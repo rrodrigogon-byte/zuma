@@ -1,0 +1,27 @@
+# Deploy do SetPoint no Render (https://render.com) — 1 clique via Blueprint.
+# Sobe a API + site como um único Web Service Node, com disco persistente para o banco.
+services:
+  - type: web
+    name: setpoint
+    runtime: node
+    plan: starter            # free/starter; suba conforme a demanda
+    region: oregon
+    buildCommand: cd app && npm install
+    startCommand: cd app && node server.js
+    healthCheckPath: /api/info
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: JWT_SECRET
+        generateValue: true   # segredo forte gerado pelo Render
+      - key: ADMIN_USER
+        value: admin
+      - key: ADMIN_PASS
+        sync: false           # defina manualmente no painel (não versionar senha)
+      - key: DB_PATH
+        value: /var/data/db.json
+    disk:
+      name: setpoint-data
+      mountPath: /var/data    # o DB_PATH aponta para cá — sobrevive a deploys
+      sizeGB: 1

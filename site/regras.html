@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Regras do Tênis · Agro Open</title>
+<meta name="description" content="Regras oficiais do tênis seguindo o padrão ATP/ITF: pontuação, sets, tie-break, saque, código de conduta e formato do torneio.">
+<link rel="icon" href="img/logo-ao-oficial.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<style>
+  .layout{display:grid;grid-template-columns:230px 1fr;gap:34px;align-items:start}
+  @media(max-width:860px){.layout{grid-template-columns:1fr}.toc{position:static!important}}
+  .toc{position:sticky;top:84px;background:var(--deep2);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .toc a{display:block;color:var(--muted);font-size:14px;padding:7px 0;border-bottom:1px solid var(--line)}
+  .toc a:last-child{border:none}.toc a:hover{color:var(--lime)}
+  article h2{font-size:26px;margin:34px 0 10px;scroll-margin-top:84px}
+  article h2:first-child{margin-top:0}
+  article p{color:#cfe0c2;margin-bottom:12px}
+  article ul{margin:0 0 14px 18px;color:#cfe0c2}
+  article li{margin-bottom:7px}
+  .score{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 18px}
+  .score span{background:var(--deep2);border:1px solid var(--line);border-radius:10px;padding:10px 16px;font-family:'Archivo';font-weight:800;font-size:18px}
+  .score b{color:var(--lime)}
+  .box{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:14px;padding:20px;margin:14px 0}
+  .box.gold{border-color:rgba(201,166,86,.4)}
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="wrap">
+    <a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span></a>
+    <div class="navlinks">
+      <a href="index.html">Site</a><a href="ranking.html">Ranking</a><a href="noticias.html">Notícias</a>
+      <a href="regras.html" class="active">Regras</a><a href="chaves.html">Chaves</a><a href="sorteio.html">Sorteio</a>
+    </div>
+  </div>
+</header>
+
+<div class="wrap hero">
+  <div class="kick">Regulamento</div>
+  <h1>Regras do <span class="lime">tênis</span>.</h1>
+  <p>Padrão oficial ATP / ITF, com as adaptações do regulamento da Agro Open por categoria.</p>
+</div>
+
+<div class="wrap layout" style="padding-bottom:40px">
+  <nav class="toc">
+    <a href="#pontuacao">1. Pontuação</a>
+    <a href="#sets">2. Sets e partida</a>
+    <a href="#tiebreak">3. Tie-break</a>
+    <a href="#saque">4. Saque e quadra</a>
+    <a href="#duplas">5. Duplas</a>
+    <a href="#conduta">6. Código de conduta</a>
+    <a href="#wo">7. WO e abandono</a>
+    <a href="#formato">8. Formato Agro Open</a>
+  </nav>
+  <article>
+    <h2 id="pontuacao">1. Pontuação</h2>
+    <p>Cada game é pontuado na sequência clássica do tênis. O sacador tem sua pontuação anunciada primeiro.</p>
+    <div class="score"><span>0 <b>(love)</b></span><span>15</span><span>30</span><span>40</span><span>game</span></div>
+    <ul>
+      <li>Em <b>40–40</b> há o "iguais" (deuce). É preciso abrir <b>2 pontos</b> de vantagem para vencer o game.</li>
+      <li>Após o iguais: quem marca tem a <b>vantagem</b>; se marcar de novo, vence o game; se perder, volta a iguais.</li>
+      <li>Em formatos amadores pode-se adotar o <b>No-Ad</b> (ponto decisivo no 40–40, quem marca leva o game) — definido por categoria.</li>
+    </ul>
+
+    <h2 id="sets">2. Sets e partida</h2>
+    <ul>
+      <li>Vence o set quem chegar primeiro a <b>6 games</b> com diferença de <b>2</b> (ex.: 6/4, 7/5).</li>
+      <li>Em <b>6–6</b>, disputa-se o <b>tie-break</b> (ver seção 3).</li>
+      <li>Partida em <b>melhor de 3 sets</b> (padrão do circuito e da Agro Open). Grand Slams masculinos usam melhor de 5.</li>
+    </ul>
+
+    <h2 id="tiebreak">3. Tie-break</h2>
+    <ul>
+      <li>Primeiro a <b>7 pontos</b>, com diferença mínima de <b>2</b> (7–5, 8–6, ...).</li>
+      <li>O primeiro saque é de 1 ponto; depois, cada jogador saca <b>2 pontos</b>, alternando.</li>
+      <li>Troca-se de lado a cada <b>6 pontos</b> somados.</li>
+      <li><b>Match tie-break</b> (até <b>10 pontos</b>) pode substituir o 3º set para agilizar — comum em duplas e categorias amadoras.</li>
+    </ul>
+
+    <h2 id="saque">4. Saque e quadra</h2>
+    <ul>
+      <li>O sacador tem <b>2 tentativas</b>. Duas faltas seguidas = ponto do adversário (dupla falta).</li>
+      <li><b>Falta de pé</b>: pisar a linha de base antes de tocar a bola.</li>
+      <li><b>Let</b>: se a bola do saque toca a rede e cai na área correta, repete-se o saque.</li>
+      <li>Saca-se em diagonal, começando pelo lado direito (deuce court) e alternando a cada ponto.</li>
+      <li>Troca-se de lado da quadra ao fim de games <b>ímpares</b> (1, 3, 5...).</li>
+    </ul>
+
+    <h2 id="duplas">5. Duplas</h2>
+    <ul>
+      <li>Quadra mais larga (corredores válidos). Ordem de saque e recepção definida no início de cada set.</li>
+      <li>Set decisivo normalmente em <b>match tie-break de 10 pontos</b>.</li>
+    </ul>
+
+    <h2 id="conduta">6. Código de conduta</h2>
+    <p>Seguindo o padrão ATP/ITF, a conduta antidesportiva é punida de forma progressiva pelo árbitro:</p>
+    <ul>
+      <li><b>1ª infração:</b> advertência (warning).</li>
+      <li><b>2ª infração:</b> perda de ponto.</li>
+      <li><b>3ª infração:</b> perda de game.</li>
+      <li><b>Reincidência grave:</b> desclassificação.</li>
+    </ul>
+    <div class="box">Exemplos de infração: abuso verbal, quebra de raquete, demora excessiva entre pontos (regra dos 25s), coaching não permitido e conduta ofensiva.</div>
+
+    <h2 id="wo">7. WO e abandono</h2>
+    <ul>
+      <li><b>WO (walkover):</b> ausência ou desistência antes do início — o adversário avança.</li>
+      <li><b>Tolerância:</b> atraso além do limite previsto no regulamento configura WO.</li>
+      <li><b>Abandono:</b> lesão ou desistência durante a partida — vence quem estiver em quadra.</li>
+    </ul>
+
+    <h2 id="formato">8. Formato da Agro Open</h2>
+    <div class="box gold">
+      <p style="margin:0"><b style="color:var(--gold)">Por categoria.</b> Cada uma das 13 chaves (incluindo a <b>PRO · Profissional</b>) tem formato definido pela comissão técnica: número de sets, uso de No-Ad e match tie-break, conforme o nível e o tempo de jogo.</p>
+    </div>
+    <ul>
+      <li>Chaves no padrão Grand Slam: cabeças de chave posicionadas e byes para os melhores ranqueados.</li>
+      <li>Piso de <b>saibro</b> e <b>quadras rápidas</b>; bola oficial <b>Head</b>.</li>
+      <li>Resultados alimentam o <b>Ranking Agro Open</b> (ver página de Ranking).</li>
+    </ul>
+    <p class="muted" style="font-size:13px;margin-top:18px">Este resumo segue o padrão ATP/ITF. O regulamento completo e oficial da 4ª Agro Open é fornecido no ato da inscrição e prevalece em caso de divergência.</p>
+  </article>
+</div>
+
+<footer class="app">AGRO OPEN · Regras conforme padrão ATP/ITF · Regulamento oficial fornecido na inscrição.</footer>
+</body>
+</html>

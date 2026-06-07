@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agenda de Jogos · Agro Open</title>
+<meta name="description" content="Programação de jogos por quadra e horário (order of play).">
+<link rel="icon" href="img/logo-ao-oficial.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<style>.j{display:flex;gap:14px;align-items:center;background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:8px}
+  .j .h{font-family:'Archivo';font-weight:900;font-size:22px;color:var(--lime);min-width:62px}
+  .j .q{font-size:12px;color:var(--gold);font-weight:700}
+  .j .c{font-weight:600}</style>
+</head>
+<body>
+<header class="app">
+  <div class="wrap"><a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span></a>
+  <div class="navlinks"><a href="index.html">Site</a><a href="chaves.html">Chaves</a><a href="perfil.html">Atletas</a><a href="agenda.html" class="active">Agenda</a></div></div>
+</header>
+<div class="wrap hero">
+  <div class="kick">Order of play</div>
+  <h1>Agenda de <span class="lime">jogos</span>.</h1>
+  <p>Programação por quadra e horário. Confira quando e onde joga cada confronto.</p>
+</div>
+<div class="wrap" style="padding-bottom:50px">
+  <div class="ctrls"><div class="field" style="margin:0"><label>Dia</label><input id="data" type="date"></div><button class="btn sm ghost" id="reload">Atualizar</button></div>
+  <div id="lista"></div>
+</div>
+<footer class="app">AGRO OPEN · Programação sujeita a alterações · powered by <b class="lime">SetPoint</b></footer>
+<script>
+const $=s=>document.querySelector(s);
+async function carregar(){
+  try{
+    const data=$('#data').value;
+    const list=await (await fetch('/api/agenda'+(data?('?data='+data):''))).json();
+    if(!list.length){ $('#lista').innerHTML='<div class="card" style="padding:30px"><p class="muted">Nenhum jogo agendado'+(data?' para esta data':'')+'.</p></div>'; return; }
+    const byDay={}; list.forEach(a=>{(byDay[a.data]=byDay[a.data]||[]).push(a);});
+    $('#lista').innerHTML=Object.keys(byDay).sort().map(d=>`<h3 style="font-size:17px;margin:18px 0 10px">${d.split('-').reverse().join('/')}</h3>`+
+      byDay[d].map(a=>`<div class="j"><div class="h">${a.hora}</div><div><div class="q">${a.quadra}${a.categoria?(' · '+a.categoria):''}${a.fase?(' · '+a.fase):''}</div><div class="c">${a.confronto}</div></div></div>`).join('')).join('');
+  }catch(e){ $('#lista').innerHTML='<div class="card" style="padding:30px"><p class="muted">Inicie o servidor (npm start) para ver a agenda.</p></div>'; }
+}
+$('#reload').onclick=carregar; $('#data').onchange=carregar;
+carregar();
+</script>
+</body>
+</html>

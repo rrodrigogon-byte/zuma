@@ -1,0 +1,97 @@
+<svg viewBox="0 0 1080 1528" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0E2E1C"/>
+      <stop offset="55%" stop-color="#0B2415"/>
+      <stop offset="100%" stop-color="#081C10"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#E7CE8A"/>
+      <stop offset="50%" stop-color="#C7A24C"/>
+      <stop offset="100%" stop-color="#9C7B2E"/>
+    </linearGradient>
+    <radialGradient id="ball" cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#A8E25A"/>
+      <stop offset="50%" stop-color="#7FCB3B"/>
+      <stop offset="100%" stop-color="#4F9E28"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1080" height="1528" fill="url(#bg)"/>
+  <!-- court lines texture -->
+  <g stroke="#5FB335" stroke-opacity="0.06" stroke-width="2">
+    <line x1="0" y1="380" x2="1080" y2="380"/><line x1="0" y1="760" x2="1080" y2="760"/>
+    <line x1="0" y1="1140" x2="1080" y2="1140"/><line x1="540" y1="0" x2="540" y2="1528"/>
+  </g>
+  <!-- gold frame -->
+  <rect x="46" y="46" width="988" height="1436" rx="26" fill="none" stroke="url(#gold)" stroke-width="2.5"/>
+  <rect x="58" y="58" width="964" height="1412" rx="20" fill="none" stroke="#C7A24C" stroke-opacity="0.25" stroke-width="1"/>
+
+  <!-- Monogram -->
+  <g transform="translate(540,210)">
+    <text x="-92" y="44" font-size="150" font-weight="900" fill="#F4F6EF" text-anchor="middle" font-family="Arial Black, Arial">A</text>
+    <g transform="translate(54,-4)">
+      <circle r="74" fill="url(#ball)" stroke="#0B2415" stroke-width="3"/>
+      <path d="M -45 -59 C -7 -26 -7 26 -45 59" fill="none" stroke="#F4F6EF" stroke-width="7" stroke-linecap="round"/>
+      <path d="M 45 -59 C 7 -26 7 26 45 59" fill="none" stroke="#F4F6EF" stroke-width="7" stroke-linecap="round"/>
+    </g>
+  </g>
+
+  <text x="540" y="356" text-anchor="middle" font-size="26" letter-spacing="14" fill="#C7A24C" font-weight="700">CONVITE EXCLUSIVO · VIP</text>
+
+  <line x1="340" y1="398" x2="740" y2="398" stroke="url(#gold)" stroke-width="2"/>
+
+  <text x="540" y="486" text-anchor="middle" font-size="78" font-weight="900" fill="#F4F6EF" font-family="Arial Black, Arial">AGRO <tspan fill="#7FCB3B">OPEN</tspan></text>
+  <text x="540" y="538" text-anchor="middle" font-size="30" letter-spacing="18" fill="#F4F6EF" font-weight="700">DE TÊNIS</text>
+  <text x="540" y="582" text-anchor="middle" font-size="20" letter-spacing="4" fill="#9DBE86" font-style="italic">Onde o esporte encontra o agronegócio · 4ª Edição</text>
+
+  <!-- Personalization -->
+  <text x="540" y="688" text-anchor="middle" font-size="22" letter-spacing="3" fill="#9DBE86">TEMOS A HONRA DE CONVIDAR</text>
+  <rect x="190" y="716" width="700" height="78" rx="10" fill="#0E2E1C" stroke="#C7A24C" stroke-opacity="0.5" stroke-width="1.5"/>
+  <text x="540" y="767" text-anchor="middle" font-size="30" fill="#E7CE8A" font-weight="700" font-style="italic">[ Nome do convidado / Empresa ]</text>
+  <text x="540" y="836" text-anchor="middle" font-size="21" fill="#F4F6EF">para uma semana de tênis de elite, negócios e impacto social.</text>
+  <text x="540" y="874" text-anchor="middle" font-size="16" fill="#C7A24C">Com João Meneses (ouro pan-americano) e grandes nomes do tênis nacional.</text>
+
+  <!-- Highlights -->
+  <g transform="translate(0,910)">
+    <rect x="120" y="0" width="380" height="118" rx="14" fill="#123A23" stroke="#5FB335" stroke-opacity="0.25"/>
+    <text x="150" y="44" font-size="15" letter-spacing="2" fill="#7FCB3B" font-weight="700">JANTAR VIP</text>
+    <text x="150" y="78" font-size="22" fill="#F4F6EF" font-weight="700">Sexta · 11 SET</text>
+    <text x="150" y="103" font-size="14" fill="#9DBE86">Networking exclusivo com a elite do agro</text>
+
+    <rect x="580" y="0" width="380" height="118" rx="14" fill="#123A23" stroke="#5FB335" stroke-opacity="0.25"/>
+    <text x="610" y="44" font-size="15" letter-spacing="2" fill="#7FCB3B" font-weight="700">PREMIAÇÃO</text>
+    <text x="610" y="78" font-size="22" fill="#F4F6EF" font-weight="700">R$ 400 mil+</text>
+    <text x="610" y="103" font-size="14" fill="#9DBE86">Maior bolsa do Centro-Oeste</text>
+
+    <rect x="120" y="138" width="380" height="118" rx="14" fill="#123A23" stroke="#C7A24C" stroke-opacity="0.4"/>
+    <text x="150" y="182" font-size="15" letter-spacing="2" fill="#C7A24C" font-weight="700">LEILÃO FLORESCER</text>
+    <text x="150" y="216" font-size="22" fill="#F4F6EF" font-weight="700">Sábado · 12 SET</text>
+    <text x="150" y="241" font-size="14" fill="#9DBE86">Florescer Ação Social · iniciativa UISA</text>
+
+    <rect x="580" y="138" width="380" height="118" rx="14" fill="#123A23" stroke="#5FB335" stroke-opacity="0.25"/>
+    <text x="610" y="182" font-size="15" letter-spacing="2" fill="#7FCB3B" font-weight="700">GRANDES FINAIS</text>
+    <text x="610" y="216" font-size="22" fill="#F4F6EF" font-weight="700">Domingo · 13 SET</text>
+    <text x="610" y="241" font-size="14" fill="#9DBE86">Premiação e encerramento</text>
+  </g>
+
+  <!-- Date / Local bar -->
+  <g transform="translate(0,1218)">
+    <line x1="120" y1="0" x2="960" y2="0" stroke="#C7A24C" stroke-opacity="0.3"/>
+    <text x="270" y="52" text-anchor="middle" font-size="14" letter-spacing="3" fill="#7FCB3B" font-weight="700">DATA</text>
+    <text x="270" y="86" text-anchor="middle" font-size="26" fill="#F4F6EF" font-weight="900">07 — 13 SET 2026</text>
+    <text x="810" y="52" text-anchor="middle" font-size="14" letter-spacing="3" fill="#7FCB3B" font-weight="700">LOCAL</text>
+    <text x="810" y="80" text-anchor="middle" font-size="20" fill="#F4F6EF" font-weight="700">Tangará Tênis Clube</text>
+    <text x="810" y="104" text-anchor="middle" font-size="16" fill="#9DBE86">Tangará da Serra · MT</text>
+    <line x1="540" y1="20" x2="540" y2="110" stroke="#C7A24C" stroke-opacity="0.3"/>
+  </g>
+
+  <!-- RSVP -->
+  <g transform="translate(0,1356)">
+    <rect x="120" y="0" width="840" height="86" rx="43" fill="url(#gold)"/>
+    <text x="540" y="40" text-anchor="middle" font-size="16" letter-spacing="3" fill="#0B2415" font-weight="700">CONFIRME SUA PRESENÇA · RSVP</text>
+    <text x="540" y="68" text-anchor="middle" font-size="22" fill="#0B2415" font-weight="900">(65) 99636-4113  ·  silvester_natal@hotmail.com</text>
+  </g>
+
+  <text x="540" y="1474" text-anchor="middle" font-size="14" letter-spacing="2" fill="#9DBE86">REALIZAÇÃO · TANGARÁ TÊNIS CLUBE  +  UISA</text>
+</svg>

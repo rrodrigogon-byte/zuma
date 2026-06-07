@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Planos & Assinaturas · Agro Open</title>
+<meta name="description" content="Planos de assinatura da plataforma Agro Open: atleta, clube/organizador e patrocinador.">
+<link rel="icon" href="img/logo-ao-oficial.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<style>
+  .plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:18px;align-items:stretch}
+  .plan{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:18px;padding:28px;display:flex;flex-direction:column}
+  .plan.feat{border-color:var(--lime);box-shadow:0 30px 60px -34px rgba(143,214,74,.5)}
+  .plan .pub{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700}
+  .plan h3{font-size:24px;margin:6px 0}
+  .plan .price{font-family:'Archivo';font-weight:900;font-size:38px;margin:4px 0}
+  .plan .price small{font-size:14px;color:var(--muted);font-weight:500}
+  .plan ul{list-style:none;margin:14px 0;flex:1}
+  .plan li{padding:8px 0 8px 26px;position:relative;font-size:14px;border-bottom:1px solid var(--line)}
+  .plan li:last-child{border:none}
+  .plan li::before{content:"";position:absolute;left:2px;top:13px;width:13px;height:7px;border-left:2.5px solid var(--lime);border-bottom:2.5px solid var(--lime);transform:rotate(-45deg)}
+  .smodal{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(4,12,7,.8);backdrop-filter:blur(5px)}
+  .smodal.open{display:flex}
+  .sbox{width:100%;max-width:420px;background:linear-gradient(165deg,#0f3120,#0a1f13);border:1px solid var(--line);border-radius:18px;padding:28px;position:relative}
+  .sx{position:absolute;top:14px;right:20px;font-size:28px;color:var(--muted);cursor:pointer}
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="wrap">
+    <a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span></a>
+    <div class="navlinks">
+      <a href="index.html">Site</a><a href="planos.html" class="active">Planos</a><a href="ranking.html">Ranking</a>
+      <a href="chaves.html">Chaves</a><a href="destaques.html">Melhores</a><a href="regras.html">Regras</a>
+    </div>
+  </div>
+</header>
+
+<div class="wrap hero">
+  <div class="kick">Assinaturas</div>
+  <h1>Planos da <span class="lime">plataforma</span>.</h1>
+  <p>Para atletas, clubes e patrocinadores. Comece grátis e evolua conforme cresce — a base para o maior circuito de tênis do agro.</p>
+</div>
+
+<div class="wrap" style="padding-bottom:40px">
+  <div class="plans" id="plans"></div>
+  <p class="muted" style="font-size:12.5px;margin-top:16px">Pagamento recorrente via Mercado Pago/Stripe (ativado pela organização). Ao assinar um plano pago, registramos sua adesão e liberamos o checkout.</p>
+</div>
+
+<div class="smodal" id="modal">
+  <div class="sbox">
+    <span class="sx" id="x">&times;</span>
+    <div class="kick" id="m-pub"></div>
+    <h3 id="m-plan" style="font-size:22px;margin:6px 0 16px"></h3>
+    <div class="field"><label>Nome / Empresa</label><input id="m-nome" placeholder="Seu nome"></div>
+    <div class="field"><label>E-mail</label><input id="m-email" type="email" placeholder="voce@email.com"></div>
+    <div class="field"><label>Telefone / WhatsApp</label><input id="m-tel" placeholder="(65) 90000-0000"></div>
+    <button class="btn" id="m-go" style="width:100%;justify-content:center;margin-top:6px">Assinar</button>
+  </div>
+</div>
+
+<footer class="app">AGRO OPEN · Plataforma de torneios de tênis · Planos para atletas, clubes e patrocinadores.</footer>
+<div class="toast" id="toast"></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const toast=(m,e)=>{const t=$('#toast');t.textContent=m;t.className='toast show'+(e?' err':'');setTimeout(()=>t.className='toast',2800);};
+let cur=null;
+const FALLBACK=[
+  {id:'atleta_free',publico:'Atleta',nome:'Atleta Free',preco:0,periodo:'sempre',destaques:['Inscrição em torneios','Acompanhar suas chaves','Ranking público']},
+  {id:'atleta_pro',publico:'Atleta',nome:'Atleta PRO',preco:19.9,periodo:'mês',destaque:true,destaques:['Tudo do Free','Histórico e estatísticas','Head-to-head','Selo PRO no ranking']},
+  {id:'clube',publico:'Clube / Organizador',nome:'Clube',preco:199,periodo:'mês',destaques:['Torneios ilimitados','Sorteio e súmula','Ranking por temporada','Painel financeiro']},
+  {id:'patrocinador',publico:'Patrocinador',nome:'Patrocinador',preco:0,periodo:'sob consulta',destaques:['Marca em torneios e ranking','Relatórios','Ativações e leads']}
+];
+function price(p){ if(p.preco===0&&p.periodo==='sob consulta') return '<span class="price">Sob consulta</span>'; if(p.preco===0) return '<span class="price">Grátis</span>'; return `<span class="price">R$ ${p.preco.toFixed(2).replace('.',',')} <small>/ ${p.periodo}</small></span>`; }
+function render(planos){
+  $('#plans').innerHTML=planos.map(p=>`<div class="plan ${p.destaque?'feat':''}">
+    <div class="pub">${p.publico}</div><h3>${p.nome}</h3>${price(p)}
+    <ul>${p.destaques.map(d=>`<li>${d}</li>`).join('')}</ul>
+    <button class="btn ${p.destaque?'':'ghost'} js-go" data-id="${p.id}" data-nome="${p.nome}" data-pub="${p.publico}">${p.preco>0?'Assinar':(p.periodo==='sob consulta'?'Falar com a gente':'Começar grátis')}</button>
+  </div>`).join('');
+}
+(async()=>{ try{ render(await (await fetch('/api/planos')).json()); }catch(e){ render(FALLBACK); } })();
+
+document.addEventListener('click',e=>{const b=e.target.closest('.js-go');if(!b)return;cur=b.dataset.id;$('#m-pub').textContent=b.dataset.pub;$('#m-plan').textContent=b.dataset.nome;$('#modal').classList.add('open');});
+$('#x').onclick=()=>$('#modal').classList.remove('open');
+$('#modal').addEventListener('click',e=>{if(e.target===$('#modal'))$('#modal').classList.remove('open');});
+$('#m-go').onclick=async()=>{
+  const nome=$('#m-nome').value.trim(),email=$('#m-email').value.trim();
+  if(!nome||!email){toast('Preencha nome e e-mail',true);return;}
+  try{
+    const r=await fetch('/api/assinar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plano:cur,nome,email,telefone:$('#m-tel').value.trim()})});
+    const d=await r.json(); if(!r.ok) throw new Error(d.error||'erro');
+    $('#modal').classList.remove('open'); toast(d.message||'Adesão registrada!');
+  }catch(e){ toast('Sem servidor ativo — rode npm start para assinar.',true); }
+};
+</script>
+</body>
+</html>

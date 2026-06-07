@@ -1,0 +1,6 @@
+node_modules
+.env
+app/data
+*.zip
+assets-pdf
+.DS_Store

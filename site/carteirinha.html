@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Carteirinha de Sócio · Agro Open</title>
+<meta name="description" content="Sua carteirinha de sócio digital com QR Code.">
+<link rel="icon" href="img/logo-ao-oficial.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<style>
+  .wrapc{max-width:440px;margin:5vh auto}
+  .card-socio{background:linear-gradient(150deg,#0f3a23,#0b2415);border:1px solid rgba(143,214,74,.35);border-radius:22px;padding:26px;position:relative;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+  .card-socio::before{content:"";position:absolute;top:-60px;right:-60px;width:200px;height:200px;border-radius:50%;background:radial-gradient(circle,rgba(143,214,74,.18),transparent 70%)}
+  .cs-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px}
+  .cs-brand{font-family:'Archivo';font-weight:900;font-size:20px;letter-spacing:1px}
+  .cs-brand .lime{color:var(--lime)}
+  .cs-tipo{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:700;text-align:right}
+  .cs-nome{font-family:'Archivo';font-weight:900;font-size:26px;margin:6px 0}
+  .cs-plano{color:#cfe0c2;font-size:14px}
+  .cs-qr{background:#fff;border-radius:14px;padding:14px;width:180px;height:180px;margin:18px auto 8px;display:flex;align-items:center;justify-content:center}
+  .cs-qr svg{width:100%;height:100%}
+  .cs-code{text-align:center;font-family:'Archivo';font-weight:800;letter-spacing:2px;color:#cfe0c2;font-size:14px}
+  .cs-foot{display:flex;justify-content:space-between;margin-top:18px;font-size:12px;color:var(--muted)}
+  .badge{display:inline-block;font-size:12px;font-weight:800;border-radius:100px;padding:5px 14px}
+  .badge.ok{background:rgba(143,214,74,.16);color:var(--lime)}
+  .badge.bad{background:rgba(226,120,100,.18);color:#e89a8c}
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="wrap"><a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span></a>
+  <div class="navlinks"><a href="index.html">Site</a><a href="conta.html">Minha conta</a><a href="reservas.html">Reservar</a></div></div>
+</header>
+
+<div class="wrap wrapc">
+  <div id="loading" class="card" style="text-align:center;padding:40px"><p class="muted">Carregando…</p></div>
+
+  <!-- não logado -->
+  <div id="anon" class="card hidden" style="text-align:center;padding:40px">
+    <h2 style="font-size:22px;margin-bottom:8px">Carteirinha de sócio</h2>
+    <p class="muted" style="margin-bottom:18px">Entre na sua conta para ver sua carteirinha digital.</p>
+    <a class="btn" href="conta.html">Entrar / criar conta</a>
+  </div>
+
+  <!-- não é sócio -->
+  <div id="nao-socio" class="card hidden" style="text-align:center;padding:40px">
+    <h2 style="font-size:22px;margin-bottom:8px">Você ainda não é sócio</h2>
+    <p class="muted" id="ns-msg" style="margin-bottom:18px"></p>
+    <a class="btn ghost" href="planos.html">Ver planos & benefícios</a>
+  </div>
+
+  <!-- carteirinha -->
+  <div id="socio" class="hidden">
+    <div class="card-socio">
+      <div class="cs-top">
+        <div><span class="cs-brand">AGRO <span class="lime">OPEN</span></span><div style="font-size:11px;color:var(--muted)">Tangará Tênis Clube</div></div>
+        <div class="cs-tipo">Sócio<br>Digital</div>
+      </div>
+      <div class="cs-nome" id="cs-nome"></div>
+      <div class="cs-plano" id="cs-plano"></div>
+      <div style="margin-top:10px"><span class="badge" id="cs-status"></span></div>
+      <div class="cs-qr" id="cs-qr"></div>
+      <div class="cs-code" id="cs-code"></div>
+      <div class="cs-foot"><span>Sócio desde <b id="cs-desde"></b></span><span>SetPoint</span></div>
+    </div>
+    <p class="muted" style="font-size:12.5px;margin-top:14px;text-align:center">Apresente o QR Code na recepção/portaria para acesso e benefícios.</p>
+  </div>
+</div>
+
+<footer class="app">AGRO OPEN · Carteirinha digital · powered by <b class="lime">SetPoint</b></footer>
+<script>
+const $=s=>document.querySelector(s);
+const TOKEN=localStorage.getItem('ao_user_token')||'';
+function show(id){['loading','anon','nao-socio','socio'].forEach(x=>$('#'+x).classList.toggle('hidden',x!==id));}
+async function load(){
+  if(!TOKEN){ show('anon'); return; }
+  try{
+    const d=await (await fetch('/api/auth/carteirinha',{headers:{Authorization:'Bearer '+TOKEN}})).json();
+    if(!d.socio){ $('#ns-msg').textContent=d.message||'Procure a recepção para aderir.'; show('nao-socio'); return; }
+    $('#cs-nome').textContent=d.nome;
+    $('#cs-plano').textContent=d.plano;
+    $('#cs-code').textContent=d.cardCode;
+    $('#cs-desde').textContent=new Date(d.desde).toLocaleDateString('pt-BR');
+    $('#cs-qr').innerHTML=d.qrSvg;
+    const ok=d.status==='em_dia';
+    const b=$('#cs-status'); b.textContent=ok?'● Em dia':'● Mensalidade em atraso'; b.className='badge '+(ok?'ok':'bad');
+    show('socio');
+  }catch(e){ show('anon'); }
+}
+load();
+</script>
+</body>
+</html>

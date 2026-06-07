@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agro Open de Tênis · 4ª Edição · 07–13 SET 2026 · Tangará da Serra/MT</title>
+<meta name="description" content="O maior torneio de tênis do Centro-Oeste. R$400 mil em premiação, 13 categorias, leilão beneficente Florescer e o F5 — uma semana de esporte, agro e inovação no coração do agronegócio brasileiro.">
+<meta name="theme-color" content="#07160D">
+<meta name="author" content="Agro Open · Tangará Tênis Clube + UISA">
+<link rel="canonical" href="https://agroopen.com.br/">
+<!-- Open Graph / social preview -->
+<meta property="og:type" content="website">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:site_name" content="Agro Open de Tênis">
+<meta property="og:title" content="4ª Agro Open de Tênis · 07–13 SET 2026">
+<meta property="og:description" content="O maior torneio de tênis do Centro-Oeste. R$400 mil+ em premiação, leilão beneficente Florescer e o F5 de inovação. Onde o esporte encontra o agronegócio.">
+<meta property="og:image" content="img/logo-ao-horizontal.png">
+<meta property="og:url" content="https://agroopen.com.br/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="4ª Agro Open de Tênis · 07–13 SET 2026">
+<meta name="twitter:description" content="O maior torneio de tênis do Centro-Oeste. R$400 mil+ em premiação e leilão beneficente Florescer.">
+<meta name="twitter:image" content="img/logo-ao-horizontal.png">
+<!-- favicon (bola de tênis) -->
+<link rel="icon" href="img/logo-ao-oficial.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#07160D; --deep:#0C2517; --deep2:#0A1F13; --panel:#0F3120; --panel2:#12381F;
+    --green:#5FB335; --lime:#8FD64A; --lime2:#B6EE72; --gold:#C9A656; --goldL:#E7CE8A;
+    --cream:#F4F6EF; --muted:#9DBE86; --muted2:#7E9A6B; --line:rgba(143,214,74,.14);
+    --maxw:1240px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth;-webkit-font-smoothing:antialiased}
+  body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--cream);line-height:1.65;overflow-x:hidden}
+  ::selection{background:var(--lime);color:var(--deep2)}
+  h1,h2,h3,h4,.display{font-family:'Archivo',sans-serif;font-weight:900;line-height:1.02;letter-spacing:-.02em}
+  a{color:inherit;text-decoration:none}
+  img{max-width:100%}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px}
+  .lime{color:var(--lime)}.gold{color:var(--gold)}
+  .eyebrow{font-family:'Inter';font-size:12px;font-weight:700;letter-spacing:.32em;text-transform:uppercase;color:var(--lime)}
+  .eyebrow.gold{color:var(--gold)}
+  .reveal{opacity:0;transform:translateY(26px);transition:opacity .7s cubic-bezier(.2,.7,.2,1),transform .7s cubic-bezier(.2,.7,.2,1)}
+  .reveal.in{opacity:1;transform:none}
+
+  .btn{display:inline-flex;align-items:center;gap:9px;background:var(--lime);color:var(--deep2);font-weight:700;font-size:15px;padding:15px 28px;border-radius:100px;transition:.25s;border:1px solid var(--lime);cursor:pointer}
+  .btn:hover{background:var(--lime2);border-color:var(--lime2);transform:translateY(-2px);box-shadow:0 14px 30px -12px rgba(143,214,74,.6)}
+  .btn.ghost{background:transparent;color:var(--cream);border-color:rgba(143,214,74,.4)}
+  .btn.ghost:hover{background:rgba(143,214,74,.1);border-color:var(--lime);box-shadow:none}
+  .btn.gold{background:var(--gold);border-color:var(--gold);color:var(--deep2)}
+  .btn.gold:hover{background:var(--goldL);border-color:var(--goldL)}
+
+  /* scroll progress */
+  .progress{position:fixed;top:0;left:0;height:3px;width:0;background:linear-gradient(90deg,var(--green),var(--lime));z-index:80;transition:width .1s}
+
+  /* NAV */
+  nav{position:sticky;top:0;z-index:60;background:rgba(7,22,13,.72);backdrop-filter:blur(16px);border-bottom:1px solid transparent;transition:.3s}
+  nav.scrolled{background:rgba(7,22,13,.94);border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex;align-items:center;justify-content:space-between;height:74px}
+  .brand{display:flex;align-items:center;gap:12px;font-family:'Archivo';font-weight:900;font-size:20px;letter-spacing:-.02em}
+  .ball{width:48px;height:36px;border-radius:8px;background:#fff url('img/logo-ao-oficial.png') center/contain no-repeat;flex:none;box-shadow:0 1px 6px rgba(0,0,0,.4)}
+  .navlinks{display:flex;gap:26px;font-size:14px;font-weight:500;color:var(--muted)}
+  .navlinks a{position:relative;transition:.2s}
+  .navlinks a:hover,.navlinks a.active{color:var(--cream)}
+  .navlinks a::after{content:"";position:absolute;left:0;bottom:-6px;width:0;height:2px;background:var(--lime);transition:.25s}
+  .navlinks a:hover::after,.navlinks a.active::after{width:100%}
+  .navcta{font-size:13px;padding:11px 22px}
+  .burger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:8px}
+  .burger span{width:24px;height:2px;background:var(--cream);transition:.3s}
+  @media(max-width:1060px){.navlinks,.navcta{display:none}.burger{display:flex}}
+  .mobnav{position:fixed;inset:0;background:rgba(7,22,13,.98);z-index:70;display:none;flex-direction:column;align-items:center;justify-content:center;gap:22px}
+  .mobnav.open{display:flex}
+  .mobnav a{font-family:'Archivo';font-weight:800;font-size:26px;color:var(--cream)}
+  .mobnav .close{position:absolute;top:24px;right:28px;font-size:34px;color:var(--muted);cursor:pointer}
+
+  /* HERO */
+  .hero{position:relative;padding:74px 0 70px;min-height:90vh;display:flex;align-items:center;overflow:hidden}
+  .hero-bg{position:absolute;inset:0;z-index:0}
+  .hero-bg .glow1{position:absolute;top:-12%;right:-6%;width:60vw;height:60vw;background:radial-gradient(circle,rgba(143,214,74,.16),transparent 62%)}
+  .hero-bg .glow2{position:absolute;bottom:-30%;left:-12%;width:55vw;height:55vw;background:radial-gradient(circle,rgba(95,179,53,.1),transparent 60%)}
+  .hero-bg .grid{position:absolute;inset:0;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:100% 60px,60px 100%;mask-image:radial-gradient(circle at 70% 40%,#000,transparent 75%);opacity:.6}
+  .hero .wrap{position:relative;z-index:2;display:grid;grid-template-columns:1.25fr .75fr;gap:40px;align-items:center;width:100%}
+  .edition-pill{display:inline-flex;align-items:center;gap:10px;border:1px solid rgba(143,214,74,.35);border-radius:100px;padding:8px 18px;font-size:12px;font-weight:600;letter-spacing:.14em;color:var(--lime);margin-bottom:26px}
+  .edition-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--lime);box-shadow:0 0 0 4px rgba(143,214,74,.2);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 4px rgba(143,214,74,.2)}50%{box-shadow:0 0 0 8px rgba(143,214,74,0)}}
+  .hero h1{font-size:clamp(54px,8.5vw,116px);letter-spacing:-.03em}
+  .hero h1 .row2{color:var(--lime)}
+  .hero h1 small{display:block;font-family:'Inter';font-weight:600;font-size:clamp(15px,2vw,22px);letter-spacing:.5em;color:var(--cream);margin-top:14px}
+  .hero .lede{font-size:clamp(16px,1.5vw,19px);color:var(--muted);max-width:520px;margin:26px 0 32px}
+  .hero-cta{display:flex;gap:14px;flex-wrap:wrap}
+  .hero-meta{display:flex;gap:34px;margin-top:38px;flex-wrap:wrap}
+  .hero-meta .m .k{font-size:11px;letter-spacing:.2em;color:var(--green);font-weight:700;text-transform:uppercase}
+  .hero-meta .m .v{font-family:'Archivo';font-weight:800;font-size:18px;margin-top:3px}
+  .prizecard{position:relative;background:linear-gradient(165deg,rgba(15,49,32,.9),rgba(10,31,19,.9));border:1px solid var(--line);border-radius:26px;padding:38px 34px;backdrop-filter:blur(6px);box-shadow:0 40px 80px -40px rgba(0,0,0,.8)}
+  .prizecard .tag{font-size:12px;letter-spacing:.2em;color:var(--gold);font-weight:700;text-transform:uppercase}
+  .prizecard .amt{font-family:'Archivo';font-weight:900;font-size:clamp(56px,7vw,84px);line-height:.92;color:var(--cream);margin:6px 0 2px}
+  .prizecard .amt b{color:var(--lime)}
+  .prizecard .sub{color:var(--muted);font-size:15px;margin-bottom:22px}
+  .prizecard hr{border:none;border-top:1px solid var(--line);margin:20px 0}
+  .prizecard .mini{display:flex;justify-content:space-between;gap:14px}
+  .prizecard .mini div .n{font-family:'Archivo';font-weight:800;font-size:26px;color:var(--lime)}
+  .prizecard .mini div .l{font-size:11px;color:var(--muted);letter-spacing:.04em}
+  .prizecard .ball-deco{position:absolute;top:-26px;right:-26px;width:88px;height:88px;border-radius:50%;background:radial-gradient(circle at 34% 28%,#B6EE72,#7FCB3B 55%,#4F9E28);box-shadow:inset 0 0 0 3px var(--deep2);opacity:.95}
+  @media(max-width:940px){.hero .wrap{grid-template-columns:1fr}.prizecard{margin-top:10px}}
+
+  /* STRIP */
+  .strip{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--deep2)}
+  .strip .wrap{display:grid;grid-template-columns:repeat(4,1fr);gap:0;padding:0 28px}
+  .strip .cell{padding:30px 22px;border-right:1px solid var(--line)}
+  .strip .cell:last-child{border-right:none}
+  .strip .n{font-family:'Archivo';font-weight:900;font-size:clamp(30px,3.4vw,44px);color:var(--lime);line-height:1}
+  .strip .l{font-size:12.5px;color:var(--muted);margin-top:6px;letter-spacing:.02em}
+  @media(max-width:760px){.strip .wrap{grid-template-columns:repeat(2,1fr)}.strip .cell:nth-child(2){border-right:none}}
+
+  section{padding:104px 0;position:relative}
+  .sec-head{max-width:720px;margin-bottom:54px}
+  .sec-head.center{margin:0 auto 54px;text-align:center}
+  .sec-head h2{font-size:clamp(32px,4.6vw,56px);margin:16px 0}
+  .sec-head p{color:var(--muted);font-size:18px}
+
+  .feat{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+  .fcard{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:20px;padding:34px 30px;transition:.3s}
+  .fcard:hover{border-color:rgba(143,214,74,.4);transform:translateY(-4px)}
+  .fcard .ic{width:48px;height:48px;border-radius:13px;background:rgba(143,214,74,.12);display:flex;align-items:center;justify-content:center;margin-bottom:20px}
+  .fcard .ic svg{width:24px;height:24px;stroke:var(--lime);fill:none;stroke-width:2}
+  .fcard h3{font-size:22px;margin-bottom:10px}
+  .fcard p{color:var(--muted);font-size:15px}
+  @media(max-width:860px){.feat{grid-template-columns:1fr}}
+
+  .players{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+  .pc{position:relative;background:linear-gradient(165deg,var(--panel2),var(--deep2));border:1px solid var(--line);border-radius:18px;padding:28px 26px;overflow:hidden;transition:.3s}
+  .pc:hover{transform:translateY(-4px);border-color:rgba(143,214,74,.4)}
+  .pc.star{border-color:var(--lime);background:linear-gradient(165deg,#16401f,var(--deep2))}
+  .pc .bg{position:absolute;right:-20px;top:-20px;width:84px;height:84px;border-radius:50%;background:radial-gradient(circle at 34% 28%,#B6EE72,#7FCB3B 55%,#4F9E28);opacity:.22}
+  .pc h4{font-size:21px}
+  .pc .r{font-size:13px;font-weight:600;margin-top:5px;color:var(--lime)}
+  .pc.star .r{color:var(--goldL)}
+  .note{font-size:13px;color:var(--muted2);margin-top:18px;font-style:italic}
+  @media(max-width:860px){.players{grid-template-columns:repeat(2,1fr)}}
+
+  .days{display:grid;grid-template-columns:repeat(7,1fr);gap:10px}
+  .day{background:var(--deep2);border:1px solid var(--line);border-radius:14px;padding:20px 14px;min-height:210px;transition:.3s}
+  .day:hover{transform:translateY(-4px)}
+  .day.hl{background:linear-gradient(165deg,var(--green),#4a991f);border-color:var(--lime)}
+  .day .num{font-family:'Archivo';font-weight:900;font-size:32px}
+  .day.hl .num,.day.hl .ev,.day.hl .ds{color:var(--deep2)}
+  .day .dow{font-size:10px;letter-spacing:.18em;font-weight:700;color:var(--muted);margin:2px 0 16px}
+  .day.hl .dow{color:rgba(10,31,19,.7)}
+  .day .ev{font-family:'Archivo';font-weight:800;font-size:14px;margin-bottom:7px}
+  .day .ds{font-size:11.5px;color:var(--muted)}
+  @media(max-width:900px){.days{grid-template-columns:repeat(2,1fr)}}
+
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center}
+  @media(max-width:900px){.split{grid-template-columns:1fr;gap:34px}}
+  .panel{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:24px;padding:40px}
+  .panel.gold{border-color:rgba(201,166,86,.45)}
+  .tagchip{display:inline-block;background:rgba(143,214,74,.12);color:var(--lime);border-radius:100px;padding:7px 16px;font-size:12px;font-weight:700;letter-spacing:.12em;margin-bottom:18px}
+  .tagchip.gold{background:rgba(201,166,86,.16);color:var(--gold)}
+  .check{list-style:none;margin:20px 0}
+  .check li{padding:12px 0 12px 34px;position:relative;border-bottom:1px solid var(--line);font-size:15.5px}
+  .check li:last-child{border-bottom:none}
+  .check li::before{content:"";position:absolute;left:2px;top:17px;width:16px;height:9px;border-left:2.5px solid var(--lime);border-bottom:2.5px solid var(--lime);transform:rotate(-45deg)}
+  .mini-stats{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px}
+  .ms{background:var(--deep2);border:1px solid var(--line);border-radius:14px;padding:20px}
+  .ms .n{font-family:'Archivo';font-weight:900;font-size:30px;color:var(--lime)}
+  .ms .n.cream{color:var(--cream)}
+  .ms .l{font-size:12px;color:var(--muted);margin-top:4px}
+
+  /* gallery */
+  .gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  @media(max-width:760px){.gallery{grid-template-columns:repeat(2,1fr)}}
+  .gtile{position:relative;aspect-ratio:4/3;border-radius:16px;border:1px solid var(--line);overflow:hidden;background-size:cover;background-position:center;transition:.3s}
+  .gtile:hover{transform:translateY(-4px);border-color:rgba(143,214,74,.45)}
+  .gtile::before{content:"";position:absolute;inset:0;background:linear-gradient(to top,rgba(7,22,13,.9),rgba(7,22,13,.05) 55%)}
+  .gtile::after{content:attr(data-l);position:absolute;left:18px;bottom:15px;font-size:14px;font-weight:700;color:var(--cream);z-index:1}
+
+  /* tickets */
+  .tickets{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  @media(max-width:860px){.tickets{grid-template-columns:1fr}}
+  .tcard{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:20px;padding:32px;display:flex;flex-direction:column;transition:.3s}
+  .tcard:hover{transform:translateY(-5px);border-color:rgba(143,214,74,.4)}
+  .tcard.feat{border-color:var(--gold);background:linear-gradient(165deg,#1c2a14,var(--deep2))}
+  .tcard .ico{font-size:30px;margin-bottom:14px}
+  .tcard h3{font-size:22px;margin-bottom:6px}
+  .tcard .price{font-family:'Archivo';font-weight:900;font-size:34px;color:var(--lime);margin:6px 0}
+  .tcard .price small{font-size:14px;color:var(--muted);font-weight:500}
+  .tcard p{font-size:14px;color:var(--muted);flex:1;margin-bottom:18px}
+
+  /* cotas */
+  .cotas{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;align-items:stretch}
+  @media(max-width:860px){.cotas{grid-template-columns:1fr}}
+  .cota{position:relative;background:var(--deep2);border:1px solid var(--line);border-radius:20px;padding:34px 30px;display:flex;flex-direction:column;transition:.3s}
+  .cota:hover{transform:translateY(-5px)}
+  .cota.master{border-color:var(--lime);background:linear-gradient(165deg,#143d22,var(--deep2));box-shadow:0 30px 60px -34px rgba(143,214,74,.5)}
+  .cota .tier{font-size:13px;letter-spacing:.16em;font-weight:700;color:var(--gold)}
+  .cota.master .tier{color:var(--lime)}
+  .cota .price{font-family:'Archivo';font-weight:900;font-size:46px;margin:10px 0 2px}
+  .cota .qt{font-size:13px;color:var(--muted);margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid var(--line)}
+  .cota p{font-size:14.5px;color:var(--muted);flex:1}
+  .ribbon{position:absolute;top:20px;right:20px;background:var(--lime);color:var(--deep2);font-size:11px;font-weight:800;letter-spacing:.06em;padding:5px 12px;border-radius:100px}
+
+  /* sponsor wall */
+  .wall{display:grid;gap:16px}
+  .tierrow{border:1px solid var(--line);border-radius:18px;padding:24px 26px;background:linear-gradient(165deg,var(--panel),var(--deep2))}
+  .tierrow.master{border-color:rgba(143,214,74,.45);background:linear-gradient(165deg,#143d22,var(--deep2))}
+  .tierhead{display:flex;align-items:center;gap:14px;margin-bottom:18px}
+  .tierhead b{font-family:'Archivo';font-weight:800;font-size:14px;letter-spacing:.1em;color:var(--gold)}
+  .tierrow.master .tierhead b{color:var(--lime)}
+  .tierhead .ln{flex:1;height:1px;background:var(--line)}
+  .tierhead .pr{font-size:13px;color:var(--muted);font-weight:600}
+  .slots{display:flex;flex-wrap:wrap;gap:14px}
+  .slot{flex:1;min-width:150px;height:74px;border:1px dashed rgba(143,214,74,.35);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;letter-spacing:.08em;color:var(--muted2);background:rgba(143,214,74,.03);transition:.25s;text-align:center;cursor:pointer}
+  .slot:hover{border-color:var(--lime);color:var(--lime);background:rgba(143,214,74,.08)}
+  .slot.master{min-width:100%;height:96px;font-size:14px}
+
+  /* marquee */
+  .marquee{overflow:hidden;padding:14px 0;-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
+  .mtrack{display:flex;gap:14px;width:max-content;animation:scroll 46s linear infinite}
+  .marquee:hover .mtrack{animation-play-state:paused}
+  @keyframes scroll{to{transform:translateX(-50%)}}
+  .chip{background:var(--deep2);border:1px solid var(--line);border-radius:100px;padding:12px 22px;font-size:14px;font-weight:600;color:var(--cream);white-space:nowrap;flex:none}
+
+  /* form */
+  .formgrid{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start}
+  @media(max-width:900px){.formgrid{grid-template-columns:1fr;gap:34px}}
+  .field{margin-bottom:16px}
+  .field label{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:7px}
+  .field input,.field select,.field textarea{width:100%;background:var(--deep2);border:1px solid var(--line);border-radius:12px;padding:14px 16px;color:var(--cream);font-family:'Inter';font-size:15px;transition:.2s}
+  .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--lime);box-shadow:0 0 0 3px rgba(143,214,74,.12)}
+  .field textarea{min-height:110px;resize:vertical}
+  .formactions{display:flex;gap:12px;flex-wrap:wrap;margin-top:6px}
+  .contact-list{list-style:none}
+  .contact-list li{display:flex;gap:14px;align-items:center;padding:16px 0;border-bottom:1px solid var(--line)}
+  .contact-list .ic{width:44px;height:44px;border-radius:12px;background:rgba(143,214,74,.12);display:flex;align-items:center;justify-content:center;flex:none}
+  .contact-list .ic svg{width:20px;height:20px;stroke:var(--lime);fill:none;stroke-width:2}
+  .contact-list .k{font-size:12px;color:var(--muted)}
+  .contact-list .v{font-weight:700}
+
+  .cta-wrap{position:relative;background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:30px;padding:64px 40px;text-align:center;overflow:hidden}
+  .cta-wrap .glow{position:absolute;top:-40%;left:50%;transform:translateX(-50%);width:70%;height:120%;background:radial-gradient(circle,rgba(143,214,74,.16),transparent 60%)}
+  .cta-wrap > *{position:relative}
+  .cta-wrap h2{font-size:clamp(28px,4vw,44px);margin-bottom:14px}
+
+  footer{border-top:1px solid var(--line);padding:54px 0 40px;color:var(--muted)}
+  footer .top{display:flex;justify-content:space-between;gap:30px;flex-wrap:wrap;align-items:flex-start;margin-bottom:34px}
+  footer .brand{font-size:24px;margin-bottom:10px}
+  footer .cols{display:flex;gap:60px;flex-wrap:wrap;font-size:14px}
+  footer .cols .k{color:var(--green);font-weight:700;font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px}
+  footer .cols a{display:block;color:var(--muted);padding:3px 0;transition:.2s}
+  footer .cols a:hover{color:var(--lime)}
+  footer .legal{border-top:1px solid var(--line);padding-top:22px;font-size:12.5px;color:var(--muted2);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+
+  /* sticky mobile cta + toast + back to top */
+  .sticky-cta{position:fixed;left:16px;right:16px;bottom:16px;z-index:55;display:none;gap:10px}
+  .sticky-cta .btn{flex:1;justify-content:center}
+  @media(max-width:760px){.sticky-cta{display:flex}}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(120px);background:var(--lime);color:var(--deep2);font-weight:700;padding:14px 24px;border-radius:100px;z-index:90;transition:.4s;box-shadow:0 14px 40px -10px rgba(0,0,0,.5)}
+  .toast.show{transform:translateX(-50%) translateY(0)}
+  .totop{position:fixed;right:20px;bottom:90px;width:46px;height:46px;border-radius:50%;background:var(--panel);border:1px solid var(--line);color:var(--lime);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;pointer-events:none;transition:.3s;z-index:55;font-size:20px}
+  .totop.show{opacity:1;pointer-events:auto}
+  @media(max-width:760px){.totop{bottom:84px}}
+
+  /* modal inscrição */
+  .modal{position:fixed;inset:0;z-index:100;display:none;align-items:flex-start;justify-content:center;padding:30px 16px;background:rgba(4,12,7,.78);backdrop-filter:blur(6px);overflow-y:auto}
+  .modal.open{display:flex}
+  .modal .box{width:100%;max-width:720px;background:linear-gradient(165deg,#0f3120,#0a1f13);border:1px solid var(--line);border-radius:22px;padding:34px;position:relative;box-shadow:0 40px 90px -30px #000;animation:pop .3s ease}
+  @keyframes pop{from{opacity:0;transform:translateY(20px) scale(.98)}to{opacity:1;transform:none}}
+  .modal .x{position:absolute;top:18px;right:22px;font-size:30px;color:var(--muted);cursor:pointer;line-height:1}
+  .modal .x:hover{color:var(--lime)}
+  .modal h3{font-size:26px;margin-bottom:4px}
+  .modal .msub{color:var(--muted);font-size:14px;margin-bottom:22px}
+  .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .fgrid .full{grid-column:1/-1}
+  @media(max-width:600px){.fgrid{grid-template-columns:1fr}}
+  .modal .chk{display:flex;gap:10px;align-items:flex-start;margin:14px 0 4px;font-size:13px;color:var(--muted)}
+  .modal .chk input{width:auto;margin-top:3px}
+  .modal .mactions{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px}
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+
+<nav id="nav">
+  <div class="wrap">
+    <a href="#top" class="brand"><span class="ball"></span>AGRO <span class="lime" style="margin-left:-6px">OPEN</span></a>
+    <div class="navlinks" id="navlinks">
+      <a href="#evento">O Evento</a>
+      <a href="#tenistas">Tenistas</a>
+      <a href="#programacao">Programação</a>
+      <a href="#sede">Sede</a>
+      <a href="#leilao">Florescer</a>
+      <a href="#ingressos">Ingressos</a>
+      <a href="sorteio.html">Sorteio</a>
+      <a href="#patrocinio">Patrocínio</a>
+    </div>
+    <a href="conta.html" class="btn ghost navcta" id="nav-conta" style="margin-right:8px">Entrar</a>
+    <a href="#contato" class="btn navcta">Fale conosco</a>
+    <div class="burger" id="burger"><span></span><span></span><span></span></div>
+  </div>
+</nav>
+<div class="mobnav" id="mobnav">
+  <span class="close" id="mobclose">&times;</span>
+  <a href="#evento">O Evento</a><a href="#tenistas">Tenistas</a><a href="#programacao">Programação</a>
+  <a href="#sede">Sede</a><a href="#leilao">Florescer</a><a href="#ingressos">Ingressos</a>
+  <a href="sorteio.html">Sorteio</a><a href="ranking.html">Ranking</a><a href="regras.html">Regras</a><a href="#patrocinio">Patrocínio</a><a href="#contato">Contato</a>
+</div>
+
+<!-- HERO -->
+<header class="hero" id="top">
+  <div class="hero-bg"><div class="grid"></div><div class="glow1"></div><div class="glow2"></div></div>
+  <div class="wrap">
+    <div>
+      <div class="edition-pill"><span class="dot"></span><span id="h-pill">4ª EDIÇÃO · 07–13 SETEMBRO 2026</span></div>
+      <h1>AGRO<br><span class="row2">OPEN</span><small>DE TÊNIS</small></h1>
+      <p class="lede" id="h-lede">Onde o esporte encontra o agronegócio. O maior torneio de tênis do Centro-Oeste do Brasil, no coração do maior polo do agro nacional.</p>
+      <div class="hero-cta">
+        <a href="#ingressos" class="btn">Inscrições &amp; ingressos →</a>
+        <a href="#patrocinio" class="btn ghost">Seja patrocinador</a>
+      </div>
+      <div class="hero-meta" id="h-meta"></div>
+    </div>
+    <div class="prizecard reveal">
+      <div class="ball-deco"></div>
+      <div class="tag">Premiação total</div>
+      <div class="amt">R$400<b>K+</b></div>
+      <div class="sub">A maior bolsa de premiação do Centro-Oeste.</div>
+      <hr>
+      <div class="mini">
+        <div><div class="n" data-count="150" data-suffix="+">0</div><div class="l">Atletas de elite</div></div>
+        <div><div class="n" data-count="13">0</div><div class="l">Categorias</div></div>
+        <div><div class="n">7</div><div class="l">Dias de evento</div></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="strip"><div class="wrap" id="strip"></div></div>
+
+<!-- O EVENTO -->
+<section id="evento">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">01 — O Evento</div>
+      <h2>Tênis + agro = <span class="lime">alto valor</span>.</h2>
+      <p>Uma plataforma premium que reúne atletas de alto nível, lideranças do campo e as maiores marcas do agronegócio em uma semana de competição, negócios e propósito.</p>
+    </div>
+    <div class="feat">
+      <div class="fcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 12h18M12 3v18"/><circle cx="12" cy="12" r="9"/></svg></div><h3>Esporte da decisão</h3><p>O tênis concentra executivos, produtores rurais e líderes empresariais — exatamente a audiência que o agro quer atingir.</p></div>
+      <div class="fcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 2l2.5 7h7l-5.5 4.5 2 7L12 16l-6 4.5 2-7L2.5 9h7z"/></svg></div><h3>Padrão Open internacional</h3><p>Identidade no nível dos grandes Opens mundiais (US Open, Australian Open), pronta para ativações de marca e cobertura de mídia.</p></div>
+      <div class="fcard reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg></div><h3>Networking B2B</h3><p>7 dias de imersão com decisores — patrocinadores, produtores, cooperativas, tradings e bancos do agro na mesma quadra.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- TENISTAS -->
+<section id="tenistas" style="background:var(--deep2)">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">02 — Line-up</div>
+      <h2>Grandes nomes <span class="lime">na quadra</span>.</h2>
+      <p>Presenças confirmadas de destaques do tênis para elevar o nível do torneio.</p>
+    </div>
+    <div class="players" id="players"></div>
+    <p class="note" id="players-note"></p>
+  </div>
+</section>
+
+<!-- PROGRAMAÇÃO -->
+<section id="programacao">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">03 — Programação</div>
+      <h2>7 dias de <span class="lime">alta performance</span>.</h2>
+      <p>De 07 a 13 de setembro de 2026, no Tangará Tênis Clube.</p>
+    </div>
+    <div class="days" id="days"></div>
+  </div>
+</section>
+
+<!-- MERCADO -->
+<section id="mercado" style="background:var(--deep2)">
+  <div class="wrap">
+    <div class="split">
+      <div class="reveal">
+        <div class="eyebrow">04 — O Mercado</div>
+        <h2 style="font-size:clamp(32px,5vw,54px);margin:16px 0">Mato Grosso, <span class="lime">#1 do agro</span> brasileiro.</h2>
+        <p style="color:var(--muted);font-size:17px">Tangará da Serra está no coração do maior polo do agronegócio do país. Da <b style="color:var(--cream)">cana-de-açúcar</b> à soja, ao algodão, ao milho e à pecuária — MT lidera. Resultado: classe A/B aquecida e a maior concentração de decisores B2B do agro.</p>
+        <div class="mini-stats">
+          <div class="ms"><div class="n">#1</div><div class="l">do Brasil no agronegócio</div></div>
+          <div class="ms"><div class="n cream">A/B</div><div class="l">Poder de compra premium</div></div>
+        </div>
+      </div>
+      <div class="panel reveal">
+        <div class="tagchip">PERFIL DA PRAÇA</div>
+        <h3 style="font-size:26px;margin-bottom:8px">Quem está na arquibancada</h3>
+        <p style="color:var(--muted);margin-bottom:8px">Público qualificado, alto poder aquisitivo e decisão B2B.</p>
+        <ul class="check">
+          <li><b>Produtores rurais</b> — fazendas de médio e grande porte</li>
+          <li><b>Executivos do agro</b> — diretores e C-levels de cooperativas e tradings</li>
+          <li><b>Decisores B2B</b> — quem assina por máquinas, insumos e crédito</li>
+          <li><b>Famílias premium</b> — público de consumo de alto valor</li>
+        </ul>
+        <p style="color:var(--muted);font-size:13px">Culturas líderes: <b style="color:var(--lime)">cana-de-açúcar</b>, soja, algodão, milho e pecuária.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SEDE / TTC -->
+<section id="sede">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">05 — A Sede</div>
+      <h2>Tangará <span class="lime">Tênis Clube</span>.</h2>
+      <p>Referência do tênis de Mato Grosso e sede oficial do circuito estadual (MT1000). Estrutura completa para a maior semana de tênis do Centro-Oeste.</p>
+    </div>
+    <div class="strip" style="border-radius:18px;border:1px solid var(--line);overflow:hidden;margin-bottom:34px">
+      <div class="wrap" style="padding:0">
+        <div class="cell reveal"><div class="n">5</div><div class="l">Quadras de saibro</div></div>
+        <div class="cell reveal"><div class="n">2</div><div class="l">Quadras rápidas</div></div>
+        <div class="cell reveal"><div class="n">13</div><div class="l">Categorias · M &amp; F</div></div>
+        <div class="cell reveal"><div class="n">Head</div><div class="l">Bola oficial</div></div>
+      </div>
+    </div>
+    <div class="gallery" id="gallery"></div>
+    <div style="display:grid;grid-template-columns:1.2fr .8fr;gap:24px;margin-top:30px;align-items:center" class="sede-foot">
+      <p class="note" style="margin:0">Cenas ilustrativas da experiência Agro Open. Para a versão final, substituímos por fotos oficiais do Tangará Tênis Clube e das edições anteriores — basta enviar os arquivos.</p>
+      <div style="text-align:right">
+        <div style="font-size:14px;color:var(--muted)">Rua Benedito Pereira de Oliveira, 1500 · Tangará da Serra/MT</div>
+        <a href="https://www.instagram.com/ttctga/" target="_blank" rel="noopener" style="color:var(--lime);font-weight:600;font-size:14px">@ttctga →</a>
+      </div>
+    </div>
+    <div class="reveal" style="margin-top:40px;border-top:1px solid var(--line);padding-top:34px;display:flex;align-items:center;gap:34px;flex-wrap:wrap;justify-content:center">
+      <span class="eyebrow" style="color:var(--muted)">Realização oficial</span>
+      <div style="background:#fff;border-radius:14px;padding:14px 20px;display:flex;align-items:center;height:84px"><img src="img/logo-agro-open-oficial.png" alt="Agro Open de Tênis" style="height:100%;width:auto"></div>
+      <div style="background:#fff;border-radius:14px;padding:14px 22px;display:flex;align-items:center;height:84px"><img src="img/logo-ttc.png" alt="Tangará Tênis Clube" style="height:100%;width:auto"></div>
+      <div style="font-family:'Archivo';font-weight:900;font-size:30px;letter-spacing:-.02em">UISA</div>
+    </div>
+  </div>
+</section>
+
+<!-- INOVAÇÃO -->
+<section id="inovacao" style="background:var(--deep2)">
+  <div class="wrap">
+    <div class="split">
+      <div class="reveal">
+        <div class="tagchip">PARALELO · MESMA SEMANA</div>
+        <h2 style="font-size:clamp(30px,4.6vw,50px);margin-bottom:16px">F5 — o poder do <span class="lime">agro que inova</span>.</h2>
+        <p style="color:var(--muted);font-size:17px;margin-bottom:8px">No mesmo período, a UISA recebe o <b style="color:var(--cream)">F5</b>, um dos maiores eventos de inovação do Centro-Oeste. A UISA é <b style="color:var(--cream)">uma das maiores biorrefinarias do mundo</b> — transforma cana-de-açúcar e biomassa em biocombustíveis, biometano, energia limpa, alimentos e fertilizantes.</p>
+        <ul class="check">
+          <li><b>2ª colocada</b> entre as 100 empresas mais inovadoras do Brasil no uso de TI (IT Fórum) — à frente de Bradesco, Dasa e Microsoft</li>
+          <li><b>Pioneira no Brasil</b> em Blockchain na produção de alimentos, com Google Cloud e IT Lean</li>
+          <li>Listada no <b>Prêmio Valor Inovação Brasil</b> · referência em automação no agro</li>
+        </ul>
+        <a href="https://www.uisa.com.br" target="_blank" rel="noopener" class="btn ghost" style="margin-top:6px">Conheça a UISA →</a>
+      </div>
+      <div class="panel reveal">
+        <div class="eyebrow">REALIZAÇÃO CONJUNTA</div>
+        <h3 style="font-size:28px;margin:14px 0 6px">Tangará Tênis Clube <span class="lime">+ UISA</span></h3>
+        <p style="color:var(--muted)">A tradição do tênis de Mato Grosso somada à força de inovação de uma das empresas mais admiradas do agro — que também realiza o Florescer Ação Social.</p>
+        <div class="mini-stats" style="grid-template-columns:1fr 1fr">
+          <div class="ms"><div class="n">#2</div><div class="l">Mais inovadoras do Brasil · IT Fórum</div></div>
+          <div class="ms"><div class="n cream">1ª</div><div class="l">Blockchain em alimentos no Brasil</div></div>
+          <div class="ms"><div class="n cream">Mundo</div><div class="l">Entre as maiores biorrefinarias</div></div>
+          <div class="ms"><div class="n">100%</div><div class="l">Energia limpa da própria biomassa</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- LEILÃO FLORESCER -->
+<section id="leilao">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow gold">06 — Impacto Social · ESG</div>
+      <h2>O agro que <span class="gold">retribui</span>.</h2>
+      <p>No sábado, 12/09, um jantar de gala com leilão beneficente em prol do Florescer Ação Social — iniciativa da própria UISA.</p>
+    </div>
+    <div class="split">
+      <div class="panel gold reveal">
+        <div class="tagchip gold">SÁBADO · 12 SET · JANTAR DE GALA</div>
+        <h3 style="font-size:28px;margin-bottom:12px">Leilão Beneficente <span class="gold">Florescer</span></h3>
+        <p style="color:var(--muted)">A Florescer Ação Social transforma vidas há quase 20 anos por meio da educação, cultura, esporte e geração de renda em Mato Grosso. A renda do leilão é 100% revertida à causa.</p>
+        <ul class="check">
+          <li><b>Mesas a R$ 7.000</b> · sistema open food · 6 convidados</li>
+          <li>Jantar premium + experiência VIP de encerramento</li>
+          <li>Apoie via <b>incentivo fiscal</b> (FIA / Lei de Cultura)</li>
+          <li><b>100%</b> revertido ao Florescer Ação Social</li>
+        </ul>
+        <a href="#ingressos" class="btn gold">Reservar minha mesa →</a>
+      </div>
+      <div class="reveal">
+        <p style="color:var(--muted);font-size:17px;margin-bottom:8px">Uma das <b style="color:var(--cream)">100 Melhores ONGs do Brasil de 2024</b> e a <b style="color:var(--cream)">melhor ONG de Mato Grosso</b>. O mesmo esporte que abre o torneio — inclusive na 1ª quadra de beach tennis de Nova Olímpia — é o que muda histórias na comunidade.</p>
+        <div class="mini-stats">
+          <div class="ms"><div class="n">≈36 mil</div><div class="l">vidas impactadas desde 2006</div></div>
+          <div class="ms"><div class="n cream">3</div><div class="l">unidades · N. Olímpia, Denise, Assari</div></div>
+          <div class="ms"><div class="n cream">4</div><div class="l">eixos: educação, cultura, esporte, renda</div></div>
+          <div class="ms"><div class="n">100%</div><div class="l">da renda do leilão à causa</div></div>
+        </div>
+        <p class="note">Florescer Ação Social · iniciativa UISA · floresceracaosocial.org</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- INGRESSOS / INSCRIÇÃO -->
+<section id="ingressos" style="background:var(--deep2)">
+  <div class="wrap">
+    <div class="sec-head center reveal">
+      <div class="eyebrow">07 — Participe</div>
+      <h2>Inscrições &amp; <span class="lime">ingressos</span>.</h2>
+      <p style="margin:0 auto">Escolha como quer fazer parte da 4ª Agro Open — na quadra, na arquibancada ou na mesa do leilão.</p>
+    </div>
+    <div class="tickets" id="tickets"></div>
+    <div style="text-align:center;margin-top:30px">
+      <a href="sorteio.html" class="btn ghost">🎾 Sorteio de chaves online →</a>
+    </div>
+    <p class="note" style="text-align:center">Inscrição de atleta abre um formulário enviado à organização. Mesa e convite abrem o WhatsApp. Vagas e lotes sujeitos a disponibilidade.</p>
+  </div>
+</section>
+
+<!-- PATROCÍNIO -->
+<section id="patrocinio">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">08 — Patrocínio</div>
+      <h2>Conecte sua marca à <span class="lime">elite do agro</span>.</h2>
+      <p>Três níveis de associação. Exposição premium por 7 dias para 3.500+ decisores classe A/B do agronegócio.</p>
+    </div>
+    <div class="cotas" id="cotas"></div>
+    <p class="note">Contrapartidas customizáveis sob medida. Cotas de leilão e ativações específicas sob consulta à comissão.</p>
+  </div>
+</section>
+
+<!-- PATROCINADORES OFICIAIS -->
+<section id="patrocinadores">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow gold">09 — Patrocinadores Oficiais</div>
+      <h2>As marcas que <span class="lime">constroem</span> a 4ª edição.</h2>
+      <p>Cotas em aberto para 2026. As marcas confirmadas terão seus logos exibidos aqui, ao lado da UISA e do Tangará Tênis Clube.</p>
+    </div>
+    <div class="wall" id="wall"></div>
+    <p class="note">Já é patrocinador ou quer confirmar sua marca? Fale com a comissão e enviamos seu logo para esta vitrine oficial.</p>
+  </div>
+</section>
+
+<!-- CONVIDADAS + HUB -->
+<section style="background:var(--deep2);padding:80px 0">
+  <div class="wrap" style="margin-bottom:24px"><div class="eyebrow reveal" style="text-align:center">Empresas convidadas para a 4ª edição</div></div>
+  <div class="marquee"><div class="mtrack" id="mq-inv-1"></div></div>
+  <div class="marquee" style="margin-top:14px"><div class="mtrack" id="mq-inv-2" style="animation-duration:54s;animation-direction:reverse"></div></div>
+  <div class="wrap" style="text-align:center;margin:48px 0 24px">
+    <div class="eyebrow reveal" style="text-align:center">Parceiro institucional de inovação</div>
+    <h3 class="reveal" style="font-size:clamp(22px,3vw,30px);margin-top:12px">HUB <span class="lime">UniAgro</span> <span style="color:var(--muted);font-family:'Inter';font-weight:500;font-size:15px">· e seus membros, dos quais a UISA faz parte</span></h3>
+  </div>
+  <div class="marquee"><div class="mtrack" id="mq-hub" style="animation-duration:60s"></div></div>
+</section>
+
+<!-- CONTATO -->
+<section id="contato">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">10 — Contato</div>
+      <h2>Fale com a <span class="lime">comissão</span>.</h2>
+      <p>Patrocínio, mesa do leilão, inscrição ou imprensa — preencha e enviamos direto pelo WhatsApp ou e-mail.</p>
+    </div>
+    <div class="formgrid">
+      <form class="panel reveal" id="contact-form" onsubmit="return false">
+        <div class="field"><label>Nome</label><input id="f-nome" type="text" placeholder="Seu nome" required></div>
+        <div class="field"><label>Empresa</label><input id="f-empresa" type="text" placeholder="Sua empresa (opcional)"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div class="field"><label>E-mail</label><input id="f-email" type="email" placeholder="voce@empresa.com"></div>
+          <div class="field"><label>Telefone</label><input id="f-tel" type="tel" placeholder="(00) 00000-0000"></div>
+        </div>
+        <div class="field"><label>Interesse</label><select id="f-interesse">
+          <option>Patrocínio (cotas)</option><option>Mesa do Leilão Florescer</option><option>Inscrição de atleta</option><option>Convite VIP / Camarote</option><option>Imprensa / mídia</option><option>Outro</option>
+        </select></div>
+        <div class="field"><label>Mensagem</label><textarea id="f-msg" placeholder="Conte como podemos ajudar..."></textarea></div>
+        <div class="formactions">
+          <button class="btn" id="send-wa">Enviar pelo WhatsApp</button>
+          <button class="btn ghost" id="send-mail">Enviar por e-mail</button>
+        </div>
+      </form>
+      <div class="reveal">
+        <ul class="contact-list">
+          <li><span class="ic"><svg viewBox="0 0 24 24"><path d="M21 15.5a2 2 0 0 1-2 2A16 16 0 0 1 4.5 5a2 2 0 0 1 2-2h2l1 4-2 1.5a12 12 0 0 0 5 5L14 11l4 1v2.5z"/></svg></span><div><div class="k">WhatsApp / Telefone</div><div class="v" id="c-phone">(65) 99636-4113</div></div></li>
+          <li><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M4 6l8 6 8-6"/></svg></span><div><div class="k">E-mail comercial</div><div class="v" id="c-email">silvester_natal@hotmail.com</div></div></li>
+          <li><span class="ic"><svg viewBox="0 0 24 24"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span><div><div class="k">Local</div><div class="v">Tangará Tênis Clube · Tangará da Serra/MT</div></div></li>
+          <li><span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17" cy="7" r="1"/></svg></span><div><div class="k">Instagram do clube</div><div class="v"><a href="https://instagram.com/ttctga" target="_blank" rel="noopener" class="lime">@ttctga</a></div></div></li>
+        </ul>
+        <div class="cta-wrap reveal" style="margin-top:22px;padding:40px 28px">
+          <div class="glow"></div>
+          <h2 style="font-size:26px">Seja parte da <span class="lime">4ª Agro Open</span>.</h2>
+          <p style="color:var(--muted);max-width:420px;margin:8px auto 20px">A elite do tênis e do agronegócio brasileiro, na mesma quadra.</p>
+          <a href="#ingressos" class="btn">Garantir presença →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <div class="brand" style="display:flex;align-items:center;gap:12px"><span class="ball"></span>AGRO <span class="lime" style="margin-left:-6px">OPEN</span></div>
+        <p style="max-width:320px;font-size:14px">Onde o esporte encontra o agronegócio. Realização Tangará Tênis Clube + UISA.</p>
+      </div>
+      <div class="cols">
+        <div><div class="k">Evento</div><a href="#evento">O Evento</a><a href="#programacao">Programação</a><a href="#tenistas">Tenistas</a><a href="#ingressos">Ingressos</a></div>
+        <div><div class="k">Portal do Tênis</div><a href="ingressos.html">Ingressos</a><a href="reservas.html">Reservar quadra</a><a href="aulas.html">Aulas</a><a href="loja.html">Pro Shop</a><a href="ligas.html">Ligas</a><a href="grupos.html">Grupos</a><a href="suico.html">Suíço</a><a href="dupla.html">Elim. dupla</a><a href="carteirinha.html">Carteirinha de sócio</a><a href="cardapio.html">Cardápio (bar)</a><a href="chaves.html">Chaves oficiais</a><a href="ranking.html">Ranking ATP/WTA</a><a href="perfil.html">Perfis & H2H</a><a href="agenda.html">Agenda de jogos</a><a href="destaques.html">Melhores do Agro</a><a href="noticias.html">Notícias</a><a href="regras.html">Regras (ATP)</a><a href="planos.html">Planos & Assinaturas</a><a href="patrocinadores.html">Patrocinadores</a><a href="conta.html">Minha conta</a><a href="admin.html">Painel ADM</a></div>
+        <div><div class="k">Causa</div><a href="#leilao">Leilão Florescer</a><a href="https://www.floresceracaosocial.org" target="_blank" rel="noopener">Florescer Ação Social</a><a href="https://www.uisa.com.br" target="_blank" rel="noopener">UISA</a></div>
+        <div><div class="k">Contato</div><a href="https://wa.me/5565996364113" target="_blank" rel="noopener">(65) 99636-4113</a><a href="mailto:silvester_natal@hotmail.com">E-mail comercial</a></div>
+      </div>
+    </div>
+    <div class="legal">
+      <span>AGRO OPEN · 4ª EDIÇÃO · 07–13 SET 2026 · Tangará da Serra/MT</span>
+      <span>© 2026 Agro Open de Tênis · plataforma <b style="color:var(--lime)">SetPoint</b>.</span>
+    </div>
+  </div>
+</footer>
+
+<div class="sticky-cta">
+  <a href="#ingressos" class="btn">Ingressos</a>
+  <a href="#patrocinio" class="btn ghost" style="background:rgba(7,22,13,.85)">Patrocínio</a>
+</div>
+<div class="totop" id="totop">↑</div>
+<div class="toast" id="toast">Abrindo o WhatsApp…</div>
+
+<!-- MODAL INSCRIÇÃO -->
+<div class="modal" id="modal-insc">
+  <div class="box">
+    <span class="x" id="modal-x">&times;</span>
+    <h3>Inscrição de Atleta <span class="lime">·</span> 4ª Agro Open</h3>
+    <div class="msub">Preencha os dados abaixo. Ao enviar, abrimos um e-mail/WhatsApp já preenchido para a organização confirmar sua vaga.</div>
+    <form id="form-insc" onsubmit="return false">
+      <div class="fgrid">
+        <div class="field full"><label>Nome completo *</label><input id="i-nome" type="text" placeholder="Seu nome completo" required></div>
+        <div class="field"><label>Data de nascimento</label><input id="i-nasc" type="date"></div>
+        <div class="field"><label>Sexo</label><select id="i-sexo"><option>Masculino</option><option>Feminino</option></select></div>
+        <div class="field"><label>CPF</label><input id="i-cpf" type="text" placeholder="000.000.000-00"></div>
+        <div class="field"><label>Cidade / UF</label><input id="i-cidade" type="text" placeholder="Tangará da Serra / MT"></div>
+        <div class="field"><label>WhatsApp / Telefone *</label><input id="i-tel" type="tel" placeholder="(65) 90000-0000" required></div>
+        <div class="field"><label>E-mail *</label><input id="i-email" type="email" placeholder="voce@email.com" required></div>
+        <div class="field full"><label>Categoria / chave *</label><select id="i-cat"></select></div>
+        <div class="field"><label>Nível de jogo</label><select id="i-nivel"><option>Iniciante</option><option>Intermediário</option><option>Avançado</option><option>Profissional</option></select></div>
+        <div class="field"><label>Parceiro(a) de duplas (se aplicável)</label><input id="i-dupla" type="text" placeholder="Nome do parceiro(a)"></div>
+        <div class="field"><label>Tamanho da camiseta</label><select id="i-camisa"><option>PP</option><option>P</option><option selected>M</option><option>G</option><option>GG</option><option>XGG</option></select></div>
+        <div class="field"><label>Contato de emergência</label><input id="i-emerg" type="text" placeholder="Nome e telefone"></div>
+        <div class="field full"><label>Observações</label><textarea id="i-obs" placeholder="Restrições, preferências de horário, etc. (opcional)"></textarea></div>
+      </div>
+      <label class="chk"><input type="checkbox" id="i-aceite"> Declaro que li e aceito o regulamento do torneio e autorizo o uso de imagem para divulgação do evento.</label>
+      <div class="mactions">
+        <button class="btn" id="i-send">Enviar inscrição</button>
+        <button class="btn ghost" id="i-mail">Por e-mail</button>
+        <button class="btn ghost" id="i-wa">WhatsApp</button>
+      </div>
+      <p class="note" style="margin-top:12px">Inscrição enviada para a organização (rrodrigogon@gmail.com). A vaga é confirmada após validação e pagamento da taxa da categoria.</p>
+    </form>
+  </div>
+</div>
+
+<script>
+/* ===================================================================
+   CONFIG — edite tudo aqui. O site se atualiza sozinho.
+   =================================================================== */
+const CONFIG = {
+  contato: { whatsapp: "5565996364113", email: "silvester_natal@hotmail.com", pessoa: "Silvester Natal", inscricaoEmail: "rrodrigogon@gmail.com" },
+  categorias: ["Masc · PRO Profissional","Masc · 1ª Classe","Masc · 2ª Classe","Masc · 3ª Classe","Masc · 4ª Classe","Masc · 5ª Classe","Masc · 34+ Veteranos","Masc · Especial VIP","Fem · PRO Profissional","Fem · 1ª Classe","Fem · 2ª Classe","Fem · 3ª Classe","Fem · 35+ Veteranas","Fem · Duplas"],
+  stats: [
+    {n:400, prefix:"R$", suffix:"K+", label:"Em premiação"},
+    {n:3500, sep:true, suffix:"+", label:"Público na semana"},
+    {n:100, suffix:"K+", label:"Alcance digital"},
+    {n:20, suffix:"+", label:"Inserções de mídia"}
+  ],
+  heroMeta: [
+    {k:"Data", v:"07 — 13 SET 2026"},
+    {k:"Local", v:"Tangará Tênis Clube · MT"},
+    {k:"Categorias", v:"13 chaves · M & F"}
+  ],
+  tenistas: {
+    confirmados: [
+      {nome:"João Meneses", papel:"★ Ouro Pan-Americano", star:true},
+      {nome:"Guilherme Clezar", papel:"Ex-ATP · confirmado"},
+      {nome:"Gilbert", papel:"Presença confirmada"},
+      {nome:"Christian Oliveira", papel:"Presença confirmada"},
+      {nome:"Paulo Saraiva", papel:"Presença confirmada"},
+      {nome:"Marvim", papel:"Presença confirmada"},
+      {nome:"Kauê Noatto", papel:"Presença confirmada"}
+    ],
+    nota:"Presenças confirmadas. Demais nomes do circuito nacional em definição — line-up sujeito a confirmação contratual de cada atleta."
+  },
+  programacao: [
+    {d:"07",dow:"SEG",ev:"Abertura",ds:"Coquetel e apresentação aos patrocinadores."},
+    {d:"08",dow:"TER",ev:"Classificação",ds:"Primeira rodada · todas as categorias."},
+    {d:"09",dow:"QUA",ev:"Oitavas",ds:"Disputa intensiva · ativações de marca."},
+    {d:"10",dow:"QUI",ev:"Quartas",ds:"Eliminatórias · cobertura de mídia."},
+    {d:"11",dow:"SEX",ev:"Semis + Jantar VIP",ds:"Networking exclusivo com patrocinadores.",hl:true},
+    {d:"12",dow:"SÁB",ev:"Finais + Leilão",ds:"Decisões e leilão beneficente Florescer.",hl:true},
+    {d:"13",dow:"DOM",ev:"Grandes Finais",ds:"Premiação e encerramento · R$400 mil.",hl:true}
+  ],
+  galeria: [
+    {img:"img/cena-quadra.svg", label:"Quadra de saibro"},
+    {img:"img/cena-arquibancada.svg", label:"Arquibancada lotada"},
+    {img:"img/cena-jantar.svg", label:"Jantar VIP"},
+    {img:"img/cena-ativacao.svg", label:"Ativações de marca"},
+    {img:"img/cena-premiacao.svg", label:"Premiação · R$400 mil"},
+    {img:"img/cena-beach.svg", label:"Beach tennis"}
+  ],
+  ingressos: [
+    {ico:"🎾", titulo:"Inscrição de Atleta", preco:"Por categoria", sub:"", desc:"Dispute uma das 13 categorias (masculino e feminino, todos os níveis). Vagas limitadas por chave.", cta:"Quero me inscrever", interesse:"Inscrição de atleta", modal:"inscricao"},
+    {ico:"🍽️", titulo:"Mesa do Leilão", preco:"R$ 7.000", sub:"/ mesa", desc:"Jantar de gala open food, 6 convidados, experiência VIP e participação no leilão beneficente Florescer (12/09).", cta:"Reservar mesa", interesse:"Mesa do Leilão Florescer", feat:true},
+    {ico:"⭐", titulo:"Convite VIP / Camarote", preco:"Sob consulta", sub:"", desc:"Acesso à área VIP durante a semana, Jantar VIP de sexta (11/09) e networking com a elite do agro.", cta:"Quero um convite", interesse:"Convite VIP / Camarote"}
+  ],
+  cotas: [
+    {tier:"MASTER · NAMING RIGHTS", price:"R$75K", qt:'1 cota · "Agro Open by sua marca"', desc:"Naming rights da quadra principal, máxima exposição, stand premium 6×4m, 12 lugares no Jantar VIP e menções ilimitadas.", master:true, cta:"Quero a cota Master"},
+    {tier:"DIAMANTE", price:"R$50K", qt:"4 cotas · quadras alternativas", desc:"Nome de quadra alternativa, logo premium no backdrop, stand 4×3m, 6 lugares no Jantar VIP e 10 posts oficiais.", cta:"Falar com a comissão"},
+    {tier:"OURO", price:"R$25K", qt:"10 cotas · apoiador", desc:"Presença no backdrop e materiais oficiais, ativações de marca, stand 3×2m, 2 lugares no Jantar VIP e 4 posts oficiais.", cta:"Falar com a comissão"}
+  ],
+  patrocinadores: { master:1, diamante:4, ouro:10 },
+  convidadas: ["Atacadão Dia&Dia","Amaggi","Jalles Machado","Bom Futuro","Sicredi","Sicoob","COFCO","Minerva","Banco Pátria","Copersucar","Barralcool","ALD","Eldorado Celulose","Veracel","CMAA","Coopercitrus","Alta Mogiana","Atos Sementes","Sementes J. Bassos","Queiroz Galvão","Bigmaster","Zilor","Atvos","Leo Madeiras","Sephora","Grupo Ser Educacional","Estácio","Porto do Açu","Energisa","Heineken"],
+  hub: ["BP Bioenergy","Cerradinho Bio","Copersucar","Coruripe","Dori Alimentos","Eldorado Brasil","Fischer","Granol","Jacto","Jalles","Minerva Foods","Ouro Fino","Pedra Agroindustrial","Santa Helena","São Martinho","SLC Agrícola","Tereos","UISA","Usina Batatais","Usina Lins","Zilor"]
+};
+
+/* ===================== RENDER ===================== */
+const $ = (s,el=document)=>el.querySelector(s);
+const el = (html)=>{const t=document.createElement('template');t.innerHTML=html.trim();return t.content.firstChild;};
+
+// hero meta
+$('#h-meta').innerHTML = CONFIG.heroMeta.map(m=>`<div class="m"><div class="k">${m.k}</div><div class="v">${m.v}</div></div>`).join('');
+// strip stats
+$('#strip').innerHTML = CONFIG.stats.map(s=>`<div class="cell"><div class="n" data-count="${s.n}" ${s.prefix?`data-prefix="${s.prefix}"`:''} ${s.suffix?`data-suffix="${s.suffix}"`:''} ${s.sep?'data-sep="1"':''}>0</div><div class="l">${s.label}</div></div>`).join('');
+// players
+$('#players').innerHTML = CONFIG.tenistas.confirmados.map(p=>`<div class="pc reveal ${p.star?'star':''}"><div class="bg"></div><h4>${p.nome}</h4><div class="r">${p.papel}</div></div>`).join('');
+$('#players-note').textContent = CONFIG.tenistas.nota;
+// days
+$('#days').innerHTML = CONFIG.programacao.map(d=>`<div class="day reveal ${d.hl?'hl':''}"><div class="num">${d.d}</div><div class="dow">${d.dow}</div><div class="ev">${d.ev}</div><div class="ds">${d.ds}</div></div>`).join('');
+// gallery
+$('#gallery').innerHTML = CONFIG.galeria.map(g=>`<div class="gtile reveal" data-l="${g.label}" style="background-image:url(${g.img})"></div>`).join('');
+// tickets
+$('#tickets').innerHTML = CONFIG.ingressos.map(t=>`<div class="tcard reveal ${t.feat?'feat':''}"><div class="ico">${t.ico}</div><h3>${t.titulo}</h3><div class="price">${t.preco} <small>${t.sub||''}</small></div><p>${t.desc}</p><a class="btn ${t.feat?'gold':''} js-wa" data-int="${t.interesse}" ${t.modal?`data-modal="${t.modal}"`:''}>${t.cta} →</a></div>`).join('');
+// cotas
+$('#cotas').innerHTML = CONFIG.cotas.map(c=>`<div class="cota reveal ${c.master?'master':''}">${c.master?'<div class="ribbon">EXCLUSIVA</div>':''}<div class="tier">${c.tier}</div><div class="price">${c.price}</div><div class="qt">${c.qt}</div><p>${c.desc}</p><a class="btn ${c.master?'':'ghost'} js-wa" data-int="Patrocínio (cotas)" style="margin-top:22px">${c.cta}</a></div>`).join('');
+// sponsor wall
+const slots = (n,cls='')=>Array.from({length:n}).map(()=>`<a class="slot ${cls} js-wa" data-int="Patrocínio (cotas)">${cls==='master'?'SUA MARCA AQUI · "AGRO OPEN BY ___"':'DISPONÍVEL'}</a>`).join('');
+$('#wall').innerHTML = `
+  <div class="tierrow master reveal"><div class="tierhead"><b>MASTER · NAMING RIGHTS</b><span class="ln"></span><span class="pr">R$ 75K · 1 cota exclusiva</span></div><div class="slots">${slots(CONFIG.patrocinadores.master,'master')}</div></div>
+  <div class="tierrow reveal"><div class="tierhead"><b>DIAMANTE</b><span class="ln"></span><span class="pr">R$ 50K · ${CONFIG.patrocinadores.diamante} cotas</span></div><div class="slots">${slots(CONFIG.patrocinadores.diamante)}</div></div>
+  <div class="tierrow reveal"><div class="tierhead"><b>OURO</b><span class="ln"></span><span class="pr">R$ 25K · ${CONFIG.patrocinadores.ouro} cotas</span></div><div class="slots">${slots(CONFIG.patrocinadores.ouro)}</div></div>`;
+// marquees
+const chips = (arr)=>arr.map(b=>`<span class="chip"${b==='UISA'?' style="border-color:var(--lime);color:var(--lime)"':''}>${b}</span>`).join('');
+$('#mq-inv-1').innerHTML = chips(CONFIG.convidadas)+chips(CONFIG.convidadas);
+$('#mq-inv-2').innerHTML = chips([...CONFIG.convidadas].reverse())+chips([...CONFIG.convidadas].reverse());
+$('#mq-hub').innerHTML = chips(CONFIG.hub)+chips(CONFIG.hub);
+// contact display
+$('#c-phone').textContent = '+'+CONFIG.contato.whatsapp.replace(/^55/,'55 ');
+$('#c-email').textContent = CONFIG.contato.email;
+
+/* ===================== INTERAÇÕES ===================== */
+// reveal
+const io=new IntersectionObserver((es)=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.12});
+document.querySelectorAll('.reveal').forEach(x=>io.observe(x));
+// count up
+const fmt=(n,sep)=>sep?n.toLocaleString('pt-BR'):String(n);
+const cio=new IntersectionObserver((es)=>es.forEach(e=>{
+  if(!e.isIntersecting)return;cio.unobserve(e.target);
+  const x=e.target,end=+x.dataset.count,pre=x.dataset.prefix||'',suf=x.dataset.suffix||'',sep=x.dataset.sep;
+  let t0=null;const step=t=>{if(!t0)t0=t;const p=Math.min((t-t0)/1300,1),e2=1-Math.pow(1-p,3);x.textContent=pre+fmt(Math.round(end*e2),sep)+suf;if(p<1)requestAnimationFrame(step)};requestAnimationFrame(step);
+}),{threshold:.6});
+document.querySelectorAll('[data-count]').forEach(c=>cio.observe(c));
+// nav + progress + totop
+const nav=$('#nav'),prog=$('#progress'),totop=$('#totop');
+addEventListener('scroll',()=>{
+  const sc=scrollY,h=document.documentElement.scrollHeight-innerHeight;
+  nav.classList.toggle('scrolled',sc>20);
+  prog.style.width=(sc/h*100)+'%';
+  totop.classList.toggle('show',sc>700);
+});
+totop.onclick=()=>scrollTo({top:0,behavior:'smooth'});
+// active nav link
+const navIds=[...document.querySelectorAll('#navlinks a')].map(a=>a.getAttribute('href').slice(1));
+const sio=new IntersectionObserver((es)=>es.forEach(e=>{if(e.isIntersecting){document.querySelectorAll('#navlinks a').forEach(a=>a.classList.toggle('active',a.getAttribute('href')==='#'+e.target.id))}}),{rootMargin:'-45% 0px -50% 0px'});
+navIds.forEach(id=>{const s=document.getElementById(id);if(s)sio.observe(s)});
+// mobile nav
+const mob=$('#mobnav');
+$('#burger').onclick=()=>mob.classList.add('open');
+$('#mobclose').onclick=()=>mob.classList.remove('open');
+mob.querySelectorAll('a').forEach(a=>a.onclick=()=>mob.classList.remove('open'));
+// toast
+const toast=$('#toast');
+const showToast=(m)=>{toast.textContent=m;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),2600)};
+// whatsapp prefilled (cards/slots)
+function waMessage(interesse,extra=''){
+  const t=`Olá! Tenho interesse em *${interesse}* na 4ª Agro Open de Tênis.${extra}`;
+  return `https://wa.me/${CONFIG.contato.whatsapp}?text=${encodeURIComponent(t)}`;
+}
+document.addEventListener('click',e=>{
+  const a=e.target.closest('.js-wa');
+  if(!a)return;
+  e.preventDefault();
+  if(a.dataset.modal==='inscricao'){ openInscricao(); return; }
+  showToast('Abrindo o WhatsApp…');
+  window.open(waMessage(a.dataset.int||'a 4ª Agro Open'),'_blank');
+});
+// contact form
+function buildMsg(){
+  const v=id=>$('#'+id).value.trim();
+  return `Olá! Contato pela página da 4ª Agro Open.%0A`+
+    `*Nome:* ${v('f-nome')||'-'}%0A*Empresa:* ${v('f-empresa')||'-'}%0A`+
+    `*E-mail:* ${v('f-email')||'-'}%0A*Telefone:* ${v('f-tel')||'-'}%0A`+
+    `*Interesse:* ${$('#f-interesse').value}%0A*Mensagem:* ${v('f-msg')||'-'}`;
+}
+$('#send-wa').onclick=()=>{
+  if(!$('#f-nome').value.trim()){$('#f-nome').focus();return showToast('Informe seu nome')}
+  showToast('Abrindo o WhatsApp…');
+  window.open(`https://wa.me/${CONFIG.contato.whatsapp}?text=${buildMsg()}`,'_blank');
+};
+$('#send-mail').onclick=()=>{
+  if(!$('#f-nome').value.trim()){$('#f-nome').focus();return showToast('Informe seu nome')}
+  const sub=encodeURIComponent('Contato 4ª Agro Open · '+$('#f-interesse').value);
+  const body=buildMsg().replace(/%0A/g,'%0D%0A');
+  location.href=`mailto:${CONFIG.contato.email}?subject=${sub}&body=${body}`;
+};
+
+/* ===================== INSCRIÇÃO (modal) ===================== */
+const modal=$('#modal-insc');
+$('#i-cat').innerHTML = CONFIG.categorias.map(c=>`<option>${c}</option>`).join('');
+function openInscricao(){modal.classList.add('open');document.body.style.overflow='hidden';setTimeout(()=>$('#i-nome').focus(),120);}
+function closeInscricao(){modal.classList.remove('open');document.body.style.overflow='';}
+$('#modal-x').onclick=closeInscricao;
+modal.addEventListener('click',e=>{if(e.target===modal)closeInscricao();});
+addEventListener('keydown',e=>{if(e.key==='Escape')closeInscricao();});
+function inscValid(){
+  for(const id of ['i-nome','i-tel','i-email']){if(!$('#'+id).value.trim()){$('#'+id).focus();showToast('Preencha os campos obrigatórios');return false;}}
+  if(!$('#i-aceite').checked){showToast('É preciso aceitar o regulamento');return false;}
+  return true;
+}
+function inscData(){
+  const v=id=>$('#'+id).value.trim()||'-';
+  return [['Nome',v('i-nome')],['Nascimento',v('i-nasc')],['Sexo',$('#i-sexo').value],['CPF',v('i-cpf')],
+    ['Cidade/UF',v('i-cidade')],['WhatsApp',v('i-tel')],['E-mail',v('i-email')],['Categoria',$('#i-cat').value],
+    ['Nível',$('#i-nivel').value],['Duplas',v('i-dupla')],['Camiseta',$('#i-camisa').value],
+    ['Contato emergência',v('i-emerg')],['Observações',v('i-obs')]].map(x=>x[0]+': '+x[1]).join('\n');
+}
+function inscObj(){
+  const v=id=>$('#'+id).value.trim();
+  return {nome:v('i-nome'),nasc:v('i-nasc'),sexo:$('#i-sexo').value,cpf:v('i-cpf'),cidade:v('i-cidade'),tel:v('i-tel'),email:v('i-email'),categoria:$('#i-cat').value,nivel:$('#i-nivel').value,dupla:v('i-dupla'),camisa:$('#i-camisa').value,emerg:v('i-emerg'),obs:v('i-obs')};
+}
+$('#i-send').onclick=async()=>{
+  if(!inscValid())return;
+  try{
+    const r=await fetch('/api/inscricao',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(inscObj())});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'erro');
+    showToast('Inscrição enviada com sucesso!');
+    closeInscricao(); document.getElementById('form-insc').reset();
+  }catch(e){
+    showToast('Sem servidor ativo — enviando por e-mail…');
+    setTimeout(()=>$('#i-mail').click(),300);
+  }
+};
+$('#i-mail').onclick=()=>{
+  if(!inscValid())return;
+  const sub=encodeURIComponent('Inscrição 4ª Agro Open · '+$('#i-nome').value+' · '+$('#i-cat').value);
+  const body=encodeURIComponent('Nova inscrição pela página da 4ª Agro Open de Tênis:\n\n'+inscData()).replace(/%0A/g,'%0D%0A');
+  location.href=`mailto:${CONFIG.contato.inscricaoEmail}?subject=${sub}&body=${body}`;
+  showToast('Abrindo seu e-mail…');
+};
+$('#i-wa').onclick=()=>{
+  if(!inscValid())return;
+  const msg='*Inscrição 4ª Agro Open de Tênis*\n\n'+inscData();
+  window.open(`https://wa.me/${CONFIG.contato.whatsapp}?text=${encodeURIComponent(msg)}`,'_blank');
+  showToast('Abrindo o WhatsApp…');
+};
+// relabel "Entrar" -> "Minha conta" se logado
+(function(){ if(localStorage.getItem('ao_user_token')){ const a=document.getElementById('nav-conta'); if(a) a.textContent='Minha conta'; } })();
+</script>
+</body>
+</html>

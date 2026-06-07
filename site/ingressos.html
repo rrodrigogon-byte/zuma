@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ingressos · Agro Open de Tênis</title>
+<meta name="description" content="Compre seu ingresso da 4ª Agro Open de Tênis e receba o QR Code de entrada.">
+<link rel="icon" href="img/logo-ao-oficial.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<style>
+  .tk{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+  .tkc{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:16px;padding:24px;cursor:pointer;transition:.2s}
+  .tkc:hover,.tkc.sel{border-color:var(--lime);transform:translateY(-3px)}
+  .tkc .setor{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);font-weight:700}
+  .tkc h3{font-size:19px;margin:6px 0}
+  .tkc .preco{font-family:'Archivo';font-weight:900;font-size:30px;color:var(--lime)}
+  .qrbox{background:#fff;border-radius:16px;padding:24px;max-width:330px;margin:0 auto;text-align:center}
+  .qrbox svg{width:240px;height:240px}
+  .qrbox .code{font-family:'Archivo';font-weight:800;color:#0B2415;letter-spacing:1px;margin-top:8px}
+  .ticket{background:linear-gradient(165deg,#16401f,var(--deep2));border:1px dashed var(--lime);border-radius:18px;padding:26px;text-align:center;max-width:420px;margin:20px auto}
+  @media print{header.app,.steps,footer.app,.toast{display:none!important}body{background:#fff}}
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="wrap">
+    <a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span></a>
+    <div class="navlinks">
+      <a href="index.html">Site</a><a href="ingressos.html" class="active">Ingressos</a><a href="chaves.html">Chaves</a>
+      <a href="ranking.html">Ranking</a><a href="planos.html">Planos</a>
+    </div>
+  </div>
+</header>
+
+<div class="wrap hero">
+  <div class="kick">Bilheteria</div>
+  <h1>Ingressos <span class="lime">4ª Agro Open</span>.</h1>
+  <p>Garanta sua entrada e receba o <b>QR Code</b> para acesso rápido na portaria — válido no celular ou impresso.</p>
+</div>
+
+<div class="wrap steps" style="padding-bottom:40px">
+  <h3 style="font-size:18px;margin-bottom:14px">1. Escolha seu ingresso</h3>
+  <div class="tk" id="tipos"></div>
+
+  <div id="form" class="card hidden" style="margin-top:22px;max-width:520px">
+    <h3 style="font-size:18px;margin-bottom:14px">2. Seus dados</h3>
+    <div class="field"><label>Nome completo</label><input id="i-nome" placeholder="Seu nome"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="field"><label>E-mail</label><input id="i-email" type="email" placeholder="voce@email.com"></div>
+      <div class="field"><label>CPF</label><input id="i-cpf" placeholder="000.000.000-00"></div>
+    </div>
+    <button class="btn" id="comprar">Emitir ingresso</button>
+    <p class="muted" style="font-size:12px;margin-top:10px">Pagamento (Pix/cartão) é habilitado ao conectar o gateway. Nesta demonstração o ingresso já é emitido válido.</p>
+  </div>
+
+  <div id="result" class="hidden">
+    <div class="ticket">
+      <div class="kick" style="color:var(--gold)">Ingresso emitido ✓</div>
+      <h3 id="r-tipo" style="font-size:22px;margin:6px 0"></h3>
+      <div class="qrbox"><div id="r-qr"></div><div class="code" id="r-code"></div></div>
+      <p class="muted" style="font-size:13px;margin-top:14px">Apresente este QR Code na portaria. Guarde uma captura de tela.</p>
+      <div style="display:flex;gap:10px;justify-content:center;margin-top:14px">
+        <button class="btn sm" onclick="window.print()">Imprimir / PDF</button>
+        <button class="btn ghost sm" id="novo">Comprar outro</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="app">AGRO OPEN · Bilheteria oficial · QR Code de uso único validado na portaria.</footer>
+<div class="toast" id="toast"></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const toast=(m,e)=>{const t=$('#toast');t.textContent=m;t.className='toast show'+(e?' err':'');setTimeout(()=>t.className='toast',2800);};
+let tipos=[], sel=null;
+const FB=[{id:'dia',nome:'Ingresso Diário',setor:'Geral',preco:40},{id:'semana',nome:'Passaporte da Semana',setor:'Geral',preco:150},{id:'final',nome:'Finais + Premiação',setor:'Geral',preco:60},{id:'vip',nome:'Camarote VIP',setor:'VIP',preco:120}];
+function render(){
+  $('#tipos').innerHTML=tipos.map(t=>`<div class="tkc ${sel===t.id?'sel':''}" data-id="${t.id}"><div class="setor">${t.setor}</div><h3>${t.nome}</h3><div class="preco">R$ ${t.preco}</div></div>`).join('');
+}
+(async()=>{ try{ tipos=await (await fetch('/api/ingresso-tipos')).json(); }catch(e){ tipos=FB; } render(); })();
+$('#tipos').addEventListener('click',e=>{const c=e.target.closest('.tkc');if(!c)return;sel=c.dataset.id;render();$('#form').classList.remove('hidden');$('#form').scrollIntoView({behavior:'smooth',block:'center'});});
+$('#comprar').onclick=async()=>{
+  if(!sel){toast('Escolha um ingresso',true);return;}
+  const nome=$('#i-nome').value.trim(),email=$('#i-email').value.trim();
+  if(!nome||!email){toast('Preencha nome e e-mail',true);return;}
+  try{
+    const r=await fetch('/api/ingresso/comprar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipoId:sel,nome,email,cpf:$('#i-cpf').value.trim()})});
+    const d=await r.json(); if(!r.ok) throw new Error(d.error||'erro');
+    $('#r-tipo').textContent=d.ingresso.tipoNome+' · '+d.ingresso.setor;
+    $('#r-qr').innerHTML=d.qrSvg; $('#r-code').textContent=d.code;
+    $('#form').classList.add('hidden'); $('#result').classList.remove('hidden');
+    $('#result').scrollIntoView({behavior:'smooth',block:'center'}); toast('Ingresso emitido!');
+  }catch(e){ toast('Sem servidor ativo — rode npm start para emitir.',true); }
+};
+$('#novo').onclick=()=>{ $('#result').classList.add('hidden'); sel=null; render(); $('#i-nome').value='';$('#i-email').value='';$('#i-cpf').value=''; window.scrollTo({top:0,behavior:'smooth'}); };
+</script>
+</body>
+</html>

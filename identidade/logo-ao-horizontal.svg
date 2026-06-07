@@ -1,0 +1,41 @@
+<svg viewBox="0 0 1280 460" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Agro Open de Tênis">
+  <defs>
+    <linearGradient id="ballGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#A8E25A"/>
+      <stop offset="45%" stop-color="#7FCB3B"/>
+      <stop offset="100%" stop-color="#4F9E28"/>
+    </linearGradient>
+    <radialGradient id="ballSheen2" cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.5"/>
+      <stop offset="40%" stop-color="#FFFFFF" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="0" y="0" width="1280" height="460" fill="#0E2E1C"/>
+
+  <!-- Monogram block -->
+  <g transform="translate(40,40)">
+    <rect x="0" y="0" width="360" height="380" rx="48" fill="#0B2415"/>
+    <rect x="8" y="8" width="344" height="364" rx="42" fill="none" stroke="#5FB335" stroke-width="2" stroke-opacity="0.35"/>
+    <!-- A -->
+    <path d="M 70 290 L 128 96 L 178 96 L 236 290 L 189 290 L 179 252 L 128 252 L 118 290 Z M 138 214 L 169 214 L 154 158 Z"
+          fill="#F4F6EF"/>
+    <!-- Ball O -->
+    <g transform="translate(258,196)">
+      <circle r="82" fill="url(#ballGrad2)" stroke="#0B2415" stroke-width="3"/>
+      <circle r="82" fill="url(#ballSheen2)"/>
+      <path d="M -50 -65 C -8 -29 -8 29 -50 65" fill="none" stroke="#F4F6EF" stroke-width="8" stroke-linecap="round"/>
+      <path d="M 50 -65 C 8 -29 8 29 50 65" fill="none" stroke="#F4F6EF" stroke-width="8" stroke-linecap="round"/>
+    </g>
+  </g>
+
+  <!-- Wordmark -->
+  <g transform="translate(450,0)">
+    <text x="0" y="150" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="120" letter-spacing="2" fill="#F4F6EF">AGRO</text>
+    <text x="0" y="280" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="120" letter-spacing="2" fill="#7FCB3B">OPEN</text>
+    <rect x="4" y="312" width="470" height="6" fill="#5FB335"/>
+    <text x="0" y="358" font-family="Arial, sans-serif" font-weight="700" font-size="40" letter-spacing="14" fill="#F4F6EF">DE TÊNIS</text>
+    <text x="0" y="404" font-family="Arial, sans-serif" font-weight="400" font-size="21" letter-spacing="4" fill="#9DBE86">4ª EDIÇÃO · 07–13 SET 2026 · TANGARÁ DA SERRA/MT</text>
+  </g>
+</svg>

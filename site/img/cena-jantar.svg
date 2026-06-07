@@ -1,0 +1,27 @@
+<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="amb" cx="50%" cy="30%" r="80%"><stop offset="0%" stop-color="#1a4a2c"/><stop offset="100%" stop-color="#081C10"/></radialGradient>
+    <linearGradient id="gld" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#E7CE8A"/><stop offset="100%" stop-color="#C7A24C"/></linearGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#amb)"/>
+  <!-- table -->
+  <ellipse cx="400" cy="430" rx="320" ry="110" fill="#0E2E1C"/>
+  <ellipse cx="400" cy="418" rx="320" ry="110" fill="#123A23"/>
+  <ellipse cx="400" cy="418" rx="250" ry="82" fill="#0B2415" opacity="0.5"/>
+  <!-- candle -->
+  <rect x="388" y="300" width="24" height="110" rx="5" fill="url(#gld)"/>
+  <ellipse cx="400" cy="300" rx="12" ry="5" fill="#E7CE8A"/>
+  <path d="M400 250 q14 26 0 48 q-14 -22 0 -48" fill="#E7CE8A"/>
+  <circle cx="400" cy="276" r="20" fill="#E7CE8A" opacity="0.25"/>
+  <!-- plates -->
+  <g fill="#F3F5EE">
+    <ellipse cx="250" cy="430" rx="48" ry="17"/><ellipse cx="550" cy="430" rx="48" ry="17"/>
+    <ellipse cx="330" cy="470" rx="48" ry="17"/><ellipse cx="470" cy="470" rx="48" ry="17"/>
+  </g>
+  <g fill="#0E2E1C"><ellipse cx="250" cy="430" rx="30" ry="10"/><ellipse cx="550" cy="430" rx="30" ry="10"/><ellipse cx="330" cy="470" rx="30" ry="10"/><ellipse cx="470" cy="470" rx="30" ry="10"/></g>
+  <!-- wine glasses -->
+  <g>
+    <path d="M214 372 q12 28 0 40 l0 26 -10 8 20 0 -10 -8 0 -26 q-12 -12 0 -40z" fill="#8FD64A" opacity="0.85"/>
+    <path d="M590 372 q12 28 0 40 l0 26 -10 8 20 0 -10 -8 0 -26 q-12 -12 0 -40z" fill="#8FD64A" opacity="0.85"/>
+  </g>
+</svg>

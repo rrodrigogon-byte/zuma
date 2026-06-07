@@ -1,0 +1,57 @@
+<svg viewBox="0 0 1080 1528" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0E2E1C"/><stop offset="55%" stop-color="#0B2415"/><stop offset="100%" stop-color="#081C10"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#E7CE8A"/><stop offset="50%" stop-color="#C7A24C"/><stop offset="100%" stop-color="#9C7B2E"/>
+    </linearGradient>
+    <radialGradient id="ball" cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#A8E25A"/><stop offset="50%" stop-color="#7FCB3B"/><stop offset="100%" stop-color="#4F9E28"/>
+    </radialGradient>
+  </defs>
+  <rect width="1080" height="1528" fill="url(#bg)"/>
+  <g stroke="#5FB335" stroke-opacity="0.06" stroke-width="2">
+    <line x1="0" y1="430" x2="1080" y2="430"/><line x1="0" y1="1090" x2="1080" y2="1090"/><line x1="540" y1="0" x2="540" y2="1528"/>
+  </g>
+  <rect x="46" y="46" width="988" height="1436" rx="26" fill="none" stroke="url(#gold)" stroke-width="2.5"/>
+  <rect x="58" y="58" width="964" height="1412" rx="20" fill="none" stroke="#C7A24C" stroke-opacity="0.22" stroke-width="1"/>
+
+  <text x="540" y="170" text-anchor="middle" font-size="20" letter-spacing="8" fill="#9DBE86" font-weight="700">UISA &amp; FLORESCER AÇÃO SOCIAL APRESENTAM</text>
+
+  <g transform="translate(540,300)">
+    <circle r="72" fill="url(#ball)" stroke="#0B2415" stroke-width="3"/>
+    <path d="M -44 -58 C -6 -26 -6 26 -44 58" fill="none" stroke="#F4F6EF" stroke-width="7" stroke-linecap="round"/>
+    <path d="M 44 -58 C 6 -26 6 26 44 58" fill="none" stroke="#F4F6EF" stroke-width="7" stroke-linecap="round"/>
+  </g>
+
+  <text x="540" y="470" text-anchor="middle" font-size="30" letter-spacing="12" fill="#C7A24C" font-weight="700">LEILÃO BENEFICENTE</text>
+  <text x="540" y="600" text-anchor="middle" font-size="128" font-weight="900" fill="#F4F6EF" font-family="Arial Black, Arial">FLORESCER</text>
+  <line x1="300" y1="650" x2="780" y2="650" stroke="url(#gold)" stroke-width="2"/>
+  <text x="540" y="710" text-anchor="middle" font-size="24" letter-spacing="3" fill="#7FCB3B" font-weight="700">4ª AGRO OPEN DE TÊNIS · SÁBADO · 12 SET 2026</text>
+
+  <text x="540" y="820" text-anchor="middle" font-size="30" fill="#F4F6EF" font-style="italic">"Onde o agro retribui."</text>
+  <text x="540" y="868" text-anchor="middle" font-size="20" fill="#9DBE86">Uma noite de gala para transformar vidas pelo esporte,</text>
+  <text x="540" y="898" text-anchor="middle" font-size="20" fill="#9DBE86">pela educação e pela cultura em Mato Grosso.</text>
+
+  <!-- 3 quick highlights -->
+  <g transform="translate(0,1000)">
+    <rect x="120" y="0" width="270" height="180" rx="14" fill="#123A23" stroke="#5FB335" stroke-opacity="0.3"/>
+    <text x="255" y="76" text-anchor="middle" font-size="44" font-weight="900" fill="#7FCB3B">≈36 mil</text>
+    <text x="255" y="112" text-anchor="middle" font-size="16" fill="#F4F6EF" font-weight="700">vidas impactadas</text>
+    <text x="255" y="142" text-anchor="middle" font-size="14" fill="#9DBE86">desde 2006</text>
+
+    <rect x="405" y="0" width="270" height="180" rx="14" fill="#123A23" stroke="#C7A24C" stroke-opacity="0.4"/>
+    <text x="540" y="76" text-anchor="middle" font-size="44" font-weight="900" fill="#E7CE8A">Melhor</text>
+    <text x="540" y="112" text-anchor="middle" font-size="16" fill="#F4F6EF" font-weight="700">ONG de Mato Grosso</text>
+    <text x="540" y="142" text-anchor="middle" font-size="14" fill="#9DBE86">Top 100 ONGs do Brasil</text>
+
+    <rect x="690" y="0" width="270" height="180" rx="14" fill="#123A23" stroke="#5FB335" stroke-opacity="0.3"/>
+    <text x="825" y="76" text-anchor="middle" font-size="44" font-weight="900" fill="#7FCB3B">100%</text>
+    <text x="825" y="112" text-anchor="middle" font-size="16" fill="#F4F6EF" font-weight="700">da renda à causa</text>
+    <text x="825" y="142" text-anchor="middle" font-size="14" fill="#9DBE86">iniciativa UISA</text>
+  </g>
+
+  <text x="540" y="1300" text-anchor="middle" font-size="22" letter-spacing="3" fill="#C7A24C" font-weight="700">KIT DE PATROCÍNIO &amp; MESAS SOLIDÁRIAS</text>
+  <text x="540" y="1440" text-anchor="middle" font-size="14" letter-spacing="2" fill="#9DBE86">FLORESCER AÇÃO SOCIAL · INICIATIVA UISA · TANGARÁ DA SERRA / NOVA OLÍMPIA · MT</text>
+</svg>

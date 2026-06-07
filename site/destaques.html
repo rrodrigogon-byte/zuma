@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Melhores do Agro · Agro Open de Tênis</title>
+<meta name="description" content="Os melhores do Agro Open: campeões por categoria, líderes do ranking e os grandes nomes do torneio.">
+<link rel="icon" href="img/logo-ao-oficial.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<style>
+  .champs{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+  .ch{background:linear-gradient(165deg,#16401f,var(--deep2));border:1px solid rgba(201,166,86,.4);border-radius:16px;padding:22px;position:relative;overflow:hidden}
+  .ch .trophy{position:absolute;right:-10px;top:-10px;font-size:60px;opacity:.18}
+  .ch .cat{font-size:12px;letter-spacing:.08em;color:var(--gold);font-weight:700;text-transform:uppercase}
+  .ch .nm{font-family:'Archivo';font-weight:900;font-size:24px;margin:6px 0 2px}
+  .ch .vice{font-size:13px;color:var(--muted)}
+  .podium{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:end;margin:8px 0 26px}
+  @media(max-width:680px){.podium{grid-template-columns:1fr}}
+  .pod{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:14px;padding:20px;text-align:center}
+  .pod.p1{border-color:var(--lime);padding-top:30px}
+  .pod .medal{font-size:30px}
+  .pod .nm{font-family:'Archivo';font-weight:900;font-size:20px;margin-top:6px}
+  .pod .pts{color:var(--lime);font-weight:700}
+  .pod .pos{font-size:12px;color:var(--muted)}
+  .stars{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}
+  .star{background:var(--deep2);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .star.gold{border-color:rgba(201,166,86,.45)}
+  .star .nm{font-family:'Archivo';font-weight:800;font-size:18px}
+  .star .r{font-size:12.5px;color:var(--lime);font-weight:600;margin-top:4px}
+  .star.gold .r{color:var(--gold)}
+  h2.sec{font-size:24px;margin:34px 0 14px}
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="wrap">
+    <a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span></a>
+    <div class="navlinks">
+      <a href="index.html">Site</a><a href="destaques.html" class="active">Melhores do Agro</a><a href="ranking.html">Ranking</a>
+      <a href="chaves.html">Chaves</a><a href="noticias.html">Notícias</a><a href="regras.html">Regras</a>
+    </div>
+  </div>
+</header>
+
+<div class="wrap hero">
+  <div class="kick">Hall da Fama</div>
+  <h1>Melhores do <span class="lime">Agro</span>.</h1>
+  <p>Os campeões de cada categoria, os líderes do Ranking Agro Open e os grandes nomes que brilham na quadra.</p>
+</div>
+
+<div class="wrap" style="padding-bottom:40px">
+  <h2 class="sec">🏆 Campeões por categoria</h2>
+  <div class="champs" id="champs"><p class="muted">Os campeões aparecem aqui conforme a organização finaliza as chaves.</p></div>
+
+  <h2 class="sec">📊 Líderes do Ranking Agro Open</h2>
+  <div class="podium" id="podium"></div>
+
+  <h2 class="sec">⭐ Grandes nomes confirmados</h2>
+  <div class="stars" id="stars"></div>
+</div>
+
+<footer class="app">AGRO OPEN · 4ª EDIÇÃO · Os melhores do tênis e do agro na mesma quadra.</footer>
+
+<script>
+const $=s=>document.querySelector(s);
+const STARS=[
+  {nome:'João Meneses', papel:'★ Ouro Pan-Americano', gold:true},
+  {nome:'Guilherme Clezar', papel:'Ex-ATP'},
+  {nome:'Gilbert', papel:'Confirmado'},
+  {nome:'Christian Oliveira', papel:'Confirmado'},
+  {nome:'Paulo Saraiva', papel:'Confirmado'},
+  {nome:'Marvim', papel:'Confirmado'},
+  {nome:'Kauê Noatto', papel:'Confirmado'}
+];
+$('#stars').innerHTML=STARS.map(s=>`<div class="star ${s.gold?'gold':''}"><div class="nm">${s.nome}</div><div class="r">${s.papel}</div></div>`).join('');
+
+(async()=>{
+  try{
+    const champs=await (await fetch('/api/campeoes')).json();
+    if(champs.length) $('#champs').innerHTML=champs.map(c=>`<div class="ch"><div class="trophy">🏆</div><div class="cat">${c.categoria}</div><div class="nm">${c.nome}</div>${c.vice?`<div class="vice">vice: ${c.vice}</div>`:''}</div>`).join('');
+  }catch(e){ $('#champs').innerHTML='<p class="muted">Inicie o servidor (npm start) para ver os campeões.</p>'; }
+  try{
+    const rk=await (await fetch('/api/ranking')).json();
+    const top=rk.slice(0,3);
+    if(top.length){
+      const order=[1,0,2]; // 2º, 1º, 3º
+      $('#podium').innerHTML=order.filter(i=>top[i]).map(i=>{const p=top[i];const medal=['🥇','🥈','🥉'][p.pos-1]||'🎾';return `<div class="pod ${p.pos===1?'p1':''}"><div class="medal">${medal}</div><div class="nm">${p.nome}</div><div class="pts">${p.pontos} pts</div><div class="pos">${p.pos}º · ${p.categoria}</div></div>`;}).join('');
+    } else $('#podium').innerHTML='<p class="muted">O ranking é preenchido quando as primeiras chaves são finalizadas.</p>';
+  }catch(e){ $('#podium').innerHTML='<p class="muted">Inicie o servidor (npm start) para ver o ranking.</p>'; }
+})();
+</script>
+</body>
+</html>

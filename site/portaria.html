@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portaria · Check-in · Agro Open</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="img/logo-ao-oficial.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<style>
+  .scan{max-width:520px;margin:0 auto}
+  #cam{width:100%;border-radius:16px;border:1px solid var(--line);background:#000;aspect-ratio:4/3;object-fit:cover}
+  .result{border-radius:18px;padding:30px;text-align:center;margin:18px 0;display:none}
+  .result.show{display:block}
+  .result.ok{background:linear-gradient(165deg,#16401f,#0a1f13);border:2px solid var(--lime)}
+  .result.err{background:linear-gradient(165deg,#3a1714,#1f0a0a);border:2px solid #e8705c}
+  .result .big{font-family:'Archivo';font-weight:900;font-size:34px}
+  .result.ok .big{color:var(--lime)}.result.err .big{color:#e8705c}
+  .counters{display:flex;gap:12px;justify-content:center;margin-bottom:18px}
+  .cnt{background:var(--deep2);border:1px solid var(--line);border-radius:12px;padding:14px 22px;text-align:center}
+  .cnt .n{font-family:'Archivo';font-weight:900;font-size:26px;color:var(--lime)}
+  .cnt .l{font-size:11px;color:var(--muted)}
+  .login-box{max-width:380px;margin:8vh auto}
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="wrap">
+    <a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span> <span class="muted" style="font-weight:500;font-size:14px">· Portaria</span></a>
+    <div class="navlinks"><a href="admin.html">Painel</a><a id="logout" style="cursor:pointer;color:#e89a8c" class="hidden">Sair</a></div>
+  </div>
+</header>
+
+<div id="login" class="wrap">
+  <div class="card login-box">
+    <div class="kick">Acesso da portaria</div>
+    <h2 style="font-size:24px;margin:8px 0 16px">Entrar</h2>
+    <div class="field"><label>Usuário</label><input id="l-user" placeholder="admin"></div>
+    <div class="field"><label>Senha</label><input id="l-pass" type="password" placeholder="••••••"></div>
+    <button class="btn" id="l-btn" style="width:100%;justify-content:center">Entrar</button>
+  </div>
+</div>
+
+<div id="app" class="wrap hidden" style="padding-bottom:40px">
+  <div class="hero" style="padding:30px 0 8px"><div class="kick">Controle de acesso</div><h1>Check-in por <span class="lime">QR Code</span>.</h1></div>
+  <div class="counters" id="counters"></div>
+  <div class="scan">
+    <video id="cam" playsinline></video>
+    <div style="display:flex;gap:10px;margin:12px 0">
+      <button class="btn sm" id="cam-toggle">📷 Ativar câmera</button>
+      <button class="btn ghost sm" id="reload">Atualizar contadores</button>
+    </div>
+    <div class="field"><label>Ou digite/cole o código do ingresso</label>
+      <div style="display:flex;gap:8px"><input id="code" placeholder="AO-XXXXXXXX-XXXX" style="flex:1"><button class="btn" id="val">Validar</button></div>
+    </div>
+    <div class="result" id="result"><div class="big" id="r-big"></div><div id="r-info" style="margin-top:8px"></div></div>
+  </div>
+</div>
+
+<footer class="app">AGRO OPEN · Portaria · QR de uso único · powered by <b class="lime">SetPoint</b></footer>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
+<script>
+const $=s=>document.querySelector(s);
+let TOKEN=localStorage.getItem('ao_admin_token')||'';
+const toast=(m,e)=>{const t=$('#toast');t.textContent=m;t.className='toast show'+(e?' err':'');setTimeout(()=>t.className='toast',2400);};
+async function api(p,o={}){const r=await fetch(p,{...o,headers:{'Content-Type':'application/json',...(TOKEN?{Authorization:'Bearer '+TOKEN}:{}),...(o.headers||{})}});if(r.status===401){logout();throw new Error('sessão');}const d=await r.json().catch(()=>({}));return {ok:r.ok,d};}
+function show(on){$('#login').classList.toggle('hidden',on);$('#app').classList.toggle('hidden',!on);$('#logout').classList.toggle('hidden',!on);}
+function logout(){TOKEN='';localStorage.removeItem('ao_admin_token');stopCam();show(false);}
+$('#logout').onclick=logout;
+$('#l-btn').onclick=async()=>{
+  const {ok,d}=await api('/api/admin/login',{method:'POST',body:JSON.stringify({user:$('#l-user').value,pass:$('#l-pass').value})});
+  if(!ok){toast(d.error||'erro',true);return;} TOKEN=d.token;localStorage.setItem('ao_admin_token',TOKEN);show(true);counters();
+};
+async function counters(){
+  try{const {ok,d}=await api('/api/admin/ingressos');if(ok)$('#counters').innerHTML=`<div class="cnt"><div class="n">${d.total}</div><div class="l">vendidos</div></div><div class="cnt"><div class="n">${d.presentes}</div><div class="l">check-ins</div></div><div class="cnt"><div class="n">${d.validos}</div><div class="l">a entrar</div></div>`;}catch(e){}
+}
+$('#reload').onclick=counters;
+let busy=false;
+async function validar(code){
+  if(!code||busy)return; busy=true;
+  const {ok,d}=await api('/api/admin/checkin',{method:'POST',body:JSON.stringify({code})});
+  const r=$('#result');r.className='result show '+(ok?'ok':'err');
+  $('#r-big').textContent = ok?'✓ ENTRADA LIBERADA':(d.resultado==='JA_USADO'?'✗ JÁ UTILIZADO':'✗ INVÁLIDO');
+  $('#r-info').textContent = d.ingresso?`${d.ingresso.nome} · ${d.ingresso.tipoNome}`:(d.message||'');
+  counters(); $('#code').value=''; setTimeout(()=>busy=false, 1200);
+}
+$('#val').onclick=()=>validar($('#code').value.trim());
+$('#code').addEventListener('keydown',e=>{if(e.key==='Enter')validar($('#code').value.trim());});
+
+// câmera + jsQR
+let stream=null,raf=null;
+const video=$('#cam'),cv=document.createElement('canvas');
+async function startCam(){
+  try{ stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}); video.srcObject=stream; await video.play(); $('#cam-toggle').textContent='⏹ Parar câmera'; tick(); }
+  catch(e){ toast('Câmera indisponível — use o código manual',true); }
+}
+function stopCam(){ if(raf)cancelAnimationFrame(raf); if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;} $('#cam-toggle').textContent='📷 Ativar câmera'; }
+let last='',lastT=0;
+function tick(){
+  if(!stream)return;
+  if(video.readyState===video.HAVE_ENOUGH_DATA){
+    cv.width=video.videoWidth;cv.height=video.videoHeight;
+    const c=cv.getContext('2d');c.drawImage(video,0,0,cv.width,cv.height);
+    const img=c.getImageData(0,0,cv.width,cv.height);
+    const q=window.jsQR&&jsQR(img.data,img.width,img.height);
+    if(q&&q.data&&(q.data!==last||Date.now()-lastT>2500)){ last=q.data;lastT=Date.now(); validar(q.data.trim()); }
+  }
+  raf=requestAnimationFrame(tick);
+}
+$('#cam-toggle').onclick=()=>{ stream?stopCam():startCam(); };
+
+if(TOKEN){show(true);counters();} else show(false);
+</script>
+</body>
+</html>

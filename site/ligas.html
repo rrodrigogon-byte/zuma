@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ligas (Round-Robin) · Agro Open</title>
+<meta name="description" content="Ligas todos-contra-todos: tabela de classificação e rodadas.">
+<link rel="icon" href="img/logo-ao-oficial.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<style>
+  .pos1 td:first-child{color:var(--gold)}
+  .toprow td{font-weight:700}
+  .rod{margin:8px 0 18px}
+  .jogo{display:flex;justify-content:space-between;align-items:center;background:var(--deep2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:8px;font-size:14px}
+  .jogo .pl{font-family:'Archivo';font-weight:800;color:var(--lime)}
+  .win{color:var(--lime);font-weight:700}
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="wrap"><a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span></a>
+  <div class="navlinks"><a href="index.html">Site</a><a href="chaves.html">Chaves</a><a href="ligas.html" class="active">Ligas</a><a href="ranking.html">Ranking</a></div></div>
+</header>
+<div class="wrap hero">
+  <div class="kick">Todos contra todos</div>
+  <h1>Ligas <span class="lime">round-robin</span>.</h1>
+  <p>Classificação por pontos: cada vitória vale 1 ponto, com desempate por saldo de sets.</p>
+</div>
+<div class="wrap" style="padding-bottom:50px">
+  <div class="ctrls"><div style="min-width:240px"><label>Liga</label><select id="cat"></select></div><button class="btn sm ghost" id="reload">Atualizar</button></div>
+  <div id="conteudo"></div>
+</div>
+<footer class="app">AGRO OPEN · Ligas geridas pela plataforma <b class="lime">SetPoint</b>.</footer>
+<script>
+const $=s=>document.querySelector(s);
+async function listar(){
+  try{
+    const ligas=await (await fetch('/api/ligas')).json();
+    if(!ligas.length){ $('#conteudo').innerHTML='<div class="card" style="padding:30px"><p class="muted">Nenhuma liga publicada ainda.</p></div>'; $('#cat').innerHTML=''; return; }
+    $('#cat').innerHTML=ligas.map(l=>`<option value="${l.categoria}">${l.categoria} (${l.atletas} atletas)</option>`).join('');
+    ver();
+  }catch(e){ $('#conteudo').innerHTML='<div class="card" style="padding:30px"><p class="muted">Inicie o servidor (npm start) para ver as ligas.</p></div>'; }
+}
+async function ver(){
+  const cat=$('#cat').value; if(!cat) return;
+  const d=await (await fetch('/api/liga/'+encodeURIComponent(cat))).json();
+  let html='<h3 style="font-size:18px;margin-bottom:10px">Classificação</h3><div class="card" style="padding:0;overflow:auto"><table><thead><tr><th>#</th><th>Atleta</th><th>J</th><th>V</th><th>D</th><th>Sets</th><th>Saldo</th><th>Pts</th></tr></thead><tbody>'+
+    d.tabela.map(p=>`<tr class="${p.pos===1?'pos1 toprow':''}"><td class="pos">${p.pos}</td><td><b>${p.nome}</b></td><td>${p.j}</td><td>${p.v}</td><td>${p.d}</td><td>${p.setsPro}-${p.setsContra}</td><td>${p.saldo>0?'+':''}${p.saldo}</td><td><b style="color:var(--lime)">${p.pontos}</b></td></tr>`).join('')+
+    '</tbody></table></div>';
+  html+='<h3 style="font-size:18px;margin:26px 0 10px">Rodadas</h3>';
+  d.rounds.forEach((jogos,i)=>{
+    html+=`<div class="rod"><div class="muted" style="font-weight:700;margin-bottom:8px">Rodada ${i+1}</div>`;
+    html+=jogos.map(g=>{
+      const aw=g.vencedor===g.a, bw=g.vencedor===g.b;
+      return `<div class="jogo"><span class="${aw?'win':''}">${g.a}</span><span class="pl">${g.placar||'vs'}</span><span class="${bw?'win':''}">${g.b}</span></div>`;
+    }).join('');
+    html+='</div>';
+  });
+  $('#conteudo').innerHTML=html;
+}
+$('#cat').onchange=ver; $('#reload').onclick=listar;
+listar();
+</script>
+</body>
+</html>

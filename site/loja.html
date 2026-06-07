@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pro Shop · Agro Open</title>
+<meta name="description" content="Pro Shop do clube: raquetes, bolas, vestuário e acessórios.">
+<link rel="icon" href="img/logo-ao-oficial.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<style>
+  .prods{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
+  .prod{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:14px;padding:22px;text-align:center}
+  .prod .cat{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .prod h3{font-size:18px;margin:6px 0}
+  .prod .preco{font-family:'Archivo';font-weight:900;font-size:24px;color:var(--lime);margin:8px 0}
+  .prod .est{font-size:12px;color:var(--muted)}
+  .prod .est.zero{color:#e89a8c}
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="wrap"><a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span></a>
+  <div class="navlinks"><a href="index.html">Site</a><a href="aulas.html">Aulas</a><a href="loja.html" class="active">Loja</a><a href="reservas.html">Reservar</a><a href="conta.html">Entrar</a></div></div>
+</header>
+<div class="wrap hero">
+  <div class="kick">Pro Shop</div>
+  <h1>Loja do <span class="lime">clube</span>.</h1>
+  <p>Raquetes, bolas, vestuário e acessórios. Compre na recepção do Tangará Tênis Clube.</p>
+</div>
+<div class="wrap" style="padding-bottom:50px"><div class="prods" id="lista"></div>
+  <p class="muted" style="font-size:12.5px;margin-top:18px">Compra e reserva de produtos na recepção. O checkout online entra com o módulo de pagamentos.</p>
+</div>
+<footer class="app">AGRO OPEN · Pro Shop · powered by <b class="lime">SetPoint</b></footer>
+<script>
+const $=s=>document.querySelector(s);
+async function carregar(){
+  try{
+    const list=await (await fetch('/api/loja')).json();
+    $('#lista').innerHTML=list.map(p=>`<div class="prod"><div class="cat">${p.cat}</div><h3>${p.nome}</h3><div class="preco">R$ ${p.preco.toLocaleString('pt-BR',{minimumFractionDigits:2})}</div><div class="est ${p.esgotado?'zero':''}">${p.esgotado?'Esgotado':('Em estoque: '+p.estoque)}</div></div>`).join('')
+      ||'<div class="card" style="padding:30px;grid-column:1/-1"><p class="muted">Catálogo em montagem. Volte em breve.</p></div>';
+  }catch(e){ $('#lista').innerHTML='<div class="card" style="padding:30px;grid-column:1/-1"><p class="muted">Inicie o servidor (npm start) para ver a loja.</p></div>'; }
+}
+carregar();
+</script>
+</body>
+</html>

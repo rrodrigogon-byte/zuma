@@ -1,0 +1,73 @@
+<svg viewBox="0 0 1080 1528" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+  <defs>
+    <linearGradient id="head" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0E2E1C"/><stop offset="100%" stop-color="#0B2415"/></linearGradient>
+  </defs>
+  <rect width="1080" height="1528" fill="#0E2E1C"/>
+  <rect width="1080" height="250" fill="url(#head)"/>
+  <text x="64" y="108" font-size="15" letter-spacing="5" fill="#7FCB3B" font-weight="700">POR QUE SUA EMPRESA DEVE ESTAR NESSA MESA</text>
+  <text x="60" y="172" font-size="50" font-weight="900" fill="#F4F6EF" font-family="Arial Black, Arial">Apoiar é estratégico.</text>
+  <text x="64" y="212" font-size="18" fill="#9DBE86">Causa concreta, marca premium e benefício fiscal — tudo na mesma noite.</text>
+
+  <!-- 6 benefit cards -->
+  <g>
+    <!-- card template: rect + number + title + text -->
+    <rect x="64" y="300" width="464" height="178" rx="14" fill="#123A23" stroke="#5FB335" stroke-opacity="0.25"/>
+    <text x="92" y="352" font-size="30" font-weight="900" fill="#7FCB3B">01</text>
+    <text x="92" y="392" font-size="21" font-weight="900" fill="#F4F6EF">INCENTIVO FISCAL</text>
+    <text x="92" y="426" font-size="15" fill="#9DBE86">Apoie via FIA (Fundo da Infância) e Lei de</text>
+    <text x="92" y="448" font-size="15" fill="#9DBE86">Incentivo à Cultura e deduza do imposto</text>
+    <text x="92" y="470" font-size="15" fill="#9DBE86">devido. Faça o bem usando o que já é seu.</text>
+
+    <rect x="552" y="300" width="464" height="178" rx="14" fill="#123A23" stroke="#5FB335" stroke-opacity="0.25"/>
+    <text x="580" y="352" font-size="30" font-weight="900" fill="#7FCB3B">02</text>
+    <text x="580" y="392" font-size="21" font-weight="900" fill="#F4F6EF">ESG COM PROVA</text>
+    <text x="580" y="426" font-size="15" fill="#9DBE86">Associe sua marca a uma ONG auditada,</text>
+    <text x="580" y="448" font-size="15" fill="#9DBE86">com selos de transparência e quase 36 mil vidas</text>
+    <text x="580" y="470" font-size="15" fill="#9DBE86">impactadas. ESG que se comprova, não só relata.</text>
+
+    <rect x="64" y="496" width="464" height="178" rx="14" fill="#123A23" stroke="#C7A24C" stroke-opacity="0.4"/>
+    <text x="92" y="548" font-size="30" font-weight="900" fill="#C7A24C">03</text>
+    <text x="92" y="588" font-size="21" font-weight="900" fill="#F4F6EF">MARCA EM EVIDÊNCIA</text>
+    <text x="92" y="622" font-size="15" fill="#9DBE86">Sua marca no telão, materiais e citações da</text>
+    <text x="92" y="644" font-size="15" fill="#9DBE86">noite, ao lado da UISA e da elite do agro</text>
+    <text x="92" y="666" font-size="15" fill="#9DBE86">reunida na 4ª Agro Open.</text>
+
+    <rect x="552" y="496" width="464" height="178" rx="14" fill="#123A23" stroke="#5FB335" stroke-opacity="0.25"/>
+    <text x="580" y="548" font-size="30" font-weight="900" fill="#7FCB3B">04</text>
+    <text x="580" y="588" font-size="21" font-weight="900" fill="#F4F6EF">NETWORKING DE ELITE</text>
+    <text x="580" y="622" font-size="15" fill="#9DBE86">Uma mesa entre produtores, executivos,</text>
+    <text x="580" y="644" font-size="15" fill="#9DBE86">cooperativas, tradings e bancos — os</text>
+    <text x="580" y="666" font-size="15" fill="#9DBE86">decisores do agro de Mato Grosso.</text>
+
+    <rect x="64" y="692" width="464" height="178" rx="14" fill="#123A23" stroke="#5FB335" stroke-opacity="0.25"/>
+    <text x="92" y="744" font-size="30" font-weight="900" fill="#7FCB3B">05</text>
+    <text x="92" y="784" font-size="21" font-weight="900" fill="#F4F6EF">LEGADO REGIONAL</text>
+    <text x="92" y="818" font-size="15" fill="#9DBE86">Educação, cultura e esporte para crianças e</text>
+    <text x="92" y="840" font-size="15" fill="#9DBE86">famílias da sua própria região. O retorno fica</text>
+    <text x="92" y="862" font-size="15" fill="#9DBE86">onde a sua empresa atua.</text>
+
+    <rect x="552" y="692" width="464" height="178" rx="14" fill="#123A23" stroke="#C7A24C" stroke-opacity="0.4"/>
+    <text x="580" y="744" font-size="30" font-weight="900" fill="#C7A24C">06</text>
+    <text x="580" y="784" font-size="21" font-weight="900" fill="#F4F6EF">PROPÓSITO + ESPORTE</text>
+    <text x="580" y="818" font-size="15" fill="#9DBE86">O mesmo tênis que abre o torneio é o que</text>
+    <text x="580" y="840" font-size="15" fill="#9DBE86">muda histórias na quadra de beach tennis</text>
+    <text x="580" y="862" font-size="15" fill="#9DBE86">do Florescer. Conexão real entre as causas.</text>
+  </g>
+
+  <!-- highlight strip incentivo -->
+  <rect x="64" y="910" width="952" height="150" rx="16" fill="#5FB335"/>
+  <text x="96" y="962" font-size="17" letter-spacing="2" fill="#0B2415" font-weight="700">A FORMA INTELIGENTE DE DOAR</text>
+  <text x="96" y="1010" font-size="30" font-weight="900" fill="#0B2415" font-family="Arial Black, Arial">Parte do seu apoio pode voltar via incentivo fiscal.</text>
+  <text x="96" y="1044" font-size="16" fill="#0B2415">Empresas no Lucro Real destinam parte do IR devido a projetos aprovados (FIA / Lei de Cultura). Consulte a comissão.</text>
+
+  <!-- quote -->
+  <text x="540" y="1150" text-anchor="middle" font-size="26" fill="#F4F6EF" font-style="italic">"Como UISA, pensamos sempre na sociedade e no ESG."</text>
+  <text x="540" y="1190" text-anchor="middle" font-size="16" fill="#9DBE86">Apoiar o Florescer é investir no futuro do agro e das pessoas que o constroem.</text>
+
+  <!-- investidores reais -->
+  <text x="64" y="1280" font-size="14" letter-spacing="3" fill="#9DBE86" font-weight="700">JÁ APOIAM O FLORESCER</text>
+  <text x="64" y="1316" font-size="18" fill="#F4F6EF" font-weight="700">UISA · Sicredi · Bom Futuro · Unimed · GEO Biogás · SENAI · FMC · e outros</text>
+
+  <rect x="0" y="1430" width="1080" height="98" fill="#0B2415"/>
+  <text x="540" y="1488" text-anchor="middle" font-size="14" letter-spacing="2" fill="#9DBE86">FLORESCER AÇÃO SOCIAL · INICIATIVA UISA · 4ª AGRO OPEN DE TÊNIS · 12 SET 2026</text>
+</svg>

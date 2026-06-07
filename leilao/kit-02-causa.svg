@@ -1,0 +1,76 @@
+<svg viewBox="0 0 1080 1528" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+  <defs>
+    <linearGradient id="head" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0E2E1C"/><stop offset="100%" stop-color="#0B2415"/></linearGradient>
+  </defs>
+  <rect width="1080" height="1528" fill="#F3F5EE"/>
+  <rect width="1080" height="250" fill="url(#head)"/>
+  <text x="64" y="108" font-size="15" letter-spacing="5" fill="#7FCB3B" font-weight="700">POR QUE APOIAR</text>
+  <text x="60" y="172" font-size="52" font-weight="900" fill="#F4F6EF" font-family="Arial Black, Arial">A causa Florescer</text>
+  <text x="64" y="212" font-size="18" fill="#9DBE86">Transformamos vidas há quase 20 anos — uma iniciativa da UISA.</text>
+
+  <!-- Intro -->
+  <text x="64" y="320" font-size="19" fill="#3d4a36">A Florescer Ação Social é uma ONG que, por meio da Educação, Cultura, Esporte e</text>
+  <text x="64" y="350" font-size="19" fill="#3d4a36">Geração de Renda, transforma comunidades e fomenta a cidadania em Mato Grosso.</text>
+  <text x="64" y="380" font-size="19" fill="#3d4a36">Nascida em 2006 com os colaboradores da UISA, hoje atua em Nova Olímpia, Denise e</text>
+  <text x="64" y="410" font-size="19" fill="#3d4a36">no Distrito de Assari, com unidades próprias cedidas pela mantenedora UISA.</text>
+
+  <!-- Missão highlight -->
+  <rect x="64" y="444" width="952" height="110" rx="12" fill="#0E2E1C"/>
+  <text x="90" y="486" font-size="15" letter-spacing="3" fill="#7FCB3B" font-weight="700">NOSSA MISSÃO</text>
+  <text x="90" y="518" font-size="18" fill="#F4F6EF" font-weight="700">Transformar comunidades por meio de programas socioeducativos,</text>
+  <text x="90" y="542" font-size="18" fill="#F4F6EF" font-weight="700">impactando vidas e fomentando a cidadania.</text>
+
+  <!-- 4 eixos -->
+  <text x="64" y="608" font-size="15" letter-spacing="4" fill="#5FB335" font-weight="800">NOSSOS 4 EIXOS DE ATUAÇÃO</text>
+  <g>
+    <rect x="64" y="630" width="464" height="150" rx="14" fill="#FFFFFF" stroke="#d6ddcb"/>
+    <rect x="64" y="630" width="8" height="150" fill="#5FB335"/>
+    <text x="98" y="676" font-size="22" font-weight="900" fill="#0E2E1C" font-family="Arial Black, Arial">EDUCAÇÃO</text>
+    <text x="98" y="712" font-size="15" fill="#3d4a36">Reforço escolar, inglês, informática e a</text>
+    <text x="98" y="736" font-size="15" fill="#3d4a36">Padaria do Bem no contraturno escolar.</text>
+
+    <rect x="552" y="630" width="464" height="150" rx="14" fill="#FFFFFF" stroke="#d6ddcb"/>
+    <rect x="552" y="630" width="8" height="150" fill="#C7A24C"/>
+    <text x="586" y="676" font-size="22" font-weight="900" fill="#0E2E1C" font-family="Arial Black, Arial">CULTURA</text>
+    <text x="586" y="712" font-size="15" fill="#3d4a36">Dança, canto e coral, violão e desenho</text>
+    <text x="586" y="736" font-size="15" fill="#3d4a36">artístico que revelam novos talentos.</text>
+
+    <rect x="64" y="796" width="464" height="150" rx="14" fill="#FFFFFF" stroke="#d6ddcb"/>
+    <rect x="64" y="796" width="8" height="150" fill="#5FB335"/>
+    <text x="98" y="842" font-size="22" font-weight="900" fill="#0E2E1C" font-family="Arial Black, Arial">ESPORTE</text>
+    <text x="98" y="878" font-size="15" fill="#3d4a36">Futebol, vôlei e a 1ª quadra de beach</text>
+    <text x="98" y="902" font-size="15" fill="#3d4a36">tennis de Nova Olímpia — o esporte que une.</text>
+
+    <rect x="552" y="796" width="464" height="150" rx="14" fill="#FFFFFF" stroke="#d6ddcb"/>
+    <rect x="552" y="796" width="8" height="150" fill="#C7A24C"/>
+    <text x="586" y="842" font-size="20" font-weight="900" fill="#0E2E1C" font-family="Arial Black, Arial">GERAÇÃO DE RENDA</text>
+    <text x="586" y="878" font-size="15" fill="#3d4a36">Ateliê Flor&amp;Ser (costura/crochê), ResinArte</text>
+    <text x="586" y="902" font-size="15" fill="#3d4a36">e qualificação com SENAI, Sicredi e UISA.</text>
+  </g>
+
+  <!-- Results bar -->
+  <text x="64" y="1010" font-size="15" letter-spacing="4" fill="#5FB335" font-weight="800">RESULTADOS QUE COMPROVAM</text>
+  <g transform="translate(64,1032)">
+    <rect x="0" y="0" width="225" height="130" rx="12" fill="#0E2E1C"/>
+    <text x="112" y="62" text-anchor="middle" font-size="40" font-weight="900" fill="#7FCB3B">≈36 mil</text>
+    <text x="112" y="96" text-anchor="middle" font-size="14" fill="#F4F6EF">vidas impactadas</text>
+    <rect x="242" y="0" width="225" height="130" rx="12" fill="#5FB335"/>
+    <text x="354" y="62" text-anchor="middle" font-size="40" font-weight="900" fill="#0B2415">3</text>
+    <text x="354" y="96" text-anchor="middle" font-size="14" fill="#0B2415" font-weight="700">unidades em MT</text>
+    <rect x="484" y="0" width="225" height="130" rx="12" fill="#C7A24C"/>
+    <text x="596" y="58" text-anchor="middle" font-size="30" font-weight="900" fill="#0B2415">Melhor ONG</text>
+    <text x="596" y="92" text-anchor="middle" font-size="14" fill="#0B2415" font-weight="700">de Mato Grosso</text>
+    <rect x="726" y="0" width="226" height="130" rx="12" fill="#0E2E1C"/>
+    <text x="839" y="58" text-anchor="middle" font-size="26" font-weight="900" fill="#7FCB3B">Top 100</text>
+    <text x="839" y="92" text-anchor="middle" font-size="14" fill="#F4F6EF">ONGs do Brasil · 2024</text>
+  </g>
+
+  <!-- selos -->
+  <rect x="64" y="1208" width="952" height="120" rx="12" fill="#EAF0E1" stroke="#cdd9bd"/>
+  <text x="90" y="1252" font-size="15" letter-spacing="3" fill="#5FB335" font-weight="700">TRANSPARÊNCIA &amp; RECONHECIMENTO</text>
+  <text x="90" y="1286" font-size="17" fill="#0E2E1C" font-weight="700">Selo da Transparência · Selo A do Selo Doar · ONG Verificada · Utilidade Pública</text>
+  <text x="90" y="1312" font-size="15" fill="#3d4a36">Moção de aplausos da Assembleia Legislativa de MT · Registro no Conselho Municipal de Assistência Social</text>
+
+  <rect x="0" y="1430" width="1080" height="98" fill="#0E2E1C"/>
+  <text x="540" y="1488" text-anchor="middle" font-size="14" letter-spacing="2" fill="#9DBE86">FLORESCER AÇÃO SOCIAL · INICIATIVA UISA · floresceracaosocial.org</text>
+</svg>

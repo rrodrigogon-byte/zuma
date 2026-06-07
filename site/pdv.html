@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDV Bar · Agro Open</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="img/logo-ao-oficial.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<style>
+  .layout{display:grid;grid-template-columns:1.3fr .9fr;gap:20px;align-items:start}
+  @media(max-width:900px){.layout{grid-template-columns:1fr}}
+  .mapa{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  @media(max-width:520px){.mapa{grid-template-columns:repeat(3,1fr)}}
+  .mesa{aspect-ratio:1;border-radius:14px;border:1px solid var(--line);background:var(--deep2);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:.15s;position:relative;padding:6px}
+  .mesa:hover{transform:translateY(-3px);border-color:var(--lime)}
+  .mesa .nn{font-family:'Archivo';font-weight:900;font-size:24px}
+  .mesa .tt{font-size:11px;color:var(--muted)}
+  .mesa.livre{opacity:.7}
+  .mesa.ocupada{background:linear-gradient(165deg,#16401f,var(--deep2));border-color:var(--lime)}
+  .mesa.conta{background:linear-gradient(165deg,#3a2e14,var(--deep2));border-color:var(--gold)}
+  .mesa.cozinha::after{content:"🍳";position:absolute;top:6px;right:8px;font-size:14px}
+  .mesa.sel{outline:2px solid var(--lime)}
+  .vtag{display:inline-block;background:rgba(143,214,74,.12);color:var(--lime);border-radius:100px;padding:2px 8px;font-size:10px;font-weight:700;margin-top:4px}
+  .panel-c{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:16px;padding:20px;position:sticky;top:84px}
+  .cat{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:12px 0 6px}
+  .pchip{display:inline-flex;align-items:center;gap:6px;background:var(--deep2);border:1px solid var(--line);border-radius:100px;padding:7px 12px;font-size:13px;cursor:pointer;margin:0 6px 6px 0}
+  .pchip:hover{border-color:var(--lime)}
+  .it{display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .it .q{color:var(--lime);font-weight:700}
+  .tot{display:flex;justify-content:space-between;font-family:'Archivo';font-weight:900;font-size:22px;margin:12px 0}
+  .login-box{max-width:380px;margin:8vh auto}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:14px}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:middle}
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="wrap">
+    <a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span> <span class="muted" style="font-weight:500;font-size:14px">· PDV Bar</span></a>
+    <div class="navlinks"><a href="admin.html">Painel</a><a href="cozinha.html">Cozinha (KDS)</a><a id="logout" class="hidden" style="cursor:pointer;color:#e89a8c">Sair</a></div>
+  </div>
+</header>
+
+<div id="login" class="wrap">
+  <div class="card login-box"><div class="kick">PDV — acesso</div><h2 style="font-size:24px;margin:8px 0 16px">Entrar</h2>
+    <div class="field"><label>Usuário</label><input id="l-user" placeholder="admin"></div>
+    <div class="field"><label>Senha</label><input id="l-pass" type="password" placeholder="••••••"></div>
+    <button class="btn" id="l-btn" style="width:100%;justify-content:center">Entrar</button>
+  </div>
+</div>
+
+<div id="app" class="wrap hidden" style="padding-bottom:40px">
+  <div class="hero" style="padding:26px 0 10px"><div class="kick">Ponto de venda</div><h1>Mapa de <span class="lime">mesas</span>.</h1></div>
+  <div id="caixa" class="legend"></div>
+  <div class="legend">
+    <span><span class="dot" style="background:#0A1F13;border:1px solid var(--line)"></span>Livre</span>
+    <span><span class="dot" style="background:#16401f"></span>Ocupada</span>
+    <span><span class="dot" style="background:#3a2e14"></span>Conta pedida</span>
+    <span>🍳 Aguardando cozinha</span>
+    <button class="btn ghost sm" id="reload" style="margin-left:auto">Atualizar</button>
+  </div>
+  <div class="layout">
+    <div>
+      <div class="mapa" id="mapa"></div>
+      <h3 style="font-size:16px;margin:22px 0 10px">Mesas virtuais (georreferenciadas)</h3>
+      <div class="mapa" id="virtuais"></div>
+    </div>
+    <div>
+      <div class="panel-c" id="comanda"><p class="muted">Selecione uma mesa para abrir a comanda.</p></div>
+    </div>
+  </div>
+</div>
+
+<footer class="app">AGRO OPEN · PDV integrado · comanda, cozinha (KDS) e caixa · powered by <b class="lime">SetPoint</b></footer>
+<div class="toast" id="toast"></div>
+
+<script>
+const $=s=>document.querySelector(s);
+let TOKEN=localStorage.getItem('ao_admin_token')||'', CARDAPIO=[], cur=null;
+const toast=(m,e)=>{const t=$('#toast');t.textContent=m;t.className='toast show'+(e?' err':'');setTimeout(()=>t.className='toast',2200);};
+async function api(p,o={}){const r=await fetch(p,{...o,headers:{'Content-Type':'application/json',...(TOKEN?{Authorization:'Bearer '+TOKEN}:{}),...(o.headers||{})}});if(r.status===401){logout();throw new Error('sessão');}const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'erro');return d;}
+function show(on){$('#login').classList.toggle('hidden',on);$('#app').classList.toggle('hidden',!on);$('#logout').classList.toggle('hidden',!on);}
+function logout(){TOKEN='';localStorage.removeItem('ao_admin_token');show(false);}
+$('#logout').onclick=logout;
+$('#l-btn').onclick=async()=>{try{const d=await api('/api/admin/login',{method:'POST',body:JSON.stringify({user:$('#l-user').value,pass:$('#l-pass').value})});TOKEN=d.token;localStorage.setItem('ao_admin_token',TOKEN);show(true);boot();}catch(e){toast(e.message,true);}};
+
+async function boot(){ CARDAPIO=await api('/api/cardapio'); loadMapa(); caixa(); }
+$('#reload').onclick=()=>{loadMapa();caixa();};
+async function caixa(){ try{const d=await api('/api/admin/caixa');$('#caixa').innerHTML=`<span>Caixa do dia: <b style="color:var(--lime)">R$ ${d.faturamento.toFixed(2).replace('.',',')}</b></span><span>${d.comandasFechadas} fechadas</span><span>${d.abertas} abertas</span>`;}catch(e){} }
+async function loadMapa(){
+  const d=await api('/api/mesas');
+  $('#mapa').innerHTML=d.fisicas.map(m=>`<div class="mesa ${m.status} ${m.aguardandoCozinha?'cozinha':''} ${cur&&cur.mesaNum===m.num&&cur.tipo==='fisica'?'sel':''}" data-num="${m.num}"><div class="nn">${m.num}</div><div class="tt">${m.status==='livre'?'livre':'R$ '+m.total.toFixed(0)}</div></div>`).join('');
+  $('#virtuais').innerHTML=d.virtuais.length?d.virtuais.map(v=>`<div class="mesa ${v.status} ${v.aguardandoCozinha?'cozinha':''}" data-cid="${v.comandaId}" style="aspect-ratio:auto;padding:14px"><div class="tt" style="font-weight:700;color:var(--cream)">${v.nome}</div><div class="tt">R$ ${v.total.toFixed(0)}</div><span class="vtag">virtual${v.local&&v.local.lat?' · GPS':''}</span></div>`).join(''):'<p class="muted" style="grid-column:1/-1;font-size:13px">Nenhuma mesa virtual ativa. Clientes criam pelo cardápio (QR).</p>';
+}
+$('#mapa').addEventListener('click',e=>{const m=e.target.closest('.mesa');if(m)abrir({mesaNum:+m.dataset.num,tipo:'fisica'});});
+$('#virtuais').addEventListener('click',e=>{const m=e.target.closest('.mesa');if(m)abrirComanda(+m.dataset.cid);});
+
+async function abrir({mesaNum}){ const c=await api('/api/comanda/abrir',{method:'POST',body:JSON.stringify({mesaNum})}); cur=c; renderComanda(); loadMapa(); }
+async function abrirComanda(id){ cur=await api('/api/comanda/'+id); renderComanda(); }
+function renderComanda(){
+  const cats=[...new Set(CARDAPIO.map(p=>p.cat))];
+  const menu=cats.map(cat=>`<div class="cat">${cat}</div>`+CARDAPIO.filter(p=>p.cat===cat).map(p=>`<span class="pchip" data-p="${p.id}">${p.nome} · R$${p.preco}${p.cozinha?' 🍳':''}</span>`).join('')).join('');
+  const itens=cur.itens.length?cur.itens.map(i=>`<div class="it"><span><span class="q">${i.qtd}×</span> ${i.nome}${i.obs?` <i style="color:var(--muted2)">(${i.obs})</i>`:''}</span><span>R$ ${(i.preco*i.qtd).toFixed(0)} ${i.cozinha?(i.status==='pronto'?'✅':'🍳'):''}</span></div>`).join(''):'<p class="muted" style="font-size:13px">Sem itens. Toque no cardápio para adicionar.</p>';
+  $('#comanda').innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center"><h3 style="font-size:20px">${cur.nome}</h3><span class="tag ${cur.tipo==='virtual'?'gold':''}">${cur.tipo==='virtual'?'virtual':'mesa '+cur.mesaNum}</span></div>
+    ${cur.local&&cur.local.lat?`<a class="muted" style="font-size:12px" target="_blank" href="https://maps.google.com/?q=${cur.local.lat},${cur.local.lng}">📍 ver no mapa (${cur.local.ref||'GPS'})</a>`:''}
+    <div style="margin:10px 0 4px">${menu}</div>
+    <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">${itens}</div>
+    <div class="tot"><span>Total</span><span class="lime">R$ ${cur.total.toFixed(2).replace('.',',')}</span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <select id="pg" style="flex:1"><option value="pix">Pix</option><option value="cartao">Cartão</option><option value="dinheiro">Dinheiro</option><option value="carteira">Carteira</option></select>
+      <button class="btn" id="fechar">Fechar conta</button>
+    </div>`;
+  $('#comanda').querySelectorAll('.pchip').forEach(ch=>ch.onclick=async()=>{cur=await api('/api/comanda/'+cur.id+'/item',{method:'POST',body:JSON.stringify({produtoId:ch.dataset.p,qtd:1})});renderComanda();loadMapa();});
+  $('#fechar').onclick=async()=>{await api('/api/admin/comanda/'+cur.id+'/fechar',{method:'POST',body:JSON.stringify({pagamento:$('#pg').value})});toast('Conta fechada!');cur=null;$('#comanda').innerHTML='<p class="muted">Selecione uma mesa.</p>';loadMapa();caixa();};
+}
+setInterval(()=>{ if(TOKEN && !$('#app').classList.contains('hidden')) loadMapa(); }, 8000);
+if(TOKEN){show(true);boot();}else show(false);
+</script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Patrocinadores · Agro Open</title>
+<meta name="description" content="Marcas que apoiam a Agro Open de Tênis e a plataforma.">
+<link rel="icon" href="img/logo-ao-oficial.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<style>
+  .cota-title{font-family:'Archivo';font-weight:900;font-size:14px;letter-spacing:3px;text-transform:uppercase;margin:30px 0 14px;color:var(--gold)}
+  .cota-title.master{color:var(--lime);font-size:18px}
+  .brands{display:grid;gap:14px}
+  .brands.master{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+  .brands.rest{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
+  .brand-card{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:14px;padding:24px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:110px;transition:.2s}
+  .brand-card:hover{transform:translateY(-3px);border-color:rgba(143,214,74,.4)}
+  .brand-card img{max-height:46px;max-width:80%;object-fit:contain}
+  .brand-card .nm{font-family:'Archivo';font-weight:800;font-size:18px}
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="wrap">
+    <a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span></a>
+    <div class="navlinks"><a href="index.html">Site</a><a href="ranking.html">Ranking</a><a href="chaves.html">Chaves</a><a href="conta.html">Entrar</a></div>
+  </div>
+</header>
+
+<div class="wrap hero">
+  <div class="kick">Quem apoia</div>
+  <h1>Nossos <span class="lime">patrocinadores</span>.</h1>
+  <p>Marcas que tornam a Agro Open possível e fortalecem o tênis e o agro de Mato Grosso.</p>
+</div>
+
+<div class="wrap" style="padding-bottom:50px"><div id="lista"></div></div>
+
+<footer class="app">AGRO OPEN · Patrocínio gerido pela plataforma <b class="lime">SetPoint</b> · quer apoiar? <a href="conta.html" class="lime">fale com a organização</a>.</footer>
+<script>
+const $=s=>document.querySelector(s);
+const COTA_LABEL={master:'Patrocinador Master',ouro:'Cota Ouro',prata:'Cota Prata',apoio:'Apoio'};
+async function carregar(){
+  try{
+    const list=await (await fetch('/api/patrocinadores')).json();
+    if(!list.length){ $('#lista').innerHTML='<div class="card" style="text-align:center;padding:40px"><p class="muted">Em breve as marcas parceiras da edição. Quer ser uma delas? Fale com a organização.</p></div>'; return; }
+    const grupos={}; list.forEach(p=>{(grupos[p.cota]=grupos[p.cota]||[]).push(p);});
+    let html='';
+    ['master','ouro','prata','apoio'].forEach(c=>{
+      if(!grupos[c]) return;
+      html+=`<div class="cota-title ${c==='master'?'master':''}">${COTA_LABEL[c]}</div><div class="brands ${c==='master'?'master':'rest'}">`+
+        grupos[c].map(p=>{
+          const inner=p.logo?`<img src="${p.logo}" alt="${p.marca}">`:`<span class="nm">${p.marca}</span>`;
+          return p.link?`<a class="brand-card" href="${p.link}" target="_blank" rel="noopener">${inner}</a>`:`<div class="brand-card">${inner}</div>`;
+        }).join('')+`</div>`;
+    });
+    $('#lista').innerHTML=html;
+  }catch(e){ $('#lista').innerHTML='<div class="card" style="padding:30px"><p class="muted">Inicie o servidor (npm start) para carregar os patrocinadores.</p></div>'; }
+}
+carregar();
+</script>
+</body>
+</html>

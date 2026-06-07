@@ -1,0 +1,69 @@
+<svg viewBox="0 0 1080 1528" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0E2E1C"/><stop offset="60%" stop-color="#0B2415"/><stop offset="100%" stop-color="#081C10"/></linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#E7CE8A"/><stop offset="50%" stop-color="#C7A24C"/><stop offset="100%" stop-color="#9C7B2E"/></linearGradient>
+  </defs>
+  <rect width="1080" height="1528" fill="url(#bg)"/>
+  <rect x="46" y="46" width="988" height="1436" rx="26" fill="none" stroke="url(#gold)" stroke-width="2.5"/>
+
+  <text x="64" y="148" font-size="15" letter-spacing="5" fill="#7FCB3B" font-weight="700">A NOITE</text>
+  <text x="60" y="208" font-size="48" font-weight="900" fill="#F4F6EF" font-family="Arial Black, Arial">Jantar de gala &amp; leilão</text>
+  <text x="64" y="248" font-size="18" fill="#9DBE86">Sábado · 12 de setembro de 2026 · Tangará Tênis Clube · Tangará da Serra/MT</text>
+
+  <!-- roteiro -->
+  <g transform="translate(64,300)" font-size="18">
+    <line x1="0" y1="0" x2="952" y2="0" stroke="#1d4a30"/>
+    <text x="0" y="42" font-weight="900" fill="#7FCB3B">19h00</text>
+    <text x="150" y="42" font-weight="700" fill="#F4F6EF">Recepção &amp; welcome drink</text>
+    <text x="560" y="42" fill="#9DBE86" font-size="15">Credenciamento de mesas e convidados VIP</text>
+    <line x1="0" y1="64" x2="952" y2="64" stroke="#1d4a30"/>
+    <text x="0" y="106" font-weight="900" fill="#7FCB3B">20h00</text>
+    <text x="150" y="106" font-weight="700" fill="#F4F6EF">Jantar open food</text>
+    <text x="560" y="106" fill="#9DBE86" font-size="15">Menu premium servido às mesas</text>
+    <line x1="0" y1="128" x2="952" y2="128" stroke="#1d4a30"/>
+    <text x="0" y="170" font-weight="900" fill="#7FCB3B">21h00</text>
+    <text x="150" y="170" font-weight="700" fill="#F4F6EF">Abertura &amp; vídeo Florescer</text>
+    <text x="560" y="170" fill="#9DBE86" font-size="15">A causa, os números e as histórias de vida</text>
+    <line x1="0" y1="192" x2="952" y2="192" stroke="#1d4a30"/>
+    <text x="0" y="234" font-weight="900" fill="#7FCB3B">21h30</text>
+    <text x="150" y="234" font-weight="700" fill="#F4F6EF">Leilão beneficente</text>
+    <text x="560" y="234" fill="#9DBE86" font-size="15">Lotes especiais com leiloeiro oficial</text>
+    <line x1="0" y1="256" x2="952" y2="256" stroke="#1d4a30"/>
+    <text x="0" y="298" font-weight="900" fill="#7FCB3B">23h00</text>
+    <text x="150" y="298" font-weight="700" fill="#F4F6EF">Encerramento &amp; música</text>
+    <text x="560" y="298" fill="#9DBE86" font-size="15">Confraternização e networking</text>
+    <line x1="0" y1="320" x2="952" y2="320" stroke="#1d4a30"/>
+  </g>
+
+  <!-- Mesa principal -->
+  <rect x="64" y="680" width="952" height="300" rx="20" fill="#123A23" stroke="url(#gold)" stroke-width="2"/>
+  <text x="540" y="742" text-anchor="middle" font-size="18" letter-spacing="4" fill="#C7A24C" font-weight="700">RESERVA DE MESA SOLIDÁRIA</text>
+  <text x="540" y="846" text-anchor="middle" font-size="96" font-weight="900" fill="#E7CE8A" font-family="Arial Black, Arial">R$ 7.000</text>
+  <text x="540" y="896" text-anchor="middle" font-size="22" fill="#F4F6EF" font-weight="700">SISTEMA OPEN FOOD · 6 CONVIDADOS POR MESA</text>
+  <text x="540" y="940" text-anchor="middle" font-size="16" fill="#9DBE86">Jantar premium, bebidas, experiência VIP, participação no leilão e reconhecimento de marca</text>
+
+  <!-- O que sua mesa inclui -->
+  <text x="64" y="1050" font-size="15" letter-spacing="4" fill="#5FB335" font-weight="800">O QUE A SUA MESA INCLUI</text>
+  <g stroke="#7FCB3B" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M64 1086 l6 7 l11 -14"/><path d="M560 1086 l6 7 l11 -14"/>
+    <path d="M64 1120 l6 7 l11 -14"/><path d="M560 1120 l6 7 l11 -14"/>
+    <path d="M64 1154 l6 7 l11 -14"/><path d="M560 1154 l6 7 l11 -14"/>
+  </g>
+  <g font-size="16" fill="#F4F6EF">
+    <text x="92" y="1092">6 lugares no jantar de gala open food</text>
+    <text x="588" y="1092">Acesso à área VIP da 4ª Agro Open</text>
+    <text x="92" y="1126">Reconhecimento da marca na noite</text>
+    <text x="588" y="1126">Recibo para incentivo fiscal (sob projeto)</text>
+    <text x="92" y="1160">Participação no leilão beneficente</text>
+    <text x="588" y="1160">100% revertido ao Florescer Ação Social</text>
+  </g>
+
+  <!-- CTA -->
+  <g transform="translate(0,1230)">
+    <rect x="64" y="0" width="952" height="100" rx="50" fill="url(#gold)"/>
+    <text x="540" y="44" text-anchor="middle" font-size="16" letter-spacing="3" fill="#0B2415" font-weight="700">RESERVE SUA MESA OU FALE SOBRE COTAS</text>
+    <text x="540" y="76" text-anchor="middle" font-size="24" fill="#0B2415" font-weight="900">(65) 99636-4113  ·  silvester_natal@hotmail.com</text>
+  </g>
+  <text x="540" y="1404" text-anchor="middle" font-size="16" fill="#9DBE86">Doações também em floresceracaosocial.org · Florescer Ação Social — iniciativa UISA</text>
+  <text x="540" y="1452" text-anchor="middle" font-size="14" letter-spacing="2" fill="#6f8a5e">REALIZAÇÃO · FLORESCER + UISA + TANGARÁ TÊNIS CLUBE</text>
+</svg>

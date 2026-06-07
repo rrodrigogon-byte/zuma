@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ranking · Agro Open de Tênis</title>
+<meta name="description" content="Ranking interno da Agro Open (estilo Meu Ranking) e rankings oficiais ATP e WTA, masculino e feminino.">
+<link rel="icon" href="img/logo-ao-oficial.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<style>
+  .flag{font-size:12px;color:var(--muted2);margin-bottom:14px}
+  .live{color:var(--lime);font-weight:700}
+  .podium td:first-child{color:var(--gold)}
+  .br{background:rgba(143,214,74,.06)}
+  .toprow td{font-weight:700}
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="wrap">
+    <a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span></a>
+    <div class="navlinks">
+      <a href="index.html">Site</a><a href="ranking.html" class="active">Ranking</a><a href="noticias.html">Notícias</a>
+      <a href="regras.html">Regras</a><a href="chaves.html">Chaves</a><a href="sorteio.html">Sorteio</a>
+    </div>
+  </div>
+</header>
+
+<div class="wrap hero">
+  <div class="kick">Rankings</div>
+  <h1>Ranking <span class="lime">do tênis</span>.</h1>
+  <p>O ranking interno da Agro Open (por resultados nas chaves) e os rankings oficiais ATP e WTA, masculino e feminino.</p>
+</div>
+
+<div class="wrap">
+  <div class="tabs">
+    <button data-t="interno" class="active">Ranking Agro Open</button>
+    <button data-t="rating">Rating Elo</button>
+    <button data-t="atp">ATP · Masculino</button>
+    <button data-t="wta">WTA · Feminino</button>
+  </div>
+
+  <section id="t-interno">
+    <div class="ctrls"><div><label>Categoria</label><select id="rk-cat"><option value="todas">Todas</option></select></div><button class="btn sm ghost" id="rk-reload">Atualizar</button></div>
+    <div class="card" style="padding:0;overflow:auto">
+      <table><thead><tr><th>#</th><th>Atleta</th><th>Categoria</th><th>Pontos</th><th>V</th><th>D</th><th>Aprov.</th></tr></thead><tbody id="rk-body"></tbody></table>
+    </div>
+    <p class="muted" style="font-size:12.5px;margin-top:12px">Pontuação acumulada por fase alcançada nas chaves oficiais — atualizada a cada torneio finalizado pela organização.</p>
+  </section>
+
+  <section id="t-rating" class="hidden">
+    <div class="card" style="padding:0;overflow:auto">
+      <table><thead><tr><th>#</th><th>Atleta</th><th>Rating (Elo)</th><th>Jogos</th><th>V</th><th>D</th><th>Aprov.</th></tr></thead><tbody id="rt-body"></tbody></table>
+    </div>
+    <p class="muted" style="font-size:12.5px;margin-top:12px">Rating dinâmico estilo Elo (base 1500), recalculado a cada partida com vencedor — base para cabeças de chave e equilíbrio de categorias.</p>
+  </section>
+  <section id="t-atp" class="hidden"><div id="atp"></div></section>
+  <section id="t-wta" class="hidden"><div id="wta"></div></section>
+</div>
+
+<footer class="app">AGRO OPEN · Rankings oficiais ATP/WTA exibidos com atribuição às fontes. Ranking interno gerado pelos resultados do torneio.</footer>
+<div class="toast" id="toast"></div>
+
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const toast=(m,e)=>{const t=$('#toast');t.textContent=m;t.className='toast show'+(e?' err':'');setTimeout(()=>t.className='toast',2400);};
+$$('.tabs button').forEach(b=>b.onclick=()=>{
+  $$('.tabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active');
+  ['interno','rating','atp','wta'].forEach(t=>$('#t-'+t).classList.toggle('hidden',t!==b.dataset.t));
+  if(b.dataset.t==='rating') loadRating();
+});
+async function loadRating(){
+  try{
+    const list=await (await fetch('/api/rating')).json();
+    $('#rt-body').innerHTML=list.map(p=>`<tr class="${p.pos<=3?'podium toprow':''}"><td class="pos">${p.pos}</td><td><b>${p.nome}</b></td><td><b style="color:var(--lime)">${p.elo}</b></td><td>${p.jogos}</td><td>${p.v}</td><td>${p.d}</td><td>${p.aproveitamento}%</td></tr>`).join('')
+      ||'<tr><td colspan="7" class="muted" style="padding:24px">O rating começa quando os primeiros jogos são lançados.</td></tr>';
+  }catch(e){ $('#rt-body').innerHTML='<tr><td colspan="7" class="muted" style="padding:24px">Inicie o servidor (npm start) para ver o rating.</td></tr>'; }
+}
+
+async function loadInterno(){
+  try{
+    const cats=await (await fetch('/api/categorias')).json();
+    $('#rk-cat').innerHTML='<option value="todas">Todas</option>'+cats.map(c=>`<option>${c}</option>`).join('');
+  }catch(e){}
+  reloadInterno();
+}
+$('#rk-reload').onclick=reloadInterno; $('#rk-cat').onchange=reloadInterno;
+async function reloadInterno(){
+  try{
+    const cat=$('#rk-cat').value;
+    const list=await (await fetch('/api/ranking'+(cat&&cat!=='todas'?('?categoria='+encodeURIComponent(cat)):''))).json();
+    $('#rk-body').innerHTML=list.map(p=>`<tr class="${p.pos<=3?'podium toprow':''}"><td class="pos">${p.pos}</td><td><b>${p.nome}</b></td><td>${p.categoria}</td><td><b style="color:var(--lime)">${p.pontos}</b></td><td>${p.vitorias}</td><td>${p.derrotas}</td><td>${p.aproveitamento}%</td></tr>`).join('')
+      ||'<tr><td colspan="7" class="muted" style="padding:24px">O ranking começa a ser preenchido quando a organização finaliza as primeiras chaves.</td></tr>';
+  }catch(e){ $('#rk-body').innerHTML='<tr><td colspan="7" class="muted" style="padding:24px">Inicie o servidor (npm start) para carregar o ranking.</td></tr>'; }
+}
+
+function rankTable(d){
+  const live = d.live?'<span class="live">● AO VIVO</span>':'snapshot';
+  const rows=(arr)=>arr.map(p=>`<tr class="${p.pais==='BRA'?'br toprow':(p.pos<=3?'podium toprow':'')}"><td class="pos">${p.pos??'—'}</td><td><b>${p.nome}</b></td><td>${p.pais||'—'}</td><td>${p.pontos!=null?p.pontos.toLocaleString('pt-BR'):'—'}</td></tr>`).join('');
+  return `<div class="flag">${d.tour} · atualizado ${d.atualizado||''} · ${live} · fonte: ${d.fonte||''}</div>
+    <div class="card" style="padding:0;overflow:auto"><table><thead><tr><th>#</th><th>Atleta</th><th>País</th><th>Pontos</th></tr></thead><tbody>${rows(d.top)}</tbody></table></div>
+    ${d.brasileiros&&d.brasileiros.length?`<h3 style="font-size:18px;margin:22px 0 10px">Brasileiros 🇧🇷</h3><div class="card" style="padding:0;overflow:auto"><table><thead><tr><th>#</th><th>Atleta</th><th>País</th><th>Pontos</th></tr></thead><tbody>${rows(d.brasileiros)}</tbody></table></div>`:''}`;
+}
+async function loadTour(id){
+  try{ const d=await (await fetch('/api/'+id)).json(); $('#'+id).innerHTML=rankTable(d); }
+  catch(e){ $('#'+id).innerHTML='<p class="muted">Inicie o servidor (npm start) para carregar o ranking '+id.toUpperCase()+'.</p>'; }
+}
+loadInterno(); loadTour('atp'); loadTour('wta');
+</script>
+</body>
+</html>

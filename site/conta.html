@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minha Conta · Agro Open</title>
+<link rel="icon" href="img/logo-ao-oficial.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<style>
+  .box{max-width:420px;margin:4vh auto}
+  .me{max-width:520px;margin:4vh auto}
+  .av{width:64px;height:64px;border-radius:50%;background:linear-gradient(165deg,var(--green),#4a991f);display:flex;align-items:center;justify-content:center;font-family:'Archivo';font-weight:900;font-size:26px;color:var(--deep2)}
+  .links a{display:flex;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--line)}
+  .links a:hover{color:var(--lime)}
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="wrap"><a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span></a>
+  <div class="navlinks"><a href="index.html">Site</a><a href="ingressos.html">Ingressos</a><a href="ranking.html">Ranking</a><a href="chaves.html">Chaves</a></div></div>
+</header>
+
+<!-- AUTH -->
+<div id="auth" class="wrap">
+  <div class="card box">
+    <div class="tabs"><button data-t="login" class="active">Entrar</button><button data-t="reg">Criar conta</button></div>
+    <div id="t-login">
+      <div class="field"><label>E-mail</label><input id="li-email" type="email" placeholder="voce@email.com"></div>
+      <div class="field"><label>Senha</label><input id="li-senha" type="password" placeholder="••••••"></div>
+      <button class="btn" id="li-btn" style="width:100%;justify-content:center">Entrar</button>
+    </div>
+    <div id="t-reg" class="hidden">
+      <div class="field"><label>Nome completo</label><input id="rg-nome" placeholder="Seu nome"></div>
+      <div class="field"><label>E-mail</label><input id="rg-email" type="email" placeholder="voce@email.com"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="field"><label>Telefone</label><input id="rg-tel" placeholder="(65) 90000-0000"></div>
+        <div class="field"><label>Senha (mín. 6)</label><input id="rg-senha" type="password" placeholder="••••••"></div>
+      </div>
+      <label style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--muted);margin:4px 0 12px"><input type="checkbox" id="rg-lgpd" style="width:auto;margin-top:3px"> Li e aceito a coleta dos meus dados para participação nos torneios e serviços do clube (LGPD).</label>
+      <button class="btn" id="rg-btn" style="width:100%;justify-content:center">Criar minha conta</button>
+    </div>
+    <p class="muted" style="font-size:12px;margin-top:14px">É da organização? Acesse o <a href="admin.html" class="lime">painel do sistema</a>.</p>
+  </div>
+</div>
+
+<!-- MINHA CONTA -->
+<div id="me" class="wrap hidden">
+  <div class="card me">
+    <div style="display:flex;align-items:center;gap:16px"><div class="av" id="m-av"></div><div><h2 id="m-nome" style="font-size:24px"></h2><span class="muted" id="m-email"></span> · <span class="tag" id="m-role"></span></div></div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:22px 0 4px">
+      <div style="background:linear-gradient(165deg,var(--green),#4a991f);border-radius:14px;padding:16px 18px;color:var(--deep2)">
+        <div style="font-size:12px;font-weight:700;opacity:.8">CARTEIRA</div>
+        <div style="font-family:'Archivo';font-weight:900;font-size:26px">R$ <span id="w-saldo">0,00</span></div>
+        <button id="w-recarga" style="margin-top:8px;background:var(--deep2);color:var(--lime);border:none;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer;font-size:13px">+ Recarregar com Pix</button>
+      </div>
+      <div style="background:var(--deep2);border:1px solid rgba(201,166,86,.4);border-radius:14px;padding:16px 18px">
+        <div style="font-size:12px;font-weight:700;color:var(--gold)">PONTOS DE FIDELIDADE</div>
+        <div style="font-family:'Archivo';font-weight:900;font-size:26px;color:var(--gold)"><span id="w-pontos">0</span> pts</div>
+      </div>
+    </div>
+    <details id="w-extrato-box" style="margin-bottom:6px"><summary class="muted" style="cursor:pointer;font-size:13px;padding:6px 0">Ver extrato</summary>
+      <div id="w-extrato" style="font-size:13px"></div>
+    </details>
+
+    <h3 style="font-size:16px;margin:22px 0 6px">Atalhos</h3>
+    <div class="links">
+      <a href="ingressos.html">Comprar ingressos <span>→</span></a>
+      <a href="reservas.html">Reservar quadra <span>→</span></a>
+      <a href="carteirinha.html">Minha carteirinha de sócio <span>→</span></a>
+      <a href="chaves.html">Ver chaves e resultados <span>→</span></a>
+      <a href="ranking.html">Meu ranking <span>→</span></a>
+      <a href="planos.html">Planos & assinaturas <span>→</span></a>
+      <a id="m-admin" href="admin.html" class="hidden">Painel da organização <span>→</span></a>
+    </div>
+    <button class="btn ghost" id="m-sair" style="margin-top:18px">Sair da conta</button>
+  </div>
+</div>
+
+<footer class="app">AGRO OPEN · Sua conta única para inscrições, ingressos, chaves e ranking.</footer>
+<div class="toast" id="toast"></div>
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const toast=(m,e)=>{const t=$('#toast');t.textContent=m;t.className='toast show'+(e?' err':'');setTimeout(()=>t.className='toast',2600);};
+let TOKEN=localStorage.getItem('ao_user_token')||'';
+$$('.tabs button').forEach(b=>b.onclick=()=>{$$('.tabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('#t-login').classList.toggle('hidden',b.dataset.t!=='login');$('#t-reg').classList.toggle('hidden',b.dataset.t!=='reg');});
+let ME=null;
+function showMe(u){
+  ME=u;
+  $('#auth').classList.add('hidden');$('#me').classList.remove('hidden');
+  $('#m-av').textContent=(u.nome||'?').trim()[0].toUpperCase();
+  $('#m-nome').textContent=u.nome;$('#m-email').textContent=u.email;$('#m-role').textContent=u.role;
+  $('#m-admin').classList.toggle('hidden', !['admin','organizador','staff'].includes(u.role));
+  carteira();
+}
+async function carteira(){
+  try{
+    const w=await (await fetch('/api/auth/carteira',{headers:{Authorization:'Bearer '+TOKEN}})).json();
+    $('#w-saldo').textContent=(w.saldo||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+    $('#w-pontos').textContent=w.pontos||0;
+    $('#w-extrato').innerHTML=(w.extrato&&w.extrato.length)
+      ? w.extrato.map(e=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line)"><span class="muted">${new Date(e.t).toLocaleDateString('pt-BR')} · ${e.motivo}</span><b style="color:${e.tipo==='débito'?'#e57':'var(--lime)'}">${e.tipo==='pontos'?(e.valor+' pts'):('R$ '+e.valor.toLocaleString('pt-BR',{minimumFractionDigits:2}))}</b></div>`).join('')
+      : '<p class="muted" style="padding:6px 0">Sem movimentações ainda. Ganhe pontos jogando e use a carteira no bar e nos ingressos.</p>';
+  }catch(e){}
+}
+async function me(){ if(!TOKEN){return;} try{const r=await fetch('/api/auth/me',{headers:{Authorization:'Bearer '+TOKEN}});if(r.ok){showMe(await r.json());}else logout();}catch(e){} }
+function logout(){TOKEN='';localStorage.removeItem('ao_user_token');$('#me').classList.add('hidden');$('#auth').classList.remove('hidden');}
+$('#m-sair').onclick=logout;
+$('#li-btn').onclick=async()=>{
+  try{const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$('#li-email').value,senha:$('#li-senha').value})});const d=await r.json();if(!r.ok)throw new Error(d.error);TOKEN=d.token;localStorage.setItem('ao_user_token',TOKEN);showMe(d.user);toast('Bem-vindo, '+d.user.nome.split(' ')[0]+'!');}catch(e){toast(e.message||'Falha no login',true);}
+};
+$('#rg-btn').onclick=async()=>{
+  if(!$('#rg-lgpd').checked){ toast('Aceite o termo de dados (LGPD) para continuar',true); return; }
+  try{const r=await fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nome:$('#rg-nome').value,email:$('#rg-email').value,senha:$('#rg-senha').value,telefone:$('#rg-tel').value,consentimento:true})});const d=await r.json();if(!r.ok)throw new Error(d.error);TOKEN=d.token;localStorage.setItem('ao_user_token',TOKEN);showMe(d.user);toast('Conta criada! Bem-vindo.');}catch(e){toast(e.message||'Falha no cadastro',true);}
+};
+$('#w-recarga').onclick=async()=>{
+  if(!ME) return;
+  const v=parseFloat(prompt('Valor da recarga (R$):','50')); if(!v||v<=0) return;
+  try{
+    const pg=await (await fetch('/api/pagar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo:'carteira',usuarioId:ME.id,valor:v,email:ME.email,descricao:'Recarga de carteira'})})).json();
+    if(pg.error) throw new Error(pg.error);
+    if(pg.modo==='simulado'){
+      if(confirm('Pix gerado (modo simulado).\nCopia e cola:\n\n'+pg.copiaECola+'\n\nConfirmar pagamento agora?')){
+        await fetch('/api/pagamento/'+pg.pagamentoId+'/confirmar',{method:'POST'});
+        toast('Recarga de R$ '+v.toFixed(2)+' confirmada!'); carteira();
+      }
+    } else {
+      alert('Pix gerado! Pague pelo app do banco:\n\n'+pg.copiaECola+'\n\nO saldo entra após a confirmação automática.');
+    }
+  }catch(e){ toast(e.message||'Falha na recarga',true); }
+};
+me();
+</script>
+</body>
+</html>

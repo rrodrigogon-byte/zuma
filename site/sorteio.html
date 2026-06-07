@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sorteio de Chaves · Agro Open de Tênis</title>
+<meta name="description" content="Sorteio e chaveamento online da 4ª Agro Open de Tênis — estilo Grand Slam, com cabeças de chave, byes e bracket interativo.">
+<link rel="icon" href="img/logo-ao-oficial.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#07160D;--deep:#0C2517;--deep2:#0A1F13;--panel:#0F3120;--green:#5FB335;--lime:#8FD64A;--lime2:#B6EE72;--gold:#C9A656;--goldL:#E7CE8A;--cream:#F4F6EF;--muted:#9DBE86;--muted2:#7E9A6B;--line:rgba(143,214,74,.16)}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--cream);line-height:1.5;min-height:100vh}
+  h1,h2,h3,.dsp{font-family:'Archivo',sans-serif;font-weight:900;letter-spacing:-.02em}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1320px;margin:0 auto;padding:0 22px}
+  .lime{color:var(--lime)}.gold{color:var(--gold)}
+
+  header{border-bottom:1px solid var(--line);background:rgba(7,22,13,.85);backdrop-filter:blur(12px);position:sticky;top:0;z-index:30}
+  header .wrap{display:flex;align-items:center;justify-content:space-between;height:68px;gap:16px}
+  .brand{display:flex;align-items:center;gap:11px;font-family:'Archivo';font-weight:900;font-size:19px}
+  .ball{width:30px;height:30px;border-radius:50%;background:radial-gradient(circle at 34% 28%,#B6EE72,#7FCB3B 55%,#4F9E28);box-shadow:inset 0 0 0 2px var(--deep2);position:relative;flex:none}
+  .ball::before,.ball::after{content:"";position:absolute;top:3px;bottom:3px;width:6px;border:1.5px solid rgba(244,246,239,.9);border-radius:50%}
+  .ball::before{left:4px;border-right:none}.ball::after{right:4px;border-left:none}
+  header a.back{font-size:14px;color:var(--muted)}
+  header a.back:hover{color:var(--lime)}
+
+  .hero{padding:46px 0 18px}
+  .kick{font-size:12px;letter-spacing:.3em;text-transform:uppercase;color:var(--lime);font-weight:700}
+  .hero h1{font-size:clamp(34px,5vw,56px);margin:12px 0 6px}
+  .hero p{color:var(--muted);max-width:680px}
+
+  .controls{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:18px;padding:24px;margin:26px 0;display:grid;grid-template-columns:1.3fr 1fr;gap:24px}
+  @media(max-width:840px){.controls{grid-template-columns:1fr}}
+  label{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:6px}
+  select,textarea,input{width:100%;background:var(--deep2);border:1px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--cream);font-family:'Inter';font-size:14px}
+  select:focus,textarea:focus,input:focus{outline:none;border-color:var(--lime)}
+  textarea{min-height:190px;resize:vertical;line-height:1.7}
+  .row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+  .row > div{flex:1;min-width:120px}
+  .btn{display:inline-flex;align-items:center;gap:8px;background:var(--lime);color:var(--deep2);font-weight:700;font-size:14px;padding:12px 22px;border-radius:100px;border:1px solid var(--lime);cursor:pointer;transition:.2s;font-family:'Inter'}
+  .btn:hover{background:var(--lime2);border-color:var(--lime2);transform:translateY(-2px)}
+  .btn.ghost{background:transparent;color:var(--cream);border-color:rgba(143,214,74,.4)}
+  .btn.ghost:hover{background:rgba(143,214,74,.1)}
+  .btn.sm{padding:9px 16px;font-size:13px}
+  .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+  .hint{font-size:12px;color:var(--muted2);margin-top:10px}
+
+  .meta{display:flex;gap:22px;flex-wrap:wrap;align-items:center;margin:6px 0 18px;color:var(--muted);font-size:13px}
+  .meta b{color:var(--cream)}
+  .meta .tag{background:rgba(143,214,74,.12);color:var(--lime);border-radius:100px;padding:5px 14px;font-weight:700;font-size:12px}
+
+  /* bracket */
+  .bracket-wrap{overflow-x:auto;padding:8px 4px 28px;border:1px solid var(--line);border-radius:18px;background:
+    radial-gradient(900px 400px at 15% -10%,rgba(143,214,74,.06),transparent 60%),var(--deep2)}
+  .bracket{display:flex;gap:30px;min-width:max-content;padding:20px}
+  .round{display:flex;flex-direction:column;justify-content:space-around;gap:14px;min-width:210px}
+  .round .rhead{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:700;text-align:center;margin-bottom:4px}
+  .match{position:relative;background:var(--deep);border:1px solid var(--line);border-radius:11px;overflow:hidden;opacity:0;transform:translateX(-10px);transition:opacity .5s,transform .5s}
+  .match.show{opacity:1;transform:none}
+  .match::after{content:"";position:absolute;right:-30px;top:50%;width:30px;height:1px;background:var(--line)}
+  .round:last-child .match::after{display:none}
+  .seat{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;transition:.15s;border-bottom:1px solid var(--line)}
+  .seat:last-child{border-bottom:none}
+  .seat:hover{background:rgba(143,214,74,.08)}
+  .seat .sd{font-size:10px;color:var(--deep2);background:var(--gold);border-radius:5px;padding:1px 5px;font-weight:800;flex:none}
+  .seat .nm{font-size:13.5px;font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .seat.bye .nm{color:var(--muted2);font-style:italic;font-weight:500}
+  .seat.bye{cursor:default}
+  .seat.win{background:rgba(143,214,74,.14)}
+  .seat.win .nm{color:var(--lime);font-weight:800}
+  .seat.empty .nm{color:var(--muted2)}
+  .seat.empty{cursor:default}
+
+  .champion{margin-top:22px;text-align:center;background:linear-gradient(165deg,#16401f,var(--deep2));border:1px solid var(--lime);border-radius:18px;padding:30px;display:none}
+  .champion.show{display:block}
+  .champion .lbl{font-size:12px;letter-spacing:.2em;color:var(--gold);font-weight:700}
+  .champion .nm{font-family:'Archivo';font-weight:900;font-size:clamp(28px,4vw,44px);margin-top:6px}
+  .empty-state{padding:60px 20px;text-align:center;color:var(--muted)}
+  .empty-state .big{font-size:60px;opacity:.5}
+
+  footer{border-top:1px solid var(--line);margin-top:40px;padding:26px 0;color:var(--muted2);font-size:12.5px;text-align:center}
+
+  @media print{
+    header,.controls,.hero p,.actions,footer,.toolbar{display:none!important}
+    body{background:#fff;color:#000}
+    .bracket-wrap{border:none;background:#fff}
+    .match{background:#fff;border:1px solid #bbb}
+    .seat{color:#000}.seat .nm{color:#000}
+    .seat.win .nm{color:#2c7a12}
+  }
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;align-items:center;margin:24px 0 12px}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(120px);background:var(--lime);color:var(--deep2);font-weight:700;padding:13px 22px;border-radius:100px;z-index:90;transition:.4s}
+  .toast.show{transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime" style="margin-left:-5px">OPEN</span></a>
+    <a href="index.html" class="back">← Voltar ao site</a>
+  </div>
+</header>
+
+<div class="wrap">
+  <section class="hero">
+    <div class="kick">Chaveamento oficial</div>
+    <h1>Sorteio de <span class="lime">Chaves</span></h1>
+    <p>Ferramenta de sorteio no padrão dos Grand Slams: cabeças de chave em posições oficiais, byes para os melhores ranqueados e bracket interativo. Insira os atletas, defina as cabeças de chave e clique em sortear.</p>
+  </section>
+
+  <section class="controls">
+    <div>
+      <label>Atletas inscritos · um por linha (os primeiros da lista podem virar cabeças de chave)</label>
+      <textarea id="players" placeholder="Ex.:&#10;João Meneses&#10;Guilherme Clezar&#10;Gilbert&#10;Christian Oliveira&#10;..."></textarea>
+      <div class="actions">
+        <button class="btn ghost sm" id="sample">Preencher exemplo</button>
+        <button class="btn ghost sm" id="clearTxt">Limpar lista</button>
+        <span class="hint" id="count">0 atletas</span>
+      </div>
+    </div>
+    <div>
+      <div class="row">
+        <div>
+          <label>Categoria / chave</label>
+          <select id="categoria">
+            <optgroup label="Masculino">
+              <option>PRO · Profissional</option><option>1ª Classe Profissional</option><option>2ª Classe Avançada</option><option>3ª Classe Intermediária</option>
+              <option>4ª Classe Iniciante+</option><option>5ª Classe Iniciante</option><option>34+ Veteranos</option><option>Especial · Convidados VIP</option>
+            </optgroup>
+            <optgroup label="Feminino">
+              <option>PRO · Profissional</option><option>1ª Classe Profissional</option><option>2ª Classe Avançada</option><option>3ª Classe Intermediária</option><option>35+ Veteranas</option><option>Duplas femininas</option>
+            </optgroup>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Tamanho da chave</label>
+          <select id="size"><option value="auto">Automático</option><option>8</option><option>16</option><option>32</option><option>64</option></select>
+        </div>
+        <div>
+          <label>Cabeças de chave</label>
+          <select id="seeds"><option>0</option><option>2</option><option selected>4</option><option>8</option><option>16</option></select>
+        </div>
+      </div>
+      <label>Ordem dos cabeças</label>
+      <select id="seedmode" style="margin-bottom:14px">
+        <option value="top">Os primeiros da lista (1, 2, 3...)</option>
+        <option value="random">Sortear quem são os cabeças</option>
+      </select>
+      <button class="btn" id="draw" style="width:100%;justify-content:center;font-size:15px;padding:14px">🎾 Sortear chaves</button>
+      <p class="hint">As cabeças de chave são posicionadas em pontos opostos do bracket (padrão ITF/Grand Slam). Byes vão para os melhores ranqueados quando a chave não fecha exata.</p>
+    </div>
+  </section>
+
+  <div class="toolbar">
+    <div class="meta" id="meta"></div>
+    <div class="actions">
+      <button class="btn ghost sm" id="reset" style="display:none">Reiniciar vencedores</button>
+      <button class="btn ghost sm" id="save" style="display:none">Salvar</button>
+      <button class="btn ghost sm" id="print" style="display:none">Imprimir / PDF</button>
+    </div>
+  </div>
+
+  <div class="bracket-wrap">
+    <div id="bracket" class="bracket"></div>
+    <div class="empty-state" id="empty"><div class="big">🎾</div><p>Insira os atletas e clique em <b>Sortear chaves</b> para gerar o bracket.</p></div>
+  </div>
+  <div class="champion" id="champion"><div class="lbl">CAMPEÃO DA CHAVE</div><div class="nm" id="champ-name"></div></div>
+</div>
+
+<footer>AGRO OPEN · 4ª EDIÇÃO · 07–13 SET 2026 · Tangará Tênis Clube · Sorteio realizado automaticamente, sujeito à validação da comissão técnica.</footer>
+<div class="toast" id="toast"></div>
+
+<script>
+const $=(s)=>document.querySelector(s);
+const ROUND_NAMES=["1ª Rodada","Oitavas","Quartas","Semifinal","Final","Campeão"];
+let state=null; // {size, seeds, rounds:[[entry|null]...], categoria}
+
+const SAMPLE=["João Meneses","Guilherme Clezar","Gilbert","Christian Oliveira","Paulo Saraiva","Marvim","Kauê Noatto","Rafael Costa","Bruno Almeida","Pedro Henrique","Lucas Martins","Felipe Souza","André Lima","Thiago Rocha","Gustavo Dias","Marcelo Nunes","Ricardo Alves","Diego Fernandes","Vitor Gomes","Eduardo Pires"];
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+function nextPow2(n){let p=2;while(p<n)p*=2;return Math.max(2,p);}
+// ordem oficial de posicionamento dos cabeças de chave
+function seedOrder(n){let arr=[1,2];while(arr.length<n){const s=arr.length*2+1,nx=[];for(const x of arr){nx.push(x);nx.push(s-x);}arr=nx;}return arr;}
+
+function readPlayers(){return $('#players').value.split('\n').map(s=>s.trim()).filter(Boolean);}
+function updateCount(){const n=readPlayers().length;$('#count').textContent=n+' atleta'+(n===1?'':'s');}
+
+function buildDraw(players,N,S){
+  const order=seedOrder(N);
+  const slot=new Array(N).fill(undefined);
+  // posiciona cabeças de chave
+  for(let r=1;r<=S && r<=players.length;r++){slot[order.indexOf(r)]={name:players[r-1],seed:r};}
+  const M=N/2;                          // nº de confrontos na 1ª rodada
+  const nonseed=shuffle(players.slice(S));
+  const matchReal=i=>(slot[2*i]&&!slot[2*i].bye)||(slot[2*i+1]&&!slot[2*i+1].bye);
+  const openSlot=i=> slot[2*i]===undefined?2*i:(slot[2*i+1]===undefined?2*i+1:-1);
+  const seedOfMatch=i=>{const a=slot[2*i],b=slot[2*i+1];return (a&&a.seed)||(b&&b.seed)||Infinity;};
+  // 1) garante 1 atleta real em cada confronto (nunca bye x bye)
+  for(let i=0;i<M;i++){if(!matchReal(i)&&nonseed.length){slot[openSlot(i)]={name:nonseed.pop()};}}
+  // 2) distribui o resto: byes vão para os melhores cabeças; demais slots recebem atletas
+  const byes=N-players.length;
+  const opens=[];for(let i=0;i<M;i++){const s=openSlot(i);if(s>=0)opens.push({slot:s,seed:seedOfMatch(i)});}
+  opens.sort((a,b)=>a.seed-b.seed);
+  for(let k=0;k<opens.length;k++){slot[opens[k].slot]=(k<byes)?{bye:true}:(nonseed.length?{name:nonseed.pop()}:{bye:true});}
+  return slot;
+}
+
+function makeRounds(slot){
+  const rounds=[slot];
+  let size=slot.length;
+  while(size>1){size/=2;rounds.push(new Array(size).fill(null));}
+  resolveByes(rounds);
+  return rounds;
+}
+// auto-avança byes e partidas já decididas por bye em cadeia
+function resolveByes(rounds){
+  for(let r=0;r<rounds.length-1;r++){
+    for(let m=0;m<rounds[r].length;m+=2){
+      const a=rounds[r][m],b=rounds[r][m+1],dst=Math.floor(m/2);
+      if(rounds[r+1][dst]) continue;
+      const aReal=a&&!a.bye, bReal=b&&!b.bye;
+      if(aReal&&b&&b.bye){rounds[r+1][dst]=a;}
+      else if(bReal&&a&&a.bye){rounds[r+1][dst]=b;}
+    }
+  }
+}
+
+function advance(r,idx){
+  if(!state)return;
+  const entry=state.rounds[r][idx];
+  if(!entry||entry.bye)return;
+  const dst=Math.floor(idx/2);
+  // limpa caminho anterior se mudou o vencedor
+  const prev=state.rounds[r+1] && state.rounds[r+1][dst];
+  if(prev && prev!==entry){ clearDownstream(r+1,dst); }
+  if(!state.rounds[r+1])return;
+  state.rounds[r+1][dst]=entry;
+  render();
+}
+function clearDownstream(r,idx){
+  if(r>=state.rounds.length)return;
+  state.rounds[r][idx]=null;
+  if(r<state.rounds.length-1) clearDownstream(r+1,Math.floor(idx/2));
+}
+
+function entryName(e){return !e?'—':e.bye?'BYE':e.name;}
+
+function render(animate){
+  const br=$('#bracket');br.innerHTML='';
+  $('#empty').style.display='none';
+  state.rounds.forEach((round,r)=>{
+    const col=document.createElement('div');col.className='round';
+    const h=document.createElement('div');h.className='rhead';h.textContent=ROUND_NAMES[r]||('Rodada '+(r+1));
+    if(r<state.rounds.length-1) col.appendChild(h);
+    if(r===state.rounds.length-1){ // coluna campeão
+      const champ=round[0];
+      const c=document.createElement('div');c.className='match show';c.style.alignSelf='center';
+      c.innerHTML=`<div class="seat ${champ&&!champ.bye?'win':'empty'}"><span class="nm">${entryName(champ)}</span></div>`;
+      const ch=document.createElement('div');ch.className='rhead';ch.textContent='Campeão';col.appendChild(ch);col.appendChild(c);br.appendChild(col);
+      return;
+    }
+    for(let m=0;m<round.length;m+=2){
+      const a=round[m],b=round[m+1];
+      const winner=state.rounds[r+1]&&state.rounds[r+1][Math.floor(m/2)];
+      const match=document.createElement('div');match.className='match';
+      [[a,m],[b,m+1]].forEach(([e,idx])=>{
+        const isWin=winner&&e&&e===winner;
+        const cls=e?(e.bye?'bye':(isWin?'win':'')):'empty';
+        const seat=document.createElement('div');seat.className='seat '+cls;
+        seat.innerHTML=(e&&e.seed?`<span class="sd">${e.seed}</span>`:'')+`<span class="nm">${entryName(e)}</span>`;
+        if(e&&!e.bye){seat.onclick=()=>advance(r,idx);}
+        match.appendChild(seat);
+      });
+      col.appendChild(match);
+    }
+    br.appendChild(col);
+  });
+  // animação de revelação
+  const matches=[...br.querySelectorAll('.match')];
+  matches.forEach((mm,i)=>{ if(animate){setTimeout(()=>mm.classList.add('show'),i*45);} else mm.classList.add('show'); });
+  // campeão
+  const last=state.rounds[state.rounds.length-1][0];
+  const champ=$('#champion');
+  if(last&&!last.bye){$('#champ-name').textContent=last.name;champ.classList.add('show');}
+  else champ.classList.remove('show');
+  ['reset','save','print'].forEach(id=>$('#'+id).style.display='inline-flex');
+  // meta
+  const real=state.rounds[0].filter(e=>e&&!e.bye).length;
+  const byes=state.rounds[0].filter(e=>e&&e.bye).length;
+  $('#meta').innerHTML=`<span class="tag">${state.categoria}</span><span>Chave de <b>${state.size}</b></span><span><b>${real}</b> atletas</span><span><b>${state.seeds}</b> cabeças</span>${byes?`<span><b>${byes}</b> byes</span>`:''}`;
+}
+
+function doDraw(){
+  let players=readPlayers();
+  if(players.length<2){toast('Insira pelo menos 2 atletas');return;}
+  let S=parseInt($('#seeds').value);
+  if($('#seedmode').value==='random'&&S>0){ // sorteia quem são os cabeças
+    const seeds=shuffle([...players]).slice(0,S);
+    const rest=players.filter(p=>!seeds.includes(p));
+    players=[...seeds,...rest];
+  }
+  let N=$('#size').value==='auto'?nextPow2(players.length):parseInt($('#size').value);
+  if(N<players.length){toast('Chave menor que o nº de atletas — ajustando');N=nextPow2(players.length);}
+  S=Math.min(S,players.length,N/2);
+  const slot=buildDraw(players,N,S);
+  state={size:N,seeds:S,categoria:$('#categoria').value,rounds:makeRounds(slot)};
+  render(true);
+  toast('Chaves sorteadas!');
+  $('#bracket').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400);}
+
+// eventos
+$('#players').addEventListener('input',updateCount);
+$('#sample').onclick=()=>{$('#players').value=SAMPLE.join('\n');updateCount();};
+$('#clearTxt').onclick=()=>{$('#players').value='';updateCount();};
+$('#draw').onclick=doDraw;
+$('#reset').onclick=()=>{ // limpa vencedores, mantém sorteio
+  if(!state)return; for(let r=1;r<state.rounds.length;r++)state.rounds[r].fill(null);
+  resolveByes(state.rounds); render(); toast('Vencedores reiniciados');
+};
+$('#print').onclick=()=>window.print();
+$('#save').onclick=()=>{try{localStorage.setItem('agroopen_sorteio',JSON.stringify(state));toast('Sorteio salvo neste navegador');}catch(e){toast('Não foi possível salvar');}};
+// restaura se houver salvo
+try{const s=localStorage.getItem('agroopen_sorteio');if(s){state=JSON.parse(s);render();}}catch(e){}
+updateCount();
+</script>
+</body>
+</html>

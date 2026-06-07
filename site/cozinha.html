@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cozinha (KDS) · Agro Open</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="img/logo-ao-oficial.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<style>
+  .kds{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+  .ticket{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:14px;padding:16px;border-left:4px solid var(--gold)}
+  .ticket.pronto{border-left-color:var(--lime);opacity:.8}
+  .ticket .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .ticket .mesa{font-family:'Archivo';font-weight:800}
+  .ticket .min{font-size:12px;color:var(--muted)}
+  .ticket .item{font-size:16px;font-weight:700;margin:4px 0}
+  .ticket .obs{font-size:12px;color:var(--gold)}
+  .ticket .setor{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)}
+  .login-box{max-width:380px;margin:8vh auto}
+  .late{color:#e8a85c}
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="wrap"><a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span> <span class="muted" style="font-weight:500;font-size:14px">· Cozinha</span></a>
+  <div class="navlinks"><a href="pdv.html">PDV</a><a id="logout" class="hidden" style="cursor:pointer;color:#e89a8c">Sair</a></div></div>
+</header>
+
+<div id="login" class="wrap"><div class="card login-box"><div class="kick">Cozinha — acesso</div><h2 style="font-size:24px;margin:8px 0 16px">Entrar</h2>
+  <div class="field"><label>Usuário</label><input id="l-user" placeholder="admin"></div>
+  <div class="field"><label>Senha</label><input id="l-pass" type="password" placeholder="••••••"></div>
+  <button class="btn" id="l-btn" style="width:100%;justify-content:center">Entrar</button></div></div>
+
+<div id="app" class="wrap hidden" style="padding-bottom:40px">
+  <div class="hero" style="padding:26px 0 8px"><div class="kick">Kitchen Display</div><h1>Fila da <span class="lime">cozinha</span>.</h1></div>
+  <div class="legend" style="display:flex;gap:14px;color:var(--muted);font-size:13px;margin-bottom:14px"><span id="cnt"></span><button class="btn ghost sm" id="reload" style="margin-left:auto">Atualizar</button></div>
+  <div class="kds" id="kds"></div>
+  <p id="vazio" class="muted" style="padding:30px 0">Nenhum pedido na fila. 🍳</p>
+</div>
+
+<footer class="app">AGRO OPEN · KDS · pedidos por ordem de chegada · powered by <b class="lime">SetPoint</b></footer>
+<div class="toast" id="toast"></div>
+<script>
+const $=s=>document.querySelector(s);
+let TOKEN=localStorage.getItem('ao_admin_token')||'';
+const toast=(m,e)=>{const t=$('#toast');t.textContent=m;t.className='toast show'+(e?' err':'');setTimeout(()=>t.className='toast',2200);};
+async function api(p,o={}){const r=await fetch(p,{...o,headers:{'Content-Type':'application/json',...(TOKEN?{Authorization:'Bearer '+TOKEN}:{}),...(o.headers||{})}});if(r.status===401){logout();throw new Error('s');}return r.json();}
+function show(on){$('#login').classList.toggle('hidden',on);$('#app').classList.toggle('hidden',!on);$('#logout').classList.toggle('hidden',!on);}
+function logout(){TOKEN='';localStorage.removeItem('ao_admin_token');show(false);}
+$('#logout').onclick=logout;
+$('#l-btn').onclick=async()=>{const d=await api('/api/admin/login',{method:'POST',body:JSON.stringify({user:$('#l-user').value,pass:$('#l-pass').value})});if(d.token){TOKEN=d.token;localStorage.setItem('ao_admin_token',TOKEN);show(true);load();}else toast('Login inválido',true);};
+$('#reload').onclick=load;
+function mins(t){return Math.floor((Date.now()-new Date(t))/60000);}
+async function load(){
+  let fila; try{fila=await api('/api/kds');}catch(e){return;}
+  $('#vazio').style.display=fila.length?'none':'block';
+  $('#cnt').textContent=fila.length+' item(ns) na fila';
+  $('#kds').innerHTML=fila.map(i=>{const m=mins(i.criadoEm);return `<div class="ticket ${i.status}">
+    <div class="top"><span class="mesa">${i.mesa}${i.tipo==='virtual'?' 📍':''}</span><span class="min ${m>=10?'late':''}">${m} min</span></div>
+    <div class="setor">${i.setor}</div>
+    <div class="item">${i.qtd}× ${i.nome}</div>
+    ${i.obs?`<div class="obs">Obs: ${i.obs}</div>`:''}
+    <div style="margin-top:10px;display:flex;gap:8px">
+      ${i.status==='em_preparo'?`<button class="btn sm" data-c="${i.comandaId}" data-i="${i.idx}" data-s="pronto">Pronto ✅</button>`:`<button class="btn ghost sm" data-c="${i.comandaId}" data-i="${i.idx}" data-s="entregue">Entregue</button>`}
+    </div></div>`;}).join('');
+  $('#kds').querySelectorAll('button').forEach(b=>b.onclick=async()=>{await api('/api/admin/kds/status',{method:'POST',body:JSON.stringify({comandaId:+b.dataset.c,idx:+b.dataset.i,status:b.dataset.s})});load();});
+}
+setInterval(()=>{if(TOKEN && !$('#app').classList.contains('hidden'))load();},6000);
+if(TOKEN){show(true);load();}else show(false);
+</script>
+</body>
+</html>

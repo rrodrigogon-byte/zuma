@@ -1,0 +1,37 @@
+<svg viewBox="0 0 440 440" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Agro Open - Monograma AO">
+  <defs>
+    <linearGradient id="ballGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#A8E25A"/>
+      <stop offset="45%" stop-color="#7FCB3B"/>
+      <stop offset="100%" stop-color="#4F9E28"/>
+    </linearGradient>
+    <radialGradient id="ballSheen" cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.55"/>
+      <stop offset="40%" stop-color="#FFFFFF" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="aGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#F4F6EF"/>
+      <stop offset="100%" stop-color="#D8E6C8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Backing rounded square -->
+  <rect x="0" y="0" width="440" height="440" rx="64" fill="#0E2E1C"/>
+  <rect x="10" y="10" width="420" height="420" rx="56" fill="none" stroke="#5FB335" stroke-width="2" stroke-opacity="0.35"/>
+
+  <!-- Letter A -->
+  <g>
+    <path d="M 96 318 L 158 116 L 210 116 L 272 318 L 222 318 L 211 278 L 156 278 L 145 318 Z M 167 238 L 200 238 L 184 178 Z"
+          fill="url(#aGrad)"/>
+  </g>
+
+  <!-- Tennis ball O -->
+  <g transform="translate(300,214)">
+    <circle r="96" fill="url(#ballGrad)" stroke="#0E2E1C" stroke-width="3"/>
+    <circle r="96" fill="url(#ballSheen)"/>
+    <!-- seams -->
+    <path d="M -58 -76 C -10 -34 -10 34 -58 76" fill="none" stroke="#F4F6EF" stroke-width="9" stroke-linecap="round"/>
+    <path d="M 58 -76 C 10 -34 10 34 58 76" fill="none" stroke="#F4F6EF" stroke-width="9" stroke-linecap="round"/>
+  </g>
+</svg>

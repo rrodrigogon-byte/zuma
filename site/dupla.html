@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eliminatória Dupla · Agro Open</title>
+<meta name="description" content="Chave de eliminatória dupla: vencedores, repescagem e grande final.">
+<link rel="icon" href="img/logo-ao-oficial.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<style>
+  .be-sec{margin:22px 0}
+  .be-sec h3{font-size:18px;margin-bottom:10px}
+  .be-sec h3.lb{color:var(--gold)} .be-sec h3.gf{color:var(--lime)}
+  .mt{display:flex;flex-direction:column;gap:2px;background:var(--deep2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:6px;max-width:340px}
+  .mt .seat{display:flex;justify-content:space-between;font-size:13px}
+  .mt .seat.win{color:var(--lime);font-weight:700}
+  .mt .seat.bye{color:var(--muted2)}
+  .grid-rounds{display:flex;gap:18px;overflow:auto;padding-bottom:8px}
+  .grid-rounds .col{min-width:180px}
+  .grid-rounds .rhead{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+  .champ{background:linear-gradient(135deg,var(--green),#4a991f);color:var(--deep2);font-family:'Archivo';font-weight:900;border-radius:10px;padding:12px 16px;display:inline-block;margin-top:6px}
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="wrap"><a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span></a>
+  <div class="navlinks"><a href="index.html">Site</a><a href="chaves.html">Chaves</a><a href="grupos.html">Grupos</a><a href="suico.html">Suíço</a><a href="dupla.html" class="active">Elim. dupla</a></div></div>
+</header>
+<div class="wrap hero">
+  <div class="kick">Eliminatória dupla</div>
+  <h1>Chave de <span class="lime">dupla eliminação</span>.</h1>
+  <p>Perdeu uma vez? Ainda há chance na repescagem. Só sai quem perde duas vezes.</p>
+</div>
+<div class="wrap" style="padding-bottom:50px">
+  <div class="ctrls"><div style="min-width:240px"><label>Categoria</label><select id="cat"></select></div><button class="btn sm ghost" id="reload">Atualizar</button></div>
+  <div id="conteudo"></div>
+</div>
+<footer class="app">AGRO OPEN · Eliminatória dupla gerida pela plataforma <b class="lime">SetPoint</b>.</footer>
+<script>
+const $=s=>document.querySelector(s);
+const nm=e=>!e?'—':(e.bye?'BYE':e.name);
+const WBN=["1ª Rodada","Oitavas","Quartas","Semi","Final WB"];
+async function listar(){
+  try{
+    const list=await (await fetch('/api/duplas')).json();
+    if(!list.length){ $('#conteudo').innerHTML='<div class="card" style="padding:30px"><p class="muted">Nenhuma eliminatória dupla publicada ainda.</p></div>'; $('#cat').innerHTML=''; return; }
+    $('#cat').innerHTML=list.map(l=>`<option value="${l.categoria}">${l.categoria}${l.campeao?(' · 🏆 '+l.campeao):''}</option>`).join('');
+    ver();
+  }catch(e){ $('#conteudo').innerHTML='<div class="card" style="padding:30px"><p class="muted">Inicie o servidor (npm start) para ver.</p></div>'; }
+}
+function matchHTML(m){
+  if(!m) return '';
+  const aw=m.winner&&m.a&&!m.a.bye&&m.winner.name===m.a.name, bw=m.winner&&m.b&&!m.b.bye&&m.winner.name===m.b.name;
+  const pl=m.placar&&m.tipo!=='bye'?` <span class="muted">(${m.placar})</span>`:'';
+  return `<div class="mt"><div class="seat ${aw?'win':''} ${m.a&&m.a.bye?'bye':''}">${nm(m.a)}${aw?pl:''}</div><div class="seat ${bw?'win':''} ${m.b&&m.b.bye?'bye':''}">${nm(m.b)}${bw?pl:''}</div></div>`;
+}
+async function ver(){
+  const cat=$('#cat').value; if(!cat) return;
+  const d=await (await fetch('/api/dupla/'+encodeURIComponent(cat))).json();
+  const M=d.matches, k=d.k;
+  // WB por rodada
+  let wb='<div class="grid-rounds">';
+  for(let r=0;r<k;r++){ wb+='<div class="col"><div class="rhead">'+(WBN[WBN.length-(k-r)]||('Rod '+(r+1)))+'</div>';
+    const cnt=d.size/Math.pow(2,r+1); for(let i=0;i<cnt;i++) wb+=matchHTML(M['WB-'+r+'-'+i]); wb+='</div>'; }
+  wb+='</div>';
+  // LB por rodada
+  let lb='<div class="grid-rounds">';
+  for(let j=1;j<=d.lbRounds;j++){ lb+='<div class="col"><div class="rhead">Repescagem '+j+'</div>';
+    const cnt=d.size/Math.pow(2,Math.ceil(j/2)+1); for(let i=0;i<cnt;i++) lb+=matchHTML(M['LB-'+j+'-'+i]); lb+='</div>'; }
+  lb+='</div>';
+  let gf=matchHTML(M['GF'])+(M['GF2']?matchHTML(M['GF2']):'');
+  let html=`<div class="be-sec"><h3>Chave de Vencedores</h3>${wb}</div>`+
+    `<div class="be-sec"><h3 class="lb">Repescagem (Chave de Perdedores)</h3>${lb}</div>`+
+    `<div class="be-sec"><h3 class="gf">Grande Final</h3>${gf}${d.campeao?`<div class="champ">🏆 Campeão: ${d.campeao}</div>`:''}</div>`;
+  $('#conteudo').innerHTML=html;
+}
+$('#cat').onchange=ver; $('#reload').onclick=listar;
+listar();
+</script>
+</body>
+</html>

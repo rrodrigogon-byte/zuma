@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aulas e Clínicas · Agro Open</title>
+<meta name="description" content="Aulas e clínicas de tênis com professores do clube. Veja a agenda e matricule-se.">
+<link rel="icon" href="img/logo-ao-oficial.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<style>
+  .aulas{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+  .aula{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:14px;padding:20px}
+  .aula h3{font-size:19px;margin-bottom:6px}
+  .aula .meta{font-size:13px;color:var(--muted);margin-bottom:4px}
+  .aula .vagas{font-size:12px;font-weight:700;color:var(--lime);margin:10px 0}
+  .aula .vagas.lotada{color:#e89a8c}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .modal.show{display:flex}.modal .card{max-width:400px;width:100%}
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="wrap"><a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span></a>
+  <div class="navlinks"><a href="index.html">Site</a><a href="aulas.html" class="active">Aulas</a><a href="loja.html">Loja</a><a href="reservas.html">Reservar</a><a href="conta.html">Entrar</a></div></div>
+</header>
+<div class="wrap hero">
+  <div class="kick">Academia</div>
+  <h1>Aulas e <span class="lime">clínicas</span>.</h1>
+  <p>Evolua seu jogo com os professores do clube. Escolha um horário e matricule-se.</p>
+</div>
+<div class="wrap" style="padding-bottom:50px">
+  <div class="ctrls"><div class="field" style="margin:0"><label>A partir de</label><input id="data" type="date"></div><button class="btn sm ghost" id="reload">Atualizar</button></div>
+  <div class="aulas" id="lista"></div>
+</div>
+<div class="modal" id="modal"><div class="card">
+  <h2 id="m-title" style="font-size:20px;margin-bottom:4px">Matrícula</h2>
+  <p class="muted" id="m-sub" style="margin-bottom:16px"></p>
+  <div class="field"><label>Nome completo</label><input id="a-nome" placeholder="Seu nome"></div>
+  <div class="field"><label>E-mail</label><input id="a-email" type="email" placeholder="voce@email.com"></div>
+  <div style="display:flex;gap:10px;margin-top:8px"><button class="btn" id="a-confirm" style="flex:1;justify-content:center">Confirmar matrícula</button><button class="btn ghost" id="a-cancel">Cancelar</button></div>
+</div></div>
+<footer class="app">AGRO OPEN · Academia · powered by <b class="lime">SetPoint</b></footer>
+<div class="toast" id="toast"></div>
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const toast=(m,e)=>{const t=$('#toast');t.textContent=m;t.className='toast show'+(e?' err':'');setTimeout(()=>t.className='toast',2600);};
+let sel=null;
+async function carregar(){
+  try{
+    const list=await (await fetch('/api/aulas')).json();
+    const from=$('#data').value;
+    const f=from?list.filter(a=>a.data>=from):list;
+    $('#lista').innerHTML=f.map(a=>{
+      const lot=a.vagasLivres<=0;
+      return `<div class="aula"><h3>${a.titulo}</h3>
+        <div class="meta">📅 ${a.data.split('-').reverse().join('/')} · ${a.hora}</div>
+        <div class="meta">👤 ${a.professor||'—'} · ${a.nivel}</div>
+        <div class="meta">💪 ${MOD[a.modalidade]||a.modalidade}${a.preco?(' · R$ '+a.preco):' · grátis'}</div>
+        <div class="vagas ${lot?'lotada':''}">${lot?'Lotada':(a.vagasLivres+' vaga(s) de '+a.vagas)}</div>
+        <button class="btn sm" data-id="${a.id}" data-t="${a.titulo}" data-s="${a.data} ${a.hora}" ${lot?'disabled':''}>${lot?'Sem vagas':'Matricular'}</button></div>`;
+    }).join('')||'<div class="card" style="padding:30px;grid-column:1/-1"><p class="muted">Nenhuma aula agendada. Volte em breve.</p></div>';
+    $$('#lista button[data-id]').forEach(b=>b.onclick=()=>{ sel=b.dataset.id; $('#m-title').textContent=b.dataset.t; $('#m-sub').textContent=b.dataset.s; $('#modal').classList.add('show'); });
+  }catch(e){ $('#lista').innerHTML='<div class="card" style="padding:30px;grid-column:1/-1"><p class="muted">Inicie o servidor (npm start) para ver as aulas.</p></div>'; }
+}
+const MOD={tenis:'Tênis',beach_tennis:'Beach Tennis',padel:'Pádel',futevolei:'Futevôlei',squash:'Squash',volei_praia:'Vôlei de praia',tenis_mesa:'Tênis de mesa',pickleball:'Pickleball'};
+$('#a-cancel').onclick=()=>$('#modal').classList.remove('show');
+$('#modal').onclick=e=>{if(e.target===$('#modal'))$('#modal').classList.remove('show');};
+$('#a-confirm').onclick=async()=>{
+  try{ const r=await fetch('/api/aula/'+sel+'/matricular',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nome:$('#a-nome').value,email:$('#a-email').value})});
+    const d=await r.json(); if(!r.ok) throw new Error(d.error); $('#modal').classList.remove('show'); toast('Matrícula confirmada!'); carregar();
+  }catch(e){ toast(e.message||'Falha',true); }
+};
+$('#reload').onclick=carregar; $('#data').onchange=carregar;
+carregar();
+</script>
+</body>
+</html>

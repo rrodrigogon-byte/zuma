@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grupos + Mata-mata · Agro Open</title>
+<meta name="description" content="Fase de grupos e mata-mata: tabelas e classificados.">
+<link rel="icon" href="img/logo-ao-oficial.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<style>
+  .grps{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+  .qual td:first-child{color:var(--gold)}
+  .qual{background:rgba(143,214,74,.07)}
+  .jogo{display:flex;justify-content:space-between;background:var(--deep2);border:1px solid var(--line);border-radius:8px;padding:7px 11px;margin-bottom:5px;font-size:13px}
+  .win{color:var(--lime);font-weight:700}
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="wrap"><a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span></a>
+  <div class="navlinks"><a href="index.html">Site</a><a href="chaves.html">Chaves</a><a href="ligas.html">Ligas</a><a href="grupos.html" class="active">Grupos</a><a href="ranking.html">Ranking</a></div></div>
+</header>
+<div class="wrap hero">
+  <div class="kick">Fase de grupos</div>
+  <h1>Grupos + <span class="lime">mata-mata</span>.</h1>
+  <p>Todos contra todos na fase de grupos; os melhores avançam para a eliminatória.</p>
+</div>
+<div class="wrap" style="padding-bottom:50px">
+  <div class="ctrls"><div style="min-width:240px"><label>Evento</label><select id="cat"></select></div><button class="btn sm ghost" id="reload">Atualizar</button></div>
+  <div id="conteudo"></div>
+</div>
+<footer class="app">AGRO OPEN · Formato gerido pela plataforma <b class="lime">SetPoint</b>.</footer>
+<script>
+const $=s=>document.querySelector(s);
+const ROUND_NAMES=["1ª Rodada","Oitavas","Quartas","Semifinal","Final","Campeão"];
+const ename=e=>!e?'—':e.bye?'BYE':e.name;
+async function listar(){
+  try{
+    const evs=await (await fetch('/api/grupos')).json();
+    if(!evs.length){ $('#conteudo').innerHTML='<div class="card" style="padding:30px"><p class="muted">Nenhum evento de grupos publicado ainda.</p></div>'; $('#cat').innerHTML=''; return; }
+    $('#cat').innerHTML=evs.map(e=>`<option value="${e.categoria}">${e.categoria}</option>`).join('');
+    ver();
+  }catch(e){ $('#conteudo').innerHTML='<div class="card" style="padding:30px"><p class="muted">Inicie o servidor (npm start) para ver os grupos.</p></div>'; }
+}
+async function ver(){
+  const cat=$('#cat').value; if(!cat) return;
+  const ev=await (await fetch('/api/grupos/'+encodeURIComponent(cat))).json();
+  const k=ev.classificamPorGrupo;
+  let html='<div class="grps">';
+  ev.tabelas.forEach(t=>{
+    html+=`<div class="card"><h3 style="font-size:17px;margin-bottom:10px">${t.nome}</h3><table><thead><tr><th>#</th><th>Atleta</th><th>J</th><th>V</th><th>Pts</th></tr></thead><tbody>`+
+      t.tabela.map(p=>`<tr class="${p.pos<=k?'qual':''}"><td class="pos">${p.pos}</td><td><b>${p.nome}</b></td><td>${p.j}</td><td>${p.v}</td><td><b style="color:var(--lime)">${p.pontos}</b></td></tr>`).join('')+
+      '</tbody></table></div>';
+  });
+  html+='</div>';
+  html+='<p class="muted" style="font-size:12.5px;margin:12px 0 0">Em destaque (dourado): classificados para o mata-mata.</p>';
+  if(ev.knockout){
+    html+='<h3 style="font-size:20px;margin:28px 0 12px">Mata-mata</h3><div class="bracket-wrap"><div class="bracket">';
+    const R=ev.knockout.rounds, total=R.length;
+    R.forEach((round,r)=>{
+      html+='<div class="round"><div class="rhead">'+(ROUND_NAMES[ROUND_NAMES.length-(total-r)]||('Rod '+(r+1)))+'</div>';
+      if(r===total-1){ const c=round[0]; html+=`<div class="match" style="align-self:center"><div class="seat ${c&&!c.bye?'win':'empty'}"><span class="nm">${ename(c)}</span></div></div></div>`; return; }
+      for(let m=0;m<round.length;m+=2){
+        const mi=m/2, win=R[r+1]&&R[r+1][mi], a=round[m], b=round[m+1];
+        const pl=ev.knockout.placares&&ev.knockout.placares[r+'-'+mi];
+        html+='<div class="match '+(mi%2===0?'up':'dn')+'">';
+        [[a,0],[b,1]].forEach(([e,side])=>{
+          const isWin=win&&e&&!e.bye&&win.name===e.name;
+          html+=`<div class="seat ${e?(e.bye?'bye':(isWin?'win':'')):'empty'}"><span class="nm">${ename(e)}</span>${pl&&pl.placar?`<span class="sc"><span>${pl.tipo!=='normal'?pl.placar:''}</span></span>`:''}</div>`;
+        });
+        html+='</div>';
+      }
+      html+='</div>';
+    });
+    html+='</div></div>';
+  } else {
+    html+='<p class="muted" style="margin-top:20px">O mata-mata será gerado ao fim da fase de grupos.</p>';
+  }
+  $('#conteudo').innerHTML=html;
+}
+$('#cat').onchange=ver; $('#reload').onclick=listar;
+listar();
+</script>
+</body>
+</html>

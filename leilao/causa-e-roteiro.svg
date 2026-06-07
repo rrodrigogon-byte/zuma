@@ -1,0 +1,79 @@
+<svg viewBox="0 0 1080 1528" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+  <defs>
+    <linearGradient id="head" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0E2E1C"/><stop offset="100%" stop-color="#0B2415"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#E7CE8A"/><stop offset="100%" stop-color="#C7A24C"/>
+    </linearGradient>
+  </defs>
+  <rect width="1080" height="1528" fill="#F3F5EE"/>
+
+  <!-- Header -->
+  <rect width="1080" height="300" fill="url(#head)"/>
+  <text x="64" y="118" font-size="15" letter-spacing="6" fill="#7FCB3B" font-weight="700">PROJETO SOCIAL · ESG</text>
+  <text x="60" y="196" font-size="74" font-weight="900" fill="#F4F6EF" font-family="Arial Black, Arial">FLORESCER</text>
+  <text x="64" y="244" font-size="20" fill="#9DBE86">Florescer Ação Social · iniciativa UISA · 4ª Agro Open · 12 SET 2026</text>
+
+  <!-- A causa -->
+  <text x="64" y="372" font-size="15" letter-spacing="4" fill="#5FB335" font-weight="800">A CAUSA</text>
+  <text x="64" y="416" font-size="34" font-weight="900" fill="#0E2E1C" font-family="Arial Black, Arial">Transformar vidas em Mato Grosso.</text>
+  <text x="64" y="462" font-size="19" fill="#3d4a36">O Florescer Ação Social é uma iniciativa da UISA que apoia mais</text>
+  <text x="64" y="490" font-size="19" fill="#3d4a36">de 5.000 famílias em Nova Olímpia, Denise e região, por meio da</text>
+  <text x="64" y="518" font-size="19" fill="#3d4a36">educação, cultura, esporte (inclusive beach tennis) e geração de renda.</text>
+  <text x="64" y="552" font-size="17" fill="#5FB335" font-weight="700">Reconhecida entre as 100 Melhores ONGs do Brasil de 2024.</text>
+
+  <!-- Impact stats -->
+  <g transform="translate(64,584)">
+    <rect x="0" y="0" width="300" height="130" rx="14" fill="#0E2E1C"/>
+    <text x="150" y="62" text-anchor="middle" font-size="46" font-weight="900" fill="#7FCB3B">5.000+</text>
+    <text x="150" y="98" text-anchor="middle" font-size="15" fill="#F4F6EF">famílias atendidas</text>
+    <rect x="326" y="0" width="300" height="130" rx="14" fill="#5FB335"/>
+    <text x="476" y="62" text-anchor="middle" font-size="46" font-weight="900" fill="#0B2415">3</text>
+    <text x="476" y="98" text-anchor="middle" font-size="15" fill="#0B2415" font-weight="700">municípios de MT</text>
+    <rect x="652" y="0" width="300" height="130" rx="14" fill="#C7A24C"/>
+    <text x="802" y="62" text-anchor="middle" font-size="46" font-weight="900" fill="#0B2415">100%</text>
+    <text x="802" y="98" text-anchor="middle" font-size="15" fill="#0B2415" font-weight="700">da renda à causa</text>
+  </g>
+
+  <!-- Roteiro -->
+  <text x="64" y="784" font-size="15" letter-spacing="4" fill="#5FB335" font-weight="800">ROTEIRO DA NOITE · 12 SET</text>
+  <g font-size="18" fill="#0E2E1C">
+    <g transform="translate(64,820)">
+      <line x1="0" y1="0" x2="952" y2="0" stroke="#d6ddcb"/>
+      <text x="0" y="40" font-weight="900" fill="#5FB335">19h00</text>
+      <text x="130" y="40" font-weight="700">Recepção &amp; welcome drink</text>
+      <text x="560" y="40" fill="#6b7861" font-size="16">Credenciamento das mesas e convidados VIP</text>
+      <line x1="0" y1="62" x2="952" y2="62" stroke="#d6ddcb"/>
+      <text x="0" y="102" font-weight="900" fill="#5FB335">20h00</text>
+      <text x="130" y="102" font-weight="700">Jantar open food</text>
+      <text x="560" y="102" fill="#6b7861" font-size="16">Menu premium servido às mesas</text>
+      <line x1="0" y1="124" x2="952" y2="124" stroke="#d6ddcb"/>
+      <text x="0" y="164" font-weight="900" fill="#5FB335">21h00</text>
+      <text x="130" y="164" font-weight="700">Abertura &amp; vídeo Florescer</text>
+      <text x="560" y="164" fill="#6b7861" font-size="16">Apresentação da causa e resultados</text>
+      <line x1="0" y1="186" x2="952" y2="186" stroke="#d6ddcb"/>
+      <text x="0" y="226" font-weight="900" fill="#5FB335">21h30</text>
+      <text x="130" y="226" font-weight="700">Leilão beneficente</text>
+      <text x="560" y="226" fill="#6b7861" font-size="16">Lotes especiais com leiloeiro oficial</text>
+      <line x1="0" y1="248" x2="952" y2="248" stroke="#d6ddcb"/>
+      <text x="0" y="288" font-weight="900" fill="#5FB335">23h00</text>
+      <text x="130" y="288" font-weight="700">Encerramento &amp; música</text>
+      <text x="560" y="288" fill="#6b7861" font-size="16">Confraternização e networking</text>
+      <line x1="0" y1="310" x2="952" y2="310" stroke="#d6ddcb"/>
+    </g>
+  </g>
+
+  <!-- Mesa box -->
+  <g transform="translate(64,1180)">
+    <rect x="0" y="0" width="952" height="150" rx="16" fill="#0E2E1C"/>
+    <text x="40" y="56" font-size="16" letter-spacing="3" fill="#C7A24C" font-weight="700">MESA SOLIDÁRIA</text>
+    <text x="40" y="112" font-size="56" font-weight="900" fill="#E7CE8A" font-family="Arial Black, Arial">R$ 7.000</text>
+    <text x="430" y="70" font-size="20" fill="#F4F6EF" font-weight="700">Open food · 6 convidados</text>
+    <text x="430" y="104" font-size="16" fill="#9DBE86">Reserve pelo (65) 99636-4113</text>
+    <text x="430" y="128" font-size="16" fill="#9DBE86">silvester_natal@hotmail.com</text>
+  </g>
+
+  <rect x="0" y="1430" width="1080" height="98" fill="#0E2E1C"/>
+  <text x="540" y="1488" text-anchor="middle" font-size="15" letter-spacing="2" fill="#9DBE86">FLORESCER AÇÃO SOCIAL · INICIATIVA UISA · 4ª AGRO OPEN · TANGARÁ TÊNIS CLUBE</text>
+</svg>

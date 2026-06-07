@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Perfil do Atleta · Agro Open</title>
+<meta name="description" content="Estatísticas, head-to-head e histórico do atleta.">
+<link rel="icon" href="img/logo-ao-oficial.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<style>
+  .stat-row{display:flex;gap:14px;flex-wrap:wrap;margin:18px 0}
+  .stat{background:var(--deep2);border:1px solid var(--line);border-radius:12px;padding:16px 20px;flex:1;min-width:120px;text-align:center}
+  .stat .n{font-family:'Archivo';font-weight:900;font-size:30px;color:var(--lime)}
+  .stat .l{font-size:12px;color:var(--muted)}
+  .av{width:80px;height:80px;border-radius:50%;background:linear-gradient(165deg,var(--green),#4a991f);display:flex;align-items:center;justify-content:center;font-family:'Archivo';font-weight:900;font-size:34px;color:var(--deep2)}
+  .res{font-weight:800;border-radius:6px;padding:2px 8px;font-size:12px}
+  .res.V{background:rgba(143,214,74,.18);color:var(--lime)} .res.D{background:rgba(226,120,100,.18);color:#e89a8c}
+  .tit{display:inline-block;background:rgba(201,166,86,.16);color:var(--gold);border-radius:100px;padding:4px 12px;font-size:13px;font-weight:700;margin:3px}
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="wrap"><a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span></a>
+  <div class="navlinks"><a href="index.html">Site</a><a href="ranking.html">Ranking</a><a href="chaves.html">Chaves</a><a href="perfil.html" class="active">Atletas</a></div></div>
+</header>
+<div class="wrap hero">
+  <div class="kick">Atletas</div>
+  <h1>Perfil & <span class="lime">head-to-head</span>.</h1>
+  <p>Estatísticas, confrontos diretos e histórico de cada atleta nos torneios da Agro Open.</p>
+</div>
+<div class="wrap" style="padding-bottom:50px">
+  <div class="ctrls"><div style="min-width:280px"><label>Atleta</label><select id="sel"></select></div></div>
+  <div id="perfil"></div>
+</div>
+<footer class="app">AGRO OPEN · Perfis gerados pelos resultados · powered by <b class="lime">SetPoint</b></footer>
+<script>
+const $=s=>document.querySelector(s);
+async function lista(){
+  try{
+    const a=await (await fetch('/api/atletas')).json();
+    if(!a.length){ $('#perfil').innerHTML='<div class="card" style="padding:30px"><p class="muted">Ainda não há partidas registradas.</p></div>'; return; }
+    $('#sel').innerHTML=a.map(n=>`<option>${n}</option>`).join(''); ver();
+  }catch(e){ $('#perfil').innerHTML='<div class="card" style="padding:30px"><p class="muted">Inicie o servidor (npm start) para ver os perfis.</p></div>'; }
+}
+async function ver(){
+  const nome=$('#sel').value; if(!nome) return;
+  const d=await (await fetch('/api/atleta/'+encodeURIComponent(nome))).json();
+  let html=`<div class="card"><div style="display:flex;align-items:center;gap:16px"><div class="av">${nome.trim()[0].toUpperCase()}</div><div><h2 style="font-size:26px">${nome}</h2>${d.elo?`<span class="muted">Rating Elo: <b style="color:var(--lime)">${d.elo}</b></span>`:''}</div></div>
+    <div class="stat-row"><div class="stat"><div class="n">${d.jogos}</div><div class="l">jogos</div></div><div class="stat"><div class="n">${d.vitorias}</div><div class="l">vitórias</div></div><div class="stat"><div class="n">${d.derrotas}</div><div class="l">derrotas</div></div><div class="stat"><div class="n">${d.aproveitamento}%</div><div class="l">aproveitamento</div></div></div>`;
+  if(d.titulos.length) html+=`<div style="margin-top:6px">${d.titulos.map(t=>`<span class="tit">🏆 ${t.categoria}</span>`).join('')}</div>`;
+  html+='</div>';
+  html+='<div class="grid2" style="align-items:start;margin-top:16px">';
+  html+='<div class="card"><h3 style="font-size:16px;margin-bottom:10px">Head-to-head</h3><div style="overflow:auto"><table><thead><tr><th>Adversário</th><th>V</th><th>D</th></tr></thead><tbody>'+
+    (d.headToHead.map(h=>`<tr><td><b>${h.adversario}</b></td><td style="color:var(--lime)">${h.v}</td><td style="color:#e89a8c">${h.d}</td></tr>`).join('')||'<tr><td colspan="3" class="muted" style="padding:16px">Sem confrontos.</td></tr>')+'</tbody></table></div></div>';
+  html+='<div class="card"><h3 style="font-size:16px;margin-bottom:10px">Histórico</h3><div style="overflow:auto"><table><thead><tr><th>Adv.</th><th>Res.</th><th>Placar</th><th>Fonte</th></tr></thead><tbody>'+
+    (d.historico.map(h=>`<tr><td>${h.adversario}</td><td><span class="res ${h.resultado}">${h.resultado}</span></td><td>${h.placar||'—'}</td><td class="muted">${h.fonte}</td></tr>`).join('')||'<tr><td colspan="4" class="muted" style="padding:16px">Sem histórico.</td></tr>')+'</tbody></table></div></div>';
+  html+='</div>';
+  $('#perfil').innerHTML=html;
+}
+$('#sel').onchange=ver;
+lista();
+</script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="sky2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0E2E1C"/><stop offset="60%" stop-color="#15402a"/><stop offset="100%" stop-color="#0B2415"/></linearGradient>
+    <linearGradient id="sand" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#E7CE8A"/><stop offset="100%" stop-color="#C7A24C"/></linearGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#sky2)"/>
+  <!-- sun -->
+  <circle cx="650" cy="150" r="60" fill="#A8E25A" opacity="0.85"/>
+  <circle cx="650" cy="150" r="90" fill="#A8E25A" opacity="0.12"/>
+  <!-- sand -->
+  <rect x="0" y="380" width="800" height="220" fill="url(#sand)"/>
+  <!-- net -->
+  <line x1="400" y1="300" x2="400" y2="430" stroke="#0B2415" stroke-width="6"/>
+  <rect x="250" y="300" width="300" height="40" fill="#0B2415" opacity="0.18"/>
+  <g stroke="#0B2415" stroke-width="1" opacity="0.4"><line x1="250" y1="312" x2="550" y2="312"/><line x1="250" y1="326" x2="550" y2="326"/></g>
+  <rect x="248" y="296" width="304" height="6" fill="#F3F5EE"/>
+  <!-- racket -->
+  <g transform="translate(250,430) rotate(-30)">
+    <ellipse cx="0" cy="-60" rx="46" ry="58" fill="#0E2E1C" stroke="#8FD64A" stroke-width="5"/>
+    <g stroke="#8FD64A" stroke-width="1.5" opacity="0.6"><line x1="-30" y1="-90" x2="-30" y2="-30"/><line x1="0" y1="-100" x2="0" y2="-20"/><line x1="30" y1="-90" x2="30" y2="-30"/><line x1="-38" y1="-60" x2="38" y2="-60"/></g>
+    <rect x="-7" y="-8" width="14" height="70" rx="6" fill="#C7A24C"/>
+  </g>
+  <!-- ball -->
+  <circle cx="520" cy="360" r="22" fill="#A8E25A" stroke="#0B2415" stroke-width="2"/>
+  <path d="M502 342 q18 18 0 36" stroke="#F3F5EE" stroke-width="3" fill="none"/>
+</svg>
