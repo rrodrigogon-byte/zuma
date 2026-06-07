@@ -1334,6 +1334,51 @@ app.patch('/api/admin/agenda/:id', auth, requireStaff, (req,res)=>{
 });
 app.delete('/api/admin/agenda/:id', auth, requireStaff, (req,res)=>{ const d=db(); d.agenda=(d.agenda||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true}); });
 
+// =================== CUPONS DE DESCONTO (cap. 8.1) ===================
+app.get('/api/admin/cupons', auth, requireStaff, (req,res)=> res.json(db().cupons||[]));
+
+app.post('/api/admin/cupons', auth, requireStaff, (req,res)=>{
+  const { codigo, tipo, valor, uso, maxUsos, validade, descricao } = req.body||{};
+  if(!codigo || !tipo || !(Number(valor)>0)) return res.status(400).json({error:'codigo, tipo e valor são obrigatórios'});
+  if(!['pct','fixo'].includes(tipo)) return res.status(400).json({error:'tipo deve ser pct ou fixo'});
+  if(!['inscricao','ingresso','ambos'].includes(uso||'ambos')) return res.status(400).json({error:'uso inválido'});
+  const exists=(db().cupons||[]).find(c=>c.codigo.toUpperCase()===(codigo||'').toUpperCase());
+  if(exists) return res.status(409).json({error:'código já existe'});
+  const c={ id:nextId(), codigo:codigo.toUpperCase(), tipo, valor:Number(valor),
+    uso:uso||'ambos', maxUsos:parseInt(maxUsos)||null, usos:0,
+    validade:validade||null, descricao:descricao||'', ativo:true, criadoEm:new Date().toISOString() };
+  if(!db().cupons) db().cupons=[]; db().cupons.push(c); save(); res.json(c);
+});
+
+app.patch('/api/admin/cupons/:id', auth, requireStaff, (req,res)=>{
+  const c=(db().cupons||[]).find(x=>x.id==req.params.id); if(!c) return res.status(404).json({error:'não encontrado'});
+  ['ativo','maxUsos','validade','descricao'].forEach(k=>{ if(req.body[k]!==undefined) c[k]=req.body[k]; });
+  save(); res.json(c);
+});
+app.delete('/api/admin/cupons/:id', auth, requireStaff, (req,res)=>{
+  const d=db(); d.cupons=(d.cupons||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true});
+});
+
+// Validar cupom (público, chamado antes do checkout)
+app.post('/api/cupom/validar', (req,res)=>{
+  const { codigo, uso, valor } = req.body||{};
+  const c=(db().cupons||[]).find(x=>x.codigo===(codigo||'').toUpperCase() && x.ativo!==false);
+  if(!c) return res.status(404).json({ok:false, error:'Cupom inválido ou expirado'});
+  if(c.validade && new Date()>new Date(c.validade+'T23:59:59')) return res.status(410).json({ok:false, error:'Cupom expirado'});
+  if(c.maxUsos!==null && c.usos>=c.maxUsos) return res.status(410).json({ok:false, error:'Cupom esgotado'});
+  if(c.uso!=='ambos' && uso && c.uso!==uso) return res.status(400).json({ok:false, error:`Cupom válido apenas para ${c.uso}`});
+  const base=Number(valor)||0;
+  const desconto = c.tipo==='pct' ? Math.round(base*(c.valor/100)*100)/100 : Math.min(c.valor, base);
+  const totalFinal = Math.max(0, base-desconto);
+  res.json({ ok:true, cupomId:c.id, codigo:c.codigo, tipo:c.tipo, valor:c.valor, desconto, totalFinal,
+    descricao:c.descricao||'' });
+});
+
+// Aplicar cupom (incrementa contador de uso — chamar ao confirmar pagamento)
+function usarCupom(cupomId){
+  const c=(db().cupons||[]).find(x=>x.id==cupomId); if(c) c.usos=(c.usos||0)+1;
+}
+
 // ---- estático: serve o site de marketing + páginas do app ----
 app.use(express.static(path.join(__dirname, '..', 'site')));
 

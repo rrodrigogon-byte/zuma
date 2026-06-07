@@ -86,6 +86,7 @@
       <button data-tab="comunic">Comunicação</button>
       <button data-tab="financeiro">Financeiro</button>
       <button data-tab="pagamentos">Pagamentos</button>
+      <button data-tab="cupons">Cupons</button>
       <button data-tab="bi">BI</button>
       <button data-tab="agenda">Agenda</button>
       <button data-tab="auditoria">Auditoria</button>
@@ -386,6 +387,30 @@
       </div>
     </section>
 
+    <!-- CUPONS -->
+    <section id="tab-cupons" class="hidden">
+      <div class="grid2" style="align-items:start">
+        <div class="card">
+          <h3 style="font-size:18px;margin-bottom:14px">Novo cupom</h3>
+          <div class="field"><label>Código</label><input id="cp-codigo" placeholder="EX: AGRO10" style="text-transform:uppercase"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="field"><label>Tipo</label><select id="cp-tipo"><option value="pct">Percentual (%)</option><option value="fixo">Valor fixo (R$)</option></select></div>
+            <div class="field"><label>Valor</label><input id="cp-valor" type="number" min="0" step="0.01" placeholder="10"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="field"><label>Aplicável a</label><select id="cp-uso"><option value="inscricao">Inscrição</option><option value="ingresso">Ingresso</option><option value="ambos">Ambos</option></select></div>
+            <div class="field"><label>Máx. usos (0 = ilimitado)</label><input id="cp-max" type="number" min="0" placeholder="0"></div>
+          </div>
+          <div class="field"><label>Validade (opcional)</label><input id="cp-validade" type="date"></div>
+          <div class="field"><label>Descrição (opcional)</label><input id="cp-desc" placeholder="Cupom de desconto..."></div>
+          <button class="btn" id="cp-criar">Criar cupom</button>
+        </div>
+        <div class="card" style="padding:0;overflow:auto">
+          <table><thead><tr><th>Código</th><th>Tipo</th><th>Valor</th><th>Uso</th><th>Usos/Máx</th><th>Validade</th><th>Ativo</th><th></th></tr></thead><tbody id="cp-body"></tbody></table>
+        </div>
+      </div>
+    </section>
+
     <!-- BI -->
     <section id="tab-bi" class="hidden">
       <div class="stat-row" id="bi-stats"></div>
@@ -550,6 +575,7 @@ $$('.tabs button').forEach(b=>b.onclick=()=>{
   if(b.dataset.tab==='suico') initSuico();
   if(b.dataset.tab==='dupla') initDupla();
   if(b.dataset.tab==='pagamentos') loadPagamentos();
+  if(b.dataset.tab==='cupons') loadCupons();
   if(b.dataset.tab==='aulas') loadAulas();
   if(b.dataset.tab==='loja') loadLoja();
   if(b.dataset.tab==='socios') loadSocios();
@@ -1160,6 +1186,49 @@ async function loadRanking(){
   $('#rk-body').innerHTML=list.map(p=>`<tr><td class="pos">${p.pos}</td><td><b>${p.nome}</b></td><td>${p.categoria}</td>
     <td><b style="color:var(--lime)">${p.pontos}</b></td><td>${p.vitorias}</td><td>${p.derrotas}</td><td>${p.aproveitamento}%</td><td>${p.torneios}</td></tr>`).join('')
     || '<tr><td colspan="8" class="muted" style="padding:24px">Sem pontuação ainda — finalize uma chave para gerar o ranking.</td></tr>';
+}
+
+// ---- cupons ----
+$('#cp-codigo').oninput=function(){ this.value=this.value.toUpperCase(); };
+$('#cp-criar').onclick=async()=>{
+  const body={
+    codigo:$('#cp-codigo').value.trim().toUpperCase(),
+    tipo:$('#cp-tipo').value,
+    valor:parseFloat($('#cp-valor').value)||0,
+    uso:$('#cp-uso').value,
+    maxUsos:parseInt($('#cp-max').value)||0,
+    validade:$('#cp-validade').value||null,
+    descricao:$('#cp-desc').value.trim()||null
+  };
+  if(!body.codigo||!body.valor){ toast('Preencha código e valor',true); return; }
+  try{
+    await api('/api/admin/cupons',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    toast('Cupom criado!');
+    $('#cp-codigo').value=''; $('#cp-valor').value=''; $('#cp-max').value=''; $('#cp-validade').value=''; $('#cp-desc').value='';
+    loadCupons();
+  } catch(err){ toast(err.message,true); }
+};
+async function loadCupons(){
+  const list=await api('/api/admin/cupons');
+  $('#cp-body').innerHTML=list.map(c=>`<tr>
+    <td><b>${c.codigo}</b></td>
+    <td>${c.tipo==='pct'?'%':'R$'}</td>
+    <td>${c.tipo==='pct'?c.valor+'%':'R$ '+c.valor.toFixed(2)}</td>
+    <td>${c.uso}</td>
+    <td>${c.usosAtuais||0}/${c.maxUsos||'∞'}</td>
+    <td>${c.validade||'—'}</td>
+    <td><button class="btn" style="padding:4px 10px;font-size:12px;background:${c.ativo?'var(--green)':'#888'}" onclick="toggleCupom(${c.id},${!c.ativo})">${c.ativo?'Sim':'Não'}</button></td>
+    <td><button class="btn" style="padding:4px 10px;font-size:12px;background:#c0392b" onclick="deleteCupom(${c.id})">Del</button></td>
+  </tr>`).join('')||'<tr><td colspan="8" class="muted" style="padding:24px">Nenhum cupom cadastrado.</td></tr>';
+}
+async function toggleCupom(id,ativo){
+  await api('/api/admin/cupons/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({ativo})});
+  loadCupons();
+}
+async function deleteCupom(id){
+  if(!confirm('Excluir este cupom?'))return;
+  await api('/api/admin/cupons/'+id,{method:'DELETE'});
+  toast('Cupom excluído'); loadCupons();
 }
 
 // boot

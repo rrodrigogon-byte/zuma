@@ -9,16 +9,28 @@
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="app.css">
 <style>
-  .tk{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
-  .tkc{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:16px;padding:24px;cursor:pointer;transition:.2s}
-  .tkc:hover,.tkc.sel{border-color:var(--lime);transform:translateY(-3px)}
+  .tk{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}
+  .tkc{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:16px;padding:24px;cursor:pointer;transition:.2s;position:relative}
+  .tkc:hover:not(.esgotado),.tkc.sel{border-color:var(--lime);transform:translateY(-3px)}
+  .tkc.esgotado{opacity:.55;cursor:not-allowed;filter:grayscale(.4)}
   .tkc .setor{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);font-weight:700}
   .tkc h3{font-size:19px;margin:6px 0}
   .tkc .preco{font-family:'Archivo';font-weight:900;font-size:30px;color:var(--lime)}
+  .tkc .lote-badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--gold);background:rgba(201,166,86,.12);border:1px solid rgba(201,166,86,.3);border-radius:20px;padding:3px 10px;margin-top:10px}
+  .tkc .vagas{font-size:12px;color:var(--muted);margin-top:5px}
+  .esgotado-badge{position:absolute;top:14px;right:14px;background:#ff4444;color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:.05em}
+  .cupom-row{display:flex;gap:8px;align-items:flex-end}
+  .cupom-row input{flex:1}
+  .cupom-row .btn{white-space:nowrap;padding:0 18px;height:42px}
+  .desconto-info{background:rgba(95,179,53,.12);border:1px solid rgba(95,179,53,.35);border-radius:10px;padding:10px 14px;font-size:14px;color:var(--lime);margin-top:8px;display:none}
+  .total-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:1px solid var(--line);margin-top:10px}
+  .total-row .label{font-size:14px;color:var(--muted)}
+  .total-row .valor{font-family:'Archivo';font-weight:900;font-size:26px;color:var(--lime)}
   .qrbox{background:#fff;border-radius:16px;padding:24px;max-width:330px;margin:0 auto;text-align:center}
   .qrbox svg{width:240px;height:240px}
   .qrbox .code{font-family:'Archivo';font-weight:800;color:#0B2415;letter-spacing:1px;margin-top:8px}
   .ticket{background:linear-gradient(165deg,#16401f,var(--deep2));border:1px dashed var(--lime);border-radius:18px;padding:26px;text-align:center;max-width:420px;margin:20px auto}
+  .pix-note{background:rgba(143,214,74,.08);border:1px solid rgba(143,214,74,.25);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--muted);margin-top:12px}
   @media print{header.app,.steps,footer.app,.toast{display:none!important}body{background:#fff}}
 </style>
 </head>
@@ -50,8 +62,23 @@
       <div class="field"><label>E-mail</label><input id="i-email" type="email" placeholder="voce@email.com"></div>
       <div class="field"><label>CPF</label><input id="i-cpf" placeholder="000.000.000-00"></div>
     </div>
-    <button class="btn" id="comprar">Emitir ingresso</button>
-    <p class="muted" style="font-size:12px;margin-top:10px">Pagamento (Pix/cartão) é habilitado ao conectar o gateway. Nesta demonstração o ingresso já é emitido válido.</p>
+
+    <div class="field" style="margin-top:14px">
+      <label>Cupom de desconto (opcional)</label>
+      <div class="cupom-row">
+        <input id="i-cupom" placeholder="Digite o código" style="text-transform:uppercase">
+        <button class="btn ghost" id="aplicar-cupom">Aplicar</button>
+      </div>
+      <div class="desconto-info" id="desconto-info"></div>
+    </div>
+
+    <div class="total-row" id="total-row">
+      <span class="label">Total</span>
+      <span class="valor" id="total-val">—</span>
+    </div>
+
+    <button class="btn" id="comprar" style="margin-top:6px">Emitir ingresso</button>
+    <p class="muted" style="font-size:12px;margin-top:10px">Em modo demonstração o ingresso é emitido válido imediatamente. Em produção com <code>MP_ACCESS_TOKEN</code> configurado será gerado um Pix via <code>/api/pagar</code>.</p>
   </div>
 
   <div id="result" class="hidden">
@@ -60,6 +87,7 @@
       <h3 id="r-tipo" style="font-size:22px;margin:6px 0"></h3>
       <div class="qrbox"><div id="r-qr"></div><div class="code" id="r-code"></div></div>
       <p class="muted" style="font-size:13px;margin-top:14px">Apresente este QR Code na portaria. Guarde uma captura de tela.</p>
+      <div class="pix-note">Em produção, após confirmação do pagamento Pix via <b>/api/pagar</b>, este QR Code seria liberado automaticamente.</div>
       <div style="display:flex;gap:10px;justify-content:center;margin-top:14px">
         <button class="btn sm" onclick="window.print()">Imprimir / PDF</button>
         <button class="btn ghost sm" id="novo">Comprar outro</button>
@@ -74,27 +102,113 @@
 <script>
 const $=s=>document.querySelector(s);
 const toast=(m,e)=>{const t=$('#toast');t.textContent=m;t.className='toast show'+(e?' err':'');setTimeout(()=>t.className='toast',2800);};
-let tipos=[], sel=null;
-const FB=[{id:'dia',nome:'Ingresso Diário',setor:'Geral',preco:40},{id:'semana',nome:'Passaporte da Semana',setor:'Geral',preco:150},{id:'final',nome:'Finais + Premiação',setor:'Geral',preco:60},{id:'vip',nome:'Camarote VIP',setor:'VIP',preco:120}];
-function render(){
-  $('#tipos').innerHTML=tipos.map(t=>`<div class="tkc ${sel===t.id?'sel':''}" data-id="${t.id}"><div class="setor">${t.setor}</div><h3>${t.nome}</h3><div class="preco">R$ ${t.preco}</div></div>`).join('');
+
+let tipos=[], sel=null, desconto=0, cupomAplicado=null;
+
+const FB=[
+  {id:'dia',nome:'Ingresso Diário',setor:'Geral',preco:40,lote:1,disponivel:80,esgotado:false},
+  {id:'semana',nome:'Passaporte da Semana',setor:'Geral',preco:150,lote:1,disponivel:30,esgotado:false},
+  {id:'final',nome:'Finais + Premiação',setor:'Geral',preco:60,lote:2,disponivel:0,esgotado:true},
+  {id:'vip',nome:'Camarote VIP',setor:'VIP',preco:120,lote:1,disponivel:10,esgotado:false}
+];
+
+function loteLabel(n){
+  const sufixos={1:'1º',2:'2º',3:'3º'};
+  return (sufixos[n]||n+'º')+' Lote';
 }
-(async()=>{ try{ tipos=await (await fetch('/api/ingresso-tipos')).json(); }catch(e){ tipos=FB; } render(); })();
-$('#tipos').addEventListener('click',e=>{const c=e.target.closest('.tkc');if(!c)return;sel=c.dataset.id;render();$('#form').classList.remove('hidden');$('#form').scrollIntoView({behavior:'smooth',block:'center'});});
+
+function render(){
+  $('#tipos').innerHTML=tipos.map(t=>`
+    <div class="tkc ${sel===t.id?'sel':''} ${t.esgotado?'esgotado':''}" data-id="${t.id}">
+      ${t.esgotado?'<span class="esgotado-badge">Esgotado</span>':''}
+      <div class="setor">${t.setor}</div>
+      <h3>${t.nome}</h3>
+      <div class="preco">R$ ${Number(t.preco).toFixed(2).replace('.',',')}</div>
+      <div class="lote-badge">🏷 ${loteLabel(t.lote)}${!t.esgotado&&t.disponivel!=null?' · '+t.disponivel+' vagas restantes':''}</div>
+    </div>`).join('');
+}
+
+function atualizarTotal(){
+  const t=tipos.find(x=>x.id===sel);
+  if(!t){$('#total-val').textContent='—';return;}
+  const base=Number(t.preco);
+  const final=Math.max(0,base-desconto);
+  $('#total-val').textContent='R$ '+final.toFixed(2).replace('.',',');
+}
+
+(async()=>{
+  try{ tipos=await (await fetch('/api/ingresso-tipos')).json(); }
+  catch(e){ tipos=FB; }
+  render();
+})();
+
+$('#tipos').addEventListener('click',e=>{
+  const c=e.target.closest('.tkc');
+  if(!c||c.classList.contains('esgotado'))return;
+  sel=c.dataset.id;
+  desconto=0; cupomAplicado=null;
+  $('#i-cupom').value='';
+  $('#desconto-info').style.display='none';
+  render();
+  atualizarTotal();
+  $('#form').classList.remove('hidden');
+  $('#form').scrollIntoView({behavior:'smooth',block:'center'});
+});
+
+$('#aplicar-cupom').onclick=async()=>{
+  const codigo=$('#i-cupom').value.trim().toUpperCase();
+  if(!codigo){toast('Digite um código de cupom',true);return;}
+  if(!sel){toast('Escolha um ingresso primeiro',true);return;}
+  const t=tipos.find(x=>x.id===sel);
+  if(!t)return;
+  try{
+    const r=await fetch('/api/cupom/validar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({codigo,uso:'ingresso',valor:t.preco})});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Cupom inválido');
+    desconto=d.desconto||0;
+    cupomAplicado=codigo;
+    const info=$('#desconto-info');
+    info.textContent='✓ Cupom aplicado — desconto de R$ '+desconto.toFixed(2).replace('.',',')+' ('+d.descricao+')';
+    info.style.display='block';
+    atualizarTotal();
+    toast('Cupom aplicado!');
+  }catch(e){
+    desconto=0; cupomAplicado=null;
+    $('#desconto-info').style.display='none';
+    atualizarTotal();
+    toast(e.message||'Cupom inválido',true);
+  }
+};
+
 $('#comprar').onclick=async()=>{
   if(!sel){toast('Escolha um ingresso',true);return;}
-  const nome=$('#i-nome').value.trim(),email=$('#i-email').value.trim();
+  const nome=$('#i-nome').value.trim(), email=$('#i-email').value.trim();
   if(!nome||!email){toast('Preencha nome e e-mail',true);return;}
   try{
-    const r=await fetch('/api/ingresso/comprar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipoId:sel,nome,email,cpf:$('#i-cpf').value.trim()})});
-    const d=await r.json(); if(!r.ok) throw new Error(d.error||'erro');
+    const body={tipoId:sel,nome,email,cpf:$('#i-cpf').value.trim()};
+    if(cupomAplicado) body.cupom=cupomAplicado;
+    const r=await fetch('/api/ingresso/comprar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'erro');
     $('#r-tipo').textContent=d.ingresso.tipoNome+' · '+d.ingresso.setor;
-    $('#r-qr').innerHTML=d.qrSvg; $('#r-code').textContent=d.code;
-    $('#form').classList.add('hidden'); $('#result').classList.remove('hidden');
-    $('#result').scrollIntoView({behavior:'smooth',block:'center'}); toast('Ingresso emitido!');
+    $('#r-qr').innerHTML=d.qrSvg;
+    $('#r-code').textContent=d.code;
+    $('#form').classList.add('hidden');
+    $('#result').classList.remove('hidden');
+    $('#result').scrollIntoView({behavior:'smooth',block:'center'});
+    toast('Ingresso emitido!');
   }catch(e){ toast('Sem servidor ativo — rode npm start para emitir.',true); }
 };
-$('#novo').onclick=()=>{ $('#result').classList.add('hidden'); sel=null; render(); $('#i-nome').value='';$('#i-email').value='';$('#i-cpf').value=''; window.scrollTo({top:0,behavior:'smooth'}); };
+
+$('#novo').onclick=()=>{
+  $('#result').classList.add('hidden');
+  sel=null; desconto=0; cupomAplicado=null;
+  render();
+  $('#i-nome').value=''; $('#i-email').value=''; $('#i-cpf').value=''; $('#i-cupom').value='';
+  $('#desconto-info').style.display='none';
+  $('#total-val').textContent='—';
+  window.scrollTo({top:0,behavior:'smooth'});
+};
 </script>
 </body>
 </html>

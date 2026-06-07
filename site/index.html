@@ -662,6 +662,17 @@
       </div>
       <p class="note" style="margin-top:12px">Inscrição enviada para a organização (rrodrigogon@gmail.com). A vaga é confirmada após validação e pagamento da taxa da categoria.</p>
     </form>
+    <div id="pix-step" style="display:none;padding:16px 0">
+      <h3 style="margin:0 0 8px;color:#0E2E1C">Pagamento via Pix</h3>
+      <p id="pix-demo" style="display:none;color:#888;font-size:13px;margin:0 0 8px">⚠ Modo demonstração — pagamento simulado</p>
+      <label style="font-size:12px;color:#555">Pix copia e cola</label>
+      <div style="display:flex;gap:8px;margin:6px 0 12px">
+        <input id="pix-code" type="text" readonly style="flex:1;font-size:12px;padding:6px 8px;border:1px solid #ccc;border-radius:6px;background:#f9f9f9">
+        <button class="btn" id="pix-copy" style="padding:6px 14px;font-size:13px">Copiar</button>
+      </div>
+      <p id="pix-timer" style="font-size:13px;color:#C9A656;margin:0 0 14px"></p>
+      <button class="btn ghost" id="pix-later">Pagar depois / já paguei</button>
+    </div>
   </div>
 </div>
 
@@ -835,8 +846,16 @@ function closeInscricao(){modal.classList.remove('open');document.body.style.ove
 $('#modal-x').onclick=closeInscricao;
 modal.addEventListener('click',e=>{if(e.target===modal)closeInscricao();});
 addEventListener('keydown',e=>{if(e.key==='Escape')closeInscricao();});
+function cpfValido(cpf){
+  cpf=cpf.replace(/\D/g,'');
+  if(cpf.length!==11||/^(\d)\1+$/.test(cpf))return false;
+  let s=0;for(let i=0;i<9;i++)s+=+cpf[i]*(10-i);let r=s*10%11;if(r===10||r===11)r=0;if(r!==+cpf[9])return false;
+  s=0;for(let i=0;i<10;i++)s+=+cpf[i]*(11-i);r=s*10%11;if(r===10||r===11)r=0;return r===+cpf[10];
+}
 function inscValid(){
   for(const id of ['i-nome','i-tel','i-email']){if(!$('#'+id).value.trim()){$('#'+id).focus();showToast('Preencha os campos obrigatórios');return false;}}
+  const cpf=$('#i-cpf').value.trim();
+  if(cpf&&!cpfValido(cpf)){$('#i-cpf').focus();showToast('CPF inválido');return false;}
   if(!$('#i-aceite').checked){showToast('É preciso aceitar o regulamento');return false;}
   return true;
 }
@@ -851,14 +870,55 @@ function inscObj(){
   const v=id=>$('#'+id).value.trim();
   return {nome:v('i-nome'),nasc:v('i-nasc'),sexo:$('#i-sexo').value,cpf:v('i-cpf'),cidade:v('i-cidade'),tel:v('i-tel'),email:v('i-email'),categoria:$('#i-cat').value,nivel:$('#i-nivel').value,dupla:v('i-dupla'),camisa:$('#i-camisa').value,emerg:v('i-emerg'),obs:v('i-obs')};
 }
+let _pixTimer=null;
+function startPixCountdown(seconds){
+  clearInterval(_pixTimer);
+  const el=$('#pix-timer');
+  function tick(){const m=String(Math.floor(seconds/60)).padStart(2,'0'),s=String(seconds%60).padStart(2,'0');el.textContent=`Expira em ${m}:${s}`;if(seconds<=0){clearInterval(_pixTimer);el.textContent='Prazo expirado.';}seconds--;}
+  tick();_pixTimer=setInterval(tick,1000);
+}
+async function showPixStep(inscId,total,email){
+  const form=$('#form-insc');
+  const pixDiv=$('#pix-step');
+  try{
+    const rp=await fetch('/api/pagar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tipo:'inscricao',refId:inscId,valor:total,email,descricao:'Inscrição 4ª Agro Open'})});
+    const dp=await rp.json();
+    const code=dp.qr_code||dp.pix_copia_cola||dp.code||'(código indisponível)';
+    const demo=dp.simulado||dp.demo||false;
+    $('#pix-code').value=code;
+    $('#pix-demo').style.display=demo?'':'none';
+    form.style.display='none';
+    pixDiv.style.display='';
+    startPixCountdown(30*60);
+    if(demo){setTimeout(async()=>{try{await fetch('/api/pagar/confirmar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refId:inscId})});}catch(_){}},2000);}
+  }catch(_){
+    form.style.display='none';
+    pixDiv.style.display='';
+    $('#pix-code').value='(modo offline — sem código)';
+    $('#pix-demo').style.display='';
+    startPixCountdown(30*60);
+  }
+}
+$('#pix-copy').onclick=()=>{
+  const c=$('#pix-code');c.select();
+  try{navigator.clipboard.writeText(c.value);}catch(_){document.execCommand('copy');}
+  showToast('Código copiado!');
+};
+$('#pix-later').onclick=()=>{
+  clearInterval(_pixTimer);
+  closeInscricao();
+  document.getElementById('form-insc').reset();
+  $('#pix-step').style.display='none';
+  $('#form-insc').style.display='';
+};
 $('#i-send').onclick=async()=>{
   if(!inscValid())return;
   try{
     const r=await fetch('/api/inscricao',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(inscObj())});
     const d=await r.json();
     if(!r.ok) throw new Error(d.error||'erro');
-    showToast('Inscrição enviada com sucesso!');
-    closeInscricao(); document.getElementById('form-insc').reset();
+    showToast('Inscrição enviada! Gerando Pix…');
+    await showPixStep(d.id, d.total ?? d.valor ?? 0, inscObj().email);
   }catch(e){
     showToast('Sem servidor ativo — enviando por e-mail…');
     setTimeout(()=>$('#i-mail').click(),300);
