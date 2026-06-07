@@ -49,6 +49,52 @@ tr:hover td{background:rgba(143,214,74,.04)}
 .toast.show{transform:translateX(-50%) translateY(0)}
 .toast.err{background:#e89a8c}
 footer.app{border-top:1px solid var(--line);margin-top:40px;padding:24px 0;color:var(--muted2);font-size:12.5px;text-align:center}
+
+/* ── RESPONSIVIDADE MOBILE ─────────────────────────────── */
+@media(max-width:700px){
+  /* header */
+  header.app .wrap{height:auto;padding:12px 16px;gap:8px}
+  header.app .navlinks{gap:12px;font-size:13px;width:100%;justify-content:flex-start;overflow-x:auto;padding-bottom:2px;flex-wrap:nowrap}
+  header.app .navlinks::-webkit-scrollbar{height:3px}
+  header.app .navlinks::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+  .brand{font-size:16px}
+  .ball{width:34px;height:26px}
+
+  /* hero */
+  .hero{padding:28px 0 8px}
+  .hero h1{font-size:clamp(24px,7vw,36px)}
+
+  /* grids */
+  .grid2,.grid3{grid-template-columns:1fr}
+
+  /* tabs */
+  .tabs{gap:6px}
+  .tabs button{padding:8px 13px;font-size:13px}
+
+  /* tabelas — scroll horizontal */
+  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:12px}
+  table{font-size:13px;min-width:520px}
+  th,td{padding:10px 8px}
+
+  /* cards */
+  .card{padding:16px}
+
+  /* botões */
+  .btn{font-size:13px;padding:10px 16px}
+
+  /* bracket scroll */
+  .bracket-wrap{border-radius:10px}
+  .bracket{gap:22px;padding:14px}
+  .round{min-width:180px;gap:10px}
+  .seat .nm{font-size:12px}
+  .seat{padding:8px 10px}
+
+  /* wrap padding menor */
+  .wrap{padding:0 14px}
+
+  /* seções */
+  section{padding:20px 0}
+}
 /* bracket compartilhado — estilo Grand Slam */
 .bracket-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:16px;background:
   radial-gradient(900px 400px at 12% -10%,rgba(143,214,74,.06),transparent 60%),var(--deep2)}
