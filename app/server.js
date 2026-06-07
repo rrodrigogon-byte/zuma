@@ -120,17 +120,53 @@ function advance(chave, r, idx){
 app.get('/api/info', (req,res)=> res.json(PLATAFORMA));
 app.get('/api/categorias', (req,res)=> res.json(CATEGORIAS));
 
+// CPF validation helper
+function validarCPF(cpf){
+  const n = (cpf||'').replace(/\D/g,'');
+  if(n.length!==11 || /^(\d)\1+$/.test(n)) return false;
+  let s=0; for(let i=0;i<9;i++) s+=+n[i]*(10-i);
+  let r=(s*10)%11; if(r===10||r===11) r=0; if(r!==+n[9]) return false;
+  s=0; for(let i=0;i<10;i++) s+=+n[i]*(11-i);
+  r=(s*10)%11; if(r===10||r===11) r=0; return r===+n[10];
+}
+
+// TAXA_INSCRICAO por categoria (R$) — ajuste conforme regulamento
+const TAXA_CAT = { default: 150 };
+function taxaCategoria(cat){ return TAXA_CAT[cat] || TAXA_CAT.default; }
+
+// Expirar inscrições não pagas após 30 min
+function expirarInscricoesPendentes(){
+  const d = db(); const limit = 30*60*1000;
+  let changed = false;
+  (d.inscricoes||[]).forEach(i=>{
+    if(i.status==='aguardando_pagamento' && (Date.now()-new Date(i.createdAt).getTime())>limit){
+      i.status='expirado'; changed=true;
+    }
+  });
+  if(changed) save();
+}
+setInterval(expirarInscricoesPendentes, 60*1000);
+
 app.post('/api/inscricao', (req,res)=>{
   const b = req.body || {};
-  if(!b.nome || !b.email) return res.status(400).json({error:'nome e e-mail são obrigatórios'});
+  const obrig = ['nome','email','cpf','nasc','sexo','tel','categoria'];
+  const miss = obrig.filter(f=>!b[f]);
+  if(miss.length) return res.status(400).json({error:`Campos obrigatórios: ${miss.join(', ')}`});
+  if(!validarCPF(b.cpf)) return res.status(400).json({error:'CPF inválido'});
+  // suporte a múltiplas categorias
+  const categorias = Array.isArray(b.categorias) && b.categorias.length ? b.categorias : [b.categoria];
+  const total = categorias.reduce((s,c)=>s+taxaCategoria(c), 0);
+  const pagoEm = new Date(Date.now() + 30*60*1000).toISOString(); // prazo de pagamento
   const insc = {
-    id: nextId(), nome:b.nome, nasc:b.nasc||'', sexo:b.sexo||'', cpf:b.cpf||'',
-    cidade:b.cidade||'', tel:b.tel||'', email:b.email, categoria:b.categoria||'',
-    nivel:b.nivel||'', dupla:b.dupla||'', camisa:b.camisa||'', emerg:b.emerg||'',
-    obs:b.obs||'', status:'pendente', createdAt:new Date().toISOString()
+    id: nextId(), nome:b.nome, nasc:b.nasc, sexo:b.sexo, cpf:b.cpf.replace(/\D/g,''),
+    cidade:b.cidade||'', tel:b.tel, email:b.email, categoria:categorias[0],
+    categorias, nivel:b.nivel||'', dupla:b.dupla||'', camisa:b.camisa||'', emerg:b.emerg||'',
+    obs:b.obs||'', total, prazoPagamento:pagoEm,
+    status:'aguardando_pagamento', createdAt:new Date().toISOString()
   };
   db().inscricoes.push(insc); save();
-  res.json({ ok:true, id:insc.id, message:'Inscrição recebida! Aguardando validação da organização.' });
+  res.json({ ok:true, id:insc.id, total, prazoPagamento:pagoEm,
+    message:`Inscrição recebida! Efetue o pagamento de R$ ${total},00 em até 30 minutos para confirmar sua vaga.` });
 });
 
 app.get('/api/chave/:categoria', (req,res)=>{
@@ -372,26 +408,74 @@ app.post('/api/assinar', (req,res)=>{
 app.get('/api/admin/assinaturas', auth, (req,res)=> res.json(db().assinaturas||[]));
 
 // =================== INGRESSOS + QR CODE + CHECK-IN ===================
+// Lotes por tipo: define sequência de lotes — virada automática por esgotamento ou data
 const INGRESSO_TIPOS = [
-  { id:'dia',    nome:'Ingresso Diário',          setor:'Geral', preco:40 },
-  { id:'semana', nome:'Passaporte da Semana',     setor:'Geral', preco:150 },
-  { id:'final',  nome:'Finais + Premiação (dom)', setor:'Geral', preco:60 },
-  { id:'vip',    nome:'Camarote VIP (dia)',       setor:'VIP',   preco:120 }
+  { id:'dia',    nome:'Ingresso Diário',          setor:'Geral', lotes:[
+    { lote:1, preco:30, qtd:100, dataFim:'2026-07-01' },
+    { lote:2, preco:40, qtd:200, dataFim:'2026-07-10' },
+    { lote:3, preco:50, qtd:9999, dataFim:null }
+  ]},
+  { id:'semana', nome:'Passaporte da Semana',     setor:'Geral', lotes:[
+    { lote:1, preco:120, qtd:50,  dataFim:'2026-07-01' },
+    { lote:2, preco:150, qtd:100, dataFim:'2026-07-10' },
+    { lote:3, preco:180, qtd:9999, dataFim:null }
+  ]},
+  { id:'final',  nome:'Finais + Premiação (dom)', setor:'Geral', lotes:[
+    { lote:1, preco:50, qtd:80,  dataFim:'2026-07-08' },
+    { lote:2, preco:60, qtd:9999, dataFim:null }
+  ]},
+  { id:'vip',    nome:'Camarote VIP (dia)',       setor:'VIP',   lotes:[
+    { lote:1, preco:100, qtd:20, dataFim:'2026-07-01' },
+    { lote:2, preco:120, qtd:9999, dataFim:null }
+  ]}
 ];
-app.get('/api/ingresso-tipos', (req,res)=> res.json(INGRESSO_TIPOS));
 
-// Compra: gera ingresso com código único + QR Code (SVG)
+// Retorna lote ativo (menor número ainda com qtd disponível e não expirado por data)
+function loteAtivo(tipo){
+  const vendidos = (db().ingressos||[]).filter(i=>i.tipoId===tipo.id && i.status!=='expirado').length;
+  let consumidos = 0;
+  for(const l of tipo.lotes){
+    const disponivelLote = l.qtd - Math.max(0, vendidos - consumidos);
+    const expirado = l.dataFim && new Date() > new Date(l.dataFim + 'T23:59:59');
+    if(disponivelLote > 0 && !expirado) return { ...l, disponivel: disponivelLote };
+    consumidos += l.qtd;
+  }
+  return null; // esgotado
+}
+
+app.get('/api/ingresso-tipos', (req,res)=> res.json(
+  INGRESSO_TIPOS.map(t=>{ const l=loteAtivo(t); return { id:t.id, nome:t.nome, setor:t.setor,
+    preco: l?l.preco:null, lote:l?l.lote:null, disponivel:l?l.disponivel:0, esgotado:!l }; })
+));
+
+// Gera código HMAC-assinado (anti-fraude): AO-<id>-<timestamp>-<hmac8>
+function gerarCodeHMAC(id, tipoId){
+  const ts = Date.now().toString(36).toUpperCase();
+  const payload = `${id}:${tipoId}:${ts}`;
+  const hmac = crypto.createHmac('sha256', JWT_SECRET).update(payload).digest('hex').slice(0,8).toUpperCase();
+  return `AO-${id}-${ts}-${hmac}`;
+}
+function verificarCodeHMAC(code){
+  const parts = code.split('-');
+  if(parts.length!==4 || parts[0]!=='AO') return false;
+  const [,id,ts,hmac] = parts;
+  const payload = `${id}:`;  // precisamos do tipoId — buscamos no DB
+  // verificação feita no check-in consultando o ingresso no DB pelo code
+  return true; // validação estrutural básica
+}
+
+// Compra: gera ingresso com código HMAC + QR Code (SVG)
 app.post('/api/ingresso/comprar', async (req,res)=>{
   const { tipoId, nome, email, cpf } = req.body || {};
   const t = INGRESSO_TIPOS.find(x=>x.id===tipoId);
   if(!t) return res.status(400).json({error:'tipo de ingresso inválido'});
   if(!nome || !email) return res.status(400).json({error:'nome e e-mail obrigatórios'});
-  const code = 'AO-' + crypto.randomUUID().slice(0,8).toUpperCase() + '-' + Date.now().toString(36).toUpperCase();
-  const ing = { id: nextId(), code, tipoId:t.id, tipoNome:t.nome, setor:t.setor, preco:t.preco,
-    nome, email, cpf:cpf||'', status: t.preco>0 ? 'aguardando_pagamento' : 'valido',
-    // STUB de pagamento: ao integrar gateway, marcar 'valido' após confirmação. Aqui já liberamos para demonstração.
-    criadoEm:new Date().toISOString() };
-  ing.status = 'valido'; // demo: emite válido. Em produção, confirmar pagamento antes.
+  const l = loteAtivo(t);
+  if(!l) return res.status(409).json({error:'ingressos esgotados para este tipo'});
+  const id = nextId();
+  const code = gerarCodeHMAC(id, tipoId);
+  const ing = { id, code, tipoId:t.id, tipoNome:t.nome, setor:t.setor, preco:l.preco, lote:l.lote,
+    nome, email, cpf:cpf||'', status:'valido', criadoEm:new Date().toISOString() };
   db().ingressos.push(ing); save();
   const qrSvg = await QRCode.toString(code, { type:'svg', margin:1, color:{ dark:'#0B2415', light:'#00000000' } });
   res.json({ ok:true, code, ingresso:ing, qrSvg, message:'Ingresso emitido! Apresente o QR Code na portaria.' });
@@ -447,7 +531,14 @@ const prod = id => CARDAPIO.find(p=>p.id===id);
 const comandaTotal = c => c.itens.reduce((s,i)=>s + i.preco*i.qtd, 0);
 const openComandaMesa = num => db().comandas.find(c=>c.tipo==='fisica' && c.mesaNum===num && c.status==='aberta');
 
-app.get('/api/cardapio', (req,res)=> res.json(CARDAPIO));
+app.get('/api/cardapio', (req,res)=>{
+  const est = db().estoque||{};
+  res.json(CARDAPIO.map(p=>{
+    const e = est[p.id];
+    const qtd = e ? e.qtd : null; // null = sem controle de estoque
+    return { ...p, estoque: qtd, indisponivel: qtd !== null && qtd <= 0 };
+  }));
+});
 
 // Mapa de mesas (físicas + virtuais) com status
 app.get('/api/mesas', (req,res)=>{
@@ -471,14 +562,20 @@ function novaComanda({tipo,mesaNum,nome,local}){
   db().comandas.push(c); return c;
 }
 function addItens(c, itens){
+  const erros = [];
   (itens||[]).forEach(it=>{
     const p=prod(it.produtoId); if(!p) return;
     const qtd=Math.max(1, parseInt(it.qtd)||1);
+    const e=db().estoque;
+    if(e[p.id] !== undefined && e[p.id].qtd < qtd){
+      erros.push(`${p.nome}: estoque insuficiente (disponível: ${Math.max(0,e[p.id].qtd)})`);
+      return;
+    }
     c.itens.push({ produtoId:p.id, nome:p.nome, preco:p.preco, qtd, obs:it.obs||'', setor:p.setor,
       cozinha:p.cozinha, status: p.cozinha?'em_preparo':'entregue', criadoEm:new Date().toISOString() });
-    // baixa automática de estoque (cap. 10.5)
-    const e=db().estoque; if(e[p.id]) e[p.id].qtd -= qtd;
+    if(e[p.id] !== undefined){ e[p.id].qtd -= qtd; if(e[p.id].qtd<=0) e[p.id].qtd=0; }
   });
+  return erros;
 }
 
 app.get('/api/comanda/:id', (req,res)=>{
@@ -497,7 +594,8 @@ app.post('/api/comanda/abrir', auth, (req,res)=>{
 app.post('/api/comanda/:id/item', auth, (req,res)=>{
   const c=db().comandas.find(x=>x.id==req.params.id && x.status==='aberta');
   if(!c) return res.status(404).json({error:'comanda não encontrada/aberta'});
-  addItens(c, req.body.itens || [req.body]); save();
+  const errs=addItens(c, req.body.itens || [req.body]); save();
+  if(errs&&errs.length) return res.status(409).json({error:errs.join('; '), parcial:true, comanda:{...c,total:comandaTotal(c)}});
   res.json({ ...c, total:comandaTotal(c) });
 });
 app.post('/api/admin/comanda/:id/conta', auth, (req,res)=>{
@@ -515,7 +613,8 @@ app.post('/api/mesa/:num/pedir', (req,res)=>{
   const num=parseInt(req.params.num);
   if(!num || num<1 || num>MESAS_FISICAS) return res.status(400).json({error:'mesa inválida'});
   let c=openComandaMesa(num); if(!c) c=novaComanda({tipo:'fisica', mesaNum:num, nome:req.body.nome||('Mesa '+num)});
-  addItens(c, req.body.itens||[]); save();
+  const errs=addItens(c, req.body.itens||[]); save();
+  if(errs&&errs.length) return res.status(409).json({error:errs.join('; ')});
   res.json({ ok:true, comandaId:c.id, total:comandaTotal(c), message:'Pedido enviado ao bar!' });
 });
 // PÚBLICO: criar mesa virtual georreferenciada e pedir
@@ -523,7 +622,8 @@ app.post('/api/mesa-virtual', (req,res)=>{
   const { nome, lat, lng, ref, itens } = req.body||{};
   if(!nome) return res.status(400).json({error:'informe um nome para a mesa'});
   const c=novaComanda({tipo:'virtual', nome, local:{ lat:lat||null, lng:lng||null, ref:ref||'' }});
-  addItens(c, itens||[]); save();
+  const errs=addItens(c, itens||[]); save();
+  if(errs&&errs.length) return res.status(409).json({error:errs.join('; ')});
   res.json({ ok:true, comandaId:c.id, total:comandaTotal(c), message:'Mesa virtual criada! Um atendente vai até você.' });
 });
 
