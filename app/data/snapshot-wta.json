@@ -1,0 +1,20 @@
+{
+  "tour": "WTA",
+  "atualizado": "2026-05-25",
+  "fonte": "WTA Tour / Olympics.com (snapshot)",
+  "top": [
+    {"pos":1,"nome":"Aryna Sabalenka","pais":"BLR","pontos":9960},
+    {"pos":2,"nome":"Elena Rybakina","pais":"KAZ","pontos":8313},
+    {"pos":3,"nome":"Iga Świątek","pais":"POL","pontos":7273},
+    {"pos":4,"nome":"Coco Gauff","pais":"USA","pontos":6749},
+    {"pos":5,"nome":"Jessica Pegula","pais":"USA","pontos":6286},
+    {"pos":6,"nome":"Amanda Anisimova","pais":"USA","pontos":5958},
+    {"pos":7,"nome":"Elina Svitolina","pais":"UKR","pontos":4315},
+    {"pos":8,"nome":"Mirra Andreeva","pais":"—","pontos":4181},
+    {"pos":9,"nome":"Victoria Mboko","pais":"CAN","pontos":3710},
+    {"pos":10,"nome":"Karolína Muchová","pais":"CZE","pontos":3318}
+  ],
+  "brasileiros": [
+    {"pos":null,"nome":"Beatriz Haddad Maia","pais":"BRA","pontos":null,"obs":"Principal brasileira do circuito — posição exata via API ao vivo."}
+  ]
+}

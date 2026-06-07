@@ -1,0 +1,17 @@
+{
+  "atualizado": "2026-05-27",
+  "fonte": "Snapshot — substituído por feed ao vivo quando a API é configurada",
+  "itens": [
+    {"titulo":"Sinner reassume a liderança do ranking da ATP","resumo":"O italiano abre vantagem no topo após o início de temporada europeu no saibro.","fonte":"ATP Tour","url":"https://www.atptour.com/en/rankings/singles"},
+    {"titulo":"João Fonseca segue como nº1 do Brasil, na 30ª posição da ATP","resumo":"Aos 19 anos, o brasileiro consolida presença entre os melhores do mundo.","fonte":"ge / Olympics","url":"https://www.olympics.com/pt/noticias/ranking-atp-simples-lista-atualizada"},
+    {"titulo":"Sabalenka mantém o nº1 da WTA; Rybakina e Świątek completam o top 3","resumo":"A bielorrussa lidera o ranking feminino sem ameaças imediatas.","fonte":"WTA Tour","url":"https://www.wtatennis.com/rankings/singles"},
+    {"titulo":"Calendário do circuito brasileiro de tênis movimenta o interior","resumo":"Torneios amadores e profissionais aquecem a base do tênis nacional.","fonte":"CBT","url":"https://cbt-tenis.com.br/"}
+  ],
+  "fontes_oficiais": [
+    {"nome":"ATP Tour","url":"https://www.atptour.com/"},
+    {"nome":"WTA Tour","url":"https://www.wtatennis.com/"},
+    {"nome":"ge · Tênis","url":"https://ge.globo.com/tenis/"},
+    {"nome":"ESPN Tênis","url":"https://www.espn.com.br/tenis/"},
+    {"nome":"CBT — Confederação Brasileira de Tênis","url":"https://cbt-tenis.com.br/"}
+  ]
+}
