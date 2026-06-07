@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data', 'db.json');
 
 const DEFAULT = { admins: [], usuarios: [], inscricoes: [], chaves: {}, ranking: { players: {} }, campeoes: {}, torneios: [], assinaturas: [], ingressos: [], comandas: [], reservas: [], patrocinadores: [], estoque: {},
-  ligas: {}, professores: [], aulas: [], loja: [], vendasLoja: [],
+  ligas: {}, professores: [], aulas: [], loja: [], vendasLoja: [], cupons: [],
   elo: { players: {} }, gruposEventos: {}, suicos: {}, duplas: {}, socios: [], campanhas: [], pagamentos: [], auditoria: [], agenda: [], seq: 1 };
 
 function ensureDir(){ fs.mkdirSync(path.dirname(DB_PATH), { recursive: true }); }
