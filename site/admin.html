@@ -9,6 +9,40 @@
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="app.css">
 <style>
+/* ===== SIDEBAR LAYOUT ===== */
+.admin-layout{display:flex;min-height:100vh}
+.sidebar{width:260px;flex:none;background:#061410;border-right:1px solid var(--line);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+.sidebar .brand-bar{padding:20px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;text-decoration:none}
+.sidebar .brand-bar .ball{width:36px;height:26px;flex:none}
+.sidebar .brand-bar span{font-family:'Archivo';font-weight:900;font-size:15px;color:var(--cream)}
+.nav-group{}
+.nav-group-header{display:flex;align-items:center;justify-content:space-between;padding:10px 18px 6px;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted2,#667);font-weight:700;cursor:pointer;user-select:none}
+.nav-group-header .arrow{transition:.2s;font-size:10px}
+.nav-group-header.collapsed .arrow{transform:rotate(-90deg)}
+.nav-group ul{list-style:none;margin:0;padding:0}
+.nav-group.collapsed ul{display:none}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 18px;font-size:13.5px;font-weight:500;color:var(--muted);cursor:pointer;transition:.15s;border-left:2px solid transparent;text-decoration:none;background:none;border-top:none;border-right:none;border-bottom:none;width:100%;text-align:left;box-sizing:border-box}
+.nav-item:hover{background:rgba(143,214,74,.06);color:var(--cream)}
+.nav-item.active{background:rgba(143,214,74,.10);color:var(--lime);border-left-color:var(--lime);font-weight:600}
+.nav-item .ico{font-size:16px;width:22px;text-align:center;flex:none}
+.nav-item.ext-link{color:var(--gold)}
+.nav-item.ext-link:hover{background:rgba(201,166,86,.08);color:#e8c97a}
+.sidebar-footer{margin-top:auto;padding:16px 18px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.sidebar-footer .av{width:34px;height:34px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px;color:var(--deep2,#0E2E1C);flex:none}
+.sidebar-footer .info{min-width:0;flex:1}
+.sidebar-footer .info .name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sidebar-footer .info .role{font-size:11px;color:var(--muted)}
+.sidebar-footer .sair{font-size:12px;color:#e89a8c;cursor:pointer;flex:none;background:none;border:none;padding:0}
+.sidebar-footer .sair:hover{color:#ffb0a0}
+.admin-main{flex:1;min-width:0;padding:28px}
+@media(max-width:768px){
+  .admin-layout{flex-direction:column}
+  .sidebar{width:100%;height:auto;position:relative}
+  .sidebar-footer{display:none}
+  .nav-group ul{display:none}
+  .nav-group.mobile-open ul{display:block}
+}
+/* ===== END SIDEBAR ===== */
   .login-box{max-width:400px;margin:8vh auto;}
   .stat-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px}
   .stat{background:var(--deep2);border:1px solid var(--line);border-radius:12px;padding:16px 20px;flex:1;min-width:140px}
@@ -35,31 +69,6 @@
 </style>
 </head>
 <body>
-<header class="app">
-  <div class="wrap">
-    <a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span> <span class="muted" style="font-weight:500;font-size:14px">· Painel SetPoint</span></a>
-    <div class="navlinks">
-      <a href="index.html">Site</a>
-      <a href="chaves.html">Chaves</a>
-      <a href="sorteio.html">Sorteio</a>
-      <a href="ranking.html">Ranking</a>
-      <a href="portaria.html">Portaria</a>
-      <a href="pdv.html">PDV Bar</a>
-      <a href="cozinha.html">Cozinha KDS</a>
-      <a href="ingressos.html">Ingressos</a>
-      <a href="inscricao.html">Inscrição</a>
-      <a href="reservas.html">Reservas</a>
-      <a href="aulas.html">Aulas</a>
-      <a href="loja.html">Loja</a>
-      <a href="agenda.html">Agenda</a>
-      <a href="perfil.html">Atletas</a>
-      <a href="planos.html">Planos</a>
-      <a href="patrocinadores.html">Patrocinadores</a>
-      <a id="logout" class="hidden" style="cursor:pointer;color:#e89a8c">Sair</a>
-    </div>
-  </div>
-</header>
-
 <!-- LOGIN -->
 <div id="login" class="wrap">
   <div class="card login-box">
@@ -74,39 +83,108 @@
 
 <!-- DASHBOARD -->
 <div id="dash" class="hidden">
-  <div class="wrap hero">
-    <div class="kick">Painel da organização</div>
-    <h1>Gestão da <span class="lime">4ª Agro Open</span></h1>
-  </div>
-  <div class="wrap">
-    <div class="tabs">
-      <button data-tab="inicio" class="active">🏠 Início</button>
-      <button data-tab="torn">Torneios</button>
-      <button data-tab="insc">Inscrições</button>
-      <button data-tab="chave">Chaveamento</button>
-      <button data-tab="rank">Ranking interno</button>
-      <button data-tab="liga">Liga (R-R)</button>
-      <button data-tab="grupos">Grupos</button>
-      <button data-tab="suico">Suíço</button>
-      <button data-tab="dupla">Elim. dupla</button>
-      <button data-tab="reservas">Reservas</button>
-      <button data-tab="aulas">Aulas</button>
-      <button data-tab="loja">Loja</button>
-      <button data-tab="socios">Sócios</button>
-      <button data-tab="patroc">Patrocínio</button>
-      <button data-tab="estoque">Estoque</button>
-      <button data-tab="assin">Assinaturas</button>
-      <button data-tab="carteira">Carteira</button>
-      <button data-tab="crm">CRM</button>
-      <button data-tab="comunic">Comunicação</button>
-      <button data-tab="financeiro">Financeiro</button>
-      <button data-tab="pagamentos">Pagamentos</button>
-      <button data-tab="cupons">Cupons</button>
-      <button data-tab="bi">BI</button>
-      <button data-tab="agenda">Agenda</button>
-      <button data-tab="auditoria">Auditoria</button>
-      <button data-tab="users">Usuários</button>
+<div class="admin-layout">
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <a href="index.html" class="brand-bar">
+      <span class="ball"></span>
+      <span>Painel ADM</span>
+    </a>
+
+    <!-- Início -->
+    <div class="nav-group">
+      <ul>
+        <li><button class="nav-item active" data-tab="inicio"><span class="ico">🏠</span> Dashboard</button></li>
+      </ul>
     </div>
+
+    <!-- Torneios -->
+    <div class="nav-group">
+      <div class="nav-group-header" onclick="toggleGroup(this)">Torneios <span class="arrow">▾</span></div>
+      <ul>
+        <li><button class="nav-item" data-tab="torn"><span class="ico">🏆</span> Torneios</button></li>
+        <li><button class="nav-item" data-tab="insc"><span class="ico">📋</span> Inscrições</button></li>
+        <li><button class="nav-item" data-tab="chave"><span class="ico">🎾</span> Chaveamento</button></li>
+        <li><button class="nav-item" data-tab="rank"><span class="ico">📊</span> Ranking</button></li>
+        <li><button class="nav-item" data-tab="liga"><span class="ico">🔄</span> Liga (R-R)</button></li>
+        <li><button class="nav-item" data-tab="grupos"><span class="ico">👥</span> Grupos</button></li>
+        <li><button class="nav-item" data-tab="suico"><span class="ico">♟️</span> Suíço</button></li>
+        <li><button class="nav-item" data-tab="dupla"><span class="ico">⚔️</span> Elim. dupla</button></li>
+        <li><button class="nav-item" data-tab="agenda"><span class="ico">📅</span> Agenda</button></li>
+      </ul>
+    </div>
+
+    <!-- Operação -->
+    <div class="nav-group collapsed">
+      <div class="nav-group-header collapsed" onclick="toggleGroup(this)">Operação <span class="arrow">▾</span></div>
+      <ul>
+        <li><a class="nav-item ext-link" href="pdv.html" target="_blank"><span class="ico">🍺</span> PDV Bar</a></li>
+        <li><a class="nav-item ext-link" href="cozinha.html" target="_blank"><span class="ico">🍳</span> Cozinha KDS</a></li>
+        <li><a class="nav-item ext-link" href="portaria.html" target="_blank"><span class="ico">🎫</span> Portaria</a></li>
+        <li><a class="nav-item ext-link" href="ingressos.html" target="_blank"><span class="ico">🎟️</span> Bilheteria</a></li>
+        <li><a class="nav-item ext-link" href="inscricao.html" target="_blank"><span class="ico">📝</span> Inscrição</a></li>
+        <li><button class="nav-item" data-tab="reservas"><span class="ico">🏟️</span> Reservas</button></li>
+        <li><button class="nav-item" data-tab="aulas"><span class="ico">📚</span> Aulas</button></li>
+        <li><button class="nav-item" data-tab="loja"><span class="ico">🛒</span> Loja</button></li>
+        <li><button class="nav-item" data-tab="estoque"><span class="ico">📦</span> Estoque</button></li>
+      </ul>
+    </div>
+
+    <!-- Clientes -->
+    <div class="nav-group collapsed">
+      <div class="nav-group-header collapsed" onclick="toggleGroup(this)">Clientes <span class="arrow">▾</span></div>
+      <ul>
+        <li><button class="nav-item" data-tab="socios"><span class="ico">👤</span> Sócios</button></li>
+        <li><button class="nav-item" data-tab="crm"><span class="ico">🗂️</span> CRM</button></li>
+        <li><button class="nav-item" data-tab="carteira"><span class="ico">💳</span> Carteira</button></li>
+        <li><button class="nav-item" data-tab="assin"><span class="ico">📄</span> Assinaturas</button></li>
+      </ul>
+    </div>
+
+    <!-- Marketing -->
+    <div class="nav-group collapsed">
+      <div class="nav-group-header collapsed" onclick="toggleGroup(this)">Marketing <span class="arrow">▾</span></div>
+      <ul>
+        <li><button class="nav-item" data-tab="patroc"><span class="ico">🤝</span> Patrocínio</button></li>
+        <li><button class="nav-item" data-tab="comunic"><span class="ico">📣</span> Comunicação</button></li>
+        <li><button class="nav-item" data-tab="cupons"><span class="ico">🏷️</span> Cupons</button></li>
+      </ul>
+    </div>
+
+    <!-- Financeiro -->
+    <div class="nav-group collapsed">
+      <div class="nav-group-header collapsed" onclick="toggleGroup(this)">Financeiro <span class="arrow">▾</span></div>
+      <ul>
+        <li><button class="nav-item" data-tab="financeiro"><span class="ico">💰</span> Financeiro</button></li>
+        <li><button class="nav-item" data-tab="pagamentos"><span class="ico">💸</span> Pagamentos</button></li>
+        <li><button class="nav-item" data-tab="bi"><span class="ico">📈</span> BI</button></li>
+      </ul>
+    </div>
+
+    <!-- Configurações -->
+    <div class="nav-group collapsed">
+      <div class="nav-group-header collapsed" onclick="toggleGroup(this)">Configurações <span class="arrow">▾</span></div>
+      <ul>
+        <li><button class="nav-item" data-tab="users"><span class="ico">👥</span> Usuários</button></li>
+        <li><button class="nav-item" data-tab="auditoria"><span class="ico">🔍</span> Auditoria</button></li>
+      </ul>
+    </div>
+
+    <!-- Footer -->
+    <div class="sidebar-footer">
+      <div class="av" id="sidebar-av">A</div>
+      <div class="info">
+        <div class="name" id="sidebar-name">Admin</div>
+        <div class="role" id="sidebar-role">admin</div>
+      </div>
+      <button class="sair" id="logout" onclick="logout()">Sair</button>
+    </div>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <main class="admin-main">
+    <div id="content">
 
     <!-- INÍCIO / DASHBOARD -->
     <section id="tab-inicio">
@@ -526,8 +604,10 @@
         </div>
       </div>
     </section>
-  </div>
-</div>
+  </div><!-- #content -->
+  </main>
+</div><!-- .admin-layout -->
+</div><!-- #dash -->
 
 <!-- MODAL PLACAR -->
 <div id="smodal" class="smodal hidden">
@@ -562,46 +642,67 @@ async function api(path, opts={}){
   return d;
 }
 
-function showDash(on){ $('#login').classList.toggle('hidden',on); $('#dash').classList.toggle('hidden',!on); $('#logout').classList.toggle('hidden',!on); }
+const ALL_TABS=['inicio','torn','insc','chave','rank','liga','grupos','suico','dupla','reservas','aulas','loja','socios','patroc','estoque','assin','carteira','crm','comunic','financeiro','pagamentos','bi','agenda','auditoria','users'];
+
+function switchTab(name){
+  ALL_TABS.forEach(t=>$('#tab-'+t).classList.toggle('hidden',t!==name));
+  $$('.nav-item[data-tab]').forEach(el=>el.classList.toggle('active',el.dataset.tab===name));
+  if(name==='rank') loadRanking();
+  if(name==='torn') loadTorneios();
+  if(name==='assin') loadAssinaturas();
+  if(name==='users') loadUsuarios();
+  if(name==='reservas') loadReservas();
+  if(name==='patroc') loadPatroc();
+  if(name==='estoque') loadEstoque();
+  if(name==='carteira') loadCarteira();
+  if(name==='liga') initLiga();
+  if(name==='grupos') initGrupos();
+  if(name==='suico') initSuico();
+  if(name==='dupla') initDupla();
+  if(name==='pagamentos') loadPagamentos();
+  if(name==='cupons') loadCupons();
+  if(name==='aulas') loadAulas();
+  if(name==='loja') loadLoja();
+  if(name==='socios') loadSocios();
+  if(name==='crm') loadCRM();
+  if(name==='comunic') loadComunic();
+  if(name==='financeiro') loadFinanceiro();
+  if(name==='bi') loadBI();
+  if(name==='inicio') loadDashboard();
+  if(name==='agenda') loadAgenda();
+  if(name==='auditoria') loadAuditoria();
+}
+
+function toggleGroup(header){
+  const group=header.closest('.nav-group');
+  const collapsed=group.classList.toggle('collapsed');
+  header.classList.toggle('collapsed',collapsed);
+}
+
+$$('.nav-item[data-tab]').forEach(btn=>btn.onclick=()=>switchTab(btn.dataset.tab));
+
+function showDash(on){
+  $('#login').classList.toggle('hidden',on);
+  $('#dash').classList.toggle('hidden',!on);
+}
 function logout(){ TOKEN=''; localStorage.removeItem('ao_admin_token'); showDash(false); }
-$('#logout').onclick=logout;
 
 $('#l-btn').onclick=async()=>{
   try{
     const d=await api('/api/admin/login',{method:'POST',body:JSON.stringify({user:$('#l-user').value,pass:$('#l-pass').value})});
-    TOKEN=d.token; localStorage.setItem('ao_admin_token',TOKEN); showDash(true); init();
+    TOKEN=d.token; localStorage.setItem('ao_admin_token',TOKEN);
+    // populate sidebar footer
+    try{
+      const me=await api('/api/admin/me').catch(()=>null);
+      const name=(me&&me.nome)||$('#l-user').value||'Admin';
+      const role=(me&&me.role)||'admin';
+      $('#sidebar-name').textContent=name;
+      $('#sidebar-role').textContent=role;
+      $('#sidebar-av').textContent=name.charAt(0).toUpperCase();
+    }catch(e){}
+    showDash(true); init();
   }catch(e){ toast(e.message,true); }
 };
-
-// tabs
-$$('.tabs button').forEach(b=>b.onclick=()=>{
-  $$('.tabs button').forEach(x=>x.classList.remove('active')); b.classList.add('active');
-  ['inicio','torn','insc','chave','rank','liga','grupos','suico','dupla','reservas','aulas','loja','socios','patroc','estoque','assin','carteira','crm','comunic','financeiro','pagamentos','bi','agenda','auditoria','users'].forEach(t=>$('#tab-'+t).classList.toggle('hidden',t!==b.dataset.tab));
-  if(b.dataset.tab==='rank') loadRanking();
-  if(b.dataset.tab==='torn') loadTorneios();
-  if(b.dataset.tab==='assin') loadAssinaturas();
-  if(b.dataset.tab==='users') loadUsuarios();
-  if(b.dataset.tab==='reservas') loadReservas();
-  if(b.dataset.tab==='patroc') loadPatroc();
-  if(b.dataset.tab==='estoque') loadEstoque();
-  if(b.dataset.tab==='carteira') loadCarteira();
-  if(b.dataset.tab==='liga') initLiga();
-  if(b.dataset.tab==='grupos') initGrupos();
-  if(b.dataset.tab==='suico') initSuico();
-  if(b.dataset.tab==='dupla') initDupla();
-  if(b.dataset.tab==='pagamentos') loadPagamentos();
-  if(b.dataset.tab==='cupons') loadCupons();
-  if(b.dataset.tab==='aulas') loadAulas();
-  if(b.dataset.tab==='loja') loadLoja();
-  if(b.dataset.tab==='socios') loadSocios();
-  if(b.dataset.tab==='crm') loadCRM();
-  if(b.dataset.tab==='comunic') loadComunic();
-  if(b.dataset.tab==='financeiro') loadFinanceiro();
-  if(b.dataset.tab==='bi') loadBI();
-  if(b.dataset.tab==='inicio') loadDashboard();
-  if(b.dataset.tab==='agenda') loadAgenda();
-  if(b.dataset.tab==='auditoria') loadAuditoria();
-});
 
 async function init(){
   CATS = await api('/api/categorias');
@@ -1247,7 +1348,12 @@ async function deleteCupom(id){
 }
 
 // boot
-if(TOKEN){ showDash(true); init().catch(()=>logout()); } else showDash(false);
+if(TOKEN){
+  showDash(true);
+  init().catch(()=>logout());
+} else {
+  showDash(false);
+}
 </script>
 </body>
 </html>
