@@ -827,9 +827,18 @@ app.patch('/api/admin/config', auth, (req,res)=>{
 app.get('/api/admin/caixa', auth, (req,res)=>{
   const fechadas=db().comandas.filter(c=>c.status==='fechada');
   const total=fechadas.reduce((s,c)=>s+(c.totalPago||0),0);
-  const porMeio={}; fechadas.forEach(c=>{porMeio[c.pagamento]=(porMeio[c.pagamento]||0)+(c.totalPago||0);});
+  const porMeio={};
+  fechadas.forEach(c=>{
+    const meios=c.pagamentos||[{meio:c.pagamento||'outros',valor:c.totalPago||0}];
+    meios.forEach(p=>{ porMeio[p.meio]=(porMeio[p.meio]||0)+(p.valor||0); });
+  });
+  const recentes=fechadas.slice(-50).reverse().map(c=>({
+    id:c.id, nome:c.nome, total:c.totalPago||0, fechadoEm:c.fechadoEm,
+    itens:(c.itens||[]).reduce((s,i)=>s+i.qtd,0),
+    pagamento:c.pagamento, pagamentos:c.pagamentos
+  }));
   res.json({ comandasFechadas:fechadas.length, faturamento:total, porMeio,
-    abertas:db().comandas.filter(c=>c.status==='aberta').length });
+    abertas:db().comandas.filter(c=>c.status==='aberta').length, recentes });
 });
 
 // =================== RESERVA DE QUADRAS (cap. 13) ===================
