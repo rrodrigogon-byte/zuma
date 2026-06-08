@@ -10,16 +10,32 @@
 <link rel="stylesheet" href="app.css">
 <style>
   .kds{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
-  .ticket{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:14px;padding:16px;border-left:4px solid var(--gold)}
-  .ticket.pronto{border-left-color:var(--lime);opacity:.8}
+  .ticket{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:14px;padding:16px;border-left:4px solid var(--lime);transition:border-color .4s}
+  .ticket.late{border-left-color:#e8a85c}
+  .ticket.atrasado{border-left-color:#e8705c;animation:pulse .8s infinite alternate}
+  .ticket.pronto{border-left-color:var(--lime);opacity:.7}
+  @keyframes pulse{from{opacity:1}to{opacity:.7}}
   .ticket .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
   .ticket .mesa{font-family:'Archivo';font-weight:800}
-  .ticket .min{font-size:12px;color:var(--muted)}
+  .ticket .min{font-size:12px;font-weight:700;font-family:'Archivo'}
+  .ticket .min.ok{color:var(--lime)}
+  .ticket .min.late{color:#e8a85c}
+  .ticket .min.atrasado{color:#e8705c}
   .ticket .item{font-size:16px;font-weight:700;margin:4px 0}
   .ticket .obs{font-size:12px;color:var(--gold)}
   .ticket .setor{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)}
   .login-box{max-width:380px;margin:8vh auto}
-  .late{color:#e8a85c}
+  .stat-bar{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .stat{background:var(--deep2);border:1px solid var(--line);border-radius:10px;padding:10px 16px;text-align:center;min-width:90px}
+  .stat .n{font-family:'Archivo';font-weight:900;font-size:22px}
+  .stat .n.lime{color:var(--lime)}.stat .n.gold{color:var(--gold)}.stat .n.red{color:#e8705c}
+  .stat .l{font-size:11px;color:var(--muted)}
+  .mode-toggle{display:flex;gap:8px;margin-bottom:12px}
+  .mode-btn{padding:6px 16px;border-radius:20px;border:1px solid var(--line);background:none;color:var(--muted);cursor:pointer;font-size:13px;font-weight:600}
+  .mode-btn.active{background:rgba(143,214,74,.12);border-color:var(--lime);color:var(--lime)}
+  .agg-item{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--deep2);border:1px solid var(--line);border-radius:12px;margin-bottom:8px}
+  .agg-item .qtd{font-family:'Archivo';font-weight:900;font-size:22px;color:var(--lime);margin-right:10px}
+  .agg-item .nome{font-size:16px;font-weight:700}
 </style>
 </head>
 <body>
@@ -35,8 +51,18 @@
 
 <div id="app" class="wrap hidden" style="padding-bottom:40px">
   <div class="hero" style="padding:26px 0 8px"><div class="kick">Kitchen Display</div><h1>Fila da <span class="lime">cozinha</span>.</h1></div>
-  <div class="legend" style="display:flex;gap:14px;color:var(--muted);font-size:13px;margin-bottom:14px"><span id="cnt"></span><button class="btn ghost sm" id="reload" style="margin-left:auto">Atualizar</button></div>
-  <div class="kds" id="kds"></div>
+  <div class="stat-bar" id="stats"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="mode-pedido">Por pedido</button>
+      <button class="mode-btn" id="mode-item">Consolidado por item</button>
+    </div>
+    <button class="btn ghost sm" id="reload">Atualizar</button>
+  </div>
+  <div id="kds-wrap">
+    <div class="kds" id="kds"></div>
+    <div id="kds-agg" class="hidden"></div>
+  </div>
   <p id="vazio" class="muted" style="padding:30px 0">Nenhum pedido na fila. 🍳</p>
 </div>
 
@@ -45,28 +71,97 @@
 <script>
 const $=s=>document.querySelector(s);
 let TOKEN=localStorage.getItem('ao_admin_token')||'';
+let FILA=[], prevCount=0, modoAgg=false;
 const toast=(m,e)=>{const t=$('#toast');t.textContent=m;t.className='toast show'+(e?' err':'');setTimeout(()=>t.className='toast',2200);};
 async function api(p,o={}){const r=await fetch(p,{...o,headers:{'Content-Type':'application/json',...(TOKEN?{Authorization:'Bearer '+TOKEN}:{}),...(o.headers||{})}});if(r.status===401){logout();throw new Error('s');}return r.json();}
 function show(on){$('#login').classList.toggle('hidden',on);$('#app').classList.toggle('hidden',!on);$('#logout').classList.toggle('hidden',!on);}
 function logout(){TOKEN='';localStorage.removeItem('ao_admin_token');show(false);}
 $('#logout').onclick=logout;
-$('#l-btn').onclick=async()=>{const d=await api('/api/admin/login',{method:'POST',body:JSON.stringify({user:$('#l-user').value,pass:$('#l-pass').value})});if(d.token){TOKEN=d.token;localStorage.setItem('ao_admin_token',TOKEN);show(true);load();}else toast('Login inválido',true);};
-$('#reload').onclick=load;
-function mins(t){return Math.floor((Date.now()-new Date(t))/60000);}
+$('#l-btn').onclick=async()=>{
+  const d=await api('/api/admin/login',{method:'POST',body:JSON.stringify({user:$('#l-user').value,pass:$('#l-pass').value})});
+  if(d.token){TOKEN=d.token;localStorage.setItem('ao_admin_token',TOKEN);show(true);load();}else toast('Login inválido',true);
+};
+$('#reload').onclick=()=>load();
+$('#mode-pedido').onclick=()=>{modoAgg=false;$('#mode-pedido').classList.add('active');$('#mode-item').classList.remove('active');renderFila();};
+$('#mode-item').onclick=()=>{modoAgg=true;$('#mode-item').classList.add('active');$('#mode-pedido').classList.remove('active');renderFila();};
+
+function beep(){
+  try{const a=new (window.AudioContext||window.webkitAudioContext)();const o=a.createOscillator();const g=a.createGain();o.connect(g);g.connect(a.destination);o.frequency.value=880;g.gain.setValueAtTime(.4,a.currentTime);g.gain.exponentialRampToValueAtTime(.001,a.currentTime+.4);o.start();o.stop(a.currentTime+.4);}catch(e){}
+}
+
+function elapsedLabel(t){
+  const s=Math.floor((Date.now()-new Date(t))/1000);
+  const m=Math.floor(s/60);
+  return m+'m '+(s%60).toString().padStart(2,'0')+'s';
+}
+function timerClass(t){
+  const m=Math.floor((Date.now()-new Date(t))/60000);
+  return m>=15?'atrasado':m>=7?'late':'ok';
+}
+
+function renderFila(){
+  const fila=FILA.filter(i=>i.status!=='entregue');
+  const atrasados=fila.filter(i=>Math.floor((Date.now()-new Date(i.criadoEm))/60000)>=15).length;
+  const prontos=fila.filter(i=>i.status==='pronto').length;
+  const emPreparo=fila.filter(i=>i.status==='em_preparo').length;
+  $('#stats').innerHTML=`
+    <div class="stat"><div class="n lime">${fila.length}</div><div class="l">na fila</div></div>
+    <div class="stat"><div class="n gold">${emPreparo}</div><div class="l">em preparo</div></div>
+    <div class="stat"><div class="n lime">${prontos}</div><div class="l">prontos</div></div>
+    <div class="stat"><div class="n red">${atrasados}</div><div class="l">&gt;15 min</div></div>`;
+
+  $('#vazio').style.display=fila.length?'none':'block';
+
+  if(modoAgg){
+    $('#kds').classList.add('hidden');
+    $('#kds-agg').classList.remove('hidden');
+    const agg={};
+    fila.forEach(i=>{if(!agg[i.nome])agg[i.nome]=0;agg[i.nome]+=i.qtd;});
+    $('#kds-agg').innerHTML=Object.entries(agg).sort((a,b)=>b[1]-a[1]).map(([nome,qtd])=>`
+      <div class="agg-item"><div style="display:flex;align-items:center"><span class="qtd">${qtd}×</span><span class="nome">${nome}</span></div></div>`).join('');
+  } else {
+    $('#kds').classList.remove('hidden');
+    $('#kds-agg').classList.add('hidden');
+    $('#kds').innerHTML=fila.map(i=>{
+      const cls=timerClass(i.criadoEm);
+      return `<div class="ticket ${i.status==='pronto'?'pronto':cls}">
+      <div class="top"><span class="mesa">${i.mesa}${i.tipo==='virtual'?' 📍':''}</span><span class="min ${cls}" data-t="${i.criadoEm}">${elapsedLabel(i.criadoEm)}</span></div>
+      <div class="setor">${i.setor||''}</div>
+      <div class="item">${i.qtd}× ${i.nome}</div>
+      ${i.obs?`<div class="obs">Obs: ${i.obs}</div>`:''}
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        ${i.status==='em_preparo'
+          ?`<button class="btn sm" data-c="${i.comandaId}" data-i="${i.idx}" data-s="pronto">Pronto ✅</button>`
+          :`<button class="btn ghost sm" data-c="${i.comandaId}" data-i="${i.idx}" data-s="entregue">Entregue</button>`}
+        <button class="btn ghost sm" data-c="${i.comandaId}" data-i="${i.idx}" data-s="86" style="border-color:#666;color:#888">86 (falta)</button>
+      </div></div>`;
+    }).join('');
+    $('#kds').querySelectorAll('button').forEach(b=>b.onclick=async()=>{
+      if(b.dataset.s==='86'){toast('Item "'+FILA.find(i=>i.comandaId==b.dataset.c&&i.idx==b.dataset.i)?.nome+'" marcado como indisponível');b.disabled=true;b.textContent='✕ Falta';return;}
+      await api('/api/admin/kds/status',{method:'POST',body:JSON.stringify({comandaId:+b.dataset.c,idx:+b.dataset.i,status:b.dataset.s})});load();
+    });
+  }
+}
+
+// update timers every second without full reload
+function tickTimers(){
+  document.querySelectorAll('.min[data-t]').forEach(el=>{
+    const cls=timerClass(el.dataset.t);
+    el.textContent=elapsedLabel(el.dataset.t);
+    el.className='min '+cls;
+  });
+}
+
 async function load(){
   let fila; try{fila=await api('/api/kds');}catch(e){return;}
-  $('#vazio').style.display=fila.length?'none':'block';
-  $('#cnt').textContent=fila.length+' item(ns) na fila';
-  $('#kds').innerHTML=fila.map(i=>{const m=mins(i.criadoEm);return `<div class="ticket ${i.status}">
-    <div class="top"><span class="mesa">${i.mesa}${i.tipo==='virtual'?' 📍':''}</span><span class="min ${m>=10?'late':''}">${m} min</span></div>
-    <div class="setor">${i.setor}</div>
-    <div class="item">${i.qtd}× ${i.nome}</div>
-    ${i.obs?`<div class="obs">Obs: ${i.obs}</div>`:''}
-    <div style="margin-top:10px;display:flex;gap:8px">
-      ${i.status==='em_preparo'?`<button class="btn sm" data-c="${i.comandaId}" data-i="${i.idx}" data-s="pronto">Pronto ✅</button>`:`<button class="btn ghost sm" data-c="${i.comandaId}" data-i="${i.idx}" data-s="entregue">Entregue</button>`}
-    </div></div>`;}).join('');
-  $('#kds').querySelectorAll('button').forEach(b=>b.onclick=async()=>{await api('/api/admin/kds/status',{method:'POST',body:JSON.stringify({comandaId:+b.dataset.c,idx:+b.dataset.i,status:b.dataset.s})});load();});
+  const newCount=fila.length;
+  if(newCount>prevCount && prevCount>=0) beep();
+  prevCount=newCount;
+  FILA=fila;
+  renderFila();
 }
+
+setInterval(tickTimers, 1000);
 setInterval(()=>{if(TOKEN && !$('#app').classList.contains('hidden'))load();},6000);
 if(TOKEN){show(true);load();}else show(false);
 </script>

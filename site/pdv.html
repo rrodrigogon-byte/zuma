@@ -17,6 +17,7 @@
   .mesa:hover{transform:translateY(-3px);border-color:var(--lime)}
   .mesa .nn{font-family:'Archivo';font-weight:900;font-size:24px}
   .mesa .tt{font-size:11px;color:var(--muted)}
+  .mesa .timer{font-size:10px;color:var(--muted2);margin-top:2px}
   .mesa.livre{opacity:.7}
   .mesa.ocupada{background:linear-gradient(165deg,#16401f,var(--deep2));border-color:var(--lime)}
   .mesa.conta{background:linear-gradient(165deg,#3a2e14,var(--deep2));border-color:var(--gold)}
@@ -25,14 +26,26 @@
   .vtag{display:inline-block;background:rgba(143,214,74,.12);color:var(--lime);border-radius:100px;padding:2px 8px;font-size:10px;font-weight:700;margin-top:4px}
   .panel-c{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:16px;padding:20px;position:sticky;top:84px}
   .cat{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:12px 0 6px}
-  .pchip{display:inline-flex;align-items:center;gap:6px;background:var(--deep2);border:1px solid var(--line);border-radius:100px;padding:7px 12px;font-size:13px;cursor:pointer;margin:0 6px 6px 0}
-  .pchip:hover{border-color:var(--lime)}
-  .it{display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .pchip{display:inline-flex;align-items:center;gap:6px;background:var(--deep2);border:1px solid var(--line);border-radius:100px;padding:7px 12px;font-size:13px;cursor:pointer;margin:0 6px 6px 0;transition:.15s}
+  .pchip:hover:not(.indisponivel){border-color:var(--lime)}
+  .pchip.indisponivel{opacity:.45;cursor:not-allowed;text-decoration:line-through}
+  .it{display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px;align-items:flex-start}
   .it .q{color:var(--lime);font-weight:700}
+  .it .obs-txt{color:var(--muted2);font-size:11px;font-style:italic}
   .tot{display:flex;justify-content:space-between;font-family:'Archivo';font-weight:900;font-size:22px;margin:12px 0}
   .login-box{max-width:380px;margin:8vh auto}
-  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:14px}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:14px;align-items:center}
   .dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:middle}
+  .obs-pop{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin:6px 0 10px;display:none}
+  .obs-pop.show{display:flex;gap:8px;align-items:center}
+  .obs-pop input{flex:1;padding:8px 12px;background:var(--deep2);border:1px solid var(--line);border-radius:8px;color:inherit;font-size:13px}
+  .obs-pop input:focus{outline:none;border-color:var(--lime)}
+  .obs-pop .btn{white-space:nowrap}
+  .conta-btn{background:none;border:1px solid var(--gold);border-radius:6px;padding:2px 7px;font-size:11px;color:var(--gold);cursor:pointer;position:absolute;bottom:5px;right:5px}
+  .conta-btn:hover{background:rgba(201,166,86,.15)}
+  #nova-mesa-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:900}
+  #nova-mesa-modal.show{display:flex}
+  #nova-mesa-modal .card{max-width:380px;width:90%}
 </style>
 </head>
 <body>
@@ -60,15 +73,28 @@
     <span><span class="dot" style="background:#3a2e14"></span>Conta pedida</span>
     <span>🍳 Aguardando cozinha</span>
     <button class="btn ghost sm" id="reload" style="margin-left:auto">Atualizar</button>
+    <button class="btn sm" id="nova-mesa-btn">＋ Mesa virtual</button>
   </div>
   <div class="layout">
     <div>
       <div class="mapa" id="mapa"></div>
-      <h3 style="font-size:16px;margin:22px 0 10px">Mesas virtuais (georreferenciadas)</h3>
+      <h3 style="font-size:16px;margin:22px 0 10px">Mesas virtuais</h3>
       <div class="mapa" id="virtuais"></div>
     </div>
     <div>
       <div class="panel-c" id="comanda"><p class="muted">Selecione uma mesa para abrir a comanda.</p></div>
+    </div>
+  </div>
+</div>
+
+<div id="nova-mesa-modal">
+  <div class="card">
+    <h3 style="font-size:18px;margin-bottom:14px">Nova mesa virtual</h3>
+    <div class="field"><label>Identificação (ex: Piscina 1, Camarote VIP)</label><input id="nm-nome" placeholder="Ex: Área VIP"></div>
+    <div class="field"><label>Referência (opcional)</label><input id="nm-ref" placeholder="Ex: Próximo ao tênis"></div>
+    <div style="display:flex;gap:10px;margin-top:6px">
+      <button class="btn" id="nm-ok">Criar mesa</button>
+      <button class="btn ghost" id="nm-cancel">Cancelar</button>
     </div>
   </div>
 </div>
@@ -78,7 +104,7 @@
 
 <script>
 const $=s=>document.querySelector(s);
-let TOKEN=localStorage.getItem('ao_admin_token')||'', CARDAPIO=[], cur=null;
+let TOKEN=localStorage.getItem('ao_admin_token')||'', CARDAPIO=[], cur=null, pendingProd=null;
 const toast=(m,e)=>{const t=$('#toast');t.textContent=m;t.className='toast show'+(e?' err':'');setTimeout(()=>t.className='toast',2200);};
 async function api(p,o={}){const r=await fetch(p,{...o,headers:{'Content-Type':'application/json',...(TOKEN?{Authorization:'Bearer '+TOKEN}:{}),...(o.headers||{})}});if(r.status===401){logout();throw new Error('sessão');}const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'erro');return d;}
 function show(on){$('#login').classList.toggle('hidden',on);$('#app').classList.toggle('hidden',!on);$('#logout').classList.toggle('hidden',!on);}
@@ -88,34 +114,137 @@ $('#l-btn').onclick=async()=>{try{const d=await api('/api/admin/login',{method:'
 
 async function boot(){ CARDAPIO=await api('/api/cardapio'); loadMapa(); caixa(); }
 $('#reload').onclick=()=>{loadMapa();caixa();};
-async function caixa(){ try{const d=await api('/api/admin/caixa');$('#caixa').innerHTML=`<span>Caixa do dia: <b style="color:var(--lime)">R$ ${d.faturamento.toFixed(2).replace('.',',')}</b></span><span>${d.comandasFechadas} fechadas</span><span>${d.abertas} abertas</span>`;}catch(e){} }
+
+async function caixa(){
+  try{const d=await api('/api/admin/caixa');$('#caixa').innerHTML=`<span>Caixa do dia: <b style="color:var(--lime)">R$ ${d.faturamento.toFixed(2).replace('.',',')}</b></span><span>${d.comandasFechadas} fechadas</span><span>${d.abertas} abertas</span>`;}catch(e){}
+}
+
+function tempoAberta(abertoEm){
+  if(!abertoEm) return '';
+  const mins=Math.floor((Date.now()-new Date(abertoEm))/60000);
+  if(mins<1) return '<1min';
+  if(mins<60) return mins+'min';
+  return Math.floor(mins/60)+'h '+(mins%60)+'min';
+}
+
 async function loadMapa(){
   const d=await api('/api/mesas');
-  $('#mapa').innerHTML=d.fisicas.map(m=>`<div class="mesa ${m.status} ${m.aguardandoCozinha?'cozinha':''} ${cur&&cur.mesaNum===m.num&&cur.tipo==='fisica'?'sel':''}" data-num="${m.num}"><div class="nn">${m.num}</div><div class="tt">${m.status==='livre'?'livre':'R$ '+m.total.toFixed(0)}</div></div>`).join('');
-  $('#virtuais').innerHTML=d.virtuais.length?d.virtuais.map(v=>`<div class="mesa ${v.status} ${v.aguardandoCozinha?'cozinha':''}" data-cid="${v.comandaId}" style="aspect-ratio:auto;padding:14px"><div class="tt" style="font-weight:700;color:var(--cream)">${v.nome}</div><div class="tt">R$ ${v.total.toFixed(0)}</div><span class="vtag">virtual${v.local&&v.local.lat?' · GPS':''}</span></div>`).join(''):'<p class="muted" style="grid-column:1/-1;font-size:13px">Nenhuma mesa virtual ativa. Clientes criam pelo cardápio (QR).</p>';
+  $('#mapa').innerHTML=d.fisicas.map(m=>`
+    <div class="mesa ${m.status} ${m.aguardandoCozinha?'cozinha':''} ${cur&&cur.mesaNum===m.num&&cur.tipo==='fisica'?'sel':''}" data-num="${m.num}">
+      <div class="nn">${m.num}</div>
+      <div class="tt">${m.status==='livre'?'livre':'R$ '+m.total.toFixed(0)}</div>
+      ${m.status!=='livre'?`<div class="timer">${tempoAberta(m.abertoEm)}</div>`:''}
+      ${m.status==='ocupada'?`<button class="conta-btn" data-cid="${m.comandaId}" title="Pedir conta">💳</button>`:''}
+    </div>`).join('');
+  $('#virtuais').innerHTML=d.virtuais.length?d.virtuais.map(v=>`
+    <div class="mesa ${v.status} ${v.aguardandoCozinha?'cozinha':''}" data-cid="${v.comandaId}" style="aspect-ratio:auto;padding:14px">
+      <div class="tt" style="font-weight:700;color:var(--cream)">${v.nome}</div>
+      <div class="tt">R$ ${v.total.toFixed(0)}</div>
+      <div class="timer">${tempoAberta(v.abertoEm)}</div>
+      <span class="vtag">virtual${v.local&&v.local.lat?' · GPS':''}</span>
+      ${v.status==='ocupada'?`<button class="conta-btn" data-cid="${v.comandaId}" title="Pedir conta">💳</button>`:''}
+    </div>`).join(''):'<p class="muted" style="grid-column:1/-1;font-size:13px">Nenhuma mesa virtual ativa.</p>';
+
+  // pedir conta buttons
+  document.querySelectorAll('.conta-btn').forEach(btn=>btn.onclick=async(e)=>{
+    e.stopPropagation();
+    try{ await api('/api/admin/comanda/'+btn.dataset.cid+'/conta',{method:'POST'}); toast('Conta pedida!'); loadMapa(); }
+    catch(err){ toast(err.message||'Erro ao pedir conta',true); }
+  });
 }
-$('#mapa').addEventListener('click',e=>{const m=e.target.closest('.mesa');if(m)abrir({mesaNum:+m.dataset.num,tipo:'fisica'});});
-$('#virtuais').addEventListener('click',e=>{const m=e.target.closest('.mesa');if(m)abrirComanda(+m.dataset.cid);});
+
+$('#mapa').addEventListener('click',e=>{
+  const btn=e.target.closest('.conta-btn');
+  if(btn) return;
+  const m=e.target.closest('.mesa');
+  if(m) abrir({mesaNum:+m.dataset.num,tipo:'fisica'});
+});
+$('#virtuais').addEventListener('click',e=>{
+  const btn=e.target.closest('.conta-btn');
+  if(btn) return;
+  const m=e.target.closest('.mesa');
+  if(m) abrirComanda(+m.dataset.cid);
+});
 
 async function abrir({mesaNum}){ const c=await api('/api/comanda/abrir',{method:'POST',body:JSON.stringify({mesaNum})}); cur=c; renderComanda(); loadMapa(); }
 async function abrirComanda(id){ cur=await api('/api/comanda/'+id); renderComanda(); }
+
 function renderComanda(){
+  if(!cur) return;
   const cats=[...new Set(CARDAPIO.map(p=>p.cat))];
-  const menu=cats.map(cat=>`<div class="cat">${cat}</div>`+CARDAPIO.filter(p=>p.cat===cat).map(p=>`<span class="pchip" data-p="${p.id}">${p.nome} · R$${p.preco}${p.cozinha?' 🍳':''}</span>`).join('')).join('');
-  const itens=cur.itens.length?cur.itens.map(i=>`<div class="it"><span><span class="q">${i.qtd}×</span> ${i.nome}${i.obs?` <i style="color:var(--muted2)">(${i.obs})</i>`:''}</span><span>R$ ${(i.preco*i.qtd).toFixed(0)} ${i.cozinha?(i.status==='pronto'?'✅':'🍳'):''}</span></div>`).join(''):'<p class="muted" style="font-size:13px">Sem itens. Toque no cardápio para adicionar.</p>';
+  const menu=cats.map(cat=>`<div class="cat">${cat}</div>`+
+    CARDAPIO.filter(p=>p.cat===cat).map(p=>`<span class="pchip ${p.indisponivel?'indisponivel':''}" data-p="${p.id}" data-nome="${p.nome}">${p.nome} · R$${p.preco}${p.cozinha?' 🍳':''}</span>`).join('')
+  ).join('');
+  const itens=cur.itens.length?cur.itens.map(i=>`
+    <div class="it">
+      <div><span class="q">${i.qtd}×</span> ${i.nome}${i.obs?`<br><span class="obs-txt">${i.obs}</span>`:''}</div>
+      <span>R$ ${(i.preco*i.qtd).toFixed(0)} ${i.cozinha?(i.status==='pronto'?'✅':'🍳'):''}</span>
+    </div>`).join('')
+    :'<p class="muted" style="font-size:13px">Sem itens. Toque no cardápio para adicionar.</p>';
+
   $('#comanda').innerHTML=`
-    <div style="display:flex;justify-content:space-between;align-items:center"><h3 style="font-size:20px">${cur.nome}</h3><span class="tag ${cur.tipo==='virtual'?'gold':''}">${cur.tipo==='virtual'?'virtual':'mesa '+cur.mesaNum}</span></div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h3 style="font-size:20px">${cur.nome}</h3>
+      <span class="tag ${cur.tipo==='virtual'?'gold':''}">${cur.tipo==='virtual'?'virtual':'mesa '+cur.mesaNum}</span>
+    </div>
     ${cur.local&&cur.local.lat?`<a class="muted" style="font-size:12px" target="_blank" href="https://maps.google.com/?q=${cur.local.lat},${cur.local.lng}">📍 ver no mapa (${cur.local.ref||'GPS'})</a>`:''}
     <div style="margin:10px 0 4px">${menu}</div>
+    <div class="obs-pop" id="obs-pop">
+      <input id="obs-input" placeholder="Observação (opcional)" maxlength="80">
+      <button class="btn sm" id="obs-add">Adicionar</button>
+      <button class="btn ghost sm" id="obs-cancel">✕</button>
+    </div>
     <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">${itens}</div>
     <div class="tot"><span>Total</span><span class="lime">R$ ${cur.total.toFixed(2).replace('.',',')}</span></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <select id="pg" style="flex:1"><option value="pix">Pix</option><option value="cartao">Cartão</option><option value="dinheiro">Dinheiro</option><option value="carteira">Carteira</option></select>
       <button class="btn" id="fechar">Fechar conta</button>
     </div>`;
-  $('#comanda').querySelectorAll('.pchip').forEach(ch=>ch.onclick=async()=>{cur=await api('/api/comanda/'+cur.id+'/item',{method:'POST',body:JSON.stringify({produtoId:ch.dataset.p,qtd:1})});renderComanda();loadMapa();});
-  $('#fechar').onclick=async()=>{await api('/api/admin/comanda/'+cur.id+'/fechar',{method:'POST',body:JSON.stringify({pagamento:$('#pg').value})});toast('Conta fechada!');cur=null;$('#comanda').innerHTML='<p class="muted">Selecione uma mesa.</p>';loadMapa();caixa();};
+
+  // click on chip: show obs popover
+  $('#comanda').querySelectorAll('.pchip:not(.indisponivel)').forEach(ch=>ch.onclick=()=>{
+    pendingProd=ch.dataset.p;
+    const pop=$('#obs-pop');
+    pop.classList.add('show');
+    $('#obs-input').value='';
+    $('#obs-input').focus();
+    ch.scrollIntoView({block:'nearest'});
+  });
+
+  $('#obs-add').onclick=async()=>{
+    if(!pendingProd) return;
+    const obs=$('#obs-input').value.trim();
+    try{
+      cur=await api('/api/comanda/'+cur.id+'/item',{method:'POST',body:JSON.stringify({produtoId:pendingProd,qtd:1,obs})});
+      pendingProd=null; renderComanda(); loadMapa();
+    }catch(e){ toast(e.message,true); }
+  };
+  $('#obs-cancel').onclick=()=>{ pendingProd=null; $('#obs-pop').classList.remove('show'); };
+  $('#obs-input').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#obs-add').click(); });
+
+  $('#fechar').onclick=async()=>{
+    await api('/api/admin/comanda/'+cur.id+'/fechar',{method:'POST',body:JSON.stringify({pagamento:$('#pg').value})});
+    toast('Conta fechada!'); cur=null;
+    $('#comanda').innerHTML='<p class="muted">Selecione uma mesa.</p>';
+    loadMapa(); caixa();
+  };
 }
+
+// nova mesa virtual
+$('#nova-mesa-btn').onclick=()=>$('#nova-mesa-modal').classList.add('show');
+$('#nm-cancel').onclick=()=>$('#nova-mesa-modal').classList.remove('show');
+$('#nm-ok').onclick=async()=>{
+  const nome=$('#nm-nome').value.trim();
+  if(!nome){toast('Informe um nome para a mesa',true);return;}
+  try{
+    await api('/api/mesa-virtual',{method:'POST',body:JSON.stringify({nome,local:{ref:$('#nm-ref').value.trim()}})});
+    toast('Mesa virtual criada!');
+    $('#nova-mesa-modal').classList.remove('show');
+    $('#nm-nome').value=''; $('#nm-ref').value='';
+    loadMapa();
+  }catch(e){ toast(e.message||'Erro ao criar mesa',true); }
+};
+
 setInterval(()=>{ if(TOKEN && !$('#app').classList.contains('hidden')) loadMapa(); }, 8000);
 if(TOKEN){show(true);boot();}else show(false);
 </script>
