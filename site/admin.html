@@ -66,6 +66,12 @@
   .setrow .vs{color:var(--muted)}
   .placar{font-size:11px;color:var(--lime);font-weight:700;padding:4px 11px;border-top:1px solid var(--line);background:rgba(143,214,74,.05)}
   .match.clk{cursor:pointer}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:800}
+  .modal.hidden{display:none}
+  .modal-box{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:24px;max-width:480px;width:90%;max-height:85vh;overflow-y:auto}
+  .cfg-section{margin-bottom:28px;padding-bottom:20px;border-bottom:1px solid var(--line)}
+  .cfg-section h4{font-size:15px;font-weight:700;color:var(--lime);margin-bottom:12px}
+  .cfg-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 </style>
 </head>
 <body>
@@ -172,6 +178,7 @@
       <ul>
         <li><button class="nav-item" data-tab="users"><span class="ico">👥</span> Usuários</button></li>
         <li><button class="nav-item" data-tab="auditoria"><span class="ico">🔍</span> Auditoria</button></li>
+        <li><button class="nav-item" data-tab="config"><span class="ico">⚙️</span> Configurações</button></li>
       </ul>
     </div>
 
@@ -608,6 +615,123 @@
         </div>
       </div>
     </section>
+
+    <!-- CONFIGURAÇÕES -->
+    <section id="tab-config" class="hidden">
+      <h2 style="font-size:22px;margin-bottom:20px">Configurações do Sistema</h2>
+
+      <!-- Seção 1: Evento -->
+      <div class="card cfg-section">
+        <h4>Evento</h4>
+        <div class="cfg-grid">
+          <div class="field"><label>Nome do evento</label><input id="cfg-ev-nome" placeholder="4ª Agro Open de Tênis"></div>
+          <div class="field"><label>Local</label><input id="cfg-ev-local" placeholder="Tangará Tênis Clube"></div>
+          <div class="field"><label>Data início</label><input id="cfg-ev-inicio" type="date"></div>
+          <div class="field"><label>Data fim</label><input id="cfg-ev-fim" type="date"></div>
+          <div class="field"><label>Cidade</label><input id="cfg-ev-cidade" placeholder="Tangará da Serra - MT"></div>
+        </div>
+        <button class="btn" id="cfg-ev-salvar">Salvar evento</button>
+      </div>
+
+      <!-- Seção 2: Bar & Restaurante -->
+      <div class="card cfg-section">
+        <h4>Bar & Restaurante</h4>
+        <div class="grid2" style="align-items:start;gap:16px">
+          <div>
+            <p style="font-size:13px;font-weight:600;margin-bottom:8px">Bar</p>
+            <div class="field"><label>Nome</label><input id="cfg-bar-nome" placeholder="Bar Agro Open"></div>
+            <div class="field"><label>Nº de mesas físicas</label><input id="cfg-bar-mesas" type="number" min="1" placeholder="20"></div>
+            <div class="field"><label>Setores (vírgula separada)</label><input id="cfg-bar-setores" placeholder="Interno,Externo,VIP"></div>
+            <button class="btn sm" id="cfg-bar-salvar">Salvar bar</button>
+          </div>
+          <div>
+            <p style="font-size:13px;font-weight:600;margin-bottom:8px">Restaurante</p>
+            <div class="field"><label>Nome</label><input id="cfg-rest-nome" placeholder="Restaurante TTC"></div>
+            <div class="field"><label>Nº de mesas físicas</label><input id="cfg-rest-mesas" type="number" min="1" placeholder="15"></div>
+            <div class="field"><label>Setores (vírgula separada)</label><input id="cfg-rest-setores" placeholder="Salão,Varanda"></div>
+            <button class="btn sm" id="cfg-rest-salvar">Salvar restaurante</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Seção 3: Cardápio -->
+      <div class="card cfg-section">
+        <h4>Cardápio</h4>
+        <div class="ctrls" style="margin-bottom:12px">
+          <div class="field" style="margin:0"><label>Nome</label><input id="cfg-cm-nome" placeholder="Nome do item"></div>
+          <div class="field" style="margin:0"><label>Categoria</label><input id="cfg-cm-cat" placeholder="Bebidas"></div>
+          <div class="field" style="margin:0"><label>Preço</label><input id="cfg-cm-preco" type="number" step="0.01" placeholder="0.00"></div>
+          <div class="field" style="margin:0"><label>Setor</label><input id="cfg-cm-setor" placeholder="Bar"></div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:20px"><input type="checkbox" id="cfg-cm-cozinha" style="width:auto"> Cozinha</label>
+          <button class="btn sm" id="cfg-cm-add" style="margin-top:18px">+ Adicionar</button>
+        </div>
+        <div class="card" style="padding:0;overflow:auto">
+          <table><thead><tr><th>Nome</th><th>Categoria</th><th>Preço</th><th>Setor</th><th>Cozinha</th><th></th></tr></thead><tbody id="cfg-cm-body"></tbody></table>
+        </div>
+      </div>
+
+      <!-- Seção 4: Quadras -->
+      <div class="card cfg-section">
+        <h4>Quadras</h4>
+        <div class="card" style="padding:0;overflow:auto;margin-bottom:12px">
+          <table><thead><tr><th>Nome</th><th>Piso</th><th>Preço/hora</th><th></th></tr></thead><tbody id="cfg-qd-body"></tbody></table>
+        </div>
+        <div class="cfg-grid">
+          <div class="field"><label>Horários disponíveis (JSON array)</label><textarea id="cfg-qd-horarios" style="min-height:70px" placeholder='["07:00","08:00","09:00"]'></textarea></div>
+        </div>
+        <button class="btn sm" id="cfg-qd-salvar">Salvar horários</button>
+      </div>
+
+      <!-- Seção 5: Categorias -->
+      <div class="card cfg-section">
+        <h4>Categorias de Torneio</h4>
+        <div id="cfg-cats-lista" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
+        <div style="display:flex;gap:10px">
+          <input id="cfg-cats-nova" placeholder="Nova categoria" style="flex:1">
+          <button class="btn sm" id="cfg-cats-add">+ Adicionar</button>
+        </div>
+      </div>
+
+      <!-- Seção 6: Ingressos e Lotes -->
+      <div class="card cfg-section">
+        <h4>Ingressos e Lotes</h4>
+        <div id="cfg-ing-lista"></div>
+        <button class="btn sm" id="cfg-ing-salvar">Salvar ingressos</button>
+      </div>
+
+      <!-- Seção 7: Planos de Sócio -->
+      <div class="card cfg-section">
+        <h4>Planos de Sócio</h4>
+        <div id="cfg-planos-lista"></div>
+        <button class="btn sm" id="cfg-planos-add">+ Adicionar plano</button>
+        <button class="btn sm" id="cfg-planos-salvar" style="margin-left:8px">Salvar planos</button>
+      </div>
+
+      <!-- Seção 8: Meios de Pagamento -->
+      <div class="card cfg-section">
+        <h4>Meios de Pagamento</h4>
+        <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:12px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:14px"><input type="checkbox" id="cfg-pg-pix" style="width:auto"> Pix</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:14px"><input type="checkbox" id="cfg-pg-cartao" style="width:auto"> Cartão</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:14px"><input type="checkbox" id="cfg-pg-dinheiro" style="width:auto"> Dinheiro</label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:14px"><input type="checkbox" id="cfg-pg-carteira" style="width:auto"> Carteira</label>
+        </div>
+        <div class="field" style="max-width:200px"><label>Taxa de plataforma %</label><input id="cfg-pg-taxa" type="number" step="0.1" min="0" placeholder="5"></div>
+        <button class="btn sm" id="cfg-pg-salvar">Salvar pagamentos</button>
+      </div>
+
+      <!-- Seção 9: Fiscal -->
+      <div class="card cfg-section" style="border-bottom:none">
+        <h4>Fiscal / NFC-e</h4>
+        <div class="cfg-grid">
+          <div class="field"><label>CNPJ</label><input id="cfg-fi-cnpj" placeholder="00.000.000/0001-00"></div>
+          <div class="field"><label>Inscrição Estadual</label><input id="cfg-fi-ie" placeholder="IE"></div>
+          <div class="field"><label>Ambiente</label><select id="cfg-fi-amb"><option value="homologacao">Homologação</option><option value="producao">Produção</option></select></div>
+        </div>
+        <button class="btn sm" id="cfg-fi-salvar">Salvar fiscal</button>
+      </div>
+    </section>
+
   </div><!-- #content -->
   </main>
 </div><!-- .admin-layout -->
@@ -625,6 +749,17 @@
     <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
     <div class="muted" style="font-size:12px;margin-bottom:8px">Resultado especial</div>
     <div id="s-special" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+  </div>
+</div>
+
+<div id="modal-editar" class="modal hidden">
+  <div class="modal-box">
+    <h3 id="modal-titulo" style="font-size:20px;margin-bottom:16px"></h3>
+    <div id="modal-campos"></div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="btn" id="modal-salvar">Salvar</button>
+      <button class="btn ghost" onclick="fecharModal()">Cancelar</button>
+    </div>
   </div>
 </div>
 
@@ -646,7 +781,7 @@ async function api(path, opts={}){
   return d;
 }
 
-const ALL_TABS=['inicio','torn','insc','chave','rank','liga','grupos','suico','dupla','reservas','aulas','loja','socios','patroc','estoque','assin','carteira','crm','comunic','financeiro','pagamentos','bi','agenda','auditoria','users'];
+const ALL_TABS=['inicio','torn','insc','chave','rank','liga','grupos','suico','dupla','reservas','aulas','loja','socios','patroc','estoque','assin','carteira','crm','comunic','financeiro','pagamentos','bi','agenda','auditoria','users','config'];
 
 function switchTab(name){
   ALL_TABS.forEach(t=>$('#tab-'+t).classList.toggle('hidden',t!==name));
@@ -676,6 +811,7 @@ function switchTab(name){
   if(name==='agenda') loadAgenda();
   if(name==='auditoria') loadAuditoria();
   if(name==='insc') loadInscricoes();
+  if(name==='config') loadConfig();
 }
 
 function toggleGroup(header){
@@ -726,14 +862,14 @@ $('#t-criar').onclick=async()=>{
 };
 async function loadTorneios(){
   const list=await api('/api/torneios');
-  $('#t-body').innerHTML=list.map(t=>`<tr><td><b>${t.nome}</b></td><td>${t.inicio||'—'}${t.fim?(' a '+t.fim):''}</td><td>${t.local||'—'}</td><td><span class="st ${t.status==='aberto'?'validada':'pendente'}">${t.status}</span></td><td><button class="btn sm danger" data-del="${t.id}">Excluir</button></td></tr>`).join('')||'<tr><td colspan="5" class="muted" style="padding:24px">Nenhum torneio criado ainda.</td></tr>';
+  $('#t-body').innerHTML=list.map(t=>`<tr><td><b>${t.nome}</b></td><td>${t.inicio||'—'}${t.fim?(' a '+t.fim):''}</td><td>${t.local||'—'}</td><td><span class="st ${t.status==='aberto'?'validada':'pendente'}">${t.status}</span></td><td><button class="btn ghost sm" onclick="editarTorneio(${t.id})">✏️</button> <button class="btn sm danger" data-del="${t.id}">Excluir</button></td></tr>`).join('')||'<tr><td colspan="5" class="muted" style="padding:24px">Nenhum torneio criado ainda.</td></tr>';
 }
 $('#t-body').onclick=async e=>{const b=e.target.closest('button');if(!b)return;if(!confirm('Excluir torneio?'))return;await api('/api/admin/torneios/'+b.dataset.del,{method:'DELETE'});toast('Torneio removido');loadTorneios();};
 // ---- assinaturas ----
 async function loadAssinaturas(){
   const list=await api('/api/admin/assinaturas');
   $('#as-stats').innerHTML=`<div class="stat"><div class="n">${list.length}</div><div class="l">assinaturas</div></div><div class="stat"><div class="n">${list.filter(a=>a.status==='ativo').length}</div><div class="l">ativas</div></div><div class="stat"><div class="n">${list.filter(a=>a.status==='pendente_pagamento').length}</div><div class="l">pendentes</div></div>`;
-  $('#as-body').innerHTML=list.map(a=>`<tr><td>${a.id}</td><td><b>${a.nome}</b><br><span class="muted" style="font-size:12px">${a.email}</span></td><td>${a.planoNome}</td><td>${a.publico}</td><td>${a.preco>0?('R$ '+(+a.preco).toFixed(2).replace('.',',')):'—'}</td><td><span class="st ${a.status==='ativo'?'validada':'pendente'}">${a.status}</span></td><td><button class="btn sm" data-act="ativo" data-id="${a.id}">Ativar</button> <button class="btn sm ghost" data-act="cancelado" data-id="${a.id}">Cancelar</button></td></tr>`).join('')||'<tr><td colspan="7" class="muted" style="padding:24px">Nenhuma assinatura ainda.</td></tr>';
+  $('#as-body').innerHTML=list.map(a=>`<tr><td>${a.id}</td><td><b>${a.nome}</b><br><span class="muted" style="font-size:12px">${a.email}</span></td><td>${a.planoNome}</td><td>${a.publico}</td><td>${a.preco>0?('R$ '+(+a.preco).toFixed(2).replace('.',',')):'—'}</td><td><span class="st ${a.status==='ativo'?'validada':'pendente'}">${a.status}</span></td><td><button class="btn ghost sm" onclick="editarAssinatura(${a.id})">✏️</button> <button class="btn sm" data-act="ativo" data-id="${a.id}">Ativar</button> <button class="btn sm ghost" data-act="cancelado" data-id="${a.id}">Cancelar</button></td></tr>`).join('')||'<tr><td colspan="7" class="muted" style="padding:24px">Nenhuma assinatura ainda.</td></tr>';
 }
 $('#as-body').onclick=async e=>{const b=e.target.closest('button');if(!b)return;await api('/api/admin/assinaturas/'+b.dataset.id,{method:'PATCH',body:JSON.stringify({status:b.dataset.act})});toast('Status atualizado');loadAssinaturas();};
 // ---- usuários ----
@@ -745,7 +881,7 @@ $('#u-criar').onclick=async()=>{
 };
 async function loadUsuarios(){
   const list=await api('/api/admin/usuarios');
-  $('#u-body').innerHTML=list.map(u=>`<tr><td><b>${u.nome}</b></td><td>${u.email}</td><td><span class="st ${u.role==='atleta'?'pendente':'validada'}">${u.role}</span></td><td>${u.ativo?'ativo':'inativo'}</td><td><button class="btn sm danger" data-del="${u.id}">Excluir</button></td></tr>`).join('');
+  $('#u-body').innerHTML=list.map(u=>`<tr><td><b>${u.nome}</b></td><td>${u.email}</td><td><span class="st ${u.role==='atleta'?'pendente':'validada'}">${u.role}</span></td><td>${u.ativo?'ativo':'inativo'}</td><td><button class="btn ghost sm" onclick="editarUsuario(${u.id})">✏️</button> <button class="btn sm danger" data-del="${u.id}">Excluir</button></td></tr>`).join('');
 }
 $('#u-body').onclick=async e=>{const b=e.target.closest('button');if(!b)return;if(!confirm('Excluir usuário?'))return;try{await api('/api/admin/usuarios/'+b.dataset.del,{method:'DELETE'});toast('Removido');loadUsuarios();}catch(err){toast(err.message,true);}};
 
@@ -1010,7 +1146,7 @@ async function loadSocios(){
   const list=await api('/api/admin/socios');
   $('#so-body').innerHTML=list.map(s=>{
     const fa=(s.faturas||[]).find(f=>f.status==='aberta');
-    return `<tr><td><b>${s.nome}</b><br><span class="muted" style="font-size:12px">${s.cardCode}</span></td><td>${s.planoNome}</td><td><span class="st ${s.status==='em_dia'?'validada':'recusada'}">${s.status==='em_dia'?'em dia':'inadimplente'}</span></td><td>${fa?('R$ '+fa.valor+' <button class="btn sm" data-pay="'+s.id+'" data-f="'+fa.id+'">Pagar</button>'):'—'} <button class="btn sm ghost" data-fat="${s.id}">+fatura</button></td><td><button class="btn sm danger" data-del="${s.id}">Excluir</button></td></tr>`;
+    return `<tr><td><b>${s.nome}</b><br><span class="muted" style="font-size:12px">${s.cardCode}</span></td><td>${s.planoNome}</td><td><span class="st ${s.status==='em_dia'?'validada':'recusada'}">${s.status==='em_dia'?'em dia':'inadimplente'}</span></td><td>${fa?('R$ '+fa.valor+' <button class="btn sm" data-pay="'+s.id+'" data-f="'+fa.id+'">Pagar</button>'):'—'} <button class="btn sm ghost" data-fat="${s.id}">+fatura</button></td><td><button class="btn ghost sm" onclick="editarSocio(${s.id})">✏️</button> <button class="btn sm danger" data-del="${s.id}">Excluir</button></td></tr>`;
   }).join('')||'<tr><td colspan="5" class="muted" style="padding:24px">Nenhum sócio ainda.</td></tr>';
 }
 $('#so-user').onchange=()=>{ const v=$('#so-user').value; if(v){ const t=$('#so-user').selectedOptions[0].textContent; } };
@@ -1074,7 +1210,7 @@ async function loadAulas(){
   const profs=await api('/api/professores');
   $('#au-prof').innerHTML='<option value="">—</option>'+profs.map(p=>`<option value="${p.id}">${p.nome}</option>`).join('');
   const aulas=await api('/api/admin/aulas/full');
-  $('#au-body').innerHTML=aulas.map(a=>`<tr><td><b>${a.titulo}</b><br><span class="muted" style="font-size:12px">${a.nivel} · ${a.preco?('R$ '+a.preco):'grátis'}</span></td><td>${a.data.split('-').reverse().join('/')} ${a.hora}</td><td>${a.professor||'—'}</td><td>${a.inscritos}/${a.vagas}</td><td><button class="btn sm danger" data-del="${a.id}">Excluir</button></td></tr>`).join('')||'<tr><td colspan="5" class="muted" style="padding:24px">Nenhuma aula agendada.</td></tr>';
+  $('#au-body').innerHTML=aulas.map(a=>`<tr><td><b>${a.titulo}</b><br><span class="muted" style="font-size:12px">${a.nivel} · ${a.preco?('R$ '+a.preco):'grátis'}</span></td><td>${a.data.split('-').reverse().join('/')} ${a.hora}</td><td>${a.professor||'—'}</td><td>${a.inscritos}/${a.vagas}</td><td><button class="btn ghost sm" onclick="editarAula(${a.id})">✏️</button> <button class="btn sm danger" data-del="${a.id}">Excluir</button></td></tr>`).join('')||'<tr><td colspan="5" class="muted" style="padding:24px">Nenhuma aula agendada.</td></tr>';
 }
 $('#au-criar').onclick=async()=>{
   const titulo=$('#au-titulo').value.trim();
@@ -1097,7 +1233,7 @@ $('#lo-criar').onclick=async()=>{
 };
 async function loadLoja(){
   const list=await api('/api/loja');
-  $('#lo-body').innerHTML=list.map(p=>`<tr><td><b>${p.nome}</b></td><td>${p.cat}</td><td>R$ ${p.preco.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td><td><b style="color:${p.esgotado?'#e89a8c':'var(--lime)'}">${p.estoque}</b></td><td><button class="btn sm danger" data-del="${p.id}">Excluir</button></td></tr>`).join('')||'<tr><td colspan="5" class="muted" style="padding:24px">Catálogo vazio.</td></tr>';
+  $('#lo-body').innerHTML=list.map(p=>`<tr><td><b>${p.nome}</b></td><td>${p.cat}</td><td>R$ ${p.preco.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td><td><b style="color:${p.esgotado?'#e89a8c':'var(--lime)'}">${p.estoque}</b></td><td><button class="btn ghost sm" onclick="editarLoja(${p.id})">✏️</button> <button class="btn sm danger" data-del="${p.id}">Excluir</button></td></tr>`).join('')||'<tr><td colspan="5" class="muted" style="padding:24px">Catálogo vazio.</td></tr>';
 }
 $('#lo-body').onclick=async e=>{const b=e.target.closest('button');if(!b)return;if(!confirm('Excluir produto?'))return;await api('/api/admin/loja/'+b.dataset.del,{method:'DELETE'});toast('Removido');loadLoja();};
 
@@ -1122,7 +1258,7 @@ async function loadReservas(){
   const list=await api('/api/admin/reservas'+(data?('?data='+data):''));
   const fat=list.filter(r=>r.status!=='cancelada').reduce((s,r)=>s+(r.preco||0),0);
   $('#rs-stats').innerHTML=`<div class="stat"><div class="n">${list.length}</div><div class="l">reservas no dia</div></div><div class="stat"><div class="n">R$ ${fat.toLocaleString('pt-BR')}</div><div class="l">receita prevista</div></div>`;
-  $('#rs-body').innerHTML=list.map(r=>`<tr><td>${r.data.split('-').reverse().join('/')}</td><td><b>${r.hora}</b></td><td>${r.quadraNome}</td><td>${r.nome}</td><td>${r.email}${r.tel?(' · '+r.tel):''}</td><td>R$ ${r.preco}</td><td><span class="st ${r.status==='cancelada'?'recusada':'validada'}">${r.status}</span></td><td><button class="btn sm danger" data-del="${r.id}">Cancelar</button></td></tr>`).join('')||'<tr><td colspan="8" class="muted" style="padding:24px">Nenhuma reserva para esta data.</td></tr>';
+  $('#rs-body').innerHTML=list.map(r=>`<tr><td>${r.data.split('-').reverse().join('/')}</td><td><b>${r.hora}</b></td><td>${r.quadraNome}</td><td>${r.nome}</td><td>${r.email}${r.tel?(' · '+r.tel):''}</td><td>R$ ${r.preco}</td><td><span class="st ${r.status==='cancelada'?'recusada':'validada'}">${r.status}</span></td><td><button class="btn ghost sm" onclick="editarReserva(${r.id})">✏️</button> <button class="btn sm danger" data-del="${r.id}">Cancelar</button></td></tr>`).join('')||'<tr><td colspan="8" class="muted" style="padding:24px">Nenhuma reserva para esta data.</td></tr>';
 }
 $('#rs-body').onclick=async e=>{const b=e.target.closest('button');if(!b)return;if(!confirm('Cancelar reserva?'))return;await api('/api/admin/reservas/'+b.dataset.del,{method:'DELETE'});toast('Reserva cancelada');loadReservas();};
 
@@ -1134,7 +1270,7 @@ $('#p-criar').onclick=async()=>{
 };
 async function loadPatroc(){
   const list=await api('/api/admin/patrocinadores');
-  $('#p-body').innerHTML=list.map(p=>`<tr><td><b>${p.marca}</b></td><td><span class="st validada">${p.cota}</span></td><td>${p.escopo==='app'?'App/Global':'Torneio'}</td><td>${p.status}</td><td><button class="btn sm danger" data-del="${p.id}">Excluir</button></td></tr>`).join('')||'<tr><td colspan="5" class="muted" style="padding:24px">Nenhum patrocinador cadastrado.</td></tr>';
+  $('#p-body').innerHTML=list.map(p=>`<tr><td><b>${p.marca}</b></td><td><span class="st validada">${p.cota}</span></td><td>${p.escopo==='app'?'App/Global':'Torneio'}</td><td>${p.status}</td><td><button class="btn ghost sm" onclick="editarPatroc(${p.id})">✏️</button> <button class="btn sm danger" data-del="${p.id}">Excluir</button></td></tr>`).join('')||'<tr><td colspan="5" class="muted" style="padding:24px">Nenhum patrocinador cadastrado.</td></tr>';
 }
 $('#p-body').onclick=async e=>{const b=e.target.closest('button');if(!b)return;if(!confirm('Excluir patrocinador?'))return;await api('/api/admin/patrocinadores/'+b.dataset.del,{method:'DELETE'});toast('Removido');loadPatroc();};
 
@@ -1185,6 +1321,7 @@ async function loadInscricoes(){
     <td>${i.categoria||'—'}</td><td>${i.cidade||'—'}</td><td>${i.tel||'—'}</td>
     <td><span class="st ${i.status}">${i.status}</span></td>
     <td><div class="actions-cell">
+      <button class="btn ghost sm" onclick="editarInscricao(${i.id})">✏️</button>
       <button class="btn sm" data-act="validada" data-id="${i.id}">Validar</button>
       <button class="btn sm ghost" data-act="recusada" data-id="${i.id}">Recusar</button>
       <button class="btn sm danger" data-act="del" data-id="${i.id}">Excluir</button>
@@ -1351,6 +1488,431 @@ async function deleteCupom(id){
   await api('/api/admin/cupons/'+id,{method:'DELETE'});
   toast('Cupom excluído'); loadCupons();
 }
+
+// ---- modal genérico ----
+let _modalData = {};
+function abrirModal(titulo, campos, onSalvar){
+  $('#modal-titulo').textContent = titulo;
+  $('#modal-campos').innerHTML = campos;
+  $('#modal-salvar').onclick = onSalvar;
+  $('#modal-editar').classList.remove('hidden');
+}
+function fecharModal(){ $('#modal-editar').classList.add('hidden'); }
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') fecharModal(); });
+
+// ---- editar torneio ----
+async function editarTorneio(id){
+  const list = await api('/api/torneios');
+  const t = list.find(x=>x.id===id); if(!t) return;
+  abrirModal('Editar torneio',`
+    <div class="field"><label>Nome</label><input id="me-nome" value="${t.nome||''}"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="field"><label>Início</label><input id="me-inicio" type="date" value="${t.inicio||''}"></div>
+      <div class="field"><label>Fim</label><input id="me-fim" type="date" value="${t.fim||''}"></div>
+    </div>
+    <div class="field"><label>Local</label><input id="me-local" value="${t.local||''}"></div>
+    <div class="field"><label>Modalidade</label><input id="me-mod" value="${t.modalidade||''}"></div>
+    <div class="field"><label>Categorias (vírgula)</label><input id="me-cats" value="${Array.isArray(t.categorias)?t.categorias.join(','):''}"></div>
+  `, async()=>{
+    try{
+      await api('/api/admin/torneio/'+id,{method:'PATCH',body:JSON.stringify({nome:$('#me-nome').value,inicio:$('#me-inicio').value,fim:$('#me-fim').value,local:$('#me-local').value,modalidade:$('#me-mod').value,categorias:$('#me-cats').value.split(',').map(s=>s.trim()).filter(Boolean)})});
+      toast('Torneio atualizado'); fecharModal(); loadTorneios();
+    }catch(e){ toast(e.message,true); }
+  });
+}
+
+// ---- editar usuário ----
+async function editarUsuario(id){
+  const list = await api('/api/admin/usuarios');
+  const u = list.find(x=>x.id===id); if(!u) return;
+  abrirModal('Editar usuário',`
+    <div class="field"><label>Nome</label><input id="me-nome" value="${u.nome||''}"></div>
+    <div class="field"><label>Papel</label><select id="me-role">
+      <option value="atleta"${u.role==='atleta'?' selected':''}>atleta</option>
+      <option value="staff"${u.role==='staff'?' selected':''}>staff</option>
+      <option value="organizador"${u.role==='organizador'?' selected':''}>organizador</option>
+      <option value="admin"${u.role==='admin'?' selected':''}>admin</option>
+    </select></div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:12px"><input type="checkbox" id="me-ativo" style="width:auto"${u.ativo?' checked':''}> Usuário ativo</label>
+    <button class="btn ghost sm" id="me-reset-btn" style="margin-bottom:8px">Resetar senha</button><span id="me-nova-senha" style="font-size:13px;margin-left:8px;color:var(--lime)"></span>
+  `, async()=>{
+    try{
+      await api('/api/admin/usuario/'+id,{method:'PATCH',body:JSON.stringify({nome:$('#me-nome').value,role:$('#me-role').value,ativo:$('#me-ativo').checked})});
+      toast('Usuário atualizado'); fecharModal(); loadUsuarios();
+    }catch(e){ toast(e.message,true); }
+  });
+  setTimeout(()=>{
+    const btn=$('#me-reset-btn'); if(!btn)return;
+    btn.onclick=async()=>{
+      try{ const r=await api('/api/admin/usuario/'+id+'/reset-senha',{method:'POST'}); $('#me-nova-senha').textContent='Nova senha: '+(r.senha||r.novaSenha||'(ver console)'); toast('Senha resetada'); }
+      catch(e){ toast(e.message,true); }
+    };
+  },50);
+}
+
+// ---- editar assinatura ----
+async function editarAssinatura(id){
+  const list = await api('/api/admin/assinaturas');
+  const a = list.find(x=>x.id===id); if(!a) return;
+  abrirModal('Editar assinatura',`
+    <div class="field"><label>Plano</label><input id="me-plano" value="${a.planoNome||a.plano||''}"></div>
+    <div class="field"><label>Status</label><select id="me-status">
+      <option value="ativo"${a.status==='ativo'?' selected':''}>ativo</option>
+      <option value="pendente_pagamento"${a.status==='pendente_pagamento'?' selected':''}>pendente_pagamento</option>
+      <option value="cancelado"${a.status==='cancelado'?' selected':''}>cancelado</option>
+    </select></div>
+    <div class="field"><label>Vencimento</label><input id="me-venc" type="date" value="${a.vencimento||''}"></div>
+  `, async()=>{
+    try{
+      await api('/api/admin/assinatura/'+id,{method:'PATCH',body:JSON.stringify({plano:$('#me-plano').value,status:$('#me-status').value,vencimento:$('#me-venc').value})});
+      toast('Assinatura atualizada'); fecharModal(); loadAssinaturas();
+    }catch(e){ toast(e.message,true); }
+  });
+}
+
+// ---- editar sócio ----
+async function editarSocio(id){
+  const list = await api('/api/admin/socios');
+  const s = list.find(x=>x.id===id); if(!s) return;
+  let planosOpts='';
+  try{ const pl=await api('/api/socio-planos'); planosOpts=pl.map(p=>`<option value="${p.id}"${p.id==s.plano?' selected':''}>${p.nome}</option>`).join(''); }catch(e){}
+  abrirModal('Editar sócio',`
+    <div class="field"><label>Plano</label><select id="me-plano">${planosOpts||'<option>'+s.planoNome+'</option>'}</select></div>
+    <div class="field"><label>Status</label><select id="me-status">
+      <option value="ativo"${s.status==='ativo'?' selected':''}>ativo</option>
+      <option value="inativo"${s.status==='inativo'?' selected':''}>inativo</option>
+    </select></div>
+    <div class="field"><label>Vencimento</label><input id="me-venc" type="date" value="${s.vencimento||''}"></div>
+  `, async()=>{
+    try{
+      await api('/api/admin/socio/'+id,{method:'PATCH',body:JSON.stringify({plano:$('#me-plano').value,status:$('#me-status').value,vencimento:$('#me-venc').value})});
+      toast('Sócio atualizado'); fecharModal(); loadSocios();
+    }catch(e){ toast(e.message,true); }
+  });
+}
+
+// ---- editar aula ----
+async function editarAula(id){
+  const aulas = await api('/api/admin/aulas/full');
+  const a = aulas.find(x=>x.id===id); if(!a) return;
+  abrirModal('Editar aula',`
+    <div class="field"><label>Título</label><input id="me-titulo" value="${a.titulo||''}"></div>
+    <div class="field"><label>Professor</label><input id="me-prof" value="${a.professor||''}"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="field"><label>Vagas</label><input id="me-vagas" type="number" value="${a.vagas||''}"></div>
+      <div class="field"><label>Preço</label><input id="me-preco" type="number" step="0.01" value="${a.preco||''}"></div>
+    </div>
+    <div class="field"><label>Dias (ex.: Seg,Qua)</label><input id="me-dias" value="${a.dias||''}"></div>
+    <div class="field"><label>Horário</label><input id="me-horario" value="${a.hora||a.horario||''}"></div>
+  `, async()=>{
+    try{
+      await api('/api/admin/aula/'+id,{method:'PATCH',body:JSON.stringify({titulo:$('#me-titulo').value,professor:$('#me-prof').value,maxAlunos:$('#me-vagas').value,preco:$('#me-preco').value,dias:$('#me-dias').value,horario:$('#me-horario').value})});
+      toast('Aula atualizada'); fecharModal(); loadAulas();
+    }catch(e){ toast(e.message,true); }
+  });
+}
+
+// ---- editar produto loja ----
+async function editarLoja(id){
+  const list = await api('/api/loja');
+  const p = list.find(x=>x.id===id); if(!p) return;
+  abrirModal('Editar produto',`
+    <div class="field"><label>Nome</label><input id="me-nome" value="${p.nome||''}"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="field"><label>Preço</label><input id="me-preco" type="number" step="0.01" value="${p.preco||''}"></div>
+      <div class="field"><label>Estoque</label><input id="me-estoque" type="number" value="${p.estoque||''}"></div>
+    </div>
+    <div class="field"><label>Categoria</label><input id="me-cat" value="${p.cat||''}"></div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:12px"><input type="checkbox" id="me-ativo" style="width:auto"${p.ativo!==false?' checked':''}> Ativo</label>
+  `, async()=>{
+    try{
+      await api('/api/admin/loja/'+id,{method:'PATCH',body:JSON.stringify({nome:$('#me-nome').value,preco:+$('#me-preco').value,estoque:+$('#me-estoque').value,cat:$('#me-cat').value,ativo:$('#me-ativo').checked})});
+      toast('Produto atualizado'); fecharModal(); loadLoja();
+    }catch(e){ toast(e.message,true); }
+  });
+}
+
+// ---- editar patrocinador ----
+async function editarPatroc(id){
+  const list = await api('/api/admin/patrocinadores');
+  const p = list.find(x=>x.id===id); if(!p) return;
+  abrirModal('Editar patrocinador',`
+    <div class="field"><label>Marca</label><input id="me-nome" value="${p.marca||''}"></div>
+    <div class="field"><label>Tier / Cota</label><input id="me-tier" value="${p.cota||p.tier||''}"></div>
+    <div class="field"><label>Descrição</label><input id="me-desc" value="${p.descricao||''}"></div>
+    <div class="field"><label>URL</label><input id="me-url" value="${p.link||p.url||''}"></div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:12px"><input type="checkbox" id="me-ativo" style="width:auto"${p.ativo!==false?' checked':''}> Ativo</label>
+  `, async()=>{
+    try{
+      await api('/api/admin/patrocinador/'+id,{method:'PATCH',body:JSON.stringify({nome:$('#me-nome').value,tier:$('#me-tier').value,descricao:$('#me-desc').value,url:$('#me-url').value,ativo:$('#me-ativo').checked})});
+      toast('Patrocinador atualizado'); fecharModal(); loadPatroc();
+    }catch(e){ toast(e.message,true); }
+  });
+}
+
+// ---- editar reserva ----
+async function editarReserva(id){
+  const list = await api('/api/admin/reservas');
+  const r = list.find(x=>x.id===id); if(!r) return;
+  abrirModal('Editar reserva',`
+    <div class="field"><label>Status</label><select id="me-status">
+      <option value="pendente"${r.status==='pendente'?' selected':''}>pendente</option>
+      <option value="confirmada"${r.status==='confirmada'?' selected':''}>confirmada</option>
+      <option value="cancelada"${r.status==='cancelada'?' selected':''}>cancelada</option>
+    </select></div>
+    <div class="field"><label>Observação</label><input id="me-obs" value="${r.obs||''}"></div>
+  `, async()=>{
+    try{
+      await api('/api/admin/reserva/'+id,{method:'PATCH',body:JSON.stringify({status:$('#me-status').value,obs:$('#me-obs').value})});
+      toast('Reserva atualizada'); fecharModal(); loadReservas();
+    }catch(e){ toast(e.message,true); }
+  });
+}
+
+// ---- editar inscrição ----
+async function editarInscricao(id){
+  const list = await api('/api/admin/inscricoes');
+  const i = list.find(x=>x.id===id); if(!i) return;
+  abrirModal('Editar inscrição',`
+    <div class="field"><label>Status</label><select id="me-status">
+      <option value="pendente"${i.status==='pendente'?' selected':''}>pendente</option>
+      <option value="validada"${i.status==='validada'?' selected':''}>validada</option>
+      <option value="recusada"${i.status==='recusada'?' selected':''}>recusada</option>
+    </select></div>
+    <div class="field"><label>Categorias (vírgula)</label><input id="me-cats" value="${Array.isArray(i.categorias)?i.categorias.join(','):(i.categoria||'')}"></div>
+    <div class="field"><label>Observação</label><input id="me-obs" value="${i.obs||''}"></div>
+  `, async()=>{
+    try{
+      await api('/api/admin/inscricao/'+id,{method:'PATCH',body:JSON.stringify({status:$('#me-status').value,categorias:$('#me-cats').value.split(',').map(s=>s.trim()).filter(Boolean),obs:$('#me-obs').value})});
+      toast('Inscrição atualizada'); fecharModal(); loadInscricoes();
+    }catch(e){ toast(e.message,true); }
+  });
+}
+
+// ---- aba configurações ----
+let _cfgData = {};
+let _cfgCats = [];
+let _cfgCardapio = [];
+let _cfgQuadras = [];
+
+async function loadConfig(){
+  try{
+    const cfg = await api('/api/admin/config').catch(()=>({}));
+    _cfgData = cfg;
+    // Evento
+    const ev = cfg.evento||{};
+    $('#cfg-ev-nome').value = ev.nome||'';
+    $('#cfg-ev-local').value = ev.local||'';
+    $('#cfg-ev-inicio').value = ev.inicio||'';
+    $('#cfg-ev-fim').value = ev.fim||'';
+    $('#cfg-ev-cidade').value = ev.cidade||'';
+    // Bar
+    const bar = cfg.bar||{};
+    $('#cfg-bar-nome').value = bar.nome||'';
+    $('#cfg-bar-mesas').value = bar.mesas||'';
+    $('#cfg-bar-setores').value = (bar.setores||[]).join(',');
+    // Restaurante
+    const rest = cfg.restaurante||{};
+    $('#cfg-rest-nome').value = rest.nome||'';
+    $('#cfg-rest-mesas').value = rest.mesas||'';
+    $('#cfg-rest-setores').value = (rest.setores||[]).join(',');
+    // Pagamentos
+    const pg = cfg.pagamentos||{};
+    $('#cfg-pg-pix').checked = pg.pix!==false;
+    $('#cfg-pg-cartao').checked = pg.cartao!==false;
+    $('#cfg-pg-dinheiro').checked = pg.dinheiro!==false;
+    $('#cfg-pg-carteira').checked = pg.carteira!==false;
+    $('#cfg-pg-taxa').value = pg.taxaPlataforma||5;
+    // Fiscal
+    const fi = cfg.fiscal||{};
+    $('#cfg-fi-cnpj').value = fi.cnpj||'';
+    $('#cfg-fi-ie').value = fi.ie||'';
+    $('#cfg-fi-amb').value = fi.ambiente||'homologacao';
+    // Categorias
+    _cfgCats = (cfg.categorias||[]).slice();
+    renderCfgCats();
+    // Planos
+    renderCfgPlanos(cfg.socioPlanos||[]);
+  }catch(e){ toast('Erro ao carregar configurações: '+e.message,true); }
+
+  // Cardápio
+  try{
+    _cfgCardapio = await api('/api/admin/cardapio').catch(()=>[]);
+    renderCfgCardapio();
+  }catch(e){}
+
+  // Quadras
+  try{
+    _cfgQuadras = await api('/api/quadras').catch(()=>[]);
+    renderCfgQuadras();
+  }catch(e){}
+
+  // Ingressos
+  try{
+    const ing = (_cfgData.ingressoTipos||[]);
+    renderCfgIngressos(ing);
+  }catch(e){}
+}
+
+function renderCfgCats(){
+  $('#cfg-cats-lista').innerHTML = _cfgCats.map((c,i)=>`<span style="display:inline-flex;align-items:center;gap:6px;background:var(--deep2);border:1px solid var(--line);border-radius:100px;padding:4px 12px;font-size:13px">${c}<button style="background:none;border:none;cursor:pointer;color:#e89a8c;font-size:16px;line-height:1" onclick="removeCfgCat(${i})">×</button></span>`).join('');
+}
+
+function removeCfgCat(i){
+  _cfgCats.splice(i,1);
+  renderCfgCats();
+}
+
+$('#cfg-cats-add').onclick=()=>{
+  const v=$('#cfg-cats-nova').value.trim();
+  if(!v)return;
+  _cfgCats.push(v);
+  $('#cfg-cats-nova').value='';
+  renderCfgCats();
+};
+
+async function saveCfgCats(){
+  try{ await api('/api/admin/config',{method:'PATCH',body:JSON.stringify({categorias:_cfgCats})}); toast('Categorias salvas'); }
+  catch(e){ toast(e.message,true); }
+}
+
+function renderCfgCardapio(){
+  $('#cfg-cm-body').innerHTML = _cfgCardapio.map(item=>`<tr>
+    <td><b>${item.nome}</b></td><td>${item.categoria||item.cat||'—'}</td>
+    <td>R$ ${(+item.preco||0).toFixed(2)}</td><td>${item.setor||'—'}</td>
+    <td>${item.cozinha?'Sim':'Não'}</td>
+    <td><button class="btn ghost sm" onclick="editarCardapio(${item.id})">✏️</button> <button class="btn sm danger" onclick="deletarCardapio(${item.id})">Del</button></td>
+  </tr>`).join('')||'<tr><td colspan="6" class="muted" style="padding:18px">Cardápio vazio.</td></tr>';
+}
+
+async function editarCardapio(id){
+  const item = _cfgCardapio.find(x=>x.id===id); if(!item) return;
+  abrirModal('Editar item cardápio',`
+    <div class="field"><label>Nome</label><input id="me-nome" value="${item.nome||''}"></div>
+    <div class="field"><label>Categoria</label><input id="me-cat" value="${item.categoria||item.cat||''}"></div>
+    <div class="field"><label>Preço</label><input id="me-preco" type="number" step="0.01" value="${item.preco||''}"></div>
+    <div class="field"><label>Setor</label><input id="me-setor" value="${item.setor||''}"></div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:12px"><input type="checkbox" id="me-cozinha" style="width:auto"${item.cozinha?' checked':''}> Cozinha</label>
+  `, async()=>{
+    try{
+      await api('/api/admin/cardapio/'+id,{method:'PATCH',body:JSON.stringify({nome:$('#me-nome').value,cat:$('#me-cat').value,preco:+$('#me-preco').value,setor:$('#me-setor').value,cozinha:$('#me-cozinha').checked})});
+      toast('Item atualizado'); fecharModal(); _cfgCardapio=await api('/api/admin/cardapio').catch(()=>[]); renderCfgCardapio();
+    }catch(e){ toast(e.message,true); }
+  });
+}
+
+async function deletarCardapio(id){
+  if(!confirm('Excluir item do cardápio?'))return;
+  try{ await api('/api/admin/cardapio/'+id,{method:'DELETE'}); toast('Removido'); _cfgCardapio=await api('/api/admin/cardapio').catch(()=>[]); renderCfgCardapio(); }
+  catch(e){ toast(e.message,true); }
+}
+
+$('#cfg-cm-add').onclick=async()=>{
+  const nome=$('#cfg-cm-nome').value.trim(); if(!nome){toast('Informe o nome',true);return;}
+  try{
+    await api('/api/admin/cardapio',{method:'POST',body:JSON.stringify({nome,cat:$('#cfg-cm-cat').value,preco:+$('#cfg-cm-preco').value,setor:$('#cfg-cm-setor').value,cozinha:$('#cfg-cm-cozinha').checked})});
+    toast('Item adicionado'); $('#cfg-cm-nome').value='';$('#cfg-cm-preco').value='';
+    _cfgCardapio=await api('/api/admin/cardapio').catch(()=>[]); renderCfgCardapio();
+  }catch(e){ toast(e.message,true); }
+};
+
+function renderCfgQuadras(){
+  $('#cfg-qd-body').innerHTML = _cfgQuadras.map(q=>`<tr>
+    <td><b>${q.nome}</b></td><td>${q.piso||'—'}</td><td>${q.preco?('R$ '+q.preco+'/h'):'—'}</td>
+    <td><button class="btn ghost sm" onclick="editarQuadra(${q.id})">✏️</button></td>
+  </tr>`).join('')||'<tr><td colspan="4" class="muted" style="padding:18px">Nenhuma quadra.</td></tr>';
+}
+
+async function editarQuadra(id){
+  const q = _cfgQuadras.find(x=>x.id===id); if(!q) return;
+  abrirModal('Editar quadra',`
+    <div class="field"><label>Nome</label><input id="me-nome" value="${q.nome||''}"></div>
+    <div class="field"><label>Piso</label><input id="me-piso" value="${q.piso||''}"></div>
+    <div class="field"><label>Preço/hora</label><input id="me-preco" type="number" step="0.01" value="${q.preco||''}"></div>
+  `, async()=>{
+    try{
+      const updated = _cfgQuadras.map(x=>x.id===id?{...x,nome:$('#me-nome').value,piso:$('#me-piso').value,preco:+$('#me-preco').value}:x);
+      await api('/api/admin/config',{method:'PATCH',body:JSON.stringify({quadras:updated})});
+      toast('Quadra atualizada'); fecharModal(); _cfgQuadras=updated; renderCfgQuadras();
+    }catch(e){ toast(e.message,true); }
+  });
+}
+
+$('#cfg-qd-salvar').onclick=async()=>{
+  try{
+    const hor = JSON.parse($('#cfg-qd-horarios').value||'[]');
+    await api('/api/admin/config',{method:'PATCH',body:JSON.stringify({horarios:hor})});
+    toast('Horários salvos');
+  }catch(e){ toast('JSON inválido ou erro: '+e.message,true); }
+};
+
+function renderCfgIngressos(ing){
+  $('#cfg-ing-lista').innerHTML = ing.length ? ing.map((t,i)=>`
+    <div style="background:var(--deep2);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:10px">
+      <div class="cfg-grid">
+        <div class="field"><label>Nome</label><input data-ing="${i}" data-f="nome" value="${t.nome||''}"></div>
+        <div class="field"><label>Setor</label><input data-ing="${i}" data-f="setor" value="${t.setor||''}"></div>
+        <div class="field"><label>Lote 1 preço</label><input type="number" data-ing="${i}" data-f="lote1preco" value="${t.lote1preco||''}"></div>
+        <div class="field"><label>Lote 1 qtd</label><input type="number" data-ing="${i}" data-f="lote1qtd" value="${t.lote1qtd||''}"></div>
+        <div class="field"><label>Lote 1 virada</label><input type="date" data-ing="${i}" data-f="lote1virada" value="${t.lote1virada||''}"></div>
+        <div class="field"><label>Lote 2 preço</label><input type="number" data-ing="${i}" data-f="lote2preco" value="${t.lote2preco||''}"></div>
+        <div class="field"><label>Lote 2 qtd</label><input type="number" data-ing="${i}" data-f="lote2qtd" value="${t.lote2qtd||''}"></div>
+        <div class="field"><label>Lote 2 virada</label><input type="date" data-ing="${i}" data-f="lote2virada" value="${t.lote2virada||''}"></div>
+        <div class="field"><label>Lote 3 preço</label><input type="number" data-ing="${i}" data-f="lote3preco" value="${t.lote3preco||''}"></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:4px"><input type="checkbox" data-ing="${i}" data-f="ativo" style="width:auto"${t.ativo!==false?' checked':''}> Ativo</label>
+    </div>
+  `).join('') : '<p class="muted">Nenhum tipo de ingresso configurado.</p>';
+}
+
+$('#cfg-ing-salvar').onclick=async()=>{
+  const ing = (_cfgData.ingressoTipos||[]).map((_,i)=>{
+    const g=(f)=>{ const el=document.querySelector(`[data-ing="${i}"][data-f="${f}"]`); return el?(el.type==='checkbox'?el.checked:el.value):null; };
+    return {nome:g('nome'),setor:g('setor'),lote1preco:+g('lote1preco'),lote1qtd:+g('lote1qtd'),lote1virada:g('lote1virada'),lote2preco:+g('lote2preco'),lote2qtd:+g('lote2qtd'),lote2virada:g('lote2virada'),lote3preco:+g('lote3preco'),ativo:g('ativo')};
+  });
+  try{ await api('/api/admin/config',{method:'PATCH',body:JSON.stringify({ingressoTipos:ing})}); toast('Ingressos salvos'); }
+  catch(e){ toast(e.message,true); }
+};
+
+let _cfgPlanos = [];
+function renderCfgPlanos(planos){
+  _cfgPlanos = planos.slice();
+  $('#cfg-planos-lista').innerHTML = _cfgPlanos.map((p,i)=>`
+    <div style="display:flex;gap:10px;margin-bottom:8px;align-items:center">
+      <input placeholder="Nome" value="${p.nome||''}" oninput="_cfgPlanos[${i}].nome=this.value" style="flex:2">
+      <input type="number" placeholder="Valor/mês" value="${p.valor||''}" oninput="_cfgPlanos[${i}].valor=+this.value" style="flex:1">
+      <button class="btn sm danger" onclick="_cfgPlanos.splice(${i},1);renderCfgPlanos(_cfgPlanos)">×</button>
+    </div>
+  `).join('')||'<p class="muted">Nenhum plano.</p>';
+}
+
+$('#cfg-planos-add').onclick=()=>{ _cfgPlanos.push({nome:'',valor:0}); renderCfgPlanos(_cfgPlanos); };
+$('#cfg-planos-salvar').onclick=async()=>{
+  try{ await api('/api/admin/config',{method:'PATCH',body:JSON.stringify({socioPlanos:_cfgPlanos})}); toast('Planos salvos'); }
+  catch(e){ toast(e.message,true); }
+};
+
+// Salvar botões da aba config
+$('#cfg-ev-salvar').onclick=async()=>{
+  try{ await api('/api/admin/config',{method:'PATCH',body:JSON.stringify({evento:{nome:$('#cfg-ev-nome').value,inicio:$('#cfg-ev-inicio').value,fim:$('#cfg-ev-fim').value,local:$('#cfg-ev-local').value,cidade:$('#cfg-ev-cidade').value}})}); toast('Evento salvo'); }
+  catch(e){ toast(e.message,true); }
+};
+$('#cfg-bar-salvar').onclick=async()=>{
+  try{ await api('/api/admin/config',{method:'PATCH',body:JSON.stringify({bar:{nome:$('#cfg-bar-nome').value,mesas:+$('#cfg-bar-mesas').value,setores:$('#cfg-bar-setores').value.split(',').map(s=>s.trim()).filter(Boolean)}})}); toast('Bar salvo'); }
+  catch(e){ toast(e.message,true); }
+};
+$('#cfg-rest-salvar').onclick=async()=>{
+  try{ await api('/api/admin/config',{method:'PATCH',body:JSON.stringify({restaurante:{nome:$('#cfg-rest-nome').value,mesas:+$('#cfg-rest-mesas').value,setores:$('#cfg-rest-setores').value.split(',').map(s=>s.trim()).filter(Boolean)}})}); toast('Restaurante salvo'); }
+  catch(e){ toast(e.message,true); }
+};
+$('#cfg-pg-salvar').onclick=async()=>{
+  try{ await api('/api/admin/config',{method:'PATCH',body:JSON.stringify({pagamentos:{pix:$('#cfg-pg-pix').checked,cartao:$('#cfg-pg-cartao').checked,dinheiro:$('#cfg-pg-dinheiro').checked,carteira:$('#cfg-pg-carteira').checked,taxaPlataforma:+$('#cfg-pg-taxa').value}})}); toast('Pagamentos salvos'); }
+  catch(e){ toast(e.message,true); }
+};
+$('#cfg-fi-salvar').onclick=async()=>{
+  try{ await api('/api/admin/config',{method:'PATCH',body:JSON.stringify({fiscal:{cnpj:$('#cfg-fi-cnpj').value,ie:$('#cfg-fi-ie').value,ambiente:$('#cfg-fi-amb').value}})}); toast('Fiscal salvo'); }
+  catch(e){ toast(e.message,true); }
+};
 
 // boot
 if(TOKEN){

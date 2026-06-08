@@ -335,6 +335,21 @@ app.post('/api/admin/resultado/confirmar', auth, requireStaff, (req,res)=>{
   p.confirmado = true; p.confirmadoEm = new Date().toISOString(); save(); res.json({ ok:true });
 });
 
+// Anular/corrigir resultado — desfaz o avanço na chave
+app.post('/api/admin/resultado/anular', auth, (req,res)=>{
+  const { torneioId, faseNome, jogoId } = req.body||{};
+  const t=db().torneios.find(x=>x.id==torneioId);
+  if(!t) return res.status(404).json({error:'torneio não encontrado'});
+  const fase=t.chaves&&t.chaves[faseNome];
+  if(!fase) return res.status(404).json({error:'fase não encontrada'});
+  const jogo=fase.find(j=>j.id===jogoId||j.id==jogoId);
+  if(!jogo) return res.status(404).json({error:'jogo não encontrado'});
+  if(!jogo.resultado) return res.status(400).json({error:'jogo sem resultado para anular'});
+  jogo.resultado=null; jogo.vencedor=null; jogo.anulado=false;
+  auditoria(req.user,'ANULAR_RESULTADO',{torneioId,faseNome,jogoId});
+  save(); res.json({ok:true});
+});
+
 // Finalizar: aplica pontos ao ranking interno
 app.post('/api/admin/finalizar', auth, (req,res)=>{
   const { categoria } = req.body || {};
@@ -533,9 +548,8 @@ const openComandaMesa = num => db().comandas.find(c=>c.tipo==='fisica' && c.mesa
 
 app.get('/api/cardapio', (req,res)=>{
   const est = db().estoque||{};
-  res.json(CARDAPIO.map(p=>{
-    const e = est[p.id];
-    const qtd = e ? e.qtd : null; // null = sem controle de estoque
+  res.json(getCardapio().map(p=>{
+    const e = est[p.id]; const qtd = e ? e.qtd : null;
     return { ...p, estoque: qtd, indisponivel: qtd !== null && qtd <= 0 };
   }));
 });
@@ -604,7 +618,12 @@ app.post('/api/admin/comanda/:id/conta', auth, (req,res)=>{
 });
 app.post('/api/admin/comanda/:id/fechar', auth, (req,res)=>{
   const c=db().comandas.find(x=>x.id==req.params.id); if(!c) return res.status(404).json({error:'não encontrada'});
-  c.status='fechada'; c.pagamento=req.body.pagamento||'pix'; c.fechadaEm=new Date().toISOString(); c.totalPago=comandaTotal(c);
+  const total=Math.max(0, comandaTotal(c) - (c.desconto||0));
+  c.status='fechada';
+  c.pagamento=req.body.pagamento||'pix';
+  c.pagamentos=req.body.pagamentos||[{meio:c.pagamento,valor:total}];
+  c.fechadaEm=new Date().toISOString(); c.totalPago=total;
+  auditoria(req.user,'FECHAR_COMANDA',{comandaId:c.id,total,meios:c.pagamentos});
   save(); res.json({ ok:true, total:c.totalPago });
 });
 
@@ -644,6 +663,160 @@ app.post('/api/admin/kds/status', auth, (req,res)=>{
   c.itens[idx].status = status==='pronto'?'pronto':(status==='entregue'?'entregue':'em_preparo'); save();
   res.json({ ok:true });
 });
+// ── COMANDA AVANÇADA ─────────────────────────────────────────────────────────
+
+// PATCH item: editar qtd e/ou obs — repõe estoque se qtd diminuir
+app.patch('/api/comanda/:id/item/:idx', auth, (req,res)=>{
+  const c=db().comandas.find(x=>x.id==req.params.id && x.status==='aberta');
+  if(!c) return res.status(404).json({error:'comanda não encontrada/aberta'});
+  const idx=parseInt(req.params.idx);
+  if(!c.itens[idx]) return res.status(404).json({error:'item não encontrado'});
+  const it=c.itens[idx];
+  const novaQtd=req.body.qtd!=null ? Math.max(1,parseInt(req.body.qtd)) : it.qtd;
+  const diff=novaQtd - it.qtd; // positivo=aumentou, negativo=diminuiu
+  if(diff!==0){
+    const e=db().estoque;
+    if(diff>0 && e[it.produtoId]!==undefined && e[it.produtoId].qtd<diff)
+      return res.status(409).json({error:`Estoque insuficiente (disponível: ${e[it.produtoId].qtd})`});
+    if(e[it.produtoId]!==undefined) e[it.produtoId].qtd -= diff;
+    it.qtd=novaQtd;
+  }
+  if(req.body.obs!=null) it.obs=req.body.obs;
+  auditoria(req.user,'PATCH_ITEM_COMANDA',{comandaId:c.id,idx,qtd:it.qtd,obs:it.obs});
+  save();
+  res.json({ ...c, total:comandaTotal(c) });
+});
+
+// DELETE item: remover/cancelar item — repõe estoque
+app.delete('/api/comanda/:id/item/:idx', auth, (req,res)=>{
+  const c=db().comandas.find(x=>x.id==req.params.id && x.status==='aberta');
+  if(!c) return res.status(404).json({error:'comanda não encontrada/aberta'});
+  const idx=parseInt(req.params.idx);
+  if(!c.itens[idx]) return res.status(404).json({error:'item não encontrado'});
+  const it=c.itens[idx];
+  const e=db().estoque;
+  if(e[it.produtoId]!==undefined) e[it.produtoId].qtd += it.qtd;
+  auditoria(req.user,'DEL_ITEM_COMANDA',{comandaId:c.id,idx,item:it.nome,motivo:req.body.motivo||''});
+  c.itens.splice(idx,1);
+  save();
+  res.json({ ...c, total:comandaTotal(c) });
+});
+
+// POST transferir comanda para outra mesa
+app.post('/api/comanda/:id/transferir', auth, (req,res)=>{
+  const c=db().comandas.find(x=>x.id==req.params.id && x.status==='aberta');
+  if(!c) return res.status(404).json({error:'comanda não encontrada/aberta'});
+  const { mesaNum } = req.body||{};
+  if(!mesaNum) return res.status(400).json({error:'informe mesaNum'});
+  const num=parseInt(mesaNum);
+  if(num<1||num>MESAS_FISICAS) return res.status(400).json({error:'mesa inválida'});
+  const outra=openComandaMesa(num);
+  if(outra && outra.id!==c.id){
+    // merge: move itens para comanda existente
+    outra.itens.push(...c.itens);
+    c.status='transferida'; c.fechadaEm=new Date().toISOString();
+    auditoria(req.user,'TRANSFERIR_COMANDA',{de:c.id,para:outra.id});
+    save(); return res.json({ ...outra, total:comandaTotal(outra) });
+  }
+  const mesaAnterior=c.mesaNum;
+  c.mesaNum=num; c.nome='Mesa '+num; c.tipo='fisica';
+  auditoria(req.user,'MOVER_COMANDA',{de:mesaAnterior,para:num});
+  save();
+  res.json({ ...c, total:comandaTotal(c) });
+});
+
+// POST desconto/cortesia na comanda (valor ou %)
+app.post('/api/comanda/:id/desconto', auth, (req,res)=>{
+  const c=db().comandas.find(x=>x.id==req.params.id && x.status==='aberta');
+  if(!c) return res.status(404).json({error:'comanda não encontrada/aberta'});
+  const { tipo, valor, motivo } = req.body||{};
+  if(!tipo||!valor) return res.status(400).json({error:'informe tipo (pct|fixo) e valor'});
+  const total=comandaTotal(c);
+  const desconto = tipo==='pct' ? total*(Math.min(100,valor)/100) : Math.min(total,valor);
+  c.desconto = (c.desconto||0) + desconto;
+  c.descontoMotivo = motivo||'Cortesia';
+  auditoria(req.user,'DESCONTO_COMANDA',{comandaId:c.id,tipo,valor,desconto});
+  save();
+  res.json({ ...c, total:Math.max(0,total - c.desconto) });
+});
+
+// POST reabrir comanda fechada (admin)
+app.post('/api/admin/comanda/:id/reabrir', auth, (req,res)=>{
+  const c=db().comandas.find(x=>x.id==req.params.id && x.status==='fechada');
+  if(!c) return res.status(404).json({error:'comanda não encontrada/fechada'});
+  c.status='aberta'; c.fechadaEm=null; c.pagamento=null; c.totalPago=null; c.contaPedida=false;
+  auditoria(req.user,'REABRIR_COMANDA',{comandaId:c.id});
+  save();
+  res.json({ ...c, total:comandaTotal(c) });
+});
+
+// DELETE comanda (admin — cancelar sem fechar)
+app.delete('/api/admin/comanda/:id', auth, (req,res)=>{
+  const idx=db().comandas.findIndex(x=>x.id==req.params.id);
+  if(idx<0) return res.status(404).json({error:'comanda não encontrada'});
+  const c=db().comandas[idx];
+  // repor estoque de todos os itens
+  const e=db().estoque;
+  c.itens.forEach(it=>{ if(e[it.produtoId]!==undefined) e[it.produtoId].qtd+=it.qtd; });
+  auditoria(req.user,'CANCEL_COMANDA',{comandaId:c.id,motivo:req.body.motivo||''});
+  db().comandas.splice(idx,1);
+  save();
+  res.json({ok:true});
+});
+
+// ── CARDÁPIO CRUD ────────────────────────────────────────────────────────────
+function getCardapio(){ return db().cardapio && db().cardapio.length ? db().cardapio : CARDAPIO; }
+
+app.get('/api/admin/cardapio', auth, requireStaff, (req,res)=> res.json(getCardapio()));
+app.post('/api/admin/cardapio', auth, requireStaff, (req,res)=>{
+  if(!db().cardapio||!db().cardapio.length) db().cardapio=[...CARDAPIO];
+  const {nome,cat,preco,setor,cozinha} = req.body||{};
+  if(!nome||!cat||!preco) return res.status(400).json({error:'nome, cat e preco são obrigatórios'});
+  const id='p'+nextId();
+  db().cardapio.push({id,nome,cat,preco:+preco,setor:setor||'bar',cozinha:!!cozinha});
+  save(); res.json({ok:true,id});
+});
+app.patch('/api/admin/cardapio/:id', auth, requireStaff, (req,res)=>{
+  if(!db().cardapio||!db().cardapio.length) db().cardapio=[...CARDAPIO];
+  const p=db().cardapio.find(x=>x.id===req.params.id);
+  if(!p) return res.status(404).json({error:'produto não encontrado'});
+  const {nome,cat,preco,setor,cozinha,indisponivel} = req.body||{};
+  if(nome) p.nome=nome; if(cat) p.cat=cat; if(preco!=null) p.preco=+preco;
+  if(setor) p.setor=setor; if(cozinha!=null) p.cozinha=!!cozinha; if(indisponivel!=null) p.indisponivel=!!indisponivel;
+  save(); res.json({ok:true});
+});
+app.delete('/api/admin/cardapio/:id', auth, requireStaff, (req,res)=>{
+  if(!db().cardapio||!db().cardapio.length) db().cardapio=[...CARDAPIO];
+  const idx=db().cardapio.findIndex(x=>x.id===req.params.id);
+  if(idx<0) return res.status(404).json({error:'produto não encontrado'});
+  db().cardapio.splice(idx,1); save(); res.json({ok:true});
+});
+
+// ── CONFIGURAÇÕES DO EVENTO ───────────────────────────────────────────────────
+const CONFIG_DEFAULT = {
+  evento: { nome:'4ª Agro Open de Tênis', dataInicio:'2026-09-07', dataFim:'2026-09-13', local:'Tangará Tênis Clube', cidade:'Tangará da Serra/MT' },
+  bar: { nome:'Bar do torneio', mesasFisicas:12, setores:['bar','cozinha','chapa'] },
+  restaurante: { nome:'Restaurante', mesasFisicas:0, setores:['cozinha','chapa'] },
+  quadras: null, // null = usa QUADRAS hardcoded
+  horarios: null, // null = usa HORARIOS hardcoded
+  ingressoTipos: null, // null = usa INGRESSO_TIPOS hardcoded
+  categorias: null, // null = usa CATEGORIAS hardcoded
+  socioPlanos: null,
+  assinPlanos: null,
+  pagamentos: { meios:['pix','cartao','dinheiro','carteira'], taxaPct:5 },
+  fiscal: { cnpj:'', ie:'', ambiente:'homologacao' }
+};
+app.get('/api/admin/config', auth, (req,res)=>{
+  res.json({ ...CONFIG_DEFAULT, ...(db().config||{}) });
+});
+app.patch('/api/admin/config', auth, (req,res)=>{
+  if(!db().config) db().config={};
+  const allowed=['evento','bar','restaurante','quadras','horarios','ingressoTipos','categorias','socioPlanos','assinPlanos','pagamentos','fiscal'];
+  allowed.forEach(k=>{ if(req.body[k]!=null) db().config[k]={...(db().config[k]||{}), ...req.body[k]}; });
+  auditoria(req.user,'CONFIG_UPDATE',{keys:Object.keys(req.body)});
+  save(); res.json({ok:true});
+});
+
 app.get('/api/admin/caixa', auth, (req,res)=>{
   const fechadas=db().comandas.filter(c=>c.status==='fechada');
   const total=fechadas.reduce((s,c)=>s+(c.totalPago||0),0);

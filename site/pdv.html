@@ -9,43 +9,102 @@
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="app.css">
 <style>
-  .layout{display:grid;grid-template-columns:1.3fr .9fr;gap:20px;align-items:start}
-  @media(max-width:900px){.layout{grid-template-columns:1fr}}
-  .mapa{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-  @media(max-width:520px){.mapa{grid-template-columns:repeat(3,1fr)}}
-  .mesa{aspect-ratio:1;border-radius:14px;border:1px solid var(--line);background:var(--deep2);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:.15s;position:relative;padding:6px}
-  .mesa:hover{transform:translateY(-3px);border-color:var(--lime)}
-  .mesa .nn{font-family:'Archivo';font-weight:900;font-size:24px}
-  .mesa .tt{font-size:11px;color:var(--muted)}
-  .mesa .timer{font-size:10px;color:var(--muted2);margin-top:2px}
-  .mesa.livre{opacity:.7}
-  .mesa.ocupada{background:linear-gradient(165deg,#16401f,var(--deep2));border-color:var(--lime)}
-  .mesa.conta{background:linear-gradient(165deg,#3a2e14,var(--deep2));border-color:var(--gold)}
-  .mesa.cozinha::after{content:"🍳";position:absolute;top:6px;right:8px;font-size:14px}
-  .mesa.sel{outline:2px solid var(--lime)}
-  .vtag{display:inline-block;background:rgba(143,214,74,.12);color:var(--lime);border-radius:100px;padding:2px 8px;font-size:10px;font-weight:700;margin-top:4px}
-  .panel-c{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:16px;padding:20px;position:sticky;top:84px}
-  .cat{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:12px 0 6px}
-  .pchip{display:inline-flex;align-items:center;gap:6px;background:var(--deep2);border:1px solid var(--line);border-radius:100px;padding:7px 12px;font-size:13px;cursor:pointer;margin:0 6px 6px 0;transition:.15s}
-  .pchip:hover:not(.indisponivel){border-color:var(--lime)}
-  .pchip.indisponivel{opacity:.45;cursor:not-allowed;text-decoration:line-through}
-  .it{display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px;align-items:flex-start}
-  .it .q{color:var(--lime);font-weight:700}
-  .it .obs-txt{color:var(--muted2);font-size:11px;font-style:italic}
-  .tot{display:flex;justify-content:space-between;font-family:'Archivo';font-weight:900;font-size:22px;margin:12px 0}
-  .login-box{max-width:380px;margin:8vh auto}
-  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:14px;align-items:center}
-  .dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:middle}
-  .obs-pop{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin:6px 0 10px;display:none}
-  .obs-pop.show{display:flex;gap:8px;align-items:center}
-  .obs-pop input{flex:1;padding:8px 12px;background:var(--deep2);border:1px solid var(--line);border-radius:8px;color:inherit;font-size:13px}
-  .obs-pop input:focus{outline:none;border-color:var(--lime)}
-  .obs-pop .btn{white-space:nowrap}
-  .conta-btn{background:none;border:1px solid var(--gold);border-radius:6px;padding:2px 7px;font-size:11px;color:var(--gold);cursor:pointer;position:absolute;bottom:5px;right:5px}
-  .conta-btn:hover{background:rgba(201,166,86,.15)}
-  #nova-mesa-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:900}
-  #nova-mesa-modal.show{display:flex}
-  #nova-mesa-modal .card{max-width:380px;width:90%}
+/* ── layout ── */
+.layout{display:grid;grid-template-columns:1.3fr .9fr;gap:20px;align-items:start}
+@media(max-width:900px){.layout{grid-template-columns:1fr}}
+
+/* ── mapa ── */
+.mapa{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media(max-width:520px){.mapa{grid-template-columns:repeat(3,1fr)}}
+.mesa{aspect-ratio:1;border-radius:14px;border:1px solid var(--line);background:var(--deep2);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:.15s;position:relative;padding:6px}
+.mesa:hover{transform:translateY(-3px);border-color:var(--lime)}
+.mesa .nn{font-family:'Archivo';font-weight:900;font-size:24px}
+.mesa .tt{font-size:11px;color:var(--muted)}
+.mesa .timer{font-size:10px;color:var(--muted2);margin-top:2px}
+.mesa.livre{opacity:.7}
+.mesa.ocupada{background:linear-gradient(165deg,#16401f,var(--deep2));border-color:var(--lime)}
+.mesa.conta{background:linear-gradient(165deg,#3a2e14,var(--deep2));border-color:var(--gold)}
+.mesa.cozinha::after{content:"🍳";position:absolute;top:6px;right:8px;font-size:14px}
+.mesa.sel{outline:2px solid var(--lime)}
+.vtag{display:inline-block;background:rgba(143,214,74,.12);color:var(--lime);border-radius:100px;padding:2px 8px;font-size:10px;font-weight:700;margin-top:4px}
+
+/* ── painel comanda ── */
+.panel-c{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:16px;padding:20px;position:sticky;top:84px}
+
+/* ── cardápio ── */
+.cat-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.cat-chip{padding:5px 12px;border-radius:100px;border:1px solid var(--line);background:var(--deep2);font-size:12px;cursor:pointer;transition:.15s}
+.cat-chip.active{background:var(--green);border-color:var(--lime);color:#fff;font-weight:700}
+.cat{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:12px 0 6px}
+.pchip{display:inline-flex;align-items:center;gap:6px;background:var(--deep2);border:1px solid var(--line);border-radius:100px;padding:7px 12px;font-size:13px;cursor:pointer;margin:0 6px 6px 0;transition:.15s}
+.pchip:hover:not(.indisponivel){border-color:var(--lime)}
+.pchip.indisponivel{opacity:.45;cursor:not-allowed;text-decoration:line-through}
+.obs-pop{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin:6px 0 10px;display:none}
+.obs-pop.show{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.obs-pop input{flex:1;min-width:120px;padding:8px 12px;background:var(--deep2);border:1px solid var(--line);border-radius:8px;color:inherit;font-size:13px}
+.obs-pop input:focus{outline:none;border-color:var(--lime)}
+
+/* ── itens da comanda ── */
+.it{display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.it-info{flex:1;min-width:0}
+.it-nome{font-weight:600}
+.it-obs{color:var(--muted2);font-size:11px;font-style:italic;cursor:pointer;display:inline-block}
+.it-obs:hover{color:var(--lime);text-decoration:underline}
+.obs-edit{display:none;gap:6px;margin-top:4px}
+.obs-edit.show{display:flex}
+.obs-edit input{flex:1;padding:4px 8px;background:var(--deep2);border:1px solid var(--line);border-radius:6px;font-size:12px;color:inherit}
+.obs-edit input:focus{outline:none;border-color:var(--lime)}
+.obs-edit button{padding:4px 8px;font-size:12px}
+.it-qtd{display:flex;align-items:center;gap:4px}
+.qtd-btn{width:24px;height:24px;border-radius:6px;border:1px solid var(--line);background:var(--deep2);color:inherit;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1}
+.qtd-btn:hover{border-color:var(--lime);background:rgba(95,179,53,.15)}
+.qtd-num{font-weight:700;color:var(--lime);min-width:18px;text-align:center}
+.it-del{background:none;border:none;cursor:pointer;font-size:16px;color:var(--muted2);padding:2px 4px;border-radius:4px;transition:.15s}
+.it-del:hover{color:#e74c3c;background:rgba(231,76,60,.12)}
+.it-price{font-size:13px;color:var(--cream);white-space:nowrap;padding-top:2px}
+.kit-badge{font-size:10px;margin-left:4px}
+
+/* ── linha de desconto ── */
+.desconto-row{display:flex;justify-content:space-between;font-size:14px;color:#e74c3c;margin:6px 0 2px}
+.tot{display:flex;justify-content:space-between;font-family:'Archivo';font-weight:900;font-size:22px;margin:12px 0}
+
+/* ── botões de ação ── */
+.action-btns{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.action-btns .btn{font-size:12px;padding:7px 11px}
+
+/* ── fechar conta ── */
+.fechar-wrap{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.fechar-wrap select{flex:1;min-width:100px}
+
+/* ── login ── */
+.login-box{max-width:380px;margin:8vh auto}
+
+/* ── legenda ── */
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:14px;align-items:center}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:middle}
+
+/* ── conta btn no mapa ── */
+.conta-btn{background:none;border:1px solid var(--gold);border-radius:6px;padding:2px 7px;font-size:11px;color:var(--gold);cursor:pointer;position:absolute;bottom:5px;right:5px}
+.conta-btn:hover{background:rgba(201,166,86,.15)}
+
+/* ── modais ── */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;z-index:900;padding:16px}
+.modal-bg.show{display:flex}
+.modal-box{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:24px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto}
+.modal-box h3{font-size:18px;margin:0 0 16px}
+.modal-row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.modal-row .btn{flex:1;justify-content:center}
+.meio-pag-row{display:flex;gap:8px;align-items:center;margin:6px 0}
+.meio-pag-row select{flex:1}
+.meio-pag-row input{width:90px;padding:8px 10px;background:var(--deep2);border:1px solid var(--line);border-radius:8px;color:inherit;font-size:13px}
+.meio-pag-row input:focus{outline:none;border-color:var(--lime)}
+.add-meio-btn{background:none;border:1px dashed var(--line);border-radius:6px;padding:6px 12px;color:var(--muted);cursor:pointer;font-size:13px;width:100%;margin-top:6px}
+.add-meio-btn:hover{border-color:var(--lime);color:var(--lime)}
+.dividir-info{background:var(--deep2);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--muted);margin-bottom:10px}
+.dividir-info b{color:var(--cream)}
+.saldo-row{font-size:13px;margin-top:8px}
+.saldo-pos{color:var(--lime)}
+.saldo-neg{color:#e74c3c}
 </style>
 </head>
 <body>
@@ -56,14 +115,18 @@
   </div>
 </header>
 
+<!-- LOGIN -->
 <div id="login" class="wrap">
-  <div class="card login-box"><div class="kick">PDV — acesso</div><h2 style="font-size:24px;margin:8px 0 16px">Entrar</h2>
+  <div class="card login-box">
+    <div class="kick">PDV — acesso</div>
+    <h2 style="font-size:24px;margin:8px 0 16px">Entrar</h2>
     <div class="field"><label>Usuário</label><input id="l-user" placeholder="admin"></div>
     <div class="field"><label>Senha</label><input id="l-pass" type="password" placeholder="••••••"></div>
     <button class="btn" id="l-btn" style="width:100%;justify-content:center">Entrar</button>
   </div>
 </div>
 
+<!-- APP -->
 <div id="app" class="wrap hidden" style="padding-bottom:40px">
   <div class="hero" style="padding:26px 0 10px"><div class="kick">Ponto de venda</div><h1>Mapa de <span class="lime">mesas</span>.</h1></div>
   <div id="caixa" class="legend"></div>
@@ -87,166 +150,718 @@
   </div>
 </div>
 
-<div id="nova-mesa-modal">
-  <div class="card">
-    <h3 style="font-size:18px;margin-bottom:14px">Nova mesa virtual</h3>
+<!-- MODAL: NOVA MESA VIRTUAL -->
+<div class="modal-bg" id="nova-mesa-modal">
+  <div class="modal-box">
+    <h3>Nova mesa virtual</h3>
     <div class="field"><label>Identificação (ex: Piscina 1, Camarote VIP)</label><input id="nm-nome" placeholder="Ex: Área VIP"></div>
     <div class="field"><label>Referência (opcional)</label><input id="nm-ref" placeholder="Ex: Próximo ao tênis"></div>
-    <div style="display:flex;gap:10px;margin-top:6px">
+    <div class="modal-row">
       <button class="btn" id="nm-ok">Criar mesa</button>
       <button class="btn ghost" id="nm-cancel">Cancelar</button>
     </div>
   </div>
 </div>
 
-<footer class="app" style="display:flex;align-items:center;flex-wrap:wrap;gap:10px">AGRO OPEN · PDV integrado · comanda, cozinha (KDS) e caixa · powered by <b class="lime">SetPoint</b> <span style="display:inline-flex;align-items:center;gap:8px;margin-left:auto;padding-left:18px;border-left:1px solid rgba(255,255,255,.12)"><img src="img/logo-ttc-sm.png" alt="TTC" style="height:28px;width:auto;background:#fff;border-radius:5px;padding:2px 5px"><span style="font-size:11px;color:var(--muted)">Realização<br>Tangará Tênis Clube</span></span></footer>
+<!-- MODAL: TRANSFERIR MESA -->
+<div class="modal-bg" id="transf-modal">
+  <div class="modal-box">
+    <h3>Transferir mesa</h3>
+    <p class="muted" style="font-size:13px;margin-bottom:12px">Mova a comanda atual para outra mesa física.</p>
+    <div class="field">
+      <label>Número da mesa destino (1–12)</label>
+      <input id="transf-num" type="number" min="1" max="12" placeholder="Ex: 5" style="width:100%;padding:10px 12px;background:var(--deep2);border:1px solid var(--line);border-radius:8px;color:inherit;font-size:15px">
+    </div>
+    <div class="modal-row">
+      <button class="btn" id="transf-ok">Transferir</button>
+      <button class="btn ghost" id="transf-cancel">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: DESCONTO / CORTESIA -->
+<div class="modal-bg" id="desc-modal">
+  <div class="modal-box">
+    <h3>Desconto / Cortesia</h3>
+    <div class="field">
+      <label>Tipo</label>
+      <select id="desc-tipo" style="width:100%">
+        <option value="pct">Percentual (%)</option>
+        <option value="fixo">Valor fixo (R$)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label id="desc-val-lbl">Valor (%)</label>
+      <input id="desc-val" type="number" min="0" step="0.01" placeholder="Ex: 10" style="width:100%;padding:10px 12px;background:var(--deep2);border:1px solid var(--line);border-radius:8px;color:inherit;font-size:15px">
+    </div>
+    <div class="field">
+      <label>Motivo</label>
+      <input id="desc-motivo" placeholder="Ex: Cortesia gerência" style="width:100%;padding:10px 12px;background:var(--deep2);border:1px solid var(--line);border-radius:8px;color:inherit;font-size:14px">
+    </div>
+    <div class="modal-row">
+      <button class="btn" id="desc-ok">Aplicar desconto</button>
+      <button class="btn ghost" id="desc-cancel">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: DIVIDIR CONTA -->
+<div class="modal-bg" id="div-modal">
+  <div class="modal-box">
+    <h3>Dividir / Fechar conta</h3>
+    <div class="dividir-info" id="div-info"></div>
+    <div style="margin-bottom:10px">
+      <label style="font-size:13px;color:var(--muted)">Dividir em partes iguais:</label>
+      <div style="display:flex;gap:8px;margin-top:6px;align-items:center">
+        <input id="div-partes" type="number" min="1" max="20" value="1" style="width:70px;padding:8px 10px;background:var(--deep2);border:1px solid var(--line);border-radius:8px;color:inherit;font-size:14px">
+        <button class="btn ghost sm" id="div-aplicar">Dividir igualmente</button>
+      </div>
+    </div>
+    <div id="div-meios"></div>
+    <button class="add-meio-btn" id="div-add-meio">＋ Adicionar forma de pagamento</button>
+    <div class="saldo-row" id="div-saldo"></div>
+    <div class="modal-row">
+      <button class="btn" id="div-ok">Fechar conta</button>
+      <button class="btn ghost" id="div-cancel">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: CANCELAR COMANDA -->
+<div class="modal-bg" id="cancel-modal">
+  <div class="modal-box">
+    <h3>Cancelar / Excluir comanda</h3>
+    <p class="muted" style="font-size:13px;margin-bottom:12px">Esta ação é irreversível. Informe o motivo do cancelamento.</p>
+    <div class="field">
+      <label>Motivo</label>
+      <input id="cancel-motivo" placeholder="Ex: Desistência do cliente" style="width:100%;padding:10px 12px;background:var(--deep2);border:1px solid var(--line);border-radius:8px;color:inherit;font-size:14px">
+    </div>
+    <div class="modal-row">
+      <button class="btn" id="cancel-ok" style="background:#c0392b;border-color:#c0392b">Cancelar comanda</button>
+      <button class="btn ghost" id="cancel-cancel">Voltar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: REMOVER ITEM (confirmação) -->
+<div class="modal-bg" id="del-item-modal">
+  <div class="modal-box">
+    <h3>Remover item</h3>
+    <p id="del-item-desc" class="muted" style="font-size:13px;margin-bottom:12px"></p>
+    <div class="field">
+      <label>Motivo (opcional)</label>
+      <input id="del-item-motivo" placeholder="Ex: Pedido errado" style="width:100%;padding:10px 12px;background:var(--deep2);border:1px solid var(--line);border-radius:8px;color:inherit;font-size:14px">
+    </div>
+    <div class="modal-row">
+      <button class="btn" id="del-item-ok" style="background:#c0392b;border-color:#c0392b">Remover</button>
+      <button class="btn ghost" id="del-item-cancel">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<footer class="app" style="display:flex;align-items:center;flex-wrap:wrap;gap:10px">
+  AGRO OPEN · PDV integrado · comanda, cozinha (KDS) e caixa · powered by <b class="lime">SetPoint</b>
+  <span style="display:inline-flex;align-items:center;gap:8px;margin-left:auto;padding-left:18px;border-left:1px solid rgba(255,255,255,.12)">
+    <img src="img/logo-ttc-sm.png" alt="TTC" style="height:28px;width:auto;background:#fff;border-radius:5px;padding:2px 5px">
+    <span style="font-size:11px;color:var(--muted)">Realização<br>Tangará Tênis Clube</span>
+  </span>
+</footer>
 <div class="toast" id="toast"></div>
 
 <script>
-const $=s=>document.querySelector(s);
-let TOKEN=localStorage.getItem('ao_admin_token')||'', CARDAPIO=[], cur=null, pendingProd=null;
-const toast=(m,e)=>{const t=$('#toast');t.textContent=m;t.className='toast show'+(e?' err':'');setTimeout(()=>t.className='toast',2200);};
-async function api(p,o={}){const r=await fetch(p,{...o,headers:{'Content-Type':'application/json',...(TOKEN?{Authorization:'Bearer '+TOKEN}:{}),...(o.headers||{})}});if(r.status===401){logout();throw new Error('sessão');}const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'erro');return d;}
-function show(on){$('#login').classList.toggle('hidden',on);$('#app').classList.toggle('hidden',!on);$('#logout').classList.toggle('hidden',!on);}
-function logout(){TOKEN='';localStorage.removeItem('ao_admin_token');show(false);}
-$('#logout').onclick=logout;
-$('#l-btn').onclick=async()=>{try{const d=await api('/api/admin/login',{method:'POST',body:JSON.stringify({user:$('#l-user').value,pass:$('#l-pass').value})});TOKEN=d.token;localStorage.setItem('ao_admin_token',TOKEN);show(true);boot();}catch(e){toast(e.message,true);}};
+'use strict';
+const $ = s => document.querySelector(s);
+let TOKEN = localStorage.getItem('ao_admin_token') || '';
+let CARDAPIO = [];
+let cur = null;
+let pendingProd = null;
+let catFilter = null;
+let delItemIdx = null;
 
-async function boot(){ CARDAPIO=await api('/api/cardapio'); loadMapa(); caixa(); }
-$('#reload').onclick=()=>{loadMapa();caixa();};
+// ── utilitários ──
+const toast = (m, e) => {
+  const t = $('#toast');
+  t.textContent = m;
+  t.className = 'toast show' + (e ? ' err' : '');
+  setTimeout(() => t.className = 'toast', 2500);
+};
 
-async function caixa(){
-  try{const d=await api('/api/admin/caixa');$('#caixa').innerHTML=`<span>Caixa do dia: <b style="color:var(--lime)">R$ ${d.faturamento.toFixed(2).replace('.',',')}</b></span><span>${d.comandasFechadas} fechadas</span><span>${d.abertas} abertas</span>`;}catch(e){}
+async function api(p, o = {}) {
+  const r = await fetch(p, {
+    ...o,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(TOKEN ? { Authorization: 'Bearer ' + TOKEN } : {}),
+      ...(o.headers || {})
+    }
+  });
+  if (r.status === 401) { logout(); throw new Error('Sessão expirada. Faça login novamente.'); }
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || 'Erro na requisição');
+  return d;
 }
 
-function tempoAberta(abertoEm){
-  if(!abertoEm) return '';
-  const mins=Math.floor((Date.now()-new Date(abertoEm))/60000);
-  if(mins<1) return '<1min';
-  if(mins<60) return mins+'min';
-  return Math.floor(mins/60)+'h '+(mins%60)+'min';
+function show(on) {
+  $('#login').classList.toggle('hidden', on);
+  $('#app').classList.toggle('hidden', !on);
+  $('#logout').classList.toggle('hidden', !on);
+}
+function logout() {
+  TOKEN = '';
+  localStorage.removeItem('ao_admin_token');
+  show(false);
+}
+$('#logout').onclick = logout;
+
+$('#l-btn').onclick = async () => {
+  try {
+    const d = await api('/api/admin/login', {
+      method: 'POST',
+      body: JSON.stringify({ user: $('#l-user').value, pass: $('#l-pass').value })
+    });
+    TOKEN = d.token;
+    localStorage.setItem('ao_admin_token', TOKEN);
+    show(true);
+    boot();
+  } catch (e) { toast(e.message, true); }
+};
+$('#l-pass').addEventListener('keydown', e => { if (e.key === 'Enter') $('#l-btn').click(); });
+
+// ── boot ──
+async function boot() {
+  CARDAPIO = await api('/api/cardapio');
+  loadMapa();
+  caixa();
+}
+$('#reload').onclick = () => { loadMapa(); caixa(); if (cur) reloadCur(); };
+
+async function caixa() {
+  try {
+    const d = await api('/api/admin/caixa');
+    $('#caixa').innerHTML = `
+      <span>Caixa do dia: <b style="color:var(--lime)">R$ ${d.faturamento.toFixed(2).replace('.', ',')}</b></span>
+      <span>${d.comandasFechadas} fechadas</span>
+      <span>${d.abertas} abertas</span>`;
+  } catch (e) {}
 }
 
-async function loadMapa(){
-  const d=await api('/api/mesas');
-  $('#mapa').innerHTML=d.fisicas.map(m=>`
-    <div class="mesa ${m.status} ${m.aguardandoCozinha?'cozinha':''} ${cur&&cur.mesaNum===m.num&&cur.tipo==='fisica'?'sel':''}" data-num="${m.num}">
+async function reloadCur() {
+  if (!cur) return;
+  try { cur = await api('/api/comanda/' + cur.id); renderComanda(); } catch (e) {}
+}
+
+// ── cronômetro ──
+function tempoAberta(abertoEm) {
+  if (!abertoEm) return '';
+  const mins = Math.floor((Date.now() - new Date(abertoEm)) / 60000);
+  if (mins < 1) return '<1min';
+  if (mins < 60) return mins + 'min';
+  return Math.floor(mins / 60) + 'h ' + (mins % 60) + 'min';
+}
+
+// ── mapa de mesas ──
+async function loadMapa() {
+  const d = await api('/api/mesas');
+  $('#mapa').innerHTML = d.fisicas.map(m => `
+    <div class="mesa ${m.status} ${m.aguardandoCozinha ? 'cozinha' : ''} ${cur && cur.mesaNum === m.num && cur.tipo === 'fisica' ? 'sel' : ''}" data-num="${m.num}">
       <div class="nn">${m.num}</div>
-      <div class="tt">${m.status==='livre'?'livre':'R$ '+m.total.toFixed(0)}</div>
-      ${m.status!=='livre'?`<div class="timer">${tempoAberta(m.abertoEm)}</div>`:''}
-      ${m.status==='ocupada'?`<button class="conta-btn" data-cid="${m.comandaId}" title="Pedir conta">💳</button>`:''}
+      <div class="tt">${m.status === 'livre' ? 'livre' : 'R$ ' + m.total.toFixed(0)}</div>
+      ${m.status !== 'livre' ? `<div class="timer">${tempoAberta(m.abertoEm)}</div>` : ''}
+      ${m.status === 'ocupada' ? `<button class="conta-btn" data-cid="${m.comandaId}" title="Pedir conta">💳</button>` : ''}
     </div>`).join('');
-  $('#virtuais').innerHTML=d.virtuais.length?d.virtuais.map(v=>`
-    <div class="mesa ${v.status} ${v.aguardandoCozinha?'cozinha':''}" data-cid="${v.comandaId}" style="aspect-ratio:auto;padding:14px">
+
+  $('#virtuais').innerHTML = d.virtuais.length ? d.virtuais.map(v => `
+    <div class="mesa ${v.status} ${v.aguardandoCozinha ? 'cozinha' : ''}" data-cid="${v.comandaId}" style="aspect-ratio:auto;padding:14px">
       <div class="tt" style="font-weight:700;color:var(--cream)">${v.nome}</div>
       <div class="tt">R$ ${v.total.toFixed(0)}</div>
       <div class="timer">${tempoAberta(v.abertoEm)}</div>
-      <span class="vtag">virtual${v.local&&v.local.lat?' · GPS':''}</span>
-      ${v.status==='ocupada'?`<button class="conta-btn" data-cid="${v.comandaId}" title="Pedir conta">💳</button>`:''}
-    </div>`).join(''):'<p class="muted" style="grid-column:1/-1;font-size:13px">Nenhuma mesa virtual ativa.</p>';
+      <span class="vtag">virtual${v.local && v.local.lat ? ' · GPS' : ''}</span>
+      ${v.status === 'ocupada' ? `<button class="conta-btn" data-cid="${v.comandaId}" title="Pedir conta">💳</button>` : ''}
+    </div>`).join('')
+    : '<p class="muted" style="grid-column:1/-1;font-size:13px">Nenhuma mesa virtual ativa.</p>';
 
-  // pedir conta buttons
-  document.querySelectorAll('.conta-btn').forEach(btn=>btn.onclick=async(e)=>{
+  document.querySelectorAll('.conta-btn').forEach(btn => btn.onclick = async (e) => {
     e.stopPropagation();
-    try{ await api('/api/admin/comanda/'+btn.dataset.cid+'/conta',{method:'POST'}); toast('Conta pedida!'); loadMapa(); }
-    catch(err){ toast(err.message||'Erro ao pedir conta',true); }
+    try {
+      await api('/api/admin/comanda/' + btn.dataset.cid + '/conta', { method: 'POST' });
+      toast('Conta pedida!'); loadMapa();
+    } catch (err) { toast(err.message || 'Erro ao pedir conta', true); }
   });
 }
 
-$('#mapa').addEventListener('click',e=>{
-  const btn=e.target.closest('.conta-btn');
-  if(btn) return;
-  const m=e.target.closest('.mesa');
-  if(m) abrir({mesaNum:+m.dataset.num,tipo:'fisica'});
+$('#mapa').addEventListener('click', e => {
+  if (e.target.closest('.conta-btn')) return;
+  const m = e.target.closest('.mesa');
+  if (m) abrirMesa(+m.dataset.num);
 });
-$('#virtuais').addEventListener('click',e=>{
-  const btn=e.target.closest('.conta-btn');
-  if(btn) return;
-  const m=e.target.closest('.mesa');
-  if(m) abrirComanda(+m.dataset.cid);
+$('#virtuais').addEventListener('click', e => {
+  if (e.target.closest('.conta-btn')) return;
+  const m = e.target.closest('.mesa');
+  if (m) abrirComanda(+m.dataset.cid);
 });
 
-async function abrir({mesaNum}){ const c=await api('/api/comanda/abrir',{method:'POST',body:JSON.stringify({mesaNum})}); cur=c; renderComanda(); loadMapa(); }
-async function abrirComanda(id){ cur=await api('/api/comanda/'+id); renderComanda(); }
+async function abrirMesa(mesaNum) {
+  const c = await api('/api/comanda/abrir', { method: 'POST', body: JSON.stringify({ mesaNum }) });
+  cur = c; renderComanda(); loadMapa();
+}
+async function abrirComanda(id) {
+  cur = await api('/api/comanda/' + id); renderComanda();
+}
 
-function renderComanda(){
-  if(!cur) return;
-  const cats=[...new Set(CARDAPIO.map(p=>p.cat))];
-  const menu=cats.map(cat=>`<div class="cat">${cat}</div>`+
-    CARDAPIO.filter(p=>p.cat===cat).map(p=>`<span class="pchip ${p.indisponivel?'indisponivel':''}" data-p="${p.id}" data-nome="${p.nome}">${p.nome} · R$${p.preco}${p.cozinha?' 🍳':''}</span>`).join('')
+// ── renderizar comanda ──
+function renderComanda() {
+  if (!cur) return;
+  const cats = [...new Set(CARDAPIO.map(p => p.cat))];
+
+  // filtro de categorias
+  const catChips = `<div class="cat-chips">
+    <span class="cat-chip${catFilter === null ? ' active' : ''}" data-cat="__all">Todos</span>
+    ${cats.map(c => `<span class="cat-chip${catFilter === c ? ' active' : ''}" data-cat="${c}">${c}</span>`).join('')}
+  </div>`;
+
+  const filteredCats = catFilter ? cats.filter(c => c === catFilter) : cats;
+  const menu = filteredCats.map(cat => `<div class="cat">${cat}</div>` +
+    CARDAPIO.filter(p => p.cat === cat).map(p =>
+      `<span class="pchip${p.indisponivel ? ' indisponivel' : ''}" data-p="${p.id}" data-nome="${p.nome}">${p.nome} · R$${p.preco}${p.cozinha ? ' 🍳' : ''}</span>`
+    ).join('')
   ).join('');
-  const itens=cur.itens.length?cur.itens.map(i=>`
-    <div class="it">
-      <div><span class="q">${i.qtd}×</span> ${i.nome}${i.obs?`<br><span class="obs-txt">${i.obs}</span>`:''}</div>
-      <span>R$ ${(i.preco*i.qtd).toFixed(0)} ${i.cozinha?(i.status==='pronto'?'✅':'🍳'):''}</span>
-    </div>`).join('')
-    :'<p class="muted" style="font-size:13px">Sem itens. Toque no cardápio para adicionar.</p>';
 
-  $('#comanda').innerHTML=`
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <h3 style="font-size:20px">${cur.nome}</h3>
-      <span class="tag ${cur.tipo==='virtual'?'gold':''}">${cur.tipo==='virtual'?'virtual':'mesa '+cur.mesaNum}</span>
+  // itens da comanda
+  let itensHtml = '';
+  if (cur.itens && cur.itens.length) {
+    itensHtml = cur.itens.map((it, idx) => `
+      <div class="it" data-idx="${idx}">
+        <div class="it-info">
+          <div class="it-nome">${it.nome}${it.cozinha ? `<span class="kit-badge">${it.status === 'pronto' ? '✅' : '🍳'}</span>` : ''}</div>
+          ${it.obs
+            ? `<span class="it-obs" data-idx="${idx}" title="Clique para editar">${it.obs}</span>`
+            : `<span class="it-obs add-obs" data-idx="${idx}" title="Adicionar observação" style="color:var(--muted)">+ obs</span>`
+          }
+          <div class="obs-edit" id="obs-edit-${idx}">
+            <input type="text" class="obs-edit-input" value="${(it.obs || '').replace(/"/g, '&quot;')}" maxlength="80" placeholder="Observação...">
+            <button class="btn sm obs-edit-ok" data-idx="${idx}">✓</button>
+            <button class="btn ghost sm obs-edit-x" data-idx="${idx}">✕</button>
+          </div>
+        </div>
+        <div class="it-qtd">
+          <button class="qtd-btn qtd-menos" data-idx="${idx}">−</button>
+          <span class="qtd-num">${it.qtd}</span>
+          <button class="qtd-btn qtd-mais" data-idx="${idx}">+</button>
+        </div>
+        <div class="it-price">R$ ${(it.preco * it.qtd).toFixed(2).replace('.', ',')}</div>
+        <button class="it-del" data-idx="${idx}" title="Remover item">🗑️</button>
+      </div>`).join('');
+  } else {
+    itensHtml = '<p class="muted" style="font-size:13px">Sem itens. Toque no cardápio para adicionar.</p>';
+  }
+
+  // desconto
+  let descontoHtml = '';
+  if (cur.desconto && cur.desconto.valor > 0) {
+    descontoHtml = `<div class="desconto-row">
+      <span>Desconto${cur.desconto.motivo ? ' — ' + cur.desconto.motivo : ''}</span>
+      <span>− R$ ${cur.desconto.valor.toFixed(2).replace('.', ',')}</span>
+    </div>`;
+  }
+
+  // status da comanda (fechada?)
+  const isFechada = cur.status === 'fechada';
+  const actionBtns = `
+    <div class="action-btns">
+      ${!isFechada ? `<button class="btn ghost sm" id="act-transf" title="Transferir para outra mesa">↔ Transferir</button>` : ''}
+      ${!isFechada ? `<button class="btn ghost sm" id="act-desc">🏷️ Desconto</button>` : ''}
+      ${!isFechada ? `<button class="btn ghost sm" id="act-div">💰 Dividir conta</button>` : ''}
+      <button class="btn ghost sm" id="act-reabrir" style="display:${isFechada ? 'inline-flex' : 'none'}">🔓 Reabrir</button>
+      ${!isFechada ? `<button class="btn ghost sm" id="act-cancel" style="border-color:#c0392b;color:#e74c3c">✕ Cancelar mesa</button>` : ''}
+    </div>`;
+
+  const fecharWrap = !isFechada ? `
+    <div class="fechar-wrap">
+      <select id="pg">
+        <option value="pix">Pix</option>
+        <option value="cartao">Cartão</option>
+        <option value="dinheiro">Dinheiro</option>
+        <option value="carteira">Carteira</option>
+      </select>
+      <button class="btn" id="fechar">Fechar conta</button>
+    </div>` : `<div style="text-align:center;padding:10px;color:var(--muted);font-size:13px">Comanda fechada.</div>`;
+
+  $('#comanda').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <h3 style="font-size:20px;margin:0">${cur.nome}</h3>
+      <span class="tag ${cur.tipo === 'virtual' ? 'gold' : ''}">${cur.tipo === 'virtual' ? 'virtual' : 'mesa ' + cur.mesaNum}</span>
     </div>
-    ${cur.local&&cur.local.lat?`<a class="muted" style="font-size:12px" target="_blank" href="https://maps.google.com/?q=${cur.local.lat},${cur.local.lng}">📍 ver no mapa (${cur.local.ref||'GPS'})</a>`:''}
-    <div style="margin:10px 0 4px">${menu}</div>
+    ${cur.local && cur.local.lat ? `<a class="muted" style="font-size:12px" target="_blank" href="https://maps.google.com/?q=${cur.local.lat},${cur.local.lng}">📍 ver no mapa (${cur.local.ref || 'GPS'})</a>` : ''}
+    <div style="margin:10px 0 4px">${catChips}${menu}</div>
     <div class="obs-pop" id="obs-pop">
       <input id="obs-input" placeholder="Observação (opcional)" maxlength="80">
       <button class="btn sm" id="obs-add">Adicionar</button>
       <button class="btn ghost sm" id="obs-cancel">✕</button>
     </div>
-    <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">${itens}</div>
-    <div class="tot"><span>Total</span><span class="lime">R$ ${cur.total.toFixed(2).replace('.',',')}</span></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <select id="pg" style="flex:1"><option value="pix">Pix</option><option value="cartao">Cartão</option><option value="dinheiro">Dinheiro</option><option value="carteira">Carteira</option></select>
-      <button class="btn" id="fechar">Fechar conta</button>
-    </div>`;
+    <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px">${itensHtml}</div>
+    ${descontoHtml}
+    <div class="tot"><span>Total</span><span class="lime">R$ ${(cur.total || 0).toFixed(2).replace('.', ',')}</span></div>
+    ${actionBtns}
+    <div style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px">${fecharWrap}</div>`;
 
-  // click on chip: show obs popover
-  $('#comanda').querySelectorAll('.pchip:not(.indisponivel)').forEach(ch=>ch.onclick=()=>{
-    pendingProd=ch.dataset.p;
-    const pop=$('#obs-pop');
-    pop.classList.add('show');
-    $('#obs-input').value='';
-    $('#obs-input').focus();
-    ch.scrollIntoView({block:'nearest'});
+  // ── event: cat chips ──
+  $('#comanda').querySelectorAll('.cat-chip').forEach(ch => ch.onclick = () => {
+    catFilter = ch.dataset.cat === '__all' ? null : ch.dataset.cat;
+    renderComanda();
   });
 
-  $('#obs-add').onclick=async()=>{
-    if(!pendingProd) return;
-    const obs=$('#obs-input').value.trim();
-    try{
-      cur=await api('/api/comanda/'+cur.id+'/item',{method:'POST',body:JSON.stringify({produtoId:pendingProd,qtd:1,obs})});
-      pendingProd=null; renderComanda(); loadMapa();
-    }catch(e){ toast(e.message,true); }
-  };
-  $('#obs-cancel').onclick=()=>{ pendingProd=null; $('#obs-pop').classList.remove('show'); };
-  $('#obs-input').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#obs-add').click(); });
+  // ── event: adicionar produto ──
+  $('#comanda').querySelectorAll('.pchip:not(.indisponivel)').forEach(ch => ch.onclick = () => {
+    pendingProd = ch.dataset.p;
+    const pop = $('#obs-pop');
+    pop.classList.add('show');
+    $('#obs-input').value = '';
+    $('#obs-input').focus();
+    ch.scrollIntoView({ block: 'nearest' });
+  });
+  const obsAdd = $('#obs-add');
+  if (obsAdd) {
+    obsAdd.onclick = async () => {
+      if (!pendingProd) return;
+      const obs = $('#obs-input').value.trim();
+      try {
+        cur = await api('/api/comanda/' + cur.id + '/item', {
+          method: 'POST',
+          body: JSON.stringify({ produtoId: pendingProd, qtd: 1, obs })
+        });
+        pendingProd = null; renderComanda(); loadMapa();
+      } catch (e) { toast(e.message, true); }
+    };
+    $('#obs-cancel').onclick = () => { pendingProd = null; $('#obs-pop').classList.remove('show'); };
+    $('#obs-input').addEventListener('keydown', e => { if (e.key === 'Enter') $('#obs-add').click(); });
+  }
 
-  $('#fechar').onclick=async()=>{
-    await api('/api/admin/comanda/'+cur.id+'/fechar',{method:'POST',body:JSON.stringify({pagamento:$('#pg').value})});
-    toast('Conta fechada!'); cur=null;
-    $('#comanda').innerHTML='<p class="muted">Selecione uma mesa.</p>';
-    loadMapa(); caixa();
+  // ── event: ➖ ➕ quantidade ──
+  $('#comanda').querySelectorAll('.qtd-menos').forEach(btn => btn.onclick = async () => {
+    const idx = +btn.dataset.idx;
+    const it = cur.itens[idx];
+    if (!it) return;
+    const novaQtd = it.qtd - 1;
+    if (novaQtd <= 0) {
+      // abrir modal de remoção
+      openDelItemModal(idx);
+      return;
+    }
+    try {
+      cur = await api('/api/comanda/' + cur.id + '/item/' + idx, {
+        method: 'PATCH',
+        body: JSON.stringify({ qtd: novaQtd, obs: it.obs || '' })
+      });
+      renderComanda();
+    } catch (e) { toast(e.message, true); }
+  });
+
+  $('#comanda').querySelectorAll('.qtd-mais').forEach(btn => btn.onclick = async () => {
+    const idx = +btn.dataset.idx;
+    const it = cur.itens[idx];
+    if (!it) return;
+    try {
+      cur = await api('/api/comanda/' + cur.id + '/item/' + idx, {
+        method: 'PATCH',
+        body: JSON.stringify({ qtd: it.qtd + 1, obs: it.obs || '' })
+      });
+      renderComanda();
+    } catch (e) { toast(e.message, true); }
+  });
+
+  // ── event: 🗑️ remover item ──
+  $('#comanda').querySelectorAll('.it-del').forEach(btn => btn.onclick = () => {
+    openDelItemModal(+btn.dataset.idx);
+  });
+
+  // ── event: obs inline ──
+  $('#comanda').querySelectorAll('.it-obs').forEach(span => span.onclick = () => {
+    const idx = +span.dataset.idx;
+    const edit = document.getElementById('obs-edit-' + idx);
+    if (edit) { edit.classList.add('show'); edit.querySelector('input').focus(); }
+  });
+  $('#comanda').querySelectorAll('.obs-edit-ok').forEach(btn => btn.onclick = async () => {
+    const idx = +btn.dataset.idx;
+    const it = cur.itens[idx];
+    const input = document.getElementById('obs-edit-' + idx).querySelector('input');
+    try {
+      cur = await api('/api/comanda/' + cur.id + '/item/' + idx, {
+        method: 'PATCH',
+        body: JSON.stringify({ qtd: it.qtd, obs: input.value.trim() })
+      });
+      renderComanda();
+    } catch (e) { toast(e.message, true); }
+  });
+  $('#comanda').querySelectorAll('.obs-edit-x').forEach(btn => btn.onclick = () => {
+    const idx = +btn.dataset.idx;
+    const edit = document.getElementById('obs-edit-' + idx);
+    if (edit) edit.classList.remove('show');
+  });
+  $('#comanda').querySelectorAll('.obs-edit input').forEach(inp => inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') inp.nextElementSibling && inp.nextElementSibling.click();
+    if (e.key === 'Escape') { inp.parentElement.classList.remove('show'); }
+  }));
+
+  // ── event: fechar conta normal ──
+  const fecharBtn = $('#fechar');
+  if (fecharBtn) {
+    fecharBtn.onclick = async () => {
+      const meio = $('#pg').value;
+      try {
+        await api('/api/admin/comanda/' + cur.id + '/fechar', {
+          method: 'POST',
+          body: JSON.stringify({ pagamentos: [{ meio, valor: cur.total }] })
+        });
+        toast('Conta fechada!');
+        cur = null;
+        $('#comanda').innerHTML = '<p class="muted">Selecione uma mesa.</p>';
+        loadMapa(); caixa();
+      } catch (e) { toast(e.message, true); }
+    };
+  }
+
+  // ── event: botões de ação ──
+  const actTransf = $('#act-transf');
+  if (actTransf) actTransf.onclick = () => {
+    $('#transf-num').value = '';
+    $('#transf-modal').classList.add('show');
+  };
+
+  const actDesc = $('#act-desc');
+  if (actDesc) actDesc.onclick = () => {
+    $('#desc-val').value = '';
+    $('#desc-motivo').value = '';
+    $('#desc-tipo').value = 'pct';
+    updateDescLabel();
+    $('#desc-modal').classList.add('show');
+  };
+
+  const actDiv = $('#act-div');
+  if (actDiv) actDiv.onclick = () => openDividirModal();
+
+  const actReabrir = $('#act-reabrir');
+  if (actReabrir) actReabrir.onclick = async () => {
+    if (!confirm('Reabrir esta comanda?')) return;
+    try {
+      await api('/api/admin/comanda/' + cur.id + '/reabrir', { method: 'POST' });
+      toast('Comanda reaberta!');
+      cur = await api('/api/comanda/' + cur.id);
+      renderComanda();
+    } catch (e) { toast(e.message, true); }
+  };
+
+  const actCancel = $('#act-cancel');
+  if (actCancel) actCancel.onclick = () => {
+    $('#cancel-motivo').value = '';
+    $('#cancel-modal').classList.add('show');
   };
 }
 
-// nova mesa virtual
-$('#nova-mesa-btn').onclick=()=>$('#nova-mesa-modal').classList.add('show');
-$('#nm-cancel').onclick=()=>$('#nova-mesa-modal').classList.remove('show');
-$('#nm-ok').onclick=async()=>{
-  const nome=$('#nm-nome').value.trim();
-  if(!nome){toast('Informe um nome para a mesa',true);return;}
-  try{
-    await api('/api/mesa-virtual',{method:'POST',body:JSON.stringify({nome,local:{ref:$('#nm-ref').value.trim()}})});
-    toast('Mesa virtual criada!');
-    $('#nova-mesa-modal').classList.remove('show');
-    $('#nm-nome').value=''; $('#nm-ref').value='';
-    loadMapa();
-  }catch(e){ toast(e.message||'Erro ao criar mesa',true); }
+// ── modal: remover item ──
+function openDelItemModal(idx) {
+  delItemIdx = idx;
+  const it = cur && cur.itens && cur.itens[idx];
+  const desc = it ? `Remover "${it.nome}" (${it.qtd}×)?` : 'Remover item?';
+  $('#del-item-desc').textContent = desc;
+  $('#del-item-motivo').value = '';
+  $('#del-item-modal').classList.add('show');
+}
+$('#del-item-ok').onclick = async () => {
+  if (delItemIdx === null || !cur) return;
+  const motivo = $('#del-item-motivo').value.trim();
+  try {
+    cur = await api('/api/comanda/' + cur.id + '/item/' + delItemIdx, {
+      method: 'DELETE',
+      body: JSON.stringify({ motivo })
+    });
+    $('#del-item-modal').classList.remove('show');
+    delItemIdx = null;
+    renderComanda(); loadMapa();
+    toast('Item removido.');
+  } catch (e) { toast(e.message, true); }
+};
+$('#del-item-cancel').onclick = () => {
+  $('#del-item-modal').classList.remove('show');
+  delItemIdx = null;
 };
 
-setInterval(()=>{ if(TOKEN && !$('#app').classList.contains('hidden')) loadMapa(); }, 8000);
-if(TOKEN){show(true);boot();}else show(false);
+// ── modal: transferir ──
+$('#transf-ok').onclick = async () => {
+  const num = parseInt($('#transf-num').value);
+  if (!num || num < 1 || num > 12) { toast('Informe um número de mesa válido (1–12)', true); return; }
+  try {
+    cur = await api('/api/comanda/' + cur.id + '/transferir', {
+      method: 'POST',
+      body: JSON.stringify({ mesaNum: num })
+    });
+    $('#transf-modal').classList.remove('show');
+    toast('Mesa transferida!');
+    renderComanda(); loadMapa();
+  } catch (e) { toast(e.message, true); }
+};
+$('#transf-cancel').onclick = () => $('#transf-modal').classList.remove('show');
+
+// ── modal: desconto ──
+function updateDescLabel() {
+  $('#desc-val-lbl').textContent = $('#desc-tipo').value === 'pct' ? 'Valor (%)' : 'Valor (R$)';
+}
+$('#desc-tipo').onchange = updateDescLabel;
+$('#desc-ok').onclick = async () => {
+  const tipo = $('#desc-tipo').value;
+  const valor = parseFloat($('#desc-val').value);
+  const motivo = $('#desc-motivo').value.trim();
+  if (!valor || valor <= 0) { toast('Informe um valor válido', true); return; }
+  try {
+    cur = await api('/api/comanda/' + cur.id + '/desconto', {
+      method: 'POST',
+      body: JSON.stringify({ tipo, valor, motivo })
+    });
+    $('#desc-modal').classList.remove('show');
+    toast('Desconto aplicado!');
+    renderComanda();
+  } catch (e) { toast(e.message, true); }
+};
+$('#desc-cancel').onclick = () => $('#desc-modal').classList.remove('show');
+
+// ── modal: dividir conta ──
+let divMeios = [];
+
+function openDividirModal() {
+  const total = cur ? (cur.total || 0) : 0;
+  $('#div-info').innerHTML = `Total da comanda: <b>R$ ${total.toFixed(2).replace('.', ',')}</b>`;
+  $('#div-partes').value = 1;
+  divMeios = [{ meio: 'pix', valor: total.toFixed(2) }];
+  renderDivMeios();
+  $('#div-modal').classList.add('show');
+}
+
+function renderDivMeios() {
+  const total = cur ? (cur.total || 0) : 0;
+  $('#div-meios').innerHTML = divMeios.map((m, i) => `
+    <div class="meio-pag-row">
+      <select class="div-meio-sel" data-i="${i}">
+        <option value="pix"${m.meio === 'pix' ? ' selected' : ''}>Pix</option>
+        <option value="cartao"${m.meio === 'cartao' ? ' selected' : ''}>Cartão</option>
+        <option value="dinheiro"${m.meio === 'dinheiro' ? ' selected' : ''}>Dinheiro</option>
+        <option value="carteira"${m.meio === 'carteira' ? ' selected' : ''}>Carteira</option>
+      </select>
+      <input class="div-meio-val" type="number" min="0" step="0.01" data-i="${i}" value="${m.valor}" placeholder="R$">
+      ${divMeios.length > 1 ? `<button class="btn ghost sm div-meio-del" data-i="${i}" style="padding:6px 8px">✕</button>` : ''}
+    </div>`).join('');
+
+  document.querySelectorAll('.div-meio-sel').forEach(s => s.onchange = () => {
+    divMeios[+s.dataset.i].meio = s.value;
+  });
+  document.querySelectorAll('.div-meio-val').forEach(inp => inp.oninput = () => {
+    divMeios[+inp.dataset.i].valor = inp.value;
+    updateDivSaldo();
+  });
+  document.querySelectorAll('.div-meio-del').forEach(btn => btn.onclick = () => {
+    divMeios.splice(+btn.dataset.i, 1);
+    renderDivMeios();
+  });
+  updateDivSaldo();
+}
+
+function updateDivSaldo() {
+  const total = cur ? (cur.total || 0) : 0;
+  const soma = divMeios.reduce((s, m) => s + (parseFloat(m.valor) || 0), 0);
+  const diff = soma - total;
+  const saldoEl = $('#div-saldo');
+  if (Math.abs(diff) < 0.01) {
+    saldoEl.innerHTML = `<span class="saldo-pos">✓ Soma correta: R$ ${soma.toFixed(2).replace('.', ',')}</span>`;
+  } else if (diff < 0) {
+    saldoEl.innerHTML = `<span class="saldo-neg">Falta R$ ${Math.abs(diff).toFixed(2).replace('.', ',')} (soma: R$ ${soma.toFixed(2).replace('.', ',')} / total: R$ ${total.toFixed(2).replace('.', ',')})</span>`;
+  } else {
+    saldoEl.innerHTML = `<span class="saldo-neg">Excede em R$ ${diff.toFixed(2).replace('.', ',')} (soma: R$ ${soma.toFixed(2).replace('.', ',')} / total: R$ ${total.toFixed(2).replace('.', ',')})</span>`;
+  }
+}
+
+$('#div-aplicar').onclick = () => {
+  const total = cur ? (cur.total || 0) : 0;
+  const n = Math.max(1, parseInt($('#div-partes').value) || 1);
+  const parte = (total / n).toFixed(2);
+  divMeios = Array.from({ length: n }, () => ({ meio: 'pix', valor: parte }));
+  renderDivMeios();
+};
+
+$('#div-add-meio').onclick = () => {
+  if (divMeios.length >= 4) { toast('Máximo de 4 formas de pagamento', true); return; }
+  divMeios.push({ meio: 'pix', valor: '' });
+  renderDivMeios();
+};
+
+$('#div-ok').onclick = async () => {
+  const total = cur ? (cur.total || 0) : 0;
+  const soma = divMeios.reduce((s, m) => s + (parseFloat(m.valor) || 0), 0);
+  if (Math.abs(soma - total) > 0.05) { toast('A soma dos pagamentos não bate com o total', true); return; }
+  const pagamentos = divMeios.map(m => ({ meio: m.meio, valor: parseFloat(m.valor) || 0 }));
+  try {
+    await api('/api/admin/comanda/' + cur.id + '/fechar', {
+      method: 'POST',
+      body: JSON.stringify({ pagamentos })
+    });
+    $('#div-modal').classList.remove('show');
+    toast('Conta fechada!');
+    cur = null;
+    $('#comanda').innerHTML = '<p class="muted">Selecione uma mesa.</p>';
+    loadMapa(); caixa();
+  } catch (e) { toast(e.message, true); }
+};
+$('#div-cancel').onclick = () => $('#div-modal').classList.remove('show');
+
+// ── modal: cancelar comanda ──
+$('#cancel-ok').onclick = async () => {
+  const motivo = $('#cancel-motivo').value.trim();
+  if (!motivo) { toast('Informe o motivo do cancelamento', true); return; }
+  try {
+    await api('/api/admin/comanda/' + cur.id, {
+      method: 'DELETE',
+      body: JSON.stringify({ motivo })
+    });
+    $('#cancel-modal').classList.remove('show');
+    toast('Comanda cancelada.');
+    cur = null;
+    $('#comanda').innerHTML = '<p class="muted">Selecione uma mesa.</p>';
+    loadMapa(); caixa();
+  } catch (e) { toast(e.message, true); }
+};
+$('#cancel-cancel').onclick = () => $('#cancel-modal').classList.remove('show');
+
+// fechar modais clicando fora
+document.querySelectorAll('.modal-bg').forEach(bg => bg.onclick = e => {
+  if (e.target === bg) bg.classList.remove('show');
+});
+
+// ── nova mesa virtual ──
+$('#nova-mesa-btn').onclick = () => $('#nova-mesa-modal').classList.add('show');
+$('#nm-cancel').onclick = () => $('#nova-mesa-modal').classList.remove('show');
+$('#nm-ok').onclick = async () => {
+  const nome = $('#nm-nome').value.trim();
+  if (!nome) { toast('Informe um nome para a mesa', true); return; }
+  try {
+    await api('/api/mesa-virtual', {
+      method: 'POST',
+      body: JSON.stringify({ nome, local: { ref: $('#nm-ref').value.trim() } })
+    });
+    toast('Mesa virtual criada!');
+    $('#nova-mesa-modal').classList.remove('show');
+    $('#nm-nome').value = ''; $('#nm-ref').value = '';
+    loadMapa();
+  } catch (e) { toast(e.message || 'Erro ao criar mesa', true); }
+};
+
+// ── auto-refresh ──
+setInterval(() => {
+  if (TOKEN && !$('#app').classList.contains('hidden')) {
+    loadMapa();
+    caixa();
+    if (cur) reloadCur();
+  }
+}, 8000);
+
+// ── init ──
+if (TOKEN) { show(true); boot(); } else show(false);
 </script>
 </body>
 </html>
