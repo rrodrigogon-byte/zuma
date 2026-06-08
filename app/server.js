@@ -246,6 +246,13 @@ app.patch('/api/admin/usuarios/:id', auth, requireRole('admin','organizador'), (
   if(b.senha){ if(b.senha.length<6) return res.status(400).json({error:'senha curta'}); u.senhaHash=bcrypt.hashSync(b.senha,10); }
   save(); res.json(publicUser(u));
 });
+app.post('/api/admin/usuarios/:id/reset-senha', auth, requireRole('admin','organizador'), (req,res)=>{
+  const u=db().usuarios.find(x=>x.id==req.params.id); if(!u) return res.status(404).json({error:'não encontrado'});
+  const nova=Math.random().toString(36).slice(2,10); // 8 chars alfanuméricos
+  u.senhaHash=bcrypt.hashSync(nova,10); save();
+  auditoria(req.user,'RESET_SENHA',{usuarioId:u.id,email:u.email});
+  res.json({ ok:true, senha:nova, aviso:'Compartilhe esta senha temporária com o usuário — ela não será exibida novamente.' });
+});
 app.delete('/api/admin/usuarios/:id', auth, requireRole('admin'), (req,res)=>{
   const d=db(); const u=d.usuarios.find(x=>x.id==req.params.id);
   if(u && u.email===norm(process.env.ADMIN_USER||'admin')) return res.status(400).json({error:'não é possível excluir o admin principal'});
@@ -1032,6 +1039,14 @@ app.post('/api/admin/aulas', auth, requireStaff, (req,res)=>{
     alunos:[], criadoEm:new Date().toISOString() };
   db().aulas.push(a); save(); res.json(aulaInfo(a));
 });
+app.patch('/api/admin/aulas/:id', auth, requireStaff, (req,res)=>{
+  const a=(db().aulas||[]).find(x=>x.id==req.params.id); if(!a) return res.status(404).json({error:'aula não encontrada'});
+  const {titulo,professor,professorId,nivel,vagas,maxAlunos,preco,data,hora,modalidade} = req.body||{};
+  if(titulo) a.titulo=titulo; if(professor) a.professor=professor; if(professorId!=null) a.professorId=professorId;
+  if(nivel) a.nivel=nivel; if(vagas||maxAlunos) a.vagas=parseInt(vagas||maxAlunos)||a.vagas;
+  if(preco!=null) a.preco=Number(preco); if(data) a.data=data; if(hora) a.hora=hora; if(modalidade) a.modalidade=modalidade;
+  save(); res.json(aulaInfo(a));
+});
 app.delete('/api/admin/aulas/:id', auth, requireStaff, (req,res)=>{ const d=db(); d.aulas=(d.aulas||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true}); });
 // Matrícula pública na aula
 app.post('/api/aula/:id/matricular', (req,res)=>{
@@ -1228,6 +1243,14 @@ app.post('/api/admin/socios/:id/pagar', auth, requireStaff, (req,res)=>{
   const s=(db().socios||[]).find(x=>x.id==req.params.id); if(!s) return res.status(404).json({error:'sócio não encontrado'});
   const f=(s.faturas||[]).find(x=>x.id==req.body.faturaId); if(!f) return res.status(404).json({error:'fatura não encontrada'});
   f.status='paga'; f.pagaEm=new Date().toISOString(); save(); res.json(pubSocio(s));
+});
+app.patch('/api/admin/socios/:id', auth, requireStaff, (req,res)=>{
+  const s=(db().socios||[]).find(x=>x.id==req.params.id); if(!s) return res.status(404).json({error:'sócio não encontrado'});
+  const {plano,status,vencimento,nome,email} = req.body||{};
+  if(plano){ const p=SOCIO_PLANOS.find(x=>x.id===plano); if(p){ s.plano=p.id; s.planoNome=p.nome; s.valor=p.valor; } }
+  if(status) s.status=status; if(nome) s.nome=nome; if(email) s.email=norm(email);
+  if(vencimento && s.faturas && s.faturas.length){ s.faturas[s.faturas.length-1].venc=vencimento; }
+  save(); res.json(pubSocio(s));
 });
 app.delete('/api/admin/socios/:id', auth, requireStaff, (req,res)=>{ const d=db(); d.socios=(d.socios||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true}); });
 

@@ -3,27 +3,67 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Planos & Assinaturas · Agro Open</title>
-<meta name="description" content="Planos de assinatura da plataforma Agro Open: atleta, clube/organizador e patrocinador.">
+<meta name="description" content="Planos de assinatura da plataforma Agro Open: Start, Pro e Premium.">
 <link rel="icon" href="img/logo-ao-oficial.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="app.css">
 <style>
-  .plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:18px;align-items:stretch}
-  .plan{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:18px;padding:28px;display:flex;flex-direction:column}
-  .plan.feat{border-color:var(--lime);box-shadow:0 30px 60px -34px rgba(143,214,74,.5)}
-  .plan .pub{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700}
-  .plan h3{font-size:24px;margin:6px 0}
-  .plan .price{font-family:'Archivo';font-weight:900;font-size:38px;margin:4px 0}
-  .plan .price small{font-size:14px;color:var(--muted);font-weight:500}
-  .plan ul{list-style:none;margin:14px 0;flex:1}
-  .plan li{padding:8px 0 8px 26px;position:relative;font-size:14px;border-bottom:1px solid var(--line)}
+  /* ── Planos ── */
+  .plans-wrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;align-items:start;margin-bottom:40px}
+  .plan{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:20px;padding:30px;display:flex;flex-direction:column;position:relative;transition:.2s}
+  .plan:hover{transform:translateY(-4px);box-shadow:0 16px 50px -20px rgba(0,0,0,.5)}
+  .plan.popular{border-color:var(--lime);box-shadow:0 0 0 1px rgba(143,214,74,.3),0 30px 60px -20px rgba(143,214,74,.25)}
+  .plan.popular:hover{box-shadow:0 0 0 1px rgba(143,214,74,.4),0 24px 60px -16px rgba(143,214,74,.35)}
+
+  .pop-badge{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,var(--green),var(--lime));color:#0E2E1C;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;padding:4px 18px;border-radius:20px;white-space:nowrap}
+
+  .plan-pub{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);font-weight:700;margin-bottom:8px}
+  .plan h3{font-size:26px;margin:0 0 6px;font-family:'Archivo',sans-serif;font-weight:900}
+  .plan-desc{font-size:13px;color:var(--muted);margin:0 0 16px;min-height:36px}
+  .plan-price{font-family:'Archivo',sans-serif;font-weight:900;font-size:42px;color:#fff;margin:4px 0 20px;line-height:1}
+  .plan-price sup{font-size:18px;vertical-align:top;margin-top:8px;font-weight:700;color:var(--muted)}
+  .plan-price small{font-family:'Inter',sans-serif;font-size:13px;color:var(--muted);font-weight:500;margin-left:4px}
+  .plan-price.free-txt{font-size:30px}
+
+  .plan ul{list-style:none;margin:0 0 24px;padding:0;flex:1}
+  .plan li{padding:9px 0 9px 28px;position:relative;font-size:14px;border-bottom:1px solid rgba(255,255,255,.05);color:#c8dfc0}
   .plan li:last-child{border:none}
-  .plan li::before{content:"";position:absolute;left:2px;top:13px;width:13px;height:7px;border-left:2.5px solid var(--lime);border-bottom:2.5px solid var(--lime);transform:rotate(-45deg)}
-  .smodal{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(4,12,7,.8);backdrop-filter:blur(5px)}
+  .plan li::before{content:'';position:absolute;left:2px;top:14px;width:13px;height:7px;border-left:2.5px solid var(--lime);border-bottom:2.5px solid var(--lime);transform:rotate(-45deg)}
+  .plan li.muted-item{color:var(--muted)}
+  .plan li.muted-item::before{border-color:var(--muted)}
+
+  .plan .btn{width:100%;justify-content:center}
+
+  /* ── Comparação ── */
+  .compare-note{text-align:center;font-size:13px;color:var(--muted);margin-bottom:50px}
+
+  /* ── FAQ ── */
+  .faq{max-width:680px;margin:0 auto 60px}
+  .faq-item{border:1px solid var(--line);border-radius:12px;margin-bottom:10px;overflow:hidden;transition:.2s}
+  .faq-item.open{border-color:rgba(95,179,53,.3)}
+  .faq-q{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;cursor:pointer;font-weight:600;font-size:15px;gap:10px;user-select:none}
+  .faq-q:hover{color:var(--lime)}
+  .faq-chevron{font-size:20px;color:var(--muted);transition:.2s;flex-shrink:0}
+  .faq-item.open .faq-chevron{transform:rotate(180deg);color:var(--lime)}
+  .faq-a{padding:0 20px;max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s;font-size:14px;color:var(--muted);line-height:1.7}
+  .faq-item.open .faq-a{max-height:300px;padding:0 20px 16px}
+
+  /* ── Modal ── */
+  .smodal{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(4,12,7,.82);backdrop-filter:blur(6px)}
   .smodal.open{display:flex}
-  .sbox{width:100%;max-width:420px;background:linear-gradient(165deg,#0f3120,#0a1f13);border:1px solid var(--line);border-radius:18px;padding:28px;position:relative}
-  .sx{position:absolute;top:14px;right:20px;font-size:28px;color:var(--muted);cursor:pointer}
+  .sbox{width:100%;max-width:440px;background:linear-gradient(165deg,#0f3120,#0a1f13);border:1px solid var(--line);border-radius:20px;padding:30px;position:relative;animation:popIn .2s ease}
+  @keyframes popIn{from{transform:scale(.95);opacity:0}to{transform:scale(1);opacity:1}}
+  .sx{position:absolute;top:14px;right:20px;font-size:28px;color:var(--muted);cursor:pointer;line-height:1}
+  .sx:hover{color:#fff}
+  .plan-selected-info{background:rgba(95,179,53,.1);border:1px solid rgba(95,179,53,.25);border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px;margin-bottom:16px}
+  .plan-selected-info .pname{font-weight:700;font-size:16px}
+  .plan-selected-info .pprice{font-family:'Archivo',sans-serif;font-weight:900;font-size:20px;color:var(--lime)}
+
+  .success-screen{text-align:center;padding:10px 0}
+  .success-screen .icon{font-size:52px;display:block;margin-bottom:12px}
+  .success-screen h3{font-size:22px;margin-bottom:6px}
+  .success-screen p{color:var(--muted);font-size:14px}
 </style>
 </head>
 <body>
@@ -31,68 +71,195 @@
   <div class="wrap">
     <a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span></a>
     <div class="navlinks">
-      <a href="index.html">Site</a><a href="planos.html" class="active">Planos</a><a href="ranking.html">Ranking</a>
-      <a href="chaves.html">Chaves</a><a href="destaques.html">Melhores</a><a href="regras.html">Regras</a>
+      <a href="index.html">Site</a>
+      <a href="planos.html" class="active">Planos</a>
+      <a href="ranking.html">Ranking</a>
+      <a href="chaves.html">Chaves</a>
+      <a href="regras.html">Regras</a>
     </div>
   </div>
 </header>
 
 <div class="wrap hero">
   <div class="kick">Assinaturas</div>
-  <h1>Planos da <span class="lime">plataforma</span>.</h1>
-  <p>Para atletas, clubes e patrocinadores. Comece grátis e evolua conforme cresce — a base para o maior circuito de tênis do agro.</p>
+  <h1>O plano certo para <span class="lime">cada jogo</span>.</h1>
+  <p>Comece gratuitamente e evolua quando precisar. Para atletas, clubes e organizadores.</p>
 </div>
 
-<div class="wrap" style="padding-bottom:40px">
-  <div class="plans" id="plans"></div>
-  <p class="muted" style="font-size:12.5px;margin-top:16px">Pagamento recorrente via Mercado Pago/Stripe (ativado pela organização). Ao assinar um plano pago, registramos sua adesão e liberamos o checkout.</p>
+<div class="wrap" style="padding-bottom:10px">
+
+  <div class="plans-wrap" id="plans">
+    <!-- Start -->
+    <div class="plan">
+      <div class="plan-pub">Atleta</div>
+      <h3>Start</h3>
+      <p class="plan-desc">Para começar no circuito sem pagar nada.</p>
+      <div class="plan-price free-txt">Grátis</div>
+      <ul>
+        <li>Inscrição em torneios</li>
+        <li>Acompanhar suas chaves</li>
+        <li>Ranking público</li>
+        <li>Perfil de atleta</li>
+        <li class="muted-item">Histórico e estatísticas</li>
+      </ul>
+      <button class="btn ghost js-go" data-id="atleta_free" data-nome="Start" data-pub="Atleta" data-preco="Grátis">Começar grátis</button>
+    </div>
+
+    <!-- Pro (popular) -->
+    <div class="plan popular">
+      <span class="pop-badge">Mais popular</span>
+      <div class="plan-pub">Atleta</div>
+      <h3>Pro</h3>
+      <p class="plan-desc">Para quem leva o tênis a sério e quer se destacar.</p>
+      <div class="plan-price"><sup>R$</sup>19<small>,90 / mês</small></div>
+      <ul>
+        <li>Tudo do plano Start</li>
+        <li>Histórico completo de partidas</li>
+        <li>Estatísticas avançadas</li>
+        <li>Head-to-head com rivais</li>
+        <li>Selo PRO no ranking</li>
+      </ul>
+      <button class="btn js-go" data-id="atleta_pro" data-nome="Pro" data-pub="Atleta" data-preco="R$ 19,90/mês">Assinar agora</button>
+    </div>
+
+    <!-- Premium -->
+    <div class="plan">
+      <div class="plan-pub">Clube / Organizador</div>
+      <h3>Premium</h3>
+      <p class="plan-desc">Para clubes, academias e organizadores de torneios.</p>
+      <div class="plan-price"><sup>R$</sup>199<small>/mês</small></div>
+      <ul>
+        <li>Torneios ilimitados</li>
+        <li>Sorteio de chaves e súmula</li>
+        <li>Ranking por temporada</li>
+        <li>Painel financeiro completo</li>
+        <li>Suporte prioritário</li>
+      </ul>
+      <button class="btn ghost js-go" data-id="clube" data-nome="Premium" data-pub="Clube / Organizador" data-preco="R$ 199/mês">Assinar agora</button>
+    </div>
+  </div>
+
+  <p class="compare-note">Dúvidas? <a href="mailto:contato@agroopen.com.br" style="color:var(--lime)">Fale com a gente</a> — respondemos em até 24h.</p>
+
+  <!-- FAQ -->
+  <div class="section-title" style="font-family:'Archivo',sans-serif;font-size:22px;font-weight:900;margin-bottom:20px;display:flex;align-items:center;gap:10px">
+    Perguntas frequentes
+    <span style="flex:1;height:1px;background:var(--line)"></span>
+  </div>
+  <div class="faq" id="faq">
+    <div class="faq-item">
+      <div class="faq-q">Posso cancelar a qualquer momento? <span class="faq-chevron">⌄</span></div>
+      <div class="faq-a">Sim. Planos mensais podem ser cancelados a qualquer momento, sem multa. O acesso é mantido até o fim do período já pago.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Como funciona o pagamento? <span class="faq-chevron">⌄</span></div>
+      <div class="faq-a">O pagamento é recorrente via Mercado Pago (Pix ou cartão de crédito). Ao assinar, você recebe um link de checkout seguro. A renovação é automática a cada mês.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Posso mudar de plano depois? <span class="faq-chevron">⌄</span></div>
+      <div class="faq-a">Sim. Você pode fazer upgrade ou downgrade a qualquer momento. O ajuste de cobrança é feito proporcionalmente no próximo ciclo.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">O plano Start é mesmo gratuito para sempre? <span class="faq-chevron">⌄</span></div>
+      <div class="faq-a">Sim. O plano Start é gratuito sem prazo de expiração. Recursos avançados como estatísticas detalhadas e o selo PRO são exclusivos do plano Pro.</div>
+    </div>
+  </div>
+
 </div>
 
+<!-- Modal de assinatura -->
 <div class="smodal" id="modal">
   <div class="sbox">
     <span class="sx" id="x">&times;</span>
-    <div class="kick" id="m-pub"></div>
-    <h3 id="m-plan" style="font-size:22px;margin:6px 0 16px"></h3>
-    <div class="field"><label>Nome / Empresa</label><input id="m-nome" placeholder="Seu nome"></div>
-    <div class="field"><label>E-mail</label><input id="m-email" type="email" placeholder="voce@email.com"></div>
-    <div class="field"><label>Telefone / WhatsApp</label><input id="m-tel" placeholder="(65) 90000-0000"></div>
-    <button class="btn" id="m-go" style="width:100%;justify-content:center;margin-top:6px">Assinar</button>
+    <div id="m-form-area">
+      <div class="kick" id="m-pub" style="margin-bottom:6px"></div>
+      <h3 id="m-plan" style="font-size:22px;margin:0 0 16px"></h3>
+      <div class="plan-selected-info">
+        <div style="flex:1"><div class="pname" id="m-plan-name"></div><div style="font-size:12px;color:var(--muted)">Plano selecionado</div></div>
+        <div class="pprice" id="m-plan-price"></div>
+      </div>
+      <div class="field"><label>Nome / Empresa</label><input id="m-nome" placeholder="Seu nome completo"></div>
+      <div class="field"><label>E-mail</label><input id="m-email" type="email" placeholder="voce@email.com"></div>
+      <div class="field"><label>Telefone / WhatsApp</label><input id="m-tel" placeholder="(65) 90000-0000"></div>
+      <button class="btn" id="m-go" style="width:100%;justify-content:center;margin-top:8px">Assinar</button>
+    </div>
+    <div id="m-success" class="success-screen" style="display:none">
+      <span class="icon">🎾</span>
+      <h3>Assinatura registrada!</h3>
+      <p>Entraremos em contato por e-mail com os próximos passos e o link de pagamento.</p>
+    </div>
   </div>
 </div>
 
-<footer class="app" style="display:flex;align-items:center;flex-wrap:wrap;gap:10px">AGRO OPEN · Plataforma de torneios de tênis · Planos para atletas, clubes e patrocinadores. <span style="display:inline-flex;align-items:center;gap:8px;margin-left:auto;padding-left:18px;border-left:1px solid rgba(255,255,255,.12)"><img src="img/logo-ttc-sm.png" alt="TTC" style="height:28px;width:auto;background:#fff;border-radius:5px;padding:2px 5px"><span style="font-size:11px;color:var(--muted)">Realização<br>Tangará Tênis Clube</span></span></footer>
+<footer class="app" style="display:flex;align-items:center;flex-wrap:wrap;gap:10px">
+  AGRO OPEN · Plataforma de torneios de tênis · Planos para atletas, clubes e patrocinadores.
+  <span style="display:inline-flex;align-items:center;gap:8px;margin-left:auto;padding-left:18px;border-left:1px solid rgba(255,255,255,.12)">
+    <img src="img/logo-ttc-sm.png" alt="TTC" style="height:28px;width:auto;background:#fff;border-radius:5px;padding:2px 5px">
+    <span style="font-size:11px;color:var(--muted)">Realização<br>Tangará Tênis Clube</span>
+  </span>
+</footer>
 <div class="toast" id="toast"></div>
 
 <script>
 const $=s=>document.querySelector(s);
 const toast=(m,e)=>{const t=$('#toast');t.textContent=m;t.className='toast show'+(e?' err':'');setTimeout(()=>t.className='toast',2800);};
 let cur=null;
-const FALLBACK=[
-  {id:'atleta_free',publico:'Atleta',nome:'Atleta Free',preco:0,periodo:'sempre',destaques:['Inscrição em torneios','Acompanhar suas chaves','Ranking público']},
-  {id:'atleta_pro',publico:'Atleta',nome:'Atleta PRO',preco:19.9,periodo:'mês',destaque:true,destaques:['Tudo do Free','Histórico e estatísticas','Head-to-head','Selo PRO no ranking']},
-  {id:'clube',publico:'Clube / Organizador',nome:'Clube',preco:199,periodo:'mês',destaques:['Torneios ilimitados','Sorteio e súmula','Ranking por temporada','Painel financeiro']},
-  {id:'patrocinador',publico:'Patrocinador',nome:'Patrocinador',preco:0,periodo:'sob consulta',destaques:['Marca em torneios e ranking','Relatórios','Ativações e leads']}
-];
-function price(p){ if(p.preco===0&&p.periodo==='sob consulta') return '<span class="price">Sob consulta</span>'; if(p.preco===0) return '<span class="price">Grátis</span>'; return `<span class="price">R$ ${p.preco.toFixed(2).replace('.',',')} <small>/ ${p.periodo}</small></span>`; }
-function render(planos){
-  $('#plans').innerHTML=planos.map(p=>`<div class="plan ${p.destaque?'feat':''}">
-    <div class="pub">${p.publico}</div><h3>${p.nome}</h3>${price(p)}
-    <ul>${p.destaques.map(d=>`<li>${d}</li>`).join('')}</ul>
-    <button class="btn ${p.destaque?'':'ghost'} js-go" data-id="${p.id}" data-nome="${p.nome}" data-pub="${p.publico}">${p.preco>0?'Assinar':(p.periodo==='sob consulta'?'Falar com a gente':'Começar grátis')}</button>
-  </div>`).join('');
-}
-(async()=>{ try{ render(await (await fetch('/api/planos')).json()); }catch(e){ render(FALLBACK); } })();
 
-document.addEventListener('click',e=>{const b=e.target.closest('.js-go');if(!b)return;cur=b.dataset.id;$('#m-pub').textContent=b.dataset.pub;$('#m-plan').textContent=b.dataset.nome;$('#modal').classList.add('open');});
+// FAQ accordion
+document.querySelectorAll('.faq-item').forEach(item=>{
+  item.querySelector('.faq-q').onclick=()=>{
+    const isOpen=item.classList.contains('open');
+    document.querySelectorAll('.faq-item').forEach(i=>i.classList.remove('open'));
+    if(!isOpen) item.classList.add('open');
+  };
+});
+
+// Planos dinâmicos (fallback para os estáticos do HTML)
+(async()=>{
+  try{
+    const planos=await (await fetch('/api/planos')).json();
+    if(planos&&planos.length) renderPlanos(planos);
+  }catch(e){}
+})();
+
+function renderPlanos(list){
+  if(!list||!list.length) return;
+  $('#plans').innerHTML=list.map((p,i)=>{ const feat=p.destaque||i===1; return `<div class="plan ${feat?'popular':''}">
+    ${feat?'<span class="pop-badge">Mais popular</span>':''}
+    <div class="plan-pub">${p.publico||'Atleta'}</div>
+    <h3>${p.nome}</h3>
+    <p class="plan-desc">${p.descricao||''}</p>
+    ${p.preco===0?'<div class="plan-price free-txt">Grátis</div>':`<div class="plan-price"><sup>R$</sup>${String(p.preco.toFixed(2).replace('.',',')).split(',')[0]}<small>,${String(p.preco.toFixed(2).replace('.',',')).split(',')[1]} / ${p.periodo}</small></div>`}
+    <ul>${(p.destaques||[]).map(d=>`<li>${d}</li>`).join('')}</ul>
+    <button class="btn ${feat?'':'ghost'} js-go" data-id="${p.id}" data-nome="${p.nome}" data-pub="${p.publico||''}" data-preco="${p.preco===0?'Grátis':'R$ '+p.preco.toFixed(2).replace('.',',')+'/'+p.periodo}">${p.preco===0?'Começar grátis':'Assinar agora'}</button>
+  </div>`; }).join('');
+}
+
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.js-go'); if(!b) return;
+  cur=b.dataset.id;
+  $('#m-pub').textContent=b.dataset.pub;
+  $('#m-plan').textContent='Assinar plano '+b.dataset.nome;
+  $('#m-plan-name').textContent=b.dataset.nome;
+  $('#m-plan-price').textContent=b.dataset.preco;
+  $('#m-form-area').style.display='block';
+  $('#m-success').style.display='none';
+  ['#m-nome','#m-email','#m-tel'].forEach(id=>$(id).value='');
+  $('#modal').classList.add('open');
+});
+
 $('#x').onclick=()=>$('#modal').classList.remove('open');
-$('#modal').addEventListener('click',e=>{if(e.target===$('#modal'))$('#modal').classList.remove('open');});
+$('#modal').addEventListener('click',e=>{ if(e.target===$('#modal')) $('#modal').classList.remove('open'); });
+
 $('#m-go').onclick=async()=>{
-  const nome=$('#m-nome').value.trim(),email=$('#m-email').value.trim();
+  const nome=$('#m-nome').value.trim(), email=$('#m-email').value.trim();
   if(!nome||!email){toast('Preencha nome e e-mail',true);return;}
   try{
     const r=await fetch('/api/assinar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plano:cur,nome,email,telefone:$('#m-tel').value.trim()})});
     const d=await r.json(); if(!r.ok) throw new Error(d.error||'erro');
-    $('#modal').classList.remove('open'); toast(d.message||'Adesão registrada!');
+    $('#m-form-area').style.display='none';
+    $('#m-success').style.display='block';
+    toast(d.message||'Adesão registrada!');
   }catch(e){ toast('Sem servidor ativo — rode npm start para assinar.',true); }
 };
 </script>

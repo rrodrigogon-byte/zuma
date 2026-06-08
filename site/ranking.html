@@ -14,6 +14,16 @@
   .podium td:first-child{color:var(--gold)}
   .br{background:rgba(143,214,74,.06)}
   .toprow td{font-weight:700}
+  .cat-pills{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+  .cat-pill{padding:5px 14px;border-radius:100px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;transition:.15s}
+  .cat-pill:hover{border-color:var(--green);color:var(--cream)}
+  .cat-pill.active{background:var(--green);border-color:var(--green);color:var(--deep2)}
+  .rk-counter{font-size:13px;color:var(--muted);margin-bottom:10px}
+  .rk-counter b{color:var(--lime)}
+  .var-up{color:var(--lime);font-weight:700}
+  .var-dn{color:#e89a8c;font-weight:700}
+  .var-eq{color:var(--muted)}
+  .pos-prev{font-size:11px;color:var(--muted);margin-left:4px}
 </style>
 </head>
 <body>
@@ -43,8 +53,10 @@
 
   <section id="t-interno">
     <div class="ctrls"><div><label>Categoria</label><select id="rk-cat"><option value="todas">Todas</option></select></div><button class="btn sm ghost" id="rk-reload">Atualizar</button></div>
+    <div id="rk-cat-pills" class="cat-pills"></div>
+    <div class="rk-counter" id="rk-counter"></div>
     <div class="card table-wrap" style="padding:0">
-      <table><thead><tr><th>#</th><th>Atleta</th><th>Categoria</th><th>Pontos</th><th>V</th><th>D</th><th>Aprov.</th></tr></thead><tbody id="rk-body"></tbody></table>
+      <table><thead><tr><th>#</th><th>Atleta</th><th>Categoria</th><th>Pontos</th><th>V</th><th>D</th><th>Aprov.</th><th>Var.</th></tr></thead><tbody id="rk-body"></tbody></table>
     </div>
     <p class="muted" style="font-size:12.5px;margin-top:12px">Pontuação acumulada por fase alcançada nas chaves oficiais — atualizada a cada torneio finalizado pela organização.</p>
   </section>
@@ -65,17 +77,59 @@
 <script>
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const toast=(m,e)=>{const t=$('#toast');t.textContent=m;t.className='toast show'+(e?' err':'');setTimeout(()=>t.className='toast',2400);};
+
 $$('.tabs button').forEach(b=>b.onclick=()=>{
   $$('.tabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active');
   ['interno','rating','atp','wta'].forEach(t=>$('#t-'+t).classList.toggle('hidden',t!==b.dataset.t));
   if(b.dataset.t==='rating') loadRating();
 });
+
 async function loadRating(){
   try{
     const list=await (await fetch('/api/rating')).json();
-    $('#rt-body').innerHTML=list.map(p=>`<tr class="${p.pos<=3?'podium toprow':''}"><td class="pos">${p.pos}</td><td><b>${p.nome}</b></td><td><b style="color:var(--lime)">${p.elo}</b></td><td>${p.jogos}</td><td>${p.v}</td><td>${p.d}</td><td>${p.aproveitamento}%</td></tr>`).join('')
+    $('#rt-body').innerHTML=list.map(p=>`<tr class="${p.pos<=3?'podium toprow':''}"><td class="pos">${p.pos}</td><td><b><a href="perfil.html?nome=${encodeURIComponent(p.nome)}" style="color:inherit;text-decoration:none;hover:underline">${p.nome}</a></b></td><td><b style="color:var(--lime)">${p.elo}</b></td><td>${p.jogos}</td><td>${p.v}</td><td>${p.d}</td><td>${p.aproveitamento}%</td></tr>`).join('')
       ||'<tr><td colspan="7" class="muted" style="padding:24px">O rating começa quando os primeiros jogos são lançados.</td></tr>';
   }catch(e){ $('#rt-body').innerHTML='<tr><td colspan="7" class="muted" style="padding:24px">Inicie o servidor (npm start) para ver o rating.</td></tr>'; }
+}
+
+let allRanking=[], activePill='todas';
+
+function varIcon(p){
+  if(p.posAnterior==null) return '<span class="var-eq">—</span>';
+  const diff=p.posAnterior-p.pos;
+  if(diff>0) return `<span class="var-up">↑${diff}</span>`;
+  if(diff<0) return `<span class="var-dn">↓${Math.abs(diff)}</span>`;
+  return '<span class="var-eq">→</span>';
+}
+
+function renderRanking(list){
+  const filtered = activePill==='todas' ? list : list.filter(p=>p.categoria===activePill);
+  $('#rk-counter').innerHTML = filtered.length ? `<b>${filtered.length}</b> atleta${filtered.length!==1?'s':''} ranqueado${filtered.length!==1?'s':''}` : '';
+  $('#rk-body').innerHTML=filtered.map(p=>`<tr class="${p.pos<=3?'podium toprow':''}">
+    <td class="pos">${p.pos}</td>
+    <td><b><a href="perfil.html?nome=${encodeURIComponent(p.nome)}" style="color:inherit;text-decoration:none">${p.nome}</a></b></td>
+    <td>${p.categoria}</td>
+    <td><b style="color:var(--lime)">${p.pontos}</b></td>
+    <td>${p.vitorias}</td><td>${p.derrotas}</td><td>${p.aproveitamento}%</td>
+    <td>${varIcon(p)}</td>
+  </tr>`).join('')
+    ||'<tr><td colspan="8" class="muted" style="padding:24px">O ranking começa a ser preenchido quando a organização finaliza as primeiras chaves.</td></tr>';
+}
+
+function buildPills(list){
+  const cats=[...new Set(list.map(p=>p.categoria).filter(Boolean))];
+  const container=$('#rk-cat-pills');
+  if(!cats.length){ container.innerHTML=''; return; }
+  container.innerHTML=['<button class="cat-pill active" data-p="todas">Todas</button>',
+    ...cats.map(c=>`<button class="cat-pill" data-p="${c}">${c}</button>`)].join('');
+  $$('#rk-cat-pills .cat-pill').forEach(b=>b.onclick=()=>{
+    $$('#rk-cat-pills .cat-pill').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    activePill=b.dataset.p;
+    // sync dropdown
+    $('#rk-cat').value=activePill;
+    renderRanking(allRanking);
+  });
 }
 
 async function loadInterno(){
@@ -85,14 +139,14 @@ async function loadInterno(){
   }catch(e){}
   reloadInterno();
 }
-$('#rk-reload').onclick=reloadInterno; $('#rk-cat').onchange=reloadInterno;
+$('#rk-reload').onclick=reloadInterno; $('#rk-cat').onchange=()=>{ activePill=$('#rk-cat').value; renderRanking(allRanking); };
 async function reloadInterno(){
   try{
-    const cat=$('#rk-cat').value;
-    const list=await (await fetch('/api/ranking'+(cat&&cat!=='todas'?('?categoria='+encodeURIComponent(cat)):''))).json();
-    $('#rk-body').innerHTML=list.map(p=>`<tr class="${p.pos<=3?'podium toprow':''}"><td class="pos">${p.pos}</td><td><b>${p.nome}</b></td><td>${p.categoria}</td><td><b style="color:var(--lime)">${p.pontos}</b></td><td>${p.vitorias}</td><td>${p.derrotas}</td><td>${p.aproveitamento}%</td></tr>`).join('')
-      ||'<tr><td colspan="7" class="muted" style="padding:24px">O ranking começa a ser preenchido quando a organização finaliza as primeiras chaves.</td></tr>';
-  }catch(e){ $('#rk-body').innerHTML='<tr><td colspan="7" class="muted" style="padding:24px">Inicie o servidor (npm start) para carregar o ranking.</td></tr>'; }
+    const list=await (await fetch('/api/ranking')).json();
+    allRanking=list;
+    buildPills(list);
+    renderRanking(list);
+  }catch(e){ $('#rk-body').innerHTML='<tr><td colspan="8" class="muted" style="padding:24px">Inicie o servidor (npm start) para carregar o ranking.</td></tr>'; }
 }
 
 function rankTable(d){

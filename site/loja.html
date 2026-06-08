@@ -9,13 +9,42 @@
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="app.css">
 <style>
+  .filter-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px}
+  .chip{padding:6px 16px;border-radius:100px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;transition:.15s}
+  .chip:hover{border-color:var(--green);color:var(--cream)}
+  .chip.active{background:var(--green);border-color:var(--green);color:var(--deep2)}
   .prods{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
-  .prod{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:14px;padding:22px;text-align:center}
-  .prod .cat{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-weight:700}
-  .prod h3{font-size:18px;margin:6px 0}
-  .prod .preco{font-family:'Archivo';font-weight:900;font-size:24px;color:var(--lime);margin:8px 0}
-  .prod .est{font-size:12px;color:var(--muted)}
-  .prod .est.zero{color:#e89a8c}
+  .prod{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
+  .prod-thumb{height:140px;display:flex;align-items:center;justify-content:center;font-size:52px;background:rgba(95,179,53,.08)}
+  .prod-thumb.cat-raquetes{background:rgba(201,166,86,.10)}
+  .prod-thumb.cat-bolas{background:rgba(143,214,74,.10)}
+  .prod-thumb.cat-vestuario{background:rgba(95,179,53,.08)}
+  .prod-thumb.cat-acessorios{background:rgba(14,46,28,.25)}
+  .prod-body{padding:16px;flex:1;display:flex;flex-direction:column;gap:6px}
+  .prod .cat-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .prod h3{font-size:16px;font-weight:700;margin:0}
+  .prod .preco{font-family:'Archivo';font-weight:900;font-size:22px;color:var(--lime);margin:4px 0}
+  .prod .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 10px;border-radius:100px}
+  .badge.ok{background:rgba(143,214,74,.15);color:var(--lime)}
+  .badge.out{background:rgba(232,154,140,.15);color:#e89a8c}
+  .prod-footer{padding:0 16px 16px}
+  .btn-reservar{width:100%;padding:9px 0;border-radius:8px;border:none;background:var(--green);color:var(--deep2);font-weight:700;font-size:14px;cursor:pointer;transition:.15s}
+  .btn-reservar:hover{background:var(--lime)}
+  .btn-reservar:disabled{background:var(--line);color:var(--muted);cursor:not-allowed}
+  .banner-info{display:flex;align-items:center;gap:12px;background:rgba(201,166,86,.10);border:1px solid rgba(201,166,86,.3);border-radius:12px;padding:14px 18px;margin-bottom:24px;font-size:13.5px;color:var(--gold)}
+  .banner-info span{font-size:22px}
+  /* modal */
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:200;opacity:0;pointer-events:none;transition:.2s}
+  .modal-bg.open{opacity:1;pointer-events:all}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:28px;width:min(420px,94vw);max-height:90vh;overflow-y:auto}
+  .modal h3{margin:0 0 18px;font-size:20px}
+  .modal label{font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;margin-top:12px}
+  .modal input{width:100%;box-sizing:border-box;background:var(--deep2);border:1px solid var(--line);border-radius:8px;padding:9px 12px;color:var(--cream);font-size:14px}
+  .modal-btns{display:flex;gap:10px;margin-top:20px}
+  .modal-btns button{flex:1;padding:10px;border-radius:8px;border:none;font-weight:700;font-size:14px;cursor:pointer}
+  .btn-cancel{background:var(--line);color:var(--muted)}
+  .btn-confirm{background:var(--green);color:var(--deep2)}
+  .btn-confirm:hover{background:var(--lime)}
 </style>
 </head>
 <body>
@@ -23,24 +52,128 @@
   <div class="wrap"><a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span></a>
   <div class="navlinks"><a href="index.html">Site</a><a href="aulas.html">Aulas</a><a href="loja.html" class="active">Loja</a><a href="reservas.html">Reservar</a><a href="conta.html">Entrar</a></div></div>
 </header>
+
 <div class="wrap hero">
   <div class="kick">Pro Shop</div>
   <h1>Loja do <span class="lime">clube</span>.</h1>
-  <p>Raquetes, bolas, vestuário e acessórios. Compre na recepção do Tangará Tênis Clube.</p>
+  <p>Raquetes, bolas, vestuário e acessórios selecionados para você.</p>
 </div>
-<div class="wrap" style="padding-bottom:50px"><div class="prods" id="lista"></div>
-  <p class="muted" style="font-size:12.5px;margin-top:18px">Compra e reserva de produtos na recepção. O checkout online entra com o módulo de pagamentos.</p>
+
+<div class="wrap" style="padding-bottom:60px">
+  <div class="banner-info"><span>🏪</span><div>Retire na <b>recepção do Tangará Tênis Clube</b> · Pagamento no ato</div></div>
+
+  <div class="filter-chips" id="chips">
+    <button class="chip active" data-cat="todos">Todos</button>
+    <button class="chip" data-cat="Raquetes">🎾 Raquetes</button>
+    <button class="chip" data-cat="Bolas">🟡 Bolas</button>
+    <button class="chip" data-cat="Vestuário">👕 Vestuário</button>
+    <button class="chip" data-cat="Acessórios">🎒 Acessórios</button>
+  </div>
+
+  <div class="prods" id="lista"></div>
 </div>
-<footer class="app">AGRO OPEN · Pro Shop · powered by <b class="lime">SetPoint</b></footer>
+
+<!-- Modal de reserva -->
+<div class="modal-bg" id="modal-bg">
+  <div class="modal">
+    <h3>Reservar: <span id="modal-nome" class="lime"></span></h3>
+    <label>Nome completo</label><input id="m-nome" placeholder="Seu nome" type="text">
+    <label>E-mail</label><input id="m-email" placeholder="email@exemplo.com" type="email">
+    <label>Telefone / WhatsApp</label><input id="m-tel" placeholder="(65) 99999-0000" type="tel">
+    <label>Quantidade</label><input id="m-qtd" type="number" min="1" max="10" value="1">
+    <div class="modal-btns">
+      <button class="btn-cancel" id="modal-cancel">Cancelar</button>
+      <button class="btn-confirm" id="modal-confirm">Confirmar reserva</button>
+    </div>
+  </div>
+</div>
+
+<footer class="app" style="display:flex;align-items:center;flex-wrap:wrap;gap:10px">
+  AGRO OPEN · Pro Shop · powered by <b class="lime">SetPoint</b>
+  <span style="display:inline-flex;align-items:center;gap:8px;margin-left:auto;padding-left:18px;border-left:1px solid rgba(255,255,255,.12)">
+    <img src="img/logo-ttc-sm.png" alt="TTC" style="height:28px;width:auto;background:#fff;border-radius:5px;padding:2px 5px">
+    <span style="font-size:11px;color:var(--muted)">Realização<br>Tangará Tênis Clube</span>
+  </span>
+</footer>
+<div class="toast" id="toast"></div>
+
 <script>
-const $=s=>document.querySelector(s);
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const toast=(m,err)=>{const t=$('#toast');t.textContent=m;t.className='toast show'+(err?' err':'');setTimeout(()=>t.className='toast',2600)};
+
+const EMOJIS={Raquetes:'🎾',Bolas:'🟡',Vestuário:'👕',Acessórios:'🎒'};
+const SLUG={Raquetes:'raquetes',Bolas:'bolas',Vestuário:'vestuario',Acessórios:'acessorios'};
+
+let allProducts=[], currentCat='todos', pendingId=null;
+
+function render(){
+  const list=allProducts.filter(p=>currentCat==='todos'||p.cat===currentCat);
+  if(!list.length){
+    $('#lista').innerHTML='<div class="card" style="padding:30px;grid-column:1/-1;text-align:center"><p class="muted">Nenhum produto nesta categoria.</p></div>';
+    return;
+  }
+  $('#lista').innerHTML=list.map(p=>{
+    const slug=SLUG[p.cat]||'acessorios';
+    const esgotado=p.esgotado||(p.estoque!=null&&p.estoque<=0);
+    return `<div class="prod" data-id="${p.id}">
+      <div class="prod-thumb cat-${slug}">${EMOJIS[p.cat]||'📦'}</div>
+      <div class="prod-body">
+        <div class="cat-label">${p.cat||'Produto'}</div>
+        <h3>${p.nome}</h3>
+        <div class="preco">R$ ${(+p.preco).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
+        <div><span class="badge ${esgotado?'out':'ok'}">${esgotado?'Esgotado':(p.estoque!=null?p.estoque+' em estoque':'Disponível')}</span></div>
+      </div>
+      <div class="prod-footer">
+        <button class="btn-reservar" ${esgotado?'disabled':''} onclick="abrirModal(${p.id},'${p.nome.replace(/'/g,"\\'")}')">
+          ${esgotado?'Esgotado':'Reservar'}
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 async function carregar(){
   try{
     const list=await (await fetch('/api/loja')).json();
-    $('#lista').innerHTML=list.map(p=>`<div class="prod"><div class="cat">${p.cat}</div><h3>${p.nome}</h3><div class="preco">R$ ${p.preco.toLocaleString('pt-BR',{minimumFractionDigits:2})}</div><div class="est ${p.esgotado?'zero':''}">${p.esgotado?'Esgotado':('Em estoque: '+p.estoque)}</div></div>`).join('')
-      ||'<div class="card" style="padding:30px;grid-column:1/-1"><p class="muted">Catálogo em montagem. Volte em breve.</p></div>';
-  }catch(e){ $('#lista').innerHTML='<div class="card" style="padding:30px;grid-column:1/-1"><p class="muted">Inicie o servidor (npm start) para ver a loja.</p></div>'; }
+    allProducts=list;
+    if(!list.length){
+      $('#lista').innerHTML='<div class="card" style="padding:30px;grid-column:1/-1"><p class="muted">Catálogo em montagem. Volte em breve.</p></div>';
+      return;
+    }
+    render();
+  }catch(e){
+    $('#lista').innerHTML='<div class="card" style="padding:30px;grid-column:1/-1"><p class="muted">Inicie o servidor (npm start) para ver a loja.</p></div>';
+  }
 }
+
+// chips
+$$('#chips .chip').forEach(c=>c.onclick=()=>{
+  $$('#chips .chip').forEach(x=>x.classList.remove('active'));
+  c.classList.add('active');
+  currentCat=c.dataset.cat;
+  render();
+});
+
+// modal
+function abrirModal(id,nome){
+  pendingId=id;
+  $('#modal-nome').textContent=nome;
+  ['m-nome','m-email','m-tel'].forEach(i=>$(('#'+i)).value='');
+  $('#m-qtd').value=1;
+  $('#modal-bg').classList.add('open');
+}
+$('#modal-cancel').onclick=()=>$('#modal-bg').classList.remove('open');
+$('#modal-bg').onclick=e=>{ if(e.target===$('#modal-bg')) $('#modal-bg').classList.remove('open'); };
+$('#modal-confirm').onclick=async()=>{
+  const nome=$('#m-nome').value.trim(), email=$('#m-email').value.trim(), tel=$('#m-tel').value.trim(), qtd=+$('#m-qtd').value;
+  if(!nome||!email||!tel||!qtd){ toast('Preencha todos os campos.',true); return; }
+  try{
+    const r=await fetch('/api/loja/'+pendingId+'/reservar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nome,email,tel,qtd})});
+    if(r.ok){ toast('Reserva confirmada! Retire na recepção.'); $('#modal-bg').classList.remove('open'); }
+    else{ const e=await r.json(); toast(e.erro||'Erro ao reservar.',true); }
+  }catch(e){ toast('Inicie o servidor para reservar.',true); }
+};
+
 carregar();
 </script>
 </body>

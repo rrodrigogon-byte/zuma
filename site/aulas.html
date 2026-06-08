@@ -9,70 +9,279 @@
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="app.css">
 <style>
-  .aulas{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
-  .aula{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:14px;padding:20px}
-  .aula h3{font-size:19px;margin-bottom:6px}
-  .aula .meta{font-size:13px;color:var(--muted);margin-bottom:4px}
-  .aula .vagas{font-size:12px;font-weight:700;color:var(--lime);margin:10px 0}
-  .aula .vagas.lotada{color:#e89a8c}
-  .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
-  .modal.show{display:flex}.modal .card{max-width:400px;width:100%}
+  /* ── Filtros ── */
+  .filtros{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:28px;align-items:center}
+  .filtros label{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:3px;display:block}
+  .filtros select{background:var(--deep2);border:1px solid var(--line);color:#fff;font-family:'Inter',sans-serif;font-size:13px;padding:8px 14px;border-radius:8px;outline:none;cursor:pointer}
+  .filtros select:focus{border-color:var(--lime)}
+  .btn-reload{margin-left:auto;align-self:flex-end}
+
+  /* ── Cards de aula ── */
+  .aulas{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:18px}
+  .aula{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:16px;padding:22px;display:flex;flex-direction:column;transition:.2s}
+  .aula:hover{transform:translateY(-3px);box-shadow:0 12px 40px -16px rgba(0,0,0,.5)}
+  .aula-badge{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 10px;border-radius:20px;margin-bottom:10px}
+  .badge-tenis{background:rgba(95,179,53,.18);color:#5FB335}
+  .badge-beach{background:rgba(201,166,86,.18);color:#C9A656}
+  .badge-padel{background:rgba(143,214,74,.18);color:#8FD64A}
+  .aula h3{font-size:18px;margin:0 0 6px;line-height:1.3}
+  .aula .meta{font-size:13px;color:var(--muted);margin:3px 0;display:flex;align-items:center;gap:6px}
+  .aula .meta span{color:#c8dfc0}
+  .nivel-chip{font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;display:inline-block}
+  .nivel-Iniciante{background:rgba(95,179,53,.2);color:#7FD160}
+  .nivel-Intermediário{background:rgba(201,166,86,.2);color:#D4B070}
+  .nivel-Avançado{background:rgba(220,80,80,.2);color:#e8907a}
+  .nivel-Livre{background:rgba(143,214,74,.15);color:#8FD64A}
+  .vagas-bar{margin:12px 0 6px;height:5px;border-radius:10px;background:var(--line);overflow:hidden}
+  .vagas-bar-fill{height:100%;border-radius:10px;background:linear-gradient(90deg,var(--lime),var(--green));transition:width .4s}
+  .vagas-bar-fill.warn{background:linear-gradient(90deg,#e8a44a,#C9A656)}
+  .vagas-bar-fill.full{background:rgba(200,100,80,.5)}
+  .vagas-txt{font-size:12px;font-weight:700;color:var(--lime);margin-bottom:12px}
+  .vagas-txt.lotada{color:#e89a8c}
+  .preco-tag{font-family:'Archivo',sans-serif;font-weight:800;font-size:20px;color:#fff;margin-bottom:14px}
+  .preco-tag small{font-family:'Inter',sans-serif;font-size:12px;color:var(--muted);font-weight:500}
+  .aula .spacer{flex:1}
+  .btn-lotada{opacity:.4;cursor:not-allowed!important;pointer-events:none}
+
+  /* ── Professores ── */
+  .profs{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-top:10px}
+  .prof-card{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:14px;padding:20px;text-align:center}
+  .prof-avatar{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--green),var(--deep2));display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 12px;border:2px solid var(--line)}
+  .prof-card h4{font-size:15px;margin:0 0 4px}
+  .prof-card p{font-size:12px;color:var(--muted);margin:0}
+
+  /* ── Próximas 7 dias ── */
+  .agenda{display:flex;flex-direction:column;gap:10px}
+  .ag-item{background:var(--deep2);border:1px solid var(--line);border-radius:12px;padding:14px 18px;display:flex;align-items:center;gap:16px}
+  .ag-date{text-align:center;min-width:52px}
+  .ag-date .dia{font-family:'Archivo',sans-serif;font-size:24px;font-weight:900;color:var(--lime);line-height:1}
+  .ag-date .mes{font-size:11px;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .ag-info{flex:1}
+  .ag-info strong{font-size:14px;display:block;margin-bottom:2px}
+  .ag-info span{font-size:12px;color:var(--muted)}
+  .ag-hora{font-family:'Archivo',sans-serif;font-weight:800;font-size:15px;color:var(--gold);white-space:nowrap}
+
+  /* ── Modal ── */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;z-index:50;padding:20px;backdrop-filter:blur(4px)}
+  .modal.show{display:flex}
+  .modal .card{max-width:440px;width:100%;position:relative;animation:popIn .2s ease}
+  @keyframes popIn{from{transform:scale(.95);opacity:0}to{transform:scale(1);opacity:1}}
+  .modal-close{position:absolute;top:14px;right:18px;font-size:24px;color:var(--muted);cursor:pointer;line-height:1}
+  .modal-close:hover{color:#fff}
+  .success-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(95,179,53,.2);color:var(--lime);font-weight:700;padding:10px 16px;border-radius:10px;margin-top:12px;font-size:14px}
+
+  /* ── Section titles ── */
+  .section-title{font-family:'Archivo',sans-serif;font-size:22px;font-weight:900;margin:40px 0 16px;display:flex;align-items:center;gap:10px}
+  .section-title::after{content:'';flex:1;height:1px;background:var(--line)}
 </style>
 </head>
 <body>
 <header class="app">
-  <div class="wrap"><a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span></a>
-  <div class="navlinks"><a href="index.html">Site</a><a href="aulas.html" class="active">Aulas</a><a href="loja.html">Loja</a><a href="reservas.html">Reservar</a><a href="conta.html">Entrar</a></div></div>
+  <div class="wrap">
+    <a href="index.html" class="brand"><span class="ball"></span>AGRO <span class="lime">OPEN</span></a>
+    <div class="navlinks">
+      <a href="index.html">Site</a>
+      <a href="aulas.html" class="active">Aulas</a>
+      <a href="reservas.html">Reservar</a>
+      <a href="loja.html">Loja</a>
+      <a href="conta.html">Entrar</a>
+    </div>
+  </div>
 </header>
+
 <div class="wrap hero">
   <div class="kick">Academia</div>
   <h1>Aulas e <span class="lime">clínicas</span>.</h1>
-  <p>Evolua seu jogo com os professores do clube. Escolha um horário e matricule-se.</p>
+  <p>Evolua seu jogo com os professores do clube. Filtre por nível, modalidade e horário.</p>
 </div>
-<div class="wrap" style="padding-bottom:50px">
-  <div class="ctrls"><div class="field" style="margin:0"><label>A partir de</label><input id="data" type="date"></div><button class="btn sm ghost" id="reload">Atualizar</button></div>
+
+<div class="wrap" style="padding-bottom:60px">
+
+  <!-- Filtros -->
+  <div class="filtros">
+    <div>
+      <label>Nível</label>
+      <select id="f-nivel">
+        <option value="">Todos os níveis</option>
+        <option>Iniciante</option>
+        <option>Intermediário</option>
+        <option>Avançado</option>
+        <option>Livre</option>
+      </select>
+    </div>
+    <div>
+      <label>Modalidade</label>
+      <select id="f-mod">
+        <option value="">Todas as modalidades</option>
+        <option value="tenis">Tênis</option>
+        <option value="beach_tennis">Beach Tennis</option>
+        <option value="padel">Padel</option>
+      </select>
+    </div>
+    <div>
+      <label>A partir de</label>
+      <input id="f-data" type="date" style="background:var(--deep2);border:1px solid var(--line);color:#fff;font-family:Inter,sans-serif;font-size:13px;padding:8px 14px;border-radius:8px;outline:none">
+    </div>
+    <button class="btn sm ghost btn-reload" id="reload">Atualizar</button>
+  </div>
+
+  <!-- Lista de aulas -->
   <div class="aulas" id="lista"></div>
+
+  <!-- Próximas 7 dias -->
+  <div class="section-title">Próximas 7 dias</div>
+  <div class="agenda" id="agenda"></div>
+
+  <!-- Professores -->
+  <div class="section-title">Professores</div>
+  <div class="profs" id="profs"></div>
+
 </div>
-<div class="modal" id="modal"><div class="card">
-  <h2 id="m-title" style="font-size:20px;margin-bottom:4px">Matrícula</h2>
-  <p class="muted" id="m-sub" style="margin-bottom:16px"></p>
-  <div class="field"><label>Nome completo</label><input id="a-nome" placeholder="Seu nome"></div>
-  <div class="field"><label>E-mail</label><input id="a-email" type="email" placeholder="voce@email.com"></div>
-  <div style="display:flex;gap:10px;margin-top:8px"><button class="btn" id="a-confirm" style="flex:1;justify-content:center">Confirmar matrícula</button><button class="btn ghost" id="a-cancel">Cancelar</button></div>
-</div></div>
+
+<!-- Modal de matrícula -->
+<div class="modal" id="modal">
+  <div class="card">
+    <span class="modal-close" id="m-close">&times;</span>
+    <div class="kick" style="margin-bottom:6px">Matrícula</div>
+    <h2 id="m-title" style="font-size:21px;margin-bottom:3px"></h2>
+    <p class="muted" id="m-sub" style="margin-bottom:18px;font-size:13px"></p>
+    <div class="field"><label>Nome completo</label><input id="a-nome" placeholder="Seu nome completo"></div>
+    <div class="field"><label>E-mail</label><input id="a-email" type="email" placeholder="voce@email.com"></div>
+    <div class="field"><label>Telefone / WhatsApp</label><input id="a-tel" placeholder="(65) 90000-0000"></div>
+    <div id="m-success" style="display:none"></div>
+    <div id="m-actions" style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn" id="a-confirm" style="flex:1;justify-content:center">Confirmar matrícula</button>
+      <button class="btn ghost" id="a-cancel">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <footer class="app">AGRO OPEN · Academia · powered by <b class="lime">SetPoint</b></footer>
 <div class="toast" id="toast"></div>
+
 <script>
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const toast=(m,e)=>{const t=$('#toast');t.textContent=m;t.className='toast show'+(e?' err':'');setTimeout(()=>t.className='toast',2600);};
-let sel=null;
+const MOD={tenis:'Tênis',beach_tennis:'Beach Tennis',padel:'Pádel',futevolei:'Futevôlei',squash:'Squash'};
+const BADGE_CLS={tenis:'badge-tenis',beach_tennis:'badge-beach',padel:'badge-padel'};
+let sel=null, ALL=[];
+
+const today=new Date().toISOString().slice(0,10);
+$('#f-data').value=today;
+$('#f-data').min=today;
+
+function badgeMod(m){ return `<span class="aula-badge ${BADGE_CLS[m]||'badge-tenis'}">${MOD[m]||m}</span>`; }
+function nivelChip(n){ return `<span class="nivel-chip nivel-${n||'Livre'}">${n||'Livre'}</span>`; }
+function vagasPct(livre,total){ if(!total)return 0; return Math.round((livre/total)*100); }
+
+function renderAulas(list){
+  if(!list.length){
+    $('#lista').innerHTML='<div class="card" style="padding:30px;grid-column:1/-1"><p class="muted">Nenhuma aula encontrada com esses filtros. Tente outros critérios.</p></div>';
+    return;
+  }
+  $('#lista').innerHTML=list.map(a=>{
+    const lot=a.vagasLivres<=0;
+    const pct=vagasPct(a.vagasLivres,a.vagas);
+    const warnClass=pct<=25?'full':pct<=50?'warn':'';
+    return `<div class="aula">
+      ${badgeMod(a.modalidade)}
+      <h3>${a.titulo}</h3>
+      <div class="meta">📅 <span>${a.data.split('-').reverse().join('/')}</span> · ${a.hora}</div>
+      <div class="meta">👤 <span>${a.professor||'—'}</span> · ${nivelChip(a.nivel)}</div>
+      <div class="spacer"></div>
+      <div class="vagas-bar"><div class="vagas-bar-fill ${warnClass}" style="width:${pct}%"></div></div>
+      <div class="vagas-txt ${lot?'lotada':''}">${lot?'Lotada — sem vagas':(a.vagasLivres+' vaga(s) disponível de '+a.vagas)}</div>
+      <div class="preco-tag">${a.preco?'R$ '+Number(a.preco).toFixed(2).replace('.',','):'Grátis'} <small>${a.preco?'/ aula':''}</small></div>
+      <button class="btn sm ${lot?'ghost btn-lotada':''}" data-id="${a.id}" data-t="${a.titulo}" data-s="${a.data.split('-').reverse().join('/')} · ${a.hora} · ${MOD[a.modalidade]||a.modalidade}" ${lot?'disabled':''}>
+        ${lot?'Lotada':'Inscrever-se'}
+      </button>
+    </div>`;
+  }).join('');
+  $$('#lista button[data-id]:not([disabled])').forEach(b=>b.onclick=()=>{
+    sel=b.dataset.id;
+    $('#m-title').textContent=b.dataset.t;
+    $('#m-sub').textContent=b.dataset.s;
+    $('#m-success').style.display='none';
+    $('#m-actions').style.display='flex';
+    ['#a-nome','#a-email','#a-tel'].forEach(id=>$(id).value='');
+    $('#modal').classList.add('show');
+  });
+}
+
+function renderAgenda(list){
+  const now=new Date(); const fim=new Date(); fim.setDate(fim.getDate()+7);
+  const prox=list.filter(a=>{ const d=new Date(a.data); return d>=now&&d<=fim; })
+    .sort((a,b)=>a.data.localeCompare(b.data)||a.hora.localeCompare(b.hora));
+  if(!prox.length){ $('#agenda').innerHTML='<p class="muted">Nenhuma aula nos próximos 7 dias.</p>'; return; }
+  const meses=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  $('#agenda').innerHTML=prox.map(a=>{
+    const d=new Date(a.data+'T00:00:00');
+    return `<div class="ag-item">
+      <div class="ag-date"><div class="dia">${d.getDate()}</div><div class="mes">${meses[d.getMonth()]}</div></div>
+      <div class="ag-info"><strong>${a.titulo}</strong><span>${MOD[a.modalidade]||a.modalidade} · ${a.nivel||'Livre'} · ${a.professor||'—'}</span></div>
+      <div class="ag-hora">${a.hora}</div>
+    </div>`;
+  }).join('');
+}
+
 async function carregar(){
   try{
-    const list=await (await fetch('/api/aulas')).json();
-    const from=$('#data').value;
-    const f=from?list.filter(a=>a.data>=from):list;
-    $('#lista').innerHTML=f.map(a=>{
-      const lot=a.vagasLivres<=0;
-      return `<div class="aula"><h3>${a.titulo}</h3>
-        <div class="meta">📅 ${a.data.split('-').reverse().join('/')} · ${a.hora}</div>
-        <div class="meta">👤 ${a.professor||'—'} · ${a.nivel}</div>
-        <div class="meta">💪 ${MOD[a.modalidade]||a.modalidade}${a.preco?(' · R$ '+a.preco):' · grátis'}</div>
-        <div class="vagas ${lot?'lotada':''}">${lot?'Lotada':(a.vagasLivres+' vaga(s) de '+a.vagas)}</div>
-        <button class="btn sm" data-id="${a.id}" data-t="${a.titulo}" data-s="${a.data} ${a.hora}" ${lot?'disabled':''}>${lot?'Sem vagas':'Matricular'}</button></div>`;
-    }).join('')||'<div class="card" style="padding:30px;grid-column:1/-1"><p class="muted">Nenhuma aula agendada. Volte em breve.</p></div>';
-    $$('#lista button[data-id]').forEach(b=>b.onclick=()=>{ sel=b.dataset.id; $('#m-title').textContent=b.dataset.t; $('#m-sub').textContent=b.dataset.s; $('#modal').classList.add('show'); });
-  }catch(e){ $('#lista').innerHTML='<div class="card" style="padding:30px;grid-column:1/-1"><p class="muted">Inicie o servidor (npm start) para ver as aulas.</p></div>'; }
+    ALL=await (await fetch('/api/aulas')).json();
+  }catch(e){ ALL=[]; }
+  filtrar();
+  renderAgenda(ALL);
 }
-const MOD={tenis:'Tênis',beach_tennis:'Beach Tennis',padel:'Pádel',futevolei:'Futevôlei',squash:'Squash',volei_praia:'Vôlei de praia',tenis_mesa:'Tênis de mesa',pickleball:'Pickleball'};
-$('#a-cancel').onclick=()=>$('#modal').classList.remove('show');
+
+function filtrar(){
+  const nivel=$('#f-nivel').value;
+  const mod=$('#f-mod').value;
+  const data=$('#f-data').value;
+  let f=ALL;
+  if(nivel) f=f.filter(a=>a.nivel===nivel);
+  if(mod) f=f.filter(a=>a.modalidade===mod);
+  if(data) f=f.filter(a=>a.data>=data);
+  if(!f.length&&!nivel&&!mod&&!data){
+    $('#lista').innerHTML='<div class="card" style="padding:30px;grid-column:1/-1"><p class="muted">Nenhuma aula agendada. Volte em breve.</p></div>';
+  } else {
+    renderAulas(f);
+  }
+}
+
+async function carregarProfs(){
+  try{
+    const profs=await (await fetch('/api/professores')).json();
+    $('#profs').innerHTML=profs.map(p=>`<div class="prof-card">
+      <div class="prof-avatar">${p.foto?`<img src="${p.foto}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:p.nome[0].toUpperCase()}</div>
+      <h4>${p.nome}</h4>
+      <p>${p.especialidade||p.modalidade||'Professor'}</p>
+    </div>`).join('');
+  }catch(e){
+    $('#profs').innerHTML='<p class="muted" style="grid-column:1/-1">Informações dos professores indisponíveis.</p>';
+  }
+}
+
+$('#f-nivel').onchange=$('#f-mod').onchange=$('#f-data').onchange=filtrar;
+$('#reload').onclick=carregar;
+$('#m-close').onclick=$('#a-cancel').onclick=()=>$('#modal').classList.remove('show');
 $('#modal').onclick=e=>{if(e.target===$('#modal'))$('#modal').classList.remove('show');};
+
 $('#a-confirm').onclick=async()=>{
-  try{ const r=await fetch('/api/aula/'+sel+'/matricular',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nome:$('#a-nome').value,email:$('#a-email').value})});
-    const d=await r.json(); if(!r.ok) throw new Error(d.error); $('#modal').classList.remove('show'); toast('Matrícula confirmada!'); carregar();
-  }catch(e){ toast(e.message||'Falha',true); }
+  const nome=$('#a-nome').value.trim(), email=$('#a-email').value.trim(), tel=$('#a-tel').value.trim();
+  if(!nome||!email){toast('Preencha nome e e-mail',true);return;}
+  try{
+    const r=await fetch('/api/aula/'+sel+'/matricular',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nome,email,telefone:tel})});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error);
+    $('#m-actions').style.display='none';
+    $('#m-success').style.display='block';
+    $('#m-success').innerHTML=`<div class="success-badge">✓ Matrícula confirmada! Nos vemos na quadra.</div>`;
+    toast('Matrícula confirmada!');
+    setTimeout(()=>{ $('#modal').classList.remove('show'); carregar(); },2500);
+  }catch(e){ toast(e.message||'Falha ao matricular',true); }
 };
-$('#reload').onclick=carregar; $('#data').onchange=carregar;
+
 carregar();
+carregarProfs();
 </script>
 </body>
 </html>

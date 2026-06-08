@@ -1537,14 +1537,14 @@ async function editarUsuario(id){
     <button class="btn ghost sm" id="me-reset-btn" style="margin-bottom:8px">Resetar senha</button><span id="me-nova-senha" style="font-size:13px;margin-left:8px;color:var(--lime)"></span>
   `, async()=>{
     try{
-      await api('/api/admin/usuario/'+id,{method:'PATCH',body:JSON.stringify({nome:$('#me-nome').value,role:$('#me-role').value,ativo:$('#me-ativo').checked})});
+      await api('/api/admin/usuarios/'+id,{method:'PATCH',body:JSON.stringify({nome:$('#me-nome').value,role:$('#me-role').value,ativo:$('#me-ativo').checked})});
       toast('Usuário atualizado'); fecharModal(); loadUsuarios();
     }catch(e){ toast(e.message,true); }
   });
   setTimeout(()=>{
     const btn=$('#me-reset-btn'); if(!btn)return;
     btn.onclick=async()=>{
-      try{ const r=await api('/api/admin/usuario/'+id+'/reset-senha',{method:'POST'}); $('#me-nova-senha').textContent='Nova senha: '+(r.senha||r.novaSenha||'(ver console)'); toast('Senha resetada'); }
+      try{ const r=await api('/api/admin/usuarios/'+id+'/reset-senha',{method:'POST'}); $('#me-nova-senha').textContent='Nova senha: '+(r.senha||r.novaSenha||'(ver console)'); toast('Senha resetada'); }
       catch(e){ toast(e.message,true); }
     };
   },50);
@@ -1585,7 +1585,7 @@ async function editarSocio(id){
     <div class="field"><label>Vencimento</label><input id="me-venc" type="date" value="${s.vencimento||''}"></div>
   `, async()=>{
     try{
-      await api('/api/admin/socio/'+id,{method:'PATCH',body:JSON.stringify({plano:$('#me-plano').value,status:$('#me-status').value,vencimento:$('#me-venc').value})});
+      await api('/api/admin/socios/'+id,{method:'PATCH',body:JSON.stringify({plano:$('#me-plano').value,status:$('#me-status').value,vencimento:$('#me-venc').value})});
       toast('Sócio atualizado'); fecharModal(); loadSocios();
     }catch(e){ toast(e.message,true); }
   });
@@ -1606,7 +1606,7 @@ async function editarAula(id){
     <div class="field"><label>Horário</label><input id="me-horario" value="${a.hora||a.horario||''}"></div>
   `, async()=>{
     try{
-      await api('/api/admin/aula/'+id,{method:'PATCH',body:JSON.stringify({titulo:$('#me-titulo').value,professor:$('#me-prof').value,maxAlunos:$('#me-vagas').value,preco:$('#me-preco').value,dias:$('#me-dias').value,horario:$('#me-horario').value})});
+      await api('/api/admin/aulas/'+id,{method:'PATCH',body:JSON.stringify({titulo:$('#me-titulo').value,professor:$('#me-prof').value,maxAlunos:$('#me-vagas').value,preco:$('#me-preco').value,dias:$('#me-dias').value,horario:$('#me-horario').value})});
       toast('Aula atualizada'); fecharModal(); loadAulas();
     }catch(e){ toast(e.message,true); }
   });
@@ -1644,7 +1644,7 @@ async function editarPatroc(id){
     <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:12px"><input type="checkbox" id="me-ativo" style="width:auto"${p.ativo!==false?' checked':''}> Ativo</label>
   `, async()=>{
     try{
-      await api('/api/admin/patrocinador/'+id,{method:'PATCH',body:JSON.stringify({nome:$('#me-nome').value,tier:$('#me-tier').value,descricao:$('#me-desc').value,url:$('#me-url').value,ativo:$('#me-ativo').checked})});
+      await api('/api/admin/patrocinadores/'+id,{method:'PATCH',body:JSON.stringify({nome:$('#me-nome').value,tier:$('#me-tier').value,descricao:$('#me-desc').value,url:$('#me-url').value,ativo:$('#me-ativo').checked})});
       toast('Patrocinador atualizado'); fecharModal(); loadPatroc();
     }catch(e){ toast(e.message,true); }
   });
@@ -1663,7 +1663,7 @@ async function editarReserva(id){
     <div class="field"><label>Observação</label><input id="me-obs" value="${r.obs||''}"></div>
   `, async()=>{
     try{
-      await api('/api/admin/reserva/'+id,{method:'PATCH',body:JSON.stringify({status:$('#me-status').value,obs:$('#me-obs').value})});
+      await api('/api/admin/reservas/'+id,{method:'PATCH',body:JSON.stringify({status:$('#me-status').value,obs:$('#me-obs').value})});
       toast('Reserva atualizada'); fecharModal(); loadReservas();
     }catch(e){ toast(e.message,true); }
   });
@@ -1683,7 +1683,7 @@ async function editarInscricao(id){
     <div class="field"><label>Observação</label><input id="me-obs" value="${i.obs||''}"></div>
   `, async()=>{
     try{
-      await api('/api/admin/inscricao/'+id,{method:'PATCH',body:JSON.stringify({status:$('#me-status').value,categorias:$('#me-cats').value.split(',').map(s=>s.trim()).filter(Boolean),obs:$('#me-obs').value})});
+      await api('/api/admin/inscricoes/'+id,{method:'PATCH',body:JSON.stringify({status:$('#me-status').value,categorias:$('#me-cats').value.split(',').map(s=>s.trim()).filter(Boolean),obs:$('#me-obs').value})});
       toast('Inscrição atualizada'); fecharModal(); loadInscricoes();
     }catch(e){ toast(e.message,true); }
   });
