@@ -331,6 +331,25 @@ async function confirmarReserva() {
     const d = await r.json();
     if (!r.ok) { toast(d.erro || 'Erro ao reservar', true); btn.disabled = false; btn.textContent = '⚡ Confirmar reserva via Pix'; return; }
 
+    // busca info Pix (copia-e-cola gerado pelo servidor)
+    let pixHtml = '';
+    try {
+      const pr = await fetch('/api/pix-info?valor=' + d.total);
+      const pd = await pr.json();
+      if (pd.ativo && pd.copiaECola) {
+        pixHtml = `
+          <div style="margin:16px 0 0;background:rgba(95,179,53,.08);border:1px solid rgba(95,179,53,.3);border-radius:12px;padding:14px 16px;text-align:left">
+            <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Chave Pix (CNPJ) · <b style="color:var(--lime)">${pd.nome || ''}</b></div>
+            <div style="font-size:13px;font-weight:700;color:var(--lime);word-break:break-all;margin-bottom:10px">${pd.chave}</div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Copia e cola:</div>
+            <textarea readonly onclick="this.select()" style="width:100%;box-sizing:border-box;font-size:10px;background:var(--deep2);color:#aaa;border:1px solid var(--line);border-radius:8px;padding:8px;resize:none;height:60px;font-family:monospace">${pd.copiaECola}</textarea>
+            <button onclick="navigator.clipboard.writeText('${pd.copiaECola.replace(/'/g,"\\'")}').then(()=>this.textContent='✅ Copiado!').catch(()=>{})" style="margin-top:8px;width:100%;padding:8px;border:none;border-radius:8px;background:var(--green);color:var(--deep2);font-weight:700;cursor:pointer;font-family:inherit">📋 Copiar código Pix</button>
+          </div>`;
+      } else {
+        pixHtml = `<p style="color:var(--muted);font-size:13px;margin-top:12px">Realize o pagamento via Pix na recepção do TTC.</p>`;
+      }
+    } catch { pixHtml = ''; }
+
     // sucesso
     $('#modal-body').innerHTML = `
       <div class="modal-success">
@@ -340,11 +359,11 @@ async function confirmarReserva() {
         <p>
           <b>${d.produto}</b> · ${qtdModal} unidade(s)<br>
           ${tamanho ? `Tamanho: <b>${tamanho}</b><br>` : ''}
-          Reserva <b>#${d.reservaId}</b><br><br>
-          Realize o pagamento via Pix e leve o <b>comprovante + número de reserva</b><br>
-          à <b>recepção do Tangará Tênis Clube</b> de 07 a 13/09/2026.
+          Reserva <b>#${d.reservaId}</b>
         </p>
-        <button class="btn-pix" style="margin-top:20px" onclick="fecharModal()">Fechar</button>
+        ${pixHtml}
+        <p style="font-size:12px;color:var(--muted);margin-top:12px">Pague e leve o <b>comprovante + nº da reserva</b> à recepção do TTC de 07 a 13/09/2026.</p>
+        <button class="btn-pix" style="margin-top:16px" onclick="fecharModal()">Fechar</button>
       </div>`;
     // atualiza estoque local
     const prod = allProducts.find(x => x.id === pendingProduct.id);

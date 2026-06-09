@@ -21,6 +21,12 @@ services:
         sync: false           # defina manualmente no painel (não versionar senha)
       - key: DB_PATH
         value: /var/data/db.json
+      - key: PIX_CHAVE
+        value: "43084070000188"   # CNPJ do clube — chave Pix estática
+      - key: PIX_NOME
+        value: "AGRO OPEN TTC"
+      - key: PIX_CIDADE
+        value: "TANGARA DA SERRA"
     disk:
       name: setpoint-data
       mountPath: /var/data    # o DB_PATH aponta para cá — sobrevive a deploys

@@ -13,7 +13,7 @@ import { applyElo, ratingList } from './rating.js';
 import { gerarFaseGrupos, tabelasGrupos, gerarMataMata, gruposCompletos } from './grupos.js';
 import { gerarSuico, proximaRodada, tabelaSuico } from './swiss.js';
 import { gerarDuplaElim, reportDupla } from './doubleelim.js';
-import { criarPix, consultarStatus, pagamentosAtivos } from './pagamentos.js';
+import { criarPix, consultarStatus, pagamentosAtivos, pixInfo, gerarBrCode } from './pagamentos.js';
 import crypto from 'crypto';
 import QRCode from 'qrcode';
 
@@ -118,6 +118,20 @@ function advance(chave, r, idx){
 
 // =================== API PÚBLICA ===================
 app.get('/api/info', (req,res)=> res.json(PLATAFORMA));
+
+// Informações públicas do Pix configurado (chave, nome, cidade, copia-e-cola sem valor)
+app.get('/api/pix-info', (req,res)=>{
+  if(!pixInfo) return res.json({ ativo:false, modo:'simulado' });
+  const { valor } = req.query; // ?valor=150.00 (opcional) gera copia-e-cola com valor fixado
+  const v = valor ? parseFloat(valor) : null;
+  const copiaECola = gerarBrCode({
+    chave: pixInfo.chave,
+    nome:  pixInfo.nome,
+    cidade:pixInfo.cidade,
+    valor: v && v > 0 ? v : null,
+  });
+  res.json({ ativo:true, modo:'estatico', chave:pixInfo.chave, nome:pixInfo.nome, cidade:pixInfo.cidade, copiaECola });
+});
 app.get('/api/categorias', (req,res)=> res.json(CATEGORIAS));
 
 // CPF validation helper
