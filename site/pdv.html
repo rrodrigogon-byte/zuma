@@ -284,6 +284,32 @@ th{background:var(--brand);color:var(--ink);font-size:11px;text-transform:upperc
 /* ── caixa info bar ── */
 .caixa-bar{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-bottom:14px;flex-wrap:wrap;align-items:center}
 .caixa-bar b{color:var(--brand2)}
+
+/* ── receber banner (contas) ── */
+.receber-banner{display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,var(--brand),#1a4a2e);border-radius:14px;padding:18px 20px;margin-bottom:14px;border:1px solid rgba(95,179,53,.2)}
+.rb-lbl{font-size:12px;color:rgba(255,255,255,.7);margin-bottom:4px}
+.rb-val{font-size:32px;font-weight:900;color:#fff;font-variant-numeric:tabular-nums}
+.rb-side{text-align:right;font-size:13px;color:rgba(255,255,255,.85)}
+.rb-side b{display:block;font-size:18px;color:var(--brand2)}
+
+/* ── mapa rota ── */
+.map-wrap{position:relative;width:100%;height:320px;background:rgba(10,26,16,.8);border-radius:12px;overflow:hidden;border:1px solid var(--line);margin-bottom:12px}
+.map-field{position:absolute;border:1px dashed rgba(95,179,53,.3);border-radius:6px}
+.map-zlabel{position:absolute;transform:translate(-50%,-50%);font-size:10px;color:var(--muted);font-weight:600;background:rgba(10,26,16,.8);padding:2px 5px;border-radius:5px;white-space:nowrap}
+.map-barmark{position:absolute;transform:translate(-50%,-50%);background:var(--brand2);color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px;z-index:3}
+.map-pulse{width:14px;height:14px;background:var(--accent);border-radius:50%;position:absolute;transform:translate(-50%,-50%);z-index:2;box-shadow:0 0 0 0 rgba(201,166,86,.6);animation:mp 1.6s infinite}
+@keyframes mp{0%{box-shadow:0 0 0 0 rgba(201,166,86,.55)}70%{box-shadow:0 0 0 14px rgba(201,166,86,0)}100%{box-shadow:0 0 0 0 rgba(201,166,86,0)}}
+.map-marker{position:absolute;transform:translate(-50%,-100%);text-align:center;z-index:3}
+.map-pin{font-size:22px;line-height:1}
+.map-plabel{font-size:10px;font-weight:700;background:var(--accent);color:#fff;padding:2px 6px;border-radius:20px;transform:translateY(-3px);display:inline-block}
+.route-info{display:flex;gap:14px;font-size:13px;flex-wrap:wrap}
+.route-info b{color:var(--brand2)}
+
+/* ── vbar (localização mesa virtual na comanda) ── */
+.vbar{display:flex;align-items:center;justify-content:space-between;gap:8px;background:rgba(201,166,86,.08);border:1px solid rgba(201,166,86,.2);border-radius:9px;padding:8px 11px;margin-bottom:8px}
+.vbar-loc{font-size:12px;color:var(--accent);font-weight:700}
+.vbar-map{border:1px solid var(--accent);color:var(--accent);background:none;border-radius:7px;padding:5px 9px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}
+.vbar-map:hover{background:rgba(201,166,86,.15)}
 </style>
 </head>
 <body>
@@ -363,10 +389,14 @@ th{background:var(--brand);color:var(--ink);font-size:11px;text-transform:upperc
       <div class="rowhead" style="margin-top:14px">
         <h2>Contas mensalistas abertas</h2>
       </div>
-      <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Mensalistas acumulam consumo e fecham a fatura mensalmente. Ao fechar uma comanda, escolha <b>📅 Conta mensal</b>.</p>
+      <div class="receber-banner">
+        <div><div class="rb-lbl">💰 Total a receber</div><div class="rb-val" id="c-aberto">R$ 0,00</div></div>
+        <div class="rb-side"><span id="c-banner-sub">0 conta(s) aberta(s)</span><b id="c-qtd">0</b></div>
+      </div>
       <div class="kpi-row">
-        <div class="kpi"><div class="kl">Total em aberto</div><div class="kv" id="c-aberto">R$ 0</div></div>
-        <div class="kpi"><div class="kl">Clientes c/ saldo</div><div class="kv" id="c-qtd">0</div></div>
+        <div class="kpi"><div class="kl">Clientes com conta</div><div class="kv" id="c-clientes">0</div></div>
+        <div class="kpi"><div class="kl">Atrasadas (+30d)</div><div class="kv" id="c-atraso" style="color:#f87171">0</div></div>
+        <div class="kpi"><div class="kl">Maior conta</div><div class="kv" id="c-maior">R$ 0</div></div>
       </div>
       <p class="kds-empty hidden" id="contas-empty" style="display:none;color:var(--muted)">Nenhuma conta em aberto. Use <b>📅 Conta mensal</b> ao fechar uma comanda.</p>
       <div class="mesa-grid" id="contas-list" style="grid-template-columns:repeat(auto-fill,minmax(270px,1fr))"></div>
@@ -419,6 +449,10 @@ th{background:var(--brand);color:var(--ink);font-size:11px;text-transform:upperc
       </div>
       <!-- comanda -->
       <div class="cmd-side">
+        <div class="vbar hidden" id="vbar">
+          <span class="vbar-loc" id="vbar-loc">📍</span>
+          <button class="vbar-map" id="vbar-map-btn">🗺 Ver no mapa / Levar</button>
+        </div>
         <div style="font-weight:700;font-size:13px;margin-bottom:6px;color:var(--muted)">COMANDA</div>
         <div class="cmd-list" id="cmd-list"></div>
         <div id="desc-line"></div>
@@ -598,6 +632,25 @@ th{background:var(--brand);color:var(--ink);font-size:11px;text-transform:upperc
     <div class="modal-row">
       <button class="btn-danger" id="del-ok">Remover</button>
       <button class="btn-cancel-m" id="del-cancel">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MAPA / ROTA (mesa virtual) ═══ -->
+<div class="overlay" id="map-overlay">
+  <div class="sheet" style="max-width:560px">
+    <div class="sheet-hdr">
+      <b id="map-title">📍 Levar até a mesa</b>
+      <button class="sh-close" onclick="closeMap()">×</button>
+    </div>
+    <div style="padding:16px;overflow:auto">
+      <div class="map-wrap" id="map-canvas"></div>
+      <div class="route-info">
+        <div>Local: <b id="ri-loc">—</b></div>
+        <div>Distância: <b id="ri-dist">—</b></div>
+        <div>A pé: <b id="ri-time">—</b></div>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin-top:10px">A linha tracejada mostra a rota do bar até a mesa virtual.</p>
     </div>
   </div>
 </div>
@@ -839,6 +892,17 @@ function renderComanda() {
   // header
   $('#sh-title').textContent = cur.nome;
   $('#sh-tag').textContent = cur.tipo === 'virtual' ? 'virtual' : 'mesa ' + cur.mesaNum;
+
+  // vbar — localização para mesas virtuais
+  const vbar = $('#vbar');
+  if (cur.tipo === 'virtual' && cur.local) {
+    const ref = typeof cur.local === 'object' ? (cur.local.ref || '') : cur.local;
+    if (ref) {
+      vbar.classList.remove('hidden');
+      $('#vbar-loc').textContent = '📍 ' + ref;
+      $('#vbar-map-btn').onclick = () => openMap(cur);
+    } else { vbar.classList.add('hidden'); }
+  } else { vbar.classList.add('hidden'); }
 
   // pills + items de menu
   renderCatPills(); renderMenuItems();
@@ -1229,7 +1293,8 @@ function renderKDS() {
     const cls = age >= 15 ? 'late' : age >= 7 ? 'warn' : '';
     const mins = Math.floor(age), secs = Math.floor((age * 60) % 60);
     const timer = String(mins).padStart(2,'0') + ':' + String(secs).padStart(2,'0');
-    const loc = o.tipo === 'virtual' && o.local ? `<div class="kloc"><span>📍 ${o.local.ref || 'virtual'}</span></div>` : '';
+    const locRef = o.tipo === 'virtual' && o.local ? (typeof o.local === 'object' ? o.local.ref : o.local) : '';
+    const loc = locRef ? `<div class="kloc"><span>📍 ${locRef}</span><button style="border:1px solid var(--accent);color:var(--accent);background:none;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer" onclick="openMap({nome:'${(o.mesa||'').replace(/'/g,'')}',local:'${locRef.replace(/'/g,'')}',tipo:'virtual'})">🗺 Levar</button></div>` : '';
     return `<div class="ticket ${cls}" data-cid="${o.comandaId}">
       <h4><span>#${o.comandaId} · ${o.mesa}</span><span class="ktimer" data-t0="${o.criadoEm}">${timer}</span></h4>
       ${loc}
@@ -1306,8 +1371,22 @@ async function loadContas() {
     const socios = await api('/api/socios');
     const comSaldo = socios.filter(s => s.saldo && s.saldo > 0);
     const total = comSaldo.reduce((s, c) => s + (c.saldo || 0), 0);
+    const atrasadas = comSaldo.filter(c => {
+      const lancs = c.lancamentos || [];
+      if (!lancs.length) return false;
+      const min = Math.min(...lancs.map(l => new Date(l.criadoEm || l.ts || Date.now())));
+      return Math.floor((Date.now() - min) / 86400000) > 30;
+    }).length;
+    const maior = comSaldo.length ? Math.max(...comSaldo.map(c => c.saldo || 0)) : 0;
+
+    // banner + KPIs
     $('#c-aberto').textContent = fmtR(total);
+    $('#c-banner-sub').textContent = comSaldo.length + ' conta(s) aberta(s)';
     $('#c-qtd').textContent = comSaldo.length;
+    $('#c-clientes').textContent = comSaldo.length;
+    $('#c-atraso').textContent = atrasadas;
+    $('#c-maior').textContent = fmtR(maior);
+
     const empty = $('#contas-empty'), list = $('#contas-list');
     if (!comSaldo.length) { empty.style.display = 'block'; list.innerHTML = ''; return; }
     empty.style.display = 'none';
@@ -1317,7 +1396,7 @@ async function loadContas() {
       const limite = c.limite || 500;
       const disponivel = limite - saldo;
       const lancamentos = c.lancamentos || [];
-      const dias = lancamentos.length ? Math.floor((Date.now() - new Date(Math.min(...lancamentos.map(l => new Date(l.criadoEm || l.ts || Date.now()))))) / 86400000) : 0;
+      const dias = lancamentos.length ? Math.floor((Date.now() - Math.min(...lancamentos.map(l => new Date(l.criadoEm || l.ts || Date.now())))) / 86400000) : 0;
       const pct = Math.min(100, Math.round(saldo / limite * 100));
       const over = disponivel < 0;
 
@@ -1335,27 +1414,42 @@ async function loadContas() {
         </div>`;
       }).join('');
 
+      const nomeEsc = c.nome.replace(/'/g, '').replace(/"/g, '');
       return `<div class="conta-card">
         <div class="cc-head">
           <div style="display:flex;gap:9px;align-items:center;min-width:0;flex:1">
             <div class="cc-av">${initials(c.nome)}</div>
-            <div style="min-width:0;flex:1"><div class="cc-nome">${c.nome}</div><div class="cc-sub">${c.planoNome || 'Mensalista'}</div></div>
+            <div style="min-width:0;flex:1"><div class="cc-nome">${c.nome}</div><div class="cc-sub">${c.planoNome || 'Mensalista'} · vence dia 10</div></div>
           </div>
           <span class="dias-badge ${diasCls(dias)}">⏱ ${dias}d</span>
         </div>
         <div class="cc-saldo"><span class="cc-saldo-lbl">Saldo em aberto</span><span class="cc-saldo-val">${fmtR(saldo)}</span></div>
         <div>
-          <div class="cc-lim-row"><span>Limite ${fmtR(limite)}</span><span style="${over ? 'color:#f87171;font-weight:700' : 'color:var(--muted)'}">${over ? '🚨 estourado' : 'disponível ' + fmtR(disponivel)}</span></div>
+          <div class="cc-lim-row">
+            <span>Limite ${fmtR(limite)} <button style="border:0;background:none;cursor:pointer;font-size:11px;color:var(--muted)" onclick="setLimite('${nomeEsc}','${c.id}',${limite})">✏️</button></span>
+            <span style="${over ? 'color:#f87171;font-weight:700' : 'color:var(--muted)'}">${over ? '🚨 estourado' : 'disponível ' + fmtR(disponivel)}</span>
+          </div>
           <div class="cc-limbar"><div class="${over ? 'over' : ''}" style="width:${pct}%"></div></div>
         </div>
-        ${detail ? `<details class="cc-det"><summary>Ver ${lancamentos.length} lançamento(s)</summary><div class="cc-lanc">${detail}</div></details>` : ''}
+        ${detail ? `<details class="cc-det"><summary>Ver ${lancamentos.length} lançamento(s) · ${lancamentos.reduce((s,l)=>(s+(l.itens||[]).reduce((a,i)=>a+(i.qtd||1),0)),0)} item(ns)</summary><div class="cc-lanc">${detail}</div></details>` : ''}
         <div class="cc-actions">
-          <button class="cc-act-sec" onclick="toast('Abra a mesa, lance itens e escolha 📅 Conta mensal → ${c.nome.replace(/'/g,'')}')">➕ Lançar</button>
-          <button class="cc-act-pri" onclick="openInv('${c.id}','${c.nome.replace(/'/g,'')}',${saldo})">📄 Fechar fatura</button>
+          <button class="cc-act-sec" onclick="toast('Abra a mesa, lance itens e escolha 📅 Conta mensal')">➕ Lançar</button>
+          <button class="cc-act-pri" onclick="openInv('${c.id}','${nomeEsc}',${saldo})">📄 Fechar fatura</button>
         </div>
       </div>`;
     }).join('');
   } catch (e) { $('#contas-empty').style.display = 'block'; }
+}
+
+async function setLimite(nome, id, limiteAtual) {
+  const v = prompt('Limite de crédito de ' + nome + ' (R$):', limiteAtual);
+  if (v === null) return;
+  const n = parseFloat((v || '').replace(',', '.'));
+  if (isNaN(n) || n < 0) { toast('Valor inválido', true); return; }
+  try {
+    await api('/api/admin/socios/' + id, { method: 'PATCH', body: JSON.stringify({ limite: n }) });
+    toast('Limite de ' + nome + ' = ' + fmtR(n)); loadContas();
+  } catch (e) { toast(e.message, true); }
 }
 
 /* ══ Fechar fatura overlay ══ */
@@ -1400,6 +1494,49 @@ async function payInvoice(meio) {
     closeInv(); loadContas();
   } catch (e) { toast(e.message, true); }
 }
+
+/* ══ Mapa de rota (mesa virtual) ══ */
+const MAP_BAR = { x: 50, y: 88 };
+const MAP_ZONES = [
+  { nm:'Quadra 1', x:16, y:22 }, { nm:'Quadra 2', x:38, y:18 },
+  { nm:'Quadra 3', x:60, y:20 }, { nm:'Quadra 4', x:83, y:24 },
+  { nm:'Arquibancada', x:50, y:44 }, { nm:'Gramado', x:22, y:60 },
+  { nm:'Piscina', x:80, y:58 }, { nm:'Quiosque', x:90, y:84 }
+];
+
+function openMap(mesa) {
+  const ref = typeof mesa.local === 'object' ? (mesa.local.ref || '') : (mesa.local || '');
+  // tenta achar a zona
+  const zone = MAP_ZONES.find(z => z.nm && ref && ref.toLowerCase().includes(z.nm.toLowerCase()));
+  const x = zone ? zone.x : 50, y = zone ? zone.y : 40;
+  const nome = mesa.nome || 'Mesa virtual';
+  $('#map-title').textContent = '📍 Levar até ' + nome;
+  const canvas = $('#map-canvas');
+  let html = '';
+  // campos decorativos
+  html += '<div class="map-field" style="left:6%;top:8%;width:88%;height:24%"></div>';
+  html += '<div class="map-field" style="left:10%;top:48%;width:32%;height:26%"></div>';
+  html += '<div class="map-field" style="left:62%;top:46%;width:30%;height:28%"></div>';
+  // labels zonas
+  MAP_ZONES.forEach(z => { html += `<div class="map-zlabel" style="left:${z.x}%;top:${z.y}%">${z.nm}</div>`; });
+  // rota SVG
+  html += `<svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:1">
+    <line x1="${MAP_BAR.x}" y1="${MAP_BAR.y}" x2="${x}" y2="${y}" stroke="var(--accent)" stroke-width="0.7" stroke-dasharray="2 1.5" opacity="0.8"/>
+  </svg>`;
+  // bar + destino
+  html += `<div class="map-barmark" style="left:${MAP_BAR.x}%;top:${MAP_BAR.y}%">🍹 Bar</div>`;
+  html += `<div class="map-pulse" style="left:${x}%;top:${y}%"></div>`;
+  html += `<div class="map-marker" style="left:${x}%;top:${y}%"><div class="map-pin">📍</div><div class="map-plabel">${nome}</div></div>`;
+  canvas.innerHTML = html;
+  // info
+  const dx = x - MAP_BAR.x, dy = y - MAP_BAR.y;
+  const dist = Math.round(Math.sqrt(dx*dx + dy*dy) * 1.8);
+  $('#ri-loc').textContent = ref || '—';
+  $('#ri-dist').textContent = dist + ' m';
+  $('#ri-time').textContent = Math.max(1, Math.round(dist / 70)) + ' min';
+  $('#map-overlay').classList.add('show');
+}
+function closeMap() { $('#map-overlay').classList.remove('show'); }
 
 /* ══ auto-refresh ══ */
 setInterval(() => {
