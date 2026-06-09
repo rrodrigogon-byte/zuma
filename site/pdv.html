@@ -78,11 +78,32 @@ h2{font-size:18px;font-weight:800}
 .kpi-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:18px}
 .kpi{background:var(--card);border-radius:12px;padding:14px;border:1px solid var(--line)}
 .kpi .kl{font-size:11px;color:var(--muted)}.kpi .kv{font-size:22px;font-weight:800;color:var(--brand2);margin-top:4px}
-.conta-card{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px}
-.conta-card .cc-nome{font-weight:700;font-size:16px}
-.conta-card .cc-val{font-size:22px;font-weight:800;color:var(--accent)}
-.conta-card .cc-lanc{font-size:12px;color:var(--muted);border-top:1px dashed var(--line);padding-top:6px;max-height:90px;overflow:auto}
-.conta-card button{border:0;background:var(--brand2);color:#fff;padding:10px;border-radius:10px;font-weight:700;cursor:pointer;font-size:13px}
+.conta-card{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:9px}
+.cc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.cc-av{width:40px;height:40px;border-radius:50%;background:rgba(201,166,86,.15);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0}
+.cc-nome{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cc-sub{font-size:12px;color:var(--muted)}
+.cc-saldo{display:flex;justify-content:space-between;align-items:center;background:rgba(201,166,86,.08);border-radius:9px;padding:9px 12px}
+.cc-saldo-lbl{font-size:12px;color:var(--muted)}
+.cc-saldo-val{font-size:22px;font-weight:800;color:var(--accent)}
+.cc-lim-row{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);align-items:center}
+.cc-limbar{height:6px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden;margin-top:4px}
+.cc-limbar>div{height:100%;background:var(--brand2);transition:width .3s;border-radius:4px}
+.cc-limbar>div.over{background:#dc2626}
+.dias-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap}
+.d-ok{background:rgba(95,179,53,.18);color:var(--brand2)}.d-warn{background:rgba(201,166,86,.2);color:var(--accent)}.d-late{background:rgba(220,38,38,.18);color:#f87171}
+.cc-det summary{cursor:pointer;font-size:12px;color:var(--brand2);font-weight:700;padding:2px 0;list-style:none}
+.cc-det summary::-webkit-details-marker{display:none}
+.cc-det summary::before{content:"▸ "}
+.cc-det[open] summary::before{content:"▾ "}
+.cc-det .cc-lanc{font-size:12px;color:var(--muted);max-height:180px;overflow:auto;margin-top:6px}
+.lanc-day{padding:5px 0;border-bottom:1px solid var(--line)}
+.lanc-day .dayhd{font-size:11px;font-weight:700;color:var(--ink);margin-bottom:2px}
+.lrow{display:flex;justify-content:space-between;gap:6px;padding:2px 0;font-size:12px}
+.cc-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cc-actions button{border:0;padding:10px;border-radius:9px;font-weight:700;cursor:pointer;font-size:12px}
+.cc-act-pri{background:var(--brand2);color:#fff}
+.cc-act-sec{background:rgba(255,255,255,.07);color:var(--muted);border:1px solid var(--line)!important}
 
 /* ── Caixa ── */
 table{width:100%;border-collapse:collapse;background:var(--card);border-radius:12px;overflow:hidden}
@@ -90,7 +111,7 @@ th,td{text-align:left;padding:10px 12px;font-size:13px;border-bottom:1px solid v
 th{background:var(--brand);color:var(--ink);font-size:11px;text-transform:uppercase;letter-spacing:.3px}
 .pill{font-size:11px;padding:3px 8px;border-radius:20px;background:rgba(255,255,255,.1);font-weight:600}
 
-/* ── overlay comanda (bottom sheet) ── */
+/* ── overlay bottom sheet ── */
 .overlay{position:fixed;inset:0;background:rgba(10,26,16,.6);display:none;align-items:flex-end;justify-content:center;z-index:20;backdrop-filter:blur(2px)}
 .overlay.show{display:flex}
 @media(min-width:760px){.overlay{align-items:center}}
@@ -151,16 +172,63 @@ th{background:var(--brand);color:var(--ink);font-size:11px;text-transform:upperc
 .total-row{display:flex;justify-content:space-between;font-size:20px;font-weight:900;padding:8px 2px;border-top:2px solid var(--line);margin-top:4px}
 
 /* ── ações comanda ── */
-.cmd-actions{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 6px}
-.cmd-actions .ca-btn{background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:11px;font-weight:700;color:var(--muted);cursor:pointer;transition:.12s}
-.cmd-actions .ca-btn:hover{border-color:var(--brand2);color:var(--ink)}
-.cmd-actions .ca-btn.danger{border-color:rgba(231,76,60,.3);color:#e08070}
-.cmd-actions .ca-btn.danger:hover{background:rgba(231,76,60,.1);border-color:#e74c3c}
-.fechar-row{display:flex;gap:7px;margin-top:6px;flex-wrap:wrap}
-.fechar-row select{flex:1;min-width:90px;padding:9px 10px;background:var(--card);border:1px solid var(--line);border-radius:8px;color:inherit;font-size:13px}
-.fechar-row select:focus{outline:none;border-color:var(--brand2)}
-.btn-fechar{flex:none;padding:9px 18px;background:var(--brand2);border:0;border-radius:8px;color:#fff;font-weight:700;font-size:14px;cursor:pointer}
-.btn-fechar:hover{background:#6fcf44}
+.cmd-quick{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:8px 0 6px}
+.cmd-quick button{border:0;padding:12px 8px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer}
+.cq-kitchen{background:rgba(201,166,86,.2);color:var(--accent)}
+.cq-kitchen:hover{background:rgba(201,166,86,.35)}
+.cq-bill{background:rgba(139,92,246,.2);color:#c4b5fd}
+.cq-bill:hover{background:rgba(139,92,246,.35)}
+.cq-pay{grid-column:1/3;background:var(--brand2);color:#fff}
+.cq-pay:hover{background:#6fcf44}
+.cq-pay:disabled{opacity:.4;cursor:not-allowed}
+
+.cmd-extra{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px}
+.cmd-extra .ca-btn{background:rgba(255,255,255,.07);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:11px;font-weight:700;color:var(--muted);cursor:pointer;transition:.12s}
+.cmd-extra .ca-btn:hover{border-color:var(--brand2);color:var(--ink)}
+.cmd-extra .ca-btn.danger{border-color:rgba(231,76,60,.3);color:#e08070}
+.cmd-extra .ca-btn.danger:hover{background:rgba(231,76,60,.1);border-color:#e74c3c}
+
+/* ── bill overlay (pré-conta) ── */
+.bill-sheet{max-width:460px;border-radius:18px 18px 0 0}
+@media(min-width:760px){.bill-sheet{border-radius:18px}}
+.bill-body{padding:16px;overflow:auto}
+.bill-items{font-size:13px;margin-bottom:10px}
+.bill-lrow{display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px dashed var(--line)}
+.bill-total{display:flex;justify-content:space-between;font-size:19px;font-weight:900;padding:10px 0;border-top:2px solid var(--line);margin:6px 0}
+.svc-row{display:flex;align-items:center;gap:9px;margin:8px 0;font-size:14px;cursor:pointer}
+.svc-row input{width:18px;height:18px;cursor:pointer;accent-color:var(--brand2)}
+.split-row{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:14px;margin:6px 0}
+.split-row input{width:60px;padding:7px 8px;background:var(--card);border:1px solid var(--line);border-radius:7px;color:inherit;font-size:13px;text-align:center}
+.split-row input:focus{outline:none;border-color:var(--brand2)}
+.split-out{font-size:13px;color:var(--brand2);font-weight:700;min-width:80px;text-align:right}
+.bill-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.bill-actions button{border:0;padding:13px;border-radius:11px;font-weight:700;font-size:14px;cursor:pointer}
+.ba-pay{background:var(--brand2);color:#fff;grid-column:1/3}
+.ba-account{background:rgba(139,92,246,.2);color:#c4b5fd}
+.ba-more{background:rgba(255,255,255,.07);color:var(--muted)}
+
+/* ── pay overlay ── */
+.pay-sheet{max-width:420px}
+.pay-sheet .pay-body{padding:18px;overflow:auto}
+.pay-total{display:flex;justify-content:space-between;font-size:20px;font-weight:900;padding:8px 0 14px;border-bottom:1px solid var(--line);margin-bottom:14px}
+.pay-hint{font-size:12px;color:var(--muted);margin-bottom:12px}
+.pay-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pay-btns button{border:1px solid var(--line);background:var(--card);padding:16px;border-radius:12px;font-weight:700;cursor:pointer;font-size:15px;color:var(--ink);transition:.12s}
+.pay-btns button:hover{border-color:var(--brand2);background:rgba(95,179,53,.08)}
+.pay-btns .pb-full{grid-column:1/3;border-color:var(--line);color:var(--muted);font-size:13px}
+.pay-btns .pb-account{grid-column:1/3;border-color:rgba(201,166,86,.3);color:var(--accent);background:rgba(201,166,86,.07)}
+
+/* ── invoice overlay (fechar fatura mensalista) ── */
+.inv-sheet{max-width:480px}
+.inv-body{padding:16px;overflow:auto}
+.inv-day{padding:6px 0;border-bottom:1px solid var(--line)}
+.inv-dayhd{font-size:12px;font-weight:700;color:var(--ink);margin-bottom:3px}
+.inv-total{display:flex;justify-content:space-between;font-size:19px;font-weight:900;padding:10px 0;border-top:2px solid var(--line);margin:8px 0}
+.inv-partial{font-size:13px;color:var(--muted);margin-top:4px}
+.inv-partial.ok{color:var(--brand2)}.inv-partial.warn{color:var(--accent)}
+.pay-opts{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:10px}
+.pay-opts button{border:1px solid var(--line);background:var(--card);padding:14px;border-radius:11px;font-weight:700;cursor:pointer;font-size:14px;color:var(--ink);transition:.12s}
+.pay-opts button:hover{border-color:var(--brand2);background:rgba(95,179,53,.08)}
 
 /* ── modais ── */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:900;padding:16px}
@@ -203,6 +271,8 @@ th{background:var(--brand);color:var(--ink);font-size:11px;text-transform:upperc
 .btn-sm{padding:5px 11px;border-radius:7px;border:1px solid var(--line);background:rgba(255,255,255,.07);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer}
 .btn-sm:hover{border-color:var(--brand2);color:var(--ink)}
 .btn-sm.primary{background:var(--brand2);border-color:var(--brand2);color:#fff}
+.btn-icon{background:rgba(255,255,255,.12);border:0;color:var(--ink);width:28px;height:28px;border-radius:7px;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.btn-icon:hover{background:rgba(255,255,255,.22)}
 
 /* ── toast ── */
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--brand);padding:10px 18px;border-radius:30px;font-size:13px;font-weight:600;opacity:0;transition:.3s;z-index:999;pointer-events:none}
@@ -255,7 +325,7 @@ th{background:var(--brand);color:var(--ink);font-size:11px;text-transform:upperc
         <h2>Salão · toque para atender</h2>
         <div style="display:flex;gap:8px">
           <button class="btn-sm" id="reload">↺ Atualizar</button>
-          <button class="btn-sm primary" id="nova-mesa-btn">+ Mesa virtual</button>
+          <button class="btn-sm primary" id="nova-mesa-btn">📍 Mesa virtual</button>
         </div>
       </div>
       <div class="caixa-bar" id="caixa-bar">Carregando caixa…</div>
@@ -267,7 +337,7 @@ th{background:var(--brand);color:var(--ink);font-size:11px;text-transform:upperc
         <span><span class="dot" style="background:var(--conta)"></span>Conta pedida</span>
       </div>
       <div class="mesa-grid" id="mapa"></div>
-      <div id="virtuais-wrap" style="margin-top:18px">
+      <div id="virtuais-wrap" style="margin-top:18px" class="hidden">
         <h3 style="font-size:14px;font-weight:700;margin-bottom:10px;color:var(--muted)">MESAS VIRTUAIS</h3>
         <div class="mesa-grid" id="virtuais"></div>
       </div>
@@ -281,8 +351,9 @@ th{background:var(--brand);color:var(--ink);font-size:11px;text-transform:upperc
         <h2>Cozinha · fila de produção</h2>
         <button class="btn-sm" id="kds-reload">↺ Atualizar</button>
       </div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Pedidos em ordem de chegada. Borda <span style="color:var(--cozinha)">amarela</span> = +7 min, <span style="color:#f87171">vermelha</span> = +15 min.</p>
       <div class="kds-grid" id="kds-list"></div>
-      <div class="kds-empty hidden" id="kds-empty">Sem pedidos na fila. Lance um prato e toque em <b>Enviar à cozinha</b>.</div>
+      <div class="kds-empty hidden" id="kds-empty">Sem pedidos na fila. Lance um prato e toque em <b>🔥 Enviar à cozinha</b>.</div>
     </div>
   </div>
 
@@ -292,12 +363,13 @@ th{background:var(--brand);color:var(--ink);font-size:11px;text-transform:upperc
       <div class="rowhead" style="margin-top:14px">
         <h2>Contas mensalistas abertas</h2>
       </div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Mensalistas acumulam consumo e fecham a fatura mensalmente. Ao fechar uma comanda, escolha <b>📅 Conta mensal</b>.</p>
       <div class="kpi-row">
         <div class="kpi"><div class="kl">Total em aberto</div><div class="kv" id="c-aberto">R$ 0</div></div>
         <div class="kpi"><div class="kl">Clientes c/ saldo</div><div class="kv" id="c-qtd">0</div></div>
       </div>
-      <p class="kds-empty" id="contas-empty" style="color:var(--muted)">Nenhuma conta em aberto. Pague com <b>📅 Conta mensal</b> ao fechar uma comanda.</p>
-      <div class="mesa-grid" id="contas-list" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))"></div>
+      <p class="kds-empty hidden" id="contas-empty" style="display:none;color:var(--muted)">Nenhuma conta em aberto. Use <b>📅 Conta mensal</b> ao fechar uma comanda.</p>
+      <div class="mesa-grid" id="contas-list" style="grid-template-columns:repeat(auto-fill,minmax(270px,1fr))"></div>
     </div>
   </div>
 
@@ -326,8 +398,9 @@ th{background:var(--brand);color:var(--ink);font-size:11px;text-transform:upperc
 <div class="overlay" id="overlay">
   <div class="sheet">
     <div class="sheet-hdr">
-      <div style="display:flex;align-items:center;gap:8px">
-        <b id="sh-title">Mesa</b>
+      <div style="display:flex;align-items:center;gap:7px;min-width:0;flex:1;overflow:hidden">
+        <b id="sh-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Mesa</b>
+        <button class="btn-icon" id="rename-btn" title="Renomear">✏️</button>
         <span class="sh-tag" id="sh-tag"></span>
       </div>
       <button class="sh-close" id="sh-close">×</button>
@@ -350,8 +423,87 @@ th{background:var(--brand);color:var(--ink);font-size:11px;text-transform:upperc
         <div class="cmd-list" id="cmd-list"></div>
         <div id="desc-line"></div>
         <div class="total-row"><span>Total</span><span id="cmd-total" style="color:var(--brand2)">R$ 0,00</span></div>
-        <div class="cmd-actions" id="cmd-actions"></div>
-        <div id="fechar-area"></div>
+        <!-- botões principais -->
+        <div class="cmd-quick" id="cmd-quick"></div>
+        <!-- ações secundárias -->
+        <div class="cmd-extra" id="cmd-extra"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PRÉ-CONTA (bill overlay) ═══ -->
+<div class="overlay" id="bill-overlay">
+  <div class="sheet bill-sheet">
+    <div class="sheet-hdr">
+      <b id="bill-title">🧾 Conta</b>
+      <button class="sh-close" onclick="closeBill()">×</button>
+    </div>
+    <div class="bill-body">
+      <div class="bill-items" id="bill-items"></div>
+      <label class="svc-row">
+        <input type="checkbox" id="svc-check" onchange="renderBill()"> Incluir taxa de serviço (10%)
+      </label>
+      <div class="split-row">
+        <span>Dividir por</span>
+        <input id="split-n" type="number" min="1" value="1" oninput="renderBill()">
+        <span>pessoa(s)</span>
+        <span class="split-out" id="split-out"></span>
+      </div>
+      <div class="bill-total"><span>Total</span><span id="bill-total" style="color:var(--brand2)">R$ 0,00</span></div>
+      <div class="bill-actions">
+        <button class="ba-pay" id="bill-pay-btn">💳 Escolher pagamento</button>
+        <button class="ba-account" id="bill-account-btn">📅 Conta mensal</button>
+        <button class="ba-more" onclick="closeBill()">➕ Adicionar mais itens</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PAGAMENTO (pay overlay) ═══ -->
+<div class="overlay" id="pay-overlay">
+  <div class="sheet pay-sheet">
+    <div class="sheet-hdr">
+      <b>Pagamento</b>
+      <button class="sh-close" onclick="closePay()">×</button>
+    </div>
+    <div class="pay-body">
+      <div class="pay-total"><span>Total a pagar</span><span id="pay-total" style="color:var(--brand2)">R$ 0,00</span></div>
+      <p class="pay-hint">Selecione a forma de pagamento:</p>
+      <div class="pay-btns">
+        <button onclick="execPay('pix')">⚡ Pix</button>
+        <button onclick="execPay('cartao')">💳 Cartão</button>
+        <button onclick="execPay('dinheiro')">💵 Dinheiro</button>
+        <button onclick="execPay('carteira')">👛 Carteira</button>
+        <button class="pb-full" onclick="closePay();openDivModal()">⚖️ Dividir / Múltiplas formas</button>
+        <button class="pb-account" onclick="closePay();fecharContaMensal()">📅 Pôr na conta mensal</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ FECHAR FATURA mensalista (inv overlay) ═══ -->
+<div class="overlay" id="inv-overlay">
+  <div class="sheet inv-sheet">
+    <div class="sheet-hdr">
+      <b id="inv-title">📄 Fechar fatura</b>
+      <button class="sh-close" onclick="closeInv()">×</button>
+    </div>
+    <div class="inv-body">
+      <div id="inv-detail" style="font-size:13px;color:var(--muted);margin-bottom:10px"></div>
+      <div id="inv-days"></div>
+      <div class="inv-total"><span>Total da fatura</span><span id="inv-total-val" style="color:var(--accent)">R$ 0,00</span></div>
+      <div class="fld">
+        <label>Valor a receber agora (parcial permitido)</label>
+        <input id="inv-amount" type="number" step="0.01" oninput="invPreview()">
+      </div>
+      <div class="inv-partial" id="inv-rest"></div>
+      <p style="font-size:12px;color:var(--muted);margin:12px 0 4px">Forma de recebimento:</p>
+      <div class="pay-opts">
+        <button onclick="payInvoice('pix')">⚡ Pix</button>
+        <button onclick="payInvoice('cartao')">💳 Cartão</button>
+        <button onclick="payInvoice('dinheiro')">💵 Dinheiro</button>
+        <button onclick="payInvoice('boleto')">📄 Boleto</button>
       </div>
     </div>
   </div>
@@ -361,10 +513,14 @@ th{background:var(--brand);color:var(--ink);font-size:11px;text-transform:upperc
 <div class="modal-bg" id="nm-modal">
   <div class="modal-box">
     <h3>📍 Nova mesa virtual</h3>
-    <div class="fld"><label>Identificação</label><input id="nm-nome" placeholder="Ex: Área VIP, Piscina 1"></div>
-    <div class="fld"><label>Referência (opcional)</label><input id="nm-ref" placeholder="Ex: Próximo ao tênis"></div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Crie uma mesa para cliente em quadra, piscina ou área aberta. O garçom verá onde levar.</p>
+    <div class="fld"><label>Nome / identificação do cliente</label><input id="nm-nome" placeholder="Ex: Rodrigo — Quadra 2"></div>
+    <div class="fld"><label>Local no clube</label>
+      <div id="zone-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:6px"></div>
+      <input id="nm-ref" placeholder="Ou descreva livremente…" style="margin-top:7px;width:100%;padding:10px 12px;background:var(--card);border:1px solid var(--line);border-radius:8px;color:inherit;font-size:14px">
+    </div>
     <div class="modal-row">
-      <button class="btn-confirm" id="nm-ok">Criar</button>
+      <button class="btn-confirm" id="nm-ok">Criar mesa</button>
       <button class="btn-cancel-m" id="nm-cancel">Cancelar</button>
     </div>
   </div>
@@ -453,6 +609,12 @@ th{background:var(--brand);color:var(--ink);font-size:11px;text-transform:upperc
 const $ = s => document.querySelector(s);
 const fmtR = v => 'R$ ' + (+v || 0).toFixed(2).replace('.', ',');
 const nowHM = () => { const d = new Date(); return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); };
+const fmtDate = ts => { const d = new Date(ts); return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear(); };
+const fmtTime = ts => { const d = new Date(ts); return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); };
+const initials = n => n.trim().split(/\s+/).slice(0,2).map(x=>x[0].toUpperCase()).join('');
+const diasCls = d => d > 30 ? 'd-late' : d >= 7 ? 'd-warn' : 'd-ok';
+
+const ZONES = ['Quadra 1','Quadra 2','Quadra 3','Quadra 4','Arquibancada','Gramado','Piscina','Quiosque'];
 
 let TOKEN = localStorage.getItem('ao_admin_token') || '';
 let CARDAPIO = [];
@@ -463,8 +625,10 @@ let searchTerm = '';
 let delItemIdx = null;
 let divMeios = [];
 let kdsOrders = [];
-let sales = [];
-let mensalistas = [];
+let kdsTimer = null;
+let invClient = null;
+let billTotal = 0;
+let vtZone = '';
 
 /* ══ toast ══ */
 let toastT;
@@ -613,6 +777,17 @@ function closeSheet() {
 $('#sh-close').onclick = closeSheet;
 $('#overlay').onclick = e => { if (e.target === $('#overlay')) closeSheet(); };
 
+/* ── rename ── */
+$('#rename-btn').onclick = () => {
+  if (!cur) return;
+  const novo = prompt('Nome da mesa/comanda:', cur.nome);
+  if (novo && novo.trim()) {
+    cur.nome = novo.trim();
+    $('#sh-title').textContent = cur.nome;
+    toast('Renomeado para ' + cur.nome);
+  }
+};
+
 function onSearch(v) { searchTerm = v.trim().toLowerCase(); catFilter = null; renderCatPills(); renderMenuItems(); }
 
 function renderCatPills() {
@@ -707,41 +882,65 @@ function renderComanda() {
   // total
   $('#cmd-total').textContent = fmtR(cur.total || 0);
 
-  // ações
-  const acts = $('#cmd-actions');
-  acts.innerHTML = '';
+  // ── botões principais ──
+  const cq = $('#cmd-quick');
+  cq.innerHTML = '';
+  if (!isFechada) {
+    const hasItens = cur.itens && cur.itens.length > 0;
+    const total = cur.total || 0;
+    cq.innerHTML = `
+      <button class="cq-kitchen" id="btn-cozinha">🔥 Enviar à cozinha</button>
+      <button class="cq-bill" id="btn-conta">🧾 Pedir conta</button>
+      <button class="cq-pay" id="btn-pagar" ${!hasItens || total === 0 ? 'disabled' : ''}>💳 Pagar e fechar</button>`;
+
+    setTimeout(() => {
+      const bc = $('#btn-cozinha');
+      if (bc) bc.onclick = async () => {
+        const cozItens = (cur.itens || []).filter(it => it.cozinha && it.status !== 'pronto');
+        if (!cozItens.length) { toast('Nenhum item de cozinha pendente', true); return; }
+        try {
+          await api('/api/admin/comanda/' + cur.id + '/cozinha', { method: 'POST' });
+          cur = await api('/api/comanda/' + cur.id);
+          renderComanda(); loadMapa(); toast('Pedido enviado à cozinha 🔥');
+        } catch (e) { toast(e.message, true); }
+      };
+      const bb = $('#btn-conta');
+      if (bb) bb.onclick = () => {
+        if (!cur.itens || !cur.itens.length) { toast('Comanda vazia', true); return; }
+        openBill();
+      };
+      const bp = $('#btn-pagar');
+      if (bp) bp.onclick = () => {
+        if (!cur.itens || !cur.itens.length || (cur.total || 0) === 0) return;
+        openBill();
+      };
+    }, 0);
+  } else {
+    cq.innerHTML = '<button class="cq-pay" id="btn-reabrir" style="grid-column:1/3;background:rgba(255,255,255,.07);color:var(--muted)">🔓 Reabrir comanda</button>';
+    setTimeout(() => {
+      const br = $('#btn-reabrir');
+      if (br) br.onclick = async () => {
+        if (!confirm('Reabrir comanda?')) return;
+        try { await api('/api/admin/comanda/' + cur.id + '/reabrir', { method: 'POST' }); cur = await api('/api/comanda/' + cur.id); renderComanda(); toast('Comanda reaberta.'); }
+        catch (e) { toast(e.message, true); }
+      };
+    }, 0);
+  }
+
+  // ── ações secundárias ──
+  const ce = $('#cmd-extra');
+  ce.innerHTML = '';
   if (!isFechada) {
     [
       ['↔ Transferir', 'ca-btn', 'act-transf'],
       ['🏷️ Desconto', 'ca-btn', 'act-desc'],
-      ['💰 Dividir', 'ca-btn', 'act-div'],
+      ['⚖️ Dividir', 'ca-btn', 'act-div'],
       ['✕ Cancelar', 'ca-btn danger', 'act-cancel'],
     ].forEach(([lbl, cls, id]) => {
       const b = document.createElement('button');
       b.className = cls; b.id = id; b.textContent = lbl;
-      acts.appendChild(b);
+      ce.appendChild(b);
     });
-  } else {
-    const b = document.createElement('button');
-    b.className = 'ca-btn'; b.id = 'act-reabrir'; b.textContent = '🔓 Reabrir';
-    acts.appendChild(b);
-  }
-
-  // fechar área
-  const fa = $('#fechar-area');
-  if (!isFechada) {
-    fa.innerHTML = `<div class="fechar-row">
-      <select id="pg">
-        <option value="pix">⚡ Pix</option>
-        <option value="cartao">💳 Cartão</option>
-        <option value="dinheiro">💵 Dinheiro</option>
-        <option value="carteira">👛 Carteira</option>
-        <option value="conta-mensal">📅 Conta mensal</option>
-      </select>
-      <button class="btn-fechar" id="btn-fechar">Fechar conta</button>
-    </div>`;
-  } else {
-    fa.innerHTML = `<div style="text-align:center;padding:8px;color:var(--muted);font-size:13px">Comanda fechada.</div>`;
   }
 
   // ── bind events ──
@@ -777,37 +976,79 @@ function renderComanda() {
     if (e.key === 'Escape') inp.parentElement.classList.remove('show');
   }));
 
-  // fechar simples
-  const btnF = $('#btn-fechar');
-  if (btnF) btnF.onclick = async () => {
-    const meio = $('#pg').value;
-    if (meio === 'conta-mensal') { await fecharContaMensal(); return; }
-    try {
-      await api('/api/admin/comanda/' + cur.id + '/fechar', { method: 'POST', body: JSON.stringify({ pagamentos: [{ meio, valor: cur.total }] }) });
-      toast('Conta fechada! ✓');
-      cur = null; $('#overlay').classList.remove('show');
-      loadMapa(); loadCaixa();
-    } catch (e) { toast(e.message, true); }
-  };
+  // ações secundárias
+  setTimeout(() => {
+    const t = $('#act-transf'); if (t) t.onclick = () => { $('#transf-num').value = ''; $('#transf-modal').classList.add('show'); };
+    const d2 = $('#act-desc'); if (d2) d2.onclick = () => { $('#desc-val').value = ''; $('#desc-motivo').value = ''; $('#desc-tipo').value = 'pct'; updateDescLbl(); $('#desc-modal').classList.add('show'); };
+    const div = $('#act-div'); if (div) div.onclick = () => openDivModal();
+    const can = $('#act-cancel'); if (can) can.onclick = () => { $('#cancel-motivo').value = ''; $('#cancel-modal').classList.add('show'); };
+  }, 0);
+}
 
-  // ações
-  const t = $('#act-transf'); if (t) t.onclick = () => { $('#transf-num').value = ''; $('#transf-modal').classList.add('show'); };
-  const d2 = $('#act-desc'); if (d2) d2.onclick = () => { $('#desc-val').value = ''; $('#desc-motivo').value = ''; $('#desc-tipo').value = 'pct'; updateDescLbl(); $('#desc-modal').classList.add('show'); };
-  const div = $('#act-div'); if (div) div.onclick = () => openDivModal();
-  const can = $('#act-cancel'); if (can) can.onclick = () => { $('#cancel-motivo').value = ''; $('#cancel-modal').classList.add('show'); };
-  const rea = $('#act-reabrir'); if (rea) rea.onclick = async () => {
-    if (!confirm('Reabrir comanda?')) return;
-    try { await api('/api/admin/comanda/' + cur.id + '/reabrir', { method: 'POST' }); cur = await api('/api/comanda/' + cur.id); renderComanda(); toast('Comanda reaberta.'); }
-    catch (e) { toast(e.message, true); }
-  };
+/* ══ PRÉ-CONTA / bill overlay ══ */
+function openBill() {
+  if (!cur || !cur.itens || !cur.itens.length) return;
+  cur.status = 'conta';
+  $('#bill-title').textContent = '🧾 Conta · ' + cur.nome;
+  $('#svc-check').checked = false;
+  const sn = $('#split-n'); if (sn) sn.value = 1;
+  renderBill();
+  $('#bill-overlay').classList.add('show');
+}
+function closeBill() { $('#bill-overlay').classList.remove('show'); }
+
+function baseBillTotal() { return cur ? (cur.total || 0) : 0; }
+function curBillTotal() { return baseBillTotal() * ($('#svc-check') && $('#svc-check').checked ? 1.1 : 1); }
+
+function renderBill() {
+  if (!cur) return;
+  const base = baseBillTotal();
+  const withSvc = $('#svc-check') && $('#svc-check').checked;
+  const total = base * (withSvc ? 1.1 : 1);
+  const n = Math.max(1, parseInt(($('#split-n') && $('#split-n').value) || 1));
+
+  let html = cur.itens.map(it =>
+    `<div class="bill-lrow"><span>${it.qtd}x ${it.nome}${it.obs ? `<small style="color:var(--accent)"> 📝 ${it.obs}</small>` : ''}</span><b>${fmtR(it.preco * it.qtd)}</b></div>`
+  ).join('');
+  if (withSvc) html += `<div class="bill-lrow" style="color:var(--muted)"><span>Taxa de serviço (10%)</span><b>${fmtR(base * 0.1)}</b></div>`;
+  $('#bill-items').innerHTML = html;
+  $('#bill-total').textContent = fmtR(total);
+  $('#split-out').textContent = n > 1 ? fmtR(total / n) + '/pess.' : '';
+  billTotal = total;
+}
+
+$('#bill-pay-btn').onclick = () => { closeBill(); openPay(); };
+$('#bill-account-btn').onclick = () => { closeBill(); fecharContaMensal(); };
+
+/* ══ PAGAMENTO overlay ══ */
+function openPay() {
+  const total = cur ? curBillTotal() : (cur ? cur.total || 0 : 0);
+  billTotal = total;
+  $('#pay-total').textContent = fmtR(total);
+  $('#pay-overlay').classList.add('show');
+}
+function closePay() { $('#pay-overlay').classList.remove('show'); }
+
+async function execPay(meio) {
+  if (!cur) return;
+  const total = billTotal || (cur.total || 0);
+  try {
+    await api('/api/admin/comanda/' + cur.id + '/fechar', { method: 'POST', body: JSON.stringify({ pagamentos: [{ meio, valor: total }] }) });
+    toast('Pago ' + fmtR(total) + ' via ' + meio + ' ✓');
+    closePay(); closeBill();
+    cur = null; $('#overlay').classList.remove('show');
+    loadMapa(); loadCaixa();
+  } catch (e) { toast(e.message, true); }
 }
 
 /* ══ conta mensal ══ */
 async function fecharContaMensal() {
   const nome = cur.nome;
+  const total = billTotal || (cur.total || 0);
   try {
-    await api('/api/admin/comanda/' + cur.id + '/fechar', { method: 'POST', body: JSON.stringify({ pagamentos: [{ meio: 'conta-mensal', valor: cur.total }] }) });
-    toast(fmtR(cur.total) + ' lançado na conta de ' + nome + ' 📅');
+    await api('/api/admin/comanda/' + cur.id + '/fechar', { method: 'POST', body: JSON.stringify({ pagamentos: [{ meio: 'conta-mensal', valor: total }] }) });
+    toast(fmtR(total) + ' lançado na conta de ' + nome + ' 📅');
+    closePay(); closeBill();
     cur = null; $('#overlay').classList.remove('show');
     loadMapa(); loadCaixa(); loadContas();
   } catch (e) { toast(e.message, true); }
@@ -926,31 +1167,43 @@ $('#cancel-ok').onclick = async () => {
 $('#cancel-back').onclick = () => $('#cancel-modal').classList.remove('show');
 
 /* ══ nova mesa virtual ══ */
-$('#nova-mesa-btn').onclick = () => $('#nm-modal').classList.add('show');
+function buildZoneGrid() {
+  const g = $('#zone-grid'); g.innerHTML = '';
+  vtZone = '';
+  ZONES.forEach(z => {
+    const b = document.createElement('button');
+    b.style.cssText = 'border:1px solid var(--line);background:var(--card);color:var(--muted);padding:9px 10px;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;text-align:left';
+    b.textContent = '📍 ' + z;
+    b.onclick = () => {
+      vtZone = z;
+      document.querySelectorAll('#zone-grid button').forEach(x => { x.style.borderColor=''; x.style.color='var(--muted)'; x.style.background='var(--card)'; });
+      b.style.borderColor = 'var(--accent)'; b.style.color = 'var(--accent)'; b.style.background = 'rgba(201,166,86,.08)';
+      $('#nm-ref').value = z;
+    };
+    g.appendChild(b);
+  });
+}
+$('#nova-mesa-btn').onclick = () => { buildZoneGrid(); $('#nm-nome').value = ''; $('#nm-ref').value = ''; $('#nm-modal').classList.add('show'); };
 $('#nm-cancel').onclick = () => $('#nm-modal').classList.remove('show');
 $('#nm-ok').onclick = async () => {
   const nome = $('#nm-nome').value.trim();
   if (!nome) { toast('Informe um nome', true); return; }
+  const ref = $('#nm-ref').value.trim() || vtZone;
   try {
-    await api('/api/mesa-virtual', { method: 'POST', body: JSON.stringify({ nome, local: { ref: $('#nm-ref').value.trim() } }) });
+    await api('/api/mesa-virtual', { method: 'POST', body: JSON.stringify({ nome, local: { ref } }) });
     toast('Mesa virtual criada!'); $('#nm-modal').classList.remove('show');
-    $('#nm-nome').value = ''; $('#nm-ref').value = ''; loadMapa();
+    $('#nm-nome').value = ''; $('#nm-ref').value = ''; vtZone = ''; loadMapa();
   } catch (e) { toast(e.message || 'Erro ao criar mesa', true); }
 };
 
 /* ══ fechar modais clicando fora ══ */
 document.querySelectorAll('.modal-bg').forEach(bg => bg.onclick = e => { if (e.target === bg) bg.classList.remove('show'); });
+document.querySelectorAll('.overlay').forEach(ov => ov.onclick = e => { if (e.target === ov) ov.classList.remove('show'); });
 
-/* ══ KDS ══
-   A API retorna lista de itens individuais:
-   [{ comandaId, idx, mesa, tipo, local, nome, qtd, obs, status, criadoEm }]
-   Agrupamos por comandaId para exibir como ticket.
-══ */
-let kdsTimer = null;
+/* ══ KDS ══ */
 async function loadKDS() {
   try {
     const d = await api('/api/kds');
-    // agrupar itens por comanda
     const map = new Map();
     d.forEach(item => {
       if (!map.has(item.comandaId)) map.set(item.comandaId, { comandaId: item.comandaId, mesa: item.mesa, tipo: item.tipo, local: item.local, criadoEm: item.criadoEm, itens: [] });
@@ -980,23 +1233,22 @@ function renderKDS() {
     return `<div class="ticket ${cls}" data-cid="${o.comandaId}">
       <h4><span>#${o.comandaId} · ${o.mesa}</span><span class="ktimer" data-t0="${o.criadoEm}">${timer}</span></h4>
       ${loc}
-      ${o.itens.map(i => `<div class="kti">${i.qtd}x ${i.nome} <small>· ${i.status || 'recebido'}</small></div>`).join('')}
+      ${o.itens.map(i => `<div class="kti">${i.qtd}x ${i.nome}${i.obs ? ` <small>📝 ${i.obs}</small>` : ''} <small>· ${i.status || 'recebido'}</small></div>`).join('')}
       <div class="kact">
-        <button class="t-start" data-cid="${o.comandaId}">Iniciar</button>
-        <button class="t-ready" data-cid="${o.comandaId}">Pronto</button>
-        <button class="t-bump" data-cid="${o.comandaId}">Entregue ✓</button>
+        <button class="t-start" data-cid="${o.comandaId}">▶ Iniciar</button>
+        <button class="t-ready" data-cid="${o.comandaId}">✓ Pronto</button>
+        <button class="t-bump" data-cid="${o.comandaId}">🚚 Entregue</button>
       </div>
     </div>`;
   }).join('');
-  // bind KDS btns — atualiza todos os itens do ticket
   list.querySelectorAll('.t-start').forEach(b => b.onclick = async () => {
     const o = kdsOrders.find(x => String(x.comandaId) === b.dataset.cid); if (!o) return;
-    try { await Promise.all(o.itens.map(it => kdsSetStatus(o.comandaId, it.idx, 'em_preparo'))); loadKDS(); toast('Iniciado!'); }
+    try { await Promise.all(o.itens.map(it => kdsSetStatus(o.comandaId, it.idx, 'em_preparo'))); loadKDS(); toast('Em preparo!'); }
     catch(e) { toast(e.message, true); }
   });
   list.querySelectorAll('.t-ready').forEach(b => b.onclick = async () => {
     const o = kdsOrders.find(x => String(x.comandaId) === b.dataset.cid); if (!o) return;
-    try { await Promise.all(o.itens.map(it => kdsSetStatus(o.comandaId, it.idx, 'pronto'))); loadKDS(); toast('Pronto!'); }
+    try { await Promise.all(o.itens.map(it => kdsSetStatus(o.comandaId, it.idx, 'pronto'))); loadKDS(); toast('Pronto! ✓'); }
     catch(e) { toast(e.message, true); }
   });
   list.querySelectorAll('.t-bump').forEach(b => b.onclick = async () => {
@@ -1021,14 +1273,12 @@ $('#kds-reload').onclick = loadKDS;
 async function loadCaixa() {
   try {
     const d = await api('/api/admin/caixa');
-    // /api/admin/caixa retorna: { comandasFechadas, faturamento, porMeio, abertas }
     const avg = d.comandasFechadas ? d.faturamento / d.comandasFechadas : 0;
     $('#caixa-bar').innerHTML = `Caixa do dia: <b>${fmtR(d.faturamento)}</b> · <span>${d.comandasFechadas} fechadas</span> · <span>${d.abertas} abertas</span>`;
     $('#k-total').textContent = fmtR(d.faturamento);
     $('#k-fechadas').textContent = d.comandasFechadas;
     $('#k-abertas').textContent = d.abertas;
     $('#k-avg').textContent = fmtR(avg);
-    // tabela de vendas recentes
     const body = $('#sales-body');
     const recentes = d.recentes || [];
     if (!recentes.length) {
@@ -1054,7 +1304,6 @@ $('#caixa-reload').onclick = loadCaixa;
 async function loadContas() {
   try {
     const socios = await api('/api/socios');
-    // filtra mensalistas com saldo
     const comSaldo = socios.filter(s => s.saldo && s.saldo > 0);
     const total = comSaldo.reduce((s, c) => s + (c.saldo || 0), 0);
     $('#c-aberto').textContent = fmtR(total);
@@ -1062,20 +1311,93 @@ async function loadContas() {
     const empty = $('#contas-empty'), list = $('#contas-list');
     if (!comSaldo.length) { empty.style.display = 'block'; list.innerHTML = ''; return; }
     empty.style.display = 'none';
-    list.innerHTML = comSaldo.map(c => `
-      <div class="conta-card">
-        <div class="cc-nome">${c.nome}</div>
-        <div style="font-size:12px;color:var(--muted)">${c.planoNome || 'Mensalista'}</div>
-        <div class="cc-val">${fmtR(c.saldo)}</div>
-        <button onclick="fecharFatura('${c.id}','${c.nome}',${c.saldo})">📄 Fechar fatura</button>
-      </div>`).join('');
+
+    list.innerHTML = comSaldo.map(c => {
+      const saldo = c.saldo || 0;
+      const limite = c.limite || 500;
+      const disponivel = limite - saldo;
+      const lancamentos = c.lancamentos || [];
+      const dias = lancamentos.length ? Math.floor((Date.now() - new Date(Math.min(...lancamentos.map(l => new Date(l.criadoEm || l.ts || Date.now()))))) / 86400000) : 0;
+      const pct = Math.min(100, Math.round(saldo / limite * 100));
+      const over = disponivel < 0;
+
+      // agrupar por dia
+      const byDay = {};
+      lancamentos.forEach(l => {
+        const d = fmtDate(new Date(l.criadoEm || l.ts || Date.now()));
+        (byDay[d] = byDay[d] || []).push(l);
+      });
+      const detail = Object.keys(byDay).map(d => {
+        const dt = byDay[d].reduce((s, l) => s + (l.valor || 0), 0);
+        return `<div class="lanc-day">
+          <div class="dayhd">📅 ${d} · <b>${fmtR(dt)}</b></div>
+          ${byDay[d].map(l => `<div class="lrow"><span>${l.mesa || 'consumo'} · ${(l.itens||[]).map(i=>(i.qtd||1)+'x '+(i.nome||i.nm||'')).join(', ')}</span><b>${fmtR(l.valor||0)}</b></div>`).join('')}
+        </div>`;
+      }).join('');
+
+      return `<div class="conta-card">
+        <div class="cc-head">
+          <div style="display:flex;gap:9px;align-items:center;min-width:0;flex:1">
+            <div class="cc-av">${initials(c.nome)}</div>
+            <div style="min-width:0;flex:1"><div class="cc-nome">${c.nome}</div><div class="cc-sub">${c.planoNome || 'Mensalista'}</div></div>
+          </div>
+          <span class="dias-badge ${diasCls(dias)}">⏱ ${dias}d</span>
+        </div>
+        <div class="cc-saldo"><span class="cc-saldo-lbl">Saldo em aberto</span><span class="cc-saldo-val">${fmtR(saldo)}</span></div>
+        <div>
+          <div class="cc-lim-row"><span>Limite ${fmtR(limite)}</span><span style="${over ? 'color:#f87171;font-weight:700' : 'color:var(--muted)'}">${over ? '🚨 estourado' : 'disponível ' + fmtR(disponivel)}</span></div>
+          <div class="cc-limbar"><div class="${over ? 'over' : ''}" style="width:${pct}%"></div></div>
+        </div>
+        ${detail ? `<details class="cc-det"><summary>Ver ${lancamentos.length} lançamento(s)</summary><div class="cc-lanc">${detail}</div></details>` : ''}
+        <div class="cc-actions">
+          <button class="cc-act-sec" onclick="toast('Abra a mesa, lance itens e escolha 📅 Conta mensal → ${c.nome.replace(/'/g,'')}')">➕ Lançar</button>
+          <button class="cc-act-pri" onclick="openInv('${c.id}','${c.nome.replace(/'/g,'')}',${saldo})">📄 Fechar fatura</button>
+        </div>
+      </div>`;
+    }).join('');
   } catch (e) { $('#contas-empty').style.display = 'block'; }
 }
-async function fecharFatura(id, nome, saldo) {
-  if (!confirm('Fechar fatura de ' + nome + ' no valor de ' + fmtR(saldo) + '?\nOK = Pix')) return;
+
+/* ══ Fechar fatura overlay ══ */
+function openInv(id, nome, saldo) {
+  invClient = { id, nome, saldo };
+  $('#inv-title').textContent = '📄 Fechar fatura · ' + nome;
+  $('#inv-detail').textContent = nome + ' · saldo em aberto: ' + fmtR(saldo);
+  $('#inv-days').innerHTML = '';
+  $('#inv-total-val').textContent = fmtR(saldo);
+  $('#inv-amount').value = saldo.toFixed(2);
+  invPreview();
+  $('#inv-overlay').classList.add('show');
+}
+function closeInv() { $('#inv-overlay').classList.remove('show'); invClient = null; }
+
+function invPreview() {
+  if (!invClient) return;
+  const tot = invClient.saldo;
+  let amt = parseFloat(($('#inv-amount').value || '').replace(',', '.'));
+  if (isNaN(amt)) amt = 0;
+  amt = Math.min(Math.max(amt, 0), tot);
+  const resta = tot - amt;
+  const el = $('#inv-rest');
+  if (resta > 0.001) {
+    el.textContent = 'Pagamento parcial · resta ' + fmtR(resta) + ' em aberto';
+    el.className = 'inv-partial warn';
+  } else {
+    el.textContent = '✓ Quita a fatura completamente.';
+    el.className = 'inv-partial ok';
+  }
+}
+
+async function payInvoice(meio) {
+  if (!invClient) return;
+  let amt = parseFloat(($('#inv-amount').value || '').replace(',', '.'));
+  if (isNaN(amt) || amt <= 0) amt = invClient.saldo;
+  if (amt > invClient.saldo) amt = invClient.saldo;
+  const parcial = amt < invClient.saldo - 0.001;
   try {
-    await api('/api/admin/socios/' + id + '/fatura', { method: 'POST', body: JSON.stringify({ meio: 'pix' }) });
-    toast('Fatura de ' + nome + ' fechada ✓'); loadContas();
+    await api('/api/admin/socios/' + invClient.id + '/fatura', { method: 'POST', body: JSON.stringify({ meio, valor: amt }) });
+    toast(parcial ? ('Recebido ' + fmtR(amt) + ' de ' + invClient.nome + ' · resta ' + fmtR(invClient.saldo - amt)) : ('Fatura de ' + invClient.nome + ' quitada ✓'));
+    closeInv(); loadContas();
   } catch (e) { toast(e.message, true); }
 }
 
