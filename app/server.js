@@ -1076,7 +1076,57 @@ app.post('/api/admin/aula/:id/presenca', auth, requireStaff, (req,res)=>{
 app.get('/api/admin/aulas/full', auth, requireStaff, (req,res)=> res.json((db().aulas||[]).map(a=>({ ...a, inscritos:(a.alunos||[]).length }))));
 
 // =================== LOJA / PRO SHOP (cap. 13) ===================
-app.get('/api/loja', (req,res)=> res.json((db().loja||[]).filter(p=>p.ativo!==false).map(p=>({ id:p.id, nome:p.nome, cat:p.cat, preco:p.preco, estoque:p.estoque, esgotado:p.estoque<=0 }))));
+// Seed dos produtos do Kit Atleta — só popula se a loja estiver vazia
+const KIT_SEED = [
+  { cod:'AOT-001', nome:'Camiseta Oficial Agro Open', cat:'Vestuário', emoji:'👕', preco:85, estoque:200,
+    desc:'Dri-fit 140g/m² UV50+. Logo bordado no peito esquerdo + TTC na manga. Tamanhos: PP ao XG + infantil (4–12).' },
+  { cod:'AOT-002', nome:'Boné Oficial Agro Open', cat:'Bonés', emoji:'🧢', preco:75, estoque:200,
+    desc:'Algodão sarjado 100% Verde Escuro. Aba curva dad cap 6 gomos, ajustável (54–60cm). Bordado 3D frente + lateral.' },
+  { cod:'AOT-003', nome:'Camiseta Premium Monograma AO', cat:'Vestuário', emoji:'👕', preco:95, estoque:150,
+    desc:'Dri-fit 140g/m² UV50+. Monograma "AO" grande no peito (silk) + TTC na manga. PP ao XG. Linha exclusiva evento.' },
+  { cod:'AOT-004', nome:'Boné Premium Monograma AO', cat:'Bonés', emoji:'🧢', preco:85, estoque:150,
+    desc:'Algodão sarjado 100% Verde Escuro. Monograma AO bordado 3D grande na frente. Ajustável (54–60cm).' },
+  { cod:'AOT-005', nome:'Meias Esportivas Agro Open', cat:'Acessórios', emoji:'🧦', preco:35, estoque:200,
+    desc:'Algodão 60% + Poliamida + Elastano. Branco c/ detalhe verde limão. Cushion reforçado. Tam: 35-38, 39-42, 43-46.' },
+  { cod:'AOT-006', nome:'Sacola Tote Bag Oficial', cat:'Acessórios', emoji:'👜', preco:45, estoque:300,
+    desc:'Lona algodão cru 100%, 280g/m². 40×45×10cm, alça 60cm. Logo silk verde escuro + "07-13 SET 2026".' },
+  { cod:'AOT-007', nome:'Garrafa Squeeze 750ml', cat:'Equipamentos', emoji:'🍶', preco:55, estoque:200,
+    desc:'Plástico BPA-Free (Tritan) 750ml. Verde Escuro matte, tampa sport cap flip-top verde limão. Monograma AO silk.' },
+  { cod:'AOT-008', nome:'Toalhinha de Tênis 50×90cm', cat:'Equipamentos', emoji:'🏊', preco:65, estoque:200,
+    desc:'Algodão 100% felpudo 380g/m². 50×90cm. Verde Escuro com viés verde limão. Logo bordado canto inferior.' },
+  { cod:'AOT-009', nome:'Pulseira de Identificação', cat:'Acessórios', emoji:'📿', preco:25, estoque:250,
+    desc:'Silicone hipoalergênico, relevo gravado. "AGRO OPEN • 4ª EDIÇÃO • TANGARÁ-MT • 2026". Credencial oficial do atleta.' },
+  { cod:'AOT-010', nome:'Munhequeira Oficial (Par)', cat:'Acessórios', emoji:'🤝', preco:40, estoque:200,
+    desc:'Algodão felpudo terry cotton, elastano interno. 7,5cm largura. Monograma AO verde limão bordado. Vendido em par.' },
+];
+function seedLoja(){
+  const d=db(); if(!d.loja) d.loja=[];
+  if(!d.loja.length){
+    KIT_SEED.forEach(k=>{ d.loja.push({ id:nextId(), cod:k.cod, nome:k.nome, cat:k.cat, emoji:k.emoji, preco:k.preco, estoque:k.estoque, desc:k.desc, ativo:true, criadoEm:new Date().toISOString() }); });
+    save();
+  }
+}
+seedLoja();
+
+app.get('/api/loja', (req,res)=> {
+  seedLoja();
+  res.json((db().loja||[]).filter(p=>p.ativo!==false).map(p=>({ id:p.id, cod:p.cod||'', nome:p.nome, cat:p.cat, emoji:p.emoji||'📦', preco:p.preco, estoque:p.estoque, esgotado:p.estoque<=0, desc:p.desc||'' })));
+});
+
+// Reserva via site público (loja — pré-venda Pix)
+app.post('/api/loja/:id/reservar', (req,res)=>{
+  const p=(db().loja||[]).find(x=>x.id==req.params.id && x.ativo!==false);
+  if(!p) return res.status(404).json({erro:'produto não encontrado'});
+  if(p.estoque<=0) return res.status(409).json({erro:'produto esgotado'});
+  const { nome, email, tel, qtd, tamanho } = req.body||{};
+  if(!nome||!email) return res.status(400).json({erro:'nome e e-mail obrigatórios'});
+  const q=Math.max(1,Math.min(parseInt(qtd)||1,p.estoque));
+  p.estoque-=q;
+  const r={ id:nextId(), produtoId:p.id, cod:p.cod||'', produto:p.nome, qtd:q, tamanho:tamanho||'', preco:p.preco, total:p.preco*q, nome, email, tel:tel||'', status:'reservado', criadoEm:new Date().toISOString(), pagamento:'pix-pendente' };
+  if(!db().reservasLoja) db().reservasLoja=[];
+  db().reservasLoja.push(r); save();
+  res.json({ ok:true, reservaId:r.id, produto:p.nome, total:r.total, msg:'Reserva confirmada! Leve o comprovante Pix na recepção do Tangará Tênis Clube para retirar.' });
+});
 app.post('/api/admin/loja', auth, requireStaff, (req,res)=>{
   const b=req.body||{}; if(!b.nome) return res.status(400).json({error:'nome obrigatório'});
   const p={ id:nextId(), nome:b.nome, cat:b.cat||'Geral', preco:Number(b.preco)||0, estoque:parseInt(b.estoque)||0, ativo:true, criadoEm:new Date().toISOString() };

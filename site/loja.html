@@ -2,49 +2,91 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pro Shop · Agro Open</title>
-<meta name="description" content="Pro Shop do clube: raquetes, bolas, vestuário e acessórios.">
+<title>Pro Shop · Kit Atleta · 4ª Agro Open</title>
+<meta name="description" content="Loja oficial da 4ª Agro Open de Tênis — Kit do Atleta, camisetas, bonés e acessórios oficiais.">
 <link rel="icon" href="img/logo-ao-oficial.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="app.css">
 <style>
-  .filter-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px}
-  .chip{padding:6px 16px;border-radius:100px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;transition:.15s}
-  .chip:hover{border-color:var(--green);color:var(--cream)}
-  .chip.active{background:var(--green);border-color:var(--green);color:var(--deep2)}
-  .prods{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
-  .prod{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
-  .prod-thumb{height:140px;display:flex;align-items:center;justify-content:center;font-size:52px;background:rgba(95,179,53,.08)}
-  .prod-thumb.cat-raquetes{background:rgba(201,166,86,.10)}
-  .prod-thumb.cat-bolas{background:rgba(143,214,74,.10)}
-  .prod-thumb.cat-vestuario{background:rgba(95,179,53,.08)}
-  .prod-thumb.cat-acessorios{background:rgba(14,46,28,.25)}
-  .prod-body{padding:16px;flex:1;display:flex;flex-direction:column;gap:6px}
-  .prod .cat-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-weight:700}
-  .prod h3{font-size:16px;font-weight:700;margin:0}
-  .prod .preco{font-family:'Archivo';font-weight:900;font-size:22px;color:var(--lime);margin:4px 0}
-  .prod .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 10px;border-radius:100px}
-  .badge.ok{background:rgba(143,214,74,.15);color:var(--lime)}
-  .badge.out{background:rgba(232,154,140,.15);color:#e89a8c}
-  .prod-footer{padding:0 16px 16px}
-  .btn-reservar{width:100%;padding:9px 0;border-radius:8px;border:none;background:var(--green);color:var(--deep2);font-weight:700;font-size:14px;cursor:pointer;transition:.15s}
-  .btn-reservar:hover{background:var(--lime)}
-  .btn-reservar:disabled{background:var(--line);color:var(--muted);cursor:not-allowed}
-  .banner-info{display:flex;align-items:center;gap:12px;background:rgba(201,166,86,.10);border:1px solid rgba(201,166,86,.3);border-radius:12px;padding:14px 18px;margin-bottom:24px;font-size:13.5px;color:var(--gold)}
-  .banner-info span{font-size:22px}
-  /* modal */
-  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:200;opacity:0;pointer-events:none;transition:.2s}
-  .modal-bg.open{opacity:1;pointer-events:all}
-  .modal{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:28px;width:min(420px,94vw);max-height:90vh;overflow-y:auto}
-  .modal h3{margin:0 0 18px;font-size:20px}
-  .modal label{font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;margin-top:12px}
-  .modal input{width:100%;box-sizing:border-box;background:var(--deep2);border:1px solid var(--line);border-radius:8px;padding:9px 12px;color:var(--cream);font-size:14px}
-  .modal-btns{display:flex;gap:10px;margin-top:20px}
-  .modal-btns button{flex:1;padding:10px;border-radius:8px;border:none;font-weight:700;font-size:14px;cursor:pointer}
-  .btn-cancel{background:var(--line);color:var(--muted)}
-  .btn-confirm{background:var(--green);color:var(--deep2)}
-  .btn-confirm:hover{background:var(--lime)}
+/* ── chips de filtro ── */
+.filter-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px;align-items:center}
+.chip{padding:7px 16px;border-radius:100px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;transition:.15s;font-family:inherit}
+.chip:hover{border-color:var(--green);color:var(--cream)}
+.chip.active{background:var(--green);border-color:var(--green);color:#fff}
+.chip-count{background:rgba(255,255,255,.18);border-radius:100px;padding:1px 7px;font-size:11px;margin-left:4px}
+
+/* ── grade de produtos ── */
+.prods{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:18px}
+
+/* ── card produto ── */
+.prod{background:linear-gradient(165deg,var(--panel),var(--deep2));border:1px solid var(--line);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;transition:.15s}
+.prod:hover{border-color:var(--green);transform:translateY(-3px);box-shadow:0 10px 30px rgba(0,0,0,.3)}
+.prod-thumb{height:160px;display:flex;align-items:center;justify-content:center;font-size:62px;position:relative;flex-shrink:0}
+.prod-thumb.cat-vestuario{background:rgba(95,179,53,.08)}
+.prod-thumb.cat-bonés{background:rgba(201,166,86,.10)}
+.prod-thumb.cat-acessórios{background:rgba(143,214,74,.07)}
+.prod-thumb.cat-equipamentos{background:rgba(14,46,28,.25)}
+.cod-badge{position:absolute;top:10px;left:10px;background:var(--deep);color:var(--lime);font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px;letter-spacing:.5px;font-family:'Archivo',sans-serif;border:1px solid rgba(143,214,74,.3)}
+.kit-badge{position:absolute;top:10px;right:10px;background:rgba(201,166,86,.2);color:var(--gold);font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;border:1px solid rgba(201,166,86,.3)}
+.prod-body{padding:16px;flex:1;display:flex;flex-direction:column;gap:6px}
+.prod-cat{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-weight:700}
+.prod-nome{font-size:16px;font-weight:700;margin:0;line-height:1.3}
+.prod-desc{font-size:12px;color:var(--muted);line-height:1.5;flex:1}
+.prod-preco{font-family:'Archivo';font-weight:900;font-size:24px;color:var(--lime);margin:6px 0 0}
+.prod-preco small{font-size:13px;font-weight:600;color:var(--muted)}
+.estoque-badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 10px;border-radius:100px;margin-top:2px}
+.est-ok{background:rgba(143,214,74,.15);color:var(--lime)}
+.est-low{background:rgba(201,166,86,.18);color:var(--gold)}
+.est-out{background:rgba(232,154,140,.15);color:#e89a8c}
+.prod-footer{padding:0 16px 16px;display:flex;flex-direction:column;gap:8px}
+.tam-select{width:100%;padding:9px 12px;background:var(--deep2);border:1px solid var(--line);border-radius:8px;color:var(--cream);font-size:13px;font-family:inherit}
+.tam-select:focus{outline:none;border-color:var(--green)}
+.btn-reservar{width:100%;padding:11px 0;border-radius:9px;border:none;background:var(--green);color:var(--deep2);font-weight:700;font-size:14px;cursor:pointer;transition:.15s;font-family:inherit}
+.btn-reservar:hover{background:var(--lime)}
+.btn-reservar:disabled{background:var(--line);color:var(--muted);cursor:not-allowed}
+
+/* ── banner pix ── */
+.banner-pix{display:flex;align-items:flex-start;gap:14px;background:rgba(95,179,53,.08);border:1px solid rgba(95,179,53,.25);border-radius:14px;padding:16px 20px;margin-bottom:28px}
+.banner-pix .icon{font-size:28px;flex-shrink:0;margin-top:2px}
+.banner-pix h4{margin:0 0 4px;font-size:14px;color:var(--lime)}
+.banner-pix p{margin:0;font-size:13px;color:var(--muted);line-height:1.5}
+
+/* ── modal ── */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;z-index:200;opacity:0;pointer-events:none;transition:.2s;padding:16px}
+.modal-bg.open{opacity:1;pointer-events:all}
+.modal{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:28px;width:min(460px,94vw);max-height:90vh;overflow-y:auto}
+.modal-hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px}
+.modal-hdr h3{margin:0;font-size:20px;line-height:1.3;padding-right:12px}
+.modal-close{background:rgba(255,255,255,.1);border:0;color:var(--muted);width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;flex-shrink:0}
+.modal-close:hover{background:rgba(255,255,255,.2);color:var(--cream)}
+.modal-prod-info{background:var(--deep2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:13px;color:var(--muted);line-height:1.5}
+.modal-prod-info b{color:var(--cream)}
+.form-row{margin:10px 0}
+.form-row label{font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px}
+.form-row input,.form-row select{width:100%;padding:10px 12px;background:var(--deep2);border:1px solid var(--line);border-radius:8px;color:var(--cream);font-size:14px;font-family:inherit}
+.form-row input:focus,.form-row select:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(95,179,53,.15)}
+.form-row input::placeholder{color:var(--muted)}
+.modal-total{display:flex;justify-content:space-between;align-items:center;background:rgba(143,214,74,.06);border:1px solid rgba(143,214,74,.15);border-radius:10px;padding:12px 14px;margin:16px 0;font-weight:700}
+.modal-total .t-val{font-family:'Archivo';font-size:22px;color:var(--lime)}
+.btn-pix{width:100%;padding:14px;border-radius:10px;border:none;background:var(--green);color:var(--deep2);font-weight:800;font-size:15px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;transition:.15s}
+.btn-pix:hover{background:var(--lime)}
+.btn-pix:disabled{background:var(--line);color:var(--muted);cursor:not-allowed}
+.pix-note{font-size:12px;color:var(--muted);text-align:center;margin-top:10px;line-height:1.5}
+.modal-success{text-align:center;padding:10px 0}
+.modal-success .s-icon{font-size:52px;margin-bottom:12px}
+.modal-success h3{font-size:20px;color:var(--lime);margin:0 0 8px}
+.modal-success p{font-size:13px;color:var(--muted);line-height:1.6;margin:0}
+.modal-success .s-total{font-family:'Archivo';font-size:28px;font-weight:900;color:var(--cream);margin:12px 0}
+
+/* ── contador ── */
+.qty-ctrl{display:flex;align-items:center;gap:8px;margin-top:4px}
+.qty-btn{width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--deep2);color:var(--cream);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:700}
+.qty-btn:hover{border-color:var(--green)}
+.qty-num{font-weight:700;font-size:16px;min-width:24px;text-align:center;color:var(--lime)}
+
+/* ── vazio / carregando ── */
+.empty-msg{grid-column:1/-1;text-align:center;padding:40px;color:var(--muted)}
 </style>
 </head>
 <body>
@@ -54,42 +96,48 @@
 </header>
 
 <div class="wrap hero">
-  <div class="kick">Pro Shop</div>
-  <h1>Loja do <span class="lime">clube</span>.</h1>
-  <p>Raquetes, bolas, vestuário e acessórios selecionados para você.</p>
+  <div class="kick">Pro Shop · Kit Atleta</div>
+  <h1>Produtos <span class="lime">oficiais</span>.</h1>
+  <p>Kit Atleta da 4ª Edição — peças exclusivas com a identidade do evento.<br>Reserve online, pague via Pix e retire na recepção do TTC.</p>
 </div>
 
 <div class="wrap" style="padding-bottom:60px">
-  <div class="banner-info"><span>🏪</span><div>Retire na <b>recepção do Tangará Tênis Clube</b> · Pagamento no ato</div></div>
 
-  <div class="filter-chips" id="chips">
-    <button class="chip active" data-cat="todos">Todos</button>
-    <button class="chip" data-cat="Raquetes">🎾 Raquetes</button>
-    <button class="chip" data-cat="Bolas">🟡 Bolas</button>
-    <button class="chip" data-cat="Vestuário">👕 Vestuário</button>
-    <button class="chip" data-cat="Acessórios">🎒 Acessórios</button>
+  <div class="banner-pix">
+    <span class="icon">⚡</span>
+    <div>
+      <h4>Como funciona a reserva</h4>
+      <p>
+        1. Escolha o produto e clique em <b>Reservar</b><br>
+        2. Preencha seus dados — a reserva baixa 1 unidade do estoque imediatamente<br>
+        3. Leve o <b>número de reserva + comprovante Pix</b> à <b>recepção do Tangará Tênis Clube</b> para retirar<br>
+        4. Retirada disponível de <b>07 a 13 de setembro de 2026</b>
+      </p>
+    </div>
   </div>
 
-  <div class="prods" id="lista"></div>
+  <div class="filter-bar" id="chips">
+    <button class="chip active" data-cat="todos">Todos</button>
+    <button class="chip" data-cat="Vestuário">👕 Vestuário</button>
+    <button class="chip" data-cat="Bonés">🧢 Bonés</button>
+    <button class="chip" data-cat="Acessórios">🎒 Acessórios</button>
+    <button class="chip" data-cat="Equipamentos">🎾 Equipamentos</button>
+  </div>
+
+  <div class="prods" id="lista">
+    <div class="empty-msg">Carregando produtos…</div>
+  </div>
 </div>
 
-<!-- Modal de reserva -->
+<!-- ══ MODAL RESERVA ══ -->
 <div class="modal-bg" id="modal-bg">
-  <div class="modal">
-    <h3>Reservar: <span id="modal-nome" class="lime"></span></h3>
-    <label>Nome completo</label><input id="m-nome" placeholder="Seu nome" type="text">
-    <label>E-mail</label><input id="m-email" placeholder="email@exemplo.com" type="email">
-    <label>Telefone / WhatsApp</label><input id="m-tel" placeholder="(65) 99999-0000" type="tel">
-    <label>Quantidade</label><input id="m-qtd" type="number" min="1" max="10" value="1">
-    <div class="modal-btns">
-      <button class="btn-cancel" id="modal-cancel">Cancelar</button>
-      <button class="btn-confirm" id="modal-confirm">Confirmar reserva</button>
-    </div>
+  <div class="modal" id="modal-body">
+    <!-- preenchido por JS -->
   </div>
 </div>
 
 <footer class="app" style="display:flex;align-items:center;flex-wrap:wrap;gap:10px">
-  AGRO OPEN · Pro Shop · powered by <b class="lime">SetPoint</b>
+  AGRO OPEN · Pro Shop · 07–13/09/2026 · Tangará da Serra – MT · powered by <b class="lime">SetPoint</b>
   <span style="display:inline-flex;align-items:center;gap:8px;margin-left:auto;padding-left:18px;border-left:1px solid rgba(255,255,255,.12)">
     <img src="img/logo-ttc-sm.png" alt="TTC" style="height:28px;width:auto;background:#fff;border-radius:5px;padding:2px 5px">
     <span style="font-size:11px;color:var(--muted)">Realização<br>Tangará Tênis Clube</span>
@@ -98,81 +146,218 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
-const toast=(m,err)=>{const t=$('#toast');t.textContent=m;t.className='toast show'+(err?' err':'');setTimeout(()=>t.className='toast',2600)};
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const toast = (m, err) => { const t = $('#toast'); t.textContent = m; t.className = 'toast show' + (err ? ' err' : ''); setTimeout(() => t.className = 'toast', 2800); };
+const fmtR = v => 'R$ ' + (+v || 0).toFixed(2).replace('.', ',');
 
-const EMOJIS={Raquetes:'🎾',Bolas:'🟡',Vestuário:'👕',Acessórios:'🎒'};
-const SLUG={Raquetes:'raquetes',Bolas:'bolas',Vestuário:'vestuario',Acessórios:'acessorios'};
+// Tamanhos por categoria
+const TAMANHOS = {
+  'Vestuário': ['PP','P','M','G','GG','XG','Inf.4','Inf.6','Inf.8','Inf.10','Inf.12'],
+  'Bonés': ['Único (ajustável)'],
+  'Meias Esportivas Agro Open': ['35–38','39–42','43–46'],
+  'default': ['Único']
+};
+function getTamanhos(p) {
+  if (TAMANHOS[p.nome]) return TAMANHOS[p.nome];
+  if (TAMANHOS[p.cat]) return TAMANHOS[p.cat];
+  return TAMANHOS.default;
+}
 
-let allProducts=[], currentCat='todos', pendingId=null;
+let allProducts = [], currentCat = 'todos', pendingProduct = null, qtdModal = 1;
 
-function render(){
-  const list=allProducts.filter(p=>currentCat==='todos'||p.cat===currentCat);
-  if(!list.length){
-    $('#lista').innerHTML='<div class="card" style="padding:30px;grid-column:1/-1;text-align:center"><p class="muted">Nenhum produto nesta categoria.</p></div>';
+/* ══ render ══ */
+function render() {
+  const list = allProducts.filter(p => currentCat === 'todos' || p.cat === currentCat);
+  const lista = $('#lista');
+  if (!list.length) {
+    lista.innerHTML = '<div class="empty-msg">Nenhum produto nesta categoria.</div>';
     return;
   }
-  $('#lista').innerHTML=list.map(p=>{
-    const slug=SLUG[p.cat]||'acessorios';
-    const esgotado=p.esgotado||(p.estoque!=null&&p.estoque<=0);
+  lista.innerHTML = list.map(p => {
+    const slug = p.cat.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+    const esgotado = p.esgotado || p.estoque <= 0;
+    const low = !esgotado && p.estoque > 0 && p.estoque <= 20;
+    const tamanhos = getTamanhos(p);
+    const temTam = tamanhos.length > 1;
     return `<div class="prod" data-id="${p.id}">
-      <div class="prod-thumb cat-${slug}">${EMOJIS[p.cat]||'📦'}</div>
+      <div class="prod-thumb cat-${slug}">
+        ${p.emoji || '📦'}
+        ${p.cod ? `<span class="cod-badge">${p.cod}</span>` : ''}
+        <span class="kit-badge">Kit Atleta</span>
+      </div>
       <div class="prod-body">
-        <div class="cat-label">${p.cat||'Produto'}</div>
-        <h3>${p.nome}</h3>
-        <div class="preco">R$ ${(+p.preco).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
-        <div><span class="badge ${esgotado?'out':'ok'}">${esgotado?'Esgotado':(p.estoque!=null?p.estoque+' em estoque':'Disponível')}</span></div>
+        <div class="prod-cat">${p.cat}</div>
+        <div class="prod-nome">${p.nome}</div>
+        ${p.desc ? `<div class="prod-desc">${p.desc}</div>` : ''}
+        <div class="prod-preco">${fmtR(p.preco)} <small>à vista via Pix</small></div>
+        <span class="estoque-badge ${esgotado ? 'est-out' : low ? 'est-low' : 'est-ok'}">
+          ${esgotado ? 'Esgotado' : low ? `⚠️ Últimas ${p.estoque} unidades` : `✓ ${p.estoque} disponíveis`}
+        </span>
       </div>
       <div class="prod-footer">
-        <button class="btn-reservar" ${esgotado?'disabled':''} onclick="abrirModal(${p.id},'${p.nome.replace(/'/g,"\\'")}')">
-          ${esgotado?'Esgotado':'Reservar'}
+        ${temTam ? `<select class="tam-select" id="tam-${p.id}">
+          <option value="">Selecione o tamanho…</option>
+          ${tamanhos.map(t => `<option value="${t}">${t}</option>`).join('')}
+        </select>` : ''}
+        <button class="btn-reservar" ${esgotado ? 'disabled' : ''} onclick="abrirModal(${p.id})">
+          ${esgotado ? 'Esgotado' : '⚡ Reservar via Pix'}
         </button>
       </div>
     </div>`;
   }).join('');
 }
 
-async function carregar(){
-  try{
-    const list=await (await fetch('/api/loja')).json();
-    allProducts=list;
-    if(!list.length){
-      $('#lista').innerHTML='<div class="card" style="padding:30px;grid-column:1/-1"><p class="muted">Catálogo em montagem. Volte em breve.</p></div>';
+/* ══ carregar ══ */
+async function carregar() {
+  try {
+    const list = await (await fetch('/api/loja')).json();
+    allProducts = list;
+    if (!list.length) {
+      $('#lista').innerHTML = '<div class="empty-msg">Catálogo em montagem. Volte em breve.</div>';
       return;
     }
+    // atualizar contadores nos chips
+    $$('#chips .chip').forEach(c => {
+      const cat = c.dataset.cat;
+      if (cat === 'todos') { const span = c.querySelector('.chip-count'); if(span) span.textContent = list.length; return; }
+      const n = list.filter(p => p.cat === cat).length;
+      if (n > 0 && !c.querySelector('.chip-count')) c.innerHTML += `<span class="chip-count">${n}</span>`;
+    });
     render();
-  }catch(e){
-    $('#lista').innerHTML='<div class="card" style="padding:30px;grid-column:1/-1"><p class="muted">Inicie o servidor (npm start) para ver a loja.</p></div>';
+  } catch (e) {
+    $('#lista').innerHTML = '<div class="empty-msg">Servidor offline. Execute <code>npm start</code> para ver a loja.</div>';
   }
 }
 
-// chips
-$$('#chips .chip').forEach(c=>c.onclick=()=>{
-  $$('#chips .chip').forEach(x=>x.classList.remove('active'));
+/* ══ filtro chips ══ */
+$$('#chips .chip').forEach(c => c.onclick = () => {
+  $$('#chips .chip').forEach(x => x.classList.remove('active'));
   c.classList.add('active');
-  currentCat=c.dataset.cat;
+  currentCat = c.dataset.cat;
   render();
 });
 
-// modal
-function abrirModal(id,nome){
-  pendingId=id;
-  $('#modal-nome').textContent=nome;
-  ['m-nome','m-email','m-tel'].forEach(i=>$(('#'+i)).value='');
-  $('#m-qtd').value=1;
+/* ══ modal reserva ══ */
+function abrirModal(id) {
+  const p = allProducts.find(x => x.id === id);
+  if (!p) return;
+  const tamanhos = getTamanhos(p);
+  const temTam = tamanhos.length > 1;
+  // lê tamanho já selecionado no card (se houver)
+  const selectEl = document.getElementById('tam-' + id);
+  const tamPresel = selectEl ? selectEl.value : '';
+  pendingProduct = p;
+  qtdModal = 1;
+
+  const tamHtml = temTam ? `
+    <div class="form-row">
+      <label>Tamanho *</label>
+      <select id="m-tam">
+        <option value="">Selecione…</option>
+        ${tamanhos.map(t => `<option value="${t}" ${tamPresel===t?'selected':''}>${t}</option>`).join('')}
+      </select>
+    </div>` : `<input type="hidden" id="m-tam" value="${tamanhos[0]}">`;
+
+  $('#modal-body').innerHTML = `
+    <div class="modal-hdr">
+      <h3>${p.emoji || ''} ${p.nome}</h3>
+      <button class="modal-close" onclick="fecharModal()">×</button>
+    </div>
+    <div class="modal-prod-info">
+      ${p.desc || ''}
+      <br><b>${p.cod || ''}</b> · ${p.cat}
+    </div>
+    ${tamHtml}
+    <div class="form-row">
+      <label>Quantidade</label>
+      <div class="qty-ctrl">
+        <button class="qty-btn" onclick="changeQty(-1)">−</button>
+        <span class="qty-num" id="qty-disp">1</span>
+        <button class="qty-btn" onclick="changeQty(1)">+</button>
+        <span style="font-size:12px;color:var(--muted);margin-left:6px">(máx. ${Math.min(p.estoque,5)})</span>
+      </div>
+    </div>
+    <div class="form-row"><label>Nome completo *</label><input id="m-nome" placeholder="Seu nome" type="text" autocomplete="name"></div>
+    <div class="form-row"><label>E-mail *</label><input id="m-email" placeholder="email@exemplo.com" type="email" autocomplete="email"></div>
+    <div class="form-row"><label>WhatsApp</label><input id="m-tel" placeholder="(65) 99999-0000" type="tel" autocomplete="tel"></div>
+    <div class="modal-total">
+      <span>Total <span style="color:var(--muted);font-size:12px">(1×)</span></span>
+      <span class="t-val" id="m-total">${fmtR(p.preco)}</span>
+    </div>
+    <button class="btn-pix" id="btn-confirmar" onclick="confirmarReserva()">
+      ⚡ Confirmar reserva via Pix
+    </button>
+    <p class="pix-note">Ao confirmar, uma unidade é reservada para você.<br>Você tem <b>24h</b> para realizar o pagamento Pix na recepção do TTC.</p>`;
+
   $('#modal-bg').classList.add('open');
+  // foco no primeiro campo
+  setTimeout(() => { const n = document.getElementById('m-nome'); if (n) n.focus(); }, 100);
 }
-$('#modal-cancel').onclick=()=>$('#modal-bg').classList.remove('open');
-$('#modal-bg').onclick=e=>{ if(e.target===$('#modal-bg')) $('#modal-bg').classList.remove('open'); };
-$('#modal-confirm').onclick=async()=>{
-  const nome=$('#m-nome').value.trim(), email=$('#m-email').value.trim(), tel=$('#m-tel').value.trim(), qtd=+$('#m-qtd').value;
-  if(!nome||!email||!tel||!qtd){ toast('Preencha todos os campos.',true); return; }
-  try{
-    const r=await fetch('/api/loja/'+pendingId+'/reservar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nome,email,tel,qtd})});
-    if(r.ok){ toast('Reserva confirmada! Retire na recepção.'); $('#modal-bg').classList.remove('open'); }
-    else{ const e=await r.json(); toast(e.erro||'Erro ao reservar.',true); }
-  }catch(e){ toast('Inicie o servidor para reservar.',true); }
-};
+
+function fecharModal() { $('#modal-bg').classList.remove('open'); pendingProduct = null; }
+
+function changeQty(delta) {
+  if (!pendingProduct) return;
+  const max = Math.min(pendingProduct.estoque, 5);
+  qtdModal = Math.max(1, Math.min(max, qtdModal + delta));
+  document.getElementById('qty-disp').textContent = qtdModal;
+  const totalEl = document.getElementById('m-total');
+  if (totalEl) {
+    totalEl.textContent = fmtR(pendingProduct.preco * qtdModal);
+    totalEl.previousElementSibling.innerHTML = `Total <span style="color:var(--muted);font-size:12px">(${qtdModal}×)</span>`;
+  }
+}
+
+async function confirmarReserva() {
+  if (!pendingProduct) return;
+  const tamEl = document.getElementById('m-tam');
+  const tamanho = tamEl ? tamEl.value : '';
+  const tamanhos = getTamanhos(pendingProduct);
+  if (tamanhos.length > 1 && !tamanho) { toast('Selecione o tamanho', true); return; }
+  const nome = document.getElementById('m-nome').value.trim();
+  const email = document.getElementById('m-email').value.trim();
+  const tel = document.getElementById('m-tel').value.trim();
+  if (!nome || !email) { toast('Preencha nome e e-mail', true); return; }
+
+  const btn = document.getElementById('btn-confirmar');
+  btn.disabled = true; btn.textContent = 'Aguarde…';
+
+  try {
+    const r = await fetch('/api/loja/' + pendingProduct.id + '/reservar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome, email, tel, qtd: qtdModal, tamanho })
+    });
+    const d = await r.json();
+    if (!r.ok) { toast(d.erro || 'Erro ao reservar', true); btn.disabled = false; btn.textContent = '⚡ Confirmar reserva via Pix'; return; }
+
+    // sucesso
+    $('#modal-body').innerHTML = `
+      <div class="modal-success">
+        <div class="s-icon">✅</div>
+        <h3>Reserva confirmada!</h3>
+        <div class="s-total">${fmtR(d.total)}</div>
+        <p>
+          <b>${d.produto}</b> · ${qtdModal} unidade(s)<br>
+          ${tamanho ? `Tamanho: <b>${tamanho}</b><br>` : ''}
+          Reserva <b>#${d.reservaId}</b><br><br>
+          Realize o pagamento via Pix e leve o <b>comprovante + número de reserva</b><br>
+          à <b>recepção do Tangará Tênis Clube</b> de 07 a 13/09/2026.
+        </p>
+        <button class="btn-pix" style="margin-top:20px" onclick="fecharModal()">Fechar</button>
+      </div>`;
+    // atualiza estoque local
+    const prod = allProducts.find(x => x.id === pendingProduct.id);
+    if (prod) { prod.estoque -= qtdModal; if (prod.estoque <= 0) prod.esgotado = true; render(); }
+  } catch (e) {
+    toast('Servidor offline. Execute npm start para reservar.', true);
+    btn.disabled = false; btn.textContent = '⚡ Confirmar reserva via Pix';
+  }
+}
+
+// fechar modal clicando fora
+$('#modal-bg').onclick = e => { if (e.target === $('#modal-bg')) fecharModal(); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharModal(); });
 
 carregar();
 </script>
