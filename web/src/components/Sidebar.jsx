@@ -26,10 +26,12 @@ const NAV_ADMIN = [
 ]
 
 const NAV_PUBLIC = [
-  { to: '/',           icon: '🏠', label: 'Home', end: true },
-  { to: '/inscricao',  icon: '✍️', label: 'Inscrição' },
-  { to: '/ranking',    icon: '🏅', label: 'Ranking' },
-  { to: '/loja',       icon: '🛍️', label: 'Loja' },
+  { to: '/',            icon: '🏠', label: 'Home', end: true },
+  { to: '/inscricao',   icon: '✍️', label: 'Inscrição' },
+  { to: '/ranking',     icon: '🏅', label: 'Ranking' },
+  { to: '/regulamento', icon: '📜', label: 'Regulamento' },
+  { to: '/bracket',     icon: '🎯', label: 'Chaves' },
+  { to: '/loja',        icon: '🛍️', label: 'Loja' },
 ]
 
 const linkStyle = {

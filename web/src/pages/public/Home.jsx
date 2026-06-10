@@ -1,52 +1,92 @@
-import { useState, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { api, fmtR } from '../../lib/api'
 
 const CATEGORIAS = [
-  { nome: 'Simples Masculino A', icon: '🎾' },
-  { nome: 'Simples Masculino B', icon: '🎾' },
-  { nome: 'Simples Feminino', icon: '🎾' },
-  { nome: 'Duplas Masculinas', icon: '👥' },
-  { nome: 'Duplas Mistas', icon: '💑' },
-  { nome: 'Masters +40', icon: '🏆' },
+  { nome: 'Simples Masculino A', icon: '🎾', desc: 'Categoria de alto nível', preco: 'R$ 120', vagas: 32, restantes: 14 },
+  { nome: 'Simples Masculino B', icon: '🎾', desc: 'Categoria intermediária', preco: 'R$ 100', vagas: 32, restantes: 20 },
+  { nome: 'Simples Feminino', icon: '👩', desc: 'Aberta a todas as níveis', preco: 'R$ 100', vagas: 24, restantes: 18 },
+  { nome: 'Duplas Masculinas', icon: '👥', desc: 'Duplas abertas', preco: 'R$ 80/atleta', vagas: 16, restantes: 10 },
+  { nome: 'Duplas Mistas', icon: '💑', desc: 'Homem + Mulher', preco: 'R$ 80/atleta', vagas: 16, restantes: 12 },
+  { nome: 'Masters +40', icon: '🏆', desc: 'Sênior 40 anos ou mais', preco: 'R$ 100', vagas: 24, restantes: 16 },
+]
+
+const PATROCINADORES = [
+  { nome: 'UISA Agroindustrial', icon: '🌾', cor: '#5FB335' },
+  { nome: 'Tangará Tênis Clube', icon: '🎾', cor: '#C9A656' },
+  { nome: 'Prefeitura de Tangará da Serra', icon: '🏛️', cor: '#0E2E1C' },
+]
+
+const INFO_CARDS = [
+  { icon: '📅', label: 'Datas', value: '07 a 13 Set 2026', sub: 'Domingo a Sábado' },
+  { icon: '📍', label: 'Local', value: 'Tangará Tênis Clube', sub: 'Tangará da Serra – MT' },
+  { icon: '🎾', label: 'Categorias', value: '6 categorias', sub: 'Masc · Fem · Misto · Sênior' },
+  { icon: '🏆', label: 'Premiação', value: 'R$ 5.000', sub: 'Em prêmios + troféus' },
 ]
 
 function TennisBall({ style }) {
   return (
     <div style={{
-      position: 'absolute',
-      fontSize: '3rem',
-      opacity: 0.08,
-      userSelect: 'none',
-      pointerEvents: 'none',
-      ...style,
+      position: 'absolute', fontSize: '3rem', opacity: 0.07,
+      userSelect: 'none', pointerEvents: 'none', ...style,
     }}>🎾</div>
+  )
+}
+
+function useCountdown(target) {
+  const [diff, setDiff] = useState(0)
+  useEffect(() => {
+    const calc = () => setDiff(Math.max(0, new Date(target) - Date.now()))
+    calc()
+    const id = setInterval(calc, 1000)
+    return () => clearInterval(id)
+  }, [target])
+  const total = Math.floor(diff / 1000)
+  const days = Math.floor(total / 86400)
+  const hours = Math.floor((total % 86400) / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const seconds = total % 60
+  return { days, hours, minutes, seconds }
+}
+
+function CountdownUnit({ value, label }) {
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(8px)',
+      borderRadius: 16, padding: '18px 24px', minWidth: 80,
+      border: '1px solid rgba(143,214,74,0.25)',
+    }}>
+      <span style={{ fontSize: 'clamp(2rem, 5vw, 3.2rem)', fontWeight: 900, color: '#8FD64A', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+        {String(value).padStart(2, '0')}
+      </span>
+      <span style={{ fontSize: '0.7rem', color: '#a0c8a0', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 6 }}>
+        {label}
+      </span>
+    </div>
   )
 }
 
 export default function Home() {
   const navigate = useNavigate()
+  const { days, hours, minutes, seconds } = useCountdown('2026-09-07T08:00:00')
   const [ranking, setRanking] = useState([])
-  const [info, setInfo] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    Promise.all([
-      api.get('/api/info').catch(() => null),
-      api.get('/api/ranking').catch(() => []),
-    ]).then(([infoData, rankData]) => {
-      if (infoData) setInfo(infoData)
-      setRanking(Array.isArray(rankData) ? rankData.slice(0, 3) : [])
+    api.get('/api/ranking').catch(() => []).then(d => {
+      setRanking(Array.isArray(d) ? d.slice(0, 3) : [])
       setLoading(false)
     })
   }, [])
 
   const medals = ['🥇', '🥈', '🥉']
   const medalColors = [
-    { bg: 'linear-gradient(135deg, #C9A656 0%, #f0d080 50%, #C9A656 100%)', border: '#C9A656', text: '#0E2E1C' },
-    { bg: 'linear-gradient(135deg, #9e9e9e 0%, #d4d4d4 50%, #9e9e9e 100%)', border: '#b0b0b0', text: '#0E2E1C' },
-    { bg: 'linear-gradient(135deg, #cd7f32 0%, #e8a96a 50%, #cd7f32 100%)', border: '#cd7f32', text: '#fff' },
+    { bg: 'linear-gradient(135deg,#C9A656,#f0d080,#C9A656)', border: '#C9A656', text: '#0E2E1C', h: 200 },
+    { bg: 'linear-gradient(135deg,#9e9e9e,#d4d4d4,#9e9e9e)', border: '#b0b0b0', text: '#0E2E1C', h: 160 },
+    { bg: 'linear-gradient(135deg,#cd7f32,#e8a96a,#cd7f32)', border: '#cd7f32', text: '#fff', h: 140 },
   ]
+  const podiumOrder = [1, 0, 2]
 
   return (
     <div style={{ fontFamily: "'Segoe UI', sans-serif", background: '#F4F6EF', minHeight: '100vh' }}>
@@ -54,306 +94,373 @@ export default function Home() {
       {/* ── HERO ── */}
       <section style={{
         position: 'relative',
-        background: 'linear-gradient(160deg, #0E2E1C 0%, #1a4a2e 50%, #0a2014 100%)',
-        color: '#F4F6EF',
-        padding: '80px 24px 100px',
-        textAlign: 'center',
-        overflow: 'hidden',
+        background: 'linear-gradient(160deg, #071a0f 0%, #0E2E1C 40%, #1a4a2e 70%, #0a2014 100%)',
+        color: '#F4F6EF', padding: '80px 24px 120px',
+        textAlign: 'center', overflow: 'hidden',
       }}>
-        {/* Decorative balls */}
-        <TennisBall style={{ top: '10%', left: '3%', fontSize: '6rem' }} />
-        <TennisBall style={{ top: '20%', right: '4%', fontSize: '8rem', transform: 'rotate(20deg)' }} />
-        <TennisBall style={{ bottom: '5%', left: '15%', fontSize: '5rem', transform: 'rotate(-15deg)' }} />
-        <TennisBall style={{ bottom: '15%', right: '10%', fontSize: '4rem' }} />
-        <TennisBall style={{ top: '50%', left: '40%', fontSize: '10rem', opacity: 0.04 }} />
+        <TennisBall style={{ top: '8%', left: '2%', fontSize: '7rem' }} />
+        <TennisBall style={{ top: '15%', right: '3%', fontSize: '9rem', transform: 'rotate(20deg)' }} />
+        <TennisBall style={{ bottom: '8%', left: '12%', fontSize: '5rem', transform: 'rotate(-15deg)' }} />
+        <TennisBall style={{ bottom: '20%', right: '8%', fontSize: '4rem' }} />
+        <TennisBall style={{ top: '45%', left: '38%', fontSize: '12rem', opacity: 0.03 }} />
 
-        {/* Badge evento */}
+        {/* Badge pulsante */}
         <div style={{
           display: 'inline-block',
-          background: 'rgba(143,214,74,0.15)',
-          border: '1px solid #8FD64A',
-          color: '#8FD64A',
-          borderRadius: '999px',
-          padding: '6px 20px',
-          fontSize: '0.8rem',
-          fontWeight: 700,
-          letterSpacing: '0.12em',
-          textTransform: 'uppercase',
-          marginBottom: '24px',
+          background: 'rgba(143,214,74,0.15)', border: '1.5px solid #8FD64A',
+          color: '#8FD64A', borderRadius: '999px', padding: '7px 22px',
+          fontSize: '0.78rem', fontWeight: 800, letterSpacing: '0.14em',
+          textTransform: 'uppercase', marginBottom: 28,
+          animation: 'pulse 2s ease-in-out infinite',
         }}>
           ⚡ Inscrições Abertas
         </div>
 
         <h1 style={{
-          fontSize: 'clamp(2rem, 6vw, 4.5rem)',
-          fontWeight: 900,
-          margin: '0 0 8px',
-          lineHeight: 1.1,
-          letterSpacing: '-0.02em',
-          textShadow: '0 2px 20px rgba(0,0,0,0.4)',
+          fontSize: 'clamp(2.2rem, 7vw, 5rem)', fontWeight: 900, margin: '0 0 6px',
+          lineHeight: 1.05, letterSpacing: '-0.02em',
+          textShadow: '0 4px 30px rgba(0,0,0,0.5)',
         }}>
           4ª AGRO OPEN<br />
           <span style={{ color: '#8FD64A' }}>DE TÊNIS</span>
         </h1>
 
-        <div style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '12px',
-          background: 'rgba(201,166,86,0.15)',
-          border: '1px solid rgba(201,166,86,0.4)',
-          borderRadius: '12px',
-          padding: '10px 24px',
-          margin: '20px 0 8px',
-        }}>
-          <span style={{ fontSize: '1.4rem' }}>📅</span>
-          <span style={{ fontSize: '1.1rem', fontWeight: 600, color: '#C9A656' }}>
-            07 a 13 de Setembro de 2026
-          </span>
-        </div>
-
-        <p style={{ fontSize: '1rem', color: '#a0c8a0', margin: '8px 0 36px', letterSpacing: '0.05em' }}>
-          🏟️ Tangará Tênis Clube — UISA
+        <p style={{ color: '#a0c8a0', fontSize: '1.05rem', margin: '12px 0 32px', letterSpacing: '0.04em' }}>
+          🏟️ Tangará Tênis Clube · UISA · Tangará da Serra – MT
         </p>
 
-        <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
+        {/* Countdown */}
+        <div style={{ marginBottom: 40 }}>
+          <p style={{ color: '#8FD64A', fontSize: '0.78rem', fontWeight: 800, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 16 }}>
+            Começa em
+          </p>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <CountdownUnit value={days} label="Dias" />
+            <CountdownUnit value={hours} label="Horas" />
+            <CountdownUnit value={minutes} label="Min" />
+            <CountdownUnit value={seconds} label="Seg" />
+          </div>
+        </div>
+
+        {/* CTAs */}
+        <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
           <button
             onClick={() => navigate('/inscricao')}
             style={{
               background: 'linear-gradient(135deg, #5FB335, #8FD64A)',
-              color: '#0E2E1C',
-              border: 'none',
-              borderRadius: '12px',
-              padding: '16px 36px',
-              fontSize: '1rem',
-              fontWeight: 800,
-              cursor: 'pointer',
-              boxShadow: '0 4px 20px rgba(95,179,53,0.4)',
-              transition: 'transform .15s, box-shadow .15s',
-              letterSpacing: '0.04em',
+              color: '#0E2E1C', border: 'none', borderRadius: 14,
+              padding: '16px 38px', fontSize: '1rem', fontWeight: 800,
+              cursor: 'pointer', boxShadow: '0 6px 24px rgba(95,179,53,0.45)',
+              letterSpacing: '0.04em', transition: 'transform .15s, box-shadow .15s',
             }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 28px rgba(95,179,53,0.5)' }}
-            onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 4px 20px rgba(95,179,53,0.4)' }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 10px 32px rgba(95,179,53,0.55)' }}
+            onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 6px 24px rgba(95,179,53,0.45)' }}
           >
             🎾 Inscreva-se Agora
           </button>
           <button
             onClick={() => navigate('/ranking')}
             style={{
-              background: 'transparent',
-              color: '#F4F6EF',
-              border: '2px solid rgba(244,246,239,0.4)',
-              borderRadius: '12px',
-              padding: '16px 36px',
-              fontSize: '1rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              transition: 'border-color .15s, background .15s',
-              letterSpacing: '0.04em',
+              background: 'transparent', color: '#F4F6EF',
+              border: '2px solid rgba(244,246,239,0.35)', borderRadius: 14,
+              padding: '16px 38px', fontSize: '1rem', fontWeight: 700,
+              cursor: 'pointer', letterSpacing: '0.04em',
+              transition: 'all .15s',
             }}
             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.borderColor = '#8FD64A' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(244,246,239,0.4)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(244,246,239,0.35)' }}
           >
-            🏆 Ver Ranking
+            🎯 Ver Chaves
           </button>
         </div>
 
-        {/* Wave divider */}
-        <svg style={{ position: 'absolute', bottom: 0, left: 0, width: '100%' }} viewBox="0 0 1440 60" preserveAspectRatio="none">
-          <path d="M0,60 C360,0 1080,60 1440,20 L1440,60 Z" fill="#F4F6EF" />
+        <svg style={{ position: 'absolute', bottom: 0, left: 0, width: '100%' }} viewBox="0 0 1440 70" preserveAspectRatio="none">
+          <path d="M0,70 C360,10 1080,65 1440,25 L1440,70 Z" fill="#F4F6EF" />
         </svg>
       </section>
 
-      {/* ── TOP 3 RANKING ── */}
-      <section style={{ maxWidth: 900, margin: '0 auto', padding: '64px 24px 48px' }}>
-        <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-          <h2 style={{ fontSize: '2rem', fontWeight: 800, color: '#0E2E1C', margin: '0 0 8px' }}>
-            🏆 Top Jogadores
-          </h2>
-          <p style={{ color: '#5a7a5a', margin: 0 }}>Os melhores classificados do torneio</p>
-        </div>
-
-        {loading ? (
-          <div style={{ textAlign: 'center', color: '#5FB335', padding: '32px', fontSize: '1.5rem' }}>🎾</div>
-        ) : ranking.length === 0 ? (
-          <div style={{ textAlign: 'center', color: '#999', padding: '32px' }}>Ranking ainda não disponível</div>
-        ) : (
-          <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'wrap' }}>
-            {ranking.map((p, i) => {
-              const mc = medalColors[i]
-              return (
-                <div key={i} style={{
-                  background: '#fff',
-                  borderRadius: '20px',
-                  padding: '32px 28px',
-                  textAlign: 'center',
-                  boxShadow: `0 4px 24px rgba(0,0,0,0.08), 0 0 0 2px ${mc.border}30`,
-                  flex: '1 1 220px',
-                  maxWidth: '260px',
-                  position: 'relative',
-                  overflow: 'hidden',
-                  transition: 'transform .2s',
-                }}
-                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-4px)'}
-                  onMouseLeave={e => e.currentTarget.style.transform = ''}
-                >
-                  <div style={{
-                    position: 'absolute', top: 0, left: 0, right: 0, height: '6px',
-                    background: mc.bg,
-                  }} />
-                  <div style={{ fontSize: '3rem', marginBottom: '8px' }}>{medals[i]}</div>
-                  <div style={{
-                    display: 'inline-block',
-                    background: mc.bg,
-                    color: mc.text,
-                    borderRadius: '999px',
-                    padding: '2px 14px',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    marginBottom: '12px',
-                  }}>#{p.posicao || i + 1}</div>
-                  <div style={{ fontWeight: 800, fontSize: '1.15rem', color: '#0E2E1C', marginBottom: '4px' }}>
-                    {p.nome}
-                  </div>
-                  <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#5FB335' }}>
-                    {p.pontos?.toLocaleString('pt-BR') ?? '—'} <span style={{ fontSize: '0.8rem', color: '#888', fontWeight: 500 }}>pts</span>
-                  </div>
-                  {(p.vitorias != null || p.derrotas != null) && (
-                    <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#666' }}>
-                      <span style={{ color: '#5FB335', fontWeight: 700 }}>{p.vitorias ?? 0}V</span>
-                      {' '}–{' '}
-                      <span style={{ color: '#e05555', fontWeight: 700 }}>{p.derrotas ?? 0}D</span>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        <div style={{ textAlign: 'center', marginTop: '32px' }}>
-          <Link to="/ranking" style={{
-            color: '#5FB335', fontWeight: 700, textDecoration: 'none', fontSize: '0.95rem',
-            borderBottom: '2px solid #8FD64A', paddingBottom: '2px',
-          }}>
-            Ver ranking completo →
-          </Link>
+      {/* ── INFO CARDS ── */}
+      <section style={{ maxWidth: 1000, margin: '0 auto', padding: '60px 24px 20px' }}>
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 20,
+        }}>
+          {INFO_CARDS.map((c, i) => (
+            <div key={i} style={{
+              background: '#fff', borderRadius: 20, padding: '28px 22px',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.07)',
+              border: '1px solid rgba(95,179,53,0.1)',
+              textAlign: 'center', transition: 'transform .2s, box-shadow .2s',
+            }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 8px 28px rgba(95,179,53,0.15)' }}
+              onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.07)' }}
+            >
+              <div style={{ fontSize: '2.5rem', marginBottom: 10 }}>{c.icon}</div>
+              <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#5FB335', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6 }}>{c.label}</div>
+              <div style={{
+                fontSize: i === 3 ? '1.6rem' : '1.05rem',
+                fontWeight: 900, color: i === 3 ? '#C9A656' : '#0E2E1C', lineHeight: 1.2,
+              }}>{c.value}</div>
+              <div style={{ fontSize: '0.8rem', color: '#7a9a7a', marginTop: 4 }}>{c.sub}</div>
+            </div>
+          ))}
         </div>
       </section>
 
       {/* ── CATEGORIAS ── */}
-      <section style={{
-        background: 'linear-gradient(180deg, #f0f4e8 0%, #e8f0dc 100%)',
-        padding: '56px 24px',
-      }}>
-        <div style={{ maxWidth: 960, margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-            <h2 style={{ fontSize: '2rem', fontWeight: 800, color: '#0E2E1C', margin: '0 0 8px' }}>
-              🎾 Categorias
-            </h2>
-            <p style={{ color: '#5a7a5a', margin: 0 }}>Escolha sua categoria e inscreva-se</p>
+      <section style={{ background: 'linear-gradient(180deg,#f0f4e8 0%,#e8f0dc 100%)', padding: '60px 24px' }}>
+        <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 40 }}>
+            <h2 style={{ fontSize: '2rem', fontWeight: 900, color: '#0E2E1C', margin: '0 0 8px' }}>🎾 Categorias</h2>
+            <p style={{ color: '#5a7a5a', margin: 0 }}>Escolha sua categoria e garanta sua vaga</p>
           </div>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-            gap: '16px',
-          }}>
-            {CATEGORIAS.map((cat, i) => (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+            {CATEGORIAS.map((cat, i) => {
+              const pct = Math.round((cat.vagas - cat.restantes) / cat.vagas * 100)
+              return (
+                <div key={i} style={{
+                  background: '#fff', borderRadius: 18, padding: '22px 20px',
+                  boxShadow: '0 2px 14px rgba(0,0,0,0.06)',
+                  border: '1px solid rgba(95,179,53,0.12)',
+                  cursor: 'pointer', transition: 'transform .15s, box-shadow .15s, border-color .15s',
+                }}
+                  onClick={() => navigate('/inscricao')}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(95,179,53,0.18)'; e.currentTarget.style.borderColor = '#5FB335' }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 2px 14px rgba(0,0,0,0.06)'; e.currentTarget.style.borderColor = 'rgba(95,179,53,0.12)' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
+                    <div style={{
+                      width: 48, height: 48, borderRadius: 14, flexShrink: 0,
+                      background: 'linear-gradient(135deg,#5FB335,#8FD64A)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem',
+                    }}>{cat.icon}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 800, color: '#0E2E1C', fontSize: '0.95rem' }}>{cat.nome}</div>
+                      <div style={{ fontSize: '0.78rem', color: '#7a9a7a', marginTop: 2 }}>{cat.desc}</div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#5FB335' }}>{cat.preco}</div>
+                    </div>
+                  </div>
+                  {/* Barra de ocupação */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#7a9a7a', marginBottom: 4 }}>
+                      <span>{cat.restantes} vagas restantes</span>
+                      <span>{pct}% preenchido</span>
+                    </div>
+                    <div style={{ background: '#e8f0dc', borderRadius: 999, height: 6, overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: pct > 75 ? '#e05555' : 'linear-gradient(90deg,#5FB335,#8FD64A)', borderRadius: 999, transition: 'width .4s' }} />
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <div style={{ textAlign: 'center', marginTop: 32 }}>
+            <button onClick={() => navigate('/inscricao')} style={{
+              background: 'linear-gradient(135deg,#5FB335,#8FD64A)', color: '#0E2E1C',
+              border: 'none', borderRadius: 12, padding: '14px 32px',
+              fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer',
+              boxShadow: '0 4px 16px rgba(95,179,53,0.3)', transition: 'transform .15s',
+            }}
+              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+              onMouseLeave={e => e.currentTarget.style.transform = ''}
+            >
+              Ver todas as categorias →
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* ── TOP 3 RANKING ── */}
+      <section style={{ maxWidth: 960, margin: '0 auto', padding: '64px 24px 48px' }}>
+        <div style={{ textAlign: 'center', marginBottom: 40 }}>
+          <h2 style={{ fontSize: '2rem', fontWeight: 900, color: '#0E2E1C', margin: '0 0 8px' }}>🏆 Top Jogadores</h2>
+          <p style={{ color: '#5a7a5a', margin: 0 }}>Os melhores classificados do ranking atual</p>
+        </div>
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: 48, color: '#5FB335', fontSize: '2rem' }}>🎾</div>
+        ) : ranking.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 48, color: '#999', fontSize: '1rem' }}>Ranking ainda não disponível</div>
+        ) : (
+          <>
+            {/* Pódio visual */}
+            <div style={{ display: 'flex', gap: 16, justifyContent: 'center', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 32 }}>
+              {podiumOrder.filter(pi => pi < ranking.length).map(pi => {
+                const p = ranking[pi]
+                const mc = medalColors[pi]
+                return (
+                  <div key={pi} style={{
+                    flex: `1 1 ${pi === 0 ? '260px' : '220px'}`,
+                    maxWidth: pi === 0 ? 300 : 250,
+                    minWidth: 180,
+                    background: '#fff', borderRadius: 20,
+                    padding: pi === 0 ? '36px 28px' : '28px 22px',
+                    textAlign: 'center',
+                    boxShadow: `0 8px 32px rgba(0,0,0,0.08), 0 0 0 2px ${mc.border}40`,
+                    position: 'relative', overflow: 'hidden',
+                    marginBottom: pi === 0 ? 0 : 20,
+                    transition: 'transform .2s',
+                  }}
+                    onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-5px)'}
+                    onMouseLeave={e => e.currentTarget.style.transform = ''}
+                  >
+                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 8, background: mc.bg }} />
+                    <div style={{ fontSize: pi === 0 ? '3.8rem' : '3rem', marginBottom: 8 }}>{medals[pi]}</div>
+                    <div style={{
+                      display: 'inline-block', background: mc.bg, color: mc.text,
+                      borderRadius: 999, padding: '3px 16px', fontSize: '0.72rem', fontWeight: 800, marginBottom: 10,
+                    }}>
+                      {pi + 1}º Lugar
+                    </div>
+                    <div style={{ fontWeight: 800, fontSize: pi === 0 ? '1.2rem' : '1rem', color: '#0E2E1C', marginBottom: 6 }}>{p.nome}</div>
+                    <div style={{ fontSize: pi === 0 ? '2rem' : '1.65rem', fontWeight: 900, color: '#5FB335' }}>
+                      {p.pontos?.toLocaleString('pt-BR') ?? '—'}
+                      <span style={{ fontSize: '0.75rem', color: '#888', fontWeight: 500, marginLeft: 4 }}>pts</span>
+                    </div>
+                    {(p.vitorias != null || p.derrotas != null) && (
+                      <div style={{ marginTop: 8, fontSize: '0.82rem' }}>
+                        <span style={{ color: '#5FB335', fontWeight: 700 }}>{p.vitorias ?? 0}V</span>
+                        <span style={{ color: '#ccc', margin: '0 4px' }}>–</span>
+                        <span style={{ color: '#e05555', fontWeight: 700 }}>{p.derrotas ?? 0}D</span>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <Link to="/ranking" style={{ color: '#5FB335', fontWeight: 700, textDecoration: 'none', fontSize: '0.95rem', borderBottom: '2px solid #8FD64A', paddingBottom: 2 }}>
+                Ver ranking completo →
+              </Link>
+            </div>
+          </>
+        )}
+      </section>
+
+      {/* ── PATROCINADORES ── */}
+      <section style={{
+        background: 'linear-gradient(135deg,#C9A656 0%,#e8c96c 50%,#C9A656 100%)',
+        padding: '48px 24px',
+      }}>
+        <div style={{ maxWidth: 900, margin: '0 auto', textAlign: 'center' }}>
+          <div style={{ fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#7a5a10', marginBottom: 24 }}>
+            Patrocínio & Realização
+          </div>
+          <div style={{ display: 'flex', gap: 24, justifyContent: 'center', flexWrap: 'wrap', alignItems: 'center' }}>
+            {PATROCINADORES.map((p, i) => (
               <div key={i} style={{
-                background: '#fff',
-                borderRadius: '16px',
-                padding: '24px 20px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '16px',
-                boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
-                border: '1px solid rgba(95,179,53,0.15)',
-                cursor: 'pointer',
-                transition: 'transform .15s, box-shadow .15s, border-color .15s',
+                background: 'rgba(255,255,255,0.85)', borderRadius: 16,
+                padding: '20px 32px', display: 'flex', alignItems: 'center', gap: 12,
+                boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
+                transition: 'transform .15s, box-shadow .15s',
               }}
-                onClick={() => navigate('/inscricao')}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(95,179,53,0.15)'; e.currentTarget.style.borderColor = '#5FB335' }}
-                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.06)'; e.currentTarget.style.borderColor = 'rgba(95,179,53,0.15)' }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.15)' }}
+                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.1)' }}
               >
-                <div style={{
-                  width: 44, height: 44,
-                  background: 'linear-gradient(135deg, #5FB335, #8FD64A)',
-                  borderRadius: '12px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '1.4rem', flexShrink: 0,
-                }}>
-                  {cat.icon}
-                </div>
-                <div>
-                  <div style={{ fontWeight: 700, color: '#0E2E1C', fontSize: '0.95rem' }}>{cat.nome}</div>
-                  <div style={{ fontSize: '0.78rem', color: '#5FB335', fontWeight: 600, marginTop: '2px' }}>Inscrições abertas</div>
-                </div>
+                <span style={{ fontSize: '2rem' }}>{p.icon}</span>
+                <span style={{ fontWeight: 800, color: p.cor, fontSize: '0.95rem' }}>{p.nome}</span>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── CTA FINAL ── */}
-      <section style={{
-        background: 'linear-gradient(135deg, #0E2E1C 0%, #1a4a2e 60%, #0E2E1C 100%)',
-        padding: '72px 24px',
-        textAlign: 'center',
-        color: '#F4F6EF',
-        position: 'relative',
-        overflow: 'hidden',
-      }}>
-        <TennisBall style={{ top: '10%', left: '5%', fontSize: '5rem' }} />
-        <TennisBall style={{ bottom: '10%', right: '5%', fontSize: '7rem' }} />
-
-        <h2 style={{ fontSize: 'clamp(1.6rem, 4vw, 2.8rem)', fontWeight: 900, margin: '0 0 12px', position: 'relative' }}>
-          Pronto para competir?
-        </h2>
-        <p style={{ color: '#a0c8a0', fontSize: '1.1rem', margin: '0 0 36px', position: 'relative' }}>
-          Garanta sua vaga na 4ª Agro Open de Tênis.<br />
-          Vagas limitadas por categoria.
-        </p>
-        <button
-          onClick={() => navigate('/inscricao')}
-          style={{
-            background: 'linear-gradient(135deg, #5FB335, #8FD64A)',
-            color: '#0E2E1C',
-            border: 'none',
-            borderRadius: '14px',
-            padding: '18px 48px',
-            fontSize: '1.1rem',
-            fontWeight: 800,
-            cursor: 'pointer',
-            boxShadow: '0 6px 24px rgba(95,179,53,0.4)',
-            letterSpacing: '0.04em',
-            position: 'relative',
-            transition: 'transform .15s',
-          }}
-          onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
-          onMouseLeave={e => e.currentTarget.style.transform = ''}
-        >
-          🎾 Fazer Inscrição
-        </button>
-
-        {/* Info bar */}
-        <div style={{
-          display: 'flex', gap: '32px', justifyContent: 'center', flexWrap: 'wrap',
-          marginTop: '48px', paddingTop: '32px',
-          borderTop: '1px solid rgba(244,246,239,0.1)',
-        }}>
+      {/* ── GALERIA ── */}
+      <section style={{ maxWidth: 1000, margin: '0 auto', padding: '64px 24px' }}>
+        <div style={{ textAlign: 'center', marginBottom: 36 }}>
+          <h2 style={{ fontSize: '2rem', fontWeight: 900, color: '#0E2E1C', margin: '0 0 8px' }}>📸 Galeria</h2>
+          <p style={{ color: '#5a7a5a', margin: 0 }}>Momentos das edições anteriores</p>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
           {[
-            { icon: '📅', label: 'Datas', value: '07–13 Set 2026' },
-            { icon: '🏟️', label: 'Local', value: 'Tangará Tênis Clube' },
-            { icon: '🏢', label: 'Realização', value: 'UISA' },
+            { grad: 'linear-gradient(135deg,#0E2E1C,#1a4a2e)', label: 'Abertura do torneio' },
+            { grad: 'linear-gradient(135deg,#1a4a2e,#5FB335)', label: 'Partidas das quartas' },
+            { grad: 'linear-gradient(135deg,#5FB335,#8FD64A)', label: 'Semifinais masculino' },
+            { grad: 'linear-gradient(135deg,#C9A656,#f0d080)', label: 'Premiação feminino' },
+            { grad: 'linear-gradient(135deg,#0a2014,#0E2E1C)', label: 'Grande final 2025' },
+            { grad: 'linear-gradient(135deg,#8FD64A,#C9A656)', label: 'Cerimônia de encerramento' },
           ].map((item, i) => (
-            <div key={i} style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '1.8rem', marginBottom: '4px' }}>{item.icon}</div>
-              <div style={{ fontSize: '0.75rem', color: '#8FD64A', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{item.label}</div>
-              <div style={{ fontWeight: 600, color: '#F4F6EF', marginTop: '2px' }}>{item.value}</div>
+            <div key={i} style={{
+              background: item.grad, borderRadius: 18, height: 200,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexDirection: 'column', gap: 12, cursor: 'pointer',
+              overflow: 'hidden', position: 'relative',
+              transition: 'transform .25s, box-shadow .25s',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+            }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.2)' }}
+              onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.12)' }}
+            >
+              <span style={{ fontSize: '2.8rem', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.3))' }}>🎾</span>
+              <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.82rem', fontWeight: 700, letterSpacing: '0.04em', textAlign: 'center', padding: '0 16px' }}>
+                {item.label}
+              </span>
             </div>
           ))}
         </div>
       </section>
+
+      {/* ── CTA FINAL ── */}
+      <section style={{
+        background: 'linear-gradient(135deg,#071a0f 0%,#0E2E1C 50%,#1a4a2e 100%)',
+        padding: '80px 24px', textAlign: 'center', color: '#F4F6EF',
+        position: 'relative', overflow: 'hidden',
+      }}>
+        <TennisBall style={{ top: '8%', left: '4%', fontSize: '6rem' }} />
+        <TennisBall style={{ bottom: '8%', right: '4%', fontSize: '8rem' }} />
+        <TennisBall style={{ top: '50%', right: '20%', fontSize: '5rem', transform: 'rotate(30deg)' }} />
+
+        <div style={{ position: 'relative', maxWidth: 640, margin: '0 auto' }}>
+          <div style={{ fontSize: '3rem', marginBottom: 16 }}>🏆</div>
+          <h2 style={{ fontSize: 'clamp(1.8rem, 5vw, 3rem)', fontWeight: 900, margin: '0 0 16px', letterSpacing: '-0.02em' }}>
+            Pronto para competir?
+          </h2>
+          <p style={{ color: '#a0c8a0', fontSize: '1.1rem', lineHeight: 1.7, margin: '0 0 40px' }}>
+            Garanta sua vaga na <strong style={{ color: '#8FD64A' }}>4ª Agro Open de Tênis</strong>.<br />
+            Mais de <strong style={{ color: '#C9A656' }}>R$ 5.000 em prêmios</strong> distribuídos entre as categorias.<br />
+            Vagas limitadas — não perca!
+          </p>
+          <button
+            onClick={() => navigate('/inscricao')}
+            style={{
+              background: 'linear-gradient(135deg,#5FB335,#8FD64A)', color: '#0E2E1C',
+              border: 'none', borderRadius: 16, padding: '20px 56px',
+              fontSize: '1.15rem', fontWeight: 900, cursor: 'pointer',
+              boxShadow: '0 8px 32px rgba(95,179,53,0.45)',
+              letterSpacing: '0.04em', transition: 'transform .15s, box-shadow .15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 12px 40px rgba(95,179,53,0.55)' }}
+            onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 8px 32px rgba(95,179,53,0.45)' }}
+          >
+            🎾 Fazer Minha Inscrição
+          </button>
+
+          <div style={{
+            display: 'flex', gap: 32, justifyContent: 'center', flexWrap: 'wrap',
+            marginTop: 52, paddingTop: 32, borderTop: '1px solid rgba(244,246,239,0.1)',
+          }}>
+            {[
+              { icon: '📅', label: 'Datas', value: '07–13 Set 2026' },
+              { icon: '🏟️', label: 'Local', value: 'Tangará Tênis Clube' },
+              { icon: '🏢', label: 'Realização', value: 'UISA' },
+              { icon: '📜', label: 'Regulamento', value: <Link to="/regulamento" style={{ color: '#8FD64A', textDecoration: 'none' }}>Ver regras</Link> },
+            ].map((item, i) => (
+              <div key={i} style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '1.8rem', marginBottom: 4 }}>{item.icon}</div>
+                <div style={{ fontSize: '0.7rem', color: '#8FD64A', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase' }}>{item.label}</div>
+                <div style={{ fontWeight: 700, color: '#F4F6EF', marginTop: 3, fontSize: '0.9rem' }}>{item.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(143,214,74,0.5); }
+          50% { box-shadow: 0 0 0 8px rgba(143,214,74,0); }
+        }
+      `}</style>
     </div>
   )
 }

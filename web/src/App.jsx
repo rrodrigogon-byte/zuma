@@ -11,6 +11,8 @@ const Home       = lazy(() => import('./pages/public/Home'))
 const Inscricao  = lazy(() => import('./pages/public/Inscricao'))
 const Ranking    = lazy(() => import('./pages/public/Ranking'))
 const Loja       = lazy(() => import('./pages/public/Loja'))
+const Regulamento = lazy(() => import('./pages/public/Regulamento'))
+const Bracket     = lazy(() => import('./pages/public/Bracket'))
 
 const Dashboard  = lazy(() => import('./pages/admin/Dashboard'))
 const Usuarios   = lazy(() => import('./pages/admin/Usuarios'))
@@ -70,10 +72,12 @@ export default function App() {
         <Route path="/admin/auditoria"    element={<Layout><Auditoria /></Layout>} />
 
         {/* Público */}
-        <Route path="/"          element={<Layout><Home /></Layout>} />
-        <Route path="/inscricao" element={<Layout><Inscricao /></Layout>} />
-        <Route path="/ranking"   element={<Layout><Ranking /></Layout>} />
-        <Route path="/loja"      element={<Layout><Loja /></Layout>} />
+        <Route path="/"            element={<Layout><Home /></Layout>} />
+        <Route path="/inscricao"  element={<Layout><Inscricao /></Layout>} />
+        <Route path="/ranking"    element={<Layout><Ranking /></Layout>} />
+        <Route path="/loja"       element={<Layout><Loja /></Layout>} />
+        <Route path="/regulamento" element={<Layout><Regulamento /></Layout>} />
+        <Route path="/bracket"    element={<Layout><Bracket /></Layout>} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
