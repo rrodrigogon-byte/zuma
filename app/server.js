@@ -548,22 +548,56 @@ app.patch('/api/admin/assinaturas/:id', auth, (req,res)=>{
 app.post('/api/admin/reset-ranking', auth, (req,res)=>{ db().ranking = { players:{} }; db().campeoes = {}; save(); res.json({ok:true}); });
 
 // =================== PDV BAR / RESTAURANTE ===================
-const MESAS_FISICAS = 12;
+const MESAS_FISICAS_DEFAULT = 12;
+const getMesasFisicas = () => {
+  const cfg = db().config?.bar?.mesasFisicas;
+  return (cfg && cfg > 0) ? cfg : MESAS_FISICAS_DEFAULT;
+};
 const CARDAPIO = [
-  { id:'chopp', nome:'Chopp 300ml',           cat:'Bebidas',    preco:12, setor:'bar',     cozinha:false },
-  { id:'cerveja', nome:'Cerveja long neck',   cat:'Bebidas',    preco:11, setor:'bar',     cozinha:false },
-  { id:'refri', nome:'Refrigerante',          cat:'Bebidas',    preco:7,  setor:'bar',     cozinha:false },
-  { id:'agua', nome:'Água',                   cat:'Bebidas',    preco:5,  setor:'bar',     cozinha:false },
-  { id:'caipi', nome:'Caipirinha',            cat:'Bebidas',    preco:18, setor:'bar',     cozinha:false },
-  { id:'suco', nome:'Suco natural',           cat:'Bebidas',    preco:12, setor:'bar',     cozinha:false },
-  { id:'burger', nome:'Hambúrguer artesanal', cat:'Cozinha',    preco:32, setor:'cozinha', cozinha:true },
-  { id:'fritas', nome:'Porção de fritas',     cat:'Cozinha',    preco:28, setor:'cozinha', cozinha:true },
-  { id:'salada', nome:'Salada do atleta',     cat:'Cozinha',    preco:24, setor:'cozinha', cozinha:true },
-  { id:'pastel', nome:'Pastel (un)',          cat:'Chapa',      preco:10, setor:'chapa',   cozinha:true },
-  { id:'misto', nome:'Misto quente',          cat:'Chapa',      preco:14, setor:'chapa',   cozinha:true },
-  { id:'acai', nome:'Açaí 500ml',             cat:'Sobremesas', preco:22, setor:'bar',     cozinha:false }
+  // ── Bebidas ──────────────────────────────────────────────────────
+  { id:'chopp',       nome:'Chopp 300ml',            cat:'Bebidas',    preco:12, setor:'bar',     cozinha:false },
+  { id:'chopp600',    nome:'Chopp 600ml',             cat:'Bebidas',    preco:18, setor:'bar',     cozinha:false },
+  { id:'cerveja_ln',  nome:'Cerveja Long Neck',       cat:'Bebidas',    preco:11, setor:'bar',     cozinha:false },
+  { id:'cerveja_lt',  nome:'Cerveja Lata 350ml',      cat:'Bebidas',    preco:9,  setor:'bar',     cozinha:false },
+  { id:'cerveja_600', nome:'Cerveja Garrafa 600ml',   cat:'Bebidas',    preco:18, setor:'bar',     cozinha:false },
+  { id:'refri',       nome:'Refrigerante Lata',       cat:'Bebidas',    preco:7,  setor:'bar',     cozinha:false },
+  { id:'refri_2l',    nome:'Refrigerante 2L',         cat:'Bebidas',    preco:15, setor:'bar',     cozinha:false },
+  { id:'agua',        nome:'Água Mineral',            cat:'Bebidas',    preco:5,  setor:'bar',     cozinha:false },
+  { id:'agua_c',      nome:'Água com Gás',            cat:'Bebidas',    preco:6,  setor:'bar',     cozinha:false },
+  { id:'caipi',       nome:'Caipirinha',              cat:'Bebidas',    preco:18, setor:'bar',     cozinha:false },
+  { id:'caipi_uva',   nome:'Caipirosca Uva',          cat:'Bebidas',    preco:20, setor:'bar',     cozinha:false },
+  { id:'suco',        nome:'Suco Natural 500ml',      cat:'Bebidas',    preco:12, setor:'bar',     cozinha:false },
+  { id:'isoton',      nome:'Isotônico',               cat:'Bebidas',    preco:9,  setor:'bar',     cozinha:false },
+  { id:'energetico',  nome:'Energético',              cat:'Bebidas',    preco:14, setor:'bar',     cozinha:false },
+  // ── Petiscos / Chapa ─────────────────────────────────────────────
+  { id:'pastel_c',    nome:'Pastel de Carne (un)',     cat:'Petiscos',   preco:10, setor:'chapa',   cozinha:true },
+  { id:'pastel_q',    nome:'Pastel de Queijo (un)',    cat:'Petiscos',   preco:10, setor:'chapa',   cozinha:true },
+  { id:'pastel_f',    nome:'Pastel de Frango (un)',    cat:'Petiscos',   preco:10, setor:'chapa',   cozinha:true },
+  { id:'misto',       nome:'Misto Quente',             cat:'Petiscos',   preco:14, setor:'chapa',   cozinha:true },
+  { id:'coxinha',     nome:'Coxinha (un)',             cat:'Petiscos',   preco:8,  setor:'chapa',   cozinha:true },
+  { id:'enrol_salsicha',nome:'Enrolado de Salsicha',  cat:'Petiscos',   preco:8,  setor:'chapa',   cozinha:true },
+  { id:'porcao_fritas',nome:'Porção de Fritas',        cat:'Petiscos',   preco:28, setor:'cozinha', cozinha:true },
+  { id:'porcao_mandioca',nome:'Porção de Mandioca',   cat:'Petiscos',   preco:26, setor:'cozinha', cozinha:true },
+  { id:'batata_frita', nome:'Batata Frita Simples',   cat:'Petiscos',   preco:18, setor:'cozinha', cozinha:true },
+  // ── Espetinhos ───────────────────────────────────────────────────
+  { id:'esp_carne',   nome:'Espetinho de Carne',       cat:'Espetinhos', preco:12, setor:'chapa',   cozinha:true },
+  { id:'esp_frango',  nome:'Espetinho de Frango',      cat:'Espetinhos', preco:10, setor:'chapa',   cozinha:true },
+  { id:'esp_linguica',nome:'Espetinho de Linguiça',    cat:'Espetinhos', preco:10, setor:'chapa',   cozinha:true },
+  { id:'esp_coração', nome:'Espetinho de Coração',     cat:'Espetinhos', preco:9,  setor:'chapa',   cozinha:true },
+  { id:'esp_misto',   nome:'Espetinho Misto',          cat:'Espetinhos', preco:12, setor:'chapa',   cozinha:true },
+  // ── Cozinha ──────────────────────────────────────────────────────
+  { id:'burger',      nome:'Hambúrguer Artesanal',     cat:'Cozinha',    preco:32, setor:'cozinha', cozinha:true },
+  { id:'burger_dp',   nome:'Hambúrguer Duplo',         cat:'Cozinha',    preco:42, setor:'cozinha', cozinha:true },
+  { id:'salada',      nome:'Salada do Atleta',         cat:'Cozinha',    preco:24, setor:'cozinha', cozinha:true },
+  { id:'prato_dia',   nome:'Prato do Dia',             cat:'Cozinha',    preco:35, setor:'cozinha', cozinha:true },
+  { id:'frango_grl',  nome:'Frango Grelhado',          cat:'Cozinha',    preco:30, setor:'cozinha', cozinha:true },
+  // ── Sobremesas ───────────────────────────────────────────────────
+  { id:'acai',        nome:'Açaí 500ml',               cat:'Sobremesas', preco:22, setor:'bar',     cozinha:false },
+  { id:'acai_300',    nome:'Açaí 300ml',               cat:'Sobremesas', preco:16, setor:'bar',     cozinha:false },
+  { id:'sorvete',     nome:'Sorvete 2 bolas',          cat:'Sobremesas', preco:12, setor:'bar',     cozinha:false },
 ];
-const prod = id => CARDAPIO.find(p=>p.id===id);
+// prod() usa cardápio dinâmico (admin pode editar) com fallback no hardcoded
+const prod = id => getCardapio().find(p=>p.id===id);
 const comandaTotal = c => c.itens.reduce((s,i)=>s + i.preco*i.qtd, 0);
 const openComandaMesa = num => db().comandas.find(c=>c.tipo==='fisica' && c.mesaNum===num && c.status==='aberta');
 
@@ -579,7 +613,7 @@ app.get('/api/cardapio', (req,res)=>{
 app.get('/api/mesas', (req,res)=>{
   const abertas = db().comandas.filter(c=>c.status==='aberta');
   const fisicas = [];
-  for(let n=1;n<=MESAS_FISICAS;n++){
+  for(let n=1;n<=getMesasFisicas();n++){
     const c = abertas.find(x=>x.tipo==='fisica' && x.mesaNum===n);
     fisicas.push({ num:n, tipo:'fisica', status: c?(c.contaPedida?'conta':'ocupada'):'livre',
       comandaId:c?c.id:null, total:c?comandaTotal(c):0, nome:c?c.nome:'', abertaEm:c?c.abertaEm:null,
@@ -588,7 +622,47 @@ app.get('/api/mesas', (req,res)=>{
   const virtuais = abertas.filter(c=>c.tipo==='virtual').map(c=>({ comandaId:c.id, tipo:'virtual', nome:c.nome,
     local:c.local||null, status: c.contaPedida?'conta':'ocupada', total:comandaTotal(c), abertaEm:c.abertaEm,
     aguardandoCozinha: c.itens.some(i=>i.cozinha && i.status==='em_preparo') }));
-  res.json({ fisicas, virtuais, totalMesasFisicas:MESAS_FISICAS });
+  res.json({ fisicas, virtuais, totalMesasFisicas:getMesasFisicas() });
+});
+
+// ── CRUD de configuração de mesas (admin) ──────────────────────────────────
+app.post('/api/admin/mesas/config', auth, requireRole('admin','organizador'), (req,res)=>{
+  const { mesasFisicas } = req.body||{};
+  const n = parseInt(mesasFisicas);
+  if(!n || n<1 || n>100) return res.status(400).json({error:'número de mesas inválido (1-100)'});
+  if(!db().config) db().config = {};
+  if(!db().config.bar) db().config.bar = {};
+  db().config.bar.mesasFisicas = n;
+  save();
+  auditoria(req.user,'CONFIG_MESAS',{mesasFisicas:n});
+  res.json({ok:true, mesasFisicas:n});
+});
+
+app.get('/api/admin/mesas/config', auth, requireStaff, (req,res)=>{
+  res.json({ mesasFisicas: getMesasFisicas() });
+});
+
+// Forçar abertura de comanda em mesa física específica (admin pode abrir em nome de cliente)
+app.post('/api/admin/mesas/:num/abrir', auth, requireStaff, (req,res)=>{
+  const num = parseInt(req.params.num);
+  if(num<1||num>getMesasFisicas()) return res.status(400).json({error:'mesa inválida'});
+  if(openComandaMesa(num)) return res.status(409).json({error:'mesa já está ocupada'});
+  const { nome } = req.body||{};
+  const c = novaComanda({tipo:'fisica', mesaNum:num, nome:nome||('Mesa '+num)});
+  save();
+  res.json({ok:true, comandaId:c.id, mesa:num});
+});
+
+// Fechar/zerar mesa forçado (admin)
+app.post('/api/admin/mesas/:num/fechar', auth, requireRole('admin','organizador'), (req,res)=>{
+  const num = parseInt(req.params.num);
+  const c = openComandaMesa(num);
+  if(!c) return res.status(404).json({error:'mesa sem comanda aberta'});
+  c.status='fechada'; c.fechadoEm=new Date().toISOString(); c.pagamento=c.pagamento||'cancelado_admin';
+  c.itens.forEach(it=>{ if(db().estoque?.[it.produtoId]!==undefined) db().estoque[it.produtoId].qtd+=it.qtd; });
+  save();
+  auditoria(req.user,'FECHAR_MESA_FORCADO',{mesa:num, comandaId:c.id});
+  res.json({ok:true});
 });
 
 function novaComanda({tipo,mesaNum,nome,local}){
@@ -651,7 +725,7 @@ app.post('/api/admin/comanda/:id/fechar', auth, (req,res)=>{
 // PÚBLICO: pedir pelo app via QR da mesa física
 app.post('/api/mesa/:num/pedir', (req,res)=>{
   const num=parseInt(req.params.num);
-  if(!num || num<1 || num>MESAS_FISICAS) return res.status(400).json({error:'mesa inválida'});
+  if(!num || num<1 || num>getMesasFisicas()) return res.status(400).json({error:'mesa inválida'});
   let c=openComandaMesa(num); if(!c) c=novaComanda({tipo:'fisica', mesaNum:num, nome:req.body.nome||('Mesa '+num)});
   const errs=addItens(c, req.body.itens||[]); save();
   if(errs&&errs.length) return res.status(409).json({error:errs.join('; ')});
@@ -730,7 +804,7 @@ app.post('/api/comanda/:id/transferir', auth, (req,res)=>{
   const { mesaNum } = req.body||{};
   if(!mesaNum) return res.status(400).json({error:'informe mesaNum'});
   const num=parseInt(mesaNum);
-  if(num<1||num>MESAS_FISICAS) return res.status(400).json({error:'mesa inválida'});
+  if(num<1||num>getMesasFisicas()) return res.status(400).json({error:'mesa inválida'});
   const outra=openComandaMesa(num);
   if(outra && outra.id!==c.id){
     // merge: move itens para comanda existente
