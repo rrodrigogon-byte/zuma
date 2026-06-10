@@ -1722,7 +1722,13 @@ function usarCupom(cupomId){
   const c=(db().cupons||[]).find(x=>x.id==cupomId); if(c) c.usos=(c.usos||0)+1;
 }
 
-// ---- estático: serve o site de marketing + páginas do app ----
-app.use(express.static(path.join(__dirname, '..', 'site')));
+// ---- estático: serve React SPA (build do web/) ----
+app.use(express.static(path.join(__dirname, 'public')));
 
-app.listen(PORT, ()=> console.log(`Agro Open API + site em http://localhost:${PORT}`));
+// SPA fallback — React Router client-side routing
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'not found' });
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.listen(PORT, ()=> console.log(`SetPoint React SPA em http://localhost:${PORT}`));
