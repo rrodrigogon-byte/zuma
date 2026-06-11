@@ -123,7 +123,7 @@ export default function Inscricao() {
       setPixInfo(pix)
       setEtapa('pix')
     } catch (err) {
-      toast?.error?.(err.message || 'Erro ao realizar inscrição')
+      toast(err.message || 'Erro ao realizar inscrição', true)
     } finally {
       setSubmitting(false)
     }
@@ -136,7 +136,7 @@ export default function Inscricao() {
       setCopiado(true)
       setTimeout(() => setCopiado(false), 2000)
     } catch {
-      toast?.error?.('Não foi possível copiar')
+      toast('Não foi possível copiar', true)
     }
   }
 

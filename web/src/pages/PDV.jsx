@@ -676,14 +676,28 @@ export default function PDV() {
             </div>
 
             <div style={S.prodGrid}>
-              {prodsFiltrados.map(p => (
-                <div key={p.id} style={S.prodCard}>
-                  <button style={S.addBtn} onClick={() => abrirObsItem(p)}>+</button>
+              {prodsFiltrados.map(p => {
+                const estBaixo = p.estoque !== null && p.estoque !== undefined && p.estoque <= 5
+                const estZero = p.estoque !== null && p.estoque !== undefined && p.estoque <= 0
+                return (
+                <div key={p.id} style={{ ...S.prodCard, opacity: estZero ? 0.45 : 1, position: 'relative' }}>
+                  {p.estoque !== null && p.estoque !== undefined && (
+                    <div style={{
+                      position: 'absolute', top: 4, right: 4,
+                      background: estZero ? '#e74c3c' : estBaixo ? '#C9A656' : '#2d4a32',
+                      color: '#fff', borderRadius: 8, fontSize: 9, fontWeight: 700,
+                      padding: '1px 5px', lineHeight: 1.4,
+                    }}>
+                      {estZero ? 'SEM' : estBaixo ? `⚠ ${p.estoque}` : p.estoque}
+                    </div>
+                  )}
+                  <button style={S.addBtn} onClick={() => !estZero && abrirObsItem(p)} disabled={estZero}>+</button>
                   <div style={S.prodName}>{p.nome}</div>
                   <div style={S.prodPrice}>{fmtR(p.preco)}</div>
                   <div style={{ fontSize: 10, opacity: 0.45, marginTop: 2 }}>{p.cat}</div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </div>

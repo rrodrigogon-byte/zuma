@@ -140,7 +140,10 @@ app.get('/api/pix-info', (req,res)=>{
   });
   res.json({ ativo:true, modo:'estatico', chave:pixInfo.chave, nome:pixInfo.nome, cidade:pixInfo.cidade, copiaECola });
 });
-app.get('/api/categorias', (req,res)=> res.json(CATEGORIAS));
+// Retorna objetos {id, nome, preco} para o formulário de inscrição
+app.get('/api/categorias', (req,res)=> res.json(
+  CATEGORIAS.map(nome=>({ id:nome, nome, preco: taxaCategoria(nome) }))
+));
 
 // CPF validation helper
 function validarCPF(cpf){
@@ -189,6 +192,44 @@ app.post('/api/inscricao', (req,res)=>{
   db().inscricoes.push(insc); save();
   res.json({ ok:true, id:insc.id, total, prazoPagamento:pagoEm,
     message:`Inscrição recebida! Efetue o pagamento de R$ ${total},00 em até 30 minutos para confirmar sua vaga.` });
+});
+// Alias plural (frontend usa /api/inscricoes)
+app.post('/api/inscricoes', (req,res,next)=> { req.url='/api/inscricao'; next('route'); });
+app.post('/api/inscricoes', (req,res)=>{
+  const b = req.body || {};
+  const obrig = ['nome','email','cpf','tel'];
+  const miss = obrig.filter(f=>!b[f]);
+  if(miss.length) return res.status(400).json({error:`Campos obrigatórios: ${miss.join(', ')}`});
+  if(!validarCPF(b.cpf)) return res.status(400).json({error:'CPF inválido'});
+  const categorias = Array.isArray(b.categorias) && b.categorias.length ? b.categorias : (b.categoria ? [b.categoria] : []);
+  if(!categorias.length) return res.status(400).json({error:'Selecione ao menos uma categoria'});
+  const total = categorias.reduce((s,c)=>s+taxaCategoria(c), 0);
+  const pagoEm = new Date(Date.now() + 30*60*1000).toISOString();
+  const insc = {
+    id: nextId(), nome:b.nome, nasc:b.nasc||'', sexo:b.sexo||'', cpf:b.cpf.replace(/\D/g,''),
+    cidade:b.cidade||'', tel:b.tel, email:b.email, categoria:categorias[0],
+    categorias, nivel:b.nivel||'', obs:b.obs||'', total, prazoPagamento:pagoEm,
+    status:'aguardando_pagamento', createdAt:new Date().toISOString()
+  };
+  db().inscricoes.push(insc); save();
+  res.json({ ok:true, id:insc.id, total, prazoPagamento:pagoEm,
+    message:`Inscrição recebida! Efetue o pagamento de R$ ${total},00 em até 30 minutos para confirmar sua vaga.` });
+});
+
+// Ingressos: alias para compatibilidade com frontend
+app.get('/api/ingressos/tipos', (req,res,next)=>{ req.url='/api/ingresso-tipos'; next('route'); });
+app.get('/api/ingressos/tipos', (req,res)=> res.json(
+  INGRESSO_TIPOS.map(t=>{ const l=loteAtivo(t); return { id:t.id, nome:t.nome, setor:t.setor,
+    preco: l?l.preco:null, lote:l?l.lote:null, disponivel:l?l.disponivel:0, esgotado:!l,
+    lotes: t.lotes.map((lo,i)=>({ ...lo, ativo: l && l.lote===lo.lote })) }; })
+));
+
+// Esqueci senha (sem e-mail implementado — retorna OK)
+app.post('/api/auth/esqueci-senha', (req,res)=>{
+  const { email } = req.body||{};
+  // Apenas registra — integração de e-mail pendente
+  console.log('Recuperação de senha solicitada para:', email);
+  res.json({ ok:true, message:'Se este e-mail estiver cadastrado, você receberá as instruções em breve.' });
 });
 
 app.get('/api/chave/:categoria', (req,res)=>{
@@ -529,20 +570,32 @@ app.get('/api/ingresso-tipos', (req,res)=> res.json(
     preco: l?l.preco:null, lote:l?l.lote:null, disponivel:l?l.disponivel:0, esgotado:!l }; })
 ));
 
-// Gera código HMAC-assinado (anti-fraude): AO-<id>-<timestamp>-<hmac8>
+// Gera código HMAC-assinado (anti-fraude): AO-<id>-<tipoId>-<timestamp>-<hmac8>
 function gerarCodeHMAC(id, tipoId){
   const ts = Date.now().toString(36).toUpperCase();
   const payload = `${id}:${tipoId}:${ts}`;
   const hmac = crypto.createHmac('sha256', JWT_SECRET).update(payload).digest('hex').slice(0,8).toUpperCase();
-  return `AO-${id}-${ts}-${hmac}`;
+  return `AO-${id}-${tipoId}-${ts}-${hmac}`;
 }
-function verificarCodeHMAC(code){
+// Verifica estrutura + HMAC + TTL (48h)
+function verificarCodeHMAC(code, ingresso){
+  if(!code || !ingresso) return { ok:false, erro:'código inválido' };
   const parts = code.split('-');
-  if(parts.length!==4 || parts[0]!=='AO') return false;
-  const [,id,ts,hmac] = parts;
-  const payload = `${id}:`;  // precisamos do tipoId — buscamos no DB
-  // verificação feita no check-in consultando o ingresso no DB pelo code
-  return true; // validação estrutural básica
+  if(parts.length !== 5 || parts[0] !== 'AO') {
+    // formato legado (4 partes) — aceitar mas marcar como legacy
+    if(parts.length===4 && parts[0]==='AO') return { ok:true, legacy:true };
+    return { ok:false, erro:'formato de código inválido' };
+  }
+  const [, id, tipoId, ts, hmac] = parts;
+  // Verificar HMAC
+  const payload = `${id}:${tipoId}:${ts}`;
+  const hmacEsperado = crypto.createHmac('sha256', JWT_SECRET).update(payload).digest('hex').slice(0,8).toUpperCase();
+  if(hmac !== hmacEsperado) return { ok:false, erro:'assinatura inválida' };
+  // Verificar TTL de 48h
+  const emitidoEm = parseInt(ts, 36);
+  const ttl = 48 * 60 * 60 * 1000;
+  if(Date.now() - emitidoEm > ttl) return { ok:false, erro:'ingresso expirado (>48h)' };
+  return { ok:true };
 }
 
 // Compra: gera ingresso com código HMAC + QR Code (SVG)
@@ -573,10 +626,14 @@ app.post('/api/admin/checkin', auth, (req,res)=>{
   const { code } = req.body || {};
   const i = (db().ingressos||[]).find(x=>x.code===(code||'').trim());
   if(!i) return res.status(404).json({ ok:false, resultado:'INVALIDO', message:'Ingresso não encontrado' });
+  // Verificação HMAC anti-fraude
+  const hmacRes = verificarCodeHMAC(i.code, i);
+  if(!hmacRes.ok) return res.status(400).json({ ok:false, resultado:'FRAUDE', message:`QR inválido: ${hmacRes.erro}`, ingresso:i });
   if(i.status==='usado') return res.status(409).json({ ok:false, resultado:'JA_USADO', message:'Ingresso já utilizado', ingresso:i, usadoEm:i.usadoEm });
   if(i.status!=='valido') return res.status(409).json({ ok:false, resultado:'PENDENTE', message:'Pagamento pendente', ingresso:i });
-  i.status='usado'; i.usadoEm=new Date().toISOString(); save();
-  res.json({ ok:true, resultado:'LIBERADO', message:'Entrada liberada', ingresso:i });
+  i.status='usado'; i.usadoEm=new Date().toISOString(); i.validadoPor=req.user?.nome||'staff'; save();
+  audit(req, 'CHECKIN', {code:i.code, nome:i.nome, tipo:i.tipoNome});
+  res.json({ ok:true, resultado:'LIBERADO', message:'✅ Entrada liberada!', ingresso:i });
 });
 
 app.get('/api/admin/ingressos', auth, requireStaff, (req,res)=>{
@@ -1050,6 +1107,19 @@ app.post('/api/admin/cardapio/reset', auth, requireRole('admin'), (req,res)=>{
   save(); res.json({ok:true, total: CARDAPIO.length});
 });
 
+// Reset geral de dados (admin apenas) — Configuracoes.jsx
+app.post('/api/admin/reset', auth, requireRole('admin'), (req,res)=>{
+  const { tipo } = req.body||{};
+  const d = db();
+  if(!tipo || tipo==='ranking') { d.ranking={ players:{} }; d.campeoes={}; }
+  if(!tipo || tipo==='inscricoes') { d.inscricoes=[]; }
+  if(!tipo || tipo==='chaves') { d.chaves={}; d.suicos={}; d.gruposEventos={}; }
+  if(!tipo || tipo==='comandas') { d.comandas=[]; }
+  if(!tipo || tipo==='auditoria') { d.auditoria=[]; }
+  audit(req, 'RESET_DADOS', tipo||'todos');
+  save(); res.json({ok:true, message:'Dados resetados com sucesso.'});
+});
+
 // ── CONFIGURAÇÕES DO EVENTO ───────────────────────────────────────────────────
 const CONFIG_DEFAULT = {
   evento: { nome:'4ª Agro Open de Tênis', dataInicio:'2026-09-07', dataFim:'2026-09-13', local:'Tangará Tênis Clube', cidade:'Tangará da Serra/MT' },
@@ -1218,6 +1288,14 @@ app.patch('/api/admin/reservas/:id', auth, requireStaff, (req,res)=>{
 });
 app.delete('/api/admin/reservas/:id', auth, requireStaff, (req,res)=>{
   const d=db(); d.reservas=(d.reservas||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true});
+});
+// Alias admin/loja/reservas → admin/reservas (AdminLoja.jsx)
+app.get('/api/admin/loja/reservas', auth, requireStaff, (req,res)=>{
+  res.json((db().reservas||[]).slice().sort((a,b)=>(a.criadoEm||'').localeCompare(b.criadoEm||'')));
+});
+app.patch('/api/admin/loja/reservas/:id', auth, requireStaff, (req,res)=>{
+  const r=(db().reservas||[]).find(x=>x.id==req.params.id); if(!r) return res.status(404).json({error:'não encontrada'});
+  if(req.body.status) r.status=req.body.status; save(); res.json(r);
 });
 
 // =================== PATROCINADORES E MÍDIA (cap. 11) ===================
