@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/Layout'
+import ErrorBoundary from './components/ErrorBoundary'
 
 const Login     = lazy(() => import('./pages/Login'))
 const PDV       = lazy(() => import('./pages/PDV'))
@@ -16,6 +17,8 @@ const Bracket     = lazy(() => import('./pages/public/Bracket'))
 const Perfil      = lazy(() => import('./pages/public/Perfil'))
 const Contato     = lazy(() => import('./pages/public/Contato'))
 
+const NotFound   = lazy(() => import('./pages/NotFound'))
+
 const Dashboard  = lazy(() => import('./pages/admin/Dashboard'))
 const Usuarios   = lazy(() => import('./pages/admin/Usuarios'))
 const Torneios   = lazy(() => import('./pages/admin/Torneios'))
@@ -30,7 +33,13 @@ const AdminLoja  = lazy(() => import('./pages/admin/AdminLoja'))
 const Aulas      = lazy(() => import('./pages/admin/Aulas'))
 const CRM        = lazy(() => import('./pages/admin/CRM'))
 const BI         = lazy(() => import('./pages/admin/BI'))
-const Auditoria  = lazy(() => import('./pages/admin/Auditoria'))
+const Auditoria     = lazy(() => import('./pages/admin/Auditoria'))
+const Configuracoes = lazy(() => import('./pages/admin/Configuracoes'))
+const Cupons        = lazy(() => import('./pages/admin/Cupons'))
+const Relatorios    = lazy(() => import('./pages/admin/Relatorios'))
+const Noticias      = lazy(() => import('./pages/admin/Noticias'))
+const Sumula        = lazy(() => import('./pages/admin/Sumula'))
+const NoticiasPublic = lazy(() => import('./pages/public/Noticias'))
 
 function Loading() {
   return (
@@ -46,6 +55,7 @@ function Loading() {
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <Suspense fallback={<Loading />}>
       <Routes>
         {/* Auth */}
@@ -71,7 +81,12 @@ export default function App() {
         <Route path="/admin/aulas"        element={<Layout><Aulas /></Layout>} />
         <Route path="/admin/crm"          element={<Layout><CRM /></Layout>} />
         <Route path="/admin/bi"           element={<Layout><BI /></Layout>} />
-        <Route path="/admin/auditoria"    element={<Layout><Auditoria /></Layout>} />
+        <Route path="/admin/auditoria"       element={<Layout><Auditoria /></Layout>} />
+        <Route path="/admin/configuracoes"  element={<Layout><Configuracoes /></Layout>} />
+        <Route path="/admin/cupons"         element={<Layout><Cupons /></Layout>} />
+        <Route path="/admin/relatorios"     element={<Layout><Relatorios /></Layout>} />
+        <Route path="/admin/noticias"       element={<Layout><Noticias /></Layout>} />
+        <Route path="/admin/sumula"         element={<Layout><Sumula /></Layout>} />
 
         {/* Público */}
         <Route path="/"            element={<Layout><Home /></Layout>} />
@@ -82,9 +97,11 @@ export default function App() {
         <Route path="/bracket"    element={<Layout><Bracket /></Layout>} />
         <Route path="/perfil"     element={<Layout><Perfil /></Layout>} />
         <Route path="/contato"    element={<Layout><Contato /></Layout>} />
+        <Route path="/noticias"   element={<Layout><NoticiasPublic /></Layout>} />
 
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Layout><NotFound /></Layout>} />
       </Routes>
     </Suspense>
+    </ErrorBoundary>
   )
 }

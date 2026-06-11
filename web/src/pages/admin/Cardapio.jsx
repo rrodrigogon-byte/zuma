@@ -8,6 +8,7 @@ const SETORES = ['bar', 'cozinha', 'chapa']
 
 const EMPTY_FORM = {
   nome: '',
+  emoji: '',
   cat: 'Bebidas',
   preco: '',
   setor: 'bar',
@@ -15,15 +16,79 @@ const EMPTY_FORM = {
   indisponivel: false,
 }
 
+// Preview do PDV — simula como o cardápio aparece na tela do atendente
+function PreviewPDV({ itens }) {
+  const grouped = CATEGORIAS.reduce((acc, cat) => {
+    const lista = itens.filter(i => i.cat === cat && !i.indisponivel)
+    if (lista.length) acc[cat] = lista
+    return acc
+  }, {})
+
+  return (
+    <div style={{
+      background: '#0E2E1C',
+      borderRadius: 10,
+      padding: 16,
+      maxHeight: 420,
+      overflowY: 'auto',
+      fontSize: 13,
+      border: '1px solid #1e4a2e',
+    }}>
+      <div style={{ color: '#8FD64A', fontWeight: 700, fontSize: 14, marginBottom: 12, letterSpacing: 1 }}>
+        📋 PREVIEW — PDV / COMANDA
+      </div>
+      {Object.entries(grouped).map(([cat, lista]) => (
+        <div key={cat} style={{ marginBottom: 14 }}>
+          <div style={{
+            color: '#C9A656',
+            fontWeight: 700,
+            fontSize: 11,
+            letterSpacing: 1.5,
+            textTransform: 'uppercase',
+            borderBottom: '1px solid #1e4a2e',
+            paddingBottom: 4,
+            marginBottom: 6,
+          }}>
+            {cat}
+          </div>
+          {lista.map(item => (
+            <div
+              key={item.id}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '4px 0',
+                borderBottom: '1px solid rgba(255,255,255,.05)',
+              }}
+            >
+              <span style={{ color: '#F4F6EF' }}>
+                {item.emoji ? item.emoji + ' ' : ''}{item.nome}
+              </span>
+              <span style={{ color: '#C9A656', fontWeight: 700, marginLeft: 12, whiteSpace: 'nowrap' }}>
+                {fmtR(item.preco)}
+              </span>
+            </div>
+          ))}
+        </div>
+      ))}
+      {Object.keys(grouped).length === 0 && (
+        <p style={{ color: 'var(--muted)', textAlign: 'center' }}>Nenhum item disponível.</p>
+      )}
+    </div>
+  )
+}
+
 export default function Cardapio() {
   const { toast } = useToast()
   const [itens, setItens] = useState([])
   const [loading, setLoading] = useState(true)
   const [novoForm, setNovoForm] = useState({ ...EMPTY_FORM })
-  const [novoCategoria, setNovoCategoria] = useState(null) // categoria do formulário inline aberto
-  const [editModal, setEditModal] = useState(null) // item sendo editado
+  const [novoCategoria, setNovoCategoria] = useState(null)
+  const [editModal, setEditModal] = useState(null)
   const [editForm, setEditForm] = useState({ ...EMPTY_FORM })
   const [saving, setSaving] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -36,8 +101,11 @@ export default function Cardapio() {
 
   useEffect(load, [])
 
+  // Itens agrupados por categoria, respeitando campo ordem
   const grouped = CATEGORIAS.reduce((acc, cat) => {
-    acc[cat] = itens.filter((i) => i.cat === cat)
+    acc[cat] = itens
+      .filter(i => i.cat === cat)
+      .sort((a, b) => (a.ordem ?? 999) - (b.ordem ?? 999))
     return acc
   }, {})
 
@@ -59,6 +127,41 @@ export default function Cardapio() {
     } catch {
       toast('Erro ao excluir', 'error')
     }
+  }
+
+  const handleMover = async (item, direcao) => {
+    // direcao: -1 = subir, +1 = descer
+    const lista = grouped[item.cat]
+    const idx = lista.findIndex(i => i.id === item.id)
+    const outro = lista[idx + direcao]
+    if (!outro) return
+    const ordemA = item.ordem ?? idx
+    const ordemB = outro.ordem ?? (idx + direcao)
+    try {
+      await Promise.all([
+        api.patch(`/api/admin/cardapio/${item.id}`, { ordem: ordemB }),
+        api.patch(`/api/admin/cardapio/${outro.id}`, { ordem: ordemA }),
+      ])
+      load()
+    } catch {
+      toast('Erro ao reordenar', 'error')
+    }
+  }
+
+  const handleDuplicar = (item) => {
+    const cat = item.cat
+    setNovoForm({
+      nome: item.nome + ' (cópia)',
+      emoji: item.emoji || '',
+      cat,
+      preco: item.preco,
+      setor: item.setor || 'bar',
+      cozinha: !!item.cozinha,
+      indisponivel: false,
+    })
+    setNovoCategoria(cat)
+    // scroll para o topo da categoria seria ideal, mas simplesmente abre o form
+    toast('Formulário preenchido com os dados do item — clique em Salvar para duplicar', 'info')
   }
 
   const openNovoInline = (cat) => {
@@ -87,6 +190,7 @@ export default function Cardapio() {
   const openEditar = (item) => {
     setEditForm({
       nome: item.nome,
+      emoji: item.emoji || '',
       cat: item.cat,
       preco: item.preco,
       setor: item.setor || 'bar',
@@ -114,9 +218,41 @@ export default function Cardapio() {
     }
   }
 
+  const handleRestaurarPadrao = async () => {
+    if (!confirm('Restaurar cardápio padrão? Isso substituirá TODOS os itens atuais pelo cardápio original do sistema.')) return
+    try {
+      await api.post('/api/admin/cardapio/reset', {})
+      toast('Cardápio restaurado com sucesso', 'success')
+      load()
+    } catch (e) {
+      toast(e?.message || 'Erro ao restaurar', 'error')
+    }
+  }
+
   return (
     <div className="page">
-      <h1 className="page-title">Cardápio</h1>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <h1 className="page-title" style={{ margin: 0 }}>Cardápio</h1>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            className={`btn btn-sm ${showPreview ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setShowPreview(v => !v)}
+          >
+            👁 Preview PDV
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={handleRestaurarPadrao}>
+            ↩ Restaurar padrão
+          </button>
+        </div>
+      </div>
+
+      {/* Preview do PDV */}
+      {showPreview && (
+        <div style={{ marginBottom: 28 }}>
+          <PreviewPDV itens={itens} />
+        </div>
+      )}
 
       {loading ? (
         <p style={{ color: 'var(--muted)' }}>Carregando…</p>
@@ -161,11 +297,20 @@ export default function Cardapio() {
                     marginBottom: 12,
                     border: '1px solid var(--green)',
                     display: 'grid',
-                    gridTemplateColumns: '1fr 120px 130px auto',
+                    gridTemplateColumns: '56px 1fr 110px 120px 130px auto',
                     gap: 10,
                     alignItems: 'end',
                   }}
                 >
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>Emoji</label>
+                    <input
+                      value={novoForm.emoji}
+                      onChange={(e) => setNovoForm((f) => ({ ...f, emoji: e.target.value }))}
+                      placeholder="🍺"
+                      style={{ textAlign: 'center', fontSize: 18 }}
+                    />
+                  </div>
                   <div className="form-group" style={{ margin: 0 }}>
                     <label>Nome</label>
                     <input
@@ -197,6 +342,17 @@ export default function Cardapio() {
                       ))}
                     </select>
                   </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label style={{ opacity: 0 }}>.</label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#ddd', fontSize: 13, cursor: 'pointer', height: 36 }}>
+                      <input
+                        type="checkbox"
+                        checked={novoForm.cozinha}
+                        onChange={(e) => setNovoForm((f) => ({ ...f, cozinha: e.target.checked }))}
+                      />
+                      Cozinha
+                    </label>
+                  </div>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button className="btn btn-primary btn-sm" onClick={handleNovoSave} disabled={saving}>
                       {saving ? '…' : 'Salvar'}
@@ -214,18 +370,23 @@ export default function Cardapio() {
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
                     gap: 12,
                   }}
                 >
-                  {lista.map((item) => (
+                  {lista.map((item, idx) => (
                     <ItemCard
                       key={item.id}
                       item={item}
+                      isFirst={idx === 0}
+                      isLast={idx === lista.length - 1}
                       onToggleCozinha={() => handleToggle(item, 'cozinha')}
                       onToggleDisponivel={() => handleToggle(item, 'indisponivel')}
                       onEditar={() => openEditar(item)}
                       onExcluir={() => handleDelete(item)}
+                      onSubir={() => handleMover(item, -1)}
+                      onDescer={() => handleMover(item, 1)}
+                      onDuplicar={() => handleDuplicar(item)}
                     />
                   ))}
                 </div>
@@ -239,12 +400,24 @@ export default function Cardapio() {
       {editModal && (
         <Modal title={`Editar — ${editModal.nome}`} onClose={() => setEditModal(null)}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div className="form-group">
-              <label>Nome</label>
-              <input
-                value={editForm.nome}
-                onChange={(e) => setEditForm((f) => ({ ...f, nome: e.target.value }))}
-              />
+            {/* Linha: emoji + nome */}
+            <div style={{ display: 'grid', gridTemplateColumns: '72px 1fr', gap: 10 }}>
+              <div className="form-group">
+                <label>Emoji</label>
+                <input
+                  value={editForm.emoji}
+                  onChange={(e) => setEditForm((f) => ({ ...f, emoji: e.target.value }))}
+                  placeholder="🍺"
+                  style={{ textAlign: 'center', fontSize: 20 }}
+                />
+              </div>
+              <div className="form-group">
+                <label>Nome</label>
+                <input
+                  value={editForm.nome}
+                  onChange={(e) => setEditForm((f) => ({ ...f, nome: e.target.value }))}
+                />
+              </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div className="form-group">
@@ -311,7 +484,7 @@ export default function Cardapio() {
   )
 }
 
-function ItemCard({ item, onToggleCozinha, onToggleDisponivel, onEditar, onExcluir }) {
+function ItemCard({ item, isFirst, isLast, onToggleCozinha, onToggleDisponivel, onEditar, onExcluir, onSubir, onDescer, onDuplicar }) {
   return (
     <div
       className="card"
@@ -324,11 +497,14 @@ function ItemCard({ item, onToggleCozinha, onToggleDisponivel, onEditar, onExclu
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <div style={{ fontWeight: 600, color: '#fff', fontSize: 14 }}>{item.nome}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 600, color: '#fff', fontSize: 14 }}>
+            {item.emoji ? <span style={{ marginRight: 6, fontSize: 16 }}>{item.emoji}</span> : null}
+            {item.nome}
+          </div>
           <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{item.setor}</div>
         </div>
-        <div style={{ fontWeight: 700, color: '#C9A656', fontSize: 15, whiteSpace: 'nowrap' }}>
+        <div style={{ fontWeight: 700, color: '#C9A656', fontSize: 15, whiteSpace: 'nowrap', marginLeft: 8 }}>
           {fmtR(item.preco)}
         </div>
       </div>
@@ -351,8 +527,38 @@ function ItemCard({ item, onToggleCozinha, onToggleDisponivel, onEditar, onExclu
       </div>
 
       {/* Ações */}
-      <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
-        <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={onEditar}>
+      <div style={{ display: 'flex', gap: 5, marginTop: 2, flexWrap: 'wrap' }}>
+        {/* Reordenar */}
+        <button
+          className="btn btn-ghost btn-sm"
+          title="Mover para cima"
+          disabled={isFirst}
+          onClick={onSubir}
+          style={{ padding: '2px 7px', opacity: isFirst ? 0.3 : 1 }}
+        >
+          ↑
+        </button>
+        <button
+          className="btn btn-ghost btn-sm"
+          title="Mover para baixo"
+          disabled={isLast}
+          onClick={onDescer}
+          style={{ padding: '2px 7px', opacity: isLast ? 0.3 : 1 }}
+        >
+          ↓
+        </button>
+
+        {/* Duplicar */}
+        <button
+          className="btn btn-ghost btn-sm"
+          title="Duplicar item"
+          onClick={onDuplicar}
+          style={{ padding: '2px 8px' }}
+        >
+          📋
+        </button>
+
+        <button className="btn btn-secondary btn-sm" style={{ flex: 1, minWidth: 50 }} onClick={onEditar}>
           Editar
         </button>
         <button className="btn btn-danger btn-sm" onClick={onExcluir}>

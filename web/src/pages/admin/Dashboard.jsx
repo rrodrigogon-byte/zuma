@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
-import { api, fmtR, fmtDate, fmtDateOnly } from '../../lib/api'
+import { useState, useEffect, useMemo } from 'react'
+import { api, fmtR, fmtDate } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
 const LINKS = [
@@ -12,15 +12,78 @@ const LINKS = [
 ]
 
 const TIPO_BADGE = {
-  estoque: { label: 'Estoque', color: '#C9A656' },
-  pagamento: { label: 'Pagamento', color: '#e05c5c' },
-  info: { label: 'Info', color: '#5FB335' },
-  mesa: { label: 'Mesa', color: '#8FD64A' },
+  estoque: { label: 'Estoque', color: '#C9A656', icon: '📦' },
+  pagamento: { label: 'Pagamento', color: '#e05c5c', icon: '💳' },
+  info: { label: 'Info', color: '#5FB335', icon: 'ℹ️' },
+  mesa: { label: 'Mesa', color: '#8FD64A', icon: '🍺' },
 }
 
-// CSS-pure pie chart using conic-gradient
+const ALERT_ACTIONS = {
+  estoque: { label: 'Ver Estoque', href: '/admin/cardapio' },
+  pagamento: { label: 'Ver Financeiro', href: '/admin/financeiro' },
+  mesa: { label: 'Ver Mesas', href: '/admin/pdv' },
+  info: null,
+}
+
+// ── Shimmer skeleton blocks ──────────────────────────────────────────────────
+
+const shimmerStyle = {
+  background: 'linear-gradient(90deg,var(--card2) 25%,var(--line) 50%,var(--card2) 75%)',
+  backgroundSize: '200% 100%',
+  animation: 'shimmer 1.5s infinite',
+  borderRadius: 6,
+}
+
+function SkeletonBar() {
+  return (
+    <div style={{ background: 'var(--card)', borderRadius: 8, height: 180, padding: 16 }}>
+      <div style={{ ...shimmerStyle, height: 12, marginBottom: 16, width: '40%' }} />
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 100 }}>
+        {[40, 70, 50, 90, 60, 80, 45].map((h, i) => (
+          <div
+            key={i}
+            style={{
+              flex: 1,
+              height: `${h}%`,
+              ...shimmerStyle,
+              borderRadius: '4px 4px 0 0',
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SkeletonKPI() {
+  return (
+    <div className="card kpi" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <div style={{ ...shimmerStyle, height: 12, width: '50%' }} />
+        <div style={{ ...shimmerStyle, height: 22, width: 22, borderRadius: '50%' }} />
+      </div>
+      <div style={{ ...shimmerStyle, height: 32, width: '60%' }} />
+      <div style={{ ...shimmerStyle, height: 10, width: '35%' }} />
+    </div>
+  )
+}
+
+function SkeletonCard({ height = 160 }) {
+  return (
+    <div style={{ background: 'var(--card)', borderRadius: 8, height, padding: 16 }}>
+      <div style={{ ...shimmerStyle, height: 12, width: '45%', marginBottom: 20 }} />
+      <div style={{ ...shimmerStyle, height: 12, width: '80%', marginBottom: 10 }} />
+      <div style={{ ...shimmerStyle, height: 12, width: '65%', marginBottom: 10 }} />
+      <div style={{ ...shimmerStyle, height: 12, width: '72%' }} />
+    </div>
+  )
+}
+
+// ── Charts ───────────────────────────────────────────────────────────────────
+
 function PieChart({ data }) {
-  if (!data || data.length === 0) return <p style={{ color: 'var(--muted)', fontSize: 13 }}>Sem dados.</p>
+  if (!data || data.length === 0)
+    return <p style={{ color: 'var(--muted)', fontSize: 13 }}>Sem dados.</p>
   const total = data.reduce((s, d) => s + d.valor, 0)
   if (total === 0) return <p style={{ color: 'var(--muted)', fontSize: 13 }}>Sem dados.</p>
 
@@ -31,7 +94,6 @@ function PieChart({ data }) {
     acc += pct
     return { ...d, from, to: acc, pct }
   })
-
   const gradient = segments
     .map((s) => `${s.color} ${s.from.toFixed(1)}% ${s.to.toFixed(1)}%`)
     .join(', ')
@@ -40,12 +102,9 @@ function PieChart({ data }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
       <div
         style={{
-          width: 110,
-          height: 110,
-          borderRadius: '50%',
+          width: 110, height: 110, borderRadius: '50%',
           background: `conic-gradient(${gradient})`,
-          flexShrink: 0,
-          boxShadow: '0 0 0 4px #0E2E1C',
+          flexShrink: 0, boxShadow: '0 0 0 4px #0E2E1C',
         }}
       />
       <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -62,10 +121,10 @@ function PieChart({ data }) {
   )
 }
 
-// Bar chart with tooltip on hover
 function BarChart({ data, maxVal }) {
   const [hovered, setHovered] = useState(null)
-  if (!data?.length) return <p style={{ color: 'var(--muted)', fontSize: 13 }}>Sem dados de faturamento.</p>
+  if (!data?.length)
+    return <p style={{ color: 'var(--muted)', fontSize: 13 }}>Sem dados de faturamento.</p>
 
   const max = maxVal || Math.max(...data.map((f) => f.total), 1)
 
@@ -83,50 +142,26 @@ function BarChart({ data, maxVal }) {
               onMouseLeave={() => setHovered(null)}
             >
               {isHov && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    bottom: '100%',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    background: '#0E2E1C',
-                    border: '1px solid var(--green)',
-                    borderRadius: 6,
-                    padding: '4px 8px',
-                    fontSize: 11,
-                    color: '#fff',
-                    whiteSpace: 'nowrap',
-                    zIndex: 10,
-                    pointerEvents: 'none',
-                    marginBottom: 4,
-                  }}
-                >
+                <div style={{
+                  position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
+                  background: '#0E2E1C', border: '1px solid var(--green)', borderRadius: 6,
+                  padding: '4px 8px', fontSize: 11, color: '#fff', whiteSpace: 'nowrap',
+                  zIndex: 10, pointerEvents: 'none', marginBottom: 4,
+                }}>
                   {fmtR(f.total)}
                 </div>
               )}
-              <div
-                style={{
-                  width: '100%',
-                  height: `${Math.max(pct, 4)}%`,
-                  background: isHov
-                    ? 'linear-gradient(to top, #C9A656, #e8c97a)'
-                    : pct === 100
-                    ? 'var(--green)'
-                    : 'linear-gradient(to top, #5FB335, #8FD64A)',
-                  borderRadius: '4px 4px 0 0',
-                  minHeight: 6,
-                  transition: 'height 0.3s, background 0.15s',
-                  cursor: 'default',
-                }}
-              />
-              <span
-                style={{
-                  fontSize: 10,
-                  color: 'var(--muted)',
-                  transform: 'rotate(-30deg)',
-                  whiteSpace: 'nowrap',
-                }}
-              >
+              <div style={{
+                width: '100%', height: `${Math.max(pct, 4)}%`,
+                background: isHov
+                  ? 'linear-gradient(to top, #C9A656, #e8c97a)'
+                  : pct === 100
+                  ? 'var(--green)'
+                  : 'linear-gradient(to top, #5FB335, #8FD64A)',
+                borderRadius: '4px 4px 0 0', minHeight: 6,
+                transition: 'height 0.3s, background 0.15s', cursor: 'default',
+              }} />
+              <span style={{ fontSize: 10, color: 'var(--muted)', transform: 'rotate(-30deg)', whiteSpace: 'nowrap' }}>
                 {f.data}
               </span>
             </div>
@@ -137,19 +172,169 @@ function BarChart({ data, maxVal }) {
   )
 }
 
+// ── Refresh button with spin animation ───────────────────────────────────────
+
+function RefreshButton({ onClick, loading }) {
+  return (
+    <button
+      className="btn btn-secondary"
+      style={{ fontSize: 12, padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 6 }}
+      onClick={onClick}
+      disabled={loading}
+      title="Atualizar dashboard"
+    >
+      <span
+        style={{
+          display: 'inline-block',
+          animation: loading ? 'spin 0.8s linear infinite' : 'none',
+        }}
+      >
+        🔄
+      </span>
+      {loading ? 'Atualizando…' : 'Atualizar'}
+    </button>
+  )
+}
+
+// ── Rich alert item ───────────────────────────────────────────────────────────
+
+function AlertItem({ alerta }) {
+  const tb = TIPO_BADGE[alerta.tipo] || TIPO_BADGE.info
+  const action = ALERT_ACTIONS[alerta.tipo]
+  return (
+    <li style={{
+      display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px',
+      background: 'var(--card2)', borderRadius: 8,
+      borderLeft: `3px solid ${tb.color}`,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 16 }}>{tb.icon}</span>
+        <span
+          className="badge"
+          style={{
+            background: tb.color + '22', color: tb.color,
+            border: `1px solid ${tb.color}44`, flexShrink: 0,
+          }}
+        >
+          {tb.label}
+        </span>
+      </div>
+      <span style={{ color: '#ddd', lineHeight: 1.4, fontSize: 13 }}>{alerta.msg}</span>
+      {action && (
+        <a
+          href={action.href}
+          style={{
+            alignSelf: 'flex-start', fontSize: 12, color: tb.color, fontWeight: 700,
+            textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4,
+          }}
+        >
+          {action.label} →
+        </a>
+      )}
+    </li>
+  )
+}
+
+// ── News widget ───────────────────────────────────────────────────────────────
+
+function NewsWidget({ noticias }) {
+  if (!noticias?.length) return null
+
+  const catColors = {
+    evento: '#5FB335', resultado: '#C9A656', inscricao: '#8FD64A',
+    geral: '#6b7280', comunicado: '#e05c5c',
+  }
+
+  return (
+    <div className="card">
+      <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16, color: '#fff' }}>
+        📰 Últimas Novidades
+      </h2>
+      <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {noticias.slice(0, 3).map((n, i) => {
+          const cat = (n.categoria || 'geral').toLowerCase()
+          const cor = catColors[cat] || '#6b7280'
+          return (
+            <li
+              key={n.id ?? i}
+              style={{
+                display: 'flex', flexDirection: 'column', gap: 4,
+                padding: '8px 10px', background: '#0E2E1C55',
+                borderRadius: 8, borderLeft: `3px solid ${cor}`,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span
+                  className="badge"
+                  style={{
+                    background: cor + '22', color: cor,
+                    border: `1px solid ${cor}44`, fontSize: 10, textTransform: 'capitalize',
+                  }}
+                >
+                  {n.categoria || 'Geral'}
+                </span>
+                {n.data_publicacao && (
+                  <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 'auto' }}>
+                    {new Date(n.data_publicacao).toLocaleDateString('pt-BR')}
+                  </span>
+                )}
+              </div>
+              <span style={{ fontSize: 13, color: '#fff', fontWeight: 600, lineHeight: 1.4 }}>
+                {n.titulo}
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
+// ── KPI card ──────────────────────────────────────────────────────────────────
+
+function KPI({ label, value, icon, color, trend }) {
+  return (
+    <div className="card kpi" style={{ borderTop: `3px solid ${color}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: 13, color: 'var(--muted)' }}>{label}</span>
+        <span style={{ fontSize: 22 }}>{icon}</span>
+      </div>
+      <div style={{ fontSize: 26, fontWeight: 700, color: '#fff', letterSpacing: '-0.5px' }}>
+        {value}
+      </div>
+      {trend && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+          <span style={{ color: trend.up ? '#5FB335' : '#e05c5c', fontWeight: 700 }}>
+            {trend.up ? '↑' : '↓'} {trend.pct}%
+          </span>
+          <span style={{ color: 'var(--muted)' }}>vs ontem</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+
 export default function Dashboard() {
   const { toast } = useToast()
   const [info, setInfo] = useState(null)
   const [dash, setDash] = useState(null)
+  const [noticias, setNoticias] = useState([])
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState(null)
 
   const fetchData = () => {
     setLoading(true)
-    Promise.all([api.get('/api/info'), api.get('/api/admin/dashboard')])
-      .then(([infoRes, dashRes]) => {
+    Promise.all([
+      api.get('/api/info'),
+      api.get('/api/admin/dashboard'),
+      api.get('/api/noticias?publicado=1&limit=3').catch(() => []),
+    ])
+      .then(([infoRes, dashRes, noticiasRes]) => {
         setInfo(infoRes)
         setDash(dashRes)
+        setNoticias(Array.isArray(noticiasRes) ? noticiasRes : noticiasRes?.noticias ?? [])
         setLastUpdate(new Date())
       })
       .catch(() => toast('Erro ao carregar dashboard', 'error'))
@@ -160,25 +345,53 @@ export default function Dashboard() {
 
   const maxFat = dash ? Math.max(...(dash.faturamento || []).map((f) => f.total), 1) : 1
 
-  // Build payment distribution data for pie chart
   const paymentPie = useMemo(() => {
     if (!dash?.pagamentos_meio) return []
     const colors = { Pix: '#5FB335', Cartao: '#C9A656', Dinheiro: '#8FD64A', Outros: '#6b7280' }
     return Object.entries(dash.pagamentos_meio).map(([label, valor]) => ({
-      label,
-      valor,
-      color: colors[label] || '#6b7280',
+      label, valor, color: colors[label] || '#6b7280',
     }))
   }, [dash])
 
-  // KPI trending helper
   const trend = (curr, prev) => {
     if (prev == null || prev === 0) return null
     const pct = ((curr - prev) / prev) * 100
     return { pct: Math.abs(pct).toFixed(1), up: pct >= 0 }
   }
 
-  if (loading) return <div className="page"><p style={{ color: 'var(--muted)' }}>Carregando…</p></div>
+  // ── Skeleton layout while loading ──────────────────────────────────────────
+  if (loading && !dash) {
+    return (
+      <div className="page">
+        {/* Banner skeleton */}
+        <div className="card" style={{ marginBottom: 24, height: 80, display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ ...shimmerStyle, width: 40, height: 40, borderRadius: '50%', flexShrink: 0 }} />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ ...shimmerStyle, height: 14, width: '40%' }} />
+            <div style={{ ...shimmerStyle, height: 10, width: '25%' }} />
+          </div>
+        </div>
+
+        <div style={{ ...shimmerStyle, height: 28, width: 160, marginBottom: 24, borderRadius: 8 }} />
+
+        {/* KPI skeletons */}
+        <div className="grid4" style={{ marginBottom: 32 }}>
+          {[0, 1, 2, 3].map((i) => <SkeletonKPI key={i} />)}
+        </div>
+
+        {/* Chart skeletons */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 24, marginBottom: 24 }}>
+          <SkeletonBar />
+          <SkeletonCard />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 28 }}>
+          <SkeletonCard height={180} />
+          <SkeletonCard height={180} />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="page">
@@ -205,17 +418,11 @@ export default function Dashboard() {
             </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-            <button
-              className="btn btn-secondary"
-              style={{ fontSize: 12, padding: '6px 14px' }}
-              onClick={fetchData}
-              disabled={loading}
-            >
-              🔄 Atualizar
-            </button>
+            <RefreshButton onClick={fetchData} loading={loading} />
             {lastUpdate && (
               <span style={{ fontSize: 11, color: 'var(--muted)' }}>
-                Atualizado às {lastUpdate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                Atualizado às{' '}
+                {lastUpdate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
               </span>
             )}
           </div>
@@ -271,35 +478,27 @@ export default function Dashboard() {
           <BarChart data={dash?.faturamento} maxVal={maxFat} />
         </div>
 
-        {/* Alertas em tempo real */}
+        {/* Alertas ricos */}
         <div className="card">
           <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16, color: '#fff' }}>
             ⚠️ Alertas em tempo real
           </h2>
           {dash?.alertas?.length ? (
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {dash.alertas.map((a, i) => {
-                const tb = TIPO_BADGE[a.tipo] || TIPO_BADGE.info
-                return (
-                  <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13 }}>
-                    <span
-                      className="badge"
-                      style={{
-                        background: tb.color + '22',
-                        color: tb.color,
-                        border: `1px solid ${tb.color}44`,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {tb.label}
-                    </span>
-                    <span style={{ color: '#ddd', lineHeight: 1.4 }}>{a.msg}</span>
-                  </li>
-                )
-              })}
+              {dash.alertas.map((a, i) => (
+                <AlertItem key={i} alerta={a} />
+              ))}
             </ul>
           ) : (
-            <p style={{ color: 'var(--muted)', fontSize: 13 }}>Nenhum alerta. ✅</p>
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              padding: '24px 0', gap: 8,
+            }}>
+              <span style={{ fontSize: 28 }}>✅</span>
+              <span style={{ color: 'var(--muted)', fontSize: 13, textAlign: 'center' }}>
+                Nenhum alerta no momento
+              </span>
+            </div>
           )}
         </div>
       </div>
@@ -324,13 +523,9 @@ export default function Dashboard() {
                 <li
                   key={i}
                   style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 2,
-                    padding: '8px 10px',
-                    background: '#0E2E1C55',
-                    borderRadius: 8,
-                    borderLeft: '3px solid var(--green)',
+                    display: 'flex', flexDirection: 'column', gap: 2,
+                    padding: '8px 10px', background: '#0E2E1C55',
+                    borderRadius: 8, borderLeft: '3px solid var(--green)',
                   }}
                 >
                   <span style={{ fontSize: 12, color: 'var(--muted)' }}>
@@ -346,10 +541,23 @@ export default function Dashboard() {
               ))}
             </ul>
           ) : (
-            <p style={{ color: 'var(--muted)', fontSize: 13 }}>Nenhuma partida agendada.</p>
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              padding: '24px 0', gap: 8,
+            }}>
+              <span style={{ fontSize: 28 }}>📅</span>
+              <span style={{ color: 'var(--muted)', fontSize: 13 }}>Nenhuma partida agendada</span>
+            </div>
           )}
         </div>
       </div>
+
+      {/* Novidades do sistema */}
+      {noticias.length > 0 && (
+        <div style={{ marginBottom: 28 }}>
+          <NewsWidget noticias={noticias} />
+        </div>
+      )}
 
       {/* Links rápidos */}
       <div>
@@ -363,16 +571,10 @@ export default function Dashboard() {
               href={l.href}
               className="card"
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '12px 18px',
-                textDecoration: 'none',
-                color: '#fff',
-                fontSize: 14,
-                fontWeight: 500,
-                transition: 'border-color 0.2s',
-                border: '1px solid #1e4a2e',
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '12px 18px', textDecoration: 'none',
+                color: '#fff', fontSize: 14, fontWeight: 500,
+                transition: 'border-color 0.2s', border: '1px solid #1e4a2e',
               }}
               onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--green)')}
               onMouseLeave={(e) => (e.currentTarget.style.borderColor = '#1e4a2e')}
@@ -383,31 +585,6 @@ export default function Dashboard() {
           ))}
         </div>
       </div>
-    </div>
-  )
-}
-
-function KPI({ label, value, icon, color, trend }) {
-  return (
-    <div
-      className="card kpi"
-      style={{ borderTop: `3px solid ${color}`, display: 'flex', flexDirection: 'column', gap: 8 }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 13, color: 'var(--muted)' }}>{label}</span>
-        <span style={{ fontSize: 22 }}>{icon}</span>
-      </div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: '#fff', letterSpacing: '-0.5px' }}>
-        {value}
-      </div>
-      {trend && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
-          <span style={{ color: trend.up ? '#5FB335' : '#e05c5c', fontWeight: 700 }}>
-            {trend.up ? '↑' : '↓'} {trend.pct}%
-          </span>
-          <span style={{ color: 'var(--muted)' }}>vs ontem</span>
-        </div>
-      )}
     </div>
   )
 }

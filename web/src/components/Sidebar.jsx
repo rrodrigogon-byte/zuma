@@ -23,7 +23,12 @@ const NAV_ADMIN = [
   { to: '/admin/aulas',       icon: '🎓', label: 'Aulas' },
   { to: '/admin/crm',         icon: '📈', label: 'CRM' },
   { to: '/admin/bi',          icon: '📉', label: 'BI' },
-  { to: '/admin/auditoria',   icon: '🔍', label: 'Auditoria' },
+  { to: '/admin/auditoria',      icon: '🔍', label: 'Auditoria' },
+  { to: '/admin/configuracoes', icon: '⚙️', label: 'Configurações' },
+  { to: '/admin/cupons',        icon: '🎟️', label: 'Cupons' },
+  { to: '/admin/relatorios',    icon: '📄', label: 'Relatórios' },
+  { to: '/admin/noticias',      icon: '📰', label: 'Notícias' },
+  { to: '/admin/sumula',        icon: '🎾', label: 'Súmula' },
 ]
 
 const NAV_PUBLIC = [
@@ -34,6 +39,7 @@ const NAV_PUBLIC = [
   { to: '/bracket',     icon: '🎯', label: 'Chaves' },
   { to: '/loja',        icon: '🛍️', label: 'Loja' },
   { to: '/contato',     icon: '📞', label: 'Contato' },
+  { to: '/noticias',    icon: '📰', label: 'Notícias' },
 ]
 
 const linkStyle = {

@@ -911,19 +911,23 @@ function getCardapio(){ return db().cardapio && db().cardapio.length ? db().card
 app.get('/api/admin/cardapio', auth, requireStaff, (req,res)=> res.json(getCardapio()));
 app.post('/api/admin/cardapio', auth, requireStaff, (req,res)=>{
   if(!db().cardapio||!db().cardapio.length) db().cardapio=[...CARDAPIO];
-  const {nome,cat,preco,setor,cozinha} = req.body||{};
+  const {nome,cat,preco,setor,cozinha,emoji,ordem} = req.body||{};
   if(!nome||!cat||!preco) return res.status(400).json({error:'nome, cat e preco são obrigatórios'});
   const id='p'+nextId();
-  db().cardapio.push({id,nome,cat,preco:+preco,setor:setor||'bar',cozinha:!!cozinha});
+  const novo = {id,nome,cat,preco:+preco,setor:setor||'bar',cozinha:!!cozinha};
+  if(emoji) novo.emoji=emoji;
+  if(ordem!=null) novo.ordem=+ordem;
+  db().cardapio.push(novo);
   save(); res.json({ok:true,id});
 });
 app.patch('/api/admin/cardapio/:id', auth, requireStaff, (req,res)=>{
   if(!db().cardapio||!db().cardapio.length) db().cardapio=[...CARDAPIO];
   const p=db().cardapio.find(x=>x.id===req.params.id);
   if(!p) return res.status(404).json({error:'produto não encontrado'});
-  const {nome,cat,preco,setor,cozinha,indisponivel} = req.body||{};
+  const {nome,cat,preco,setor,cozinha,indisponivel,emoji,ordem} = req.body||{};
   if(nome) p.nome=nome; if(cat) p.cat=cat; if(preco!=null) p.preco=+preco;
   if(setor) p.setor=setor; if(cozinha!=null) p.cozinha=!!cozinha; if(indisponivel!=null) p.indisponivel=!!indisponivel;
+  if(emoji!=null) p.emoji=emoji; if(ordem!=null) p.ordem=+ordem;
   save(); res.json({ok:true});
 });
 app.delete('/api/admin/cardapio/:id', auth, requireStaff, (req,res)=>{
@@ -931,6 +935,11 @@ app.delete('/api/admin/cardapio/:id', auth, requireStaff, (req,res)=>{
   const idx=db().cardapio.findIndex(x=>x.id===req.params.id);
   if(idx<0) return res.status(404).json({error:'produto não encontrado'});
   db().cardapio.splice(idx,1); save(); res.json({ok:true});
+});
+// Restaurar cardápio padrão (sobrescreve com CARDAPIO hardcoded)
+app.post('/api/admin/cardapio/reset', auth, requireRole('admin'), (req,res)=>{
+  db().cardapio = [...CARDAPIO];
+  save(); res.json({ok:true, total: CARDAPIO.length});
 });
 
 // ── CONFIGURAÇÕES DO EVENTO ───────────────────────────────────────────────────
@@ -948,14 +957,48 @@ const CONFIG_DEFAULT = {
   fiscal: { cnpj:'', ie:'', ambiente:'homologacao' }
 };
 app.get('/api/admin/config', auth, (req,res)=>{
-  res.json({ ...CONFIG_DEFAULT, ...(db().config||{}) });
+  const d = db();
+  res.json({
+    evento: {
+      nome:       d.config?.evento?.nome       || CONFIG_DEFAULT.evento.nome,
+      slogan:     d.config?.evento?.slogan     || 'UISA / Tangará Tênis Clube',
+      dataInicio: d.config?.evento?.dataInicio || CONFIG_DEFAULT.evento.dataInicio,
+      dataFim:    d.config?.evento?.dataFim    || CONFIG_DEFAULT.evento.dataFim,
+      local:      d.config?.evento?.local      || CONFIG_DEFAULT.evento.local,
+      cidade:     d.config?.evento?.cidade     || (CONFIG_DEFAULT.evento.cidade||''),
+      site:       d.config?.evento?.site       || '',
+      whatsapp:   d.config?.evento?.whatsapp   || '',
+      instagram:  d.config?.evento?.instagram  || '',
+      premiacao:  d.config?.evento?.premiacao  ?? 5000,
+    },
+    bar: {
+      nome:         d.config?.bar?.nome         || CONFIG_DEFAULT.bar.nome,
+      mesasFisicas: d.config?.bar?.mesasFisicas ?? CONFIG_DEFAULT.bar.mesasFisicas,
+      taxaServico:  d.config?.bar?.taxaServico  ?? 10,
+      setores:      d.config?.bar?.setores      || CONFIG_DEFAULT.bar.setores,
+    },
+    restaurante: { ...(CONFIG_DEFAULT.restaurante), ...(d.config?.restaurante||{}) },
+    pagamentos:  { ...(CONFIG_DEFAULT.pagamentos),  ...(d.config?.pagamentos||{}) },
+    fiscal:      { ...(CONFIG_DEFAULT.fiscal),      ...(d.config?.fiscal||{}) },
+    pix: {
+      chave:  process.env.PIX_CHAVE ? '***' + process.env.PIX_CHAVE.slice(-4) : '',
+      nome:   process.env.PIX_NOME  || '',
+      cidade: process.env.PIX_CIDADE|| '',
+    },
+  });
 });
-app.patch('/api/admin/config', auth, (req,res)=>{
-  if(!db().config) db().config={};
-  const allowed=['evento','bar','restaurante','quadras','horarios','ingressoTipos','categorias','socioPlanos','assinPlanos','pagamentos','fiscal'];
-  allowed.forEach(k=>{ if(req.body[k]!=null) db().config[k]={...(db().config[k]||{}), ...req.body[k]}; });
-  auditoria(req.user,'CONFIG_UPDATE',{keys:Object.keys(req.body)});
-  save(); res.json({ok:true});
+app.patch('/api/admin/config', auth, requireRole('admin'), (req,res)=>{
+  const d = db();
+  if(!d.config) d.config = {};
+  const allowed = ['evento','bar','restaurante','quadras','horarios','ingressoTipos','categorias','socioPlanos','assinPlanos','pagamentos','fiscal'];
+  allowed.forEach(k => {
+    if (req.body[k] != null) {
+      d.config[k] = { ...(d.config[k] || {}), ...req.body[k] };
+    }
+  });
+  audit(req, 'UPDATE_CONFIG', { keys: Object.keys(req.body) });
+  save();
+  res.json({ ok: true });
 });
 
 app.get('/api/admin/caixa', auth, (req,res)=>{
@@ -1807,6 +1850,45 @@ app.patch('/api/admin/cupons/:id', auth, requireStaff, (req,res)=>{
 });
 app.delete('/api/admin/cupons/:id', auth, requireStaff, (req,res)=>{
   const d=db(); d.cupons=(d.cupons||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true});
+});
+
+// ── Notícias ─────────────────────────────────────────────────────────────────
+app.get('/api/noticias', (req, res) => {
+  const d = db();
+  let noticias = d.noticias || [];
+  if (req.query.publicado === '1') noticias = noticias.filter(n => n.publicado);
+  res.json(noticias.sort((a, b) => new Date(b.criadoEm) - new Date(a.criadoEm)));
+});
+
+app.get('/api/admin/noticias', auth, requireStaff, (req, res) => {
+  res.json((db().noticias || []).sort((a, b) => new Date(b.criadoEm) - new Date(a.criadoEm)));
+});
+
+app.post('/api/admin/noticias', auth, requireRole('admin', 'organizador'), (req, res) => {
+  const { titulo, resumo, conteudo, categoria, publicado } = req.body;
+  if (!titulo) return res.status(400).json({ error: 'título obrigatório' });
+  const d = db();
+  if (!d.noticias) d.noticias = [];
+  const n = { id: nextId(), titulo, resumo: resumo || '', conteudo: conteudo || '', categoria: categoria || 'aviso', publicado: !!publicado, criadoEm: new Date().toISOString(), autor: req.user.nome || req.user.user };
+  d.noticias.push(n);
+  save();
+  res.json(n);
+});
+
+app.patch('/api/admin/noticias/:id', auth, requireRole('admin', 'organizador'), (req, res) => {
+  const d = db();
+  const n = (d.noticias || []).find(x => x.id == req.params.id);
+  if (!n) return res.status(404).json({ error: 'não encontrada' });
+  Object.assign(n, req.body);
+  save();
+  res.json(n);
+});
+
+app.delete('/api/admin/noticias/:id', auth, requireRole('admin', 'organizador'), (req, res) => {
+  const d = db();
+  d.noticias = (d.noticias || []).filter(x => x.id != req.params.id);
+  save();
+  res.json({ ok: true });
 });
 
 // Validar cupom (público, chamado antes do checkout)
