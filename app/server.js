@@ -417,6 +417,43 @@ app.delete('/api/admin/torneios/:id', auth, (req,res)=>{
   const d=db(); d.torneios=(d.torneios||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true});
 });
 
+// ── Torneio — sortear chave por torneio ──────────────────────────────────────
+app.post('/api/admin/torneios/:id/sortear', auth, requireRole('admin', 'organizador'), (req, res) => {
+  const torneio = (db().torneios || []).find(t => t.id == req.params.id);
+  if (!torneio) return res.status(404).json({ error: 'torneio não encontrado' });
+  const { participantes = [], size, seeds = 0, wildcards = 0 } = req.body;
+  if (participantes.length < 2) return res.status(400).json({ error: 'mínimo 2 participantes' });
+  try {
+    const chave = sortear(participantes, { size: size || participantes.length, seeds: parseInt(seeds), wildcards: parseInt(wildcards) });
+    const d = db();
+    if (!d.brackets) d.brackets = {};
+    d.brackets[torneio.id] = { ...chave, torneioId: torneio.id, nome: torneio.nome, geradoEm: new Date().toISOString() };
+    save();
+    auditoria(req.user, 'SORTEAR_TORNEIO', { torneioId: torneio.id, nome: torneio.nome, n: participantes.length });
+    res.json(d.brackets[torneio.id]);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get('/api/admin/torneios/:id/bracket', auth, requireStaff, (req, res) => {
+  const d = db();
+  const bracket = (d.brackets || {})[req.params.id];
+  if (!bracket) return res.status(404).json({ error: 'bracket não gerado ainda' });
+  res.json(bracket);
+});
+
+app.get('/api/bracket/:categoria', (req, res) => {
+  const d = db();
+  // tenta pelo id do torneio primeiro, depois por nome de categoria
+  const bracket = (d.brackets || {})[req.params.categoria];
+  if (bracket) return res.json(bracket);
+  // fallback: acha torneio por nome/categoria e retorna seu bracket
+  const t = (d.torneios || []).find(t => t.nome?.toLowerCase().includes(req.params.categoria.toLowerCase()));
+  if (t && d.brackets?.[t.id]) return res.json(d.brackets[t.id]);
+  res.status(404).json({ error: 'bracket não encontrado' });
+});
+
 // =================== ASSINATURAS / PLANOS ===================
 const PLANOS = [
   { id:'atleta_free', publico:'Atleta', nome:'Atleta Free', preco:0, periodo:'sempre', destaques:['Inscrição em torneios','Acompanhar suas chaves','Ranking público'] },
@@ -534,10 +571,19 @@ app.post('/api/admin/checkin', auth, (req,res)=>{
   res.json({ ok:true, resultado:'LIBERADO', message:'Entrada liberada', ingresso:i });
 });
 
-app.get('/api/admin/ingressos', auth, (req,res)=>{
+app.get('/api/admin/ingressos', auth, requireStaff, (req,res)=>{
   const list = db().ingressos||[];
   res.json({ total:list.length, presentes:list.filter(i=>i.status==='usado').length,
     validos:list.filter(i=>i.status==='valido').length, lista:list });
+});
+app.post('/api/admin/ingressos/:id/validar', auth, requireStaff, (req,res)=>{
+  const d=db();
+  const ing=(d.ingressos||[]).find(i=>i.id==req.params.id);
+  if(!ing) return res.status(404).json({error:'ingresso não encontrado'});
+  if(ing.validado) return res.status(409).json({error:'já validado',validadoEm:ing.validadoEm});
+  ing.validado=true; ing.validadoEm=new Date().toISOString();
+  ing.validadoPor=req.user.nome||req.user.user;
+  save(); res.json(ing);
 });
 app.patch('/api/admin/assinaturas/:id', auth, (req,res)=>{
   const a=(db().assinaturas||[]).find(x=>x.id==req.params.id);
@@ -927,6 +973,43 @@ app.get('/api/admin/caixa', auth, (req,res)=>{
   }));
   res.json({ comandasFechadas:fechadas.length, faturamento:total, porMeio,
     abertas:db().comandas.filter(c=>c.status==='aberta').length, recentes });
+});
+
+// ── Caixa — movimentos do dia (sangria/suprimento) ──────────────────────────
+app.get('/api/admin/caixa/hoje', auth, requireStaff, (req, res) => {
+  const d = db();
+  const hoje = new Date().toISOString().slice(0, 10);
+  const movs = (d.caixaMovimentos || []).filter(m => m.data.startsWith(hoje));
+  const vendas = (d.comandas || []).filter(c => c.status === 'fechada' && (c.fechadaEm || '').startsWith(hoje));
+  const totalVendas = vendas.reduce((a, c) => a + (c.total || 0), 0);
+  const sangrias   = movs.filter(m => m.tipo === 'sangria').reduce((a, m) => a + m.valor, 0);
+  const suprimentos = movs.filter(m => m.tipo === 'suprimento').reduce((a, m) => a + m.valor, 0);
+  const abertura = (d.config?.caixa?.abertura) || 0;
+  res.json({ abertura, sangrias, suprimentos, vendas: totalVendas, saldo: abertura + suprimentos + totalVendas - sangrias, movimentos: movs });
+});
+
+app.post('/api/admin/caixa/movimento', auth, requireStaff, (req, res) => {
+  const { tipo, valor, motivo } = req.body;
+  if (!['sangria', 'suprimento'].includes(tipo)) return res.status(400).json({ error: 'tipo inválido' });
+  if (!valor || valor <= 0) return res.status(400).json({ error: 'valor inválido' });
+  const d = db();
+  if (!d.caixaMovimentos) d.caixaMovimentos = [];
+  const mov = { id: nextId(), tipo, valor: Number(valor), motivo: motivo || '', data: new Date().toISOString(), usuario: req.user.nome || req.user.user };
+  d.caixaMovimentos.push(mov);
+  save();
+  auditoria(req.user, tipo.toUpperCase(), mov);
+  res.json(mov);
+});
+
+// ── Vendas do dia ────────────────────────────────────────────────────────────
+app.get('/api/admin/vendas', auth, requireStaff, (req, res) => {
+  const d = db();
+  const hoje = new Date().toISOString().slice(0, 10);
+  const filtroHoje = req.query.hoje === '1';
+  let vendas = (d.comandas || []).filter(c => c.status === 'fechada');
+  if (filtroHoje) vendas = vendas.filter(c => (c.fechadaEm || '').startsWith(hoje));
+  const total = vendas.reduce((a, c) => a + (c.total || 0), 0);
+  res.json({ vendas, total, count: vendas.length });
 });
 
 // =================== RESERVA DE QUADRAS (cap. 13) ===================
@@ -1663,19 +1746,43 @@ app.get('/api/agenda', (req,res)=>{
   if(dataValida(req.query.data)) list=list.filter(a=>a.data===req.query.data);
   res.json(list.slice().sort((a,b)=>(a.data+a.hora+a.quadra).localeCompare(b.data+b.hora+b.quadra)));
 });
-app.post('/api/admin/agenda', auth, requireStaff, (req,res)=>{
-  const b=req.body||{};
-  if(!b.data || !b.hora || !b.confronto) return res.status(400).json({error:'data, hora e confronto obrigatórios'});
-  const a={ id:nextId(), data:b.data, hora:b.hora, quadra:b.quadra||'Quadra 1', categoria:b.categoria||'',
-    confronto:b.confronto, fase:b.fase||'', status:b.status||'agendado', criadoEm:new Date().toISOString() };
-  db().agenda.push(a); save(); res.json(a);
+app.get('/api/admin/agenda', auth, requireStaff, (req,res)=>{
+  const d=db();
+  const torneios=d.torneios||[];
+  const jogos=(d.agenda||[]).map(j=>({...j, torneioNome:torneios.find(t=>t.id==j.torneioId)?.nome||''}));
+  res.json(jogos);
 });
-app.patch('/api/admin/agenda/:id', auth, requireStaff, (req,res)=>{
-  const a=(db().agenda||[]).find(x=>x.id==req.params.id); if(!a) return res.status(404).json({error:'não encontrado'});
-  ['data','hora','quadra','categoria','confronto','fase','status'].forEach(k=>{ if(req.body[k]!==undefined) a[k]=req.body[k]; });
-  save(); res.json(a);
+app.post('/api/admin/agenda', auth, requireRole('admin','organizador'), (req,res)=>{
+  const { data, hora, quadra, categoria, confronto, fase, torneioId } = req.body||{};
+  if(!confronto) return res.status(400).json({error:'confronto obrigatório'});
+  const d=db();
+  if(!d.agenda) d.agenda=[];
+  const jogo={ id:nextId(), data, hora, quadra:quadra||'', categoria:categoria||'', confronto, fase:fase||'',
+    torneioId:torneioId||null, status:'pendente', placar1:null, placar2:null, vencedor:null, criadoEm:new Date().toISOString() };
+  d.agenda.push(jogo); save(); res.json(jogo);
 });
-app.delete('/api/admin/agenda/:id', auth, requireStaff, (req,res)=>{ const d=db(); d.agenda=(d.agenda||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true}); });
+app.patch('/api/admin/agenda/:id', auth, requireRole('admin','organizador','staff'), (req,res)=>{
+  const d=db();
+  if(!d.agenda) d.agenda=[];
+  const idx=d.agenda.findIndex(j=>j.id==req.params.id);
+  if(idx===-1) return res.status(404).json({error:'jogo não encontrado'});
+  const { placar1, placar2, vencedor, status } = req.body;
+  ['data','hora','quadra','categoria','confronto','fase'].forEach(k=>{ if(req.body[k]!==undefined) d.agenda[idx][k]=req.body[k]; });
+  if(placar1!==undefined) d.agenda[idx].placar1=placar1;
+  if(placar2!==undefined) d.agenda[idx].placar2=placar2;
+  if(vencedor!==undefined) d.agenda[idx].vencedor=vencedor;
+  if(status!==undefined) d.agenda[idx].status=status;
+  if(placar1!==undefined||placar2!==undefined) d.agenda[idx].status='concluido';
+  save();
+  auditoria(req.user,'RESULTADO_JOGO',{id:req.params.id,placar1,placar2,vencedor});
+  res.json(d.agenda[idx]);
+});
+app.delete('/api/admin/agenda/:id', auth, requireRole('admin','organizador'), (req,res)=>{
+  const d=db(); const before=(d.agenda||[]).length;
+  d.agenda=(d.agenda||[]).filter(j=>j.id!=req.params.id);
+  if(d.agenda.length===before) return res.status(404).json({error:'não encontrado'});
+  save(); res.json({ok:true});
+});
 
 // =================== CUPONS DE DESCONTO (cap. 8.1) ===================
 app.get('/api/admin/cupons', auth, requireStaff, (req,res)=> res.json(db().cupons||[]));
@@ -1721,6 +1828,59 @@ app.post('/api/cupom/validar', (req,res)=>{
 function usarCupom(cupomId){
   const c=(db().cupons||[]).find(x=>x.id==cupomId); if(c) c.usos=(c.usos||0)+1;
 }
+
+// =================== AUTH EXTRA (registro/perfil/me/inscrições) ===================
+
+// POST /api/auth/registro — alias público para registro de atleta
+app.post('/api/auth/registro', async (req, res) => {
+  const { nome, email, senha, telefone } = req.body || {};
+  if (!nome || !email || !senha) return res.status(400).json({ error: 'nome, email e senha obrigatórios' });
+  if ((senha || '').length < 6) return res.status(400).json({ error: 'a senha deve ter ao menos 6 caracteres' });
+  const d = db();
+  if (!d.usuarios) d.usuarios = [];
+  if (d.usuarios.find(u => u.email === norm(email))) {
+    return res.status(409).json({ error: 'e-mail já cadastrado' });
+  }
+  const hash = await bcrypt.hash(senha, 10);
+  const u = { id: nextId(), nome, email: norm(email), senhaHash: hash, role: 'atleta',
+    telefone: telefone || '', ativo: true, criadoEm: new Date().toISOString() };
+  d.usuarios.push(u);
+  save();
+  res.json({ token: tokenFor(u), user: publicUser(u) });
+});
+
+// GET /api/me — perfil do usuário autenticado
+app.get('/api/me', auth, (req, res) => {
+  const u = (db().usuarios || []).find(u => u.id == req.user.id);
+  if (!u) return res.status(404).json({ error: 'não encontrado' });
+  res.json(publicUser(u));
+});
+
+// PATCH /api/auth/perfil — atualizar dados e/ou senha
+app.patch('/api/auth/perfil', auth, async (req, res) => {
+  const { nome, email, telefone, senhaNova, senhaAtual } = req.body || {};
+  const d = db();
+  const u = (d.usuarios || []).find(x => x.id == req.user.id);
+  if (!u) return res.status(404).json({ error: 'não encontrado' });
+  if (senhaNova) {
+    if (!senhaAtual) return res.status(400).json({ error: 'senha atual obrigatória' });
+    const ok = await bcrypt.compare(senhaAtual, u.senhaHash);
+    if (!ok) return res.status(401).json({ error: 'senha atual incorreta' });
+    u.senhaHash = await bcrypt.hash(senhaNova, 10);
+  }
+  if (nome) u.nome = nome;
+  if (email) u.email = norm(email);
+  if (telefone !== undefined) u.telefone = telefone;
+  save();
+  res.json(publicUser(u));
+});
+
+// GET /api/inscricoes/minhas — inscrições do usuário logado
+app.get('/api/inscricoes/minhas', auth, (req, res) => {
+  const d = db();
+  const minhas = (d.inscricoes || []).filter(i => i.usuarioId == req.user.id || i.email === req.user.email);
+  res.json(minhas);
+});
 
 // ---- estático: serve React SPA (build do web/) ----
 app.use(express.static(path.join(__dirname, 'public')));

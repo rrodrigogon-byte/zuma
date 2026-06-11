@@ -16,45 +16,64 @@ const COLORS = {
   muted: '#7a9e85',
 }
 
+// mode: 'painel' | 'atleta' | 'cadastro' | 'esqueci'
 export default function Login() {
   const navigate = useNavigate()
-  const { setToken, setSiteToken } = useAuth()
+  const { setToken, setSiteToken, login } = useAuth()
   const { toast } = useToast()
 
-  const [mode, setMode] = useState('painel') // 'painel' | 'atleta'
+  const [mode, setMode] = useState('painel')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  // painel fields
+  // painel
   const [user, setUser] = useState('')
   const [pass, setPass] = useState('')
 
-  // atleta fields
+  // atleta login
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
+
+  // cadastro
+  const [cadNome, setCadNome] = useState('')
+  const [cadEmail, setCadEmail] = useState('')
+  const [cadSenha, setCadSenha] = useState('')
+
+  // esqueci
+  const [esqEmail, setEsqEmail] = useState('')
+  const [esqSent, setEsqSent] = useState(false)
+
+  const changeMode = (m) => { setMode(m); setError('') }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     setLoading(true)
-
     try {
       if (mode === 'painel') {
         const data = await api.post('/api/admin/login', { user, pass })
-        setToken(data.token)
+        // support both setToken (legacy) and login
+        if (typeof setToken === 'function') setToken(data.token)
+        else login(data.token, data.user || { user, role: data.role })
         const role = data.role || data.user?.role
-        if (role === 'staff') {
-          navigate('/pdv')
-        } else {
-          navigate('/admin')
-        }
-      } else {
+        navigate(role === 'staff' ? '/pdv' : '/admin')
+      } else if (mode === 'atleta') {
         const data = await api.post('/api/auth/login', { email, senha })
-        setSiteToken(data.token)
+        if (typeof setSiteToken === 'function') setSiteToken(data.token)
+        else login(data.token, data.user || { email, role: 'atleta' }, true)
         navigate('/')
+      } else if (mode === 'cadastro') {
+        const data = await api.post('/api/auth/registro', { nome: cadNome, email: cadEmail, senha: cadSenha })
+        if (typeof setSiteToken === 'function') setSiteToken(data.token)
+        else login(data.token, data.user || { nome: cadNome, email: cadEmail, role: 'atleta' }, true)
+        toast('Conta criada com sucesso! Bem-vindo(a)!', 'success')
+        navigate('/')
+      } else if (mode === 'esqueci') {
+        await api.post('/api/auth/esqueci-senha', { email: esqEmail }).catch(() => {})
+        setEsqSent(true)
       }
     } catch (err) {
-      const msg = err?.message || 'Erro ao fazer login. Verifique os dados.'
+      const msg = err?.message || 'Erro ao processar. Verifique os dados.'
       setError(msg)
     } finally {
       setLoading(false)
@@ -98,6 +117,34 @@ export default function Login() {
     marginBottom: '6px',
   }
 
+  const linkBtn = {
+    background: 'none',
+    border: 'none',
+    color: COLORS.green,
+    fontSize: '13px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    padding: 0,
+    textDecoration: 'underline',
+  }
+
+  const onFocus = (e) => (e.target.style.borderColor = COLORS.green)
+  const onBlur  = (e) => (e.target.style.borderColor = COLORS.inputBorder)
+
+  const submitLabel = {
+    painel: 'Entrar',
+    atleta: 'Entrar',
+    cadastro: 'Criar conta',
+    esqueci: 'Enviar link',
+  }[mode]
+
+  const submitLoadingLabel = {
+    painel: 'Entrando…',
+    atleta: 'Entrando…',
+    cadastro: 'Criando…',
+    esqueci: 'Enviando…',
+  }[mode]
+
   return (
     <div
       style={{
@@ -110,34 +157,20 @@ export default function Login() {
         fontFamily: "'Inter', 'Segoe UI', sans-serif",
       }}
     >
-      <div
-        style={{
-          width: '100%',
-          maxWidth: '400px',
-        }}
-      >
+      <div style={{ width: '100%', maxWidth: '400px' }}>
         {/* Logo area */}
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
           <div style={{ fontSize: '48px', lineHeight: 1, marginBottom: '12px' }}>🎾</div>
-          <div
-            style={{
-              fontSize: '28px',
-              fontWeight: '800',
-              color: COLORS.green,
-              letterSpacing: '-0.5px',
-              marginBottom: '4px',
-            }}
-          >
+          <div style={{
+            fontSize: '28px', fontWeight: '800', color: COLORS.green,
+            letterSpacing: '-0.5px', marginBottom: '4px',
+          }}>
             SetPoint
           </div>
-          <div
-            style={{
-              fontSize: '13px',
-              color: COLORS.gold,
-              fontWeight: '500',
-              letterSpacing: '0.5px',
-            }}
-          >
+          <div style={{
+            fontSize: '13px', color: COLORS.gold,
+            fontWeight: '500', letterSpacing: '0.5px',
+          }}>
             4ª Agro Open de Tênis
           </div>
         </div>
@@ -152,28 +185,43 @@ export default function Login() {
             boxShadow: '0 8px 40px rgba(0,0,0,0.5)',
           }}
         >
-          {/* Tabs */}
-          <div
-            style={{
+          {/* Tab switcher — only for painel / atleta */}
+          {(mode === 'painel' || mode === 'atleta') && (
+            <div style={{
               display: 'flex',
               background: COLORS.inputBg,
               borderRadius: '10px',
               padding: '4px',
-              marginBottom: '28px',
+              marginBottom: '24px',
               gap: '2px',
-            }}
-          >
-            <button style={tabStyle(mode === 'painel')} onClick={() => { setMode('painel'); setError('') }}>
-              Painel
-            </button>
-            <button style={tabStyle(mode === 'atleta')} onClick={() => { setMode('atleta'); setError('') }}>
-              Atleta
-            </button>
-          </div>
+            }}>
+              <button style={tabStyle(mode === 'painel')} onClick={() => changeMode('painel')}>Painel</button>
+              <button style={tabStyle(mode === 'atleta')} onClick={() => changeMode('atleta')}>Atleta</button>
+            </div>
+          )}
+
+          {/* Section title for sub-modes */}
+          {(mode === 'cadastro' || mode === 'esqueci') && (
+            <div style={{ marginBottom: '20px' }}>
+              <button
+                onClick={() => changeMode('atleta')}
+                style={{ ...linkBtn, fontSize: '12px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 4 }}
+              >
+                ← Voltar
+              </button>
+              <div style={{
+                fontSize: '16px', fontWeight: '800', color: COLORS.cream,
+              }}>
+                {mode === 'cadastro' ? 'Criar conta de atleta' : 'Recuperar senha'}
+              </div>
+            </div>
+          )}
 
           {/* Form */}
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {mode === 'painel' ? (
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+
+            {/* ── PAINEL ── */}
+            {mode === 'painel' && (
               <>
                 <div>
                   <label style={labelStyle}>Usuário</label>
@@ -185,8 +233,8 @@ export default function Login() {
                     required
                     autoComplete="username"
                     style={inputStyle}
-                    onFocus={(e) => (e.target.style.borderColor = COLORS.green)}
-                    onBlur={(e) => (e.target.style.borderColor = COLORS.inputBorder)}
+                    onFocus={onFocus}
+                    onBlur={onBlur}
                   />
                 </div>
                 <div>
@@ -199,12 +247,16 @@ export default function Login() {
                     required
                     autoComplete="current-password"
                     style={inputStyle}
-                    onFocus={(e) => (e.target.style.borderColor = COLORS.green)}
-                    onBlur={(e) => (e.target.style.borderColor = COLORS.inputBorder)}
+                    onFocus={onFocus}
+                    onBlur={onBlur}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSubmit(e)}
                   />
                 </div>
               </>
-            ) : (
+            )}
+
+            {/* ── ATLETA LOGIN ── */}
+            {mode === 'atleta' && (
               <>
                 <div>
                   <label style={labelStyle}>E-mail</label>
@@ -216,8 +268,8 @@ export default function Login() {
                     required
                     autoComplete="email"
                     style={inputStyle}
-                    onFocus={(e) => (e.target.style.borderColor = COLORS.green)}
-                    onBlur={(e) => (e.target.style.borderColor = COLORS.inputBorder)}
+                    onFocus={onFocus}
+                    onBlur={onBlur}
                   />
                 </div>
                 <div>
@@ -230,93 +282,212 @@ export default function Login() {
                     required
                     autoComplete="current-password"
                     style={inputStyle}
-                    onFocus={(e) => (e.target.style.borderColor = COLORS.green)}
-                    onBlur={(e) => (e.target.style.borderColor = COLORS.inputBorder)}
+                    onFocus={onFocus}
+                    onBlur={onBlur}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSubmit(e)}
+                  />
+                  <div style={{ textAlign: 'right', marginTop: 6 }}>
+                    <button type="button" style={linkBtn} onClick={() => changeMode('esqueci')}>
+                      Esqueci minha senha
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── CADASTRO ── */}
+            {mode === 'cadastro' && (
+              <>
+                <div>
+                  <label style={labelStyle}>Nome completo</label>
+                  <input
+                    type="text"
+                    value={cadNome}
+                    onChange={(e) => setCadNome(e.target.value)}
+                    placeholder="Seu nome"
+                    required
+                    autoComplete="name"
+                    style={inputStyle}
+                    onFocus={onFocus}
+                    onBlur={onBlur}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>E-mail</label>
+                  <input
+                    type="email"
+                    value={cadEmail}
+                    onChange={(e) => setCadEmail(e.target.value)}
+                    placeholder="seu@email.com"
+                    required
+                    autoComplete="email"
+                    style={inputStyle}
+                    onFocus={onFocus}
+                    onBlur={onBlur}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Senha</label>
+                  <input
+                    type="password"
+                    value={cadSenha}
+                    onChange={(e) => setCadSenha(e.target.value)}
+                    placeholder="Mínimo 6 caracteres"
+                    required
+                    minLength={6}
+                    autoComplete="new-password"
+                    style={inputStyle}
+                    onFocus={onFocus}
+                    onBlur={onBlur}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSubmit(e)}
                   />
                 </div>
               </>
             )}
 
+            {/* ── ESQUECI SENHA ── */}
+            {mode === 'esqueci' && !esqSent && (
+              <div>
+                <label style={labelStyle}>E-mail cadastrado</label>
+                <input
+                  type="email"
+                  value={esqEmail}
+                  onChange={(e) => setEsqEmail(e.target.value)}
+                  placeholder="seu@email.com"
+                  required
+                  autoComplete="email"
+                  style={inputStyle}
+                  onFocus={onFocus}
+                  onBlur={onBlur}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSubmit(e)}
+                />
+                <p style={{ fontSize: 12, color: COLORS.muted, marginTop: 6, lineHeight: 1.5 }}>
+                  Enviaremos um link para redefinir sua senha.
+                </p>
+              </div>
+            )}
+
+            {mode === 'esqueci' && esqSent && (
+              <div style={{
+                textAlign: 'center', padding: '20px',
+                background: 'rgba(95,179,53,.08)', border: '1px solid rgba(95,179,53,.2)',
+                borderRadius: 10,
+              }}>
+                <div style={{ fontSize: 32, marginBottom: 10 }}>📬</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.cream, marginBottom: 6 }}>
+                  E-mail enviado!
+                </div>
+                <div style={{ fontSize: 13, color: COLORS.muted }}>
+                  Verifique sua caixa de entrada para redefinir a senha.
+                </div>
+              </div>
+            )}
+
             {/* Error message */}
             {error && (
-              <div
-                style={{
-                  background: 'rgba(220, 60, 60, 0.12)',
-                  border: '1px solid rgba(220, 60, 60, 0.35)',
-                  borderRadius: '8px',
-                  padding: '10px 14px',
-                  color: '#f87171',
-                  fontSize: '13px',
-                  lineHeight: '1.5',
-                }}
-              >
+              <div style={{
+                background: 'rgba(220, 60, 60, 0.12)',
+                border: '1px solid rgba(220, 60, 60, 0.35)',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                color: '#f87171',
+                fontSize: '13px',
+                lineHeight: '1.5',
+              }}>
                 {error}
               </div>
             )}
 
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                width: '100%',
-                padding: '13px',
-                background: loading ? '#3d7022' : COLORS.green,
-                color: '#fff',
-                border: 'none',
-                borderRadius: '10px',
-                fontSize: '15px',
-                fontWeight: '700',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                letterSpacing: '0.3px',
-                transition: 'background 0.2s, transform 0.1s',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                marginTop: '4px',
-              }}
-              onMouseEnter={(e) => { if (!loading) e.target.style.background = '#4e9a2b' }}
-              onMouseLeave={(e) => { if (!loading) e.target.style.background = COLORS.green }}
-            >
-              {loading ? (
-                <>
-                  <span
-                    style={{
-                      width: '16px',
-                      height: '16px',
-                      border: '2px solid rgba(255,255,255,0.3)',
+            {/* Submit button */}
+            {!(mode === 'esqueci' && esqSent) && (
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  width: '100%',
+                  padding: '13px',
+                  background: loading ? '#3d7022' : COLORS.green,
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '10px',
+                  fontSize: '15px',
+                  fontWeight: '700',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  letterSpacing: '0.3px',
+                  transition: 'background 0.2s, transform 0.1s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  marginTop: '4px',
+                }}
+                onMouseEnter={(e) => { if (!loading) e.target.style.background = '#4e9a2b' }}
+                onMouseLeave={(e) => { if (!loading) e.target.style.background = COLORS.green }}
+              >
+                {loading ? (
+                  <>
+                    <span style={{
+                      width: '18px', height: '18px',
+                      border: '2.5px solid rgba(255,255,255,0.25)',
                       borderTopColor: '#fff',
                       borderRadius: '50%',
                       display: 'inline-block',
-                      animation: 'spin 0.7s linear infinite',
-                    }}
-                  />
-                  Entrando…
-                </>
-              ) : (
-                'Entrar'
-              )}
-            </button>
+                      animation: 'spin 0.65s linear infinite',
+                    }} />
+                    {submitLoadingLabel}
+                  </>
+                ) : submitLabel}
+              </button>
+            )}
           </form>
+
+          {/* Footer links inside card */}
+          {mode === 'atleta' && (
+            <div style={{
+              marginTop: 20, paddingTop: 16,
+              borderTop: `1px solid ${COLORS.cardBorder}`,
+              textAlign: 'center', fontSize: 13, color: COLORS.muted,
+            }}>
+              Não tem conta?{' '}
+              <button type="button" style={linkBtn} onClick={() => changeMode('cadastro')}>
+                Criar conta grátis
+              </button>
+            </div>
+          )}
+
+          {mode === 'cadastro' && (
+            <div style={{
+              marginTop: 20, paddingTop: 16,
+              borderTop: `1px solid ${COLORS.cardBorder}`,
+              textAlign: 'center', fontSize: 13, color: COLORS.muted,
+            }}>
+              Já tem conta?{' '}
+              <button type="button" style={linkBtn} onClick={() => changeMode('atleta')}>
+                Entrar
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
-        <p
-          style={{
-            textAlign: 'center',
-            color: COLORS.muted,
-            fontSize: '12px',
-            marginTop: '24px',
-            opacity: 0.7,
-          }}
-        >
+        <p style={{
+          textAlign: 'center',
+          color: COLORS.muted,
+          fontSize: '12px',
+          marginTop: '24px',
+          opacity: 0.7,
+        }}>
           SetPoint · Gestão Esportiva
         </p>
       </div>
 
-      {/* Spinner keyframe */}
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   )
 }

@@ -13,6 +13,8 @@ const Ranking    = lazy(() => import('./pages/public/Ranking'))
 const Loja       = lazy(() => import('./pages/public/Loja'))
 const Regulamento = lazy(() => import('./pages/public/Regulamento'))
 const Bracket     = lazy(() => import('./pages/public/Bracket'))
+const Perfil      = lazy(() => import('./pages/public/Perfil'))
+const Contato     = lazy(() => import('./pages/public/Contato'))
 
 const Dashboard  = lazy(() => import('./pages/admin/Dashboard'))
 const Usuarios   = lazy(() => import('./pages/admin/Usuarios'))
@@ -78,6 +80,8 @@ export default function App() {
         <Route path="/loja"       element={<Layout><Loja /></Layout>} />
         <Route path="/regulamento" element={<Layout><Regulamento /></Layout>} />
         <Route path="/bracket"    element={<Layout><Bracket /></Layout>} />
+        <Route path="/perfil"     element={<Layout><Perfil /></Layout>} />
+        <Route path="/contato"    element={<Layout><Contato /></Layout>} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
