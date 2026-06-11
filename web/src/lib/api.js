@@ -22,13 +22,25 @@ async function request(path, opts = {}) {
   return data
 }
 
-export const api = {
-  get:    (path)       => request(path),
-  post:   (path, body) => request(path, { method: 'POST',   body: JSON.stringify(body) }),
-  patch:  (path, body) => request(path, { method: 'PATCH',  body: JSON.stringify(body) }),
-  put:    (path, body) => request(path, { method: 'PUT',    body: JSON.stringify(body) }),
-  delete: (path)       => request(path, { method: 'DELETE' }),
+// api() pode ser chamada diretamente como função (api(url, opts))
+// OU via métodos (api.get, api.post, ...)
+function apiFn(path, opts = {}) {
+  // Se opts.body é string, já veio serializado
+  const finalOpts = opts.body && typeof opts.body === 'string'
+    ? opts
+    : opts.body
+      ? { ...opts, body: JSON.stringify(opts.body) }
+      : opts
+  return request(path, finalOpts)
 }
+
+apiFn.get    = (path)       => request(path)
+apiFn.post   = (path, body) => request(path, { method: 'POST',   body: JSON.stringify(body) })
+apiFn.patch  = (path, body) => request(path, { method: 'PATCH',  body: JSON.stringify(body) })
+apiFn.put    = (path, body) => request(path, { method: 'PUT',    body: JSON.stringify(body) })
+apiFn.delete = (path)       => request(path, { method: 'DELETE' })
+
+export const api = apiFn
 
 export function fmtR(v) {
   return 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',')

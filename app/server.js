@@ -86,6 +86,14 @@ function audit(req, acao, detalhe){
     acao, detalhe: detalhe||'', ip: req.ip || '' });
   if(d.auditoria.length > 1000) d.auditoria = d.auditoria.slice(-1000);
 }
+// alias: auditoria(user, acao, detalhe) — mesma coisa mas recebe user diretamente
+function auditoria(user, acao, detalhe){
+  const d = db(); d.auditoria = d.auditoria || [];
+  d.auditoria.push({ id: nextId(), ts:new Date().toISOString(),
+    user: user ? `${user.nome} (${user.role})` : 'anônimo',
+    acao, detalhe: detalhe||'', ip: '' });
+  if(d.auditoria.length > 1000) d.auditoria = d.auditoria.slice(-1000);
+}
 
 // Trava global: tudo em /api/admin exige login de staff (exceto o próprio login)
 app.use('/api/admin', (req,res,next)=>{
@@ -784,7 +792,7 @@ app.post('/api/mesa-virtual', (req,res)=>{
   const c=novaComanda({tipo:'virtual', nome, local:{ lat:lat||null, lng:lng||null, ref:ref||'' }});
   const errs=addItens(c, itens||[]); save();
   if(errs&&errs.length) return res.status(409).json({error:errs.join('; ')});
-  res.json({ ok:true, comandaId:c.id, total:comandaTotal(c), message:'Mesa virtual criada! Um atendente vai até você.' });
+  res.json({ ok:true, id:c.id, comandaId:c.id, total:comandaTotal(c), message:'Mesa virtual criada! Um atendente vai até você.' });
 });
 
 // KDS — cozinha
@@ -903,6 +911,106 @@ app.delete('/api/admin/comanda/:id', auth, (req,res)=>{
   db().comandas.splice(idx,1);
   save();
   res.json({ok:true});
+});
+
+// ── ALIASES — rotas que o PDV/KDS frontend usa ──────────────────────────────
+
+// GET /api/admin/mesas — alias público (PDV e admin Mesas usam este path)
+app.get('/api/admin/mesas', auth, requireStaff, (req,res)=>{
+  const abertas = db().comandas.filter(c=>c.status==='aberta');
+  const fisicas = [];
+  for(let n=1;n<=getMesasFisicas();n++){
+    const c = abertas.find(x=>x.tipo==='fisica' && x.mesaNum===n);
+    fisicas.push({ num:n, tipo:'fisica', status: c?(c.contaPedida?'conta':'ocupada'):'livre',
+      comandaId:c?c.id:null, total:c?comandaTotal(c):0, nome:c?c.nome:'', abertaEm:c?c.abertaEm:null,
+      aguardandoCozinha: c? c.itens.some(i=>i.cozinha && i.status==='em_preparo') : false });
+  }
+  const virtuais = abertas.filter(c=>c.tipo==='virtual').map(c=>({ comandaId:c.id, tipo:'virtual', nome:c.nome,
+    local:c.local||null, status: c.contaPedida?'conta':'ocupada', total:comandaTotal(c), abertaEm:c.abertaEm,
+    aguardandoCozinha: c.itens.some(i=>i.cozinha && i.status==='em_preparo') }));
+  res.json({ fisicas, virtuais, totalMesasFisicas:getMesasFisicas() });
+});
+
+// GET /api/admin/comandas — listar todas as comandas (abertas + fechadas recentes)
+app.get('/api/admin/comandas', auth, requireStaff, (req,res)=>{
+  const hoje = new Date().toISOString().slice(0,10);
+  const lista = (db().comandas||[]).filter(c=> c.status==='aberta' || (c.fechadaEm||'').startsWith(hoje));
+  res.json(lista.map(c=>({ ...c, total: comandaTotal(c) })));
+});
+
+// GET /api/admin/kds — alias para /api/kds (usado por admin)
+app.get('/api/admin/kds', auth, requireStaff, (req,res)=>{
+  const fila=[];
+  db().comandas.filter(c=>c.status==='aberta').forEach(c=>{
+    c.itens.forEach((it,idx)=>{ if(it.cozinha && it.status!=='entregue'){ fila.push({ comandaId:c.id, idx,
+      mesa:c.nome, tipo:c.tipo, local:c.local||null, nome:it.nome, qtd:it.qtd, obs:it.obs, setor:it.setor,
+      status:it.status, criadoEm:it.criadoEm }); } });
+  });
+  fila.sort((a,b)=> new Date(a.criadoEm)-new Date(b.criadoEm));
+  res.json(fila);
+});
+
+// POST /api/comanda/:id/adicionar — alias para /api/comanda/:id/item (aceita {itens:[...]})
+app.post('/api/comanda/:id/adicionar', auth, (req,res)=>{
+  const c=db().comandas.find(x=>x.id==req.params.id && x.status==='aberta');
+  if(!c) return res.status(404).json({error:'comanda não encontrada/aberta'});
+  const errs=addItens(c, req.body.itens || [req.body]); save();
+  if(errs&&errs.length) return res.status(409).json({error:errs.join('; '), parcial:true, comanda:{...c,total:comandaTotal(c)}});
+  res.json({ ...c, total:comandaTotal(c) });
+});
+
+// POST /api/comanda/:id/cancelar-item — cancela pelo índice (body {idx})
+app.post('/api/comanda/:id/cancelar-item', auth, (req,res)=>{
+  const c=db().comandas.find(x=>x.id==req.params.id && x.status==='aberta');
+  if(!c) return res.status(404).json({error:'comanda não encontrada/aberta'});
+  const idx=parseInt(req.body.idx);
+  if(isNaN(idx)||!c.itens[idx]) return res.status(404).json({error:'item não encontrado'});
+  const it=c.itens[idx];
+  const e=db().estoque;
+  if(e[it.produtoId]!==undefined) e[it.produtoId].qtd += it.qtd;
+  audit(req, 'CANCEL_ITEM_COMANDA', {comandaId:c.id,idx,item:it.nome});
+  c.itens.splice(idx,1);
+  save();
+  res.json({ ...c, total:comandaTotal(c) });
+});
+
+// POST /api/comanda/:id/conta — solicitar conta (alias sem /admin)
+app.post('/api/comanda/:id/conta', auth, (req,res)=>{
+  const c=db().comandas.find(x=>x.id==req.params.id);
+  if(!c) return res.status(404).json({error:'comanda não encontrada'});
+  c.contaPedida=true; save();
+  res.json({ ok:true, total: Math.max(0, comandaTotal(c) - (c.desconto||0)) });
+});
+
+// POST /api/comanda/:id/pagar — fechar + registrar pagamento (alias para /api/admin/comanda/:id/fechar)
+app.post('/api/comanda/:id/pagar', auth, (req,res)=>{
+  const c=db().comandas.find(x=>x.id==req.params.id);
+  if(!c) return res.status(404).json({error:'comanda não encontrada'});
+  const { meio='dinheiro', desconto=0, servico=false, totalFinal } = req.body||{};
+  const subtotal = comandaTotal(c);
+  const descVal  = desconto > 0 ? subtotal * (desconto/100) : (c.desconto||0);
+  const servicoVal = servico ? (subtotal-descVal)*0.1 : 0;
+  const total = totalFinal != null ? Number(totalFinal) : Math.max(0, subtotal - descVal + servicoVal);
+  c.status='fechada';
+  c.pagamento=meio;
+  c.pagamentos=[{meio, valor:total}];
+  c.fechadaEm=new Date().toISOString();
+  c.totalPago=total;
+  if(desconto>0) { c.desconto=descVal; c.descontoMotivo=`${desconto}%`; }
+  audit(req, 'PAGAR_COMANDA', {comandaId:c.id,total,meio});
+  save();
+  res.json({ ok:true, total });
+});
+
+// POST /api/admin/mesas/abrir — abrir mesa física (admin)
+app.post('/api/admin/mesas/abrir', auth, requireStaff, (req,res)=>{
+  const num = parseInt(req.body.numero || req.body.num);
+  if(!num || num<1 || num>getMesasFisicas()) return res.status(400).json({error:'mesa inválida'});
+  if(openComandaMesa(num)) return res.status(409).json({error:'mesa já está ocupada'});
+  const { nome } = req.body||{};
+  const c = novaComanda({tipo:'fisica', mesaNum:num, nome:nome||('Mesa '+num)});
+  save();
+  res.json({ok:true, comandaId:c.id, id:c.id, mesa:num});
 });
 
 // ── CARDÁPIO CRUD ────────────────────────────────────────────────────────────

@@ -180,8 +180,8 @@ export default function KDS() {
 
   async function load() {
     try {
-      const data = await api('/api/kds')
-      setItems(data)
+      const data = await api.get('/api/kds')
+      setItems(Array.isArray(data) ? data : [])
     } catch {
       // silently retry
     } finally {
@@ -197,10 +197,7 @@ export default function KDS() {
 
   async function handleStatusChange(comandaId, idx, newStatus) {
     try {
-      await api('/api/admin/kds/status', {
-        method: 'POST',
-        body: JSON.stringify({ comandaId, idx, status: newStatus }),
-      })
+      await api.post('/api/admin/kds/status', { comandaId, idx, status: newStatus })
       setItems(prev =>
         prev.map(i =>
           i.comandaId === comandaId && i.idx === idx ? { ...i, status: newStatus } : i
