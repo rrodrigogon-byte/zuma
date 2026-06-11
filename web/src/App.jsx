@@ -39,9 +39,12 @@ const Cupons        = lazy(() => import('./pages/admin/Cupons'))
 const Relatorios    = lazy(() => import('./pages/admin/Relatorios'))
 const Noticias      = lazy(() => import('./pages/admin/Noticias'))
 const Sumula        = lazy(() => import('./pages/admin/Sumula'))
-const Mensalidades  = lazy(() => import('./pages/admin/Mensalidades'))
-const Financeiro    = lazy(() => import('./pages/admin/Financeiro'))
-const NoticiasPublic = lazy(() => import('./pages/public/Noticias'))
+const Mensalidades    = lazy(() => import('./pages/admin/Mensalidades'))
+const Financeiro      = lazy(() => import('./pages/admin/Financeiro'))
+const Quadras         = lazy(() => import('./pages/admin/Quadras'))
+const Pontos          = lazy(() => import('./pages/admin/Pontos'))
+const AgendaQuadras   = lazy(() => import('./pages/public/AgendaQuadras'))
+const NoticiasPublic  = lazy(() => import('./pages/public/Noticias'))
 
 function Loading() {
   return (
@@ -91,6 +94,8 @@ export default function App() {
         <Route path="/admin/sumula"         element={<Layout><Sumula /></Layout>} />
         <Route path="/admin/mensalidades"   element={<Layout><Mensalidades /></Layout>} />
         <Route path="/admin/financeiro"     element={<Layout><Financeiro /></Layout>} />
+        <Route path="/admin/quadras"        element={<Layout><Quadras /></Layout>} />
+        <Route path="/admin/pontos"         element={<Layout><Pontos /></Layout>} />
 
         {/* Público */}
         <Route path="/"            element={<Layout><Home /></Layout>} />
@@ -102,6 +107,7 @@ export default function App() {
         <Route path="/perfil"     element={<Layout><Perfil /></Layout>} />
         <Route path="/contato"    element={<Layout><Contato /></Layout>} />
         <Route path="/noticias"   element={<Layout><NoticiasPublic /></Layout>} />
+        <Route path="/quadras"    element={<Layout><AgendaQuadras /></Layout>} />
 
         <Route path="*" element={<Layout><NotFound /></Layout>} />
       </Routes>

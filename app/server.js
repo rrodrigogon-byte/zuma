@@ -16,6 +16,7 @@ import { gerarDuplaElim, reportDupla } from './doubleelim.js';
 import { criarPix, consultarStatus, pagamentosAtivos, pixInfo, gerarBrCode } from './pagamentos.js';
 import crypto from 'crypto';
 import QRCode from 'qrcode';
+import { wpp } from './whatsapp.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -2318,6 +2319,179 @@ app.get('/api/admin/financeiro/categorias', auth, requireStaff, (req,res)=>{
     receita:['Mensalidade','Inscrição Torneio','Ingresso Evento','Bar/Lanchonete','Loja','Aula/Escola','Patrocínio','Aluguel de Quadra','Outros'],
     despesa:['Pessoal/RH','Manutenção','Utilities (Água/Luz)','Material Esportivo','Alimentação/Bebidas','Marketing','Equipamentos','Impostos/Taxas','Serviços Terceiros','Outros']
   });
+});
+
+// =================== FASE 3A — WHATSAPP ===================
+
+app.get('/api/admin/whatsapp/status', auth, requireStaff, (req,res)=>{
+  res.json({ ativo: wpp.ativo(), baseUrl: process.env.WPP_BASE_URL||'', instance: process.env.WPP_INSTANCE||'setpoint' });
+});
+app.post('/api/admin/whatsapp/testar', auth, requireRole('admin','organizador'), async (req,res)=>{
+  const { telefone, mensagem } = req.body||{};
+  if(!telefone) return res.status(400).json({error:'telefone obrigatório'});
+  try {
+    const r = await wpp.enviar(telefone, mensagem||'🎾 Teste de mensagem do SetPoint!');
+    res.json({ ok:true, simulado:!!r.simulado, resultado:r });
+  } catch(e){ res.status(500).json({error:e.message}); }
+});
+// Disparar notificação manual de mensalidade vencendo
+app.post('/api/admin/whatsapp/cobrar', auth, requireRole('admin','organizador'), async (req,res)=>{
+  const { ids } = req.body||{};
+  const d=db();
+  const lista = ids?.length ? (d.mensalidades||[]).filter(m=>ids.includes(m.id))
+    : (d.mensalidades||[]).filter(m=>m.status==='pendente');
+  const resultados=[];
+  for(const m of lista){
+    const socio=(d.socios||[]).find(s=>s.id==m.socioId);
+    const tel = socio?.telefone||socio?.celular||'';
+    if(!tel){ resultados.push({id:m.id, ok:false, erro:'sem telefone'}); continue; }
+    try {
+      const venc = new Date(m.vencimento+'T12:00:00').toLocaleDateString('pt-BR');
+      await wpp.mensalidadeVencendo(tel, m.socioNome||socio?.nome||'', m.valor, venc);
+      resultados.push({id:m.id, ok:true, tel});
+    } catch(e){ resultados.push({id:m.id, ok:false, erro:e.message}); }
+  }
+  res.json({ ok:true, enviados:resultados.filter(r=>r.ok).length, total:resultados.length, resultados });
+});
+
+// =================== FASE 3B — PROGRAMA DE PONTOS ===================
+
+// Helpers
+function saldoPontos(socioId){ return (db().pontos||[]).filter(p=>p.socioId==socioId).reduce((s,p)=>s+p.pontos,0); }
+
+app.get('/api/admin/pontos', auth, requireStaff, (req,res)=>{
+  const { socioId } = req.query;
+  let list = db().pontos||[];
+  if(socioId) list=list.filter(p=>p.socioId==socioId);
+  res.json(list.slice().sort((a,b)=>b.criadoEm.localeCompare(a.criadoEm)));
+});
+app.get('/api/admin/pontos/saldos', auth, requireStaff, (req,res)=>{
+  const d=db();
+  const map={};
+  (d.pontos||[]).forEach(p=>{ map[p.socioId]=(map[p.socioId]||0)+p.pontos; });
+  const lista=(d.socios||[]).map(s=>({
+    id:s.id, nome:s.nome, email:s.email, saldo:map[s.id]||0
+  })).sort((a,b)=>b.saldo-a.saldo);
+  res.json(lista);
+});
+app.post('/api/admin/pontos', auth, requireStaff, async (req,res)=>{
+  const { socioId, pontos, tipo, descricao } = req.body||{};
+  if(!socioId||!pontos||!descricao) return res.status(400).json({error:'socioId, pontos e descrição obrigatórios'});
+  const d=db(); d.pontos=d.pontos||[];
+  const s=(d.socios||[]).find(x=>x.id==socioId);
+  const t={ id:nextId(), socioId, socioNome:s?.nome||'', pontos:Number(pontos),
+    tipo:tipo||'manual', descricao, criadoEm:new Date().toISOString() };
+  d.pontos.push(t); save();
+  const saldo=saldoPontos(socioId);
+  if(pontos>0 && s?.telefone) {
+    wpp.pontosCreditados(s.telefone, s.nome, pontos, saldo).catch(()=>{});
+  }
+  res.json({ ...t, saldo });
+});
+app.delete('/api/admin/pontos/:id', auth, requireRole('admin'), (req,res)=>{
+  const d=db(); d.pontos=(d.pontos||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true});
+});
+// Resgatar pontos (descontar)
+app.post('/api/admin/pontos/resgatar', auth, requireStaff, (req,res)=>{
+  const { socioId, pontos, descricao } = req.body||{};
+  if(!socioId||!pontos) return res.status(400).json({error:'socioId e pontos obrigatórios'});
+  const saldo=saldoPontos(socioId);
+  if(saldo < Number(pontos)) return res.status(400).json({error:`Saldo insuficiente (${saldo} pontos disponíveis)`});
+  const d=db(); d.pontos=d.pontos||[];
+  const s=(d.socios||[]).find(x=>x.id==socioId);
+  const t={ id:nextId(), socioId, socioNome:s?.nome||'', pontos:-Number(pontos),
+    tipo:'resgate', descricao:descricao||'Resgate de pontos', criadoEm:new Date().toISOString() };
+  d.pontos.push(t); save();
+  res.json({ ...t, saldo: saldo-Number(pontos) });
+});
+// Saldo do sócio autenticado
+app.get('/api/pontos/meus', auth, (req,res)=>{
+  const list=(db().pontos||[]).filter(p=>p.socioId==req.user.id);
+  const saldo=list.reduce((s,p)=>s+p.pontos,0);
+  res.json({ saldo, historico:list.sort((a,b)=>b.criadoEm.localeCompare(a.criadoEm)).slice(0,50) });
+});
+
+// =================== FASE 3C — AGENDAMENTO DE QUADRAS ===================
+
+// CRUD de quadras
+app.get('/api/quadras', (req,res)=> res.json((db().quadras||[]).filter(q=>q.ativa!==false)));
+app.get('/api/admin/quadras', auth, requireStaff, (req,res)=> res.json(db().quadras||[]));
+app.post('/api/admin/quadras', auth, requireRole('admin','organizador'), (req,res)=>{
+  const { nome, tipo, cor, descricao } = req.body||{};
+  if(!nome) return res.status(400).json({error:'nome obrigatório'});
+  const q={ id:nextId(), nome, tipo:tipo||'Tênis', cor:cor||'#5FB335', descricao:descricao||'', ativa:true, criadoEm:new Date().toISOString() };
+  const d=db(); d.quadras=d.quadras||[]; d.quadras.push(q); save();
+  res.json(q);
+});
+app.patch('/api/admin/quadras/:id', auth, requireRole('admin','organizador'), (req,res)=>{
+  const d=db(); const q=(d.quadras||[]).find(x=>x.id==req.params.id);
+  if(!q) return res.status(404).json({error:'não encontrada'});
+  Object.assign(q, req.body); save(); res.json(q);
+});
+app.delete('/api/admin/quadras/:id', auth, requireRole('admin'), (req,res)=>{
+  const d=db(); d.quadras=(d.quadras||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true});
+});
+
+// Reservas — consulta pública (disponibilidade)
+app.get('/api/reservas', (req,res)=>{
+  const { quadraId, data } = req.query;
+  let list=(db().reservas||[]).filter(r=>r.status!=='cancelada');
+  if(quadraId) list=list.filter(r=>r.quadraId==quadraId);
+  if(data) list=list.filter(r=>r.data===data);
+  res.json(list);
+});
+// Reservas admin
+app.get('/api/admin/reservas', auth, requireStaff, (req,res)=>{
+  const { quadraId, data, de, ate } = req.query;
+  let list=db().reservas||[];
+  if(quadraId) list=list.filter(r=>r.quadraId==quadraId);
+  if(data) list=list.filter(r=>r.data===data);
+  if(de) list=list.filter(r=>r.data>=de);
+  if(ate) list=list.filter(r=>r.data<=ate);
+  res.json(list.sort((a,b)=>a.data.localeCompare(b.data)||a.horaInicio.localeCompare(b.horaInicio)));
+});
+// Criar reserva (pública — atleta autenticado ou admin)
+app.post('/api/reservas', auth, async (req,res)=>{
+  const { quadraId, data, horaInicio, horaFim, obs } = req.body||{};
+  if(!quadraId||!data||!horaInicio||!horaFim) return res.status(400).json({error:'quadraId, data, horaInicio e horaFim obrigatórios'});
+  const d=db();
+  const q=(d.quadras||[]).find(x=>x.id==quadraId && x.ativa!==false);
+  if(!q) return res.status(404).json({error:'quadra não encontrada'});
+  // checar conflito
+  const conflito=(d.reservas||[]).find(r=>
+    r.quadraId==quadraId && r.data===data && r.status!=='cancelada' &&
+    r.horaInicio < horaFim && r.horaFim > horaInicio
+  );
+  if(conflito) return res.status(409).json({error:'Horário indisponível para esta quadra'});
+  const u=req.user;
+  const socio=(d.socios||[]).find(s=>s.usuarioId==u.id||s.email===u.email);
+  const r={ id:nextId(), quadraId, quadraNome:q.nome, data, horaInicio, horaFim,
+    socioId:socio?.id||u.id, socioNome:u.nome||socio?.nome||'', usuarioId:u.id,
+    status:'confirmada', obs:obs||'', criadoEm:new Date().toISOString() };
+  d.reservas=d.reservas||[]; d.reservas.push(r); save();
+  // notificação WhatsApp
+  const tel=socio?.telefone||socio?.celular||'';
+  if(tel){ wpp.reservaConfirmada(tel, r.socioNome, q.nome, data, `${horaInicio}–${horaFim}`).catch(()=>{}); }
+  // crédito de pontos por reserva
+  if(socio){ const t={id:nextId(),socioId:socio.id,socioNome:socio.nome,pontos:5,tipo:'reserva',descricao:`Reserva ${q.nome} ${data}`,criadoEm:new Date().toISOString()}; d.pontos=d.pontos||[]; d.pontos.push(t); }
+  save();
+  res.json(r);
+});
+// Cancelar reserva
+app.patch('/api/reservas/:id/cancelar', auth, async (req,res)=>{
+  const d=db(); const r=(d.reservas||[]).find(x=>x.id==req.params.id);
+  if(!r) return res.status(404).json({error:'reserva não encontrada'});
+  if(r.usuarioId!=req.user.id && !STAFF.includes(req.user.role)) return res.status(403).json({error:'sem permissão'});
+  r.status='cancelada'; r.canceladoEm=new Date().toISOString(); save();
+  const socio=(d.socios||[]).find(s=>s.id==r.socioId);
+  const tel=socio?.telefone||socio?.celular||'';
+  if(tel){ wpp.reservaCancelada(tel, r.socioNome, r.quadraNome, r.data, `${r.horaInicio}–${r.horaFim}`).catch(()=>{}); }
+  res.json(r);
+});
+app.patch('/api/admin/reservas/:id', auth, requireStaff, (req,res)=>{
+  const d=db(); const r=(d.reservas||[]).find(x=>x.id==req.params.id);
+  if(!r) return res.status(404).json({error:'não encontrada'});
+  Object.assign(r, req.body); save(); res.json(r);
 });
 
 // ---- estático: serve React SPA (build do web/) ----

@@ -31,6 +31,8 @@ const NAV_ADMIN = [
   { to: '/admin/sumula',        icon: '🎾', label: 'Súmula' },
   { to: '/admin/mensalidades',  icon: '💳', label: 'Mensalidades' },
   { to: '/admin/financeiro',    icon: '💰', label: 'Financeiro' },
+  { to: '/admin/quadras',       icon: '🏟️', label: 'Quadras' },
+  { to: '/admin/pontos',        icon: '⭐', label: 'Pontos' },
 ]
 
 const NAV_PUBLIC = [
@@ -42,6 +44,7 @@ const NAV_PUBLIC = [
   { to: '/loja',        icon: '🛍️', label: 'Loja' },
   { to: '/contato',     icon: '📞', label: 'Contato' },
   { to: '/noticias',    icon: '📰', label: 'Notícias' },
+  { to: '/quadras',     icon: '🏟️', label: 'Quadras' },
 ]
 
 const linkStyle = {
