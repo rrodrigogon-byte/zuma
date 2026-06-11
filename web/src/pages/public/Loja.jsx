@@ -30,7 +30,7 @@ function hasSize(produto) {
 }
 
 export default function Loja() {
-  const toast = useToast()
+  const { toast } = useToast()
   const navigate = useNavigate()
 
   const [produtos, setProdutos] = useState([])

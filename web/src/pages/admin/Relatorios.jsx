@@ -104,7 +104,7 @@ function DateFilter({ from, to, onFrom, onTo, periodButtons = true }) {
 
 /* ═══════════════════════════════════════════════════════════ */
 export default function Relatorios() {
-  const toast = useToast()
+  const { toast } = useToast()
 
   const [loading, setLoading] = useState(true)
 

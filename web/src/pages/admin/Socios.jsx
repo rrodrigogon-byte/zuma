@@ -36,7 +36,7 @@ function Avatar({ nome }) {
 }
 
 export default function Socios() {
-  const toast = useToast()
+  const { toast } = useToast()
   const [socios, setSocios]         = useState([])
   const [loading, setLoading]       = useState(true)
   const [expandido, setExpandido]   = useState(null)

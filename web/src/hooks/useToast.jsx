@@ -33,5 +33,6 @@ export function ToastProvider({ children }) {
 }
 
 export function useToast() {
-  return useContext(Ctx)
+  const toast = useContext(Ctx)
+  return { toast }
 }

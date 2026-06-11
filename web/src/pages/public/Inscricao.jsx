@@ -55,7 +55,7 @@ const INPUT_STYLE = (err) => ({
 })
 
 export default function Inscricao() {
-  const toast = useToast()
+  const { toast } = useToast()
   const navigate = useNavigate()
 
   const [categorias, setCategorias] = useState([])

@@ -10,7 +10,7 @@ const STATUS_COLOR = {
 }
 
 export default function Mesas() {
-  const toast = useToast()
+  const { toast } = useToast()
   const [fisicas, setFisicas]     = useState([])
   const [virtuais, setVirtuais]   = useState([])
   const [config, setConfig]       = useState({ mesasFisicas: 0 })

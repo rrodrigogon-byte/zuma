@@ -21,7 +21,7 @@ function isExpired(validade) {
 }
 
 export default function Cupons() {
-  const toast = useToast()
+  const { toast } = useToast()
   const [cupons, setCupons]     = useState([])
   const [loading, setLoading]   = useState(true)
   const [modal, setModal]       = useState(false)

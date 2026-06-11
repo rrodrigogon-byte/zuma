@@ -6,7 +6,7 @@ import Modal from '../../components/Modal'
 const EMPTY_ENTRADA = { produtoId: '', qtd: '', custo: '' }
 
 export default function Estoque() {
-  const toast = useToast()
+  const { toast } = useToast()
   const [estoque, setEstoque]       = useState([])
   const [loading, setLoading]       = useState(true)
   const [filtro, setFiltro]         = useState('todos')   // 'todos' | 'baixo' | 'ok'

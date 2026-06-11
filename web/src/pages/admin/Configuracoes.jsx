@@ -47,7 +47,7 @@ function Field({ label, children }) {
 }
 
 export default function Configuracoes() {
-  const toast = useToast()
+  const { toast } = useToast()
 
   const [evento, setEvento]       = useState({ nome: '', slogan: '', dataInicio: '', dataFim: '', local: '', site: '' })
   const [bar, setBar]             = useState({ mesasFisicas: '', taxaServico: '' })
