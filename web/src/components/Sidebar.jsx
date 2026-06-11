@@ -29,6 +29,8 @@ const NAV_ADMIN = [
   { to: '/admin/relatorios',    icon: '📄', label: 'Relatórios' },
   { to: '/admin/noticias',      icon: '📰', label: 'Notícias' },
   { to: '/admin/sumula',        icon: '🎾', label: 'Súmula' },
+  { to: '/admin/mensalidades',  icon: '💳', label: 'Mensalidades' },
+  { to: '/admin/financeiro',    icon: '💰', label: 'Financeiro' },
 ]
 
 const NAV_PUBLIC = [

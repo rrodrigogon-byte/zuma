@@ -2163,6 +2163,163 @@ app.get('/api/inscricoes/minhas', auth, (req, res) => {
   res.json(minhas);
 });
 
+// =================== FASE 2 — FINANCEIRO DO CLUBE ===================
+
+// --- Planos de mensalidade ---
+app.get('/api/admin/mensalidades/planos', auth, requireStaff, (req,res)=>{
+  res.json(db().planosAssinatura||[]);
+});
+app.post('/api/admin/mensalidades/planos', auth, requireRole('admin','organizador'), (req,res)=>{
+  const { nome, valor, periodicidade, descricao } = req.body||{};
+  if(!nome||!valor) return res.status(400).json({error:'nome e valor obrigatórios'});
+  const p = { id:nextId(), nome, valor:Number(valor), periodicidade:periodicidade||'mensal',
+    descricao:descricao||'', ativo:true, criadoEm:new Date().toISOString() };
+  const d=db(); d.planosAssinatura=d.planosAssinatura||[]; d.planosAssinatura.push(p); save();
+  res.json(p);
+});
+app.patch('/api/admin/mensalidades/planos/:id', auth, requireRole('admin','organizador'), (req,res)=>{
+  const d=db(); const p=(d.planosAssinatura||[]).find(x=>x.id==req.params.id);
+  if(!p) return res.status(404).json({error:'não encontrado'});
+  Object.assign(p, req.body); save(); res.json(p);
+});
+app.delete('/api/admin/mensalidades/planos/:id', auth, requireRole('admin'), (req,res)=>{
+  const d=db(); d.planosAssinatura=(d.planosAssinatura||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true});
+});
+
+// --- Cobranças de mensalidade ---
+app.get('/api/admin/mensalidades', auth, requireStaff, (req,res)=>{
+  let list = db().mensalidades||[];
+  const { socioId, status, mes } = req.query;
+  if(socioId) list=list.filter(m=>m.socioId==socioId);
+  if(status) list=list.filter(m=>m.status===status);
+  if(mes) list=list.filter(m=>(m.vencimento||'').startsWith(mes));
+  res.json(list.slice().sort((a,b)=>(b.vencimento||'').localeCompare(a.vencimento||'')));
+});
+app.post('/api/admin/mensalidades', auth, requireRole('admin','organizador'), (req,res)=>{
+  const { socioId, socioNome, planoId, planoNome, valor, vencimento, obs } = req.body||{};
+  if(!socioId||!valor||!vencimento) return res.status(400).json({error:'socioId, valor e vencimento obrigatórios'});
+  const m = { id:nextId(), socioId, socioNome:socioNome||'', planoId:planoId||null, planoNome:planoNome||'',
+    valor:Number(valor), vencimento, status:'pendente', pagoEm:null, obs:obs||'',
+    criadoEm:new Date().toISOString() };
+  const d=db(); d.mensalidades=d.mensalidades||[]; d.mensalidades.push(m); save();
+  res.json(m);
+});
+app.post('/api/admin/mensalidades/gerar', auth, requireRole('admin','organizador'), (req,res)=>{
+  const { mes, planoId } = req.body||{};
+  if(!mes) return res.status(400).json({error:'informe o mês (YYYY-MM)'});
+  const d=db();
+  const socios=(d.socios||[]).filter(s=>s.ativo!==false);
+  const planos=d.planosAssinatura||[];
+  const geradas=[]; const puladas=[];
+  socios.forEach(s=>{
+    // suporte a planoId (novo) ou plano (string legado)
+    const plano = s.planoId
+      ? planos.find(p=>p.id==s.planoId)
+      : planos.find(p=>p.nome===s.plano);
+    if(!plano) return;
+    if(planoId && plano.id!=planoId) return;
+    if(!plano) return;
+    const venc=`${mes}-${String(s.diaVencimento||10).padStart(2,'0')}`;
+    const jaExiste=(d.mensalidades||[]).find(m=>m.socioId==s.id && (m.vencimento||'').startsWith(mes));
+    if(jaExiste){ puladas.push(s.nome); return; }
+    const m={ id:nextId(), socioId:s.id, socioNome:s.nome, planoId:plano.id, planoNome:plano.nome,
+      valor:plano.valor, vencimento:venc, status:'pendente', pagoEm:null, obs:'',
+      criadoEm:new Date().toISOString() };
+    d.mensalidades=d.mensalidades||[]; d.mensalidades.push(m); geradas.push(m);
+  });
+  save();
+  res.json({ ok:true, geradas:geradas.length, puladas:puladas.length });
+});
+app.patch('/api/admin/mensalidades/:id', auth, requireStaff, (req,res)=>{
+  const d=db(); const m=(d.mensalidades||[]).find(x=>x.id==req.params.id);
+  if(!m) return res.status(404).json({error:'não encontrada'});
+  if(req.body.status==='pago' && !m.pagoEm) req.body.pagoEm=new Date().toISOString();
+  Object.assign(m, req.body); save(); res.json(m);
+});
+app.delete('/api/admin/mensalidades/:id', auth, requireRole('admin','organizador'), (req,res)=>{
+  const d=db(); d.mensalidades=(d.mensalidades||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true});
+});
+
+// --- Lançamentos financeiros (contas a pagar / receber) ---
+app.get('/api/admin/financeiro/lancamentos', auth, requireStaff, (req,res)=>{
+  let list = db().lancamentos||[];
+  const { tipo, status, categoria, de, ate } = req.query;
+  if(tipo) list=list.filter(l=>l.tipo===tipo);
+  if(status) list=list.filter(l=>l.status===status);
+  if(categoria) list=list.filter(l=>l.categoria===categoria);
+  if(de) list=list.filter(l=>(l.vencimento||'')>=de);
+  if(ate) list=list.filter(l=>(l.vencimento||'')<=ate);
+  res.json(list.slice().sort((a,b)=>(a.vencimento||'').localeCompare(b.vencimento||'')));
+});
+app.post('/api/admin/financeiro/lancamentos', auth, requireStaff, (req,res)=>{
+  const { tipo, categoria, descricao, valor, vencimento, obs } = req.body||{};
+  if(!tipo||!valor||!descricao) return res.status(400).json({error:'tipo, valor e descrição obrigatórios'});
+  if(!['receita','despesa'].includes(tipo)) return res.status(400).json({error:'tipo deve ser receita ou despesa'});
+  const l = { id:nextId(), tipo, categoria:categoria||'Outros', descricao, valor:Number(valor),
+    vencimento:vencimento||new Date().toISOString().slice(0,10), status:'pendente',
+    pagoEm:null, obs:obs||'', origem:'manual', criadoEm:new Date().toISOString() };
+  const d=db(); d.lancamentos=d.lancamentos||[]; d.lancamentos.push(l); save();
+  res.json(l);
+});
+app.patch('/api/admin/financeiro/lancamentos/:id', auth, requireStaff, (req,res)=>{
+  const d=db(); const l=(d.lancamentos||[]).find(x=>x.id==req.params.id);
+  if(!l) return res.status(404).json({error:'não encontrado'});
+  if(req.body.status==='pago' && !l.pagoEm) req.body.pagoEm=new Date().toISOString();
+  Object.assign(l, req.body); save(); res.json(l);
+});
+app.delete('/api/admin/financeiro/lancamentos/:id', auth, requireRole('admin','organizador'), (req,res)=>{
+  const d=db(); d.lancamentos=(d.lancamentos||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true});
+});
+
+// --- Resumo financeiro e fluxo de caixa ---
+app.get('/api/admin/financeiro/resumo', auth, requireStaff, (req,res)=>{
+  const d=db();
+  const hoje=new Date().toISOString().slice(0,10);
+  const mesAtual=hoje.slice(0,7);
+  const lancs=d.lancamentos||[];
+  const mens=d.mensalidades||[];
+  const comandas=d.comandas||[];
+  const recBar=comandas.filter(c=>c.status==='fechada')
+    .reduce((s,c)=>s+(c.itens||[]).reduce((t,i)=>t+(i.preco||0)*(i.qtd||1),0),0);
+  const mensRecebidas=mens.filter(m=>m.status==='pago').reduce((s,m)=>s+m.valor,0);
+  const mensPendentes=mens.filter(m=>m.status==='pendente').reduce((s,m)=>s+m.valor,0);
+  const mensVencidas =mens.filter(m=>m.status==='pendente'&&m.vencimento<hoje).reduce((s,m)=>s+m.valor,0);
+  const recMes=lancs.filter(l=>l.tipo==='receita'&&l.status==='pago'&&(l.pagoEm||'').startsWith(mesAtual)).reduce((s,l)=>s+l.valor,0);
+  const despMes=lancs.filter(l=>l.tipo==='despesa'&&l.status==='pago'&&(l.pagoEm||'').startsWith(mesAtual)).reduce((s,l)=>s+l.valor,0);
+  const aReceber=lancs.filter(l=>l.tipo==='receita'&&l.status==='pendente').reduce((s,l)=>s+l.valor,0);
+  const aPagar  =lancs.filter(l=>l.tipo==='despesa'&&l.status==='pendente').reduce((s,l)=>s+l.valor,0);
+  const inadimplentes=mens.filter(m=>m.status==='pendente'&&m.vencimento<hoje).length;
+  const inscRec=(d.inscricoes||[]).filter(i=>i.status==='confirmado').reduce((s,i)=>s+(i.total||0),0);
+  const totalReceitas=recBar+mensRecebidas+recMes+inscRec;
+  const totalDespesas=despMes;
+  res.json({ saldo:totalReceitas-totalDespesas, totalReceitas, totalDespesas, recBar,
+    mensRecebidas, mensPendentes, mensVencidas, recMes, despMes, aReceber, aPagar,
+    inadimplentes, inscRec, mesAtual, hoje });
+});
+app.get('/api/admin/financeiro/fluxo', auth, requireStaff, (req,res)=>{
+  const d=db();
+  const hoje=new Date();
+  const meses=[];
+  for(let i=11;i>=0;i--){
+    const dt=new Date(hoje.getFullYear(), hoje.getMonth()-i, 1);
+    meses.push(`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`);
+  }
+  const lancs=d.lancamentos||[];
+  const mens=d.mensalidades||[];
+  res.json(meses.map(mes=>{
+    const rec=lancs.filter(l=>l.tipo==='receita'&&l.status==='pago'&&(l.pagoEm||'').startsWith(mes)).reduce((s,l)=>s+l.valor,0);
+    const desp=lancs.filter(l=>l.tipo==='despesa'&&l.status==='pago'&&(l.pagoEm||'').startsWith(mes)).reduce((s,l)=>s+l.valor,0);
+    const mensR=mens.filter(m=>m.status==='pago'&&(m.pagoEm||'').startsWith(mes)).reduce((s,m)=>s+m.valor,0);
+    return { mes, receitas:rec+mensR, despesas:desp, saldo:(rec+mensR)-desp };
+  }));
+});
+app.get('/api/admin/financeiro/categorias', auth, requireStaff, (req,res)=>{
+  res.json({
+    receita:['Mensalidade','Inscrição Torneio','Ingresso Evento','Bar/Lanchonete','Loja','Aula/Escola','Patrocínio','Aluguel de Quadra','Outros'],
+    despesa:['Pessoal/RH','Manutenção','Utilities (Água/Luz)','Material Esportivo','Alimentação/Bebidas','Marketing','Equipamentos','Impostos/Taxas','Serviços Terceiros','Outros']
+  });
+});
+
 // ---- estático: serve React SPA (build do web/) ----
 app.use(express.static(path.join(__dirname, 'public')));
 
