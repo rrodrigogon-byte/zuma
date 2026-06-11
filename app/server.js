@@ -1322,9 +1322,22 @@ function seedLoja(){
 }
 seedLoja();
 
+// Mapa de imagens por código AOT
+const IMAGEM_LOJA = {
+  'AOT-001':'/produtos/aot-001.jpg','AOT-002':'/produtos/aot-002.jpg',
+  'AOT-003':'/produtos/aot-003.jpg','AOT-004':'/produtos/aot-004.jpg',
+  'AOT-005':'/produtos/aot-005.jpg','AOT-006':'/produtos/aot-006.jpg',
+  'AOT-007':'/produtos/aot-007.jpg','AOT-008':'/produtos/aot-008.jpg',
+  'AOT-009':'/produtos/aot-009.jpg','AOT-010':'/produtos/aot-010.jpg',
+};
+
 app.get('/api/loja', (req,res)=> {
   seedLoja();
-  res.json((db().loja||[]).filter(p=>p.ativo!==false).map(p=>({ id:p.id, cod:p.cod||'', nome:p.nome, cat:p.cat, emoji:p.emoji||'📦', preco:p.preco, estoque:p.estoque, esgotado:p.estoque<=0, desc:p.desc||'' })));
+  res.json((db().loja||[]).filter(p=>p.ativo!==false).map(p=>({
+    id:p.id, cod:p.cod||'', nome:p.nome, cat:p.cat, emoji:p.emoji||'📦',
+    preco:p.preco, estoque:p.estoque, esgotado:p.estoque<=0, desc:p.desc||'',
+    imagem: p.imagem || IMAGEM_LOJA[p.cod] || null,
+  })));
 });
 
 // Reserva via site público (loja — pré-venda Pix)

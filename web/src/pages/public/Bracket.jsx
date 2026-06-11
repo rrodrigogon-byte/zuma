@@ -204,7 +204,7 @@ export default function Bracket() {
   const { toast } = useToast()
 
   useEffect(() => {
-    api('/api/categorias')
+    api.get('/api/categorias')
       .then(data => {
         const list = Array.isArray(data) ? data : data.categorias || []
         setCategorias(list)
@@ -220,21 +220,20 @@ export default function Bracket() {
     setFormato(null)
 
     // Tenta bracket primeiro, depois fallback para outros formatos
-    api(`/api/bracket/${catSel}`)
+    api.get(`/api/bracket/${catSel}`)
       .then(data => {
         setFormato(data.formato || 'eliminatoria')
         setDados(data)
         setLoading(false)
       })
       .catch(() => {
-        // tenta grupos
-        api(`/api/grupos/${catSel}`)
+        api.get(`/api/grupos/${catSel}`)
           .then(data => { setFormato('grupos'); setDados(data); setLoading(false) })
           .catch(() => {
-            api(`/api/suico/${catSel}`)
+            api.get(`/api/suico/${catSel}`)
               .then(data => { setFormato('swiss'); setDados(data); setLoading(false) })
               .catch(() => {
-                api(`/api/roundrobin/${catSel}`)
+                api.get(`/api/roundrobin/${catSel}`)
                   .then(data => { setFormato('roundrobin'); setDados(data); setLoading(false) })
                   .catch(() => { setLoading(false) })
               })

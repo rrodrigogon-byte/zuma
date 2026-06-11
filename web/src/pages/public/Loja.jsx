@@ -175,47 +175,68 @@ export default function Loja() {
                   onMouseEnter={e => !esgotado && (e.currentTarget.style.transform = 'translateY(-4px)', e.currentTarget.style.boxShadow = '0 10px 32px rgba(0,0,0,0.12)')}
                   onMouseLeave={e => (e.currentTarget.style.transform = '', e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.07)')}
                 >
-                  {/* Imagem / placeholder */}
+                  {/* Imagem do produto */}
                   <div style={{
-                    height: 200,
-                    background: esgotado
-                      ? 'linear-gradient(135deg, #e0e0e0, #f0f0f0)'
-                      : `linear-gradient(135deg, #0E2E1C 0%, #1a4a2e 60%, #2a5a3e 100%)`,
+                    height: 220,
+                    background: p.imagem
+                      ? '#fff'
+                      : esgotado
+                        ? 'linear-gradient(135deg, #e0e0e0, #f0f0f0)'
+                        : 'linear-gradient(135deg, #0E2E1C 0%, #1a4a2e 60%, #2a5a3e 100%)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     fontSize: '5rem',
                     position: 'relative',
+                    overflow: 'hidden',
                   }}>
-                    {p.cat?.toLowerCase() === 'kit' ? '🎽' : p.cat?.toLowerCase() === 'camiseta' ? '👕' : '🎾'}
+                    {p.imagem ? (
+                      <img
+                        src={p.imagem}
+                        alt={p.nome}
+                        style={{
+                          width: '100%', height: '100%', objectFit: 'contain',
+                          padding: '10px',
+                          filter: esgotado ? 'grayscale(60%) opacity(0.7)' : 'none',
+                          transition: 'transform .3s',
+                        }}
+                        onMouseEnter={e => !esgotado && (e.target.style.transform = 'scale(1.06)')}
+                        onMouseLeave={e => (e.target.style.transform = 'scale(1)')}
+                      />
+                    ) : (
+                      p.emoji || '📦'
+                    )}
 
                     {/* Badges */}
-                    <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <div style={{ position: 'absolute', top: 10, left: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       {esgotado && (
                         <span style={{
                           background: '#e05555', color: '#fff',
                           borderRadius: '999px', padding: '4px 12px', fontSize: '0.72rem', fontWeight: 800,
+                          boxShadow: '0 2px 6px rgba(0,0,0,.2)',
                         }}>ESGOTADO</span>
                       )}
                       {poucasVagas && (
                         <span style={{
                           background: '#C9A656', color: '#0E2E1C',
                           borderRadius: '999px', padding: '4px 12px', fontSize: '0.72rem', fontWeight: 800,
+                          boxShadow: '0 2px 6px rgba(0,0,0,.2)',
                         }}>ÚLTIMAS {p.estoque}</span>
                       )}
                     </div>
 
-                    {/* categoria badge */}
-                    {p.cat && (
-                      <div style={{
-                        position: 'absolute', bottom: 10, right: 10,
-                        background: cs.bg, color: cs.text,
-                        borderRadius: '8px', padding: '3px 10px',
-                        fontSize: '0.72rem', fontWeight: 700,
-                      }}>
-                        {p.cat}
-                      </div>
-                    )}
+                    {/* código + categoria badge */}
+                    <div style={{ position: 'absolute', bottom: 8, right: 8, display: 'flex', gap: 5, flexDirection: 'column', alignItems: 'flex-end' }}>
+                      {p.cod && (
+                        <div style={{
+                          background: 'rgba(14,46,28,.85)', color: '#8FD64A',
+                          borderRadius: '6px', padding: '2px 8px',
+                          fontSize: '0.68rem', fontWeight: 800, letterSpacing: '.04em',
+                        }}>
+                          {p.cod}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Conteúdo */}
@@ -271,12 +292,25 @@ export default function Loja() {
         <Modal onClose={() => setSelectedProduto(null)}>
           {etapaModal === 'form' ? (
             <div style={{ padding: '8px 0' }}>
-              <h2 style={{ margin: '0 0 4px', color: '#0E2E1C', fontWeight: 800, fontSize: '1.3rem' }}>
-                🛒 Reservar Produto
-              </h2>
-              <p style={{ margin: '0 0 20px', color: '#5a7a5a', fontSize: '0.9rem' }}>
-                {selectedProduto.nome} · <strong style={{ color: '#5FB335' }}>{fmtR(selectedProduto.preco || 0)}</strong>
-              </p>
+              {/* Cabeçalho com miniatura */}
+              <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 20 }}>
+                {selectedProduto.imagem && (
+                  <img
+                    src={selectedProduto.imagem}
+                    alt={selectedProduto.nome}
+                    style={{ width: 72, height: 72, objectFit: 'contain', borderRadius: 10, border: '1px solid #e0e0e0', background: '#fff', padding: 4, flexShrink: 0 }}
+                  />
+                )}
+                <div>
+                  <h2 style={{ margin: '0 0 3px', color: '#0E2E1C', fontWeight: 800, fontSize: '1.2rem' }}>
+                    🛒 Reservar Produto
+                  </h2>
+                  <p style={{ margin: 0, color: '#5a7a5a', fontSize: '0.88rem' }}>
+                    {selectedProduto.nome} · <strong style={{ color: '#5FB335' }}>{fmtR(selectedProduto.preco || 0)}</strong>
+                    {selectedProduto.cod && <span style={{ marginLeft: 6, fontSize: '0.75rem', color: '#aaa' }}>{selectedProduto.cod}</span>}
+                  </p>
+                </div>
+              </div>
 
               <div style={{ marginBottom: 16 }}>
                 <label style={labelStyle}>Nome completo *</label>
