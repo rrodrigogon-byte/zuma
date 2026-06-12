@@ -271,23 +271,48 @@ export default function KDS() {
     setItems(prev => prev.filter(i => i.status !== 'pronto'))
   }
 
+  async function marcarTodosProntos() {
+    const pendentes = items.filter(i => i.status !== 'pronto' &&
+      (filtroSetor === 'todos' || (filtroSetor === 'bar' && !i.cozinha) || (filtroSetor === 'cozinha' && i.cozinha)))
+    if (!pendentes.length) return
+    if (!confirm(`Marcar ${pendentes.length} itens como PRONTOS?`)) return
+    for (const item of pendentes) {
+      try { await api.post('/api/admin/kds/status', { comandaId:item.comandaId, idx:item.idx, status:'pronto' }) } catch {}
+    }
+    setItems(prev => prev.map(i => {
+      const match = pendentes.find(p => p.comandaId===i.comandaId && p.idx===i.idx)
+      return match ? { ...i, status:'pronto' } : i
+    }))
+    toast(`✅ ${pendentes.length} itens marcados como prontos`)
+  }
+
+  // Som melhorado — 3 beeps em sequência
+  function tocarSom() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)()
+      const beep = (delay, freq) => {
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        osc.connect(gain); gain.connect(ctx.destination)
+        osc.frequency.value = freq; gain.gain.value = 0.12
+        osc.start(ctx.currentTime + delay)
+        osc.stop(ctx.currentTime + delay + 0.15)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.15)
+      }
+      beep(0, 880); beep(0.2, 1100); beep(0.4, 880)
+    } catch {}
+  }
+
   const barItems     = useMemo(() => items.filter(i => !i.cozinha), [items])
   const cozinhaItems = useMemo(() => items.filter(i => i.cozinha), [items])
   const totalPendentes   = useMemo(() => items.filter(i => i.status !== 'pronto').length, [items])
   const barPendentes     = useMemo(() => barItems.filter(i => i.status !== 'pronto').length, [barItems])
   const cozinhaPendentes = useMemo(() => cozinhaItems.filter(i => i.status !== 'pronto').length, [cozinhaItems])
 
-  // Alerta sonoro quando novos pedidos chegam
+  // Alerta sonoro melhorado — 3 beeps quando novos pedidos chegam
   useEffect(() => {
     if (somAtivo && totalPendentes > prevPendentesRef.current) {
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)()
-        const osc = ctx.createOscillator()
-        const gain = ctx.createGain()
-        osc.connect(gain); gain.connect(ctx.destination)
-        osc.frequency.value = 880; gain.gain.value = 0.15
-        osc.start(); osc.stop(ctx.currentTime + 0.18)
-      } catch {}
+      tocarSom()
     }
     prevPendentesRef.current = totalPendentes
   }, [totalPendentes, somAtivo])
@@ -338,38 +363,41 @@ export default function KDS() {
               {totalPendentes} pendente{totalPendentes !== 1 ? 's' : ''}
             </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <button
-              onClick={() => setHidePronto(h => !h)}
-              style={{
-                background: hidePronto ? '#5FB335' : '#1e3a24',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 8,
-                padding: '8px 18px',
-                fontWeight: 700,
-                fontSize: 15,
-                cursor: 'pointer',
-              }}
-            >
-              {hidePronto ? 'Mostrar prontos' : 'Ocultar prontos'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap:'wrap' }}>
+            {/* Filtro setor */}
+            {['todos','bar','cozinha'].map(s => (
+              <button key={s} onClick={() => setFiltroSetor(s)} style={{
+                background: filtroSetor === s ? (s==='bar' ? '#3498db' : s==='cozinha' ? '#e05c5c' : '#5FB335') : '#1e3a24',
+                color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px',
+                fontWeight: 700, fontSize: 13, cursor: 'pointer',
+              }}>
+                {s === 'todos' ? '🍽 Tudo' : s === 'bar' ? '🍺 Bar' : '🔥 Cozinha'}
+                {s !== 'todos' && (
+                  <span style={{ marginLeft:5, background:'rgba(0,0,0,.3)', borderRadius:8, padding:'1px 6px', fontSize:11 }}>
+                    {s === 'bar' ? barPendentes : cozinhaPendentes}
+                  </span>
+                )}
+              </button>
+            ))}
+            <div style={{ width:1, height:28, background:'#1e3a24', margin:'0 4px' }} />
+            <button onClick={marcarTodosProntos} title="Marcar todos os visíveis como prontos"
+              style={{ background:'#1e3a24', color:'#5FB335', border:'1px solid #5FB335', borderRadius:8, padding:'7px 14px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+              ✅ Todos prontos
             </button>
-            <button
-              onClick={limparProntos}
-              style={{
-                background: '#1e3a24',
-                color: '#C9A656',
-                border: '1px solid #C9A656',
-                borderRadius: 8,
-                padding: '8px 18px',
-                fontWeight: 700,
-                fontSize: 15,
-                cursor: 'pointer',
-              }}
-            >
-              Limpar prontos
+            <button onClick={() => setHidePronto(h => !h)}
+              style={{ background: hidePronto ? '#5FB335' : '#1e3a24', color:'#fff', border:'none', borderRadius:8, padding:'7px 14px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+              {hidePronto ? '👁 Mostrar' : '🙈 Ocultar'} prontos
             </button>
-            <span style={{ fontSize: 28, fontWeight: 700, color: '#C9A656', minWidth: 90, textAlign: 'right' }}>
+            <button onClick={limparProntos}
+              style={{ background:'#1e3a24', color:'#C9A656', border:'1px solid #C9A656', borderRadius:8, padding:'7px 14px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+              🗑 Limpar
+            </button>
+            <button onClick={() => setSomAtivo(s=>!s)}
+              style={{ background: somAtivo ? '#1e3a24' : 'transparent', color: somAtivo ? '#5FB335' : '#555',
+                border:`1px solid ${somAtivo ? '#5FB335' : '#333'}`, borderRadius:8, padding:'7px 14px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+              {somAtivo ? '🔔 Som' : '🔇 Mudo'}
+            </button>
+            <span style={{ fontSize: 24, fontWeight: 700, color: '#C9A656', minWidth: 80, textAlign: 'right' }}>
               <Clock />
             </span>
           </div>

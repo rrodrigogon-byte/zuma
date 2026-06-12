@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { api, fmtDate } from '../lib/api'
 import { useToast } from '../hooks/useToast'
 
@@ -172,9 +172,24 @@ export default function Portaria() {
   const [ultimosValidados, setUltimosValidados] = useState([])
   const [loading, setLoading] = useState(true)
   const [showScanner, setShowScanner] = useState(false)
-  const [histTab, setHistTab] = useState('sessao') // 'sessao' | 'hoje'
+  const [histTab, setHistTab] = useState('sessao') // 'sessao' | 'hoje' | 'todos'
+  const [filtroTipo, setFiltroTipo] = useState('todos')
   const inputRef = useRef(null)
   const { toast } = useToast()
+
+  // Busca instantânea
+  const resultadosBusca = useMemo(() => {
+    if (!busca.trim() || busca.length < 2) return []
+    const q = busca.toLowerCase()
+    return ingressos.filter(i =>
+      i.nome.toLowerCase().includes(q) ||
+      (i.qrCode && i.qrCode.toLowerCase().includes(q)) ||
+      String(i.id) === busca.trim()
+    ).slice(0, 8)
+  }, [ingressos, busca])
+
+  // Tipos únicos de ingresso
+  const tipos = useMemo(() => ['todos', ...new Set(ingressos.map(i => i.tipo).filter(Boolean))], [ingressos])
 
   const load = useCallback(async () => {
     try {
@@ -241,6 +256,13 @@ export default function Portaria() {
   const validadosHojeList = ingressos.filter(i => i.validado && new Date(i.validadoEm).toDateString() === hoje)
     .sort((a, b) => new Date(b.validadoEm) - new Date(a.validadoEm))
 
+  /* ── Lista todos com filtro tipo ── */
+  const todosFiltrados = useMemo(() => {
+    return ingressos
+      .filter(i => filtroTipo === 'todos' || i.tipo === filtroTipo)
+      .sort((a,b) => a.nome.localeCompare(b.nome))
+  }, [ingressos, filtroTipo])
+
   return (
     <>
       <style>{`
@@ -295,7 +317,7 @@ export default function Portaria() {
 
           {/* Busca + Scanner */}
           <form onSubmit={handleBusca}>
-            <div style={{ background:'#0f1f13', border:'2px solid #1e3a24', borderRadius:14, padding:'20px 24px' }}>
+            <div style={{ background:'#0f1f13', border:'2px solid #1e3a24', borderRadius:14, padding:'20px 24px', position:'relative' }}>
               <label style={{ fontSize:16, color:'#aaa', fontWeight:600, display:'block', marginBottom:10 }}>
                 🔍 Código QR / Nome do participante
               </label>
@@ -314,14 +336,38 @@ export default function Portaria() {
                   Buscar
                 </button>
               </div>
+              {/* Resultados instantâneos */}
+              {resultadosBusca.length > 0 && (
+                <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'#0a1a0d', border:'2px solid #2d4a32',
+                  borderTop:'none', borderRadius:'0 0 14px 14px', zIndex:50, overflow:'hidden' }}>
+                  {resultadosBusca.map(ing => (
+                    <div key={ing.id} onClick={() => { setEncontrado(ing); setBusca('') }}
+                      style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
+                        padding:'12px 20px', cursor:'pointer', borderBottom:'1px solid #1e3a24',
+                        background: ing.validado ? 'rgba(231,76,60,.05)' : 'transparent' }}>
+                      <div>
+                        <div style={{ fontSize:16, fontWeight:700, color:'#f0f0f0' }}>{ing.nome}</div>
+                        <div style={{ fontSize:12, color:'#888' }}>{ing.tipo || '—'} · ID #{ing.id}</div>
+                      </div>
+                      <span style={{ fontSize:13, fontWeight:700, color: ing.validado ? '#e74c3c' : '#5FB335' }}>
+                        {ing.validado ? '⛔ Validado' : '✅ Disponível'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </form>
 
           {/* Histórico */}
           <div style={{ background:'#0f1f13', border:'1px solid #1e3a24', borderRadius:14, padding:'20px 24px', flex:1 }}>
             {/* Tabs histórico */}
-            <div style={{ display:'flex', gap:0, marginBottom:16, borderBottom:'1px solid #1e3a24' }}>
-              {[{ k:'sessao', l:`Sessão atual (${ultimosValidados.length})` }, { k:'hoje', l:`Validados hoje (${validadosHoje})` }].map(t => (
+            <div style={{ display:'flex', gap:0, marginBottom:16, borderBottom:'1px solid #1e3a24', flexWrap:'wrap' }}>
+              {[
+                { k:'sessao', l:`Sessão (${ultimosValidados.length})` },
+                { k:'hoje', l:`Hoje (${validadosHoje})` },
+                { k:'todos', l:`Todos (${total})` }
+              ].map(t => (
                 <button key={t.k} onClick={() => setHistTab(t.k)} style={{
                   padding:'8px 18px', background:'none', border:'none', color: histTab === t.k ? '#5FB335' : '#555',
                   cursor:'pointer', fontWeight:700, fontSize:13,
@@ -380,6 +426,40 @@ export default function Portaria() {
                   ))}
                 </div>
               )
+            )}
+
+            {histTab === 'todos' && (
+              <>
+                {/* Filtro por tipo */}
+                <div style={{ display:'flex', gap:6, marginBottom:12, flexWrap:'wrap' }}>
+                  {tipos.map(t => (
+                    <button key={t} onClick={() => setFiltroTipo(t)} style={{
+                      padding:'4px 12px', borderRadius:20, fontSize:12, fontWeight:700, cursor:'pointer',
+                      background: filtroTipo===t ? '#5FB335' : '#1e3a24',
+                      color: filtroTipo===t ? '#000' : '#888', border:'none',
+                    }}>{t === 'todos' ? `Todos (${ingressos.length})` : t}</button>
+                  ))}
+                </div>
+                <div style={{ display:'flex', flexDirection:'column', gap:6, overflowY:'auto', maxHeight:340 }}>
+                  {todosFiltrados.length === 0 ? (
+                    <div style={{ color:'#3a5a40', textAlign:'center', padding:20 }}>Nenhum ingresso.</div>
+                  ) : todosFiltrados.map(ing => (
+                    <div key={ing.id} onClick={() => setEncontrado(ing)} style={{
+                      display:'flex', justifyContent:'space-between', alignItems:'center',
+                      background: ing.validado ? 'rgba(95,179,53,.05)' : '#0a1a0d', borderRadius:10, padding:'10px 16px',
+                      borderLeft:`4px solid ${ing.validado ? '#5FB335' : '#1e3a24'}`, cursor:'pointer',
+                    }}>
+                      <div>
+                        <div style={{ fontSize:14, fontWeight:700, color:'#f0f0f0' }}>{ing.nome}</div>
+                        <div style={{ fontSize:11, color:'#888' }}>{ing.tipo || '—'} · #{ing.id}</div>
+                      </div>
+                      <span style={{ fontSize:12, fontWeight:700, color: ing.validado ? '#5FB335' : '#555' }}>
+                        {ing.validado ? '✔ Validado' : '—'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </div>

@@ -62,6 +62,9 @@ export default function AdminLoja() {
   // Filtros reservas
   const [buscaRes, setBuscaRes]         = useState('')
   const [filtroStatus, setFiltroStatus] = useState('todos')
+  // Filtros produtos
+  const [buscaProd, setBuscaProd]       = useState('')
+  const [filtroCat, setFiltroCat]       = useState('todos')
 
   async function load() {
     setLoading(true)
@@ -89,6 +92,23 @@ export default function AdminLoja() {
   const receitaVendas  = reservas
     .filter(r => r.status === 'confirmada' || r.status === 'entregue')
     .reduce((s, r) => s + (r.valor || 0), 0)
+
+  // Filtro produtos
+  const produtosFiltrados = useMemo(() => {
+    return produtos.filter(p => {
+      const matchCat = filtroCat === 'todos' || p.cat === filtroCat
+      const q = buscaProd.toLowerCase()
+      const matchBusca = !q || (p.nome||'').toLowerCase().includes(q) || (p.descricao||'').toLowerCase().includes(q)
+      return matchCat && matchBusca
+    })
+  }, [produtos, filtroCat, buscaProd])
+
+  // Breakdown por categoria
+  const valorPorCat = useMemo(() => {
+    const map = {}
+    produtos.forEach(p => { map[p.cat||'Outro'] = (map[p.cat||'Outro']||0) + (p.preco||0)*(p.estoque||0) })
+    return Object.entries(map).sort((a,b)=>b[1]-a[1])
+  }, [produtos])
 
   // Filtro reservas
   const reservasFiltradas = useMemo(() => {
@@ -191,7 +211,7 @@ export default function AdminLoja() {
       </div>
 
       {/* KPI Cards */}
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
         <KpiCard label="Produtos" valor={totalProdutos} icon="📦" color="#5FB335" />
         <KpiCard label="Estoque Total" valor={`${totalEstoque} un`} icon="🗃️" color="#C9A656" />
         <KpiCard label="Receita Potencial" valor={fmtR(receitaPotenc)} icon="💰" color="#8FD64A" />
@@ -200,6 +220,20 @@ export default function AdminLoja() {
           <KpiCard label="Receita Confirmada" valor={fmtR(receitaVendas)} icon="✅" color="#5FB335" />
         )}
       </div>
+      {/* Breakdown por categoria */}
+      {valorPorCat.length > 1 && (
+        <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
+          {valorPorCat.map(([cat, val]) => (
+            <div key={cat} onClick={() => setFiltroCat(filtroCat === cat ? 'todos' : cat)}
+              style={{ padding:'5px 12px', borderRadius:20, fontSize:12, fontWeight:700, cursor:'pointer',
+                background: filtroCat === cat ? '#C9A65622' : 'var(--surface)',
+                border:`1px solid ${filtroCat === cat ? '#C9A656' : 'var(--line)'}`,
+                color: filtroCat === cat ? '#C9A656' : 'var(--muted)' }}>
+              {cat} · {fmtR(val)}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Tabs */}
       <div style={S.tabs}>
@@ -218,6 +252,19 @@ export default function AdminLoja() {
 
       {/* Aba: Produtos */}
       {aba === 'produtos' && (
+        <>
+        <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap', alignItems:'center' }}>
+          <input style={{ ...S.input, flex:1, minWidth:180 }} placeholder="🔍 Buscar produto…"
+            value={buscaProd} onChange={e => setBuscaProd(e.target.value)} />
+          <select style={S.select} value={filtroCat} onChange={e => setFiltroCat(e.target.value)}>
+            <option value="todos">Todas categorias</option>
+            {CATS.map(c => <option key={c}>{c}</option>)}
+          </select>
+          {(buscaProd || filtroCat !== 'todos') && (
+            <button style={S.btnSm()} onClick={() => { setBuscaProd(''); setFiltroCat('todos') }}>✕ Limpar</button>
+          )}
+          <span style={{ fontSize:12, color:'var(--muted)' }}>{produtosFiltrados.length}/{produtos.length}</span>
+        </div>
         <table style={S.table}>
           <thead>
             <tr>
@@ -227,12 +274,12 @@ export default function AdminLoja() {
             </tr>
           </thead>
           <tbody>
-            {produtos.length === 0 && (
+            {produtosFiltrados.length === 0 && (
               <tr><td colSpan={6} style={{ ...S.td, color: 'var(--muted)', textAlign: 'center', padding: '2rem' }}>
-                Nenhum produto cadastrado.
+                Nenhum produto encontrado.
               </td></tr>
             )}
-            {produtos.map(p => (
+            {produtosFiltrados.map(p => (
               <tr key={p.id}>
                 <td style={S.td}><strong>{p.nome}</strong></td>
                 <td style={S.td}><span style={S.badge('#C9A656')}>{p.cat}</span></td>
@@ -255,6 +302,7 @@ export default function AdminLoja() {
             ))}
           </tbody>
         </table>
+        </>
       )}
 
       {/* Aba: Reservas */}

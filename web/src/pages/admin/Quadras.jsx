@@ -196,16 +196,22 @@ export default function Quadras() {
       </div>
 
       {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 10, marginBottom: 20 }}>
         {[
-          { label: 'Reservas hoje', value: kpis.hoje, color: '#5FB335' },
-          { label: 'Na semana', value: kpis.semana, color: '#C9A656' },
-          { label: 'Quadras ativas', value: kpis.quadrasAtivas, color: '#3b82f6' },
-          { label: 'Ocup. hoje', value: `${kpis.taxaOcup}%`, color: kpis.taxaOcup > 60 ? '#5FB335' : kpis.taxaOcup > 30 ? '#C9A656' : '#888' },
+          { label: 'Reservas hoje', value: kpis.hoje, color: '#5FB335', icon:'📅' },
+          { label: 'Na semana', value: kpis.semana, color: '#C9A656', icon:'📆' },
+          { label: 'Quadras ativas', value: kpis.quadrasAtivas, color: '#3b82f6', icon:'🎾' },
+          { label: 'Ocupação hoje', value: `${kpis.taxaOcup}%`,
+            color: kpis.taxaOcup > 60 ? '#5FB335' : kpis.taxaOcup > 30 ? '#C9A656' : '#888', icon:'📊',
+            sub: kpis.taxaOcup > 60 ? 'Alta ocupação' : kpis.taxaOcup > 30 ? 'Média' : 'Baixa' },
         ].map(k => (
-          <div key={k.label} style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, padding: '14px 16px', borderTop: `3px solid ${k.color}` }}>
-            <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>{k.label}</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: k.color }}>{k.value}</div>
+          <div key={k.label} style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, padding: '12px 16px', borderLeft: `4px solid ${k.color}` }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+              <span style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.8, fontWeight:700 }}>{k.label}</span>
+              <span style={{ fontSize:16 }}>{k.icon}</span>
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
+            {k.sub && <div style={{ fontSize:10, color:'var(--muted)', marginTop:3 }}>{k.sub}</div>}
           </div>
         ))}
       </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { api } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
@@ -19,6 +19,19 @@ function statusReal(m) {
   const hoje = new Date().toISOString().slice(0, 10)
   if (m.vencimento < hoje) return 'vencido'
   return 'pendente'
+}
+
+function exportCSV(lista, hoje) {
+  const headers = ['Sócio','Plano','Valor','Vencimento','Status','Pago Em']
+  const rows = lista.map(m => {
+    const st = m.status === 'pago' ? 'Pago' : m.status === 'cancelado' ? 'Cancelado' : m.vencimento < hoje ? 'Vencido' : 'Pendente'
+    return [m.socioNome, m.planoNome||'—', fmtR(m.valor), fmtData(m.vencimento), st, m.pagoEm ? fmtData(m.pagoEm.slice(0,10)) : '—']
+  })
+  const csv = [headers,...rows].map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n')
+  const blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'})
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href=url; a.download=`mensalidades_${new Date().toISOString().slice(0,10)}.csv`; a.click()
+  URL.revokeObjectURL(url)
 }
 
 const S = {
@@ -178,6 +191,7 @@ export default function Mensalidades() {
   const [socios, setSocios] = useState([])
   const [filtroStatus, setFiltroStatus] = useState('')
   const [filtroMes, setFiltroMes] = useState('')
+  const [buscaSocio, setBuscaSocio] = useState('')
   const [loading, setLoading] = useState(false)
   const [modalGerar, setModalGerar] = useState(false)
   const [modalNova, setModalNova] = useState(false)
@@ -214,9 +228,13 @@ export default function Mensalidades() {
   const inadTaxa  = mens.length > 0 ? ((vencidas.length / mens.length) * 100).toFixed(1) : 0
 
   /* Filtros */
-  let listaFiltrada = mens
-  if (filtroStatus) listaFiltrada = listaFiltrada.filter(m => statusReal(m) === filtroStatus)
-  if (filtroMes)    listaFiltrada = listaFiltrada.filter(m => (m.vencimento || '').startsWith(filtroMes))
+  const listaFiltrada = useMemo(() => {
+    let base = mens
+    if (filtroStatus) base = base.filter(m => statusReal(m) === filtroStatus)
+    if (filtroMes)    base = base.filter(m => (m.vencimento || '').startsWith(filtroMes))
+    if (buscaSocio)   base = base.filter(m => (m.socioNome||'').toLowerCase().includes(buscaSocio.toLowerCase()))
+    return base
+  }, [mens, filtroStatus, filtroMes, buscaSocio])
 
   /* CRUD */
   async function marcarPago(id) {
@@ -288,6 +306,8 @@ export default function Mensalidades() {
       <div style={S.header}>
         <div style={S.title}>💳 Mensalidades</div>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+          <button style={{ ...S.btn, background:'rgba(95,179,53,.15)', color:'var(--green)', border:'1px solid var(--green)' }}
+            onClick={() => exportCSV(listaFiltrada, hoje)}>📥 CSV</button>
           <button style={{ ...S.btn, background:'#25D366', color:'#fff' }}
             onClick={() => setModalWpp(true)}>
             📱 WhatsApp Cobrar
@@ -342,6 +362,13 @@ export default function Mensalidades() {
 
       {tab === 'cobranças' && (
         <>
+          {/* Busca por sócio */}
+          <div style={{ marginBottom:10 }}>
+            <input value={buscaSocio} onChange={e => setBuscaSocio(e.target.value)}
+              placeholder="🔍 Buscar por nome do sócio…"
+              style={{ width:'100%', padding:'8px 12px', background:'var(--surface)', border:'1px solid var(--line)',
+                borderRadius:8, color:'var(--cream)', fontSize:13, boxSizing:'border-box' }} />
+          </div>
           {/* Filter chips rápidos */}
           <div style={S.bar}>
             <FilterChip label="Todos" active={filtroStatus === ''} onClick={() => setFiltroStatus('')} count={counts['']} />

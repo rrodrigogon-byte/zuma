@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { api } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
@@ -35,6 +35,24 @@ const S = {
   btn:    { padding:'8px 16px', borderRadius:8, border:'none', cursor:'pointer', fontWeight:700, fontSize:12 },
   bar:    { display:'flex', gap:10, marginBottom:16, flexWrap:'wrap', alignItems:'center' },
   inp:    { padding:'7px 12px', borderRadius:8, border:'1px solid var(--line)', background:'var(--surface)', color:'var(--cream)', fontSize:13 },
+}
+
+/* ── KPI card com borderLeft stripe ── */
+function KpiCard({ label, value, color, sub, icon }) {
+  return (
+    <div style={{
+      background:'var(--surface)', border:'1px solid var(--line)', borderRadius:10,
+      padding:'14px 18px', borderLeft:`4px solid ${color || 'var(--green)'}`,
+      flex:1, minWidth:150,
+    }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
+        <div style={{ fontSize:11, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'.5px', fontWeight:700 }}>{label}</div>
+        {icon && <span style={{ fontSize:16 }}>{icon}</span>}
+      </div>
+      <div style={{ fontSize:22, fontWeight:800, color: color || 'var(--green)', lineHeight:1.1 }}>{value}</div>
+      {sub && <div style={{ fontSize:11, color:'var(--muted)', marginTop:4 }}>{sub}</div>}
+    </div>
+  )
 }
 
 /* ── Badge status ── */
@@ -218,6 +236,21 @@ export default function Financeiro() {
   const cats = form.tipo === 'receita' ? CAT_RECEITA : CAT_DESPESA
   const catsDisponiveis = tab === 'receitas' ? CAT_RECEITA : tab === 'despesas' ? CAT_DESPESA : [...CAT_RECEITA, ...CAT_DESPESA]
 
+  /* Alertas de vencimento */
+  const amanha = new Date(); amanha.setDate(amanha.getDate() + 1)
+  const fimSemana = new Date(); fimSemana.setDate(fimSemana.getDate() + 7)
+  const amStr = amanha.toISOString().slice(0,10)
+  const fimSemStr = fimSemana.toISOString().slice(0,10)
+
+  const alertasVencimento = useMemo(() => {
+    const pendentes = lancs.filter(l => l.status !== 'pago' && l.status !== 'cancelado' && l.vencimento)
+    const hoje_str = hoje
+    const vencendoHoje = pendentes.filter(l => l.vencimento === hoje_str)
+    const vencendoSemana = pendentes.filter(l => l.vencimento > hoje_str && l.vencimento <= fimSemStr)
+    const jáVencidos = pendentes.filter(l => l.vencimento < hoje_str)
+    return { vencendoHoje, vencendoSemana, jáVencidos }
+  }, [lancs, hoje])
+
   function handleExportCSV() {
     exportCSV(listaTabFiltrada.map(l => ({
       tipo: l.tipo,
@@ -240,40 +273,55 @@ export default function Financeiro() {
       </div>
 
       {/* Cards KPI */}
-      {resumo && (
-        <div style={S.cards}>
-          <div style={S.card}>
-            <div style={{ ...S.cNum, color: resumo.saldo >= 0 ? 'var(--green)' : '#ef4444' }}>{fmtR(resumo.saldo)}</div>
-            <div style={S.cLbl}>Saldo total</div>
-          </div>
-          <div style={S.card}>
-            <div style={S.cNum}>{fmtR(resumo.aReceber)}</div>
-            <div style={S.cLbl}>A receber</div>
-          </div>
-          <div style={S.card}>
-            <div style={{ ...S.cNum, color:'#ef4444' }}>{fmtR(resumo.aPagar)}</div>
-            <div style={S.cLbl}>A pagar</div>
-          </div>
-          <div style={S.card}>
-            <div style={{ ...S.cNum, color:'var(--green)' }}>{fmtR(resumo.recMes)}</div>
-            <div style={S.cLbl}>Rec. este mês</div>
-          </div>
-          <div style={S.card}>
-            <div style={{ ...S.cNum, color:'#ef4444' }}>{fmtR(resumo.despMes)}</div>
-            <div style={S.cLbl}>Desp. este mês</div>
-          </div>
-          <div style={S.card}>
-            <div style={{ ...S.cNum, color: (resumo.recMes - resumo.despMes) >= 0 ? 'var(--lime)' : '#ef4444' }}>
-              {fmtR(resumo.recMes - resumo.despMes)}
+      {resumo && (() => {
+        const resultado = (resumo.recMes||0) - (resumo.despMes||0)
+        const margem = resumo.recMes > 0 ? ((resultado/resumo.recMes)*100).toFixed(1) : 0
+        return (
+          <>
+            <div style={{ display:'flex', gap:10, flexWrap:'wrap', marginBottom:12 }}>
+              <KpiCard label="Saldo Total" value={fmtR(resumo.saldo)} color={resumo.saldo >= 0 ? 'var(--green)' : '#ef4444'} icon="💰" />
+              <KpiCard label="A Receber" value={fmtR(resumo.aReceber)} color='var(--green)' icon="📥" />
+              <KpiCard label="A Pagar" value={fmtR(resumo.aPagar)} color='#ef4444' icon="📤" />
+              <KpiCard label="Rec. Mês" value={fmtR(resumo.recMes)} color='var(--green)' icon="↑" />
+              <KpiCard label="Desp. Mês" value={fmtR(resumo.despMes)} color='#ef4444' icon="↓" />
+              <KpiCard label="Resultado Mês" value={fmtR(resultado)} color={resultado >= 0 ? 'var(--lime)' : '#ef4444'}
+                sub={`Margem: ${margem}%`} icon={resultado >= 0 ? '📈' : '📉'} />
+              <KpiCard label="Inadimplentes" value={resumo.inadimplentes} color={resumo.inadimplentes > 0 ? '#ef4444' : 'var(--green)'} icon="⚠️" />
             </div>
-            <div style={S.cLbl}>Resultado mês</div>
-          </div>
-          <div style={S.card}>
-            <div style={{ ...S.cNum, color:'#ef4444' }}>{resumo.inadimplentes}</div>
-            <div style={S.cLbl}>Inadimplentes</div>
-          </div>
-        </div>
-      )}
+            {/* Alertas de vencimento */}
+            {(alertasVencimento.vencendoHoje.length > 0 || alertasVencimento.jáVencidos.length > 0 || alertasVencimento.vencendoSemana.length > 0) && (
+              <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:16 }}>
+                {alertasVencimento.jáVencidos.length > 0 && (
+                  <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', borderRadius:8,
+                    background:'rgba(239,68,68,.1)', border:'1px solid rgba(239,68,68,.35)', cursor:'pointer' }}
+                    onClick={() => { setTab('todos'); setFiltroStatus('pendente') }}>
+                    <span>🔴</span>
+                    <span style={{ fontWeight:700, color:'#ef4444', fontSize:13 }}>{alertasVencimento.jáVencidos.length} Vencidos</span>
+                    <span style={{ color:'var(--muted)', fontSize:12 }}>{fmtR(alertasVencimento.jáVencidos.reduce((s,l)=>s+(l.valor||0),0))}</span>
+                  </div>
+                )}
+                {alertasVencimento.vencendoHoje.length > 0 && (
+                  <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', borderRadius:8,
+                    background:'rgba(251,191,36,.1)', border:'1px solid rgba(251,191,36,.35)', cursor:'pointer' }}
+                    onClick={() => { setTab('todos'); setFiltroDe(hoje); setFiltroAte(hoje) }}>
+                    <span>⚡</span>
+                    <span style={{ fontWeight:700, color:'#fbbf24', fontSize:13 }}>{alertasVencimento.vencendoHoje.length} Vencem Hoje</span>
+                    <span style={{ color:'var(--muted)', fontSize:12 }}>{fmtR(alertasVencimento.vencendoHoje.reduce((s,l)=>s+(l.valor||0),0))}</span>
+                  </div>
+                )}
+                {alertasVencimento.vencendoSemana.length > 0 && (
+                  <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', borderRadius:8,
+                    background:'rgba(95,179,53,.07)', border:'1px solid rgba(95,179,53,.25)' }}>
+                    <span>📅</span>
+                    <span style={{ fontWeight:700, color:'var(--green)', fontSize:13 }}>{alertasVencimento.vencendoSemana.length} Esta semana</span>
+                    <span style={{ color:'var(--muted)', fontSize:12 }}>{fmtR(alertasVencimento.vencendoSemana.reduce((s,l)=>s+(l.valor||0),0))}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )
+      })()}
 
       {/* Tabs */}
       <div style={{ display:'flex', gap:4, marginBottom:16, borderBottom:'1px solid var(--line)' }}>
@@ -291,9 +339,51 @@ export default function Financeiro() {
       {tab === 'resumo' && (
         <>
           <FluxoChart dados={fluxo} />
-          {resumo && (
-            <>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:16 }}>
+          {resumo && (() => {
+            const resultado = (resumo.recMes||0) - (resumo.despMes||0)
+            const margem = resumo.recMes > 0 ? ((resultado/resumo.recMes)*100) : 0
+            const margemColor = margem >= 20 ? 'var(--green)' : margem >= 0 ? '#fbbf24' : '#ef4444'
+            const recPct = resumo.recMes > 0 ? Math.min(100, Math.round((resultado/resumo.recMes)*100+100)/2) : 50
+            return (
+              <>
+                {/* Gauge resultado mês */}
+                <div style={{ ...S.card, marginBottom:16, borderLeft:'4px solid ' + margemColor }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+                    <div style={{ fontSize:14, fontWeight:800, color:'var(--cream)' }}>
+                      {resultado >= 0 ? '📈' : '📉'} Resultado do Mês Atual
+                    </div>
+                    <div style={{ fontSize:22, fontWeight:900, color:margemColor }}>{fmtR(resultado)}</div>
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:12 }}>
+                    {[
+                      { label:'Receitas', val:resumo.recMes, color:'var(--green)' },
+                      { label:'Despesas', val:resumo.despMes, color:'#ef4444' },
+                      { label:'Margem', val:`${margem.toFixed(1)}%`, color:margemColor, isStr:true },
+                    ].map(k => (
+                      <div key={k.label} style={{ textAlign:'center', padding:'8px', background:'rgba(0,0,0,.12)', borderRadius:8 }}>
+                        <div style={{ fontSize:11, color:'var(--muted)', marginBottom:4 }}>{k.label}</div>
+                        <div style={{ fontSize:16, fontWeight:800, color:k.color }}>{k.isStr ? k.val : fmtR(k.val)}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Barra receita vs despesa */}
+                  {resumo.recMes > 0 && (
+                    <div>
+                      <div style={{ height:8, borderRadius:4, background:'rgba(239,68,68,.25)', overflow:'hidden', position:'relative' }}>
+                        <div style={{ position:'absolute', left:0, top:0, height:'100%', borderRadius:4,
+                          width:`${Math.min(100,(resumo.recMes-resumo.despMes>=0 ? (resumo.despMes/resumo.recMes)*100 : 100))}%`,
+                          background:'#ef4444' }} />
+                        <div style={{ position:'absolute', left:0, top:0, height:'100%', borderRadius:4,
+                          width:`${Math.min(100,100)}%`, background:'var(--green)', opacity:.25 }} />
+                      </div>
+                      <div style={{ display:'flex', justifyContent:'space-between', fontSize:10, color:'var(--muted)', marginTop:4 }}>
+                        <span style={{ color:'#ef4444' }}>■ Despesas {resumo.recMes > 0 ? ((resumo.despMes/resumo.recMes)*100).toFixed(0) : 0}%</span>
+                        <span style={{ color:'var(--green)' }}>■ Receitas 100%</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:16 }}>
                 <div style={S.card}>
                   <div style={{ fontWeight:700, color:'var(--cream)', marginBottom:12 }}>Receitas por fonte</div>
                   {[
@@ -322,9 +412,10 @@ export default function Financeiro() {
                   ))}
                 </div>
               </div>
-              <DRE resumo={resumo} />
-            </>
-          )}
+                <DRE resumo={resumo} />
+              </>
+            )
+          })()}
         </>
       )}
 

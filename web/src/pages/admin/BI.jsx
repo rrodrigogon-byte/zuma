@@ -136,6 +136,7 @@ export default function BI() {
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
+  const [periodoAtivo, setPeriodoAtivo] = useState('mes') // 'hoje'|'semana'|'mes'|'ano'
   const intervalRef = useRef(null)
 
   async function fetchData() {
@@ -249,26 +250,34 @@ export default function BI() {
               atualizado {lastUpdate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
             </span>
           )}
-          <button
-            style={S.btnSm(autoRefresh)}
-            onClick={() => setAutoRefresh(a => !a)}
-            title={autoRefresh ? 'Auto-refresh ativo (30s) — clique para pausar' : 'Auto-refresh pausado — clique para ativar'}
-          >
+          <button style={S.btnSm(autoRefresh)} onClick={() => setAutoRefresh(a => !a)}>
             {autoRefresh ? '⏸ Auto' : '▶ Auto'}
           </button>
-          <button
-            style={S.btnSm(false)}
-            onClick={fetchData}
-          >
-            🔄 Atualizar
-          </button>
-          <button
-            style={{ ...S.btnSm(false), background: '#0E2E1C', color: '#8FD64A', borderColor: '#5FB335' }}
-            onClick={handleExportCSV}
-          >
-            ⬇ CSV
-          </button>
+          <button style={S.btnSm(false)} onClick={fetchData}>🔄 Atualizar</button>
+          <button style={{ ...S.btnSm(false), background: '#0E2E1C', color: '#8FD64A', borderColor: '#5FB335' }}
+            onClick={handleExportCSV}>⬇ CSV</button>
         </div>
+      </div>
+
+      {/* Filtro de período */}
+      <div style={{ display:'flex', gap:6, marginBottom:'1rem', flexWrap:'wrap', alignItems:'center' }}>
+        <span style={{ fontSize:12, color:'var(--muted)', fontWeight:600 }}>Período:</span>
+        {[
+          { key:'hoje', label:'Hoje' },
+          { key:'semana', label:'7 dias' },
+          { key:'mes', label:'30 dias' },
+          { key:'ano', label:'12 meses' },
+        ].map(p => (
+          <button key={p.key} onClick={() => setPeriodoAtivo(p.key)} style={{
+            padding:'4px 14px', borderRadius:20, border:`1.5px solid ${periodoAtivo===p.key ? 'var(--green)' : 'var(--line)'}`,
+            background: periodoAtivo===p.key ? 'rgba(95,179,53,.15)' : 'transparent',
+            color: periodoAtivo===p.key ? 'var(--green)' : 'var(--muted)',
+            cursor:'pointer', fontSize:12, fontWeight:700,
+          }}>{p.label}</button>
+        ))}
+        <span style={{ fontSize:11, color:'var(--muted)', marginLeft:6 }}>
+          {periodoAtivo==='hoje' ? 'Dados do dia atual' : periodoAtivo==='semana' ? 'Últimos 7 dias' : periodoAtivo==='mes' ? 'Últimos 30 dias' : 'Últimos 12 meses'}
+        </span>
       </div>
 
       {/* KPIs principais */}

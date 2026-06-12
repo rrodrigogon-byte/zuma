@@ -149,6 +149,9 @@ export default function Socios() {
 
   const totalReceber = socios.reduce((s, sc) => s + (sc.saldo || 0), 0)
   const emAtraso     = socios.filter(sc => statusSocio(sc) === 'late').length
+  const emAtencao    = socios.filter(sc => statusSocio(sc) === 'warn').length
+  const emOk         = socios.filter(sc => statusSocio(sc) === 'ok').length
+  const totalLimite  = socios.reduce((s, sc) => s + (sc.limite || 0), 0)
 
   const sociosFiltrados = useMemo(() => {
     return socios.filter(sc => {
@@ -173,19 +176,24 @@ export default function Socios() {
       </div>
 
       {/* KPIs */}
-      <div className="grid3" style={{ marginBottom: 20 }}>
-        <div className="kpi">
-          <div className="kpi-label">Total Sócios</div>
-          <div className="kpi-value">{socios.length}</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">Total a Receber</div>
-          <div className="kpi-value" style={{ color: 'var(--lime)', fontSize: 22 }}>{fmtR(totalReceber)}</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">Em Atraso</div>
-          <div className="kpi-value" style={{ color: emAtraso > 0 ? '#e74c3c' : 'var(--green)' }}>{emAtraso}</div>
-        </div>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:10, marginBottom:20 }}>
+        {[
+          { label:'Total Sócios', val:socios.length, color:'#3b82f6', icon:'👥' },
+          { label:'A Receber', val:fmtR(totalReceber), color:'var(--lime)', icon:'💰' },
+          { label:'Limite Total', val:fmtR(totalLimite), color:'var(--green)', icon:'📊' },
+          { label:'Em Atraso', val:emAtraso, color: emAtraso > 0 ? '#e74c3c' : 'var(--green)', icon:'🔴' },
+          { label:'Atenção', val:emAtencao, color: emAtencao > 0 ? '#C9A656' : 'var(--muted)', icon:'⚠️' },
+          { label:'Regular', val:emOk, color:'var(--green)', icon:'✅' },
+        ].map(k => (
+          <div key={k.label} style={{ background:'var(--surface)', border:'1px solid var(--line)', borderRadius:10,
+            padding:'12px 16px', borderLeft:`4px solid ${k.color}` }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+              <span style={{ fontSize:11, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'.4px', fontWeight:700 }}>{k.label}</span>
+              <span style={{ fontSize:16 }}>{k.icon}</span>
+            </div>
+            <div style={{ fontSize:20, fontWeight:800, color:k.color }}>{k.val}</div>
+          </div>
+        ))}
       </div>
 
       {/* Filtros */}

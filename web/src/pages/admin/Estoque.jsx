@@ -5,12 +5,28 @@ import Modal from '../../components/Modal'
 
 const EMPTY_ENTRADA = { produtoId: '', qtd: '', custo: '' }
 
+function exportCSV(lista) {
+  const headers = ['Produto','Categoria','Qtd Atual','Mínimo','Custo Unit.','Valor Total','Status']
+  const rows = lista.map(it => {
+    const qtd = it.qtd ?? 0
+    const min = it.min ?? 0
+    const custo = it.custo || 0
+    return [it.nome, it.cat || '—', qtd, min, fmtR(custo), fmtR(qtd*custo), qtd < min ? 'Baixo' : 'OK']
+  })
+  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n')
+  const blob = new Blob(['\uFEFF' + csv], { type:'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href=url; a.download=`estoque_${new Date().toISOString().slice(0,10)}.csv`; a.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function Estoque() {
   const { toast } = useToast()
   const [estoque, setEstoque]       = useState([])
   const [loading, setLoading]       = useState(true)
   const [filtro, setFiltro]         = useState('todos')   // 'todos' | 'baixo' | 'ok'
   const [busca, setBusca]           = useState('')
+  const [filtroCat, setFiltroCat]   = useState('Todas')
   const [modal, setModal]           = useState(false)
   const [form, setForm]             = useState(EMPTY_ENTRADA)
   const [saving, setSaving]         = useState(false)
@@ -103,18 +119,37 @@ export default function Estoque() {
   const alertas = estoque.filter(it => (it.qtd ?? 0) < (it.min ?? 0))
   const valorTotal = estoque.reduce((s, it) => s + (it.qtd || 0) * (it.custo || 0), 0)
 
+  // Extrair categorias únicas
+  const categorias = useMemo(() => {
+    const cats = [...new Set(estoque.map(it => it.cat || 'Sem categoria').filter(Boolean))]
+    return ['Todas', ...cats.sort()]
+  }, [estoque])
+
+  // Breakdown valor por categoria
+  const valorPorCat = useMemo(() => {
+    const map = {}
+    estoque.forEach(it => {
+      const cat = it.cat || 'Sem categoria'
+      map[cat] = (map[cat] || 0) + (it.qtd || 0) * (it.custo || 0)
+    })
+    return Object.entries(map).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1])
+  }, [estoque])
+
   const lista = useMemo(() => {
     let base = filtro === 'baixo'
       ? estoque.filter(it => (it.qtd ?? 0) < (it.min ?? 0))
       : filtro === 'ok'
       ? estoque.filter(it => (it.qtd ?? 0) >= (it.min ?? 0))
       : estoque
+    if (filtroCat !== 'Todas') {
+      base = base.filter(it => (it.cat || 'Sem categoria') === filtroCat)
+    }
     if (busca) {
       const q = busca.toLowerCase()
       base = base.filter(it => (it.nome || '').toLowerCase().includes(q))
     }
     return base
-  }, [estoque, filtro, busca])
+  }, [estoque, filtro, busca, filtroCat])
 
   if (loading) return <div className="page"><p style={{ color: 'var(--muted)' }}>Carregando…</p></div>
 
@@ -155,6 +190,7 @@ export default function Estoque() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <h1 className="page-title" style={{ margin: 0 }}>Estoque</h1>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => exportCSV(lista)} title="Exportar CSV">📥 CSV</button>
           <button className="btn btn-secondary btn-sm" onClick={load}>↺ Atualizar</button>
           <button className="btn btn-primary btn-sm" onClick={() => { setForm(EMPTY_ENTRADA); setModal(true) }}>
             + Entrada
@@ -193,30 +229,52 @@ export default function Estoque() {
       )}
 
       {/* KPIs */}
-      <div className="grid2" style={{ marginBottom: 24, maxWidth: 480 }}>
-        <div className="kpi">
-          <div className="kpi-label">Alertas Estoque Baixo</div>
-          <div className="kpi-value" style={{ color: alertas.length > 0 ? '#e74c3c' : 'var(--green)' }}>
-            {alertas.length}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(155px,1fr))', gap:10, marginBottom:20 }}>
+        <div style={{ background:'var(--surface)', border:'1px solid var(--line)', borderRadius:10, padding:'12px 16px',
+          borderLeft:`4px solid ${alertas.length > 0 ? '#e74c3c' : 'var(--green)'}` }}>
+          <div style={{ fontSize:11, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'.5px', marginBottom:4 }}>Alertas Baixo</div>
+          <div style={{ fontSize:22, fontWeight:800, color: alertas.length > 0 ? '#e74c3c' : 'var(--green)' }}>{alertas.length}</div>
+          {alertas.length > 0 && <div style={{ fontSize:10, color:'#e74c3c', marginTop:3 }}>{alertas.slice(0,2).map(a=>a.nome).join(', ')}{alertas.length>2?` +${alertas.length-2}`:''}</div>}
+        </div>
+        <div style={{ background:'var(--surface)', border:'1px solid var(--line)', borderRadius:10, padding:'12px 16px',
+          borderLeft:'4px solid var(--lime)' }}>
+          <div style={{ fontSize:11, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'.5px', marginBottom:4 }}>Valor em Estoque</div>
+          <div style={{ fontSize:20, fontWeight:800, color:'var(--lime)' }}>{fmtR(valorTotal)}</div>
+        </div>
+        <div style={{ background:'var(--surface)', border:'1px solid var(--line)', borderRadius:10, padding:'12px 16px',
+          borderLeft:'4px solid #3b82f6' }}>
+          <div style={{ fontSize:11, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'.5px', marginBottom:4 }}>Itens Cadastrados</div>
+          <div style={{ fontSize:22, fontWeight:800, color:'#3b82f6' }}>{estoque.length}</div>
+        </div>
+        {valorPorCat.length > 0 && (
+          <div style={{ background:'var(--surface)', border:'1px solid var(--line)', borderRadius:10, padding:'12px 16px',
+            borderLeft:'4px solid #C9A656', gridColumn:'span 1' }}>
+            <div style={{ fontSize:11, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'.5px', marginBottom:6 }}>Valor por Categoria</div>
+            {valorPorCat.slice(0,3).map(([cat, val]) => (
+              <div key={cat} style={{ display:'flex', justifyContent:'space-between', fontSize:11, marginBottom:3 }}>
+                <span style={{ color:'var(--muted)' }}>{cat}</span>
+                <span style={{ fontWeight:700, color:'#C9A656' }}>{fmtR(val)}</span>
+              </div>
+            ))}
           </div>
-          {alertas.length > 0 && (
-            <div className="kpi-sub">{alertas.map(a => a.nome).join(', ')}</div>
-          )}
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">Valor Total em Estoque</div>
-          <div className="kpi-value" style={{ color: 'var(--lime)', fontSize: 22 }}>{fmtR(valorTotal)}</div>
-        </div>
+        )}
       </div>
 
       {/* Busca + Filtros rápidos */}
-      <input
-        style={{ width: '100%', padding: '8px 12px', background: 'var(--card)', border: '1px solid #1e4a2e', borderRadius: 8, color: '#fff', fontSize: 13, marginBottom: 10, boxSizing: 'border-box' }}
-        placeholder="🔍 Buscar produto por nome…"
-        value={busca}
-        onChange={e => setBusca(e.target.value)}
-      />
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+      <div style={{ display:'flex', gap:8, marginBottom:8, flexWrap:'wrap', alignItems:'center' }}>
+        <input
+          style={{ flex:1, minWidth:180, padding: '8px 12px', background: 'var(--card)', border: '1px solid #1e4a2e', borderRadius: 8, color: '#fff', fontSize: 13, boxSizing: 'border-box' }}
+          placeholder="🔍 Buscar produto por nome…"
+          value={busca}
+          onChange={e => setBusca(e.target.value)}
+        />
+        <select value={filtroCat} onChange={e => setFiltroCat(e.target.value)}
+          style={{ padding:'8px 10px', background:'var(--surface)', border:'1px solid var(--line)', borderRadius:8, color:'var(--cream)', fontSize:13 }}>
+          {categorias.map(c => <option key={c}>{c}</option>)}
+        </select>
+        <span style={{ fontSize:12, color:'var(--muted)', whiteSpace:'nowrap' }}>{lista.length} itens</span>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap:'wrap' }}>
         {[
           { key: 'todos', label: 'Todos' },
           { key: 'baixo', label: '⚠️ Abaixo do mínimo' },
