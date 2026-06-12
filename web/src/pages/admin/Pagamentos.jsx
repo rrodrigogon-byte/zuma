@@ -128,6 +128,7 @@ export default function Pagamentos() {
   const [filtroStatus, setFiltroStatus] = useState('todos')
   const [filtroMeio, setFiltroMeio] = useState('todos')
   const [filtroPeriodo, setFiltroPeriodo] = useState('todos')
+  const [busca, setBusca] = useState('')
   const [confirmando, setConfirmando] = useState(null)
   const [detalhe, setDetalhe] = useState(null)
   const { toast } = useToast()
@@ -136,7 +137,7 @@ export default function Pagamentos() {
     setLoading(true)
     try {
       const data = await api.get('/api/admin/pagamentos')
-      setPagamentos(data)
+      setPagamentos(Array.isArray(data) ? data : (data.pagamentos || []))
     } catch (e) {
       toast('Erro ao carregar pagamentos', 'error')
     } finally {
@@ -148,6 +149,7 @@ export default function Pagamentos() {
 
   const filtrados = useMemo(() => {
     const cutoff = startOf(filtroPeriodo)
+    const q = busca.toLowerCase()
     return pagamentos.filter((p) => {
       if (filtroStatus !== 'todos' && p.status !== filtroStatus) return false
       if (filtroMeio !== 'todos') {
@@ -157,9 +159,10 @@ export default function Pagamentos() {
         } else if (m !== filtroMeio) return false
       }
       if (cutoff && p.criadoEm && p.criadoEm < cutoff) return false
+      if (q && !((p.usuario || '').toLowerCase().includes(q) || (p.tipo || '').toLowerCase().includes(q) || String(p.id).includes(q))) return false
       return true
     })
-  }, [pagamentos, filtroStatus, filtroMeio, filtroPeriodo])
+  }, [pagamentos, filtroStatus, filtroMeio, filtroPeriodo, busca])
 
   const totalFiltrado = filtrados.filter((p) => p.status === 'pago').reduce((s, p) => s + (p.valor || 0), 0)
   const totalRecebido = pagamentos.filter((p) => p.status === 'pago').reduce((s, p) => s + (p.valor || 0), 0)
@@ -241,6 +244,14 @@ export default function Pagamentos() {
         </h2>
         <BarChart7 data={chart7} />
       </div>
+
+      {/* Busca */}
+      <input
+        style={{ width: '100%', padding: '8px 12px', background: 'var(--card)', border: '1px solid #1e4a2e', borderRadius: 8, color: '#fff', fontSize: 13, marginBottom: 12, boxSizing: 'border-box' }}
+        placeholder="🔍 Buscar por usuário, tipo ou ID…"
+        value={busca}
+        onChange={e => setBusca(e.target.value)}
+      />
 
       {/* Filtros */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>

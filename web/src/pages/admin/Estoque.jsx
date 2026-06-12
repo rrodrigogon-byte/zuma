@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { api, fmtR } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
@@ -10,11 +10,13 @@ export default function Estoque() {
   const [estoque, setEstoque]       = useState([])
   const [loading, setLoading]       = useState(true)
   const [filtro, setFiltro]         = useState('todos')   // 'todos' | 'baixo' | 'ok'
+  const [busca, setBusca]           = useState('')
   const [modal, setModal]           = useState(false)
   const [form, setForm]             = useState(EMPTY_ENTRADA)
   const [saving, setSaving]         = useState(false)
   const [editMin, setEditMin]       = useState({})        // { id: valorStr }
   const [expandido, setExpandido]   = useState({})        // { id: bool } — histórico aberto
+  const [ajustando, setAjustando]   = useState({})        // { id: bool } — loading de ajuste rápido
   const minRefs                     = useRef({})
 
   async function load() {
@@ -79,14 +81,40 @@ export default function Estoque() {
     setExpandido(prev => ({ ...prev, [key]: !prev[key] }))
   }
 
+  // Ajuste rápido +1/-1
+  async function ajustarRapido(item, delta) {
+    const key = item.id ?? item.produtoId
+    const novaQtd = Math.max(0, (item.qtd ?? 0) + delta)
+    setAjustando(prev => ({ ...prev, [key]: true }))
+    try {
+      if (delta > 0) {
+        await api.post('/api/admin/estoque/entrada', { produtoId: key, qtd: delta })
+      } else {
+        await api.post('/api/admin/estoque/ajuste', { produtoId: key, qtd: novaQtd })
+      }
+      load()
+    } catch (e) {
+      toast(e.message || 'Erro ao ajustar', 'error')
+    } finally {
+      setAjustando(prev => ({ ...prev, [key]: false }))
+    }
+  }
+
   const alertas = estoque.filter(it => (it.qtd ?? 0) < (it.min ?? 0))
   const valorTotal = estoque.reduce((s, it) => s + (it.qtd || 0) * (it.custo || 0), 0)
 
-  const lista = filtro === 'baixo'
-    ? estoque.filter(it => (it.qtd ?? 0) < (it.min ?? 0))
-    : filtro === 'ok'
-    ? estoque.filter(it => (it.qtd ?? 0) >= (it.min ?? 0))
-    : estoque
+  const lista = useMemo(() => {
+    let base = filtro === 'baixo'
+      ? estoque.filter(it => (it.qtd ?? 0) < (it.min ?? 0))
+      : filtro === 'ok'
+      ? estoque.filter(it => (it.qtd ?? 0) >= (it.min ?? 0))
+      : estoque
+    if (busca) {
+      const q = busca.toLowerCase()
+      base = base.filter(it => (it.nome || '').toLowerCase().includes(q))
+    }
+    return base
+  }, [estoque, filtro, busca])
 
   if (loading) return <div className="page"><p style={{ color: 'var(--muted)' }}>Carregando…</p></div>
 
@@ -181,7 +209,13 @@ export default function Estoque() {
         </div>
       </div>
 
-      {/* Filtros rápidos */}
+      {/* Busca + Filtros rápidos */}
+      <input
+        style={{ width: '100%', padding: '8px 12px', background: 'var(--card)', border: '1px solid #1e4a2e', borderRadius: 8, color: '#fff', fontSize: 13, marginBottom: 10, boxSizing: 'border-box' }}
+        placeholder="🔍 Buscar produto por nome…"
+        value={busca}
+        onChange={e => setBusca(e.target.value)}
+      />
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         {[
           { key: 'todos', label: 'Todos' },
@@ -226,13 +260,14 @@ export default function Estoque() {
               <th style={{ textAlign: 'center' }}>Mínimo</th>
               <th>Custo Unit.</th>
               <th>Valor Total</th>
+              <th style={{ textAlign: 'center' }}>Ajuste Rápido</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {lista.length === 0 && (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', color: 'var(--muted)', padding: '24px 0' }}>
+                <td colSpan={8} style={{ textAlign: 'center', color: 'var(--muted)', padding: '24px 0' }}>
                   Nenhum item encontrado.
                 </td>
               </tr>
@@ -316,6 +351,22 @@ export default function Estoque() {
 
                     <td>{it.custo != null ? fmtR(it.custo) : '—'}</td>
                     <td>{fmtR(qtd * (it.custo || 0))}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      <div style={{ display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
+                        <button
+                          onClick={() => ajustarRapido(it, -1)}
+                          disabled={ajustando[key] || qtd <= 0}
+                          style={{ width: 26, height: 26, borderRadius: 6, border: '1px solid #e74c3c', background: '#e74c3c22', color: '#e74c3c', cursor: 'pointer', fontWeight: 800, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: qtd <= 0 ? 0.4 : 1 }}>
+                          −
+                        </button>
+                        <button
+                          onClick={() => ajustarRapido(it, 1)}
+                          disabled={ajustando[key]}
+                          style={{ width: 26, height: 26, borderRadius: 6, border: '1px solid #5FB335', background: '#5FB33522', color: '#5FB335', cursor: 'pointer', fontWeight: 800, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          +
+                        </button>
+                      </div>
+                    </td>
                     <td>
                       {hist.length > 0 && (
                         <button
@@ -332,7 +383,7 @@ export default function Estoque() {
                   {/* Linha de histórico expandível */}
                   {aberto && hist.length > 0 && (
                     <tr key={`${key}-hist`}>
-                      <td colSpan={7} style={{ padding: '8px 16px 12px', background: 'rgba(0,0,0,.2)' }}>
+                      <td colSpan={8} style={{ padding: '8px 16px 12px', background: 'rgba(0,0,0,.2)' }}>
                         <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6, fontWeight: 600 }}>
                           Últimas movimentações
                         </div>

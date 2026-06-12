@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { api, fmtR, fmtDate, fmtDateOnly } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
@@ -91,8 +91,25 @@ export default function Cupons() {
     navigator.clipboard.writeText(code).then(() => toast('Código copiado!'))
   }
 
+  const [busca, setBusca]           = useState('')
+  const [filtroAtivo, setFiltroAtivo] = useState('todos') // 'todos' | 'ativo' | 'inativo' | 'expirado'
+
   const ativos       = cupons.filter(c => c.ativo && !isExpired(c.validade)).length
   const totalUsos    = cupons.reduce((s, c) => s + (c.usos || 0), 0)
+
+  const cuponsFiltrados = useMemo(() => {
+    return cupons.filter(c => {
+      const expired = isExpired(c.validade)
+      if (filtroAtivo === 'ativo' && (!c.ativo || expired)) return false
+      if (filtroAtivo === 'inativo' && (c.ativo || expired)) return false
+      if (filtroAtivo === 'expirado' && !expired) return false
+      if (busca) {
+        const q = busca.toLowerCase()
+        if (!(c.codigo || '').toLowerCase().includes(q) && !(c.descricao || '').toLowerCase().includes(q)) return false
+      }
+      return true
+    })
+  }, [cupons, busca, filtroAtivo])
 
   const kpiStyle = {
     background: 'var(--surface)', border: '1px solid var(--line)',
@@ -124,12 +141,29 @@ export default function Cupons() {
         </div>
       </div>
 
+      {/* Busca + filtros */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+        <input
+          style={{ flex: 1, minWidth: 200, padding: '7px 12px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, color: 'var(--cream)', fontSize: 13 }}
+          placeholder="🔍 Buscar por código ou descrição…"
+          value={busca}
+          onChange={e => setBusca(e.target.value)}
+        />
+        {[['todos','Todos'],['ativo','Ativos'],['inativo','Inativos'],['expirado','Expirados']].map(([val,label]) => (
+          <button key={val}
+            onClick={() => setFiltroAtivo(val)}
+            style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid', borderColor: filtroAtivo === val ? 'var(--green)' : 'var(--line)', background: filtroAtivo === val ? 'rgba(95,179,53,.15)' : 'transparent', color: filtroAtivo === val ? 'var(--green)' : 'var(--muted)', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* Table */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: 48 }}><div className="spinner" /></div>
-      ) : cupons.length === 0 ? (
+      ) : cuponsFiltrados.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 48, color: 'var(--muted)' }}>
-          Nenhum cupom cadastrado.
+          Nenhum cupom encontrado.
         </div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
@@ -147,7 +181,7 @@ export default function Cupons() {
               </tr>
             </thead>
             <tbody>
-              {cupons.map(c => {
+              {cuponsFiltrados.map(c => {
                 const expired = isExpired(c.validade)
                 return (
                   <tr key={c.id}>

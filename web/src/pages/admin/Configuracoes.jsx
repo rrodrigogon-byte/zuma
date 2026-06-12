@@ -46,6 +46,41 @@ function Field({ label, children }) {
   )
 }
 
+/** Toggle estilo switch ON/OFF */
+function Toggle({ checked, onChange, disabled }) {
+  return (
+    <button
+      onClick={() => !disabled && onChange(!checked)}
+      disabled={disabled}
+      style={{
+        position: 'relative',
+        display: 'inline-flex',
+        alignItems: 'center',
+        width: 52,
+        height: 28,
+        borderRadius: 999,
+        background: checked ? 'var(--green)' : 'var(--line)',
+        border: 'none',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        transition: 'background .2s',
+        padding: 0,
+        flexShrink: 0,
+      }}
+    >
+      <span style={{
+        position: 'absolute',
+        left: checked ? 26 : 4,
+        width: 20,
+        height: 20,
+        borderRadius: '50%',
+        background: '#fff',
+        boxShadow: '0 1px 4px rgba(0,0,0,.3)',
+        transition: 'left .2s',
+      }} />
+    </button>
+  )
+}
+
 export default function Configuracoes() {
   const { toast } = useToast()
 
@@ -57,18 +92,28 @@ export default function Configuracoes() {
   const [savingBar, setSavingBar] = useState(false)
   const [savingPix, setSavingPix] = useState(false)
 
+  // Pagamentos
+  const [modoSimulado, setModoSimulado]   = useState(false)   // config.pagamentos.modoSimulado
+  const [pagAtivos, setPagAtivos]         = useState(false)   // env-based (lido-only)
+  const [savingPag, setSavingPag]         = useState(false)
+
   // reset modal
-  const [resetStep, setResetStep] = useState(0)   // 0=idle 1=confirm 2=type
-  const [resetInput, setResetInput] = useState('')
-  const [resetting, setResetting] = useState(false)
+  const [resetStep, setResetStep]     = useState(0)   // 0=idle 1=confirm 2=type
+  const [resetInput, setResetInput]   = useState('')
+  const [resetting, setResetting]     = useState(false)
 
   async function load() {
     setLoading(true)
     try {
-      const data = await api.get('/api/admin/config')
+      const [data, status] = await Promise.all([
+        api.get('/api/admin/config'),
+        api.get('/api/pagamentos/status').catch(() => ({ ativo: false })),
+      ])
       if (data.evento) setEvento({ ...evento, ...data.evento })
-      if (data.bar)    setBar({ mesasFisicas: data.bar.mesasFisicas ?? '', taxaServico: data.taxaServico ?? '' })
+      if (data.bar)    setBar({ mesasFisicas: data.bar.mesasFisicas ?? '', taxaServico: data.bar.taxaServico ?? '' })
       if (data.pix)    setPix({ chave: data.pix.chave ?? '', nome: data.pix.nome ?? '', cidade: data.pix.cidade ?? '' })
+      setPagAtivos(!!status.ativo)
+      setModoSimulado(!!(data.pagamentos?.modoSimulado))
     } catch {
       toast('Erro ao carregar configurações', true)
     } finally {
@@ -88,6 +133,10 @@ export default function Configuracoes() {
     } finally {
       setSaving(false)
     }
+  }
+
+  async function savePagamentos() {
+    await saveSection({ pagamentos: { modoSimulado } }, setSavingPag)
   }
 
   async function handleReset() {
@@ -212,6 +261,95 @@ export default function Configuracoes() {
               onChange={e => setPix(p => ({ ...p, cidade: e.target.value }))} />
           </Field>
         </div>
+      </SectionCard>
+
+      {/* Pagamentos — Mercado Pago */}
+      <SectionCard
+        title="💳 Pagamentos & Mercado Pago"
+        onSave={savePagamentos}
+        saving={savingPag}
+      >
+        {/* Status atual (env-based, read-only) */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          background: pagAtivos ? 'rgba(95,179,53,.10)' : 'rgba(201,166,86,.08)',
+          border: `1px solid ${pagAtivos ? 'rgba(95,179,53,.35)' : 'rgba(201,166,86,.30)'}`,
+          borderRadius: 8, padding: '10px 14px', marginBottom: 20, fontSize: 13,
+        }}>
+          <span style={{
+            width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+            background: pagAtivos ? 'var(--green)' : 'var(--gold)',
+          }} />
+          <div>
+            <strong style={{ color: pagAtivos ? 'var(--green)' : 'var(--gold)' }}>
+              {pagAtivos ? 'Mercado Pago ativo' : 'Modo simulado (sem env vars de produção)'}
+            </strong>
+            <p style={{ margin: '2px 0 0', color: 'var(--muted)', fontSize: 12 }}>
+              {pagAtivos
+                ? 'Variáveis PIX_CHAVE / MP_TOKEN detectadas no servidor.'
+                : 'Configure PIX_CHAVE ou MP_TOKEN nas variáveis de ambiente do servidor para ativar pagamentos reais.'}
+            </p>
+          </div>
+        </div>
+
+        {/* Toggle forçar simulação */}
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+          gap: 16, padding: '14px 0', borderTop: '1px solid var(--line)',
+        }}>
+          <div style={{ flex: 1 }}>
+            <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 700, color: 'var(--cream)' }}>
+              Forçar modo simulado
+            </p>
+            <p style={{ margin: 0, fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
+              Quando ativado, todos os pagamentos entram em modo simulação — mesmo que as variáveis de produção estejam configuradas.
+              Útil para testes sem movimentar dinheiro real.
+            </p>
+          </div>
+          <Toggle
+            checked={modoSimulado}
+            onChange={setModoSimulado}
+          />
+        </div>
+
+        {/* Toggle pagamentos por meio disponíveis */}
+        <div style={{
+          marginTop: 16, padding: '14px 0', borderTop: '1px solid var(--line)',
+        }}>
+          <p style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: 'var(--muted)' }}>
+            Meios de pagamento aceitos no PDV
+          </p>
+          {['pix', 'cartao', 'dinheiro', 'carteira'].map(meio => (
+            <div key={meio} style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,.04)',
+            }}>
+              <span style={{ fontSize: 13, color: 'var(--cream)', textTransform: 'capitalize', fontWeight: 600 }}>
+                {meio === 'pix' ? '📱 PIX' : meio === 'cartao' ? '💳 Cartão' : meio === 'dinheiro' ? '💵 Dinheiro' : '👛 Carteira'}
+              </span>
+              <span style={{
+                fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999,
+                background: 'rgba(95,179,53,.15)', color: 'var(--green)',
+              }}>
+                ativo
+              </span>
+            </div>
+          ))}
+          <p style={{ marginTop: 10, fontSize: 11, color: 'var(--muted)' }}>
+            Para desativar meios de pagamento, edite <code>config.pagamentos.meios</code> via API.
+          </p>
+        </div>
+
+        {/* Aviso quando modoSimulado ativo */}
+        {modoSimulado && (
+          <div style={{
+            marginTop: 16,
+            background: 'rgba(201,166,86,.10)', border: '1px solid rgba(201,166,86,.35)',
+            borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--gold)',
+          }}>
+            ⚠️ <strong>Modo simulado ativo:</strong> ao salvar, todos os pagamentos PIX passarão a exigir confirmação manual — nenhum valor real será cobrado.
+          </div>
+        )}
       </SectionCard>
 
       {/* Aparência */}

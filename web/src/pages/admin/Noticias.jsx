@@ -130,10 +130,16 @@ export default function Noticias() {
     }
   }
 
+  const [busca, setBusca] = useState('')
+
   const filtradas = noticias.filter(n => {
     if (filtro === 'publicados') return n.publicado
     if (filtro === 'rascunhos') return !n.publicado
     return true
+  }).filter(n => {
+    if (!busca) return true
+    const q = busca.toLowerCase()
+    return (n.titulo || '').toLowerCase().includes(q) || (n.resumo || '').toLowerCase().includes(q)
   })
 
   return (
@@ -151,6 +157,13 @@ export default function Noticias() {
           <button className="btn btn-primary btn-sm" onClick={openCriar}>+ Nova Notícia</button>
         </div>
       </div>
+
+      <input
+        style={{ width: '100%', padding: '8px 12px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, color: 'var(--fg)', fontSize: 13, marginBottom: 14, boxSizing: 'border-box' }}
+        placeholder="🔍 Buscar por título ou resumo…"
+        value={busca}
+        onChange={e => setBusca(e.target.value)}
+      />
 
       {loading ? (
         <p style={{ color: 'var(--muted)' }}>Carregando…</p>
