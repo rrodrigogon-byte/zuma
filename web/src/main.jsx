@@ -17,3 +17,17 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     </BrowserRouter>
   </React.StrictMode>
 )
+
+// ── PWA Service Worker ────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/sw.js', { scope: '/' })
+      .then(reg => {
+        console.log('[PWA] Service Worker registrado:', reg.scope)
+        // Verifica atualizações a cada 60s
+        setInterval(() => reg.update(), 60_000)
+      })
+      .catch(err => console.warn('[PWA] Falha ao registrar SW:', err))
+  })
+}

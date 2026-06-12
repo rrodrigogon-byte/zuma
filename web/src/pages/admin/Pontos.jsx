@@ -1,6 +1,132 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { api } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
+
+// ── Gráfico de linha SVG — evolução do Elo ───────────────────────────────────
+function EloLineChart({ historico, jogadorNome, color = '#5FB335' }) {
+  // Filtra só os eventos de elo do jogador selecionado
+  const dados = useMemo(() => {
+    const hist = historico
+      .filter(h => h.socioNome === jogadorNome && h.elo != null)
+      .sort((a, b) => new Date(a.criadoEm) - new Date(b.criadoEm))
+    if (hist.length === 0) return []
+    return hist.map((h, i) => ({
+      x: i,
+      y: h.elo,
+      label: new Date(h.criadoEm).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+      tipo: h.tipo,
+    }))
+  }, [historico, jogadorNome])
+
+  if (dados.length < 2) {
+    return (
+      <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted)', fontSize: '0.9rem' }}>
+        {dados.length === 0
+          ? 'Nenhum dado de Elo para este jogador.'
+          : 'Necessário ao menos 2 pontos para exibir o gráfico.'}
+      </div>
+    )
+  }
+
+  const W = 500, H = 160, PAD = { t: 16, r: 20, b: 36, l: 50 }
+  const iW = W - PAD.l - PAD.r
+  const iH = H - PAD.t - PAD.b
+  const minY = Math.min(...dados.map(d => d.y)) - 50
+  const maxY = Math.max(...dados.map(d => d.y)) + 50
+
+  const px = i => PAD.l + (i / (dados.length - 1)) * iW
+  const py = v => PAD.t + iH - ((v - minY) / (maxY - minY)) * iH
+
+  const points = dados.map((d, i) => `${px(i)},${py(d.y)}`).join(' ')
+
+  // Linha de baseline (rating inicial / 1500)
+  const baseline = py(1500)
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', maxHeight: 200, overflow: 'visible' }}>
+      {/* Grid horizontal */}
+      {[minY, (minY + maxY) / 2, maxY].map((v, i) => (
+        <g key={i}>
+          <line x1={PAD.l} y1={py(v)} x2={W - PAD.r} y2={py(v)}
+            stroke="var(--line)" strokeWidth="0.5" strokeDasharray="4" />
+          <text x={PAD.l - 6} y={py(v) + 4} textAnchor="end" fontSize="9" fill="var(--muted)">
+            {Math.round(v)}
+          </text>
+        </g>
+      ))}
+
+      {/* Linha baseline 1500 */}
+      {baseline >= PAD.t && baseline <= PAD.t + iH && (
+        <line x1={PAD.l} y1={baseline} x2={W - PAD.r} y2={baseline}
+          stroke="#C9A656" strokeWidth="1" strokeDasharray="6 3" opacity={0.6} />
+      )}
+
+      {/* Área preenchida */}
+      <polyline
+        points={[
+          `${PAD.l},${PAD.t + iH}`,
+          ...dados.map((d, i) => `${px(i)},${py(d.y)}`),
+          `${px(dados.length - 1)},${PAD.t + iH}`,
+        ].join(' ')}
+        fill={color + '22'}
+        stroke="none"
+      />
+
+      {/* Linha principal */}
+      <polyline
+        points={points}
+        fill="none"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+
+      {/* Pontos e labels */}
+      {dados.map((d, i) => (
+        <g key={i}>
+          <circle cx={px(i)} cy={py(d.y)} r={3} fill={color} />
+          {(i === 0 || i === dados.length - 1 || dados.length <= 10) && (
+            <text x={px(i)} y={PAD.t + iH + 14} textAnchor="middle" fontSize="8" fill="var(--muted)">
+              {d.label}
+            </text>
+          )}
+        </g>
+      ))}
+
+      {/* Valor atual */}
+      <text x={px(dados.length - 1) + 5} y={py(dados[dados.length - 1].y) - 6}
+        fontSize="10" fontWeight="bold" fill={color}>
+        {dados[dados.length - 1].y}
+      </text>
+    </svg>
+  )
+}
+
+// ── Mini sparkline para o ranking ─────────────────────────────────────────────
+function Sparkline({ historico, socioNome }) {
+  const vals = useMemo(() => {
+    return historico
+      .filter(h => h.socioNome === socioNome && h.elo != null)
+      .sort((a, b) => new Date(a.criadoEm) - new Date(b.criadoEm))
+      .slice(-10)
+      .map(h => h.elo)
+  }, [historico, socioNome])
+
+  if (vals.length < 2) return <span style={{ color: 'var(--muted)', fontSize: 11 }}>—</span>
+
+  const W = 60, H = 20
+  const min = Math.min(...vals), max = Math.max(...vals)
+  const range = max - min || 1
+  const pts = vals.map((v, i) => `${(i / (vals.length - 1)) * W},${H - ((v - min) / range) * H}`).join(' ')
+  const trend = vals[vals.length - 1] > vals[0]
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: 60, height: 20 }}>
+      <polyline points={pts} fill="none" stroke={trend ? '#5FB335' : '#e05c5c'} strokeWidth="1.5"
+        strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
 
 const fmtData = s => s ? new Date(s).toLocaleDateString('pt-BR') : '—'
 const fmtR = v => `R$ ${Number(v || 0).toFixed(2).replace('.', ',')}`
@@ -33,6 +159,7 @@ const S = {
 export default function Pontos() {
   const { toast } = useToast()
   const [tab, setTab] = useState('ranking')
+  const [eloJogador, setEloJogador] = useState('')
   const [saldos, setSaldos] = useState([])
   const [historico, setHistorico] = useState([])
   const [socios, setSocios] = useState([])
@@ -52,6 +179,8 @@ export default function Pontos() {
         api.get('/api/admin/socios'),
       ])
       setSaldos(s); setHistorico(h); setSocios(sc)
+      // Define o primeiro sócio como padrão do gráfico Elo
+      if (s.length > 0 && !eloJogador) setEloJogador(s[0].nome)
     } finally { setLoading(false) }
   }, [])
 
@@ -120,12 +249,12 @@ export default function Pontos() {
       </div>
 
       <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid var(--line)' }}>
-        {['ranking', 'histórico'].map(t => (
+        {['ranking', 'histórico', 'elo'].map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
             padding: '8px 16px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13,
             background: 'none', color: tab === t ? 'var(--green)' : 'var(--muted)',
             borderBottom: tab === t ? '2px solid var(--green)' : '2px solid transparent', textTransform: 'capitalize',
-          }}>{t}</button>
+          }}>{t === 'elo' ? '⚡ Elo / Rating' : t}</button>
         ))}
       </div>
 
@@ -137,10 +266,11 @@ export default function Pontos() {
               <th style={S.th}>Sócio</th>
               <th style={S.th}>E-mail</th>
               <th style={S.th}>Pontos</th>
+              <th style={S.th}>Tendência Elo</th>
               <th style={S.th}>Ações</th>
             </tr></thead>
             <tbody>
-              {saldos.length === 0 && <tr><td colSpan={5} style={{ ...S.td, textAlign: 'center', color: 'var(--muted)', padding: 32 }}>Nenhum ponto registrado ainda.</td></tr>}
+              {saldos.length === 0 && <tr><td colSpan={6} style={{ ...S.td, textAlign: 'center', color: 'var(--muted)', padding: 32 }}>Nenhum ponto registrado ainda.</td></tr>}
               {saldos.map((s, i) => (
                 <tr key={s.id}>
                   <td style={{ ...S.td, color: i < 3 ? 'var(--gold)' : 'var(--muted)', fontWeight: 700 }}>{i + 1}</td>
@@ -153,6 +283,9 @@ export default function Pontos() {
                     <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 4 }}>pts</span>
                   </td>
                   <td style={S.td}>
+                    <Sparkline historico={historico} socioNome={s.nome} />
+                  </td>
+                  <td style={S.td}>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button onClick={() => { setForm(f => ({ ...f, socioId: s.id })); setModalCreditar(true) }}
                         style={{ ...S.btn, padding: '4px 9px', background: '#d1fae5', color: '#065f46', fontSize: 11 }}>+ Creditar</button>
@@ -160,6 +293,10 @@ export default function Pontos() {
                         <button onClick={() => { setFormR(f => ({ ...f, socioId: s.id })); setModalResgatar(true) }}
                           style={{ ...S.btn, padding: '4px 9px', background: '#fef3c7', color: '#92400e', fontSize: 11 }}>Resgatar</button>
                       )}
+                      <button
+                        onClick={() => { setEloJogador(s.nome); setTab('elo') }}
+                        style={{ ...S.btn, padding: '4px 9px', background: '#ede9fe', color: '#5b21b6', fontSize: 11 }}
+                      >⚡ Elo</button>
                     </div>
                   </td>
                 </tr>
@@ -211,6 +348,96 @@ export default function Pontos() {
             </table>
           </div>
         </>
+      )}
+
+      {/* ── Aba Elo / Rating ── */}
+      {tab === 'elo' && (
+        <div>
+          {/* Seletor de jogador */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+            <label style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 600 }}>Jogador:</label>
+            <select
+              value={eloJogador}
+              onChange={e => setEloJogador(e.target.value)}
+              style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--cream)', fontSize: 13 }}
+            >
+              <option value="">Selecione…</option>
+              {saldos.map(s => <option key={s.id} value={s.nome}>{s.nome}</option>)}
+            </select>
+          </div>
+
+          {/* Gráfico de evolução */}
+          {eloJogador ? (
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, padding: '1.25rem', marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div style={{ fontWeight: 800, color: 'var(--cream)', fontSize: 15 }}>
+                  ⚡ Evolução Elo — {eloJogador}
+                </div>
+                <span style={{ fontSize: 11, color: 'var(--muted)' }}>linha amarela = 1500 (base)</span>
+              </div>
+              <EloLineChart historico={historico} jogadorNome={eloJogador} color="#5FB335" />
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', color: 'var(--muted)', padding: '3rem', background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--line)' }}>
+              Selecione um jogador para ver a evolução do Elo.
+            </div>
+          )}
+
+          {/* Tabela de rating geral — todos os sócios com elo */}
+          <div style={{ fontWeight: 700, color: 'var(--cream)', fontSize: 14, marginBottom: 10 }}>
+            Ranking Geral de Rating
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={S.table}>
+              <thead><tr>
+                <th style={S.th}>#</th>
+                <th style={S.th}>Jogador</th>
+                <th style={S.th}>Rating Elo</th>
+                <th style={S.th}>Tendência (últimas 10)</th>
+                <th style={S.th}></th>
+              </tr></thead>
+              <tbody>
+                {saldos.length === 0 && (
+                  <tr><td colSpan={5} style={{ ...S.td, textAlign: 'center', color: 'var(--muted)', padding: 32 }}>
+                    Nenhum sócio cadastrado.
+                  </td></tr>
+                )}
+                {saldos.map((s, i) => {
+                  // Pega o último Elo registrado no histórico
+                  const eloEntries = historico
+                    .filter(h => h.socioNome === s.nome && h.elo != null)
+                    .sort((a, b) => new Date(b.criadoEm) - new Date(a.criadoEm))
+                  const eloAtual = eloEntries[0]?.elo ?? s.elo ?? null
+                  return (
+                    <tr key={s.id} style={{ background: eloJogador === s.nome ? 'rgba(95,179,53,.06)' : undefined }}>
+                      <td style={{ ...S.td, color: i < 3 ? 'var(--gold)' : 'var(--muted)', fontWeight: 700 }}>{i + 1}</td>
+                      <td style={{ ...S.td, fontWeight: 700, color: eloJogador === s.nome ? 'var(--green)' : 'var(--cream)' }}>
+                        {eloJogador === s.nome && '▸ '}{s.nome}
+                      </td>
+                      <td style={S.td}>
+                        {eloAtual != null
+                          ? <span style={{ fontWeight: 800, fontSize: 15, color: eloAtual >= 1500 ? 'var(--green)' : '#C9A656' }}>{eloAtual}</span>
+                          : <span style={{ color: 'var(--muted)' }}>—</span>
+                        }
+                      </td>
+                      <td style={S.td}><Sparkline historico={historico} socioNome={s.nome} /></td>
+                      <td style={S.td}>
+                        <button
+                          onClick={() => setEloJogador(s.nome)}
+                          style={{ ...S.btn, padding: '3px 8px', background: eloJogador === s.nome ? '#d1fae5' : 'var(--surface)', border: '1px solid var(--line)', color: 'var(--cream)', fontSize: 11 }}
+                        >Ver gráfico</button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 10 }}>
+            Elo Rating calculado automaticamente pelo sistema com base em resultados das partidas.
+            Rating inicial: 1500. K-factor: 32.
+          </p>
+        </div>
       )}
 
       {/* Modal creditar */}

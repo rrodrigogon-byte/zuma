@@ -1,13 +1,60 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
 
+// ── Badge de pedidos pendentes ─────────────────────────────────────────────────
+function usePendingOrders(isStaff) {
+  const [pendentes, setPendentes] = useState(0)
+  const intervalRef = useRef(null)
+
+  useEffect(() => {
+    if (!isStaff) return
+
+    async function check() {
+      try {
+        const mesas = await api.get('/api/mesas')
+        // Conta itens com status "novo" em qualquer comanda aberta
+        let count = 0
+        const lista = Array.isArray(mesas) ? mesas : (mesas.mesas || [])
+        lista.forEach(m => {
+          const items = m.pedidos || m.itens || []
+          count += items.filter(it => it.status === 'novo' || it.status === 'pendente').length
+        })
+        setPendentes(count)
+      } catch {
+        // silencioso — não interrompe UX
+      }
+    }
+
+    check()
+    intervalRef.current = setInterval(check, 20000) // poll a cada 20s
+    return () => clearInterval(intervalRef.current)
+  }, [isStaff])
+
+  return pendentes
+}
+
+function Badge({ count }) {
+  if (!count) return null
+  return (
+    <span style={{
+      marginLeft: 'auto',
+      background: '#e05c5c', color: '#fff',
+      borderRadius: 10, fontSize: 10, fontWeight: 800,
+      padding: '1px 6px', minWidth: 18, textAlign: 'center',
+      lineHeight: '16px', display: 'inline-block',
+    }}>
+      {count > 99 ? '99+' : count}
+    </span>
+  )
+}
+
 const NAV_OP = [
-  { to: '/pdv',      icon: '🛒', label: 'PDV' },
-  { to: '/garcom',   icon: '🍽️', label: 'Modo Garçom' },
-  { to: '/kds',      icon: '👨‍🍳', label: 'Cozinha / KDS' },
-  { to: '/portaria', icon: '🎫', label: 'Portaria' },
+  { to: '/pdv',      icon: '🛒', label: 'PDV',            badge: true },
+  { to: '/garcom',   icon: '🍽️', label: 'Modo Garçom',   badge: false },
+  { to: '/kds',      icon: '👨‍🍳', label: 'Cozinha / KDS', badge: true },
+  { to: '/portaria', icon: '🎫', label: 'Portaria',        badge: false },
 ]
 
 // Grupos do admin organizados por tema
@@ -95,7 +142,7 @@ const activeStyle = {
   borderLeft: '3px solid var(--green)',
 }
 
-function NavItem({ to, icon, label, end, onClick }) {
+function NavItem({ to, icon, label, end, onClick, badgeCount }) {
   return (
     <NavLink
       to={to}
@@ -104,12 +151,13 @@ function NavItem({ to, icon, label, end, onClick }) {
       onClick={onClick}
     >
       <span style={{ fontSize: 16 }}>{icon}</span>
-      {label}
+      <span style={{ flex: 1 }}>{label}</span>
+      {badgeCount > 0 && <Badge count={badgeCount} />}
     </NavLink>
   )
 }
 
-function Section({ label, items, onNavClick, collapsible = false }) {
+function Section({ label, items, onNavClick, collapsible = false, badgesMap = {} }) {
   const [collapsed, setCollapsed] = useState(false)
   return (
     <div style={{ padding: '4px 0', borderBottom: '1px solid var(--line)' }}>
@@ -126,7 +174,14 @@ function Section({ label, items, onNavClick, collapsible = false }) {
         <span>{label}</span>
         {collapsible && <span style={{ fontSize: 9 }}>{collapsed ? '▶' : '▼'}</span>}
       </div>
-      {!collapsed && items.map(n => <NavItem key={n.to} {...n} onClick={onNavClick} />)}
+      {!collapsed && items.map(n => (
+        <NavItem
+          key={n.to}
+          {...n}
+          onClick={onNavClick}
+          badgeCount={n.badge ? (badgesMap[n.to] || 0) : 0}
+        />
+      ))}
     </div>
   )
 }
@@ -152,6 +207,13 @@ export default function Sidebar() {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+  const pendentes = usePendingOrders(isStaff)
+
+  // Mapeia badges por rota (PDV e KDS recebem o total de pendentes)
+  const badgesMap = {
+    '/pdv': pendentes,
+    '/kds': pendentes,
+  }
 
   useEffect(() => {
     const handler = () => {
@@ -228,7 +290,7 @@ export default function Sidebar() {
           )}
         </div>
 
-        {isStaff && <Section label="Operações" items={NAV_OP} onNavClick={handleNavClick} />}
+        {isStaff && <Section label="Operações" items={NAV_OP} onNavClick={handleNavClick} badgesMap={badgesMap} />}
         {isOrg   && <AdminGroups groups={NAV_ADMIN_GROUPS} onNavClick={handleNavClick} />}
         <Section label="Site Público" items={NAV_PUBLIC} onNavClick={handleNavClick} />
 

@@ -1,20 +1,56 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { api, fmtDateOnly } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
 const TODAY = new Date().toISOString().slice(0, 10)
 
 const STATUS_OPTS = [
-  { value: 'pendente',    label: 'Aguardando',   color: '#C9A656' },
-  { value: 'em_andamento', label: 'Em andamento', color: '#8FD64A' },
-  { value: 'concluido',   label: 'Concluída',    color: '#5FB335' },
+  { value: 'pendente',     label: 'Aguardando',   color: '#C9A656' },
+  { value: 'em_andamento', label: 'Em andamento',  color: '#8FD64A' },
+  { value: 'concluido',    label: 'Concluída',     color: '#5FB335' },
 ]
 
 function statusInfo(s) {
   return STATUS_OPTS.find(o => o.value === s) || { label: s || 'Pendente', color: '#888' }
 }
 
-// ── Set Score Component ──────────────────────────────────────────────────────
+// ── Timer da partida ──────────────────────────────────────────────────────────
+function PartidaTimer({ jogoSel }) {
+  const [elapsed, setElapsed] = useState(0)
+  const timerRef = useRef(null)
+
+  useEffect(() => {
+    if (jogoSel?.status !== 'em_andamento') { setElapsed(0); return }
+    // Tenta calcular a partir de criadoEm ou usa 0
+    const base = jogoSel.iniciadoEm || jogoSel.criadoEm || null
+    const offset = base ? Math.floor((Date.now() - new Date(base).getTime()) / 1000) : 0
+    setElapsed(Math.max(0, offset))
+    timerRef.current = setInterval(() => setElapsed(e => e + 1), 1000)
+    return () => clearInterval(timerRef.current)
+  }, [jogoSel?.id, jogoSel?.status])
+
+  if (!jogoSel || jogoSel.status !== 'em_andamento') return null
+
+  const mins = Math.floor(elapsed / 60)
+  const secs = elapsed % 60
+  const urgent = mins >= 120  // > 2h — alerta
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      background: urgent ? 'rgba(224,92,92,.15)' : 'rgba(143,214,74,.1)',
+      border: `1px solid ${urgent ? '#e05c5c' : '#8FD64A'}`,
+      borderRadius: 8, padding: '0.4rem 0.9rem',
+    }}>
+      <span style={{ fontSize: 16 }}>⏱</span>
+      <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: '1rem', color: urgent ? '#e05c5c' : '#8FD64A' }}>
+        {String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')}
+      </span>
+      <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>em andamento</span>
+    </div>
+  )
+}
+
+// ── Set Score Component ───────────────────────────────────────────────────────
 function SetScore({ label, sets, onChange }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -44,13 +80,17 @@ const btnCount = {
   transition: 'background .1s',
 }
 
-// ── Main ─────────────────────────────────────────────────────────────────────
+// ── Main ──────────────────────────────────────────────────────────────────────
 export default function Sumula() {
   const { toast } = useToast()
-  const [jogos, setJogos] = useState([])
+  const [todos, setTodos] = useState([])         // todos os jogos carregados
   const [loading, setLoading] = useState(true)
   const [jogoSel, setJogoSel] = useState(null)
   const [saving, setSaving] = useState(false)
+
+  // Filtros da lista
+  const [dataSel, setDataSel] = useState(TODAY)
+  const [verConcluidos, setVerConcluidos] = useState(false)
 
   // Placar por sets: [[sets J1], [sets J2]], games
   const [setsJ1, setSetsJ1] = useState([0, 0, 0])
@@ -62,16 +102,24 @@ export default function Sumula() {
   const [obs, setObs] = useState('')
 
   function loadJogos() {
+    setLoading(true)
     api.get('/api/admin/agenda')
-      .then(all => {
-        const hoje = (all || []).filter(j => j.data === TODAY && j.status !== 'concluido' && !j.vencedor)
-        setJogos(hoje)
-      })
+      .then(all => setTodos(all || []))
       .catch(() => toast('Erro ao carregar agenda', 'error'))
       .finally(() => setLoading(false))
   }
 
   useEffect(() => { loadJogos() }, [])
+
+  // ── Filtra jogos conforme data e toggle concluídos ──
+  const jogos = todos.filter(j => {
+    if (j.data !== dataSel) return false
+    if (!verConcluidos && (j.status === 'concluido' || j.vencedor)) return false
+    return true
+  })
+
+  // Datas únicas disponíveis para o selector
+  const datasDisponiveis = [...new Set(todos.map(j => j.data))].sort()
 
   function selecionarJogo(j) {
     setJogoSel(j)
@@ -92,9 +140,9 @@ export default function Sumula() {
     if (!jogoSel) return
     setSaving(true)
     try {
-      await api.patch(`/api/admin/agenda/${jogoSel.id}`, { status: 'em_andamento' })
+      await api.patch(`/api/admin/agenda/${jogoSel.id}`, { status: 'em_andamento', iniciadoEm: new Date().toISOString() })
       setStatusPartida('em_andamento')
-      setJogoSel(j => ({ ...j, status: 'em_andamento' }))
+      setJogoSel(j => ({ ...j, status: 'em_andamento', iniciadoEm: new Date().toISOString() }))
       toast('Partida iniciada')
     } catch (e) { toast(e.message, 'error') } finally { setSaving(false) }
   }
@@ -124,30 +172,91 @@ export default function Sumula() {
   if (!jogoSel) {
     return (
       <div style={{ padding: '1.5rem', maxWidth: 800, margin: '0 auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1.5rem' }}>
+        {/* Cabeçalho */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1.25rem' }}>
           <span style={{ fontSize: 28 }}>🎾</span>
           <h1 style={{ color: 'var(--fg)', fontWeight: 800, fontSize: '1.5rem', margin: 0 }}>Súmula Eletrônica</h1>
         </div>
-        <p style={{ color: 'var(--muted)', marginBottom: '1.5rem', fontSize: '0.95rem' }}>
-          Jogos de hoje ({fmtDateOnly(TODAY)}) — pendentes
+
+        {/* Filtros */}
+        <div style={{ display: 'flex', gap: 12, marginBottom: '1.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Seletor de data */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <label style={{ color: 'var(--muted)', fontSize: '0.85rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+              📅 Data:
+            </label>
+            <input
+              type="date"
+              value={dataSel}
+              onChange={e => setDataSel(e.target.value)}
+              style={{
+                padding: '0.4rem 0.6rem', borderRadius: 8,
+                border: '1px solid var(--line)', background: 'var(--surface)',
+                color: 'var(--fg)', fontSize: '0.9rem', cursor: 'pointer',
+              }}
+            />
+          </div>
+
+          {/* Atalhos de datas disponíveis */}
+          {datasDisponiveis.length > 0 && datasDisponiveis.length <= 10 && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {datasDisponiveis.map(d => (
+                <button
+                  key={d}
+                  onClick={() => setDataSel(d)}
+                  style={{
+                    padding: '0.3rem 0.7rem', borderRadius: 6, border: '1px solid var(--line)',
+                    background: dataSel === d ? 'var(--green)' : 'var(--surface)',
+                    color: dataSel === d ? '#fff' : 'var(--muted)',
+                    fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  {d === TODAY ? 'Hoje' : fmtDateOnly(d)}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Toggle concluídos */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', marginLeft: 'auto' }}>
+            <input
+              type="checkbox"
+              checked={verConcluidos}
+              onChange={e => setVerConcluidos(e.target.checked)}
+              style={{ accentColor: 'var(--green)', width: 16, height: 16 }}
+            />
+            <span style={{ color: 'var(--muted)', fontSize: '0.85rem', fontWeight: 600 }}>Ver concluídas</span>
+          </label>
+        </div>
+
+        {/* Contador */}
+        <p style={{ color: 'var(--muted)', marginBottom: '1rem', fontSize: '0.9rem' }}>
+          {fmtDateOnly(dataSel)} — {jogos.length} {verConcluidos ? 'jogo(s)' : 'jogo(s) pendente(s)'}
         </p>
 
-        {loading ? <p style={{ color: 'var(--muted)' }}>Carregando…</p> : jogos.length === 0 ? (
+        {loading ? (
+          <p style={{ color: 'var(--muted)' }}>Carregando…</p>
+        ) : jogos.length === 0 ? (
           <div style={{ textAlign: 'center', color: 'var(--muted)', padding: '3rem', background: 'var(--surface)', borderRadius: 12, border: '1px solid var(--line)' }}>
-            Nenhum jogo pendente para hoje.
+            {todos.filter(j => j.data === dataSel).length > 0
+              ? 'Todos os jogos desta data já foram concluídos. Ative "Ver concluídas" para visualizá-los.'
+              : 'Nenhum jogo cadastrado para esta data.'}
           </div>
         ) : (
           <div style={{ display: 'grid', gap: 12 }}>
             {jogos.map(j => {
               const si = statusInfo(j.status)
+              const concluido = j.status === 'concluido' || !!j.vencedor
               return (
                 <div
                   key={j.id}
-                  onClick={() => selecionarJogo(j)}
+                  onClick={() => !concluido && selecionarJogo(j)}
                   style={{
-                    background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 12,
-                    padding: '1.1rem 1.25rem', cursor: 'pointer',
+                    background: 'var(--surface)', border: `1px solid ${concluido ? 'var(--line)' : 'var(--line)'}`,
+                    borderRadius: 12,
+                    padding: '1.1rem 1.25rem', cursor: concluido ? 'default' : 'pointer',
                     display: 'flex', alignItems: 'center', gap: 16,
+                    opacity: concluido ? 0.7 : 1,
                     transition: 'border-color .15s, box-shadow .15s',
                     boxShadow: '0 1px 4px rgba(0,0,0,.06)',
                   }}
@@ -157,17 +266,24 @@ export default function Sumula() {
                       {j.confronto || 'Confronto não definido'}
                     </div>
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                      {j.hora && <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>⏰ {j.hora}</span>}
-                      {j.quadra && <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>🎾 {j.quadra}</span>}
+                      {j.hora     && <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>⏰ {j.hora}</span>}
+                      {j.quadra   && <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>🎾 {j.quadra}</span>}
                       {j.categoria && <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>📋 {j.categoria}</span>}
-                      {j.fase && <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>🏆 {j.fase}</span>}
+                      {j.fase     && <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>🏆 {j.fase}</span>}
+                      {j.vencedor && <span style={{ color: '#5FB335', fontSize: '0.85rem', fontWeight: 700 }}>🏅 {j.vencedor}</span>}
                     </div>
+                    {/* Placar final */}
+                    {concluido && j.placar1 && (
+                      <div style={{ marginTop: 4, fontSize: '0.82rem', color: 'var(--muted)' }}>
+                        Placar: {j.placar1} | {j.placar2}
+                      </div>
+                    )}
                   </div>
                   <span style={{
                     padding: '0.25rem 0.7rem', borderRadius: 12, fontSize: '0.78rem', fontWeight: 700,
-                    background: si.color + '22', color: si.color,
+                    background: si.color + '22', color: si.color, flexShrink: 0,
                   }}>{si.label}</span>
-                  <span style={{ color: 'var(--muted)', fontSize: 18 }}>›</span>
+                  {!concluido && <span style={{ color: 'var(--muted)', fontSize: 18 }}>›</span>}
                 </div>
               )
             })}
@@ -197,7 +313,7 @@ export default function Sumula() {
           style={{ padding: '0.35rem 0.7rem', flexShrink: 0 }}
         >← Voltar</button>
         <div style={{ flex: 1, textAlign: 'center' }}>
-          {jogoSel.hora && <span style={{ color: 'var(--muted)', fontSize: '0.9rem', marginRight: 8 }}>⏰ {jogoSel.hora}</span>}
+          {jogoSel.hora   && <span style={{ color: 'var(--muted)', fontSize: '0.9rem', marginRight: 8 }}>⏰ {jogoSel.hora}</span>}
           {jogoSel.quadra && <span style={{ color: 'var(--muted)', fontSize: '0.9rem' }}>🎾 {jogoSel.quadra}</span>}
         </div>
         <span style={{
@@ -206,7 +322,14 @@ export default function Sumula() {
         }}>{si.label}</span>
       </div>
 
-      {/* Jogadores */}
+      {/* Timer da partida */}
+      {statusPartida === 'em_andamento' && (
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <PartidaTimer jogoSel={jogoSel} />
+        </div>
+      )}
+
+      {/* Jogadores + Sets */}
       <div style={{
         background: 'var(--surface)', borderRadius: 12, padding: '1.25rem',
         border: '1px solid var(--line)',
