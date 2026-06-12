@@ -1,8 +1,39 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { api, fmtDateOnly } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
 const TODAY = new Date().toISOString().slice(0, 10)
+
+function KpiCard({ label, value, color, sub, icon }) {
+  return (
+    <div style={{
+      background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10,
+      padding: '14px 18px', borderLeft: `4px solid ${color || 'var(--green)'}`, flex: 1, minWidth: 130,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+        <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: 700 }}>{label}</div>
+        {icon && <span style={{ fontSize: 16 }}>{icon}</span>}
+      </div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: color || 'var(--green)', lineHeight: 1.1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{sub}</div>}
+    </div>
+  )
+}
+
+function exportCSVSumula(jogos) {
+  const headers = ['Data', 'Hora', 'Quadra', 'Confronto', 'Categoria', 'Fase', 'Status', 'Placar J1', 'Placar J2', 'Vencedor']
+  const rows = jogos.map(j => [
+    j.data || '', j.hora || '', j.quadra || '', j.confronto || '',
+    j.categoria || '', j.fase || '',
+    j.status === 'concluido' ? 'Concluída' : j.status === 'em_andamento' ? 'Em andamento' : 'Pendente',
+    j.placar1 || '', j.placar2 || '', j.vencedor || '',
+  ])
+  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(',')).join('\n')
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }))
+  a.download = `sumula_${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+}
 
 const STATUS_OPTS = [
   { value: 'pendente',     label: 'Aguardando',   color: '#C9A656' },
@@ -111,6 +142,18 @@ export default function Sumula() {
 
   useEffect(() => { loadJogos() }, [])
 
+  // ── KPIs globais ──────────────────────────────────────────────────────────────
+  const kpis = useMemo(() => {
+    const hoje = todos.filter(j => j.data === TODAY)
+    return {
+      hojeTotal:      hoje.length,
+      hojeEmAndamento: hoje.filter(j => j.status === 'em_andamento').length,
+      hogePendentes:  hoje.filter(j => !j.vencedor && j.status !== 'em_andamento').length,
+      totalConcluidos: todos.filter(j => j.vencedor || j.status === 'concluido').length,
+      totalPartidas:  todos.length,
+    }
+  }, [todos])
+
   // ── Filtra jogos conforme data e toggle concluídos ──
   const jogos = todos.filter(j => {
     if (j.data !== dataSel) return false
@@ -173,10 +216,26 @@ export default function Sumula() {
     return (
       <div style={{ padding: '1.5rem', maxWidth: 800, margin: '0 auto' }}>
         {/* Cabeçalho */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1.25rem' }}>
-          <span style={{ fontSize: 28 }}>🎾</span>
-          <h1 style={{ color: 'var(--fg)', fontWeight: 800, fontSize: '1.5rem', margin: 0 }}>Súmula Eletrônica</h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 28 }}>🎾</span>
+            <h1 style={{ color: 'var(--fg)', fontWeight: 800, fontSize: '1.5rem', margin: 0 }}>Súmula Eletrônica</h1>
+          </div>
+          <button
+            onClick={() => exportCSVSumula(todos)}
+            style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--muted)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+          >📥 CSV</button>
         </div>
+
+        {/* KPI Cards */}
+        {!loading && todos.length > 0 && (
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+            <KpiCard label="Hoje" value={kpis.hojeTotal} color="#5FB335" icon="📅" sub="partidas agendadas" />
+            <KpiCard label="Em andamento" value={kpis.hojeEmAndamento} color="#C9A656" icon="⏱" sub="em quadra agora" />
+            <KpiCard label="Pendentes hoje" value={kpis.hogePendentes} color="#e05c5c" icon="⏳" sub="aguardando início" />
+            <KpiCard label="Concluídas (total)" value={kpis.totalConcluidos} color="#8FD64A" icon="✅" sub={`de ${kpis.totalPartidas} partidas`} />
+          </div>
+        )}
 
         {/* Filtros */}
         <div style={{ display: 'flex', gap: 12, marginBottom: '1.25rem', flexWrap: 'wrap', alignItems: 'center' }}>

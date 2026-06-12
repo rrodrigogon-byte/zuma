@@ -3,6 +3,22 @@ import { api, fmtDate, fmtDateOnly } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
 
+function KpiCard({ label, value, color, sub, icon }) {
+  return (
+    <div style={{
+      background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10,
+      padding: '14px 18px', borderLeft: `4px solid ${color || 'var(--green)'}`, flex: 1, minWidth: 130,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+        <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: 700 }}>{label}</div>
+        {icon && <span style={{ fontSize: 16 }}>{icon}</span>}
+      </div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: color || 'var(--green)', lineHeight: 1.1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{sub}</div>}
+    </div>
+  )
+}
+
 const EMPTY_JOGO = { data: '', hora: '', quadra: '', categoria: '', confronto: '', fase: '', torneioId: '' }
 const EMPTY_RESULTADO = { placar1: '', placar2: '' }
 
@@ -307,11 +323,17 @@ export default function Agenda() {
   }
 
   // Stats rápidas
-  const stats = useMemo(() => ({
-    total: jogos.length,
-    concluidos: jogos.filter(j => j.vencedor).length,
-    pendentes: jogos.filter(j => !j.vencedor).length,
-  }), [jogos])
+  const stats = useMemo(() => {
+    const concluidos = jogos.filter(j => j.vencedor).length
+    const total = jogos.length
+    return {
+      total,
+      concluidos,
+      pendentes: jogos.filter(j => !j.vencedor).length,
+      taxaConclusao: total > 0 ? Math.round((concluidos / total) * 100) : 0,
+      hoje: jogos.filter(j => j.data === new Date().toISOString().slice(0, 10)).length,
+    }
+  }, [jogos])
 
   // Export CSV
   function exportCSV() {
@@ -371,12 +393,13 @@ export default function Agenda() {
         </div>
       )}
 
-      {/* Stats */}
+      {/* Stats — KpiCards borderLeft */}
       {!loading && jogos.length > 0 && (
-        <div className="agenda-stats">
-          <div className="stat-pill">{stats.total} total</div>
-          <div className="stat-pill stat-pill--done">{stats.concluidos} concluídos</div>
-          <div className="stat-pill stat-pill--pend">{stats.pendentes} pendentes</div>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+          <KpiCard label="Total" value={stats.total} color="#5FB335" icon="📋" sub="partidas cadastradas" />
+          <KpiCard label="Concluídos" value={stats.concluidos} color="#8FD64A" icon="✅" sub="com resultado" />
+          <KpiCard label="Pendentes" value={stats.pendentes} color="#C9A656" icon="⏳" sub="aguardando resultado" />
+          <KpiCard label="Taxa Conclusão" value={`${stats.taxaConclusao}%`} color="#5FB335" icon="📊" sub={`${stats.hoje} jogos hoje`} />
         </div>
       )}
 

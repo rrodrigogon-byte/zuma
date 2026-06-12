@@ -224,17 +224,26 @@ export default function Pagamentos() {
         </button>
       </div>
 
-      {/* KPIs */}
+      {/* KPIs com borderLeft */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        <KpiCard label="Recebido (total)" valor={fmtR(totalRecebido)} cls="kpi-green" />
-        <KpiCard label="Pendente" valor={fmtR(totalPendente)} cls="kpi-yellow" />
-        <KpiCard label="Cancelado" valor={fmtR(totalCancelado)} cls="kpi-gray" />
-        {filtroPeriodo !== 'todos' && (
-          <div className="kpi-card" style={{ flex: 1, minWidth: 140, borderTop: '3px solid #C9A656' }}>
-            <span className="kpi-label">Recebido no período</span>
-            <span className="kpi-valor" style={{ color: '#C9A656' }}>{fmtR(totalFiltrado)}</span>
+        {[
+          { label: 'RECEBIDO (TOTAL)', value: fmtR(totalRecebido), color: '#5FB335', icon: '💰', sub: `${pagamentos.filter(p => p.status === 'pago').length} transações` },
+          { label: 'PENDENTE', value: fmtR(totalPendente), color: '#C9A656', icon: '⏳', sub: `${pagamentos.filter(p => p.status === 'pendente').length} aguardando` },
+          { label: 'CANCELADO', value: fmtR(totalCancelado), color: '#e05c5c', icon: '❌', sub: `${pagamentos.filter(p => p.status === 'cancelado').length} estornados` },
+          ...(filtroPeriodo !== 'todos' ? [{ label: 'RECEBIDO NO PERÍODO', value: fmtR(totalFiltrado), color: '#C9A656', icon: '📅', sub: filtroPeriodo }] : []),
+        ].map(k => (
+          <div key={k.label} style={{
+            background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10,
+            padding: '14px 18px', borderLeft: `4px solid ${k.color}`, flex: 1, minWidth: 140,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+              <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: 700 }}>{k.label}</div>
+              <span style={{ fontSize: 16 }}>{k.icon}</span>
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: k.color, lineHeight: 1.1 }}>{k.value}</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{k.sub}</div>
           </div>
-        )}
+        ))}
       </div>
 
       {/* Gráfico últimos 7 dias */}

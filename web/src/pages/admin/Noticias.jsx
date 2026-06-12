@@ -1,7 +1,37 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { api, fmtDate } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
+
+function KpiCard({ label, value, color, sub, icon }) {
+  return (
+    <div style={{
+      background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10,
+      padding: '14px 18px', borderLeft: `4px solid ${color || 'var(--green)'}`, flex: 1, minWidth: 130,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+        <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: 700 }}>{label}</div>
+        {icon && <span style={{ fontSize: 16 }}>{icon}</span>}
+      </div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: color || 'var(--green)', lineHeight: 1.1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{sub}</div>}
+    </div>
+  )
+}
+
+function exportCSV(lista) {
+  const headers = ['ID', 'Título', 'Categoria', 'Status', 'Data']
+  const rows = lista.map(n => [
+    n.id, n.titulo || '', n.categoria || '',
+    n.publicado ? 'Publicado' : 'Rascunho',
+    n.criadoEm ? new Date(n.criadoEm).toLocaleDateString('pt-BR') : '',
+  ])
+  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(',')).join('\n')
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }))
+  a.download = `noticias_${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+}
 
 const CATEGORIAS = [
   { value: 'aviso',     label: 'Aviso',     color: '#C9A656' },
@@ -132,15 +162,26 @@ export default function Noticias() {
 
   const [busca, setBusca] = useState('')
 
-  const filtradas = noticias.filter(n => {
-    if (filtro === 'publicados') return n.publicado
-    if (filtro === 'rascunhos') return !n.publicado
+  const kpis = useMemo(() => {
+    const publicadas = noticias.filter(n => n.publicado).length
+    const cats = new Set(noticias.map(n => n.categoria).filter(Boolean))
+    return {
+      total: noticias.length,
+      publicadas,
+      rascunhos: noticias.length - publicadas,
+      categorias: cats.size,
+    }
+  }, [noticias])
+
+  const filtradas = useMemo(() => noticias.filter(n => {
+    if (filtro === 'publicados' && !n.publicado) return false
+    if (filtro === 'rascunhos' && n.publicado) return false
+    if (busca) {
+      const q = busca.toLowerCase()
+      if (!(n.titulo || '').toLowerCase().includes(q) && !(n.resumo || '').toLowerCase().includes(q)) return false
+    }
     return true
-  }).filter(n => {
-    if (!busca) return true
-    const q = busca.toLowerCase()
-    return (n.titulo || '').toLowerCase().includes(q) || (n.resumo || '').toLowerCase().includes(q)
-  })
+  }), [noticias, filtro, busca])
 
   return (
     <div style={S.page}>
@@ -154,9 +195,23 @@ export default function Noticias() {
               </button>
             ))}
           </div>
+          <button
+            onClick={() => exportCSV(filtradas)}
+            style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--muted)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+          >📥 CSV</button>
           <button className="btn btn-primary btn-sm" onClick={openCriar}>+ Nova Notícia</button>
         </div>
       </div>
+
+      {/* KPI Cards */}
+      {!loading && noticias.length > 0 && (
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+          <KpiCard label="Total" value={kpis.total} color="#5FB335" icon="📰" sub="notícias cadastradas" />
+          <KpiCard label="Publicadas" value={kpis.publicadas} color="#8FD64A" icon="✅" sub="visíveis ao público" />
+          <KpiCard label="Rascunhos" value={kpis.rascunhos} color="#C9A656" icon="✏️" sub="não publicadas" />
+          <KpiCard label="Categorias" value={kpis.categorias} color="#5FB335" icon="🏷️" sub="tipos distintos" />
+        </div>
+      )}
 
       <input
         style={{ width: '100%', padding: '8px 12px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, color: 'var(--fg)', fontSize: 13, marginBottom: 14, boxSizing: 'border-box' }}

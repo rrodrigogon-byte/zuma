@@ -138,14 +138,27 @@ export default function Inscricoes() {
         </button>
       </div>
 
-      {/* KPI extra: receita aprovada */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-        <div style={{ padding: '10px 18px', background: '#1e4a2e22', border: '1px solid #1e4a2e', borderRadius: 10, minWidth: 110 }}>
-          <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, marginBottom: 2 }}>Receita aprovada</div>
-          <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--green)' }}>
-            {receita.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+      {/* KPI Cards borderLeft */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+        {[
+          { label: 'TOTAL', value: inscricoes.length, color: '#5FB335', icon: '📋', sub: 'inscrições' },
+          { label: 'APROVADAS', value: contadores.aprovado, color: '#8FD64A', icon: '✅', sub: 'confirmadas' },
+          { label: 'PENDENTES', value: contadores.pendente, color: '#C9A656', icon: '⏳', sub: 'aguardando' },
+          { label: 'CANCELADAS', value: contadores.cancelado, color: '#e05c5c', icon: '❌', sub: 'rejeitadas' },
+          { label: 'RECEITA APROVADA', value: receita.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }), color: '#5FB335', icon: '💰', sub: 'valor confirmado' },
+        ].map(k => (
+          <div key={k.label} style={{
+            background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10,
+            padding: '14px 18px', borderLeft: `4px solid ${k.color}`, flex: 1, minWidth: 130,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+              <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: 700 }}>{k.label}</div>
+              <span style={{ fontSize: 16 }}>{k.icon}</span>
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: k.color, lineHeight: 1.1 }}>{k.value}</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{k.sub}</div>
           </div>
-        </div>
+        ))}
       </div>
 
       {/* Busca */}
@@ -159,52 +172,20 @@ export default function Inscricoes() {
         />
       </div>
 
-      {/* Contadores por status */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        {['pendente', 'aprovado', 'cancelado'].map((s) => {
-          const sc = STATUS_COLORS[s]
-          return (
-            <div
-              key={s}
-              onClick={() => { setFiltro(s); setSelecionados([]) }}
-              style={{
-                padding: '10px 18px',
-                background: sc.bg,
-                border: `1px solid ${sc.border}`,
-                borderRadius: 10,
-                cursor: 'pointer',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 2,
-                minWidth: 100,
-                transition: 'opacity 0.15s',
-                opacity: filtro !== 'todos' && filtro !== s ? 0.5 : 1,
-              }}
-            >
-              <span style={{ fontSize: 22, fontWeight: 700, color: sc.color }}>{contadores[s]}</span>
-              <span style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'capitalize' }}>{s}</span>
-            </div>
-          )
-        })}
-        <div
-          onClick={() => { setFiltro('todos'); setSelecionados([]) }}
-          style={{
-            padding: '10px 18px',
-            background: '#1e4a2e22',
-            border: '1px solid #1e4a2e',
-            borderRadius: 10,
-            cursor: 'pointer',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 2,
-            minWidth: 100,
-            opacity: filtro !== 'todos' ? 0.5 : 1,
-            transition: 'opacity 0.15s',
-          }}
-        >
-          <span style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>{inscricoes.length}</span>
-          <span style={{ fontSize: 12, color: 'var(--muted)' }}>Total</span>
-        </div>
+      {/* Filtros de status rápidos */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        {[['todos', 'Todos', '#5FB335'], ['pendente', 'Pendentes', '#C9A656'], ['aprovado', 'Aprovados', '#8FD64A'], ['cancelado', 'Cancelados', '#e05c5c']].map(([s, label, color]) => (
+          <button
+            key={s}
+            onClick={() => { setFiltro(s); setSelecionados([]) }}
+            style={{
+              padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+              border: `1px solid ${filtro === s ? color : 'var(--line)'}`,
+              background: filtro === s ? color + '22' : 'transparent',
+              color: filtro === s ? color : 'var(--muted)',
+            }}
+          >{label}{s !== 'todos' && ` (${contadores[s] || inscricoes.length})`}</button>
+        ))}
       </div>
 
       {/* Filtros de data */}

@@ -2,6 +2,22 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { api, fmtDate } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
+function KpiCard({ label, value, color, sub, icon }) {
+  return (
+    <div style={{
+      background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10,
+      padding: '14px 18px', borderLeft: `4px solid ${color || 'var(--green)'}`, flex: 1, minWidth: 130,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+        <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: 700 }}>{label}</div>
+        {icon && <span style={{ fontSize: 16 }}>{icon}</span>}
+      </div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: color || 'var(--green)', lineHeight: 1.1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{sub}</div>}
+    </div>
+  )
+}
+
 function exportCSV(logs) {
   const headers = ['ID', 'Data/Hora', 'Usuário', 'Ação', 'Dados']
   const rows = logs.map(l => [
@@ -99,6 +115,15 @@ export default function Auditoria() {
 
   useEffect(() => { load() }, [load])
 
+  // KPIs de auditoria
+  const auditKpis = useMemo(() => {
+    const erros   = logs.filter(l => (l.acao || '').toLowerCase().includes('erro') || (l.acao || '').toLowerCase().includes('delete')).length
+    const logins  = logs.filter(l => (l.acao || '').toLowerCase().includes('login')).length
+    const criados = logs.filter(l => (l.acao || '').toLowerCase().includes('create') || (l.acao || '').toLowerCase() === 'create').length
+    const hoje    = logs.filter(l => l.criadoEm && l.criadoEm.slice(0, 10) === new Date().toISOString().slice(0, 10)).length
+    return { total: logs.length, erros, logins, criados, hoje }
+  }, [logs])
+
   // Ações únicas para o filtro
   const acoesUnicas = useMemo(() => {
     const set = new Set(logs.map(l => l.acao).filter(Boolean))
@@ -149,7 +174,7 @@ export default function Auditoria() {
   return (
     <div style={S.page}>
       <div style={S.header}>
-        <h1 style={S.h1}>Log de Auditoria</h1>
+        <h1 style={S.h1}>🔍 Log de Auditoria</h1>
         <div style={S.toolbar}>
           <input
             style={S.searchBox}
@@ -180,6 +205,16 @@ export default function Auditoria() {
           <button style={S.btnSm()} onClick={() => exportCSV(filtered)}>⬇ CSV</button>
         </div>
       </div>
+
+      {/* KPI Cards */}
+      {!loading && logs.length > 0 && (
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+          <KpiCard label="Total Logs" value={auditKpis.total} color="#5FB335" icon="📋" sub={`${auditKpis.hoje} hoje`} />
+          <KpiCard label="Logins" value={auditKpis.logins} color="#8FD64A" icon="🔑" sub="acessos registrados" />
+          <KpiCard label="Criações" value={auditKpis.criados} color="#C9A656" icon="✏️" sub="registros criados" />
+          <KpiCard label="Erros/Deletes" value={auditKpis.erros} color="#e05c5c" icon="⚠️" sub="ações críticas" />
+        </div>
+      )}
 
       {busca && (
         <p style={S.count}>

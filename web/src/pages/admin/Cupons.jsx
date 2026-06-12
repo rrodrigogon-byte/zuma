@@ -96,6 +96,24 @@ export default function Cupons() {
 
   const ativos       = cupons.filter(c => c.ativo && !isExpired(c.validade)).length
   const totalUsos    = cupons.reduce((s, c) => s + (c.usos || 0), 0)
+  const expirados    = cupons.filter(c => isExpired(c.validade)).length
+
+  function exportCSV() {
+    const headers = ['Código', 'Tipo', 'Valor', 'Uso', 'Utilizações', 'Máx Usos', 'Validade', 'Status']
+    const rows = cuponsFiltrados.map(c => [
+      c.codigo, c.tipo === 'pct' ? 'Percentual' : 'Fixo',
+      c.tipo === 'pct' ? `${c.valor}%` : `R$ ${Number(c.valor || 0).toFixed(2)}`,
+      c.uso === 'bar' ? 'Bar' : c.uso === 'inscricao' ? 'Inscrição' : 'Ambos',
+      c.usos || 0, c.maxUsos || 'Ilimitado',
+      c.validade || '—',
+      isExpired(c.validade) ? 'Expirado' : c.ativo ? 'Ativo' : 'Inativo',
+    ])
+    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(',')).join('\n')
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }))
+    a.download = `cupons_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+  }
 
   const cuponsFiltrados = useMemo(() => {
     return cupons.filter(c => {
@@ -118,27 +136,39 @@ export default function Cupons() {
 
   return (
     <div style={{ padding: '24px 16px', maxWidth: 1100, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
         <h2 style={{ margin: 0, fontSize: 22, fontWeight: 900, color: 'var(--cream)' }}>🎟️ Cupons</h2>
-        <button className="btn btn-primary btn-sm" onClick={() => { setForm(EMPTY_FORM); setModal(true) }}>
-          + Novo Cupom
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={exportCSV}
+            style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--muted)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+          >📥 CSV</button>
+          <button className="btn btn-primary btn-sm" onClick={() => { setForm(EMPTY_FORM); setModal(true) }}>
+            + Novo Cupom
+          </button>
+        </div>
       </div>
 
-      {/* KPIs */}
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 28 }}>
-        <div style={kpiStyle}>
-          <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, marginBottom: 4 }}>TOTAL CUPONS</div>
-          <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--cream)' }}>{cupons.length}</div>
-        </div>
-        <div style={kpiStyle}>
-          <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, marginBottom: 4 }}>ATIVOS</div>
-          <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--green)' }}>{ativos}</div>
-        </div>
-        <div style={kpiStyle}>
-          <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, marginBottom: 4 }}>UTILIZAÇÕES TOTAIS</div>
-          <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--gold)' }}>{totalUsos}</div>
-        </div>
+      {/* KPIs com borderLeft */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
+        {[
+          { label: 'TOTAL CUPONS',       value: cupons.length,  color: '#5FB335', icon: '🎟️', sub: 'cadastrados' },
+          { label: 'ATIVOS',             value: ativos,         color: '#8FD64A', icon: '✅', sub: 'válidos e em uso' },
+          { label: 'EXPIRADOS',          value: expirados,      color: '#e05c5c', icon: '⛔', sub: 'fora do prazo' },
+          { label: 'UTILIZAÇÕES TOTAIS', value: totalUsos,      color: '#C9A656', icon: '🛒', sub: 'vezes aplicados' },
+        ].map(k => (
+          <div key={k.label} style={{
+            background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10,
+            padding: '14px 18px', borderLeft: `4px solid ${k.color}`, flex: 1, minWidth: 130,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+              <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: 700 }}>{k.label}</div>
+              <span style={{ fontSize: 16 }}>{k.icon}</span>
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: k.color, lineHeight: 1.1 }}>{k.value}</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{k.sub}</div>
+          </div>
+        ))}
       </div>
 
       {/* Busca + filtros */}

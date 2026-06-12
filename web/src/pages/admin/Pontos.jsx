@@ -189,6 +189,13 @@ export default function Pontos() {
   const totalPontos = saldos.reduce((s, x) => s + x.saldo, 0)
   const comPontos = saldos.filter(s => s.saldo > 0).length
   const top = saldos[0]
+  const [buscaRanking, setBuscaRanking] = useState('')
+
+  const saldosFiltrados = useMemo(() => {
+    if (!buscaRanking.trim()) return saldos
+    const q = buscaRanking.toLowerCase()
+    return saldos.filter(s => (s.nome || '').toLowerCase().includes(q) || (s.email || '').toLowerCase().includes(q))
+  }, [saldos, buscaRanking])
 
   const histFiltrado = filtroSocio
     ? historico.filter(h => h.socioId == filtroSocio)
@@ -239,24 +246,26 @@ export default function Pontos() {
         </div>
       </div>
 
-      <div style={S.cards}>
-        <div style={S.card}>
-          <div style={S.cNum}>{totalPontos.toLocaleString('pt-BR')}</div>
-          <div style={S.cLbl}>Total de pontos ativos</div>
-        </div>
-        <div style={S.card}>
-          <div style={S.cNum}>{comPontos}</div>
-          <div style={S.cLbl}>Sócios com pontos</div>
-        </div>
-        <div style={S.card}>
-          <div style={S.cNum}>{historico.filter(h => h.pontos > 0).length}</div>
-          <div style={S.cLbl}>Créditos realizados</div>
-        </div>
-        <div style={S.card}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--cream)', marginBottom: 2 }}>{top?.nome?.split(' ')[0] || '—'}</div>
-          <div style={{ fontSize: 11, color: 'var(--green)', fontWeight: 700 }}>{top?.saldo || 0} pts</div>
-          <div style={S.cLbl}>Líder do ranking</div>
-        </div>
+      {/* KPI Cards com borderLeft */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
+        {[
+          { label: 'PONTOS ATIVOS', value: totalPontos.toLocaleString('pt-BR'), color: '#5FB335', icon: '⭐', sub: 'total em circulação' },
+          { label: 'SÓCIOS COM PONTOS', value: comPontos, color: '#8FD64A', icon: '👥', sub: `de ${saldos.length} sócios` },
+          { label: 'CRÉDITOS REALIZADOS', value: historico.filter(h => h.pontos > 0).length, color: '#C9A656', icon: '✏️', sub: 'lançamentos de crédito' },
+          { label: 'LÍDER DO RANKING', value: top?.nome?.split(' ')[0] || '—', color: '#C9A656', icon: '🏆', sub: `${top?.saldo || 0} pontos` },
+        ].map(k => (
+          <div key={k.label} style={{
+            background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10,
+            padding: '14px 18px', borderLeft: `4px solid ${k.color}`, flex: 1, minWidth: 140,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+              <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: 700 }}>{k.label}</div>
+              <span style={{ fontSize: 16 }}>{k.icon}</span>
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: k.color, lineHeight: 1.1 }}>{k.value}</div>
+            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{k.sub}</div>
+          </div>
+        ))}
       </div>
 
       <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid var(--line)' }}>
@@ -270,6 +279,16 @@ export default function Pontos() {
       </div>
 
       {tab === 'ranking' && (
+        <>
+          <div style={{ marginBottom: 12 }}>
+            <input
+              value={buscaRanking}
+              onChange={e => setBuscaRanking(e.target.value)}
+              placeholder="🔍 Buscar sócio por nome ou e-mail…"
+              style={{ width: '100%', maxWidth: 320, padding: '7px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--cream)', fontSize: 13 }}
+            />
+            {buscaRanking && <span style={{ marginLeft: 10, fontSize: 12, color: 'var(--muted)' }}>{saldosFiltrados.length} resultado(s)</span>}
+          </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={S.table}>
             <thead><tr>
@@ -281,8 +300,8 @@ export default function Pontos() {
               <th style={S.th}>Ações</th>
             </tr></thead>
             <tbody>
-              {saldos.length === 0 && <tr><td colSpan={6} style={{ ...S.td, textAlign: 'center', color: 'var(--muted)', padding: 32 }}>Nenhum ponto registrado ainda.</td></tr>}
-              {saldos.map((s, i) => (
+              {saldosFiltrados.length === 0 && <tr><td colSpan={6} style={{ ...S.td, textAlign: 'center', color: 'var(--muted)', padding: 32 }}>Nenhum ponto registrado ainda.</td></tr>}
+              {saldosFiltrados.map((s, i) => (
                 <tr key={s.id}>
                   <td style={{ ...S.td, color: i < 3 ? 'var(--gold)' : 'var(--muted)', fontWeight: 700 }}>{i + 1}</td>
                   <td style={{ ...S.td, fontWeight: 700 }}>{s.nome}</td>
@@ -315,6 +334,7 @@ export default function Pontos() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {tab === 'histórico' && (
