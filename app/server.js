@@ -606,6 +606,17 @@ app.post('/api/contato', publicLimit(), (req,res)=>{
   res.json({ ok:true, message:'Mensagem recebida! Entraremos em contato em breve.' });
 });
 app.get('/api/admin/contatos', auth, requireStaff, (req,res)=> res.json((db().contatos||[]).slice().reverse()));
+app.patch('/api/admin/contatos/:id', auth, requireStaff, (req,res)=>{
+  const c=(db().contatos||[]).find(x=>x.id==req.params.id);
+  if(!c) return res.status(404).json({error:'mensagem não encontrada'});
+  if(req.body.lida!==undefined) c.lida=!!req.body.lida;
+  save(); res.json(c);
+});
+app.delete('/api/admin/contatos/:id', auth, requireStaff, (req,res)=>{
+  const d=db(); const i=(d.contatos||[]).findIndex(x=>x.id==req.params.id);
+  if(i<0) return res.status(404).json({error:'mensagem não encontrada'});
+  d.contatos.splice(i,1); save(); res.json({ok:true});
+});
 
 app.post('/api/assinar', (req,res)=>{
   const { plano, nome, email, tipo, telefone } = req.body || {};
@@ -1996,8 +2007,20 @@ app.get('/api/pagamento/:id', async (req,res)=>{
 
 // Webhook do Mercado Pago (produção): confirma e libera o pedido
 app.post('/api/pagamento/webhook', async (req,res)=>{
-  const extId = req.body?.data?.id || req.query['data.id'];
-  if(extId){ const pg=(db().pagamentos||[]).find(p=>p.externalId==String(extId)); if(pg && pg.status==='pendente'){ const st=await consultarStatus(extId); if(st==='aprovado'){ pg.status='aprovado'; fulfill(pg); save(); } } }
+  const extId = req.body?.data?.id || req.query['data.id'] || req.query.id;
+  // Verificação de assinatura (defesa em profundidade) — só quando MP_WEBHOOK_SECRET definido.
+  // Advisory: o gate real é o consultarStatus (re-consulta o MP; "aprovado" não é forjável).
+  const secret = process.env.MP_WEBHOOK_SECRET;
+  if(secret){
+    try {
+      const sig = req.headers['x-signature']||''; const reqId = req.headers['x-request-id']||'';
+      const ts = (sig.match(/ts=([^,]+)/)||[])[1]; const v1 = (sig.match(/v1=([^,]+)/)||[])[1];
+      const manifest = `id:${String(extId||'').toLowerCase()};request-id:${reqId};ts:${ts};`;
+      const calc = crypto.createHmac('sha256', secret).update(manifest).digest('hex');
+      if(!v1 || calc !== v1) console.warn('[MP webhook] assinatura não confere (processando via re-consulta de status)');
+    } catch(e){ console.warn('[MP webhook] erro ao validar assinatura:', e.message); }
+  }
+  if(extId){ const pg=(db().pagamentos||[]).find(p=>p.externalId==String(extId)); if(pg && pg.status==='pendente'){ const st=await consultarStatus(extId); if(st==='aprovado'){ pg.status='aprovado'; if(!pg.fulfilledEm){ fulfill(pg); pg.fulfilledEm=new Date().toISOString(); } save(); } } }
   res.sendStatus(200);
 });
 
@@ -2008,7 +2031,40 @@ app.post('/api/pagamento/:id/confirmar', (req,res)=>{
   if(pg.status!=='aprovado'){ pg.status='aprovado'; pg.confirmadoEm=new Date().toISOString(); fulfill(pg); save(); }
   res.json({ ok:true, status:pg.status, fulfill:pg.fulfillMsg||'' });
 });
-app.get('/api/admin/pagamentos', auth, requireStaff, (req,res)=> res.json((db().pagamentos||[]).slice().reverse()));
+// Normaliza o pagamento para o painel: o front usa pago/pendente/cancelado,
+// o backend usa aprovado/pendente/recusado. Também expõe meio/usuário e os campos Pix.
+const mapPagStatus = s => s==='aprovado' ? 'pago' : (s==='recusado' ? 'cancelado' : (s||'pendente'));
+function pubPagamento(pg){
+  return {
+    id: pg.id, tipo: pg.tipo, refId: pg.refId,
+    usuario: pg.usuario || pg.email || (pg.usuarioId ? '#'+pg.usuarioId : ''),
+    meio: pg.meio || pg.provedor || '', valor: pg.valor, criadoEm: pg.criadoEm,
+    status: mapPagStatus(pg.status), descricao: pg.descricao||'', txid: pg.externalId||'',
+    pixCopiaECola: pg.copiaECola||'', qrCode: pg.qrBase64 ? ('data:image/png;base64,'+pg.qrBase64) : null,
+    confirmadoEm: pg.confirmadoEm||null, confirmadoPor: pg.confirmadoPor||null, fulfillMsg: pg.fulfillMsg||'',
+  };
+}
+app.get('/api/admin/pagamentos', auth, requireStaff, (req,res)=> res.json((db().pagamentos||[]).slice().reverse().map(pubPagamento)));
+
+// Confirmação/estorno manual pela organização — essencial no Pix estático, onde não há
+// confirmação automática. Ao confirmar, libera o pedido (fulfill), de forma idempotente.
+app.patch('/api/admin/pagamentos/:id', auth, requireStaff, (req,res)=>{
+  const pg=(db().pagamentos||[]).find(p=>p.id==req.params.id);
+  if(!pg) return res.status(404).json({error:'pagamento não encontrado'});
+  const novo = req.body?.status;
+  if(novo==='pago'){
+    pg.status='aprovado'; pg.confirmadoEm=new Date().toISOString(); pg.confirmadoPor=req.user?.nome||'staff';
+    if(!pg.fulfilledEm){ fulfill(pg); pg.fulfilledEm=new Date().toISOString(); }
+  } else if(novo==='cancelado'){
+    pg.status='cancelado'; pg.canceladoEm=new Date().toISOString(); pg.canceladoPor=req.user?.nome||'staff';
+  } else if(novo==='pendente'){
+    pg.status='pendente';
+  } else {
+    return res.status(400).json({error:'status inválido (use pago, cancelado ou pendente)'});
+  }
+  save();
+  res.json(pubPagamento(pg));
+});
 
 // Libera o pedido conforme o tipo (chamado ao aprovar o pagamento)
 function fulfill(pg){

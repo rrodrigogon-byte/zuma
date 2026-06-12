@@ -22,6 +22,7 @@ const NAV_ADMIN = [
   { to: '/admin/loja',        icon: '🛍️', label: 'Loja' },
   { to: '/admin/aulas',       icon: '🎓', label: 'Aulas' },
   { to: '/admin/crm',         icon: '📈', label: 'CRM' },
+  { to: '/admin/contatos',    icon: '✉️', label: 'Contatos' },
   { to: '/admin/bi',          icon: '📉', label: 'BI' },
   { to: '/admin/auditoria',      icon: '🔍', label: 'Auditoria' },
   { to: '/admin/configuracoes', icon: '⚙️', label: 'Configurações' },

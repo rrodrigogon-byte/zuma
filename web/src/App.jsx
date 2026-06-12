@@ -65,6 +65,7 @@ const Mensalidades    = lazy(() => import('./pages/admin/Mensalidades'))
 const Financeiro      = lazy(() => import('./pages/admin/Financeiro'))
 const Quadras         = lazy(() => import('./pages/admin/Quadras'))
 const Pontos          = lazy(() => import('./pages/admin/Pontos'))
+const Contatos        = lazy(() => import('./pages/admin/Contatos'))
 const AgendaQuadras   = lazy(() => import('./pages/public/AgendaQuadras'))
 const NoticiasPublic  = lazy(() => import('./pages/public/Noticias'))
 
@@ -122,6 +123,7 @@ export default function App() {
           <Route path="/admin/financeiro"     element={<Layout><Financeiro /></Layout>} />
           <Route path="/admin/quadras"        element={<Layout><Quadras /></Layout>} />
           <Route path="/admin/pontos"         element={<Layout><Pontos /></Layout>} />
+          <Route path="/admin/contatos"       element={<Layout><Contatos /></Layout>} />
         </Route>
 
         {/* Público */}
