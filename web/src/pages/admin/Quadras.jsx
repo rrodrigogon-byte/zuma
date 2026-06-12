@@ -1,8 +1,18 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { api } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
 const fmtData = s => s ? new Date(s + 'T12:00:00').toLocaleDateString('pt-BR') : '—'
+
+function exportCSV(reservas) {
+  const headers = ['ID', 'Quadra', 'Data', 'Início', 'Fim', 'Responsável', 'Status', 'Obs']
+  const rows = reservas.map(r => [r.id, r.quadraNome, r.data, r.horaInicio, r.horaFim, r.socioNome, r.status, r.obs || ''])
+  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href = url; a.download = `reservas_${new Date().toISOString().slice(0,10)}.csv`; a.click()
+  URL.revokeObjectURL(url)
+}
 const HORAS = Array.from({ length: 32 }, (_, i) => {
   const h = Math.floor(i / 2) + 7
   const m = i % 2 === 0 ? '00' : '30'
@@ -81,6 +91,8 @@ export default function Quadras() {
   const [modalReserva, setModalReserva] = useState(null)
   const [fq, setFq] = useState({ nome: '', tipo: 'Tênis', cor: '#5FB335', descricao: '' })
   const [fr, setFr] = useState({ quadraId: '', data: '', horaInicio: '', horaFim: '', socioNome: '', obs: '' })
+  const [filtroStatus, setFiltroStatus] = useState('todos')
+  const [filtroQ, setFiltroQ] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -92,10 +104,40 @@ export default function Quadras() {
 
   useEffect(() => { load() }, [load])
 
-  const reservasFiltradas = reservas.filter(r => {
-    if (tab === 'grade') return r.data === dataRef
-    return true
-  })
+  // KPIs
+  const hoje = new Date().toISOString().slice(0, 10)
+  const kpis = useMemo(() => {
+    const resHoje = reservas.filter(r => r.data === hoje && r.status !== 'cancelada')
+    const resSemana = reservas.filter(r => {
+      const d = new Date(r.data + 'T12:00:00')
+      const ini = new Date(); ini.setDate(ini.getDate() - ini.getDay())
+      const fim = new Date(ini); fim.setDate(ini.getDate() + 6)
+      return d >= ini && d <= fim && r.status !== 'cancelada'
+    })
+    const totalSlots = quadras.filter(q => q.ativa !== false).length * HORAS.slice(0,-1).length
+    const ocupadosHoje = resHoje.reduce((s, r) => {
+      const ini = HORAS.indexOf(r.horaInicio), fim = HORAS.indexOf(r.horaFim)
+      return s + (fim - ini > 0 ? fim - ini : 1)
+    }, 0)
+    return {
+      hoje: resHoje.length,
+      semana: resSemana.length,
+      quadrasAtivas: quadras.filter(q => q.ativa !== false).length,
+      taxaOcup: totalSlots > 0 ? Math.round((ocupadosHoje / totalSlots) * 100) : 0,
+    }
+  }, [reservas, quadras, hoje])
+
+  const reservasFiltradas = useMemo(() => {
+    return reservas.filter(r => {
+      if (tab === 'grade') return r.data === dataRef
+      if (tab === 'reservas') {
+        if (filtroStatus !== 'todos' && r.status !== filtroStatus) return false
+        if (filtroQ && !r.socioNome?.toLowerCase().includes(filtroQ.toLowerCase()) && !r.quadraNome?.toLowerCase().includes(filtroQ.toLowerCase())) return false
+        return r.data === dataRef
+      }
+      return true
+    })
+  }, [reservas, tab, dataRef, filtroStatus, filtroQ])
 
   async function salvarQuadra(e) {
     e.preventDefault()
@@ -144,11 +186,28 @@ export default function Quadras() {
       <div style={S.hdr}>
         <div style={S.title}>🎾 Quadras & Reservas</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={() => exportCSV(reservas)}
+            style={{ ...S.btn, background: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--cream)' }}>📥 CSV</button>
           <button onClick={() => { setFq({ nome: '', tipo: 'Tênis', cor: '#5FB335', descricao: '' }); setModalQuadra({}) }}
             style={{ ...S.btn, background: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--cream)' }}>+ Quadra</button>
           <button onClick={() => { setFr({ quadraId: quadras[0]?.id || '', data: dataRef, horaInicio: '08:00', horaFim: '09:00', socioNome: '', obs: '' }); setModalReserva({}) }}
             style={{ ...S.btn, background: 'var(--green)', color: 'var(--deep)' }}>+ Reserva</button>
         </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: 12, marginBottom: 20 }}>
+        {[
+          { label: 'Reservas hoje', value: kpis.hoje, color: '#5FB335' },
+          { label: 'Na semana', value: kpis.semana, color: '#C9A656' },
+          { label: 'Quadras ativas', value: kpis.quadrasAtivas, color: '#3b82f6' },
+          { label: 'Ocup. hoje', value: `${kpis.taxaOcup}%`, color: kpis.taxaOcup > 60 ? '#5FB335' : kpis.taxaOcup > 30 ? '#C9A656' : '#888' },
+        ].map(k => (
+          <div key={k.label} style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, padding: '14px 16px', borderTop: `3px solid ${k.color}` }}>
+            <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>{k.label}</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: k.color }}>{k.value}</div>
+          </div>
+        ))}
       </div>
 
       <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid var(--line)' }}>
@@ -181,7 +240,16 @@ export default function Quadras() {
           <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
             <input type="date" value={dataRef} onChange={e => setDataRef(e.target.value)}
               style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--cream)', fontSize: 13 }} />
-            <span style={{ fontSize: 12, color: 'var(--muted)' }}>{reservas.filter(r => r.data === dataRef).length} reservas neste dia</span>
+            <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}
+              style={{ padding: '7px 10px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--cream)', fontSize: 13 }}>
+              <option value="todos">Todos os status</option>
+              <option value="confirmada">Confirmadas</option>
+              <option value="pendente">Pendentes</option>
+              <option value="cancelada">Canceladas</option>
+            </select>
+            <input placeholder="🔍 Buscar responsável ou quadra…" value={filtroQ} onChange={e => setFiltroQ(e.target.value)}
+              style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--cream)', fontSize: 13, flex: 1, minWidth: 180 }} />
+            <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{reservasFiltradas.length} reserva{reservasFiltradas.length !== 1 ? 's' : ''}</span>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ ...S.card, width: '100%', borderCollapse: 'collapse' }}>
@@ -189,10 +257,10 @@ export default function Quadras() {
                 {['Quadra', 'Data', 'Horário', 'Responsável', 'Status', 'Obs', 'Ações'].map(h => <th key={h} style={S.th}>{h}</th>)}
               </tr></thead>
               <tbody>
-                {reservas.filter(r => r.data === dataRef || tab !== 'grade').length === 0 && (
+                {reservasFiltradas.length === 0 && (
                   <tr><td colSpan={7} style={{ ...S.td, textAlign: 'center', color: 'var(--muted)', padding: 32 }}>Nenhuma reserva</td></tr>
                 )}
-                {reservas.filter(r => r.data === dataRef).sort((a, b) => a.horaInicio.localeCompare(b.horaInicio)).map(r => (
+                {reservasFiltradas.sort((a, b) => a.horaInicio.localeCompare(b.horaInicio)).map(r => (
                   <tr key={r.id}>
                     <td style={{ ...S.td, fontWeight: 700 }}>{r.quadraNome}</td>
                     <td style={S.td}>{fmtData(r.data)}</td>

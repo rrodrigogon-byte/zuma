@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { api, fmtR, fmtDate } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
@@ -6,6 +6,19 @@ import Modal from '../../components/Modal'
 const MODALIDADES = ['Tênis', 'Beach Tennis', 'Padel', 'Squash', 'Funcional', 'Outro']
 const NIVEIS = ['Iniciante', 'Intermediário', 'Avançado', 'Todos']
 const EMPTY_AULA = { titulo: '', professorId: '', modalidade: 'Tênis', data: '', hora: '', nivel: 'Todos', vagas: 8, preco: '' }
+
+function exportCSV(aulas, professores) {
+  const headers = ['ID', 'Título', 'Professor', 'Modalidade', 'Data', 'Hora', 'Nível', 'Vagas', 'Preço']
+  const rows = aulas.map(a => {
+    const prof = professores.find(p => p.id === a.professorId)
+    return [a.id, a.titulo, prof?.nome || '', a.modalidade, a.data, a.hora, a.nivel, a.vagas, a.preco || 0]
+  })
+  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href = url; a.download = `aulas_${new Date().toISOString().slice(0,10)}.csv`; a.click()
+  URL.revokeObjectURL(url)
+}
 
 export default function Aulas() {
   const { toast } = useToast()
@@ -17,6 +30,9 @@ export default function Aulas() {
   const [form, setForm] = useState(EMPTY_AULA)
   const [nomeProf, setNomeProf] = useState('')
   const [saving, setSaving] = useState(false)
+  const [busca, setBusca] = useState('')
+  const [filtroMod, setFiltroMod] = useState('Todas')
+  const [filtroNivel, setFiltroNivel] = useState('Todos')
 
   async function load() {
     setLoading(true)
@@ -106,6 +122,24 @@ export default function Aulas() {
 
   const NIVEL_COLOR = { Iniciante: '#5FB335', Intermediário: '#C9A656', Avançado: '#e05c5c', Todos: '#888' }
 
+  // KPIs
+  const kpis = useMemo(() => {
+    const totalVagas = aulas.reduce((s, a) => s + (a.vagas || 0), 0)
+    const receitaPot = aulas.reduce((s, a) => s + (a.preco || 0) * (a.vagas || 0), 0)
+    const porMod = MODALIDADES.reduce((acc, m) => { acc[m] = aulas.filter(a => a.modalidade === m).length; return acc }, {})
+    return { total: aulas.length, professores: professores.length, totalVagas, receitaPot, porMod }
+  }, [aulas, professores])
+
+  // Filtros
+  const aulasFiltradas = useMemo(() => {
+    return aulas.filter(a => {
+      if (filtroMod !== 'Todas' && a.modalidade !== filtroMod) return false
+      if (filtroNivel !== 'Todos' && a.nivel !== filtroNivel) return false
+      if (busca && !a.titulo.toLowerCase().includes(busca.toLowerCase())) return false
+      return true
+    })
+  }, [aulas, filtroMod, filtroNivel, busca])
+
   if (loading) return <div style={S.page}><p style={{ color: 'var(--muted)' }}>Carregando…</p></div>
 
   return (
@@ -113,9 +147,39 @@ export default function Aulas() {
       <div style={S.header}>
         <h1 style={S.h1}>Aulas</h1>
         <div style={S.actions}>
+          <button style={S.btnOutline} onClick={() => exportCSV(aulasFiltradas, professores)}>📥 CSV</button>
           <button style={S.btnOutline} onClick={() => setModalProf(true)}>+ Professor</button>
           <button style={S.btn} onClick={() => { setForm(EMPTY_AULA); setModalAula(true) }}>+ Nova Aula</button>
         </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(130px,1fr))', gap: 10, marginBottom: 20 }}>
+        {[
+          { label: 'Total aulas', value: kpis.total, color: '#5FB335' },
+          { label: 'Professores', value: kpis.professores, color: '#C9A656' },
+          { label: 'Total vagas', value: kpis.totalVagas, color: '#3b82f6' },
+          { label: 'Receita potencial', value: fmtR(kpis.receitaPot), color: '#8FD64A', small: true },
+        ].map(k => (
+          <div key={k.label} style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, padding: '12px 14px', borderTop: `3px solid ${k.color}` }}>
+            <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>{k.label}</div>
+            <div style={{ fontSize: k.small ? 16 : 22, fontWeight: 800, color: k.color }}>{k.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filtros */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+        <input placeholder="🔍 Buscar aula…" value={busca} onChange={e => setBusca(e.target.value)}
+          style={{ ...S.input, marginBottom: 0, flex: 1, minWidth: 160 }} />
+        <select value={filtroMod} onChange={e => setFiltroMod(e.target.value)} style={{ ...S.select, marginBottom: 0 }}>
+          <option value="Todas">Todas modalidades</option>
+          {MODALIDADES.map(m => <option key={m}>{m}</option>)}
+        </select>
+        <select value={filtroNivel} onChange={e => setFiltroNivel(e.target.value)} style={{ ...S.select, marginBottom: 0 }}>
+          {NIVEIS.map(n => <option key={n}>{n}</option>)}
+        </select>
+        <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{aulasFiltradas.length} de {aulas.length}</span>
       </div>
 
       <table style={S.table}>
@@ -127,10 +191,10 @@ export default function Aulas() {
           </tr>
         </thead>
         <tbody>
-          {aulas.length === 0 && (
-            <tr><td colSpan={8} style={{ ...S.td, color: 'var(--muted)', textAlign: 'center' }}>Nenhuma aula cadastrada.</td></tr>
+          {aulasFiltradas.length === 0 && (
+            <tr><td colSpan={8} style={{ ...S.td, color: 'var(--muted)', textAlign: 'center' }}>Nenhuma aula encontrada.</td></tr>
           )}
-          {aulas.map(a => {
+          {aulasFiltradas.map(a => {
             const prof = professores.find(p => p.id === a.professorId)
             return (
               <tr key={a.id}>

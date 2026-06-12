@@ -3,9 +3,25 @@
  * Interface focada em: ver mesas, adicionar itens, pedir conta.
  * Sem acesso a caixa, pagamentos, configurações.
  */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { api, fmtR } from '../lib/api'
 import { useToast } from '../hooks/useToast'
+
+// Ticker de auto-refresh
+function RefreshTicker({ interval = 15, lastUpdate, onManual }) {
+  const [sec, setSec] = useState(interval)
+  useEffect(() => {
+    setSec(interval)
+    const t = setInterval(() => setSec(s => s <= 1 ? interval : s - 1), 1000)
+    return () => clearInterval(t)
+  }, [lastUpdate, interval])
+  return (
+    <button onClick={onManual}
+      style={{ background: '#1e4029', border: 'none', borderRadius: 8, color: sec <= 5 ? '#C9A656' : '#8FD64A', padding: '5px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 700, minWidth: 48 }}>
+      ↺ {sec}s
+    </button>
+  )
+}
 
 const S = {
   page: { minHeight: '100vh', background: '#060e08', color: '#f4f6ef', fontFamily: 'inherit' },
@@ -67,9 +83,14 @@ export default function GarcomView() {
   const [itemObs, setItemObs] = useState({ prod: null, obs: '' })
   const [loading, setLoading] = useState(false)
   const [novaMesa, setNovaMesa] = useState('')
+  const [lastUpdate, setLastUpdate] = useState(Date.now())
+  const autoRef = useRef(null)
 
   const loadMesas = useCallback(async () => {
-    try { setMesas(await api.get('/api/mesas')) } catch { /* silencioso */ }
+    try {
+      setMesas(await api.get('/api/mesas'))
+      setLastUpdate(Date.now())
+    } catch { /* silencioso */ }
   }, [])
 
   const loadCardapio = useCallback(async () => {
@@ -87,8 +108,8 @@ export default function GarcomView() {
   useEffect(() => {
     loadMesas()
     loadCardapio()
-    const t = setInterval(() => loadMesas(), 15000)
-    return () => clearInterval(t)
+    autoRef.current = setInterval(() => loadMesas(), 15000)
+    return () => clearInterval(autoRef.current)
   }, [loadMesas, loadCardapio])
 
   const cats = ['Tudo', ...Array.from(new Set(cardapio.map(p => p.cat)))]
@@ -98,6 +119,7 @@ export default function GarcomView() {
 
   const abertas = [...(mesas.fisicas || []), ...(mesas.virtuais || [])].filter(m => m.status !== 'livre')
   const pendentes = abertas.filter(m => m.status === 'conta').length
+  const prontos = comanda?.itens?.filter(it => it.status === 'pronto').length || 0
 
   const handleMesaClick = async (mesa) => {
     if (mesa.status === 'livre') {
@@ -172,14 +194,16 @@ export default function GarcomView() {
       {/* Header */}
       <div style={S.header}>
         <span style={S.title}>👨‍🍳 Modo Garçom</span>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <span style={S.badge(pendentes)}>
-            {pendentes > 0 ? `${pendentes} conta${pendentes > 1 ? 's' : ''}` : 'OK'}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {pendentes > 0 && (
+            <span style={{ background: '#C9A656', color: '#000', borderRadius: 20, padding: '3px 10px', fontWeight: 800, fontSize: 12 }}>
+              🧾 {pendentes} conta{pendentes > 1 ? 's' : ''}
+            </span>
+          )}
+          <span style={S.badge(abertas.length)}>
+            {abertas.length} mesa{abertas.length !== 1 ? 's' : ''} abertas
           </span>
-          <button onClick={loadMesas}
-            style={{ background: '#1e4029', border: 'none', borderRadius: 8, color: '#8FD64A', padding: '5px 10px', cursor: 'pointer', fontSize: 12 }}>
-            ↺
-          </button>
+          <RefreshTicker interval={15} lastUpdate={lastUpdate} onManual={loadMesas} />
         </div>
       </div>
 
@@ -232,7 +256,14 @@ export default function GarcomView() {
                 </div>
                 <div style={{ fontSize: 11, opacity: 0.5, marginTop: 2 }}>#{comanda.id} · {fmtR(comanda.total || 0)}</div>
               </div>
-              <button style={S.sheetClose} onClick={fechar}>✕</button>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {prontos > 0 && (
+                  <span style={{ background: '#5FB335', color: '#000', borderRadius: 20, padding: '3px 10px', fontWeight: 800, fontSize: 12, animation: 'pulse-gold 1s infinite' }}>
+                    ✓ {prontos} pronto{prontos > 1 ? 's' : ''}
+                  </span>
+                )}
+                <button style={S.sheetClose} onClick={fechar}>✕</button>
+              </div>
             </div>
 
             <div style={S.sheetBody}>

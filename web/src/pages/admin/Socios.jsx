@@ -1,9 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { api, fmtR, fmtDate } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
 
 const PLANOS = ['Básico', 'Prata', 'Ouro', 'Diamante']
+
+function exportCSV(socios) {
+  const headers = ['ID', 'Nome', 'E-mail', 'Plano', 'Saldo', 'Limite', 'Status']
+  const rows = socios.map(s => [s.id, s.nome, s.email, s.plano, s.saldo || 0, s.limite || 0, statusSocio(s)])
+  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href = url; a.download = `socios_${new Date().toISOString().slice(0,10)}.csv`; a.click()
+  URL.revokeObjectURL(url)
+}
 
 const EMPTY_FORM = { nome: '', email: '', plano: 'Básico', limite: '' }
 const EMPTY_FAT  = { valor: '', descricao: '' }
@@ -46,6 +56,9 @@ export default function Socios() {
   const [fatForm, setFatForm]       = useState(EMPTY_FAT)
   const [saving, setSaving]         = useState(false)
   const [editLimite, setEditLimite] = useState({})    // { id: str }
+  const [busca, setBusca]           = useState('')
+  const [filtroStatus, setFiltroStatus] = useState('todos')
+  const [filtroPlan, setFiltroPlan] = useState('todos')
 
   async function load() {
     setLoading(true)
@@ -137,6 +150,15 @@ export default function Socios() {
   const totalReceber = socios.reduce((s, sc) => s + (sc.saldo || 0), 0)
   const emAtraso     = socios.filter(sc => statusSocio(sc) === 'late').length
 
+  const sociosFiltrados = useMemo(() => {
+    return socios.filter(sc => {
+      if (filtroStatus !== 'todos' && statusSocio(sc) !== filtroStatus) return false
+      if (filtroPlan !== 'todos' && sc.plano !== filtroPlan) return false
+      if (busca && !sc.nome.toLowerCase().includes(busca.toLowerCase()) && !sc.email?.toLowerCase().includes(busca.toLowerCase())) return false
+      return true
+    })
+  }, [socios, filtroStatus, filtroPlan, busca])
+
   if (loading) return <div className="page"><p style={{ color: 'var(--muted)' }}>Carregando…</p></div>
 
   return (
@@ -144,13 +166,14 @@ export default function Socios() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <h1 className="page-title" style={{ margin: 0 }}>Sócios</h1>
-        <button className="btn btn-primary btn-sm" onClick={() => { setForm(EMPTY_FORM); setModal(true) }}>
-          + Novo Sócio
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => exportCSV(sociosFiltrados)}>📥 CSV</button>
+          <button className="btn btn-primary btn-sm" onClick={() => { setForm(EMPTY_FORM); setModal(true) }}>+ Novo Sócio</button>
+        </div>
       </div>
 
       {/* KPIs */}
-      <div className="grid3" style={{ marginBottom: 28 }}>
+      <div className="grid3" style={{ marginBottom: 20 }}>
         <div className="kpi">
           <div className="kpi-label">Total Sócios</div>
           <div className="kpi-value">{socios.length}</div>
@@ -165,12 +188,31 @@ export default function Socios() {
         </div>
       </div>
 
+      {/* Filtros */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 18, flexWrap: 'wrap', alignItems: 'center' }}>
+        <input placeholder="🔍 Buscar por nome ou e-mail…" value={busca} onChange={e => setBusca(e.target.value)}
+          style={{ flex: 1, minWidth: 180, padding: '8px 12px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, color: 'var(--cream)', fontSize: 13 }} />
+        <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}
+          style={{ padding: '8px 10px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, color: 'var(--cream)', fontSize: 13 }}>
+          <option value="todos">Todos status</option>
+          <option value="ok">OK</option>
+          <option value="warn">Atenção</option>
+          <option value="late">Atraso</option>
+        </select>
+        <select value={filtroPlan} onChange={e => setFiltroPlan(e.target.value)}
+          style={{ padding: '8px 10px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 8, color: 'var(--cream)', fontSize: 13 }}>
+          <option value="todos">Todos planos</option>
+          {PLANOS.map(p => <option key={p}>{p}</option>)}
+        </select>
+        <span style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>{sociosFiltrados.length} de {socios.length}</span>
+      </div>
+
       {/* Cards */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {socios.length === 0 && (
-          <p style={{ color: 'var(--muted)' }}>Nenhum sócio cadastrado.</p>
+        {sociosFiltrados.length === 0 && (
+          <p style={{ color: 'var(--muted)' }}>Nenhum sócio encontrado.</p>
         )}
-        {socios.map(sc => {
+        {sociosFiltrados.map(sc => {
           const st       = statusSocio(sc)
           const stCfg    = STATUS_CFG[st]
           const usoFrac  = sc.limite > 0 ? Math.min(sc.saldo / sc.limite, 1) : 0

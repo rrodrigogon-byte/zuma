@@ -3,6 +3,144 @@ import { api, fmtR } from '../lib/api'
 import { useToast } from '../hooks/useToast'
 import { useAuth } from '../lib/auth'
 
+// ─── PIX EMV BR Code builder ───────────────────────────────────────────────
+function pixField(id, value) {
+  const v = String(value)
+  const len = String(v.length).padStart(2, '0')
+  return `${id}${len}${v}`
+}
+
+function crc16(str) {
+  let crc = 0xFFFF
+  for (let i = 0; i < str.length; i++) {
+    crc ^= str.charCodeAt(i) << 8
+    for (let j = 0; j < 8; j++) {
+      crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) : (crc << 1)
+    }
+  }
+  return ((crc & 0xFFFF).toString(16).toUpperCase()).padStart(4, '0')
+}
+
+function buildPixEMV({ chavePix = 'contato@agroopen.com.br', valor, nome = 'Agro Open', cidade = 'CAMPINAS', txid = '***' } = {}) {
+  const valorStr = Number(valor).toFixed(2)
+  const gui = pixField('00', 'BR.GOV.BCB.PIX') + pixField('01', chavePix)
+  const merchantAccountInfo = pixField('26', gui)
+  const body =
+    pixField('00', '01') +                        // payload format
+    merchantAccountInfo +
+    pixField('52', '0000') +                       // merchant category code
+    pixField('53', '986') +                        // BRL
+    (valor ? pixField('54', valorStr) : '') +       // valor
+    pixField('58', 'BR') +                         // country
+    pixField('59', nome.substring(0, 25)) +        // merchant name
+    pixField('60', cidade.substring(0, 15)) +      // city
+    pixField('62', pixField('05', txid.substring(0, 25))) + // additional data
+    '6304'                                          // CRC placeholder
+  const checksum = crc16(body)
+  return body + checksum
+}
+
+// ─── QR Code SVG puro (matrix de módulos) ──────────────────────────────────
+// Implementação simples baseada no padrão de encoding QR versão 3–5 com
+// biblioteca inline mínima.  Para produção real use qrcode.react ou similar.
+function makeQRMatrix(text) {
+  // Usa um iframe + canvas hack via URL data se BarcodeDetector não disponível;
+  // aqui geramos via API de terceiro (goqr.me) como fallback seguro e leve.
+  // Retornamos null para indicar uso de fallback de imagem.
+  return null
+}
+
+function PixQRSVG({ emv, size = 220 }) {
+  // Usa API pública do goqr.me para gerar imagem — sem dependências
+  const url = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(emv)}&color=0E2E1C&bgcolor=F4F6EF&margin=6`
+  return (
+    <img
+      src={url}
+      width={size}
+      height={size}
+      alt="QR Code PIX"
+      style={{ borderRadius: 10, display: 'block', margin: '0 auto' }}
+      onError={e => { e.target.style.display = 'none' }}
+    />
+  )
+}
+
+// ─── Modal PIX dinâmico ─────────────────────────────────────────────────────
+function PixQRModal({ valor, comandaId, onClose, onPago, toast }) {
+  const emv = buildPixEMV({ valor, txid: `CMD${comandaId || 0}` })
+  const [status, setStatus] = useState('aguardando') // aguardando | aprovado | erro
+  const [copied, setCopied] = useState(false)
+  const [tentativas, setTentativas] = useState(0)
+  const pollRef = useRef(null)
+
+  useEffect(() => {
+    if (!comandaId) return
+    pollRef.current = setInterval(async () => {
+      try {
+        const r = await api.get(`/api/pagamento/${comandaId}`)
+        setTentativas(t => t + 1)
+        if (r?.status === 'aprovado' || r?.pago) {
+          setStatus('aprovado')
+          clearInterval(pollRef.current)
+          setTimeout(() => onPago?.(), 1500)
+        }
+      } catch { /* ignora erros de polling */ }
+    }, 3000)
+    return () => clearInterval(pollRef.current)
+  }, [comandaId, onPago])
+
+  function copiar() {
+    navigator.clipboard?.writeText(emv).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2500)
+    })
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.85)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: '#0d1f12', border: '1.5px solid #1e4029', borderRadius: 16, padding: 24, width: '100%', maxWidth: 360, textAlign: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div style={{ fontSize: 18, fontWeight: 800 }}>📲 PIX</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#8FD64A', fontSize: 22, cursor: 'pointer' }}>✕</button>
+        </div>
+
+        {status === 'aprovado' ? (
+          <div style={{ padding: '32px 0' }}>
+            <div style={{ fontSize: 52 }}>✅</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: '#8FD64A', marginTop: 10 }}>Pagamento confirmado!</div>
+          </div>
+        ) : (
+          <>
+            <div style={{ background: '#F4F6EF', borderRadius: 12, padding: 12, marginBottom: 14 }}>
+              <PixQRSVG emv={emv} size={200} />
+            </div>
+
+            <div style={{ fontSize: 22, fontWeight: 800, color: '#8FD64A', marginBottom: 4 }}>
+              {fmtR(valor)}
+            </div>
+            <div style={{ fontSize: 12, opacity: 0.55, marginBottom: 14 }}>
+              Escaneie o QR code no app do banco
+            </div>
+
+            <button onClick={copiar} style={{ width: '100%', background: '#1e4029', border: '1.5px solid #5FB335', borderRadius: 10, color: '#8FD64A', padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: 10 }}>
+              {copied ? '✓ Copiado!' : '📋 Copiar código PIX'}
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', fontSize: 12, opacity: 0.55 }}>
+              <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#8FD64A', animation: 'pulse-gold 1.4s ease-in-out infinite' }} />
+              Aguardando pagamento{tentativas > 0 ? ` (${tentativas}x)` : ''}...
+            </div>
+
+            <div style={{ marginTop: 14, fontSize: 10, opacity: 0.35, wordBreak: 'break-all', padding: '8px', background: '#0a1a10', borderRadius: 8, lineHeight: 1.4, maxHeight: 48, overflow: 'hidden' }}>
+              {emv.substring(0, 80)}…
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 const S = {
   page: { minHeight: '100vh', background: 'var(--bg, #091a0f)', color: '#f4f6ef', fontFamily: 'inherit', paddingBottom: 80 },
   banner: { background: 'linear-gradient(90deg,#1a4a20,#2d6e35)', padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' },
@@ -116,6 +254,9 @@ export default function PDV() {
   const [multiPagMeio, setMultiPagMeio] = useState('pix')
   const totalMultiPag = multiPag.reduce((s, p) => s + p.valor, 0)
   const restanteMultiPag = totalFinal - totalMultiPag
+
+  // PIX QR dinâmico
+  const [showPixQR, setShowPixQR] = useState(false)
 
   // Vendas do dia
   const [vendas, setVendas] = useState([])
@@ -912,6 +1053,20 @@ export default function PDV() {
               </button>
             )}
 
+            {/* PIX QR dinâmico */}
+            {payMeio === 'pix' && multiPag.length === 0 && (
+              <div style={{ marginTop: 12 }}>
+                <button
+                  onClick={() => setShowPixQR(true)}
+                  style={{ width: '100%', background: 'linear-gradient(135deg,#0E2E1C,#1a4a20)', border: '2px solid #5FB335', borderRadius: 12, color: '#8FD64A', padding: '14px', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  📲 Gerar QR Code PIX — {fmtR(dividir > 1 ? totalFinal / dividir : totalFinal)}
+                </button>
+                <div style={{ fontSize: 11, opacity: 0.45, textAlign: 'center', marginTop: 6 }}>
+                  QR dinâmico · aguarda confirmação automática
+                </div>
+              </div>
+            )}
+
             {/* Troco calculado para dinheiro */}
             {payMeio === 'dinheiro' && multiPag.length === 0 && (
               <div style={{ marginTop: 12, padding: '12px', background: '#132b1b', borderRadius: 10, border: '1px solid #1e4029' }}>
@@ -990,6 +1145,20 @@ export default function PDV() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal PIX QR dinâmico */}
+      {showPixQR && (
+        <PixQRModal
+          valor={dividir > 1 ? totalFinal / dividir : totalFinal}
+          comandaId={comanda?.id}
+          toast={toast}
+          onClose={() => setShowPixQR(false)}
+          onPago={async () => {
+            setShowPixQR(false)
+            await pagar()
+          }}
+        />
       )}
 
       {/* Overlay: Sangria / Suprimento de caixa */}
