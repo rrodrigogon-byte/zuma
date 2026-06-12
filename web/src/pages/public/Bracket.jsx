@@ -233,7 +233,7 @@ export default function Bracket() {
             api.get(`/api/suico/${catSel}`)
               .then(data => { setFormato('swiss'); setDados(data); setLoading(false) })
               .catch(() => {
-                api.get(`/api/roundrobin/${catSel}`)
+                api.get(`/api/liga/${catSel}`)
                   .then(data => { setFormato('roundrobin'); setDados(data); setLoading(false) })
                   .catch(() => { setLoading(false) })
               })

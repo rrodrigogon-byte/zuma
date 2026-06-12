@@ -5,7 +5,13 @@ const Ctx = createContext(null)
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
 
-  const toast = useCallback((msg, isError = false) => {
+  // 2º arg aceita boolean (true=erro) OU string de variante. Muitas telas chamam
+  // toast(msg, 'success'|'error'|'warn'|'info'); sem este mapeamento toda string
+  // truthy renderizava como erro vermelho — inclusive os sucessos.
+  const toast = useCallback((msg, kind = false) => {
+    const isError = kind === true ||
+      kind === 'error' || kind === 'erro' ||
+      kind === 'warn' || kind === 'warning' || kind === 'danger'
     const id = Math.random().toString(36).slice(2)
     setToasts(t => [...t, { id, msg, isError }])
     setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3800)
