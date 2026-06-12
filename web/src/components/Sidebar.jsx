@@ -85,7 +85,7 @@ function Section({ label, items, onNavClick }) {
 }
 
 export default function Sidebar() {
-  const { user, logout, isAdmin, isStaff, isAtleta } = useAuth()
+  const { user, logout, isOrg, isStaff, isAtleta } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
@@ -166,7 +166,7 @@ export default function Sidebar() {
         </div>
 
         {isStaff && <Section label="Operações" items={NAV_OP} onNavClick={handleNavClick} />}
-        {isAdmin  && <Section label="Admin"     items={NAV_ADMIN} onNavClick={handleNavClick} />}
+        {isOrg   && <Section label="Admin"     items={NAV_ADMIN} onNavClick={handleNavClick} />}
         <Section label="Site Público" items={NAV_PUBLIC} onNavClick={handleNavClick} />
 
         {/* Bottom user area */}
