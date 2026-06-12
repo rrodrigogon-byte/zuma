@@ -223,6 +223,17 @@ export default function Pontos() {
       <div style={S.hdr}>
         <div style={S.title}>⭐ Programa de Pontos</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => {
+              const headers = ['Sócio', 'Saldo', 'Data']
+              const rows = tab === 'histórico'
+                ? histFiltrado.map(h => [h.socioNome, h.pontos, h.criadoEm ? new Date(h.criadoEm).toLocaleString('pt-BR') : ''])
+                : saldos.map(s => [s.nome, s.saldo, ''])
+              const csv = [headers, ...rows].map(r => r.map(v => `"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n')
+              const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })); a.download = `pontos_${new Date().toISOString().slice(0,10)}.csv`; a.click()
+            }}
+            style={{ ...S.btn, background: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--cream)' }}
+          >⬇ CSV</button>
           <button onClick={() => setModalResgatar(true)} style={{ ...S.btn, background: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--cream)' }}>🎁 Resgatar</button>
           <button onClick={() => setModalCreditar(true)} style={{ ...S.btn, background: 'var(--green)', color: 'var(--deep)' }}>+ Creditar Pontos</button>
         </div>

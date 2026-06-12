@@ -1,6 +1,22 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { api, fmtDate } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
+
+function exportCSV(logs) {
+  const headers = ['ID', 'Data/Hora', 'Usuário', 'Ação', 'Dados']
+  const rows = logs.map(l => [
+    l.id ?? '',
+    l.criadoEm ? new Date(l.criadoEm).toLocaleString('pt-BR') : '',
+    l.usuario || 'sistema',
+    l.acao || '',
+    typeof l.dados === 'object' ? JSON.stringify(l.dados) : String(l.dados || ''),
+  ])
+  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }))
+  a.download = `auditoria_${new Date().toISOString().slice(0,10)}.csv`
+  a.click()
+}
 
 function JsonPreview({ dados }) {
   const [expanded, setExpanded] = useState(false)
@@ -65,8 +81,9 @@ export default function Auditoria() {
   const { toast } = useToast()
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
-  const [busca, setBusca] = useState('')
-  const [limit, setLimit] = useState(100)
+  const [busca, setBusca]           = useState('')
+  const [limit, setLimit]           = useState(100)
+  const [filtroAcao, setFiltroAcao] = useState('todas')
 
   const load = useCallback(async (lim = limit) => {
     setLoading(true)
@@ -82,14 +99,23 @@ export default function Auditoria() {
 
   useEffect(() => { load() }, [load])
 
-  const filtered = logs.filter(log => {
-    if (!busca.trim()) return true
-    const q = busca.toLowerCase()
-    return (
-      (log.acao || '').toLowerCase().includes(q) ||
-      (log.usuario || '').toLowerCase().includes(q)
-    )
-  })
+  // Ações únicas para o filtro
+  const acoesUnicas = useMemo(() => {
+    const set = new Set(logs.map(l => l.acao).filter(Boolean))
+    return [...set].sort()
+  }, [logs])
+
+  const filtered = useMemo(() => {
+    const q = busca.toLowerCase().trim()
+    return logs.filter(log => {
+      if (filtroAcao !== 'todas' && log.acao !== filtroAcao) return false
+      if (!q) return true
+      return (
+        (log.acao || '').toLowerCase().includes(q) ||
+        (log.usuario || '').toLowerCase().includes(q)
+      )
+    })
+  }, [logs, busca, filtroAcao])
 
   const S = {
     page: { padding: '1.5rem', maxWidth: 1200, margin: '0 auto' },
@@ -134,6 +160,14 @@ export default function Auditoria() {
           />
           <select
             style={S.select}
+            value={filtroAcao}
+            onChange={e => setFiltroAcao(e.target.value)}
+          >
+            <option value="todas">Todas as ações</option>
+            {acoesUnicas.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+          <select
+            style={S.select}
             value={limit}
             onChange={e => { setLimit(Number(e.target.value)); load(Number(e.target.value)) }}
           >
@@ -142,9 +176,8 @@ export default function Auditoria() {
             <option value={250}>Últimos 250</option>
             <option value={500}>Últimos 500</option>
           </select>
-          <button style={S.btnSm('var(--green)')} onClick={() => load()}>
-            ↻ Atualizar
-          </button>
+          <button style={S.btnSm('var(--green)')} onClick={() => load()}>↻ Atualizar</button>
+          <button style={S.btnSm()} onClick={() => exportCSV(filtered)}>⬇ CSV</button>
         </div>
       </div>
 

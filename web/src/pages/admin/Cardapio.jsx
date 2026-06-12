@@ -1,7 +1,33 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { api, fmtR } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
+
+function exportCSV(itens) {
+  const headers = ['ID', 'Nome', 'Categoria', 'Setor', 'Preço', 'Disponível', 'Cozinha']
+  const rows = itens.map(i => [
+    i.id, i.nome, i.cat, i.setor || 'bar',
+    String(i.preco), i.indisponivel ? 'Não' : 'Sim', i.cozinha ? 'Sim' : 'Não',
+  ])
+  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }))
+  a.download = `cardapio_${new Date().toISOString().slice(0,10)}.csv`
+  a.click()
+}
+
+function KpiCard({ label, value, sub, color }) {
+  return (
+    <div style={{
+      background: 'var(--surface)', border: '1px solid var(--line)',
+      borderRadius: 10, padding: '14px 18px', flex: 1, minWidth: 110,
+    }}>
+      <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 900, color: color || 'var(--cream)' }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{sub}</div>}
+    </div>
+  )
+}
 
 const CATEGORIAS = ['Bebidas', 'Petiscos', 'Espetinhos', 'Cozinha', 'Sobremesas']
 const SETORES = ['bar', 'cozinha', 'chapa']
@@ -89,6 +115,9 @@ export default function Cardapio() {
   const [editForm, setEditForm] = useState({ ...EMPTY_FORM })
   const [saving, setSaving] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
+  const [busca, setBusca]           = useState('')
+  const [filtroCat, setFiltroCat]   = useState('Todas')
+  const [filtroDisp, setFiltroDisp] = useState('todos') // 'todos'|'disponiveis'|'indisponiveis'
 
   const load = () => {
     setLoading(true)
@@ -101,13 +130,35 @@ export default function Cardapio() {
 
   useEffect(load, [])
 
+  // KPIs
+  const kpis = useMemo(() => ({
+    total:        itens.length,
+    disponiveis:  itens.filter(i => !i.indisponivel).length,
+    bar:          itens.filter(i => i.setor === 'bar').length,
+    cozinha:      itens.filter(i => i.setor === 'cozinha').length,
+    chapa:        itens.filter(i => i.setor === 'chapa').length,
+    precoMedio:   itens.length ? (itens.reduce((s, i) => s + Number(i.preco || 0), 0) / itens.length) : 0,
+  }), [itens])
+
+  // Itens filtrados por busca/categoria/disponibilidade
+  const itensFiltrados = useMemo(() => {
+    const q = busca.toLowerCase().trim()
+    return itens.filter(i => {
+      if (filtroCat !== 'Todas' && i.cat !== filtroCat) return false
+      if (filtroDisp === 'disponiveis' && i.indisponivel) return false
+      if (filtroDisp === 'indisponiveis' && !i.indisponivel) return false
+      if (q && !i.nome.toLowerCase().includes(q)) return false
+      return true
+    })
+  }, [itens, busca, filtroCat, filtroDisp])
+
   // Itens agrupados por categoria, respeitando campo ordem
-  const grouped = CATEGORIAS.reduce((acc, cat) => {
-    acc[cat] = itens
+  const grouped = useMemo(() => CATEGORIAS.reduce((acc, cat) => {
+    acc[cat] = itensFiltrados
       .filter(i => i.cat === cat)
       .sort((a, b) => (a.ordem ?? 999) - (b.ordem ?? 999))
     return acc
-  }, {})
+  }, {}), [itensFiltrados])
 
   const handleToggle = async (item, campo) => {
     try {
@@ -232,9 +283,10 @@ export default function Cardapio() {
   return (
     <div className="page">
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <h1 className="page-title" style={{ margin: 0 }}>Cardápio</h1>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => exportCSV(itensFiltrados)}>⬇ CSV</button>
           <button
             className={`btn btn-sm ${showPreview ? 'btn-primary' : 'btn-ghost'}`}
             onClick={() => setShowPreview(v => !v)}
@@ -245,6 +297,46 @@ export default function Cardapio() {
             ↩ Restaurar padrão
           </button>
         </div>
+      </div>
+
+      {/* KPIs */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+        <KpiCard label="Total de Itens" value={kpis.total} color="var(--cream)" />
+        <KpiCard label="Disponíveis" value={kpis.disponiveis} color="var(--green)" sub={`${kpis.total - kpis.disponiveis} indisp.`} />
+        <KpiCard label="Bar" value={kpis.bar} color="var(--lime)" />
+        <KpiCard label="Cozinha" value={kpis.cozinha} color="var(--gold)" />
+        <KpiCard label="Chapa" value={kpis.chapa} color="#e07b39" />
+        <KpiCard label="Preço Médio" value={fmtR(kpis.precoMedio)} color="var(--cream)" />
+      </div>
+
+      {/* Filtros */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20, alignItems: 'center' }}>
+        <input
+          className="input" placeholder="🔍 Buscar item…"
+          value={busca} onChange={e => setBusca(e.target.value)}
+          style={{ maxWidth: 220 }}
+        />
+        <select className="input" value={filtroCat} onChange={e => setFiltroCat(e.target.value)} style={{ maxWidth: 160 }}>
+          <option value="Todas">Todas as categorias</option>
+          {CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        {['todos', 'disponiveis', 'indisponiveis'].map(v => (
+          <button key={v} className={`btn btn-sm ${filtroDisp === v ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setFiltroDisp(v)}
+          >
+            {v === 'todos' ? 'Todos' : v === 'disponiveis' ? '✅ Disponíveis' : '🚫 Indisponíveis'}
+          </button>
+        ))}
+        {(busca || filtroCat !== 'Todas' || filtroDisp !== 'todos') && (
+          <button className="btn btn-ghost btn-sm" onClick={() => { setBusca(''); setFiltroCat('Todas'); setFiltroDisp('todos') }}>
+            ✕ Limpar
+          </button>
+        )}
+        {(busca || filtroCat !== 'Todas' || filtroDisp !== 'todos') && (
+          <span style={{ fontSize: 12, color: 'var(--muted)', marginLeft: 4 }}>
+            {itensFiltrados.length} resultado{itensFiltrados.length !== 1 ? 's' : ''}
+          </span>
+        )}
       </div>
 
       {/* Preview do PDV */}

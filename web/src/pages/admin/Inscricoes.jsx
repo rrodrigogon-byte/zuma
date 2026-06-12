@@ -46,8 +46,9 @@ export default function Inscricoes() {
   const [filtroDataDe, setFiltroDataDe] = useState('')
   const [filtroDataAte, setFiltroDataAte] = useState('')
   const [selecionados, setSelecionados] = useState([])
-  const [acao, setAcao] = useState('aprovado')
-  const [detalhe, setDetalhe] = useState(null)
+  const [acao, setAcao]               = useState('aprovado')
+  const [detalhe, setDetalhe]         = useState(null)
+  const [busca, setBusca]             = useState('')
   const { toast } = useToast()
 
   const load = async () => {
@@ -70,14 +71,18 @@ export default function Inscricoes() {
     return c
   }, [inscricoes])
 
+  const receita = useMemo(() => inscricoes.reduce((s, i) => s + (i.status === 'aprovado' ? Number(i.total || 0) : 0), 0), [inscricoes])
+
   const filtrados = useMemo(() => {
+    const q = busca.toLowerCase().trim()
     return inscricoes.filter((i) => {
       if (filtro !== 'todos' && i.status !== filtro) return false
       if (filtroDataDe && i.criadoEm && i.criadoEm < filtroDataDe) return false
       if (filtroDataAte && i.criadoEm && i.criadoEm.slice(0, 10) > filtroDataAte) return false
+      if (q && !`${i.nome} ${i.email} ${i.dupla || ''}`.toLowerCase().includes(q)) return false
       return true
     })
-  }, [inscricoes, filtro, filtroDataDe, filtroDataAte])
+  }, [inscricoes, filtro, filtroDataDe, filtroDataAte, busca])
 
   const toggleSel = (id) => setSelecionados((prev) =>
     prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
@@ -128,13 +133,30 @@ export default function Inscricoes() {
     <div className="page">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <h1 className="page-title" style={{ margin: 0 }}>Inscrições</h1>
-        <button
-          className="btn btn-secondary"
-          onClick={() => exportCSV(filtrados)}
-          title="Exportar inscrições visíveis como CSV"
-        >
+        <button className="btn btn-secondary" onClick={() => exportCSV(filtrados)}>
           📥 Exportar CSV
         </button>
+      </div>
+
+      {/* KPI extra: receita aprovada */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <div style={{ padding: '10px 18px', background: '#1e4a2e22', border: '1px solid #1e4a2e', borderRadius: 10, minWidth: 110 }}>
+          <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, marginBottom: 2 }}>Receita aprovada</div>
+          <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--green)' }}>
+            {receita.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          </div>
+        </div>
+      </div>
+
+      {/* Busca */}
+      <div style={{ marginBottom: 16 }}>
+        <input
+          className="input"
+          placeholder="🔍 Buscar por nome, e-mail ou dupla…"
+          value={busca}
+          onChange={e => setBusca(e.target.value)}
+          style={{ maxWidth: 300 }}
+        />
       </div>
 
       {/* Contadores por status */}

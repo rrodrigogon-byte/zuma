@@ -1,5 +1,20 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { api, fmtDate, fmtDateOnly } from '../../lib/api'
+
+function exportCSV(torneios) {
+  const headers = ['ID', 'Nome', 'Formato', 'Modalidade', 'Início', 'Fim', 'Local', 'Status']
+  const hoje = new Date().toISOString().slice(0, 10)
+  const rows = torneios.map(t => [
+    t.id, t.nome, t.formato, t.modalidade,
+    t.inicio, t.fim, t.local || '',
+    t.fim < hoje ? 'Encerrado' : t.inicio <= hoje ? 'Em andamento' : 'Futuro',
+  ])
+  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n')
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }))
+  a.download = `torneios_${new Date().toISOString().slice(0,10)}.csv`
+  a.click()
+}
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
 
@@ -255,6 +270,8 @@ export default function Torneios() {
   const [editId, setEditId] = useState(null)
   const [saving, setSaving] = useState(false)
   const [selectedTorneio, setSelectedTorneio] = useState(null)
+  const [busca, setBusca]           = useState('')
+  const [filtroStatus, setFiltroStatus] = useState('todos') // 'todos'|'futuro'|'andamento'|'encerrado'
   const { toast } = useToast()
 
   const load = async () => {
@@ -316,11 +333,47 @@ export default function Torneios() {
     setSelectedTorneio(prev => prev?.id === t.id ? null : t)
   }
 
+  const torneiosFiltrados = useMemo(() => {
+    const q = busca.toLowerCase().trim()
+    const hoje = new Date().toISOString().slice(0, 10)
+    return torneios.filter(t => {
+      if (q && !t.nome.toLowerCase().includes(q) && !t.local?.toLowerCase().includes(q)) return false
+      if (filtroStatus === 'futuro'     && !(t.inicio > hoje)) return false
+      if (filtroStatus === 'andamento'  && !(t.inicio <= hoje && t.fim >= hoje)) return false
+      if (filtroStatus === 'encerrado'  && !(t.fim < hoje)) return false
+      return true
+    })
+  }, [torneios, busca, filtroStatus])
+
   return (
     <div className="page-torneios">
       <div className="page-header">
         <h1>Torneios</h1>
-        <button className="btn-primary" onClick={openCreate}>+ Novo Torneio</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => exportCSV(torneiosFiltrados)}>⬇ CSV</button>
+          <button className="btn-primary" onClick={openCreate}>+ Novo Torneio</button>
+        </div>
+      </div>
+
+      {/* Filtros */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18, alignItems: 'center' }}>
+        <input
+          className="input" placeholder="🔍 Buscar torneio ou local…"
+          value={busca} onChange={e => setBusca(e.target.value)}
+          style={{ maxWidth: 240 }}
+        />
+        {[['todos','Todos'],['futuro','Futuros'],['andamento','Em andamento'],['encerrado','Encerrados']].map(([v, l]) => (
+          <button key={v} className={`btn btn-sm ${filtroStatus === v ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setFiltroStatus(v)}>
+            {l}
+          </button>
+        ))}
+        {(busca || filtroStatus !== 'todos') && (
+          <button className="btn btn-ghost btn-sm" onClick={() => { setBusca(''); setFiltroStatus('todos') }}>✕ Limpar</button>
+        )}
+        <span style={{ fontSize: 12, color: 'var(--muted)', marginLeft: 4 }}>
+          {torneiosFiltrados.length} de {torneios.length}
+        </span>
       </div>
 
       <div className={`torneios-layout ${selectedTorneio ? 'torneios-layout--split' : ''}`}>
@@ -328,8 +381,8 @@ export default function Torneios() {
         <div className="torneios-lista">
           {loading ? (
             <p className="loading-msg">Carregando…</p>
-          ) : torneios.length === 0 ? (
-            <p className="empty-msg">Nenhum torneio cadastrado.</p>
+          ) : torneiosFiltrados.length === 0 ? (
+            <p className="empty-msg">{torneios.length === 0 ? 'Nenhum torneio cadastrado.' : 'Nenhum resultado para os filtros aplicados.'}</p>
           ) : (
             <div className="table-wrap">
               <table className="admin-table">
@@ -346,7 +399,7 @@ export default function Torneios() {
                   </tr>
                 </thead>
                 <tbody>
-                  {torneios.map(t => {
+                  {torneiosFiltrados.map(t => {
                     const { label, cls } = statusBadge(t)
                     const isSelected = selectedTorneio?.id === t.id
                     return (

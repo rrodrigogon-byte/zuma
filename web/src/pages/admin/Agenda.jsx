@@ -198,8 +198,10 @@ export default function Agenda() {
   const [jogos, setJogos] = useState([])
   const [torneios, setTorneios] = useState([])
   const [loading, setLoading] = useState(true)
-  const [vista, setVista] = useState('lista') // 'lista' | 'semana'
-  const [anchor, setAnchor] = useState(new Date().toISOString().slice(0, 10))
+  const [vista, setVista]       = useState('lista') // 'lista' | 'semana'
+  const [anchor, setAnchor]     = useState(new Date().toISOString().slice(0, 10))
+  const [busca, setBusca]       = useState('')
+  const [filtroStatus, setFiltroStatus] = useState('todos') // 'todos'|'pendentes'|'concluidos'
 
   // Modal novo jogo
   const [openNovo, setOpenNovo] = useState(false)
@@ -311,12 +313,63 @@ export default function Agenda() {
     pendentes: jogos.filter(j => !j.vencedor).length,
   }), [jogos])
 
+  // Export CSV
+  function exportCSV() {
+    const headers = ['ID', 'Data', 'Hora', 'Quadra', 'Confronto', 'Categoria', 'Vencedor', 'Placar']
+    const rows = jogosFiltrados.map(j => [
+      j.id, j.data, j.hora, j.quadra || '',
+      j.confronto || '', j.categoria || '',
+      j.vencedor || '', j.placar ? `${j.placar1}-${j.placar2}` : '',
+    ])
+    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n')
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }))
+    a.download = `agenda_${new Date().toISOString().slice(0,10)}.csv`
+    a.click()
+  }
+
+  // Filtro de jogos
+  const jogosFiltrados = useMemo(() => {
+    const q = busca.toLowerCase().trim()
+    return jogos.filter(j => {
+      if (filtroStatus === 'pendentes' && j.vencedor) return false
+      if (filtroStatus === 'concluidos' && !j.vencedor) return false
+      if (q && !`${j.confronto} ${j.quadra} ${j.categoria}`.toLowerCase().includes(q)) return false
+      return true
+    })
+  }, [jogos, busca, filtroStatus])
+
   return (
     <div className="page-agenda">
       <div className="page-header">
         <h1>Agenda</h1>
-        <button className="btn-primary" onClick={() => { setForm(EMPTY_JOGO); setOpenNovo(true) }}>+ Novo Jogo</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost btn-sm" onClick={exportCSV}>⬇ CSV</button>
+          <button className="btn-primary" onClick={() => { setForm(EMPTY_JOGO); setOpenNovo(true) }}>+ Novo Jogo</button>
+        </div>
       </div>
+
+      {/* Busca e filtros */}
+      {!loading && jogos.length > 0 && (
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
+          <input
+            className="input" placeholder="🔍 Buscar confronto, quadra ou categoria…"
+            value={busca} onChange={e => setBusca(e.target.value)}
+            style={{ maxWidth: 280 }}
+          />
+          {[['todos','Todos'],['pendentes','Pendentes'],['concluidos','Concluídos']].map(([v,l]) => (
+            <button key={v} className={`btn btn-sm ${filtroStatus === v ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setFiltroStatus(v)}>{l}
+            </button>
+          ))}
+          {(busca || filtroStatus !== 'todos') && (
+            <button className="btn btn-ghost btn-sm" onClick={() => { setBusca(''); setFiltroStatus('todos') }}>✕ Limpar</button>
+          )}
+          <span style={{ fontSize: 12, color: 'var(--muted)', marginLeft: 4 }}>
+            {jogosFiltrados.length} de {jogos.length}
+          </span>
+        </div>
+      )}
 
       {/* Stats */}
       {!loading && jogos.length > 0 && (
@@ -358,7 +411,7 @@ export default function Agenda() {
         />
       ) : (
         <VistaLista
-          jogos={jogos}
+          jogos={jogosFiltrados}
           torneioNome={torneioNome}
           onEditPlacar={openResultado}
         />

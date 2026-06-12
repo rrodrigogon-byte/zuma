@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { api } from '../lib/api'
 import { useToast } from '../hooks/useToast'
 
@@ -229,8 +229,11 @@ function Panel({ title, items, onStatusChange, hidePronto }) {
 
 export default function KDS() {
   const [items, setItems] = useState([])
-  const [hidePronto, setHidePronto] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [hidePronto, setHidePronto]     = useState(false)
+  const [loading, setLoading]           = useState(true)
+  const [filtroSetor, setFiltroSetor]   = useState('todos') // 'todos'|'bar'|'cozinha'
+  const [somAtivo, setSomAtivo]         = useState(false)
+  const prevPendentesRef = useRef(0)
   const { toast } = useToast()
   const intervalRef = useRef(null)
 
@@ -268,9 +271,26 @@ export default function KDS() {
     setItems(prev => prev.filter(i => i.status !== 'pronto'))
   }
 
-  const barItems = items.filter(i => !i.cozinha)
-  const cozinhaItems = items.filter(i => i.cozinha)
-  const totalPendentes = items.filter(i => i.status !== 'pronto').length
+  const barItems     = useMemo(() => items.filter(i => !i.cozinha), [items])
+  const cozinhaItems = useMemo(() => items.filter(i => i.cozinha), [items])
+  const totalPendentes   = useMemo(() => items.filter(i => i.status !== 'pronto').length, [items])
+  const barPendentes     = useMemo(() => barItems.filter(i => i.status !== 'pronto').length, [barItems])
+  const cozinhaPendentes = useMemo(() => cozinhaItems.filter(i => i.status !== 'pronto').length, [cozinhaItems])
+
+  // Alerta sonoro quando novos pedidos chegam
+  useEffect(() => {
+    if (somAtivo && totalPendentes > prevPendentesRef.current) {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)()
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        osc.connect(gain); gain.connect(ctx.destination)
+        osc.frequency.value = 880; gain.gain.value = 0.15
+        osc.start(); osc.stop(ctx.currentTime + 0.18)
+      } catch {}
+    }
+    prevPendentesRef.current = totalPendentes
+  }, [totalPendentes, somAtivo])
 
   return (
     <>
@@ -367,19 +387,23 @@ export default function KDS() {
             padding: '20px 24px 0',
             overflow: 'hidden',
           }}>
-            <Panel
-              title="🍺 BAR"
-              items={barItems}
-              onStatusChange={handleStatusChange}
-              hidePronto={hidePronto}
-            />
-            <div style={{ width: 2, background: '#1e3a24', flexShrink: 0 }} />
-            <Panel
-              title="🍽 COZINHA"
-              items={cozinhaItems}
-              onStatusChange={handleStatusChange}
-              hidePronto={hidePronto}
-            />
+            {(filtroSetor === 'todos' || filtroSetor === 'bar') && (
+              <Panel
+                title={`🍺 BAR${barPendentes > 0 ? ` (${barPendentes})` : ''}`}
+                items={barItems}
+                onStatusChange={handleStatusChange}
+                hidePronto={hidePronto}
+              />
+            )}
+            {filtroSetor === 'todos' && <div style={{ width: 2, background: '#1e3a24', flexShrink: 0 }} />}
+            {(filtroSetor === 'todos' || filtroSetor === 'cozinha') && (
+              <Panel
+                title={`🍽 COZINHA${cozinhaPendentes > 0 ? ` (${cozinhaPendentes})` : ''}`}
+                items={cozinhaItems}
+                onStatusChange={handleStatusChange}
+                hidePronto={hidePronto}
+              />
+            )}
           </div>
         )}
       </div>
