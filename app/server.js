@@ -15,6 +15,7 @@ import { gerarSuico, proximaRodada, tabelaSuico } from './swiss.js';
 import { gerarDuplaElim, reportDupla } from './doubleelim.js';
 import { criarPix, consultarStatus, pagamentosAtivos, pixInfo, gerarBrCode } from './pagamentos.js';
 import crypto from 'crypto';
+import fs from 'fs';
 import QRCode from 'qrcode';
 import { wpp } from './whatsapp.js';
 import { mail } from './email.js';
@@ -25,6 +26,23 @@ const app = express();
 // do cliente (importante para rate-limit e auditoria).
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '1mb' }));
+
+// SSE — realtime para KDS, Mesas, Portaria
+const sseClients = new Set();
+function sseBroadcast(event, data) {
+  const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const res of sseClients) { try { res.write(msg); } catch {} }
+}
+app.get('/api/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+  res.write(': connected\n\n');
+  sseClients.add(res);
+  req.on('close', () => sseClients.delete(res));
+});
 
 // Headers de segurança (sem dependências extras — convenção do projeto). CORS é
 // same-origin por padrão (API e SPA no mesmo host); libera só métodos esperados.
@@ -921,13 +939,13 @@ app.post('/api/comanda/abrir', auth, (req,res)=>{
 app.post('/api/comanda/:id/item', auth, (req,res)=>{
   const c=db().comandas.find(x=>x.id==req.params.id && x.status==='aberta');
   if(!c) return res.status(404).json({error:'comanda não encontrada/aberta'});
-  const errs=addItens(c, req.body.itens || [req.body]); save();
+  const errs=addItens(c, req.body.itens || [req.body]); save(); sseBroadcast('comanda',{id:c.id,status:c.status});
   if(errs&&errs.length) return res.status(409).json({error:errs.join('; '), parcial:true, comanda:{...c,total:comandaTotal(c)}});
   res.json({ ...c, total:comandaTotal(c) });
 });
 app.post('/api/admin/comanda/:id/conta', auth, (req,res)=>{
   const c=db().comandas.find(x=>x.id==req.params.id); if(!c) return res.status(404).json({error:'não encontrada'});
-  c.contaPedida=true; save(); res.json({ok:true});
+  c.contaPedida=true; save(); sseBroadcast('comanda',{id:c.id,status:'conta_pedida'}); res.json({ok:true});
 });
 app.post('/api/admin/comanda/:id/fechar', auth, (req,res)=>{
   const c=db().comandas.find(x=>x.id==req.params.id); if(!c) return res.status(404).json({error:'não encontrada'});
@@ -1118,7 +1136,7 @@ app.get('/api/admin/kds', auth, requireStaff, (req,res)=>{
 app.post('/api/comanda/:id/adicionar', auth, (req,res)=>{
   const c=db().comandas.find(x=>x.id==req.params.id && x.status==='aberta');
   if(!c) return res.status(404).json({error:'comanda não encontrada/aberta'});
-  const errs=addItens(c, req.body.itens || [req.body]); save();
+  const errs=addItens(c, req.body.itens || [req.body]); save(); sseBroadcast('comanda',{id:c.id,status:c.status});
   if(errs&&errs.length) return res.status(409).json({error:errs.join('; '), parcial:true, comanda:{...c,total:comandaTotal(c)}});
   res.json({ ...c, total:comandaTotal(c) });
 });
@@ -1142,7 +1160,7 @@ app.post('/api/comanda/:id/cancelar-item', auth, (req,res)=>{
 app.post('/api/comanda/:id/conta', auth, (req,res)=>{
   const c=db().comandas.find(x=>x.id==req.params.id);
   if(!c) return res.status(404).json({error:'comanda não encontrada'});
-  c.contaPedida=true; save();
+  c.contaPedida=true; save(); sseBroadcast('comanda',{id:c.id,status:'conta_pedida'});
   res.json({ ok:true, total: Math.max(0, comandaTotal(c) - (c.desconto||0)) });
 });
 
@@ -2686,3 +2704,16 @@ process.on('unhandledRejection', (e)=> console.error('unhandledRejection:', e?.m
 process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.message || e));
 
 app.listen(PORT, ()=> console.log(`SetPoint React SPA em http://localhost:${PORT}`));
+
+// Backup diário às 03h
+;(function agendarBackupDiario() {
+  const DB_P = process.env.DB_PATH || path.join(__dirname, 'data', 'db.json');
+  const agora = new Date(), prox = new Date(agora);
+  prox.setDate(prox.getDate() + (agora.getHours() >= 3 ? 1 : 0));
+  prox.setHours(3, 0, 0, 0);
+  setTimeout(function tick() {
+    const bak = DB_P.replace(/\.json$/, '') + '-' + new Date().toISOString().slice(0,10) + '.bak.json';
+    try { if (fs.existsSync(DB_P)) fs.copyFileSync(DB_P, bak); } catch {}
+    setTimeout(tick, 24*60*60*1000);
+  }, Math.max(0, prox - agora));
+})();
