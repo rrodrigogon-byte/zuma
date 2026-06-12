@@ -2,8 +2,6 @@ import { useState, useEffect, useMemo } from 'react'
 import { api, fmtR } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
-const SEG_COLOR = ['#5FB335', '#C9A656', '#8FD64A', '#e05c5c', '#888', '#0E2E1C']
-
 // ── Utilitário CSV ────────────────────────────────────────────────────────────
 function exportCSV(rows, headers, filename) {
   const lines = [
@@ -16,34 +14,33 @@ function exportCSV(rows, headers, filename) {
   ]
   const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url; a.download = filename; a.click()
+  const a = document.createElement('a'); a.href = url; a.download = filename; a.click()
   URL.revokeObjectURL(url)
 }
 
 // ── Modal de Comunicado ───────────────────────────────────────────────────────
 function ModalComunicado({ segmentos, onClose, toast }) {
   const [destino, setDestino] = useState('todos')
-  const [canal, setCanal] = useState('whatsapp')
+  const [canal, setCanal] = useState('email')
+  const [assunto, setAssunto] = useState('')
   const [mensagem, setMensagem] = useState('')
   const [enviando, setEnviando] = useState(false)
+  const [resultado, setResultado] = useState(null)
 
   async function handleEnviar(e) {
     e.preventDefault()
     if (!mensagem.trim()) { toast('Digite a mensagem', 'error'); return }
     setEnviando(true)
     try {
-      await api.post('/api/admin/crm/comunicado', {
-        destino,
+      const r = await api.post('/api/admin/comunicacao', {
+        segmento: destino,
         canal,
+        assunto: assunto.trim() || 'Comunicado SetPoint',
         mensagem: mensagem.trim(),
       })
-      toast(`Comunicado enviado via ${canal === 'whatsapp' ? 'WhatsApp' : 'E-mail'}!`)
-      onClose()
+      setResultado(r.campanha)
     } catch (e) {
-      // Endpoint pode não existir ainda — simula sucesso em dev
-      toast(`Comunicado agendado (${canal})`, false)
-      onClose()
+      toast(e.message || 'Erro ao enviar comunicado', 'error')
     } finally {
       setEnviando(false)
     }
@@ -55,32 +52,51 @@ function ModalComunicado({ segmentos, onClose, toast }) {
     color: 'var(--fg)', fontSize: '0.9rem', boxSizing: 'border-box',
   }
 
+  if (resultado) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+        <div style={{ background: 'var(--surface)', borderRadius: 14, padding: '2rem', width: 440, maxWidth: '95vw', textAlign: 'center' }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+          <h3 style={{ color: 'var(--fg)', fontWeight: 800, marginBottom: 8 }}>Comunicado Registrado!</h3>
+          <p style={{ color: 'var(--muted)', fontSize: '0.9rem', marginBottom: 16 }}>
+            <strong>{resultado.destinatarios}</strong> destinatário(s) via <strong>{resultado.canal}</strong>.<br />
+            Status: <strong>{resultado.status}</strong>
+          </p>
+          {resultado.amostra?.length > 0 && (
+            <p style={{ color: 'var(--muted)', fontSize: '0.82rem', marginBottom: 16 }}>
+              Amostra: {resultado.amostra.join(', ')}
+            </p>
+          )}
+          {resultado.obs && (
+            <p style={{ color: 'var(--muted)', fontSize: '0.78rem', fontStyle: 'italic', marginBottom: 20 }}>{resultado.obs}</p>
+          )}
+          <button onClick={onClose} style={{ padding: '0.6rem 1.6rem', borderRadius: 8, border: 'none', background: 'var(--green)', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>
+            Fechar
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,.65)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-    }}>
-      <form onSubmit={handleEnviar} style={{
-        background: 'var(--surface)', borderRadius: 14, padding: '1.75rem',
-        width: 480, maxWidth: '95vw', display: 'flex', flexDirection: 'column', gap: 14,
-      }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+      <form onSubmit={handleEnviar} style={{ background: 'var(--surface)', borderRadius: 14, padding: '1.75rem', width: 500, maxWidth: '95vw', display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, color: 'var(--fg)', fontWeight: 800, fontSize: '1.1rem' }}>
-            📢 Enviar Comunicado
-          </h3>
-          <button type="button" onClick={onClose}
-            style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 20, cursor: 'pointer' }}>✕</button>
+          <h3 style={{ margin: 0, color: 'var(--fg)', fontWeight: 800, fontSize: '1.1rem' }}>📢 Enviar Comunicado</h3>
+          <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: 20, cursor: 'pointer' }}>✕</button>
         </div>
 
         {/* Destinatário */}
         <label>
           <div style={{ fontSize: '0.8rem', color: 'var(--muted)', fontWeight: 600, marginBottom: 6 }}>Destinatário</div>
           <select value={destino} onChange={e => setDestino(e.target.value)} style={ipt}>
-            <option value="todos">Todos os clientes</option>
-            <option value="ativos">Somente ativos</option>
-            {segmentos.map(s => (
-              <option key={s.nome} value={`seg:${s.nome}`}>{s.nome} ({s.qtd})</option>
-            ))}
+            <option value="todos">Todos os atletas</option>
+            <option value="ativos">Somente ativos (inscrito recente)</option>
+            <option value="inativos">Inativos (90+ dias)</option>
+            <option value="aniversariantes">Aniversariantes do mês</option>
+            {segmentos?.maioresConsumidores?.length > 0 && (
+              <option value="top10">Top 10 consumidores</option>
+            )}
           </select>
         </label>
 
@@ -88,49 +104,37 @@ function ModalComunicado({ segmentos, onClose, toast }) {
         <label>
           <div style={{ fontSize: '0.8rem', color: 'var(--muted)', fontWeight: 600, marginBottom: 6 }}>Canal de envio</div>
           <div style={{ display: 'flex', gap: 10 }}>
-            {[
-              { v: 'whatsapp', icon: '💬', label: 'WhatsApp' },
-              { v: 'email',    icon: '✉️',  label: 'E-mail' },
-            ].map(({ v, icon, label }) => (
-              <button
-                type="button"
-                key={v}
-                onClick={() => setCanal(v)}
-                style={{
-                  flex: 1, padding: '0.6rem', borderRadius: 8,
-                  border: `2px solid ${canal === v ? 'var(--green)' : 'var(--border)'}`,
-                  background: canal === v ? 'rgba(95,179,53,.12)' : 'var(--bg)',
-                  color: canal === v ? 'var(--green)' : 'var(--muted)',
-                  cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem',
-                }}
-              >{icon} {label}</button>
+            {[{ v: 'email', icon: '✉️', label: 'E-mail' }, { v: 'whatsapp', icon: '💬', label: 'WhatsApp' }].map(({ v, icon, label }) => (
+              <button type="button" key={v} onClick={() => setCanal(v)} style={{
+                flex: 1, padding: '0.6rem', borderRadius: 8,
+                border: `2px solid ${canal === v ? 'var(--green)' : 'var(--border)'}`,
+                background: canal === v ? 'rgba(95,179,53,.12)' : 'var(--bg)',
+                color: canal === v ? 'var(--green)' : 'var(--muted)',
+                cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem',
+              }}>{icon} {label}</button>
             ))}
           </div>
+        </label>
+
+        {/* Assunto */}
+        <label>
+          <div style={{ fontSize: '0.8rem', color: 'var(--muted)', fontWeight: 600, marginBottom: 6 }}>Assunto (e-mail)</div>
+          <input value={assunto} onChange={e => setAssunto(e.target.value)} placeholder="Ex: Oferta especial para sócios" style={ipt} />
         </label>
 
         {/* Mensagem */}
         <label>
           <div style={{ fontSize: '0.8rem', color: 'var(--muted)', fontWeight: 600, marginBottom: 6 }}>
-            Mensagem *
-            <span style={{ fontWeight: 400, marginLeft: 8 }}>{mensagem.length}/500</span>
+            Mensagem * <span style={{ fontWeight: 400 }}>{mensagem.length}/500</span>
           </div>
-          <textarea
-            required
-            maxLength={500}
-            value={mensagem}
-            onChange={e => setMensagem(e.target.value)}
+          <textarea required maxLength={500} value={mensagem} onChange={e => setMensagem(e.target.value)}
             placeholder="Ex: Olá! Temos uma promoção especial para você…"
-            style={{ ...ipt, resize: 'vertical', minHeight: 100 }}
-          />
+            style={{ ...ipt, resize: 'vertical', minHeight: 100 }} />
         </label>
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button type="button" onClick={onClose}
-            style={{ padding: '0.55rem 1.2rem', borderRadius: 8, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontWeight: 600 }}>
-            Cancelar
-          </button>
-          <button type="submit" disabled={enviando}
-            style={{ padding: '0.55rem 1.4rem', borderRadius: 8, border: 'none', background: 'var(--green)', color: '#fff', cursor: 'pointer', fontWeight: 700 }}>
+          <button type="button" onClick={onClose} style={{ padding: '0.55rem 1.2rem', borderRadius: 8, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontWeight: 600 }}>Cancelar</button>
+          <button type="submit" disabled={enviando} style={{ padding: '0.55rem 1.4rem', borderRadius: 8, border: 'none', background: 'var(--green)', color: '#fff', cursor: 'pointer', fontWeight: 700 }}>
             {enviando ? 'Enviando…' : '📤 Enviar'}
           </button>
         </div>
@@ -139,12 +143,148 @@ function ModalComunicado({ segmentos, onClose, toast }) {
   )
 }
 
-// ── Página CRM ────────────────────────────────────────────────────────────────
+// ── Sub-tabelas ───────────────────────────────────────────────────────────────
+function TabelaMaioresConsumidores({ lista, onComunicar }) {
+  const S = {
+    table: { width: '100%', borderCollapse: 'collapse', background: 'var(--surface)', borderRadius: 8, overflow: 'hidden' },
+    th: { background: 'var(--surface2)', color: 'var(--muted)', fontSize: '0.78rem', padding: '0.55rem 0.75rem', textAlign: 'left', fontWeight: 600 },
+    td: { padding: '0.65rem 0.75rem', borderBottom: '1px solid var(--border)', color: 'var(--fg)', fontSize: '0.9rem' },
+  }
+  if (!lista?.length) return <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '2rem' }}>Nenhum dado disponível.</p>
+  const max = lista[0]?.total || 1
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={S.table}>
+        <thead><tr>
+          <th style={S.th}>#</th>
+          <th style={S.th}>Cliente</th>
+          <th style={S.th}>E-mail</th>
+          <th style={S.th}>Consumo Total</th>
+          <th style={S.th}>Participação</th>
+          <th style={S.th}>Ação</th>
+        </tr></thead>
+        <tbody>
+          {lista.map((c, i) => {
+            const pct = ((c.total / max) * 100).toFixed(0)
+            const cor = i === 0 ? '#C9A656' : i < 3 ? '#8FD64A' : '#5FB335'
+            return (
+              <tr key={c.email}>
+                <td style={{ ...S.td, fontWeight: 800, color: i < 3 ? 'var(--gold)' : 'var(--muted)' }}>{i + 1}</td>
+                <td style={{ ...S.td, fontWeight: 700 }}>{c.nome}</td>
+                <td style={{ ...S.td, color: 'var(--muted)', fontSize: 12 }}>{c.email}</td>
+                <td style={S.td}>
+                  <span style={{ fontWeight: 800, color: cor }}>{fmtR(c.total)}</span>
+                  <div style={{ height: 4, borderRadius: 2, background: `linear-gradient(90deg, ${cor} ${pct}%, var(--border) ${pct}%)`, marginTop: 4 }} />
+                </td>
+                <td style={{ ...S.td, color: 'var(--muted)', fontSize: 12 }}>{pct}% do líder</td>
+                <td style={S.td}>
+                  <button onClick={() => onComunicar(c.email)} style={{ padding: '0.2rem 0.6rem', borderRadius: 6, border: '1px solid var(--border)', background: 'none', color: 'var(--green)', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}>📢</button>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function TabelaAniversariantes({ lista }) {
+  const S = {
+    table: { width: '100%', borderCollapse: 'collapse', background: 'var(--surface)', borderRadius: 8, overflow: 'hidden' },
+    th: { background: 'var(--surface2)', color: 'var(--muted)', fontSize: '0.78rem', padding: '0.55rem 0.75rem', textAlign: 'left', fontWeight: 600 },
+    td: { padding: '0.65rem 0.75rem', borderBottom: '1px solid var(--border)', color: 'var(--fg)', fontSize: '0.9rem' },
+  }
+  if (!lista?.length) return <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '2rem' }}>Nenhum aniversariante este mês. 🎉</p>
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={S.table}>
+        <thead><tr>
+          <th style={S.th}>Nome</th>
+          <th style={S.th}>E-mail</th>
+          <th style={S.th}>Data de Nasc.</th>
+          <th style={S.th}>Ação</th>
+        </tr></thead>
+        <tbody>
+          {lista.map(a => (
+            <tr key={a.email}>
+              <td style={{ ...S.td, fontWeight: 700 }}>🎂 {a.nome}</td>
+              <td style={{ ...S.td, color: 'var(--muted)', fontSize: 12 }}>{a.email}</td>
+              <td style={S.td}>{a.nasc ? new Date(a.nasc + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</td>
+              <td style={S.td}>
+                <button style={{ padding: '0.2rem 0.6rem', borderRadius: 6, border: '1px solid var(--border)', background: '#fef3c7', color: '#92400e', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700 }}>
+                  🎁 Parabenizar
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function TabelaInativos({ lista, onComunicar }) {
+  const [busca, setBusca] = useState('')
+  const S = {
+    table: { width: '100%', borderCollapse: 'collapse', background: 'var(--surface)', borderRadius: 8, overflow: 'hidden' },
+    th: { background: 'var(--surface2)', color: 'var(--muted)', fontSize: '0.78rem', padding: '0.55rem 0.75rem', textAlign: 'left', fontWeight: 600 },
+    td: { padding: '0.65rem 0.75rem', borderBottom: '1px solid var(--border)', color: 'var(--fg)', fontSize: '0.9rem' },
+  }
+  const filtrado = useMemo(() => {
+    if (!busca.trim()) return lista || []
+    const q = busca.toLowerCase()
+    return (lista || []).filter(i => i.nome?.toLowerCase().includes(q) || i.email?.toLowerCase().includes(q))
+  }, [lista, busca])
+
+  if (!lista?.length) return <p style={{ color: 'var(--muted)', textAlign: 'center', padding: '2rem' }}>Nenhum cliente inativo encontrado.</p>
+  return (
+    <>
+      <input type="search" placeholder="🔍 Filtrar por nome ou e-mail…" value={busca} onChange={e => setBusca(e.target.value)}
+        style={{ width: '100%', padding: '0.5rem 0.8rem', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--fg)', fontSize: '0.9rem', marginBottom: 12, boxSizing: 'border-box' }} />
+      <div style={{ overflowX: 'auto' }}>
+        <table style={S.table}>
+          <thead><tr>
+            <th style={S.th}>Nome</th>
+            <th style={S.th}>E-mail</th>
+            <th style={S.th}>Inativo há</th>
+            <th style={S.th}>Risco</th>
+            <th style={S.th}>Ação</th>
+          </tr></thead>
+          <tbody>
+            {filtrado.length === 0 && <tr><td colSpan={5} style={{ ...S.td, textAlign: 'center', color: 'var(--muted)' }}>Nenhum resultado.</td></tr>}
+            {filtrado.map(i => {
+              const dias = i.diasInativo
+              const risco = dias == null ? 'Nunca acessou' : dias > 180 ? 'Alto' : dias > 90 ? 'Médio' : 'Baixo'
+              const riscoColor = dias == null ? '#e05c5c' : dias > 180 ? '#e05c5c' : dias > 90 ? '#C9A656' : '#8FD64A'
+              return (
+                <tr key={i.email}>
+                  <td style={{ ...S.td, fontWeight: 700 }}>{i.nome}</td>
+                  <td style={{ ...S.td, color: 'var(--muted)', fontSize: 12 }}>{i.email}</td>
+                  <td style={S.td}>{dias != null ? `${dias} dias` : '—'}</td>
+                  <td style={S.td}>
+                    <span style={{ padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 700, background: riscoColor + '22', color: riscoColor }}>{risco}</span>
+                  </td>
+                  <td style={S.td}>
+                    <button onClick={() => onComunicar(i.email)} style={{ padding: '0.2rem 0.6rem', borderRadius: 6, border: '1px solid var(--border)', background: 'none', color: 'var(--green)', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}>📢 Reativar</button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>{filtrado.length} de {lista.length} registros</p>
+    </>
+  )
+}
+
+// ── Página CRM principal ──────────────────────────────────────────────────────
 export default function CRM() {
   const { toast } = useToast()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [busca, setBusca] = useState('')
+  const [tab, setTab] = useState('consumidores')
   const [modalComunicado, setModalComunicado] = useState(false)
 
   useEffect(() => {
@@ -158,7 +298,6 @@ export default function CRM() {
     page: { padding: '1.5rem', maxWidth: 1100, margin: '0 auto' },
     headerRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: 12 },
     h1: { color: 'var(--fg)', fontWeight: 700, fontSize: '1.4rem', margin: 0 },
-    btnGroup: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' },
     btn: (primary) => ({
       padding: '0.45rem 1rem', borderRadius: 8,
       border: primary ? 'none' : '1px solid var(--border)',
@@ -166,191 +305,113 @@ export default function CRM() {
       color: primary ? '#fff' : 'var(--muted)',
       cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem',
     }),
-    kpiGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: '2rem' },
+    kpiGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: '1.5rem' },
     kpiCard: (color) => ({
-      background: 'var(--surface)',
-      border: `1px solid var(--border)`,
-      borderLeft: `4px solid ${color}`,
-      borderRadius: 8,
-      padding: '1rem 1.25rem',
+      background: 'var(--surface)', border: `1px solid var(--border)`,
+      borderLeft: `4px solid ${color}`, borderRadius: 8, padding: '1rem 1.25rem',
     }),
     kpiLabel: { color: 'var(--muted)', fontSize: '0.78rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' },
     kpiValue: (color) => ({ color, fontSize: '2rem', fontWeight: 800, lineHeight: 1.1, margin: '0.3rem 0 0' }),
-    section: { marginBottom: '2rem' },
-    h2: { color: 'var(--fg)', fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 8 },
-    searchBar: {
-      width: '100%', padding: '0.55rem 0.9rem', borderRadius: 8, marginBottom: '1rem',
-      border: '1px solid var(--border)', background: 'var(--surface)',
-      color: 'var(--fg)', fontSize: '0.9rem', boxSizing: 'border-box',
-    },
-    table: { width: '100%', borderCollapse: 'collapse', background: 'var(--surface)', borderRadius: 8, overflow: 'hidden' },
-    th: { background: 'var(--surface2)', color: 'var(--muted)', fontSize: '0.78rem', padding: '0.55rem 0.75rem', textAlign: 'left', fontWeight: 600 },
-    td: { padding: '0.65rem 0.75rem', borderBottom: '1px solid var(--border)', color: 'var(--fg)', fontSize: '0.9rem' },
-    bar: (pct, color) => ({
-      height: 6, borderRadius: 3,
-      background: `linear-gradient(90deg, ${color} ${pct}%, var(--border) ${pct}%)`,
-      marginTop: 4,
+    tabBar: { display: 'flex', gap: 4, borderBottom: '1px solid var(--border)', marginBottom: '1.25rem', flexWrap: 'wrap' },
+    tabBtn: (active) => ({
+      padding: '8px 16px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13,
+      background: 'none', color: active ? 'var(--green)' : 'var(--muted)',
+      borderBottom: active ? '2px solid var(--green)' : '2px solid transparent',
     }),
-    badge: (color) => ({ display: 'inline-block', padding: '0.2rem 0.55rem', borderRadius: 12, background: color + '22', color, fontSize: '0.75rem', fontWeight: 700 }),
-    empty: { color: 'var(--muted)', fontSize: '0.9rem', padding: '2rem', textAlign: 'center', background: 'var(--surface)', borderRadius: 8 },
-    muted: { color: 'var(--muted)', fontSize: '0.78rem', marginTop: '0.5rem' },
+  }
+
+  function handleExportCSV() {
+    if (!data) return
+    const segs = data.segmentos || {}
+    const lista = segs.maioresConsumidores || []
+    if (!lista.length) { toast('Nenhum dado para exportar', 'error'); return }
+    exportCSV(
+      lista.map(c => ({ Nome: c.nome, Email: c.email, 'Consumo Total (R$)': Number(c.total || 0).toFixed(2) })),
+      ['Nome', 'Email', 'Consumo Total (R$)'],
+      'crm_maiores_consumidores.csv'
+    )
+    toast('CSV exportado!')
   }
 
   if (loading) return <div style={S.page}><p style={{ color: 'var(--muted)' }}>Carregando…</p></div>
   if (!data) return <div style={S.page}><p style={{ color: 'var(--muted)' }}>Sem dados disponíveis.</p></div>
 
-  const { totais = {}, segmentos = [] } = data
+  // O servidor retorna: { totais: {...}, segmentos: { maioresConsumidores, aniversariantes, inativos } }
+  const totais = data.totais || {}
+  const segs = data.segmentos || {}
 
-  // Filtro de busca sobre segmentos
-  const segFiltrados = useMemo(() => {
-    if (!busca.trim()) return segmentos
-    const q = busca.toLowerCase()
-    return segmentos.filter(s =>
-      s.nome?.toLowerCase().includes(q) ||
-      String(s.qtd).includes(q)
-    )
-  }, [segmentos, busca])
-
-  const maxQtd = Math.max(...segmentos.map(s => s.qtd), 1)
-
-  function handleExportCSV() {
-    if (!segmentos.length) { toast('Nenhum dado para exportar', 'error'); return }
-    const headers = ['Segmento', 'Clientes', 'Participação (%)', 'Valor Médio (R$)']
-    const rows = segmentos.map(seg => ({
-      'Segmento': seg.nome,
-      'Clientes': seg.qtd,
-      'Participação (%)': totais.clientes > 0 ? ((seg.qtd / totais.clientes) * 100).toFixed(1) : '0',
-      'Valor Médio (R$)': seg.valorMedio != null ? Number(seg.valorMedio).toFixed(2) : '',
-    }))
-    exportCSV(rows, headers, 'crm_segmentos.csv')
-    toast('CSV exportado!')
-  }
+  const TABS = [
+    { id: 'consumidores', label: `💰 Maiores Consumidores (${segs.maioresConsumidores?.length || 0})` },
+    { id: 'aniversariantes', label: `🎂 Aniversariantes (${segs.aniversariantes?.length || 0})` },
+    { id: 'inativos', label: `💤 Inativos (${segs.inativos?.length || 0})` },
+  ]
 
   return (
     <div style={S.page}>
       {/* Header */}
       <div style={S.headerRow}>
         <h1 style={S.h1}>📈 CRM — Base de Clientes</h1>
-        <div style={S.btnGroup}>
-          <button style={S.btn(false)} onClick={handleExportCSV}>
-            ⬇ Exportar CSV
-          </button>
-          <button style={S.btn(true)} onClick={() => setModalComunicado(true)}>
-            📢 Enviar Comunicado
-          </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button style={S.btn(false)} onClick={handleExportCSV}>⬇ Exportar CSV</button>
+          <button style={S.btn(true)} onClick={() => setModalComunicado(true)}>📢 Enviar Comunicado</button>
         </div>
       </div>
 
       {/* KPIs */}
       <div style={S.kpiGrid}>
         <div style={S.kpiCard('#5FB335')}>
-          <div style={S.kpiLabel}>Total de Clientes</div>
+          <div style={S.kpiLabel}>Total de Atletas</div>
           <div style={S.kpiValue('#5FB335')}>{(totais.clientes ?? 0).toLocaleString('pt-BR')}</div>
         </div>
         <div style={S.kpiCard('#C9A656')}>
-          <div style={S.kpiLabel}>Clientes Ativos</div>
-          <div style={S.kpiValue('#C9A656')}>{(totais.ativos ?? 0).toLocaleString('pt-BR')}</div>
-          {totais.clientes > 0 && (
-            <div style={{ color: 'var(--muted)', fontSize: '0.8rem', marginTop: 4 }}>
-              {((totais.ativos / totais.clientes) * 100).toFixed(0)}% da base
-            </div>
-          )}
+          <div style={S.kpiLabel}>Com Inscrição</div>
+          <div style={S.kpiValue('#C9A656')}>{(totais.comInscricao ?? 0).toLocaleString('pt-BR')}</div>
+          {totais.clientes > 0 && <div style={{ color: 'var(--muted)', fontSize: '0.8rem', marginTop: 4 }}>
+            {((totais.comInscricao / totais.clientes) * 100).toFixed(0)}% da base
+          </div>}
         </div>
         <div style={S.kpiCard('#8FD64A')}>
-          <div style={S.kpiLabel}>Novos (30 dias)</div>
-          <div style={S.kpiValue('#8FD64A')}>{(totais.novos ?? 0).toLocaleString('pt-BR')}</div>
+          <div style={S.kpiLabel}>Com Consumo</div>
+          <div style={S.kpiValue('#8FD64A')}>{(totais.comConsumo ?? 0).toLocaleString('pt-BR')}</div>
         </div>
-        {totais.ticketMedio != null && (
-          <div style={S.kpiCard('#0E2E1C')}>
-            <div style={S.kpiLabel}>Ticket Médio</div>
-            <div style={S.kpiValue('#5FB335')}>{fmtR(totais.ticketMedio)}</div>
-          </div>
-        )}
+        <div style={S.kpiCard('#e05c5c')}>
+          <div style={S.kpiLabel}>Inativos (90d+)</div>
+          <div style={S.kpiValue('#e05c5c')}>{(segs.inativos?.length ?? 0).toLocaleString('pt-BR')}</div>
+          {totais.clientes > 0 && <div style={{ color: 'var(--muted)', fontSize: '0.8rem', marginTop: 4 }}>
+            {(((segs.inativos?.length || 0) / totais.clientes) * 100).toFixed(0)}% da base
+          </div>}
+        </div>
+        <div style={S.kpiCard('#0E2E1C')}>
+          <div style={S.kpiLabel}>Aniversariantes (mês)</div>
+          <div style={S.kpiValue('#5FB335')}>{(segs.aniversariantes?.length ?? 0).toLocaleString('pt-BR')}</div>
+        </div>
       </div>
 
-      {/* Segmentos */}
-      <div style={S.section}>
-        <h2 style={S.h2}>
-          <span style={{ background: '#5FB335', borderRadius: 4, width: 4, height: 18, display: 'inline-block' }} />
-          Segmentação de Clientes
-        </h2>
-
-        {/* Barra de busca */}
-        <input
-          type="search"
-          placeholder="🔍 Buscar segmento por nome ou quantidade…"
-          value={busca}
-          onChange={e => setBusca(e.target.value)}
-          style={S.searchBar}
-        />
-
-        {segFiltrados.length === 0 ? (
-          <div style={S.empty}>
-            {busca ? `Nenhum segmento encontrado para "${busca}".` : 'Sem dados de segmentação disponíveis.'}
-          </div>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={S.table}>
-              <thead>
-                <tr>
-                  {['Segmento', 'Clientes', 'Participação', 'Valor Médio', 'Ação'].map(h => (
-                    <th key={h} style={S.th}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {segFiltrados.map((seg, i) => {
-                  const color = SEG_COLOR[i % SEG_COLOR.length]
-                  const pct = totais.clientes > 0 ? ((seg.qtd / totais.clientes) * 100).toFixed(1) : 0
-                  return (
-                    <tr key={seg.nome}>
-                      <td style={S.td}>
-                        <span style={S.badge(color)}>{seg.nome}</span>
-                      </td>
-                      <td style={S.td}><strong>{seg.qtd.toLocaleString('pt-BR')}</strong></td>
-                      <td style={{ ...S.td, minWidth: 140 }}>
-                        <span style={{ fontSize: '0.85rem' }}>{pct}%</span>
-                        <div style={S.bar(parseFloat(pct), color)} />
-                      </td>
-                      <td style={S.td}>
-                        {seg.valorMedio != null ? fmtR(seg.valorMedio) : <span style={{ color: 'var(--muted)' }}>—</span>}
-                      </td>
-                      <td style={S.td}>
-                        <button
-                          onClick={() => setModalComunicado(true)}
-                          style={{
-                            padding: '0.25rem 0.7rem', borderRadius: 6, border: '1px solid var(--border)',
-                            background: 'none', color: 'var(--green)', cursor: 'pointer',
-                            fontSize: '0.78rem', fontWeight: 600,
-                          }}
-                        >
-                          📢 Comunicar
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {busca && (
-          <p style={S.muted}>{segFiltrados.length} de {segmentos.length} segmentos</p>
-        )}
+      {/* Abas */}
+      <div style={S.tabBar}>
+        {TABS.map(t => (
+          <button key={t.id} style={S.tabBtn(tab === t.id)} onClick={() => setTab(t.id)}>{t.label}</button>
+        ))}
       </div>
 
-      <p style={{ color: 'var(--muted)', fontSize: '0.78rem', marginTop: '0.5rem' }}>
-        Dados consolidados em tempo real. Use "Exportar CSV" para baixar segmentos. Use "Enviar Comunicado" para mensagem em massa.
+      {/* Conteúdo das abas */}
+      {tab === 'consumidores' && (
+        <TabelaMaioresConsumidores lista={segs.maioresConsumidores} onComunicar={() => setModalComunicado(true)} />
+      )}
+      {tab === 'aniversariantes' && (
+        <TabelaAniversariantes lista={segs.aniversariantes} />
+      )}
+      {tab === 'inativos' && (
+        <TabelaInativos lista={segs.inativos} onComunicar={() => setModalComunicado(true)} />
+      )}
+
+      <p style={{ color: 'var(--muted)', fontSize: '0.78rem', marginTop: '1.5rem' }}>
+        Dados consolidados em tempo real. Use "Enviar Comunicado" para disparar campanhas registradas no sistema.
       </p>
 
       {/* Modal comunicado */}
       {modalComunicado && (
-        <ModalComunicado
-          segmentos={segmentos}
-          onClose={() => setModalComunicado(false)}
-          toast={toast}
-        />
+        <ModalComunicado segmentos={segs} onClose={() => setModalComunicado(false)} toast={toast} />
       )}
     </div>
   )
