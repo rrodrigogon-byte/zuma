@@ -67,73 +67,178 @@ function PixQRSVG({ emv, size = 220 }) {
 
 // ─── Modal PIX dinâmico ─────────────────────────────────────────────────────
 function PixQRModal({ valor, comandaId, onClose, onPago, toast }) {
-  const emv = buildPixEMV({ valor, txid: `CMD${comandaId || 0}` })
-  const [status, setStatus] = useState('aguardando') // aguardando | aprovado | erro
-  const [copied, setCopied] = useState(false)
+  // Estados da criação do pagamento
+  const [iniciando, setIniciando] = useState(true)    // aguardando POST /api/pagar
+  const [erroInicio, setErroInicio] = useState(null)  // erro ao criar pagamento
+  // Dados retornados pelo backend
+  const [pagamentoId, setPagamentoId] = useState(null)
+  const [copiaECola, setCopiaECola] = useState('')
+  const [qrBase64, setQrBase64] = useState(null)
+  const [modo, setModo] = useState('simulado')        // 'mercadopago' | 'simulado'
+  // Estado do polling
+  const [status, setStatus] = useState('aguardando')  // aguardando | aprovado | erro
   const [tentativas, setTentativas] = useState(0)
+  const [copied, setCopied] = useState(false)
+  const [confirmando, setConfirmando] = useState(false)
   const pollRef = useRef(null)
 
+  // Passo 1: criar o registro de pagamento no backend ao abrir o modal
   useEffect(() => {
-    if (!comandaId) return
+    let cancelled = false
+    async function criarPagamento() {
+      try {
+        const r = await api.post('/api/pagar', {
+          tipo: 'generico',
+          valor,
+          descricao: `Comanda #${comandaId || 0}`,
+        })
+        if (cancelled) return
+        setPagamentoId(r.pagamentoId)
+        setCopiaECola(r.copiaECola || '')
+        setQrBase64(r.qrBase64 || null)
+        setModo(r.modo || 'simulado')
+        setIniciando(false)
+      } catch (e) {
+        if (cancelled) return
+        setErroInicio(e?.message || 'Erro ao gerar PIX')
+        setIniciando(false)
+      }
+    }
+    criarPagamento()
+    return () => { cancelled = true }
+  }, [valor, comandaId])
+
+  // Passo 2: assim que temos o pagamentoId, inicia polling GET /api/pagamento/:id
+  useEffect(() => {
+    if (!pagamentoId) return
     pollRef.current = setInterval(async () => {
       try {
-        const r = await api.get(`/api/pagamento/${comandaId}`)
+        const r = await api.get(`/api/pagamento/${pagamentoId}`)
         setTentativas(t => t + 1)
-        if (r?.status === 'aprovado' || r?.pago) {
+        if (r?.status === 'aprovado') {
           setStatus('aprovado')
           clearInterval(pollRef.current)
           setTimeout(() => onPago?.(), 1500)
         }
-      } catch { /* ignora erros de polling */ }
+      } catch { /* ignora erros transientes */ }
     }, 3000)
     return () => clearInterval(pollRef.current)
-  }, [comandaId, onPago])
+  }, [pagamentoId, onPago])
 
+  // Copiar copia-e-cola (retornado pelo backend, não o EMV local)
   function copiar() {
-    navigator.clipboard?.writeText(emv).then(() => {
+    const texto = copiaECola || buildPixEMV({ valor, txid: `CMD${comandaId || 0}` })
+    navigator.clipboard?.writeText(texto).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2500)
     })
   }
 
+  // Confirmar simulação (dev/staging apenas — botão visível somente quando modo === 'simulado')
+  async function confirmarSimulacao() {
+    if (!pagamentoId) return
+    setConfirmando(true)
+    try {
+      await api.post(`/api/pagamento/${pagamentoId}/confirmar`, {})
+      setStatus('aprovado')
+      clearInterval(pollRef.current)
+      setTimeout(() => onPago?.(), 1500)
+    } catch (e) {
+      toast?.(e?.message || 'Erro ao confirmar', 'error')
+    } finally {
+      setConfirmando(false)
+    }
+  }
+
+  // QR a exibir: prioriza base64 do backend (Mercado Pago real), fallback para API externa
+  const emvFallback = buildPixEMV({ valor, txid: `CMD${comandaId || 0}` })
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.85)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ background: '#0d1f12', border: '1.5px solid #1e4029', borderRadius: 16, padding: 24, width: '100%', maxWidth: 360, textAlign: 'center' }}>
+        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ fontSize: 18, fontWeight: 800 }}>📲 PIX</div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#8FD64A', fontSize: 22, cursor: 'pointer' }}>✕</button>
         </div>
 
-        {status === 'aprovado' ? (
+        {/* Carregando criação do pagamento */}
+        {iniciando && (
+          <div style={{ padding: '32px 0' }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
+            <div style={{ fontSize: 14, opacity: 0.65 }}>Gerando PIX...</div>
+          </div>
+        )}
+
+        {/* Erro ao criar pagamento */}
+        {!iniciando && erroInicio && (
+          <div style={{ padding: '24px 0' }}>
+            <div style={{ fontSize: 36 }}>❌</div>
+            <div style={{ fontSize: 14, color: '#e74c3c', marginTop: 10, marginBottom: 16 }}>{erroInicio}</div>
+            <button onClick={onClose} style={{ background: '#1e4029', border: '1px solid #5FB335', borderRadius: 8, color: '#8FD64A', padding: '8px 20px', cursor: 'pointer', fontWeight: 700 }}>
+              Fechar
+            </button>
+          </div>
+        )}
+
+        {/* Pagamento aprovado */}
+        {!iniciando && !erroInicio && status === 'aprovado' && (
           <div style={{ padding: '32px 0' }}>
             <div style={{ fontSize: 52 }}>✅</div>
             <div style={{ fontSize: 20, fontWeight: 800, color: '#8FD64A', marginTop: 10 }}>Pagamento confirmado!</div>
           </div>
-        ) : (
+        )}
+
+        {/* QR Code + ações */}
+        {!iniciando && !erroInicio && status !== 'aprovado' && (
           <>
+            {/* QR: base64 do backend (MP) ou fallback externo */}
             <div style={{ background: '#F4F6EF', borderRadius: 12, padding: 12, marginBottom: 14 }}>
-              <PixQRSVG emv={emv} size={200} />
+              {qrBase64 ? (
+                <img
+                  src={`data:image/png;base64,${qrBase64}`}
+                  width={200} height={200} alt="QR Code PIX"
+                  style={{ borderRadius: 10, display: 'block', margin: '0 auto' }}
+                />
+              ) : (
+                <PixQRSVG emv={emvFallback} size={200} />
+              )}
             </div>
 
             <div style={{ fontSize: 22, fontWeight: 800, color: '#8FD64A', marginBottom: 4 }}>
               {fmtR(valor)}
             </div>
             <div style={{ fontSize: 12, opacity: 0.55, marginBottom: 14 }}>
-              Escaneie o QR code no app do banco
+              {modo === 'mercadopago' ? 'QR dinâmico Mercado Pago' : 'Escaneie o QR code no app do banco'}
             </div>
 
+            {/* Copiar copia-e-cola (do backend) */}
             <button onClick={copiar} style={{ width: '100%', background: '#1e4029', border: '1.5px solid #5FB335', borderRadius: 10, color: '#8FD64A', padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: 10 }}>
               {copied ? '✓ Copiado!' : '📋 Copiar código PIX'}
             </button>
 
+            {/* Botão de simulação (dev/staging — só aparece em modo simulado) */}
+            {modo === 'simulado' && (
+              <button
+                onClick={confirmarSimulacao}
+                disabled={confirmando}
+                style={{ width: '100%', background: '#2d4a10', border: '1.5px solid #8FD64A', borderRadius: 10, color: '#8FD64A', padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: 10, opacity: confirmando ? 0.6 : 1 }}>
+                {confirmando ? '⏳ Confirmando...' : '✓ Confirmar pagamento (simulação)'}
+              </button>
+            )}
+
+            {/* Status de polling */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', fontSize: 12, opacity: 0.55 }}>
               <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#8FD64A', animation: 'pulse-gold 1.4s ease-in-out infinite' }} />
               Aguardando pagamento{tentativas > 0 ? ` (${tentativas}x)` : ''}...
             </div>
 
-            <div style={{ marginTop: 14, fontSize: 10, opacity: 0.35, wordBreak: 'break-all', padding: '8px', background: '#0a1a10', borderRadius: 8, lineHeight: 1.4, maxHeight: 48, overflow: 'hidden' }}>
-              {emv.substring(0, 80)}…
-            </div>
+            {/* Preview do código (truncado) */}
+            {copiaECola && (
+              <div style={{ marginTop: 14, fontSize: 10, opacity: 0.35, wordBreak: 'break-all', padding: '8px', background: '#0a1a10', borderRadius: 8, lineHeight: 1.4, maxHeight: 48, overflow: 'hidden' }}>
+                {copiaECola.substring(0, 80)}…
+              </div>
+            )}
           </>
         )}
       </div>
