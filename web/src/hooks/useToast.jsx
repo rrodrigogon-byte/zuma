@@ -31,7 +31,7 @@ export function ToastProvider({ children }) {
             padding: '12px 20px', borderRadius: 10, fontWeight: 700,
             fontSize: 14, boxShadow: 'var(--shadow)', maxWidth: 360,
             animation: 'slideIn .2s ease',
-          }}>{t.msg}</div>
+          }}>{String(t.msg ?? '')}</div>
         ))}
       </div>
     </Ctx.Provider>

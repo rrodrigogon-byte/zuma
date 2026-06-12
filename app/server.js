@@ -1647,6 +1647,10 @@ app.post('/api/loja/:id/reservar', (req,res)=>{
   db().reservasLoja.push(r); save();
   res.json({ ok:true, reservaId:r.id, produto:p.nome, total:r.total, msg:'Reserva confirmada! Leve o comprovante Pix na recepção do Tangará Tênis Clube para retirar.' });
 });
+app.get('/api/admin/loja', auth, requireStaff, (req,res)=>{
+  seedLoja();
+  res.json(db().loja || []);
+});
 app.post('/api/admin/loja', auth, requireStaff, (req,res)=>{
   const b=req.body||{}; if(!b.nome) return res.status(400).json({error:'nome obrigatório'});
   const p={ id:nextId(), nome:b.nome, cat:b.cat||'Geral', preco:Number(b.preco)||0, estoque:parseInt(b.estoque)||0, ativo:true, criadoEm:new Date().toISOString() };

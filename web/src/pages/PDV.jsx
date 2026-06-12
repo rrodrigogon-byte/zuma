@@ -358,7 +358,7 @@ export default function PDV() {
   const [multiPagValor, setMultiPagValor] = useState('')
   const [multiPagMeio, setMultiPagMeio] = useState('pix')
   const totalMultiPag = multiPag.reduce((s, p) => s + p.valor, 0)
-  const restanteMultiPag = totalFinal - totalMultiPag
+  // restanteMultiPag calculado após totalFinal (ver abaixo)
 
   // PIX QR dinâmico
   const [showPixQR, setShowPixQR] = useState(false)
@@ -446,6 +446,9 @@ export default function PDV() {
   const subtotalDesc = subtotal - descVal
   const servicoVal = servico ? subtotalDesc * 0.1 : 0
   const totalFinal = subtotalDesc + servicoVal
+
+  // Restante multi-pagamento (calculado aqui após totalFinal estar disponível)
+  const restanteMultiPag = totalFinal - totalMultiPag
 
   // Troco (considera divisão)
   const totalPorPessoa = dividir > 1 ? totalFinal / dividir : totalFinal
@@ -786,7 +789,7 @@ export default function PDV() {
                 <div key={v.id} style={S.vcard} onClick={() => handleVirtualClick(v)}>
                   <div style={S.vcardLeft}>
                     <span style={S.vcardName}>{v.nome || `Comanda #${v.id}`}</span>
-                    <span style={S.vcardSub}>{v.local || '—'}</span>
+                    <span style={S.vcardSub}>{typeof v.local === 'object' && v.local ? (v.local.ref || '—') : (v.local || '—')}</span>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <div style={S.vcardTotal}>{fmtR(v.total || 0)}</div>
