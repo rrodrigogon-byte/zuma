@@ -285,7 +285,7 @@ export default function PDV() {
     if (!comanda?.id) return
     if (!window.confirm('Remover este item da comanda?')) return
     try {
-      await api.delete(`/api/comanda/${comanda.id}/item`, { idx })
+      await api.delete(`/api/comanda/${comanda.id}/item/${idx}`)
       await loadComanda(comanda.id)
       await loadMesas()
       toast('Item removido', 'success')

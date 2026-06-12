@@ -1,4 +1,7 @@
-export default function Modal({ title, onClose, children, width = 520 }) {
+export default function Modal({ open = true, title, onClose, children, width = 520 }) {
+  // Telas que renderizam condicionalmente ({cond && <Modal/>}) não passam `open`
+  // (default true). Telas que passam `open={state}` são respeitadas aqui.
+  if (!open) return null
   return (
     <div
       className="modal-backdrop fade-in"

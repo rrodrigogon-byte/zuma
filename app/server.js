@@ -17,13 +17,43 @@ import { criarPix, consultarStatus, pagamentosAtivos, pixInfo, gerarBrCode } fro
 import crypto from 'crypto';
 import QRCode from 'qrcode';
 import { wpp } from './whatsapp.js';
+import { mail } from './email.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+// Atrás do proxy do Render: confia no X-Forwarded-For para que req.ip seja o IP real
+// do cliente (importante para rate-limit e auditoria).
+app.set('trust proxy', 1);
 app.use(express.json({ limit: '1mb' }));
 
+// Headers de segurança (sem dependências extras — convenção do projeto). CORS é
+// same-origin por padrão (API e SPA no mesmo host); libera só métodos esperados.
+app.use((req,res,next)=>{
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-XSS-Protection', '0');
+  const origin = req.headers.origin;
+  if(origin){
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
+  }
+  if(req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 const PORT = process.env.PORT || 3000;
+const PROD = process.env.NODE_ENV === 'production';
 const JWT_SECRET = process.env.JWT_SECRET || 'agro-open-dev-secret-troque-em-producao';
+// Em produção, recusa subir sem um JWT_SECRET próprio — o fallback conhecido permitiria
+// forjar tokens de admin.
+if(PROD && (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'agro-open-dev-secret-troque-em-producao')){
+  console.error('FATAL: defina JWT_SECRET (forte) em produção. Abortando boot.');
+  process.exit(1);
+}
 
 // Identidade da plataforma (SaaS) — o evento "Agro Open" roda sobre o SetPoint.
 const PLATAFORMA = { nome:'SetPoint', slogan:'A plataforma que decide o jogo.', versao:'4.5', evento:'4ª Agro Open de Tênis' };
@@ -56,6 +86,37 @@ seedUsuarios();
 const findUser = login => db().usuarios.find(u=>u.email===norm(login));
 const publicUser = u => ({ id:u.id, nome:u.nome, email:u.email, role:u.role, telefone:u.telefone, ativo:u.ativo });
 
+// Recuperação do admin: se ADMIN_PASS_RESET=1 e ADMIN_PASS definido, redefine a senha
+// do admin no boot (evita lockout se a senha de produção for perdida). Remova a flag depois.
+if(process.env.ADMIN_PASS_RESET === '1' && process.env.ADMIN_PASS){
+  const adm = db().usuarios.find(u=>u.role==='admin');
+  if(adm){ adm.senhaHash = bcrypt.hashSync(process.env.ADMIN_PASS, 10); adm.ativo = true; save();
+    console.log(`Senha do admin "${adm.email}" redefinida via ADMIN_PASS_RESET.`); }
+}
+
+// Contas demo por papel — criadas apenas com SEED_DEMO=1 (idempotente). Senha via DEMO_PASS
+// ou padrão. Úteis para handoff/teste; troque/desative em produção real.
+function seedDemoUsers(){
+  if(process.env.SEED_DEMO !== '1') return;
+  const senha = process.env.DEMO_PASS || 'agroopen2026';
+  const demos = [
+    { nome:'Organizador Demo', email:'organizador@agroopen.com', role:'organizador' },
+    { nome:'Staff Demo',       email:'staff@agroopen.com',       role:'staff' },
+    { nome:'Atleta Demo',      email:'atleta@agroopen.com',      role:'atleta' },
+  ];
+  let criou = false;
+  for(const dm of demos){
+    if(!findUser(dm.email)){
+      db().usuarios.push({ id: nextId(), nome:dm.nome, email:norm(dm.email), senhaHash:bcrypt.hashSync(senha,10),
+        role:dm.role, telefone:'', ativo:true, criadoEm:new Date().toISOString(), demo:true });
+      criou = true;
+      console.log(`Conta demo criada: ${dm.email} / ${senha} (${dm.role})`);
+    }
+  }
+  if(criou) save();
+}
+seedDemoUsers();
+
 // ---- auth ----
 function auth(req,res,next){
   const h = req.headers.authorization || '';
@@ -78,6 +139,16 @@ function rateLimit(chave, max=8, janelaMs=15*60*1000){
   return true;
 }
 const limparTentativas = chave => tentativas.delete(chave);
+
+// Rate-limit para endpoints públicos sem auth (inscrição, ingresso, reserva, contato,
+// mesa virtual) — evita spam/abuso. Mais permissivo que o login.
+function publicLimit(max=20, janelaMs=10*60*1000){
+  return (req,res,next)=>{
+    const chave = `pub:${req.path}:${req.ip||''}`;
+    if(!rateLimit(chave, max, janelaMs)) return res.status(429).json({error:'muitas requisições, tente novamente em alguns minutos'});
+    next();
+  };
+}
 
 // ---- trilha de auditoria das ações administrativas ----
 function audit(req, acao, detalhe){
@@ -173,7 +244,7 @@ function expirarInscricoesPendentes(){
 }
 setInterval(expirarInscricoesPendentes, 60*1000);
 
-app.post('/api/inscricao', (req,res)=>{
+app.post('/api/inscricao', publicLimit(), (req,res)=>{
   const b = req.body || {};
   const obrig = ['nome','email','cpf','nasc','sexo','tel','categoria'];
   const miss = obrig.filter(f=>!b[f]);
@@ -191,6 +262,7 @@ app.post('/api/inscricao', (req,res)=>{
     status:'aguardando_pagamento', createdAt:new Date().toISOString()
   };
   db().inscricoes.push(insc); save();
+  if(insc.email) mail.inscricaoRecebida(insc.email, insc.nome, categorias, total, pagoEm).catch(()=>{});
   res.json({ ok:true, id:insc.id, total, prazoPagamento:pagoEm,
     message:`Inscrição recebida! Efetue o pagamento de R$ ${total},00 em até 30 minutos para confirmar sua vaga.` });
 });
@@ -213,6 +285,7 @@ app.post('/api/inscricoes', (req,res)=>{
     status:'aguardando_pagamento', createdAt:new Date().toISOString()
   };
   db().inscricoes.push(insc); save();
+  if(insc.email) mail.inscricaoRecebida(insc.email, insc.nome, categorias, total, pagoEm).catch(()=>{});
   res.json({ ok:true, id:insc.id, total, prazoPagamento:pagoEm,
     message:`Inscrição recebida! Efetue o pagamento de R$ ${total},00 em até 30 minutos para confirmar sua vaga.` });
 });
@@ -226,10 +299,19 @@ app.get('/api/ingressos/tipos', (req,res)=> res.json(
 ));
 
 // Esqueci senha (sem e-mail implementado — retorna OK)
-app.post('/api/auth/esqueci-senha', (req,res)=>{
+app.post('/api/auth/esqueci-senha', publicLimit(10), (req,res)=>{
   const { email } = req.body||{};
-  // Apenas registra — integração de e-mail pendente
-  console.log('Recuperação de senha solicitada para:', email);
+  const u = email ? findUser(email) : null;
+  if(u && u.ativo){
+    // senha temporária com entropia criptográfica (substitui o stub que só logava)
+    const temp = crypto.randomBytes(5).toString('hex').toUpperCase(); // 10 chars
+    u.senhaHash = bcrypt.hashSync(temp, 10);
+    u.senhaTemporaria = true;
+    save();
+    mail.senhaTemporaria(u.email, u.nome, temp).catch(()=>{});
+    audit({ user:{ nome:u.nome, role:u.role }, ip:req.ip }, 'RESET senha (esqueci-senha)');
+  }
+  // resposta neutra: não revela se o e-mail existe
   res.json({ ok:true, message:'Se este e-mail estiver cadastrado, você receberá as instruções em breve.' });
 });
 
@@ -513,6 +595,18 @@ const PLANOS = [
 ];
 app.get('/api/planos', (req,res)=> res.json(PLANOS));
 
+// Contato público — persiste a mensagem para a organização (antes era descartada no front)
+app.post('/api/contato', publicLimit(), (req,res)=>{
+  const { nome, email, mensagem } = req.body || {};
+  if(!nome || !email || !mensagem) return res.status(400).json({error:'nome, e-mail e mensagem são obrigatórios'});
+  const d = db(); d.contatos = d.contatos || [];
+  d.contatos.push({ id: nextId(), nome:String(nome).slice(0,120), email:String(email).slice(0,160),
+    mensagem:String(mensagem).slice(0,2000), lida:false, criadoEm:new Date().toISOString() });
+  save();
+  res.json({ ok:true, message:'Mensagem recebida! Entraremos em contato em breve.' });
+});
+app.get('/api/admin/contatos', auth, requireStaff, (req,res)=> res.json((db().contatos||[]).slice().reverse()));
+
 app.post('/api/assinar', (req,res)=>{
   const { plano, nome, email, tipo, telefone } = req.body || {};
   const p = PLANOS.find(x=>x.id===plano);
@@ -582,9 +676,9 @@ function gerarCodeHMAC(id, tipoId){
 function verificarCodeHMAC(code, ingresso){
   if(!code || !ingresso) return { ok:false, erro:'código inválido' };
   const parts = code.split('-');
+  // Exige formato assinado completo (5 partes). O formato "legado" de 4 partes
+  // era aceito SEM verificar assinatura — bypass que permitia forjar ingressos.
   if(parts.length !== 5 || parts[0] !== 'AO') {
-    // formato legado (4 partes) — aceitar mas marcar como legacy
-    if(parts.length===4 && parts[0]==='AO') return { ok:true, legacy:true };
     return { ok:false, erro:'formato de código inválido' };
   }
   const [, id, tipoId, ts, hmac] = parts;
@@ -600,7 +694,7 @@ function verificarCodeHMAC(code, ingresso){
 }
 
 // Compra: gera ingresso com código HMAC + QR Code (SVG)
-app.post('/api/ingresso/comprar', async (req,res)=>{
+app.post('/api/ingresso/comprar', publicLimit(), async (req,res)=>{
   const { tipoId, nome, email, cpf } = req.body || {};
   const t = INGRESSO_TIPOS.find(x=>x.id===tipoId);
   if(!t) return res.status(400).json({error:'tipo de ingresso inválido'});
@@ -613,6 +707,7 @@ app.post('/api/ingresso/comprar', async (req,res)=>{
     nome, email, cpf:cpf||'', status:'valido', criadoEm:new Date().toISOString() };
   db().ingressos.push(ing); save();
   const qrSvg = await QRCode.toString(code, { type:'svg', margin:1, color:{ dark:'#0B2415', light:'#00000000' } });
+  if(ing.email) mail.ingresso(ing.email, ing.nome, ing.tipoNome, ing.code).catch(()=>{});
   res.json({ ok:true, code, ingresso:ing, qrSvg, message:'Ingresso emitido! Apresente o QR Code na portaria.' });
 });
 
@@ -1261,7 +1356,7 @@ app.get('/api/reservas', (req,res)=>{
 });
 
 // Reservar (público): valida conflito e cria a reserva
-app.post('/api/reservar', (req,res)=>{
+app.post('/api/reservar', publicLimit(), (req,res)=>{
   const { quadraId, data, hora, nome, email, tel } = req.body || {};
   const q = quadra(quadraId);
   if(!q) return res.status(400).json({error:'quadra inválida'});
@@ -1859,15 +1954,31 @@ app.delete('/api/admin/dupla/:categoria', auth, requireStaff, (req,res)=>{ delet
 // =================== PAGAMENTOS · PIX / CARTÃO (cap. 12.3 / 15) ===================
 app.get('/api/pagamentos/status', (req,res)=> res.json({ ativo: pagamentosAtivos, modo: pagamentosAtivos?'mercadopago':'simulado' }));
 
+// Valor real do pedido, lido do servidor (fonte da verdade). Para tipos de preço fixo,
+// não confiamos no valor enviado pelo cliente — senão dava para pagar R$0,01 por uma
+// inscrição de R$150 e confirmá-la. Retorna null quando o valor é legitimamente
+// definido pelo usuário (recarga de carteira, genérico) ou o ref não foi encontrado.
+function valorEsperado(d, tipo, refId){
+  if(tipo==='ingresso'){ const i=(d.ingressos||[]).find(x=>x.id==refId||x.code===refId); return i?Number(i.preco):null; }
+  if(tipo==='inscricao'){ const i=(d.inscricoes||[]).find(x=>x.id==refId); return i?Number(i.total):null; }
+  if(tipo==='reserva'){ const r=(d.reservas||[]).find(x=>x.id==refId); return (r&&r.preco!=null)?Number(r.preco):null; }
+  if(tipo==='mensalidade'){ const s=(d.socios||[]).find(x=>x.id==refId); const f=s&&(s.faturas||[]).find(x=>x.status==='aberta'); return f?Number(f.valor):null; }
+  if(tipo==='assinatura'){ const a=(d.assinaturas||[]).find(x=>x.id==refId); return a?Number(a.preco):null; }
+  return null; // carteira/loja/generico: valor definido pelo usuário
+}
+
 // Cria uma cobrança Pix para um pedido (ingresso, inscrição, reserva, recarga, mensalidade, assinatura, loja)
-app.post('/api/pagar', async (req,res)=>{
+app.post('/api/pagar', publicLimit(40), async (req,res)=>{
   const { tipo, refId, valor, descricao, email, usuarioId } = req.body||{};
   const tiposOk = ['ingresso','inscricao','reserva','carteira','mensalidade','assinatura','loja','generico'];
   if(!tiposOk.includes(tipo)) return res.status(400).json({error:'tipo de pedido inválido'});
-  if(!(Number(valor)>0)) return res.status(400).json({error:'valor inválido'});
+  // Para pedidos de preço fixo, o servidor sobrepõe o valor do cliente pelo preço real.
+  const esperado = valorEsperado(db(), tipo, refId);
+  const valorCobrado = (esperado!=null && esperado>0) ? esperado : Number(valor);
+  if(!(valorCobrado>0)) return res.status(400).json({error:'valor inválido'});
   try{
-    const pix = await criarPix({ valor, descricao: descricao||('SetPoint · '+tipo), email });
-    const pg = { id: nextId(), tipo, refId:refId||null, usuarioId:usuarioId||null, valor:Number(valor),
+    const pix = await criarPix({ valor:valorCobrado, descricao: descricao||('SetPoint · '+tipo), email });
+    const pg = { id: nextId(), tipo, refId:refId||null, usuarioId:usuarioId||null, valor:valorCobrado,
       descricao:descricao||'', email:email||'', provedor:pix.provedor, externalId:pix.externalId,
       copiaECola:pix.copiaECola, qrBase64:pix.qrBase64||null, taxaPlataforma:pix.taxaPlataforma,
       status:'pendente', criadoEm:new Date().toISOString() };
@@ -2502,5 +2613,16 @@ app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'not found' });
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
+
+// Error-handler global: evita vazar stack trace e garante resposta JSON consistente.
+app.use((err, req, res, next)=>{
+  console.error('Erro não tratado:', err?.message || err);
+  if(res.headersSent) return next(err);
+  res.status(err?.status || 500).json({ error: PROD ? 'erro interno' : (err?.message || 'erro interno') });
+});
+
+// Não derruba o processo por uma rejeição/exceção isolada (várias rotas async sem catch).
+process.on('unhandledRejection', (e)=> console.error('unhandledRejection:', e?.message || e));
+process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.message || e));
 
 app.listen(PORT, ()=> console.log(`SetPoint React SPA em http://localhost:${PORT}`));

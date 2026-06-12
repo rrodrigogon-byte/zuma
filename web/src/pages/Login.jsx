@@ -19,7 +19,7 @@ const COLORS = {
 // mode: 'painel' | 'atleta' | 'cadastro' | 'esqueci'
 export default function Login() {
   const navigate = useNavigate()
-  const { setToken, setSiteToken, login } = useAuth()
+  const { login } = useAuth()
   const { toast } = useToast()
 
   const [mode, setMode] = useState('painel')
@@ -52,20 +52,17 @@ export default function Login() {
     try {
       if (mode === 'painel') {
         const data = await api.post('/api/admin/login', { user, pass })
-        // support both setToken (legacy) and login
-        if (typeof setToken === 'function') setToken(data.token)
-        else login(data.token, data.user || { user, role: data.role })
-        const role = data.role || data.user?.role
-        navigate(role === 'staff' ? '/pdv' : '/admin')
+        // /api/admin/login devolve { token, user: <nome>, role } — montar objeto com role,
+        // senão user.role fica undefined e a sidebar não mostra o menu Admin/Operações.
+        login(data.token, { nome: data.user, role: data.role })
+        navigate(data.role === 'staff' ? '/pdv' : '/admin')
       } else if (mode === 'atleta') {
         const data = await api.post('/api/auth/login', { email, senha })
-        if (typeof setSiteToken === 'function') setSiteToken(data.token)
-        else login(data.token, data.user || { email, role: 'atleta' }, true)
+        login(data.token, data.user || { email, role: 'atleta' }, true)
         navigate('/')
       } else if (mode === 'cadastro') {
         const data = await api.post('/api/auth/registro', { nome: cadNome, email: cadEmail, senha: cadSenha })
-        if (typeof setSiteToken === 'function') setSiteToken(data.token)
-        else login(data.token, data.user || { nome: cadNome, email: cadEmail, role: 'atleta' }, true)
+        login(data.token, data.user || { nome: cadNome, email: cadEmail, role: 'atleta' }, true)
         toast('Conta criada com sucesso! Bem-vindo(a)!', 'success')
         navigate('/')
       } else if (mode === 'esqueci') {

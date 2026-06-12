@@ -63,10 +63,7 @@ export default function Contato() {
     e.preventDefault()
     setLoading(true)
     try {
-      // POST /api/contato — pode ser mock se o endpoint não existir
-      await api.post('/api/contato', { nome, email, mensagem }).catch(() => {
-        // mock success when endpoint doesn't exist yet
-      })
+      await api.post('/api/contato', { nome, email, mensagem })
       setEnviado(true)
       toast('Mensagem enviada! Entraremos em contato em breve.', 'success')
       setNome('')

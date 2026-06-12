@@ -90,7 +90,7 @@ export default function Loja() {
       setPixInfo(pix)
       setEtapaModal('pix')
     } catch (err) {
-      toast?.error?.(err.message || 'Erro ao realizar reserva')
+      toast(err.message || 'Erro ao realizar reserva', true)
     } finally {
       setSubmitting(false)
     }
@@ -103,7 +103,7 @@ export default function Loja() {
       setCopiado(true)
       setTimeout(() => setCopiado(false), 2000)
     } catch {
-      toast?.error?.('Não foi possível copiar')
+      toast('Não foi possível copiar', true)
     }
   }
 
