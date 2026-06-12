@@ -1,13 +1,49 @@
 /**
- * GarcomView.jsx — Modo Garçom simplificado
- * Interface focada em: ver mesas, adicionar itens, pedir conta.
- * Sem acesso a caixa, pagamentos, configurações.
+ * GarcomView.jsx — Modo Garçom v2
+ * Redesign completo: bottom-sheet moderno, grid de produtos com categorias visuais,
+ * cart temporário (múltiplos itens antes de confirmar), badges de setor (bar/chapa/cozinha),
+ * estoque em tempo real, busca instantânea com highlight, obs rápidas inline.
  */
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { api, fmtR } from '../lib/api'
 import { useToast } from '../hooks/useToast'
 
-// Ticker de auto-refresh
+/* ─── emojis por categoria ─────────────────────────────────────── */
+const CAT_EMOJI = {
+  'Bebidas':    '🍺',
+  'Petiscos':   '🍟',
+  'Espetinhos': '🍢',
+  'Cozinha':    '🍽️',
+  'Sobremesas': '🍦',
+  'Tudo':       '🔍',
+}
+const catEmoji = (c) => CAT_EMOJI[c] || '📦'
+
+/* ─── cores de setor ────────────────────────────────────────────── */
+const SETOR_COLOR = {
+  bar:     { bg: '#0e2a3a', border: '#3498db', text: '#3498db', label: 'Bar' },
+  chapa:   { bg: '#3a2000', border: '#e67e22', text: '#e67e22', label: 'Chapa' },
+  cozinha: { bg: '#2a0000', border: '#e05c5c', text: '#e05c5c', label: 'Cozinha' },
+}
+const setorStyle = (s) => SETOR_COLOR[s] || { bg: '#1a1a2e', border: '#555', text: '#aaa', label: s || '?' }
+
+/* ─── highlight de texto ────────────────────────────────────────── */
+function Highlight({ text, query }) {
+  if (!query) return <>{text}</>
+  const idx = text.toLowerCase().indexOf(query.toLowerCase())
+  if (idx < 0) return <>{text}</>
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark style={{ background: '#C9A656', color: '#000', borderRadius: 2, padding: '0 1px' }}>
+        {text.slice(idx, idx + query.length)}
+      </mark>
+      {text.slice(idx + query.length)}
+    </>
+  )
+}
+
+/* ─── Ticker de auto-refresh ────────────────────────────────────── */
 function RefreshTicker({ interval = 15, lastUpdate, onManual }) {
   const [sec, setSec] = useState(interval)
   useEffect(() => {
@@ -16,12 +52,54 @@ function RefreshTicker({ interval = 15, lastUpdate, onManual }) {
     return () => clearInterval(t)
   }, [lastUpdate, interval])
   return (
-    <button onClick={onManual}
-      style={{ background: '#1e4029', border: 'none', borderRadius: 8, color: sec <= 5 ? '#C9A656' : '#8FD64A', padding: '5px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 700, minWidth: 48 }}>
-      ↺ {sec}s
+    <button onClick={onManual} style={{
+      background: '#1e4029', border: 'none', borderRadius: 8,
+      color: sec <= 5 ? '#C9A656' : '#8FD64A',
+      padding: '5px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 700, minWidth: 48,
+    }}>↺ {sec}s</button>
+  )
+}
+
+/* ─── CartBadge: bolinha flutuante com contagem do cart ─────────── */
+function CartBadge({ count, total, onClick }) {
+  if (!count) return null
+  return (
+    <button onClick={onClick} style={{
+      position: 'fixed', bottom: 24, right: 20, zIndex: 300,
+      background: '#5FB335', border: 'none', borderRadius: 50, color: '#fff',
+      padding: '14px 20px', cursor: 'pointer', fontWeight: 800, fontSize: 15,
+      boxShadow: '0 4px 24px rgba(95,179,53,.5)',
+      display: 'flex', alignItems: 'center', gap: 8,
+      animation: 'pop-in .25s ease',
+    }}>
+      🛒 {count} {count === 1 ? 'item' : 'itens'} · {fmtR(total)}
     </button>
   )
 }
+
+/* ─── QtyControl ───────────────────────────────────────────────── */
+function QtyControl({ qty, onDec, onInc, mini = false }) {
+  const sz = mini ? 22 : 28
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: mini ? 4 : 6 }}>
+      <button onClick={onDec} style={{
+        width: sz, height: sz, borderRadius: 6, border: '1.5px solid #2a5a32',
+        background: '#132b1b', color: '#8FD64A', cursor: 'pointer',
+        fontWeight: 800, fontSize: mini ? 13 : 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>−</button>
+      <span style={{ minWidth: mini ? 18 : 22, textAlign: 'center', fontWeight: 800, fontSize: mini ? 13 : 15 }}>
+        {qty}
+      </span>
+      <button onClick={onInc} style={{
+        width: sz, height: sz, borderRadius: 6, border: '1.5px solid #2a5a32',
+        background: '#1e4029', color: '#8FD64A', cursor: 'pointer',
+        fontWeight: 800, fontSize: mini ? 13 : 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>+</button>
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
 
 const S = {
   page: { minHeight: '100vh', background: '#060e08', color: '#f4f6ef', fontFamily: 'inherit' },
@@ -31,99 +109,190 @@ const S = {
     position: 'sticky', top: 0, zIndex: 20,
   },
   title: { fontSize: 18, fontWeight: 800, color: '#5FB335' },
-  badge: (n) => ({
-    background: n > 0 ? '#e74c3c' : '#2d4a32', color: '#fff',
-    borderRadius: 20, padding: '3px 12px', fontWeight: 800, fontSize: 14,
-  }),
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 10, padding: 16 },
+  overlay: {
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,.85)',
+    zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+  },
+  sheet: {
+    background: '#0d1f12', borderTop: '2px solid #1e4029', borderRadius: '20px 20px 0 0',
+    width: '100%', maxWidth: 560, maxHeight: '92vh', display: 'flex', flexDirection: 'column',
+  },
+  sheetHandle: {
+    width: 40, height: 4, background: '#2a5a32', borderRadius: 4,
+    margin: '10px auto 0', flexShrink: 0,
+  },
+  sheetHeader: {
+    padding: '12px 18px 10px', borderBottom: '1px solid #1e4029',
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
+  },
+  sheetTitle: { fontWeight: 800, fontSize: 16 },
+  sheetClose: { background: 'none', border: 'none', color: '#8FD64A', fontSize: 22, cursor: 'pointer', padding: 4 },
+  sheetBody: { overflowY: 'auto', flex: 1, padding: '10px 16px' },
+  sheetActions: { padding: '10px 16px 20px', display: 'flex', gap: 8, borderTop: '1px solid #1e4029', flexShrink: 0 },
+  input: {
+    width: '100%', background: '#132b1b', border: '1.5px solid #1e4029',
+    borderRadius: 10, padding: '10px 14px', color: '#f4f6ef', fontSize: 14,
+    boxSizing: 'border-box', outline: 'none',
+  },
+  section: { padding: '12px 16px 4px' },
+  sectionTitle: { fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#8FD64A', marginBottom: 10 },
   card: (s) => ({
     background: s === 'ocupada' ? '#132b1b' : s === 'conta' ? '#3a2800' : '#0d1f12',
     border: `2px solid ${s === 'conta' ? '#C9A656' : s === 'ocupada' ? '#5FB335' : '#1e4029'}`,
-    borderRadius: 10, padding: '12px 8px', cursor: 'pointer', textAlign: 'center',
+    borderRadius: 12, padding: '12px 8px', cursor: 'pointer', textAlign: 'center',
     animation: s === 'conta' ? 'pulse-gold 1.4s ease-in-out infinite' : 'none',
+    transition: 'transform .12s',
   }),
-  cardNum: { fontSize: 24, fontWeight: 800 },
-  cardStatus: (s) => ({
-    fontSize: 9, marginTop: 4, padding: '2px 6px', borderRadius: 4,
-    background: s === 'conta' ? '#C9A656' : s === 'ocupada' ? '#1e4029' : '#0d1f12',
-    color: s === 'conta' ? '#000' : '#8FD64A', display: 'inline-block',
-  }),
-  cardTotal: { fontSize: 12, color: '#8FD64A', fontWeight: 700, marginTop: 3 },
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.8)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' },
-  sheet: { background: '#0d1f12', borderTop: '2px solid #1e4029', borderRadius: '18px 18px 0 0', padding: '0 0 20px', width: '100%', maxWidth: 500, maxHeight: '88vh', display: 'flex', flexDirection: 'column' },
-  sheetHeader: { padding: '14px 18px 10px', borderBottom: '1px solid #1e4029', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
-  sheetTitle: { fontWeight: 800, fontSize: 16 },
-  sheetClose: { background: 'none', border: 'none', color: '#8FD64A', fontSize: 22, cursor: 'pointer' },
-  sheetBody: { overflowY: 'auto', flex: 1, padding: '10px 16px' },
-  itemRow: { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderBottom: '1px solid #1a3020' },
-  itemQty: { minWidth: 26, height: 26, borderRadius: 6, background: '#1e4029', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#8FD64A' },
-  sheetActions: { padding: '10px 16px 14px', display: 'flex', gap: 8, borderTop: '1px solid #1e4029' },
-  input: { width: '100%', background: '#132b1b', border: '1.5px solid #1e4029', borderRadius: 8, padding: '9px 12px', color: '#f4f6ef', fontSize: 14, marginBottom: 10, boxSizing: 'border-box' },
-  catScroll: { display: 'flex', gap: 8, overflowX: 'auto', padding: '8px 0', marginBottom: 8 },
-  catBtn: (a) => ({ padding: '5px 14px', borderRadius: 20, border: `1.5px solid ${a ? '#5FB335' : '#1e4029'}`, background: a ? '#1a4a20' : 'transparent', color: a ? '#8FD64A' : '#f4f6ef', cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 600 }),
-  prodGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8 },
-  prodCard: { background: '#132b1b', border: '1.5px solid #1e4029', borderRadius: 10, padding: '10px 10px 8px', position: 'relative', cursor: 'pointer' },
-  prodName: { fontSize: 12, fontWeight: 600, marginBottom: 4 },
-  prodPrice: { fontSize: 13, color: '#C9A656', fontWeight: 700 },
-  addBtn: { position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: 6, background: '#5FB335', border: 'none', color: '#fff', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 },
-  statusBadge: { fontSize: 9, padding: '2px 5px', borderRadius: 4, fontWeight: 700 },
-  section: { padding: '12px 16px 4px' },
-  sectionTitle: { fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#8FD64A', marginBottom: 10 },
 }
 
 export default function GarcomView() {
   const { toast } = useToast()
-  const [mesas, setMesas] = useState({ fisicas: [], virtuais: [] })
+
+  /* ── state principal ── */
+  const [mesas, setMesas]       = useState({ fisicas: [], virtuais: [] })
   const [cardapio, setCardapio] = useState([])
-  const [comanda, setComanda] = useState(null)
-  const [sheet, setSheet] = useState(null)
-  const [overlay, setOverlay] = useState(null) // null | 'comanda' | 'cardapio' | 'obs'
-  const [catFiltro, setCatFiltro] = useState('Tudo')
-  const [busca, setBusca] = useState('')
-  const [itemObs, setItemObs] = useState({ prod: null, obs: '' })
-  const [loading, setLoading] = useState(false)
-  const [novaMesa, setNovaMesa] = useState('')
+  const [comanda, setComanda]   = useState(null)
+  const [sheet, setSheet]       = useState(null)   // { tipo, num?, id? }
+  const [overlay, setOverlay]   = useState(null)   // null | 'comanda' | 'cardapio' | 'cart' | 'nova'
   const [lastUpdate, setLastUpdate] = useState(Date.now())
+  const [loading, setLoading]   = useState(false)
   const autoRef = useRef(null)
 
-  const loadMesas = useCallback(async () => {
+  /* ── state do cardápio / busca ── */
+  const [catFiltro, setCatFiltro] = useState('Tudo')
+  const [busca, setBusca]         = useState('')
+  const [setor, setSetor]         = useState('todos')
+
+  /* ── cart temporário ── */
+  const [cart, setCart] = useState([])  // [{ prod, qty, obs }]
+  const [obsAberta, setObsAberta] = useState(null) // id do prod com obs expandida
+
+  /* ── nova comanda ── */
+  const [nomeMesa, setNomeMesa] = useState('')
+
+  /* ── loaders ── */
+  const loadMesas = useCallback(async (quiet = false) => {
     try {
       setMesas(await api.get('/api/mesas'))
       setLastUpdate(Date.now())
-    } catch { /* silencioso */ }
+    } catch { if (!quiet) toast('Erro ao carregar mesas', true) }
   }, [])
 
   const loadCardapio = useCallback(async () => {
     try {
       const data = await api.get('/api/cardapio')
-      setCardapio(data.filter(p => !p.indisponivel))
+      setCardapio(Array.isArray(data) ? data : [])
     } catch { /* silencioso */ }
   }, [])
 
   const loadComanda = useCallback(async (id) => {
     if (!id) return
-    try { setComanda(await api.get(`/api/comanda/${id}`)) } catch { /* silencioso */ }
+    try { setComanda(await api.get(`/api/comanda/${id}`)) }
+    catch { toast('Erro ao carregar comanda', true) }
   }, [])
 
   useEffect(() => {
     loadMesas()
     loadCardapio()
-    autoRef.current = setInterval(() => loadMesas(), 15000)
+    autoRef.current = setInterval(() => loadMesas(true), 15000)
     return () => clearInterval(autoRef.current)
   }, [loadMesas, loadCardapio])
 
-  const cats = ['Tudo', ...Array.from(new Set(cardapio.map(p => p.cat)))]
-  const prods = cardapio
-    .filter(p => catFiltro === 'Tudo' || p.cat === catFiltro)
-    .filter(p => !busca || p.nome.toLowerCase().includes(busca.toLowerCase()))
+  /* ── dados derivados ── */
+  const abertas  = useMemo(() => [...(mesas.fisicas || []), ...(mesas.virtuais || [])].filter(m => m.status !== 'livre'), [mesas])
+  const pendentes = useMemo(() => abertas.filter(m => m.status === 'conta').length, [abertas])
+  const prontos   = comanda?.itens?.filter(it => it.status === 'pronto').length || 0
 
-  const abertas = [...(mesas.fisicas || []), ...(mesas.virtuais || [])].filter(m => m.status !== 'livre')
-  const pendentes = abertas.filter(m => m.status === 'conta').length
-  const prontos = comanda?.itens?.filter(it => it.status === 'pronto').length || 0
+  const cats = useMemo(() => ['Tudo', ...Array.from(new Set(cardapio.map(p => p.cat).filter(Boolean)))], [cardapio])
+  const setores = useMemo(() => ['todos', ...Array.from(new Set(cardapio.map(p => p.setor).filter(Boolean)))], [cardapio])
+
+  const prods = useMemo(() => cardapio
+    .filter(p => catFiltro === 'Tudo' || p.cat === catFiltro)
+    .filter(p => setor === 'todos' || p.setor === setor)
+    .filter(p => !busca || p.nome.toLowerCase().includes(busca.toLowerCase()))
+  , [cardapio, catFiltro, setor, busca])
+
+  const cartTotal = useMemo(() => cart.reduce((s, ci) => s + (ci.prod.preco * ci.qty), 0), [cart])
+  const cartCount = useMemo(() => cart.reduce((s, ci) => s + ci.qty, 0), [cart])
+
+  /* ── helpers de cart ── */
+  const cartQty = (prodId) => cart.find(c => c.prod.id === prodId)?.qty || 0
+
+  const setQty = (prod, qty) => {
+    if (qty <= 0) {
+      setCart(c => c.filter(ci => ci.prod.id !== prod.id))
+    } else {
+      setCart(c => {
+        const ex = c.find(ci => ci.prod.id === prod.id)
+        if (ex) return c.map(ci => ci.prod.id === prod.id ? { ...ci, qty } : ci)
+        return [...c, { prod, qty, obs: '' }]
+      })
+    }
+  }
+
+  const addOne = (prod) => {
+    if (prod.estoque !== undefined && prod.estoque !== null && prod.estoque <= 0) return
+    setQty(prod, cartQty(prod.id) + 1)
+  }
+
+  const setObs = (prodId, obs) => {
+    setCart(c => c.map(ci => ci.prod.id === prodId ? { ...ci, obs } : ci))
+  }
+
+  /* ── confirmar pedido (cart → API) ── */
+  const confirmarPedido = async () => {
+    if (!cart.length || !sheet?.id) return
+    setLoading(true)
+    try {
+      const itens = cart.map(ci => ({ produtoId: ci.prod.id, qtd: ci.qty, obs: ci.obs || undefined }))
+      await api.post(`/api/comanda/${sheet.id}/adicionar`, { itens })
+      await loadComanda(sheet.id)
+      await loadMesas(true)
+      toast(`✓ ${cartCount} item(s) adicionado(s)!`)
+      setCart([])
+      setOverlay('comanda')
+    } catch (e) {
+      toast(e.message || 'Erro ao adicionar itens', true)
+    } finally { setLoading(false) }
+  }
+
+  /* ── pedir conta ── */
+  const pedirConta = async () => {
+    if (!sheet?.id) return
+    setLoading(true)
+    try {
+      await api.post(`/api/comanda/${sheet.id}/conta`, {})
+      await loadComanda(sheet.id)
+      await loadMesas(true)
+      toast('🧾 Conta solicitada!')
+      setOverlay('comanda')
+    } catch (e) { toast(e.message || 'Erro', true) }
+    finally { setLoading(false) }
+  }
+
+  /* ── iniciar comanda ── */
+  const iniciarComanda = async () => {
+    if (!sheet?.num) return
+    setLoading(true)
+    try {
+      await api.post(`/api/mesa/${sheet.num}/pedir`, { itens: [], nome: nomeMesa || undefined })
+      const mesasData = await api.get('/api/mesas')
+      setMesas(mesasData)
+      const m = mesasData.fisicas.find(x => x.num === sheet.num)
+      if (m?.comandaId) {
+        setSheet(s => ({ ...s, id: m.comandaId }))
+        await loadComanda(m.comandaId)
+      }
+      setOverlay('comanda')
+      setNomeMesa('')
+    } catch (e) {
+      toast(e.message || 'Erro ao abrir comanda', true)
+    } finally { setLoading(false) }
+  }
 
   const handleMesaClick = async (mesa) => {
     if (mesa.status === 'livre') {
-      setNovaMesa('')
+      setNomeMesa('')
       setSheet({ tipo: 'fisica', num: mesa.num })
       setOverlay('nova')
     } else {
@@ -133,65 +302,32 @@ export default function GarcomView() {
     }
   }
 
-  const iniciarComanda = async () => {
-    if (!sheet?.num) return
-    setLoading(true)
-    try {
-      await api.post(`/api/mesa/${sheet.num}/pedir`, { itens: [], nome: novaMesa || undefined })
-      const mesasData = await api.get('/api/mesas')
-      setMesas(mesasData)
-      const m = mesasData.fisicas.find(x => x.num === sheet.num)
-      if (m?.comandaId) {
-        setSheet(s => ({ ...s, id: m.comandaId }))
-        await loadComanda(m.comandaId)
-      }
-      setOverlay('comanda')
-    } catch (e) {
-      toast(e.message || 'Erro ao abrir comanda', 'error')
-    } finally { setLoading(false) }
+  const abrirCardapio = () => {
+    setBusca(''); setCatFiltro('Tudo'); setSetor('todos')
+    setOverlay('cardapio')
   }
 
-  const adicionarItem = async () => {
-    if (!itemObs.prod || !sheet?.id) return
-    setLoading(true)
-    try {
-      await api.post(`/api/comanda/${sheet.id}/adicionar`, { itens: [{ produtoId: itemObs.prod.id, qtd: 1, obs: itemObs.obs }] })
-      await loadComanda(sheet.id)
-      await loadMesas()
-      toast('Item adicionado!', 'success')
-      setOverlay('comanda')
-      setItemObs({ prod: null, obs: '' })
-    } catch (e) {
-      toast(e.message || 'Erro ao adicionar', 'error')
-    } finally { setLoading(false) }
-  }
+  const fechar = () => { setOverlay(null); setSheet(null); setComanda(null); setCart([]) }
 
-  const pedirConta = async () => {
-    if (!sheet?.id) return
-    setLoading(true)
-    try {
-      await api.post(`/api/comanda/${sheet.id}/conta`, {})
-      await loadComanda(sheet.id)
-      await loadMesas()
-      toast('Conta solicitada! ✓', 'success')
-      setOverlay('comanda')
-    } catch (e) {
-      toast(e.message || 'Erro', 'error')
-    } finally { setLoading(false) }
-  }
-
-  const fechar = () => { setOverlay(null); setSheet(null); setComanda(null); setBusca('') }
-
+  /* ════════════════════ RENDER ════════════════════════════════════ */
   return (
     <div style={S.page}>
       <style>{`
         @keyframes pulse-gold {
           0%,100% { box-shadow: 0 0 0 0 rgba(201,166,86,.5); }
-          50% { box-shadow: 0 0 0 8px rgba(201,166,86,0); }
+          50%      { box-shadow: 0 0 0 8px rgba(201,166,86,0); }
         }
+        @keyframes pop-in {
+          from { transform: scale(.85) translateY(20px); opacity: 0; }
+          to   { transform: scale(1) translateY(0); opacity: 1; }
+        }
+        .mesa-card:hover { transform: translateY(-2px) scale(1.02); }
+        .prod-card:active { transform: scale(.97); }
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-thumb { background: #1e4029; border-radius: 4px; }
       `}</style>
 
-      {/* Header */}
+      {/* ── Header ── */}
       <div style={S.header}>
         <span style={S.title}>👨‍🍳 Modo Garçom</span>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -200,61 +336,88 @@ export default function GarcomView() {
               🧾 {pendentes} conta{pendentes > 1 ? 's' : ''}
             </span>
           )}
-          <span style={S.badge(abertas.length)}>
-            {abertas.length} mesa{abertas.length !== 1 ? 's' : ''} abertas
+          <span style={{ background: abertas.length > 0 ? '#1e4029' : '#2d4a32', color: '#8FD64A', borderRadius: 20, padding: '3px 12px', fontWeight: 800, fontSize: 13 }}>
+            {abertas.length} abertas
           </span>
-          <RefreshTicker interval={15} lastUpdate={lastUpdate} onManual={loadMesas} />
+          <RefreshTicker interval={15} lastUpdate={lastUpdate} onManual={() => loadMesas()} />
         </div>
       </div>
 
-      {/* Mesas físicas */}
+      {/* ── Mesas Físicas ── */}
       <div style={S.section}>
         <div style={S.sectionTitle}>Mesas Físicas</div>
-        <div style={S.grid}>
-          {(mesas.fisicas || []).map(m => (
-            <div key={m.num} style={S.card(m.status)} onClick={() => handleMesaClick(m)}>
-              <div style={S.cardNum}>{m.num}</div>
-              <div style={S.cardStatus(m.status)}>
-                {m.status === 'livre' ? 'livre' : m.status === 'conta' ? 'conta' : 'ocupada'}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: 8, padding: '0 0 8px' }}>
+          {(mesas.fisicas || []).map(m => {
+            const s = m.status
+            return (
+              <div key={m.num}
+                className="mesa-card"
+                style={{ ...S.card(s), transition: 'transform .12s, box-shadow .12s' }}
+                onClick={() => handleMesaClick(m)}
+              >
+                <div style={{ fontSize: 22, fontWeight: 900, color: s === 'conta' ? '#C9A656' : s === 'ocupada' ? '#8FD64A' : '#4a7a52' }}>
+                  {m.num}
+                </div>
+                <div style={{ fontSize: 9, marginTop: 3, padding: '2px 5px', borderRadius: 4, display: 'inline-block',
+                  background: s === 'conta' ? '#C9A656' : s === 'ocupada' ? '#1e4029' : '#0d1f12',
+                  color: s === 'conta' ? '#000' : s === 'ocupada' ? '#8FD64A' : '#3a6a42',
+                  fontWeight: 700, textTransform: 'uppercase' }}>
+                  {s === 'livre' ? 'livre' : s === 'conta' ? 'conta 🧾' : 'aberta'}
+                </div>
+                {s !== 'livre' && (
+                  <div style={{ fontSize: 11, color: '#C9A656', fontWeight: 700, marginTop: 3 }}>
+                    {fmtR(m.total || 0)}
+                  </div>
+                )}
               </div>
-              {m.status !== 'livre' && <div style={S.cardTotal}>{fmtR(m.total || 0)}</div>}
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 
-      {/* Comandas Virtuais */}
+      {/* ── Comandas Virtuais ── */}
       {(mesas.virtuais || []).length > 0 && (
         <div style={S.section}>
           <div style={S.sectionTitle}>Comandas Virtuais</div>
           {mesas.virtuais.map(v => (
             <div key={v.id}
-              style={{ background: '#132b1b', border: '1px solid #1e4029', borderRadius: 10, padding: '10px 14px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', cursor: 'pointer' }}
+              style={{ background: '#132b1b', border: '1px solid #1e4029', borderRadius: 12, padding: '12px 14px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
               onClick={async () => {
                 setSheet({ tipo: 'virtual', id: v.id })
                 await loadComanda(v.id)
                 setOverlay('comanda')
               }}>
-              <span style={{ fontWeight: 700 }}>{v.nome || `#${v.id}`}</span>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{v.nome || `#${v.id}`}</div>
+                {v.aguardandoCozinha > 0 && <div style={{ fontSize: 11, color: '#e67e22' }}>🍳 {v.aguardandoCozinha} na cozinha</div>}
+              </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ color: '#8FD64A', fontWeight: 700 }}>{fmtR(v.total || 0)}</div>
-                {v.status === 'conta' && <span style={{ fontSize: 10, color: '#C9A656' }}>conta</span>}
+                <div style={{ color: '#8FD64A', fontWeight: 800, fontSize: 15 }}>{fmtR(v.total || 0)}</div>
+                {v.status === 'conta' && <div style={{ fontSize: 10, color: '#C9A656', fontWeight: 700 }}>🧾 conta</div>}
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Sheet da comanda */}
+      {/* ── Espaço para o botão flutuante não cobrir conteúdo ── */}
+      {overlay === 'cardapio' && cartCount > 0 && <div style={{ height: 80 }} />}
+
+      {/* ════════ OVERLAYS ════════ */}
+
+      {/* ── Overlay: Comanda ── */}
       {overlay === 'comanda' && sheet && comanda && (
         <div style={S.overlay} onClick={fechar}>
           <div style={S.sheet} onClick={e => e.stopPropagation()}>
+            <div style={S.sheetHandle} />
             <div style={S.sheetHeader}>
               <div>
                 <div style={S.sheetTitle}>
-                  {sheet.tipo === 'fisica' ? `Mesa ${sheet.num}` : comanda.mesa || `Comanda #${comanda.id}`}
+                  {sheet.tipo === 'fisica' ? `🍽️ Mesa ${sheet.num}` : (comanda.mesa || `Comanda #${comanda.id}`)}
                 </div>
-                <div style={{ fontSize: 11, opacity: 0.5, marginTop: 2 }}>#{comanda.id} · {fmtR(comanda.total || 0)}</div>
+                <div style={{ fontSize: 11, opacity: 0.5, marginTop: 2 }}>
+                  #{comanda.id} · {(comanda.itens || []).length} itens · <span style={{ color: '#C9A656' }}>{fmtR(comanda.total || 0)}</span>
+                </div>
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 {prontos > 0 && (
@@ -268,43 +431,62 @@ export default function GarcomView() {
 
             <div style={S.sheetBody}>
               {(!comanda.itens || comanda.itens.length === 0) ? (
-                <div style={{ textAlign: 'center', opacity: 0.4, padding: 20, fontSize: 13 }}>Sem itens ainda</div>
+                <div style={{ textAlign: 'center', opacity: 0.4, padding: '32px 0', fontSize: 14 }}>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>🍽️</div>
+                  Nenhum item ainda — toque em Adicionar
+                </div>
               ) : (
-                comanda.itens.map((it, i) => (
-                  <div key={i} style={S.itemRow}>
-                    <div style={S.itemQty}>{it.qtd}</div>
-                    <div style={{ flex: 1, fontSize: 13 }}>
-                      {it.nome}
-                      {it.obs && <div style={{ fontSize: 10, opacity: 0.5 }}>{it.obs}</div>}
-                    </div>
-                    {it.status && (
-                      <span style={{
-                        ...S.statusBadge,
-                        background: it.status === 'pronto' ? '#1a4a20' : it.status === 'em_preparo' ? '#3a2800' : '#1e4029',
-                        color: it.status === 'pronto' ? '#8FD64A' : it.status === 'em_preparo' ? '#C9A656' : '#aaa',
-                      }}>{it.status}</span>
-                    )}
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#C9A656' }}>
-                      {fmtR((it.preco || 0) * (it.qtd || 1))}
-                    </div>
+                <div>
+                  {comanda.itens.map((it, i) => {
+                    const statusColor = {
+                      pronto: '#5FB335', em_preparo: '#C9A656', preparando: '#3498db',
+                      entregue: '#555', novo: '#888', pendente: '#888',
+                    }
+                    return (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid #1a3020' }}>
+                        <div style={{ minWidth: 28, height: 28, borderRadius: 8, background: '#1e4029', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#8FD64A' }}>
+                          {it.qtd}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600 }}>{it.nome}</div>
+                          {it.obs && <div style={{ fontSize: 10, color: '#8FD64A', opacity: .7, marginTop: 1 }}>📝 {it.obs}</div>}
+                        </div>
+                        {it.status && (
+                          <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 20, fontWeight: 700, background: 'transparent', border: `1px solid ${statusColor[it.status] || '#555'}`, color: statusColor[it.status] || '#555' }}>
+                            {it.status.replace('_', ' ')}
+                          </span>
+                        )}
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#C9A656', whiteSpace: 'nowrap' }}>
+                          {fmtR((it.preco || 0) * (it.qtd || 1))}
+                        </div>
+                      </div>
+                    )
+                  })}
+
+                  {/* Subtotal */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 0 4px', fontWeight: 800 }}>
+                    <span style={{ color: '#8FD64A' }}>Total</span>
+                    <span style={{ color: '#C9A656', fontSize: 18 }}>{fmtR(comanda.total || 0)}</span>
                   </div>
-                ))
+                </div>
               )}
             </div>
 
             <div style={S.sheetActions}>
-              <button className="btn btn-secondary" style={{ flex: 1, fontSize: 13 }}
-                onClick={() => { setBusca(''); setOverlay('cardapio') }}>
+              <button
+                onClick={abrirCardapio}
+                style={{ flex: 1.5, padding: '12px 0', borderRadius: 12, border: '1.5px solid #2a5a32', background: '#132b1b', color: '#8FD64A', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>
                 ➕ Adicionar item
               </button>
-              {comanda.status !== 'conta' && (
-                <button className="btn btn-primary" style={{ flex: 1, fontSize: 13 }}
-                  onClick={pedirConta} disabled={loading || !comanda.itens?.length}>
+              {comanda.status !== 'conta' ? (
+                <button
+                  onClick={pedirConta}
+                  disabled={loading || !comanda.itens?.length}
+                  style={{ flex: 1, padding: '12px 0', borderRadius: 12, border: 'none', background: comanda.itens?.length ? '#C9A656' : '#2a2a10', color: comanda.itens?.length ? '#000' : '#555', cursor: comanda.itens?.length ? 'pointer' : 'not-allowed', fontWeight: 800, fontSize: 14 }}>
                   🧾 Pedir conta
                 </button>
-              )}
-              {comanda.status === 'conta' && (
-                <div style={{ flex: 1, textAlign: 'center', padding: '8px', background: '#3a280055', border: '1px solid #C9A656', borderRadius: 8, color: '#C9A656', fontWeight: 700, fontSize: 13 }}>
+              ) : (
+                <div style={{ flex: 1, padding: '12px 0', borderRadius: 12, background: 'rgba(201,166,86,.1)', border: '1px solid #C9A656', color: '#C9A656', fontWeight: 700, fontSize: 13, textAlign: 'center' }}>
                   ⏳ Aguardando caixa
                 </div>
               )}
@@ -313,84 +495,307 @@ export default function GarcomView() {
         </div>
       )}
 
-      {/* Seletor de cardápio */}
+      {/* ── Overlay: Cardápio / Adicionar itens ── */}
       {overlay === 'cardapio' && (
         <div style={S.overlay} onClick={() => setOverlay('comanda')}>
-          <div style={{ ...S.sheet, maxHeight: '90vh' }} onClick={e => e.stopPropagation()}>
+          <div style={{ ...S.sheet, maxHeight: '94vh' }} onClick={e => e.stopPropagation()}>
+            <div style={S.sheetHandle} />
             <div style={S.sheetHeader}>
-              <div style={S.sheetTitle}>Adicionar item</div>
+              <div style={S.sheetTitle}>🛒 Adicionar itens</div>
               <button style={S.sheetClose} onClick={() => setOverlay('comanda')}>✕</button>
             </div>
-            <div style={{ padding: '10px 16px 0' }}>
-              <input style={S.input} placeholder="🔍 Buscar…" value={busca}
-                onChange={e => setBusca(e.target.value)} autoFocus />
-              <div style={S.catScroll}>
-                {cats.map(c => (
-                  <button key={c} style={S.catBtn(catFiltro === c)}
-                    onClick={() => { setCatFiltro(c); setBusca('') }}>{c}</button>
-                ))}
+
+            {/* Busca */}
+            <div style={{ padding: '10px 16px 0', flexShrink: 0 }}>
+              <div style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 15, opacity: .5 }}>🔍</span>
+                <input
+                  style={{ ...S.input, paddingLeft: 36, marginBottom: 0 }}
+                  placeholder="Buscar produto…"
+                  value={busca}
+                  onChange={e => setBusca(e.target.value)}
+                  autoFocus
+                />
+                {busca && (
+                  <button onClick={() => setBusca('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#8FD64A', cursor: 'pointer', fontSize: 16, padding: 2 }}>✕</button>
+                )}
               </div>
             </div>
-            <div style={{ overflowY: 'auto', padding: '8px 16px', flex: 1 }}>
-              <div style={S.prodGrid}>
-                {prods.map(p => {
-                  const sem = p.estoque !== null && p.estoque !== undefined && p.estoque <= 0
+
+            {/* Filtros: categorias + setores */}
+            <div style={{ flexShrink: 0 }}>
+              {/* Categorias */}
+              <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '10px 16px 0', scrollbarWidth: 'none' }}>
+                {cats.map(c => {
+                  const active = catFiltro === c
                   return (
-                    <div key={p.id} style={{ ...S.prodCard, opacity: sem ? 0.4 : 1 }}>
-                      <button style={S.addBtn} disabled={sem}
-                        onClick={() => { setItemObs({ prod: p, obs: '' }); setOverlay('obs') }}>+</button>
-                      <div style={S.prodName}>{p.nome}</div>
-                      <div style={S.prodPrice}>{fmtR(p.preco)}</div>
-                      {sem && <div style={{ fontSize: 9, color: '#e74c3c', fontWeight: 700 }}>SEM ESTOQUE</div>}
+                    <button key={c}
+                      onClick={() => { setCatFiltro(c); setBusca('') }}
+                      style={{
+                        padding: '6px 14px', borderRadius: 20, whiteSpace: 'nowrap', cursor: 'pointer',
+                        border: active ? '1.5px solid #5FB335' : '1.5px solid #1e4029',
+                        background: active ? '#1a4a20' : 'transparent',
+                        color: active ? '#8FD64A' : '#aaa',
+                        fontWeight: active ? 800 : 500, fontSize: 12,
+                        flexShrink: 0,
+                      }}>
+                      {catEmoji(c)} {c}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Setores (bar/chapa/cozinha) — só mostra se tem mais de 1 */}
+              {setores.length > 2 && (
+                <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '8px 16px 4px', scrollbarWidth: 'none' }}>
+                  {setores.map(s => {
+                    const active = setor === s
+                    const sc = s !== 'todos' ? setorStyle(s) : null
+                    return (
+                      <button key={s}
+                        onClick={() => setSetor(s)}
+                        style={{
+                          padding: '4px 12px', borderRadius: 20, whiteSpace: 'nowrap', cursor: 'pointer',
+                          border: active && sc ? `1.5px solid ${sc.border}` : active ? '1.5px solid #5FB335' : '1.5px solid #1e4029',
+                          background: active && sc ? sc.bg : active ? '#1a4a20' : 'transparent',
+                          color: active && sc ? sc.text : active ? '#8FD64A' : '#666',
+                          fontWeight: active ? 800 : 500, fontSize: 11, flexShrink: 0,
+                        }}>
+                        {s === 'todos' ? '🔀 Todos' : `${s === 'bar' ? '🍺' : s === 'chapa' ? '🔥' : '👨‍🍳'} ${setorStyle(s).label}`}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Contador de resultados */}
+              <div style={{ padding: '4px 16px 8px', fontSize: 11, color: '#3a6a42' }}>
+                {prods.length} produto{prods.length !== 1 ? 's' : ''} {busca && `para "${busca}"`}
+              </div>
+            </div>
+
+            {/* Grid de produtos */}
+            <div style={{ overflowY: 'auto', flex: 1, padding: '0 12px 8px' }}>
+              {prods.length === 0 ? (
+                <div style={{ textAlign: 'center', opacity: .4, padding: 32, fontSize: 13 }}>
+                  Nenhum produto encontrado
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))', gap: 8 }}>
+                  {prods.map(p => {
+                    const sem = p.estoque !== null && p.estoque !== undefined && p.estoque <= 0
+                    const baixo = p.estoque !== null && p.estoque !== undefined && p.estoque > 0 && p.estoque <= 3
+                    const qty = cartQty(p.id)
+                    const sc = setorStyle(p.setor)
+                    const obsOpen = obsAberta === p.id
+                    return (
+                      <div key={p.id}
+                        className="prod-card"
+                        style={{
+                          background: qty > 0 ? '#0e2a16' : '#0d1a10',
+                          border: qty > 0 ? '2px solid #5FB335' : sem ? '1.5px solid #2a1010' : '1.5px solid #1e4029',
+                          borderRadius: 12, padding: '10px 10px 8px',
+                          opacity: sem ? 0.45 : 1,
+                          transition: 'border .15s, background .15s',
+                          cursor: sem ? 'not-allowed' : 'default',
+                          position: 'relative',
+                          display: 'flex', flexDirection: 'column', gap: 4,
+                        }}>
+
+                        {/* Badge de setor */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                          <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 20, border: `1px solid ${sc.border}`, color: sc.text, fontWeight: 700, background: sc.bg }}>
+                            {p.setor === 'bar' ? '🍺' : p.setor === 'chapa' ? '🔥' : p.setor === 'cozinha' ? '👨‍🍳' : '📦'} {sc.label}
+                          </span>
+                          {baixo && <span style={{ fontSize: 9, color: '#e67e22', fontWeight: 700 }}>⚠️ {p.estoque} rest.</span>}
+                          {sem && <span style={{ fontSize: 9, color: '#e05c5c', fontWeight: 700 }}>ESGOTADO</span>}
+                        </div>
+
+                        {/* Nome */}
+                        <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.3, flex: 1 }}>
+                          <Highlight text={p.nome} query={busca} />
+                        </div>
+
+                        {/* Preço */}
+                        <div style={{ fontSize: 14, color: '#C9A656', fontWeight: 800 }}>{fmtR(p.preco)}</div>
+
+                        {/* Controle de quantidade */}
+                        {!sem && (
+                          qty === 0 ? (
+                            <button
+                              onClick={() => addOne(p)}
+                              style={{ width: '100%', padding: '7px 0', borderRadius: 8, border: 'none', background: '#1e4029', color: '#8FD64A', cursor: 'pointer', fontWeight: 800, fontSize: 14, marginTop: 2 }}>
+                              + Adicionar
+                            </button>
+                          ) : (
+                            <div style={{ marginTop: 4 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                                <QtyControl
+                                  qty={qty}
+                                  mini
+                                  onDec={() => setQty(p, qty - 1)}
+                                  onInc={() => setQty(p, qty + 1)}
+                                />
+                                <span style={{ fontSize: 12, fontWeight: 800, color: '#5FB335' }}>{fmtR(p.preco * qty)}</span>
+                              </div>
+                              {/* Obs rápida toggle */}
+                              <button
+                                onClick={() => setObsAberta(obsOpen ? null : p.id)}
+                                style={{ width: '100%', padding: '4px 0', borderRadius: 6, border: '1px solid #2a5a32', background: 'transparent', color: '#3a8a4a', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>
+                                📝 {cart.find(c => c.prod.id === p.id)?.obs || 'obs…'}
+                              </button>
+                              {obsOpen && (
+                                <input
+                                  autoFocus
+                                  style={{ ...S.input, marginTop: 4, fontSize: 11, padding: '6px 10px' }}
+                                  placeholder="Ex: sem gelo, bem gelado…"
+                                  value={cart.find(c => c.prod.id === p.id)?.obs || ''}
+                                  onChange={e => setObs(p.id, e.target.value)}
+                                  onKeyDown={e => { if (e.key === 'Enter') setObsAberta(null) }}
+                                />
+                              )}
+                            </div>
+                          )
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Footer quando cart tem itens */}
+            {cartCount > 0 && (
+              <div style={{ padding: '10px 16px 20px', borderTop: '1px solid #1e4029', background: '#0a1a0d', flexShrink: 0 }}>
+                <button
+                  onClick={() => setOverlay('cart')}
+                  style={{ width: '100%', padding: '14px 0', borderRadius: 14, border: 'none', background: '#5FB335', color: '#fff', cursor: 'pointer', fontWeight: 800, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                  🛒 Ver pedido ({cartCount} item{cartCount !== 1 ? 's' : ''}) · {fmtR(cartTotal)}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Overlay: Revisão do Cart ── */}
+      {overlay === 'cart' && (
+        <div style={S.overlay} onClick={() => setOverlay('cardapio')}>
+          <div style={{ ...S.sheet, maxHeight: '85vh' }} onClick={e => e.stopPropagation()}>
+            <div style={S.sheetHandle} />
+            <div style={S.sheetHeader}>
+              <div>
+                <div style={S.sheetTitle}>📋 Revisar pedido</div>
+                <div style={{ fontSize: 11, opacity: .5, marginTop: 2 }}>
+                  {sheet?.tipo === 'fisica' ? `Mesa ${sheet.num}` : 'Comanda'}
+                </div>
+              </div>
+              <button style={S.sheetClose} onClick={() => setOverlay('cardapio')}>← Voltar</button>
+            </div>
+
+            <div style={S.sheetBody}>
+              {cart.map((ci, i) => {
+                const sc = setorStyle(ci.prod.setor)
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 0', borderBottom: '1px solid #1a3020' }}>
+                    {/* Setor badge */}
+                    <div style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 8, background: sc.bg, border: `1px solid ${sc.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
+                      {ci.prod.setor === 'bar' ? '🍺' : ci.prod.setor === 'chapa' ? '🔥' : '👨‍🍳'}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700 }}>{ci.prod.nome}</div>
+                      {ci.obs && <div style={{ fontSize: 11, color: '#8FD64A', opacity: .7 }}>📝 {ci.obs}</div>}
+                      <div style={{ fontSize: 12, color: '#C9A656', marginTop: 2 }}>{fmtR(ci.prod.preco)} × {ci.qty}</div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: '#C9A656' }}>{fmtR(ci.prod.preco * ci.qty)}</div>
+                      <QtyControl
+                        qty={ci.qty}
+                        mini
+                        onDec={() => setQty(ci.prod, ci.qty - 1)}
+                        onInc={() => setQty(ci.prod, ci.qty + 1)}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+
+              {/* Total */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '16px 0 4px', fontWeight: 900 }}>
+                <span style={{ fontSize: 15, color: '#8FD64A' }}>Total do pedido</span>
+                <span style={{ fontSize: 20, color: '#C9A656' }}>{fmtR(cartTotal)}</span>
+              </div>
+
+              {/* Agrupamento por setor — aviso visual */}
+              <div style={{ background: '#0a1a0d', borderRadius: 10, padding: '10px 14px', marginTop: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#3a6a42', marginBottom: 6 }}>DESTINO DOS PEDIDOS</div>
+                {['bar', 'chapa', 'cozinha'].map(s => {
+                  const itens = cart.filter(ci => ci.prod.setor === s)
+                  if (!itens.length) return null
+                  const sc = setorStyle(s)
+                  return (
+                    <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <span style={{ fontSize: 12, color: sc.text, fontWeight: 700, minWidth: 70 }}>
+                        {s === 'bar' ? '🍺 Bar' : s === 'chapa' ? '🔥 Chapa' : '👨‍🍳 Cozinha'}
+                      </span>
+                      <span style={{ fontSize: 11, color: '#aaa' }}>
+                        {itens.map(ci => `${ci.qty}× ${ci.prod.nome}`).join(', ')}
+                      </span>
                     </div>
                   )
                 })}
               </div>
             </div>
-          </div>
-        </div>
-      )}
 
-      {/* Observação do item */}
-      {overlay === 'obs' && itemObs.prod && (
-        <div style={S.overlay} onClick={() => setOverlay('cardapio')}>
-          <div style={{ ...S.sheet, maxHeight: 'auto' }} onClick={e => e.stopPropagation()}>
-            <div style={S.sheetHeader}>
-              <div style={S.sheetTitle}>➕ {itemObs.prod.nome}</div>
-              <button style={S.sheetClose} onClick={() => setOverlay('cardapio')}>✕</button>
-            </div>
-            <div style={{ padding: 16 }}>
-              <div style={{ fontSize: 15, color: '#C9A656', fontWeight: 700, marginBottom: 12 }}>{fmtR(itemObs.prod.preco)}</div>
-              <input style={S.input} placeholder="Observação (ex: sem gelo, bem gelado…)"
-                value={itemObs.obs}
-                onChange={e => setItemObs(v => ({ ...v, obs: e.target.value }))}
-                autoFocus />
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setOverlay('cardapio')}>Voltar</button>
-                <button className="btn btn-primary" style={{ flex: 1 }} onClick={adicionarItem} disabled={loading}>
-                  {loading ? '…' : 'Adicionar'}
-                </button>
-              </div>
+            <div style={S.sheetActions}>
+              <button
+                onClick={() => setOverlay('cardapio')}
+                style={{ flex: 1, padding: '12px 0', borderRadius: 12, border: '1.5px solid #2a5a32', background: 'transparent', color: '#8FD64A', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>
+                ← Continuar
+              </button>
+              <button
+                onClick={confirmarPedido}
+                disabled={loading}
+                style={{ flex: 2, padding: '12px 0', borderRadius: 12, border: 'none', background: '#5FB335', color: '#fff', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 15 }}>
+                {loading ? '⏳ Enviando…' : `✓ Confirmar ${cartCount} item${cartCount !== 1 ? 's' : ''}`}
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Nova comanda */}
+      {/* ── Overlay: Nova comanda ── */}
       {overlay === 'nova' && (
         <div style={S.overlay} onClick={() => { setOverlay(null); setSheet(null) }}>
           <div style={{ ...S.sheet, maxHeight: 'auto' }} onClick={e => e.stopPropagation()}>
+            <div style={S.sheetHandle} />
             <div style={S.sheetHeader}>
-              <div style={S.sheetTitle}>Mesa {sheet?.num} — Nova comanda</div>
+              <div style={S.sheetTitle}>🆕 Mesa {sheet?.num} — Nova comanda</div>
               <button style={S.sheetClose} onClick={() => { setOverlay(null); setSheet(null) }}>✕</button>
             </div>
-            <div style={{ padding: 16 }}>
-              <input style={S.input} placeholder="Nome do cliente (opcional)"
-                value={novaMesa} onChange={e => setNovaMesa(e.target.value)} autoFocus />
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => { setOverlay(null); setSheet(null) }}>Cancelar</button>
-                <button className="btn btn-primary" style={{ flex: 1 }} onClick={iniciarComanda} disabled={loading}>
-                  {loading ? '…' : 'Abrir comanda'}
+            <div style={{ padding: 20 }}>
+              <div style={{ fontSize: 13, color: '#8FD64A', marginBottom: 14, opacity: .7 }}>
+                Informe o nome do cliente ou grupo (opcional)
+              </div>
+              <input
+                style={S.input}
+                placeholder="Nome do cliente ou mesa (ex: João, Família Silva…)"
+                value={nomeMesa}
+                onChange={e => setNomeMesa(e.target.value)}
+                autoFocus
+                onKeyDown={e => e.key === 'Enter' && iniciarComanda()}
+              />
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button
+                  onClick={() => { setOverlay(null); setSheet(null) }}
+                  style={{ flex: 1, padding: '12px 0', borderRadius: 12, border: '1.5px solid #1e4029', background: 'transparent', color: '#aaa', cursor: 'pointer', fontWeight: 700 }}>
+                  Cancelar
+                </button>
+                <button
+                  onClick={iniciarComanda}
+                  disabled={loading}
+                  style={{ flex: 2, padding: '12px 0', borderRadius: 12, border: 'none', background: '#5FB335', color: '#fff', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 15 }}>
+                  {loading ? '⏳' : '✓ Abrir comanda'}
                 </button>
               </div>
             </div>

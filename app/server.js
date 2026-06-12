@@ -841,7 +841,14 @@ app.get('/api/cardapio', (req,res)=>{
   const est = db().estoque||{};
   res.json(getCardapio().map(p=>{
     const e = est[p.id]; const qtd = e ? e.qtd : null;
-    return { ...p, estoque: qtd, indisponivel: qtd !== null && qtd <= 0 };
+    return {
+      ...p,
+      setor:      p.setor  || 'bar',
+      cozinha:    p.cozinha || false,
+      estoque:    qtd,
+      estoqueMin: e?.min ?? null,
+      indisponivel: qtd !== null && qtd <= 0,
+    };
   }));
 });
 
