@@ -125,9 +125,11 @@ export default function Aulas() {
   // KPIs
   const kpis = useMemo(() => {
     const totalVagas = aulas.reduce((s, a) => s + (a.vagas || 0), 0)
+    const totalInscritos = aulas.reduce((s, a) => s + (a.inscritos ?? a.alunos?.length ?? 0), 0)
     const receitaPot = aulas.reduce((s, a) => s + (a.preco || 0) * (a.vagas || 0), 0)
-    const porMod = MODALIDADES.reduce((acc, m) => { acc[m] = aulas.filter(a => a.modalidade === m).length; return acc }, {})
-    return { total: aulas.length, professores: professores.length, totalVagas, receitaPot, porMod }
+    const receitaReal = aulas.reduce((s, a) => s + (a.preco || 0) * (a.inscritos ?? a.alunos?.length ?? 0), 0)
+    const ocupacao = totalVagas > 0 ? Math.round((totalInscritos / totalVagas) * 100) : 0
+    return { total: aulas.length, professores: professores.length, totalVagas, totalInscritos, receitaPot, receitaReal, ocupacao }
   }, [aulas, professores])
 
   // Filtros
@@ -154,16 +156,19 @@ export default function Aulas() {
       </div>
 
       {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(130px,1fr))', gap: 10, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: 10, marginBottom: 20 }}>
         {[
-          { label: 'Total aulas', value: kpis.total, color: '#5FB335' },
+          { label: 'Total Aulas', value: kpis.total, color: '#5FB335' },
           { label: 'Professores', value: kpis.professores, color: '#C9A656' },
-          { label: 'Total vagas', value: kpis.totalVagas, color: '#3b82f6' },
-          { label: 'Receita potencial', value: fmtR(kpis.receitaPot), color: '#8FD64A', small: true },
+          { label: 'Inscritos', value: kpis.totalInscritos, color: '#8FD64A' },
+          { label: 'Total Vagas', value: kpis.totalVagas, color: '#3b82f6' },
+          { label: 'Ocupação', value: `${kpis.ocupacao}%`, color: kpis.ocupacao >= 80 ? '#e05c5c' : kpis.ocupacao >= 50 ? '#C9A656' : '#5FB335' },
+          { label: 'Receita Realizada', value: fmtR(kpis.receitaReal), color: '#5FB335', small: true },
+          { label: 'Receita Potencial', value: fmtR(kpis.receitaPot), color: '#8FD64A', small: true },
         ].map(k => (
           <div key={k.label} style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, padding: '12px 14px', borderTop: `3px solid ${k.color}` }}>
             <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>{k.label}</div>
-            <div style={{ fontSize: k.small ? 16 : 22, fontWeight: 800, color: k.color }}>{k.value}</div>
+            <div style={{ fontSize: k.small ? 15 : 22, fontWeight: 800, color: k.color }}>{k.value}</div>
           </div>
         ))}
       </div>
@@ -185,17 +190,21 @@ export default function Aulas() {
       <table style={S.table}>
         <thead>
           <tr>
-            {['Título', 'Professor', 'Modalidade', 'Data/Hora', 'Nível', 'Vagas', 'Preço', ''].map(h => (
+            {['Título', 'Professor', 'Modalidade', 'Data/Hora', 'Nível', 'Capacidade', 'Inscritos', 'Preço', ''].map(h => (
               <th key={h} style={S.th}>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {aulasFiltradas.length === 0 && (
-            <tr><td colSpan={8} style={{ ...S.td, color: 'var(--muted)', textAlign: 'center' }}>Nenhuma aula encontrada.</td></tr>
+            <tr><td colSpan={9} style={{ ...S.td, color: 'var(--muted)', textAlign: 'center' }}>Nenhuma aula encontrada.</td></tr>
           )}
           {aulasFiltradas.map(a => {
             const prof = professores.find(p => p.id === a.professorId)
+            const inscritos = a.inscritos ?? (a.alunos?.length ?? 0)
+            const vagas = a.vagas || 1
+            const pctOcup = Math.min(100, Math.round((inscritos / vagas) * 100))
+            const barColor = pctOcup >= 90 ? '#e05c5c' : pctOcup >= 70 ? '#C9A656' : '#5FB335'
             return (
               <tr key={a.id}>
                 <td style={S.td}><strong>{a.titulo}</strong></td>
@@ -203,7 +212,14 @@ export default function Aulas() {
                 <td style={S.td}><span style={S.badge('#5FB335')}>{a.modalidade}</span></td>
                 <td style={S.td}>{a.data} {a.hora}</td>
                 <td style={S.td}><span style={S.badge(NIVEL_COLOR[a.nivel] || '#888')}>{a.nivel}</span></td>
-                <td style={S.td}>{a.vagas}</td>
+                <td style={S.td}>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 3 }}>{vagas} vagas</div>
+                  <div style={{ height: 6, borderRadius: 3, background: 'var(--line)', width: 80 }}>
+                    <div style={{ height: '100%', borderRadius: 3, background: barColor, width: `${pctOcup}%`, transition: 'width .3s' }} />
+                  </div>
+                  <div style={{ fontSize: 10, color: barColor, marginTop: 2 }}>{pctOcup}%</div>
+                </td>
+                <td style={{ ...S.td, fontWeight: 700, color: barColor }}>{inscritos}</td>
                 <td style={S.td}>{a.preco > 0 ? fmtR(a.preco) : <span style={{ color: 'var(--muted)' }}>Grátis</span>}</td>
                 <td style={S.td}>
                   <button style={S.btnSm('#e05c5c')} onClick={() => excluirAula(a.id, a.titulo)}>Excluir</button>

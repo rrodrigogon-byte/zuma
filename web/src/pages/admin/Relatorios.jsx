@@ -85,14 +85,36 @@ function Section({ title, children, onCSV, onPrint }) {
 }
 
 function DateFilter({ from, to, onFrom, onTo, periodButtons = true }) {
+  // detecta período ativo para highlight
+  const isToday  = from === today()  && to === today()
+  const isWeek   = from === daysAgo(6) && to === today() && !isToday
+  const isMes    = from === daysAgo(29) && to === today() && !isToday && !isWeek
+  const isTodos  = !from && !to
+
+  function periodBtn(label, active, onClick) {
+    return (
+      <button
+        className="btn btn-ghost btn-sm"
+        onClick={onClick}
+        style={{
+          fontWeight: active ? 800 : 600,
+          background: active ? 'rgba(95,179,53,.18)' : 'transparent',
+          color: active ? 'var(--green)' : 'var(--muted)',
+          border: active ? '1px solid var(--green)' : '1px solid transparent',
+        }}
+      >{label}</button>
+    )
+  }
+
   return (
-    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18, alignItems: 'center' }}>
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18, alignItems: 'center' }}>
       {periodButtons && (
         <>
-          <button className="btn btn-ghost btn-sm" onClick={() => { onFrom(today()); onTo(today()) }}>Hoje</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => { onFrom(daysAgo(6)); onTo(today()) }}>Semana</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => { onFrom(daysAgo(29)); onTo(today()) }}>Mês</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => { onFrom(''); onTo('') }}>Todos</button>
+          {periodBtn('Hoje',   isToday, () => { onFrom(today()); onTo(today()) })}
+          {periodBtn('7 dias', isWeek,  () => { onFrom(daysAgo(6)); onTo(today()) })}
+          {periodBtn('30 dias',isMes,   () => { onFrom(daysAgo(29)); onTo(today()) })}
+          {periodBtn('Todos',  isTodos, () => { onFrom(''); onTo('') })}
+          <div style={{ width:1, height:22, background:'var(--line)', margin:'0 4px' }} />
         </>
       )}
       <input className="input" type="date" style={{ maxWidth: 140 }} value={from} onChange={e => onFrom(e.target.value)} />
@@ -245,6 +267,37 @@ export default function Relatorios() {
   const porStatusAul = {}
   aulFiltradas.forEach(m => { const s = m.status||'ativo'; porStatusAul[s]=(porStatusAul[s]||0)+1 })
 
+  /* ── Export CSV da aba ativa ── */
+  function exportTabCSV() {
+    switch (tabAtiva) {
+      case 'financeiro':
+        return exportCSV('financeiro.csv', vendasFiltradas.map(v => ({
+          data: fmtDate(v.createdAt||v.data), total: v.total,
+          meio: v.formaPagamento||v.meio||'',
+        })))
+      case 'inscricoes':
+        return exportCSV('inscricoes.csv', inscFiltradas.map(i => ({
+          nome: i.nome, categoria: i.categoria, status: i.status,
+          data: fmtDate(i.createdAt||i.data),
+        })))
+      case 'socios':
+        return exportCSV('socios.csv', socios.map(s => ({
+          nome: s.nome, email: s.email, plano: s.plano, status: s.status, saldo: s.saldo,
+        })))
+      case 'quadras':
+        return exportCSV('reservas_quadras.csv', resFiltradas.map(r => ({
+          quadra: r.quadra||r.quadraNome||'', data: r.data||'', horario: r.horario||'',
+          cliente: r.clienteNome||r.socioNome||'', valor: r.valor||0, status: r.status||'',
+        })))
+      case 'aulas':
+        return exportCSV('matriculas.csv', aulFiltradas.map(m => ({
+          aluno: m.alunoNome||m.socioNome||'', aula: m.aulaNome||m.modalidade||'',
+          status: m.status||'', valor: m.valor||0, data: m.createdAt||m.data||'',
+        })))
+      default: break
+    }
+  }
+
   return (
     <>
       {/* Print styles */}
@@ -259,8 +312,12 @@ export default function Relatorios() {
       <div style={{ padding:'24px 16px', maxWidth:1100, margin:'0 auto' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:24, flexWrap:'wrap', gap:10 }}>
           <h2 style={{ margin:0, fontSize:22, fontWeight:900, color:'var(--cream)' }}>📄 Relatórios</h2>
-          <div style={{ display:'flex', gap:8 }}>
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
             <button className="btn btn-ghost btn-sm" onClick={load}>↺ Atualizar</button>
+            <button className="btn btn-ghost btn-sm" onClick={exportTabCSV}
+              title={`Exportar dados da aba "${TABS_REL.find(t=>t.key===tabAtiva)?.label}" em CSV`}>
+              ⬇ CSV
+            </button>
             <button className="btn btn-ghost btn-sm" onClick={() => window.print()}>🖨️ Imprimir</button>
           </div>
         </div>

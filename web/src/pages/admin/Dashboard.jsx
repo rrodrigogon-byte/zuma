@@ -9,6 +9,12 @@ const LINKS = [
   { label: 'Cardápio', href: '/admin/cardapio', icon: '🍽️' },
   { label: 'Usuários', href: '/admin/usuarios', icon: '👤' },
   { label: 'Financeiro', href: '/admin/financeiro', icon: '💰' },
+  { label: 'CRM', href: '/admin/crm', icon: '📈' },
+  { label: 'Loja', href: '/admin/loja', icon: '🛍️' },
+  { label: 'Estoque', href: '/admin/estoque', icon: '📦' },
+  { label: 'Agenda', href: '/admin/agenda', icon: '📅' },
+  { label: 'Auditoria', href: '/admin/auditoria', icon: '🔍' },
+  { label: 'Configurações', href: '/admin/configuracoes', icon: '⚙️' },
 ]
 
 const TIPO_BADGE = {
@@ -473,42 +479,71 @@ export default function Dashboard() {
 
       <h1 className="page-title">Dashboard</h1>
 
-      {/* KPIs */}
+      {/* KPIs — Linha 1: operacional */}
       {dash?.indicadores && (
-        <div className="grid4" style={{ marginBottom: 32 }}>
-          <KPI
-            label="Inscritos"
-            value={dash.indicadores.inscritos ?? '—'}
-            icon="🎾"
-            color="var(--green)"
-            trend={trend(dash.indicadores.inscritos, dash.indicadores.inscritos_ontem)}
-          />
-          <KPI
-            label="Receita do Dia"
-            value={fmtR(dash.indicadores.receita ?? 0)}
-            icon="💰"
-            color="#C9A656"
-            trend={trend(dash.indicadores.receita, dash.indicadores.receita_ontem)}
-          />
-          <KPI
-            label="Mesas Ocupadas"
-            value={
-              dash.indicadores.mesasOcupadas != null
-                ? `${dash.indicadores.mesasOcupadas} / ${dash.indicadores.totalMesas}`
-                : '—'
-            }
-            icon="🍺"
-            color="#5FB335"
-            trend={trend(dash.indicadores.mesasOcupadas, dash.indicadores.mesasOcupadas_ontem)}
-          />
-          <KPI
-            label="Comandas Abertas"
-            value={dash.indicadores.comandasAbertas ?? '—'}
-            icon="📋"
-            color="#8FD64A"
-            trend={trend(dash.indicadores.comandasAbertas, dash.indicadores.comandasAbertas_ontem)}
-          />
-        </div>
+        <>
+          <div className="grid4" style={{ marginBottom: 12 }}>
+            <KPI
+              label="Inscrições"
+              value={dash.indicadores.inscritos ?? '—'}
+              icon="🎾"
+              color="var(--green)"
+              trend={trend(dash.indicadores.inscritos, dash.indicadores.inscritos_ontem)}
+            />
+            <KPI
+              label="Faturamento Bar"
+              value={fmtR(dash.indicadores.receita ?? 0)}
+              icon="💰"
+              color="#C9A656"
+              trend={trend(dash.indicadores.receita, dash.indicadores.receita_ontem)}
+            />
+            <KPI
+              label="Mesas Ocupadas"
+              value={
+                dash.indicadores.mesasOcupadas != null
+                  ? `${dash.indicadores.mesasOcupadas} / ${dash.indicadores.totalMesas}`
+                  : '—'
+              }
+              icon="🍺"
+              color="#5FB335"
+              trend={trend(dash.indicadores.mesasOcupadas, dash.indicadores.mesasOcupadas_ontem)}
+            />
+            <KPI
+              label="Comandas Abertas"
+              value={dash.indicadores.comandasAbertas ?? '—'}
+              icon="📋"
+              color="#8FD64A"
+              trend={trend(dash.indicadores.comandasAbertas, dash.indicadores.comandasAbertas_ontem)}
+            />
+          </div>
+          {/* KPIs — Linha 2: estrutural */}
+          <div className="grid4" style={{ marginBottom: 32 }}>
+            <KPI
+              label="Atletas Cadastrados"
+              value={dash.indicadores.atletas ?? '—'}
+              icon="👤"
+              color="#8FD64A"
+            />
+            <KPI
+              label="Sócios Ativos"
+              value={dash.indicadores.socios ?? '—'}
+              icon="🤝"
+              color="#C9A656"
+            />
+            <KPI
+              label="Torneios"
+              value={dash.indicadores.torneios ?? '—'}
+              icon="🏆"
+              color="#5FB335"
+            />
+            <KPI
+              label="Reservas Hoje"
+              value={dash.indicadores.reservasHoje ?? '—'}
+              icon="📅"
+              color="var(--green)"
+            />
+          </div>
+        </>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 24, marginBottom: 24 }}>
@@ -594,34 +629,61 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Novidades do sistema */}
-      {noticias.length > 0 && (
-        <div style={{ marginBottom: 28 }}>
+      {/* Pendências + Novidades */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 28 }}>
+        {/* Pendências resumo */}
+        {dash?.pendencias && (
+          <div className="card">
+            <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 14, color: '#fff' }}>⚡ Pendências</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {[
+                { label: 'Inscrições aguardando', val: dash.pendencias.inscPend, href: '/admin/inscricoes', cor: '#C9A656' },
+                { label: 'Pagamentos pendentes', val: dash.pendencias.pagPend, href: '/admin/pagamentos', cor: '#e05c5c' },
+                { label: 'Faturas sócios abertas', val: dash.pendencias.faturasAbertas, href: '/admin/socios', cor: '#C9A656' },
+                { label: 'Placares não confirmados', val: dash.pendencias.placaresNaoConf, href: '/admin/agenda', cor: '#5FB335' },
+                { label: 'Reservas hoje', val: dash.pendencias.reservasHoje, href: '/admin/agenda', cor: '#8FD64A' },
+              ].map(({ label, val, href, cor }) => (
+                <a key={label} href={href} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: val > 0 ? cor + '11' : 'transparent', borderRadius: 8, border: `1px solid ${val > 0 ? cor + '44' : '#1e4a2e'}` }}>
+                  <span style={{ fontSize: 13, color: '#ccc' }}>{label}</span>
+                  <span style={{ fontSize: 16, fontWeight: 800, color: val > 0 ? cor : 'var(--muted)' }}>{val ?? '—'}</span>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Novidades do sistema */}
+        {noticias.length > 0 ? (
           <NewsWidget noticias={noticias} />
-        </div>
-      )}
+        ) : (
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <h2 style={{ fontSize: 15, fontWeight: 600, color: '#fff', margin: 0 }}>📰 Novidades</h2>
+            <p style={{ color: 'var(--muted)', fontSize: 13 }}>Nenhuma notícia publicada.</p>
+          </div>
+        )}
+      </div>
 
       {/* Links rápidos */}
       <div>
         <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 14, color: '#fff' }}>
           Acesso Rápido
         </h2>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
           {LINKS.map((l) => (
             <a
               key={l.href}
               href={l.href}
               className="card"
               style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '12px 18px', textDecoration: 'none',
-                color: '#fff', fontSize: 14, fontWeight: 500,
-                transition: 'border-color 0.2s', border: '1px solid #1e4a2e',
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 16px', textDecoration: 'none',
+                color: '#fff', fontSize: 13, fontWeight: 500,
+                transition: 'border-color 0.2s, background 0.2s', border: '1px solid #1e4a2e',
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--green)')}
-              onMouseLeave={(e) => (e.currentTarget.style.borderColor = '#1e4a2e')}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--green)'; e.currentTarget.style.background = '#1a3a2233' }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#1e4a2e'; e.currentTarget.style.background = '' }}
             >
-              <span style={{ fontSize: 20 }}>{l.icon}</span>
+              <span style={{ fontSize: 18 }}>{l.icon}</span>
               {l.label}
             </a>
           ))}

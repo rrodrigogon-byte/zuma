@@ -57,6 +57,8 @@ export default function Mesas() {
   const [comanda, setComanda]     = useState(null)   // { mesa, data }
   const [transferindo, setTransferindo] = useState(null) // item sendo transferido
   const [lastUpdate, setLastUpdate] = useState(Date.now())
+  const [busca, setBusca]         = useState('')
+  const [filtroStatus, setFiltroStatus] = useState('todos')
   const autoRef = useRef(null)
 
   /* ── Load ── */
@@ -139,10 +141,22 @@ export default function Mesas() {
   }
 
   /* ── KPIs ── */
-  const ocupadas     = fisicas.filter(m => m.status !== 'livre').length
-  const livres       = fisicas.filter(m => m.status === 'livre').length
-  const totalReceber = fisicas.reduce((s, m) => s + (m.total || 0), 0)
-  const itensCozinha = fisicas.reduce((s, m) => s + (m.aguardandoCozinha || 0), 0)
+  const ocupadas       = fisicas.filter(m => m.status !== 'livre').length
+  const livres         = fisicas.filter(m => m.status === 'livre').length
+  const totalReceber   = fisicas.reduce((s, m) => s + (m.total || 0), 0)
+  const itensCozinha   = fisicas.reduce((s, m) => s + (m.aguardandoCozinha || 0), 0)
+  const taxaOcupacao   = fisicas.length ? Math.round((ocupadas / fisicas.length) * 100) : 0
+  const ocBarColor     = taxaOcupacao >= 90 ? '#e05c5c' : taxaOcupacao >= 70 ? '#C9A656' : '#5FB335'
+  const totalComandas  = virtuais.length
+  const mesaMaior      = fisicas.reduce((acc, m) => (m.total || 0) > (acc?.total || 0) ? m : acc, null)
+
+  /* ── Mesas filtradas para o grid ── */
+  const fisicasFiltradas = fisicas.filter(m => {
+    const passaStatus = filtroStatus === 'todos' || m.status === filtroStatus
+    const term = busca.toLowerCase()
+    const passaBusca = !term || String(m.num).includes(term) || (m.nome || '').toLowerCase().includes(term)
+    return passaStatus && passaBusca
+  })
 
   /* ── Item counts por status na comanda aberta ── */
   const itensComanda = comanda?.data?.itens || []
@@ -162,27 +176,56 @@ export default function Mesas() {
       </div>
 
       {/* KPIs */}
-      <div className="grid4" style={{ marginBottom:24 }}>
-        <div className="kpi">
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:12, marginBottom:24 }}>
+        {/* Total */}
+        <div className="kpi" style={{ borderLeft:'4px solid var(--green)' }}>
           <div className="kpi-label">Total Mesas</div>
           <div className="kpi-value">{fisicas.length}</div>
         </div>
-        <div className="kpi">
+        {/* Ocupadas */}
+        <div className="kpi" style={{ borderLeft:'4px solid var(--gold)' }}>
           <div className="kpi-label">Ocupadas</div>
           <div className="kpi-value" style={{ color:'var(--gold)' }}>{ocupadas}</div>
         </div>
-        <div className="kpi">
+        {/* Livres */}
+        <div className="kpi" style={{ borderLeft:'4px solid var(--green)' }}>
           <div className="kpi-label">Livres</div>
           <div className="kpi-value" style={{ color:'var(--green)' }}>{livres}</div>
         </div>
-        <div className="kpi">
-          <div className="kpi-label">Total a Receber</div>
-          <div className="kpi-value" style={{ color:'var(--lime)', fontSize:22 }}>{fmtR(totalReceber)}</div>
+        {/* Taxa de ocupação */}
+        <div className="kpi" style={{ borderLeft:`4px solid ${ocBarColor}` }}>
+          <div className="kpi-label">Ocupação</div>
+          <div className="kpi-value" style={{ color:ocBarColor }}>{taxaOcupacao}%</div>
+          <div style={{ height:6, borderRadius:3, background:'var(--line)', marginTop:8 }}>
+            <div style={{ height:'100%', borderRadius:3, background:ocBarColor, width:`${taxaOcupacao}%`, transition:'width .4s' }} />
+          </div>
         </div>
+        {/* Total a receber */}
+        <div className="kpi" style={{ borderLeft:'4px solid var(--lime)' }}>
+          <div className="kpi-label">Faturamento Aberto</div>
+          <div className="kpi-value" style={{ color:'var(--lime)', fontSize:20 }}>{fmtR(totalReceber)}</div>
+        </div>
+        {/* Comandas virtuais */}
+        {totalComandas > 0 && (
+          <div className="kpi" style={{ borderLeft:'4px solid #3498db' }}>
+            <div className="kpi-label">Comandas Virtuais</div>
+            <div className="kpi-value" style={{ color:'#3498db' }}>{totalComandas}</div>
+          </div>
+        )}
+        {/* Mesa top */}
+        {mesaMaior && mesaMaior.total > 0 && (
+          <div className="kpi" style={{ borderLeft:'4px solid var(--gold)' }}>
+            <div className="kpi-label">🏆 Mesa Top</div>
+            <div className="kpi-value" style={{ fontSize:16, color:'var(--gold)' }}>
+              #{mesaMaior.num} · {fmtR(mesaMaior.total)}
+            </div>
+          </div>
+        )}
+        {/* Cozinha */}
         {itensCozinha > 0 && (
-          <div className="kpi" style={{ borderTop:'3px solid var(--gold)' }}>
+          <div className="kpi" style={{ borderLeft:'4px solid #e05c5c' }}>
             <div className="kpi-label">🍳 Aguardando Cozinha</div>
-            <div className="kpi-value" style={{ color:'var(--gold)' }}>{itensCozinha}</div>
+            <div className="kpi-value" style={{ color:'#e05c5c' }}>{itensCozinha}</div>
           </div>
         )}
       </div>
@@ -205,10 +248,48 @@ export default function Mesas() {
         </div>
       </div>
 
+      {/* Busca + Filtro de status */}
+      <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'center', marginBottom:16 }}>
+        <input
+          className="input"
+          type="search"
+          placeholder="🔍 Buscar mesa (nº ou nome)…"
+          value={busca}
+          onChange={e => setBusca(e.target.value)}
+          style={{ maxWidth:220 }}
+        />
+        {['todos','livre','ocupada','fechando'].map(s => {
+          const labels = { todos:'Todas', livre:'Livres', ocupada:'Ocupadas', fechando:'Fechando conta' }
+          const colors = { todos:'var(--muted)', livre:'var(--green)', ocupada:'var(--gold)', fechando:'#3498db' }
+          const active  = filtroStatus === s
+          return (
+            <button key={s}
+              onClick={() => setFiltroStatus(s)}
+              style={{
+                padding:'5px 14px', borderRadius:20, border: active ? `1.5px solid ${colors[s]}` : '1.5px solid var(--line)',
+                background: active ? `${colors[s]}22` : 'var(--surface)',
+                color: active ? colors[s] : 'var(--muted)',
+                cursor:'pointer', fontWeight: active ? 800 : 600, fontSize:12, transition:'all .15s',
+              }}>
+              {labels[s]}
+            </button>
+          )
+        })}
+        {(busca || filtroStatus !== 'todos') && (
+          <button onClick={() => { setBusca(''); setFiltroStatus('todos') }}
+            style={{ fontSize:12, color:'var(--muted)', background:'none', border:'none', cursor:'pointer', textDecoration:'underline' }}>
+            limpar
+          </button>
+        )}
+        <span style={{ fontSize:12, color:'var(--muted)', marginLeft:'auto' }}>
+          {fisicasFiltradas.length} de {fisicas.length} mesa(s)
+        </span>
+      </div>
+
       {/* Grid de mesas físicas */}
       <p className="section-title">Mesas Físicas</p>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))', gap:12, marginBottom:32 }}>
-        {fisicas.map(m => {
+        {fisicasFiltradas.map(m => {
           const sc = STATUS_COLOR[m.status] || STATUS_COLOR.livre
           const clickable = m.status !== 'livre'
           return (
@@ -235,6 +316,9 @@ export default function Mesas() {
           )
         })}
         {fisicas.length === 0 && <p style={{ color:'var(--muted)', gridColumn:'1/-1' }}>Nenhuma mesa cadastrada.</p>}
+        {fisicas.length > 0 && fisicasFiltradas.length === 0 && (
+          <p style={{ color:'var(--muted)', gridColumn:'1/-1' }}>Nenhuma mesa encontrada com os filtros aplicados.</p>
+        )}
       </div>
 
       {/* Comandas virtuais */}

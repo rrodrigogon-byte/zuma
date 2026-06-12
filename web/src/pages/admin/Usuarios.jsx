@@ -3,6 +3,29 @@ import { api, fmtDate, fmtDateOnly } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
 
+function exportCSV(usuarios) {
+  const headers = ['ID', 'Nome', 'E-mail', 'Perfil', 'Status', 'Último Acesso']
+  const rows = usuarios.map(u => [
+    u.id, u.nome, u.email, u.role,
+    u.ativo !== false ? 'Ativo' : 'Inativo',
+    u.ultimoAcesso ? new Date(u.ultimoAcesso).toLocaleDateString('pt-BR') : '—'
+  ])
+  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href = url; a.download = `usuarios_${new Date().toISOString().slice(0,10)}.csv`; a.click()
+  URL.revokeObjectURL(url)
+}
+
+function KpiCard({ label, value, color = 'var(--green)', icon }) {
+  return (
+    <div style={{ background: 'var(--card)', border: `1px solid var(--line)`, borderLeft: `4px solid ${color}`, borderRadius: 10, padding: '14px 18px', minWidth: 130 }}>
+      <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 4 }}>{icon} {label}</div>
+      <div style={{ fontSize: 26, fontWeight: 800, color }}>{value}</div>
+    </div>
+  )
+}
+
 const ROLES = ['admin', 'organizador', 'staff', 'atleta']
 
 const ROLE_COLORS = {
@@ -142,12 +165,37 @@ export default function Usuarios() {
     })
   }, [usuarios, busca, filtroRole])
 
+  // KPIs calculados
+  const kpis = useMemo(() => {
+    const total = usuarios.length
+    const ativos = usuarios.filter(u => u.ativo !== false).length
+    const byRole = ROLES.reduce((acc, r) => ({ ...acc, [r]: usuarios.filter(u => u.role === r).length }), {})
+    const semAcesso = usuarios.filter(u => !u.ultimoAcesso).length
+    return { total, ativos, ...byRole, semAcesso }
+  }, [usuarios])
+
   return (
     <div className="page">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <h1 className="page-title" style={{ margin: 0 }}>Usuários</h1>
-        <button className="btn btn-primary" onClick={openNovo}>+ Novo Usuário</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-secondary" onClick={() => exportCSV(lista)}>⬇ CSV</button>
+          <button className="btn btn-primary" onClick={openNovo}>+ Novo Usuário</button>
+        </div>
       </div>
+
+      {/* KPIs */}
+      {!loading && (
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
+          <KpiCard label="Total" value={kpis.total} color="var(--green)" icon="👥" />
+          <KpiCard label="Ativos" value={kpis.ativos} color="#5FB335" icon="✅" />
+          <KpiCard label="Admin" value={kpis.admin || 0} color="#e05c5c" icon="🔑" />
+          <KpiCard label="Organizador" value={kpis.organizador || 0} color="#C9A656" icon="🗂" />
+          <KpiCard label="Staff" value={kpis.staff || 0} color="#8FD64A" icon="🎫" />
+          <KpiCard label="Atletas" value={kpis.atleta || 0} color="var(--green)" icon="🎾" />
+          <KpiCard label="Sem acesso" value={kpis.semAcesso} color="var(--muted)" icon="⚠️" />
+        </div>
+      )}
 
       {/* Filtros */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>

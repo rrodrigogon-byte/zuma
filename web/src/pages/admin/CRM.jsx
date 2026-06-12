@@ -279,6 +279,127 @@ function TabelaInativos({ lista, onComunicar }) {
   )
 }
 
+// ── Tab Atletas completa ──────────────────────────────────────────────────────
+function TabelaAtletas({ toast }) {
+  const [atletas, setAtletas] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [busca, setBusca] = useState('')
+  const [filtroRole, setFiltroRole] = useState('todos')
+
+  useEffect(() => {
+    api.get('/api/admin/usuarios')
+      .then(setAtletas)
+      .catch(() => toast('Erro ao carregar atletas', 'error'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const lista = useMemo(() => {
+    const q = busca.toLowerCase()
+    return atletas.filter(u => {
+      const matchQ = !q || u.nome?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
+      const matchR = filtroRole === 'todos' || u.role === filtroRole
+      return matchQ && matchR
+    })
+  }, [atletas, busca, filtroRole])
+
+  function handleCSV() {
+    const headers = ['Nome', 'E-mail', 'Perfil', 'Status', 'Último Acesso']
+    const rows = lista.map(u => [
+      u.nome, u.email, u.role,
+      u.ativo !== false ? 'Ativo' : 'Inativo',
+      u.ultimoAcesso ? new Date(u.ultimoAcesso).toLocaleDateString('pt-BR') : '—'
+    ])
+    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = `atletas_${new Date().toISOString().slice(0,10)}.csv`; a.click()
+    URL.revokeObjectURL(url)
+    toast('CSV exportado!')
+  }
+
+  const ROLE_COLORS = {
+    admin: '#e05c5c', organizador: '#C9A656', staff: '#5FB335', atleta: '#8FD64A'
+  }
+
+  // KPIs rápidos
+  const kAtivos = atletas.filter(u => u.ativo !== false).length
+  const kAtletas = atletas.filter(u => u.role === 'atleta').length
+  const kStaff = atletas.filter(u => ['admin','organizador','staff'].includes(u.role)).length
+
+  if (loading) return <p style={{ color: 'var(--muted)', padding: 20 }}>Carregando…</p>
+
+  const S = {
+    th: { background: 'var(--surface2)', color: 'var(--muted)', fontSize: '0.78rem', padding: '0.55rem 0.75rem', textAlign: 'left', fontWeight: 600 },
+    td: { padding: '0.65rem 0.75rem', borderBottom: '1px solid var(--border)', color: 'var(--fg)', fontSize: '0.9rem' },
+  }
+
+  return (
+    <>
+      {/* Mini KPIs */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+        {[
+          { label: 'Total', value: atletas.length, color: 'var(--green)' },
+          { label: 'Ativos', value: kAtivos, color: '#5FB335' },
+          { label: 'Atletas', value: kAtletas, color: '#8FD64A' },
+          { label: 'Staff/Admin', value: kStaff, color: '#C9A656' },
+        ].map(k => (
+          <div key={k.label} style={{ background: 'var(--surface)', border: `1px solid var(--border)`, borderLeft: `4px solid ${k.color}`, borderRadius: 8, padding: '8px 14px', minWidth: 90 }}>
+            <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase' }}>{k.label}</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: k.color }}>{k.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filtros + CSV */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+        <input type="search" placeholder="🔍 Buscar nome ou e-mail…" value={busca} onChange={e => setBusca(e.target.value)}
+          style={{ flex: 1, minWidth: 180, padding: '0.5rem 0.8rem', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--fg)', fontSize: '0.9rem' }} />
+        <select value={filtroRole} onChange={e => setFiltroRole(e.target.value)}
+          style={{ padding: '0.5rem 0.8rem', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--fg)', fontSize: '0.9rem' }}>
+          <option value="todos">Todos os perfis</option>
+          {['admin','organizador','staff','atleta'].map(r => <option key={r} value={r}>{r}</option>)}
+        </select>
+        <button onClick={handleCSV} style={{ padding: '0.5rem 1rem', borderRadius: 8, border: '1px solid var(--border)', background: 'none', color: 'var(--green)', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+          ⬇ CSV
+        </button>
+        <span style={{ fontSize: 12, color: 'var(--muted)' }}>{lista.length} de {atletas.length}</span>
+      </div>
+
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--surface)', borderRadius: 8, overflow: 'hidden' }}>
+          <thead><tr>
+            {['Nome', 'E-mail', 'Perfil', 'Status', 'Último Acesso'].map(h => <th key={h} style={S.th}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {lista.length === 0 && <tr><td colSpan={5} style={{ ...S.td, textAlign: 'center', color: 'var(--muted)' }}>Nenhum resultado.</td></tr>}
+            {lista.map(u => {
+              const cor = ROLE_COLORS[u.role] || '#888'
+              return (
+                <tr key={u.id}>
+                  <td style={{ ...S.td, fontWeight: 700 }}>{u.nome}</td>
+                  <td style={{ ...S.td, color: 'var(--muted)', fontSize: 12 }}>{u.email}</td>
+                  <td style={S.td}>
+                    <span style={{ padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 700, background: cor + '22', color: cor }}>{u.role}</span>
+                  </td>
+                  <td style={S.td}>
+                    <span style={{ padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 700, background: u.ativo !== false ? '#5FB33522' : '#e05c5c22', color: u.ativo !== false ? '#5FB335' : '#e05c5c' }}>
+                      {u.ativo !== false ? 'Ativo' : 'Inativo'}
+                    </span>
+                  </td>
+                  <td style={{ ...S.td, fontSize: 12, color: 'var(--muted)' }}>
+                    {u.ultimoAcesso ? new Date(u.ultimoAcesso).toLocaleDateString('pt-BR') : '—'}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>{lista.length} registros</p>
+    </>
+  )
+}
+
 // ── Página CRM principal ──────────────────────────────────────────────────────
 export default function CRM() {
   const { toast } = useToast()
@@ -344,6 +465,7 @@ export default function CRM() {
     { id: 'consumidores', label: `💰 Maiores Consumidores (${segs.maioresConsumidores?.length || 0})` },
     { id: 'aniversariantes', label: `🎂 Aniversariantes (${segs.aniversariantes?.length || 0})` },
     { id: 'inativos', label: `💤 Inativos (${segs.inativos?.length || 0})` },
+    { id: 'atletas', label: `👤 Todos os Atletas` },
   ]
 
   return (
@@ -403,6 +525,9 @@ export default function CRM() {
       )}
       {tab === 'inativos' && (
         <TabelaInativos lista={segs.inativos} onComunicar={() => setModalComunicado(true)} />
+      )}
+      {tab === 'atletas' && (
+        <TabelaAtletas toast={toast} />
       )}
 
       <p style={{ color: 'var(--muted)', fontSize: '0.78rem', marginTop: '1.5rem' }}>
