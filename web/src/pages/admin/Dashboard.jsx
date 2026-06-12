@@ -330,10 +330,45 @@ export default function Dashboard() {
       api.get('/api/info'),
       api.get('/api/admin/dashboard'),
       api.get('/api/noticias?publicado=1&limit=3').catch(() => []),
+      api.get('/api/mesas').catch(() => ({ fisicas: [], virtuais: [] })),
     ])
-      .then(([infoRes, dashRes, noticiasRes]) => {
+      .then(([infoRes, dashRes, noticiasRes, mesasRes]) => {
         setInfo(infoRes)
-        setDash(dashRes)
+        // Normaliza campos do dashboard para o formato esperado pelos KPIs
+        const ind = dashRes?.indicadores || {}
+        const fisicas = mesasRes?.fisicas || []
+        const mesasOcupadas = fisicas.filter(m => m.status !== 'livre').length
+        const totalMesas = fisicas.length
+        const normalizado = {
+          ...dashRes,
+          indicadores: {
+            ...ind,
+            // Mapeia inscricoes → inscritos
+            inscritos: ind.inscricoes ?? ind.atletas ?? 0,
+            inscritos_ontem: null,
+            // Receita do dia = faturamento do bar hoje
+            receita: ind.faturamentoBar ?? ind.receitaPagamentos ?? 0,
+            receita_ontem: null,
+            // Mesas em tempo real
+            mesasOcupadas,
+            totalMesas,
+            mesasOcupadas_ontem: null,
+            comandasAbertas: ind.comandasAbertas ?? 0,
+            comandasAbertas_ontem: null,
+          },
+          // Normaliza alertas (servidor usa nivel/txt, dashboard usa tipo/msg)
+          alertas: (dashRes?.alertas || []).map(a => ({
+            tipo: a.nivel === 'aten' ? 'pagamento' : a.nivel === 'info' ? 'info' : 'info',
+            msg: a.txt || a.msg || '',
+          })).filter(a => !a.msg.includes('Tudo em dia')),
+          // Dados de faturamento para o gráfico
+          faturamento: dashRes?.faturamento || [],
+          // Pagamentos por meio
+          pagamentos_meio: dashRes?.pagamentos_meio || {},
+          // Próximos jogos
+          proximos_jogos: dashRes?.proximos_jogos || [],
+        }
+        setDash(normalizado)
         setNoticias(Array.isArray(noticiasRes) ? noticiasRes : noticiasRes?.noticias ?? [])
         setLastUpdate(new Date())
       })
@@ -341,7 +376,14 @@ export default function Dashboard() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { fetchData() }, [])
+  // Auto-refresh a cada 30 segundos
+  useEffect(() => {
+    fetchData()
+    const interval = setInterval(() => {
+      fetchData()
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [])
 
   const maxFat = dash ? Math.max(...(dash.faturamento || []).map((f) => f.total), 1) : 1
 

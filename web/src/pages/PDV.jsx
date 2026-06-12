@@ -107,6 +107,16 @@ export default function PDV() {
   // Troco
   const [valorRecebido, setValorRecebido] = useState('')
 
+  // Divisão de conta
+  const [dividir, setDividir] = useState(1)
+
+  // Múltiplos meios de pagamento
+  const [multiPag, setMultiPag] = useState([])
+  const [multiPagValor, setMultiPagValor] = useState('')
+  const [multiPagMeio, setMultiPagMeio] = useState('pix')
+  const totalMultiPag = multiPag.reduce((s, p) => s + p.valor, 0)
+  const restanteMultiPag = totalFinal - totalMultiPag
+
   // Vendas do dia
   const [vendas, setVendas] = useState([])
   const [vendasLoading, setVendasLoading] = useState(false)
@@ -175,9 +185,14 @@ export default function PDV() {
   const abertas = [...(mesas.fisicas || []), ...(mesas.virtuais || [])].filter(m => m.status !== 'livre')
   const totalAberto = abertas.reduce((s, m) => s + (m.total || 0), 0)
 
+  // Busca no cardápio
+  const [buscaCardapio, setBuscaCardapio] = useState('')
+
   // Categorias
   const cats = ['Tudo', ...Array.from(new Set(cardapio.map(p => p.cat)))]
-  const prodsFiltrados = catFiltro === 'Tudo' ? cardapio : cardapio.filter(p => p.cat === catFiltro)
+  const prodsFiltrados = cardapio
+    .filter(p => catFiltro === 'Tudo' || p.cat === catFiltro)
+    .filter(p => !buscaCardapio || p.nome.toLowerCase().includes(buscaCardapio.toLowerCase()))
 
   // Totais com desconto e serviço
   const subtotal = comanda?.total || 0
@@ -186,8 +201,9 @@ export default function PDV() {
   const servicoVal = servico ? subtotalDesc * 0.1 : 0
   const totalFinal = subtotalDesc + servicoVal
 
-  // Troco
-  const trocoVal = valorRecebido ? (parseFloat(valorRecebido.replace(',', '.')) || 0) - totalFinal : 0
+  // Troco (considera divisão)
+  const totalPorPessoa = dividir > 1 ? totalFinal / dividir : totalFinal
+  const trocoVal = valorRecebido ? (parseFloat(valorRecebido.replace(',', '.')) || 0) - totalPorPessoa : 0
 
   // Abrir mesa física
   const handleMesaClick = async (mesa) => {
@@ -324,18 +340,32 @@ export default function PDV() {
     if (!comanda?.id) return
     setLoading(true)
     try {
-      await api.post(`/api/comanda/${comanda.id}/pagar`, {
-        meio: payMeio,
-        desconto: descPct > 0 ? descPct : undefined,
-        servico: servico,
-        totalFinal,
-      })
+      // Se há múltiplos meios registrados, envia todos; senão envia o único selecionado
+      const payload = multiPag.length > 0 && restanteMultiPag < 0.01
+        ? {
+            meios: multiPag,
+            meio: multiPag[0]?.meio || payMeio,
+            desconto: descPct > 0 ? descPct : undefined,
+            servico,
+            totalFinal,
+          }
+        : {
+            meio: payMeio,
+            desconto: descPct > 0 ? descPct : undefined,
+            servico,
+            totalFinal,
+            dividir: dividir > 1 ? dividir : undefined,
+          }
+      await api.post(`/api/comanda/${comanda.id}/pagar`, payload)
       toast('Pagamento registrado! ✓', 'success')
       setOverlay(null)
       setSheet(null)
       setComanda(null)
       setDescPct(0)
       setValorRecebido('')
+      setDividir(1)
+      setMultiPag([])
+      setMultiPagValor('')
       await loadMesas()
       await loadCaixaHoje()
     } catch (e) {
@@ -411,6 +441,10 @@ export default function PDV() {
     setComanda(null)
     setOverlay(null)
     setDescPct(0)
+    setDividir(1)
+    setMultiPag([])
+    setMultiPagValor('')
+    setBuscaCardapio('')
   }
 
   const fmtMeio = (meio) => {
@@ -664,14 +698,23 @@ export default function PDV() {
         <div style={S.overlay} onClick={() => setOverlay(null)}>
           <div style={{ ...S.modal, maxWidth: 500, maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}
             onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
               <div style={S.modalTitle}>Cardápio</div>
-              <button style={S.sheetClose} onClick={() => setOverlay(null)}>✕</button>
+              <button style={S.sheetClose} onClick={() => { setOverlay(null); setBuscaCardapio('') }}>✕</button>
             </div>
+
+            {/* Campo de busca */}
+            <input
+              style={{ ...S.input, marginBottom: 8 }}
+              placeholder="🔍 Buscar produto…"
+              value={buscaCardapio}
+              onChange={e => setBuscaCardapio(e.target.value)}
+              autoFocus
+            />
 
             <div style={S.catScroll}>
               {cats.map(c => (
-                <button key={c} style={S.catBtn(catFiltro === c)} onClick={() => setCatFiltro(c)}>{c}</button>
+                <button key={c} style={S.catBtn(catFiltro === c)} onClick={() => { setCatFiltro(c); setBuscaCardapio('') }}>{c}</button>
               ))}
             </div>
 
@@ -779,14 +822,29 @@ export default function PDV() {
       {/* Overlay: Pagamento */}
       {overlay === 'pagar' && (
         <div style={S.overlay} onClick={() => setOverlay(null)}>
-          <div style={S.modal} onClick={e => e.stopPropagation()}>
+          <div style={{ ...S.modal, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
               <div style={S.modalTitle}>💳 Pagamento</div>
               <button style={S.sheetClose} onClick={() => setOverlay(null)}>✕</button>
             </div>
-            <div style={{ fontSize: 13, opacity: 0.6, marginBottom: 4 }}>
+            <div style={{ fontSize: 13, opacity: 0.6, marginBottom: 8 }}>
               {descPct > 0 && <span>Subtotal: {fmtR(subtotalDesc)} · </span>}
               Total: <strong style={{ color: '#8FD64A', fontSize: 16 }}>{fmtR(totalFinal)}</strong>
+            </div>
+
+            {/* Divisão de conta */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, padding: '8px 10px', background: '#132b1b', borderRadius: 8 }}>
+              <span style={{ fontSize: 12, opacity: 0.7, flex: 1 }}>Dividir entre:</span>
+              <button onClick={() => setDividir(d => Math.max(1, d - 1))}
+                style={{ background: '#1e4029', border: 'none', borderRadius: 6, color: '#8FD64A', width: 28, height: 28, cursor: 'pointer', fontWeight: 800, fontSize: 16 }}>-</button>
+              <span style={{ fontWeight: 800, fontSize: 16, minWidth: 24, textAlign: 'center' }}>{dividir}</span>
+              <button onClick={() => setDividir(d => d + 1)}
+                style={{ background: '#1e4029', border: 'none', borderRadius: 6, color: '#8FD64A', width: 28, height: 28, cursor: 'pointer', fontWeight: 800, fontSize: 16 }}>+</button>
+              {dividir > 1 && (
+                <span style={{ fontSize: 13, color: '#C9A656', fontWeight: 700, marginLeft: 6 }}>
+                  = {fmtR(totalFinal / dividir)}/pessoa
+                </span>
+              )}
             </div>
 
             <div style={S.payBtns}>
@@ -798,13 +856,69 @@ export default function PDV() {
               ))}
             </div>
 
+            {/* Múltiplos meios de pagamento */}
+            {multiPag.length > 0 && (
+              <div style={{ marginTop: 12, padding: '8px 10px', background: '#0a1a10', borderRadius: 8, border: '1px solid #1e4029' }}>
+                <div style={{ fontSize: 11, opacity: 0.65, marginBottom: 6 }}>Pagamentos registrados:</div>
+                {multiPag.map((p, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
+                    <span>{PAY_OPTIONS.find(o => o.key === p.meio)?.icon} {PAY_OPTIONS.find(o => o.key === p.meio)?.label}</span>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <span style={{ color: '#8FD64A', fontWeight: 700 }}>{fmtR(p.valor)}</span>
+                      <button onClick={() => setMultiPag(prev => prev.filter((_, j) => j !== i))}
+                        style={{ background: 'none', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: 12 }}>✕</button>
+                    </div>
+                  </div>
+                ))}
+                <div style={{ borderTop: '1px solid #1e4029', marginTop: 6, paddingTop: 6, display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                  <span>Restante:</span>
+                  <span style={{ color: restanteMultiPag > 0 ? '#C9A656' : '#8FD64A', fontWeight: 700 }}>{fmtR(Math.max(0, restanteMultiPag))}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Adicionar pagamento parcial */}
+            {multiPag.length > 0 && restanteMultiPag > 0.01 && (
+              <div style={{ marginTop: 8, padding: '8px 10px', background: '#132b1b', borderRadius: 8, border: '1px solid #1e4029' }}>
+                <div style={{ fontSize: 11, opacity: 0.65, marginBottom: 6 }}>Adicionar pagamento parcial:</div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    type="number" min="0" step="0.01"
+                    placeholder="Valor"
+                    value={multiPagValor}
+                    onChange={e => setMultiPagValor(e.target.value)}
+                    style={{ ...S.input, marginBottom: 0, fontSize: 13, flex: 1 }}
+                  />
+                  <button
+                    onClick={() => {
+                      const v = parseFloat(multiPagValor) || 0
+                      if (v > 0) {
+                        setMultiPag(prev => [...prev, { meio: multiPagMeio, valor: v }])
+                        setMultiPagValor('')
+                      }
+                    }}
+                    style={{ background: '#5FB335', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 700, padding: '0 14px', cursor: 'pointer', fontSize: 13 }}>
+                    + Add
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {multiPag.length === 0 && (
+              <button
+                style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid #1e4029', borderRadius: 8, color: '#8FD64A', padding: '6px 12px', cursor: 'pointer', fontSize: 12, marginTop: 8 }}
+                onClick={() => setMultiPag([{ meio: payMeio, valor: parseFloat((totalFinal / 2).toFixed(2)) }])}>
+                ➕ Dividir pagamento (2+ meios)
+              </button>
+            )}
+
             {/* Troco calculado para dinheiro */}
-            {payMeio === 'dinheiro' && (
-              <div style={{ marginTop: 16, padding: '12px', background: '#132b1b', borderRadius: 10, border: '1px solid #1e4029' }}>
+            {payMeio === 'dinheiro' && multiPag.length === 0 && (
+              <div style={{ marginTop: 12, padding: '12px', background: '#132b1b', borderRadius: 10, border: '1px solid #1e4029' }}>
                 <div style={{ fontSize: 12, opacity: 0.65, marginBottom: 6 }}>Valor recebido (R$)</div>
                 <input
                   type="number" min="0" step="0.01"
-                  placeholder={`mín. ${fmtR(totalFinal)}`}
+                  placeholder={`mín. ${fmtR(dividir > 1 ? totalFinal / dividir : totalFinal)}`}
                   value={valorRecebido}
                   onChange={e => setValorRecebido(e.target.value)}
                   style={{ ...S.input, marginBottom: 0, fontSize: 16, fontWeight: 600 }}
@@ -827,10 +941,13 @@ export default function PDV() {
 
             <button
               className="btn btn-primary"
-              style={{ width: '100%', marginTop: 18, fontSize: 15 }}
+              style={{ width: '100%', marginTop: 14, fontSize: 15 }}
               onClick={pagar}
-              disabled={loading || (payMeio === 'dinheiro' && valorRecebido && trocoVal < 0)}>
-              {loading ? 'Processando...' : `Confirmar — ${PAY_OPTIONS.find(o => o.key === payMeio)?.label}`}
+              disabled={loading || (payMeio === 'dinheiro' && multiPag.length === 0 && valorRecebido && trocoVal < 0)}>
+              {loading ? 'Processando...' : multiPag.length > 0 && restanteMultiPag < 0.01
+                ? `✅ Confirmar — Pago (${fmtR(totalFinal)})`
+                : `Confirmar — ${PAY_OPTIONS.find(o => o.key === payMeio)?.label}${dividir > 1 ? ` (${fmtR(totalFinal / dividir)}/pessoa)` : ''}`
+              }
             </button>
           </div>
         </div>

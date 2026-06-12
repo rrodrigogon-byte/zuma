@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { api, fmtDate } from '../lib/api'
+import { api } from '../lib/api'
 import { useToast } from '../hooks/useToast'
 
 const STATUS_ORDER = ['novo', 'em_preparo', 'pronto']
@@ -16,6 +16,28 @@ const STATUS_COLOR = {
   pronto: '#5FB335',
 }
 
+// Retorna minutos decorridos desde criadoEm
+function minutosDecorridos(criadoEm) {
+  if (!criadoEm) return 0
+  return Math.floor((Date.now() - new Date(criadoEm).getTime()) / 60000)
+}
+
+// Cor de urgência baseada no tempo
+function corUrgencia(mins, status) {
+  if (status === 'pronto') return STATUS_COLOR.pronto
+  if (status === 'novo') {
+    if (mins >= 10) return '#ff0000' // crítico: vermelho intenso
+    if (mins >= 5)  return '#ff4500' // urgente: laranja-vermelho
+    return STATUS_COLOR.novo
+  }
+  if (status === 'em_preparo') {
+    if (mins >= 20) return '#ff6b00' // crítico em preparo
+    if (mins >= 12) return '#e6a817'
+    return STATUS_COLOR.em_preparo
+  }
+  return '#aaa'
+}
+
 function Clock() {
   const [now, setNow] = useState(new Date())
   useEffect(() => {
@@ -29,22 +51,48 @@ function Clock() {
   )
 }
 
+// Componente de timer que atualiza a cada segundo
+function ElapsedTimer({ criadoEm, status }) {
+  const [mins, setMins] = useState(minutosDecorridos(criadoEm))
+  useEffect(() => {
+    const t = setInterval(() => setMins(minutosDecorridos(criadoEm)), 10000)
+    return () => clearInterval(t)
+  }, [criadoEm])
+  if (!criadoEm || status === 'pronto') return null
+  const urgent = mins >= 10 && status === 'novo'
+  const warn = mins >= 5 && status === 'novo'
+  const urgPreparo = mins >= 20 && status === 'em_preparo'
+  return (
+    <span style={{
+      fontSize: 13, fontWeight: 700, padding: '2px 8px', borderRadius: 10,
+      background: (urgent || urgPreparo) ? '#ff000033' : warn ? '#ff450022' : '#1e3a24',
+      color: (urgent || urgPreparo) ? '#ff5555' : warn ? '#ff8c42' : '#888',
+      animation: (urgent || urgPreparo) ? 'pulse 1s infinite' : 'none',
+    }}>
+      ⏱ {mins}min
+    </span>
+  )
+}
+
 function ItemCard({ item, onStatusChange }) {
   const next = STATUS_ORDER[STATUS_ORDER.indexOf(item.status) + 1]
-  const color = STATUS_COLOR[item.status] || '#aaa'
-  const isPulsing = item.status === 'novo'
+  const mins = minutosDecorridos(item.criadoEm)
+  const color = corUrgencia(mins, item.status)
+  const isPulsing = item.status === 'novo' || (item.status === 'em_preparo' && mins >= 15)
+  const isUrgent = (item.status === 'novo' && mins >= 8) || (item.status === 'em_preparo' && mins >= 20)
 
   return (
     <div
       onClick={() => next && onStatusChange(item.comandaId, item.idx, next)}
       style={{
-        background: '#0f1f13',
+        background: isUrgent ? '#1a0a0a' : '#0f1f13',
         border: `2px solid ${color}`,
         borderRadius: 12,
         padding: '16px 20px',
         cursor: next ? 'pointer' : 'default',
         animation: isPulsing ? 'pulse 1.4s infinite' : 'none',
         userSelect: 'none',
+        transition: 'border-color 0.5s',
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
@@ -58,21 +106,29 @@ function ItemCard({ item, onStatusChange }) {
               ⚠ {item.obs}
             </div>
           )}
-          <div style={{ marginTop: 8, fontSize: 14, color: '#888' }}>
-            #{item.comandaId} · {fmtDate(item.criadoEm)}
+          <div style={{ marginTop: 8, fontSize: 14, color: '#888', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span>#{item.comandaId}</span>
+            <ElapsedTimer criadoEm={item.criadoEm} status={item.status} />
+            {isUrgent && <span style={{ color: '#ff5555', fontWeight: 700, fontSize: 13 }}>🔥 URGENTE</span>}
           </div>
         </div>
-        <div style={{
-          background: color,
-          color: '#000',
-          borderRadius: 8,
-          padding: '6px 14px',
-          fontWeight: 800,
-          fontSize: 15,
-          whiteSpace: 'nowrap',
-          alignSelf: 'center',
-        }}>
-          {STATUS_LABEL[item.status] || item.status}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+          <div style={{
+            background: color,
+            color: item.status === 'pronto' ? '#000' : '#fff',
+            borderRadius: 8,
+            padding: '6px 14px',
+            fontWeight: 800,
+            fontSize: 15,
+            whiteSpace: 'nowrap',
+          }}>
+            {STATUS_LABEL[item.status] || item.status}
+          </div>
+          {next && (
+            <div style={{ fontSize: 11, color: '#555', textAlign: 'center' }}>
+              toque para avançar →
+            </div>
+          )}
         </div>
       </div>
     </div>

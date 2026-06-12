@@ -1,40 +1,76 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../lib/auth'
+import { api } from '../lib/api'
 
 const NAV_OP = [
   { to: '/pdv',      icon: '🛒', label: 'PDV' },
-  { to: '/kds',      icon: '👨‍🍳', label: 'Cozinha' },
+  { to: '/garcom',   icon: '🍽️', label: 'Modo Garçom' },
+  { to: '/kds',      icon: '👨‍🍳', label: 'Cozinha / KDS' },
   { to: '/portaria', icon: '🎫', label: 'Portaria' },
 ]
 
-const NAV_ADMIN = [
-  { to: '/admin',             icon: '📊', label: 'Dashboard', end: true },
-  { to: '/admin/torneios',    icon: '🎾', label: 'Torneios' },
-  { to: '/admin/agenda',      icon: '📅', label: 'Agenda' },
-  { to: '/admin/inscricoes',  icon: '📋', label: 'Inscrições' },
-  { to: '/admin/usuarios',    icon: '👥', label: 'Usuários' },
-  { to: '/admin/socios',      icon: '🏆', label: 'Sócios' },
-  { to: '/admin/cardapio',    icon: '🍽️', label: 'Cardápio' },
-  { to: '/admin/estoque',     icon: '📦', label: 'Estoque' },
-  { to: '/admin/mesas',       icon: '🪑', label: 'Mesas' },
-  { to: '/admin/pagamentos',  icon: '💳', label: 'Pagamentos' },
-  { to: '/admin/loja',        icon: '🛍️', label: 'Loja' },
-  { to: '/admin/aulas',       icon: '🎓', label: 'Aulas' },
-  { to: '/admin/crm',         icon: '📈', label: 'CRM' },
-  { to: '/admin/contatos',    icon: '✉️', label: 'Contatos' },
-  { to: '/admin/bi',          icon: '📉', label: 'BI' },
-  { to: '/admin/auditoria',      icon: '🔍', label: 'Auditoria' },
-  { to: '/admin/configuracoes', icon: '⚙️', label: 'Configurações' },
-  { to: '/admin/cupons',        icon: '🎟️', label: 'Cupons' },
-  { to: '/admin/relatorios',    icon: '📄', label: 'Relatórios' },
-  { to: '/admin/noticias',      icon: '📰', label: 'Notícias' },
-  { to: '/admin/sumula',        icon: '🎾', label: 'Súmula' },
-  { to: '/admin/mensalidades',  icon: '💳', label: 'Mensalidades' },
-  { to: '/admin/financeiro',    icon: '💰', label: 'Financeiro' },
-  { to: '/admin/quadras',       icon: '🏟️', label: 'Quadras' },
-  { to: '/admin/pontos',        icon: '⭐', label: 'Pontos' },
+// Grupos do admin organizados por tema
+const NAV_ADMIN_GROUPS = [
+  {
+    label: 'Visão Geral',
+    items: [
+      { to: '/admin',           icon: '📊', label: 'Dashboard', end: true },
+      { to: '/admin/bi',        icon: '📉', label: 'BI & Analytics' },
+      { to: '/admin/relatorios',icon: '📄', label: 'Relatórios' },
+      { to: '/admin/financeiro',icon: '💰', label: 'Financeiro' },
+    ],
+  },
+  {
+    label: 'Torneio',
+    items: [
+      { to: '/admin/torneios',   icon: '🎾', label: 'Torneios' },
+      { to: '/admin/agenda',     icon: '📅', label: 'Agenda / OoP' },
+      { to: '/admin/sumula',     icon: '📝', label: 'Súmula' },
+      { to: '/admin/inscricoes', icon: '📋', label: 'Inscrições' },
+      { to: '/admin/quadras',    icon: '🏟️', label: 'Quadras' },
+      { to: '/admin/pontos',     icon: '⭐', label: 'Pontos & Elo' },
+    ],
+  },
+  {
+    label: 'Bar & PDV',
+    items: [
+      { to: '/admin/mesas',    icon: '🪑', label: 'Mesas' },
+      { to: '/admin/cardapio', icon: '🍽️', label: 'Cardápio' },
+      { to: '/admin/estoque',  icon: '📦', label: 'Estoque' },
+      { to: '/admin/pagamentos',icon: '💳', label: 'Pagamentos' },
+      { to: '/admin/cupons',   icon: '🎟️', label: 'Cupons' },
+    ],
+  },
+  {
+    label: 'Membros',
+    items: [
+      { to: '/admin/usuarios',     icon: '👥', label: 'Usuários' },
+      { to: '/admin/socios',       icon: '🏆', label: 'Sócios' },
+      { to: '/admin/mensalidades', icon: '💳', label: 'Mensalidades' },
+      { to: '/admin/aulas',        icon: '🎓', label: 'Aulas' },
+      { to: '/admin/crm',          icon: '📈', label: 'CRM' },
+    ],
+  },
+  {
+    label: 'Loja & Conteúdo',
+    items: [
+      { to: '/admin/loja',          icon: '🛍️', label: 'Loja' },
+      { to: '/admin/noticias',      icon: '📰', label: 'Notícias' },
+      { to: '/admin/contatos',      icon: '✉️', label: 'Contatos' },
+    ],
+  },
+  {
+    label: 'Sistema',
+    items: [
+      { to: '/admin/auditoria',     icon: '🔍', label: 'Auditoria' },
+      { to: '/admin/configuracoes', icon: '⚙️', label: 'Configurações' },
+    ],
+  },
 ]
+
+// Lista plana para compatibilidade
+const NAV_ADMIN = NAV_ADMIN_GROUPS.flatMap(g => g.items)
 
 const NAV_PUBLIC = [
   { to: '/',            icon: '🏠', label: 'Home', end: true },
@@ -73,15 +109,41 @@ function NavItem({ to, icon, label, end, onClick }) {
   )
 }
 
-function Section({ label, items, onNavClick }) {
+function Section({ label, items, onNavClick, collapsible = false }) {
+  const [collapsed, setCollapsed] = useState(false)
   return (
-    <div style={{ padding: '6px 0' }}>
-      <div style={{
-        fontSize: 10, fontWeight: 800, color: 'var(--muted)',
-        padding: '8px 16px 4px', textTransform: 'uppercase', letterSpacing: '.8px',
-      }}>{label}</div>
-      {items.map(n => <NavItem key={n.to} {...n} onClick={onNavClick} />)}
+    <div style={{ padding: '4px 0', borderBottom: '1px solid var(--line)' }}>
+      <div
+        style={{
+          fontSize: 10, fontWeight: 800, color: 'var(--muted)',
+          padding: '6px 16px 4px', textTransform: 'uppercase', letterSpacing: '.8px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          cursor: collapsible ? 'pointer' : 'default',
+          userSelect: 'none',
+        }}
+        onClick={() => collapsible && setCollapsed(c => !c)}
+      >
+        <span>{label}</span>
+        {collapsible && <span style={{ fontSize: 9 }}>{collapsed ? '▶' : '▼'}</span>}
+      </div>
+      {!collapsed && items.map(n => <NavItem key={n.to} {...n} onClick={onNavClick} />)}
     </div>
+  )
+}
+
+function AdminGroups({ groups, onNavClick }) {
+  return (
+    <>
+      {groups.map(g => (
+        <Section
+          key={g.label}
+          label={g.label}
+          items={g.items}
+          onNavClick={onNavClick}
+          collapsible
+        />
+      ))}
+    </>
   )
 }
 
@@ -167,7 +229,7 @@ export default function Sidebar() {
         </div>
 
         {isStaff && <Section label="Operações" items={NAV_OP} onNavClick={handleNavClick} />}
-        {isOrg   && <Section label="Admin"     items={NAV_ADMIN} onNavClick={handleNavClick} />}
+        {isOrg   && <AdminGroups groups={NAV_ADMIN_GROUPS} onNavClick={handleNavClick} />}
         <Section label="Site Público" items={NAV_PUBLIC} onNavClick={handleNavClick} />
 
         {/* Bottom user area */}

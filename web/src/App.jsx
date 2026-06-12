@@ -25,10 +25,11 @@ function ProtectedOutlet({ need }) {
   return dest ? <Navigate to={dest} replace /> : <Outlet />
 }
 
-const Login     = lazy(() => import('./pages/Login'))
-const PDV       = lazy(() => import('./pages/PDV'))
-const KDS       = lazy(() => import('./pages/KDS'))
-const Portaria  = lazy(() => import('./pages/Portaria'))
+const Login      = lazy(() => import('./pages/Login'))
+const PDV        = lazy(() => import('./pages/PDV'))
+const KDS        = lazy(() => import('./pages/KDS'))
+const Portaria   = lazy(() => import('./pages/Portaria'))
+const GarcomView = lazy(() => import('./pages/GarcomView'))
 
 const Home       = lazy(() => import('./pages/public/Home'))
 const Inscricao  = lazy(() => import('./pages/public/Inscricao'))
@@ -96,6 +97,7 @@ export default function App() {
         <Route path="/admin/kds"      element={<Protected need="staff"><Layout noSidebar><KDS /></Layout></Protected>} />
         <Route path="/portaria"       element={<Protected need="staff"><Layout noSidebar><Portaria /></Layout></Protected>} />
         <Route path="/admin/portaria" element={<Protected need="staff"><Layout noSidebar><Portaria /></Layout></Protected>} />
+        <Route path="/garcom"         element={<Protected need="staff"><Layout noSidebar><GarcomView /></Layout></Protected>} />
 
         {/* Admin (admin/organizador) — guarda única via Outlet */}
         <Route element={<ProtectedOutlet need="org" />}>
