@@ -94,6 +94,7 @@ export default function Perfil() {
   const [me, setMe] = useState(null)
   const [inscricoes, setInscricoes] = useState([])
   const [loadingMe, setLoadingMe] = useState(true)
+  const [rankingStats, setRankingStats] = useState(null)
 
   // Edit profile
   const [nome, setNome] = useState('')
@@ -111,7 +112,8 @@ export default function Perfil() {
     Promise.all([
       api.get('/api/me').catch(() => null),
       api.get('/api/inscricoes/minhas').catch(() => []),
-    ]).then(([meData, insData]) => {
+      api.get('/api/me/ranking').catch(() => null),
+    ]).then(([meData, insData, rankData]) => {
       if (meData) {
         setMe(meData)
         setNome(meData.nome || '')
@@ -119,6 +121,7 @@ export default function Perfil() {
         setTelefone(meData.telefone || '')
       }
       setInscricoes(Array.isArray(insData) ? insData : insData?.inscricoes || [])
+      if (rankData) setRankingStats(rankData)
       setLoadingMe(false)
     })
   }, [])
@@ -252,6 +255,151 @@ export default function Perfil() {
           </div>
         </div>
       </div>
+
+      {/* Meu Ranking */}
+      {rankingStats && rankingStats.matches && rankingStats.matches.length > 0 && (
+        <div style={cardStyle}>
+          <div style={sectionTitle}>🏆 Meu Ranking</div>
+
+          {/* KPIs topo */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12, marginBottom: 20 }}>
+            {/* Posição geral */}
+            <div style={{
+              background: C.inputBg,
+              border: `1px solid ${C.cardBorder}`,
+              borderRadius: 10,
+              padding: '14px 12px',
+              textAlign: 'center',
+            }}>
+              <div style={{ fontSize: 26, fontWeight: 900, color: C.gold }}>#{rankingStats.posGeral ?? '—'}</div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Posição Geral</div>
+            </div>
+
+            {/* Pontos totais */}
+            <div style={{
+              background: C.inputBg,
+              border: `1px solid ${C.cardBorder}`,
+              borderRadius: 10,
+              padding: '14px 12px',
+              textAlign: 'center',
+            }}>
+              <div style={{ fontSize: 26, fontWeight: 900, color: C.green }}>
+                {rankingStats.matches.reduce((s, m) => s + (m.pontos || 0), 0)}
+              </div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Pontos</div>
+            </div>
+
+            {/* Torneios jogados */}
+            <div style={{
+              background: C.inputBg,
+              border: `1px solid ${C.cardBorder}`,
+              borderRadius: 10,
+              padding: '14px 12px',
+              textAlign: 'center',
+            }}>
+              <div style={{ fontSize: 26, fontWeight: 900, color: C.cream }}>
+                {rankingStats.matches.reduce((s, m) => s + (m.torneios || 0), 0)}
+              </div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Torneios</div>
+            </div>
+
+            {/* Aproveitamento médio */}
+            {(() => {
+              const avg = rankingStats.matches.length
+                ? Math.round(rankingStats.matches.reduce((s, m) => s + (m.aproveitamento || 0), 0) / rankingStats.matches.length)
+                : 0
+              const aprColor = avg >= 60 ? C.green : avg >= 40 ? C.gold : '#f87171'
+              return (
+                <div style={{
+                  background: C.inputBg,
+                  border: `1px solid ${C.cardBorder}`,
+                  borderRadius: 10,
+                  padding: '14px 12px',
+                  textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: 26, fontWeight: 900, color: aprColor }}>{avg}%</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Aprovt. Médio</div>
+                </div>
+              )
+            })()}
+          </div>
+
+          {/* Barra de aproveitamento geral */}
+          {(() => {
+            const vTotal = rankingStats.matches.reduce((s, m) => s + (m.vitorias || 0), 0)
+            const dTotal = rankingStats.matches.reduce((s, m) => s + (m.derrotas || 0), 0)
+            const total = vTotal + dTotal
+            const pct = total > 0 ? Math.round((vTotal / total) * 100) : 0
+            const barColor = pct >= 60 ? C.green : pct >= 40 ? C.gold : '#f87171'
+            return total > 0 ? (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.muted, marginBottom: 6 }}>
+                  <span>Aproveitamento geral · {vTotal}V / {dTotal}D</span>
+                  <span style={{ color: barColor, fontWeight: 700 }}>{pct}%</span>
+                </div>
+                <div style={{ height: 8, background: 'rgba(255,255,255,.08)', borderRadius: 8, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${pct}%`, background: barColor, borderRadius: 8, transition: 'width 0.6s ease' }} />
+                </div>
+              </div>
+            ) : null
+          })()}
+
+          {/* Categorias */}
+          {rankingStats.matches.length > 1 && (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 12, color: C.muted, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>Por categoria</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {rankingStats.matches.map((m, i) => {
+                  const pct = m.aproveitamento || 0
+                  const barColor = pct >= 60 ? C.green : pct >= 40 ? C.gold : '#f87171'
+                  return (
+                    <div key={i} style={{
+                      background: 'rgba(255,255,255,.04)',
+                      border: `1px solid ${C.cardBorder}`,
+                      borderRadius: 9,
+                      padding: '10px 14px',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: C.cream }}>{m.categoria}</span>
+                        <div style={{ display: 'flex', gap: 12, fontSize: 12, color: C.muted }}>
+                          <span style={{ color: C.gold, fontWeight: 700 }}>{m.pontos} pts</span>
+                          <span>{m.vitorias ?? 0}V / {m.derrotas ?? 0}D</span>
+                          <span style={{ color: barColor, fontWeight: 700 }}>{pct}%</span>
+                        </div>
+                      </div>
+                      <div style={{ height: 5, background: 'rgba(255,255,255,.08)', borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: barColor, borderRadius: 4 }} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Títulos */}
+          {rankingStats.titulos && rankingStats.titulos.length > 0 && (
+            <div>
+              <div style={{ fontSize: 12, color: C.muted, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>🥇 Títulos conquistados</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {rankingStats.titulos.map((t, i) => (
+                  <span key={i} style={{
+                    padding: '5px 14px',
+                    borderRadius: 20,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    background: 'rgba(201,166,86,.15)',
+                    color: C.gold,
+                    border: '1px solid rgba(201,166,86,.3)',
+                  }}>
+                    🏆 {t.categoria || t.edicao || t}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Minhas inscrições */}
       <div style={cardStyle}>

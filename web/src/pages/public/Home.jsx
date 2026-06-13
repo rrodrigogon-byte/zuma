@@ -2,14 +2,43 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../../lib/api'
 
-// Categorias e patrocinadores fixos do evento (configurações do torneio)
+// Patrocinadores fixos do evento
 const PATROCINADORES = [
   { nome: 'UISA Agroindustrial', icon: '🌾', cor: '#5FB335' },
   { nome: 'Tangará Tênis Clube', icon: '🎾', cor: '#C9A656' },
   { nome: 'Prefeitura de Tangará da Serra', icon: '🏛️', cor: '#0E2E1C' },
 ]
 
-const INFO_CARDS = [
+// Galeria com fotos licenciadas (CC / domínio público)
+const GALLERY = [
+  {
+    img: 'https://sspark.genspark.ai/cfimages?u1=uBNzwhX%2FTWhx2%2FVnwh4vVJUma6aBOvWTlIp48Bj%2Bt%2FvkVnGub7UFEePk2YdVFY%2FfaMkcnjM%2BYrDRG82yPVNOnL3MpDZIl1BTPBTCA2Nn3mJAV6ZnkFH4SloUF9rWESX5DHm8YgdL1l7eUZOb7Pg%3D&u2=i4Vxk9s4b8RsKjvy&width=2560',
+    label: 'Quadras do clube', credit: 'Freerange Stock (CC)'
+  },
+  {
+    img: 'https://sspark.genspark.ai/cfimages?u1=I3RGF3OQ57Ll5ME7nq5hQwJ5iQ0UA3cdKUUTGvjbQqrAB4jpc2nvDJ66KnV9UFTt2sPmosC%2F32KaF%2BY6kLfxAK%2FuxM2yliTsijGuukGgDVz6alyqdKNJeOw5ricawOoM1U1GBdOPR8sG44h9H31TaHEFL99XreeW4GcGRtb4nLRbZAGa4CDfxYG3jwq8UfbAxCbTi295tQ%3D%3D&u2=e%2Be07vRwApkPy8q1&width=2560',
+    label: 'Arquibancada cheia', credit: 'Wikimedia Commons (CC)'
+  },
+  {
+    img: 'https://sspark.genspark.ai/cfimages?u1=ljENdPGZnpEtRKXjSkXOigSQQ5NvbW12WD9h6InfPblZ1uteFQQqnUtF480VZ9F1lSvpo4jOajVfLPd2U8P2oEyo6fi1cQ7T6zLQTRUFX%2FNb0TukSu643Xo%2FhBFvIr0%3D&u2=LK5x1okOD%2FoDFx5F&width=2560',
+    label: 'Três quadras — visão aérea', credit: 'Freerange Stock (CC)'
+  },
+  {
+    img: 'https://sspark.genspark.ai/cfimages?u1=4%2Fitlj41OePZqbbo7OwSjN5qBt0%2BC7x3Kz9YzjDovrROy7QjmVdC9R3KXR8fgEImVHBeUhf2fkSoZaWXDGj0NU8%2BMIoByfyVBW8LxORCbQMSKQ86H87mmvw5mmjTyCIiRbKx2n%2F248akxFjQHbhglXUCEYdOKHKXV22U0vePo5ac%2FRqyAs6WL0iH1ZfJSAs5Ebtyp0MkAYN8u3IdOTyaQ6FzOALjUSFeKzsq0IS0A5FK3D0%2B&u2=Rv%2ByLUFjVq0F4WWI&width=2560',
+    label: 'Cerimônia de premiação', credit: 'Wikimedia Commons (CC)'
+  },
+  {
+    img: 'https://sspark.genspark.ai/cfimages?u1=peqkPREb%2BuY3rYgsJ%2FOjzj8aNTVbYasmeO5CEbM8S0vnJxyrcHwokfBq6U%2Bs9Fshe02vNAV9TEyloo8npIuv%2F8f1fRvt2W1bNMIfdGlJsltRLG9ZNYm3hkAT2c%2F8iJ5dzPIMyqTHG%2BqHL%2Bq0Bs9THoF0uLM6uzpgBRAgzc5cbzzeDU9YlaL6&u2=nSKlpAolM8rZn9ZD&width=2560',
+    label: 'Australian Open — Rod Laver Arena', credit: 'Wikimedia Commons (CC)'
+  },
+  {
+    img: 'https://sspark.genspark.ai/cfimages?u1=W77x7JJMqKcTKTBZn8PKfsukk9rECNVzlbR5B8mEUAjWEQXkaqNRowI%2Bwj68FFbxeW2BbsXjvUp0kFBs4VMuxTfXOMG7PY53oZccKe12nHXI5%2BlRy2VLurNC6j5jav0qbA%3D%3D&u2=PrlR%2B0Ivenlvt8ns&width=2560',
+    label: 'Torcida nas tribunas', credit: 'Freerange Stock (CC)'
+  },
+]
+
+// INFO_CARDS dinâmicos — fallback para valores fixos se /api/info não retornar
+const INFO_CARDS_DEFAULT = [
   { icon: '📅', label: 'Datas', value: '07 a 13 Set 2026', sub: 'Domingo a Sábado' },
   { icon: '📍', label: 'Local', value: 'Tangará Tênis Clube', sub: 'Tangará da Serra – MT' },
   { icon: '🎾', label: 'Categorias', value: '14 categorias', sub: 'Masc · Fem · Misto · Sênior' },
@@ -257,35 +286,54 @@ export default function Home() {
   const [rankingLoading, setRankingLoading] = useState(true)
   const [noticias, setNoticias] = useState([])
   const [noticiasLoading, setNoticiasLoading] = useState(true)
-  const [totalInscritos, setTotalInscritos] = useState(null)    // null = ainda carregando
-  const [categorias, setCategorias] = useState([])              // da API real
-  const [eventoInfo, setEventoInfo] = useState(null)            // { dataInicio, nomeEvento }
+  const [totalInscritos, setTotalInscritos] = useState(null)
+  const [categorias, setCategorias]         = useState([])
+  const [eventoInfo, setEventoInfo]         = useState(null)
+  const [infoCards, setInfoCards]           = useState(INFO_CARDS_DEFAULT)
 
   useEffect(() => {
-    // Ranking público
     api.get('/api/ranking').catch(() => []).then(d => {
       setRanking(Array.isArray(d) ? d.slice(0, 3) : [])
       setRankingLoading(false)
     })
-    // Notícias publicadas
     api.get('/api/noticias?publicado=1').catch(() => []).then(d => {
       setNoticias(Array.isArray(d) ? d.slice(0, 3) : d?.noticias?.slice(0, 3) ?? [])
       setNoticiasLoading(false)
     })
-    // Contagem real de inscrições aprovadas/pagas (endpoint público de inscrições)
     api.get('/api/inscricoes-count').catch(() => null).then(d => {
       const count = d?.total ?? d?.count ?? null
       setTotalInscritos(typeof count === 'number' ? count : null)
     })
-    // Categorias da API (para mostrar vagas reais)
     api.get('/api/categorias').catch(() => []).then(d => {
       if (Array.isArray(d) && d.length > 0) setCategorias(d)
     })
-    // Info do evento (data, nome) para countdown
+    // Info do evento — gera INFO_CARDS dinâmicos a partir da API
     api.get('/api/info').catch(() => null).then(d => {
+      if (!d) return
       if (d?.dataInicio) setEventoInfo({ dataInicio: d.dataInicio, nomeEvento: d.nomeEvento || d.evento })
+      // Atualizar cards com dados reais
+      const local = d.local || d.localEvento || 'Tangará Tênis Clube'
+      const cidade = d.cidade || 'Tangará da Serra – MT'
+      const datas = d.dataInicio && d.dataFim
+        ? formatarPeriodo(d.dataInicio, d.dataFim)
+        : (d.datas || '07 a 13 Set 2026')
+      const premio = d.premiacao || d.premio || 'R$ 5.000'
+      setInfoCards([
+        { icon: '📅', label: 'Datas', value: datas, sub: 'Data do torneio' },
+        { icon: '📍', label: 'Local', value: local, sub: cidade },
+        { icon: '🎾', label: 'Categorias', value: (d.totalCategorias || '14') + ' categorias', sub: 'Masc · Fem · Misto · Sênior' },
+        { icon: '🏆', label: 'Premiação', value: premio, sub: 'Em prêmios + troféus' },
+      ])
     })
   }, [])
+
+  function formatarPeriodo(inicio, fim) {
+    const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+    const di = new Date(inicio + 'T12:00:00'), df = new Date(fim + 'T12:00:00')
+    if (di.getMonth() === df.getMonth())
+      return di.getDate() + ' a ' + df.getDate() + ' ' + meses[di.getMonth()] + ' ' + di.getFullYear()
+    return di.getDate() + ' ' + meses[di.getMonth()] + ' – ' + df.getDate() + ' ' + meses[df.getMonth()] + ' ' + df.getFullYear()
+  }
 
   const medals = ['🥇', '🥈', '🥉']
   const medalColors = [
@@ -397,7 +445,7 @@ export default function Home() {
       <RevealSection>
         <section style={{ maxWidth: 1000, margin: '0 auto', padding: '60px 24px 20px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 20 }}>
-            {INFO_CARDS.map((c, i) => (
+            {infoCards.map((c, i) => (
               <div key={i} style={{
                 background: '#fff', borderRadius: 20, padding: '28px 22px',
                 boxShadow: '0 4px 20px rgba(0,0,0,0.07)',
@@ -637,37 +685,47 @@ export default function Home() {
         </section>
       </RevealSection>
 
-      {/* ── GALERIA ── */}
+      {/* ── GALERIA com fotos reais ── */}
       <RevealSection>
-        <section style={{ maxWidth: 1000, margin: '0 auto', padding: '64px 24px' }}>
+        <section style={{ maxWidth: 1060, margin: '0 auto', padding: '64px 24px' }}>
           <div style={{ textAlign: 'center', marginBottom: 36 }}>
             <h2 style={{ fontSize: '2rem', fontWeight: 900, color: '#0E2E1C', margin: '0 0 8px' }}>📸 Galeria</h2>
             <p style={{ color: '#5a7a5a', margin: 0 }}>Momentos das edições anteriores</p>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-            {[
-              { grad: 'linear-gradient(135deg,#0E2E1C,#1a4a2e)', label: 'Abertura do torneio' },
-              { grad: 'linear-gradient(135deg,#1a4a2e,#5FB335)', label: 'Partidas das quartas' },
-              { grad: 'linear-gradient(135deg,#5FB335,#8FD64A)', label: 'Semifinais masculino' },
-              { grad: 'linear-gradient(135deg,#C9A656,#f0d080)', label: 'Premiação feminino' },
-              { grad: 'linear-gradient(135deg,#0a2014,#0E2E1C)', label: 'Grande final 2025' },
-              { grad: 'linear-gradient(135deg,#8FD64A,#C9A656)', label: 'Cerimônia de encerramento' },
-            ].map((item, i) => (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gridTemplateRows: 'auto auto',
+            gap: 12,
+          }}>
+            {GALLERY.map((item, i) => (
               <div key={i} style={{
-                background: item.grad, borderRadius: 18, height: 200,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexDirection: 'column', gap: 12, cursor: 'pointer',
-                overflow: 'hidden', position: 'relative',
+                borderRadius: 18, overflow: 'hidden',
+                position: 'relative', cursor: 'pointer',
+                height: i === 0 ? 280 : 200,
+                gridColumn: i === 0 ? 'span 2' : 'span 1',
+                boxShadow: '0 4px 18px rgba(0,0,0,0.13)',
                 transition: 'transform .25s, box-shadow .25s',
-                boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+                background: '#0E2E1C',
               }}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.2)' }}
-                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.12)' }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.025)'; e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.22)' }}
+                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 4px 18px rgba(0,0,0,0.13)' }}
               >
-                <span style={{ fontSize: '2.8rem', filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.3))' }}>🎾</span>
-                <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.82rem', fontWeight: 700, letterSpacing: '0.04em', textAlign: 'center', padding: '0 16px' }}>
-                  {item.label}
-                </span>
+                <img
+                  src={item.img}
+                  alt={item.label}
+                  loading="lazy"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', transition: 'opacity .3s' }}
+                  onError={e => { e.target.style.display='none' }}
+                />
+                <div style={{
+                  position: 'absolute', bottom: 0, left: 0, right: 0,
+                  background: 'linear-gradient(to top, rgba(7,26,15,.85) 0%, transparent 100%)',
+                  padding: '28px 16px 14px',
+                }}>
+                  <div style={{ color: '#F4F6EF', fontSize: '0.82rem', fontWeight: 700 }}>{item.label}</div>
+                  <div style={{ color: '#8FD64A', fontSize: '0.66rem', marginTop: 2, opacity: 0.8 }}>{item.credit}</div>
+                </div>
               </div>
             ))}
           </div>

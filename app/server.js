@@ -2275,22 +2275,74 @@ app.get('/api/admin/dashboard', auth, requireStaff, (req,res)=>{
     .filter(i=>i.pago===true||i.status==='aprovada'||i.status==='validada')
     .reduce((s,i)=>s+(i.total||0),0);
   const fatTotal = fatBar + fatLoja + fatInsc;
+
+  // ── Faturamento real últimos 7 dias (por dia) ─────────────────────────────
+  const dias7 = Array.from({length:7}, (_,i)=>{
+    const dt = new Date(); dt.setDate(dt.getDate()-6+i);
+    return dt.toISOString().slice(0,10);
+  });
+  const faturamento = dias7.map(dia=>{
+    const barDia = (d.comandas||[])
+      .filter(c=>c.status==='fechada' && (c.fechadoEm||c.criadoEm||'').slice(0,10)===dia)
+      .reduce((s,c)=>s+(c.totalPago||0),0);
+    const lojaDia = (d.reservasLoja||[])
+      .filter(r=>(r.status==='confirmada'||r.status==='entregue') && (r.criadoEm||'').slice(0,10)===dia)
+      .reduce((s,r)=>s+(r.total||0),0);
+    const inscDia = (d.inscricoes||[])
+      .filter(i=>(i.pago===true||i.status==='aprovada'||i.status==='validada') && (i.criadoEm||'').slice(0,10)===dia)
+      .reduce((s,i)=>s+(i.total||0),0);
+    return { dia: dia.slice(5), total: barDia+lojaDia+inscDia, bar:barDia, loja:lojaDia, insc:inscDia };
+  });
+
+  // ── Próximos jogos da agenda (próximas 48h) ───────────────────────────────
+  const agora = new Date();
+  const limite = new Date(agora.getTime() + 48*3600000);
+  const proximos_jogos = (d.agenda||[])
+    .filter(j=>j.status==='pendente' && j.data && j.hora)
+    .map(j=>({ ...j, _ts: new Date(j.data+'T'+j.hora) }))
+    .filter(j=>j._ts>=agora && j._ts<=limite)
+    .sort((a,b)=>a._ts-b._ts)
+    .slice(0,5)
+    .map(({_ts,...j})=>j);
+
+  // ── Mesas ocupadas agora ──────────────────────────────────────────────────
+  const mesasFisicas = (d.mesas?.fisicas||[]);
+  const mesasVirtuais = (d.mesas?.virtuais||[]);
+  const todasMesas = [...mesasFisicas, ...mesasVirtuais];
+  const mesasOcupadas = todasMesas.filter(m=>m.status==='ocupada'||m.status==='conta').length;
+
+  // ── Distribuição de pagamentos por meio ───────────────────────────────────
+  const meioCount = {};
+  (d.pagamentos||[]).filter(p=>p.status==='aprovado').forEach(p=>{
+    const meio = p.meio||p.metodoPagamento||'outro';
+    meioCount[meio] = (meioCount[meio]||0) + (p.valor||0);
+  });
+  const CORES_MEIO = { pix:'#5FB335', dinheiro:'#C9A656', cartao:'#5b6af0', credito:'#5b6af0', debito:'#8FD64A', outro:'#999' };
+  const payment_distribution = Object.entries(meioCount)
+    .map(([meio,valor])=>({ label:meio.charAt(0).toUpperCase()+meio.slice(1), valor, color:CORES_MEIO[meio.toLowerCase()]||'#999' }))
+    .sort((a,b)=>b.valor-a.valor);
+
   const alertas=[];
-  if(inscPend) alertas.push({ nivel:'aten', txt:`${inscPend} inscrição(ões) aguardando validação` });
-  if(placaresNaoConf) alertas.push({ nivel:'aten', txt:`${placaresNaoConf} placar(es) aguardando confirmação (dupla validação)` });
-  if(faturasAbertas) alertas.push({ nivel:'info', txt:`${faturasAbertas} fatura(s) de sócio em aberto` });
-  if(pagPend) alertas.push({ nivel:'info', txt:`${pagPend} pagamento(s) pendente(s)` });
+  if(inscPend) alertas.push({ nivel:'aten', txt:`${inscPend} inscrição(ões) aguardando validação`, link:'/admin/inscricoes' });
+  if(placaresNaoConf) alertas.push({ nivel:'aten', txt:`${placaresNaoConf} placar(es) aguardando confirmação (dupla validação)`, link:'/admin/agenda' });
+  if(faturasAbertas) alertas.push({ nivel:'info', txt:`${faturasAbertas} fatura(s) de sócio em aberto`, link:'/admin/socios' });
+  if(pagPend) alertas.push({ nivel:'info', txt:`${pagPend} pagamento(s) pendente(s)`, link:'/admin/pagamentos' });
   if(!alertas.length) alertas.push({ nivel:'ok', txt:'Tudo em dia. Nenhuma pendência.' });
+
   res.json({
     indicadores:{
       atletas:(d.usuarios||[]).filter(u=>u.role==='atleta').length,
       socios:(d.socios||[]).length, torneios:(d.torneios||[]).length,
       chaves:Object.keys(d.chaves||{}).length, inscricoes:(d.inscricoes||[]).length,
       reservasHoje, comandasAbertas:(d.comandas||[]).filter(c=>c.status==='aberta').length,
+      mesasOcupadas, totalMesas: todasMesas.length,
       receitaPagamentos:receita,
       faturamentoBar:fatBar,
       fatLoja, fatInsc, fatTotal
     },
+    faturamento,
+    proximos_jogos,
+    payment_distribution,
     pendencias:{ inscPend, faturasAbertas, reservasHoje, pagPend, placaresNaoConf },
     alertas
   });
@@ -2468,6 +2520,24 @@ app.patch('/api/auth/perfil', auth, async (req, res) => {
   if (telefone !== undefined) u.telefone = telefone;
   save();
   res.json(publicUser(u));
+});
+
+// GET /api/me/ranking — estatísticas de ranking do usuário logado (busca por nome)
+app.get('/api/me/ranking', auth, (req,res)=>{
+  const u = (db().usuarios||[]).find(x=>x.id==req.user.id);
+  if(!u) return res.status(404).json({error:'não encontrado'});
+  const nome = u.nome||'';
+  // Busca no ranking por nome (case-insensitive, parcial)
+  const players = Object.values(db().ranking?.players||{});
+  const matches = players.filter(p=>p.nome?.toLowerCase()===nome.toLowerCase() || p.nome?.toLowerCase().includes(nome.toLowerCase().split(' ')[0]));
+  // Ranking geral do atleta (pior caso: pega todas as categorias)
+  const rankingGeral = rankingList(db().ranking);
+  const posGeral = rankingGeral.findIndex(p=>p.nome?.toLowerCase()===nome.toLowerCase())+1;
+  // Títulos (campeão de categoria)
+  const campeoes = db().campeoes||{};
+  const titulos = Object.keys(campeoes).filter(cat=>campeoes[cat].nome?.toLowerCase()===nome.toLowerCase())
+    .map(cat=>({categoria:cat,...campeoes[cat]}));
+  res.json({ matches, posGeral: posGeral||null, titulos });
 });
 
 // GET /api/inscricoes/minhas — inscrições do usuário logado
