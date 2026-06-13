@@ -27,10 +27,31 @@ function useEntranceAnimation(count) {
     const id = setInterval(() => {
       if (i >= count) { clearInterval(id); return }
       setVisible(prev => [...prev, i]); i++
-    }, 45)
+    }, 40)
     return () => clearInterval(id)
   }, [count])
   return visible
+}
+
+/* ─── Indicador de movimento (↑↓) ───────────────────────────────────────── */
+function MovBadge({ mov = 0 }) {
+  if (mov === 0) return (
+    <span style={{ fontSize: '0.7rem', color: '#bbb', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+      <span>—</span>
+    </span>
+  )
+  const up = mov > 0
+  return (
+    <span style={{
+      fontSize: '0.7rem', fontWeight: 800,
+      color: up ? '#22a55a' : '#e05555',
+      background: up ? 'rgba(34,165,90,.1)' : 'rgba(224,85,85,.1)',
+      borderRadius: 6, padding: '2px 6px',
+      display: 'inline-flex', alignItems: 'center', gap: 2,
+    }}>
+      {up ? '↑' : '↓'}{Math.abs(mov)}
+    </span>
+  )
 }
 
 /* ─── Sparkline SVG puro ────────────────────────────────────────────────── */
@@ -97,6 +118,12 @@ function PodiumCard({ player, idx, onClick }) {
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: MEDAL_BG[idx], color: MEDAL_TEXT[idx], borderRadius: 999, padding: '4px 18px', fontSize: '0.72rem', fontWeight: 800, marginBottom: 12 }}>
         {['🥇 Campeão','🥈 Vice','🥉 3º Lugar'][idx]}
       </div>
+      {/* Indicador de movimento no pódio */}
+      {player.movimento !== undefined && player.movimento !== 0 && (
+        <div style={{ marginBottom: 8 }}>
+          <MovBadge mov={player.movimento} />
+        </div>
+      )}
       <div style={{ fontWeight: 900, fontSize: isFirst ? '1.25rem' : '1.05rem', color: C.darkGreen, marginBottom: 6 }}>{player.nome}</div>
       <div style={{ fontSize: isFirst ? '2.2rem' : '1.8rem', fontWeight: 900, color: C.green }}>
         {(player.pontos || 0).toLocaleString('pt-BR')}
@@ -112,9 +139,11 @@ function PodiumCard({ player, idx, onClick }) {
           {player.aproveitamento}% aproveitamento
         </div>
       )}
-      {player.torneios > 0 && (
+      {(player.torneios > 0 || player.partidas_avulsas > 0) && (
         <div style={{ marginTop: 4, fontSize: '0.72rem', color: '#aaa' }}>
-          {player.torneios} torneio{player.torneios !== 1 ? 's' : ''}
+          {player.torneios > 0 && <span>{player.torneios} torneio{player.torneios !== 1 ? 's' : ''}</span>}
+          {player.torneios > 0 && player.partidas_avulsas > 0 && <span> · </span>}
+          {player.partidas_avulsas > 0 && <span>{player.partidas_avulsas} partida{player.partidas_avulsas !== 1 ? 's' : ''}</span>}
         </div>
       )}
       {player.categoria && (
@@ -129,16 +158,23 @@ function PodiumCard({ player, idx, onClick }) {
 function AtletaModal({ atleta, todos, onClose }) {
   if (!atleta) return null
 
-  // Posição no ranking geral
   const posGeral = todos.findIndex(p => p.nome === atleta.nome && p.categoria === atleta.categoria) + 1
 
-  // Simular evolução de pontos (distribuição uniforme pelos torneios)
-  const torneios = atleta.torneios || 0
-  const ptsPorTorneio = torneios > 0 ? Math.round(atleta.pontos / torneios) : 0
-  const evolucao = Array.from({ length: torneios }, (_, i) => ptsPorTorneio * (i + 1))
+  // Evolução real baseada no histórico
+  const hist = atleta.historico || []
+  let acum = 0
+  const evolucao = hist.map(h => { acum += (h.pontos || 0); return acum })
+  if (evolucao.length === 0 && atleta.torneios > 0) {
+    const ptsPorTorneio = Math.round(atleta.pontos / atleta.torneios)
+    for (let i = 0; i < atleta.torneios; i++) evolucao.push(ptsPorTorneio * (i + 1))
+  }
 
   const aprvColor = atleta.aproveitamento >= 70 ? C.green : atleta.aproveitamento >= 40 ? C.gold : '#e05555'
   const totalJogos = (atleta.vitorias || 0) + (atleta.derrotas || 0)
+  const totalEventos = (atleta.torneios || 0) + (atleta.partidas_avulsas || 0)
+
+  // Últimas 5 partidas do histórico
+  const ultimasPartidas = [...hist].reverse().slice(0, 5)
 
   return (
     <div
@@ -146,21 +182,30 @@ function AtletaModal({ atleta, todos, onClose }) {
       onClick={onClose}
     >
       <div
-        style={{ background: C.white, borderRadius: 24, maxWidth: 480, width: '100%', overflow: 'hidden', boxShadow: '0 24px 80px rgba(0,0,0,.22)' }}
+        style={{ background: C.white, borderRadius: 24, maxWidth: 500, width: '100%', overflow: 'hidden', boxShadow: '0 24px 80px rgba(0,0,0,.22)', maxHeight: '90vh', overflowY: 'auto' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div style={{ background: 'linear-gradient(135deg,' + C.darkGreen + ',' + '#1a4a2e' + ')', padding: '28px 28px 20px', color: C.white, position: 'relative' }}>
           <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'rgba(255,255,255,.15)', border: 'none', borderRadius: 999, width: 32, height: 32, cursor: 'pointer', color: C.white, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-          <div style={{ fontSize: '3rem', marginBottom: 8 }}>
-            {posGeral === 1 ? '🥇' : posGeral === 2 ? '🥈' : posGeral === 3 ? '🥉' : '🎾'}
-          </div>
-          <div style={{ fontWeight: 900, fontSize: '1.4rem', marginBottom: 4 }}>{atleta.nome}</div>
-          {atleta.categoria && (
-            <div style={{ background: 'rgba(143,214,74,.2)', borderRadius: 20, padding: '3px 14px', display: 'inline-block', fontSize: '0.78rem', color: C.lightGreen, fontWeight: 700 }}>
-              {atleta.categoria}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ fontSize: '3rem' }}>
+              {posGeral === 1 ? '🥇' : posGeral === 2 ? '🥈' : posGeral === 3 ? '🥉' : '🎾'}
             </div>
-          )}
+            <div>
+              <div style={{ fontWeight: 900, fontSize: '1.3rem', marginBottom: 4 }}>{atleta.nome}</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                {atleta.categoria && (
+                  <div style={{ background: 'rgba(143,214,74,.2)', borderRadius: 20, padding: '3px 14px', display: 'inline-block', fontSize: '0.78rem', color: C.lightGreen, fontWeight: 700 }}>
+                    {atleta.categoria}
+                  </div>
+                )}
+                {atleta.movimento !== 0 && (
+                  <MovBadge mov={atleta.movimento} />
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Stats grid */}
@@ -169,7 +214,7 @@ function AtletaModal({ atleta, todos, onClose }) {
             {[
               { icon: '🏆', label: 'Posição', value: posGeral > 0 ? '#' + posGeral : '—', color: posGeral === 1 ? C.gold : C.darkGreen },
               { icon: '⭐', label: 'Pontos', value: (atleta.pontos || 0).toLocaleString('pt-BR'), color: C.green },
-              { icon: '🎾', label: 'Torneios', value: atleta.torneios || 0, color: C.gold },
+              { icon: '🎾', label: 'Eventos', value: totalEventos || 0, color: C.gold },
             ].map((s, i) => (
               <div key={i} style={{ background: '#f8fdf5', borderRadius: 14, padding: '14px 10px', textAlign: 'center' }}>
                 <div style={{ fontSize: '1.4rem' }}>{s.icon}</div>
@@ -178,6 +223,20 @@ function AtletaModal({ atleta, todos, onClose }) {
               </div>
             ))}
           </div>
+
+          {/* Detalhe torneios vs partidas */}
+          {(atleta.torneios > 0 || atleta.partidas_avulsas > 0) && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+              <div style={{ background: '#f8fdf5', borderRadius: 12, padding: '10px 14px', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.68rem', color: C.muted, fontWeight: 600 }}>Torneios</div>
+                <div style={{ fontWeight: 900, color: C.darkGreen, fontSize: '1.1rem', marginTop: 2 }}>{atleta.torneios || 0}</div>
+              </div>
+              <div style={{ background: '#f8fdf5', borderRadius: 12, padding: '10px 14px', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.68rem', color: C.muted, fontWeight: 600 }}>Partidas avulsas</div>
+                <div style={{ fontWeight: 900, color: C.gold, fontSize: '1.1rem', marginTop: 2 }}>{atleta.partidas_avulsas || 0}</div>
+              </div>
+            </div>
+          )}
 
           {/* Aproveitamento */}
           <div style={{ background: '#f8fdf5', borderRadius: 14, padding: '14px 16px', marginBottom: 14 }}>
@@ -199,12 +258,39 @@ function AtletaModal({ atleta, todos, onClose }) {
           {evolucao.length >= 2 && (
             <div style={{ background: '#f8fdf5', borderRadius: 14, padding: '14px 16px', marginBottom: 14 }}>
               <div style={{ fontWeight: 700, fontSize: '0.85rem', color: C.darkGreen, marginBottom: 10 }}>Evolução de pontos</div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 0 }}>
-                <Sparkline data={evolucao} width={380} height={48} color={C.green} />
-              </div>
+              <Sparkline data={evolucao} width={420} height={48} color={C.green} />
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: '0.68rem', color: C.muted }}>
-                <span>Torneio 1</span>
-                <span>Torneio {torneios}</span>
+                <span>Início</span>
+                <span>Agora</span>
+              </div>
+            </div>
+          )}
+
+          {/* Últimas partidas */}
+          {ultimasPartidas.length > 0 && (
+            <div style={{ background: '#f8fdf5', borderRadius: 14, padding: '14px 16px', marginBottom: 14 }}>
+              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: C.darkGreen, marginBottom: 10 }}>Últimas partidas</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {ultimasPartidas.map((h, i) => {
+                  const isVitoria = h.resultado === 'vitoria'
+                  const isTorneio = h.tipo === 'torneio'
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: C.white, borderRadius: 10, padding: '8px 12px', border: '1px solid ' + C.border }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: '1rem' }}>{isTorneio ? '🏆' : (isVitoria ? '✅' : '❌')}</span>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: '0.8rem', color: C.darkGreen }}>
+                            {isTorneio ? (h.descricao || 'Torneio') : (h.adversario ? `vs ${h.adversario}` : h.descricao)}
+                          </div>
+                          {h.placar && <div style={{ fontSize: '0.68rem', color: C.muted }}>{h.placar}</div>}
+                        </div>
+                      </div>
+                      <span style={{ fontWeight: 800, fontSize: '0.85rem', color: (h.pontos > 0) ? C.green : '#bbb' }}>
+                        +{h.pontos || 0} pts
+                      </span>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -212,15 +298,15 @@ function AtletaModal({ atleta, todos, onClose }) {
           {/* Médias */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div style={{ background: '#f8fdf5', borderRadius: 12, padding: '12px', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.68rem', color: C.muted, fontWeight: 600 }}>Média pts/torneio</div>
+              <div style={{ fontSize: '0.68rem', color: C.muted, fontWeight: 600 }}>Média pts/evento</div>
               <div style={{ fontWeight: 900, color: C.green, fontSize: '1.1rem', marginTop: 4 }}>
-                {torneios > 0 ? (atleta.pontos / torneios).toFixed(0) : '—'}
+                {totalEventos > 0 ? (atleta.pontos / totalEventos).toFixed(0) : '—'}
               </div>
             </div>
             <div style={{ background: '#f8fdf5', borderRadius: 12, padding: '12px', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.68rem', color: C.muted, fontWeight: 600 }}>Média jogos/torneio</div>
+              <div style={{ fontSize: '0.68rem', color: C.muted, fontWeight: 600 }}>Total jogos</div>
               <div style={{ fontWeight: 900, color: C.gold, fontSize: '1.1rem', marginTop: 4 }}>
-                {torneios > 0 ? (totalJogos / torneios).toFixed(1) : '—'}
+                {totalJogos}
               </div>
             </div>
           </div>
@@ -252,38 +338,48 @@ function PodiumSection({ titulo, lista, onAtletaClick }) {
   )
 }
 
-/* ─── Componente principal ──────────────────────────────────────────────── */
+/* ─── Componente principal ─────────────────────────────────────────────── */
 export default function Ranking() {
   const navigate = useNavigate()
   const [ranking, setRanking]         = useState([])
+  const [temporadas, setTemporadas]   = useState([])
   const [loading, setLoading]         = useState(true)
   const [busca, setBusca]             = useState('')
   const [catFiltro, setCatFiltro]     = useState('all')
-  const [viewMode, setViewMode]       = useState('geral')   // 'geral' | 'categoria' | 'tabela'
+  const [tempFiltro, setTempFiltro]   = useState('all')
+  const [viewMode, setViewMode]       = useState('geral')
   const [atletaSel, setAtletaSel]     = useState(null)
   const [sortCol, setSortCol]         = useState('pontos')
   const [sortDir, setSortDir]         = useState('desc')
   const tableRef = useRef(null)
 
-  useEffect(() => {
-    api.get('/api/ranking')
-      .then(d => { setRanking(Array.isArray(d) ? d : []); setLoading(false) })
-      .catch(() => setLoading(false))
+  const loadData = useCallback((temp) => {
+    setLoading(true)
+    const params = new URLSearchParams()
+    if (temp && temp !== 'all') params.set('temporada', temp)
+    Promise.all([
+      api.get('/api/ranking?' + params.toString()),
+      api.get('/api/ranking/temporadas').catch(() => []),
+    ]).then(([r, t]) => {
+      setRanking(Array.isArray(r) ? r : [])
+      setTemporadas(Array.isArray(t) ? t : [])
+      setLoading(false)
+    }).catch(() => setLoading(false))
   }, [])
+
+  useEffect(() => { loadData(tempFiltro) }, [tempFiltro])
 
   const categorias = useMemo(() => {
     const cats = new Set(ranking.map(p => p.categoria).filter(Boolean))
     return [...cats].sort()
   }, [ranking])
 
-  // Filtrado para busca + categoria
   const filtrado = useMemo(() => {
     let arr = ranking.filter(p => {
       const matchBusca = !busca || p.nome?.toLowerCase().includes(busca.toLowerCase())
       const matchCat   = catFiltro === 'all' || p.categoria === catFiltro
       return matchBusca && matchCat
     })
-    // Ordenação
     arr = [...arr].sort((a, b) => {
       let va = a[sortCol] ?? 0, vb = b[sortCol] ?? 0
       if (typeof va === 'string') va = va.toLowerCase(), vb = vb.toLowerCase()
@@ -294,7 +390,6 @@ export default function Ranking() {
     return arr
   }, [ranking, busca, catFiltro, sortCol, sortDir])
 
-  // Ranking por categoria
   const rankingPorCat = useMemo(() => {
     const map = {}
     categorias.forEach(cat => {
@@ -311,8 +406,8 @@ export default function Ranking() {
 
   const totalAtletas  = ranking.length
   const totalCats     = categorias.length
-  const totalTorneios = Math.max(...ranking.map(p => p.torneios || 0), 0)
   const totalJogos    = ranking.reduce((s, p) => s + (p.vitorias || 0) + (p.derrotas || 0), 0)
+  const totalEventos  = ranking.reduce((s, p) => s + (p.torneios || 0) + (p.partidas_avulsas || 0), 0)
 
   const handleSort = (col) => {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -329,26 +424,52 @@ export default function Ranking() {
     </span>
   )
 
+  const TemporadaSelector = () => (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,.6)', fontWeight: 600 }}>Temporada:</span>
+      {['all', ...temporadas].map(t => (
+        <button key={t} onClick={() => setTempFiltro(t)} style={{
+          background: tempFiltro === t ? C.lightGreen : 'rgba(255,255,255,.12)',
+          color: tempFiltro === t ? C.darkGreen : 'rgba(255,255,255,.85)',
+          border: 'none', borderRadius: 16, padding: '5px 14px',
+          fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer',
+          transition: 'all .15s',
+        }}>
+          {t === 'all' ? 'Todas' : t}
+        </button>
+      ))}
+    </div>
+  )
+
   return (
     <div style={{ minHeight: '100vh', background: C.bg, fontFamily: "'Segoe UI', sans-serif" }}>
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div style={{
         background: 'linear-gradient(135deg,' + C.darkGreen + ' 0%,#1a4a2e 100%)',
-        padding: '40px 24px 72px', color: C.bg,
+        padding: '40px 24px 80px', color: C.bg,
         position: 'relative', overflow: 'hidden',
       }}>
         <div style={{ position: 'absolute', top: '10%', right: '4%', fontSize: '7rem', opacity: 0.06, pointerEvents: 'none' }}>🎾</div>
         <div style={{ position: 'absolute', bottom: '5%', left: '2%', fontSize: '5rem', opacity: 0.05, pointerEvents: 'none' }}>🏆</div>
         <div style={{ maxWidth: 1040, margin: '0 auto', textAlign: 'center', position: 'relative' }}>
           <Link to="/" style={{ color: C.lightGreen, textDecoration: 'none', fontSize: '0.85rem', fontWeight: 600 }}>← Início</Link>
-          <h1 style={{ fontSize: 'clamp(1.8rem,4vw,2.8rem)', fontWeight: 900, margin: '14px 0 6px', letterSpacing: '-0.02em' }}>
+          <h1 style={{ fontSize: 'clamp(1.8rem,4vw,2.8rem)', fontWeight: 900, margin: '14px 0 4px', letterSpacing: '-0.02em' }}>
             🏆 Ranking
           </h1>
-          <p style={{ color: '#a0c8a0', margin: 0 }}>4ª Agro Open de Tênis · 2026</p>
+          <p style={{ color: '#a0c8a0', margin: '0 0 16px', fontSize: '0.9rem' }}>
+            Ranking contínuo ao estilo meuranking — todos os jogos valem pontos
+          </p>
+
+          {/* Seletor de temporada */}
+          {temporadas.length > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
+              <TemporadaSelector />
+            </div>
+          )}
 
           {/* Tabs de visão */}
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 22, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
             {[
               { key: 'geral',     label: '🏆 Geral' },
               { key: 'categoria', label: '🎾 Por Categoria' },
@@ -377,10 +498,10 @@ export default function Ranking() {
         {!loading && ranking.length > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginTop: 28, marginBottom: 32 }}>
             {[
-              { icon: '👥', label: 'Atletas',           value: totalAtletas,            color: C.green },
-              { icon: '🎾', label: 'Categorias',        value: totalCats || '—',        color: C.gold },
-              { icon: '🏆', label: 'Edições realizadas', value: totalTorneios || '—',   color: C.darkGreen },
-              { icon: '⚔️', label: 'Jogos disputados',  value: totalJogos,              color: '#5b6af0' },
+              { icon: '👥', label: 'Atletas',         value: totalAtletas,      color: C.green },
+              { icon: '🎾', label: 'Categorias',      value: totalCats || '—',  color: C.gold },
+              { icon: '📅', label: 'Eventos',         value: totalEventos,      color: C.darkGreen },
+              { icon: '⚔️', label: 'Jogos disputados',value: totalJogos,        color: '#5b6af0' },
             ].map((kpi, i) => (
               <div key={i} style={{
                 background: C.white, borderRadius: 18, padding: '20px 14px',
@@ -406,7 +527,7 @@ export default function Ranking() {
           <div style={{ textAlign: 'center', padding: 80, color: '#aaa' }}>
             <div style={{ fontSize: '3rem', marginBottom: 16 }}>🏆</div>
             <div style={{ fontWeight: 700, fontSize: '1.1rem', color: C.darkGreen, marginBottom: 8 }}>Ranking ainda não publicado</div>
-            <div style={{ color: C.muted, fontSize: '0.9rem' }}>Os pontos serão calculados automaticamente ao término dos torneios.</div>
+            <div style={{ color: C.muted, fontSize: '0.9rem' }}>Os pontos serão calculados automaticamente ao término dos torneios e partidas registradas.</div>
           </div>
         )}
 
@@ -435,7 +556,7 @@ export default function Ranking() {
               </div>
             )}
 
-            {/* Top 10 rápido */}
+            {/* Continuação ranking */}
             {ranking.length > 3 && (
               <div style={{ background: C.white, borderRadius: 18, overflow: 'hidden', boxShadow: '0 2px 14px rgba(0,0,0,.06)', marginBottom: 32 }}>
                 <div style={{ padding: '16px 22px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -450,7 +571,7 @@ export default function Ranking() {
                     <div key={i}
                       onClick={() => setAtletaSel(p)}
                       style={{
-                        display: 'grid', gridTemplateColumns: '52px 1fr 90px 80px 80px 70px',
+                        display: 'grid', gridTemplateColumns: '52px 28px 1fr 90px 80px 80px 70px',
                         padding: '11px 20px', alignItems: 'center',
                         borderBottom: '1px solid ' + C.border,
                         background: i % 2 === 0 ? C.white : '#fafcf8',
@@ -460,6 +581,7 @@ export default function Ranking() {
                       onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? C.white : '#fafcf8'}
                     >
                       <div style={{ textAlign: 'center', fontWeight: 800, color: '#bbb', fontSize: '0.9rem' }}>{pos}</div>
+                      <div style={{ textAlign: 'center' }}><MovBadge mov={p.movimento || 0} /></div>
                       <div>
                         <div style={{ fontWeight: 700, color: C.darkGreen, fontSize: '0.92rem' }}>{p.nome}</div>
                         {p.categoria && <div style={{ fontSize: '0.7rem', color: C.muted, marginTop: 1 }}>{p.categoria}</div>}
@@ -476,7 +598,7 @@ export default function Ranking() {
                         <DonutAprv pct={p.aproveitamento ?? 0} size={36} />
                       </div>
                       <div style={{ textAlign: 'right', color: C.muted, fontSize: '0.82rem' }}>
-                        {p.torneios ?? 0} torneio{p.torneios !== 1 ? 's' : ''}
+                        {(p.torneios || 0) + (p.partidas_avulsas || 0)} evento{((p.torneios || 0) + (p.partidas_avulsas || 0)) !== 1 ? 's' : ''}
                       </div>
                     </div>
                   )
@@ -491,17 +613,13 @@ export default function Ranking() {
         ══════════════════════════════════════════════════════════════════ */}
         {!loading && ranking.length > 0 && viewMode === 'categoria' && (
           <>
-            {/* Seletor de categoria */}
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 28, justifyContent: 'center' }}>
-              <button
-                onClick={() => setCatFiltro('all')}
-                style={{
-                  background: catFiltro === 'all' ? C.darkGreen : C.white,
-                  color: catFiltro === 'all' ? C.white : C.darkGreen,
-                  border: '2px solid ' + (catFiltro === 'all' ? C.darkGreen : C.border),
-                  borderRadius: 20, padding: '8px 18px', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer',
-                }}
-              >
+              <button onClick={() => setCatFiltro('all')} style={{
+                background: catFiltro === 'all' ? C.darkGreen : C.white,
+                color: catFiltro === 'all' ? C.white : C.darkGreen,
+                border: '2px solid ' + (catFiltro === 'all' ? C.darkGreen : C.border),
+                borderRadius: 20, padding: '8px 18px', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer',
+              }}>
                 Todas
               </button>
               {categorias.map(cat => (
@@ -509,8 +627,7 @@ export default function Ranking() {
                   background: catFiltro === cat ? C.green : C.white,
                   color: catFiltro === cat ? C.white : C.darkGreen,
                   border: '2px solid ' + (catFiltro === cat ? C.green : C.border),
-                  borderRadius: 20, padding: '8px 18px', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
-                  transition: 'all .15s',
+                  borderRadius: 20, padding: '8px 18px', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', transition: 'all .15s',
                 }}>
                   {cat}
                   <span style={{ marginLeft: 6, background: 'rgba(0,0,0,.1)', borderRadius: 10, padding: '1px 7px', fontSize: '0.72rem' }}>
@@ -520,17 +637,10 @@ export default function Ranking() {
               ))}
             </div>
 
-            {/* Pódios */}
             {(catFiltro === 'all' ? categorias : [catFiltro]).map(cat => (
-              <PodiumSection
-                key={cat}
-                titulo={cat}
-                lista={rankingPorCat[cat] || []}
-                onAtletaClick={setAtletaSel}
-              />
+              <PodiumSection key={cat} titulo={cat} lista={rankingPorCat[cat] || []} onAtletaClick={setAtletaSel} />
             ))}
 
-            {/* Tabela da categoria selecionada */}
             {catFiltro !== 'all' && (rankingPorCat[catFiltro] || []).length > 3 && (
               <div style={{ background: C.white, borderRadius: 18, overflow: 'hidden', boxShadow: '0 2px 14px rgba(0,0,0,.06)', marginTop: 8 }}>
                 <div style={{ padding: '14px 20px', borderBottom: '1px solid ' + C.border }}>
@@ -540,7 +650,7 @@ export default function Ranking() {
                   <div key={i}
                     onClick={() => setAtletaSel(p)}
                     style={{
-                      display: 'grid', gridTemplateColumns: '48px 1fr 90px 80px 64px',
+                      display: 'grid', gridTemplateColumns: '48px 28px 1fr 90px 80px 64px',
                       padding: '10px 18px', alignItems: 'center',
                       borderBottom: '1px solid ' + C.border,
                       background: i % 2 === 0 ? C.white : '#fafcf8',
@@ -550,6 +660,7 @@ export default function Ranking() {
                     onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? C.white : '#fafcf8'}
                   >
                     <div style={{ textAlign: 'center', color: '#bbb', fontWeight: 800 }}>{i + 4}</div>
+                    <div style={{ textAlign: 'center' }}><MovBadge mov={p.movimento || 0} /></div>
                     <div style={{ fontWeight: 700, color: C.darkGreen, fontSize: '0.9rem' }}>{p.nome}</div>
                     <div style={{ textAlign: 'right', fontWeight: 900, color: C.green }}>{(p.pontos || 0).toLocaleString('pt-BR')}</div>
                     <div style={{ textAlign: 'center', fontSize: '0.8rem' }}>
@@ -615,12 +726,13 @@ export default function Ranking() {
               {/* Header */}
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: '52px 1fr 110px 90px 80px 80px 80px',
+                gridTemplateColumns: '52px 36px 1fr 110px 90px 80px 80px 70px',
                 background: 'linear-gradient(135deg,' + C.darkGreen + ',#1a4a2e)',
                 padding: '14px 20px', color: C.lightGreen,
                 fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase',
               }}>
                 <div style={{ textAlign: 'center' }}>#</div>
+                <div style={{ textAlign: 'center' }}>Mov</div>
                 <div><SortBtn col="nome" label="Jogador" /></div>
                 <div style={{ textAlign: 'right' }}><SortBtn col="pontos" label="Pontos" /></div>
                 <div style={{ textAlign: 'center' }}><SortBtn col="aproveitamento" label="Aprv." /></div>
@@ -643,7 +755,7 @@ export default function Ranking() {
                     onClick={() => setAtletaSel(p)}
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '52px 1fr 110px 90px 80px 80px 80px',
+                      gridTemplateColumns: '52px 36px 1fr 110px 90px 80px 80px 70px',
                       padding: '12px 20px', alignItems: 'center',
                       borderBottom: '1px solid ' + C.border,
                       background: hasMedal
@@ -665,6 +777,9 @@ export default function Ranking() {
                       {hasMedal
                         ? <span style={{ fontSize: '1.2rem' }}>{MEDAL[pos - 1]}</span>
                         : <span style={{ color: '#bbb', fontSize: '0.88rem' }}>{pos}</span>}
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <MovBadge mov={p.movimento || 0} />
                     </div>
                     <div>
                       <div style={{ fontWeight: 700, color: C.darkGreen, fontSize: '0.93rem' }}>{p.nome}</div>
@@ -695,6 +810,7 @@ export default function Ranking() {
             {ranking.length > 0 && (
               <div style={{ textAlign: 'center', marginTop: 16, fontSize: '0.75rem', color: '#bbb' }}>
                 Atualizado em {new Date().toLocaleDateString('pt-BR')} · {ranking.length} atleta{ranking.length !== 1 ? 's' : ''}
+                {tempFiltro !== 'all' && ` · Temporada ${tempFiltro}`}
               </div>
             )}
           </>

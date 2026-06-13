@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { db, save, nextId } from './db.js';
 import { sortear } from './bracket.js';
-import { applyChaveToRanking, rankingList } from './ranking.js';
+import { applyChaveToRanking, rankingList, applyPartidaToRanking, temporadasList, resetTemporada } from './ranking.js';
 import { ranking as tennisRanking, noticias as tennisNews } from './tennis.js';
 import { matchWinner, FORMATOS, MODALIDADES } from './rules.js';
 import { gerarRoundRobin, tabelaRoundRobin } from './roundrobin.js';
@@ -369,7 +369,8 @@ app.get('/api/chaves', (req,res)=>{
   res.json(Object.keys(ch).map(cat=>({ categoria:cat, size:ch[cat].size, seeds:ch[cat].seeds, atletas: ch[cat].rounds[0].filter(e=>e&&!e.bye).length, finalizada: !!ch[cat].finalizada })));
 });
 
-app.get('/api/ranking', (req,res)=> res.json(rankingList(db().ranking, req.query.categoria)));
+app.get('/api/ranking', (req,res)=> res.json(rankingList(db().ranking, req.query.categoria, req.query.temporada)));
+app.get('/api/ranking/temporadas', (req,res)=> res.json(temporadasList(db().ranking)));
 app.get('/api/atp', async (req,res)=> res.json(await tennisRanking('ATP')));
 app.get('/api/wta', async (req,res)=> res.json(await tennisRanking('WTA')));
 app.get('/api/noticias', async (req,res)=> res.json(await tennisNews()));
@@ -868,6 +869,73 @@ app.delete('/api/admin/ranking/atleta', auth, (req,res)=>{
   const key = (categoria+'|'+nome).toLowerCase();
   if(db().ranking?.players?.[key]) { delete db().ranking.players[key]; save(); }
   res.json({ ok:true });
+});
+
+// ── Partidas avulsas / Desafios (ranking contínuo estilo meuranking) ─────────
+// POST /api/admin/ranking/partida — registra partida avulsa e atualiza ranking
+app.post('/api/admin/ranking/partida', auth, (req,res)=>{
+  const { vencedor, perdedor, categoria, placar, descricao, temporada } = req.body || {};
+  if(!vencedor || !perdedor || !categoria) return res.status(400).json({error:'vencedor, perdedor e categoria obrigatórios'});
+  if(vencedor === perdedor) return res.status(400).json({error:'vencedor e perdedor não podem ser iguais'});
+  db().ranking = db().ranking || { players:{} };
+  const result = applyPartidaToRanking(db().ranking, { vencedor, perdedor, categoria, placar, descricao, temporada });
+  // Registrar no histórico geral de partidas avulsas
+  db().partidas_avulsas = db().partidas_avulsas || [];
+  db().partidas_avulsas.push({
+    id: nextId(), vencedor, perdedor, categoria, placar,
+    descricao: descricao || 'Partida avulsa',
+    temporada: temporada || new Date().getFullYear().toString(),
+    data: new Date().toISOString(),
+    ptsVencedor: result.ptsVencedor,
+    ptsPerdedor: result.ptsPerdedor,
+  });
+  save();
+  res.json({ ok:true, ptsVencedor:result.ptsVencedor, ptsPerdedor:result.ptsPerdedor, ranking: rankingList(db().ranking, categoria) });
+});
+
+// GET /api/admin/ranking/partidas — lista partidas avulsas
+app.get('/api/admin/ranking/partidas', auth, (req,res)=>{
+  const { categoria, temporada, limit=50 } = req.query;
+  let list = db().partidas_avulsas || [];
+  if(categoria) list = list.filter(p=>p.categoria===categoria);
+  if(temporada) list = list.filter(p=>p.temporada===temporada);
+  list = list.slice(-Number(limit)).reverse();
+  res.json(list);
+});
+
+// DELETE /api/admin/ranking/partida/:id — remove partida avulsa
+app.delete('/api/admin/ranking/partida/:id', auth, (req,res)=>{
+  const id = Number(req.params.id);
+  db().partidas_avulsas = (db().partidas_avulsas||[]).filter(p=>p.id!==id);
+  save();
+  res.json({ok:true});
+});
+
+// GET /api/admin/ranking/temporadas — lista temporadas existentes
+app.get('/api/admin/ranking/temporadas', auth, (req,res)=>{
+  res.json(temporadasList(db().ranking));
+});
+
+// POST /api/admin/ranking/temporada/reset — arquiva temporada e zera
+app.post('/api/admin/ranking/temporada/reset', auth, (req,res)=>{
+  const { temporada } = req.body || {};
+  if(!temporada) return res.status(400).json({error:'temporada obrigatória'});
+  db().ranking = db().ranking || { players:{} };
+  resetTemporada(db().ranking, temporada);
+  save();
+  res.json({ok:true, mensagem:`Temporada ${temporada} arquivada e zerada.`});
+});
+
+// GET /api/admin/ranking/arquivados — lista temporadas arquivadas
+app.get('/api/admin/ranking/arquivados', auth, (req,res)=>{
+  const arq = db().ranking?.arquivados || {};
+  const result = [];
+  for(const [temp, players] of Object.entries(arq)){
+    const lista = Object.values(players).sort((a,b)=>(b.pontos||0)-(a.pontos||0));
+    result.push({ temporada:temp, atletas:lista.length, lider:lista[0]?.nome||'—' });
+  }
+  result.sort((a,b)=>b.temporada.localeCompare(a.temporada));
+  res.json(result);
 });
 
 // =================== PDV BAR / RESTAURANTE ===================

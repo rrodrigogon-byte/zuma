@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { api } from '../../lib/api'
 
 /* ─── Paleta ─────────────────────────────────────────────────────────────── */
@@ -377,6 +377,70 @@ function AtletaPerfilModal({ atleta, todos, campeoes, onClose, onEdit, onRemover
   )
 }
 
+/* ─── Modal Registrar Partida Avulsa ────────────────────────────────────── */
+function PartidaModal({ categorias, onSave, onClose }) {
+  const [form, setForm] = useState({ vencedor: '', perdedor: '', categoria: categorias[0] || '', placar: '', descricao: 'Partida avulsa', temporada: new Date().getFullYear().toString() })
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,46,28,.65)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
+      <div style={{ background: C.white, borderRadius: 20, maxWidth: 460, width: '100%', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,.28)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#1a4a2e)`, padding: '22px 24px', color: C.white }}>
+          <div style={{ fontWeight: 900, fontSize: '1.1rem' }}>⚔️ Registrar Partida Avulsa</div>
+          <div style={{ fontSize: '0.82rem', color: '#a0c8a0', marginTop: 4 }}>Ranking contínuo — todos os jogos valem pontos</div>
+        </div>
+        <div style={{ padding: '22px 24px' }}>
+          {[
+            { k: 'vencedor', label: '✅ Vencedor *', placeholder: 'Nome do vencedor' },
+            { k: 'perdedor', label: '❌ Perdedor *', placeholder: 'Nome do perdedor' },
+            { k: 'placar',   label: '📊 Placar', placeholder: 'Ex: 6-4, 6-2' },
+            { k: 'descricao',label: '📝 Descrição', placeholder: 'Ex: Desafio, Liga, Amistoso...' },
+          ].map(f => (
+            <div key={f.k} style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>{f.label}</label>
+              <input value={form[f.k]} onChange={e => set(f.k, e.target.value)} placeholder={f.placeholder}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.92rem', outline: 'none', boxSizing: 'border-box' }}
+                onFocus={e => e.target.style.borderColor = C.green}
+                onBlur={e => e.target.style.borderColor = '#d0dcc8'} />
+            </div>
+          ))}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+            <div>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>Categoria *</label>
+              {categorias.length > 0 ? (
+                <select value={form.categoria} onChange={e => set('categoria', e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
+                  {categorias.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              ) : (
+                <input value={form.categoria} onChange={e => set('categoria', e.target.value)} placeholder="Categoria"
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
+              )}
+            </div>
+            <div>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>Temporada</label>
+              <input value={form.temporada} onChange={e => set('temporada', e.target.value)} placeholder="2025"
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+          </div>
+          {/* Info sobre pontuação */}
+          <div style={{ background: '#f0fae8', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: '0.78rem', color: C.muted, lineHeight: 1.6 }}>
+            <strong style={{ color: C.darkGreen }}>Como funciona:</strong> Pontos variam conforme o nível dos jogadores — vencer alguém melhor ranqueado vale mais (15 pts) que vencer alguém pior (6 pts). O perdedor sempre ganha pelo menos 1 ponto por jogar.
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={onClose} style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1.5px solid #d0dcc8', background: C.white, cursor: 'pointer', fontWeight: 600, color: '#666' }}>Cancelar</button>
+            <button
+              onClick={() => form.vencedor.trim() && form.perdedor.trim() && form.categoria && onSave(form)}
+              disabled={!form.vencedor.trim() || !form.perdedor.trim() || !form.categoria}
+              style={{ flex: 2, padding: '11px', borderRadius: 10, border: 'none', background: (form.vencedor.trim() && form.perdedor.trim()) ? `linear-gradient(135deg,${C.green},${C.lightGreen})` : '#e0e0e0', color: (form.vencedor.trim() && form.perdedor.trim()) ? C.darkGreen : '#aaa', fontWeight: 800, cursor: (form.vencedor.trim() && form.perdedor.trim()) ? 'pointer' : 'not-allowed' }}>
+              ⚔️ Registrar partida
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ─── Componente principal ──────────────────────────────────────────────── */
 export default function AdminRanking() {
   const [ranking,       setRanking]       = useState([])
@@ -389,6 +453,7 @@ export default function AdminRanking() {
   const [tab,           setTab]           = useState('ranking')
   const [editAtleta,    setEditAtleta]    = useState(null)
   const [showAdd,       setShowAdd]       = useState(false)
+  const [showPartida,   setShowPartida]   = useState(false)
   const [perfilAtleta,  setPerfilAtleta]  = useState(null)
   const [confirmReset,  setConfirmReset]  = useState(false)
   const [saving,        setSaving]        = useState(false)
@@ -397,21 +462,38 @@ export default function AdminRanking() {
   const [editPontos,    setEditPontos]    = useState(false)
   const [pontosDraft,   setPontosDraft]   = useState(null)
   const [catExpand,     setCatExpand]     = useState({})
+  const [partidas,      setPartidas]      = useState([])
+  const [loadingPart,   setLoadingPart]   = useState(false)
+  const [temporadas,    setTemporadas]    = useState([])
+  const [tempSelecionada, setTempSelecionada] = useState('all')
+  const [confirmTemp,   setConfirmTemp]   = useState(null) // temporada a arquivar
 
   const showMsg = (text, type = 'ok') => { setMsg({ text, type }); setTimeout(() => setMsg(null), 3500) }
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true)
     Promise.all([
       api.get('/api/ranking'),
       api.get('/api/admin/campeoes').catch(() => []),
-    ]).then(([r, c]) => {
+      api.get('/api/ranking/temporadas').catch(() => []),
+    ]).then(([r, c, t]) => {
       setRanking(Array.isArray(r) ? r : [])
       setCampeoes(Array.isArray(c) ? c : [])
+      setTemporadas(Array.isArray(t) ? t : [])
       setLoading(false)
     }).catch(() => setLoading(false))
-  }
-  useEffect(() => { load() }, [])
+  }, [])
+
+  const loadPartidas = useCallback(() => {
+    setLoadingPart(true)
+    api.get('/api/admin/ranking/partidas?limit=100').then(d => {
+      setPartidas(Array.isArray(d) ? d : [])
+      setLoadingPart(false)
+    }).catch(() => setLoadingPart(false))
+  }, [])
+
+  useEffect(() => { load() }, [load])
+  useEffect(() => { if (tab === 'partidas') loadPartidas() }, [tab, loadPartidas])
 
   const categorias = useMemo(() => [...new Set(ranking.map(p => p.categoria).filter(Boolean))].sort(), [ranking])
 
@@ -497,6 +579,34 @@ export default function AdminRanking() {
     finally { setSaving(false) }
   }
 
+  const handleRegistrarPartida = async (form) => {
+    setSaving(true)
+    try {
+      const r = await api.post('/api/admin/ranking/partida', form)
+      showMsg(`✅ Partida registrada! ${form.vencedor} +${r.ptsVencedor}pts · ${form.perdedor} +${r.ptsPerdedor}pts`)
+      setShowPartida(false); load(); if (tab === 'partidas') loadPartidas()
+    } catch (e) { showMsg('Erro ao registrar partida.', 'err') }
+    finally { setSaving(false) }
+  }
+
+  const handleRemoverPartida = async (id) => {
+    if (!window.confirm('Remover esta partida?')) return
+    try {
+      await api.delete(`/api/admin/ranking/partida/${id}`)
+      showMsg('Partida removida.'); loadPartidas()
+    } catch { showMsg('Erro ao remover partida.', 'err') }
+  }
+
+  const handleArquivarTemporada = async (temp) => {
+    setSaving(true)
+    try {
+      await api.post('/api/admin/ranking/temporada/reset', { temporada: temp })
+      showMsg(`Temporada ${temp} arquivada com sucesso!`)
+      setConfirmTemp(null); load()
+    } catch { showMsg('Erro ao arquivar temporada.', 'err') }
+    finally { setSaving(false) }
+  }
+
   /* Edição da tabela de pontos */
   const startEditPontos = () => { setPontosDraft(pontosTbl.map(r => ({ ...r }))); setEditPontos(true) }
   const savePontos = () => { setPontosTbl(pontosDraft); setEditPontos(false); showMsg('Tabela de pontos atualizada!') }
@@ -528,6 +638,10 @@ export default function AdminRanking() {
                 style={{ background: 'rgba(143,214,74,.15)', color: C.lightGreen, border: '1px solid rgba(143,214,74,.3)', borderRadius: 10, padding: '9px 16px', fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem' }}>
                 ⬇ Exportar CSV
               </button>
+              <button onClick={() => setShowPartida(true)}
+                style={{ background: 'rgba(91,106,240,.2)', color: '#b0b8ff', border: '1px solid rgba(91,106,240,.35)', borderRadius: 10, padding: '9px 16px', fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem' }}>
+                ⚔️ Registrar partida
+              </button>
               <button onClick={() => setShowAdd(true)}
                 style={{ background: C.lightGreen, color: C.darkGreen, border: 'none', borderRadius: 10, padding: '9px 18px', fontWeight: 800, cursor: 'pointer', fontSize: '0.85rem' }}>
                 ➕ Adicionar atleta
@@ -544,8 +658,10 @@ export default function AdminRanking() {
             {[
               { key: 'ranking',    label: '📋 Ranking Geral' },
               { key: 'categorias', label: '🎾 Por Categoria' },
+              { key: 'partidas',   label: '⚔️ Partidas Avulsas' },
+              { key: 'temporadas', label: '📅 Temporadas' },
               { key: 'campeoes',   label: '🏅 Campeões' },
-              { key: 'pontuacao',  label: '⭐ Tabela de Pontos' },
+              { key: 'pontuacao',  label: '⭐ Pontuação' },
               { key: 'stats',      label: '📊 Estatísticas' },
             ].map(t => (
               <button key={t.key} onClick={() => setTab(t.key)} style={{
@@ -786,6 +902,170 @@ export default function AdminRanking() {
         )}
 
         {/* ════════════════════════════════════════════════════
+            TAB: PARTIDAS AVULSAS
+        ════════════════════════════════════════════════════ */}
+        {tab === 'partidas' && (
+          <div>
+            {/* Info box */}
+            <div style={{ background: 'linear-gradient(135deg,#1a3a4e,#0e2e3c)', borderRadius: 16, padding: '18px 22px', marginBottom: 20, color: C.white, display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+              <span style={{ fontSize: '2rem' }}>⚔️</span>
+              <div>
+                <div style={{ fontWeight: 900, fontSize: '1rem', marginBottom: 4 }}>Ranking Contínuo — Estilo meuranking</div>
+                <div style={{ fontSize: '0.82rem', color: '#a0c8c8', lineHeight: 1.6 }}>
+                  Registre partidas avulsas e desafios para manter um ranking ativo o ano todo, sem depender de torneios. Pontos variam pela diferença de nível: <strong>vencer alguém melhor = 15 pts · mesma faixa = 10 pts · nível inferior = 6 pts</strong>. O perdedor sempre ganha pontos por jogar.
+                </div>
+              </div>
+            </div>
+
+            {/* Botão registrar */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+              <button onClick={() => setShowPartida(true)}
+                style={{ background: `linear-gradient(135deg,${C.green},${C.lightGreen})`, color: C.darkGreen, border: 'none', borderRadius: 10, padding: '10px 22px', fontWeight: 800, cursor: 'pointer', fontSize: '0.88rem', boxShadow: '0 3px 12px rgba(95,179,53,.3)' }}>
+                ⚔️ Registrar nova partida
+              </button>
+            </div>
+
+            {loadingPart ? (
+              <div style={{ textAlign: 'center', padding: 60, color: C.green, fontSize: '2rem' }}>⏳</div>
+            ) : partidas.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 60, background: C.white, borderRadius: 18, color: '#aaa' }}>
+                <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>⚔️</div>
+                <div style={{ fontWeight: 700, color: C.darkGreen, marginBottom: 6 }}>Nenhuma partida avulsa registrada</div>
+                <div style={{ fontSize: '0.84rem' }}>Registre partidas e desafios para manter o ranking ativo durante todo o ano.</div>
+              </div>
+            ) : (
+              <div style={{ background: C.white, borderRadius: 18, overflow: 'hidden', boxShadow: '0 2px 16px rgba(0,0,0,.07)' }}>
+                <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#1a4a2e)`, padding: '12px 18px', display: 'grid', gridTemplateColumns: '1fr 1fr 80px 80px 70px 60px', color: C.lightGreen, fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
+                  <div>Vencedor</div>
+                  <div>Perdedor</div>
+                  <div style={{ textAlign: 'center' }}>Placar</div>
+                  <div style={{ textAlign: 'center' }}>Categoria</div>
+                  <div style={{ textAlign: 'center' }}>Data</div>
+                  <div style={{ textAlign: 'center' }}>Ação</div>
+                </div>
+                {partidas.map((p, i) => (
+                  <div key={p.id || i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 80px 80px 70px 60px', padding: '11px 18px', alignItems: 'center', borderBottom: `1px solid ${C.border}`, background: i % 2 === 0 ? C.white : '#fafcf8' }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: C.darkGreen, fontSize: '0.88rem' }}>✅ {p.vencedor}</div>
+                      {p.descricao !== 'Partida avulsa' && <div style={{ fontSize: '0.68rem', color: C.muted }}>{p.descricao}</div>}
+                    </div>
+                    <div style={{ fontWeight: 600, color: '#888', fontSize: '0.88rem' }}>❌ {p.perdedor}</div>
+                    <div style={{ textAlign: 'center' }}>
+                      {p.placar
+                        ? <span style={{ fontSize: '0.8rem', background: '#f0f4e8', padding: '2px 8px', borderRadius: 8, fontWeight: 700, color: C.darkGreen }}>{p.placar}</span>
+                        : <span style={{ color: '#ccc', fontSize: '0.8rem' }}>—</span>}
+                    </div>
+                    <div style={{ textAlign: 'center', fontSize: '0.75rem', color: C.muted }}>{p.categoria}</div>
+                    <div style={{ textAlign: 'center', fontSize: '0.72rem', color: '#aaa' }}>
+                      {p.data ? new Date(p.data).toLocaleDateString('pt-BR') : '—'}
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <button onClick={() => handleRemoverPartida(p.id)}
+                        style={{ background: 'rgba(224,85,85,.1)', border: 'none', borderRadius: 7, padding: '4px 9px', cursor: 'pointer', fontSize: '0.88rem' }}>🗑</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ════════════════════════════════════════════════════
+            TAB: TEMPORADAS
+        ════════════════════════════════════════════════════ */}
+        {tab === 'temporadas' && (
+          <div>
+            <div style={{ background: 'linear-gradient(135deg,#2e1a3a,#1a0e2e)', borderRadius: 16, padding: '18px 22px', marginBottom: 20, color: C.white, display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+              <span style={{ fontSize: '2rem' }}>📅</span>
+              <div>
+                <div style={{ fontWeight: 900, fontSize: '1rem', marginBottom: 4 }}>Gestão de Temporadas</div>
+                <div style={{ fontSize: '0.82rem', color: '#c8a0d0', lineHeight: 1.6 }}>
+                  Cada temporada corresponde a um ano de competição. Ao final, você pode <strong>arquivar</strong> a temporada (preserva o histórico) e recomeçar o ranking zerado para o novo ano.
+                </div>
+              </div>
+            </div>
+
+            {temporadas.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 60, background: C.white, borderRadius: 18, color: '#aaa' }}>
+                <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>📅</div>
+                <div style={{ fontWeight: 700, color: C.darkGreen, marginBottom: 6 }}>Nenhuma temporada iniciada</div>
+                <div style={{ fontSize: '0.84rem' }}>As temporadas são criadas automaticamente ao registrar pontos (torneios ou partidas avulsas).</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {temporadas.map((temp, i) => {
+                  const atletasTemp = ranking.filter(p => p.temporada === temp || !p.temporada)
+                  const lider = atletasTemp.sort((a, b) => (b.pontos || 0) - (a.pontos || 0))[0]
+                  const totalPts = atletasTemp.reduce((s, p) => s + (p.pontos || 0), 0)
+                  const isAtual = i === 0
+                  return (
+                    <div key={temp} style={{ background: C.white, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 10px rgba(0,0,0,.07)', border: isAtual ? `2px solid ${C.green}` : `1px solid ${C.border}` }}>
+                      <div style={{ background: isAtual ? `linear-gradient(135deg,${C.darkGreen},#1a4a2e)` : '#f8fdf5', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <span style={{ fontSize: '1.5rem' }}>{isAtual ? '📅' : '📦'}</span>
+                          <div>
+                            <div style={{ fontWeight: 900, fontSize: '1.1rem', color: isAtual ? C.white : C.darkGreen }}>
+                              Temporada {temp}
+                              {isAtual && <span style={{ marginLeft: 10, background: 'rgba(143,214,74,.25)', color: C.lightGreen, borderRadius: 20, padding: '2px 12px', fontSize: '0.72rem', fontWeight: 800 }}>● Em curso</span>}
+                            </div>
+                            <div style={{ fontSize: '0.78rem', color: isAtual ? '#a0c8a0' : C.muted, marginTop: 2 }}>
+                              {atletasTemp.length} atleta{atletasTemp.length !== 1 ? 's' : ''} · {totalPts.toLocaleString('pt-BR')} pontos distribuídos
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          {lider && (
+                            <div style={{ textAlign: 'right', marginRight: 8 }}>
+                              <div style={{ fontSize: '0.72rem', color: isAtual ? '#a0c8a0' : C.muted }}>Líder</div>
+                              <div style={{ fontWeight: 800, fontSize: '0.9rem', color: isAtual ? C.lightGreen : C.darkGreen }}>👑 {lider.nome}</div>
+                            </div>
+                          )}
+                          {isAtual && (
+                            <button onClick={() => setConfirmTemp(temp)}
+                              style={{ background: 'rgba(224,85,85,.2)', color: '#ffaaaa', border: '1px solid rgba(224,85,85,.35)', borderRadius: 10, padding: '7px 14px', fontWeight: 700, cursor: 'pointer', fontSize: '0.78rem' }}>
+                              📦 Arquivar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {/* Top 3 da temporada */}
+                      <div style={{ padding: '12px 20px', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                        {atletasTemp.slice(0, 3).map((p, j) => (
+                          <div key={j} style={{ background: j === 0 ? 'rgba(201,166,86,.08)' : '#f8fdf5', border: `1px solid ${j === 0 ? 'rgba(201,166,86,.3)' : C.border}`, borderRadius: 10, padding: '8px 14px', minWidth: 140 }}>
+                            <div style={{ fontSize: '1rem', marginBottom: 2 }}>{j === 0 ? '🥇' : j === 1 ? '🥈' : '🥉'}</div>
+                            <div style={{ fontWeight: 700, color: C.darkGreen, fontSize: '0.84rem' }}>{p.nome}</div>
+                            <div style={{ fontWeight: 900, color: j === 0 ? C.gold : C.green, fontSize: '0.88rem' }}>{(p.pontos || 0).toLocaleString('pt-BR')} pts</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Confirmação de arquivar */}
+            {confirmTemp && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,46,28,.65)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => setConfirmTemp(null)}>
+                <div style={{ background: C.white, borderRadius: 20, maxWidth: 380, width: '100%', padding: '28px', boxShadow: '0 20px 60px rgba(0,0,0,.28)', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                  <div style={{ fontSize: '3rem', marginBottom: 12 }}>📦</div>
+                  <div style={{ fontWeight: 900, color: C.darkGreen, fontSize: '1.1rem', marginBottom: 8 }}>Arquivar temporada {confirmTemp}?</div>
+                  <div style={{ color: C.muted, fontSize: '0.85rem', marginBottom: 24, lineHeight: 1.6 }}>
+                    O histórico será preservado em <strong>Temporadas Arquivadas</strong>, mas os pontos atuais serão zerados para iniciar uma nova temporada.
+                  </div>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button onClick={() => setConfirmTemp(null)} style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1.5px solid #d0dcc8', background: C.white, cursor: 'pointer', fontWeight: 600 }}>Cancelar</button>
+                    <button onClick={() => handleArquivarTemporada(confirmTemp)} disabled={saving} style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg,${C.green},${C.lightGreen})`, color: C.darkGreen, fontWeight: 800, cursor: saving ? 'wait' : 'pointer' }}>
+                      {saving ? '⏳' : '📦 Arquivar'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ════════════════════════════════════════════════════
             TAB: CAMPEÕES
         ════════════════════════════════════════════════════ */}
         {tab === 'campeoes' && (
@@ -994,6 +1274,7 @@ export default function AdminRanking() {
       {/* Modais globais */}
       {editAtleta   && <EditModal atleta={editAtleta} onSave={handleSaveEdit} onClose={() => setEditAtleta(null)} />}
       {showAdd      && <AddModal categorias={categorias} onSave={handleAddAtleta} onClose={() => setShowAdd(false)} />}
+      {showPartida  && <PartidaModal categorias={categorias} onSave={handleRegistrarPartida} onClose={() => setShowPartida(false)} />}
       {perfilAtleta && <AtletaPerfilModal atleta={perfilAtleta} todos={ranking} campeoes={campeoes} onClose={() => setPerfilAtleta(null)} onEdit={a => { setPerfilAtleta(null); setEditAtleta(a) }} onRemover={handleRemover} />}
 
       <style>{`@keyframes fadeIn { from { opacity:0; transform:translateY(-6px) } to { opacity:1; transform:none } }`}</style>

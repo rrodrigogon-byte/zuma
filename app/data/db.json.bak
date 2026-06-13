@@ -10,6 +10,16 @@
       "telefone": "",
       "ativo": true,
       "criadoEm": "2026-06-13T20:42:27.124Z"
+    },
+    {
+      "id": 12,
+      "nome": "João Atleta Teste",
+      "email": "joao.teste@agroopen.com",
+      "senhaHash": "$2a$10$O0XVCySV82UTRtPzBD8Ei.YL.T9bTj9Tv4MlFyswa.reuW.RjN.Rm",
+      "role": "atleta",
+      "telefone": "",
+      "ativo": true,
+      "criadoEm": "2026-06-13T20:42:42.069Z"
     }
   ],
   "inscricoes": [],
@@ -39,7 +49,8 @@
       "estoque": 200,
       "desc": "Dri-fit 140g/m² UV50+. Logo bordado no peito esquerdo + TTC na manga. Tamanhos: PP ao XG + infantil (4–12).",
       "ativo": true,
-      "criadoEm": "2026-06-13T20:42:27.129Z"
+      "criadoEm": "2026-06-13T20:42:27.129Z",
+      "imagem": "/produtos/aot-001-camiseta-oficial.jpg"
     },
     {
       "id": 3,
@@ -51,7 +62,8 @@
       "estoque": 200,
       "desc": "Algodão sarjado 100% Verde Escuro. Aba curva dad cap 6 gomos, ajustável (54–60cm). Bordado 3D frente + lateral.",
       "ativo": true,
-      "criadoEm": "2026-06-13T20:42:27.130Z"
+      "criadoEm": "2026-06-13T20:42:27.130Z",
+      "imagem": "/produtos/aot-002-bone-oficial.jpg"
     },
     {
       "id": 4,
@@ -63,7 +75,8 @@
       "estoque": 150,
       "desc": "Dri-fit 140g/m² UV50+. Monograma \"AO\" grande no peito (silk) + TTC na manga. PP ao XG. Linha exclusiva evento.",
       "ativo": true,
-      "criadoEm": "2026-06-13T20:42:27.130Z"
+      "criadoEm": "2026-06-13T20:42:27.130Z",
+      "imagem": "/produtos/aot-003-camiseta-premium.jpg"
     },
     {
       "id": 5,
@@ -75,7 +88,8 @@
       "estoque": 150,
       "desc": "Algodão sarjado 100% Verde Escuro. Monograma AO bordado 3D grande na frente. Ajustável (54–60cm).",
       "ativo": true,
-      "criadoEm": "2026-06-13T20:42:27.130Z"
+      "criadoEm": "2026-06-13T20:42:27.130Z",
+      "imagem": "/produtos/aot-004-bone-premium.jpg"
     },
     {
       "id": 6,
@@ -87,7 +101,8 @@
       "estoque": 200,
       "desc": "Algodão 60% + Poliamida + Elastano. Branco c/ detalhe verde limão. Cushion reforçado. Tam: 35-38, 39-42, 43-46.",
       "ativo": true,
-      "criadoEm": "2026-06-13T20:42:27.130Z"
+      "criadoEm": "2026-06-13T20:42:27.130Z",
+      "imagem": "/produtos/aot-005-meias.jpg"
     },
     {
       "id": 7,
@@ -99,7 +114,8 @@
       "estoque": 300,
       "desc": "Lona algodão cru 100%, 280g/m². 40×45×10cm, alça 60cm. Logo silk verde escuro + \"07-13 SET 2026\".",
       "ativo": true,
-      "criadoEm": "2026-06-13T20:42:27.130Z"
+      "criadoEm": "2026-06-13T20:42:27.130Z",
+      "imagem": "/produtos/aot-006-tote-bag.jpg"
     },
     {
       "id": 8,
@@ -111,7 +127,8 @@
       "estoque": 200,
       "desc": "Plástico BPA-Free (Tritan) 750ml. Verde Escuro matte, tampa sport cap flip-top verde limão. Monograma AO silk.",
       "ativo": true,
-      "criadoEm": "2026-06-13T20:42:27.131Z"
+      "criadoEm": "2026-06-13T20:42:27.131Z",
+      "imagem": "/produtos/aot-007-squeeze.jpg"
     },
     {
       "id": 9,
@@ -123,7 +140,8 @@
       "estoque": 200,
       "desc": "Algodão 100% felpudo 380g/m². 50×90cm. Verde Escuro com viés verde limão. Logo bordado canto inferior.",
       "ativo": true,
-      "criadoEm": "2026-06-13T20:42:27.131Z"
+      "criadoEm": "2026-06-13T20:42:27.131Z",
+      "imagem": "/produtos/aot-008-toalhinha.jpg"
     },
     {
       "id": 10,
@@ -135,7 +153,8 @@
       "estoque": 250,
       "desc": "Silicone hipoalergênico, relevo gravado. \"AGRO OPEN • 4ª EDIÇÃO • TANGARÁ-MT • 2026\". Credencial oficial do atleta.",
       "ativo": true,
-      "criadoEm": "2026-06-13T20:42:27.131Z"
+      "criadoEm": "2026-06-13T20:42:27.131Z",
+      "imagem": "/produtos/aot-009-pulseira.jpg"
     },
     {
       "id": 11,
@@ -147,7 +166,8 @@
       "estoque": 200,
       "desc": "Algodão felpudo terry cotton, elastano interno. 7,5cm largura. Monograma AO verde limão bordado. Vendido em par.",
       "ativo": true,
-      "criadoEm": "2026-06-13T20:42:27.131Z"
+      "criadoEm": "2026-06-13T20:42:27.131Z",
+      "imagem": "/produtos/aot-010-munhequeira.jpg"
     }
   ],
   "vendasLoja": [],
@@ -161,10 +181,73 @@
   "socios": [],
   "campanhas": [],
   "pagamentos": [],
-  "auditoria": [],
+  "auditoria": [
+    {
+      "id": 14,
+      "ts": "2026-06-13T21:03:48.026Z",
+      "user": "Administrador (admin)",
+      "acao": "POST /api/admin/ranking/partida",
+      "detalhe": "",
+      "ip": "::1"
+    },
+    {
+      "id": 16,
+      "ts": "2026-06-13T21:03:48.057Z",
+      "user": "Administrador (admin)",
+      "acao": "POST /api/admin/ranking/partida",
+      "detalhe": "",
+      "ip": "::1"
+    },
+    {
+      "id": 18,
+      "ts": "2026-06-13T21:03:48.089Z",
+      "user": "Administrador (admin)",
+      "acao": "POST /api/admin/ranking/partida",
+      "detalhe": "",
+      "ip": "::1"
+    }
+  ],
   "agenda": [],
   "cardapio": [],
   "contatos": [],
   "config": {},
-  "seq": 13
+  "partidas_avulsas": [
+    {
+      "id": 13,
+      "vencedor": "João Silva",
+      "perdedor": "Pedro Souza",
+      "categoria": "Masc · A",
+      "placar": "6-4 7-5",
+      "descricao": "Desafio de ranking",
+      "temporada": "2026",
+      "data": "2026-06-13T21:03:48.022Z",
+      "ptsVencedor": 10,
+      "ptsPerdedor": 1
+    },
+    {
+      "id": 15,
+      "vencedor": "Pedro Souza",
+      "perdedor": "Carlos Lima",
+      "categoria": "Masc · A",
+      "placar": "6-3 6-4",
+      "descricao": "Partida avulsa",
+      "temporada": "2026",
+      "data": "2026-06-13T21:03:48.053Z",
+      "ptsVencedor": 10,
+      "ptsPerdedor": 1
+    },
+    {
+      "id": 17,
+      "vencedor": "Ana Costa",
+      "perdedor": "Marcia Reis",
+      "categoria": "Fem · A",
+      "placar": "7-5 6-3",
+      "descricao": "Partida avulsa",
+      "temporada": "2026",
+      "data": "2026-06-13T21:03:48.086Z",
+      "ptsVencedor": 10,
+      "ptsPerdedor": 1
+    }
+  ],
+  "seq": 20
 }
