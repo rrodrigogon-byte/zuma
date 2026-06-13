@@ -310,8 +310,7 @@ app.post('/api/inscricao', publicLimit(), (req,res)=>{
   res.json({ ok:true, id:insc.id, total, prazoPagamento:pagoEm,
     message:`Inscrição recebida! Efetue o pagamento de ${Number(total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} em até 30 minutos para confirmar sua vaga.` });
 });
-// Alias plural (frontend usa /api/inscricoes)
-app.post('/api/inscricoes', (req,res,next)=> { req.url='/api/inscricao'; next('route'); });
+// Rota plural — usada pelo frontend público de inscrição
 app.post('/api/inscricoes', (req,res)=>{
   const b = req.body || {};
   const obrig = ['nome','email','cpf','tel'];
