@@ -130,6 +130,7 @@ const NAV_PUBLIC = [
   { to: '/contato',     icon: '📞', label: 'Contato' },
   { to: '/noticias',    icon: '📰', label: 'Notícias' },
   { to: '/quadras',     icon: '🏟️', label: 'Quadras' },
+  { to: '/clube',       icon: '🎾', label: 'O Clube (TTC)' },
 ]
 
 const linkStyle = {
