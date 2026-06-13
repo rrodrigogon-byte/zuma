@@ -507,7 +507,7 @@ export default function AdminRanking() {
 
       {/* Toast */}
       {msg && (
-        <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 1000, background: msg.type === 'ok' ? C.green : C.danger, color: C.white, padding: '12px 22px', borderRadius: 12, fontWeight: 700, fontSize: '0.88rem', boxShadow: '0 4px 20px rgba(0,0,0,.2)', animation: 'fadeIn .2s', zIndex: 1001 }}>
+        <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 1001, background: msg.type === 'ok' ? C.green : C.danger, color: C.white, padding: '12px 22px', borderRadius: 12, fontWeight: 700, fontSize: '0.88rem', boxShadow: '0 4px 20px rgba(0,0,0,.2)', animation: 'fadeIn .2s' }}>
           {msg.type === 'ok' ? '✓ ' : '⚠ '}{msg.text}
         </div>
       )}
