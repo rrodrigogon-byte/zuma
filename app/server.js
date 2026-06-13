@@ -1739,22 +1739,48 @@ function seedLoja(){
     KIT_SEED.forEach(k=>{ d.loja.push({ id:nextId(), cod:k.cod, nome:k.nome, cat:k.cat, emoji:k.emoji, preco:k.preco, estoque:k.estoque, desc:k.desc, ativo:true, criadoEm:new Date().toISOString() }); });
     save();
   } else {
-    // Backfill: produtos existentes (criados antes do catálogo) recebem descrição/emoji do KIT_SEED pelo código
+    // Backfill: produtos existentes recebem desc/emoji/imagem do KIT_SEED e IMAGEM_LOJA pelo código
     let alterado=false;
     const porCod=Object.fromEntries(KIT_SEED.map(k=>[k.cod,k]));
-    d.loja.forEach(p=>{ const k=porCod[p.cod]; if(k){ if(!p.desc && k.desc){ p.desc=k.desc; alterado=true; } if(!p.emoji && k.emoji){ p.emoji=k.emoji; alterado=true; } } });
+    d.loja.forEach(p=>{
+      const k=porCod[p.cod];
+      if(k){
+        if(!p.desc && k.desc){ p.desc=k.desc; alterado=true; }
+        if(!p.emoji && k.emoji){ p.emoji=k.emoji; alterado=true; }
+      }
+      // Backfill imagem: se não tem imagem definida pelo admin, preenche do mapa
+      // (IMAGEM_LOJA definido logo abaixo — mas usamos valor inline aqui)
+      const imgMap = {
+        'AOT-001':'/produtos/aot-001-camiseta-oficial.jpg',
+        'AOT-002':'/produtos/aot-002-bone-oficial.jpg',
+        'AOT-003':'/produtos/aot-003-camiseta-premium.jpg',
+        'AOT-004':'/produtos/aot-004-bone-premium.jpg',
+        'AOT-005':'/produtos/aot-005-meias.jpg',
+        'AOT-006':'/produtos/aot-006-tote-bag.jpg',
+        'AOT-007':'/produtos/aot-007-squeeze.jpg',
+        'AOT-008':'/produtos/aot-008-toalhinha.jpg',
+        'AOT-009':'/produtos/aot-009-pulseira.jpg',
+        'AOT-010':'/produtos/aot-010-munhequeira.jpg',
+      };
+      if(p.cod && !p.imagem && imgMap[p.cod]){ p.imagem=imgMap[p.cod]; alterado=true; }
+    });
     if(alterado) save();
   }
 }
 seedLoja();
 
-// Mapa de imagens por código AOT
+// Mapa de imagens por código AOT — geradas do Catálogo Técnico 4ª Edição 2026
 const IMAGEM_LOJA = {
-  'AOT-001':'/produtos/aot-001.jpg','AOT-002':'/produtos/aot-002.jpg',
-  'AOT-003':'/produtos/aot-003.jpg','AOT-004':'/produtos/aot-004.jpg',
-  'AOT-005':'/produtos/aot-005.jpg','AOT-006':'/produtos/aot-006.jpg',
-  'AOT-007':'/produtos/aot-007.jpg','AOT-008':'/produtos/aot-008.jpg',
-  'AOT-009':'/produtos/aot-009.jpg','AOT-010':'/produtos/aot-010.jpg',
+  'AOT-001':'/produtos/aot-001-camiseta-oficial.jpg',
+  'AOT-002':'/produtos/aot-002-bone-oficial.jpg',
+  'AOT-003':'/produtos/aot-003-camiseta-premium.jpg',
+  'AOT-004':'/produtos/aot-004-bone-premium.jpg',
+  'AOT-005':'/produtos/aot-005-meias.jpg',
+  'AOT-006':'/produtos/aot-006-tote-bag.jpg',
+  'AOT-007':'/produtos/aot-007-squeeze.jpg',
+  'AOT-008':'/produtos/aot-008-toalhinha.jpg',
+  'AOT-009':'/produtos/aot-009-pulseira.jpg',
+  'AOT-010':'/produtos/aot-010-munhequeira.jpg',
 };
 
 app.get('/api/loja', (req,res)=> {
