@@ -215,7 +215,16 @@ function advance(chave, r, idx){
 }
 
 // =================== API PÚBLICA ===================
-app.get('/api/info', (req,res)=> res.json(PLATAFORMA));
+app.get('/api/info', (req,res)=>{
+  const d = db();
+  res.json({
+    ...PLATAFORMA,
+    dataInicio: d.config?.evento?.dataInicio || CONFIG_DEFAULT.evento.dataInicio,
+    dataFim:    d.config?.evento?.dataFim    || CONFIG_DEFAULT.evento.dataFim,
+    local:      d.config?.evento?.local      || CONFIG_DEFAULT.evento.local,
+    nomeEvento: d.config?.evento?.nome       || CONFIG_DEFAULT.evento.nome,
+  });
+});
 
 // Informações públicas do Pix configurado (chave, nome, cidade, copia-e-cola sem valor)
 app.get('/api/pix-info', (req,res)=>{

@@ -135,6 +135,7 @@ export default function App() {
         <Route path="/loja"       element={<Layout><Loja /></Layout>} />
         <Route path="/regulamento" element={<Layout><Regulamento /></Layout>} />
         <Route path="/bracket"    element={<Layout><Bracket /></Layout>} />
+        <Route path="/chaves"     element={<Layout><Bracket /></Layout>} />
         <Route path="/perfil"     element={<Layout><Perfil /></Layout>} />
         <Route path="/contato"    element={<Layout><Contato /></Layout>} />
         <Route path="/noticias"   element={<Layout><NoticiasPublic /></Layout>} />

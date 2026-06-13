@@ -98,22 +98,35 @@ export default function Configuracoes() {
   const [savingPag, setSavingPag]         = useState(false)
 
   // reset modal
-  const [resetStep, setResetStep]     = useState(0)   // 0=idle 1=confirm 2=type
+  const [resetStep, setResetStep]     = useState(0)
   const [resetInput, setResetInput]   = useState('')
   const [resetting, setResetting]     = useState(false)
+
+  // Categorias & Vagas
+  const [categoriasLista, setCategoriasLista] = useState([])   // { id, nome, preco, inscritos, vagas }
+  const [vagasEdit, setVagasEdit]             = useState({})   // { [catId]: { vagas: '' } }
+  const [savingCat, setSavingCat]             = useState(false)
 
   async function load() {
     setLoading(true)
     try {
-      const [data, status] = await Promise.all([
+      const [data, status, cats] = await Promise.all([
         api.get('/api/admin/config'),
         api.get('/api/pagamentos/status').catch(() => ({ ativo: false })),
+        api.get('/api/categorias').catch(() => []),
       ])
       if (data.evento) setEvento({ ...evento, ...data.evento })
       if (data.bar)    setBar({ mesasFisicas: data.bar.mesasFisicas ?? '', taxaServico: data.bar.taxaServico ?? '' })
       if (data.pix)    setPix({ chave: data.pix.chave ?? '', nome: data.pix.nome ?? '', cidade: data.pix.cidade ?? '' })
       setPagAtivos(!!status.ativo)
       setModoSimulado(!!(data.pagamentos?.modoSimulado))
+      if (Array.isArray(cats) && cats.length) {
+        setCategoriasLista(cats)
+        // pré-preenche vagasEdit com o que vier da API
+        const ve = {}
+        cats.forEach(c => { ve[c.id] = { vagas: c.vagas != null ? String(c.vagas) : '' } })
+        setVagasEdit(ve)
+      }
     } catch {
       toast('Erro ao carregar configurações', true)
     } finally {
@@ -137,6 +150,24 @@ export default function Configuracoes() {
 
   async function savePagamentos() {
     await saveSection({ pagamentos: { modoSimulado } }, setSavingPag)
+  }
+
+  async function saveCategorias() {
+    setSavingCat(true)
+    try {
+      // Monta objeto { [catId]: { vagas: Number|null } }
+      const categorias = {}
+      Object.entries(vagasEdit).forEach(([id, v]) => {
+        const n = parseInt(v.vagas)
+        categorias[id] = { vagas: isNaN(n) ? null : n }
+      })
+      await api.patch('/api/admin/config', { categorias })
+      toast('Vagas salvas')
+    } catch (e) {
+      toast(e.message || 'Erro ao salvar vagas', true)
+    } finally {
+      setSavingCat(false)
+    }
   }
 
   async function handleReset() {
@@ -372,6 +403,57 @@ export default function Configuracoes() {
           Para alterar a paleta, edite as variáveis CSS em <code>index.css</code>.
         </p>
       </SectionCard>
+
+      {/* Categorias & Vagas */}
+      {categoriasLista.length > 0 && (
+        <SectionCard title="🎾 Categorias — Vagas & Inscritos" onSave={saveCategorias} saving={savingCat}>
+          <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 14px' }}>
+            Configure o número máximo de vagas por categoria. Deixe em branco para sem limite.
+            O contador de inscritos reflete a situação atual do banco.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
+            {categoriasLista.map(cat => {
+              const ve = vagasEdit[cat.id] || { vagas: '' }
+              const vagas = parseInt(ve.vagas)
+              const ocupacao = !isNaN(vagas) && vagas > 0 ? Math.min(100, Math.round((cat.inscritos / vagas) * 100)) : null
+              const lotado = !isNaN(vagas) && vagas > 0 && cat.inscritos >= vagas
+              return (
+                <div key={cat.id} style={{
+                  background: 'var(--surface2)', border: `1px solid ${lotado ? '#e05c5c44' : 'var(--line)'}`,
+                  borderLeft: `3px solid ${lotado ? '#e05c5c' : '#5FB335'}`,
+                  borderRadius: 8, padding: '12px 14px',
+                }}>
+                  <div style={{ fontWeight: 700, color: 'var(--fg)', fontSize: 12, marginBottom: 8, lineHeight: 1.3 }}>
+                    {cat.nome}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <label style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}>Vagas:</label>
+                    <input
+                      type="number" min="0" placeholder="Sem limite"
+                      value={ve.vagas}
+                      onChange={e => setVagasEdit(prev => ({ ...prev, [cat.id]: { ...prev[cat.id], vagas: e.target.value } }))}
+                      style={{ width: 80, padding: '4px 8px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--fg)', fontSize: 13 }}
+                    />
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10,
+                      background: lotado ? '#e05c5c18' : cat.inscritos > 0 ? '#5FB33518' : 'transparent',
+                      color: lotado ? '#e05c5c' : cat.inscritos > 0 ? '#5FB335' : 'var(--muted)',
+                    }}>
+                      {cat.inscritos} inscrito{cat.inscritos !== 1 ? 's' : ''}
+                      {!isNaN(vagas) && vagas > 0 ? ` / ${vagas}` : ''}
+                    </span>
+                  </div>
+                  {ocupacao !== null && (
+                    <div style={{ marginTop: 8, height: 4, background: 'var(--line)', borderRadius: 2, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${ocupacao}%`, background: lotado ? '#e05c5c' : '#5FB335', borderRadius: 2, transition: 'width .3s' }} />
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </SectionCard>
+      )}
 
       {/* Avançado */}
       <SectionCard title="Avançado">

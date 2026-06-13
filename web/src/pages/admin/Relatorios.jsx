@@ -129,6 +129,7 @@ function DateFilter({ from, to, onFrom, onTo, periodButtons = true }) {
 const TABS_REL = [
   { key:'financeiro', label:'💰 Financeiro' },
   { key:'inscricoes', label:'📋 Inscrições' },
+  { key:'loja',       label:'🛍️ Loja' },
   { key:'socios',     label:'🏆 Sócios' },
   { key:'quadras',    label:'🎾 Quadras' },
   { key:'aulas',      label:'📚 Aulas/Matrículas' },
@@ -145,9 +146,12 @@ export default function Relatorios() {
   const [inscricoes, setInscricoes] = useState([])
   const [pagamentos, setPagamentos] = useState([])
   const [socios, setSocios]         = useState([])
-  const [reservas, setReservas]     = useState([])
-  const [matriculas, setMatriculas] = useState([])
-  const [aulas, setAulas]           = useState([])
+  const [reservas, setReservas]       = useState([])
+  const [reservasLoja, setReservasLoja] = useState([])
+  const [matriculas, setMatriculas]   = useState([])
+  const [aulas, setAulas]             = useState([])
+  const [lojaFrom, setLojaFrom]       = useState(daysAgo(29))
+  const [lojaTo,   setLojaTo]         = useState(today())
 
   // filters
   const [finFrom, setFinFrom] = useState(daysAgo(29))
@@ -164,13 +168,14 @@ export default function Relatorios() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [dash, v, insc, pag, soc, res, mat, aul] = await Promise.all([
+      const [dash, v, insc, pag, soc, res, resLoja, mat, aul] = await Promise.all([
         api.get('/api/admin/dashboard').catch(() => ({})),
         api.get('/api/admin/vendas').catch(() => []),
         api.get('/api/admin/inscricoes').catch(() => []),
         api.get('/api/admin/pagamentos').catch(() => []),
         api.get('/api/admin/socios').catch(() => []),
         api.get('/api/admin/reservas').catch(() => []),
+        api.get('/api/admin/loja/reservas').catch(() => []),
         api.get('/api/admin/matriculas').catch(() => []),
         api.get('/api/admin/aulas').catch(() => []),
       ])
@@ -180,6 +185,7 @@ export default function Relatorios() {
       setPagamentos(Array.isArray(pag) ? pag : pag.pagamentos || [])
       setSocios(Array.isArray(soc) ? soc : soc.socios || [])
       setReservas(Array.isArray(res) ? res : res.reservas || [])
+      setReservasLoja(Array.isArray(resLoja) ? resLoja : [])
       setMatriculas(Array.isArray(mat) ? mat : mat.matriculas || [])
       setAulas(Array.isArray(aul) ? aul : aul.aulas || [])
     } catch {
@@ -258,6 +264,16 @@ export default function Relatorios() {
   resFiltradas.forEach(r => { const h = (r.horario||r.hora||'').slice(0,2)+'h'; porHorario[h]=(porHorario[h]||0)+1 })
   const porHorarioArr = Object.entries(porHorario).map(([label,value])=>({label,value})).sort((a,b)=>a.label.localeCompare(b.label))
 
+  /* ── Dados derivados — Loja ── */
+  const lojaFiltradas = reservasLoja.filter(r => inRange(r.criadoEm, lojaFrom, lojaTo))
+  const receitaLoja   = lojaFiltradas.filter(r => r.status === 'confirmada' || r.status === 'entregue').reduce((s, r) => s + (r.total || 0), 0)
+  const lojaPend      = lojaFiltradas.filter(r => r.status === 'reservado' || r.status === 'pendente').length
+  const lojaPorProd   = {}
+  lojaFiltradas.forEach(r => { lojaPorProd[r.produto||'?'] = (lojaPorProd[r.produto||'?']||0) + (r.qtd||1) })
+  const lojaPorProdArr = Object.entries(lojaPorProd).map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value)
+  const lojaPorStatus  = {}
+  lojaFiltradas.forEach(r => { lojaPorStatus[r.status||'?'] = (lojaPorStatus[r.status||'?']||0)+1 })
+
   /* ── Dados derivados — Aulas ── */
   const aulFiltradas = matriculas.filter(m => inRange(m.createdAt || m.data, aulFrom, aulTo))
   const receitaAulas = aulFiltradas.reduce((s, m) => s + (m.valor || 0), 0)
@@ -288,6 +304,13 @@ export default function Relatorios() {
         return exportCSV('reservas_quadras.csv', resFiltradas.map(r => ({
           quadra: r.quadra||r.quadraNome||'', data: r.data||'', horario: r.horario||'',
           cliente: r.clienteNome||r.socioNome||'', valor: r.valor||0, status: r.status||'',
+        })))
+      case 'loja':
+        return exportCSV('reservas_loja.csv', lojaFiltradas.map(r => ({
+          id: r.id, produto: r.produto||'', atleta: r.nome||'', email: r.email||'',
+          tel: r.tel||'', tamanho: r.tamanho||'', qtd: r.qtd??1,
+          total: r.total!=null ? r.total : '', status: r.status||'',
+          data: r.criadoEm ? fmtDate(r.criadoEm) : '',
         })))
       case 'aulas':
         return exportCSV('matriculas.csv', aulFiltradas.map(m => ({
@@ -418,6 +441,77 @@ export default function Relatorios() {
             )}
             {inscFiltradas.length === 0 && (
               <p style={{ textAlign:'center', color:'var(--muted)', padding:24 }}>Nenhuma inscrição no período.</p>
+            )}
+          </Section>
+        )}
+
+        {/* ── Tab: Loja ── */}
+        {tabAtiva === 'loja' && (
+          <Section title="🛍️ Relatório da Loja — Kit Atleta" onCSV={exportTabCSV} onPrint>
+            <DateFilter from={lojaFrom} to={lojaTo} onFrom={setLojaFrom} onTo={setLojaTo} />
+            <div style={{ display:'flex', gap:14, flexWrap:'wrap', marginBottom:22 }}>
+              {[
+                { label:'RESERVAS',        val: lojaFiltradas.length,       color:'var(--green)',  bg:'rgba(95,179,53,.1)' },
+                { label:'PENDENTES',        val: lojaPend,                   color:'var(--gold)',   bg:'rgba(201,166,86,.1)' },
+                { label:'RECEITA CONF.',    val: fmtR(receitaLoja),          color:'var(--lime)',   bg:'rgba(143,214,74,.08)' },
+              ].map(k => (
+                <div key={k.label} style={{ background:k.bg, borderRadius:10, padding:'12px 20px', flex:1, minWidth:120 }}>
+                  <div style={{ fontSize:11, color:'var(--muted)', fontWeight:700 }}>{k.label}</div>
+                  <div style={{ fontSize:24, fontWeight:900, color:k.color, marginTop:4 }}>{k.val}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Breakdown por produto */}
+            {lojaPorProdArr.length > 0 && (
+              <div style={{ marginBottom:22 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:'var(--muted)', marginBottom:10 }}>Itens mais reservados</div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                  {lojaPorProdArr.map(p => (
+                    <div key={p.label} style={{ background:'var(--card)', borderRadius:8, padding:'8px 14px',
+                      border:'1px solid var(--line)', fontSize:13 }}>
+                      <strong style={{ color:'var(--fg)' }}>{p.label}</strong>
+                      <span style={{ color:'var(--green)', fontWeight:700, marginLeft:8 }}>{p.value} un</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Tabela de reservas */}
+            {lojaFiltradas.length > 0 ? (
+              <div style={{ overflowX:'auto' }}>
+                <table className="table">
+                  <thead>
+                    <tr>
+                      {['#','Produto','Atleta','E-mail','Tam','Qtd','Total','Status','Data'].map(h=>(
+                        <th key={h}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lojaFiltradas.map(r => (
+                      <tr key={r.id}>
+                        <td style={{ color:'var(--muted)', fontSize:12 }}>{r.id}</td>
+                        <td style={{ fontWeight:600 }}>{r.produto||'—'}</td>
+                        <td>{r.nome||'—'}</td>
+                        <td style={{ fontSize:12, color:'var(--muted)' }}>{r.email||'—'}</td>
+                        <td>{r.tamanho||'—'}</td>
+                        <td style={{ textAlign:'center' }}>{r.qtd??1}</td>
+                        <td style={{ fontWeight:700, color:'var(--gold)' }}>{r.total!=null?fmtR(r.total):'—'}</td>
+                        <td><span style={{
+                          background: r.status==='confirmada'||r.status==='entregue' ? '#5FB33520' : r.status==='cancelada' ? '#e05c5c20' : '#C9A65620',
+                          color: r.status==='confirmada'||r.status==='entregue' ? '#5FB335' : r.status==='cancelada' ? '#e05c5c' : '#C9A656',
+                          borderRadius:10, padding:'2px 8px', fontSize:11, fontWeight:700,
+                        }}>{r.status}</span></td>
+                        <td style={{ fontSize:12, color:'var(--muted)', whiteSpace:'nowrap' }}>{r.criadoEm?fmtDate(r.criadoEm):'—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p style={{ color:'var(--muted)', textAlign:'center', padding:32 }}>Sem reservas no período selecionado.</p>
             )}
           </Section>
         )}

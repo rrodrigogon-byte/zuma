@@ -26,40 +26,6 @@ function TennisBall({ style }) {
   )
 }
 
-function useCountdown(target) {
-  const [diff, setDiff] = useState(0)
-  useEffect(() => {
-    const calc = () => setDiff(Math.max(0, new Date(target) - Date.now()))
-    calc()
-    const id = setInterval(calc, 1000)
-    return () => clearInterval(id)
-  }, [target])
-  const total = Math.floor(diff / 1000)
-  const days = Math.floor(total / 86400)
-  const hours = Math.floor((total % 86400) / 3600)
-  const minutes = Math.floor((total % 3600) / 60)
-  const seconds = total % 60
-  return { days, hours, minutes, seconds }
-}
-
-function CountdownUnit({ value, label }) {
-  return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(8px)',
-      borderRadius: 16, padding: '18px 24px', minWidth: 80,
-      border: '1px solid rgba(143,214,74,0.25)',
-    }}>
-      <span style={{ fontSize: 'clamp(2rem, 5vw, 3.2rem)', fontWeight: 900, color: '#8FD64A', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
-        {String(value).padStart(2, '0')}
-      </span>
-      <span style={{ fontSize: '0.7rem', color: '#a0c8a0', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 6 }}>
-        {label}
-      </span>
-    </div>
-  )
-}
-
 // ── Scroll reveal hook ────────────────────────────────────────────────────────
 
 function useReveal() {
@@ -93,6 +59,72 @@ function RevealSection({ children, style }) {
       }}
     >
       {children}
+    </div>
+  )
+}
+
+// ── Countdown ────────────────────────────────────────────────────────────────
+
+function useCountdown(targetDate) {
+  const calc = () => {
+    const diff = new Date(targetDate + 'T00:00:00') - new Date()
+    if (diff <= 0) return { d: 0, h: 0, m: 0, s: 0, ended: true }
+    const d = Math.floor(diff / 86400000)
+    const h = Math.floor((diff % 86400000) / 3600000)
+    const m = Math.floor((diff % 3600000) / 60000)
+    const s = Math.floor((diff % 60000) / 1000)
+    return { d, h, m, s, ended: false }
+  }
+  const [t, setT] = useState(calc)
+  useEffect(() => {
+    if (!targetDate) return
+    const id = setInterval(() => setT(calc()), 1000)
+    return () => clearInterval(id)
+  }, [targetDate])
+  return t
+}
+
+function CountdownUnit({ val, label }) {
+  return (
+    <div style={{ textAlign: 'center', minWidth: 52 }}>
+      <div style={{
+        fontSize: '1.8rem', fontWeight: 900, color: '#C9A656', lineHeight: 1,
+        fontVariantNumeric: 'tabular-nums',
+      }}>
+        {String(val).padStart(2, '0')}
+      </div>
+      <div style={{ fontSize: '0.65rem', color: '#8FD64A', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: 4 }}>
+        {label}
+      </div>
+    </div>
+  )
+}
+
+function CountdownBanner({ dataInicio, nomeEvento }) {
+  const { d, h, m, s, ended } = useCountdown(dataInicio)
+  if (!dataInicio || ended) return null
+  return (
+    <div style={{
+      display: 'inline-flex', alignItems: 'center', gap: 0,
+      background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(201,166,86,0.35)',
+      borderRadius: 16, padding: '14px 22px', marginBottom: 28,
+      backdropFilter: 'blur(8px)',
+    }}>
+      <div style={{ marginRight: 20, borderRight: '1px solid rgba(255,255,255,0.15)', paddingRight: 20 }}>
+        <div style={{ fontSize: '0.7rem', color: '#8FD64A', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 2 }}>
+          Começa em
+        </div>
+        <div style={{ fontSize: '0.78rem', color: '#c8e0b8', fontWeight: 500 }}>
+          {nomeEvento || 'Agro Open'}
+        </div>
+      </div>
+      <CountdownUnit val={d} label="dias" />
+      <div style={{ color: '#C9A656', fontWeight: 900, fontSize: '1.4rem', margin: '0 4px', lineHeight: 1, paddingBottom: 8 }}>:</div>
+      <CountdownUnit val={h} label="horas" />
+      <div style={{ color: '#C9A656', fontWeight: 900, fontSize: '1.4rem', margin: '0 4px', lineHeight: 1, paddingBottom: 8 }}>:</div>
+      <CountdownUnit val={m} label="min" />
+      <div style={{ color: '#C9A656', fontWeight: 900, fontSize: '1.4rem', margin: '0 4px', lineHeight: 1, paddingBottom: 8 }}>:</div>
+      <CountdownUnit val={s} label="seg" />
     </div>
   )
 }
@@ -221,13 +253,13 @@ function WhatsAppFAB() {
 
 export default function Home() {
   const navigate = useNavigate()
-  const { days, hours, minutes, seconds } = useCountdown('2026-09-07T08:00:00')
   const [ranking, setRanking] = useState([])
   const [rankingLoading, setRankingLoading] = useState(true)
   const [noticias, setNoticias] = useState([])
   const [noticiasLoading, setNoticiasLoading] = useState(true)
   const [totalInscritos, setTotalInscritos] = useState(null)    // null = ainda carregando
   const [categorias, setCategorias] = useState([])              // da API real
+  const [eventoInfo, setEventoInfo] = useState(null)            // { dataInicio, nomeEvento }
 
   useEffect(() => {
     // Ranking público
@@ -248,6 +280,10 @@ export default function Home() {
     // Categorias da API (para mostrar vagas reais)
     api.get('/api/categorias').catch(() => []).then(d => {
       if (Array.isArray(d) && d.length > 0) setCategorias(d)
+    })
+    // Info do evento (data, nome) para countdown
+    api.get('/api/info').catch(() => null).then(d => {
+      if (d?.dataInicio) setEventoInfo({ dataInicio: d.dataInicio, nomeEvento: d.nomeEvento || d.evento })
     })
   }, [])
 
@@ -295,9 +331,12 @@ export default function Home() {
           <span style={{ color: '#8FD64A' }}>DE TÊNIS</span>
         </h1>
 
-        <p style={{ color: '#a0c8a0', fontSize: '1.05rem', margin: '12px 0 32px', letterSpacing: '0.04em' }}>
+        <p style={{ color: '#a0c8a0', fontSize: '1.05rem', margin: '12px 0 24px', letterSpacing: '0.04em' }}>
           🏟️ Tangará Tênis Clube · UISA · Tangará da Serra – MT
         </p>
+
+        {/* Countdown até o evento */}
+        {eventoInfo && <CountdownBanner dataInicio={eventoInfo.dataInicio} nomeEvento={eventoInfo.nomeEvento} />}
 
         {/* Contador de inscritos — só exibe se totalInscritos > 0 */}
         {totalInscritos !== null && totalInscritos > 0 && (
@@ -317,19 +356,6 @@ export default function Home() {
             </div>
           </div>
         )}
-
-        {/* Countdown */}
-        <div style={{ marginBottom: 40 }}>
-          <p style={{ color: '#8FD64A', fontSize: '0.78rem', fontWeight: 800, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 16 }}>
-            Começa em
-          </p>
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <CountdownUnit value={days} label="Dias" />
-            <CountdownUnit value={hours} label="Horas" />
-            <CountdownUnit value={minutes} label="Min" />
-            <CountdownUnit value={seconds} label="Seg" />
-          </div>
-        </div>
 
         {/* CTAs */}
         <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>

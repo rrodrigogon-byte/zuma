@@ -259,7 +259,20 @@ export default function Bracket() {
     <div className="page-bracket">
       {/* Header */}
       <div className="bracket-header">
-        <h1 className="bracket-titulo">Chaves do Torneio</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
+          <h1 className="bracket-titulo" style={{ margin: 0 }}>🏆 Chaves do Torneio</h1>
+          {dados && (
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20,
+              background: '#5FB33518', color: '#5FB335', border: '1px solid #5FB33540' }}>
+              {formato === 'eliminatoria' ? 'Eliminatória' : formato === 'grupos' ? 'Fase de Grupos'
+                : formato === 'swiss' ? 'Suíço' : formato === 'roundrobin' ? 'Round Robin'
+                : formato === 'dupla_eliminacao' ? 'Dupla Eliminação' : formato}
+            </span>
+          )}
+        </div>
+        <p style={{ color: '#5a7a5a', margin: '0 0 16px', fontSize: '0.9rem' }}>
+          Selecione uma categoria para ver os confrontos
+        </p>
 
         {categorias.length > 0 && (
           <div className="bracket-cat-selector">
@@ -270,6 +283,9 @@ export default function Bracket() {
                 onClick={() => setCatSel(catVal(c))}
               >
                 {catLabel(c)}
+                {c.inscritos > 0 && (
+                  <span style={{ marginLeft: 5, fontSize: 10, opacity: 0.75 }}>{c.inscritos}</span>
+                )}
               </button>
             ))}
           </div>
@@ -294,7 +310,11 @@ export default function Bracket() {
       {loading ? (
         <p className="loading-msg">Carregando chave…</p>
       ) : !dados ? (
-        <p className="empty-msg">Chave ainda não gerada para esta categoria.</p>
+        <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+          <div style={{ fontSize: '3rem', marginBottom: 12 }}>🎾</div>
+          <p style={{ color: '#5a7a5a', fontSize: '1rem', fontWeight: 600 }}>Chave ainda não gerada para esta categoria.</p>
+          <p style={{ color: '#8aaa8a', fontSize: '0.85rem' }}>Aguarde o sorteio oficial ou escolha outra categoria acima.</p>
+        </div>
       ) : (
         <div className="bracket-content">
           {(formato === 'eliminatoria' || formato === 'dupla_eliminacao') && (
