@@ -273,6 +273,66 @@ export default function Clube() {
           </p>
         </Section>
 
+        {/* Instagram */}
+        <Section id="instagram" title="Siga o TTC no Instagram">
+          <p style={{ color: '#374151', lineHeight: 1.7, marginBottom: 24, fontSize: '1rem' }}>
+            Acompanhe o dia a dia do Tangará Tênis Clube: aulas, eventos, torneios e muito mais.
+            Siga <strong>@ttctga</strong> e faça parte da comunidade TTC nas redes sociais.
+          </p>
+
+          {/* Galeria de posts */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+            gap: 20,
+            marginBottom: 28,
+          }}>
+            {[
+              { id: 'DZVTOrVErwl', label: 'Feliz Dia do Tenista 🎾' },
+              { id: 'DZX7Hk9xP6W', label: 'Estrutura do clube' },
+              { id: 'DZgAYpEEn5J', label: 'Brasil na Copa 2026 ⚽🇧🇷' },
+              { id: 'DQbwqD0ku9-', label: 'Benefícios de Sócio' },
+            ].map(({ id, label }) => (
+              <div key={id} style={{
+                borderRadius: 12, overflow: 'hidden',
+                boxShadow: '0 2px 12px rgba(0,0,0,0.10)',
+                background: '#fff',
+                display: 'flex', flexDirection: 'column',
+              }}>
+                <iframe
+                  src={`https://www.instagram.com/p/${id}/embed/`}
+                  width="100%"
+                  height="420"
+                  style={{ border: 'none', display: 'block', minWidth: 0 }}
+                  scrolling="no"
+                  allowTransparency="true"
+                  loading="lazy"
+                  title={label}
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* CTA Instagram */}
+          <div style={{ textAlign: 'center' }}>
+            <a
+              href="https://www.instagram.com/ttctga/"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 10,
+                background: 'linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045)',
+                color: '#fff', padding: '13px 28px', borderRadius: 30,
+                fontWeight: 700, textDecoration: 'none', fontSize: '0.95rem',
+                boxShadow: '0 4px 16px rgba(130,58,180,0.35)',
+              }}
+            >
+              <span style={{ fontSize: '1.2rem' }}>📸</span>
+              Seguir @ttctga no Instagram
+            </a>
+          </div>
+        </Section>
+
         {/* Seja Sócio */}
         <Section id="seja-socio" title="Seja Sócio do TTC">
           <div style={{
