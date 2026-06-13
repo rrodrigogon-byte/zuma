@@ -120,6 +120,16 @@ const NAV_ADMIN_GROUPS = [
 // Lista plana para compatibilidade
 const NAV_ADMIN = NAV_ADMIN_GROUPS.flatMap(g => g.items)
 
+const NAV_ATLETA = [
+  { to: '/meu-painel',  icon: '🏠', label: 'Visão Geral', end: true },
+  { to: '/meu-painel?tab=jogos',       icon: '🎾', label: 'Meus Jogos' },
+  { to: '/meu-painel?tab=ranking',     icon: '🏆', label: 'Meu Ranking' },
+  { to: '/meu-painel?tab=inscricoes',  icon: '📋', label: 'Inscrições' },
+  { to: '/meu-painel?tab=chaves',      icon: '🎯', label: 'Minhas Chaves' },
+  { to: '/meu-painel?tab=historico',   icon: '📊', label: 'Histórico' },
+  { to: '/meu-painel?tab=perfil',      icon: '👤', label: 'Perfil' },
+]
+
 const NAV_PUBLIC = [
   { to: '/',            icon: '🏠', label: 'Home', end: true },
   { to: '/inscricao',   icon: '✍️', label: 'Inscrição' },
@@ -293,6 +303,7 @@ export default function Sidebar() {
 
         {isStaff && <Section label="Operações" items={NAV_OP} onNavClick={handleNavClick} badgesMap={badgesMap} />}
         {isOrg   && <AdminGroups groups={NAV_ADMIN_GROUPS} onNavClick={handleNavClick} />}
+        {isAtleta && <Section label="Portal do Atleta" items={NAV_ATLETA} onNavClick={handleNavClick} />}
         <Section label="Site Público" items={NAV_PUBLIC} onNavClick={handleNavClick} />
 
         {/* Bottom user area */}
@@ -309,7 +320,7 @@ export default function Sidebar() {
               </div>
               {isAtleta && (
                 <NavLink
-                  to="/perfil"
+                  to="/meu-painel"
                   style={({ isActive }) => ({
                     display: 'block',
                     textAlign: 'center',
@@ -319,14 +330,14 @@ export default function Sidebar() {
                     fontSize: 12,
                     fontWeight: 700,
                     textDecoration: 'none',
-                    background: isActive ? 'rgba(95,179,53,.18)' : 'rgba(95,179,53,.08)',
+                    background: isActive ? 'rgba(95,179,53,.22)' : 'rgba(95,179,53,.08)',
                     color: 'var(--green)',
-                    border: '1px solid rgba(95,179,53,.2)',
+                    border: '1px solid rgba(95,179,53,.25)',
                     transition: 'background 0.15s',
                   })}
                   onClick={handleNavClick}
                 >
-                  👤 Meu Perfil
+                  🏠 Meu Painel
                 </NavLink>
               )}
               <button

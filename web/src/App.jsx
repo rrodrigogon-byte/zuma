@@ -70,6 +70,7 @@ const AdminRanking    = lazy(() => import('./pages/admin/AdminRanking'))
 const Contatos        = lazy(() => import('./pages/admin/Contatos'))
 const AgendaQuadras   = lazy(() => import('./pages/public/AgendaQuadras'))
 const NoticiasPublic  = lazy(() => import('./pages/public/Noticias'))
+const MeuPainel       = lazy(() => import('./pages/atleta/MeuPainel'))
 
 function Loading() {
   return (
@@ -129,6 +130,9 @@ export default function App() {
           <Route path="/admin/ranking"        element={<Layout><AdminRanking /></Layout>} />
           <Route path="/admin/contatos"       element={<Layout><Contatos /></Layout>} />
         </Route>
+
+        {/* Portal do Atleta */}
+        <Route path="/meu-painel"  element={<Layout><MeuPainel /></Layout>} />
 
         {/* Público */}
         <Route path="/"            element={<Layout><Home /></Layout>} />

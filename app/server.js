@@ -12,6 +12,7 @@ import { gerarRoundRobin, tabelaRoundRobin } from './roundrobin.js';
 import { applyElo, ratingList } from './rating.js';
 import { gerarFaseGrupos, tabelasGrupos, gerarMataMata, gruposCompletos } from './grupos.js';
 import { gerarSuico, proximaRodada, tabelaSuico } from './swiss.js';
+import { sortearLiga, sortearProximaRodada, calcularTabela, registrarResultado, podeFinalizar } from './liga.js';
 import { gerarDuplaElim, reportDupla } from './doubleelim.js';
 import { criarPix, consultarStatus, pagamentosAtivos, pixInfo, gerarBrCode } from './pagamentos.js';
 import crypto from 'crypto';
@@ -2906,6 +2907,428 @@ app.patch('/api/admin/reservas/:id', auth, requireStaff, (req,res)=>{
   const d=db(); const r=(d.reservas||[]).find(x=>x.id==req.params.id);
   if(!r) return res.status(404).json({error:'não encontrada'});
   Object.assign(r, req.body); save(); res.json(r);
+});
+
+// =================== LIGAS DE RANKING ===================
+// Liga = competição por temporada com rodadas sorteadas, tabela e ranking acumulado
+
+// Garante estrutura no db
+function ensureLigas() { const d = db(); if (!d.ligas) d.ligas = {}; return d; }
+
+// ── Listar ligas públicas ─────────────────────────────────────────────────
+app.get('/api/ligas', (req, res) => {
+  const d = ensureLigas();
+  const lista = Object.values(d.ligas).map(l => ({
+    id: l.id, nome: l.nome, temporada: l.temporada, categoria: l.categoria,
+    formato: l.formato, status: l.status, rodadaAtual: l.rodadaAtual || 0,
+    totalRodadas: l.rodadas?.length || 0,
+    inscricoes: (l.inscricoes || []).filter(i => i.status === 'ativo').length,
+    descricao: l.descricao || '',
+  }));
+  res.json(lista.sort((a, b) => b.id - a.id));
+});
+
+// ── Detalhe público de uma liga ──────────────────────────────────────────
+app.get('/api/ligas/:id', (req, res) => {
+  const d = ensureLigas();
+  const liga = d.ligas[req.params.id];
+  if (!liga) return res.status(404).json({ error: 'liga não encontrada' });
+  const tabela = calcularTabela(liga);
+  res.json({
+    id: liga.id, nome: liga.nome, temporada: liga.temporada,
+    categoria: liga.categoria, formato: liga.formato,
+    status: liga.status, rodadaAtual: liga.rodadaAtual || 0,
+    config: liga.config, descricao: liga.descricao || '',
+    rodadas: liga.rodadas || [],
+    inscricoes: (liga.inscricoes || []).filter(i => i.status === 'ativo')
+      .map(i => ({ id: i.id, nome: i.nome, inscritoEm: i.inscritoEm })),
+    tabela,
+  });
+});
+
+// ── Inscrição pública na liga ────────────────────────────────────────────
+app.post('/api/ligas/:id/inscrever', publicLimit(), (req, res) => {
+  const d = ensureLigas();
+  const liga = d.ligas[req.params.id];
+  if (!liga) return res.status(404).json({ error: 'liga não encontrada' });
+  if (liga.status !== 'inscricoes') return res.status(400).json({ error: 'inscrições encerradas para esta liga' });
+  const { nome, email, tel } = req.body || {};
+  if (!nome || !email) return res.status(400).json({ error: 'nome e e-mail obrigatórios' });
+  const jaInscrito = (liga.inscricoes || []).find(i => i.email?.toLowerCase() === email.toLowerCase() && i.status === 'ativo');
+  if (jaInscrito) return res.status(400).json({ error: 'e-mail já inscrito nesta liga' });
+  liga.inscricoes = liga.inscricoes || [];
+  const insc = { id: nextId(), nome: String(nome).trim(), email: String(email).trim().toLowerCase(),
+    tel: tel || '', status: 'ativo', inscritoEm: new Date().toISOString() };
+  liga.inscricoes.push(insc);
+  save();
+  res.json({ ok: true, inscricao: insc, totalInscritos: liga.inscricoes.filter(i => i.status === 'ativo').length });
+});
+
+// ── Cancelar inscrição pública ────────────────────────────────────────────
+app.delete('/api/ligas/:id/inscrever', publicLimit(5), (req, res) => {
+  const d = ensureLigas();
+  const liga = d.ligas[req.params.id];
+  if (!liga) return res.status(404).json({ error: 'liga não encontrada' });
+  if (liga.status !== 'inscricoes') return res.status(400).json({ error: 'não é possível cancelar após início' });
+  const { email } = req.body || {};
+  const insc = (liga.inscricoes || []).find(i => i.email === email?.toLowerCase() && i.status === 'ativo');
+  if (!insc) return res.status(404).json({ error: 'inscrição não encontrada' });
+  insc.status = 'desistiu'; save();
+  res.json({ ok: true });
+});
+
+// ── Admin: criar liga ────────────────────────────────────────────────────
+app.post('/api/admin/ligas', auth, requireRole('admin', 'organizador'), (req, res) => {
+  const { nome, temporada, categoria, formato, descricao, config } = req.body || {};
+  if (!nome) return res.status(400).json({ error: 'nome obrigatório' });
+  const d = ensureLigas();
+  const id = nextId();
+  const liga = {
+    id, nome, temporada: temporada || new Date().getFullYear().toString(),
+    categoria: categoria || 'Geral', formato: formato || 'simples',
+    descricao: descricao || '', status: 'inscricoes',
+    rodadaAtual: 0, inscricoes: [], rodadas: [],
+    config: {
+      pontosVitoria: config?.pontosVitoria ?? 3,
+      pontosDerrota: config?.pontosDerrota ?? 1,
+      pontosWO: config?.pontosWO ?? 0,
+      pontosBye: config?.pontosBye ?? 2,
+      maxRodadas: config?.maxRodadas ?? null,
+      ...(config || {}),
+    },
+    criadaEm: new Date().toISOString(),
+  };
+  d.ligas[id] = liga; save();
+  auditoria(req.user, 'CRIAR_LIGA', { id, nome, categoria });
+  res.json(liga);
+});
+
+// ── Admin: editar liga ────────────────────────────────────────────────────
+app.patch('/api/admin/ligas/:id', auth, requireRole('admin', 'organizador'), (req, res) => {
+  const d = ensureLigas();
+  const liga = d.ligas[req.params.id];
+  if (!liga) return res.status(404).json({ error: 'não encontrada' });
+  const campos = ['nome', 'temporada', 'categoria', 'formato', 'descricao', 'status'];
+  campos.forEach(k => { if (req.body[k] !== undefined) liga[k] = req.body[k]; });
+  if (req.body.config) Object.assign(liga.config, req.body.config);
+  save();
+  res.json(liga);
+});
+
+// ── Admin: excluir liga ────────────────────────────────────────────────────
+app.delete('/api/admin/ligas/:id', auth, requireRole('admin'), (req, res) => {
+  const d = ensureLigas();
+  if (!d.ligas[req.params.id]) return res.status(404).json({ error: 'não encontrada' });
+  delete d.ligas[req.params.id]; save();
+  res.json({ ok: true });
+});
+
+// ── Admin: abrir / fechar inscrições ─────────────────────────────────────
+app.post('/api/admin/ligas/:id/status', auth, requireRole('admin', 'organizador'), (req, res) => {
+  const d = ensureLigas();
+  const liga = d.ligas[req.params.id];
+  if (!liga) return res.status(404).json({ error: 'não encontrada' });
+  const { status } = req.body || {};
+  const validos = ['inscricoes', 'em_andamento', 'encerrada'];
+  if (!validos.includes(status)) return res.status(400).json({ error: 'status inválido' });
+  liga.status = status; save();
+  res.json({ ok: true, status: liga.status });
+});
+
+// ── Admin: adicionar participante manualmente ─────────────────────────────
+app.post('/api/admin/ligas/:id/participantes', auth, requireStaff, (req, res) => {
+  const d = ensureLigas();
+  const liga = d.ligas[req.params.id];
+  if (!liga) return res.status(404).json({ error: 'não encontrada' });
+  const { nome, email, tel } = req.body || {};
+  if (!nome) return res.status(400).json({ error: 'nome obrigatório' });
+  liga.inscricoes = liga.inscricoes || [];
+  // Evita duplicata por e-mail
+  if (email && liga.inscricoes.find(i => i.email === email?.toLowerCase() && i.status === 'ativo'))
+    return res.status(400).json({ error: 'e-mail já inscrito' });
+  const insc = { id: nextId(), nome: String(nome).trim(),
+    email: email ? String(email).trim().toLowerCase() : '',
+    tel: tel || '', status: 'ativo', inscritoEm: new Date().toISOString() };
+  liga.inscricoes.push(insc);
+  save();
+  res.json({ ok: true, inscricao: insc });
+});
+
+// ── Admin: remover participante ────────────────────────────────────────────
+app.delete('/api/admin/ligas/:id/participantes/:inscId', auth, requireStaff, (req, res) => {
+  const d = ensureLigas();
+  const liga = d.ligas[req.params.id];
+  if (!liga) return res.status(404).json({ error: 'não encontrada' });
+  const insc = (liga.inscricoes || []).find(i => i.id == req.params.inscId);
+  if (!insc) return res.status(404).json({ error: 'participante não encontrado' });
+  insc.status = 'desistiu'; save();
+  res.json({ ok: true });
+});
+
+// ── Admin: gerar todas as rodadas de uma vez (Round-Robin completo) ───────
+app.post('/api/admin/ligas/:id/sortear', auth, requireRole('admin', 'organizador'), (req, res) => {
+  const d = ensureLigas();
+  const liga = d.ligas[req.params.id];
+  if (!liga) return res.status(404).json({ error: 'não encontrada' });
+  if (liga.rodadas && liga.rodadas.length > 0)
+    return res.status(400).json({ error: 'rodadas já geradas. Exclua todas para regenerar.' });
+  const ativos = (liga.inscricoes || []).filter(i => i.status === 'ativo');
+  if (ativos.length < 2) return res.status(400).json({ error: 'mínimo 2 participantes ativos' });
+  try {
+    const rodadas = sortearLiga(liga.inscricoes, liga.config);
+    liga.rodadas = rodadas;
+    liga.rodadaAtual = 1;
+    liga.status = 'em_andamento';
+    liga.rodadas[0].status = 'em_andamento';
+    liga.rodadas[0].geradaEm = new Date().toISOString();
+    save();
+    auditoria(req.user, 'SORTEAR_LIGA', { id: liga.id, nome: liga.nome, rodadas: rodadas.length });
+    res.json({ ok: true, totalRodadas: rodadas.length, liga: { ...liga, tabela: calcularTabela(liga) } });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ── Admin: gerar próxima rodada (modo suíço — por pontuação) ─────────────
+app.post('/api/admin/ligas/:id/proxima-rodada', auth, requireRole('admin', 'organizador'), (req, res) => {
+  const d = ensureLigas();
+  const liga = d.ligas[req.params.id];
+  if (!liga) return res.status(404).json({ error: 'não encontrada' });
+  const ultima = liga.rodadas?.[liga.rodadas.length - 1];
+  if (ultima && ultima.status !== 'encerrada')
+    return res.status(400).json({ error: 'encerre a rodada atual antes de gerar a próxima' });
+  try {
+    const nova = sortearProximaRodada(liga);
+    liga.rodadas = liga.rodadas || [];
+    nova.status = 'em_andamento';
+    liga.rodadas.push(nova);
+    liga.rodadaAtual = nova.numero;
+    save();
+    res.json({ ok: true, rodada: nova });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ── Admin: resetar rodadas ─────────────────────────────────────────────────
+app.delete('/api/admin/ligas/:id/rodadas', auth, requireRole('admin'), (req, res) => {
+  const d = ensureLigas();
+  const liga = d.ligas[req.params.id];
+  if (!liga) return res.status(404).json({ error: 'não encontrada' });
+  liga.rodadas = []; liga.rodadaAtual = 0; liga.status = 'inscricoes';
+  save();
+  res.json({ ok: true });
+});
+
+// ── Admin: lançar resultado de jogo ─────────────────────────────────────
+app.post('/api/admin/ligas/:id/resultado', auth, requireStaff, (req, res) => {
+  const d = ensureLigas();
+  const liga = d.ligas[req.params.id];
+  if (!liga) return res.status(404).json({ error: 'não encontrada' });
+  const { rodada, jogoId, sets, vencedor, tipo } = req.body || {};
+  if (rodada === undefined || jogoId === undefined) return res.status(400).json({ error: 'rodada e jogoId obrigatórios' });
+  try {
+    registrarResultado(liga, rodada, jogoId, { sets, vencedor, tipo });
+    // Avança rodada automático se encerrou
+    const rodadaObj = liga.rodadas[rodada];
+    if (rodadaObj.status === 'encerrada' && liga.rodadas[rodada + 1]) {
+      liga.rodadas[rodada + 1].status = 'em_andamento';
+      liga.rodadas[rodada + 1].geradaEm = liga.rodadas[rodada + 1].geradaEm || new Date().toISOString();
+      liga.rodadaAtual = rodada + 2; // 1-based
+    }
+    save();
+    res.json({ ok: true, jogo: liga.rodadas[rodada].jogos.find(j => j.id === jogoId),
+      tabela: calcularTabela(liga), rodadaStatus: rodadaObj.status });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ── Admin: encerrar jogo sem resultado (WO / abandono) ────────────────────
+app.post('/api/admin/ligas/:id/resultado-wo', auth, requireStaff, (req, res) => {
+  const d = ensureLigas();
+  const liga = d.ligas[req.params.id];
+  if (!liga) return res.status(404).json({ error: 'não encontrada' });
+  const { rodada, jogoId, vencedor, tipo } = req.body || {};
+  if (!vencedor) return res.status(400).json({ error: 'vencedor obrigatório para WO' });
+  try {
+    registrarResultado(liga, rodada, jogoId, { vencedor, tipo: tipo || 'wo' });
+    save();
+    res.json({ ok: true, tabela: calcularTabela(liga) });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ── Admin: encerrar liga + aplicar ao ranking geral ──────────────────────
+app.post('/api/admin/ligas/:id/finalizar', auth, requireRole('admin', 'organizador'), (req, res) => {
+  const d = ensureLigas();
+  const liga = d.ligas[req.params.id];
+  if (!liga) return res.status(404).json({ error: 'não encontrada' });
+  if (liga.status === 'encerrada') return res.status(400).json({ error: 'liga já encerrada' });
+  const tabela = calcularTabela(liga);
+  // Aplica pontos ao ranking geral do evento
+  d.ranking = d.ranking || { players: {} };
+  d.ranking.players = d.ranking.players || {};
+  for (const entry of tabela) {
+    const key = (liga.categoria + '|' + entry.nome).toLowerCase();
+    const p = d.ranking.players[key] || (d.ranking.players[key] = {
+      nome: entry.nome, categoria: liga.categoria, pontos: 0, vitorias: 0, derrotas: 0, torneios: 0
+    });
+    p.pontos += entry.pts;
+    p.vitorias += entry.v;
+    p.derrotas += entry.d;
+    p.torneios += 1;
+  }
+  // Campeão
+  if (tabela[0]) {
+    d.campeoes = d.campeoes || {};
+    d.campeoes[`Liga ${liga.nome} ${liga.temporada}`] = {
+      nome: tabela[0].nome, pts: tabela[0].pts, conquistadoEm: new Date().toISOString()
+    };
+  }
+  liga.status = 'encerrada';
+  liga.encerradaEm = new Date().toISOString();
+  liga.tabelaFinal = tabela;
+  save();
+  auditoria(req.user, 'FINALIZAR_LIGA', { id: liga.id, nome: liga.nome, campeao: tabela[0]?.nome });
+  res.json({ ok: true, tabela, campeao: tabela[0] });
+});
+
+// ── Admin: full detail (inclui e-mails / tels dos inscritos) ─────────────
+app.get('/api/admin/ligas/:id', auth, requireStaff, (req, res) => {
+  const d = ensureLigas();
+  const liga = d.ligas[req.params.id];
+  if (!liga) return res.status(404).json({ error: 'não encontrada' });
+  res.json({ ...liga, tabela: calcularTabela(liga) });
+});
+
+// =================== PORTAL DO ATLETA — rotas extras ===================
+
+// GET /api/me/jogos — próximos e recentes jogos do atleta logado (busca por nome)
+app.get('/api/me/jogos', auth, (req, res) => {
+  const u = (db().usuarios || []).find(x => x.id == req.user.id);
+  if (!u) return res.status(404).json({ error: 'não encontrado' });
+  const nome = (u.nome || '').toLowerCase();
+  const agenda = db().agenda || [];
+  // Busca confrontos que contenham o nome do atleta
+  const meus = agenda
+    .filter(j => j.confronto && j.confronto.toLowerCase().includes(nome.split(' ')[0].toLowerCase()))
+    .sort((a, b) => {
+      const da = (a.data || '') + (a.hora || '');
+      const db2 = (b.data || '') + (b.hora || '');
+      return da.localeCompare(db2);
+    });
+  const hoje = new Date().toISOString().slice(0, 10);
+  const proximos = meus.filter(j => !j.data || j.data >= hoje);
+  const concluidos = meus.filter(j => j.data && j.data < hoje && j.status === 'concluido');
+  res.json({ proximos, concluidos });
+});
+
+// GET /api/me/historico — histórico completo de partidas do atleta logado
+app.get('/api/me/historico', auth, (req, res) => {
+  const u = (db().usuarios || []).find(x => x.id == req.user.id);
+  if (!u) return res.status(404).json({ error: 'não encontrado' });
+  const nome = u.nome || '';
+  // Coleta partidas de todas as chaves (bracket)
+  function coletarPartidasAtleta(nomeAtleta) {
+    const d = db();
+    const partidas = [];
+    const n = nomeAtleta.toLowerCase();
+    // chaves simples
+    Object.entries(d.chaves || {}).forEach(([cat, chave]) => {
+      (chave.rounds || []).forEach((round, ri) => {
+        round.forEach(match => {
+          if (!match || !match.a || !match.b) return;
+          const nA = (match.a.nome || match.a || '').toLowerCase();
+          const nB = (match.b.nome || match.b || '').toLowerCase();
+          if (!nA.includes(n.split(' ')[0]) && !nB.includes(n.split(' ')[0])) return;
+          const meuNome = nA.includes(n.split(' ')[0]) ? (match.a.nome || match.a) : (match.b.nome || match.b);
+          const advNome = nA.includes(n.split(' ')[0]) ? (match.b.nome || match.b) : (match.a.nome || match.a);
+          if (!match.vencedor) return;
+          const win = (match.vencedor || '').toLowerCase().includes(n.split(' ')[0]);
+          partidas.push({
+            adversario: advNome,
+            resultado: win ? 'V' : 'D',
+            placar: match.sets ? match.sets.map(s => `${s[0]}-${s[1]}`).join(' ') : '',
+            fase: `R${ri + 1}`,
+            categoria: cat,
+            fonte: 'chave',
+          });
+        });
+      });
+    });
+    // agenda concluída
+    (d.agenda || []).filter(j => j.status === 'concluido' && j.confronto && j.confronto.toLowerCase().includes(n.split(' ')[0])).forEach(j => {
+      const partes = (j.confronto || '').split(/\s+x\s+/i);
+      const adversario = partes.length === 2
+        ? (partes[0].toLowerCase().includes(n.split(' ')[0]) ? partes[1] : partes[0])
+        : j.confronto;
+      const win = j.vencedor && j.vencedor.toLowerCase().includes(n.split(' ')[0]);
+      const p1 = j.placar1 || '';
+      const p2 = j.placar2 || '';
+      partidas.push({
+        adversario: adversario.trim(),
+        resultado: j.vencedor ? (win ? 'V' : 'D') : '?',
+        placar: p1 && p2 ? `${p1} × ${p2}` : '',
+        fase: j.fase || '',
+        categoria: j.categoria || '',
+        data: j.data || '',
+        fonte: 'agenda',
+      });
+    });
+    return partidas;
+  }
+  const historico = coletarPartidasAtleta(nome);
+  const v = historico.filter(p => p.resultado === 'V').length;
+  const d2 = historico.filter(p => p.resultado === 'D').length;
+  res.json({ historico, vitorias: v, derrotas: d2, total: historico.length });
+});
+
+// POST /api/me/confirmar-resultado/:agendaId — atleta confirma/contesta placar do jogo
+app.post('/api/me/confirmar-resultado/:agendaId', auth, (req, res) => {
+  const u = (db().usuarios || []).find(x => x.id == req.user.id);
+  if (!u) return res.status(404).json({ error: 'não encontrado' });
+  const d = db();
+  const jogo = (d.agenda || []).find(j => j.id == req.params.agendaId);
+  if (!jogo) return res.status(404).json({ error: 'jogo não encontrado' });
+  const { acao, obs } = req.body || {}; // acao: 'confirmar' | 'contestar'
+  if (!['confirmar', 'contestar'].includes(acao)) return res.status(400).json({ error: 'acao inválida' });
+  jogo.confirmacaoAtleta = jogo.confirmacaoAtleta || {};
+  const nomeAtleta = u.nome || '';
+  jogo.confirmacaoAtleta[String(u.id)] = {
+    atleta: nomeAtleta,
+    acao,
+    obs: obs || '',
+    em: new Date().toISOString(),
+  };
+  // Se ambos os atletas confirmaram, marca como 'dupla-confirmado'
+  const partes = (jogo.confronto || '').split(/\s+x\s+/i).map(s => s.trim());
+  const confs = Object.values(jogo.confirmacaoAtleta || {});
+  if (confs.length >= 2 && confs.every(c => c.acao === 'confirmar')) {
+    jogo.status = 'dupla-confirmado';
+  }
+  save();
+  res.json({ ok: true, jogo });
+});
+
+// GET /api/me/chave — chave(s) do torneio onde o atleta logado está inscrito
+app.get('/api/me/chave', auth, (req, res) => {
+  const u = (db().usuarios || []).find(x => x.id == req.user.id);
+  if (!u) return res.status(404).json({ error: 'não encontrado' });
+  const nome = (u.nome || '').toLowerCase();
+  const chaves = db().chaves || {};
+  const minhasChaves = Object.entries(chaves)
+    .filter(([, ch]) => {
+      const round0 = ch.rounds?.[0] || [];
+      return round0.some(e => e && !e.bye && ((e.nome || e || '').toLowerCase()).includes(nome.split(' ')[0]));
+    })
+    .map(([cat, ch]) => {
+      const round0 = ch.rounds?.[0] || [];
+      const idx = round0.findIndex(e => e && !e.bye && ((e.nome || e || '').toLowerCase()).includes(nome.split(' ')[0]));
+      return { categoria: cat, size: ch.size, finalizada: !!ch.finalizada, posicao: idx + 1, chave: ch };
+    });
+  res.json(minhasChaves);
 });
 
 // ---- estático: serve React SPA (build do web/) ----

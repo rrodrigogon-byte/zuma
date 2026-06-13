@@ -1,0 +1,170 @@
+{
+  "admins": [],
+  "usuarios": [
+    {
+      "id": 1,
+      "nome": "Administrador",
+      "email": "admin",
+      "senhaHash": "$2a$10$bKohVQonVNJpuZ5maz.KN.IL25IcjcEBwjBkBCCVbBGsMGhj0o6eO",
+      "role": "admin",
+      "telefone": "",
+      "ativo": true,
+      "criadoEm": "2026-06-13T20:42:27.124Z"
+    }
+  ],
+  "inscricoes": [],
+  "chaves": {},
+  "ranking": {
+    "players": {}
+  },
+  "campeoes": {},
+  "torneios": [],
+  "assinaturas": [],
+  "ingressos": [],
+  "comandas": [],
+  "reservas": [],
+  "patrocinadores": [],
+  "estoque": {},
+  "ligas": {},
+  "professores": [],
+  "aulas": [],
+  "loja": [
+    {
+      "id": 2,
+      "cod": "AOT-001",
+      "nome": "Camiseta Oficial Agro Open",
+      "cat": "Vestuário",
+      "emoji": "👕",
+      "preco": 85,
+      "estoque": 200,
+      "desc": "Dri-fit 140g/m² UV50+. Logo bordado no peito esquerdo + TTC na manga. Tamanhos: PP ao XG + infantil (4–12).",
+      "ativo": true,
+      "criadoEm": "2026-06-13T20:42:27.129Z"
+    },
+    {
+      "id": 3,
+      "cod": "AOT-002",
+      "nome": "Boné Oficial Agro Open",
+      "cat": "Bonés",
+      "emoji": "🧢",
+      "preco": 75,
+      "estoque": 200,
+      "desc": "Algodão sarjado 100% Verde Escuro. Aba curva dad cap 6 gomos, ajustável (54–60cm). Bordado 3D frente + lateral.",
+      "ativo": true,
+      "criadoEm": "2026-06-13T20:42:27.130Z"
+    },
+    {
+      "id": 4,
+      "cod": "AOT-003",
+      "nome": "Camiseta Premium Monograma AO",
+      "cat": "Vestuário",
+      "emoji": "👕",
+      "preco": 95,
+      "estoque": 150,
+      "desc": "Dri-fit 140g/m² UV50+. Monograma \"AO\" grande no peito (silk) + TTC na manga. PP ao XG. Linha exclusiva evento.",
+      "ativo": true,
+      "criadoEm": "2026-06-13T20:42:27.130Z"
+    },
+    {
+      "id": 5,
+      "cod": "AOT-004",
+      "nome": "Boné Premium Monograma AO",
+      "cat": "Bonés",
+      "emoji": "🧢",
+      "preco": 85,
+      "estoque": 150,
+      "desc": "Algodão sarjado 100% Verde Escuro. Monograma AO bordado 3D grande na frente. Ajustável (54–60cm).",
+      "ativo": true,
+      "criadoEm": "2026-06-13T20:42:27.130Z"
+    },
+    {
+      "id": 6,
+      "cod": "AOT-005",
+      "nome": "Meias Esportivas Agro Open",
+      "cat": "Acessórios",
+      "emoji": "🧦",
+      "preco": 35,
+      "estoque": 200,
+      "desc": "Algodão 60% + Poliamida + Elastano. Branco c/ detalhe verde limão. Cushion reforçado. Tam: 35-38, 39-42, 43-46.",
+      "ativo": true,
+      "criadoEm": "2026-06-13T20:42:27.130Z"
+    },
+    {
+      "id": 7,
+      "cod": "AOT-006",
+      "nome": "Sacola Tote Bag Oficial",
+      "cat": "Acessórios",
+      "emoji": "👜",
+      "preco": 45,
+      "estoque": 300,
+      "desc": "Lona algodão cru 100%, 280g/m². 40×45×10cm, alça 60cm. Logo silk verde escuro + \"07-13 SET 2026\".",
+      "ativo": true,
+      "criadoEm": "2026-06-13T20:42:27.130Z"
+    },
+    {
+      "id": 8,
+      "cod": "AOT-007",
+      "nome": "Garrafa Squeeze 750ml",
+      "cat": "Equipamentos",
+      "emoji": "🍶",
+      "preco": 55,
+      "estoque": 200,
+      "desc": "Plástico BPA-Free (Tritan) 750ml. Verde Escuro matte, tampa sport cap flip-top verde limão. Monograma AO silk.",
+      "ativo": true,
+      "criadoEm": "2026-06-13T20:42:27.131Z"
+    },
+    {
+      "id": 9,
+      "cod": "AOT-008",
+      "nome": "Toalhinha de Tênis 50×90cm",
+      "cat": "Equipamentos",
+      "emoji": "🏊",
+      "preco": 65,
+      "estoque": 200,
+      "desc": "Algodão 100% felpudo 380g/m². 50×90cm. Verde Escuro com viés verde limão. Logo bordado canto inferior.",
+      "ativo": true,
+      "criadoEm": "2026-06-13T20:42:27.131Z"
+    },
+    {
+      "id": 10,
+      "cod": "AOT-009",
+      "nome": "Pulseira de Identificação",
+      "cat": "Acessórios",
+      "emoji": "📿",
+      "preco": 25,
+      "estoque": 250,
+      "desc": "Silicone hipoalergênico, relevo gravado. \"AGRO OPEN • 4ª EDIÇÃO • TANGARÁ-MT • 2026\". Credencial oficial do atleta.",
+      "ativo": true,
+      "criadoEm": "2026-06-13T20:42:27.131Z"
+    },
+    {
+      "id": 11,
+      "cod": "AOT-010",
+      "nome": "Munhequeira Oficial (Par)",
+      "cat": "Acessórios",
+      "emoji": "🤝",
+      "preco": 40,
+      "estoque": 200,
+      "desc": "Algodão felpudo terry cotton, elastano interno. 7,5cm largura. Monograma AO verde limão bordado. Vendido em par.",
+      "ativo": true,
+      "criadoEm": "2026-06-13T20:42:27.131Z"
+    }
+  ],
+  "vendasLoja": [],
+  "cupons": [],
+  "elo": {
+    "players": {}
+  },
+  "gruposEventos": {},
+  "suicos": {},
+  "duplas": {},
+  "socios": [],
+  "campanhas": [],
+  "pagamentos": [],
+  "auditoria": [],
+  "agenda": [],
+  "cardapio": [],
+  "contatos": [],
+  "config": {},
+  "seq": 13
+}

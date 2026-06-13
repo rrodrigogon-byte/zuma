@@ -59,12 +59,12 @@ export default function Login() {
       } else if (mode === 'atleta') {
         const data = await api.post('/api/auth/login', { email, senha })
         login(data.token, data.user || { email, role: 'atleta' }, true)
-        navigate('/')
+        navigate('/meu-painel')
       } else if (mode === 'cadastro') {
         const data = await api.post('/api/auth/registro', { nome: cadNome, email: cadEmail, senha: cadSenha })
         login(data.token, data.user || { nome: cadNome, email: cadEmail, role: 'atleta' }, true)
-        toast('Conta criada com sucesso! Bem-vindo(a)!', 'success')
-        navigate('/')
+        toast('Conta criada com sucesso! Bem-vindo(a)! 🎾', 'success')
+        navigate('/meu-painel')
       } else if (mode === 'esqueci') {
         await api.post('/api/auth/esqueci-senha', { email: esqEmail }).catch(() => {})
         setEsqSent(true)
