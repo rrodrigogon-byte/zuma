@@ -2,15 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../../lib/api'
 
-const CATEGORIAS = [
-  { nome: 'Simples Masculino A', icon: '🎾', desc: 'Categoria de alto nível', preco: 'R$ 120', vagas: 32, restantes: 14 },
-  { nome: 'Simples Masculino B', icon: '🎾', desc: 'Categoria intermediária', preco: 'R$ 100', vagas: 32, restantes: 20 },
-  { nome: 'Simples Feminino', icon: '👩', desc: 'Aberta a todas as níveis', preco: 'R$ 100', vagas: 24, restantes: 18 },
-  { nome: 'Duplas Masculinas', icon: '👥', desc: 'Duplas abertas', preco: 'R$ 80/atleta', vagas: 16, restantes: 10 },
-  { nome: 'Duplas Mistas', icon: '💑', desc: 'Homem + Mulher', preco: 'R$ 80/atleta', vagas: 16, restantes: 12 },
-  { nome: 'Masters +40', icon: '🏆', desc: 'Sênior 40 anos ou mais', preco: 'R$ 100', vagas: 24, restantes: 16 },
-]
-
+// Categorias e patrocinadores fixos do evento (configurações do torneio)
 const PATROCINADORES = [
   { nome: 'UISA Agroindustrial', icon: '🌾', cor: '#5FB335' },
   { nome: 'Tangará Tênis Clube', icon: '🎾', cor: '#C9A656' },
@@ -20,11 +12,9 @@ const PATROCINADORES = [
 const INFO_CARDS = [
   { icon: '📅', label: 'Datas', value: '07 a 13 Set 2026', sub: 'Domingo a Sábado' },
   { icon: '📍', label: 'Local', value: 'Tangará Tênis Clube', sub: 'Tangará da Serra – MT' },
-  { icon: '🎾', label: 'Categorias', value: '6 categorias', sub: 'Masc · Fem · Misto · Sênior' },
+  { icon: '🎾', label: 'Categorias', value: '14 categorias', sub: 'Masc · Fem · Misto · Sênior' },
   { icon: '🏆', label: 'Premiação', value: 'R$ 5.000', sub: 'Em prêmios + troféus' },
 ]
-
-const TOTAL_INSCRITOS_FAKE = 87
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -236,15 +226,28 @@ export default function Home() {
   const [rankingLoading, setRankingLoading] = useState(true)
   const [noticias, setNoticias] = useState([])
   const [noticiasLoading, setNoticiasLoading] = useState(true)
+  const [totalInscritos, setTotalInscritos] = useState(null)    // null = ainda carregando
+  const [categorias, setCategorias] = useState([])              // da API real
 
   useEffect(() => {
+    // Ranking público
     api.get('/api/ranking').catch(() => []).then(d => {
       setRanking(Array.isArray(d) ? d.slice(0, 3) : [])
       setRankingLoading(false)
     })
+    // Notícias publicadas
     api.get('/api/noticias?publicado=1').catch(() => []).then(d => {
       setNoticias(Array.isArray(d) ? d.slice(0, 3) : d?.noticias?.slice(0, 3) ?? [])
       setNoticiasLoading(false)
+    })
+    // Contagem real de inscrições aprovadas/pagas (endpoint público de inscrições)
+    api.get('/api/inscricoes-count').catch(() => null).then(d => {
+      const count = d?.total ?? d?.count ?? null
+      setTotalInscritos(typeof count === 'number' ? count : null)
+    })
+    // Categorias da API (para mostrar vagas reais)
+    api.get('/api/categorias').catch(() => []).then(d => {
+      if (Array.isArray(d) && d.length > 0) setCategorias(d)
     })
   }, [])
 
@@ -296,22 +299,24 @@ export default function Home() {
           🏟️ Tangará Tênis Clube · UISA · Tangará da Serra – MT
         </p>
 
-        {/* Contador de inscritos */}
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 10,
-          background: 'rgba(95,179,53,0.12)', border: '1px solid rgba(95,179,53,0.3)',
-          borderRadius: 12, padding: '10px 20px', marginBottom: 28,
-        }}>
-          <span style={{ fontSize: '1.5rem' }}>🎾</span>
-          <div style={{ textAlign: 'left' }}>
-            <div style={{ fontSize: 'clamp(1.5rem, 4vw, 2.2rem)', fontWeight: 900, color: '#8FD64A', lineHeight: 1 }}>
-              <AnimatedCounter target={TOTAL_INSCRITOS_FAKE} />
-            </div>
-            <div style={{ fontSize: '0.72rem', color: '#a0c8a0', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-              atletas inscritos
+        {/* Contador de inscritos — só exibe se totalInscritos > 0 */}
+        {totalInscritos !== null && totalInscritos > 0 && (
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 10,
+            background: 'rgba(95,179,53,0.12)', border: '1px solid rgba(95,179,53,0.3)',
+            borderRadius: 12, padding: '10px 20px', marginBottom: 28,
+          }}>
+            <span style={{ fontSize: '1.5rem' }}>🎾</span>
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontSize: 'clamp(1.5rem, 4vw, 2.2rem)', fontWeight: 900, color: '#8FD64A', lineHeight: 1 }}>
+                <AnimatedCounter target={totalInscritos} />
+              </div>
+              <div style={{ fontSize: '0.72rem', color: '#a0c8a0', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                atletas inscritos
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Countdown */}
         <div style={{ marginBottom: 40 }}>
@@ -389,7 +394,7 @@ export default function Home() {
         </section>
       </RevealSection>
 
-      {/* ── CATEGORIAS ── */}
+      {/* ── CATEGORIAS — exibe se API retornar dados; caso contrário mostra CTA simples ── */}
       <RevealSection>
         <section style={{ background: 'linear-gradient(180deg,#f0f4e8 0%,#e8f0dc 100%)', padding: '60px 24px' }}>
           <div style={{ maxWidth: 1000, margin: '0 auto' }}>
@@ -397,47 +402,52 @@ export default function Home() {
               <h2 style={{ fontSize: '2rem', fontWeight: 900, color: '#0E2E1C', margin: '0 0 8px' }}>🎾 Categorias</h2>
               <p style={{ color: '#5a7a5a', margin: 0 }}>Escolha sua categoria e garanta sua vaga</p>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-              {CATEGORIAS.map((cat, i) => {
-                const pct = Math.round((cat.vagas - cat.restantes) / cat.vagas * 100)
-                return (
-                  <div key={i} style={{
-                    background: '#fff', borderRadius: 18, padding: '22px 20px',
-                    boxShadow: '0 2px 14px rgba(0,0,0,0.06)',
-                    border: '1px solid rgba(95,179,53,0.12)',
-                    cursor: 'pointer', transition: 'transform .15s, box-shadow .15s, border-color .15s',
-                  }}
-                    onClick={() => navigate('/inscricao')}
-                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(95,179,53,0.18)'; e.currentTarget.style.borderColor = '#5FB335' }}
-                    onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 2px 14px rgba(0,0,0,0.06)'; e.currentTarget.style.borderColor = 'rgba(95,179,53,0.12)' }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
-                      <div style={{
-                        width: 48, height: 48, borderRadius: 14, flexShrink: 0,
-                        background: 'linear-gradient(135deg,#5FB335,#8FD64A)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem',
-                      }}>{cat.icon}</div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 800, color: '#0E2E1C', fontSize: '0.95rem' }}>{cat.nome}</div>
-                        <div style={{ fontSize: '0.78rem', color: '#7a9a7a', marginTop: 2 }}>{cat.desc}</div>
-                      </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#5FB335' }}>{cat.preco}</div>
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#7a9a7a', marginBottom: 4 }}>
-                        <span>{cat.restantes} vagas restantes</span>
-                        <span>{pct}% preenchido</span>
-                      </div>
-                      <div style={{ background: '#e8f0dc', borderRadius: 999, height: 6, overflow: 'hidden' }}>
-                        <div style={{ width: `${pct}%`, height: '100%', background: pct > 75 ? '#e05555' : 'linear-gradient(90deg,#5FB335,#8FD64A)', borderRadius: 999, transition: 'width .4s' }} />
+
+            {categorias.length > 0 ? (
+              /* Grid de categorias com dados reais da API */
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                {categorias.slice(0, 12).map((cat, i) => {
+                  const precoFmt = cat.preco ? `R$ ${Number(cat.preco).toFixed(0)}` : 'Sob consulta'
+                  const icons = ['🎾','🎾','👩','👥','💑','🏆','🏅','⭐','🎯','🔥','💪','🌟']
+                  return (
+                    <div key={cat.id ?? i} style={{
+                      background: '#fff', borderRadius: 18, padding: '22px 20px',
+                      boxShadow: '0 2px 14px rgba(0,0,0,0.06)',
+                      border: '1px solid rgba(95,179,53,0.12)',
+                      cursor: 'pointer', transition: 'transform .15s, box-shadow .15s, border-color .15s',
+                    }}
+                      onClick={() => navigate('/inscricao')}
+                      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(95,179,53,0.18)'; e.currentTarget.style.borderColor = '#5FB335' }}
+                      onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 2px 14px rgba(0,0,0,0.06)'; e.currentTarget.style.borderColor = 'rgba(95,179,53,0.12)' }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                        <div style={{
+                          width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+                          background: 'linear-gradient(135deg,#5FB335,#8FD64A)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem',
+                        }}>{icons[i % icons.length]}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 800, color: '#0E2E1C', fontSize: '0.9rem', lineHeight: 1.3 }}>{cat.nome}</div>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#5FB335', marginTop: 4 }}>{precoFmt}</div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )
-              })}
-            </div>
+                  )
+                })}
+              </div>
+            ) : (
+              /* Fallback elegante quando a API não retornou categorias */
+              <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                <div style={{ fontSize: '3rem', marginBottom: 12 }}>🎾</div>
+                <div style={{ color: '#5a7a5a', fontSize: '1rem', marginBottom: 8 }}>
+                  <strong style={{ color: '#0E2E1C' }}>14 categorias disponíveis</strong>
+                </div>
+                <div style={{ color: '#7a9a7a', fontSize: '0.9rem' }}>
+                  Masc PRO · 1ª a 5ª Classe · Veteranos · Feminino · Duplas
+                </div>
+              </div>
+            )}
+
             <div style={{ textAlign: 'center', marginTop: 32 }}>
               <button onClick={() => navigate('/inscricao')} style={{
                 background: 'linear-gradient(135deg,#5FB335,#8FD64A)', color: '#0E2E1C',
@@ -448,7 +458,7 @@ export default function Home() {
                 onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
                 onMouseLeave={e => e.currentTarget.style.transform = ''}
               >
-                Ver todas as categorias →
+                Inscreva-se agora →
               </button>
             </div>
           </div>

@@ -12,7 +12,7 @@ const STATUS_BADGE = {
 }
 const STATUS_OPTS = ['todos', 'pendente', 'confirmada', 'entregue', 'cancelada']
 
-const EMPTY_PROD = { nome: '', cat: 'Kit', preco: '', estoque: '', descricao: '' }
+const EMPTY_PROD = { nome: '', cat: 'Kit', preco: '', estoque: '', descricao: '', imagem: '' }
 
 function KpiCard({ label, valor, icon, color }) {
   return (
@@ -124,7 +124,7 @@ export default function AdminLoja() {
   function abrirNovo() { setEditando(null); setForm(EMPTY_PROD); setModal(true) }
   function abrirEdit(p) {
     setEditando(p.id)
-    setForm({ nome: p.nome, cat: p.cat, preco: p.preco, estoque: p.estoque, descricao: p.descricao || '' })
+    setForm({ nome: p.nome, cat: p.cat, preco: p.preco, estoque: p.estoque, descricao: p.descricao || '', imagem: p.imagem || '' })
     setModal(true)
   }
 
@@ -133,7 +133,7 @@ export default function AdminLoja() {
     if (!form.preco || isNaN(form.preco)) return toast('Preço inválido', 'error')
     setSaving(true)
     try {
-      const body = { ...form, preco: parseFloat(form.preco), estoque: parseInt(form.estoque) || 0 }
+      const body = { ...form, preco: parseFloat(form.preco), estoque: parseInt(form.estoque) || 0, imagem: form.imagem?.trim() || '' }
       if (editando) {
         await api.patch(`/api/admin/loja/${editando}`, body)
         toast('Produto atualizado')
@@ -268,19 +268,27 @@ export default function AdminLoja() {
         <table style={S.table}>
           <thead>
             <tr>
-              {['Nome', 'Categoria', 'Preço', 'Estoque', 'Descrição', ''].map(h => (
+              {['Foto', 'Nome', 'Categoria', 'Preço', 'Estoque', 'Descrição', ''].map(h => (
                 <th key={h} style={S.th}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {produtosFiltrados.length === 0 && (
-              <tr><td colSpan={6} style={{ ...S.td, color: 'var(--muted)', textAlign: 'center', padding: '2rem' }}>
+              <tr><td colSpan={7} style={{ ...S.td, color: 'var(--muted)', textAlign: 'center', padding: '2rem' }}>
                 Nenhum produto encontrado.
               </td></tr>
             )}
             {produtosFiltrados.map(p => (
               <tr key={p.id}>
+                <td style={{ ...S.td, width: 52, padding: '0.4rem 0.5rem' }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)', background: 'var(--surface2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
+                    {p.imagem
+                      ? <img src={p.imagem} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display='none'; e.target.parentNode.innerHTML='📦' }} />
+                      : '📦'
+                    }
+                  </div>
+                </td>
                 <td style={S.td}><strong>{p.nome}</strong></td>
                 <td style={S.td}><span style={S.badge('#C9A656')}>{p.cat}</span></td>
                 <td style={S.td}>{fmtR(p.preco)}</td>
@@ -289,7 +297,7 @@ export default function AdminLoja() {
                     {p.estoque > 0 ? `${p.estoque} un` : '⚠ SEM ESTOQUE'}
                   </span>
                 </td>
-                <td style={{ ...S.td, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <td style={{ ...S.td, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {p.descricao || '—'}
                 </td>
                 <td style={S.td}>
@@ -410,6 +418,21 @@ export default function AdminLoja() {
               <input style={S.input} type="number" min="0" value={form.estoque}
                 onChange={e => setForm(f => ({ ...f, estoque: e.target.value }))} placeholder="0" />
             </div>
+          </div>
+          <div style={S.field}>
+            <label style={S.label}>URL da Imagem</label>
+            <input style={S.input} type="url" value={form.imagem}
+              onChange={e => setForm(f => ({ ...f, imagem: e.target.value }))}
+              placeholder="https://exemplo.com/foto-produto.jpg" />
+            {form.imagem && (
+              <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <img src={form.imagem} alt="preview"
+                  style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }}
+                  onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'inline' }}
+                />
+                <span style={{ display: 'none', fontSize: '0.75rem', color: '#e05c5c' }}>⚠ URL inválida ou imagem não carregou</span>
+              </div>
+            )}
           </div>
           <div style={S.field}>
             <label style={S.label}>Descrição</label>

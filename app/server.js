@@ -348,6 +348,15 @@ app.get('/api/atp', async (req,res)=> res.json(await tennisRanking('ATP')));
 app.get('/api/wta', async (req,res)=> res.json(await tennisRanking('WTA')));
 app.get('/api/noticias', async (req,res)=> res.json(await tennisNews()));
 
+// Contagem pública de inscrições aprovadas/pagas (sem expor dados pessoais)
+// Usado pela Home.jsx para mostrar contador real de atletas inscritos
+app.get('/api/inscricoes-count', (req,res)=>{
+  const d = db();
+  const total = (d.inscricoes||[]).filter(i => i.status !== 'recusada' && i.status !== 'cancelada').length;
+  const aprovadas = (d.inscricoes||[]).filter(i => i.status === 'aprovada' || i.status === 'validada' || i.pago === true).length;
+  res.json({ total, aprovadas });
+});
+
 // =================== API ADMIN ===================
 // Login do SISTEMA (admin/organizador/staff) — compatível com o painel atual
 app.post('/api/admin/login', (req,res)=>{
@@ -1653,7 +1662,10 @@ app.get('/api/loja', (req,res)=> {
   seedLoja();
   res.json((db().loja||[]).filter(p=>p.ativo!==false).map(p=>({
     id:p.id, cod:p.cod||'', nome:p.nome, cat:p.cat, emoji:p.emoji||'📦',
-    preco:p.preco, estoque:p.estoque, esgotado:p.estoque<=0, desc:p.desc||'',
+    preco:p.preco, estoque:p.estoque, esgotado:p.estoque<=0,
+    // descricao: aceita tanto 'descricao' (admin) quanto 'desc' (seed legado)
+    descricao: p.descricao || p.desc || '',
+    // imagem: prioriza campo salvo no admin, depois mapa legacy, depois null
     imagem: p.imagem || IMAGEM_LOJA[p.cod] || null,
   })));
 });
@@ -1678,12 +1690,13 @@ app.get('/api/admin/loja', auth, requireStaff, (req,res)=>{
 });
 app.post('/api/admin/loja', auth, requireStaff, (req,res)=>{
   const b=req.body||{}; if(!b.nome) return res.status(400).json({error:'nome obrigatório'});
-  const p={ id:nextId(), nome:b.nome, cat:b.cat||'Geral', preco:Number(b.preco)||0, estoque:parseInt(b.estoque)||0, ativo:true, criadoEm:new Date().toISOString() };
+  const p={ id:nextId(), nome:b.nome, cat:b.cat||'Geral', preco:Number(b.preco)||0, estoque:parseInt(b.estoque)||0,
+    descricao:b.descricao||'', imagem:b.imagem||'', ativo:true, criadoEm:new Date().toISOString() };
   db().loja.push(p); save(); res.json(p);
 });
 app.patch('/api/admin/loja/:id', auth, requireStaff, (req,res)=>{
   const p=(db().loja||[]).find(x=>x.id==req.params.id); if(!p) return res.status(404).json({error:'não encontrado'});
-  ['nome','cat','ativo'].forEach(k=>{ if(req.body[k]!==undefined) p[k]=req.body[k]; });
+  ['nome','cat','ativo','descricao','imagem'].forEach(k=>{ if(req.body[k]!==undefined) p[k]=req.body[k]; });
   if(req.body.preco!==undefined) p.preco=Number(req.body.preco);
   if(req.body.estoque!==undefined) p.estoque=parseInt(req.body.estoque)||0;
   save(); res.json(p);
