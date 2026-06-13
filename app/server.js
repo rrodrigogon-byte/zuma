@@ -308,7 +308,7 @@ app.post('/api/inscricao', publicLimit(), (req,res)=>{
   db().inscricoes.push(insc); save();
   if(insc.email) mail.inscricaoRecebida(insc.email, insc.nome, categorias, total, pagoEm).catch(()=>{});
   res.json({ ok:true, id:insc.id, total, prazoPagamento:pagoEm,
-    message:`Inscrição recebida! Efetue o pagamento de R$ ${total},00 em até 30 minutos para confirmar sua vaga.` });
+    message:`Inscrição recebida! Efetue o pagamento de ${Number(total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} em até 30 minutos para confirmar sua vaga.` });
 });
 // Alias plural (frontend usa /api/inscricoes)
 app.post('/api/inscricoes', (req,res,next)=> { req.url='/api/inscricao'; next('route'); });
@@ -331,7 +331,7 @@ app.post('/api/inscricoes', (req,res)=>{
   db().inscricoes.push(insc); save();
   if(insc.email) mail.inscricaoRecebida(insc.email, insc.nome, categorias, total, pagoEm).catch(()=>{});
   res.json({ ok:true, id:insc.id, total, prazoPagamento:pagoEm,
-    message:`Inscrição recebida! Efetue o pagamento de R$ ${total},00 em até 30 minutos para confirmar sua vaga.` });
+    message:`Inscrição recebida! Efetue o pagamento de ${Number(total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} em até 30 minutos para confirmar sua vaga.` });
 });
 
 // Ingressos: alias para compatibilidade com frontend
@@ -1738,6 +1738,12 @@ function seedLoja(){
   if(!d.loja.length){
     KIT_SEED.forEach(k=>{ d.loja.push({ id:nextId(), cod:k.cod, nome:k.nome, cat:k.cat, emoji:k.emoji, preco:k.preco, estoque:k.estoque, desc:k.desc, ativo:true, criadoEm:new Date().toISOString() }); });
     save();
+  } else {
+    // Backfill: produtos existentes (criados antes do catálogo) recebem descrição/emoji do KIT_SEED pelo código
+    let alterado=false;
+    const porCod=Object.fromEntries(KIT_SEED.map(k=>[k.cod,k]));
+    d.loja.forEach(p=>{ const k=porCod[p.cod]; if(k){ if(!p.desc && k.desc){ p.desc=k.desc; alterado=true; } if(!p.emoji && k.emoji){ p.emoji=k.emoji; alterado=true; } } });
+    if(alterado) save();
   }
 }
 seedLoja();

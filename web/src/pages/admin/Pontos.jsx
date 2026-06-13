@@ -129,7 +129,7 @@ function Sparkline({ historico, socioNome }) {
 }
 
 const fmtData = s => s ? new Date(s).toLocaleDateString('pt-BR') : '—'
-const fmtR = v => `R$ ${Number(v || 0).toFixed(2).replace('.', ',')}`
+const fmtR = v => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v || 0))
 
 const TIPO_INFO = {
   manual:    { label: 'Manual',     bg: '#e0e7ff', color: '#3730a3' },

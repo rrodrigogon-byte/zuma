@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { api } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
-const fmtR = v => `R$ ${Number(v || 0).toFixed(2).replace('.', ',')}`
+const fmtR = v => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v || 0))
 const fmtData = s => s ? new Date(s + 'T12:00:00').toLocaleDateString('pt-BR') : '—'
 const mesLabel = s => { const [y, m] = s.split('-'); return `${m}/${y}` }
 

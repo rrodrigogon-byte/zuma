@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { api, fmtR, fmtDate } from '../../lib/api'
+import { api, fmtR, fmtDate, fmtQtd } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
 
@@ -214,7 +214,7 @@ export default function AdminLoja() {
       {/* KPI Cards */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
         <KpiCard label="Produtos" valor={totalProdutos} icon="📦" color="#5FB335" />
-        <KpiCard label="Estoque Total" valor={`${totalEstoque} un`} icon="🗃️" color="#C9A656" />
+        <KpiCard label="Estoque Total" valor={fmtQtd(totalEstoque)} icon="🗃️" color="#C9A656" />
         <KpiCard label="Receita Potencial" valor={fmtR(receitaPotenc)} icon="💰" color="#8FD64A" />
         <KpiCard label="Reservas Pendentes" valor={reservasPend} icon="⏳" color={reservasPend > 0 ? '#e05c5c' : '#5FB335'} />
         {receitaVendas > 0 && (
@@ -295,7 +295,7 @@ export default function AdminLoja() {
                 <td style={S.td}>{fmtR(p.preco)}</td>
                 <td style={S.td}>
                   <span style={S.badge(p.estoque > 5 ? '#5FB335' : p.estoque > 0 ? '#C9A656' : '#e05c5c')}>
-                    {p.estoque > 0 ? `${p.estoque} un` : '⚠ SEM ESTOQUE'}
+                    {p.estoque > 0 ? fmtQtd(p.estoque) : '⚠ SEM ESTOQUE'}
                   </span>
                 </td>
                 <td style={{ ...S.td, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

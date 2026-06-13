@@ -10,7 +10,7 @@ const FROM = process.env.EMAIL_FROM || 'SetPoint <no-reply@setpoint.app>'
 
 function ativo() { return !!KEY }
 
-const brl = v => 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',')
+const brl = v => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v || 0))
 
 // Layout HTML base com a identidade da marca
 function layout(titulo, corpoHtml) {

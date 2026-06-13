@@ -42,8 +42,27 @@ apiFn.delete = (path, body) => request(path, { method: 'DELETE', ...(body ? { bo
 
 export const api = apiFn
 
+// Formatação pt-BR (ponto de milhar, vírgula decimal)
+const _brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
+const _int = new Intl.NumberFormat('pt-BR')
+
+// Moeda: R$ 117.750,00
 export function fmtR(v) {
-  return 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',')
+  return _brl.format(Number(v || 0))
+}
+
+// Número com separador de milhar. casas = nº de casas decimais (opcional)
+export function fmtNum(v, casas) {
+  const n = Number(v || 0)
+  if (casas != null) {
+    return n.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas })
+  }
+  return _int.format(n)
+}
+
+// Quantidade com unidade de medida: 2.050 un
+export function fmtQtd(v, unidade = 'un') {
+  return `${fmtNum(v)} ${unidade}`
 }
 
 export function fmtDate(iso) {
