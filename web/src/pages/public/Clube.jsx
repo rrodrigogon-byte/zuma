@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 const C = {
   deep: '#0E2E1C',
@@ -58,6 +58,133 @@ function FeatureCard({ icon, title, items }) {
         ))}
       </ul>
     </div>
+  )
+}
+
+const FOTOS = [
+  { src: '/ttc/galeria/galeria-bt-01.jpg', alt: 'Equipe feminina de beach tennis celebrando' },
+  { src: '/ttc/galeria/galeria-bt-02.jpg', alt: 'Atleta com raquete na quadra de areia' },
+  { src: '/ttc/galeria/galeria-bt-03.jpg', alt: 'Dupla campeã de beach tennis com troféu' },
+  { src: '/ttc/galeria/galeria-bt-04.jpg', alt: 'Jogo de beach tennis à noite' },
+  { src: '/ttc/galeria/galeria-ten-01.jpg', alt: 'Jovem tenista na quadra de saibro' },
+  { src: '/ttc/galeria/galeria-ten-02.jpg', alt: 'Criança sacando no tênis' },
+  { src: '/ttc/galeria/galeria-ten-03.jpg', alt: 'Turma de tênis kids com professores' },
+  { src: '/ttc/galeria/galeria-ten-04.jpg', alt: 'Atleta na 2ª Copa Agro de Tênis' },
+  { src: '/ttc/galeria/galeria-ten-05.jpg', alt: 'Tenista em ação à noite' },
+  { src: '/ttc/galeria/galeria-ten-06.jpg', alt: 'Grupo de crianças no torneio Copa Agro' },
+  { src: '/ttc/galeria/galeria-ten-07.jpg', alt: 'Campeões Kids Sub-10 com troféus' },
+  { src: '/ttc/galeria/galeria-ten-08.jpg', alt: '2ª Copa Agro de Tênis — banner oficial' },
+]
+
+function GaleriaFotos() {
+  const [lightbox, setLightbox] = useState(null)
+
+  return (
+    <>
+      {/* Grid */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+        gap: 8,
+      }}>
+        {FOTOS.map((foto, i) => (
+          <div
+            key={i}
+            onClick={() => setLightbox(i)}
+            style={{
+              borderRadius: 8, overflow: 'hidden', cursor: 'pointer',
+              aspectRatio: '1/1', background: '#e5e7eb',
+              position: 'relative',
+              transition: 'transform .15s, box-shadow .15s',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'scale(1.03)'
+              e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.2)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'scale(1)'
+              e.currentTarget.style.boxShadow = 'none'
+            }}
+          >
+            <img
+              src={foto.src}
+              alt={foto.alt}
+              loading="lazy"
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            />
+            <div style={{
+              position: 'absolute', inset: 0,
+              background: 'rgba(14,46,28,0)',
+              transition: 'background .15s',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(14,46,28,0.25)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(14,46,28,0)' }}
+            >
+              <span style={{ fontSize: '1.6rem', opacity: 0.9 }}>🔍</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Lightbox */}
+      {lightbox !== null && (
+        <div
+          onClick={() => setLightbox(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.92)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 16,
+          }}
+        >
+          <button
+            onClick={() => setLightbox(i => (i - 1 + FOTOS.length) % FOTOS.length)}
+            style={{
+              position: 'fixed', left: 16, top: '50%', transform: 'translateY(-50%)',
+              background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '50%',
+              width: 48, height: 48, color: '#fff', fontSize: 22, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+            onClick={e => { e.stopPropagation(); setLightbox(i => (i - 1 + FOTOS.length) % FOTOS.length) }}
+          >‹</button>
+
+          <img
+            src={FOTOS[lightbox].src}
+            alt={FOTOS[lightbox].alt}
+            style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: 8 }}
+            onClick={e => e.stopPropagation()}
+          />
+
+          <button
+            style={{
+              position: 'fixed', right: 16, top: '50%', transform: 'translateY(-50%)',
+              background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '50%',
+              width: 48, height: 48, color: '#fff', fontSize: 22, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+            onClick={e => { e.stopPropagation(); setLightbox(i => (i + 1) % FOTOS.length) }}
+          >›</button>
+
+          <button
+            style={{
+              position: 'fixed', top: 16, right: 16,
+              background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '50%',
+              width: 40, height: 40, color: '#fff', fontSize: 20, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+            onClick={e => { e.stopPropagation(); setLightbox(null) }}
+          >✕</button>
+
+          <div style={{
+            position: 'fixed', bottom: 20, left: 0, right: 0, textAlign: 'center',
+            color: 'rgba(255,255,255,0.7)', fontSize: '0.85rem',
+          }}>
+            {FOTOS[lightbox].alt} · {lightbox + 1}/{FOTOS.length}
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
@@ -273,48 +400,16 @@ export default function Clube() {
           </p>
         </Section>
 
-        {/* Instagram */}
-        <Section id="instagram" title="Siga o TTC no Instagram">
+        {/* Galeria de Fotos */}
+        <Section id="galeria" title="Galeria de Fotos">
           <p style={{ color: '#374151', lineHeight: 1.7, marginBottom: 24, fontSize: '1rem' }}>
-            Acompanhe o dia a dia do Tangará Tênis Clube: aulas, eventos, torneios e muito mais.
-            Siga <strong>@ttctga</strong> e faça parte da comunidade TTC nas redes sociais.
+            Momentos reais do Tangará Tênis Clube — beach tennis, tênis, eventos e muito mais.
+            Siga <strong>@ttctga</strong> no Instagram para acompanhar o dia a dia do clube.
           </p>
 
-          {/* Galeria de posts */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-            gap: 20,
-            marginBottom: 28,
-          }}>
-            {[
-              { id: 'DZVTOrVErwl', label: 'Feliz Dia do Tenista 🎾' },
-              { id: 'DZX7Hk9xP6W', label: 'Estrutura do clube' },
-              { id: 'DZgAYpEEn5J', label: 'Brasil na Copa 2026 ⚽🇧🇷' },
-              { id: 'DQbwqD0ku9-', label: 'Benefícios de Sócio' },
-            ].map(({ id, label }) => (
-              <div key={id} style={{
-                borderRadius: 12, overflow: 'hidden',
-                boxShadow: '0 2px 12px rgba(0,0,0,0.10)',
-                background: '#fff',
-                display: 'flex', flexDirection: 'column',
-              }}>
-                <iframe
-                  src={`https://www.instagram.com/p/${id}/embed/`}
-                  width="100%"
-                  height="420"
-                  style={{ border: 'none', display: 'block', minWidth: 0 }}
-                  scrolling="no"
-                  allowTransparency="true"
-                  loading="lazy"
-                  title={label}
-                />
-              </div>
-            ))}
-          </div>
+          <GaleriaFotos />
 
-          {/* CTA Instagram */}
-          <div style={{ textAlign: 'center' }}>
+          <div style={{ textAlign: 'center', marginTop: 28 }}>
             <a
               href="https://www.instagram.com/ttctga/"
               target="_blank"
@@ -328,7 +423,7 @@ export default function Clube() {
               }}
             >
               <span style={{ fontSize: '1.2rem' }}>📸</span>
-              Seguir @ttctga no Instagram
+              Ver mais no Instagram @ttctga
             </a>
           </div>
         </Section>
