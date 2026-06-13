@@ -818,6 +818,58 @@ app.patch('/api/admin/assinaturas/:id', auth, (req,res)=>{
 
 app.post('/api/admin/reset-ranking', auth, (req,res)=>{ db().ranking = { players:{} }; db().campeoes = {}; save(); res.json({ok:true}); });
 
+// ── CRUD manual do ranking ────────────────────────────────────────────────
+// GET /api/admin/campeoes  — lista campeões por categoria (para painel admin)
+app.get('/api/admin/campeoes', auth, (req,res)=>{
+  const c = db().campeoes || {};
+  res.json(Object.keys(c).map(cat=>({ categoria:cat, ...c[cat] })));
+});
+
+// POST /api/admin/ranking/atleta — adiciona atleta manualmente
+app.post('/api/admin/ranking/atleta', auth, (req,res)=>{
+  const { nome, categoria, pontos=0, vitorias=0, derrotas=0, torneios=0 } = req.body || {};
+  if(!nome || !categoria) return res.status(400).json({error:'nome e categoria obrigatórios'});
+  db().ranking = db().ranking || { players:{} };
+  db().ranking.players = db().ranking.players || {};
+  const key = (categoria+'|'+nome).toLowerCase();
+  const existing = db().ranking.players[key];
+  if(existing){
+    existing.pontos   += pontos;
+    existing.vitorias += vitorias;
+    existing.derrotas += derrotas;
+    existing.torneios += torneios;
+  } else {
+    db().ranking.players[key] = { nome, categoria, pontos, vitorias, derrotas, torneios };
+  }
+  save();
+  res.json({ ok:true, ranking: rankingList(db().ranking, categoria) });
+});
+
+// PATCH /api/admin/ranking/atleta — edita atleta existente
+app.patch('/api/admin/ranking/atleta', auth, (req,res)=>{
+  const { nome, categoria, pontos, vitorias, derrotas, torneios } = req.body || {};
+  if(!nome || !categoria) return res.status(400).json({error:'nome e categoria obrigatórios'});
+  db().ranking = db().ranking || { players:{} };
+  const key = (categoria+'|'+nome).toLowerCase();
+  const p = db().ranking.players?.[key];
+  if(!p) return res.status(404).json({error:'atleta não encontrado'});
+  if(pontos   != null) p.pontos   = Number(pontos);
+  if(vitorias != null) p.vitorias = Number(vitorias);
+  if(derrotas != null) p.derrotas = Number(derrotas);
+  if(torneios != null) p.torneios = Number(torneios);
+  save();
+  res.json({ ok:true, atleta: p });
+});
+
+// DELETE /api/admin/ranking/atleta — remove atleta
+app.delete('/api/admin/ranking/atleta', auth, (req,res)=>{
+  const { nome, categoria } = req.body || {};
+  if(!nome || !categoria) return res.status(400).json({error:'nome e categoria obrigatórios'});
+  const key = (categoria+'|'+nome).toLowerCase();
+  if(db().ranking?.players?.[key]) { delete db().ranking.players[key]; save(); }
+  res.json({ ok:true });
+});
+
 // =================== PDV BAR / RESTAURANTE ===================
 const MESAS_FISICAS_DEFAULT = 12;
 const getMesasFisicas = () => {

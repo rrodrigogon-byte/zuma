@@ -77,6 +77,7 @@ const NAV_ADMIN_GROUPS = [
       { to: '/admin/inscricoes', icon: '📋', label: 'Inscrições' },
       { to: '/admin/quadras',    icon: '🏟️', label: 'Quadras' },
       { to: '/admin/pontos',     icon: '⭐', label: 'Pontos & Elo' },
+      { to: '/admin/ranking',    icon: '🏆', label: 'Ranking Torneios' },
     ],
   },
   {
