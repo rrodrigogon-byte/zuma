@@ -71,6 +71,8 @@ const Contatos        = lazy(() => import('./pages/admin/Contatos'))
 const AgendaQuadras   = lazy(() => import('./pages/public/AgendaQuadras'))
 const NoticiasPublic  = lazy(() => import('./pages/public/Noticias'))
 const MeuPainel       = lazy(() => import('./pages/atleta/MeuPainel'))
+const Clube           = lazy(() => import('./pages/public/Clube'))
+const Liga            = lazy(() => import('./pages/public/Liga'))
 
 function Loading() {
   return (
@@ -146,6 +148,9 @@ export default function App() {
         <Route path="/contato"    element={<Layout><Contato /></Layout>} />
         <Route path="/noticias"   element={<Layout><NoticiasPublic /></Layout>} />
         <Route path="/quadras"    element={<Layout><AgendaQuadras /></Layout>} />
+        <Route path="/clube"      element={<Layout><Clube /></Layout>} />
+        <Route path="/liga"       element={<Layout><Liga /></Layout>} />
+        <Route path="/liga/:id"   element={<Layout><Liga /></Layout>} />
 
         <Route path="*" element={<Layout><NotFound /></Layout>} />
       </Routes>

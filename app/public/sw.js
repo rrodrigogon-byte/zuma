@@ -1,9 +1,9 @@
 // SetPoint PWA Service Worker — v1.0.0
 // Estratégia: Cache-First para assets estáticos, Network-First para /api/
 
-const CACHE_NAME = 'setpoint-v1'
-const STATIC_CACHE = 'setpoint-static-v1'
-const API_CACHE = 'setpoint-api-v1'
+const CACHE_NAME = 'setpoint-v2'
+const STATIC_CACHE = 'setpoint-static-v2'
+const API_CACHE = 'setpoint-api-v2'
 
 // Assets estáticos para pré-caching
 const PRE_CACHE_URLS = [

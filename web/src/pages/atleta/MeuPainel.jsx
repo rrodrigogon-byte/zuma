@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api, fmtDate, fmtDateOnly } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { useToast } from '../../hooks/useToast'
@@ -865,8 +865,19 @@ export default function MeuPainel() {
   const navigate = useNavigate()
   const { user, isAtleta } = useAuth()
   const { toast } = useToast()
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const [tab, setTab] = useState('visao')
+  // Lê o ?tab= da URL; fallback para 'visao'
+  const VALID_TABS = ['visao','jogos','ranking','inscricoes','chaves','historico','perfil']
+  const tabParam = searchParams.get('tab')
+  const [tab, setTabState] = useState(VALID_TABS.includes(tabParam) ? tabParam : 'visao')
+
+  // Sincroniza URL quando a aba muda
+  const setTab = (t) => {
+    setTabState(t)
+    if (t === 'visao') setSearchParams({}, { replace: true })
+    else setSearchParams({ tab: t }, { replace: true })
+  }
   const [loading, setLoading] = useState(true)
   const [confirmando, setConfirmando] = useState(null)
 

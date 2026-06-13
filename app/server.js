@@ -1800,6 +1800,18 @@ const KIT_SEED = [
     desc:'Silicone hipoalergênico, relevo gravado. "AGRO OPEN • 4ª EDIÇÃO • TANGARÁ-MT • 2026". Credencial oficial do atleta.' },
   { cod:'AOT-010', nome:'Munhequeira Oficial (Par)', cat:'Acessórios', emoji:'🤝', preco:40, estoque:200,
     desc:'Algodão felpudo terry cotton, elastano interno. 7,5cm largura. Monograma AO verde limão bordado. Vendido em par.' },
+  { cod:'AOT-011', nome:'Bandana Headband Agro Open', cat:'Acessórios', emoji:'🎀', preco:30, estoque:150,
+    desc:'Elástico esportivo com interior felpudo absorvente. Verde Escuro com monograma AO bordado. Tamanho único.' },
+  { cod:'AOT-012', nome:'Grip / Overgrip Agro Open', cat:'Equipamentos', emoji:'🎾', preco:20, estoque:200,
+    desc:'Overgrip premium com textura antiderrapante. Embalagem exclusiva 4ª Edição Agro Open de Tênis 2026. Kit com 2 unidades.' },
+  { cod:'AOT-013', nome:'Mochila Esportiva Agro Open', cat:'Equipamentos', emoji:'🎒', preco:180, estoque:100,
+    desc:'Mochila esportiva Verde Escuro. Logo Agro Open bordado na frente. Compartimentos múltiplos + bolso lateral para garrafa. 2026 • Tangará-MT.' },
+  { cod:'AOT-014', nome:'Raqueteira Agro Open', cat:'Equipamentos', emoji:'🎾', preco:220, estoque:80,
+    desc:'Raqueteira semi-rígida Verde Escuro com vivos verde limão. Logo Agro Open estampado. Alça de ombro + handles. Capacidade 2 raquetes.' },
+  { cod:'AOT-015', nome:'Toalha Grande Agro Open', cat:'Equipamentos', emoji:'🛁', preco:95, estoque:120,
+    desc:'Toalha grande 100% algodão felpudo premium. Verde Escuro com viés verde limão. Logo bordado central. Ideal para vestiário e quadra.' },
+  { cod:'AOT-016', nome:'Viseira Agro Open', cat:'Bonés', emoji:'🧢', preco:60, estoque:150,
+    desc:'Viseira esportiva Verde Escuro. Monograma AO bordado 3D na frente. Alça ajustável com detalhe verde limão. Proteção solar na quadra.' },
 ];
 function seedLoja(){
   const d=db(); if(!d.loja) d.loja=[];
@@ -1807,9 +1819,11 @@ function seedLoja(){
     KIT_SEED.forEach(k=>{ d.loja.push({ id:nextId(), cod:k.cod, nome:k.nome, cat:k.cat, emoji:k.emoji, preco:k.preco, estoque:k.estoque, desc:k.desc, ativo:true, criadoEm:new Date().toISOString() }); });
     save();
   } else {
-    // Backfill: produtos existentes recebem desc/emoji/imagem do KIT_SEED e IMAGEM_LOJA pelo código
+    // Backfill: adiciona produtos novos do seed e atualiza campos de existentes
     let alterado=false;
     const porCod=Object.fromEntries(KIT_SEED.map(k=>[k.cod,k]));
+    const codExistentes=new Set(d.loja.map(p=>p.cod));
+    KIT_SEED.forEach(k=>{ if(!codExistentes.has(k.cod)){ d.loja.push({ id:nextId(), cod:k.cod, nome:k.nome, cat:k.cat, emoji:k.emoji, preco:k.preco, estoque:k.estoque, desc:k.desc, ativo:true, criadoEm:new Date().toISOString() }); alterado=true; } });
     d.loja.forEach(p=>{
       const k=porCod[p.cod];
       if(k){
@@ -1829,6 +1843,12 @@ function seedLoja(){
         'AOT-008':'/produtos/aot-008-toalhinha.jpg',
         'AOT-009':'/produtos/aot-009-pulseira.jpg',
         'AOT-010':'/produtos/aot-010-munhequeira.jpg',
+        'AOT-011':'/produtos/aot-011-bandana.jpg',
+        'AOT-012':'/produtos/aot-012-grip-overgrip.jpg',
+        'AOT-013':'/produtos/aot-013-mochila.jpg',
+        'AOT-014':'/produtos/aot-014-raqueteira.jpg',
+        'AOT-015':'/produtos/aot-015-toalha-grande.jpg',
+        'AOT-016':'/produtos/aot-016-viseira.jpg',
       };
       if(p.cod && !p.imagem && imgMap[p.cod]){ p.imagem=imgMap[p.cod]; alterado=true; }
     });
@@ -1849,6 +1869,12 @@ const IMAGEM_LOJA = {
   'AOT-008':'/produtos/aot-008-toalhinha.jpg',
   'AOT-009':'/produtos/aot-009-pulseira.jpg',
   'AOT-010':'/produtos/aot-010-munhequeira.jpg',
+  'AOT-011':'/produtos/aot-011-bandana.jpg',
+  'AOT-012':'/produtos/aot-012-grip-overgrip.jpg',
+  'AOT-013':'/produtos/aot-013-mochila.jpg',
+  'AOT-014':'/produtos/aot-014-raqueteira.jpg',
+  'AOT-015':'/produtos/aot-015-toalha-grande.jpg',
+  'AOT-016':'/produtos/aot-016-viseira.jpg',
 };
 
 app.get('/api/loja', (req,res)=> {
