@@ -231,9 +231,26 @@ app.get('/api/pix-info', (req,res)=>{
   res.json({ ativo:true, modo:'estatico', chave:pixInfo.chave, nome:pixInfo.nome, cidade:pixInfo.cidade, copiaECola });
 });
 // Retorna objetos {id, nome, preco} para o formulário de inscrição
-app.get('/api/categorias', (req,res)=> res.json(
-  CATEGORIAS.map(nome=>({ id:nome, nome, preco: taxaCategoria(nome) }))
-));
+app.get('/api/categorias', (req,res)=>{
+  const d = db();
+  // Conta inscritos ativos por categoria
+  const insc = (d.inscricoes||[]).filter(i => i.status !== 'recusada' && i.status !== 'cancelada' && i.status !== 'expirado');
+  const porCat = {};
+  insc.forEach(i => {
+    const cats = Array.isArray(i.categorias) ? i.categorias : (i.categoria ? [i.categoria] : []);
+    cats.forEach(c => { porCat[c] = (porCat[c]||0) + 1; });
+  });
+  // Lê vagas configuradas por categoria (pode existir em db().config ou db().torneios)
+  const cfg = (d.config?.categorias) || {};
+  res.json(
+    CATEGORIAS.map(nome => ({
+      id: nome, nome,
+      preco: taxaCategoria(nome),
+      inscritos: porCat[nome] || 0,
+      vagas: cfg[nome]?.vagas ?? null,  // null = sem limite publicado
+    }))
+  );
+});
 
 // CPF validation helper
 function validarCPF(cpf){
@@ -1430,13 +1447,28 @@ app.patch('/api/admin/reservas/:id', auth, requireStaff, (req,res)=>{
 app.delete('/api/admin/reservas/:id', auth, requireStaff, (req,res)=>{
   const d=db(); d.reservas=(d.reservas||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true});
 });
-// Alias admin/loja/reservas → admin/reservas (AdminLoja.jsx)
+// Reservas da LOJA (db().reservasLoja) — corrige bug que apontava para db().reservas (quadras)
 app.get('/api/admin/loja/reservas', auth, requireStaff, (req,res)=>{
-  res.json((db().reservas||[]).slice().sort((a,b)=>(a.criadoEm||'').localeCompare(b.criadoEm||'')));
+  const list = (db().reservasLoja||[]).slice().sort((a,b)=>(b.criadoEm||'').localeCompare(a.criadoEm||''));
+  res.json(list);
 });
 app.patch('/api/admin/loja/reservas/:id', auth, requireStaff, (req,res)=>{
-  const r=(db().reservas||[]).find(x=>x.id==req.params.id); if(!r) return res.status(404).json({error:'não encontrada'});
-  if(req.body.status) r.status=req.body.status; save(); res.json(r);
+  const d = db();
+  if(!d.reservasLoja) d.reservasLoja = [];
+  const r = d.reservasLoja.find(x=>x.id==req.params.id);
+  if(!r) return res.status(404).json({error:'reserva não encontrada'});
+  const statusAnterior = r.status;
+  if(req.body.status) r.status = req.body.status;
+  // Baixa de estoque automática ao confirmar reserva (se ainda não foi debitada)
+  if(req.body.status === 'confirmada' && statusAnterior !== 'confirmada' && !r.estoqueBaixado){
+    const prod = (d.loja||[]).find(p=>p.id==r.produtoId);
+    if(prod && prod.estoque > 0){
+      // Estoque já foi decrementado no momento da reserva, apenas marcar como confirmado
+      r.estoqueBaixado = true;
+    }
+  }
+  save();
+  res.json(r);
 });
 
 // =================== PATROCINADORES E MÍDIA (cap. 11) ===================
@@ -2173,6 +2205,15 @@ app.get('/api/admin/dashboard', auth, requireStaff, (req,res)=>{
   const placaresNaoConf=Object.values(d.chaves||{}).reduce((s,ch)=>s+Object.values(ch.placares||{}).filter(p=>p.confirmado===false).length,0);
   const fechadas=(d.comandas||[]).filter(c=>c.status==='fechada');
   const receita = (d.pagamentos||[]).filter(p=>p.status==='aprovado').reduce((s,p)=>s+(p.valor||0),0);
+  // Faturamento unificado: bar + loja confirmada/entregue + inscrições pagas
+  const fatBar = fechadas.reduce((s,c)=>s+(c.totalPago||0),0);
+  const fatLoja = (d.reservasLoja||[])
+    .filter(r=>r.status==='confirmada'||r.status==='entregue')
+    .reduce((s,r)=>s+(r.total||0),0);
+  const fatInsc = (d.inscricoes||[])
+    .filter(i=>i.pago===true||i.status==='aprovada'||i.status==='validada')
+    .reduce((s,i)=>s+(i.total||0),0);
+  const fatTotal = fatBar + fatLoja + fatInsc;
   const alertas=[];
   if(inscPend) alertas.push({ nivel:'aten', txt:`${inscPend} inscrição(ões) aguardando validação` });
   if(placaresNaoConf) alertas.push({ nivel:'aten', txt:`${placaresNaoConf} placar(es) aguardando confirmação (dupla validação)` });
@@ -2185,7 +2226,9 @@ app.get('/api/admin/dashboard', auth, requireStaff, (req,res)=>{
       socios:(d.socios||[]).length, torneios:(d.torneios||[]).length,
       chaves:Object.keys(d.chaves||{}).length, inscricoes:(d.inscricoes||[]).length,
       reservasHoje, comandasAbertas:(d.comandas||[]).filter(c=>c.status==='aberta').length,
-      receitaPagamentos:receita, faturamentoBar:fechadas.reduce((s,c)=>s+(c.totalPago||0),0)
+      receitaPagamentos:receita,
+      faturamentoBar:fatBar,
+      fatLoja, fatInsc, fatTotal
     },
     pendencias:{ inscPend, faturasAbertas, reservasHoje, pagPend, placaresNaoConf },
     alertas

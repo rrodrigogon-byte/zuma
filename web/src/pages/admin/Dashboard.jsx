@@ -298,7 +298,7 @@ function NewsWidget({ noticias }) {
 
 // ── KPI card ──────────────────────────────────────────────────────────────────
 
-function KPI({ label, value, icon, color, trend }) {
+function KPI({ label, value, icon, color, trend, sub }) {
   return (
     <div className="card kpi" style={{ borderTop: `3px solid ${color}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -314,6 +314,11 @@ function KPI({ label, value, icon, color, trend }) {
             {trend.up ? '↑' : '↓'} {trend.pct}%
           </span>
           <span style={{ color: 'var(--muted)' }}>vs ontem</span>
+        </div>
+      )}
+      {sub && (
+        <div style={{ fontSize: 10, color: 'var(--muted)', lineHeight: 1.5, marginTop: -2 }}>
+          {sub}
         </div>
       )}
     </div>
@@ -352,8 +357,11 @@ export default function Dashboard() {
             // Mapeia inscricoes → inscritos
             inscritos: ind.inscricoes ?? ind.atletas ?? 0,
             inscritos_ontem: null,
-            // Receita do dia = faturamento do bar hoje
-            receita: ind.faturamentoBar ?? ind.receitaPagamentos ?? 0,
+            // Faturamento total = bar + loja + inscrições
+            receita: ind.fatTotal ?? ind.faturamentoBar ?? ind.receitaPagamentos ?? 0,
+            fatBar: ind.faturamentoBar ?? 0,
+            fatLoja: ind.fatLoja ?? 0,
+            fatInsc: ind.fatInsc ?? 0,
             receita_ontem: null,
             // Mesas em tempo real
             mesasOcupadas,
@@ -491,11 +499,16 @@ export default function Dashboard() {
               trend={trend(dash.indicadores.inscritos, dash.indicadores.inscritos_ontem)}
             />
             <KPI
-              label="Faturamento Bar"
+              label="Faturamento Total"
               value={fmtR(dash.indicadores.receita ?? 0)}
               icon="💰"
               color="#C9A656"
               trend={trend(dash.indicadores.receita, dash.indicadores.receita_ontem)}
+              sub={[
+                dash.indicadores.fatBar   > 0 && `Bar: ${fmtR(dash.indicadores.fatBar)}`,
+                dash.indicadores.fatLoja  > 0 && `Loja: ${fmtR(dash.indicadores.fatLoja)}`,
+                dash.indicadores.fatInsc  > 0 && `Inscrições: ${fmtR(dash.indicadores.fatInsc)}`,
+              ].filter(Boolean).join('  ·  ')}
             />
             <KPI
               label="Mesas Ocupadas"

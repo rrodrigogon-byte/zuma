@@ -428,7 +428,22 @@ export default function Home() {
                         }}>{icons[i % icons.length]}</div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 800, color: '#0E2E1C', fontSize: '0.9rem', lineHeight: 1.3 }}>{cat.nome}</div>
-                          <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#5FB335', marginTop: 4 }}>{precoFmt}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 5, flexWrap: 'wrap' }}>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#5FB335' }}>{precoFmt}</div>
+                            {cat.inscritos > 0 && (
+                              <div style={{
+                                fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px',
+                                borderRadius: 20,
+                                background: cat.vagas && cat.inscritos >= cat.vagas ? '#e0555522' : '#5FB33518',
+                                color: cat.vagas && cat.inscritos >= cat.vagas ? '#e05555' : '#3a7a1e',
+                                border: `1px solid ${cat.vagas && cat.inscritos >= cat.vagas ? '#e0555544' : '#5FB33540'}`,
+                              }}>
+                                {cat.vagas
+                                  ? `${cat.inscritos}/${cat.vagas} vagas`
+                                  : `${cat.inscritos} inscrito${cat.inscritos !== 1 ? 's' : ''}`}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>

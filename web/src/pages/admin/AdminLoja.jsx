@@ -31,10 +31,11 @@ function KpiCard({ label, valor, icon, color }) {
 }
 
 function exportCSV(reservas) {
-  const headers = ['ID', 'Produto', 'Atleta', 'E-mail', 'Tel', 'Tamanho', 'Status', 'Data']
+  const headers = ['ID', 'Produto', 'Atleta', 'E-mail', 'Tel', 'Tamanho', 'Qtd', 'Total', 'Status', 'Data']
   const rows = reservas.map(r => [
     r.id, r.produto || '', r.nome || '', r.email || '', r.tel || '',
-    r.tamanho || '', r.status || '', r.criadoEm ? fmtDate(r.criadoEm) : '',
+    r.tamanho || '', r.qtd ?? 1, r.total != null ? fmtR(r.total) : fmtR((r.qtd||1)*(r.preco||0)),
+    r.status || '', r.criadoEm ? fmtDate(r.criadoEm) : '',
   ])
   const csv = [headers, ...rows]
     .map(row => row.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
@@ -91,7 +92,7 @@ export default function AdminLoja() {
   const reservasPend   = reservas.filter(r => r.status === 'pendente').length
   const receitaVendas  = reservas
     .filter(r => r.status === 'confirmada' || r.status === 'entregue')
-    .reduce((s, r) => s + (r.valor || 0), 0)
+    .reduce((s, r) => s + (r.total || r.valor || 0), 0)
 
   // Filtro produtos
   const produtosFiltrados = useMemo(() => {
@@ -339,14 +340,14 @@ export default function AdminLoja() {
           <table style={S.table}>
             <thead>
               <tr>
-                {['#', 'Produto', 'Atleta', 'E-mail', 'Tamanho', 'Status', 'Data', ''].map(h => (
+                {['#', 'Produto', 'Atleta', 'E-mail', 'Tamanho', 'Qtd', 'Total', 'Status', 'Data', ''].map(h => (
                   <th key={h} style={S.th}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {reservasFiltradas.length === 0 && (
-                <tr><td colSpan={8} style={{ ...S.td, color: 'var(--muted)', textAlign: 'center', padding: '2rem' }}>
+                <tr><td colSpan={10} style={{ ...S.td, color: 'var(--muted)', textAlign: 'center', padding: '2rem' }}>
                   Nenhuma reserva encontrada.
                 </td></tr>
               )}
@@ -359,6 +360,10 @@ export default function AdminLoja() {
                     <td style={S.td}>{r.nome}</td>
                     <td style={{ ...S.td, fontSize: '0.8rem' }}>{r.email}</td>
                     <td style={S.td}>{r.tamanho || '—'}</td>
+                    <td style={{ ...S.td, textAlign: 'center' }}>{r.qtd ?? 1}</td>
+                    <td style={{ ...S.td, fontWeight: 700, color: '#C9A656' }}>
+                      {r.total != null ? fmtR(r.total) : r.preco ? fmtR((r.qtd||1)*(r.preco||0)) : '—'}
+                    </td>
                     <td style={S.td}><span style={S.badge(bd.color)}>{bd.label}</span></td>
                     <td style={{ ...S.td, fontSize: '0.8rem', whiteSpace: 'nowrap' }}>{fmtDate(r.criadoEm)}</td>
                     <td style={S.td}>

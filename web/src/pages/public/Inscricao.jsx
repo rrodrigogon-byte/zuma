@@ -67,6 +67,7 @@ export default function Inscricao() {
 
   const [form, setForm] = useState({ nome: '', cpf: '', email: '', tel: '', nasc: '', categorias: [] })
   const [erros, setErros] = useState({})
+  const [lgpdOk, setLgpdOk] = useState(false)
 
   useEffect(() => {
     api.get('/api/categorias')
@@ -101,6 +102,7 @@ export default function Inscricao() {
     if (form.tel.replace(/\D/g, '').length < 10) e.tel = 'Telefone inválido'
     if (!form.nasc) e.nasc = 'Data de nascimento obrigatória'
     if (form.categorias.length === 0) e.categorias = 'Selecione ao menos uma categoria'
+    if (!lgpdOk) e.lgpd = 'Aceite os termos para continuar'
     setErros(e)
     return Object.keys(e).length === 0
   }
@@ -232,10 +234,39 @@ export default function Inscricao() {
             </div>
           )}
 
+          {/* ── Banner próximo passo ── */}
+          <div style={{
+            background: 'linear-gradient(135deg, #0E2E1C22, #5FB33511)',
+            border: '1.5px solid #5FB33555',
+            borderRadius: '14px', padding: '18px 20px', marginTop: '20px',
+          }}>
+            <div style={{ fontWeight: 700, color: '#0E2E1C', fontSize: '0.95rem', marginBottom: '8px' }}>
+              🏆 Próximos passos
+            </div>
+            <ol style={{ margin: 0, paddingLeft: '18px', color: '#3a5a3a', lineHeight: 1.8, fontSize: '0.88rem' }}>
+              <li>Envie o comprovante PIX para o WhatsApp da organização</li>
+              <li>Aguarde a <strong>confirmação por e-mail</strong> em até 24 h</li>
+              <li>Acompanhe as <strong>chaves do torneio</strong> pela página abaixo</li>
+            </ol>
+            <Link
+              to="/chaves"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                marginTop: '14px', padding: '11px 16px',
+                background: 'linear-gradient(135deg, #5FB335, #8FD64A)',
+                color: '#0E2E1C', borderRadius: '10px',
+                fontWeight: 700, fontSize: '0.92rem', textDecoration: 'none',
+                boxShadow: '0 2px 8px #5FB33540',
+              }}
+            >
+              🏆 Ver Chaves do Torneio
+            </Link>
+          </div>
+
           <button
             onClick={() => navigate('/')}
             style={{
-              width: '100%', marginTop: '20px',
+              width: '100%', marginTop: '12px',
               background: 'transparent', border: '2px solid #d0dcc8',
               borderRadius: '10px', padding: '12px',
               color: '#5a7a5a', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem',
@@ -414,11 +445,39 @@ export default function Inscricao() {
             </div>
           )}
 
+          {/* ── LGPD / Consentimento ── */}
+          <div style={{
+            marginTop: '24px',
+            background: '#f8faf4', border: `1.5px solid ${erros.lgpd ? '#e05555' : '#d0e8c8'}`,
+            borderRadius: '12px', padding: '14px 16px',
+          }}>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={lgpdOk}
+                onChange={e => { setLgpdOk(e.target.checked); setErros(err => ({ ...err, lgpd: '' })) }}
+                style={{ marginTop: 3, width: 18, height: 18, accentColor: '#5FB335', flexShrink: 0, cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: '0.82rem', color: '#3a5a3a', lineHeight: 1.55 }}>
+                Estou ciente e concordo que meus dados pessoais (nome, CPF, e-mail e telefone) serão utilizados
+                exclusivamente para a realização da inscrição e comunicação sobre o{' '}
+                <strong>4ª Agro Open de Tênis 2026</strong>, conforme a{' '}
+                <strong>Lei Geral de Proteção de Dados (LGPD — Lei 13.709/2018)</strong>.
+                Os dados não serão compartilhados com terceiros sem consentimento.
+              </span>
+            </label>
+            {erros.lgpd && (
+              <div style={{ color: '#e05555', fontSize: '0.78rem', marginTop: 6, fontWeight: 600 }}>
+                ⚠ {erros.lgpd}
+              </div>
+            )}
+          </div>
+
           <button
             type="submit"
             disabled={submitting}
             style={{
-              width: '100%', marginTop: '28px',
+              width: '100%', marginTop: '16px',
               background: submitting ? '#ccc' : 'linear-gradient(135deg, #5FB335, #8FD64A)',
               color: submitting ? '#666' : '#0E2E1C',
               border: 'none', borderRadius: '12px', padding: '16px',
