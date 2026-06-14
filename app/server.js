@@ -2353,6 +2353,58 @@ app.post('/api/admin/comunicacao', auth, requireStaff, (req,res)=>{
   res.json({ ok:true, campanha:camp });
 });
 
+// =================== COMUNICADOS DE JOGO (ranking) ===================
+app.get('/api/admin/ranking/comunicados', auth, requireStaff, (req,res)=>{
+  res.json((db().comunicados||[]).slice().reverse());
+});
+app.post('/api/admin/ranking/comunicados', auth, requireStaff, (req,res)=>{
+  const { tipo='aviso', titulo, mensagem, categoria, dataJogo, horaJogo, quadra, atleta1, atleta2, publicado=true } = req.body||{};
+  if(!titulo||!mensagem) return res.status(400).json({error:'título e mensagem obrigatórios'});
+  const d=db();
+  if(!d.comunicados) d.comunicados=[];
+  const c={ id:nextId(), tipo, titulo, mensagem, categoria:categoria||'', dataJogo:dataJogo||'', horaJogo:horaJogo||'', quadra:quadra||'', atleta1:atleta1||'', atleta2:atleta2||'', publicado:!!publicado, criadoEm:new Date().toISOString(), autor:req.user.nome||req.user.user };
+  d.comunicados.push(c); save();
+  res.json({ ok:true, comunicado:c });
+});
+app.patch('/api/admin/ranking/comunicados/:id', auth, requireStaff, (req,res)=>{
+  const d=db(); const c=(d.comunicados||[]).find(x=>x.id==req.params.id);
+  if(!c) return res.status(404).json({error:'comunicado não encontrado'});
+  const campos=['tipo','titulo','mensagem','categoria','dataJogo','horaJogo','quadra','atleta1','atleta2','publicado'];
+  campos.forEach(k=>{ if(req.body[k]!==undefined) c[k]=req.body[k]; });
+  save(); res.json({ok:true,comunicado:c});
+});
+app.delete('/api/admin/ranking/comunicados/:id', auth, requireStaff, (req,res)=>{
+  const d=db(); d.comunicados=(d.comunicados||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true});
+});
+// público
+app.get('/api/comunicados', publicRateLimit, (req,res)=>{
+  res.json((db().comunicados||[]).filter(c=>c.publicado).slice().reverse());
+});
+
+// =================== REGRAS DO TORNEIO (editáveis) ===================
+app.get('/api/admin/regras-torneio', auth, requireStaff, (req,res)=>{
+  res.json(db().regrasTorneio||{});
+});
+app.put('/api/admin/regras-torneio', auth, requireStaff, (req,res)=>{
+  db().regrasTorneio = req.body||{};
+  save(); res.json({ok:true});
+});
+// público
+app.get('/api/regras-torneio', publicRateLimit, (req,res)=>{
+  res.json(db().regrasTorneio||{});
+});
+
+// =================== CHAVES PUBLICADAS (overview) ===================
+app.get('/api/admin/chaves-overview', auth, requireStaff, (req,res)=>{
+  const ch=db().chaves||{};
+  res.json(Object.keys(ch).map(cat=>{
+    const c=ch[cat];
+    const totalJogos=c.rounds?c.rounds.reduce((s,r)=>s+Math.floor(r.filter(Boolean).length/2),0):0;
+    const jogosFeitos=c.placares?Object.keys(c.placares).length:0;
+    return { categoria:cat, finalizada:!!c.finalizada, rodadas:c.rounds?.length||0, totalJogos, jogosFeitos, formato:(c.regras&&c.regras.label)||'', geradoEm:c.geradoEm||'' };
+  }));
+});
+
 // =================== SISTEMA SUÍÇO (cap. 4.1) ===================
 app.get('/api/suicos', (req,res)=>{ const S=db().suicos||{}; res.json(Object.keys(S).map(cat=>({ categoria:cat, atletas:S[cat].players.length, rodadas:S[cat].rounds.length }))); });
 app.get('/api/suico/:categoria', (req,res)=>{ const s=db().suicos[req.params.categoria]; if(!s) return res.status(404).json({error:'não publicado'}); res.json({ ...s, tabela:tabelaSuico(s) }); });

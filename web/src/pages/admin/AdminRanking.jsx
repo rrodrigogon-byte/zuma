@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { api } from '../../lib/api'
 
 /* ─── Paleta ─────────────────────────────────────────────────────────────── */
@@ -441,6 +441,874 @@ function PartidaModal({ categorias, onSave, onClose }) {
   )
 }
 
+/* ─── Tab: Sorteio / Chaves ─────────────────────────────────────────────── */
+function TabSorteio({ categorias, showMsg }) {
+  const [chaves, setChaves] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [form, setForm] = useState({ categoria: '', fonte: 'inscritos', lista: '', formato: '3sets', size: 'auto', seeds: 4, seedmode: 'top', wildcards: '' })
+  const [sorteando, setSorteando] = useState(false)
+  const [detalhe, setDetalhe] = useState(null)
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const FORMATOS_LABEL = {
+    '3sets': 'Tênis · melhor de 3 sets', '3sets_mtb': 'Tênis · 2 sets + match tie-break',
+    '5sets': 'Tênis · melhor de 5 sets', 'beach_mtb': 'Beach/Pádel · 2 sets + MTB',
+    'volei_praia': 'Vôlei de praia', 'futevolei': 'Futevôlei', 'squash': 'Squash',
+    'tenis_mesa5': 'Tênis de mesa (md5)', 'pickleball': 'Pickleball'
+  }
+
+  const load = useCallback(() => {
+    setLoading(true)
+    api.get('/api/admin/chaves-overview').then(d => { setChaves(Array.isArray(d) ? d : []); setLoading(false) }).catch(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const handleSortear = async () => {
+    if (!form.categoria.trim()) return showMsg('Informe a categoria.', 'err')
+    setSorteando(true)
+    const body = {
+      categoria: form.categoria.trim(),
+      formato: form.formato,
+      size: form.size === 'auto' ? 'auto' : Number(form.size),
+      seeds: Number(form.seeds),
+      seedmode: form.seedmode,
+      fonte: form.fonte,
+      wildcards: form.wildcards.split('\n').map(s => s.trim()).filter(Boolean),
+    }
+    if (form.fonte === 'lista') {
+      body.lista = form.lista.split('\n').map(s => s.trim()).filter(Boolean)
+    }
+    try {
+      await api.post('/api/admin/sortear', body)
+      showMsg(`✅ Chave gerada para "${form.categoria}"!`)
+      load()
+    } catch (e) { showMsg(e.message || 'Erro ao sortear.', 'err') }
+    finally { setSorteando(false) }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {/* Gerador */}
+      <div style={{ background: C.white, borderRadius: 18, overflow: 'hidden', boxShadow: '0 2px 14px rgba(0,0,0,.07)' }}>
+        <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#1a4a2e)`, padding: '18px 22px', color: C.white }}>
+          <div style={{ fontWeight: 900, fontSize: '1.05rem' }}>🎲 Gerar Sorteio / Chave</div>
+          <div style={{ fontSize: '0.8rem', color: '#a0c8a0', marginTop: 3 }}>Cria a chave de eliminatória para uma categoria a partir dos inscritos ou de uma lista manual</div>
+        </div>
+        <div style={{ padding: '20px 22px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+            {/* Categoria */}
+            <div>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>Categoria *</label>
+              {categorias.length > 0 ? (
+                <select value={form.categoria} onChange={e => set('categoria', e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
+                  <option value="">— selecionar —</option>
+                  {categorias.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              ) : (
+                <input value={form.categoria} onChange={e => set('categoria', e.target.value)} placeholder="Ex: Masc · 1ª Classe"
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
+              )}
+            </div>
+            {/* Formato */}
+            <div>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>Formato de jogo</label>
+              <select value={form.formato} onChange={e => set('formato', e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
+                {Object.entries(FORMATOS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </div>
+            {/* Tamanho da chave */}
+            <div>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>Tamanho da chave</label>
+              <select value={form.size} onChange={e => set('size', e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
+                <option value="auto">Auto (pelo nº de inscritos)</option>
+                {[4, 8, 16, 32, 64].map(n => <option key={n} value={n}>{n} atletas</option>)}
+              </select>
+            </div>
+            {/* Seeds */}
+            <div>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>Nº de cabeças-de-chave</label>
+              <input type="number" min={0} max={16} value={form.seeds} onChange={e => set('seeds', e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+            {/* Seedmode */}
+            <div>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>Critério de cabeça</label>
+              <select value={form.seedmode} onChange={e => set('seedmode', e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
+                <option value="top">Top ranking (automático)</option>
+                <option value="manual">Manual (ordem da lista)</option>
+              </select>
+            </div>
+            {/* Fonte */}
+            <div>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>Fonte de atletas</label>
+              <select value={form.fonte} onChange={e => set('fonte', e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
+                <option value="inscritos">Inscritos aprovados</option>
+                <option value="lista">Lista manual</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Lista manual ou wildcards */}
+          <div style={{ display: 'grid', gridTemplateColumns: form.fonte === 'lista' ? '1fr 1fr' : '1fr', gap: 14, marginTop: 14 }}>
+            {form.fonte === 'lista' && (
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>
+                  Lista de atletas (1 por linha) *
+                </label>
+                <textarea value={form.lista} onChange={e => set('lista', e.target.value)}
+                  rows={6} placeholder={"João Silva\nMaria Santos\nPedro Oliveira\n..."}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'monospace' }} />
+              </div>
+            )}
+            <div>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>
+                Wildcards / convidados (1 por linha, opcional)
+              </label>
+              <textarea value={form.wildcards} onChange={e => set('wildcards', e.target.value)}
+                rows={form.fonte === 'lista' ? 6 : 3} placeholder={"Carlos Convidado\n..."}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'monospace' }} />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 12, marginTop: 18, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button onClick={handleSortear} disabled={sorteando || !form.categoria.trim()}
+              style={{ padding: '12px 28px', borderRadius: 12, border: 'none', background: sorteando || !form.categoria.trim() ? '#e0e0e0' : `linear-gradient(135deg,${C.green},${C.lightGreen})`, color: sorteando || !form.categoria.trim() ? '#aaa' : C.darkGreen, fontWeight: 800, cursor: sorteando || !form.categoria.trim() ? 'not-allowed' : 'pointer', fontSize: '0.92rem' }}>
+              {sorteando ? '⏳ Sorteando...' : '🎲 Gerar chave'}
+            </button>
+            <a href="/admin/torneios" style={{ padding: '12px 20px', borderRadius: 12, background: C.surface, border: `1px solid ${C.border}`, color: C.darkGreen, fontWeight: 700, textDecoration: 'none', fontSize: '0.85rem' }}>
+              🏆 Ir para Torneios →
+            </a>
+            <div style={{ fontSize: '0.78rem', color: C.muted, flex: 1, minWidth: 200 }}>
+              ⚠️ Chaves geradas aqui são no sistema de Eliminatória Simples. Para formatos avançados (Round Robin, Suíço), use a seção <strong>Torneios</strong>.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Overview de chaves existentes */}
+      <div style={{ background: C.white, borderRadius: 18, overflow: 'hidden', boxShadow: '0 2px 14px rgba(0,0,0,.07)' }}>
+        <div style={{ padding: '16px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ margin: 0, fontWeight: 900, color: C.darkGreen, fontSize: '1rem' }}>📋 Chaves geradas ({chaves.length})</h3>
+          <button onClick={load} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 14px', cursor: 'pointer', fontWeight: 700, color: C.muted, fontSize: '0.78rem' }}>↻ Atualizar</button>
+        </div>
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center', color: C.green, fontSize: '2rem' }}>⏳</div>
+        ) : chaves.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center', color: '#aaa' }}>
+            <div style={{ fontSize: '2rem', marginBottom: 8 }}>🎲</div>
+            <div>Nenhuma chave gerada ainda. Use o formulário acima para criar.</div>
+          </div>
+        ) : (
+          <div>
+            {chaves.map((ch, i) => (
+              <div key={i}
+                style={{ padding: '14px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', transition: 'background .1s' }}
+                onClick={() => setDetalhe(detalhe?.categoria === ch.categoria ? null : ch)}
+                onMouseEnter={e => e.currentTarget.style.background = '#f8fdf4'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: ch.finalizada ? 'rgba(201,166,86,.12)' : `rgba(95,179,53,.12)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', flexShrink: 0 }}>
+                  {ch.finalizada ? '🏆' : '🎾'}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, color: C.darkGreen, fontSize: '0.92rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ch.categoria}</div>
+                  <div style={{ fontSize: '0.75rem', color: C.muted, marginTop: 2 }}>
+                    {ch.formato || '—'} · {ch.rodadas} rodadas · {ch.jogosFeitos}/{ch.totalJogos} jogos realizados
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+                  <span style={{ padding: '3px 12px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700, background: ch.finalizada ? 'rgba(201,166,86,.15)' : 'rgba(95,179,53,.15)', color: ch.finalizada ? C.gold : C.green }}>
+                    {ch.finalizada ? '✓ Finalizada' : '⏳ Em andamento'}
+                  </span>
+                  <span style={{ color: C.muted, fontSize: '0.8rem' }}>{detalhe?.categoria === ch.categoria ? '▲' : '▼'}</span>
+                </div>
+              </div>
+            ))}
+            {/* Detalhe expandido */}
+            {detalhe && (
+              <div style={{ padding: '16px 22px', background: C.surface, borderTop: `1px solid ${C.border}` }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
+                  {[
+                    { label: 'Categoria', value: detalhe.categoria },
+                    { label: 'Formato', value: detalhe.formato || '—' },
+                    { label: 'Rodadas', value: detalhe.rodadas },
+                    { label: 'Jogos feitos', value: `${detalhe.jogosFeitos} / ${detalhe.totalJogos}` },
+                    { label: 'Status', value: detalhe.finalizada ? 'Finalizada' : 'Em andamento' },
+                    { label: 'Gerado em', value: detalhe.geradoEm ? new Date(detalhe.geradoEm).toLocaleDateString('pt-BR') : '—' },
+                  ].map((item, i) => (
+                    <div key={i} style={{ background: C.white, borderRadius: 10, padding: '10px 14px' }}>
+                      <div style={{ fontSize: '0.68rem', color: C.muted, fontWeight: 700, textTransform: 'uppercase', marginBottom: 3 }}>{item.label}</div>
+                      <div style={{ fontWeight: 700, color: C.darkGreen, fontSize: '0.88rem' }}>{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <a href="/admin/torneios" style={{ padding: '9px 18px', borderRadius: 10, background: `linear-gradient(135deg,${C.green},${C.lightGreen})`, color: C.darkGreen, fontWeight: 700, textDecoration: 'none', fontSize: '0.82rem' }}>
+                    🏆 Gerenciar em Torneios →
+                  </a>
+                  <a href="/ranking" target="_blank" style={{ padding: '9px 18px', borderRadius: 10, background: C.white, border: `1px solid ${C.border}`, color: C.darkGreen, fontWeight: 700, textDecoration: 'none', fontSize: '0.82rem' }}>
+                    👁 Ver chave pública →
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ─── Tab: Regras do Torneio ─────────────────────────────────────────────── */
+const REGRAS_DEFAULT = {
+  titulo: '4ª Agro Open de Tênis',
+  subtitulo: 'Regulamento Oficial',
+  versao: '1.0',
+  edicao: '2026',
+  local: 'Tênis & Touring Clube — Cuiabá, MT',
+  data: '',
+  organizador: 'TTC — Tênis & Touring Clube',
+  contato: '',
+  premiacaoTotal: 'R$ 250.000+',
+  formato: 'Eliminatória simples com fase de grupos em algumas categorias. Melhor de 3 sets com Advantage. Decisivo em Match Tie-Break (10 pontos).',
+  categorias: [
+    { nome: 'Masculino · 1ª Classe', formato: 'Melhor de 3 sets (MTB)', idade: 'Livre', vagas: 32 },
+    { nome: 'Masculino · 2ª Classe', formato: 'Melhor de 3 sets (MTB)', idade: 'Livre', vagas: 32 },
+    { nome: 'Masculino · 3ª Classe', formato: 'Melhor de 3 sets', idade: 'Livre', vagas: 32 },
+    { nome: 'Feminino · 1ª Classe', formato: 'Melhor de 3 sets (MTB)', idade: 'Livre', vagas: 16 },
+    { nome: 'Feminino · 2ª Classe', formato: 'Melhor de 3 sets', idade: 'Livre', vagas: 16 },
+    { nome: 'Masculino · 35+', formato: 'Melhor de 3 sets', idade: '35+', vagas: 16 },
+    { nome: 'Masculino · 45+', formato: 'Melhor de 3 sets', idade: '45+', vagas: 16 },
+    { nome: 'Masculino · 55+', formato: 'Melhor de 3 sets', idade: '55+', vagas: 8 },
+    { nome: 'Misto · Duplas 1ª Classe', formato: 'Melhor de 3 sets (MTB)', idade: 'Livre', vagas: 16 },
+    { nome: 'Infantil · 14 anos', formato: 'Melhor de 3 sets', idade: 'Até 14', vagas: 16 },
+  ],
+  regrasGerais: [
+    'Os atletas devem se apresentar com 15 minutos de antecedência ao horário marcado.',
+    'Tolerância de 10 minutos para início da partida. Após esse prazo, W.O. para o adversário.',
+    'As bolas serão fornecidas pela organização (3 bolas por jogo). Troca autorizada a cada set.',
+    'Em caso de lesão, o atleta poderá receber atendimento médico por até 3 minutos. Após isso, W.O. ou continuidade sob responsabilidade do atleta.',
+    'Não é permitido o uso de dispositivos eletrônicos durante a partida.',
+    'A pontuação segue as regras oficiais da CBT (Confederação Brasileira de Tênis).',
+    'Reclamações devem ser feitas exclusivamente ao árbitro ou mesa de competição.',
+    'O uso de uniformes adequados é obrigatório. Camiseta, bermuda/shorts ou saia esportiva.',
+    'É proibido o consumo de bebidas alcoólicas nas quadras durante as partidas.',
+    'A organização se reserva o direito de alterar horários e quadras por necessidade operacional.',
+    'Casos omissos serão resolvidos pelo comitê organizador, cuja decisão é irrecorrível.',
+  ],
+  premiacao: [
+    { categoria: 'Campeão (1ª Classe)', premio: 'R$ 15.000 + Troféu' },
+    { categoria: 'Vice-campeão (1ª Classe)', premio: 'R$ 7.500 + Troféu' },
+    { categoria: 'Semifinalistas (1ª Classe)', premio: 'R$ 3.000 cada + Medalha' },
+    { categoria: 'Demais categorias', premio: 'Troféus e medalhas por fase' },
+  ],
+  cronograma: [
+    { fase: 'Credenciamento', data: '', obs: 'Obrigatório para confirmar inscrição' },
+    { fase: '1ª Rodada', data: '', obs: '' },
+    { fase: 'Quartas de Final', data: '', obs: '' },
+    { fase: 'Semifinais', data: '', obs: '' },
+    { fase: 'Finais', data: '', obs: 'Transmissão ao vivo' },
+    { fase: 'Premiação', data: '', obs: 'Cerimônia de encerramento' },
+  ],
+  observacoes: 'A inscrição implica na aceitação integral deste regulamento.',
+}
+
+function TabRegras({ showMsg }) {
+  const [regras, setRegras] = useState(null)
+  const [editMode, setEditMode] = useState(false)
+  const [draft, setDraft] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [activeSection, setActiveSection] = useState('geral')
+
+  useEffect(() => {
+    api.get('/api/admin/regras-torneio').then(d => {
+      const merged = Object.keys(d).length > 0 ? d : REGRAS_DEFAULT
+      setRegras(merged); setDraft(JSON.parse(JSON.stringify(merged)))
+    }).catch(() => { setRegras(REGRAS_DEFAULT); setDraft(JSON.parse(JSON.stringify(REGRAS_DEFAULT))) })
+  }, [])
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await api.put('/api/admin/regras-torneio', draft)
+      setRegras(JSON.parse(JSON.stringify(draft)))
+      setEditMode(false)
+      showMsg('✅ Regulamento salvo com sucesso!')
+    } catch { showMsg('Erro ao salvar regulamento.', 'err') }
+    finally { setSaving(false) }
+  }
+
+  const handleCancel = () => { setDraft(JSON.parse(JSON.stringify(regras))); setEditMode(false) }
+
+  const setField = (path, value) => {
+    setDraft(d => {
+      const nd = JSON.parse(JSON.stringify(d))
+      const keys = path.split('.')
+      let obj = nd
+      for (let i = 0; i < keys.length - 1; i++) obj = obj[keys[i]]
+      obj[keys[keys.length - 1]] = value
+      return nd
+    })
+  }
+
+  const setArrayItem = (arr, idx, field, value) => {
+    setDraft(d => {
+      const nd = JSON.parse(JSON.stringify(d))
+      nd[arr][idx][field] = value
+      return nd
+    })
+  }
+
+  const addArrayItem = (arr, template) => {
+    setDraft(d => { const nd = JSON.parse(JSON.stringify(d)); nd[arr] = [...(nd[arr] || []), template]; return nd })
+  }
+
+  const removeArrayItem = (arr, idx) => {
+    setDraft(d => { const nd = JSON.parse(JSON.stringify(d)); nd[arr] = nd[arr].filter((_, i) => i !== idx); return nd })
+  }
+
+  const setListItem = (arr, idx, value) => {
+    setDraft(d => { const nd = JSON.parse(JSON.stringify(d)); nd[arr][idx] = value; return nd })
+  }
+
+  const data = editMode ? draft : regras
+  if (!data) return <div style={{ textAlign: 'center', padding: 60, color: C.green, fontSize: '2rem' }}>⏳</div>
+
+  const inp = (field, placeholder = '', multiline = false) => {
+    const val = field.split('.').reduce((o, k) => o?.[k], data) ?? ''
+    if (!editMode) return <span style={{ color: C.darkGreen, fontWeight: 600 }}>{val || <span style={{ color: '#ccc' }}>—</span>}</span>
+    const common = { value: val, onChange: e => setField(field, e.target.value), placeholder, style: { width: '100%', padding: '8px 11px', borderRadius: 9, border: `1.5px solid ${C.green}`, fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', background: '#fffdf7', fontFamily: 'inherit' } }
+    return multiline ? <textarea {...common} rows={3} style={{ ...common.style, resize: 'vertical' }} /> : <input {...common} />
+  }
+
+  const SECTIONS = [
+    { key: 'geral', label: '📋 Geral' },
+    { key: 'categorias', label: '🎾 Categorias' },
+    { key: 'regras', label: '📜 Regras' },
+    { key: 'premiacao', label: '🏆 Premiação' },
+    { key: 'cronograma', label: '📅 Cronograma' },
+  ]
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Toolbar */}
+      <div style={{ background: C.white, borderRadius: 16, padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, boxShadow: '0 2px 10px rgba(0,0,0,.06)' }}>
+        <div>
+          <div style={{ fontWeight: 900, color: C.darkGreen, fontSize: '1rem' }}>📜 Regulamento Oficial do Torneio</div>
+          <div style={{ fontSize: '0.78rem', color: C.muted, marginTop: 2 }}>
+            Versão {data.versao || '1.0'} · {data.edicao || '2026'} · Publicado em <a href="/regulamento" target="_blank" style={{ color: C.green }}>regulamento</a>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {!editMode ? (
+            <>
+              <a href="/regulamento" target="_blank" style={{ padding: '9px 16px', borderRadius: 10, background: C.surface, border: `1px solid ${C.border}`, color: C.darkGreen, textDecoration: 'none', fontWeight: 700, fontSize: '0.82rem' }}>👁 Ver público →</a>
+              <button onClick={() => setEditMode(true)} style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg,${C.green},${C.lightGreen})`, color: C.darkGreen, fontWeight: 800, cursor: 'pointer', fontSize: '0.85rem' }}>✏️ Editar regulamento</button>
+            </>
+          ) : (
+            <>
+              <button onClick={handleCancel} style={{ padding: '9px 16px', borderRadius: 10, border: '1.5px solid #d0dcc8', background: C.white, cursor: 'pointer', fontWeight: 600, color: '#666', fontSize: '0.82rem' }}>Cancelar</button>
+              <button onClick={handleSave} disabled={saving} style={{ padding: '9px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg,${C.green},${C.lightGreen})`, color: C.darkGreen, fontWeight: 800, cursor: 'pointer', fontSize: '0.85rem' }}>
+                {saving ? '⏳ Salvando...' : '✓ Salvar'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Subtabs */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {SECTIONS.map(s => (
+          <button key={s.key} onClick={() => setActiveSection(s.key)}
+            style={{ padding: '8px 18px', borderRadius: 50, fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', border: 'none', background: activeSection === s.key ? C.darkGreen : C.white, color: activeSection === s.key ? '#8FD64A' : C.darkGreen, boxShadow: '0 2px 6px rgba(0,0,0,.07)' }}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Geral ── */}
+      {activeSection === 'geral' && (
+        <div style={{ background: C.white, borderRadius: 18, padding: '22px 24px', boxShadow: '0 2px 14px rgba(0,0,0,.07)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
+            {[
+              { label: 'Nome do torneio', f: 'titulo' },
+              { label: 'Subtítulo', f: 'subtitulo' },
+              { label: 'Edição / Ano', f: 'edicao' },
+              { label: 'Versão do regulamento', f: 'versao' },
+              { label: 'Local', f: 'local' },
+              { label: 'Data', f: 'data' },
+              { label: 'Organizador', f: 'organizador' },
+              { label: 'Contato', f: 'contato' },
+              { label: 'Premiação total', f: 'premiacaoTotal' },
+            ].map(({ label, f }) => (
+              <div key={f}>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: C.muted, textTransform: 'uppercase', marginBottom: 5 }}>{label}</div>
+                {inp(f, label)}
+              </div>
+            ))}
+            <div style={{ gridColumn: '1 / -1' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: C.muted, textTransform: 'uppercase', marginBottom: 5 }}>Formato geral</div>
+              {inp('formato', 'Descreva o formato geral das disputas...', true)}
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: C.muted, textTransform: 'uppercase', marginBottom: 5 }}>Observações</div>
+              {inp('observacoes', 'Observações finais...', true)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Categorias ── */}
+      {activeSection === 'categorias' && (
+        <div style={{ background: C.white, borderRadius: 18, overflow: 'hidden', boxShadow: '0 2px 14px rgba(0,0,0,.07)' }}>
+          <div style={{ padding: '14px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between' }}>
+            <h3 style={{ margin: 0, fontWeight: 900, color: C.darkGreen }}>🎾 Categorias ({(data.categorias || []).length})</h3>
+            {editMode && (
+              <button onClick={() => addArrayItem('categorias', { nome: '', formato: 'Melhor de 3 sets', idade: 'Livre', vagas: 16 })}
+                style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: `linear-gradient(135deg,${C.green},${C.lightGreen})`, color: C.darkGreen, fontWeight: 700, cursor: 'pointer', fontSize: '0.78rem' }}>
+                ➕ Adicionar categoria
+              </button>
+            )}
+          </div>
+          <div style={{ overflow: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 600 }}>
+              <thead>
+                <tr style={{ background: C.surface }}>
+                  {['Categoria', 'Formato de jogo', 'Faixa etária', 'Vagas', editMode ? 'Ação' : ''].filter(Boolean).map(h => (
+                    <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.72rem', fontWeight: 800, color: C.darkGreen, textTransform: 'uppercase', borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(data.categorias || []).map((cat, i) => (
+                  <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
+                    <td style={{ padding: '10px 16px' }}>
+                      {editMode ? <input value={cat.nome} onChange={e => setArrayItem('categorias', i, 'nome', e.target.value)} style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: `1.5px solid ${C.green}`, fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} /> : <span style={{ fontWeight: 700, color: C.darkGreen }}>{cat.nome}</span>}
+                    </td>
+                    <td style={{ padding: '10px 16px' }}>
+                      {editMode ? <input value={cat.formato} onChange={e => setArrayItem('categorias', i, 'formato', e.target.value)} style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: `1.5px solid ${C.green}`, fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} /> : <span style={{ color: C.muted, fontSize: '0.85rem' }}>{cat.formato}</span>}
+                    </td>
+                    <td style={{ padding: '10px 16px' }}>
+                      {editMode ? <input value={cat.idade} onChange={e => setArrayItem('categorias', i, 'idade', e.target.value)} style={{ width: 90, padding: '7px 10px', borderRadius: 8, border: `1.5px solid ${C.green}`, fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} /> : <span style={{ color: C.muted, fontSize: '0.85rem' }}>{cat.idade}</span>}
+                    </td>
+                    <td style={{ padding: '10px 16px' }}>
+                      {editMode ? <input type="number" value={cat.vagas} onChange={e => setArrayItem('categorias', i, 'vagas', Number(e.target.value))} style={{ width: 70, padding: '7px 10px', borderRadius: 8, border: `1.5px solid ${C.green}`, fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} /> : <span style={{ fontWeight: 700, color: C.green }}>{cat.vagas}</span>}
+                    </td>
+                    {editMode && (
+                      <td style={{ padding: '10px 16px' }}>
+                        <button onClick={() => removeArrayItem('categorias', i)} style={{ background: 'rgba(224,85,85,.1)', border: 'none', borderRadius: 7, padding: '6px 10px', cursor: 'pointer', color: C.danger }}>🗑</button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Regras gerais ── */}
+      {activeSection === 'regras' && (
+        <div style={{ background: C.white, borderRadius: 18, overflow: 'hidden', boxShadow: '0 2px 14px rgba(0,0,0,.07)' }}>
+          <div style={{ padding: '14px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between' }}>
+            <h3 style={{ margin: 0, fontWeight: 900, color: C.darkGreen }}>📜 Regras gerais ({(data.regrasGerais || []).length})</h3>
+            {editMode && (
+              <button onClick={() => addArrayItem('regrasGerais', '')}
+                style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: `linear-gradient(135deg,${C.green},${C.lightGreen})`, color: C.darkGreen, fontWeight: 700, cursor: 'pointer', fontSize: '0.78rem' }}>
+                ➕ Adicionar regra
+              </button>
+            )}
+          </div>
+          <div style={{ padding: '16px 22px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {(data.regrasGerais || []).map((r, i) => (
+              <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', background: `linear-gradient(135deg,${C.green},${C.lightGreen})`, color: C.darkGreen, fontWeight: 900, fontSize: '0.78rem', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 4 }}>{i + 1}</div>
+                <div style={{ flex: 1 }}>
+                  {editMode ? (
+                    <textarea value={r} onChange={e => setListItem('regrasGerais', i, e.target.value)} rows={2}
+                      style={{ width: '100%', padding: '8px 11px', borderRadius: 9, border: `1.5px solid ${C.green}`, fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }} />
+                  ) : (
+                    <div style={{ color: C.darkGreen, fontSize: '0.9rem', lineHeight: 1.6, paddingTop: 4 }}>{r}</div>
+                  )}
+                </div>
+                {editMode && (
+                  <button onClick={() => removeArrayItem('regrasGerais', i)} style={{ background: 'rgba(224,85,85,.1)', border: 'none', borderRadius: 7, padding: '6px 8px', cursor: 'pointer', color: C.danger, flexShrink: 0, marginTop: 2 }}>🗑</button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Premiação ── */}
+      {activeSection === 'premiacao' && (
+        <div style={{ background: C.white, borderRadius: 18, overflow: 'hidden', boxShadow: '0 2px 14px rgba(0,0,0,.07)' }}>
+          <div style={{ padding: '14px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h3 style={{ margin: 0, fontWeight: 900, color: C.darkGreen }}>🏆 Tabela de Premiação</h3>
+              <div style={{ fontSize: '0.78rem', color: C.muted, marginTop: 2 }}>Total: <strong style={{ color: C.gold }}>{data.premiacaoTotal}</strong></div>
+            </div>
+            {editMode && (
+              <button onClick={() => addArrayItem('premiacao', { categoria: '', premio: '' })}
+                style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: `linear-gradient(135deg,${C.green},${C.lightGreen})`, color: C.darkGreen, fontWeight: 700, cursor: 'pointer', fontSize: '0.78rem' }}>
+                ➕ Adicionar linha
+              </button>
+            )}
+          </div>
+          <div style={{ padding: '16px 22px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {(data.premiacao || []).map((p, i) => (
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: editMode ? '1fr 1fr auto' : '1fr 1fr', gap: 10, padding: '12px 16px', background: i === 0 ? 'rgba(201,166,86,.06)' : C.surface, borderRadius: 12, border: i === 0 ? `1px solid ${C.gold}40` : `1px solid ${C.border}` }}>
+                <div>
+                  {editMode ? <input value={p.categoria} onChange={e => setArrayItem('premiacao', i, 'categoria', e.target.value)} placeholder="Categoria / fase" style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: `1.5px solid ${C.green}`, fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} /> : <span style={{ fontWeight: 700, color: C.darkGreen }}>{i === 0 ? '🥇 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : ''}{p.categoria}</span>}
+                </div>
+                <div>
+                  {editMode ? <input value={p.premio} onChange={e => setArrayItem('premiacao', i, 'premio', e.target.value)} placeholder="Ex: R$ 15.000 + Troféu" style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: `1.5px solid ${C.green}`, fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} /> : <span style={{ fontWeight: 700, color: i <= 2 ? C.gold : C.green, fontSize: '0.92rem' }}>{p.premio}</span>}
+                </div>
+                {editMode && <button onClick={() => removeArrayItem('premiacao', i)} style={{ background: 'rgba(224,85,85,.1)', border: 'none', borderRadius: 7, padding: '6px 8px', cursor: 'pointer', color: C.danger }}>🗑</button>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Cronograma ── */}
+      {activeSection === 'cronograma' && (
+        <div style={{ background: C.white, borderRadius: 18, overflow: 'hidden', boxShadow: '0 2px 14px rgba(0,0,0,.07)' }}>
+          <div style={{ padding: '14px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between' }}>
+            <h3 style={{ margin: 0, fontWeight: 900, color: C.darkGreen }}>📅 Cronograma</h3>
+            {editMode && (
+              <button onClick={() => addArrayItem('cronograma', { fase: '', data: '', obs: '' })}
+                style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: `linear-gradient(135deg,${C.green},${C.lightGreen})`, color: C.darkGreen, fontWeight: 700, cursor: 'pointer', fontSize: '0.78rem' }}>
+                ➕ Adicionar fase
+              </button>
+            )}
+          </div>
+          <div style={{ padding: '16px 22px', display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {(data.cronograma || []).map((fase, i) => (
+              <div key={i} style={{ display: 'flex', gap: 0, alignItems: 'stretch' }}>
+                {/* Timeline dot */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 36, flexShrink: 0 }}>
+                  <div style={{ width: 14, height: 14, borderRadius: '50%', background: `linear-gradient(135deg,${C.green},${C.lightGreen})`, border: `2px solid ${C.white}`, boxShadow: `0 0 0 2px ${C.green}`, flexShrink: 0, marginTop: 16 }} />
+                  {i < (data.cronograma || []).length - 1 && <div style={{ width: 2, flex: 1, background: `${C.green}30` }} />}
+                </div>
+                <div style={{ flex: 1, paddingBottom: 20, paddingLeft: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: editMode ? '1fr 140px 1fr auto' : '1fr 140px 1fr', gap: 8, alignItems: 'center' }}>
+                    <div>
+                      {editMode ? <input value={fase.fase} onChange={e => setArrayItem('cronograma', i, 'fase', e.target.value)} placeholder="Nome da fase" style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: `1.5px solid ${C.green}`, fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} /> : <div style={{ fontWeight: 700, color: C.darkGreen }}>{fase.fase}</div>}
+                    </div>
+                    <div>
+                      {editMode ? <input type="date" value={fase.data} onChange={e => setArrayItem('cronograma', i, 'data', e.target.value)} style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: `1.5px solid ${C.green}`, fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} /> : <div style={{ color: C.muted, fontSize: '0.85rem' }}>{fase.data ? new Date(fase.data + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }) : <span style={{ color: '#ddd' }}>A definir</span>}</div>}
+                    </div>
+                    <div>
+                      {editMode ? <input value={fase.obs} onChange={e => setArrayItem('cronograma', i, 'obs', e.target.value)} placeholder="Observação" style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: `1.5px solid ${C.green}`, fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} /> : <div style={{ color: '#888', fontSize: '0.82rem' }}>{fase.obs}</div>}
+                    </div>
+                    {editMode && <button onClick={() => removeArrayItem('cronograma', i)} style={{ background: 'rgba(224,85,85,.1)', border: 'none', borderRadius: 7, padding: '6px 8px', cursor: 'pointer', color: C.danger }}>🗑</button>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── Tab: Comunicados de Jogo ───────────────────────────────────────────── */
+const TIPOS_COMUNICADO = [
+  { key: 'jogo', label: '⚔️ Jogo agendado', color: '#4A90D9' },
+  { key: 'resultado', label: '✅ Resultado', color: '#5FB335' },
+  { key: 'wo', label: '🚫 W.O. / Abandono', color: '#E05555' },
+  { key: 'adiado', label: '⏸ Adiado', color: '#C9A656' },
+  { key: 'aviso', label: '📢 Aviso geral', color: '#7B5EA7' },
+  { key: 'inscricoes', label: '📋 Inscrições', color: '#3AAB6D' },
+]
+
+function TabComunicados({ categorias, showMsg }) {
+  const [comunicados, setComunicados] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [editItem, setEditItem] = useState(null)
+  const [filtroTipo, setFiltroTipo] = useState('all')
+  const [filtroCat, setFiltroCat] = useState('all')
+  const [saving, setSaving] = useState(false)
+  const FORM_EMPTY = { tipo: 'jogo', titulo: '', mensagem: '', categoria: '', dataJogo: '', horaJogo: '', quadra: '', atleta1: '', atleta2: '', publicado: true }
+  const [form, setForm] = useState(FORM_EMPTY)
+  const formRef = useRef(null)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    api.get('/api/admin/ranking/comunicados').then(d => { setComunicados(Array.isArray(d) ? d : []); setLoading(false) }).catch(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const openNew = () => { setForm(FORM_EMPTY); setEditItem(null); setShowForm(true); setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth' }), 50) }
+
+  const openEdit = (c) => {
+    setForm({ tipo: c.tipo, titulo: c.titulo, mensagem: c.mensagem, categoria: c.categoria || '', dataJogo: c.dataJogo || '', horaJogo: c.horaJogo || '', quadra: c.quadra || '', atleta1: c.atleta1 || '', atleta2: c.atleta2 || '', publicado: c.publicado })
+    setEditItem(c); setShowForm(true)
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+  }
+
+  const handleSave = async () => {
+    if (!form.titulo.trim() || !form.mensagem.trim()) return showMsg('Título e mensagem são obrigatórios.', 'err')
+    setSaving(true)
+    try {
+      if (editItem) {
+        await api.patch(`/api/admin/ranking/comunicados/${editItem.id}`, form)
+        showMsg('✅ Comunicado atualizado!')
+      } else {
+        await api.post('/api/admin/ranking/comunicados', form)
+        showMsg('✅ Comunicado publicado!')
+      }
+      setShowForm(false); setEditItem(null); load()
+    } catch (e) { showMsg(e.message || 'Erro ao salvar comunicado.', 'err') }
+    finally { setSaving(false) }
+  }
+
+  const handleDelete = async (c) => {
+    if (!window.confirm(`Excluir "${c.titulo}"?`)) return
+    try { await api.delete(`/api/admin/ranking/comunicados/${c.id}`); showMsg('Comunicado excluído.'); load() } catch { showMsg('Erro ao excluir.', 'err') }
+  }
+
+  const handleTogglePublicado = async (c) => {
+    try {
+      await api.patch(`/api/admin/ranking/comunicados/${c.id}`, { publicado: !c.publicado })
+      load()
+    } catch { showMsg('Erro.', 'err') }
+  }
+
+  const tipoInfo = (key) => TIPOS_COMUNICADO.find(t => t.key === key) || TIPOS_COMUNICADO[4]
+
+  const filtrados = comunicados.filter(c => {
+    if (filtroTipo !== 'all' && c.tipo !== filtroTipo) return false
+    if (filtroCat !== 'all' && c.categoria !== filtroCat) return false
+    return true
+  })
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Barra de ações */}
+      <div style={{ background: C.white, borderRadius: 16, padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, boxShadow: '0 2px 10px rgba(0,0,0,.06)' }}>
+        <div>
+          <div style={{ fontWeight: 900, color: C.darkGreen, fontSize: '1rem' }}>📢 Comunicados de Jogos</div>
+          <div style={{ fontSize: '0.78rem', color: C.muted, marginTop: 2 }}>{comunicados.length} comunicado{comunicados.length !== 1 ? 's' : ''} · {comunicados.filter(c => c.publicado).length} publicado{comunicados.filter(c => c.publicado).length !== 1 ? 's' : ''}</div>
+        </div>
+        <button onClick={openNew}
+          style={{ padding: '10px 22px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${C.green},${C.lightGreen})`, color: C.darkGreen, fontWeight: 800, cursor: 'pointer', fontSize: '0.88rem' }}>
+          ➕ Novo comunicado
+        </button>
+      </div>
+
+      {/* Formulário de criação/edição */}
+      {showForm && (
+        <div ref={formRef} style={{ background: C.white, borderRadius: 18, overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,.12)', border: `2px solid ${C.green}` }}>
+          <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#1a4a2e)`, padding: '16px 22px', color: C.white, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontWeight: 900, fontSize: '1rem' }}>{editItem ? '✏️ Editar comunicado' : '➕ Novo comunicado'}</div>
+              <div style={{ fontSize: '0.78rem', color: '#a0c8a0', marginTop: 2 }}>Preencha os detalhes e publique</div>
+            </div>
+            <button onClick={() => setShowForm(false)} style={{ background: 'rgba(255,255,255,.15)', border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', color: C.white, fontWeight: 700 }}>✕</button>
+          </div>
+          <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* Tipo */}
+            <div>
+              <label style={{ fontSize: '0.72rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 6 }}>TIPO DE COMUNICADO</label>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {TIPOS_COMUNICADO.map(t => (
+                  <button key={t.key} onClick={() => set('tipo', t.key)}
+                    style={{ padding: '7px 14px', borderRadius: 50, border: `1.5px solid ${form.tipo === t.key ? t.color : '#e0e0e0'}`, background: form.tipo === t.key ? `${t.color}18` : 'transparent', color: form.tipo === t.key ? t.color : C.muted, fontWeight: form.tipo === t.key ? 800 : 600, cursor: 'pointer', fontSize: '0.8rem', transition: 'all .15s' }}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Grid campos */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>TÍTULO *</label>
+                <input value={form.titulo} onChange={e => set('titulo', e.target.value)} placeholder="Ex: Jogo — João Silva vs Pedro Santos"
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${C.green}`, fontSize: '0.92rem', outline: 'none', boxSizing: 'border-box' }} />
+              </div>
+
+              {form.tipo === 'jogo' && (
+                <>
+                  <div>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>ATLETA 1</label>
+                    <input value={form.atleta1} onChange={e => set('atleta1', e.target.value)} placeholder="Nome do atleta 1"
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>ATLETA 2</label>
+                    <input value={form.atleta2} onChange={e => set('atleta2', e.target.value)} placeholder="Nome do atleta 2"
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>DATA DO JOGO</label>
+                    <input type="date" value={form.dataJogo} onChange={e => set('dataJogo', e.target.value)}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>HORA</label>
+                    <input type="time" value={form.horaJogo} onChange={e => set('horaJogo', e.target.value)}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.72rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>QUADRA</label>
+                    <input value={form.quadra} onChange={e => set('quadra', e.target.value)} placeholder="Ex: Quadra 3 — Saibro"
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label style={{ fontSize: '0.72rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>CATEGORIA</label>
+                {categorias.length > 0 ? (
+                  <select value={form.categoria} onChange={e => set('categoria', e.target.value)}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
+                    <option value="">Todas / Geral</option>
+                    {categorias.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                ) : (
+                  <input value={form.categoria} onChange={e => set('categoria', e.target.value)} placeholder="Categoria ou 'Geral'"
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
+                )}
+              </div>
+            </div>
+
+            {/* Mensagem */}
+            <div>
+              <label style={{ fontSize: '0.72rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>MENSAGEM / DETALHES *</label>
+              <textarea value={form.mensagem} onChange={e => set('mensagem', e.target.value)} rows={4}
+                placeholder="Detalhe o comunicado: horário, local, instruções importantes, resultado, observações..."
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${C.green}`, fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }} />
+            </div>
+
+            {/* Publicado toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: C.surface, borderRadius: 12 }}>
+              <div style={{ width: 44, height: 24, borderRadius: 12, background: form.publicado ? C.green : '#ccc', cursor: 'pointer', position: 'relative', transition: 'background .2s', flexShrink: 0 }}
+                onClick={() => set('publicado', !form.publicado)}>
+                <div style={{ position: 'absolute', top: 3, left: form.publicado ? 23 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .2s', boxShadow: '0 1px 4px rgba(0,0,0,.25)' }} />
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, color: C.darkGreen, fontSize: '0.88rem' }}>
+                  {form.publicado ? '✅ Publicado' : '📝 Rascunho'}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: C.muted }}>
+                  {form.publicado ? 'Visível para atletas e público' : 'Apenas para administradores'}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => { setShowForm(false); setEditItem(null) }} style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1.5px solid #d0dcc8', background: C.white, cursor: 'pointer', fontWeight: 600, color: '#666' }}>Cancelar</button>
+              <button onClick={handleSave} disabled={saving || !form.titulo.trim() || !form.mensagem.trim()}
+                style={{ flex: 2, padding: '11px', borderRadius: 10, border: 'none', background: (form.titulo.trim() && form.mensagem.trim()) ? `linear-gradient(135deg,${C.green},${C.lightGreen})` : '#e0e0e0', color: (form.titulo.trim() && form.mensagem.trim()) ? C.darkGreen : '#aaa', fontWeight: 800, cursor: (form.titulo.trim() && form.mensagem.trim()) ? 'pointer' : 'not-allowed' }}>
+                {saving ? '⏳ Salvando...' : editItem ? '✓ Atualizar comunicado' : '📢 Publicar comunicado'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Filtros */}
+      <div style={{ background: C.white, borderRadius: 14, padding: '12px 18px', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,.05)' }}>
+        <select value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)}
+          style={{ padding: '8px 12px', borderRadius: 9, border: '1.5px solid #d0dcc8', fontSize: '0.84rem', outline: 'none', background: C.white, color: C.darkGreen }}>
+          <option value="all">Todos os tipos</option>
+          {TIPOS_COMUNICADO.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+        </select>
+        <select value={filtroCat} onChange={e => setFiltroCat(e.target.value)}
+          style={{ padding: '8px 12px', borderRadius: 9, border: '1.5px solid #d0dcc8', fontSize: '0.84rem', outline: 'none', background: C.white, color: C.darkGreen }}>
+          <option value="all">Todas as categorias</option>
+          {categorias.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <span style={{ fontSize: '0.78rem', color: C.muted, marginLeft: 'auto' }}>{filtrados.length} resultado{filtrados.length !== 1 ? 's' : ''}</span>
+      </div>
+
+      {/* Lista de comunicados */}
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 60, color: C.green, fontSize: '2rem' }}>⏳</div>
+      ) : filtrados.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 60, background: C.white, borderRadius: 18, color: '#aaa', boxShadow: '0 2px 14px rgba(0,0,0,.07)' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: 10 }}>📢</div>
+          <div style={{ fontWeight: 700, color: C.darkGreen, marginBottom: 6 }}>Nenhum comunicado ainda</div>
+          <div style={{ fontSize: '0.84rem' }}>Crie comunicados de jogos, resultados e avisos para os atletas.</div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {filtrados.map((c, i) => {
+            const tipo = tipoInfo(c.tipo)
+            return (
+              <div key={c.id || i} style={{ background: C.white, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 10px rgba(0,0,0,.06)', border: `1px solid ${C.border}`, opacity: c.publicado ? 1 : 0.7, transition: 'all .2s' }}
+                onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,.12)'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+                onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,.06)'; e.currentTarget.style.transform = 'none' }}
+              >
+                {/* Barra de cor do tipo */}
+                <div style={{ height: 4, background: tipo.color, width: '100%' }} />
+                <div style={{ padding: '14px 20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                        <span style={{ padding: '3px 12px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 800, background: `${tipo.color}18`, color: tipo.color, border: `1px solid ${tipo.color}30` }}>{tipo.label}</span>
+                        {c.categoria && <span style={{ padding: '3px 12px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700, background: C.surface, color: C.muted, border: `1px solid ${C.border}` }}>{c.categoria}</span>}
+                        {!c.publicado && <span style={{ padding: '3px 12px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700, background: '#fff3e0', color: '#f57c00', border: '1px solid #ffe0b2' }}>📝 Rascunho</span>}
+                      </div>
+                      <div style={{ fontWeight: 800, color: C.darkGreen, fontSize: '0.95rem', marginBottom: 6 }}>{c.titulo}</div>
+
+                      {/* Info do jogo */}
+                      {(c.atleta1 || c.atleta2 || c.dataJogo) && (
+                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+                          {(c.atleta1 || c.atleta2) && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f0fae8', borderRadius: 8, padding: '5px 12px', fontSize: '0.82rem', fontWeight: 700, color: C.darkGreen }}>
+                              <span>{c.atleta1}</span><span style={{ color: C.muted }}>vs</span><span>{c.atleta2}</span>
+                            </div>
+                          )}
+                          {c.dataJogo && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.82rem', color: C.muted }}>
+                              📅 {new Date(c.dataJogo + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                              {c.horaJogo && <span> · ⏰ {c.horaJogo}</span>}
+                              {c.quadra && <span> · 🎾 {c.quadra}</span>}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      <div style={{ color: '#666', fontSize: '0.84rem', lineHeight: 1.6 }}>{c.mensagem}</div>
+                      <div style={{ fontSize: '0.7rem', color: '#bbb', marginTop: 8 }}>
+                        por {c.autor || '—'} · {c.criadoEm ? new Date(c.criadoEm).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      <button onClick={() => handleTogglePublicado(c)} title={c.publicado ? 'Despublicar' : 'Publicar'}
+                        style={{ padding: '6px 10px', borderRadius: 8, border: `1.5px solid ${c.publicado ? C.green : '#d0dcc8'}`, background: 'transparent', cursor: 'pointer', fontSize: '0.85rem', color: c.publicado ? C.green : C.muted }}>
+                        {c.publicado ? '👁' : '🙈'}
+                      </button>
+                      <button onClick={() => openEdit(c)} title="Editar"
+                        style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #d0dcc8', background: '#f8f8f8', cursor: 'pointer', fontSize: '0.85rem' }}>✏️</button>
+                      <button onClick={() => handleDelete(c)} title="Excluir"
+                        style={{ padding: '6px 10px', borderRadius: 8, border: `1.5px solid rgba(224,85,85,.3)`, background: 'rgba(224,85,85,.05)', cursor: 'pointer', fontSize: '0.85rem', color: C.danger }}>🗑</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ─── Componente principal ──────────────────────────────────────────────── */
 export default function AdminRanking() {
   const [ranking,       setRanking]       = useState([])
@@ -656,13 +1524,16 @@ export default function AdminRanking() {
           {/* Tabs */}
           <div style={{ display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 0 }}>
             {[
-              { key: 'ranking',    label: '📋 Ranking Geral' },
-              { key: 'categorias', label: '🎾 Por Categoria' },
-              { key: 'partidas',   label: '⚔️ Partidas Avulsas' },
-              { key: 'temporadas', label: '📅 Temporadas' },
-              { key: 'campeoes',   label: '🏅 Campeões' },
-              { key: 'pontuacao',  label: '⭐ Pontuação' },
-              { key: 'stats',      label: '📊 Estatísticas' },
+              { key: 'ranking',      label: '📋 Ranking Geral' },
+              { key: 'categorias',   label: '🎾 Por Categoria' },
+              { key: 'partidas',     label: '⚔️ Partidas Avulsas' },
+              { key: 'temporadas',   label: '📅 Temporadas' },
+              { key: 'campeoes',     label: '🏅 Campeões' },
+              { key: 'pontuacao',    label: '⭐ Pontuação' },
+              { key: 'sorteio',      label: '🎲 Sorteio / Chaves' },
+              { key: 'regras',       label: '📜 Regras' },
+              { key: 'comunicados',  label: '📢 Comunicados' },
+              { key: 'stats',        label: '📊 Estatísticas' },
             ].map(t => (
               <button key={t.key} onClick={() => setTab(t.key)} style={{
                 background: tab === t.key ? C.white : 'transparent',
@@ -1164,6 +2035,27 @@ export default function AdminRanking() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* ════════════════════════════════════════════════════
+            TAB: SORTEIO / CHAVES
+        ════════════════════════════════════════════════════ */}
+        {tab === 'sorteio' && (
+          <TabSorteio categorias={categorias} showMsg={showMsg} />
+        )}
+
+        {/* ════════════════════════════════════════════════════
+            TAB: REGRAS DO TORNEIO
+        ════════════════════════════════════════════════════ */}
+        {tab === 'regras' && (
+          <TabRegras showMsg={showMsg} />
+        )}
+
+        {/* ════════════════════════════════════════════════════
+            TAB: COMUNICADOS DE JOGO
+        ════════════════════════════════════════════════════ */}
+        {tab === 'comunicados' && (
+          <TabComunicados categorias={categorias} showMsg={showMsg} />
         )}
 
         {/* ════════════════════════════════════════════════════
