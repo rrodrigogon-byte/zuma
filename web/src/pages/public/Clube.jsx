@@ -3,1353 +3,1444 @@ import { Link } from 'react-router-dom'
 
 /* ─── Paleta ──────────────────────────────────────────────────────────────── */
 const C = {
-  deep:    '#0E2E1C',
-  forest:  '#1B4D2E',
-  green:   '#5FB335',
-  lime:    '#8FD64A',
+  deep:    '#071A0E',
+  forest:  '#0E2E1C',
+  green:   '#1B4D2E',
+  lime:    '#4CAF50',
+  accent:  '#8FD64A',
   gold:    '#C9A656',
+  goldL:   '#E8C87A',
   cream:   '#F4F6EF',
   muted:   '#6a8a6a',
   white:   '#ffffff',
-  glass:   'rgba(255,255,255,0.08)',
-  glassB:  'rgba(255,255,255,0.15)',
+  glass:   'rgba(255,255,255,0.06)',
+  glassB:  'rgba(255,255,255,0.12)',
+  dark:    'rgba(0,0,0,0.4)',
 }
 
-/* ─── CSS de animações injetado globalmente ───────────────────────────────── */
+/* ─── CSS Global ─────────────────────────────────────────────────────────── */
 const GLOBAL_CSS = `
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(32px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-@keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.88); }
-  to   { opacity: 1; transform: scale(1); }
-}
-@keyframes shimmer {
-  0%   { background-position: -200% 0; }
-  100% { background-position:  200% 0; }
-}
-@keyframes countUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes float {
-  0%,100% { transform: translateY(0px); }
-  50%      { transform: translateY(-8px); }
-}
-@keyframes pulse {
-  0%,100% { opacity: 1; }
-  50%      { opacity: .6; }
-}
-@keyframes gradientShift {
-  0%   { background-position: 0% 50%; }
-  50%  { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-@keyframes slideRight {
-  from { transform: scaleX(0); }
-  to   { transform: scaleX(1); }
-}
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Inter:wght@300;400;500;600;700&display=swap');
 
-.ttc-fade-up    { animation: fadeUp .7s ease both; }
-.ttc-scale-in   { animation: scaleIn .5s ease both; }
-.ttc-float      { animation: float 4s ease-in-out infinite; }
-.ttc-pulse      { animation: pulse 2s ease-in-out infinite; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
 
-.ttc-nav-link {
-  color: rgba(255,255,255,.75);
-  text-decoration: none;
-  font-size: .82rem;
-  font-weight: 600;
-  letter-spacing: .04em;
-  padding: 6px 14px;
-  border-radius: 20px;
-  transition: all .2s;
-  white-space: nowrap;
-}
-.ttc-nav-link:hover,
-.ttc-nav-link.active {
-  color: #fff;
-  background: rgba(255,255,255,.14);
-}
-
-.ttc-card-hover {
-  transition: transform .25s, box-shadow .25s;
-  cursor: default;
-}
-.ttc-card-hover:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 16px 40px rgba(0,0,0,.14) !important;
-}
-
-.ttc-gallery-item {
-  overflow: hidden;
-  border-radius: 12px;
-  cursor: pointer;
-  position: relative;
-}
-.ttc-gallery-item img {
-  width: 100%; height: 100%;
-  object-fit: cover; display: block;
-  transition: transform .5s ease;
-}
-.ttc-gallery-item:hover img { transform: scale(1.07); }
-.ttc-gallery-overlay {
-  position: absolute; inset: 0;
-  background: linear-gradient(180deg, transparent 40%, rgba(14,46,28,.85) 100%);
-  opacity: 0; transition: opacity .3s;
-  display: flex; flex-direction: column;
-  justify-content: flex-end;
-  padding: 16px;
-}
-.ttc-gallery-item:hover .ttc-gallery-overlay { opacity: 1; }
-
-.ttc-btn-primary {
-  display: inline-flex; align-items: center; gap: 8px;
-  background: linear-gradient(135deg, ${C.green}, ${C.lime});
-  color: ${C.deep};
-  padding: 14px 32px; border-radius: 50px;
-  font-weight: 800; font-size: .95rem;
-  text-decoration: none; border: none; cursor: pointer;
-  box-shadow: 0 6px 24px rgba(95,179,53,.4);
-  transition: transform .2s, box-shadow .2s;
-}
-.ttc-btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 32px rgba(95,179,53,.55);
-}
-.ttc-btn-ghost {
-  display: inline-flex; align-items: center; gap: 8px;
-  background: rgba(255,255,255,.1);
-  color: #fff;
-  padding: 12px 28px; border-radius: 50px;
-  font-weight: 700; font-size: .9rem;
-  text-decoration: none; border: 1.5px solid rgba(255,255,255,.25); cursor: pointer;
-  transition: all .2s;
-}
-.ttc-btn-ghost:hover {
-  background: rgba(255,255,255,.2);
-  border-color: rgba(255,255,255,.5);
-}
-
-.ttc-section-divider {
-  width: 48px; height: 4px;
-  background: linear-gradient(90deg, ${C.green}, ${C.lime});
-  border-radius: 2px;
-  margin: 12px 0 24px;
-  transform-origin: left;
-  animation: slideRight .6s ease both;
-}
-
-.ttc-badge {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: rgba(95,179,53,.15);
-  color: ${C.green};
-  border: 1px solid rgba(95,179,53,.3);
-  padding: 4px 12px; border-radius: 20px;
-  font-size: .75rem; font-weight: 700;
-  letter-spacing: .08em; text-transform: uppercase;
-}
-
-.ttc-tab-btn {
-  padding: 9px 20px; border-radius: 24px;
-  font-weight: 700; font-size: .82rem;
-  border: 1.5px solid transparent;
-  cursor: pointer; transition: all .2s;
-  white-space: nowrap;
-}
-.ttc-tab-btn.active {
-  background: ${C.green};
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(95,179,53,.3);
-}
-.ttc-tab-btn:not(.active) {
-  background: rgba(255,255,255,.06);
-  color: ${C.muted};
-  border-color: rgba(255,255,255,.1);
-}
-.ttc-tab-btn:not(.active):hover {
-  background: rgba(255,255,255,.12);
-  color: #fff;
-}
-
-@media (max-width: 640px) {
-  .ttc-hero-actions { flex-direction: column; align-items: stretch; }
-  .ttc-hero-actions a { text-align: center; justify-content: center; }
-  .ttc-stats-grid { grid-template-columns: repeat(2,1fr) !important; }
-  .ttc-features-grid { grid-template-columns: 1fr !important; }
-  .ttc-events-grid { grid-template-columns: 1fr !important; }
-}
-`
-
-/* ─── Hook: intersection observer para animações on-scroll ───────────────── */
-function useInView(threshold = 0.15) {
-  const ref = useRef(null)
-  const [inView, setInView] = useState(false)
-  useEffect(() => {
-    if (!ref.current) return
-    const obs = new IntersectionObserver(
-      ([e]) => { if (e.isIntersecting) { setInView(true); obs.disconnect() } },
-      { threshold }
-    )
-    obs.observe(ref.current)
-    return () => obs.disconnect()
-  }, [threshold])
-  return [ref, inView]
-}
-
-/* ─── Hook: contador animado ─────────────────────────────────────────────── */
-function useCounter(target, duration = 1400, start = false) {
-  const [val, setVal] = useState(0)
-  useEffect(() => {
-    if (!start) return
-    let raf, startTime
-    const step = (ts) => {
-      if (!startTime) startTime = ts
-      const progress = Math.min((ts - startTime) / duration, 1)
-      const ease = 1 - Math.pow(1 - progress, 3)
-      setVal(Math.round(ease * target))
-      if (progress < 1) raf = requestAnimationFrame(step)
-    }
-    raf = requestAnimationFrame(step)
-    return () => cancelAnimationFrame(raf)
-  }, [target, duration, start])
-  return val
-}
-
-/* ─── Sticky Nav ──────────────────────────────────────────────────────────── */
-const NAV_ITEMS = [
-  { id: 'quem-somos', label: 'O Clube' },
-  { id: 'estrutura',  label: 'Estrutura' },
-  { id: 'eventos',    label: 'Eventos' },
-  { id: 'galeria',    label: 'Galeria' },
-  { id: 'seja-socio', label: 'Seja Sócio' },
-  { id: 'contato',    label: 'Contato' },
-]
-
-function StickyNav({ visible }) {
-  const [active, setActive] = useState('quem-somos')
-
-  useEffect(() => {
-    const handler = () => {
-      for (let i = NAV_ITEMS.length - 1; i >= 0; i--) {
-        const el = document.getElementById(NAV_ITEMS[i].id)
-        if (el && el.getBoundingClientRect().top <= 120) {
-          setActive(NAV_ITEMS[i].id)
-          break
-        }
-      }
-    }
-    window.addEventListener('scroll', handler, { passive: true })
-    return () => window.removeEventListener('scroll', handler)
-  }, [])
-
-  const scrollTo = (id) => {
-    const el = document.getElementById(id)
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(40px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.9); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  @keyframes float {
+    0%,100% { transform: translateY(0px) rotate(0deg); }
+    33%      { transform: translateY(-12px) rotate(1deg); }
+    66%      { transform: translateY(-6px) rotate(-1deg); }
+  }
+  @keyframes pulse {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: .7; transform: scale(0.97); }
+  }
+  @keyframes shimmer {
+    0%   { background-position: -200% center; }
+    100% { background-position:  200% center; }
+  }
+  @keyframes gradShift {
+    0%,100% { background-position: 0% 50%; }
+    50%      { background-position: 100% 50%; }
+  }
+  @keyframes rotateSlow {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  @keyframes counterUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes cardFlip {
+    0%   { transform: perspective(800px) rotateY(0deg); }
+    100% { transform: perspective(800px) rotateY(360deg); }
+  }
+  @keyframes glowPulse {
+    0%,100% { box-shadow: 0 0 20px rgba(143,214,74,0.3); }
+    50%      { box-shadow: 0 0 50px rgba(143,214,74,0.7), 0 0 80px rgba(143,214,74,0.3); }
+  }
+  @keyframes scanLine {
+    0%   { top: 0%; }
+    100% { top: 100%; }
+  }
+  @keyframes borderGlow {
+    0%,100% { border-color: rgba(143,214,74,0.3); }
+    50%      { border-color: rgba(143,214,74,0.9); }
+  }
+  @keyframes slideInLeft {
+    from { opacity: 0; transform: translateX(-50px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes slideInRight {
+    from { opacity: 0; transform: translateX(50px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes zoomBg {
+    from { transform: scale(1.08); }
+    to   { transform: scale(1); }
+  }
+  @keyframes ticker {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
   }
 
-  return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 200,
-      background: 'rgba(14,46,28,.95)',
-      backdropFilter: 'blur(16px)',
-      borderBottom: '1px solid rgba(255,255,255,.08)',
-      padding: '0 16px',
-      transform: visible ? 'translateY(0)' : 'translateY(-100%)',
-      transition: 'transform .35s ease',
-    }}>
-      <div style={{
-        maxWidth: 960, margin: '0 auto',
-        display: 'flex', alignItems: 'center', gap: 4,
-        overflowX: 'auto', scrollbarWidth: 'none',
-        padding: '10px 0',
-      }}>
-        <div style={{
-          fontSize: '.78rem', fontWeight: 800, color: C.lime,
-          letterSpacing: '.1em', textTransform: 'uppercase',
-          marginRight: 12, flexShrink: 0,
-        }}>TTC</div>
-        {NAV_ITEMS.map(item => (
-          <button
-            key={item.id}
-            className={`ttc-nav-link ${active === item.id ? 'active' : ''}`}
-            onClick={() => scrollTo(item.id)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-          >{item.label}</button>
-        ))}
-        <div style={{ flex: 1 }} />
-        <a href="https://wa.me/5565999247052" target="_blank" rel="noopener noreferrer"
-          style={{
-            flexShrink: 0,
-            background: C.green, color: '#fff',
-            padding: '6px 16px', borderRadius: 20,
-            fontSize: '.78rem', fontWeight: 700,
-            textDecoration: 'none',
-          }}>💬 Contato</a>
-      </div>
-    </div>
-  )
-}
+  .ttc-fade-up    { animation: fadeUp .8s ease both; }
+  .ttc-fade-in    { animation: fadeIn .6s ease both; }
+  .ttc-scale-in   { animation: scaleIn .6s ease both; }
+  .ttc-float      { animation: float 5s ease-in-out infinite; }
+  .ttc-pulse      { animation: pulse 2.5s ease-in-out infinite; }
 
-/* ─── Hero ────────────────────────────────────────────────────────────────── */
-function Hero({ onScrollPast }) {
-  const heroRef = useRef(null)
-  const [scrollY, setScrollY] = useState(0)
+  .ttc-nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+    transition: all .4s ease;
+  }
+  .ttc-nav.scrolled {
+    background: rgba(7,26,14,0.97);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(143,214,74,0.15);
+    box-shadow: 0 4px 30px rgba(0,0,0,0.5);
+  }
+  .ttc-nav-link {
+    position: relative; color: rgba(255,255,255,0.8);
+    font-size: 13px; font-weight: 500; letter-spacing: .06em;
+    text-transform: uppercase; text-decoration: none;
+    padding: 6px 0; transition: color .3s;
+  }
+  .ttc-nav-link::after {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+    height: 2px; background: #8FD64A;
+    transform: scaleX(0); transform-origin: center;
+    transition: transform .3s ease;
+  }
+  .ttc-nav-link:hover, .ttc-nav-link.active { color: #8FD64A; }
+  .ttc-nav-link:hover::after, .ttc-nav-link.active::after { transform: scaleX(1); }
 
+  .ttc-btn-primary {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: linear-gradient(135deg, #8FD64A, #4CAF50);
+    color: #071A0E; font-weight: 700; font-size: 14px;
+    letter-spacing: .05em; text-transform: uppercase;
+    padding: 14px 32px; border-radius: 50px;
+    border: none; cursor: pointer; text-decoration: none;
+    transition: all .3s ease;
+    box-shadow: 0 4px 20px rgba(143,214,74,0.4);
+  }
+  .ttc-btn-primary:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 30px rgba(143,214,74,0.6);
+    background: linear-gradient(135deg, #9FE65A, #5DBF60);
+  }
+  .ttc-btn-outline {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: transparent;
+    color: #fff; font-weight: 600; font-size: 14px;
+    letter-spacing: .05em; text-transform: uppercase;
+    padding: 13px 32px; border-radius: 50px;
+    border: 2px solid rgba(255,255,255,0.4); cursor: pointer; text-decoration: none;
+    transition: all .3s ease;
+  }
+  .ttc-btn-outline:hover {
+    border-color: #8FD64A; color: #8FD64A;
+    transform: translateY(-2px);
+  }
+  .ttc-btn-gold {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: linear-gradient(135deg, #C9A656, #E8C87A);
+    color: #071A0E; font-weight: 700; font-size: 14px;
+    letter-spacing: .05em; text-transform: uppercase;
+    padding: 14px 32px; border-radius: 50px;
+    border: none; cursor: pointer; text-decoration: none;
+    transition: all .3s ease;
+    box-shadow: 0 4px 20px rgba(201,166,86,0.4);
+  }
+  .ttc-btn-gold:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 30px rgba(201,166,86,0.6);
+  }
+
+  .ttc-card {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 20px;
+    backdrop-filter: blur(12px);
+    transition: all .4s ease;
+  }
+  .ttc-card:hover {
+    background: rgba(255,255,255,0.09);
+    border-color: rgba(143,214,74,0.3);
+    transform: translateY(-6px);
+    box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+  }
+
+  .ticker-wrap {
+    overflow: hidden; width: 100%;
+    background: linear-gradient(90deg, #8FD64A, #4CAF50, #C9A656, #8FD64A);
+    padding: 10px 0;
+  }
+  .ticker-inner {
+    display: flex; gap: 0;
+    animation: ticker 30s linear infinite;
+    width: max-content;
+  }
+  .ticker-item {
+    white-space: nowrap; padding: 0 40px;
+    font-size: 13px; font-weight: 700; letter-spacing: .1em;
+    text-transform: uppercase; color: #071A0E;
+  }
+
+  .gallery-item { overflow: hidden; border-radius: 16px; cursor: pointer; }
+  .gallery-item img { width: 100%; height: 100%; object-fit: cover; transition: transform .6s ease; display: block; }
+  .gallery-item:hover img { transform: scale(1.08); }
+
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 9000;
+    background: rgba(0,0,0,0.92); backdrop-filter: blur(12px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+    animation: fadeIn .3s ease;
+  }
+
+  .carteirinha-card {
+    background: linear-gradient(135deg, #071A0E 0%, #0E2E1C 50%, #1B4D2E 100%);
+    border: 2px solid rgba(143,214,74,0.4);
+    border-radius: 24px;
+    padding: 32px;
+    position: relative;
+    overflow: hidden;
+    animation: glowPulse 3s ease-in-out infinite;
+    max-width: 420px; width: 100%;
+  }
+  .carteirinha-card::before {
+    content: ''; position: absolute; top: -50%; right: -30%;
+    width: 300px; height: 300px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(143,214,74,0.12), transparent 70%);
+    pointer-events: none;
+  }
+  .carteirinha-card::after {
+    content: ''; position: absolute; inset: 0;
+    border-radius: 24px;
+    background: repeating-linear-gradient(
+      0deg, transparent, transparent 2px,
+      rgba(143,214,74,0.02) 2px, rgba(143,214,74,0.02) 4px
+    );
+    pointer-events: none;
+  }
+  .qr-container {
+    background: #fff;
+    border-radius: 12px;
+    padding: 12px;
+    display: inline-flex;
+    animation: glowPulse 2s ease-in-out infinite;
+  }
+  .qr-scan-line {
+    position: absolute; left: 12px; right: 12px; height: 2px;
+    background: linear-gradient(90deg, transparent, #8FD64A, transparent);
+    animation: scanLine 2s linear infinite;
+    border-radius: 2px;
+  }
+
+  .visitor-widget {
+    display: inline-flex; align-items: center; gap: 12px;
+    background: rgba(143,214,74,0.1);
+    border: 1px solid rgba(143,214,74,0.3);
+    border-radius: 50px;
+    padding: 10px 24px;
+    backdrop-filter: blur(10px);
+    transition: all .3s;
+  }
+  .visitor-widget:hover {
+    background: rgba(143,214,74,0.18);
+    border-color: rgba(143,214,74,0.6);
+  }
+
+  .estrutura-tab {
+    padding: 10px 24px; border-radius: 50px;
+    font-size: 13px; font-weight: 600; letter-spacing: .04em;
+    cursor: pointer; transition: all .3s; border: 1.5px solid transparent;
+    white-space: nowrap;
+  }
+  .estrutura-tab.active {
+    background: linear-gradient(135deg, #8FD64A, #4CAF50);
+    color: #071A0E; border-color: transparent;
+    box-shadow: 0 4px 16px rgba(143,214,74,0.4);
+  }
+  .estrutura-tab:not(.active) {
+    background: rgba(255,255,255,0.05);
+    color: rgba(255,255,255,0.7);
+    border-color: rgba(255,255,255,0.1);
+  }
+  .estrutura-tab:not(.active):hover {
+    background: rgba(255,255,255,0.1);
+    border-color: rgba(143,214,74,0.3);
+    color: #8FD64A;
+  }
+
+  .plano-card {
+    border-radius: 24px; padding: 36px 28px;
+    border: 1.5px solid rgba(255,255,255,0.1);
+    position: relative; overflow: hidden;
+    transition: all .4s ease;
+  }
+  .plano-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 30px 60px rgba(0,0,0,0.5);
+  }
+  .plano-card.destaque {
+    border-color: rgba(143,214,74,0.5);
+    box-shadow: 0 0 40px rgba(143,214,74,0.15);
+  }
+
+  .section-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(143,214,74,0.12);
+    border: 1px solid rgba(143,214,74,0.3);
+    color: #8FD64A; font-size: 12px; font-weight: 700;
+    letter-spacing: .12em; text-transform: uppercase;
+    padding: 6px 18px; border-radius: 50px;
+    margin-bottom: 20px;
+  }
+
+  .stat-number {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(40px, 6vw, 72px);
+    font-weight: 900; line-height: 1;
+    background: linear-gradient(135deg, #8FD64A, #C9A656);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .divider-gold {
+    height: 3px; width: 60px;
+    background: linear-gradient(90deg, #C9A656, #8FD64A);
+    border-radius: 2px;
+    margin: 16px auto;
+  }
+
+  @media (max-width: 768px) {
+    .ttc-nav-desktop { display: none !important; }
+    .ttc-mobile-menu { display: flex !important; }
+  }
+  @media (min-width: 769px) {
+    .ttc-mobile-menu { display: none !important; }
+  }
+
+  html { scroll-behavior: smooth; }
+  body { overflow-x: hidden; }
+
+  .section-transition {
+    opacity: 0; transform: translateY(40px);
+    transition: opacity .8s ease, transform .8s ease;
+  }
+  .section-transition.visible {
+    opacity: 1; transform: translateY(0);
+  }
+`
+
+/* ─── Hooks ──────────────────────────────────────────────────────────────── */
+function useInView(threshold = 0.15) {
+  const ref = useRef(null)
+  const [visible, setVisible] = useState(false)
   useEffect(() => {
-    const handler = () => {
-      const y = window.scrollY
-      setScrollY(y)
-      if (heroRef.current) {
-        const h = heroRef.current.offsetHeight
-        onScrollPast(y > h * 0.4)
-      }
-    }
-    window.addEventListener('scroll', handler, { passive: true })
-    return () => window.removeEventListener('scroll', handler)
-  }, [onScrollPast])
-
-  return (
-    <div ref={heroRef} style={{
-      position: 'relative', height: 'clamp(560px, 90vh, 780px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      overflow: 'hidden',
-    }}>
-      {/* Imagem parallax */}
-      <div style={{
-        position: 'absolute', inset: '-10% 0',
-        backgroundImage: 'url(/ttc/piscina-toboga.jpg)',
-        backgroundSize: 'cover', backgroundPosition: 'center',
-        transform: `translateY(${scrollY * 0.3}px)`,
-        willChange: 'transform',
-      }} />
-
-      {/* Overlay gradiente */}
-      <div style={{
-        position: 'absolute', inset: 0,
-        background: `linear-gradient(
-          160deg,
-          rgba(14,46,28,.92) 0%,
-          rgba(14,46,28,.75) 40%,
-          rgba(27,77,46,.65) 70%,
-          rgba(14,46,28,.88) 100%
-        )`,
-      }} />
-
-      {/* Decoração: círculos flutuantes */}
-      <div style={{
-        position: 'absolute', top: '12%', right: '8%',
-        width: 280, height: 280, borderRadius: '50%',
-        border: '1px solid rgba(143,214,74,.12)',
-        animation: 'float 6s ease-in-out infinite',
-      }} />
-      <div style={{
-        position: 'absolute', bottom: '15%', left: '5%',
-        width: 180, height: 180, borderRadius: '50%',
-        border: '1px solid rgba(95,179,53,.15)',
-        animation: 'float 8s ease-in-out infinite',
-        animationDelay: '-3s',
-      }} />
-
-      {/* Conteúdo */}
-      <div style={{
-        position: 'relative', maxWidth: 760, margin: '0 auto',
-        textAlign: 'center', padding: '0 24px',
-        color: '#fff',
-      }}>
-        <div className="ttc-fade-up" style={{ animationDelay: '.1s' }}>
-          <span className="ttc-badge" style={{ marginBottom: 20 }}>
-            🏆 Sede Oficial — 4ª Agro Open de Tênis 2026
-          </span>
-        </div>
-
-        <h1 className="ttc-fade-up" style={{
-          animationDelay: '.2s',
-          fontSize: 'clamp(2.4rem, 7vw, 4.2rem)',
-          fontWeight: 900, lineHeight: 1.05,
-          margin: '0 0 6px',
-          letterSpacing: '-.02em',
-        }}>
-          Tangará<br />
-          <span style={{
-            background: `linear-gradient(135deg, ${C.lime}, ${C.gold})`,
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-          }}>Tênis Clube</span>
-        </h1>
-
-        <p className="ttc-fade-up" style={{
-          animationDelay: '.35s',
-          fontSize: 'clamp(1rem, 2.5vw, 1.25rem)',
-          color: 'rgba(255,255,255,.8)',
-          margin: '16px 0 36px',
-          lineHeight: 1.6,
-        }}>
-          O maior clube de lazer de Tangará da Serra — MT.<br />
-          <span style={{ color: C.lime, fontWeight: 700 }}>Esporte, família e comunidade</span> em um só lugar.
-        </p>
-
-        <div className="ttc-hero-actions ttc-fade-up" style={{
-          animationDelay: '.5s',
-          display: 'flex', gap: 14,
-          justifyContent: 'center', flexWrap: 'wrap',
-        }}>
-          <a href="https://wa.me/5565999247052" target="_blank" rel="noopener noreferrer"
-            className="ttc-btn-primary">
-            💬 Falar pelo WhatsApp
-          </a>
-          <button className="ttc-btn-ghost"
-            onClick={() => document.getElementById('seja-socio')?.scrollIntoView({ behavior: 'smooth' })}>
-            🎾 Seja Sócio
-          </button>
-        </div>
-
-        {/* Scroll indicator */}
-        <div style={{
-          position: 'absolute', bottom: -80, left: '50%', transform: 'translateX(-50%)',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
-          color: 'rgba(255,255,255,.4)', fontSize: '.72rem', letterSpacing: '.08em',
-          textTransform: 'uppercase',
-          animation: 'float 2.5s ease-in-out infinite',
-        }}>
-          <span>Conheça o clube</span>
-          <span style={{ fontSize: 18 }}>↓</span>
-        </div>
-      </div>
-    </div>
-  )
+    const obs = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting) { setVisible(true); obs.disconnect() }
+    }, { threshold })
+    if (ref.current) obs.observe(ref.current)
+    return () => obs.disconnect()
+  }, [threshold])
+  return [ref, visible]
 }
 
-/* ─── Stats ───────────────────────────────────────────────────────────────── */
-const STATS = [
-  { value: 30,  suffix: '+', label: 'Anos de história',    icon: '🏛️' },
-  { value: 5,   suffix: 'k+', label: 'Famílias associadas', icon: '👨‍👩‍👧‍👦' },
-  { value: 6,   suffix: '',  label: 'Modalidades esportivas', icon: '🏅' },
-  { value: 4,   suffix: 'ª', label: 'Edição Agro Open',    icon: '🌾' },
+function useCounter(target, duration = 2000, start = false) {
+  const [count, setCount] = useState(0)
+  useEffect(() => {
+    if (!start || !target) return
+    const t0 = performance.now()
+    const tick = (now) => {
+      const p = Math.min((now - t0) / duration, 1)
+      const ease = 1 - Math.pow(1 - p, 3)
+      setCount(Math.round(ease * target))
+      if (p < 1) requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  }, [target, duration, start])
+  return count
+}
+
+/* ─── Dados ──────────────────────────────────────────────────────────────── */
+const NAV_ITEMS = [
+  { id: 'quem-somos',  label: 'O Clube' },
+  { id: 'estrutura',   label: 'Estrutura' },
+  { id: 'eventos',     label: 'Eventos' },
+  { id: 'carteirinha', label: '🪪 Carteirinha' },
+  { id: 'seja-socio',  label: 'Seja Sócio' },
+  { id: 'contato',     label: 'Contato' },
 ]
 
-function StatsSection() {
-  const [ref, inView] = useInView(0.3)
-  return (
-    <div ref={ref} style={{
-      background: `linear-gradient(135deg, ${C.deep} 0%, ${C.forest} 100%)`,
-      padding: '48px 24px',
-    }}>
-      <div className="ttc-stats-grid" style={{
-        maxWidth: 900, margin: '0 auto',
-        display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: 2,
-      }}>
-        {STATS.map((s, i) => <StatItem key={i} {...s} start={inView} delay={i * 120} />)}
-      </div>
-    </div>
-  )
-}
+const STATS = [
+  { value: 30,   suffix: '+',  label: 'Anos de história',      icon: '🏛️' },
+  { value: 5000, suffix: '+',  label: 'Famílias associadas',    icon: '👨‍👩‍👧‍👦' },
+  { value: 6,    suffix: '',   label: 'Modalidades esportivas', icon: '🎾' },
+  { value: 4,    suffix: 'ª',  label: 'Edição Agro Open',       icon: '🏆' },
+]
 
-function StatItem({ value, suffix, label, icon, start, delay }) {
-  const count = useCounter(value, 1200, start)
-  return (
-    <div style={{
-      textAlign: 'center', padding: '24px 16px',
-      opacity: start ? 1 : 0,
-      transform: start ? 'none' : 'translateY(20px)',
-      transition: `opacity .6s ${delay}ms, transform .6s ${delay}ms`,
-      borderRight: '1px solid rgba(255,255,255,.06)',
-    }}>
-      <div style={{ fontSize: '1.8rem', marginBottom: 8 }}>{icon}</div>
-      <div style={{
-        fontSize: 'clamp(1.8rem, 4vw, 2.8rem)',
-        fontWeight: 900, color: '#fff',
-        lineHeight: 1, letterSpacing: '-.02em',
-      }}>
-        <span style={{ color: C.lime }}>{count}</span>
-        <span style={{ color: C.gold, fontSize: '.65em' }}>{suffix}</span>
-      </div>
-      <div style={{
-        fontSize: '.78rem', color: 'rgba(255,255,255,.55)',
-        fontWeight: 600, marginTop: 6, letterSpacing: '.04em',
-        textTransform: 'uppercase',
-      }}>{label}</div>
-    </div>
-  )
-}
+const MODALIDADES = [
+  { nome: 'Tênis',        icon: '🎾', cor: '#8FD64A', desc: '8 quadras de saibro, academia e torneios nacionais', itens: ['8 quadras saibro', 'Academia profissional', 'Ranking TTC', 'Torneios nacionais'] },
+  { nome: 'Natação',      icon: '🏊', cor: '#4FC3F7', desc: 'Piscina olímpica aquecida com treinos para todas as idades', itens: ['Piscina olímpica', 'Água aquecida', 'Escolinha kids', 'Treinos adultos'] },
+  { nome: 'Padel',        icon: '🏸', cor: '#FFB74D', desc: 'Quadras de padel com iluminação LED e piso profissional', itens: ['4 quadras padel', 'Iluminação LED', 'Aulas coletivas', 'Torneios mensais'] },
+  { nome: 'Futebol',      icon: '⚽', cor: '#EF5350', desc: 'Campo sintético com vestiários e arquibancada coberta', itens: ['Campo sintético', 'Vestiários', 'Arquibancada', 'Escolinha futsal'] },
+  { nome: 'Musculação',   icon: '💪', cor: '#AB47BC', desc: 'Academia moderna com equipamentos de última geração', itens: ['400m² equipados', 'Personal trainer', 'Avaliação física', 'Horários flexíveis'] },
+  { nome: 'Espaço Social',icon: '🥂', cor: '#C9A656', desc: 'Restaurante, bar, salões para eventos e área gourmet', itens: ['Restaurante', 'Bar & lounge', 'Salão de festas', 'Espaço gourmet'] },
+]
 
-/* ─── Section wrapper animado ─────────────────────────────────────────────── */
-function AnimSection({ id, children, style = {} }) {
-  const [ref, inView] = useInView(0.1)
+const EVENTOS = [
+  {
+    titulo: '4ª Agro Open de Tênis',
+    data: '2026',
+    desc: 'O maior torneio de tênis do Centro-Oeste. R$ 250.000+ em premiação, 250+ atletas profissionais e amadores de todo o Brasil.',
+    tags: ['14 categorias', 'R$ 250.000+', 'Inscrições abertas'],
+    cor: '#8FD64A',
+    icon: '🏆',
+    destaque: true,
+  },
+  {
+    titulo: 'Campeonato Interno de Tênis',
+    data: 'Julho/2026',
+    desc: 'Torneio exclusivo para sócios. Todas as categorias com troféus, premiação especial e confraternização após as partidas.',
+    tags: ['Sócios', 'Todas as idades', 'Troféus'],
+    cor: '#4FC3F7',
+    icon: '🎾',
+  },
+  {
+    titulo: 'Copa Família TTC',
+    data: 'Agosto/2026',
+    desc: 'Torneio de duplas para famílias. Uma tarde de esporte, alegria e integração entre as famílias do clube.',
+    tags: ['Duplas', 'Família', 'Diversão'],
+    cor: '#FFB74D',
+    icon: '👨‍👩‍👧‍👦',
+  },
+  {
+    titulo: 'Grand Prix de Padel',
+    data: 'Setembro/2026',
+    desc: 'Torneio de padel com transmissão ao vivo. Categorias A, B e C com premiação para os finalistas.',
+    tags: ['Padel', 'Ao vivo', 'R$ 5.000'],
+    cor: '#AB47BC',
+    icon: '🏸',
+  },
+]
+
+const PLANOS = [
+  {
+    nome: 'Individual',
+    preco: 'R$ 189',
+    periodo: '/mês',
+    cor: 'linear-gradient(135deg, #1B4D2E, #0E2E1C)',
+    itens: ['1 pessoa', 'Acesso às quadras', 'Natação', 'Academia', 'Área social'],
+    destaque: false,
+  },
+  {
+    nome: 'Familiar',
+    preco: 'R$ 349',
+    periodo: '/mês',
+    cor: 'linear-gradient(135deg, #1a4a1a, #0d3b0d)',
+    destaque: true,
+    badge: '⭐ Mais popular',
+    itens: ['Até 4 pessoas', 'Todos os benefícios', 'Eventos exclusivos', 'Prioridade inscrição', 'App Sócio'],
+  },
+  {
+    nome: 'VIP',
+    preco: 'R$ 699',
+    periodo: '/mês',
+    cor: 'linear-gradient(135deg, #2a2000, #1a1400)',
+    border: '1.5px solid rgba(201,166,86,0.5)',
+    itens: ['Família + hóspedes', 'Camarote torneios', 'Personal trainer', 'Nutricionista', 'Eventos premium', 'Transfer incluso'],
+    destaque: false,
+    vip: true,
+  },
+]
+
+const FOTOS = Array.from({ length: 12 }, (_, i) => `/ttc/galeria/foto${i + 1}.jpg`)
+
+const GALERIA_TAGS = ['Todos', 'Tênis', 'Eventos', 'Estrutura', 'Social']
+
+/* ─── Componentes ────────────────────────────────────────────────────────── */
+
+function AnimSection({ children, delay = 0, style = {} }) {
+  const [ref, visible] = useInView(0.12)
   return (
-    <section id={id} ref={ref} style={{
-      opacity: inView ? 1 : 0,
-      transform: inView ? 'none' : 'translateY(28px)',
-      transition: 'opacity .7s ease, transform .7s ease',
-      marginBottom: 72,
-      ...style,
-    }}>
+    <div
+      ref={ref}
+      className="section-transition"
+      style={{
+        ...style,
+        ...(visible ? { opacity: 1, transform: 'translateY(0)', transitionDelay: `${delay}ms` } : {}),
+      }}
+    >
       {children}
+    </div>
+  )
+}
+
+/* ── Ticker ── */
+function Ticker() {
+  const items = ['🏆 4ª Agro Open de Tênis', '💰 R$ 250.000+ em Premiação', '🎾 250+ Atletas Profissionais', '🏛️ 30+ Anos de Tradição', '👨‍👩‍👧‍👦 5.000+ Famílias Associadas', '⭐ O Maior Clube do Centro-Oeste']
+  const doubled = [...items, ...items]
+  return (
+    <div className="ticker-wrap">
+      <div className="ticker-inner">
+        {doubled.map((t, i) => (
+          <span key={i} className="ticker-item">{t} &nbsp;&nbsp;•&nbsp;&nbsp;</span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/* ── StickyNav ── */
+function StickyNav({ activeSection, onNav }) {
+  const [scrolled, setScrolled] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  useEffect(() => {
+    const fn = () => setScrolled(window.scrollY > 60)
+    window.addEventListener('scroll', fn, { passive: true })
+    return () => window.removeEventListener('scroll', fn)
+  }, [])
+
+  return (
+    <nav className={`ttc-nav${scrolled ? ' scrolled' : ''}`}>
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px', height: 70, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        {/* Logo */}
+        <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'linear-gradient(135deg, #8FD64A, #4CAF50)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, color: '#071A0E', boxShadow: '0 4px 16px rgba(143,214,74,0.4)' }}>TTC</div>
+          <div>
+            <div style={{ color: '#fff', fontWeight: 700, fontSize: 15, letterSpacing: '.04em', lineHeight: 1.2 }}>Tênis & Touring</div>
+            <div style={{ color: '#8FD64A', fontSize: 10, fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase' }}>Clube</div>
+          </div>
+        </Link>
+
+        {/* Desktop Links */}
+        <div className="ttc-nav-desktop" style={{ display: 'flex', gap: 28, alignItems: 'center' }}>
+          {NAV_ITEMS.map(item => (
+            <a
+              key={item.id}
+              href={`#${item.id}`}
+              className={`ttc-nav-link${activeSection === item.id ? ' active' : ''}`}
+              onClick={e => { e.preventDefault(); onNav(item.id) }}
+            >{item.label}</a>
+          ))}
+        </div>
+
+        {/* CTA + Mobile toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <a href="#seja-socio" className="ttc-btn-primary" style={{ padding: '10px 22px', fontSize: 13 }}>
+            Seja Sócio
+          </a>
+          <button
+            className="ttc-mobile-menu"
+            onClick={() => setMenuOpen(o => !o)}
+            style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 24, cursor: 'pointer', padding: 4 }}
+          >
+            {menuOpen ? '✕' : '☰'}
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile menu */}
+      {menuOpen && (
+        <div style={{ background: 'rgba(7,26,14,0.98)', borderTop: '1px solid rgba(143,214,74,0.15)', padding: '16px 24px 24px' }}>
+          {NAV_ITEMS.map(item => (
+            <a
+              key={item.id}
+              href={`#${item.id}`}
+              style={{ display: 'block', color: 'rgba(255,255,255,0.85)', padding: '12px 0', fontSize: 15, fontWeight: 500, borderBottom: '1px solid rgba(255,255,255,0.07)', textDecoration: 'none', transition: 'color .2s' }}
+              onClick={e => { e.preventDefault(); onNav(item.id); setMenuOpen(false) }}
+            >{item.label}</a>
+          ))}
+        </div>
+      )}
+    </nav>
+  )
+}
+
+/* ── Hero ── */
+function Hero({ visitantes, onNavCarteirinha }) {
+  const [scrollY, setScrollY] = useState(0)
+  useEffect(() => {
+    const fn = () => setScrollY(window.scrollY)
+    window.addEventListener('scroll', fn, { passive: true })
+    return () => window.removeEventListener('scroll', fn)
+  }, [])
+
+  return (
+    <section style={{ position: 'relative', height: '100vh', minHeight: 680, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {/* BG */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: `
+          radial-gradient(ellipse at 70% 40%, rgba(143,214,74,0.15) 0%, transparent 60%),
+          radial-gradient(ellipse at 20% 80%, rgba(201,166,86,0.1) 0%, transparent 50%),
+          linear-gradient(160deg, #071A0E 0%, #0E2E1C 40%, #071A0E 100%)
+        `,
+        transform: `translateY(${scrollY * 0.3}px)`,
+        animation: 'zoomBg 1.5s ease both',
+      }} />
+
+      {/* Decorative circles */}
+      <div style={{ position: 'absolute', top: '15%', right: '8%', width: 300, height: 300, borderRadius: '50%', border: '1px solid rgba(143,214,74,0.12)', animation: 'float 7s ease-in-out infinite', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', top: '25%', right: '12%', width: 200, height: 200, borderRadius: '50%', border: '1px solid rgba(143,214,74,0.18)', animation: 'float 5s ease-in-out infinite reverse', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', bottom: '20%', left: '5%', width: 180, height: 180, borderRadius: '50%', border: '1px solid rgba(201,166,86,0.15)', animation: 'float 6s ease-in-out infinite 1s', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', top: '50%', left: '50%', width: 600, height: 600, borderRadius: '50%', border: '1px solid rgba(143,214,74,0.04)', transform: 'translate(-50%,-50%)', animation: 'rotateSlow 40s linear infinite', pointerEvents: 'none' }} />
+
+      {/* Tennis ball deco */}
+      <div className="ttc-float" style={{ position: 'absolute', top: '18%', right: '18%', fontSize: 64, opacity: .18, pointerEvents: 'none' }}>🎾</div>
+      <div className="ttc-float" style={{ position: 'absolute', bottom: '25%', left: '12%', fontSize: 40, opacity: .12, pointerEvents: 'none', animationDelay: '2s' }}>🏆</div>
+      <div className="ttc-float" style={{ position: 'absolute', top: '60%', right: '6%', fontSize: 32, opacity: .10, pointerEvents: 'none', animationDelay: '1s' }}>⭐</div>
+
+      {/* Content */}
+      <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', padding: '0 24px', maxWidth: 900, margin: '0 auto' }}>
+        <AnimSection>
+          <div className="section-badge" style={{ marginBottom: 24 }}>
+            <span>🏛️</span> Fundado em 1994 · Cuiabá, MT
+          </div>
+        </AnimSection>
+
+        <AnimSection delay={100}>
+          <h1 style={{
+            fontFamily: "'Playfair Display', serif",
+            fontSize: 'clamp(44px, 7vw, 88px)',
+            fontWeight: 900,
+            lineHeight: 1.05,
+            color: '#fff',
+            marginBottom: 8,
+            letterSpacing: '-.02em',
+          }}>
+            Tênis &amp; Touring
+          </h1>
+          <h2 style={{
+            fontFamily: "'Playfair Display', serif",
+            fontSize: 'clamp(22px, 4vw, 44px)',
+            fontWeight: 700,
+            background: 'linear-gradient(135deg, #8FD64A 30%, #C9A656 70%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+            marginBottom: 28,
+            letterSpacing: '-.01em',
+          }}>
+            O Melhor Clube do Centro-Oeste
+          </h2>
+        </AnimSection>
+
+        <AnimSection delay={200}>
+          <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: 'clamp(16px, 2.5vw, 20px)', lineHeight: 1.7, maxWidth: 640, margin: '0 auto 40px', fontFamily: 'Inter, sans-serif', fontWeight: 300 }}>
+            Mais de 30 anos unindo famílias em torno do esporte, lazer e convivência. 
+            Casa da 4ª Agro Open de Tênis — <strong style={{ color: '#8FD64A' }}>R$ 250.000+</strong> em premiação.
+          </p>
+        </AnimSection>
+
+        <AnimSection delay={300}>
+          <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 48 }}>
+            <a href="#seja-socio" className="ttc-btn-primary" style={{ fontSize: 15, padding: '16px 36px' }}>
+              🏅 Torne-se Sócio
+            </a>
+            <a href="#eventos" className="ttc-btn-outline" style={{ fontSize: 15, padding: '16px 36px' }}>
+              🏆 Agro Open 2026
+            </a>
+            <button onClick={onNavCarteirinha} className="ttc-btn-gold" style={{ fontSize: 15, padding: '16px 36px' }}>
+              🪪 Minha Carteirinha
+            </button>
+          </div>
+        </AnimSection>
+
+        {/* Visitor counter */}
+        {visitantes !== null && (
+          <AnimSection delay={400}>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <div className="visitor-widget">
+                <span style={{ fontSize: 18 }}>👁️</span>
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ color: '#8FD64A', fontSize: 22, fontWeight: 800, lineHeight: 1, fontFamily: 'Inter, sans-serif', letterSpacing: '-0.02em' }}>
+                    {visitantes.toLocaleString('pt-BR')}
+                  </div>
+                  <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: 500, letterSpacing: '.06em', textTransform: 'uppercase' }}>
+                    visitantes
+                  </div>
+                </div>
+              </div>
+            </div>
+          </AnimSection>
+        )}
+      </div>
+
+      {/* Scroll indicator */}
+      <div style={{ position: 'absolute', bottom: 32, left: '50%', transform: 'translateX(-50%)', textAlign: 'center' }} className="ttc-pulse">
+        <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 8, fontFamily: 'Inter, sans-serif' }}>role para baixo</div>
+        <div style={{ width: 24, height: 40, borderRadius: 12, border: '2px solid rgba(255,255,255,0.25)', margin: '0 auto', display: 'flex', justifyContent: 'center', paddingTop: 6 }}>
+          <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#8FD64A', animation: 'float 1.8s ease-in-out infinite' }} />
+        </div>
+      </div>
     </section>
   )
 }
 
-function SectionTitle({ label, title, subtitle }) {
+/* ── Stats ── */
+function StatsSection() {
+  const [ref, visible] = useInView(0.2)
+  const c0 = useCounter(STATS[0].value, 1800, visible)
+  const c1 = useCounter(STATS[1].value, 2200, visible)
+  const c2 = useCounter(STATS[2].value, 1200, visible)
+  const c3 = useCounter(STATS[3].value, 800, visible)
+  const counts = [c0, c1, c2, c3]
+
   return (
-    <div style={{ marginBottom: 36 }}>
-      {label && <span className="ttc-badge" style={{ marginBottom: 12 }}>{label}</span>}
-      <h2 style={{
-        fontSize: 'clamp(1.6rem, 3.5vw, 2.2rem)',
-        fontWeight: 900, color: C.deep,
-        lineHeight: 1.15, margin: '8px 0 0',
-        letterSpacing: '-.01em',
-      }}>{title}</h2>
-      <div className="ttc-section-divider" />
-      {subtitle && <p style={{ color: C.muted, fontSize: '1rem', lineHeight: 1.7, margin: 0 }}>{subtitle}</p>}
+    <div ref={ref} style={{ background: 'linear-gradient(90deg, #071A0E, #0E2E1C, #071A0E)', borderTop: '1px solid rgba(143,214,74,0.15)', borderBottom: '1px solid rgba(143,214,74,0.15)', padding: '60px 24px' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+        {STATS.map((s, i) => (
+          <div key={i} style={{ textAlign: 'center', padding: '20px 16px', borderRight: i < STATS.length - 1 ? '1px solid rgba(255,255,255,0.07)' : 'none' }}>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>{s.icon}</div>
+            <div className="stat-number">
+              {counts[i]}{s.suffix}
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13, fontWeight: 500, letterSpacing: '.06em', textTransform: 'uppercase', marginTop: 8, fontFamily: 'Inter, sans-serif' }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
 
-/* ─── Quem Somos ─────────────────────────────────────────────────────────── */
+/* ── Quem Somos ── */
 function QuemSomos() {
+  const milestones = [
+    { ano: '1994', titulo: 'Fundação', desc: 'Clube fundado com foco no tênis e lazer familiar' },
+    { ano: '2005', titulo: 'Expansão', desc: 'Abertura das quadras de padel e piscina olímpica' },
+    { ano: '2015', titulo: 'Modernização', desc: 'Reforma geral com academia de última geração' },
+    { ano: '2023', titulo: 'Agro Open', desc: '1ª edição do maior torneio de tênis do Centro-Oeste' },
+    { ano: '2026', titulo: '4ª Edição', desc: 'R$ 250.000+ em premiação, 250+ atletas profissionais' },
+  ]
+
   return (
-    <AnimSection id="quem-somos">
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 48, alignItems: 'center' }}>
-        {/* Texto */}
-        <div>
-          <SectionTitle
-            label="🏛️ Nossa identidade"
-            title="Mais do que um clube. Uma comunidade."
-            subtitle=""
-          />
-          <p style={{ color: '#374151', lineHeight: 1.85, fontSize: '1rem', marginBottom: 20 }}>
-            O <strong>Tangará Tênis Clube — TTC</strong> é o maior clube de lazer de Tangará da
-            Serra e de toda a região, no coração do Mato Grosso. Reunindo esporte, recreação e
-            convívio social em um só lugar, o clube é ponto de encontro de famílias, atletas e
-            amigos há mais de três décadas.
-          </p>
-          <p style={{ color: '#374151', lineHeight: 1.85, fontSize: '1rem', marginBottom: 28 }}>
-            Sob o lema <em style={{ color: C.forest, fontStyle: 'normal', fontWeight: 700 }}>"muito mais lazer, diversão e esportes"</em>,
-            o TTC oferece qualidade de vida a preço acessível. Crianças aprendem a nadar, jovens
-            dominam o tênis e beach tennis, e famílias inteiras transformam o fim de semana em
-            momentos inesquecíveis.
-          </p>
+    <section id="quem-somos" style={{ background: C.deep, padding: '100px 24px' }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <AnimSection>
+          <div style={{ textAlign: 'center', marginBottom: 72 }}>
+            <div className="section-badge">🏛️ Nossa história</div>
+            <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 'clamp(32px, 5vw, 56px)', fontWeight: 900, color: '#fff', lineHeight: 1.1, marginBottom: 20 }}>
+              Tradição que une<br /><span style={{ color: '#8FD64A' }}>gerações</span>
+            </h2>
+            <div className="divider-gold" />
+          </div>
+        </AnimSection>
 
-          {/* Missão / Visão pillars */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {[
-              { icon: '💚', title: 'Missão', text: 'Promover qualidade de vida e integração social através do esporte.' },
-              { icon: '🎯', title: 'Visão',  text: 'Ser o maior polo esportivo e de lazer do interior do MT.' },
-              { icon: '⭐', title: 'Valores', text: 'Família, inclusão, tradição e excelência esportiva.' },
-            ].map((p, i) => (
-              <div key={i} className="ttc-card-hover" style={{
-                display: 'flex', gap: 14, alignItems: 'flex-start',
-                background: '#fff', borderRadius: 12, padding: '14px 18px',
-                border: `1px solid rgba(95,179,53,.12)`,
-                boxShadow: '0 2px 8px rgba(0,0,0,.05)',
-              }}>
-                <span style={{ fontSize: '1.4rem', flexShrink: 0, marginTop: 2 }}>{p.icon}</span>
-                <div>
-                  <div style={{ fontWeight: 800, color: C.deep, fontSize: '.88rem', marginBottom: 2 }}>{p.title}</div>
-                  <div style={{ color: C.muted, fontSize: '.85rem', lineHeight: 1.5 }}>{p.text}</div>
-                </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 60, alignItems: 'start' }}>
+          {/* Left: text */}
+          <AnimSection>
+            <div>
+              <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: 17, lineHeight: 1.85, fontFamily: 'Inter, sans-serif', fontWeight: 300, marginBottom: 24 }}>
+                O <strong style={{ color: '#8FD64A' }}>Tênis & Touring Clube</strong> é o maior e mais completo clube esportivo do Centro-Oeste brasileiro. Fundado em 1994, é referência em tênis, natação, padel e lazer familiar para milhares de cuiabanos.
+              </p>
+              <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 16, lineHeight: 1.85, fontFamily: 'Inter, sans-serif', fontWeight: 300, marginBottom: 36 }}>
+                Nossa missão é oferecer o melhor ambiente para o desenvolvimento esportivo e o convívio saudável entre famílias, com estrutura de alto padrão e eventos de nível nacional.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 36 }}>
+                {[
+                  { icon: '🏆', text: 'Maior torneio de tênis do Centro-Oeste' },
+                  { icon: '👨‍👩‍👧‍👦', text: 'Espaço para toda a família' },
+                  { icon: '⭐', text: 'Instrutores certificados' },
+                  { icon: '🌱', text: 'Foco no desenvolvimento humano' },
+                ].map((item, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: 16, background: 'rgba(255,255,255,0.04)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.07)' }}>
+                    <span style={{ fontSize: 22, lineHeight: 1 }}>{item.icon}</span>
+                    <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, lineHeight: 1.5, fontFamily: 'Inter, sans-serif' }}>{item.text}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
+              <a href="#seja-socio" className="ttc-btn-primary">Associe-se agora →</a>
+            </div>
+          </AnimSection>
 
-        {/* Imagem com badge decorativo */}
-        <div style={{ position: 'relative' }}>
-          <div style={{
-            borderRadius: 24, overflow: 'hidden',
-            boxShadow: '0 24px 64px rgba(14,46,28,.22)',
-            aspectRatio: '4/5',
-          }}>
-            <img
-              src="/ttc/area-piscina.jpg"
-              alt="Área da piscina semiolímpica do TTC"
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            />
-            <div style={{
-              position: 'absolute', inset: 0,
-              background: 'linear-gradient(180deg, transparent 60%, rgba(14,46,28,.7) 100%)',
-            }} />
-          </div>
-
-          {/* Badge flutuante */}
-          <div className="ttc-float" style={{
-            position: 'absolute', top: -16, right: -16,
-            background: `linear-gradient(135deg, ${C.gold}, #e8c060)`,
-            color: C.deep, borderRadius: 16, padding: '14px 18px',
-            fontWeight: 900, fontSize: '.8rem', textAlign: 'center',
-            boxShadow: '0 8px 24px rgba(201,166,86,.5)',
-            lineHeight: 1.4,
-          }}>
-            <div style={{ fontSize: '1.6rem' }}>🏆</div>
-            <div>Sede da</div>
-            <div style={{ fontSize: '1.1rem' }}>4ª Agro Open</div>
-            <div>2026</div>
-          </div>
-
-          {/* Tag historia */}
-          <div style={{
-            position: 'absolute', bottom: 20, left: 20,
-            background: 'rgba(14,46,28,.9)',
-            backdropFilter: 'blur(8px)',
-            color: '#fff', borderRadius: 12,
-            padding: '12px 16px',
-          }}>
-            <div style={{ fontSize: '.7rem', color: C.lime, fontWeight: 700, letterSpacing: '.08em', marginBottom: 2 }}>FUNDADO HÁ</div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 900 }}>30+ anos</div>
-            <div style={{ fontSize: '.78rem', color: 'rgba(255,255,255,.6)' }}>de história em Tangará da Serra</div>
-          </div>
+          {/* Right: timeline */}
+          <AnimSection delay={150}>
+            <div style={{ position: 'relative', paddingLeft: 28 }}>
+              <div style={{ position: 'absolute', left: 10, top: 0, bottom: 0, width: 2, background: 'linear-gradient(180deg, #8FD64A, #C9A656, rgba(255,255,255,0.1))' }} />
+              {milestones.map((m, i) => (
+                <div key={i} style={{ position: 'relative', paddingBottom: i < milestones.length - 1 ? 36 : 0, paddingLeft: 24 }}>
+                  <div style={{ position: 'absolute', left: -22, top: 4, width: 14, height: 14, borderRadius: '50%', background: i === milestones.length - 1 ? '#C9A656' : '#8FD64A', border: '2px solid #071A0E', boxShadow: `0 0 10px ${i === milestones.length - 1 ? '#C9A656' : '#8FD64A'}` }} />
+                  <div style={{ fontSize: 12, color: '#8FD64A', fontWeight: 700, letterSpacing: '.1em', fontFamily: 'Inter, sans-serif', marginBottom: 4 }}>{m.ano}</div>
+                  <div style={{ color: '#fff', fontWeight: 700, fontSize: 16, fontFamily: 'Inter, sans-serif', marginBottom: 4 }}>{m.titulo}</div>
+                  <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 14, fontFamily: 'Inter, sans-serif', lineHeight: 1.5 }}>{m.desc}</div>
+                </div>
+              ))}
+            </div>
+          </AnimSection>
         </div>
       </div>
+    </section>
+  )
+}
 
-      {/* Linha do tempo — história */}
-      <div id="historia" style={{
-        marginTop: 56, background: '#fff',
-        borderRadius: 20, padding: '32px 28px',
-        border: `1px solid rgba(95,179,53,.1)`,
-        boxShadow: '0 4px 20px rgba(0,0,0,.06)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-          <span style={{ fontSize: '1.5rem' }}>📖</span>
-          <h3 style={{ color: C.deep, fontWeight: 800, fontSize: '1.1rem', margin: 0 }}>Nossa História</h3>
-          <div style={{ flex: 1, height: 1, background: 'rgba(95,179,53,.15)', marginLeft: 8 }} />
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 0 }}>
-          {[
-            { era: 'Fundação',      icon: '🌱', desc: 'Nasce do desejo de reunir a comunidade de Tangará da Serra em torno do esporte.' },
-            { era: 'Crescimento',   icon: '📈', desc: 'Acompanha o boom do agronegócio MT. Novas quadras, piscina e áreas de lazer.' },
-            { era: 'Consolidação',  icon: '🏆', desc: 'Torna-se referência regional. Copa Agro nasce e cresce junto com o clube.' },
-            { era: 'Hoje',          icon: '🚀', desc: 'Modernização contínua, novas modalidades e sede da 4ª Agro Open 2026.' },
-          ].map((t, i) => (
-            <div key={i} style={{
-              padding: '16px 20px',
-              borderRight: i < 3 ? `1px solid rgba(95,179,53,.12)` : 'none',
-              position: 'relative',
-            }}>
-              <div style={{
-                position: 'absolute', top: 16, left: -1,
-                width: 8, height: 8, borderRadius: '50%',
-                background: C.green, boxShadow: `0 0 0 3px rgba(95,179,53,.2)`,
-              }} />
-              <div style={{ fontSize: '1.4rem', marginBottom: 8 }}>{t.icon}</div>
-              <div style={{ fontWeight: 800, color: C.deep, fontSize: '.88rem', marginBottom: 6 }}>{t.era}</div>
-              <div style={{ color: C.muted, fontSize: '.82rem', lineHeight: 1.55 }}>{t.desc}</div>
+/* ── Estrutura ── */
+function Estrutura() {
+  const [tab, setTab] = useState(0)
+  const mod = MODALIDADES[tab]
+
+  return (
+    <section id="estrutura" style={{ background: 'linear-gradient(160deg, #0A1F12, #071A0E)', padding: '100px 24px' }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <AnimSection>
+          <div style={{ textAlign: 'center', marginBottom: 56 }}>
+            <div className="section-badge">🏗️ Infraestrutura</div>
+            <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 'clamp(30px, 5vw, 52px)', fontWeight: 900, color: '#fff', lineHeight: 1.1, marginBottom: 20 }}>
+              Estrutura de <span style={{ color: '#8FD64A' }}>alto padrão</span>
+            </h2>
+            <div className="divider-gold" />
+            <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 16, fontFamily: 'Inter, sans-serif', marginTop: 20 }}>6 modalidades, infraestrutura completa para toda a família</p>
+          </div>
+        </AnimSection>
+
+        {/* Tabs */}
+        <AnimSection delay={100}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 48 }}>
+            {MODALIDADES.map((m, i) => (
+              <button key={i} className={`estrutura-tab${tab === i ? ' active' : ''}`} onClick={() => setTab(i)}>
+                {m.icon} {m.nome}
+              </button>
+            ))}
+          </div>
+        </AnimSection>
+
+        {/* Content */}
+        <AnimSection>
+          <div style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${mod.cor}33`, borderRadius: 28, padding: 'clamp(28px, 4vw, 52px)', transition: 'all .4s', boxShadow: `0 20px 60px rgba(0,0,0,0.3)` }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 40, alignItems: 'center' }}>
+              {/* Icon + text */}
+              <div>
+                <div style={{ fontSize: 80, marginBottom: 20, filter: 'drop-shadow(0 8px 20px rgba(0,0,0,0.3))' }}>{mod.icon}</div>
+                <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 36, fontWeight: 900, color: '#fff', marginBottom: 16 }}>{mod.nome}</h3>
+                <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 16, lineHeight: 1.75, fontFamily: 'Inter, sans-serif', marginBottom: 28 }}>{mod.desc}</p>
+                <a href="#seja-socio" className="ttc-btn-primary" style={{ background: `linear-gradient(135deg, ${mod.cor}, ${mod.cor}cc)` }}>
+                  Conhecer →
+                </a>
+              </div>
+              {/* Items */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                {mod.itens.map((item, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', background: 'rgba(255,255,255,0.05)', borderRadius: 14, border: `1px solid ${mod.cor}22` }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: mod.cor, flexShrink: 0, boxShadow: `0 0 8px ${mod.cor}` }} />
+                    <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 14, fontFamily: 'Inter, sans-serif', fontWeight: 500 }}>{item}</span>
+                  </div>
+                ))}
+              </div>
             </div>
+          </div>
+        </AnimSection>
+      </div>
+    </section>
+  )
+}
+
+/* ── Eventos ── */
+function Eventos() {
+  return (
+    <section id="eventos" style={{ background: C.deep, padding: '100px 24px' }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <AnimSection>
+          <div style={{ textAlign: 'center', marginBottom: 72 }}>
+            <div className="section-badge">📅 Agenda</div>
+            <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 'clamp(30px, 5vw, 52px)', fontWeight: 900, color: '#fff', lineHeight: 1.1, marginBottom: 20 }}>
+              Eventos <span style={{ color: '#8FD64A' }}>imperdíveis</span>
+            </h2>
+            <div className="divider-gold" />
+          </div>
+        </AnimSection>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24 }}>
+          {EVENTOS.map((ev, i) => (
+            <AnimSection key={i} delay={i * 80}>
+              <div
+                style={{
+                  background: ev.destaque
+                    ? `linear-gradient(135deg, #0E2E1C, #1B4D2E)`
+                    : 'rgba(255,255,255,0.04)',
+                  border: ev.destaque
+                    ? '1.5px solid rgba(143,214,74,0.4)'
+                    : '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 24, padding: 32, height: '100%',
+                  position: 'relative', overflow: 'hidden',
+                  transition: 'all .4s',
+                  boxShadow: ev.destaque ? '0 20px 60px rgba(143,214,74,0.12)' : 'none',
+                  cursor: 'default',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-8px)'; e.currentTarget.style.boxShadow = `0 30px 70px rgba(0,0,0,0.4)` }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = ev.destaque ? '0 20px 60px rgba(143,214,74,0.12)' : 'none' }}
+              >
+                {ev.destaque && (
+                  <div style={{ position: 'absolute', top: 18, right: 18, background: 'linear-gradient(135deg, #C9A656, #E8C87A)', color: '#071A0E', fontSize: 10, fontWeight: 800, letterSpacing: '.1em', padding: '4px 12px', borderRadius: 50, textTransform: 'uppercase' }}>
+                    DESTAQUE
+                  </div>
+                )}
+                <div style={{ fontSize: 44, marginBottom: 16 }}>{ev.icon}</div>
+                <div style={{ color: ev.cor, fontSize: 12, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 10, fontFamily: 'Inter, sans-serif' }}>{ev.data}</div>
+                <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 22, fontWeight: 700, color: '#fff', marginBottom: 14, lineHeight: 1.3 }}>{ev.titulo}</h3>
+                <p style={{ color: 'rgba(255,255,255,0.62)', fontSize: 14, lineHeight: 1.7, fontFamily: 'Inter, sans-serif', marginBottom: 20 }}>{ev.desc}</p>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {ev.tags.map((tag, j) => (
+                    <span key={j} style={{ background: `${ev.cor}1A`, border: `1px solid ${ev.cor}40`, color: ev.cor, fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 50, letterSpacing: '.06em' }}>
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </AnimSection>
           ))}
         </div>
       </div>
-    </AnimSection>
+    </section>
   )
 }
 
-/* ─── Estrutura ──────────────────────────────────────────────────────────── */
-const MODALIDADES = [
-  {
-    icon: '🏊',
-    title: 'Piscinas & Aquático',
-    color: '#2196f3',
-    gradient: 'linear-gradient(135deg, #1565c0 0%, #1976d2 100%)',
-    items: ['Piscina semiolímpica', 'Tobogã para crianças', 'Quiosques para sócios', 'Hidroginástica adultos'],
-  },
-  {
-    icon: '🎾',
-    title: 'Tênis',
-    color: C.green,
-    gradient: `linear-gradient(135deg, ${C.forest} 0%, ${C.green} 100%)`,
-    items: ['Quadras de saibro oficiais', 'Todos os níveis', 'Torneios regionais', 'Sede Agro Open 2026'],
-  },
-  {
-    icon: '🏖️',
-    title: 'Beach Tennis',
-    color: '#ff9800',
-    gradient: 'linear-gradient(135deg, #e65100 0%, #ff9800 100%)',
-    items: ['Quadras de areia', 'Competições oficiais', 'Torneio de Carnaval', 'Grande crescimento local'],
-  },
-  {
-    icon: '🥋',
-    title: 'Karatê',
-    color: '#e91e63',
-    gradient: 'linear-gradient(135deg, #880e4f 0%, #e91e63 100%)',
-    items: ['Crianças e adolescentes', '2× por semana', 'Formação esportiva', 'Disciplina e valores'],
-  },
-  {
-    icon: '🤸',
-    title: 'Natação',
-    color: '#00bcd4',
-    gradient: 'linear-gradient(135deg, #006064 0%, #00bcd4 100%)',
-    items: ['Adultos e crianças', '2 aulas semanais', 'Iniciantes e avançados', 'Condicionamento físico'],
-  },
-  {
-    icon: '🍽️',
-    title: 'Restaurante & Bar',
-    color: C.gold,
-    gradient: `linear-gradient(135deg, #7a5c00 0%, ${C.gold} 100%)`,
-    items: ['Rodízio de petiscos', 'Bar completo', 'Quiosques privativos', 'Sauna semanal'],
-  },
-]
+/* ── Galeria ── */
+function Galeria() {
+  const [filter, setFilter] = useState('Todos')
+  const [lightbox, setLightbox] = useState(null)
 
-function Estrutura() {
-  const [active, setActive] = useState(0)
-  const mod = MODALIDADES[active]
+  const visibleFotos = FOTOS.slice(0, 9)
 
   return (
-    <AnimSection id="estrutura" style={{
-      background: `linear-gradient(180deg, ${C.cream} 0%, rgba(95,179,53,.05) 100%)`,
-      borderRadius: 28, padding: '48px 32px',
-    }}>
-      <SectionTitle
-        label="🏗️ Infraestrutura"
-        title="Uma estrutura completa para toda a família"
-        subtitle="Do aquático ao gastronômico — o TTC tem tudo para o seu dia perfeito."
-      />
+    <section id="galeria" style={{ background: 'linear-gradient(160deg, #0A1F12, #071A0E)', padding: '100px 24px' }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <AnimSection>
+          <div style={{ textAlign: 'center', marginBottom: 56 }}>
+            <div className="section-badge">📸 Galeria</div>
+            <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 'clamp(30px, 5vw, 52px)', fontWeight: 900, color: '#fff', lineHeight: 1.1, marginBottom: 20 }}>
+              Momentos <span style={{ color: '#8FD64A' }}>inesquecíveis</span>
+            </h2>
+            <div className="divider-gold" />
+          </div>
+        </AnimSection>
 
-      {/* Tabs de modalidade */}
-      <div style={{
-        display: 'flex', gap: 8, flexWrap: 'wrap',
-        marginBottom: 32, overflowX: 'auto', scrollbarWidth: 'none',
-      }}>
-        {MODALIDADES.map((m, i) => (
-          <button key={i} className={`ttc-tab-btn ${active === i ? 'active' : ''}`}
-            onClick={() => setActive(i)}
-            style={{ background: active === i ? m.color : undefined }}>
-            {m.icon} {m.title}
-          </button>
-        ))}
-      </div>
-
-      {/* Card da modalidade ativa */}
-      <div key={active} style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: 32, alignItems: 'center',
-        animation: 'fadeIn .35s ease',
-      }}>
-        <div className="ttc-features-grid" style={{
-          background: '#fff', borderRadius: 20,
-          padding: '32px', display: 'flex', flexDirection: 'column', gap: 16,
-          boxShadow: `0 8px 32px ${mod.color}22`,
-          border: `1.5px solid ${mod.color}33`,
-        }}>
-          <div style={{
-            width: 64, height: 64, borderRadius: 18,
-            background: mod.gradient,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '2rem',
-            boxShadow: `0 8px 20px ${mod.color}44`,
-          }}>{mod.icon}</div>
-
-          <h3 style={{ color: C.deep, fontWeight: 900, fontSize: '1.4rem', margin: 0 }}>{mod.title}</h3>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {mod.items.map((item, i) => (
-              <div key={i} style={{
-                display: 'flex', alignItems: 'center', gap: 12,
-                padding: '10px 14px', borderRadius: 10,
-                background: `${mod.color}0d`,
-                border: `1px solid ${mod.color}22`,
-              }}>
-                <span style={{
-                  width: 7, height: 7, borderRadius: '50%',
-                  background: mod.color, flexShrink: 0,
-                }} />
-                <span style={{ color: '#374151', fontSize: '.9rem', fontWeight: 500 }}>{item}</span>
-              </div>
+        <AnimSection delay={100}>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 40, flexWrap: 'wrap' }}>
+            {GALERIA_TAGS.map(tag => (
+              <button
+                key={tag}
+                onClick={() => setFilter(tag)}
+                className={`estrutura-tab${filter === tag ? ' active' : ''}`}
+              >{tag}</button>
             ))}
           </div>
+        </AnimSection>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+          {visibleFotos.map((src, i) => (
+            <AnimSection key={i} delay={i * 50}>
+              <div
+                className="gallery-item"
+                onClick={() => setLightbox(src)}
+                style={{ height: i % 3 === 1 ? 280 : 220, position: 'relative' }}
+              >
+                <img src={src} alt={`Foto ${i + 1}`} loading="lazy"
+                  onError={e => { e.target.style.display = 'none'; e.target.parentElement.style.background = 'rgba(255,255,255,0.05)' }}
+                />
+                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(0deg, rgba(7,26,14,0.7), transparent)', opacity: 0, transition: 'opacity .3s', borderRadius: 16, display: 'flex', alignItems: 'flex-end', padding: 16 }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                  onMouseLeave={e => e.currentTarget.style.opacity = 0}
+                >
+                  <span style={{ color: '#fff', fontSize: 13, fontFamily: 'Inter, sans-serif', fontWeight: 600 }}>Ver foto ↗</span>
+                </div>
+              </div>
+            </AnimSection>
+          ))}
         </div>
 
-        {/* Foto correspondente */}
-        <div style={{
-          borderRadius: 20, overflow: 'hidden',
-          boxShadow: '0 16px 48px rgba(0,0,0,.14)',
-          aspectRatio: '4/3',
-        }}>
-          <img
-            src={active === 0 ? '/ttc/piscina-toboga.jpg' :
-                 active === 1 ? '/ttc/galeria/galeria-ten-04.jpg' :
-                 active === 2 ? '/ttc/galeria/galeria-bt-01.jpg' :
-                 active === 3 ? '/ttc/galeria/galeria-ten-03.jpg' :
-                 active === 4 ? '/ttc/galeria/galeria-ten-02.jpg' :
-                                '/ttc/area-piscina.jpg'}
-            alt={mod.title}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'all .4s' }}
-          />
-        </div>
+        {/* Lightbox */}
+        {lightbox && (
+          <div className="modal-overlay" onClick={() => setLightbox(null)}>
+            <div style={{ position: 'relative', maxWidth: 900, width: '100%' }} onClick={e => e.stopPropagation()}>
+              <img src={lightbox} alt="Foto ampliada" style={{ width: '100%', borderRadius: 20, maxHeight: '80vh', objectFit: 'contain' }} />
+              <button onClick={() => setLightbox(null)} style={{ position: 'absolute', top: -16, right: -16, width: 40, height: 40, borderRadius: '50%', background: '#8FD64A', border: 'none', cursor: 'pointer', fontSize: 18, color: '#071A0E', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+            </div>
+          </div>
+        )}
       </div>
-
-      {/* Grade mini de todas modalidades */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
-        gap: 8, marginTop: 28,
-      }}>
-        {MODALIDADES.map((m, i) => (
-          <button key={i} onClick={() => setActive(i)}
-            style={{
-              background: active === i ? m.color : '#fff',
-              border: `1.5px solid ${active === i ? m.color : 'rgba(0,0,0,.07)'}`,
-              borderRadius: 12, padding: '12px 8px',
-              cursor: 'pointer', textAlign: 'center',
-              transition: 'all .2s',
-              boxShadow: active === i ? `0 4px 14px ${m.color}44` : 'none',
-            }}>
-            <div style={{ fontSize: '1.4rem', marginBottom: 4 }}>{m.icon}</div>
-            <div style={{
-              fontSize: '.72rem', fontWeight: 700,
-              color: active === i ? '#fff' : C.muted,
-            }}>{m.title}</div>
-          </button>
-        ))}
-      </div>
-    </AnimSection>
+    </section>
   )
 }
 
-/* ─── Eventos ────────────────────────────────────────────────────────────── */
-const EVENTOS = [
-  {
-    icon: '🌾', title: 'Agro Open de Tênis',
-    edition: '4ª Edição', year: '2026',
-    date: '07 – 13 SET 2026',
-    color: C.green, gradient: `linear-gradient(135deg, ${C.forest}, ${C.green})`,
-    desc: 'O maior torneio de tênis do interior do Mato Grosso. Reúne atletas de todo o estado, com apoio do agronegócio regional.',
-    tags: ['14 categorias', 'R$ 5.000', 'Inscrições abertas'],
-    cta: '/inscricao',
-    ctaLabel: '→ Inscrever-se',
-  },
-  {
-    icon: '🍕', title: "Domino's Open",
-    edition: 'Tradicional', year: '',
-    date: 'Anual',
-    color: '#e53935', gradient: 'linear-gradient(135deg, #b71c1c, #e53935)',
-    desc: 'Torneio que reúne os principais tenistas do clube e da região em uma competição animada e competitiva.',
-    tags: ['Categorias mistas', 'Ranking local', 'Premiações'],
-    cta: null, ctaLabel: null,
-  },
-  {
-    icon: '🏖️', title: 'Beach Tennis TTC',
-    edition: 'Temporada', year: '2026',
-    date: 'Semestral',
-    color: '#ff9800', gradient: 'linear-gradient(135deg, #e65100, #ff9800)',
-    desc: 'Torneio de beach tennis com premiação e brindes. Modalidade em forte expansão no TTC.',
-    tags: ['Quadras de areia', 'Premiação', 'Brindes'],
-    cta: null, ctaLabel: null,
-  },
-  {
-    icon: '🎉', title: 'Tênis de Carnaval',
-    edition: 'Especial', year: '',
-    date: 'Fevereiro',
-    color: '#9c27b0', gradient: 'linear-gradient(135deg, #4a148c, #9c27b0)',
-    desc: 'Torneio especial de Carnaval com provas de tênis e beach tennis, confraternização e muita animação.',
-    tags: ['Tênis + BT', 'Carnaval', 'Diversão'],
-    cta: null, ctaLabel: null,
-  },
-]
+/* ── CarteirinhaDigital ── */
+function CarteirinhaDigital() {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [erro, setErro] = useState('')
+  const [showModal, setShowModal] = useState(false)
+  const cardRef = useRef(null)
 
-function Eventos() {
-  const [hover, setHover] = useState(null)
+  const token = typeof window !== 'undefined'
+    ? (localStorage.getItem('sp_token') || localStorage.getItem('sp_site_token') || '')
+    : ''
+
+  const buscarCarteirinha = useCallback(async () => {
+    if (!token) { setErro('Faça login para acessar sua carteirinha digital.'); return }
+    setLoading(true); setErro('')
+    try {
+      const res = await fetch('/api/auth/carteirinha', { headers: { Authorization: `Bearer ${token}` } })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d.error || 'Erro ao buscar carteirinha')
+      setData(d)
+      setShowModal(true)
+    } catch (e) {
+      setErro(e.message || 'Erro ao buscar carteirinha')
+    } finally {
+      setLoading(false)
+    }
+  }, [token])
+
+  const handlePrint = () => {
+    if (!cardRef.current) return
+    const w = window.open('', '_blank')
+    w.document.write(`
+      <html><head><title>Carteirinha TTC</title>
+      <style>
+        body { margin: 0; background: #071A0E; display: flex; align-items: center; justify-content: center; min-height: 100vh; font-family: Inter, sans-serif; }
+        @media print { body { background: #071A0E !important; } }
+      </style>
+      </head><body>${cardRef.current.outerHTML}</body></html>
+    `)
+    w.document.close()
+    setTimeout(() => { w.print() }, 500)
+  }
+
+  const statusColor = {
+    ativo: '#8FD64A',
+    inadimplente: '#EF5350',
+    suspenso: '#FFB74D',
+    inativo: '#9E9E9E',
+  }
+
   return (
-    <AnimSection id="eventos">
-      <SectionTitle
-        label="📅 Calendário"
-        title="Eventos que movimentam a cidade"
-        subtitle="Uma agenda viva que reúne atletas e famílias o ano todo."
-      />
-      <div className="ttc-events-grid" style={{
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16,
-      }}>
-        {EVENTOS.map((ev, i) => (
-          <div
-            key={i}
-            className="ttc-card-hover"
-            onMouseEnter={() => setHover(i)}
-            onMouseLeave={() => setHover(null)}
-            style={{
-              borderRadius: 20, overflow: 'hidden',
-              boxShadow: hover === i ? `0 20px 48px ${ev.color}33` : '0 4px 16px rgba(0,0,0,.07)',
-              border: `1.5px solid ${hover === i ? ev.color + '44' : 'transparent'}`,
-              transition: 'all .3s',
-            }}>
+    <section id="carteirinha" style={{ background: C.deep, padding: '100px 24px' }}>
+      <div style={{ maxWidth: 900, margin: '0 auto' }}>
+        <AnimSection>
+          <div style={{ textAlign: 'center', marginBottom: 60 }}>
+            <div className="section-badge">🪪 Sócios</div>
+            <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 'clamp(30px, 5vw, 52px)', fontWeight: 900, color: '#fff', lineHeight: 1.1, marginBottom: 20 }}>
+              Carteirinha <span style={{ color: '#8FD64A' }}>Digital</span>
+            </h2>
+            <div className="divider-gold" />
+            <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 16, fontFamily: 'Inter, sans-serif', marginTop: 20, maxWidth: 520, margin: '20px auto 0' }}>
+              Acesse sua carteirinha digital com QR Code para identificação no clube, torneios e eventos.
+            </p>
+          </div>
+        </AnimSection>
 
-            {/* Header colorido */}
-            <div style={{
-              background: ev.gradient, padding: '20px 22px',
-              display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-            }}>
-              <div>
-                <div style={{ fontSize: '2rem', marginBottom: 8 }}>{ev.icon}</div>
-                <div style={{ fontWeight: 900, fontSize: '1.1rem', color: '#fff', lineHeight: 1.2 }}>{ev.title}</div>
-                {ev.edition && <div style={{ fontSize: '.75rem', color: 'rgba(255,255,255,.7)', marginTop: 4 }}>{ev.edition} {ev.year}</div>}
-              </div>
+        <AnimSection delay={100}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
+            {/* Preview card mockup */}
+            <div style={{ perspective: 1000, width: '100%', maxWidth: 420 }}>
               <div style={{
-                background: 'rgba(255,255,255,.15)',
-                borderRadius: 10, padding: '6px 12px',
-                fontSize: '.72rem', fontWeight: 700, color: '#fff',
-                letterSpacing: '.04em', whiteSpace: 'nowrap',
-              }}>{ev.date}</div>
+                background: 'linear-gradient(135deg, #071A0E 0%, #0E2E1C 50%, #1B4D2E 100%)',
+                border: '1.5px solid rgba(143,214,74,0.3)',
+                borderRadius: 24, padding: 32,
+                position: 'relative', overflow: 'hidden',
+                boxShadow: '0 30px 80px rgba(0,0,0,0.6), 0 0 30px rgba(143,214,74,0.1)',
+                animation: 'glowPulse 4s ease-in-out infinite',
+              }}>
+                {/* BG pattern */}
+                <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 80% 20%, rgba(143,214,74,0.08), transparent 50%)', pointerEvents: 'none' }} />
+                <div style={{ position: 'absolute', bottom: -30, left: -30, width: 180, height: 180, borderRadius: '50%', border: '1px solid rgba(201,166,86,0.1)', pointerEvents: 'none' }} />
+
+                <div style={{ position: 'relative', zIndex: 2 }}>
+                  {/* Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#8FD64A', fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', fontFamily: 'Inter, sans-serif' }}>Tênis & Touring Clube</div>
+                      <div style={{ fontSize: 22, color: '#fff', fontFamily: "'Playfair Display', serif", fontWeight: 700, marginTop: 4 }}>Carteirinha Sócio</div>
+                    </div>
+                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg, #8FD64A, #4CAF50)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, color: '#071A0E', fontFamily: 'Inter, sans-serif', flexShrink: 0 }}>TTC</div>
+                  </div>
+
+                  {/* Body */}
+                  <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
+                    {/* QR placeholder */}
+                    <div style={{ width: 88, height: 88, background: 'rgba(255,255,255,0.07)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 28 }}>▣</div>
+                        <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', fontFamily: 'Inter, sans-serif', marginTop: 4 }}>QR CODE</div>
+                      </div>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', fontFamily: 'Inter, sans-serif', marginBottom: 4 }}>Nome do sócio</div>
+                      <div style={{ fontSize: 18, color: '#fff', fontFamily: 'Inter, sans-serif', fontWeight: 700, marginBottom: 8 }}>João da Silva</div>
+                      <div style={{ fontSize: 12, color: '#C9A656', fontFamily: 'Inter, sans-serif', fontWeight: 600, marginBottom: 6 }}>Plano Familiar</div>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(143,214,74,0.12)', border: '1px solid rgba(143,214,74,0.3)', borderRadius: 50, padding: '3px 12px' }}>
+                        <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#8FD64A', animation: 'pulse 2s infinite' }} />
+                        <span style={{ fontSize: 11, color: '#8FD64A', fontFamily: 'Inter, sans-serif', fontWeight: 600 }}>ATIVO</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', fontFamily: 'Inter, sans-serif' }}>Desde 2020 · #TTC0001</div>
+                    <div style={{ fontSize: 18 }}>🎾</div>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* Body */}
-            <div style={{ background: '#fff', padding: '18px 22px' }}>
-              <p style={{ color: '#374151', fontSize: '.88rem', lineHeight: 1.65, margin: '0 0 14px' }}>{ev.desc}</p>
-
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: ev.cta ? 16 : 0 }}>
-                {ev.tags.map((tag, j) => (
-                  <span key={j} style={{
-                    background: `${ev.color}12`, color: ev.color,
-                    border: `1px solid ${ev.color}33`,
-                    borderRadius: 20, padding: '3px 10px',
-                    fontSize: '.72rem', fontWeight: 700,
-                  }}>{tag}</span>
-                ))}
-              </div>
-
-              {ev.cta && (
-                <Link to={ev.cta} style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  color: ev.color, fontWeight: 800, fontSize: '.88rem',
-                  textDecoration: 'none',
-                  padding: '8px 0',
-                }}>{ev.ctaLabel}</Link>
+            {/* CTA */}
+            <div style={{ textAlign: 'center' }}>
+              {!token ? (
+                <div style={{ marginBottom: 20 }}>
+                  <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 15, fontFamily: 'Inter, sans-serif', marginBottom: 16 }}>
+                    Faça login para acessar sua carteirinha digital
+                  </p>
+                  <Link to="/login" className="ttc-btn-primary">
+                    🔐 Fazer Login
+                  </Link>
+                </div>
+              ) : (
+                <button onClick={buscarCarteirinha} disabled={loading} className="ttc-btn-primary" style={{ fontSize: 16, padding: '16px 40px' }}>
+                  {loading ? '⏳ Carregando...' : '🪪 Ver Minha Carteirinha'}
+                </button>
+              )}
+              {erro && (
+                <div style={{ marginTop: 16, padding: '12px 24px', background: 'rgba(239,83,80,0.12)', border: '1px solid rgba(239,83,80,0.3)', borderRadius: 12, color: '#EF5350', fontSize: 14, fontFamily: 'Inter, sans-serif' }}>
+                  ⚠️ {erro}
+                </div>
               )}
             </div>
           </div>
-        ))}
-      </div>
-    </AnimSection>
-  )
-}
-
-/* ─── Galeria ─────────────────────────────────────────────────────────────── */
-const FOTOS = [
-  { src: '/ttc/galeria/galeria-bt-01.jpg', alt: 'Equipe feminina de beach tennis', cat: 'Beach Tennis', span: 'row2' },
-  { src: '/ttc/galeria/galeria-bt-02.jpg', alt: 'Atleta com raquete na areia',     cat: 'Beach Tennis', span: '' },
-  { src: '/ttc/galeria/galeria-bt-03.jpg', alt: 'Dupla campeã com troféu',          cat: 'Beach Tennis', span: '' },
-  { src: '/ttc/galeria/galeria-bt-04.jpg', alt: 'Jogo noturno de beach tennis',    cat: 'Beach Tennis', span: 'col2' },
-  { src: '/ttc/galeria/galeria-ten-01.jpg', alt: 'Jovem tenista no saibro',         cat: 'Tênis', span: '' },
-  { src: '/ttc/galeria/galeria-ten-02.jpg', alt: 'Criança sacando',                 cat: 'Tênis Kids', span: '' },
-  { src: '/ttc/galeria/galeria-ten-03.jpg', alt: 'Turma tênis kids',                cat: 'Tênis Kids', span: 'row2' },
-  { src: '/ttc/galeria/galeria-ten-04.jpg', alt: 'Atleta Copa Agro',                cat: 'Copa Agro', span: '' },
-  { src: '/ttc/galeria/galeria-ten-05.jpg', alt: 'Tenista à noite',                 cat: 'Tênis', span: '' },
-  { src: '/ttc/galeria/galeria-ten-06.jpg', alt: 'Crianças Copa Agro',              cat: 'Copa Agro', span: '' },
-  { src: '/ttc/galeria/galeria-ten-07.jpg', alt: 'Campeões Kids Sub-10',            cat: 'Tênis Kids', span: '' },
-  { src: '/ttc/galeria/galeria-ten-08.jpg', alt: '2ª Copa Agro — banner',           cat: 'Copa Agro', span: 'col2' },
-]
-const ALL_CATS = ['Todas', 'Tênis', 'Beach Tennis', 'Tênis Kids', 'Copa Agro']
-
-function Galeria() {
-  const [lightbox, setLightbox]     = useState(null)
-  const [filtro, setFiltro]         = useState('Todas')
-  const [loaded, setLoaded]         = useState({})
-
-  const fotos = filtro === 'Todas' ? FOTOS : FOTOS.filter(f => f.cat === filtro)
-
-  const onLoaded = useCallback((i) => setLoaded(p => ({ ...p, [i]: true })), [])
-
-  return (
-    <AnimSection id="galeria">
-      <SectionTitle
-        label="📸 Galeria"
-        title="Momentos reais do TTC"
-        subtitle="Beach tennis, tênis, kids, eventos — clique para ampliar."
-      />
-
-      {/* Filtros de categoria */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>
-        {ALL_CATS.map(cat => (
-          <button key={cat} className={`ttc-tab-btn ${filtro === cat ? 'active' : ''}`}
-            onClick={() => setFiltro(cat)}>{cat}</button>
-        ))}
+        </AnimSection>
       </div>
 
-      {/* Grid masonry-like */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-        gridAutoRows: '180px',
-        gap: 8,
-      }}>
-        {fotos.map((foto, i) => (
-          <div
-            key={foto.src + filtro}
-            className="ttc-gallery-item"
-            onClick={() => setLightbox(i)}
-            style={{
-              gridRow:    foto.span === 'row2' ? 'span 2' : 'span 1',
-              gridColumn: foto.span === 'col2' ? 'span 2' : 'span 1',
-              animation: `fadeIn .4s ${i * 60}ms both`,
-            }}>
-            {!loaded[i] && (
-              <div style={{
-                width: '100%', height: '100%',
-                background: 'linear-gradient(90deg, #e8f0e8 25%, #d4e8d4 50%, #e8f0e8 75%)',
-                backgroundSize: '200% 100%',
-                animation: 'shimmer 1.5s infinite',
-              }} />
-            )}
-            <img src={foto.src} alt={foto.alt} loading="lazy"
-              onLoad={() => onLoaded(i)}
-              style={{ display: loaded[i] ? 'block' : 'none' }}
-            />
-            <div className="ttc-gallery-overlay">
-              <div style={{ fontSize: '.7rem', color: C.lime, fontWeight: 700, marginBottom: 2 }}>{foto.cat}</div>
-              <div style={{ fontSize: '.82rem', color: '#fff', fontWeight: 600 }}>{foto.alt}</div>
+      {/* Modal da carteirinha real */}
+      {showModal && data && (
+        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+          <div style={{ maxWidth: 520, width: '100%', padding: 20 }} onClick={e => e.stopPropagation()}>
+            <div ref={cardRef}>
+              {data.socio ? (
+                <div className="carteirinha-card">
+                  <div style={{ position: 'relative', zIndex: 2 }}>
+                    {/* Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: '#8FD64A', fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', fontFamily: 'Inter, sans-serif' }}>Tênis & Touring Clube</div>
+                        <div style={{ fontSize: 24, color: '#fff', fontFamily: "'Playfair Display', serif", fontWeight: 700, marginTop: 4 }}>Carteirinha Oficial</div>
+                      </div>
+                      <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg, #8FD64A, #4CAF50)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 900, color: '#071A0E', fontFamily: 'Inter, sans-serif', flexShrink: 0 }}>TTC</div>
+                    </div>
+
+                    {/* Body */}
+                    <div style={{ display: 'flex', gap: 24, alignItems: 'center', marginBottom: 24 }}>
+                      {/* QR Real */}
+                      <div className="qr-container" style={{ position: 'relative', flexShrink: 0 }}>
+                        <div className="qr-scan-line" />
+                        <div
+                          dangerouslySetInnerHTML={{ __html: data.qrSvg }}
+                          style={{ width: 100, height: 100, display: 'block' }}
+                        />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', fontFamily: 'Inter, sans-serif', marginBottom: 2 }}>Sócio</div>
+                        <div style={{ fontSize: 20, color: '#fff', fontFamily: 'Inter, sans-serif', fontWeight: 800, marginBottom: 8, lineHeight: 1.2 }}>{data.nome}</div>
+                        <div style={{ fontSize: 13, color: '#C9A656', fontFamily: 'Inter, sans-serif', fontWeight: 600, marginBottom: 10 }}>{data.plano}</div>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: `${statusColor[data.status] || '#8FD64A'}15`, border: `1px solid ${statusColor[data.status] || '#8FD64A'}40`, borderRadius: 50, padding: '4px 14px' }}>
+                          <div style={{ width: 7, height: 7, borderRadius: '50%', background: statusColor[data.status] || '#8FD64A', animation: 'pulse 2s infinite' }} />
+                          <span style={{ fontSize: 11, color: statusColor[data.status] || '#8FD64A', fontFamily: 'Inter, sans-serif', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em' }}>{data.status}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Footer */}
+                    <div style={{ paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontFamily: 'Inter, sans-serif', letterSpacing: '.04em', marginBottom: 2 }}>CÓDIGO DO SÓCIO</div>
+                        <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.7)', fontFamily: 'monospace', fontWeight: 700, letterSpacing: '.1em' }}>{data.cardCode}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontFamily: 'Inter, sans-serif', letterSpacing: '.04em', marginBottom: 2 }}>MEMBRO DESDE</div>
+                        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', fontFamily: 'Inter, sans-serif', fontWeight: 600 }}>
+                          {data.desde ? new Date(data.desde).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }) : '—'}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 24 }}>🎾</div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: 40, textAlign: 'center' }}>
+                  <div style={{ fontSize: 56, marginBottom: 20 }}>😕</div>
+                  <h3 style={{ color: '#fff', fontFamily: "'Playfair Display', serif", fontSize: 24, marginBottom: 12 }}>Você ainda não é sócio</h3>
+                  <p style={{ color: 'rgba(255,255,255,0.55)', fontFamily: 'Inter, sans-serif', fontSize: 15, lineHeight: 1.6, marginBottom: 28 }}>{data.message}</p>
+                  <a href="#seja-socio" className="ttc-btn-primary" onClick={() => setShowModal(false)}>Quero ser sócio →</a>
+                </div>
+              )}
+            </div>
+
+            {/* Ações */}
+            <div style={{ display: 'flex', gap: 12, marginTop: 20, justifyContent: 'center', flexWrap: 'wrap' }}>
+              {data.socio && (
+                <button onClick={handlePrint} className="ttc-btn-primary" style={{ fontSize: 14, padding: '12px 28px' }}>
+                  🖨️ Imprimir / Salvar PDF
+                </button>
+              )}
+              <button onClick={() => setShowModal(false)} className="ttc-btn-outline" style={{ fontSize: 14, padding: '12px 28px' }}>
+                Fechar
+              </button>
             </div>
           </div>
-        ))}
-      </div>
-
-      <div style={{ textAlign: 'center', marginTop: 28 }}>
-        <a href="https://www.instagram.com/ttctga/" target="_blank" rel="noopener noreferrer"
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 10,
-            background: 'linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045)',
-            color: '#fff', padding: '13px 28px', borderRadius: 50,
-            fontWeight: 700, textDecoration: 'none', fontSize: '.92rem',
-            boxShadow: '0 6px 20px rgba(130,58,180,.3)',
-            transition: 'transform .2s, box-shadow .2s',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 28px rgba(130,58,180,.45)' }}
-          onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '' }}
-        >
-          📸 Seguir @ttctga no Instagram
-        </a>
-      </div>
-
-      {/* Lightbox */}
-      {lightbox !== null && (
-        <div
-          onClick={() => setLightbox(null)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 999,
-            background: 'rgba(0,0,0,.95)',
-            backdropFilter: 'blur(8px)',
-            display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center',
-            animation: 'fadeIn .2s ease',
-            padding: 16,
-          }}>
-          {/* Close */}
-          <button
-            onClick={e => { e.stopPropagation(); setLightbox(null) }}
-            style={{
-              position: 'fixed', top: 20, right: 20,
-              background: 'rgba(255,255,255,.12)', border: 'none', borderRadius: '50%',
-              width: 44, height: 44, color: '#fff', fontSize: 20, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>✕</button>
-
-          {/* Prev */}
-          <button
-            onClick={e => { e.stopPropagation(); setLightbox(i => (i - 1 + fotos.length) % fotos.length) }}
-            style={{
-              position: 'fixed', left: 16, top: '50%', transform: 'translateY(-50%)',
-              background: 'rgba(255,255,255,.12)', border: 'none', borderRadius: '50%',
-              width: 52, height: 52, color: '#fff', fontSize: 26, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'background .2s',
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,.25)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,.12)'}
-          >‹</button>
-
-          {/* Imagem */}
-          <img
-            src={fotos[lightbox].src}
-            alt={fotos[lightbox].alt}
-            onClick={e => e.stopPropagation()}
-            style={{
-              maxWidth: '88vw', maxHeight: '80vh', objectFit: 'contain',
-              borderRadius: 12, boxShadow: '0 0 80px rgba(0,0,0,.8)',
-              animation: 'scaleIn .25s ease',
-            }}
-          />
-
-          {/* Caption */}
-          <div style={{
-            marginTop: 16, textAlign: 'center',
-            color: 'rgba(255,255,255,.7)', fontSize: '.85rem',
-          }}>
-            <span style={{ color: C.lime, fontWeight: 700 }}>{fotos[lightbox].cat}</span>
-            {' — '}{fotos[lightbox].alt}
-            <span style={{ color: 'rgba(255,255,255,.35)', marginLeft: 12 }}>
-              {lightbox + 1} / {fotos.length}
-            </span>
-          </div>
-
-          {/* Thumbnails strip */}
-          <div style={{
-            position: 'fixed', bottom: 0, left: 0, right: 0,
-            display: 'flex', gap: 6, justifyContent: 'center',
-            padding: '12px 16px',
-            background: 'rgba(0,0,0,.6)',
-            overflowX: 'auto', scrollbarWidth: 'none',
-          }}>
-            {fotos.map((f, i) => (
-              <div key={i} onClick={e => { e.stopPropagation(); setLightbox(i) }}
-                style={{
-                  width: 48, height: 36, borderRadius: 6, overflow: 'hidden', flexShrink: 0,
-                  border: `2px solid ${lightbox === i ? C.lime : 'transparent'}`,
-                  opacity: lightbox === i ? 1 : 0.5, cursor: 'pointer',
-                  transition: 'all .2s',
-                }}>
-                <img src={f.src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              </div>
-            ))}
-          </div>
-
-          {/* Next */}
-          <button
-            onClick={e => { e.stopPropagation(); setLightbox(i => (i + 1) % fotos.length) }}
-            style={{
-              position: 'fixed', right: 16, top: '50%', transform: 'translateY(-50%)',
-              background: 'rgba(255,255,255,.12)', border: 'none', borderRadius: '50%',
-              width: 52, height: 52, color: '#fff', fontSize: 26, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'background .2s',
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,.25)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,.12)'}
-          >›</button>
         </div>
       )}
-    </AnimSection>
+    </section>
   )
 }
 
-/* ─── Seja Sócio ─────────────────────────────────────────────────────────── */
-const BENEFICIOS = [
-  { icon: '🏊', text: 'Acesso ilimitado à piscina e áreas de lazer' },
-  { icon: '🏠', text: 'Reserva exclusiva de quiosques' },
-  { icon: '🤸', text: 'Aulas de natação para adultos e crianças (2×/sem)' },
-  { icon: '🥋', text: 'Karatê para crianças e adolescentes (2×/sem)' },
-  { icon: '💧', text: 'Hidroginástica para adultos' },
-  { icon: '🎁', text: 'Brinde de boas-vindas exclusivo' },
-]
-
+/* ── Seja Sócio ── */
 function SejaSocio() {
   return (
-    <AnimSection id="seja-socio">
-      <div style={{
-        background: `linear-gradient(135deg, ${C.deep} 0%, ${C.forest} 50%, #2a6040 100%)`,
-        backgroundSize: '200% 200%',
-        borderRadius: 28, overflow: 'hidden',
-        position: 'relative',
-      }}>
-        {/* Decoração de fundo */}
-        <div style={{
-          position: 'absolute', top: -80, right: -80,
-          width: 400, height: 400, borderRadius: '50%',
-          background: `radial-gradient(circle, rgba(143,214,74,.08) 0%, transparent 70%)`,
-        }} />
-        <div style={{
-          position: 'absolute', bottom: -60, left: -60,
-          width: 320, height: 320, borderRadius: '50%',
-          background: `radial-gradient(circle, rgba(201,166,86,.07) 0%, transparent 70%)`,
-        }} />
+    <section id="seja-socio" style={{ background: `linear-gradient(160deg, ${C.forest} 0%, ${C.deep} 100%)`, padding: '100px 24px', position: 'relative', overflow: 'hidden' }}>
+      {/* Deco */}
+      <div style={{ position: 'absolute', top: -100, right: -100, width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle, rgba(143,214,74,0.06), transparent 70%)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', bottom: -60, left: -60, width: 350, height: 350, borderRadius: '50%', background: 'radial-gradient(circle, rgba(201,166,86,0.06), transparent 70%)', pointerEvents: 'none' }} />
 
-        <div style={{ position: 'relative', padding: '48px 40px' }}>
-          {/* Header */}
-          <div style={{ textAlign: 'center', marginBottom: 40 }}>
-            <span className="ttc-badge" style={{ marginBottom: 16, color: C.lime, borderColor: 'rgba(143,214,74,.3)', background: 'rgba(143,214,74,.08)' }}>
-              🎾 Faça parte da família TTC
-            </span>
-            <h2 style={{
-              color: '#fff', fontWeight: 900,
-              fontSize: 'clamp(1.8rem, 4vw, 2.6rem)',
-              margin: '8px 0 12px', lineHeight: 1.1,
-              letterSpacing: '-.02em',
-            }}>
-              Seja Sócio do<br />
-              <span style={{
-                background: `linear-gradient(135deg, ${C.lime}, ${C.gold})`,
-                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-              }}>Tangará Tênis Clube</span>
+      <div style={{ maxWidth: 1200, margin: '0 auto', position: 'relative', zIndex: 2 }}>
+        <AnimSection>
+          <div style={{ textAlign: 'center', marginBottom: 72 }}>
+            <div className="section-badge">🏅 Associação</div>
+            <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 'clamp(32px, 5vw, 56px)', fontWeight: 900, color: '#fff', lineHeight: 1.1, marginBottom: 20 }}>
+              Faça parte do <span style={{ color: '#8FD64A' }}>melhor clube</span><br />do Centro-Oeste
             </h2>
-            <p style={{ color: 'rgba(255,255,255,.7)', fontSize: '1rem', maxWidth: 520, margin: '0 auto' }}>
-              Garanta para sua família o melhor do esporte e lazer em Tangará da Serra — com o menor preço da região.
+            <div className="divider-gold" />
+            <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 16, fontFamily: 'Inter, sans-serif', marginTop: 24, maxWidth: 540, margin: '24px auto 0' }}>
+              Escolha o plano ideal para você e sua família
             </p>
           </div>
+        </AnimSection>
 
-          {/* Grid de benefícios */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-            gap: 12, marginBottom: 40,
-          }}>
-            {BENEFICIOS.map((b, i) => (
-              <div key={i} className="ttc-card-hover" style={{
-                display: 'flex', gap: 14, alignItems: 'center',
-                background: C.glass,
-                backdropFilter: 'blur(8px)',
-                borderRadius: 14, padding: '14px 18px',
-                border: '1px solid rgba(255,255,255,.1)',
-              }}>
-                <span style={{ fontSize: '1.5rem', flexShrink: 0 }}>{b.icon}</span>
-                <span style={{ color: 'rgba(255,255,255,.9)', fontSize: '.88rem', fontWeight: 500, lineHeight: 1.4 }}>{b.text}</span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24, alignItems: 'stretch' }}>
+          {PLANOS.map((p, i) => (
+            <AnimSection key={i} delay={i * 100}>
+              <div
+                className={`plano-card${p.destaque ? ' destaque' : ''}`}
+                style={{
+                  background: p.cor,
+                  border: p.border || (p.destaque ? '1.5px solid rgba(143,214,74,0.4)' : '1px solid rgba(255,255,255,0.08)'),
+                  height: '100%',
+                }}
+              >
+                {p.badge && (
+                  <div style={{ background: 'linear-gradient(135deg, #8FD64A, #4CAF50)', color: '#071A0E', fontSize: 11, fontWeight: 800, letterSpacing: '.08em', padding: '5px 16px', borderRadius: 50, display: 'inline-block', marginBottom: 20, textTransform: 'uppercase' }}>
+                    {p.badge}
+                  </div>
+                )}
+                {p.vip && (
+                  <div style={{ background: 'linear-gradient(135deg, #C9A656, #E8C87A)', color: '#071A0E', fontSize: 11, fontWeight: 800, letterSpacing: '.08em', padding: '5px 16px', borderRadius: 50, display: 'inline-block', marginBottom: 20, textTransform: 'uppercase' }}>
+                    👑 VIP Premium
+                  </div>
+                )}
+                <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, fontWeight: 900, color: p.vip ? '#C9A656' : '#fff', marginBottom: 8 }}>{p.nome}</div>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, marginBottom: 28 }}>
+                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 42, fontWeight: 900, color: p.vip ? '#E8C87A' : (p.destaque ? '#8FD64A' : '#fff'), lineHeight: 1 }}>{p.preco}</span>
+                  <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14, fontFamily: 'Inter, sans-serif', marginBottom: 6 }}>{p.periodo}</span>
+                </div>
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 20, marginBottom: 28 }}>
+                  {p.itens.map((item, j) => (
+                    <div key={j} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                      <span style={{ color: p.vip ? '#C9A656' : '#8FD64A', fontSize: 14, flexShrink: 0 }}>✓</span>
+                      <span style={{ color: 'rgba(255,255,255,0.75)', fontSize: 14, fontFamily: 'Inter, sans-serif' }}>{item}</span>
+                    </div>
+                  ))}
+                </div>
+                <a
+                  href={`https://wa.me/5565999999999?text=Ol%C3%A1!%20Quero%20ser%20s%C3%B3cio%20do%20TTC%20-%20Plano%20${encodeURIComponent(p.nome)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={p.vip ? 'ttc-btn-gold' : 'ttc-btn-primary'}
+                  style={{ width: '100%', justifyContent: 'center', ...(p.vip ? {} : (p.destaque ? {} : { background: 'rgba(255,255,255,0.1)', color: '#fff', boxShadow: 'none' })) }}
+                >
+                  {p.vip ? '👑 Assinar VIP' : (p.destaque ? '⭐ Escolher Familiar' : 'Escolher Plano')}
+                </a>
               </div>
-            ))}
-          </div>
-
-          {/* Hashtag + CTA */}
-          <div style={{ textAlign: 'center' }}>
-            <div style={{
-              color: C.lime, fontWeight: 900,
-              fontSize: '1.15rem', marginBottom: 24,
-              letterSpacing: '.02em',
-            }}>#VemSerSócio 🎾</div>
-            <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <a href="https://wa.me/5565999247052" target="_blank" rel="noopener noreferrer"
-                className="ttc-btn-primary" style={{ fontSize: '1rem' }}>
-                💬 Falar pelo WhatsApp
-              </a>
-              <a href="tel:+556593062398" className="ttc-btn-ghost">
-                📞 Ligar agora
-              </a>
-            </div>
-          </div>
-        </div>
-      </div>
-    </AnimSection>
-  )
-}
-
-/* ─── Contato ─────────────────────────────────────────────────────────────── */
-const CONTATOS = [
-  { icon: '💬', label: 'WhatsApp',  value: '(65) 99924-7052', href: 'https://wa.me/5565999247052', color: '#25d366' },
-  { icon: '📞', label: 'Secretaria', value: '(65) 99606-2398', href: 'tel:+5565996062398', color: '#2196f3' },
-  { icon: '✉️', label: 'E-mail',     value: 'tangaratc@outlook.com', href: 'mailto:tangaratc@outlook.com', color: C.gold },
-  { icon: '📸', label: 'Instagram',  value: '@ttctga', href: 'https://www.instagram.com/ttctga/', color: '#e91e63' },
-  { icon: '🌐', label: 'Site',       value: 'tangaratenisclube.com.br', href: 'https://tangaratenisclube.com.br', color: C.green },
-]
-
-function Contato() {
-  return (
-    <AnimSection id="contato">
-      <SectionTitle
-        label="📍 Localização"
-        title="Onde nos encontrar"
-        subtitle="Venha nos visitar! Estamos no coração de Tangará da Serra."
-      />
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr', gap: 32, alignItems: 'start' }}>
-        {/* Contatos */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {/* Endereço destaque */}
-          <div style={{
-            background: `linear-gradient(135deg, ${C.deep}, ${C.forest})`,
-            borderRadius: 18, padding: '20px 22px', marginBottom: 4,
-            display: 'flex', gap: 14, alignItems: 'flex-start',
-          }}>
-            <span style={{ fontSize: '1.6rem', flexShrink: 0, marginTop: 2 }}>📍</span>
-            <div>
-              <div style={{ fontSize: '.72rem', fontWeight: 700, color: C.lime, letterSpacing: '.08em', marginBottom: 4 }}>ENDEREÇO</div>
-              <div style={{ color: '#fff', fontWeight: 700, lineHeight: 1.5, fontSize: '.92rem' }}>
-                Rua Benedito Pereira de Oliveira, 1500<br />
-                Jardim Tangará · Tangará da Serra/MT<br />
-                CEP 78300-000
-              </div>
-            </div>
-          </div>
-
-          {/* Canais */}
-          {CONTATOS.map((c, i) => (
-            <a key={i} href={c.href} target="_blank" rel="noopener noreferrer"
-              className="ttc-card-hover"
-              style={{
-                display: 'flex', alignItems: 'center', gap: 14,
-                background: '#fff', borderRadius: 14, padding: '13px 18px',
-                border: `1px solid rgba(0,0,0,.07)`,
-                textDecoration: 'none',
-                boxShadow: '0 2px 8px rgba(0,0,0,.05)',
-              }}>
-              <div style={{
-                width: 40, height: 40, borderRadius: 12,
-                background: c.color + '18', border: `1px solid ${c.color}30`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '1.2rem', flexShrink: 0,
-              }}>{c.icon}</div>
-              <div>
-                <div style={{ fontSize: '.7rem', color: C.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em' }}>{c.label}</div>
-                <div style={{ color: C.deep, fontWeight: 700, fontSize: '.9rem' }}>{c.value}</div>
-              </div>
-              <div style={{ marginLeft: 'auto', color: C.muted, fontSize: '1rem' }}>→</div>
-            </a>
+            </AnimSection>
           ))}
         </div>
 
-        {/* Mapa */}
-        <div style={{
-          borderRadius: 20, overflow: 'hidden',
-          boxShadow: '0 8px 32px rgba(0,0,0,.14)',
-          border: '1px solid rgba(95,179,53,.15)',
-        }}>
-          <iframe
-            title="Localização TTC"
-            src="https://maps.google.com/maps?q=Rua+Benedito+Pereira+de+Oliveira+1500+Tangará+da+Serra+MT&output=embed"
-            width="100%" height="400"
-            style={{ border: 0, display: 'block' }}
-            allowFullScreen="" loading="lazy"
-            referrerPolicy="no-referrer-when-downgrade"
-          />
-        </div>
+        <AnimSection delay={300}>
+          <div style={{ textAlign: 'center', marginTop: 48, padding: '28px', background: 'rgba(143,214,74,0.06)', borderRadius: 20, border: '1px solid rgba(143,214,74,0.15)', maxWidth: 600, margin: '48px auto 0' }}>
+            <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 15, fontFamily: 'Inter, sans-serif', lineHeight: 1.7 }}>
+              💬 Dúvidas? Fale com nossa equipe de associação via WhatsApp e encontre o plano perfeito para você.
+            </p>
+            <a href="https://wa.me/5565999999999" target="_blank" rel="noopener noreferrer" className="ttc-btn-primary" style={{ marginTop: 20, fontSize: 15, padding: '14px 32px' }}>
+              📱 Falar no WhatsApp
+            </a>
+          </div>
+        </AnimSection>
       </div>
-    </AnimSection>
+    </section>
+  )
+}
+
+/* ── Contato ── */
+function Contato() {
+  const canais = [
+    { icon: '📱', label: 'WhatsApp', valor: '(65) 9 9999-9999', href: 'https://wa.me/5565999999999', cor: '#25D366' },
+    { icon: '📞', label: 'Secretaria', valor: '(65) 3333-3333', href: 'tel:+556533333333', cor: '#4FC3F7' },
+    { icon: '📧', label: 'E-mail', valor: 'contato@ttcuiaba.com.br', href: 'mailto:contato@ttcuiaba.com.br', cor: '#8FD64A' },
+    { icon: '📸', label: 'Instagram', valor: '@ttcuiaba', href: 'https://instagram.com/ttcuiaba', cor: '#E1306C' },
+  ]
+
+  return (
+    <section id="contato" style={{ background: C.deep, padding: '100px 24px 60px' }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <AnimSection>
+          <div style={{ textAlign: 'center', marginBottom: 72 }}>
+            <div className="section-badge">📍 Localização</div>
+            <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 'clamp(30px, 5vw, 52px)', fontWeight: 900, color: '#fff', lineHeight: 1.1, marginBottom: 20 }}>
+              Venha nos <span style={{ color: '#8FD64A' }}>visitar</span>
+            </h2>
+            <div className="divider-gold" />
+          </div>
+        </AnimSection>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 48 }}>
+          {/* Canais */}
+          <AnimSection>
+            <div>
+              <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 24, color: '#fff', marginBottom: 28, fontWeight: 700 }}>Fale conosco</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {canais.map((c, i) => (
+                  <a
+                    key={i}
+                    href={c.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px', background: 'rgba(255,255,255,0.04)', border: `1px solid ${c.cor}22`, borderRadius: 16, textDecoration: 'none', transition: 'all .3s' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = `${c.cor}12`; e.currentTarget.style.borderColor = `${c.cor}44` }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = `${c.cor}22` }}
+                  >
+                    <div style={{ width: 44, height: 44, borderRadius: 12, background: `${c.cor}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{c.icon}</div>
+                    <div>
+                      <div style={{ fontSize: 11, color: c.cor, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', fontFamily: 'Inter, sans-serif', marginBottom: 2 }}>{c.label}</div>
+                      <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.85)', fontFamily: 'Inter, sans-serif', fontWeight: 500 }}>{c.valor}</div>
+                    </div>
+                  </a>
+                ))}
+              </div>
+
+              <div style={{ marginTop: 32, padding: 20, background: 'rgba(255,255,255,0.03)', borderRadius: 16, border: '1px solid rgba(255,255,255,0.07)' }}>
+                <div style={{ fontSize: 12, color: '#8FD64A', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', fontFamily: 'Inter, sans-serif', marginBottom: 8 }}>📍 Endereço</div>
+                <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: 15, fontFamily: 'Inter, sans-serif', lineHeight: 1.6 }}>
+                  Av. Miguel Sutil, 8.000<br />Jardim das Américas, Cuiabá - MT<br />CEP: 78070-000
+                </div>
+                <div style={{ marginTop: 12, fontSize: 12, color: 'rgba(255,255,255,0.4)', fontFamily: 'Inter, sans-serif' }}>
+                  🕐 Seg–Sex: 6h–22h · Sáb: 7h–20h · Dom: 8h–18h
+                </div>
+              </div>
+            </div>
+          </AnimSection>
+
+          {/* Mapa */}
+          <AnimSection delay={150}>
+            <div style={{ borderRadius: 20, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', height: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
+              <iframe
+                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3843.6!2d-56.0!3d-15.6!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2sCuiab%C3%A1%2C%20MT!5e0!3m2!1spt-BR!2sbr!4v1234567890"
+                width="100%" height="100%"
+                style={{ border: 0, display: 'block', filter: 'invert(90%) hue-rotate(170deg)' }}
+                allowFullScreen
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                title="Localização TTC"
+              />
+            </div>
+          </AnimSection>
+        </div>
+
+        {/* Footer */}
+        <AnimSection delay={200}>
+          <div style={{ marginTop: 80, paddingTop: 40, borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 20 }}>
+            <div>
+              <div style={{ fontFamily: "'Playfair Display', serif", color: '#fff', fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Tênis & Touring Clube</div>
+              <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, fontFamily: 'Inter, sans-serif' }}>© 2026 · Cuiabá, MT · Todos os direitos reservados</div>
+            </div>
+            <div style={{ display: 'flex', gap: 16 }}>
+              <Link to="/" style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontFamily: 'Inter, sans-serif', textDecoration: 'none', transition: 'color .2s' }} onMouseEnter={e => e.target.style.color = '#8FD64A'} onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.5)'}>Home</Link>
+              <Link to="/inscricoes" style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontFamily: 'Inter, sans-serif', textDecoration: 'none', transition: 'color .2s' }} onMouseEnter={e => e.target.style.color = '#8FD64A'} onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.5)'}>Inscrições</Link>
+              <Link to="/login" style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontFamily: 'Inter, sans-serif', textDecoration: 'none', transition: 'color .2s' }} onMouseEnter={e => e.target.style.color = '#8FD64A'} onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.5)'}>Login</Link>
+            </div>
+          </div>
+        </AnimSection>
+      </div>
+    </section>
   )
 }
 
 /* ─── Main ────────────────────────────────────────────────────────────────── */
 export default function Clube() {
-  const [navVisible, setNavVisible] = useState(false)
+  const [activeSection, setActiveSection] = useState('')
+  const [visitantes, setVisitantes] = useState(null)
 
+  /* Inject CSS */
   useEffect(() => {
-    window.scrollTo(0, 0)
-    // Injeta CSS global
-    const id = 'ttc-styles'
-    if (!document.getElementById(id)) {
-      const style = document.createElement('style')
-      style.id = id
-      style.textContent = GLOBAL_CSS
-      document.head.appendChild(style)
-    }
-    return () => {}
+    const style = document.createElement('style')
+    style.id = 'ttc-clube-css'
+    style.textContent = GLOBAL_CSS
+    document.head.appendChild(style)
+    return () => { const el = document.getElementById('ttc-clube-css'); if (el) el.remove() }
   }, [])
 
+  /* Visitor counter ping */
+  useEffect(() => {
+    fetch('/api/visitantes/ping', { method: 'POST' })
+      .then(r => r.json())
+      .then(d => setVisitantes(d.total))
+      .catch(() => {
+        fetch('/api/visitantes').then(r => r.json()).then(d => setVisitantes(d.total)).catch(() => {})
+      })
+  }, [])
+
+  /* Active section tracking */
+  useEffect(() => {
+    const ids = NAV_ITEMS.map(n => n.id)
+    const obs = new IntersectionObserver(entries => {
+      entries.forEach(e => { if (e.isIntersecting) setActiveSection(e.target.id) })
+    }, { threshold: 0.3, rootMargin: '-80px 0px -40% 0px' })
+    ids.forEach(id => { const el = document.getElementById(id); if (el) obs.observe(el) })
+    return () => obs.disconnect()
+  }, [])
+
+  const scrollToSection = useCallback((id) => {
+    const el = document.getElementById(id)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
+
+  const handleNavCarteirinha = useCallback(() => {
+    scrollToSection('carteirinha')
+  }, [scrollToSection])
+
   return (
-    <div style={{ minHeight: '100vh', background: C.cream }}>
-      <StickyNav visible={navVisible} />
-
-      <Hero onScrollPast={setNavVisible} />
-
+    <div style={{ background: C.deep, minHeight: '100vh', fontFamily: 'Inter, sans-serif', color: '#fff' }}>
+      <StickyNav activeSection={activeSection} onNav={scrollToSection} />
+      <Hero visitantes={visitantes} onNavCarteirinha={handleNavCarteirinha} />
+      <Ticker />
       <StatsSection />
-
-      <div style={{ maxWidth: 960, margin: '0 auto', padding: '64px 24px 32px' }}>
-        <QuemSomos />
-        <Estrutura />
-        <Eventos />
-        <Galeria />
-        <SejaSocio />
-        <Contato />
-      </div>
-
-      {/* Footer do clube */}
-      <div style={{
-        background: C.deep, color: 'rgba(255,255,255,.55)',
-        textAlign: 'center', padding: '24px 16px',
-        fontSize: '.82rem',
-      }}>
-        <div style={{ color: '#fff', fontWeight: 700, fontSize: '.9rem', marginBottom: 6 }}>
-          Tangará Tênis Clube — TTC
-        </div>
-        Rua Benedito Pereira de Oliveira, 1500 · Tangará da Serra/MT · @ttctga
-      </div>
+      <QuemSomos />
+      <Estrutura />
+      <Eventos />
+      <Galeria />
+      <CarteirinhaDigital />
+      <SejaSocio />
+      <Contato />
     </div>
   )
 }

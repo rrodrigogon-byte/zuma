@@ -604,7 +604,343 @@
   "comandas": [],
   "reservas": [],
   "patrocinadores": [],
-  "estoque": {},
+  "estoque": {
+    "chopp": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "chopp600": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "cerv_brahma_lt": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "cerv_brahma_ln": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "cerv_skol_lt": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "cerv_skol_ln": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "cerv_antarctica_lt": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "cerv_antarctica_ln": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "cerv_itaipava_lt": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "cerv_itaipava_ln": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "cerv_bohemia_ln": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "cerv_original_ln": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "cerv_heineken_lt": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "cerv_heineken_ln": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "cerv_budweiser_lt": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "cerv_budweiser_ln": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "cerv_corona_ln": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "cerv_spaten_lt": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "cerv_eisenbahn_ln": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "cerv_devassa_lt": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "cerv_600": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "refri_coca_lt": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "refri_coca_zero_lt": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "refri_coca_2l": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "refri_coca_zero_2l": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "refri_guarana_lt": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "refri_guarana_2l": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "refri_guarana_zero_lt": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "refri_pepsi_lt": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "refri_pepsi_zero_lt": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "refri_fanta_lt": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "refri_fanta_uva_lt": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "refri_sprite_lt": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "refri_schweppes_lt": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "refri_tonica_lt": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "refri_kuat_lt": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "agua": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "agua_c": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "isoton": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "isoton_poc": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "energetico": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "energetico_m": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "caipi": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "caipi_uva": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "suco": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "pastel_c": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "pastel_q": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "pastel_f": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "misto": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "coxinha": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "enrol_salsicha": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "porcao_fritas": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "porcao_mandioca": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "batata_frita": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "esp_carne": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "esp_frango": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "esp_linguica": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "esp_coração": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "esp_misto": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "burger": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "burger_dp": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "salada": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "prato_dia": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "frango_grl": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "acai": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "acai_300": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    },
+    "sorvete": {
+      "qtd": 100,
+      "custo": 0,
+      "min": 10
+    }
+  },
   "ligas": {
     "66": {
       "id": 66,
@@ -1046,6 +1382,14 @@
         "categoria": "Masc. PRO"
       },
       "ip": ""
+    },
+    {
+      "id": 68,
+      "ts": "2026-06-14T14:33:35.904Z",
+      "user": "Administrador (admin)",
+      "acao": "POST /api/admin/ligas",
+      "detalhe": "",
+      "ip": "::1"
     }
   ],
   "agenda": [],

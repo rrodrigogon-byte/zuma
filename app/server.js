@@ -2302,6 +2302,18 @@ app.patch('/api/admin/socios/:id', auth, requireStaff, (req,res)=>{
 });
 app.delete('/api/admin/socios/:id', auth, requireStaff, (req,res)=>{ const d=db(); d.socios=(d.socios||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true}); });
 
+// =================== CONTADOR DE VISITANTES ===================
+app.get('/api/visitantes', (req,res)=>{
+  res.json({ total: db().config?.visitantes || 0 });
+});
+app.post('/api/visitantes/ping', (req,res)=>{
+  const d=db();
+  if(!d.config) d.config={};
+  d.config.visitantes = (d.config.visitantes||0)+1;
+  save();
+  res.json({ total: d.config.visitantes });
+});
+
 // Minha carteirinha (atleta logado) — com QR Code
 app.get('/api/auth/carteirinha', auth, async (req,res)=>{
   const u=db().usuarios.find(x=>x.id===req.user.id); if(!u) return res.status(404).json({error:'usuário não encontrado'});
