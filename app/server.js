@@ -1110,21 +1110,56 @@ const getMesasFisicas = () => {
   return (cfg && cfg > 0) ? cfg : MESAS_FISICAS_DEFAULT;
 };
 const CARDAPIO = [
-  // ── Bebidas ──────────────────────────────────────────────────────
-  { id:'chopp',       nome:'Chopp 300ml',            cat:'Bebidas',    preco:12, setor:'bar',     cozinha:false },
-  { id:'chopp600',    nome:'Chopp 600ml',             cat:'Bebidas',    preco:18, setor:'bar',     cozinha:false },
-  { id:'cerveja_ln',  nome:'Cerveja Long Neck',       cat:'Bebidas',    preco:11, setor:'bar',     cozinha:false },
-  { id:'cerveja_lt',  nome:'Cerveja Lata 350ml',      cat:'Bebidas',    preco:9,  setor:'bar',     cozinha:false },
-  { id:'cerveja_600', nome:'Cerveja Garrafa 600ml',   cat:'Bebidas',    preco:18, setor:'bar',     cozinha:false },
-  { id:'refri',       nome:'Refrigerante Lata',       cat:'Bebidas',    preco:7,  setor:'bar',     cozinha:false },
-  { id:'refri_2l',    nome:'Refrigerante 2L',         cat:'Bebidas',    preco:15, setor:'bar',     cozinha:false },
-  { id:'agua',        nome:'Água Mineral',            cat:'Bebidas',    preco:5,  setor:'bar',     cozinha:false },
-  { id:'agua_c',      nome:'Água com Gás',            cat:'Bebidas',    preco:6,  setor:'bar',     cozinha:false },
-  { id:'caipi',       nome:'Caipirinha',              cat:'Bebidas',    preco:18, setor:'bar',     cozinha:false },
-  { id:'caipi_uva',   nome:'Caipirosca Uva',          cat:'Bebidas',    preco:20, setor:'bar',     cozinha:false },
+  // ── Chopps ───────────────────────────────────────────────────────
+  { id:'chopp',       nome:'Chopp 300ml',              cat:'Chopp',      preco:12, setor:'bar',     cozinha:false },
+  { id:'chopp600',    nome:'Chopp 600ml',               cat:'Chopp',      preco:18, setor:'bar',     cozinha:false },
+  // ── Cervejas Brasileiras — Top 10 ────────────────────────────────
+  { id:'cerv_brahma_lt',    nome:'Brahma Lata 350ml',            cat:'Cervejas',   preco:9,  setor:'bar',     cozinha:false },
+  { id:'cerv_brahma_ln',    nome:'Brahma Long Neck 330ml',       cat:'Cervejas',   preco:11, setor:'bar',     cozinha:false },
+  { id:'cerv_skol_lt',      nome:'Skol Lata 350ml',              cat:'Cervejas',   preco:9,  setor:'bar',     cozinha:false },
+  { id:'cerv_skol_ln',      nome:'Skol Long Neck 330ml',         cat:'Cervejas',   preco:11, setor:'bar',     cozinha:false },
+  { id:'cerv_antarctica_lt',nome:'Antarctica Lata 350ml',        cat:'Cervejas',   preco:9,  setor:'bar',     cozinha:false },
+  { id:'cerv_antarctica_ln',nome:'Antarctica Long Neck 330ml',   cat:'Cervejas',   preco:11, setor:'bar',     cozinha:false },
+  { id:'cerv_itaipava_lt',  nome:'Itaipava Lata 350ml',          cat:'Cervejas',   preco:8,  setor:'bar',     cozinha:false },
+  { id:'cerv_itaipava_ln',  nome:'Itaipava Long Neck 330ml',     cat:'Cervejas',   preco:10, setor:'bar',     cozinha:false },
+  { id:'cerv_bohemia_ln',   nome:'Bohemia Long Neck 350ml',      cat:'Cervejas',   preco:13, setor:'bar',     cozinha:false },
+  { id:'cerv_original_ln',  nome:'Original Long Neck 330ml',     cat:'Cervejas',   preco:13, setor:'bar',     cozinha:false },
+  { id:'cerv_heineken_lt',  nome:'Heineken Lata 350ml',          cat:'Cervejas',   preco:14, setor:'bar',     cozinha:false },
+  { id:'cerv_heineken_ln',  nome:'Heineken Long Neck 330ml',     cat:'Cervejas',   preco:16, setor:'bar',     cozinha:false },
+  { id:'cerv_budweiser_lt', nome:'Budweiser Lata 350ml',         cat:'Cervejas',   preco:12, setor:'bar',     cozinha:false },
+  { id:'cerv_budweiser_ln', nome:'Budweiser Long Neck 330ml',    cat:'Cervejas',   preco:14, setor:'bar',     cozinha:false },
+  { id:'cerv_corona_ln',    nome:'Corona Long Neck 330ml',       cat:'Cervejas',   preco:16, setor:'bar',     cozinha:false },
+  { id:'cerv_spaten_lt',    nome:'Spaten Lata 350ml',            cat:'Cervejas',   preco:12, setor:'bar',     cozinha:false },
+  { id:'cerv_eisenbahn_ln', nome:'Eisenbahn Long Neck 355ml',    cat:'Cervejas',   preco:15, setor:'bar',     cozinha:false },
+  { id:'cerv_devassa_lt',   nome:'Devassa Lata 350ml',           cat:'Cervejas',   preco:10, setor:'bar',     cozinha:false },
+  { id:'cerv_600',          nome:'Cerveja Garrafa 600ml',        cat:'Cervejas',   preco:20, setor:'bar',     cozinha:false },
+  // ── Refrigerantes ────────────────────────────────────────────────
+  { id:'refri_coca_lt',     nome:'Coca-Cola Lata 350ml',         cat:'Refrigerantes', preco:7,  setor:'bar',  cozinha:false },
+  { id:'refri_coca_zero_lt',nome:'Coca-Cola Zero Lata 350ml',    cat:'Refrigerantes', preco:7,  setor:'bar',  cozinha:false },
+  { id:'refri_coca_2l',     nome:'Coca-Cola 2L',                 cat:'Refrigerantes', preco:15, setor:'bar',  cozinha:false },
+  { id:'refri_coca_zero_2l',nome:'Coca-Cola Zero 2L',            cat:'Refrigerantes', preco:15, setor:'bar',  cozinha:false },
+  { id:'refri_guarana_lt',  nome:'Guaraná Antarctica Lata 350ml',cat:'Refrigerantes', preco:7,  setor:'bar',  cozinha:false },
+  { id:'refri_guarana_2l',  nome:'Guaraná Antarctica 2L',        cat:'Refrigerantes', preco:14, setor:'bar',  cozinha:false },
+  { id:'refri_guarana_zero_lt', nome:'Guaraná Antarctica Zero Lata', cat:'Refrigerantes', preco:7, setor:'bar', cozinha:false },
+  { id:'refri_pepsi_lt',    nome:'Pepsi Lata 350ml',             cat:'Refrigerantes', preco:7,  setor:'bar',  cozinha:false },
+  { id:'refri_pepsi_zero_lt',nome:'Pepsi Black Lata 350ml',      cat:'Refrigerantes', preco:7,  setor:'bar',  cozinha:false },
+  { id:'refri_fanta_lt',    nome:'Fanta Laranja Lata 350ml',     cat:'Refrigerantes', preco:7,  setor:'bar',  cozinha:false },
+  { id:'refri_fanta_uva_lt',nome:'Fanta Uva Lata 350ml',         cat:'Refrigerantes', preco:7,  setor:'bar',  cozinha:false },
+  { id:'refri_sprite_lt',   nome:'Sprite Lata 350ml',            cat:'Refrigerantes', preco:7,  setor:'bar',  cozinha:false },
+  { id:'refri_schweppes_lt',nome:'Schweppes Citrus Lata 350ml',  cat:'Refrigerantes', preco:8,  setor:'bar',  cozinha:false },
+  { id:'refri_tonica_lt',   nome:'Água Tônica Schweppes 350ml',  cat:'Refrigerantes', preco:8,  setor:'bar',  cozinha:false },
+  { id:'refri_kuat_lt',     nome:'Kuat Lata 350ml',              cat:'Refrigerantes', preco:7,  setor:'bar',  cozinha:false },
+  // ── Águas e Isotônicos ───────────────────────────────────────────
+  { id:'agua',        nome:'Água Mineral 500ml',       cat:'Bebidas',    preco:5,  setor:'bar',     cozinha:false },
+  { id:'agua_c',      nome:'Água com Gás 500ml',       cat:'Bebidas',    preco:6,  setor:'bar',     cozinha:false },
+  { id:'isoton',      nome:'Isotônico Gatorade 500ml', cat:'Bebidas',    preco:10, setor:'bar',     cozinha:false },
+  { id:'isoton_poc',  nome:'Powerade 500ml',           cat:'Bebidas',    preco:10, setor:'bar',     cozinha:false },
+  { id:'energetico',  nome:'Energético Red Bull 250ml',cat:'Bebidas',    preco:18, setor:'bar',     cozinha:false },
+  { id:'energetico_m',nome:'Monster Energy 473ml',     cat:'Bebidas',    preco:16, setor:'bar',     cozinha:false },
+  // ── Drinks ───────────────────────────────────────────────────────
+  { id:'caipi',       nome:'Caipirinha',              cat:'Drinks',     preco:18, setor:'bar',     cozinha:false },
+  { id:'caipi_uva',   nome:'Caipirosca Uva',          cat:'Drinks',     preco:20, setor:'bar',     cozinha:false },
   { id:'suco',        nome:'Suco Natural 500ml',      cat:'Bebidas',    preco:12, setor:'bar',     cozinha:false },
-  { id:'isoton',      nome:'Isotônico',               cat:'Bebidas',    preco:9,  setor:'bar',     cozinha:false },
-  { id:'energetico',  nome:'Energético',              cat:'Bebidas',    preco:14, setor:'bar',     cozinha:false },
   // ── Petiscos / Chapa ─────────────────────────────────────────────
   { id:'pastel_c',    nome:'Pastel de Carne (un)',     cat:'Petiscos',   preco:10, setor:'chapa',   cozinha:true },
   { id:'pastel_q',    nome:'Pastel de Queijo (un)',    cat:'Petiscos',   preco:10, setor:'chapa',   cozinha:true },
@@ -1828,7 +1863,7 @@ app.post('/api/admin/carteira', auth, requireStaff, (req,res)=>{
 // =================== ESTOQUE SIMPLES DO PDV (cap. 10.5) ===================
 function estoqueItem(id){ const e=db().estoque; if(!e[id]) e[id]={ qtd:0, custo:0, min:5 }; return e[id]; }
 app.get('/api/admin/estoque', auth, requireStaff, (req,res)=>{
-  res.json(CARDAPIO.map(p=>{ const e=estoqueItem(p.id); return { id:p.id, nome:p.nome, cat:p.cat, preco:p.preco,
+  res.json(getCardapio().map(p=>{ const e=estoqueItem(p.id); return { id:p.id, nome:p.nome, cat:p.cat, preco:p.preco,
     qtd:e.qtd, custo:e.custo, min:e.min, baixo: e.qtd<=e.min }; }));
 });
 app.post('/api/admin/estoque/entrada', auth, requireStaff, (req,res)=>{
