@@ -2377,7 +2377,7 @@ app.delete('/api/admin/ranking/comunicados/:id', auth, requireStaff, (req,res)=>
   const d=db(); d.comunicados=(d.comunicados||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true});
 });
 // público
-app.get('/api/comunicados', publicRateLimit, (req,res)=>{
+app.get('/api/comunicados', publicLimit(), (req,res)=>{
   res.json((db().comunicados||[]).filter(c=>c.publicado).slice().reverse());
 });
 
@@ -2390,7 +2390,7 @@ app.put('/api/admin/regras-torneio', auth, requireStaff, (req,res)=>{
   save(); res.json({ok:true});
 });
 // público
-app.get('/api/regras-torneio', publicRateLimit, (req,res)=>{
+app.get('/api/regras-torneio', publicLimit(), (req,res)=>{
   res.json(db().regrasTorneio||{});
 });
 
