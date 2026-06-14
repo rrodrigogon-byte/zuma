@@ -25,7 +25,510 @@
   "inscricoes": [],
   "chaves": {},
   "ranking": {
-    "players": {}
+    "players": {
+      "Rafael Andrade__Masc. PRO": {
+        "nome": "Rafael Andrade",
+        "categoria": "Masc. PRO",
+        "elo": 2450,
+        "pontos": 2450,
+        "historico": [
+          {
+            "temporada": "2026",
+            "pontos": 2450,
+            "pos": 0,
+            "data": "2026-06-14T13:45:36.269Z"
+          }
+        ],
+        "criadoEm": "2026-06-14T13:45:36.269Z",
+        "movimento": 0,
+        "posAnterior": 1
+      },
+      "Bruno Silveira__Masc. PRO": {
+        "nome": "Bruno Silveira",
+        "categoria": "Masc. PRO",
+        "elo": 2310,
+        "pontos": 2310,
+        "historico": [
+          {
+            "temporada": "2026",
+            "pontos": 2310,
+            "pos": 0,
+            "data": "2026-06-14T13:45:36.269Z"
+          }
+        ],
+        "criadoEm": "2026-06-14T13:45:36.269Z",
+        "movimento": 0,
+        "posAnterior": 2
+      },
+      "Diego Mendes__Masc. PRO": {
+        "nome": "Diego Mendes",
+        "categoria": "Masc. PRO",
+        "elo": 2180,
+        "pontos": 2180,
+        "historico": [
+          {
+            "temporada": "2026",
+            "pontos": 2180,
+            "pos": 0,
+            "data": "2026-06-14T13:45:36.269Z"
+          }
+        ],
+        "criadoEm": "2026-06-14T13:45:36.269Z",
+        "movimento": 0,
+        "posAnterior": 3
+      },
+      "Carlos Rocha__Masc. PRO": {
+        "nome": "Carlos Rocha",
+        "categoria": "Masc. PRO",
+        "elo": 2050,
+        "pontos": 2050,
+        "historico": [
+          {
+            "temporada": "2026",
+            "pontos": 2050,
+            "pos": 0,
+            "data": "2026-06-14T13:45:36.269Z"
+          }
+        ],
+        "criadoEm": "2026-06-14T13:45:36.269Z",
+        "movimento": 0,
+        "posAnterior": 4
+      },
+      "Marcos Vieira__Masc. PRO": {
+        "nome": "Marcos Vieira",
+        "categoria": "Masc. PRO",
+        "elo": 1920,
+        "pontos": 1920,
+        "historico": [
+          {
+            "temporada": "2026",
+            "pontos": 1920,
+            "pos": 0,
+            "data": "2026-06-14T13:45:36.269Z"
+          }
+        ],
+        "criadoEm": "2026-06-14T13:45:36.269Z",
+        "movimento": 0,
+        "posAnterior": 5
+      },
+      "Felipe Costa__1ª Classe": {
+        "nome": "Felipe Costa",
+        "categoria": "1ª Classe",
+        "elo": 1800,
+        "pontos": 1800,
+        "historico": [
+          {
+            "temporada": "2026",
+            "pontos": 1800,
+            "pos": 0,
+            "data": "2026-06-14T13:45:36.269Z"
+          }
+        ],
+        "criadoEm": "2026-06-14T13:45:36.269Z",
+        "movimento": 0,
+        "posAnterior": 1
+      },
+      "André Lima__1ª Classe": {
+        "nome": "André Lima",
+        "categoria": "1ª Classe",
+        "elo": 1670,
+        "pontos": 1670,
+        "historico": [
+          {
+            "temporada": "2026",
+            "pontos": 1670,
+            "pos": 0,
+            "data": "2026-06-14T13:45:36.269Z"
+          }
+        ],
+        "criadoEm": "2026-06-14T13:45:36.269Z",
+        "movimento": 0,
+        "posAnterior": 2
+      },
+      "Paulo Nunes__1ª Classe": {
+        "nome": "Paulo Nunes",
+        "categoria": "1ª Classe",
+        "elo": 1540,
+        "pontos": 1540,
+        "historico": [
+          {
+            "temporada": "2026",
+            "pontos": 1540,
+            "pos": 0,
+            "data": "2026-06-14T13:45:36.269Z"
+          }
+        ],
+        "criadoEm": "2026-06-14T13:45:36.269Z",
+        "movimento": 0,
+        "posAnterior": 3
+      },
+      "Lucas Ferreira__2ª Classe": {
+        "nome": "Lucas Ferreira",
+        "categoria": "2ª Classe",
+        "elo": 1400,
+        "pontos": 1400,
+        "historico": [
+          {
+            "temporada": "2026",
+            "pontos": 1400,
+            "pos": 0,
+            "data": "2026-06-14T13:45:36.269Z"
+          }
+        ],
+        "criadoEm": "2026-06-14T13:45:36.269Z",
+        "movimento": 0,
+        "posAnterior": 1
+      },
+      "Ricardo Gomes__2ª Classe": {
+        "nome": "Ricardo Gomes",
+        "categoria": "2ª Classe",
+        "elo": 1280,
+        "pontos": 1280,
+        "historico": [
+          {
+            "temporada": "2026",
+            "pontos": 1280,
+            "pos": 0,
+            "data": "2026-06-14T13:45:36.269Z"
+          }
+        ],
+        "criadoEm": "2026-06-14T13:45:36.269Z",
+        "movimento": 0,
+        "posAnterior": 2
+      },
+      "Ana Paula Silva__Fem. PRO": {
+        "nome": "Ana Paula Silva",
+        "categoria": "Fem. PRO",
+        "elo": 2200,
+        "pontos": 2200,
+        "historico": [
+          {
+            "temporada": "2026",
+            "pontos": 2200,
+            "pos": 0,
+            "data": "2026-06-14T13:45:36.269Z"
+          }
+        ],
+        "criadoEm": "2026-06-14T13:45:36.269Z",
+        "movimento": 0,
+        "posAnterior": 1
+      },
+      "Carla Mendes__Fem. PRO": {
+        "nome": "Carla Mendes",
+        "categoria": "Fem. PRO",
+        "elo": 2050,
+        "pontos": 2050,
+        "historico": [
+          {
+            "temporada": "2026",
+            "pontos": 2050,
+            "pos": 0,
+            "data": "2026-06-14T13:45:36.269Z"
+          }
+        ],
+        "criadoEm": "2026-06-14T13:45:36.269Z",
+        "movimento": 0,
+        "posAnterior": 2
+      },
+      "Juliana Rocha__Fem. PRO": {
+        "nome": "Juliana Rocha",
+        "categoria": "Fem. PRO",
+        "elo": 1900,
+        "pontos": 1900,
+        "historico": [
+          {
+            "temporada": "2026",
+            "pontos": 1900,
+            "pos": 0,
+            "data": "2026-06-14T13:45:36.269Z"
+          }
+        ],
+        "criadoEm": "2026-06-14T13:45:36.269Z",
+        "movimento": 0,
+        "posAnterior": 3
+      },
+      "Beatriz Costa__Fem. 1ª": {
+        "nome": "Beatriz Costa",
+        "categoria": "Fem. 1ª",
+        "elo": 1700,
+        "pontos": 1700,
+        "historico": [
+          {
+            "temporada": "2026",
+            "pontos": 1700,
+            "pos": 0,
+            "data": "2026-06-14T13:45:36.269Z"
+          }
+        ],
+        "criadoEm": "2026-06-14T13:45:36.269Z",
+        "movimento": 0,
+        "posAnterior": 1
+      },
+      "Fernanda Lima__Fem. 1ª": {
+        "nome": "Fernanda Lima",
+        "categoria": "Fem. 1ª",
+        "elo": 1560,
+        "pontos": 1560,
+        "historico": [
+          {
+            "temporada": "2026",
+            "pontos": 1560,
+            "pos": 0,
+            "data": "2026-06-14T13:45:36.269Z"
+          }
+        ],
+        "criadoEm": "2026-06-14T13:45:36.269Z",
+        "movimento": 0,
+        "posAnterior": 2
+      },
+      "masc. pro|rafael andrade": {
+        "nome": "Rafael Andrade",
+        "categoria": "Masc. PRO",
+        "pontos": 20,
+        "vitorias": 2,
+        "derrotas": 0,
+        "torneios": 0,
+        "partidas_avulsas": 2,
+        "temporada": "2026",
+        "historico": [
+          {
+            "tipo": "partida",
+            "resultado": "vitoria",
+            "pontos": 10,
+            "adversario": "Bruno Silveira",
+            "placar": "6-3 7-5",
+            "descricao": "Seed demo",
+            "data": "2026-06-14T13:45:36.269Z",
+            "temporada": "2026"
+          },
+          {
+            "tipo": "partida",
+            "resultado": "vitoria",
+            "pontos": 10,
+            "adversario": "Diego Mendes",
+            "placar": "6-4 6-2",
+            "descricao": "Seed demo",
+            "data": "2026-06-14T13:45:36.269Z",
+            "temporada": "2026"
+          }
+        ],
+        "posAnterior": 6,
+        "movimento": 0
+      },
+      "masc. pro|bruno silveira": {
+        "nome": "Bruno Silveira",
+        "categoria": "Masc. PRO",
+        "pontos": 11,
+        "vitorias": 1,
+        "derrotas": 1,
+        "torneios": 0,
+        "partidas_avulsas": 2,
+        "temporada": "2026",
+        "historico": [
+          {
+            "tipo": "partida",
+            "resultado": "derrota",
+            "pontos": 1,
+            "adversario": "Rafael Andrade",
+            "placar": "6-3 7-5",
+            "descricao": "Seed demo",
+            "data": "2026-06-14T13:45:36.269Z",
+            "temporada": "2026"
+          },
+          {
+            "tipo": "partida",
+            "resultado": "vitoria",
+            "pontos": 10,
+            "adversario": "Carlos Rocha",
+            "placar": "7-6 6-4",
+            "descricao": "Seed demo",
+            "data": "2026-06-14T13:45:36.270Z",
+            "temporada": "2026"
+          }
+        ],
+        "posAnterior": 7,
+        "movimento": 0
+      },
+      "masc. pro|diego mendes": {
+        "nome": "Diego Mendes",
+        "categoria": "Masc. PRO",
+        "pontos": 11,
+        "vitorias": 1,
+        "derrotas": 1,
+        "torneios": 0,
+        "partidas_avulsas": 2,
+        "temporada": "2026",
+        "historico": [
+          {
+            "tipo": "partida",
+            "resultado": "derrota",
+            "pontos": 1,
+            "adversario": "Rafael Andrade",
+            "placar": "6-4 6-2",
+            "descricao": "Seed demo",
+            "data": "2026-06-14T13:45:36.269Z",
+            "temporada": "2026"
+          },
+          {
+            "tipo": "partida",
+            "resultado": "vitoria",
+            "pontos": 10,
+            "adversario": "Marcos Vieira",
+            "placar": "6-2 6-1",
+            "descricao": "Seed demo",
+            "data": "2026-06-14T13:45:36.270Z",
+            "temporada": "2026"
+          }
+        ],
+        "posAnterior": 8,
+        "movimento": 0
+      },
+      "masc. pro|carlos rocha": {
+        "nome": "Carlos Rocha",
+        "categoria": "Masc. PRO",
+        "pontos": 1,
+        "vitorias": 0,
+        "derrotas": 1,
+        "torneios": 0,
+        "partidas_avulsas": 1,
+        "temporada": "2026",
+        "historico": [
+          {
+            "tipo": "partida",
+            "resultado": "derrota",
+            "pontos": 1,
+            "adversario": "Bruno Silveira",
+            "placar": "7-6 6-4",
+            "descricao": "Seed demo",
+            "data": "2026-06-14T13:45:36.270Z",
+            "temporada": "2026"
+          }
+        ],
+        "posAnterior": 9,
+        "movimento": 0
+      },
+      "masc. pro|marcos vieira": {
+        "nome": "Marcos Vieira",
+        "categoria": "Masc. PRO",
+        "pontos": 1,
+        "vitorias": 0,
+        "derrotas": 1,
+        "torneios": 0,
+        "partidas_avulsas": 1,
+        "temporada": "2026",
+        "historico": [
+          {
+            "tipo": "partida",
+            "resultado": "derrota",
+            "pontos": 1,
+            "adversario": "Diego Mendes",
+            "placar": "6-2 6-1",
+            "descricao": "Seed demo",
+            "data": "2026-06-14T13:45:36.270Z",
+            "temporada": "2026"
+          }
+        ],
+        "posAnterior": 10,
+        "movimento": 0
+      },
+      "fem. pro|ana paula silva": {
+        "nome": "Ana Paula Silva",
+        "categoria": "Fem. PRO",
+        "pontos": 10,
+        "vitorias": 1,
+        "derrotas": 0,
+        "torneios": 0,
+        "partidas_avulsas": 1,
+        "temporada": "2026",
+        "historico": [
+          {
+            "tipo": "partida",
+            "resultado": "vitoria",
+            "pontos": 10,
+            "adversario": "Carla Mendes",
+            "placar": "6-3 6-4",
+            "descricao": "Seed demo",
+            "data": "2026-06-14T13:45:36.270Z",
+            "temporada": "2026"
+          }
+        ],
+        "posAnterior": 4,
+        "movimento": 0
+      },
+      "fem. pro|carla mendes": {
+        "nome": "Carla Mendes",
+        "categoria": "Fem. PRO",
+        "pontos": 1,
+        "vitorias": 0,
+        "derrotas": 1,
+        "torneios": 0,
+        "partidas_avulsas": 1,
+        "temporada": "2026",
+        "historico": [
+          {
+            "tipo": "partida",
+            "resultado": "derrota",
+            "pontos": 1,
+            "adversario": "Ana Paula Silva",
+            "placar": "6-3 6-4",
+            "descricao": "Seed demo",
+            "data": "2026-06-14T13:45:36.270Z",
+            "temporada": "2026"
+          }
+        ],
+        "posAnterior": 5,
+        "movimento": 0
+      },
+      "1ª classe|felipe costa": {
+        "nome": "Felipe Costa",
+        "categoria": "1ª Classe",
+        "pontos": 10,
+        "vitorias": 1,
+        "derrotas": 0,
+        "torneios": 0,
+        "partidas_avulsas": 1,
+        "temporada": "2026",
+        "historico": [
+          {
+            "tipo": "partida",
+            "resultado": "vitoria",
+            "pontos": 10,
+            "adversario": "André Lima",
+            "placar": "6-4 3-6 7-5",
+            "descricao": "Seed demo",
+            "data": "2026-06-14T13:45:36.270Z",
+            "temporada": "2026"
+          }
+        ],
+        "posAnterior": 4,
+        "movimento": -3
+      },
+      "1ª classe|andré lima": {
+        "nome": "André Lima",
+        "categoria": "1ª Classe",
+        "pontos": 1,
+        "vitorias": 0,
+        "derrotas": 1,
+        "torneios": 0,
+        "partidas_avulsas": 1,
+        "temporada": "2026",
+        "historico": [
+          {
+            "tipo": "partida",
+            "resultado": "derrota",
+            "pontos": 1,
+            "adversario": "Felipe Costa",
+            "placar": "6-4 3-6 7-5",
+            "descricao": "Seed demo",
+            "data": "2026-06-14T13:45:36.270Z",
+            "temporada": "2026"
+          }
+        ],
+        "posAnterior": 5,
+        "movimento": -3
+      }
+    },
+    "snapshot": {}
   },
   "campeoes": {},
   "torneios": [],
@@ -179,7 +682,8 @@
       "estoque": 150,
       "desc": "Elástico esportivo com interior felpudo absorvente. Verde Escuro com monograma AO bordado. Tamanho único.",
       "ativo": true,
-      "criadoEm": "2026-06-13T22:05:39.022Z"
+      "criadoEm": "2026-06-13T22:05:39.022Z",
+      "imagem": "/produtos/aot-011-bandana.jpg"
     },
     {
       "id": 21,
@@ -191,7 +695,8 @@
       "estoque": 200,
       "desc": "Overgrip premium com textura antiderrapante. Embalagem exclusiva 4ª Edição Agro Open de Tênis 2026. Kit com 2 unidades.",
       "ativo": true,
-      "criadoEm": "2026-06-13T22:05:39.022Z"
+      "criadoEm": "2026-06-13T22:05:39.022Z",
+      "imagem": "/produtos/aot-012-grip-overgrip.jpg"
     },
     {
       "id": 22,
@@ -203,7 +708,8 @@
       "estoque": 100,
       "desc": "Mochila esportiva Verde Escuro. Logo Agro Open bordado na frente. Compartimentos múltiplos + bolso lateral para garrafa. 2026 • Tangará-MT.",
       "ativo": true,
-      "criadoEm": "2026-06-13T22:05:39.023Z"
+      "criadoEm": "2026-06-13T22:05:39.023Z",
+      "imagem": "/produtos/aot-013-mochila.jpg"
     },
     {
       "id": 23,
@@ -215,7 +721,8 @@
       "estoque": 80,
       "desc": "Raqueteira semi-rígida Verde Escuro com vivos verde limão. Logo Agro Open estampado. Alça de ombro + handles. Capacidade 2 raquetes.",
       "ativo": true,
-      "criadoEm": "2026-06-13T22:05:39.023Z"
+      "criadoEm": "2026-06-13T22:05:39.023Z",
+      "imagem": "/produtos/aot-014-raqueteira.jpg"
     },
     {
       "id": 24,
@@ -227,7 +734,21 @@
       "estoque": 120,
       "desc": "Toalha grande 100% algodão felpudo premium. Verde Escuro com viés verde limão. Logo bordado central. Ideal para vestiário e quadra.",
       "ativo": true,
-      "criadoEm": "2026-06-13T22:05:39.023Z"
+      "criadoEm": "2026-06-13T22:05:39.023Z",
+      "imagem": "/produtos/aot-015-toalha-grande.jpg"
+    },
+    {
+      "id": 25,
+      "cod": "AOT-016",
+      "nome": "Viseira Agro Open",
+      "cat": "Bonés",
+      "emoji": "🧢",
+      "preco": 60,
+      "estoque": 150,
+      "desc": "Viseira esportiva Verde Escuro. Monograma AO bordado 3D na frente. Alça ajustável com detalhe verde limão. Proteção solar na quadra.",
+      "ativo": true,
+      "criadoEm": "2026-06-13T22:05:39.023Z",
+      "imagem": "/produtos/aot-016-viseira.jpg"
     }
   ],
   "vendasLoja": [],
@@ -271,6 +792,14 @@
       "ts": "2026-06-13T21:04:00.796Z",
       "user": "Administrador (admin)",
       "acao": "POST /api/admin/reset-ranking",
+      "detalhe": "",
+      "ip": "::1"
+    },
+    {
+      "id": 26,
+      "ts": "2026-06-14T13:45:36.245Z",
+      "user": "Administrador (admin)",
+      "acao": "LOGIN painel",
       "detalhe": "",
       "ip": "::1"
     }
@@ -317,5 +846,5 @@
       "ptsPerdedor": 1
     }
   ],
-  "seq": 26
+  "seq": 28
 }

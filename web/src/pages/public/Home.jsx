@@ -506,8 +506,22 @@ export default function Home() {
       ])
     })
     // Campeões de edições anteriores
-    api.get('/api/campeoes').catch(() => []).then(d => {
-      if (Array.isArray(d) && d.length > 0) setCampeoes(d)
+    // API retorna {categoria: {nome, edicao, ano, ...}} — converter para array
+    api.get('/api/campeoes').catch(() => null).then(d => {
+      if (!d) return
+      if (Array.isArray(d) && d.length > 0) {
+        setCampeoes(d)
+      } else if (d && typeof d === 'object' && !Array.isArray(d)) {
+        // Converte { 'Masc PRO': { nome, edicao, ano }, ... } → array
+        const arr = Object.entries(d).map(([cat, v]) => ({
+          categoria: cat,
+          nome: v.nome || v.atleta || '—',
+          edicao: v.edicao || v.torneio || '',
+          ano: v.ano || '',
+          pontos: v.pontos || v.elo || null,
+        }))
+        if (arr.length > 0) setCampeoes(arr)
+      }
     })
   }, [])
 

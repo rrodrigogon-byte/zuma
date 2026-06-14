@@ -938,6 +938,65 @@ app.get('/api/admin/ranking/arquivados', auth, (req,res)=>{
   res.json(result);
 });
 
+// POST /api/admin/ranking/seed — popula dados de demonstração para testes
+// Só executa se ranking estiver vazio (evita sobrescrever dados reais)
+app.post('/api/admin/ranking/seed', auth, requireStaff, (req,res)=>{
+  const d = db();
+  if (!d.ranking) d.ranking = { players:{}, arquivados:{} };
+  const existing = Object.keys(d.ranking.players || {}).length;
+  if (existing > 0 && !req.body?.force) {
+    return res.status(409).json({ ok:false, msg:`Ranking já possui ${existing} atleta(s). Use force:true para sobrescrever.` });
+  }
+  const { force=false, temporada='2026' } = req.body || {};
+  const atletas = [
+    { nome:'Rafael Andrade', categoria:'Masc. PRO', elo:2450, pontos:2450 },
+    { nome:'Bruno Silveira', categoria:'Masc. PRO', elo:2310, pontos:2310 },
+    { nome:'Diego Mendes', categoria:'Masc. PRO', elo:2180, pontos:2180 },
+    { nome:'Carlos Rocha', categoria:'Masc. PRO', elo:2050, pontos:2050 },
+    { nome:'Marcos Vieira', categoria:'Masc. PRO', elo:1920, pontos:1920 },
+    { nome:'Felipe Costa', categoria:'1ª Classe', elo:1800, pontos:1800 },
+    { nome:'André Lima', categoria:'1ª Classe', elo:1670, pontos:1670 },
+    { nome:'Paulo Nunes', categoria:'1ª Classe', elo:1540, pontos:1540 },
+    { nome:'Lucas Ferreira', categoria:'2ª Classe', elo:1400, pontos:1400 },
+    { nome:'Ricardo Gomes', categoria:'2ª Classe', elo:1280, pontos:1280 },
+    { nome:'Ana Paula Silva', categoria:'Fem. PRO', elo:2200, pontos:2200 },
+    { nome:'Carla Mendes', categoria:'Fem. PRO', elo:2050, pontos:2050 },
+    { nome:'Juliana Rocha', categoria:'Fem. PRO', elo:1900, pontos:1900 },
+    { nome:'Beatriz Costa', categoria:'Fem. 1ª', elo:1700, pontos:1700 },
+    { nome:'Fernanda Lima', categoria:'Fem. 1ª', elo:1560, pontos:1560 },
+  ];
+  const now = new Date().toISOString();
+  let added = 0;
+  for (const a of atletas) {
+    const key = `${a.nome}__${a.categoria}`;
+    if (!force && d.ranking.players[key]) continue;
+    d.ranking.players[key] = {
+      nome: a.nome,
+      categoria: a.categoria,
+      elo: a.elo,
+      pontos: a.pontos,
+      historico: [{ temporada, pontos: a.pontos, pos: 0, data: now }],
+      criadoEm: now,
+    };
+    added++;
+  }
+  // Partidas de demonstração entre os primeiros 4 da PRO Masc
+  const partidas = [
+    { vencedor:'Rafael Andrade', perdedor:'Bruno Silveira', categoria:'Masc. PRO', placar:'6-3 7-5' },
+    { vencedor:'Rafael Andrade', perdedor:'Diego Mendes', categoria:'Masc. PRO', placar:'6-4 6-2' },
+    { vencedor:'Bruno Silveira', perdedor:'Carlos Rocha', categoria:'Masc. PRO', placar:'7-6 6-4' },
+    { vencedor:'Diego Mendes', perdedor:'Marcos Vieira', categoria:'Masc. PRO', placar:'6-2 6-1' },
+    { vencedor:'Ana Paula Silva', perdedor:'Carla Mendes', categoria:'Fem. PRO', placar:'6-3 6-4' },
+    { vencedor:'Felipe Costa', perdedor:'André Lima', categoria:'1ª Classe', placar:'6-4 3-6 7-5' },
+  ];
+  for (const p of partidas) {
+    const result = applyPartidaToRanking(d.ranking, { ...p, temporada, descricao:'Seed demo' });
+    if (!result.ok) continue;
+  }
+  save();
+  res.json({ ok:true, adicionados:added, partidas:partidas.length, total: Object.keys(d.ranking.players).length });
+});
+
 // =================== PDV BAR / RESTAURANTE ===================
 const MESAS_FISICAS_DEFAULT = 12;
 const getMesasFisicas = () => {
@@ -1682,18 +1741,25 @@ app.post('/api/admin/estoque/ajuste', auth, requireStaff, (req,res)=>{
   save(); res.json({ ok:true, ...e });
 });
 
-// =================== ROUND-ROBIN / LIGAS (cap. 4.1) ===================
-// Público: ver a liga (rodadas + tabela)
-app.get('/api/liga/:categoria', (req,res)=>{
-  const rr = db().ligas[req.params.categoria];
+// =================== ROUND-ROBIN / LIGAS LEGADO (cap. 4.1) ===================
+// NOTA: /api/ligas agora é gerenciado pelo novo sistema de Ligas de Ranking (mais abaixo)
+// Estas rotas legadas foram renomeadas para evitar conflito
+// Público: ver a liga round-robin legada (rodadas + tabela)
+app.get('/api/liga-rr/:categoria', (req,res)=>{
+  const d = db();
+  // Compatibilidade: o antigo sistema usava db().ligas com chaves por categoria
+  // O novo sistema usa db().ligas com IDs numéricos — não conflitar
+  const legacy = d.ligas_rr || {};
+  const rr = legacy[req.params.categoria];
   if(!rr) return res.status(404).json({error:'liga não publicada'});
   res.json({ ...rr, tabela: tabelaRoundRobin(rr) });
 });
-app.get('/api/ligas', (req,res)=>{
-  const L=db().ligas||{};
-  res.json(Object.keys(L).map(cat=>({ categoria:cat, atletas:L[cat].players.length, rodadas:L[cat].rounds.length, formato:(L[cat].regras&&L[cat].regras.label)||'' })));
+// Listagem das ligas legadas (round-robin antigas)
+app.get('/api/ligas-rr', (req,res)=>{
+  const L=db().ligas_rr||{};
+  res.json(Object.keys(L).map(cat=>({ categoria:cat, atletas:L[cat].players?.length||0, rodadas:L[cat].rounds?.length||0, formato:(L[cat].regras&&L[cat].regras.label)||'' })));
 });
-// Admin: gerar liga round-robin
+// Admin: gerar liga round-robin (LEGADO — usa db().ligas_rr para não conflitar com novo sistema)
 app.post('/api/admin/liga/gerar', auth, requireStaff, (req,res)=>{
   const { categoria, fonte='inscritos', lista, formato='3sets' } = req.body||{};
   if(!categoria) return res.status(400).json({error:'categoria obrigatória'});
@@ -1703,14 +1769,15 @@ app.post('/api/admin/liga/gerar', auth, requireStaff, (req,res)=>{
   try{
     const rr=gerarRoundRobin(nomes);
     rr.categoria=categoria; rr.regras=FORMATOS[formato]||FORMATOS['3sets'];
-    db().ligas[categoria]=rr; save();
+    if(!db().ligas_rr) db().ligas_rr={};
+    db().ligas_rr[categoria]=rr; save();
     res.json({ ...rr, tabela: tabelaRoundRobin(rr) });
   }catch(e){ res.status(400).json({error:e.message}); }
 });
-// Admin: lançar resultado de um jogo da liga
+// Admin: lançar resultado de um jogo da liga (LEGADO)
 app.post('/api/admin/liga/resultado', auth, requireStaff, (req,res)=>{
   const { categoria, rodada, jogo, sets, winnerSlot, tipo } = req.body||{};
-  const rr=db().ligas[categoria]; if(!rr) return res.status(404).json({error:'liga não encontrada'});
+  const rr=(db().ligas_rr||{})[categoria]; if(!rr) return res.status(404).json({error:'liga não encontrada'});
   const g=rr.rounds[rodada] && rr.rounds[rodada][jogo]; if(!g) return res.status(404).json({error:'jogo não encontrado'});
   if(Array.isArray(sets) && sets.length){
     const r=matchWinner(sets, rr.regras||{}); if(!r.valid) return res.status(400).json({error:r.error});
@@ -1721,7 +1788,7 @@ app.post('/api/admin/liga/resultado', auth, requireStaff, (req,res)=>{
   applyElo(db().elo, g.vencedor, g.vencedor===g.a ? g.b : g.a); // rating interno
   save(); res.json({ ...rr, tabela: tabelaRoundRobin(rr) });
 });
-app.delete('/api/admin/liga/:categoria', auth, requireStaff, (req,res)=>{ delete db().ligas[req.params.categoria]; save(); res.json({ok:true}); });
+app.delete('/api/admin/liga/:categoria', auth, requireStaff, (req,res)=>{ if(!db().ligas_rr) db().ligas_rr={}; delete db().ligas_rr[req.params.categoria]; save(); res.json({ok:true}); });
 
 // Rating interno (Elo) — público
 app.get('/api/rating', (req,res)=> res.json(ratingList(db().elo)));
@@ -2380,8 +2447,12 @@ app.get('/api/admin/notificacoes', auth, requireStaff, (req, res) => {
       data: r.criadoEm || new Date().toISOString(), link: '/admin/quadras',
     }));
 
-  // Contatos não lidos
-  (d.contatos || []).filter(c => !c.lido)
+  // Contatos não vistos no bell (usa notif_visto_em, independente do campo 'lido' da página Contatos)
+  const vistoEm = d.config?.notif_visto_em ? new Date(d.config.notif_visto_em).getTime() : 0;
+  (d.contatos || []).filter(c => {
+    const dt = c.criadoEm ? new Date(c.criadoEm).getTime() : 0;
+    return dt > vistoEm; // só mostra contatos chegados após o último "limpar"
+  })
     .slice(-5).forEach(c => notifs.push({
       tipo: 'contato', icon: '✉️', cor: '#8FD64A',
       titulo: `Mensagem de ${c.nome || 'Visitante'}`,
@@ -2405,10 +2476,13 @@ app.get('/api/admin/notificacoes', auth, requireStaff, (req, res) => {
   res.json({ notificacoes: notifs.slice(0, 20), total });
 });
 
-// Marcar contatos como lidos em lote (ação do bell)
+// Marcar notificações como vistas (ação do bell) — usa flag separada 'notif_visto'
+// para NÃO interferir com o campo 'lido' da página de Contatos
 app.post('/api/admin/notificacoes/ler', auth, requireStaff, (req, res) => {
   const d = db();
-  (d.contatos || []).forEach(c => { c.lido = true; });
+  // Registra timestamp da última visualização do bell — contatos mais antigos ficam silenciados
+  if (!d.config) d.config = {};
+  d.config.notif_visto_em = new Date().toISOString();
   save();
   res.json({ ok: true });
 });

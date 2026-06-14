@@ -365,18 +365,41 @@ export default function Login() {
             )}
 
             {mode === 'esqueci' && esqSent && (
-              <div style={{
-                textAlign: 'center', padding: '20px',
-                background: 'rgba(95,179,53,.08)', border: '1px solid rgba(95,179,53,.2)',
-                borderRadius: 10,
-              }}>
-                <div style={{ fontSize: 32, marginBottom: 10 }}>📬</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.cream, marginBottom: 6 }}>
-                  E-mail enviado!
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{
+                  textAlign: 'center', padding: '24px 20px',
+                  background: 'rgba(95,179,53,.08)', border: '1px solid rgba(95,179,53,.3)',
+                  borderRadius: 12,
+                  animation: 'fadeIn 0.4s ease',
+                }}>
+                  <div style={{ fontSize: 40, marginBottom: 12 }}>📬</div>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: COLORS.cream, marginBottom: 8 }}>
+                    Link enviado com sucesso!
+                  </div>
+                  <div style={{ fontSize: 13, color: COLORS.muted, lineHeight: 1.6 }}>
+                    Verifique sua caixa de entrada em <strong style={{ color: COLORS.cream }}>{esqEmail}</strong> para redefinir sua senha.
+                  </div>
+                  <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 8, opacity: 0.7 }}>
+                    Não recebeu? Cheque também a pasta de spam.
+                  </div>
                 </div>
-                <div style={{ fontSize: 13, color: COLORS.muted }}>
-                  Verifique sua caixa de entrada para redefinir a senha.
-                </div>
+                <button
+                  type="button"
+                  onClick={() => { setEsqSent(false); changeMode('atleta') }}
+                  style={{
+                    width: '100%', padding: '12px',
+                    background: 'transparent',
+                    color: COLORS.green,
+                    border: `1px solid ${COLORS.green}`,
+                    borderRadius: '10px', fontSize: '14px',
+                    fontWeight: '700', cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={e => { e.target.style.background = 'rgba(95,179,53,.1)' }}
+                  onMouseLeave={e => { e.target.style.background = 'transparent' }}
+                >
+                  ← Voltar para o login
+                </button>
               </div>
             )}
 

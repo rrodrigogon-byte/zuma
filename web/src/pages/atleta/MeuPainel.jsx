@@ -114,7 +114,7 @@ function StatusBadge({ status }) {
 }
 
 // ─── ABA VISÃO GERAL ─────────────────────────────────────────────────────────
-function TabVisao({ me, inscricoes, jogos, ranking, onTabChange }) {
+function TabVisao({ me, inscricoes, jogos, ranking, ligas, onTabChange }) {
   const proximos = (jogos?.proximos || []).slice(0, 3)
   const posGeral = ranking?.posGeral
   const totalPontos = (ranking?.matches || []).reduce((s, m) => s + (m.pontos || 0), 0)
@@ -215,6 +215,56 @@ function TabVisao({ me, inscricoes, jogos, ranking, onTabChange }) {
           </div>
         ))}
       </div>
+
+      {/* Ligas de Ranking */}
+      {ligas && ligas.length > 0 && (
+        <div style={card}>
+          <div style={sectionTitle}>
+            <span>🏅</span> Ligas de Ranking
+            <Link to="/liga" style={{
+              marginLeft: 'auto', fontSize: 12, color: C.green,
+              textDecoration: 'none', fontWeight: 700,
+            }}>Ver todas →</Link>
+          </div>
+          {ligas.slice(0, 3).map(lg => {
+            const statusColor = {
+              ativa: C.green, encerrada: C.muted, pendente: C.gold,
+            }[lg.status] || C.muted
+            const statusLabel = { ativa: '▶ Ativa', encerrada: '✓ Encerrada', pendente: '⏳ Em breve' }[lg.status] || lg.status
+            return (
+              <Link
+                key={lg.id}
+                to={`/liga/${lg.id}`}
+                style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '11px 14px', marginBottom: 8,
+                  background: C.inputBg, border: `1px solid ${C.cardBorder}`,
+                  borderLeft: `3px solid ${statusColor}`,
+                  borderRadius: 9, textDecoration: 'none',
+                  transition: 'border-color .15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.borderLeftColor = C.lime}
+                onMouseLeave={e => e.currentTarget.style.borderLeftColor = statusColor}
+              >
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.cream }}>{lg.nome}</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                    {lg.categoria && <span>{lg.categoria}</span>}
+                    {lg.temporada && <span> · {lg.temporada}</span>}
+                    {lg.rodadaAtual > 0 && <span style={{ color: C.gold }}> · Rodada {lg.rodadaAtual}/{lg.totalRodadas}</span>}
+                  </div>
+                </div>
+                <span style={{
+                  fontSize: 11, fontWeight: 700, color: statusColor,
+                  background: `${statusColor}18`, borderRadius: 20, padding: '3px 10px',
+                }}>
+                  {statusLabel}
+                </span>
+              </Link>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -1047,10 +1097,11 @@ export default function MeuPainel() {
   const [rankingGlobal, setRankingGlobal] = useState([])
   const [historico, setHistorico] = useState(null)
   const [chaves, setChaves] = useState([])
+  const [ligas, setLigas] = useState([])
 
   const loadData = useCallback(async () => {
     try {
-      const [meData, insData, jogosData, rankData, rankGlobal, histData, chavesData] = await Promise.all([
+      const [meData, insData, jogosData, rankData, rankGlobal, histData, chavesData, ligasData] = await Promise.all([
         api.get('/api/me').catch(() => null),
         api.get('/api/inscricoes/minhas').catch(() => []),
         api.get('/api/me/jogos').catch(() => ({ proximos: [], concluidos: [] })),
@@ -1058,6 +1109,7 @@ export default function MeuPainel() {
         api.get('/api/ranking').catch(() => []),
         api.get('/api/me/historico').catch(() => null),
         api.get('/api/me/chave').catch(() => []),
+        api.get('/api/ligas').catch(() => []),
       ])
       if (meData) setMe(meData)
       setInscricoes(Array.isArray(insData) ? insData : [])
@@ -1066,6 +1118,9 @@ export default function MeuPainel() {
       setRankingGlobal(Array.isArray(rankGlobal) ? rankGlobal : [])
       setHistorico(histData)
       setChaves(Array.isArray(chavesData) ? chavesData : [])
+      // Filtra ligas ativas ou abertas para inscrição
+      const allLigas = Array.isArray(ligasData) ? ligasData : []
+      setLigas(allLigas.filter(l => l.status === 'ativa' || l.status === 'pendente').slice(0, 5))
     } catch (err) {
       toast('Erro ao carregar dados', 'error')
     } finally {
@@ -1209,7 +1264,7 @@ export default function MeuPainel() {
       {/* Tab content */}
       <div>
         {tab === 'visao' && (
-          <TabVisao me={me} inscricoes={inscricoes} jogos={jogos} ranking={ranking} onTabChange={setTab} />
+          <TabVisao me={me} inscricoes={inscricoes} jogos={jogos} ranking={ranking} ligas={ligas} onTabChange={setTab} />
         )}
         {tab === 'jogos' && (
           <TabJogos jogos={jogos} onConfirmar={handleConfirmar} confirmando={confirmando} />

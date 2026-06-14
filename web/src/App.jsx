@@ -4,6 +4,13 @@ import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
 import { useAuth } from './lib/auth'
 
+// Redireciona atletas logados para o portal e não-atletas para a página pública de perfil
+function PerfilRoute() {
+  const { user, isAtleta } = useAuth()
+  if (user && isAtleta) return <Navigate to="/meu-painel" replace />
+  return <Layout><Perfil /></Layout>
+}
+
 // Decide o destino do redirect da guarda: sem login → /login; logado mas sem
 // permissão → home do papel (staff→/pdv, atleta→/). null = autorizado.
 function gateRedirect(need, auth) {
@@ -147,7 +154,7 @@ export default function App() {
         <Route path="/regulamento" element={<Layout><Regulamento /></Layout>} />
         <Route path="/bracket"    element={<Layout><Bracket /></Layout>} />
         <Route path="/chaves"     element={<Layout><Bracket /></Layout>} />
-        <Route path="/perfil"     element={<Layout><Perfil /></Layout>} />
+        <Route path="/perfil"     element={<PerfilRoute />} />
         <Route path="/contato"    element={<Layout><Contato /></Layout>} />
         <Route path="/noticias"   element={<Layout><NoticiasPublic /></Layout>} />
         <Route path="/quadras"    element={<Layout><AgendaQuadras /></Layout>} />
