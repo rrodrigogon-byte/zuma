@@ -67,12 +67,14 @@ const Financeiro      = lazy(() => import('./pages/admin/Financeiro'))
 const Quadras         = lazy(() => import('./pages/admin/Quadras'))
 const Pontos          = lazy(() => import('./pages/admin/Pontos'))
 const AdminRanking    = lazy(() => import('./pages/admin/AdminRanking'))
+const AdminLigas      = lazy(() => import('./pages/admin/AdminLigas'))
 const Contatos        = lazy(() => import('./pages/admin/Contatos'))
 const AgendaQuadras   = lazy(() => import('./pages/public/AgendaQuadras'))
 const NoticiasPublic  = lazy(() => import('./pages/public/Noticias'))
 const MeuPainel       = lazy(() => import('./pages/atleta/MeuPainel'))
 const Clube           = lazy(() => import('./pages/public/Clube'))
 const Liga            = lazy(() => import('./pages/public/Liga'))
+const PerfilAtleta    = lazy(() => import('./pages/public/PerfilAtleta'))
 
 function Loading() {
   return (
@@ -130,6 +132,7 @@ export default function App() {
           <Route path="/admin/quadras"        element={<Layout><Quadras /></Layout>} />
           <Route path="/admin/pontos"         element={<Layout><Pontos /></Layout>} />
           <Route path="/admin/ranking"        element={<Layout><AdminRanking /></Layout>} />
+          <Route path="/admin/ligas"          element={<Layout><AdminLigas /></Layout>} />
           <Route path="/admin/contatos"       element={<Layout><Contatos /></Layout>} />
         </Route>
 
@@ -149,8 +152,9 @@ export default function App() {
         <Route path="/noticias"   element={<Layout><NoticiasPublic /></Layout>} />
         <Route path="/quadras"    element={<Layout><AgendaQuadras /></Layout>} />
         <Route path="/clube"      element={<Layout><Clube /></Layout>} />
-        <Route path="/liga"       element={<Layout><Liga /></Layout>} />
-        <Route path="/liga/:id"   element={<Layout><Liga /></Layout>} />
+        <Route path="/liga"          element={<Layout><Liga /></Layout>} />
+        <Route path="/liga/:id"      element={<Layout><Liga /></Layout>} />
+        <Route path="/atleta/:nome"  element={<Layout><PerfilAtleta /></Layout>} />
 
         <Route path="*" element={<Layout><NotFound /></Layout>} />
       </Routes>

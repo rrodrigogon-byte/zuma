@@ -2344,6 +2344,75 @@ function fulfill(pg){
 // =================== AUDITORIA (segurança) ===================
 app.get('/api/admin/auditoria', auth, requireStaff, (req,res)=> res.json((db().auditoria||[]).slice(-200).reverse()));
 
+// =================== NOTIFICAÇÕES DO ADMIN ===================
+// Agrega eventos recentes em um feed de notificações para o painel
+app.get('/api/admin/notificacoes', auth, requireStaff, (req, res) => {
+  const d = db();
+  const notifs = [];
+  const agora = Date.now();
+  const UMA_SEMANA = 7 * 24 * 60 * 60 * 1000;
+
+  // Inscrições recentes (últimas 48h)
+  const DUAS_HORAS = 2 * 24 * 60 * 60 * 1000;
+  (d.inscricoes || []).filter(i => i.criadoEm && (agora - new Date(i.criadoEm).getTime()) < DUAS_HORAS)
+    .slice(-10).reverse().forEach(i => notifs.push({
+      tipo: 'inscricao', icon: '✍️', cor: '#27ae60',
+      titulo: `Nova inscrição: ${i.nome || i.nomes?.[0] || 'Atleta'}`,
+      detalhe: i.categoria ? `Categoria: ${i.categoria}` : '',
+      data: i.criadoEm, link: '/admin/inscricoes',
+    }));
+
+  // Pagamentos pendentes
+  (d.pagamentos || []).filter(p => p.status === 'pendente')
+    .slice(-5).forEach(p => notifs.push({
+      tipo: 'pagamento', icon: '💳', cor: '#e05c5c',
+      titulo: `Pagamento pendente: R$ ${Number(p.valor||0).toFixed(2)}`,
+      detalhe: p.nome || p.descricao || '',
+      data: p.criadoEm || new Date().toISOString(), link: '/admin/pagamentos',
+    }));
+
+  // Reservas pendentes
+  (d.reservas || []).filter(r => r.status === 'pendente')
+    .slice(-5).forEach(r => notifs.push({
+      tipo: 'reserva', icon: '🏟️', cor: '#C9A656',
+      titulo: `Reserva aguardando: ${r.quadraNome || 'Quadra'}`,
+      detalhe: `${r.socioNome || r.nome || ''} · ${r.data || ''}`,
+      data: r.criadoEm || new Date().toISOString(), link: '/admin/quadras',
+    }));
+
+  // Contatos não lidos
+  (d.contatos || []).filter(c => !c.lido)
+    .slice(-5).forEach(c => notifs.push({
+      tipo: 'contato', icon: '✉️', cor: '#8FD64A',
+      titulo: `Mensagem de ${c.nome || 'Visitante'}`,
+      detalhe: (c.mensagem || '').slice(0, 60),
+      data: c.criadoEm || new Date().toISOString(), link: '/admin/contatos',
+    }));
+
+  // Estoque baixo
+  (d.estoque ? Object.entries(d.estoque) : [])
+    .filter(([,v]) => (v.qtd || 0) < (v.minimo || 5) && v.ativo !== false)
+    .slice(0, 3).forEach(([nome, v]) => notifs.push({
+      tipo: 'estoque', icon: '📦', cor: '#C9A656',
+      titulo: `Estoque baixo: ${v.nome || nome}`,
+      detalhe: `${v.qtd || 0} unidades restantes`,
+      data: new Date().toISOString(), link: '/admin/estoque',
+    }));
+
+  // Ordenar por data decrescente
+  notifs.sort((a, b) => new Date(b.data) - new Date(a.data));
+  const total = notifs.length;
+  res.json({ notificacoes: notifs.slice(0, 20), total });
+});
+
+// Marcar contatos como lidos em lote (ação do bell)
+app.post('/api/admin/notificacoes/ler', auth, requireStaff, (req, res) => {
+  const d = db();
+  (d.contatos || []).forEach(c => { c.lido = true; });
+  save();
+  res.json({ ok: true });
+});
+
 // =================== PERFIL DO ATLETA + HEAD-TO-HEAD (cap. 3.2) ===================
 // Coleta todas as partidas com vencedor de todos os formatos.
 function coletarPartidas(){

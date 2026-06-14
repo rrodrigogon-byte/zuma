@@ -310,6 +310,24 @@ function AtletaModal({ atleta, todos, onClose }) {
               </div>
             </div>
           </div>
+
+          {/* Link para perfil completo */}
+          <Link
+            to={`/atleta/${encodeURIComponent(atleta.nome)}`}
+            onClick={onClose}
+            style={{
+              display: 'block', textAlign: 'center', marginTop: 16,
+              background: `linear-gradient(135deg,${C.green},${C.lightGreen})`,
+              color: C.darkGreen, borderRadius: 12, padding: '12px 20px',
+              fontWeight: 800, fontSize: 14, textDecoration: 'none',
+              boxShadow: '0 4px 16px rgba(95,179,53,.3)',
+              transition: 'transform .15s, box-shadow .15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(95,179,53,.4)' }}
+            onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 4px 16px rgba(95,179,53,.3)' }}
+          >
+            Ver Perfil Completo →
+          </Link>
         </div>
       </div>
     </div>

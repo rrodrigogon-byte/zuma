@@ -183,6 +183,179 @@ function AnimatedCounter({ target, duration = 1800 }) {
   return <span ref={ref}>{value}</span>
 }
 
+// ── Live Stats Bar ────────────────────────────────────────────────────────────
+
+function LiveStatsBar({ totalInscritos, totalCategorias, diasRestantes }) {
+  const stats = [
+    { icon: '🎾', label: 'Atletas inscritos', value: totalInscritos, animated: true, color: '#5FB335' },
+    { icon: '🏆', label: 'Categorias', value: totalCategorias || 14, animated: false, color: '#C9A656' },
+    { icon: '⏳', label: 'Dias para o torneio', value: diasRestantes != null ? diasRestantes : '—', animated: false, color: '#8FD64A' },
+    { icon: '🌎', label: 'Cidades participantes', value: null, animated: false, color: '#5FB335' },
+  ]
+
+  return (
+    <div style={{
+      background: '#0E2E1C',
+      borderTop: '1px solid rgba(143,214,74,0.15)',
+      borderBottom: '1px solid rgba(143,214,74,0.15)',
+      padding: '0',
+    }}>
+      <div style={{
+        maxWidth: 1060, margin: '0 auto',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+      }}>
+        {stats.filter(s => s.value !== null).map((s, i) => (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center', gap: 14,
+            padding: '20px 28px',
+            borderRight: i < stats.filter(x => x.value !== null).length - 1 ? '1px solid rgba(255,255,255,.07)' : 'none',
+          }}>
+            <span style={{ fontSize: '1.8rem', flexShrink: 0 }}>{s.icon}</span>
+            <div>
+              <div style={{ fontSize: '1.55rem', fontWeight: 900, color: s.color, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+                {s.animated && typeof s.value === 'number'
+                  ? <AnimatedCounter target={s.value} />
+                  : s.value}
+              </div>
+              <div style={{ fontSize: '0.67rem', color: 'rgba(255,255,255,.5)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 3 }}>
+                {s.label}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Campeões / Últimas edições ────────────────────────────────────────────────
+
+const CAMPEOES_DEFAULT = [
+  { edicao: '3ª Agro Open', ano: '2024', categoria: 'Masc. PRO', nome: 'Rafael A.', pontos: 2400 },
+  { edicao: '3ª Agro Open', ano: '2024', categoria: '1ª Classe', nome: 'Diego M.', pontos: 1800 },
+  { edicao: '2ª Agro Open', ano: '2023', categoria: 'Masc. PRO', nome: 'Bruno S.', pontos: 2200 },
+  { edicao: '2ª Agro Open', ano: '2023', categoria: '2ª Classe', nome: 'Carlos R.', pontos: 1600 },
+]
+
+function CampeoesSection({ campeoes }) {
+  const lista = (campeoes && campeoes.length > 0) ? campeoes : CAMPEOES_DEFAULT
+  return (
+    <section style={{ background: 'linear-gradient(180deg,#e8f0dc 0%,#f0f4e8 100%)', padding: '64px 24px' }}>
+      <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+        <div style={{ textAlign: 'center', marginBottom: 40 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <div style={{ height: 2, width: 40, background: '#C9A656', borderRadius: 2 }} />
+            <span style={{ fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.15em', color: '#C9A656', textTransform: 'uppercase' }}>Hall da Fama</span>
+            <div style={{ height: 2, width: 40, background: '#C9A656', borderRadius: 2 }} />
+          </div>
+          <h2 style={{ fontSize: '2rem', fontWeight: 900, color: '#0E2E1C', margin: '0 0 8px' }}>🏆 Últimos Campeões</h2>
+          <p style={{ color: '#5a7a5a', margin: 0 }}>Conheça quem dominou as edições anteriores</p>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
+          {lista.slice(0, 8).map((c, i) => (
+            <div key={i} style={{
+              background: '#fff',
+              border: i === 0 ? '2px solid #C9A656' : '1px solid rgba(0,0,0,0.07)',
+              borderRadius: 18,
+              padding: '20px 20px 18px',
+              position: 'relative', overflow: 'hidden',
+              boxShadow: i === 0 ? '0 6px 28px rgba(201,166,86,.18)' : '0 2px 12px rgba(0,0,0,.06)',
+              transition: 'transform .2s, box-shadow .2s',
+            }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 10px 30px rgba(201,166,86,.22)' }}
+              onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = i === 0 ? '0 6px 28px rgba(201,166,86,.18)' : '0 2px 12px rgba(0,0,0,.06)' }}
+            >
+              {i === 0 && (
+                <div style={{ position: 'absolute', top: 12, right: 14, fontSize: 11, fontWeight: 800, color: '#C9A656', background: 'rgba(201,166,86,.1)', borderRadius: 999, padding: '2px 8px' }}>⭐ Destaque</div>
+              )}
+              <div style={{ fontSize: '2.2rem', marginBottom: 8 }}>🏆</div>
+              <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#5FB335', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>
+                {c.categoria}
+              </div>
+              <div style={{ fontWeight: 900, fontSize: '1rem', color: '#0E2E1C', marginBottom: 2 }}>{c.nome}</div>
+              <div style={{ fontSize: '0.78rem', color: '#7a9a7a' }}>
+                {c.edicao} · {c.ano}
+              </div>
+              {c.pontos && (
+                <div style={{ marginTop: 8, fontSize: '0.85rem', fontWeight: 800, color: '#C9A656' }}>
+                  {c.pontos.toLocaleString('pt-BR')} pts
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ── Timeline do evento ────────────────────────────────────────────────────────
+
+function TimelineEvento({ dataInicio, dataFim }) {
+  const fases = [
+    { icon: '📋', label: 'Inscrições Abertas', desc: 'Garanta sua vaga', status: 'active' },
+    { icon: '✅', label: 'Encerramento das Inscrições', desc: dataInicio ? `Até ${new Date(dataInicio + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}` : 'Em breve', status: 'upcoming' },
+    { icon: '🎲', label: 'Sorteio das Chaves', desc: 'Definição dos grupos', status: 'upcoming' },
+    { icon: '🎾', label: 'Início do Torneio', desc: dataInicio ? new Date(dataInicio + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }) : 'Em breve', status: 'upcoming' },
+    { icon: '🏆', label: 'Grande Final', desc: dataFim ? new Date(dataFim + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' }) : 'Em breve', status: 'upcoming' },
+  ]
+
+  return (
+    <section style={{ maxWidth: 860, margin: '0 auto', padding: '64px 24px 48px' }}>
+      <div style={{ textAlign: 'center', marginBottom: 44 }}>
+        <h2 style={{ fontSize: '2rem', fontWeight: 900, color: '#0E2E1C', margin: '0 0 8px' }}>📅 Cronograma</h2>
+        <p style={{ color: '#5a7a5a', margin: 0 }}>Acompanhe todas as etapas do torneio</p>
+      </div>
+      <div style={{ position: 'relative' }}>
+        {/* linha vertical */}
+        <div style={{
+          position: 'absolute', left: 23, top: 0, bottom: 0, width: 2,
+          background: 'linear-gradient(to bottom, #5FB335 0%, #C9A656 50%, rgba(0,0,0,.08) 100%)',
+          borderRadius: 2,
+        }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+          {fases.map((f, i) => (
+            <div key={i} style={{ display: 'flex', gap: 20, alignItems: 'flex-start', paddingBottom: i < fases.length - 1 ? 28 : 0 }}>
+              {/* dot */}
+              <div style={{
+                width: 48, height: 48, borderRadius: '50%', flexShrink: 0,
+                background: f.status === 'active' ? 'linear-gradient(135deg,#5FB335,#8FD64A)' : '#fff',
+                border: f.status === 'active' ? 'none' : '2px solid rgba(0,0,0,.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem',
+                boxShadow: f.status === 'active' ? '0 4px 16px rgba(95,179,53,.4)' : '0 2px 8px rgba(0,0,0,.06)',
+                position: 'relative', zIndex: 1,
+              }}>
+                {f.status === 'active' ? f.icon : <span style={{ opacity: 0.5 }}>{f.icon}</span>}
+              </div>
+              {/* conteúdo */}
+              <div style={{ paddingTop: 8, flex: 1 }}>
+                <div style={{
+                  fontWeight: 800, fontSize: '0.95rem',
+                  color: f.status === 'active' ? '#0E2E1C' : '#5a7a5a',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  {f.label}
+                  {f.status === 'active' && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 800, color: '#5FB335',
+                      background: 'rgba(95,179,53,.12)', border: '1px solid rgba(95,179,53,.3)',
+                      borderRadius: 999, padding: '2px 8px', animation: 'pulseBadge 2s ease-in-out infinite',
+                    }}>
+                      AGORA
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '0.82rem', color: '#8a9a8a', marginTop: 2 }}>{f.desc}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
 // ── Ranking skeleton ─────────────────────────────────────────────────────────
 
 function RankingSkeleton() {
@@ -290,6 +463,8 @@ export default function Home() {
   const [categorias, setCategorias]         = useState([])
   const [eventoInfo, setEventoInfo]         = useState(null)
   const [infoCards, setInfoCards]           = useState(INFO_CARDS_DEFAULT)
+  const [campeoes, setCampeoes]             = useState([])
+  const [diasRestantes, setDiasRestantes]   = useState(null)
 
   useEffect(() => {
     api.get('/api/ranking').catch(() => []).then(d => {
@@ -310,7 +485,12 @@ export default function Home() {
     // Info do evento — gera INFO_CARDS dinâmicos a partir da API
     api.get('/api/info').catch(() => null).then(d => {
       if (!d) return
-      if (d?.dataInicio) setEventoInfo({ dataInicio: d.dataInicio, nomeEvento: d.nomeEvento || d.evento })
+      if (d?.dataInicio) {
+        setEventoInfo({ dataInicio: d.dataInicio, dataFim: d.dataFim, nomeEvento: d.nomeEvento || d.evento })
+        // Calcular dias restantes
+        const diff = new Date(d.dataInicio + 'T00:00:00') - new Date()
+        if (diff > 0) setDiasRestantes(Math.ceil(diff / 86400000))
+      }
       // Atualizar cards com dados reais
       const local = d.local || d.localEvento || 'Tangará Tênis Clube'
       const cidade = d.cidade || 'Tangará da Serra – MT'
@@ -324,6 +504,10 @@ export default function Home() {
         { icon: '🎾', label: 'Categorias', value: (d.totalCategorias || '14') + ' categorias', sub: 'Masc · Fem · Misto · Sênior' },
         { icon: '🏆', label: 'Premiação', value: premio, sub: 'Em prêmios + troféus' },
       ])
+    })
+    // Campeões de edições anteriores
+    api.get('/api/campeoes').catch(() => []).then(d => {
+      if (Array.isArray(d) && d.length > 0) setCampeoes(d)
     })
   }, [])
 
@@ -386,25 +570,6 @@ export default function Home() {
         {/* Countdown até o evento */}
         {eventoInfo && <CountdownBanner dataInicio={eventoInfo.dataInicio} nomeEvento={eventoInfo.nomeEvento} />}
 
-        {/* Contador de inscritos — só exibe se totalInscritos > 0 */}
-        {totalInscritos !== null && totalInscritos > 0 && (
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 10,
-            background: 'rgba(95,179,53,0.12)', border: '1px solid rgba(95,179,53,0.3)',
-            borderRadius: 12, padding: '10px 20px', marginBottom: 28,
-          }}>
-            <span style={{ fontSize: '1.5rem' }}>🎾</span>
-            <div style={{ textAlign: 'left' }}>
-              <div style={{ fontSize: 'clamp(1.5rem, 4vw, 2.2rem)', fontWeight: 900, color: '#8FD64A', lineHeight: 1 }}>
-                <AnimatedCounter target={totalInscritos} />
-              </div>
-              <div style={{ fontSize: '0.72rem', color: '#a0c8a0', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-                atletas inscritos
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* CTAs */}
         <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
           <button
@@ -441,6 +606,15 @@ export default function Home() {
         </svg>
       </section>
 
+      {/* ── LIVE STATS BAR ── */}
+      {(totalInscritos !== null && totalInscritos > 0) && (
+        <LiveStatsBar
+          totalInscritos={totalInscritos}
+          totalCategorias={categorias.length || null}
+          diasRestantes={diasRestantes}
+        />
+      )}
+
       {/* ── INFO CARDS ── */}
       <RevealSection>
         <section style={{ maxWidth: 1000, margin: '0 auto', padding: '60px 24px 20px' }}>
@@ -466,6 +640,14 @@ export default function Home() {
             ))}
           </div>
         </section>
+      </RevealSection>
+
+      {/* ── TIMELINE ── */}
+      <RevealSection>
+        <TimelineEvento
+          dataInicio={eventoInfo?.dataInicio}
+          dataFim={eventoInfo?.dataFim}
+        />
       </RevealSection>
 
       {/* ── CATEGORIAS — exibe se API retornar dados; caso contrário mostra CTA simples ── */}
@@ -552,6 +734,11 @@ export default function Home() {
             </div>
           </div>
         </section>
+      </RevealSection>
+
+      {/* ── CAMPEÕES ── */}
+      <RevealSection>
+        <CampeoesSection campeoes={campeoes} />
       </RevealSection>
 
       {/* ── TOP 3 RANKING ── */}

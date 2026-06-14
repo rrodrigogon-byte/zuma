@@ -358,6 +358,34 @@ function TabJogos({ jogos, onConfirmar, confirmando }) {
 }
 
 // ─── ABA RANKING ─────────────────────────────────────────────────────────────
+function MovimentoBadge({ valor }) {
+  if (!valor || valor === 0) {
+    return (
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', gap: 3,
+        fontSize: 11, fontWeight: 700, color: C.muted,
+        background: 'rgba(255,255,255,.06)', borderRadius: 6,
+        padding: '2px 7px',
+      }}>
+        — estável
+      </span>
+    )
+  }
+  const subiu = valor > 0
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 3,
+      fontSize: 11, fontWeight: 800,
+      color: subiu ? C.green : C.red,
+      background: subiu ? 'rgba(95,179,53,.12)' : 'rgba(231,76,60,.12)',
+      border: `1px solid ${subiu ? 'rgba(95,179,53,.3)' : 'rgba(231,76,60,.3)'}`,
+      borderRadius: 6, padding: '2px 7px',
+    }}>
+      {subiu ? '▲' : '▼'} {Math.abs(valor)} {subiu ? 'posições' : 'posições'}
+    </span>
+  )
+}
+
 function TabRanking({ ranking, rankingGlobal, nomAtleta }) {
   const posGeral = ranking?.posGeral
   const totalPontos = (ranking?.matches || []).reduce((s, m) => s + (m.pontos || 0), 0)
@@ -365,17 +393,77 @@ function TabRanking({ ranking, rankingGlobal, nomAtleta }) {
   const derrotas = (ranking?.matches || []).reduce((s, m) => s + (m.derrotas || 0), 0)
   const titulos = ranking?.titulos || []
 
-  // Top 10 do ranking global para exibir posição relativa
+  // Localiza o atleta no ranking global para pegar movimento e partidas_avulsas
+  const meuEntry = (rankingGlobal || []).find(p =>
+    (p.nome || '').toLowerCase().trim() === (nomAtleta || '').toLowerCase().trim()
+  ) || (rankingGlobal || []).find(p =>
+    (p.nome || '').toLowerCase().includes((nomAtleta || '').split(' ')[0].toLowerCase())
+  )
+
+  const movimento = meuEntry?.movimento ?? 0
+  const partidasAvulsas = meuEntry?.partidas_avulsas || ranking?.partidas_avulsas || []
+
+  // Top 10 do ranking global
   const top10 = (rankingGlobal || []).slice(0, 10)
 
   return (
     <div>
+      {/* ── Hero: posição + movimento ── */}
+      <div style={{
+        ...card,
+        padding: '20px 24px',
+        marginBottom: 18,
+        background: 'linear-gradient(135deg, rgba(201,166,86,.08) 0%, rgba(95,179,53,.06) 100%)',
+        border: '1px solid rgba(201,166,86,.25)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
+      }}>
+        <div>
+          <div style={{ fontSize: 12, color: C.muted, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 1 }}>
+            Sua posição no ranking
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+            <span style={{ fontSize: 42, fontWeight: 900, color: C.gold, lineHeight: 1 }}>
+              {posGeral ? `#${posGeral}` : '—'}
+            </span>
+            <MovimentoBadge valor={movimento} />
+          </div>
+          {meuEntry?.pontos != null && (
+            <div style={{ fontSize: 13, color: C.muted, marginTop: 6 }}>
+              <span style={{ color: C.cream, fontWeight: 700 }}>{meuEntry.pontos}</span> pontos acumulados
+            </div>
+          )}
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: 11, color: C.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.8 }}>Histórico de posições</div>
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+            {(meuEntry?.historico || []).slice(-6).map((h, i, arr) => {
+              const prev = arr[i - 1]?.pos
+              const cur  = h.pos
+              const diff = prev != null ? prev - cur : 0
+              const cor  = diff > 0 ? C.green : diff < 0 ? C.red : C.muted
+              return (
+                <div key={i} style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  background: 'rgba(255,255,255,.04)', borderRadius: 8, padding: '6px 10px',
+                  border: `1px solid rgba(255,255,255,.08)`,
+                }}>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: cor }}>#{cur}</span>
+                  <span style={{ fontSize: 9, color: C.muted, marginTop: 2 }}>
+                    {h.mes || h.label || `R${i + 1}`}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
       {/* KPIs */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
-        <KpiCard label="Posição Geral" value={posGeral ? `#${posGeral}` : '—'} icon="🏅" color={C.gold} />
         <KpiCard label="Pontos Totais" value={totalPontos} icon="⭐" color={C.green} />
         <KpiCard label="Vitórias" value={vitorias} icon="🏆" color={C.lime} />
         <KpiCard label="Derrotas" value={derrotas} icon="📉" color={C.red} />
+        <KpiCard label="Desafios" value={partidasAvulsas.length} icon="⚔️" color={C.gold} />
       </div>
 
       {/* Aproveitamento */}
@@ -396,9 +484,64 @@ function TabRanking({ ranking, rankingGlobal, nomAtleta }) {
         )
       })()}
 
+      {/* Partidas Avulsas / Desafios */}
+      {partidasAvulsas.length > 0 && (
+        <div style={{ ...card, marginBottom: 18 }}>
+          <div style={sectionTitle}><span>⚔️</span> Desafios & Partidas Avulsas</div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.cardBorder}` }}>
+                  {['Data', 'Adversário', 'Resultado', 'Pontos', 'Cat.'].map(h => (
+                    <th key={h} style={{ padding: '8px 10px', textAlign: 'left', color: C.muted, fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.7 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {partidasAvulsas.slice(0, 12).map((pa, i) => {
+                  const venceu = pa.vencedor === nomAtleta || pa.resultado === 'vitoria' || pa.resultado === 'w'
+                  const perdeu = pa.vencedor && pa.vencedor !== nomAtleta || pa.resultado === 'derrota' || pa.resultado === 'l'
+                  const corRes = venceu ? C.green : perdeu ? C.red : C.muted
+                  const adv = pa.adversario || (pa.jogador1 === nomAtleta ? pa.jogador2 : pa.jogador1) || '—'
+                  const pts = pa.pontos || pa.pontos_ganhos || 0
+                  const data = pa.data ? new Date(pa.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '—'
+                  return (
+                    <tr key={i} style={{
+                      borderBottom: `1px solid rgba(255,255,255,.04)`,
+                      background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,.02)',
+                    }}>
+                      <td style={{ padding: '9px 10px', color: C.muted }}>{data}</td>
+                      <td style={{ padding: '9px 10px', color: C.cream, fontWeight: 600 }}>{adv}</td>
+                      <td style={{ padding: '9px 10px' }}>
+                        <span style={{
+                          fontSize: 11, fontWeight: 700, color: corRes,
+                          background: venceu ? 'rgba(95,179,53,.1)' : perdeu ? 'rgba(231,76,60,.1)' : 'rgba(255,255,255,.06)',
+                          borderRadius: 5, padding: '2px 8px',
+                        }}>
+                          {venceu ? 'Vitória' : perdeu ? 'Derrota' : pa.placar || '—'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '9px 10px', color: pts > 0 ? C.gold : C.muted, fontWeight: 800 }}>
+                        {pts > 0 ? `+${pts}` : pts || '—'}
+                      </td>
+                      <td style={{ padding: '9px 10px', color: C.muted, fontSize: 11 }}>{pa.categoria || '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          {partidasAvulsas.length > 12 && (
+            <div style={{ textAlign: 'center', marginTop: 10, fontSize: 12, color: C.muted }}>
+              + {partidasAvulsas.length - 12} partidas anteriores
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Por categoria */}
       {(ranking?.matches || []).length > 0 && (
-        <div style={card}>
+        <div style={{ ...card, marginBottom: 18 }}>
           <div style={sectionTitle}><span>🎾</span> Por Categoria</div>
           {ranking.matches.map((m, i) => {
             const pct = m.aproveitamento || 0
@@ -430,7 +573,7 @@ function TabRanking({ ranking, rankingGlobal, nomAtleta }) {
 
       {/* Títulos */}
       {titulos.length > 0 && (
-        <div style={card}>
+        <div style={{ ...card, marginBottom: 18 }}>
           <div style={sectionTitle}><span>🥇</span> Títulos Conquistados</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {titulos.map((t, i) => (
@@ -453,9 +596,11 @@ function TabRanking({ ranking, rankingGlobal, nomAtleta }) {
       {top10.length > 0 && (
         <div style={card}>
           <div style={sectionTitle}><span>🏅</span> Top 10 Geral do Torneio</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             {top10.map((p, i) => {
-              const isMine = (p.nome || '').toLowerCase().includes((nomAtleta || '').split(' ')[0].toLowerCase())
+              const isMine = (p.nome || '').toLowerCase().trim() === (nomAtleta || '').toLowerCase().trim()
+                || (p.nome || '').toLowerCase().includes((nomAtleta || '').split(' ')[0].toLowerCase())
+              const mov = p.movimento ?? 0
               return (
                 <div key={i} style={{
                   display: 'flex', alignItems: 'center', gap: 12,
@@ -464,6 +609,7 @@ function TabRanking({ ranking, rankingGlobal, nomAtleta }) {
                   border: `1px solid ${isMine ? 'rgba(95,179,53,.3)' : C.cardBorder}`,
                   borderRadius: 9,
                 }}>
+                  {/* Posição */}
                   <div style={{
                     width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
                     background: i === 0 ? 'rgba(201,166,86,.2)' : i === 1 ? 'rgba(200,200,200,.15)' : i === 2 ? 'rgba(180,100,40,.15)' : 'rgba(255,255,255,.06)',
@@ -473,9 +619,21 @@ function TabRanking({ ranking, rankingGlobal, nomAtleta }) {
                   }}>
                     {i + 1}
                   </div>
-                  <div style={{ flex: 1, fontSize: 13, fontWeight: isMine ? 800 : 600, color: isMine ? C.green : C.cream }}>
-                    {p.nome} {isMine && '← você'}
+                  {/* Seta de movimento */}
+                  <div style={{ width: 18, flexShrink: 0, textAlign: 'center' }}>
+                    {mov > 0
+                      ? <span style={{ fontSize: 10, color: C.green, fontWeight: 900 }}>▲</span>
+                      : mov < 0
+                        ? <span style={{ fontSize: 10, color: C.red, fontWeight: 900 }}>▼</span>
+                        : <span style={{ fontSize: 9, color: 'rgba(255,255,255,.2)' }}>—</span>
+                    }
                   </div>
+                  {/* Nome */}
+                  <div style={{ flex: 1, fontSize: 13, fontWeight: isMine ? 800 : 600, color: isMine ? C.green : C.cream }}>
+                    {p.nome}
+                    {isMine && <span style={{ fontSize: 10, color: C.green, marginLeft: 6, opacity: 0.8 }}>← você</span>}
+                  </div>
+                  {/* Pontos */}
                   <div style={{ fontSize: 14, fontWeight: 800, color: C.gold }}>{p.pontos} pts</div>
                 </div>
               )
