@@ -948,53 +948,159 @@ app.post('/api/admin/ranking/seed', auth, requireStaff, (req,res)=>{
     return res.status(409).json({ ok:false, msg:`Ranking já possui ${existing} atleta(s). Use force:true para sobrescrever.` });
   }
   const { force=false, temporada='2026' } = req.body || {};
+
+  // Se force=true, limpa tudo para recomeçar do zero
+  if (force) {
+    d.ranking = { players:{}, arquivados:{} };
+  }
+
   const atletas = [
-    { nome:'Rafael Andrade', categoria:'Masc. PRO', elo:2450, pontos:2450 },
-    { nome:'Bruno Silveira', categoria:'Masc. PRO', elo:2310, pontos:2310 },
-    { nome:'Diego Mendes', categoria:'Masc. PRO', elo:2180, pontos:2180 },
-    { nome:'Carlos Rocha', categoria:'Masc. PRO', elo:2050, pontos:2050 },
-    { nome:'Marcos Vieira', categoria:'Masc. PRO', elo:1920, pontos:1920 },
-    { nome:'Felipe Costa', categoria:'1ª Classe', elo:1800, pontos:1800 },
-    { nome:'André Lima', categoria:'1ª Classe', elo:1670, pontos:1670 },
-    { nome:'Paulo Nunes', categoria:'1ª Classe', elo:1540, pontos:1540 },
-    { nome:'Lucas Ferreira', categoria:'2ª Classe', elo:1400, pontos:1400 },
-    { nome:'Ricardo Gomes', categoria:'2ª Classe', elo:1280, pontos:1280 },
-    { nome:'Ana Paula Silva', categoria:'Fem. PRO', elo:2200, pontos:2200 },
-    { nome:'Carla Mendes', categoria:'Fem. PRO', elo:2050, pontos:2050 },
-    { nome:'Juliana Rocha', categoria:'Fem. PRO', elo:1900, pontos:1900 },
-    { nome:'Beatriz Costa', categoria:'Fem. 1ª', elo:1700, pontos:1700 },
-    { nome:'Fernanda Lima', categoria:'Fem. 1ª', elo:1560, pontos:1560 },
+    { nome:'Rafael Andrade', categoria:'Masc. PRO', pontos:2450 },
+    { nome:'Bruno Silveira', categoria:'Masc. PRO', pontos:2310 },
+    { nome:'Diego Mendes',   categoria:'Masc. PRO', pontos:2180 },
+    { nome:'Carlos Rocha',   categoria:'Masc. PRO', pontos:2050 },
+    { nome:'Marcos Vieira',  categoria:'Masc. PRO', pontos:1920 },
+    { nome:'Felipe Costa',   categoria:'1ª Classe', pontos:1800 },
+    { nome:'André Lima',     categoria:'1ª Classe', pontos:1670 },
+    { nome:'Paulo Nunes',    categoria:'1ª Classe', pontos:1540 },
+    { nome:'Lucas Ferreira', categoria:'2ª Classe', pontos:1400 },
+    { nome:'Ricardo Gomes',  categoria:'2ª Classe', pontos:1280 },
+    { nome:'Ana Paula Silva',categoria:'Fem. PRO',  pontos:2200 },
+    { nome:'Carla Mendes',   categoria:'Fem. PRO',  pontos:2050 },
+    { nome:'Juliana Rocha',  categoria:'Fem. PRO',  pontos:1900 },
+    { nome:'Beatriz Costa',  categoria:'Fem. 1ª',   pontos:1700 },
+    { nome:'Fernanda Lima',  categoria:'Fem. 1ª',   pontos:1560 },
   ];
   const now = new Date().toISOString();
   let added = 0;
   for (const a of atletas) {
-    const key = `${a.nome}__${a.categoria}`;
+    // Chave no mesmo formato que applyPartidaToRanking usa: "categoria|nome" em lowercase
+    const key = (a.categoria + '|' + a.nome).toLowerCase();
     if (!force && d.ranking.players[key]) continue;
     d.ranking.players[key] = {
       nome: a.nome,
       categoria: a.categoria,
-      elo: a.elo,
       pontos: a.pontos,
-      historico: [{ temporada, pontos: a.pontos, pos: 0, data: now }],
-      criadoEm: now,
+      vitorias: 0, derrotas: 0, torneios: 0, partidas_avulsas: 0,
+      temporada, historico: [], posAnterior: null, criadoEm: now,
     };
     added++;
   }
-  // Partidas de demonstração entre os primeiros 4 da PRO Masc
+
+  // Partidas de demonstração entre os primeiros atletas de cada categoria
   const partidas = [
-    { vencedor:'Rafael Andrade', perdedor:'Bruno Silveira', categoria:'Masc. PRO', placar:'6-3 7-5' },
-    { vencedor:'Rafael Andrade', perdedor:'Diego Mendes', categoria:'Masc. PRO', placar:'6-4 6-2' },
-    { vencedor:'Bruno Silveira', perdedor:'Carlos Rocha', categoria:'Masc. PRO', placar:'7-6 6-4' },
-    { vencedor:'Diego Mendes', perdedor:'Marcos Vieira', categoria:'Masc. PRO', placar:'6-2 6-1' },
-    { vencedor:'Ana Paula Silva', perdedor:'Carla Mendes', categoria:'Fem. PRO', placar:'6-3 6-4' },
-    { vencedor:'Felipe Costa', perdedor:'André Lima', categoria:'1ª Classe', placar:'6-4 3-6 7-5' },
+    { vencedor:'Rafael Andrade', perdedor:'Bruno Silveira',  categoria:'Masc. PRO',  placar:'6-3 7-5',    data:'2026-05-10' },
+    { vencedor:'Rafael Andrade', perdedor:'Diego Mendes',    categoria:'Masc. PRO',  placar:'6-4 6-2',    data:'2026-05-17' },
+    { vencedor:'Bruno Silveira', perdedor:'Carlos Rocha',    categoria:'Masc. PRO',  placar:'7-6 6-4',    data:'2026-05-24' },
+    { vencedor:'Diego Mendes',   perdedor:'Marcos Vieira',   categoria:'Masc. PRO',  placar:'6-2 6-1',    data:'2026-05-31' },
+    { vencedor:'Bruno Silveira', perdedor:'Rafael Andrade',  categoria:'Masc. PRO',  placar:'6-7 7-5 6-3',data:'2026-06-07' },
+    { vencedor:'Ana Paula Silva',perdedor:'Carla Mendes',    categoria:'Fem. PRO',   placar:'6-3 6-4',    data:'2026-05-15' },
+    { vencedor:'Ana Paula Silva',perdedor:'Juliana Rocha',   categoria:'Fem. PRO',   placar:'7-5 6-2',    data:'2026-06-01' },
+    { vencedor:'Felipe Costa',   perdedor:'André Lima',      categoria:'1ª Classe',  placar:'6-4 3-6 7-5',data:'2026-05-20' },
+    { vencedor:'André Lima',     perdedor:'Paulo Nunes',     categoria:'1ª Classe',  placar:'6-3 6-1',    data:'2026-06-03' },
+    { vencedor:'Lucas Ferreira', perdedor:'Ricardo Gomes',   categoria:'2ª Classe',  placar:'7-6 4-6 6-4',data:'2026-05-28' },
   ];
+
+  // Limpar partidas de seed anteriores
+  if (!d.partidas_avulsas) d.partidas_avulsas = [];
+  d.partidas_avulsas = d.partidas_avulsas.filter(p => p.descricao !== 'Seed demo');
+
+  let partidasSalvas = 0;
   for (const p of partidas) {
+    // applyPartidaToRanking retorna { ptsVencedor, ptsPerdedor } — sem campo .ok
+    // Nunca retorna erro pois cria os players se não existirem
     const result = applyPartidaToRanking(d.ranking, { ...p, temporada, descricao:'Seed demo' });
-    if (!result.ok) continue;
+    // Registrar em partidas_avulsas para aparecer no perfil público do atleta
+    d.partidas_avulsas.push({
+      id: nextId(), vencedor: p.vencedor, perdedor: p.perdedor, categoria: p.categoria,
+      placar: p.placar, descricao: 'Seed demo', temporada, data: p.data || now,
+      ptsVencedor: result.ptsVencedor, ptsPerdedor: result.ptsPerdedor, criadoEm: now,
+    });
+    partidasSalvas++;
   }
   save();
-  res.json({ ok:true, adicionados:added, partidas:partidas.length, total: Object.keys(d.ranking.players).length });
+  res.json({ ok:true, adicionados:added, partidas:partidasSalvas, total: Object.keys(d.ranking.players).length });
+});
+
+// POST /api/admin/seed/campeoes — popula hall da fama com campeões das edições anteriores
+app.post('/api/admin/seed/campeoes', auth, requireStaff, (req,res)=>{
+  const d = db();
+  if (!d.campeoes) d.campeoes = {};
+  const { force=false } = req.body || {};
+  if (Object.keys(d.campeoes).length > 0 && !force)
+    return res.status(409).json({ ok:false, msg:'Campeões já cadastrados. Use force:true para sobrescrever.' });
+  d.campeoes = {
+    'Masc. PRO':    { nome:'Rafael Andrade', edicao:'3ª Agro Open', ano:'2024', pontos:2450 },
+    '1ª Classe':    { nome:'Felipe Costa',   edicao:'3ª Agro Open', ano:'2024', pontos:1800 },
+    'Fem. PRO':     { nome:'Ana Paula Silva',edicao:'3ª Agro Open', ano:'2024', pontos:2200 },
+    'Masc. Sênior': { nome:'Roberto Alves',  edicao:'3ª Agro Open', ano:'2024', pontos:1450 },
+    '2ª Classe':    { nome:'Lucas Ferreira', edicao:'2ª Agro Open', ano:'2023', pontos:1400 },
+    'Fem. 1ª':      { nome:'Beatriz Costa',  edicao:'2ª Agro Open', ano:'2023', pontos:1700 },
+    'Masc. PRO #2': { nome:'Bruno Silveira', edicao:'2ª Agro Open', ano:'2023', pontos:2200 },
+    'Misto A':      { nome:'Diego & Carla',  edicao:'1ª Agro Open', ano:'2022', pontos:1600 },
+  };
+  save();
+  res.json({ ok:true, total: Object.keys(d.campeoes).length });
+});
+
+// POST /api/admin/seed/demo — popula dados demo completos: torneio, inscrições, atletas, notícia
+app.post('/api/admin/seed/demo', auth, requireStaff, (req,res)=>{
+  const d = db();
+  const { force=false } = req.body || {};
+  let report = [];
+
+  // 1. Torneio de referência
+  if (!(d.torneios||[]).find(t=>t.nome==='4ª Agro Open de Tênis') || force) {
+    if (!d.torneios) d.torneios = [];
+    d.torneios = d.torneios.filter(t=>t.nome!=='4ª Agro Open de Tênis');
+    d.torneios.push({
+      id: nextId(), nome:'4ª Agro Open de Tênis', dataInicio:'2026-09-07', dataFim:'2026-09-13',
+      local:'Tangará Tênis Clube', cidade:'Tangará da Serra – MT',
+      status:'aberto', premio:'R$ 5.000', edicao:'4ª', descricao:'O maior torneio de tênis do interior do Mato Grosso.',
+      criadoEm: new Date().toISOString(),
+    });
+    report.push('torneio criado');
+  }
+
+  // 2. Inscrições demo com atletas do ranking
+  const atletasDemo = [
+    { nome:'Rafael Andrade', email:'rafael.andrade@email.com', categoria:'Masc. PRO', telefone:'(65) 99999-0001' },
+    { nome:'Bruno Silveira',  email:'bruno.silveira@email.com',  categoria:'Masc. PRO', telefone:'(65) 99999-0002' },
+    { nome:'Diego Mendes',    email:'diego.mendes@email.com',    categoria:'Masc. PRO', telefone:'(65) 99999-0003' },
+    { nome:'Felipe Costa',    email:'felipe.costa@email.com',    categoria:'1ª Classe', telefone:'(65) 99999-0004' },
+    { nome:'André Lima',      email:'andre.lima@email.com',      categoria:'1ª Classe', telefone:'(65) 99999-0005' },
+    { nome:'Ana Paula Silva', email:'ana.silva@email.com',       categoria:'Fem. PRO',  telefone:'(65) 99999-0006' },
+    { nome:'Carla Mendes',    email:'carla.mendes@email.com',    categoria:'Fem. PRO',  telefone:'(65) 99999-0007' },
+    { nome:'Lucas Ferreira',  email:'lucas.ferreira@email.com',  categoria:'2ª Classe', telefone:'(65) 99999-0008' },
+  ];
+  if (!d.inscricoes) d.inscricoes = [];
+  let insAdded = 0;
+  for (const a of atletasDemo) {
+    if (d.inscricoes.find(i=>i.email===a.email && i.categoria===a.categoria)) continue;
+    d.inscricoes.push({
+      id: nextId(), ...a, status:'aprovada', pago:true,
+      criadoEm: new Date(Date.now() - Math.random()*7*86400000).toISOString(),
+    });
+    insAdded++;
+  }
+  if (insAdded > 0) report.push(`${insAdded} inscrições adicionadas`);
+
+  // 3. Notícia de boas-vindas
+  if (!(d.noticias||[]).find(n=>n.titulo==='Bem-vindo à 4ª Agro Open de Tênis!') || force) {
+    if (!d.noticias) d.noticias = [];
+    d.noticias = d.noticias.filter(n=>n.titulo!=='Bem-vindo à 4ª Agro Open de Tênis!');
+    d.noticias.push({
+      id: nextId(),
+      titulo: 'Bem-vindo à 4ª Agro Open de Tênis!',
+      conteudo: 'As inscrições para a 4ª edição do Agro Open de Tênis estão abertas! O torneio acontece de 07 a 13 de setembro de 2026 no Tangará Tênis Clube. Participe e mostre seu talento no maior torneio de tênis do interior de Mato Grosso.',
+      publicado: true, destaque: true,
+      criadoEm: new Date().toISOString(), autor:'Admin',
+    });
+    report.push('notícia criada');
+  }
+
+  save();
+  res.json({ ok:true, acoes: report });
 });
 
 // =================== PDV BAR / RESTAURANTE ===================
@@ -2488,7 +2594,7 @@ app.post('/api/admin/notificacoes/ler', auth, requireStaff, (req, res) => {
 });
 
 // =================== PERFIL DO ATLETA + HEAD-TO-HEAD (cap. 3.2) ===================
-// Coleta todas as partidas com vencedor de todos os formatos.
+// Coleta todas as partidas com vencedor de todos os formatos, incluindo partidas avulsas de ranking.
 function coletarPartidas(){
   const d=db(); const out=[];
   // chaves (eliminatória simples) — deriva nomes das rounds + placares
@@ -2497,18 +2603,35 @@ function coletarPartidas(){
       const a=ch.rounds[r]?.[2*m], b=ch.rounds[r]?.[2*m+1]; if(!a||!b||a.bye||b.bye) continue;
       const perd = p.vencedor===a.name ? b.name : a.name;
       out.push({ a:a.name, b:b.name, vencedor:p.vencedor, perdedor:perd, placar:p.placar, fonte:'Chave', categoria:cat }); } }
-  // ligas, suíços, grupos, duplas — jogos com vencedor
+  // ligas (novo sistema com IDs numéricos)
+  for(const id in (d.ligas||{})){
+    const liga=d.ligas[id]; if(!liga||!liga.rodadas) continue;
+    liga.rodadas.flat().forEach(g=>{ if(g&&g.vencedor&&g.a&&g.b&&g.tipo!=='bye')
+      out.push({ a:g.a, b:g.b, vencedor:g.vencedor, perdedor:g.vencedor===g.a?g.b:g.a, placar:g.placar, fonte:'Liga', categoria:liga.categoria||'' }); });
+  }
+  // ligas legadas (round-robin), suíços, grupos, duplas
   const addJogos = (jogos, fonte, cat)=> jogos.forEach(g=>{ if(g.vencedor && g.a && g.b && g.tipo!=='bye'){ out.push({ a:g.a, b:g.b, vencedor:g.vencedor, perdedor:g.vencedor===g.a?g.b:g.a, placar:g.placar, fonte, categoria:cat }); } });
-  for(const cat in (d.ligas||{})) addJogos(d.ligas[cat].rounds.flat(), 'Liga', cat);
+  for(const cat in (d.ligas_rr||{})) { if(d.ligas_rr[cat].rounds) addJogos(d.ligas_rr[cat].rounds.flat(), 'Liga RR', cat); }
   for(const cat in (d.suicos||{})) addJogos(d.suicos[cat].rounds.flat(), 'Suíço', cat);
   for(const cat in (d.gruposEventos||{})){ d.gruposEventos[cat].grupos.forEach(g=>addJogos(g.rr.rounds.flat(),'Grupos',cat)); }
   for(const cat in (d.duplas||{})){ const s=d.duplas[cat]; Object.values(s.matches).forEach(m=>{ if(m.winner&&m.a&&m.b&&!m.a.bye&&!m.b.bye&&m.tipo!=='bye'){ out.push({ a:m.a.name, b:m.b.name, vencedor:m.winner.name, perdedor:m.winner.name===m.a.name?m.b.name:m.a.name, placar:m.placar, fonte:'Elim. dupla', categoria:cat }); } }); }
+  // ✅ partidas avulsas de ranking — agora incluídas no perfil público
+  (d.partidas_avulsas||[]).filter(p=>p.vencedor&&p.perdedor).forEach(p=>{
+    out.push({ a:p.vencedor, b:p.perdedor, vencedor:p.vencedor, perdedor:p.perdedor,
+      placar:p.placar||'', fonte:'Ranking', categoria:p.categoria||'' });
+  });
   return out;
 }
+
+// /api/atletas — lista todos os atletas com histórico de partidas OU cadastrados no ranking
 app.get('/api/atletas', (req,res)=>{
-  const set=new Set(); coletarPartidas().forEach(p=>{ set.add(p.a); set.add(p.b); });
+  const set=new Set();
+  coletarPartidas().forEach(p=>{ set.add(p.a); set.add(p.b); });
+  // Incluir atletas do ranking mesmo sem partidas registradas
+  Object.values((db().ranking||{}).players||{}).forEach(p=>{ if(p.nome) set.add(p.nome); });
   res.json([...set].sort((a,b)=>a.localeCompare(b)));
 });
+
 app.get('/api/atleta/:nome', (req,res)=>{
   const nome=req.params.nome; const partidas=coletarPartidas().filter(p=>p.a===nome||p.b===nome);
   let v=0,der=0; const h2h={}; const hist=[];
@@ -2516,13 +2639,25 @@ app.get('/api/atleta/:nome', (req,res)=>{
     const op = p.a===nome ? p.b : p.a; const win = p.vencedor===nome;
     if(win) v++; else der++;
     h2h[op]=h2h[op]||{ adversario:op, v:0, d:0 }; win?h2h[op].v++:h2h[op].d++;
-    hist.push({ adversario:op, resultado:win?'V':'D', placar:p.placar, fonte:p.fonte, categoria:p.categoria });
+    hist.push({ adversario:op, resultado:win?'V':'D', placar:p.placar, fonte:p.fonte, categoria:p.categoria, data:p.data||null });
   });
-  const elo=(db().elo.players||{})[nome];
+  // ELO do sistema legado
+  const eloLegado=(db().elo?.players||{})[nome];
+  // Dados do novo sistema de ranking (busca por nome, qualquer categoria)
+  const rankingPlayers = Object.values((db().ranking||{}).players||{}).filter(p=>p.nome===nome);
+  const melhorPlayer = rankingPlayers.sort((a,b)=>(b.pontos||0)-(a.pontos||0))[0];
+  const pontos = melhorPlayer?.pontos || null;
+  const rankingElo = melhorPlayer?.elo || null;
+  // Posição no ranking geral (menor pos entre as categorias)
+  const rankLista = rankingList(db().ranking);
+  const posRanking = rankLista.find(p=>p.nome===nome)?.pos || null;
+  const movimento = rankLista.find(p=>p.nome===nome)?.movimento || 0;
   const titulos=Object.keys(db().campeoes||{}).filter(c=>db().campeoes[c].nome===nome).map(c=>({categoria:c,...db().campeoes[c]}));
   const j=v+der;
   res.json({ nome, jogos:j, vitorias:v, derrotas:der, aproveitamento:j?Math.round(100*v/j):0,
-    elo: elo?elo.elo:null, titulos, headToHead:Object.values(h2h).sort((a,b)=>(b.v+b.d)-(a.v+a.d)), historico:hist.reverse() });
+    elo: rankingElo || (eloLegado?eloLegado.elo:null),
+    pontos, posicao: posRanking, movimento,
+    titulos, headToHead:Object.values(h2h).sort((a,b)=>(b.v+b.d)-(a.v+a.d)), historico:hist.reverse() });
 });
 
 // =================== DASHBOARD DO ORGANIZADOR (cap. 3.3) ===================
@@ -2600,7 +2735,12 @@ app.get('/api/admin/dashboard', auth, requireStaff, (req,res)=>{
 
   res.json({
     indicadores:{
-      atletas:(d.usuarios||[]).filter(u=>u.role==='atleta').length,
+      // Conta atletas cadastrados como usuários + players do ranking (sem duplicar por nome)
+      atletas:(()=>{
+        const atletasUsuarios = new Set((d.usuarios||[]).filter(u=>u.role==='atleta').map(u=>u.nome||u.email));
+        Object.values((d.ranking||{}).players||{}).forEach(p=>{ if(p.nome) atletasUsuarios.add(p.nome); });
+        return atletasUsuarios.size;
+      })(),
       socios:(d.socios||[]).length, torneios:(d.torneios||[]).length,
       chaves:Object.keys(d.chaves||{}).length, inscricoes:(d.inscricoes||[]).length,
       reservasHoje, comandasAbertas:(d.comandas||[]).filter(c=>c.status==='aberta').length,
@@ -3151,6 +3291,23 @@ app.patch('/api/admin/reservas/:id', auth, requireStaff, (req,res)=>{
 
 // Garante estrutura no db
 function ensureLigas() { const d = db(); if (!d.ligas) d.ligas = {}; return d; }
+
+// ── GET /api/admin/ligas — listagem completa para o painel admin ──────────
+// Retorna mais dados que o endpoint público: emails dos inscritos, config completa
+app.get('/api/admin/ligas', auth, requireStaff, (req, res) => {
+  const d = ensureLigas();
+  const lista = Object.values(d.ligas).map(l => ({
+    id: l.id, nome: l.nome, temporada: l.temporada, categoria: l.categoria,
+    formato: l.formato, status: l.status, rodadaAtual: l.rodadaAtual || 0,
+    totalRodadas: l.rodadas?.length || 0, descricao: l.descricao || '',
+    config: l.config || {},
+    criadoEm: l.criadoEm || null,
+    inscricoes: (l.inscricoes || []).length,
+    inscritosAtivos: (l.inscricoes || []).filter(i => i.status === 'ativo').length,
+    tabela: calcularTabela(l),
+  }));
+  res.json(lista.sort((a, b) => b.id - a.id));
+});
 
 // ── Listar ligas públicas ─────────────────────────────────────────────────
 app.get('/api/ligas', (req, res) => {
