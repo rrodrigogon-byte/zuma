@@ -1,3 +1,23 @@
+# Deploy do SetPoint no GCP Cloud Run (trigger no push à main).
+#
+# PRÉ-REQUISITOS (uma vez, no projeto GCP):
+#   1) Bucket para o banco JSON durável (o disco do Cloud Run é efêmero):
+#        gsutil mb -l us-central1 gs://agro-open-db
+#   2) Segredo do JWT no Secret Manager (NÃO versionar segredo no repo):
+#        printf '%s' "$(openssl rand -hex 32)" | gcloud secrets create setpoint-jwt-secret --data-file=-
+#   3) Permitir que a service account de runtime do Cloud Run leia o segredo e
+#      escreva no bucket (substitua PROJECT_NUMBER):
+#        gcloud secrets add-iam-policy-binding setpoint-jwt-secret \
+#          --member=serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com \
+#          --role=roles/secretmanager.secretAccessor
+#        gsutil iam ch serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com:objectAdmin gs://agro-open-db
+#
+# Observação: max-instances=1 é OBRIGATÓRIO — o banco JSON tem escrita única.
+# A chave Pix (PIX_CHAVE) é o CNPJ de recebimento do clube, dado público impresso
+# em todo BR Code — fica como env var; só o JWT_SECRET vai para o Secret Manager.
+substitutions:
+  _GCS_BUCKET: 'agro-open-db'
+
 steps:
   # Build da imagem Docker
   - name: 'gcr.io/cloud-builders/docker'
@@ -16,7 +36,7 @@ steps:
     args:
       - 'run'
       - 'deploy'
-      - 'agro-open'
+      - 'setpoint'
       - '--image=gcr.io/$PROJECT_ID/agro-open:$COMMIT_SHA'
       - '--region=us-central1'
       - '--platform=managed'
@@ -25,8 +45,10 @@ steps:
       - '--memory=512Mi'
       - '--cpu=1'
       - '--min-instances=0'
-      - '--max-instances=10'
-      - '--set-env-vars=NODE_ENV=production,PORT=3000,DB_PATH=/data/db.json,PIX_CHAVE=43084070000188,PIX_NOME=AGRO OPEN TTC,PIX_CIDADE=TANGARA DA SERRA'
+      - '--max-instances=1'
+      # PORT é reservado pelo Cloud Run (o flag --port já o define) — não inclua aqui.
+      - '--set-env-vars=NODE_ENV=production,DB_PATH=/tmp/db.json,GCS_BUCKET=${_GCS_BUCKET},PIX_CHAVE=43084070000188,PIX_NOME=AGROOPENTCC,PIX_CIDADE=TANGARADASERRA'
+      - '--set-secrets=JWT_SECRET=setpoint-jwt-secret:latest'
 
 images:
   - 'gcr.io/$PROJECT_ID/agro-open:$COMMIT_SHA'

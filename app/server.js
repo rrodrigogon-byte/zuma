@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { db, save, nextId } from './db.js';
+import { db, save, nextId, hydrate, flush } from './db.js';
 import { sortear } from './bracket.js';
 import { applyChaveToRanking, rankingList, applyPartidaToRanking, temporadasList, resetTemporada } from './ranking.js';
 import { ranking as tennisRanking, noticias as tennisNews } from './tennis.js';
@@ -45,15 +45,21 @@ app.get('/api/events', (req, res) => {
   req.on('close', () => sseClients.delete(res));
 });
 
-// Headers de segurança (sem dependências extras — convenção do projeto). CORS é
-// same-origin por padrão (API e SPA no mesmo host); libera só métodos esperados.
+// CORS: API e SPA são servidas no mesmo host (same-origin não precisa de CORS).
+// Só liberamos origens explicitamente listadas em CORS_ORIGINS — nunca refletimos
+// qualquer Origin de volta com credenciais (isso anularia a intenção same-origin).
+const ALLOWED_ORIGINS = new Set(
+  (process.env.CORS_ORIGINS || '').split(',').map(s=>s.trim()).filter(Boolean)
+);
+
+// Headers de segurança (sem dependências extras — convenção do projeto).
 app.use((req,res,next)=>{
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('X-XSS-Protection', '0');
   const origin = req.headers.origin;
-  if(origin){
+  if(origin && ALLOWED_ORIGINS.has(origin)){
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -334,13 +340,10 @@ app.post('/api/inscricoes', (req,res)=>{
     message:`Inscrição recebida! Efetue o pagamento de ${Number(total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} em até 30 minutos para confirmar sua vaga.` });
 });
 
-// Ingressos: alias para compatibilidade com frontend
+// Ingressos: alias para compatibilidade com frontend → reescreve para /api/ingresso-tipos
+// (handler real em ~/api/ingresso-tipos). A 2ª definição idêntica desta rota era código
+// morto (nunca alcançada após o next('route')) e foi removida.
 app.get('/api/ingressos/tipos', (req,res,next)=>{ req.url='/api/ingresso-tipos'; next('route'); });
-app.get('/api/ingressos/tipos', (req,res)=> res.json(
-  INGRESSO_TIPOS.map(t=>{ const l=loteAtivo(t); return { id:t.id, nome:t.nome, setor:t.setor,
-    preco: l?l.preco:null, lote:l?l.lote:null, disponivel:l?l.disponivel:0, esgotado:!l,
-    lotes: t.lotes.map((lo,i)=>({ ...lo, ativo: l && l.lote===lo.lote })) }; })
-));
 
 // Esqueci senha (sem e-mail implementado — retorna OK)
 app.post('/api/auth/esqueci-senha', publicLimit(10), (req,res)=>{
@@ -448,7 +451,7 @@ app.patch('/api/admin/usuarios/:id', auth, requireRole('admin','organizador'), (
 });
 app.post('/api/admin/usuarios/:id/reset-senha', auth, requireRole('admin','organizador'), (req,res)=>{
   const u=db().usuarios.find(x=>x.id==req.params.id); if(!u) return res.status(404).json({error:'não encontrado'});
-  const nova=Math.random().toString(36).slice(2,10); // 8 chars alfanuméricos
+  const nova=crypto.randomBytes(6).toString('base64url'); // 8 chars, RNG criptográfico
   u.senhaHash=bcrypt.hashSync(nova,10); save();
   auditoria(req.user,'RESET_SENHA',{usuarioId:u.id,email:u.email});
   res.json({ ok:true, senha:nova, aviso:'Compartilhe esta senha temporária com o usuário — ela não será exibida novamente.' });
@@ -1285,20 +1288,20 @@ function addItens(c, itens){
   return erros;
 }
 
-app.get('/api/comanda/:id', (req,res)=>{
+app.get('/api/comanda/:id', auth, requireStaff, (req,res)=>{
   const c=db().comandas.find(x=>x.id==req.params.id);
   if(!c) return res.status(404).json({error:'comanda não encontrada'});
   res.json({ ...c, total: comandaTotal(c) });
 });
 
 // Atendente abre mesa física e/ou adiciona itens
-app.post('/api/comanda/abrir', auth, (req,res)=>{
+app.post('/api/comanda/abrir', auth, requireStaff, (req,res)=>{
   const { mesaNum, nome } = req.body||{};
   let c = openComandaMesa(parseInt(mesaNum));
   if(!c) c = novaComanda({tipo:'fisica', mesaNum:parseInt(mesaNum), nome});
   save(); res.json({ ...c, total:comandaTotal(c) });
 });
-app.post('/api/comanda/:id/item', auth, (req,res)=>{
+app.post('/api/comanda/:id/item', auth, requireStaff, (req,res)=>{
   const c=db().comandas.find(x=>x.id==req.params.id && x.status==='aberta');
   if(!c) return res.status(404).json({error:'comanda não encontrada/aberta'});
   const errs=addItens(c, req.body.itens || [req.body]); save(); sseBroadcast('comanda',{id:c.id,status:c.status});
@@ -1359,7 +1362,7 @@ app.post('/api/admin/kds/status', auth, (req,res)=>{
 // ── COMANDA AVANÇADA ─────────────────────────────────────────────────────────
 
 // PATCH item: editar qtd e/ou obs — repõe estoque se qtd diminuir
-app.patch('/api/comanda/:id/item/:idx', auth, (req,res)=>{
+app.patch('/api/comanda/:id/item/:idx', auth, requireStaff, (req,res)=>{
   const c=db().comandas.find(x=>x.id==req.params.id && x.status==='aberta');
   if(!c) return res.status(404).json({error:'comanda não encontrada/aberta'});
   const idx=parseInt(req.params.idx);
@@ -1381,7 +1384,7 @@ app.patch('/api/comanda/:id/item/:idx', auth, (req,res)=>{
 });
 
 // DELETE item: remover/cancelar item — repõe estoque
-app.delete('/api/comanda/:id/item/:idx', auth, (req,res)=>{
+app.delete('/api/comanda/:id/item/:idx', auth, requireStaff, (req,res)=>{
   const c=db().comandas.find(x=>x.id==req.params.id && x.status==='aberta');
   if(!c) return res.status(404).json({error:'comanda não encontrada/aberta'});
   const idx=parseInt(req.params.idx);
@@ -1396,7 +1399,7 @@ app.delete('/api/comanda/:id/item/:idx', auth, (req,res)=>{
 });
 
 // POST transferir comanda para outra mesa
-app.post('/api/comanda/:id/transferir', auth, (req,res)=>{
+app.post('/api/comanda/:id/transferir', auth, requireStaff, (req,res)=>{
   const c=db().comandas.find(x=>x.id==req.params.id && x.status==='aberta');
   if(!c) return res.status(404).json({error:'comanda não encontrada/aberta'});
   const { mesaNum } = req.body||{};
@@ -1419,7 +1422,7 @@ app.post('/api/comanda/:id/transferir', auth, (req,res)=>{
 });
 
 // POST desconto/cortesia na comanda (valor ou %)
-app.post('/api/comanda/:id/desconto', auth, (req,res)=>{
+app.post('/api/comanda/:id/desconto', auth, requireStaff, (req,res)=>{
   const c=db().comandas.find(x=>x.id==req.params.id && x.status==='aberta');
   if(!c) return res.status(404).json({error:'comanda não encontrada/aberta'});
   const { tipo, valor, motivo } = req.body||{};
@@ -1495,7 +1498,7 @@ app.get('/api/admin/kds', auth, requireStaff, (req,res)=>{
 });
 
 // POST /api/comanda/:id/adicionar — alias para /api/comanda/:id/item (aceita {itens:[...]})
-app.post('/api/comanda/:id/adicionar', auth, (req,res)=>{
+app.post('/api/comanda/:id/adicionar', auth, requireStaff, (req,res)=>{
   const c=db().comandas.find(x=>x.id==req.params.id && x.status==='aberta');
   if(!c) return res.status(404).json({error:'comanda não encontrada/aberta'});
   const errs=addItens(c, req.body.itens || [req.body]); save(); sseBroadcast('comanda',{id:c.id,status:c.status});
@@ -1504,7 +1507,7 @@ app.post('/api/comanda/:id/adicionar', auth, (req,res)=>{
 });
 
 // POST /api/comanda/:id/cancelar-item — cancela pelo índice (body {idx})
-app.post('/api/comanda/:id/cancelar-item', auth, (req,res)=>{
+app.post('/api/comanda/:id/cancelar-item', auth, requireStaff, (req,res)=>{
   const c=db().comandas.find(x=>x.id==req.params.id && x.status==='aberta');
   if(!c) return res.status(404).json({error:'comanda não encontrada/aberta'});
   const idx=parseInt(req.body.idx);
@@ -1519,7 +1522,7 @@ app.post('/api/comanda/:id/cancelar-item', auth, (req,res)=>{
 });
 
 // POST /api/comanda/:id/conta — solicitar conta (alias sem /admin)
-app.post('/api/comanda/:id/conta', auth, (req,res)=>{
+app.post('/api/comanda/:id/conta', auth, requireStaff, (req,res)=>{
   const c=db().comandas.find(x=>x.id==req.params.id);
   if(!c) return res.status(404).json({error:'comanda não encontrada'});
   c.contaPedida=true; save(); sseBroadcast('comanda',{id:c.id,status:'conta_pedida'});
@@ -1527,7 +1530,7 @@ app.post('/api/comanda/:id/conta', auth, (req,res)=>{
 });
 
 // POST /api/comanda/:id/pagar — fechar + registrar pagamento (alias para /api/admin/comanda/:id/fechar)
-app.post('/api/comanda/:id/pagar', auth, (req,res)=>{
+app.post('/api/comanda/:id/pagar', auth, requireStaff, (req,res)=>{
   const c=db().comandas.find(x=>x.id==req.params.id);
   if(!c) return res.status(404).json({error:'comanda não encontrada'});
   const { meio='dinheiro', desconto=0, servico=false, totalFinal } = req.body||{};
@@ -3844,7 +3847,20 @@ app.use((err, req, res, next)=>{
 process.on('unhandledRejection', (e)=> console.error('unhandledRejection:', e?.message || e));
 process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.message || e));
 
-app.listen(PORT, ()=> console.log(`SetPoint React SPA em http://localhost:${PORT}`));
+// Boot: hidrata o DB do GCS (se configurado) ANTES de aceitar requisições, para
+// que nenhuma requisição seja servida sobre um estado vazio/efêmero. Os seeds acima
+// já rodaram (gravação local apenas); hydrate() sobrepõe com o estado durável do
+// bucket quando existe. Sem GCS_BUCKET, resolve imediatamente.
+;(async () => {
+  await hydrate();
+  app.listen(PORT, ()=> console.log(`SetPoint React SPA em http://localhost:${PORT}`));
+})();
+
+// Encerramento gracioso: garante o flush do último estado para o GCS antes de morrer
+// (Cloud Run envia SIGTERM no deploy/scale-down e concede ~10s de grace period).
+for(const sig of ['SIGTERM','SIGINT']){
+  process.on(sig, async ()=>{ try { await flush(); } catch {} process.exit(0); });
+}
 
 // Backup diário às 03h
 ;(function agendarBackupDiario() {

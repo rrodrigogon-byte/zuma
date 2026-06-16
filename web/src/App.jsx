@@ -147,18 +147,18 @@ export default function App() {
         <Route path="/meu-painel"  element={<Layout><MeuPainel /></Layout>} />
 
         {/* Público */}
-        <Route path="/"            element={<Layout><Home /></Layout>} />
+        <Route path="/"            element={<Layout marketing><Home /></Layout>} />
         <Route path="/inscricao"  element={<Layout><Inscricao /></Layout>} />
         <Route path="/ranking"    element={<Layout><Ranking /></Layout>} />
         <Route path="/loja"       element={<Layout><Loja /></Layout>} />
-        <Route path="/regulamento" element={<Layout><Regulamento /></Layout>} />
+        <Route path="/regulamento" element={<Layout marketing><Regulamento /></Layout>} />
         <Route path="/bracket"    element={<Layout><Bracket /></Layout>} />
         <Route path="/chaves"     element={<Layout><Bracket /></Layout>} />
         <Route path="/perfil"     element={<PerfilRoute />} />
         <Route path="/contato"    element={<Layout><Contato /></Layout>} />
         <Route path="/noticias"   element={<Layout><NoticiasPublic /></Layout>} />
         <Route path="/quadras"    element={<Layout><AgendaQuadras /></Layout>} />
-        <Route path="/clube"      element={<Layout><Clube /></Layout>} />
+        <Route path="/clube"      element={<Layout marketing><Clube /></Layout>} />
         <Route path="/liga"          element={<Layout><Liga /></Layout>} />
         <Route path="/liga/:id"      element={<Layout><Liga /></Layout>} />
         <Route path="/atleta/:nome"  element={<Layout><PerfilAtleta /></Layout>} />

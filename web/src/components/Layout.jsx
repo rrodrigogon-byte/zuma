@@ -53,7 +53,7 @@ function TopBar() {
   )
 }
 
-export default function Layout({ children, noSidebar = false }) {
+export default function Layout({ children, noSidebar = false, marketing = false }) {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const { user } = useAuth()
 
@@ -63,7 +63,10 @@ export default function Layout({ children, noSidebar = false }) {
     return () => window.removeEventListener('resize', handler)
   }, [])
 
-  if (noSidebar) return <>{children}</>
+  // Páginas públicas "premium" (Home/Clube/Regulamento) têm header/hero próprios.
+  // Para visitante anônimo, renderiza full-bleed (sem a barra admin de 220px, que
+  // espremia o layout). Usuário logado mantém a Sidebar para voltar ao painel.
+  if (noSidebar || (marketing && !user)) return <>{children}</>
 
   const hasTopBar = !!user
   const topBarH = hasTopBar ? 50 : 0
