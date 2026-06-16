@@ -46,7 +46,8 @@ steps:
       - '--cpu=1'
       - '--min-instances=0'
       - '--max-instances=1'
-      - '--set-env-vars=NODE_ENV=production,PORT=3000,DB_PATH=/data/db.json,GCS_BUCKET=${_GCS_BUCKET},PIX_CHAVE=43084070000188,PIX_NOME=AGRO OPEN TTC,PIX_CIDADE=TANGARA DA SERRA'
+      # PORT é reservado pelo Cloud Run (o flag --port já o define) — não inclua aqui.
+      - '--set-env-vars=NODE_ENV=production,DB_PATH=/tmp/db.json,GCS_BUCKET=${_GCS_BUCKET},PIX_CHAVE=43084070000188,PIX_NOME=AGROOPENTCC,PIX_CIDADE=TANGARADASERRA'
       - '--set-secrets=JWT_SECRET=setpoint-jwt-secret:latest'
 
 images:
