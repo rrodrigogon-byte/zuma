@@ -1,5 +1,17 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { api } from '../../lib/api'
+
+const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+// "2026-09-07".."2026-09-13" → "07 a 13 de Setembro de 2026" (sem Date p/ evitar fuso)
+function periodoBR(ini, fim) {
+  if (!ini || !fim) return ''
+  const [ay, am, ad] = ini.split('-')
+  const [by, bm, bd] = fim.split('-')
+  if (!ad || !bd) return ''
+  const mes = MESES[(+am || 1) - 1]
+  return `${ad} a ${bd} de ${mes} de ${ay}` + (am !== bm ? '' : '')
+}
 
 const SECOES = [
   { id: 'organizacao', num: '1', titulo: 'Organização' },
@@ -68,6 +80,17 @@ function SubTitle({ children }) {
 export default function Regulamento() {
   const navigate = useNavigate()
   const [active, setActive] = useState('organizacao')
+  const [info, setInfo] = useState(null)
+
+  // Datas/evento/local vêm do backend (/api/info) para não divergir do torneio
+  // configurado. Os textos detalhados das regras seguem editoriais (estáticos).
+  useEffect(() => {
+    api.get('/api/info').then(setInfo).catch(() => {})
+  }, [])
+
+  const periodo = periodoBR(info?.dataInicio, info?.dataFim)
+  const evento = info?.nomeEvento || info?.evento || '4ª Agro Open de Tênis'
+  const local = info?.local || 'Tangará Tênis Clube'
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -110,14 +133,14 @@ export default function Regulamento() {
             </h1>
           </div>
           <p style={{ color: '#a0c8a0', margin: 0, fontSize: '1rem' }}>
-            4ª Agro Open de Tênis · 07 a 13 de Setembro de 2026
+            {evento}{periodo ? ` · ${periodo}` : ''}
           </p>
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16,
             background: 'rgba(201,166,86,0.15)', border: '1px solid rgba(201,166,86,0.4)',
             borderRadius: 10, padding: '8px 18px', fontSize: '0.82rem', color: '#C9A656', fontWeight: 600,
           }}>
-            🏆 R$ 5.000 em prêmios · Tangará Tênis Clube · Tangará da Serra – MT
+            🏆 R$ 5.000 em prêmios · {local} · Tangará da Serra – MT
           </div>
         </div>
         <svg style={{ position: 'absolute', bottom: 0, left: 0, width: '100%' }} viewBox="0 0 1440 40" preserveAspectRatio="none">
@@ -132,10 +155,10 @@ export default function Regulamento() {
           width: 220, flexShrink: 0, position: 'sticky', top: 24,
           background: '#fff', borderRadius: 18, padding: '20px 16px',
           boxShadow: '0 2px 16px rgba(0,0,0,0.07)',
-          display: 'none',
-          // visível em desktop via style abaixo
+          // visibilidade controlada por .reg-sidebar (oculto no mobile, visível ≥900px)
         }}
           className="reg-sidebar"
+          aria-label="Índice do regulamento"
         >
           <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#7a9a7a', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 14 }}>
             Conteúdo
@@ -144,6 +167,8 @@ export default function Regulamento() {
             <button
               key={s.id}
               onClick={() => scrollTo(s.id)}
+              aria-current={active === s.id ? 'true' : undefined}
+              aria-label={`Ir para a seção ${s.num} — ${s.titulo}`}
               style={{
                 display: 'flex', alignItems: 'center', gap: 10, width: '100%',
                 background: active === s.id ? 'rgba(95,179,53,0.1)' : 'transparent',

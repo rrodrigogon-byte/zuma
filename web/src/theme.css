@@ -186,3 +186,7 @@ tr:hover td { background: rgba(255,255,255,.02); }
   from { background-position: 200% 0; }
   to   { background-position: -200% 0; }
 }
+
+/* Índice lateral do /regulamento: oculto no mobile, fixo no desktop (≥900px). */
+.reg-sidebar { display: none; }
+@media (min-width: 900px) { .reg-sidebar { display: block; } }
