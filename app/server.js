@@ -20,6 +20,7 @@ import fs from 'fs';
 import QRCode from 'qrcode';
 import { wpp } from './whatsapp.js';
 import { mail } from './email.js';
+import { emitir as nfceEmitir, cancelar as nfceCancelar, nfceConfigurado } from './nfce.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -1552,8 +1553,19 @@ app.post('/api/comanda/:id/pagar', auth, requireStaff, (req,res)=>{
   c.totalPago=total;
   if(desconto>0) { c.desconto=descVal; c.descontoMotivo=`${desconto}%`; }
   audit(req, 'PAGAR_COMANDA', {comandaId:c.id,total,meio,nsu:c.tef?.nsu});
+  // NFC-e automática do bar (quando ativada em Config → Fiscal). Não bloqueia o
+  // pagamento: a venda já está paga; a nota emite em background e atualiza o status.
+  let notaFiscalId = null;
+  const fcfg = { ...CONFIG_DEFAULT.fiscal, ...(db().config?.fiscal||{}) };
+  if(fcfg.nfceAtiva && total > 0){
+    try {
+      const nota = montarNotaComanda(c, c.pagamentos, total, req.body.cpf, fcfg);
+      notaFiscalId = nota.id;
+      processarNfce(nota.id, fcfg).catch(e=>console.error('NFC-e:', e.message));
+    } catch(e){ console.error('NFC-e (montagem):', e.message); }
+  }
   save();
-  res.json({ ok:true, total, tef:c.tef||null });
+  res.json({ ok:true, total, tef:c.tef||null, notaFiscalId });
 });
 
 // POST /api/admin/mesas/abrir — abrir mesa física (admin)
@@ -1579,6 +1591,7 @@ app.post('/api/admin/cardapio', auth, requireStaff, (req,res)=>{
   const novo = {id,nome,cat,preco:+preco,setor:setor||'bar',cozinha:!!cozinha};
   if(emoji) novo.emoji=emoji;
   if(ordem!=null) novo.ordem=+ordem;
+  if(req.body.fiscal && typeof req.body.fiscal==='object') novo.fiscal=req.body.fiscal;
   db().cardapio.push(novo);
   save(); res.json({ok:true,id});
 });
@@ -1590,6 +1603,7 @@ app.patch('/api/admin/cardapio/:id', auth, requireStaff, (req,res)=>{
   if(nome) p.nome=nome; if(cat) p.cat=cat; if(preco!=null) p.preco=+preco;
   if(setor) p.setor=setor; if(cozinha!=null) p.cozinha=!!cozinha; if(indisponivel!=null) p.indisponivel=!!indisponivel;
   if(emoji!=null) p.emoji=emoji; if(ordem!=null) p.ordem=+ordem;
+  if(req.body.fiscal && typeof req.body.fiscal==='object') p.fiscal={ ...(p.fiscal||{}), ...req.body.fiscal };
   save(); res.json({ok:true});
 });
 app.delete('/api/admin/cardapio/:id', auth, requireStaff, (req,res)=>{
@@ -1633,7 +1647,13 @@ const CONFIG_DEFAULT = {
   tef: { ativo:false, adquirente:'', terminal:'', ambiente:'homologacao',
     agenteUrl:'', maxParcelas:12, parcelaSemJuros:1, valorMinParcela:20,
     imprimirComprovante:true },
-  fiscal: { cnpj:'', ie:'', ambiente:'homologacao' }
+  // Fiscal / NFC-e (modelo 65). nfceAtiva liga a emissão automática no fechamento do
+  // bar. Sem provedor configurado (NFCE_PROVEDOR/NFCE_TOKEN) a emissão é SIMULADA.
+  fiscal: { cnpj:'', ie:'', razaoSocial:'', regime:'simples', ambiente:'homologacao',
+    cscId:'', csc:'', serie:1, proximoNumero:1, nfceAtiva:false,
+    enviarEmail:true, enviarWhatsapp:false,
+    // padrão fiscal por categoria do cardápio (acelera o cadastro por item)
+    padraoCategoria: {} }
 };
 app.get('/api/admin/config', auth, (req,res)=>{
   const d = db();
@@ -2278,6 +2298,98 @@ app.post('/api/admin/tef/estorno/:id', auth, requireStaff, (req,res)=>{
   auditoria(req.user,'ESTORNO_TEF',{ nsu:t.nsu, valor:t.valor });
   save();
   res.json({ ok:true, estornado:t.id });
+});
+
+// =================== NFC-e — NOTA FISCAL DO CONSUMIDOR (modelo 65) ============
+// Emissão automática da nota dos produtos do bar ao fechar a comanda paga.
+// Provider-agnóstico (app/nfce.js): real quando há provedor configurado, senão SIMULADO.
+
+// Monta o registro da nota a partir da comanda (numeração própria + dados fiscais
+// por item, com padrão por categoria). Incrementa o próximo número da série.
+function montarNotaComanda(c, meios, total, cpf, fcfg){
+  const d = db();
+  const serie  = Number(fcfg.serie) || 1;
+  const numero = Number(fcfg.proximoNumero) || 1;
+  d.config = d.config || {}; d.config.fiscal = { ...fcfg, proximoNumero: numero + 1 };
+  const cardapio = getCardapio();
+  const itens = (c.itens||[]).map(it=>{
+    const prod = cardapio.find(p=>p.id===it.produtoId);
+    const padrao = (fcfg.padraoCategoria && (fcfg.padraoCategoria[prod?.cat] || fcfg.padraoCategoria[it.setor])) || {};
+    return { produtoId: it.produtoId, nome: it.nome, qtd: it.qtd, preco: it.preco,
+      fiscal: { ...padrao, ...(prod?.fiscal||{}) } };
+  });
+  const nota = { id: nextId(), tipo:'nfce', vendaId: c.id, origem:'comanda',
+    ambiente: fcfg.ambiente || 'homologacao', serie, numero, status:'processando',
+    cpfConsumidor: cpf || '', valorTotal: total, pagamentos: meios || [],
+    chaveAcesso:'', protocolo:'', danfeUrl:'', xmlUrl:'', qrConteudo:'', motivoRejeicao:'',
+    simulado: !nfceConfigurado(), itens, criadaEm: new Date().toISOString(), autorizadaEm:null, canceladaEm:null };
+  d.notasFiscais = d.notasFiscais || [];
+  d.notasFiscais.push(nota);
+  c.notaFiscalId = nota.id;
+  return nota;
+}
+
+// Emite a nota no provedor/SEFAZ (ou simulado) e atualiza o registro.
+async function processarNfce(notaId, fcfg){
+  const nota = (db().notasFiscais||[]).find(n=>n.id===notaId);
+  if(!nota) return;
+  const emitente = { cnpj: fcfg.cnpj, nome: fcfg.razaoSocial || 'Tangará Tênis Clube', ie: fcfg.ie, regime: fcfg.regime };
+  const r = await nfceEmitir({ emitente, itens: nota.itens, pagamentos: nota.pagamentos,
+    cpf: nota.cpfConsumidor, valorTotal: nota.valorTotal, serie: nota.serie, numero: nota.numero,
+    ambiente: nota.ambiente, refId: nota.id });
+  Object.assign(nota, { status: r.status, chaveAcesso: r.chaveAcesso||'', protocolo: r.protocolo||'',
+    danfeUrl: r.danfeUrl||'', xmlUrl: r.xmlUrl||'', qrConteudo: r.qrConteudo||'', motivoRejeicao: r.motivoRejeicao||'',
+    autorizadaEm: r.status==='autorizada' ? new Date().toISOString() : nota.autorizadaEm });
+  save();
+  sseBroadcast('nfce', { id: nota.id, status: nota.status, vendaId: nota.vendaId });
+}
+
+// Lista as notas (conciliação) — filtros ?status=&de=&ate=
+app.get('/api/admin/notas', auth, requireStaff, (req,res)=>{
+  let list = (db().notasFiscais||[]).slice();
+  const { status, de, ate } = req.query;
+  if(status) list = list.filter(n=>n.status===status);
+  if(de) list = list.filter(n=>(n.criadaEm||'')>=de);
+  if(ate) list = list.filter(n=>(n.criadaEm||'')<=ate+'T23:59:59');
+  list.sort((a,b)=>(b.criadaEm||'').localeCompare(a.criadaEm||''));
+  res.json(list);
+});
+app.get('/api/admin/notas/:id', auth, requireStaff, (req,res)=>{
+  const n=(db().notasFiscais||[]).find(x=>x.id==req.params.id);
+  if(!n) return res.status(404).json({error:'nota não encontrada'});
+  res.json(n);
+});
+
+// Reemissão manual (ex.: após corrigir rejeição/contingência)
+app.post('/api/admin/comanda/:id/nfce', auth, requireStaff, async (req,res)=>{
+  const c=(db().comandas||[]).find(x=>x.id==req.params.id);
+  if(!c) return res.status(404).json({error:'comanda não encontrada'});
+  const fcfg = { ...CONFIG_DEFAULT.fiscal, ...(db().config?.fiscal||{}) };
+  const total = c.totalPago != null ? c.totalPago : Math.max(0, comandaTotal(c) - (c.desconto||0));
+  const nota = montarNotaComanda(c, c.pagamentos||[{meio:c.pagamento||'dinheiro',valor:total}], total, req.body?.cpf, fcfg);
+  save();
+  await processarNfce(nota.id, fcfg);
+  const atual=(db().notasFiscais||[]).find(n=>n.id===nota.id);
+  auditoria(req.user,'EMITIR_NFCE',{ comandaId:c.id, notaId:nota.id, status:atual?.status });
+  res.json({ ok:true, nota: atual });
+});
+
+// Cancelamento da NFC-e (dentro do prazo legal de 30 min)
+app.post('/api/admin/notas/:id/cancelar', auth, requireStaff, async (req,res)=>{
+  const d=db(); const n=(d.notasFiscais||[]).find(x=>x.id==req.params.id);
+  if(!n) return res.status(404).json({error:'nota não encontrada'});
+  if(n.status==='cancelada') return res.status(409).json({error:'nota já cancelada'});
+  if(n.status!=='autorizada' && n.status!=='contingencia') return res.status(409).json({error:'só é possível cancelar nota autorizada'});
+  const justificativa = (req.body?.justificativa||'Cancelamento solicitado pelo emitente').slice(0,255);
+  const r = await nfceCancelar({ refId:n.id, ambiente:n.ambiente }, justificativa);
+  if(r.status!=='cancelada') return res.status(502).json({error: r.motivoRejeicao || 'falha ao cancelar no provedor'});
+  n.status='cancelada'; n.canceladaEm=new Date().toISOString(); n.motivoCancelamento=justificativa;
+  d.nfceEventos = d.nfceEventos||[];
+  d.nfceEventos.push({ id:nextId(), notaId:n.id, tipo:'cancelamento', protocolo:r.protocolo||'', justificativa, ts:new Date().toISOString() });
+  auditoria(req.user,'CANCELAR_NFCE',{ notaId:n.id, justificativa });
+  save();
+  sseBroadcast('nfce', { id:n.id, status:'cancelada', vendaId:n.vendaId });
+  res.json({ ok:true, nota:n });
 });
 
 // =================== FINANCEIRO / DRE CONSOLIDADO (cap. 13) ===================

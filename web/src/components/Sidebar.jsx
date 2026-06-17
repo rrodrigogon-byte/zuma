@@ -89,6 +89,7 @@ const NAV_ADMIN_GROUPS = [
       { to: '/admin/cardapio', icon: '🍽️', label: 'Cardápio' },
       { to: '/admin/estoque',  icon: '📦', label: 'Estoque' },
       { to: '/admin/pagamentos',icon: '💳', label: 'Pagamentos' },
+      { to: '/admin/notas',    icon: '🧾', label: 'Notas Fiscais' },
       { to: '/admin/cupons',   icon: '🎟️', label: 'Cupons' },
     ],
   },

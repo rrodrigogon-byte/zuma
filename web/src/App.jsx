@@ -78,6 +78,7 @@ const Pontos          = lazy(() => import('./pages/admin/Pontos'))
 const AdminRanking    = lazy(() => import('./pages/admin/AdminRanking'))
 const AdminLigas      = lazy(() => import('./pages/admin/AdminLigas'))
 const Contatos        = lazy(() => import('./pages/admin/Contatos'))
+const NotasFiscais    = lazy(() => import('./pages/admin/NotasFiscais'))
 const AgendaQuadras   = lazy(() => import('./pages/public/AgendaQuadras'))
 const NoticiasPublic  = lazy(() => import('./pages/public/Noticias'))
 const MeuPainel       = lazy(() => import('./pages/atleta/MeuPainel'))
@@ -145,6 +146,7 @@ export default function App() {
           <Route path="/admin/ranking"        element={<Layout><AdminRanking /></Layout>} />
           <Route path="/admin/ligas"          element={<Layout><AdminLigas /></Layout>} />
           <Route path="/admin/contatos"       element={<Layout><Contatos /></Layout>} />
+          <Route path="/admin/notas"          element={<Layout><NotasFiscais /></Layout>} />
         </Route>
 
         {/* Portal do Atleta */}

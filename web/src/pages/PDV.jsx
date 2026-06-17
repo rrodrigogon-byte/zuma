@@ -393,6 +393,9 @@ export default function PDV() {
   const [tefModalidade, setTefModalidade] = useState('credito_avista')
   const [tefParcelas, setTefParcelas] = useState(2)
   const [tefProcessando, setTefProcessando] = useState(false)
+
+  // CPF na nota (NFC-e) — opcional, informado no fechamento
+  const [cpfNota, setCpfNota] = useState('')
   const [novaVirtual, setNovaVirtual] = useState({ nome: '', local: '' })
   const [novaMesaNome, setNovaMesaNome] = useState('')
   const [loading, setLoading] = useState(false)
@@ -683,6 +686,7 @@ export default function PDV() {
     setLoading(true)
     try {
       // Se há múltiplos meios registrados, envia todos; senão envia o único selecionado
+      const cpf = cpfNota.replace(/\D/g, '') || undefined
       const payload = multiPag.length > 0 && restanteMultiPag < 0.01
         ? {
             meios: multiPag,
@@ -690,6 +694,7 @@ export default function PDV() {
             desconto: descPct > 0 ? descPct : undefined,
             servico,
             totalFinal,
+            cpf,
           }
         : {
             meio: payMeio,
@@ -698,6 +703,7 @@ export default function PDV() {
             totalFinal,
             dividir: dividir > 1 ? dividir : undefined,
             tef: tefResult || undefined,
+            cpf,
           }
       await api.post(`/api/comanda/${comanda.id}/pagar`, payload)
       toast(tefResult
@@ -709,6 +715,7 @@ export default function PDV() {
       setDescPct(0)
       setValorRecebido('')
       setDividir(1)
+      setCpfNota('')
       setMultiPag([])
       setMultiPagValor('')
       await loadMesas()
@@ -1566,6 +1573,18 @@ export default function PDV() {
                 </div>
               </div>
             )}
+
+            {/* CPF na nota (NFC-e) — opcional */}
+            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, opacity: 0.65, whiteSpace: 'nowrap' }}>🧾 CPF na nota</span>
+              <input
+                value={cpfNota}
+                onChange={e => setCpfNota(e.target.value)}
+                placeholder="opcional"
+                inputMode="numeric"
+                style={{ ...S.input, marginBottom: 0, flex: 1, fontSize: 13 }}
+              />
+            </div>
 
             <button
               className="btn btn-primary"
