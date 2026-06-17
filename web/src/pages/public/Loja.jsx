@@ -293,6 +293,7 @@ function CheckoutModal({ itens, produtos, onClose, onSuccess }) {
   const [pixInfo, setPixInfo] = useState(null)
   const [concluido, setConcluido] = useState(false)
   const [copiado, setCopiado] = useState(false)
+  const [codigoPedido, setCodigoPedido] = useState('')
 
   const total = useMemo(() => itens.reduce((s, i) => {
     const p = produtos.find(x => x.id === i.produtoId)
@@ -314,15 +315,13 @@ function CheckoutModal({ itens, produtos, onClose, onSuccess }) {
     if (!validar()) return
     setSubmitting(true)
     try {
-      // Reservar cada item do carrinho sequencialmente
-      for (const item of itens) {
-        const p = produtos.find(x => x.id === item.produtoId)
-        if (!p) continue
-        await api.post(`/api/loja/${p.id}/reservar`, {
-          nome: form.nome, email: form.email, tel: form.tel,
-          qtd: item.qtd, tamanho: item.tamanho || undefined,
-        })
-      }
+      // Lança o carrinho inteiro como UM pedido agrupado, que cai na fila de
+      // atendimento do admin (preparar → liberar → entregar).
+      const resp = await api.post('/api/loja/pedido', {
+        cliente: { nome: form.nome, email: form.email, tel: form.tel },
+        itens: itens.map(it => ({ produtoId: it.produtoId, qtd: it.qtd, tamanho: it.tamanho || undefined })),
+      })
+      setCodigoPedido(resp.codigo || '')
       const pix = await api.get(`/api/pix-info?valor=${total}`).catch(() => null)
       setPixInfo(pix)
       setConcluido(true)
@@ -357,11 +356,18 @@ function CheckoutModal({ itens, produtos, onClose, onSuccess }) {
         <div style={{ padding: '8px 0' }}>
           <div style={{ textAlign: 'center', marginBottom: 20 }}>
             <div style={{ fontSize: '2.5rem', marginBottom: 8 }}>✅</div>
-            <h2 style={{ color: '#1B4D2E', fontWeight: 800, margin: '0 0 4px' }}>Pedido Confirmado!</h2>
+            <h2 style={{ color: '#1B4D2E', fontWeight: 800, margin: '0 0 4px' }}>Pedido Recebido!</h2>
             <p style={{ color: '#5a7a5a', margin: 0, fontSize: '0.9rem' }}>
-              {itens.length} item{itens.length > 1 ? 's' : ''} reservado{itens.length > 1 ? 's' : ''}
+              {itens.length} item{itens.length > 1 ? 's' : ''} · aguardando preparação
             </p>
           </div>
+          {codigoPedido && (
+            <div style={{ background: '#1B4D2E', borderRadius: 12, padding: '12px 14px', marginBottom: 14, textAlign: 'center', color: '#F4F6EF' }}>
+              <div style={{ fontSize: '0.72rem', color: '#7BC142', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Código do pedido</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#C9A656', letterSpacing: '0.06em' }}>{codigoPedido}</div>
+              <div style={{ fontSize: '0.74rem', color: '#a8c8a8', marginTop: 2 }}>Guarde este código para retirar seu pedido</div>
+            </div>
+          )}
           {/* Resumo dos itens */}
           <div style={{ background: '#f8faf4', borderRadius: 12, padding: '12px 14px', marginBottom: 16 }}>
             {itens.map((item, idx) => {

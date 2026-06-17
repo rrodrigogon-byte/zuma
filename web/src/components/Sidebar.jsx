@@ -54,6 +54,7 @@ const NAV_OP = [
   { to: '/pdv',      icon: '🛒', label: 'PDV',            badge: true },
   { to: '/garcom',   icon: '🍽️', label: 'Modo Garçom',   badge: false },
   { to: '/kds',      icon: '👨‍🍳', label: 'Cozinha / KDS', badge: true },
+  { to: '/loja-atendimento', icon: '🛍️', label: 'Atend. Loja', badge: false },
   { to: '/portaria', icon: '🎫', label: 'Portaria',        badge: false },
 ]
 
