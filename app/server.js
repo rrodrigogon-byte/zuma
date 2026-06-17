@@ -1533,20 +1533,27 @@ app.post('/api/comanda/:id/conta', auth, requireStaff, (req,res)=>{
 app.post('/api/comanda/:id/pagar', auth, requireStaff, (req,res)=>{
   const c=db().comandas.find(x=>x.id==req.params.id);
   if(!c) return res.status(404).json({error:'comanda não encontrada'});
-  const { meio='dinheiro', desconto=0, servico=false, totalFinal } = req.body||{};
+  const { meio='dinheiro', desconto=0, servico=false, totalFinal, tef } = req.body||{};
   const subtotal = comandaTotal(c);
   const descVal  = desconto > 0 ? subtotal * (desconto/100) : (c.desconto||0);
   const servicoVal = servico ? (subtotal-descVal)*0.1 : 0;
   const total = totalFinal != null ? Number(totalFinal) : Math.max(0, subtotal - descVal + servicoVal);
   c.status='fechada';
   c.pagamento=meio;
-  c.pagamentos=[{meio, valor:total}];
+  // Cartão via maquininha (TEF): registra o comprovante da captura (NSU/autorização/
+  // bandeira/parcelas) vindo do agente local e loga a transação para conciliação.
+  if(meio==='tef' && tef){
+    c.tef = registrarTef({ ...tef, valor: total, origem:'comanda', refId: c.id }, req);
+    c.pagamentos=[{ meio, valor:total, tef:c.tef }];
+  } else {
+    c.pagamentos=[{meio, valor:total}];
+  }
   c.fechadaEm=new Date().toISOString();
   c.totalPago=total;
   if(desconto>0) { c.desconto=descVal; c.descontoMotivo=`${desconto}%`; }
-  audit(req, 'PAGAR_COMANDA', {comandaId:c.id,total,meio});
+  audit(req, 'PAGAR_COMANDA', {comandaId:c.id,total,meio,nsu:c.tef?.nsu});
   save();
-  res.json({ ok:true, total });
+  res.json({ ok:true, total, tef:c.tef||null });
 });
 
 // POST /api/admin/mesas/abrir — abrir mesa física (admin)
@@ -1622,6 +1629,10 @@ const CONFIG_DEFAULT = {
   socioPlanos: null,
   assinPlanos: null,
   pagamentos: { meios:['pix','cartao','dinheiro','carteira'], taxaPct:5 },
+  // TEF/maquininha (presencial). Sem agenteUrl → o PDV opera em modo SIMULADO.
+  tef: { ativo:false, adquirente:'', terminal:'', ambiente:'homologacao',
+    agenteUrl:'', maxParcelas:12, parcelaSemJuros:1, valorMinParcela:20,
+    imprimirComprovante:true },
   fiscal: { cnpj:'', ie:'', ambiente:'homologacao' }
 };
 app.get('/api/admin/config', auth, (req,res)=>{
@@ -1647,6 +1658,7 @@ app.get('/api/admin/config', auth, (req,res)=>{
     },
     restaurante: { ...(CONFIG_DEFAULT.restaurante), ...(d.config?.restaurante||{}) },
     pagamentos:  { ...(CONFIG_DEFAULT.pagamentos),  ...(d.config?.pagamentos||{}) },
+    tef:         { ...(CONFIG_DEFAULT.tef),         ...(d.config?.tef||{}) },
     fiscal:      { ...(CONFIG_DEFAULT.fiscal),      ...(d.config?.fiscal||{}) },
     pix: {
       chave:  process.env.PIX_CHAVE ? '***' + process.env.PIX_CHAVE.slice(-4) : '',
@@ -1658,7 +1670,7 @@ app.get('/api/admin/config', auth, (req,res)=>{
 app.patch('/api/admin/config', auth, requireRole('admin'), (req,res)=>{
   const d = db();
   if(!d.config) d.config = {};
-  const allowed = ['evento','bar','restaurante','quadras','horarios','ingressoTipos','categorias','socioPlanos','assinPlanos','pagamentos','fiscal'];
+  const allowed = ['evento','bar','restaurante','quadras','horarios','ingressoTipos','categorias','socioPlanos','assinPlanos','pagamentos','tef','fiscal'];
   allowed.forEach(k => {
     if (req.body[k] != null) {
       d.config[k] = { ...(d.config[k] || {}), ...req.body[k] };
@@ -2215,6 +2227,57 @@ app.patch('/api/admin/loja/pedidos/:id', auth, requireStaff, (req,res)=>{
     if(cli.tel) wpp.lojaPedidoPronto(cli.tel, cli.nome||'', p.codigo).catch(()=>{});
   }
   res.json(p);
+});
+
+// =================== PAGAMENTO PRESENCIAL — TEF (maquininha) ==================
+// O pinpad é físico/local: a captura ocorre no NAVEGADOR via agente TEF local
+// (web/src/lib/tef.js). A nuvem apenas REGISTRA o resultado (NSU/autorização) e
+// loga para conciliação — mesmo padrão "simulado quando sem credencial" dos demais.
+function registrarTef(t, req){
+  const d=db(); d.tefTransacoes=d.tefTransacoes||[];
+  const reg = {
+    nsu: t.nsu||'', autorizacao: t.autorizacao||'', adquirente: t.adquirente||'',
+    bandeira: t.bandeira||'', parcelas: Number(t.parcelas)||1,
+    modalidade: t.modalidade||'credito_avista', // credito_avista|credito_parcelado|debito
+    valor: Number(t.valor)||0, simulado: !!t.simulado,
+    comprovanteCliente: t.comprovanteCliente||'', comprovanteEstabelecimento: t.comprovanteEstabelecimento||'',
+  };
+  d.tefTransacoes.push({ id:nextId(), tipo:'venda', origem:t.origem||'', refId:t.refId??null,
+    ...reg, status:'aprovado', estornadoEm:null, ts:new Date().toISOString(),
+    operador: req?.user ? `${req.user.nome} (${req.user.role})` : '' });
+  return reg;
+}
+
+// Conciliação: lista as transações TEF (filtros ?de=&ate=&status=)
+app.get('/api/admin/tef/transacoes', auth, requireStaff, (req,res)=>{
+  let list=(db().tefTransacoes||[]).slice();
+  const { de, ate, status } = req.query;
+  if(status) list=list.filter(t=>t.status===status);
+  if(de) list=list.filter(t=>(t.ts||'')>=de);
+  if(ate) list=list.filter(t=>(t.ts||'')<=ate+'T23:59:59');
+  list.sort((a,b)=>(b.ts||'').localeCompare(a.ts||''));
+  res.json(list);
+});
+
+// Estorno/cancelamento TEF (mesmo dia). O estorno físico ocorre no pinpad (front);
+// aqui marcamos a transação como estornada e reabrimos a venda associada.
+app.post('/api/admin/tef/estorno/:id', auth, requireStaff, (req,res)=>{
+  const d=db(); const t=(d.tefTransacoes||[]).find(x=>x.id==req.params.id && x.tipo==='venda');
+  if(!t) return res.status(404).json({error:'transação não encontrada'});
+  if(t.status==='estornado') return res.status(409).json({error:'transação já estornada'});
+  t.status='estornado'; t.estornadoEm=new Date().toISOString();
+  d.tefTransacoes.push({ id:nextId(), tipo:'estorno', origem:t.origem, refId:t.refId,
+    nsu:t.nsu, autorizacao:t.autorizacao, adquirente:t.adquirente, bandeira:t.bandeira,
+    parcelas:t.parcelas, modalidade:t.modalidade, valor:-Math.abs(t.valor), simulado:t.simulado,
+    status:'aprovado', ts:new Date().toISOString(), operador: req.user?`${req.user.nome} (${req.user.role})`:'' });
+  // reabre a comanda associada, se aplicável
+  if(t.origem==='comanda' && t.refId!=null){
+    const c=(d.comandas||[]).find(x=>x.id==t.refId);
+    if(c && c.status==='fechada'){ c.status='aberta'; c.fechadaEm=null; c.pagamento=null; c.pagamentos=[]; c.totalPago=null; c.tef=null; c.contaPedida=false; }
+  }
+  auditoria(req.user,'ESTORNO_TEF',{ nsu:t.nsu, valor:t.valor });
+  save();
+  res.json({ ok:true, estornado:t.id });
 });
 
 // =================== FINANCEIRO / DRE CONSOLIDADO (cap. 13) ===================
