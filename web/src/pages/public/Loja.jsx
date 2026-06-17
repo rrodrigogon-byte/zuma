@@ -249,16 +249,16 @@ function CarrinhoModal({ itens, produtos, onClose, onRemove, onQtdChange, onChec
               </div>
               {/* Controles de quantidade */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                <button onClick={() => onQtdChange(idx, item.qtd - 1)}
+                <button onClick={() => onQtdChange(idx, item.qtd - 1)} aria-label="Diminuir quantidade" title="Diminuir"
                   style={{ width: 28, height: 28, borderRadius: '50%', border: '1.5px solid #d0dcc8', background: '#fff', cursor: 'pointer', fontWeight: 800, fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#333' }}>
                   −
                 </button>
-                <span style={{ fontWeight: 700, minWidth: 20, textAlign: 'center', color: '#1B4D2E' }}>{item.qtd}</span>
-                <button onClick={() => onQtdChange(idx, item.qtd + 1)}
+                <span style={{ fontWeight: 700, minWidth: 20, textAlign: 'center', color: '#1B4D2E' }} aria-label={`Quantidade: ${item.qtd}`}>{item.qtd}</span>
+                <button onClick={() => onQtdChange(idx, item.qtd + 1)} aria-label="Aumentar quantidade" title="Aumentar"
                   style={{ width: 28, height: 28, borderRadius: '50%', border: '1.5px solid #d0dcc8', background: '#fff', cursor: 'pointer', fontWeight: 800, fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#333' }}>
                   +
                 </button>
-                <button onClick={() => onRemove(idx)}
+                <button onClick={() => onRemove(idx)} aria-label="Remover item do carrinho" title="Remover"
                   style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: '#fee2e2', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e05555' }}>
                   ✕
                 </button>
