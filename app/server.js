@@ -2147,6 +2147,88 @@ app.post('/api/admin/loja/vender', auth, requireStaff, (req,res)=>{
   db().vendasLoja.push(v); save(); res.json({ ok:true, venda:v });
 });
 
+// =================== PEDIDOS DA LOJA — FILA DE ATENDIMENTO ====================
+// Fluxo: cliente lança 1 pedido (carrinho agrupado) → cai na fila do admin que
+// PREPARA o material e LIBERA (pronto) → ENTREGA. Espelha o padrão do KDS.
+const LOJA_STATUS = ['pendente','preparando','pronto','entregue','cancelado'];
+const LOJA_STATUS_LABEL = { pendente:'Aguardando preparo', preparando:'Em preparação', pronto:'Pronto para retirada', entregue:'Entregue', cancelado:'Cancelado' };
+function gerarCodigoPedido(){ return 'LJ-' + crypto.randomBytes(3).toString('hex').toUpperCase(); }
+function pedidoPublico(p){
+  return { codigo:p.codigo, status:p.status, statusLabel:LOJA_STATUS_LABEL[p.status]||p.status,
+    itens:p.itens, total:p.total, pagamento:p.pagamento, criadoEm:p.criadoEm, atualizadoEm:p.atualizadoEm };
+}
+
+// PÚBLICO: cliente lança o pedido (carrinho inteiro num único pedido agrupado)
+app.post('/api/loja/pedido', publicLimit(), (req,res)=>{
+  const { cliente, itens } = req.body||{};
+  const nome = (cliente?.nome||'').trim(), email = (cliente?.email||'').trim();
+  if(!nome || !email) return res.status(400).json({error:'nome e e-mail do cliente são obrigatórios'});
+  if(!Array.isArray(itens) || !itens.length) return res.status(400).json({error:'carrinho vazio'});
+  const d=db();
+  // valida estoque de tudo ANTES de baixar (transação all-or-nothing)
+  const linhas=[];
+  for(const it of itens){
+    const p=(d.loja||[]).find(x=>x.id==it.produtoId && x.ativo!==false);
+    if(!p) return res.status(400).json({error:'produto indisponível no carrinho'});
+    const q=Math.max(1, parseInt(it.qtd)||1);
+    if((p.estoque||0) < q) return res.status(409).json({error:`estoque insuficiente de ${p.nome} (disponível: ${p.estoque||0})`});
+    linhas.push({ p, q, tamanho:(it.tamanho||'') });
+  }
+  let total=0; const itensPedido=[];
+  for(const { p, q, tamanho } of linhas){
+    p.estoque -= q; total += p.preco*q;
+    itensPedido.push({ produtoId:p.id, cod:p.cod||'', nome:p.nome, qtd:q, tamanho, preco:p.preco, subtotal:p.preco*q });
+  }
+  const agora=new Date().toISOString();
+  const pedido={ id:nextId(), codigo:gerarCodigoPedido(), cliente:{ nome, email, tel:(cliente?.tel||'') },
+    itens:itensPedido, total, status:'pendente', pagamento:'pix-pendente',
+    criadoEm:agora, atualizadoEm:agora, historico:[{ status:'pendente', ts:agora }] };
+  if(!d.pedidosLoja) d.pedidosLoja=[];
+  d.pedidosLoja.push(pedido); save();
+  sseBroadcast('loja', { tipo:'novo', id:pedido.id, codigo:pedido.codigo, status:pedido.status });
+  res.json({ ok:true, codigo:pedido.codigo, id:pedido.id, total, status:pedido.status,
+    msg:'Pedido recebido! Acompanhe pelo código e retire no Tangará Tênis Clube após a confirmação.' });
+});
+
+// PÚBLICO: cliente acompanha o status pelo código
+app.get('/api/loja/pedido/:codigo', (req,res)=>{
+  const cod=String(req.params.codigo||'').toUpperCase();
+  const p=(db().pedidosLoja||[]).find(x=>x.codigo===cod);
+  if(!p) return res.status(404).json({error:'pedido não encontrado'});
+  res.json(pedidoPublico(p));
+});
+
+// ADMIN: fila de pedidos para atendimento (filtro opcional ?status=)
+app.get('/api/admin/loja/pedidos', auth, requireStaff, (req,res)=>{
+  let list=(db().pedidosLoja||[]).slice();
+  if(req.query.status) list=list.filter(p=>p.status===req.query.status);
+  list.sort((a,b)=> (b.criadoEm||'').localeCompare(a.criadoEm||''));
+  res.json(list);
+});
+
+// ADMIN: avança/altera o status do pedido (preparar, liberar, entregar, cancelar)
+app.patch('/api/admin/loja/pedidos/:id', auth, requireStaff, (req,res)=>{
+  const d=db(); const p=(d.pedidosLoja||[]).find(x=>x.id==req.params.id);
+  if(!p) return res.status(404).json({error:'pedido não encontrado'});
+  const novo=req.body.status;
+  if(!LOJA_STATUS.includes(novo)) return res.status(400).json({error:'status inválido'});
+  // cancelar repõe o estoque (uma única vez)
+  if(novo==='cancelado' && p.status!=='cancelado'){
+    for(const it of p.itens||[]){ const prod=(d.loja||[]).find(x=>x.id==it.produtoId); if(prod) prod.estoque=(prod.estoque||0)+it.qtd; }
+  }
+  // reverter um cancelamento volta a baixar o estoque
+  if(p.status==='cancelado' && novo!=='cancelado'){
+    for(const it of p.itens||[]){ const prod=(d.loja||[]).find(x=>x.id==it.produtoId); if(prod) prod.estoque=Math.max(0,(prod.estoque||0)-it.qtd); }
+  }
+  if(req.body.pagamento!==undefined) p.pagamento=req.body.pagamento;
+  if(novo!==p.status){ p.status=novo; p.historico=p.historico||[]; p.historico.push({ status:novo, ts:new Date().toISOString() }); }
+  p.atualizadoEm=new Date().toISOString();
+  auditoria(req.user,'PEDIDO_LOJA_STATUS',{ pedido:p.codigo, status:novo });
+  save();
+  sseBroadcast('loja', { tipo:'status', id:p.id, codigo:p.codigo, status:p.status });
+  res.json(p);
+});
+
 // =================== FINANCEIRO / DRE CONSOLIDADO (cap. 13) ===================
 app.get('/api/admin/financeiro', auth, requireStaff, (req,res)=>{
   const d=db();

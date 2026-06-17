@@ -322,6 +322,29 @@ const TABS = [
   { key: 'vendas', icon: '📊', label: 'Vendas' },
 ]
 
+// Emoji por categoria/nome do produto (case-insensitive, cobre plurais/variações).
+// Antes o mapa usava chaves exatas ('Cerveja') e a categoria real ('Cervejas') caía
+// no fallback genérico 🍽 — por isso cervejas apareciam como prato+garfo.
+function prodEmoji(p) {
+  const s = `${p?.cat || ''} ${p?.nome || ''}`.toLowerCase()
+  const has = (...ks) => ks.some(k => s.includes(k))
+  if (has('chopp')) return '🍺'
+  if (has('cerveja', 'lager', 'pilsen', 'ipa', 'long neck', 'lata 350')) return '🍺'
+  if (has('refri', 'coca', 'guaraná', 'guarana', 'soda', 'sprite', 'fanta', 'tônica', 'tonica')) return '🥤'
+  if (has('drink', 'caipirinha', 'gin', 'vodka', 'whisky', 'dose', 'coquetel')) return '🍸'
+  if (has('vinho', 'espumante', 'taça', 'taca')) return '🍷'
+  if (has('suco', 'limonada')) return '🧃'
+  if (has('água', 'agua', 'water')) return '💧'
+  if (has('café', 'cafe', 'expresso', 'capuccino', 'cappuccino')) return '☕'
+  if (has('lanche', 'burger', 'hambúrguer', 'hamburguer', 'sanduí', 'sandui', 'x-')) return '🍔'
+  if (has('batata', 'fritas', 'porção', 'porcao', 'petisco', 'isca', 'frango')) return '🍟'
+  if (has('espetinho', 'churrasco', 'espeto')) return '🍢'
+  if (has('pizza')) return '🍕'
+  if (has('sobremesa', 'doce', 'bolo', 'pudim', 'sorvete', 'açaí', 'acai')) return '🍰'
+  if (has('bebida')) return '🥤'
+  return '🍽'
+}
+
 // ── Componente de card de mesa (extraído para evitar parsing issues) ──────────
 function MesaCard({ m, onClick }) {
   const tempoAberto = (() => {
@@ -1099,14 +1122,7 @@ export default function PDV() {
                     const estBaixo = p.estoque !== null && p.estoque !== undefined && p.estoque <= 5
                     const estZero = p.estoque !== null && p.estoque !== undefined && p.estoque <= 0
                     const qtd = getQtd(p.id)
-                    // Emoji automático por categoria
-                    const catEmoji = {
-                      'Bebidas': '🥤', 'Bebida': '🥤', 'Bar': '🍺', 'Cerveja': '🍺',
-                      'Comida': '🍽', 'Lanche': '🍔', 'Snack': '🍟', 'Porcao': '🍟', 'Porção': '🍟',
-                      'Sobremesa': '🍰', 'Doce': '🍬', 'Café': '☕', 'Cafe': '☕',
-                      'Suco': '🍹', 'Agua': '💧', 'Água': '💧',
-                    }
-                    const emoji = (p.emoji) || catEmoji[p.cat] || '🍽'
+                    const emoji = p.emoji || prodEmoji(p)
 
                     return (
                       <div key={p.id} style={{

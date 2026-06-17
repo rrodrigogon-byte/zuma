@@ -21,7 +21,7 @@ const GCS_OBJECT = process.env.GCS_OBJECT || 'db.json';
 
 const DEFAULT = { admins: [], usuarios: [], inscricoes: [], chaves: {}, ranking: { players: {}, arquivados: {} }, campeoes: {}, torneios: [], assinaturas: [], ingressos: [], comandas: [], reservas: [], patrocinadores: [], estoque: {},
   ligas: {}, professores: [], aulas: [], loja: [], vendasLoja: [], cupons: [],
-  elo: { players: {} }, gruposEventos: {}, suicos: {}, duplas: {}, socios: [], campanhas: [], pagamentos: [], auditoria: [], agenda: [], cardapio: [], contatos: [], config: {}, partidas_avulsas: [], seq: 1 };
+  elo: { players: {} }, gruposEventos: {}, suicos: {}, duplas: {}, socios: [], campanhas: [], pagamentos: [], auditoria: [], agenda: [], cardapio: [], contatos: [], config: {}, partidas_avulsas: [], reservasLoja: [], vendasLoja: [], pedidosLoja: [], seq: 1 };
 
 function ensureDir(){ fs.mkdirSync(path.dirname(DB_PATH), { recursive: true }); }
 
