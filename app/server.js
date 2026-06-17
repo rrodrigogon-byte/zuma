@@ -1737,45 +1737,23 @@ const HORARIOS = ['07:00','08:00','09:00','10:00','11:00','14:00','15:00','16:00
 const quadra = id => QUADRAS.find(q=>q.id===id);
 const dataValida = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s||''));
 
-app.get('/api/quadras', (req,res)=> res.json({ quadras:QUADRAS, horarios:HORARIOS }));
+// Semeia db().quadras (System B) a partir do catálogo padrão, se ainda vazio —
+// assim a página pública e o admin já mostram as 7 quadras sem cadastro manual.
+function seedQuadras(){
+  const d = db();
+  if(!d.quadras || !d.quadras.length){
+    d.quadras = QUADRAS.map(q=>({ id:q.id, nome:q.nome, tipo:q.piso, preco:q.preco, cor:'#5FB335', ativa:true, criadoEm:new Date().toISOString() }));
+    save();
+  }
+}
 
-// Disponibilidade do dia (público): só expõe slots ocupados, sem dados pessoais
-app.get('/api/reservas', (req,res)=>{
-  const { data } = req.query;
-  if(!dataValida(data)) return res.status(400).json({error:'informe a data no formato AAAA-MM-DD'});
-  const ocupados = (db().reservas||[])
-    .filter(r=>r.data===data && r.status!=='cancelada')
-    .map(r=>({ quadraId:r.quadraId, hora:r.hora, status:r.status }));
-  res.json({ data, horarios:HORARIOS, quadras:QUADRAS, ocupados });
-});
-
-// Reservar (público): valida conflito e cria a reserva
-app.post('/api/reservar', publicLimit(), (req,res)=>{
-  const { quadraId, data, hora, nome, email, tel } = req.body || {};
-  const q = quadra(quadraId);
-  if(!q) return res.status(400).json({error:'quadra inválida'});
-  if(!dataValida(data)) return res.status(400).json({error:'data inválida'});
-  if(!HORARIOS.includes(hora)) return res.status(400).json({error:'horário inválido'});
-  if(!nome || !email) return res.status(400).json({error:'nome e e-mail obrigatórios'});
-  const hoje = new Date().toISOString().slice(0,10);
-  if(data < hoje) return res.status(400).json({error:'não é possível reservar uma data passada'});
-  const conflito = (db().reservas||[]).some(r=>r.quadraId===quadraId && r.data===data && r.hora===hora && r.status!=='cancelada');
-  if(conflito) return res.status(409).json({error:'este horário já está reservado'});
-  const r = { id: nextId(), quadraId, quadraNome:q.nome, piso:q.piso, preco:q.preco,
-    data, hora, nome, email, tel:tel||'', status:'reservada', criadoEm:new Date().toISOString() };
-  db().reservas.push(r); save();
-  res.json({ ok:true, reserva:r, message:'Quadra reservada! Apresente-se na recepção no horário.' });
-});
-
-app.get('/api/admin/reservas', auth, requireStaff, (req,res)=>{
-  let list = db().reservas||[];
-  if(dataValida(req.query.data)) list = list.filter(r=>r.data===req.query.data);
-  res.json(list.slice().sort((a,b)=> (a.data+a.hora).localeCompare(b.data+b.hora)));
-});
-app.patch('/api/admin/reservas/:id', auth, requireStaff, (req,res)=>{
-  const r=(db().reservas||[]).find(x=>x.id==req.params.id); if(!r) return res.status(404).json({error:'não encontrada'});
-  if(req.body.status) r.status=req.body.status; save(); res.json(r);
-});
+// NOTA: as rotas GET /api/quadras, GET /api/reservas, POST /api/reservar,
+// GET/PATCH /api/admin/reservas que existiam aqui ("System A", com QUADRAS
+// estático e slot por `hora`) foram REMOVIDAS. Elas sombreavam (Express usa o 1º
+// handler) as rotas equivalentes da "FASE 3C" (db().quadras + horaInicio/horaFim),
+// que são as que o frontend usa — quebrando a página pública de quadras (shape
+// errado). Agora o System B é a única implementação. O array QUADRAS abaixo passou
+// a ser a semente de db().quadras (seedQuadras), e dataValida segue em uso na agenda.
 app.delete('/api/admin/reservas/:id', auth, requireStaff, (req,res)=>{
   const d=db(); d.reservas=(d.reservas||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true});
 });
@@ -3400,8 +3378,8 @@ app.get('/api/pontos/meus', auth, (req,res)=>{
 // =================== FASE 3C — AGENDAMENTO DE QUADRAS ===================
 
 // CRUD de quadras
-app.get('/api/quadras', (req,res)=> res.json((db().quadras||[]).filter(q=>q.ativa!==false)));
-app.get('/api/admin/quadras', auth, requireStaff, (req,res)=> res.json(db().quadras||[]));
+app.get('/api/quadras', (req,res)=>{ seedQuadras(); res.json((db().quadras||[]).filter(q=>q.ativa!==false)); });
+app.get('/api/admin/quadras', auth, requireStaff, (req,res)=>{ seedQuadras(); res.json(db().quadras||[]); });
 app.post('/api/admin/quadras', auth, requireRole('admin','organizador'), (req,res)=>{
   const { nome, tipo, cor, descricao } = req.body||{};
   if(!nome) return res.status(400).json({error:'nome obrigatório'});
