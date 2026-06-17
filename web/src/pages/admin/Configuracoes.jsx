@@ -101,6 +101,10 @@ export default function Configuracoes() {
   const [tef, setTef] = useState({ ativo: false, adquirente: '', terminal: '', ambiente: 'homologacao', agenteUrl: '', maxParcelas: 12, valorMinParcela: 20 })
   const [savingTef, setSavingTef] = useState(false)
 
+  // Fiscal / NFC-e (Recurso B)
+  const [fiscal, setFiscal] = useState({ cnpj: '', ie: '', razaoSocial: '', regime: 'simples', ambiente: 'homologacao', cscId: '', csc: '', serie: 1, proximoNumero: 1, nfceAtiva: false, enviarEmail: true })
+  const [savingFiscal, setSavingFiscal] = useState(false)
+
   // reset modal
   const [resetStep, setResetStep]     = useState(0)
   const [resetInput, setResetInput]   = useState('')
@@ -125,6 +129,7 @@ export default function Configuracoes() {
       setPagAtivos(!!status.ativo)
       setModoSimulado(!!(data.pagamentos?.modoSimulado))
       if (data.tef) setTef(t => ({ ...t, ...data.tef }))
+      if (data.fiscal) setFiscal(f => ({ ...f, ...data.fiscal }))
       if (Array.isArray(cats) && cats.length) {
         setCategoriasLista(cats)
         // pré-preenche vagasEdit com o que vier da API
@@ -431,6 +436,59 @@ export default function Configuracoes() {
           <Field label="Valor mínimo da parcela (R$)">
             <input className="input" type="number" min="0" step="1" value={tef.valorMinParcela}
               onChange={e => setTef(t => ({ ...t, valorMinParcela: e.target.value }))} />
+          </Field>
+        </div>
+      </SectionCard>
+
+      {/* Fiscal / NFC-e */}
+      <SectionCard
+        title="🧾 Fiscal — NFC-e (nota do bar)"
+        onSave={() => saveSection({ fiscal: { ...fiscal, serie: Number(fiscal.serie) || 1, proximoNumero: Number(fiscal.proximoNumero) || 1 } }, setSavingFiscal)}
+        saving={savingFiscal}
+      >
+        <div style={{
+          background: 'rgba(201,166,86,.08)', border: '1px solid rgba(201,166,86,.25)',
+          borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: 'var(--gold)', lineHeight: 1.5,
+        }}>
+          A emissão real exige <strong>certificado A1</strong>, credenciamento na <strong>SEFAZ-MT</strong> (CSC) e um <strong>provedor</strong> (Focus NFe/PlugNotas, via variáveis no servidor). Sem isso, a NFC-e roda em <strong>modo simulado</strong> para testes.
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <Toggle checked={fiscal.nfceAtiva} onChange={v => setFiscal(f => ({ ...f, nfceAtiva: v }))} />
+          <span style={{ fontSize: 14, fontWeight: 600 }}>Emitir NFC-e automaticamente ao fechar a comanda do bar</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+          <Field label="Razão social do emitente">
+            <input className="input" value={fiscal.razaoSocial} onChange={e => setFiscal(f => ({ ...f, razaoSocial: e.target.value }))} />
+          </Field>
+          <Field label="CNPJ">
+            <input className="input" value={fiscal.cnpj} onChange={e => setFiscal(f => ({ ...f, cnpj: e.target.value }))} />
+          </Field>
+          <Field label="Inscrição Estadual">
+            <input className="input" value={fiscal.ie} onChange={e => setFiscal(f => ({ ...f, ie: e.target.value }))} />
+          </Field>
+          <Field label="Regime tributário">
+            <select className="input" value={fiscal.regime} onChange={e => setFiscal(f => ({ ...f, regime: e.target.value }))}>
+              <option value="simples">Simples Nacional (CSOSN)</option>
+              <option value="normal">Regime normal (CST)</option>
+            </select>
+          </Field>
+          <Field label="CSC ID (idToken)">
+            <input className="input" value={fiscal.cscId} onChange={e => setFiscal(f => ({ ...f, cscId: e.target.value }))} />
+          </Field>
+          <Field label="CSC (token)">
+            <input className="input" value={fiscal.csc} onChange={e => setFiscal(f => ({ ...f, csc: e.target.value }))} placeholder="••••••" />
+          </Field>
+          <Field label="Série">
+            <input className="input" type="number" min="1" value={fiscal.serie} onChange={e => setFiscal(f => ({ ...f, serie: e.target.value }))} />
+          </Field>
+          <Field label="Próximo número">
+            <input className="input" type="number" min="1" value={fiscal.proximoNumero} onChange={e => setFiscal(f => ({ ...f, proximoNumero: e.target.value }))} />
+          </Field>
+          <Field label="Ambiente">
+            <select className="input" value={fiscal.ambiente} onChange={e => setFiscal(f => ({ ...f, ambiente: e.target.value }))}>
+              <option value="homologacao">Homologação</option>
+              <option value="producao">Produção</option>
+            </select>
           </Field>
         </div>
       </SectionCard>

@@ -247,6 +247,7 @@ export default function Cardapio() {
       setor: item.setor || 'bar',
       cozinha: !!item.cozinha,
       indisponivel: !!item.indisponivel,
+      fiscal: { ncm: '', cfop: '', cstCsosn: '', unidade: 'UN', origem: 0, ...(item.fiscal || {}) },
     })
     setEditModal(item)
   }
@@ -563,6 +564,41 @@ export default function Cardapio() {
                 Indisponível
               </label>
             </div>
+
+            {/* Dados fiscais (NFC-e) — usados na emissão da nota do bar */}
+            <details style={{ background: 'rgba(201,166,86,.06)', border: '1px solid rgba(201,166,86,.2)', borderRadius: 8, padding: '8px 12px' }}>
+              <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 700, color: 'var(--gold,#C9A656)' }}>🧾 Dados fiscais (NFC-e)</summary>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 12px', marginTop: 10 }}>
+                <label style={{ fontSize: 12, color: '#bbb' }}>NCM
+                  <input className="input" value={editForm.fiscal?.ncm || ''} placeholder="ex.: 22030000"
+                    onChange={e => setEditForm(f => ({ ...f, fiscal: { ...f.fiscal, ncm: e.target.value } }))} />
+                </label>
+                <label style={{ fontSize: 12, color: '#bbb' }}>CFOP
+                  <input className="input" value={editForm.fiscal?.cfop || ''} placeholder="ex.: 5102"
+                    onChange={e => setEditForm(f => ({ ...f, fiscal: { ...f.fiscal, cfop: e.target.value } }))} />
+                </label>
+                <label style={{ fontSize: 12, color: '#bbb' }}>CST / CSOSN
+                  <input className="input" value={editForm.fiscal?.cstCsosn || ''} placeholder="ex.: 102"
+                    onChange={e => setEditForm(f => ({ ...f, fiscal: { ...f.fiscal, cstCsosn: e.target.value } }))} />
+                </label>
+                <label style={{ fontSize: 12, color: '#bbb' }}>Unidade
+                  <input className="input" value={editForm.fiscal?.unidade || ''} placeholder="UN"
+                    onChange={e => setEditForm(f => ({ ...f, fiscal: { ...f.fiscal, unidade: e.target.value } }))} />
+                </label>
+                <label style={{ fontSize: 12, color: '#bbb' }}>Origem
+                  <select className="input" value={editForm.fiscal?.origem ?? 0}
+                    onChange={e => setEditForm(f => ({ ...f, fiscal: { ...f.fiscal, origem: Number(e.target.value) } }))}>
+                    <option value={0}>0 — Nacional</option>
+                    <option value={1}>1 — Estrangeira (importação direta)</option>
+                    <option value={2}>2 — Estrangeira (mercado interno)</option>
+                  </select>
+                </label>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8 }}>
+                Em branco → usa o padrão por categoria (Configurações → Fiscal).
+              </div>
+            </details>
+
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
               <button className="btn btn-secondary" onClick={() => setEditModal(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={handleEditSave} disabled={saving}>
