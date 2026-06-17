@@ -97,6 +97,10 @@ export default function Configuracoes() {
   const [pagAtivos, setPagAtivos]         = useState(false)   // env-based (lido-only)
   const [savingPag, setSavingPag]         = useState(false)
 
+  // TEF / Maquininha (presencial)
+  const [tef, setTef] = useState({ ativo: false, adquirente: '', terminal: '', ambiente: 'homologacao', agenteUrl: '', maxParcelas: 12, valorMinParcela: 20 })
+  const [savingTef, setSavingTef] = useState(false)
+
   // reset modal
   const [resetStep, setResetStep]     = useState(0)
   const [resetInput, setResetInput]   = useState('')
@@ -120,6 +124,7 @@ export default function Configuracoes() {
       if (data.pix)    setPix({ chave: data.pix.chave ?? '', nome: data.pix.nome ?? '', cidade: data.pix.cidade ?? '' })
       setPagAtivos(!!status.ativo)
       setModoSimulado(!!(data.pagamentos?.modoSimulado))
+      if (data.tef) setTef(t => ({ ...t, ...data.tef }))
       if (Array.isArray(cats) && cats.length) {
         setCategoriasLista(cats)
         // pré-preenche vagasEdit com o que vier da API
@@ -381,6 +386,53 @@ export default function Configuracoes() {
             ⚠️ <strong>Modo simulado ativo:</strong> ao salvar, todos os pagamentos PIX passarão a exigir confirmação manual — nenhum valor real será cobrado.
           </div>
         )}
+      </SectionCard>
+
+      {/* TEF / Maquininha */}
+      <SectionCard
+        title="💳 Maquininha (TEF) — Presencial"
+        onSave={() => saveSection({ tef: { ...tef, maxParcelas: Number(tef.maxParcelas) || 12, valorMinParcela: Number(tef.valorMinParcela) || 0 } }, setSavingTef)}
+        saving={savingTef}
+      >
+        <div style={{
+          background: String(tef.agenteUrl || '').trim() ? 'rgba(95,179,53,.08)' : 'rgba(201,166,86,.08)',
+          border: `1px solid ${String(tef.agenteUrl || '').trim() ? 'rgba(95,179,53,.3)' : 'rgba(201,166,86,.25)'}`,
+          borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13,
+          color: String(tef.agenteUrl || '').trim() ? 'var(--lime, #8FD64A)' : 'var(--gold)',
+        }}>
+          {String(tef.agenteUrl || '').trim()
+            ? '✓ Agente TEF configurado — o PDV captura no pinpad físico.'
+            : '⚠️ Sem agente TEF: o PDV opera em modo SIMULADO (aprova automaticamente, sem cobrança real). Informe o endereço do agente local para produção.'}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+          <Field label="Adquirente (Stone/Cielo/Rede/PagBank)">
+            <input className="input" value={tef.adquirente}
+              onChange={e => setTef(t => ({ ...t, adquirente: e.target.value }))} placeholder="ex.: Stone" />
+          </Field>
+          <Field label="Terminal / PDV (identificação)">
+            <input className="input" value={tef.terminal}
+              onChange={e => setTef(t => ({ ...t, terminal: e.target.value }))} placeholder="ex.: BAR-01" />
+          </Field>
+          <Field label="Endereço do agente TEF local">
+            <input className="input" value={tef.agenteUrl}
+              onChange={e => setTef(t => ({ ...t, agenteUrl: e.target.value }))} placeholder="https://localhost:9000" />
+          </Field>
+          <Field label="Ambiente">
+            <select className="input" value={tef.ambiente}
+              onChange={e => setTef(t => ({ ...t, ambiente: e.target.value }))}>
+              <option value="homologacao">Homologação</option>
+              <option value="producao">Produção</option>
+            </select>
+          </Field>
+          <Field label="Máx. de parcelas">
+            <input className="input" type="number" min="1" max="18" value={tef.maxParcelas}
+              onChange={e => setTef(t => ({ ...t, maxParcelas: e.target.value }))} />
+          </Field>
+          <Field label="Valor mínimo da parcela (R$)">
+            <input className="input" type="number" min="0" step="1" value={tef.valorMinParcela}
+              onChange={e => setTef(t => ({ ...t, valorMinParcela: e.target.value }))} />
+          </Field>
+        </div>
       </SectionCard>
 
       {/* Aparência */}

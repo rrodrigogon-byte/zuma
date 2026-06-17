@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { api, fmtR } from '../lib/api'
+import { pagarTef, MODALIDADES_TEF } from '../lib/tef'
 import { useToast } from '../hooks/useToast'
 import { useAuth } from '../lib/auth'
 
@@ -312,7 +313,8 @@ const S = {
 
 const PAY_OPTIONS = [
   { key: 'pix', icon: '📲', label: 'Pix' },
-  { key: 'cartao', icon: '💳', label: 'Cartão' },
+  { key: 'tef', icon: '💳', label: 'Maquininha' },
+  { key: 'cartao', icon: '🌐', label: 'Cartão online' },
   { key: 'dinheiro', icon: '💵', label: 'Dinheiro' },
   { key: 'carteira', icon: '👛', label: 'Carteira' },
 ]
@@ -385,6 +387,12 @@ export default function PDV() {
   const [catFiltro, setCatFiltro] = useState('Tudo')
   const [payMeio, setPayMeio] = useState('pix')
   const [servico, setServico] = useState(true)
+
+  // TEF (maquininha): config do agente + modalidade/parcelas escolhidas no pagamento
+  const [tefCfg, setTefCfg] = useState(null)
+  const [tefModalidade, setTefModalidade] = useState('credito_avista')
+  const [tefParcelas, setTefParcelas] = useState(2)
+  const [tefProcessando, setTefProcessando] = useState(false)
   const [novaVirtual, setNovaVirtual] = useState({ nome: '', local: '' })
   const [novaMesaNome, setNovaMesaNome] = useState('')
   const [loading, setLoading] = useState(false)
@@ -471,6 +479,8 @@ export default function PDV() {
     loadMesas()
     loadCardapio()
     loadCaixaHoje()
+    // Config do TEF (agente local, adquirente, parcelamento). Sem agenteUrl → simulado.
+    api.get('/api/admin/config').then(cfg => setTefCfg(cfg?.tef || {})).catch(() => setTefCfg({}))
     timerRef.current = setInterval(() => {
       loadMesas()
       loadCaixaHoje()
@@ -656,6 +666,20 @@ export default function PDV() {
   // Pagar
   const pagar = async () => {
     if (!comanda?.id) return
+    // Maquininha (TEF): captura no pinpad ANTES de fechar a venda. Se negar/falhar,
+    // a comanda permanece aberta. (fluxo de meio único)
+    let tefResult = null
+    if (payMeio === 'tef' && multiPag.length === 0) {
+      setTefProcessando(true)
+      try {
+        tefResult = await pagarTef({ valor: totalFinal, modalidade: tefModalidade, parcelas: tefParcelas, tef: tefCfg || {} })
+      } catch (e) {
+        setTefProcessando(false)
+        toast(e.message || 'Falha na maquininha — venda mantida em aberto', 'error')
+        return
+      }
+      setTefProcessando(false)
+    }
     setLoading(true)
     try {
       // Se há múltiplos meios registrados, envia todos; senão envia o único selecionado
@@ -673,9 +697,12 @@ export default function PDV() {
             servico,
             totalFinal,
             dividir: dividir > 1 ? dividir : undefined,
+            tef: tefResult || undefined,
           }
       await api.post(`/api/comanda/${comanda.id}/pagar`, payload)
-      toast('Pagamento registrado! ✓', 'success')
+      toast(tefResult
+        ? `Pago na maquininha ✓ NSU ${tefResult.nsu}${tefResult.simulado ? ' (simulado)' : ''}`
+        : 'Pagamento registrado! ✓', 'success')
       setOverlay(null)
       setSheet(null)
       setComanda(null)
@@ -1506,12 +1533,46 @@ export default function PDV() {
               </div>
             )}
 
+            {/* Maquininha (TEF): modalidade + parcelas */}
+            {payMeio === 'tef' && multiPag.length === 0 && (
+              <div style={{ marginTop: 12, padding: '12px', background: '#132b1b', borderRadius: 10, border: '1px solid #1e4029' }}>
+                <div style={{ fontSize: 12, opacity: 0.65, marginBottom: 8 }}>Modalidade no cartão</div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {MODALIDADES_TEF.map(m => (
+                    <button key={m.key} onClick={() => setTefModalidade(m.key)}
+                      style={{ flex: 1, minWidth: 92, padding: '8px 6px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                        border: tefModalidade === m.key ? '1.5px solid #5FB335' : '1px solid #1e4029',
+                        background: tefModalidade === m.key ? '#1a4a20' : 'transparent',
+                        color: tefModalidade === m.key ? '#8FD64A' : '#9ab09a' }}>
+                      {m.icon} {m.label}
+                    </button>
+                  ))}
+                </div>
+                {tefModalidade === 'credito_parcelado' && (
+                  <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 12, opacity: 0.65 }}>Parcelas:</span>
+                    <select value={tefParcelas} onChange={e => setTefParcelas(parseInt(e.target.value))}
+                      style={{ ...S.input, marginBottom: 0, width: 'auto', padding: '6px 10px' }}>
+                      {Array.from({ length: Math.max(2, (tefCfg?.maxParcelas || 12)) - 1 }, (_, i) => i + 2).map(n => (
+                        <option key={n} value={n}>{n}x de {fmtR(totalFinal / n)}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div style={{ fontSize: 11, opacity: 0.55, marginTop: 8 }}>
+                  {tefCfg && !String(tefCfg.agenteUrl || '').trim()
+                    ? '⚠️ Agente TEF não configurado — modo SIMULADO (aprova automaticamente).'
+                    : '💳 Insira/aproxime o cartão na maquininha ao confirmar.'}
+                </div>
+              </div>
+            )}
+
             <button
               className="btn btn-primary"
               style={{ width: '100%', marginTop: 14, fontSize: 15 }}
               onClick={pagar}
-              disabled={loading || (payMeio === 'dinheiro' && multiPag.length === 0 && valorRecebido && trocoVal < 0)}>
-              {loading ? 'Processando...' : multiPag.length > 0 && restanteMultiPag < 0.01
+              disabled={loading || tefProcessando || (payMeio === 'dinheiro' && multiPag.length === 0 && valorRecebido && trocoVal < 0)}>
+              {tefProcessando ? '💳 Aguardando maquininha…' : loading ? 'Processando...' : multiPag.length > 0 && restanteMultiPag < 0.01
                 ? `✅ Confirmar — Pago (${fmtR(totalFinal)})`
                 : `Confirmar — ${PAY_OPTIONS.find(o => o.key === payMeio)?.label}${dividir > 1 ? ` (${fmtR(totalFinal / dividir)}/pessoa)` : ''}`
               }
