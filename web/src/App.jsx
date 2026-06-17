@@ -45,6 +45,7 @@ const Ranking    = lazy(() => import('./pages/public/Ranking'))
 const Loja       = lazy(() => import('./pages/public/Loja'))
 const Regulamento = lazy(() => import('./pages/public/Regulamento'))
 const Bracket     = lazy(() => import('./pages/public/Bracket'))
+const AcompanharPedido = lazy(() => import('./pages/public/AcompanharPedido'))
 const Perfil      = lazy(() => import('./pages/public/Perfil'))
 const Contato     = lazy(() => import('./pages/public/Contato'))
 
@@ -154,6 +155,7 @@ export default function App() {
         <Route path="/inscricao"  element={<Layout><Inscricao /></Layout>} />
         <Route path="/ranking"    element={<Layout><Ranking /></Layout>} />
         <Route path="/loja"       element={<Layout><Loja /></Layout>} />
+        <Route path="/pedido/:codigo" element={<Layout marketing><AcompanharPedido /></Layout>} />
         <Route path="/regulamento" element={<Layout marketing><Regulamento /></Layout>} />
         <Route path="/bracket"    element={<Layout><Bracket /></Layout>} />
         <Route path="/chaves"     element={<Layout><Bracket /></Layout>} />

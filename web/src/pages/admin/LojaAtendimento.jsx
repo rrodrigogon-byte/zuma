@@ -66,6 +66,17 @@ export default function LojaAtendimento() {
     finally { setBusy(null) }
   }
 
+  const alternarPagamento = async (p) => {
+    const novo = p.pagamento === 'pago' ? 'pix-pendente' : 'pago'
+    setBusy(p.id)
+    try {
+      await api.patch(`/api/admin/loja/pedidos/${p.id}`, { pagamento: novo })
+      await load(true)
+      toast(novo === 'pago' ? `Pedido ${p.codigo} marcado como pago` : `Pagamento de ${p.codigo} reaberto`)
+    } catch (e) { toast(e.message || 'Erro ao atualizar pagamento', 'error') }
+    finally { setBusy(null) }
+  }
+
   // Agrupa por status. "entregue" só mostra os de hoje (evita acúmulo infinito).
   const porStatus = useMemo(() => {
     const g = { pendente: [], preparando: [], pronto: [], entregue: [] }
@@ -129,9 +140,16 @@ export default function LojaAtendimento() {
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed var(--line)', paddingTop: 6, marginBottom: 8 }}>
-                      <span style={{ fontSize: 11, color: p.pagamento === 'pago' ? '#5FB335' : '#C9A656', fontWeight: 700 }}>
-                        {p.pagamento === 'pago' ? '✓ pago' : '⏳ pix pendente'}
-                      </span>
+                      <button
+                        onClick={() => alternarPagamento(p)}
+                        disabled={busy === p.id}
+                        title={p.pagamento === 'pago' ? 'Reabrir pagamento' : 'Marcar como pago'}
+                        style={{ fontSize: 11, fontWeight: 700, cursor: 'pointer', borderRadius: 6, padding: '3px 8px',
+                          border: `1px solid ${p.pagamento === 'pago' ? '#2e6b3a' : '#7a6a2a'}`,
+                          background: p.pagamento === 'pago' ? 'rgba(95,179,53,.12)' : 'rgba(201,166,86,.1)',
+                          color: p.pagamento === 'pago' ? '#5FB335' : '#C9A656' }}>
+                        {p.pagamento === 'pago' ? '✓ pago' : '💰 marcar pago'}
+                      </button>
                       <span style={{ fontWeight: 800, color: 'var(--gold, #C9A656)' }}>{fmtR(p.total || 0)}</span>
                     </div>
 

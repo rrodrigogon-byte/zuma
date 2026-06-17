@@ -1177,9 +1177,9 @@ export default function PDV() {
                             {/* Botão lançar rápido */}
                             <button
                               onClick={() => lancamentoRapido(p)}
-                              title="Lançar direto"
-                              style={{ flex: 1, height: 26, borderRadius: 6, background: 'linear-gradient(135deg,#5FB335,#3a8c1e)', border: 'none', color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer', lineHeight: 1 }}>
-                              ✓
+                              title="Lançar na comanda"
+                              style={{ flex: 1, height: 26, borderRadius: 6, background: 'linear-gradient(135deg,#5FB335,#3a8c1e)', border: 'none', color: '#fff', fontWeight: 800, fontSize: 11.5, cursor: 'pointer', lineHeight: 1, letterSpacing: '.02em' }}>
+                              + Lançar
                             </button>
                             {/* Botão com obs */}
                             <button
@@ -1202,17 +1202,41 @@ export default function PDV() {
               )}
             </div>
 
-            {/* Rodapé: total de itens na comanda */}
+            {/* Rodapé: lista VIVA dos itens já lançados na comanda */}
             {comanda?.itens?.length > 0 && (
-              <div style={{ padding: '8px 16px', borderTop: '1px solid #1e4029', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#0a1a0f' }}>
-                <div style={{ fontSize: 12, opacity: 0.6 }}>
-                  {comanda.itens.reduce((s, i) => s + (i.qtd || 1), 0)} item(s) na comanda
+              <div style={{ borderTop: '1px solid #1e4029', background: '#0a1a0f' }}>
+                <div style={{ padding: '8px 16px 4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: '#8FD64A' }}>
+                    🧾 Lançados ({comanda.itens.reduce((s, i) => s + (i.qtd || 1), 0)})
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: '#C9A656' }}>{fmtR(comanda.total || 0)}</span>
                 </div>
-                <button
-                  onClick={() => setOverlay(null)}
-                  style={{ background: '#1a4a20', border: '1.5px solid #5FB335', borderRadius: 8, color: '#8FD64A', padding: '6px 16px', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>
-                  ✓ Fechar cardápio
-                </button>
+                {/* lista rolável dos itens já na comanda */}
+                <div style={{ maxHeight: 132, overflowY: 'auto', padding: '0 16px' }}>
+                  {comanda.itens.map((it, idx) => (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid #142a1a' }}>
+                      <span style={{ minWidth: 26, height: 20, borderRadius: 5, background: '#1e4029', color: '#8FD64A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{it.qtd}×</span>
+                      <span style={{ flex: 1, fontSize: 12, color: '#dfe9df', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {it.nome}{it.obs ? <span style={{ color: '#8FD64A', opacity: .7 }}> · {it.obs}</span> : null}
+                      </span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#C9A656', flexShrink: 0 }}>{fmtR((it.preco || 0) * (it.qtd || 1))}</span>
+                      <button
+                        onClick={() => cancelarItem(idx)}
+                        title="Remover item"
+                        aria-label={`Remover ${it.nome}`}
+                        style={{ background: 'none', border: 'none', color: '#e05c5c', cursor: 'pointer', fontSize: 13, padding: '0 2px', flexShrink: 0 }}>
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ padding: '8px 16px 12px' }}>
+                  <button
+                    onClick={() => setOverlay(null)}
+                    style={{ width: '100%', background: '#1a4a20', border: '1.5px solid #5FB335', borderRadius: 9, color: '#8FD64A', padding: '9px 0', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
+                    ✓ Concluir e voltar à comanda
+                  </button>
+                </div>
               </div>
             )}
           </div>
