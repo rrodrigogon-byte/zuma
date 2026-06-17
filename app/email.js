@@ -77,6 +77,27 @@ export const mail = {
     return enviar({ to, subject: 'SetPoint · Seu ingresso — 4ª Agro Open', html })
   },
 
+  // Loja: pedido recebido (aguardando preparo) — nominal ao cliente
+  async lojaPedidoRecebido(to, nome, codigo, total) {
+    const html = layout('Pedido recebido 🛍️', `
+      <p>Olá, <b>${nome}</b>!</p>
+      <p>Recebemos seu pedido na loja da 4ª Agro Open.</p>
+      <p>Código do pedido (guarde para a retirada):</p>
+      <p style="font-size:20px;font-weight:bold;letter-spacing:2px;background:#F4F6EF;border:1px dashed #5FB335;border-radius:10px;padding:14px;text-align:center">${codigo}</p>
+      <p>Total: <b>${brl(total)}</b></p>
+      <p>Avisaremos quando estiver <b>pronto para retirada</b> no Tangará Tênis Clube.</p>`)
+    return enviar({ to, subject: `SetPoint · Pedido ${codigo} recebido`, html })
+  },
+
+  // Loja: pedido pronto para retirada — nominal ao cliente
+  async lojaPedidoPronto(to, nome, codigo) {
+    const html = layout('Pedido pronto para retirada ✅', `
+      <p>Olá, <b>${nome}</b>!</p>
+      <p>Seu pedido <b>${codigo}</b> está <b>pronto para retirada</b> no Tangará Tênis Clube.</p>
+      <p>Apresente este código na loja. Até já! 🎾</p>`)
+    return enviar({ to, subject: `SetPoint · Pedido ${codigo} pronto para retirada`, html })
+  },
+
   // Senha temporária (recuperação) — nominal ao titular da conta
   async senhaTemporaria(to, nome, senha) {
     const html = layout('Recuperação de senha 🔑', `

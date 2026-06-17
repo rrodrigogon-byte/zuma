@@ -414,6 +414,11 @@ function CheckoutModal({ itens, produtos, onClose, onSuccess }) {
             Abra seu banco → PIX → Copia e Cola (ou chave) → confirme e guarde o comprovante.
             <br />Seus itens ficam reservados até a confirmação do pagamento pela organização.
           </div>
+          {codigoPedido && (
+            <a href={`/pedido/${codigoPedido}`} style={{ display: 'block', width: '100%', textAlign: 'center', boxSizing: 'border-box', background: 'linear-gradient(135deg,#1B4D2E,#2e7d46)', borderRadius: 10, padding: 12, color: '#fff', fontWeight: 700, textDecoration: 'none', fontSize: '0.9rem', marginBottom: 10 }}>
+              📍 Acompanhar meu pedido
+            </a>
+          )}
           <button onClick={onClose} style={{ width: '100%', background: 'transparent', border: '2px solid #d0dcc8', borderRadius: 10, padding: 11, color: '#5a7a5a', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem' }}>
             Fechar
           </button>

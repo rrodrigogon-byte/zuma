@@ -54,6 +54,11 @@ export const wpp = {
       `❌ *SetPoint — Reserva Cancelada*\n\nOlá, *${nome}*.\n\nSua reserva foi cancelada:\n🎾 Quadra: *${quadra}*\n📆 Data: *${data}*\n⏰ Horário: *${hora}*\n\nDúvidas? Entre em contato com o clube.`)
   },
 
+  async lojaPedidoPronto(tel, nome, codigo) {
+    return enviar(tel,
+      `🛍️ *SetPoint — Loja Agro Open*\n\nOlá, *${nome}*! ✅\n\nSeu pedido *${codigo}* está *pronto para retirada* no Tangará Tênis Clube.\n\nApresente este código na loja. Até já! 🎾`)
+  },
+
   async pontosCreditados(tel, nome, pontos, saldo) {
     return enviar(tel,
       `⭐ *SetPoint — Fidelidade*\n\nOlá, *${nome}*!\n\nVocê ganhou *+${pontos} pontos*.\nSeu saldo atual: *${saldo} pontos* 🏆\n\nAcumule pontos e troque por benefícios no clube!`)

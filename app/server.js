@@ -2186,6 +2186,8 @@ app.post('/api/loja/pedido', publicLimit(), (req,res)=>{
   if(!d.pedidosLoja) d.pedidosLoja=[];
   d.pedidosLoja.push(pedido); save();
   sseBroadcast('loja', { tipo:'novo', id:pedido.id, codigo:pedido.codigo, status:pedido.status });
+  // Confirmação ao cliente (fire-and-forget; simulado se faltar API key)
+  if(email) mail.lojaPedidoRecebido(email, nome, pedido.codigo, total).catch(()=>{});
   res.json({ ok:true, codigo:pedido.codigo, id:pedido.id, total, status:pedido.status,
     msg:'Pedido recebido! Acompanhe pelo código e retire no Tangará Tênis Clube após a confirmação.' });
 });
@@ -2210,7 +2212,8 @@ app.get('/api/admin/loja/pedidos', auth, requireStaff, (req,res)=>{
 app.patch('/api/admin/loja/pedidos/:id', auth, requireStaff, (req,res)=>{
   const d=db(); const p=(d.pedidosLoja||[]).find(x=>x.id==req.params.id);
   if(!p) return res.status(404).json({error:'pedido não encontrado'});
-  const novo=req.body.status;
+  // status é opcional: pode-se enviar só { pagamento } para marcar pago.
+  const novo = req.body.status!==undefined ? req.body.status : p.status;
   if(!LOJA_STATUS.includes(novo)) return res.status(400).json({error:'status inválido'});
   // cancelar repõe o estoque (uma única vez)
   if(novo==='cancelado' && p.status!=='cancelado'){
@@ -2221,11 +2224,18 @@ app.patch('/api/admin/loja/pedidos/:id', auth, requireStaff, (req,res)=>{
     for(const it of p.itens||[]){ const prod=(d.loja||[]).find(x=>x.id==it.produtoId); if(prod) prod.estoque=Math.max(0,(prod.estoque||0)-it.qtd); }
   }
   if(req.body.pagamento!==undefined) p.pagamento=req.body.pagamento;
-  if(novo!==p.status){ p.status=novo; p.historico=p.historico||[]; p.historico.push({ status:novo, ts:new Date().toISOString() }); }
+  const mudouStatus = novo!==p.status;
+  if(mudouStatus){ p.status=novo; p.historico=p.historico||[]; p.historico.push({ status:novo, ts:new Date().toISOString() }); }
   p.atualizadoEm=new Date().toISOString();
-  auditoria(req.user,'PEDIDO_LOJA_STATUS',{ pedido:p.codigo, status:novo });
+  auditoria(req.user,'PEDIDO_LOJA',{ pedido:p.codigo, status:p.status, pagamento:p.pagamento });
   save();
   sseBroadcast('loja', { tipo:'status', id:p.id, codigo:p.codigo, status:p.status });
+  // Avisa o cliente quando o pedido fica PRONTO para retirada (e-mail + WhatsApp)
+  if(mudouStatus && novo==='pronto'){
+    const cli=p.cliente||{};
+    if(cli.email) mail.lojaPedidoPronto(cli.email, cli.nome||'', p.codigo).catch(()=>{});
+    if(cli.tel) wpp.lojaPedidoPronto(cli.tel, cli.nome||'', p.codigo).catch(()=>{});
+  }
   res.json(p);
 });
 
