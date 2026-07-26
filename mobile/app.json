@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "SetPoint Ultra",
+    "slug": "setpoint-ultra",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTabletMode": true,
+      "bundleIdentifier": "com.setpoint.ultra"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.setpoint.ultra"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow $(PRODUCT_NAME) to access your face ID"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera"
+        }
+      ],
+      [
+        "expo-file-system",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos"
+        }
+      ]
+    ],
+    "extra": {
+      "apiUrl": "https://setpoint-ultra-prod.run.app",
+      "eas": {
+        "projectId": "setpoint-ultra-prod"
+      }
+    }
+  }
+}

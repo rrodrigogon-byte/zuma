@@ -1,0 +1,240 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "SetPoint Ultra API",
+    "description": "API completa para gestão de bares, restaurantes, lojas e barbearias",
+    "version": "1.0.0",
+    "contact": {
+      "name": "SetPoint Ultra Support",
+      "url": "https://setpoint-ultra.com.br"
+    },
+    "license": {
+      "name": "Proprietary"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.setpoint-ultra.com.br",
+      "description": "Production"
+    },
+    {
+      "url": "http://localhost:3000",
+      "description": "Development"
+    }
+  ],
+  "paths": {
+    "/api/auth/login": {
+      "post": {
+        "summary": "Fazer login",
+        "tags": ["Autenticação"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { "type": "string" },
+                  "password": { "type": "string" }
+                },
+                "required": ["email", "password"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login bem-sucedido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": { "type": "string" },
+                    "usuario": { "$ref": "#/components/schemas/Usuario" }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Credenciais inválidas"
+          }
+        }
+      }
+    },
+    "/api/bar/comandas": {
+      "get": {
+        "summary": "Listar comandas",
+        "tags": ["Comanda"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Lista de comandas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Comanda" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Criar comanda",
+        "tags": ["Comanda"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "numero_comanda": { "type": "integer" },
+                  "mesa_id": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Comanda criada",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Comanda" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/estoque/movimentacoes/entrada": {
+      "post": {
+        "summary": "Registrar entrada de estoque",
+        "tags": ["Estoque"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tipo_documento": { "type": "string" },
+                  "numero_documento": { "type": "string" },
+                  "fornecedor_id": { "type": "string" },
+                  "itens": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "produto_id": { "type": "string" },
+                        "quantidade": { "type": "number" },
+                        "valor_unitario": { "type": "number" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Entrada registrada"
+          }
+        }
+      }
+    },
+    "/api/pagamentos": {
+      "post": {
+        "summary": "Processar pagamento",
+        "tags": ["Pagamentos"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tipo_pagamento": { "type": "string", "enum": ["dinheiro", "cartao_credito", "cartao_debito", "pix"] },
+                  "valor": { "type": "number" },
+                  "referencia": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Pagamento processado"
+          }
+        }
+      }
+    },
+    "/api/relatorios/dashboard/resumo": {
+      "get": {
+        "summary": "Obter resumo do dashboard",
+        "tags": ["Relatórios"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "data_inicio",
+            "in": "query",
+            "schema": { "type": "string", "format": "date" }
+          },
+          {
+            "name": "data_fim",
+            "in": "query",
+            "schema": { "type": "string", "format": "date" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumo do dashboard"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Usuario": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "email": { "type": "string" },
+          "nome": { "type": "string" },
+          "roles": { "type": "array", "items": { "type": "string" } },
+          "ativo": { "type": "boolean" }
+        }
+      },
+      "Comanda": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "numero_comanda": { "type": "integer" },
+          "mesa_id": { "type": "string" },
+          "status": { "type": "string", "enum": ["aberta", "fechada", "cancelada"] },
+          "total_bruto": { "type": "number" },
+          "total_desconto": { "type": "number" },
+          "total_liquido": { "type": "number" },
+          "data_abertura": { "type": "string", "format": "date-time" },
+          "data_fechamento": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  }
+}

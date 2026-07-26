@@ -1,5 +1,77 @@
+# Dependências
 node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Ambiente
 .env
-app/data/db.json
+.env.local
+.env.*.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 .DS_Store
+
+# Logs
+logs/
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build
+dist/
+build/
+.next/
+out/
+
+# Cache
+.cache/
+.eslintcache
+
+# Testes
+coverage/
+.nyc_output/
+
+# Banco de dados
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploads
+uploads/
+public/uploads/
+
+# Temporários
+tmp/
+temp/
+*.tmp
+
+# Credenciais (NUNCA versionar)
+credentials.json
+secrets.json
+.aws/
+.gcp/
+.ssh/
+
+# Arquivos de sistema
+Thumbs.db
+.AppleDouble
+.LSOverride
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Kubernetes
+k8s/secrets/
+
+# Variáveis de ambiente sensíveis
+.env.*.secret
+.env.production.local
