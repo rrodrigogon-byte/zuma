@@ -1,0 +1,509 @@
+/* ============================================================================
+   ESTILOS: CAIXA DIÁRIO
+   ============================================================================ */
+
+.caixa-diario-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+}
+
+/* ============================================================================
+   HEADER
+   ============================================================================ */
+
+.caixa-header {
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.caixa-header h1 {
+  font-size: 2.5rem;
+  color: #1a1a1a;
+  margin: 0 0 10px 0;
+}
+
+.caixa-header p {
+  font-size: 1rem;
+  color: #666;
+  margin: 0;
+}
+
+/* ============================================================================
+   ALERTAS DE RESULTADO
+   ============================================================================ */
+
+.resultado-alert {
+  padding: 15px 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-weight: 500;
+  animation: slideDown 0.3s ease-out;
+}
+
+.resultado-sucesso {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.resultado-erro {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================================================
+   NAVEGAÇÃO DE ABAS
+   ============================================================================ */
+
+.tabs-navigation {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 30px;
+  border-bottom: 2px solid #e0e0e0;
+  overflow-x: auto;
+  padding-bottom: 10px;
+}
+
+.tab-btn {
+  padding: 12px 20px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 1rem;
+  color: #666;
+  border-bottom: 3px solid transparent;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.tab-btn:hover {
+  color: #333;
+}
+
+.tab-btn.active {
+  color: #007bff;
+  border-bottom-color: #007bff;
+}
+
+/* ============================================================================
+   CONTEÚDO DE ABAS
+   ============================================================================ */
+
+.caixa-content {
+  background: #fff;
+  border-radius: 8px;
+  padding: 30px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.tab-section {
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.tab-section h2 {
+  font-size: 1.8rem;
+  color: #1a1a1a;
+  margin-bottom: 20px;
+}
+
+.tab-section h3 {
+  font-size: 1.3rem;
+  color: #333;
+  margin-bottom: 15px;
+}
+
+/* ============================================================================
+   FORMULÁRIOS
+   ============================================================================ */
+
+.form-caixa {
+  display: grid;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.form-group input,
+.form-group textarea {
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-family: inherit;
+  transition: border-color 0.3s ease;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+/* ============================================================================
+   BOTÕES
+   ============================================================================ */
+
+.btn-primary,
+.btn-danger,
+.btn-success,
+.btn-link {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-primary {
+  background-color: #007bff;
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: #0056b3;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+}
+
+.btn-danger {
+  background-color: #dc3545;
+  color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: #c82333;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+}
+
+.btn-success {
+  background-color: #28a745;
+  color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+  background-color: #218838;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+}
+
+.btn-link {
+  background: none;
+  color: #007bff;
+  padding: 6px 12px;
+  text-decoration: underline;
+}
+
+.btn-link:hover {
+  color: #0056b3;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ============================================================================
+   SELETOR DE CAIXA
+   ============================================================================ */
+
+.caixa-selector {
+  margin-bottom: 30px;
+}
+
+.caixa-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 15px;
+  margin-top: 15px;
+}
+
+.caixa-card {
+  padding: 15px;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: #f9f9f9;
+}
+
+.caixa-card:hover {
+  border-color: #007bff;
+  background: #f0f7ff;
+  transform: translateY(-2px);
+}
+
+.caixa-card.selected {
+  border-color: #007bff;
+  background: #e7f3ff;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.caixa-card h4 {
+  margin: 0 0 10px 0;
+  color: #1a1a1a;
+}
+
+.caixa-card p {
+  margin: 5px 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.no-data {
+  padding: 20px;
+  text-align: center;
+  color: #999;
+  background: #f5f5f5;
+  border-radius: 6px;
+}
+
+/* ============================================================================
+   TABELAS
+   ============================================================================ */
+
+.table-movimentacoes,
+.table-relatorio {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+
+.table-movimentacoes thead,
+.table-relatorio thead {
+  background-color: #f5f5f5;
+  border-bottom: 2px solid #ddd;
+}
+
+.table-movimentacoes th,
+.table-relatorio th {
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #333;
+}
+
+.table-movimentacoes td,
+.table-relatorio td {
+  padding: 12px;
+  border-bottom: 1px solid #eee;
+}
+
+.table-movimentacoes tbody tr:hover,
+.table-relatorio tbody tr:hover {
+  background-color: #f9f9f9;
+}
+
+/* ============================================================================
+   BADGES
+   ============================================================================ */
+
+.badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.badge-sangria {
+  background-color: #ffe0e0;
+  color: #c82333;
+}
+
+.badge-suprimento {
+  background-color: #e0ffe0;
+  color: #218838;
+}
+
+.badge-aberto {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.badge-fechado {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+/* ============================================================================
+   RESUMO DE FECHAMENTO
+   ============================================================================ */
+
+.movimentacoes-summary {
+  background: #f9f9f9;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 30px;
+}
+
+.movimentacoes-summary h3 {
+  margin-top: 0;
+}
+
+.fechamento-resultado {
+  background: #e7f3ff;
+  padding: 20px;
+  border-radius: 8px;
+  margin-top: 30px;
+  border-left: 4px solid #007bff;
+}
+
+.fechamento-resultado h3 {
+  margin-top: 0;
+  color: #0056b3;
+}
+
+.resumo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+  margin-top: 15px;
+}
+
+.resumo-item {
+  display: flex;
+  flex-direction: column;
+  padding: 15px;
+  background: white;
+  border-radius: 6px;
+  border-left: 3px solid #007bff;
+}
+
+.resumo-item span {
+  font-size: 0.9rem;
+  color: #666;
+  margin-bottom: 5px;
+}
+
+.resumo-item strong {
+  font-size: 1.3rem;
+  color: #1a1a1a;
+}
+
+.resumo-item small {
+  font-size: 0.8rem;
+  color: #999;
+  margin-top: 5px;
+}
+
+.resumo-item.divergencia-OK {
+  border-left-color: #28a745;
+}
+
+.resumo-item.divergencia-OK strong {
+  color: #28a745;
+}
+
+.resumo-item.divergencia-SOBRA {
+  border-left-color: #ffc107;
+}
+
+.resumo-item.divergencia-SOBRA strong {
+  color: #856404;
+}
+
+.resumo-item.divergencia-FALTA {
+  border-left-color: #dc3545;
+}
+
+.resumo-item.divergencia-FALTA strong {
+  color: #dc3545;
+}
+
+/* ============================================================================
+   INFORMAÇÕES
+   ============================================================================ */
+
+.info-text {
+  color: #666;
+  font-size: 0.95rem;
+  margin-bottom: 20px;
+}
+
+/* ============================================================================
+   RESPONSIVIDADE
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  .caixa-diario-container {
+    padding: 15px;
+  }
+
+  .caixa-header h1 {
+    font-size: 1.8rem;
+  }
+
+  .caixa-content {
+    padding: 20px;
+  }
+
+  .tabs-navigation {
+    gap: 5px;
+  }
+
+  .tab-btn {
+    padding: 10px 15px;
+    font-size: 0.9rem;
+  }
+
+  .caixa-list {
+    grid-template-columns: 1fr;
+  }
+
+  .resumo-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .table-movimentacoes,
+  .table-relatorio {
+    font-size: 0.9rem;
+  }
+
+  .table-movimentacoes th,
+  .table-relatorio th,
+  .table-movimentacoes td,
+  .table-relatorio td {
+    padding: 8px;
+  }
+}
