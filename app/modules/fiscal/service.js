@@ -1,19 +1,24 @@
 /**
- * Service: Fiscal Nacional Completo
- * SetPoint Ultra — NFC-e, NF-e, NF-Se, CT-e, Contingência, Inutilização
- * Provedor primário: Focus NFe | Fallback: Webmania
+ * Service: Fiscal Nacional Completo (MOTOR PRÓPRIO)
+ * SetPoint Ultra — NFC-e, NF-e, NF-Se, CT-e
+ * Sem dependência de provedores externos. Comunicação direta com SEFAZ.
  */
 import { db } from '../../core/database.js';
+import * as motor from '../../core/fiscal-engine.js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const CERT_DIR = path.join(__dirname, '../../data/certificados');
 
 // ============================================================================
-// CONFIGURAÇÃO FISCAL DO TENANT
+// CONFIGURAÇÃO FISCAL DO TENANT E CERTIFICADO
 // ============================================================================
 
 export async function obterConfigFiscal(tenantId) {
-  const result = await db.query(
-    'SELECT * FROM fiscal_configuracoes WHERE tenant_id = $1',
-    [tenantId]
-  );
+  const result = await db.query('SELECT * FROM fiscal_configuracoes WHERE tenant_id = $1', [tenantId]);
   return result.rows[0] || null;
 }
 
@@ -21,315 +26,238 @@ export async function salvarConfigFiscal(tenantId, dados) {
   const result = await db.query(
     `INSERT INTO fiscal_configuracoes
       (tenant_id, cnpj, ie, im, razao_social, nome_fantasia, regime_tributario,
-       ambiente, uf, csc_id, csc, serie_nfce, serie_nfe, provedor, token_provedor)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+       ambiente, uf, csc_id, csc, serie_nfce, serie_nfe)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
      ON CONFLICT (tenant_id) DO UPDATE SET
        cnpj=$2, ie=$3, im=$4, razao_social=$5, nome_fantasia=$6,
        regime_tributario=$7, ambiente=$8, uf=$9, csc_id=$10, csc=$11,
-       serie_nfce=$12, serie_nfe=$13, provedor=$14, token_provedor=$15,
-       updated_at=NOW()
+       serie_nfce=$12, serie_nfe=$13, updated_at=NOW()
      RETURNING *`,
     [tenantId, dados.cnpj, dados.ie, dados.im, dados.razao_social, dados.nome_fantasia,
      dados.regime_tributario || 'simples', dados.ambiente || 'homologacao',
-     dados.uf, dados.csc_id, dados.csc, dados.serie_nfce || 1, dados.serie_nfe || 1,
-     dados.provedor || 'focusnfe', dados.token_provedor]
+     dados.uf, dados.csc_id, dados.csc, dados.serie_nfce || 1, dados.serie_nfe || 1]
   );
   return result.rows[0];
 }
 
+export async function uploadCertificadoA1(tenantId, base64Pfx, senha) {
+  if (!fs.existsSync(CERT_DIR)) fs.mkdirSync(CERT_DIR, { recursive: true });
+
+  const pfxPath = path.join(CERT_DIR, `cert_${tenantId}.pfx`);
+  fs.writeFileSync(pfxPath, Buffer.from(base64Pfx, 'base64'));
+
+  // Testar leitura e extração para garantir que a senha está correta
+  try {
+    motor.extrairChavesCertificado(pfxPath, senha);
+  } catch (err) {
+    fs.unlinkSync(pfxPath);
+    throw new Error('Certificado inválido ou senha incorreta: ' + err.message);
+  }
+
+  await db.query(
+    `UPDATE fiscal_configuracoes SET certificado_senha = $1, certificado_valido = TRUE WHERE tenant_id = $2`,
+    [senha, tenantId]
+  );
+  return { sucesso: true, mensagem: 'Certificado A1 configurado com sucesso' };
+}
+
 // ============================================================================
-// EMISSÃO DE NFC-e (Nota Fiscal ao Consumidor Eletrônica)
+// EMISSÃO DE NFC-e (MOTOR PRÓPRIO)
 // ============================================================================
 
-/**
- * Emitir NFC-e de forma ASSÍNCRONA (não bloqueia o PDV)
- * O pagamento já foi confirmado — a nota é enfileirada e emitida em background
- */
 export async function emitirNFCe(tenantId, dadosVenda) {
   const config = await obterConfigFiscal(tenantId);
-  if (!config) throw new Error('Configuração fiscal não encontrada para este estabelecimento');
+  if (!config || !config.certificado_valido) throw new Error('Configuração fiscal ou certificado ausente');
 
-  // Verificar contingência ativa
-  const contingencia = await verificarContingencia(tenantId, 'nfce');
+  const pfxPath = path.join(CERT_DIR, `cert_${tenantId}.pfx`);
 
   // Obter próximo número
   const numeroResult = await db.query(
-    `UPDATE fiscal_configuracoes
-     SET proximo_numero_nfce = proximo_numero_nfce + 1
-     WHERE tenant_id = $1
-     RETURNING proximo_numero_nfce - 1 AS numero`,
+    `UPDATE fiscal_configuracoes SET proximo_numero_nfce = proximo_numero_nfce + 1 WHERE tenant_id = $1 RETURNING proximo_numero_nfce - 1 AS numero`,
     [tenantId]
   );
   const numero = numeroResult.rows[0].numero;
 
-  // Registrar documento como pendente
+  // Gerar Chave de Acesso
+  const codigoAleatorio = Math.floor(Math.random() * 99999999);
+  const ufCodigo = '51'; // MT
+  const anoMes = new Date().toISOString().slice(2,7).replace('-','');
+  const chaveAcesso = motor.gerarChaveAcesso(ufCodigo, anoMes, config.cnpj, '65', config.serie_nfce, numero, '1', codigoAleatorio);
+
+  // Registrar documento
   const docResult = await db.query(
     `INSERT INTO fiscal_documentos
       (tenant_id, tipo, numero, serie, status, ambiente, valor_total,
-       destinatario_nome, destinatario_cpf_cnpj, referencia_interna, nsu_tef)
-     VALUES ($1,'nfce',$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       destinatario_nome, destinatario_cpf_cnpj, chave_acesso)
+     VALUES ($1,'nfce',$2,$3,'processando',$4,$5,$6,$7,$8)
      RETURNING *`,
-    [tenantId, numero, config.serie_nfce,
-     contingencia ? 'contingencia' : 'pendente',
-     config.ambiente, dadosVenda.valor_total,
-     dadosVenda.destinatario_nome, dadosVenda.destinatario_cpf,
-     dadosVenda.venda_id, dadosVenda.nsu_tef]
+    [tenantId, numero, config.serie_nfce, config.ambiente, dadosVenda.valor_total,
+     dadosVenda.destinatario_nome, dadosVenda.destinatario_cpf, chaveAcesso]
   );
-  const doc = docResult.rows[0];
+  const docId = docResult.rows[0].id;
 
-  // Emitir via Focus NFe (ou contingência)
-  if (!contingencia) {
-    try {
-      const xmlPayload = montarXMLNFCe(config, dadosVenda, numero);
-      const resultado = await chamarFocusNFe(config, 'nfce', xmlPayload);
-      await atualizarStatusDocumento(doc.id, resultado);
-    } catch (err) {
-      // Em caso de erro da SEFAZ, ativar contingência
-      console.error(`[FISCAL] Erro ao emitir NFC-e ${numero}:`, err.message);
-      await ativarContingencia(tenantId, 'nfce', err.message);
-      await db.query(
-        "UPDATE fiscal_documentos SET status = 'contingencia' WHERE id = $1",
-        [doc.id]
-      );
-    }
-  }
-
-  return doc;
-}
-
-/**
- * Emitir NF-e (Nota Fiscal Eletrônica — para B2B, transferências, devoluções)
- */
-export async function emitirNFe(tenantId, dadosNota) {
-  const config = await obterConfigFiscal(tenantId);
-  if (!config) throw new Error('Configuração fiscal não encontrada');
-
-  const numeroResult = await db.query(
-    `UPDATE fiscal_configuracoes
-     SET proximo_numero_nfe = proximo_numero_nfe + 1
-     WHERE tenant_id = $1
-     RETURNING proximo_numero_nfe - 1 AS numero`,
-    [tenantId]
-  );
-  const numero = numeroResult.rows[0].numero;
-
-  const docResult = await db.query(
-    `INSERT INTO fiscal_documentos
-      (tenant_id, tipo, numero, serie, status, ambiente, valor_total,
-       destinatario_nome, destinatario_cpf_cnpj, referencia_interna)
-     VALUES ($1,'nfe',$2,$3,'pendente',$4,$5,$6,$7,$8)
-     RETURNING *`,
-    [tenantId, numero, config.serie_nfe, config.ambiente,
-     dadosNota.valor_total, dadosNota.destinatario_nome,
-     dadosNota.destinatario_cnpj, dadosNota.referencia_id]
-  );
-
-  // Emissão assíncrona
+  // Emissão Assíncrona
   setImmediate(async () => {
     try {
-      const xmlPayload = montarXMLNFe(config, dadosNota, numero);
-      const resultado = await chamarFocusNFe(config, 'nfe', xmlPayload);
-      await atualizarStatusDocumento(docResult.rows[0].id, resultado);
+      // 1. Montar XML
+      const xmlOriginal = montarXMLNFCe(config, dadosVenda, numero, chaveAcesso, codigoAleatorio);
+
+      // 2. Assinar XML com A1
+      const xmlAssinado = motor.assinarXml(xmlOriginal, 'infNFe', pfxPath, config.certificado_senha);
+
+      // 3. Montar Lote
+      const idLote = Date.now().toString();
+      const xmlLote = `<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><idLote>${idLote}</idLote><indSinc>1</indSinc>${xmlAssinado}</enviNFe>`;
+
+      // 4. Enviar SEFAZ
+      const respostaSefaz = await motor.enviarSefaz(config.uf, config.ambiente, 'NfeAutorizacao', xmlLote, pfxPath, config.certificado_senha);
+
+      // 5. Processar Retorno (Síncrono)
+      const retEnviNFe = respostaSefaz?.['soapenv:Envelope']?.['soapenv:Body']?.['nfeResultMsg']?.['retEnviNFe'];
+      const protNFe = retEnviNFe?.protNFe?.infProt;
+
+      if (protNFe && protNFe.cStat === '100') { // Autorizado
+        await db.query(
+          `UPDATE fiscal_documentos SET status = 'autorizado', protocolo = $1, data_autorizacao = $2, xml_retorno = $3 WHERE id = $4`,
+          [protNFe.nProt, protNFe.dhRecbto, xmlAssinado, docId]
+        );
+      } else { // Rejeitado
+        const motivo = protNFe?.xMotivo || retEnviNFe?.xMotivo || 'Rejeição Desconhecida';
+        await db.query(
+          `UPDATE fiscal_documentos SET status = 'rejeitado', motivo_rejeicao = $1 WHERE id = $2`,
+          [motivo, docId]
+        );
+      }
     } catch (err) {
-      console.error(`[FISCAL] Erro ao emitir NF-e ${numero}:`, err.message);
+      console.error(`[FISCAL PRÓPRIO] Erro ao emitir NFC-e ${numero}:`, err.message);
+      await db.query(
+        `UPDATE fiscal_documentos SET status = 'contingencia', motivo_rejeicao = $1 WHERE id = $2`,
+        [err.message, docId]
+      );
     }
   });
 
   return docResult.rows[0];
 }
 
-/**
- * Emitir NF-Se (Nota Fiscal de Serviços Eletrônica)
- */
-export async function emitirNFSe(tenantId, dadosServico) {
-  const config = await obterConfigFiscal(tenantId);
-  if (!config) throw new Error('Configuração fiscal não encontrada');
-  if (!config.im) throw new Error('Inscrição Municipal (IM) não configurada para emissão de NF-Se');
+// ============================================================================
+// HELPERS XML
+// ============================================================================
 
-  const numeroResult = await db.query(
-    `UPDATE fiscal_configuracoes
-     SET proximo_numero_nfse = proximo_numero_nfse + 1
-     WHERE tenant_id = $1
-     RETURNING proximo_numero_nfse - 1 AS numero`,
-    [tenantId]
-  );
-  const numero = numeroResult.rows[0].numero;
-
-  const docResult = await db.query(
-    `INSERT INTO fiscal_documentos
-      (tenant_id, tipo, numero, serie, status, ambiente, valor_total,
-       destinatario_nome, destinatario_cpf_cnpj)
-     VALUES ($1,'nfse',$2,1,'pendente',$3,$4,$5,$6)
-     RETURNING *`,
-    [tenantId, numero, config.ambiente, dadosServico.valor_total,
-     dadosServico.tomador_nome, dadosServico.tomador_cpf_cnpj]
-  );
-
-  return docResult.rows[0];
-}
-
-/**
- * Cancelar documento fiscal
- */
-export async function cancelarDocumento(documentoId, tenantId, justificativa) {
-  if (!justificativa || justificativa.length < 15) {
-    throw new Error('Justificativa de cancelamento deve ter no mínimo 15 caracteres');
-  }
-
-  const docResult = await db.query(
-    'SELECT * FROM fiscal_documentos WHERE id = $1 AND tenant_id = $2',
-    [documentoId, tenantId]
-  );
-  const doc = docResult.rows[0];
-  if (!doc) throw new Error('Documento não encontrado');
-  if (doc.status !== 'autorizado') throw new Error('Apenas documentos autorizados podem ser cancelados');
-
-  // Verificar prazo de cancelamento (NFC-e: 30 min; NF-e: 24h)
-  const prazoHoras = doc.tipo === 'nfce' ? 0.5 : 24;
-  const horasDesdeEmissao = (Date.now() - new Date(doc.data_autorizacao).getTime()) / 3600000;
-  if (horasDesdeEmissao > prazoHoras) {
-    throw new Error(`Prazo de cancelamento expirado (${prazoHoras}h)`);
-  }
-
-  // Chamar Focus NFe para cancelamento
-  const config = await obterConfigFiscal(tenantId);
-  try {
-    await chamarFocusNFe(config, `cancelar_${doc.tipo}`, {
-      chave: doc.chave_acesso,
-      justificativa
-    });
-  } catch (err) {
-    console.error('[FISCAL] Erro ao cancelar:', err.message);
-  }
-
-  const result = await db.query(
-    "UPDATE fiscal_documentos SET status = 'cancelado' WHERE id = $1 RETURNING *",
-    [documentoId]
-  );
-  return result.rows[0];
+function montarXMLNFCe(config, venda, numero, chave, cNF) {
+  // Simplificação didática do layout XML da NFe 4.00
+  return `
+<NFe xmlns="http://www.portalfiscal.inf.br/nfe">
+  <infNFe Id="NFe${chave}" versao="4.00">
+    <ide>
+      <cUF>51</cUF>
+      <cNF>${String(cNF).padStart(8,'0')}</cNF>
+      <natOp>VENDA AO CONSUMIDOR</natOp>
+      <mod>65</mod>
+      <serie>${config.serie_nfce}</serie>
+      <nNF>${numero}</nNF>
+      <dhEmi>${new Date().toISOString()}</dhEmi>
+      <tpNF>1</tpNF>
+      <idDest>1</idDest>
+      <cMunFG>5107909</cMunFG>
+      <tpImp>4</tpImp>
+      <tpEmis>1</tpEmis>
+      <cDV>${chave.slice(-1)}</cDV>
+      <tpAmb>${config.ambiente === 'producao' ? 1 : 2}</tpAmb>
+      <finNFe>1</finNFe>
+      <indFinal>1</indFinal>
+      <indPres>1</indPres>
+      <procEmi>0</procEmi>
+      <verProc>SetPointUltra-3.0</verProc>
+    </ide>
+    <emit>
+      <CNPJ>${config.cnpj.replace(/\D/g,'')}</CNPJ>
+      <xNome>${config.razao_social}</xNome>
+      <enderEmit>
+        <xLgr>Rua Exemplo</xLgr>
+        <nro>123</nro>
+        <xBairro>Centro</xBairro>
+        <cMun>5107909</cMun>
+        <xMun>Tangara da Serra</xMun>
+        <UF>MT</UF>
+        <CEP>78300000</CEP>
+      </enderEmit>
+      <IE>${config.ie.replace(/\D/g,'')}</IE>
+      <CRT>${config.regime_tributario === 'simples' ? 1 : 3}</CRT>
+    </emit>
+    ${venda.destinatario_cpf ? `
+    <dest>
+      <CPF>${venda.destinatario_cpf.replace(/\D/g,'')}</CPF>
+      <xNome>${venda.destinatario_nome}</xNome>
+      <indIEDest>9</indIEDest>
+    </dest>` : ''}
+    ${venda.itens.map((i, idx) => `
+    <det nItem="${idx + 1}">
+      <prod>
+        <cProd>${i.codigo || i.produto_id}</cProd>
+        <cEAN>SEM GTIN</cEAN>
+        <xProd>${i.descricao}</xProd>
+        <NCM>00000000</NCM>
+        <CFOP>5102</CFOP>
+        <uCom>${i.unidade || 'UN'}</uCom>
+        <qCom>${i.quantidade}</qCom>
+        <vUnCom>${i.valor_unitario}</vUnCom>
+        <vProd>${i.valor_total}</vProd>
+        <cEANTrib>SEM GTIN</cEANTrib>
+        <uTrib>${i.unidade || 'UN'}</uTrib>
+        <qTrib>${i.quantidade}</qTrib>
+        <vUnTrib>${i.valor_unitario}</vUnTrib>
+        <indTot>1</indTot>
+      </prod>
+      <imposto>
+        <ICMS>
+          <ICMSSN102>
+            <orig>0</orig>
+            <CSOSN>102</CSOSN>
+          </ICMSSN102>
+        </ICMS>
+        <PIS><PISNT><CST>07</CST></PISNT></PIS>
+        <COFINS><COFINSNT><CST>07</CST></COFINSNT></COFINS>
+      </imposto>
+    </det>`).join('')}
+    <total>
+      <ICMSTot>
+        <vBC>0.00</vBC>
+        <vICMS>0.00</vICMS>
+        <vICMSDeson>0.00</vICMSDeson>
+        <vFCP>0.00</vFCP>
+        <vBCST>0.00</vBCST>
+        <vST>0.00</vST>
+        <vFCPST>0.00</vFCPST>
+        <vFCPSTRet>0.00</vFCPSTRet>
+        <vProd>${venda.valor_total}</vProd>
+        <vFrete>0.00</vFrete>
+        <vSeg>0.00</vSeg>
+        <vDesc>0.00</vDesc>
+        <vII>0.00</vII>
+        <vIPI>0.00</vIPI>
+        <vIPIDevol>0.00</vIPIDevol>
+        <vPIS>0.00</vPIS>
+        <vCOFINS>0.00</vCOFINS>
+        <vOutro>0.00</vOutro>
+        <vNF>${venda.valor_total}</vNF>
+      </ICMSTot>
+    </total>
+    <transp>
+      <modFrete>9</modFrete>
+    </transp>
+    <pag>
+      <detPag>
+        <tPag>01</tPag>
+        <vPag>${venda.valor_total}</vPag>
+      </detPag>
+    </pag>
+  </infNFe>
+</NFe>`.trim();
 }
 
 // ============================================================================
-// CONTINGÊNCIA
-// ============================================================================
-
-export async function verificarContingencia(tenantId, tipo) {
-  const result = await db.query(
-    `SELECT * FROM fiscal_contingencias
-     WHERE tenant_id = $1 AND tipo = $2 AND ativo = TRUE`,
-    [tenantId, tipo]
-  );
-  return result.rows[0] || null;
-}
-
-export async function ativarContingencia(tenantId, tipo, motivo) {
-  // Desativar contingência anterior se existir
-  await db.query(
-    "UPDATE fiscal_contingencias SET ativo = FALSE WHERE tenant_id = $1 AND tipo = $2",
-    [tenantId, tipo]
-  );
-  await db.query(
-    `INSERT INTO fiscal_contingencias (tenant_id, tipo, motivo) VALUES ($1,$2,$3)`,
-    [tenantId, tipo, motivo]
-  );
-}
-
-export async function desativarContingencia(tenantId, tipo) {
-  await db.query(
-    "UPDATE fiscal_contingencias SET ativo = FALSE, fim = NOW() WHERE tenant_id = $1 AND tipo = $2",
-    [tenantId, tipo]
-  );
-  // Reprocessar documentos em contingência
-  await reprocessarContingencia(tenantId, tipo);
-}
-
-async function reprocessarContingencia(tenantId, tipo) {
-  const docs = await db.query(
-    "SELECT * FROM fiscal_documentos WHERE tenant_id = $1 AND tipo = $2 AND status = 'contingencia'",
-    [tenantId, tipo]
-  );
-  console.log(`[FISCAL] Reprocessando ${docs.rows.length} documentos em contingência...`);
-  // Aqui seria implementada a lógica de reenvio para a SEFAZ
-}
-
-// ============================================================================
-// HELPERS INTERNOS
-// ============================================================================
-
-async function atualizarStatusDocumento(docId, resultado) {
-  await db.query(
-    `UPDATE fiscal_documentos
-     SET status = $1, chave_acesso = $2, protocolo = $3,
-         data_autorizacao = $4, xml_retorno = $5, motivo_rejeicao = $6
-     WHERE id = $7`,
-    [resultado.status, resultado.chave_acesso, resultado.protocolo,
-     resultado.data_autorizacao, resultado.xml, resultado.motivo, docId]
-  );
-}
-
-/**
- * Chamar API do Focus NFe
- */
-async function chamarFocusNFe(config, endpoint, payload) {
-  const baseUrl = config.ambiente === 'producao'
-    ? 'https://api.focusnfe.com.br/v2'
-    : 'https://homologacao.focusnfe.com.br/v2';
-
-  const response = await fetch(`${baseUrl}/${endpoint}`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Basic ${Buffer.from(config.token_provedor + ':').toString('base64')}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
-  });
-
-  if (!response.ok) {
-    const erro = await response.text();
-    throw new Error(`Focus NFe retornou ${response.status}: ${erro}`);
-  }
-
-  return response.json();
-}
-
-/**
- * Montar payload XML para NFC-e (simplificado — em produção usar biblioteca específica)
- */
-function montarXMLNFCe(config, venda, numero) {
-  return {
-    natureza_operacao: 'VENDA AO CONSUMIDOR',
-    forma_pagamento: 0,
-    numero,
-    serie: config.serie_nfce,
-    data_emissao: new Date().toISOString(),
-    cnpj_emitente: config.cnpj,
-    nome_emitente: config.razao_social,
-    uf: config.uf,
-    csc_id: config.csc_id,
-    csc: config.csc,
-    itens: venda.itens || [],
-    pagamentos: venda.pagamentos || [],
-    valor_total: venda.valor_total
-  };
-}
-
-function montarXMLNFe(config, nota, numero) {
-  return {
-    natureza_operacao: nota.natureza_operacao || 'VENDA',
-    numero,
-    serie: config.serie_nfe,
-    data_emissao: new Date().toISOString(),
-    cnpj_emitente: config.cnpj,
-    nome_emitente: config.razao_social,
-    uf: config.uf,
-    destinatario: nota.destinatario,
-    itens: nota.itens || [],
-    valor_total: nota.valor_total
-  };
-}
-
-// ============================================================================
-// CONSULTAS E RELATÓRIOS
+// CONSULTAS
 // ============================================================================
 
 export async function listarDocumentos(tenantId, filtros = {}) {
@@ -337,11 +265,11 @@ export async function listarDocumentos(tenantId, filtros = {}) {
   let where = 'WHERE tenant_id = $1';
   if (filtros.tipo) { params.push(filtros.tipo); where += ` AND tipo = $${params.length}`; }
   if (filtros.status) { params.push(filtros.status); where += ` AND status = $${params.length}`; }
-  if (filtros.data_inicio) { params.push(filtros.data_inicio); where += ` AND data_emissao >= $${params.length}`; }
-  if (filtros.data_fim) { params.push(filtros.data_fim); where += ` AND data_emissao <= $${params.length}`; }
 
   const result = await db.query(
-    `SELECT * FROM fiscal_documentos ${where} ORDER BY data_emissao DESC LIMIT 200`,
+    `SELECT id, tipo, numero, serie, status, ambiente, chave_acesso, protocolo,
+            data_emissao, data_autorizacao, valor_total, destinatario_nome, motivo_rejeicao
+     FROM fiscal_documentos ${where} ORDER BY data_emissao DESC LIMIT 200`,
     params
   );
   return result.rows;

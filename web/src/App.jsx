@@ -79,6 +79,12 @@ const AdminRanking    = lazy(() => import('./pages/admin/AdminRanking'))
 const AdminLigas      = lazy(() => import('./pages/admin/AdminLigas'))
 const Contatos        = lazy(() => import('./pages/admin/Contatos'))
 const NotasFiscais    = lazy(() => import('./pages/admin/NotasFiscais'))
+const Oficina         = lazy(() => import('./pages/admin/Oficina'))
+const Agropecuaria    = lazy(() => import('./pages/admin/Agropecuaria'))
+const Varejo          = lazy(() => import('./pages/admin/Varejo'))
+const Compras         = lazy(() => import('./pages/admin/Compras'))
+const ConfiguracaoFiscal = lazy(() => import('./pages/admin/ConfiguracaoFiscal'))
+const ERP             = lazy(() => import('./pages/admin/ERP'))
 const AgendaQuadras   = lazy(() => import('./pages/public/AgendaQuadras'))
 const NoticiasPublic  = lazy(() => import('./pages/public/Noticias'))
 const MeuPainel       = lazy(() => import('./pages/atleta/MeuPainel'))
@@ -147,6 +153,12 @@ export default function App() {
           <Route path="/admin/ligas"          element={<Layout><AdminLigas /></Layout>} />
           <Route path="/admin/contatos"       element={<Layout><Contatos /></Layout>} />
           <Route path="/admin/notas"          element={<Layout><NotasFiscais /></Layout>} />
+          <Route path="/admin/erp"            element={<Layout><ERP /></Layout>} />
+          <Route path="/admin/oficina"         element={<Layout><Oficina /></Layout>} />
+          <Route path="/admin/agropecuaria"    element={<Layout><Agropecuaria /></Layout>} />
+          <Route path="/admin/varejo"          element={<Layout><Varejo /></Layout>} />
+          <Route path="/admin/compras"         element={<Layout><Compras /></Layout>} />
+          <Route path="/admin/fiscal/config"   element={<Layout><ConfiguracaoFiscal /></Layout>} />
         </Route>
 
         {/* Portal do Atleta */}
