@@ -85,6 +85,9 @@ const Varejo          = lazy(() => import('./pages/admin/Varejo'))
 const Compras         = lazy(() => import('./pages/admin/Compras'))
 const ConfiguracaoFiscal = lazy(() => import('./pages/admin/ConfiguracaoFiscal'))
 const ERP             = lazy(() => import('./pages/admin/ERP'))
+const LojaModa        = lazy(() => import('./pages/admin/LojaModa'))
+const BarbeariaERP    = lazy(() => import('./pages/admin/BarbeariaERP'))
+const Supermercado    = lazy(() => import('./pages/admin/Supermercado'))
 const AgendaQuadras   = lazy(() => import('./pages/public/AgendaQuadras'))
 const NoticiasPublic  = lazy(() => import('./pages/public/Noticias'))
 const MeuPainel       = lazy(() => import('./pages/atleta/MeuPainel'))
@@ -159,6 +162,9 @@ export default function App() {
           <Route path="/admin/varejo"          element={<Layout><Varejo /></Layout>} />
           <Route path="/admin/compras"         element={<Layout><Compras /></Layout>} />
           <Route path="/admin/fiscal/config"   element={<Layout><ConfiguracaoFiscal /></Layout>} />
+          <Route path="/admin/loja-moda"         element={<Layout><LojaModa /></Layout>} />
+          <Route path="/admin/barbearia-erp"     element={<Layout><BarbeariaERP /></Layout>} />
+          <Route path="/admin/supermercado"      element={<Layout><Supermercado /></Layout>} />
         </Route>
 
         {/* Portal do Atleta */}
