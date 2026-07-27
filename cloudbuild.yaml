@@ -1,16 +1,32 @@
-# CI/CD SetPoint Ultra — Google Cloud Build
-# Deploy automático no Cloud Run com PostgreSQL
+# ─────────────────────────────────────────────────────────────────────────────
+# SetPoint Ultra — CI/CD Pipeline (Google Cloud Build)
+# Disparo automático: push na branch main
+# ─────────────────────────────────────────────────────────────────────────────
 steps:
-  # 1. Build da imagem Docker
-  - name: 'gcr.io/cloud-builders/docker'
-    args: [ 'build', '-t', 'gcr.io/$PROJECT_ID/setpoint-ultra:$COMMIT_SHA', '.' ]
 
-  # 2. Push da imagem para o Container Registry
-  - name: 'gcr.io/cloud-builders/docker'
-    args: [ 'push', 'gcr.io/$PROJECT_ID/setpoint-ultra:$COMMIT_SHA' ]
+  # ── 1. Build da imagem Docker (multi-stage) ──────────────────────────────
+  - id: 'build-image'
+    name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '--cache-from'
+      - 'gcr.io/$PROJECT_ID/setpoint-ultra:latest'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/setpoint-ultra:$COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/setpoint-ultra:latest'
+      - '.'
+    timeout: '600s'
 
-  # 3. Deploy no Cloud Run
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  # ── 2. Push das imagens para o Container Registry ────────────────────────
+  - id: 'push-image'
+    name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '--all-tags', 'gcr.io/$PROJECT_ID/setpoint-ultra']
+    waitFor: ['build-image']
+
+  # ── 3. Deploy no Cloud Run (São Paulo) ───────────────────────────────────
+  - id: 'deploy-cloud-run'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
       - 'run'
@@ -19,27 +35,64 @@ steps:
       - '--image'
       - 'gcr.io/$PROJECT_ID/setpoint-ultra:$COMMIT_SHA'
       - '--region'
-      - 'southamerica-east1' # São Paulo
+      - 'southamerica-east1'
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'
       - '--port'
       - '8080'
       - '--memory'
-      - '1024Mi'
+      - '1Gi'
       - '--cpu'
       - '1'
       - '--min-instances'
       - '1'
       - '--max-instances'
       - '10'
-      - '--set-env-vars'
-      - 'NODE_ENV=production,DB_HOST=$_DB_HOST,DB_USER=$_DB_USER,DB_PASS=$_DB_PASS,DB_NAME=$_DB_NAME'
+      - '--concurrency'
+      - '80'
+      - '--timeout'
+      - '60s'
       - '--add-cloudsql-instances'
       - '$_CLOUD_SQL_INSTANCE'
+      - '--set-env-vars'
+      - 'NODE_ENV=production,PORT=8080,DB_HOST=/cloudsql/$_CLOUD_SQL_INSTANCE,DB_USER=$_DB_USER,DB_NAME=$_DB_NAME,SEFAZ_AMBIENTE=producao'
+      - '--set-secrets'
+      - 'DB_PASS=setpoint-db-pass:latest,JWT_SECRET=setpoint-jwt-secret:latest,CERT_ENCRYPTION_KEY=setpoint-cert-key:latest'
+      - '--service-account'
+      - 'setpoint-cloudrun@$PROJECT_ID.iam.gserviceaccount.com'
+    waitFor: ['push-image']
 
+  # ── 4. Verificar healthcheck após deploy ─────────────────────────────────
+  - id: 'verify-health'
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        SERVICE_URL=$(gcloud run services describe setpoint-ultra \
+          --region southamerica-east1 \
+          --format 'value(status.url)')
+        echo "✅ Serviço disponível em: $$SERVICE_URL"
+        echo "🔍 Verificando healthcheck..."
+        curl -sf "$$SERVICE_URL/health" || (echo "❌ Healthcheck falhou!" && exit 1)
+        echo "✅ Healthcheck OK!"
+    waitFor: ['deploy-cloud-run']
+
+# ── Imagens a registrar ───────────────────────────────────────────────────────
 images:
   - 'gcr.io/$PROJECT_ID/setpoint-ultra:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/setpoint-ultra:latest'
 
+# ── Variáveis substituíveis (definidas no trigger do Cloud Build) ─────────────
+substitutions:
+  _CLOUD_SQL_INSTANCE: 'SEU_PROJECT_ID:southamerica-east1:setpoint-db-prd'
+  _DB_USER: 'setpoint_admin'
+  _DB_NAME: 'setpoint_ultra'
+
+# ── Opções ────────────────────────────────────────────────────────────────────
 options:
   logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+
+timeout: '1200s'
