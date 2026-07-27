@@ -90,6 +90,7 @@ const ERP             = lazy(() => import('./pages/admin/ERP'))
 const LojaModa        = lazy(() => import('./pages/admin/LojaModa'))
 const BarbeariaERP    = lazy(() => import('./pages/admin/BarbeariaERP'))
 const Supermercado    = lazy(() => import('./pages/admin/Supermercado'))
+const Omnichannel     = lazy(() => import('./pages/admin/Omnichannel'))
 const PDVUnificado    = lazy(() => import('./pages/admin/PDVUnificado'))
 const AgendaQuadras   = lazy(() => import('./pages/public/AgendaQuadras'))
 const AgendamentoOnline = lazy(() => import('./pages/public/AgendamentoOnline'))
@@ -161,20 +162,18 @@ export default function App() {
           <Route path="/admin/contatos"       element={<Layout><Contatos /></Layout>} />
           <Route path="/admin/lojas"          element={<Layout><Lojas /></Layout>} />
           <Route path="/admin/notas"          element={<Layout><NotasFiscais /></Layout>} />
-<<<<<<< HEAD
           <Route path="/admin/pdv-offline"    element={<Layout><PDVOffline /></Layout>} />
-=======
           <Route path="/admin/erp"            element={<Layout><ERP /></Layout>} />
           <Route path="/admin/oficina"         element={<Layout><Oficina /></Layout>} />
           <Route path="/admin/agropecuaria"    element={<Layout><Agropecuaria /></Layout>} />
           <Route path="/admin/varejo"          element={<Layout><Varejo /></Layout>} />
           <Route path="/admin/compras"         element={<Layout><Compras /></Layout>} />
           <Route path="/admin/fiscal/config"   element={<Layout><ConfiguracaoFiscal /></Layout>} />
-          <Route path="/admin/loja-moda"         element={<Layout><LojaModa /></Layout>} />
-          <Route path="/admin/barbearia-erp"     element={<Layout><BarbeariaERP /></Layout>} />
-          <Route path="/admin/supermercado"      element={<Layout><Supermercado /></Layout>} />
-          <Route path="/admin/pdv-erp"            element={<PDVUnificado />} />
->>>>>>> origin/main
+          <Route path="/admin/loja-moda"       element={<Layout><LojaModa /></Layout>} />
+          <Route path="/admin/barbearia-erp"   element={<Layout><BarbeariaERP /></Layout>} />
+          <Route path="/admin/supermercado"    element={<Layout><Supermercado /></Layout>} />
+          <Route path="/admin/omnichannel"      element={<Layout><Omnichannel /></Layout>} />
+          <Route path="/admin/pdv-erp"         element={<PDVUnificado />} />
         </Route>
 
         {/* Portal do Atleta */}

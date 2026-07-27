@@ -1,7 +1,7 @@
 import express from 'express'
 import crypto from 'crypto'
 import * as dbPg from '../db-pg.js'
-import { verificarPermissao, verificarTenant } from '../core/auth.js'
+import { autenticar, autorizar } from './auth.js'
 
 const router = express.Router()
 
@@ -28,7 +28,7 @@ const TIPOS_MANIFESTACAO = new Set(['ciencia', 'desconhecimento', 'nao_realizada
  * GET /api/fiscal/configuracao/:lojaId
  * Obter configuração fiscal da loja
  */
-router.get('/api/fiscal/configuracao/:lojaId', verificarTenant, verificarPermissao(['admin', 'gerente', 'caixa']), async (req, res) => {
+router.get('/configuracao/:lojaId', autenticar, autorizar('admin', 'gerente', 'caixa'), async (req, res) => {
   const { lojaId } = req.params
   const { empresa_id: empresaId } = req.usuario
   try {
@@ -48,7 +48,7 @@ router.get('/api/fiscal/configuracao/:lojaId', verificarTenant, verificarPermiss
  * PUT /api/fiscal/configuracao/:lojaId
  * Atualizar configuração fiscal da loja
  */
-router.put('/api/fiscal/configuracao/:lojaId', verificarTenant, verificarPermissao(['admin', 'gerente']), async (req, res) => {
+router.put('/configuracao/:lojaId', autenticar, autorizar('admin', 'gerente'), async (req, res) => {
   const { lojaId } = req.params
   const { empresa_id: empresaId } = req.usuario
   const { regime_tributario, ambiente_nfe, certificado_a1_id, contingencia_ativa } = req.body
@@ -87,7 +87,7 @@ router.put('/api/fiscal/configuracao/:lojaId', verificarTenant, verificarPermiss
  * POST /api/fiscal/documento
  * Emitir novo documento fiscal (NF-e, SAT, MFE, NFS-e)
  */
-router.post('/api/fiscal/documento', verificarTenant, verificarPermissao(['admin', 'gerente', 'caixa']), async (req, res) => {
+router.post('/documento', autenticar, autorizar('admin', 'gerente', 'caixa'), async (req, res) => {
   const { empresa_id: empresaId, usuario_id: usuarioId } = req.usuario
   const {
     loja_id: lojaId,
@@ -247,7 +247,7 @@ router.post('/api/fiscal/documento', verificarTenant, verificarPermissao(['admin
  * GET /api/fiscal/documento/:documentoId
  * Obter documento fiscal completo
  */
-router.get('/api/fiscal/documento/:documentoId', verificarTenant, verificarPermissao(['admin', 'gerente', 'caixa']), async (req, res) => {
+router.get('/documento/:documentoId', autenticar, autorizar('admin', 'gerente', 'caixa'), async (req, res) => {
   const { documentoId } = req.params
   const { empresa_id: empresaId } = req.usuario
   try {
@@ -274,7 +274,7 @@ router.get('/api/fiscal/documento/:documentoId', verificarTenant, verificarPermi
  * POST /api/fiscal/documento/:documentoId/autorizar
  * Autorizar documento fiscal (simular autorização)
  */
-router.post('/api/fiscal/documento/:documentoId/autorizar', verificarTenant, verificarPermissao(['admin', 'gerente']), async (req, res) => {
+router.post('/documento/:documentoId/autorizar', autenticar, autorizar('admin', 'gerente'), async (req, res) => {
   const { documentoId } = req.params
   const { empresa_id: empresaId, usuario_id: usuarioId } = req.usuario
   const { chave_acesso: chaveAcesso, protocolo_autorizacao: protocoloAutorizacao } = req.body
@@ -324,7 +324,7 @@ router.post('/api/fiscal/documento/:documentoId/autorizar', verificarTenant, ver
  * POST /api/fiscal/documento/:documentoId/cancelar
  * Cancelar documento fiscal
  */
-router.post('/api/fiscal/documento/:documentoId/cancelar', verificarTenant, verificarPermissao(['admin', 'gerente']), async (req, res) => {
+router.post('/documento/:documentoId/cancelar', autenticar, autorizar('admin', 'gerente'), async (req, res) => {
   const { documentoId } = req.params
   const { empresa_id: empresaId, usuario_id: usuarioId } = req.usuario
   const { motivo_cancelamento: motivoCancelamento, protocolo_cancelamento: protocoloCancelamento } = req.body
@@ -375,7 +375,7 @@ router.post('/api/fiscal/documento/:documentoId/cancelar', verificarTenant, veri
  * POST /api/fiscal/manifestacao
  * Registrar manifestação do destinatário (NF-e)
  */
-router.post('/api/fiscal/manifestacao', verificarTenant, verificarPermissao(['admin', 'gerente', 'caixa']), async (req, res) => {
+router.post('/manifestacao', autenticar, autorizar('admin', 'gerente', 'caixa'), async (req, res) => {
   const { empresa_id: empresaId, usuario_id: usuarioId } = req.usuario
   const { documento_fiscal_id: documentoFiscalId, tipo_manifestacao: tipoManifestacao, justificativa } = req.body
 
@@ -402,7 +402,7 @@ router.post('/api/fiscal/manifestacao', verificarTenant, verificarPermissao(['ad
  * GET /api/fiscal/documentos
  * Listar documentos fiscais com filtros
  */
-router.get('/api/fiscal/documentos', verificarTenant, verificarPermissao(['admin', 'gerente', 'caixa']), async (req, res) => {
+router.get('/documentos', autenticar, autorizar('admin', 'gerente', 'caixa'), async (req, res) => {
   const { empresa_id: empresaId } = req.usuario
   const { loja_id: lojaId, tipo_documento: tipoDocumento, status_fiscal: statusFiscal, limite = 100, offset = 0 } = req.query
 
@@ -443,7 +443,7 @@ router.get('/api/fiscal/documentos', verificarTenant, verificarPermissao(['admin
  * POST /api/fiscal/contingencia/iniciar
  * Iniciar contingência fiscal (quando servidor Sefaz indisponível)
  */
-router.post('/api/fiscal/contingencia/iniciar', verificarTenant, verificarPermissao(['admin', 'gerente']), async (req, res) => {
+router.post('/contingencia/iniciar', autenticar, autorizar('admin', 'gerente'), async (req, res) => {
   const { empresa_id: empresaId } = req.usuario
   const { loja_id: lojaId, tipo_documento: tipoDocumento, motivo_contingencia: motivoContingencia } = req.body
 
@@ -476,7 +476,7 @@ router.post('/api/fiscal/contingencia/iniciar', verificarTenant, verificarPermis
  * GET /api/fiscal/contingencia/status
  * Obter status de contingência
  */
-router.get('/api/fiscal/contingencia/status', verificarTenant, verificarPermissao(['admin', 'gerente']), async (req, res) => {
+router.get('/contingencia/status', autenticar, autorizar('admin', 'gerente'), async (req, res) => {
   const { empresa_id: empresaId } = req.usuario
   const { loja_id: lojaId } = req.query
 

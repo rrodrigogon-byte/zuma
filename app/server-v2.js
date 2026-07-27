@@ -23,6 +23,10 @@ import nfceRoutes from './routes/nfce.js';
 import caixaRoutes from './routes/caixa.js';
 import lojasRoutes from './routes/lojas.js';
 import pdvOfflineRoutes from './routes/pdv-offline.js';
+import fiscalRoutes from './routes/fiscal.js';
+import supermercadoRoutes from './routes/supermercado.js';
+import omnichannelRoutes from './routes/omnichannel.js';
+import analyticsRoutes from './routes/analytics.js';
 
 // Carregar variáveis de ambiente
 dotenv.config();
@@ -45,8 +49,16 @@ app.use(cors({
   credentials: true
 }));
 
-// Body parser
-app.use(express.json({ limit: '10mb' }));
+// Body parser. Para webhooks, preserva o corpo original exclusivamente para
+// validação criptográfica de assinatura antes de qualquer processamento.
+app.use(express.json({
+  limit: '10mb',
+  verify: (req, _res, buffer) => {
+    if (req.originalUrl?.includes('/omnichannel/webhooks/')) {
+      req.rawBody = Buffer.from(buffer);
+    }
+  },
+}));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Logging
@@ -98,7 +110,11 @@ app.get('/', (req, res) => {
       nfce: '/nfce',
       caixa: '/caixa',
       lojas: '/lojas',
-      pdv_offline: '/pdv-offline'
+      pdv_offline: '/pdv-offline',
+      fiscal: '/fiscal',
+      supermercado: '/supermercado',
+      omnichannel: '/omnichannel',
+      analytics: '/analytics'
     }
   });
 });
@@ -127,6 +143,12 @@ app.use('/lojas', lojasRoutes);
 // PDV offline, terminais e periféricos
 app.use('/pdv-offline', pdvOfflineRoutes);
 
+// Fiscal nacional, operação comercial e pedidos omnichannel
+app.use('/fiscal', fiscalRoutes);
+app.use('/supermercado', supermercadoRoutes);
+app.use('/omnichannel', omnichannelRoutes);
+app.use('/analytics', analyticsRoutes);
+
 // Aliases com prefixo /api preservam a compatibilidade com o frontend Vite
 // existente, que faz chamadas relativas a /api/*.
 app.use('/api/auth', authRoutes);
@@ -137,6 +159,16 @@ app.use('/api/nfce', nfceRoutes);
 app.use('/api/caixa', caixaRoutes);
 app.use('/api/lojas', lojasRoutes);
 app.use('/api/pdv-offline', pdvOfflineRoutes);
+app.use('/api/fiscal', fiscalRoutes);
+app.use('/api/supermercado', supermercadoRoutes);
+app.use('/api/omnichannel', omnichannelRoutes);
+app.use('/api/analytics', analyticsRoutes);
+// Compatibilidade explícita para os painéis administrativos legados.
+app.use('/api/admin', analyticsRoutes);
+// Compatibilidade da vitrine pública existente: /api/loja/pedido e
+// /api/loja/pedido/:codigo são rotas públicas, enquanto o restante continua
+// protegido dentro de /api/omnichannel.
+app.use('/api', omnichannelRoutes);
 
 /**
  * ============================================================================
@@ -194,7 +226,13 @@ async function iniciarServidor() {
       console.log('  • GET    /lojas');
       console.log('  • POST   /lojas');
       console.log('  • POST   /pdv-offline/sincronizar');
-      console.log('  • POST   /pdv-offline/terminal/heartbeat\n');
+      console.log('  • POST   /pdv-offline/terminal/heartbeat');
+      console.log('  • POST   /fiscal/documento');
+      console.log('  • GET    /supermercado/produtos');
+      console.log('  • POST   /supermercado/transferencias');
+      console.log('  • GET    /omnichannel/pedidos');
+      console.log('  • GET    /analytics/resumo');
+      console.log('  • POST   /omnichannel/webhooks/:codigoPublico\n');
     });
   } catch (error) {
     console.error('❌ Erro ao iniciar servidor:', error);

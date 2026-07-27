@@ -141,15 +141,12 @@ export default function BI() {
 
   async function fetchData() {
     try {
-      const [bi, dash] = await Promise.all([
-        api.get('/api/admin/bi'),
-        api.get('/api/admin/dashboard').catch(() => null),
-      ])
+      const bi = await api.get(`/api/analytics/resumo?periodo=${encodeURIComponent(periodoAtivo)}`)
       setData(bi)
-      setDashData(dash)
+      setDashData(null)
       setLastUpdate(new Date())
     } catch {
-      toast('Erro ao carregar BI', 'error')
+      toast('Erro ao carregar indicadores gerenciais', 'error')
     } finally {
       setLoading(false)
     }
@@ -157,7 +154,7 @@ export default function BI() {
 
   useEffect(() => {
     fetchData()
-  }, [])
+  }, [periodoAtivo])
 
   // Auto-refresh a cada 30 segundos
   useEffect(() => {
@@ -180,7 +177,7 @@ export default function BI() {
 
     if (faturSerie.length > 0) {
       exportCSV(
-        faturSerie.map(r => ({ Período: r.label, 'Faturamento (R$)': r.valor })),
+        faturSerie.map(r => ({ Período: r.data, 'Faturamento (R$)': r.faturamento })),
         ['Período', 'Faturamento (R$)'],
         'bi_faturamento_serie.csv'
       )
@@ -188,8 +185,8 @@ export default function BI() {
     if (dist.length > 0) {
       setTimeout(() => {
         exportCSV(
-          dist.map(r => ({ Categoria: r.categoria, 'Valor (R$)': r.valor })),
-          ['Categoria', 'Valor (R$)'],
+          dist.map(r => ({ Produto: r.nome, 'Valor (R$)': r.valor })),
+          ['Produto', 'Valor (R$)'],
           'bi_distribuicao_receita.csv'
         )
       }, 300)
@@ -232,6 +229,12 @@ export default function BI() {
   const bm = data.benchmarks || {}
   const faturamentoSerie = op.faturamentoSerie || []
   const despesasSerie = op.despesasSerie || []
+  const estoque = data.estoque || {}
+  const pedidos = data.pedidos || {}
+  const fiscal = data.fiscal || {}
+  const previsao = data.previsao?.proximosSeteDias || []
+  const demandaProdutos = data.previsao?.demandaProdutos || []
+  const alertas = data.alertas || []
 
   // KPIs extras do dashboard
   const dash = dashData || {}
@@ -285,28 +288,27 @@ export default function BI() {
         <div style={S.kpi('#5FB335')}>
           <div style={S.kpiLabel}>Faturamento</div>
           <div style={S.kpiValue('#5FB335')}>{fmtR(op.faturamento ?? 0)}</div>
-          {op.faturamentoMesAnterior != null && (
-            <div style={S.muted}>mês anterior: {fmtR(op.faturamentoMesAnterior)}</div>
+          {op.faturamentoPeriodoAnterior != null && (
+            <div style={S.muted}>período anterior: {fmtR(op.faturamentoPeriodoAnterior)} · {op.variacaoFaturamentoPercentual >= 0 ? '▲' : '▼'} {Math.abs(op.variacaoFaturamentoPercentual || 0).toFixed(1)}%</div>
           )}
         </div>
         <div style={S.kpi('#C9A656')}>
           <div style={S.kpiLabel}>Ticket Médio</div>
           <div style={S.kpiValue('#C9A656')}>{fmtR(op.ticketMedio ?? 0)}</div>
-          {bm.ticketMedio != null && (
-            <div style={S.muted}>benchmark: {fmtR(bm.ticketMedio)}</div>
+          {op.ticketMedioPeriodoAnterior != null && (
+            <div style={S.muted}>período anterior: {fmtR(op.ticketMedioPeriodoAnterior)} · {op.variacaoTicketMedioPercentual >= 0 ? '▲' : '▼'} {Math.abs(op.variacaoTicketMedioPercentual || 0).toFixed(1)}%</div>
           )}
         </div>
         <div style={S.kpi('#8FD64A')}>
           <div style={S.kpiLabel}>Margem Bruta</div>
-          <div style={S.kpiValue('#8FD64A')}>{((op.margemBruta ?? 0) * 100).toFixed(1)}%</div>
-          {bm.margemBruta != null && (
-            <div style={S.muted}>benchmark: {(bm.margemBruta * 100).toFixed(1)}%</div>
-          )}
+          <div style={S.kpiValue('#8FD64A')}>{(op.margemBrutaPercentual ?? 0).toFixed(1)}%</div>
+          <div style={S.muted}>resultado bruto: {fmtR(op.margemBruta ?? 0)}</div>
         </div>
-        {op.nTransacoes != null && (
+        {op.numeroVendas != null && (
           <div style={S.kpi('#0E2E1C')}>
             <div style={S.kpiLabel}>Transações</div>
-            <div style={S.kpiValue('#5FB335')}>{op.nTransacoes.toLocaleString('pt-BR')}</div>
+                          <div style={S.kpiValue('#5FB335')}>{op.numeroVendas.toLocaleString('pt-BR')}</div>
+
           </div>
         )}
       </div>
@@ -376,9 +378,9 @@ export default function BI() {
               <span style={S.dot('#5FB335')} />
               Evolução do Faturamento
             </div>
-            <LineChart items={faturamentoSerie} color="#5FB335" valueKey="valor" labelKey="label" fmt={fmtR} />
+            <LineChart items={faturamentoSerie} color="#5FB335" valueKey="faturamento" labelKey="data" fmt={fmtR} />
             <div style={{ marginTop: 12 }}>
-              <BarChart items={faturamentoSerie} color="#5FB335" valueKey="valor" labelKey="label" fmt={fmtR} />
+              <BarChart items={faturamentoSerie} color="#5FB335" valueKey="faturamento" labelKey="data" fmt={fmtR} />
             </div>
           </div>
         )}
@@ -390,7 +392,7 @@ export default function BI() {
               <span style={S.dot('#8FD64A')} />
               Distribuição de Receita
             </div>
-            <BarChart items={op.distribuicao} color="#8FD64A" valueKey="valor" labelKey="categoria" fmt={fmtR} />
+            <BarChart items={op.distribuicao} color="#8FD64A" valueKey="valor" labelKey="nome" fmt={fmtR} />
           </div>
         )}
 
@@ -405,6 +407,68 @@ export default function BI() {
           </div>
         )}
       </div>
+
+      {/* Operação, previsão e alertas derivados dos dados reais da loja */}
+      <div style={S.grid2}>
+        <div style={S.card}>
+          <div style={S.cardTitle}><span style={S.dot('#C9A656')} />Operação Omnichannel</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
+            <div><div style={S.kpiLabel}>Pedidos abertos</div><div style={S.kpiValue('#C9A656')}>{pedidos.abertos ?? 0}</div></div>
+            <div><div style={S.kpiLabel}>Em preparo</div><div style={S.kpiValue('#5FB335')}>{pedidos.emPreparo ?? 0}</div></div>
+            <div><div style={S.kpiLabel}>Tempo médio</div><div style={{ ...S.kpiValue('#0E2E1C'), fontSize: '1.25rem' }}>{(pedidos.tempoMedioConclusaoMinutos ?? 0).toFixed(1)} min</div></div>
+            <div><div style={S.kpiLabel}>Cancelados</div><div style={{ ...S.kpiValue('#e05c5c'), fontSize: '1.25rem' }}>{pedidos.canceladosPeriodo ?? 0}</div></div>
+          </div>
+        </div>
+        <div style={S.card}>
+          <div style={S.cardTitle}><span style={S.dot('#8FD64A')} />Estoque e Fiscal</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
+            <div><div style={S.kpiLabel}>Sem estoque</div><div style={{ ...S.kpiValue('#e05c5c'), fontSize: '1.25rem' }}>{estoque.semEstoque ?? 0}</div></div>
+            <div><div style={S.kpiLabel}>No mínimo</div><div style={{ ...S.kpiValue('#C9A656'), fontSize: '1.25rem' }}>{estoque.estoqueCritico ?? 0}</div></div>
+            <div><div style={S.kpiLabel}>Fiscal em contingência</div><div style={{ ...S.kpiValue('#e05c5c'), fontSize: '1.25rem' }}>{fiscal.documentosContingencia ?? 0}</div></div>
+            <div><div style={S.kpiLabel}>Fiscal com erro</div><div style={{ ...S.kpiValue('#e05c5c'), fontSize: '1.25rem' }}>{fiscal.documentosComErro ?? 0}</div></div>
+          </div>
+        </div>
+      </div>
+
+      {(previsao.length > 0 || demandaProdutos.length > 0) && (
+        <div style={{ ...S.grid2, marginBottom: '1rem' }}>
+          {previsao.length > 0 && (
+            <div style={S.card}>
+              <div style={S.cardTitle}><span style={S.dot('#5FB335')} />Previsão de Faturamento — Próximos 7 Dias</div>
+              <LineChart items={previsao} color="#C9A656" valueKey="faturamento_previsto" labelKey="data" fmt={fmtR} />
+              <p style={{ ...S.muted, marginTop: 10 }}>Média móvel ponderada com tendência linear, calculada exclusivamente do histórico fechado da loja.</p>
+            </div>
+          )}
+          {demandaProdutos.length > 0 && (
+            <div style={S.card}>
+              <div style={S.cardTitle}><span style={S.dot('#C9A656')} />Demanda Estimada por Produto — 7 Dias</div>
+              <BarChart
+                items={demandaProdutos}
+                color="#C9A656"
+                valueKey="demanda_prevista_7_dias"
+                labelKey="nome"
+                fmt={(valor) => `${Number(valor).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} un.`}
+              />
+              <p style={{ ...S.muted, marginTop: 10 }}>Use como apoio à reposição; valide estoque físico, sazonalidade e promoções antes de comprar.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {alertas.length > 0 && (
+        <div style={{ ...S.card, marginBottom: '1rem' }}>
+          <div style={S.cardTitle}><span style={S.dot('#e05c5c')} />Alertas Operacionais</div>
+          <div style={{ display: 'grid', gap: 9 }}>
+            {alertas.map((alerta, indice) => (
+              <div key={`${alerta.categoria}-${indice}`} style={{ padding: '0.75rem', borderRadius: 8, border: '1px solid var(--border)', background: alerta.severidade === 'critica' ? 'rgba(224,92,92,.10)' : 'var(--surface2)' }}>
+                <strong style={{ color: alerta.severidade === 'critica' || alerta.severidade === 'alta' ? '#e05c5c' : '#C9A656', fontSize: '0.82rem', textTransform: 'uppercase' }}>{alerta.categoria}</strong>
+                <div style={{ marginTop: 3, color: 'var(--fg)', fontSize: '0.86rem' }}>{alerta.mensagem}</div>
+                <div style={{ ...S.muted, marginTop: 3 }}>{alerta.acao}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Indicadores adicionais (NPS, Churn, LTV) */}
       {(op.nps != null || op.churnRate != null || op.ltv != null) && (

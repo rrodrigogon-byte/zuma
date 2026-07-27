@@ -36,7 +36,7 @@ export default function LojaAtendimento() {
 
   const load = useCallback(async (quiet = false) => {
     try {
-      const data = await api.get('/api/admin/loja/pedidos')
+      const data = await api.get('/api/omnichannel/pedidos')
       setPedidos(Array.isArray(data) ? data : [])
     } catch (e) {
       if (!quiet) toast(e.message || 'Erro ao carregar pedidos', 'error')
@@ -58,7 +58,7 @@ export default function LojaAtendimento() {
   const mudarStatus = async (p, status) => {
     setBusy(p.id)
     try {
-      await api.patch(`/api/admin/loja/pedidos/${p.id}`, { status })
+      await api.patch(`/api/omnichannel/pedidos/${p.id}`, { status })
       await load(true)
       const labels = { preparando: 'em preparação', pronto: 'liberado', entregue: 'entregue', cancelado: 'cancelado' }
       toast(`Pedido ${p.codigo} ${labels[status] || status}`)
@@ -70,7 +70,7 @@ export default function LojaAtendimento() {
     const novo = p.pagamento === 'pago' ? 'pix-pendente' : 'pago'
     setBusy(p.id)
     try {
-      await api.patch(`/api/admin/loja/pedidos/${p.id}`, { pagamento: novo })
+      await api.patch(`/api/omnichannel/pedidos/${p.id}`, { pagamento: novo })
       await load(true)
       toast(novo === 'pago' ? `Pedido ${p.codigo} marcado como pago` : `Pagamento de ${p.codigo} reaberto`)
     } catch (e) { toast(e.message || 'Erro ao atualizar pagamento', 'error') }

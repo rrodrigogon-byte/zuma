@@ -92,6 +92,7 @@ const NAV_ADMIN_GROUPS = [
       { to: '/admin/notas',    icon: '🧾', label: 'Notas Fiscais' },
       { to: '/admin/cupons',   icon: '🎟️', label: 'Cupons' },
       { to: '/admin/pdv-offline', icon: '📡', label: 'PDV Offline & Periféricos' },
+      { to: '/admin/omnichannel', icon: '🔄', label: 'Canais, Delivery & Fidelidade' },
     ],
   },
   {
