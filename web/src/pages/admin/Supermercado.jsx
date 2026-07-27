@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, fmtDate, fmtDateOnly, fmtQtd, fmtR } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
-const TABS = ['Produtos', 'Lotes & Validade', 'Promoções', 'Etiquetas', 'Transferências']
+const TABS = ['Produtos', 'Lotes & Validade', 'Promoções', 'Etiquetas', 'Transferências', 'Fornecedores', 'Margem']
 const inputStyle = { width: '100%', padding: '9px 11px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--fg)', boxSizing: 'border-box' }
 const labelStyle = { display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 5, fontWeight: 600 }
 const panelStyle = { background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 12 }

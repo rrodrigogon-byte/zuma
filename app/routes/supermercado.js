@@ -964,4 +964,240 @@ router.post('/transferencias/:id/cancelar', autenticar, autorizar('admin', 'gere
   }
 });
 
+// ============================================================================
+// NOVOS ENDPOINTS: LOTES, FORNECEDORES E MARGEM
+// ============================================================================
+
+/**
+ * GET /supermercado/lotes
+ * Listar lotes de produtos com filtro por produto, loja e status
+ */
+router.get('/lotes', autenticar, autorizar('admin', 'gerente', 'vendedor', 'caixa'), async (req, res) => {
+  try {
+    const { produto_id, status = 'ativo', limite = 50, offset = 0 } = req.query;
+    let sql = 'SELECT * FROM lotes_produto WHERE empresa_id = $1 AND loja_id = $2';
+    const params = [req.empresaId, req.lojaId];
+    let paramIndex = 3;
+
+    if (produto_id) {
+      sql += ` AND produto_id = $${paramIndex++}`;
+      params.push(produto_id);
+    }
+    if (status) {
+      sql += ` AND status = $${paramIndex++}`;
+      params.push(status);
+    }
+
+    sql += ` ORDER BY data_validade ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    params.push(limite, offset);
+
+    const result = await dbPg.query(sql, params);
+    res.json({ sucesso: true, lotes: result.rows });
+  } catch (error) {
+    console.error('Erro ao listar lotes:', error);
+    res.status(500).json({ erro: 'Erro ao listar lotes' });
+  }
+});
+
+/**
+ * POST /supermercado/lotes
+ * Criar novo lote de produto
+ */
+router.post('/lotes', autenticar, autorizar('admin', 'gerente'), async (req, res) => {
+  try {
+    const { produto_id, numero_lote, data_fabricacao, data_validade, quantidade_inicial, preco_custo, preco_venda } = req.body;
+
+    if (!produto_id || !numero_lote || !data_validade || !quantidade_inicial) {
+      return res.status(400).json({ erro: 'Campos obrigatórios: produto_id, numero_lote, data_validade, quantidade_inicial' });
+    }
+
+    const result = await dbPg.query(
+      `INSERT INTO lotes_produto
+       (empresa_id, loja_id, produto_id, numero_lote, data_fabricacao, data_validade, quantidade_inicial, quantidade_atual, preco_custo, preco_venda)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING *`,
+      [req.empresaId, req.lojaId, produto_id, numero_lote, data_fabricacao || null, data_validade, quantidade_inicial, quantidade_inicial, preco_custo || null, preco_venda || null]
+    );
+
+    await dbPg.registrarAuditoria({
+      empresa_id: req.empresaId,
+      loja_id: req.lojaId,
+      usuario_id: req.usuario.usuario_id,
+      tabela: 'lotes_produto',
+      operacao: 'INSERT',
+      registro_id: result.rows[0].id,
+      dados_novo: result.rows[0],
+      ip_address: req.ip,
+      user_agent: req.get('user-agent'),
+    });
+
+    res.status(201).json({ sucesso: true, lote: result.rows[0] });
+  } catch (error) {
+    console.error('Erro ao criar lote:', error);
+    if (error.code === '23505') {
+      return res.status(400).json({ erro: 'Lote já existe para este produto' });
+    }
+    res.status(500).json({ erro: 'Erro ao criar lote' });
+  }
+});
+
+/**
+ * GET /supermercado/fornecedores
+ * Listar fornecedores da empresa
+ */
+router.get('/fornecedores', autenticar, autorizar('admin', 'gerente'), async (req, res) => {
+  try {
+    const { ativo = true, limite = 50, offset = 0 } = req.query;
+    let sql = 'SELECT * FROM fornecedores_produto WHERE empresa_id = $1';
+    const params = [req.empresaId];
+    let paramIndex = 2;
+
+    if (ativo !== undefined) {
+      sql += ` AND ativo = $${paramIndex++}`;
+      params.push(ativo === 'true' || ativo === true);
+    }
+
+    sql += ` ORDER BY nome ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    params.push(limite, offset);
+
+    const result = await dbPg.query(sql, params);
+    res.json({ sucesso: true, fornecedores: result.rows });
+  } catch (error) {
+    console.error('Erro ao listar fornecedores:', error);
+    res.status(500).json({ erro: 'Erro ao listar fornecedores' });
+  }
+});
+
+/**
+ * POST /supermercado/fornecedores
+ * Criar novo fornecedor
+ */
+router.post('/fornecedores', autenticar, autorizar('admin', 'gerente'), async (req, res) => {
+  try {
+    const { nome, cnpj, email, telefone, contato_nome, contato_telefone, endereco, cidade, estado, cep, prazo_entrega_dias, condicao_pagamento } = req.body;
+
+    if (!nome) {
+      return res.status(400).json({ erro: 'Nome do fornecedor é obrigatório' });
+    }
+
+    const result = await dbPg.query(
+      `INSERT INTO fornecedores_produto
+       (empresa_id, nome, cnpj, email, telefone, contato_nome, contato_telefone, endereco, cidade, estado, cep, prazo_entrega_dias, condicao_pagamento)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       RETURNING *`,
+      [req.empresaId, nome, cnpj || null, email || null, telefone || null, contato_nome || null, contato_telefone || null, endereco || null, cidade || null, estado || null, cep || null, prazo_entrega_dias || 7, condicao_pagamento || null]
+    );
+
+    await dbPg.registrarAuditoria({
+      empresa_id: req.empresaId,
+      loja_id: req.lojaId,
+      usuario_id: req.usuario.usuario_id,
+      tabela: 'fornecedores_produto',
+      operacao: 'INSERT',
+      registro_id: result.rows[0].id,
+      dados_novo: result.rows[0],
+      ip_address: req.ip,
+      user_agent: req.get('user-agent'),
+    });
+
+    res.status(201).json({ sucesso: true, fornecedor: result.rows[0] });
+  } catch (error) {
+    console.error('Erro ao criar fornecedor:', error);
+    if (error.code === '23505') {
+      return res.status(400).json({ erro: 'CNPJ já cadastrado' });
+    }
+    res.status(500).json({ erro: 'Erro ao criar fornecedor' });
+  }
+});
+
+/**
+ * GET /supermercado/margem
+ * Listar análise de margem por produto
+ */
+router.get('/margem', autenticar, autorizar('admin', 'gerente'), async (req, res) => {
+  try {
+    const { limite = 50, offset = 0 } = req.query;
+    const result = await dbPg.query(
+      `SELECT * FROM margem_produto
+       WHERE empresa_id = $1 AND loja_id = $2
+       ORDER BY margem_percentual DESC
+       LIMIT $3 OFFSET $4`,
+      [req.empresaId, req.lojaId, limite, offset]
+    );
+
+    res.json({ sucesso: true, margens: result.rows });
+  } catch (error) {
+    console.error('Erro ao listar margens:', error);
+    res.status(500).json({ erro: 'Erro ao listar margens' });
+  }
+});
+
+/**
+ * GET /supermercado/margem/resumo
+ * Resumo de margens: média, mínima, máxima
+ */
+router.get('/margem/resumo', autenticar, autorizar('admin', 'gerente'), async (req, res) => {
+  try {
+    const result = await dbPg.query(
+      `SELECT
+        COUNT(*) as total_produtos,
+        AVG(margem_percentual) as margem_media,
+        MIN(margem_percentual) as margem_minima,
+        MAX(margem_percentual) as margem_maxima,
+        SUM(faturamento_mes) as faturamento_total,
+        SUM(lucro_mes) as lucro_total
+       FROM margem_produto
+       WHERE empresa_id = $1 AND loja_id = $2`,
+      [req.empresaId, req.lojaId]
+    );
+
+    res.json({ sucesso: true, resumo: result.rows[0] });
+  } catch (error) {
+    console.error('Erro ao calcular resumo de margens:', error);
+    res.status(500).json({ erro: 'Erro ao calcular resumo' });
+  }
+});
+
+/**
+ * PATCH /supermercado/margem/:produto_id
+ * Atualizar margem de um produto
+ */
+router.patch('/margem/:produto_id', autenticar, autorizar('admin', 'gerente'), async (req, res) => {
+  try {
+    const { preco_custo, preco_venda } = req.body;
+
+    if (!preco_custo || !preco_venda) {
+      return res.status(400).json({ erro: 'preco_custo e preco_venda são obrigatórios' });
+    }
+
+    const result = await dbPg.query(
+      `UPDATE margem_produto SET preco_custo = $1, preco_venda = $2, data_atualizacao = NOW()
+       WHERE empresa_id = $3 AND loja_id = $4 AND produto_id = $5
+       RETURNING *`,
+      [preco_custo, preco_venda, req.empresaId, req.lojaId, req.params.produto_id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ erro: 'Margem não encontrada' });
+    }
+
+    await dbPg.registrarAuditoria({
+      empresa_id: req.empresaId,
+      loja_id: req.lojaId,
+      usuario_id: req.usuario.usuario_id,
+      tabela: 'margem_produto',
+      operacao: 'UPDATE',
+      registro_id: req.params.produto_id,
+      dados_novo: result.rows[0],
+      ip_address: req.ip,
+      user_agent: req.get('user-agent'),
+    });
+
+    res.json({ sucesso: true, margem: result.rows[0] });
+  } catch (error) {
+    console.error('Erro ao atualizar margem:', error);
+    res.status(500).json({ erro: 'Erro ao atualizar margem' });
+  }
+});
+
 export default router;

@@ -24,6 +24,7 @@ import caixaRoutes from './routes/caixa.js';
 import lojasRoutes from './routes/lojas.js';
 import pdvOfflineRoutes from './routes/pdv-offline.js';
 import fiscalRoutes from './routes/fiscal.js';
+import barbeariaRoutes from './routes/barbearia.js';
 import supermercadoRoutes from './routes/supermercado.js';
 import omnichannelRoutes from './routes/omnichannel.js';
 import analyticsRoutes from './routes/analytics.js';
@@ -112,6 +113,7 @@ app.get('/', (req, res) => {
       lojas: '/lojas',
       pdv_offline: '/pdv-offline',
       fiscal: '/fiscal',
+      barbearia: '/barbearia',
       supermercado: '/supermercado',
       omnichannel: '/omnichannel',
       analytics: '/analytics'
@@ -145,6 +147,7 @@ app.use('/pdv-offline', pdvOfflineRoutes);
 
 // Fiscal nacional, operação comercial e pedidos omnichannel
 app.use('/fiscal', fiscalRoutes);
+app.use('/barbearia', barbeariaRoutes);
 app.use('/supermercado', supermercadoRoutes);
 app.use('/omnichannel', omnichannelRoutes);
 app.use('/analytics', analyticsRoutes);
@@ -160,100 +163,27 @@ app.use('/api/caixa', caixaRoutes);
 app.use('/api/lojas', lojasRoutes);
 app.use('/api/pdv-offline', pdvOfflineRoutes);
 app.use('/api/fiscal', fiscalRoutes);
+app.use('/api/barbearia', barbeariaRoutes);
 app.use('/api/supermercado', supermercadoRoutes);
 app.use('/api/omnichannel', omnichannelRoutes);
 app.use('/api/analytics', analyticsRoutes);
-// Compatibilidade explícita para os painéis administrativos legados.
-app.use('/api/admin', analyticsRoutes);
-// Compatibilidade da vitrine pública existente: /api/loja/pedido e
-// /api/loja/pedido/:codigo são rotas públicas, enquanto o restante continua
-// protegido dentro de /api/omnichannel.
-app.use('/api', omnichannelRoutes);
 
-/**
- * ============================================================================
- * TRATAMENTO DE ERROS 404
- * ============================================================================
- */
-
+// 404
 app.use((req, res) => {
-  res.status(404).json({
-    erro: 'Rota não encontrada',
-    metodo: req.method,
-    caminho: req.path
-  });
+  res.status(404).json({ erro: 'Rota não encontrada', codigo: 'ROTA_NAO_ENCONTRADA' });
 });
 
 /**
  * ============================================================================
- * INICIALIZAÇÃO DO SERVIDOR
+ * INICIALIZAR SERVIDOR
  * ============================================================================
  */
 
-async function iniciarServidor() {
-  try {
-    // Testar conexão com banco de dados
-    console.log('🔌 Testando conexão com PostgreSQL...');
-    const dbHealth = await dbPg.healthCheck();
-    if (dbHealth.status === 'ok') {
-      console.log('✅ Conexão com PostgreSQL estabelecida');
-    } else {
-      throw new Error('Falha ao conectar ao PostgreSQL');
-    }
-
-    // Iniciar servidor
-    app.listen(PORT, () => {
-      console.log(`\n${'='.repeat(60)}`);
-      console.log(`🚀 ERP Modular Brasil v2.0.0`);
-      console.log(`📍 Servidor rodando em http://localhost:${PORT}`);
-      console.log(`🔐 Ambiente: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`${'='.repeat(60)}\n`);
-
-      console.log('📚 Endpoints disponíveis:');
-      console.log('  • POST   /auth/login');
-      console.log('  • POST   /auth/logout');
-      console.log('  • GET    /estoque/produtos');
-      console.log('  • POST   /estoque/entrada');
-      console.log('  • POST   /estoque/saida');
-      console.log('  • POST   /vendas/criar');
-      console.log('  • POST   /vendas/:id/adicionar-item');
-      console.log('  • POST   /vendas/:id/fechar');
-      console.log('  • POST   /pagamentos/processar');
-      console.log('  • POST   /nfce/emitir');
-      console.log('  • POST   /caixa/abrir');
-      console.log('  • POST   /caixa/sangria');
-      console.log('  • POST   /caixa/:id/fechar');
-      console.log('  • GET    /lojas');
-      console.log('  • POST   /lojas');
-      console.log('  • POST   /pdv-offline/sincronizar');
-      console.log('  • POST   /pdv-offline/terminal/heartbeat');
-      console.log('  • POST   /fiscal/documento');
-      console.log('  • GET    /supermercado/produtos');
-      console.log('  • POST   /supermercado/transferencias');
-      console.log('  • GET    /omnichannel/pedidos');
-      console.log('  • GET    /analytics/resumo');
-      console.log('  • POST   /omnichannel/webhooks/:codigoPublico\n');
-    });
-  } catch (error) {
-    console.error('❌ Erro ao iniciar servidor:', error);
-    process.exit(1);
-  }
-}
-
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('⚠️  SIGTERM recebido, encerrando...');
-  await dbPg.closePool();
-  process.exit(0);
+app.listen(PORT, () => {
+  console.log(`\n✓ ERP Modular Brasil v2.0.0`);
+  console.log(`✓ Servidor rodando na porta ${PORT}`);
+  console.log(`✓ Ambiente: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`✓ Banco de dados: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}\n`);
 });
-
-process.on('SIGINT', async () => {
-  console.log('⚠️  SIGINT recebido, encerrando...');
-  await dbPg.closePool();
-  process.exit(0);
-});
-
-// Iniciar
-iniciarServidor();
 
 export default app;
