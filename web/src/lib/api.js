@@ -2,11 +2,22 @@ function getToken() {
   return localStorage.getItem('sp_token') || localStorage.getItem('sp_site_token') || ''
 }
 
+function getLojaAtivaId() {
+  try {
+    const loja = JSON.parse(localStorage.getItem('sp_loja_ativa') || 'null')
+    return loja?.id || ''
+  } catch {
+    return ''
+  }
+}
+
 async function request(path, opts = {}) {
   const token = getToken()
+  const lojaId = getLojaAtivaId()
   const headers = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: 'Bearer ' + token } : {}),
+    ...(lojaId ? { 'X-Loja-Id': lojaId } : {}),
     ...(opts.headers || {}),
   }
   const res = await fetch(path, { ...opts, headers })
@@ -14,6 +25,8 @@ async function request(path, opts = {}) {
     localStorage.removeItem('sp_token')
     localStorage.removeItem('sp_site_token')
     localStorage.removeItem('sp_user')
+    localStorage.removeItem('sp_loja_ativa')
+    localStorage.removeItem('sp_lojas_acessiveis')
     window.location.href = '/login'
     return
   }

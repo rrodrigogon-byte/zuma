@@ -1,10 +1,8 @@
 /**
  * ============================================================================
- * ROTAS DE CAIXA - ERP MODULAR
+ * ROTAS DE CAIXA — KYTTO ERP
  * ============================================================================
- * Arquivo: routes/caixa.js
- * Descrição: Abertura, fechamento, sangria, suprimento
- * ============================================================================
+ * Abertura, sangria, suprimento, fechamento e relatórios por loja.
  */
 
 import express from 'express';
@@ -13,314 +11,262 @@ import { autenticar, autorizar } from './auth.js';
 
 const router = express.Router();
 
-/**
- * POST /caixa/abrir
- * Abrir caixa
- */
+function dinheiroValido(valor, permitirZero = true) {
+  const numero = Number(valor);
+  return Number.isFinite(numero) && (permitirZero ? numero >= 0 : numero > 0) ? numero : null;
+}
+
+async function buscarCaixaDaLoja(caixaId, empresaId, lojaId, client = null) {
+  const sql = `SELECT * FROM caixas WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`;
+  const resultado = client
+    ? await dbPg.queryInTransaction(client, sql, [caixaId, empresaId, lojaId])
+    : await dbPg.query(sql, [caixaId, empresaId, lojaId]);
+  return resultado.rows[0] || null;
+}
+
+/** POST /caixa/abrir — inicia um caixa físico na loja ativa. */
 router.post('/abrir', autenticar, autorizar('admin', 'gerente', 'caixa'), async (req, res) => {
+  const client = await dbPg.beginTransaction();
   try {
-    const { valor_inicial = 0, observacoes } = req.body;
+    const { numero_caixa, valor_abertura = 0, observacoes = null } = req.body;
+    const numeroCaixa = Number(numero_caixa);
+    const valorAbertura = dinheiroValido(valor_abertura);
 
-    // Verificar se já existe caixa aberto
-    const caixaAberto = await dbPg.query(
-      `SELECT * FROM caixas WHERE empresa_id = $1 AND status = 'aberto' AND DATE(data_abertura) = CURRENT_DATE`,
-      [req.empresaId]
-    );
-
-    if (caixaAberto.rows.length > 0) {
-      return res.status(400).json({ erro: 'Já existe um caixa aberto hoje' });
+    if (!Number.isInteger(numeroCaixa) || numeroCaixa <= 0 || valorAbertura === null) {
+      await dbPg.rollback(client);
+      return res.status(400).json({ erro: 'Número do caixa e valor de abertura válido são obrigatórios' });
     }
 
-    // Criar caixa
-    const caixaResult = await dbPg.query(
-      `INSERT INTO caixas 
-       (empresa_id, usuario_id, valor_inicial, status, observacoes)
-       VALUES ($1, $2, $3, $4, $5)
+    const aberto = await dbPg.queryInTransaction(
+      client,
+      `SELECT id FROM caixas
+       WHERE empresa_id = $1 AND loja_id = $2 AND numero_caixa = $3 AND status = 'aberto'
+       FOR UPDATE`,
+      [req.empresaId, req.lojaId, numeroCaixa]
+    );
+    if (aberto.rows.length > 0) {
+      await dbPg.rollback(client);
+      return res.status(409).json({ erro: 'Este caixa já está aberto nesta loja' });
+    }
+
+    const resultado = await dbPg.queryInTransaction(
+      client,
+      `INSERT INTO caixas
+       (empresa_id, loja_id, numero_caixa, usuario_operador_id, valor_abertura, status, observacoes)
+       VALUES ($1, $2, $3, $4, $5, 'aberto', $6)
        RETURNING *`,
-      [req.empresaId, req.usuario.usuario_id, valor_inicial, 'aberto', observacoes || null]
+      [req.empresaId, req.lojaId, numeroCaixa, req.usuario.usuario_id, valorAbertura, observacoes]
     );
 
-    const caixa = caixaResult.rows[0];
-
-    // Registrar auditoria
-    await dbPg.registrarAuditoria({
-      empresa_id: req.empresaId,
-      usuario_id: req.usuario.usuario_id,
-      tabela: 'caixas',
-      operacao: 'INSERT',
-      registro_id: caixa.id,
-      dados_novo: { valor_inicial, status: 'aberto' },
-      ip_address: req.ip
-    });
-
+    await dbPg.commit(client);
     res.status(201).json({
       sucesso: true,
-      caixa,
-      mensagem: 'Caixa aberto com sucesso'
+      loja_id: req.lojaId,
+      caixa: resultado.rows[0],
+      mensagem: 'Caixa aberto com sucesso',
     });
   } catch (error) {
+    await dbPg.rollback(client);
     console.error('Erro ao abrir caixa:', error);
     res.status(500).json({ erro: 'Erro ao abrir caixa' });
   }
 });
 
-/**
- * POST /caixa/sangria
- * Registrar sangria (retirada de dinheiro)
- */
-router.post('/sangria', autenticar, autorizar('admin', 'gerente', 'caixa'), async (req, res) => {
+async function registrarMovimento(req, res, tipo) {
+  const client = await dbPg.beginTransaction();
   try {
-    const { caixa_id, valor, motivo } = req.body;
-
-    if (!caixa_id || !valor) {
-      return res.status(400).json({ erro: 'Caixa e valor são obrigatórios' });
+    const { caixa_id, valor, descricao = null, motivo = null } = req.body;
+    const valorNumerico = dinheiroValido(valor, false);
+    if (!caixa_id || valorNumerico === null) {
+      await dbPg.rollback(client);
+      return res.status(400).json({ erro: 'Caixa e valor positivo são obrigatórios' });
     }
 
-    // Validar caixa
-    const caixa = await dbPg.findById('caixas', caixa_id, req.empresaId);
+    const caixa = await buscarCaixaDaLoja(caixa_id, req.empresaId, req.lojaId, client);
     if (!caixa) {
-      return res.status(404).json({ erro: 'Caixa não encontrado' });
+      await dbPg.rollback(client);
+      return res.status(404).json({ erro: 'Caixa não encontrado nesta loja' });
     }
-
     if (caixa.status !== 'aberto') {
-      return res.status(400).json({ erro: 'Caixa deve estar aberto' });
+      await dbPg.rollback(client);
+      return res.status(400).json({ erro: 'O caixa deve estar aberto para registrar movimentações' });
     }
 
-    // Registrar movimentação
-    const movResult = await dbPg.query(
-      `INSERT INTO movimentacoes_caixa
-       (empresa_id, caixa_id, tipo, valor, motivo, usuario_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
+    const resultado = await dbPg.queryInTransaction(
+      client,
+      `INSERT INTO movimentacoes_caixa (caixa_id, tipo, valor, descricao, usuario_id)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [req.empresaId, caixa_id, 'sangria', valor, motivo || null, req.usuario.usuario_id]
+      [caixa_id, tipo, valorNumerico, descricao || motivo, req.usuario.usuario_id]
     );
 
-    // Registrar auditoria
-    await dbPg.registrarAuditoria({
-      empresa_id: req.empresaId,
-      usuario_id: req.usuario.usuario_id,
-      tabela: 'movimentacoes_caixa',
-      operacao: 'INSERT',
-      registro_id: movResult.rows[0].id,
-      dados_novo: { tipo: 'sangria', valor, motivo },
-      ip_address: req.ip
-    });
-
-    res.status(201).json({
+    await dbPg.commit(client);
+    return res.status(201).json({
       sucesso: true,
-      movimentacao: movResult.rows[0],
-      mensagem: 'Sangria registrada'
+      loja_id: req.lojaId,
+      movimentacao: resultado.rows[0],
+      mensagem: tipo === 'sangria' ? 'Sangria registrada' : 'Suprimento registrado',
     });
   } catch (error) {
-    console.error('Erro ao registrar sangria:', error);
-    res.status(500).json({ erro: 'Erro ao registrar sangria' });
+    await dbPg.rollback(client);
+    console.error(`Erro ao registrar ${tipo}:`, error);
+    return res.status(500).json({ erro: `Erro ao registrar ${tipo}` });
   }
-});
+}
 
-/**
- * POST /caixa/suprimento
- * Registrar suprimento (adição de dinheiro)
- */
-router.post('/suprimento', autenticar, autorizar('admin', 'gerente', 'caixa'), async (req, res) => {
+/** POST /caixa/sangria — registra retirada de numerário. */
+router.post('/sangria', autenticar, autorizar('admin', 'gerente', 'caixa'), (req, res) =>
+  registrarMovimento(req, res, 'sangria')
+);
+
+/** POST /caixa/suprimento — registra aporte de numerário. */
+router.post('/suprimento', autenticar, autorizar('admin', 'gerente', 'caixa'), (req, res) =>
+  registrarMovimento(req, res, 'suprimento')
+);
+
+/** POST /caixa/:id/fechar — fecha caixa e registra divergência de conferência. */
+router.post('/:id/fechar', autenticar, autorizar('admin', 'gerente', 'caixa'), async (req, res) => {
+  const client = await dbPg.beginTransaction();
   try {
-    const { caixa_id, valor, motivo } = req.body;
-
-    if (!caixa_id || !valor) {
-      return res.status(400).json({ erro: 'Caixa e valor são obrigatórios' });
+    const { valor_contado, valor_fechamento, observacoes = null } = req.body;
+    const valorContado = dinheiroValido(valor_contado ?? valor_fechamento);
+    if (valorContado === null) {
+      await dbPg.rollback(client);
+      return res.status(400).json({ erro: 'Valor contado é obrigatório e não pode ser negativo' });
     }
 
-    // Validar caixa
-    const caixa = await dbPg.findById('caixas', caixa_id, req.empresaId);
+    const caixa = await buscarCaixaDaLoja(req.params.id, req.empresaId, req.lojaId, client);
     if (!caixa) {
-      return res.status(404).json({ erro: 'Caixa não encontrado' });
+      await dbPg.rollback(client);
+      return res.status(404).json({ erro: 'Caixa não encontrado nesta loja' });
     }
-
     if (caixa.status !== 'aberto') {
-      return res.status(400).json({ erro: 'Caixa deve estar aberto' });
+      await dbPg.rollback(client);
+      return res.status(409).json({ erro: 'Caixa já está fechado ou suspenso' });
     }
 
-    // Registrar movimentação
-    const movResult = await dbPg.query(
-      `INSERT INTO movimentacoes_caixa
-       (empresa_id, caixa_id, tipo, valor, motivo, usuario_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING *`,
-      [req.empresaId, caixa_id, 'suprimento', valor, motivo || null, req.usuario.usuario_id]
-    );
-
-    // Registrar auditoria
-    await dbPg.registrarAuditoria({
-      empresa_id: req.empresaId,
-      usuario_id: req.usuario.usuario_id,
-      tabela: 'movimentacoes_caixa',
-      operacao: 'INSERT',
-      registro_id: movResult.rows[0].id,
-      dados_novo: { tipo: 'suprimento', valor, motivo },
-      ip_address: req.ip
-    });
-
-    res.status(201).json({
-      sucesso: true,
-      movimentacao: movResult.rows[0],
-      mensagem: 'Suprimento registrado'
-    });
-  } catch (error) {
-    console.error('Erro ao registrar suprimento:', error);
-    res.status(500).json({ erro: 'Erro ao registrar suprimento' });
-  }
-});
-
-/**
- * POST /caixa/:id/fechar
- * Fechar caixa com resumo
- */
-router.post('/:id/fechar', autenticar, autorizar('admin', 'gerente'), async (req, res) => {
-  try {
-    const { valor_final, observacoes } = req.body;
-
-    if (valor_final === undefined) {
-      return res.status(400).json({ erro: 'Valor final é obrigatório' });
-    }
-
-    // Validar caixa
-    const caixa = await dbPg.findById('caixas', req.params.id, req.empresaId);
-    if (!caixa) {
-      return res.status(404).json({ erro: 'Caixa não encontrado' });
-    }
-
-    if (caixa.status !== 'aberto') {
-      return res.status(400).json({ erro: 'Caixa já foi fechado' });
-    }
-
-    // Buscar movimentações do caixa
-    const movResult = await dbPg.query(
-      `SELECT SUM(CASE WHEN tipo = 'sangria' THEN -valor ELSE valor END) as total_movimentacoes
+    const movimentos = await dbPg.queryInTransaction(
+      client,
+      `SELECT COALESCE(SUM(
+         CASE
+           WHEN tipo IN ('sangria', 'pagamento') THEN -valor
+           ELSE valor
+         END
+       ), 0) AS total_movimentacoes
        FROM movimentacoes_caixa
-       WHERE empresa_id = $1 AND caixa_id = $2`,
-      [req.empresaId, req.params.id]
+       WHERE caixa_id = $1`,
+      [caixa.id]
+    );
+    const totalMovimentacoes = Number(movimentos.rows[0].total_movimentacoes || 0);
+    const valorEsperado = Number(caixa.valor_abertura) + totalMovimentacoes;
+    const divergencia = valorContado - valorEsperado;
+
+    const atualizado = await dbPg.queryInTransaction(
+      client,
+      `UPDATE caixas
+       SET valor_fechamento = $1,
+           data_fechamento = CURRENT_TIMESTAMP,
+           status = 'fechado',
+           observacoes = COALESCE($2, observacoes)
+       WHERE id = $3 AND status = 'aberto'
+       RETURNING *`,
+      [valorContado, observacoes, caixa.id]
+    );
+    if (atualizado.rows.length === 0) {
+      await dbPg.rollback(client);
+      return res.status(409).json({ erro: 'O caixa foi alterado por outra operação' });
+    }
+
+    await dbPg.queryInTransaction(
+      client,
+      `INSERT INTO fechamentos_caixa
+       (caixa_id, valor_esperado, valor_contado, divergencia, usuario_responsavel_id, observacoes)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [caixa.id, valorEsperado, valorContado, divergencia, req.usuario.usuario_id, observacoes]
     );
 
-    const totalMovimentacoes = movResult.rows[0]?.total_movimentacoes || 0;
-    const valorEsperado = caixa.valor_inicial + totalMovimentacoes;
-    const diferenca = valor_final - valorEsperado;
-
-    // Atualizar caixa
-    const caixaFechado = await dbPg.update('caixas', req.params.id, {
-      valor_final,
-      diferenca,
-      status: 'fechado',
-      observacoes_fechamento: observacoes || null
-    }, req.empresaId);
-
-    // Registrar auditoria
-    await dbPg.registrarAuditoria({
-      empresa_id: req.empresaId,
-      usuario_id: req.usuario.usuario_id,
-      tabela: 'caixas',
-      operacao: 'UPDATE',
-      registro_id: req.params.id,
-      dados_novo: { status: 'fechado', valor_final, diferenca },
-      ip_address: req.ip
-    });
-
+    await dbPg.commit(client);
     res.json({
       sucesso: true,
-      caixa: caixaFechado,
+      loja_id: req.lojaId,
+      caixa: atualizado.rows[0],
       resumo: {
-        valor_inicial: caixa.valor_inicial,
+        valor_abertura: Number(caixa.valor_abertura),
+        movimentacoes: totalMovimentacoes,
         valor_esperado: valorEsperado,
-        valor_final,
-        diferenca,
-        status_diferenca: Math.abs(diferenca) < 0.01 ? 'OK' : (diferenca > 0 ? 'SOBRA' : 'FALTA')
+        valor_contado: valorContado,
+        divergencia,
+        status_divergencia: Math.abs(divergencia) < 0.01 ? 'OK' : (divergencia > 0 ? 'SOBRA' : 'FALTA'),
       },
-      mensagem: 'Caixa fechado'
+      mensagem: 'Caixa fechado',
     });
   } catch (error) {
+    await dbPg.rollback(client);
     console.error('Erro ao fechar caixa:', error);
     res.status(500).json({ erro: 'Erro ao fechar caixa' });
   }
 });
 
-/**
- * GET /caixa/aberto
- * Obter caixa aberto do dia
- */
+/** GET /caixa/aberto — caixas abertos da loja ativa, com movimento acumulado. */
 router.get('/aberto', autenticar, async (req, res) => {
   try {
-    const result = await dbPg.query(
-      `SELECT * FROM caixas 
-       WHERE empresa_id = $1 AND status = 'aberto' AND DATE(data_abertura) = CURRENT_DATE`,
-      [req.empresaId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ erro: 'Nenhum caixa aberto' });
+    const { numero_caixa } = req.query;
+    const parametros = [req.empresaId, req.lojaId];
+    let sql = `
+      SELECT c.*,
+             COALESCE(SUM(CASE WHEN mc.tipo IN ('sangria', 'pagamento') THEN -mc.valor ELSE mc.valor END), 0) AS movimentacoes,
+             c.valor_abertura + COALESCE(SUM(CASE WHEN mc.tipo IN ('sangria', 'pagamento') THEN -mc.valor ELSE mc.valor END), 0) AS valor_esperado
+      FROM caixas c
+      LEFT JOIN movimentacoes_caixa mc ON mc.caixa_id = c.id
+      WHERE c.empresa_id = $1 AND c.loja_id = $2 AND c.status = 'aberto'
+    `;
+    if (numero_caixa) {
+      sql += ' AND c.numero_caixa = $3';
+      parametros.push(Number(numero_caixa));
     }
+    sql += ' GROUP BY c.id ORDER BY c.data_abertura DESC';
 
-    const caixa = result.rows[0];
-
-    // Buscar movimentações
-    const movResult = await dbPg.query(
-      `SELECT * FROM movimentacoes_caixa 
-       WHERE empresa_id = $1 AND caixa_id = $2
-       ORDER BY data_operacao DESC`,
-      [req.empresaId, caixa.id]
-    );
-
-    res.json({
-      sucesso: true,
-      caixa,
-      movimentacoes: movResult.rows
-    });
+    const resultado = await dbPg.query(sql, parametros);
+    res.json({ sucesso: true, loja_id: req.lojaId, caixas: resultado.rows });
   } catch (error) {
-    res.status(500).json({ erro: 'Erro ao buscar caixa' });
+    console.error('Erro ao buscar caixas abertos:', error);
+    res.status(500).json({ erro: 'Erro ao buscar caixas abertos' });
   }
 });
 
-/**
- * GET /caixa/relatorio
- * Relatório de caixas
- */
-router.get('/relatorio', autenticar, async (req, res) => {
+/** GET /caixa/relatorio — consolida fechamentos da loja ativa. */
+router.get('/relatorio', autenticar, autorizar('admin', 'gerente', 'caixa'), async (req, res) => {
   try {
-    const { data_inicio, data_fim } = req.query;
+    const { data_inicio = null, data_fim = null } = req.query;
+    const resultado = await dbPg.query(
+      `SELECT
+         COUNT(c.id)::int AS total_caixas,
+         COALESCE(SUM(c.valor_abertura), 0) AS total_abertura,
+         COALESCE(SUM(c.valor_fechamento), 0) AS total_fechamento,
+         COALESCE(SUM(f.valor_esperado), 0) AS total_esperado,
+         COALESCE(SUM(f.divergencia), 0) AS total_divergencias,
+         COUNT(*) FILTER (WHERE ABS(COALESCE(f.divergencia, 0)) < 0.01)::int AS caixas_ok,
+         COUNT(*) FILTER (WHERE f.divergencia > 0.01)::int AS caixas_sobra,
+         COUNT(*) FILTER (WHERE f.divergencia < -0.01)::int AS caixas_falta
+       FROM caixas c
+       LEFT JOIN LATERAL (
+         SELECT * FROM fechamentos_caixa fc
+         WHERE fc.caixa_id = c.id
+         ORDER BY fc.data_fechamento DESC
+         LIMIT 1
+       ) f ON true
+       WHERE c.empresa_id = $1
+         AND c.loja_id = $2
+         AND c.status = 'fechado'
+         AND ($3::timestamptz IS NULL OR c.data_abertura >= $3::timestamptz)
+         AND ($4::timestamptz IS NULL OR c.data_abertura <= $4::timestamptz)`,
+      [req.empresaId, req.lojaId, data_inicio, data_fim]
+    );
 
-    let sql = `
-      SELECT 
-        COUNT(id) as total_caixas,
-        SUM(valor_inicial) as total_inicial,
-        SUM(valor_final) as total_final,
-        COUNT(CASE WHEN diferenca = 0 THEN 1 END) as caixas_ok,
-        COUNT(CASE WHEN diferenca > 0 THEN 1 END) as caixas_sobra,
-        COUNT(CASE WHEN diferenca < 0 THEN 1 END) as caixas_falta,
-        SUM(ABS(diferenca)) as total_divergencias
-      FROM caixas
-      WHERE empresa_id = $1 AND status = 'fechado'
-    `;
-    const params = [req.empresaId];
-    let paramIndex = 2;
-
-    if (data_inicio) {
-      sql += ` AND data_abertura >= $${paramIndex}`;
-      params.push(data_inicio);
-      paramIndex++;
-    }
-
-    if (data_fim) {
-      sql += ` AND data_abertura <= $${paramIndex}`;
-      params.push(data_fim);
-      paramIndex++;
-    }
-
-    const result = await dbPg.query(sql, params);
-
-    res.json({
-      sucesso: true,
-      relatorio: result.rows[0]
-    });
+    res.json({ sucesso: true, loja_id: req.lojaId, relatorio: resultado.rows[0] });
   } catch (error) {
-    console.error('Erro ao gerar relatório:', error);
-    res.status(500).json({ erro: 'Erro ao gerar relatório' });
+    console.error('Erro ao gerar relatório de caixa:', error);
+    res.status(500).json({ erro: 'Erro ao gerar relatório de caixa' });
   }
 });
 

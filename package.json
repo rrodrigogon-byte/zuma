@@ -8,6 +8,7 @@
     "start": "node app/server-v2.js",
     "dev": "nodemon app/server-v2.js",
     "migrate": "node app/migrations/migrate-json-to-pg.js",
+    "migrate:sql": "node app/migrations/run-sql-migrations.js",
     "test": "jest --coverage",
     "test:watch": "jest --watch",
     "test:e2e": "jest --testPathPattern=e2e",

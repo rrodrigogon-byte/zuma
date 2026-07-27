@@ -78,7 +78,9 @@ const Pontos          = lazy(() => import('./pages/admin/Pontos'))
 const AdminRanking    = lazy(() => import('./pages/admin/AdminRanking'))
 const AdminLigas      = lazy(() => import('./pages/admin/AdminLigas'))
 const Contatos        = lazy(() => import('./pages/admin/Contatos'))
+const Lojas           = lazy(() => import('./pages/admin/Lojas'))
 const NotasFiscais    = lazy(() => import('./pages/admin/NotasFiscais'))
+const PDVOffline      = lazy(() => import('./pages/admin/PDVOffline'))
 const AgendaQuadras   = lazy(() => import('./pages/public/AgendaQuadras'))
 const NoticiasPublic  = lazy(() => import('./pages/public/Noticias'))
 const MeuPainel       = lazy(() => import('./pages/atleta/MeuPainel'))
@@ -146,7 +148,9 @@ export default function App() {
           <Route path="/admin/ranking"        element={<Layout><AdminRanking /></Layout>} />
           <Route path="/admin/ligas"          element={<Layout><AdminLigas /></Layout>} />
           <Route path="/admin/contatos"       element={<Layout><Contatos /></Layout>} />
+          <Route path="/admin/lojas"          element={<Layout><Lojas /></Layout>} />
           <Route path="/admin/notas"          element={<Layout><NotasFiscais /></Layout>} />
+          <Route path="/admin/pdv-offline"    element={<Layout><PDVOffline /></Layout>} />
         </Route>
 
         {/* Portal do Atleta */}

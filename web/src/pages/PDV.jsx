@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { api, fmtR } from '../lib/api'
 import { pagarTef, MODALIDADES_TEF } from '../lib/tef'
+import { enfileirarVendaOffline, entregarFilaAoAgente, imprimirViaAgenteLocal, resumoFilaOffline } from '../lib/pdvOffline'
 import { useToast } from '../hooks/useToast'
 import { useAuth } from '../lib/auth'
 
@@ -321,6 +322,7 @@ const PAY_OPTIONS = [
 
 const TABS = [
   { key: 'mesas', icon: '🍽', label: 'Mesas' },
+  { key: 'offline', icon: '📡', label: 'Contingência' },
   { key: 'vendas', icon: '📊', label: 'Vendas' },
 ]
 
@@ -378,7 +380,7 @@ function MesaCard({ m, onClick }) {
 
 export default function PDV() {
   const { toast } = useToast()
-  const { user } = useAuth()
+  const { user, lojaAtiva } = useAuth()
   const [mesas, setMesas] = useState({ fisicas: [], virtuais: [] })
   const [cardapio, setCardapio] = useState([])
   const [comanda, setComanda] = useState(null)
@@ -400,6 +402,10 @@ export default function PDV() {
   const [novaMesaNome, setNovaMesaNome] = useState('')
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('mesas')
+  const [carrinhoOffline, setCarrinhoOffline] = useState([])
+  const [pagamentoOffline, setPagamentoOffline] = useState('dinheiro')
+  const [processandoOffline, setProcessandoOffline] = useState(false)
+  const [resumoOffline, setResumoOffline] = useState({ total: 0, pendente: 0, falha: 0 })
 
   // Busca de mesa
   const [buscaMesa, setBuscaMesa] = useState('')
@@ -448,11 +454,19 @@ export default function PDV() {
   }, [])
 
   const loadCardapio = useCallback(async () => {
+    const chaveCache = `kytto_pdv_catalogo_${lojaAtiva?.id || 'padrao'}`
     try {
       const data = await api.get('/api/cardapio')
-      setCardapio(data.filter(p => !p.indisponivel))
-    } catch { /* silencioso */ }
-  }, [])
+      const itens = data.filter(p => !p.indisponivel)
+      setCardapio(itens)
+      localStorage.setItem(chaveCache, JSON.stringify({ atualizado_em: new Date().toISOString(), itens }))
+    } catch {
+      try {
+        const cache = JSON.parse(localStorage.getItem(chaveCache) || 'null')
+        if (Array.isArray(cache?.itens)) setCardapio(cache.itens)
+      } catch { /* cache indisponível */ }
+    }
+  }, [lojaAtiva?.id])
 
   const loadComanda = useCallback(async (id) => {
     if (!id) return
@@ -491,9 +505,14 @@ export default function PDV() {
     return () => clearInterval(timerRef.current)
   }, [loadMesas, loadCardapio, loadCaixaHoje])
 
+  const atualizarResumoOffline = useCallback(async () => {
+    try { setResumoOffline(await resumoFilaOffline()) } catch { /* IndexedDB indisponível */ }
+  }, [])
+
   useEffect(() => {
     if (activeTab === 'vendas') loadVendas()
-  }, [activeTab, loadVendas])
+    if (activeTab === 'offline') atualizarResumoOffline()
+  }, [activeTab, loadVendas, atualizarResumoOffline])
 
   // Banner stats
   const abertas = [...(mesas.fisicas || []), ...(mesas.virtuais || [])].filter(m => m.status !== 'livre')
@@ -627,6 +646,73 @@ export default function PDV() {
     }
   }
 
+  // Venda direta de contingência. Ela não altera comandas abertas para evitar
+  // duplicidade de estoque; cada evento é entregue ao agente local de forma idempotente.
+  const totalCarrinhoOffline = carrinhoOffline.reduce((soma, item) => soma + item.quantidade * item.valor_unitario, 0)
+
+  const adicionarAoCarrinhoOffline = (produto) => {
+    const produtoId = produto.produto_id || produto.id
+    setCarrinhoOffline((atual) => {
+      const existente = atual.find((item) => item.produto_id === produtoId)
+      if (existente) return atual.map((item) => item.produto_id === produtoId ? { ...item, quantidade: item.quantidade + 1 } : item)
+      return [...atual, {
+        produto_id: produtoId,
+        nome: produto.nome,
+        quantidade: 1,
+        valor_unitario: Number(produto.preco || produto.preco_venda || 0),
+        desconto_item: 0,
+      }]
+    })
+  }
+
+  const alterarQuantidadeOffline = (produtoId, diferenca) => {
+    setCarrinhoOffline((atual) => atual
+      .map((item) => item.produto_id === produtoId ? { ...item, quantidade: Math.max(0, item.quantidade + diferenca) } : item)
+      .filter((item) => item.quantidade > 0))
+  }
+
+  const finalizarVendaOffline = async () => {
+    const operadorId = user?.id || user?.usuario_id || user?.user_id
+    if (!operadorId) { toast('Sessão de operador inválida para venda offline.', 'error'); return }
+    if (carrinhoOffline.length === 0 || totalCarrinhoOffline <= 0) { toast('Inclua ao menos um item no carrinho de contingência.', 'error'); return }
+    if (pagamentoOffline === 'pix') { toast('PIX não pode ser concluído em contingência sem confirmação online.', 'error'); return }
+
+    setProcessandoOffline(true)
+    try {
+      let referenciaExterna = null
+      if (pagamentoOffline === 'tef') {
+        const tef = await pagarTef({ valor: totalCarrinhoOffline, modalidade: tefModalidade, parcelas: tefParcelas, tef: tefCfg || {} })
+        referenciaExterna = tef?.nsu || tef?.referencia || null
+        if (!referenciaExterna) throw new Error('A autorização TEF não retornou uma referência segura')
+      }
+
+      const evento = await enfileirarVendaOffline({
+        usuario_vendedor_id: operadorId,
+        itens: carrinhoOffline.map(({ produto_id, quantidade, valor_unitario, desconto_item }) => ({ produto_id, quantidade, valor_unitario, desconto_item })),
+        pagamentos: [{ tipo: pagamentoOffline, valor: Number(totalCarrinhoOffline.toFixed(2)), status: 'aprovado', referencia_externa: referenciaExterna }],
+        observacoes: `Venda direta em contingência${lojaAtiva?.nome ? ` — ${lojaAtiva.nome}` : ''}`,
+      })
+
+      let mensagem = `Venda ${evento.id.slice(0, 8)} preservada na fila local.`
+      try {
+        const entrega = await entregarFilaAoAgente()
+        mensagem = entrega.entregue > 0
+          ? 'Venda capturada e entregue com segurança ao agente local.'
+          : mensagem
+      } catch {
+        mensagem = 'Venda preservada localmente; será sincronizada quando o agente retornar.'
+      }
+
+      setCarrinhoOffline([])
+      await atualizarResumoOffline()
+      toast(mensagem, 'success')
+    } catch (erro) {
+      toast(erro?.message || 'Não foi possível registrar a venda de contingência.', 'error')
+    } finally {
+      setProcessandoOffline(false)
+    }
+  }
+
   // Cancelar item individual
   const cancelarItem = async (idx) => {
     if (!comanda?.id) return
@@ -750,14 +836,39 @@ export default function PDV() {
     }
   }
 
-  // Imprimir comanda
-  const imprimirComanda = () => {
+  // Imprimir comanda: prioriza o agente local homologado e mantém o navegador como contingência.
+  const imprimirComanda = async () => {
     if (!comanda) return
-    const linhas = (comanda.itens || []).map(it =>
+    const itens = comanda.itens || []
+    const linhasAgente = itens.map(it => ({
+      esquerda: `${it.qtd}× ${it.nome}${it.obs ? ` (${it.obs})` : ''}`,
+      direita: fmtR((it.preco || 0) * (it.qtd || 1)),
+    }))
+    const linhas = itens.map(it =>
       `<tr><td>${it.qtd}× ${it.nome}${it.obs ? ` <small>(${it.obs})</small>` : ''}</td><td style="text-align:right">${fmtR((it.preco || 0) * (it.qtd || 1))}</td></tr>`
     ).join('')
     const mesa = sheet?.tipo === 'fisica' ? `Mesa ${sheet.num}` : (comanda.mesa || `Comanda #${comanda.id}`)
     const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    const conteudoAgente = {
+      titulo: 'KY TTO ERP',
+      subtitulo: `${mesa} — ${hora}`,
+      linhas: [
+        ...linhasAgente,
+        ...(descPct > 0 ? [{ esquerda: `Desconto ${descPct}%`, direita: `-${fmtR(descVal)}` }] : []),
+        ...(servico ? [{ esquerda: 'Serviço 10%', direita: fmtR(servicoVal) }] : []),
+      ],
+      total: `TOTAL ${fmtR(totalFinal)}`,
+      rodape: 'Obrigado pela preferência!',
+    }
+
+    try {
+      await imprimirViaAgenteLocal({ conteudo: conteudoAgente })
+      toast('Comanda enviada à impressora local.', 'success')
+      return
+    } catch {
+      toast('Agente local indisponível; abrindo impressão do navegador.', 'warning')
+    }
+
     const html = `
       <!DOCTYPE html><html><head><meta charset="utf-8">
       <title>Comanda #${comanda.id}</title>
@@ -770,7 +881,7 @@ export default function PDV() {
         .total { font-weight: bold; font-size: 15px; }
         .rodape { text-align: center; margin-top: 14px; font-size: 11px; color: #888; }
       </style></head><body>
-      <h2>Agro Open</h2>
+      <h2>Kytto ERP</h2>
       <p>${mesa} — ${hora}</p>
       <table>${linhas}
         ${descPct > 0 ? `<tr><td>Desconto ${descPct}%</td><td style="text-align:right">-${fmtR(descVal)}</td></tr>` : ''}
@@ -910,6 +1021,106 @@ export default function PDV() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Aba de contingência: somente vendas diretas, sem manipular comandas em aberto. */}
+      {activeTab === 'offline' && (
+        <div style={S.section}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+            <div>
+              <div style={S.sectionTitle}>Venda direta em contingência</div>
+              <div style={{ fontSize: 12, opacity: .68, maxWidth: 650, marginTop: 4 }}>
+                Registre apenas operações novas quando a conexão com o servidor estiver indisponível. A venda é guardada no navegador e transferida ao agente local antes da sincronização.
+              </div>
+            </div>
+            <button className="btn btn-secondary" style={{ fontSize: 12, padding: '6px 10px' }} onClick={atualizarResumoOffline}>Atualizar fila</button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: 8, marginBottom: 16 }}>
+            <div style={{ background: '#132b1b', border: '1px solid #1e4029', borderRadius: 8, padding: 10 }}>
+              <div style={{ fontSize: 11, opacity: .6 }}>Eventos na fila</div>
+              <div style={{ fontSize: 20, fontWeight: 800 }}>{resumoOffline.total || 0}</div>
+            </div>
+            <div style={{ background: '#132b1b', border: '1px solid #1e4029', borderRadius: 8, padding: 10 }}>
+              <div style={{ fontSize: 11, opacity: .6 }}>Pendentes locais</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: '#C9A656' }}>{resumoOffline.pendente || 0}</div>
+            </div>
+            <div style={{ background: '#132b1b', border: '1px solid #1e4029', borderRadius: 8, padding: 10 }}>
+              <div style={{ fontSize: 11, opacity: .6 }}>Com falha de entrega</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: resumoOffline.falha ? '#e74c3c' : '#8FD64A' }}>{resumoOffline.falha || 0}</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.3fr) minmax(280px, .9fr)', gap: 14, alignItems: 'start' }}>
+            <div style={{ background: '#102416', border: '1px solid #1e4029', borderRadius: 10, padding: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Catálogo disponível localmente</div>
+              {cardapio.length === 0 ? (
+                <div style={{ fontSize: 12, opacity: .6, padding: 14 }}>Nenhum catálogo está disponível em cache. Conecte-se uma vez para atualizar os produtos deste terminal.</div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8, maxHeight: 430, overflowY: 'auto', paddingRight: 3 }}>
+                  {cardapio.map((produto) => (
+                    <button key={produto.produto_id || produto.id} type="button" onClick={() => adicionarAoCarrinhoOffline(produto)} style={{ textAlign: 'left', cursor: 'pointer', color: '#f4f6ef', background: '#132b1b', border: '1px solid #1e4029', borderRadius: 8, padding: 10 }}>
+                      <div style={{ fontSize: 17, marginBottom: 3 }}>{prodEmoji(produto)}</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.25 }}>{produto.nome}</div>
+                      <div style={{ fontSize: 12, color: '#8FD64A', fontWeight: 700, marginTop: 5 }}>{fmtR(produto.preco || produto.preco_venda || 0)}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ background: '#132b1b', border: '1px solid #2d6e3f', borderRadius: 10, padding: 12, position: 'sticky', top: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, borderBottom: '1px solid #1e4029', paddingBottom: 9, marginBottom: 8 }}>
+                <strong>Carrinho de contingência</strong>
+                <span style={{ fontSize: 12, opacity: .65 }}>{carrinhoOffline.reduce((soma, item) => soma + item.quantidade, 0)} itens</span>
+              </div>
+              {carrinhoOffline.length === 0 ? (
+                <div style={{ fontSize: 12, opacity: .6, padding: '16px 0' }}>Selecione itens do catálogo para iniciar uma venda direta.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12, maxHeight: 220, overflowY: 'auto' }}>
+                  {carrinhoOffline.map((item) => (
+                    <div key={item.produto_id} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600 }}>{item.nome}</div>
+                        <div style={{ fontSize: 11, opacity: .6 }}>{fmtR(item.valor_unitario)} cada</div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <button type="button" onClick={() => alterarQuantidadeOffline(item.produto_id, -1)} style={{ width: 25, height: 25, borderRadius: 5, border: '1px solid #456', background: '#0d1f12', color: '#f4f6ef', cursor: 'pointer' }}>−</button>
+                        <span style={{ minWidth: 18, textAlign: 'center', fontSize: 12 }}>{item.quantidade}</span>
+                        <button type="button" onClick={() => alterarQuantidadeOffline(item.produto_id, 1)} style={{ width: 25, height: 25, borderRadius: 5, border: '1px solid #456', background: '#0d1f12', color: '#f4f6ef', cursor: 'pointer' }}>+</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #1e4029', paddingTop: 10, fontSize: 17, fontWeight: 800 }}>
+                <span>Total</span><span style={{ color: '#8FD64A' }}>{fmtR(totalCarrinhoOffline)}</span>
+              </div>
+              <div style={{ fontSize: 12, margin: '13px 0 7px', opacity: .75 }}>Pagamento já autorizado</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 12 }}>
+                {[['dinheiro', 'Dinheiro'], ['tef', 'TEF local'], ['carteira', 'Vale']].map(([tipo, label]) => (
+                  <button key={tipo} type="button" onClick={() => setPagamentoOffline(tipo)} style={{ border: pagamentoOffline === tipo ? '1.5px solid #8FD64A' : '1px solid #1e4029', background: pagamentoOffline === tipo ? '#1e4029' : '#0d1f12', color: '#f4f6ef', borderRadius: 7, padding: '7px 4px', cursor: 'pointer', fontSize: 11, fontWeight: pagamentoOffline === tipo ? 700 : 400 }}>{label}</button>
+                ))}
+              </div>
+              {pagamentoOffline === 'tef' && <div style={{ fontSize: 11, color: '#C9A656', margin: '-5px 0 10px' }}>A autorização TEF local será solicitada antes de salvar o evento.</div>}
+              <button className="btn btn-primary" type="button" disabled={processandoOffline || carrinhoOffline.length === 0} onClick={finalizarVendaOffline} style={{ width: '100%', opacity: processandoOffline || carrinhoOffline.length === 0 ? .55 : 1 }}>
+                {processandoOffline ? 'Registrando venda...' : 'Registrar venda de contingência'}
+              </button>
+              <button className="btn btn-secondary" type="button" onClick={async () => {
+                try {
+                  const entrega = await entregarFilaAoAgente()
+                  await atualizarResumoOffline()
+                  toast(entrega.entregue ? `${entrega.entregue} evento(s) entregue(s) ao agente.` : 'Não há eventos pendentes para entregar.', 'success')
+                } catch (erro) {
+                  toast(erro?.message || 'Agente local indisponível.', 'warning')
+                }
+              }} style={{ width: '100%', marginTop: 8, fontSize: 12 }}>
+                Tentar entregar fila ao agente
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Aba Vendas */}

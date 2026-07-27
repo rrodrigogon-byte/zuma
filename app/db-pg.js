@@ -101,15 +101,20 @@ export async function queryInTransaction(client, text, params = []) {
 /**
  * Buscar por ID
  */
-export async function findById(table, id, empresaId = null) {
+export async function findById(table, id, empresaId = null, lojaId = null) {
   let sql = `SELECT * FROM ${table} WHERE id = $1`;
   const params = [id];
-  
+  let paramIndex = 2;
+
   if (empresaId) {
-    sql += ` AND empresa_id = $2`;
+    sql += ` AND empresa_id = $${paramIndex++}`;
     params.push(empresaId);
   }
-  
+  if (lojaId) {
+    sql += ` AND loja_id = $${paramIndex++}`;
+    params.push(lojaId);
+  }
+
   const result = await query(sql, params);
   return result.rows[0] || null;
 }
@@ -117,7 +122,7 @@ export async function findById(table, id, empresaId = null) {
 /**
  * Buscar todos com filtros
  */
-export async function findAll(table, filters = {}, empresaId = null, limit = 100, offset = 0) {
+export async function findAll(table, filters = {}, empresaId = null, limit = 100, offset = 0, lojaId = null) {
   let sql = `SELECT * FROM ${table}`;
   const params = [];
   const conditions = [];
@@ -126,6 +131,11 @@ export async function findAll(table, filters = {}, empresaId = null, limit = 100
   if (empresaId) {
     conditions.push(`empresa_id = $${paramIndex}`);
     params.push(empresaId);
+    paramIndex++;
+  }
+  if (lojaId) {
+    conditions.push(`loja_id = $${paramIndex}`);
+    params.push(lojaId);
     paramIndex++;
   }
 
@@ -199,7 +209,7 @@ export async function insert(table, data) {
 /**
  * Atualizar registro
  */
-export async function update(table, id, data, empresaId = null) {
+export async function update(table, id, data, empresaId = null, lojaId = null) {
   const columns = Object.keys(data);
   const values = Object.values(data);
   let paramIndex = values.length + 1;
@@ -213,6 +223,11 @@ export async function update(table, id, data, empresaId = null) {
     sql += ` AND empresa_id = $${paramIndex}`;
     params.push(empresaId);
   }
+  if (lojaId) {
+    paramIndex++;
+    sql += ` AND loja_id = $${paramIndex}`;
+    params.push(lojaId);
+  }
 
   sql += ` RETURNING *`;
 
@@ -223,13 +238,18 @@ export async function update(table, id, data, empresaId = null) {
 /**
  * Deletar registro
  */
-export async function deleteRecord(table, id, empresaId = null) {
+export async function deleteRecord(table, id, empresaId = null, lojaId = null) {
   let sql = `DELETE FROM ${table} WHERE id = $1`;
   const params = [id];
+  let paramIndex = 2;
 
   if (empresaId) {
-    sql += ` AND empresa_id = $2`;
+    sql += ` AND empresa_id = $${paramIndex++}`;
     params.push(empresaId);
+  }
+  if (lojaId) {
+    sql += ` AND loja_id = $${paramIndex++}`;
+    params.push(lojaId);
   }
 
   const result = await query(sql, params);
@@ -303,18 +323,20 @@ export async function buscarUsuarioPorEmail(email, empresaId) {
 export async function registrarAuditoria(dados) {
   const sql = `
     INSERT INTO auditoria
-    (empresa_id, usuario_id, tabela, operacao, registro_id, dados_anterior, dados_novo, ip_address)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    (empresa_id, loja_id, usuario_id, tabela, operacao, registro_id, dados_anterior, dados_novo, ip_address, user_agent)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
   `;
   await query(sql, [
     dados.empresa_id,
+    dados.loja_id || null,
     dados.usuario_id || null,
     dados.tabela,
     dados.operacao,
     dados.registro_id,
     dados.dados_anterior ? JSON.stringify(dados.dados_anterior) : null,
     dados.dados_novo ? JSON.stringify(dados.dados_novo) : null,
-    dados.ip_address || null
+    dados.ip_address || null,
+    dados.user_agent || null
   ]);
 }
 
@@ -344,38 +366,57 @@ export async function criarProduto(dados) {
 /**
  * Atualizar estoque
  */
-export async function atualizarEstoque(empresaId, produtoId, quantidade, tipo = 'ajuste', motivo = null) {
+export async function atualizarEstoque(empresaId, produtoId, quantidade, tipo = 'ajuste', motivo = null, lojaId = null, usuarioId = null) {
   const client = await beginTransaction();
   try {
-    // Buscar estoque atual
-    const estoqueResult = await queryInTransaction(
-      client,
-      `SELECT quantidade FROM estoque WHERE empresa_id = $1 AND produto_id = $2`,
-      [empresaId, produtoId]
-    );
-
-    const quantidadeAtual = estoqueResult.rows[0]?.quantidade || 0;
-    const novaQuantidade = quantidadeAtual + quantidade;
-
-    // Validar se não fica negativo
-    if (novaQuantidade < 0) {
-      throw new Error('Estoque insuficiente');
+    // Compatibilidade com chamadas legadas: o saldo sem loja explícita é
+    // direcionado somente à matriz, nunca a uma unidade arbitrária.
+    let lojaEfetivaId = lojaId;
+    if (!lojaEfetivaId) {
+      const matriz = await queryInTransaction(
+        client,
+        `SELECT id FROM lojas WHERE empresa_id = $1 AND ativa = true
+         ORDER BY CASE WHEN codigo = 'MATRIZ' THEN 0 ELSE 1 END, data_criacao LIMIT 1`,
+        [empresaId]
+      );
+      lojaEfetivaId = matriz.rows[0]?.id;
+      if (!lojaEfetivaId) throw new Error('Não há loja ativa para registrar o estoque');
     }
 
-    // Atualizar estoque
-    await queryInTransaction(
+    const estoqueResult = await queryInTransaction(
       client,
-      `UPDATE estoque SET quantidade = $1 WHERE empresa_id = $2 AND produto_id = $3`,
-      [novaQuantidade, empresaId, produtoId]
+      `SELECT id, quantidade FROM estoque
+       WHERE empresa_id = $1 AND loja_id = $2 AND produto_id = $3
+       ORDER BY data_atualizacao DESC NULLS LAST
+       LIMIT 1 FOR UPDATE`,
+      [empresaId, lojaEfetivaId, produtoId]
     );
+    const quantidadeAtual = Number(estoqueResult.rows[0]?.quantidade || 0);
+    const novaQuantidade = quantidadeAtual + Number(quantidade);
+    if (!Number.isFinite(novaQuantidade)) throw new Error('Quantidade inválida');
+    if (novaQuantidade < 0) throw new Error('Estoque insuficiente');
 
-    // Registrar movimentação
+    if (estoqueResult.rows.length > 0) {
+      await queryInTransaction(
+        client,
+        `UPDATE estoque SET quantidade = $1, data_atualizacao = CURRENT_TIMESTAMP WHERE id = $2`,
+        [novaQuantidade, estoqueResult.rows[0].id]
+      );
+    } else {
+      await queryInTransaction(
+        client,
+        `INSERT INTO estoque (empresa_id, loja_id, produto_id, quantidade)
+         VALUES ($1, $2, $3, $4)`,
+        [empresaId, lojaEfetivaId, produtoId, novaQuantidade]
+      );
+    }
+
     await queryInTransaction(
       client,
       `INSERT INTO movimentacoes_estoque
-       (empresa_id, produto_id, tipo, quantidade, motivo, usuario_id)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [empresaId, produtoId, tipo, quantidade, motivo, null]
+       (empresa_id, loja_id, produto_id, tipo, quantidade, motivo, usuario_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [empresaId, lojaEfetivaId, produtoId, tipo, quantidade, motivo, usuarioId]
     );
 
     await commit(client);
@@ -392,12 +433,13 @@ export async function atualizarEstoque(empresaId, produtoId, quantidade, tipo = 
 export async function criarVenda(dados) {
   const sql = `
     INSERT INTO vendas
-    (empresa_id, numero_venda, usuario_vendedor_id, tipo_venda, status, valor_bruto, valor_liquido)
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    (empresa_id, loja_id, numero_venda, usuario_vendedor_id, tipo_venda, status, valor_bruto, valor_liquido)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     RETURNING *
   `;
   const result = await query(sql, [
     dados.empresa_id,
+    dados.loja_id,
     dados.numero_venda,
     dados.usuario_vendedor_id,
     dados.tipo_venda || 'pdv',
@@ -431,16 +473,21 @@ export async function adicionarItemVenda(dados) {
 /**
  * Fechar venda
  */
-export async function fecharVenda(empresaId, vendaId) {
-  const sql = `
-    UPDATE vendas 
+export async function fecharVenda(empresaId, vendaId, lojaId = null) {
+  let sql = `
+    UPDATE vendas
     SET status = 'fechada', valor_liquido = (
       SELECT COALESCE(SUM(valor_total), 0) FROM itens_venda WHERE venda_id = $1
     )
     WHERE id = $1 AND empresa_id = $2
-    RETURNING *
   `;
-  const result = await query(sql, [vendaId, empresaId]);
+  const params = [vendaId, empresaId];
+  if (lojaId) {
+    sql += ' AND loja_id = $3';
+    params.push(lojaId);
+  }
+  sql += ' RETURNING *';
+  const result = await query(sql, params);
   return result.rows[0] || null;
 }
 
@@ -448,14 +495,21 @@ export async function fecharVenda(empresaId, vendaId) {
  * Registrar pagamento
  */
 export async function registrarPagamento(dados) {
+  const lojaId = dados.loja_id || (await query(
+    `SELECT loja_id FROM vendas WHERE id = $1 AND empresa_id = $2`,
+    [dados.venda_id, dados.empresa_id]
+  )).rows[0]?.loja_id;
+  if (!lojaId) throw new Error('Loja da venda não encontrada para registrar pagamento');
+
   const sql = `
     INSERT INTO pagamentos
-    (empresa_id, venda_id, forma_pagamento_id, valor, status, usuario_id)
-    VALUES ($1, $2, $3, $4, $5, $6)
+    (empresa_id, loja_id, venda_id, forma_pagamento_id, valor, status, usuario_id)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
     RETURNING *
   `;
   const result = await query(sql, [
     dados.empresa_id,
+    lojaId,
     dados.venda_id,
     dados.forma_pagamento_id,
     dados.valor,
@@ -468,7 +522,7 @@ export async function registrarPagamento(dados) {
 /**
  * Buscar relatório de vendas
  */
-export async function relatorioVendas(empresaId, dataInicio, dataFim) {
+export async function relatorioVendas(empresaId, dataInicio, dataFim, lojaId = null) {
   const sql = `
     SELECT 
       DATE(v.data_venda) as data,
@@ -479,14 +533,15 @@ export async function relatorioVendas(empresaId, dataInicio, dataFim) {
       COUNT(DISTINCT u.id) as quantidade_vendedores
     FROM vendas v
     LEFT JOIN usuarios u ON v.usuario_vendedor_id = u.id
-    WHERE v.empresa_id = $1 
-      AND v.data_venda >= $2 
+    WHERE v.empresa_id = $1
+      AND v.data_venda >= $2
       AND v.data_venda <= $3
       AND v.status = 'fechada'
+      AND ($4::uuid IS NULL OR v.loja_id = $4::uuid)
     GROUP BY DATE(v.data_venda), u.nome_completo
     ORDER BY data DESC
   `;
-  const result = await query(sql, [empresaId, dataInicio, dataFim]);
+  const result = await query(sql, [empresaId, dataInicio, dataFim, lojaId]);
   return result.rows;
 }
 

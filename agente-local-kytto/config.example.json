@@ -1,0 +1,41 @@
+{
+  "servidor_url": "https://SEU-DOMINIO-DO-KYTTO",
+  "terminal_id": "UUID-DO-TERMINAL-PROVISIONADO",
+  "token_terminal": "TOKEN-EXIBIDO-UMA-UNICA-VEZ-NO-PROVISIONAMENTO",
+  "origem_pdv_permitida": "https://SEU-DOMINIO-DO-KYTTO",
+  "host_local": "127.0.0.1",
+  "porta_local": 9357,
+  "intervalo_fila_ms": 2500,
+  "intervalo_heartbeat_ms": 30000,
+  "dispositivos": [
+    {
+      "id": "UUID-DO-DISPOSITIVO-CADASTRADO",
+      "tipo": "impressora_termica",
+      "ativo": true,
+      "endereco_conexao": "192.168.1.50",
+      "configuracoes": {
+        "modo": "rede",
+        "host": "192.168.1.50",
+        "porta": 9100,
+        "largura_colunas": 42,
+        "timeout_ms": 5000
+      }
+    },
+    {
+      "id": "UUID-DA-GAVETA-CADASTRADA",
+      "tipo": "gaveta",
+      "ativo": true,
+      "configuracoes": {
+        "modo": "diagnostico"
+      }
+    },
+    {
+      "id": "UUID-DA-BALANCA-CADASTRADA",
+      "tipo": "balanca",
+      "ativo": true,
+      "configuracoes": {
+        "peso_simulado_kg": 0
+      }
+    }
+  ]
+}

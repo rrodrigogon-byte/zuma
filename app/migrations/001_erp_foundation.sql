@@ -158,7 +158,7 @@ CREATE TABLE IF NOT EXISTS movimentacoes_estoque (
   documento_tipo VARCHAR(20), -- 'nf', 'nfce', 'manual', 'venda'
   documento_numero VARCHAR(50),
   documento_serie VARCHAR(10),
-  fornecedor_id UUID REFERENCES fornecedores(id) ON DELETE SET NULL,
+  fornecedor_id UUID, -- Chave estrangeira adicionada após a criação de fornecedores
   usuario_id UUID NOT NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
   motivo VARCHAR(255), -- Para ajustes
   custo_unitario DECIMAL(10, 2),
@@ -219,6 +219,10 @@ CREATE TABLE IF NOT EXISTS fornecedores (
   data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(empresa_id, cnpj, cpf)
 );
+
+ALTER TABLE movimentacoes_estoque
+  ADD CONSTRAINT fk_movimentacoes_estoque_fornecedor
+  FOREIGN KEY (fornecedor_id) REFERENCES fornecedores(id) ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS compras (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

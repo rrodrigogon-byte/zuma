@@ -21,6 +21,8 @@ import vendasRoutes from './routes/vendas.js';
 import pagamentosRoutes from './routes/pagamentos.js';
 import nfceRoutes from './routes/nfce.js';
 import caixaRoutes from './routes/caixa.js';
+import lojasRoutes from './routes/lojas.js';
+import pdvOfflineRoutes from './routes/pdv-offline.js';
 
 // Carregar variáveis de ambiente
 dotenv.config();
@@ -94,7 +96,9 @@ app.get('/', (req, res) => {
       vendas: '/vendas',
       pagamentos: '/pagamentos',
       nfce: '/nfce',
-      caixa: '/caixa'
+      caixa: '/caixa',
+      lojas: '/lojas',
+      pdv_offline: '/pdv-offline'
     }
   });
 });
@@ -116,6 +120,23 @@ app.use('/nfce', nfceRoutes);
 
 // Rotas de caixa
 app.use('/caixa', caixaRoutes);
+
+// Rotas de lojas e auditoria multiloja
+app.use('/lojas', lojasRoutes);
+
+// PDV offline, terminais e periféricos
+app.use('/pdv-offline', pdvOfflineRoutes);
+
+// Aliases com prefixo /api preservam a compatibilidade com o frontend Vite
+// existente, que faz chamadas relativas a /api/*.
+app.use('/api/auth', authRoutes);
+app.use('/api/estoque', estoqueRoutes);
+app.use('/api/vendas', vendasRoutes);
+app.use('/api/pagamentos', pagamentosRoutes);
+app.use('/api/nfce', nfceRoutes);
+app.use('/api/caixa', caixaRoutes);
+app.use('/api/lojas', lojasRoutes);
+app.use('/api/pdv-offline', pdvOfflineRoutes);
 
 /**
  * ============================================================================
@@ -169,7 +190,11 @@ async function iniciarServidor() {
       console.log('  • POST   /nfce/emitir');
       console.log('  • POST   /caixa/abrir');
       console.log('  • POST   /caixa/sangria');
-      console.log('  • POST   /caixa/:id/fechar\n');
+      console.log('  • POST   /caixa/:id/fechar');
+      console.log('  • GET    /lojas');
+      console.log('  • POST   /lojas');
+      console.log('  • POST   /pdv-offline/sincronizar');
+      console.log('  • POST   /pdv-offline/terminal/heartbeat\n');
     });
   } catch (error) {
     console.error('❌ Erro ao iniciar servidor:', error);

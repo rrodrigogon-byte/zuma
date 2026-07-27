@@ -1,9 +1,9 @@
 // SetPoint PWA Service Worker — v1.0.0
 // Estratégia: Cache-First para assets estáticos, Network-First para /api/
 
-const CACHE_NAME = 'setpoint-v2'
-const STATIC_CACHE = 'setpoint-static-v2'
-const API_CACHE = 'setpoint-api-v2'
+const CACHE_NAME = 'kytto-v3'
+const STATIC_CACHE = 'kytto-static-v3'
+const API_CACHE = 'kytto-api-v3'
 
 // Assets estáticos para pré-caching
 const PRE_CACHE_URLS = [
@@ -43,9 +43,23 @@ self.addEventListener('fetch', event => {
   // Ignora requisições de extensões ou non-http
   if (!url.protocol.startsWith('http')) return
 
-  // ── /api/* — Network-First (sempre busca dados frescos) ──
+  // ── /api/* — dados de leitura podem usar cache; mutações nunca são
+  // armazenadas pelo Service Worker. A fila offline do PDV controla apenas
+  // eventos idempotentes explicitamente aprovados pela aplicação.
   if (url.pathname.startsWith('/api/')) {
-    event.respondWith(networkFirst(request, API_CACHE, 5000))
+    if (request.method === 'GET') {
+      event.respondWith(networkFirst(request, API_CACHE, 5000))
+    } else {
+      event.respondWith(
+        fetch(request).catch(() => new Response(JSON.stringify({
+          erro: 'offline',
+          codigo: 'REDE_INDISPONIVEL',
+        }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        }))
+      )
+    }
     return
   }
 
@@ -77,7 +91,7 @@ async function cacheFirst(request, cacheName) {
   if (cached) return cached
   try {
     const response = await fetch(request)
-    if (response.ok) {
+    if (response.ok && request.method === 'GET') {
       const cache = await caches.open(cacheName)
       cache.put(request, response.clone())
     }
@@ -93,7 +107,7 @@ async function networkFirst(request, cacheName, timeoutMs = 5000) {
   try {
     const response = await fetch(request, { signal: controller.signal })
     clearTimeout(timeout)
-    if (response.ok) {
+    if (response.ok && request.method === 'GET') {
       const cache = await caches.open(cacheName)
       cache.put(request, response.clone())
     }
@@ -112,7 +126,7 @@ async function networkFirst(request, cacheName, timeoutMs = 5000) {
 async function staleWhileRevalidate(request, cacheName) {
   const cached = await caches.match(request)
   const networkFetch = fetch(request).then(async response => {
-    if (response.ok) {
+    if (response.ok && request.method === 'GET') {
       const cache = await caches.open(cacheName)
       cache.put(request, response.clone())
     }

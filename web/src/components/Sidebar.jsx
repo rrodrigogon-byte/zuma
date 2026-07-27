@@ -91,6 +91,7 @@ const NAV_ADMIN_GROUPS = [
       { to: '/admin/pagamentos',icon: '💳', label: 'Pagamentos' },
       { to: '/admin/notas',    icon: '🧾', label: 'Notas Fiscais' },
       { to: '/admin/cupons',   icon: '🎟️', label: 'Cupons' },
+      { to: '/admin/pdv-offline', icon: '📡', label: 'PDV Offline & Periféricos' },
     ],
   },
   {
@@ -107,6 +108,7 @@ const NAV_ADMIN_GROUPS = [
     label: 'Loja & Conteúdo',
     items: [
       { to: '/admin/loja',          icon: '🛍️', label: 'Loja' },
+      { to: '/admin/lojas',         icon: '🏬', label: 'Unidades' },
       { to: '/admin/noticias',      icon: '📰', label: 'Notícias' },
       { to: '/admin/contatos',      icon: '✉️', label: 'Contatos' },
     ],
@@ -219,7 +221,7 @@ function AdminGroups({ groups, onNavClick }) {
 }
 
 export default function Sidebar() {
-  const { user, logout, isOrg, isStaff, isAtleta } = useAuth()
+  const { user, logout, isOrg, isStaff, isAtleta, lojaAtiva, lojasAcessiveis, trocarLoja } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
@@ -305,6 +307,34 @@ export default function Sidebar() {
             </button>
           )}
         </div>
+
+        {user && lojasAcessiveis.length > 0 && (
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
+            <label htmlFor="loja-ativa" style={{
+              display: 'block', marginBottom: 6, fontSize: 10, fontWeight: 800,
+              color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.8px',
+            }}>
+              Loja ativa
+            </label>
+            <select
+              id="loja-ativa"
+              value={lojaAtiva?.id || ''}
+              onChange={(event) => trocarLoja(event.target.value)}
+              style={{
+                width: '100%', padding: '8px 9px', borderRadius: 7,
+                border: '1px solid var(--line)', background: 'var(--surface-2)',
+                color: 'var(--cream)', fontSize: 12, fontWeight: 700,
+              }}
+              aria-label="Selecionar loja ativa"
+            >
+              {lojasAcessiveis.map((loja) => (
+                <option key={loja.id} value={loja.id}>
+                  {loja.codigo ? `${loja.codigo} — ` : ''}{loja.nome || loja.nome_fantasia}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {isStaff && <Section label="Operações" items={NAV_OP} onNavClick={handleNavClick} badgesMap={badgesMap} />}
         {isOrg   && <AdminGroups groups={NAV_ADMIN_GROUPS} onNavClick={handleNavClick} />}

@@ -1,0 +1,14 @@
+{
+  "name": "kytto-agente-local",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Agente local Kytto para periféricos e sincronização offline do PDV.",
+  "scripts": {
+    "start": "node src/index.js",
+    "check": "node --check src/index.js && node --check src/drivers.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
