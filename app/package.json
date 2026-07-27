@@ -3,19 +3,26 @@
   "version": "4.5.0",
   "description": "SetPoint — plataforma de gestão esportiva e de arenas (torneios, chaves, ranking, ingressos+QR, PDV, reserva de quadras, patrocínio, carteira). Evento de demonstração: 4ª Agro Open de Tênis.",
   "type": "module",
-  "main": "server.js",
+  "main": "server-erp.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "start": "node server-erp.js",
+    "dev": "node --watch server-erp.js"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.21.0",
+    "axios": "^1.18.1",
     "bcryptjs": "^2.4.3",
+    "bwip-js": "^4.11.2",
+    "ejs": "^6.0.1",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
-    "qrcode": "^1.5.4"
+    "node-forge": "^1.4.0",
+    "qr-image": "^3.2.0",
+    "qrcode": "^1.5.4",
+    "xml2js": "^0.6.2",
+    "xmldom": "^0.6.0"
   }
 }

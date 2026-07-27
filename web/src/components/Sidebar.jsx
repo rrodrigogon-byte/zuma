@@ -95,6 +95,20 @@ const NAV_ADMIN_GROUPS = [
     ],
   },
   {
+    label: 'ERP Comercial',
+    items: [
+      { to: '/admin/erp',           icon: '🏢', label: 'Hub ERP' },
+      { to: '/admin/supermercado',  icon: '🏪', label: 'Supermercado' },
+      { to: '/admin/loja-moda',     icon: '👗', label: 'Loja de Moda' },
+      { to: '/admin/barbearia-erp', icon: '✂️', label: 'Barbearia & Salão' },
+      { to: '/admin/oficina',       icon: '🔧', label: 'Oficina Mecânica' },
+      { to: '/admin/agropecuaria',  icon: '🌾', label: 'Agropecuária & Pet' },
+      { to: '/admin/varejo',        icon: '🛒', label: 'Varejo Geral' },
+      { to: '/admin/compras',       icon: '📦', label: 'Compras & Fornec.' },
+      { to: '/admin/fiscal/config', icon: '⚙️', label: 'Config. Fiscal' },
+    ],
+  },
+  {
     label: 'Membros',
     items: [
       { to: '/admin/usuarios',     icon: '👥', label: 'Usuários' },

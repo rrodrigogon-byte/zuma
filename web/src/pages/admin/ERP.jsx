@@ -1,0 +1,93 @@
+/**
+ * ERP Hub — SetPoint Ultra
+ * Página central de acesso a todos os módulos ERP
+ */
+import { useNavigate } from 'react-router-dom'
+
+const MODULOS = [
+  {
+    categoria: '🏪 Comércio & Varejo',
+    items: [
+      { icon: '🛒', label: 'Varejo Geral', desc: 'Orçamentos, pedidos, multi-estoque, entregas', href: '/admin/varejo' },
+      { icon: '👗', label: 'Loja de Moda', desc: 'Grade Cor×Tamanho, crediário, condicional', href: '/admin/loja-moda' },
+      { icon: '🏪', label: 'Supermercado', desc: 'Balança, lotes, validade, gôndola', href: '/admin/supermercado' },
+      { icon: '📦', label: 'Compras', desc: 'Pedidos, cotações, fornecedores, recebimento', href: '/admin/compras' },
+    ]
+  },
+  {
+    categoria: '🔧 Serviços',
+    items: [
+      { icon: '🔧', label: 'Oficina Mecânica', desc: 'OS digital, checklist, aprovação WhatsApp', href: '/admin/oficina' },
+      { icon: '✂️', label: 'Barbearia & Salão', desc: 'Agendamento, rateio, assinaturas', href: '/admin/barbearia' },
+      { icon: '🌾', label: 'Agropecuária & Petshop', desc: 'Receituário, prontuário, vacinas', href: '/admin/agropecuaria' },
+    ]
+  },
+  {
+    categoria: '🍽️ Alimentação',
+    items: [
+      { icon: '🍺', label: 'Bar & Comandas', desc: 'Mesas, KDS, comanda digital', href: '/admin/pdv' },
+      { icon: '🍽️', label: 'Restaurante', desc: 'Cardápio, ficha técnica, delivery', href: '/admin/cardapio' },
+    ]
+  },
+  {
+    categoria: '🎾 Esportivo',
+    items: [
+      { icon: '🎾', label: 'Quadras & Reservas', desc: 'Agendamento, preços dinâmicos, IoT', href: '/admin/agenda' },
+      { icon: '🏆', label: 'Torneios', desc: 'Chaves, grupos, ranking, gamificação', href: '/admin/torneios' },
+      { icon: '👥', label: 'Atletas & CRM', desc: 'Mensalidades, carteira, pontos', href: '/admin/socios' },
+    ]
+  },
+  {
+    categoria: '📊 Gestão & Financeiro',
+    items: [
+      { icon: '💰', label: 'Financeiro', desc: 'DRE, fluxo de caixa, contas', href: '/admin/financeiro' },
+      { icon: '📈', label: 'BI & Relatórios', desc: 'Dashboard, curva ABC, KPIs', href: '/admin/bi' },
+      { icon: '🧾', label: 'Notas Fiscais', desc: 'NFC-e, NF-e, NF-Se — motor próprio', href: '/admin/notas' },
+      { icon: '⚙️', label: 'Config. Fiscal', desc: 'Certificado A1, SEFAZ, CSC', href: '/admin/fiscal/config' },
+    ]
+  }
+]
+
+export default function ERP() {
+  const navigate = useNavigate()
+
+  return (
+    <div style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
+      <div style={{ marginBottom: 32 }}>
+        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800 }}>SetPoint Ultra</h1>
+        <p style={{ margin: '6px 0 0', color: 'var(--muted)', fontSize: 15 }}>
+          ERP Modular Brasil — Selecione o módulo para acessar
+        </p>
+      </div>
+
+      {MODULOS.map(grupo => (
+        <div key={grupo.categoria} style={{ marginBottom: 32 }}>
+          <h2 style={{ margin: '0 0 16px', fontSize: 16, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1 }}>
+            {grupo.categoria}
+          </h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
+            {grupo.items.map(mod => (
+              <button
+                key={mod.href}
+                onClick={() => navigate(mod.href)}
+                style={{
+                  background: 'var(--card)', borderRadius: 12, padding: '18px 20px',
+                  border: '1px solid var(--line)', cursor: 'pointer', textAlign: 'left',
+                  transition: 'all 0.2s', display: 'flex', alignItems: 'flex-start', gap: 14
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.transform = 'translateY(-2px)' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.transform = 'none' }}
+              >
+                <span style={{ fontSize: 28, lineHeight: 1 }}>{mod.icon}</span>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{mod.label}</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.4 }}>{mod.desc}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}

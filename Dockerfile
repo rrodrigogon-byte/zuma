@@ -1,43 +1,52 @@
-# SetPoint — imagem de produção com build do frontend React incluído
-# Stage 1: Build do frontend React
-FROM node:20-alpine AS frontend-build
-WORKDIR /workspace
-# Instala deps do frontend
-COPY web/package*.json ./web/
-RUN cd web && npm install
-# Cria diretório app/public para o outDir do vite
-RUN mkdir -p app/public
-# Copia o código do frontend
-COPY web ./web
-# Build (outDir: '../app/public' no vite.config.js → /workspace/app/public)
-RUN cd web && npm run build
+# SetPoint Ultra — Dockerfile para GCP Cloud Run
+# Multi-stage build para otimização de tamanho e segurança
 
-# Stage 2: Imagem final de produção
-FROM node:20-alpine
-WORKDIR /usr/src/app
+# ─── Stage 1: Build do Web (React) ──────────────────────────────────────────
+FROM node:22-alpine AS web-builder
+WORKDIR /app/web
+COPY web/package*.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm run build
 
-# Instala dependências do backend
-COPY app/package*.json ./app/
-RUN cd app && npm install --omit=dev
+# ─── Stage 2: Build do Backend (Node.js) ────────────────────────────────────
+FROM node:22-alpine AS backend-builder
+WORKDIR /app/api
+COPY app/package*.json ./
+RUN npm ci --only=production
+COPY app/ ./
 
-# Copia o código do backend
-COPY app ./app
-
-# Copia o build do frontend (gerado pelo vite no stage anterior)
-COPY --from=frontend-build /workspace/app/public ./app/public
-
-# Copia o site legado (HTML estático)
-COPY site ./site
-
-# Configurações de ambiente
-ENV DB_PATH=/data/db.json
-ENV PORT=3000
+# ─── Stage 3: Imagem Final de Produção ──────────────────────────────────────
+FROM node:22-alpine
 ENV NODE_ENV=production
+ENV PORT=8080
 
-# Volume para dados persistentes
-VOLUME ["/data"]
+# Instalar dependências de sistema para geração de PDF (DANFE)
+RUN apk add --no-cache fontconfig ttf-dejavu
 
-EXPOSE 3000
+WORKDIR /app
 
-WORKDIR /usr/src/app/app
-CMD ["node", "server.js"]
+# Copiar dependências e código do backend
+COPY --from=backend-builder /app/api ./
+
+# Copiar build do frontend para ser servido pelo backend
+COPY --from=web-builder /app/web/dist ./public
+
+# Criar usuário não-root para segurança
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001 && \
+    chown -R nodejs:nodejs /app
+USER nodejs
+
+EXPOSE 8080
+
+# Healthcheck para o Cloud Run
+HEALTHCHECK --interval=30s --timeout=3s \
+  CMD wget -qO- http://localhost:8080/health || exit 1
+
+# Copiar e configurar entrypoint
+COPY --chown=nodejs:nodejs entrypoint.sh ./
+RUN chmod +x entrypoint.sh
+
+# Iniciar o servidor ERP principal via entrypoint
+ENTRYPOINT ["./entrypoint.sh"]
