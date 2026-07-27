@@ -15,5 +15,5 @@ else
 fi
 
 # Executar o servidor principal do ERP
-echo "▶️  Iniciando Node.js (server-erp.js)..."
-exec node server-erp.js
+echo "▶️  Iniciando Node.js (server-v2.js)..."
+exec node server-v2.js
