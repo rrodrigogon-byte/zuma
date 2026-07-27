@@ -164,6 +164,18 @@ async function registrarModulos() {
 }
 
 // ============================================================================
+// ROTAS PÚBLICAS (sem autenticação)
+// ============================================================================
+
+try {
+  const { default: agendamentoPublico } = await import('./modules/barbearia/routes-publico.js');
+  app.use('/api/publico/agendamento', agendamentoPublico);
+  console.log('  ✅ Agendamento Online Público → /api/publico/agendamento/:slug');
+} catch (err) {
+  console.warn('  ⚠️  Agendamento Online Público não disponível:', err.message);
+}
+
+// ============================================================================
 // TRATAMENTO DE ERROS
 // ============================================================================
 
