@@ -61,6 +61,15 @@ const authLimiter = rateLimit({
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Em produção, servir o build React antes das rotas. As chamadas /api/*
+// continuam sendo resolvidas pelos módulos registrados abaixo.
+if (PROD) {
+  app.use(express.static(path.join(__dirname, 'public'), {
+    maxAge: '1h',
+    etag: true
+  }));
+}
+
 // Log de requisições em desenvolvimento
 if (!PROD) {
   app.use((req, res, next) => {

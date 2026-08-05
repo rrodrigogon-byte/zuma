@@ -7,7 +7,7 @@ echo "🚀 Iniciando SetPoint Ultra no Google Cloud Run..."
 export TZ="America/Cuiaba"
 
 # Verificar se as variáveis de banco de dados estão configuradas
-if [ -z "$DB_HOST" ] || [ -z "$DB_USER" ] || [ -z "$DB_PASS" ] || [ -z "$DB_NAME" ]; then
+if [ -z "$DB_HOST" ] || [ -z "$DB_USER" ] || [ -z "$DB_PASSWORD" ] || [ -z "$DB_NAME" ]; then
   echo "⚠️  AVISO: Variáveis de banco de dados (DB_*) não configuradas."
   echo "⚠️  O sistema iniciará usando SQLite/JSON em memória para fallback."
 else
@@ -15,5 +15,5 @@ else
 fi
 
 # Executar o servidor principal do ERP
-echo "▶️  Iniciando Node.js (server-v2.js)..."
-exec node server-v2.js
+echo "▶️  Iniciando Node.js (server-erp.js)..."
+exec node server-erp.js
