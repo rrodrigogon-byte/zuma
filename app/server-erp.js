@@ -114,7 +114,38 @@ function criarAdminPadrao() {
   }
 }
 
-// Rota: Login
+// Rota: Login Admin (Painel)
+app.post('/api/admin/login', authLimiter, (req, res) => {
+  try {
+    const { user, pass } = req.body;
+    
+    if (!user || !pass) {
+      return res.status(400).json({ error: 'Usuário e senha são obrigatórios' });
+    }
+    
+    const usuario = usuarios.get(user);
+    
+    if (!usuario || !verificarPassword(pass, usuario.senha)) {
+      return res.status(401).json({ error: 'Usuário ou senha inválidos' });
+    }
+    
+    if (!usuario.ativo) {
+      return res.status(403).json({ error: 'Usuário desativado' });
+    }
+    
+    const token = Buffer.from(`${user}:${Date.now()}`).toString('base64');
+    
+    res.json({
+      token,
+      user: usuario.nome,
+      role: usuario.role || 'admin'
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao fazer login' });
+  }
+});
+
+// Rota: Login Atleta
 app.post('/api/auth/login', authLimiter, (req, res) => {
   try {
     const { email, senha } = req.body;
@@ -137,12 +168,11 @@ app.post('/api/auth/login', authLimiter, (req, res) => {
     const token = Buffer.from(`${email}:${Date.now()}`).toString('base64');
     
     res.json({
-      sucesso: true,
       token,
-      usuario: {
+      user: {
         email: usuario.email,
         nome: usuario.nome,
-        tipo: usuario.tipo
+        role: 'atleta'
       }
     });
   } catch (err) {
@@ -150,10 +180,10 @@ app.post('/api/auth/login', authLimiter, (req, res) => {
   }
 });
 
-// Rota: Cadastro
-app.post('/api/auth/register', authLimiter, (req, res) => {
+// Rota: Cadastro Atleta
+app.post('/api/auth/registro', authLimiter, (req, res) => {
   try {
-    const { email, nome, senha, senhaConfirm } = req.body;
+    const { email, nome, senha } = req.body;
     
     if (!email || !nome || !senha) {
       return res.status(400).json({ erro: 'Email, nome e senha são obrigatórios' });
