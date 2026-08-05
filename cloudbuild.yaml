@@ -57,7 +57,7 @@ steps:
       - --timeout
       - 60s
       - --set-env-vars
-      - NODE_ENV=production,PORT=8080,TZ=America/Cuiaba
+      - NODE_ENV=production,TZ=America/Cuiaba
     waitFor:
       - push-image
 
