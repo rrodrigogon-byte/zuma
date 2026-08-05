@@ -79,6 +79,201 @@ if (!PROD) {
 }
 
 // ============================================================================
+// AUTENTICAÇÃO E USUÁRIOS
+// ============================================================================
+
+// Armazenamento em memória (em produção, usar banco de dados)
+const usuarios = new Map();
+
+// Usuário admin padrão (será criado na inicialização)
+const ADMIN_TEMP_PASSWORD = 'SetPoint@2026Temp';
+const ADMIN_EMAIL = 'admin@setpoint-ultra.local';
+
+// Função auxiliar para hash simples (em produção, usar bcrypt)
+function hashPassword(pwd) {
+  return Buffer.from(pwd).toString('base64');
+}
+
+function verificarPassword(pwd, hash) {
+  return hashPassword(pwd) === hash;
+}
+
+// Criar usuário admin na inicialização
+function criarAdminPadrao() {
+  if (!usuarios.has(ADMIN_EMAIL)) {
+    usuarios.set(ADMIN_EMAIL, {
+      email: ADMIN_EMAIL,
+      nome: 'Administrador',
+      senha: hashPassword(ADMIN_TEMP_PASSWORD),
+      tipo: 'admin',
+      criado: new Date(),
+      ativo: true
+    });
+    console.log(`✅ Usuário admin criado: ${ADMIN_EMAIL}`);
+    console.log(`🔐 Senha temporária: ${ADMIN_TEMP_PASSWORD}`);
+  }
+}
+
+// Rota: Login
+app.post('/api/auth/login', authLimiter, (req, res) => {
+  try {
+    const { email, senha } = req.body;
+    
+    if (!email || !senha) {
+      return res.status(400).json({ erro: 'Email e senha são obrigatórios' });
+    }
+    
+    const usuario = usuarios.get(email);
+    
+    if (!usuario || !verificarPassword(senha, usuario.senha)) {
+      return res.status(401).json({ erro: 'Email ou senha inválidos' });
+    }
+    
+    if (!usuario.ativo) {
+      return res.status(403).json({ erro: 'Usuário desativado' });
+    }
+    
+    // Gerar token simples (em produção, usar JWT)
+    const token = Buffer.from(`${email}:${Date.now()}`).toString('base64');
+    
+    res.json({
+      sucesso: true,
+      token,
+      usuario: {
+        email: usuario.email,
+        nome: usuario.nome,
+        tipo: usuario.tipo
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao fazer login' });
+  }
+});
+
+// Rota: Cadastro
+app.post('/api/auth/register', authLimiter, (req, res) => {
+  try {
+    const { email, nome, senha, senhaConfirm } = req.body;
+    
+    if (!email || !nome || !senha) {
+      return res.status(400).json({ erro: 'Email, nome e senha são obrigatórios' });
+    }
+    
+    if (senha !== senhaConfirm) {
+      return res.status(400).json({ erro: 'Senhas não conferem' });
+    }
+    
+    if (senha.length < 8) {
+      return res.status(400).json({ erro: 'Senha deve ter no mínimo 8 caracteres' });
+    }
+    
+    if (usuarios.has(email)) {
+      return res.status(409).json({ erro: 'Email já cadastrado' });
+    }
+    
+    // Validar se é um email de rota conhecida
+    if (!email.includes('@')) {
+      return res.status(400).json({ erro: 'Email inválido' });
+    }
+    
+    usuarios.set(email, {
+      email,
+      nome,
+      senha: hashPassword(senha),
+      tipo: 'usuario',
+      criado: new Date(),
+      ativo: true
+    });
+    
+    res.status(201).json({
+      sucesso: true,
+      mensagem: 'Conta criada com sucesso',
+      usuario: { email, nome, tipo: 'usuario' }
+    });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao criar conta' });
+  }
+});
+
+// Rota: Recuperação de Senha
+app.post('/api/auth/forgot-password', authLimiter, (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ erro: 'Email é obrigatório' });
+    }
+    
+    const usuario = usuarios.get(email);
+    
+    if (!usuario) {
+      // Não revelar se o email existe (segurança)
+      return res.json({
+        sucesso: true,
+        mensagem: 'Se o email existe, um link de recuperação foi enviado'
+      });
+    }
+    
+    // Gerar token de recuperação
+    const tokenRecuperacao = Buffer.from(`${email}:${Date.now()}:recover`).toString('base64');
+    usuario.tokenRecuperacao = tokenRecuperacao;
+    usuario.expiracaoRecuperacao = Date.now() + (3600 * 1000); // 1 hora
+    
+    res.json({
+      sucesso: true,
+      mensagem: 'Link de recuperação enviado para o email',
+      // Em produção, enviar por email. Para teste:
+      _debug: PROD ? undefined : { token: tokenRecuperacao }
+    });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao processar recuperação' });
+  }
+});
+
+// Rota: Redefinir Senha
+app.post('/api/auth/reset-password', (req, res) => {
+  try {
+    const { token, novaSenha, novasenhaConfirm } = req.body;
+    
+    if (!token || !novaSenha) {
+      return res.status(400).json({ erro: 'Token e nova senha são obrigatórios' });
+    }
+    
+    if (novaSenha !== novasenhaConfirm) {
+      return res.status(400).json({ erro: 'Senhas não conferem' });
+    }
+    
+    if (novaSenha.length < 8) {
+      return res.status(400).json({ erro: 'Senha deve ter no mínimo 8 caracteres' });
+    }
+    
+    // Procurar usuário com este token
+    let usuarioEncontrado = null;
+    for (const [email, usuario] of usuarios.entries()) {
+      if (usuario.tokenRecuperacao === token && usuario.expiracaoRecuperacao > Date.now()) {
+        usuarioEncontrado = usuario;
+        break;
+      }
+    }
+    
+    if (!usuarioEncontrado) {
+      return res.status(401).json({ erro: 'Token inválido ou expirado' });
+    }
+    
+    usuarioEncontrado.senha = hashPassword(novaSenha);
+    usuarioEncontrado.tokenRecuperacao = null;
+    usuarioEncontrado.expiracaoRecuperacao = null;
+    
+    res.json({
+      sucesso: true,
+      mensagem: 'Senha alterada com sucesso'
+    });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao redefinir senha' });
+  }
+});
+
+// ============================================================================
 // HEALTH CHECK
 // ============================================================================
 
@@ -215,6 +410,8 @@ async function iniciar() {
   console.log('═'.repeat(65));
   console.log('\n📦 Registrando módulos...\n');
 
+  // Criar usuário admin padrão
+  criarAdminPadrao();
   await registrarModulos();
 
   app.listen(PORT, () => {
