@@ -444,6 +444,39 @@ async function iniciar() {
   criarAdminPadrao();
   await registrarModulos();
 
+// Rota: Info
+app.get('/api/info', (req, res) => {
+  res.json({
+    versao: '3.0.0',
+    nome: 'SetPoint Ultra',
+    ambiente: PROD ? 'produção' : 'desenvolvimento'
+  });
+});
+
+// Rota: Dashboard
+app.get('/api/admin/dashboard', (req, res) => {
+  res.json({
+    faturamento: { total: 0, dias: [] },
+    pagamentos: { credito: 0, debito: 0, dinheiro: 0 },
+    alertas: [],
+    partidas: [],
+    noticias: []
+  });
+});
+
+// Rota: Notícias
+app.get('/api/noticias', (req, res) => {
+  res.json([]);
+});
+
+// Rota: Mesas
+app.get('/api/mesas', (req, res) => {
+  res.json({
+    fisicas: [],
+    virtuais: []
+  });
+});
+
   app.listen(PORT, () => {
     console.log('═'.repeat(65));
     console.log(`  ✅ Servidor rodando em http://localhost:${PORT}`);
