@@ -66,10 +66,10 @@ steps:
     args:
       - -c
       - |
-        SERVICE_URL="$(gcloud run services describe ${_SERVICE_NAME} --region ${_REGION} --format='value(status.url)')"
-        echo "Serviço publicado em: ${SERVICE_URL}"
-        for attempt in $(seq 1 12); do
-          if curl --fail --silent --show-error "${SERVICE_URL}/health"; then
+        SERVICE_URL="$$(gcloud run services describe ${_SERVICE_NAME} --region ${_REGION} --format='value(status.url)')"
+        echo "Serviço publicado em: $$SERVICE_URL"
+        for attempt in $$(seq 1 12); do
+          if curl --fail --silent --show-error "$$SERVICE_URL/health"; then
             exit 0
           fi
           sleep 5
