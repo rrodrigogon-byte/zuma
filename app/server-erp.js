@@ -435,11 +435,47 @@ async function iniciar() {
   // Rota: Dashboard
   app.get('/api/admin/dashboard', (req, res) => {
     res.json({
-      faturamento: { total: 0, dias: [] },
-      pagamentos: { credito: 0, debito: 0, dinheiro: 0 },
+      // Faturamento: array de dias com total (para o gráfico de barras)
+      faturamento: [
+        { data: '01/08', total: 0 },
+        { data: '02/08', total: 0 },
+        { data: '03/08', total: 0 },
+        { data: '04/08', total: 0 },
+        { data: '05/08', total: 0 },
+        { data: '06/08', total: 0 },
+        { data: '07/08', total: 0 }
+      ],
+      // Pagamentos por meio (para o gráfico de pizza)
+      pagamentos_meio: {
+        credito: 0,
+        debito: 0,
+        dinheiro: 0
+      },
+      // Próximos jogos/partidas
+      proximos_jogos: [],
+      // Alertas do sistema
       alertas: [],
-      partidas: [],
-      noticias: []
+      // Indicadores principais (KPIs)
+      indicadores: {
+        inscricoes: 0,
+        atletas: 0,
+        inscritos: 0,
+        receita: 0,
+        faturamentoBar: 0,
+        fatLoja: 0,
+        fatInsc: 0,
+        mesasOcupadas: 0,
+        totalMesas: 0,
+        comandasAbertas: 0
+      },
+      // Pendências
+      pendencias: {
+        inscPend: 0,
+        pagPend: 0,
+        faturasAbertas: 0,
+        placaresNaoConf: 0,
+        reservasHoje: 0
+      }
     });
   });
 
