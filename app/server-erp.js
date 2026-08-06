@@ -444,68 +444,68 @@ async function iniciar() {
   criarAdminPadrao();
   await registrarModulos();
 
-// Rota: Info
-app.get('/api/info', (req, res) => {
-  res.json({
-    versao: '3.0.0',
-    nome: 'SetPoint Ultra',
-    ambiente: PROD ? 'produção' : 'desenvolvimento'
+  // Rota: Info
+  app.get('/api/info', (req, res) => {
+    res.json({
+      versao: '3.0.0',
+      nome: 'SetPoint Ultra',
+      ambiente: PROD ? 'produção' : 'desenvolvimento'
+    });
   });
-});
 
-// Rota: Dashboard
-app.get('/api/admin/dashboard', (req, res) => {
-  res.json({
-    faturamento: { total: 0, dias: [] },
-    pagamentos: { credito: 0, debito: 0, dinheiro: 0 },
-    alertas: [],
-    partidas: [],
-    noticias: []
+  // Rota: Dashboard
+  app.get('/api/admin/dashboard', (req, res) => {
+    res.json({
+      faturamento: { total: 0, dias: [] },
+      pagamentos: { credito: 0, debito: 0, dinheiro: 0 },
+      alertas: [],
+      partidas: [],
+      noticias: []
+    });
   });
-});
 
-// Rota: Notícias
-app.get('/api/noticias', (req, res) => {
-  res.json([]);
-});
-
-// Rota: Mesas
-app.get('/api/mesas', (req, res) => {
-  res.json({
-    fisicas: [],
-    virtuais: []
+  // Rota: Notícias
+  app.get('/api/noticias', (req, res) => {
+    res.json([]);
   });
-});
 
-// ============================================================================
-// MIDDLEWARE DE FALLBACK PARA ROTAS DE API NÃO IMPLEMENTADAS
-// ============================================================================
-// Retorna dados estruturados vazios para qualquer rota /api/* não definida
-// Isso permite que o frontend carregue sem erros enquanto as APIs são implementadas
+  // Rota: Mesas
+  app.get('/api/mesas', (req, res) => {
+    res.json({
+      fisicas: [],
+      virtuais: []
+    });
+  });
 
-app.all('/api/*', (req, res) => {
-  const path = req.path;
-  
-  // Padrões de resposta por tipo de endpoint
-  if (path.includes('/login')) {
-    return res.status(401).json({ erro: 'Não autenticado' });
-  }
-  if (path.includes('/dashboard') || path.includes('/resumo')) {
-    return res.json({ total: 0, dados: [], graficos: {} });
-  }
-  if (path.includes('/list') || path.includes('?')) {
-    return res.json([]);
-  }
-  if (path.includes('/config')) {
-    return res.json({});
-  }
-  if (path.includes('/status')) {
-    return res.json({ status: 'ok' });
-  }
-  
-  // Resposta genérica para outras rotas
-  res.json([]);
-});
+  // ============================================================================
+  // MIDDLEWARE DE FALLBACK PARA ROTAS DE API NÃO IMPLEMENTADAS
+  // ============================================================================
+  // Retorna dados estruturados vazios para qualquer rota /api/* não definida
+  // Isso permite que o frontend carregue sem erros enquanto as APIs são implementadas
+
+  app.all('/api/*', (req, res) => {
+    const path = req.path;
+    
+    // Padrões de resposta por tipo de endpoint
+    if (path.includes('/login')) {
+      return res.status(401).json({ erro: 'Não autenticado' });
+    }
+    if (path.includes('/dashboard') || path.includes('/resumo')) {
+      return res.json({ total: 0, dados: [], graficos: {} });
+    }
+    if (path.includes('/list') || path.includes('?')) {
+      return res.json([]);
+    }
+    if (path.includes('/config')) {
+      return res.json({});
+    }
+    if (path.includes('/status')) {
+      return res.json({ status: 'ok' });
+    }
+    
+    // Resposta genérica para outras rotas
+    res.json([]);
+  });
 
   app.listen(PORT, () => {
     console.log('═'.repeat(65));
