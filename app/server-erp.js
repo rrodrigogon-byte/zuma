@@ -410,27 +410,6 @@ try {
 }
 
 // ============================================================================
-// TRATAMENTO DE ERROS
-// ============================================================================
-
-app.use((req, res) => {
-  if (req.path.startsWith('/api/')) {
-    return res.status(404).json({ erro: 'Rota não encontrada', caminho: req.path });
-  }
-  // SPA fallback
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-app.use((err, req, res, next) => {
-  console.error('[ERRO]', err?.message || err);
-  if (res.headersSent) return next(err);
-  res.status(err?.status || 500).json({
-    erro: PROD ? 'Erro interno do servidor' : (err?.message || 'Erro interno'),
-    codigo: err?.code
-  });
-});
-
-// ============================================================================
 // INICIALIZAÇÃO
 // ============================================================================
 
@@ -505,6 +484,27 @@ async function iniciar() {
     
     // Resposta genérica para outras rotas
     res.json([]);
+  });
+
+  // ============================================================================
+  // TRATAMENTO DE ERROS (DENTRO DE iniciar() APÓS TODAS AS ROTAS)
+  // ============================================================================
+
+  app.use((req, res) => {
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ erro: 'Rota não encontrada', caminho: req.path });
+    }
+    // SPA fallback
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  });
+
+  app.use((err, req, res, next) => {
+    console.error('[ERRO]', err?.message || err);
+    if (res.headersSent) return next(err);
+    res.status(err?.status || 500).json({
+      erro: PROD ? 'Erro interno do servidor' : (err?.message || 'Erro interno'),
+      codigo: err?.code
+    });
   });
 
   app.listen(PORT, () => {
