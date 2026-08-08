@@ -79,6 +79,25 @@ function contaReceberPadrao(id, dados = {}) {
   };
 }
 
+export function garantirClientePadrao() {
+  const store = clientesPersistidos();
+  const id = 'cli-padrao-balcao';
+  if (!store.clientes[id]) {
+    store.clientes[id] = {
+      ...clientePadrao(id, {
+        nome: 'Cliente Balcão',
+        tipo: 'pf',
+        limiteCreditoMensal: 0,
+        diasVencimento: 1,
+        observacao: 'Conta padrão para atendimento eventual sem cadastro nominal.'
+      }),
+      padrao: true,
+    };
+    saveFn();
+  }
+  return store.clientes[id];
+}
+
 export function criarCliente(dados) {
   const store = clientesPersistidos();
   const id = `cli-${Date.now().toString(36)}-${String(Object.keys(store.clientes).length + 1).padStart(3, '0')}`;
@@ -91,12 +110,13 @@ export function atualizarCliente(clienteId, dados) {
   const store = clientesPersistidos();
   const cliente = store.clientes[clienteId];
   if (!cliente) return null;
-  const normalizado = normalizarCliente(dados);
+  const normalizado = normalizarCliente({ ...cliente, ...dados });
   Object.assign(cliente, normalizado, { atualizadoEm: new Date().toISOString() });
   return cliente;
 }
 
 export function listarClientes() {
+  garantirClientePadrao();
   const store = clientesPersistidos();
   return Object.values(store.clientes)
     .filter(c => c.status !== 'deletado')
@@ -126,24 +146,32 @@ export function atualizarContaReceber(contaId, dados) {
   const store = clientesPersistidos();
   const contaAnterior = store.contasReceber[contaId];
   if (!contaAnterior) return null;
-  
-  const normalizado = normalizarContaReceber(dados);
+
   const statusAnterior = contaAnterior.status;
+  const valorAnterior = Number(contaAnterior.valor || 0);
+  const clienteIdAnterior = contaAnterior.clienteId;
+  const normalizado = normalizarContaReceber({ ...contaAnterior, ...dados });
   Object.assign(contaAnterior, normalizado, { atualizadoEm: new Date().toISOString() });
-  
-  // Recalcular status
+
+  // Recalcular status conforme data de vencimento e baixa de pagamento.
   const dataVenc = new Date(contaAnterior.dataVencimento);
   const diasAtraso = Math.floor((new Date() - dataVenc) / (1000 * 60 * 60 * 24));
   contaAnterior.status = contaAnterior.dataPagamento ? 'paga' : diasAtraso > 0 ? 'atrasada' : 'pendente';
   contaAnterior.diasAtraso = Math.max(0, diasAtraso);
-  
-  // Atualizar saldo devedor
-  const cliente = store.clientes[contaAnterior.clienteId];
-  if (cliente) {
-    const diferenca = (statusAnterior !== 'paga' ? contaAnterior.valor : 0) - (contaAnterior.status !== 'paga' ? contaAnterior.valor : 0);
-    cliente.saldoDevedor = Math.max(0, (cliente.saldoDevedor || 0) + diferenca);
+
+  // Recalcular exposição de crédito quando valor, cliente ou situação for alterada.
+  const saldoAnterior = statusAnterior !== 'paga' ? valorAnterior : 0;
+  const saldoNovo = contaAnterior.status !== 'paga' ? Number(contaAnterior.valor || 0) : 0;
+  if (clienteIdAnterior !== contaAnterior.clienteId) {
+    const clienteAnterior = store.clientes[clienteIdAnterior];
+    if (clienteAnterior) clienteAnterior.saldoDevedor = Math.max(0, Number(clienteAnterior.saldoDevedor || 0) - saldoAnterior);
+    const clienteNovo = store.clientes[contaAnterior.clienteId];
+    if (clienteNovo) clienteNovo.saldoDevedor = Math.max(0, Number(clienteNovo.saldoDevedor || 0) + saldoNovo);
+  } else {
+    const cliente = store.clientes[contaAnterior.clienteId];
+    if (cliente) cliente.saldoDevedor = Math.max(0, Number(cliente.saldoDevedor || 0) + saldoNovo - saldoAnterior);
   }
-  
+
   return contaAnterior;
 }
 
@@ -214,15 +242,19 @@ export function listarAlertas() {
 export function criarFechamentoDiario(dados = {}) {
   const store = clientesPersistidos();
   const agora = new Date();
-  const dataFechamento = agora.toISOString().split('T')[0];
-  
-  // Calcular totais
+  const dataFechamento = String(dados.dataFechamento || agora.toISOString().split('T')[0]).slice(0, 10);
+
+  // Snapshot financeiro: em aberto, pendente, atrasado e recebido na data operacional.
   const contasReceber = Object.values(store.contasReceber);
-  const totalReceber = contasReceber.reduce((soma, c) => soma + (c.status !== 'paga' ? c.valor : 0), 0);
-  const totalRecebido = contasReceber.reduce((soma, c) => soma + (c.status === 'paga' && new Date(c.dataPagamento).toISOString().split('T')[0] === dataFechamento ? c.valor : 0), 0);
-  const totalPendente = totalReceber - totalRecebido;
-  const totalAtrasado = contasReceber.reduce((soma, c) => soma + (c.status === 'atrasada' ? c.valor : 0), 0);
-  
+  const abertas = contasReceber.filter((conta) => conta.status !== 'paga');
+  const totalReceber = abertas.reduce((soma, conta) => soma + Number(conta.valor || 0), 0);
+  const totalRecebido = contasReceber.reduce((soma, conta) => {
+    const diaPagamento = conta.dataPagamento ? String(conta.dataPagamento).slice(0, 10) : '';
+    return soma + (conta.status === 'paga' && diaPagamento === dataFechamento ? Number(conta.valor || 0) : 0);
+  }, 0);
+  const totalPendente = abertas.filter((conta) => conta.status === 'pendente').reduce((soma, conta) => soma + Number(conta.valor || 0), 0);
+  const totalAtrasado = abertas.filter((conta) => conta.status === 'atrasada').reduce((soma, conta) => soma + Number(conta.valor || 0), 0);
+
   const fechamento = {
     id: `fec-${dataFechamento}-${Date.now().toString(36)}`,
     dataFechamento,
@@ -235,6 +267,7 @@ export function criarFechamentoDiario(dados = {}) {
     alertas: Object.values(store.alertas).length,
     observacao: dados.observacao || '',
     responsavel: dados.responsavel || 'admin@setpoint-ultra.local',
+    origem: dados.origem || 'manual',
     status: 'fechado',
     criadoEm: agora.toISOString(),
   };
@@ -257,6 +290,7 @@ export { saveFn as save };
 
 export default {
   clientesPersistidos,
+  garantirClientePadrao,
   criarCliente,
   atualizarCliente,
   listarClientes,

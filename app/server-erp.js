@@ -21,6 +21,7 @@ import { CATALOGO_BEBIDAS_KYTTO, RESUMO_CATALOGO_BEBIDAS } from './catalogo-bebi
 import { CATALOGO_ESPETINHOS_KYTTO, RESUMO_CATALOGO_ESPETINHOS } from './catalogo-espetinhos.js';
 import * as clientesKytto from './clientes-contas-kytto.js';
 import * as fiscalKytto from './fiscal-kytto.js';
+import { OAuth2Client } from 'google-auth-library';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,6 +29,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3001;
 const PROD = process.env.NODE_ENV === 'production';
+const schedulerOidcClient = new OAuth2Client();
 
 // ============================================================================
 // MIDDLEWARES GLOBAIS
@@ -435,8 +437,9 @@ async function iniciar() {
   console.log('═'.repeat(65));
   console.log('\n📦 Registrando módulos...\n');
 
-  // Criar usuário admin padrão
+  // Criar usuário admin padrão e a conta operacional sem cadastro nominal.
   criarAdminPadrao();
+  clientesKytto.garantirClientePadrao();
   await registrarModulos();
 
   // Rota: Info
@@ -854,6 +857,55 @@ async function iniciar() {
     res.json([]);
   });
 
+  // ── ROTINA INTERNA FINANCEIRA (CLOUD SCHEDULER) ───────────────────────────
+  // O endpoint só aceita token OIDC emitido pelo Cloud Scheduler para a conta
+  // de serviço específica configurada no ambiente. Assim, não há segredos na URL.
+  async function validarAgendador(req, res, next) {
+    try {
+      const esperado = process.env.SCHEDULER_SERVICE_ACCOUNT;
+      const auth = String(req.get('authorization') || '');
+      const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+      if (!esperado || !token) return res.status(401).json({ erro: 'Agendador não autenticado.' });
+      const audience = process.env.SCHEDULER_AUDIENCE || `${req.protocol}://${req.get('host')}/api/internal/financeiro/rotina-diaria`;
+      const ticket = await schedulerOidcClient.verifyIdToken({ idToken: token, audience });
+      const payload = ticket.getPayload();
+      if (payload?.email !== esperado || payload?.email_verified !== true) return res.status(403).json({ erro: 'Identidade do agendador não autorizada.' });
+      return next();
+    } catch (error) {
+      console.warn('[SCHEDULER] Token OIDC inválido:', error?.message || error);
+      return res.status(401).json({ erro: 'Token do agendador inválido.' });
+    }
+  }
+
+  function dataOperacional(now = new Date()) {
+    const partes = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
+    const obter = (tipo) => partes.find((parte) => parte.type === tipo)?.value;
+    return `${obter('year')}-${obter('month')}-${obter('day')}`;
+  }
+
+  function executarRotinaFinanceiraDiaria(origem = 'manual') {
+    const alertas = clientesKytto.verificarAlertasVencimento();
+    const data = dataOperacional();
+    let fechamento = clientesKytto.obterFechamentoDiario(data);
+    let fechadoAgora = false;
+    if (!fechamento) {
+      fechamento = clientesKytto.criarFechamentoDiario({
+        dataFechamento: data,
+        responsavel: origem === 'agendador' ? 'agendador-financeiro@kytto.local' : 'admin@setpoint-ultra.local',
+        observacao: origem === 'agendador' ? 'Fechamento diário automático e atualização de alertas.' : 'Fechamento diário manual e atualização de alertas.',
+        origem,
+      });
+      fechadoAgora = true;
+    }
+    save();
+    return { data, alertas, fechamento, fechadoAgora };
+  }
+
+  app.post('/api/internal/financeiro/rotina-diaria', validarAgendador, (req, res) => {
+    const resultado = executarRotinaFinanceiraDiaria('agendador');
+    res.json({ ok: true, ...resultado, totalAlertas: resultado.alertas.length });
+  });
+
   // ── CLIENTES E CONTAS A RECEBER ──────────────────────────────────────────
   app.post('/api/admin/clientes', requerEditorCatalogo, (req, res) => {
     try {
@@ -918,6 +970,7 @@ async function iniciar() {
   app.get('/api/admin/alertas-vencimento', requerEditorCatalogo, (req, res) => {
     try {
       const alertas = clientesKytto.verificarAlertasVencimento();
+      save();
       res.json({ ok: true, alertas, total: alertas.length });
     } catch (error) {
       res.status(400).json({ erro: error.message });
@@ -926,9 +979,8 @@ async function iniciar() {
 
   app.post('/api/admin/fechamento-diario', requerEditorCatalogo, (req, res) => {
     try {
-      const fechamento = clientesKytto.criarFechamentoDiario(req.body);
-      save();
-      res.status(201).json({ ok: true, fechamento });
+      const resultado = executarRotinaFinanceiraDiaria('manual');
+      res.status(resultado.fechadoAgora ? 201 : 200).json({ ok: true, fechamento: resultado.fechamento, alertas: resultado.alertas, fechadoAgora: resultado.fechadoAgora });
     } catch (error) {
       res.status(400).json({ erro: error.message });
     }

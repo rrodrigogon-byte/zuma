@@ -3,6 +3,8 @@ import { api, fmtR, fmtDate } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
 
+const EMPTY_CONTA_FORM = { clienteId: '', mesaNumero: '', descricao: '', valor: '', dataVencimento: '', observacao: '' }
+
 export default function ContasReceber() {
   const { toast } = useToast()
   const [contas, setContas] = useState([])
@@ -11,6 +13,8 @@ export default function ContasReceber() {
   const [loading, setLoading] = useState(true)
   const [filtroStatus, setFiltroStatus] = useState('todos') // todos | pendente | atrasada | paga
   const [modalPagamento, setModalPagamento] = useState(null)
+  const [modalNovaConta, setModalNovaConta] = useState(false)
+  const [novaConta, setNovaConta] = useState(EMPTY_CONTA_FORM)
   const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
@@ -32,6 +36,38 @@ export default function ContasReceber() {
   }, [toast])
 
   useEffect(() => { load() }, [load])
+
+  const abrirNovaConta = () => {
+    const padrao = clientes.find((cliente) => cliente.padrao) || clientes[0]
+    const hoje = new Date()
+    const vencimento = new Date(hoje)
+    vencimento.setDate(vencimento.getDate() + Number(padrao?.diasVencimento || 30))
+    setNovaConta({ ...EMPTY_CONTA_FORM, clienteId: padrao?.id || '', dataVencimento: vencimento.toISOString().slice(0, 10) })
+    setModalNovaConta(true)
+  }
+
+  const handleCriarConta = async () => {
+    if (!novaConta.clienteId || !novaConta.descricao || !Number(novaConta.valor) || !novaConta.dataVencimento) {
+      return toast('Cliente, descrição, valor e vencimento são obrigatórios', true)
+    }
+    setSaving(true)
+    try {
+      await api.post('/api/admin/contas-receber', {
+        ...novaConta,
+        mesaNumero: Number(novaConta.mesaNumero || 0),
+        valor: Number(novaConta.valor),
+        dataVencimento: `${novaConta.dataVencimento}T23:59:59-04:00`,
+      })
+      toast('Conta a receber criada com sucesso')
+      setModalNovaConta(false)
+      setNovaConta(EMPTY_CONTA_FORM)
+      load()
+    } catch (e) {
+      toast(e.message || 'Erro ao criar conta a receber', true)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const handleRegistrarPagamento = async () => {
     if (!modalPagamento) return
@@ -66,7 +102,10 @@ export default function ContasReceber() {
     <div className="page">
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:24, flexWrap:'wrap', gap:12 }}>
         <h1 className="page-title" style={{ margin:0 }}>💰 Contas a Receber</h1>
-        <button className="btn btn-secondary btn-sm" onClick={load}>↺ Atualizar</button>
+        <div style={{ display:'flex', gap:8 }}>
+          <button className="btn btn-secondary btn-sm" onClick={load}>↺ Atualizar</button>
+          <button className="btn btn-primary btn-sm" onClick={abrirNovaConta}>+ Nova Conta</button>
+        </div>
       </div>
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:12, marginBottom:24 }}>
@@ -162,6 +201,51 @@ export default function ContasReceber() {
           </tbody>
         </table>
       </div>
+
+      {modalNovaConta && (
+        <Modal title="Nova Conta a Receber" onClose={() => setModalNovaConta(false)} width={560}>
+          <div style={{ paddingBottom: 16 }}>
+            <div className="form-group">
+              <label>Cliente *</label>
+              <select value={novaConta.clienteId} onChange={(e) => {
+                const cliente = clientes.find((item) => item.id === e.target.value)
+                const vencimento = new Date()
+                vencimento.setDate(vencimento.getDate() + Number(cliente?.diasVencimento || 30))
+                setNovaConta({ ...novaConta, clienteId: e.target.value, dataVencimento: vencimento.toISOString().slice(0, 10) })
+              }}>
+                <option value="">Selecione o cliente...</option>
+                {clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}{cliente.padrao ? ' (padrão)' : ''}</option>)}
+              </select>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Mesa associada (opcional)</label>
+                <input type="number" min="0" value={novaConta.mesaNumero} onChange={(e) => setNovaConta({ ...novaConta, mesaNumero: e.target.value })} placeholder="Ex.: 1" />
+              </div>
+              <div className="form-group">
+                <label>Valor (R$) *</label>
+                <input type="number" min="0.01" step="0.01" value={novaConta.valor} onChange={(e) => setNovaConta({ ...novaConta, valor: e.target.value })} placeholder="0,00" />
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Descrição *</label>
+              <input value={novaConta.descricao} onChange={(e) => setNovaConta({ ...novaConta, descricao: e.target.value })} placeholder="Ex.: Consumo mesa 01" />
+            </div>
+            <div className="form-group">
+              <label>Data de vencimento *</label>
+              <input type="date" value={novaConta.dataVencimento} onChange={(e) => setNovaConta({ ...novaConta, dataVencimento: e.target.value })} />
+            </div>
+            <div className="form-group">
+              <label>Observação</label>
+              <textarea value={novaConta.observacao} onChange={(e) => setNovaConta({ ...novaConta, observacao: e.target.value })} rows={2} placeholder="Detalhes adicionais da cobrança..." />
+            </div>
+            <div style={{ display:'flex', justifyContent:'flex-end', gap:8, marginTop:16 }}>
+              <button className="btn btn-ghost" onClick={() => setModalNovaConta(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={handleCriarConta} disabled={saving}>{saving ? 'Criando...' : 'Criar Conta'}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {modalPagamento && (
         <Modal title="Registrar Pagamento" onClose={() => setModalPagamento(null)}>
