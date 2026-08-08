@@ -152,10 +152,10 @@ export default function Cupons() {
       {/* KPIs com borderLeft */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
         {[
-          { label: 'TOTAL CUPONS',       value: cupons.length,  color: '#5FB335', icon: '🎟️', sub: 'cadastrados' },
-          { label: 'ATIVOS',             value: ativos,         color: '#8FD64A', icon: '✅', sub: 'válidos e em uso' },
+          { label: 'TOTAL CUPONS',       value: cupons.length,  color: '#FF6B2C', icon: '🎟️', sub: 'cadastrados' },
+          { label: 'ATIVOS',             value: ativos,         color: '#FF9B72', icon: '✅', sub: 'válidos e em uso' },
           { label: 'EXPIRADOS',          value: expirados,      color: '#e05c5c', icon: '⛔', sub: 'fora do prazo' },
-          { label: 'UTILIZAÇÕES TOTAIS', value: totalUsos,      color: '#C9A656', icon: '🛒', sub: 'vezes aplicados' },
+          { label: 'UTILIZAÇÕES TOTAIS', value: totalUsos,      color: '#FF6B2C', icon: '🛒', sub: 'vezes aplicados' },
         ].map(k => (
           <div key={k.label} style={{
             background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10,
@@ -182,7 +182,7 @@ export default function Cupons() {
         {[['todos','Todos'],['ativo','Ativos'],['inativo','Inativos'],['expirado','Expirados']].map(([val,label]) => (
           <button key={val}
             onClick={() => setFiltroAtivo(val)}
-            style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid', borderColor: filtroAtivo === val ? 'var(--green)' : 'var(--line)', background: filtroAtivo === val ? 'rgba(95,179,53,.15)' : 'transparent', color: filtroAtivo === val ? 'var(--green)' : 'var(--muted)', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+            style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid', borderColor: filtroAtivo === val ? 'var(--green)' : 'var(--line)', background: filtroAtivo === val ? 'rgba(255,107,44,.15)' : 'transparent', color: filtroAtivo === val ? 'var(--green)' : 'var(--muted)', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
             {label}
           </button>
         ))}
@@ -219,7 +219,7 @@ export default function Cupons() {
                       <button
                         onClick={() => copyCode(c.codigo)}
                         style={{
-                          background: 'rgba(95,179,53,.12)', color: 'var(--green)',
+                          background: 'rgba(255,107,44,.12)', color: 'var(--green)',
                           border: 'none', borderRadius: 6, padding: '3px 8px',
                           fontWeight: 800, cursor: 'pointer', fontFamily: 'monospace',
                           fontSize: 13,
@@ -241,7 +241,7 @@ export default function Cupons() {
                       {c.tipo === 'pct' ? `${c.valor}%` : fmtR(c.valor)}
                     </td>
                     <td>
-                      <span className="badge" style={{ background: 'rgba(143,214,74,.12)', color: 'var(--lime)' }}>
+                      <span className="badge" style={{ background: 'rgba(255,107,44,.12)', color: 'var(--lime)' }}>
                         {c.uso === 'bar' ? 'Bar' : c.uso === 'inscricao' ? 'Inscrição' : 'Ambos'}
                       </span>
                     </td>

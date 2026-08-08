@@ -3,9 +3,9 @@ import { api, fmtDate } from '../../lib/api'
 
 const CATEGORIAS = [
   { value: 'todos',     label: 'Todas',    color: '#888' },
-  { value: 'aviso',     label: 'Aviso',    color: '#C9A656' },
-  { value: 'resultado', label: 'Resultado', color: '#5FB335' },
-  { value: 'novidade',  label: 'Novidade', color: '#8FD64A' },
+  { value: 'aviso',     label: 'Aviso',    color: '#FF6B2C' },
+  { value: 'resultado', label: 'Resultado', color: '#FF6B2C' },
+  { value: 'novidade',  label: 'Novidade', color: '#FF9B72' },
 ]
 
 function catInfo(cat) {

@@ -3,7 +3,7 @@ import { api } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
 // ── Gráfico de linha SVG — evolução do Elo ───────────────────────────────────
-function EloLineChart({ historico, jogadorNome, color = '#5FB335' }) {
+function EloLineChart({ historico, jogadorNome, color = '#FF6B2C' }) {
   // Filtra só os eventos de elo do jogador selecionado
   const dados = useMemo(() => {
     const hist = historico
@@ -58,7 +58,7 @@ function EloLineChart({ historico, jogadorNome, color = '#5FB335' }) {
       {/* Linha baseline 1500 */}
       {baseline >= PAD.t && baseline <= PAD.t + iH && (
         <line x1={PAD.l} y1={baseline} x2={W - PAD.r} y2={baseline}
-          stroke="#C9A656" strokeWidth="1" strokeDasharray="6 3" opacity={0.6} />
+          stroke="#FF6B2C" strokeWidth="1" strokeDasharray="6 3" opacity={0.6} />
       )}
 
       {/* Área preenchida */}
@@ -122,7 +122,7 @@ function Sparkline({ historico, socioNome }) {
   const trend = vals[vals.length - 1] > vals[0]
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: 60, height: 20 }}>
-      <polyline points={pts} fill="none" stroke={trend ? '#5FB335' : '#e05c5c'} strokeWidth="1.5"
+      <polyline points={pts} fill="none" stroke={trend ? '#FF6B2C' : '#e05c5c'} strokeWidth="1.5"
         strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
@@ -249,10 +249,10 @@ export default function Pontos() {
       {/* KPI Cards com borderLeft */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
         {[
-          { label: 'PONTOS ATIVOS', value: totalPontos.toLocaleString('pt-BR'), color: '#5FB335', icon: '⭐', sub: 'total em circulação' },
-          { label: 'SÓCIOS COM PONTOS', value: comPontos, color: '#8FD64A', icon: '👥', sub: `de ${saldos.length} sócios` },
-          { label: 'CRÉDITOS REALIZADOS', value: historico.filter(h => h.pontos > 0).length, color: '#C9A656', icon: '✏️', sub: 'lançamentos de crédito' },
-          { label: 'LÍDER DO RANKING', value: top?.nome?.split(' ')[0] || '—', color: '#C9A656', icon: '🏆', sub: `${top?.saldo || 0} pontos` },
+          { label: 'PONTOS ATIVOS', value: totalPontos.toLocaleString('pt-BR'), color: '#FF6B2C', icon: '⭐', sub: 'total em circulação' },
+          { label: 'SÓCIOS COM PONTOS', value: comPontos, color: '#FF9B72', icon: '👥', sub: `de ${saldos.length} sócios` },
+          { label: 'CRÉDITOS REALIZADOS', value: historico.filter(h => h.pontos > 0).length, color: '#FF6B2C', icon: '✏️', sub: 'lançamentos de crédito' },
+          { label: 'LÍDER DO RANKING', value: top?.nome?.split(' ')[0] || '—', color: '#FF6B2C', icon: '🏆', sub: `${top?.saldo || 0} pontos` },
         ].map(k => (
           <div key={k.label} style={{
             background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10,
@@ -406,7 +406,7 @@ export default function Pontos() {
                 </div>
                 <span style={{ fontSize: 11, color: 'var(--muted)' }}>linha amarela = 1500 (base)</span>
               </div>
-              <EloLineChart historico={historico} jogadorNome={eloJogador} color="#5FB335" />
+              <EloLineChart historico={historico} jogadorNome={eloJogador} color="#FF6B2C" />
             </div>
           ) : (
             <div style={{ textAlign: 'center', color: 'var(--muted)', padding: '3rem', background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--line)' }}>
@@ -440,14 +440,14 @@ export default function Pontos() {
                     .sort((a, b) => new Date(b.criadoEm) - new Date(a.criadoEm))
                   const eloAtual = eloEntries[0]?.elo ?? s.elo ?? null
                   return (
-                    <tr key={s.id} style={{ background: eloJogador === s.nome ? 'rgba(95,179,53,.06)' : undefined }}>
+                    <tr key={s.id} style={{ background: eloJogador === s.nome ? 'rgba(255,107,44,.06)' : undefined }}>
                       <td style={{ ...S.td, color: i < 3 ? 'var(--gold)' : 'var(--muted)', fontWeight: 700 }}>{i + 1}</td>
                       <td style={{ ...S.td, fontWeight: 700, color: eloJogador === s.nome ? 'var(--green)' : 'var(--cream)' }}>
                         {eloJogador === s.nome && '▸ '}{s.nome}
                       </td>
                       <td style={S.td}>
                         {eloAtual != null
-                          ? <span style={{ fontWeight: 800, fontSize: 15, color: eloAtual >= 1500 ? 'var(--green)' : '#C9A656' }}>{eloAtual}</span>
+                          ? <span style={{ fontWeight: 800, fontSize: 15, color: eloAtual >= 1500 ? 'var(--green)' : '#FF6B2C' }}>{eloAtual}</span>
                           : <span style={{ color: 'var(--muted)' }}>—</span>
                         }
                       </td>

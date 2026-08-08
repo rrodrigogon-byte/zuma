@@ -5,7 +5,7 @@
 .pdvo-kicker { color: var(--green) !important; font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 .pdvo-actions, .pdvo-stacked-actions, .pdvo-conflict-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .pdvo-button, .pdvo-link-button, .pdvo-text-action, .pdvo-conflict-actions button { border: 0; border-radius: 9px; font: inherit; font-weight: 750; cursor: pointer; transition: transform .16s ease, filter .16s ease, background .16s ease; }
-.pdvo-button { background: var(--green); color: #08220e; padding: 11px 15px; box-shadow: 0 4px 12px rgba(95,179,53,.22); }
+.pdvo-button { background: var(--green); color: #08220e; padding: 11px 15px; box-shadow: 0 4px 12px rgba(255,107,44,.22); }
 .pdvo-button:hover, .pdvo-link-button:hover, .pdvo-conflict-actions button:hover { filter: brightness(1.07); transform: translateY(-1px); }
 .pdvo-button:disabled, .pdvo-link-button:disabled, .pdvo-text-action:disabled, .pdvo-conflict-actions button:disabled { opacity: .55; cursor: not-allowed; transform: none; }
 .pdvo-button--secondary { background: var(--surface2); color: var(--text); box-shadow: none; border: 1px solid var(--line); }
@@ -68,7 +68,7 @@
 .pdvo-form { display: grid; gap: 14px; }
 .pdvo-form label { display: grid; gap: 6px; color: var(--text); font-size: 12px; font-weight: 750; }
 .pdvo-form input, .pdvo-form select { width: 100%; box-sizing: border-box; border: 1px solid var(--line); outline: none; padding: 10px 11px; border-radius: 8px; font: inherit; color: var(--text); background: var(--surface2); }
-.pdvo-form input:focus, .pdvo-form select:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(95,179,53,.16); }
+.pdvo-form input:focus, .pdvo-form select:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(255,107,44,.16); }
 .pdvo-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .pdvo-checkbox { display: flex !important; align-items: center; gap: 8px !important; font-weight: 600 !important; }
 .pdvo-checkbox input { width: auto !important; }

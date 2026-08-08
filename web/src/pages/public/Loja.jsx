@@ -25,15 +25,15 @@ function CartBadge({ count, onClick }) {
   return (
     <button onClick={onClick} style={{
       position: 'fixed', bottom: 24, right: 24, zIndex: 1000,
-      background: 'linear-gradient(135deg, #5FB335, #7BC142)',
+      background: 'linear-gradient(135deg, #FF6B2C, #7BC142)',
       color: '#1B4D2E', border: 'none', borderRadius: '999px',
       padding: '14px 22px', fontWeight: 800, fontSize: '1rem',
-      cursor: 'pointer', boxShadow: '0 6px 24px rgba(95,179,53,0.5)',
+      cursor: 'pointer', boxShadow: '0 6px 24px rgba(255,107,44,0.5)',
       display: 'flex', alignItems: 'center', gap: 10,
       transition: 'transform .15s, box-shadow .15s',
     }}
-      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 32px rgba(95,179,53,0.6)' }}
-      onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 6px 24px rgba(95,179,53,0.5)' }}
+      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 32px rgba(255,107,44,0.6)' }}
+      onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 6px 24px rgba(255,107,44,0.5)' }}
     >
       🛒 <span>Carrinho</span>
       <span style={{
@@ -76,7 +76,7 @@ function ProdutoCard({ produto, onAddCart, qtdNoCarrinho }) {
     <div style={{
       background: '#fff', borderRadius: 20, overflow: 'hidden',
       boxShadow: '0 4px 20px rgba(0,0,0,0.07)',
-      border: esgotado ? '1.5px solid #eee' : qtdNoCarrinho > 0 ? '2px solid #5FB335' : '1.5px solid rgba(95,179,53,0.15)',
+      border: esgotado ? '1.5px solid #eee' : qtdNoCarrinho > 0 ? '2px solid #FF6B2C' : '1.5px solid rgba(255,107,44,0.15)',
       opacity: esgotado ? 0.75 : 1,
       display: 'flex', flexDirection: 'column',
       transition: 'transform .2s, box-shadow .2s',
@@ -89,7 +89,7 @@ function ProdutoCard({ produto, onAddCart, qtdNoCarrinho }) {
       {qtdNoCarrinho > 0 && (
         <div style={{
           position: 'absolute', top: 10, right: 10, zIndex: 5,
-          background: '#5FB335', color: '#fff', borderRadius: '999px',
+          background: '#FF6B2C', color: '#fff', borderRadius: '999px',
           padding: '3px 10px', fontSize: '0.72rem', fontWeight: 800,
           boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
         }}>{qtdNoCarrinho} no carrinho</div>
@@ -100,7 +100,7 @@ function ProdutoCard({ produto, onAddCart, qtdNoCarrinho }) {
         height: 200,
         background: p.imagem ? '#fff' : esgotado
           ? 'linear-gradient(135deg,#e0e0e0,#f0f0f0)'
-          : 'linear-gradient(135deg,#1B4D2E 0%,#1a4a2e 60%,#2a5a3e 100%)',
+          : 'linear-gradient(135deg,#1B4D2E 0%,#183450 60%,#2a5a3e 100%)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: '5rem', position: 'relative', overflow: 'hidden',
       }}>
@@ -120,7 +120,7 @@ function ProdutoCard({ produto, onAddCart, qtdNoCarrinho }) {
             <span style={{ background: '#e05555', color: '#fff', borderRadius: 999, padding: '4px 12px', fontSize: '0.72rem', fontWeight: 800 }}>ESGOTADO</span>
           )}
           {poucasVagas && (
-            <span style={{ background: '#C9A656', color: '#1B4D2E', borderRadius: 999, padding: '4px 12px', fontSize: '0.72rem', fontWeight: 800 }}>ÚLTIMAS {p.estoque}</span>
+            <span style={{ background: '#FF6B2C', color: '#1B4D2E', borderRadius: 999, padding: '4px 12px', fontSize: '0.72rem', fontWeight: 800 }}>ÚLTIMAS {p.estoque}</span>
           )}
         </div>
         {p.cod && (
@@ -134,14 +134,14 @@ function ProdutoCard({ produto, onAddCart, qtdNoCarrinho }) {
       <div style={{ padding: '18px', flex: 1, display: 'flex', flexDirection: 'column' }}>
         <h3 style={{ margin: '0 0 6px', fontSize: '1.05rem', fontWeight: 800, color: '#1B4D2E' }}>{p.nome}</h3>
         {(p.desc || p.descricao) && (
-          <p style={{ margin: '0 0 10px', fontSize: '0.83rem', color: '#5a7a5a', lineHeight: 1.5, flex: 1 }}>
+          <p style={{ margin: '0 0 10px', fontSize: '0.83rem', color: '#5A6570', lineHeight: 1.5, flex: 1 }}>
             {(() => { const d = p.desc || p.descricao; return d.length > 90 ? d.slice(0, 90) + '…' : d })()}
           </p>
         )}
 
         <div style={{ marginTop: 'auto' }}>
           {p.estoque != null && !esgotado && (
-            <div style={{ fontSize: '0.76rem', color: poucasVagas ? '#C9A656' : '#5a7a5a', marginBottom: 10, fontWeight: poucasVagas ? 700 : 400 }}>
+            <div style={{ fontSize: '0.76rem', color: poucasVagas ? '#FF6B2C' : '#5A6570', marginBottom: 10, fontWeight: poucasVagas ? 700 : 400 }}>
               {poucasVagas ? `⚡ Apenas ${p.estoque} unidade${p.estoque > 1 ? 's' : ''} disponível${p.estoque > 1 ? 'is' : ''}` : `✅ ${p.estoque} em estoque`}
             </div>
           )}
@@ -155,8 +155,8 @@ function ProdutoCard({ produto, onAddCart, qtdNoCarrinho }) {
                   <button key={t} onClick={() => { setTamanhoSel(t); setSizeErr(false) }}
                     style={{
                       padding: '5px 12px', borderRadius: 8, fontSize: '0.8rem', fontWeight: 700,
-                      border: tamanhoSel === t ? '2px solid #5FB335' : '1.5px solid #d0dcc8',
-                      background: tamanhoSel === t ? '#5FB335' : '#fff',
+                      border: tamanhoSel === t ? '2px solid #FF6B2C' : '1.5px solid #d0dcc8',
+                      background: tamanhoSel === t ? '#FF6B2C' : '#fff',
                       color: tamanhoSel === t ? '#1B4D2E' : '#333',
                       cursor: 'pointer', transition: 'all .1s',
                     }}
@@ -170,7 +170,7 @@ function ProdutoCard({ produto, onAddCart, qtdNoCarrinho }) {
                   Cancelar
                 </button>
                 <button onClick={confirmSize}
-                  style={{ flex: 2, padding: '8px', background: 'linear-gradient(135deg,#5FB335,#7BC142)', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '0.82rem', fontWeight: 700, color: '#1B4D2E' }}>
+                  style={{ flex: 2, padding: '8px', background: 'linear-gradient(135deg,#FF6B2C,#7BC142)', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '0.82rem', fontWeight: 700, color: '#1B4D2E' }}>
                   ✓ Adicionar
                 </button>
               </div>
@@ -179,16 +179,16 @@ function ProdutoCard({ produto, onAddCart, qtdNoCarrinho }) {
 
           {!addingSize && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <div style={{ fontSize: '1.45rem', fontWeight: 900, color: esgotado ? '#bbb' : '#5FB335' }}>
+              <div style={{ fontSize: '1.45rem', fontWeight: 900, color: esgotado ? '#bbb' : '#FF6B2C' }}>
                 {fmtR(p.preco || 0)}
               </div>
               <button onClick={handleAdd} disabled={esgotado}
                 style={{
-                  background: esgotado ? '#e0e0e0' : 'linear-gradient(135deg,#5FB335,#7BC142)',
+                  background: esgotado ? '#e0e0e0' : 'linear-gradient(135deg,#FF6B2C,#7BC142)',
                   color: esgotado ? '#999' : '#1B4D2E', border: 'none', borderRadius: 10,
                   padding: '10px 18px', fontWeight: 700, fontSize: '0.88rem',
                   cursor: esgotado ? 'not-allowed' : 'pointer',
-                  boxShadow: esgotado ? 'none' : '0 3px 10px rgba(95,179,53,0.3)',
+                  boxShadow: esgotado ? 'none' : '0 3px 10px rgba(255,107,44,0.3)',
                 }}>
                 {esgotado ? 'Esgotado' : '🛒 Adicionar'}
               </button>
@@ -213,8 +213,8 @@ function CarrinhoModal({ itens, produtos, onClose, onRemove, onQtdChange, onChec
       <Modal onClose={onClose}>
         <div style={{ textAlign: 'center', padding: '32px 0' }}>
           <div style={{ fontSize: '3rem', marginBottom: 12 }}>🛒</div>
-          <div style={{ color: '#5a7a5a', fontSize: '1rem' }}>Seu carrinho está vazio</div>
-          <button onClick={onClose} style={{ marginTop: 20, padding: '10px 28px', background: 'linear-gradient(135deg,#5FB335,#7BC142)', border: 'none', borderRadius: 10, fontWeight: 700, color: '#1B4D2E', cursor: 'pointer' }}>
+          <div style={{ color: '#5A6570', fontSize: '1rem' }}>Seu carrinho está vazio</div>
+          <button onClick={onClose} style={{ marginTop: 20, padding: '10px 28px', background: 'linear-gradient(135deg,#FF6B2C,#7BC142)', border: 'none', borderRadius: 10, fontWeight: 700, color: '#1B4D2E', cursor: 'pointer' }}>
             Ver Produtos
           </button>
         </div>
@@ -233,7 +233,7 @@ function CarrinhoModal({ itens, produtos, onClose, onRemove, onQtdChange, onChec
             <div key={idx} style={{
               display: 'flex', alignItems: 'center', gap: 12,
               background: '#f8faf4', borderRadius: 12, padding: '12px 14px',
-              border: '1px solid rgba(95,179,53,0.15)',
+              border: '1px solid rgba(255,107,44,0.15)',
             }}>
               {/* Mini imagem */}
               <div style={{ width: 48, height: 48, borderRadius: 8, background: '#e8f0dc', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
@@ -244,8 +244,8 @@ function CarrinhoModal({ itens, produtos, onClose, onRemove, onQtdChange, onChec
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, color: '#1B4D2E', fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nome}</div>
-                {item.tamanho && <div style={{ fontSize: '0.75rem', color: '#5FB335', fontWeight: 700 }}>Tamanho: {item.tamanho}</div>}
-                <div style={{ fontSize: '0.82rem', color: '#5a7a5a' }}>{fmtR(p.preco)} × {item.qtd} = <strong style={{ color: '#1B4D2E' }}>{fmtR(p.preco * item.qtd)}</strong></div>
+                {item.tamanho && <div style={{ fontSize: '0.75rem', color: '#FF6B2C', fontWeight: 700 }}>Tamanho: {item.tamanho}</div>}
+                <div style={{ fontSize: '0.82rem', color: '#5A6570' }}>{fmtR(p.preco)} × {item.qtd} = <strong style={{ color: '#1B4D2E' }}>{fmtR(p.preco * item.qtd)}</strong></div>
               </div>
               {/* Controles de quantidade */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
@@ -268,14 +268,14 @@ function CarrinhoModal({ itens, produtos, onClose, onRemove, onQtdChange, onChec
         })}
       </div>
       {/* Total */}
-      <div style={{ background: 'linear-gradient(135deg,#1B4D2E,#1a4a2e)', borderRadius: 12, padding: '14px 18px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ background: 'linear-gradient(135deg,#1B4D2E,#183450)', borderRadius: 12, padding: '14px 18px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ color: '#7BC142', fontWeight: 600, fontSize: '0.85rem' }}>Total ({itens.length} item{itens.length > 1 ? 's' : ''})</div>
-        <div style={{ color: '#C9A656', fontWeight: 900, fontSize: '1.5rem' }}>{fmtR(total)}</div>
+        <div style={{ color: '#FF6B2C', fontWeight: 900, fontSize: '1.5rem' }}>{fmtR(total)}</div>
       </div>
       <button onClick={onCheckout} style={{
-        width: '100%', background: 'linear-gradient(135deg,#5FB335,#7BC142)', color: '#1B4D2E',
+        width: '100%', background: 'linear-gradient(135deg,#FF6B2C,#7BC142)', color: '#1B4D2E',
         border: 'none', borderRadius: 12, padding: '14px', fontWeight: 800, fontSize: '1rem',
-        cursor: 'pointer', boxShadow: '0 4px 14px rgba(95,179,53,0.35)',
+        cursor: 'pointer', boxShadow: '0 4px 14px rgba(255,107,44,0.35)',
       }}>
         ✅ Finalizar Pedido
       </button>
@@ -357,14 +357,14 @@ function CheckoutModal({ itens, produtos, onClose, onSuccess }) {
           <div style={{ textAlign: 'center', marginBottom: 20 }}>
             <div style={{ fontSize: '2.5rem', marginBottom: 8 }}>✅</div>
             <h2 style={{ color: '#1B4D2E', fontWeight: 800, margin: '0 0 4px' }}>Pedido Recebido!</h2>
-            <p style={{ color: '#5a7a5a', margin: 0, fontSize: '0.9rem' }}>
+            <p style={{ color: '#5A6570', margin: 0, fontSize: '0.9rem' }}>
               {itens.length} item{itens.length > 1 ? 's' : ''} · aguardando preparação
             </p>
           </div>
           {codigoPedido && (
-            <div style={{ background: '#1B4D2E', borderRadius: 12, padding: '12px 14px', marginBottom: 14, textAlign: 'center', color: '#F4F6EF' }}>
+            <div style={{ background: '#1B4D2E', borderRadius: 12, padding: '12px 14px', marginBottom: 14, textAlign: 'center', color: '#FFF4EC' }}>
               <div style={{ fontSize: '0.72rem', color: '#7BC142', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Código do pedido</div>
-              <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#C9A656', letterSpacing: '0.06em' }}>{codigoPedido}</div>
+              <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#FF6B2C', letterSpacing: '0.06em' }}>{codigoPedido}</div>
               <div style={{ fontSize: '0.74rem', color: '#a8c8a8', marginTop: 2 }}>Guarde este código para retirar seu pedido</div>
             </div>
           )}
@@ -376,14 +376,14 @@ function CheckoutModal({ itens, produtos, onClose, onSuccess }) {
               return (
                 <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '4px 0', borderBottom: idx < itens.length - 1 ? '1px solid #e8f0e0' : 'none' }}>
                   <span style={{ color: '#1B4D2E', fontWeight: 600 }}>{p.nome}{item.tamanho ? ` (${item.tamanho})` : ''} ×{item.qtd}</span>
-                  <span style={{ color: '#5FB335', fontWeight: 700 }}>{fmtR((p.preco || 0) * item.qtd)}</span>
+                  <span style={{ color: '#FF6B2C', fontWeight: 700 }}>{fmtR((p.preco || 0) * item.qtd)}</span>
                 </div>
               )
             })}
           </div>
-          <div style={{ background: 'linear-gradient(135deg,#1B4D2E,#1a4a2e)', borderRadius: 14, padding: '18px', textAlign: 'center', marginBottom: 20, color: '#F4F6EF' }}>
+          <div style={{ background: 'linear-gradient(135deg,#1B4D2E,#183450)', borderRadius: 14, padding: '18px', textAlign: 'center', marginBottom: 20, color: '#FFF4EC' }}>
             <div style={{ fontSize: '0.8rem', color: '#7BC142', fontWeight: 600, marginBottom: 3 }}>TOTAL A PAGAR</div>
-            <div style={{ fontSize: '2rem', fontWeight: 900, color: '#C9A656' }}>{fmtR(total)}</div>
+            <div style={{ fontSize: '2rem', fontWeight: 900, color: '#FF6B2C' }}>{fmtR(total)}</div>
           </div>
           {pixInfo?.copiaECola && (
             <>
@@ -393,7 +393,7 @@ function CheckoutModal({ itens, produtos, onClose, onSuccess }) {
                   style={{ width: '100%', borderRadius: 10, border: '1.5px solid #d0dcc8', padding: '9px 12px', fontSize: '0.75rem', color: '#444', resize: 'none', boxSizing: 'border-box', background: '#fafaf6', marginBottom: 8 }}
                 />
                 <button onClick={copiarPix} style={{
-                  width: '100%', background: copiado ? '#5FB335' : 'linear-gradient(135deg,#5FB335,#7BC142)',
+                  width: '100%', background: copiado ? '#FF6B2C' : 'linear-gradient(135deg,#FF6B2C,#7BC142)',
                   color: copiado ? '#fff' : '#1B4D2E', border: 'none', borderRadius: 10, padding: 11, fontWeight: 700, cursor: 'pointer',
                 }}>
                   {copiado ? '✅ Copiado!' : '📋 Copiar Código PIX'}
@@ -405,12 +405,12 @@ function CheckoutModal({ itens, produtos, onClose, onSuccess }) {
                   <div style={{ background: '#f0f4e8', borderRadius: 10, padding: '11px 14px', fontWeight: 700, color: '#1B4D2E', fontSize: '0.95rem' }}>
                     {pixInfo.chave}
                   </div>
-                  {pixInfo.nome && <div style={{ fontSize: '0.78rem', color: '#5a7a5a', marginTop: 3 }}>Favorecido: <strong>{pixInfo.nome}</strong></div>}
+                  {pixInfo.nome && <div style={{ fontSize: '0.78rem', color: '#5A6570', marginTop: 3 }}>Favorecido: <strong>{pixInfo.nome}</strong></div>}
                 </div>
               )}
             </>
           )}
-          <div style={{ background: '#fffbf0', border: '1px solid #C9A656', borderRadius: 10, padding: '12px 14px', fontSize: '0.8rem', color: '#5a4a00', lineHeight: 1.6, marginBottom: 16 }}>
+          <div style={{ background: '#fffbf0', border: '1px solid #FF6B2C', borderRadius: 10, padding: '12px 14px', fontSize: '0.8rem', color: '#5a4a00', lineHeight: 1.6, marginBottom: 16 }}>
             Abra seu banco → PIX → Copia e Cola (ou chave) → confirme e guarde o comprovante.
             <br />Seus itens ficam reservados até a confirmação do pagamento pela organização.
           </div>
@@ -419,7 +419,7 @@ function CheckoutModal({ itens, produtos, onClose, onSuccess }) {
               📍 Acompanhar meu pedido
             </a>
           )}
-          <button onClick={onClose} style={{ width: '100%', background: 'transparent', border: '2px solid #d0dcc8', borderRadius: 10, padding: 11, color: '#5a7a5a', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem' }}>
+          <button onClick={onClose} style={{ width: '100%', background: 'transparent', border: '2px solid #d0dcc8', borderRadius: 10, padding: 11, color: '#5A6570', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem' }}>
             Fechar
           </button>
         </div>
@@ -431,8 +431,8 @@ function CheckoutModal({ itens, produtos, onClose, onSuccess }) {
     <Modal onClose={onClose}>
       <div style={{ padding: '8px 0' }}>
         <h2 style={{ margin: '0 0 4px', color: '#1B4D2E', fontWeight: 800, fontSize: '1.2rem' }}>📦 Finalizar Pedido</h2>
-        <p style={{ margin: '0 0 20px', color: '#5a7a5a', fontSize: '0.85rem' }}>
-          {itens.length} item{itens.length > 1 ? 's' : ''} · Total: <strong style={{ color: '#5FB335' }}>{fmtR(total)}</strong>
+        <p style={{ margin: '0 0 20px', color: '#5A6570', fontSize: '0.85rem' }}>
+          {itens.length} item{itens.length > 1 ? 's' : ''} · Total: <strong style={{ color: '#FF6B2C' }}>{fmtR(total)}</strong>
         </p>
 
         <div style={{ marginBottom: 14 }}>
@@ -461,22 +461,22 @@ function CheckoutModal({ itens, produtos, onClose, onSuccess }) {
             return (
               <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', padding: '4px 0', borderBottom: idx < itens.length - 1 ? '1px solid #e8f0e0' : 'none' }}>
                 <span style={{ color: '#1B4D2E', fontWeight: 600 }}>{p.nome}{item.tamanho ? ` (${item.tamanho})` : ''} ×{item.qtd}</span>
-                <span style={{ color: '#5FB335', fontWeight: 700 }}>{fmtR((p.preco || 0) * item.qtd)}</span>
+                <span style={{ color: '#FF6B2C', fontWeight: 700 }}>{fmtR((p.preco || 0) * item.qtd)}</span>
               </div>
             )
           })}
         </div>
 
-        <div style={{ background: 'linear-gradient(135deg,#1B4D2E,#1a4a2e)', borderRadius: 12, padding: '14px 18px', marginBottom: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ background: 'linear-gradient(135deg,#1B4D2E,#183450)', borderRadius: 12, padding: '14px 18px', marginBottom: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ color: '#7BC142', fontWeight: 600, fontSize: '0.85rem' }}>Total a pagar</div>
-          <div style={{ color: '#C9A656', fontWeight: 900, fontSize: '1.5rem' }}>{fmtR(total)}</div>
+          <div style={{ color: '#FF6B2C', fontWeight: 900, fontSize: '1.5rem' }}>{fmtR(total)}</div>
         </div>
 
         <button onClick={handleSubmit} disabled={submitting} style={{
-          width: '100%', background: submitting ? '#ccc' : 'linear-gradient(135deg,#5FB335,#7BC142)',
+          width: '100%', background: submitting ? '#ccc' : 'linear-gradient(135deg,#FF6B2C,#7BC142)',
           color: submitting ? '#666' : '#1B4D2E', border: 'none', borderRadius: 12, padding: 14,
           fontWeight: 800, fontSize: '1rem', cursor: submitting ? 'wait' : 'pointer',
-          boxShadow: submitting ? 'none' : '0 4px 14px rgba(95,179,53,0.35)',
+          boxShadow: submitting ? 'none' : '0 4px 14px rgba(255,107,44,0.35)',
         }}>
           {submitting ? 'Processando…' : '✅ Confirmar Pedido'}
         </button>
@@ -561,12 +561,12 @@ export default function Loja() {
   const qtdNoCarrinhoPor = (prodId) => carrinho.filter(i => i.produtoId === prodId).reduce((s, i) => s + i.qtd, 0)
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F4F6EF', fontFamily: "'Segoe UI', sans-serif" }}>
+    <div style={{ minHeight: '100vh', background: '#FFF4EC', fontFamily: "'Segoe UI', sans-serif" }}>
 
       {/* Header */}
       <div style={{
-        background: 'linear-gradient(135deg,#1B4D2E 0%,#1a4a2e 100%)',
-        padding: '40px 24px 56px', color: '#F4F6EF',
+        background: 'linear-gradient(135deg,#1B4D2E 0%,#183450 100%)',
+        padding: '40px 24px 56px', color: '#FFF4EC',
         position: 'relative', overflow: 'hidden',
       }}>
         <div style={{ position: 'absolute', top: '8%', right: '3%', fontSize: '6rem', opacity: 0.07, pointerEvents: 'none' }}>🛍️</div>
@@ -581,7 +581,7 @@ export default function Loja() {
           {totalItens > 0 && (
             <button onClick={() => setShowCarrinho(true)} style={{
               marginTop: 16, display: 'inline-flex', alignItems: 'center', gap: 8,
-              background: 'rgba(143,214,74,0.15)', border: '1.5px solid #7BC142',
+              background: 'rgba(255,107,44,0.15)', border: '1.5px solid #7BC142',
               color: '#7BC142', borderRadius: 10, padding: '8px 18px',
               fontWeight: 700, cursor: 'pointer', fontSize: '0.88rem',
             }}>
@@ -590,7 +590,7 @@ export default function Loja() {
           )}
         </div>
         <svg style={{ position: 'absolute', bottom: 0, left: 0, width: '100%' }} viewBox="0 0 1440 40" preserveAspectRatio="none">
-          <path d="M0,40 C480,0 960,40 1440,10 L1440,40 Z" fill="#F4F6EF" />
+          <path d="M0,40 C480,0 960,40 1440,10 L1440,40 Z" fill="#FFF4EC" />
         </svg>
       </div>
 
@@ -603,8 +603,8 @@ export default function Loja() {
               <button key={c} onClick={() => setFiltroCat(c)} style={{
                 padding: '6px 16px', borderRadius: 999, fontSize: '0.82rem', fontWeight: 700,
                 border: filtroCat === c ? 'none' : '1.5px solid #d0dcc8',
-                background: filtroCat === c ? 'linear-gradient(135deg,#5FB335,#7BC142)' : '#fff',
-                color: filtroCat === c ? '#1B4D2E' : '#5a7a5a',
+                background: filtroCat === c ? 'linear-gradient(135deg,#FF6B2C,#7BC142)' : '#fff',
+                color: filtroCat === c ? '#1B4D2E' : '#5A6570',
                 cursor: 'pointer', transition: 'all .15s',
               }}>
                 {c === 'todos' ? '🛍️ Todos' : c}
@@ -617,7 +617,7 @@ export default function Loja() {
         )}
 
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '64px', color: '#5FB335', fontSize: '2rem' }}>🎾</div>
+          <div style={{ textAlign: 'center', padding: '64px', color: '#FF6B2C', fontSize: '2rem' }}>🎾</div>
         ) : produtos.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '64px', color: '#999' }}>
             <div style={{ fontSize: '3rem', marginBottom: 12 }}>🛍️</div>

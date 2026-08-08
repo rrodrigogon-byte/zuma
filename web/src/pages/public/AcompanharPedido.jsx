@@ -13,7 +13,7 @@ const ETAPAS = [
   { key: 'pronto',     label: 'Pronto p/ retirar', emoji: '✅' },
   { key: 'entregue',   label: 'Entregue',        emoji: '📦' },
 ]
-const VERDE = '#5FB335'
+const VERDE = '#FF6B2C'
 
 export default function AcompanharPedido() {
   const { codigo } = useParams()
@@ -40,16 +40,16 @@ export default function AcompanharPedido() {
   const cancelado = pedido?.status === 'cancelado'
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F4F6EF', fontFamily: "'Segoe UI', sans-serif", padding: '32px 16px' }}>
+    <div style={{ minHeight: '100vh', background: '#FFF4EC', fontFamily: "'Segoe UI', sans-serif", padding: '32px 16px' }}>
       <div style={{ maxWidth: 560, margin: '0 auto' }}>
         <Link to="/loja" style={{ color: '#1B4D2E', textDecoration: 'none', fontSize: '0.85rem', fontWeight: 600 }}>← Voltar à loja</Link>
 
         <div style={{ background: '#fff', borderRadius: 18, padding: '24px 22px', marginTop: 14, boxShadow: '0 2px 16px rgba(0,0,0,0.07)' }}>
-          <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#7a9a7a', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Acompanhar pedido</div>
+          <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#5A6570', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Acompanhar pedido</div>
           <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#1B4D2E', letterSpacing: '0.04em', marginTop: 2 }}>{codigo}</div>
 
           {loading ? (
-            <div style={{ padding: '30px 0', textAlign: 'center', color: '#7a9a7a' }}>Carregando…</div>
+            <div style={{ padding: '30px 0', textAlign: 'center', color: '#5A6570' }}>Carregando…</div>
           ) : erro ? (
             <div style={{ marginTop: 18, background: '#fff4f4', border: '1px solid #e0b0b0', borderRadius: 12, padding: '16px', color: '#a33', fontSize: '0.9rem' }}>
               {erro}. Confira o código do pedido.
@@ -97,11 +97,11 @@ export default function AcompanharPedido() {
                   </div>
                 ))}
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e3ecda', marginTop: 6, paddingTop: 6, fontWeight: 800, color: '#1B4D2E' }}>
-                  <span>Total</span><span style={{ color: '#C9A656' }}>{fmtR(pedido.total || 0)}</span>
+                  <span>Total</span><span style={{ color: '#FF6B2C' }}>{fmtR(pedido.total || 0)}</span>
                 </div>
               </div>
 
-              <div style={{ marginTop: 12, fontSize: '0.8rem', color: '#5a7a5a' }}>
+              <div style={{ marginTop: 12, fontSize: '0.8rem', color: '#5A6570' }}>
                 Pagamento: <b>{pedido.pagamento === 'pago' ? 'confirmado ✓' : 'Pix pendente ⏳'}</b>
                 {pedido.status === 'pronto' && <div style={{ marginTop: 8, background: '#eaf7e0', border: `1px solid ${VERDE}`, borderRadius: 10, padding: '10px 12px', color: '#1B4D2E', fontWeight: 600 }}>🎾 Seu pedido está pronto! Retire no Tangará Tênis Clube apresentando o código <b>{codigo}</b>.</div>}
               </div>

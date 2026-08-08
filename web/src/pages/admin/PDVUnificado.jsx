@@ -1,5 +1,5 @@
 /**
- * PDV Unificado — SetPoint Ultra
+ * PDV Unificado — KYTTO Clube
  * Atende todos os segmentos: Supermercado, Loja de Moda, Barbearia, Varejo, Bar
  * Rota: /admin/pdv-erp
  */
@@ -8,7 +8,7 @@ import { api } from '../../lib/api'
 
 const theme = {
   bg: '#0f1117', surface: '#1a1d27', card: '#22263a',
-  green: '#5fb335', muted: '#8a8fa8', cream: '#e8e6df',
+  green: '#FF6B2C', muted: '#8a8fa8', cream: '#e8e6df',
   line: '#2e3248', red: '#e05c5c', yellow: '#f5a623', blue: '#4a9eff',
 }
 
@@ -16,7 +16,7 @@ const SEGMENTOS = [
   { id: 'supermercado', label: 'Supermercado', icon: '🏪', cor: '#4a9eff' },
   { id: 'loja-moda',    label: 'Loja de Moda', icon: '👗', cor: '#e05c5c' },
   { id: 'barbearia',    label: 'Barbearia',    icon: '✂️', cor: '#f5a623' },
-  { id: 'varejo',       label: 'Varejo Geral', icon: '🛒', cor: '#5fb335' },
+  { id: 'varejo',       label: 'Varejo Geral', icon: '🛒', cor: '#FF6B2C' },
   { id: 'bar',          label: 'Bar/Rest.',    icon: '🍺', cor: '#9b59b6' },
 ]
 

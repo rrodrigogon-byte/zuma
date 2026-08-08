@@ -3,9 +3,9 @@ import { api } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
 const C = {
-  green: '#5FB335',
-  cream: '#F4F6EF',
-  gold: '#C9A656',
+  green: '#FF6B2C',
+  cream: '#FFF4EC',
+  gold: '#FF6B2C',
   card: '#132b1b',
   cardBorder: '#1e3d28',
   inputBg: '#0e2216',
@@ -148,8 +148,8 @@ export default function Contato() {
           <span style={{
             display: 'inline-block',
             padding: '7px 18px',
-            background: 'rgba(95,179,53,.12)',
-            border: '1px solid rgba(95,179,53,.3)',
+            background: 'rgba(255,107,44,.12)',
+            border: '1px solid rgba(255,107,44,.3)',
             borderRadius: 20,
             color: C.green,
             fontSize: 12,
@@ -173,8 +173,8 @@ export default function Contato() {
         {enviado ? (
           <div style={{
             textAlign: 'center', padding: '30px 20px',
-            background: 'rgba(95,179,53,.08)',
-            border: '1px solid rgba(95,179,53,.2)',
+            background: 'rgba(255,107,44,.08)',
+            border: '1px solid rgba(255,107,44,.2)',
             borderRadius: 12,
           }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>

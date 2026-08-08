@@ -22,8 +22,8 @@ function TopBar() {
       {/* Atleta: botão painel */}
       {isAtleta && (
         <button onClick={() => navigate('/meu-painel')}
-          style={{ padding: '5px 14px', borderRadius: 8, border: '1px solid rgba(95,179,53,.3)',
-            background: 'rgba(95,179,53,.08)', color: 'var(--green)',
+          style={{ padding: '5px 14px', borderRadius: 8, border: '1px solid rgba(255,107,44,.3)',
+            background: 'rgba(255,107,44,.08)', color: 'var(--green)',
             cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
           🏠 Meu Painel
         </button>

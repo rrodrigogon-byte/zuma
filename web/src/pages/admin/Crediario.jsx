@@ -1,5 +1,5 @@
 /**
- * Crediário Próprio — SetPoint Ultra
+ * Crediário Próprio — KYTTO Clube
  * Gestão de contas a prazo, carnê, régua de cobrança e inadimplência
  * Rota: /admin/crediario
  */
@@ -9,7 +9,7 @@ import { useToast } from '../../hooks/useToast'
 
 const T = {
   bg: '#0f1117', surface: '#1a1d27', card: '#22263a',
-  green: '#5fb335', muted: '#8a8fa8', cream: '#e8e6df',
+  green: '#FF6B2C', muted: '#8a8fa8', cream: '#e8e6df',
   line: '#2e3248', red: '#e05c5c', yellow: '#f5a623', blue: '#4a9eff',
 }
 
@@ -423,9 +423,9 @@ function ModalCarneConteudo({ contaId }) {
           <div key={p.id} style={{
             display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
             background: '#1a1d27', borderRadius: 10,
-            borderLeft: `3px solid ${p.status === 'paga' ? '#5fb335' : vencida ? '#e05c5c' : '#4a9eff'}`,
+            borderLeft: `3px solid ${p.status === 'paga' ? '#FF6B2C' : vencida ? '#e05c5c' : '#4a9eff'}`,
           }}>
-            <div style={{ width: 28, height: 28, borderRadius: '50%', background: p.status === 'paga' ? '#5fb33533' : '#22263a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, flexShrink: 0 }}>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: p.status === 'paga' ? '#FF6B2C33' : '#22263a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, flexShrink: 0 }}>
               {p.numero}
             </div>
             <div style={{ flex: 1 }}>
@@ -433,9 +433,9 @@ function ModalCarneConteudo({ contaId }) {
               <div style={{ fontSize: 11, color: '#8a8fa8' }}>Vence: {new Date(p.data_vencimento + 'T12:00').toLocaleDateString('pt-BR')}</div>
             </div>
             {p.status === 'paga' ? (
-              <span style={{ fontSize: 11, color: '#5fb335', fontWeight: 700 }}>✓ Pago</span>
+              <span style={{ fontSize: 11, color: '#FF6B2C', fontWeight: 700 }}>✓ Pago</span>
             ) : (
-              <button onClick={() => pagarParcela(p.id)} style={{ padding: '5px 12px', background: '#5fb335', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
+              <button onClick={() => pagarParcela(p.id)} style={{ padding: '5px 12px', background: '#FF6B2C', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
                 Pagar
               </button>
             )}

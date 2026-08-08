@@ -4,15 +4,15 @@ import { api } from '../../lib/api'
 
 // ── Paleta ────────────────────────────────────────────────────────────────────
 const C = {
-  bg:         '#F4F6EF',
+  bg:         '#FFF4EC',
   card:       '#fff',
-  green:      '#5FB335',
-  lime:       '#8FD64A',
-  gold:       '#C9A656',
-  dark:       '#0E2E1C',
-  muted:      '#7a9a7a',
+  green:      '#FF6B2C',
+  lime:       '#FF9B72',
+  gold:       '#FF6B2C',
+  dark:       '#12283F',
+  muted:      '#5A6570',
   red:        '#e05555',
-  border:     'rgba(95,179,53,0.12)',
+  border:     'rgba(255,107,44,0.12)',
   shadow:     '0 4px 20px rgba(0,0,0,0.07)',
 }
 
@@ -38,9 +38,9 @@ function ResBadge({ res }) {
   return (
     <span style={{
       width: 28, height: 28, borderRadius: '50%',
-      background: vitoria ? 'rgba(95,179,53,.15)' : 'rgba(224,85,85,.12)',
+      background: vitoria ? 'rgba(255,107,44,.15)' : 'rgba(224,85,85,.12)',
       color: vitoria ? C.green : C.red,
-      border: `1.5px solid ${vitoria ? 'rgba(95,179,53,.4)' : 'rgba(224,85,85,.35)'}`,
+      border: `1.5px solid ${vitoria ? 'rgba(255,107,44,.4)' : 'rgba(224,85,85,.35)'}`,
       fontWeight: 900, fontSize: 12,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
@@ -173,7 +173,7 @@ export default function PerfilAtleta() {
 
       {/* ── HERO ── */}
       <section style={{
-        background: 'linear-gradient(160deg, #071a0f 0%, #0E2E1C 40%, #1a4a2e 100%)',
+        background: 'linear-gradient(160deg, #12283F 0%, #12283F 40%, #183450 100%)',
         padding: '56px 24px 72px', position: 'relative', overflow: 'hidden',
       }}>
         {/* bg decorativo */}
@@ -197,20 +197,20 @@ export default function PerfilAtleta() {
               background: `linear-gradient(135deg,${C.green},${C.lime})`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: '2.2rem', fontWeight: 900, color: C.dark,
-              boxShadow: '0 8px 32px rgba(95,179,53,.35)',
+              boxShadow: '0 8px 32px rgba(255,107,44,.35)',
               border: '3px solid rgba(255,255,255,.15)',
             }}>
               {iniciais}
             </div>
 
             <div style={{ flex: 1 }}>
-              <h1 style={{ fontSize: 'clamp(1.6rem,5vw,2.4rem)', fontWeight: 900, color: '#F4F6EF', margin: '0 0 8px', letterSpacing: '-0.02em' }}>
+              <h1 style={{ fontSize: 'clamp(1.6rem,5vw,2.4rem)', fontWeight: 900, color: '#FFF4EC', margin: '0 0 8px', letterSpacing: '-0.02em' }}>
                 {nomeDecoded}
               </h1>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
                 {posRanking && (
                   <span style={{
-                    background: 'rgba(201,166,86,.2)', border: '1px solid rgba(201,166,86,.4)',
+                    background: 'rgba(255,107,44,.2)', border: '1px solid rgba(255,107,44,.4)',
                     color: C.gold, borderRadius: 999, padding: '4px 14px',
                     fontSize: 12, fontWeight: 800,
                   }}>
@@ -219,7 +219,7 @@ export default function PerfilAtleta() {
                 )}
                 {pontosRanking && (
                   <span style={{
-                    background: 'rgba(95,179,53,.15)', border: '1px solid rgba(95,179,53,.35)',
+                    background: 'rgba(255,107,44,.15)', border: '1px solid rgba(255,107,44,.35)',
                     color: C.lime, borderRadius: 999, padding: '4px 14px',
                     fontSize: 12, fontWeight: 800,
                   }}>
@@ -238,8 +238,8 @@ export default function PerfilAtleta() {
                 {/* Movimento */}
                 {movimento !== 0 && (
                   <span style={{
-                    background: movimento > 0 ? 'rgba(95,179,53,.15)' : 'rgba(224,85,85,.12)',
-                    border: `1px solid ${movimento > 0 ? 'rgba(95,179,53,.4)' : 'rgba(224,85,85,.35)'}`,
+                    background: movimento > 0 ? 'rgba(255,107,44,.15)' : 'rgba(224,85,85,.12)',
+                    border: `1px solid ${movimento > 0 ? 'rgba(255,107,44,.4)' : 'rgba(224,85,85,.35)'}`,
                     color: movimento > 0 ? C.lime : C.red,
                     borderRadius: 999, padding: '4px 14px', fontSize: 12, fontWeight: 800,
                   }}>
@@ -291,14 +291,14 @@ export default function PerfilAtleta() {
 
         {/* Títulos */}
         {titulos.length > 0 && (
-          <div style={{ background: C.card, borderRadius: 18, padding: '20px 22px', boxShadow: C.shadow, border: `1px solid rgba(201,166,86,.2)`, marginBottom: 24 }}>
+          <div style={{ background: C.card, borderRadius: 18, padding: '20px 22px', boxShadow: C.shadow, border: `1px solid rgba(255,107,44,.2)`, marginBottom: 24 }}>
             <h3 style={{ margin: '0 0 14px', fontSize: '0.85rem', fontWeight: 800, color: C.gold, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
               🥇 Títulos Conquistados
             </h3>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
               {titulos.map((t, i) => (
                 <div key={i} style={{
-                  background: 'rgba(201,166,86,.08)', border: '1px solid rgba(201,166,86,.25)',
+                  background: 'rgba(255,107,44,.08)', border: '1px solid rgba(255,107,44,.25)',
                   borderRadius: 12, padding: '10px 16px', textAlign: 'center',
                 }}>
                   <div style={{ fontSize: 22, marginBottom: 4 }}>🏆</div>
@@ -320,7 +320,7 @@ export default function PerfilAtleta() {
             ].map(tab => (
               <button key={tab.id} onClick={() => setTabH2H(tab.id)} style={{
                 flex: 1, padding: '14px 12px',
-                background: tabH2H === tab.id ? 'rgba(95,179,53,.06)' : 'transparent',
+                background: tabH2H === tab.id ? 'rgba(255,107,44,.06)' : 'transparent',
                 border: 'none', borderBottom: `2px solid ${tabH2H === tab.id ? C.green : 'transparent'}`,
                 color: tabH2H === tab.id ? C.dark : C.muted,
                 fontWeight: tabH2H === tab.id ? 800 : 600,
@@ -356,7 +356,7 @@ export default function PerfilAtleta() {
                             borderRadius: 10, transition: 'background .15s',
                             cursor: 'pointer',
                           }}
-                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(95,179,53,.05)'}
+                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,107,44,.05)'}
                             onMouseLeave={e => e.currentTarget.style.background = 'rgba(0,0,0,.02)'}
                           >
                             {/* Ranking do adversário */}
@@ -432,8 +432,8 @@ export default function PerfilAtleta() {
                                 {p.categoria && (
                                   <span style={{
                                     fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999,
-                                    background: 'rgba(95,179,53,.1)', color: C.green,
-                                    border: '1px solid rgba(95,179,53,.25)',
+                                    background: 'rgba(255,107,44,.1)', color: C.green,
+                                    border: '1px solid rgba(255,107,44,.25)',
                                   }}>{p.categoria}</span>
                                 )}
                               </td>

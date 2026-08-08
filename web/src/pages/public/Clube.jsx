@@ -4,13 +4,13 @@ import { Link } from 'react-router-dom'
 /* ─── Paleta ──────────────────────────────────────────────────────────────── */
 const C = {
   deep:    '#071A0E',
-  forest:  '#0E2E1C',
+  forest:  '#12283F',
   green:   '#1B4D2E',
   lime:    '#4CAF50',
-  accent:  '#8FD64A',
-  gold:    '#C9A656',
+  accent:  '#FF9B72',
+  gold:    '#FF6B2C',
   goldL:   '#E8C87A',
-  cream:   '#F4F6EF',
+  cream:   '#FFF4EC',
   muted:   '#6a8a6a',
   white:   '#ffffff',
   glass:   'rgba(255,255,255,0.06)',
@@ -66,16 +66,16 @@ const GLOBAL_CSS = `
     100% { transform: perspective(800px) rotateY(360deg); }
   }
   @keyframes glowPulse {
-    0%,100% { box-shadow: 0 0 20px rgba(143,214,74,0.3); }
-    50%      { box-shadow: 0 0 50px rgba(143,214,74,0.7), 0 0 80px rgba(143,214,74,0.3); }
+    0%,100% { box-shadow: 0 0 20px rgba(255,107,44,0.3); }
+    50%      { box-shadow: 0 0 50px rgba(255,107,44,0.7), 0 0 80px rgba(255,107,44,0.3); }
   }
   @keyframes scanLine {
     0%   { top: 0%; }
     100% { top: 100%; }
   }
   @keyframes borderGlow {
-    0%,100% { border-color: rgba(143,214,74,0.3); }
-    50%      { border-color: rgba(143,214,74,0.9); }
+    0%,100% { border-color: rgba(255,107,44,0.3); }
+    50%      { border-color: rgba(255,107,44,0.9); }
   }
   @keyframes slideInLeft {
     from { opacity: 0; transform: translateX(-50px); }
@@ -107,7 +107,7 @@ const GLOBAL_CSS = `
   .ttc-nav.scrolled {
     background: rgba(7,26,14,0.97);
     backdrop-filter: blur(20px);
-    border-bottom: 1px solid rgba(143,214,74,0.15);
+    border-bottom: 1px solid rgba(255,107,44,0.15);
     box-shadow: 0 4px 30px rgba(0,0,0,0.5);
   }
   .ttc-nav-link {
@@ -118,26 +118,26 @@ const GLOBAL_CSS = `
   }
   .ttc-nav-link::after {
     content: ''; position: absolute; bottom: 0; left: 0; right: 0;
-    height: 2px; background: #8FD64A;
+    height: 2px; background: #FF9B72;
     transform: scaleX(0); transform-origin: center;
     transition: transform .3s ease;
   }
-  .ttc-nav-link:hover, .ttc-nav-link.active { color: #8FD64A; }
+  .ttc-nav-link:hover, .ttc-nav-link.active { color: #FF9B72; }
   .ttc-nav-link:hover::after, .ttc-nav-link.active::after { transform: scaleX(1); }
 
   .ttc-btn-primary {
     display: inline-flex; align-items: center; gap: 8px;
-    background: linear-gradient(135deg, #8FD64A, #4CAF50);
+    background: linear-gradient(135deg, #FF9B72, #4CAF50);
     color: #071A0E; font-weight: 700; font-size: 14px;
     letter-spacing: .05em; text-transform: uppercase;
     padding: 14px 32px; border-radius: 50px;
     border: none; cursor: pointer; text-decoration: none;
     transition: all .3s ease;
-    box-shadow: 0 4px 20px rgba(143,214,74,0.4);
+    box-shadow: 0 4px 20px rgba(255,107,44,0.4);
   }
   .ttc-btn-primary:hover {
     transform: translateY(-3px);
-    box-shadow: 0 8px 30px rgba(143,214,74,0.6);
+    box-shadow: 0 8px 30px rgba(255,107,44,0.6);
     background: linear-gradient(135deg, #9FE65A, #5DBF60);
   }
   .ttc-btn-outline {
@@ -150,22 +150,22 @@ const GLOBAL_CSS = `
     transition: all .3s ease;
   }
   .ttc-btn-outline:hover {
-    border-color: #8FD64A; color: #8FD64A;
+    border-color: #FF9B72; color: #FF9B72;
     transform: translateY(-2px);
   }
   .ttc-btn-gold {
     display: inline-flex; align-items: center; gap: 8px;
-    background: linear-gradient(135deg, #C9A656, #E8C87A);
+    background: linear-gradient(135deg, #FF6B2C, #E8C87A);
     color: #071A0E; font-weight: 700; font-size: 14px;
     letter-spacing: .05em; text-transform: uppercase;
     padding: 14px 32px; border-radius: 50px;
     border: none; cursor: pointer; text-decoration: none;
     transition: all .3s ease;
-    box-shadow: 0 4px 20px rgba(201,166,86,0.4);
+    box-shadow: 0 4px 20px rgba(255,107,44,0.4);
   }
   .ttc-btn-gold:hover {
     transform: translateY(-3px);
-    box-shadow: 0 8px 30px rgba(201,166,86,0.6);
+    box-shadow: 0 8px 30px rgba(255,107,44,0.6);
   }
 
   .ttc-card {
@@ -177,14 +177,14 @@ const GLOBAL_CSS = `
   }
   .ttc-card:hover {
     background: rgba(255,255,255,0.09);
-    border-color: rgba(143,214,74,0.3);
+    border-color: rgba(255,107,44,0.3);
     transform: translateY(-6px);
     box-shadow: 0 20px 50px rgba(0,0,0,0.4);
   }
 
   .ticker-wrap {
     overflow: hidden; width: 100%;
-    background: linear-gradient(90deg, #8FD64A, #4CAF50, #C9A656, #8FD64A);
+    background: linear-gradient(90deg, #FF9B72, #4CAF50, #FF6B2C, #FF9B72);
     padding: 10px 0;
   }
   .ticker-inner {
@@ -211,8 +211,8 @@ const GLOBAL_CSS = `
   }
 
   .carteirinha-card {
-    background: linear-gradient(135deg, #071A0E 0%, #0E2E1C 50%, #1B4D2E 100%);
-    border: 2px solid rgba(143,214,74,0.4);
+    background: linear-gradient(135deg, #071A0E 0%, #12283F 50%, #1B4D2E 100%);
+    border: 2px solid rgba(255,107,44,0.4);
     border-radius: 24px;
     padding: 32px;
     position: relative;
@@ -223,7 +223,7 @@ const GLOBAL_CSS = `
   .carteirinha-card::before {
     content: ''; position: absolute; top: -50%; right: -30%;
     width: 300px; height: 300px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(143,214,74,0.12), transparent 70%);
+    background: radial-gradient(circle, rgba(255,107,44,0.12), transparent 70%);
     pointer-events: none;
   }
   .carteirinha-card::after {
@@ -231,7 +231,7 @@ const GLOBAL_CSS = `
     border-radius: 24px;
     background: repeating-linear-gradient(
       0deg, transparent, transparent 2px,
-      rgba(143,214,74,0.02) 2px, rgba(143,214,74,0.02) 4px
+      rgba(255,107,44,0.02) 2px, rgba(255,107,44,0.02) 4px
     );
     pointer-events: none;
   }
@@ -244,23 +244,23 @@ const GLOBAL_CSS = `
   }
   .qr-scan-line {
     position: absolute; left: 12px; right: 12px; height: 2px;
-    background: linear-gradient(90deg, transparent, #8FD64A, transparent);
+    background: linear-gradient(90deg, transparent, #FF9B72, transparent);
     animation: scanLine 2s linear infinite;
     border-radius: 2px;
   }
 
   .visitor-widget {
     display: inline-flex; align-items: center; gap: 12px;
-    background: rgba(143,214,74,0.1);
-    border: 1px solid rgba(143,214,74,0.3);
+    background: rgba(255,107,44,0.1);
+    border: 1px solid rgba(255,107,44,0.3);
     border-radius: 50px;
     padding: 10px 24px;
     backdrop-filter: blur(10px);
     transition: all .3s;
   }
   .visitor-widget:hover {
-    background: rgba(143,214,74,0.18);
-    border-color: rgba(143,214,74,0.6);
+    background: rgba(255,107,44,0.18);
+    border-color: rgba(255,107,44,0.6);
   }
 
   .estrutura-tab {
@@ -270,9 +270,9 @@ const GLOBAL_CSS = `
     white-space: nowrap;
   }
   .estrutura-tab.active {
-    background: linear-gradient(135deg, #8FD64A, #4CAF50);
+    background: linear-gradient(135deg, #FF9B72, #4CAF50);
     color: #071A0E; border-color: transparent;
-    box-shadow: 0 4px 16px rgba(143,214,74,0.4);
+    box-shadow: 0 4px 16px rgba(255,107,44,0.4);
   }
   .estrutura-tab:not(.active) {
     background: rgba(255,255,255,0.05);
@@ -281,8 +281,8 @@ const GLOBAL_CSS = `
   }
   .estrutura-tab:not(.active):hover {
     background: rgba(255,255,255,0.1);
-    border-color: rgba(143,214,74,0.3);
-    color: #8FD64A;
+    border-color: rgba(255,107,44,0.3);
+    color: #FF9B72;
   }
 
   .plano-card {
@@ -296,15 +296,15 @@ const GLOBAL_CSS = `
     box-shadow: 0 30px 60px rgba(0,0,0,0.5);
   }
   .plano-card.destaque {
-    border-color: rgba(143,214,74,0.5);
-    box-shadow: 0 0 40px rgba(143,214,74,0.15);
+    border-color: rgba(255,107,44,0.5);
+    box-shadow: 0 0 40px rgba(255,107,44,0.15);
   }
 
   .section-badge {
     display: inline-flex; align-items: center; gap: 8px;
-    background: rgba(143,214,74,0.12);
-    border: 1px solid rgba(143,214,74,0.3);
-    color: #8FD64A; font-size: 12px; font-weight: 700;
+    background: rgba(255,107,44,0.12);
+    border: 1px solid rgba(255,107,44,0.3);
+    color: #FF9B72; font-size: 12px; font-weight: 700;
     letter-spacing: .12em; text-transform: uppercase;
     padding: 6px 18px; border-radius: 50px;
     margin-bottom: 20px;
@@ -314,14 +314,14 @@ const GLOBAL_CSS = `
     font-family: 'Playfair Display', serif;
     font-size: clamp(40px, 6vw, 72px);
     font-weight: 900; line-height: 1;
-    background: linear-gradient(135deg, #8FD64A, #C9A656);
+    background: linear-gradient(135deg, #FF9B72, #FF6B2C);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     background-clip: text;
   }
 
   .divider-gold {
     height: 3px; width: 60px;
-    background: linear-gradient(90deg, #C9A656, #8FD64A);
+    background: linear-gradient(90deg, #FF6B2C, #FF9B72);
     border-radius: 2px;
     margin: 16px auto;
   }
@@ -394,12 +394,12 @@ const STATS = [
 ]
 
 const MODALIDADES = [
-  { nome: 'Tênis',        icon: '🎾', cor: '#8FD64A', desc: '8 quadras de saibro, academia e torneios nacionais', itens: ['8 quadras saibro', 'Academia profissional', 'Ranking TTC', 'Torneios nacionais'] },
+  { nome: 'Tênis',        icon: '🎾', cor: '#FF9B72', desc: '8 quadras de saibro, academia e torneios nacionais', itens: ['8 quadras saibro', 'Academia profissional', 'Ranking TTC', 'Torneios nacionais'] },
   { nome: 'Natação',      icon: '🏊', cor: '#4FC3F7', desc: 'Piscina olímpica aquecida com treinos para todas as idades', itens: ['Piscina olímpica', 'Água aquecida', 'Escolinha kids', 'Treinos adultos'] },
   { nome: 'Padel',        icon: '🏸', cor: '#FFB74D', desc: 'Quadras de padel com iluminação LED e piso profissional', itens: ['4 quadras padel', 'Iluminação LED', 'Aulas coletivas', 'Torneios mensais'] },
   { nome: 'Futebol',      icon: '⚽', cor: '#EF5350', desc: 'Campo sintético com vestiários e arquibancada coberta', itens: ['Campo sintético', 'Vestiários', 'Arquibancada', 'Escolinha futsal'] },
   { nome: 'Musculação',   icon: '💪', cor: '#AB47BC', desc: 'Academia moderna com equipamentos de última geração', itens: ['400m² equipados', 'Personal trainer', 'Avaliação física', 'Horários flexíveis'] },
-  { nome: 'Espaço Social',icon: '🥂', cor: '#C9A656', desc: 'Restaurante, bar, salões para eventos e área gourmet', itens: ['Restaurante', 'Bar & lounge', 'Salão de festas', 'Espaço gourmet'] },
+  { nome: 'Espaço Social',icon: '🥂', cor: '#FF6B2C', desc: 'Restaurante, bar, salões para eventos e área gourmet', itens: ['Restaurante', 'Bar & lounge', 'Salão de festas', 'Espaço gourmet'] },
 ]
 
 const EVENTOS = [
@@ -408,7 +408,7 @@ const EVENTOS = [
     data: '2026',
     desc: 'O maior torneio de tênis do Centro-Oeste. R$ 250.000+ em premiação, 250+ atletas profissionais e amadores de todo o Brasil.',
     tags: ['14 categorias', 'R$ 250.000+', 'Inscrições abertas'],
-    cor: '#8FD64A',
+    cor: '#FF9B72',
     icon: '🏆',
     destaque: true,
   },
@@ -443,7 +443,7 @@ const PLANOS = [
     nome: 'Individual',
     preco: 'R$ 189',
     periodo: '/mês',
-    cor: 'linear-gradient(135deg, #1B4D2E, #0E2E1C)',
+    cor: 'linear-gradient(135deg, #1B4D2E, #12283F)',
     itens: ['1 pessoa', 'Acesso às quadras', 'Natação', 'Academia', 'Área social'],
     destaque: false,
   },
@@ -461,7 +461,7 @@ const PLANOS = [
     preco: 'R$ 699',
     periodo: '/mês',
     cor: 'linear-gradient(135deg, #2a2000, #1a1400)',
-    border: '1.5px solid rgba(201,166,86,0.5)',
+    border: '1.5px solid rgba(255,107,44,0.5)',
     itens: ['Família + hóspedes', 'Camarote torneios', 'Personal trainer', 'Nutricionista', 'Eventos premium', 'Transfer incluso'],
     destaque: false,
     vip: true,
@@ -521,10 +521,10 @@ function StickyNav({ activeSection, onNav }) {
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px', height: 70, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         {/* Logo */}
         <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'linear-gradient(135deg, #8FD64A, #4CAF50)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, color: '#071A0E', boxShadow: '0 4px 16px rgba(143,214,74,0.4)' }}>TTC</div>
+          <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'linear-gradient(135deg, #FF9B72, #4CAF50)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, color: '#071A0E', boxShadow: '0 4px 16px rgba(255,107,44,0.4)' }}>TTC</div>
           <div>
             <div style={{ color: '#fff', fontWeight: 700, fontSize: 15, letterSpacing: '.04em', lineHeight: 1.2 }}>Tênis & Touring</div>
-            <div style={{ color: '#8FD64A', fontSize: 10, fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase' }}>Clube</div>
+            <div style={{ color: '#FF9B72', fontSize: 10, fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase' }}>Clube</div>
           </div>
         </Link>
 
@@ -557,7 +557,7 @@ function StickyNav({ activeSection, onNav }) {
 
       {/* Mobile menu */}
       {menuOpen && (
-        <div style={{ background: 'rgba(7,26,14,0.98)', borderTop: '1px solid rgba(143,214,74,0.15)', padding: '16px 24px 24px' }}>
+        <div style={{ background: 'rgba(7,26,14,0.98)', borderTop: '1px solid rgba(255,107,44,0.15)', padding: '16px 24px 24px' }}>
           {NAV_ITEMS.map(item => (
             <a
               key={item.id}
@@ -587,19 +587,19 @@ function Hero({ visitantes, onNavCarteirinha }) {
       <div style={{
         position: 'absolute', inset: 0,
         background: `
-          radial-gradient(ellipse at 70% 40%, rgba(143,214,74,0.15) 0%, transparent 60%),
-          radial-gradient(ellipse at 20% 80%, rgba(201,166,86,0.1) 0%, transparent 50%),
-          linear-gradient(160deg, #071A0E 0%, #0E2E1C 40%, #071A0E 100%)
+          radial-gradient(ellipse at 70% 40%, rgba(255,107,44,0.15) 0%, transparent 60%),
+          radial-gradient(ellipse at 20% 80%, rgba(255,107,44,0.1) 0%, transparent 50%),
+          linear-gradient(160deg, #071A0E 0%, #12283F 40%, #071A0E 100%)
         `,
         transform: `translateY(${scrollY * 0.3}px)`,
         animation: 'zoomBg 1.5s ease both',
       }} />
 
       {/* Decorative circles */}
-      <div style={{ position: 'absolute', top: '15%', right: '8%', width: 300, height: 300, borderRadius: '50%', border: '1px solid rgba(143,214,74,0.12)', animation: 'float 7s ease-in-out infinite', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', top: '25%', right: '12%', width: 200, height: 200, borderRadius: '50%', border: '1px solid rgba(143,214,74,0.18)', animation: 'float 5s ease-in-out infinite reverse', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', bottom: '20%', left: '5%', width: 180, height: 180, borderRadius: '50%', border: '1px solid rgba(201,166,86,0.15)', animation: 'float 6s ease-in-out infinite 1s', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', top: '50%', left: '50%', width: 600, height: 600, borderRadius: '50%', border: '1px solid rgba(143,214,74,0.04)', transform: 'translate(-50%,-50%)', animation: 'rotateSlow 40s linear infinite', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', top: '15%', right: '8%', width: 300, height: 300, borderRadius: '50%', border: '1px solid rgba(255,107,44,0.12)', animation: 'float 7s ease-in-out infinite', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', top: '25%', right: '12%', width: 200, height: 200, borderRadius: '50%', border: '1px solid rgba(255,107,44,0.18)', animation: 'float 5s ease-in-out infinite reverse', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', bottom: '20%', left: '5%', width: 180, height: 180, borderRadius: '50%', border: '1px solid rgba(255,107,44,0.15)', animation: 'float 6s ease-in-out infinite 1s', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', top: '50%', left: '50%', width: 600, height: 600, borderRadius: '50%', border: '1px solid rgba(255,107,44,0.04)', transform: 'translate(-50%,-50%)', animation: 'rotateSlow 40s linear infinite', pointerEvents: 'none' }} />
 
       {/* Tennis ball deco */}
       <div className="ttc-float" style={{ position: 'absolute', top: '18%', right: '18%', fontSize: 64, opacity: .18, pointerEvents: 'none' }}>🎾</div>
@@ -630,7 +630,7 @@ function Hero({ visitantes, onNavCarteirinha }) {
             fontFamily: "'Playfair Display', serif",
             fontSize: 'clamp(22px, 4vw, 44px)',
             fontWeight: 700,
-            background: 'linear-gradient(135deg, #8FD64A 30%, #C9A656 70%)',
+            background: 'linear-gradient(135deg, #FF9B72 30%, #FF6B2C 70%)',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
             backgroundClip: 'text',
@@ -644,7 +644,7 @@ function Hero({ visitantes, onNavCarteirinha }) {
         <AnimSection delay={200}>
           <p style={{ color: 'rgba(255,255,255,0.72)', fontSize: 'clamp(16px, 2.5vw, 20px)', lineHeight: 1.7, maxWidth: 640, margin: '0 auto 40px', fontFamily: 'Inter, sans-serif', fontWeight: 300 }}>
             Mais de 30 anos unindo famílias em torno do esporte, lazer e convivência. 
-            Casa da 4ª Agro Open de Tênis — <strong style={{ color: '#8FD64A' }}>R$ 250.000+</strong> em premiação.
+            Casa da 4ª Agro Open de Tênis — <strong style={{ color: '#FF9B72' }}>R$ 250.000+</strong> em premiação.
           </p>
         </AnimSection>
 
@@ -669,7 +669,7 @@ function Hero({ visitantes, onNavCarteirinha }) {
               <div className="visitor-widget">
                 <span style={{ fontSize: 18 }}>👁️</span>
                 <div style={{ textAlign: 'left' }}>
-                  <div style={{ color: '#8FD64A', fontSize: 22, fontWeight: 800, lineHeight: 1, fontFamily: 'Inter, sans-serif', letterSpacing: '-0.02em' }}>
+                  <div style={{ color: '#FF9B72', fontSize: 22, fontWeight: 800, lineHeight: 1, fontFamily: 'Inter, sans-serif', letterSpacing: '-0.02em' }}>
                     {visitantes.toLocaleString('pt-BR')}
                   </div>
                   <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: 500, letterSpacing: '.06em', textTransform: 'uppercase' }}>
@@ -686,7 +686,7 @@ function Hero({ visitantes, onNavCarteirinha }) {
       <div style={{ position: 'absolute', bottom: 32, left: '50%', transform: 'translateX(-50%)', textAlign: 'center' }} className="ttc-pulse">
         <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 8, fontFamily: 'Inter, sans-serif' }}>role para baixo</div>
         <div style={{ width: 24, height: 40, borderRadius: 12, border: '2px solid rgba(255,255,255,0.25)', margin: '0 auto', display: 'flex', justifyContent: 'center', paddingTop: 6 }}>
-          <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#8FD64A', animation: 'float 1.8s ease-in-out infinite' }} />
+          <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#FF9B72', animation: 'float 1.8s ease-in-out infinite' }} />
         </div>
       </div>
     </section>
@@ -703,7 +703,7 @@ function StatsSection() {
   const counts = [c0, c1, c2, c3]
 
   return (
-    <div ref={ref} style={{ background: 'linear-gradient(90deg, #071A0E, #0E2E1C, #071A0E)', borderTop: '1px solid rgba(143,214,74,0.15)', borderBottom: '1px solid rgba(143,214,74,0.15)', padding: '60px 24px' }}>
+    <div ref={ref} style={{ background: 'linear-gradient(90deg, #071A0E, #12283F, #071A0E)', borderTop: '1px solid rgba(255,107,44,0.15)', borderBottom: '1px solid rgba(255,107,44,0.15)', padding: '60px 24px' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
         {STATS.map((s, i) => (
           <div key={i} style={{ textAlign: 'center', padding: '20px 16px', borderRight: i < STATS.length - 1 ? '1px solid rgba(255,255,255,0.07)' : 'none' }}>
@@ -736,7 +736,7 @@ function QuemSomos() {
           <div style={{ textAlign: 'center', marginBottom: 72 }}>
             <div className="section-badge">🏛️ Nossa história</div>
             <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 'clamp(32px, 5vw, 56px)', fontWeight: 900, color: '#fff', lineHeight: 1.1, marginBottom: 20 }}>
-              Tradição que une<br /><span style={{ color: '#8FD64A' }}>gerações</span>
+              Tradição que une<br /><span style={{ color: '#FF9B72' }}>gerações</span>
             </h2>
             <div className="divider-gold" />
           </div>
@@ -747,7 +747,7 @@ function QuemSomos() {
           <AnimSection>
             <div>
               <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: 17, lineHeight: 1.85, fontFamily: 'Inter, sans-serif', fontWeight: 300, marginBottom: 24 }}>
-                O <strong style={{ color: '#8FD64A' }}>Tênis & Touring Clube</strong> é o maior e mais completo clube esportivo do Centro-Oeste brasileiro. Fundado em 1994, é referência em tênis, natação, padel e lazer familiar para milhares de cuiabanos.
+                O <strong style={{ color: '#FF9B72' }}>Tênis & Touring Clube</strong> é o maior e mais completo clube esportivo do Centro-Oeste brasileiro. Fundado em 1994, é referência em tênis, natação, padel e lazer familiar para milhares de cuiabanos.
               </p>
               <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 16, lineHeight: 1.85, fontFamily: 'Inter, sans-serif', fontWeight: 300, marginBottom: 36 }}>
                 Nossa missão é oferecer o melhor ambiente para o desenvolvimento esportivo e o convívio saudável entre famílias, com estrutura de alto padrão e eventos de nível nacional.
@@ -772,11 +772,11 @@ function QuemSomos() {
           {/* Right: timeline */}
           <AnimSection delay={150}>
             <div style={{ position: 'relative', paddingLeft: 28 }}>
-              <div style={{ position: 'absolute', left: 10, top: 0, bottom: 0, width: 2, background: 'linear-gradient(180deg, #8FD64A, #C9A656, rgba(255,255,255,0.1))' }} />
+              <div style={{ position: 'absolute', left: 10, top: 0, bottom: 0, width: 2, background: 'linear-gradient(180deg, #FF9B72, #FF6B2C, rgba(255,255,255,0.1))' }} />
               {milestones.map((m, i) => (
                 <div key={i} style={{ position: 'relative', paddingBottom: i < milestones.length - 1 ? 36 : 0, paddingLeft: 24 }}>
-                  <div style={{ position: 'absolute', left: -22, top: 4, width: 14, height: 14, borderRadius: '50%', background: i === milestones.length - 1 ? '#C9A656' : '#8FD64A', border: '2px solid #071A0E', boxShadow: `0 0 10px ${i === milestones.length - 1 ? '#C9A656' : '#8FD64A'}` }} />
-                  <div style={{ fontSize: 12, color: '#8FD64A', fontWeight: 700, letterSpacing: '.1em', fontFamily: 'Inter, sans-serif', marginBottom: 4 }}>{m.ano}</div>
+                  <div style={{ position: 'absolute', left: -22, top: 4, width: 14, height: 14, borderRadius: '50%', background: i === milestones.length - 1 ? '#FF6B2C' : '#FF9B72', border: '2px solid #071A0E', boxShadow: `0 0 10px ${i === milestones.length - 1 ? '#FF6B2C' : '#FF9B72'}` }} />
+                  <div style={{ fontSize: 12, color: '#FF9B72', fontWeight: 700, letterSpacing: '.1em', fontFamily: 'Inter, sans-serif', marginBottom: 4 }}>{m.ano}</div>
                   <div style={{ color: '#fff', fontWeight: 700, fontSize: 16, fontFamily: 'Inter, sans-serif', marginBottom: 4 }}>{m.titulo}</div>
                   <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 14, fontFamily: 'Inter, sans-serif', lineHeight: 1.5 }}>{m.desc}</div>
                 </div>
@@ -801,7 +801,7 @@ function Estrutura() {
           <div style={{ textAlign: 'center', marginBottom: 56 }}>
             <div className="section-badge">🏗️ Infraestrutura</div>
             <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 'clamp(30px, 5vw, 52px)', fontWeight: 900, color: '#fff', lineHeight: 1.1, marginBottom: 20 }}>
-              Estrutura de <span style={{ color: '#8FD64A' }}>alto padrão</span>
+              Estrutura de <span style={{ color: '#FF9B72' }}>alto padrão</span>
             </h2>
             <div className="divider-gold" />
             <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 16, fontFamily: 'Inter, sans-serif', marginTop: 20 }}>6 modalidades, infraestrutura completa para toda a família</p>
@@ -858,7 +858,7 @@ function Eventos() {
           <div style={{ textAlign: 'center', marginBottom: 72 }}>
             <div className="section-badge">📅 Agenda</div>
             <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 'clamp(30px, 5vw, 52px)', fontWeight: 900, color: '#fff', lineHeight: 1.1, marginBottom: 20 }}>
-              Eventos <span style={{ color: '#8FD64A' }}>imperdíveis</span>
+              Eventos <span style={{ color: '#FF9B72' }}>imperdíveis</span>
             </h2>
             <div className="divider-gold" />
           </div>
@@ -870,22 +870,22 @@ function Eventos() {
               <div
                 style={{
                   background: ev.destaque
-                    ? `linear-gradient(135deg, #0E2E1C, #1B4D2E)`
+                    ? `linear-gradient(135deg, #12283F, #1B4D2E)`
                     : 'rgba(255,255,255,0.04)',
                   border: ev.destaque
-                    ? '1.5px solid rgba(143,214,74,0.4)'
+                    ? '1.5px solid rgba(255,107,44,0.4)'
                     : '1px solid rgba(255,255,255,0.08)',
                   borderRadius: 24, padding: 32, height: '100%',
                   position: 'relative', overflow: 'hidden',
                   transition: 'all .4s',
-                  boxShadow: ev.destaque ? '0 20px 60px rgba(143,214,74,0.12)' : 'none',
+                  boxShadow: ev.destaque ? '0 20px 60px rgba(255,107,44,0.12)' : 'none',
                   cursor: 'default',
                 }}
                 onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-8px)'; e.currentTarget.style.boxShadow = `0 30px 70px rgba(0,0,0,0.4)` }}
-                onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = ev.destaque ? '0 20px 60px rgba(143,214,74,0.12)' : 'none' }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = ev.destaque ? '0 20px 60px rgba(255,107,44,0.12)' : 'none' }}
               >
                 {ev.destaque && (
-                  <div style={{ position: 'absolute', top: 18, right: 18, background: 'linear-gradient(135deg, #C9A656, #E8C87A)', color: '#071A0E', fontSize: 10, fontWeight: 800, letterSpacing: '.1em', padding: '4px 12px', borderRadius: 50, textTransform: 'uppercase' }}>
+                  <div style={{ position: 'absolute', top: 18, right: 18, background: 'linear-gradient(135deg, #FF6B2C, #E8C87A)', color: '#071A0E', fontSize: 10, fontWeight: 800, letterSpacing: '.1em', padding: '4px 12px', borderRadius: 50, textTransform: 'uppercase' }}>
                     DESTAQUE
                   </div>
                 )}
@@ -923,7 +923,7 @@ function Galeria() {
           <div style={{ textAlign: 'center', marginBottom: 56 }}>
             <div className="section-badge">📸 Galeria</div>
             <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 'clamp(30px, 5vw, 52px)', fontWeight: 900, color: '#fff', lineHeight: 1.1, marginBottom: 20 }}>
-              Momentos <span style={{ color: '#8FD64A' }}>inesquecíveis</span>
+              Momentos <span style={{ color: '#FF9B72' }}>inesquecíveis</span>
             </h2>
             <div className="divider-gold" />
           </div>
@@ -968,7 +968,7 @@ function Galeria() {
           <div className="modal-overlay" onClick={() => setLightbox(null)}>
             <div style={{ position: 'relative', maxWidth: 900, width: '100%' }} onClick={e => e.stopPropagation()}>
               <img src={lightbox} alt="Foto ampliada" style={{ width: '100%', borderRadius: 20, maxHeight: '80vh', objectFit: 'contain' }} />
-              <button onClick={() => setLightbox(null)} style={{ position: 'absolute', top: -16, right: -16, width: 40, height: 40, borderRadius: '50%', background: '#8FD64A', border: 'none', cursor: 'pointer', fontSize: 18, color: '#071A0E', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+              <button onClick={() => setLightbox(null)} style={{ position: 'absolute', top: -16, right: -16, width: 40, height: 40, borderRadius: '50%', background: '#FF9B72', border: 'none', cursor: 'pointer', fontSize: 18, color: '#071A0E', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
             </div>
           </div>
         )}
@@ -1021,7 +1021,7 @@ function CarteirinhaDigital() {
   }
 
   const statusColor = {
-    ativo: '#8FD64A',
+    ativo: '#FF9B72',
     inadimplente: '#EF5350',
     suspenso: '#FFB74D',
     inativo: '#9E9E9E',
@@ -1034,7 +1034,7 @@ function CarteirinhaDigital() {
           <div style={{ textAlign: 'center', marginBottom: 60 }}>
             <div className="section-badge">🪪 Sócios</div>
             <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 'clamp(30px, 5vw, 52px)', fontWeight: 900, color: '#fff', lineHeight: 1.1, marginBottom: 20 }}>
-              Carteirinha <span style={{ color: '#8FD64A' }}>Digital</span>
+              Carteirinha <span style={{ color: '#FF9B72' }}>Digital</span>
             </h2>
             <div className="divider-gold" />
             <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 16, fontFamily: 'Inter, sans-serif', marginTop: 20, maxWidth: 520, margin: '20px auto 0' }}>
@@ -1048,25 +1048,25 @@ function CarteirinhaDigital() {
             {/* Preview card mockup */}
             <div style={{ perspective: 1000, width: '100%', maxWidth: 420 }}>
               <div style={{
-                background: 'linear-gradient(135deg, #071A0E 0%, #0E2E1C 50%, #1B4D2E 100%)',
-                border: '1.5px solid rgba(143,214,74,0.3)',
+                background: 'linear-gradient(135deg, #071A0E 0%, #12283F 50%, #1B4D2E 100%)',
+                border: '1.5px solid rgba(255,107,44,0.3)',
                 borderRadius: 24, padding: 32,
                 position: 'relative', overflow: 'hidden',
-                boxShadow: '0 30px 80px rgba(0,0,0,0.6), 0 0 30px rgba(143,214,74,0.1)',
+                boxShadow: '0 30px 80px rgba(0,0,0,0.6), 0 0 30px rgba(255,107,44,0.1)',
                 animation: 'glowPulse 4s ease-in-out infinite',
               }}>
                 {/* BG pattern */}
-                <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 80% 20%, rgba(143,214,74,0.08), transparent 50%)', pointerEvents: 'none' }} />
-                <div style={{ position: 'absolute', bottom: -30, left: -30, width: 180, height: 180, borderRadius: '50%', border: '1px solid rgba(201,166,86,0.1)', pointerEvents: 'none' }} />
+                <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 80% 20%, rgba(255,107,44,0.08), transparent 50%)', pointerEvents: 'none' }} />
+                <div style={{ position: 'absolute', bottom: -30, left: -30, width: 180, height: 180, borderRadius: '50%', border: '1px solid rgba(255,107,44,0.1)', pointerEvents: 'none' }} />
 
                 <div style={{ position: 'relative', zIndex: 2 }}>
                   {/* Header */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
                     <div>
-                      <div style={{ fontSize: 11, color: '#8FD64A', fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', fontFamily: 'Inter, sans-serif' }}>Tênis & Touring Clube</div>
+                      <div style={{ fontSize: 11, color: '#FF9B72', fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', fontFamily: 'Inter, sans-serif' }}>Tênis & Touring Clube</div>
                       <div style={{ fontSize: 22, color: '#fff', fontFamily: "'Playfair Display', serif", fontWeight: 700, marginTop: 4 }}>Carteirinha Sócio</div>
                     </div>
-                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg, #8FD64A, #4CAF50)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, color: '#071A0E', fontFamily: 'Inter, sans-serif', flexShrink: 0 }}>TTC</div>
+                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg, #FF9B72, #4CAF50)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, color: '#071A0E', fontFamily: 'Inter, sans-serif', flexShrink: 0 }}>TTC</div>
                   </div>
 
                   {/* Body */}
@@ -1081,10 +1081,10 @@ function CarteirinhaDigital() {
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', fontFamily: 'Inter, sans-serif', marginBottom: 4 }}>Nome do sócio</div>
                       <div style={{ fontSize: 18, color: '#fff', fontFamily: 'Inter, sans-serif', fontWeight: 700, marginBottom: 8 }}>João da Silva</div>
-                      <div style={{ fontSize: 12, color: '#C9A656', fontFamily: 'Inter, sans-serif', fontWeight: 600, marginBottom: 6 }}>Plano Familiar</div>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(143,214,74,0.12)', border: '1px solid rgba(143,214,74,0.3)', borderRadius: 50, padding: '3px 12px' }}>
-                        <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#8FD64A', animation: 'pulse 2s infinite' }} />
-                        <span style={{ fontSize: 11, color: '#8FD64A', fontFamily: 'Inter, sans-serif', fontWeight: 600 }}>ATIVO</span>
+                      <div style={{ fontSize: 12, color: '#FF6B2C', fontFamily: 'Inter, sans-serif', fontWeight: 600, marginBottom: 6 }}>Plano Familiar</div>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,107,44,0.12)', border: '1px solid rgba(255,107,44,0.3)', borderRadius: 50, padding: '3px 12px' }}>
+                        <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#FF9B72', animation: 'pulse 2s infinite' }} />
+                        <span style={{ fontSize: 11, color: '#FF9B72', fontFamily: 'Inter, sans-serif', fontWeight: 600 }}>ATIVO</span>
                       </div>
                     </div>
                   </div>
@@ -1135,10 +1135,10 @@ function CarteirinhaDigital() {
                     {/* Header */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
                       <div>
-                        <div style={{ fontSize: 11, color: '#8FD64A', fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', fontFamily: 'Inter, sans-serif' }}>Tênis & Touring Clube</div>
+                        <div style={{ fontSize: 11, color: '#FF9B72', fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', fontFamily: 'Inter, sans-serif' }}>Tênis & Touring Clube</div>
                         <div style={{ fontSize: 24, color: '#fff', fontFamily: "'Playfair Display', serif", fontWeight: 700, marginTop: 4 }}>Carteirinha Oficial</div>
                       </div>
-                      <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg, #8FD64A, #4CAF50)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 900, color: '#071A0E', fontFamily: 'Inter, sans-serif', flexShrink: 0 }}>TTC</div>
+                      <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg, #FF9B72, #4CAF50)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 900, color: '#071A0E', fontFamily: 'Inter, sans-serif', flexShrink: 0 }}>TTC</div>
                     </div>
 
                     {/* Body */}
@@ -1154,10 +1154,10 @@ function CarteirinhaDigital() {
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', fontFamily: 'Inter, sans-serif', marginBottom: 2 }}>Sócio</div>
                         <div style={{ fontSize: 20, color: '#fff', fontFamily: 'Inter, sans-serif', fontWeight: 800, marginBottom: 8, lineHeight: 1.2 }}>{data.nome}</div>
-                        <div style={{ fontSize: 13, color: '#C9A656', fontFamily: 'Inter, sans-serif', fontWeight: 600, marginBottom: 10 }}>{data.plano}</div>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: `${statusColor[data.status] || '#8FD64A'}15`, border: `1px solid ${statusColor[data.status] || '#8FD64A'}40`, borderRadius: 50, padding: '4px 14px' }}>
-                          <div style={{ width: 7, height: 7, borderRadius: '50%', background: statusColor[data.status] || '#8FD64A', animation: 'pulse 2s infinite' }} />
-                          <span style={{ fontSize: 11, color: statusColor[data.status] || '#8FD64A', fontFamily: 'Inter, sans-serif', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em' }}>{data.status}</span>
+                        <div style={{ fontSize: 13, color: '#FF6B2C', fontFamily: 'Inter, sans-serif', fontWeight: 600, marginBottom: 10 }}>{data.plano}</div>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: `${statusColor[data.status] || '#FF9B72'}15`, border: `1px solid ${statusColor[data.status] || '#FF9B72'}40`, borderRadius: 50, padding: '4px 14px' }}>
+                          <div style={{ width: 7, height: 7, borderRadius: '50%', background: statusColor[data.status] || '#FF9B72', animation: 'pulse 2s infinite' }} />
+                          <span style={{ fontSize: 11, color: statusColor[data.status] || '#FF9B72', fontFamily: 'Inter, sans-serif', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em' }}>{data.status}</span>
                         </div>
                       </div>
                     </div>
@@ -1211,15 +1211,15 @@ function SejaSocio() {
   return (
     <section id="seja-socio" style={{ background: `linear-gradient(160deg, ${C.forest} 0%, ${C.deep} 100%)`, padding: '100px 24px', position: 'relative', overflow: 'hidden' }}>
       {/* Deco */}
-      <div style={{ position: 'absolute', top: -100, right: -100, width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle, rgba(143,214,74,0.06), transparent 70%)', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', bottom: -60, left: -60, width: 350, height: 350, borderRadius: '50%', background: 'radial-gradient(circle, rgba(201,166,86,0.06), transparent 70%)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', top: -100, right: -100, width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,107,44,0.06), transparent 70%)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', bottom: -60, left: -60, width: 350, height: 350, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,107,44,0.06), transparent 70%)', pointerEvents: 'none' }} />
 
       <div style={{ maxWidth: 1200, margin: '0 auto', position: 'relative', zIndex: 2 }}>
         <AnimSection>
           <div style={{ textAlign: 'center', marginBottom: 72 }}>
             <div className="section-badge">🏅 Associação</div>
             <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 'clamp(32px, 5vw, 56px)', fontWeight: 900, color: '#fff', lineHeight: 1.1, marginBottom: 20 }}>
-              Faça parte do <span style={{ color: '#8FD64A' }}>melhor clube</span><br />do Centro-Oeste
+              Faça parte do <span style={{ color: '#FF9B72' }}>melhor clube</span><br />do Centro-Oeste
             </h2>
             <div className="divider-gold" />
             <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 16, fontFamily: 'Inter, sans-serif', marginTop: 24, maxWidth: 540, margin: '24px auto 0' }}>
@@ -1235,29 +1235,29 @@ function SejaSocio() {
                 className={`plano-card${p.destaque ? ' destaque' : ''}`}
                 style={{
                   background: p.cor,
-                  border: p.border || (p.destaque ? '1.5px solid rgba(143,214,74,0.4)' : '1px solid rgba(255,255,255,0.08)'),
+                  border: p.border || (p.destaque ? '1.5px solid rgba(255,107,44,0.4)' : '1px solid rgba(255,255,255,0.08)'),
                   height: '100%',
                 }}
               >
                 {p.badge && (
-                  <div style={{ background: 'linear-gradient(135deg, #8FD64A, #4CAF50)', color: '#071A0E', fontSize: 11, fontWeight: 800, letterSpacing: '.08em', padding: '5px 16px', borderRadius: 50, display: 'inline-block', marginBottom: 20, textTransform: 'uppercase' }}>
+                  <div style={{ background: 'linear-gradient(135deg, #FF9B72, #4CAF50)', color: '#071A0E', fontSize: 11, fontWeight: 800, letterSpacing: '.08em', padding: '5px 16px', borderRadius: 50, display: 'inline-block', marginBottom: 20, textTransform: 'uppercase' }}>
                     {p.badge}
                   </div>
                 )}
                 {p.vip && (
-                  <div style={{ background: 'linear-gradient(135deg, #C9A656, #E8C87A)', color: '#071A0E', fontSize: 11, fontWeight: 800, letterSpacing: '.08em', padding: '5px 16px', borderRadius: 50, display: 'inline-block', marginBottom: 20, textTransform: 'uppercase' }}>
+                  <div style={{ background: 'linear-gradient(135deg, #FF6B2C, #E8C87A)', color: '#071A0E', fontSize: 11, fontWeight: 800, letterSpacing: '.08em', padding: '5px 16px', borderRadius: 50, display: 'inline-block', marginBottom: 20, textTransform: 'uppercase' }}>
                     👑 VIP Premium
                   </div>
                 )}
-                <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, fontWeight: 900, color: p.vip ? '#C9A656' : '#fff', marginBottom: 8 }}>{p.nome}</div>
+                <div style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, fontWeight: 900, color: p.vip ? '#FF6B2C' : '#fff', marginBottom: 8 }}>{p.nome}</div>
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, marginBottom: 28 }}>
-                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 42, fontWeight: 900, color: p.vip ? '#E8C87A' : (p.destaque ? '#8FD64A' : '#fff'), lineHeight: 1 }}>{p.preco}</span>
+                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 42, fontWeight: 900, color: p.vip ? '#E8C87A' : (p.destaque ? '#FF9B72' : '#fff'), lineHeight: 1 }}>{p.preco}</span>
                   <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14, fontFamily: 'Inter, sans-serif', marginBottom: 6 }}>{p.periodo}</span>
                 </div>
                 <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 20, marginBottom: 28 }}>
                   {p.itens.map((item, j) => (
                     <div key={j} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                      <span style={{ color: p.vip ? '#C9A656' : '#8FD64A', fontSize: 14, flexShrink: 0 }}>✓</span>
+                      <span style={{ color: p.vip ? '#FF6B2C' : '#FF9B72', fontSize: 14, flexShrink: 0 }}>✓</span>
                       <span style={{ color: 'rgba(255,255,255,0.75)', fontSize: 14, fontFamily: 'Inter, sans-serif' }}>{item}</span>
                     </div>
                   ))}
@@ -1277,7 +1277,7 @@ function SejaSocio() {
         </div>
 
         <AnimSection delay={300}>
-          <div style={{ textAlign: 'center', marginTop: 48, padding: '28px', background: 'rgba(143,214,74,0.06)', borderRadius: 20, border: '1px solid rgba(143,214,74,0.15)', maxWidth: 600, margin: '48px auto 0' }}>
+          <div style={{ textAlign: 'center', marginTop: 48, padding: '28px', background: 'rgba(255,107,44,0.06)', borderRadius: 20, border: '1px solid rgba(255,107,44,0.15)', maxWidth: 600, margin: '48px auto 0' }}>
             <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 15, fontFamily: 'Inter, sans-serif', lineHeight: 1.7 }}>
               💬 Dúvidas? Fale com nossa equipe de associação via WhatsApp e encontre o plano perfeito para você.
             </p>
@@ -1296,7 +1296,7 @@ function Contato() {
   const canais = [
     { icon: '📱', label: 'WhatsApp', valor: '(65) 9 9999-9999', href: 'https://wa.me/5565999999999', cor: '#25D366' },
     { icon: '📞', label: 'Secretaria', valor: '(65) 3333-3333', href: 'tel:+556533333333', cor: '#4FC3F7' },
-    { icon: '📧', label: 'E-mail', valor: 'contato@ttcuiaba.com.br', href: 'mailto:contato@ttcuiaba.com.br', cor: '#8FD64A' },
+    { icon: '📧', label: 'E-mail', valor: 'contato@ttcuiaba.com.br', href: 'mailto:contato@ttcuiaba.com.br', cor: '#FF9B72' },
     { icon: '📸', label: 'Instagram', valor: '@ttcuiaba', href: 'https://instagram.com/ttcuiaba', cor: '#E1306C' },
   ]
 
@@ -1307,7 +1307,7 @@ function Contato() {
           <div style={{ textAlign: 'center', marginBottom: 72 }}>
             <div className="section-badge">📍 Localização</div>
             <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 'clamp(30px, 5vw, 52px)', fontWeight: 900, color: '#fff', lineHeight: 1.1, marginBottom: 20 }}>
-              Venha nos <span style={{ color: '#8FD64A' }}>visitar</span>
+              Venha nos <span style={{ color: '#FF9B72' }}>visitar</span>
             </h2>
             <div className="divider-gold" />
           </div>
@@ -1339,7 +1339,7 @@ function Contato() {
               </div>
 
               <div style={{ marginTop: 32, padding: 20, background: 'rgba(255,255,255,0.03)', borderRadius: 16, border: '1px solid rgba(255,255,255,0.07)' }}>
-                <div style={{ fontSize: 12, color: '#8FD64A', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', fontFamily: 'Inter, sans-serif', marginBottom: 8 }}>📍 Endereço</div>
+                <div style={{ fontSize: 12, color: '#FF9B72', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', fontFamily: 'Inter, sans-serif', marginBottom: 8 }}>📍 Endereço</div>
                 <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: 15, fontFamily: 'Inter, sans-serif', lineHeight: 1.6 }}>
                   Av. Miguel Sutil, 8.000<br />Jardim das Américas, Cuiabá - MT<br />CEP: 78070-000
                 </div>
@@ -1374,9 +1374,9 @@ function Contato() {
               <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, fontFamily: 'Inter, sans-serif' }}>© 2026 · Cuiabá, MT · Todos os direitos reservados</div>
             </div>
             <div style={{ display: 'flex', gap: 16 }}>
-              <Link to="/" style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontFamily: 'Inter, sans-serif', textDecoration: 'none', transition: 'color .2s' }} onMouseEnter={e => e.target.style.color = '#8FD64A'} onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.5)'}>Home</Link>
-              <Link to="/inscricoes" style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontFamily: 'Inter, sans-serif', textDecoration: 'none', transition: 'color .2s' }} onMouseEnter={e => e.target.style.color = '#8FD64A'} onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.5)'}>Inscrições</Link>
-              <Link to="/login" style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontFamily: 'Inter, sans-serif', textDecoration: 'none', transition: 'color .2s' }} onMouseEnter={e => e.target.style.color = '#8FD64A'} onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.5)'}>Login</Link>
+              <Link to="/" style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontFamily: 'Inter, sans-serif', textDecoration: 'none', transition: 'color .2s' }} onMouseEnter={e => e.target.style.color = '#FF9B72'} onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.5)'}>Home</Link>
+              <Link to="/inscricoes" style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontFamily: 'Inter, sans-serif', textDecoration: 'none', transition: 'color .2s' }} onMouseEnter={e => e.target.style.color = '#FF9B72'} onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.5)'}>Inscrições</Link>
+              <Link to="/login" style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontFamily: 'Inter, sans-serif', textDecoration: 'none', transition: 'color .2s' }} onMouseEnter={e => e.target.style.color = '#FF9B72'} onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.5)'}>Login</Link>
             </div>
           </div>
         </AnimSection>

@@ -34,9 +34,9 @@ function exportCSV(lista) {
 }
 
 const CATEGORIAS = [
-  { value: 'aviso',     label: 'Aviso',     color: '#C9A656' },
-  { value: 'resultado', label: 'Resultado', color: '#5FB335' },
-  { value: 'novidade',  label: 'Novidade',  color: '#8FD64A' },
+  { value: 'aviso',     label: 'Aviso',     color: '#FF6B2C' },
+  { value: 'resultado', label: 'Resultado', color: '#FF6B2C' },
+  { value: 'novidade',  label: 'Novidade',  color: '#FF9B72' },
 ]
 
 const EMPTY = { titulo: '', resumo: '', conteudo: '', categoria: 'aviso', publicado: false }
@@ -60,8 +60,8 @@ function StatusBadge({ publicado }) {
     <span style={{
       display: 'inline-block', padding: '0.18rem 0.55rem',
       borderRadius: 12, fontSize: '0.72rem', fontWeight: 700,
-      background: publicado ? 'rgba(95,179,53,.15)' : 'rgba(136,136,136,.15)',
-      color: publicado ? '#5FB335' : '#888',
+      background: publicado ? 'rgba(255,107,44,.15)' : 'rgba(136,136,136,.15)',
+      color: publicado ? '#FF6B2C' : '#888',
     }}>{publicado ? 'Publicado' : 'Rascunho'}</span>
   )
 }
@@ -206,10 +206,10 @@ export default function Noticias() {
       {/* KPI Cards */}
       {!loading && noticias.length > 0 && (
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-          <KpiCard label="Total" value={kpis.total} color="#5FB335" icon="📰" sub="notícias cadastradas" />
-          <KpiCard label="Publicadas" value={kpis.publicadas} color="#8FD64A" icon="✅" sub="visíveis ao público" />
-          <KpiCard label="Rascunhos" value={kpis.rascunhos} color="#C9A656" icon="✏️" sub="não publicadas" />
-          <KpiCard label="Categorias" value={kpis.categorias} color="#5FB335" icon="🏷️" sub="tipos distintos" />
+          <KpiCard label="Total" value={kpis.total} color="#FF6B2C" icon="📰" sub="notícias cadastradas" />
+          <KpiCard label="Publicadas" value={kpis.publicadas} color="#FF9B72" icon="✅" sub="visíveis ao público" />
+          <KpiCard label="Rascunhos" value={kpis.rascunhos} color="#FF6B2C" icon="✏️" sub="não publicadas" />
+          <KpiCard label="Categorias" value={kpis.categorias} color="#FF6B2C" icon="🏷️" sub="tipos distintos" />
         </div>
       )}
 

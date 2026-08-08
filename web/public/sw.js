@@ -1,4 +1,4 @@
-// SetPoint PWA Service Worker — v1.0.0
+// KYTTO Clube PWA Service Worker — v1.0.0
 // Estratégia: Cache-First para assets estáticos, Network-First para /api/
 
 const CACHE_NAME = 'kytto-v3'
@@ -139,7 +139,7 @@ async function staleWhileRevalidate(request, cacheName) {
 // ── Push notifications (futuro) ───────────────────────────────────────────────
 self.addEventListener('push', event => {
   const data = event.data?.json() || {}
-  const title = data.title || 'SetPoint'
+  const title = data.title || 'Kytto Clube'
   const options = {
     body: data.body || 'Nova notificação',
     icon: '/icon-192.png',

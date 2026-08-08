@@ -5,7 +5,7 @@ import { useAuth } from '../lib/auth'
 
 const COR = {
   inscricao: '#27ae60', pagamento: '#e05c5c',
-  reserva: '#C9A656', contato: '#8FD64A', estoque: '#C9A656',
+  reserva: '#FF6B2C', contato: '#FF9B72', estoque: '#FF6B2C',
 }
 
 function tempoRelativo(iso) {
@@ -67,7 +67,7 @@ export default function NotifBell() {
       <button onClick={handleOpen} style={{
         position: 'relative', width: 38, height: 38, borderRadius: '50%',
         border: open ? '1px solid var(--green)' : '1px solid var(--line)',
-        background: open ? 'rgba(95,179,53,.12)' : 'var(--surface)',
+        background: open ? 'rgba(255,107,44,.12)' : 'var(--surface)',
         cursor: 'pointer', fontSize: 17, display: 'flex',
         alignItems: 'center', justifyContent: 'center',
         transition: 'all .15s', color: open ? 'var(--green)' : 'var(--muted)',
@@ -121,11 +121,11 @@ export default function NotifBell() {
               cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'flex-start',
               transition: 'background .12s',
             }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(95,179,53,.06)'}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,107,44,.06)'}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             >
               <div style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
-                background: `${COR[n.tipo] || '#5FB335'}20`,
+                background: `${COR[n.tipo] || '#FF6B2C'}20`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
                 {n.icon}
               </div>

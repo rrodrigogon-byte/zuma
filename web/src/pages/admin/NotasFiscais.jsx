@@ -8,9 +8,9 @@ import { api, fmtR, fmtDate } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
 const STATUS = {
-  autorizada:  { label: 'Autorizada',  cor: '#5FB335', bg: 'rgba(95,179,53,.12)' },
+  autorizada:  { label: 'Autorizada',  cor: '#FF6B2C', bg: 'rgba(255,107,44,.12)' },
   processando: { label: 'Processando', cor: '#3498db', bg: 'rgba(52,152,219,.12)' },
-  contingencia:{ label: 'Contingência', cor: '#C9A656', bg: 'rgba(201,166,86,.12)' },
+  contingencia:{ label: 'Contingência', cor: '#FF6B2C', bg: 'rgba(255,107,44,.12)' },
   rejeitada:   { label: 'Rejeitada',   cor: '#e05c5c', bg: 'rgba(224,92,92,.12)' },
   cancelada:   { label: 'Cancelada',   cor: '#8a8a8a', bg: 'rgba(138,138,138,.12)' },
 }
@@ -114,7 +114,7 @@ export default function NotasFiscais() {
                   <tr key={n.id} style={{ borderBottom: '1px solid var(--line)' }}>
                     <td style={{ padding: '8px 6px', fontWeight: 700 }}>{n.numero}/{n.serie}{n.simulado ? ' 🧪' : ''}</td>
                     <td style={{ padding: '8px 6px', color: 'var(--muted)' }}>{fmtDate ? fmtDate(n.criadaEm) : (n.criadaEm || '').slice(0, 16).replace('T', ' ')}</td>
-                    <td style={{ padding: '8px 6px', fontWeight: 700, color: 'var(--gold,#C9A656)' }}>{fmtR(n.valorTotal || 0)}</td>
+                    <td style={{ padding: '8px 6px', fontWeight: 700, color: 'var(--gold,#FF6B2C)' }}>{fmtR(n.valorTotal || 0)}</td>
                     <td style={{ padding: '8px 6px' }}>{n.cpfConsumidor || '—'}</td>
                     <td style={{ padding: '8px 6px', fontFamily: 'monospace', fontSize: 11, color: 'var(--muted)' }}>{n.chaveAcesso ? n.chaveAcesso.replace(/(.{4})/g, '$1 ').trim() : '—'}</td>
                     <td style={{ padding: '8px 6px' }}>
@@ -126,7 +126,7 @@ export default function NotasFiscais() {
                         <button className="btn" disabled={busy === n.id} onClick={() => cancelar(n)} style={{ fontSize: 11, color: '#e05c5c', borderColor: '#5a2a2a' }}>Cancelar</button>
                       )}
                       {(n.status === 'rejeitada' || n.status === 'contingencia') && (
-                        <button className="btn" disabled={busy === n.id} onClick={() => reemitir(n)} style={{ fontSize: 11, color: '#8FD64A' }}>Reemitir</button>
+                        <button className="btn" disabled={busy === n.id} onClick={() => reemitir(n)} style={{ fontSize: 11, color: '#FF9B72' }}>Reemitir</button>
                       )}
                     </td>
                   </tr>

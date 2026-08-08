@@ -5,11 +5,11 @@ import { useAuth } from '../../lib/auth'
 import { useToast } from '../../hooks/useToast'
 
 const C = {
-  bg: '#091a0f',
-  green: '#5FB335',
-  lime: '#8FD64A',
-  cream: '#F4F6EF',
-  gold: '#C9A656',
+  bg: '#12283F',
+  green: '#FF6B2C',
+  lime: '#FF9B72',
+  cream: '#FFF4EC',
+  gold: '#FF6B2C',
   card: '#132b1b',
   cardBorder: '#1e3d28',
   inputBg: '#0e2216',
@@ -56,7 +56,7 @@ function Spinner() {
   return (
     <span style={{
       width: 16, height: 16,
-      border: '2.5px solid rgba(95,179,53,.3)',
+      border: '2.5px solid rgba(255,107,44,.3)',
       borderTopColor: C.green,
       borderRadius: '50%',
       display: 'inline-block',
@@ -86,14 +86,14 @@ function KpiCard({ label, value, icon, color = C.green, sub }) {
 
 function StatusBadge({ status }) {
   const map = {
-    confirmado:        { bg: 'rgba(95,179,53,.15)',  color: C.green,  label: 'Confirmado' },
-    aprovada:          { bg: 'rgba(95,179,53,.15)',  color: C.green,  label: 'Aprovada' },
-    validada:          { bg: 'rgba(95,179,53,.15)',  color: C.green,  label: 'Paga' },
-    pendente:          { bg: 'rgba(201,166,86,.15)', color: C.gold,   label: 'Pendente' },
+    confirmado:        { bg: 'rgba(255,107,44,.15)',  color: C.green,  label: 'Confirmado' },
+    aprovada:          { bg: 'rgba(255,107,44,.15)',  color: C.green,  label: 'Aprovada' },
+    validada:          { bg: 'rgba(255,107,44,.15)',  color: C.green,  label: 'Paga' },
+    pendente:          { bg: 'rgba(255,107,44,.15)', color: C.gold,   label: 'Pendente' },
     cancelado:         { bg: 'rgba(248,113,113,.15)',color: C.red,    label: 'Cancelado' },
     cancelada:         { bg: 'rgba(248,113,113,.15)',color: C.red,    label: 'Cancelada' },
     concluido:         { bg: 'rgba(96,165,250,.15)', color: C.blue,   label: 'Concluído' },
-    'dupla-confirmado':{ bg: 'rgba(95,179,53,.15)',  color: C.green,  label: '✓ Confirmado' },
+    'dupla-confirmado':{ bg: 'rgba(255,107,44,.15)',  color: C.green,  label: '✓ Confirmado' },
     recusada:          { bg: 'rgba(248,113,113,.15)',color: C.red,    label: 'Recusada' },
   }
   const s = map[(status || '').toLowerCase()] || { bg: 'rgba(122,158,133,.15)', color: C.muted, label: status || '—' }
@@ -372,8 +372,8 @@ function TabJogos({ jogos, onConfirmar, confirmando }) {
                         onClick={() => onConfirmar(j.id, 'confirmar')}
                         disabled={confirmando === j.id}
                         style={{
-                          padding: '7px 16px', background: 'rgba(95,179,53,.15)',
-                          border: '1px solid rgba(95,179,53,.3)', borderRadius: 8,
+                          padding: '7px 16px', background: 'rgba(255,107,44,.15)',
+                          border: '1px solid rgba(255,107,44,.3)', borderRadius: 8,
                           color: C.green, fontSize: 12, fontWeight: 700, cursor: 'pointer',
                           display: 'flex', alignItems: 'center', gap: 6,
                         }}
@@ -427,8 +427,8 @@ function MovimentoBadge({ valor }) {
       display: 'inline-flex', alignItems: 'center', gap: 3,
       fontSize: 11, fontWeight: 800,
       color: subiu ? C.green : C.red,
-      background: subiu ? 'rgba(95,179,53,.12)' : 'rgba(231,76,60,.12)',
-      border: `1px solid ${subiu ? 'rgba(95,179,53,.3)' : 'rgba(231,76,60,.3)'}`,
+      background: subiu ? 'rgba(255,107,44,.12)' : 'rgba(231,76,60,.12)',
+      border: `1px solid ${subiu ? 'rgba(255,107,44,.3)' : 'rgba(231,76,60,.3)'}`,
       borderRadius: 6, padding: '2px 7px',
     }}>
       {subiu ? '▲' : '▼'} {Math.abs(valor)} {subiu ? 'posições' : 'posições'}
@@ -463,8 +463,8 @@ function TabRanking({ ranking, rankingGlobal, nomAtleta }) {
         ...card,
         padding: '20px 24px',
         marginBottom: 18,
-        background: 'linear-gradient(135deg, rgba(201,166,86,.08) 0%, rgba(95,179,53,.06) 100%)',
-        border: '1px solid rgba(201,166,86,.25)',
+        background: 'linear-gradient(135deg, rgba(255,107,44,.08) 0%, rgba(255,107,44,.06) 100%)',
+        border: '1px solid rgba(255,107,44,.25)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
       }}>
         <div>
@@ -565,7 +565,7 @@ function TabRanking({ ranking, rankingGlobal, nomAtleta }) {
                       <td style={{ padding: '9px 10px' }}>
                         <span style={{
                           fontSize: 11, fontWeight: 700, color: corRes,
-                          background: venceu ? 'rgba(95,179,53,.1)' : perdeu ? 'rgba(231,76,60,.1)' : 'rgba(255,255,255,.06)',
+                          background: venceu ? 'rgba(255,107,44,.1)' : perdeu ? 'rgba(231,76,60,.1)' : 'rgba(255,255,255,.06)',
                           borderRadius: 5, padding: '2px 8px',
                         }}>
                           {venceu ? 'Vitória' : perdeu ? 'Derrota' : pa.placar || '—'}
@@ -628,8 +628,8 @@ function TabRanking({ ranking, rankingGlobal, nomAtleta }) {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {titulos.map((t, i) => (
               <div key={i} style={{
-                background: 'rgba(201,166,86,.12)',
-                border: '1px solid rgba(201,166,86,.3)',
+                background: 'rgba(255,107,44,.12)',
+                border: '1px solid rgba(255,107,44,.3)',
                 borderRadius: 12,
                 padding: '10px 16px',
                 textAlign: 'center',
@@ -655,14 +655,14 @@ function TabRanking({ ranking, rankingGlobal, nomAtleta }) {
                 <div key={i} style={{
                   display: 'flex', alignItems: 'center', gap: 12,
                   padding: '10px 14px',
-                  background: isMine ? 'rgba(95,179,53,.1)' : 'rgba(255,255,255,.03)',
-                  border: `1px solid ${isMine ? 'rgba(95,179,53,.3)' : C.cardBorder}`,
+                  background: isMine ? 'rgba(255,107,44,.1)' : 'rgba(255,255,255,.03)',
+                  border: `1px solid ${isMine ? 'rgba(255,107,44,.3)' : C.cardBorder}`,
                   borderRadius: 9,
                 }}>
                   {/* Posição */}
                   <div style={{
                     width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-                    background: i === 0 ? 'rgba(201,166,86,.2)' : i === 1 ? 'rgba(200,200,200,.15)' : i === 2 ? 'rgba(180,100,40,.15)' : 'rgba(255,255,255,.06)',
+                    background: i === 0 ? 'rgba(255,107,44,.2)' : i === 1 ? 'rgba(200,200,200,.15)' : i === 2 ? 'rgba(180,100,40,.15)' : 'rgba(255,255,255,.06)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: 12, fontWeight: 800,
                     color: i === 0 ? C.gold : i === 1 ? '#ccc' : i === 2 ? '#cd7f32' : C.muted,
@@ -816,8 +816,8 @@ function TabChaves({ chaves }) {
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
               padding: '9px 18px',
-              background: 'rgba(95,179,53,.1)',
-              border: '1px solid rgba(95,179,53,.25)',
+              background: 'rgba(255,107,44,.1)',
+              border: '1px solid rgba(255,107,44,.25)',
               borderRadius: 9, color: C.green,
               fontSize: 13, fontWeight: 700, textDecoration: 'none',
               transition: 'background 0.15s',
@@ -969,7 +969,7 @@ function TabPerfil({ me, onSaved }) {
           background: `linear-gradient(135deg, ${C.green}, ${C.lime})`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 30, fontWeight: 900, color: '#fff', flexShrink: 0,
-          boxShadow: '0 4px 20px rgba(95,179,53,.35)',
+          boxShadow: '0 4px 20px rgba(255,107,44,.35)',
         }}>
           {(me?.nome || '?').charAt(0).toUpperCase()}
         </div>
@@ -979,7 +979,7 @@ function TabPerfil({ me, onSaved }) {
           <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
             <span style={{
               padding: '3px 12px', borderRadius: 20, fontSize: 11, fontWeight: 700,
-              background: 'rgba(95,179,53,.15)', color: C.green,
+              background: 'rgba(255,107,44,.15)', color: C.green,
             }}>
               🎾 Atleta
             </span>
@@ -1161,7 +1161,7 @@ export default function MeuPainel() {
         height: '70vh', gap: 16,
       }}>
         <div style={{
-          width: 40, height: 40, border: '4px solid rgba(95,179,53,.2)',
+          width: 40, height: 40, border: '4px solid rgba(255,107,44,.2)',
           borderTopColor: C.green, borderRadius: '50%', animation: 'spin 0.7s linear infinite',
         }} />
         <span style={{ color: C.muted, fontSize: 14 }}>Carregando seu painel…</span>
@@ -1191,7 +1191,7 @@ export default function MeuPainel() {
           background: `linear-gradient(135deg, ${C.green}, ${C.lime})`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 26, fontWeight: 900, color: '#fff', flexShrink: 0,
-          boxShadow: '0 0 24px rgba(95,179,53,.4)',
+          boxShadow: '0 0 24px rgba(255,107,44,.4)',
         }}>
           {displayName.charAt(0).toUpperCase()}
         </div>
@@ -1203,14 +1203,14 @@ export default function MeuPainel() {
             Olá, {displayName.split(' ')[0]}! 🎾
           </div>
           <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
-            4ª Agro Open de Tênis · SetPoint
+            4ª Agro Open de Tênis · Kytto Clube
           </div>
         </div>
         {/* Pill de posição */}
         {ranking?.posGeral && (
           <div style={{
-            background: 'rgba(201,166,86,.15)',
-            border: '1px solid rgba(201,166,86,.3)',
+            background: 'rgba(255,107,44,.15)',
+            border: '1px solid rgba(255,107,44,.3)',
             borderRadius: 12, padding: '10px 18px', textAlign: 'center',
           }}>
             <div style={{ fontSize: 22, fontWeight: 900, color: C.gold }}>#{ranking.posGeral}</div>

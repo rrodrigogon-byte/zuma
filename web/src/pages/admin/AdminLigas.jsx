@@ -27,7 +27,7 @@ function Sb({ status }) {
 
 function Spinner() {
   return <span style={{ display:'inline-block', width:14, height:14,
-    border:'2px solid rgba(95,179,53,.3)', borderTopColor:'#5FB335',
+    border:'2px solid rgba(255,107,44,.3)', borderTopColor:'#FF6B2C',
     borderRadius:'50%', animation:'spin .7s linear infinite' }} />
 }
 
@@ -84,8 +84,8 @@ function ModalLiga({ liga, onClose, onSave }) {
             placeholder="Descrição breve da liga (opcional)" />
         </div>
 
-        <div style={{ padding: '12px 14px', background: 'rgba(95,179,53,.06)',
-          border: '1px solid rgba(95,179,53,.15)', borderRadius: 10 }}>
+        <div style={{ padding: '12px 14px', background: 'rgba(255,107,44,.06)',
+          border: '1px solid rgba(255,107,44,.15)', borderRadius: 10 }}>
           <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--muted)',
             textTransform: 'uppercase', marginBottom: 10 }}>⚙️ Pontuação</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
@@ -150,7 +150,7 @@ function ModalResultado({ ligaId, rodadaIdx, jogo, onClose, onSave }) {
     <Modal onClose={onClose} title="🎾 Registrar Resultado">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ textAlign: 'center', padding: '10px 16px',
-          background: 'rgba(95,179,53,.07)', borderRadius: 10 }}>
+          background: 'rgba(255,107,44,.07)', borderRadius: 10 }}>
           <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--cream)' }}>
             {jogo.a} <span style={{ color: 'var(--muted)', fontWeight: 400 }}>vs</span> {jogo.b}
           </span>
@@ -162,7 +162,7 @@ function ModalResultado({ ligaId, rodadaIdx, jogo, onClose, onSave }) {
           <div style={{ display: 'flex', gap: 8 }}>
             {[['normal','🎾 Normal'],['wo','🚫 W.O.']].map(([v,l]) => (
               <button key={v} onClick={() => setTipo(v)}
-                style={{ ...btnBase, background: tipo===v ? 'rgba(95,179,53,.15)' : 'transparent',
+                style={{ ...btnBase, background: tipo===v ? 'rgba(255,107,44,.15)' : 'transparent',
                   borderColor: tipo===v ? 'var(--green)' : 'var(--line)',
                   color: tipo===v ? 'var(--green)' : 'var(--muted)' }}>
                 {l}
@@ -177,7 +177,7 @@ function ModalResultado({ ligaId, rodadaIdx, jogo, onClose, onSave }) {
           <div style={{ display: 'flex', gap: 8 }}>
             {[jogo.a, jogo.b].map(nome => (
               <button key={nome} onClick={() => setVencedor(nome)}
-                style={{ ...btnBase, background: vencedor===nome ? 'rgba(95,179,53,.2)' : 'transparent',
+                style={{ ...btnBase, background: vencedor===nome ? 'rgba(255,107,44,.2)' : 'transparent',
                   borderColor: vencedor===nome ? 'var(--green)' : 'var(--line)',
                   color: vencedor===nome ? 'var(--green)' : 'var(--cream)' }}>
                 {nome}
@@ -344,7 +344,7 @@ function DetalheAdmin({ ligaId, onBack, showToast }) {
         {podeAvancar && (
           <button onClick={avancarRodada} disabled={proximaRd}
             style={{ padding: '8px 16px', borderRadius: 8, border: 'none',
-              background: '#C9A656', color: '#0e2216', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+              background: '#FF6B2C', color: '#0e2216', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
             {proximaRd ? <Spinner /> : '⏭ Próxima Rodada'}
           </button>
         )}
@@ -408,7 +408,7 @@ function DetalheAdmin({ ligaId, onBack, showToast }) {
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
-                  <tr style={{ background: 'rgba(95,179,53,.1)' }}>
+                  <tr style={{ background: 'rgba(255,107,44,.1)' }}>
                     {['#', 'Atleta', 'Pts', 'J', 'V', 'D', 'BYE', 'W.O.'].map(h => (
                       <th key={h} style={{ padding: '10px 12px', textAlign: h === 'Atleta' ? 'left' : 'center',
                         color: 'var(--muted)', fontWeight: 700, fontSize: 11,
@@ -419,15 +419,15 @@ function DetalheAdmin({ ligaId, onBack, showToast }) {
                 <tbody>
                   {tabela.map((p, i) => (
                     <tr key={p.nome} style={{ borderTop: '1px solid var(--line)',
-                      background: i < 3 ? 'rgba(201,166,86,.04)' : 'transparent' }}>
+                      background: i < 3 ? 'rgba(255,107,44,.04)' : 'transparent' }}>
                       <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800,
-                        color: ['#C9A656','#9e9e9e','#cd7f32'][i] || 'var(--muted)' }}>
+                        color: ['#FF6B2C','#9e9e9e','#cd7f32'][i] || 'var(--muted)' }}>
                         {i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}
                       </td>
                       <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--cream)' }}>{p.nome}</td>
                       <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: 'var(--green)', fontSize: 15 }}>{p.pts}</td>
                       <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--muted)' }}>{p.jogos}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center', color: '#5FB335', fontWeight: 700 }}>{p.v}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center', color: '#FF6B2C', fontWeight: 700 }}>{p.v}</td>
                       <td style={{ padding: '10px 12px', textAlign: 'center', color: '#e05c5c' }}>{p.d}</td>
                       <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--muted)' }}>{p.bye || 0}</td>
                       <td style={{ padding: '10px 12px', textAlign: 'center', color: 'var(--muted)' }}>{p.wo || 0}</td>
@@ -460,7 +460,7 @@ function DetalheAdmin({ ligaId, onBack, showToast }) {
                 borderRadius: 12, overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', display: 'flex',
                   alignItems: 'center', justifyContent: 'space-between',
-                  background: isAtual ? 'rgba(95,179,53,.08)' : 'transparent' }}>
+                  background: isAtual ? 'rgba(255,107,44,.08)' : 'transparent' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{ width: 32, height: 32, borderRadius: '50%',
                       background: isAtual ? 'var(--green)' : 'var(--card2)',
@@ -483,8 +483,8 @@ function DetalheAdmin({ ligaId, onBack, showToast }) {
                     return (
                       <div key={j.id} style={{ display: 'flex', alignItems: 'center', gap: 8,
                         padding: '10px 12px', marginTop: 6,
-                        background: done ? 'rgba(95,179,53,.06)' : isBye ? 'rgba(255,255,255,.03)' : 'var(--surface)',
-                        border: `1px solid ${done ? 'rgba(95,179,53,.2)' : 'var(--line)'}`,
+                        background: done ? 'rgba(255,107,44,.06)' : isBye ? 'rgba(255,255,255,.03)' : 'var(--surface)',
+                        border: `1px solid ${done ? 'rgba(255,107,44,.2)' : 'var(--line)'}`,
                         borderRadius: 9 }}>
                         {isBye ? (
                           <>
@@ -676,7 +676,7 @@ export default function AdminLigas() {
             <button key={v} onClick={() => setFiltroStatus(v)}
               style={{ padding: '8px 14px', borderRadius: 8,
                 border: `1px solid ${filtroStatus===v ? 'var(--green)' : 'var(--line)'}`,
-                background: filtroStatus===v ? 'rgba(95,179,53,.15)' : 'transparent',
+                background: filtroStatus===v ? 'rgba(255,107,44,.15)' : 'transparent',
                 color: filtroStatus===v ? 'var(--green)' : 'var(--muted)',
                 cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
               {l}
@@ -722,7 +722,7 @@ export default function AdminLigas() {
             <div key={l.id} style={{ background: 'var(--card)', border: '1px solid var(--line)',
               borderRadius: 12, padding: '16px 20px', display: 'flex',
               alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(95,179,53,.12)',
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(255,107,44,.12)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 22, flexShrink: 0 }}>🏆</div>
               <div style={{ flex: 1, minWidth: 0 }}>

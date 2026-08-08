@@ -1,5 +1,5 @@
 /**
- * ERP Hub — SetPoint Ultra
+ * ERP Hub — KYTTO Clube
  * Página central de acesso a todos os módulos ERP
  */
 import { useNavigate } from 'react-router-dom'
@@ -54,9 +54,9 @@ export default function ERP() {
   return (
     <div style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
       <div style={{ marginBottom: 32 }}>
-        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800 }}>SetPoint Ultra</h1>
+        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, fontFamily: 'var(--font-display)' }}>Kytto Clube</h1>
         <p style={{ margin: '6px 0 0', color: 'var(--muted)', fontSize: 15 }}>
-          ERP Modular Brasil — Selecione o módulo para acessar
+          Plataforma integrada KYTTO — selecione o módulo para acessar
         </p>
       </div>
 
@@ -75,7 +75,7 @@ export default function ERP() {
                   border: '1px solid var(--line)', cursor: 'pointer', textAlign: 'left',
                   transition: 'all 0.2s', display: 'flex', alignItems: 'flex-start', gap: 14
                 }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.transform = 'translateY(-2px)' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--orange)'; e.currentTarget.style.transform = 'translateY(-2px)' }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.transform = 'none' }}
               >
                 <span style={{ fontSize: 28, lineHeight: 1 }}>{mod.icon}</span>

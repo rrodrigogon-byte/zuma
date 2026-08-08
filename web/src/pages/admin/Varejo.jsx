@@ -1,5 +1,5 @@
 /**
- * Varejo Geral — SetPoint Ultra
+ * Varejo Geral — KYTTO Clube
  * Orçamentos, Pedidos, Multi-Estoque, Tabelas de Preço, Entregas
  */
 import { useState, useEffect, useCallback } from 'react'
@@ -7,8 +7,8 @@ import { api, fmtR, fmtDate } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
 const TABS = ['Orçamentos', 'Pedidos', 'Estoques', 'Entregas']
-const STATUS_ORC = { aberto: { label: 'Aberto', color: '#4a9eff' }, convertido: { label: 'Convertido', color: '#5FB335' }, expirado: { label: 'Expirado', color: '#f59e0b' }, cancelado: { label: 'Cancelado', color: '#e05c5c' } }
-const STATUS_ENT = { pendente: { label: 'Pendente', color: '#f59e0b' }, saiu_entrega: { label: 'Saiu p/ Entrega', color: '#4a9eff' }, entregue: { label: 'Entregue', color: '#5FB335' }, nao_entregue: { label: 'Não Entregue', color: '#e05c5c' } }
+const STATUS_ORC = { aberto: { label: 'Aberto', color: '#4a9eff' }, convertido: { label: 'Convertido', color: '#FF6B2C' }, expirado: { label: 'Expirado', color: '#f59e0b' }, cancelado: { label: 'Cancelado', color: '#e05c5c' } }
+const STATUS_ENT = { pendente: { label: 'Pendente', color: '#f59e0b' }, saiu_entrega: { label: 'Saiu p/ Entrega', color: '#4a9eff' }, entregue: { label: 'Entregue', color: '#FF6B2C' }, nao_entregue: { label: 'Não Entregue', color: '#e05c5c' } }
 
 export default function Varejo() {
   const { toast } = useToast()
@@ -125,7 +125,7 @@ export default function Varejo() {
                         </td>
                         <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                           {o.status === 'aberto' && (
-                            <button onClick={() => converterOrcamento(o.id)} style={{ padding: '4px 12px', borderRadius: 6, border: 'none', background: '#5FB335', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                            <button onClick={() => converterOrcamento(o.id)} style={{ padding: '4px 12px', borderRadius: 6, border: 'none', background: '#FF6B2C', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
                               Converter em Pedido
                             </button>
                           )}
@@ -237,7 +237,7 @@ export default function Varejo() {
 
             <div style={{ background: 'var(--card)', borderRadius: 10, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <span style={{ fontWeight: 700 }}>Total do Orçamento</span>
-              <span style={{ fontWeight: 700, fontSize: 22, color: '#5FB335' }}>{fmtR(totalOrc)}</span>
+              <span style={{ fontWeight: 700, fontSize: 22, color: '#FF6B2C' }}>{fmtR(totalOrc)}</span>
             </div>
 
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>

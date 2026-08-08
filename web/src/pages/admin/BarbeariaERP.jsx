@@ -1,5 +1,5 @@
 /**
- * Barbearia & Salão ERP — SetPoint Ultra
+ * Barbearia & Salão ERP — KYTTO Clube
  * Agendamentos, Profissionais, Rateio automático, Assinaturas/Pacotes, Extrato de repasse
  */
 import { useState, useEffect, useCallback } from 'react'
@@ -12,7 +12,7 @@ const STATUS_AGEND = {
   agendado: { label: 'Agendado', color: '#4a9eff' },
   confirmado: { label: 'Confirmado', color: '#8b5cf6' },
   em_atendimento: { label: 'Em Atendimento', color: '#f59e0b' },
-  concluido: { label: 'Concluído', color: '#5FB335' },
+  concluido: { label: 'Concluído', color: '#FF6B2C' },
   cancelado: { label: 'Cancelado', color: '#e05c5c' },
   nao_compareceu: { label: 'Não Compareceu', color: '#888' }
 }
@@ -195,7 +195,7 @@ export default function BarbeariaERP() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 13 }}>
                     <div style={{ background: 'var(--bg)', borderRadius: 8, padding: '10px 12px', textAlign: 'center' }}>
                       <div style={{ fontSize: 11, color: 'var(--muted)' }}>Comissão</div>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: '#5FB335' }}>{p.percentual_comissao}%</div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: '#FF6B2C' }}>{p.percentual_comissao}%</div>
                     </div>
                     <div style={{ background: 'var(--bg)', borderRadius: 8, padding: '10px 12px', textAlign: 'center' }}>
                       <div style={{ fontSize: 11, color: 'var(--muted)' }}>Salão</div>
@@ -229,7 +229,7 @@ export default function BarbeariaERP() {
                 {[
                   { label: 'Total Faturado', value: fmtR(totalFaturado), color: '#4a9eff', icon: '💰' },
                   { label: 'Repasse Profissionais', value: fmtR(totalProfissionais), color: '#8b5cf6', icon: '✂️' },
-                  { label: 'Receita do Salão', value: fmtR(totalSalao), color: '#5FB335', icon: '🏠' },
+                  { label: 'Receita do Salão', value: fmtR(totalSalao), color: '#FF6B2C', icon: '🏠' },
                 ].map(k => (
                   <div key={k.label} style={{ background: 'var(--card)', borderRadius: 12, padding: 20, border: '1px solid var(--line)', textAlign: 'center' }}>
                     <div style={{ fontSize: 28, marginBottom: 8 }}>{k.icon}</div>
@@ -266,9 +266,9 @@ export default function BarbeariaERP() {
                         <td style={{ padding: '12px 16px', textAlign: 'right', color: '#e05c5c' }}>-{fmtR(r.taxa_maquininha || 0)}</td>
                         <td style={{ padding: '12px 16px', textAlign: 'right' }}>{r.percentual_comissao}%</td>
                         <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: '#8b5cf6' }}>{fmtR(r.valor_profissional || 0)}</td>
-                        <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: '#5FB335' }}>{fmtR(r.valor_salao || 0)}</td>
+                        <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: '#FF6B2C' }}>{fmtR(r.valor_salao || 0)}</td>
                         <td style={{ padding: '12px 16px' }}>
-                          <span style={{ background: r.pago ? '#5FB33522' : '#f59e0b22', color: r.pago ? '#5FB335' : '#f59e0b', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
+                          <span style={{ background: r.pago ? '#FF6B2C22' : '#f59e0b22', color: r.pago ? '#FF6B2C' : '#f59e0b', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
                             {r.pago ? 'Pago' : 'Pendente'}
                           </span>
                         </td>
@@ -295,7 +295,7 @@ export default function BarbeariaERP() {
                         <div style={{ fontWeight: 700, fontSize: 16 }}>{a.cliente_nome}</div>
                         <div style={{ fontSize: 12, color: 'var(--muted)' }}>{a.plano_nome}</div>
                       </div>
-                      <span style={{ background: a.status === 'ativa' ? '#5FB33522' : '#88888822', color: a.status === 'ativa' ? '#5FB335' : '#888', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
+                      <span style={{ background: a.status === 'ativa' ? '#FF6B2C22' : '#88888822', color: a.status === 'ativa' ? '#FF6B2C' : '#888', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
                         {a.status === 'ativa' ? 'Ativa' : 'Inativa'}
                       </span>
                     </div>
@@ -337,7 +337,7 @@ export default function BarbeariaERP() {
                     <tr key={s.id} style={{ borderTop: '1px solid var(--line)' }}>
                       <td style={{ padding: '12px 16px', fontWeight: 600 }}>{s.nome}</td>
                       <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--muted)' }}>{s.duracao_minutos} min</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: '#5FB335' }}>{fmtR(s.preco || 0)}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: '#FF6B2C' }}>{fmtR(s.preco || 0)}</td>
                       <td style={{ padding: '12px 16px' }}>
                         <span style={{ background: 'var(--card2)', padding: '3px 10px', borderRadius: 20, fontSize: 12 }}>{s.categoria || 'Geral'}</span>
                       </td>
@@ -399,7 +399,7 @@ export default function BarbeariaERP() {
                 </div>
                 <div>
                   <div style={{ fontSize: 11, color: 'var(--muted)' }}>Salão</div>
-                  <div style={{ fontWeight: 700, color: '#5FB335' }}>{fmtR(((100 - (parseFloat(formProf.taxa_maquininha_debito) || 0)) * (100 - (parseFloat(formProf.percentual_comissao) || 0))) / 100)}</div>
+                  <div style={{ fontWeight: 700, color: '#FF6B2C' }}>{fmtR(((100 - (parseFloat(formProf.taxa_maquininha_debito) || 0)) * (100 - (parseFloat(formProf.percentual_comissao) || 0))) / 100)}</div>
                 </div>
               </div>
             </div>

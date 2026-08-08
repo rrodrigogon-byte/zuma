@@ -22,10 +22,10 @@ function IngressoModal({ ingresso, onValidar, onClose }) {
   return (
     <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }}>
       <div onClick={e => e.stopPropagation()}
-        style={{ background:'#0a1a0d', border:`3px solid ${jaValidado ? '#e74c3c' : '#5FB335'}`, borderRadius:20, padding:'40px 48px', minWidth:400, maxWidth:540, textAlign:'center' }}>
+        style={{ background:'#0a1a0d', border:`3px solid ${jaValidado ? '#e74c3c' : '#FF6B2C'}`, borderRadius:20, padding:'40px 48px', minWidth:400, maxWidth:540, textAlign:'center' }}>
         <div style={{ fontSize:16, color:'#888', marginBottom:8, letterSpacing:2, textTransform:'uppercase' }}>Ingresso</div>
         <div style={{ fontSize:40, fontWeight:900, color:'#f0f0f0', lineHeight:1.1, marginBottom:10 }}>{ingresso.nome}</div>
-        <div style={{ display:'inline-block', background:'#1e3a24', color:'#C9A656', borderRadius:8, padding:'6px 20px', fontWeight:700, fontSize:18, marginBottom:24 }}>
+        <div style={{ display:'inline-block', background:'#1e3a24', color:'#FF6B2C', borderRadius:8, padding:'6px 20px', fontWeight:700, fontSize:18, marginBottom:24 }}>
           {ingresso.tipo}
         </div>
         {jaValidado ? (
@@ -37,7 +37,7 @@ function IngressoModal({ ingresso, onValidar, onClose }) {
           </div>
         ) : (
           <button onClick={() => onValidar(ingresso.id)}
-            style={{ background:'#5FB335', color:'#000', border:'none', borderRadius:12, padding:'18px 40px', fontSize:26, fontWeight:900, cursor:'pointer', letterSpacing:1, display:'block', width:'100%', marginBottom:16, textTransform:'uppercase' }}>
+            style={{ background:'#FF6B2C', color:'#000', border:'none', borderRadius:12, padding:'18px 40px', fontSize:26, fontWeight:900, cursor:'pointer', letterSpacing:1, display:'block', width:'100%', marginBottom:16, textTransform:'uppercase' }}>
             ✔ VALIDAR ENTRADA
           </button>
         )}
@@ -104,7 +104,7 @@ function QRScanner({ onScan, onClose }) {
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.92)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', zIndex:200 }}>
-      <div style={{ fontSize:20, fontWeight:800, color:'#5FB335', marginBottom:14, letterSpacing:2 }}>📷 CÂMERA QR</div>
+      <div style={{ fontSize:20, fontWeight:800, color:'#FF6B2C', marginBottom:14, letterSpacing:2 }}>📷 CÂMERA QR</div>
       {erro ? (
         <div style={{ background:'#3a0a0a', border:'2px solid #e74c3c', borderRadius:12, padding:24, maxWidth:380, textAlign:'center', color:'#e74c3c', fontSize:14 }}>
           {erro}
@@ -112,11 +112,11 @@ function QRScanner({ onScan, onClose }) {
           <span style={{ fontSize:12, color:'#888' }}>Use a busca manual por nome ou código.</span>
         </div>
       ) : (
-        <div style={{ position:'relative', width:300, height:300, borderRadius:16, overflow:'hidden', border:'3px solid #5FB335', background:'#000' }}>
+        <div style={{ position:'relative', width:300, height:300, borderRadius:16, overflow:'hidden', border:'3px solid #FF6B2C', background:'#000' }}>
           <video ref={videoRef} style={{ width:'100%', height:'100%', objectFit:'cover' }} muted playsInline />
           {/* Linha de escaneamento animada */}
           <div style={{
-            position:'absolute', top:0, left:0, right:0, height:2, background:'rgba(95,179,53,.8)',
+            position:'absolute', top:0, left:0, right:0, height:2, background:'rgba(255,107,44,.8)',
             animation:'scan-line 2s ease-in-out infinite',
           }} />
           {/* Cantos do visor */}
@@ -125,10 +125,10 @@ function QRScanner({ onScan, onClose }) {
               position:'absolute', top:i<2?0:undefined, bottom:i>=2?0:undefined,
               left:i%2===0?0:undefined, right:i%2===1?0:undefined,
               width:24, height:24,
-              borderTop: i < 2 ? '3px solid #5FB335' : 'none',
-              borderBottom: i >= 2 ? '3px solid #5FB335' : 'none',
-              borderLeft: i % 2 === 0 ? '3px solid #5FB335' : 'none',
-              borderRight: i % 2 === 1 ? '3px solid #5FB335' : 'none',
+              borderTop: i < 2 ? '3px solid #FF6B2C' : 'none',
+              borderBottom: i >= 2 ? '3px solid #FF6B2C' : 'none',
+              borderLeft: i % 2 === 0 ? '3px solid #FF6B2C' : 'none',
+              borderRight: i % 2 === 1 ? '3px solid #FF6B2C' : 'none',
             }} />
           ))}
         </div>
@@ -146,7 +146,7 @@ function QRScanner({ onScan, onClose }) {
           <input name='qr' placeholder='Cole o código QR aqui…'
             style={{ background:'#0f1f13', border:'2px solid #2d4a32', borderRadius:10, padding:'10px 14px', fontSize:16, color:'#f0f0f0', outline:'none', width:220 }} />
           <button type='submit'
-            style={{ background:'#5FB335', color:'#000', border:'none', borderRadius:10, padding:'0 20px', fontSize:14, fontWeight:900, cursor:'pointer' }}>OK</button>
+            style={{ background:'#FF6B2C', color:'#000', border:'none', borderRadius:10, padding:'0 20px', fontSize:14, fontWeight:900, cursor:'pointer' }}>OK</button>
         </form>
       </div>
       <button onClick={() => { stopCamera(); onClose() }}
@@ -283,11 +283,11 @@ export default function Portaria() {
         {/* Header */}
         <div style={{ background:'#0a1a0d', borderBottom:'2px solid #1e3a24', padding:'16px 32px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div>
-            <div style={{ fontSize:26, fontWeight:900, color:'#5FB335', letterSpacing:2 }}>PORTARIA</div>
+            <div style={{ fontSize:26, fontWeight:900, color:'#FF6B2C', letterSpacing:2 }}>PORTARIA</div>
             <div style={{ fontSize:13, color:'#888', marginTop:2 }}>Controle de acesso — Agro Open</div>
           </div>
           <div style={{ display:'flex', gap:10, alignItems:'center' }}>
-            <button onClick={load} style={{ background:'transparent', color:'#5FB335', border:'1px solid #2d4a32', borderRadius:8, padding:'6px 14px', fontSize:13, cursor:'pointer' }}>
+            <button onClick={load} style={{ background:'transparent', color:'#FF6B2C', border:'1px solid #2d4a32', borderRadius:8, padding:'6px 14px', fontSize:13, cursor:'pointer' }}>
               ↺ Recarregar
             </button>
             <div style={{ fontSize:13, color:'#888' }}>
@@ -300,17 +300,17 @@ export default function Portaria() {
 
           {/* KPIs */}
           <div style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
-            <KpiCard label="Total Vendidos" value={total} color="#C9A656" />
-            <KpiCard label="Validados Hoje" value={validadosHoje} color="#5FB335" />
-            <KpiCard label="Restantes" value={restantes} color={restantes > 0 ? '#5FB335' : '#888'} />
+            <KpiCard label="Total Vendidos" value={total} color="#FF6B2C" />
+            <KpiCard label="Validados Hoje" value={validadosHoje} color="#FF6B2C" />
+            <KpiCard label="Restantes" value={restantes} color={restantes > 0 ? '#FF6B2C' : '#888'} />
             <div style={{
-              background:'#0f1f13', border:`2px solid ${pct >= 80 ? '#5FB335' : pct >= 50 ? '#C9A656' : '#1e3a24'}`,
+              background:'#0f1f13', border:`2px solid ${pct >= 80 ? '#FF6B2C' : pct >= 50 ? '#FF6B2C' : '#1e3a24'}`,
               borderRadius:14, padding:'20px 28px', textAlign:'center', minWidth:140, flex:1,
             }}>
               <div style={{ fontSize:13, color:'#888', marginBottom:4, fontWeight:600, textTransform:'uppercase', letterSpacing:1 }}>Ocupação</div>
-              <div style={{ fontSize:42, fontWeight:900, color: pct >= 80 ? '#5FB335' : '#C9A656', lineHeight:1 }}>{pct}%</div>
+              <div style={{ fontSize:42, fontWeight:900, color: pct >= 80 ? '#FF6B2C' : '#FF6B2C', lineHeight:1 }}>{pct}%</div>
               <div style={{ background:'#1e3a24', borderRadius:4, height:6, marginTop:10 }}>
-                <div style={{ width:`${pct}%`, background:'#5FB335', borderRadius:4, height:'100%', transition:'width .5s' }} />
+                <div style={{ width:`${pct}%`, background:'#FF6B2C', borderRadius:4, height:'100%', transition:'width .5s' }} />
               </div>
             </div>
           </div>
@@ -328,11 +328,11 @@ export default function Portaria() {
                   style={{ flex:1, background:'#060e08', border:'2px solid #2d4a32', borderRadius:10, padding:'14px 20px', fontSize:22, color:'#f0f0f0', outline:'none', fontFamily:'inherit' }}
                 />
                 <button type="button" onClick={() => setShowScanner(true)} title="Abrir câmera QR"
-                  style={{ background:'#1e3a24', color:'#5FB335', border:'none', borderRadius:10, padding:'0 18px', fontSize:24, cursor:'pointer' }}>
+                  style={{ background:'#1e3a24', color:'#FF6B2C', border:'none', borderRadius:10, padding:'0 18px', fontSize:24, cursor:'pointer' }}>
                   📷
                 </button>
                 <button type="submit"
-                  style={{ background:'#5FB335', color:'#000', border:'none', borderRadius:10, padding:'0 28px', fontSize:18, fontWeight:900, cursor:'pointer', letterSpacing:1, textTransform:'uppercase' }}>
+                  style={{ background:'#FF6B2C', color:'#000', border:'none', borderRadius:10, padding:'0 28px', fontSize:18, fontWeight:900, cursor:'pointer', letterSpacing:1, textTransform:'uppercase' }}>
                   Buscar
                 </button>
               </div>
@@ -349,7 +349,7 @@ export default function Portaria() {
                         <div style={{ fontSize:16, fontWeight:700, color:'#f0f0f0' }}>{ing.nome}</div>
                         <div style={{ fontSize:12, color:'#888' }}>{ing.tipo || '—'} · ID #{ing.id}</div>
                       </div>
-                      <span style={{ fontSize:13, fontWeight:700, color: ing.validado ? '#e74c3c' : '#5FB335' }}>
+                      <span style={{ fontSize:13, fontWeight:700, color: ing.validado ? '#e74c3c' : '#FF6B2C' }}>
                         {ing.validado ? '⛔ Validado' : '✅ Disponível'}
                       </span>
                     </div>
@@ -369,9 +369,9 @@ export default function Portaria() {
                 { k:'todos', l:`Todos (${total})` }
               ].map(t => (
                 <button key={t.k} onClick={() => setHistTab(t.k)} style={{
-                  padding:'8px 18px', background:'none', border:'none', color: histTab === t.k ? '#5FB335' : '#555',
+                  padding:'8px 18px', background:'none', border:'none', color: histTab === t.k ? '#FF6B2C' : '#555',
                   cursor:'pointer', fontWeight:700, fontSize:13,
-                  borderBottom: histTab === t.k ? '2px solid #5FB335' : '2px solid transparent',
+                  borderBottom: histTab === t.k ? '2px solid #FF6B2C' : '2px solid transparent',
                 }}>{t.l}</button>
               ))}
             </div>
@@ -387,13 +387,13 @@ export default function Portaria() {
                     <div key={`${ing.id}-${idx}`} onClick={() => setEncontrado(ing)} style={{
                       display:'flex', justifyContent:'space-between', alignItems:'center',
                       background:'#0a1a0d', borderRadius:10, padding:'12px 18px',
-                      borderLeft:'4px solid #5FB335', cursor:'pointer', animation:'fadeSlide .25s ease',
+                      borderLeft:'4px solid #FF6B2C', cursor:'pointer', animation:'fadeSlide .25s ease',
                     }}>
                       <div>
                         <div style={{ fontSize:18, fontWeight:800, color:'#f0f0f0' }}>{ing.nome}</div>
                         <div style={{ fontSize:13, color:'#888', marginTop:2 }}>{ing.tipo || '—'}</div>
                       </div>
-                      <div style={{ fontSize:13, color:'#5FB335', fontWeight:600 }}>
+                      <div style={{ fontSize:13, color:'#FF6B2C', fontWeight:600 }}>
                         ✔ {new Date(ing.validadoEm).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit', second:'2-digit' })}
                       </div>
                     </div>
@@ -413,13 +413,13 @@ export default function Portaria() {
                     <div key={`h-${ing.id}-${idx}`} onClick={() => setEncontrado(ing)} style={{
                       display:'flex', justifyContent:'space-between', alignItems:'center',
                       background:'#0a1a0d', borderRadius:10, padding:'10px 16px',
-                      borderLeft:'4px solid #C9A656', cursor:'pointer',
+                      borderLeft:'4px solid #FF6B2C', cursor:'pointer',
                     }}>
                       <div>
                         <div style={{ fontSize:16, fontWeight:700, color:'#f0f0f0' }}>{ing.nome}</div>
                         <div style={{ fontSize:12, color:'#888' }}>{ing.tipo || '—'}</div>
                       </div>
-                      <div style={{ fontSize:12, color:'#C9A656' }}>
+                      <div style={{ fontSize:12, color:'#FF6B2C' }}>
                         {new Date(ing.validadoEm).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })}
                       </div>
                     </div>
@@ -435,7 +435,7 @@ export default function Portaria() {
                   {tipos.map(t => (
                     <button key={t} onClick={() => setFiltroTipo(t)} style={{
                       padding:'4px 12px', borderRadius:20, fontSize:12, fontWeight:700, cursor:'pointer',
-                      background: filtroTipo===t ? '#5FB335' : '#1e3a24',
+                      background: filtroTipo===t ? '#FF6B2C' : '#1e3a24',
                       color: filtroTipo===t ? '#000' : '#888', border:'none',
                     }}>{t === 'todos' ? `Todos (${ingressos.length})` : t}</button>
                   ))}
@@ -446,14 +446,14 @@ export default function Portaria() {
                   ) : todosFiltrados.map(ing => (
                     <div key={ing.id} onClick={() => setEncontrado(ing)} style={{
                       display:'flex', justifyContent:'space-between', alignItems:'center',
-                      background: ing.validado ? 'rgba(95,179,53,.05)' : '#0a1a0d', borderRadius:10, padding:'10px 16px',
-                      borderLeft:`4px solid ${ing.validado ? '#5FB335' : '#1e3a24'}`, cursor:'pointer',
+                      background: ing.validado ? 'rgba(255,107,44,.05)' : '#0a1a0d', borderRadius:10, padding:'10px 16px',
+                      borderLeft:`4px solid ${ing.validado ? '#FF6B2C' : '#1e3a24'}`, cursor:'pointer',
                     }}>
                       <div>
                         <div style={{ fontSize:14, fontWeight:700, color:'#f0f0f0' }}>{ing.nome}</div>
                         <div style={{ fontSize:11, color:'#888' }}>{ing.tipo || '—'} · #{ing.id}</div>
                       </div>
-                      <span style={{ fontSize:12, fontWeight:700, color: ing.validado ? '#5FB335' : '#555' }}>
+                      <span style={{ fontSize:12, fontWeight:700, color: ing.validado ? '#FF6B2C' : '#555' }}>
                         {ing.validado ? '✔ Validado' : '—'}
                       </span>
                     </div>

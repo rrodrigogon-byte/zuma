@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="420" viewBox="0 0 1400 420">
+  <rect width="1400" height="420" fill="#FF6B2C"/>
+  <rect x="108" y="103" width="214" height="214" rx="53.928" fill="#FFFFFF"/>
+
+  <path d="M 215 136.0 L 271.0 204.0 L 215 266.0 L 159.0 204.0 Z" fill="#FF6B2C"/>
+  <line x1="215" y1="136.0" x2="215" y2="266.0" stroke="#FF6B2C" stroke-width="7.0"/>
+  <line x1="159.0" y1="204.0" x2="271.0" y2="204.0" stroke="#FF6B2C" stroke-width="7.0"/>
+  <path d="M 215 266.0 q 26.0 20.0 -3.0 33.0" fill="none" stroke="#FF6B2C"
+        stroke-width="9.0" stroke-linecap="round"/>
+  <circle cx="212.0" cy="302.0" r="7.0" fill="#FF6B2C" opacity="0.85"/>
+
+  <text x="392" y="228" font-family="Outfit" font-size="106" font-weight="700"
+        letter-spacing="1" fill="#FFFFFF">KYTTO</text>
+  <text x="396" y="284" font-family="Work Sans" font-size="25" font-weight="500"
+        letter-spacing="6" fill="#FFE2D2">SISTEMAS QUE FAZEM O NEGÓCIO SUBIR</text>
+</svg>

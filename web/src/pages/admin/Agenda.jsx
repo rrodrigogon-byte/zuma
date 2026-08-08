@@ -396,10 +396,10 @@ export default function Agenda() {
       {/* Stats — KpiCards borderLeft */}
       {!loading && jogos.length > 0 && (
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-          <KpiCard label="Total" value={stats.total} color="#5FB335" icon="📋" sub="partidas cadastradas" />
-          <KpiCard label="Concluídos" value={stats.concluidos} color="#8FD64A" icon="✅" sub="com resultado" />
-          <KpiCard label="Pendentes" value={stats.pendentes} color="#C9A656" icon="⏳" sub="aguardando resultado" />
-          <KpiCard label="Taxa Conclusão" value={`${stats.taxaConclusao}%`} color="#5FB335" icon="📊" sub={`${stats.hoje} jogos hoje`} />
+          <KpiCard label="Total" value={stats.total} color="#FF6B2C" icon="📋" sub="partidas cadastradas" />
+          <KpiCard label="Concluídos" value={stats.concluidos} color="#FF9B72" icon="✅" sub="com resultado" />
+          <KpiCard label="Pendentes" value={stats.pendentes} color="#FF6B2C" icon="⏳" sub="aguardando resultado" />
+          <KpiCard label="Taxa Conclusão" value={`${stats.taxaConclusao}%`} color="#FF6B2C" icon="📊" sub={`${stats.hoje} jogos hoje`} />
         </div>
       )}
 
@@ -564,7 +564,7 @@ export default function Agenda() {
         /* Toggle vista */
         .vista-toggle { display: flex; gap: .25rem; margin-bottom: 1.25rem; background: #f3f4f6; border-radius: 8px; padding: .25rem; width: fit-content; }
         .vista-btn { padding: .35rem .9rem; border-radius: 6px; border: none; background: transparent; font-size: .85rem; font-weight: 600; cursor: pointer; color: #6b7280; transition: all .15s; }
-        .vista-btn--active { background: #fff; color: #0E2E1C; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+        .vista-btn--active { background: #fff; color: #12283F; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 
         /* Cards */
         .agenda-card {
@@ -577,7 +577,7 @@ export default function Agenda() {
         .agenda-card--compact { padding: .5rem; font-size: .8rem; }
 
         .agenda-card-header { display: flex; align-items: center; gap: .5rem; }
-        .agenda-hora { font-weight: 700; font-size: .88rem; color: #0E2E1C; }
+        .agenda-hora { font-weight: 700; font-size: .88rem; color: #12283F; }
         .agenda-quadra { color: #6b7280; font-size: .78rem; margin-left: auto; }
         .agenda-confronto { font-weight: 600; font-size: .9rem; }
         .agenda-placar { font-size: .82rem; color: #374151; }
@@ -589,7 +589,7 @@ export default function Agenda() {
         .jogo-badge--done { background: #dcfce7; color: #16a34a; }
 
         /* Dias */
-        .agenda-dia-titulo { font-size: 1rem; font-weight: 700; color: #0E2E1C; margin-bottom: .75rem; display: flex; align-items: center; gap: .5rem; }
+        .agenda-dia-titulo { font-size: 1rem; font-weight: 700; color: #12283F; margin-bottom: .75rem; display: flex; align-items: center; gap: .5rem; }
         .agenda-dia-count { font-size: .75rem; font-weight: 500; color: #9ca3af; background: #f3f4f6; border-radius: 20px; padding: .1rem .5rem; }
         .agenda-dia { margin-bottom: 2rem; }
         .agenda-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: .75rem; }
@@ -606,7 +606,7 @@ export default function Agenda() {
         .semana-dia-col { min-width: 120px; }
         .semana-dia-col--hoje { background: #f0fdf4 !important; }
         .semana-dia-nome { display: block; font-size: .72rem; font-weight: 700; text-transform: uppercase; color: #9ca3af; }
-        .semana-dia-num { display: block; font-size: .9rem; font-weight: 700; color: #0E2E1C; }
+        .semana-dia-num { display: block; font-size: .9rem; font-weight: 700; color: #12283F; }
         .semana-cell { vertical-align: top; min-height: 60px; }
         .semana-cell--hoje { background: #fafffe; }
         .semana-cell .agenda-card { margin-bottom: .25rem; }
@@ -623,9 +623,9 @@ export default function Agenda() {
         .resultado-nome { font-size: .78rem; font-weight: 600; color: #374151; text-align: center; max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .resultado-input {
           width: 72px; height: 60px; font-size: 2rem; font-weight: 800; text-align: center;
-          border: 2px solid #d1d5db; border-radius: 10px; color: #0E2E1C;
+          border: 2px solid #d1d5db; border-radius: 10px; color: #12283F;
         }
-        .resultado-input:focus { border-color: #5FB335; outline: none; }
+        .resultado-input:focus { border-color: #FF6B2C; outline: none; }
         .resultado-sep { font-size: 1.5rem; font-weight: 700; color: #9ca3af; }
         .resultado-preview { text-align: center; font-size: .88rem; color: #6b7280; margin-bottom: .5rem; }
         .resultado-preview strong { color: #16a34a; }

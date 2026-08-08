@@ -75,12 +75,12 @@ function JsonPreview({ dados }) {
 }
 
 const ACAO_COLORS = {
-  login: '#5FB335',
+  login: '#FF6B2C',
   logout: '#888',
-  create: '#8FD64A',
-  update: '#C9A656',
+  create: '#FF9B72',
+  update: '#FF6B2C',
   delete: '#e05c5c',
-  pagamento: '#5FB335',
+  pagamento: '#FF6B2C',
   erro: '#e05c5c',
 }
 
@@ -209,9 +209,9 @@ export default function Auditoria() {
       {/* KPI Cards */}
       {!loading && logs.length > 0 && (
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-          <KpiCard label="Total Logs" value={auditKpis.total} color="#5FB335" icon="📋" sub={`${auditKpis.hoje} hoje`} />
-          <KpiCard label="Logins" value={auditKpis.logins} color="#8FD64A" icon="🔑" sub="acessos registrados" />
-          <KpiCard label="Criações" value={auditKpis.criados} color="#C9A656" icon="✏️" sub="registros criados" />
+          <KpiCard label="Total Logs" value={auditKpis.total} color="#FF6B2C" icon="📋" sub={`${auditKpis.hoje} hoje`} />
+          <KpiCard label="Logins" value={auditKpis.logins} color="#FF9B72" icon="🔑" sub="acessos registrados" />
+          <KpiCard label="Criações" value={auditKpis.criados} color="#FF6B2C" icon="✏️" sub="registros criados" />
           <KpiCard label="Erros/Deletes" value={auditKpis.erros} color="#e05c5c" icon="⚠️" sub="ações críticas" />
         </div>
       )}

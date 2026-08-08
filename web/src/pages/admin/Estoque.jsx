@@ -248,12 +248,12 @@ export default function Estoque() {
         </div>
         {valorPorCat.length > 0 && (
           <div style={{ background:'var(--surface)', border:'1px solid var(--line)', borderRadius:10, padding:'12px 16px',
-            borderLeft:'4px solid #C9A656', gridColumn:'span 1' }}>
+            borderLeft:'4px solid #FF6B2C', gridColumn:'span 1' }}>
             <div style={{ fontSize:11, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'.5px', marginBottom:6 }}>Valor por Categoria</div>
             {valorPorCat.slice(0,3).map(([cat, val]) => (
               <div key={cat} style={{ display:'flex', justifyContent:'space-between', fontSize:11, marginBottom:3 }}>
                 <span style={{ color:'var(--muted)' }}>{cat}</span>
-                <span style={{ fontWeight:700, color:'#C9A656' }}>{fmtR(val)}</span>
+                <span style={{ fontWeight:700, color:'#FF6B2C' }}>{fmtR(val)}</span>
               </div>
             ))}
           </div>
@@ -367,7 +367,7 @@ export default function Estoque() {
                           className="nivel-bar-fill"
                           style={{
                             width: pct + '%',
-                            background: baixo ? '#e74c3c' : '#5FB335',
+                            background: baixo ? '#e74c3c' : '#FF6B2C',
                           }}
                         />
                       </div>
@@ -420,7 +420,7 @@ export default function Estoque() {
                         <button
                           onClick={() => ajustarRapido(it, 1)}
                           disabled={ajustando[key]}
-                          style={{ width: 26, height: 26, borderRadius: 6, border: '1px solid #5FB335', background: '#5FB33522', color: '#5FB335', cursor: 'pointer', fontWeight: 800, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          style={{ width: 26, height: 26, borderRadius: 6, border: '1px solid #FF6B2C', background: '#FF6B2C22', color: '#FF6B2C', cursor: 'pointer', fontWeight: 800, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           +
                         </button>
                       </div>
@@ -462,7 +462,7 @@ export default function Estoque() {
                                 </td>
                                 <td>
                                   <span style={{
-                                    color: mov.tipo === 'entrada' ? '#5FB335' : '#e74c3c',
+                                    color: mov.tipo === 'entrada' ? '#FF6B2C' : '#e74c3c',
                                     fontWeight: 600,
                                   }}>
                                     {mov.tipo || 'entrada'}

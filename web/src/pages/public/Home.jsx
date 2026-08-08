@@ -7,9 +7,9 @@ import { api } from '../../lib/api'
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PATROCINADORES = [
-  { nome: 'UISA Agroindustrial', icon: '🌾', cor: '#5FB335', desc: 'Patrocinador Master' },
-  { nome: 'Tangará Tênis Clube', icon: '🎾', cor: '#C9A656', desc: 'Sede Oficial' },
-  { nome: 'Prefeitura de Tangará da Serra', icon: '🏛️', cor: '#0E2E1C', desc: 'Apoio Institucional' },
+  { nome: 'UISA Agroindustrial', icon: '🌾', cor: '#FF6B2C', desc: 'Patrocinador Master' },
+  { nome: 'Tangará Tênis Clube', icon: '🎾', cor: '#FF6B2C', desc: 'Sede Oficial' },
+  { nome: 'Prefeitura de Tangará da Serra', icon: '🏛️', cor: '#12283F', desc: 'Apoio Institucional' },
 ]
 
 const INFO_CARDS_DEFAULT = [
@@ -60,7 +60,7 @@ const ATLETAS_DESTAQUE = [
 ]
 
 const CAT_COLORS = {
-  evento: '#5FB335', resultado: '#C9A656', inscricao: '#8FD64A',
+  evento: '#FF6B2C', resultado: '#FF6B2C', inscricao: '#FF9B72',
   geral: '#6b7280', comunicado: '#e05c5c',
 }
 
@@ -70,12 +70,12 @@ const CAT_COLORS = {
 
 const GLOBAL_CSS = `
   @keyframes pulseBadge {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(143,214,74,0.5); }
-    50% { box-shadow: 0 0 0 10px rgba(143,214,74,0); }
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,107,44,0.5); }
+    50% { box-shadow: 0 0 0 10px rgba(255,107,44,0); }
   }
   @keyframes pulseGold {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(201,166,86,0.6); }
-    50% { box-shadow: 0 0 0 12px rgba(201,166,86,0); }
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,107,44,0.6); }
+    50% { box-shadow: 0 0 0 12px rgba(255,107,44,0); }
   }
   @keyframes shimmerLight {
     0% { background-position: 200% 0; }
@@ -215,7 +215,7 @@ function TennisBall({ style }) {
   )
 }
 
-function SectionLabel({ text, color = '#C9A656' }) {
+function SectionLabel({ text, color = '#FF6B2C' }) {
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
       <div style={{ height: 2, width: 36, background: color, borderRadius: 2 }} />
@@ -233,13 +233,13 @@ function CountdownUnit({ val, label }) {
   return (
     <div style={{ textAlign: 'center', minWidth: 56 }}>
       <div style={{
-        fontSize: '2rem', fontWeight: 900, color: '#C9A656', lineHeight: 1,
+        fontSize: '2rem', fontWeight: 900, color: '#FF6B2C', lineHeight: 1,
         fontVariantNumeric: 'tabular-nums',
-        textShadow: '0 2px 12px rgba(201,166,86,0.4)',
+        textShadow: '0 2px 12px rgba(255,107,44,0.4)',
       }}>
         {String(val).padStart(2, '0')}
       </div>
-      <div style={{ fontSize: '0.6rem', color: '#8FD64A', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: 4 }}>
+      <div style={{ fontSize: '0.6rem', color: '#FF9B72', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: 4 }}>
         {label}
       </div>
     </div>
@@ -252,24 +252,24 @@ function CountdownBanner({ dataInicio, nomeEvento }) {
   return (
     <div style={{
       display: 'inline-flex', alignItems: 'center', gap: 0,
-      background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(201,166,86,0.4)',
+      background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,107,44,0.4)',
       borderRadius: 18, padding: '16px 26px', marginBottom: 32,
       backdropFilter: 'blur(12px)',
     }}>
       <div style={{ marginRight: 22, borderRight: '1px solid rgba(255,255,255,0.12)', paddingRight: 22 }}>
-        <div style={{ fontSize: '0.65rem', color: '#8FD64A', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 2 }}>
+        <div style={{ fontSize: '0.65rem', color: '#FF9B72', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 2 }}>
           ⚡ Começa em
         </div>
-        <div style={{ fontSize: '0.8rem', color: '#c8e0b8', fontWeight: 600 }}>
+        <div style={{ fontSize: '0.8rem', color: '#FCE2D3', fontWeight: 600 }}>
           {nomeEvento || '4ª Agro Open'}
         </div>
       </div>
       <CountdownUnit val={d} label="dias" />
-      <div style={{ color: '#C9A656', fontWeight: 900, fontSize: '1.6rem', margin: '0 4px', lineHeight: 1, paddingBottom: 10 }}>:</div>
+      <div style={{ color: '#FF6B2C', fontWeight: 900, fontSize: '1.6rem', margin: '0 4px', lineHeight: 1, paddingBottom: 10 }}>:</div>
       <CountdownUnit val={h} label="horas" />
-      <div style={{ color: '#C9A656', fontWeight: 900, fontSize: '1.6rem', margin: '0 4px', lineHeight: 1, paddingBottom: 10 }}>:</div>
+      <div style={{ color: '#FF6B2C', fontWeight: 900, fontSize: '1.6rem', margin: '0 4px', lineHeight: 1, paddingBottom: 10 }}>:</div>
       <CountdownUnit val={m} label="min" />
-      <div style={{ color: '#C9A656', fontWeight: 900, fontSize: '1.6rem', margin: '0 4px', lineHeight: 1, paddingBottom: 10 }}>:</div>
+      <div style={{ color: '#FF6B2C', fontWeight: 900, fontSize: '1.6rem', margin: '0 4px', lineHeight: 1, paddingBottom: 10 }}>:</div>
       <CountdownUnit val={s} label="seg" />
     </div>
   )
@@ -281,16 +281,16 @@ function CountdownBanner({ dataInicio, nomeEvento }) {
 
 function LiveStatsBar({ totalInscritos, totalCategorias, diasRestantes }) {
   const stats = [
-    { icon: '🎾', label: 'Atletas inscritos', value: totalInscritos, animated: true, color: '#5FB335' },
-    { icon: '🏆', label: 'Categorias', value: totalCategorias || 14, animated: false, color: '#C9A656' },
-    { icon: '⏳', label: 'Dias para o torneio', value: diasRestantes != null ? diasRestantes : '—', animated: false, color: '#8FD64A' },
+    { icon: '🎾', label: 'Atletas inscritos', value: totalInscritos, animated: true, color: '#FF6B2C' },
+    { icon: '🏆', label: 'Categorias', value: totalCategorias || 14, animated: false, color: '#FF6B2C' },
+    { icon: '⏳', label: 'Dias para o torneio', value: diasRestantes != null ? diasRestantes : '—', animated: false, color: '#FF9B72' },
   ].filter(s => s.value !== null)
 
   return (
     <div style={{
-      background: '#0B2517',
-      borderTop: '1px solid rgba(143,214,74,0.12)',
-      borderBottom: '1px solid rgba(143,214,74,0.12)',
+      background: '#12283F',
+      borderTop: '1px solid rgba(255,107,44,0.12)',
+      borderBottom: '1px solid rgba(255,107,44,0.12)',
     }}>
       <div style={{
         maxWidth: 1060, margin: '0 auto',
@@ -325,17 +325,17 @@ function LiveStatsBar({ totalInscritos, totalCategorias, diasRestantes }) {
 
 function MagnitudeSection() {
   const stats = [
-    { number: 4, suffix: 'ª', label: 'Edição', desc: 'Crescendo a cada ano', color: '#C9A656', icon: '🏆' },
-    { number: 250, prefix: 'R$', suffix: 'k+', label: 'Em Premiação', desc: 'O maior prize money do Centro-Oeste', color: '#8FD64A', icon: '💰', big: true },
-    { number: 250, suffix: '+', label: 'Atletas', desc: 'De todo o Brasil', color: '#5FB335', icon: '🎾' },
-    { number: 14, suffix: '', label: 'Categorias', desc: 'Para todos os níveis', color: '#C9A656', icon: '📋' },
-    { number: 7, suffix: ' dias', label: 'De competição', desc: '07 a 13 de setembro', color: '#8FD64A', icon: '📅' },
-    { number: 3, suffix: 'ª', label: 'Maior torneio', desc: 'Do Centro-Oeste', color: '#5FB335', icon: '🌎' },
+    { number: 4, suffix: 'ª', label: 'Edição', desc: 'Crescendo a cada ano', color: '#FF6B2C', icon: '🏆' },
+    { number: 250, prefix: 'R$', suffix: 'k+', label: 'Em Premiação', desc: 'O maior prize money do Centro-Oeste', color: '#FF9B72', icon: '💰', big: true },
+    { number: 250, suffix: '+', label: 'Atletas', desc: 'De todo o Brasil', color: '#FF6B2C', icon: '🎾' },
+    { number: 14, suffix: '', label: 'Categorias', desc: 'Para todos os níveis', color: '#FF6B2C', icon: '📋' },
+    { number: 7, suffix: ' dias', label: 'De competição', desc: '07 a 13 de setembro', color: '#FF9B72', icon: '📅' },
+    { number: 3, suffix: 'ª', label: 'Maior torneio', desc: 'Do Centro-Oeste', color: '#FF6B2C', icon: '🌎' },
   ]
 
   return (
     <section style={{
-      background: 'linear-gradient(160deg, #071a0f 0%, #0E2E1C 50%, #0a2014 100%)',
+      background: 'linear-gradient(160deg, #0D2235 0%, #12283F 50%, #102B43 100%)',
       padding: '80px 24px',
       position: 'relative',
       overflow: 'hidden',
@@ -358,12 +358,12 @@ function MagnitudeSection() {
       <div style={{ maxWidth: 1100, margin: '0 auto', position: 'relative' }}>
         <RevealSection>
           <div style={{ textAlign: 'center', marginBottom: 64 }}>
-            <SectionLabel text="Os Números do Maior Torneio" color="#C9A656" />
-            <h2 style={{ fontSize: 'clamp(1.8rem, 4vw, 3rem)', fontWeight: 900, color: '#F4F6EF', margin: '0 0 12px', letterSpacing: '-0.02em' }}>
+            <SectionLabel text="Os Números do Maior Torneio" color="#FF6B2C" />
+            <h2 style={{ fontSize: 'clamp(1.8rem, 4vw, 3rem)', fontWeight: 900, color: '#FFF4EC', margin: '0 0 12px', letterSpacing: '-0.02em' }}>
               Uma escala sem precedentes<br />
-              <span style={{ color: '#8FD64A' }}>no Centro-Oeste</span>
+              <span style={{ color: '#FF9B72' }}>no Centro-Oeste</span>
             </h2>
-            <p style={{ color: 'rgba(200,224,184,0.7)', fontSize: '1rem', maxWidth: 520, margin: '0 auto' }}>
+            <p style={{ color: 'rgba(255,244,236,0.7)', fontSize: '1rem', maxWidth: 520, margin: '0 auto' }}>
               A 4ª Agro Open não é apenas um torneio — é o maior evento de tênis já realizado na região Centro-Oeste do Brasil.
             </p>
           </div>
@@ -378,9 +378,9 @@ function MagnitudeSection() {
             <RevealSection key={i} delay={i * 80}>
               <div style={{
                 background: s.big
-                  ? 'linear-gradient(135deg, rgba(201,166,86,0.15) 0%, rgba(143,214,74,0.1) 100%)'
+                  ? 'linear-gradient(135deg, rgba(255,107,44,0.15) 0%, rgba(255,107,44,0.1) 100%)'
                   : 'rgba(255,255,255,0.04)',
-                border: s.big ? '1.5px solid rgba(201,166,86,0.35)' : '1px solid rgba(255,255,255,0.08)',
+                border: s.big ? '1.5px solid rgba(255,107,44,0.35)' : '1px solid rgba(255,255,255,0.08)',
                 borderRadius: 20,
                 padding: '28px 20px 24px',
                 textAlign: 'center',
@@ -388,8 +388,8 @@ function MagnitudeSection() {
                 position: 'relative',
                 overflow: 'hidden',
               }}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-6px)'; e.currentTarget.style.background = s.big ? 'rgba(201,166,86,0.18)' : 'rgba(255,255,255,0.07)' }}
-                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.background = s.big ? 'linear-gradient(135deg, rgba(201,166,86,0.15) 0%, rgba(143,214,74,0.1) 100%)' : 'rgba(255,255,255,0.04)' }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-6px)'; e.currentTarget.style.background = s.big ? 'rgba(255,107,44,0.18)' : 'rgba(255,255,255,0.07)' }}
+                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.background = s.big ? 'linear-gradient(135deg, rgba(255,107,44,0.15) 0%, rgba(255,107,44,0.1) 100%)' : 'rgba(255,255,255,0.04)' }}
               >
                 <div style={{ fontSize: '1.8rem', marginBottom: 8 }}>{s.icon}</div>
                 <div style={{
@@ -402,13 +402,13 @@ function MagnitudeSection() {
                   <AnimatedCounter target={s.number} duration={1600} />
                   <span style={{ fontSize: '0.65em' }}>{s.suffix}</span>
                 </div>
-                <div style={{ fontWeight: 800, color: '#F4F6EF', fontSize: '0.82rem', marginTop: 8 }}>{s.label}</div>
-                <div style={{ color: 'rgba(200,224,184,0.55)', fontSize: '0.7rem', marginTop: 4, lineHeight: 1.4 }}>{s.desc}</div>
+                <div style={{ fontWeight: 800, color: '#FFF4EC', fontSize: '0.82rem', marginTop: 8 }}>{s.label}</div>
+                <div style={{ color: 'rgba(255,244,236,0.55)', fontSize: '0.7rem', marginTop: 4, lineHeight: 1.4 }}>{s.desc}</div>
                 {s.big && (
                   <div style={{
                     position: 'absolute', top: 8, right: 10,
-                    fontSize: '0.6rem', fontWeight: 800, color: '#C9A656',
-                    background: 'rgba(201,166,86,0.15)', borderRadius: 999,
+                    fontSize: '0.6rem', fontWeight: 800, color: '#FF6B2C',
+                    background: 'rgba(255,107,44,0.15)', borderRadius: 999,
                     padding: '2px 8px', letterSpacing: '0.1em',
                     animation: 'pulseGold 2.5s ease-in-out infinite',
                   }}>
@@ -440,24 +440,24 @@ function AtletasProSection({ ranking }) {
   })) : ATLETAS_DESTAQUE
 
   const medalColors = [
-    { from: '#C9A656', to: '#f0d080', glow: 'rgba(201,166,86,0.4)', border: '#C9A656' },
+    { from: '#FF6B2C', to: '#f0d080', glow: 'rgba(255,107,44,0.4)', border: '#FF6B2C' },
     { from: '#9e9e9e', to: '#d4d4d4', glow: 'rgba(180,180,180,0.35)', border: '#b0b0b0' },
     { from: '#cd7f32', to: '#e8a96a', glow: 'rgba(205,127,50,0.35)', border: '#cd7f32' },
   ]
 
   return (
     <section style={{
-      background: 'linear-gradient(180deg, #f8faf4 0%, #edf2e5 100%)',
+      background: 'linear-gradient(180deg, #FFF4EC 0%, #FFF9F5 100%)',
       padding: '80px 24px',
     }}>
       <div style={{ maxWidth: 1060, margin: '0 auto' }}>
         <RevealSection>
           <div style={{ textAlign: 'center', marginBottom: 56 }}>
-            <SectionLabel text="Atletas de Elite" color="#5FB335" />
-            <h2 style={{ fontSize: 'clamp(1.8rem, 4vw, 2.8rem)', fontWeight: 900, color: '#0E2E1C', margin: '0 0 12px', letterSpacing: '-0.02em' }}>
+            <SectionLabel text="Atletas de Elite" color="#FF6B2C" />
+            <h2 style={{ fontSize: 'clamp(1.8rem, 4vw, 2.8rem)', fontWeight: 900, color: '#12283F', margin: '0 0 12px', letterSpacing: '-0.02em' }}>
               🏆 Jogadores Profissionais
             </h2>
-            <p style={{ color: '#5a7a5a', fontSize: '1rem', maxWidth: 540, margin: '0 auto' }}>
+            <p style={{ color: '#5A6570', fontSize: '1rem', maxWidth: 540, margin: '0 auto' }}>
               Atletas ranqueados nacionalmente competindo por vagas e premiações de alto nível
             </p>
           </div>
@@ -490,7 +490,7 @@ function AtletasProSection({ ranking }) {
                       <span style={{ fontSize: '3rem', lineHeight: 1 }}>{a.emoji}</span>
                       <div style={{
                         background: `linear-gradient(135deg, ${mc.from}, ${mc.to})`,
-                        color: '#0E2E1C', borderRadius: 999,
+                        color: '#12283F', borderRadius: 999,
                         padding: '4px 14px', fontSize: '0.72rem', fontWeight: 900,
                         letterSpacing: '0.06em',
                       }}>
@@ -499,28 +499,28 @@ function AtletasProSection({ ranking }) {
                     </div>
 
                     {/* Nome */}
-                    <div style={{ fontWeight: 900, fontSize: '1.2rem', color: '#0E2E1C', marginBottom: 4 }}>{a.nome}</div>
-                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#5FB335', marginBottom: 2, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                    <div style={{ fontWeight: 900, fontSize: '1.2rem', color: '#12283F', marginBottom: 4 }}>{a.nome}</div>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#FF6B2C', marginBottom: 2, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                       {a.categoria}
                     </div>
-                    <div style={{ fontSize: '0.76rem', color: '#7a9a7a', marginBottom: 16 }}>📍 {a.cidade}</div>
+                    <div style={{ fontSize: '0.76rem', color: '#5A6570', marginBottom: 16 }}>📍 {a.cidade}</div>
 
                     {/* Stats */}
                     <div style={{ display: 'flex', gap: 10 }}>
                       <div style={{
-                        flex: 1, background: 'rgba(95,179,53,0.08)', borderRadius: 12,
+                        flex: 1, background: 'rgba(255,107,44,0.08)', borderRadius: 12,
                         padding: '10px 12px', textAlign: 'center',
-                        border: '1px solid rgba(95,179,53,0.15)',
+                        border: '1px solid rgba(255,107,44,0.15)',
                       }}>
-                        <div style={{ fontWeight: 900, color: '#5FB335', fontSize: '1rem' }}>{a.pontos}</div>
+                        <div style={{ fontWeight: 900, color: '#FF6B2C', fontSize: '1rem' }}>{a.pontos}</div>
                         <div style={{ fontSize: '0.62rem', color: '#8a9a8a', fontWeight: 700, textTransform: 'uppercase', marginTop: 2 }}>Pontos</div>
                       </div>
                       <div style={{
-                        flex: 1, background: 'rgba(201,166,86,0.08)', borderRadius: 12,
+                        flex: 1, background: 'rgba(255,107,44,0.08)', borderRadius: 12,
                         padding: '10px 12px', textAlign: 'center',
-                        border: '1px solid rgba(201,166,86,0.15)',
+                        border: '1px solid rgba(255,107,44,0.15)',
                       }}>
-                        <div style={{ fontWeight: 900, color: '#C9A656', fontSize: '1rem' }}>{a.vitoriasDesc}</div>
+                        <div style={{ fontWeight: 900, color: '#FF6B2C', fontSize: '1rem' }}>{a.vitoriasDesc}</div>
                         <div style={{ fontSize: '0.62rem', color: '#8a9a8a', fontWeight: 700, textTransform: 'uppercase', marginTop: 2 }}>Partidas</div>
                       </div>
                     </div>
@@ -535,8 +535,8 @@ function AtletasProSection({ ranking }) {
           <div style={{ textAlign: 'center', marginTop: 40 }}>
             <Link to="/ranking" style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
-              color: '#5FB335', fontWeight: 800, textDecoration: 'none',
-              fontSize: '0.95rem', borderBottom: '2px solid #8FD64A', paddingBottom: 2,
+              color: '#FF6B2C', fontWeight: 800, textDecoration: 'none',
+              fontSize: '0.95rem', borderBottom: '2px solid #FF9B72', paddingBottom: 2,
               transition: 'color 0.2s',
             }}>
               Ver ranking completo →
@@ -554,17 +554,17 @@ function AtletasProSection({ ranking }) {
 
 function PrizeBreakdown() {
   const premios = [
-    { cat: 'Masc. PRO', primeiro: 'R$ 45.000', segundo: 'R$ 20.000', cor: '#C9A656', emoji: '👑' },
-    { cat: '1ª Classe', primeiro: 'R$ 28.000', segundo: 'R$ 12.000', cor: '#5FB335', emoji: '🏆' },
-    { cat: '2ª Classe', primeiro: 'R$ 18.000', segundo: 'R$ 8.000', cor: '#8FD64A', emoji: '🥇' },
+    { cat: 'Masc. PRO', primeiro: 'R$ 45.000', segundo: 'R$ 20.000', cor: '#FF6B2C', emoji: '👑' },
+    { cat: '1ª Classe', primeiro: 'R$ 28.000', segundo: 'R$ 12.000', cor: '#FF6B2C', emoji: '🏆' },
+    { cat: '2ª Classe', primeiro: 'R$ 18.000', segundo: 'R$ 8.000', cor: '#FF9B72', emoji: '🥇' },
     { cat: 'Feminino A', primeiro: 'R$ 22.000', segundo: 'R$ 10.000', cor: '#e06e8a', emoji: '💪' },
-    { cat: 'Duplas PRO', primeiro: 'R$ 30.000', segundo: 'R$ 14.000', cor: '#C9A656', emoji: '🤝' },
-    { cat: 'Sênior 35+', primeiro: 'R$ 15.000', segundo: 'R$ 7.000', cor: '#5FB335', emoji: '⭐' },
+    { cat: 'Duplas PRO', primeiro: 'R$ 30.000', segundo: 'R$ 14.000', cor: '#FF6B2C', emoji: '🤝' },
+    { cat: 'Sênior 35+', primeiro: 'R$ 15.000', segundo: 'R$ 7.000', cor: '#FF6B2C', emoji: '⭐' },
   ]
 
   return (
     <section style={{
-      background: 'linear-gradient(135deg, #0E2E1C 0%, #1a4a2e 50%, #0a2014 100%)',
+      background: 'linear-gradient(135deg, #12283F 0%, #183450 50%, #102B43 100%)',
       padding: '80px 24px',
       position: 'relative',
       overflow: 'hidden',
@@ -580,18 +580,18 @@ function PrizeBreakdown() {
       <div style={{ maxWidth: 1060, margin: '0 auto', position: 'relative' }}>
         <RevealSection>
           <div style={{ textAlign: 'center', marginBottom: 56 }}>
-            <SectionLabel text="Premiação Por Categoria" color="#C9A656" />
-            <h2 style={{ fontSize: 'clamp(1.8rem, 4vw, 2.8rem)', fontWeight: 900, color: '#F4F6EF', margin: '0 0 12px', letterSpacing: '-0.02em' }}>
+            <SectionLabel text="Premiação Por Categoria" color="#FF6B2C" />
+            <h2 style={{ fontSize: 'clamp(1.8rem, 4vw, 2.8rem)', fontWeight: 900, color: '#FFF4EC', margin: '0 0 12px', letterSpacing: '-0.02em' }}>
               💰 Mais de{' '}
               <span style={{
-                color: '#C9A656',
-                textShadow: '0 4px 24px rgba(201,166,86,0.5)',
+                color: '#FF6B2C',
+                textShadow: '0 4px 24px rgba(255,107,44,0.5)',
               }}>
                 R$ 250.000
               </span>{' '}
               em Prêmios
             </h2>
-            <p style={{ color: 'rgba(200,224,184,0.7)', fontSize: '1rem', maxWidth: 560, margin: '0 auto' }}>
+            <p style={{ color: 'rgba(255,244,236,0.7)', fontSize: '1rem', maxWidth: 560, margin: '0 auto' }}>
               O maior prize money já oferecido em um torneio de tênis no Centro-Oeste. Compete pelos maiores prêmios da região.
             </p>
           </div>
@@ -600,8 +600,8 @@ function PrizeBreakdown() {
         {/* Grand prize destaque */}
         <RevealSection>
           <div style={{
-            background: 'linear-gradient(135deg, rgba(201,166,86,0.18) 0%, rgba(201,166,86,0.08) 100%)',
-            border: '2px solid rgba(201,166,86,0.4)',
+            background: 'linear-gradient(135deg, rgba(255,107,44,0.18) 0%, rgba(255,107,44,0.08) 100%)',
+            border: '2px solid rgba(255,107,44,0.4)',
             borderRadius: 24, padding: '36px 40px', marginBottom: 32,
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             flexWrap: 'wrap', gap: 24,
@@ -609,33 +609,33 @@ function PrizeBreakdown() {
           }}>
             <div style={{
               position: 'absolute', top: 0, right: 0, width: 200, height: 200,
-              background: 'radial-gradient(circle, rgba(201,166,86,0.15) 0%, transparent 70%)',
+              background: 'radial-gradient(circle, rgba(255,107,44,0.15) 0%, transparent 70%)',
             }} />
             <div>
-              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#8FD64A', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 8 }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#FF9B72', letterSpacing: '0.18em', textTransform: 'uppercase', marginBottom: 8 }}>
                 🏆 Premiação Total do Torneio
               </div>
-              <div style={{ fontSize: 'clamp(2.8rem, 8vw, 4.5rem)', fontWeight: 900, color: '#C9A656', lineHeight: 1, letterSpacing: '-0.02em', textShadow: '0 4px 32px rgba(201,166,86,0.4)' }}>
+              <div style={{ fontSize: 'clamp(2.8rem, 8vw, 4.5rem)', fontWeight: 900, color: '#FF6B2C', lineHeight: 1, letterSpacing: '-0.02em', textShadow: '0 4px 32px rgba(255,107,44,0.4)' }}>
                 R$ 250.000<span style={{ fontSize: '0.4em', verticalAlign: 'super' }}>+</span>
               </div>
-              <div style={{ color: 'rgba(200,224,184,0.7)', fontSize: '0.9rem', marginTop: 8 }}>
+              <div style={{ color: 'rgba(255,244,236,0.7)', fontSize: '0.9rem', marginTop: 8 }}>
                 Distribuídos em 14 categorias · Maior do Centro-Oeste
               </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-end' }}>
               <div style={{
-                background: 'rgba(143,214,74,0.15)', border: '1px solid rgba(143,214,74,0.3)',
+                background: 'rgba(255,107,44,0.15)', border: '1px solid rgba(255,107,44,0.3)',
                 borderRadius: 12, padding: '10px 20px', textAlign: 'center',
               }}>
-                <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#8FD64A' }}>4ª</div>
-                <div style={{ fontSize: '0.65rem', color: 'rgba(200,224,184,0.6)', fontWeight: 700, textTransform: 'uppercase' }}>Edição</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#FF9B72' }}>4ª</div>
+                <div style={{ fontSize: '0.65rem', color: 'rgba(255,244,236,0.6)', fontWeight: 700, textTransform: 'uppercase' }}>Edição</div>
               </div>
               <div style={{
-                background: 'rgba(201,166,86,0.15)', border: '1px solid rgba(201,166,86,0.3)',
+                background: 'rgba(255,107,44,0.15)', border: '1px solid rgba(255,107,44,0.3)',
                 borderRadius: 12, padding: '10px 20px', textAlign: 'center',
               }}>
-                <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#C9A656' }}>250+</div>
-                <div style={{ fontSize: '0.65rem', color: 'rgba(200,224,184,0.6)', fontWeight: 700, textTransform: 'uppercase' }}>Atletas</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#FF6B2C' }}>250+</div>
+                <div style={{ fontSize: '0.65rem', color: 'rgba(255,244,236,0.6)', fontWeight: 700, textTransform: 'uppercase' }}>Atletas</div>
               </div>
             </div>
           </div>
@@ -657,19 +657,19 @@ function PrizeBreakdown() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
                   <span style={{ fontSize: '1.8rem' }}>{p.emoji}</span>
                   <div>
-                    <div style={{ fontWeight: 900, color: '#F4F6EF', fontSize: '0.95rem' }}>{p.cat}</div>
+                    <div style={{ fontWeight: 900, color: '#FFF4EC', fontSize: '0.95rem' }}>{p.cat}</div>
                     <div style={{ fontSize: '0.68rem', color: p.cor, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Categoria</div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '0.62rem', color: 'rgba(200,224,184,0.5)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 }}>🥇 1º Lugar</div>
+                    <div style={{ fontSize: '0.62rem', color: 'rgba(255,244,236,0.5)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 }}>🥇 1º Lugar</div>
                     <div style={{ fontWeight: 900, color: p.cor, fontSize: '1.05rem' }}>{p.primeiro}</div>
                   </div>
                   <div style={{ width: 1, background: 'rgba(255,255,255,0.08)' }} />
                   <div style={{ flex: 1, paddingLeft: 12 }}>
-                    <div style={{ fontSize: '0.62rem', color: 'rgba(200,224,184,0.5)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 }}>🥈 2º Lugar</div>
-                    <div style={{ fontWeight: 800, color: 'rgba(200,224,184,0.7)', fontSize: '1rem' }}>{p.segundo}</div>
+                    <div style={{ fontSize: '0.62rem', color: 'rgba(255,244,236,0.5)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 }}>🥈 2º Lugar</div>
+                    <div style={{ fontWeight: 800, color: 'rgba(255,244,236,0.7)', fontSize: '1rem' }}>{p.segundo}</div>
                   </div>
                 </div>
               </div>
@@ -679,7 +679,7 @@ function PrizeBreakdown() {
 
         <RevealSection delay={400}>
           <div style={{ textAlign: 'center', marginTop: 40 }}>
-            <p style={{ color: 'rgba(200,224,184,0.5)', fontSize: '0.78rem' }}>
+            <p style={{ color: 'rgba(255,244,236,0.5)', fontSize: '0.78rem' }}>
               * Valores informativos. Premiação final confirmada no regulamento oficial.
             </p>
           </div>
@@ -696,13 +696,13 @@ function PrizeBreakdown() {
 function CampeoesSection({ campeoes }) {
   const lista = (campeoes && campeoes.length > 0) ? campeoes : CAMPEOES_DEFAULT
   return (
-    <section style={{ background: 'linear-gradient(180deg,#e8f0dc 0%,#f0f4e8 100%)', padding: '64px 24px' }}>
+    <section style={{ background: 'linear-gradient(180deg,#FFF4EC 0%,#FFF9F5 100%)', padding: '64px 24px' }}>
       <div style={{ maxWidth: 1000, margin: '0 auto' }}>
         <RevealSection>
           <div style={{ textAlign: 'center', marginBottom: 44 }}>
-            <SectionLabel text="Hall da Fama" color="#C9A656" />
-            <h2 style={{ fontSize: 'clamp(1.6rem, 3.5vw, 2.4rem)', fontWeight: 900, color: '#0E2E1C', margin: '0 0 8px' }}>🏆 Últimos Campeões</h2>
-            <p style={{ color: '#5a7a5a', margin: 0 }}>Conheça quem dominou as edições anteriores</p>
+            <SectionLabel text="Hall da Fama" color="#FF6B2C" />
+            <h2 style={{ fontSize: 'clamp(1.6rem, 3.5vw, 2.4rem)', fontWeight: 900, color: '#12283F', margin: '0 0 8px' }}>🏆 Últimos Campeões</h2>
+            <p style={{ color: '#5A6570', margin: 0 }}>Conheça quem dominou as edições anteriores</p>
           </div>
         </RevealSection>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
@@ -710,24 +710,24 @@ function CampeoesSection({ campeoes }) {
             <RevealSection key={i} delay={i * 60}>
               <div style={{
                 background: '#fff',
-                border: i === 0 ? '2px solid #C9A656' : '1px solid rgba(0,0,0,0.07)',
+                border: i === 0 ? '2px solid #FF6B2C' : '1px solid rgba(0,0,0,0.07)',
                 borderRadius: 18, padding: '20px 20px 18px',
                 position: 'relative', overflow: 'hidden',
-                boxShadow: i === 0 ? '0 6px 28px rgba(201,166,86,.18)' : '0 2px 12px rgba(0,0,0,.06)',
+                boxShadow: i === 0 ? '0 6px 28px rgba(255,107,44,.18)' : '0 2px 12px rgba(0,0,0,.06)',
                 transition: 'transform .2s, box-shadow .2s',
               }}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 10px 30px rgba(201,166,86,.22)' }}
-                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = i === 0 ? '0 6px 28px rgba(201,166,86,.18)' : '0 2px 12px rgba(0,0,0,.06)' }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 10px 30px rgba(255,107,44,.22)' }}
+                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = i === 0 ? '0 6px 28px rgba(255,107,44,.18)' : '0 2px 12px rgba(0,0,0,.06)' }}
               >
                 {i === 0 && (
-                  <div style={{ position: 'absolute', top: 12, right: 14, fontSize: 10, fontWeight: 800, color: '#C9A656', background: 'rgba(201,166,86,.1)', borderRadius: 999, padding: '2px 8px' }}>⭐ Destaque</div>
+                  <div style={{ position: 'absolute', top: 12, right: 14, fontSize: 10, fontWeight: 800, color: '#FF6B2C', background: 'rgba(255,107,44,.1)', borderRadius: 999, padding: '2px 8px' }}>⭐ Destaque</div>
                 )}
                 <div style={{ fontSize: '2.2rem', marginBottom: 8 }}>🏆</div>
-                <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#5FB335', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>{c.categoria}</div>
-                <div style={{ fontWeight: 900, fontSize: '1rem', color: '#0E2E1C', marginBottom: 2 }}>{c.nome}</div>
-                <div style={{ fontSize: '0.78rem', color: '#7a9a7a' }}>{c.edicao} · {c.ano}</div>
+                <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#FF6B2C', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>{c.categoria}</div>
+                <div style={{ fontWeight: 900, fontSize: '1rem', color: '#12283F', marginBottom: 2 }}>{c.nome}</div>
+                <div style={{ fontSize: '0.78rem', color: '#5A6570' }}>{c.edicao} · {c.ano}</div>
                 {c.pontos && (
-                  <div style={{ marginTop: 8, fontSize: '0.85rem', fontWeight: 800, color: '#C9A656' }}>
+                  <div style={{ marginTop: 8, fontSize: '0.85rem', fontWeight: 800, color: '#FF6B2C' }}>
                     {c.pontos.toLocaleString('pt-BR')} pts
                   </div>
                 )}
@@ -757,15 +757,15 @@ function TimelineEvento({ dataInicio, dataFim }) {
     <section style={{ maxWidth: 860, margin: '0 auto', padding: '64px 24px 48px' }}>
       <RevealSection>
         <div style={{ textAlign: 'center', marginBottom: 44 }}>
-          <SectionLabel text="Cronograma" color="#5FB335" />
-          <h2 style={{ fontSize: 'clamp(1.6rem, 3.5vw, 2.4rem)', fontWeight: 900, color: '#0E2E1C', margin: '0 0 8px' }}>📅 Etapas do Torneio</h2>
-          <p style={{ color: '#5a7a5a', margin: 0 }}>Acompanhe todas as etapas da 4ª Agro Open</p>
+          <SectionLabel text="Cronograma" color="#FF6B2C" />
+          <h2 style={{ fontSize: 'clamp(1.6rem, 3.5vw, 2.4rem)', fontWeight: 900, color: '#12283F', margin: '0 0 8px' }}>📅 Etapas do Torneio</h2>
+          <p style={{ color: '#5A6570', margin: 0 }}>Acompanhe todas as etapas da 4ª Agro Open</p>
         </div>
       </RevealSection>
       <div style={{ position: 'relative' }}>
         <div style={{
           position: 'absolute', left: 23, top: 0, bottom: 0, width: 2,
-          background: 'linear-gradient(to bottom, #5FB335 0%, #C9A656 50%, rgba(0,0,0,.08) 100%)',
+          background: 'linear-gradient(to bottom, #FF6B2C 0%, #FF6B2C 50%, rgba(0,0,0,.08) 100%)',
           borderRadius: 2,
         }} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -774,21 +774,21 @@ function TimelineEvento({ dataInicio, dataFim }) {
               <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', paddingBottom: i < fases.length - 1 ? 28 : 0 }}>
                 <div style={{
                   width: 48, height: 48, borderRadius: '50%', flexShrink: 0,
-                  background: f.status === 'active' ? 'linear-gradient(135deg,#5FB335,#8FD64A)' : '#fff',
+                  background: f.status === 'active' ? 'linear-gradient(135deg,#FF6B2C,#FF9B72)' : '#fff',
                   border: f.status === 'active' ? 'none' : '2px solid rgba(0,0,0,.1)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem',
-                  boxShadow: f.status === 'active' ? '0 4px 16px rgba(95,179,53,.4)' : '0 2px 8px rgba(0,0,0,.06)',
+                  boxShadow: f.status === 'active' ? '0 4px 16px rgba(255,107,44,.4)' : '0 2px 8px rgba(0,0,0,.06)',
                   position: 'relative', zIndex: 1,
                 }}>
                   {f.status === 'active' ? f.icon : <span style={{ opacity: 0.5 }}>{f.icon}</span>}
                 </div>
                 <div style={{ paddingTop: 8, flex: 1 }}>
-                  <div style={{ fontWeight: 800, fontSize: '0.95rem', color: f.status === 'active' ? '#0E2E1C' : '#5a7a5a', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ fontWeight: 800, fontSize: '0.95rem', color: f.status === 'active' ? '#12283F' : '#5A6570', display: 'flex', alignItems: 'center', gap: 8 }}>
                     {f.label}
                     {f.status === 'active' && (
                       <span style={{
-                        fontSize: 10, fontWeight: 800, color: '#5FB335',
-                        background: 'rgba(95,179,53,.12)', border: '1px solid rgba(95,179,53,.3)',
+                        fontSize: 10, fontWeight: 800, color: '#FF6B2C',
+                        background: 'rgba(255,107,44,.12)', border: '1px solid rgba(255,107,44,.3)',
                         borderRadius: 999, padding: '2px 8px', animation: 'pulseBadge 2s ease-in-out infinite',
                       }}>AGORA</span>
                     )}
@@ -849,11 +849,11 @@ function NoticiaCard({ noticia }) {
         <span style={{ background: cor + '18', color: cor, border: `1px solid ${cor}33`, borderRadius: 999, padding: '3px 12px', fontSize: '0.7rem', fontWeight: 800, textTransform: 'capitalize' }}>
           {noticia.categoria || 'Geral'}
         </span>
-        {dataStr && <span style={{ fontSize: '0.72rem', color: '#7a9a7a', fontWeight: 600 }}>{dataStr}</span>}
+        {dataStr && <span style={{ fontSize: '0.72rem', color: '#5A6570', fontWeight: 600 }}>{dataStr}</span>}
       </div>
-      <div style={{ fontWeight: 800, color: '#0E2E1C', fontSize: '0.95rem', lineHeight: 1.35 }}>{noticia.titulo}</div>
+      <div style={{ fontWeight: 800, color: '#12283F', fontSize: '0.95rem', lineHeight: 1.35 }}>{noticia.titulo}</div>
       {noticia.resumo && (
-        <div style={{ fontSize: '0.8rem', color: '#5a7a5a', lineHeight: 1.5 }}>
+        <div style={{ fontSize: '0.8rem', color: '#5A6570', lineHeight: 1.5 }}>
           {noticia.resumo.length > 100 ? noticia.resumo.slice(0, 100) + '…' : noticia.resumo}
         </div>
       )}
@@ -985,22 +985,22 @@ export default function Home() {
 
   const medals = ['🥇', '🥈', '🥉']
   const medalColors = [
-    { bg: 'linear-gradient(135deg,#C9A656,#f0d080,#C9A656)', border: '#C9A656', text: '#0E2E1C', glow: 'rgba(201,166,86,0.4)' },
-    { bg: 'linear-gradient(135deg,#9e9e9e,#d4d4d4,#9e9e9e)', border: '#b0b0b0', text: '#0E2E1C', glow: 'rgba(180,180,180,0.3)' },
+    { bg: 'linear-gradient(135deg,#FF6B2C,#f0d080,#FF6B2C)', border: '#FF6B2C', text: '#12283F', glow: 'rgba(255,107,44,0.4)' },
+    { bg: 'linear-gradient(135deg,#9e9e9e,#d4d4d4,#9e9e9e)', border: '#b0b0b0', text: '#12283F', glow: 'rgba(180,180,180,0.3)' },
     { bg: 'linear-gradient(135deg,#cd7f32,#e8a96a,#cd7f32)', border: '#cd7f32', text: '#fff', glow: 'rgba(205,127,50,0.3)' },
   ]
   const podiumOrder = [1, 0, 2]
 
   return (
-    <div style={{ fontFamily: "'Segoe UI', sans-serif", background: '#F4F6EF', minHeight: '100vh' }}>
+    <div style={{ fontFamily: "'Work Sans', 'Segoe UI', sans-serif", background: '#FFF4EC', minHeight: '100vh' }}>
 
       {/* ══════════════════════════════════════════════════════════════════════
           HERO — ÉPICO
       ══════════════════════════════════════════════════════════════════════ */}
       <section style={{
         position: 'relative',
-        background: 'linear-gradient(160deg, #040f08 0%, #071a0f 30%, #0E2E1C 65%, #0a2014 100%)',
-        color: '#F4F6EF',
+        background: 'linear-gradient(160deg, #0A1B2B 0%, #0D2235 30%, #12283F 65%, #102B43 100%)',
+        color: '#FFF4EC',
         padding: 'clamp(80px, 12vw, 120px) 24px clamp(120px, 18vw, 160px)',
         textAlign: 'center',
         overflow: 'hidden',
@@ -1018,26 +1018,34 @@ export default function Home() {
         <div style={{
           position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)',
           width: 'min(700px, 100vw)', height: 'min(700px, 100vw)',
-          background: 'radial-gradient(circle, rgba(143,214,74,0.06) 0%, transparent 65%)',
+          background: 'radial-gradient(circle, rgba(255,107,44,0.06) 0%, transparent 65%)',
           pointerEvents: 'none',
         }} />
 
         {/* Content */}
         <div style={{ position: 'relative', zIndex: 1, maxWidth: 820 }}>
 
-          {/* Top badges */}
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 22 }}>
+          <img
+            src="/brand/kytto-negativo.svg"
+            alt="Kytto"
+            style={{ width: 154, height: 'auto', borderRadius: 8, boxShadow: '0 8px 28px rgba(0,0,0,.18)' }}
+          />
+        </div>
+
+        {/* Top badges */}
           <div className="hero-badge" style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 28 }}>
             <div style={{
-              background: 'rgba(143,214,74,0.12)', border: '1.5px solid #8FD64A',
-              color: '#8FD64A', borderRadius: '999px', padding: '7px 20px',
+              background: 'rgba(255,107,44,0.12)', border: '1.5px solid #FF9B72',
+              color: '#FF9B72', borderRadius: '999px', padding: '7px 20px',
               fontSize: '0.75rem', fontWeight: 800, letterSpacing: '0.14em',
               textTransform: 'uppercase', animation: 'pulseBadge 2s ease-in-out infinite',
             }}>
               ⚡ Inscrições Abertas
             </div>
             <div style={{
-              background: 'rgba(201,166,86,0.12)', border: '1.5px solid rgba(201,166,86,0.5)',
-              color: '#C9A656', borderRadius: '999px', padding: '7px 20px',
+              background: 'rgba(255,107,44,0.12)', border: '1.5px solid rgba(255,107,44,0.5)',
+              color: '#FF6B2C', borderRadius: '999px', padding: '7px 20px',
               fontSize: '0.75rem', fontWeight: 800, letterSpacing: '0.12em',
               textTransform: 'uppercase', animation: 'pulseGold 2.5s ease-in-out infinite',
             }}>
@@ -1049,14 +1057,14 @@ export default function Home() {
           <h1 style={{ margin: '0 0 4px', lineHeight: 1.02, letterSpacing: '-0.03em' }}>
             <div className="hero-title-line1" style={{
               fontSize: 'clamp(0.9rem, 2.5vw, 1.15rem)', fontWeight: 800,
-              color: '#8FD64A', letterSpacing: '0.25em', textTransform: 'uppercase',
+              color: '#FF9B72', letterSpacing: '0.25em', textTransform: 'uppercase',
               marginBottom: 6,
             }}>
               🌎 Centro-Oeste · 4ª Edição · 2026
             </div>
             <div className="hero-title-line2" style={{
               fontSize: 'clamp(2.6rem, 8vw, 5.8rem)', fontWeight: 900,
-              color: '#F4F6EF',
+              color: '#FFF4EC',
               textShadow: '0 4px 40px rgba(0,0,0,0.6)',
               lineHeight: 1,
             }}>
@@ -1064,7 +1072,7 @@ export default function Home() {
             </div>
             <div className="hero-title-line3" style={{
               fontSize: 'clamp(2.6rem, 8vw, 5.8rem)', fontWeight: 900,
-              background: 'linear-gradient(90deg, #5FB335, #8FD64A, #C9A656)',
+              background: 'linear-gradient(90deg, #FF6B2C, #FF9B72, #FF6B2C)',
               backgroundSize: '200% auto',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
@@ -1078,11 +1086,11 @@ export default function Home() {
 
           {/* Sub */}
           <p className="hero-sub" style={{
-            color: 'rgba(200,224,184,0.8)', fontSize: 'clamp(0.9rem, 2vw, 1.1rem)',
+            color: 'rgba(255,244,236,0.8)', fontSize: 'clamp(0.9rem, 2vw, 1.1rem)',
             margin: '16px 0 28px', letterSpacing: '0.04em', lineHeight: 1.6,
           }}>
-            <strong style={{ color: '#F4F6EF' }}>4ª Agro Open de Tênis</strong> · Tangará Tênis Clube · UISA · Tangará da Serra – MT<br />
-            <span style={{ color: 'rgba(143,214,74,0.85)', fontSize: '0.9em' }}>
+            <strong style={{ color: '#FFF4EC' }}>4ª Agro Open de Tênis</strong> · Tangará Tênis Clube · UISA · Tangará da Serra – MT<br />
+            <span style={{ color: 'rgba(255,107,44,0.85)', fontSize: '0.9em' }}>
               Atletas profissionais · 14 categorias · 07 a 13 de Setembro de 2026
             </span>
           </p>
@@ -1095,40 +1103,40 @@ export default function Home() {
             <button
               onClick={() => navigate('/inscricao')}
               style={{
-                background: 'linear-gradient(135deg, #5FB335, #8FD64A)',
-                color: '#0E2E1C', border: 'none', borderRadius: 14,
+                background: 'linear-gradient(135deg, #FF6B2C, #FF9B72)',
+                color: '#12283F', border: 'none', borderRadius: 14,
                 padding: '18px 44px', fontSize: '1.05rem', fontWeight: 900,
-                cursor: 'pointer', boxShadow: '0 8px 28px rgba(95,179,53,0.5)',
+                cursor: 'pointer', boxShadow: '0 8px 28px rgba(255,107,44,0.5)',
                 letterSpacing: '0.04em', transition: 'transform .15s, box-shadow .15s',
               }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)'; e.currentTarget.style.boxShadow = '0 14px 40px rgba(95,179,53,0.6)' }}
-              onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 8px 28px rgba(95,179,53,0.5)' }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)'; e.currentTarget.style.boxShadow = '0 14px 40px rgba(255,107,44,0.6)' }}
+              onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 8px 28px rgba(255,107,44,0.5)' }}
             >
               🎾 Inscreva-se Agora
             </button>
             <button
               onClick={() => navigate('/ranking')}
               style={{
-                background: 'transparent', color: '#F4F6EF',
-                border: '2px solid rgba(201,166,86,0.45)', borderRadius: 14,
+                background: 'transparent', color: '#FFF4EC',
+                border: '2px solid rgba(255,107,44,0.45)', borderRadius: 14,
                 padding: '18px 44px', fontSize: '1.05rem', fontWeight: 700,
                 cursor: 'pointer', letterSpacing: '0.04em', transition: 'all .15s',
               }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(201,166,86,0.1)'; e.currentTarget.style.borderColor = '#C9A656'; e.currentTarget.style.color = '#C9A656' }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(201,166,86,0.45)'; e.currentTarget.style.color = '#F4F6EF' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,107,44,0.1)'; e.currentTarget.style.borderColor = '#FF6B2C'; e.currentTarget.style.color = '#FF6B2C' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(255,107,44,0.45)'; e.currentTarget.style.color = '#FFF4EC' }}
             >
               🏆 Ver Ranking
             </button>
             <button
               onClick={() => navigate('/chaves')}
               style={{
-                background: 'transparent', color: '#8FD64A',
-                border: '2px solid rgba(143,214,74,0.3)', borderRadius: 14,
+                background: 'transparent', color: '#FF9B72',
+                border: '2px solid rgba(255,107,44,0.3)', borderRadius: 14,
                 padding: '18px 44px', fontSize: '1.05rem', fontWeight: 700,
                 cursor: 'pointer', letterSpacing: '0.04em', transition: 'all .15s',
               }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(143,214,74,0.08)'; e.currentTarget.style.borderColor = '#8FD64A' }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(143,214,74,0.3)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,107,44,0.08)'; e.currentTarget.style.borderColor = '#FF9B72' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(255,107,44,0.3)' }}
             >
               🎯 Ver Chaves
             </button>
@@ -1148,7 +1156,7 @@ export default function Home() {
             ].map((b, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                 <span style={{ fontSize: '1rem' }}>{b.icon}</span>
-                <span style={{ fontSize: '0.75rem', color: 'rgba(200,224,184,0.7)', fontWeight: 700 }}>{b.label}</span>
+                <span style={{ fontSize: '0.75rem', color: 'rgba(255,244,236,0.7)', fontWeight: 700 }}>{b.label}</span>
               </div>
             ))}
           </div>
@@ -1156,7 +1164,7 @@ export default function Home() {
 
         {/* Bottom wave */}
         <svg style={{ position: 'absolute', bottom: 0, left: 0, width: '100%' }} viewBox="0 0 1440 70" preserveAspectRatio="none">
-          <path d="M0,70 C360,10 1080,65 1440,25 L1440,70 Z" fill="#F4F6EF" />
+          <path d="M0,70 C360,10 1080,65 1440,25 L1440,70 Z" fill="#FFF4EC" />
         </svg>
       </section>
 
@@ -1181,30 +1189,30 @@ export default function Home() {
               <div key={i} style={{
                 background: '#fff', borderRadius: 22, padding: '30px 24px',
                 boxShadow: '0 4px 24px rgba(0,0,0,0.07)',
-                border: i === 3 ? '2px solid rgba(201,166,86,0.3)' : '1px solid rgba(95,179,53,0.1)',
+                border: i === 3 ? '2px solid rgba(255,107,44,0.3)' : '1px solid rgba(255,107,44,0.1)',
                 textAlign: 'center', transition: 'transform .2s, box-shadow .2s',
                 position: 'relative',
               }}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-5px)'; e.currentTarget.style.boxShadow = i === 3 ? '0 12px 36px rgba(201,166,86,0.22)' : '0 10px 32px rgba(95,179,53,0.14)' }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-5px)'; e.currentTarget.style.boxShadow = i === 3 ? '0 12px 36px rgba(255,107,44,0.22)' : '0 10px 32px rgba(255,107,44,0.14)' }}
                 onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 4px 24px rgba(0,0,0,0.07)' }}
               >
                 {i === 3 && (
                   <div style={{
                     position: 'absolute', top: -1, left: -1, right: -1, height: 4,
-                    background: 'linear-gradient(90deg, #C9A656, #f0d080, #C9A656)',
+                    background: 'linear-gradient(90deg, #FF6B2C, #f0d080, #FF6B2C)',
                     borderRadius: '22px 22px 0 0',
                   }} />
                 )}
                 <div style={{ fontSize: '2.6rem', marginBottom: 10 }}>{c.icon}</div>
-                <div style={{ fontSize: '0.68rem', fontWeight: 800, color: i === 3 ? '#C9A656' : '#5FB335', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>{c.label}</div>
+                <div style={{ fontSize: '0.68rem', fontWeight: 800, color: i === 3 ? '#FF6B2C' : '#FF6B2C', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>{c.label}</div>
                 <div style={{
                   fontSize: i === 3 ? 'clamp(1.3rem, 3vw, 1.7rem)' : '1.05rem',
-                  fontWeight: 900, color: i === 3 ? '#C9A656' : '#0E2E1C', lineHeight: 1.2,
-                  textShadow: i === 3 ? '0 2px 12px rgba(201,166,86,0.3)' : 'none',
+                  fontWeight: 900, color: i === 3 ? '#FF6B2C' : '#12283F', lineHeight: 1.2,
+                  textShadow: i === 3 ? '0 2px 12px rgba(255,107,44,0.3)' : 'none',
                 }}>
                   {c.value}
                 </div>
-                <div style={{ fontSize: '0.8rem', color: '#7a9a7a', marginTop: 5 }}>{c.sub}</div>
+                <div style={{ fontSize: '0.8rem', color: '#5A6570', marginTop: 5 }}>{c.sub}</div>
               </div>
             ))}
           </div>
@@ -1246,12 +1254,12 @@ export default function Home() {
           CATEGORIAS
       ══════════════════════════════════════════════════════════════════════ */}
       <RevealSection>
-        <section style={{ background: 'linear-gradient(180deg,#f0f4e8 0%,#e8f0dc 100%)', padding: '64px 24px' }}>
+        <section style={{ background: 'linear-gradient(180deg,#FFF9F5 0%,#FFF4EC 100%)', padding: '64px 24px' }}>
           <div style={{ maxWidth: 1040, margin: '0 auto' }}>
             <div style={{ textAlign: 'center', marginBottom: 44 }}>
-              <SectionLabel text="Participe" color="#5FB335" />
-              <h2 style={{ fontSize: 'clamp(1.6rem, 3.5vw, 2.4rem)', fontWeight: 900, color: '#0E2E1C', margin: '0 0 8px' }}>🎾 Categorias Disponíveis</h2>
-              <p style={{ color: '#5a7a5a', margin: 0 }}>Escolha sua categoria e garanta sua vaga</p>
+              <SectionLabel text="Participe" color="#FF6B2C" />
+              <h2 style={{ fontSize: 'clamp(1.6rem, 3.5vw, 2.4rem)', fontWeight: 900, color: '#12283F', margin: '0 0 8px' }}>🎾 Categorias Disponíveis</h2>
+              <p style={{ color: '#5A6570', margin: 0 }}>Escolha sua categoria e garanta sua vaga</p>
             </div>
 
             {categorias.length > 0 ? (
@@ -1264,29 +1272,29 @@ export default function Home() {
                       <div style={{
                         background: '#fff', borderRadius: 18, padding: '22px 20px',
                         boxShadow: '0 2px 14px rgba(0,0,0,0.06)',
-                        border: '1px solid rgba(95,179,53,0.12)',
+                        border: '1px solid rgba(255,107,44,0.12)',
                         cursor: 'pointer', transition: 'transform .15s, box-shadow .15s, border-color .15s',
                       }}
                         onClick={() => navigate('/inscricao')}
-                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(95,179,53,0.18)'; e.currentTarget.style.borderColor = '#5FB335' }}
-                        onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 2px 14px rgba(0,0,0,0.06)'; e.currentTarget.style.borderColor = 'rgba(95,179,53,0.12)' }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(255,107,44,0.18)'; e.currentTarget.style.borderColor = '#FF6B2C' }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 2px 14px rgba(0,0,0,0.06)'; e.currentTarget.style.borderColor = 'rgba(255,107,44,0.12)' }}
                       >
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
                           <div style={{
                             width: 44, height: 44, borderRadius: 12, flexShrink: 0,
-                            background: 'linear-gradient(135deg,#5FB335,#8FD64A)',
+                            background: 'linear-gradient(135deg,#FF6B2C,#FF9B72)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem',
                           }}>{icons[i % icons.length]}</div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 800, color: '#0E2E1C', fontSize: '0.9rem', lineHeight: 1.3 }}>{cat.nome}</div>
+                            <div style={{ fontWeight: 800, color: '#12283F', fontSize: '0.9rem', lineHeight: 1.3 }}>{cat.nome}</div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 5, flexWrap: 'wrap' }}>
-                              <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#5FB335' }}>{precoFmt}</div>
+                              <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#FF6B2C' }}>{precoFmt}</div>
                               {cat.inscritos > 0 && (
                                 <div style={{
                                   fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: 20,
-                                  background: cat.vagas && cat.inscritos >= cat.vagas ? '#e0555522' : '#5FB33518',
+                                  background: cat.vagas && cat.inscritos >= cat.vagas ? '#e0555522' : '#FF6B2C18',
                                   color: cat.vagas && cat.inscritos >= cat.vagas ? '#e05555' : '#3a7a1e',
-                                  border: `1px solid ${cat.vagas && cat.inscritos >= cat.vagas ? '#e0555544' : '#5FB33540'}`,
+                                  border: `1px solid ${cat.vagas && cat.inscritos >= cat.vagas ? '#e0555544' : '#FF6B2C40'}`,
                                 }}>
                                   {cat.vagas ? `${cat.inscritos}/${cat.vagas} vagas` : `${cat.inscritos} inscrito${cat.inscritos !== 1 ? 's' : ''}`}
                                 </div>
@@ -1302,10 +1310,10 @@ export default function Home() {
             ) : (
               <div style={{ textAlign: 'center', padding: '32px 0' }}>
                 <div style={{ fontSize: '3rem', marginBottom: 12 }}>🎾</div>
-                <div style={{ color: '#5a7a5a', fontSize: '1rem', marginBottom: 8 }}>
-                  <strong style={{ color: '#0E2E1C' }}>14 categorias disponíveis</strong>
+                <div style={{ color: '#5A6570', fontSize: '1rem', marginBottom: 8 }}>
+                  <strong style={{ color: '#12283F' }}>14 categorias disponíveis</strong>
                 </div>
-                <div style={{ color: '#7a9a7a', fontSize: '0.9rem' }}>
+                <div style={{ color: '#5A6570', fontSize: '0.9rem' }}>
                   Masc PRO · 1ª a 5ª Classe · Veteranos · Feminino · Duplas
                 </div>
               </div>
@@ -1314,13 +1322,13 @@ export default function Home() {
             <RevealSection delay={200}>
               <div style={{ textAlign: 'center', marginTop: 36 }}>
                 <button onClick={() => navigate('/inscricao')} style={{
-                  background: 'linear-gradient(135deg,#5FB335,#8FD64A)', color: '#0E2E1C',
+                  background: 'linear-gradient(135deg,#FF6B2C,#FF9B72)', color: '#12283F',
                   border: 'none', borderRadius: 12, padding: '15px 36px',
                   fontWeight: 800, fontSize: '1rem', cursor: 'pointer',
-                  boxShadow: '0 4px 16px rgba(95,179,53,0.3)', transition: 'transform .15s, box-shadow .15s',
+                  boxShadow: '0 4px 16px rgba(255,107,44,0.3)', transition: 'transform .15s, box-shadow .15s',
                 }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(95,179,53,0.4)' }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 4px 16px rgba(95,179,53,0.3)' }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(255,107,44,0.4)' }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 4px 16px rgba(255,107,44,0.3)' }}
                 >
                   Inscreva-se agora →
                 </button>
@@ -1343,9 +1351,9 @@ export default function Home() {
       <RevealSection>
         <section style={{ maxWidth: 960, margin: '0 auto', padding: '64px 24px 48px' }}>
           <div style={{ textAlign: 'center', marginBottom: 44 }}>
-            <SectionLabel text="Ranking Atual" color="#C9A656" />
-            <h2 style={{ fontSize: 'clamp(1.6rem, 3.5vw, 2.4rem)', fontWeight: 900, color: '#0E2E1C', margin: '0 0 8px' }}>🏅 Pódio do Ranking</h2>
-            <p style={{ color: '#5a7a5a', margin: 0 }}>Os melhores classificados do ranking atual</p>
+            <SectionLabel text="Ranking Atual" color="#FF6B2C" />
+            <h2 style={{ fontSize: 'clamp(1.6rem, 3.5vw, 2.4rem)', fontWeight: 900, color: '#12283F', margin: '0 0 8px' }}>🏅 Pódio do Ranking</h2>
+            <p style={{ color: '#5A6570', margin: 0 }}>Os melhores classificados do ranking atual</p>
           </div>
           {rankingLoading ? (
             <RankingSkeleton />
@@ -1380,14 +1388,14 @@ export default function Home() {
                       <div style={{ display: 'inline-block', background: mc.bg, color: mc.text, borderRadius: 999, padding: '3px 16px', fontSize: '0.72rem', fontWeight: 800, marginBottom: 10 }}>
                         {pi + 1}º Lugar
                       </div>
-                      <div style={{ fontWeight: 800, fontSize: pi === 0 ? '1.2rem' : '1rem', color: '#0E2E1C', marginBottom: 6 }}>{p.nome}</div>
-                      <div style={{ fontSize: pi === 0 ? '2rem' : '1.65rem', fontWeight: 900, color: '#5FB335' }}>
+                      <div style={{ fontWeight: 800, fontSize: pi === 0 ? '1.2rem' : '1rem', color: '#12283F', marginBottom: 6 }}>{p.nome}</div>
+                      <div style={{ fontSize: pi === 0 ? '2rem' : '1.65rem', fontWeight: 900, color: '#FF6B2C' }}>
                         {p.pontos?.toLocaleString('pt-BR') ?? '—'}
                         <span style={{ fontSize: '0.75rem', color: '#888', fontWeight: 500, marginLeft: 4 }}>pts</span>
                       </div>
                       {(p.vitorias != null || p.derrotas != null) && (
                         <div style={{ marginTop: 8, fontSize: '0.82rem' }}>
-                          <span style={{ color: '#5FB335', fontWeight: 700 }}>{p.vitorias ?? 0}V</span>
+                          <span style={{ color: '#FF6B2C', fontWeight: 700 }}>{p.vitorias ?? 0}V</span>
                           <span style={{ color: '#ccc', margin: '0 4px' }}>–</span>
                           <span style={{ color: '#e05555', fontWeight: 700 }}>{p.derrotas ?? 0}D</span>
                         </div>
@@ -1397,7 +1405,7 @@ export default function Home() {
                 })}
               </div>
               <div style={{ textAlign: 'center' }}>
-                <Link to="/ranking" style={{ color: '#5FB335', fontWeight: 700, textDecoration: 'none', fontSize: '0.95rem', borderBottom: '2px solid #8FD64A', paddingBottom: 2 }}>
+                <Link to="/ranking" style={{ color: '#FF6B2C', fontWeight: 700, textDecoration: 'none', fontSize: '0.95rem', borderBottom: '2px solid #FF9B72', paddingBottom: 2 }}>
                   Ver ranking completo →
                 </Link>
               </div>
@@ -1411,12 +1419,12 @@ export default function Home() {
       ══════════════════════════════════════════════════════════════════════ */}
       {(noticiasLoading || noticias.length > 0) && (
         <RevealSection>
-          <section style={{ background: 'linear-gradient(180deg,#f8faf4 0%,#f0f4e8 100%)', padding: '60px 24px' }}>
+          <section style={{ background: 'linear-gradient(180deg,#FFF4EC 0%,#FFF9F5 100%)', padding: '60px 24px' }}>
             <div style={{ maxWidth: 1040, margin: '0 auto' }}>
               <div style={{ textAlign: 'center', marginBottom: 36 }}>
-                <SectionLabel text="Novidades" color="#5FB335" />
-                <h2 style={{ fontSize: 'clamp(1.6rem, 3.5vw, 2.4rem)', fontWeight: 900, color: '#0E2E1C', margin: '0 0 8px' }}>📰 Últimas Notícias</h2>
-                <p style={{ color: '#5a7a5a', margin: 0 }}>Fique por dentro de tudo sobre o torneio</p>
+                <SectionLabel text="Novidades" color="#FF6B2C" />
+                <h2 style={{ fontSize: 'clamp(1.6rem, 3.5vw, 2.4rem)', fontWeight: 900, color: '#12283F', margin: '0 0 8px' }}>📰 Últimas Notícias</h2>
+                <p style={{ color: '#5A6570', margin: 0 }}>Fique por dentro de tudo sobre o torneio</p>
               </div>
               {noticiasLoading ? (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
@@ -1443,9 +1451,9 @@ export default function Home() {
       <RevealSection>
         <section style={{ maxWidth: 1060, margin: '0 auto', padding: '64px 24px' }}>
           <div style={{ textAlign: 'center', marginBottom: 40 }}>
-            <SectionLabel text="Momentos" color="#C9A656" />
-            <h2 style={{ fontSize: 'clamp(1.6rem, 3.5vw, 2.4rem)', fontWeight: 900, color: '#0E2E1C', margin: '0 0 8px' }}>📸 Galeria</h2>
-            <p style={{ color: '#5a7a5a', margin: 0 }}>Reviva os momentos épicos das edições anteriores</p>
+            <SectionLabel text="Momentos" color="#FF6B2C" />
+            <h2 style={{ fontSize: 'clamp(1.6rem, 3.5vw, 2.4rem)', fontWeight: 900, color: '#12283F', margin: '0 0 8px' }}>📸 Galeria</h2>
+            <p style={{ color: '#5A6570', margin: 0 }}>Reviva os momentos épicos das edições anteriores</p>
           </div>
           <div style={{
             display: 'grid',
@@ -1460,7 +1468,7 @@ export default function Home() {
                 gridColumn: i === 0 ? 'span 2' : 'span 1',
                 boxShadow: '0 4px 18px rgba(0,0,0,0.13)',
                 transition: 'transform .25s, box-shadow .25s',
-                background: '#0E2E1C',
+                background: '#12283F',
               }}
                 onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.025)'; e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.22)' }}
                 onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 4px 18px rgba(0,0,0,0.13)' }}
@@ -1475,8 +1483,8 @@ export default function Home() {
                   background: 'linear-gradient(to top, rgba(7,26,15,.85) 0%, transparent 100%)',
                   padding: '28px 16px 14px',
                 }}>
-                  <div style={{ color: '#F4F6EF', fontSize: '0.82rem', fontWeight: 700 }}>{item.label}</div>
-                  <div style={{ color: '#8FD64A', fontSize: '0.66rem', marginTop: 2, opacity: 0.8 }}>{item.credit}</div>
+                  <div style={{ color: '#FFF4EC', fontSize: '0.82rem', fontWeight: 700 }}>{item.label}</div>
+                  <div style={{ color: '#FF9B72', fontSize: '0.66rem', marginTop: 2, opacity: 0.8 }}>{item.credit}</div>
                 </div>
               </div>
             ))}
@@ -1489,7 +1497,7 @@ export default function Home() {
       ══════════════════════════════════════════════════════════════════════ */}
       <RevealSection>
         <section style={{
-          background: 'linear-gradient(135deg,#C9A656 0%,#e8c96c 50%,#C9A656 100%)',
+          background: 'linear-gradient(135deg,#FF6B2C 0%,#e8c96c 50%,#FF6B2C 100%)',
           padding: '56px 24px',
         }}>
           <div style={{ maxWidth: 960, margin: '0 auto', textAlign: 'center' }}>
@@ -1522,8 +1530,8 @@ export default function Home() {
       ══════════════════════════════════════════════════════════════════════ */}
       <RevealSection>
         <section style={{
-          background: 'linear-gradient(160deg, #040f08 0%, #071a0f 30%, #0E2E1C 70%, #0a2014 100%)',
-          padding: '96px 24px', textAlign: 'center', color: '#F4F6EF',
+          background: 'linear-gradient(160deg, #0A1B2B 0%, #0D2235 30%, #12283F 70%, #102B43 100%)',
+          padding: '96px 24px', textAlign: 'center', color: '#FFF4EC',
           position: 'relative', overflow: 'hidden',
         }}>
           <TennisBall style={{ top: '8%', left: '4%', fontSize: '7rem' }} />
@@ -1534,7 +1542,7 @@ export default function Home() {
           <div style={{
             position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
             width: 600, height: 600,
-            background: 'radial-gradient(circle, rgba(201,166,86,0.07) 0%, transparent 65%)',
+            background: 'radial-gradient(circle, rgba(255,107,44,0.07) 0%, transparent 65%)',
             pointerEvents: 'none',
           }} />
 
@@ -1542,12 +1550,12 @@ export default function Home() {
             {/* Prize callout */}
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 12,
-              background: 'rgba(201,166,86,0.12)', border: '1.5px solid rgba(201,166,86,0.35)',
+              background: 'rgba(255,107,44,0.12)', border: '1.5px solid rgba(255,107,44,0.35)',
               borderRadius: 999, padding: '10px 28px', marginBottom: 28,
               animation: 'pulseGold 2.5s ease-in-out infinite',
             }}>
               <span style={{ fontSize: '1.4rem' }}>💰</span>
-              <span style={{ fontWeight: 900, color: '#C9A656', fontSize: 'clamp(1rem, 3vw, 1.4rem)', letterSpacing: '-0.01em' }}>
+              <span style={{ fontWeight: 900, color: '#FF6B2C', fontSize: 'clamp(1rem, 3vw, 1.4rem)', letterSpacing: '-0.01em' }}>
                 R$ 250.000+ em Premiação
               </span>
             </div>
@@ -1558,7 +1566,7 @@ export default function Home() {
             }}>
               Pronto para disputar<br />
               <span style={{
-                background: 'linear-gradient(90deg, #5FB335, #8FD64A)',
+                background: 'linear-gradient(90deg, #FF6B2C, #FF9B72)',
                 WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
                 backgroundClip: 'text',
               }}>
@@ -1566,10 +1574,10 @@ export default function Home() {
               </span>
             </h2>
 
-            <p style={{ color: 'rgba(200,224,184,0.75)', fontSize: 'clamp(0.95rem, 2vw, 1.1rem)', lineHeight: 1.7, margin: '0 0 44px' }}>
-              Garanta sua vaga na <strong style={{ color: '#8FD64A' }}>4ª Agro Open de Tênis</strong> —
+            <p style={{ color: 'rgba(255,244,236,0.75)', fontSize: 'clamp(0.95rem, 2vw, 1.1rem)', lineHeight: 1.7, margin: '0 0 44px' }}>
+              Garanta sua vaga na <strong style={{ color: '#FF9B72' }}>4ª Agro Open de Tênis</strong> —
               o maior torneio de tênis do Centro-Oeste do Brasil.<br />
-              <strong style={{ color: '#C9A656' }}>Mais de R$ 250.000 em premiação</strong> distribuídos entre 14 categorias.
+              <strong style={{ color: '#FF6B2C' }}>Mais de R$ 250.000 em premiação</strong> distribuídos entre 14 categorias.
               Atletas profissionais e amadores de todo o Brasil. Vagas limitadas.
             </p>
 
@@ -1577,27 +1585,27 @@ export default function Home() {
               <button
                 onClick={() => navigate('/inscricao')}
                 style={{
-                  background: 'linear-gradient(135deg,#5FB335,#8FD64A)', color: '#0E2E1C',
+                  background: 'linear-gradient(135deg,#FF6B2C,#FF9B72)', color: '#12283F',
                   border: 'none', borderRadius: 16, padding: '20px 60px',
                   fontSize: '1.15rem', fontWeight: 900, cursor: 'pointer',
-                  boxShadow: '0 8px 32px rgba(95,179,53,0.45)',
+                  boxShadow: '0 8px 32px rgba(255,107,44,0.45)',
                   letterSpacing: '0.04em', transition: 'transform .15s, box-shadow .15s',
                 }}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)'; e.currentTarget.style.boxShadow = '0 14px 44px rgba(95,179,53,0.55)' }}
-                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 8px 32px rgba(95,179,53,0.45)' }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)'; e.currentTarget.style.boxShadow = '0 14px 44px rgba(255,107,44,0.55)' }}
+                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 8px 32px rgba(255,107,44,0.45)' }}
               >
                 🎾 Fazer Minha Inscrição
               </button>
               <button
                 onClick={() => navigate('/regulamento')}
                 style={{
-                  background: 'transparent', color: 'rgba(200,224,184,0.8)',
-                  border: '1.5px solid rgba(200,224,184,0.2)', borderRadius: 16,
+                  background: 'transparent', color: 'rgba(255,244,236,0.8)',
+                  border: '1.5px solid rgba(255,244,236,0.2)', borderRadius: 16,
                   padding: '20px 40px', fontSize: '1rem', fontWeight: 700,
                   cursor: 'pointer', transition: 'all .15s',
                 }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = 'rgba(200,224,184,0.4)'; e.currentTarget.style.color = '#F4F6EF' }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(200,224,184,0.2)'; e.currentTarget.style.color = 'rgba(200,224,184,0.8)' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = 'rgba(255,244,236,0.4)'; e.currentTarget.style.color = '#FFF4EC' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(255,244,236,0.2)'; e.currentTarget.style.color = 'rgba(255,244,236,0.8)' }}
               >
                 📜 Ver Regulamento
               </button>
@@ -1616,8 +1624,8 @@ export default function Home() {
               ].map((item, i) => (
                 <div key={i} style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '1.8rem', marginBottom: 4 }}>{item.icon}</div>
-                  <div style={{ fontSize: '0.65rem', color: '#8FD64A', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase' }}>{item.label}</div>
-                  <div style={{ fontWeight: 700, color: '#F4F6EF', marginTop: 3, fontSize: '0.88rem' }}>{item.value}</div>
+                  <div style={{ fontSize: '0.65rem', color: '#FF9B72', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase' }}>{item.label}</div>
+                  <div style={{ fontWeight: 700, color: '#FFF4EC', marginTop: 3, fontSize: '0.88rem' }}>{item.value}</div>
                 </div>
               ))}
             </div>

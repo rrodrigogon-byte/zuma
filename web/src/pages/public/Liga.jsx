@@ -4,9 +4,9 @@ import { api } from '../../lib/api'
 
 /* ── Paleta ─────────────────────────────────────────────────────────────── */
 const C = {
-  green: '#1B4D2E', lime: '#7BC142', gold: '#C9A656',
+  green: '#1B4D2E', lime: '#7BC142', gold: '#FF6B2C',
   silver: '#9e9e9e', bronze: '#cd7f32',
-  bg: '#F4F6EF', card: '#fff', border: '#e0ead0',
+  bg: '#FFF4EC', card: '#fff', border: '#e0ead0',
   muted: '#6a8a6a', danger: '#e05555', white: '#fff',
   text: '#1a2a1a',
 }
@@ -168,7 +168,7 @@ function TabelaClassificacao({ tabela, liga }) {
           {[podio[1],podio[0],podio[2]].filter(Boolean).map((p, rawIdx) => {
             const real = p === podio[0] ? 0 : p === podio[1] ? 1 : 2
             const h = real===0?100:85
-            const bg = ['linear-gradient(135deg,#C9A656,#f0d080)','linear-gradient(135deg,#b8c8b0,#d8e8d0)','linear-gradient(135deg,#cd7f32,#e8a96a)'][real]
+            const bg = ['linear-gradient(135deg,#FF6B2C,#f0d080)','linear-gradient(135deg,#b8c8b0,#d8e8d0)','linear-gradient(135deg,#cd7f32,#e8a96a)'][real]
             return (
               <div key={p.nome} style={{textAlign:'center',width:real===0?130:110}}>
                 <div style={{height:h,background:bg,borderRadius:'12px 12px 0 0',display:'flex',

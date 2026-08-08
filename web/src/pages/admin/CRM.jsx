@@ -35,7 +35,7 @@ function ModalComunicado({ segmentos, onClose, toast }) {
       const r = await api.post('/api/admin/comunicacao', {
         segmento: destino,
         canal,
-        assunto: assunto.trim() || 'Comunicado SetPoint',
+        assunto: assunto.trim() || 'Comunicado Kytto Clube',
         mensagem: mensagem.trim(),
       })
       setResultado(r.campanha)
@@ -108,7 +108,7 @@ function ModalComunicado({ segmentos, onClose, toast }) {
               <button type="button" key={v} onClick={() => setCanal(v)} style={{
                 flex: 1, padding: '0.6rem', borderRadius: 8,
                 border: `2px solid ${canal === v ? 'var(--green)' : 'var(--border)'}`,
-                background: canal === v ? 'rgba(95,179,53,.12)' : 'var(--bg)',
+                background: canal === v ? 'rgba(255,107,44,.12)' : 'var(--bg)',
                 color: canal === v ? 'var(--green)' : 'var(--muted)',
                 cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem',
               }}>{icon} {label}</button>
@@ -166,7 +166,7 @@ function TabelaMaioresConsumidores({ lista, onComunicar }) {
         <tbody>
           {lista.map((c, i) => {
             const pct = ((c.total / max) * 100).toFixed(0)
-            const cor = i === 0 ? '#C9A656' : i < 3 ? '#8FD64A' : '#5FB335'
+            const cor = i === 0 ? '#FF6B2C' : i < 3 ? '#FF9B72' : '#FF6B2C'
             return (
               <tr key={c.email}>
                 <td style={{ ...S.td, fontWeight: 800, color: i < 3 ? 'var(--gold)' : 'var(--muted)' }}>{i + 1}</td>
@@ -256,7 +256,7 @@ function TabelaInativos({ lista, onComunicar }) {
             {filtrado.map(i => {
               const dias = i.diasInativo
               const risco = dias == null ? 'Nunca acessou' : dias > 180 ? 'Alto' : dias > 90 ? 'Médio' : 'Baixo'
-              const riscoColor = dias == null ? '#e05c5c' : dias > 180 ? '#e05c5c' : dias > 90 ? '#C9A656' : '#8FD64A'
+              const riscoColor = dias == null ? '#e05c5c' : dias > 180 ? '#e05c5c' : dias > 90 ? '#FF6B2C' : '#FF9B72'
               return (
                 <tr key={i.email}>
                   <td style={{ ...S.td, fontWeight: 700 }}>{i.nome}</td>
@@ -318,7 +318,7 @@ function TabelaAtletas({ toast }) {
   }
 
   const ROLE_COLORS = {
-    admin: '#e05c5c', organizador: '#C9A656', staff: '#5FB335', atleta: '#8FD64A'
+    admin: '#e05c5c', organizador: '#FF6B2C', staff: '#FF6B2C', atleta: '#FF9B72'
   }
 
   // KPIs rápidos
@@ -339,9 +339,9 @@ function TabelaAtletas({ toast }) {
       <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
         {[
           { label: 'Total', value: atletas.length, color: 'var(--green)' },
-          { label: 'Ativos', value: kAtivos, color: '#5FB335' },
-          { label: 'Atletas', value: kAtletas, color: '#8FD64A' },
-          { label: 'Staff/Admin', value: kStaff, color: '#C9A656' },
+          { label: 'Ativos', value: kAtivos, color: '#FF6B2C' },
+          { label: 'Atletas', value: kAtletas, color: '#FF9B72' },
+          { label: 'Staff/Admin', value: kStaff, color: '#FF6B2C' },
         ].map(k => (
           <div key={k.label} style={{ background: 'var(--surface)', border: `1px solid var(--border)`, borderLeft: `4px solid ${k.color}`, borderRadius: 8, padding: '8px 14px', minWidth: 90 }}>
             <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase' }}>{k.label}</div>
@@ -382,7 +382,7 @@ function TabelaAtletas({ toast }) {
                     <span style={{ padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 700, background: cor + '22', color: cor }}>{u.role}</span>
                   </td>
                   <td style={S.td}>
-                    <span style={{ padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 700, background: u.ativo !== false ? '#5FB33522' : '#e05c5c22', color: u.ativo !== false ? '#5FB335' : '#e05c5c' }}>
+                    <span style={{ padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 700, background: u.ativo !== false ? '#FF6B2C22' : '#e05c5c22', color: u.ativo !== false ? '#FF6B2C' : '#e05c5c' }}>
                       {u.ativo !== false ? 'Ativo' : 'Inativo'}
                     </span>
                   </td>
@@ -481,20 +481,20 @@ export default function CRM() {
 
       {/* KPIs */}
       <div style={S.kpiGrid}>
-        <div style={S.kpiCard('#5FB335')}>
+        <div style={S.kpiCard('#FF6B2C')}>
           <div style={S.kpiLabel}>Total de Atletas</div>
-          <div style={S.kpiValue('#5FB335')}>{(totais.clientes ?? 0).toLocaleString('pt-BR')}</div>
+          <div style={S.kpiValue('#FF6B2C')}>{(totais.clientes ?? 0).toLocaleString('pt-BR')}</div>
         </div>
-        <div style={S.kpiCard('#C9A656')}>
+        <div style={S.kpiCard('#FF6B2C')}>
           <div style={S.kpiLabel}>Com Inscrição</div>
-          <div style={S.kpiValue('#C9A656')}>{(totais.comInscricao ?? 0).toLocaleString('pt-BR')}</div>
+          <div style={S.kpiValue('#FF6B2C')}>{(totais.comInscricao ?? 0).toLocaleString('pt-BR')}</div>
           {totais.clientes > 0 && <div style={{ color: 'var(--muted)', fontSize: '0.8rem', marginTop: 4 }}>
             {((totais.comInscricao / totais.clientes) * 100).toFixed(0)}% da base
           </div>}
         </div>
-        <div style={S.kpiCard('#8FD64A')}>
+        <div style={S.kpiCard('#FF9B72')}>
           <div style={S.kpiLabel}>Com Consumo</div>
-          <div style={S.kpiValue('#8FD64A')}>{(totais.comConsumo ?? 0).toLocaleString('pt-BR')}</div>
+          <div style={S.kpiValue('#FF9B72')}>{(totais.comConsumo ?? 0).toLocaleString('pt-BR')}</div>
         </div>
         <div style={S.kpiCard('#e05c5c')}>
           <div style={S.kpiLabel}>Inativos (90d+)</div>
@@ -503,9 +503,9 @@ export default function CRM() {
             {(((segs.inativos?.length || 0) / totais.clientes) * 100).toFixed(0)}% da base
           </div>}
         </div>
-        <div style={S.kpiCard('#0E2E1C')}>
+        <div style={S.kpiCard('#12283F')}>
           <div style={S.kpiLabel}>Aniversariantes (mês)</div>
-          <div style={S.kpiValue('#5FB335')}>{(segs.aniversariantes?.length ?? 0).toLocaleString('pt-BR')}</div>
+          <div style={S.kpiValue('#FF6B2C')}>{(segs.aniversariantes?.length ?? 0).toLocaleString('pt-BR')}</div>
         </div>
       </div>
 

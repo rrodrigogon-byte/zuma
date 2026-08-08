@@ -118,7 +118,7 @@ export default function AgendaQuadras() {
                   style={{
                     padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: isOcupado || dataBloqueada ? 'default' : 'pointer',
                     border: isSel ? '2px solid var(--green)' : '1px solid var(--line)',
-                    background: isOcupado ? 'rgba(239,68,68,.12)' : isSel ? 'rgba(95,179,53,.2)' : 'var(--bg)',
+                    background: isOcupado ? 'rgba(239,68,68,.12)' : isSel ? 'rgba(255,107,44,.2)' : 'var(--bg)',
                     color: isOcupado ? '#ef4444' : isSel ? 'var(--green)' : 'var(--cream)',
                     opacity: isOcupado ? 0.6 : 1,
                   }}>
@@ -135,7 +135,7 @@ export default function AgendaQuadras() {
 
       {/* Painel de confirmação */}
       {quadraSel && slot.horaInicio && (
-        <div style={{ ...S.card, background: 'rgba(95,179,53,.08)', border: '1px solid rgba(95,179,53,.3)' }}>
+        <div style={{ ...S.card, background: 'rgba(255,107,44,.08)', border: '1px solid rgba(255,107,44,.3)' }}>
           <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--green)', marginBottom: 12 }}>Confirmar Reserva</div>
           <div style={{ fontSize: 14, color: 'var(--cream)', marginBottom: 4 }}>
             🎾 <b>{quadraSel.nome}</b> — {fmtData(data)}

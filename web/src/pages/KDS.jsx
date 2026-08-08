@@ -12,8 +12,8 @@ const STATUS_LABEL = {
 
 const STATUS_COLOR = {
   novo: '#e74c3c',
-  em_preparo: '#C9A656',
-  pronto: '#5FB335',
+  em_preparo: '#FF6B2C',
+  pronto: '#FF6B2C',
 }
 
 // Retorna minutos decorridos desde criadoEm
@@ -98,7 +98,7 @@ function ItemCard({ item, onStatusChange }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 28, fontWeight: 800, color: '#f0f0f0', lineHeight: 1.1 }}>
-            <span style={{ fontSize: 40, color: '#C9A656', marginRight: 10 }}>×{item.qtd}</span>
+            <span style={{ fontSize: 40, color: '#FF6B2C', marginRight: 10 }}>×{item.qtd}</span>
             {item.nome}
           </div>
           {item.obs && (
@@ -145,7 +145,7 @@ function CommandaGroup({ comanda, items, onStatusChange }) {
   return (
     <div style={{
       background: '#0a1a0d',
-      border: `1px solid ${allPronto ? '#5FB335' : '#1e3a24'}`,
+      border: `1px solid ${allPronto ? '#FF6B2C' : '#1e3a24'}`,
       borderRadius: 16,
       padding: 20,
       marginBottom: 20,
@@ -153,7 +153,7 @@ function CommandaGroup({ comanda, items, onStatusChange }) {
       <div style={{
         fontSize: 22,
         fontWeight: 700,
-        color: '#C9A656',
+        color: '#FF6B2C',
         marginBottom: 14,
         borderBottom: '1px solid #1e3a24',
         paddingBottom: 10,
@@ -193,7 +193,7 @@ function Panel({ title, items, onStatusChange, hidePronto }) {
         justifyContent: 'space-between',
         alignItems: 'center',
       }}>
-        <span style={{ fontSize: 26, fontWeight: 800, color: '#5FB335', letterSpacing: 2 }}>
+        <span style={{ fontSize: 26, fontWeight: 800, color: '#FF6B2C', letterSpacing: 2 }}>
           {title}
         </span>
         <span style={{
@@ -349,7 +349,7 @@ export default function KDS() {
           zIndex: 10,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-            <span style={{ fontSize: 24, fontWeight: 800, color: '#5FB335', letterSpacing: 1 }}>
+            <span style={{ fontSize: 24, fontWeight: 800, color: '#FF6B2C', letterSpacing: 1 }}>
               KDS — Cozinha & Bar
             </span>
             <span style={{
@@ -367,7 +367,7 @@ export default function KDS() {
             {/* Filtro setor */}
             {['todos','bar','cozinha'].map(s => (
               <button key={s} onClick={() => setFiltroSetor(s)} style={{
-                background: filtroSetor === s ? (s==='bar' ? '#3498db' : s==='cozinha' ? '#e05c5c' : '#5FB335') : '#1e3a24',
+                background: filtroSetor === s ? (s==='bar' ? '#3498db' : s==='cozinha' ? '#e05c5c' : '#FF6B2C') : '#1e3a24',
                 color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px',
                 fontWeight: 700, fontSize: 13, cursor: 'pointer',
               }}>
@@ -381,23 +381,23 @@ export default function KDS() {
             ))}
             <div style={{ width:1, height:28, background:'#1e3a24', margin:'0 4px' }} />
             <button onClick={marcarTodosProntos} title="Marcar todos os visíveis como prontos"
-              style={{ background:'#1e3a24', color:'#5FB335', border:'1px solid #5FB335', borderRadius:8, padding:'7px 14px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+              style={{ background:'#1e3a24', color:'#FF6B2C', border:'1px solid #FF6B2C', borderRadius:8, padding:'7px 14px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
               ✅ Todos prontos
             </button>
             <button onClick={() => setHidePronto(h => !h)}
-              style={{ background: hidePronto ? '#5FB335' : '#1e3a24', color:'#fff', border:'none', borderRadius:8, padding:'7px 14px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+              style={{ background: hidePronto ? '#FF6B2C' : '#1e3a24', color:'#fff', border:'none', borderRadius:8, padding:'7px 14px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
               {hidePronto ? '👁 Mostrar' : '🙈 Ocultar'} prontos
             </button>
             <button onClick={limparProntos}
-              style={{ background:'#1e3a24', color:'#C9A656', border:'1px solid #C9A656', borderRadius:8, padding:'7px 14px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+              style={{ background:'#1e3a24', color:'#FF6B2C', border:'1px solid #FF6B2C', borderRadius:8, padding:'7px 14px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
               🗑 Limpar
             </button>
             <button onClick={() => setSomAtivo(s=>!s)}
-              style={{ background: somAtivo ? '#1e3a24' : 'transparent', color: somAtivo ? '#5FB335' : '#555',
-                border:`1px solid ${somAtivo ? '#5FB335' : '#333'}`, borderRadius:8, padding:'7px 14px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+              style={{ background: somAtivo ? '#1e3a24' : 'transparent', color: somAtivo ? '#FF6B2C' : '#555',
+                border:`1px solid ${somAtivo ? '#FF6B2C' : '#333'}`, borderRadius:8, padding:'7px 14px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
               {somAtivo ? '🔔 Som' : '🔇 Mudo'}
             </button>
-            <span style={{ fontSize: 24, fontWeight: 700, color: '#C9A656', minWidth: 80, textAlign: 'right' }}>
+            <span style={{ fontSize: 24, fontWeight: 700, color: '#FF6B2C', minWidth: 80, textAlign: 'right' }}>
               <Clock />
             </span>
           </div>

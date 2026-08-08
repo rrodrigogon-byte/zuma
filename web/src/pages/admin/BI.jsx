@@ -3,7 +3,7 @@ import { api, fmtR } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
 // ── Componentes de gráfico ───────────────────────────────────────────────────
-function BarChart({ items, color = '#5FB335', valueKey = 'valor', labelKey = 'label', fmt = (v) => v }) {
+function BarChart({ items, color = '#FF6B2C', valueKey = 'valor', labelKey = 'label', fmt = (v) => v }) {
   const max = Math.max(...items.map(i => i[valueKey]), 1)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -34,7 +34,7 @@ function BarChart({ items, color = '#5FB335', valueKey = 'valor', labelKey = 'la
   )
 }
 
-function GaugeBar({ label, atual, benchmark, color = '#5FB335' }) {
+function GaugeBar({ label, atual, benchmark, color = '#FF6B2C' }) {
   const max = Math.max(atual, benchmark, 1)
   const pctAtual = (atual / max) * 100
   const pctBench = (benchmark / max) * 100
@@ -53,7 +53,7 @@ function GaugeBar({ label, atual, benchmark, color = '#5FB335' }) {
         {/* benchmark marker */}
         <div style={{
           position: 'absolute', top: 0, bottom: 0,
-          left: `${pctBench}%`, width: 2, background: '#C9A656',
+          left: `${pctBench}%`, width: 2, background: '#FF6B2C',
         }} />
         <span style={{
           position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
@@ -64,7 +64,7 @@ function GaugeBar({ label, atual, benchmark, color = '#5FB335' }) {
       </div>
       <div style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: 2 }}>
         {atual >= benchmark
-          ? <span style={{ color: '#5FB335' }}>▲ acima do benchmark</span>
+          ? <span style={{ color: '#FF6B2C' }}>▲ acima do benchmark</span>
           : <span style={{ color: '#e05c5c' }}>▼ abaixo do benchmark</span>
         }
       </div>
@@ -73,7 +73,7 @@ function GaugeBar({ label, atual, benchmark, color = '#5FB335' }) {
 }
 
 // ── Linha do tempo simples (sparkline horizontal) ─────────────────────────────
-function LineChart({ items, color = '#5FB335', valueKey = 'valor', labelKey = 'label', fmt = (v) => v }) {
+function LineChart({ items, color = '#FF6B2C', valueKey = 'valor', labelKey = 'label', fmt = (v) => v }) {
   if (!items || items.length < 2) return null
   const max = Math.max(...items.map(i => i[valueKey]), 1)
   const W = 100, H = 50
@@ -257,7 +257,7 @@ export default function BI() {
             {autoRefresh ? '⏸ Auto' : '▶ Auto'}
           </button>
           <button style={S.btnSm(false)} onClick={fetchData}>🔄 Atualizar</button>
-          <button style={{ ...S.btnSm(false), background: '#0E2E1C', color: '#8FD64A', borderColor: '#5FB335' }}
+          <button style={{ ...S.btnSm(false), background: '#12283F', color: '#FF9B72', borderColor: '#FF6B2C' }}
             onClick={handleExportCSV}>⬇ CSV</button>
         </div>
       </div>
@@ -273,7 +273,7 @@ export default function BI() {
         ].map(p => (
           <button key={p.key} onClick={() => setPeriodoAtivo(p.key)} style={{
             padding:'4px 14px', borderRadius:20, border:`1.5px solid ${periodoAtivo===p.key ? 'var(--green)' : 'var(--line)'}`,
-            background: periodoAtivo===p.key ? 'rgba(95,179,53,.15)' : 'transparent',
+            background: periodoAtivo===p.key ? 'rgba(255,107,44,.15)' : 'transparent',
             color: periodoAtivo===p.key ? 'var(--green)' : 'var(--muted)',
             cursor:'pointer', fontSize:12, fontWeight:700,
           }}>{p.label}</button>
@@ -285,29 +285,29 @@ export default function BI() {
 
       {/* KPIs principais */}
       <div style={S.kpiRow}>
-        <div style={S.kpi('#5FB335')}>
+        <div style={S.kpi('#FF6B2C')}>
           <div style={S.kpiLabel}>Faturamento</div>
-          <div style={S.kpiValue('#5FB335')}>{fmtR(op.faturamento ?? 0)}</div>
+          <div style={S.kpiValue('#FF6B2C')}>{fmtR(op.faturamento ?? 0)}</div>
           {op.faturamentoPeriodoAnterior != null && (
             <div style={S.muted}>período anterior: {fmtR(op.faturamentoPeriodoAnterior)} · {op.variacaoFaturamentoPercentual >= 0 ? '▲' : '▼'} {Math.abs(op.variacaoFaturamentoPercentual || 0).toFixed(1)}%</div>
           )}
         </div>
-        <div style={S.kpi('#C9A656')}>
+        <div style={S.kpi('#FF6B2C')}>
           <div style={S.kpiLabel}>Ticket Médio</div>
-          <div style={S.kpiValue('#C9A656')}>{fmtR(op.ticketMedio ?? 0)}</div>
+          <div style={S.kpiValue('#FF6B2C')}>{fmtR(op.ticketMedio ?? 0)}</div>
           {op.ticketMedioPeriodoAnterior != null && (
             <div style={S.muted}>período anterior: {fmtR(op.ticketMedioPeriodoAnterior)} · {op.variacaoTicketMedioPercentual >= 0 ? '▲' : '▼'} {Math.abs(op.variacaoTicketMedioPercentual || 0).toFixed(1)}%</div>
           )}
         </div>
-        <div style={S.kpi('#8FD64A')}>
+        <div style={S.kpi('#FF9B72')}>
           <div style={S.kpiLabel}>Margem Bruta</div>
-          <div style={S.kpiValue('#8FD64A')}>{(op.margemBrutaPercentual ?? 0).toFixed(1)}%</div>
+          <div style={S.kpiValue('#FF9B72')}>{(op.margemBrutaPercentual ?? 0).toFixed(1)}%</div>
           <div style={S.muted}>resultado bruto: {fmtR(op.margemBruta ?? 0)}</div>
         </div>
         {op.numeroVendas != null && (
-          <div style={S.kpi('#0E2E1C')}>
+          <div style={S.kpi('#12283F')}>
             <div style={S.kpiLabel}>Transações</div>
-                          <div style={S.kpiValue('#5FB335')}>{op.numeroVendas.toLocaleString('pt-BR')}</div>
+                          <div style={S.kpiValue('#FF6B2C')}>{op.numeroVendas.toLocaleString('pt-BR')}</div>
 
           </div>
         )}
@@ -317,30 +317,30 @@ export default function BI() {
       {(reservasHoje != null || comandasAbertas != null) && (
         <div style={S.kpiRow}>
           {reservasHoje != null && (
-            <div style={S.kpi('#5FB335')}>
+            <div style={S.kpi('#FF6B2C')}>
               <div style={S.kpiLabel}>Reservas Hoje</div>
-              <div style={S.kpiValue('#5FB335')}>{reservasHoje}</div>
+              <div style={S.kpiValue('#FF6B2C')}>{reservasHoje}</div>
               <div style={S.muted}>quadras reservadas</div>
             </div>
           )}
           {comandasAbertas != null && (
-            <div style={S.kpi('#C9A656')}>
+            <div style={S.kpi('#FF6B2C')}>
               <div style={S.kpiLabel}>Comandas Abertas</div>
-              <div style={S.kpiValue('#C9A656')}>{comandasAbertas}</div>
+              <div style={S.kpiValue('#FF6B2C')}>{comandasAbertas}</div>
               <div style={S.muted}>mesas / comandas ativas</div>
             </div>
           )}
           {ind.atletas != null && (
-            <div style={S.kpi('#8FD64A')}>
+            <div style={S.kpi('#FF9B72')}>
               <div style={S.kpiLabel}>Atletas</div>
-              <div style={S.kpiValue('#8FD64A')}>{ind.atletas}</div>
+              <div style={S.kpiValue('#FF9B72')}>{ind.atletas}</div>
               <div style={S.muted}>inscritos na plataforma</div>
             </div>
           )}
           {ind.inscricoes != null && (
-            <div style={S.kpi('#0E2E1C')}>
+            <div style={S.kpi('#12283F')}>
               <div style={S.kpiLabel}>Inscrições</div>
-              <div style={S.kpiValue('#5FB335')}>{ind.inscricoes}</div>
+              <div style={S.kpiValue('#FF6B2C')}>{ind.inscricoes}</div>
               <div style={S.muted}>no torneio atual</div>
             </div>
           )}
@@ -351,17 +351,17 @@ export default function BI() {
         {/* Comparativo com benchmarks */}
         <div style={S.card}>
           <div style={S.cardTitle}>
-            <span style={S.dot('#C9A656')} />
+            <span style={S.dot('#FF6B2C')} />
             Comparativo com Benchmarks
           </div>
           {op.faturamento != null && bm.faturamento != null && (
-            <GaugeBar label="Faturamento" atual={op.faturamento} benchmark={bm.faturamento} color="#5FB335" />
+            <GaugeBar label="Faturamento" atual={op.faturamento} benchmark={bm.faturamento} color="#FF6B2C" />
           )}
           {op.ticketMedio != null && bm.ticketMedio != null && (
-            <GaugeBar label="Ticket Médio" atual={op.ticketMedio} benchmark={bm.ticketMedio} color="#C9A656" />
+            <GaugeBar label="Ticket Médio" atual={op.ticketMedio} benchmark={bm.ticketMedio} color="#FF6B2C" />
           )}
           {op.receitaRecorrente != null && bm.receitaRecorrente != null && (
-            <GaugeBar label="Receita Recorrente" atual={op.receitaRecorrente} benchmark={bm.receitaRecorrente} color="#8FD64A" />
+            <GaugeBar label="Receita Recorrente" atual={op.receitaRecorrente} benchmark={bm.receitaRecorrente} color="#FF9B72" />
           )}
           {op.custoAquisicao != null && bm.custoAquisicao != null && (
             <GaugeBar label="Custo de Aquisição" atual={op.custoAquisicao} benchmark={bm.custoAquisicao} color="#e05c5c" />
@@ -375,12 +375,12 @@ export default function BI() {
         {faturamentoSerie.length > 0 && (
           <div style={S.card}>
             <div style={S.cardTitle}>
-              <span style={S.dot('#5FB335')} />
+              <span style={S.dot('#FF6B2C')} />
               Evolução do Faturamento
             </div>
-            <LineChart items={faturamentoSerie} color="#5FB335" valueKey="faturamento" labelKey="data" fmt={fmtR} />
+            <LineChart items={faturamentoSerie} color="#FF6B2C" valueKey="faturamento" labelKey="data" fmt={fmtR} />
             <div style={{ marginTop: 12 }}>
-              <BarChart items={faturamentoSerie} color="#5FB335" valueKey="faturamento" labelKey="data" fmt={fmtR} />
+              <BarChart items={faturamentoSerie} color="#FF6B2C" valueKey="faturamento" labelKey="data" fmt={fmtR} />
             </div>
           </div>
         )}
@@ -389,10 +389,10 @@ export default function BI() {
         {op.distribuicao && op.distribuicao.length > 0 && (
           <div style={S.card}>
             <div style={S.cardTitle}>
-              <span style={S.dot('#8FD64A')} />
+              <span style={S.dot('#FF9B72')} />
               Distribuição de Receita
             </div>
-            <BarChart items={op.distribuicao} color="#8FD64A" valueKey="valor" labelKey="nome" fmt={fmtR} />
+            <BarChart items={op.distribuicao} color="#FF9B72" valueKey="valor" labelKey="nome" fmt={fmtR} />
           </div>
         )}
 
@@ -411,19 +411,19 @@ export default function BI() {
       {/* Operação, previsão e alertas derivados dos dados reais da loja */}
       <div style={S.grid2}>
         <div style={S.card}>
-          <div style={S.cardTitle}><span style={S.dot('#C9A656')} />Operação Omnichannel</div>
+          <div style={S.cardTitle}><span style={S.dot('#FF6B2C')} />Operação Omnichannel</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
-            <div><div style={S.kpiLabel}>Pedidos abertos</div><div style={S.kpiValue('#C9A656')}>{pedidos.abertos ?? 0}</div></div>
-            <div><div style={S.kpiLabel}>Em preparo</div><div style={S.kpiValue('#5FB335')}>{pedidos.emPreparo ?? 0}</div></div>
-            <div><div style={S.kpiLabel}>Tempo médio</div><div style={{ ...S.kpiValue('#0E2E1C'), fontSize: '1.25rem' }}>{(pedidos.tempoMedioConclusaoMinutos ?? 0).toFixed(1)} min</div></div>
+            <div><div style={S.kpiLabel}>Pedidos abertos</div><div style={S.kpiValue('#FF6B2C')}>{pedidos.abertos ?? 0}</div></div>
+            <div><div style={S.kpiLabel}>Em preparo</div><div style={S.kpiValue('#FF6B2C')}>{pedidos.emPreparo ?? 0}</div></div>
+            <div><div style={S.kpiLabel}>Tempo médio</div><div style={{ ...S.kpiValue('#12283F'), fontSize: '1.25rem' }}>{(pedidos.tempoMedioConclusaoMinutos ?? 0).toFixed(1)} min</div></div>
             <div><div style={S.kpiLabel}>Cancelados</div><div style={{ ...S.kpiValue('#e05c5c'), fontSize: '1.25rem' }}>{pedidos.canceladosPeriodo ?? 0}</div></div>
           </div>
         </div>
         <div style={S.card}>
-          <div style={S.cardTitle}><span style={S.dot('#8FD64A')} />Estoque e Fiscal</div>
+          <div style={S.cardTitle}><span style={S.dot('#FF9B72')} />Estoque e Fiscal</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
             <div><div style={S.kpiLabel}>Sem estoque</div><div style={{ ...S.kpiValue('#e05c5c'), fontSize: '1.25rem' }}>{estoque.semEstoque ?? 0}</div></div>
-            <div><div style={S.kpiLabel}>No mínimo</div><div style={{ ...S.kpiValue('#C9A656'), fontSize: '1.25rem' }}>{estoque.estoqueCritico ?? 0}</div></div>
+            <div><div style={S.kpiLabel}>No mínimo</div><div style={{ ...S.kpiValue('#FF6B2C'), fontSize: '1.25rem' }}>{estoque.estoqueCritico ?? 0}</div></div>
             <div><div style={S.kpiLabel}>Fiscal em contingência</div><div style={{ ...S.kpiValue('#e05c5c'), fontSize: '1.25rem' }}>{fiscal.documentosContingencia ?? 0}</div></div>
             <div><div style={S.kpiLabel}>Fiscal com erro</div><div style={{ ...S.kpiValue('#e05c5c'), fontSize: '1.25rem' }}>{fiscal.documentosComErro ?? 0}</div></div>
           </div>
@@ -434,17 +434,17 @@ export default function BI() {
         <div style={{ ...S.grid2, marginBottom: '1rem' }}>
           {previsao.length > 0 && (
             <div style={S.card}>
-              <div style={S.cardTitle}><span style={S.dot('#5FB335')} />Previsão de Faturamento — Próximos 7 Dias</div>
-              <LineChart items={previsao} color="#C9A656" valueKey="faturamento_previsto" labelKey="data" fmt={fmtR} />
+              <div style={S.cardTitle}><span style={S.dot('#FF6B2C')} />Previsão de Faturamento — Próximos 7 Dias</div>
+              <LineChart items={previsao} color="#FF6B2C" valueKey="faturamento_previsto" labelKey="data" fmt={fmtR} />
               <p style={{ ...S.muted, marginTop: 10 }}>Média móvel ponderada com tendência linear, calculada exclusivamente do histórico fechado da loja.</p>
             </div>
           )}
           {demandaProdutos.length > 0 && (
             <div style={S.card}>
-              <div style={S.cardTitle}><span style={S.dot('#C9A656')} />Demanda Estimada por Produto — 7 Dias</div>
+              <div style={S.cardTitle}><span style={S.dot('#FF6B2C')} />Demanda Estimada por Produto — 7 Dias</div>
               <BarChart
                 items={demandaProdutos}
-                color="#C9A656"
+                color="#FF6B2C"
                 valueKey="demanda_prevista_7_dias"
                 labelKey="nome"
                 fmt={(valor) => `${Number(valor).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} un.`}
@@ -461,7 +461,7 @@ export default function BI() {
           <div style={{ display: 'grid', gap: 9 }}>
             {alertas.map((alerta, indice) => (
               <div key={`${alerta.categoria}-${indice}`} style={{ padding: '0.75rem', borderRadius: 8, border: '1px solid var(--border)', background: alerta.severidade === 'critica' ? 'rgba(224,92,92,.10)' : 'var(--surface2)' }}>
-                <strong style={{ color: alerta.severidade === 'critica' || alerta.severidade === 'alta' ? '#e05c5c' : '#C9A656', fontSize: '0.82rem', textTransform: 'uppercase' }}>{alerta.categoria}</strong>
+                <strong style={{ color: alerta.severidade === 'critica' || alerta.severidade === 'alta' ? '#e05c5c' : '#FF6B2C', fontSize: '0.82rem', textTransform: 'uppercase' }}>{alerta.categoria}</strong>
                 <div style={{ marginTop: 3, color: 'var(--fg)', fontSize: '0.86rem' }}>{alerta.mensagem}</div>
                 <div style={{ ...S.muted, marginTop: 3 }}>{alerta.acao}</div>
               </div>
@@ -474,14 +474,14 @@ export default function BI() {
       {(op.nps != null || op.churnRate != null || op.ltv != null) && (
         <div style={{ ...S.card, marginBottom: '1rem' }}>
           <div style={S.cardTitle}>
-            <span style={S.dot('#C9A656')} />
+            <span style={S.dot('#FF6B2C')} />
             Indicadores Adicionais
           </div>
           <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
             {op.nps != null && (
               <div>
                 <div style={S.kpiLabel}>NPS</div>
-                <div style={{ ...S.kpiValue(op.nps >= 50 ? '#5FB335' : op.nps >= 0 ? '#C9A656' : '#e05c5c'), fontSize: '1.4rem' }}>{op.nps}</div>
+                <div style={{ ...S.kpiValue(op.nps >= 50 ? '#FF6B2C' : op.nps >= 0 ? '#FF6B2C' : '#e05c5c'), fontSize: '1.4rem' }}>{op.nps}</div>
               </div>
             )}
             {op.churnRate != null && (
@@ -493,7 +493,7 @@ export default function BI() {
             {op.ltv != null && (
               <div>
                 <div style={S.kpiLabel}>LTV</div>
-                <div style={{ ...S.kpiValue('#8FD64A'), fontSize: '1.4rem' }}>{fmtR(op.ltv)}</div>
+                <div style={{ ...S.kpiValue('#FF9B72'), fontSize: '1.4rem' }}>{fmtR(op.ltv)}</div>
               </div>
             )}
           </div>

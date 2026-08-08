@@ -500,13 +500,13 @@ export default function Torneios() {
         /* Detalhe */
         .torneio-detalhe { padding: 1.25rem; }
         .detalhe-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; }
-        .detalhe-header h2 { font-size: 1.05rem; font-weight: 700; color: #0E2E1C; margin: 0 0 .2rem; }
+        .detalhe-header h2 { font-size: 1.05rem; font-weight: 700; color: #12283F; margin: 0 0 .2rem; }
         .detalhe-sub { font-size: .78rem; color: #6b7280; margin: 0; }
 
         .detalhe-progresso { display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; }
         .progresso-bar { height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; }
         .progresso-bar.wide { flex: 1; }
-        .progresso-fill { height: 100%; background: #5FB335; border-radius: 4px; transition: width .3s; }
+        .progresso-fill { height: 100%; background: #FF6B2C; border-radius: 4px; transition: width .3s; }
         .progresso-label { font-size: .75rem; color: #6b7280; white-space: nowrap; }
 
         .detalhe-section { margin-bottom: 1.5rem; border-top: 1px solid #f3f4f6; padding-top: 1rem; }

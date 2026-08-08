@@ -1,4 +1,4 @@
-# SetPoint Ultra — Dockerfile para GCP Cloud Run
+# KYTTO Clube — Dockerfile para GCP Cloud Run
 # Multi-stage build para otimização de tamanho e segurança
 
 # ─── Stage 1: Build do Web (React) ──────────────────────────────────────────

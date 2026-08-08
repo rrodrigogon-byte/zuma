@@ -1,5 +1,5 @@
 /**
- * Loja de Moda — SetPoint Ultra
+ * Loja de Moda — KYTTO Clube
  * Grade Cor×Tamanho, Crediário próprio, Condicional (malinha), Vale-presente, Comissões
  */
 import { useState, useEffect, useCallback } from 'react'
@@ -199,7 +199,7 @@ export default function LojaModa() {
                       </td>
                       <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>{fmtR(p.preco_venda || 0)}</td>
                       <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                        <span style={{ background: (p.estoque_total || 0) > 0 ? '#5FB33522' : '#e05c5c22', color: (p.estoque_total || 0) > 0 ? '#5FB335' : '#e05c5c', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
+                        <span style={{ background: (p.estoque_total || 0) > 0 ? '#FF6B2C22' : '#e05c5c22', color: (p.estoque_total || 0) > 0 ? '#FF6B2C' : '#e05c5c', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
                           {p.estoque_total || 0} un
                         </span>
                       </td>
@@ -234,7 +234,7 @@ export default function LojaModa() {
                         <tr key={cor}>
                           <td style={{ padding: '4px 8px', fontWeight: 600 }}>{cor}</td>
                           {['P', 'M', 'G'].map(t => (
-                            <td key={t} style={{ padding: '4px 8px', textAlign: 'center', color: '#5FB335' }}>✓</td>
+                            <td key={t} style={{ padding: '4px 8px', textAlign: 'center', color: '#FF6B2C' }}>✓</td>
                           ))}
                         </tr>
                       ))}
@@ -255,7 +255,7 @@ export default function LojaModa() {
                       <div style={{ fontWeight: 600 }}>{p.nome}</div>
                       <div style={{ fontSize: 12, color: 'var(--muted)' }}>{(p.cores || []).length} cores × {(p.tamanhos || []).length} tamanhos = {(p.cores || []).length * (p.tamanhos || []).length} variantes</div>
                     </div>
-                    <span style={{ fontWeight: 700, color: '#5FB335' }}>{fmtR(p.preco_venda || 0)}</span>
+                    <span style={{ fontWeight: 700, color: '#FF6B2C' }}>{fmtR(p.preco_venda || 0)}</span>
                   </div>
                 ))}
               </div>
@@ -289,14 +289,14 @@ export default function LojaModa() {
                           <div style={{ fontSize: 12, color: 'var(--muted)' }}>{c.cliente_cpf}</div>
                         </td>
                         <td style={{ padding: '12px 16px', textAlign: 'right' }}>{fmtR(c.valor_total || 0)}</td>
-                        <td style={{ padding: '12px 16px', textAlign: 'right', color: '#5FB335' }}>{fmtR(c.valor_pago || 0)}</td>
-                        <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: saldo > 0 ? '#e05c5c' : '#5FB335' }}>{fmtR(saldo)}</td>
+                        <td style={{ padding: '12px 16px', textAlign: 'right', color: '#FF6B2C' }}>{fmtR(c.valor_pago || 0)}</td>
+                        <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: saldo > 0 ? '#e05c5c' : '#FF6B2C' }}>{fmtR(saldo)}</td>
                         <td style={{ padding: '12px 16px', fontSize: 13, color: atrasado ? '#e05c5c' : 'var(--muted)' }}>
                           {c.proximo_vencimento ? fmtDate(c.proximo_vencimento) : '-'}
                           {atrasado && <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700 }}>({c.dias_atraso}d atraso)</span>}
                         </td>
                         <td style={{ padding: '12px 16px' }}>
-                          <span style={{ background: atrasado ? '#e05c5c22' : '#5FB33522', color: atrasado ? '#e05c5c' : '#5FB335', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
+                          <span style={{ background: atrasado ? '#e05c5c22' : '#FF6B2C22', color: atrasado ? '#e05c5c' : '#FF6B2C', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
                             {atrasado ? 'Atrasado' : 'Em dia'}
                           </span>
                         </td>
@@ -371,12 +371,12 @@ export default function LojaModa() {
                 <div key={v.id} style={{ background: 'var(--card)', borderRadius: 12, padding: 24, border: '1px solid var(--line)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                     <span style={{ fontSize: 28 }}>🎁</span>
-                    <span style={{ background: v.status === 'ativo' ? '#5FB33522' : '#88888822', color: v.status === 'ativo' ? '#5FB335' : '#888', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
+                    <span style={{ background: v.status === 'ativo' ? '#FF6B2C22' : '#88888822', color: v.status === 'ativo' ? '#FF6B2C' : '#888', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
                       {v.status === 'ativo' ? 'Ativo' : 'Utilizado'}
                     </span>
                   </div>
                   <div style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 700, letterSpacing: 2, marginBottom: 8 }}>{v.codigo}</div>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: '#5FB335' }}>{fmtR(v.valor || 0)}</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: '#FF6B2C' }}>{fmtR(v.valor || 0)}</div>
                   <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 8 }}>Emitido em {fmtDate(v.created_at)}</div>
                 </div>
               ))}
@@ -405,10 +405,10 @@ export default function LojaModa() {
                       <td style={{ padding: '12px 16px', fontWeight: 600 }}>{c.vendedor_nome}</td>
                       <td style={{ padding: '12px 16px', textAlign: 'right' }}>{fmtR(c.total_vendas || 0)}</td>
                       <td style={{ padding: '12px 16px', textAlign: 'right' }}>{c.percentual_comissao}%</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: '#5FB335' }}>{fmtR(c.valor_comissao || 0)}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: '#FF6B2C' }}>{fmtR(c.valor_comissao || 0)}</td>
                       <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--muted)' }}>{c.periodo}</td>
                       <td style={{ padding: '12px 16px' }}>
-                        <span style={{ background: c.pago ? '#5FB33522' : '#f59e0b22', color: c.pago ? '#5FB335' : '#f59e0b', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
+                        <span style={{ background: c.pago ? '#FF6B2C22' : '#f59e0b22', color: c.pago ? '#FF6B2C' : '#f59e0b', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
                           {c.pago ? 'Pago' : 'Pendente'}
                         </span>
                       </td>
@@ -493,7 +493,7 @@ export default function LojaModa() {
             {totalCombinacoes > 0 && (
               <div style={{ background: 'var(--card)', borderRadius: 10, padding: 16, marginBottom: 24 }}>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8 }}>Preview da Grade</div>
-                <div style={{ fontWeight: 700, fontSize: 16, color: '#5FB335', marginBottom: 8 }}>
+                <div style={{ fontWeight: 700, fontSize: 16, color: '#FF6B2C', marginBottom: 8 }}>
                   {coresSelecionadas.length} cores × {tamanhosSelecionados.length} tamanhos = <span style={{ fontSize: 20 }}>{totalCombinacoes}</span> variantes
                 </div>
                 <div style={{ overflowX: 'auto' }}>
@@ -509,7 +509,7 @@ export default function LojaModa() {
                         <tr key={cor}>
                           <td style={{ padding: '4px 10px', fontWeight: 600 }}>{cor}</td>
                           {tamanhosSelecionados.map(t => (
-                            <td key={t} style={{ padding: '4px 10px', textAlign: 'center', color: '#5FB335', fontSize: 16 }}>✓</td>
+                            <td key={t} style={{ padding: '4px 10px', textAlign: 'center', color: '#FF6B2C', fontSize: 16 }}>✓</td>
                           ))}
                         </tr>
                       ))}
@@ -560,7 +560,7 @@ export default function LojaModa() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
                   <div style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: 11, color: 'var(--muted)' }}>Entrada</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: '#5FB335' }}>{fmtR(valorEntrada)}</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#FF6B2C' }}>{fmtR(valorEntrada)}</div>
                   </div>
                   <div style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: 11, color: 'var(--muted)' }}>{formCrediario.num_parcelas}x de</div>

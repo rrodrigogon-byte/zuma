@@ -1,5 +1,5 @@
 /**
- * SetPoint Ultra — ERP Modular Brasil
+ * KYTTO Clube — Plataforma de Gestão Integrada
  * server-erp.js — Servidor principal com TODOS os módulos integrados
  *
  * Versão: 3.0.0
@@ -37,7 +37,7 @@ app.use(helmet({
 
 app.use(cors({
   origin: PROD
-    ? [process.env.FRONTEND_URL, /\.setpointultra\.com\.br$/].filter(Boolean)
+    ? [process.env.FRONTEND_URL, /\.kytto\.com\.br$/].filter(Boolean)
     : '*',
   credentials: true
 }));
@@ -322,7 +322,7 @@ app.get('/health', async (req, res) => {
 
 app.get('/', (req, res) => {
   res.json({
-    nome: 'SetPoint Ultra — ERP Modular Brasil',
+    nome: 'KYTTO Clube — Plataforma de Gestão Integrada',
     versao: '3.0.0',
     status: 'operacional',
     segmentos: {
@@ -415,7 +415,7 @@ try {
 
 async function iniciar() {
   console.log('\n' + '═'.repeat(65));
-  console.log('  🚀 SetPoint Ultra — ERP Modular Brasil v3.0.0');
+  console.log('  🚀 KYTTO Clube — Plataforma de Gestão Integrada v3.0.0');
   console.log('═'.repeat(65));
   console.log('\n📦 Registrando módulos...\n');
 
@@ -427,7 +427,7 @@ async function iniciar() {
   app.get('/api/info', (req, res) => {
     res.json({
       versao: '3.0.0',
-      nome: 'SetPoint Ultra',
+      nome: 'KYTTO Clube',
       ambiente: PROD ? 'produção' : 'desenvolvimento'
     });
   });

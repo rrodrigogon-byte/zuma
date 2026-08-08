@@ -182,7 +182,7 @@ export default function Socios() {
           { label:'A Receber', val:fmtR(totalReceber), color:'var(--lime)', icon:'💰' },
           { label:'Limite Total', val:fmtR(totalLimite), color:'var(--green)', icon:'📊' },
           { label:'Em Atraso', val:emAtraso, color: emAtraso > 0 ? '#e74c3c' : 'var(--green)', icon:'🔴' },
-          { label:'Atenção', val:emAtencao, color: emAtencao > 0 ? '#C9A656' : 'var(--muted)', icon:'⚠️' },
+          { label:'Atenção', val:emAtencao, color: emAtencao > 0 ? '#FF6B2C' : 'var(--muted)', icon:'⚠️' },
           { label:'Regular', val:emOk, color:'var(--green)', icon:'✅' },
         ].map(k => (
           <div key={k.label} style={{ background:'var(--surface)', border:'1px solid var(--line)', borderRadius:10,
@@ -233,7 +233,7 @@ export default function Socios() {
               className="card"
               style={{
                 borderColor: st === 'late' ? 'rgba(231,76,60,.35)'
-                           : st === 'warn' ? 'rgba(201,166,86,.35)'
+                           : st === 'warn' ? 'rgba(255,107,44,.35)'
                            : undefined,
               }}
             >

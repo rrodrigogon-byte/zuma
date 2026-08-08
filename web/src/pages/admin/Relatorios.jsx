@@ -98,7 +98,7 @@ function DateFilter({ from, to, onFrom, onTo, periodButtons = true }) {
         onClick={onClick}
         style={{
           fontWeight: active ? 800 : 600,
-          background: active ? 'rgba(95,179,53,.18)' : 'transparent',
+          background: active ? 'rgba(255,107,44,.18)' : 'transparent',
           color: active ? 'var(--green)' : 'var(--muted)',
           border: active ? '1px solid var(--green)' : '1px solid transparent',
         }}
@@ -381,15 +381,15 @@ export default function Relatorios() {
             })))} onPrint>
             <DateFilter from={finFrom} to={finTo} onFrom={setFinFrom} onTo={setFinTo} />
             <div style={{ display:'flex', gap:14, flexWrap:'wrap', marginBottom:22 }}>
-              <div style={{ background:'rgba(95,179,53,.1)', borderRadius:10, padding:'12px 20px', flex:1, minWidth:130 }}>
+              <div style={{ background:'rgba(255,107,44,.1)', borderRadius:10, padding:'12px 20px', flex:1, minWidth:130 }}>
                 <div style={{ fontSize:11, color:'var(--muted)', fontWeight:700 }}>RECEITA NO PERÍODO</div>
                 <div style={{ fontSize:24, fontWeight:900, color:'var(--green)', marginTop:4 }}>{fmtR(receitaTotal)}</div>
               </div>
-              <div style={{ background:'rgba(201,166,86,.1)', borderRadius:10, padding:'12px 20px', flex:1, minWidth:130 }}>
+              <div style={{ background:'rgba(255,107,44,.1)', borderRadius:10, padding:'12px 20px', flex:1, minWidth:130 }}>
                 <div style={{ fontSize:11, color:'var(--muted)', fontWeight:700 }}>VENDAS</div>
                 <div style={{ fontSize:24, fontWeight:900, color:'var(--gold)', marginTop:4 }}>{vendasFiltradas.length}</div>
               </div>
-              <div style={{ background:'rgba(143,214,74,.08)', borderRadius:10, padding:'12px 20px', flex:1, minWidth:130 }}>
+              <div style={{ background:'rgba(255,107,44,.08)', borderRadius:10, padding:'12px 20px', flex:1, minWidth:130 }}>
                 <div style={{ fontSize:11, color:'var(--muted)', fontWeight:700 }}>TICKET MÉDIO</div>
                 <div style={{ fontSize:24, fontWeight:900, color:'var(--lime)', marginTop:4 }}>
                   {fmtR(vendasFiltradas.length ? receitaTotal/vendasFiltradas.length : 0)}
@@ -422,12 +422,12 @@ export default function Relatorios() {
             })))} onPrint>
             <DateFilter from={insFrom} to={insTo} onFrom={setInsFrom} onTo={setInsTo} />
             <div style={{ display:'flex', gap:14, flexWrap:'wrap', marginBottom:22 }}>
-              <div style={{ background:'rgba(95,179,53,.1)', borderRadius:10, padding:'12px 20px', flex:1, minWidth:120 }}>
+              <div style={{ background:'rgba(255,107,44,.1)', borderRadius:10, padding:'12px 20px', flex:1, minWidth:120 }}>
                 <div style={{ fontSize:11, color:'var(--muted)', fontWeight:700 }}>TOTAL</div>
                 <div style={{ fontSize:24, fontWeight:900, color:'var(--green)', marginTop:4 }}>{inscFiltradas.length}</div>
               </div>
               {porStatusArr.map(s => (
-                <div key={s.label} style={{ background:'rgba(143,214,74,.08)', borderRadius:10, padding:'12px 20px', flex:1, minWidth:120 }}>
+                <div key={s.label} style={{ background:'rgba(255,107,44,.08)', borderRadius:10, padding:'12px 20px', flex:1, minWidth:120 }}>
                   <div style={{ fontSize:11, color:'var(--muted)', fontWeight:700 }}>{s.label.toUpperCase()}</div>
                   <div style={{ fontSize:24, fontWeight:900, color:'var(--lime)', marginTop:4 }}>{s.value}</div>
                 </div>
@@ -451,9 +451,9 @@ export default function Relatorios() {
             <DateFilter from={lojaFrom} to={lojaTo} onFrom={setLojaFrom} onTo={setLojaTo} />
             <div style={{ display:'flex', gap:14, flexWrap:'wrap', marginBottom:22 }}>
               {[
-                { label:'RESERVAS',        val: lojaFiltradas.length,       color:'var(--green)',  bg:'rgba(95,179,53,.1)' },
-                { label:'PENDENTES',        val: lojaPend,                   color:'var(--gold)',   bg:'rgba(201,166,86,.1)' },
-                { label:'RECEITA CONF.',    val: fmtR(receitaLoja),          color:'var(--lime)',   bg:'rgba(143,214,74,.08)' },
+                { label:'RESERVAS',        val: lojaFiltradas.length,       color:'var(--green)',  bg:'rgba(255,107,44,.1)' },
+                { label:'PENDENTES',        val: lojaPend,                   color:'var(--gold)',   bg:'rgba(255,107,44,.1)' },
+                { label:'RECEITA CONF.',    val: fmtR(receitaLoja),          color:'var(--lime)',   bg:'rgba(255,107,44,.08)' },
               ].map(k => (
                 <div key={k.label} style={{ background:k.bg, borderRadius:10, padding:'12px 20px', flex:1, minWidth:120 }}>
                   <div style={{ fontSize:11, color:'var(--muted)', fontWeight:700 }}>{k.label}</div>
@@ -500,8 +500,8 @@ export default function Relatorios() {
                         <td style={{ textAlign:'center' }}>{r.qtd??1}</td>
                         <td style={{ fontWeight:700, color:'var(--gold)' }}>{r.total!=null?fmtR(r.total):'—'}</td>
                         <td><span style={{
-                          background: r.status==='confirmada'||r.status==='entregue' ? '#5FB33520' : r.status==='cancelada' ? '#e05c5c20' : '#C9A65620',
-                          color: r.status==='confirmada'||r.status==='entregue' ? '#5FB335' : r.status==='cancelada' ? '#e05c5c' : '#C9A656',
+                          background: r.status==='confirmada'||r.status==='entregue' ? '#FF6B2C20' : r.status==='cancelada' ? '#e05c5c20' : '#FF6B2C20',
+                          color: r.status==='confirmada'||r.status==='entregue' ? '#FF6B2C' : r.status==='cancelada' ? '#e05c5c' : '#FF6B2C',
                           borderRadius:10, padding:'2px 8px', fontSize:11, fontWeight:700,
                         }}>{r.status}</span></td>
                         <td style={{ fontSize:12, color:'var(--muted)', whiteSpace:'nowrap' }}>{r.criadoEm?fmtDate(r.criadoEm):'—'}</td>
@@ -525,10 +525,10 @@ export default function Relatorios() {
             <DateFilter from={socFrom} to={socTo} onFrom={setSocFrom} onTo={setSocTo} periodButtons={false} />
             <div style={{ display:'flex', gap:14, flexWrap:'wrap', marginBottom:22 }}>
               {[
-                { label:'TOTAL SÓCIOS', val:socios.length, color:'var(--green)', bg:'rgba(95,179,53,.1)' },
+                { label:'TOTAL SÓCIOS', val:socios.length, color:'var(--green)', bg:'rgba(255,107,44,.1)' },
                 { label:'INADIMPLENTES', val:inadimplentes.length, color:'#e74c3c', bg:'rgba(231,76,60,.1)' },
-                { label:'A RECEBER', val:fmtR(totalAReceber), color:'var(--gold)', bg:'rgba(201,166,86,.1)' },
-                { label:'ANIVERSARIANTES', val:aniversariantes.length, color:'var(--lime)', bg:'rgba(143,214,74,.08)' },
+                { label:'A RECEBER', val:fmtR(totalAReceber), color:'var(--gold)', bg:'rgba(255,107,44,.1)' },
+                { label:'ANIVERSARIANTES', val:aniversariantes.length, color:'var(--lime)', bg:'rgba(255,107,44,.08)' },
               ].map(k => (
                 <div key={k.label} style={{ background:k.bg, borderRadius:10, padding:'12px 20px', flex:1, minWidth:120 }}>
                   <div style={{ fontSize:11, color:'var(--muted)', fontWeight:700 }}>{k.label}</div>
@@ -560,7 +560,7 @@ export default function Relatorios() {
                 <div style={{ fontSize:13, fontWeight:700, color:'var(--lime)', margin:'20px 0 10px' }}>🎂 Aniversariantes do Mês</div>
                 <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
                   {aniversariantes.map(s => (
-                    <div key={s.id} style={{ background:'rgba(143,214,74,.1)', border:'1px solid rgba(143,214,74,.2)', borderRadius:8, padding:'8px 14px', fontSize:13, color:'var(--cream)' }}>
+                    <div key={s.id} style={{ background:'rgba(255,107,44,.1)', border:'1px solid rgba(255,107,44,.2)', borderRadius:8, padding:'8px 14px', fontSize:13, color:'var(--cream)' }}>
                       🎂 {s.nome}
                     </div>
                   ))}
@@ -580,9 +580,9 @@ export default function Relatorios() {
             <DateFilter from={qFrom} to={qTo} onFrom={setQFrom} onTo={setQTo} />
             <div style={{ display:'flex', gap:14, flexWrap:'wrap', marginBottom:22 }}>
               {[
-                { label:'RESERVAS NO PERÍODO', val:resFiltradas.length, color:'var(--green)', bg:'rgba(95,179,53,.1)' },
-                { label:'RECEITA ESTIMADA',    val:fmtR(receitaQuadras), color:'var(--lime)', bg:'rgba(143,214,74,.08)' },
-                { label:'QUADRAS ATIVAS',      val:porQuadraArr.length, color:'var(--gold)', bg:'rgba(201,166,86,.1)' },
+                { label:'RESERVAS NO PERÍODO', val:resFiltradas.length, color:'var(--green)', bg:'rgba(255,107,44,.1)' },
+                { label:'RECEITA ESTIMADA',    val:fmtR(receitaQuadras), color:'var(--lime)', bg:'rgba(255,107,44,.08)' },
+                { label:'QUADRAS ATIVAS',      val:porQuadraArr.length, color:'var(--gold)', bg:'rgba(255,107,44,.1)' },
               ].map(k => (
                 <div key={k.label} style={{ background:k.bg, borderRadius:10, padding:'12px 20px', flex:1, minWidth:120 }}>
                   <div style={{ fontSize:11, color:'var(--muted)', fontWeight:700 }}>{k.label}</div>
@@ -613,7 +613,7 @@ export default function Relatorios() {
                           <td>{r.horario || r.hora || '—'}</td>
                           <td>{r.clienteNome || r.socioNome || '—'}</td>
                           <td style={{ color:'var(--green)', fontWeight:700 }}>{fmtR(r.valor||0)}</td>
-                          <td><span style={{ fontSize:11, padding:'2px 8px', borderRadius:20, background:'rgba(95,179,53,.15)', color:'var(--green)', fontWeight:700 }}>{r.status||'—'}</span></td>
+                          <td><span style={{ fontSize:11, padding:'2px 8px', borderRadius:20, background:'rgba(255,107,44,.15)', color:'var(--green)', fontWeight:700 }}>{r.status||'—'}</span></td>
                         </tr>
                       ))}
                     </tbody>
@@ -639,11 +639,11 @@ export default function Relatorios() {
             <DateFilter from={aulFrom} to={aulTo} onFrom={setAulFrom} onTo={setAulTo} />
             <div style={{ display:'flex', gap:14, flexWrap:'wrap', marginBottom:22 }}>
               {[
-                { label:'MATRÍCULAS NO PERÍODO', val:aulFiltradas.length, color:'var(--green)', bg:'rgba(95,179,53,.1)' },
-                { label:'RECEITA',               val:fmtR(receitaAulas),  color:'var(--lime)',  bg:'rgba(143,214,74,.08)' },
+                { label:'MATRÍCULAS NO PERÍODO', val:aulFiltradas.length, color:'var(--green)', bg:'rgba(255,107,44,.1)' },
+                { label:'RECEITA',               val:fmtR(receitaAulas),  color:'var(--lime)',  bg:'rgba(255,107,44,.08)' },
                 { label:'AULAS / MODALIDADES',   val:porAulaArr.length,   color:'#3498db',      bg:'rgba(52,152,219,.1)' },
                 ...Object.entries(porStatusAul).map(([s, n]) => ({
-                  label: s.toUpperCase(), val:n, color:'var(--gold)', bg:'rgba(201,166,86,.1)',
+                  label: s.toUpperCase(), val:n, color:'var(--gold)', bg:'rgba(255,107,44,.1)',
                 })),
               ].map(k => (
                 <div key={k.label} style={{ background:k.bg, borderRadius:10, padding:'12px 20px', flex:1, minWidth:120 }}>
@@ -665,7 +665,7 @@ export default function Relatorios() {
                         <tr key={i}>
                           <td style={{ fontWeight:600 }}>{m.alunoNome || m.socioNome || '—'}</td>
                           <td>{m.aulaNome || m.modalidade || '—'}</td>
-                          <td><span style={{ fontSize:11, padding:'2px 8px', borderRadius:20, background:'rgba(95,179,53,.15)', color:'var(--green)', fontWeight:700 }}>{m.status||'ativo'}</span></td>
+                          <td><span style={{ fontSize:11, padding:'2px 8px', borderRadius:20, background:'rgba(255,107,44,.15)', color:'var(--green)', fontWeight:700 }}>{m.status||'ativo'}</span></td>
                           <td style={{ color:'var(--green)', fontWeight:700 }}>{fmtR(m.valor||0)}</td>
                           <td>{fmtDate(m.createdAt||m.data)||'—'}</td>
                         </tr>

@@ -1,5 +1,5 @@
 /**
- * Compras & Fornecedores — SetPoint Ultra
+ * Compras & Fornecedores — KYTTO Clube
  * Pedidos de Compra, Cotações, Fornecedores, Recebimento
  */
 import { useState, useEffect, useCallback } from 'react'
@@ -13,7 +13,7 @@ const STATUS_PC = {
   aprovado: { label: 'Aprovado', color: '#4a9eff' },
   enviado: { label: 'Enviado', color: '#8b5cf6' },
   parcialmente_recebido: { label: 'Parc. Recebido', color: '#f59e0b' },
-  recebido: { label: 'Recebido', color: '#5FB335' },
+  recebido: { label: 'Recebido', color: '#FF6B2C' },
   cancelado: { label: 'Cancelado', color: '#e05c5c' }
 }
 
@@ -127,7 +127,7 @@ export default function Compras() {
                         </td>
                         <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                           {p.status === 'aguardando_aprovacao' && (
-                            <button onClick={() => aprovarPedido(p.id)} style={{ padding: '4px 12px', borderRadius: 6, border: 'none', background: '#5FB335', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                            <button onClick={() => aprovarPedido(p.id)} style={{ padding: '4px 12px', borderRadius: 6, border: 'none', background: '#FF6B2C', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
                               Aprovar
                             </button>
                           )}

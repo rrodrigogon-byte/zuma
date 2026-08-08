@@ -1,5 +1,5 @@
 /**
- * BI Dashboard Completo — SetPoint Ultra
+ * BI Dashboard Completo — KYTTO Clube
  * DRE, Curva ABC, Fluxo de Caixa, KPIs por Segmento, Ranking Vendedores
  * Rota: /admin/bi-erp
  */
@@ -8,7 +8,7 @@ import { api } from '../../lib/api'
 
 const T = {
   bg: '#0f1117', surface: '#1a1d27', card: '#22263a',
-  green: '#5fb335', muted: '#8a8fa8', cream: '#e8e6df',
+  green: '#FF6B2C', muted: '#8a8fa8', cream: '#e8e6df',
   line: '#2e3248', red: '#e05c5c', yellow: '#f5a623', blue: '#4a9eff',
   purple: '#9b59b6',
 }
@@ -484,7 +484,7 @@ export default function BIDashboard() {
             <div key={i} style={{ background: T.card, border: `1px solid ${T.line}`, borderRadius: 14, padding: 20 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                 <div style={{ fontWeight: 800, fontSize: 14 }}>{seg.icon} {seg.nome}</div>
-                <div style={{ fontSize: 10, padding: '3px 8px', background: 'rgba(95,179,53,.15)', color: T.green, borderRadius: 20, fontWeight: 700 }}>
+                <div style={{ fontSize: 10, padding: '3px 8px', background: 'rgba(255,107,44,.15)', color: T.green, borderRadius: 20, fontWeight: 700 }}>
                   {fmtPct(seg.participacao)}
                 </div>
               </div>

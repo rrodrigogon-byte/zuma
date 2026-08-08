@@ -36,9 +36,9 @@ function exportCSVSumula(jogos) {
 }
 
 const STATUS_OPTS = [
-  { value: 'pendente',     label: 'Aguardando',   color: '#C9A656' },
-  { value: 'em_andamento', label: 'Em andamento',  color: '#8FD64A' },
-  { value: 'concluido',    label: 'Concluída',     color: '#5FB335' },
+  { value: 'pendente',     label: 'Aguardando',   color: '#FF6B2C' },
+  { value: 'em_andamento', label: 'Em andamento',  color: '#FF9B72' },
+  { value: 'concluido',    label: 'Concluída',     color: '#FF6B2C' },
 ]
 
 function statusInfo(s) {
@@ -68,12 +68,12 @@ function PartidaTimer({ jogoSel }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 8,
-      background: urgent ? 'rgba(224,92,92,.15)' : 'rgba(143,214,74,.1)',
-      border: `1px solid ${urgent ? '#e05c5c' : '#8FD64A'}`,
+      background: urgent ? 'rgba(224,92,92,.15)' : 'rgba(255,107,44,.1)',
+      border: `1px solid ${urgent ? '#e05c5c' : '#FF9B72'}`,
       borderRadius: 8, padding: '0.4rem 0.9rem',
     }}>
       <span style={{ fontSize: 16 }}>⏱</span>
-      <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: '1rem', color: urgent ? '#e05c5c' : '#8FD64A' }}>
+      <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 800, fontSize: '1rem', color: urgent ? '#e05c5c' : '#FF9B72' }}>
         {String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')}
       </span>
       <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>em andamento</span>
@@ -230,10 +230,10 @@ export default function Sumula() {
         {/* KPI Cards */}
         {!loading && todos.length > 0 && (
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-            <KpiCard label="Hoje" value={kpis.hojeTotal} color="#5FB335" icon="📅" sub="partidas agendadas" />
-            <KpiCard label="Em andamento" value={kpis.hojeEmAndamento} color="#C9A656" icon="⏱" sub="em quadra agora" />
+            <KpiCard label="Hoje" value={kpis.hojeTotal} color="#FF6B2C" icon="📅" sub="partidas agendadas" />
+            <KpiCard label="Em andamento" value={kpis.hojeEmAndamento} color="#FF6B2C" icon="⏱" sub="em quadra agora" />
             <KpiCard label="Pendentes hoje" value={kpis.hogePendentes} color="#e05c5c" icon="⏳" sub="aguardando início" />
-            <KpiCard label="Concluídas (total)" value={kpis.totalConcluidos} color="#8FD64A" icon="✅" sub={`de ${kpis.totalPartidas} partidas`} />
+            <KpiCard label="Concluídas (total)" value={kpis.totalConcluidos} color="#FF9B72" icon="✅" sub={`de ${kpis.totalPartidas} partidas`} />
           </div>
         )}
 
@@ -329,7 +329,7 @@ export default function Sumula() {
                       {j.quadra   && <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>🎾 {j.quadra}</span>}
                       {j.categoria && <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>📋 {j.categoria}</span>}
                       {j.fase     && <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>🏆 {j.fase}</span>}
-                      {j.vencedor && <span style={{ color: '#5FB335', fontSize: '0.85rem', fontWeight: 700 }}>🏅 {j.vencedor}</span>}
+                      {j.vencedor && <span style={{ color: '#FF6B2C', fontSize: '0.85rem', fontWeight: 700 }}>🏅 {j.vencedor}</span>}
                     </div>
                     {/* Placar final */}
                     {concluido && j.placar1 && (
@@ -440,7 +440,7 @@ export default function Sumula() {
                 style={{
                   padding: '0.7rem', borderRadius: 8, fontWeight: 700, fontSize: '0.9rem',
                   border: `2px solid ${vencedor === nome ? 'var(--green)' : 'var(--line)'}`,
-                  background: vencedor === nome ? 'rgba(95,179,53,.15)' : 'var(--bg)',
+                  background: vencedor === nome ? 'rgba(255,107,44,.15)' : 'var(--bg)',
                   color: vencedor === nome ? 'var(--green)' : 'var(--fg)',
                   cursor: 'pointer', transition: 'all .15s',
                 }}

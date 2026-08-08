@@ -112,7 +112,7 @@ export default function Lojas() {
           <p style={{ margin: '8px 0 0', color: 'var(--muted)', maxWidth: 700 }}>Cadastre filiais, alterne o contexto ativo e valide a trilha de auditoria encadeada da empresa.</p>
         </div>
         {lojaAtiva && (
-          <div style={{ padding: '10px 13px', border: '1px solid rgba(95,179,53,.35)', background: 'rgba(95,179,53,.09)', borderRadius: 9, color: 'var(--cream)', fontSize: 13 }}>
+          <div style={{ padding: '10px 13px', border: '1px solid rgba(255,107,44,.35)', background: 'rgba(255,107,44,.09)', borderRadius: 9, color: 'var(--cream)', fontSize: 13 }}>
             Operando em: <strong>{lojaAtiva.nome || lojaAtiva.nome_fantasia}</strong>
           </div>
         )}
@@ -148,7 +148,7 @@ export default function Lojas() {
                       </td>
                       <td style={{ padding: '14px 16px', color: 'var(--muted)', fontSize: 12 }}>{[loja.endereco_cidade, loja.endereco_estado].filter(Boolean).join(' / ') || 'Não informado'}</td>
                       <td style={{ padding: '14px 16px' }}>
-                        <span style={{ fontSize: 11, fontWeight: 800, padding: '4px 7px', borderRadius: 999, color: loja.ativa ? '#8fd64a' : '#e7a1a1', background: loja.ativa ? 'rgba(95,179,53,.14)' : 'rgba(224,92,92,.12)' }}>{loja.ativa ? 'ATIVA' : 'INATIVA'}</span>
+                        <span style={{ fontSize: 11, fontWeight: 800, padding: '4px 7px', borderRadius: 999, color: loja.ativa ? '#FF9B72' : '#e7a1a1', background: loja.ativa ? 'rgba(255,107,44,.14)' : 'rgba(224,92,92,.12)' }}>{loja.ativa ? 'ATIVA' : 'INATIVA'}</span>
                         {lojaAtiva?.id === loja.id && <span style={{ display: 'block', marginTop: 5, color: 'var(--gold)', fontSize: 10, fontWeight: 800 }}>EM USO</span>}
                       </td>
                       <td style={{ padding: '14px 16px', display: 'flex', gap: 7, flexWrap: 'wrap' }}>
@@ -182,7 +182,7 @@ export default function Lojas() {
       </section>
 
       {auditoria && (
-        <section style={{ marginTop: 20, background: auditoria.sucesso ? 'rgba(95,179,53,.09)' : 'rgba(224,92,92,.10)', border: `1px solid ${auditoria.sucesso ? 'rgba(95,179,53,.34)' : 'rgba(224,92,92,.35)'}`, borderRadius: 11, padding: '14px 16px', color: 'var(--cream)' }}>
+        <section style={{ marginTop: 20, background: auditoria.sucesso ? 'rgba(255,107,44,.09)' : 'rgba(224,92,92,.10)', border: `1px solid ${auditoria.sucesso ? 'rgba(255,107,44,.34)' : 'rgba(224,92,92,.35)'}`, borderRadius: 11, padding: '14px 16px', color: 'var(--cream)' }}>
           <strong>Auditoria — {auditoria.loja.nome}</strong>
           <p style={{ margin: '5px 0 0', color: 'var(--muted)', fontSize: 13 }}>{auditoria.verificacao?.motivo || (auditoria.sucesso ? 'Cadeia de auditoria íntegra.' : 'A cadeia possui inconsistências.')}</p>
         </section>

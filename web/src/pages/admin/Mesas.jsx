@@ -4,8 +4,8 @@ import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
 
 const STATUS_COLOR = {
-  livre:    { bg:'rgba(95,179,53,.15)',   text:'var(--green)', label:'Livre' },
-  ocupada:  { bg:'rgba(201,166,86,.15)',  text:'var(--gold)',  label:'Ocupada' },
+  livre:    { bg:'rgba(255,107,44,.15)',   text:'var(--green)', label:'Livre' },
+  ocupada:  { bg:'rgba(255,107,44,.15)',  text:'var(--gold)',  label:'Ocupada' },
   fechando: { bg:'rgba(52,152,219,.15)',  text:'#3498db',      label:'Fechando' },
 }
 
@@ -146,7 +146,7 @@ export default function Mesas() {
   const totalReceber   = fisicas.reduce((s, m) => s + (m.total || 0), 0)
   const itensCozinha   = fisicas.reduce((s, m) => s + (m.aguardandoCozinha || 0), 0)
   const taxaOcupacao   = fisicas.length ? Math.round((ocupadas / fisicas.length) * 100) : 0
-  const ocBarColor     = taxaOcupacao >= 90 ? '#e05c5c' : taxaOcupacao >= 70 ? '#C9A656' : '#5FB335'
+  const ocBarColor     = taxaOcupacao >= 90 ? '#e05c5c' : taxaOcupacao >= 70 ? '#FF6B2C' : '#FF6B2C'
   const totalComandas  = virtuais.length
   const mesaMaior      = fisicas.reduce((acc, m) => (m.total || 0) > (acc?.total || 0) ? m : acc, null)
 
@@ -417,7 +417,7 @@ export default function Mesas() {
 
             {/* Painel de transferência */}
             {transferindo && (
-              <div style={{ background:'rgba(201,166,86,.1)', border:'1px solid var(--gold)', borderRadius:10, padding:14, marginBottom:16 }}>
+              <div style={{ background:'rgba(255,107,44,.1)', border:'1px solid var(--gold)', borderRadius:10, padding:14, marginBottom:16 }}>
                 <div style={{ fontSize:13, fontWeight:700, color:'var(--gold)', marginBottom:10 }}>
                   ↔️ Transferir "{transferindo.nome}" para mesa:
                 </div>
@@ -425,7 +425,7 @@ export default function Mesas() {
                   {fisicas.filter(f => f.status !== 'livre' && f.num !== comanda.mesa.num).map(f => (
                     <button key={f.num} onClick={() => transferirItem(transferindo, f.num)}
                       style={{ padding:'6px 14px', borderRadius:8, border:'1px solid var(--gold)',
-                        background:'rgba(201,166,86,.15)', color:'var(--gold)', cursor:'pointer', fontWeight:700, fontSize:13 }}>
+                        background:'rgba(255,107,44,.15)', color:'var(--gold)', cursor:'pointer', fontWeight:700, fontSize:13 }}>
                       Mesa #{f.num}
                     </button>
                   ))}

@@ -11,8 +11,8 @@ function normStatus(i) {
 }
 
 const STATUS_COLORS = {
-  aprovado: { bg: '#5FB33522', color: '#5FB335', border: '#5FB33544', label: 'Aprovada' },
-  pendente:  { bg: '#C9A65622', color: '#C9A656', border: '#C9A65644', label: 'Pendente' },
+  aprovado: { bg: '#FF6B2C22', color: '#FF6B2C', border: '#FF6B2C44', label: 'Aprovada' },
+  pendente:  { bg: '#FF6B2C22', color: '#FF6B2C', border: '#FF6B2C44', label: 'Pendente' },
   cancelado: { bg: '#6b728022', color: '#9ca3af', border: '#6b728044', label: 'Cancelada' },
 }
 
@@ -158,11 +158,11 @@ export default function Inscricoes() {
       {/* KPI Cards */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         {[
-          { label: 'TOTAL',           value: inscricoes.length,   color: '#5FB335', icon: '📋', sub: 'inscrições' },
-          { label: 'APROVADAS',       value: contadores.aprovado, color: '#8FD64A', icon: '✅', sub: 'confirmadas' },
-          { label: 'PENDENTES',       value: contadores.pendente, color: '#C9A656', icon: '⏳', sub: 'aguardando' },
+          { label: 'TOTAL',           value: inscricoes.length,   color: '#FF6B2C', icon: '📋', sub: 'inscrições' },
+          { label: 'APROVADAS',       value: contadores.aprovado, color: '#FF9B72', icon: '✅', sub: 'confirmadas' },
+          { label: 'PENDENTES',       value: contadores.pendente, color: '#FF6B2C', icon: '⏳', sub: 'aguardando' },
           { label: 'CANCELADAS',      value: contadores.cancelado,color: '#e05c5c', icon: '❌', sub: 'rejeitadas' },
-          { label: 'RECEITA APROVADA',value: fmtR(receita),       color: '#5FB335', icon: '💰', sub: 'valor confirmado' },
+          { label: 'RECEITA APROVADA',value: fmtR(receita),       color: '#FF6B2C', icon: '💰', sub: 'valor confirmado' },
         ].map(k => (
           <div key={k.label} style={{
             background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10,
@@ -202,9 +202,9 @@ export default function Inscricoes() {
       {/* Filtros de status rápidos */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
         {[
-          ['todos',    'Todos',      '#5FB335'],
-          ['pendente', 'Pendentes',  '#C9A656'],
-          ['aprovado', 'Aprovadas',  '#8FD64A'],
+          ['todos',    'Todos',      '#FF6B2C'],
+          ['pendente', 'Pendentes',  '#FF6B2C'],
+          ['aprovado', 'Aprovadas',  '#FF9B72'],
           ['cancelado','Canceladas', '#e05c5c'],
         ].map(([s, label, color]) => (
           <button key={s}
@@ -228,7 +228,7 @@ export default function Inscricoes() {
       {selecionados.length > 0 && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10,
-          padding: '10px 14px', background: '#0E2E1C',
+          padding: '10px 14px', background: '#12283F',
           border: '1px solid var(--green)', borderRadius: 8,
           marginBottom: 14, flexWrap: 'wrap',
         }}>
@@ -287,20 +287,20 @@ export default function Inscricoes() {
                     <td style={{ padding: '10px 12px' }}>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                         {(Array.isArray(i.categorias) ? i.categorias : [i.categoria]).filter(Boolean).map((c, idx) => (
-                          <span key={idx} style={{ background: '#5FB33518', color: '#5FB335', border: '1px solid #5FB33540', borderRadius: 10, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>{c}</span>
+                          <span key={idx} style={{ background: '#FF6B2C18', color: '#FF6B2C', border: '1px solid #FF6B2C40', borderRadius: 10, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>{c}</span>
                         ))}
                       </div>
                     </td>
-                    <td style={{ padding: '10px 12px', fontWeight: 700, color: '#C9A656', whiteSpace: 'nowrap' }}>
+                    <td style={{ padding: '10px 12px', fontWeight: 700, color: '#FF6B2C', whiteSpace: 'nowrap' }}>
                       {i.total != null ? fmtR(i.total) : '—'}
                     </td>
                     <td style={{ padding: '10px 12px' }}>
                       {i.pagamento ? (
                         <span style={{
-                          background: (i.pagamento === 'pago' || i.pago) ? '#5FB33518' : '#C9A65618',
-                          color: (i.pagamento === 'pago' || i.pago) ? '#5FB335' : '#C9A656',
+                          background: (i.pagamento === 'pago' || i.pago) ? '#FF6B2C18' : '#FF6B2C18',
+                          color: (i.pagamento === 'pago' || i.pago) ? '#FF6B2C' : '#FF6B2C',
                           border: '1px solid',
-                          borderColor: (i.pagamento === 'pago' || i.pago) ? '#5FB33540' : '#C9A65640',
+                          borderColor: (i.pagamento === 'pago' || i.pago) ? '#FF6B2C40' : '#FF6B2C40',
                           borderRadius: 10, padding: '2px 8px', fontSize: 11, fontWeight: 600,
                         }}>{i.pagamento}</span>
                       ) : '—'}
@@ -368,10 +368,10 @@ export default function Inscricoes() {
                 <h3 style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8, fontWeight: 600 }}>Histórico de Pagamento</h3>
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {detalhe.historicoPagamento.map((h, idx) => (
-                    <li key={idx} style={{ fontSize: 12, color: '#ddd', display: 'flex', gap: 8, padding: '6px 10px', background: '#0E2E1C55', borderRadius: 6 }}>
+                    <li key={idx} style={{ fontSize: 12, color: '#ddd', display: 'flex', gap: 8, padding: '6px 10px', background: '#12283F55', borderRadius: 6 }}>
                       <span style={{ color: 'var(--muted)' }}>{h.data ? fmtDate(h.data) : '—'}</span>
                       <span>{h.evento || h.descricao}</span>
-                      {h.valor != null && <span style={{ marginLeft: 'auto', color: '#5FB335', fontWeight: 600 }}>{fmtR(h.valor)}</span>}
+                      {h.valor != null && <span style={{ marginLeft: 'auto', color: '#FF6B2C', fontWeight: 600 }}>{fmtR(h.valor)}</span>}
                     </li>
                   ))}
                 </ul>

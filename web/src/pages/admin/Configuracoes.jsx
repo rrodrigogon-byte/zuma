@@ -3,11 +3,11 @@ import { api, fmtDate } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
 const PALETA = [
-  { name: 'Deep',  var: '--deep',   hex: '#0E2E1C' },
-  { name: 'Green', var: '--green',  hex: '#5FB335' },
-  { name: 'Lime',  var: '--lime',   hex: '#8FD64A' },
-  { name: 'Gold',  var: '--gold',   hex: '#C9A656' },
-  { name: 'Cream', var: '--cream',  hex: '#F4F6EF' },
+  { name: 'Deep',  var: '--deep',   hex: '#12283F' },
+  { name: 'Green', var: '--green',  hex: '#FF6B2C' },
+  { name: 'Lime',  var: '--lime',   hex: '#FF9B72' },
+  { name: 'Gold',  var: '--gold',   hex: '#FF6B2C' },
+  { name: 'Cream', var: '--cream',  hex: '#FFF4EC' },
 ]
 
 function SectionCard({ title, children, onSave, saving }) {
@@ -283,7 +283,7 @@ export default function Configuracoes() {
         saving={savingPix}
       >
         <div style={{
-          background: 'rgba(201,166,86,.08)', border: '1px solid rgba(201,166,86,.25)',
+          background: 'rgba(255,107,44,.08)', border: '1px solid rgba(255,107,44,.25)',
           borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: 'var(--gold)',
         }}>
           Chave atual (mascarada): <strong>{maskPix(pix.chave)}</strong>
@@ -313,8 +313,8 @@ export default function Configuracoes() {
         {/* Status atual (env-based, read-only) */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10,
-          background: pagAtivos ? 'rgba(95,179,53,.10)' : 'rgba(201,166,86,.08)',
-          border: `1px solid ${pagAtivos ? 'rgba(95,179,53,.35)' : 'rgba(201,166,86,.30)'}`,
+          background: pagAtivos ? 'rgba(255,107,44,.10)' : 'rgba(255,107,44,.08)',
+          border: `1px solid ${pagAtivos ? 'rgba(255,107,44,.35)' : 'rgba(255,107,44,.30)'}`,
           borderRadius: 8, padding: '10px 14px', marginBottom: 20, fontSize: 13,
         }}>
           <span style={{
@@ -370,7 +370,7 @@ export default function Configuracoes() {
               </span>
               <span style={{
                 fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999,
-                background: 'rgba(95,179,53,.15)', color: 'var(--green)',
+                background: 'rgba(255,107,44,.15)', color: 'var(--green)',
               }}>
                 ativo
               </span>
@@ -385,7 +385,7 @@ export default function Configuracoes() {
         {modoSimulado && (
           <div style={{
             marginTop: 16,
-            background: 'rgba(201,166,86,.10)', border: '1px solid rgba(201,166,86,.35)',
+            background: 'rgba(255,107,44,.10)', border: '1px solid rgba(255,107,44,.35)',
             borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--gold)',
           }}>
             ⚠️ <strong>Modo simulado ativo:</strong> ao salvar, todos os pagamentos PIX passarão a exigir confirmação manual — nenhum valor real será cobrado.
@@ -400,10 +400,10 @@ export default function Configuracoes() {
         saving={savingTef}
       >
         <div style={{
-          background: String(tef.agenteUrl || '').trim() ? 'rgba(95,179,53,.08)' : 'rgba(201,166,86,.08)',
-          border: `1px solid ${String(tef.agenteUrl || '').trim() ? 'rgba(95,179,53,.3)' : 'rgba(201,166,86,.25)'}`,
+          background: String(tef.agenteUrl || '').trim() ? 'rgba(255,107,44,.08)' : 'rgba(255,107,44,.08)',
+          border: `1px solid ${String(tef.agenteUrl || '').trim() ? 'rgba(255,107,44,.3)' : 'rgba(255,107,44,.25)'}`,
           borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13,
-          color: String(tef.agenteUrl || '').trim() ? 'var(--lime, #8FD64A)' : 'var(--gold)',
+          color: String(tef.agenteUrl || '').trim() ? 'var(--lime, #FF9B72)' : 'var(--gold)',
         }}>
           {String(tef.agenteUrl || '').trim()
             ? '✓ Agente TEF configurado — o PDV captura no pinpad físico.'
@@ -447,7 +447,7 @@ export default function Configuracoes() {
         saving={savingFiscal}
       >
         <div style={{
-          background: 'rgba(201,166,86,.08)', border: '1px solid rgba(201,166,86,.25)',
+          background: 'rgba(255,107,44,.08)', border: '1px solid rgba(255,107,44,.25)',
           borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: 'var(--gold)', lineHeight: 1.5,
         }}>
           A emissão real exige <strong>certificado A1</strong>, credenciamento na <strong>SEFAZ-MT</strong> (CSC) e um <strong>provedor</strong> (Focus NFe/PlugNotas, via variáveis no servidor). Sem isso, a NFC-e roda em <strong>modo simulado</strong> para testes.
@@ -530,7 +530,7 @@ export default function Configuracoes() {
               return (
                 <div key={cat.id} style={{
                   background: 'var(--surface2)', border: `1px solid ${lotado ? '#e05c5c44' : 'var(--line)'}`,
-                  borderLeft: `3px solid ${lotado ? '#e05c5c' : '#5FB335'}`,
+                  borderLeft: `3px solid ${lotado ? '#e05c5c' : '#FF6B2C'}`,
                   borderRadius: 8, padding: '12px 14px',
                 }}>
                   <div style={{ fontWeight: 700, color: 'var(--fg)', fontSize: 12, marginBottom: 8, lineHeight: 1.3 }}>
@@ -546,8 +546,8 @@ export default function Configuracoes() {
                     />
                     <span style={{
                       fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10,
-                      background: lotado ? '#e05c5c18' : cat.inscritos > 0 ? '#5FB33518' : 'transparent',
-                      color: lotado ? '#e05c5c' : cat.inscritos > 0 ? '#5FB335' : 'var(--muted)',
+                      background: lotado ? '#e05c5c18' : cat.inscritos > 0 ? '#FF6B2C18' : 'transparent',
+                      color: lotado ? '#e05c5c' : cat.inscritos > 0 ? '#FF6B2C' : 'var(--muted)',
                     }}>
                       {cat.inscritos} inscrito{cat.inscritos !== 1 ? 's' : ''}
                       {!isNaN(vagas) && vagas > 0 ? ` / ${vagas}` : ''}
@@ -555,7 +555,7 @@ export default function Configuracoes() {
                   </div>
                   {ocupacao !== null && (
                     <div style={{ marginTop: 8, height: 4, background: 'var(--line)', borderRadius: 2, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${ocupacao}%`, background: lotado ? '#e05c5c' : '#5FB335', borderRadius: 2, transition: 'width .3s' }} />
+                      <div style={{ height: '100%', width: `${ocupacao}%`, background: lotado ? '#e05c5c' : '#FF6B2C', borderRadius: 2, transition: 'width .3s' }} />
                     </div>
                   )}
                 </div>

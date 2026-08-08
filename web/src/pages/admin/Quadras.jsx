@@ -19,7 +19,7 @@ const HORAS = Array.from({ length: 32 }, (_, i) => {
   return `${String(h).padStart(2, '0')}:${m}`
 }).filter(h => h <= '22:00')
 const TIPOS = ['Tênis', 'Padel', 'Beach Tennis', 'Squash', 'Poliesportiva', 'Outros']
-const CORES = ['#5FB335', '#C9A656', '#3b82f6', '#ef4444', '#8b5cf6', '#f59e0b', '#14b8a6']
+const CORES = ['#FF6B2C', '#FF6B2C', '#3b82f6', '#ef4444', '#8b5cf6', '#f59e0b', '#14b8a6']
 
 const S = {
   page:  { padding: '24px 28px', maxWidth: 1100 },
@@ -64,7 +64,7 @@ function Grade({ quadras, reservas, dataRef, onNovaReserva }) {
                 style={{
                   padding: '5px 8px', borderBottom: '1px solid rgba(255,255,255,.04)', borderLeft: '1px solid var(--line)',
                   cursor: res ? 'default' : 'pointer', minHeight: 32, fontSize: 11,
-                  background: res ? (res.horaInicio === h ? 'rgba(95,179,53,.18)' : 'rgba(95,179,53,.08)') : 'transparent',
+                  background: res ? (res.horaInicio === h ? 'rgba(255,107,44,.18)' : 'rgba(255,107,44,.08)') : 'transparent',
                   color: res ? 'var(--green)' : 'transparent',
                   transition: 'background .1s',
                 }}
@@ -89,7 +89,7 @@ export default function Quadras() {
   const [loading, setLoading] = useState(false)
   const [modalQuadra, setModalQuadra] = useState(null)
   const [modalReserva, setModalReserva] = useState(null)
-  const [fq, setFq] = useState({ nome: '', tipo: 'Tênis', cor: '#5FB335', descricao: '' })
+  const [fq, setFq] = useState({ nome: '', tipo: 'Tênis', cor: '#FF6B2C', descricao: '' })
   const [fr, setFr] = useState({ quadraId: '', data: '', horaInicio: '', horaFim: '', socioNome: '', obs: '' })
   const [filtroStatus, setFiltroStatus] = useState('todos')
   const [filtroQ, setFiltroQ] = useState('')
@@ -188,7 +188,7 @@ export default function Quadras() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={() => exportCSV(reservas)}
             style={{ ...S.btn, background: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--cream)' }}>📥 CSV</button>
-          <button onClick={() => { setFq({ nome: '', tipo: 'Tênis', cor: '#5FB335', descricao: '' }); setModalQuadra({}) }}
+          <button onClick={() => { setFq({ nome: '', tipo: 'Tênis', cor: '#FF6B2C', descricao: '' }); setModalQuadra({}) }}
             style={{ ...S.btn, background: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--cream)' }}>+ Quadra</button>
           <button onClick={() => { setFr({ quadraId: quadras[0]?.id || '', data: dataRef, horaInicio: '08:00', horaFim: '09:00', socioNome: '', obs: '' }); setModalReserva({}) }}
             style={{ ...S.btn, background: 'var(--green)', color: 'var(--deep)' }}>+ Reserva</button>
@@ -198,11 +198,11 @@ export default function Quadras() {
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 10, marginBottom: 20 }}>
         {[
-          { label: 'Reservas hoje', value: kpis.hoje, color: '#5FB335', icon:'📅' },
-          { label: 'Na semana', value: kpis.semana, color: '#C9A656', icon:'📆' },
+          { label: 'Reservas hoje', value: kpis.hoje, color: '#FF6B2C', icon:'📅' },
+          { label: 'Na semana', value: kpis.semana, color: '#FF6B2C', icon:'📆' },
           { label: 'Quadras ativas', value: kpis.quadrasAtivas, color: '#3b82f6', icon:'🎾' },
           { label: 'Ocupação hoje', value: `${kpis.taxaOcup}%`,
-            color: kpis.taxaOcup > 60 ? '#5FB335' : kpis.taxaOcup > 30 ? '#C9A656' : '#888', icon:'📊',
+            color: kpis.taxaOcup > 60 ? '#FF6B2C' : kpis.taxaOcup > 30 ? '#FF6B2C' : '#888', icon:'📊',
             sub: kpis.taxaOcup > 60 ? 'Alta ocupação' : kpis.taxaOcup > 30 ? 'Média' : 'Baixa' },
         ].map(k => (
           <div key={k.label} style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, padding: '12px 16px', borderLeft: `4px solid ${k.color}` }}>

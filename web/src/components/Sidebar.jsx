@@ -40,7 +40,7 @@ function Badge({ count }) {
   return (
     <span style={{
       marginLeft: 'auto',
-      background: '#e05c5c', color: '#fff',
+      background: 'var(--danger)', color: '#fff',
       borderRadius: 10, fontSize: 10, fontWeight: 800,
       padding: '1px 6px', minWidth: 18, textAlign: 'center',
       lineHeight: '16px', display: 'inline-block',
@@ -172,7 +172,7 @@ const linkStyle = {
 }
 const activeStyle = {
   ...linkStyle,
-  background: 'rgba(95,179,53,.12)', color: 'var(--green)',
+  background: 'rgba(255,107,44,.12)', color: 'var(--green)',
   borderLeft: '3px solid var(--green)',
 }
 
@@ -305,10 +305,14 @@ export default function Sidebar() {
           padding: '18px 16px', borderBottom: '1px solid var(--line)',
           display: 'flex', alignItems: 'center', gap: 10,
         }}>
-          <span style={{ fontSize: 28 }}>🎾</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--green)' }}>SetPoint</div>
-            <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 1 }}>4ª Agro Open</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <img
+              src="/brand/kytto-horizontal.svg"
+              alt="Kytto"
+              className="kytto-mark"
+              style={{ width: 126, height: 38, objectFit: 'contain', objectPosition: 'left center' }}
+            />
+            <div className="kytto-eyebrow" style={{ marginTop: 3, fontSize: 9 }}>Kytto Clube</div>
           </div>
           {isMobile && (
             <button
@@ -381,9 +385,9 @@ export default function Sidebar() {
                     fontSize: 12,
                     fontWeight: 700,
                     textDecoration: 'none',
-                    background: isActive ? 'rgba(95,179,53,.22)' : 'rgba(95,179,53,.08)',
+                    background: isActive ? 'rgba(255,107,44,.22)' : 'rgba(255,107,44,.08)',
                     color: 'var(--green)',
-                    border: '1px solid rgba(95,179,53,.25)',
+                    border: '1px solid rgba(255,107,44,.25)',
                     transition: 'background 0.15s',
                   })}
                   onClick={handleNavClick}

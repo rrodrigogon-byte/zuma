@@ -1,5 +1,5 @@
 /**
- * Billing & Assinaturas SaaS — SetPoint Ultra
+ * Billing & Assinaturas SaaS — KYTTO Clube
  * Gestão de planos, cobranças, tenant onboarding e métricas SaaS
  * Rota: /admin/billing
  */
@@ -9,7 +9,7 @@ import { useToast } from '../../hooks/useToast'
 
 const T = {
   bg: '#0f1117', surface: '#1a1d27', card: '#22263a',
-  green: '#5fb335', muted: '#8a8fa8', cream: '#e8e6df',
+  green: '#FF6B2C', muted: '#8a8fa8', cream: '#e8e6df',
   line: '#2e3248', red: '#e05c5c', yellow: '#f5a623', blue: '#4a9eff', purple: '#9b59b6',
 }
 

@@ -5,10 +5,10 @@ import Modal from '../../components/Modal'
 
 const CATS = ['Kit', 'Camiseta', 'Boné', 'Acessório', 'Outro']
 const STATUS_BADGE = {
-  pendente:  { label: 'Pendente',  color: '#C9A656' },
-  confirmada:{ label: 'Confirmada',color: '#5FB335' },
+  pendente:  { label: 'Pendente',  color: '#FF6B2C' },
+  confirmada:{ label: 'Confirmada',color: '#FF6B2C' },
   cancelada: { label: 'Cancelada', color: '#e05c5c' },
-  entregue:  { label: 'Entregue',  color: '#8FD64A' },
+  entregue:  { label: 'Entregue',  color: '#FF9B72' },
 }
 const STATUS_OPTS = ['todos', 'pendente', 'confirmada', 'entregue', 'cancelada']
 
@@ -213,12 +213,12 @@ export default function AdminLoja() {
 
       {/* KPI Cards */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-        <KpiCard label="Produtos" valor={totalProdutos} icon="📦" color="#5FB335" />
-        <KpiCard label="Estoque Total" valor={fmtQtd(totalEstoque)} icon="🗃️" color="#C9A656" />
-        <KpiCard label="Receita Potencial" valor={fmtR(receitaPotenc)} icon="💰" color="#8FD64A" />
-        <KpiCard label="Reservas Pendentes" valor={reservasPend} icon="⏳" color={reservasPend > 0 ? '#e05c5c' : '#5FB335'} />
+        <KpiCard label="Produtos" valor={totalProdutos} icon="📦" color="#FF6B2C" />
+        <KpiCard label="Estoque Total" valor={fmtQtd(totalEstoque)} icon="🗃️" color="#FF6B2C" />
+        <KpiCard label="Receita Potencial" valor={fmtR(receitaPotenc)} icon="💰" color="#FF9B72" />
+        <KpiCard label="Reservas Pendentes" valor={reservasPend} icon="⏳" color={reservasPend > 0 ? '#e05c5c' : '#FF6B2C'} />
         {receitaVendas > 0 && (
-          <KpiCard label="Receita Confirmada" valor={fmtR(receitaVendas)} icon="✅" color="#5FB335" />
+          <KpiCard label="Receita Confirmada" valor={fmtR(receitaVendas)} icon="✅" color="#FF6B2C" />
         )}
       </div>
       {/* Breakdown por categoria */}
@@ -227,9 +227,9 @@ export default function AdminLoja() {
           {valorPorCat.map(([cat, val]) => (
             <div key={cat} onClick={() => setFiltroCat(filtroCat === cat ? 'todos' : cat)}
               style={{ padding:'5px 12px', borderRadius:20, fontSize:12, fontWeight:700, cursor:'pointer',
-                background: filtroCat === cat ? '#C9A65622' : 'var(--surface)',
-                border:`1px solid ${filtroCat === cat ? '#C9A656' : 'var(--line)'}`,
-                color: filtroCat === cat ? '#C9A656' : 'var(--muted)' }}>
+                background: filtroCat === cat ? '#FF6B2C22' : 'var(--surface)',
+                border:`1px solid ${filtroCat === cat ? '#FF6B2C' : 'var(--line)'}`,
+                color: filtroCat === cat ? '#FF6B2C' : 'var(--muted)' }}>
               {cat} · {fmtR(val)}
             </div>
           ))}
@@ -291,10 +291,10 @@ export default function AdminLoja() {
                   </div>
                 </td>
                 <td style={S.td}><strong>{p.nome}</strong></td>
-                <td style={S.td}><span style={S.badge('#C9A656')}>{p.cat}</span></td>
+                <td style={S.td}><span style={S.badge('#FF6B2C')}>{p.cat}</span></td>
                 <td style={S.td}>{fmtR(p.preco)}</td>
                 <td style={S.td}>
-                  <span style={S.badge(p.estoque > 5 ? '#5FB335' : p.estoque > 0 ? '#C9A656' : '#e05c5c')}>
+                  <span style={S.badge(p.estoque > 5 ? '#FF6B2C' : p.estoque > 0 ? '#FF6B2C' : '#e05c5c')}>
                     {p.estoque > 0 ? fmtQtd(p.estoque) : '⚠ SEM ESTOQUE'}
                   </span>
                 </td>
@@ -361,7 +361,7 @@ export default function AdminLoja() {
                     <td style={{ ...S.td, fontSize: '0.8rem' }}>{r.email}</td>
                     <td style={S.td}>{r.tamanho || '—'}</td>
                     <td style={{ ...S.td, textAlign: 'center' }}>{r.qtd ?? 1}</td>
-                    <td style={{ ...S.td, fontWeight: 700, color: '#C9A656' }}>
+                    <td style={{ ...S.td, fontWeight: 700, color: '#FF6B2C' }}>
                       {r.total != null ? fmtR(r.total) : r.preco ? fmtR((r.qtd||1)*(r.preco||0)) : '—'}
                     </td>
                     <td style={S.td}><span style={S.badge(bd.color)}>{bd.label}</span></td>
@@ -370,12 +370,12 @@ export default function AdminLoja() {
                       <div style={S.actions}>
                         {r.status === 'pendente' && (
                           <>
-                            <button style={S.btnSm('#5FB335')} onClick={() => atualizarStatus(r.id, 'confirmada')}>✓ Confirmar</button>
+                            <button style={S.btnSm('#FF6B2C')} onClick={() => atualizarStatus(r.id, 'confirmada')}>✓ Confirmar</button>
                             <button style={S.btnSm('#e05c5c')} onClick={() => atualizarStatus(r.id, 'cancelada')}>✕</button>
                           </>
                         )}
                         {r.status === 'confirmada' && (
-                          <button style={S.btnSm('#8FD64A')} onClick={() => atualizarStatus(r.id, 'entregue')}>📦 Entregar</button>
+                          <button style={S.btnSm('#FF9B72')} onClick={() => atualizarStatus(r.id, 'entregue')}>📦 Entregar</button>
                         )}
                         {(r.status === 'entregue' || r.status === 'cancelada') && (
                           <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>—</span>

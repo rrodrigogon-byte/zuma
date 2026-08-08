@@ -52,7 +52,7 @@ function PreviewPDV({ itens }) {
 
   return (
     <div style={{
-      background: '#0E2E1C',
+      background: '#12283F',
       borderRadius: 10,
       padding: 16,
       maxHeight: 420,
@@ -60,13 +60,13 @@ function PreviewPDV({ itens }) {
       fontSize: 13,
       border: '1px solid #1e4a2e',
     }}>
-      <div style={{ color: '#8FD64A', fontWeight: 700, fontSize: 14, marginBottom: 12, letterSpacing: 1 }}>
+      <div style={{ color: '#FF9B72', fontWeight: 700, fontSize: 14, marginBottom: 12, letterSpacing: 1 }}>
         📋 PREVIEW — PDV / COMANDA
       </div>
       {Object.entries(grouped).map(([cat, lista]) => (
         <div key={cat} style={{ marginBottom: 14 }}>
           <div style={{
-            color: '#C9A656',
+            color: '#FF6B2C',
             fontWeight: 700,
             fontSize: 11,
             letterSpacing: 1.5,
@@ -88,10 +88,10 @@ function PreviewPDV({ itens }) {
                 borderBottom: '1px solid rgba(255,255,255,.05)',
               }}
             >
-              <span style={{ color: '#F4F6EF' }}>
+              <span style={{ color: '#FFF4EC' }}>
                 {item.emoji ? item.emoji + ' ' : ''}{item.nome}
               </span>
-              <span style={{ color: '#C9A656', fontWeight: 700, marginLeft: 12, whiteSpace: 'nowrap' }}>
+              <span style={{ color: '#FF6B2C', fontWeight: 700, marginLeft: 12, whiteSpace: 'nowrap' }}>
                 {fmtR(item.preco)}
               </span>
             </div>
@@ -369,7 +369,7 @@ export default function Cardapio() {
                   <h2 style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: 0 }}>{cat}</h2>
                   <span
                     className="badge"
-                    style={{ background: '#5FB33522', color: '#5FB335', border: '1px solid #5FB33544' }}
+                    style={{ background: '#FF6B2C22', color: '#FF6B2C', border: '1px solid #FF6B2C44' }}
                   >
                     {lista.length} {lista.length === 1 ? 'item' : 'itens'}
                   </span>
@@ -566,8 +566,8 @@ export default function Cardapio() {
             </div>
 
             {/* Dados fiscais (NFC-e) — usados na emissão da nota do bar */}
-            <details style={{ background: 'rgba(201,166,86,.06)', border: '1px solid rgba(201,166,86,.2)', borderRadius: 8, padding: '8px 12px' }}>
-              <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 700, color: 'var(--gold,#C9A656)' }}>🧾 Dados fiscais (NFC-e)</summary>
+            <details style={{ background: 'rgba(255,107,44,.06)', border: '1px solid rgba(255,107,44,.2)', borderRadius: 8, padding: '8px 12px' }}>
+              <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 700, color: 'var(--gold,#FF6B2C)' }}>🧾 Dados fiscais (NFC-e)</summary>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 12px', marginTop: 10 }}>
                 <label style={{ fontSize: 12, color: '#bbb' }}>NCM
                   <input className="input" value={editForm.fiscal?.ncm || ''} placeholder="ex.: 22030000"
@@ -632,7 +632,7 @@ function ItemCard({ item, isFirst, isLast, onToggleCozinha, onToggleDisponivel, 
           </div>
           <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{item.setor}</div>
         </div>
-        <div style={{ fontWeight: 700, color: '#C9A656', fontSize: 15, whiteSpace: 'nowrap', marginLeft: 8 }}>
+        <div style={{ fontWeight: 700, color: '#FF6B2C', fontSize: 15, whiteSpace: 'nowrap', marginLeft: 8 }}>
           {fmtR(item.preco)}
         </div>
       </div>
@@ -642,13 +642,13 @@ function ItemCard({ item, isFirst, isLast, onToggleCozinha, onToggleDisponivel, 
         <ToggleChip
           label="Cozinha"
           active={!!item.cozinha}
-          activeColor="#5FB335"
+          activeColor="#FF6B2C"
           onClick={onToggleCozinha}
         />
         <ToggleChip
           label={item.indisponivel ? 'Indisponível' : 'Disponível'}
           active={!item.indisponivel}
-          activeColor="#8FD64A"
+          activeColor="#FF9B72"
           inactiveColor="#e05c5c"
           onClick={onToggleDisponivel}
         />
@@ -697,7 +697,7 @@ function ItemCard({ item, isFirst, isLast, onToggleCozinha, onToggleDisponivel, 
   )
 }
 
-function ToggleChip({ label, active, activeColor = '#5FB335', inactiveColor = '#555', onClick }) {
+function ToggleChip({ label, active, activeColor = '#FF6B2C', inactiveColor = '#555', onClick }) {
   const color = active ? activeColor : inactiveColor
   return (
     <button

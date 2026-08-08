@@ -2,7 +2,7 @@
  * tef.js — camada de pagamento via maquininha (TEF) no PDV.
  *
  * O pinpad é FÍSICO e LOCAL: o navegador conversa com um "agente TEF local"
- * (middleware SiTef/PayGo) por HTTP em localhost. A nuvem (SetPoint) só recebe o
+ * (middleware SiTef/PayGo) por HTTP em localhost. A nuvem (KYTTO Clube) só recebe o
  * RESULTADO da captura (NSU/autorização) para baixar a venda.
  *
  * Sem `config.tef.agenteUrl` configurado, opera em MODO SIMULADO (aprova com

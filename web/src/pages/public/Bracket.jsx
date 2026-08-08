@@ -263,14 +263,14 @@ export default function Bracket() {
           <h1 className="bracket-titulo" style={{ margin: 0 }}>🏆 Chaves do Torneio</h1>
           {dados && (
             <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20,
-              background: '#5FB33518', color: '#5FB335', border: '1px solid #5FB33540' }}>
+              background: '#FF6B2C18', color: '#FF6B2C', border: '1px solid #FF6B2C40' }}>
               {formato === 'eliminatoria' ? 'Eliminatória' : formato === 'grupos' ? 'Fase de Grupos'
                 : formato === 'swiss' ? 'Suíço' : formato === 'roundrobin' ? 'Round Robin'
                 : formato === 'dupla_eliminacao' ? 'Dupla Eliminação' : formato}
             </span>
           )}
         </div>
-        <p style={{ color: '#5a7a5a', margin: '0 0 16px', fontSize: '0.9rem' }}>
+        <p style={{ color: '#5A6570', margin: '0 0 16px', fontSize: '0.9rem' }}>
           Selecione uma categoria para ver os confrontos
         </p>
 
@@ -312,7 +312,7 @@ export default function Bracket() {
       ) : !dados ? (
         <div style={{ textAlign: 'center', padding: '48px 24px' }}>
           <div style={{ fontSize: '3rem', marginBottom: 12 }}>🎾</div>
-          <p style={{ color: '#5a7a5a', fontSize: '1rem', fontWeight: 600 }}>Chave ainda não gerada para esta categoria.</p>
+          <p style={{ color: '#5A6570', fontSize: '1rem', fontWeight: 600 }}>Chave ainda não gerada para esta categoria.</p>
           <p style={{ color: '#8aaa8a', fontSize: '0.85rem' }}>Aguarde o sorteio oficial ou escolha outra categoria acima.</p>
         </div>
       ) : (
@@ -333,20 +333,20 @@ export default function Bracket() {
         .page-bracket { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
 
         .bracket-header { margin-bottom: 1.5rem; }
-        .bracket-titulo { font-size: 1.5rem; font-weight: 700; color: #0E2E1C; margin-bottom: 1rem; }
+        .bracket-titulo { font-size: 1.5rem; font-weight: 700; color: #12283F; margin-bottom: 1rem; }
 
         .bracket-cat-selector { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
         .cat-btn {
-          padding: .4rem .9rem; border-radius: 20px; border: 1.5px solid #5FB335;
-          background: #fff; color: #5FB335; font-weight: 600; cursor: pointer; font-size: .85rem;
+          padding: .4rem .9rem; border-radius: 20px; border: 1.5px solid #FF6B2C;
+          background: #fff; color: #FF6B2C; font-weight: 600; cursor: pointer; font-size: .85rem;
           transition: all .15s;
         }
         .cat-btn:hover { background: #f0fae8; }
-        .cat-btn--active { background: #5FB335; color: #fff; }
+        .cat-btn--active { background: #FF6B2C; color: #fff; }
 
         .bracket-progresso { display: flex; align-items: center; gap: .75rem; margin-top: .5rem; }
         .progresso-bar { flex: 1; max-width: 300px; height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; }
-        .progresso-fill { height: 100%; background: #5FB335; border-radius: 4px; transition: width .3s; }
+        .progresso-fill { height: 100%; background: #FF6B2C; border-radius: 4px; transition: width .3s; }
         .progresso-label { font-size: .8rem; color: #6b7280; }
 
         /* Bracket */
@@ -396,12 +396,12 @@ export default function Bracket() {
         .grupos-tabelas { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.25rem; }
         .grupo-card { background: #fff; border: 1.5px solid #e5e7eb; border-radius: 10px; overflow: hidden; }
         .grupo-nome {
-          background: #0E2E1C; color: #fff; padding: .6rem 1rem;
+          background: #12283F; color: #fff; padding: .6rem 1rem;
           font-size: .9rem; font-weight: 700; margin: 0;
         }
         .grupo-table { margin: 0; }
         .grupo-table th, .grupo-table td { padding: .4rem .6rem; font-size: .82rem; }
-        .grupo-row--classifica td:first-child::after { content: ' ✓'; color: #5FB335; }
+        .grupo-row--classifica td:first-child::after { content: ' ✓'; color: #FF6B2C; }
 
         .grupos-jogos h3 { font-size: 1rem; font-weight: 700; margin-bottom: .75rem; }
 
@@ -425,7 +425,7 @@ export default function Bracket() {
         .jogo-vs { color: #9ca3af; font-size: .75rem; }
 
         .rodada-bloco { margin-bottom: 1.5rem; }
-        .rodada-nome { font-size: .9rem; font-weight: 700; color: #0E2E1C; margin-bottom: .5rem; }
+        .rodada-nome { font-size: .9rem; font-weight: 700; color: #12283F; margin-bottom: .5rem; }
 
         @media (max-width: 640px) {
           .page-bracket { padding: 1rem; }

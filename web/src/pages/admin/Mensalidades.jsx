@@ -56,7 +56,7 @@ function FilterChip({ label, active, onClick, count, color }) {
   return (
     <button onClick={onClick} style={{
       padding:'5px 14px', borderRadius:20, border:`1.5px solid ${active ? (color || 'var(--green)') : 'var(--line)'}`,
-      background: active ? (color ? color + '22' : 'rgba(95,179,53,.15)') : 'transparent',
+      background: active ? (color ? color + '22' : 'rgba(255,107,44,.15)') : 'transparent',
       color: active ? (color || 'var(--green)') : 'var(--muted)',
       cursor:'pointer', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap',
     }}>
@@ -135,7 +135,7 @@ function ModalWpp({ mens, onClose, toast }) {
             </p>
             <div style={{ display:'flex', gap:8, marginBottom:12, alignItems:'center' }}>
               <button onClick={() => setSelecionados(pendentesVencidos.map(m => m.id))}
-                style={{ ...S.btn, padding:'4px 10px', background:'rgba(95,179,53,.15)', color:'var(--green)', fontSize:11 }}>
+                style={{ ...S.btn, padding:'4px 10px', background:'rgba(255,107,44,.15)', color:'var(--green)', fontSize:11 }}>
                 Selecionar todos ({pendentesVencidos.length})
               </button>
               <button onClick={() => setSelecionados([])}
@@ -152,7 +152,7 @@ function ModalWpp({ mens, onClose, toast }) {
                 return (
                   <div key={m.id} onClick={() => toggle(m.id)} style={{
                     display:'flex', alignItems:'center', gap:12, padding:'10px 12px', borderRadius:8, marginBottom:6, cursor:'pointer',
-                    background: sel ? 'rgba(95,179,53,.08)' : 'transparent', border:`1px solid ${sel ? 'var(--green)' : 'var(--line)'}`,
+                    background: sel ? 'rgba(255,107,44,.08)' : 'transparent', border:`1px solid ${sel ? 'var(--green)' : 'var(--line)'}`,
                   }}>
                     <div style={{ width:20, height:20, borderRadius:4, border:`2px solid ${sel ? 'var(--green)' : 'var(--line)'}`,
                       background: sel ? 'var(--green)' : 'transparent', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, color:'var(--deep)', flexShrink:0 }}>
@@ -306,7 +306,7 @@ export default function Mensalidades() {
       <div style={S.header}>
         <div style={S.title}>💳 Mensalidades</div>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-          <button style={{ ...S.btn, background:'rgba(95,179,53,.15)', color:'var(--green)', border:'1px solid var(--green)' }}
+          <button style={{ ...S.btn, background:'rgba(255,107,44,.15)', color:'var(--green)', border:'1px solid var(--green)' }}
             onClick={() => exportCSV(listaFiltrada, hoje)}>📥 CSV</button>
           <button style={{ ...S.btn, background:'#25D366', color:'#fff' }}
             onClick={() => setModalWpp(true)}>

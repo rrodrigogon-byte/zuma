@@ -66,7 +66,7 @@ function BarChart7({ data }) {
                 bottom: '100%',
                 left: '50%',
                 transform: 'translateX(-50%)',
-                background: '#0E2E1C',
+                background: '#12283F',
                 border: '1px solid var(--green)',
                 borderRadius: 6,
                 padding: '3px 7px',
@@ -85,8 +85,8 @@ function BarChart7({ data }) {
                 width: '100%',
                 height: `${Math.max(pct, 4)}%`,
                 background: isHov
-                  ? 'linear-gradient(to top, #C9A656, #e8c97a)'
-                  : 'linear-gradient(to top, #5FB335, #8FD64A)',
+                  ? 'linear-gradient(to top, #FF6B2C, #e8c97a)'
+                  : 'linear-gradient(to top, #FF6B2C, #FF9B72)',
                 borderRadius: '3px 3px 0 0',
                 minHeight: 4,
                 transition: 'background 0.15s',
@@ -227,10 +227,10 @@ export default function Pagamentos() {
       {/* KPIs com borderLeft */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         {[
-          { label: 'RECEBIDO (TOTAL)', value: fmtR(totalRecebido), color: '#5FB335', icon: '💰', sub: `${pagamentos.filter(p => p.status === 'pago').length} transações` },
-          { label: 'PENDENTE', value: fmtR(totalPendente), color: '#C9A656', icon: '⏳', sub: `${pagamentos.filter(p => p.status === 'pendente').length} aguardando` },
+          { label: 'RECEBIDO (TOTAL)', value: fmtR(totalRecebido), color: '#FF6B2C', icon: '💰', sub: `${pagamentos.filter(p => p.status === 'pago').length} transações` },
+          { label: 'PENDENTE', value: fmtR(totalPendente), color: '#FF6B2C', icon: '⏳', sub: `${pagamentos.filter(p => p.status === 'pendente').length} aguardando` },
           { label: 'CANCELADO', value: fmtR(totalCancelado), color: '#e05c5c', icon: '❌', sub: `${pagamentos.filter(p => p.status === 'cancelado').length} estornados` },
-          ...(filtroPeriodo !== 'todos' ? [{ label: 'RECEBIDO NO PERÍODO', value: fmtR(totalFiltrado), color: '#C9A656', icon: '📅', sub: filtroPeriodo }] : []),
+          ...(filtroPeriodo !== 'todos' ? [{ label: 'RECEBIDO NO PERÍODO', value: fmtR(totalFiltrado), color: '#FF6B2C', icon: '📅', sub: filtroPeriodo }] : []),
         ].map(k => (
           <div key={k.label} style={{
             background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10,
@@ -276,8 +276,8 @@ export default function Pagamentos() {
                 borderRadius: 6,
                 border: '1px solid',
                 borderColor: filtroPeriodo === val ? 'var(--green)' : '#1e4a2e',
-                background: filtroPeriodo === val ? '#5FB33522' : 'transparent',
-                color: filtroPeriodo === val ? '#5FB335' : 'var(--muted)',
+                background: filtroPeriodo === val ? '#FF6B2C22' : 'transparent',
+                color: filtroPeriodo === val ? '#FF6B2C' : 'var(--muted)',
                 cursor: 'pointer',
               }}
             >
@@ -311,8 +311,8 @@ export default function Pagamentos() {
                 borderRadius: 6,
                 border: '1px solid',
                 borderColor: filtroStatus === s ? 'var(--green)' : '#1e4a2e',
-                background: filtroStatus === s ? '#5FB33522' : 'transparent',
-                color: filtroStatus === s ? '#5FB335' : 'var(--muted)',
+                background: filtroStatus === s ? '#FF6B2C22' : 'transparent',
+                color: filtroStatus === s ? '#FF6B2C' : 'var(--muted)',
                 cursor: 'pointer',
               }}
             >
@@ -430,7 +430,7 @@ export default function Pagamentos() {
                 <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'block', marginBottom: 4 }}>Pix Copia e Cola</span>
                 <div
                   style={{
-                    background: '#0E2E1C',
+                    background: '#12283F',
                     border: '1px solid #1e4a2e',
                     borderRadius: 6,
                     padding: '8px 10px',

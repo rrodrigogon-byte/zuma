@@ -161,7 +161,7 @@ function PixQRModal({ valor, comandaId, onClose, onPago, toast }) {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ fontSize: 18, fontWeight: 800 }}>📲 PIX</div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#8FD64A', fontSize: 22, cursor: 'pointer' }}>✕</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#FF9B72', fontSize: 22, cursor: 'pointer' }}>✕</button>
         </div>
 
         {/* Carregando criação do pagamento */}
@@ -177,7 +177,7 @@ function PixQRModal({ valor, comandaId, onClose, onPago, toast }) {
           <div style={{ padding: '24px 0' }}>
             <div style={{ fontSize: 36 }}>❌</div>
             <div style={{ fontSize: 14, color: '#e74c3c', marginTop: 10, marginBottom: 16 }}>{erroInicio}</div>
-            <button onClick={onClose} style={{ background: '#1e4029', border: '1px solid #5FB335', borderRadius: 8, color: '#8FD64A', padding: '8px 20px', cursor: 'pointer', fontWeight: 700 }}>
+            <button onClick={onClose} style={{ background: '#1e4029', border: '1px solid #FF6B2C', borderRadius: 8, color: '#FF9B72', padding: '8px 20px', cursor: 'pointer', fontWeight: 700 }}>
               Fechar
             </button>
           </div>
@@ -187,7 +187,7 @@ function PixQRModal({ valor, comandaId, onClose, onPago, toast }) {
         {!iniciando && !erroInicio && status === 'aprovado' && (
           <div style={{ padding: '32px 0' }}>
             <div style={{ fontSize: 52 }}>✅</div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: '#8FD64A', marginTop: 10 }}>Pagamento confirmado!</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: '#FF9B72', marginTop: 10 }}>Pagamento confirmado!</div>
           </div>
         )}
 
@@ -195,7 +195,7 @@ function PixQRModal({ valor, comandaId, onClose, onPago, toast }) {
         {!iniciando && !erroInicio && status !== 'aprovado' && (
           <>
             {/* QR: base64 do backend (MP) ou fallback externo */}
-            <div style={{ background: '#F4F6EF', borderRadius: 12, padding: 12, marginBottom: 14 }}>
+            <div style={{ background: '#FFF4EC', borderRadius: 12, padding: 12, marginBottom: 14 }}>
               {qrBase64 ? (
                 <img
                   src={`data:image/png;base64,${qrBase64}`}
@@ -207,7 +207,7 @@ function PixQRModal({ valor, comandaId, onClose, onPago, toast }) {
               )}
             </div>
 
-            <div style={{ fontSize: 22, fontWeight: 800, color: '#8FD64A', marginBottom: 4 }}>
+            <div style={{ fontSize: 22, fontWeight: 800, color: '#FF9B72', marginBottom: 4 }}>
               {fmtR(valor)}
             </div>
             <div style={{ fontSize: 12, opacity: 0.55, marginBottom: 14 }}>
@@ -215,7 +215,7 @@ function PixQRModal({ valor, comandaId, onClose, onPago, toast }) {
             </div>
 
             {/* Copiar copia-e-cola (do backend) */}
-            <button onClick={copiar} style={{ width: '100%', background: '#1e4029', border: '1.5px solid #5FB335', borderRadius: 10, color: '#8FD64A', padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: 10 }}>
+            <button onClick={copiar} style={{ width: '100%', background: '#1e4029', border: '1.5px solid #FF6B2C', borderRadius: 10, color: '#FF9B72', padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: 10 }}>
               {copied ? '✓ Copiado!' : '📋 Copiar código PIX'}
             </button>
 
@@ -224,14 +224,14 @@ function PixQRModal({ valor, comandaId, onClose, onPago, toast }) {
               <button
                 onClick={confirmarSimulacao}
                 disabled={confirmando}
-                style={{ width: '100%', background: '#2d4a10', border: '1.5px solid #8FD64A', borderRadius: 10, color: '#8FD64A', padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: 10, opacity: confirmando ? 0.6 : 1 }}>
+                style={{ width: '100%', background: '#2d4a10', border: '1.5px solid #FF9B72', borderRadius: 10, color: '#FF9B72', padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: 10, opacity: confirmando ? 0.6 : 1 }}>
                 {confirmando ? '⏳ Confirmando...' : '✓ Confirmar pagamento (simulação)'}
               </button>
             )}
 
             {/* Status de polling */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', fontSize: 12, opacity: 0.55 }}>
-              <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#8FD64A', animation: 'pulse-gold 1.4s ease-in-out infinite' }} />
+              <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#FF9B72', animation: 'pulse-gold 1.4s ease-in-out infinite' }} />
               Aguardando pagamento{tentativas > 0 ? ` (${tentativas}x)` : ''}...
             </div>
 
@@ -249,64 +249,64 @@ function PixQRModal({ valor, comandaId, onClose, onPago, toast }) {
 }
 
 const S = {
-  page: { minHeight: '100vh', background: 'var(--bg, #091a0f)', color: '#f4f6ef', fontFamily: 'inherit', paddingBottom: 80 },
+  page: { minHeight: '100vh', background: 'var(--bg, #12283F)', color: '#FFF4EC', fontFamily: 'inherit', paddingBottom: 80 },
   banner: { background: 'linear-gradient(90deg,#1a4a20,#2d6e35)', padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' },
   bannerStat: { display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 60 },
   bannerLabel: { fontSize: 10, opacity: 0.75, textTransform: 'uppercase', letterSpacing: 0.8 },
-  bannerVal: { fontSize: 16, fontWeight: 700, color: '#8FD64A' },
+  bannerVal: { fontSize: 16, fontWeight: 700, color: '#FF9B72' },
   bannerValSmall: { fontSize: 13, fontWeight: 700 },
   section: { padding: '18px 16px 8px' },
-  sectionTitle: { fontSize: 13, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#8FD64A', marginBottom: 12 },
+  sectionTitle: { fontSize: 13, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#FF9B72', marginBottom: 12 },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(110px,1fr))', gap: 10 },
   card: (status) => ({
     background: status === 'ocupada' ? '#132b1b' : status === 'conta' ? '#3a2800' : status === 'livre' ? '#0d1f12' : '#132b1b',
-    border: `1.5px solid ${status === 'conta' ? '#C9A656' : status === 'ocupada' ? '#5FB335' : '#1e4029'}`,
+    border: `1.5px solid ${status === 'conta' ? '#FF6B2C' : status === 'ocupada' ? '#FF6B2C' : '#1e4029'}`,
     borderRadius: 10, padding: '10px 8px', cursor: 'pointer', textAlign: 'center', position: 'relative',
     transition: 'transform .15s, box-shadow .15s',
     animation: status === 'conta' ? 'pulse-gold 1.4s ease-in-out infinite' : 'none',
   }),
   cardNum: { fontSize: 22, fontWeight: 800, lineHeight: 1 },
   cardType: { fontSize: 10, opacity: 0.55, marginTop: 2 },
-  cardTotal: { fontSize: 13, fontWeight: 700, color: '#8FD64A', marginTop: 4 },
+  cardTotal: { fontSize: 13, fontWeight: 700, color: '#FF9B72', marginTop: 4 },
   cardFire: { position: 'absolute', top: 4, right: 6, fontSize: 14 },
   virtualList: { display: 'flex', flexDirection: 'column', gap: 8 },
   vcard: { background: '#132b1b', border: '1.5px solid #1e4029', borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' },
   vcardLeft: { display: 'flex', flexDirection: 'column' },
   vcardName: { fontWeight: 700, fontSize: 14 },
   vcardSub: { fontSize: 11, opacity: 0.55 },
-  vcardTotal: { fontSize: 15, fontWeight: 700, color: '#8FD64A' },
+  vcardTotal: { fontSize: 15, fontWeight: 700, color: '#FF9B72' },
   sheet: { position: 'fixed', bottom: 0, left: 0, right: 0, background: '#0d1f12', borderTop: '2px solid #1e4029', borderRadius: '18px 18px 0 0', padding: '0 0 env(safe-area-inset-bottom,0)', maxHeight: '88vh', display: 'flex', flexDirection: 'column', zIndex: 100 },
   sheetHeader: { padding: '14px 18px 10px', borderBottom: '1px solid #1e4029', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
   sheetTitle: { fontWeight: 800, fontSize: 16 },
-  sheetClose: { background: 'none', border: 'none', color: '#8FD64A', fontSize: 22, cursor: 'pointer', lineHeight: 1 },
+  sheetClose: { background: 'none', border: 'none', color: '#FF9B72', fontSize: 22, cursor: 'pointer', lineHeight: 1 },
   sheetBody: { overflowY: 'auto', flex: 1, padding: '10px 16px' },
   itemRow: { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderBottom: '1px solid #1a3020' },
-  itemQty: { minWidth: 26, height: 26, borderRadius: 6, background: '#1e4029', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#8FD64A' },
+  itemQty: { minWidth: 26, height: 26, borderRadius: 6, background: '#1e4029', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#FF9B72' },
   itemName: { flex: 1, fontSize: 13 },
-  itemPrice: { fontSize: 13, fontWeight: 600, color: '#C9A656' },
-  itemStatus: { fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#1e4029', color: '#8FD64A' },
+  itemPrice: { fontSize: 13, fontWeight: 600, color: '#FF6B2C' },
+  itemStatus: { fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#1e4029', color: '#FF9B72' },
   itemDeleteBtn: { background: 'none', border: 'none', color: '#c0392b', fontSize: 15, cursor: 'pointer', padding: '2px 4px', lineHeight: 1, opacity: 0.8 },
   sheetActions: { padding: '10px 16px 14px', display: 'flex', gap: 8, flexWrap: 'wrap', borderTop: '1px solid #1e4029' },
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.75)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 },
   modal: { background: '#0d1f12', border: '1.5px solid #1e4029', borderRadius: 14, padding: 24, width: '100%', maxWidth: 380 },
   modalTitle: { fontSize: 17, fontWeight: 800, marginBottom: 16 },
   payBtns: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 16 },
-  payBtn: (active) => ({ padding: '18px 10px', borderRadius: 10, border: `2px solid ${active ? '#5FB335' : '#1e4029'}`, background: active ? '#1a4a20' : '#132b1b', color: '#f4f6ef', cursor: 'pointer', fontSize: 20, textAlign: 'center', transition: 'all .15s' }),
+  payBtn: (active) => ({ padding: '18px 10px', borderRadius: 10, border: `2px solid ${active ? '#FF6B2C' : '#1e4029'}`, background: active ? '#1a4a20' : '#132b1b', color: '#FFF4EC', cursor: 'pointer', fontSize: 20, textAlign: 'center', transition: 'all .15s' }),
   payBtnLabel: { fontSize: 12, fontWeight: 600, marginTop: 4 },
   catScroll: { display: 'flex', gap: 8, overflowX: 'auto', padding: '8px 0', marginBottom: 10 },
-  catBtn: (active) => ({ padding: '5px 14px', borderRadius: 20, border: `1.5px solid ${active ? '#5FB335' : '#1e4029'}`, background: active ? '#1a4a20' : 'transparent', color: active ? '#8FD64A' : '#f4f6ef', cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 600 }),
+  catBtn: (active) => ({ padding: '5px 14px', borderRadius: 20, border: `1.5px solid ${active ? '#FF6B2C' : '#1e4029'}`, background: active ? '#1a4a20' : 'transparent', color: active ? '#FF9B72' : '#FFF4EC', cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 600 }),
   prodGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: 10, overflowY: 'auto', maxHeight: '40vh' },
   prodCard: { background: '#132b1b', border: '1.5px solid #1e4029', borderRadius: 10, padding: '10px 10px 8px', position: 'relative' },
   prodName: { fontSize: 12, fontWeight: 600, marginBottom: 4 },
-  prodPrice: { fontSize: 13, color: '#C9A656', fontWeight: 700 },
-  addBtn: { position: 'absolute', top: 8, right: 8, width: 26, height: 26, borderRadius: 6, background: '#5FB335', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 },
-  input: { width: '100%', background: '#132b1b', border: '1.5px solid #1e4029', borderRadius: 8, padding: '9px 12px', color: '#f4f6ef', fontSize: 14, marginBottom: 10, boxSizing: 'border-box' },
+  prodPrice: { fontSize: 13, color: '#FF6B2C', fontWeight: 700 },
+  addBtn: { position: 'absolute', top: 8, right: 8, width: 26, height: 26, borderRadius: 6, background: '#FF6B2C', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 },
+  input: { width: '100%', background: '#132b1b', border: '1.5px solid #1e4029', borderRadius: 8, padding: '9px 12px', color: '#FFF4EC', fontSize: 14, marginBottom: 10, boxSizing: 'border-box' },
   contaBox: { marginBottom: 16 },
   contaRow: { display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 14 },
   contaTotal: { display: 'flex', justifyContent: 'space-between', padding: '8px 0', fontSize: 17, fontWeight: 800, borderTop: '1px solid #1e4029', marginTop: 6 },
   serviceToggle: { display: 'flex', alignItems: 'center', gap: 8, margin: '8px 0', fontSize: 13, cursor: 'pointer' },
   bottomTabs: { position: 'fixed', bottom: 0, left: 0, right: 0, background: '#0d1f12', borderTop: '1.5px solid #1e4029', display: 'flex', zIndex: 50, paddingBottom: 'env(safe-area-inset-bottom,0)' },
-  tabBtn: (active) => ({ flex: 1, padding: '10px 4px 8px', background: 'none', border: 'none', color: active ? '#8FD64A' : '#f4f6ef', cursor: 'pointer', fontSize: 10, fontWeight: active ? 700 : 400, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, opacity: active ? 1 : 0.55 }),
+  tabBtn: (active) => ({ flex: 1, padding: '10px 4px 8px', background: 'none', border: 'none', color: active ? '#FF9B72' : '#FFF4EC', cursor: 'pointer', fontSize: 10, fontWeight: active ? 700 : 400, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, opacity: active ? 1 : 0.55 }),
   tabIcon: { fontSize: 18 },
   vendasList: { display: 'flex', flexDirection: 'column', gap: 8 },
   vendaRow: { background: '#132b1b', border: '1px solid #1e4029', borderRadius: 8, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
@@ -359,20 +359,20 @@ function MesaCard({ m, onClick }) {
     const mm = mins % 60
     return hh + 'h' + (mm > 0 ? String(mm).padStart(2, '0') : '')
   })()
-  const bgStatus = m.status === 'conta' ? '#C9A656' : m.status === 'ocupada' ? '#1e4029' : '#0d1f12'
-  const clrStatus = m.status === 'conta' ? '#000' : '#8FD64A'
+  const bgStatus = m.status === 'conta' ? '#FF6B2C' : m.status === 'ocupada' ? '#1e4029' : '#0d1f12'
+  const clrStatus = m.status === 'conta' ? '#000' : '#FF9B72'
   const label = m.status === 'livre' ? 'livre' : m.status === 'conta' ? 'conta' : 'ocupada'
   return (
-    <div style={{ background: m.status === 'ocupada' ? '#132b1b' : m.status === 'conta' ? '#3a2800' : '#0d1f12', border: '1.5px solid ' + (m.status === 'conta' ? '#C9A656' : m.status === 'ocupada' ? '#5FB335' : '#1e4029'), borderRadius: 10, padding: '10px 8px', cursor: 'pointer', textAlign: 'center', position: 'relative', transition: 'transform .12s, box-shadow .12s', animation: m.status === 'conta' ? 'pulse-gold 1.4s ease-in-out infinite' : 'none' }}
+    <div style={{ background: m.status === 'ocupada' ? '#132b1b' : m.status === 'conta' ? '#3a2800' : '#0d1f12', border: '1.5px solid ' + (m.status === 'conta' ? '#FF6B2C' : m.status === 'ocupada' ? '#FF6B2C' : '#1e4029'), borderRadius: 10, padding: '10px 8px', cursor: 'pointer', textAlign: 'center', position: 'relative', transition: 'transform .12s, box-shadow .12s', animation: m.status === 'conta' ? 'pulse-gold 1.4s ease-in-out infinite' : 'none' }}
       onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.4)' }}
       onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '' }}
       onClick={onClick}>
       {m.aguardandoCozinha && <span style={{ position: 'absolute', top: 4, right: 6, fontSize: 14 }} title="Aguardando cozinha">🔥</span>}
       <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1 }}>{m.num}</div>
       <div style={{ fontSize: 10, opacity: 0.55, marginTop: 2 }}>{m.tipo || 'Mesa'}</div>
-      {m.status !== 'livre' && <div style={{ fontSize: 13, fontWeight: 700, color: '#8FD64A', marginTop: 4 }}>{fmtR(m.total || 0)}</div>}
+      {m.status !== 'livre' && <div style={{ fontSize: 13, fontWeight: 700, color: '#FF9B72', marginTop: 4 }}>{fmtR(m.total || 0)}</div>}
       {m.nome && <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2 }}>{m.nome}</div>}
-      {tempoAberto && <div style={{ fontSize: 9, color: '#C9A656', fontWeight: 700, marginTop: 2 }}>{'⏱ ' + tempoAberto}</div>}
+      {tempoAberto && <div style={{ fontSize: 9, color: '#FF6B2C', fontWeight: 700, marginTop: 2 }}>{'⏱ ' + tempoAberto}</div>}
       <div style={{ fontSize: 9, marginTop: 4, padding: '2px 6px', borderRadius: 4, background: bgStatus, color: clrStatus, display: 'inline-block' }}>{label}</div>
     </div>
   )
@@ -919,8 +919,8 @@ export default function PDV() {
     <div style={S.page}>
       <style>{`
         @keyframes pulse-gold {
-          0%,100% { box-shadow: 0 0 0 0 rgba(201,166,86,.5); }
-          50% { box-shadow: 0 0 0 8px rgba(201,166,86,0); }
+          0%,100% { box-shadow: 0 0 0 0 rgba(255,107,44,.5); }
+          50% { box-shadow: 0 0 0 8px rgba(255,107,44,0); }
         }
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -932,28 +932,28 @@ export default function PDV() {
       <div style={S.banner}>
         <div style={S.bannerStat}>
           <span style={S.bannerLabel}>Abertura</span>
-          <span style={{ ...S.bannerValSmall, color: '#f4f6ef' }}>{fmtR(caixaHoje.abertura || 0)}</span>
+          <span style={{ ...S.bannerValSmall, color: '#FFF4EC' }}>{fmtR(caixaHoje.abertura || 0)}</span>
         </div>
         <div style={S.bannerStat}>
           <span style={S.bannerLabel}>Sangrias</span>
           <span style={{ ...S.bannerValSmall, color: '#e74c3c' }}>-{fmtR(caixaHoje.sangrias || 0)}</span>
         </div>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 18, fontWeight: 800, color: '#f4f6ef', lineHeight: 1 }}>PDV</div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: '#FFF4EC', lineHeight: 1 }}>PDV</div>
           <div style={{ fontSize: 10, opacity: 0.55, marginTop: 2 }}>{abertas.length} mesa{abertas.length !== 1 ? 's' : ''} abertas</div>
         </div>
         <div style={S.bannerStat}>
           <span style={S.bannerLabel}>Vendas</span>
-          <span style={{ ...S.bannerValSmall, color: '#8FD64A' }}>{fmtR(caixaHoje.vendas || 0)}</span>
+          <span style={{ ...S.bannerValSmall, color: '#FF9B72' }}>{fmtR(caixaHoje.vendas || 0)}</span>
         </div>
         <div style={S.bannerStat}>
           <span style={S.bannerLabel}>Saldo est.</span>
-          <span style={{ ...S.bannerValSmall, color: '#C9A656' }}>{fmtR(caixaHoje.saldo || 0)}</span>
+          <span style={{ ...S.bannerValSmall, color: '#FF6B2C' }}>{fmtR(caixaHoje.saldo || 0)}</span>
         </div>
         {/* Botão Sangria/Suprimento */}
         <button
           onClick={() => { setCaixaMov({ tipo: 'sangria', valor: '', motivo: '' }); setOverlay('caixa-mov') }}
-          style={{ background: '#1e4029', border: '1.5px solid #5FB335', borderRadius: 8, color: '#f4f6ef', fontSize: 11, padding: '5px 9px', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
+          style={{ background: '#1e4029', border: '1.5px solid #FF6B2C', borderRadius: 8, color: '#FFF4EC', fontSize: 11, padding: '5px 9px', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
           💰 Caixa
         </button>
       </div>
@@ -970,8 +970,8 @@ export default function PDV() {
                 {/* Chips de status */}
                 {[
                   { label: 'Livres', count: (mesas.fisicas||[]).filter(m=>m.status==='livre').length, color: '#1e4029', text: '#6aaa6a' },
-                  { label: 'Ocupadas', count: (mesas.fisicas||[]).filter(m=>m.status==='ocupada').length, color: '#1a4a20', text: '#8FD64A' },
-                  { label: 'Conta', count: (mesas.fisicas||[]).filter(m=>m.status==='conta').length, color: '#3a2800', text: '#C9A656' },
+                  { label: 'Ocupadas', count: (mesas.fisicas||[]).filter(m=>m.status==='ocupada').length, color: '#1a4a20', text: '#FF9B72' },
+                  { label: 'Conta', count: (mesas.fisicas||[]).filter(m=>m.status==='conta').length, color: '#3a2800', text: '#FF6B2C' },
                 ].map(s => s.count > 0 && (
                   <span key={s.label} style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: s.color, color: s.text }}>
                     {s.label}: {s.count}
@@ -1043,11 +1043,11 @@ export default function PDV() {
             </div>
             <div style={{ background: '#132b1b', border: '1px solid #1e4029', borderRadius: 8, padding: 10 }}>
               <div style={{ fontSize: 11, opacity: .6 }}>Pendentes locais</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: '#C9A656' }}>{resumoOffline.pendente || 0}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: '#FF6B2C' }}>{resumoOffline.pendente || 0}</div>
             </div>
             <div style={{ background: '#132b1b', border: '1px solid #1e4029', borderRadius: 8, padding: 10 }}>
               <div style={{ fontSize: 11, opacity: .6 }}>Com falha de entrega</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: resumoOffline.falha ? '#e74c3c' : '#8FD64A' }}>{resumoOffline.falha || 0}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: resumoOffline.falha ? '#e74c3c' : '#FF9B72' }}>{resumoOffline.falha || 0}</div>
             </div>
           </div>
 
@@ -1059,10 +1059,10 @@ export default function PDV() {
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8, maxHeight: 430, overflowY: 'auto', paddingRight: 3 }}>
                   {cardapio.map((produto) => (
-                    <button key={produto.produto_id || produto.id} type="button" onClick={() => adicionarAoCarrinhoOffline(produto)} style={{ textAlign: 'left', cursor: 'pointer', color: '#f4f6ef', background: '#132b1b', border: '1px solid #1e4029', borderRadius: 8, padding: 10 }}>
+                    <button key={produto.produto_id || produto.id} type="button" onClick={() => adicionarAoCarrinhoOffline(produto)} style={{ textAlign: 'left', cursor: 'pointer', color: '#FFF4EC', background: '#132b1b', border: '1px solid #1e4029', borderRadius: 8, padding: 10 }}>
                       <div style={{ fontSize: 17, marginBottom: 3 }}>{prodEmoji(produto)}</div>
                       <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.25 }}>{produto.nome}</div>
-                      <div style={{ fontSize: 12, color: '#8FD64A', fontWeight: 700, marginTop: 5 }}>{fmtR(produto.preco || produto.preco_venda || 0)}</div>
+                      <div style={{ fontSize: 12, color: '#FF9B72', fontWeight: 700, marginTop: 5 }}>{fmtR(produto.preco || produto.preco_venda || 0)}</div>
                     </button>
                   ))}
                 </div>
@@ -1085,9 +1085,9 @@ export default function PDV() {
                         <div style={{ fontSize: 11, opacity: .6 }}>{fmtR(item.valor_unitario)} cada</div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <button type="button" onClick={() => alterarQuantidadeOffline(item.produto_id, -1)} style={{ width: 25, height: 25, borderRadius: 5, border: '1px solid #456', background: '#0d1f12', color: '#f4f6ef', cursor: 'pointer' }}>−</button>
+                        <button type="button" onClick={() => alterarQuantidadeOffline(item.produto_id, -1)} style={{ width: 25, height: 25, borderRadius: 5, border: '1px solid #456', background: '#0d1f12', color: '#FFF4EC', cursor: 'pointer' }}>−</button>
                         <span style={{ minWidth: 18, textAlign: 'center', fontSize: 12 }}>{item.quantidade}</span>
-                        <button type="button" onClick={() => alterarQuantidadeOffline(item.produto_id, 1)} style={{ width: 25, height: 25, borderRadius: 5, border: '1px solid #456', background: '#0d1f12', color: '#f4f6ef', cursor: 'pointer' }}>+</button>
+                        <button type="button" onClick={() => alterarQuantidadeOffline(item.produto_id, 1)} style={{ width: 25, height: 25, borderRadius: 5, border: '1px solid #456', background: '#0d1f12', color: '#FFF4EC', cursor: 'pointer' }}>+</button>
                       </div>
                     </div>
                   ))}
@@ -1095,15 +1095,15 @@ export default function PDV() {
               )}
 
               <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #1e4029', paddingTop: 10, fontSize: 17, fontWeight: 800 }}>
-                <span>Total</span><span style={{ color: '#8FD64A' }}>{fmtR(totalCarrinhoOffline)}</span>
+                <span>Total</span><span style={{ color: '#FF9B72' }}>{fmtR(totalCarrinhoOffline)}</span>
               </div>
               <div style={{ fontSize: 12, margin: '13px 0 7px', opacity: .75 }}>Pagamento já autorizado</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 12 }}>
                 {[['dinheiro', 'Dinheiro'], ['tef', 'TEF local'], ['carteira', 'Vale']].map(([tipo, label]) => (
-                  <button key={tipo} type="button" onClick={() => setPagamentoOffline(tipo)} style={{ border: pagamentoOffline === tipo ? '1.5px solid #8FD64A' : '1px solid #1e4029', background: pagamentoOffline === tipo ? '#1e4029' : '#0d1f12', color: '#f4f6ef', borderRadius: 7, padding: '7px 4px', cursor: 'pointer', fontSize: 11, fontWeight: pagamentoOffline === tipo ? 700 : 400 }}>{label}</button>
+                  <button key={tipo} type="button" onClick={() => setPagamentoOffline(tipo)} style={{ border: pagamentoOffline === tipo ? '1.5px solid #FF9B72' : '1px solid #1e4029', background: pagamentoOffline === tipo ? '#1e4029' : '#0d1f12', color: '#FFF4EC', borderRadius: 7, padding: '7px 4px', cursor: 'pointer', fontSize: 11, fontWeight: pagamentoOffline === tipo ? 700 : 400 }}>{label}</button>
                 ))}
               </div>
-              {pagamentoOffline === 'tef' && <div style={{ fontSize: 11, color: '#C9A656', margin: '-5px 0 10px' }}>A autorização TEF local será solicitada antes de salvar o evento.</div>}
+              {pagamentoOffline === 'tef' && <div style={{ fontSize: 11, color: '#FF6B2C', margin: '-5px 0 10px' }}>A autorização TEF local será solicitada antes de salvar o evento.</div>}
               <button className="btn btn-primary" type="button" disabled={processandoOffline || carrinhoOffline.length === 0} onClick={finalizarVendaOffline} style={{ width: '100%', opacity: processandoOffline || carrinhoOffline.length === 0 ? .55 : 1 }}>
                 {processandoOffline ? 'Registrando venda...' : 'Registrar venda de contingência'}
               </button>
@@ -1138,7 +1138,7 @@ export default function PDV() {
             <div style={S.vendasList}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, opacity: 0.55, padding: '0 4px 6px', borderBottom: '1px solid #1e4029' }}>
                 <span>Total do dia</span>
-                <span style={{ color: '#8FD64A', fontWeight: 700 }}>
+                <span style={{ color: '#FF9B72', fontWeight: 700 }}>
                   {fmtR(vendas.reduce((s, v) => s + (v.total || v.valor || 0), 0))}
                 </span>
               </div>
@@ -1150,7 +1150,7 @@ export default function PDV() {
                       {fmtMeio(v.meio || v.meioPagamento)} · {v.hora || v.fechadoEm ? new Date(v.fechadoEm || v.hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'}
                     </div>
                   </div>
-                  <div style={{ fontWeight: 700, color: '#8FD64A' }}>{fmtR(v.total || v.valor || 0)}</div>
+                  <div style={{ fontWeight: 700, color: '#FF9B72' }}>{fmtR(v.total || v.valor || 0)}</div>
                 </div>
               ))}
             </div>
@@ -1181,7 +1181,7 @@ export default function PDV() {
                     {sheet.tipo === 'fisica' ? `Mesa ${sheet.num}` : comanda.mesa || `Comanda #${comanda.id}`}
                   </div>
                   {comanda.itens?.length > 0 && (
-                    <span style={{ fontSize: 10, fontWeight: 800, background: '#5FB335', color: '#0E2E1C', borderRadius: 10, padding: '2px 7px' }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, background: '#FF6B2C', color: '#12283F', borderRadius: 10, padding: '2px 7px' }}>
                       {comanda.itens.reduce((s,i) => s+(i.qtd||1), 0)} itens
                     </span>
                   )}
@@ -1195,11 +1195,11 @@ export default function PDV() {
                 {/* Botão lançar rápido — abre cardápio direto */}
                 <button
                   onClick={() => setOverlay('cardapio')}
-                  style={{ background: 'linear-gradient(135deg,#5FB335,#3a8c1e)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer', padding: '5px 12px', whiteSpace: 'nowrap' }}>
+                  style={{ background: 'linear-gradient(135deg,#FF6B2C,#3a8c1e)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer', padding: '5px 12px', whiteSpace: 'nowrap' }}>
                   + Lançar
                 </button>
                 <button title="Imprimir comanda" onClick={imprimirComanda}
-                  style={{ background: 'none', border: '1px solid #1e4029', borderRadius: 6, color: '#f4f6ef', fontSize: 16, cursor: 'pointer', padding: '3px 7px' }}>
+                  style={{ background: 'none', border: '1px solid #1e4029', borderRadius: 6, color: '#FFF4EC', fontSize: 16, cursor: 'pointer', padding: '3px 7px' }}>
                   🖨
                 </button>
                 <button style={S.sheetClose} onClick={fecharSheet}>✕</button>
@@ -1213,7 +1213,7 @@ export default function PDV() {
                   <div style={{ fontSize: 14, opacity: 0.45, marginBottom: 16 }}>Comanda vazia</div>
                   <button
                     onClick={() => setOverlay('cardapio')}
-                    style={{ background: 'linear-gradient(135deg,#5FB335,#3a8c1e)', border: 'none', borderRadius: 10, color: '#fff', padding: '12px 28px', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
+                    style={{ background: 'linear-gradient(135deg,#FF6B2C,#3a8c1e)', border: 'none', borderRadius: 10, color: '#fff', padding: '12px 28px', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
                     ➕ Lançar primeiro item
                   </button>
                 </div>
@@ -1227,7 +1227,7 @@ export default function PDV() {
                         {it.obs && <div style={{ fontSize: 10, opacity: 0.5, fontStyle: 'italic' }}>💬 {it.obs}</div>}
                       </div>
                       {it.status && it.status !== 'normal' && (
-                        <div style={{ ...S.itemStatus, background: it.status === 'entregue' ? '#1a4a20' : it.status === 'preparando' ? '#3a2800' : '#1e4029', color: it.status === 'entregue' ? '#8FD64A' : it.status === 'preparando' ? '#C9A656' : '#8FD64A' }}>
+                        <div style={{ ...S.itemStatus, background: it.status === 'entregue' ? '#1a4a20' : it.status === 'preparando' ? '#3a2800' : '#1e4029', color: it.status === 'entregue' ? '#FF9B72' : it.status === 'preparando' ? '#FF6B2C' : '#FF9B72' }}>
                           {it.status}
                         </div>
                       )}
@@ -1245,7 +1245,7 @@ export default function PDV() {
                     <span style={{ fontSize: 11, opacity: 0.65, marginRight: 4 }}>Desconto:</span>
                     {[0, 5, 10, 15, 20].map(p => (
                       <button key={p} onClick={() => setDescPct(p)}
-                        style={{ padding: '3px 9px', borderRadius: 16, border: `1.5px solid ${descPct === p ? '#5FB335' : '#1e4029'}`, background: descPct === p ? '#1a4a20' : 'transparent', color: descPct === p ? '#8FD64A' : '#f4f6ef', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
+                        style={{ padding: '3px 9px', borderRadius: 16, border: `1.5px solid ${descPct === p ? '#FF6B2C' : '#1e4029'}`, background: descPct === p ? '#1a4a20' : 'transparent', color: descPct === p ? '#FF9B72' : '#FFF4EC', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
                         {p}%
                       </button>
                     ))}
@@ -1257,7 +1257,7 @@ export default function PDV() {
                     />
                   </div>
                   {descPct > 0 && (
-                    <div style={{ fontSize: 11, color: '#8FD64A', marginTop: 5 }}>
+                    <div style={{ fontSize: 11, color: '#FF9B72', marginTop: 5 }}>
                       Desconto: −{fmtR(descVal)} → Subtotal: {fmtR(subtotalDesc)}
                     </div>
                   )}
@@ -1280,7 +1280,7 @@ export default function PDV() {
                     <span style={{ fontSize: 10, opacity: 0.5, fontWeight: 400 }}>+10% serv.</span>
                   )}
                 </span>
-                <span style={{ color: '#8FD64A' }}>{fmtR(totalFinal)}</span>
+                <span style={{ color: '#FF9B72' }}>{fmtR(totalFinal)}</span>
               </div>
             </div>
 
@@ -1372,7 +1372,7 @@ export default function PDV() {
                     return (
                       <div key={p.id} style={{
                         background: estZero ? '#1a1a1a' : '#1a2e1e',
-                        border: `1.5px solid ${estZero ? '#3a1a1a' : estBaixo ? '#C9A65660' : '#1e4029'}`,
+                        border: `1.5px solid ${estZero ? '#3a1a1a' : estBaixo ? '#FF6B2C60' : '#1e4029'}`,
                         borderRadius: 12, overflow: 'hidden',
                         opacity: estZero ? 0.5 : 1,
                         display: 'flex', flexDirection: 'column',
@@ -1389,8 +1389,8 @@ export default function PDV() {
                           {p.estoque !== null && p.estoque !== undefined && (
                             <div style={{
                               position: 'absolute', top: 6, right: 6,
-                              background: estZero ? '#e74c3c' : estBaixo ? '#C9A656' : '#1e4a2a',
-                              color: estZero ? '#fff' : estBaixo ? '#000' : '#8FD64A',
+                              background: estZero ? '#e74c3c' : estBaixo ? '#FF6B2C' : '#1e4a2a',
+                              color: estZero ? '#fff' : estBaixo ? '#000' : '#FF9B72',
                               borderRadius: 8, fontSize: 9, fontWeight: 800,
                               padding: '2px 6px', lineHeight: 1.4,
                             }}>
@@ -1399,9 +1399,9 @@ export default function PDV() {
                           )}
                           {/* Emoji/ícone */}
                           <div style={{ fontSize: 28, marginBottom: 6, lineHeight: 1 }}>{emoji}</div>
-                          <div style={{ fontWeight: 700, fontSize: 13, lineHeight: 1.3, color: estZero ? '#888' : '#f4f6ef', marginBottom: 3 }}>{p.nome}</div>
+                          <div style={{ fontWeight: 700, fontSize: 13, lineHeight: 1.3, color: estZero ? '#888' : '#FFF4EC', marginBottom: 3 }}>{p.nome}</div>
                           {p.cat && <div style={{ fontSize: 10, opacity: 0.45, marginBottom: 4 }}>{p.cat}</div>}
-                          <div style={{ fontSize: 15, fontWeight: 800, color: estZero ? '#666' : '#C9A656' }}>{fmtR(p.preco)}</div>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: estZero ? '#666' : '#FF6B2C' }}>{fmtR(p.preco)}</div>
                         </div>
 
                         {/* Controles de quantidade + adicionar */}
@@ -1410,27 +1410,27 @@ export default function PDV() {
                             {/* Seletor de quantidade */}
                             <button
                               onClick={() => setQtd(p.id, qtd - 1)}
-                              style={{ width: 26, height: 26, borderRadius: 6, background: '#132b1b', border: '1px solid #1e4029', color: '#8FD64A', fontWeight: 800, fontSize: 16, cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>
+                              style={{ width: 26, height: 26, borderRadius: 6, background: '#132b1b', border: '1px solid #1e4029', color: '#FF9B72', fontWeight: 800, fontSize: 16, cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>
                               −
                             </button>
-                            <span style={{ minWidth: 20, textAlign: 'center', fontWeight: 800, fontSize: 13, color: qtd > 1 ? '#C9A656' : '#f4f6ef' }}>{qtd}</span>
+                            <span style={{ minWidth: 20, textAlign: 'center', fontWeight: 800, fontSize: 13, color: qtd > 1 ? '#FF6B2C' : '#FFF4EC' }}>{qtd}</span>
                             <button
                               onClick={() => setQtd(p.id, qtd + 1)}
-                              style={{ width: 26, height: 26, borderRadius: 6, background: '#132b1b', border: '1px solid #1e4029', color: '#8FD64A', fontWeight: 800, fontSize: 16, cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>
+                              style={{ width: 26, height: 26, borderRadius: 6, background: '#132b1b', border: '1px solid #1e4029', color: '#FF9B72', fontWeight: 800, fontSize: 16, cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>
                               +
                             </button>
                             {/* Botão lançar rápido */}
                             <button
                               onClick={() => lancamentoRapido(p)}
                               title="Lançar na comanda"
-                              style={{ flex: 1, height: 26, borderRadius: 6, background: 'linear-gradient(135deg,#5FB335,#3a8c1e)', border: 'none', color: '#fff', fontWeight: 800, fontSize: 11.5, cursor: 'pointer', lineHeight: 1, letterSpacing: '.02em' }}>
+                              style={{ flex: 1, height: 26, borderRadius: 6, background: 'linear-gradient(135deg,#FF6B2C,#3a8c1e)', border: 'none', color: '#fff', fontWeight: 800, fontSize: 11.5, cursor: 'pointer', lineHeight: 1, letterSpacing: '.02em' }}>
                               + Lançar
                             </button>
                             {/* Botão com obs */}
                             <button
                               onClick={() => abrirObsItem(p)}
                               title="Adicionar com observação"
-                              style={{ width: 26, height: 26, borderRadius: 6, background: '#132b1b', border: '1px solid #1e4029', color: '#C9A656', fontWeight: 800, fontSize: 13, cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>
+                              style={{ width: 26, height: 26, borderRadius: 6, background: '#132b1b', border: '1px solid #1e4029', color: '#FF6B2C', fontWeight: 800, fontSize: 13, cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>
                               💬
                             </button>
                           </div>
@@ -1451,20 +1451,20 @@ export default function PDV() {
             {comanda?.itens?.length > 0 && (
               <div style={{ borderTop: '1px solid #1e4029', background: '#0a1a0f' }}>
                 <div style={{ padding: '8px 16px 4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: '#8FD64A' }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: '#FF9B72' }}>
                     🧾 Lançados ({comanda.itens.reduce((s, i) => s + (i.qtd || 1), 0)})
                   </span>
-                  <span style={{ fontSize: 13, fontWeight: 800, color: '#C9A656' }}>{fmtR(comanda.total || 0)}</span>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: '#FF6B2C' }}>{fmtR(comanda.total || 0)}</span>
                 </div>
                 {/* lista rolável dos itens já na comanda */}
                 <div style={{ maxHeight: 132, overflowY: 'auto', padding: '0 16px' }}>
                   {comanda.itens.map((it, idx) => (
                     <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid #142a1a' }}>
-                      <span style={{ minWidth: 26, height: 20, borderRadius: 5, background: '#1e4029', color: '#8FD64A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{it.qtd}×</span>
+                      <span style={{ minWidth: 26, height: 20, borderRadius: 5, background: '#1e4029', color: '#FF9B72', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{it.qtd}×</span>
                       <span style={{ flex: 1, fontSize: 12, color: '#dfe9df', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {it.nome}{it.obs ? <span style={{ color: '#8FD64A', opacity: .7 }}> · {it.obs}</span> : null}
+                        {it.nome}{it.obs ? <span style={{ color: '#FF9B72', opacity: .7 }}> · {it.obs}</span> : null}
                       </span>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: '#C9A656', flexShrink: 0 }}>{fmtR((it.preco || 0) * (it.qtd || 1))}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#FF6B2C', flexShrink: 0 }}>{fmtR((it.preco || 0) * (it.qtd || 1))}</span>
                       <button
                         onClick={() => cancelarItem(idx)}
                         title="Remover item"
@@ -1478,7 +1478,7 @@ export default function PDV() {
                 <div style={{ padding: '8px 16px 12px' }}>
                   <button
                     onClick={() => setOverlay(null)}
-                    style={{ width: '100%', background: '#1a4a20', border: '1.5px solid #5FB335', borderRadius: 9, color: '#8FD64A', padding: '9px 0', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
+                    style={{ width: '100%', background: '#1a4a20', border: '1.5px solid #FF6B2C', borderRadius: 9, color: '#FF9B72', padding: '9px 0', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
                     ✓ Concluir e voltar à comanda
                   </button>
                 </div>
@@ -1499,7 +1499,7 @@ export default function PDV() {
               </div>
               <div>
                 <div style={{ fontWeight: 800, fontSize: 15 }}>{itemObs.prod.nome}</div>
-                <div style={{ fontSize: 13, color: '#C9A656', fontWeight: 700 }}>{fmtR(itemObs.prod.preco)}</div>
+                <div style={{ fontSize: 13, color: '#FF6B2C', fontWeight: 700 }}>{fmtR(itemObs.prod.preco)}</div>
                 {itemObs.prod.cat && <div style={{ fontSize: 11, opacity: 0.45, marginTop: 2 }}>{itemObs.prod.cat}</div>}
               </div>
             </div>
@@ -1510,18 +1510,18 @@ export default function PDV() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <button
                   onClick={() => setItemObs(v => ({ ...v, qtd: Math.max(1, (v.qtd || 1) - 1) }))}
-                  style={{ width: 36, height: 36, borderRadius: 8, background: '#1e4029', border: 'none', color: '#8FD64A', fontWeight: 800, fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>
+                  style={{ width: 36, height: 36, borderRadius: 8, background: '#1e4029', border: 'none', color: '#FF9B72', fontWeight: 800, fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>
                   −
                 </button>
-                <span style={{ fontSize: 22, fontWeight: 900, color: '#C9A656', minWidth: 36, textAlign: 'center' }}>
+                <span style={{ fontSize: 22, fontWeight: 900, color: '#FF6B2C', minWidth: 36, textAlign: 'center' }}>
                   {itemObs.qtd || 1}
                 </span>
                 <button
                   onClick={() => setItemObs(v => ({ ...v, qtd: Math.min(99, (v.qtd || 1) + 1) }))}
-                  style={{ width: 36, height: 36, borderRadius: 8, background: '#1e4029', border: 'none', color: '#8FD64A', fontWeight: 800, fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>
+                  style={{ width: 36, height: 36, borderRadius: 8, background: '#1e4029', border: 'none', color: '#FF9B72', fontWeight: 800, fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>
                   +
                 </button>
-                <div style={{ flex: 1, textAlign: 'right', fontSize: 14, fontWeight: 700, color: '#8FD64A' }}>
+                <div style={{ flex: 1, textAlign: 'right', fontSize: 14, fontWeight: 700, color: '#FF9B72' }}>
                   = {fmtR((itemObs.prod.preco || 0) * (itemObs.qtd || 1))}
                 </div>
               </div>
@@ -1557,7 +1557,7 @@ export default function PDV() {
               <div style={S.modalTitle}>🧾 Pré-conta</div>
               <div style={{ display: 'flex', gap: 6 }}>
                 <button title="Imprimir" onClick={imprimirComanda}
-                  style={{ background: 'none', border: '1px solid #1e4029', borderRadius: 6, color: '#f4f6ef', fontSize: 15, cursor: 'pointer', padding: '3px 7px' }}>
+                  style={{ background: 'none', border: '1px solid #1e4029', borderRadius: 6, color: '#FFF4EC', fontSize: 15, cursor: 'pointer', padding: '3px 7px' }}>
                   🖨
                 </button>
                 <button style={S.sheetClose} onClick={() => setOverlay(null)}>✕</button>
@@ -1568,7 +1568,7 @@ export default function PDV() {
               {(comanda.itens || []).map((it, i) => (
                 <div key={i} style={S.contaRow}>
                   <span>{it.qtd}× {it.nome}</span>
-                  <span style={{ color: '#C9A656' }}>{fmtR((it.preco || 0) * (it.qtd || 1))}</span>
+                  <span style={{ color: '#FF6B2C' }}>{fmtR((it.preco || 0) * (it.qtd || 1))}</span>
                 </div>
               ))}
               <div style={S.contaRow}>
@@ -1576,7 +1576,7 @@ export default function PDV() {
                 <span>{fmtR(subtotal)}</span>
               </div>
               {descPct > 0 && (
-                <div style={{ ...S.contaRow, color: '#8FD64A' }}>
+                <div style={{ ...S.contaRow, color: '#FF9B72' }}>
                   <span>Desconto {descPct}%</span>
                   <span>-{fmtR(descVal)}</span>
                 </div>
@@ -1587,7 +1587,7 @@ export default function PDV() {
               </label>
               <div style={S.contaTotal}>
                 <span>Total</span>
-                <span style={{ color: '#8FD64A' }}>{fmtR(totalFinal)}</span>
+                <span style={{ color: '#FF9B72' }}>{fmtR(totalFinal)}</span>
               </div>
             </div>
 
@@ -1619,7 +1619,7 @@ export default function PDV() {
               <div style={{ fontSize: 11, opacity: 0.55, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
                 {sheet?.tipo === 'fisica' ? `Mesa ${sheet?.num}` : comanda?.mesa || `Comanda #${comanda?.id}`}
               </div>
-              <div style={{ fontSize: 34, fontWeight: 900, color: '#8FD64A', lineHeight: 1 }}>
+              <div style={{ fontSize: 34, fontWeight: 900, color: '#FF9B72', lineHeight: 1 }}>
                 {fmtR(totalFinal)}
               </div>
               {servico && (
@@ -1634,12 +1634,12 @@ export default function PDV() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, padding: '8px 10px', background: '#132b1b', borderRadius: 8 }}>
               <span style={{ fontSize: 12, opacity: 0.7, flex: 1 }}>Dividir entre:</span>
               <button onClick={() => setDividir(d => Math.max(1, d - 1))}
-                style={{ background: '#1e4029', border: 'none', borderRadius: 6, color: '#8FD64A', width: 28, height: 28, cursor: 'pointer', fontWeight: 800, fontSize: 16 }}>-</button>
+                style={{ background: '#1e4029', border: 'none', borderRadius: 6, color: '#FF9B72', width: 28, height: 28, cursor: 'pointer', fontWeight: 800, fontSize: 16 }}>-</button>
               <span style={{ fontWeight: 800, fontSize: 16, minWidth: 24, textAlign: 'center' }}>{dividir}</span>
               <button onClick={() => setDividir(d => d + 1)}
-                style={{ background: '#1e4029', border: 'none', borderRadius: 6, color: '#8FD64A', width: 28, height: 28, cursor: 'pointer', fontWeight: 800, fontSize: 16 }}>+</button>
+                style={{ background: '#1e4029', border: 'none', borderRadius: 6, color: '#FF9B72', width: 28, height: 28, cursor: 'pointer', fontWeight: 800, fontSize: 16 }}>+</button>
               {dividir > 1 && (
-                <span style={{ fontSize: 13, color: '#C9A656', fontWeight: 700, marginLeft: 6 }}>
+                <span style={{ fontSize: 13, color: '#FF6B2C', fontWeight: 700, marginLeft: 6 }}>
                   = {fmtR(totalFinal / dividir)}/pessoa
                 </span>
               )}
@@ -1662,7 +1662,7 @@ export default function PDV() {
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
                     <span>{PAY_OPTIONS.find(o => o.key === p.meio)?.icon} {PAY_OPTIONS.find(o => o.key === p.meio)?.label}</span>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <span style={{ color: '#8FD64A', fontWeight: 700 }}>{fmtR(p.valor)}</span>
+                      <span style={{ color: '#FF9B72', fontWeight: 700 }}>{fmtR(p.valor)}</span>
                       <button onClick={() => setMultiPag(prev => prev.filter((_, j) => j !== i))}
                         style={{ background: 'none', border: 'none', color: '#e74c3c', cursor: 'pointer', fontSize: 12 }}>✕</button>
                     </div>
@@ -1670,7 +1670,7 @@ export default function PDV() {
                 ))}
                 <div style={{ borderTop: '1px solid #1e4029', marginTop: 6, paddingTop: 6, display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
                   <span>Restante:</span>
-                  <span style={{ color: restanteMultiPag > 0 ? '#C9A656' : '#8FD64A', fontWeight: 700 }}>{fmtR(Math.max(0, restanteMultiPag))}</span>
+                  <span style={{ color: restanteMultiPag > 0 ? '#FF6B2C' : '#FF9B72', fontWeight: 700 }}>{fmtR(Math.max(0, restanteMultiPag))}</span>
                 </div>
               </div>
             )}
@@ -1695,7 +1695,7 @@ export default function PDV() {
                         setMultiPagValor('')
                       }
                     }}
-                    style={{ background: '#5FB335', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 700, padding: '0 14px', cursor: 'pointer', fontSize: 13 }}>
+                    style={{ background: '#FF6B2C', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 700, padding: '0 14px', cursor: 'pointer', fontSize: 13 }}>
                     + Add
                   </button>
                 </div>
@@ -1704,7 +1704,7 @@ export default function PDV() {
 
             {multiPag.length === 0 && (
               <button
-                style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid #1e4029', borderRadius: 8, color: '#8FD64A', padding: '6px 12px', cursor: 'pointer', fontSize: 12, marginTop: 8 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid #1e4029', borderRadius: 8, color: '#FF9B72', padding: '6px 12px', cursor: 'pointer', fontSize: 12, marginTop: 8 }}
                 onClick={() => setMultiPag([{ meio: payMeio, valor: parseFloat((totalFinal / 2).toFixed(2)) }])}>
                 ➕ Dividir pagamento (2+ meios)
               </button>
@@ -1715,7 +1715,7 @@ export default function PDV() {
               <div style={{ marginTop: 12 }}>
                 <button
                   onClick={() => setShowPixQR(true)}
-                  style={{ width: '100%', background: 'linear-gradient(135deg,#0E2E1C,#1a4a20)', border: '2px solid #5FB335', borderRadius: 12, color: '#8FD64A', padding: '14px', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  style={{ width: '100%', background: 'linear-gradient(135deg,#12283F,#1a4a20)', border: '2px solid #FF6B2C', borderRadius: 12, color: '#FF9B72', padding: '14px', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                   📲 Gerar QR Code PIX — {fmtR(dividir > 1 ? totalFinal / dividir : totalFinal)}
                 </button>
                 <div style={{ fontSize: 11, opacity: 0.45, textAlign: 'center', marginTop: 6 }}>
@@ -1738,7 +1738,7 @@ export default function PDV() {
                 {valorRecebido && (
                   <div style={{ marginTop: 8, textAlign: 'center' }}>
                     {trocoVal >= 0 ? (
-                      <div style={{ fontSize: 20, fontWeight: 800, color: '#8FD64A' }}>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: '#FF9B72' }}>
                         Troco: {fmtR(trocoVal)}
                       </div>
                     ) : (
@@ -1759,9 +1759,9 @@ export default function PDV() {
                   {MODALIDADES_TEF.map(m => (
                     <button key={m.key} onClick={() => setTefModalidade(m.key)}
                       style={{ flex: 1, minWidth: 92, padding: '8px 6px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700,
-                        border: tefModalidade === m.key ? '1.5px solid #5FB335' : '1px solid #1e4029',
+                        border: tefModalidade === m.key ? '1.5px solid #FF6B2C' : '1px solid #1e4029',
                         background: tefModalidade === m.key ? '#1a4a20' : 'transparent',
-                        color: tefModalidade === m.key ? '#8FD64A' : '#9ab09a' }}>
+                        color: tefModalidade === m.key ? '#FF9B72' : '#9ab09a' }}>
                       {m.icon} {m.label}
                     </button>
                   ))}
@@ -1880,9 +1880,9 @@ export default function PDV() {
                   onClick={() => setCaixaMov(v => ({ ...v, tipo: t.key }))}
                   style={{
                     flex: 1, padding: '10px 6px', borderRadius: 10,
-                    border: `2px solid ${caixaMov.tipo === t.key ? (t.key === 'sangria' ? '#e74c3c' : '#5FB335') : '#1e4029'}`,
+                    border: `2px solid ${caixaMov.tipo === t.key ? (t.key === 'sangria' ? '#e74c3c' : '#FF6B2C') : '#1e4029'}`,
                     background: caixaMov.tipo === t.key ? (t.key === 'sangria' ? '#2d0a0a' : '#1a4a20') : '#132b1b',
-                    color: '#f4f6ef', cursor: 'pointer', textAlign: 'center',
+                    color: '#FFF4EC', cursor: 'pointer', textAlign: 'center',
                   }}>
                   <div style={{ fontSize: 16 }}>{t.label}</div>
                   <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2 }}>{t.desc}</div>

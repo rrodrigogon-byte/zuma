@@ -1,5 +1,5 @@
 /**
- * Agropecuária & Petshop — SetPoint Ultra
+ * Agropecuária & Petshop — KYTTO Clube
  * Tela: Pets, Prontuários, Vacinas, Receituários
  */
 import { useState, useEffect, useCallback } from 'react'
@@ -127,7 +127,7 @@ export default function Agropecuaria() {
                     <tr key={r.id} style={{ borderTop: '1px solid var(--line)' }}>
                       <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontWeight: 600 }}>{r.numero_receita}</td>
                       <td style={{ padding: '12px 16px' }}>
-                        <span style={{ background: r.tipo === 'agronomico' ? '#5FB33522' : '#8b5cf622', color: r.tipo === 'agronomico' ? '#5FB335' : '#8b5cf6', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
+                        <span style={{ background: r.tipo === 'agronomico' ? '#FF6B2C22' : '#8b5cf622', color: r.tipo === 'agronomico' ? '#FF6B2C' : '#8b5cf6', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
                           {r.tipo === 'agronomico' ? '🌱 Agronômico' : '🐾 Veterinário'}
                         </span>
                       </td>
@@ -135,7 +135,7 @@ export default function Agropecuaria() {
                       <td style={{ padding: '12px 16px' }}>{r.cliente_nome}</td>
                       <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--muted)' }}>{fmtDate(r.data_emissao)}</td>
                       <td style={{ padding: '12px 16px' }}>
-                        <span style={{ background: r.status === 'emitido' ? '#4a9eff22' : '#5FB33522', color: r.status === 'emitido' ? '#4a9eff' : '#5FB335', padding: '3px 10px', borderRadius: 20, fontSize: 12 }}>
+                        <span style={{ background: r.status === 'emitido' ? '#4a9eff22' : '#FF6B2C22', color: r.status === 'emitido' ? '#4a9eff' : '#FF6B2C', padding: '3px 10px', borderRadius: 20, fontSize: 12 }}>
                           {r.status}
                         </span>
                       </td>

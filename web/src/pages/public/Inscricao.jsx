@@ -33,7 +33,7 @@ function validarCPF(cpf) {
 
 const FIELD = (label, children, error) => (
   <div style={{ marginBottom: '20px' }}>
-    <label style={{ display: 'block', fontWeight: 600, color: '#0E2E1C', marginBottom: '6px', fontSize: '0.9rem' }}>
+    <label style={{ display: 'block', fontWeight: 600, color: '#12283F', marginBottom: '6px', fontSize: '0.9rem' }}>
       {label}
     </label>
     {children}
@@ -144,23 +144,23 @@ export default function Inscricao() {
 
   if (etapa === 'pix') {
     return (
-      <div style={{ minHeight: '100vh', background: '#F4F6EF', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+      <div style={{ minHeight: '100vh', background: '#FFF4EC', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
         <div style={{ background: '#fff', borderRadius: '24px', padding: '40px 36px', maxWidth: '500px', width: '100%', boxShadow: '0 8px 40px rgba(0,0,0,0.1)' }}>
           <div style={{ textAlign: 'center', marginBottom: '28px' }}>
             <div style={{ fontSize: '3rem', marginBottom: '12px' }}>✅</div>
-            <h2 style={{ color: '#0E2E1C', fontWeight: 800, fontSize: '1.5rem', margin: '0 0 6px' }}>
+            <h2 style={{ color: '#12283F', fontWeight: 800, fontSize: '1.5rem', margin: '0 0 6px' }}>
               Inscrição Realizada!
             </h2>
-            <p style={{ color: '#5a7a5a', margin: 0 }}>Agora finalize seu pagamento via PIX</p>
+            <p style={{ color: '#5A6570', margin: 0 }}>Agora finalize seu pagamento via PIX</p>
           </div>
 
           {/* Total */}
           <div style={{
-            background: 'linear-gradient(135deg, #0E2E1C, #1a4a2e)',
-            borderRadius: '16px', padding: '20px', textAlign: 'center', marginBottom: '24px', color: '#F4F6EF',
+            background: 'linear-gradient(135deg, #12283F, #183450)',
+            borderRadius: '16px', padding: '20px', textAlign: 'center', marginBottom: '24px', color: '#FFF4EC',
           }}>
-            <div style={{ fontSize: '0.85rem', color: '#8FD64A', fontWeight: 600, marginBottom: '4px' }}>VALOR A PAGAR</div>
-            <div style={{ fontSize: '2.2rem', fontWeight: 900, color: '#C9A656' }}>
+            <div style={{ fontSize: '0.85rem', color: '#FF9B72', fontWeight: 600, marginBottom: '4px' }}>VALOR A PAGAR</div>
+            <div style={{ fontSize: '2.2rem', fontWeight: 900, color: '#FF6B2C' }}>
               {fmtR(totalSelecionado)}
             </div>
           </div>
@@ -173,12 +173,12 @@ export default function Inscricao() {
                 </div>
                 <div style={{
                   background: '#f0f4e8', borderRadius: '10px', padding: '12px 16px',
-                  fontWeight: 700, color: '#0E2E1C', fontSize: '1.05rem', letterSpacing: '0.05em',
+                  fontWeight: 700, color: '#12283F', fontSize: '1.05rem', letterSpacing: '0.05em',
                 }}>
                   {pixInfo.chave}
                 </div>
                 {pixInfo.nome && (
-                  <div style={{ fontSize: '0.8rem', color: '#5a7a5a', marginTop: '4px' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#5A6570', marginTop: '4px' }}>
                     Favorecido: <strong>{pixInfo.nome}</strong>
                   </div>
                 )}
@@ -203,8 +203,8 @@ export default function Inscricao() {
                     onClick={copiarPix}
                     style={{
                       width: '100%', marginTop: '8px',
-                      background: copiado ? '#5FB335' : 'linear-gradient(135deg, #5FB335, #8FD64A)',
-                      color: copiado ? '#fff' : '#0E2E1C',
+                      background: copiado ? '#FF6B2C' : 'linear-gradient(135deg, #FF6B2C, #FF9B72)',
+                      color: copiado ? '#fff' : '#12283F',
                       border: 'none', borderRadius: '10px', padding: '12px',
                       fontWeight: 700, cursor: 'pointer', fontSize: '0.95rem',
                       transition: 'all .2s',
@@ -216,7 +216,7 @@ export default function Inscricao() {
               )}
 
               <div style={{
-                background: '#fffbf0', border: '1px solid #C9A656', borderRadius: '12px',
+                background: '#fffbf0', border: '1px solid #FF6B2C', borderRadius: '12px',
                 padding: '14px 16px', fontSize: '0.83rem', color: '#5a4a00', lineHeight: 1.6,
               }}>
                 <strong>📌 Instruções:</strong>
@@ -236,11 +236,11 @@ export default function Inscricao() {
 
           {/* ── Banner próximo passo ── */}
           <div style={{
-            background: 'linear-gradient(135deg, #0E2E1C22, #5FB33511)',
-            border: '1.5px solid #5FB33555',
+            background: 'linear-gradient(135deg, #12283F22, #FF6B2C11)',
+            border: '1.5px solid #FF6B2C55',
             borderRadius: '14px', padding: '18px 20px', marginTop: '20px',
           }}>
-            <div style={{ fontWeight: 700, color: '#0E2E1C', fontSize: '0.95rem', marginBottom: '8px' }}>
+            <div style={{ fontWeight: 700, color: '#12283F', fontSize: '0.95rem', marginBottom: '8px' }}>
               🏆 Próximos passos
             </div>
             <ol style={{ margin: 0, paddingLeft: '18px', color: '#3a5a3a', lineHeight: 1.8, fontSize: '0.88rem' }}>
@@ -253,10 +253,10 @@ export default function Inscricao() {
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 marginTop: '14px', padding: '11px 16px',
-                background: 'linear-gradient(135deg, #5FB335, #8FD64A)',
-                color: '#0E2E1C', borderRadius: '10px',
+                background: 'linear-gradient(135deg, #FF6B2C, #FF9B72)',
+                color: '#12283F', borderRadius: '10px',
                 fontWeight: 700, fontSize: '0.92rem', textDecoration: 'none',
-                boxShadow: '0 2px 8px #5FB33540',
+                boxShadow: '0 2px 8px #FF6B2C40',
               }}
             >
               🏆 Ver Chaves do Torneio
@@ -269,7 +269,7 @@ export default function Inscricao() {
               width: '100%', marginTop: '12px',
               background: 'transparent', border: '2px solid #d0dcc8',
               borderRadius: '10px', padding: '12px',
-              color: '#5a7a5a', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem',
+              color: '#5A6570', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem',
             }}
           >
             ← Voltar ao início
@@ -280,16 +280,16 @@ export default function Inscricao() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F4F6EF' }}>
+    <div style={{ minHeight: '100vh', background: '#FFF4EC' }}>
       {/* Header */}
       <div style={{
-        background: 'linear-gradient(135deg, #0E2E1C, #1a4a2e)',
+        background: 'linear-gradient(135deg, #12283F, #183450)',
         padding: '32px 24px 40px',
-        color: '#F4F6EF',
+        color: '#FFF4EC',
         position: 'relative',
       }}>
         <div style={{ maxWidth: 680, margin: '0 auto', textAlign: 'center' }}>
-          <Link to="/" style={{ color: '#8FD64A', textDecoration: 'none', fontSize: '0.85rem', fontWeight: 600 }}>
+          <Link to="/" style={{ color: '#FF9B72', textDecoration: 'none', fontSize: '0.85rem', fontWeight: 600 }}>
             ← Voltar
           </Link>
           <h1 style={{ fontSize: '2rem', fontWeight: 900, margin: '12px 0 4px' }}>Inscrição</h1>
@@ -305,8 +305,8 @@ export default function Inscricao() {
         }}>
 
           {/* Dados pessoais */}
-          <h3 style={{ color: '#0E2E1C', fontWeight: 800, margin: '0 0 24px', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ background: 'linear-gradient(135deg,#5FB335,#8FD64A)', color: '#0E2E1C', borderRadius: '8px', padding: '2px 10px', fontSize: '0.8rem' }}>1</span>
+          <h3 style={{ color: '#12283F', fontWeight: 800, margin: '0 0 24px', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ background: 'linear-gradient(135deg,#FF6B2C,#FF9B72)', color: '#12283F', borderRadius: '8px', padding: '2px 10px', fontSize: '0.8rem' }}>1</span>
             Dados Pessoais
           </h3>
 
@@ -316,7 +316,7 @@ export default function Inscricao() {
               onChange={e => set('nome', e.target.value)}
               placeholder="Seu nome completo"
               style={INPUT_STYLE(erros.nome)}
-              onFocus={e => !erros.nome && (e.target.style.borderColor = '#5FB335')}
+              onFocus={e => !erros.nome && (e.target.style.borderColor = '#FF6B2C')}
               onBlur={e => !erros.nome && (e.target.style.borderColor = '#d0dcc8')}
             />
           ), erros.nome)}
@@ -329,7 +329,7 @@ export default function Inscricao() {
                 placeholder="000.000.000-00"
                 maxLength={14}
                 style={INPUT_STYLE(erros.cpf)}
-                onFocus={e => !erros.cpf && (e.target.style.borderColor = '#5FB335')}
+                onFocus={e => !erros.cpf && (e.target.style.borderColor = '#FF6B2C')}
                 onBlur={e => !erros.cpf && (e.target.style.borderColor = '#d0dcc8')}
               />
             ), erros.cpf)}
@@ -339,7 +339,7 @@ export default function Inscricao() {
                 value={form.nasc}
                 onChange={e => set('nasc', e.target.value)}
                 style={INPUT_STYLE(erros.nasc)}
-                onFocus={e => !erros.nasc && (e.target.style.borderColor = '#5FB335')}
+                onFocus={e => !erros.nasc && (e.target.style.borderColor = '#FF6B2C')}
                 onBlur={e => !erros.nasc && (e.target.style.borderColor = '#d0dcc8')}
               />
             ), erros.nasc)}
@@ -353,7 +353,7 @@ export default function Inscricao() {
                 onChange={e => set('email', e.target.value)}
                 placeholder="seu@email.com"
                 style={INPUT_STYLE(erros.email)}
-                onFocus={e => !erros.email && (e.target.style.borderColor = '#5FB335')}
+                onFocus={e => !erros.email && (e.target.style.borderColor = '#FF6B2C')}
                 onBlur={e => !erros.email && (e.target.style.borderColor = '#d0dcc8')}
               />
             ), erros.email)}
@@ -364,15 +364,15 @@ export default function Inscricao() {
                 placeholder="(65) 99999-9999"
                 maxLength={16}
                 style={INPUT_STYLE(erros.tel)}
-                onFocus={e => !erros.tel && (e.target.style.borderColor = '#5FB335')}
+                onFocus={e => !erros.tel && (e.target.style.borderColor = '#FF6B2C')}
                 onBlur={e => !erros.tel && (e.target.style.borderColor = '#d0dcc8')}
               />
             ), erros.tel)}
           </div>
 
           {/* Categorias */}
-          <h3 style={{ color: '#0E2E1C', fontWeight: 800, margin: '12px 0 20px', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ background: 'linear-gradient(135deg,#5FB335,#8FD64A)', color: '#0E2E1C', borderRadius: '8px', padding: '2px 10px', fontSize: '0.8rem' }}>2</span>
+          <h3 style={{ color: '#12283F', fontWeight: 800, margin: '12px 0 20px', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ background: 'linear-gradient(135deg,#FF6B2C,#FF9B72)', color: '#12283F', borderRadius: '8px', padding: '2px 10px', fontSize: '0.8rem' }}>2</span>
             Categorias
           </h3>
 
@@ -381,7 +381,7 @@ export default function Inscricao() {
           )}
 
           {loading ? (
-            <div style={{ textAlign: 'center', color: '#5FB335', padding: '20px' }}>Carregando categorias…</div>
+            <div style={{ textAlign: 'center', color: '#FF6B2C', padding: '20px' }}>Carregando categorias…</div>
           ) : categorias.length === 0 ? (
             <div style={{ color: '#888', padding: '12px', textAlign: 'center' }}>Nenhuma categoria disponível</div>
           ) : (
@@ -394,7 +394,7 @@ export default function Inscricao() {
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     padding: '14px 16px',
                     borderRadius: '12px',
-                    border: `1.5px solid ${sel ? '#5FB335' : esgotado ? '#e0e0e0' : '#d0dcc8'}`,
+                    border: `1.5px solid ${sel ? '#FF6B2C' : esgotado ? '#e0e0e0' : '#d0dcc8'}`,
                     background: sel ? '#f0fae8' : esgotado ? '#fafafa' : '#fafcf8',
                     cursor: esgotado ? 'not-allowed' : 'pointer',
                     opacity: esgotado ? 0.6 : 1,
@@ -406,18 +406,18 @@ export default function Inscricao() {
                         checked={sel}
                         disabled={esgotado}
                         onChange={() => !esgotado && toggleCat(cat.id)}
-                        style={{ width: 18, height: 18, accentColor: '#5FB335' }}
+                        style={{ width: 18, height: 18, accentColor: '#FF6B2C' }}
                       />
                       <div>
-                        <div style={{ fontWeight: 700, color: '#0E2E1C', fontSize: '0.95rem' }}>{cat.nome}</div>
+                        <div style={{ fontWeight: 700, color: '#12283F', fontSize: '0.95rem' }}>{cat.nome}</div>
                         {cat.vagasRestantes != null && (
-                          <div style={{ fontSize: '0.78rem', color: esgotado ? '#e05555' : '#5a7a5a', marginTop: '2px' }}>
+                          <div style={{ fontSize: '0.78rem', color: esgotado ? '#e05555' : '#5A6570', marginTop: '2px' }}>
                             {esgotado ? '❌ Esgotado' : `✅ ${cat.vagasRestantes} vagas restantes`}
                           </div>
                         )}
                       </div>
                     </div>
-                    <div style={{ fontWeight: 800, color: '#5FB335', fontSize: '1rem' }}>
+                    <div style={{ fontWeight: 800, color: '#FF6B2C', fontSize: '1rem' }}>
                       {fmtR(cat.preco || 0)}
                     </div>
                   </label>
@@ -429,17 +429,17 @@ export default function Inscricao() {
           {/* Resumo */}
           {form.categorias.length > 0 && (
             <div style={{
-              background: 'linear-gradient(135deg, #0E2E1C, #1a4a2e)',
+              background: 'linear-gradient(135deg, #12283F, #183450)',
               borderRadius: '14px', padding: '20px', marginTop: '20px',
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             }}>
               <div>
-                <div style={{ color: '#8FD64A', fontWeight: 600, fontSize: '0.85rem' }}>TOTAL</div>
+                <div style={{ color: '#FF9B72', fontWeight: 600, fontSize: '0.85rem' }}>TOTAL</div>
                 <div style={{ color: '#a0c8a0', fontSize: '0.8rem', marginTop: '2px' }}>
                   {form.categorias.length} categoria{form.categorias.length > 1 ? 's' : ''} selecionada{form.categorias.length > 1 ? 's' : ''}
                 </div>
               </div>
-              <div style={{ color: '#C9A656', fontWeight: 900, fontSize: '1.8rem' }}>
+              <div style={{ color: '#FF6B2C', fontWeight: 900, fontSize: '1.8rem' }}>
                 {fmtR(totalSelecionado)}
               </div>
             </div>
@@ -456,7 +456,7 @@ export default function Inscricao() {
                 type="checkbox"
                 checked={lgpdOk}
                 onChange={e => { setLgpdOk(e.target.checked); setErros(err => ({ ...err, lgpd: '' })) }}
-                style={{ marginTop: 3, width: 18, height: 18, accentColor: '#5FB335', flexShrink: 0, cursor: 'pointer' }}
+                style={{ marginTop: 3, width: 18, height: 18, accentColor: '#FF6B2C', flexShrink: 0, cursor: 'pointer' }}
               />
               <span style={{ fontSize: '0.82rem', color: '#3a5a3a', lineHeight: 1.55 }}>
                 Estou ciente e concordo que meus dados pessoais (nome, CPF, e-mail e telefone) serão utilizados
@@ -478,11 +478,11 @@ export default function Inscricao() {
             disabled={submitting}
             style={{
               width: '100%', marginTop: '16px',
-              background: submitting ? '#ccc' : 'linear-gradient(135deg, #5FB335, #8FD64A)',
-              color: submitting ? '#666' : '#0E2E1C',
+              background: submitting ? '#ccc' : 'linear-gradient(135deg, #FF6B2C, #FF9B72)',
+              color: submitting ? '#666' : '#12283F',
               border: 'none', borderRadius: '12px', padding: '16px',
               fontWeight: 800, fontSize: '1rem', cursor: submitting ? 'wait' : 'pointer',
-              boxShadow: submitting ? 'none' : '0 4px 16px rgba(95,179,53,0.35)',
+              boxShadow: submitting ? 'none' : '0 4px 16px rgba(255,107,44,0.35)',
               letterSpacing: '0.04em',
             }}
           >

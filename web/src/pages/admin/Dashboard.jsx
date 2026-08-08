@@ -18,10 +18,10 @@ const LINKS = [
 ]
 
 const TIPO_BADGE = {
-  estoque: { label: 'Estoque', color: '#C9A656', icon: '📦' },
+  estoque: { label: 'Estoque', color: '#FF6B2C', icon: '📦' },
   pagamento: { label: 'Pagamento', color: '#e05c5c', icon: '💳' },
-  info: { label: 'Info', color: '#5FB335', icon: 'ℹ️' },
-  mesa: { label: 'Mesa', color: '#8FD64A', icon: '🍺' },
+  info: { label: 'Info', color: '#FF6B2C', icon: 'ℹ️' },
+  mesa: { label: 'Mesa', color: '#FF9B72', icon: '🍺' },
 }
 
 const ALERT_ACTIONS = {
@@ -110,7 +110,7 @@ function PieChart({ data }) {
         style={{
           width: 110, height: 110, borderRadius: '50%',
           background: `conic-gradient(${gradient})`,
-          flexShrink: 0, boxShadow: '0 0 0 4px #0E2E1C',
+          flexShrink: 0, boxShadow: '0 0 0 4px #12283F',
         }}
       />
       <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -150,7 +150,7 @@ function BarChart({ data, maxVal }) {
               {isHov && (
                 <div style={{
                   position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
-                  background: '#0E2E1C', border: '1px solid var(--green)', borderRadius: 6,
+                  background: '#12283F', border: '1px solid var(--green)', borderRadius: 6,
                   padding: '4px 8px', fontSize: 11, color: '#fff', whiteSpace: 'nowrap',
                   zIndex: 10, pointerEvents: 'none', marginBottom: 4,
                 }}>
@@ -160,10 +160,10 @@ function BarChart({ data, maxVal }) {
               <div style={{
                 width: '100%', height: `${Math.max(pct, 4)}%`,
                 background: isHov
-                  ? 'linear-gradient(to top, #C9A656, #e8c97a)'
+                  ? 'linear-gradient(to top, #FF6B2C, #e8c97a)'
                   : pct === 100
                   ? 'var(--green)'
-                  : 'linear-gradient(to top, #5FB335, #8FD64A)',
+                  : 'linear-gradient(to top, #FF6B2C, #FF9B72)',
                 borderRadius: '4px 4px 0 0', minHeight: 6,
                 transition: 'height 0.3s, background 0.15s', cursor: 'default',
               }} />
@@ -247,7 +247,7 @@ function NewsWidget({ noticias }) {
   if (!noticias?.length) return null
 
   const catColors = {
-    evento: '#5FB335', resultado: '#C9A656', inscricao: '#8FD64A',
+    evento: '#FF6B2C', resultado: '#FF6B2C', inscricao: '#FF9B72',
     geral: '#6b7280', comunicado: '#e05c5c',
   }
 
@@ -265,7 +265,7 @@ function NewsWidget({ noticias }) {
               key={n.id ?? i}
               style={{
                 display: 'flex', flexDirection: 'column', gap: 4,
-                padding: '8px 10px', background: '#0E2E1C55',
+                padding: '8px 10px', background: '#12283F55',
                 borderRadius: 8, borderLeft: `3px solid ${cor}`,
               }}
             >
@@ -310,7 +310,7 @@ function KPI({ label, value, icon, color, trend, sub }) {
       </div>
       {trend && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
-          <span style={{ color: trend.up ? '#5FB335' : '#e05c5c', fontWeight: 700 }}>
+          <span style={{ color: trend.up ? '#FF6B2C' : '#e05c5c', fontWeight: 700 }}>
             {trend.up ? '↑' : '↓'} {trend.pct}%
           </span>
           <span style={{ color: 'var(--muted)' }}>vs ontem</span>
@@ -403,7 +403,7 @@ export default function Dashboard() {
 
   const paymentPie = useMemo(() => {
     if (!dash?.pagamentos_meio) return []
-    const colors = { Pix: '#5FB335', Cartao: '#C9A656', Dinheiro: '#8FD64A', Outros: '#6b7280' }
+    const colors = { Pix: '#FF6B2C', Cartao: '#FF6B2C', Dinheiro: '#FF9B72', Outros: '#6b7280' }
     return Object.entries(dash.pagamentos_meio).map(([label, valor]) => ({
       label, valor, color: colors[label] || '#6b7280',
     }))
@@ -456,7 +456,7 @@ export default function Dashboard() {
         <div
           className="card"
           style={{
-            background: 'linear-gradient(135deg, #0E2E1C 60%, #1a4228)',
+            background: 'linear-gradient(135deg, #12283F 60%, #1a4228)',
             borderLeft: '4px solid var(--green)',
             marginBottom: 24,
             display: 'flex',
@@ -502,7 +502,7 @@ export default function Dashboard() {
               label="Faturamento Total"
               value={fmtR(dash.indicadores.receita ?? 0)}
               icon="💰"
-              color="#C9A656"
+              color="#FF6B2C"
               trend={trend(dash.indicadores.receita, dash.indicadores.receita_ontem)}
               sub={[
                 dash.indicadores.fatBar   > 0 && `Bar: ${fmtR(dash.indicadores.fatBar)}`,
@@ -518,14 +518,14 @@ export default function Dashboard() {
                   : '—'
               }
               icon="🍺"
-              color="#5FB335"
+              color="#FF6B2C"
               trend={trend(dash.indicadores.mesasOcupadas, dash.indicadores.mesasOcupadas_ontem)}
             />
             <KPI
               label="Comandas Abertas"
               value={dash.indicadores.comandasAbertas ?? '—'}
               icon="📋"
-              color="#8FD64A"
+              color="#FF9B72"
               trend={trend(dash.indicadores.comandasAbertas, dash.indicadores.comandasAbertas_ontem)}
             />
           </div>
@@ -535,19 +535,19 @@ export default function Dashboard() {
               label="Atletas Cadastrados"
               value={dash.indicadores.atletas ?? '—'}
               icon="👤"
-              color="#8FD64A"
+              color="#FF9B72"
             />
             <KPI
               label="Sócios Ativos"
               value={dash.indicadores.socios ?? '—'}
               icon="🤝"
-              color="#C9A656"
+              color="#FF6B2C"
             />
             <KPI
               label="Torneios"
               value={dash.indicadores.torneios ?? '—'}
               icon="🏆"
-              color="#5FB335"
+              color="#FF6B2C"
             />
             <KPI
               label="Reservas Hoje"
@@ -614,7 +614,7 @@ export default function Dashboard() {
                   key={i}
                   style={{
                     display: 'flex', flexDirection: 'column', gap: 2,
-                    padding: '8px 10px', background: '#0E2E1C55',
+                    padding: '8px 10px', background: '#12283F55',
                     borderRadius: 8, borderLeft: '3px solid var(--green)',
                   }}
                 >
@@ -625,7 +625,7 @@ export default function Dashboard() {
                     {j.atleta1 || '?'} <span style={{ color: 'var(--muted)' }}>vs</span> {j.atleta2 || '?'}
                   </span>
                   {j.categoria && (
-                    <span style={{ fontSize: 11, color: '#8FD64A' }}>{j.categoria}</span>
+                    <span style={{ fontSize: 11, color: '#FF9B72' }}>{j.categoria}</span>
                   )}
                 </li>
               ))}
@@ -650,11 +650,11 @@ export default function Dashboard() {
             <h2 style={{ fontSize: 15, fontWeight: 600, marginBottom: 14, color: '#fff' }}>⚡ Pendências</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {[
-                { label: 'Inscrições aguardando', val: dash.pendencias.inscPend, href: '/admin/inscricoes', cor: '#C9A656' },
+                { label: 'Inscrições aguardando', val: dash.pendencias.inscPend, href: '/admin/inscricoes', cor: '#FF6B2C' },
                 { label: 'Pagamentos pendentes', val: dash.pendencias.pagPend, href: '/admin/pagamentos', cor: '#e05c5c' },
-                { label: 'Faturas sócios abertas', val: dash.pendencias.faturasAbertas, href: '/admin/socios', cor: '#C9A656' },
-                { label: 'Placares não confirmados', val: dash.pendencias.placaresNaoConf, href: '/admin/agenda', cor: '#5FB335' },
-                { label: 'Reservas hoje', val: dash.pendencias.reservasHoje, href: '/admin/agenda', cor: '#8FD64A' },
+                { label: 'Faturas sócios abertas', val: dash.pendencias.faturasAbertas, href: '/admin/socios', cor: '#FF6B2C' },
+                { label: 'Placares não confirmados', val: dash.pendencias.placaresNaoConf, href: '/admin/agenda', cor: '#FF6B2C' },
+                { label: 'Reservas hoje', val: dash.pendencias.reservasHoje, href: '/admin/agenda', cor: '#FF9B72' },
               ].map(({ label, val, href, cor }) => (
                 <a key={label} href={href} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: val > 0 ? cor + '11' : 'transparent', borderRadius: 8, border: `1px solid ${val > 0 ? cor + '44' : '#1e4a2e'}` }}>
                   <span style={{ fontSize: 13, color: '#ccc' }}>{label}</span>

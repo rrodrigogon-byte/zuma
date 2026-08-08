@@ -3,9 +3,9 @@ import { api } from '../../lib/api'
 
 /* ─── Paleta ─────────────────────────────────────────────────────────────── */
 const C = {
-  green: '#5FB335', darkGreen: '#0E2E1C', lightGreen: '#8FD64A',
-  gold: '#C9A656', bg: '#F4F6EF', white: '#fff',
-  muted: '#7a9a7a', border: '#e8f0dc', danger: '#e05555',
+  green: '#FF6B2C', darkGreen: '#12283F', lightGreen: '#FF9B72',
+  gold: '#FF6B2C', bg: '#FFF4EC', white: '#fff',
+  muted: '#5A6570', border: '#e8f0dc', danger: '#e05555',
   card: '#fff', surface: '#f8fdf4',
 }
 
@@ -89,7 +89,7 @@ function EditModal({ atleta, onSave, onClose }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,46,28,.65)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
       <div style={{ background: C.white, borderRadius: 20, maxWidth: 440, width: '100%', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,.28)' }} onClick={e => e.stopPropagation()}>
-        <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#1a4a2e)`, padding: '22px 24px', color: C.white }}>
+        <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#183450)`, padding: '22px 24px', color: C.white }}>
           <div style={{ fontWeight: 900, fontSize: '1.1rem', marginBottom: 2 }}>✏️ Editar Atleta</div>
           <div style={{ fontSize: '0.82rem', color: '#a0c8a0' }}>{atleta.nome} · {atleta.categoria}</div>
         </div>
@@ -146,7 +146,7 @@ function AddModal({ categorias, onSave, onClose }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,46,28,.65)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
       <div style={{ background: C.white, borderRadius: 20, maxWidth: 440, width: '100%', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,.28)' }} onClick={e => e.stopPropagation()}>
-        <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#1a4a2e)`, padding: '22px 24px', color: C.white }}>
+        <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#183450)`, padding: '22px 24px', color: C.white }}>
           <div style={{ fontWeight: 900, fontSize: '1.1rem' }}>➕ Adicionar Atleta ao Ranking</div>
           <div style={{ fontSize: '0.82rem', color: '#a0c8a0', marginTop: 4 }}>Inserção manual de pontuação</div>
         </div>
@@ -234,14 +234,14 @@ function AtletaPerfilModal({ atleta, todos, campeoes, onClose, onEdit, onRemover
       <div style={{ background: C.white, borderRadius: 24, maxWidth: 520, width: '100%', overflow: 'hidden', boxShadow: '0 32px 80px rgba(0,0,0,.32)', margin: 'auto' }} onClick={e => e.stopPropagation()}>
 
         {/* Header com avatar */}
-        <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#1a4a2e)`, padding: '28px 28px 22px', color: C.white }}>
+        <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#183450)`, padding: '28px 28px 22px', color: C.white }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <div style={{
               width: 64, height: 64, borderRadius: '50%', flexShrink: 0,
               background: `linear-gradient(135deg,${C.green},${C.lightGreen})`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: '1.8rem', fontWeight: 900, color: C.darkGreen,
-              boxShadow: '0 4px 16px rgba(95,179,53,.4)',
+              boxShadow: '0 4px 16px rgba(255,107,44,.4)',
             }}>
               {atleta.nome?.charAt(0).toUpperCase()}
             </div>
@@ -250,7 +250,7 @@ function AtletaPerfilModal({ atleta, todos, campeoes, onClose, onEdit, onRemover
               <div style={{ fontSize: '0.83rem', color: '#a0c8a0', marginBottom: 6 }}>{atleta.categoria}</div>
               <div style={{ display: 'flex', gap: 8 }}>
                 {titulos.length > 0 && (
-                  <span style={{ background: 'rgba(201,166,86,.25)', color: C.gold, padding: '2px 10px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700 }}>
+                  <span style={{ background: 'rgba(255,107,44,.25)', color: C.gold, padding: '2px 10px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700 }}>
                     🏆 {titulos.length} título{titulos.length > 1 ? 's' : ''}
                   </span>
                 )}
@@ -309,7 +309,7 @@ function AtletaPerfilModal({ atleta, todos, campeoes, onClose, onEdit, onRemover
               <div style={{ fontSize: '0.72rem', color: C.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>🏆 Títulos</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {titulos.map((t, i) => (
-                  <span key={i} style={{ background: 'rgba(201,166,86,.12)', color: C.gold, border: '1px solid rgba(201,166,86,.3)', padding: '4px 12px', borderRadius: 20, fontSize: '0.78rem', fontWeight: 700 }}>
+                  <span key={i} style={{ background: 'rgba(255,107,44,.12)', color: C.gold, border: '1px solid rgba(255,107,44,.3)', padding: '4px 12px', borderRadius: 20, fontSize: '0.78rem', fontWeight: 700 }}>
                     🏆 {t.categoria}{t.edicao ? ` · ${t.edicao}` : ''}
                   </span>
                 ))}
@@ -384,7 +384,7 @@ function PartidaModal({ categorias, onSave, onClose }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,46,28,.65)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
       <div style={{ background: C.white, borderRadius: 20, maxWidth: 460, width: '100%', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,.28)' }} onClick={e => e.stopPropagation()}>
-        <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#1a4a2e)`, padding: '22px 24px', color: C.white }}>
+        <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#183450)`, padding: '22px 24px', color: C.white }}>
           <div style={{ fontWeight: 900, fontSize: '1.1rem' }}>⚔️ Registrar Partida Avulsa</div>
           <div style={{ fontSize: '0.82rem', color: '#a0c8a0', marginTop: 4 }}>Ranking contínuo — todos os jogos valem pontos</div>
         </div>
@@ -491,7 +491,7 @@ function TabSorteio({ categorias, showMsg }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {/* Gerador */}
       <div style={{ background: C.white, borderRadius: 18, overflow: 'hidden', boxShadow: '0 2px 14px rgba(0,0,0,.07)' }}>
-        <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#1a4a2e)`, padding: '18px 22px', color: C.white }}>
+        <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#183450)`, padding: '18px 22px', color: C.white }}>
           <div style={{ fontWeight: 900, fontSize: '1.05rem' }}>🎲 Gerar Sorteio / Chave</div>
           <div style={{ fontSize: '0.8rem', color: '#a0c8a0', marginTop: 3 }}>Cria a chave de eliminatória para uma categoria a partir dos inscritos ou de uma lista manual</div>
         </div>
@@ -613,7 +613,7 @@ function TabSorteio({ categorias, showMsg }) {
                 onMouseEnter={e => e.currentTarget.style.background = '#f8fdf4'}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
               >
-                <div style={{ width: 44, height: 44, borderRadius: 12, background: ch.finalizada ? 'rgba(201,166,86,.12)' : `rgba(95,179,53,.12)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', flexShrink: 0 }}>
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: ch.finalizada ? 'rgba(255,107,44,.12)' : `rgba(255,107,44,.12)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', flexShrink: 0 }}>
                   {ch.finalizada ? '🏆' : '🎾'}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -623,7 +623,7 @@ function TabSorteio({ categorias, showMsg }) {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
-                  <span style={{ padding: '3px 12px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700, background: ch.finalizada ? 'rgba(201,166,86,.15)' : 'rgba(95,179,53,.15)', color: ch.finalizada ? C.gold : C.green }}>
+                  <span style={{ padding: '3px 12px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700, background: ch.finalizada ? 'rgba(255,107,44,.15)' : 'rgba(255,107,44,.15)', color: ch.finalizada ? C.gold : C.green }}>
                     {ch.finalizada ? '✓ Finalizada' : '⏳ Em andamento'}
                   </span>
                   <span style={{ color: C.muted, fontSize: '0.8rem' }}>{detalhe?.categoria === ch.categoria ? '▲' : '▼'}</span>
@@ -826,7 +826,7 @@ function TabRegras({ showMsg }) {
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {SECTIONS.map(s => (
           <button key={s.key} onClick={() => setActiveSection(s.key)}
-            style={{ padding: '8px 18px', borderRadius: 50, fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', border: 'none', background: activeSection === s.key ? C.darkGreen : C.white, color: activeSection === s.key ? '#8FD64A' : C.darkGreen, boxShadow: '0 2px 6px rgba(0,0,0,.07)' }}>
+            style={{ padding: '8px 18px', borderRadius: 50, fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', border: 'none', background: activeSection === s.key ? C.darkGreen : C.white, color: activeSection === s.key ? '#FF9B72' : C.darkGreen, boxShadow: '0 2px 6px rgba(0,0,0,.07)' }}>
             {s.label}
           </button>
         ))}
@@ -963,7 +963,7 @@ function TabRegras({ showMsg }) {
           </div>
           <div style={{ padding: '16px 22px', display: 'flex', flexDirection: 'column', gap: 10 }}>
             {(data.premiacao || []).map((p, i) => (
-              <div key={i} style={{ display: 'grid', gridTemplateColumns: editMode ? '1fr 1fr auto' : '1fr 1fr', gap: 10, padding: '12px 16px', background: i === 0 ? 'rgba(201,166,86,.06)' : C.surface, borderRadius: 12, border: i === 0 ? `1px solid ${C.gold}40` : `1px solid ${C.border}` }}>
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: editMode ? '1fr 1fr auto' : '1fr 1fr', gap: 10, padding: '12px 16px', background: i === 0 ? 'rgba(255,107,44,.06)' : C.surface, borderRadius: 12, border: i === 0 ? `1px solid ${C.gold}40` : `1px solid ${C.border}` }}>
                 <div>
                   {editMode ? <input value={p.categoria} onChange={e => setArrayItem('premiacao', i, 'categoria', e.target.value)} placeholder="Categoria / fase" style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: `1.5px solid ${C.green}`, fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} /> : <span style={{ fontWeight: 700, color: C.darkGreen }}>{i === 0 ? '🥇 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : ''}{p.categoria}</span>}
                 </div>
@@ -1023,9 +1023,9 @@ function TabRegras({ showMsg }) {
 /* ─── Tab: Comunicados de Jogo ───────────────────────────────────────────── */
 const TIPOS_COMUNICADO = [
   { key: 'jogo', label: '⚔️ Jogo agendado', color: '#4A90D9' },
-  { key: 'resultado', label: '✅ Resultado', color: '#5FB335' },
+  { key: 'resultado', label: '✅ Resultado', color: '#FF6B2C' },
   { key: 'wo', label: '🚫 W.O. / Abandono', color: '#E05555' },
-  { key: 'adiado', label: '⏸ Adiado', color: '#C9A656' },
+  { key: 'adiado', label: '⏸ Adiado', color: '#FF6B2C' },
   { key: 'aviso', label: '📢 Aviso geral', color: '#7B5EA7' },
   { key: 'inscricoes', label: '📋 Inscrições', color: '#3AAB6D' },
 ]
@@ -1112,7 +1112,7 @@ function TabComunicados({ categorias, showMsg }) {
       {/* Formulário de criação/edição */}
       {showForm && (
         <div ref={formRef} style={{ background: C.white, borderRadius: 18, overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,.12)', border: `2px solid ${C.green}` }}>
-          <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#1a4a2e)`, padding: '16px 22px', color: C.white, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#183450)`, padding: '16px 22px', color: C.white, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <div style={{ fontWeight: 900, fontSize: '1rem' }}>{editItem ? '✏️ Editar comunicado' : '➕ Novo comunicado'}</div>
               <div style={{ fontSize: '0.78rem', color: '#a0c8a0', marginTop: 2 }}>Preencha os detalhes e publique</div>
@@ -1491,7 +1491,7 @@ export default function AdminRanking() {
       )}
 
       {/* ── HEADER ── */}
-      <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#1a4a2e)`, padding: '28px 28px 0', color: C.white }}>
+      <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#183450)`, padding: '28px 28px 0', color: C.white }}>
         <div style={{ maxWidth: 1160, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
             <div>
@@ -1503,7 +1503,7 @@ export default function AdminRanking() {
                 👁 Ver público →
               </a>
               <button onClick={() => exportCSV(filtrado, 'ranking-agro-open.csv')}
-                style={{ background: 'rgba(143,214,74,.15)', color: C.lightGreen, border: '1px solid rgba(143,214,74,.3)', borderRadius: 10, padding: '9px 16px', fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem' }}>
+                style={{ background: 'rgba(255,107,44,.15)', color: C.lightGreen, border: '1px solid rgba(255,107,44,.3)', borderRadius: 10, padding: '9px 16px', fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem' }}>
                 ⬇ Exportar CSV
               </button>
               <button onClick={() => setShowPartida(true)}
@@ -1613,7 +1613,7 @@ export default function AdminRanking() {
             ) : (
               <div style={{ background: C.white, borderRadius: 18, overflow: 'hidden', boxShadow: '0 2px 16px rgba(0,0,0,.07)' }}>
                 {/* Cabeçalho clicável para ordenar */}
-                <div style={{ display: 'grid', gridTemplateColumns: '52px 1fr 90px 100px 100px 80px 80px 80px', background: `linear-gradient(135deg,${C.darkGreen},#1a4a2e)`, padding: '12px 18px', color: C.lightGreen, fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '52px 1fr 90px 100px 100px 80px 80px 80px', background: `linear-gradient(135deg,${C.darkGreen},#183450)`, padding: '12px 18px', color: C.lightGreen, fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
                   <div style={{ textAlign: 'center' }}>#</div>
                   <div style={{ cursor: 'pointer' }} onClick={() => toggleSort('nome')}>Atleta <SortIcon col="nome" /></div>
                   <div style={{ textAlign: 'right', cursor: 'pointer' }} onClick={() => toggleSort('pontos')}>Pontos <SortIcon col="pontos" /></div>
@@ -1688,7 +1688,7 @@ export default function AdminRanking() {
               return (
                 <div key={cat} style={{ background: C.white, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 10px rgba(0,0,0,.06)' }}>
                   {/* Header da categoria */}
-                  <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#1a4a2e)`, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+                  <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#183450)`, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
                     onClick={() => setCatExpand(p => ({ ...p, [cat]: !expanded }))}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <span style={{ fontSize: '1.3rem' }}>🎾</span>
@@ -1791,7 +1791,7 @@ export default function AdminRanking() {
             {/* Botão registrar */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
               <button onClick={() => setShowPartida(true)}
-                style={{ background: `linear-gradient(135deg,${C.green},${C.lightGreen})`, color: C.darkGreen, border: 'none', borderRadius: 10, padding: '10px 22px', fontWeight: 800, cursor: 'pointer', fontSize: '0.88rem', boxShadow: '0 3px 12px rgba(95,179,53,.3)' }}>
+                style={{ background: `linear-gradient(135deg,${C.green},${C.lightGreen})`, color: C.darkGreen, border: 'none', borderRadius: 10, padding: '10px 22px', fontWeight: 800, cursor: 'pointer', fontSize: '0.88rem', boxShadow: '0 3px 12px rgba(255,107,44,.3)' }}>
                 ⚔️ Registrar nova partida
               </button>
             </div>
@@ -1806,7 +1806,7 @@ export default function AdminRanking() {
               </div>
             ) : (
               <div style={{ background: C.white, borderRadius: 18, overflow: 'hidden', boxShadow: '0 2px 16px rgba(0,0,0,.07)' }}>
-                <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#1a4a2e)`, padding: '12px 18px', display: 'grid', gridTemplateColumns: '1fr 1fr 80px 80px 70px 60px', color: C.lightGreen, fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
+                <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#183450)`, padding: '12px 18px', display: 'grid', gridTemplateColumns: '1fr 1fr 80px 80px 70px 60px', color: C.lightGreen, fontSize: '0.68rem', fontWeight: 800, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
                   <div>Vencedor</div>
                   <div>Perdedor</div>
                   <div style={{ textAlign: 'center' }}>Placar</div>
@@ -1871,13 +1871,13 @@ export default function AdminRanking() {
                   const isAtual = i === 0
                   return (
                     <div key={temp} style={{ background: C.white, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 10px rgba(0,0,0,.07)', border: isAtual ? `2px solid ${C.green}` : `1px solid ${C.border}` }}>
-                      <div style={{ background: isAtual ? `linear-gradient(135deg,${C.darkGreen},#1a4a2e)` : '#f8fdf5', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ background: isAtual ? `linear-gradient(135deg,${C.darkGreen},#183450)` : '#f8fdf5', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                           <span style={{ fontSize: '1.5rem' }}>{isAtual ? '📅' : '📦'}</span>
                           <div>
                             <div style={{ fontWeight: 900, fontSize: '1.1rem', color: isAtual ? C.white : C.darkGreen }}>
                               Temporada {temp}
-                              {isAtual && <span style={{ marginLeft: 10, background: 'rgba(143,214,74,.25)', color: C.lightGreen, borderRadius: 20, padding: '2px 12px', fontSize: '0.72rem', fontWeight: 800 }}>● Em curso</span>}
+                              {isAtual && <span style={{ marginLeft: 10, background: 'rgba(255,107,44,.25)', color: C.lightGreen, borderRadius: 20, padding: '2px 12px', fontSize: '0.72rem', fontWeight: 800 }}>● Em curso</span>}
                             </div>
                             <div style={{ fontSize: '0.78rem', color: isAtual ? '#a0c8a0' : C.muted, marginTop: 2 }}>
                               {atletasTemp.length} atleta{atletasTemp.length !== 1 ? 's' : ''} · {totalPts.toLocaleString('pt-BR')} pontos distribuídos
@@ -1902,7 +1902,7 @@ export default function AdminRanking() {
                       {/* Top 3 da temporada */}
                       <div style={{ padding: '12px 20px', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                         {atletasTemp.slice(0, 3).map((p, j) => (
-                          <div key={j} style={{ background: j === 0 ? 'rgba(201,166,86,.08)' : '#f8fdf5', border: `1px solid ${j === 0 ? 'rgba(201,166,86,.3)' : C.border}`, borderRadius: 10, padding: '8px 14px', minWidth: 140 }}>
+                          <div key={j} style={{ background: j === 0 ? 'rgba(255,107,44,.08)' : '#f8fdf5', border: `1px solid ${j === 0 ? 'rgba(255,107,44,.3)' : C.border}`, borderRadius: 10, padding: '8px 14px', minWidth: 140 }}>
                             <div style={{ fontSize: '1rem', marginBottom: 2 }}>{j === 0 ? '🥇' : j === 1 ? '🥈' : '🥉'}</div>
                             <div style={{ fontWeight: 700, color: C.darkGreen, fontSize: '0.84rem' }}>{p.nome}</div>
                             <div style={{ fontWeight: 900, color: j === 0 ? C.gold : C.green, fontSize: '0.88rem' }}>{(p.pontos || 0).toLocaleString('pt-BR')} pts</div>
@@ -1950,7 +1950,7 @@ export default function AdminRanking() {
             ) : (
               <>
                 {/* Resumo */}
-                <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#1a4a2e)`, borderRadius: 16, padding: '18px 22px', marginBottom: 20, color: C.white, display: 'flex', alignItems: 'center', gap: 16 }}>
+                <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#183450)`, borderRadius: 16, padding: '18px 22px', marginBottom: 20, color: C.white, display: 'flex', alignItems: 'center', gap: 16 }}>
                   <span style={{ fontSize: '2.5rem' }}>🏆</span>
                   <div>
                     <div style={{ fontWeight: 900, fontSize: '1rem' }}>{campeoes.length} título{campeoes.length !== 1 ? 's' : ''} registrado{campeoes.length !== 1 ? 's' : ''}</div>
@@ -1964,7 +1964,7 @@ export default function AdminRanking() {
                     <div key={i} style={{ background: C.white, borderRadius: 18, overflow: 'hidden', boxShadow: '0 3px 16px rgba(0,0,0,.08)', transition: 'transform .15s' }}
                       onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-3px)'}
                       onMouseLeave={e => e.currentTarget.style.transform = 'none'}>
-                      <div style={{ background: 'linear-gradient(135deg,#C9A656,#f0d080)', padding: '20px', textAlign: 'center' }}>
+                      <div style={{ background: 'linear-gradient(135deg,#FF6B2C,#f0d080)', padding: '20px', textAlign: 'center' }}>
                         <div style={{ fontSize: '2.8rem' }}>🥇</div>
                       </div>
                       <div style={{ padding: '16px', textAlign: 'center' }}>
@@ -2005,7 +2005,7 @@ export default function AdminRanking() {
               }
             </div>
             {(editPontos ? pontosDraft : pontosTbl).map((row, i) => (
-              <div key={i} style={{ display: 'grid', gridTemplateColumns: '56px 1fr auto', padding: '14px 22px', alignItems: 'center', borderBottom: `1px solid ${C.border}`, background: i === 0 ? 'rgba(201,166,86,.05)' : C.white }}>
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: '56px 1fr auto', padding: '14px 22px', alignItems: 'center', borderBottom: `1px solid ${C.border}`, background: i === 0 ? 'rgba(255,107,44,.05)' : C.white }}>
                 <span style={{ fontSize: '1.5rem', textAlign: 'center' }}>{row.icon}</span>
                 <div>
                   <div style={{ fontWeight: 700, color: C.darkGreen, fontSize: '0.9rem' }}>{row.fase}</div>

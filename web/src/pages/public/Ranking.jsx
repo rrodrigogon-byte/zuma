@@ -4,19 +4,19 @@ import { api } from '../../lib/api'
 
 /* ─── Constantes visuais ─────────────────────────────────────────────────── */
 const C = {
-  green: '#5FB335', darkGreen: '#0E2E1C', lightGreen: '#8FD64A',
-  gold: '#C9A656', silver: '#9e9e9e', bronze: '#cd7f32',
-  bg: '#F4F6EF', white: '#fff',
-  muted: '#7a9a7a', border: '#e8f0dc',
+  green: '#FF6B2C', darkGreen: '#12283F', lightGreen: '#FF9B72',
+  gold: '#FF6B2C', silver: '#9e9e9e', bronze: '#cd7f32',
+  bg: '#FFF4EC', white: '#fff',
+  muted: '#5A6570', border: '#e8f0dc',
 }
 const MEDAL       = ['🥇','🥈','🥉']
 const MEDAL_BG    = [
-  'linear-gradient(135deg,#C9A656 0%,#f0d080 60%,#C9A656 100%)',
+  'linear-gradient(135deg,#FF6B2C 0%,#f0d080 60%,#FF6B2C 100%)',
   'linear-gradient(135deg,#9e9e9e 0%,#d4d4d4 60%,#9e9e9e 100%)',
   'linear-gradient(135deg,#cd7f32 0%,#e8a96a 60%,#cd7f32 100%)',
 ]
-const MEDAL_TEXT  = ['#0E2E1C','#0E2E1C','#fff']
-const MEDAL_SHADOW= ['rgba(201,166,86,.35)','rgba(158,158,158,.25)','rgba(205,127,50,.3)']
+const MEDAL_TEXT  = ['#12283F','#12283F','#fff']
+const MEDAL_SHADOW= ['rgba(255,107,44,.35)','rgba(158,158,158,.25)','rgba(205,127,50,.3)']
 
 /* ─── Animação sequencial de entrada ────────────────────────────────────── */
 function useEntranceAnimation(count) {
@@ -186,7 +186,7 @@ function AtletaModal({ atleta, todos, onClose }) {
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div style={{ background: 'linear-gradient(135deg,' + C.darkGreen + ',' + '#1a4a2e' + ')', padding: '28px 28px 20px', color: C.white, position: 'relative' }}>
+        <div style={{ background: 'linear-gradient(135deg,' + C.darkGreen + ',' + '#183450' + ')', padding: '28px 28px 20px', color: C.white, position: 'relative' }}>
           <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'rgba(255,255,255,.15)', border: 'none', borderRadius: 999, width: 32, height: 32, cursor: 'pointer', color: C.white, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={{ fontSize: '3rem' }}>
@@ -196,7 +196,7 @@ function AtletaModal({ atleta, todos, onClose }) {
               <div style={{ fontWeight: 900, fontSize: '1.3rem', marginBottom: 4 }}>{atleta.nome}</div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 {atleta.categoria && (
-                  <div style={{ background: 'rgba(143,214,74,.2)', borderRadius: 20, padding: '3px 14px', display: 'inline-block', fontSize: '0.78rem', color: C.lightGreen, fontWeight: 700 }}>
+                  <div style={{ background: 'rgba(255,107,44,.2)', borderRadius: 20, padding: '3px 14px', display: 'inline-block', fontSize: '0.78rem', color: C.lightGreen, fontWeight: 700 }}>
                     {atleta.categoria}
                   </div>
                 )}
@@ -320,11 +320,11 @@ function AtletaModal({ atleta, todos, onClose }) {
               background: `linear-gradient(135deg,${C.green},${C.lightGreen})`,
               color: C.darkGreen, borderRadius: 12, padding: '12px 20px',
               fontWeight: 800, fontSize: 14, textDecoration: 'none',
-              boxShadow: '0 4px 16px rgba(95,179,53,.3)',
+              boxShadow: '0 4px 16px rgba(255,107,44,.3)',
               transition: 'transform .15s, box-shadow .15s',
             }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(95,179,53,.4)' }}
-            onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 4px 16px rgba(95,179,53,.3)' }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(255,107,44,.4)' }}
+            onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 4px 16px rgba(255,107,44,.3)' }}
           >
             Ver Perfil Completo →
           </Link>
@@ -464,7 +464,7 @@ export default function Ranking() {
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div style={{
-        background: 'linear-gradient(135deg,' + C.darkGreen + ' 0%,#1a4a2e 100%)',
+        background: 'linear-gradient(135deg,' + C.darkGreen + ' 0%,#183450 100%)',
         padding: '40px 24px 80px', color: C.bg,
         position: 'relative', overflow: 'hidden',
       }}>
@@ -524,7 +524,7 @@ export default function Ranking() {
               <div key={i} style={{
                 background: C.white, borderRadius: 18, padding: '20px 14px',
                 textAlign: 'center', boxShadow: '0 3px 16px rgba(0,0,0,.07)',
-                border: '1px solid rgba(95,179,53,.1)', transition: 'transform .2s',
+                border: '1px solid rgba(255,107,44,.1)', transition: 'transform .2s',
               }}
                 onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-3px)'}
                 onMouseLeave={e => e.currentTarget.style.transform = ''}
@@ -728,10 +728,10 @@ export default function Ranking() {
               )}
               {isFiltered && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: '0.82rem', color: '#5a7a5a' }}>{filtrado.length} resultado{filtrado.length !== 1 ? 's' : ''}</span>
+                  <span style={{ fontSize: '0.82rem', color: '#5A6570' }}>{filtrado.length} resultado{filtrado.length !== 1 ? 's' : ''}</span>
                   <button
                     onClick={() => { setBusca(''); setCatFiltro('all') }}
-                    style={{ background: C.bg, border: 'none', borderRadius: 8, padding: '5px 12px', fontSize: '0.78rem', color: '#5a7a5a', cursor: 'pointer', fontWeight: 600 }}
+                    style={{ background: C.bg, border: 'none', borderRadius: 8, padding: '5px 12px', fontSize: '0.78rem', color: '#5A6570', cursor: 'pointer', fontWeight: 600 }}
                   >
                     Limpar ✕
                   </button>
@@ -745,7 +745,7 @@ export default function Ranking() {
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: '52px 36px 1fr 110px 90px 80px 80px 70px',
-                background: 'linear-gradient(135deg,' + C.darkGreen + ',#1a4a2e)',
+                background: 'linear-gradient(135deg,' + C.darkGreen + ',#183450)',
                 padding: '14px 20px', color: C.lightGreen,
                 fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase',
               }}>
@@ -777,7 +777,7 @@ export default function Ranking() {
                       padding: '12px 20px', alignItems: 'center',
                       borderBottom: '1px solid ' + C.border,
                       background: hasMedal
-                        ? (pos === 1 ? 'rgba(201,166,86,.07)' : pos === 2 ? 'rgba(158,158,158,.05)' : 'rgba(205,127,50,.06)')
+                        ? (pos === 1 ? 'rgba(255,107,44,.07)' : pos === 2 ? 'rgba(158,158,158,.05)' : 'rgba(205,127,50,.06)')
                         : (i % 2 === 0 ? C.white : '#fafcf8'),
                       transition: 'background .1s, opacity .3s, transform .3s',
                       opacity: isVis ? 1 : 0,
@@ -787,7 +787,7 @@ export default function Ranking() {
                     onMouseEnter={e => e.currentTarget.style.background = '#f0fae8'}
                     onMouseLeave={e => {
                       e.currentTarget.style.background = hasMedal
-                        ? (pos === 1 ? 'rgba(201,166,86,.07)' : pos === 2 ? 'rgba(158,158,158,.05)' : 'rgba(205,127,50,.06)')
+                        ? (pos === 1 ? 'rgba(255,107,44,.07)' : pos === 2 ? 'rgba(158,158,158,.05)' : 'rgba(205,127,50,.06)')
                         : (i % 2 === 0 ? C.white : '#fafcf8')
                     }}
                   >
@@ -843,7 +843,7 @@ export default function Ranking() {
                 background: 'linear-gradient(135deg,' + C.green + ',' + C.lightGreen + ')',
                 color: C.darkGreen, border: 'none', borderRadius: 14,
                 padding: '15px 38px', fontWeight: 800, cursor: 'pointer', fontSize: '0.95rem',
-                boxShadow: '0 4px 18px rgba(95,179,53,.3)', transition: 'transform .15s',
+                boxShadow: '0 4px 18px rgba(255,107,44,.3)', transition: 'transform .15s',
               }}
               onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
               onMouseLeave={e => e.currentTarget.style.transform = ''}

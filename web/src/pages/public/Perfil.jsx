@@ -5,11 +5,11 @@ import { useAuth } from '../../lib/auth'
 import { useToast } from '../../hooks/useToast'
 
 const C = {
-  bg: '#091a0f',
-  green: '#5FB335',
-  lime: '#8FD64A',
-  cream: '#F4F6EF',
-  gold: '#C9A656',
+  bg: '#12283F',
+  green: '#FF6B2C',
+  lime: '#FF9B72',
+  cream: '#FFF4EC',
+  gold: '#FF6B2C',
   card: '#132b1b',
   cardBorder: '#1e3d28',
   inputBg: '#0e2216',
@@ -61,10 +61,10 @@ const sectionTitle = {
 }
 
 const STATUS_COLORS = {
-  confirmado:  { bg: 'rgba(95,179,53,.15)',  color: '#5FB335' },
-  pendente:    { bg: 'rgba(201,166,86,.15)', color: '#C9A656' },
+  confirmado:  { bg: 'rgba(255,107,44,.15)',  color: '#FF6B2C' },
+  pendente:    { bg: 'rgba(255,107,44,.15)', color: '#FF6B2C' },
   cancelado:   { bg: 'rgba(248,113,113,.15)', color: '#f87171' },
-  pago:        { bg: 'rgba(95,179,53,.15)',  color: '#5FB335' },
+  pago:        { bg: 'rgba(255,107,44,.15)',  color: '#FF6B2C' },
 }
 
 function StatusBadge({ label, type = 'neutral' }) {
@@ -174,7 +174,7 @@ export default function Perfil() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
         <div style={{
           width: 28, height: 28,
-          border: '3px solid rgba(95,179,53,.3)',
+          border: '3px solid rgba(255,107,44,.3)',
           borderTopColor: C.green,
           borderRadius: '50%',
           animation: 'spin 0.7s linear infinite',
@@ -228,7 +228,7 @@ export default function Perfil() {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 30, fontWeight: 900, color: '#fff',
           flexShrink: 0,
-          boxShadow: '0 4px 20px rgba(95,179,53,.35)',
+          boxShadow: '0 4px 20px rgba(255,107,44,.35)',
         }}>
           {initial}
         </div>
@@ -243,7 +243,7 @@ export default function Perfil() {
             <span style={{
               display: 'inline-block', padding: '3px 12px', borderRadius: 20,
               fontSize: 11, fontWeight: 700, letterSpacing: '0.3px',
-              background: 'rgba(95,179,53,.15)', color: C.green,
+              background: 'rgba(255,107,44,.15)', color: C.green,
             }}>
               {roleLabel}
             </span>
@@ -388,9 +388,9 @@ export default function Perfil() {
                     borderRadius: 20,
                     fontSize: 12,
                     fontWeight: 700,
-                    background: 'rgba(201,166,86,.15)',
+                    background: 'rgba(255,107,44,.15)',
                     color: C.gold,
-                    border: '1px solid rgba(201,166,86,.3)',
+                    border: '1px solid rgba(255,107,44,.3)',
                   }}>
                     🏆 {t.categoria || t.edicao || t}
                   </span>

@@ -82,7 +82,7 @@ function FluxoChart({ dados }) {
             <div key={d.mes} style={{ display:'flex', flexDirection:'column', alignItems:'center', minWidth:48, flex:1, position:'relative' }}
               onMouseEnter={() => setHov(i)} onMouseLeave={() => setHov(null)}>
               {hov === i && (
-                <div style={{ position:'absolute', bottom:'100%', left:'50%', transform:'translateX(-50%)', background:'#0E2E1C', border:'1px solid var(--green)', borderRadius:6, padding:'6px 10px', fontSize:11, color:'#fff', whiteSpace:'nowrap', zIndex:10, marginBottom:4 }}>
+                <div style={{ position:'absolute', bottom:'100%', left:'50%', transform:'translateX(-50%)', background:'#12283F', border:'1px solid var(--green)', borderRadius:6, padding:'6px 10px', fontSize:11, color:'#fff', whiteSpace:'nowrap', zIndex:10, marginBottom:4 }}>
                   <div style={{ color:'var(--green)' }}>↑ {fmtR(d.receitas)}</div>
                   <div style={{ color:'#ef4444' }}>↓ {fmtR(d.despesas)}</div>
                   <div style={{ color: saldo >= 0 ? 'var(--lime)' : '#fbbf24', borderTop:'1px solid #1e4a2e', marginTop:3, paddingTop:3 }}>= {fmtR(saldo)}</div>
@@ -137,7 +137,7 @@ function DRE({ resumo }) {
         <span style={{ fontWeight:800, color:'var(--cream)' }}>= Resultado Líquido</span>
         <span style={{ fontWeight:900, fontSize:17, color: resultado >= 0 ? 'var(--green)' : '#ef4444' }}>{fmtR(resultado)}</span>
       </div>
-      <div style={{ marginTop:8, padding:'8px 12px', borderRadius:8, background: margem >= 0 ? 'rgba(95,179,53,.1)' : 'rgba(239,68,68,.1)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+      <div style={{ marginTop:8, padding:'8px 12px', borderRadius:8, background: margem >= 0 ? 'rgba(255,107,44,.1)' : 'rgba(239,68,68,.1)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
         <span style={{ fontSize:12, color:'var(--muted)' }}>Margem operacional</span>
         <span style={{ fontSize:16, fontWeight:800, color: margem >= 0 ? 'var(--lime)' : '#ef4444' }}>{margem}%</span>
       </div>
@@ -311,7 +311,7 @@ export default function Financeiro() {
                 )}
                 {alertasVencimento.vencendoSemana.length > 0 && (
                   <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', borderRadius:8,
-                    background:'rgba(95,179,53,.07)', border:'1px solid rgba(95,179,53,.25)' }}>
+                    background:'rgba(255,107,44,.07)', border:'1px solid rgba(255,107,44,.25)' }}>
                     <span>📅</span>
                     <span style={{ fontWeight:700, color:'var(--green)', fontSize:13 }}>{alertasVencimento.vencendoSemana.length} Esta semana</span>
                     <span style={{ color:'var(--muted)', fontSize:12 }}>{fmtR(alertasVencimento.vencendoSemana.reduce((s,l)=>s+(l.valor||0),0))}</span>
@@ -454,7 +454,7 @@ export default function Financeiro() {
                 <button onClick={limparFiltros} style={{ ...S.btn, background:'none', border:'1px solid var(--line)', color:'var(--muted)' }}>✕ Limpar</button>
               )}
               <span style={{ marginLeft:'auto', fontSize:12, color:'var(--muted)' }}>{listaTabFiltrada.length} lançamentos</span>
-              <button onClick={handleExportCSV} style={{ ...S.btn, background:'rgba(95,179,53,.15)', color:'var(--green)', border:'1px solid var(--green)' }}>
+              <button onClick={handleExportCSV} style={{ ...S.btn, background:'rgba(255,107,44,.15)', color:'var(--green)', border:'1px solid var(--green)' }}>
                 📥 Exportar CSV
               </button>
             </div>

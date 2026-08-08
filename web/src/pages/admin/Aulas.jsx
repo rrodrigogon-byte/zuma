@@ -120,7 +120,7 @@ export default function Aulas() {
     profChip: { padding: '0.3rem 0.8rem', background: 'var(--surface2)', borderRadius: 20, color: 'var(--fg)', fontSize: '0.85rem', border: '1px solid var(--border)' },
   }
 
-  const NIVEL_COLOR = { Iniciante: '#5FB335', Intermediário: '#C9A656', Avançado: '#e05c5c', Todos: '#888' }
+  const NIVEL_COLOR = { Iniciante: '#FF6B2C', Intermediário: '#FF6B2C', Avançado: '#e05c5c', Todos: '#888' }
 
   // KPIs
   const kpis = useMemo(() => {
@@ -158,13 +158,13 @@ export default function Aulas() {
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: 10, marginBottom: 20 }}>
         {[
-          { label: 'Total Aulas', value: kpis.total, color: '#5FB335' },
-          { label: 'Professores', value: kpis.professores, color: '#C9A656' },
-          { label: 'Inscritos', value: kpis.totalInscritos, color: '#8FD64A' },
+          { label: 'Total Aulas', value: kpis.total, color: '#FF6B2C' },
+          { label: 'Professores', value: kpis.professores, color: '#FF6B2C' },
+          { label: 'Inscritos', value: kpis.totalInscritos, color: '#FF9B72' },
           { label: 'Total Vagas', value: kpis.totalVagas, color: '#3b82f6' },
-          { label: 'Ocupação', value: `${kpis.ocupacao}%`, color: kpis.ocupacao >= 80 ? '#e05c5c' : kpis.ocupacao >= 50 ? '#C9A656' : '#5FB335' },
-          { label: 'Receita Realizada', value: fmtR(kpis.receitaReal), color: '#5FB335', small: true },
-          { label: 'Receita Potencial', value: fmtR(kpis.receitaPot), color: '#8FD64A', small: true },
+          { label: 'Ocupação', value: `${kpis.ocupacao}%`, color: kpis.ocupacao >= 80 ? '#e05c5c' : kpis.ocupacao >= 50 ? '#FF6B2C' : '#FF6B2C' },
+          { label: 'Receita Realizada', value: fmtR(kpis.receitaReal), color: '#FF6B2C', small: true },
+          { label: 'Receita Potencial', value: fmtR(kpis.receitaPot), color: '#FF9B72', small: true },
         ].map(k => (
           <div key={k.label} style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10, padding: '12px 14px', borderTop: `3px solid ${k.color}` }}>
             <div style={{ fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>{k.label}</div>
@@ -204,12 +204,12 @@ export default function Aulas() {
             const inscritos = a.inscritos ?? (a.alunos?.length ?? 0)
             const vagas = a.vagas || 1
             const pctOcup = Math.min(100, Math.round((inscritos / vagas) * 100))
-            const barColor = pctOcup >= 90 ? '#e05c5c' : pctOcup >= 70 ? '#C9A656' : '#5FB335'
+            const barColor = pctOcup >= 90 ? '#e05c5c' : pctOcup >= 70 ? '#FF6B2C' : '#FF6B2C'
             return (
               <tr key={a.id}>
                 <td style={S.td}><strong>{a.titulo}</strong></td>
                 <td style={S.td}>{prof ? prof.nome : <span style={{ color: 'var(--muted)' }}>—</span>}</td>
-                <td style={S.td}><span style={S.badge('#5FB335')}>{a.modalidade}</span></td>
+                <td style={S.td}><span style={S.badge('#FF6B2C')}>{a.modalidade}</span></td>
                 <td style={S.td}>{a.data} {a.hora}</td>
                 <td style={S.td}><span style={S.badge(NIVEL_COLOR[a.nivel] || '#888')}>{a.nivel}</span></td>
                 <td style={S.td}>

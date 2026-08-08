@@ -30,12 +30,12 @@ const ROLES = ['admin', 'organizador', 'staff', 'atleta']
 
 const ROLE_COLORS = {
   admin: { bg: '#e05c5c22', color: '#e05c5c', border: '#e05c5c44' },
-  organizador: { bg: '#C9A65622', color: '#C9A656', border: '#C9A65644' },
-  staff: { bg: '#5FB33522', color: '#5FB335', border: '#5FB33544' },
-  atleta: { bg: '#8FD64A22', color: '#8FD64A', border: '#8FD64A44' },
+  organizador: { bg: '#FF6B2C22', color: '#FF6B2C', border: '#FF6B2C44' },
+  staff: { bg: '#FF6B2C22', color: '#FF6B2C', border: '#FF6B2C44' },
+  atleta: { bg: '#FF9B7222', color: '#FF9B72', border: '#FF9B7244' },
 }
 
-const AVATAR_COLORS = ['#e05c5c', '#C9A656', '#5FB335', '#8FD64A', '#4a9abe', '#9b59b6', '#e67e22']
+const AVATAR_COLORS = ['#e05c5c', '#FF6B2C', '#FF6B2C', '#FF9B72', '#4a9abe', '#9b59b6', '#e67e22']
 
 const EMPTY_FORM = { nome: '', email: '', senha: '', role: 'staff' }
 
@@ -188,10 +188,10 @@ export default function Usuarios() {
       {!loading && (
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
           <KpiCard label="Total" value={kpis.total} color="var(--green)" icon="👥" />
-          <KpiCard label="Ativos" value={kpis.ativos} color="#5FB335" icon="✅" />
+          <KpiCard label="Ativos" value={kpis.ativos} color="#FF6B2C" icon="✅" />
           <KpiCard label="Admin" value={kpis.admin || 0} color="#e05c5c" icon="🔑" />
-          <KpiCard label="Organizador" value={kpis.organizador || 0} color="#C9A656" icon="🗂" />
-          <KpiCard label="Staff" value={kpis.staff || 0} color="#8FD64A" icon="🎫" />
+          <KpiCard label="Organizador" value={kpis.organizador || 0} color="#FF6B2C" icon="🗂" />
+          <KpiCard label="Staff" value={kpis.staff || 0} color="#FF9B72" icon="🎫" />
           <KpiCard label="Atletas" value={kpis.atleta || 0} color="var(--green)" icon="🎾" />
           <KpiCard label="Sem acesso" value={kpis.semAcesso} color="var(--muted)" icon="⚠️" />
         </div>
@@ -278,9 +278,9 @@ export default function Usuarios() {
                       <button
                         onClick={() => toggleAtivo(u)}
                         style={{
-                          background: u.ativo !== false ? '#5FB33522' : '#e05c5c22',
-                          color: u.ativo !== false ? '#5FB335' : '#e05c5c',
-                          border: `1px solid ${u.ativo !== false ? '#5FB33544' : '#e05c5c44'}`,
+                          background: u.ativo !== false ? '#FF6B2C22' : '#e05c5c22',
+                          color: u.ativo !== false ? '#FF6B2C' : '#e05c5c',
+                          border: `1px solid ${u.ativo !== false ? '#FF6B2C44' : '#e05c5c44'}`,
                           borderRadius: 12,
                           padding: '3px 12px',
                           fontSize: 12,

@@ -1,5 +1,5 @@
 /**
- * Oficina Mecânica — SetPoint Ultra
+ * Oficina Mecânica — KYTTO Clube
  * Tela completa: lista de OS, criação, checklist, aprovação WhatsApp
  */
 import { useState, useEffect, useCallback } from 'react'
@@ -11,7 +11,7 @@ const STATUS_LABELS = {
   orcamento_enviado: { label: 'Aguardando Aprovação', color: '#f59e0b' },
   aprovado: { label: 'Aprovado', color: '#10b981' },
   em_execucao: { label: 'Em Execução', color: '#8b5cf6' },
-  finalizado: { label: 'Finalizado', color: '#5FB335' },
+  finalizado: { label: 'Finalizado', color: '#FF6B2C' },
   cancelado: { label: 'Cancelado', color: '#e05c5c' },
 }
 
@@ -181,7 +181,7 @@ export default function Oficina() {
                         {os.status === 'em_execucao' && (
                           <button
                             onClick={() => atualizarStatus(os.id, 'finalizado')}
-                            style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: '#5FB335', color: '#fff', cursor: 'pointer', fontSize: 12 }}
+                            style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: '#FF6B2C', color: '#fff', cursor: 'pointer', fontSize: 12 }}
                           >Finalizar</button>
                         )}
                       </div>
@@ -286,7 +286,7 @@ export default function Oficina() {
 
             <div style={{ background: 'var(--card)', borderRadius: 10, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <span style={{ fontWeight: 700, fontSize: 16 }}>Total da OS</span>
-              <span style={{ fontWeight: 700, fontSize: 24, color: '#5FB335' }}>{fmtR(osSelecionada.valor_total || 0)}</span>
+              <span style={{ fontWeight: 700, fontSize: 24, color: '#FF6B2C' }}>{fmtR(osSelecionada.valor_total || 0)}</span>
             </div>
 
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>

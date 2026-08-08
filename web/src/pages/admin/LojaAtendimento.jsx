@@ -9,9 +9,9 @@ import { api, fmtR } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
 const COLUNAS = [
-  { key: 'pendente',   titulo: 'Aguardando preparo', cor: '#C9A656', acao: { label: '▶ Iniciar preparo', to: 'preparando' } },
+  { key: 'pendente',   titulo: 'Aguardando preparo', cor: '#FF6B2C', acao: { label: '▶ Iniciar preparo', to: 'preparando' } },
   { key: 'preparando', titulo: 'Em preparação',      cor: '#3498db', acao: { label: '✅ Liberar (pronto)', to: 'pronto' } },
-  { key: 'pronto',     titulo: 'Pronto p/ retirada',  cor: '#5FB335', acao: { label: '📦 Entregar', to: 'entregue' } },
+  { key: 'pronto',     titulo: 'Pronto p/ retirada',  cor: '#FF6B2C', acao: { label: '📦 Entregar', to: 'entregue' } },
   { key: 'entregue',   titulo: 'Entregues (hoje)',    cor: '#6a7a6a', acao: null },
 ]
 
@@ -124,7 +124,7 @@ export default function LojaAtendimento() {
                 ) : lista.map(p => (
                   <div key={p.id} style={{ background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 12, padding: '10px 12px', marginBottom: 10 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                      <span style={{ fontWeight: 900, color: 'var(--gold, #C9A656)', fontSize: 15, letterSpacing: '.04em' }}>{p.codigo}</span>
+                      <span style={{ fontWeight: 900, color: 'var(--gold, #FF6B2C)', fontSize: 15, letterSpacing: '.04em' }}>{p.codigo}</span>
                       <span style={{ fontSize: 11, color: 'var(--muted)' }}>{tempoAtras(p.criadoEm)}</span>
                     </div>
                     <div style={{ fontSize: 13, fontWeight: 700, marginTop: 2 }}>{p.cliente?.nome || '—'}</div>
@@ -133,7 +133,7 @@ export default function LojaAtendimento() {
                     <div style={{ margin: '8px 0', display: 'flex', flexDirection: 'column', gap: 3 }}>
                       {(p.itens || []).map((it, i) => (
                         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                          <span><b style={{ color: 'var(--lime, #8FD64A)' }}>{it.qtd}×</b> {it.nome}{it.tamanho ? ` (${it.tamanho})` : ''}</span>
+                          <span><b style={{ color: 'var(--lime, #FF9B72)' }}>{it.qtd}×</b> {it.nome}{it.tamanho ? ` (${it.tamanho})` : ''}</span>
                           <span style={{ color: 'var(--muted)' }}>{fmtR(it.subtotal ?? (it.preco || 0) * (it.qtd || 1))}</span>
                         </div>
                       ))}
@@ -146,11 +146,11 @@ export default function LojaAtendimento() {
                         title={p.pagamento === 'pago' ? 'Reabrir pagamento' : 'Marcar como pago'}
                         style={{ fontSize: 11, fontWeight: 700, cursor: 'pointer', borderRadius: 6, padding: '3px 8px',
                           border: `1px solid ${p.pagamento === 'pago' ? '#2e6b3a' : '#7a6a2a'}`,
-                          background: p.pagamento === 'pago' ? 'rgba(95,179,53,.12)' : 'rgba(201,166,86,.1)',
-                          color: p.pagamento === 'pago' ? '#5FB335' : '#C9A656' }}>
+                          background: p.pagamento === 'pago' ? 'rgba(255,107,44,.12)' : 'rgba(255,107,44,.1)',
+                          color: p.pagamento === 'pago' ? '#FF6B2C' : '#FF6B2C' }}>
                         {p.pagamento === 'pago' ? '✓ pago' : '💰 marcar pago'}
                       </button>
-                      <span style={{ fontWeight: 800, color: 'var(--gold, #C9A656)' }}>{fmtR(p.total || 0)}</span>
+                      <span style={{ fontWeight: 800, color: 'var(--gold, #FF6B2C)' }}>{fmtR(p.total || 0)}</span>
                     </div>
 
                     <div style={{ display: 'flex', gap: 6 }}>

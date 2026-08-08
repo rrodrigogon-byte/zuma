@@ -1,5 +1,5 @@
 /**
- * Configuração Fiscal — SetPoint Ultra (Motor Fiscal Próprio)
+ * Configuração Fiscal — KYTTO Clube (Motor Fiscal Próprio)
  * Upload de Certificado A1, configuração SEFAZ, CSC, ambiente
  */
 import { useState, useEffect, useCallback } from 'react'
@@ -74,10 +74,10 @@ export default function ConfiguracaoFiscal() {
       </div>
 
       {/* Status do Certificado */}
-      <div style={{ background: config?.certificado_valido ? '#5FB33518' : '#e05c5c18', border: `1px solid ${config?.certificado_valido ? '#5FB335' : '#e05c5c'}`, borderRadius: 10, padding: '14px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ background: config?.certificado_valido ? '#FF6B2C18' : '#e05c5c18', border: `1px solid ${config?.certificado_valido ? '#FF6B2C' : '#e05c5c'}`, borderRadius: 10, padding: '14px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
         <span style={{ fontSize: 24 }}>{config?.certificado_valido ? '✅' : '⚠️'}</span>
         <div>
-          <div style={{ fontWeight: 700, color: config?.certificado_valido ? '#5FB335' : '#e05c5c' }}>
+          <div style={{ fontWeight: 700, color: config?.certificado_valido ? '#FF6B2C' : '#e05c5c' }}>
             {config?.certificado_valido ? 'Certificado A1 configurado e válido' : 'Certificado A1 não configurado'}
           </div>
           <div style={{ fontSize: 13, color: 'var(--muted)' }}>
@@ -86,7 +86,7 @@ export default function ConfiguracaoFiscal() {
               : 'Configure o certificado digital A1 (.pfx) para habilitar a emissão de documentos fiscais'}
           </div>
         </div>
-        <div style={{ marginLeft: 'auto', background: config?.ambiente === 'producao' ? '#5FB33522' : '#f59e0b22', color: config?.ambiente === 'producao' ? '#5FB335' : '#f59e0b', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700 }}>
+        <div style={{ marginLeft: 'auto', background: config?.ambiente === 'producao' ? '#FF6B2C22' : '#f59e0b22', color: config?.ambiente === 'producao' ? '#FF6B2C' : '#f59e0b', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700 }}>
           {config?.ambiente === 'producao' ? '🟢 PRODUÇÃO' : '🟡 HOMOLOGAÇÃO'}
         </div>
       </div>
