@@ -27,6 +27,7 @@ import * as cadastrosMestres from './cadastros-mestres-kytto.js';
 import { pagamentosPix } from './pagamentos-pix-kytto.js';
 import { gerarRelatorioOperacional } from './relatorios-operacionais-kytto.js';
 import * as canaisKytto from './canais-fidelidade-kytto.js';
+import { acaoDaRequisicao, moduloDaRota, resumoAcessoUsuario, temPermissao } from './perfis-usuarios-kytto.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -194,7 +195,7 @@ app.post('/api/admin/login', authLimiter, (req, res) => {
 
     res.json({
       token,
-      user: { email: usuario.email, nome: usuario.nome, role: papel, empresaId: empresaAtiva.id, roles: usuario.roles || [papel], platformAdmin: usuario.platformAdmin === true },
+      user: { email: usuario.email, nome: usuario.nome, role: papel, empresaId: empresaAtiva.id, roles: usuario.roles || [papel], perfis: resumoAcessoUsuario(usuario).perfis, tipoUsuario: resumoAcessoUsuario(usuario).tipoUsuario, permissoes: resumoAcessoUsuario(usuario).permissoes, platformAdmin: usuario.platformAdmin === true },
       role: papel,
       sessao: {
         loja_ativa: { id: empresaAtiva.id, nome: empresaAtiva.nomeFantasia || empresaAtiva.nome, ativa: empresaAtiva.ativa !== false, empresaId: empresaAtiva.id },
@@ -485,6 +486,8 @@ async function iniciar() {
 
   // Criar a empresa, o usuário administrativo e a conta padrão no escopo correto.
   criarAdminPadrao();
+  const usuariosMigradosParaPerfis = cadastrosMestres.migrarPerfisUsuarios();
+  if (usuariosMigradosParaPerfis) console.log(`✅ ${usuariosMigradosParaPerfis} usuário(s) migrado(s) para perfis estruturados.`);
   // A configuração fiscal anterior era vinculada ao email administrativo. A
   // migração preserva o A1 cifrado e passa a vinculá-lo à empresa padrão.
   fiscalKytto.migrarTenant(`conta-${ADMIN_EMAIL}`, `empresa-${cadastrosMestres.EMPRESA_PADRAO_ID}`);
@@ -569,8 +572,15 @@ async function iniciar() {
         catch { return ''; }
       })()
     ));
-    if (!usuario || usuario.ativo === false || (usuario.tipo !== 'admin' && !(usuario.roles || []).includes('admin'))) {
+    if (!usuario || usuario.ativo === false) {
       return res.status(401).json({ erro: 'Autenticação administrativa necessária' });
+    }
+
+    const acesso = resumoAcessoUsuario(usuario);
+    const modulo = moduloDaRota(req.path);
+    const acao = acaoDaRequisicao(req.method);
+    if (!temPermissao({ ...usuario, ...acesso }, modulo, acao)) {
+      return res.status(403).json({ erro: `Seu perfil não permite ${acao} no módulo ${modulo}.`, codigo: 'PERMISSAO_NEGADA', modulo, acao });
     }
 
     const empresas = cadastrosMestres.empresasDoUsuario(usuario);
@@ -589,7 +599,8 @@ async function iniciar() {
       return res.status(403).json({ erro: 'Acesso negado a dados de outra empresa.' });
     }
 
-    req.usuario = usuario;
+    req.usuario = { ...usuario, ...acesso };
+    req.permissoes = acesso.permissoes;
     req.empresaId = empresa.id;
     req.empresa = empresa;
     next();

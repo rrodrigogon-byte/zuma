@@ -13,8 +13,30 @@ const TABS = [
 const EMPTY = {
   funcionarios: { nome: '', cpf: '', email: '', telefone: '', cargo: '', departamento: '', dataAdmissao: '', salario: '', status: 'ativo', observacao: '' },
   fornecedores: { nome: '', cnpj: '', inscricaoEstadual: '', email: '', telefone: '', endereco: '', condicaoPagamento: '30 dias', status: 'ativo', observacao: '' },
-  usuarios: { nome: '', email: '', telefone: '', roles: 'operador', senhaInicial: '', ativo: true },
+  usuarios: { nome: '', email: '', telefone: '', tipoUsuario: 'operador_pdv', perfis: ['operador_pdv'], senhaInicial: '', ativo: true },
 }
+
+const TIPOS_USUARIO = [
+  { id: 'administrador', nome: 'Administrador', descricao: 'Gestão completa da empresa', perfilPadrao: 'administrador' },
+  { id: 'gerente', nome: 'Gerente', descricao: 'Gestão operacional e financeira', perfilPadrao: 'gerente_operacional' },
+  { id: 'operador_pdv', nome: 'Operador de PDV', descricao: 'Vendas e atendimento', perfilPadrao: 'operador_pdv' },
+  { id: 'caixa', nome: 'Caixa', descricao: 'Recebimentos e fechamento', perfilPadrao: 'caixa' },
+  { id: 'estoque', nome: 'Gerente de Estoque', descricao: 'Inventário e movimentações', perfilPadrao: 'gerente_estoque' },
+  { id: 'garcom', nome: 'Garçom', descricao: 'Mesas e comandas', perfilPadrao: 'garcom' },
+  { id: 'cozinha', nome: 'Cozinha / KDS', descricao: 'Preparo de pedidos', perfilPadrao: 'cozinha' },
+  { id: 'consultor', nome: 'Consultor', descricao: 'Consultas e relatórios', perfilPadrao: 'consultor' },
+]
+
+const PERFIS_ACESSO = [
+  { id: 'administrador', nome: 'Administrador', modulos: 'Todos os módulos e configurações' },
+  { id: 'gerente_operacional', nome: 'Gerente Operacional', modulos: 'Operação, financeiro e relatórios' },
+  { id: 'operador_pdv', nome: 'Operador de PDV', modulos: 'PDV, pagamentos e clientes' },
+  { id: 'caixa', nome: 'Caixa', modulos: 'Pagamentos, recebimentos e fechamento' },
+  { id: 'gerente_estoque', nome: 'Gerente de Estoque', modulos: 'Estoque, cardápio e relatórios' },
+  { id: 'garcom', nome: 'Garçom', modulos: 'Mesas, comandas e cardápio' },
+  { id: 'cozinha', nome: 'Cozinha / KDS', modulos: 'Cozinha e acompanhamento de preparo' },
+  { id: 'consultor', nome: 'Consultor', modulos: 'Dashboard e relatórios em leitura' },
+]
 
 function statusColor(status) {
   if (['ativo', true].includes(status)) return '#2ecc71'
@@ -86,7 +108,8 @@ export default function CadastrosMestres() {
   const abrirEditar = (registro) => {
     const base = { ...EMPTY[tab], ...registro }
     if (tab === 'usuarios') {
-      base.roles = Array.isArray(registro.roles) ? registro.roles.join(', ') : (registro.role || 'operador')
+      base.tipoUsuario = registro.tipoUsuario || 'operador_pdv'
+      base.perfis = Array.isArray(registro.perfis) ? registro.perfis : (Array.isArray(registro.roles) ? registro.roles : [registro.role || 'operador_pdv'])
       base.senhaInicial = ''
     }
     setForm(base)
@@ -103,7 +126,11 @@ export default function CadastrosMestres() {
     setSaving(true)
     try {
       const payload = { ...form }
-      if (tab === 'usuarios') payload.roles = String(form.roles || 'operador').split(',').map((role) => role.trim()).filter(Boolean)
+      if (tab === 'usuarios') {
+        payload.perfis = Array.isArray(form.perfis) ? form.perfis : []
+        if (!payload.perfis.length) return toast('Selecione ao menos um perfil de acesso.', true)
+        delete payload.roles
+      }
       if (modal?.modo === 'novo') await api.post(aba.endpoint, payload)
       else await api.patch(`${aba.endpoint}/${modal.id}`, payload)
       toast(`${tab.slice(0, -1)} ${modal?.modo === 'novo' ? 'cadastrado' : 'atualizado'} com sucesso.`)
@@ -179,7 +206,7 @@ export default function CadastrosMestres() {
                 </>}
                 {tab === 'usuarios' && <>
                   <td><strong>{registro.nome}</strong><div style={{ fontSize: 11, color: 'var(--muted)' }}>{registro.email}</div></td>
-                  <td>{(registro.roles || []).join(', ') || 'operador'}</td>
+                  <td><strong>{registro.tipoUsuario ? (TIPOS_USUARIO.find((tipo) => tipo.id === registro.tipoUsuario)?.nome || registro.tipoUsuario) : 'Operador de PDV'}</strong><div style={{ fontSize: 11, color: 'var(--muted)' }}>{(registro.perfis || registro.roles || []).map((perfil) => PERFIS_ACESSO.find((item) => item.id === perfil)?.nome || perfil).join(' · ') || 'Sem perfil'}</div></td>
                   <td>{registro.telefone || '—'}</td>
                   <td><span className="badge" style={{ color: statusColor(registro.ativo), background: `${statusColor(registro.ativo)}18` }}>{registro.ativo === false ? 'inativo' : 'ativo'}</span></td>
                 </>}
@@ -253,10 +280,25 @@ function FornecedorForm({ form, setForm }) {
 
 function UsuarioForm({ form, setForm, isNew }) {
   const update = (key, value) => setForm({ ...form, [key]: value })
+  const perfis = Array.isArray(form.perfis) ? form.perfis : []
+  const selecionarTipo = (tipoUsuario) => {
+    const tipo = TIPOS_USUARIO.find((item) => item.id === tipoUsuario)
+    setForm({ ...form, tipoUsuario, perfis: tipo?.perfilPadrao ? [tipo.perfilPadrao] : perfis })
+  }
+  const alternarPerfil = (perfilId) => {
+    const proximos = perfis.includes(perfilId) ? perfis.filter((item) => item !== perfilId) : [...perfis, perfilId]
+    update('perfis', proximos)
+  }
+  const permissoesAtivas = PERFIS_ACESSO.filter((perfil) => perfis.includes(perfil.id)).map((perfil) => perfil.modulos)
   return <>
+    <div className="card" style={{ fontSize: 12, background: 'rgba(255,107,44,.06)', border: '1px solid rgba(255,107,44,.2)' }}>
+      Selecione o tipo e um ou mais perfis. As permissões são somadas e sempre valem apenas para a empresa ativa.
+    </div>
     <Linha><Campo label="Nome *"><input value={form.nome} onChange={(e) => update('nome', e.target.value)} /></Campo><Campo label="Telefone"><input value={form.telefone} onChange={(e) => update('telefone', e.target.value)} /></Campo></Linha>
     <Campo label="Email *"><input type="email" value={form.email} onChange={(e) => update('email', e.target.value)} /></Campo>
-    <Campo label="Perfis (separados por vírgula)"><input value={form.roles} onChange={(e) => update('roles', e.target.value)} placeholder="operador, gerente" /></Campo>
+    <Campo label="Tipo de usuário *"><select value={form.tipoUsuario || 'operador_pdv'} onChange={(e) => selecionarTipo(e.target.value)}>{TIPOS_USUARIO.map((tipo) => <option key={tipo.id} value={tipo.id}>{tipo.nome} — {tipo.descricao}</option>)}</select></Campo>
+    <Campo label="Perfis de acesso *"><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>{PERFIS_ACESSO.map((perfil) => <label key={perfil.id} style={{ display: 'flex', gap: 8, padding: 10, border: `1px solid ${perfis.includes(perfil.id) ? '#FF6B2C' : 'var(--border, #e6e6e6)'}`, borderRadius: 8, background: perfis.includes(perfil.id) ? 'rgba(255,107,44,.08)' : '#fff', cursor: 'pointer' }}><input type="checkbox" checked={perfis.includes(perfil.id)} onChange={() => alternarPerfil(perfil.id)} style={{ marginTop: 2 }} /><span><strong style={{ fontSize: 13 }}>{perfil.nome}</strong><small style={{ display: 'block', color: 'var(--muted)', marginTop: 2 }}>{perfil.modulos}</small></span></label>)}</div></Campo>
+    <div className="card" style={{ fontSize: 12, padding: 12, background: 'rgba(18,40,63,.04)' }}><strong style={{ color: '#12283F' }}>Permissões resultantes:</strong><div style={{ marginTop: 4, color: 'var(--muted)' }}>{permissoesAtivas.length ? permissoesAtivas.join(' · ') : 'Selecione ao menos um perfil de acesso.'}</div></div>
     <Campo label={isNew ? 'Senha inicial *' : 'Nova senha (opcional)'}><input type="password" value={form.senhaInicial} onChange={(e) => update('senhaInicial', e.target.value)} /></Campo>
     <Campo label="Situação"><select value={form.ativo ? 'ativo' : 'inativo'} onChange={(e) => update('ativo', e.target.value === 'ativo')}><option value="ativo">Ativo</option><option value="inativo">Inativo</option></select></Campo>
   </>

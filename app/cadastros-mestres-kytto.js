@@ -3,6 +3,7 @@
 // acessados fora do escopo resolvido pela sessão autenticada.
 
 import { db, save } from './db.js';
+import { normalizarPerfis, resumoAcessoUsuario, tipoDoUsuario, validarConfiguracaoUsuario } from './perfis-usuarios-kytto.js';
 
 export const EMPRESA_PADRAO_ID = 'emp-kytto-001';
 
@@ -109,12 +110,20 @@ export function atualizarEmpresa(empresaId, payload = {}) {
 }
 
 function normalizarUsuario(payload = {}) {
-  const roles = Array.isArray(payload.roles) ? payload.roles : [payload.role || payload.tipo || 'operador'];
+  const tipoUsuario = tipoDoUsuario(payload);
+  const perfis = normalizarPerfis(payload.perfis || payload.roles || [payload.role || payload.tipo], tipoUsuario);
+  const acesso = resumoAcessoUsuario({ ...payload, tipoUsuario, perfis });
   return {
     nome: texto(payload.nome, 120),
     email: texto(payload.email, 120).toLowerCase(),
     telefone: texto(payload.telefone, 30),
-    roles: [...new Set(roles.map((role) => texto(role, 40)).filter(Boolean))],
+    tipoUsuario: acesso.tipoUsuario,
+    perfis: acesso.perfis,
+    // Compatibilidade transitória com integrações antigas que ainda leem roles.
+    roles: acesso.perfis,
+    role: acesso.perfis[0] || 'operador_pdv',
+    permissoes: acesso.permissoes,
+    permissoesExtras: payload.permissoesExtras && typeof payload.permissoesExtras === 'object' && !Array.isArray(payload.permissoesExtras) ? payload.permissoesExtras : {},
     ativo: payload.ativo !== false,
     funcionarioId: texto(payload.funcionarioId || payload.funcionario_id, 80),
     platformAdmin: Boolean(payload.platformAdmin),
@@ -123,7 +132,8 @@ function normalizarUsuario(payload = {}) {
 
 export function criarUsuario(empresaId, payload = {}) {
   if (!obterEmpresa(empresaId)?.ativa) throw new Error('Empresa não encontrada ou inativa.');
-  const dados = normalizarUsuario(payload);
+  const configuracao = validarConfiguracaoUsuario(payload);
+  const dados = normalizarUsuario({ ...payload, ...configuracao });
   if (!dados.nome || !dados.email) throw new Error('Nome e email do usuário são obrigatórios.');
   const usuarios = bucket('usuarios', empresaId);
   const existente = Object.values(usuarios).find((usuario) => usuario.email === dados.email);
@@ -141,7 +151,12 @@ export function criarUsuario(empresaId, payload = {}) {
 export function atualizarUsuario(empresaId, usuarioId, payload = {}) {
   const usuario = bucket('usuarios', empresaId)[usuarioId];
   if (!usuario || usuario.empresaId !== empresaId) return null;
-  const dados = normalizarUsuario({ ...usuario, ...payload });
+  const configuracao = validarConfiguracaoUsuario({
+    tipoUsuario: payload.tipoUsuario ?? usuario.tipoUsuario ?? tipoDoUsuario(usuario),
+    perfis: payload.perfis ?? payload.roles ?? usuario.perfis ?? usuario.roles,
+    permissoesExtras: payload.permissoesExtras ?? usuario.permissoesExtras,
+  });
+  const dados = normalizarUsuario({ ...usuario, ...payload, ...configuracao });
   Object.assign(usuario, dados, { atualizadoEm: agora() });
   if (payload.senhaHash) usuario.senhaHash = texto(payload.senhaHash, 250);
   if (Array.isArray(payload.empresasAcessiveis)) {
@@ -152,10 +167,36 @@ export function atualizarUsuario(empresaId, usuarioId, payload = {}) {
   return usuario;
 }
 
+export function migrarPerfisUsuarios() {
+  const store = base();
+  let migrados = 0;
+  for (const usuariosDaEmpresa of Object.values(store.usuarios || {})) {
+    for (const usuario of Object.values(usuariosDaEmpresa || {})) {
+      const acesso = resumoAcessoUsuario(usuario);
+      const precisaMigrar = usuario.tipoUsuario !== acesso.tipoUsuario
+        || JSON.stringify(usuario.perfis || []) !== JSON.stringify(acesso.perfis)
+        || JSON.stringify(usuario.roles || []) !== JSON.stringify(acesso.perfis)
+        || JSON.stringify(usuario.permissoes || {}) !== JSON.stringify(acesso.permissoes);
+      if (precisaMigrar) {
+        usuario.tipoUsuario = acesso.tipoUsuario;
+        usuario.perfis = acesso.perfis;
+        usuario.roles = acesso.perfis;
+        usuario.role = acesso.perfis[0] || 'operador_pdv';
+        usuario.permissoes = acesso.permissoes;
+        usuario.permissoesExtras ||= {};
+        usuario.atualizadoEm = agora();
+        migrados += 1;
+      }
+    }
+  }
+  if (migrados) save();
+  return migrados;
+}
+
 export function listarUsuarios(empresaId) {
   return Object.values(bucket('usuarios', empresaId))
     .filter((usuario) => usuario.ativo !== false || usuario.incluirInativos)
-    .map(({ senhaHash, ...usuario }) => usuario)
+    .map(({ senhaHash, ...usuario }) => ({ ...usuario, ...resumoAcessoUsuario(usuario) }))
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
