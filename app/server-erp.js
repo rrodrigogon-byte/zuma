@@ -1520,7 +1520,8 @@ async function iniciar() {
   // Registra Florescer Ação Social com chave PIX na inicialização
   function inicializarFlorescer() {
     const dados = db()
-    const empresaFlorescer = dados.empresas?.find((e) => e.cnpj === '13246882000111')
+    const empresaFlorescer = cadastrosMestres.listarEmpresas({ incluirInativas: true })
+      .find((empresa) => String(empresa.cnpj || '').replace(/\D/g, '') === '13246882000111')
     if (empresaFlorescer && !dados.pagamentos?.[empresaFlorescer.id]?.pix?.length) {
       try {
         pagamentosPix.registrarChavePix(empresaFlorescer.id, {
