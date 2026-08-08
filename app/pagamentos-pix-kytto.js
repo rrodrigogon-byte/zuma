@@ -5,7 +5,7 @@
  * Data: 2026-08-08
  */
 
-import { db } from './db.js'
+import { db, save } from './db.js'
 
 export const pagamentosPix = {
   // ── CONFIGURAÇÃO PIX POR EMPRESA ──────────────────────────────────────
@@ -47,6 +47,7 @@ export const pagamentosPix = {
     }
 
     dados.pagamentos[empresaId].pix.push(novaPix)
+    save()
     return novaPix
   },
 
@@ -70,6 +71,7 @@ export const pagamentosPix = {
     if (!pix) throw new Error('Chave PIX não encontrada')
     pix.ativa = ativa
     pix.atualizadaEm = new Date().toISOString()
+    save()
     return pix
   },
 
@@ -102,7 +104,8 @@ export const pagamentosPix = {
     }
 
     dados.pagamentos[empresaId].adquirentes.push(novoAdquirente)
-    return { ...novoAdquirente, chavePrivada: '[criptografado]' }
+    save()
+    return { ...novoAdquirente, chavePrivada: '[protegido]' }
   },
 
   /**
@@ -152,6 +155,7 @@ export const pagamentosPix = {
     }
 
     dados.pagamentos[empresaId].transacoes.push(novaTransacao)
+    save()
     return novaTransacao
   },
 
@@ -164,6 +168,7 @@ export const pagamentosPix = {
     if (!transacao) throw new Error('Transação não encontrada')
     transacao.status = novoStatus
     transacao.atualizadaEm = new Date().toISOString()
+    save()
     return transacao
   },
 
@@ -234,7 +239,8 @@ export const pagamentosPix = {
       atualizadaEm: new Date().toISOString(),
     }
 
-    return { ...dados.pagamentos[empresaId].mercadoPago, accessToken: '[criptografado]' }
+    save()
+    return { ...dados.pagamentos[empresaId].mercadoPago, accessToken: '[protegido]' }
   },
 
   /**
