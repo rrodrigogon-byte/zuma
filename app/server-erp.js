@@ -25,6 +25,7 @@ import { OAuth2Client } from 'google-auth-library';
 import bcrypt from 'bcryptjs';
 import * as cadastrosMestres from './cadastros-mestres-kytto.js';
 import { pagamentosPix } from './pagamentos-pix-kytto.js';
+import { gerarRelatorioOperacional } from './relatorios-operacionais-kytto.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1286,6 +1287,15 @@ async function iniciar() {
       const dataInicio = req.query.dataInicio || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
       const dataFim = req.query.dataFim || new Date().toISOString()
       const relatorio = pagamentosPix.gerarRelatorioPagamentos(req.empresaId, dataInicio, dataFim)
+      res.json({ ok: true, relatorio })
+    } catch (error) {
+      res.status(400).json({ erro: error.message })
+    }
+  })
+
+  app.get('/api/admin/relatorios/operacional', requerEditorCatalogo, (req, res) => {
+    try {
+      const relatorio = gerarRelatorioOperacional(req.empresaId, req.query)
       res.json({ ok: true, relatorio })
     } catch (error) {
       res.status(400).json({ erro: error.message })

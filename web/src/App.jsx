@@ -69,6 +69,7 @@ const Auditoria     = lazy(() => import('./pages/admin/Auditoria'))
 const Configuracoes = lazy(() => import('./pages/admin/Configuracoes'))
 const Cupons        = lazy(() => import('./pages/admin/Cupons'))
 const Relatorios    = lazy(() => import('./pages/admin/Relatorios'))
+const RelatoriosOperacionais = lazy(() => import('./pages/admin/RelatoriosOperacionais'))
 const Noticias      = lazy(() => import('./pages/admin/Noticias'))
 const Sumula        = lazy(() => import('./pages/admin/Sumula'))
 const Mensalidades    = lazy(() => import('./pages/admin/Mensalidades'))
@@ -156,6 +157,7 @@ export default function App() {
           <Route path="/admin/configuracoes"  element={<Layout><Configuracoes /></Layout>} />
           <Route path="/admin/cupons"         element={<Layout><Cupons /></Layout>} />
           <Route path="/admin/relatorios"     element={<Layout><Relatorios /></Layout>} />
+          <Route path="/admin/relatorios-operacionais" element={<Layout><RelatoriosOperacionais /></Layout>} />
           <Route path="/admin/noticias"       element={<Layout><Noticias /></Layout>} />
           <Route path="/admin/sumula"         element={<Layout><Sumula /></Layout>} />
           <Route path="/admin/mensalidades"   element={<Layout><Mensalidades /></Layout>} />

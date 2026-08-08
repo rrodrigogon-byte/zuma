@@ -65,7 +65,7 @@ const NAV_ADMIN_GROUPS = [
     items: [
       { to: '/admin',           icon: '📊', label: 'Dashboard', end: true },
       { to: '/admin/bi',        icon: '📉', label: 'BI & Analytics' },
-      { to: '/admin/relatorios',icon: '📄', label: 'Relatórios' },
+      { to: '/admin/relatorios-operacionais',icon: '📄', label: 'Relatórios Operacionais' },
       { to: '/admin/financeiro',icon: '💰', label: 'Financeiro' },
     ],
   },
