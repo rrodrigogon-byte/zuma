@@ -18,6 +18,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import { db, save, hydrate, flush } from './db.js';
 import { CATALOGO_BEBIDAS_KYTTO, RESUMO_CATALOGO_BEBIDAS } from './catalogo-bebidas.js';
+import { CATALOGO_ESPETINHOS_KYTTO, RESUMO_CATALOGO_ESPETINHOS } from './catalogo-espetinhos.js';
 import * as fiscalKytto from './fiscal-kytto.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -588,6 +589,71 @@ async function iniciar() {
     return estado.cardapio;
   }
 
+  // Cada produto de cardápio tem uma ficha de estoque independente. O saldo
+  // inicial é sempre zero e o histórico registra a origem de cada alteração.
+  function estoquePersistido() {
+    const estado = db();
+    if (!estado.estoque || typeof estado.estoque !== 'object' || Array.isArray(estado.estoque)) estado.estoque = {};
+    return estado.estoque;
+  }
+
+  function fichaEstoque(produto) {
+    return {
+      id: produto.id,
+      produtoId: produto.id,
+      nome: produto.nome,
+      cat: produto.cat || 'Sem categoria',
+      subcategoria: produto.subcategoria || '',
+      unidade: produto.unidade || 'UN',
+      ativo: true,
+      qtd: 0,
+      min: 0,
+      custo: 0,
+      historico: [],
+      criadoEm: new Date().toISOString(),
+      atualizadoEm: new Date().toISOString(),
+    };
+  }
+
+  function sincronizarEstoqueCardapio({ registrarHistorico = false } = {}) {
+    const estoque = estoquePersistido();
+    const itens = cardapioPersistido();
+    const idsAtivos = new Set(itens.map(item => item.id));
+    let criados = 0, atualizados = 0, arquivados = 0;
+    for (const produto of itens) {
+      const atual = estoque[produto.id];
+      if (!atual) {
+        estoque[produto.id] = fichaEstoque(produto);
+        criados++;
+      } else {
+        const mudou = atual.nome !== produto.nome || atual.cat !== produto.cat || atual.unidade !== produto.unidade || atual.ativo !== true;
+        Object.assign(atual, {
+          produtoId: produto.id, nome: produto.nome, cat: produto.cat || 'Sem categoria',
+          subcategoria: produto.subcategoria || '', unidade: produto.unidade || 'UN', ativo: true,
+          atualizadoEm: new Date().toISOString(),
+        });
+        if (mudou) atualizados++;
+      }
+    }
+    for (const ficha of Object.values(estoque)) {
+      if (!idsAtivos.has(ficha.produtoId) && ficha.ativo !== false) {
+        ficha.ativo = false;
+        ficha.atualizadoEm = new Date().toISOString();
+        if (registrarHistorico) ficha.historico ||= [];
+        arquivados++;
+      }
+    }
+    return { criados, atualizados, arquivados, total: Object.values(estoque).filter(item => item.ativo !== false).length };
+  }
+
+  function listarEstoqueCardapio() {
+    const resumo = sincronizarEstoqueCardapio();
+    if (resumo.criados || resumo.atualizados || resumo.arquivados) save();
+    return Object.values(estoquePersistido())
+      .filter(item => item.ativo !== false)
+      .sort((a, b) => String(a.cat).localeCompare(String(b.cat), 'pt-BR') || String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
+  }
+
   function normalizarProduto(payload = {}) {
     const texto = (valor, tamanho = 160) => String(valor || '').trim().slice(0, tamanho);
     const numero = (valor) => {
@@ -623,6 +689,67 @@ async function iniciar() {
     res.json(cardapioPersistido());
   });
 
+  app.get('/api/admin/estoque', requerEditorCatalogo, (req, res) => {
+    res.json({ estoque: listarEstoqueCardapio() });
+  });
+
+  app.post('/api/admin/estoque/sincronizar-cardapio', requerEditorCatalogo, (req, res) => {
+    const resumo = sincronizarEstoqueCardapio();
+    save();
+    res.json({ ok: true, ...resumo, mensagem: 'Estoque sincronizado com o cardápio.' });
+  });
+
+  app.post('/api/admin/estoque/entrada', requerEditorCatalogo, (req, res) => {
+    const produtoId = String(req.body?.produtoId || '');
+    const qtd = Number(req.body?.qtd);
+    const custo = req.body?.custo === undefined || req.body?.custo === '' ? null : Number(req.body.custo);
+    const ficha = estoquePersistido()[produtoId];
+    if (!ficha || ficha.ativo === false) return res.status(404).json({ erro: 'Produto de estoque não encontrado.' });
+    if (!Number.isFinite(qtd) || qtd <= 0) return res.status(400).json({ erro: 'Quantidade de entrada inválida.' });
+    if (custo !== null && (!Number.isFinite(custo) || custo < 0)) return res.status(400).json({ erro: 'Custo unitário inválido.' });
+    ficha.qtd = Number(ficha.qtd || 0) + qtd;
+    if (custo !== null) ficha.custo = custo;
+    ficha.historico ||= [];
+    ficha.historico.push({ tipo: 'entrada', qtd, custo: custo ?? ficha.custo ?? 0, ts: new Date().toISOString(), origem: 'administracao' });
+    ficha.historico = ficha.historico.slice(-100);
+    ficha.atualizadoEm = new Date().toISOString();
+    save();
+    res.json({ ok: true, item: ficha });
+  });
+
+  app.post('/api/admin/estoque/ajuste', requerEditorCatalogo, (req, res) => {
+    const produtoId = String(req.body?.produtoId || '');
+    const ficha = estoquePersistido()[produtoId];
+    if (!ficha || ficha.ativo === false) return res.status(404).json({ erro: 'Produto de estoque não encontrado.' });
+    const agora = new Date().toISOString();
+    let alterado = false;
+    if (req.body?.min !== undefined) {
+      const min = Number(req.body.min);
+      if (!Number.isFinite(min) || min < 0) return res.status(400).json({ erro: 'Estoque mínimo inválido.' });
+      ficha.min = Math.floor(min);
+      alterado = true;
+    }
+    if (req.body?.qtd !== undefined) {
+      const qtd = Number(req.body.qtd);
+      if (!Number.isFinite(qtd) || qtd < 0) return res.status(400).json({ erro: 'Quantidade inventariada inválida.' });
+      const anterior = Number(ficha.qtd || 0);
+      ficha.qtd = qtd;
+      ficha.historico ||= [];
+      ficha.historico.push({ tipo: 'inventario', qtd: Math.abs(qtd - anterior), saldoAnterior: anterior, saldoFinal: qtd, ts: agora, origem: 'administracao' });
+      ficha.historico = ficha.historico.slice(-100);
+      alterado = true;
+    }
+    if (!alterado) return res.status(400).json({ erro: 'Informe uma quantidade ou um estoque mínimo.' });
+    ficha.atualizadoEm = agora;
+    save();
+    res.json({ ok: true, item: ficha });
+  });
+
+  app.get('/api/admin/estoque/inventario', requerEditorCatalogo, (req, res) => {
+    const itens = listarEstoqueCardapio();
+    res.json({ ok: true, geradoEm: new Date().toISOString(), itens: itens.map(({ id, nome, cat, unidade, qtd, min }) => ({ id, nome, cat, unidade, qtd, min })) });
+  });
+
   app.get('/api/admin/cardapio/catalogo-bebidas', requerEditorCatalogo, (req, res) => {
     const cadastrados = cardapioPersistido().filter((item) => item.catalogoSeed === 'kytto-bebidas-v1').length;
     res.json({ ...RESUMO_CATALOGO_BEBIDAS, cadastrados, versao: 'kytto-bebidas-v1' });
@@ -652,9 +779,35 @@ async function iniciar() {
 
     if (adicionados.length) {
       itens.push(...adicionados);
+      sincronizarEstoqueCardapio();
       save();
     }
     res.status(201).json({ ok: true, adicionados: adicionados.length, total: itens.length, versao: 'kytto-bebidas-v1' });
+  });
+
+  app.get('/api/admin/cardapio/catalogo-espetinhos', requerEditorCatalogo, (req, res) => {
+    const cadastrados = cardapioPersistido().filter((item) => item.catalogoSeed === 'kytto-espetinhos-v1').length;
+    res.json({ ...RESUMO_CATALOGO_ESPETINHOS, cadastrados, versao: 'kytto-espetinhos-v1' });
+  });
+
+  app.post('/api/admin/cardapio/catalogo-espetinhos', requerEditorCatalogo, (req, res) => {
+    const itens = cardapioPersistido();
+    const existentes = new Set(itens.map((item) => String(item.nome || '').toLocaleLowerCase('pt-BR')));
+    const agora = new Date().toISOString();
+    const adicionados = [];
+    for (const produtoBase of CATALOGO_ESPETINHOS_KYTTO) {
+      const produto = normalizarProduto(produtoBase);
+      const chave = produto.nome.toLocaleLowerCase('pt-BR');
+      if (existentes.has(chave)) continue;
+      adicionados.push({ ...produto, id: `esp-${Date.now().toString(36)}-${String(itens.length + adicionados.length + 1).padStart(3, '0')}`, ordem: itens.length + adicionados.length + 1, catalogoSeed: 'kytto-espetinhos-v1', criadoEm: agora, atualizadoEm: agora });
+      existentes.add(chave);
+    }
+    if (adicionados.length) {
+      itens.push(...adicionados);
+      sincronizarEstoqueCardapio();
+      save();
+    }
+    res.status(201).json({ ok: true, adicionados: adicionados.length, total: itens.length, versao: 'kytto-espetinhos-v1' });
   });
 
   app.post('/api/admin/cardapio', requerEditorCatalogo, (req, res) => {
@@ -666,6 +819,7 @@ async function iniciar() {
     const agora = new Date().toISOString();
     const novo = { ...produto, id: `prd-${Date.now().toString(36)}-${itens.length + 1}`, ordem: itens.length + 1, criadoEm: agora, atualizadoEm: agora };
     itens.push(novo);
+    sincronizarEstoqueCardapio();
     save();
     res.status(201).json({ ok: true, item: novo });
   });
@@ -679,6 +833,7 @@ async function iniciar() {
       return res.status(400).json({ erro: 'Nome e preço válido são obrigatórios' });
     }
     Object.assign(item, atualizado, { atualizadoEm: new Date().toISOString() });
+    sincronizarEstoqueCardapio();
     save();
     res.json({ ok: true, item });
   });
@@ -688,6 +843,7 @@ async function iniciar() {
     const indice = itens.findIndex((produto) => produto.id === req.params.id);
     if (indice < 0) return res.status(404).json({ erro: 'Produto não encontrado' });
     const [removido] = itens.splice(indice, 1);
+    sincronizarEstoqueCardapio({ registrarHistorico: true });
     save();
     res.json({ ok: true, removido: { id: removido.id, nome: removido.nome } });
   });

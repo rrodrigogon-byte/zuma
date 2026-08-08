@@ -4,6 +4,7 @@ import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
 
 const EMPTY_ENTRADA = { produtoId: '', qtd: '', custo: '' }
+const EMPTY_INVENTARIO = { produtoId: '', qtd: '', observacao: '' }
 
 function exportCSV(lista) {
   const headers = ['Produto','Categoria','Qtd Atual','Mínimo','Custo Unit.','Valor Total','Status']
@@ -28,8 +29,12 @@ export default function Estoque() {
   const [busca, setBusca]           = useState('')
   const [filtroCat, setFiltroCat]   = useState('Todas')
   const [modal, setModal]           = useState(false)
+  const [inventarioModal, setInventarioModal] = useState(false)
+  const [inventarioForm, setInventarioForm] = useState(EMPTY_INVENTARIO)
   const [form, setForm]             = useState(EMPTY_ENTRADA)
   const [saving, setSaving]         = useState(false)
+  const [inventariando, setInventariando] = useState(false)
+  const [sincronizando, setSincronizando] = useState(false)
   const [editMin, setEditMin]       = useState({})        // { id: valorStr }
   const [expandido, setExpandido]   = useState({})        // { id: bool } — histórico aberto
   const [ajustando, setAjustando]   = useState({})        // { id: bool } — loading de ajuste rápido
@@ -68,6 +73,37 @@ export default function Estoque() {
       toast(e.message || 'Erro ao registrar entrada', true)
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function sincronizarCardapio() {
+    setSincronizando(true)
+    try {
+      const resultado = await api.post('/api/admin/estoque/sincronizar-cardapio', {})
+      toast(`${resultado.criados || 0} novo(s) item(ns) sincronizado(s) com o cardápio`)
+      load()
+    } catch (error) {
+      toast(error.message || 'Erro ao sincronizar cardápio', true)
+    } finally {
+      setSincronizando(false)
+    }
+  }
+
+  async function salvarInventario() {
+    if (!inventarioForm.produtoId) return toast('Selecione um produto para a contagem', true)
+    const qtd = Number(inventarioForm.qtd)
+    if (!Number.isFinite(qtd) || qtd < 0) return toast('Quantidade contada inválida', true)
+    setInventariando(true)
+    try {
+      await api.post('/api/admin/estoque/ajuste', { produtoId: inventarioForm.produtoId, qtd })
+      toast('Contagem de inventário registrada')
+      setInventarioModal(false)
+      setInventarioForm(EMPTY_INVENTARIO)
+      load()
+    } catch (error) {
+      toast(error.message || 'Erro ao registrar inventário', true)
+    } finally {
+      setInventariando(false)
     }
   }
 
@@ -191,6 +227,8 @@ export default function Estoque() {
         <h1 className="page-title" style={{ margin: 0 }}>Estoque</h1>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-ghost btn-sm" onClick={() => exportCSV(lista)} title="Exportar CSV">📥 CSV</button>
+          <button className="btn btn-ghost btn-sm" onClick={sincronizarCardapio} disabled={sincronizando}>🔄 {sincronizando ? 'Sincronizando…' : 'Sincronizar Cardápio'}</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => { setInventarioForm(EMPTY_INVENTARIO); setInventarioModal(true) }}>📋 Inventário</button>
           <button className="btn btn-secondary btn-sm" onClick={load}>↺ Atualizar</button>
           <button className="btn btn-primary btn-sm" onClick={() => { setForm(EMPTY_ENTRADA); setModal(true) }}>
             + Entrada
@@ -231,15 +269,15 @@ export default function Estoque() {
       {/* KPIs */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(155px,1fr))', gap:10, marginBottom:20 }}>
         <div style={{ background:'var(--surface)', border:'1px solid var(--line)', borderRadius:10, padding:'12px 16px',
-          borderLeft:`4px solid ${alertas.length > 0 ? '#e74c3c' : 'var(--green)'}` }}>
+          borderLeft:`4px solid ${alertas.length > 0 ? '#e74c3c' : '#FF6B2C'}` }}>
           <div style={{ fontSize:11, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'.5px', marginBottom:4 }}>Alertas Baixo</div>
-          <div style={{ fontSize:22, fontWeight:800, color: alertas.length > 0 ? '#e74c3c' : 'var(--green)' }}>{alertas.length}</div>
+          <div style={{ fontSize:22, fontWeight:800, color: alertas.length > 0 ? '#e74c3c' : '#FF6B2C' }}>{alertas.length}</div>
           {alertas.length > 0 && <div style={{ fontSize:10, color:'#e74c3c', marginTop:3 }}>{alertas.slice(0,2).map(a=>a.nome).join(', ')}{alertas.length>2?` +${alertas.length-2}`:''}</div>}
         </div>
         <div style={{ background:'var(--surface)', border:'1px solid var(--line)', borderRadius:10, padding:'12px 16px',
-          borderLeft:'4px solid var(--lime)' }}>
+          borderLeft:'4px solid #FFB703' }}>
           <div style={{ fontSize:11, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'.5px', marginBottom:4 }}>Valor em Estoque</div>
-          <div style={{ fontSize:20, fontWeight:800, color:'var(--lime)' }}>{fmtR(valorTotal)}</div>
+          <div style={{ fontSize:20, fontWeight:800, color:'#FFB703' }}>{fmtR(valorTotal)}</div>
         </div>
         <div style={{ background:'var(--surface)', border:'1px solid var(--line)', borderRadius:10, padding:'12px 16px',
           borderLeft:'4px solid #3b82f6' }}>
@@ -487,6 +525,30 @@ export default function Estoque() {
           </tbody>
         </table>
       </div>
+
+      {/* Modal: contagem de inventário */}
+      {inventarioModal && (
+        <Modal title="Contagem de Inventário" onClose={() => setInventarioModal(false)}>
+          <div style={{ padding: '4px 0 8px' }}>
+            <p style={{ marginTop: 0, color: 'var(--muted)', fontSize: 13, lineHeight: 1.55 }}>Informe a quantidade física contada. O sistema registra a divergência no histórico sem apagar as movimentações anteriores.</p>
+            <div className="form-group">
+              <label>Produto</label>
+              <select value={inventarioForm.produtoId} onChange={e => setInventarioForm(f => ({ ...f, produtoId: e.target.value }))}>
+                <option value="">Selecione…</option>
+                {estoque.map(it => <option key={it.id ?? it.produtoId} value={it.id ?? it.produtoId}>{it.nome} — saldo atual: {it.qtd ?? 0}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Quantidade física contada *</label>
+              <input type="number" min="0" value={inventarioForm.qtd} onChange={e => setInventarioForm(f => ({ ...f, qtd: e.target.value }))} placeholder="0" />
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+              <button className="btn btn-ghost btn-sm" onClick={() => setInventarioModal(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={salvarInventario} disabled={inventariando}>{inventariando ? 'Registrando…' : 'Registrar contagem'}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* Modal: entrada de estoque */}
       {modal && (

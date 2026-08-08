@@ -127,6 +127,7 @@ export default function Cardapio() {
   const [filtroCat, setFiltroCat]   = useState('Todas')
   const [filtroDisp, setFiltroDisp] = useState('todos') // 'todos'|'disponiveis'|'indisponiveis'
   const [importandoBebidas, setImportandoBebidas] = useState(false)
+  const [importandoEspetinhos, setImportandoEspetinhos] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -301,6 +302,20 @@ export default function Cardapio() {
     }
   }
 
+  const handleImportarCatalogoEspetinhos = async () => {
+    if (!confirm('Importar os sabores iniciais de espetinhos? Os itens serão cadastrados na chapa, indisponíveis e com preço pendente para revisão antes da venda.')) return
+    setImportandoEspetinhos(true)
+    try {
+      const resultado = await api.post('/api/admin/cardapio/catalogo-espetinhos', {})
+      toast(`${resultado.adicionados || 0} espetinhos adicionados para revisão comercial`, 'success')
+      load()
+    } catch (e) {
+      toast(e?.message || 'Erro ao importar espetinhos', 'error')
+    } finally {
+      setImportandoEspetinhos(false)
+    }
+  }
+
   const handleRestaurarPadrao = async () => {
     if (!confirm('Restaurar cardápio padrão? Isso substituirá TODOS os itens atuais pelo cardápio original do sistema.')) return
     try {
@@ -320,7 +335,10 @@ export default function Cardapio() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-ghost btn-sm" onClick={() => exportCSV(itensFiltrados)}>⬇ CSV</button>
           <button className="btn btn-primary btn-sm" onClick={handleImportarCatalogoBebidas} disabled={importandoBebidas}>
-            {importandoBebidas ? 'Importando…' : '🍺 Importar catálogo de bebidas'}
+            {importandoBebidas ? 'Importando…' : '🍺 Importar bebidas'}
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={handleImportarCatalogoEspetinhos} disabled={importandoEspetinhos}>
+            {importandoEspetinhos ? 'Importando…' : '🍢 Importar espetinhos'}
           </button>
           <button
             className={`btn btn-sm ${showPreview ? 'btn-primary' : 'btn-ghost'}`}
@@ -337,8 +355,8 @@ export default function Cardapio() {
       {/* KPIs */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
         <KpiCard label="Total de Itens" value={kpis.total} color="var(--cream)" />
-        <KpiCard label="Disponíveis" value={kpis.disponiveis} color="var(--green)" sub={`${kpis.total - kpis.disponiveis} indisp.`} />
-        <KpiCard label="Bar" value={kpis.bar} color="var(--lime)" />
+        <KpiCard label="Disponíveis" value={kpis.disponiveis} color="#FF6B2C" sub={`${kpis.total - kpis.disponiveis} indisp.`} />
+        <KpiCard label="Bar" value={kpis.bar} color="#FF9B72" />
         <KpiCard label="Cozinha" value={kpis.cozinha} color="var(--gold)" />
         <KpiCard label="Chapa" value={kpis.chapa} color="#e07b39" />
         <KpiCard label="Preço Médio" value={fmtR(kpis.precoMedio)} color="var(--cream)" />
@@ -422,7 +440,7 @@ export default function Cardapio() {
                   className="card"
                   style={{
                     marginBottom: 12,
-                    border: '1px solid var(--green)',
+                    border: '1px solid #FF6B2C',
                     display: 'grid',
                     gridTemplateColumns: '56px 1fr 110px 120px 130px auto',
                     gap: 10,
