@@ -1196,6 +1196,16 @@ async function iniciar() {
   app.post('/api/admin/plataforma/empresas', requerAdministradorPlataforma, (req, res) => {
     try {
       const empresa = cadastrosMestres.criarEmpresa(req.body || {});
+      // Todo novo tenant recebe uma configuração fiscal independente, ainda em
+      // homologação e sem emissão automática. A NFC-e só é liberada após o
+      // checklist fiscal completo da própria empresa.
+      fiscalKytto.salvarConfiguracaoFiscal(`empresa-${empresa.id}`, {
+        cnpj: String(empresa.cnpj || '').replace(/\D/g, ''),
+        razaoSocial: empresa.nome,
+        nomeFantasia: empresa.nomeFantasia,
+        ambiente: 'homologacao',
+        emissaoAutomaticaAtiva: false,
+      });
       let administrador = null;
       const dadosAdmin = req.body?.administrador;
       if (dadosAdmin?.email || dadosAdmin?.nome || dadosAdmin?.senhaInicial) {
@@ -1517,11 +1527,23 @@ async function iniciar() {
     });
   });
 
+  function provisionarFiscalDaEmpresa(empresa) {
+    if (!empresa?.id) return
+    fiscalKytto.salvarConfiguracaoFiscal(`empresa-${empresa.id}`, {
+      cnpj: String(empresa.cnpj || '').replace(/\D/g, ''),
+      razaoSocial: empresa.nome || '',
+      nomeFantasia: empresa.nomeFantasia || empresa.nome || '',
+      ambiente: 'homologacao',
+      emissaoAutomaticaAtiva: false,
+    })
+  }
+
   // Registra Florescer Ação Social com chave PIX na inicialização
   function inicializarFlorescer() {
     const dados = db()
     const empresaFlorescer = cadastrosMestres.listarEmpresas({ incluirInativas: true })
       .find((empresa) => String(empresa.cnpj || '').replace(/\D/g, '') === '13246882000111')
+    if (empresaFlorescer) provisionarFiscalDaEmpresa(empresaFlorescer)
     if (empresaFlorescer && !dados.pagamentos?.[empresaFlorescer.id]?.pix?.length) {
       try {
         pagamentosPix.registrarChavePix(empresaFlorescer.id, {
