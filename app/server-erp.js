@@ -16,6 +16,8 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import { db, save, hydrate, flush } from './db.js';
+import { CATALOGO_BEBIDAS_KYTTO, RESUMO_CATALOGO_BEBIDAS } from './catalogo-bebidas.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -117,15 +119,16 @@ function criarAdminPadrao() {
 // Rota: Login Admin (Painel)
 app.post('/api/admin/login', authLimiter, (req, res) => {
   try {
-    const { user, pass } = req.body;
-    
-    if (!user || !pass) {
+    const { user, pass, senha } = req.body || {};
+    const senhaInformada = pass || senha;
+
+    if (!user || !senhaInformada) {
       return res.status(400).json({ error: 'Usuário e senha são obrigatórios' });
     }
-    
-    const usuario = usuarios.get(user);
-    
-    if (!usuario || !verificarPassword(pass, usuario.senha)) {
+
+    const usuario = usuarios.get(String(user).trim().toLowerCase());
+
+    if (!usuario || !verificarPassword(senhaInformada, usuario.senha)) {
       return res.status(401).json({ error: 'Usuário ou senha inválidos' });
     }
     
@@ -137,7 +140,7 @@ app.post('/api/admin/login', authLimiter, (req, res) => {
     
     res.json({
       token,
-      user: usuario.nome,
+      user: { email: usuario.email, nome: usuario.nome, role: usuario.role || 'admin' },
       role: usuario.role || 'admin'
     });
   } catch (err) {
@@ -414,6 +417,8 @@ try {
 // ============================================================================
 
 async function iniciar() {
+  // Carrega o estado persistente antes de expor qualquer endpoint mutável.
+  await hydrate();
   console.log('\n' + '═'.repeat(65));
   console.log('  🚀 KYTTO Clube — Plataforma de Gestão Integrada v3.0.0');
   console.log('═'.repeat(65));
@@ -477,6 +482,140 @@ async function iniciar() {
         reservasHoje: 0
       }
     });
+  });
+
+  // ── CATÁLOGO / CARDÁPIO ──────────────────────────────────────────────────
+  // O token emitido no login é usado para proteger a administração do catálogo.
+  // A rota de leitura do PDV entrega apenas itens liberados para venda.
+  function usuarioDoToken(req) {
+    const header = String(req.headers.authorization || '');
+    if (!header.startsWith('Bearer ')) return null;
+    try {
+      const decoded = Buffer.from(header.slice(7), 'base64').toString('utf8');
+      const email = decoded.split(':')[0]?.trim().toLowerCase();
+      return email ? usuarios.get(email) || null : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function requerEditorCatalogo(req, res, next) {
+    const usuario = usuarioDoToken(req);
+    if (!usuario || usuario.tipo !== 'admin') {
+      return res.status(401).json({ erro: 'Autenticação administrativa necessária' });
+    }
+    req.usuario = usuario;
+    next();
+  }
+
+  function cardapioPersistido() {
+    const estado = db();
+    if (!Array.isArray(estado.cardapio)) estado.cardapio = [];
+    return estado.cardapio;
+  }
+
+  function normalizarProduto(payload = {}) {
+    const texto = (valor, tamanho = 160) => String(valor || '').trim().slice(0, tamanho);
+    const numero = (valor) => {
+      const n = Number(String(valor ?? '').replace(',', '.'));
+      return Number.isFinite(n) && n >= 0 ? n : null;
+    };
+    return {
+      nome: texto(payload.nome),
+      marca: texto(payload.marca),
+      tipo: texto(payload.tipo),
+      embalagem: texto(payload.embalagem),
+      volumeMl: payload.volumeMl == null || payload.volumeMl === '' ? null : Math.max(0, Math.floor(Number(payload.volumeMl) || 0)),
+      cat: texto(payload.cat) || 'Bebidas',
+      subcategoria: texto(payload.subcategoria) || 'Bebidas',
+      setor: ['bar', 'cozinha', 'chapa'].includes(payload.setor) ? payload.setor : 'bar',
+      emoji: texto(payload.emoji, 12),
+      preco: numero(payload.preco),
+      unidade: texto(payload.unidade, 12) || 'UN',
+      cozinha: Boolean(payload.cozinha),
+      indisponivel: Boolean(payload.indisponivel),
+      precoPendente: Boolean(payload.precoPendente),
+      semAlcool: Boolean(payload.semAlcool),
+      fiscal: payload.fiscal && typeof payload.fiscal === 'object' ? payload.fiscal : undefined,
+    };
+  }
+
+  app.get('/api/cardapio', (req, res) => {
+    const itens = cardapioPersistido().filter((item) => !item.indisponivel);
+    res.json(itens);
+  });
+
+  app.get('/api/admin/cardapio', requerEditorCatalogo, (req, res) => {
+    res.json(cardapioPersistido());
+  });
+
+  app.get('/api/admin/cardapio/catalogo-bebidas', requerEditorCatalogo, (req, res) => {
+    const cadastrados = cardapioPersistido().filter((item) => item.catalogoSeed === 'kytto-bebidas-v1').length;
+    res.json({ ...RESUMO_CATALOGO_BEBIDAS, cadastrados, versao: 'kytto-bebidas-v1' });
+  });
+
+  app.post('/api/admin/cardapio/catalogo-bebidas', requerEditorCatalogo, (req, res) => {
+    const itens = cardapioPersistido();
+    const existentes = new Set(itens.map((item) => `${item.marca}|${item.tipo}|${item.embalagem}`.toLowerCase()));
+    const agora = new Date().toISOString();
+    const adicionados = [];
+
+    for (const produtoBase of CATALOGO_BEBIDAS_KYTTO) {
+      const produto = normalizarProduto(produtoBase);
+      const chave = `${produto.marca}|${produto.tipo}|${produto.embalagem}`.toLowerCase();
+      if (existentes.has(chave)) continue;
+      const id = `beb-${Date.now().toString(36)}-${String(itens.length + adicionados.length + 1).padStart(3, '0')}`;
+      adicionados.push({
+        ...produto,
+        id,
+        ordem: itens.length + adicionados.length + 1,
+        catalogoSeed: 'kytto-bebidas-v1',
+        criadoEm: agora,
+        atualizadoEm: agora,
+      });
+      existentes.add(chave);
+    }
+
+    if (adicionados.length) {
+      itens.push(...adicionados);
+      save();
+    }
+    res.status(201).json({ ok: true, adicionados: adicionados.length, total: itens.length, versao: 'kytto-bebidas-v1' });
+  });
+
+  app.post('/api/admin/cardapio', requerEditorCatalogo, (req, res) => {
+    const produto = normalizarProduto(req.body);
+    if (!produto.nome || produto.preco === null) {
+      return res.status(400).json({ erro: 'Nome e preço válido são obrigatórios' });
+    }
+    const itens = cardapioPersistido();
+    const agora = new Date().toISOString();
+    const novo = { ...produto, id: `prd-${Date.now().toString(36)}-${itens.length + 1}`, ordem: itens.length + 1, criadoEm: agora, atualizadoEm: agora };
+    itens.push(novo);
+    save();
+    res.status(201).json({ ok: true, item: novo });
+  });
+
+  app.patch('/api/admin/cardapio/:id', requerEditorCatalogo, (req, res) => {
+    const itens = cardapioPersistido();
+    const item = itens.find((produto) => produto.id === req.params.id);
+    if (!item) return res.status(404).json({ erro: 'Produto não encontrado' });
+    const atualizado = normalizarProduto({ ...item, ...req.body });
+    if (!atualizado.nome || atualizado.preco === null) {
+      return res.status(400).json({ erro: 'Nome e preço válido são obrigatórios' });
+    }
+    Object.assign(item, atualizado, { atualizadoEm: new Date().toISOString() });
+    save();
+    res.json({ ok: true, item });
+  });
+
+  app.delete('/api/admin/cardapio/:id', requerEditorCatalogo, (req, res) => {
+    const itens = cardapioPersistido();
+    const indice = itens.findIndex((produto) => produto.id === req.params.id);
+    if (indice < 0) return res.status(404).json({ erro: 'Produto não encontrado' });
+    const [removido] = itens.splice(indice, 1);
+    save();
+    res.json({ ok: true, removido: { id: removido.id, nome: removido.nome } });
   });
 
   // Rota: Notícias
@@ -556,8 +695,9 @@ process.on('unhandledRejection', (e) => console.error('[UnhandledRejection]', e?
 process.on('uncaughtException', (e) => console.error('[UncaughtException]', e?.message || e));
 
 for (const sig of ['SIGTERM', 'SIGINT']) {
-  process.on(sig, () => {
-    console.log(`\n⚠️  ${sig} recebido — encerrando graciosamente...`);
+  process.on(sig, async () => {
+    console.log(`\n⚠️  ${sig} recebido — persistindo alterações antes de encerrar...`);
+    try { await flush(); } catch (err) { console.error('Falha ao persistir no encerramento:', err?.message || err); }
     process.exit(0);
   });
 }

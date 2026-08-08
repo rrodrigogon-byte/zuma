@@ -6,6 +6,8 @@ substitutions:
   _REPOSITORY: cloud-run-source-deploy
   _SERVICE_NAME: setpoint-ultra
   _IMAGE_TAG: latest
+  _GCS_BUCKET: setpoint-kytto-data-avd-108835006988
+  _GCS_OBJECT: setpoint-ultra/db.json
 
 steps:
   - id: build-image
@@ -50,14 +52,16 @@ steps:
       - '1'
       - --min-instances
       - '0'
+      # O catálogo é persistido em um único JSON no Cloud Storage; uma instância
+      # evita concorrência de escrita e preserva a consistência operacional.
       - --max-instances
-      - '10'
+      - '1'
       - --concurrency
       - '80'
       - --timeout
       - 60s
       - --set-env-vars
-      - NODE_ENV=production,TZ=America/Cuiaba
+      - NODE_ENV=production,TZ=America/Cuiaba,GCS_BUCKET=${_GCS_BUCKET},GCS_OBJECT=${_GCS_OBJECT}
     waitFor:
       - push-image
 

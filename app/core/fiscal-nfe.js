@@ -5,7 +5,7 @@
  */
 
 import forge from 'node-forge';
-import { DOMParser, XMLSerializer } from 'xmldom';
+import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import { db } from './database.js';
 import { gerarDanfe } from './danfe-generator.js';
 

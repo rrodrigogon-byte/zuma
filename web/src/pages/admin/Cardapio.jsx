@@ -34,6 +34,14 @@ const SETORES = ['bar', 'cozinha', 'chapa']
 
 const EMPTY_FORM = {
   nome: '',
+  marca: '',
+  tipo: '',
+  embalagem: '',
+  volumeMl: '',
+  subcategoria: 'Bebidas',
+  unidade: 'UN',
+  semAlcool: false,
+  precoPendente: false,
   emoji: '',
   cat: 'Bebidas',
   preco: '',
@@ -118,6 +126,7 @@ export default function Cardapio() {
   const [busca, setBusca]           = useState('')
   const [filtroCat, setFiltroCat]   = useState('Todas')
   const [filtroDisp, setFiltroDisp] = useState('todos') // 'todos'|'disponiveis'|'indisponiveis'
+  const [importandoBebidas, setImportandoBebidas] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -221,7 +230,7 @@ export default function Cardapio() {
   }
 
   const handleNovoSave = async () => {
-    if (!novoForm.nome || !novoForm.preco) return toast('Nome e preço obrigatórios', 'warn')
+    if (!novoForm.nome || novoForm.preco === '' || Number(novoForm.preco) < 0) return toast('Nome e preço válido são obrigatórios', 'warn')
     setSaving(true)
     try {
       await api.post('/api/admin/cardapio', {
@@ -241,6 +250,14 @@ export default function Cardapio() {
   const openEditar = (item) => {
     setEditForm({
       nome: item.nome,
+      marca: item.marca || '',
+      tipo: item.tipo || '',
+      embalagem: item.embalagem || '',
+      volumeMl: item.volumeMl || '',
+      subcategoria: item.subcategoria || 'Bebidas',
+      unidade: item.unidade || 'UN',
+      semAlcool: !!item.semAlcool,
+      precoPendente: !!item.precoPendente,
       emoji: item.emoji || '',
       cat: item.cat,
       preco: item.preco,
@@ -253,7 +270,7 @@ export default function Cardapio() {
   }
 
   const handleEditSave = async () => {
-    if (!editForm.nome || !editForm.preco) return toast('Nome e preço obrigatórios', 'warn')
+    if (!editForm.nome || editForm.preco === '' || Number(editForm.preco) < 0) return toast('Nome e preço válido são obrigatórios', 'warn')
     setSaving(true)
     try {
       await api.patch(`/api/admin/cardapio/${editModal.id}`, {
@@ -267,6 +284,20 @@ export default function Cardapio() {
       toast(e?.message || 'Erro ao salvar', 'error')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleImportarCatalogoBebidas = async () => {
+    if (!confirm('Importar o catálogo inicial Kytto de bebidas? Os itens entram indisponíveis e com preço pendente para você revisar antes da venda.')) return
+    setImportandoBebidas(true)
+    try {
+      const resultado = await api.post('/api/admin/cardapio/catalogo-bebidas', {})
+      toast(`${resultado.adicionados || 0} itens de bebidas adicionados para revisão`, 'success')
+      load()
+    } catch (e) {
+      toast(e?.message || 'Erro ao importar catálogo de bebidas', 'error')
+    } finally {
+      setImportandoBebidas(false)
     }
   }
 
@@ -288,6 +319,9 @@ export default function Cardapio() {
         <h1 className="page-title" style={{ margin: 0 }}>Cardápio</h1>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-ghost btn-sm" onClick={() => exportCSV(itensFiltrados)}>⬇ CSV</button>
+          <button className="btn btn-primary btn-sm" onClick={handleImportarCatalogoBebidas} disabled={importandoBebidas}>
+            {importandoBebidas ? 'Importando…' : '🍺 Importar catálogo de bebidas'}
+          </button>
           <button
             className={`btn btn-sm ${showPreview ? 'btn-primary' : 'btn-ghost'}`}
             onClick={() => setShowPreview(v => !v)}
@@ -514,6 +548,24 @@ export default function Cardapio() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div className="form-group">
+                <label>Marca</label>
+                <input value={editForm.marca} onChange={(e) => setEditForm((f) => ({ ...f, marca: e.target.value }))} placeholder="Ex.: Heineken" />
+              </div>
+              <div className="form-group">
+                <label>Tipo / estilo</label>
+                <input value={editForm.tipo} onChange={(e) => setEditForm((f) => ({ ...f, tipo: e.target.value }))} placeholder="Ex.: Puro Malte" />
+              </div>
+              <div className="form-group">
+                <label>Embalagem</label>
+                <input value={editForm.embalagem} onChange={(e) => setEditForm((f) => ({ ...f, embalagem: e.target.value }))} placeholder="Ex.: Long Neck 330 ml" />
+              </div>
+              <div className="form-group">
+                <label>Volume (ml)</label>
+                <input type="number" min="0" value={editForm.volumeMl} onChange={(e) => setEditForm((f) => ({ ...f, volumeMl: e.target.value }))} placeholder="330" />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="form-group">
                 <label>Preço (R$)</label>
                 <input
                   type="number"
@@ -546,7 +598,7 @@ export default function Cardapio() {
                 ))}
               </select>
             </div>
-            <div style={{ display: 'flex', gap: 20 }}>
+            <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', color: '#ddd', fontSize: 14 }}>
                 <input
                   type="checkbox"
@@ -562,6 +614,22 @@ export default function Cardapio() {
                   onChange={(e) => setEditForm((f) => ({ ...f, indisponivel: e.target.checked }))}
                 />
                 Indisponível
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', color: '#ddd', fontSize: 14 }}>
+                <input
+                  type="checkbox"
+                  checked={editForm.precoPendente}
+                  onChange={(e) => setEditForm((f) => ({ ...f, precoPendente: e.target.checked }))}
+                />
+                Preço pendente de revisão
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', color: '#ddd', fontSize: 14 }}>
+                <input
+                  type="checkbox"
+                  checked={editForm.semAlcool}
+                  onChange={(e) => setEditForm((f) => ({ ...f, semAlcool: e.target.checked }))}
+                />
+                Sem álcool
               </label>
             </div>
 
@@ -630,10 +698,12 @@ function ItemCard({ item, isFirst, isLast, onToggleCozinha, onToggleDisponivel, 
             {item.emoji ? <span style={{ marginRight: 6, fontSize: 16 }}>{item.emoji}</span> : null}
             {item.nome}
           </div>
-          <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{item.setor}</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+            {[item.marca, item.tipo, item.embalagem].filter(Boolean).join(' · ') || item.setor}
+          </div>
         </div>
-        <div style={{ fontWeight: 700, color: '#FF6B2C', fontSize: 15, whiteSpace: 'nowrap', marginLeft: 8 }}>
-          {fmtR(item.preco)}
+        <div style={{ fontWeight: 700, color: '#FF6B2C', fontSize: 15, whiteSpace: 'nowrap', marginLeft: 8, textAlign: 'right' }}>
+          {item.precoPendente ? <span style={{ fontSize: 11, color: 'var(--muted)' }}>A definir</span> : fmtR(item.preco)}
         </div>
       </div>
 
