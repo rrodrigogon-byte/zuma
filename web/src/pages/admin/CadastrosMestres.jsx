@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
+import { useAuth } from '../../lib/auth'
 import Modal from '../../components/Modal'
 
 const TABS = [
@@ -23,12 +24,15 @@ function statusColor(status) {
 
 export default function CadastrosMestres() {
   const { toast } = useToast()
+  const { user } = useAuth()
   const [tab, setTab] = useState('funcionarios')
   const [dados, setDados] = useState({ funcionarios: [], fornecedores: [], usuarios: [] })
   const [empresa, setEmpresa] = useState(null)
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(null)
+  const [modalEmpresa, setModalEmpresa] = useState(false)
   const [form, setForm] = useState(EMPTY.funcionarios)
+  const [empresaForm, setEmpresaForm] = useState({ nome: '', nomeFantasia: '', cnpj: '', email: '', telefone: '', administrador: { nome: '', email: '', senhaInicial: '' } })
   const [saving, setSaving] = useState(false)
 
   const aba = useMemo(() => TABS.find((item) => item.id === tab), [tab])
@@ -56,6 +60,23 @@ export default function CadastrosMestres() {
   }, [toast])
 
   useEffect(() => { carregar() }, [carregar])
+
+  const criarEmpresa = async () => {
+    if (!empresaForm.nome || !empresaForm.administrador.nome || !empresaForm.administrador.email || String(empresaForm.administrador.senhaInicial || '').length < 8) {
+      return toast('Informe os dados da empresa e o administrador inicial com senha de ao menos 8 caracteres.', true)
+    }
+    setSaving(true)
+    try {
+      await api.post('/api/admin/plataforma/empresas', empresaForm)
+      toast('Empresa criada com isolamento próprio. Faça novo login para selecioná-la na sessão.')
+      setModalEmpresa(false)
+      setEmpresaForm({ nome: '', nomeFantasia: '', cnpj: '', email: '', telefone: '', administrador: { nome: '', email: '', senhaInicial: '' } })
+    } catch (error) {
+      toast(error.message || 'Não foi possível criar a empresa.', true)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const abrirNovo = () => {
     setForm(EMPTY[tab])
@@ -107,8 +128,9 @@ export default function CadastrosMestres() {
             {empresa?.nomeFantasia ? <strong style={{ color: '#FF6B2C', marginLeft: 6 }}>Empresa: {empresa.nomeFantasia}</strong> : null}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-secondary btn-sm" onClick={carregar}>↺ Atualizar</button>
+          {user?.platformAdmin && <button className="btn btn-secondary btn-sm" onClick={() => setModalEmpresa(true)}>🏢 Nova Empresa</button>}
           <button className="btn btn-primary btn-sm" onClick={abrirNovo}>+ Novo {aba?.label?.slice(0, -1)}</button>
         </div>
       </div>
@@ -167,6 +189,23 @@ export default function CadastrosMestres() {
           </tbody>
         </table>
       </div>
+
+      {modalEmpresa && (
+        <Modal title="Nova empresa isolada" onClose={() => setModalEmpresa(false)} width={620}>
+          <div style={{ display: 'grid', gap: 12, paddingBottom: 16 }}>
+            <div className="card" style={{ fontSize: 12, color: 'var(--muted)', background: 'rgba(255,107,44,.06)' }}>
+              A nova empresa terá cadastros, cardápio, estoque, mesas, financeiro e fiscal próprios. O administrador abaixo visualizará somente os dados dela.
+            </div>
+            <Linha><Campo label="Razão social *"><input value={empresaForm.nome} onChange={(e) => setEmpresaForm({ ...empresaForm, nome: e.target.value })} /></Campo><Campo label="Nome fantasia"><input value={empresaForm.nomeFantasia} onChange={(e) => setEmpresaForm({ ...empresaForm, nomeFantasia: e.target.value })} /></Campo></Linha>
+            <Linha><Campo label="CNPJ"><input value={empresaForm.cnpj} onChange={(e) => setEmpresaForm({ ...empresaForm, cnpj: e.target.value })} /></Campo><Campo label="Email corporativo"><input type="email" value={empresaForm.email} onChange={(e) => setEmpresaForm({ ...empresaForm, email: e.target.value })} /></Campo></Linha>
+            <Campo label="Telefone"><input value={empresaForm.telefone} onChange={(e) => setEmpresaForm({ ...empresaForm, telefone: e.target.value })} /></Campo>
+            <h3 style={{ margin: '8px 0 0', color: '#12283F', fontSize: 15 }}>Administrador inicial</h3>
+            <Linha><Campo label="Nome *"><input value={empresaForm.administrador.nome} onChange={(e) => setEmpresaForm({ ...empresaForm, administrador: { ...empresaForm.administrador, nome: e.target.value } })} /></Campo><Campo label="Email *"><input type="email" value={empresaForm.administrador.email} onChange={(e) => setEmpresaForm({ ...empresaForm, administrador: { ...empresaForm.administrador, email: e.target.value } })} /></Campo></Linha>
+            <Campo label="Senha inicial *"><input type="password" value={empresaForm.administrador.senhaInicial} onChange={(e) => setEmpresaForm({ ...empresaForm, administrador: { ...empresaForm.administrador, senhaInicial: e.target.value } })} /></Campo>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}><button className="btn btn-ghost" onClick={() => setModalEmpresa(false)}>Cancelar</button><button className="btn btn-primary" onClick={criarEmpresa} disabled={saving}>{saving ? 'Criando...' : 'Criar empresa isolada'}</button></div>
+          </div>
+        </Modal>
+      )}
 
       {modal && (
         <Modal title={`${modal.modo === 'novo' ? 'Novo' : 'Editar'} ${aba.label.slice(0, -1)}`} onClose={() => setModal(null)} width={620}>

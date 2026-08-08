@@ -145,6 +145,11 @@ function criarAdminPadrao() {
     cadastrosMestres.atualizarUsuario(cadastrosMestres.EMPRESA_PADRAO_ID, usuario.id, { senhaHash: usuario.senhaHash });
     console.log(`✅ Administrador padrão associado à empresa ${cadastrosMestres.EMPRESA_PADRAO_ID}`);
   }
+  // Atualiza instalações que já haviam criado o administrador antes da inclusão
+  // explícita do papel de administrador da plataforma.
+  if (usuario && usuario.platformAdmin !== true && usuario.id && usuario.empresaId) {
+    usuario = cadastrosMestres.atualizarUsuario(usuario.empresaId, usuario.id, { platformAdmin: true });
+  }
   usuario.empresasAcessiveis ||= [usuario.empresaId || cadastrosMestres.EMPRESA_PADRAO_ID];
   return espelharUsuarioEmMemoria(usuario);
 }
@@ -186,7 +191,7 @@ app.post('/api/admin/login', authLimiter, (req, res) => {
 
     res.json({
       token,
-      user: { email: usuario.email, nome: usuario.nome, role: papel, empresaId: empresaAtiva.id, roles: usuario.roles || [papel] },
+      user: { email: usuario.email, nome: usuario.nome, role: papel, empresaId: empresaAtiva.id, roles: usuario.roles || [papel], platformAdmin: usuario.platformAdmin === true },
       role: papel,
       sessao: {
         loja_ativa: { id: empresaAtiva.id, nome: empresaAtiva.nomeFantasia || empresaAtiva.nome, ativa: empresaAtiva.ativa !== false, empresaId: empresaAtiva.id },
@@ -1071,6 +1076,20 @@ async function iniciar() {
     }
   });
 
+  function requerAdministradorPlataforma(req, res, next) {
+    const usuario = usuarioDoToken(req) || espelharUsuarioEmMemoria(cadastrosMestres.obterUsuarioPorEmail(
+      (() => {
+        try { return Buffer.from(String(req.headers.authorization || '').replace(/^Bearer\\s+/i, ''), 'base64').toString('utf8').split(':')[0]; }
+        catch { return ''; }
+      })()
+    ));
+    if (!usuario || usuario.ativo === false || usuario.platformAdmin !== true) {
+      return res.status(403).json({ erro: 'Permissão de administração da plataforma necessária.' });
+    }
+    req.usuario = usuario;
+    next();
+  }
+
   // ── CADASTROS MESTRES MULTIENTIDADE ──────────────────────────────────────
   // Funcionários, usuários e fornecedores são registros únicos por empresa e
   // podem ser reutilizados pelos módulos de RH, compras, financeiro e operação.
@@ -1163,6 +1182,51 @@ async function iniciar() {
       espelharUsuarioEmMemoria(usuario);
       const { senhaHash, ...resposta } = usuario;
       res.json({ ok: true, usuario: resposta });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  // ── GESTÃO DE EMPRESAS (SOMENTE ADMINISTRADOR DA PLATAFORMA) ────────────
+  app.get('/api/admin/plataforma/empresas', requerAdministradorPlataforma, (req, res) => {
+    res.json({ ok: true, empresas: cadastrosMestres.listarEmpresas({ incluirInativas: true }) });
+  });
+
+  app.post('/api/admin/plataforma/empresas', requerAdministradorPlataforma, (req, res) => {
+    try {
+      const empresa = cadastrosMestres.criarEmpresa(req.body || {});
+      let administrador = null;
+      const dadosAdmin = req.body?.administrador;
+      if (dadosAdmin?.email || dadosAdmin?.nome || dadosAdmin?.senhaInicial) {
+        const senhaInicial = String(dadosAdmin.senhaInicial || '');
+        if (!dadosAdmin?.nome || !dadosAdmin?.email || senhaInicial.length < 8) {
+          return res.status(400).json({ erro: 'Para criar o administrador da empresa, informe nome, email e senha inicial com ao menos 8 caracteres.' });
+        }
+        administrador = cadastrosMestres.criarUsuario(empresa.id, {
+          nome: dadosAdmin.nome, email: dadosAdmin.email, telefone: dadosAdmin.telefone || '',
+          roles: ['admin', 'gerente'], senhaHash: hashPassword(senhaInicial), empresasAcessiveis: [empresa.id],
+        });
+        espelharUsuarioEmMemoria(administrador);
+      }
+      // O administrador de plataforma também recebe acesso à empresa recém-criada
+      // para auditoria e suporte, sem conceder esse acesso a nenhum outro usuário.
+      if (req.usuario?.id && req.usuario?.empresaId) {
+        const acessos = [...new Set([...(req.usuario.empresasAcessiveis || [req.usuario.empresaId]), empresa.id])];
+        const atualizado = cadastrosMestres.atualizarUsuario(req.usuario.empresaId, req.usuario.id, { empresasAcessiveis: acessos });
+        espelharUsuarioEmMemoria(atualizado);
+      }
+      const respostaAdmin = administrador ? (({ senhaHash, ...safe }) => safe)(administrador) : null;
+      res.status(201).json({ ok: true, empresa, administrador: respostaAdmin });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.patch('/api/admin/plataforma/empresas/:empresaId', requerAdministradorPlataforma, (req, res) => {
+    try {
+      const empresa = cadastrosMestres.atualizarEmpresa(req.params.empresaId, req.body || {});
+      if (!empresa) return res.status(404).json({ erro: 'Empresa não encontrada.' });
+      res.json({ ok: true, empresa });
     } catch (error) {
       res.status(400).json({ erro: error.message });
     }
