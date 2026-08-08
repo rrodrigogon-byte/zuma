@@ -20,17 +20,17 @@ export default function Login() {
 
     try {
       if (aba === 'painel') {
-        const { data } = await api.post('/admin/login', { user, senha })
+        const data = await api.post('/api/admin/login', { user, senha })
         login(data.token, data.user)
         if (data.user.role === 'org') navigate('/admin')
         else navigate('/pdv')
       } else {
-        const { data } = await api.post('/auth/login', { email: user, senha })
+        const data = await api.post('/api/auth/login', { email: user, senha })
         login(data.token, data.user)
         navigate('/meu-painel')
       }
     } catch (err) {
-      setErro(err.response?.data?.error || 'Erro ao fazer login')
+      setErro(err?.message || 'Erro ao fazer login')
     } finally {
       setLoading(false)
     }
