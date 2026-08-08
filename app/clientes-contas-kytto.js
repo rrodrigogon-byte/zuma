@@ -43,21 +43,34 @@ function migrarEstruturaLegada(estado) {
     estado.clientesKytto = { empresas: {} };
   }
   const store = estado.clientesKytto;
-  if (store.empresas && typeof store.empresas === 'object') return store;
-
   // A versão anterior possuía um único conjunto global. A migração idempotente o
   // associa à empresa padrão sem apagar ou misturar os registros existentes.
-  const legado = {
-    clientes: store.clientes || {},
-    contasReceber: store.contasReceber || {},
-    alertas: store.alertas || {},
-    fechamentoDiario: store.fechamentoDiario || {},
-  };
-  store.empresas = { [EMPRESA_PADRAO_ID]: legado };
-  delete store.clientes;
-  delete store.contasReceber;
-  delete store.alertas;
-  delete store.fechamentoDiario;
+  if (!store.empresas || typeof store.empresas !== 'object') {
+    const legado = {
+      clientes: store.clientes || {},
+      contasReceber: store.contasReceber || {},
+      alertas: store.alertas || {},
+      fechamentoDiario: store.fechamentoDiario || {},
+    };
+    store.empresas = { [EMPRESA_PADRAO_ID]: legado };
+    delete store.clientes;
+    delete store.contasReceber;
+    delete store.alertas;
+    delete store.fechamentoDiario;
+  }
+
+  // Algumas instalações podem ter recebido a estrutura intermediária antes do
+  // campo empresaId existir. Completar esse campo torna a migração retroativa e
+  // evita que registros legítimos desapareçam do filtro da empresa padrão.
+  const legadoPadrao = store.empresas[EMPRESA_PADRAO_ID];
+  if (legadoPadrao) {
+    for (const tipo of ['clientes', 'contasReceber', 'alertas', 'fechamentoDiario']) {
+      legadoPadrao[tipo] ||= {};
+      for (const registro of Object.values(legadoPadrao[tipo])) {
+        if (registro && !registro.empresaId) registro.empresaId = EMPRESA_PADRAO_ID;
+      }
+    }
+  }
   return store;
 }
 
