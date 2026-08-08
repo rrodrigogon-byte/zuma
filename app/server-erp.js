@@ -19,6 +19,7 @@ import path from 'path';
 import { db, save, hydrate, flush } from './db.js';
 import { CATALOGO_BEBIDAS_KYTTO, RESUMO_CATALOGO_BEBIDAS } from './catalogo-bebidas.js';
 import { CATALOGO_ESPETINHOS_KYTTO, RESUMO_CATALOGO_ESPETINHOS } from './catalogo-espetinhos.js';
+import * as clientesKytto from './clientes-contas-kytto.js';
 import * as fiscalKytto from './fiscal-kytto.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -851,6 +852,95 @@ async function iniciar() {
   // Rota: Notícias
   app.get('/api/noticias', (req, res) => {
     res.json([]);
+  });
+
+  // ── CLIENTES E CONTAS A RECEBER ──────────────────────────────────────────
+  app.post('/api/admin/clientes', requerEditorCatalogo, (req, res) => {
+    try {
+      const cliente = clientesKytto.criarCliente(req.body);
+      save();
+      res.status(201).json({ ok: true, cliente });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.get('/api/admin/clientes', requerEditorCatalogo, (req, res) => {
+    try {
+      const clientes = clientesKytto.listarClientes();
+      res.json({ ok: true, clientes });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.patch('/api/admin/clientes/:clienteId', requerEditorCatalogo, (req, res) => {
+    try {
+      const cliente = clientesKytto.atualizarCliente(req.params.clienteId, req.body);
+      if (!cliente) return res.status(404).json({ erro: 'Cliente não encontrado.' });
+      save();
+      res.json({ ok: true, cliente });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.post('/api/admin/contas-receber', requerEditorCatalogo, (req, res) => {
+    try {
+      const conta = clientesKytto.criarContaReceber(req.body);
+      save();
+      res.status(201).json({ ok: true, conta });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.get('/api/admin/contas-receber', requerEditorCatalogo, (req, res) => {
+    try {
+      const contas = clientesKytto.listarContasReceber(req.query);
+      res.json({ ok: true, contas });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.patch('/api/admin/contas-receber/:contaId', requerEditorCatalogo, (req, res) => {
+    try {
+      const conta = clientesKytto.atualizarContaReceber(req.params.contaId, req.body);
+      if (!conta) return res.status(404).json({ erro: 'Conta a receber não encontrada.' });
+      save();
+      res.json({ ok: true, conta });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.get('/api/admin/alertas-vencimento', requerEditorCatalogo, (req, res) => {
+    try {
+      const alertas = clientesKytto.verificarAlertasVencimento();
+      res.json({ ok: true, alertas, total: alertas.length });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.post('/api/admin/fechamento-diario', requerEditorCatalogo, (req, res) => {
+    try {
+      const fechamento = clientesKytto.criarFechamentoDiario(req.body);
+      save();
+      res.status(201).json({ ok: true, fechamento });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.get('/api/admin/fechamento-diario', requerEditorCatalogo, (req, res) => {
+    try {
+      const fechamentos = clientesKytto.listarFechamentosDiarios();
+      res.json({ ok: true, fechamentos });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
   });
 
   // ── MAPA DE MESAS ────────────────────────────────────────────────────────
