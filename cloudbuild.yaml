@@ -63,7 +63,7 @@ steps:
       - --set-env-vars
       - NODE_ENV=production,TZ=America/Cuiaba,GCS_BUCKET=${_GCS_BUCKET},GCS_OBJECT=${_GCS_OBJECT},SCHEDULER_SERVICE_ACCOUNT=108835006988-compute@developer.gserviceaccount.com,SCHEDULER_AUDIENCE=https://setpoint.kytto.com.br/api/internal/financeiro/rotina-diaria
       - --update-secrets
-      - FISCAL_CERT_MASTER_KEY=setpoint-ultra-fiscal-master-key:latest
+      - FISCAL_CERT_MASTER_KEY=setpoint-ultra-fiscal-master-key:latest,PAYMENTS_MASTER_KEY=setpoint-ultra-payments-master-key:latest
     waitFor:
       - push-image
 

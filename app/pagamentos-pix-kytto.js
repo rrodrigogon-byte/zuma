@@ -5,7 +5,28 @@
  * Data: 2026-08-08
  */
 
+import crypto from 'crypto'
 import { db, save } from './db.js'
+
+function paymentsMasterKey() {
+  const raw = process.env.PAYMENTS_MASTER_KEY
+  if (!raw || raw.length < 24) throw new Error('Cofre de pagamentos indisponível. A chave mestra não foi configurada.')
+  return crypto.createHash('sha256').update(raw).digest()
+}
+
+function encryptSecret(value) {
+  const iv = crypto.randomBytes(12)
+  const cipher = crypto.createCipheriv('aes-256-gcm', paymentsMasterKey(), iv)
+  const encrypted = Buffer.concat([cipher.update(Buffer.from(String(value), 'utf8')), cipher.final()])
+  return { cipher: 'AES-256-GCM', iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64'), data: encrypted.toString('base64') }
+}
+
+export function decryptPaymentSecret(payload) {
+  if (!payload?.data || !payload?.iv || !payload?.tag) throw new Error('Credencial de pagamento protegida é inválida.')
+  const decipher = crypto.createDecipheriv('aes-256-gcm', paymentsMasterKey(), Buffer.from(payload.iv, 'base64'))
+  decipher.setAuthTag(Buffer.from(payload.tag, 'base64'))
+  return Buffer.concat([decipher.update(Buffer.from(payload.data, 'base64')), decipher.final()]).toString('utf8')
+}
 
 export const pagamentosPix = {
   // ── CONFIGURAÇÃO PIX POR EMPRESA ──────────────────────────────────────
@@ -95,7 +116,7 @@ export const pagamentosPix = {
       nome: config.nome,
       tipo: config.tipo, // 'rede', 'cielo', 'stone', 'getnet'
       chavePublica: config.chavePublica || '',
-      chavePrivada: config.chavePrivada ? Buffer.from(config.chavePrivada).toString('base64') : '', // Criptografado
+      chavePrivadaProtegida: config.chavePrivada ? encryptSecret(config.chavePrivada) : null,
       terminal: config.terminal || '',
       loja: config.loja || '',
       ativa: true,
@@ -105,7 +126,8 @@ export const pagamentosPix = {
 
     dados.pagamentos[empresaId].adquirentes.push(novoAdquirente)
     save()
-    return { ...novoAdquirente, chavePrivada: '[protegido]' }
+    const { chavePrivadaProtegida, ...seguro } = novoAdquirente
+    return { ...seguro, credencialConfigurada: Boolean(chavePrivadaProtegida) }
   },
 
   /**
@@ -231,7 +253,8 @@ export const pagamentosPix = {
     if (!dados.pagamentos[empresaId]) dados.pagamentos[empresaId] = {}
 
     dados.pagamentos[empresaId].mercadoPago = {
-      accessToken: Buffer.from(config.accessToken).toString('base64'),
+      accessTokenProtegido: encryptSecret(config.accessToken),
+      webhookSecretProtegido: config.webhookSecret ? encryptSecret(config.webhookSecret) : null,
       publicKey: config.publicKey || '',
       userId: config.userId || '',
       ativa: true,
@@ -240,7 +263,8 @@ export const pagamentosPix = {
     }
 
     save()
-    return { ...dados.pagamentos[empresaId].mercadoPago, accessToken: '[protegido]' }
+    const { accessTokenProtegido, webhookSecretProtegido, ...seguro } = dados.pagamentos[empresaId].mercadoPago
+    return { ...seguro, accessTokenConfigurado: Boolean(accessTokenProtegido), webhookConfigurado: Boolean(webhookSecretProtegido) }
   },
 
   /**
@@ -253,6 +277,9 @@ export const pagamentosPix = {
     return {
       ativa: config.ativa,
       userId: config.userId,
+      publicKey: config.publicKey || '',
+      accessTokenConfigurado: Boolean(config.accessTokenProtegido),
+      webhookConfigurado: Boolean(config.webhookSecretProtegido),
       criadaEm: config.criadaEm,
     }
   },

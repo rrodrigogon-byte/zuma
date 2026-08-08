@@ -1282,6 +1282,40 @@ async function iniciar() {
     }
   })
 
+  app.post('/api/admin/pagamentos/adquirentes', requerEditorCatalogo, (req, res) => {
+    try {
+      const adquirente = pagamentosPix.registrarAdquirente(req.empresaId, req.body)
+      res.status(201).json({ ok: true, adquirente })
+    } catch (error) {
+      res.status(400).json({ erro: error.message })
+    }
+  })
+
+  app.get('/api/admin/pagamentos/adquirentes', requerEditorCatalogo, (req, res) => {
+    try {
+      res.json({ ok: true, adquirentes: pagamentosPix.listarAdquirentes(req.empresaId) })
+    } catch (error) {
+      res.status(400).json({ erro: error.message })
+    }
+  })
+
+  app.post('/api/admin/pagamentos/mercadopago/config', requerEditorCatalogo, (req, res) => {
+    try {
+      const config = pagamentosPix.registrarMercadoPago(req.empresaId, req.body)
+      res.status(201).json({ ok: true, config })
+    } catch (error) {
+      res.status(400).json({ erro: error.message })
+    }
+  })
+
+  app.get('/api/admin/pagamentos/mercadopago/config', requerEditorCatalogo, (req, res) => {
+    try {
+      res.json({ ok: true, config: pagamentosPix.obterConfigMercadoPago(req.empresaId) })
+    } catch (error) {
+      res.status(400).json({ erro: error.message })
+    }
+  })
+
   // ── MAPA DE MESAS ────────────────────────────────────────────────────────
   // Mesas são dados operacionais próprios, persistidos junto ao cardápio e
   // estoque. Cada mesa pode ter rótulo, nome de referência e uma conta/cliente
