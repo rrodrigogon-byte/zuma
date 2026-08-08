@@ -1,0 +1,227 @@
+import { useState, useEffect, useCallback } from 'react'
+import { api, fmtR } from '../../lib/api'
+import { useToast } from '../../hooks/useToast'
+import Modal from '../../components/Modal'
+
+const EMPTY_FORM = {
+  nome: '',
+  tipo: 'pf',
+  cpfCnpj: '',
+  email: '',
+  telefone: '',
+  endereco: '',
+  limiteCreditoMensal: 0,
+  diasVencimento: 30,
+  observacao: ''
+}
+
+export default function Clientes() {
+  const { toast } = useToast()
+  const [clientes, setClientes] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [busca, setBusca] = useState('')
+  const [modal, setModal] = useState(null) // null | 'novo' | cliente_id
+  const [form, setForm] = useState(EMPTY_FORM)
+  const [saving, setSaving] = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const { clientes } = await api.get('/api/admin/clientes')
+      setClientes(clientes || [])
+    } catch (e) {
+      toast('Erro ao carregar clientes', true)
+    } finally {
+      setLoading(false)
+    }
+  }, [toast])
+
+  useEffect(() => { load() }, [load])
+
+  const handleSave = async () => {
+    if (!form.nome) return toast('Nome do cliente é obrigatório', true)
+    setSaving(true)
+    try {
+      if (modal === 'novo') {
+        await api.post('/api/admin/clientes', form)
+        toast('Cliente cadastrado com sucesso')
+      } else {
+        await api.patch(`/api/admin/clientes/${modal}`, form)
+        toast('Cliente atualizado com sucesso')
+      }
+      setModal(null)
+      load()
+    } catch (e) {
+      toast(e.message || 'Erro ao salvar cliente', true)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const openNovo = () => {
+    setForm(EMPTY_FORM)
+    setModal('novo')
+  }
+
+  const openEditar = (c) => {
+    setForm({
+      nome: c.nome || '',
+      tipo: c.tipo || 'pf',
+      cpfCnpj: c.cpfCnpj || '',
+      email: c.email || '',
+      telefone: c.telefone || '',
+      endereco: c.endereco || '',
+      limiteCreditoMensal: c.limiteCreditoMensal || 0,
+      diasVencimento: c.diasVencimento || 30,
+      observacao: c.observacao || ''
+    })
+    setModal(c.id)
+  }
+
+  const filtrados = clientes.filter(c => {
+    const term = busca.toLowerCase()
+    return !term || c.nome.toLowerCase().includes(term) || (c.cpfCnpj || '').includes(term) || (c.email || '').toLowerCase().includes(term)
+  })
+
+  // KPIs
+  const totalClientes = clientes.length
+  const totalCredito = clientes.reduce((acc, c) => acc + (c.limiteCreditoMensal || 0), 0)
+  const totalDevedor = clientes.reduce((acc, c) => acc + (c.saldoDevedor || 0), 0)
+  const clientesEmRisco = clientes.filter(c => c.risco === 'alto').length
+
+  return (
+    <div className="page">
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:24, flexWrap:'wrap', gap:12 }}>
+        <h1 className="page-title" style={{ margin:0 }}>👥 Clientes & Contas</h1>
+        <div style={{ display:'flex', gap:8 }}>
+          <button className="btn btn-secondary btn-sm" onClick={load}>↺ Atualizar</button>
+          <button className="btn btn-primary btn-sm" onClick={openNovo}>+ Novo Cliente</button>
+        </div>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:12, marginBottom:24 }}>
+        <div className="kpi" style={{ borderLeft:'4px solid #FF6B2C' }}>
+          <div className="kpi-label">Total de Clientes</div>
+          <div className="kpi-value">{totalClientes}</div>
+        </div>
+        <div className="kpi" style={{ borderLeft:'4px solid #FF9B72' }}>
+          <div className="kpi-label">Limite de Crédito Total</div>
+          <div className="kpi-value" style={{ color:'#FF9B72' }}>{fmtR(totalCredito)}</div>
+        </div>
+        <div className="kpi" style={{ borderLeft:'4px solid #FFB703' }}>
+          <div className="kpi-label">Saldo Devedor Total</div>
+          <div className="kpi-value" style={{ color:'#FFB703' }}>{fmtR(totalDevedor)}</div>
+        </div>
+        <div className="kpi" style={{ borderLeft:'4px solid #e74c3c' }}>
+          <div className="kpi-label">Clientes em Risco Alto</div>
+          <div className="kpi-value" style={{ color:'#e74c3c' }}>{clientesEmRisco}</div>
+        </div>
+      </div>
+
+      <div style={{ marginBottom:16 }}>
+        <input type="search" className="input" placeholder="🔍 Buscar por nome, CPF/CNPJ ou email..." value={busca} onChange={e => setBusca(e.target.value)} style={{ maxWidth: 400 }} />
+      </div>
+
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Nome / Razão Social</th>
+              <th>Contato</th>
+              <th>Limite Mensal</th>
+              <th>Saldo Devedor</th>
+              <th>Score</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && <tr><td colSpan="6" style={{ textAlign:'center', padding:20 }}>Carregando...</td></tr>}
+            {!loading && filtrados.length === 0 && <tr><td colSpan="6" style={{ textAlign:'center', padding:20, color:'var(--muted)' }}>Nenhum cliente encontrado.</td></tr>}
+            {filtrados.map(c => (
+              <tr key={c.id}>
+                <td>
+                  <div style={{ fontWeight: 600 }}>{c.nome}</div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>{c.tipo.toUpperCase()} {c.cpfCnpj ? `· ${c.cpfCnpj}` : ''}</div>
+                </td>
+                <td>
+                  <div style={{ fontSize: 13 }}>{c.telefone || '—'}</div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>{c.email}</div>
+                </td>
+                <td>{fmtR(c.limiteCreditoMensal)}</td>
+                <td>
+                  <span style={{ color: c.saldoDevedor > 0 ? '#FFB703' : 'inherit', fontWeight: c.saldoDevedor > 0 ? 600 : 400 }}>
+                    {fmtR(c.saldoDevedor)}
+                  </span>
+                </td>
+                <td>
+                  <span className="badge" style={{ background: c.risco === 'baixo' ? 'rgba(46,204,113,0.1)' : c.risco === 'alto' ? 'rgba(231,76,60,0.1)' : 'rgba(255,183,3,0.1)', color: c.risco === 'baixo' ? '#2ecc71' : c.risco === 'alto' ? '#e74c3c' : '#FFB703' }}>
+                    {c.scoreCredito} ({c.risco})
+                  </span>
+                </td>
+                <td style={{ textAlign: 'right' }}>
+                  <button className="btn btn-ghost btn-sm" onClick={() => openEditar(c)}>Editar</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {modal && (
+        <Modal title={modal === 'novo' ? 'Novo Cliente' : 'Editar Cliente'} onClose={() => setModal(null)} width={600}>
+          <div style={{ display: 'grid', gap: 12, paddingBottom: 16 }}>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Nome / Razão Social *</label>
+                <input value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} placeholder="Nome completo" />
+              </div>
+              <div className="form-group" style={{ maxWidth: 120 }}>
+                <label>Tipo</label>
+                <select value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value })}>
+                  <option value="pf">Pessoa Física</option>
+                  <option value="pj">Pessoa Jurídica</option>
+                </select>
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>CPF / CNPJ</label>
+                <input value={form.cpfCnpj} onChange={e => setForm({ ...form, cpfCnpj: e.target.value })} placeholder="000.000.000-00" />
+              </div>
+              <div className="form-group">
+                <label>Telefone</label>
+                <input value={form.telefone} onChange={e => setForm({ ...form, telefone: e.target.value })} placeholder="(00) 00000-0000" />
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Email</label>
+              <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="email@exemplo.com" />
+            </div>
+            <div className="form-group">
+              <label>Endereço Completo</label>
+              <input value={form.endereco} onChange={e => setForm({ ...form, endereco: e.target.value })} placeholder="Rua, Número, Bairro, Cidade - UF" />
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Limite de Crédito Mensal (R$)</label>
+                <input type="number" min="0" step="0.01" value={form.limiteCreditoMensal} onChange={e => setForm({ ...form, limiteCreditoMensal: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label>Prazo Padrão (Dias)</label>
+                <input type="number" min="1" max="90" value={form.diasVencimento} onChange={e => setForm({ ...form, diasVencimento: e.target.value })} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Observações Internas</label>
+              <textarea value={form.observacao} onChange={e => setForm({ ...form, observacao: e.target.value })} rows={3} placeholder="Anotações sobre o cliente..." />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+              <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Salvando...' : 'Salvar Cliente'}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  )
+}

@@ -86,6 +86,9 @@ const Agropecuaria    = lazy(() => import('./pages/admin/Agropecuaria'))
 const Varejo          = lazy(() => import('./pages/admin/Varejo'))
 const Compras         = lazy(() => import('./pages/admin/Compras'))
 const ConfiguracaoFiscal = lazy(() => import('./pages/admin/ConfiguracaoFiscal'))
+const Clientes = lazy(() => import('./pages/admin/Clientes'))
+const ContasReceber = lazy(() => import('./pages/admin/ContasReceber'))
+const FechamentoDiario = lazy(() => import('./pages/admin/FechamentoDiario'))
 const ERP             = lazy(() => import('./pages/admin/ERP'))
 const LojaModa        = lazy(() => import('./pages/admin/LojaModa'))
 const BarbeariaERP    = lazy(() => import('./pages/admin/BarbeariaERP'))
@@ -163,6 +166,9 @@ export default function App() {
           <Route path="/admin/contatos"       element={<Layout><Contatos /></Layout>} />
           <Route path="/admin/lojas"          element={<Layout><Lojas /></Layout>} />
           <Route path="/admin/notas"          element={<Layout><NotasFiscais /></Layout>} />
+          <Route path="/admin/clientes"       element={<Layout><Clientes /></Layout>} />
+          <Route path="/admin/contas-receber" element={<Layout><ContasReceber /></Layout>} />
+          <Route path="/admin/fechamento-diario" element={<Layout><FechamentoDiario /></Layout>} />
           <Route path="/admin/pdv-offline"    element={<Layout><PDVOffline /></Layout>} />
           <Route path="/admin/erp"            element={<Layout><ERP /></Layout>} />
           <Route path="/admin/oficina"         element={<Layout><Oficina /></Layout>} />
