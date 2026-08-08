@@ -62,6 +62,8 @@ steps:
       - 60s
       - --set-env-vars
       - NODE_ENV=production,TZ=America/Cuiaba,GCS_BUCKET=${_GCS_BUCKET},GCS_OBJECT=${_GCS_OBJECT}
+      - --update-secrets
+      - FISCAL_CERT_MASTER_KEY=setpoint-ultra-fiscal-master-key:latest
     waitFor:
       - push-image
 

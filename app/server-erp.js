@@ -18,6 +18,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import { db, save, hydrate, flush } from './db.js';
 import { CATALOGO_BEBIDAS_KYTTO, RESUMO_CATALOGO_BEBIDAS } from './catalogo-bebidas.js';
+import * as fiscalKytto from './fiscal-kytto.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -360,7 +361,8 @@ async function registrarModulos() {
     // ── MÓDULOS PDV E FISCAL ────────────────────────────────────────────────
     { prefixo: '/api/v1/pdv',           arquivo: './modules/pdv/routes.js',           nome: 'PDV' },
     { prefixo: '/api/v1/caixa',         arquivo: './modules/caixa/routes.js',         nome: 'Caixa' },
-    { prefixo: '/api/v1/fiscal',        arquivo: './modules/fiscal/routes.js',        nome: 'Fiscal (NFC-e/NF-e/NF-Se)' },
+    // Fiscal é montado diretamente abaixo: a produção usa db.json persistido no GCS,
+    // enquanto o módulo legado pressupõe PostgreSQL.
     { prefixo: '/api/v1/pagamentos',    arquivo: './modules/pagamentos-multi/routes.js', nome: 'Pagamentos Multi-Adquirente' },
 
     // ── MÓDULOS ALIMENTAÇÃO ─────────────────────────────────────────────────
@@ -514,6 +516,71 @@ async function iniciar() {
     req.usuario = usuario;
     next();
   }
+
+  // ── FISCAL / CERTIFICADOS A1 ──────────────────────────────────────────────
+  // Usa a mesma autenticação administrativa do catálogo e mantém certificados
+  // cifrados em objeto dedicado do GCS. Nunca retorna senha, CSC ou arquivo A1.
+  const fiscalTenantId = (req) => `conta-${req.usuario?.email || 'principal'}`;
+  const fiscalResposta = (config) => fiscalKytto.limparDadosSensiveis(config);
+
+  app.get('/api/v1/fiscal/config', requerEditorCatalogo, (req, res) => {
+    res.json({ ok: true, config: fiscalResposta(fiscalKytto.obterConfiguracaoFiscal(fiscalTenantId(req))) });
+  });
+
+  app.post('/api/v1/fiscal/config', requerEditorCatalogo, (req, res) => {
+    try {
+      const config = fiscalKytto.salvarConfiguracaoFiscal(fiscalTenantId(req), req.body || {});
+      res.json({ ok: true, config: fiscalResposta(config), mensagem: 'Configuração fiscal salva.' });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.get('/api/v1/fiscal/certificados', requerEditorCatalogo, async (req, res) => {
+    try {
+      res.json({ ok: true, certificados: await fiscalKytto.listarCertificados(fiscalTenantId(req)) });
+    } catch (error) {
+      res.status(500).json({ erro: error.message });
+    }
+  });
+
+  app.post('/api/v1/fiscal/certificado', requerEditorCatalogo, async (req, res) => {
+    try {
+      const config = await fiscalKytto.importarCertificadoA1(fiscalTenantId(req), {
+        arquivoBase64: req.body?.pfx_base64 || req.body?.arquivoBase64,
+        senha: req.body?.senha,
+        nomeArquivo: req.body?.nomeArquivo || req.body?.nome_arquivo || 'certificado-a1.p12',
+      });
+      res.status(201).json({ ok: true, config: fiscalResposta(config), mensagem: 'Certificado A1 validado, cifrado e associado à empresa.' });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.post('/api/v1/fiscal/certificados/:id/ativar', requerEditorCatalogo, (req, res) => {
+    try {
+      const config = fiscalKytto.ativarCertificado(fiscalTenantId(req), req.params.id);
+      res.json({ ok: true, config: fiscalResposta(config), mensagem: 'Certificado ativo atualizado.' });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.get('/api/v1/fiscal/documentos', requerEditorCatalogo, (req, res) => {
+    res.json({ ok: true, documentos: fiscalKytto.listarDocumentos(fiscalTenantId(req)) });
+  });
+
+  // Este endpoint valida prontidão, reserva numeração e registra a solicitação.
+  // O envio à SEFAZ permanece bloqueado até que os requisitos cadastrais e as
+  // regras fiscais por produto estejam completos, evitando emissão inválida.
+  app.post('/api/v1/fiscal/nfce/preflight', requerEditorCatalogo, (req, res) => {
+    try {
+      const documento = fiscalKytto.registrarPreflightEmissao(fiscalTenantId(req), req.body || {});
+      res.status(201).json({ ok: true, documento, mensagem: 'NFC-e preparada para autorização após a validação fiscal.' });
+    } catch (error) {
+      res.status(422).json({ erro: error.message });
+    }
+  });
 
   function cardapioPersistido() {
     const estado = db();
