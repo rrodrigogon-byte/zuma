@@ -139,7 +139,7 @@ async function staleWhileRevalidate(request, cacheName) {
 // ── Push notifications (futuro) ───────────────────────────────────────────────
 self.addEventListener('push', event => {
   const data = event.data?.json() || {}
-  const title = data.title || 'Kytto Clube'
+  const title = data.title || 'Kytto'
   const options = {
     body: data.body || 'Nova notificação',
     icon: '/icon-192.png',

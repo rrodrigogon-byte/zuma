@@ -3,15 +3,15 @@ import { Link } from 'react-router-dom'
 
 /* ─── Paleta ──────────────────────────────────────────────────────────────── */
 const C = {
-  deep:    '#071A0E',
+  deep:    '#12283F',
   forest:  '#12283F',
-  green:   '#1B4D2E',
-  lime:    '#4CAF50',
+  green:   '#12283F',
+  lime:    '#2D6F9E',
   accent:  '#FF9B72',
   gold:    '#FF6B2C',
   goldL:   '#E8C87A',
   cream:   '#FFF4EC',
-  muted:   '#6a8a6a',
+  muted:   '#2D6F9E',
   white:   '#ffffff',
   glass:   'rgba(255,255,255,0.06)',
   glassB:  'rgba(255,255,255,0.12)',
@@ -127,8 +127,8 @@ const GLOBAL_CSS = `
 
   .ttc-btn-primary {
     display: inline-flex; align-items: center; gap: 8px;
-    background: linear-gradient(135deg, #FF9B72, #4CAF50);
-    color: #071A0E; font-weight: 700; font-size: 14px;
+    background: linear-gradient(135deg, #FF9B72, #2D6F9E);
+    color: #12283F; font-weight: 700; font-size: 14px;
     letter-spacing: .05em; text-transform: uppercase;
     padding: 14px 32px; border-radius: 50px;
     border: none; cursor: pointer; text-decoration: none;
@@ -138,7 +138,7 @@ const GLOBAL_CSS = `
   .ttc-btn-primary:hover {
     transform: translateY(-3px);
     box-shadow: 0 8px 30px rgba(255,107,44,0.6);
-    background: linear-gradient(135deg, #9FE65A, #5DBF60);
+    background: linear-gradient(135deg, #8AA9C0, #8AA9C0);
   }
   .ttc-btn-outline {
     display: inline-flex; align-items: center; gap: 8px;
@@ -156,7 +156,7 @@ const GLOBAL_CSS = `
   .ttc-btn-gold {
     display: inline-flex; align-items: center; gap: 8px;
     background: linear-gradient(135deg, #FF6B2C, #E8C87A);
-    color: #071A0E; font-weight: 700; font-size: 14px;
+    color: #12283F; font-weight: 700; font-size: 14px;
     letter-spacing: .05em; text-transform: uppercase;
     padding: 14px 32px; border-radius: 50px;
     border: none; cursor: pointer; text-decoration: none;
@@ -184,7 +184,7 @@ const GLOBAL_CSS = `
 
   .ticker-wrap {
     overflow: hidden; width: 100%;
-    background: linear-gradient(90deg, #FF9B72, #4CAF50, #FF6B2C, #FF9B72);
+    background: linear-gradient(90deg, #FF9B72, #2D6F9E, #FF6B2C, #FF9B72);
     padding: 10px 0;
   }
   .ticker-inner {
@@ -195,7 +195,7 @@ const GLOBAL_CSS = `
   .ticker-item {
     white-space: nowrap; padding: 0 40px;
     font-size: 13px; font-weight: 700; letter-spacing: .1em;
-    text-transform: uppercase; color: #071A0E;
+    text-transform: uppercase; color: #12283F;
   }
 
   .gallery-item { overflow: hidden; border-radius: 16px; cursor: pointer; }
@@ -211,7 +211,7 @@ const GLOBAL_CSS = `
   }
 
   .carteirinha-card {
-    background: linear-gradient(135deg, #071A0E 0%, #12283F 50%, #1B4D2E 100%);
+    background: linear-gradient(135deg, #12283F 0%, #12283F 50%, #12283F 100%);
     border: 2px solid rgba(255,107,44,0.4);
     border-radius: 24px;
     padding: 32px;
@@ -270,8 +270,8 @@ const GLOBAL_CSS = `
     white-space: nowrap;
   }
   .estrutura-tab.active {
-    background: linear-gradient(135deg, #FF9B72, #4CAF50);
-    color: #071A0E; border-color: transparent;
+    background: linear-gradient(135deg, #FF9B72, #2D6F9E);
+    color: #12283F; border-color: transparent;
     box-shadow: 0 4px 16px rgba(255,107,44,0.4);
   }
   .estrutura-tab:not(.active) {
@@ -443,7 +443,7 @@ const PLANOS = [
     nome: 'Individual',
     preco: 'R$ 189',
     periodo: '/mês',
-    cor: 'linear-gradient(135deg, #1B4D2E, #12283F)',
+    cor: 'linear-gradient(135deg, #12283F, #12283F)',
     itens: ['1 pessoa', 'Acesso às quadras', 'Natação', 'Academia', 'Área social'],
     destaque: false,
   },
@@ -451,7 +451,7 @@ const PLANOS = [
     nome: 'Familiar',
     preco: 'R$ 349',
     periodo: '/mês',
-    cor: 'linear-gradient(135deg, #1a4a1a, #0d3b0d)',
+    cor: 'linear-gradient(135deg, #12283F, #12283F)',
     destaque: true,
     badge: '⭐ Mais popular',
     itens: ['Até 4 pessoas', 'Todos os benefícios', 'Eventos exclusivos', 'Prioridade inscrição', 'App Sócio'],
@@ -521,7 +521,7 @@ function StickyNav({ activeSection, onNav }) {
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 24px', height: 70, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         {/* Logo */}
         <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'linear-gradient(135deg, #FF9B72, #4CAF50)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, color: '#071A0E', boxShadow: '0 4px 16px rgba(255,107,44,0.4)' }}>TTC</div>
+          <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'linear-gradient(135deg, #FF9B72, #2D6F9E)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, color: '#12283F', boxShadow: '0 4px 16px rgba(255,107,44,0.4)' }}>TTC</div>
           <div>
             <div style={{ color: '#fff', fontWeight: 700, fontSize: 15, letterSpacing: '.04em', lineHeight: 1.2 }}>Tênis & Touring</div>
             <div style={{ color: '#FF9B72', fontSize: 10, fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase' }}>Clube</div>
@@ -589,7 +589,7 @@ function Hero({ visitantes, onNavCarteirinha }) {
         background: `
           radial-gradient(ellipse at 70% 40%, rgba(255,107,44,0.15) 0%, transparent 60%),
           radial-gradient(ellipse at 20% 80%, rgba(255,107,44,0.1) 0%, transparent 50%),
-          linear-gradient(160deg, #071A0E 0%, #12283F 40%, #071A0E 100%)
+          linear-gradient(160deg, #12283F 0%, #12283F 40%, #12283F 100%)
         `,
         transform: `translateY(${scrollY * 0.3}px)`,
         animation: 'zoomBg 1.5s ease both',
@@ -703,7 +703,7 @@ function StatsSection() {
   const counts = [c0, c1, c2, c3]
 
   return (
-    <div ref={ref} style={{ background: 'linear-gradient(90deg, #071A0E, #12283F, #071A0E)', borderTop: '1px solid rgba(255,107,44,0.15)', borderBottom: '1px solid rgba(255,107,44,0.15)', padding: '60px 24px' }}>
+    <div ref={ref} style={{ background: 'linear-gradient(90deg, #12283F, #12283F, #12283F)', borderTop: '1px solid rgba(255,107,44,0.15)', borderBottom: '1px solid rgba(255,107,44,0.15)', padding: '60px 24px' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
         {STATS.map((s, i) => (
           <div key={i} style={{ textAlign: 'center', padding: '20px 16px', borderRight: i < STATS.length - 1 ? '1px solid rgba(255,255,255,0.07)' : 'none' }}>
@@ -775,7 +775,7 @@ function QuemSomos() {
               <div style={{ position: 'absolute', left: 10, top: 0, bottom: 0, width: 2, background: 'linear-gradient(180deg, #FF9B72, #FF6B2C, rgba(255,255,255,0.1))' }} />
               {milestones.map((m, i) => (
                 <div key={i} style={{ position: 'relative', paddingBottom: i < milestones.length - 1 ? 36 : 0, paddingLeft: 24 }}>
-                  <div style={{ position: 'absolute', left: -22, top: 4, width: 14, height: 14, borderRadius: '50%', background: i === milestones.length - 1 ? '#FF6B2C' : '#FF9B72', border: '2px solid #071A0E', boxShadow: `0 0 10px ${i === milestones.length - 1 ? '#FF6B2C' : '#FF9B72'}` }} />
+                  <div style={{ position: 'absolute', left: -22, top: 4, width: 14, height: 14, borderRadius: '50%', background: i === milestones.length - 1 ? '#FF6B2C' : '#FF9B72', border: '2px solid #12283F', boxShadow: `0 0 10px ${i === milestones.length - 1 ? '#FF6B2C' : '#FF9B72'}` }} />
                   <div style={{ fontSize: 12, color: '#FF9B72', fontWeight: 700, letterSpacing: '.1em', fontFamily: 'Inter, sans-serif', marginBottom: 4 }}>{m.ano}</div>
                   <div style={{ color: '#fff', fontWeight: 700, fontSize: 16, fontFamily: 'Inter, sans-serif', marginBottom: 4 }}>{m.titulo}</div>
                   <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 14, fontFamily: 'Inter, sans-serif', lineHeight: 1.5 }}>{m.desc}</div>
@@ -795,7 +795,7 @@ function Estrutura() {
   const mod = MODALIDADES[tab]
 
   return (
-    <section id="estrutura" style={{ background: 'linear-gradient(160deg, #0A1F12, #071A0E)', padding: '100px 24px' }}>
+    <section id="estrutura" style={{ background: 'linear-gradient(160deg, #12283F, #12283F)', padding: '100px 24px' }}>
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
         <AnimSection>
           <div style={{ textAlign: 'center', marginBottom: 56 }}>
@@ -870,7 +870,7 @@ function Eventos() {
               <div
                 style={{
                   background: ev.destaque
-                    ? `linear-gradient(135deg, #12283F, #1B4D2E)`
+                    ? `linear-gradient(135deg, #12283F, #12283F)`
                     : 'rgba(255,255,255,0.04)',
                   border: ev.destaque
                     ? '1.5px solid rgba(255,107,44,0.4)'
@@ -885,7 +885,7 @@ function Eventos() {
                 onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = ev.destaque ? '0 20px 60px rgba(255,107,44,0.12)' : 'none' }}
               >
                 {ev.destaque && (
-                  <div style={{ position: 'absolute', top: 18, right: 18, background: 'linear-gradient(135deg, #FF6B2C, #E8C87A)', color: '#071A0E', fontSize: 10, fontWeight: 800, letterSpacing: '.1em', padding: '4px 12px', borderRadius: 50, textTransform: 'uppercase' }}>
+                  <div style={{ position: 'absolute', top: 18, right: 18, background: 'linear-gradient(135deg, #FF6B2C, #E8C87A)', color: '#12283F', fontSize: 10, fontWeight: 800, letterSpacing: '.1em', padding: '4px 12px', borderRadius: 50, textTransform: 'uppercase' }}>
                     DESTAQUE
                   </div>
                 )}
@@ -917,7 +917,7 @@ function Galeria() {
   const visibleFotos = FOTOS.slice(0, 9)
 
   return (
-    <section id="galeria" style={{ background: 'linear-gradient(160deg, #0A1F12, #071A0E)', padding: '100px 24px' }}>
+    <section id="galeria" style={{ background: 'linear-gradient(160deg, #12283F, #12283F)', padding: '100px 24px' }}>
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
         <AnimSection>
           <div style={{ textAlign: 'center', marginBottom: 56 }}>
@@ -968,7 +968,7 @@ function Galeria() {
           <div className="modal-overlay" onClick={() => setLightbox(null)}>
             <div style={{ position: 'relative', maxWidth: 900, width: '100%' }} onClick={e => e.stopPropagation()}>
               <img src={lightbox} alt="Foto ampliada" style={{ width: '100%', borderRadius: 20, maxHeight: '80vh', objectFit: 'contain' }} />
-              <button onClick={() => setLightbox(null)} style={{ position: 'absolute', top: -16, right: -16, width: 40, height: 40, borderRadius: '50%', background: '#FF9B72', border: 'none', cursor: 'pointer', fontSize: 18, color: '#071A0E', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+              <button onClick={() => setLightbox(null)} style={{ position: 'absolute', top: -16, right: -16, width: 40, height: 40, borderRadius: '50%', background: '#FF9B72', border: 'none', cursor: 'pointer', fontSize: 18, color: '#12283F', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
             </div>
           </div>
         )}
@@ -1011,8 +1011,8 @@ function CarteirinhaDigital() {
     w.document.write(`
       <html><head><title>Carteirinha TTC</title>
       <style>
-        body { margin: 0; background: #071A0E; display: flex; align-items: center; justify-content: center; min-height: 100vh; font-family: Inter, sans-serif; }
-        @media print { body { background: #071A0E !important; } }
+        body { margin: 0; background: #12283F; display: flex; align-items: center; justify-content: center; min-height: 100vh; font-family: Inter, sans-serif; }
+        @media print { body { background: #12283F !important; } }
       </style>
       </head><body>${cardRef.current.outerHTML}</body></html>
     `)
@@ -1048,7 +1048,7 @@ function CarteirinhaDigital() {
             {/* Preview card mockup */}
             <div style={{ perspective: 1000, width: '100%', maxWidth: 420 }}>
               <div style={{
-                background: 'linear-gradient(135deg, #071A0E 0%, #12283F 50%, #1B4D2E 100%)',
+                background: 'linear-gradient(135deg, #12283F 0%, #12283F 50%, #12283F 100%)',
                 border: '1.5px solid rgba(255,107,44,0.3)',
                 borderRadius: 24, padding: 32,
                 position: 'relative', overflow: 'hidden',
@@ -1066,7 +1066,7 @@ function CarteirinhaDigital() {
                       <div style={{ fontSize: 11, color: '#FF9B72', fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', fontFamily: 'Inter, sans-serif' }}>Tênis & Touring Clube</div>
                       <div style={{ fontSize: 22, color: '#fff', fontFamily: "'Playfair Display', serif", fontWeight: 700, marginTop: 4 }}>Carteirinha Sócio</div>
                     </div>
-                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg, #FF9B72, #4CAF50)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, color: '#071A0E', fontFamily: 'Inter, sans-serif', flexShrink: 0 }}>TTC</div>
+                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg, #FF9B72, #2D6F9E)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, color: '#12283F', fontFamily: 'Inter, sans-serif', flexShrink: 0 }}>TTC</div>
                   </div>
 
                   {/* Body */}
@@ -1138,7 +1138,7 @@ function CarteirinhaDigital() {
                         <div style={{ fontSize: 11, color: '#FF9B72', fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', fontFamily: 'Inter, sans-serif' }}>Tênis & Touring Clube</div>
                         <div style={{ fontSize: 24, color: '#fff', fontFamily: "'Playfair Display', serif", fontWeight: 700, marginTop: 4 }}>Carteirinha Oficial</div>
                       </div>
-                      <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg, #FF9B72, #4CAF50)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 900, color: '#071A0E', fontFamily: 'Inter, sans-serif', flexShrink: 0 }}>TTC</div>
+                      <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg, #FF9B72, #2D6F9E)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 900, color: '#12283F', fontFamily: 'Inter, sans-serif', flexShrink: 0 }}>TTC</div>
                     </div>
 
                     {/* Body */}
@@ -1240,12 +1240,12 @@ function SejaSocio() {
                 }}
               >
                 {p.badge && (
-                  <div style={{ background: 'linear-gradient(135deg, #FF9B72, #4CAF50)', color: '#071A0E', fontSize: 11, fontWeight: 800, letterSpacing: '.08em', padding: '5px 16px', borderRadius: 50, display: 'inline-block', marginBottom: 20, textTransform: 'uppercase' }}>
+                  <div style={{ background: 'linear-gradient(135deg, #FF9B72, #2D6F9E)', color: '#12283F', fontSize: 11, fontWeight: 800, letterSpacing: '.08em', padding: '5px 16px', borderRadius: 50, display: 'inline-block', marginBottom: 20, textTransform: 'uppercase' }}>
                     {p.badge}
                   </div>
                 )}
                 {p.vip && (
-                  <div style={{ background: 'linear-gradient(135deg, #FF6B2C, #E8C87A)', color: '#071A0E', fontSize: 11, fontWeight: 800, letterSpacing: '.08em', padding: '5px 16px', borderRadius: 50, display: 'inline-block', marginBottom: 20, textTransform: 'uppercase' }}>
+                  <div style={{ background: 'linear-gradient(135deg, #FF6B2C, #E8C87A)', color: '#12283F', fontSize: 11, fontWeight: 800, letterSpacing: '.08em', padding: '5px 16px', borderRadius: 50, display: 'inline-block', marginBottom: 20, textTransform: 'uppercase' }}>
                     👑 VIP Premium
                   </div>
                 )}
@@ -1294,7 +1294,7 @@ function SejaSocio() {
 /* ── Contato ── */
 function Contato() {
   const canais = [
-    { icon: '📱', label: 'WhatsApp', valor: '(65) 9 9999-9999', href: 'https://wa.me/5565999999999', cor: '#25D366' },
+    { icon: '📱', label: 'WhatsApp', valor: '(65) 9 9999-9999', href: 'https://wa.me/5565999999999', cor: '#2D6F9E' },
     { icon: '📞', label: 'Secretaria', valor: '(65) 3333-3333', href: 'tel:+556533333333', cor: '#4FC3F7' },
     { icon: '📧', label: 'E-mail', valor: 'contato@ttcuiaba.com.br', href: 'mailto:contato@ttcuiaba.com.br', cor: '#FF9B72' },
     { icon: '📸', label: 'Instagram', valor: '@ttcuiaba', href: 'https://instagram.com/ttcuiaba', cor: '#E1306C' },

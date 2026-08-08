@@ -35,7 +35,7 @@ function ModalComunicado({ segmentos, onClose, toast }) {
       const r = await api.post('/api/admin/comunicacao', {
         segmento: destino,
         canal,
-        assunto: assunto.trim() || 'Comunicado Kytto Clube',
+        assunto: assunto.trim() || 'Comunicado Kytto',
         mensagem: mensagem.trim(),
       })
       setResultado(r.campanha)

@@ -34,7 +34,7 @@ const S = {
 }
 
 function StatusBadge({ status }) {
-  const map = { confirmada: ['#d1fae5','#065f46','Confirmada'], cancelada: ['#fee2e2','#991b1b','Cancelada'], pendente: ['#fef3c7','#92400e','Pendente'] }
+  const map = { confirmada: ['#FFF9F5','#12283F','Confirmada'], cancelada: ['#fee2e2','#991b1b','Cancelada'], pendente: ['#fef3c7','#92400e','Pendente'] }
   const [bg, color, label] = map[status] || map.pendente
   return <span style={{ display: 'inline-block', padding: '2px 9px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: bg, color }}>{label}</span>
 }
@@ -303,8 +303,8 @@ export default function Quadras() {
               {q.descricao && <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10 }}>{q.descricao}</div>}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
-                  background: q.ativa !== false ? '#d1fae5' : '#fee2e2',
-                  color: q.ativa !== false ? '#065f46' : '#991b1b' }}>
+                  background: q.ativa !== false ? '#FFF9F5' : '#fee2e2',
+                  color: q.ativa !== false ? '#12283F' : '#991b1b' }}>
                   {q.ativa !== false ? 'Ativa' : 'Inativa'}
                 </span>
               </div>

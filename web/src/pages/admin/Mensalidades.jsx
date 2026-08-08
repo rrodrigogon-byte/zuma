@@ -8,7 +8,7 @@ const mesLabel = s => { const [y, m] = s.split('-'); return `${m}/${y}` }
 
 const STATUS_COLOR = {
   pendente:  { bg:'#fef3c7', color:'#92400e', label:'Pendente' },
-  pago:      { bg:'#d1fae5', color:'#065f46', label:'Pago' },
+  pago:      { bg:'#FFF9F5', color:'#12283F', label:'Pago' },
   vencido:   { bg:'#fee2e2', color:'#991b1b', label:'Vencido' },
   cancelado: { bg:'#f3f4f6', color:'#6b7280', label:'Cancelado' },
 }
@@ -171,7 +171,7 @@ function ModalWpp({ mens, onClose, toast }) {
             <div style={{ display:'flex', gap:8, justifyContent:'flex-end', paddingTop:12, borderTop:'1px solid var(--line)' }}>
               <button onClick={onClose} style={{ ...S.btn, background:'none', border:'1px solid var(--line)', color:'var(--muted)' }}>Cancelar</button>
               <button onClick={enviar} disabled={enviando || selecionados.length === 0}
-                style={{ ...S.btn, background: selecionados.length === 0 ? 'var(--line)' : '#25D366', color:'#fff', opacity: enviando ? 0.7 : 1 }}>
+                style={{ ...S.btn, background: selecionados.length === 0 ? 'var(--line)' : '#2D6F9E', color:'#fff', opacity: enviando ? 0.7 : 1 }}>
                 {enviando ? 'Enviando…' : `📱 Enviar (${selecionados.length})`}
               </button>
             </div>
@@ -308,7 +308,7 @@ export default function Mensalidades() {
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
           <button style={{ ...S.btn, background:'rgba(255,107,44,.15)', color:'var(--green)', border:'1px solid var(--green)' }}
             onClick={() => exportCSV(listaFiltrada, hoje)}>📥 CSV</button>
-          <button style={{ ...S.btn, background:'#25D366', color:'#fff' }}
+          <button style={{ ...S.btn, background:'#2D6F9E', color:'#fff' }}
             onClick={() => setModalWpp(true)}>
             📱 WhatsApp Cobrar
           </button>
@@ -372,7 +372,7 @@ export default function Mensalidades() {
           {/* Filter chips rápidos */}
           <div style={S.bar}>
             <FilterChip label="Todos" active={filtroStatus === ''} onClick={() => setFiltroStatus('')} count={counts['']} />
-            <FilterChip label="✓ Pagos" active={filtroStatus === 'pago'} onClick={() => setFiltroStatus('pago')} count={counts.pago} color='#065f46' />
+            <FilterChip label="✓ Pagos" active={filtroStatus === 'pago'} onClick={() => setFiltroStatus('pago')} count={counts.pago} color='#12283F' />
             <FilterChip label="⏳ Pendentes" active={filtroStatus === 'pendente'} onClick={() => setFiltroStatus('pendente')} count={counts.pendente} color='#92400e' />
             <FilterChip label="🔴 Vencidos" active={filtroStatus === 'vencido'} onClick={() => setFiltroStatus('vencido')} count={counts.vencido} color='#991b1b' />
             <FilterChip label="✕ Cancelados" active={filtroStatus === 'cancelado'} onClick={() => setFiltroStatus('cancelado')} count={counts.cancelado} color='#6b7280' />
@@ -425,7 +425,7 @@ export default function Mensalidades() {
                           <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
                             {m.status === 'pendente' && (
                               <button onClick={() => marcarPago(m.id)}
-                                style={{ ...S.btn, padding:'4px 10px', background:'#d1fae5', color:'#065f46', fontSize:11 }}>✓ Pago</button>
+                                style={{ ...S.btn, padding:'4px 10px', background:'#FFF9F5', color:'#12283F', fontSize:11 }}>✓ Pago</button>
                             )}
                             {m.status === 'pendente' && (
                               <button onClick={() => cancelar(m.id)}

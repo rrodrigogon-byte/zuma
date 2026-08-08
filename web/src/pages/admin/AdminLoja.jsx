@@ -200,7 +200,7 @@ export default function AdminLoja() {
         <h1 style={S.h1}>🛍️ Loja — Kit Atleta</h1>
         <div style={{ display: 'flex', gap: 8 }}>
           {aba === 'reservas' && reservas.length > 0 && (
-            <button style={{ ...S.btn, background: '#1e4029', border: '1px solid var(--green)' }}
+            <button style={{ ...S.btn, background: '#294F6C', border: '1px solid var(--green)' }}
               onClick={() => exportCSV(reservasFiltradas)}>
               ⬇ CSV
             </button>

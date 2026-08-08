@@ -4,11 +4,11 @@ import { api } from '../../lib/api'
 
 /* ── Paleta ─────────────────────────────────────────────────────────────── */
 const C = {
-  green: '#1B4D2E', lime: '#7BC142', gold: '#FF6B2C',
+  green: '#12283F', lime: '#2D6F9E', gold: '#FF6B2C',
   silver: '#9e9e9e', bronze: '#cd7f32',
-  bg: '#FFF4EC', card: '#fff', border: '#e0ead0',
-  muted: '#6a8a6a', danger: '#e05555', white: '#fff',
-  text: '#1a2a1a',
+  bg: '#FFF4EC', card: '#fff', border: '#EAF1F7',
+  muted: '#2D6F9E', danger: '#e05555', white: '#fff',
+  text: '#12283F',
 }
 const MEDAL = ['🥇','🥈','🥉']
 
@@ -21,7 +21,7 @@ const fmtTel = v => {
 const fmtCPF = v => v.replace(/\D/g,'').replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4')
 
 const statusBadge = {
-  inscricoes:   { label:'Inscrições Abertas', color:'#27ae60', bg:'#eafaf1' },
+  inscricoes:   { label:'Inscrições Abertas', color:'#2D6F9E', bg:'#FFF9F5' },
   em_andamento: { label:'Em Andamento',       color:'#2980b9', bg:'#eaf4fb' },
   encerrada:    { label:'Encerrada',           color:'#7f8c8d', bg:'#f2f3f4' },
 }
@@ -134,7 +134,7 @@ function ModalInscricao({ liga, onClose, onSuccess }) {
 
         <div style={{display:'flex',gap:10,marginTop:20}}>
           <button onClick={onClose} style={{flex:1,padding:'11px',borderRadius:9,border:`1.5px solid ${C.border}`,
-            background:'#f5f7f0',cursor:'pointer',fontWeight:600,color:C.muted,fontSize:'0.9rem'}}>
+            background:'#FFF9F5',cursor:'pointer',fontWeight:600,color:C.muted,fontSize:'0.9rem'}}>
             Cancelar
           </button>
           <button onClick={enviar} disabled={loading} style={{flex:2,padding:'11px',borderRadius:9,border:'none',
@@ -168,7 +168,7 @@ function TabelaClassificacao({ tabela, liga }) {
           {[podio[1],podio[0],podio[2]].filter(Boolean).map((p, rawIdx) => {
             const real = p === podio[0] ? 0 : p === podio[1] ? 1 : 2
             const h = real===0?100:85
-            const bg = ['linear-gradient(135deg,#FF6B2C,#f0d080)','linear-gradient(135deg,#b8c8b0,#d8e8d0)','linear-gradient(135deg,#cd7f32,#e8a96a)'][real]
+            const bg = ['linear-gradient(135deg,#FF6B2C,#f0d080)','linear-gradient(135deg,#EAF1F7,#EAF1F7)','linear-gradient(135deg,#cd7f32,#e8a96a)'][real]
             return (
               <div key={p.nome} style={{textAlign:'center',width:real===0?130:110}}>
                 <div style={{height:h,background:bg,borderRadius:'12px 12px 0 0',display:'flex',
@@ -202,17 +202,17 @@ function TabelaClassificacao({ tabela, liga }) {
           </thead>
           <tbody>
             {tabela.map((p,i) => (
-              <tr key={p.nome} style={{background:i%2===0?'#f8fbf5':'#fff',
+              <tr key={p.nome} style={{background:i%2===0?'#FFF9F5':'#fff',
                 borderBottom:`1px solid ${C.border}`,transition:'background .15s'}}
-                onMouseEnter={e=>e.currentTarget.style.background='#e8f5dc'}
-                onMouseLeave={e=>e.currentTarget.style.background=i%2===0?'#f8fbf5':'#fff'}>
+                onMouseEnter={e=>e.currentTarget.style.background='#FFF9F5'}
+                onMouseLeave={e=>e.currentTarget.style.background=i%2===0?'#FFF9F5':'#fff'}>
                 <td style={{...td,textAlign:'center',fontWeight:800}}>
                   {i<3?<span style={{fontSize:'1.1rem'}}>{MEDAL[i]}</span>:p.pos}
                 </td>
                 <td style={{...td,fontWeight:600,color:C.green}}>{p.nome}</td>
                 <td style={{...td,textAlign:'center',fontWeight:800,color:C.lime,fontSize:'1rem'}}>{p.pts}</td>
                 <td style={{...td,textAlign:'center',color:C.muted}}>{p.jogos}</td>
-                <td style={{...td,textAlign:'center',color:'#27ae60',fontWeight:700}}>{p.v}</td>
+                <td style={{...td,textAlign:'center',color:'#2D6F9E',fontWeight:700}}>{p.v}</td>
                 <td style={{...td,textAlign:'center',color:C.danger}}>{p.d}</td>
                 <td style={{...td}}><AprBar v={p.v} d={p.d}/></td>
               </tr>
@@ -222,7 +222,7 @@ function TabelaClassificacao({ tabela, liga }) {
       </div>
 
       {/* Legenda de pontos */}
-      <div style={{marginTop:12,padding:'8px 12px',background:'#f0f7e8',borderRadius:8,
+      <div style={{marginTop:12,padding:'8px 12px',background:'#FFF9F5',borderRadius:8,
         fontSize:'0.8rem',color:C.muted,display:'flex',gap:16,flexWrap:'wrap'}}>
         <span>🏆 Vitória: <strong style={{color:C.green}}>{liga.config?.pontosVitoria??3}pts</strong></span>
         <span>😓 Derrota: <strong style={{color:C.green}}>{liga.config?.pontosDerrota??1}pts</strong></span>
@@ -246,7 +246,7 @@ function Rodadas({ rodadas, inscricoes, rodadaAtual }) {
   const statusRodada = {
     pendente:    { label:'Pendente',    color:C.muted,   bg:'#f5f5f5' },
     em_andamento:{ label:'Em Andamento',color:'#2980b9', bg:'#eaf4fb' },
-    encerrada:   { label:'Encerrada',   color:'#27ae60', bg:'#eafaf1' },
+    encerrada:   { label:'Encerrada',   color:'#2D6F9E', bg:'#FFF9F5' },
   }
 
   return (
@@ -263,7 +263,7 @@ function Rodadas({ rodadas, inscricoes, rodadaAtual }) {
             {/* Header da rodada */}
             <div onClick={()=>setAberta(open?-1:ri)}
               style={{display:'flex',alignItems:'center',justifyContent:'space-between',
-                padding:'12px 16px',cursor:'pointer',background:open?'#f0fbea':'#f8fbf5',
+                padding:'12px 16px',cursor:'pointer',background:open?'#FFF9F5':'#FFF9F5',
                 userSelect:'none'}}>
               <div style={{display:'flex',alignItems:'center',gap:10}}>
                 <div style={{width:32,height:32,borderRadius:'50%',background:C.green,
@@ -290,8 +290,8 @@ function Rodadas({ rodadas, inscricoes, rodadaAtual }) {
                   return (
                     <div key={j.id} style={{
                       display:'flex',alignItems:'center',gap:8,padding:'10px 14px',
-                      background:done?'#f0fbea':isBye?'#f8f8f8':'#fff',
-                      border:`1.5px solid ${done?'#c3e6cb':isBye?'#e0e0e0':C.border}`,
+                      background:done?'#FFF9F5':isBye?'#f8f8f8':'#fff',
+                      border:`1.5px solid ${done?'#C5D7E6':isBye?'#e0e0e0':C.border}`,
                       borderRadius:10,
                     }}>
                       {isBye ? (
@@ -308,7 +308,7 @@ function Rodadas({ rodadas, inscricoes, rodadaAtual }) {
                           }}>{j.a}</span>
                           <div style={{textAlign:'center',minWidth:60}}>
                             {done ? (
-                              <span style={{background:'#1B4D2E',color:'#fff',borderRadius:6,
+                              <span style={{background:'#12283F',color:'#fff',borderRadius:6,
                                 padding:'3px 10px',fontSize:'0.78rem',fontWeight:700}}>
                                 {j.placar||'✓'}
                               </span>
@@ -352,7 +352,7 @@ function Participantes({ inscricoes, tabela }) {
       {inscricoes.map((insc,i) => {
         const entry = tabela?.find(t=>t.nome===insc.nome)
         return (
-          <div key={insc.id} style={{background:'#f8fbf5',border:`1.5px solid ${C.border}`,
+          <div key={insc.id} style={{background:'#FFF9F5',border:`1.5px solid ${C.border}`,
             borderRadius:12,padding:'12px 14px',display:'flex',alignItems:'center',gap:10}}>
             <div style={{width:36,height:36,borderRadius:'50%',background:C.green,display:'flex',
               alignItems:'center',justifyContent:'center',color:'#fff',fontWeight:800,fontSize:'0.9rem',
@@ -536,7 +536,7 @@ function Detalheliga() {
       </div>
 
       {/* Abas */}
-      <div style={{display:'flex',gap:4,marginBottom:16,background:'#f0f5e8',borderRadius:12,padding:4,overflowX:'auto'}}>
+      <div style={{display:'flex',gap:4,marginBottom:16,background:'#FFF9F5',borderRadius:12,padding:4,overflowX:'auto'}}>
         {ABAS.map(a => (
           <button key={a.id} onClick={()=>setAba(a.id)}
             style={{flex:1,padding:'9px 8px',border:'none',borderRadius:9,cursor:'pointer',

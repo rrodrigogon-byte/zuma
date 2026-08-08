@@ -133,11 +133,11 @@ const fmtR = v => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 
 
 const TIPO_INFO = {
   manual:    { label: 'Manual',     bg: '#e0e7ff', color: '#3730a3' },
-  reserva:   { label: 'Reserva',    bg: '#d1fae5', color: '#065f46' },
+  reserva:   { label: 'Reserva',    bg: '#FFF9F5', color: '#12283F' },
   compra:    { label: 'Compra',     bg: '#fef3c7', color: '#92400e' },
   inscricao: { label: 'Inscrição',  bg: '#ede9fe', color: '#5b21b6' },
   resgate:   { label: 'Resgate',    bg: '#fee2e2', color: '#991b1b' },
-  bonus:     { label: 'Bônus',      bg: '#d1fae5', color: '#065f46' },
+  bonus:     { label: 'Bônus',      bg: '#FFF9F5', color: '#12283F' },
 }
 
 const S = {
@@ -318,7 +318,7 @@ export default function Pontos() {
                   <td style={S.td}>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button onClick={() => { setForm(f => ({ ...f, socioId: s.id })); setModalCreditar(true) }}
-                        style={{ ...S.btn, padding: '4px 9px', background: '#d1fae5', color: '#065f46', fontSize: 11 }}>+ Creditar</button>
+                        style={{ ...S.btn, padding: '4px 9px', background: '#FFF9F5', color: '#12283F', fontSize: 11 }}>+ Creditar</button>
                       {s.saldo > 0 && (
                         <button onClick={() => { setFormR(f => ({ ...f, socioId: s.id })); setModalResgatar(true) }}
                           style={{ ...S.btn, padding: '4px 9px', background: '#fef3c7', color: '#92400e', fontSize: 11 }}>Resgatar</button>
@@ -455,7 +455,7 @@ export default function Pontos() {
                       <td style={S.td}>
                         <button
                           onClick={() => setEloJogador(s.nome)}
-                          style={{ ...S.btn, padding: '3px 8px', background: eloJogador === s.nome ? '#d1fae5' : 'var(--surface)', border: '1px solid var(--line)', color: 'var(--cream)', fontSize: 11 }}
+                          style={{ ...S.btn, padding: '3px 8px', background: eloJogador === s.nome ? '#FFF9F5' : 'var(--surface)', border: '1px solid var(--line)', color: 'var(--cream)', fontSize: 11 }}
                         >Ver gráfico</button>
                       </td>
                     </tr>

@@ -64,6 +64,14 @@ const CAT_COLORS = {
   geral: '#6b7280', comunicado: '#e05c5c',
 }
 
+const SOLUCOES_KYTTO = [
+  { icon: '🛒', tag: 'Comércio', title: 'Loja e varejo', text: 'PDV, estoque, compras, fiscal e financeiro para operações comerciais.', to: '/admin/varejo' },
+  { icon: '🍽️', tag: 'Alimentação', title: 'Bar e restaurante', text: 'Comandas, cozinha, mesas, pagamentos e produção no mesmo fluxo.', to: '/pdv' },
+  { icon: '🌾', tag: 'Agro', title: 'Agropecuária', text: 'Controle de insumos, compras, documentos e operação especializada.', to: '/admin/agropecuaria' },
+  { icon: '🎾', tag: 'Associativo', title: 'Clube e eventos', text: 'Associados, recorrência, reservas, ranking e experiências.', to: '/admin/torneios' },
+  { icon: '✂️', tag: 'Serviços', title: 'Barbearia e salão', text: 'Agenda, atendimento, comissão, produtos e caixa.', to: '/admin/barbearia' },
+]
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CSS GLOBAL
 // ─────────────────────────────────────────────────────────────────────────────
@@ -513,7 +521,7 @@ function AtletasProSection({ ranking }) {
                         border: '1px solid rgba(255,107,44,0.15)',
                       }}>
                         <div style={{ fontWeight: 900, color: '#FF6B2C', fontSize: '1rem' }}>{a.pontos}</div>
-                        <div style={{ fontSize: '0.62rem', color: '#8a9a8a', fontWeight: 700, textTransform: 'uppercase', marginTop: 2 }}>Pontos</div>
+                        <div style={{ fontSize: '0.62rem', color: '#8AA9C0', fontWeight: 700, textTransform: 'uppercase', marginTop: 2 }}>Pontos</div>
                       </div>
                       <div style={{
                         flex: 1, background: 'rgba(255,107,44,0.08)', borderRadius: 12,
@@ -521,7 +529,7 @@ function AtletasProSection({ ranking }) {
                         border: '1px solid rgba(255,107,44,0.15)',
                       }}>
                         <div style={{ fontWeight: 900, color: '#FF6B2C', fontSize: '1rem' }}>{a.vitoriasDesc}</div>
-                        <div style={{ fontSize: '0.62rem', color: '#8a9a8a', fontWeight: 700, textTransform: 'uppercase', marginTop: 2 }}>Partidas</div>
+                        <div style={{ fontSize: '0.62rem', color: '#8AA9C0', fontWeight: 700, textTransform: 'uppercase', marginTop: 2 }}>Partidas</div>
                       </div>
                     </div>
                   </div>
@@ -793,7 +801,7 @@ function TimelineEvento({ dataInicio, dataFim }) {
                       }}>AGORA</span>
                     )}
                   </div>
-                  <div style={{ fontSize: '0.82rem', color: '#8a9a8a', marginTop: 2 }}>{f.desc}</div>
+                  <div style={{ fontSize: '0.82rem', color: '#8AA9C0', marginTop: 2 }}>{f.desc}</div>
                 </div>
               </div>
             </RevealSection>
@@ -814,7 +822,7 @@ function RankingSkeleton() {
       {[{ w: 240, h: 260 }, { w: 200, h: 220 }, { w: 200, h: 200 }].map((s, i) => (
         <div key={i} style={{
           width: s.w, height: s.h, borderRadius: 20,
-          background: 'linear-gradient(90deg,#e8f0e8 25%,#d4e8d4 50%,#e8f0e8 75%)',
+          background: 'linear-gradient(90deg,#FFF9F5 25%,#EAF1F7 50%,#FFF9F5 75%)',
           backgroundSize: '200% 100%',
           animation: 'shimmerLight 1.5s infinite',
         }} />
@@ -875,7 +883,7 @@ function WhatsAppFAB() {
       style={{
         position: 'fixed', bottom: 28, right: 28, zIndex: 9999,
         width: 58, height: 58, borderRadius: '50%',
-        background: hovered ? '#128C7E' : '#25D366',
+        background: hovered ? '#128C7E' : '#2D6F9E',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         boxShadow: hovered ? '0 8px 28px rgba(37,211,102,0.55)' : '0 4px 18px rgba(37,211,102,0.4)',
         transition: 'background 0.2s, box-shadow 0.2s, transform 0.2s',
@@ -994,8 +1002,38 @@ export default function Home() {
   return (
     <div style={{ fontFamily: "'Work Sans', 'Segoe UI', sans-serif", background: '#FFF4EC', minHeight: '100vh' }}>
 
+      <section style={{
+        background: 'linear-gradient(145deg, #12283F 0%, #17354F 56%, #2D6F9E 100%)',
+        color: '#FFF4EC', padding: 'clamp(66px, 9vw, 108px) 24px 72px', position: 'relative', overflow: 'hidden',
+      }}>
+        <div style={{ position: 'absolute', width: 520, height: 520, borderRadius: '50%', background: 'rgba(255,107,44,.14)', filter: 'blur(4px)', right: '-190px', top: '-260px' }} />
+        <div style={{ maxWidth: 1180, margin: '0 auto', position: 'relative' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 28, flexWrap: 'wrap', alignItems: 'center', marginBottom: 40 }}>
+            <div>
+              <img src="/brand/kytto-negativo.svg" alt="Kytto — Sistemas inteligentes para negócios" style={{ width: 236, maxWidth: '72vw', height: 'auto', display: 'block' }} />
+              <div style={{ marginTop: 14, color: '#FFB293', fontFamily: "'JetBrains Mono', monospace", fontSize: 11, fontWeight: 800, letterSpacing: '.16em', textTransform: 'uppercase' }}>Plataforma multinegócio</div>
+            </div>
+            <button onClick={() => navigate('/login')} style={{ background: '#FF6B2C', color: '#fff', border: 'none', borderRadius: 10, padding: '14px 22px', fontFamily: "'Outfit', sans-serif", fontWeight: 800, cursor: 'pointer', boxShadow: '0 10px 24px rgba(0,0,0,.18)' }}>Acessar plataforma →</button>
+          </div>
+          <div style={{ maxWidth: 760 }}>
+            <h1 style={{ margin: 0, fontFamily: "'Outfit', sans-serif", fontSize: 'clamp(2.5rem, 6vw, 5.1rem)', lineHeight: 1.02, letterSpacing: '-.045em' }}>Sistemas que fazem o seu <span style={{ color: '#FF9B72' }}>negócio subir.</span></h1>
+            <p style={{ margin: '24px 0 0', color: '#EAF1F7', fontSize: 'clamp(1rem, 2vw, 1.25rem)', lineHeight: 1.65, maxWidth: 640 }}>Gestão, vendas, operações, automação e suporte técnico para negócios que precisam funcionar de ponta a ponta.</p>
+          </div>
+          <div id="solucoes" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14, marginTop: 42 }}>
+            {SOLUCOES_KYTTO.map((solucao) => (
+              <button key={solucao.title} onClick={() => navigate(solucao.to)} style={{ textAlign: 'left', background: 'rgba(255,255,255,.97)', border: '1px solid rgba(255,255,255,.34)', borderRadius: 14, padding: '18px', cursor: 'pointer', color: '#12283F', boxShadow: '0 14px 26px rgba(0,0,0,.10)' }}>
+                <div style={{ fontSize: 24 }}>{solucao.icon}</div>
+                <div style={{ marginTop: 13, color: '#FF6B2C', fontSize: 10, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase' }}>{solucao.tag}</div>
+                <div style={{ marginTop: 5, fontFamily: "'Outfit', sans-serif", fontSize: 18, fontWeight: 800 }}>{solucao.title}</div>
+                <div style={{ marginTop: 7, color: '#5A6570', fontSize: 13, lineHeight: 1.45 }}>{solucao.text}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ══════════════════════════════════════════════════════════════════════
-          HERO — ÉPICO
+          EVENTOS E CLUBE — VERTICAL KYTTO
       ══════════════════════════════════════════════════════════════════════ */}
       <section style={{
         position: 'relative',
@@ -1293,7 +1331,7 @@ export default function Home() {
                                 <div style={{
                                   fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: 20,
                                   background: cat.vagas && cat.inscritos >= cat.vagas ? '#e0555522' : '#FF6B2C18',
-                                  color: cat.vagas && cat.inscritos >= cat.vagas ? '#e05555' : '#3a7a1e',
+                                  color: cat.vagas && cat.inscritos >= cat.vagas ? '#e05555' : '#12283F',
                                   border: `1px solid ${cat.vagas && cat.inscritos >= cat.vagas ? '#e0555544' : '#FF6B2C40'}`,
                                 }}>
                                   {cat.vagas ? `${cat.inscritos}/${cat.vagas} vagas` : `${cat.inscritos} inscrito${cat.inscritos !== 1 ? 's' : ''}`}
@@ -1430,8 +1468,8 @@ export default function Home() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
                   {[0, 1, 2].map(i => (
                     <div key={i} style={{ background: '#fff', borderRadius: 18, padding: '22px 20px', height: 160 }}>
-                      <div style={{ background: 'linear-gradient(90deg,#e8f0e8 25%,#d4e8d4 50%,#e8f0e8 75%)', backgroundSize: '200% 100%', animation: 'shimmerLight 1.5s infinite', borderRadius: 999, height: 20, width: '40%', marginBottom: 10 }} />
-                      <div style={{ background: 'linear-gradient(90deg,#e8f0e8 25%,#d4e8d4 50%,#e8f0e8 75%)', backgroundSize: '200% 100%', animation: 'shimmerLight 1.5s infinite', borderRadius: 6, height: 14, width: '85%' }} />
+                      <div style={{ background: 'linear-gradient(90deg,#FFF9F5 25%,#EAF1F7 50%,#FFF9F5 75%)', backgroundSize: '200% 100%', animation: 'shimmerLight 1.5s infinite', borderRadius: 999, height: 20, width: '40%', marginBottom: 10 }} />
+                      <div style={{ background: 'linear-gradient(90deg,#FFF9F5 25%,#EAF1F7 50%,#FFF9F5 75%)', backgroundSize: '200% 100%', animation: 'shimmerLight 1.5s infinite', borderRadius: 6, height: 14, width: '85%' }} />
                     </div>
                   ))}
                 </div>

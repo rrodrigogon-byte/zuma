@@ -6,11 +6,11 @@ const C = {
   green: '#FF6B2C',
   cream: '#FFF4EC',
   gold: '#FF6B2C',
-  card: '#132b1b',
-  cardBorder: '#1e3d28',
-  inputBg: '#0e2216',
-  inputBorder: '#2a4a35',
-  muted: '#7a9e85',
+  card: '#17354F',
+  cardBorder: '#12283F',
+  inputBg: '#12283F',
+  inputBorder: '#12283F',
+  muted: '#8AA9C0',
 }
 
 const inputStyle = {
@@ -248,7 +248,7 @@ export default function Contato() {
               disabled={loading}
               style={{
                 padding: '12px 28px',
-                background: loading ? '#3d7022' : C.green,
+                background: loading ? '#12283F' : C.green,
                 color: '#fff',
                 border: 'none',
                 borderRadius: 9,

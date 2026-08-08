@@ -4,7 +4,7 @@ import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 
 const COR = {
-  inscricao: '#27ae60', pagamento: '#e05c5c',
+  inscricao: '#2D6F9E', pagamento: '#e05c5c',
   reserva: '#FF6B2C', contato: '#FF9B72', estoque: '#FF6B2C',
 }
 

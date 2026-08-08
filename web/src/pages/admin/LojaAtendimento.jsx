@@ -12,7 +12,7 @@ const COLUNAS = [
   { key: 'pendente',   titulo: 'Aguardando preparo', cor: '#FF6B2C', acao: { label: '▶ Iniciar preparo', to: 'preparando' } },
   { key: 'preparando', titulo: 'Em preparação',      cor: '#3498db', acao: { label: '✅ Liberar (pronto)', to: 'pronto' } },
   { key: 'pronto',     titulo: 'Pronto p/ retirada',  cor: '#FF6B2C', acao: { label: '📦 Entregar', to: 'entregue' } },
-  { key: 'entregue',   titulo: 'Entregues (hoje)',    cor: '#6a7a6a', acao: null },
+  { key: 'entregue',   titulo: 'Entregues (hoje)',    cor: '#2D6F9E', acao: null },
 ]
 
 function tempoAtras(iso) {
@@ -116,7 +116,7 @@ export default function LojaAtendimento() {
               <div key={col.key} style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, padding: 12, minHeight: 120 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, paddingBottom: 8, borderBottom: `2px solid ${col.cor}` }}>
                   <span style={{ fontWeight: 800, fontSize: 14, color: col.cor }}>{col.titulo}</span>
-                  <span style={{ background: col.cor, color: '#06120a', borderRadius: 20, padding: '1px 9px', fontWeight: 800, fontSize: 12 }}>{lista.length}</span>
+                  <span style={{ background: col.cor, color: '#12283F', borderRadius: 20, padding: '1px 9px', fontWeight: 800, fontSize: 12 }}>{lista.length}</span>
                 </div>
 
                 {lista.length === 0 ? (
@@ -145,7 +145,7 @@ export default function LojaAtendimento() {
                         disabled={busy === p.id}
                         title={p.pagamento === 'pago' ? 'Reabrir pagamento' : 'Marcar como pago'}
                         style={{ fontSize: 11, fontWeight: 700, cursor: 'pointer', borderRadius: 6, padding: '3px 8px',
-                          border: `1px solid ${p.pagamento === 'pago' ? '#2e6b3a' : '#7a6a2a'}`,
+                          border: `1px solid ${p.pagamento === 'pago' ? '#12283F' : '#7a6a2a'}`,
                           background: p.pagamento === 'pago' ? 'rgba(255,107,44,.12)' : 'rgba(255,107,44,.1)',
                           color: p.pagamento === 'pago' ? '#FF6B2C' : '#FF6B2C' }}>
                         {p.pagamento === 'pago' ? '✓ pago' : '💰 marcar pago'}
@@ -158,7 +158,7 @@ export default function LojaAtendimento() {
                         <button
                           onClick={() => mudarStatus(p, col.acao.to)}
                           disabled={busy === p.id}
-                          style={{ flex: 1, padding: '8px 0', borderRadius: 9, border: 'none', background: col.cor, color: '#06120a', fontWeight: 800, fontSize: 12, cursor: busy === p.id ? 'wait' : 'pointer' }}>
+                          style={{ flex: 1, padding: '8px 0', borderRadius: 9, border: 'none', background: col.cor, color: '#12283F', fontWeight: 800, fontSize: 12, cursor: busy === p.id ? 'wait' : 'pointer' }}>
                           {busy === p.id ? '…' : col.acao.label}
                         </button>
                       )}

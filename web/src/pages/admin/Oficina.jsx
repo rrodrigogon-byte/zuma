@@ -9,7 +9,7 @@ import { useToast } from '../../hooks/useToast'
 const STATUS_LABELS = {
   aberta: { label: 'Aberta', color: '#4a9eff' },
   orcamento_enviado: { label: 'Aguardando Aprovação', color: '#f59e0b' },
-  aprovado: { label: 'Aprovado', color: '#10b981' },
+  aprovado: { label: 'Aprovado', color: '#2D6F9E' },
   em_execucao: { label: 'Em Execução', color: '#8b5cf6' },
   finalizado: { label: 'Finalizado', color: '#FF6B2C' },
   cancelado: { label: 'Cancelado', color: '#e05c5c' },
@@ -169,7 +169,7 @@ export default function Oficina() {
                         {os.status === 'aberta' && (
                           <button
                             onClick={() => enviarOrcamentoWhatsApp(os)}
-                            style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: '#25D366', color: '#fff', cursor: 'pointer', fontSize: 12 }}
+                            style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: '#2D6F9E', color: '#fff', cursor: 'pointer', fontSize: 12 }}
                           >WhatsApp</button>
                         )}
                         {os.status === 'aprovado' && (
@@ -293,7 +293,7 @@ export default function Oficina() {
               {osSelecionada.status === 'aberta' && (
                 <button
                   onClick={() => enviarOrcamentoWhatsApp(osSelecionada)}
-                  style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#25D366', color: '#fff', cursor: 'pointer', fontWeight: 600 }}
+                  style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#2D6F9E', color: '#fff', cursor: 'pointer', fontWeight: 600 }}
                 >📱 Enviar Orçamento WhatsApp</button>
               )}
               <button onClick={() => setModal(null)} style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid var(--line)', background: 'transparent', color: 'var(--fg)', cursor: 'pointer' }}>Fechar</button>

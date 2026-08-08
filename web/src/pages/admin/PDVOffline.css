@@ -5,7 +5,7 @@
 .pdvo-kicker { color: var(--green) !important; font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 .pdvo-actions, .pdvo-stacked-actions, .pdvo-conflict-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .pdvo-button, .pdvo-link-button, .pdvo-text-action, .pdvo-conflict-actions button { border: 0; border-radius: 9px; font: inherit; font-weight: 750; cursor: pointer; transition: transform .16s ease, filter .16s ease, background .16s ease; }
-.pdvo-button { background: var(--green); color: #08220e; padding: 11px 15px; box-shadow: 0 4px 12px rgba(255,107,44,.22); }
+.pdvo-button { background: var(--green); color: #12283F; padding: 11px 15px; box-shadow: 0 4px 12px rgba(255,107,44,.22); }
 .pdvo-button:hover, .pdvo-link-button:hover, .pdvo-conflict-actions button:hover { filter: brightness(1.07); transform: translateY(-1px); }
 .pdvo-button:disabled, .pdvo-link-button:disabled, .pdvo-text-action:disabled, .pdvo-conflict-actions button:disabled { opacity: .55; cursor: not-allowed; transform: none; }
 .pdvo-button--secondary { background: var(--surface2); color: var(--text); box-shadow: none; border: 1px solid var(--line); }
@@ -32,7 +32,7 @@
 .pdvo-table-wrap td small { margin-top: 3px; font-size: 11px; }
 .pdvo-status { display: inline-flex; align-items: center; width: max-content; gap: 5px; border-radius: 999px; padding: 3px 8px; font-size: 10px; font-weight: 800; line-height: 1.2; }
 .pdvo-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.pdvo-status--online, .pdvo-status--processado { color: #25813c; background: rgba(37,129,60,.12); }
+.pdvo-status--online, .pdvo-status--processado { color: #2D6F9E; background: rgba(37,129,60,.12); }
 .pdvo-status--offline, .pdvo-status--falha, .pdvo-status--erro { color: #b73b3b; background: rgba(183,59,59,.12); }
 .pdvo-status--conflito, .pdvo-status--pendente { color: #a76e0a; background: rgba(167,110,10,.12); }
 .pdvo-status--desconhecido { color: #65707a; background: rgba(101,112,122,.12); }
@@ -57,7 +57,7 @@
 .pdvo-alert { display: flex; justify-content: space-between; gap: 12px; padding: 11px 14px; margin-bottom: 14px; border-radius: 9px; font-size: 13px; }
 .pdvo-alert button { border: 0; background: transparent; color: inherit; font-size: 17px; cursor: pointer; }
 .pdvo-alert--error { background: rgba(183,59,59,.13); color: #b73b3b; border: 1px solid rgba(183,59,59,.25); }
-.pdvo-alert--success { background: rgba(37,129,60,.13); color: #25813c; border: 1px solid rgba(37,129,60,.25); }
+.pdvo-alert--success { background: rgba(37,129,60,.13); color: #2D6F9E; border: 1px solid rgba(37,129,60,.25); }
 .pdvo-empty { text-align: center; color: var(--muted); padding: 25px !important; margin: 0; font-size: 13px; }
 .pdvo-modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 20px; background: rgba(0,0,0,.55); backdrop-filter: blur(3px); }
 .pdvo-modal { width: min(620px, 100%); max-height: min(760px, 92vh); overflow: auto; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 28px 90px rgba(0,0,0,.35); }
@@ -74,6 +74,6 @@
 .pdvo-checkbox input { width: auto !important; }
 .pdvo-form footer { display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--line); padding-top: 16px; }
 .pdvo-token p { line-height: 1.55; color: var(--muted); }
-.pdvo-token pre { overflow-wrap: anywhere; white-space: pre-wrap; padding: 13px; border-radius: 9px; background: #121917; color: #b7e89b; font-size: 12px; line-height: 1.5; }
+.pdvo-token pre { overflow-wrap: anywhere; white-space: pre-wrap; padding: 13px; border-radius: 9px; background: #12283F; color: #EAF1F7; font-size: 12px; line-height: 1.5; }
 @media (max-width: 1000px) { .pdvo-cards { grid-template-columns: repeat(2, 1fr); } .pdvo-grid { grid-template-columns: 1fr; } }
 @media (max-width: 680px) { .pdvo-page { padding: 18px; } .pdvo-heading, .pdvo-panel-header, .pdvo-conflict { align-items: stretch; flex-direction: column; } .pdvo-actions .pdvo-button { flex: 1; } .pdvo-cards { grid-template-columns: 1fr; } .pdvo-form-row { grid-template-columns: 1fr; } .pdvo-conflict-actions button { flex: 1; } }

@@ -45,13 +45,13 @@ const INPUT_STYLE = (err) => ({
   width: '100%',
   padding: '12px 14px',
   borderRadius: '10px',
-  border: `1.5px solid ${err ? '#e05555' : '#d0dcc8'}`,
+  border: `1.5px solid ${err ? '#e05555' : '#EAF1F7'}`,
   fontSize: '0.95rem',
   outline: 'none',
   background: '#fff',
   boxSizing: 'border-box',
   transition: 'border-color .15s',
-  color: '#1a2e1a',
+  color: '#12283F',
 })
 
 export default function Inscricao() {
@@ -172,7 +172,7 @@ export default function Inscricao() {
                   Chave PIX (CNPJ)
                 </div>
                 <div style={{
-                  background: '#f0f4e8', borderRadius: '10px', padding: '12px 16px',
+                  background: '#FFF9F5', borderRadius: '10px', padding: '12px 16px',
                   fontWeight: 700, color: '#12283F', fontSize: '1.05rem', letterSpacing: '0.05em',
                 }}>
                   {pixInfo.chave}
@@ -194,7 +194,7 @@ export default function Inscricao() {
                     value={pixInfo.copiaECola}
                     rows={4}
                     style={{
-                      width: '100%', borderRadius: '10px', border: '1.5px solid #d0dcc8',
+                      width: '100%', borderRadius: '10px', border: '1.5px solid #EAF1F7',
                       padding: '10px 12px', fontSize: '0.78rem', color: '#444',
                       resize: 'none', boxSizing: 'border-box', background: '#fafaf6',
                     }}
@@ -243,7 +243,7 @@ export default function Inscricao() {
             <div style={{ fontWeight: 700, color: '#12283F', fontSize: '0.95rem', marginBottom: '8px' }}>
               🏆 Próximos passos
             </div>
-            <ol style={{ margin: 0, paddingLeft: '18px', color: '#3a5a3a', lineHeight: 1.8, fontSize: '0.88rem' }}>
+            <ol style={{ margin: 0, paddingLeft: '18px', color: '#12283F', lineHeight: 1.8, fontSize: '0.88rem' }}>
               <li>Envie o comprovante PIX para o WhatsApp da organização</li>
               <li>Aguarde a <strong>confirmação por e-mail</strong> em até 24 h</li>
               <li>Acompanhe as <strong>chaves do torneio</strong> pela página abaixo</li>
@@ -267,7 +267,7 @@ export default function Inscricao() {
             onClick={() => navigate('/')}
             style={{
               width: '100%', marginTop: '12px',
-              background: 'transparent', border: '2px solid #d0dcc8',
+              background: 'transparent', border: '2px solid #EAF1F7',
               borderRadius: '10px', padding: '12px',
               color: '#5A6570', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem',
             }}
@@ -293,7 +293,7 @@ export default function Inscricao() {
             ← Voltar
           </Link>
           <h1 style={{ fontSize: '2rem', fontWeight: 900, margin: '12px 0 4px' }}>Inscrição</h1>
-          <p style={{ color: '#a0c8a0', margin: 0 }}>4ª Agro Open de Tênis · 07–13 Set 2026</p>
+          <p style={{ color: '#EAF1F7', margin: 0 }}>4ª Agro Open de Tênis · 07–13 Set 2026</p>
         </div>
       </div>
 
@@ -317,7 +317,7 @@ export default function Inscricao() {
               placeholder="Seu nome completo"
               style={INPUT_STYLE(erros.nome)}
               onFocus={e => !erros.nome && (e.target.style.borderColor = '#FF6B2C')}
-              onBlur={e => !erros.nome && (e.target.style.borderColor = '#d0dcc8')}
+              onBlur={e => !erros.nome && (e.target.style.borderColor = '#EAF1F7')}
             />
           ), erros.nome)}
 
@@ -330,7 +330,7 @@ export default function Inscricao() {
                 maxLength={14}
                 style={INPUT_STYLE(erros.cpf)}
                 onFocus={e => !erros.cpf && (e.target.style.borderColor = '#FF6B2C')}
-                onBlur={e => !erros.cpf && (e.target.style.borderColor = '#d0dcc8')}
+                onBlur={e => !erros.cpf && (e.target.style.borderColor = '#EAF1F7')}
               />
             ), erros.cpf)}
             {FIELD('Data de Nascimento *', (
@@ -340,7 +340,7 @@ export default function Inscricao() {
                 onChange={e => set('nasc', e.target.value)}
                 style={INPUT_STYLE(erros.nasc)}
                 onFocus={e => !erros.nasc && (e.target.style.borderColor = '#FF6B2C')}
-                onBlur={e => !erros.nasc && (e.target.style.borderColor = '#d0dcc8')}
+                onBlur={e => !erros.nasc && (e.target.style.borderColor = '#EAF1F7')}
               />
             ), erros.nasc)}
           </div>
@@ -354,7 +354,7 @@ export default function Inscricao() {
                 placeholder="seu@email.com"
                 style={INPUT_STYLE(erros.email)}
                 onFocus={e => !erros.email && (e.target.style.borderColor = '#FF6B2C')}
-                onBlur={e => !erros.email && (e.target.style.borderColor = '#d0dcc8')}
+                onBlur={e => !erros.email && (e.target.style.borderColor = '#EAF1F7')}
               />
             ), erros.email)}
             {FIELD('Telefone / WhatsApp *', (
@@ -365,7 +365,7 @@ export default function Inscricao() {
                 maxLength={16}
                 style={INPUT_STYLE(erros.tel)}
                 onFocus={e => !erros.tel && (e.target.style.borderColor = '#FF6B2C')}
-                onBlur={e => !erros.tel && (e.target.style.borderColor = '#d0dcc8')}
+                onBlur={e => !erros.tel && (e.target.style.borderColor = '#EAF1F7')}
               />
             ), erros.tel)}
           </div>
@@ -394,8 +394,8 @@ export default function Inscricao() {
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     padding: '14px 16px',
                     borderRadius: '12px',
-                    border: `1.5px solid ${sel ? '#FF6B2C' : esgotado ? '#e0e0e0' : '#d0dcc8'}`,
-                    background: sel ? '#f0fae8' : esgotado ? '#fafafa' : '#fafcf8',
+                    border: `1.5px solid ${sel ? '#FF6B2C' : esgotado ? '#e0e0e0' : '#EAF1F7'}`,
+                    background: sel ? '#FFF9F5' : esgotado ? '#fafafa' : '#FFF9F5',
                     cursor: esgotado ? 'not-allowed' : 'pointer',
                     opacity: esgotado ? 0.6 : 1,
                     transition: 'all .15s',
@@ -435,7 +435,7 @@ export default function Inscricao() {
             }}>
               <div>
                 <div style={{ color: '#FF9B72', fontWeight: 600, fontSize: '0.85rem' }}>TOTAL</div>
-                <div style={{ color: '#a0c8a0', fontSize: '0.8rem', marginTop: '2px' }}>
+                <div style={{ color: '#EAF1F7', fontSize: '0.8rem', marginTop: '2px' }}>
                   {form.categorias.length} categoria{form.categorias.length > 1 ? 's' : ''} selecionada{form.categorias.length > 1 ? 's' : ''}
                 </div>
               </div>
@@ -448,7 +448,7 @@ export default function Inscricao() {
           {/* ── LGPD / Consentimento ── */}
           <div style={{
             marginTop: '24px',
-            background: '#f8faf4', border: `1.5px solid ${erros.lgpd ? '#e05555' : '#d0e8c8'}`,
+            background: '#FFF9F5', border: `1.5px solid ${erros.lgpd ? '#e05555' : '#EAF1F7'}`,
             borderRadius: '12px', padding: '14px 16px',
           }}>
             <label style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer' }}>
@@ -458,7 +458,7 @@ export default function Inscricao() {
                 onChange={e => { setLgpdOk(e.target.checked); setErros(err => ({ ...err, lgpd: '' })) }}
                 style={{ marginTop: 3, width: 18, height: 18, accentColor: '#FF6B2C', flexShrink: 0, cursor: 'pointer' }}
               />
-              <span style={{ fontSize: '0.82rem', color: '#3a5a3a', lineHeight: 1.55 }}>
+              <span style={{ fontSize: '0.82rem', color: '#12283F', lineHeight: 1.55 }}>
                 Estou ciente e concordo que meus dados pessoais (nome, CPF, e-mail e telefone) serão utilizados
                 exclusivamente para a realização da inscrição e comunicação sobre o{' '}
                 <strong>4ª Agro Open de Tênis 2026</strong>, conforme a{' '}

@@ -201,13 +201,13 @@ export default function Usuarios() {
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         <input
           className="form-group"
-          style={{ flex: '1 1 200px', margin: 0, padding: '8px 12px', background: 'var(--card)', border: '1px solid #1e4a2e', borderRadius: 8, color: '#fff', fontSize: 14 }}
+          style={{ flex: '1 1 200px', margin: 0, padding: '8px 12px', background: 'var(--card)', border: '1px solid #12283F', borderRadius: 8, color: '#fff', fontSize: 14 }}
           placeholder="Buscar por nome ou e-mail…"
           value={buscaInput}
           onChange={(e) => handleBuscaChange(e.target.value)}
         />
         <select
-          style={{ padding: '8px 12px', background: 'var(--card)', border: '1px solid #1e4a2e', borderRadius: 8, color: filtroRole ? '#fff' : 'var(--muted)', fontSize: 14 }}
+          style={{ padding: '8px 12px', background: 'var(--card)', border: '1px solid #12283F', borderRadius: 8, color: filtroRole ? '#fff' : 'var(--muted)', fontSize: 14 }}
           value={filtroRole}
           onChange={(e) => setFiltroRole(e.target.value)}
         >
@@ -227,7 +227,7 @@ export default function Usuarios() {
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid #1e4a2e' }}>
+              <tr style={{ borderBottom: '1px solid #12283F' }}>
                 {['', 'Nome', 'E-mail', 'Perfil', 'Último acesso', 'Status', 'Ações'].map((h) => (
                   <th key={h} style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
@@ -347,7 +347,7 @@ export default function Usuarios() {
                   <button
                     type="button"
                     onClick={() => setForm((f) => ({ ...f, senha: genSenha() }))}
-                    style={{ background: 'none', border: '1px solid #1e4a2e', borderRadius: 6, padding: '2px 8px', color: 'var(--muted)', cursor: 'pointer', fontSize: 13 }}
+                    style={{ background: 'none', border: '1px solid #12283F', borderRadius: 6, padding: '2px 8px', color: 'var(--muted)', cursor: 'pointer', fontSize: 13 }}
                     title="Gerar senha aleatória"
                   >
                     🎲 Gerar

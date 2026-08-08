@@ -313,7 +313,7 @@ export default function Bracket() {
         <div style={{ textAlign: 'center', padding: '48px 24px' }}>
           <div style={{ fontSize: '3rem', marginBottom: 12 }}>🎾</div>
           <p style={{ color: '#5A6570', fontSize: '1rem', fontWeight: 600 }}>Chave ainda não gerada para esta categoria.</p>
-          <p style={{ color: '#8aaa8a', fontSize: '0.85rem' }}>Aguarde o sorteio oficial ou escolha outra categoria acima.</p>
+          <p style={{ color: '#8AA9C0', fontSize: '0.85rem' }}>Aguarde o sorteio oficial ou escolha outra categoria acima.</p>
         </div>
       ) : (
         <div className="bracket-content">
@@ -341,7 +341,7 @@ export default function Bracket() {
           background: #fff; color: #FF6B2C; font-weight: 600; cursor: pointer; font-size: .85rem;
           transition: all .15s;
         }
-        .cat-btn:hover { background: #f0fae8; }
+        .cat-btn:hover { background: #FFF9F5; }
         .cat-btn--active { background: #FF6B2C; color: #fff; }
 
         .bracket-progresso { display: flex; align-items: center; gap: .75rem; margin-top: .5rem; }
@@ -364,7 +364,7 @@ export default function Bracket() {
           overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.06);
           min-width: 180px;
         }
-        .bracket-match--done { border-color: #d1fae5; }
+        .bracket-match--done { border-color: #FFF9F5; }
         .bracket-match-meta {
           display: flex; gap: .5rem; padding: .2rem .5rem; background: #f9fafb;
           font-size: .7rem; color: #9ca3af; border-top: 1px solid #f3f4f6;
@@ -377,19 +377,19 @@ export default function Bracket() {
           padding: .45rem .6rem; gap: .5rem;
           transition: background .1s;
         }
-        .bracket-player--winner { background: #f0fdf4; }
+        .bracket-player--winner { background: #FFF9F5; }
         .bracket-player--bye { opacity: .45; }
         .bracket-player-nome {
           font-size: .82rem; font-weight: 500; color: #111; flex: 1;
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .bracket-player--winner .bracket-player-nome { color: #16a34a; font-weight: 700; }
+        .bracket-player--winner .bracket-player-nome { color: #2D6F9E; font-weight: 700; }
         .bracket-player-placar {
           font-size: .82rem; font-weight: 700; color: #374151;
           background: #f3f4f6; border-radius: 4px; padding: .1rem .35rem; min-width: 24px;
           text-align: center;
         }
-        .bracket-player--winner .bracket-player-placar { background: #dcfce7; color: #16a34a; }
+        .bracket-player--winner .bracket-player-placar { background: #FFF9F5; color: #2D6F9E; }
 
         /* Grupos */
         .grupos-wrap { display: flex; flex-direction: column; gap: 2rem; }
@@ -420,7 +420,7 @@ export default function Bracket() {
         .jogo-confronto { flex: 1; font-weight: 500; }
         .jogo-quadra { color: #9ca3af; font-size: .78rem; }
         .jogo-p { flex: 1; }
-        .jogo-p.winner { font-weight: 700; color: #16a34a; }
+        .jogo-p.winner { font-weight: 700; color: #2D6F9E; }
         .jogo-placar { font-weight: 700; font-size: .9rem; color: #374151; }
         .jogo-vs { color: #9ca3af; font-size: .75rem; }
 

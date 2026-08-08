@@ -6,7 +6,7 @@ import { useToast } from '../hooks/useToast'
 function KpiCard({ label, value, color }) {
   return (
     <div style={{
-      background:'#0f1f13', border:`2px solid ${color || '#1e3a24'}`, borderRadius:14,
+      background:'#162F46', border:`2px solid ${color || '#294F6C'}`, borderRadius:14,
       padding:'20px 28px', textAlign:'center', minWidth:140, flex:1,
     }}>
       <div style={{ fontSize:42, fontWeight:900, color:color || '#f0f0f0', lineHeight:1 }}>{value}</div>
@@ -22,10 +22,10 @@ function IngressoModal({ ingresso, onValidar, onClose }) {
   return (
     <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }}>
       <div onClick={e => e.stopPropagation()}
-        style={{ background:'#0a1a0d', border:`3px solid ${jaValidado ? '#e74c3c' : '#FF6B2C'}`, borderRadius:20, padding:'40px 48px', minWidth:400, maxWidth:540, textAlign:'center' }}>
+        style={{ background:'#10283F', border:`3px solid ${jaValidado ? '#e74c3c' : '#FF6B2C'}`, borderRadius:20, padding:'40px 48px', minWidth:400, maxWidth:540, textAlign:'center' }}>
         <div style={{ fontSize:16, color:'#888', marginBottom:8, letterSpacing:2, textTransform:'uppercase' }}>Ingresso</div>
         <div style={{ fontSize:40, fontWeight:900, color:'#f0f0f0', lineHeight:1.1, marginBottom:10 }}>{ingresso.nome}</div>
-        <div style={{ display:'inline-block', background:'#1e3a24', color:'#FF6B2C', borderRadius:8, padding:'6px 20px', fontWeight:700, fontSize:18, marginBottom:24 }}>
+        <div style={{ display:'inline-block', background:'#294F6C', color:'#FF6B2C', borderRadius:8, padding:'6px 20px', fontWeight:700, fontSize:18, marginBottom:24 }}>
           {ingresso.tipo}
         </div>
         {jaValidado ? (
@@ -144,7 +144,7 @@ function QRScanner({ onScan, onClose }) {
         <form onSubmit={e => { e.preventDefault(); const v = e.target.qr.value.trim(); if(v){stopCamera();onScan(v)} }}
           style={{ display:'flex', gap:8 }}>
           <input name='qr' placeholder='Cole o código QR aqui…'
-            style={{ background:'#0f1f13', border:'2px solid #2d4a32', borderRadius:10, padding:'10px 14px', fontSize:16, color:'#f0f0f0', outline:'none', width:220 }} />
+            style={{ background:'#162F46', border:'2px solid #345B77', borderRadius:10, padding:'10px 14px', fontSize:16, color:'#f0f0f0', outline:'none', width:220 }} />
           <button type='submit'
             style={{ background:'#FF6B2C', color:'#000', border:'none', borderRadius:10, padding:'0 20px', fontSize:14, fontWeight:900, cursor:'pointer' }}>OK</button>
         </form>
@@ -278,16 +278,16 @@ export default function Portaria() {
           onClose={() => setShowScanner(false)}
         />
       )}
-      <div style={{ minHeight:'100vh', background:'#060e08', color:'#f0f0f0', fontFamily:"'Segoe UI',system-ui,sans-serif", display:'flex', flexDirection:'column', padding:0 }}>
+      <div style={{ minHeight:'100vh', background:'#0B1C2D', color:'#f0f0f0', fontFamily:"'Segoe UI',system-ui,sans-serif", display:'flex', flexDirection:'column', padding:0 }}>
 
         {/* Header */}
-        <div style={{ background:'#0a1a0d', borderBottom:'2px solid #1e3a24', padding:'16px 32px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <div style={{ background:'#10283F', borderBottom:'2px solid #294F6C', padding:'16px 32px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div>
             <div style={{ fontSize:26, fontWeight:900, color:'#FF6B2C', letterSpacing:2 }}>PORTARIA</div>
             <div style={{ fontSize:13, color:'#888', marginTop:2 }}>Controle de acesso — Agro Open</div>
           </div>
           <div style={{ display:'flex', gap:10, alignItems:'center' }}>
-            <button onClick={load} style={{ background:'transparent', color:'#FF6B2C', border:'1px solid #2d4a32', borderRadius:8, padding:'6px 14px', fontSize:13, cursor:'pointer' }}>
+            <button onClick={load} style={{ background:'transparent', color:'#FF6B2C', border:'1px solid #345B77', borderRadius:8, padding:'6px 14px', fontSize:13, cursor:'pointer' }}>
               ↺ Recarregar
             </button>
             <div style={{ fontSize:13, color:'#888' }}>
@@ -304,12 +304,12 @@ export default function Portaria() {
             <KpiCard label="Validados Hoje" value={validadosHoje} color="#FF6B2C" />
             <KpiCard label="Restantes" value={restantes} color={restantes > 0 ? '#FF6B2C' : '#888'} />
             <div style={{
-              background:'#0f1f13', border:`2px solid ${pct >= 80 ? '#FF6B2C' : pct >= 50 ? '#FF6B2C' : '#1e3a24'}`,
+              background:'#162F46', border:`2px solid ${pct >= 80 ? '#FF6B2C' : pct >= 50 ? '#FF6B2C' : '#294F6C'}`,
               borderRadius:14, padding:'20px 28px', textAlign:'center', minWidth:140, flex:1,
             }}>
               <div style={{ fontSize:13, color:'#888', marginBottom:4, fontWeight:600, textTransform:'uppercase', letterSpacing:1 }}>Ocupação</div>
               <div style={{ fontSize:42, fontWeight:900, color: pct >= 80 ? '#FF6B2C' : '#FF6B2C', lineHeight:1 }}>{pct}%</div>
-              <div style={{ background:'#1e3a24', borderRadius:4, height:6, marginTop:10 }}>
+              <div style={{ background:'#294F6C', borderRadius:4, height:6, marginTop:10 }}>
                 <div style={{ width:`${pct}%`, background:'#FF6B2C', borderRadius:4, height:'100%', transition:'width .5s' }} />
               </div>
             </div>
@@ -317,7 +317,7 @@ export default function Portaria() {
 
           {/* Busca + Scanner */}
           <form onSubmit={handleBusca}>
-            <div style={{ background:'#0f1f13', border:'2px solid #1e3a24', borderRadius:14, padding:'20px 24px', position:'relative' }}>
+            <div style={{ background:'#162F46', border:'2px solid #294F6C', borderRadius:14, padding:'20px 24px', position:'relative' }}>
               <label style={{ fontSize:16, color:'#aaa', fontWeight:600, display:'block', marginBottom:10 }}>
                 🔍 Código QR / Nome do participante
               </label>
@@ -325,10 +325,10 @@ export default function Portaria() {
                 <input ref={inputRef} type="text" value={busca} onChange={e => setBusca(e.target.value)}
                   placeholder="Escaneie o QR ou digite o nome/ID…"
                   autoComplete="off"
-                  style={{ flex:1, background:'#060e08', border:'2px solid #2d4a32', borderRadius:10, padding:'14px 20px', fontSize:22, color:'#f0f0f0', outline:'none', fontFamily:'inherit' }}
+                  style={{ flex:1, background:'#0B1C2D', border:'2px solid #345B77', borderRadius:10, padding:'14px 20px', fontSize:22, color:'#f0f0f0', outline:'none', fontFamily:'inherit' }}
                 />
                 <button type="button" onClick={() => setShowScanner(true)} title="Abrir câmera QR"
-                  style={{ background:'#1e3a24', color:'#FF6B2C', border:'none', borderRadius:10, padding:'0 18px', fontSize:24, cursor:'pointer' }}>
+                  style={{ background:'#294F6C', color:'#FF6B2C', border:'none', borderRadius:10, padding:'0 18px', fontSize:24, cursor:'pointer' }}>
                   📷
                 </button>
                 <button type="submit"
@@ -338,12 +338,12 @@ export default function Portaria() {
               </div>
               {/* Resultados instantâneos */}
               {resultadosBusca.length > 0 && (
-                <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'#0a1a0d', border:'2px solid #2d4a32',
+                <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'#10283F', border:'2px solid #345B77',
                   borderTop:'none', borderRadius:'0 0 14px 14px', zIndex:50, overflow:'hidden' }}>
                   {resultadosBusca.map(ing => (
                     <div key={ing.id} onClick={() => { setEncontrado(ing); setBusca('') }}
                       style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
-                        padding:'12px 20px', cursor:'pointer', borderBottom:'1px solid #1e3a24',
+                        padding:'12px 20px', cursor:'pointer', borderBottom:'1px solid #294F6C',
                         background: ing.validado ? 'rgba(231,76,60,.05)' : 'transparent' }}>
                       <div>
                         <div style={{ fontSize:16, fontWeight:700, color:'#f0f0f0' }}>{ing.nome}</div>
@@ -360,9 +360,9 @@ export default function Portaria() {
           </form>
 
           {/* Histórico */}
-          <div style={{ background:'#0f1f13', border:'1px solid #1e3a24', borderRadius:14, padding:'20px 24px', flex:1 }}>
+          <div style={{ background:'#162F46', border:'1px solid #294F6C', borderRadius:14, padding:'20px 24px', flex:1 }}>
             {/* Tabs histórico */}
-            <div style={{ display:'flex', gap:0, marginBottom:16, borderBottom:'1px solid #1e3a24', flexWrap:'wrap' }}>
+            <div style={{ display:'flex', gap:0, marginBottom:16, borderBottom:'1px solid #294F6C', flexWrap:'wrap' }}>
               {[
                 { k:'sessao', l:`Sessão (${ultimosValidados.length})` },
                 { k:'hoje', l:`Hoje (${validadosHoje})` },
@@ -378,7 +378,7 @@ export default function Portaria() {
 
             {histTab === 'sessao' && (
               ultimosValidados.length === 0 ? (
-                <div style={{ color:'#3a5a40', fontSize:16, textAlign:'center', marginTop:20 }}>
+                <div style={{ color:'#587B92', fontSize:16, textAlign:'center', marginTop:20 }}>
                   Nenhuma entrada validada nesta sessão
                 </div>
               ) : (
@@ -386,7 +386,7 @@ export default function Portaria() {
                   {ultimosValidados.map((ing, idx) => (
                     <div key={`${ing.id}-${idx}`} onClick={() => setEncontrado(ing)} style={{
                       display:'flex', justifyContent:'space-between', alignItems:'center',
-                      background:'#0a1a0d', borderRadius:10, padding:'12px 18px',
+                      background:'#10283F', borderRadius:10, padding:'12px 18px',
                       borderLeft:'4px solid #FF6B2C', cursor:'pointer', animation:'fadeSlide .25s ease',
                     }}>
                       <div>
@@ -404,7 +404,7 @@ export default function Portaria() {
 
             {histTab === 'hoje' && (
               validadosHojeList.length === 0 ? (
-                <div style={{ color:'#3a5a40', fontSize:16, textAlign:'center', marginTop:20 }}>
+                <div style={{ color:'#587B92', fontSize:16, textAlign:'center', marginTop:20 }}>
                   Nenhuma entrada validada hoje
                 </div>
               ) : (
@@ -412,7 +412,7 @@ export default function Portaria() {
                   {validadosHojeList.map((ing, idx) => (
                     <div key={`h-${ing.id}-${idx}`} onClick={() => setEncontrado(ing)} style={{
                       display:'flex', justifyContent:'space-between', alignItems:'center',
-                      background:'#0a1a0d', borderRadius:10, padding:'10px 16px',
+                      background:'#10283F', borderRadius:10, padding:'10px 16px',
                       borderLeft:'4px solid #FF6B2C', cursor:'pointer',
                     }}>
                       <div>
@@ -435,19 +435,19 @@ export default function Portaria() {
                   {tipos.map(t => (
                     <button key={t} onClick={() => setFiltroTipo(t)} style={{
                       padding:'4px 12px', borderRadius:20, fontSize:12, fontWeight:700, cursor:'pointer',
-                      background: filtroTipo===t ? '#FF6B2C' : '#1e3a24',
+                      background: filtroTipo===t ? '#FF6B2C' : '#294F6C',
                       color: filtroTipo===t ? '#000' : '#888', border:'none',
                     }}>{t === 'todos' ? `Todos (${ingressos.length})` : t}</button>
                   ))}
                 </div>
                 <div style={{ display:'flex', flexDirection:'column', gap:6, overflowY:'auto', maxHeight:340 }}>
                   {todosFiltrados.length === 0 ? (
-                    <div style={{ color:'#3a5a40', textAlign:'center', padding:20 }}>Nenhum ingresso.</div>
+                    <div style={{ color:'#587B92', textAlign:'center', padding:20 }}>Nenhum ingresso.</div>
                   ) : todosFiltrados.map(ing => (
                     <div key={ing.id} onClick={() => setEncontrado(ing)} style={{
                       display:'flex', justifyContent:'space-between', alignItems:'center',
-                      background: ing.validado ? 'rgba(255,107,44,.05)' : '#0a1a0d', borderRadius:10, padding:'10px 16px',
-                      borderLeft:`4px solid ${ing.validado ? '#FF6B2C' : '#1e3a24'}`, cursor:'pointer',
+                      background: ing.validado ? 'rgba(255,107,44,.05)' : '#10283F', borderRadius:10, padding:'10px 16px',
+                      borderLeft:`4px solid ${ing.validado ? '#FF6B2C' : '#294F6C'}`, cursor:'pointer',
                     }}>
                       <div>
                         <div style={{ fontSize:14, fontWeight:700, color:'#f0f0f0' }}>{ing.nome}</div>

@@ -53,7 +53,7 @@ function RefreshTicker({ interval = 15, lastUpdate, onManual }) {
   }, [lastUpdate, interval])
   return (
     <button onClick={onManual} style={{
-      background: '#1e4029', border: 'none', borderRadius: 8,
+      background: '#294F6C', border: 'none', borderRadius: 8,
       color: sec <= 5 ? '#FF6B2C' : '#FF9B72',
       padding: '5px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 700, minWidth: 48,
     }}>↺ {sec}s</button>
@@ -83,16 +83,16 @@ function QtyControl({ qty, onDec, onInc, mini = false }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: mini ? 4 : 6 }}>
       <button onClick={onDec} style={{
-        width: sz, height: sz, borderRadius: 6, border: '1.5px solid #2a5a32',
-        background: '#132b1b', color: '#FF9B72', cursor: 'pointer',
+        width: sz, height: sz, borderRadius: 6, border: '1.5px solid #3A6687',
+        background: '#17354F', color: '#FF9B72', cursor: 'pointer',
         fontWeight: 800, fontSize: mini ? 13 : 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>−</button>
       <span style={{ minWidth: mini ? 18 : 22, textAlign: 'center', fontWeight: 800, fontSize: mini ? 13 : 15 }}>
         {qty}
       </span>
       <button onClick={onInc} style={{
-        width: sz, height: sz, borderRadius: 6, border: '1.5px solid #2a5a32',
-        background: '#1e4029', color: '#FF9B72', cursor: 'pointer',
+        width: sz, height: sz, borderRadius: 6, border: '1.5px solid #3A6687',
+        background: '#294F6C', color: '#FF9B72', cursor: 'pointer',
         fontWeight: 800, fontSize: mini ? 13 : 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>+</button>
     </div>
@@ -102,9 +102,9 @@ function QtyControl({ qty, onDec, onInc, mini = false }) {
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
 const S = {
-  page: { minHeight: '100vh', background: '#060e08', color: '#FFF4EC', fontFamily: 'inherit' },
+  page: { minHeight: '100vh', background: '#0B1C2D', color: '#FFF4EC', fontFamily: 'inherit' },
   header: {
-    background: '#0a1a0d', borderBottom: '2px solid #1e3a24',
+    background: '#10283F', borderBottom: '2px solid #294F6C',
     padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     position: 'sticky', top: 0, zIndex: 20,
   },
@@ -114,31 +114,31 @@ const S = {
     zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
   },
   sheet: {
-    background: '#0d1f12', borderTop: '2px solid #1e4029', borderRadius: '20px 20px 0 0',
+    background: '#142F49', borderTop: '2px solid #294F6C', borderRadius: '20px 20px 0 0',
     width: '100%', maxWidth: 560, maxHeight: '92vh', display: 'flex', flexDirection: 'column',
   },
   sheetHandle: {
-    width: 40, height: 4, background: '#2a5a32', borderRadius: 4,
+    width: 40, height: 4, background: '#3A6687', borderRadius: 4,
     margin: '10px auto 0', flexShrink: 0,
   },
   sheetHeader: {
-    padding: '12px 18px 10px', borderBottom: '1px solid #1e4029',
+    padding: '12px 18px 10px', borderBottom: '1px solid #294F6C',
     display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
   },
   sheetTitle: { fontWeight: 800, fontSize: 16 },
   sheetClose: { background: 'none', border: 'none', color: '#FF9B72', fontSize: 22, cursor: 'pointer', padding: 4 },
   sheetBody: { overflowY: 'auto', flex: 1, padding: '10px 16px' },
-  sheetActions: { padding: '10px 16px 20px', display: 'flex', gap: 8, borderTop: '1px solid #1e4029', flexShrink: 0 },
+  sheetActions: { padding: '10px 16px 20px', display: 'flex', gap: 8, borderTop: '1px solid #294F6C', flexShrink: 0 },
   input: {
-    width: '100%', background: '#132b1b', border: '1.5px solid #1e4029',
+    width: '100%', background: '#17354F', border: '1.5px solid #294F6C',
     borderRadius: 10, padding: '10px 14px', color: '#FFF4EC', fontSize: 14,
     boxSizing: 'border-box', outline: 'none',
   },
   section: { padding: '12px 16px 4px' },
   sectionTitle: { fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#FF9B72', marginBottom: 10 },
   card: (s) => ({
-    background: s === 'ocupada' ? '#132b1b' : s === 'conta' ? '#3a2800' : '#0d1f12',
-    border: `2px solid ${s === 'conta' ? '#FF6B2C' : s === 'ocupada' ? '#FF6B2C' : '#1e4029'}`,
+    background: s === 'ocupada' ? '#17354F' : s === 'conta' ? '#3a2800' : '#142F49',
+    border: `2px solid ${s === 'conta' ? '#FF6B2C' : s === 'ocupada' ? '#FF6B2C' : '#294F6C'}`,
     borderRadius: 12, padding: '12px 8px', cursor: 'pointer', textAlign: 'center',
     animation: s === 'conta' ? 'pulse-gold 1.4s ease-in-out infinite' : 'none',
     transition: 'transform .12s',
@@ -363,7 +363,7 @@ export default function GarcomView() {
         .mesa-card:hover { transform: translateY(-2px) scale(1.02); }
         .prod-card:active { transform: scale(.97); }
         ::-webkit-scrollbar { width: 4px; height: 4px; }
-        ::-webkit-scrollbar-thumb { background: #1e4029; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #294F6C; border-radius: 4px; }
       `}</style>
 
       {/* ── Header ── */}
@@ -375,7 +375,7 @@ export default function GarcomView() {
               🧾 {pendentes} conta{pendentes > 1 ? 's' : ''}
             </span>
           )}
-          <span style={{ background: abertas.length > 0 ? '#1e4029' : '#2d4a32', color: '#FF9B72', borderRadius: 20, padding: '3px 12px', fontWeight: 800, fontSize: 13 }}>
+          <span style={{ background: abertas.length > 0 ? '#294F6C' : '#345B77', color: '#FF9B72', borderRadius: 20, padding: '3px 12px', fontWeight: 800, fontSize: 13 }}>
             {abertas.length} abertas
           </span>
           <RefreshTicker interval={15} lastUpdate={lastUpdate} onManual={() => loadMesas()} />
@@ -394,12 +394,12 @@ export default function GarcomView() {
                 style={{ ...S.card(s), transition: 'transform .12s, box-shadow .12s' }}
                 onClick={() => handleMesaClick(m)}
               >
-                <div style={{ fontSize: 22, fontWeight: 900, color: s === 'conta' ? '#FF6B2C' : s === 'ocupada' ? '#FF9B72' : '#4a7a52' }}>
+                <div style={{ fontSize: 22, fontWeight: 900, color: s === 'conta' ? '#FF6B2C' : s === 'ocupada' ? '#FF9B72' : '#5B839D' }}>
                   {m.num}
                 </div>
                 <div style={{ fontSize: 9, marginTop: 3, padding: '2px 5px', borderRadius: 4, display: 'inline-block',
-                  background: s === 'conta' ? '#FF6B2C' : s === 'ocupada' ? '#1e4029' : '#0d1f12',
-                  color: s === 'conta' ? '#000' : s === 'ocupada' ? '#FF9B72' : '#3a6a42',
+                  background: s === 'conta' ? '#FF6B2C' : s === 'ocupada' ? '#294F6C' : '#142F49',
+                  color: s === 'conta' ? '#000' : s === 'ocupada' ? '#FF9B72' : '#62839A',
                   fontWeight: 700, textTransform: 'uppercase' }}>
                   {s === 'livre' ? 'livre' : s === 'conta' ? 'conta 🧾' : 'aberta'}
                 </div>
@@ -420,7 +420,7 @@ export default function GarcomView() {
           <div style={S.sectionTitle}>Comandas Virtuais</div>
           {mesas.virtuais.map(v => (
             <div key={v.id}
-              style={{ background: '#132b1b', border: '1px solid #1e4029', borderRadius: 12, padding: '12px 14px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+              style={{ background: '#17354F', border: '1px solid #294F6C', borderRadius: 12, padding: '12px 14px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
               onClick={async () => {
                 setSheet({ tipo: 'virtual', id: v.id })
                 await loadComanda(v.id)
@@ -483,7 +483,7 @@ export default function GarcomView() {
                     }
                     const editavel = comanda.status !== 'conta' && comanda.status !== 'fechada'
                     return (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid #1a3020' }}>
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: '1px solid #1F405C' }}>
                         {editavel ? (
                           <QtyControl
                             qty={it.qtd}
@@ -492,7 +492,7 @@ export default function GarcomView() {
                             onInc={() => mudarQtdItem(i, it.qtd + 1)}
                           />
                         ) : (
-                          <div style={{ minWidth: 28, height: 28, borderRadius: 8, background: '#1e4029', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#FF9B72' }}>
+                          <div style={{ minWidth: 28, height: 28, borderRadius: 8, background: '#294F6C', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#FF9B72' }}>
                             {it.qtd}
                           </div>
                         )}
@@ -533,7 +533,7 @@ export default function GarcomView() {
             <div style={{ ...S.sheetActions, flexDirection: 'column' }}>
               <button
                 onClick={abrirCardapio}
-                style={{ width: '100%', padding: '12px 0', borderRadius: 12, border: '1.5px solid #2a5a32', background: '#132b1b', color: '#FF9B72', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>
+                style={{ width: '100%', padding: '12px 0', borderRadius: 12, border: '1.5px solid #3A6687', background: '#17354F', color: '#FF9B72', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>
                 ➕ Adicionar item
               </button>
               <div style={{ display: 'flex', gap: 8, width: '100%' }}>
@@ -552,7 +552,7 @@ export default function GarcomView() {
                 <button
                   onClick={() => setOverlay('encerrar')}
                   disabled={loading || !comanda.itens?.length}
-                  style={{ flex: 1, padding: '12px 0', borderRadius: 12, border: 'none', background: comanda.itens?.length ? '#FF6B2C' : '#1a2a1a', color: comanda.itens?.length ? '#fff' : '#555', cursor: comanda.itens?.length ? 'pointer' : 'not-allowed', fontWeight: 800, fontSize: 14 }}>
+                  style={{ flex: 1, padding: '12px 0', borderRadius: 12, border: 'none', background: comanda.itens?.length ? '#FF6B2C' : '#12283F', color: comanda.itens?.length ? '#fff' : '#555', cursor: comanda.itens?.length ? 'pointer' : 'not-allowed', fontWeight: 800, fontSize: 14 }}>
                   ✅ Encerrar
                 </button>
               </div>
@@ -599,8 +599,8 @@ export default function GarcomView() {
                       onClick={() => { setCatFiltro(c); setBusca('') }}
                       style={{
                         padding: '6px 14px', borderRadius: 20, whiteSpace: 'nowrap', cursor: 'pointer',
-                        border: active ? '1.5px solid #FF6B2C' : '1.5px solid #1e4029',
-                        background: active ? '#1a4a20' : 'transparent',
+                        border: active ? '1.5px solid #FF6B2C' : '1.5px solid #294F6C',
+                        background: active ? '#254B6A' : 'transparent',
                         color: active ? '#FF9B72' : '#aaa',
                         fontWeight: active ? 800 : 500, fontSize: 12,
                         flexShrink: 0,
@@ -622,8 +622,8 @@ export default function GarcomView() {
                         onClick={() => setSetor(s)}
                         style={{
                           padding: '4px 12px', borderRadius: 20, whiteSpace: 'nowrap', cursor: 'pointer',
-                          border: active && sc ? `1.5px solid ${sc.border}` : active ? '1.5px solid #FF6B2C' : '1.5px solid #1e4029',
-                          background: active && sc ? sc.bg : active ? '#1a4a20' : 'transparent',
+                          border: active && sc ? `1.5px solid ${sc.border}` : active ? '1.5px solid #FF6B2C' : '1.5px solid #294F6C',
+                          background: active && sc ? sc.bg : active ? '#254B6A' : 'transparent',
                           color: active && sc ? sc.text : active ? '#FF9B72' : '#666',
                           fontWeight: active ? 800 : 500, fontSize: 11, flexShrink: 0,
                         }}>
@@ -635,7 +635,7 @@ export default function GarcomView() {
               )}
 
               {/* Contador de resultados */}
-              <div style={{ padding: '4px 16px 8px', fontSize: 11, color: '#3a6a42' }}>
+              <div style={{ padding: '4px 16px 8px', fontSize: 11, color: '#62839A' }}>
                 {prods.length} produto{prods.length !== 1 ? 's' : ''} {busca && `para "${busca}"`}
               </div>
             </div>
@@ -658,8 +658,8 @@ export default function GarcomView() {
                       <div key={p.id}
                         className="prod-card"
                         style={{
-                          background: qty > 0 ? '#0e2a16' : '#0d1a10',
-                          border: qty > 0 ? '2px solid #FF6B2C' : sem ? '1.5px solid #2a1010' : '1.5px solid #1e4029',
+                          background: qty > 0 ? '#12324A' : '#10273D',
+                          border: qty > 0 ? '2px solid #FF6B2C' : sem ? '1.5px solid #2a1010' : '1.5px solid #294F6C',
                           borderRadius: 12, padding: '10px 10px 8px',
                           opacity: sem ? 0.45 : 1,
                           transition: 'border .15s, background .15s',
@@ -690,7 +690,7 @@ export default function GarcomView() {
                           qty === 0 ? (
                             <button
                               onClick={() => addOne(p)}
-                              style={{ width: '100%', padding: '7px 0', borderRadius: 8, border: 'none', background: '#1e4029', color: '#FF9B72', cursor: 'pointer', fontWeight: 800, fontSize: 14, marginTop: 2 }}>
+                              style={{ width: '100%', padding: '7px 0', borderRadius: 8, border: 'none', background: '#294F6C', color: '#FF9B72', cursor: 'pointer', fontWeight: 800, fontSize: 14, marginTop: 2 }}>
                               + Adicionar
                             </button>
                           ) : (
@@ -707,7 +707,7 @@ export default function GarcomView() {
                               {/* Obs rápida toggle */}
                               <button
                                 onClick={() => setObsAberta(obsOpen ? null : p.id)}
-                                style={{ width: '100%', padding: '4px 0', borderRadius: 6, border: '1px solid #2a5a32', background: 'transparent', color: '#3a8a4a', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>
+                                style={{ width: '100%', padding: '4px 0', borderRadius: 6, border: '1px solid #3A6687', background: 'transparent', color: '#47799E', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>
                                 📝 {cart.find(c => c.prod.id === p.id)?.obs || 'obs…'}
                               </button>
                               {obsOpen && (
@@ -732,7 +732,7 @@ export default function GarcomView() {
 
             {/* Footer quando cart tem itens */}
             {cartCount > 0 && (
-              <div style={{ padding: '10px 16px 20px', borderTop: '1px solid #1e4029', background: '#0a1a0d', flexShrink: 0 }}>
+              <div style={{ padding: '10px 16px 20px', borderTop: '1px solid #294F6C', background: '#10283F', flexShrink: 0 }}>
                 <button
                   onClick={() => setOverlay('cart')}
                   style={{ width: '100%', padding: '14px 0', borderRadius: 14, border: 'none', background: '#FF6B2C', color: '#fff', cursor: 'pointer', fontWeight: 800, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
@@ -763,7 +763,7 @@ export default function GarcomView() {
               {cart.map((ci, i) => {
                 const sc = setorStyle(ci.prod.setor)
                 return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 0', borderBottom: '1px solid #1a3020' }}>
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 0', borderBottom: '1px solid #1F405C' }}>
                     {/* Setor badge */}
                     <div style={{ flexShrink: 0, width: 34, height: 34, borderRadius: 8, background: sc.bg, border: `1px solid ${sc.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
                       {ci.prod.setor === 'bar' ? '🍺' : ci.prod.setor === 'chapa' ? '🔥' : '👨‍🍳'}
@@ -793,8 +793,8 @@ export default function GarcomView() {
               </div>
 
               {/* Agrupamento por setor — aviso visual */}
-              <div style={{ background: '#0a1a0d', borderRadius: 10, padding: '10px 14px', marginTop: 8 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#3a6a42', marginBottom: 6 }}>DESTINO DOS PEDIDOS</div>
+              <div style={{ background: '#10283F', borderRadius: 10, padding: '10px 14px', marginTop: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#62839A', marginBottom: 6 }}>DESTINO DOS PEDIDOS</div>
                 {['bar', 'chapa', 'cozinha'].map(s => {
                   const itens = cart.filter(ci => ci.prod.setor === s)
                   if (!itens.length) return null
@@ -816,7 +816,7 @@ export default function GarcomView() {
             <div style={S.sheetActions}>
               <button
                 onClick={() => setOverlay('cardapio')}
-                style={{ flex: 1, padding: '12px 0', borderRadius: 12, border: '1.5px solid #2a5a32', background: 'transparent', color: '#FF9B72', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>
+                style={{ flex: 1, padding: '12px 0', borderRadius: 12, border: '1.5px solid #3A6687', background: 'transparent', color: '#FF9B72', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>
                 ← Continuar
               </button>
               <button
@@ -849,7 +849,7 @@ export default function GarcomView() {
                 <span style={{ color: '#FF9B72', fontWeight: 700 }}>Total a pagar</span>
                 <span style={{ color: '#FF6B2C', fontWeight: 900, fontSize: 26 }}>{fmtR(comanda.total || 0)}</span>
               </div>
-              <div style={{ fontSize: 12, color: '#3a6a42', fontWeight: 700, marginBottom: 8 }}>FORMA DE PAGAMENTO</div>
+              <div style={{ fontSize: 12, color: '#62839A', fontWeight: 700, marginBottom: 8 }}>FORMA DE PAGAMENTO</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
                 {[
                   { meio: 'dinheiro', label: 'Dinheiro', emoji: '💵' },
@@ -859,7 +859,7 @@ export default function GarcomView() {
                   <button key={m.meio}
                     onClick={() => encerrarComanda(m.meio)}
                     disabled={loading}
-                    style={{ padding: '16px 0', borderRadius: 12, border: '1.5px solid #2a5a32', background: '#132b1b', color: '#FF9B72', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 13, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                    style={{ padding: '16px 0', borderRadius: 12, border: '1.5px solid #3A6687', background: '#17354F', color: '#FF9B72', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 13, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                     <span style={{ fontSize: 24 }}>{m.emoji}</span>
                     {m.label}
                   </button>
@@ -869,7 +869,7 @@ export default function GarcomView() {
             <div style={S.sheetActions}>
               <button
                 onClick={() => setOverlay('comanda')}
-                style={{ flex: 1, padding: '12px 0', borderRadius: 12, border: '1.5px solid #1e4029', background: 'transparent', color: '#aaa', cursor: 'pointer', fontWeight: 700 }}>
+                style={{ flex: 1, padding: '12px 0', borderRadius: 12, border: '1.5px solid #294F6C', background: 'transparent', color: '#aaa', cursor: 'pointer', fontWeight: 700 }}>
                 ← Voltar
               </button>
             </div>
@@ -901,7 +901,7 @@ export default function GarcomView() {
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                 <button
                   onClick={() => { setOverlay(null); setSheet(null) }}
-                  style={{ flex: 1, padding: '12px 0', borderRadius: 12, border: '1.5px solid #1e4029', background: 'transparent', color: '#aaa', cursor: 'pointer', fontWeight: 700 }}>
+                  style={{ flex: 1, padding: '12px 0', borderRadius: 12, border: '1.5px solid #294F6C', background: 'transparent', color: '#aaa', cursor: 'pointer', fontWeight: 700 }}>
                   Cancelar
                 </button>
                 <button

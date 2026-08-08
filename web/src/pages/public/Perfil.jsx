@@ -10,11 +10,11 @@ const C = {
   lime: '#FF9B72',
   cream: '#FFF4EC',
   gold: '#FF6B2C',
-  card: '#132b1b',
-  cardBorder: '#1e3d28',
-  inputBg: '#0e2216',
-  inputBorder: '#2a4a35',
-  muted: '#7a9e85',
+  card: '#17354F',
+  cardBorder: '#12283F',
+  inputBg: '#12283F',
+  inputBorder: '#12283F',
+  muted: '#8AA9C0',
   red: '#f87171',
 }
 
@@ -488,7 +488,7 @@ export default function Perfil() {
             disabled={savingPerfil}
             style={{
               padding: '11px 24px',
-              background: savingPerfil ? '#3d7022' : C.green,
+              background: savingPerfil ? '#12283F' : C.green,
               color: '#fff',
               border: 'none',
               borderRadius: 9,
@@ -576,7 +576,7 @@ export default function Perfil() {
             disabled={savingSenha}
             style={{
               padding: '11px 24px',
-              background: savingSenha ? '#3d7022' : C.green,
+              background: savingSenha ? '#12283F' : C.green,
               color: '#fff',
               border: 'none',
               borderRadius: 9,

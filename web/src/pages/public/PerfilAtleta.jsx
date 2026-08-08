@@ -54,7 +54,7 @@ function Skeleton({ w = '100%', h = 16, r = 8 }) {
   return (
     <div style={{
       width: w, height: h, borderRadius: r,
-      background: 'linear-gradient(90deg,#e8f0e8 25%,#d4e8d4 50%,#e8f0e8 75%)',
+      background: 'linear-gradient(90deg,#FFF9F5 25%,#EAF1F7 50%,#FFF9F5 75%)',
       backgroundSize: '200% 100%',
       animation: 'shimmerLight 1.5s infinite',
     }} />

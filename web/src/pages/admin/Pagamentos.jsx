@@ -256,7 +256,7 @@ export default function Pagamentos() {
 
       {/* Busca */}
       <input
-        style={{ width: '100%', padding: '8px 12px', background: 'var(--card)', border: '1px solid #1e4a2e', borderRadius: 8, color: '#fff', fontSize: 13, marginBottom: 12, boxSizing: 'border-box' }}
+        style={{ width: '100%', padding: '8px 12px', background: 'var(--card)', border: '1px solid #12283F', borderRadius: 8, color: '#fff', fontSize: 13, marginBottom: 12, boxSizing: 'border-box' }}
         placeholder="🔍 Buscar por usuário, tipo ou ID…"
         value={busca}
         onChange={e => setBusca(e.target.value)}
@@ -275,7 +275,7 @@ export default function Pagamentos() {
                 fontSize: 12,
                 borderRadius: 6,
                 border: '1px solid',
-                borderColor: filtroPeriodo === val ? 'var(--green)' : '#1e4a2e',
+                borderColor: filtroPeriodo === val ? 'var(--green)' : '#12283F',
                 background: filtroPeriodo === val ? '#FF6B2C22' : 'transparent',
                 color: filtroPeriodo === val ? '#FF6B2C' : 'var(--muted)',
                 cursor: 'pointer',
@@ -290,7 +290,7 @@ export default function Pagamentos() {
         <select
           value={filtroMeio}
           onChange={(e) => setFiltroMeio(e.target.value)}
-          style={{ padding: '6px 10px', background: 'var(--card)', border: '1px solid #1e4a2e', borderRadius: 8, color: filtroMeio !== 'todos' ? '#fff' : 'var(--muted)', fontSize: 13 }}
+          style={{ padding: '6px 10px', background: 'var(--card)', border: '1px solid #12283F', borderRadius: 8, color: filtroMeio !== 'todos' ? '#fff' : 'var(--muted)', fontSize: 13 }}
         >
           <option value="todos">Todos os meios</option>
           <option value="pix">Pix</option>
@@ -310,7 +310,7 @@ export default function Pagamentos() {
                 fontSize: 12,
                 borderRadius: 6,
                 border: '1px solid',
-                borderColor: filtroStatus === s ? 'var(--green)' : '#1e4a2e',
+                borderColor: filtroStatus === s ? 'var(--green)' : '#12283F',
                 background: filtroStatus === s ? '#FF6B2C22' : 'transparent',
                 color: filtroStatus === s ? '#FF6B2C' : 'var(--muted)',
                 cursor: 'pointer',
@@ -335,7 +335,7 @@ export default function Pagamentos() {
         <div className="table-wrap">
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid #1e4a2e' }}>
+              <tr style={{ borderBottom: '1px solid #12283F' }}>
                 {['#', 'Usuário', 'Tipo', 'Meio', 'Valor', 'Data', 'Status', 'Ações'].map((h) => (
                   <th key={h} style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
@@ -431,7 +431,7 @@ export default function Pagamentos() {
                 <div
                   style={{
                     background: '#12283F',
-                    border: '1px solid #1e4a2e',
+                    border: '1px solid #12283F',
                     borderRadius: 6,
                     padding: '8px 10px',
                     fontSize: 11,

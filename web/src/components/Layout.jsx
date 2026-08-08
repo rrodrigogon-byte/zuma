@@ -12,7 +12,7 @@ function TopBar() {
 
   return (
     <div style={{
-      position: 'fixed', top: 0, right: 0, left: 220,
+      position: 'fixed', top: 0, right: 0, left: 256,
       height: 50, background: 'var(--surface)',
       borderBottom: '1px solid var(--line)',
       display: 'flex', alignItems: 'center',
@@ -76,7 +76,7 @@ export default function Layout({ children, noSidebar = false, marketing = false 
       <Sidebar />
       {hasTopBar && !isMobile && <TopBar />}
       <main style={{
-        marginLeft: isMobile ? 0 : 220,
+        marginLeft: isMobile ? 0 : 256,
         marginTop: hasTopBar && !isMobile ? topBarH : 0,
         flex: 1, minHeight: '100vh',
       }}>

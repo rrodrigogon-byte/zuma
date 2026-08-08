@@ -5,7 +5,7 @@ import Modal from '../../components/Modal'
 
 /* ── Paleta ─────────────────────────────────────────────────────────────── */
 const STATUS_BADGE = {
-  inscricoes:   { label: 'Inscrições', color: '#27ae60', bg: 'rgba(39,174,96,.12)' },
+  inscricoes:   { label: 'Inscrições', color: '#2D6F9E', bg: 'rgba(39,174,96,.12)' },
   em_andamento: { label: 'Em Andamento', color: '#2980b9', bg: 'rgba(41,128,185,.12)' },
   encerrada:    { label: 'Encerrada', color: '#7f8c8d', bg: 'rgba(127,140,141,.12)' },
 }
@@ -344,7 +344,7 @@ function DetalheAdmin({ ligaId, onBack, showToast }) {
         {podeAvancar && (
           <button onClick={avancarRodada} disabled={proximaRd}
             style={{ padding: '8px 16px', borderRadius: 8, border: 'none',
-              background: '#FF6B2C', color: '#0e2216', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+              background: '#FF6B2C', color: '#12283F', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
             {proximaRd ? <Spinner /> : '⏭ Próxima Rodada'}
           </button>
         )}
@@ -690,7 +690,7 @@ export default function AdminLigas() {
         {[
           { label: 'Total', val: ligas.length, icon: '🏆', color: 'var(--green)' },
           { label: 'Em Andamento', val: ligas.filter(l=>l.status==='em_andamento').length, icon: '🔴', color: '#2980b9' },
-          { label: 'Inscrições Abertas', val: ligas.filter(l=>l.status==='inscricoes').length, icon: '✍️', color: '#27ae60' },
+          { label: 'Inscrições Abertas', val: ligas.filter(l=>l.status==='inscricoes').length, icon: '✍️', color: '#2D6F9E' },
           { label: 'Encerradas', val: ligas.filter(l=>l.status==='encerrada').length, icon: '🏁', color: '#7f8c8d' },
         ].map(k => (
           <div key={k.label} style={{ background: 'var(--card)', border: '1px solid var(--line)',

@@ -43,7 +43,7 @@ function Section({ id, num, titulo, children }) {
           {titulo}
         </h2>
       </div>
-      <div style={{ color: '#3a5a3a', lineHeight: 1.8, fontSize: '0.95rem' }}>
+      <div style={{ color: '#12283F', lineHeight: 1.8, fontSize: '0.95rem' }}>
         {children}
       </div>
     </section>
@@ -132,7 +132,7 @@ export default function Regulamento() {
               Regulamento
             </h1>
           </div>
-          <p style={{ color: '#a0c8a0', margin: 0, fontSize: '1rem' }}>
+          <p style={{ color: '#EAF1F7', margin: 0, fontSize: '1rem' }}>
             {evento}{periodo ? ` · ${periodo}` : ''}
           </p>
           <div style={{
@@ -274,10 +274,10 @@ export default function Regulamento() {
                     ['Semifinais', 'Melhor de 3', '6 games', 'Não'],
                     ['Final', 'Melhor de 3', '6 games', 'Não'],
                   ].map(([fase, sets, games, mtb], i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid #EADFD4', background: i % 2 === 0 ? '#fff' : '#fafcf8' }}>
+                    <tr key={i} style={{ borderBottom: '1px solid #EADFD4', background: i % 2 === 0 ? '#fff' : '#FFF9F5' }}>
                       <td style={{ padding: '10px 14px', fontWeight: 700, color: '#12283F' }}>{fase}</td>
-                      <td style={{ padding: '10px 14px', color: '#3a5a3a' }}>{sets}</td>
-                      <td style={{ padding: '10px 14px', color: '#3a5a3a' }}>{games}</td>
+                      <td style={{ padding: '10px 14px', color: '#12283F' }}>{sets}</td>
+                      <td style={{ padding: '10px 14px', color: '#12283F' }}>{games}</td>
                       <td style={{ padding: '10px 14px', color: '#FF6B2C', fontWeight: 600 }}>{mtb}</td>
                     </tr>
                   ))}
@@ -295,7 +295,7 @@ export default function Regulamento() {
 
           {/* Seção 4 */}
           <Section id="pontuacao" num="4" titulo="Pontuação">
-            <p style={{ marginBottom: 16 }}>O torneio integra o sistema de ranking Kytto Clube. Os pontos distribuídos por categoria e fase estão descritos abaixo:</p>
+            <p style={{ marginBottom: 16 }}>O torneio integra o sistema de ranking Kytto. Os pontos distribuídos por categoria e fase estão descritos abaixo:</p>
             <div style={{ overflowX: 'auto', marginBottom: 16 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
                 <thead>
@@ -314,19 +314,19 @@ export default function Regulamento() {
                     ['Duplas Mistas', '100', '70', '40', '20', '—'],
                     ['Masters +40', '120', '80', '50', '25', '—'],
                   ].map(([cat, ...pts], i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid #EADFD4', background: i % 2 === 0 ? '#fff' : '#fafcf8' }}>
+                    <tr key={i} style={{ borderBottom: '1px solid #EADFD4', background: i % 2 === 0 ? '#fff' : '#FFF9F5' }}>
                       <td style={{ padding: '10px 14px', fontWeight: 700, color: '#12283F' }}>{cat}</td>
                       {pts.map((p, j) => (
-                        <td key={j} style={{ padding: '10px 14px', textAlign: 'right', color: j === 0 ? '#FF6B2C' : '#3a5a3a', fontWeight: j === 0 ? 800 : 400 }}>{p}</td>
+                        <td key={j} style={{ padding: '10px 14px', textAlign: 'right', color: j === 0 ? '#FF6B2C' : '#12283F', fontWeight: j === 0 ? 800 : 400 }}>{p}</td>
                       ))}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <Item>Os pontos serão lançados no ranking Kytto Clube em até 48h após o encerramento do torneio.</Item>
+            <Item>Os pontos serão lançados no ranking Kytto em até 48h após o encerramento do torneio.</Item>
             <Item>Atletas que se retirarem sem completar a fase mínima de grupos não pontuarão.</Item>
-            <Item>O ranking Kytto Clube utiliza o sistema Elo combinado com pontuação por fase, acumulando resultados dos últimos 12 meses.</Item>
+            <Item>O ranking Kytto utiliza o sistema Elo combinado com pontuação por fase, acumulando resultados dos últimos 12 meses.</Item>
           </Section>
 
           {/* Seção 5 */}
@@ -382,7 +382,7 @@ export default function Regulamento() {
           {/* Seção 6 */}
           <Section id="disposicoes" num="6" titulo="Disposições Gerais">
             <SubTitle>Inscrições</SubTitle>
-            <Item>As inscrições são realizadas exclusivamente pela plataforma Kytto Clube (este site).</Item>
+            <Item>As inscrições são realizadas exclusivamente pela plataforma Kytto (este site).</Item>
             <Item>O prazo de inscrição encerra-se em 31 de agosto de 2026 ou quando esgotadas as vagas.</Item>
             <Item>A inscrição somente é confirmada após o pagamento integral da taxa via Pix.</Item>
             <Item>Não haverá devolução da taxa de inscrição após confirmação, exceto em cancelamento do evento pela organização.</Item>
@@ -400,7 +400,7 @@ export default function Regulamento() {
 
             <SubTitle>Casos Omissos</SubTitle>
             <Item>Os casos não previstos neste regulamento serão resolvidos pela comissão técnica do evento, cujas decisões são soberanas e irrecorríveis.</Item>
-            <Item>Eventuais alterações de horário, quadra ou formato serão comunicadas pelo sistema Kytto Clube e pelo mural do clube.</Item>
+            <Item>Eventuais alterações de horário, quadra ou formato serão comunicadas pelo sistema Kytto e pelo mural do clube.</Item>
 
             <div style={{
               marginTop: 24, background: '#FFF4EC', borderRadius: 12,
@@ -417,7 +417,7 @@ export default function Regulamento() {
           }}>
             <div style={{ fontSize: '2rem', marginBottom: 12 }}>🎾</div>
             <h3 style={{ fontSize: '1.4rem', fontWeight: 900, margin: '0 0 10px' }}>Leu o regulamento?</h3>
-            <p style={{ color: '#a0c8a0', margin: '0 0 24px', lineHeight: 1.6 }}>
+            <p style={{ color: '#EAF1F7', margin: '0 0 24px', lineHeight: 1.6 }}>
               Garanta sua vaga na 4ª Agro Open de Tênis. Vagas limitadas por categoria.
             </p>
             <button

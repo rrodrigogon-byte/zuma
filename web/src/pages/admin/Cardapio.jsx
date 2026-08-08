@@ -58,7 +58,7 @@ function PreviewPDV({ itens }) {
       maxHeight: 420,
       overflowY: 'auto',
       fontSize: 13,
-      border: '1px solid #1e4a2e',
+      border: '1px solid #12283F',
     }}>
       <div style={{ color: '#FF9B72', fontWeight: 700, fontSize: 14, marginBottom: 12, letterSpacing: 1 }}>
         📋 PREVIEW — PDV / COMANDA
@@ -71,7 +71,7 @@ function PreviewPDV({ itens }) {
             fontSize: 11,
             letterSpacing: 1.5,
             textTransform: 'uppercase',
-            borderBottom: '1px solid #1e4a2e',
+            borderBottom: '1px solid #12283F',
             paddingBottom: 4,
             marginBottom: 6,
           }}>
@@ -362,7 +362,7 @@ export default function Cardapio() {
                   alignItems: 'center',
                   marginBottom: 12,
                   paddingBottom: 8,
-                  borderBottom: '2px solid #1e4a2e',
+                  borderBottom: '2px solid #12283F',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -618,7 +618,7 @@ function ItemCard({ item, isFirst, isLast, onToggleCozinha, onToggleDisponivel, 
       className="card"
       style={{
         opacity: item.indisponivel ? 0.55 : 1,
-        border: item.indisponivel ? '1px solid #444' : '1px solid #1e4a2e',
+        border: item.indisponivel ? '1px solid #444' : '1px solid #12283F',
         display: 'flex',
         flexDirection: 'column',
         gap: 10,

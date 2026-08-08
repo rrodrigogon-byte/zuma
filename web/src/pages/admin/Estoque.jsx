@@ -263,7 +263,7 @@ export default function Estoque() {
       {/* Busca + Filtros rápidos */}
       <div style={{ display:'flex', gap:8, marginBottom:8, flexWrap:'wrap', alignItems:'center' }}>
         <input
-          style={{ flex:1, minWidth:180, padding: '8px 12px', background: 'var(--card)', border: '1px solid #1e4a2e', borderRadius: 8, color: '#fff', fontSize: 13, boxSizing: 'border-box' }}
+          style={{ flex:1, minWidth:180, padding: '8px 12px', background: 'var(--card)', border: '1px solid #12283F', borderRadius: 8, color: '#fff', fontSize: 13, boxSizing: 'border-box' }}
           placeholder="🔍 Buscar produto por nome…"
           value={busca}
           onChange={e => setBusca(e.target.value)}

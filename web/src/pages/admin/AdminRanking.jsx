@@ -5,8 +5,8 @@ import { api } from '../../lib/api'
 const C = {
   green: '#FF6B2C', darkGreen: '#12283F', lightGreen: '#FF9B72',
   gold: '#FF6B2C', bg: '#FFF4EC', white: '#fff',
-  muted: '#5A6570', border: '#e8f0dc', danger: '#e05555',
-  card: '#fff', surface: '#f8fdf4',
+  muted: '#5A6570', border: '#FFF9F5', danger: '#e05555',
+  card: '#fff', surface: '#FFF9F5',
 }
 
 /* ─── Tabela de pontos padrão ─────────────────────────────────────────────── */
@@ -91,7 +91,7 @@ function EditModal({ atleta, onSave, onClose }) {
       <div style={{ background: C.white, borderRadius: 20, maxWidth: 440, width: '100%', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,.28)' }} onClick={e => e.stopPropagation()}>
         <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#183450)`, padding: '22px 24px', color: C.white }}>
           <div style={{ fontWeight: 900, fontSize: '1.1rem', marginBottom: 2 }}>✏️ Editar Atleta</div>
-          <div style={{ fontSize: '0.82rem', color: '#a0c8a0' }}>{atleta.nome} · {atleta.categoria}</div>
+          <div style={{ fontSize: '0.82rem', color: '#EAF1F7' }}>{atleta.nome} · {atleta.categoria}</div>
         </div>
         <div style={{ padding: '22px 24px' }}>
           {/* Preview aproveitamento */}
@@ -118,15 +118,15 @@ function EditModal({ atleta, onSave, onClose }) {
               <div key={f.k}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>{f.label}</label>
                 <input type="number" value={form[f.k] ?? 0} onChange={e => set(f.k, Number(e.target.value))}
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box' }}
                   onFocus={e => e.target.style.borderColor = C.green}
-                  onBlur={e => e.target.style.borderColor = '#d0dcc8'} />
+                  onBlur={e => e.target.style.borderColor = '#EAF1F7'} />
               </div>
             ))}
           </div>
 
           <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-            <button onClick={onClose} style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1.5px solid #d0dcc8', background: C.white, cursor: 'pointer', fontWeight: 600, color: '#666' }}>Cancelar</button>
+            <button onClick={onClose} style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1.5px solid #EAF1F7', background: C.white, cursor: 'pointer', fontWeight: 600, color: '#666' }}>Cancelar</button>
             <button onClick={() => onSave(form)} style={{ flex: 2, padding: '11px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg,${C.green},${C.lightGreen})`, color: C.darkGreen, fontWeight: 800, cursor: 'pointer' }}>
               ✓ Salvar alterações
             </button>
@@ -148,15 +148,15 @@ function AddModal({ categorias, onSave, onClose }) {
       <div style={{ background: C.white, borderRadius: 20, maxWidth: 440, width: '100%', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,.28)' }} onClick={e => e.stopPropagation()}>
         <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#183450)`, padding: '22px 24px', color: C.white }}>
           <div style={{ fontWeight: 900, fontSize: '1.1rem' }}>➕ Adicionar Atleta ao Ranking</div>
-          <div style={{ fontSize: '0.82rem', color: '#a0c8a0', marginTop: 4 }}>Inserção manual de pontuação</div>
+          <div style={{ fontSize: '0.82rem', color: '#EAF1F7', marginTop: 4 }}>Inserção manual de pontuação</div>
         </div>
         <div style={{ padding: '22px 24px' }}>
           <div style={{ marginBottom: 14 }}>
             <label style={{ fontSize: '0.75rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>Nome completo *</label>
             <input value={form.nome} onChange={e => set('nome', e.target.value)} placeholder="Nome do atleta"
-              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.92rem', outline: 'none', boxSizing: 'border-box' }}
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.92rem', outline: 'none', boxSizing: 'border-box' }}
               onFocus={e => e.target.style.borderColor = C.green}
-              onBlur={e => e.target.style.borderColor = '#d0dcc8'} />
+              onBlur={e => e.target.style.borderColor = '#EAF1F7'} />
           </div>
 
           <div style={{ marginBottom: 14 }}>
@@ -170,12 +170,12 @@ function AddModal({ categorias, onSave, onClose }) {
             </div>
             {catCustom || categorias.length === 0 ? (
               <input value={form.categoria} onChange={e => set('categoria', e.target.value)} placeholder="Ex: Masc · 1ª Classe"
-                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.92rem', outline: 'none', boxSizing: 'border-box' }}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.92rem', outline: 'none', boxSizing: 'border-box' }}
                 onFocus={e => e.target.style.borderColor = C.green}
-                onBlur={e => e.target.style.borderColor = '#d0dcc8'} />
+                onBlur={e => e.target.style.borderColor = '#EAF1F7'} />
             ) : (
               <select value={form.categoria} onChange={e => set('categoria', e.target.value)}
-                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.92rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.92rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
                 {categorias.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             )}
@@ -192,7 +192,7 @@ function AddModal({ categorias, onSave, onClose }) {
                 <label style={{ fontSize: '0.72rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 3 }}>{f.label}</label>
                 <input type="number" min="0" value={form[f.k]}
                   onChange={e => set(f.k, Number(e.target.value))}
-                  style={{ width: '100%', padding: '9px 10px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
+                  style={{ width: '100%', padding: '9px 10px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
               </div>
             ))}
           </div>
@@ -206,7 +206,7 @@ function AddModal({ categorias, onSave, onClose }) {
           )}
 
           <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={onClose} style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1.5px solid #d0dcc8', background: C.white, cursor: 'pointer', fontWeight: 600, color: '#666' }}>Cancelar</button>
+            <button onClick={onClose} style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1.5px solid #EAF1F7', background: C.white, cursor: 'pointer', fontWeight: 600, color: '#666' }}>Cancelar</button>
             <button onClick={() => form.nome.trim() && form.categoria.trim() && onSave(form)} disabled={!form.nome.trim() || !form.categoria.trim()}
               style={{ flex: 2, padding: '11px', borderRadius: 10, border: 'none', background: form.nome.trim() ? `linear-gradient(135deg,${C.green},${C.lightGreen})` : '#e0e0e0', color: form.nome.trim() ? C.darkGreen : '#aaa', fontWeight: 800, cursor: form.nome.trim() ? 'pointer' : 'not-allowed' }}>
               ➕ Adicionar ao ranking
@@ -247,14 +247,14 @@ function AtletaPerfilModal({ atleta, todos, campeoes, onClose, onEdit, onRemover
             </div>
             <div>
               <div style={{ fontWeight: 900, fontSize: '1.2rem', marginBottom: 2 }}>{atleta.nome}</div>
-              <div style={{ fontSize: '0.83rem', color: '#a0c8a0', marginBottom: 6 }}>{atleta.categoria}</div>
+              <div style={{ fontSize: '0.83rem', color: '#EAF1F7', marginBottom: 6 }}>{atleta.categoria}</div>
               <div style={{ display: 'flex', gap: 8 }}>
                 {titulos.length > 0 && (
                   <span style={{ background: 'rgba(255,107,44,.25)', color: C.gold, padding: '2px 10px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700 }}>
                     🏆 {titulos.length} título{titulos.length > 1 ? 's' : ''}
                   </span>
                 )}
-                <span style={{ background: 'rgba(255,255,255,.12)', color: '#d0f0a0', padding: '2px 10px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700 }}>
+                <span style={{ background: 'rgba(255,255,255,.12)', color: '#EAF1F7', padding: '2px 10px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700 }}>
                   #{posGeral} geral · #{posCat}° na cat.
                 </span>
               </div>
@@ -333,7 +333,7 @@ function AtletaPerfilModal({ atleta, todos, campeoes, onClose, onEdit, onRemover
                         {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
                       </span>
                       <div style={{ flex: 1, height: 6, background: '#eee', borderRadius: 4, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${((p.pontos || 0) / maxPts) * 100}%`, background: isMe ? C.green : '#c8dcc0', borderRadius: 4 }} />
+                        <div style={{ height: '100%', width: `${((p.pontos || 0) / maxPts) * 100}%`, background: isMe ? C.green : '#EAF1F7', borderRadius: 4 }} />
                       </div>
                       <span style={{ fontSize: '0.75rem', fontWeight: isMe ? 800 : 500, color: isMe ? C.darkGreen : C.muted, minWidth: 90, textAlign: 'right' }}>
                         {isMe ? <strong>{p.nome}</strong> : p.nome} · {fmtN(p.pontos)}
@@ -367,7 +367,7 @@ function AtletaPerfilModal({ atleta, todos, campeoes, onClose, onEdit, onRemover
               🗑 Remover
             </button>
             <button onClick={onClose}
-              style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1.5px solid #d0dcc8', background: C.white, color: '#666', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}>
+              style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1.5px solid #EAF1F7', background: C.white, color: '#666', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}>
               Fechar
             </button>
           </div>
@@ -386,7 +386,7 @@ function PartidaModal({ categorias, onSave, onClose }) {
       <div style={{ background: C.white, borderRadius: 20, maxWidth: 460, width: '100%', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,.28)' }} onClick={e => e.stopPropagation()}>
         <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#183450)`, padding: '22px 24px', color: C.white }}>
           <div style={{ fontWeight: 900, fontSize: '1.1rem' }}>⚔️ Registrar Partida Avulsa</div>
-          <div style={{ fontSize: '0.82rem', color: '#a0c8a0', marginTop: 4 }}>Ranking contínuo — todos os jogos valem pontos</div>
+          <div style={{ fontSize: '0.82rem', color: '#EAF1F7', marginTop: 4 }}>Ranking contínuo — todos os jogos valem pontos</div>
         </div>
         <div style={{ padding: '22px 24px' }}>
           {[
@@ -398,9 +398,9 @@ function PartidaModal({ categorias, onSave, onClose }) {
             <div key={f.k} style={{ marginBottom: 12 }}>
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>{f.label}</label>
               <input value={form[f.k]} onChange={e => set(f.k, e.target.value)} placeholder={f.placeholder}
-                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.92rem', outline: 'none', boxSizing: 'border-box' }}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.92rem', outline: 'none', boxSizing: 'border-box' }}
                 onFocus={e => e.target.style.borderColor = C.green}
-                onBlur={e => e.target.style.borderColor = '#d0dcc8'} />
+                onBlur={e => e.target.style.borderColor = '#EAF1F7'} />
             </div>
           ))}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
@@ -408,26 +408,26 @@ function PartidaModal({ categorias, onSave, onClose }) {
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>Categoria *</label>
               {categorias.length > 0 ? (
                 <select value={form.categoria} onChange={e => set('categoria', e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
                   {categorias.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               ) : (
                 <input value={form.categoria} onChange={e => set('categoria', e.target.value)} placeholder="Categoria"
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
               )}
             </div>
             <div>
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>Temporada</label>
               <input value={form.temporada} onChange={e => set('temporada', e.target.value)} placeholder="2025"
-                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
             </div>
           </div>
           {/* Info sobre pontuação */}
-          <div style={{ background: '#f0fae8', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: '0.78rem', color: C.muted, lineHeight: 1.6 }}>
+          <div style={{ background: '#FFF9F5', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: '0.78rem', color: C.muted, lineHeight: 1.6 }}>
             <strong style={{ color: C.darkGreen }}>Como funciona:</strong> Pontos variam conforme o nível dos jogadores — vencer alguém melhor ranqueado vale mais (15 pts) que vencer alguém pior (6 pts). O perdedor sempre ganha pelo menos 1 ponto por jogar.
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={onClose} style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1.5px solid #d0dcc8', background: C.white, cursor: 'pointer', fontWeight: 600, color: '#666' }}>Cancelar</button>
+            <button onClick={onClose} style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1.5px solid #EAF1F7', background: C.white, cursor: 'pointer', fontWeight: 600, color: '#666' }}>Cancelar</button>
             <button
               onClick={() => form.vencedor.trim() && form.perdedor.trim() && form.categoria && onSave(form)}
               disabled={!form.vencedor.trim() || !form.perdedor.trim() || !form.categoria}
@@ -493,7 +493,7 @@ function TabSorteio({ categorias, showMsg }) {
       <div style={{ background: C.white, borderRadius: 18, overflow: 'hidden', boxShadow: '0 2px 14px rgba(0,0,0,.07)' }}>
         <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#183450)`, padding: '18px 22px', color: C.white }}>
           <div style={{ fontWeight: 900, fontSize: '1.05rem' }}>🎲 Gerar Sorteio / Chave</div>
-          <div style={{ fontSize: '0.8rem', color: '#a0c8a0', marginTop: 3 }}>Cria a chave de eliminatória para uma categoria a partir dos inscritos ou de uma lista manual</div>
+          <div style={{ fontSize: '0.8rem', color: '#EAF1F7', marginTop: 3 }}>Cria a chave de eliminatória para uma categoria a partir dos inscritos ou de uma lista manual</div>
         </div>
         <div style={{ padding: '20px 22px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
@@ -502,20 +502,20 @@ function TabSorteio({ categorias, showMsg }) {
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>Categoria *</label>
               {categorias.length > 0 ? (
                 <select value={form.categoria} onChange={e => set('categoria', e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
                   <option value="">— selecionar —</option>
                   {categorias.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               ) : (
                 <input value={form.categoria} onChange={e => set('categoria', e.target.value)} placeholder="Ex: Masc · 1ª Classe"
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
               )}
             </div>
             {/* Formato */}
             <div>
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>Formato de jogo</label>
               <select value={form.formato} onChange={e => set('formato', e.target.value)}
-                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
                 {Object.entries(FORMATOS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </div>
@@ -523,7 +523,7 @@ function TabSorteio({ categorias, showMsg }) {
             <div>
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>Tamanho da chave</label>
               <select value={form.size} onChange={e => set('size', e.target.value)}
-                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
                 <option value="auto">Auto (pelo nº de inscritos)</option>
                 {[4, 8, 16, 32, 64].map(n => <option key={n} value={n}>{n} atletas</option>)}
               </select>
@@ -532,13 +532,13 @@ function TabSorteio({ categorias, showMsg }) {
             <div>
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>Nº de cabeças-de-chave</label>
               <input type="number" min={0} max={16} value={form.seeds} onChange={e => set('seeds', e.target.value)}
-                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
             </div>
             {/* Seedmode */}
             <div>
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>Critério de cabeça</label>
               <select value={form.seedmode} onChange={e => set('seedmode', e.target.value)}
-                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
                 <option value="top">Top ranking (automático)</option>
                 <option value="manual">Manual (ordem da lista)</option>
               </select>
@@ -547,7 +547,7 @@ function TabSorteio({ categorias, showMsg }) {
             <div>
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>Fonte de atletas</label>
               <select value={form.fonte} onChange={e => set('fonte', e.target.value)}
-                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
                 <option value="inscritos">Inscritos aprovados</option>
                 <option value="lista">Lista manual</option>
               </select>
@@ -563,7 +563,7 @@ function TabSorteio({ categorias, showMsg }) {
                 </label>
                 <textarea value={form.lista} onChange={e => set('lista', e.target.value)}
                   rows={6} placeholder={"João Silva\nMaria Santos\nPedro Oliveira\n..."}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'monospace' }} />
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'monospace' }} />
               </div>
             )}
             <div>
@@ -572,7 +572,7 @@ function TabSorteio({ categorias, showMsg }) {
               </label>
               <textarea value={form.wildcards} onChange={e => set('wildcards', e.target.value)}
                 rows={form.fonte === 'lista' ? 6 : 3} placeholder={"Carlos Convidado\n..."}
-                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'monospace' }} />
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'monospace' }} />
             </div>
           </div>
 
@@ -610,7 +610,7 @@ function TabSorteio({ categorias, showMsg }) {
               <div key={i}
                 style={{ padding: '14px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', transition: 'background .1s' }}
                 onClick={() => setDetalhe(detalhe?.categoria === ch.categoria ? null : ch)}
-                onMouseEnter={e => e.currentTarget.style.background = '#f8fdf4'}
+                onMouseEnter={e => e.currentTarget.style.background = '#FFF9F5'}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
               >
                 <div style={{ width: 44, height: 44, borderRadius: 12, background: ch.finalizada ? 'rgba(255,107,44,.12)' : `rgba(255,107,44,.12)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', flexShrink: 0 }}>
@@ -813,7 +813,7 @@ function TabRegras({ showMsg }) {
             </>
           ) : (
             <>
-              <button onClick={handleCancel} style={{ padding: '9px 16px', borderRadius: 10, border: '1.5px solid #d0dcc8', background: C.white, cursor: 'pointer', fontWeight: 600, color: '#666', fontSize: '0.82rem' }}>Cancelar</button>
+              <button onClick={handleCancel} style={{ padding: '9px 16px', borderRadius: 10, border: '1.5px solid #EAF1F7', background: C.white, cursor: 'pointer', fontWeight: 600, color: '#666', fontSize: '0.82rem' }}>Cancelar</button>
               <button onClick={handleSave} disabled={saving} style={{ padding: '9px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg,${C.green},${C.lightGreen})`, color: C.darkGreen, fontWeight: 800, cursor: 'pointer', fontSize: '0.85rem' }}>
                 {saving ? '⏳ Salvando...' : '✓ Salvar'}
               </button>
@@ -1027,7 +1027,7 @@ const TIPOS_COMUNICADO = [
   { key: 'wo', label: '🚫 W.O. / Abandono', color: '#E05555' },
   { key: 'adiado', label: '⏸ Adiado', color: '#FF6B2C' },
   { key: 'aviso', label: '📢 Aviso geral', color: '#7B5EA7' },
-  { key: 'inscricoes', label: '📋 Inscrições', color: '#3AAB6D' },
+  { key: 'inscricoes', label: '📋 Inscrições', color: '#2D6F9E' },
 ]
 
 function TabComunicados({ categorias, showMsg }) {
@@ -1115,7 +1115,7 @@ function TabComunicados({ categorias, showMsg }) {
           <div style={{ background: `linear-gradient(135deg,${C.darkGreen},#183450)`, padding: '16px 22px', color: C.white, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <div style={{ fontWeight: 900, fontSize: '1rem' }}>{editItem ? '✏️ Editar comunicado' : '➕ Novo comunicado'}</div>
-              <div style={{ fontSize: '0.78rem', color: '#a0c8a0', marginTop: 2 }}>Preencha os detalhes e publique</div>
+              <div style={{ fontSize: '0.78rem', color: '#EAF1F7', marginTop: 2 }}>Preencha os detalhes e publique</div>
             </div>
             <button onClick={() => setShowForm(false)} style={{ background: 'rgba(255,255,255,.15)', border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', color: C.white, fontWeight: 700 }}>✕</button>
           </div>
@@ -1146,27 +1146,27 @@ function TabComunicados({ categorias, showMsg }) {
                   <div>
                     <label style={{ fontSize: '0.72rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>ATLETA 1</label>
                     <input value={form.atleta1} onChange={e => set('atleta1', e.target.value)} placeholder="Nome do atleta 1"
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>ATLETA 2</label>
                     <input value={form.atleta2} onChange={e => set('atleta2', e.target.value)} placeholder="Nome do atleta 2"
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>DATA DO JOGO</label>
                     <input type="date" value={form.dataJogo} onChange={e => set('dataJogo', e.target.value)}
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>HORA</label>
                     <input type="time" value={form.horaJogo} onChange={e => set('horaJogo', e.target.value)}
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
                   </div>
                   <div>
                     <label style={{ fontSize: '0.72rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>QUADRA</label>
                     <input value={form.quadra} onChange={e => set('quadra', e.target.value)} placeholder="Ex: Quadra 3 — Saibro"
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
                   </div>
                 </>
               )}
@@ -1175,13 +1175,13 @@ function TabComunicados({ categorias, showMsg }) {
                 <label style={{ fontSize: '0.72rem', fontWeight: 700, color: C.darkGreen, display: 'block', marginBottom: 4 }}>CATEGORIA</label>
                 {categorias.length > 0 ? (
                   <select value={form.categoria} onChange={e => set('categoria', e.target.value)}
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box', background: C.white }}>
                     <option value="">Todas / Geral</option>
                     {categorias.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 ) : (
                   <input value={form.categoria} onChange={e => set('categoria', e.target.value)} placeholder="Categoria ou 'Geral'"
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
                 )}
               </div>
             </div>
@@ -1211,7 +1211,7 @@ function TabComunicados({ categorias, showMsg }) {
             </div>
 
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => { setShowForm(false); setEditItem(null) }} style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1.5px solid #d0dcc8', background: C.white, cursor: 'pointer', fontWeight: 600, color: '#666' }}>Cancelar</button>
+              <button onClick={() => { setShowForm(false); setEditItem(null) }} style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1.5px solid #EAF1F7', background: C.white, cursor: 'pointer', fontWeight: 600, color: '#666' }}>Cancelar</button>
               <button onClick={handleSave} disabled={saving || !form.titulo.trim() || !form.mensagem.trim()}
                 style={{ flex: 2, padding: '11px', borderRadius: 10, border: 'none', background: (form.titulo.trim() && form.mensagem.trim()) ? `linear-gradient(135deg,${C.green},${C.lightGreen})` : '#e0e0e0', color: (form.titulo.trim() && form.mensagem.trim()) ? C.darkGreen : '#aaa', fontWeight: 800, cursor: (form.titulo.trim() && form.mensagem.trim()) ? 'pointer' : 'not-allowed' }}>
                 {saving ? '⏳ Salvando...' : editItem ? '✓ Atualizar comunicado' : '📢 Publicar comunicado'}
@@ -1224,12 +1224,12 @@ function TabComunicados({ categorias, showMsg }) {
       {/* Filtros */}
       <div style={{ background: C.white, borderRadius: 14, padding: '12px 18px', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,.05)' }}>
         <select value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)}
-          style={{ padding: '8px 12px', borderRadius: 9, border: '1.5px solid #d0dcc8', fontSize: '0.84rem', outline: 'none', background: C.white, color: C.darkGreen }}>
+          style={{ padding: '8px 12px', borderRadius: 9, border: '1.5px solid #EAF1F7', fontSize: '0.84rem', outline: 'none', background: C.white, color: C.darkGreen }}>
           <option value="all">Todos os tipos</option>
           {TIPOS_COMUNICADO.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
         </select>
         <select value={filtroCat} onChange={e => setFiltroCat(e.target.value)}
-          style={{ padding: '8px 12px', borderRadius: 9, border: '1.5px solid #d0dcc8', fontSize: '0.84rem', outline: 'none', background: C.white, color: C.darkGreen }}>
+          style={{ padding: '8px 12px', borderRadius: 9, border: '1.5px solid #EAF1F7', fontSize: '0.84rem', outline: 'none', background: C.white, color: C.darkGreen }}>
           <option value="all">Todas as categorias</option>
           {categorias.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
@@ -1270,7 +1270,7 @@ function TabComunicados({ categorias, showMsg }) {
                       {(c.atleta1 || c.atleta2 || c.dataJogo) && (
                         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
                           {(c.atleta1 || c.atleta2) && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f0fae8', borderRadius: 8, padding: '5px 12px', fontSize: '0.82rem', fontWeight: 700, color: C.darkGreen }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#FFF9F5', borderRadius: 8, padding: '5px 12px', fontSize: '0.82rem', fontWeight: 700, color: C.darkGreen }}>
                               <span>{c.atleta1}</span><span style={{ color: C.muted }}>vs</span><span>{c.atleta2}</span>
                             </div>
                           )}
@@ -1290,11 +1290,11 @@ function TabComunicados({ categorias, showMsg }) {
                     </div>
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                       <button onClick={() => handleTogglePublicado(c)} title={c.publicado ? 'Despublicar' : 'Publicar'}
-                        style={{ padding: '6px 10px', borderRadius: 8, border: `1.5px solid ${c.publicado ? C.green : '#d0dcc8'}`, background: 'transparent', cursor: 'pointer', fontSize: '0.85rem', color: c.publicado ? C.green : C.muted }}>
+                        style={{ padding: '6px 10px', borderRadius: 8, border: `1.5px solid ${c.publicado ? C.green : '#EAF1F7'}`, background: 'transparent', cursor: 'pointer', fontSize: '0.85rem', color: c.publicado ? C.green : C.muted }}>
                         {c.publicado ? '👁' : '🙈'}
                       </button>
                       <button onClick={() => openEdit(c)} title="Editar"
-                        style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #d0dcc8', background: '#f8f8f8', cursor: 'pointer', fontSize: '0.85rem' }}>✏️</button>
+                        style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid #EAF1F7', background: '#f8f8f8', cursor: 'pointer', fontSize: '0.85rem' }}>✏️</button>
                       <button onClick={() => handleDelete(c)} title="Excluir"
                         style={{ padding: '6px 10px', borderRadius: 8, border: `1.5px solid rgba(224,85,85,.3)`, background: 'rgba(224,85,85,.05)', cursor: 'pointer', fontSize: '0.85rem', color: C.danger }}>🗑</button>
                     </div>
@@ -1496,7 +1496,7 @@ export default function AdminRanking() {
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
             <div>
               <h1 style={{ margin: 0, fontSize: '1.55rem', fontWeight: 900, letterSpacing: '-0.02em' }}>🏆 Gestão de Ranking</h1>
-              <p style={{ margin: '4px 0 0', color: '#a0c8a0', fontSize: '0.85rem' }}>Ranking público de torneios · 4ª Agro Open de Tênis</p>
+              <p style={{ margin: '4px 0 0', color: '#EAF1F7', fontSize: '0.85rem' }}>Ranking público de torneios · 4ª Agro Open de Tênis</p>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <a href="/ranking" target="_blank" rel="noreferrer" style={{ background: 'rgba(255,255,255,.12)', color: C.white, padding: '9px 16px', borderRadius: 10, fontWeight: 700, fontSize: '0.8rem', textDecoration: 'none', border: '1px solid rgba(255,255,255,.18)' }}>
@@ -1582,13 +1582,13 @@ export default function AdminRanking() {
               <div style={{ flex: '1 1 220px', position: 'relative' }}>
                 <span style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: '#aaa' }}>🔍</span>
                 <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar atleta…"
-                  style={{ width: '100%', paddingLeft: 34, paddingRight: 10, paddingTop: 9, paddingBottom: 9, borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }}
+                  style={{ width: '100%', paddingLeft: 34, paddingRight: 10, paddingTop: 9, paddingBottom: 9, borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }}
                   onFocus={e => e.target.style.borderColor = C.green}
-                  onBlur={e => e.target.style.borderColor = '#d0dcc8'} />
+                  onBlur={e => e.target.style.borderColor = '#EAF1F7'} />
               </div>
               {categorias.length > 0 && (
                 <select value={catFiltro} onChange={e => setCatFiltro(e.target.value)}
-                  style={{ flex: '0 1 210px', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.85rem', outline: 'none', color: C.darkGreen, background: C.white }}>
+                  style={{ flex: '0 1 210px', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.85rem', outline: 'none', color: C.darkGreen, background: C.white }}>
                   <option value="all">Todas as categorias</option>
                   {categorias.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
@@ -1630,10 +1630,10 @@ export default function AdminRanking() {
                   const media = p.torneios > 0 ? Math.round(p.pontos / p.torneios) : 0
                   return (
                     <div key={`${p.nome}-${p.categoria}-${i}`}
-                      style={{ display: 'grid', gridTemplateColumns: '52px 1fr 90px 100px 100px 80px 80px 80px', padding: '11px 18px', alignItems: 'center', borderBottom: `1px solid ${C.border}`, background: i % 2 === 0 ? C.white : '#fafcf8', cursor: 'pointer', transition: 'background .1s' }}
+                      style={{ display: 'grid', gridTemplateColumns: '52px 1fr 90px 100px 100px 80px 80px 80px', padding: '11px 18px', alignItems: 'center', borderBottom: `1px solid ${C.border}`, background: i % 2 === 0 ? C.white : '#FFF9F5', cursor: 'pointer', transition: 'background .1s' }}
                       onClick={() => setPerfilAtleta(p)}
-                      onMouseEnter={e => e.currentTarget.style.background = '#f0fae8'}
-                      onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? C.white : '#fafcf8'}
+                      onMouseEnter={e => e.currentTarget.style.background = '#FFF9F5'}
+                      onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? C.white : '#FFF9F5'}
                     >
                       <div style={{ textAlign: 'center' }}><PosBadge pos={pos} /></div>
                       <div>
@@ -1651,7 +1651,7 @@ export default function AdminRanking() {
                       <div style={{ textAlign: 'center', color: '#888', fontSize: '0.8rem' }}>{media > 0 ? fmtN(media) : '—'}</div>
                       <div style={{ display: 'flex', justifyContent: 'center', gap: 5 }} onClick={e => e.stopPropagation()}>
                         <button onClick={() => setEditAtleta(p)} title="Editar"
-                          style={{ background: '#f0f4e8', border: 'none', borderRadius: 7, padding: '5px 9px', cursor: 'pointer', fontSize: '0.88rem' }}>✏️</button>
+                          style={{ background: '#FFF9F5', border: 'none', borderRadius: 7, padding: '5px 9px', cursor: 'pointer', fontSize: '0.88rem' }}>✏️</button>
                         <button onClick={() => handleRemover(p)} title="Remover"
                           style={{ background: 'rgba(224,85,85,.08)', border: 'none', borderRadius: 7, padding: '5px 9px', cursor: 'pointer', fontSize: '0.88rem' }}>🗑</button>
                       </div>
@@ -1694,14 +1694,14 @@ export default function AdminRanking() {
                       <span style={{ fontSize: '1.3rem' }}>🎾</span>
                       <div>
                         <div style={{ color: C.white, fontWeight: 800, fontSize: '0.95rem' }}>{cat}</div>
-                        <div style={{ color: '#a0c8a0', fontSize: '0.75rem' }}>{jogadores.length} atleta{jogadores.length !== 1 ? 's' : ''}</div>
+                        <div style={{ color: '#EAF1F7', fontSize: '0.75rem' }}>{jogadores.length} atleta{jogadores.length !== 1 ? 's' : ''}</div>
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       {lider && (
                         <div style={{ textAlign: 'right' }}>
                           <div style={{ color: C.gold, fontSize: '0.78rem', fontWeight: 800 }}>👑 {lider.nome}</div>
-                          <div style={{ color: '#a0c8a0', fontSize: '0.7rem' }}>{fmtN(lider.pontos)} pts · {aprv(lider)}% aprov.</div>
+                          <div style={{ color: '#EAF1F7', fontSize: '0.7rem' }}>{fmtN(lider.pontos)} pts · {aprv(lider)}% aprov.</div>
                         </div>
                       )}
                       <span style={{ color: C.lightGreen, fontSize: '1.1rem', transition: 'transform .2s', transform: expanded ? 'rotate(180deg)' : 'none' }}>▼</span>
@@ -1742,7 +1742,7 @@ export default function AdminRanking() {
                             return (
                               <div key={i} onClick={() => setPerfilAtleta(p)}
                                 style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: C.surface, cursor: 'pointer', border: `1px solid ${C.border}`, transition: 'background .1s' }}
-                                onMouseEnter={e => e.currentTarget.style.background = '#eaf5e0'}
+                                onMouseEnter={e => e.currentTarget.style.background = '#FFF9F5'}
                                 onMouseLeave={e => e.currentTarget.style.background = C.surface}
                               >
                                 <span style={{ width: 28, textAlign: 'center', fontWeight: 800, color: C.muted, fontSize: '0.82rem' }}>#{pos}</span>
@@ -1756,7 +1756,7 @@ export default function AdminRanking() {
                                 <span style={{ fontWeight: 800, color: C.green, fontSize: '0.85rem', minWidth: 60, textAlign: 'right' }}>{fmtN(p.pontos)}</span>
                                 <span style={{ fontSize: '0.72rem', color: pct >= 60 ? C.green : pct >= 40 ? C.gold : C.danger, fontWeight: 700, minWidth: 38 }}>{pct}%</span>
                                 <div style={{ display: 'flex', gap: 4 }} onClick={e => e.stopPropagation()}>
-                                  <button onClick={() => setEditAtleta(p)} style={{ background: '#f0f4e8', border: 'none', borderRadius: 7, padding: '4px 8px', cursor: 'pointer', fontSize: '0.8rem' }}>✏️</button>
+                                  <button onClick={() => setEditAtleta(p)} style={{ background: '#FFF9F5', border: 'none', borderRadius: 7, padding: '4px 8px', cursor: 'pointer', fontSize: '0.8rem' }}>✏️</button>
                                   <button onClick={() => handleRemover(p)} style={{ background: 'rgba(224,85,85,.08)', border: 'none', borderRadius: 7, padding: '4px 8px', cursor: 'pointer', fontSize: '0.8rem' }}>🗑</button>
                                 </div>
                               </div>
@@ -1815,7 +1815,7 @@ export default function AdminRanking() {
                   <div style={{ textAlign: 'center' }}>Ação</div>
                 </div>
                 {partidas.map((p, i) => (
-                  <div key={p.id || i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 80px 80px 70px 60px', padding: '11px 18px', alignItems: 'center', borderBottom: `1px solid ${C.border}`, background: i % 2 === 0 ? C.white : '#fafcf8' }}>
+                  <div key={p.id || i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 80px 80px 70px 60px', padding: '11px 18px', alignItems: 'center', borderBottom: `1px solid ${C.border}`, background: i % 2 === 0 ? C.white : '#FFF9F5' }}>
                     <div>
                       <div style={{ fontWeight: 700, color: C.darkGreen, fontSize: '0.88rem' }}>✅ {p.vencedor}</div>
                       {p.descricao !== 'Partida avulsa' && <div style={{ fontSize: '0.68rem', color: C.muted }}>{p.descricao}</div>}
@@ -1823,7 +1823,7 @@ export default function AdminRanking() {
                     <div style={{ fontWeight: 600, color: '#888', fontSize: '0.88rem' }}>❌ {p.perdedor}</div>
                     <div style={{ textAlign: 'center' }}>
                       {p.placar
-                        ? <span style={{ fontSize: '0.8rem', background: '#f0f4e8', padding: '2px 8px', borderRadius: 8, fontWeight: 700, color: C.darkGreen }}>{p.placar}</span>
+                        ? <span style={{ fontSize: '0.8rem', background: '#FFF9F5', padding: '2px 8px', borderRadius: 8, fontWeight: 700, color: C.darkGreen }}>{p.placar}</span>
                         : <span style={{ color: '#ccc', fontSize: '0.8rem' }}>—</span>}
                     </div>
                     <div style={{ textAlign: 'center', fontSize: '0.75rem', color: C.muted }}>{p.categoria}</div>
@@ -1871,7 +1871,7 @@ export default function AdminRanking() {
                   const isAtual = i === 0
                   return (
                     <div key={temp} style={{ background: C.white, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 10px rgba(0,0,0,.07)', border: isAtual ? `2px solid ${C.green}` : `1px solid ${C.border}` }}>
-                      <div style={{ background: isAtual ? `linear-gradient(135deg,${C.darkGreen},#183450)` : '#f8fdf5', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ background: isAtual ? `linear-gradient(135deg,${C.darkGreen},#183450)` : '#FFF9F5', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                           <span style={{ fontSize: '1.5rem' }}>{isAtual ? '📅' : '📦'}</span>
                           <div>
@@ -1879,7 +1879,7 @@ export default function AdminRanking() {
                               Temporada {temp}
                               {isAtual && <span style={{ marginLeft: 10, background: 'rgba(255,107,44,.25)', color: C.lightGreen, borderRadius: 20, padding: '2px 12px', fontSize: '0.72rem', fontWeight: 800 }}>● Em curso</span>}
                             </div>
-                            <div style={{ fontSize: '0.78rem', color: isAtual ? '#a0c8a0' : C.muted, marginTop: 2 }}>
+                            <div style={{ fontSize: '0.78rem', color: isAtual ? '#EAF1F7' : C.muted, marginTop: 2 }}>
                               {atletasTemp.length} atleta{atletasTemp.length !== 1 ? 's' : ''} · {totalPts.toLocaleString('pt-BR')} pontos distribuídos
                             </div>
                           </div>
@@ -1887,7 +1887,7 @@ export default function AdminRanking() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           {lider && (
                             <div style={{ textAlign: 'right', marginRight: 8 }}>
-                              <div style={{ fontSize: '0.72rem', color: isAtual ? '#a0c8a0' : C.muted }}>Líder</div>
+                              <div style={{ fontSize: '0.72rem', color: isAtual ? '#EAF1F7' : C.muted }}>Líder</div>
                               <div style={{ fontWeight: 800, fontSize: '0.9rem', color: isAtual ? C.lightGreen : C.darkGreen }}>👑 {lider.nome}</div>
                             </div>
                           )}
@@ -1902,7 +1902,7 @@ export default function AdminRanking() {
                       {/* Top 3 da temporada */}
                       <div style={{ padding: '12px 20px', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                         {atletasTemp.slice(0, 3).map((p, j) => (
-                          <div key={j} style={{ background: j === 0 ? 'rgba(255,107,44,.08)' : '#f8fdf5', border: `1px solid ${j === 0 ? 'rgba(255,107,44,.3)' : C.border}`, borderRadius: 10, padding: '8px 14px', minWidth: 140 }}>
+                          <div key={j} style={{ background: j === 0 ? 'rgba(255,107,44,.08)' : '#FFF9F5', border: `1px solid ${j === 0 ? 'rgba(255,107,44,.3)' : C.border}`, borderRadius: 10, padding: '8px 14px', minWidth: 140 }}>
                             <div style={{ fontSize: '1rem', marginBottom: 2 }}>{j === 0 ? '🥇' : j === 1 ? '🥈' : '🥉'}</div>
                             <div style={{ fontWeight: 700, color: C.darkGreen, fontSize: '0.84rem' }}>{p.nome}</div>
                             <div style={{ fontWeight: 900, color: j === 0 ? C.gold : C.green, fontSize: '0.88rem' }}>{(p.pontos || 0).toLocaleString('pt-BR')} pts</div>
@@ -1925,7 +1925,7 @@ export default function AdminRanking() {
                     O histórico será preservado em <strong>Temporadas Arquivadas</strong>, mas os pontos atuais serão zerados para iniciar uma nova temporada.
                   </div>
                   <div style={{ display: 'flex', gap: 10 }}>
-                    <button onClick={() => setConfirmTemp(null)} style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1.5px solid #d0dcc8', background: C.white, cursor: 'pointer', fontWeight: 600 }}>Cancelar</button>
+                    <button onClick={() => setConfirmTemp(null)} style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1.5px solid #EAF1F7', background: C.white, cursor: 'pointer', fontWeight: 600 }}>Cancelar</button>
                     <button onClick={() => handleArquivarTemporada(confirmTemp)} disabled={saving} style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', background: `linear-gradient(135deg,${C.green},${C.lightGreen})`, color: C.darkGreen, fontWeight: 800, cursor: saving ? 'wait' : 'pointer' }}>
                       {saving ? '⏳' : '📦 Arquivar'}
                     </button>
@@ -1954,7 +1954,7 @@ export default function AdminRanking() {
                   <span style={{ fontSize: '2.5rem' }}>🏆</span>
                   <div>
                     <div style={{ fontWeight: 900, fontSize: '1rem' }}>{campeoes.length} título{campeoes.length !== 1 ? 's' : ''} registrado{campeoes.length !== 1 ? 's' : ''}</div>
-                    <div style={{ color: '#a0c8a0', fontSize: '0.82rem' }}>
+                    <div style={{ color: '#EAF1F7', fontSize: '0.82rem' }}>
                       {[...new Set(campeoes.map(c => c.categoria))].length} categoria{[...new Set(campeoes.map(c => c.categoria))].length !== 1 ? 's' : ''} · {[...new Set(campeoes.map(c => c.edicao).filter(Boolean))].length} edição(ões)
                     </div>
                   </div>
@@ -1998,7 +1998,7 @@ export default function AdminRanking() {
                 ? <button onClick={startEditPontos} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '8px 16px', cursor: 'pointer', fontWeight: 700, color: C.darkGreen, fontSize: '0.82rem' }}>✏️ Editar pontos</button>
                 : (
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => setEditPontos(false)} style={{ background: C.white, border: '1.5px solid #d0dcc8', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontWeight: 600, color: '#666', fontSize: '0.82rem' }}>Cancelar</button>
+                    <button onClick={() => setEditPontos(false)} style={{ background: C.white, border: '1.5px solid #EAF1F7', borderRadius: 10, padding: '8px 14px', cursor: 'pointer', fontWeight: 600, color: '#666', fontSize: '0.82rem' }}>Cancelar</button>
                     <button onClick={savePontos} style={{ background: `linear-gradient(135deg,${C.green},${C.lightGreen})`, border: 'none', borderRadius: 10, padding: '8px 16px', cursor: 'pointer', fontWeight: 800, color: C.darkGreen, fontSize: '0.82rem' }}>✓ Salvar</button>
                   </div>
                 )
@@ -2009,7 +2009,7 @@ export default function AdminRanking() {
                 <span style={{ fontSize: '1.5rem', textAlign: 'center' }}>{row.icon}</span>
                 <div>
                   <div style={{ fontWeight: 700, color: C.darkGreen, fontSize: '0.9rem' }}>{row.fase}</div>
-                  <div style={{ fontSize: '0.68rem', color: C.muted, marginTop: 2 }}>key: <code style={{ background: '#f0f4e8', padding: '1px 5px', borderRadius: 4 }}>{row.key}</code></div>
+                  <div style={{ fontSize: '0.68rem', color: C.muted, marginTop: 2 }}>key: <code style={{ background: '#FFF9F5', padding: '1px 5px', borderRadius: 4 }}>{row.key}</code></div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {editPontos ? (
@@ -2029,7 +2029,7 @@ export default function AdminRanking() {
               <div style={{ fontSize: '0.78rem', color: C.muted, lineHeight: 1.7 }}>
                 <strong style={{ color: C.darkGreen }}>Como funciona:</strong> Ao finalizar uma chave em{' '}
                 <a href="/admin/torneios" style={{ color: C.green, fontWeight: 600 }}>Torneios</a>, o sistema
-                chama <code style={{ background: '#e8f0dc', padding: '1px 5px', borderRadius: 4 }}>applyChaveToRanking()</code> e
+                chama <code style={{ background: '#FFF9F5', padding: '1px 5px', borderRadius: 4 }}>applyChaveToRanking()</code> e
                 atribui os pontos acima com base na fase mais avançada de cada atleta.
                 {editPontos && <span style={{ color: C.gold, fontWeight: 700, marginLeft: 8 }}>⚠ Alterações afetam apenas a exibição local — para persistir, integre com o backend.</span>}
               </div>
@@ -2073,7 +2073,7 @@ export default function AdminRanking() {
                   return (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       <span style={{ fontSize: '0.8rem', color: C.darkGreen, fontWeight: 700, minWidth: 180 }}>{cat}</span>
-                      <div style={{ flex: 1, height: 10, background: '#e8f0dc', borderRadius: 8, overflow: 'hidden' }}>
+                      <div style={{ flex: 1, height: 10, background: '#FFF9F5', borderRadius: 8, overflow: 'hidden' }}>
                         <div style={{ height: '100%', width: `${pct}%`, background: `linear-gradient(90deg,${C.green},${C.lightGreen})`, borderRadius: 8 }} />
                       </div>
                       <span style={{ fontSize: '0.78rem', color: C.muted, minWidth: 70, textAlign: 'right' }}>
@@ -2094,7 +2094,7 @@ export default function AdminRanking() {
                   const pct = Math.round(((p.pontos || 0) / maxP) * 100)
                   return (
                     <div key={i} onClick={() => setPerfilAtleta(p)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: C.surface, cursor: 'pointer', border: `1px solid ${C.border}`, transition: 'background .1s' }}
-                      onMouseEnter={e => e.currentTarget.style.background = '#eaf5e0'}
+                      onMouseEnter={e => e.currentTarget.style.background = '#FFF9F5'}
                       onMouseLeave={e => e.currentTarget.style.background = C.surface}>
                       <span style={{ width: 28, textAlign: 'center' }}><PosBadge pos={i + 1} /></span>
                       <div style={{ flex: 1 }}>
@@ -2124,7 +2124,7 @@ export default function AdminRanking() {
                     const color = pct >= 70 ? C.green : pct >= 50 ? C.gold : C.danger
                     return (
                       <div key={i} onClick={() => setPerfilAtleta(p)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: C.surface, cursor: 'pointer', border: `1px solid ${C.border}`, transition: 'background .1s' }}
-                        onMouseEnter={e => e.currentTarget.style.background = '#eaf5e0'}
+                        onMouseEnter={e => e.currentTarget.style.background = '#FFF9F5'}
                         onMouseLeave={e => e.currentTarget.style.background = C.surface}>
                         <span style={{ width: 28, textAlign: 'center', fontWeight: 800, color: i < 3 ? color : C.muted, fontSize: '0.85rem' }}>#{i + 1}</span>
                         <div style={{ flex: 1 }}>
@@ -2153,7 +2153,7 @@ export default function AdminRanking() {
                 Esta ação <strong>não pode ser desfeita</strong>. Todos os pontos, vitórias e derrotas serão perdidos permanentemente.
               </div>
               <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => setConfirmReset(false)} style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1.5px solid #d0dcc8', background: C.white, cursor: 'pointer', fontWeight: 600 }}>Cancelar</button>
+                <button onClick={() => setConfirmReset(false)} style={{ flex: 1, padding: '11px', borderRadius: 10, border: '1.5px solid #EAF1F7', background: C.white, cursor: 'pointer', fontWeight: 600 }}>Cancelar</button>
                 <button onClick={handleReset} disabled={saving} style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', background: C.danger, color: C.white, fontWeight: 800, cursor: saving ? 'wait' : 'pointer' }}>
                   {saving ? '⏳' : '🗑 Confirmar'}
                 </button>

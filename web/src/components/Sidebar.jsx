@@ -265,7 +265,7 @@ export default function Sidebar() {
   }
 
   const sidebarStyle = {
-    width: 220,
+    width: 256,
     background: 'var(--surface)',
     borderRight: '1px solid var(--line)',
     height: '100vh',
@@ -302,17 +302,25 @@ export default function Sidebar() {
       <nav style={sidebarStyle}>
         {/* Logo + close button (mobile) */}
         <div style={{
-          padding: '18px 16px', borderBottom: '1px solid var(--line)',
+          padding: '20px 18px 18px',
+          background: 'var(--navy)',
+          borderBottom: '4px solid var(--orange)',
           display: 'flex', alignItems: 'center', gap: 10,
+          boxShadow: '0 8px 20px rgba(18,40,63,.14)',
         }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <img
-              src="/brand/kytto-horizontal.svg"
-              alt="Kytto"
+              src="/brand/kytto-negativo.svg"
+              alt="Kytto — Sistemas inteligentes para negócios"
               className="kytto-mark"
-              style={{ width: 126, height: 38, objectFit: 'contain', objectPosition: 'left center' }}
+              style={{ width: 184, height: 52, objectFit: 'contain', objectPosition: 'left center' }}
             />
-            <div className="kytto-eyebrow" style={{ marginTop: 3, fontSize: 9 }}>Kytto Clube</div>
+            <div style={{
+              marginTop: 8, color: '#FFF4EC', fontFamily: 'var(--font-mono)',
+              fontSize: 9, fontWeight: 800, letterSpacing: '.16em', textTransform: 'uppercase', opacity: .92,
+            }}>
+              Plataforma multinegócio
+            </div>
           </div>
           {isMobile && (
             <button

@@ -189,10 +189,10 @@ export default function Inscricoes() {
         />
         <span style={{ fontSize: 13, color: 'var(--muted)' }}>De:</span>
         <input type="date" value={filtroDataDe} onChange={e => setFiltroDataDe(e.target.value)}
-          style={{ padding: '6px 10px', background: 'var(--card)', border: '1px solid #1e4a2e', borderRadius: 8, color: '#fff', fontSize: 13 }} />
+          style={{ padding: '6px 10px', background: 'var(--card)', border: '1px solid #12283F', borderRadius: 8, color: '#fff', fontSize: 13 }} />
         <span style={{ fontSize: 13, color: 'var(--muted)' }}>Até:</span>
         <input type="date" value={filtroDataAte} onChange={e => setFiltroDataAte(e.target.value)}
-          style={{ padding: '6px 10px', background: 'var(--card)', border: '1px solid #1e4a2e', borderRadius: 8, color: '#fff', fontSize: 13 }} />
+          style={{ padding: '6px 10px', background: 'var(--card)', border: '1px solid #12283F', borderRadius: 8, color: '#fff', fontSize: 13 }} />
         {(filtroDataDe || filtroDataAte) && (
           <button className="btn btn-secondary" style={{ fontSize: 12, padding: '5px 12px' }}
             onClick={() => { setFiltroDataDe(''); setFiltroDataAte('') }}>Limpar datas</button>
@@ -236,7 +236,7 @@ export default function Inscricoes() {
             {selecionados.length} selecionada(s)
           </span>
           <select value={acao} onChange={e => setAcao(e.target.value)}
-            style={{ padding: '5px 10px', background: 'var(--card)', border: '1px solid #1e4a2e', borderRadius: 6, color: '#fff', fontSize: 13 }}>
+            style={{ padding: '5px 10px', background: 'var(--card)', border: '1px solid #12283F', borderRadius: 6, color: '#fff', fontSize: 13 }}>
             <option value="aprovado">Aprovar</option>
             <option value="pendente">Pendente</option>
             <option value="cancelado">Cancelar</option>
@@ -257,7 +257,7 @@ export default function Inscricoes() {
         <div className="table-wrap">
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid #1e4a2e' }}>
+              <tr style={{ borderBottom: '1px solid #12283F' }}>
                 <th style={{ padding: '10px 12px' }}>
                   <input type="checkbox" checked={allSelected} onChange={toggleAll} />
                 </th>
@@ -272,16 +272,16 @@ export default function Inscricoes() {
                 const stCfg = STATUS_COLORS[st] || STATUS_COLORS.cancelado
                 return (
                   <tr key={i.id}
-                    style={{ borderBottom: '1px solid #1e4a2e11', background: selecionados.includes(i.id) ? '#1a4228' : 'transparent' }}
+                    style={{ borderBottom: '1px solid #1e4a2e11', background: selecionados.includes(i.id) ? '#12283F' : 'transparent' }}
                     onMouseEnter={e => { if (!selecionados.includes(i.id)) e.currentTarget.style.background = '#1a3a2222' }}
-                    onMouseLeave={e => { e.currentTarget.style.background = selecionados.includes(i.id) ? '#1a4228' : 'transparent' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = selecionados.includes(i.id) ? '#12283F' : 'transparent' }}
                   >
                     <td style={{ padding: '10px 12px' }}>
                       <input type="checkbox" checked={selecionados.includes(i.id)} onChange={() => toggleSel(i.id)} />
                     </td>
                     <td style={{ padding: '10px 12px', color: '#fff', fontWeight: 500, cursor: 'pointer' }}
                       onClick={() => setDetalhe(i)} title="Ver detalhes">
-                      <span style={{ borderBottom: '1px dashed #1e4a2e' }}>{i.nome}</span>
+                      <span style={{ borderBottom: '1px dashed #12283F' }}>{i.nome}</span>
                     </td>
                     <td style={{ padding: '10px 12px', color: 'var(--muted)', fontSize: 12 }}>{i.email}</td>
                     <td style={{ padding: '10px 12px' }}>

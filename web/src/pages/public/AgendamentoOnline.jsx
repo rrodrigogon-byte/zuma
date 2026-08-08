@@ -503,7 +503,7 @@ export default function AgendamentoOnline() {
               rel="noopener noreferrer"
               style={{
                 display: 'block', padding: '14px',
-                background: '#25d366', color: '#fff',
+                background: '#2D6F9E', color: '#fff',
                 borderRadius: 12, textDecoration: 'none',
                 fontSize: 14, fontWeight: 800, marginBottom: 12,
               }}

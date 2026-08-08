@@ -13,7 +13,7 @@ const ITEM_STATUS = {
   novo:       { bg:'#fef3c7', color:'#92400e', label:'Novo' },
   pendente:   { bg:'#fef3c7', color:'#92400e', label:'Pendente' },
   preparando: { bg:'#dbeafe', color:'#1e40af', label:'Preparando' },
-  pronto:     { bg:'#d1fae5', color:'#065f46', label:'Pronto' },
+  pronto:     { bg:'#FFF9F5', color:'#12283F', label:'Pronto' },
   entregue:   { bg:'#f3f4f6', color:'#6b7280', label:'Entregue' },
 }
 
@@ -362,7 +362,7 @@ export default function Mesas() {
               {[
                 { label:'🆕 Novos', val:itensNovos, color:'#92400e' },
                 { label:'🍳 Prep.', val:itensPrep, color:'#1e40af' },
-                { label:'✅ Prontos', val:itensProntos, color:'#065f46' },
+                { label:'✅ Prontos', val:itensProntos, color:'#12283F' },
                 { label:'🤝 Entregues', val:itensEntregues, color:'var(--muted)' },
               ].map(k => (
                 <div key={k.label} style={{ background:'var(--card2)', borderRadius:8, padding:'8px 14px', flex:1, minWidth:80, textAlign:'center' }}>

@@ -58,7 +58,7 @@ function KpiCard({ label, value, color, sub, icon }) {
 /* ── Badge status ── */
 function Badge({ status, vencimento }) {
   const hoje = new Date().toISOString().slice(0,10)
-  if (status === 'pago')      return <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#d1fae5', color:'#065f46' }}>Pago</span>
+  if (status === 'pago')      return <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#FFF9F5', color:'#12283F' }}>Pago</span>
   if (status === 'cancelado') return <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#f3f4f6', color:'#6b7280' }}>Cancelado</span>
   if (vencimento && vencimento < hoje) return <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#fee2e2', color:'#991b1b' }}>Vencido</span>
   return <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:700, background:'#fef3c7', color:'#92400e' }}>Pendente</span>
@@ -85,7 +85,7 @@ function FluxoChart({ dados }) {
                 <div style={{ position:'absolute', bottom:'100%', left:'50%', transform:'translateX(-50%)', background:'#12283F', border:'1px solid var(--green)', borderRadius:6, padding:'6px 10px', fontSize:11, color:'#fff', whiteSpace:'nowrap', zIndex:10, marginBottom:4 }}>
                   <div style={{ color:'var(--green)' }}>↑ {fmtR(d.receitas)}</div>
                   <div style={{ color:'#ef4444' }}>↓ {fmtR(d.despesas)}</div>
-                  <div style={{ color: saldo >= 0 ? 'var(--lime)' : '#fbbf24', borderTop:'1px solid #1e4a2e', marginTop:3, paddingTop:3 }}>= {fmtR(saldo)}</div>
+                  <div style={{ color: saldo >= 0 ? 'var(--lime)' : '#fbbf24', borderTop:'1px solid #12283F', marginTop:3, paddingTop:3 }}>= {fmtR(saldo)}</div>
                 </div>
               )}
               <div style={{ display:'flex', alignItems:'flex-end', gap:2, height:H }}>
@@ -514,7 +514,7 @@ export default function Financeiro() {
                           <div style={{ display:'flex', gap:6 }}>
                             {l.status === 'pendente' && (
                               <button onClick={() => marcarPago(l.id)}
-                                style={{ ...S.btn, padding:'4px 9px', background:'#d1fae5', color:'#065f46', fontSize:11 }}>✓ Pago</button>
+                                style={{ ...S.btn, padding:'4px 9px', background:'#FFF9F5', color:'#12283F', fontSize:11 }}>✓ Pago</button>
                             )}
                             <button onClick={() => abrirEdicao(l)}
                               style={{ ...S.btn, padding:'4px 9px', background:'var(--surface)', border:'1px solid var(--line)', color:'var(--cream)', fontSize:11 }}>✎</button>

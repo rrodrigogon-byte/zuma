@@ -54,7 +54,7 @@ export default function ERP() {
   return (
     <div style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
       <div style={{ marginBottom: 32 }}>
-        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, fontFamily: 'var(--font-display)' }}>Kytto Clube</h1>
+        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, fontFamily: 'var(--font-display)' }}>Kytto</h1>
         <p style={{ margin: '6px 0 0', color: 'var(--muted)', fontSize: 15 }}>
           Plataforma integrada KYTTO — selecione o módulo para acessar
         </p>

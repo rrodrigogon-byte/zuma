@@ -1,7 +1,7 @@
 {
-  "name": "Kytto Clube — Gestão de clubes, eventos e operações",
-  "short_name": "Kytto Clube",
-  "description": "Gestão integrada de associados, torneios, reservas, bar, financeiro e operações.",
+  "name": "Kytto — Sistemas inteligentes para negócios",
+  "short_name": "Kytto",
+  "description": "Sistemas de gestão, vendas, operações e automação para comércio, alimentação, agro, clubes e serviços.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#FFF4EC",

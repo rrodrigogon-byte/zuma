@@ -456,7 +456,7 @@ export default function Dashboard() {
         <div
           className="card"
           style={{
-            background: 'linear-gradient(135deg, #12283F 60%, #1a4228)',
+            background: 'linear-gradient(135deg, #12283F 60%, #12283F)',
             borderLeft: '4px solid var(--green)',
             marginBottom: 24,
             display: 'flex',
@@ -656,7 +656,7 @@ export default function Dashboard() {
                 { label: 'Placares não confirmados', val: dash.pendencias.placaresNaoConf, href: '/admin/agenda', cor: '#FF6B2C' },
                 { label: 'Reservas hoje', val: dash.pendencias.reservasHoje, href: '/admin/agenda', cor: '#FF9B72' },
               ].map(({ label, val, href, cor }) => (
-                <a key={label} href={href} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: val > 0 ? cor + '11' : 'transparent', borderRadius: 8, border: `1px solid ${val > 0 ? cor + '44' : '#1e4a2e'}` }}>
+                <a key={label} href={href} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: val > 0 ? cor + '11' : 'transparent', borderRadius: 8, border: `1px solid ${val > 0 ? cor + '44' : '#12283F'}` }}>
                   <span style={{ fontSize: 13, color: '#ccc' }}>{label}</span>
                   <span style={{ fontSize: 16, fontWeight: 800, color: val > 0 ? cor : 'var(--muted)' }}>{val ?? '—'}</span>
                 </a>
@@ -691,10 +691,10 @@ export default function Dashboard() {
                 display: 'flex', alignItems: 'center', gap: 8,
                 padding: '10px 16px', textDecoration: 'none',
                 color: '#fff', fontSize: 13, fontWeight: 500,
-                transition: 'border-color 0.2s, background 0.2s', border: '1px solid #1e4a2e',
+                transition: 'border-color 0.2s, background 0.2s', border: '1px solid #12283F',
               }}
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--green)'; e.currentTarget.style.background = '#1a3a2233' }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#1e4a2e'; e.currentTarget.style.background = '' }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#12283F'; e.currentTarget.style.background = '' }}
             >
               <span style={{ fontSize: 18 }}>{l.icon}</span>
               {l.label}

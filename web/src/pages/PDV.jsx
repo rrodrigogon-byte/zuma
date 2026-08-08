@@ -157,7 +157,7 @@ function PixQRModal({ valor, comandaId, onClose, onPago, toast }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.85)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div style={{ background: '#0d1f12', border: '1.5px solid #1e4029', borderRadius: 16, padding: 24, width: '100%', maxWidth: 360, textAlign: 'center' }}>
+      <div style={{ background: '#142F49', border: '1.5px solid #294F6C', borderRadius: 16, padding: 24, width: '100%', maxWidth: 360, textAlign: 'center' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ fontSize: 18, fontWeight: 800 }}>📲 PIX</div>
@@ -177,7 +177,7 @@ function PixQRModal({ valor, comandaId, onClose, onPago, toast }) {
           <div style={{ padding: '24px 0' }}>
             <div style={{ fontSize: 36 }}>❌</div>
             <div style={{ fontSize: 14, color: '#e74c3c', marginTop: 10, marginBottom: 16 }}>{erroInicio}</div>
-            <button onClick={onClose} style={{ background: '#1e4029', border: '1px solid #FF6B2C', borderRadius: 8, color: '#FF9B72', padding: '8px 20px', cursor: 'pointer', fontWeight: 700 }}>
+            <button onClick={onClose} style={{ background: '#294F6C', border: '1px solid #FF6B2C', borderRadius: 8, color: '#FF9B72', padding: '8px 20px', cursor: 'pointer', fontWeight: 700 }}>
               Fechar
             </button>
           </div>
@@ -215,7 +215,7 @@ function PixQRModal({ valor, comandaId, onClose, onPago, toast }) {
             </div>
 
             {/* Copiar copia-e-cola (do backend) */}
-            <button onClick={copiar} style={{ width: '100%', background: '#1e4029', border: '1.5px solid #FF6B2C', borderRadius: 10, color: '#FF9B72', padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: 10 }}>
+            <button onClick={copiar} style={{ width: '100%', background: '#294F6C', border: '1.5px solid #FF6B2C', borderRadius: 10, color: '#FF9B72', padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: 10 }}>
               {copied ? '✓ Copiado!' : '📋 Copiar código PIX'}
             </button>
 
@@ -224,7 +224,7 @@ function PixQRModal({ valor, comandaId, onClose, onPago, toast }) {
               <button
                 onClick={confirmarSimulacao}
                 disabled={confirmando}
-                style={{ width: '100%', background: '#2d4a10', border: '1.5px solid #FF9B72', borderRadius: 10, color: '#FF9B72', padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: 10, opacity: confirmando ? 0.6 : 1 }}>
+                style={{ width: '100%', background: '#314C65', border: '1.5px solid #FF9B72', borderRadius: 10, color: '#FF9B72', padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: 10, opacity: confirmando ? 0.6 : 1 }}>
                 {confirmando ? '⏳ Confirmando...' : '✓ Confirmar pagamento (simulação)'}
               </button>
             )}
@@ -237,7 +237,7 @@ function PixQRModal({ valor, comandaId, onClose, onPago, toast }) {
 
             {/* Preview do código (truncado) */}
             {copiaECola && (
-              <div style={{ marginTop: 14, fontSize: 10, opacity: 0.35, wordBreak: 'break-all', padding: '8px', background: '#0a1a10', borderRadius: 8, lineHeight: 1.4, maxHeight: 48, overflow: 'hidden' }}>
+              <div style={{ marginTop: 14, fontSize: 10, opacity: 0.35, wordBreak: 'break-all', padding: '8px', background: '#10283F', borderRadius: 8, lineHeight: 1.4, maxHeight: 48, overflow: 'hidden' }}>
                 {copiaECola.substring(0, 80)}…
               </div>
             )}
@@ -250,7 +250,7 @@ function PixQRModal({ valor, comandaId, onClose, onPago, toast }) {
 
 const S = {
   page: { minHeight: '100vh', background: 'var(--bg, #12283F)', color: '#FFF4EC', fontFamily: 'inherit', paddingBottom: 80 },
-  banner: { background: 'linear-gradient(90deg,#1a4a20,#2d6e35)', padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' },
+  banner: { background: 'linear-gradient(90deg,#254B6A,#2E5C7A)', padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' },
   bannerStat: { display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 60 },
   bannerLabel: { fontSize: 10, opacity: 0.75, textTransform: 'uppercase', letterSpacing: 0.8 },
   bannerVal: { fontSize: 16, fontWeight: 700, color: '#FF9B72' },
@@ -259,8 +259,8 @@ const S = {
   sectionTitle: { fontSize: 13, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#FF9B72', marginBottom: 12 },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(110px,1fr))', gap: 10 },
   card: (status) => ({
-    background: status === 'ocupada' ? '#132b1b' : status === 'conta' ? '#3a2800' : status === 'livre' ? '#0d1f12' : '#132b1b',
-    border: `1.5px solid ${status === 'conta' ? '#FF6B2C' : status === 'ocupada' ? '#FF6B2C' : '#1e4029'}`,
+    background: status === 'ocupada' ? '#17354F' : status === 'conta' ? '#3a2800' : status === 'livre' ? '#142F49' : '#17354F',
+    border: `1.5px solid ${status === 'conta' ? '#FF6B2C' : status === 'ocupada' ? '#FF6B2C' : '#294F6C'}`,
     borderRadius: 10, padding: '10px 8px', cursor: 'pointer', textAlign: 'center', position: 'relative',
     transition: 'transform .15s, box-shadow .15s',
     animation: status === 'conta' ? 'pulse-gold 1.4s ease-in-out infinite' : 'none',
@@ -270,46 +270,46 @@ const S = {
   cardTotal: { fontSize: 13, fontWeight: 700, color: '#FF9B72', marginTop: 4 },
   cardFire: { position: 'absolute', top: 4, right: 6, fontSize: 14 },
   virtualList: { display: 'flex', flexDirection: 'column', gap: 8 },
-  vcard: { background: '#132b1b', border: '1.5px solid #1e4029', borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' },
+  vcard: { background: '#17354F', border: '1.5px solid #294F6C', borderRadius: 10, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' },
   vcardLeft: { display: 'flex', flexDirection: 'column' },
   vcardName: { fontWeight: 700, fontSize: 14 },
   vcardSub: { fontSize: 11, opacity: 0.55 },
   vcardTotal: { fontSize: 15, fontWeight: 700, color: '#FF9B72' },
-  sheet: { position: 'fixed', bottom: 0, left: 0, right: 0, background: '#0d1f12', borderTop: '2px solid #1e4029', borderRadius: '18px 18px 0 0', padding: '0 0 env(safe-area-inset-bottom,0)', maxHeight: '88vh', display: 'flex', flexDirection: 'column', zIndex: 100 },
-  sheetHeader: { padding: '14px 18px 10px', borderBottom: '1px solid #1e4029', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+  sheet: { position: 'fixed', bottom: 0, left: 0, right: 0, background: '#142F49', borderTop: '2px solid #294F6C', borderRadius: '18px 18px 0 0', padding: '0 0 env(safe-area-inset-bottom,0)', maxHeight: '88vh', display: 'flex', flexDirection: 'column', zIndex: 100 },
+  sheetHeader: { padding: '14px 18px 10px', borderBottom: '1px solid #294F6C', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
   sheetTitle: { fontWeight: 800, fontSize: 16 },
   sheetClose: { background: 'none', border: 'none', color: '#FF9B72', fontSize: 22, cursor: 'pointer', lineHeight: 1 },
   sheetBody: { overflowY: 'auto', flex: 1, padding: '10px 16px' },
-  itemRow: { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderBottom: '1px solid #1a3020' },
-  itemQty: { minWidth: 26, height: 26, borderRadius: 6, background: '#1e4029', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#FF9B72' },
+  itemRow: { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderBottom: '1px solid #1F405C' },
+  itemQty: { minWidth: 26, height: 26, borderRadius: 6, background: '#294F6C', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: '#FF9B72' },
   itemName: { flex: 1, fontSize: 13 },
   itemPrice: { fontSize: 13, fontWeight: 600, color: '#FF6B2C' },
-  itemStatus: { fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#1e4029', color: '#FF9B72' },
+  itemStatus: { fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#294F6C', color: '#FF9B72' },
   itemDeleteBtn: { background: 'none', border: 'none', color: '#c0392b', fontSize: 15, cursor: 'pointer', padding: '2px 4px', lineHeight: 1, opacity: 0.8 },
-  sheetActions: { padding: '10px 16px 14px', display: 'flex', gap: 8, flexWrap: 'wrap', borderTop: '1px solid #1e4029' },
+  sheetActions: { padding: '10px 16px 14px', display: 'flex', gap: 8, flexWrap: 'wrap', borderTop: '1px solid #294F6C' },
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.75)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  modal: { background: '#0d1f12', border: '1.5px solid #1e4029', borderRadius: 14, padding: 24, width: '100%', maxWidth: 380 },
+  modal: { background: '#142F49', border: '1.5px solid #294F6C', borderRadius: 14, padding: 24, width: '100%', maxWidth: 380 },
   modalTitle: { fontSize: 17, fontWeight: 800, marginBottom: 16 },
   payBtns: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 16 },
-  payBtn: (active) => ({ padding: '18px 10px', borderRadius: 10, border: `2px solid ${active ? '#FF6B2C' : '#1e4029'}`, background: active ? '#1a4a20' : '#132b1b', color: '#FFF4EC', cursor: 'pointer', fontSize: 20, textAlign: 'center', transition: 'all .15s' }),
+  payBtn: (active) => ({ padding: '18px 10px', borderRadius: 10, border: `2px solid ${active ? '#FF6B2C' : '#294F6C'}`, background: active ? '#254B6A' : '#17354F', color: '#FFF4EC', cursor: 'pointer', fontSize: 20, textAlign: 'center', transition: 'all .15s' }),
   payBtnLabel: { fontSize: 12, fontWeight: 600, marginTop: 4 },
   catScroll: { display: 'flex', gap: 8, overflowX: 'auto', padding: '8px 0', marginBottom: 10 },
-  catBtn: (active) => ({ padding: '5px 14px', borderRadius: 20, border: `1.5px solid ${active ? '#FF6B2C' : '#1e4029'}`, background: active ? '#1a4a20' : 'transparent', color: active ? '#FF9B72' : '#FFF4EC', cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 600 }),
+  catBtn: (active) => ({ padding: '5px 14px', borderRadius: 20, border: `1.5px solid ${active ? '#FF6B2C' : '#294F6C'}`, background: active ? '#254B6A' : 'transparent', color: active ? '#FF9B72' : '#FFF4EC', cursor: 'pointer', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 600 }),
   prodGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: 10, overflowY: 'auto', maxHeight: '40vh' },
-  prodCard: { background: '#132b1b', border: '1.5px solid #1e4029', borderRadius: 10, padding: '10px 10px 8px', position: 'relative' },
+  prodCard: { background: '#17354F', border: '1.5px solid #294F6C', borderRadius: 10, padding: '10px 10px 8px', position: 'relative' },
   prodName: { fontSize: 12, fontWeight: 600, marginBottom: 4 },
   prodPrice: { fontSize: 13, color: '#FF6B2C', fontWeight: 700 },
   addBtn: { position: 'absolute', top: 8, right: 8, width: 26, height: 26, borderRadius: 6, background: '#FF6B2C', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 },
-  input: { width: '100%', background: '#132b1b', border: '1.5px solid #1e4029', borderRadius: 8, padding: '9px 12px', color: '#FFF4EC', fontSize: 14, marginBottom: 10, boxSizing: 'border-box' },
+  input: { width: '100%', background: '#17354F', border: '1.5px solid #294F6C', borderRadius: 8, padding: '9px 12px', color: '#FFF4EC', fontSize: 14, marginBottom: 10, boxSizing: 'border-box' },
   contaBox: { marginBottom: 16 },
   contaRow: { display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 14 },
-  contaTotal: { display: 'flex', justifyContent: 'space-between', padding: '8px 0', fontSize: 17, fontWeight: 800, borderTop: '1px solid #1e4029', marginTop: 6 },
+  contaTotal: { display: 'flex', justifyContent: 'space-between', padding: '8px 0', fontSize: 17, fontWeight: 800, borderTop: '1px solid #294F6C', marginTop: 6 },
   serviceToggle: { display: 'flex', alignItems: 'center', gap: 8, margin: '8px 0', fontSize: 13, cursor: 'pointer' },
-  bottomTabs: { position: 'fixed', bottom: 0, left: 0, right: 0, background: '#0d1f12', borderTop: '1.5px solid #1e4029', display: 'flex', zIndex: 50, paddingBottom: 'env(safe-area-inset-bottom,0)' },
+  bottomTabs: { position: 'fixed', bottom: 0, left: 0, right: 0, background: '#142F49', borderTop: '1.5px solid #294F6C', display: 'flex', zIndex: 50, paddingBottom: 'env(safe-area-inset-bottom,0)' },
   tabBtn: (active) => ({ flex: 1, padding: '10px 4px 8px', background: 'none', border: 'none', color: active ? '#FF9B72' : '#FFF4EC', cursor: 'pointer', fontSize: 10, fontWeight: active ? 700 : 400, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, opacity: active ? 1 : 0.55 }),
   tabIcon: { fontSize: 18 },
   vendasList: { display: 'flex', flexDirection: 'column', gap: 8 },
-  vendaRow: { background: '#132b1b', border: '1px solid #1e4029', borderRadius: 8, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  vendaRow: { background: '#17354F', border: '1px solid #294F6C', borderRadius: 8, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
 }
 
 const PAY_OPTIONS = [
@@ -359,11 +359,11 @@ function MesaCard({ m, onClick }) {
     const mm = mins % 60
     return hh + 'h' + (mm > 0 ? String(mm).padStart(2, '0') : '')
   })()
-  const bgStatus = m.status === 'conta' ? '#FF6B2C' : m.status === 'ocupada' ? '#1e4029' : '#0d1f12'
+  const bgStatus = m.status === 'conta' ? '#FF6B2C' : m.status === 'ocupada' ? '#294F6C' : '#142F49'
   const clrStatus = m.status === 'conta' ? '#000' : '#FF9B72'
   const label = m.status === 'livre' ? 'livre' : m.status === 'conta' ? 'conta' : 'ocupada'
   return (
-    <div style={{ background: m.status === 'ocupada' ? '#132b1b' : m.status === 'conta' ? '#3a2800' : '#0d1f12', border: '1.5px solid ' + (m.status === 'conta' ? '#FF6B2C' : m.status === 'ocupada' ? '#FF6B2C' : '#1e4029'), borderRadius: 10, padding: '10px 8px', cursor: 'pointer', textAlign: 'center', position: 'relative', transition: 'transform .12s, box-shadow .12s', animation: m.status === 'conta' ? 'pulse-gold 1.4s ease-in-out infinite' : 'none' }}
+    <div style={{ background: m.status === 'ocupada' ? '#17354F' : m.status === 'conta' ? '#3a2800' : '#142F49', border: '1.5px solid ' + (m.status === 'conta' ? '#FF6B2C' : m.status === 'ocupada' ? '#FF6B2C' : '#294F6C'), borderRadius: 10, padding: '10px 8px', cursor: 'pointer', textAlign: 'center', position: 'relative', transition: 'transform .12s, box-shadow .12s', animation: m.status === 'conta' ? 'pulse-gold 1.4s ease-in-out infinite' : 'none' }}
       onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.4)' }}
       onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '' }}
       onClick={onClick}>
@@ -924,7 +924,7 @@ export default function PDV() {
         }
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #1e4029; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #294F6C; border-radius: 4px; }
         @media print { body * { visibility: hidden; } }
       `}</style>
 
@@ -953,7 +953,7 @@ export default function PDV() {
         {/* Botão Sangria/Suprimento */}
         <button
           onClick={() => { setCaixaMov({ tipo: 'sangria', valor: '', motivo: '' }); setOverlay('caixa-mov') }}
-          style={{ background: '#1e4029', border: '1.5px solid #FF6B2C', borderRadius: 8, color: '#FFF4EC', fontSize: 11, padding: '5px 9px', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
+          style={{ background: '#294F6C', border: '1.5px solid #FF6B2C', borderRadius: 8, color: '#FFF4EC', fontSize: 11, padding: '5px 9px', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>
           💰 Caixa
         </button>
       </div>
@@ -969,8 +969,8 @@ export default function PDV() {
               <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', alignItems: 'center', flexWrap: 'wrap' }}>
                 {/* Chips de status */}
                 {[
-                  { label: 'Livres', count: (mesas.fisicas||[]).filter(m=>m.status==='livre').length, color: '#1e4029', text: '#6aaa6a' },
-                  { label: 'Ocupadas', count: (mesas.fisicas||[]).filter(m=>m.status==='ocupada').length, color: '#1a4a20', text: '#FF9B72' },
+                  { label: 'Livres', count: (mesas.fisicas||[]).filter(m=>m.status==='livre').length, color: '#294F6C', text: '#A9C3D6' },
+                  { label: 'Ocupadas', count: (mesas.fisicas||[]).filter(m=>m.status==='ocupada').length, color: '#254B6A', text: '#FF9B72' },
                   { label: 'Conta', count: (mesas.fisicas||[]).filter(m=>m.status==='conta').length, color: '#3a2800', text: '#FF6B2C' },
                 ].map(s => s.count > 0 && (
                   <span key={s.label} style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: s.color, color: s.text }}>
@@ -1037,29 +1037,29 @@ export default function PDV() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: 8, marginBottom: 16 }}>
-            <div style={{ background: '#132b1b', border: '1px solid #1e4029', borderRadius: 8, padding: 10 }}>
+            <div style={{ background: '#17354F', border: '1px solid #294F6C', borderRadius: 8, padding: 10 }}>
               <div style={{ fontSize: 11, opacity: .6 }}>Eventos na fila</div>
               <div style={{ fontSize: 20, fontWeight: 800 }}>{resumoOffline.total || 0}</div>
             </div>
-            <div style={{ background: '#132b1b', border: '1px solid #1e4029', borderRadius: 8, padding: 10 }}>
+            <div style={{ background: '#17354F', border: '1px solid #294F6C', borderRadius: 8, padding: 10 }}>
               <div style={{ fontSize: 11, opacity: .6 }}>Pendentes locais</div>
               <div style={{ fontSize: 20, fontWeight: 800, color: '#FF6B2C' }}>{resumoOffline.pendente || 0}</div>
             </div>
-            <div style={{ background: '#132b1b', border: '1px solid #1e4029', borderRadius: 8, padding: 10 }}>
+            <div style={{ background: '#17354F', border: '1px solid #294F6C', borderRadius: 8, padding: 10 }}>
               <div style={{ fontSize: 11, opacity: .6 }}>Com falha de entrega</div>
               <div style={{ fontSize: 20, fontWeight: 800, color: resumoOffline.falha ? '#e74c3c' : '#FF9B72' }}>{resumoOffline.falha || 0}</div>
             </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.3fr) minmax(280px, .9fr)', gap: 14, alignItems: 'start' }}>
-            <div style={{ background: '#102416', border: '1px solid #1e4029', borderRadius: 10, padding: 12 }}>
+            <div style={{ background: '#18374F', border: '1px solid #294F6C', borderRadius: 10, padding: 12 }}>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Catálogo disponível localmente</div>
               {cardapio.length === 0 ? (
                 <div style={{ fontSize: 12, opacity: .6, padding: 14 }}>Nenhum catálogo está disponível em cache. Conecte-se uma vez para atualizar os produtos deste terminal.</div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8, maxHeight: 430, overflowY: 'auto', paddingRight: 3 }}>
                   {cardapio.map((produto) => (
-                    <button key={produto.produto_id || produto.id} type="button" onClick={() => adicionarAoCarrinhoOffline(produto)} style={{ textAlign: 'left', cursor: 'pointer', color: '#FFF4EC', background: '#132b1b', border: '1px solid #1e4029', borderRadius: 8, padding: 10 }}>
+                    <button key={produto.produto_id || produto.id} type="button" onClick={() => adicionarAoCarrinhoOffline(produto)} style={{ textAlign: 'left', cursor: 'pointer', color: '#FFF4EC', background: '#17354F', border: '1px solid #294F6C', borderRadius: 8, padding: 10 }}>
                       <div style={{ fontSize: 17, marginBottom: 3 }}>{prodEmoji(produto)}</div>
                       <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.25 }}>{produto.nome}</div>
                       <div style={{ fontSize: 12, color: '#FF9B72', fontWeight: 700, marginTop: 5 }}>{fmtR(produto.preco || produto.preco_venda || 0)}</div>
@@ -1069,8 +1069,8 @@ export default function PDV() {
               )}
             </div>
 
-            <div style={{ background: '#132b1b', border: '1px solid #2d6e3f', borderRadius: 10, padding: 12, position: 'sticky', top: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, borderBottom: '1px solid #1e4029', paddingBottom: 9, marginBottom: 8 }}>
+            <div style={{ background: '#17354F', border: '1px solid #12283F', borderRadius: 10, padding: 12, position: 'sticky', top: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, borderBottom: '1px solid #294F6C', paddingBottom: 9, marginBottom: 8 }}>
                 <strong>Carrinho de contingência</strong>
                 <span style={{ fontSize: 12, opacity: .65 }}>{carrinhoOffline.reduce((soma, item) => soma + item.quantidade, 0)} itens</span>
               </div>
@@ -1085,22 +1085,22 @@ export default function PDV() {
                         <div style={{ fontSize: 11, opacity: .6 }}>{fmtR(item.valor_unitario)} cada</div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <button type="button" onClick={() => alterarQuantidadeOffline(item.produto_id, -1)} style={{ width: 25, height: 25, borderRadius: 5, border: '1px solid #456', background: '#0d1f12', color: '#FFF4EC', cursor: 'pointer' }}>−</button>
+                        <button type="button" onClick={() => alterarQuantidadeOffline(item.produto_id, -1)} style={{ width: 25, height: 25, borderRadius: 5, border: '1px solid #456', background: '#142F49', color: '#FFF4EC', cursor: 'pointer' }}>−</button>
                         <span style={{ minWidth: 18, textAlign: 'center', fontSize: 12 }}>{item.quantidade}</span>
-                        <button type="button" onClick={() => alterarQuantidadeOffline(item.produto_id, 1)} style={{ width: 25, height: 25, borderRadius: 5, border: '1px solid #456', background: '#0d1f12', color: '#FFF4EC', cursor: 'pointer' }}>+</button>
+                        <button type="button" onClick={() => alterarQuantidadeOffline(item.produto_id, 1)} style={{ width: 25, height: 25, borderRadius: 5, border: '1px solid #456', background: '#142F49', color: '#FFF4EC', cursor: 'pointer' }}>+</button>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #1e4029', paddingTop: 10, fontSize: 17, fontWeight: 800 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #294F6C', paddingTop: 10, fontSize: 17, fontWeight: 800 }}>
                 <span>Total</span><span style={{ color: '#FF9B72' }}>{fmtR(totalCarrinhoOffline)}</span>
               </div>
               <div style={{ fontSize: 12, margin: '13px 0 7px', opacity: .75 }}>Pagamento já autorizado</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 12 }}>
                 {[['dinheiro', 'Dinheiro'], ['tef', 'TEF local'], ['carteira', 'Vale']].map(([tipo, label]) => (
-                  <button key={tipo} type="button" onClick={() => setPagamentoOffline(tipo)} style={{ border: pagamentoOffline === tipo ? '1.5px solid #FF9B72' : '1px solid #1e4029', background: pagamentoOffline === tipo ? '#1e4029' : '#0d1f12', color: '#FFF4EC', borderRadius: 7, padding: '7px 4px', cursor: 'pointer', fontSize: 11, fontWeight: pagamentoOffline === tipo ? 700 : 400 }}>{label}</button>
+                  <button key={tipo} type="button" onClick={() => setPagamentoOffline(tipo)} style={{ border: pagamentoOffline === tipo ? '1.5px solid #FF9B72' : '1px solid #294F6C', background: pagamentoOffline === tipo ? '#294F6C' : '#142F49', color: '#FFF4EC', borderRadius: 7, padding: '7px 4px', cursor: 'pointer', fontSize: 11, fontWeight: pagamentoOffline === tipo ? 700 : 400 }}>{label}</button>
                 ))}
               </div>
               {pagamentoOffline === 'tef' && <div style={{ fontSize: 11, color: '#FF6B2C', margin: '-5px 0 10px' }}>A autorização TEF local será solicitada antes de salvar o evento.</div>}
@@ -1136,7 +1136,7 @@ export default function PDV() {
             <div style={{ fontSize: 13, opacity: 0.45, textAlign: 'center', padding: 24 }}>Nenhuma venda fechada hoje</div>
           ) : (
             <div style={S.vendasList}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, opacity: 0.55, padding: '0 4px 6px', borderBottom: '1px solid #1e4029' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, opacity: 0.55, padding: '0 4px 6px', borderBottom: '1px solid #294F6C' }}>
                 <span>Total do dia</span>
                 <span style={{ color: '#FF9B72', fontWeight: 700 }}>
                   {fmtR(vendas.reduce((s, v) => s + (v.total || v.valor || 0), 0))}
@@ -1195,11 +1195,11 @@ export default function PDV() {
                 {/* Botão lançar rápido — abre cardápio direto */}
                 <button
                   onClick={() => setOverlay('cardapio')}
-                  style={{ background: 'linear-gradient(135deg,#FF6B2C,#3a8c1e)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer', padding: '5px 12px', whiteSpace: 'nowrap' }}>
+                  style={{ background: 'linear-gradient(135deg,#FF6B2C,#2D6F9E)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer', padding: '5px 12px', whiteSpace: 'nowrap' }}>
                   + Lançar
                 </button>
                 <button title="Imprimir comanda" onClick={imprimirComanda}
-                  style={{ background: 'none', border: '1px solid #1e4029', borderRadius: 6, color: '#FFF4EC', fontSize: 16, cursor: 'pointer', padding: '3px 7px' }}>
+                  style={{ background: 'none', border: '1px solid #294F6C', borderRadius: 6, color: '#FFF4EC', fontSize: 16, cursor: 'pointer', padding: '3px 7px' }}>
                   🖨
                 </button>
                 <button style={S.sheetClose} onClick={fecharSheet}>✕</button>
@@ -1213,7 +1213,7 @@ export default function PDV() {
                   <div style={{ fontSize: 14, opacity: 0.45, marginBottom: 16 }}>Comanda vazia</div>
                   <button
                     onClick={() => setOverlay('cardapio')}
-                    style={{ background: 'linear-gradient(135deg,#FF6B2C,#3a8c1e)', border: 'none', borderRadius: 10, color: '#fff', padding: '12px 28px', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
+                    style={{ background: 'linear-gradient(135deg,#FF6B2C,#2D6F9E)', border: 'none', borderRadius: 10, color: '#fff', padding: '12px 28px', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
                     ➕ Lançar primeiro item
                   </button>
                 </div>
@@ -1221,13 +1221,13 @@ export default function PDV() {
                 <>
                   {comanda.itens.map((it, i) => (
                     <div key={i} style={{ ...S.itemRow, alignItems: 'center' }}>
-                      <div style={{ ...S.itemQty, background: it.status === 'cancelado' ? '#3a1a1a' : '#1e4029' }}>{it.qtd}</div>
+                      <div style={{ ...S.itemQty, background: it.status === 'cancelado' ? '#3a1a1a' : '#294F6C' }}>{it.qtd}</div>
                       <div style={S.itemName}>
                         <span style={{ textDecoration: it.status === 'cancelado' ? 'line-through' : 'none', opacity: it.status === 'cancelado' ? 0.4 : 1 }}>{it.nome}</span>
                         {it.obs && <div style={{ fontSize: 10, opacity: 0.5, fontStyle: 'italic' }}>💬 {it.obs}</div>}
                       </div>
                       {it.status && it.status !== 'normal' && (
-                        <div style={{ ...S.itemStatus, background: it.status === 'entregue' ? '#1a4a20' : it.status === 'preparando' ? '#3a2800' : '#1e4029', color: it.status === 'entregue' ? '#FF9B72' : it.status === 'preparando' ? '#FF6B2C' : '#FF9B72' }}>
+                        <div style={{ ...S.itemStatus, background: it.status === 'entregue' ? '#254B6A' : it.status === 'preparando' ? '#3a2800' : '#294F6C', color: it.status === 'entregue' ? '#FF9B72' : it.status === 'preparando' ? '#FF6B2C' : '#FF9B72' }}>
                           {it.status}
                         </div>
                       )}
@@ -1240,12 +1240,12 @@ export default function PDV() {
 
               {/* Campo de desconto — mais compacto */}
               {comanda.itens?.length > 0 && (
-                <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid #1e4029' }}>
+                <div style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid #294F6C' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 11, opacity: 0.65, marginRight: 4 }}>Desconto:</span>
                     {[0, 5, 10, 15, 20].map(p => (
                       <button key={p} onClick={() => setDescPct(p)}
-                        style={{ padding: '3px 9px', borderRadius: 16, border: `1.5px solid ${descPct === p ? '#FF6B2C' : '#1e4029'}`, background: descPct === p ? '#1a4a20' : 'transparent', color: descPct === p ? '#FF9B72' : '#FFF4EC', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
+                        style={{ padding: '3px 9px', borderRadius: 16, border: `1.5px solid ${descPct === p ? '#FF6B2C' : '#294F6C'}`, background: descPct === p ? '#254B6A' : 'transparent', color: descPct === p ? '#FF9B72' : '#FFF4EC', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
                         {p}%
                       </button>
                     ))}
@@ -1266,7 +1266,7 @@ export default function PDV() {
             </div>
 
             {/* Rodapé com total visual rico */}
-            <div style={{ padding: '8px 16px', borderTop: '1px solid #1e4029', background: '#0a1a0f' }}>
+            <div style={{ padding: '8px 16px', borderTop: '1px solid #294F6C', background: '#12283F' }}>
               {descPct > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, opacity: 0.6, marginBottom: 2 }}>
                   <span>Subtotal c/ desconto</span>
@@ -1309,7 +1309,7 @@ export default function PDV() {
             onClick={e => e.stopPropagation()}>
 
             {/* Header */}
-            <div style={{ padding: '14px 18px 10px', borderBottom: '1px solid #1e4029', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <div style={{ padding: '14px 18px 10px', borderBottom: '1px solid #294F6C', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
               <div>
                 <div style={{ fontWeight: 800, fontSize: 16 }}>🍽 Cardápio</div>
                 <div style={{ fontSize: 11, opacity: 0.5, marginTop: 1 }}>
@@ -1371,8 +1371,8 @@ export default function PDV() {
 
                     return (
                       <div key={p.id} style={{
-                        background: estZero ? '#1a1a1a' : '#1a2e1e',
-                        border: `1.5px solid ${estZero ? '#3a1a1a' : estBaixo ? '#FF6B2C60' : '#1e4029'}`,
+                        background: estZero ? '#1a1a1a' : '#12283F',
+                        border: `1.5px solid ${estZero ? '#3a1a1a' : estBaixo ? '#FF6B2C60' : '#294F6C'}`,
                         borderRadius: 12, overflow: 'hidden',
                         opacity: estZero ? 0.5 : 1,
                         display: 'flex', flexDirection: 'column',
@@ -1380,7 +1380,7 @@ export default function PDV() {
                       }}>
                         {/* Área visual do produto */}
                         <div style={{
-                          background: estZero ? '#2a1a1a' : 'linear-gradient(135deg,#0d2218,#1a3a24)',
+                          background: estZero ? '#2a1a1a' : 'linear-gradient(135deg,#12283F,#12283F)',
                           padding: '14px 12px 10px',
                           display: 'flex', flexDirection: 'column', flex: 1,
                           position: 'relative',
@@ -1389,7 +1389,7 @@ export default function PDV() {
                           {p.estoque !== null && p.estoque !== undefined && (
                             <div style={{
                               position: 'absolute', top: 6, right: 6,
-                              background: estZero ? '#e74c3c' : estBaixo ? '#FF6B2C' : '#1e4a2a',
+                              background: estZero ? '#e74c3c' : estBaixo ? '#FF6B2C' : '#12283F',
                               color: estZero ? '#fff' : estBaixo ? '#000' : '#FF9B72',
                               borderRadius: 8, fontSize: 9, fontWeight: 800,
                               padding: '2px 6px', lineHeight: 1.4,
@@ -1406,31 +1406,31 @@ export default function PDV() {
 
                         {/* Controles de quantidade + adicionar */}
                         {!estZero && (
-                          <div style={{ padding: '8px 10px', borderTop: '1px solid #1e4029', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ padding: '8px 10px', borderTop: '1px solid #294F6C', display: 'flex', alignItems: 'center', gap: 6 }}>
                             {/* Seletor de quantidade */}
                             <button
                               onClick={() => setQtd(p.id, qtd - 1)}
-                              style={{ width: 26, height: 26, borderRadius: 6, background: '#132b1b', border: '1px solid #1e4029', color: '#FF9B72', fontWeight: 800, fontSize: 16, cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>
+                              style={{ width: 26, height: 26, borderRadius: 6, background: '#17354F', border: '1px solid #294F6C', color: '#FF9B72', fontWeight: 800, fontSize: 16, cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>
                               −
                             </button>
                             <span style={{ minWidth: 20, textAlign: 'center', fontWeight: 800, fontSize: 13, color: qtd > 1 ? '#FF6B2C' : '#FFF4EC' }}>{qtd}</span>
                             <button
                               onClick={() => setQtd(p.id, qtd + 1)}
-                              style={{ width: 26, height: 26, borderRadius: 6, background: '#132b1b', border: '1px solid #1e4029', color: '#FF9B72', fontWeight: 800, fontSize: 16, cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>
+                              style={{ width: 26, height: 26, borderRadius: 6, background: '#17354F', border: '1px solid #294F6C', color: '#FF9B72', fontWeight: 800, fontSize: 16, cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>
                               +
                             </button>
                             {/* Botão lançar rápido */}
                             <button
                               onClick={() => lancamentoRapido(p)}
                               title="Lançar na comanda"
-                              style={{ flex: 1, height: 26, borderRadius: 6, background: 'linear-gradient(135deg,#FF6B2C,#3a8c1e)', border: 'none', color: '#fff', fontWeight: 800, fontSize: 11.5, cursor: 'pointer', lineHeight: 1, letterSpacing: '.02em' }}>
+                              style={{ flex: 1, height: 26, borderRadius: 6, background: 'linear-gradient(135deg,#FF6B2C,#2D6F9E)', border: 'none', color: '#fff', fontWeight: 800, fontSize: 11.5, cursor: 'pointer', lineHeight: 1, letterSpacing: '.02em' }}>
                               + Lançar
                             </button>
                             {/* Botão com obs */}
                             <button
                               onClick={() => abrirObsItem(p)}
                               title="Adicionar com observação"
-                              style={{ width: 26, height: 26, borderRadius: 6, background: '#132b1b', border: '1px solid #1e4029', color: '#FF6B2C', fontWeight: 800, fontSize: 13, cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>
+                              style={{ width: 26, height: 26, borderRadius: 6, background: '#17354F', border: '1px solid #294F6C', color: '#FF6B2C', fontWeight: 800, fontSize: 13, cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>
                               💬
                             </button>
                           </div>
@@ -1449,7 +1449,7 @@ export default function PDV() {
 
             {/* Rodapé: lista VIVA dos itens já lançados na comanda */}
             {comanda?.itens?.length > 0 && (
-              <div style={{ borderTop: '1px solid #1e4029', background: '#0a1a0f' }}>
+              <div style={{ borderTop: '1px solid #294F6C', background: '#12283F' }}>
                 <div style={{ padding: '8px 16px 4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', textTransform: 'uppercase', color: '#FF9B72' }}>
                     🧾 Lançados ({comanda.itens.reduce((s, i) => s + (i.qtd || 1), 0)})
@@ -1459,9 +1459,9 @@ export default function PDV() {
                 {/* lista rolável dos itens já na comanda */}
                 <div style={{ maxHeight: 132, overflowY: 'auto', padding: '0 16px' }}>
                   {comanda.itens.map((it, idx) => (
-                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid #142a1a' }}>
-                      <span style={{ minWidth: 26, height: 20, borderRadius: 5, background: '#1e4029', color: '#FF9B72', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{it.qtd}×</span>
-                      <span style={{ flex: 1, fontSize: 12, color: '#dfe9df', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid #12283F' }}>
+                      <span style={{ minWidth: 26, height: 20, borderRadius: 5, background: '#294F6C', color: '#FF9B72', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{it.qtd}×</span>
+                      <span style={{ flex: 1, fontSize: 12, color: '#FFF9F5', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {it.nome}{it.obs ? <span style={{ color: '#FF9B72', opacity: .7 }}> · {it.obs}</span> : null}
                       </span>
                       <span style={{ fontSize: 12, fontWeight: 700, color: '#FF6B2C', flexShrink: 0 }}>{fmtR((it.preco || 0) * (it.qtd || 1))}</span>
@@ -1478,7 +1478,7 @@ export default function PDV() {
                 <div style={{ padding: '8px 16px 12px' }}>
                   <button
                     onClick={() => setOverlay(null)}
-                    style={{ width: '100%', background: '#1a4a20', border: '1.5px solid #FF6B2C', borderRadius: 9, color: '#FF9B72', padding: '9px 0', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
+                    style={{ width: '100%', background: '#254B6A', border: '1.5px solid #FF6B2C', borderRadius: 9, color: '#FF9B72', padding: '9px 0', cursor: 'pointer', fontWeight: 800, fontSize: 13 }}>
                     ✓ Concluir e voltar à comanda
                   </button>
                 </div>
@@ -1494,7 +1494,7 @@ export default function PDV() {
           <div style={S.modal} onClick={e => e.stopPropagation()}>
             {/* Header com emoji/nome */}
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 14 }}>
-              <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg,#1a3a24,#0d2218)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>
+              <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg,#12283F,#12283F)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>
                 🍽
               </div>
               <div>
@@ -1505,12 +1505,12 @@ export default function PDV() {
             </div>
 
             {/* Seletor de quantidade */}
-            <div style={{ marginBottom: 12, padding: '10px 12px', background: '#132b1b', borderRadius: 10, border: '1px solid #1e4029' }}>
+            <div style={{ marginBottom: 12, padding: '10px 12px', background: '#17354F', borderRadius: 10, border: '1px solid #294F6C' }}>
               <div style={{ fontSize: 11, opacity: 0.65, marginBottom: 8 }}>Quantidade</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <button
                   onClick={() => setItemObs(v => ({ ...v, qtd: Math.max(1, (v.qtd || 1) - 1) }))}
-                  style={{ width: 36, height: 36, borderRadius: 8, background: '#1e4029', border: 'none', color: '#FF9B72', fontWeight: 800, fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>
+                  style={{ width: 36, height: 36, borderRadius: 8, background: '#294F6C', border: 'none', color: '#FF9B72', fontWeight: 800, fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>
                   −
                 </button>
                 <span style={{ fontSize: 22, fontWeight: 900, color: '#FF6B2C', minWidth: 36, textAlign: 'center' }}>
@@ -1518,7 +1518,7 @@ export default function PDV() {
                 </span>
                 <button
                   onClick={() => setItemObs(v => ({ ...v, qtd: Math.min(99, (v.qtd || 1) + 1) }))}
-                  style={{ width: 36, height: 36, borderRadius: 8, background: '#1e4029', border: 'none', color: '#FF9B72', fontWeight: 800, fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>
+                  style={{ width: 36, height: 36, borderRadius: 8, background: '#294F6C', border: 'none', color: '#FF9B72', fontWeight: 800, fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>
                   +
                 </button>
                 <div style={{ flex: 1, textAlign: 'right', fontSize: 14, fontWeight: 700, color: '#FF9B72' }}>
@@ -1557,7 +1557,7 @@ export default function PDV() {
               <div style={S.modalTitle}>🧾 Pré-conta</div>
               <div style={{ display: 'flex', gap: 6 }}>
                 <button title="Imprimir" onClick={imprimirComanda}
-                  style={{ background: 'none', border: '1px solid #1e4029', borderRadius: 6, color: '#FFF4EC', fontSize: 15, cursor: 'pointer', padding: '3px 7px' }}>
+                  style={{ background: 'none', border: '1px solid #294F6C', borderRadius: 6, color: '#FFF4EC', fontSize: 15, cursor: 'pointer', padding: '3px 7px' }}>
                   🖨
                 </button>
                 <button style={S.sheetClose} onClick={() => setOverlay(null)}>✕</button>
@@ -1609,7 +1609,7 @@ export default function PDV() {
             </div>
 
             {/* Resumo visual do total — destaque */}
-            <div style={{ textAlign: 'center', padding: '14px 10px', background: 'linear-gradient(135deg,#0d2218,#1a3a24)', borderRadius: 14, marginBottom: 14, border: '1.5px solid #1e4029' }}>
+            <div style={{ textAlign: 'center', padding: '14px 10px', background: 'linear-gradient(135deg,#12283F,#12283F)', borderRadius: 14, marginBottom: 14, border: '1.5px solid #294F6C' }}>
               {descPct > 0 && (
                 <div style={{ fontSize: 11, opacity: 0.6, marginBottom: 4 }}>
                   Subtotal {fmtR(subtotal)} − {descPct}% desc. = {fmtR(subtotalDesc)}
@@ -1631,13 +1631,13 @@ export default function PDV() {
             </div>
 
             {/* Divisão de conta */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, padding: '8px 10px', background: '#132b1b', borderRadius: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, padding: '8px 10px', background: '#17354F', borderRadius: 8 }}>
               <span style={{ fontSize: 12, opacity: 0.7, flex: 1 }}>Dividir entre:</span>
               <button onClick={() => setDividir(d => Math.max(1, d - 1))}
-                style={{ background: '#1e4029', border: 'none', borderRadius: 6, color: '#FF9B72', width: 28, height: 28, cursor: 'pointer', fontWeight: 800, fontSize: 16 }}>-</button>
+                style={{ background: '#294F6C', border: 'none', borderRadius: 6, color: '#FF9B72', width: 28, height: 28, cursor: 'pointer', fontWeight: 800, fontSize: 16 }}>-</button>
               <span style={{ fontWeight: 800, fontSize: 16, minWidth: 24, textAlign: 'center' }}>{dividir}</span>
               <button onClick={() => setDividir(d => d + 1)}
-                style={{ background: '#1e4029', border: 'none', borderRadius: 6, color: '#FF9B72', width: 28, height: 28, cursor: 'pointer', fontWeight: 800, fontSize: 16 }}>+</button>
+                style={{ background: '#294F6C', border: 'none', borderRadius: 6, color: '#FF9B72', width: 28, height: 28, cursor: 'pointer', fontWeight: 800, fontSize: 16 }}>+</button>
               {dividir > 1 && (
                 <span style={{ fontSize: 13, color: '#FF6B2C', fontWeight: 700, marginLeft: 6 }}>
                   = {fmtR(totalFinal / dividir)}/pessoa
@@ -1656,7 +1656,7 @@ export default function PDV() {
 
             {/* Múltiplos meios de pagamento */}
             {multiPag.length > 0 && (
-              <div style={{ marginTop: 12, padding: '8px 10px', background: '#0a1a10', borderRadius: 8, border: '1px solid #1e4029' }}>
+              <div style={{ marginTop: 12, padding: '8px 10px', background: '#10283F', borderRadius: 8, border: '1px solid #294F6C' }}>
                 <div style={{ fontSize: 11, opacity: 0.65, marginBottom: 6 }}>Pagamentos registrados:</div>
                 {multiPag.map((p, i) => (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
@@ -1668,7 +1668,7 @@ export default function PDV() {
                     </div>
                   </div>
                 ))}
-                <div style={{ borderTop: '1px solid #1e4029', marginTop: 6, paddingTop: 6, display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                <div style={{ borderTop: '1px solid #294F6C', marginTop: 6, paddingTop: 6, display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
                   <span>Restante:</span>
                   <span style={{ color: restanteMultiPag > 0 ? '#FF6B2C' : '#FF9B72', fontWeight: 700 }}>{fmtR(Math.max(0, restanteMultiPag))}</span>
                 </div>
@@ -1677,7 +1677,7 @@ export default function PDV() {
 
             {/* Adicionar pagamento parcial */}
             {multiPag.length > 0 && restanteMultiPag > 0.01 && (
-              <div style={{ marginTop: 8, padding: '8px 10px', background: '#132b1b', borderRadius: 8, border: '1px solid #1e4029' }}>
+              <div style={{ marginTop: 8, padding: '8px 10px', background: '#17354F', borderRadius: 8, border: '1px solid #294F6C' }}>
                 <div style={{ fontSize: 11, opacity: 0.65, marginBottom: 6 }}>Adicionar pagamento parcial:</div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   <input
@@ -1704,7 +1704,7 @@ export default function PDV() {
 
             {multiPag.length === 0 && (
               <button
-                style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid #1e4029', borderRadius: 8, color: '#FF9B72', padding: '6px 12px', cursor: 'pointer', fontSize: 12, marginTop: 8 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid #294F6C', borderRadius: 8, color: '#FF9B72', padding: '6px 12px', cursor: 'pointer', fontSize: 12, marginTop: 8 }}
                 onClick={() => setMultiPag([{ meio: payMeio, valor: parseFloat((totalFinal / 2).toFixed(2)) }])}>
                 ➕ Dividir pagamento (2+ meios)
               </button>
@@ -1715,7 +1715,7 @@ export default function PDV() {
               <div style={{ marginTop: 12 }}>
                 <button
                   onClick={() => setShowPixQR(true)}
-                  style={{ width: '100%', background: 'linear-gradient(135deg,#12283F,#1a4a20)', border: '2px solid #FF6B2C', borderRadius: 12, color: '#FF9B72', padding: '14px', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  style={{ width: '100%', background: 'linear-gradient(135deg,#12283F,#254B6A)', border: '2px solid #FF6B2C', borderRadius: 12, color: '#FF9B72', padding: '14px', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                   📲 Gerar QR Code PIX — {fmtR(dividir > 1 ? totalFinal / dividir : totalFinal)}
                 </button>
                 <div style={{ fontSize: 11, opacity: 0.45, textAlign: 'center', marginTop: 6 }}>
@@ -1726,7 +1726,7 @@ export default function PDV() {
 
             {/* Troco calculado para dinheiro */}
             {payMeio === 'dinheiro' && multiPag.length === 0 && (
-              <div style={{ marginTop: 12, padding: '12px', background: '#132b1b', borderRadius: 10, border: '1px solid #1e4029' }}>
+              <div style={{ marginTop: 12, padding: '12px', background: '#17354F', borderRadius: 10, border: '1px solid #294F6C' }}>
                 <div style={{ fontSize: 12, opacity: 0.65, marginBottom: 6 }}>Valor recebido (R$)</div>
                 <input
                   type="number" min="0" step="0.01"
@@ -1753,15 +1753,15 @@ export default function PDV() {
 
             {/* Maquininha (TEF): modalidade + parcelas */}
             {payMeio === 'tef' && multiPag.length === 0 && (
-              <div style={{ marginTop: 12, padding: '12px', background: '#132b1b', borderRadius: 10, border: '1px solid #1e4029' }}>
+              <div style={{ marginTop: 12, padding: '12px', background: '#17354F', borderRadius: 10, border: '1px solid #294F6C' }}>
                 <div style={{ fontSize: 12, opacity: 0.65, marginBottom: 8 }}>Modalidade no cartão</div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {MODALIDADES_TEF.map(m => (
                     <button key={m.key} onClick={() => setTefModalidade(m.key)}
                       style={{ flex: 1, minWidth: 92, padding: '8px 6px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700,
-                        border: tefModalidade === m.key ? '1.5px solid #FF6B2C' : '1px solid #1e4029',
-                        background: tefModalidade === m.key ? '#1a4a20' : 'transparent',
-                        color: tefModalidade === m.key ? '#FF9B72' : '#9ab09a' }}>
+                        border: tefModalidade === m.key ? '1.5px solid #FF6B2C' : '1px solid #294F6C',
+                        background: tefModalidade === m.key ? '#254B6A' : 'transparent',
+                        color: tefModalidade === m.key ? '#FF9B72' : '#8AA9C0' }}>
                       {m.icon} {m.label}
                     </button>
                   ))}
@@ -1880,8 +1880,8 @@ export default function PDV() {
                   onClick={() => setCaixaMov(v => ({ ...v, tipo: t.key }))}
                   style={{
                     flex: 1, padding: '10px 6px', borderRadius: 10,
-                    border: `2px solid ${caixaMov.tipo === t.key ? (t.key === 'sangria' ? '#e74c3c' : '#FF6B2C') : '#1e4029'}`,
-                    background: caixaMov.tipo === t.key ? (t.key === 'sangria' ? '#2d0a0a' : '#1a4a20') : '#132b1b',
+                    border: `2px solid ${caixaMov.tipo === t.key ? (t.key === 'sangria' ? '#e74c3c' : '#FF6B2C') : '#294F6C'}`,
+                    background: caixaMov.tipo === t.key ? (t.key === 'sangria' ? '#2d0a0a' : '#254B6A') : '#17354F',
                     color: '#FFF4EC', cursor: 'pointer', textAlign: 'center',
                   }}>
                   <div style={{ fontSize: 16 }}>{t.label}</div>

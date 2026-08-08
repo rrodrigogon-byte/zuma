@@ -42,11 +42,11 @@ export default function AcompanharPedido() {
   return (
     <div style={{ minHeight: '100vh', background: '#FFF4EC', fontFamily: "'Segoe UI', sans-serif", padding: '32px 16px' }}>
       <div style={{ maxWidth: 560, margin: '0 auto' }}>
-        <Link to="/loja" style={{ color: '#1B4D2E', textDecoration: 'none', fontSize: '0.85rem', fontWeight: 600 }}>← Voltar à loja</Link>
+        <Link to="/loja" style={{ color: '#12283F', textDecoration: 'none', fontSize: '0.85rem', fontWeight: 600 }}>← Voltar à loja</Link>
 
         <div style={{ background: '#fff', borderRadius: 18, padding: '24px 22px', marginTop: 14, boxShadow: '0 2px 16px rgba(0,0,0,0.07)' }}>
           <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#5A6570', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Acompanhar pedido</div>
-          <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#1B4D2E', letterSpacing: '0.04em', marginTop: 2 }}>{codigo}</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#12283F', letterSpacing: '0.04em', marginTop: 2 }}>{codigo}</div>
 
           {loading ? (
             <div style={{ padding: '30px 0', textAlign: 'center', color: '#5A6570' }}>Carregando…</div>
@@ -71,13 +71,13 @@ export default function AcompanharPedido() {
                         <div style={{
                           width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
                           display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem',
-                          background: feito ? VERDE : '#eef2e8',
-                          color: feito ? '#fff' : '#9ab09a',
+                          background: feito ? VERDE : '#FFF9F5',
+                          color: feito ? '#fff' : '#8AA9C0',
                           boxShadow: atual ? `0 0 0 4px ${VERDE}33` : 'none',
                           transition: 'all .2s',
                         }}>{feito ? e.emoji : '○'}</div>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: atual ? 800 : 600, color: feito ? '#1B4D2E' : '#9ab09a', fontSize: '0.98rem' }}>
+                          <div style={{ fontWeight: atual ? 800 : 600, color: feito ? '#12283F' : '#8AA9C0', fontSize: '0.98rem' }}>
                             {e.label}{atual ? ' • agora' : ''}
                           </div>
                         </div>
@@ -89,26 +89,26 @@ export default function AcompanharPedido() {
               )}
 
               {/* Itens */}
-              <div style={{ marginTop: 16, background: '#f8faf4', borderRadius: 12, padding: '12px 14px' }}>
+              <div style={{ marginTop: 16, background: '#FFF9F5', borderRadius: 12, padding: '12px 14px' }}>
                 {(pedido.itens || []).map((it, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.86rem', padding: '4px 0', color: '#1B4D2E' }}>
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.86rem', padding: '4px 0', color: '#12283F' }}>
                     <span><b>{it.qtd}×</b> {it.nome}{it.tamanho ? ` (${it.tamanho})` : ''}</span>
                     <span style={{ fontWeight: 700, color: VERDE }}>{fmtR(it.subtotal ?? (it.preco || 0) * (it.qtd || 1))}</span>
                   </div>
                 ))}
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e3ecda', marginTop: 6, paddingTop: 6, fontWeight: 800, color: '#1B4D2E' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #FFF9F5', marginTop: 6, paddingTop: 6, fontWeight: 800, color: '#12283F' }}>
                   <span>Total</span><span style={{ color: '#FF6B2C' }}>{fmtR(pedido.total || 0)}</span>
                 </div>
               </div>
 
               <div style={{ marginTop: 12, fontSize: '0.8rem', color: '#5A6570' }}>
                 Pagamento: <b>{pedido.pagamento === 'pago' ? 'confirmado ✓' : 'Pix pendente ⏳'}</b>
-                {pedido.status === 'pronto' && <div style={{ marginTop: 8, background: '#eaf7e0', border: `1px solid ${VERDE}`, borderRadius: 10, padding: '10px 12px', color: '#1B4D2E', fontWeight: 600 }}>🎾 Seu pedido está pronto! Retire no Tangará Tênis Clube apresentando o código <b>{codigo}</b>.</div>}
+                {pedido.status === 'pronto' && <div style={{ marginTop: 8, background: '#FFF9F5', border: `1px solid ${VERDE}`, borderRadius: 10, padding: '10px 12px', color: '#12283F', fontWeight: 600 }}>🎾 Seu pedido está pronto! Retire no Tangará Tênis Clube apresentando o código <b>{codigo}</b>.</div>}
               </div>
             </>
           )}
         </div>
-        <div style={{ textAlign: 'center', marginTop: 12, fontSize: '0.74rem', color: '#9ab09a' }}>Atualiza automaticamente a cada 10s</div>
+        <div style={{ textAlign: 'center', marginTop: 12, fontSize: '0.74rem', color: '#8AA9C0' }}>Atualiza automaticamente a cada 10s</div>
       </div>
     </div>
   )

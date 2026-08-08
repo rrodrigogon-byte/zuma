@@ -6,7 +6,7 @@
   --sand:    #FFF4EC;
   --graphite:#5A6570;
   --line:    #EADFD4;
-  --success: #12B76A;
+  --success: #2D6F9E;
   --danger:  #F03D2E;
 
   /* Tokens de compatibilidade da interface atual */
@@ -86,7 +86,7 @@ input::placeholder, textarea::placeholder { color: #8C969D; }
   display: inline-block; padding: 3px 10px; border-radius: 99px;
   font-size: 11px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase;
 }
-.badge-green  { background: rgba(18,183,106,.13); color: #087443; }
+.badge-green  { background: rgba(45,111,158,.13); color: #245E88; }
 .badge-lime   { background: rgba(255,107,44,.13); color: var(--orange-dark); }
 .badge-gold   { background: rgba(18,40,63,.10); color: var(--navy); }
 .badge-red    { background: rgba(240,61,46,.12); color: #C8291F; }

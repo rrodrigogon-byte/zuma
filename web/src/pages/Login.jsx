@@ -12,7 +12,7 @@ const COLORS = {
   graphite: '#5A6570',
   line: '#EADFD4',
   white: '#FFFFFF',
-  success: '#12B76A',
+  success: '#2D6F9E',
   danger: '#F03D2E',
 }
 
@@ -148,10 +148,10 @@ export default function Login() {
             color: COLORS.orange, fontFamily: "'JetBrains Mono', monospace", fontSize: 11,
             fontWeight: 700, letterSpacing: '.13em', textTransform: 'uppercase', marginTop: 12,
           }}>
-            Kytto Clube
+            Kytto
           </div>
           <p style={{ color: COLORS.graphite, marginTop: 8, fontSize: 13, lineHeight: 1.5 }}>
-            Gestão para clubes, eventos e operações.
+            Sistemas inteligentes para negócios.
           </p>
         </div>
 

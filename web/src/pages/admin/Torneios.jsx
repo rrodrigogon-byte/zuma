@@ -495,7 +495,7 @@ export default function Torneios() {
         }
 
         .torneio-row:hover { background: #f9fafb; }
-        .torneio-row--selected { background: #f0fdf4 !important; }
+        .torneio-row--selected { background: #FFF9F5 !important; }
 
         /* Detalhe */
         .torneio-detalhe { padding: 1.25rem; }
@@ -525,8 +525,8 @@ export default function Torneios() {
           font-size: .8rem; padding: .35rem .5rem; background: #f9fafb; border-radius: 6px;
           margin-bottom: .25rem;
         }
-        .bracket-mini-jogo.done { background: #f0fdf4; }
-        .bracket-mini-jogo .winner { font-weight: 700; color: #16a34a; }
+        .bracket-mini-jogo.done { background: #FFF9F5; }
+        .bracket-mini-jogo .winner { font-weight: 700; color: #2D6F9E; }
         .bracket-mini-jogo .vs { color: #9ca3af; font-size: .72rem; }
         .bracket-mini-jogo em { font-style: normal; font-weight: 700; font-size: .78rem; color: #374151; }
         .bracket-mini-jogo .jogo-meta { color: #9ca3af; font-size: .72rem; margin-left: auto; }
@@ -545,7 +545,7 @@ export default function Torneios() {
         /* Placar editor */
         .placar-row { display: flex; align-items: center; gap: .5rem; }
         .placar-display { font-size: .82rem; color: #374151; flex: 1; }
-        .placar-vencedor { font-size: .75rem; color: #16a34a; font-weight: 600; }
+        .placar-vencedor { font-size: .75rem; color: #2D6F9E; font-weight: 600; }
         .placar-editor { display: flex; align-items: center; gap: .4rem; }
         .placar-input { width: 48px; padding: .25rem .4rem; border: 1.5px solid #d1d5db; border-radius: 6px; font-size: .85rem; text-align: center; }
         .placar-sep { font-weight: 700; color: #374151; }

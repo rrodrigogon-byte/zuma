@@ -230,7 +230,7 @@ export default function Crediario() {
                     <td style={{ padding: '10px 12px' }}>
                       <a href={`https://wa.me/55${c.telefone?.replace(/\D/g, '')}?text=Olá ${c.nome}, você possui parcelas em atraso.`}
                         target="_blank" rel="noreferrer"
-                        style={{ padding: '4px 10px', background: '#25d366', borderRadius: 6, color: '#fff', fontSize: 11, fontWeight: 700, textDecoration: 'none' }}>
+                        style={{ padding: '4px 10px', background: '#2D6F9E', borderRadius: 6, color: '#fff', fontSize: 11, fontWeight: 700, textDecoration: 'none' }}>
                         WhatsApp
                       </a>
                     </td>

@@ -10,11 +10,11 @@ const C = {
   lime: '#FF9B72',
   cream: '#FFF4EC',
   gold: '#FF6B2C',
-  card: '#132b1b',
-  cardBorder: '#1e3d28',
-  inputBg: '#0e2216',
-  inputBorder: '#2a4a35',
-  muted: '#7a9e85',
+  card: '#17354F',
+  cardBorder: '#12283F',
+  inputBg: '#12283F',
+  inputBorder: '#12283F',
+  muted: '#8AA9C0',
   red: '#f87171',
   blue: '#60a5fa',
   purple: '#a78bfa',
@@ -1009,7 +1009,7 @@ function TabPerfil({ me, onSaved }) {
               onFocus={e => e.target.style.borderColor = C.green} onBlur={e => e.target.style.borderColor = C.inputBorder} />
           </div>
           <button type="submit" disabled={saving} style={{
-            padding: '11px 24px', background: saving ? '#3d7022' : C.green,
+            padding: '11px 24px', background: saving ? '#12283F' : C.green,
             color: '#fff', border: 'none', borderRadius: 9, fontSize: 14,
             fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer',
             alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 8,
@@ -1040,7 +1040,7 @@ function TabPerfil({ me, onSaved }) {
             </div>
           ))}
           <button type="submit" disabled={savingPw} style={{
-            padding: '11px 24px', background: savingPw ? '#3d7022' : C.green,
+            padding: '11px 24px', background: savingPw ? '#12283F' : C.green,
             color: '#fff', border: 'none', borderRadius: 9, fontSize: 14,
             fontWeight: 700, cursor: savingPw ? 'not-allowed' : 'pointer',
             alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 8,
@@ -1176,7 +1176,7 @@ export default function MeuPainel() {
     <div style={{ maxWidth: 860, margin: '0 auto', padding: '20px 16px 60px', fontFamily: "'Inter','Segoe UI',sans-serif" }}>
       {/* Header hero */}
       <div style={{
-        background: `linear-gradient(135deg, #0e2216 0%, #1a3a22 100%)`,
+        background: `linear-gradient(135deg, #12283F 0%, #12283F 100%)`,
         border: `1px solid ${C.cardBorder}`,
         borderRadius: 16,
         padding: '24px 28px',
@@ -1203,7 +1203,7 @@ export default function MeuPainel() {
             Olá, {displayName.split(' ')[0]}! 🎾
           </div>
           <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
-            4ª Agro Open de Tênis · Kytto Clube
+            4ª Agro Open de Tênis · Kytto
           </div>
         </div>
         {/* Pill de posição */}

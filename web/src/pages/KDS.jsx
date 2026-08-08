@@ -65,7 +65,7 @@ function ElapsedTimer({ criadoEm, status }) {
   return (
     <span style={{
       fontSize: 13, fontWeight: 700, padding: '2px 8px', borderRadius: 10,
-      background: (urgent || urgPreparo) ? '#ff000033' : warn ? '#ff450022' : '#1e3a24',
+      background: (urgent || urgPreparo) ? '#ff000033' : warn ? '#ff450022' : '#294F6C',
       color: (urgent || urgPreparo) ? '#ff5555' : warn ? '#ff8c42' : '#888',
       animation: (urgent || urgPreparo) ? 'pulse 1s infinite' : 'none',
     }}>
@@ -85,7 +85,7 @@ function ItemCard({ item, onStatusChange }) {
     <div
       onClick={() => next && onStatusChange(item.comandaId, item.idx, next)}
       style={{
-        background: isUrgent ? '#1a0a0a' : '#0f1f13',
+        background: isUrgent ? '#1a0a0a' : '#162F46',
         border: `2px solid ${color}`,
         borderRadius: 12,
         padding: '16px 20px',
@@ -144,8 +144,8 @@ function CommandaGroup({ comanda, items, onStatusChange }) {
 
   return (
     <div style={{
-      background: '#0a1a0d',
-      border: `1px solid ${allPronto ? '#FF6B2C' : '#1e3a24'}`,
+      background: '#10283F',
+      border: `1px solid ${allPronto ? '#FF6B2C' : '#294F6C'}`,
       borderRadius: 16,
       padding: 20,
       marginBottom: 20,
@@ -155,7 +155,7 @@ function CommandaGroup({ comanda, items, onStatusChange }) {
         fontWeight: 700,
         color: '#FF6B2C',
         marginBottom: 14,
-        borderBottom: '1px solid #1e3a24',
+        borderBottom: '1px solid #294F6C',
         paddingBottom: 10,
       }}>
         {title}
@@ -185,7 +185,7 @@ function Panel({ title, items, onStatusChange, hidePronto }) {
   return (
     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <div style={{
-        background: '#0f1f13',
+        background: '#162F46',
         borderRadius: 12,
         padding: '14px 20px',
         marginBottom: 20,
@@ -197,7 +197,7 @@ function Panel({ title, items, onStatusChange, hidePronto }) {
           {title}
         </span>
         <span style={{
-          background: pending > 0 ? '#e74c3c' : '#2d4a32',
+          background: pending > 0 ? '#e74c3c' : '#345B77',
           color: '#fff',
           borderRadius: 20,
           padding: '4px 16px',
@@ -209,7 +209,7 @@ function Panel({ title, items, onStatusChange, hidePronto }) {
       </div>
       <div style={{ overflowY: 'auto', flex: 1 }}>
         {Object.keys(grouped).length === 0 ? (
-          <div style={{ color: '#3a5a40', textAlign: 'center', marginTop: 60, fontSize: 20 }}>
+          <div style={{ color: '#587B92', textAlign: 'center', marginTop: 60, fontSize: 20 }}>
             Nenhum pedido
           </div>
         ) : (
@@ -329,7 +329,7 @@ export default function KDS() {
       `}</style>
       <div style={{
         minHeight: '100vh',
-        background: '#060e08',
+        background: '#0B1C2D',
         color: '#f0f0f0',
         fontFamily: "'Segoe UI', system-ui, sans-serif",
         display: 'flex',
@@ -338,8 +338,8 @@ export default function KDS() {
       }}>
         {/* Header */}
         <div style={{
-          background: '#0a1a0d',
-          borderBottom: '2px solid #1e3a24',
+          background: '#10283F',
+          borderBottom: '2px solid #294F6C',
           padding: '12px 24px',
           display: 'flex',
           justifyContent: 'space-between',
@@ -353,7 +353,7 @@ export default function KDS() {
               KDS — Cozinha & Bar
             </span>
             <span style={{
-              background: totalPendentes > 0 ? '#e74c3c' : '#2d4a32',
+              background: totalPendentes > 0 ? '#e74c3c' : '#345B77',
               color: '#fff',
               borderRadius: 20,
               padding: '4px 16px',
@@ -367,7 +367,7 @@ export default function KDS() {
             {/* Filtro setor */}
             {['todos','bar','cozinha'].map(s => (
               <button key={s} onClick={() => setFiltroSetor(s)} style={{
-                background: filtroSetor === s ? (s==='bar' ? '#3498db' : s==='cozinha' ? '#e05c5c' : '#FF6B2C') : '#1e3a24',
+                background: filtroSetor === s ? (s==='bar' ? '#3498db' : s==='cozinha' ? '#e05c5c' : '#FF6B2C') : '#294F6C',
                 color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px',
                 fontWeight: 700, fontSize: 13, cursor: 'pointer',
               }}>
@@ -379,21 +379,21 @@ export default function KDS() {
                 )}
               </button>
             ))}
-            <div style={{ width:1, height:28, background:'#1e3a24', margin:'0 4px' }} />
+            <div style={{ width:1, height:28, background:'#294F6C', margin:'0 4px' }} />
             <button onClick={marcarTodosProntos} title="Marcar todos os visíveis como prontos"
-              style={{ background:'#1e3a24', color:'#FF6B2C', border:'1px solid #FF6B2C', borderRadius:8, padding:'7px 14px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+              style={{ background:'#294F6C', color:'#FF6B2C', border:'1px solid #FF6B2C', borderRadius:8, padding:'7px 14px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
               ✅ Todos prontos
             </button>
             <button onClick={() => setHidePronto(h => !h)}
-              style={{ background: hidePronto ? '#FF6B2C' : '#1e3a24', color:'#fff', border:'none', borderRadius:8, padding:'7px 14px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+              style={{ background: hidePronto ? '#FF6B2C' : '#294F6C', color:'#fff', border:'none', borderRadius:8, padding:'7px 14px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
               {hidePronto ? '👁 Mostrar' : '🙈 Ocultar'} prontos
             </button>
             <button onClick={limparProntos}
-              style={{ background:'#1e3a24', color:'#FF6B2C', border:'1px solid #FF6B2C', borderRadius:8, padding:'7px 14px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+              style={{ background:'#294F6C', color:'#FF6B2C', border:'1px solid #FF6B2C', borderRadius:8, padding:'7px 14px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
               🗑 Limpar
             </button>
             <button onClick={() => setSomAtivo(s=>!s)}
-              style={{ background: somAtivo ? '#1e3a24' : 'transparent', color: somAtivo ? '#FF6B2C' : '#555',
+              style={{ background: somAtivo ? '#294F6C' : 'transparent', color: somAtivo ? '#FF6B2C' : '#555',
                 border:`1px solid ${somAtivo ? '#FF6B2C' : '#333'}`, borderRadius:8, padding:'7px 14px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
               {somAtivo ? '🔔 Som' : '🔇 Mudo'}
             </button>
@@ -404,7 +404,7 @@ export default function KDS() {
         </div>
 
         {loading ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, color: '#3a5a40' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, color: '#587B92' }}>
             Carregando pedidos…
           </div>
         ) : (
@@ -423,7 +423,7 @@ export default function KDS() {
                 hidePronto={hidePronto}
               />
             )}
-            {filtroSetor === 'todos' && <div style={{ width: 2, background: '#1e3a24', flexShrink: 0 }} />}
+            {filtroSetor === 'todos' && <div style={{ width: 2, background: '#294F6C', flexShrink: 0 }} />}
             {(filtroSetor === 'todos' || filtroSetor === 'cozinha') && (
               <Panel
                 title={`🍽 COZINHA${cozinhaPendentes > 0 ? ` (${cozinhaPendentes})` : ''}`}

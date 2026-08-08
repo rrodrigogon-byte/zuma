@@ -558,7 +558,7 @@ export default function Agenda() {
           padding: .3rem .75rem; border-radius: 20px; font-size: .78rem; font-weight: 600;
           background: #f3f4f6; color: #374151;
         }
-        .stat-pill--done { background: #dcfce7; color: #16a34a; }
+        .stat-pill--done { background: #FFF9F5; color: #2D6F9E; }
         .stat-pill--pend { background: #fef3c7; color: #d97706; }
 
         /* Toggle vista */
@@ -573,7 +573,7 @@ export default function Agenda() {
           transition: box-shadow .15s;
         }
         .agenda-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
-        .agenda-card--done { border-color: #d1fae5; background: #fafffe; }
+        .agenda-card--done { border-color: #FFF9F5; background: #FFF9F5; }
         .agenda-card--compact { padding: .5rem; font-size: .8rem; }
 
         .agenda-card-header { display: flex; align-items: center; gap: .5rem; }
@@ -581,12 +581,12 @@ export default function Agenda() {
         .agenda-quadra { color: #6b7280; font-size: .78rem; margin-left: auto; }
         .agenda-confronto { font-weight: 600; font-size: .9rem; }
         .agenda-placar { font-size: .82rem; color: #374151; }
-        .agenda-vencedor { color: #16a34a; font-weight: 700; }
+        .agenda-vencedor { color: #2D6F9E; font-weight: 700; }
         .agenda-meta { display: flex; flex-wrap: wrap; gap: .3rem; }
         .agenda-card-edit { align-self: flex-start; margin-top: .15rem; }
 
         .jogo-badge { font-size: .68rem; padding: .15rem .4rem; border-radius: 4px; font-weight: 700; }
-        .jogo-badge--done { background: #dcfce7; color: #16a34a; }
+        .jogo-badge--done { background: #FFF9F5; color: #2D6F9E; }
 
         /* Dias */
         .agenda-dia-titulo { font-size: 1rem; font-weight: 700; color: #12283F; margin-bottom: .75rem; display: flex; align-items: center; gap: .5rem; }
@@ -604,11 +604,11 @@ export default function Agenda() {
         .semana-grid thead th { background: #f9fafb; text-align: center; }
         .semana-quadra-col { width: 60px; text-align: center !important; }
         .semana-dia-col { min-width: 120px; }
-        .semana-dia-col--hoje { background: #f0fdf4 !important; }
+        .semana-dia-col--hoje { background: #FFF9F5 !important; }
         .semana-dia-nome { display: block; font-size: .72rem; font-weight: 700; text-transform: uppercase; color: #9ca3af; }
         .semana-dia-num { display: block; font-size: .9rem; font-weight: 700; color: #12283F; }
         .semana-cell { vertical-align: top; min-height: 60px; }
-        .semana-cell--hoje { background: #fafffe; }
+        .semana-cell--hoje { background: #FFF9F5; }
         .semana-cell .agenda-card { margin-bottom: .25rem; }
         .semana-quadra-label { text-align: center; font-weight: 700; font-size: .82rem; color: #374151; background: #f9fafb; }
         .semana-empty { padding: 2rem; text-align: center; color: #9ca3af; font-size: .85rem; }
@@ -628,7 +628,7 @@ export default function Agenda() {
         .resultado-input:focus { border-color: #FF6B2C; outline: none; }
         .resultado-sep { font-size: 1.5rem; font-weight: 700; color: #9ca3af; }
         .resultado-preview { text-align: center; font-size: .88rem; color: #6b7280; margin-bottom: .5rem; }
-        .resultado-preview strong { color: #16a34a; }
+        .resultado-preview strong { color: #2D6F9E; }
 
         /* Tags */
         .tag { background: #e5e7eb; border-radius: 4px; padding: .1rem .4rem; font-size: .72rem; color: #374151; }

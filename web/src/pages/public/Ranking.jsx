@@ -7,7 +7,7 @@ const C = {
   green: '#FF6B2C', darkGreen: '#12283F', lightGreen: '#FF9B72',
   gold: '#FF6B2C', silver: '#9e9e9e', bronze: '#cd7f32',
   bg: '#FFF4EC', white: '#fff',
-  muted: '#5A6570', border: '#e8f0dc',
+  muted: '#5A6570', border: '#FFF9F5',
 }
 const MEDAL       = ['🥇','🥈','🥉']
 const MEDAL_BG    = [
@@ -44,7 +44,7 @@ function MovBadge({ mov = 0 }) {
   return (
     <span style={{
       fontSize: '0.7rem', fontWeight: 800,
-      color: up ? '#22a55a' : '#e05555',
+      color: up ? '#2D6F9E' : '#e05555',
       background: up ? 'rgba(34,165,90,.1)' : 'rgba(224,85,85,.1)',
       borderRadius: 6, padding: '2px 6px',
       display: 'inline-flex', alignItems: 'center', gap: 2,
@@ -147,7 +147,7 @@ function PodiumCard({ player, idx, onClick }) {
         </div>
       )}
       {player.categoria && (
-        <div style={{ marginTop: 8, fontSize: '0.75rem', color: C.muted, fontWeight: 600, background: '#f0fae8', borderRadius: 20, padding: '2px 10px', display: 'inline-block' }}>{player.categoria}</div>
+        <div style={{ marginTop: 8, fontSize: '0.75rem', color: C.muted, fontWeight: 600, background: '#FFF9F5', borderRadius: 20, padding: '2px 10px', display: 'inline-block' }}>{player.categoria}</div>
       )}
       {onClick && <div style={{ marginTop: 12, fontSize: '0.72rem', color: C.green, opacity: 0.7 }}>Ver perfil →</div>}
     </div>
@@ -216,7 +216,7 @@ function AtletaModal({ atleta, todos, onClose }) {
               { icon: '⭐', label: 'Pontos', value: (atleta.pontos || 0).toLocaleString('pt-BR'), color: C.green },
               { icon: '🎾', label: 'Eventos', value: totalEventos || 0, color: C.gold },
             ].map((s, i) => (
-              <div key={i} style={{ background: '#f8fdf5', borderRadius: 14, padding: '14px 10px', textAlign: 'center' }}>
+              <div key={i} style={{ background: '#FFF9F5', borderRadius: 14, padding: '14px 10px', textAlign: 'center' }}>
                 <div style={{ fontSize: '1.4rem' }}>{s.icon}</div>
                 <div style={{ fontWeight: 900, fontSize: '1.1rem', color: s.color, lineHeight: 1.1, marginTop: 4 }}>{s.value}</div>
                 <div style={{ fontSize: '0.68rem', color: C.muted, fontWeight: 600, marginTop: 3 }}>{s.label}</div>
@@ -227,11 +227,11 @@ function AtletaModal({ atleta, todos, onClose }) {
           {/* Detalhe torneios vs partidas */}
           {(atleta.torneios > 0 || atleta.partidas_avulsas > 0) && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
-              <div style={{ background: '#f8fdf5', borderRadius: 12, padding: '10px 14px', textAlign: 'center' }}>
+              <div style={{ background: '#FFF9F5', borderRadius: 12, padding: '10px 14px', textAlign: 'center' }}>
                 <div style={{ fontSize: '0.68rem', color: C.muted, fontWeight: 600 }}>Torneios</div>
                 <div style={{ fontWeight: 900, color: C.darkGreen, fontSize: '1.1rem', marginTop: 2 }}>{atleta.torneios || 0}</div>
               </div>
-              <div style={{ background: '#f8fdf5', borderRadius: 12, padding: '10px 14px', textAlign: 'center' }}>
+              <div style={{ background: '#FFF9F5', borderRadius: 12, padding: '10px 14px', textAlign: 'center' }}>
                 <div style={{ fontSize: '0.68rem', color: C.muted, fontWeight: 600 }}>Partidas avulsas</div>
                 <div style={{ fontWeight: 900, color: C.gold, fontSize: '1.1rem', marginTop: 2 }}>{atleta.partidas_avulsas || 0}</div>
               </div>
@@ -239,7 +239,7 @@ function AtletaModal({ atleta, todos, onClose }) {
           )}
 
           {/* Aproveitamento */}
-          <div style={{ background: '#f8fdf5', borderRadius: 14, padding: '14px 16px', marginBottom: 14 }}>
+          <div style={{ background: '#FFF9F5', borderRadius: 14, padding: '14px 16px', marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
               <span style={{ fontWeight: 700, fontSize: '0.85rem', color: C.darkGreen }}>Aproveitamento</span>
               <span style={{ fontWeight: 900, color: aprvColor, fontSize: '1rem' }}>{atleta.aproveitamento ?? 0}%</span>
@@ -256,7 +256,7 @@ function AtletaModal({ atleta, todos, onClose }) {
 
           {/* Evolução de pontos */}
           {evolucao.length >= 2 && (
-            <div style={{ background: '#f8fdf5', borderRadius: 14, padding: '14px 16px', marginBottom: 14 }}>
+            <div style={{ background: '#FFF9F5', borderRadius: 14, padding: '14px 16px', marginBottom: 14 }}>
               <div style={{ fontWeight: 700, fontSize: '0.85rem', color: C.darkGreen, marginBottom: 10 }}>Evolução de pontos</div>
               <Sparkline data={evolucao} width={420} height={48} color={C.green} />
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: '0.68rem', color: C.muted }}>
@@ -268,7 +268,7 @@ function AtletaModal({ atleta, todos, onClose }) {
 
           {/* Últimas partidas */}
           {ultimasPartidas.length > 0 && (
-            <div style={{ background: '#f8fdf5', borderRadius: 14, padding: '14px 16px', marginBottom: 14 }}>
+            <div style={{ background: '#FFF9F5', borderRadius: 14, padding: '14px 16px', marginBottom: 14 }}>
               <div style={{ fontWeight: 700, fontSize: '0.85rem', color: C.darkGreen, marginBottom: 10 }}>Últimas partidas</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {ultimasPartidas.map((h, i) => {
@@ -297,13 +297,13 @@ function AtletaModal({ atleta, todos, onClose }) {
 
           {/* Médias */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <div style={{ background: '#f8fdf5', borderRadius: 12, padding: '12px', textAlign: 'center' }}>
+            <div style={{ background: '#FFF9F5', borderRadius: 12, padding: '12px', textAlign: 'center' }}>
               <div style={{ fontSize: '0.68rem', color: C.muted, fontWeight: 600 }}>Média pts/evento</div>
               <div style={{ fontWeight: 900, color: C.green, fontSize: '1.1rem', marginTop: 4 }}>
                 {totalEventos > 0 ? (atleta.pontos / totalEventos).toFixed(0) : '—'}
               </div>
             </div>
-            <div style={{ background: '#f8fdf5', borderRadius: 12, padding: '12px', textAlign: 'center' }}>
+            <div style={{ background: '#FFF9F5', borderRadius: 12, padding: '12px', textAlign: 'center' }}>
               <div style={{ fontSize: '0.68rem', color: C.muted, fontWeight: 600 }}>Total jogos</div>
               <div style={{ fontWeight: 900, color: C.gold, fontSize: '1.1rem', marginTop: 4 }}>
                 {totalJogos}
@@ -475,7 +475,7 @@ export default function Ranking() {
           <h1 style={{ fontSize: 'clamp(1.8rem,4vw,2.8rem)', fontWeight: 900, margin: '14px 0 4px', letterSpacing: '-0.02em' }}>
             🏆 Ranking
           </h1>
-          <p style={{ color: '#a0c8a0', margin: '0 0 16px', fontSize: '0.9rem' }}>
+          <p style={{ color: '#EAF1F7', margin: '0 0 16px', fontSize: '0.9rem' }}>
             Ranking contínuo ao estilo meuranking — todos os jogos valem pontos
           </p>
 
@@ -592,11 +592,11 @@ export default function Ranking() {
                         display: 'grid', gridTemplateColumns: '52px 28px 1fr 90px 80px 80px 70px',
                         padding: '11px 20px', alignItems: 'center',
                         borderBottom: '1px solid ' + C.border,
-                        background: i % 2 === 0 ? C.white : '#fafcf8',
+                        background: i % 2 === 0 ? C.white : '#FFF9F5',
                         cursor: 'pointer', transition: 'background .1s',
                       }}
-                      onMouseEnter={e => e.currentTarget.style.background = '#f0fae8'}
-                      onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? C.white : '#fafcf8'}
+                      onMouseEnter={e => e.currentTarget.style.background = '#FFF9F5'}
+                      onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? C.white : '#FFF9F5'}
                     >
                       <div style={{ textAlign: 'center', fontWeight: 800, color: '#bbb', fontSize: '0.9rem' }}>{pos}</div>
                       <div style={{ textAlign: 'center' }}><MovBadge mov={p.movimento || 0} /></div>
@@ -671,11 +671,11 @@ export default function Ranking() {
                       display: 'grid', gridTemplateColumns: '48px 28px 1fr 90px 80px 64px',
                       padding: '10px 18px', alignItems: 'center',
                       borderBottom: '1px solid ' + C.border,
-                      background: i % 2 === 0 ? C.white : '#fafcf8',
+                      background: i % 2 === 0 ? C.white : '#FFF9F5',
                       cursor: 'pointer', transition: 'background .1s',
                     }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#f0fae8'}
-                    onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? C.white : '#fafcf8'}
+                    onMouseEnter={e => e.currentTarget.style.background = '#FFF9F5'}
+                    onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? C.white : '#FFF9F5'}
                   >
                     <div style={{ textAlign: 'center', color: '#bbb', fontWeight: 800 }}>{i + 4}</div>
                     <div style={{ textAlign: 'center' }}><MovBadge mov={p.movimento || 0} /></div>
@@ -711,16 +711,16 @@ export default function Ranking() {
                   value={busca}
                   onChange={e => setBusca(e.target.value)}
                   placeholder="Buscar jogador…"
-                  style={{ width: '100%', paddingLeft: 38, paddingRight: 12, paddingTop: 10, paddingBottom: 10, borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.95rem', outline: 'none', boxSizing: 'border-box' }}
+                  style={{ width: '100%', paddingLeft: 38, paddingRight: 12, paddingTop: 10, paddingBottom: 10, borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.95rem', outline: 'none', boxSizing: 'border-box' }}
                   onFocus={e => e.target.style.borderColor = C.green}
-                  onBlur={e => e.target.style.borderColor = '#d0dcc8'}
+                  onBlur={e => e.target.style.borderColor = '#EAF1F7'}
                 />
               </div>
               {categorias.length > 0 && (
                 <select
                   value={catFiltro}
                   onChange={e => setCatFiltro(e.target.value)}
-                  style={{ flex: '0 1 200px', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #d0dcc8', fontSize: '0.9rem', outline: 'none', color: C.darkGreen, background: C.white, cursor: 'pointer' }}
+                  style={{ flex: '0 1 200px', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #EAF1F7', fontSize: '0.9rem', outline: 'none', color: C.darkGreen, background: C.white, cursor: 'pointer' }}
                 >
                   <option value="all">Todas as categorias</option>
                   {categorias.map(c => <option key={c} value={c}>{c}</option>)}
@@ -778,17 +778,17 @@ export default function Ranking() {
                       borderBottom: '1px solid ' + C.border,
                       background: hasMedal
                         ? (pos === 1 ? 'rgba(255,107,44,.07)' : pos === 2 ? 'rgba(158,158,158,.05)' : 'rgba(205,127,50,.06)')
-                        : (i % 2 === 0 ? C.white : '#fafcf8'),
+                        : (i % 2 === 0 ? C.white : '#FFF9F5'),
                       transition: 'background .1s, opacity .3s, transform .3s',
                       opacity: isVis ? 1 : 0,
                       transform: isVis ? 'translateX(0)' : 'translateX(-10px)',
                       cursor: 'pointer',
                     }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#f0fae8'}
+                    onMouseEnter={e => e.currentTarget.style.background = '#FFF9F5'}
                     onMouseLeave={e => {
                       e.currentTarget.style.background = hasMedal
                         ? (pos === 1 ? 'rgba(255,107,44,.07)' : pos === 2 ? 'rgba(158,158,158,.05)' : 'rgba(205,127,50,.06)')
-                        : (i % 2 === 0 ? C.white : '#fafcf8')
+                        : (i % 2 === 0 ? C.white : '#FFF9F5')
                     }}
                   >
                     <div style={{ textAlign: 'center', fontWeight: 800 }}>

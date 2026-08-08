@@ -46,9 +46,9 @@
 }
 
 .resultado-sucesso {
-  background-color: #d4edda;
-  color: #155724;
-  border: 1px solid #c3e6cb;
+  background-color: #E9F1F7;
+  color: #12283F;
+  border: 1px solid #C5D7E6;
 }
 
 .resultado-erro {
@@ -217,12 +217,12 @@
 }
 
 .btn-success {
-  background-color: #28a745;
+  background-color: #2D6F9E;
   color: white;
 }
 
 .btn-success:hover:not(:disabled) {
-  background-color: #218838;
+  background-color: #245E88;
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
 }
@@ -352,8 +352,8 @@ button:disabled {
 }
 
 .badge-suprimento {
-  background-color: #e0ffe0;
-  color: #218838;
+  background-color: #EAF3F9;
+  color: #245E88;
 }
 
 .badge-aberto {
@@ -362,8 +362,8 @@ button:disabled {
 }
 
 .badge-fechado {
-  background-color: #d4edda;
-  color: #155724;
+  background-color: #E9F1F7;
+  color: #12283F;
 }
 
 /* ============================================================================
@@ -428,11 +428,11 @@ button:disabled {
 }
 
 .resumo-item.divergencia-OK {
-  border-left-color: #28a745;
+  border-left-color: #2D6F9E;
 }
 
 .resumo-item.divergencia-OK strong {
-  color: #28a745;
+  color: #2D6F9E;
 }
 
 .resumo-item.divergencia-SOBRA {
