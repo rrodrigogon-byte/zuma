@@ -279,6 +279,28 @@ export function listarDocumentos(tenantId = 'principal') {
     .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)));
 }
 
+// Migra o vínculo lógico de um tenant legado para a empresa padrão. O arquivo
+// cifrado permanece no mesmo objeto privado do GCS; somente os metadados e a
+// autorização de acesso são realocados de forma idempotente.
+export function migrarTenant(origem, destino) {
+  const store = fiscalStore();
+  const sourceKey = tenantKey(origem);
+  const targetKey = tenantKey(destino);
+  if (sourceKey === targetKey || store.configuracoes[targetKey]) return false;
+  const origemConfig = store.configuracoes[sourceKey];
+  if (!origemConfig) return false;
+  store.configuracoes[targetKey] = { ...origemConfig, tenantId: targetKey, updatedAt: new Date().toISOString() };
+  delete store.configuracoes[sourceKey];
+  for (const certificado of Object.values(store.certificados)) {
+    if (certificado.tenantId === sourceKey) certificado.tenantId = targetKey;
+  }
+  for (const documento of Object.values(store.documentos)) {
+    if (documento.tenantId === sourceKey) documento.tenantId = targetKey;
+  }
+  save();
+  return true;
+}
+
 export function limparDadosSensiveis(config) {
   if (!config) return config;
   const { csc, ...safe } = config;
@@ -288,5 +310,5 @@ export function limparDadosSensiveis(config) {
 export default {
   obterConfiguracaoFiscal, salvarConfiguracaoFiscal, importarCertificadoA1,
   listarCertificados, ativarCertificado, verificarProntidao, carregarMaterialAtivo,
-  registrarPreflightEmissao, listarDocumentos, limparDadosSensiveis,
+  registrarPreflightEmissao, listarDocumentos, migrarTenant, limparDadosSensiveis,
 };

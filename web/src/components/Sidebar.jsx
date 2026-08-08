@@ -90,6 +90,7 @@ const NAV_ADMIN_GROUPS = [
       { to: '/admin/estoque',  icon: '📦', label: 'Estoque' },
       { to: '/admin/pagamentos',icon: '💳', label: 'Pagamentos' },
       { to: '/admin/notas',    icon: '🧾', label: 'Notas Fiscais' },
+      { to: '/admin/cadastros-mestres', icon: '🗂️', label: 'Cadastros Mestres' },
       { to: '/admin/clientes', icon: '👥', label: 'Clientes & Contas' },
       { to: '/admin/contas-receber', icon: '💰', label: 'Contas a Receber' },
       { to: '/admin/fechamento-diario', icon: '🔐', label: 'Fechamento Diário' },

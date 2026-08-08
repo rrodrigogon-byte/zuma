@@ -22,6 +22,8 @@ import { CATALOGO_ESPETINHOS_KYTTO, RESUMO_CATALOGO_ESPETINHOS } from './catalog
 import * as clientesKytto from './clientes-contas-kytto.js';
 import * as fiscalKytto from './fiscal-kytto.js';
 import { OAuth2Client } from 'google-auth-library';
+import bcrypt from 'bcryptjs';
+import * as cadastrosMestres from './cadastros-mestres-kytto.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -103,29 +105,48 @@ const usuarios = new Map();
 const ADMIN_TEMP_PASSWORD = 'SetPoint@2026Temp';
 const ADMIN_EMAIL = 'admin@setpoint-ultra.local';
 
-// Função auxiliar para hash simples (em produção, usar bcrypt)
+// Senhas novas usam bcrypt. O comparador aceita o hash legado apenas para
+// migração transparente da conta administrativa já existente.
 function hashPassword(pwd) {
-  return Buffer.from(pwd).toString('base64');
+  return bcrypt.hashSync(String(pwd), 12);
 }
 
 function verificarPassword(pwd, hash) {
-  return hashPassword(pwd) === hash;
+  const valor = String(hash || '');
+  return valor.startsWith('$2')
+    ? bcrypt.compareSync(String(pwd), valor)
+    : Buffer.from(String(pwd)).toString('base64') === valor;
 }
 
-// Criar usuário admin na inicialização
+function espelharUsuarioEmMemoria(usuario) {
+  if (!usuario?.email) return null;
+  const espelho = {
+    ...usuario,
+    senha: usuario.senhaHash || usuario.senha || '',
+    tipo: (usuario.roles || [usuario.role || usuario.tipo || 'operador']).includes('admin') ? 'admin' : (usuario.tipo || 'operador'),
+    role: usuario.role || (usuario.roles || [])[0] || 'operador',
+    ativo: usuario.ativo !== false,
+  };
+  usuarios.set(String(espelho.email).toLowerCase(), espelho);
+  return espelho;
+}
+
+// Cria a empresa operacional e a conta administradora padrão apenas na primeira
+// inicialização. Nenhuma senha é escrita em log.
 function criarAdminPadrao() {
-  if (!usuarios.has(ADMIN_EMAIL)) {
-    usuarios.set(ADMIN_EMAIL, {
-      email: ADMIN_EMAIL,
-      nome: 'Administrador',
-      senha: hashPassword(ADMIN_TEMP_PASSWORD),
-      tipo: 'admin',
-      criado: new Date(),
-      ativo: true
+  cadastrosMestres.garantirEmpresaPadrao();
+  let usuario = cadastrosMestres.obterUsuarioPorEmail(ADMIN_EMAIL);
+  if (!usuario) {
+    usuario = cadastrosMestres.criarUsuario(cadastrosMestres.EMPRESA_PADRAO_ID, {
+      nome: 'Administrador', email: ADMIN_EMAIL, roles: ['admin', 'gerente-financeiro'],
+      platformAdmin: true, senhaHash: hashPassword(ADMIN_TEMP_PASSWORD),
     });
-    console.log(`✅ Usuário admin criado: ${ADMIN_EMAIL}`);
-    console.log(`🔐 Senha temporária: ${ADMIN_TEMP_PASSWORD}`);
+    usuario.empresasAcessiveis = [cadastrosMestres.EMPRESA_PADRAO_ID];
+    cadastrosMestres.atualizarUsuario(cadastrosMestres.EMPRESA_PADRAO_ID, usuario.id, { senhaHash: usuario.senhaHash });
+    console.log(`✅ Administrador padrão associado à empresa ${cadastrosMestres.EMPRESA_PADRAO_ID}`);
   }
+  usuario.empresasAcessiveis ||= [usuario.empresaId || cadastrosMestres.EMPRESA_PADRAO_ID];
+  return espelharUsuarioEmMemoria(usuario);
 }
 
 // Rota: Login Admin (Painel)
@@ -138,22 +159,39 @@ app.post('/api/admin/login', authLimiter, (req, res) => {
       return res.status(400).json({ error: 'Usuário e senha são obrigatórios' });
     }
 
-    const usuario = usuarios.get(String(user).trim().toLowerCase());
+    const email = String(user).trim().toLowerCase();
+    const usuario = usuarios.get(email) || espelharUsuarioEmMemoria(cadastrosMestres.obterUsuarioPorEmail(email));
 
-    if (!usuario || !verificarPassword(senhaInformada, usuario.senha)) {
+    if (!usuario || !verificarPassword(senhaInformada, usuario.senhaHash || usuario.senha)) {
       return res.status(401).json({ error: 'Usuário ou senha inválidos' });
     }
-    
+
     if (!usuario.ativo) {
       return res.status(403).json({ error: 'Usuário desativado' });
     }
-    
-    const token = Buffer.from(`${user}:${Date.now()}`).toString('base64');
-    
+
+    // Atualiza automaticamente hashes legados após uma autenticação bem-sucedida.
+    if (!String(usuario.senhaHash || usuario.senha || '').startsWith('$2') && usuario.id && usuario.empresaId) {
+      const senhaHash = hashPassword(senhaInformada);
+      cadastrosMestres.atualizarUsuario(usuario.empresaId, usuario.id, { senhaHash });
+      usuario.senhaHash = senhaHash;
+      usuario.senha = senhaHash;
+    }
+
+    const empresas = cadastrosMestres.empresasDoUsuario(usuario);
+    if (!empresas.length) return res.status(403).json({ error: 'Usuário sem empresa ativa associada.' });
+    const empresaAtiva = empresas[0];
+    const token = Buffer.from(`${email}:${Date.now()}:${empresaAtiva.id}`).toString('base64');
+    const papel = usuario.role || ((usuario.roles || []).includes('admin') ? 'admin' : ((usuario.roles || [])[0] || 'operador'));
+
     res.json({
       token,
-      user: { email: usuario.email, nome: usuario.nome, role: usuario.role || 'admin' },
-      role: usuario.role || 'admin'
+      user: { email: usuario.email, nome: usuario.nome, role: papel, empresaId: empresaAtiva.id, roles: usuario.roles || [papel] },
+      role: papel,
+      sessao: {
+        loja_ativa: { id: empresaAtiva.id, nome: empresaAtiva.nomeFantasia || empresaAtiva.nome, ativa: empresaAtiva.ativa !== false, empresaId: empresaAtiva.id },
+        lojas_acessiveis: empresas.map((empresa) => ({ id: empresa.id, nome: empresa.nomeFantasia || empresa.nome, ativa: empresa.ativa !== false, empresaId: empresa.id })),
+      }
     });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao fazer login' });
@@ -437,9 +475,12 @@ async function iniciar() {
   console.log('═'.repeat(65));
   console.log('\n📦 Registrando módulos...\n');
 
-  // Criar usuário admin padrão e a conta operacional sem cadastro nominal.
+  // Criar a empresa, o usuário administrativo e a conta padrão no escopo correto.
   criarAdminPadrao();
-  clientesKytto.garantirClientePadrao();
+  // A configuração fiscal anterior era vinculada ao email administrativo. A
+  // migração preserva o A1 cifrado e passa a vinculá-lo à empresa padrão.
+  fiscalKytto.migrarTenant(`conta-${ADMIN_EMAIL}`, `empresa-${cadastrosMestres.EMPRESA_PADRAO_ID}`);
+  clientesKytto.garantirClientePadrao(cadastrosMestres.EMPRESA_PADRAO_ID);
   await registrarModulos();
 
   // Rota: Info
@@ -514,18 +555,42 @@ async function iniciar() {
   }
 
   function requerEditorCatalogo(req, res, next) {
-    const usuario = usuarioDoToken(req);
-    if (!usuario || usuario.tipo !== 'admin') {
+    const usuario = usuarioDoToken(req) || espelharUsuarioEmMemoria(cadastrosMestres.obterUsuarioPorEmail(
+      (() => {
+        try { return Buffer.from(String(req.headers.authorization || '').replace(/^Bearer\\s+/i, ''), 'base64').toString('utf8').split(':')[0]; }
+        catch { return ''; }
+      })()
+    ));
+    if (!usuario || usuario.ativo === false || (usuario.tipo !== 'admin' && !(usuario.roles || []).includes('admin'))) {
       return res.status(401).json({ erro: 'Autenticação administrativa necessária' });
     }
+
+    const empresas = cadastrosMestres.empresasDoUsuario(usuario);
+    const solicitada = String(req.get('X-Loja-Id') || '').trim();
+    const empresa = solicitada
+      ? empresas.find((item) => item.id === solicitada && item.ativa !== false)
+      : empresas[0];
+    if (!empresa) {
+      return res.status(403).json({ erro: 'Empresa ativa inválida ou sem permissão para este usuário.' });
+    }
+
+    // Qualquer tentativa de forçar empresaId por corpo, query ou parâmetro é
+    // bloqueada antes de a rota acessar os dados persistidos.
+    const empresaSolicitadaNoPayload = req.body?.empresaId || req.query?.empresaId || req.params?.empresaId;
+    if (empresaSolicitadaNoPayload && String(empresaSolicitadaNoPayload) !== empresa.id) {
+      return res.status(403).json({ erro: 'Acesso negado a dados de outra empresa.' });
+    }
+
     req.usuario = usuario;
+    req.empresaId = empresa.id;
+    req.empresa = empresa;
     next();
   }
 
   // ── FISCAL / CERTIFICADOS A1 ──────────────────────────────────────────────
   // Usa a mesma autenticação administrativa do catálogo e mantém certificados
   // cifrados em objeto dedicado do GCS. Nunca retorna senha, CSC ou arquivo A1.
-  const fiscalTenantId = (req) => `conta-${req.usuario?.email || 'principal'}`;
+  const fiscalTenantId = (req) => `empresa-${req.empresaId || cadastrosMestres.EMPRESA_PADRAO_ID}`;
   const fiscalResposta = (config) => fiscalKytto.limparDadosSensiveis(config);
 
   app.get('/api/v1/fiscal/config', requerEditorCatalogo, (req, res) => {
@@ -587,23 +652,33 @@ async function iniciar() {
     }
   });
 
-  function cardapioPersistido() {
+  function cardapioPersistido(empresaId = cadastrosMestres.EMPRESA_PADRAO_ID) {
     const estado = db();
-    if (!Array.isArray(estado.cardapio)) estado.cardapio = [];
-    return estado.cardapio;
+    estado.cardapioPorEmpresa ||= {};
+    // Migração idempotente da lista legada publicada para a empresa padrão.
+    if (!estado.cardapioPorEmpresa[cadastrosMestres.EMPRESA_PADRAO_ID] && Array.isArray(estado.cardapio)) {
+      estado.cardapioPorEmpresa[cadastrosMestres.EMPRESA_PADRAO_ID] = estado.cardapio.map((item) => ({ ...item, empresaId: cadastrosMestres.EMPRESA_PADRAO_ID }));
+    }
+    estado.cardapioPorEmpresa[empresaId] ||= [];
+    return estado.cardapioPorEmpresa[empresaId];
   }
 
-  // Cada produto de cardápio tem uma ficha de estoque independente. O saldo
-  // inicial é sempre zero e o histórico registra a origem de cada alteração.
-  function estoquePersistido() {
+  // Cada produto de cardápio tem uma ficha de estoque independente e segregada
+  // pela empresa. O saldo inicial é zero e o histórico não cruza empresas.
+  function estoquePersistido(empresaId = cadastrosMestres.EMPRESA_PADRAO_ID) {
     const estado = db();
-    if (!estado.estoque || typeof estado.estoque !== 'object' || Array.isArray(estado.estoque)) estado.estoque = {};
-    return estado.estoque;
+    estado.estoquePorEmpresa ||= {};
+    if (!estado.estoquePorEmpresa[cadastrosMestres.EMPRESA_PADRAO_ID] && estado.estoque && typeof estado.estoque === 'object' && !Array.isArray(estado.estoque)) {
+      estado.estoquePorEmpresa[cadastrosMestres.EMPRESA_PADRAO_ID] = Object.fromEntries(Object.entries(estado.estoque).map(([id, item]) => [id, { ...item, empresaId: cadastrosMestres.EMPRESA_PADRAO_ID }]));
+    }
+    estado.estoquePorEmpresa[empresaId] ||= {};
+    return estado.estoquePorEmpresa[empresaId];
   }
 
-  function fichaEstoque(produto) {
+  function fichaEstoque(produto, empresaId) {
     return {
       id: produto.id,
+      empresaId,
       produtoId: produto.id,
       nome: produto.nome,
       cat: produto.cat || 'Sem categoria',
@@ -619,20 +694,20 @@ async function iniciar() {
     };
   }
 
-  function sincronizarEstoqueCardapio({ registrarHistorico = false } = {}) {
-    const estoque = estoquePersistido();
-    const itens = cardapioPersistido();
+  function sincronizarEstoqueCardapio(empresaId = cadastrosMestres.EMPRESA_PADRAO_ID, { registrarHistorico = false } = {}) {
+    const estoque = estoquePersistido(empresaId);
+    const itens = cardapioPersistido(empresaId);
     const idsAtivos = new Set(itens.map(item => item.id));
     let criados = 0, atualizados = 0, arquivados = 0;
     for (const produto of itens) {
       const atual = estoque[produto.id];
       if (!atual) {
-        estoque[produto.id] = fichaEstoque(produto);
+        estoque[produto.id] = fichaEstoque(produto, empresaId);
         criados++;
       } else {
         const mudou = atual.nome !== produto.nome || atual.cat !== produto.cat || atual.unidade !== produto.unidade || atual.ativo !== true;
         Object.assign(atual, {
-          produtoId: produto.id, nome: produto.nome, cat: produto.cat || 'Sem categoria',
+          empresaId, produtoId: produto.id, nome: produto.nome, cat: produto.cat || 'Sem categoria',
           subcategoria: produto.subcategoria || '', unidade: produto.unidade || 'UN', ativo: true,
           atualizadoEm: new Date().toISOString(),
         });
@@ -650,10 +725,10 @@ async function iniciar() {
     return { criados, atualizados, arquivados, total: Object.values(estoque).filter(item => item.ativo !== false).length };
   }
 
-  function listarEstoqueCardapio() {
-    const resumo = sincronizarEstoqueCardapio();
+  function listarEstoqueCardapio(empresaId = cadastrosMestres.EMPRESA_PADRAO_ID) {
+    const resumo = sincronizarEstoqueCardapio(empresaId);
     if (resumo.criados || resumo.atualizados || resumo.arquivados) save();
-    return Object.values(estoquePersistido())
+    return Object.values(estoquePersistido(empresaId))
       .filter(item => item.ativo !== false)
       .sort((a, b) => String(a.cat).localeCompare(String(b.cat), 'pt-BR') || String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
   }
@@ -685,20 +760,20 @@ async function iniciar() {
   }
 
   app.get('/api/cardapio', (req, res) => {
-    const itens = cardapioPersistido().filter((item) => !item.indisponivel);
+    const itens = cardapioPersistido(cadastrosMestres.EMPRESA_PADRAO_ID).filter((item) => !item.indisponivel);
     res.json(itens);
   });
 
   app.get('/api/admin/cardapio', requerEditorCatalogo, (req, res) => {
-    res.json(cardapioPersistido());
+    res.json(cardapioPersistido(req.empresaId));
   });
 
   app.get('/api/admin/estoque', requerEditorCatalogo, (req, res) => {
-    res.json({ estoque: listarEstoqueCardapio() });
+    res.json({ estoque: listarEstoqueCardapio(req.empresaId) });
   });
 
   app.post('/api/admin/estoque/sincronizar-cardapio', requerEditorCatalogo, (req, res) => {
-    const resumo = sincronizarEstoqueCardapio();
+    const resumo = sincronizarEstoqueCardapio(req.empresaId);
     save();
     res.json({ ok: true, ...resumo, mensagem: 'Estoque sincronizado com o cardápio.' });
   });
@@ -707,7 +782,7 @@ async function iniciar() {
     const produtoId = String(req.body?.produtoId || '');
     const qtd = Number(req.body?.qtd);
     const custo = req.body?.custo === undefined || req.body?.custo === '' ? null : Number(req.body.custo);
-    const ficha = estoquePersistido()[produtoId];
+    const ficha = estoquePersistido(req.empresaId)[produtoId];
     if (!ficha || ficha.ativo === false) return res.status(404).json({ erro: 'Produto de estoque não encontrado.' });
     if (!Number.isFinite(qtd) || qtd <= 0) return res.status(400).json({ erro: 'Quantidade de entrada inválida.' });
     if (custo !== null && (!Number.isFinite(custo) || custo < 0)) return res.status(400).json({ erro: 'Custo unitário inválido.' });
@@ -723,7 +798,7 @@ async function iniciar() {
 
   app.post('/api/admin/estoque/ajuste', requerEditorCatalogo, (req, res) => {
     const produtoId = String(req.body?.produtoId || '');
-    const ficha = estoquePersistido()[produtoId];
+    const ficha = estoquePersistido(req.empresaId)[produtoId];
     if (!ficha || ficha.ativo === false) return res.status(404).json({ erro: 'Produto de estoque não encontrado.' });
     const agora = new Date().toISOString();
     let alterado = false;
@@ -750,17 +825,17 @@ async function iniciar() {
   });
 
   app.get('/api/admin/estoque/inventario', requerEditorCatalogo, (req, res) => {
-    const itens = listarEstoqueCardapio();
+    const itens = listarEstoqueCardapio(req.empresaId);
     res.json({ ok: true, geradoEm: new Date().toISOString(), itens: itens.map(({ id, nome, cat, unidade, qtd, min }) => ({ id, nome, cat, unidade, qtd, min })) });
   });
 
   app.get('/api/admin/cardapio/catalogo-bebidas', requerEditorCatalogo, (req, res) => {
-    const cadastrados = cardapioPersistido().filter((item) => item.catalogoSeed === 'kytto-bebidas-v1').length;
+    const cadastrados = cardapioPersistido(req.empresaId).filter((item) => item.catalogoSeed === 'kytto-bebidas-v1').length;
     res.json({ ...RESUMO_CATALOGO_BEBIDAS, cadastrados, versao: 'kytto-bebidas-v1' });
   });
 
   app.post('/api/admin/cardapio/catalogo-bebidas', requerEditorCatalogo, (req, res) => {
-    const itens = cardapioPersistido();
+    const itens = cardapioPersistido(req.empresaId);
     const existentes = new Set(itens.map((item) => `${item.marca}|${item.tipo}|${item.embalagem}`.toLowerCase()));
     const agora = new Date().toISOString();
     const adicionados = [];
@@ -772,6 +847,7 @@ async function iniciar() {
       const id = `beb-${Date.now().toString(36)}-${String(itens.length + adicionados.length + 1).padStart(3, '0')}`;
       adicionados.push({
         ...produto,
+        empresaId: req.empresaId,
         id,
         ordem: itens.length + adicionados.length + 1,
         catalogoSeed: 'kytto-bebidas-v1',
@@ -783,19 +859,19 @@ async function iniciar() {
 
     if (adicionados.length) {
       itens.push(...adicionados);
-      sincronizarEstoqueCardapio();
+      sincronizarEstoqueCardapio(req.empresaId);
       save();
     }
     res.status(201).json({ ok: true, adicionados: adicionados.length, total: itens.length, versao: 'kytto-bebidas-v1' });
   });
 
   app.get('/api/admin/cardapio/catalogo-espetinhos', requerEditorCatalogo, (req, res) => {
-    const cadastrados = cardapioPersistido().filter((item) => item.catalogoSeed === 'kytto-espetinhos-v1').length;
+    const cadastrados = cardapioPersistido(req.empresaId).filter((item) => item.catalogoSeed === 'kytto-espetinhos-v1').length;
     res.json({ ...RESUMO_CATALOGO_ESPETINHOS, cadastrados, versao: 'kytto-espetinhos-v1' });
   });
 
   app.post('/api/admin/cardapio/catalogo-espetinhos', requerEditorCatalogo, (req, res) => {
-    const itens = cardapioPersistido();
+    const itens = cardapioPersistido(req.empresaId);
     const existentes = new Set(itens.map((item) => String(item.nome || '').toLocaleLowerCase('pt-BR')));
     const agora = new Date().toISOString();
     const adicionados = [];
@@ -803,12 +879,12 @@ async function iniciar() {
       const produto = normalizarProduto(produtoBase);
       const chave = produto.nome.toLocaleLowerCase('pt-BR');
       if (existentes.has(chave)) continue;
-      adicionados.push({ ...produto, id: `esp-${Date.now().toString(36)}-${String(itens.length + adicionados.length + 1).padStart(3, '0')}`, ordem: itens.length + adicionados.length + 1, catalogoSeed: 'kytto-espetinhos-v1', criadoEm: agora, atualizadoEm: agora });
+      adicionados.push({ ...produto, empresaId: req.empresaId, id: `esp-${Date.now().toString(36)}-${String(itens.length + adicionados.length + 1).padStart(3, '0')}`, ordem: itens.length + adicionados.length + 1, catalogoSeed: 'kytto-espetinhos-v1', criadoEm: agora, atualizadoEm: agora });
       existentes.add(chave);
     }
     if (adicionados.length) {
       itens.push(...adicionados);
-      sincronizarEstoqueCardapio();
+      sincronizarEstoqueCardapio(req.empresaId);
       save();
     }
     res.status(201).json({ ok: true, adicionados: adicionados.length, total: itens.length, versao: 'kytto-espetinhos-v1' });
@@ -819,35 +895,35 @@ async function iniciar() {
     if (!produto.nome || produto.preco === null) {
       return res.status(400).json({ erro: 'Nome e preço válido são obrigatórios' });
     }
-    const itens = cardapioPersistido();
+    const itens = cardapioPersistido(req.empresaId);
     const agora = new Date().toISOString();
-    const novo = { ...produto, id: `prd-${Date.now().toString(36)}-${itens.length + 1}`, ordem: itens.length + 1, criadoEm: agora, atualizadoEm: agora };
+    const novo = { ...produto, empresaId: req.empresaId, id: `prd-${Date.now().toString(36)}-${itens.length + 1}`, ordem: itens.length + 1, criadoEm: agora, atualizadoEm: agora };
     itens.push(novo);
-    sincronizarEstoqueCardapio();
+    sincronizarEstoqueCardapio(req.empresaId);
     save();
     res.status(201).json({ ok: true, item: novo });
   });
 
   app.patch('/api/admin/cardapio/:id', requerEditorCatalogo, (req, res) => {
-    const itens = cardapioPersistido();
-    const item = itens.find((produto) => produto.id === req.params.id);
-    if (!item) return res.status(404).json({ erro: 'Produto não encontrado' });
+    const itens = cardapioPersistido(req.empresaId);
+    const item = itens.find((produto) => produto.id === req.params.id && produto.empresaId === req.empresaId);
+    if (!item) return res.status(404).json({ erro: 'Produto não encontrado na empresa ativa.' });
     const atualizado = normalizarProduto({ ...item, ...req.body });
     if (!atualizado.nome || atualizado.preco === null) {
       return res.status(400).json({ erro: 'Nome e preço válido são obrigatórios' });
     }
-    Object.assign(item, atualizado, { atualizadoEm: new Date().toISOString() });
-    sincronizarEstoqueCardapio();
+    Object.assign(item, atualizado, { empresaId: req.empresaId, atualizadoEm: new Date().toISOString() });
+    sincronizarEstoqueCardapio(req.empresaId);
     save();
     res.json({ ok: true, item });
   });
 
   app.delete('/api/admin/cardapio/:id', requerEditorCatalogo, (req, res) => {
-    const itens = cardapioPersistido();
-    const indice = itens.findIndex((produto) => produto.id === req.params.id);
-    if (indice < 0) return res.status(404).json({ erro: 'Produto não encontrado' });
+    const itens = cardapioPersistido(req.empresaId);
+    const indice = itens.findIndex((produto) => produto.id === req.params.id && produto.empresaId === req.empresaId);
+    if (indice < 0) return res.status(404).json({ erro: 'Produto não encontrado na empresa ativa.' });
     const [removido] = itens.splice(indice, 1);
-    sincronizarEstoqueCardapio({ registrarHistorico: true });
+    sincronizarEstoqueCardapio(req.empresaId, { registrarHistorico: true });
     save();
     res.json({ ok: true, removido: { id: removido.id, nome: removido.nome } });
   });
@@ -883,33 +959,33 @@ async function iniciar() {
     return `${obter('year')}-${obter('month')}-${obter('day')}`;
   }
 
-  function executarRotinaFinanceiraDiaria(origem = 'manual') {
-    const alertas = clientesKytto.verificarAlertasVencimento();
+  function executarRotinaFinanceiraDiaria(empresaId, origem = 'manual') {
+    const alertas = clientesKytto.verificarAlertasVencimento(empresaId);
     const data = dataOperacional();
-    let fechamento = clientesKytto.obterFechamentoDiario(data);
+    let fechamento = clientesKytto.obterFechamentoDiario(empresaId, data);
     let fechadoAgora = false;
     if (!fechamento) {
-      fechamento = clientesKytto.criarFechamentoDiario({
+      fechamento = clientesKytto.criarFechamentoDiario(empresaId, {
         dataFechamento: data,
-        responsavel: origem === 'agendador' ? 'agendador-financeiro@kytto.local' : 'admin@setpoint-ultra.local',
+        responsavel: origem === 'agendador' ? 'agendador-financeiro@kytto.local' : String(empresaId),
         observacao: origem === 'agendador' ? 'Fechamento diário automático e atualização de alertas.' : 'Fechamento diário manual e atualização de alertas.',
         origem,
       });
       fechadoAgora = true;
     }
     save();
-    return { data, alertas, fechamento, fechadoAgora };
+    return { empresaId, data, alertas, fechamento, fechadoAgora };
   }
 
   app.post('/api/internal/financeiro/rotina-diaria', validarAgendador, (req, res) => {
-    const resultado = executarRotinaFinanceiraDiaria('agendador');
-    res.json({ ok: true, ...resultado, totalAlertas: resultado.alertas.length });
+    const resultados = cadastrosMestres.listarEmpresas().map((empresa) => executarRotinaFinanceiraDiaria(empresa.id, 'agendador'));
+    res.json({ ok: true, resultados, totalEmpresas: resultados.length, totalAlertas: resultados.reduce((soma, resultado) => soma + resultado.alertas.length, 0) });
   });
 
   // ── CLIENTES E CONTAS A RECEBER ──────────────────────────────────────────
   app.post('/api/admin/clientes', requerEditorCatalogo, (req, res) => {
     try {
-      const cliente = clientesKytto.criarCliente(req.body);
+      const cliente = clientesKytto.criarCliente(req.empresaId, req.body);
       save();
       res.status(201).json({ ok: true, cliente });
     } catch (error) {
@@ -919,7 +995,7 @@ async function iniciar() {
 
   app.get('/api/admin/clientes', requerEditorCatalogo, (req, res) => {
     try {
-      const clientes = clientesKytto.listarClientes();
+      const clientes = clientesKytto.listarClientes(req.empresaId);
       res.json({ ok: true, clientes });
     } catch (error) {
       res.status(400).json({ erro: error.message });
@@ -928,7 +1004,7 @@ async function iniciar() {
 
   app.patch('/api/admin/clientes/:clienteId', requerEditorCatalogo, (req, res) => {
     try {
-      const cliente = clientesKytto.atualizarCliente(req.params.clienteId, req.body);
+      const cliente = clientesKytto.atualizarCliente(req.empresaId, req.params.clienteId, req.body);
       if (!cliente) return res.status(404).json({ erro: 'Cliente não encontrado.' });
       save();
       res.json({ ok: true, cliente });
@@ -939,7 +1015,7 @@ async function iniciar() {
 
   app.post('/api/admin/contas-receber', requerEditorCatalogo, (req, res) => {
     try {
-      const conta = clientesKytto.criarContaReceber(req.body);
+      const conta = clientesKytto.criarContaReceber(req.empresaId, req.body);
       save();
       res.status(201).json({ ok: true, conta });
     } catch (error) {
@@ -949,7 +1025,7 @@ async function iniciar() {
 
   app.get('/api/admin/contas-receber', requerEditorCatalogo, (req, res) => {
     try {
-      const contas = clientesKytto.listarContasReceber(req.query);
+      const contas = clientesKytto.listarContasReceber(req.empresaId, req.query);
       res.json({ ok: true, contas });
     } catch (error) {
       res.status(400).json({ erro: error.message });
@@ -958,7 +1034,7 @@ async function iniciar() {
 
   app.patch('/api/admin/contas-receber/:contaId', requerEditorCatalogo, (req, res) => {
     try {
-      const conta = clientesKytto.atualizarContaReceber(req.params.contaId, req.body);
+      const conta = clientesKytto.atualizarContaReceber(req.empresaId, req.params.contaId, req.body);
       if (!conta) return res.status(404).json({ erro: 'Conta a receber não encontrada.' });
       save();
       res.json({ ok: true, conta });
@@ -969,7 +1045,7 @@ async function iniciar() {
 
   app.get('/api/admin/alertas-vencimento', requerEditorCatalogo, (req, res) => {
     try {
-      const alertas = clientesKytto.verificarAlertasVencimento();
+      const alertas = clientesKytto.verificarAlertasVencimento(req.empresaId);
       save();
       res.json({ ok: true, alertas, total: alertas.length });
     } catch (error) {
@@ -979,7 +1055,7 @@ async function iniciar() {
 
   app.post('/api/admin/fechamento-diario', requerEditorCatalogo, (req, res) => {
     try {
-      const resultado = executarRotinaFinanceiraDiaria('manual');
+      const resultado = executarRotinaFinanceiraDiaria(req.empresaId, 'manual');
       res.status(resultado.fechadoAgora ? 201 : 200).json({ ok: true, fechamento: resultado.fechamento, alertas: resultado.alertas, fechadoAgora: resultado.fechadoAgora });
     } catch (error) {
       res.status(400).json({ erro: error.message });
@@ -988,8 +1064,105 @@ async function iniciar() {
 
   app.get('/api/admin/fechamento-diario', requerEditorCatalogo, (req, res) => {
     try {
-      const fechamentos = clientesKytto.listarFechamentosDiarios();
+      const fechamentos = clientesKytto.listarFechamentosDiarios(req.empresaId);
       res.json({ ok: true, fechamentos });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  // ── CADASTROS MESTRES MULTIENTIDADE ──────────────────────────────────────
+  // Funcionários, usuários e fornecedores são registros únicos por empresa e
+  // podem ser reutilizados pelos módulos de RH, compras, financeiro e operação.
+  app.get('/api/admin/empresa-ativa', requerEditorCatalogo, (req, res) => {
+    const acessiveis = cadastrosMestres.empresasDoUsuario(req.usuario).map((empresa) => ({
+      id: empresa.id, nome: empresa.nome, nomeFantasia: empresa.nomeFantasia,
+      cnpj: empresa.cnpj, ativa: empresa.ativa !== false, modulos: empresa.modulos || [],
+    }));
+    res.json({ ok: true, empresa: req.empresa, empresasAcessiveis: acessiveis });
+  });
+
+  app.get('/api/admin/funcionarios', requerEditorCatalogo, (req, res) => {
+    res.json({ ok: true, funcionarios: cadastrosMestres.listarFuncionarios(req.empresaId, { incluirDesligados: req.query.incluirDesligados === 'true' }) });
+  });
+
+  app.post('/api/admin/funcionarios', requerEditorCatalogo, (req, res) => {
+    try {
+      const funcionario = cadastrosMestres.criarFuncionario(req.empresaId, req.body || {});
+      res.status(201).json({ ok: true, funcionario });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.patch('/api/admin/funcionarios/:funcionarioId', requerEditorCatalogo, (req, res) => {
+    try {
+      const funcionario = cadastrosMestres.atualizarFuncionario(req.empresaId, req.params.funcionarioId, req.body || {});
+      if (!funcionario) return res.status(404).json({ erro: 'Funcionário não encontrado na empresa ativa.' });
+      res.json({ ok: true, funcionario });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.get('/api/admin/fornecedores', requerEditorCatalogo, (req, res) => {
+    res.json({ ok: true, fornecedores: cadastrosMestres.listarFornecedores(req.empresaId, { incluirInativos: req.query.incluirInativos === 'true' }) });
+  });
+
+  app.post('/api/admin/fornecedores', requerEditorCatalogo, (req, res) => {
+    try {
+      const fornecedor = cadastrosMestres.criarFornecedor(req.empresaId, req.body || {});
+      res.status(201).json({ ok: true, fornecedor });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.patch('/api/admin/fornecedores/:fornecedorId', requerEditorCatalogo, (req, res) => {
+    try {
+      const fornecedor = cadastrosMestres.atualizarFornecedor(req.empresaId, req.params.fornecedorId, req.body || {});
+      if (!fornecedor) return res.status(404).json({ erro: 'Fornecedor não encontrado na empresa ativa.' });
+      res.json({ ok: true, fornecedor });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.get('/api/admin/usuarios-mestres', requerEditorCatalogo, (req, res) => {
+    res.json({ ok: true, usuarios: cadastrosMestres.listarUsuarios(req.empresaId) });
+  });
+
+  app.post('/api/admin/usuarios-mestres', requerEditorCatalogo, (req, res) => {
+    try {
+      const senhaInicial = String(req.body?.senhaInicial || req.body?.senha || '');
+      if (senhaInicial.length < 8) return res.status(400).json({ erro: 'A senha inicial deve possuir pelo menos 8 caracteres.' });
+      const usuario = cadastrosMestres.criarUsuario(req.empresaId, {
+        ...req.body, senhaHash: hashPassword(senhaInicial),
+        empresasAcessiveis: [req.empresaId],
+      });
+      espelharUsuarioEmMemoria(usuario);
+      const { senhaHash, ...resposta } = usuario;
+      res.status(201).json({ ok: true, usuario: resposta });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.patch('/api/admin/usuarios-mestres/:usuarioId', requerEditorCatalogo, (req, res) => {
+    try {
+      const payload = { ...req.body };
+      if (payload.senhaInicial || payload.senha) {
+        const novaSenha = String(payload.senhaInicial || payload.senha);
+        if (novaSenha.length < 8) return res.status(400).json({ erro: 'A senha deve possuir pelo menos 8 caracteres.' });
+        payload.senhaHash = hashPassword(novaSenha);
+      }
+      delete payload.senha;
+      delete payload.senhaInicial;
+      const usuario = cadastrosMestres.atualizarUsuario(req.empresaId, req.params.usuarioId, payload);
+      if (!usuario) return res.status(404).json({ erro: 'Usuário não encontrado na empresa ativa.' });
+      espelharUsuarioEmMemoria(usuario);
+      const { senhaHash, ...resposta } = usuario;
+      res.json({ ok: true, usuario: resposta });
     } catch (error) {
       res.status(400).json({ erro: error.message });
     }
@@ -999,15 +1172,30 @@ async function iniciar() {
   // Mesas são dados operacionais próprios, persistidos junto ao cardápio e
   // estoque. Cada mesa pode ter rótulo, nome de referência e uma conta/cliente
   // vinculada, sem obrigar a criação de uma comanda no momento do cadastro.
-  function mesasPersistidas() {
+  function mesasPersistidas(empresaId = cadastrosMestres.EMPRESA_PADRAO_ID) {
     const estado = db();
     if (!estado.mesasKytto || typeof estado.mesasKytto !== 'object') {
-      estado.mesasKytto = { config: { mesasFisicas: 0, atualizadoEm: null }, fisicas: {}, virtuais: {} };
+      estado.mesasKytto = { empresas: {} };
     }
-    estado.mesasKytto.config ||= { mesasFisicas: 0, atualizadoEm: null };
-    estado.mesasKytto.fisicas ||= {};
-    estado.mesasKytto.virtuais ||= {};
-    return estado.mesasKytto;
+    const raiz = estado.mesasKytto;
+    // Migra o mapa global legado uma única vez para a empresa padrão.
+    if (!raiz.empresas) {
+      raiz.empresas = {
+        [cadastrosMestres.EMPRESA_PADRAO_ID]: {
+          config: raiz.config || { mesasFisicas: 0, atualizadoEm: null },
+          fisicas: raiz.fisicas || {}, virtuais: raiz.virtuais || {},
+        },
+      };
+      delete raiz.config;
+      delete raiz.fisicas;
+      delete raiz.virtuais;
+    }
+    raiz.empresas[empresaId] ||= { config: { mesasFisicas: 0, atualizadoEm: null }, fisicas: {}, virtuais: {} };
+    const empresa = raiz.empresas[empresaId];
+    empresa.config ||= { mesasFisicas: 0, atualizadoEm: null };
+    empresa.fisicas ||= {};
+    empresa.virtuais ||= {};
+    return empresa;
   }
 
   function normalizarMesa(payload = {}, numeroPadrao = null) {
@@ -1023,18 +1211,18 @@ async function iniciar() {
     };
   }
 
-  function mesaPadrao(numero) {
+  function mesaPadrao(numero, empresaId) {
     const agora = new Date().toISOString();
-    return { num: numero, nome: `Mesa ${numero}`, apelido: '', contaNome: '', contaId: '', observacao: '', status: 'livre', total: 0, aguardandoCozinha: 0, comandaId: null, ativa: true, criadoEm: agora, atualizadoEm: agora };
+    return { num: numero, empresaId, nome: `Mesa ${numero}`, apelido: '', contaNome: '', contaId: '', observacao: '', status: 'livre', total: 0, aguardandoCozinha: 0, comandaId: null, ativa: true, criadoEm: agora, atualizadoEm: agora };
   }
 
-  function garantirQuantidadeMesas(quantidade) {
-    const store = mesasPersistidas();
+  function garantirQuantidadeMesas(empresaId, quantidade) {
+    const store = mesasPersistidas(empresaId);
     const alvo = Math.max(0, Math.floor(Number(quantidade) || 0));
     let adicionadas = 0;
     for (let numero = 1; numero <= alvo; numero++) {
       if (!store.fisicas[numero]) {
-        store.fisicas[numero] = mesaPadrao(numero);
+        store.fisicas[numero] = mesaPadrao(numero, empresaId);
         adicionadas++;
       }
       store.fisicas[numero].ativa = true;
@@ -1044,39 +1232,40 @@ async function iniciar() {
     return adicionadas;
   }
 
-  function listarMesasFisicas() {
-    const store = mesasPersistidas();
+  function listarMesasFisicas(empresaId = cadastrosMestres.EMPRESA_PADRAO_ID) {
+    const store = mesasPersistidas(empresaId);
     return Object.values(store.fisicas).filter(mesa => mesa.ativa !== false).sort((a, b) => a.num - b.num);
   }
 
   app.get('/api/mesas', (req, res) => {
-    const store = mesasPersistidas();
-    res.json({ fisicas: listarMesasFisicas(), virtuais: Object.values(store.virtuais).filter(mesa => mesa.ativa !== false) });
+    const empresaId = cadastrosMestres.EMPRESA_PADRAO_ID;
+    const store = mesasPersistidas(empresaId);
+    res.json({ fisicas: listarMesasFisicas(empresaId), virtuais: Object.values(store.virtuais).filter(mesa => mesa.ativa !== false) });
   });
 
   app.get('/api/admin/mesas/config', requerEditorCatalogo, (req, res) => {
-    const store = mesasPersistidas();
-    res.json({ ...store.config, mesasFisicas: listarMesasFisicas().length });
+    const store = mesasPersistidas(req.empresaId);
+    res.json({ ...store.config, mesasFisicas: listarMesasFisicas(req.empresaId).length });
   });
 
   app.post('/api/admin/mesas/config', requerEditorCatalogo, (req, res) => {
     const quantidade = Number(req.body?.mesasFisicas);
     if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > 500) return res.status(400).json({ erro: 'Informe entre 1 e 500 mesas.' });
-    const adicionadas = garantirQuantidadeMesas(quantidade);
+    const adicionadas = garantirQuantidadeMesas(req.empresaId, quantidade);
     save();
-    res.json({ ok: true, adicionadas, mesasFisicas: listarMesasFisicas().length, mensagem: adicionadas ? 'Mesas sequenciais adicionadas ao mapa.' : 'O mapa já possui essa quantidade ou mais mesas.' });
+    res.json({ ok: true, adicionadas, mesasFisicas: listarMesasFisicas(req.empresaId).length, mensagem: adicionadas ? 'Mesas sequenciais adicionadas ao mapa.' : 'O mapa já possui essa quantidade ou mais mesas.' });
   });
 
   app.post('/api/admin/mesas', requerEditorCatalogo, (req, res) => {
-    const store = mesasPersistidas();
-    const existentes = listarMesasFisicas();
+    const store = mesasPersistidas(req.empresaId);
+    const existentes = listarMesasFisicas(req.empresaId);
     const proximoNumero = existentes.length ? Math.max(...existentes.map(mesa => mesa.num)) + 1 : 1;
     const dados = normalizarMesa(req.body || {}, proximoNumero);
     if (!dados.num || dados.num > 9999) return res.status(400).json({ erro: 'Número de mesa inválido.' });
     if (store.fisicas[dados.num] && store.fisicas[dados.num].ativa !== false) return res.status(409).json({ erro: `A mesa ${dados.num} já existe.` });
-    const mesa = { ...mesaPadrao(dados.num), ...dados, nome: dados.nome || `Mesa ${dados.num}` };
+    const mesa = { ...mesaPadrao(dados.num, req.empresaId), ...dados, empresaId: req.empresaId, nome: dados.nome || `Mesa ${dados.num}` };
     store.fisicas[dados.num] = mesa;
-    store.config.mesasFisicas = listarMesasFisicas().length;
+    store.config.mesasFisicas = listarMesasFisicas(req.empresaId).length;
     store.config.atualizadoEm = new Date().toISOString();
     save();
     res.status(201).json({ ok: true, mesa });
@@ -1084,9 +1273,9 @@ async function iniciar() {
 
   app.patch('/api/admin/mesas/:numero', requerEditorCatalogo, (req, res) => {
     const numero = Number(req.params.numero);
-    const store = mesasPersistidas();
+    const store = mesasPersistidas(req.empresaId);
     const mesa = store.fisicas[numero];
-    if (!mesa || mesa.ativa === false) return res.status(404).json({ erro: 'Mesa não encontrada.' });
+    if (!mesa || mesa.empresaId !== req.empresaId || mesa.ativa === false) return res.status(404).json({ erro: 'Mesa não encontrada na empresa ativa.' });
     const dados = normalizarMesa(req.body || {}, numero);
     Object.assign(mesa, {
       nome: dados.nome || mesa.nome || `Mesa ${numero}`,
@@ -1102,20 +1291,21 @@ async function iniciar() {
 
   app.delete('/api/admin/mesas/:numero', requerEditorCatalogo, (req, res) => {
     const numero = Number(req.params.numero);
-    const mesa = mesasPersistidas().fisicas[numero];
-    if (!mesa || mesa.ativa === false) return res.status(404).json({ erro: 'Mesa não encontrada.' });
+    const store = mesasPersistidas(req.empresaId);
+    const mesa = store.fisicas[numero];
+    if (!mesa || mesa.empresaId !== req.empresaId || mesa.ativa === false) return res.status(404).json({ erro: 'Mesa não encontrada na empresa ativa.' });
     if (mesa.status !== 'livre' || mesa.comandaId) return res.status(409).json({ erro: 'Não é possível remover uma mesa ocupada ou com comanda aberta.' });
     mesa.ativa = false;
     mesa.atualizadoEm = new Date().toISOString();
-    mesasPersistidas().config.mesasFisicas = listarMesasFisicas().length;
+    store.config.mesasFisicas = listarMesasFisicas(req.empresaId).length;
     save();
     res.json({ ok: true, numero });
   });
 
   app.post('/api/admin/mesas/:numero/fechar', requerEditorCatalogo, (req, res) => {
     const numero = Number(req.params.numero);
-    const mesa = mesasPersistidas().fisicas[numero];
-    if (!mesa || mesa.ativa === false) return res.status(404).json({ erro: 'Mesa não encontrada.' });
+    const mesa = mesasPersistidas(req.empresaId).fisicas[numero];
+    if (!mesa || mesa.empresaId !== req.empresaId || mesa.ativa === false) return res.status(404).json({ erro: 'Mesa não encontrada na empresa ativa.' });
     mesa.status = 'livre';
     mesa.total = 0;
     mesa.aguardandoCozinha = 0;

@@ -21,12 +21,12 @@ export default function Login() {
     try {
       if (aba === 'painel') {
         const data = await api.post('/api/admin/login', { user, senha })
-        login(data.token, data.user)
-        if (data.user.role === 'org') navigate('/admin')
+        login(data.token, data.user, false, data.sessao || {})
+        if (['org', 'admin', 'organizador', 'gerente'].includes(data.user.role)) navigate('/admin')
         else navigate('/pdv')
       } else {
         const data = await api.post('/api/auth/login', { email: user, senha })
-        login(data.token, data.user)
+        login(data.token, data.user, false, data.sessao || {})
         navigate('/meu-painel')
       }
     } catch (err) {
