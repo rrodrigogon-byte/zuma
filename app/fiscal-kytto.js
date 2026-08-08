@@ -83,7 +83,9 @@ function describeCertificate(pfxBuffer, password) {
     return {
       subject,
       commonName: cn,
-      cnpj: cnpjFromSubject(subject) || (cn.match(/(\d{14})/) || [])[1] || '',
+      // O CN do e-CNPJ identifica o titular; priorizá-lo evita confundir CNPJs
+      // presentes em OUs da cadeia ICP-Brasil com o CNPJ do emitente.
+      cnpj: (cn.match(/(\d{14})/) || [])[1] || cnpjFromSubject(subject) || '',
       validFrom,
       validTo,
       fingerprint: crypto.createHash('sha256').update(pfxBuffer).digest('hex'),

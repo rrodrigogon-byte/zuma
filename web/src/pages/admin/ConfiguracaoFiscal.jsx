@@ -34,6 +34,7 @@ function Section({ title, description, children }) {
 export default function ConfiguracaoFiscal() {
   const { toast } = useToast()
   const [config, setConfig] = useState(null)
+  const [certificados, setCertificados] = useState([])
   const [form, setForm] = useState(EMPTY_CONFIG)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -44,9 +45,13 @@ export default function ConfiguracaoFiscal() {
   const carregar = useCallback(async () => {
     setLoading(true)
     try {
-      const result = await api.get('/api/v1/fiscal/config')
+      const [result, certsResult] = await Promise.all([
+        api.get('/api/v1/fiscal/config'),
+        api.get('/api/v1/fiscal/certificados'),
+      ])
       const loaded = result.config || EMPTY_CONFIG
       setConfig(loaded)
+      setCertificados(certsResult.certificados || [])
       setForm({ ...EMPTY_CONFIG, ...loaded, endereco: { ...EMPTY_CONFIG.endereco, ...(loaded.endereco || {}) } })
     } catch (error) {
       toast(error.message || 'Não foi possível carregar a configuração fiscal.', 'error')
@@ -93,6 +98,7 @@ export default function ConfiguracaoFiscal() {
       const loaded = result.config || EMPTY_CONFIG
       setConfig(loaded)
       setForm(current => ({ ...current, ...loaded, endereco: { ...current.endereco, ...(loaded.endereco || {}) } }))
+      setCertificados(await api.get('/api/v1/fiscal/certificados').then(data => data.certificados || []))
       setCertFile(null)
       setCertSenha('')
       toast('Certificado A1 validado e armazenado de forma cifrada.', 'success')
@@ -100,6 +106,19 @@ export default function ConfiguracaoFiscal() {
       toast(error.message || 'Falha ao importar o certificado.', 'error')
     } finally {
       setUploading(false)
+    }
+  }
+
+  async function ativarCertificado(certificadoId) {
+    try {
+      const result = await api.post(`/api/v1/fiscal/certificados/${certificadoId}/ativar`, {})
+      const loaded = result.config || EMPTY_CONFIG
+      setConfig(loaded)
+      setForm(current => ({ ...current, ...loaded, endereco: { ...current.endereco, ...(loaded.endereco || {}) } }))
+      setCertificados(await api.get('/api/v1/fiscal/certificados').then(data => data.certificados || []))
+      toast('Certificado ativo atualizado.', 'success')
+    } catch (error) {
+      toast(error.message || 'Não foi possível ativar o certificado.', 'error')
     }
   }
 
@@ -136,6 +155,15 @@ export default function ConfiguracaoFiscal() {
         <Field label="Senha do certificado" type="password" value={certSenha} onChange={event => setCertSenha(event.target.value)} placeholder="Senha do A1" />
         <button type="button" onClick={uploadCertificado} disabled={uploading} className="btn-primary" style={{ minHeight: 39, whiteSpace: 'nowrap' }}>{uploading ? 'Validando…' : 'Importar A1'}</button>
       </div>
+      {certificados.length > 0 && <div style={{ marginTop: 18, borderTop: '1px solid var(--line)', paddingTop: 16 }}>
+        <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: .7, marginBottom: 8 }}>Certificados importados</div>
+        {certificados.map(item => <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--line)', fontSize: 13 }}>
+          <span style={{ color: item.id === certificate?.id ? 'var(--accent)' : 'var(--muted)' }}>{item.id === certificate?.id ? '●' : '○'}</span>
+          <div style={{ flex: 1, minWidth: 0 }}><strong>{item.commonName || item.nomeArquivo}</strong><span style={{ display: 'block', color: 'var(--muted)', fontSize: 12 }}>Válido até {item.validTo ? new Date(item.validTo).toLocaleDateString('pt-BR') : '—'}</span></div>
+          {item.id !== certificate?.id && <button type="button" onClick={() => ativarCertificado(item.id)} className="btn-ghost btn-sm">Tornar ativo</button>}
+          {item.id === certificate?.id && <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 800 }}>ATIVO</span>}
+        </div>)}
+      </div>}
     </Section>
 
     <Section title="🏢 Identificação do emitente" description="Os dados abaixo são utilizados na montagem e nas validações da NF-e/NFC-e.">
