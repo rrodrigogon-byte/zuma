@@ -1,8 +1,10 @@
 // Módulo de Clientes, Contas a Receber, Alertas e Fechamento Diário para Setpoint Kytto
 // Persistência: JSON em Google Cloud Storage (db.js)
 
+import { db as dbFunc, save as saveFn } from './db.js';
+
 export function clientesPersistidos() {
-  const estado = require('./db.js').db();
+  const estado = dbFunc();
   if (!estado.clientesKytto || typeof estado.clientesKytto !== 'object') {
     estado.clientesKytto = { clientes: {}, contasReceber: {}, alertas: {}, fechamentoDiario: {} };
   }
@@ -250,6 +252,8 @@ export function obterFechamentoDiario(dataFechamento) {
   const store = clientesPersistidos();
   return Object.values(store.fechamentoDiario).find(f => f.dataFechamento === dataFechamento) || null;
 }
+
+export { saveFn as save };
 
 export default {
   clientesPersistidos,
