@@ -18,16 +18,26 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   </React.StrictMode>
 )
 
-// ── PWA Service Worker ────────────────────────────────────────────────────────
+// ── Recuperação de cache de versões anteriores ───────────────────────────────
+// O PWA legado mantinha assets antigos em Cache Storage em alguns navegadores.
+// A aplicação passa a depender dos assets hashados e da rede, evitando entregar
+// uma interface antiga após um novo deploy.
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register('/sw.js', { scope: '/' })
-      .then(reg => {
-        console.log('[PWA] Service Worker registrado:', reg.scope)
-        // Verifica atualizações a cada 60s
-        setInterval(() => reg.update(), 60_000)
-      })
-      .catch(err => console.warn('[PWA] Falha ao registrar SW:', err))
+  window.addEventListener('load', async () => {
+    try {
+      const registrations = await navigator.serviceWorker.getRegistrations()
+      await Promise.all(registrations.map(registration => registration.unregister()))
+
+      if ('caches' in window) {
+        const cacheNames = await caches.keys()
+        await Promise.all(
+          cacheNames
+            .filter(name => name.startsWith('kytto-'))
+            .map(name => caches.delete(name))
+        )
+      }
+    } catch (error) {
+      console.warn('[KYTTO] Não foi possível limpar o cache legado:', error)
+    }
   })
 }

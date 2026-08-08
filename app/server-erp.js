@@ -68,7 +68,14 @@ app.use(express.urlencoded({ extended: true }));
 if (PROD) {
   app.use(express.static(path.join(__dirname, 'public'), {
     maxAge: '1h',
-    etag: true
+    etag: true,
+    setHeaders: (res, filePath) => {
+      // O HTML e o worker determinam qual versão do frontend será carregada.
+      // Não podem permanecer em cache após um deploy.
+      if (/\/(index\.html|sw\.js|manifest\.json|manifest\.webmanifest)$/.test(filePath)) {
+        res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
+      }
+    }
   }));
 }
 
@@ -669,7 +676,8 @@ async function iniciar() {
     if (req.path.startsWith('/api/')) {
       return res.status(404).json({ erro: 'Rota não encontrada', caminho: req.path });
     }
-    // SPA fallback
+    // SPA fallback: a página-base não pode reutilizar o bundle de um deploy anterior.
+    res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
   });
 
