@@ -97,6 +97,7 @@ const BarbeariaERP    = lazy(() => import('./pages/admin/BarbeariaERP'))
 const Barbearia       = lazy(() => import('./pages/admin/Barbearia'))
 const Supermercado    = lazy(() => import('./pages/admin/Supermercado'))
 const Omnichannel     = lazy(() => import('./pages/admin/Omnichannel'))
+const CanaisFidelidade = lazy(() => import('./pages/admin/CanaisFidelidade'))
 const PDVUnificado    = lazy(() => import('./pages/admin/PDVUnificado'))
 const AgendaQuadras   = lazy(() => import('./pages/public/AgendaQuadras'))
 const AgendamentoOnline = lazy(() => import('./pages/public/AgendamentoOnline'))
@@ -184,7 +185,7 @@ export default function App() {
           <Route path="/admin/barbearia-erp"   element={<Layout><BarbeariaERP /></Layout>} />
           <Route path="/admin/barbearia"        element={<Layout><Barbearia /></Layout>} />
           <Route path="/admin/supermercado"    element={<Layout><Supermercado /></Layout>} />
-          <Route path="/admin/omnichannel"      element={<Layout><Omnichannel /></Layout>} />
+          <Route path="/admin/omnichannel"      element={<Layout><CanaisFidelidade /></Layout>} />
           <Route path="/admin/pdv-erp"         element={<PDVUnificado />} />
         </Route>
 

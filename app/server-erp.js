@@ -26,6 +26,7 @@ import bcrypt from 'bcryptjs';
 import * as cadastrosMestres from './cadastros-mestres-kytto.js';
 import { pagamentosPix } from './pagamentos-pix-kytto.js';
 import { gerarRelatorioOperacional } from './relatorios-operacionais-kytto.js';
+import * as canaisKytto from './canais-fidelidade-kytto.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1334,6 +1335,39 @@ async function iniciar() {
     } catch (error) {
       res.status(400).json({ erro: error.message })
     }
+  })
+
+  // ── FIDELIZAÇÃO, DELIVERY E CANAIS DE VENDA ──────────────────────────────
+  app.get('/api/admin/canais-venda', requerEditorCatalogo, (req, res) => {
+    res.json({ ok: true, canais: canaisKytto.obterCanais(req.empresaId) })
+  })
+
+  app.post('/api/admin/canais-venda', requerEditorCatalogo, (req, res) => {
+    try { res.status(201).json({ ok: true, canal: canaisKytto.salvarCanal(req.empresaId, req.body) }) }
+    catch (error) { res.status(400).json({ erro: error.message }) }
+  })
+
+  app.get('/api/admin/fidelidade', requerEditorCatalogo, (req, res) => {
+    res.json({ ok: true, ...canaisKytto.obterFidelidade(req.empresaId) })
+  })
+
+  app.patch('/api/admin/fidelidade/regra', requerEditorCatalogo, (req, res) => {
+    try { res.json({ ok: true, regra: canaisKytto.salvarRegraFidelidade(req.empresaId, req.body) }) }
+    catch (error) { res.status(400).json({ erro: error.message }) }
+  })
+
+  app.post('/api/admin/fidelidade/membros', requerEditorCatalogo, (req, res) => {
+    try { res.status(201).json({ ok: true, membro: canaisKytto.cadastrarMembroFidelidade(req.empresaId, req.body) }) }
+    catch (error) { res.status(400).json({ erro: error.message }) }
+  })
+
+  app.get('/api/admin/delivery/pedidos', requerEditorCatalogo, (req, res) => {
+    res.json({ ok: true, pedidos: canaisKytto.listarPedidosCanal(req.empresaId, req.query) })
+  })
+
+  app.post('/api/admin/delivery/pedidos', requerEditorCatalogo, (req, res) => {
+    try { res.status(201).json({ ok: true, pedido: canaisKytto.criarPedidoCanal(req.empresaId, req.body) }) }
+    catch (error) { res.status(400).json({ erro: error.message }) }
   })
 
   // ── MAPA DE MESAS ────────────────────────────────────────────────────────
