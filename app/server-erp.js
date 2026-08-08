@@ -24,6 +24,7 @@ import * as fiscalKytto from './fiscal-kytto.js';
 import { OAuth2Client } from 'google-auth-library';
 import bcrypt from 'bcryptjs';
 import * as cadastrosMestres from './cadastros-mestres-kytto.js';
+import { pagamentosPix } from './pagamentos-pix-kytto.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1232,6 +1233,55 @@ async function iniciar() {
     }
   });
 
+  // ── PAGAMENTOS PIX POR EMPRESA ────────────────────────────────────────────
+  app.post('/api/admin/pagamentos/pix/registrar', requerEditorCatalogo, (req, res) => {
+    try {
+      const pix = pagamentosPix.registrarChavePix(req.empresaId, req.body)
+      res.status(201).json({ ok: true, pix: { ...pix, chave: pix.chave.slice(0, 3) + '***' + pix.chave.slice(-3) } })
+    } catch (error) {
+      res.status(400).json({ erro: error.message })
+    }
+  })
+
+  app.get('/api/admin/pagamentos/pix', requerEditorCatalogo, (req, res) => {
+    try {
+      const chaves = pagamentosPix.listarChavesPix(req.empresaId)
+      res.json({ ok: true, chaves })
+    } catch (error) {
+      res.status(400).json({ erro: error.message })
+    }
+  })
+
+  app.post('/api/admin/pagamentos/transacao', requerEditorCatalogo, (req, res) => {
+    try {
+      const transacao = pagamentosPix.registrarTransacao(req.empresaId, req.body)
+      res.status(201).json({ ok: true, transacao })
+    } catch (error) {
+      res.status(400).json({ erro: error.message })
+    }
+  })
+
+  app.get('/api/admin/pagamentos/transacoes', requerEditorCatalogo, (req, res) => {
+    try {
+      const transacoes = pagamentosPix.listarTransacoes(req.empresaId, req.query)
+      const totais = pagamentosPix.calcularTotais(req.empresaId, req.query)
+      res.json({ ok: true, transacoes, totais })
+    } catch (error) {
+      res.status(400).json({ erro: error.message })
+    }
+  })
+
+  app.get('/api/admin/pagamentos/relatorio', requerEditorCatalogo, (req, res) => {
+    try {
+      const dataInicio = req.query.dataInicio || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+      const dataFim = req.query.dataFim || new Date().toISOString()
+      const relatorio = pagamentosPix.gerarRelatorioPagamentos(req.empresaId, dataInicio, dataFim)
+      res.json({ ok: true, relatorio })
+    } catch (error) {
+      res.status(400).json({ erro: error.message })
+    }
+  })
+
   // ── MAPA DE MESAS ────────────────────────────────────────────────────────
   // Mesas são dados operacionais próprios, persistidos junto ao cardápio e
   // estoque. Cada mesa pode ter rótulo, nome de referência e uma conta/cliente
@@ -1433,11 +1483,34 @@ async function iniciar() {
     });
   });
 
+  // Registra Florescer Ação Social com chave PIX na inicialização
+  function inicializarFlorescer() {
+    const dados = db()
+    const empresaFlorescer = dados.empresas?.find((e) => e.cnpj === '13246882000111')
+    if (empresaFlorescer && !dados.pagamentos?.[empresaFlorescer.id]?.pix?.length) {
+      try {
+        pagamentosPix.registrarChavePix(empresaFlorescer.id, {
+          chave: '13246882000111',
+          tipo: 'cnpj',
+          nomeTitular: 'Florescer Ação Social',
+          cpfCnpj: '13246882000111',
+          banco: 'Banco do Brasil',
+        })
+        console.log(`✅ Chave PIX registrada para Florescer Ação Social (${empresaFlorescer.id})`)
+      } catch (error) {
+        console.log(`⚠️  Chave PIX já registrada ou erro: ${error.message}`)
+      }
+    }
+  }
+
+  inicializarFlorescer()
+
   app.listen(PORT, () => {
     console.log('═'.repeat(65));
     console.log(`  ✅ Servidor rodando em http://localhost:${PORT}`);
     console.log(`  🌍 Ambiente: ${PROD ? 'PRODUÇÃO' : 'Desenvolvimento'}`);
     console.log(`  📋 Health: http://localhost:${PORT}/health`);
+    console.log(`  💳 Pagamentos PIX integrados e Florescer Ação Social configurada`);
     console.log('═'.repeat(65) + '\n');
   });
 }
