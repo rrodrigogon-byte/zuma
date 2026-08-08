@@ -4,7 +4,7 @@ import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
 
 const STATUS_COLOR = {
-  livre:    { bg:'rgba(255,107,44,.15)',   text:'var(--green)', label:'Livre' },
+  livre:    { bg:'rgba(255,107,44,.12)',   text:'#FF6B2C', label:'Livre' },
   ocupada:  { bg:'rgba(255,107,44,.15)',  text:'var(--gold)',  label:'Ocupada' },
   fechando: { bg:'rgba(52,152,219,.15)',  text:'#3498db',      label:'Fechando' },
 }
@@ -59,6 +59,9 @@ export default function Mesas() {
   const [lastUpdate, setLastUpdate] = useState(Date.now())
   const [busca, setBusca]         = useState('')
   const [filtroStatus, setFiltroStatus] = useState('todos')
+  const [mesaModal, setMesaModal]   = useState(null)
+  const [mesaForm, setMesaForm]     = useState({ numero:'', nome:'', apelido:'', contaNome:'', contaId:'', observacao:'' })
+  const [salvandoMesa, setSalvandoMesa] = useState(false)
   const autoRef = useRef(null)
 
   /* ── Load ── */
@@ -98,6 +101,50 @@ export default function Mesas() {
       toast('Configuração salva'); load()
     } catch { toast('Erro ao salvar configuração', true) }
     finally { setSavingCfg(false) }
+  }
+
+  function abrirNovaMesa() {
+    const proximo = fisicas.length ? Math.max(...fisicas.map(mesa => Number(mesa.num) || 0)) + 1 : 1
+    setMesaForm({ numero: String(proximo), nome: `Mesa ${proximo}`, apelido:'', contaNome:'', contaId:'', observacao:'' })
+    setMesaModal({ modo:'nova' })
+  }
+
+  function editarMesa(mesa) {
+    setMesaForm({ numero:String(mesa.num), nome:mesa.nome || '', apelido:mesa.apelido || '', contaNome:mesa.contaNome || '', contaId:mesa.contaId || '', observacao:mesa.observacao || '' })
+    setMesaModal({ modo:'editar', mesa })
+  }
+
+  async function salvarMesa() {
+    const numero = Number(mesaForm.numero)
+    if (!Number.isInteger(numero) || numero < 1) return toast('Informe um número de mesa válido', true)
+    setSalvandoMesa(true)
+    try {
+      if (mesaModal?.modo === 'nova') {
+        await api.post('/api/admin/mesas', { ...mesaForm, numero })
+        toast(`Mesa ${numero} cadastrada`)
+      } else {
+        await api.patch(`/api/admin/mesas/${numero}`, { ...mesaForm, numero })
+        toast(`Mesa ${numero} atualizada`)
+      }
+      setMesaModal(null)
+      load()
+    } catch (error) {
+      toast(error.message || 'Erro ao salvar mesa', true)
+    } finally {
+      setSalvandoMesa(false)
+    }
+  }
+
+  async function excluirMesa(mesa) {
+    if (!confirm(`Remover a mesa ${mesa.num} do mapa? Só mesas livres podem ser removidas.`)) return
+    try {
+      await api.delete(`/api/admin/mesas/${mesa.num}`)
+      toast(`Mesa ${mesa.num} removida`)
+      setMesaModal(null)
+      load()
+    } catch (error) {
+      toast(error.message || 'Não foi possível remover a mesa', true)
+    }
   }
 
   /* ── Abrir comanda ── */
@@ -172,13 +219,16 @@ export default function Mesas() {
       {/* Header */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:24, flexWrap:'wrap', gap:12 }}>
         <h1 className="page-title" style={{ margin:0 }}>🍽️ Mesas</h1>
-        <RefreshTicker lastUpdate={lastUpdate} onManual={() => load()} />
+        <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+          <button className="btn btn-primary btn-sm" onClick={abrirNovaMesa}>+ Nova mesa</button>
+          <RefreshTicker lastUpdate={lastUpdate} onManual={() => load()} />
+        </div>
       </div>
 
       {/* KPIs */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:12, marginBottom:24 }}>
         {/* Total */}
-        <div className="kpi" style={{ borderLeft:'4px solid var(--green)' }}>
+        <div className="kpi" style={{ borderLeft:'4px solid #FF6B2C' }}>
           <div className="kpi-label">Total Mesas</div>
           <div className="kpi-value">{fisicas.length}</div>
         </div>
@@ -188,9 +238,9 @@ export default function Mesas() {
           <div className="kpi-value" style={{ color:'var(--gold)' }}>{ocupadas}</div>
         </div>
         {/* Livres */}
-        <div className="kpi" style={{ borderLeft:'4px solid var(--green)' }}>
+        <div className="kpi" style={{ borderLeft:'4px solid #FF9B72' }}>
           <div className="kpi-label">Livres</div>
-          <div className="kpi-value" style={{ color:'var(--green)' }}>{livres}</div>
+          <div className="kpi-value" style={{ color:'#FF9B72' }}>{livres}</div>
         </div>
         {/* Taxa de ocupação */}
         <div className="kpi" style={{ borderLeft:`4px solid ${ocBarColor}` }}>
@@ -201,9 +251,9 @@ export default function Mesas() {
           </div>
         </div>
         {/* Total a receber */}
-        <div className="kpi" style={{ borderLeft:'4px solid var(--lime)' }}>
+        <div className="kpi" style={{ borderLeft:'4px solid #FFB703' }}>
           <div className="kpi-label">Faturamento Aberto</div>
-          <div className="kpi-value" style={{ color:'var(--lime)', fontSize:20 }}>{fmtR(totalReceber)}</div>
+          <div className="kpi-value" style={{ color:'#FFB703', fontSize:20 }}>{fmtR(totalReceber)}</div>
         </div>
         {/* Comandas virtuais */}
         {totalComandas > 0 && (
@@ -236,7 +286,7 @@ export default function Mesas() {
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
           <div style={{ flex:'0 0 220px' }}>
             <label style={{ fontSize:12, color:'var(--muted)', fontWeight:700, display:'block', marginBottom:6 }}>
-              Número de mesas físicas
+              Criar mesas sequenciais até o número informado
             </label>
             <input type="number" min="1" value={cfgEdit}
               onChange={e => setCfgEdit(e.target.value)} style={{ maxWidth:120 }} />
@@ -260,7 +310,7 @@ export default function Mesas() {
         />
         {['todos','livre','ocupada','fechando'].map(s => {
           const labels = { todos:'Todas', livre:'Livres', ocupada:'Ocupadas', fechando:'Fechando conta' }
-          const colors = { todos:'var(--muted)', livre:'var(--green)', ocupada:'var(--gold)', fechando:'#3498db' }
+          const colors = { todos:'var(--muted)', livre:'#FF6B2C', ocupada:'#FFB703', fechando:'#3498db' }
           const active  = filtroStatus === s
           return (
             <button key={s}
@@ -308,10 +358,13 @@ export default function Mesas() {
                 {sc.label}
               </div>
               {m.nome && <div style={{ fontSize:12, color:'var(--text)', marginTop:4, fontWeight:600 }}>{m.nome}</div>}
+              {m.apelido && <div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>{m.apelido}</div>}
+              {m.contaNome && <div style={{ fontSize:11, color:'#FFB703', marginTop:4 }}>👤 {m.contaNome}</div>}
               {m.total > 0 && <div style={{ fontSize:13, color:'var(--cream)', marginTop:6, fontWeight:700 }}>{fmtR(m.total)}</div>}
               {m.aguardandoCozinha > 0 && (
                 <div style={{ fontSize:11, color:'var(--gold)', marginTop:4 }}>🍳 {m.aguardandoCozinha} item(s)</div>
               )}
+              <button onClick={(event) => { event.stopPropagation(); editarMesa(m) }} className="btn btn-ghost btn-sm" style={{ marginTop:8, fontSize:11, padding:'3px 8px' }}>Editar</button>
             </div>
           )
         })}
@@ -347,6 +400,29 @@ export default function Mesas() {
             </table>
           </div>
         </>
+      )}
+
+      {/* Modal: cadastro e vínculo de conta */}
+      {mesaModal && (
+        <Modal title={mesaModal.modo === 'nova' ? 'Cadastrar mesa' : `Editar mesa ${mesaForm.numero}`} onClose={() => setMesaModal(null)}>
+          <div style={{ padding:'4px 0 8px' }}>
+            <p style={{ marginTop:0, color:'var(--muted)', fontSize:13 }}>Defina um nome de referência e associe, se necessário, uma conta ou cliente. A conta pode ser alterada a qualquer momento.</p>
+            <div className="form-row">
+              <div className="form-group"><label>Número da mesa *</label><input type="number" min="1" disabled={mesaModal.modo === 'editar'} value={mesaForm.numero} onChange={e => setMesaForm(f => ({ ...f, numero:e.target.value }))} /></div>
+              <div className="form-group"><label>Nome de exibição *</label><input value={mesaForm.nome} onChange={e => setMesaForm(f => ({ ...f, nome:e.target.value }))} placeholder="Ex.: Varanda 01" /></div>
+            </div>
+            <div className="form-row">
+              <div className="form-group"><label>Apelido / localização</label><input value={mesaForm.apelido} onChange={e => setMesaForm(f => ({ ...f, apelido:e.target.value }))} placeholder="Ex.: Deck externo" /></div>
+              <div className="form-group"><label>Conta ou cliente associado</label><input value={mesaForm.contaNome} onChange={e => setMesaForm(f => ({ ...f, contaNome:e.target.value }))} placeholder="Nome da conta" /></div>
+            </div>
+            <div className="form-group"><label>ID da conta (opcional)</label><input value={mesaForm.contaId} onChange={e => setMesaForm(f => ({ ...f, contaId:e.target.value }))} placeholder="Identificador interno" /></div>
+            <div className="form-group"><label>Observação</label><textarea value={mesaForm.observacao} onChange={e => setMesaForm(f => ({ ...f, observacao:e.target.value }))} placeholder="Informações operacionais da mesa" rows="3" /></div>
+            <div style={{ display:'flex', gap:8, justifyContent:'space-between', marginTop:10 }}>
+              <div>{mesaModal.modo === 'editar' && <button className="btn btn-danger btn-sm" onClick={() => excluirMesa(mesaModal.mesa)}>Remover mesa</button>}</div>
+              <div style={{ display:'flex', gap:8 }}><button className="btn btn-ghost btn-sm" onClick={() => setMesaModal(null)}>Cancelar</button><button className="btn btn-primary" disabled={salvandoMesa} onClick={salvarMesa}>{salvandoMesa ? 'Salvando…' : 'Salvar mesa'}</button></div>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* ── Modal: detalhes expandidos da comanda ── */}
@@ -386,7 +462,7 @@ export default function Mesas() {
                     }}>
                       <div style={{ width:32, height:32, borderRadius:8, background:'var(--surface)',
                         display:'flex', alignItems:'center', justifyContent:'center', fontWeight:800, fontSize:14,
-                        color:'var(--green)', flexShrink:0 }}>
+                        color:'#FF6B2C', flexShrink:0 }}>
                         {it.qtd}
                       </div>
                       <div style={{ flex:1 }}>
@@ -440,7 +516,7 @@ export default function Mesas() {
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', paddingTop:12, borderTop:'1px solid var(--line)' }}>
               <div>
                 <span style={{ color:'var(--muted)', fontSize:13 }}>Total: </span>
-                <strong style={{ color:'var(--lime)', fontSize:18 }}>
+                <strong style={{ color:'#FFB703', fontSize:18 }}>
                   {fmtR(comanda.data?.total || comanda.mesa.total)}
                 </strong>
               </div>

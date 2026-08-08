@@ -853,12 +853,136 @@ async function iniciar() {
     res.json([]);
   });
 
-  // Rota: Mesas
+  // ── MAPA DE MESAS ────────────────────────────────────────────────────────
+  // Mesas são dados operacionais próprios, persistidos junto ao cardápio e
+  // estoque. Cada mesa pode ter rótulo, nome de referência e uma conta/cliente
+  // vinculada, sem obrigar a criação de uma comanda no momento do cadastro.
+  function mesasPersistidas() {
+    const estado = db();
+    if (!estado.mesasKytto || typeof estado.mesasKytto !== 'object') {
+      estado.mesasKytto = { config: { mesasFisicas: 0, atualizadoEm: null }, fisicas: {}, virtuais: {} };
+    }
+    estado.mesasKytto.config ||= { mesasFisicas: 0, atualizadoEm: null };
+    estado.mesasKytto.fisicas ||= {};
+    estado.mesasKytto.virtuais ||= {};
+    return estado.mesasKytto;
+  }
+
+  function normalizarMesa(payload = {}, numeroPadrao = null) {
+    const texto = (valor, limite = 100) => String(valor ?? '').trim().slice(0, limite);
+    const numero = Number(payload.numero ?? payload.num ?? numeroPadrao);
+    return {
+      num: Number.isInteger(numero) && numero > 0 ? numero : null,
+      nome: texto(payload.nome, 80),
+      apelido: texto(payload.apelido, 80),
+      contaNome: texto(payload.contaNome ?? payload.conta_nome, 120),
+      contaId: texto(payload.contaId ?? payload.conta_id, 80),
+      observacao: texto(payload.observacao, 300),
+    };
+  }
+
+  function mesaPadrao(numero) {
+    const agora = new Date().toISOString();
+    return { num: numero, nome: `Mesa ${numero}`, apelido: '', contaNome: '', contaId: '', observacao: '', status: 'livre', total: 0, aguardandoCozinha: 0, comandaId: null, ativa: true, criadoEm: agora, atualizadoEm: agora };
+  }
+
+  function garantirQuantidadeMesas(quantidade) {
+    const store = mesasPersistidas();
+    const alvo = Math.max(0, Math.floor(Number(quantidade) || 0));
+    let adicionadas = 0;
+    for (let numero = 1; numero <= alvo; numero++) {
+      if (!store.fisicas[numero]) {
+        store.fisicas[numero] = mesaPadrao(numero);
+        adicionadas++;
+      }
+      store.fisicas[numero].ativa = true;
+    }
+    store.config.mesasFisicas = Object.values(store.fisicas).filter(mesa => mesa.ativa !== false).length;
+    store.config.atualizadoEm = new Date().toISOString();
+    return adicionadas;
+  }
+
+  function listarMesasFisicas() {
+    const store = mesasPersistidas();
+    return Object.values(store.fisicas).filter(mesa => mesa.ativa !== false).sort((a, b) => a.num - b.num);
+  }
+
   app.get('/api/mesas', (req, res) => {
-    res.json({
-      fisicas: [],
-      virtuais: []
+    const store = mesasPersistidas();
+    res.json({ fisicas: listarMesasFisicas(), virtuais: Object.values(store.virtuais).filter(mesa => mesa.ativa !== false) });
+  });
+
+  app.get('/api/admin/mesas/config', requerEditorCatalogo, (req, res) => {
+    const store = mesasPersistidas();
+    res.json({ ...store.config, mesasFisicas: listarMesasFisicas().length });
+  });
+
+  app.post('/api/admin/mesas/config', requerEditorCatalogo, (req, res) => {
+    const quantidade = Number(req.body?.mesasFisicas);
+    if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > 500) return res.status(400).json({ erro: 'Informe entre 1 e 500 mesas.' });
+    const adicionadas = garantirQuantidadeMesas(quantidade);
+    save();
+    res.json({ ok: true, adicionadas, mesasFisicas: listarMesasFisicas().length, mensagem: adicionadas ? 'Mesas sequenciais adicionadas ao mapa.' : 'O mapa já possui essa quantidade ou mais mesas.' });
+  });
+
+  app.post('/api/admin/mesas', requerEditorCatalogo, (req, res) => {
+    const store = mesasPersistidas();
+    const existentes = listarMesasFisicas();
+    const proximoNumero = existentes.length ? Math.max(...existentes.map(mesa => mesa.num)) + 1 : 1;
+    const dados = normalizarMesa(req.body || {}, proximoNumero);
+    if (!dados.num || dados.num > 9999) return res.status(400).json({ erro: 'Número de mesa inválido.' });
+    if (store.fisicas[dados.num] && store.fisicas[dados.num].ativa !== false) return res.status(409).json({ erro: `A mesa ${dados.num} já existe.` });
+    const mesa = { ...mesaPadrao(dados.num), ...dados, nome: dados.nome || `Mesa ${dados.num}` };
+    store.fisicas[dados.num] = mesa;
+    store.config.mesasFisicas = listarMesasFisicas().length;
+    store.config.atualizadoEm = new Date().toISOString();
+    save();
+    res.status(201).json({ ok: true, mesa });
+  });
+
+  app.patch('/api/admin/mesas/:numero', requerEditorCatalogo, (req, res) => {
+    const numero = Number(req.params.numero);
+    const store = mesasPersistidas();
+    const mesa = store.fisicas[numero];
+    if (!mesa || mesa.ativa === false) return res.status(404).json({ erro: 'Mesa não encontrada.' });
+    const dados = normalizarMesa(req.body || {}, numero);
+    Object.assign(mesa, {
+      nome: dados.nome || mesa.nome || `Mesa ${numero}`,
+      apelido: dados.apelido,
+      contaNome: dados.contaNome,
+      contaId: dados.contaId,
+      observacao: dados.observacao,
+      atualizadoEm: new Date().toISOString(),
     });
+    save();
+    res.json({ ok: true, mesa });
+  });
+
+  app.delete('/api/admin/mesas/:numero', requerEditorCatalogo, (req, res) => {
+    const numero = Number(req.params.numero);
+    const mesa = mesasPersistidas().fisicas[numero];
+    if (!mesa || mesa.ativa === false) return res.status(404).json({ erro: 'Mesa não encontrada.' });
+    if (mesa.status !== 'livre' || mesa.comandaId) return res.status(409).json({ erro: 'Não é possível remover uma mesa ocupada ou com comanda aberta.' });
+    mesa.ativa = false;
+    mesa.atualizadoEm = new Date().toISOString();
+    mesasPersistidas().config.mesasFisicas = listarMesasFisicas().length;
+    save();
+    res.json({ ok: true, numero });
+  });
+
+  app.post('/api/admin/mesas/:numero/fechar', requerEditorCatalogo, (req, res) => {
+    const numero = Number(req.params.numero);
+    const mesa = mesasPersistidas().fisicas[numero];
+    if (!mesa || mesa.ativa === false) return res.status(404).json({ erro: 'Mesa não encontrada.' });
+    mesa.status = 'livre';
+    mesa.total = 0;
+    mesa.aguardandoCozinha = 0;
+    mesa.comandaId = null;
+    mesa.contaNome = '';
+    mesa.contaId = '';
+    mesa.atualizadoEm = new Date().toISOString();
+    save();
+    res.json({ ok: true, mesa });
   });
 
   // ============================================================================
