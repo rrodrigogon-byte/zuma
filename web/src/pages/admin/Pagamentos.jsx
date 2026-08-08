@@ -1,477 +1,168 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
-import { api, fmtR, fmtDate, fmtDateOnly } from '../../lib/api'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { api, fmtDate, fmtR } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
 
-const STATUS_OPTS = ['todos', 'pago', 'pendente', 'cancelado']
-const MEIO_OPTS = ['todos', 'pix', 'cartao', 'dinheiro', 'outros']
+const EMPTY_TRANSACTION = { valor: '', metodo: 'pix', descricao: '', referencia: '' }
+const EMPTY_TERMINAL = { nome: '', tipo: 'mercado_pago_point', terminal: '', loja: '', chavePublica: '', chavePrivada: '' }
+const EMPTY_MP = { publicKey: '', accessToken: '', webhookSecret: '', userId: '' }
 
-const statusBadge = (s) => {
-  const map = { pago: 'badge-green', pendente: 'badge-yellow', cancelado: 'badge-gray' }
-  return map[s] || 'badge-gray'
+const statusColor = (status) => ({ aprovado: '#16806b', pendente: '#c47a00', recusado: '#b23a48', cancelado: '#6b7280' }[status] || '#6b7280')
+
+function Kpi({ label, value, color = '#FF6B2C', detail }) {
+  return <div className="card" style={{ flex: 1, minWidth: 168, borderLeft: `4px solid ${color}`, padding: '15px 17px' }}>
+    <div style={{ color: 'var(--muted)', fontSize: 11, letterSpacing: '.06em', fontWeight: 800 }}>{label}</div>
+    <div style={{ color, fontWeight: 850, fontSize: 22, marginTop: 5 }}>{value}</div>
+    {detail && <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 4 }}>{detail}</div>}
+  </div>
 }
 
-function KpiCard({ label, valor, cls }) {
-  return (
-    <div className={`kpi-card ${cls || ''}`} style={{ flex: 1, minWidth: 140 }}>
-      <span className="kpi-label">{label}</span>
-      <span className="kpi-valor">{valor}</span>
-    </div>
-  )
+function Field({ label, children, wide = false }) {
+  return <label style={{ display: 'grid', gap: 6, gridColumn: wide ? '1 / -1' : undefined }}>
+    <span style={{ color: 'var(--muted)', fontSize: 11, fontWeight: 800, letterSpacing: '.05em' }}>{label}</span>
+    {children}
+  </label>
 }
 
-function exportCSV(pagamentos) {
-  const headers = ['ID', 'Usuário', 'Tipo', 'Meio', 'Valor', 'Data', 'Status']
-  const rows = pagamentos.map((p) => [
-    p.id,
-    p.usuario || '',
-    p.tipo || '',
-    p.meio || '',
-    p.valor ?? 0,
-    p.criadoEm ? fmtDate(p.criadoEm) : '',
-    p.status,
-  ])
-  const csv = [headers, ...rows]
-    .map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
-    .join('\n')
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `pagamentos_${new Date().toISOString().slice(0, 10)}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
-// CSS-only bar chart for last 7 days
-function BarChart7({ data }) {
-  const [hovered, setHovered] = useState(null)
-  if (!data?.length) return <p style={{ color: 'var(--muted)', fontSize: 12 }}>Sem dados.</p>
-  const max = Math.max(...data.map((d) => d.total), 1)
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 80 }}>
-      {data.map((d, i) => {
-        const pct = (d.total / max) * 100
-        const isHov = hovered === i
-        return (
-          <div
-            key={d.data || i}
-            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, position: 'relative' }}
-            onMouseEnter={() => setHovered(i)}
-            onMouseLeave={() => setHovered(null)}
-          >
-            {isHov && (
-              <div style={{
-                position: 'absolute',
-                bottom: '100%',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                background: '#12283F',
-                border: '1px solid var(--green)',
-                borderRadius: 6,
-                padding: '3px 7px',
-                fontSize: 11,
-                color: '#fff',
-                whiteSpace: 'nowrap',
-                zIndex: 10,
-                pointerEvents: 'none',
-                marginBottom: 3,
-              }}>
-                {fmtR(d.total)}
-              </div>
-            )}
-            <div
-              style={{
-                width: '100%',
-                height: `${Math.max(pct, 4)}%`,
-                background: isHov
-                  ? 'linear-gradient(to top, #FF6B2C, #e8c97a)'
-                  : 'linear-gradient(to top, #FF6B2C, #FF9B72)',
-                borderRadius: '3px 3px 0 0',
-                minHeight: 4,
-                transition: 'background 0.15s',
-                cursor: 'default',
-              }}
-            />
-            <span style={{ fontSize: 9, color: 'var(--muted)', transform: 'rotate(-30deg)', whiteSpace: 'nowrap' }}>
-              {d.data || ''}
-            </span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function startOf(period) {
-  const now = new Date()
-  if (period === 'hoje') {
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    return d.toISOString()
-  }
-  if (period === 'semana') {
-    const d = new Date(now)
-    d.setDate(d.getDate() - 6)
-    d.setHours(0, 0, 0, 0)
-    return d.toISOString()
-  }
-  if (period === 'mes') {
-    const d = new Date(now.getFullYear(), now.getMonth(), 1)
-    return d.toISOString()
-  }
-  return null
-}
+const inputStyle = { width: '100%', boxSizing: 'border-box', padding: '10px 11px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--text)' }
 
 export default function Pagamentos() {
-  const [pagamentos, setPagamentos] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [filtroStatus, setFiltroStatus] = useState('todos')
-  const [filtroMeio, setFiltroMeio] = useState('todos')
-  const [filtroPeriodo, setFiltroPeriodo] = useState('todos')
-  const [busca, setBusca] = useState('')
-  const [confirmando, setConfirmando] = useState(null)
-  const [detalhe, setDetalhe] = useState(null)
   const { toast } = useToast()
+  const [loading, setLoading] = useState(true)
+  const [pix, setPix] = useState([])
+  const [adquirentes, setAdquirentes] = useState([])
+  const [mercadoPago, setMercadoPago] = useState(null)
+  const [transacoes, setTransacoes] = useState([])
+  const [totais, setTotais] = useState({ total: 0, aprovado: 0, pendente: 0, porMetodo: {} })
+  const [modal, setModal] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [transactionForm, setTransactionForm] = useState(EMPTY_TRANSACTION)
+  const [terminalForm, setTerminalForm] = useState(EMPTY_TERMINAL)
+  const [mpForm, setMpForm] = useState(EMPTY_MP)
 
-  const load = async () => {
+  const carregar = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await api.get('/api/admin/pagamentos')
-      setPagamentos(Array.isArray(data) ? data : (data.pagamentos || []))
-    } catch (e) {
-      toast('Erro ao carregar pagamentos', 'error')
-    } finally {
-      setLoading(false)
-    }
-  }
+      const [pixRes, terminaisRes, mpRes, transacoesRes] = await Promise.all([
+        api.get('/api/admin/pagamentos/pix'),
+        api.get('/api/admin/pagamentos/adquirentes'),
+        api.get('/api/admin/pagamentos/mercadopago/config'),
+        api.get('/api/admin/pagamentos/transacoes'),
+      ])
+      setPix(pixRes.chaves || [])
+      setAdquirentes(terminaisRes.adquirentes || [])
+      setMercadoPago(mpRes.config || null)
+      setTransacoes(transacoesRes.transacoes || [])
+      setTotais(transacoesRes.totais || { total: 0, aprovado: 0, pendente: 0, porMetodo: {} })
+    } catch (error) {
+      toast(error.message || 'Não foi possível carregar a central de pagamentos.', 'error')
+    } finally { setLoading(false) }
+  }, [toast])
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { carregar() }, [carregar])
 
-  const filtrados = useMemo(() => {
-    const cutoff = startOf(filtroPeriodo)
-    const q = busca.toLowerCase()
-    return pagamentos.filter((p) => {
-      if (filtroStatus !== 'todos' && p.status !== filtroStatus) return false
-      if (filtroMeio !== 'todos') {
-        const m = (p.meio || '').toLowerCase()
-        if (filtroMeio === 'outros') {
-          if (['pix', 'cartao', 'dinheiro'].includes(m)) return false
-        } else if (m !== filtroMeio) return false
-      }
-      if (cutoff && p.criadoEm && p.criadoEm < cutoff) return false
-      if (q && !((p.usuario || '').toLowerCase().includes(q) || (p.tipo || '').toLowerCase().includes(q) || String(p.id).includes(q))) return false
-      return true
-    })
-  }, [pagamentos, filtroStatus, filtroMeio, filtroPeriodo, busca])
-
-  const totalFiltrado = filtrados.filter((p) => p.status === 'pago').reduce((s, p) => s + (p.valor || 0), 0)
-  const totalRecebido = pagamentos.filter((p) => p.status === 'pago').reduce((s, p) => s + (p.valor || 0), 0)
-  const totalPendente = pagamentos.filter((p) => p.status === 'pendente').reduce((s, p) => s + (p.valor || 0), 0)
-  const totalCancelado = pagamentos.filter((p) => p.status === 'cancelado').reduce((s, p) => s + (p.valor || 0), 0)
-
-  // Build last 7 days chart data from all pagamentos pago
-  const chart7 = useMemo(() => {
-    const days = []
-    const now = new Date()
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now)
-      d.setDate(d.getDate() - i)
-      const key = d.toISOString().slice(0, 10)
-      days.push({ data: key.slice(5), total: 0 })
-    }
-    pagamentos.forEach((p) => {
-      if (p.status !== 'pago' || !p.criadoEm) return
-      const key = p.criadoEm.slice(0, 10)
-      const idx = days.findIndex((d) => {
-        const now2 = new Date()
-        const target = new Date(now2)
-        target.setDate(target.getDate() - (6 - days.indexOf(d)))
-        return target.toISOString().slice(0, 10) === key
-      })
-      if (idx >= 0) days[idx].total += p.valor || 0
-    })
-    return days
-  }, [pagamentos])
-
-  const handlePatch = async (id, status) => {
-    setConfirmando(id)
+  const criarTransacao = async () => {
+    const valor = Number(String(transactionForm.valor).replace(',', '.'))
+    if (!valor || valor <= 0) return toast('Informe um valor válido para a transação.', 'error')
+    setSaving(true)
     try {
-      await api.patch(`/api/admin/pagamentos/${id}`, { status })
-      toast(`Pagamento marcado como ${status}`)
-      load()
-    } catch (e) {
-      toast(e.message || 'Erro ao atualizar', 'error')
-    } finally {
-      setConfirmando(null)
-    }
+      await api.post('/api/admin/pagamentos/transacao', { ...transactionForm, valor, status: 'pendente' })
+      toast('Transação registrada como pendente de confirmação do provedor.')
+      setModal(null); setTransactionForm(EMPTY_TRANSACTION); carregar()
+    } catch (error) { toast(error.message || 'Não foi possível registrar a transação.', 'error') }
+    finally { setSaving(false) }
   }
 
-  const confirmarManual = (id) => {
-    if (!confirm('Confirmar pagamento manualmente?')) return
-    handlePatch(id, 'pago')
+  const salvarTerminal = async () => {
+    if (!terminalForm.nome || !terminalForm.tipo) return toast('Informe o nome e o provedor do terminal.', 'error')
+    setSaving(true)
+    try {
+      await api.post('/api/admin/pagamentos/adquirentes', terminalForm)
+      toast('Terminal configurado. A credencial privada foi protegida no cofre de pagamentos.')
+      setModal(null); setTerminalForm(EMPTY_TERMINAL); carregar()
+    } catch (error) { toast(error.message || 'Não foi possível configurar o terminal.', 'error') }
+    finally { setSaving(false) }
   }
 
-  return (
-    <div className="page">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h1 className="page-title" style={{ margin: 0 }}>Pagamentos</h1>
-        <button
-          className="btn btn-secondary"
-          onClick={() => exportCSV(filtrados)}
-          title="Exportar pagamentos visíveis como CSV"
-        >
-          📥 Exportar CSV
-        </button>
+  const salvarMercadoPago = async () => {
+    if (!mpForm.accessToken) return toast('Informe o Access Token do Mercado Pago.', 'error')
+    setSaving(true)
+    try {
+      await api.post('/api/admin/pagamentos/mercadopago/config', mpForm)
+      toast('Mercado Pago configurado com credenciais protegidas. A ativação real depende do webhook e dos terminais autorizados.')
+      setModal(null); setMpForm(EMPTY_MP); carregar()
+    } catch (error) { toast(error.message || 'Não foi possível salvar a configuração do Mercado Pago.', 'error') }
+    finally { setSaving(false) }
+  }
+
+  const recentes = useMemo(() => transacoes.slice(0, 10), [transacoes])
+
+  return <div className="page">
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'flex-start', marginBottom: 20, flexWrap: 'wrap' }}>
+      <div>
+        <h1 className="page-title" style={{ marginBottom: 5 }}>Pagamentos</h1>
+        <p style={{ margin: 0, color: 'var(--muted)' }}>PIX, terminais, Mercado Pago e conciliação pertencem exclusivamente à empresa ativa.</p>
       </div>
-
-      {/* KPIs com borderLeft */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        {[
-          { label: 'RECEBIDO (TOTAL)', value: fmtR(totalRecebido), color: '#FF6B2C', icon: '💰', sub: `${pagamentos.filter(p => p.status === 'pago').length} transações` },
-          { label: 'PENDENTE', value: fmtR(totalPendente), color: '#FF6B2C', icon: '⏳', sub: `${pagamentos.filter(p => p.status === 'pendente').length} aguardando` },
-          { label: 'CANCELADO', value: fmtR(totalCancelado), color: '#e05c5c', icon: '❌', sub: `${pagamentos.filter(p => p.status === 'cancelado').length} estornados` },
-          ...(filtroPeriodo !== 'todos' ? [{ label: 'RECEBIDO NO PERÍODO', value: fmtR(totalFiltrado), color: '#FF6B2C', icon: '📅', sub: filtroPeriodo }] : []),
-        ].map(k => (
-          <div key={k.label} style={{
-            background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 10,
-            padding: '14px 18px', borderLeft: `4px solid ${k.color}`, flex: 1, minWidth: 140,
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-              <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: 700 }}>{k.label}</div>
-              <span style={{ fontSize: 16 }}>{k.icon}</span>
-            </div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: k.color, lineHeight: 1.1 }}>{k.value}</div>
-            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>{k.sub}</div>
-          </div>
-        ))}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button className="btn btn-secondary btn-sm" onClick={carregar}>↺ Atualizar</button>
+        <button className="btn btn-secondary btn-sm" onClick={() => setModal('terminal')}>▣ Terminal</button>
+        <button className="btn btn-secondary btn-sm" onClick={() => setModal('mercadopago')}>MP Mercado Pago</button>
+        <button className="btn btn-primary btn-sm" onClick={() => setModal('transacao')}>+ Registrar transação</button>
       </div>
-
-      {/* Gráfico últimos 7 dias */}
-      <div className="card" style={{ marginBottom: 20 }}>
-        <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: '#fff' }}>
-          Recebido — últimos 7 dias
-        </h2>
-        <BarChart7 data={chart7} />
-      </div>
-
-      {/* Busca */}
-      <input
-        style={{ width: '100%', padding: '8px 12px', background: 'var(--card)', border: '1px solid #12283F', borderRadius: 8, color: '#fff', fontSize: 13, marginBottom: 12, boxSizing: 'border-box' }}
-        placeholder="🔍 Buscar por usuário, tipo ou ID…"
-        value={busca}
-        onChange={e => setBusca(e.target.value)}
-      />
-
-      {/* Filtros */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        {/* Período */}
-        <div style={{ display: 'flex', gap: 4 }}>
-          {[['todos', 'Todos'], ['hoje', 'Hoje'], ['semana', 'Esta semana'], ['mes', 'Este mês']].map(([val, label]) => (
-            <button
-              key={val}
-              onClick={() => setFiltroPeriodo(val)}
-              style={{
-                padding: '5px 12px',
-                fontSize: 12,
-                borderRadius: 6,
-                border: '1px solid',
-                borderColor: filtroPeriodo === val ? 'var(--green)' : '#12283F',
-                background: filtroPeriodo === val ? '#FF6B2C22' : 'transparent',
-                color: filtroPeriodo === val ? '#FF6B2C' : 'var(--muted)',
-                cursor: 'pointer',
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* Meio */}
-        <select
-          value={filtroMeio}
-          onChange={(e) => setFiltroMeio(e.target.value)}
-          style={{ padding: '6px 10px', background: 'var(--card)', border: '1px solid #12283F', borderRadius: 8, color: filtroMeio !== 'todos' ? '#fff' : 'var(--muted)', fontSize: 13 }}
-        >
-          <option value="todos">Todos os meios</option>
-          <option value="pix">Pix</option>
-          <option value="cartao">Cartão</option>
-          <option value="dinheiro">Dinheiro</option>
-          <option value="outros">Outros</option>
-        </select>
-
-        {/* Status */}
-        <div style={{ display: 'flex', gap: 4 }}>
-          {STATUS_OPTS.map((s) => (
-            <button
-              key={s}
-              onClick={() => setFiltroStatus(s)}
-              style={{
-                padding: '5px 12px',
-                fontSize: 12,
-                borderRadius: 6,
-                border: '1px solid',
-                borderColor: filtroStatus === s ? 'var(--green)' : '#12283F',
-                background: filtroStatus === s ? '#FF6B2C22' : 'transparent',
-                color: filtroStatus === s ? '#FF6B2C' : 'var(--muted)',
-                cursor: 'pointer',
-              }}
-            >
-              {s.charAt(0).toUpperCase() + s.slice(1)}
-              {s !== 'todos' && (
-                <span style={{ marginLeft: 4, fontSize: 11 }}>
-                  ({pagamentos.filter((p) => p.status === s).length})
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {loading ? (
-        <p style={{ color: 'var(--muted)', padding: 16 }}>Carregando…</p>
-      ) : filtrados.length === 0 ? (
-        <p style={{ color: 'var(--muted)', padding: 16 }}>Nenhum pagamento encontrado.</p>
-      ) : (
-        <div className="table-wrap">
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid #12283F' }}>
-                {['#', 'Usuário', 'Tipo', 'Meio', 'Valor', 'Data', 'Status', 'Ações'].map((h) => (
-                  <th key={h} style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtrados.map((p) => (
-                <tr
-                  key={p.id}
-                  style={{ borderBottom: '1px solid #1e4a2e11' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = '#1a3a2222')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <td style={{ padding: '10px 12px', color: 'var(--muted)', fontSize: 12 }}>{p.id}</td>
-                  <td style={{ padding: '10px 12px', color: '#fff' }}>{p.usuario || '—'}</td>
-                  <td style={{ padding: '10px 12px', color: 'var(--muted)' }}>{p.tipo || '—'}</td>
-                  <td style={{ padding: '10px 12px', color: 'var(--muted)', textTransform: 'capitalize' }}>{p.meio || '—'}</td>
-                  <td style={{ padding: '10px 12px', color: '#fff', fontWeight: 600 }}>{fmtR(p.valor)}</td>
-                  <td style={{ padding: '10px 12px', color: 'var(--muted)', fontSize: 12 }}>{p.criadoEm ? fmtDate(p.criadoEm) : '—'}</td>
-                  <td style={{ padding: '10px 12px' }}>
-                    <span className={`badge ${statusBadge(p.status)}`}>{p.status}</span>
-                  </td>
-                  <td style={{ padding: '10px 12px' }}>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button className="btn btn-secondary btn-sm" onClick={() => setDetalhe(p)}>Ver</button>
-                      {p.status === 'pendente' && (
-                        <button
-                          className="btn btn-primary btn-sm"
-                          disabled={confirmando === p.id}
-                          onClick={() => confirmarManual(p.id)}
-                        >
-                          {confirmando === p.id ? '…' : 'Confirmar'}
-                        </button>
-                      )}
-                      {p.status === 'pago' && (
-                        <button
-                          className="btn btn-danger btn-sm"
-                          disabled={confirmando === p.id}
-                          onClick={() => { if (confirm('Estornar pagamento?')) handlePatch(p.id, 'cancelado') }}
-                        >
-                          Estornar
-                        </button>
-                      )}
-                      {p.status === 'cancelado' && (
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          disabled={confirmando === p.id}
-                          onClick={() => confirmarManual(p.id)}
-                        >
-                          Reativar
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Modal detalhe */}
-      {detalhe && (
-        <Modal title={`Pagamento #${detalhe.id}`} onClose={() => setDetalhe(null)}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <Field label="Usuário" value={detalhe.usuario} />
-              <Field label="Tipo" value={detalhe.tipo} />
-              <Field label="Meio" value={detalhe.meio} />
-              <Field label="Valor" value={fmtR(detalhe.valor)} />
-              <Field label="Status" value={
-                <span className={`badge ${statusBadge(detalhe.status)}`}>{detalhe.status}</span>
-              } />
-              <Field label="Data" value={detalhe.criadoEm ? fmtDate(detalhe.criadoEm) : '—'} />
-              {detalhe.referencia && <Field label="Referência" value={detalhe.referencia} />}
-              {detalhe.txid && <Field label="TxID" value={detalhe.txid} />}
-            </div>
-
-            {/* QR Pix se disponível */}
-            {detalhe.qrCode && (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>QR Code Pix</span>
-                <img
-                  src={detalhe.qrCode}
-                  alt="QR Code Pix"
-                  style={{ width: 180, height: 180, borderRadius: 8, background: '#fff', padding: 4 }}
-                />
-              </div>
-            )}
-            {detalhe.pixCopiaECola && (
-              <div>
-                <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, display: 'block', marginBottom: 4 }}>Pix Copia e Cola</span>
-                <div
-                  style={{
-                    background: '#12283F',
-                    border: '1px solid #12283F',
-                    borderRadius: 6,
-                    padding: '8px 10px',
-                    fontSize: 11,
-                    color: '#ddd',
-                    wordBreak: 'break-all',
-                    fontFamily: 'monospace',
-                  }}
-                >
-                  {detalhe.pixCopiaECola}
-                </div>
-                <button
-                  className="btn btn-secondary"
-                  style={{ fontSize: 12, marginTop: 6, padding: '4px 12px' }}
-                  onClick={() => { navigator.clipboard?.writeText(detalhe.pixCopiaECola); toast('Copiado!', 'success') }}
-                >
-                  Copiar
-                </button>
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              {detalhe.status === 'pendente' && (
-                <button className="btn btn-primary" onClick={() => { confirmarManual(detalhe.id); setDetalhe(null) }}>
-                  Confirmar
-                </button>
-              )}
-              <button className="btn btn-secondary" onClick={() => setDetalhe(null)}>Fechar</button>
-            </div>
-          </div>
-        </Modal>
-      )}
     </div>
-  )
+
+    <div className="card" style={{ marginBottom: 18, padding: 14, background: 'rgba(255,107,44,.06)', borderColor: 'rgba(255,107,44,.25)' }}>
+      <strong style={{ color: '#FF6B2C' }}>Prontidão de cobrança:</strong> a chave PIX é exibida somente mascarada. Credenciais de terminais e Mercado Pago ficam cifradas e nunca são devolvidas pela API. Para cobrança real, configure o provedor e o webhook autenticado.
+    </div>
+
+    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+      <Kpi label="RECEBIDO" value={fmtR(totais.aprovado)} color="#16806b" detail="Transações aprovadas" />
+      <Kpi label="PENDENTE" value={fmtR(totais.pendente)} color="#c47a00" detail="Aguardando provedor" />
+      <Kpi label="PIX ATIVO" value={String(pix.length)} detail={pix.length ? 'Chave(s) configurada(s)' : 'Configure uma chave PIX'} />
+      <Kpi label="TERMINAIS" value={String(adquirentes.length)} color="#12283F" detail="Máquinas/adquirentes" />
+    </div>
+
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 16, marginBottom: 18 }}>
+      <section className="card">
+        <h2 style={{ margin: '0 0 12px', fontSize: 16, color: '#12283F' }}>PIX configurado</h2>
+        {loading ? <p style={{ color: 'var(--muted)' }}>Carregando…</p> : pix.length === 0 ? <p style={{ color: 'var(--muted)' }}>Nenhuma chave PIX cadastrada para esta empresa.</p> : pix.map((chave) => <div key={chave.id} style={{ padding: '10px 0', borderTop: '1px solid var(--line)' }}>
+          <strong>{chave.nomeTitular || 'Titular não informado'}</strong><br /><span style={{ color: 'var(--muted)', fontSize: 12 }}>{chave.tipo?.toUpperCase()} · {chave.chave} · {chave.ativa ? 'Ativa' : 'Inativa'}</span>
+        </div>)}
+      </section>
+
+      <section className="card">
+        <h2 style={{ margin: '0 0 12px', fontSize: 16, color: '#12283F' }}>Mercado Pago</h2>
+        {mercadoPago ? <>
+          <p style={{ margin: '0 0 8px', color: '#16806b', fontWeight: 750 }}>Configuração protegida</p>
+          <div style={{ color: 'var(--muted)', fontSize: 12, display: 'grid', gap: 4 }}>
+            <span>Token: {mercadoPago.accessTokenConfigurado ? 'configurado' : 'pendente'}</span>
+            <span>Webhook: {mercadoPago.webhookConfigurado ? 'configurado' : 'pendente'}</span>
+            <span>Usuário do provedor: {mercadoPago.userId || 'não informado'}</span>
+          </div>
+        </> : <p style={{ color: 'var(--muted)' }}>Ainda não configurado. Informe as credenciais de uma conta vendedora da empresa.</p>}
+      </section>
+
+      <section className="card">
+        <h2 style={{ margin: '0 0 12px', fontSize: 16, color: '#12283F' }}>Terminais e adquirentes</h2>
+        {adquirentes.length === 0 ? <p style={{ color: 'var(--muted)' }}>Nenhum terminal configurado.</p> : adquirentes.map((terminal) => <div key={terminal.id} style={{ padding: '10px 0', borderTop: '1px solid var(--line)' }}>
+          <strong>{terminal.nome}</strong><br /><span style={{ color: 'var(--muted)', fontSize: 12 }}>{terminal.tipo} · {terminal.terminal || 'Terminal não identificado'} · {terminal.credencialConfigurada ? 'Credencial protegida' : 'Sem credencial'}</span>
+        </div>)}
+      </section>
+    </div>
+
+    <section className="card">
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+        <h2 style={{ margin: 0, fontSize: 16, color: '#12283F' }}>Transações recentes</h2><span style={{ color: 'var(--muted)', fontSize: 12 }}>{transacoes.length} registradas</span>
+      </div>
+      {recentes.length === 0 ? <p style={{ color: 'var(--muted)' }}>Nenhuma transação registrada nesta empresa.</p> : <div className="table-wrap"><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}><thead><tr style={{ borderBottom: '1px solid var(--line)' }}>{['Data', 'Método', 'Descrição', 'Valor', 'Status'].map((h) => <th key={h} style={{ textAlign: 'left', padding: 9, color: 'var(--muted)' }}>{h}</th>)}</tr></thead><tbody>{recentes.map((t) => <tr key={t.id} style={{ borderBottom: '1px solid var(--line)' }}><td style={{ padding: 9 }}>{fmtDate(t.criadaEm)}</td><td style={{ padding: 9, textTransform: 'capitalize' }}>{t.metodo}</td><td style={{ padding: 9 }}>{t.descricao || '—'}</td><td style={{ padding: 9, fontWeight: 750 }}>{fmtR(t.valor)}</td><td style={{ padding: 9 }}><span style={{ color: statusColor(t.status), fontWeight: 800 }}>{t.status}</span></td></tr>)}</tbody></table></div>}
+    </section>
+
+    {modal === 'transacao' && <Modal title="Registrar transação" onClose={() => setModal(null)} width={560}><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}><Field label="Valor (R$)"><input autoFocus style={inputStyle} inputMode="decimal" value={transactionForm.valor} onChange={(e) => setTransactionForm({ ...transactionForm, valor: e.target.value })} /></Field><Field label="Método"><select style={inputStyle} value={transactionForm.metodo} onChange={(e) => setTransactionForm({ ...transactionForm, metodo: e.target.value })}><option value="pix">PIX</option><option value="cartao">Cartão</option><option value="mercadopago">Mercado Pago</option></select></Field><Field label="Descrição" wide><input style={inputStyle} value={transactionForm.descricao} onChange={(e) => setTransactionForm({ ...transactionForm, descricao: e.target.value })} /></Field><Field label="Referência" wide><input style={inputStyle} value={transactionForm.referencia} onChange={(e) => setTransactionForm({ ...transactionForm, referencia: e.target.value })} /></Field></div><Actions onCancel={() => setModal(null)} onSave={criarTransacao} saving={saving} label="Registrar como pendente" /></Modal>}
+
+    {modal === 'terminal' && <Modal title="Configurar terminal / adquirente" onClose={() => setModal(null)} width={620}><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}><Field label="Nome do terminal *"><input style={inputStyle} value={terminalForm.nome} onChange={(e) => setTerminalForm({ ...terminalForm, nome: e.target.value })} /></Field><Field label="Provedor *"><select style={inputStyle} value={terminalForm.tipo} onChange={(e) => setTerminalForm({ ...terminalForm, tipo: e.target.value })}><option value="mercado_pago_point">Mercado Pago Point</option><option value="cielo">Cielo</option><option value="rede">Rede</option><option value="stone">Stone</option><option value="getnet">Getnet</option><option value="outro">Outro</option></select></Field><Field label="Identificação do terminal"><input style={inputStyle} value={terminalForm.terminal} onChange={(e) => setTerminalForm({ ...terminalForm, terminal: e.target.value })} /></Field><Field label="Loja / estabelecimento"><input style={inputStyle} value={terminalForm.loja} onChange={(e) => setTerminalForm({ ...terminalForm, loja: e.target.value })} /></Field><Field label="Chave pública" wide><input style={inputStyle} value={terminalForm.chavePublica} onChange={(e) => setTerminalForm({ ...terminalForm, chavePublica: e.target.value })} /></Field><Field label="Credencial privada" wide><input type="password" style={inputStyle} value={terminalForm.chavePrivada} onChange={(e) => setTerminalForm({ ...terminalForm, chavePrivada: e.target.value })} /></Field></div><p style={{ color: 'var(--muted)', fontSize: 12 }}>A credencial privada é cifrada antes da persistência e não volta a ser exibida.</p><Actions onCancel={() => setModal(null)} onSave={salvarTerminal} saving={saving} label="Salvar terminal" /></Modal>}
+
+    {modal === 'mercadopago' && <Modal title="Configurar Mercado Pago" onClose={() => setModal(null)} width={620}><div style={{ display: 'grid', gap: 12 }}><Field label="Public Key"><input style={inputStyle} value={mpForm.publicKey} onChange={(e) => setMpForm({ ...mpForm, publicKey: e.target.value })} /></Field><Field label="Access Token *"><input type="password" style={inputStyle} value={mpForm.accessToken} onChange={(e) => setMpForm({ ...mpForm, accessToken: e.target.value })} /></Field><Field label="Assinatura secreta de webhook"><input type="password" style={inputStyle} value={mpForm.webhookSecret} onChange={(e) => setMpForm({ ...mpForm, webhookSecret: e.target.value })} /></Field><Field label="ID do usuário vendedor"><input style={inputStyle} value={mpForm.userId} onChange={(e) => setMpForm({ ...mpForm, userId: e.target.value })} /></Field></div><p style={{ color: 'var(--muted)', fontSize: 12 }}>Use credenciais produtivas somente após testar o webhook. O token e a assinatura serão cifrados em repouso.</p><Actions onCancel={() => setModal(null)} onSave={salvarMercadoPago} saving={saving} label="Salvar configuração protegida" /></Modal>}
+  </div>
 }
 
-function Field({ label, value }) {
-  return (
-    <div>
-      <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
-      <div style={{ fontSize: 14, color: '#fff' }}>{value || '—'}</div>
-    </div>
-  )
-}
+function Actions({ onCancel, onSave, saving, label }) { return <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}><button className="btn btn-ghost" onClick={onCancel}>Cancelar</button><button className="btn btn-primary" onClick={onSave} disabled={saving}>{saving ? 'Salvando…' : label}</button></div> }
