@@ -30,11 +30,9 @@ if ('serviceWorker' in navigator) {
 
       if ('caches' in window) {
         const cacheNames = await caches.keys()
-        await Promise.all(
-          cacheNames
-            .filter(name => name.startsWith('kytto-'))
-            .map(name => caches.delete(name))
-        )
+        // Cache Storage é isolado por domínio. Limpar todos os nomes desta origem
+        // remove também o cache "setpoint-*" que continha a interface anterior.
+        await Promise.all(cacheNames.map(name => caches.delete(name)))
       }
     } catch (error) {
       console.warn('[KYTTO] Não foi possível limpar o cache legado:', error)

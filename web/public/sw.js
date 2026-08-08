@@ -4,7 +4,6 @@
 // anterior do SetPoint em alguns navegadores. Ela se auto-remove após limpar os
 // caches e força uma única navegação de rede para carregar a versão Kytto.
 
-const CACHE_PREFIX = 'kytto-'
 
 self.addEventListener('install', event => {
   event.waitUntil(self.skipWaiting())
@@ -13,11 +12,9 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     const cacheKeys = await caches.keys()
-    await Promise.all(
-      cacheKeys
-        .filter(key => key.startsWith(CACHE_PREFIX))
-        .map(key => caches.delete(key))
-    )
+    // Os caches são isolados por origem. Apagar todos nesta origem remove tanto
+    // os caches Kytto quanto os caches "setpoint-*" da interface anterior.
+    await Promise.all(cacheKeys.map(key => caches.delete(key)))
 
     // Remove o próprio worker para que atualizações futuras dependam sempre
     // do navegador e da versão hashada dos assets, sem reter a UI antiga.
