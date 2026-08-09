@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
 
@@ -10,8 +10,18 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [aba, setAba] = useState('painel') // 'painel' ou 'atleta'
 
-  const { login } = useAuth()
+  const { login, user: usuarioAtual, isOrg, isStaff } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const proximoSeguro = searchParams.get('next')?.startsWith('/') ? searchParams.get('next') : null
+
+  // Um administrador já autenticado nunca deve receber de novo a tela de login
+  // ou a landing: a entrada passa direto para a operação completa.
+  useEffect(() => {
+    if (!usuarioAtual) return
+    if (isOrg) navigate(proximoSeguro || '/admin', { replace: true })
+    else if (isStaff) navigate(proximoSeguro || '/pdv', { replace: true })
+  }, [usuarioAtual, isOrg, isStaff, navigate, proximoSeguro])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -22,8 +32,8 @@ export default function Login() {
       if (aba === 'painel') {
         const data = await api.post('/api/admin/login', { user, senha })
         login(data.token, data.user, false, data.sessao || {})
-        if (['org', 'admin', 'organizador', 'gerente'].includes(data.user.role)) navigate('/admin')
-        else navigate('/pdv')
+        if (['org', 'admin', 'organizador', 'gerente'].includes(data.user.role)) navigate(proximoSeguro || '/admin', { replace: true })
+        else navigate(proximoSeguro || '/pdv', { replace: true })
       } else {
         const data = await api.post('/api/auth/login', { email: user, senha })
         login(data.token, data.user, false, data.sessao || {})

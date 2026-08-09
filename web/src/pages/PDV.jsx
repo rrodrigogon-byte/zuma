@@ -318,6 +318,7 @@ const PAY_OPTIONS = [
   { key: 'cartao', icon: '🌐', label: 'Cartão online' },
   { key: 'dinheiro', icon: '💵', label: 'Dinheiro' },
   { key: 'carteira', icon: '👛', label: 'Carteira' },
+  { key: 'conta', icon: '📒', label: 'Na conta' },
 ]
 
 const TABS = [
@@ -429,6 +430,8 @@ export default function PDV() {
   const [multiPag, setMultiPag] = useState([])
   const [multiPagValor, setMultiPagValor] = useState('')
   const [multiPagMeio, setMultiPagMeio] = useState('pix')
+  const [clientesConta, setClientesConta] = useState([])
+  const [clienteContaId, setClienteContaId] = useState('')
   const totalMultiPag = multiPag.reduce((s, p) => s + p.valor, 0)
   // restanteMultiPag calculado após totalFinal (ver abaixo)
 
@@ -476,6 +479,15 @@ export default function PDV() {
     } catch { /* silencioso */ }
   }, [])
 
+  const loadClientesConta = useCallback(async () => {
+    try {
+      const data = await api.get('/api/admin/clientes')
+      const elegiveis = (data?.clientes || []).filter(cliente => !cliente.padrao && cliente.status !== 'deletado')
+      setClientesConta(elegiveis)
+      setClienteContaId(atual => atual && elegiveis.some(cliente => cliente.id === atual) ? atual : (elegiveis[0]?.id || ''))
+    } catch { setClientesConta([]) }
+  }, [])
+
   const loadCaixaHoje = useCallback(async () => {
     try {
       const data = await api.get('/api/admin/caixa/hoje')
@@ -495,6 +507,7 @@ export default function PDV() {
   useEffect(() => {
     loadMesas()
     loadCardapio()
+    loadClientesConta()
     loadCaixaHoje()
     // Config do TEF (agente local, adquirente, parcelamento). Sem agenteUrl → simulado.
     api.get('/api/admin/config').then(cfg => setTefCfg(cfg?.tef || {})).catch(() => setTefCfg({}))
@@ -503,7 +516,7 @@ export default function PDV() {
       loadCaixaHoje()
     }, 15000)
     return () => clearInterval(timerRef.current)
-  }, [loadMesas, loadCardapio, loadCaixaHoje])
+  }, [loadMesas, loadCardapio, loadClientesConta, loadCaixaHoje])
 
   const atualizarResumoOffline = useCallback(async () => {
     try { setResumoOffline(await resumoFilaOffline()) } catch { /* IndexedDB indisponível */ }
@@ -784,6 +797,7 @@ export default function PDV() {
           }
         : {
             meio: payMeio,
+            clienteId: payMeio === 'conta' ? clienteContaId : undefined,
             desconto: descPct > 0 ? descPct : undefined,
             servico,
             totalFinal,
@@ -1647,12 +1661,29 @@ export default function PDV() {
 
             <div style={S.payBtns}>
               {PAY_OPTIONS.map(o => (
-                <div key={o.key} style={S.payBtn(payMeio === o.key)} onClick={() => { setPayMeio(o.key); setValorRecebido('') }}>
+                <div key={o.key} style={S.payBtn(payMeio === o.key)} onClick={() => { setPayMeio(o.key); setValorRecebido(''); if (o.key !== 'conta') setMultiPag([]) }}>
                   <div>{o.icon}</div>
                   <div style={S.payBtnLabel}>{o.label}</div>
                 </div>
               ))}
             </div>
+
+            {/* Lançamento em conta: exige cliente nominal da empresa ativa */}
+            {payMeio === 'conta' && multiPag.length === 0 && (
+              <div style={{ marginTop: 12, padding: '12px', background: '#3a2800', borderRadius: 10, border: '1px solid #FF6B2C' }}>
+                <div style={{ fontSize: 12, color: '#FF9B72', fontWeight: 700, marginBottom: 7 }}>📒 Lançar em conta do cliente</div>
+                {clientesConta.length ? (
+                  <>
+                    <select value={clienteContaId} onChange={e => setClienteContaId(e.target.value)} style={{ ...S.input, marginBottom: 6, cursor: 'pointer' }}>
+                      {clientesConta.map(cliente => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}
+                    </select>
+                    <div style={{ fontSize: 11, opacity: .7 }}>A venda será encerrada e a pendência será registrada em Contas a Receber.</div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: 12, color: '#FF9B72' }}>Cadastre primeiro um cliente nominal para usar esta forma de pagamento.</div>
+                )}
+              </div>
+            )}
 
             {/* Múltiplos meios de pagamento */}
             {multiPag.length > 0 && (
@@ -1801,7 +1832,7 @@ export default function PDV() {
               className="btn btn-primary"
               style={{ width: '100%', marginTop: 14, fontSize: 15 }}
               onClick={pagar}
-              disabled={loading || tefProcessando || (payMeio === 'dinheiro' && multiPag.length === 0 && valorRecebido && trocoVal < 0)}>
+              disabled={loading || tefProcessando || (payMeio === 'conta' && multiPag.length === 0 && !clienteContaId) || (payMeio === 'dinheiro' && multiPag.length === 0 && valorRecebido && trocoVal < 0)}>
               {tefProcessando ? '💳 Aguardando maquininha…' : loading ? 'Processando...' : multiPag.length > 0 && restanteMultiPag < 0.01
                 ? `✅ Confirmar — Pago (${fmtR(totalFinal)})`
                 : `Confirmar — ${PAY_OPTIONS.find(o => o.key === payMeio)?.label}${dividir > 1 ? ` (${fmtR(totalFinal / dividir)}/pessoa)` : ''}`

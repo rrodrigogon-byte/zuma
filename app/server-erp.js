@@ -83,7 +83,7 @@ if (PROD) {
     setHeaders: (res, filePath) => {
       // O HTML e o worker determinam qual versão do frontend será carregada.
       // Não podem permanecer em cache após um deploy.
-      if (/\/(index\.html|sw\.js|manifest\.json|manifest\.webmanifest)$/.test(filePath)) {
+      if (/\/(index\.html|sw\.js|service-worker\.js|manifest\.json|manifest\.webmanifest)$/.test(filePath)) {
         res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
       }
     }
@@ -139,10 +139,33 @@ function espelharUsuarioEmMemoria(usuario) {
 // inicialização. Nenhuma senha é escrita em log.
 function criarAdminPadrao() {
   cadastrosMestres.garantirEmpresaPadrao();
+  // Bootstrap idempotente do catálogo da empresa padrão. Esta rotina não usa a
+  // função operacional de cardápio, que pertence ao escopo de rotas abaixo,
+  // evitando que uma inicialização limpa interrompa a subida do servidor.
+  const estado = db();
+  estado.cardapioPorEmpresa ||= {};
+  const empresaId = cadastrosMestres.EMPRESA_PADRAO_ID;
+  estado.cardapioPorEmpresa[empresaId] ||= [];
+  const cardapio = estado.cardapioPorEmpresa[empresaId];
+  if (cardapio.length === 0) {
+    const agora = new Date().toISOString();
+    const sementes = [...CATALOGO_BEBIDAS_KYTTO, ...CATALOGO_ESPETINHOS_KYTTO];
+    const itens = sementes.map((item, indice) => ({
+      ...item,
+      empresaId,
+      id: item.id || `seed-${Date.now().toString(36)}-${String(indice + 1).padStart(3, '0')}`,
+      indisponivel: item.indisponivel === true,
+      criadoEm: item.criadoEm || agora,
+      atualizadoEm: agora,
+    }));
+    cardapio.push(...itens);
+    console.log(`✅ Catálogo Kytto inicializado: ${itens.length} itens`);
+  }
   let usuario = cadastrosMestres.obterUsuarioPorEmail(ADMIN_EMAIL);
   if (!usuario) {
     usuario = cadastrosMestres.criarUsuario(cadastrosMestres.EMPRESA_PADRAO_ID, {
       nome: 'Administrador', email: ADMIN_EMAIL, roles: ['admin', 'gerente-financeiro'],
+      tipoUsuario: 'administrador', perfis: ['administrador'],
       platformAdmin: true, senhaHash: hashPassword(ADMIN_TEMP_PASSWORD),
     });
     usuario.empresasAcessiveis = [cadastrosMestres.EMPRESA_PADRAO_ID];
@@ -606,6 +629,48 @@ async function iniciar() {
     next();
   }
 
+  // Operações de PDV, mesas e comandas podem ser executadas pelos perfis
+  // Garçom, Operador de PDV, Caixa, Gerente e Administrador. A empresa vem
+  // exclusivamente do cabeçalho X-Loja-Id validado contra o usuário autenticado.
+  function requerOperacaoComanda(req, res, next) {
+    const usuario = usuarioDoToken(req) || espelharUsuarioEmMemoria(cadastrosMestres.obterUsuarioPorEmail(
+      (() => {
+        try { return Buffer.from(String(req.headers.authorization || '').replace(/^Bearer\s+/i, ''), 'base64').toString('utf8').split(':')[0]; }
+        catch { return ''; }
+      })()
+    ));
+    if (!usuario || usuario.ativo === false) {
+      return res.status(401).json({ erro: 'Autenticação necessária para operar comandas.' });
+    }
+
+    const acesso = resumoAcessoUsuario(usuario);
+    const acao = acaoDaRequisicao(req.method);
+    const permissoes = { ...usuario, ...acesso };
+    const permitido = ['mesas', 'pdv', 'pagamentos'].some((modulo) => temPermissao(permissoes, modulo, acao));
+    if (!permitido) {
+      return res.status(403).json({ erro: 'Seu perfil não permite esta operação de comanda.', codigo: 'PERMISSAO_NEGADA', acao });
+    }
+
+    const empresas = cadastrosMestres.empresasDoUsuario(usuario);
+    const solicitada = String(req.get('X-Loja-Id') || '').trim();
+    const empresa = solicitada
+      ? empresas.find((item) => item.id === solicitada && item.ativa !== false)
+      : empresas[0];
+    if (!empresa) {
+      return res.status(403).json({ erro: 'Empresa ativa inválida ou sem permissão para este usuário.' });
+    }
+    const empresaNoPayload = req.body?.empresaId || req.query?.empresaId || req.params?.empresaId;
+    if (empresaNoPayload && String(empresaNoPayload) !== empresa.id) {
+      return res.status(403).json({ erro: 'Acesso negado a dados de outra empresa.' });
+    }
+
+    req.usuario = { ...usuario, ...acesso };
+    req.permissoes = acesso.permissoes;
+    req.empresaId = empresa.id;
+    req.empresa = empresa;
+    next();
+  }
+
   // ── FISCAL / CERTIFICADOS A1 ──────────────────────────────────────────────
   // Usa a mesma autenticação administrativa do catálogo e mantém certificados
   // cifrados em objeto dedicado do GCS. Nunca retorna senha, CSC ou arquivo A1.
@@ -778,8 +843,13 @@ async function iniciar() {
     };
   }
 
-  app.get('/api/cardapio', (req, res) => {
-    const itens = cardapioPersistido(cadastrosMestres.EMPRESA_PADRAO_ID).filter((item) => !item.indisponivel);
+  // Leitura operacional do cardápio: exige empresa ativa e não vaza produtos
+  // entre empresas. A quantidade de inventário é gerida no módulo de estoque;
+  // itens sem bloqueio explícito continuam vendáveis no PDV.
+  app.get('/api/cardapio', requerOperacaoComanda, (req, res) => {
+    const itens = cardapioPersistido(req.empresaId)
+      .filter((item) => !item.indisponivel)
+      .map((item) => ({ ...item }));
     res.json(itens);
   });
 
@@ -1450,11 +1520,340 @@ async function iniciar() {
     return Object.values(store.fisicas).filter(mesa => mesa.ativa !== false).sort((a, b) => a.num - b.num);
   }
 
-  app.get('/api/mesas', (req, res) => {
-    const empresaId = cadastrosMestres.EMPRESA_PADRAO_ID;
-    const store = mesasPersistidas(empresaId);
-    res.json({ fisicas: listarMesasFisicas(empresaId), virtuais: Object.values(store.virtuais).filter(mesa => mesa.ativa !== false) });
+  // ── COMANDAS OPERACIONAIS (PDV / MODO GARÇOM) ───────────────────────────
+  // Estado separado por empresa, persistido no mesmo JSON/GCS da plataforma.
+  // O frontend usa estes contratos tanto no PDV quanto no Modo Garçom.
+  function comandasPersistidas(empresaId) {
+    const dados = db();
+    dados.operacaoBarKytto ||= { empresas: {} };
+    dados.operacaoBarKytto.empresas ||= {};
+    dados.operacaoBarKytto.empresas[empresaId] ||= { sequencia: 0, comandas: {} };
+    const store = dados.operacaoBarKytto.empresas[empresaId];
+    store.comandas ||= {};
+    store.sequencia = Number(store.sequencia || 0);
+    return store;
+  }
+
+  function totalComanda(comanda) {
+    return Number((comanda?.itens || []).reduce((soma, item) => soma + (Number(item.preco) || 0) * (Number(item.qtd) || 0), 0).toFixed(2));
+  }
+
+  function comandasDaEmpresa(empresaId) {
+    return Object.values(comandasPersistidas(empresaId).comandas)
+      .filter((comanda) => comanda.empresaId === empresaId);
+  }
+
+  function comandaAtivaDaMesa(empresaId, numeroMesa) {
+    return comandasDaEmpresa(empresaId).find((comanda) =>
+      comanda.tipo === 'fisica' && Number(comanda.mesaNum) === Number(numeroMesa) && ['aberta', 'conta'].includes(comanda.status)
+    ) || null;
+  }
+
+  function sincronizarMesaComanda(empresaId, numeroMesa) {
+    const mesa = mesasPersistidas(empresaId).fisicas[Number(numeroMesa)];
+    if (!mesa) return null;
+    const comanda = comandaAtivaDaMesa(empresaId, numeroMesa);
+    Object.assign(mesa, {
+      status: !comanda ? 'livre' : comanda.status === 'conta' ? 'conta' : 'ocupada',
+      comandaId: comanda?.id || null,
+      total: comanda ? totalComanda(comanda) : 0,
+      aguardandoCozinha: comanda ? (comanda.itens || []).filter((item) => item.cozinha && ['novo', 'em_preparo', 'pronto'].includes(item.status)).length : 0,
+      atualizadoEm: new Date().toISOString(),
+    });
+    return mesa;
+  }
+
+  function criarComanda(empresaId, { tipo = 'fisica', mesaNum = null, nome = '', local = null } = {}) {
+    const store = comandasPersistidas(empresaId);
+    store.sequencia += 1;
+    const agora = new Date().toISOString();
+    const id = `cmd-${Date.now().toString(36)}-${String(store.sequencia).padStart(4, '0')}`;
+    const comanda = {
+      id, empresaId, tipo, mesaNum: mesaNum ? Number(mesaNum) : null,
+      mesa: mesaNum ? `Mesa ${Number(mesaNum)}` : '',
+      nome: String(nome || (mesaNum ? `Mesa ${Number(mesaNum)}` : 'Cliente')).trim().slice(0, 120),
+      local: local && typeof local === 'object' ? local : null,
+      status: 'aberta', contaPedida: false, itens: [], pagamentos: [],
+      abertaEm: agora, atualizadaEm: agora, fechadaEm: null,
+    };
+    store.comandas[id] = comanda;
+    if (comanda.tipo === 'fisica') sincronizarMesaComanda(empresaId, comanda.mesaNum);
+    return comanda;
+  }
+
+  function obterComandaOperacional(empresaId, id, { ativa = false } = {}) {
+    const comanda = comandasPersistidas(empresaId).comandas[String(id)];
+    if (!comanda || comanda.empresaId !== empresaId) return null;
+    if (ativa && !['aberta', 'conta'].includes(comanda.status)) return null;
+    return comanda;
+  }
+
+  function respostaComanda(comanda) {
+    return { ...comanda, total: totalComanda(comanda) };
+  }
+
+  function adicionarItensComanda(empresaId, comanda, itens = []) {
+    const catalogo = cardapioPersistido(empresaId);
+    const estoque = estoquePersistido(empresaId);
+    const empresa = cadastrosMestres.obterEmpresa(empresaId);
+    const permitirEstoqueNegativo = empresa?.permitirEstoqueNegativo !== false;
+    const erros = [];
+    const adicionados = [];
+    for (const entrada of Array.isArray(itens) ? itens : []) {
+      const produto = catalogo.find((item) => item.id === String(entrada?.produtoId || '') && item.empresaId === empresaId && !item.indisponivel);
+      if (!produto) {
+        erros.push('Produto não encontrado ou indisponível.');
+        continue;
+      }
+      const qtd = Math.max(1, Math.floor(Number(entrada?.qtd) || 1));
+      const ficha = estoque[produto.id];
+      // Validar estoque: se a empresa não permite estoque negativo e o saldo é insuficiente, bloquear
+      if (ficha?.controlaEstoque === true && !permitirEstoqueNegativo && Number(ficha.qtd || 0) < qtd) {
+        erros.push(`${produto.nome}: estoque insuficiente (disponível: ${ficha.qtd || 0}, solicitado: ${qtd}).`);
+        continue;
+      }
+      // Se permite estoque negativo, permitir venda mesmo com saldo zero ou negativo
+      if (ficha?.controlaEstoque === true && permitirEstoqueNegativo && Number(ficha.qtd || 0) < qtd) {
+        console.warn(`[ESTOQUE NEGATIVO] ${produto.nome}: saldo ${ficha.qtd || 0} insuficiente para ${qtd}, mas empresa permite estoque negativo.`);
+      }
+      const item = {
+        id: `it-${Date.now().toString(36)}-${String(comanda.itens.length + 1).padStart(3, '0')}`,
+        produtoId: produto.id, nome: produto.nome, preco: Number(produto.preco || 0), qtd,
+        obs: String(entrada?.obs || '').trim().slice(0, 300), setor: produto.setor || 'bar',
+        cozinha: Boolean(produto.cozinha), status: produto.cozinha ? 'em_preparo' : 'entregue', criadoEm: new Date().toISOString(),
+      };
+      comanda.itens.push(item);
+      adicionados.push(item);
+      if (ficha?.controlaEstoque === true) {
+        ficha.qtd = Number(ficha.qtd || 0) - qtd;
+        ficha.historico ||= [];
+        ficha.historico.push({ tipo: 'saida_comanda', qtd, saldoFinal: ficha.qtd, comandaId: comanda.id, ts: new Date().toISOString() });
+        ficha.historico = ficha.historico.slice(-100);
+        ficha.atualizadoEm = new Date().toISOString();
+      }
+    }
+    comanda.atualizadaEm = new Date().toISOString();
+    if (comanda.tipo === 'fisica') sincronizarMesaComanda(empresaId, comanda.mesaNum);
+    return { erros, adicionados };
+  }
+
+  function atualizarItemComanda(empresaId, comanda, indice, dados = {}) {
+    const item = comanda.itens[Number(indice)];
+    if (!item) return null;
+    if (dados.qtd !== undefined) {
+      const novaQtd = Math.max(1, Math.floor(Number(dados.qtd) || 1));
+      const diferenca = novaQtd - Number(item.qtd || 0);
+      const ficha = estoquePersistido(empresaId)[item.produtoId];
+      if (ficha?.controlaEstoque === true && diferenca > 0 && Number(ficha.qtd || 0) < diferenca) {
+        throw new Error('Estoque insuficiente para aumentar a quantidade.');
+      }
+      if (ficha?.controlaEstoque === true && diferenca !== 0) {
+        ficha.qtd = Number(ficha.qtd || 0) - diferenca;
+        ficha.historico ||= [];
+        ficha.historico.push({ tipo: 'ajuste_comanda', qtd: diferenca, saldoFinal: ficha.qtd, comandaId: comanda.id, ts: new Date().toISOString() });
+        ficha.historico = ficha.historico.slice(-100);
+      }
+      item.qtd = novaQtd;
+    }
+    if (dados.obs !== undefined) item.obs = String(dados.obs || '').trim().slice(0, 300);
+    comanda.atualizadaEm = new Date().toISOString();
+    if (comanda.tipo === 'fisica') sincronizarMesaComanda(empresaId, comanda.mesaNum);
+    return item;
+  }
+
+  function removerItemComanda(empresaId, comanda, indice) {
+    const posicao = Number(indice);
+    const item = comanda.itens[posicao];
+    if (!item) return null;
+    const ficha = estoquePersistido(empresaId)[item.produtoId];
+    if (ficha?.controlaEstoque === true) {
+      ficha.qtd = Number(ficha.qtd || 0) + Number(item.qtd || 0);
+      ficha.historico ||= [];
+      ficha.historico.push({ tipo: 'estorno_comanda', qtd: item.qtd, saldoFinal: ficha.qtd, comandaId: comanda.id, ts: new Date().toISOString() });
+      ficha.historico = ficha.historico.slice(-100);
+    }
+    comanda.itens.splice(posicao, 1);
+    comanda.atualizadaEm = new Date().toISOString();
+    if (comanda.tipo === 'fisica') sincronizarMesaComanda(empresaId, comanda.mesaNum);
+    return item;
+  }
+
+  function dataVencimentoPadrao(dias = 1) {
+    const data = new Date();
+    data.setDate(data.getDate() + Math.max(1, Math.floor(Number(dias) || 1)));
+    return data.toISOString().slice(0, 10);
+  }
+
+  function selecionarClienteConta(empresaId, clienteId, nomeComanda) {
+    if (clienteId) return clientesKytto.obterCliente(empresaId, String(clienteId));
+    const nome = String(nomeComanda || '').trim().toLocaleLowerCase('pt-BR');
+    if (nome) {
+      const encontrado = clientesKytto.listarClientes(empresaId).find((cliente) => String(cliente.nome || '').trim().toLocaleLowerCase('pt-BR') === nome);
+      if (encontrado) return encontrado;
+    }
+    return null;
+  }
+
+  function listarMesasOperacionais(empresaId) {
+    const fisicas = listarMesasFisicas(empresaId).map((mesa) => {
+      const comanda = comandaAtivaDaMesa(empresaId, mesa.num);
+      return {
+        ...mesa,
+        status: !comanda ? 'livre' : comanda.status === 'conta' ? 'conta' : 'ocupada',
+        comandaId: comanda?.id || null,
+        total: comanda ? totalComanda(comanda) : 0,
+        aguardandoCozinha: comanda ? (comanda.itens || []).filter((item) => item.cozinha && ['novo', 'em_preparo', 'pronto'].includes(item.status)).length : 0,
+      };
+    });
+    const virtuais = comandasDaEmpresa(empresaId)
+      .filter((comanda) => comanda.tipo === 'virtual' && ['aberta', 'conta'].includes(comanda.status))
+      .map((comanda) => ({ id: comanda.id, comandaId: comanda.id, tipo: 'virtual', nome: comanda.nome, local: comanda.local, status: comanda.status === 'conta' ? 'conta' : 'ocupada', total: totalComanda(comanda), abertaEm: comanda.abertaEm }));
+    return { fisicas, virtuais };
+  }
+
+  app.get('/api/mesas', requerOperacaoComanda, (req, res) => {
+    res.json(listarMesasOperacionais(req.empresaId));
   });
+
+  app.get('/api/comanda/:id', requerOperacaoComanda, (req, res) => {
+    const comanda = obterComandaOperacional(req.empresaId, req.params.id);
+    if (!comanda) return res.status(404).json({ erro: 'Comanda não encontrada na empresa ativa.' });
+    res.json(respostaComanda(comanda));
+  });
+
+  app.post('/api/mesa/:numero/pedir', requerOperacaoComanda, (req, res) => {
+    const numero = Number(req.params.numero);
+    const mesa = mesasPersistidas(req.empresaId).fisicas[numero];
+    if (!Number.isInteger(numero) || numero < 1 || !mesa || mesa.ativa === false) return res.status(400).json({ erro: 'Mesa física inválida.' });
+    let comanda = comandaAtivaDaMesa(req.empresaId, numero);
+    if (!comanda) comanda = criarComanda(req.empresaId, { tipo: 'fisica', mesaNum: numero, nome: req.body?.nome });
+    const { erros } = adicionarItensComanda(req.empresaId, comanda, req.body?.itens || []);
+    save();
+    if (erros.length) return res.status(409).json({ erro: erros.join(' '), comanda: respostaComanda(comanda) });
+    res.status(201).json({ ok: true, comandaId: comanda.id, id: comanda.id, total: totalComanda(comanda), comanda: respostaComanda(comanda) });
+  });
+
+  app.post('/api/mesa-virtual', requerOperacaoComanda, (req, res) => {
+    const nome = String(req.body?.nome || '').trim();
+    if (!nome) return res.status(400).json({ erro: 'Informe o nome da comanda virtual.' });
+    const comanda = criarComanda(req.empresaId, { tipo: 'virtual', nome, local: req.body?.local || null });
+    const { erros } = adicionarItensComanda(req.empresaId, comanda, req.body?.itens || []);
+    save();
+    if (erros.length) return res.status(409).json({ erro: erros.join(' '), comanda: respostaComanda(comanda) });
+    res.status(201).json({ ok: true, id: comanda.id, comandaId: comanda.id, total: totalComanda(comanda), comanda: respostaComanda(comanda) });
+  });
+
+  app.post('/api/comanda/:id/adicionar', requerOperacaoComanda, (req, res) => {
+    const comanda = obterComandaOperacional(req.empresaId, req.params.id, { ativa: true });
+    if (!comanda || comanda.status !== 'aberta') return res.status(409).json({ erro: 'A comanda não está aberta para novos itens.' });
+    const itens = Array.isArray(req.body?.itens) ? req.body.itens : [req.body || {}];
+    const { erros } = adicionarItensComanda(req.empresaId, comanda, itens);
+    save();
+    if (erros.length) return res.status(409).json({ erro: erros.join(' '), parcial: comanda.itens.length > 0, comanda: respostaComanda(comanda) });
+    res.json(respostaComanda(comanda));
+  });
+
+  app.patch('/api/comanda/:id/item/:indice', requerOperacaoComanda, (req, res) => {
+    const comanda = obterComandaOperacional(req.empresaId, req.params.id, { ativa: true });
+    if (!comanda || comanda.status !== 'aberta') return res.status(409).json({ erro: 'A comanda não está aberta para edição.' });
+    try {
+      const item = atualizarItemComanda(req.empresaId, comanda, req.params.indice, req.body || {});
+      if (!item) return res.status(404).json({ erro: 'Item não encontrado na comanda.' });
+      save();
+      res.json(respostaComanda(comanda));
+    } catch (erro) {
+      res.status(409).json({ erro: erro.message || 'Não foi possível atualizar o item.' });
+    }
+  });
+
+  app.delete('/api/comanda/:id/item/:indice', requerOperacaoComanda, (req, res) => {
+    const comanda = obterComandaOperacional(req.empresaId, req.params.id, { ativa: true });
+    if (!comanda || comanda.status !== 'aberta') return res.status(409).json({ erro: 'A comanda não está aberta para edição.' });
+    const item = removerItemComanda(req.empresaId, comanda, req.params.indice);
+    if (!item) return res.status(404).json({ erro: 'Item não encontrado na comanda.' });
+    save();
+    res.json(respostaComanda(comanda));
+  });
+
+  app.post('/api/comanda/:id/cancelar-item', requerOperacaoComanda, (req, res) => {
+    const comanda = obterComandaOperacional(req.empresaId, req.params.id, { ativa: true });
+    if (!comanda || comanda.status !== 'aberta') return res.status(409).json({ erro: 'A comanda não está aberta para edição.' });
+    const item = removerItemComanda(req.empresaId, comanda, req.body?.idx);
+    if (!item) return res.status(404).json({ erro: 'Item não encontrado na comanda.' });
+    save();
+    res.json(respostaComanda(comanda));
+  });
+
+  app.post('/api/comanda/:id/conta', requerOperacaoComanda, (req, res) => {
+    const comanda = obterComandaOperacional(req.empresaId, req.params.id, { ativa: true });
+    if (!comanda || comanda.status !== 'aberta') return res.status(409).json({ erro: 'A comanda não está aberta para solicitar a conta.' });
+    if (!comanda.itens.length) return res.status(400).json({ erro: 'Inclua ao menos um item antes de pedir a conta.' });
+    comanda.status = 'conta';
+    comanda.contaPedida = true;
+    comanda.atualizadaEm = new Date().toISOString();
+    if (comanda.tipo === 'fisica') sincronizarMesaComanda(req.empresaId, comanda.mesaNum);
+    save();
+    res.json({ ok: true, comanda: respostaComanda(comanda) });
+  });
+
+  app.post('/api/comanda/:id/pagar', requerOperacaoComanda, (req, res) => {
+    const comanda = obterComandaOperacional(req.empresaId, req.params.id, { ativa: true });
+    if (!comanda) return res.status(404).json({ erro: 'Comanda não encontrada ou já encerrada.' });
+    if (!comanda.itens.length) return res.status(400).json({ erro: 'Não é possível fechar uma comanda sem itens.' });
+    const subtotal = totalComanda(comanda);
+    const desconto = Math.max(0, Number(req.body?.desconto || 0));
+    const descontoValor = desconto > 0 && desconto <= 100 ? Number((subtotal * (desconto / 100)).toFixed(2)) : Number(comanda.desconto || 0);
+    const servico = req.body?.servico === true ? Number(((subtotal - descontoValor) * 0.1).toFixed(2)) : 0;
+    const total = Number((req.body?.totalFinal !== undefined ? Number(req.body.totalFinal) : subtotal - descontoValor + servico).toFixed(2));
+    if (!Number.isFinite(total) || total < 0) return res.status(400).json({ erro: 'Total de pagamento inválido.' });
+
+    const pagamentosEnviados = Array.isArray(req.body?.meios) && req.body.meios.length
+      ? req.body.meios
+      : [{ meio: req.body?.meio || 'dinheiro', valor: total }];
+    const permitidos = new Set(['dinheiro', 'pix', 'cartao', 'credito', 'debito', 'tef', 'carteira', 'conta']);
+    const pagamentos = pagamentosEnviados.map((pagamento) => ({
+      meio: String(pagamento?.meio || req.body?.meio || 'dinheiro').toLowerCase(),
+      valor: Number(pagamento?.valor ?? total),
+    }));
+    if (pagamentos.some((pagamento) => !permitidos.has(pagamento.meio) || !Number.isFinite(pagamento.valor) || pagamento.valor <= 0)) {
+      return res.status(400).json({ erro: 'Meio ou valor de pagamento inválido.' });
+    }
+    const somaPagamentos = Number(pagamentos.reduce((soma, pagamento) => soma + pagamento.valor, 0).toFixed(2));
+    if (Math.abs(somaPagamentos - total) > 0.02) {
+      return res.status(400).json({ erro: 'A soma dos pagamentos deve ser igual ao total da comanda.' });
+    }
+
+    const contasReceber = [];
+    for (const pagamento of pagamentos.filter((item) => item.meio === 'conta')) {
+      const cliente = selecionarClienteConta(req.empresaId, req.body?.clienteId, comanda.nome);
+      if (!cliente || cliente.padrao) {
+        return res.status(400).json({ erro: 'Para lançar em conta, selecione um cliente cadastrado da empresa ativa.' });
+      }
+      const conta = clientesKytto.criarContaReceber(req.empresaId, {
+        clienteId: cliente.id,
+        descricao: `Comanda ${comanda.id} — ${comanda.nome || 'Atendimento'}`,
+        valor: pagamento.valor,
+        dataVencimento: req.body?.dataVencimento || dataVencimentoPadrao(cliente.diasVencimento),
+        origem: 'comanda', referenciaId: comanda.id,
+      });
+      contasReceber.push(conta);
+    }
+
+    comanda.status = 'fechada';
+    comanda.contaPedida = false;
+    comanda.pagamento = pagamentos[0]?.meio || 'dinheiro';
+    comanda.pagamentos = pagamentos;
+    comanda.desconto = descontoValor;
+    comanda.taxaServico = servico;
+    comanda.totalPago = total;
+    comanda.contasReceberIds = contasReceber.map((conta) => conta.id);
+    comanda.fechadaEm = new Date().toISOString();
+    comanda.atualizadaEm = comanda.fechadaEm;
+    if (comanda.tipo === 'fisica') sincronizarMesaComanda(req.empresaId, comanda.mesaNum);
+    save();
+    res.json({ ok: true, total, pagamentos, contasReceber, comanda: respostaComanda(comanda) });
+  });
+
 
   app.get('/api/admin/mesas/config', requerEditorCatalogo, (req, res) => {
     const store = mesasPersistidas(req.empresaId);

@@ -32,6 +32,16 @@ function ProtectedOutlet({ need }) {
   return dest ? <Navigate to={dest} replace /> : <Outlet />
 }
 
+// A rota raiz é institucional apenas para visitantes. Uma sessão operacional
+// não pode permanecer na landing, especialmente em mobile: administradores vão
+// ao painel completo e colaboradores ao PDV.
+function EntradaPrincipal() {
+  const auth = useAuth()
+  if (auth.user && auth.isOrg) return <Navigate to="/admin" replace />
+  if (auth.user && auth.isStaff) return <Navigate to="/pdv" replace />
+  return <Layout marketing><Home /></Layout>
+}
+
 const Login      = lazy(() => import('./pages/Login'))
 const PDV        = lazy(() => import('./pages/PDV'))
 const KDS        = lazy(() => import('./pages/KDS'))
@@ -193,7 +203,7 @@ export default function App() {
         <Route path="/meu-painel"  element={<Layout><MeuPainel /></Layout>} />
 
         {/* Público */}
-        <Route path="/"            element={<Layout marketing><Home /></Layout>} />
+        <Route path="/"            element={<EntradaPrincipal />} />
         <Route path="/inscricao"  element={<Layout><Inscricao /></Layout>} />
         <Route path="/ranking"    element={<Layout><Ranking /></Layout>} />
         <Route path="/loja"       element={<Layout><Loja /></Layout>} />

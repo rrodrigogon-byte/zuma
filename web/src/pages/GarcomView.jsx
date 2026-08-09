@@ -167,8 +167,10 @@ export default function GarcomView() {
   const [cart, setCart] = useState([])  // [{ prod, qty, obs }]
   const [obsAberta, setObsAberta] = useState(null) // id do prod com obs expandida
 
-  /* ── nova comanda ── */
+  /* ── nova comanda / lançamento em conta ── */
   const [nomeMesa, setNomeMesa] = useState('')
+  const [clientesConta, setClientesConta] = useState([])
+  const [clienteContaId, setClienteContaId] = useState('')
 
   /* ── loaders ── */
   const loadMesas = useCallback(async (quiet = false) => {
@@ -185,6 +187,15 @@ export default function GarcomView() {
     } catch { /* silencioso */ }
   }, [])
 
+  const loadClientesConta = useCallback(async () => {
+    try {
+      const data = await api.get('/api/admin/clientes')
+      const elegiveis = (data?.clientes || []).filter(cliente => !cliente.padrao && cliente.status !== 'deletado')
+      setClientesConta(elegiveis)
+      setClienteContaId(atual => atual && elegiveis.some(cliente => cliente.id === atual) ? atual : (elegiveis[0]?.id || ''))
+    } catch { setClientesConta([]) }
+  }, [])
+
   const loadComanda = useCallback(async (id) => {
     if (!id) return
     try { setComanda(await api.get(`/api/comanda/${id}`)) }
@@ -194,9 +205,10 @@ export default function GarcomView() {
   useEffect(() => {
     loadMesas()
     loadCardapio()
+    loadClientesConta()
     autoRef.current = setInterval(() => loadMesas(true), 15000)
     return () => clearInterval(autoRef.current)
-  }, [loadMesas, loadCardapio])
+  }, [loadMesas, loadCardapio, loadClientesConta])
 
   /* ── dados derivados ── */
   const abertas  = useMemo(() => [...(mesas.fisicas || []), ...(mesas.virtuais || [])].filter(m => m.status !== 'livre'), [mesas])
@@ -297,12 +309,13 @@ export default function GarcomView() {
   }
 
   /* ── encerrar comanda (fecha + registra pagamento) ── */
-  const encerrarComanda = async (meio) => {
+  const encerrarComanda = async (meio, clienteId = '') => {
     if (!sheet?.id) return
     setLoading(true)
     try {
-      const r = await api.post(`/api/comanda/${sheet.id}/pagar`, { meio })
-      toast(`✓ Comanda encerrada · ${fmtR(r.total || 0)}`)
+      const r = await api.post(`/api/comanda/${sheet.id}/pagar`, { meio, ...(clienteId ? { clienteId } : {}) })
+      const emConta = meio === 'conta'
+      toast(emConta ? `✓ Lançado em conta · ${fmtR(r.total || 0)}` : `✓ Comanda encerrada · ${fmtR(r.total || 0)}`)
       fechar()
       await loadMesas(true)
     } catch (e) { toast(e.message || 'Erro ao encerrar comanda', true) }
@@ -850,16 +863,17 @@ export default function GarcomView() {
                 <span style={{ color: '#FF6B2C', fontWeight: 900, fontSize: 26 }}>{fmtR(comanda.total || 0)}</span>
               </div>
               <div style={{ fontSize: 12, color: '#62839A', fontWeight: 700, marginBottom: 8 }}>FORMA DE PAGAMENTO</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 {[
                   { meio: 'dinheiro', label: 'Dinheiro', emoji: '💵' },
                   { meio: 'pix',      label: 'Pix',      emoji: '📱' },
                   { meio: 'cartao',   label: 'Cartão',   emoji: '💳' },
+                  { meio: 'conta',    label: 'Na conta', emoji: '📒' },
                 ].map(m => (
                   <button key={m.meio}
-                    onClick={() => encerrarComanda(m.meio)}
+                    onClick={() => m.meio === 'conta' ? setOverlay('conta-cliente') : encerrarComanda(m.meio)}
                     disabled={loading}
-                    style={{ padding: '16px 0', borderRadius: 12, border: '1.5px solid #3A6687', background: '#17354F', color: '#FF9B72', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 13, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                    style={{ padding: '16px 0', borderRadius: 12, border: '1.5px solid #3A6687', background: m.meio === 'conta' ? '#3a2800' : '#17354F', color: '#FF9B72', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 13, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                     <span style={{ fontSize: 24 }}>{m.emoji}</span>
                     {m.label}
                   </button>
@@ -871,6 +885,57 @@ export default function GarcomView() {
                 onClick={() => setOverlay('comanda')}
                 style={{ flex: 1, padding: '12px 0', borderRadius: 12, border: '1.5px solid #294F6C', background: 'transparent', color: '#aaa', cursor: 'pointer', fontWeight: 700 }}>
                 ← Voltar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Overlay: lançamento em conta de cliente ── */}
+      {overlay === 'conta-cliente' && sheet && comanda && (
+        <div style={S.overlay} onClick={() => setOverlay('encerrar')}>
+          <div style={{ ...S.sheet, maxHeight: 'auto' }} onClick={e => e.stopPropagation()}>
+            <div style={S.sheetHandle} />
+            <div style={S.sheetHeader}>
+              <div>
+                <div style={S.sheetTitle}>📒 Lançar em conta</div>
+                <div style={{ fontSize: 11, opacity: .55, marginTop: 2 }}>A pendência será criada em Contas a Receber.</div>
+              </div>
+              <button style={S.sheetClose} onClick={() => setOverlay('encerrar')}>✕</button>
+            </div>
+            <div style={{ padding: '16px 18px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14, fontWeight: 800 }}>
+                <span style={{ color: '#FF9B72' }}>Total da comanda</span>
+                <span style={{ color: '#FF6B2C', fontSize: 18 }}>{fmtR(comanda.total || 0)}</span>
+              </div>
+              {clientesConta.length ? (
+                <>
+                  <label style={{ display: 'block', fontSize: 11, color: '#62839A', fontWeight: 700, marginBottom: 6 }}>CLIENTE CADASTRADO</label>
+                  <select
+                    value={clienteContaId}
+                    onChange={e => setClienteContaId(e.target.value)}
+                    style={{ ...S.input, cursor: 'pointer' }}
+                  >
+                    {clientesConta.map(cliente => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}
+                  </select>
+                  <div style={{ marginTop: 10, color: '#FF9B72', fontSize: 11, lineHeight: 1.45 }}>
+                    O valor ficará pendente no cadastro do cliente e poderá ser acompanhado em Contas a Receber.
+                  </div>
+                </>
+              ) : (
+                <div style={{ background: '#3a2800', border: '1px solid #FF6B2C', borderRadius: 10, padding: 12, color: '#FF9B72', fontSize: 13 }}>
+                  Cadastre primeiro um cliente nominal em Cadastros Mestres para lançar uma venda em conta.
+                </div>
+              )}
+            </div>
+            <div style={S.sheetActions}>
+              <button onClick={() => setOverlay('encerrar')} style={{ flex: 1, padding: '12px 0', borderRadius: 12, border: '1.5px solid #294F6C', background: 'transparent', color: '#aaa', cursor: 'pointer', fontWeight: 700 }}>← Voltar</button>
+              <button
+                onClick={() => encerrarComanda('conta', clienteContaId)}
+                disabled={loading || !clienteContaId}
+                style={{ flex: 2, padding: '12px 0', borderRadius: 12, border: 'none', background: clienteContaId ? '#FF6B2C' : '#12283F', color: clienteContaId ? '#fff' : '#555', cursor: clienteContaId ? 'pointer' : 'not-allowed', fontWeight: 800 }}
+              >
+                📒 Confirmar em conta
               </button>
             </div>
           </div>
