@@ -784,8 +784,10 @@ export default function PDV() {
     }
     setLoading(true)
     try {
-      // Se há múltiplos meios registrados, envia todos; senão envia o único selecionado
+      // Se há múltiplos meios registrados, envia todos; senão envia o único selecionado.
+      // Quando ainda existir saldo, registra somente a parcela e mantém a comanda em conta.
       const cpf = cpfNota.replace(/\D/g, '') || undefined
+      const registrarParcial = multiPag.length > 0 && restanteMultiPag > 0.01
       const payload = multiPag.length > 0 && restanteMultiPag < 0.01
         ? {
             meios: multiPag,
@@ -805,7 +807,19 @@ export default function PDV() {
             tef: tefResult || undefined,
             cpf,
           }
-      await api.post(`/api/comanda/${comanda.id}/pagar`, payload)
+      const resposta = registrarParcial
+        ? await api.post(`/api/comanda/${comanda.id}/pagamento-parcial`, { ...payload, meios: multiPag, totalFinal })
+        : await api.post(`/api/comanda/${comanda.id}/pagar`, payload)
+      if (registrarParcial && !resposta.quitada) {
+        toast(`Parcela registrada. Saldo pendente: ${fmtR(resposta.saldoPendente)}`, 'success')
+        setComanda(resposta.comanda)
+        setMultiPag([])
+        setMultiPagValor('')
+        setOverlay(null)
+        await loadMesas()
+        await loadCaixaHoje()
+        return
+      }
       toast(tefResult
         ? `Pago na maquininha ✓ NSU ${tefResult.nsu}${tefResult.simulado ? ' (simulado)' : ''}`
         : 'Pagamento registrado! ✓', 'success')
@@ -1842,7 +1856,9 @@ export default function PDV() {
               style={{ width: '100%', marginTop: 14, fontSize: 15 }}
               onClick={pagar}
               disabled={loading || tefProcessando || (payMeio === 'conta' && multiPag.length === 0 && !clienteContaId) || (payMeio === 'dinheiro' && multiPag.length === 0 && valorRecebido && trocoVal < 0)}>
-              {tefProcessando ? '💳 Aguardando maquininha…' : loading ? 'Processando...' : multiPag.length > 0 && restanteMultiPag < 0.01
+              {tefProcessando ? '💳 Aguardando maquininha…' : loading ? 'Processando...' : multiPag.length > 0 && restanteMultiPag > 0.01
+                ? `Registrar parcela — saldo ${fmtR(restanteMultiPag)}`
+                : multiPag.length > 0
                 ? `✅ Confirmar — Pago (${fmtR(totalFinal)})`
                 : `Confirmar — ${PAY_OPTIONS.find(o => o.key === payMeio)?.label}${dividir > 1 ? ` (${fmtR(totalFinal / dividir)}/pessoa)` : ''}`
               }

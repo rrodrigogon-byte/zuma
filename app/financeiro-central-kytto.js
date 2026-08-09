@@ -205,7 +205,7 @@ export function registrarVendaComanda(empresaId, { comanda, pagamentos = [], con
       },
       usuario,
       automatico: true,
-      chaveIdempotencia: `comanda:${comanda.id}:pagamento:${indice}`,
+      chaveIdempotencia: `comanda:${comanda.id}:pagamento:${pagamento?.id || indice}`,
     }));
   });
   return registros;

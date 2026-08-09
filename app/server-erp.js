@@ -24,7 +24,7 @@ import * as fiscalKytto from './fiscal-kytto.js';
 import { OAuth2Client } from 'google-auth-library';
 import bcrypt from 'bcryptjs';
 import * as cadastrosMestres from './cadastros-mestres-kytto.js';
-import { pagamentosPix } from './pagamentos-pix-kytto.js';
+import { pagamentosPix, listarProvedoresPagamento } from './pagamentos-pix-kytto.js';
 import { gerarRelatorioOperacional } from './relatorios-operacionais-kytto.js';
 import * as canaisKytto from './canais-fidelidade-kytto.js';
 import * as financeiroKytto from './financeiro-central-kytto.js';
@@ -2116,6 +2116,10 @@ async function iniciar() {
     }
   })
 
+  app.get('/api/admin/pagamentos/provedores', requerEditorCatalogo, (req, res) => {
+    res.json({ ok: true, provedores: listarProvedoresPagamento() });
+  })
+
   app.post('/api/admin/pagamentos/adquirentes', requerEditorCatalogo, (req, res) => {
     try {
       const adquirente = pagamentosPix.registrarAdquirente(req.empresaId, req.body)
@@ -2142,11 +2146,51 @@ async function iniciar() {
     }
   })
 
+  app.patch('/api/admin/pagamentos/adquirentes/:adquirenteId', requerEditorCatalogo, (req, res) => {
+    try {
+      const adquirente = pagamentosPix.atualizarAdquirente(req.empresaId, req.params.adquirenteId, req.body || {})
+      res.json({ ok: true, adquirente })
+    } catch (error) {
+      res.status(400).json({ erro: error.message })
+    }
+  })
+
+  app.post('/api/admin/pagamentos/adquirentes/:adquirenteId/homologar', requerEditorCatalogo, (req, res) => {
+    try {
+      const adquirente = pagamentosPix.prepararHomologacaoAdquirente(req.empresaId, req.params.adquirenteId)
+      const baseUrl = `${req.protocol}://${req.get('host')}`
+      res.json({
+        ok: true,
+        adquirente,
+        webhookUrl: `${baseUrl}/api/webhooks/pagamentos/${encodeURIComponent(adquirente.tipo)}`,
+        mensagem: 'Homologação preparada. Configure a URL de webhook no portal do provedor e envie uma transação de ambiente de homologação.',
+      })
+    } catch (error) {
+      res.status(400).json({ erro: error.message })
+    }
+  })
+
   app.get('/api/admin/pagamentos/mercadopago/config', requerEditorCatalogo, (req, res) => {
     try {
       res.json({ ok: true, config: pagamentosPix.obterConfigMercadoPago(req.empresaId) })
     } catch (error) {
       res.status(400).json({ erro: error.message })
+    }
+  })
+
+  // Webhook público: a assinatura HMAC é obrigatória e as credenciais nunca são expostas.
+  // O identificador da empresa é aceito apenas para localizar o cofre correto; sem uma
+  // assinatura válida, nenhuma alteração de transação é permitida.
+  app.post('/api/webhooks/pagamentos/:tipo', (req, res) => {
+    try {
+      const empresaId = String(req.query?.empresaId || req.get('X-Loja-Id') || '').trim()
+      if (!empresaId) return res.status(400).json({ erro: 'Empresa do webhook é obrigatória.' })
+      const assinatura = req.get('X-Kytto-Signature') || req.get('X-Signature') || ''
+      const resultado = pagamentosPix.processarWebhookAdquirente(empresaId, req.params.tipo, req.body || {}, assinatura)
+      res.status(200).json({ ok: true, recebido: true, status: resultado.status, transacaoId: resultado.transacao?.id || null })
+    } catch (error) {
+      console.warn('[PAGAMENTOS] Webhook rejeitado:', error.message)
+      res.status(401).json({ erro: 'Webhook rejeitado.' })
     }
   })
 
@@ -2683,10 +2727,85 @@ async function iniciar() {
     }
   });
 
+  // Registra uma ou mais parcelas sem exigir a quitação integral. A venda somente
+  // entra no faturamento canônico após o saldo ser totalmente quitado.
+  app.post('/api/comanda/:id/pagamento-parcial', requerOperacaoComanda, (req, res) => {
+    try {
+      const comanda = obterComandaOperacional(req.empresaId, req.params.id, { ativa: true });
+      if (!comanda) return res.status(404).json({ erro: 'Comanda não encontrada ou já encerrada.' });
+      if (!(comanda.itens || []).length) return res.status(400).json({ erro: 'Não é possível registrar pagamento em comanda sem itens.' });
+
+      const subtotal = totalComanda(comanda);
+      const totalFinal = comanda.totalFinal !== undefined
+        ? Number(comanda.totalFinal)
+        : Number((req.body?.totalFinal !== undefined ? Number(req.body.totalFinal) : subtotal).toFixed(2));
+      if (!Number.isFinite(totalFinal) || totalFinal < 0) return res.status(400).json({ erro: 'Total final inválido.' });
+
+      const pagamentosEnviados = Array.isArray(req.body?.meios) && req.body.meios.length
+        ? req.body.meios
+        : [{ meio: req.body?.meio || 'dinheiro', valor: req.body?.valor }];
+      const permitidos = new Set(['dinheiro', 'pix', 'cartao', 'credito', 'debito', 'tef', 'carteira', 'conta']);
+      const novasParcelas = pagamentosEnviados.map((pagamento, indice) => ({
+        id: `pag-${Date.now().toString(36)}-${String(indice + 1).padStart(2, '0')}`,
+        meio: String(pagamento?.meio || 'dinheiro').toLowerCase(),
+        valor: Number(pagamento?.valor),
+        responsavel: String(pagamento?.responsavel || req.body?.responsavel || '').trim().slice(0, 120) || null,
+        registradoEm: new Date().toISOString(),
+      }));
+      if (novasParcelas.some((pagamento) => !permitidos.has(pagamento.meio) || !Number.isFinite(pagamento.valor) || pagamento.valor <= 0)) {
+        return res.status(400).json({ erro: 'Informe pelo menos uma parcela com meio e valor válidos.' });
+      }
+
+      const pagamentosAnteriores = Array.isArray(comanda.pagamentos) ? comanda.pagamentos : [];
+      const totalAnterior = Number(pagamentosAnteriores.reduce((soma, pagamento) => soma + Number(pagamento.valor || 0), 0).toFixed(2));
+      const valorDaParcela = Number(novasParcelas.reduce((soma, pagamento) => soma + pagamento.valor, 0).toFixed(2));
+      const saldoAnterior = Number(Math.max(0, totalFinal - totalAnterior).toFixed(2));
+      if (valorDaParcela - saldoAnterior > 0.02) return res.status(400).json({ erro: `A parcela excede o saldo pendente de ${saldoAnterior.toFixed(2)}.` });
+
+      const contasReceber = [];
+      for (const pagamento of novasParcelas.filter((item) => item.meio === 'conta')) {
+        const cliente = selecionarClienteConta(req.empresaId, req.body?.clienteId, comanda.nome);
+        if (!cliente || cliente.padrao) return res.status(400).json({ erro: 'Para lançar em conta, selecione um cliente cadastrado da empresa ativa.' });
+        const conta = clientesKytto.criarContaReceber(req.empresaId, {
+          clienteId: cliente.id,
+          descricao: `Comanda ${comanda.id} — parcela ${pagamento.responsavel || 'em conta'}`,
+          valor: pagamento.valor,
+          dataVencimento: req.body?.dataVencimento || dataVencimentoPadrao(cliente.diasVencimento),
+          origem: 'comanda', referenciaId: comanda.id,
+        });
+        contasReceber.push(conta);
+      }
+
+      const dataOperacao = req.body?.dataOperacao ? new Date(req.body.dataOperacao) : new Date();
+      if (Number.isNaN(dataOperacao.valueOf())) return res.status(400).json({ erro: 'Data operacional inválida.' });
+      comanda.totalFinal = totalFinal;
+      comanda.pagamentos = [...pagamentosAnteriores, ...novasParcelas];
+      comanda.totalPago = Number((totalAnterior + valorDaParcela).toFixed(2));
+      comanda.saldoPendente = Number(Math.max(0, totalFinal - comanda.totalPago).toFixed(2));
+      comanda.contasReceberIds = [...new Set([...(comanda.contasReceberIds || []), ...contasReceber.map((conta) => conta.id)])];
+      comanda.pagamento = comanda.pagamentos[0]?.meio || null;
+      comanda.atualizadaEm = dataOperacao.toISOString();
+      const quitada = comanda.saldoPendente <= 0.02;
+      comanda.status = quitada ? 'fechada' : 'conta';
+      comanda.contaPedida = !quitada;
+      if (quitada) comanda.fechadaEm = dataOperacao.toISOString();
+
+      const lancamentosFinanceiros = financeiroKytto.registrarVendaComanda(req.empresaId, {
+        comanda, pagamentos: novasParcelas, contasReceber, usuario: req.usuario?.email, dataOperacao: comanda.atualizadaEm,
+      });
+      if (comanda.tipo === 'fisica') sincronizarMesaComanda(req.empresaId, comanda.mesaNum);
+      save();
+      res.json({ ok: true, quitada, totalFinal, totalPago: comanda.totalPago, saldoPendente: comanda.saldoPendente, novasParcelas, contasReceber, lancamentosFinanceiros, comanda: respostaComanda(comanda) });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
   app.post('/api/comanda/:id/pagar', requerOperacaoComanda, (req, res) => {
     const comanda = obterComandaOperacional(req.empresaId, req.params.id, { ativa: true });
     if (!comanda) return res.status(404).json({ erro: 'Comanda não encontrada ou já encerrada.' });
     if (!comanda.itens.length) return res.status(400).json({ erro: 'Não é possível fechar uma comanda sem itens.' });
+    if ((comanda.pagamentos || []).length > 0) return res.status(409).json({ erro: 'Esta comanda já possui parcelas. Use o fluxo de pagamento parcial para concluir o saldo pendente.' });
     const subtotal = totalComanda(comanda);
     const desconto = Math.max(0, Number(req.body?.desconto || 0));
     const descontoValor = desconto > 0 && desconto <= 100 ? Number((subtotal * (desconto / 100)).toFixed(2)) : Number(comanda.desconto || 0);

@@ -136,9 +136,10 @@ function ItemCard({ item, onStatusChange }) {
 }
 
 function CommandaGroup({ comanda, items, onStatusChange }) {
+  const mesaFormatada = String(comanda.mesa || '').trim() || (comanda.mesaNum ? `Mesa ${comanda.mesaNum}` : 'Atendimento')
   const title = comanda.tipo === 'virtual'
-    ? `${comanda.mesa} · ${comanda.local || ''}`
-    : `Mesa ${comanda.mesa}`
+    ? `${mesaFormatada}${comanda.local ? ` · ${comanda.local}` : ''}`
+    : mesaFormatada
 
   const allPronto = items.every(i => i.status === 'pronto')
 

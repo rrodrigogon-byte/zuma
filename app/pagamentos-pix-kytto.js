@@ -8,6 +8,24 @@
 import crypto from 'crypto'
 import { db, save } from './db.js'
 
+// Catálogo de provedores suportados pela central administrativa. As credenciais
+// são sempre segregadas por empresa e protegidas antes de persistir.
+export const PROVEDORES_PAGAMENTO = Object.freeze({
+  mercado_pago_point: { nome: 'Mercado Pago Point', categoria: 'pos', pix: true, presencial: true, homologacao: true },
+  mercado_pago: { nome: 'Mercado Pago', categoria: 'gateway', pix: true, presencial: true, homologacao: true },
+  stone: { nome: 'Stone', categoria: 'tef_pos', pix: true, presencial: true, homologacao: true },
+  rede: { nome: 'Rede (Itaú)', categoria: 'gateway_pos', pix: true, presencial: true, homologacao: true },
+  cielo: { nome: 'Cielo', categoria: 'gateway_pos', pix: true, presencial: true, homologacao: true },
+  getnet: { nome: 'Getnet', categoria: 'gateway_pos', pix: true, presencial: true, homologacao: true },
+  sicoob: { nome: 'Sicoob', categoria: 'pix', pix: true, presencial: false, homologacao: true },
+  sicredi: { nome: 'Sicredi', categoria: 'pix', pix: true, presencial: false, homologacao: true },
+  outro: { nome: 'Outro provedor', categoria: 'manual', pix: false, presencial: false, homologacao: false },
+})
+
+export function listarProvedoresPagamento() {
+  return Object.entries(PROVEDORES_PAGAMENTO).map(([id, dados]) => ({ id, ...dados }))
+}
+
 function paymentsMasterKey() {
   const raw = process.env.PAYMENTS_MASTER_KEY
   if (!raw || raw.length < 24) throw new Error('Cofre de pagamentos indisponível. A chave mestra não foi configurada.')
@@ -26,6 +44,24 @@ export function decryptPaymentSecret(payload) {
   const decipher = crypto.createDecipheriv('aes-256-gcm', paymentsMasterKey(), Buffer.from(payload.iv, 'base64'))
   decipher.setAuthTag(Buffer.from(payload.tag, 'base64'))
   return Buffer.concat([decipher.update(Buffer.from(payload.data, 'base64')), decipher.final()]).toString('utf8')
+}
+
+function serializarAdquirente(acq) {
+  return {
+    id: acq.id,
+    nome: acq.nome,
+    tipo: acq.tipo,
+    terminal: acq.terminal,
+    loja: acq.loja,
+    ambiente: acq.ambiente || 'homologacao',
+    ativa: acq.ativa !== false,
+    webhookConfigurado: Boolean(acq.webhookSecretProtegido),
+    credencialConfigurada: Boolean(acq.chavePrivadaProtegida),
+    statusHomologacao: acq.statusHomologacao || 'nao_iniciada',
+    ultimoTesteEm: acq.ultimoTesteEm || null,
+    criadaEm: acq.criadaEm,
+    atualizadaEm: acq.atualizadaEm,
+  }
 }
 
 export const pagamentosPix = {
@@ -105,6 +141,9 @@ export const pagamentosPix = {
     if (!empresaId || !config?.nome || !config?.tipo) {
       throw new Error('Empresa, nome e tipo de adquirente são obrigatórios')
     }
+    const tipo = String(config.tipo).toLowerCase()
+    if (!PROVEDORES_PAGAMENTO[tipo]) throw new Error('Provedor de pagamento não suportado.')
+    const ambiente = config.ambiente === 'producao' ? 'producao' : 'homologacao'
 
     const dados = db()
     if (!dados.pagamentos) dados.pagamentos = {}
@@ -114,20 +153,23 @@ export const pagamentosPix = {
     const novoAdquirente = {
       id: `acq-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       nome: config.nome,
-      tipo: config.tipo, // 'rede', 'cielo', 'stone', 'getnet'
+      tipo,
+      ambiente,
       chavePublica: config.chavePublica || '',
       chavePrivadaProtegida: config.chavePrivada ? encryptSecret(config.chavePrivada) : null,
+      webhookSecretProtegido: config.webhookSecret ? encryptSecret(config.webhookSecret) : null,
       terminal: config.terminal || '',
       loja: config.loja || '',
-      ativa: true,
+      ativa: config.ativa !== false,
+      statusHomologacao: config.chavePrivada ? 'aguardando_teste' : 'pendente_credenciais',
+      ultimoTesteEm: null,
       criadaEm: new Date().toISOString(),
       atualizadaEm: new Date().toISOString(),
     }
 
     dados.pagamentos[empresaId].adquirentes.push(novoAdquirente)
     save()
-    const { chavePrivadaProtegida, ...seguro } = novoAdquirente
-    return { ...seguro, credencialConfigurada: Boolean(chavePrivadaProtegida) }
+    return serializarAdquirente(novoAdquirente)
   },
 
   /**
@@ -135,15 +177,75 @@ export const pagamentosPix = {
    */
   listarAdquirentes(empresaId) {
     const dados = db()
-    return (dados.pagamentos?.[empresaId]?.adquirentes || []).map((acq) => ({
-      id: acq.id,
-      nome: acq.nome,
-      tipo: acq.tipo,
-      terminal: acq.terminal,
-      loja: acq.loja,
-      ativa: acq.ativa,
-      criadaEm: acq.criadaEm,
-    }))
+    return (dados.pagamentos?.[empresaId]?.adquirentes || []).map(serializarAdquirente)
+  },
+
+  atualizarAdquirente(empresaId, adquirenteId, dadosAtualizacao = {}) {
+    const dados = db()
+    const adquirente = dados.pagamentos?.[empresaId]?.adquirentes?.find((item) => item.id === adquirenteId)
+    if (!adquirente) throw new Error('Adquirente não encontrado.')
+    if (dadosAtualizacao.nome !== undefined) adquirente.nome = String(dadosAtualizacao.nome).trim().slice(0, 120) || adquirente.nome
+    if (dadosAtualizacao.terminal !== undefined) adquirente.terminal = String(dadosAtualizacao.terminal).trim().slice(0, 120)
+    if (dadosAtualizacao.loja !== undefined) adquirente.loja = String(dadosAtualizacao.loja).trim().slice(0, 120)
+    if (dadosAtualizacao.ativa !== undefined) adquirente.ativa = Boolean(dadosAtualizacao.ativa)
+    if (dadosAtualizacao.ambiente !== undefined) adquirente.ambiente = dadosAtualizacao.ambiente === 'producao' ? 'producao' : 'homologacao'
+    if (dadosAtualizacao.chavePublica !== undefined) adquirente.chavePublica = String(dadosAtualizacao.chavePublica || '').trim()
+    if (dadosAtualizacao.chavePrivada) {
+      adquirente.chavePrivadaProtegida = encryptSecret(dadosAtualizacao.chavePrivada)
+      adquirente.statusHomologacao = 'aguardando_teste'
+    }
+    if (dadosAtualizacao.webhookSecret) adquirente.webhookSecretProtegido = encryptSecret(dadosAtualizacao.webhookSecret)
+    adquirente.atualizadaEm = new Date().toISOString()
+    save()
+    return serializarAdquirente(adquirente)
+  },
+
+  prepararHomologacaoAdquirente(empresaId, adquirenteId) {
+    const dados = db()
+    const adquirente = dados.pagamentos?.[empresaId]?.adquirentes?.find((item) => item.id === adquirenteId)
+    if (!adquirente) throw new Error('Adquirente não encontrado.')
+    if (!adquirente?.chavePrivadaProtegida) throw new Error('Informe a credencial privada antes de iniciar a homologação.')
+    if (!adquirente?.webhookSecretProtegido) throw new Error('Configure a assinatura secreta do webhook antes de iniciar a homologação.')
+    adquirente.statusHomologacao = 'aguardando_webhook'
+    adquirente.ultimoTesteEm = new Date().toISOString()
+    adquirente.atualizadaEm = adquirente.ultimoTesteEm
+    save()
+    return serializarAdquirente(adquirente)
+  },
+
+  processarWebhookAdquirente(empresaId, tipo, payload, assinatura) {
+    const dados = db()
+    const adquirente = (dados.pagamentos?.[empresaId]?.adquirentes || []).find((item) => item.tipo === String(tipo).toLowerCase() && item.ativa !== false)
+    if (!adquirente) throw new Error('Adquirente ativo não encontrado para a empresa.')
+    if (!adquirente.webhookSecretProtegido) throw new Error('Webhook não configurado para este adquirente.')
+
+    const segredo = decryptPaymentSecret(adquirente.webhookSecretProtegido)
+    const esperado = crypto.createHmac('sha256', segredo).update(JSON.stringify(payload || {})).digest('hex')
+    const recebido = String(assinatura || '').replace(/^sha256=/i, '')
+    if (!recebido || recebido.length !== esperado.length || !crypto.timingSafeEqual(Buffer.from(recebido), Buffer.from(esperado))) {
+      throw new Error('Assinatura de webhook inválida.')
+    }
+
+    const referencia = String(payload?.referencia || payload?.reference || payload?.external_reference || payload?.transacaoId || '')
+    const statusRecebido = String(payload?.status || payload?.payment_status || '').toLowerCase()
+    const status = ['approved', 'aprovado', 'paid', 'pago'].includes(statusRecebido)
+      ? 'aprovado'
+      : ['rejected', 'recusado', 'denied'].includes(statusRecebido)
+        ? 'recusado'
+        : ['cancelled', 'cancelado'].includes(statusRecebido)
+          ? 'cancelado'
+          : 'pendente'
+    const transacao = (dados.pagamentos?.[empresaId]?.transacoes || []).find((item) => item.id === referencia || item.referencia === referencia)
+    if (transacao) {
+      transacao.status = status
+      transacao.atualizadaEm = new Date().toISOString()
+      transacao.metadadosAdquirente = { ...(transacao.metadadosAdquirente || {}), webhook: { tipo: adquirente.tipo, recebidoEm: transacao.atualizadaEm, evento: payload?.id || payload?.eventId || null } }
+    }
+    adquirente.statusHomologacao = 'webhook_validado'
+    adquirente.ultimoTesteEm = new Date().toISOString()
+    adquirente.atualizadaEm = adquirente.ultimoTesteEm
+    save()
+    return { adquirente: serializarAdquirente(adquirente), transacao: transacao ? { ...transacao } : null, status }
   },
 
   // ── TRANSAÇÕES DE PAGAMENTO ──────────────────────────────────────────
