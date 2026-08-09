@@ -2223,6 +2223,24 @@ async function iniciar() {
   });
 
   // Produção/KDS: filas de itens de cozinha e atualização de preparo.
+  app.get('/api/setores/pedidos', requerOperacaoComanda, (req, res) => {
+    const setorFiltro = String(req.query.setor || '').toLowerCase();
+    const pedidos = comandasDaEmpresa(req.empresaId)
+      .filter((comanda) => ['aberta', 'conta'].includes(comanda.status))
+      .map((comanda) => ({
+        comandaId: comanda.id,
+        mesa: comanda.mesa,
+        mesaNum: comanda.mesaNum,
+        cliente: comanda.nome,
+        abertaEm: comanda.abertaEm,
+        itens: (comanda.itens || []).map((item, indice) => ({ ...item, indice }))
+          .filter((item) => !setorFiltro || String(item.setor || 'bar').toLowerCase() === setorFiltro)
+          .filter((item) => ['novo', 'em_preparo', 'pronto'].includes(item.status)),
+      }))
+      .filter((pedido) => pedido.itens.length > 0);
+    res.json({ ok: true, pedidos, setorFiltro: setorFiltro || 'todos' });
+  });
+
   app.get('/api/kds/pedidos', requerOperacaoComanda, (req, res) => {
     const pedidos = comandasDaEmpresa(req.empresaId)
       .filter((comanda) => ['aberta', 'conta'].includes(comanda.status))
@@ -2274,6 +2292,54 @@ async function iniciar() {
     if (comanda.tipo === 'fisica') sincronizarMesaComanda(req.empresaId, comanda.mesaNum);
     save();
     res.json({ ok: true, comanda: respostaComanda(comanda) });
+  });
+
+  app.post('/api/comanda/:id/reabrir', requerEditorCatalogo, (req, res) => {
+    try {
+      const comanda = obterComandaOperacional(req.empresaId, req.params.id);
+      if (!comanda) return res.status(404).json({ erro: 'Comanda não encontrada.' });
+      if (comanda.status === 'aberta') return res.status(409).json({ erro: 'A comanda já está aberta.' });
+      if (!['fechada', 'conta'].includes(comanda.status)) return res.status(409).json({ erro: 'Apenas comandas fechadas ou em conta podem ser reabertas.' });
+      
+      const motivoReabertura = String(req.body?.motivo || 'Reabertura manual').trim().slice(0, 300);
+      const usuarioReabertura = req.usuario?.email || 'sistema';
+      
+      comanda.historicoReaberturas ||= [];
+      comanda.historicoReaberturas.push({
+        data: new Date().toISOString(),
+        usuario: usuarioReabertura,
+        motivo: motivoReabertura,
+        statusAnterior: comanda.status,
+      });
+      comanda.historicoReaberturas = comanda.historicoReaberturas.slice(-50);
+      
+      if (comanda.pagamentos && comanda.pagamentos.length > 0) {
+        const estoque = estoquePersistido(req.empresaId);
+        for (const item of comanda.itens || []) {
+          const ficha = estoque[item.produtoId];
+          if (ficha?.controlaEstoque === true) {
+            ficha.qtd = Number(ficha.qtd || 0) + Number(item.qtd || 0);
+            ficha.historico ||= [];
+            ficha.historico.push({ tipo: 'reversao_comanda_reabertura', qtd: item.qtd, saldoFinal: ficha.qtd, comandaId: comanda.id, ts: new Date().toISOString() });
+            ficha.historico = ficha.historico.slice(-100);
+          }
+        }
+      }
+      
+      comanda.status = 'aberta';
+      comanda.contaPedida = false;
+      comanda.pagamento = null;
+      comanda.pagamentos = [];
+      comanda.totalPago = 0;
+      comanda.contasReceberIds = [];
+      comanda.atualizadaEm = new Date().toISOString();
+      
+      if (comanda.tipo === 'fisica') sincronizarMesaComanda(req.empresaId, comanda.mesaNum);
+      save();
+      res.json({ ok: true, comanda: respostaComanda(comanda), mensagem: 'Comanda reaberта com sucesso. Estoque revertido.' });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
   });
 
   app.post('/api/comanda/:id/pagar', requerOperacaoComanda, (req, res) => {
