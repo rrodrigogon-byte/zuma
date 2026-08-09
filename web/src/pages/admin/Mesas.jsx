@@ -406,6 +406,8 @@ export default function Mesas() {
               {m.apelido && <div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>{m.apelido}</div>}
               {m.contaNome && <div style={{ fontSize:11, color:'#FFB703', marginTop:4 }}>👤 {m.contaNome}</div>}
               {m.total > 0 && <div style={{ fontSize:13, color:'var(--cream)', marginTop:6, fontWeight:700 }}>{fmtR(m.total)}</div>}
+              {m.bloqueadaPorReserva && <div style={{ fontSize:11, color:'#e05c5c', marginTop:5, fontWeight:800 }}>🔒 Reservada agora</div>}
+              {!m.bloqueadaPorReserva && m.proximaReserva && <div style={{ fontSize:11, color:'#FFB703', marginTop:5, fontWeight:800 }}>📅 Reserva {new Intl.DateTimeFormat('pt-BR', { hour:'2-digit', minute:'2-digit', timeZone:'America/Cuiaba' }).format(new Date(m.proximaReserva.inicioEm))}</div>}
               {m.aguardandoCozinha > 0 && (
                 <div style={{ fontSize:11, color:'var(--gold)', marginTop:4 }}>🍳 {m.aguardandoCozinha} item(s)</div>
               )}

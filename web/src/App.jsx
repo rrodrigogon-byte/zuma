@@ -71,6 +71,7 @@ const Estoque    = lazy(() => import('./pages/admin/Estoque'))
 const FichasTecnicas = lazy(() => import('./pages/admin/FichasTecnicas'))
 const ModificadoresCombos = lazy(() => import('./pages/admin/ModificadoresCombos'))
 const Mesas      = lazy(() => import('./pages/admin/Mesas'))
+const ReservasFilas = lazy(() => import('./pages/admin/ReservasFilas'))
 const Socios     = lazy(() => import('./pages/admin/Socios'))
 const Pagamentos = lazy(() => import('./pages/admin/Pagamentos'))
 const AdminLoja  = lazy(() => import('./pages/admin/AdminLoja'))
@@ -164,6 +165,7 @@ export default function App() {
           <Route path="/admin/fichas-tecnicas" element={<Layout><FichasTecnicas /></Layout>} />
           <Route path="/admin/modificadores-combos" element={<Layout><ModificadoresCombos /></Layout>} />
           <Route path="/admin/mesas"        element={<Layout><Mesas /></Layout>} />
+          <Route path="/admin/reservas"     element={<Layout><ReservasFilas /></Layout>} />
           <Route path="/admin/socios"       element={<Layout><Socios /></Layout>} />
           <Route path="/admin/pagamentos"   element={<Layout><Pagamentos /></Layout>} />
           <Route path="/admin/loja"         element={<Layout><AdminLoja /></Layout>} />

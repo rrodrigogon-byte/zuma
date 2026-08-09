@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+const baseUrl = process.env.BASE_URL || 'http://127.0.0.1:3107'; const email = process.env.TEST_ADMIN_EMAIL || 'admin@setpoint-ultra.local'; const senha = process.env.TEST_ADMIN_SENHA || 'SetPoint@2026Temp';
+async function request(path, { method = 'GET', token, body, aceitarErro = false } = {}) { const resposta = await fetch(`${baseUrl}${path}`, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) }); const dados = await resposta.json().catch(() => ({})); if (!resposta.ok && !aceitarErro) throw new Error(`${method} ${path}: ${dados.erro || resposta.status}`); return { resposta, dados }; }
+const login = await request('/api/auth/login', { method: 'POST', body: { email, senha } }); const token = login.dados.token || login.dados.accessToken; assert.ok(token);
+await request('/api/admin/mesas/config', { method: 'POST', token, body: { mesasFisicas: 2 } });
+const criada = await request('/api/admin/reservas', { method: 'POST', token, body: { clienteNome: 'Reserva API', telefone: '65999999999', pessoas: 4, mesaNum: 1, inicioEm: '2026-08-20T19:00', duracaoMinutos: 120 } }); const reserva = criada.dados.reserva; assert.ok(reserva.id);
+const conflito = await request('/api/admin/reservas', { method: 'POST', token, aceitarErro: true, body: { clienteNome: 'Conflito', pessoas: 2, mesaNum: 1, inicioEm: '2026-08-20T20:00', duracaoMinutos: 60 } }); assert.equal(conflito.resposta.status, 422);
+const visao = await request('/api/admin/reservas/visao?data=2026-08-20', { token }); assert.equal(visao.dados.ocupacao.porMesa['1'].length, 1);
+await request(`/api/admin/reservas/${reserva.id}/status`, { method: 'POST', token, body: { status: 'no_show' } }); const indicadores = await request('/api/admin/reservas/indicadores?data=2026-08-20', { token }); assert.equal(indicadores.dados.indicadores.noShows, 1);
+const fila = await request('/api/admin/fila-espera', { method: 'POST', token, body: { clienteNome: 'Fila API', pessoas: 3, previsaoMinutos: 25 } }); const senhaFila = fila.dados.item; assert.ok(senhaFila.id);
+const chamada = await request(`/api/admin/fila-espera/${senhaFila.id}/chamar`, { method: 'POST', token, body: { mesaNum: 2 } }); assert.equal(chamada.dados.item.status, 'chamado'); assert.match(chamada.dados.notificacao, /sem disparo externo/);
+const finalizada = await request(`/api/admin/fila-espera/${senhaFila.id}/finalizar`, { method: 'POST', token, body: { status: 'atendido' } }); assert.equal(finalizada.dados.item.status, 'atendido');
+console.log('✓ Integração reserva → conflito → no-show → ocupação → fila → chamada validada');

@@ -26,6 +26,7 @@ import * as tributacaoKytto from './tributacao-kytto.js';
 import * as fiscalXmlKytto from './fiscal-xml-kytto.js';
 import { gerarRepresentacaoAuxiliarNfce } from './representacao-fiscal-kytto.js';
 import * as modificadoresCombosKytto from './modificadores-combos-kytto.js';
+import * as reservasKytto from './reservas-kytto.js';
 import { OAuth2Client } from 'google-auth-library';
 import bcrypt from 'bcryptjs';
 import * as cadastrosMestres from './cadastros-mestres-kytto.js';
@@ -3040,13 +3041,22 @@ async function iniciar() {
   }
 
   function listarMesasOperacionais(empresaId) {
+    const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' }).format(new Date());
+    const reservasDaData = reservasKytto.ocupacaoPrevista(empresaId, hoje).porMesa;
+    const agora = Date.now();
     const fisicas = listarMesasFisicas(empresaId).map((mesa) => {
       const comanda = comandaAtivaDaMesa(empresaId, mesa.num);
+      const reservas = reservasDaData[mesa.num] || [];
+      const proximaReserva = reservas.find((reserva) => new Date(reserva.fimEm).valueOf() >= agora) || null;
+      const reservaAtiva = reservas.find((reserva) => new Date(reserva.inicioEm).valueOf() <= agora && new Date(reserva.fimEm).valueOf() >= agora) || null;
       return {
         ...mesa,
         status: !comanda ? 'livre' : comanda.status === 'conta' ? 'conta' : 'ocupada',
         comandaId: comanda?.id || null,
         total: comanda ? totalComanda(comanda) : 0,
+        reservaAtiva,
+        proximaReserva,
+        bloqueadaPorReserva: Boolean(reservaAtiva && !comanda),
         aguardandoCozinha: comanda ? (comanda.itens || []).filter((item) => item.cozinha && ['novo', 'em_preparo', 'pronto'].includes(item.status)).length : 0,
       };
     });
@@ -3181,6 +3191,46 @@ async function iniciar() {
     }
     res.status(404).json({ erro: 'Pedido público não encontrado na empresa ativa.' });
   });
+
+  function validarMesaReserva(empresaId, mesaNum) {
+    if (mesaNum === null || mesaNum === undefined || mesaNum === '') return;
+    const mesa = mesasPersistidas(empresaId).fisicas[Number(mesaNum)];
+    if (!mesa || mesa.ativa === false) throw new Error('Mesa de reserva não encontrada ou inativa.');
+  }
+
+  app.get('/api/admin/reservas/config', requerEditorCatalogo, (req, res) => res.json({ ok: true, configuracao: reservasKytto.configuracaoReservas(req.empresaId) }));
+  app.patch('/api/admin/reservas/config', requerEditorCatalogo, (req, res) => {
+    try { const configuracao = reservasKytto.atualizarConfiguracaoReservas(req.empresaId, req.body || {}); save(); res.json({ ok: true, configuracao }); }
+    catch (erro) { res.status(422).json({ erro: erro.message }); }
+  });
+  app.get('/api/admin/reservas', requerOperacaoComanda, (req, res) => res.json({ ok: true, reservas: reservasKytto.listarReservas(req.empresaId, req.query || {}) }));
+  app.get('/api/admin/reservas/visao', requerOperacaoComanda, (req, res) => res.json({ ok: true, ocupacao: reservasKytto.ocupacaoPrevista(req.empresaId, req.query?.data) }));
+  app.post('/api/admin/reservas', requerOperacaoComanda, (req, res) => {
+    try { validarMesaReserva(req.empresaId, req.body?.mesaNum); const reserva = reservasKytto.criarReserva(req.empresaId, req.body || {}, req.usuario?.email); save(); res.status(201).json({ ok: true, reserva }); }
+    catch (erro) { res.status(422).json({ erro: erro.message }); }
+  });
+  app.patch('/api/admin/reservas/:id', requerOperacaoComanda, (req, res) => {
+    try { validarMesaReserva(req.empresaId, req.body?.mesaNum); const reserva = reservasKytto.atualizarReserva(req.empresaId, req.params.id, req.body || {}, req.usuario?.email); if (!reserva) return res.status(404).json({ erro: 'Reserva não encontrada na empresa ativa.' }); save(); res.json({ ok: true, reserva }); }
+    catch (erro) { res.status(422).json({ erro: erro.message }); }
+  });
+  app.post('/api/admin/reservas/:id/status', requerOperacaoComanda, (req, res) => {
+    try { const reserva = reservasKytto.alterarStatusReserva(req.empresaId, req.params.id, String(req.body?.status || ''), req.usuario?.email); if (!reserva) return res.status(404).json({ erro: 'Reserva não encontrada na empresa ativa.' }); save(); res.json({ ok: true, reserva }); }
+    catch (erro) { res.status(422).json({ erro: erro.message }); }
+  });
+  app.get('/api/admin/fila-espera', requerOperacaoComanda, (req, res) => res.json({ ok: true, fila: reservasKytto.listarFila(req.empresaId, { incluirFinalizados: String(req.query?.historico || '') === '1' }) }));
+  app.post('/api/admin/fila-espera', requerOperacaoComanda, (req, res) => {
+    try { const item = reservasKytto.adicionarFila(req.empresaId, req.body || {}, req.usuario?.email); save(); res.status(201).json({ ok: true, item }); }
+    catch (erro) { res.status(422).json({ erro: erro.message }); }
+  });
+  app.post('/api/admin/fila-espera/:id/chamar', requerOperacaoComanda, (req, res) => {
+    try { validarMesaReserva(req.empresaId, req.body?.mesaNum); const item = reservasKytto.chamarFila(req.empresaId, req.params.id, req.body?.mesaNum, req.usuario?.email); if (!item) return res.status(404).json({ erro: 'Senha não encontrada na empresa ativa.' }); save(); res.json({ ok: true, item, notificacao: 'Notificação registrada para envio pelo canal configurado; sem disparo externo enquanto não houver credenciais de mensageria.' }); }
+    catch (erro) { res.status(422).json({ erro: erro.message }); }
+  });
+  app.post('/api/admin/fila-espera/:id/finalizar', requerOperacaoComanda, (req, res) => {
+    try { const item = reservasKytto.finalizarFila(req.empresaId, req.params.id, String(req.body?.status || ''), req.usuario?.email); if (!item) return res.status(404).json({ erro: 'Senha não encontrada na empresa ativa.' }); save(); res.json({ ok: true, item }); }
+    catch (erro) { res.status(422).json({ erro: erro.message }); }
+  });
+  app.get('/api/admin/reservas/indicadores', requerEditorCatalogo, (req, res) => res.json({ ok: true, indicadores: reservasKytto.ocupacaoPrevista(req.empresaId, req.query?.data) }));
 
   app.get('/api/mesas', requerOperacaoComanda, (req, res) => {
     res.json(listarMesasOperacionais(req.empresaId));

@@ -86,6 +86,7 @@ const NAV_ADMIN_GROUPS = [
     label: 'Bar & PDV',
     items: [
       { to: '/admin/mesas',    icon: '🪑', label: 'Mesas' },
+      { to: '/admin/reservas', icon: '📅', label: 'Reservas & Fila' },
       { to: '/admin/cardapio', icon: '🍽️', label: 'Cardápio' },
       { to: '/admin/estoque',  icon: '📦', label: 'Estoque' },
       { to: '/admin/fichas-tecnicas', icon: '🧪', label: 'Fichas Técnicas' },
