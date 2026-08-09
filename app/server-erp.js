@@ -1708,6 +1708,41 @@ async function iniciar() {
     }
   });
 
+  // ── ENDPOINT ESPECIAL: CRIAR USUÁRIO ADMINISTRATIVO (BOOTSTRAP) ────────────
+  app.post('/api/admin/bootstrap/usuario-admin', (req, res) => {
+    try {
+      const senhaBootstrap = String(req.body?.senhaBootstrap || '');
+      if (senhaBootstrap !== 'bootstrap-kytto-2026') {
+        return res.status(403).json({ erro: 'Chave de bootstrap inválida.' });
+      }
+      const email = String(req.body?.email || '').toLowerCase().trim();
+      const senha = String(req.body?.senha || '');
+      if (!email || !senha || senha.length < 8) {
+        return res.status(400).json({ erro: 'Email e senha (mín. 8 caracteres) são obrigatórios.' });
+      }
+      const usuarioExistente = Object.values(cadastrosMestres.listarUsuarios('emp-kytto-001')).find((u) => u.email === email);
+      if (usuarioExistente) {
+        return res.status(409).json({ erro: 'Usuário com este email já existe.' });
+      }
+      const usuario = cadastrosMestres.criarUsuario('emp-kytto-001', {
+        nome: String(req.body?.nome || email.split('@')[0]),
+        email,
+        senhaHash: hashPassword(senha),
+        roles: ['administrador'],
+        tipoUsuario: 'administrador',
+        perfis: ['administrador'],
+        platformAdmin: true,
+        empresasAcessiveis: ['emp-kytto-001'],
+      });
+      espelharUsuarioEmMemoria(usuario);
+      save();
+      const { senhaHash, ...resposta } = usuario;
+      res.status(201).json({ ok: true, usuario: resposta, mensagem: 'Usuário administrativo criado com sucesso.' });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
   // ── GESTÃO DE EMPRESAS (SOMENTE ADMINISTRADOR DA PLATAFORMA) ────────────
   app.get('/api/admin/plataforma/empresas', requerAdministradorPlataforma, (req, res) => {
     res.json({ ok: true, empresas: cadastrosMestres.listarEmpresas({ incluirInativas: true }) });
