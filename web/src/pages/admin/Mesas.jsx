@@ -62,19 +62,25 @@ export default function Mesas() {
   const [mesaModal, setMesaModal]   = useState(null)
   const [mesaForm, setMesaForm]     = useState({ numero:'', nome:'', apelido:'', contaNome:'', contaId:'', observacao:'' })
   const [salvandoMesa, setSalvandoMesa] = useState(false)
+  const [qrModal, setQrModal] = useState(null)
+  const [qrLoading, setQrLoading] = useState(false)
+  const [pedidoPublicoConfig, setPedidoPublicoConfig] = useState({ confirmarGarcom: false, minutosSessao: 120, limiteItensPorPedido: 20 })
+  const [salvandoPedidoPublico, setSalvandoPedidoPublico] = useState(false)
   const autoRef = useRef(null)
 
   /* ── Load ── */
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true)
     try {
-      const [mesas, cfg] = await Promise.all([
+      const [mesas, cfg, pedidoPublico] = await Promise.all([
         api.get('/api/mesas'),
         api.get('/api/admin/mesas/config'),
+        api.get('/api/admin/pedidos-publicos/config'),
       ])
       setFisicas(mesas.fisicas || [])
       setVirtuais(mesas.virtuais || [])
       setConfig(cfg)
+      setPedidoPublicoConfig(pedidoPublico?.configuracao || { confirmarGarcom: false, minutosSessao: 120, limiteItensPorPedido: 20 })
       setCfgEdit(String(cfg.mesasFisicas ?? ''))
       setLastUpdate(Date.now())
     } catch {
@@ -101,6 +107,35 @@ export default function Mesas() {
       toast('Configuração salva'); load()
     } catch { toast('Erro ao salvar configuração', true) }
     finally { setSavingCfg(false) }
+  }
+
+  async function salvarPedidoPublico() {
+    setSalvandoPedidoPublico(true)
+    try {
+      const resposta = await api.patch('/api/admin/pedidos-publicos/config', pedidoPublicoConfig)
+      setPedidoPublicoConfig(resposta.configuracao || pedidoPublicoConfig); toast('Configuração do autoatendimento salva')
+    } catch (erro) { toast(erro.message || 'Não foi possível salvar o autoatendimento', true) }
+    finally { setSalvandoPedidoPublico(false) }
+  }
+
+  async function abrirQrMesa(mesa) {
+    setQrLoading(true)
+    try { const qr = await api.get(`/api/admin/mesas/${mesa.num}/qr`); setQrModal({ mesa, ...qr }) }
+    catch (erro) { toast(erro.message || 'Não foi possível gerar o QR Code', true) }
+    finally { setQrLoading(false) }
+  }
+
+  async function rotacionarQrMesa() {
+    if (!qrModal?.mesa || !confirm(`Rotacionar o QR Code da Mesa ${qrModal.mesa.num}? O código atualmente impresso deixará de funcionar.`)) return
+    setQrLoading(true)
+    try { await api.post(`/api/admin/mesas/${qrModal.mesa.num}/qr/rotacionar`, {}); toast('QR Code anterior invalidado. Gerando novo código…'); await abrirQrMesa(qrModal.mesa) }
+    catch (erro) { toast(erro.message || 'Não foi possível rotacionar o QR Code', true) }
+    finally { setQrLoading(false) }
+  }
+
+  function baixarQrMesa() {
+    if (!qrModal?.dataUrl) return
+    const link = document.createElement('a'); link.href = qrModal.dataUrl; link.download = `kytto-qr-mesa-${qrModal.mesa.num}.png`; link.click()
   }
 
   function abrirNovaMesa() {
@@ -296,6 +331,16 @@ export default function Mesas() {
             {savingCfg ? 'Salvando…' : 'Salvar'}
           </button>
         </div>
+        <div style={{ marginTop:16, paddingTop:14, borderTop:'1px solid var(--line)' }}>
+          <div style={{ fontWeight:800, color:'var(--cream)', marginBottom:8 }}>Autoatendimento por QR Code</div>
+          <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'end' }}>
+            <label style={{ display:'flex', alignItems:'center', gap:7, fontSize:13, color:'var(--text)', cursor:'pointer' }}><input type="checkbox" checked={!!pedidoPublicoConfig.confirmarGarcom} onChange={e => setPedidoPublicoConfig(configuracao => ({ ...configuracao, confirmarGarcom:e.target.checked }))} /> Exigir confirmação da equipe antes de enviar ao KDS</label>
+            <label style={{ fontSize:12, color:'var(--muted)' }}>Sessão (minutos)<input type="number" min="15" max="480" value={pedidoPublicoConfig.minutosSessao || 120} onChange={e => setPedidoPublicoConfig(configuracao => ({ ...configuracao, minutosSessao:e.target.value }))} style={{ display:'block', width:105, marginTop:5 }} /></label>
+            <label style={{ fontSize:12, color:'var(--muted)' }}>Máximo de itens/pedido<input type="number" min="1" max="100" value={pedidoPublicoConfig.limiteItensPorPedido || 20} onChange={e => setPedidoPublicoConfig(configuracao => ({ ...configuracao, limiteItensPorPedido:e.target.value }))} style={{ display:'block', width:120, marginTop:5 }} /></label>
+            <button className="btn btn-secondary btn-sm" onClick={salvarPedidoPublico} disabled={salvandoPedidoPublico}>{salvandoPedidoPublico ? 'Salvando…' : 'Salvar autoatendimento'}</button>
+          </div>
+          <p style={{ margin:'8px 0 0', color:'var(--muted)', fontSize:11 }}>Os QR Codes são exclusivos por mesa, usam sessão temporária e podem ser rotacionados a qualquer momento.</p>
+        </div>
       </div>
 
       {/* Busca + Filtro de status */}
@@ -364,7 +409,7 @@ export default function Mesas() {
               {m.aguardandoCozinha > 0 && (
                 <div style={{ fontSize:11, color:'var(--gold)', marginTop:4 }}>🍳 {m.aguardandoCozinha} item(s)</div>
               )}
-              <button onClick={(event) => { event.stopPropagation(); editarMesa(m) }} className="btn btn-ghost btn-sm" style={{ marginTop:8, fontSize:11, padding:'3px 8px' }}>Editar</button>
+              <div style={{ display:'flex', gap:5, justifyContent:'center', marginTop:8 }}><button onClick={(event) => { event.stopPropagation(); editarMesa(m) }} className="btn btn-ghost btn-sm" style={{ fontSize:11, padding:'3px 8px' }}>Editar</button><button onClick={(event) => { event.stopPropagation(); abrirQrMesa(m) }} className="btn btn-ghost btn-sm" disabled={qrLoading} style={{ fontSize:11, padding:'3px 8px' }}>QR</button></div>
             </div>
           )
         })}
@@ -424,6 +469,8 @@ export default function Mesas() {
           </div>
         </Modal>
       )}
+
+      {qrModal && <Modal title={`QR Code — Mesa ${qrModal.mesa.num}`} onClose={() => setQrModal(null)} width={480}><div style={{ textAlign:'center', padding:'4px 0 10px' }}><p style={{ color:'var(--muted)', fontSize:13, marginTop:0 }}>Imprima este código e deixe-o visível na mesa. Cada leitura abre uma sessão temporária e isolada desta mesa.</p><img src={qrModal.dataUrl} alt={`QR Code da Mesa ${qrModal.mesa.num}`} style={{ width:260, height:260, maxWidth:'100%', background:'#fff', padding:8, borderRadius:10 }} /><a href={qrModal.url} target="_blank" rel="noreferrer" style={{ display:'block', margin:'10px 0', color:'#FF6B2C', overflowWrap:'anywhere', fontSize:12 }}>{qrModal.url}</a><div style={{ display:'flex', justifyContent:'center', gap:8, flexWrap:'wrap' }}><button className="btn btn-primary" onClick={baixarQrMesa}>Baixar PNG</button><button className="btn btn-danger" onClick={rotacionarQrMesa} disabled={qrLoading}>{qrLoading ? 'Gerando…' : 'Rotacionar QR'}</button></div><p style={{ color:'var(--muted)', fontSize:11, marginBottom:0 }}>Ao rotacionar, o QR Code anterior é invalidado imediatamente.</p></div></Modal>}
 
       {/* ── Modal: detalhes expandidos da comanda ── */}
       {comanda && (

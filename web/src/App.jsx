@@ -119,6 +119,7 @@ const MeuPainel       = lazy(() => import('./pages/atleta/MeuPainel'))
 const Clube           = lazy(() => import('./pages/public/Clube'))
 const Liga            = lazy(() => import('./pages/public/Liga'))
 const PerfilAtleta    = lazy(() => import('./pages/public/PerfilAtleta'))
+const CardapioMesaPublico = lazy(() => import('./pages/public/CardapioMesaPublico'))
 
 function Loading() {
   return (
@@ -214,6 +215,7 @@ export default function App() {
         <Route path="/ranking"    element={<Layout><Ranking /></Layout>} />
         <Route path="/loja"       element={<Layout><Loja /></Layout>} />
         <Route path="/pedido/:codigo" element={<Layout marketing><AcompanharPedido /></Layout>} />
+        <Route path="/cardapio/mesa/:token" element={<CardapioMesaPublico />} />
         <Route path="/agendar/:slug" element={<AgendamentoOnline />} />
         <Route path="/regulamento" element={<Layout marketing><Regulamento /></Layout>} />
         <Route path="/bracket"    element={<Layout><Bracket /></Layout>} />

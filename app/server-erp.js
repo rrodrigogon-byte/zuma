@@ -2682,9 +2682,53 @@ async function iniciar() {
     };
   }
 
+  function gerarTokenMesaPublica() { return crypto.randomBytes(24).toString('base64url'); }
+
+  function configuracaoPedidoPublico(empresaId) {
+    const estado = db();
+    estado.pedidoPublicoKytto ||= { empresas: {}, sessoes: {} };
+    estado.pedidoPublicoKytto.empresas ||= {};
+    estado.pedidoPublicoKytto.sessoes ||= {};
+    estado.pedidoPublicoKytto.empresas[empresaId] ||= { confirmarGarcom: false, minutosSessao: 120, limiteItensPorPedido: 20, atualizadoEm: new Date().toISOString() };
+    return estado.pedidoPublicoKytto.empresas[empresaId];
+  }
+
+  function criarOuObterTokenMesaPublica(empresaId, numeroMesa) {
+    const mesa = mesasPersistidas(empresaId).fisicas[Number(numeroMesa)];
+    if (!mesa || mesa.ativa === false) throw new Error('Mesa não encontrada ou inativa.');
+    if (!mesa.tokenPublico) { mesa.tokenPublico = gerarTokenMesaPublica(); mesa.tokenPublicoCriadoEm = new Date().toISOString(); mesa.atualizadoEm = new Date().toISOString(); save(); }
+    return mesa.tokenPublico;
+  }
+
+  function localizarMesaPorTokenPublico(token) {
+    const tokenSeguro = String(token || '').trim();
+    if (tokenSeguro.length < 24) return null;
+    const raiz = db().mesasKytto?.empresas || {};
+    for (const [empresaId, dados] of Object.entries(raiz)) {
+      const mesa = Object.values(dados?.fisicas || {}).find((item) => item.ativa !== false && item.tokenPublico === tokenSeguro);
+      if (mesa) return { empresaId, mesa };
+    }
+    return null;
+  }
+
+  function criarSessaoMesaPublica(empresaId, mesa, ip = '') {
+    const estado = db(); configuracaoPedidoPublico(empresaId);
+    const config = estado.pedidoPublicoKytto.empresas[empresaId];
+    const agora = new Date(); const expiraEm = new Date(agora.valueOf() + Math.max(15, Math.min(480, Number(config.minutosSessao || 120))) * 60000);
+    const token = crypto.randomBytes(24).toString('base64url');
+    estado.pedidoPublicoKytto.sessoes[token] = { token, empresaId, mesaNum: Number(mesa.num), criadoEm: agora.toISOString(), expiraEm: expiraEm.toISOString(), ultimoUsoEm: agora.toISOString(), ipHash: ip ? crypto.createHash('sha256').update(ip).digest('hex').slice(0, 16) : null, tentativas: 0 };
+    save(); return estado.pedidoPublicoKytto.sessoes[token];
+  }
+
+  function validarSessaoMesaPublica(token, empresaId, mesaNum) {
+    const sessao = db().pedidoPublicoKytto?.sessoes?.[String(token || '')];
+    if (!sessao || sessao.empresaId !== empresaId || Number(sessao.mesaNum) !== Number(mesaNum) || new Date(sessao.expiraEm).valueOf() <= Date.now()) throw new Error('Sessão da mesa expirada ou inválida. Leia o QR Code novamente.');
+    sessao.ultimoUsoEm = new Date().toISOString(); return sessao;
+  }
+
   function mesaPadrao(numero, empresaId) {
     const agora = new Date().toISOString();
-    return { num: numero, empresaId, nome: `Mesa ${numero}`, apelido: '', contaNome: '', contaId: '', observacao: '', status: 'livre', total: 0, aguardandoCozinha: 0, comandaId: null, ativa: true, criadoEm: agora, atualizadoEm: agora };
+    return { num: numero, empresaId, nome: `Mesa ${numero}`, apelido: '', contaNome: '', contaId: '', observacao: '', status: 'livre', total: 0, aguardandoCozinha: 0, comandaId: null, ativa: true, tokenPublico: gerarTokenMesaPublica(), tokenPublicoCriadoEm: agora, criadoEm: agora, atualizadoEm: agora };
   }
 
   function garantirQuantidadeMesas(empresaId, quantidade) {
@@ -3011,6 +3055,132 @@ async function iniciar() {
       .map((comanda) => ({ id: comanda.id, comandaId: comanda.id, tipo: 'virtual', nome: comanda.nome, local: comanda.local, status: comanda.status === 'conta' ? 'conta' : 'ocupada', total: totalComanda(comanda), abertaEm: comanda.abertaEm }));
     return { fisicas, virtuais };
   }
+
+  function respostaCardapioPublico(empresaId) {
+    const grupos = new Map(modificadoresCombosKytto.listarGruposModificadores(empresaId).map((grupo) => [grupo.id, grupo]));
+    return cardapioPersistido(empresaId).filter((produto) => !produto.indisponivel).map((produto) => ({
+      id: produto.id, nome: produto.nome, marca: produto.marca || '', tipo: produto.tipo || '', cat: produto.cat || 'Outros', subcategoria: produto.subcategoria || '', emoji: produto.emoji || '', preco: Number(produto.preco || 0), unidade: produto.unidade || 'UN', setor: produto.setor || 'bar', semAlcool: Boolean(produto.semAlcool),
+      gruposModificadores: (produto.modificadorGrupoIds || []).map((id) => grupos.get(id)).filter(Boolean).map((grupo) => ({ id: grupo.id, nome: grupo.nome, obrigatorio: Boolean(grupo.obrigatorio), minimo: grupo.minimo, maximo: grupo.maximo, opcoes: (grupo.opcoes || []).filter((opcao) => opcao.ativo !== false).map((opcao) => ({ id: opcao.id, nome: opcao.nome, precoAdicional: Number(opcao.precoAdicional || 0) })) })),
+    }));
+  }
+
+  function responderMesaPublica(req, res, { exigirSessao = false } = {}) {
+    const encontrada = localizarMesaPorTokenPublico(req.params.token);
+    if (!encontrada) { res.status(404).json({ erro: 'QR Code inválido, expirado ou mesa indisponível.' }); return null; }
+    let sessao = null;
+    if (exigirSessao) {
+      try { sessao = validarSessaoMesaPublica(req.get('X-Mesa-Session'), encontrada.empresaId, encontrada.mesa.num); }
+      catch (erro) { res.status(401).json({ erro: erro.message }); return null; }
+    }
+    return { ...encontrada, sessao, config: configuracaoPedidoPublico(encontrada.empresaId) };
+  }
+
+  app.get('/api/public/mesa/:token', (req, res) => {
+    const contexto = responderMesaPublica(req, res); if (!contexto) return;
+    const empresa = cadastrosMestres.obterEmpresa(contexto.empresaId) || {};
+    res.set('Cache-Control', 'no-store').json({ ok: true, mesa: { numero: contexto.mesa.num, nome: contexto.mesa.nome || `Mesa ${contexto.mesa.num}` }, empresa: { nome: empresa.nomeFantasia || empresa.nome || empresa.razaoSocial || 'Kytto' }, configuracao: { confirmarGarcom: Boolean(contexto.config.confirmarGarcom) }, cardapio: respostaCardapioPublico(contexto.empresaId) });
+  });
+
+  app.post('/api/public/mesa/:token/sessao', (req, res) => {
+    const contexto = responderMesaPublica(req, res); if (!contexto) return;
+    const sessao = criarSessaoMesaPublica(contexto.empresaId, contexto.mesa, req.ip || '');
+    res.set('Cache-Control', 'no-store').status(201).json({ ok: true, sessao: { token: sessao.token, expiraEm: sessao.expiraEm }, mesa: { numero: contexto.mesa.num, nome: contexto.mesa.nome || `Mesa ${contexto.mesa.num}` }, configuracao: { confirmarGarcom: Boolean(contexto.config.confirmarGarcom) }, cardapio: respostaCardapioPublico(contexto.empresaId) });
+  });
+
+  app.post('/api/public/mesa/:token/pedidos', (req, res) => {
+    const contexto = responderMesaPublica(req, res, { exigirSessao: true }); if (!contexto) return;
+    const itens = Array.isArray(req.body?.itens) ? req.body.itens.slice(0, Math.max(1, Number(contexto.config.limiteItensPorPedido || 20))) : [];
+    if (!itens.length) return res.status(400).json({ erro: 'Selecione ao menos um item para enviar o pedido.' });
+    const chaveIdempotencia = String(req.get('Idempotency-Key') || req.body?.idempotencyKey || '').trim().slice(0, 120);
+    if (!chaveIdempotencia) return res.status(400).json({ erro: 'Identificador de pedido obrigatório. Atualize a página e tente novamente.' });
+    contexto.sessao.idempotencias ||= {};
+    const anterior = contexto.sessao.idempotencias[chaveIdempotencia];
+    if (anterior) return res.json({ ok: true, duplicado: true, ...anterior });
+    const agora = Date.now();
+    contexto.sessao.tentativas = (contexto.sessao.tentativas || 0) + 1;
+    if (contexto.sessao.ultimoPedidoEm && agora - new Date(contexto.sessao.ultimoPedidoEm).valueOf() < 1500) return res.status(429).json({ erro: 'Aguarde alguns segundos antes de enviar outro pedido.' });
+    let comanda = comandaAtivaDaMesa(contexto.empresaId, contexto.mesa.num);
+    if (!comanda) comanda = criarComanda(contexto.empresaId, { tipo: 'fisica', mesaNum: contexto.mesa.num, nome: 'Cliente QR' });
+    const inicio = comanda.itens.length;
+    const { erros, adicionados } = adicionarItensComanda(contexto.empresaId, comanda, itens);
+    if (erros.length) {
+      for (let indice = comanda.itens.length - 1; indice >= inicio; indice -= 1) removerItemComanda(contexto.empresaId, comanda, indice);
+      save(); return res.status(409).json({ erro: erros.join(' ') });
+    }
+    const statusInicial = contexto.config.confirmarGarcom ? 'aguardando_confirmacao' : 'novo';
+    for (const item of adicionados) { item.status = statusInicial; item.origem = 'qr_mesa'; item.sessaoMesaId = contexto.sessao.token.slice(0, 12); }
+    comanda.pedidosPublicos ||= [];
+    const pedido = { id: `qr-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`, itensIds: adicionados.map((item) => item.id), status: statusInicial, criadoEm: new Date().toISOString(), origem: 'qr_mesa' };
+    comanda.pedidosPublicos.push(pedido); comanda.pedidosPublicos = comanda.pedidosPublicos.slice(-100);
+    contexto.sessao.ultimoPedidoEm = new Date().toISOString();
+    const resposta = { pedidoId: pedido.id, comandaId: comanda.id, status: pedido.status, aguardandoConfirmacao: contexto.config.confirmarGarcom, total: totalComanda(comanda) };
+    contexto.sessao.idempotencias[chaveIdempotencia] = resposta;
+    const chaves = Object.keys(contexto.sessao.idempotencias); if (chaves.length > 40) chaves.slice(0, chaves.length - 40).forEach((chave) => delete contexto.sessao.idempotencias[chave]);
+    save();
+    res.status(201).json({ ok: true, ...resposta });
+  });
+
+  app.post('/api/public/mesa/:token/chamar-garcom', (req, res) => {
+    const contexto = responderMesaPublica(req, res, { exigirSessao: true }); if (!contexto) return;
+    const estado = db(); estado.pedidoPublicoKytto.chamados ||= {};
+    const id = `chamada-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
+    estado.pedidoPublicoKytto.chamados[id] = { id, empresaId: contexto.empresaId, mesaNum: contexto.mesa.num, tipo: ['conta', 'garcom'].includes(String(req.body?.tipo)) ? String(req.body.tipo) : 'garcom', mensagem: String(req.body?.mensagem || '').trim().slice(0, 250), status: 'pendente', criadoEm: new Date().toISOString() };
+    save(); res.status(201).json({ ok: true, chamadoId: id, mensagem: 'Solicitação enviada à equipe.' });
+  });
+
+  app.get('/api/admin/pedidos-publicos/config', requerEditorCatalogo, (req, res) => {
+    res.json({ ok: true, configuracao: configuracaoPedidoPublico(req.empresaId) });
+  });
+
+  app.patch('/api/admin/pedidos-publicos/config', requerEditorCatalogo, (req, res) => {
+    const config = configuracaoPedidoPublico(req.empresaId);
+    if (req.body?.confirmarGarcom !== undefined) config.confirmarGarcom = Boolean(req.body.confirmarGarcom);
+    if (req.body?.minutosSessao !== undefined) {
+      const minutos = Number(req.body.minutosSessao); if (!Number.isFinite(minutos) || minutos < 15 || minutos > 480) return res.status(400).json({ erro: 'A sessão deve durar entre 15 e 480 minutos.' });
+      config.minutosSessao = Math.floor(minutos);
+    }
+    if (req.body?.limiteItensPorPedido !== undefined) {
+      const limite = Number(req.body.limiteItensPorPedido); if (!Number.isFinite(limite) || limite < 1 || limite > 100) return res.status(400).json({ erro: 'O limite de itens deve estar entre 1 e 100.' });
+      config.limiteItensPorPedido = Math.floor(limite);
+    }
+    config.atualizadoEm = new Date().toISOString(); config.atualizadoPor = req.usuario?.email || null; save();
+    res.json({ ok: true, configuracao: config });
+  });
+
+  app.get('/api/admin/mesas/:numero/qr', requerEditorCatalogo, async (req, res) => {
+    try {
+      const numero = Number(req.params.numero); const token = criarOuObterTokenMesaPublica(req.empresaId, numero);
+      const base = String(process.env.PUBLIC_APP_URL || 'https://setpoint.kytto.com.br').replace(/\/$/, '');
+      const url = `${base}/cardapio/mesa/${token}`;
+      const QRCode = (await import('qrcode')).default;
+      const dataUrl = await QRCode.toDataURL(url, { errorCorrectionLevel: 'M', width: 420, margin: 2 });
+      res.json({ ok: true, mesaNum: numero, url, dataUrl, tokenCriadoEm: mesasPersistidas(req.empresaId).fisicas[numero]?.tokenPublicoCriadoEm });
+    } catch (erro) { res.status(422).json({ erro: erro.message }); }
+  });
+
+  app.post('/api/admin/mesas/:numero/qr/rotacionar', requerEditorCatalogo, (req, res) => {
+    const mesa = mesasPersistidas(req.empresaId).fisicas[Number(req.params.numero)];
+    if (!mesa || mesa.ativa === false) return res.status(404).json({ erro: 'Mesa não encontrada ou inativa.' });
+    mesa.tokenPublico = gerarTokenMesaPublica(); mesa.tokenPublicoCriadoEm = new Date().toISOString(); mesa.atualizadoEm = mesa.tokenPublicoCriadoEm; save();
+    res.json({ ok: true, mensagem: 'QR Code anterior invalidado. Gere e imprima o novo código.' });
+  });
+
+  app.get('/api/admin/pedidos-publicos/pendentes', requerOperacaoComanda, (req, res) => {
+    const pedidos = comandasDaEmpresa(req.empresaId).flatMap((comanda) => (comanda.pedidosPublicos || []).filter((pedido) => pedido.status === 'aguardando_confirmacao').map((pedido) => ({ ...pedido, comandaId: comanda.id, mesa: comanda.mesa, mesaNum: comanda.mesaNum, itens: (comanda.itens || []).filter((item) => pedido.itensIds.includes(item.id)) })));
+    res.json({ ok: true, pedidos });
+  });
+
+  app.post('/api/pedidos-publicos/:id/confirmar', requerOperacaoComanda, (req, res) => {
+    for (const comanda of comandasDaEmpresa(req.empresaId)) {
+      const pedido = (comanda.pedidosPublicos || []).find((item) => item.id === req.params.id);
+      if (!pedido) continue;
+      if (pedido.status !== 'aguardando_confirmacao') return res.status(409).json({ erro: 'Pedido já foi processado.' });
+      pedido.status = 'novo'; pedido.confirmadoEm = new Date().toISOString(); pedido.confirmadoPor = req.usuario?.email || null;
+      for (const item of comanda.itens || []) if (pedido.itensIds.includes(item.id)) item.status = 'novo';
+      save(); return res.json({ ok: true, pedido, mensagem: 'Pedido confirmado e enviado ao KDS.' });
+    }
+    res.status(404).json({ erro: 'Pedido público não encontrado na empresa ativa.' });
+  });
 
   app.get('/api/mesas', requerOperacaoComanda, (req, res) => {
     res.json(listarMesasOperacionais(req.empresaId));
