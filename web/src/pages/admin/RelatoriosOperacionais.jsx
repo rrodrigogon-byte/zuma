@@ -22,6 +22,7 @@ export default function RelatoriosOperacionais() {
   const { toast } = useToast()
   const [days, setDays] = useState('30')
   const [report, setReport] = useState(null)
+  const [metricas, setMetricas] = useState(null)
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
@@ -29,14 +30,21 @@ export default function RelatoriosOperacionais() {
     try {
       const end = new Date(); const start = new Date(end)
       start.setDate(start.getDate() - Number(days) + 1); start.setHours(0, 0, 0, 0)
-      const result = await api.get(`/api/admin/relatorios/operacional?dataInicio=${encodeURIComponent(start.toISOString())}&dataFim=${encodeURIComponent(end.toISOString())}`)
+      const periodo = Number(days) === 7 ? 'semana' : 'mes'
+      const [result, metricasRes] = await Promise.all([
+        api.get(`/api/admin/relatorios/operacional?dataInicio=${encodeURIComponent(start.toISOString())}&dataFim=${encodeURIComponent(end.toISOString())}`),
+        api.get(`/api/admin/metricas/operacional?periodo=${periodo}`),
+      ])
       setReport(result.relatorio)
+      setMetricas(metricasRes?.ok ? metricasRes : null)
     } catch (error) { toast(error.message || 'Falha ao gerar relatório operacional.', 'error') }
     finally { setLoading(false) }
   }, [days, toast])
 
   useEffect(() => { load() }, [load])
   const max = useMemo(() => Math.max(...(report?.vendas?.serieDiaria || []).flatMap((d) => [d.vendas, d.recebimentos]), 1), [report])
+  const receitaCan = metricas?.faturamento || {}
+  const estoqueCan = metricas?.estoque || {}
 
   return <div className="page">
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
@@ -45,14 +53,14 @@ export default function RelatoriosOperacionais() {
     </div>
     {loading ? <div className="card" style={{ color: 'var(--muted)' }}>Gerando os indicadores reais da empresa ativa…</div> : !report ? <div className="card">Relatório indisponível.</div> : <>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
-        <Metric label="VENDAS APROVADAS" value={fmtR(report.vendas.aprovadas)} detail={`${report.vendas.transacoes} transações confirmadas`} color="#16806b" />
+        <Metric label="VENDAS APROVADAS" value={fmtR(receitaCan.total ?? report.vendas.aprovadas)} detail={`${receitaCan.quantidade ?? report.vendas.transacoes} transações confirmadas · ${metricas?.periodo?.nome || 'período selecionado'}`} color="#16806b" />
         <Metric label="PAGAMENTOS PENDENTES" value={fmtR(report.vendas.pendentes)} detail="Aguardando confirmação do provedor" color="#c47a00" />
         <Metric label="A RECEBER" value={fmtR(report.financeiro.aReceber)} detail={`${report.financeiro.contasAbertas} conta(s) aberta(s)`} color="#12283F" />
         <Metric label="VENCIDO" value={fmtR(report.financeiro.vencido)} detail="Contas em atraso" color="#b23a48" />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(280px, 1fr)', gap: 16 }}>
         <section className="card"><h2 style={{ fontSize: 16, color: '#12283F', margin: '0 0 15px' }}>Vendas e recebimentos por dia</h2><div style={{ height: 190, display: 'flex', alignItems: 'end', gap: 4 }}>{report.vendas.serieDiaria.map((item) => <div key={item.data} title={`${item.data}: ${fmtR(item.vendas)}`} style={{ flex: 1, height: '100%', display: 'flex', alignItems: 'end', gap: 2 }}><span style={{ flex: 1, minHeight: 2, height: `${Math.max(2, item.vendas / max * 100)}%`, background: '#FF6B2C', borderRadius: '4px 4px 0 0' }} /><span style={{ flex: 1, minHeight: 2, height: `${Math.max(2, item.recebimentos / max * 100)}%`, background: '#12283F', borderRadius: '4px 4px 0 0' }} /></div>)}</div><div style={{ marginTop: 11, display: 'flex', gap: 12, color: 'var(--muted)', fontSize: 11 }}><span>■ Laranja: vendas</span><span>■ Azul: recebimentos</span></div></section>
-        <section className="card"><h2 style={{ fontSize: 16, color: '#12283F', margin: '0 0 15px' }}>Estoque</h2><div style={{ display: 'grid', gap: 10, color: 'var(--muted)', fontSize: 13 }}><div>Itens de cardápio: <strong style={{ color: '#12283F' }}>{report.estoque.itensCatalogo}</strong></div><div>Itens controlados: <strong style={{ color: '#12283F' }}>{report.estoque.itensControlados}</strong></div><div>Sem estoque: <strong style={{ color: report.estoque.semEstoque ? '#b23a48' : '#16806b' }}>{report.estoque.semEstoque}</strong></div><div>Abaixo do mínimo: <strong style={{ color: report.estoque.baixo.length ? '#c47a00' : '#16806b' }}>{report.estoque.baixo.length}</strong></div></div></section>
+        <section className="card"><h2 style={{ fontSize: 16, color: '#12283F', margin: '0 0 15px' }}>Estoque</h2><div style={{ display: 'grid', gap: 10, color: 'var(--muted)', fontSize: 13 }}><div>Itens de cardápio: <strong style={{ color: '#12283F' }}>{estoqueCan.total ?? report.estoque.itensCatalogo}</strong></div><div>Itens controlados: <strong style={{ color: '#12283F' }}>{estoqueCan.total ?? report.estoque.itensControlados}</strong></div><div>Sem estoque: <strong style={{ color: (estoqueCan.semEstoque ?? report.estoque.semEstoque) ? '#b23a48' : '#16806b' }}>{estoqueCan.semEstoque ?? report.estoque.semEstoque}</strong></div><div>Abaixo do mínimo: <strong style={{ color: (estoqueCan.baixo ?? report.estoque.baixo.length) ? '#c47a00' : '#16806b' }}>{estoqueCan.baixo ?? report.estoque.baixo.length}</strong></div></div></section>
       </div>
       <section className="card" style={{ marginTop: 16 }}><h2 style={{ fontSize: 16, color: '#12283F', margin: '0 0 12px' }}>Receita por meio de pagamento</h2><div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{Object.entries(report.vendas.porMetodo || {}).map(([metodo, valor]) => <div key={metodo} style={{ padding: '10px 13px', background: 'var(--surface-2)', borderRadius: 8, minWidth: 130 }}><div style={{ color: 'var(--muted)', textTransform: 'capitalize', fontSize: 11 }}>{metodo}</div><strong style={{ color: '#12283F' }}>{fmtR(valor)}</strong></div>)}</div></section>
     </>}

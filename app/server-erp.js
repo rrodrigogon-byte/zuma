@@ -813,8 +813,11 @@ async function iniciar() {
       unidade: produto.unidade || 'UN',
       ativo: true,
       qtd: 0,
+      // `min` é mantido por compatibilidade; `minimo` é a fonte canônica.
       min: 0,
+      minimo: 0,
       custo: 0,
+      custoMedioPonderado: 0,
       historico: [],
       criadoEm: new Date().toISOString(),
       atualizadoEm: new Date().toISOString(),
@@ -833,6 +836,10 @@ async function iniciar() {
         criados++;
       } else {
         const mudou = atual.nome !== produto.nome || atual.cat !== produto.cat || atual.unidade !== produto.unidade || atual.ativo !== true;
+        // Migração compatível dos campos legados para a nomenclatura canônica.
+        if (atual.minimo === undefined) atual.minimo = Number(atual.min || 0);
+        if (atual.min === undefined) atual.min = Number(atual.minimo || 0);
+        if (atual.custoMedioPonderado === undefined) atual.custoMedioPonderado = Number(atual.custo || 0);
         Object.assign(atual, {
           empresaId, produtoId: produto.id, nome: produto.nome, cat: produto.cat || 'Sem categoria',
           subcategoria: produto.subcategoria || '', unidade: produto.unidade || 'UN', ativo: true,
@@ -901,7 +908,26 @@ async function iniciar() {
   });
 
   app.get('/api/admin/estoque', requerEditorCatalogo, (req, res) => {
-    res.json({ estoque: listarEstoqueCardapio(req.empresaId) });
+    const cardapioPorId = new Map(cardapioPersistido(req.empresaId).map(produto => [String(produto.id), produto]));
+    const estoque = listarEstoqueCardapio(req.empresaId).map((ficha) => {
+      const produto = cardapioPorId.get(String(ficha.produtoId || ficha.id));
+      const statusEstoque = metricasKytto.getStockStatus(ficha);
+      const custoMedio = Number(ficha.custoMedioPonderado ?? ficha.custo ?? 0);
+      const precoVenda = Number(produto?.preco || 0);
+      return {
+        ...ficha,
+        minimo: statusEstoque.minimo,
+        min: statusEstoque.minimo,
+        statusEstoque: statusEstoque.status,
+        custoMedioPonderado: custoMedio,
+        margemBruta: metricasKytto.calcularMargemBruta(precoVenda, custoMedio),
+        precoVenda,
+      };
+    });
+    res.json({ estoque, resumo: {
+      ...metricasKytto.contarEstoquesPorStatus(estoque),
+      valorTotal: Number(metricasKytto.calcularValorEstoque(estoque).toFixed(2)),
+    } });
   });
 
   app.post('/api/admin/estoque/sincronizar-cardapio', requerEditorCatalogo, (req, res) => {
@@ -960,10 +986,12 @@ async function iniciar() {
     const agora = new Date().toISOString();
     let alterado = false;
     let ajusteEstoque = null;
-    if (req.body?.min !== undefined) {
-      const min = Number(req.body.min);
+    if (req.body?.min !== undefined || req.body?.minimo !== undefined) {
+      const min = Number(req.body?.minimo ?? req.body?.min);
       if (!Number.isFinite(min) || min < 0) return res.status(400).json({ erro: 'Estoque mínimo inválido.' });
+      // Mantém a compatibilidade do campo legado e a fonte canônica sincronizados.
       ficha.min = Math.floor(min);
+      ficha.minimo = Math.floor(min);
       alterado = true;
     }
     if (req.body?.qtd !== undefined) {
@@ -1836,25 +1864,47 @@ async function iniciar() {
   });
 
   // ── MÉTRICAS CANÔNICAS (SSOT) ──────────────────────────────────────────────
+  function dataCuiabaAgora() {
+    return metricasKytto.dataOperacionalCuiaba(new Date());
+  }
+
+  function deslocarData(dataIso, dias) {
+    const data = new Date(`${dataIso}T12:00:00Z`);
+    data.setUTCDate(data.getUTCDate() + dias);
+    return data.toISOString().slice(0, 10);
+  }
+
+  function resolverPeriodoMetricas(query = {}) {
+    const hoje = dataCuiabaAgora();
+    const periodo = String(query.periodo || 'hoje').toLowerCase();
+    const deInformado = String(query.de || '').slice(0, 10);
+    const ateInformado = String(query.ate || '').slice(0, 10);
+    if (deInformado || ateInformado) return { nome: 'personalizado', de: deInformado || hoje, ate: ateInformado || hoje };
+    if (periodo === 'semana') return { nome: 'ultimos_7_dias', de: deslocarData(hoje, -6), ate: hoje };
+    if (periodo === 'mes' || periodo === '30dias') return { nome: 'ultimos_30_dias', de: deslocarData(hoje, -29), ate: hoje };
+    if (periodo === 'ano' || periodo === '12meses') return { nome: 'ultimos_12_meses', de: deslocarData(hoje, -364), ate: hoje };
+    return { nome: 'hoje', de: hoje, ate: hoje };
+  }
   
   app.get('/api/admin/metricas/operacional', requerEditorCatalogo, (req, res) => {
     try {
-      const hoje = new Date().toISOString().slice(0, 10);
+      const recorte = resolverPeriodoMetricas(req.query);
       const comandas = comandasDaEmpresa(req.empresaId);
-      const estoque = Object.values(estoquePersistido(req.empresaId)).filter(i => i.ativo !== false);
+      // Garante que todo item do cardápio tenha ficha de estoque antes do cálculo.
+      const estoque = listarEstoqueCardapio(req.empresaId);
       
       // Comandas abertas
       const openTabs = metricasKytto.getOpenTabs(comandas);
       
-      // Faturamento do dia
-      const revenueHoje = metricasKytto.getRevenue(comandas, hoje, hoje);
+      // Faturamento oficial: comandas fechadas no recorte solicitado.
+      const revenueHoje = metricasKytto.getRevenue(comandas, recorte.de, recorte.ate);
       
       // Estoque por status
       const estoqueStatus = metricasKytto.contarEstoquesPorStatus(estoque);
       const valorEstoque = metricasKytto.calcularValorEstoque(estoque);
       
-      // CMV do dia
-      const vendasHoje = metricasKytto.filtrarVendasPorPeriodo(comandas, hoje, hoje);
+      // CMV do período solicitado.
+      const vendasHoje = metricasKytto.filtrarVendasPorPeriodo(comandas, recorte.de, recorte.ate);
       const cmvHoje = metricasKytto.calcularCMV(vendasHoje, estoquePersistido(req.empresaId));
       
       // Faturamento por método
@@ -1864,7 +1914,7 @@ async function iniciar() {
         ok: true,
         timestamp: new Date().toISOString(),
         empresa: req.empresaId,
-        periodo: { data: hoje, fuso: 'America/Cuiaba' },
+        periodo: { nome: recorte.nome, inicio: recorte.de, fim: recorte.ate, fuso: 'America/Cuiaba' },
         
         // Comandas
         comandas: {
@@ -1901,7 +1951,8 @@ async function iniciar() {
       // Guardrail: valida que Dashboard, BI e Relatórios retornam os mesmos totais
       const hoje = new Date().toISOString().slice(0, 10);
       const comandas = comandasDaEmpresa(req.empresaId);
-      const estoque = Object.values(estoquePersistido(req.empresaId)).filter(i => i.ativo !== false);
+      // Garante que todo item do cardápio tenha ficha de estoque antes do cálculo.
+      const estoque = listarEstoqueCardapio(req.empresaId);
       
       const openTabs = metricasKytto.getOpenTabs(comandas);
       const revenue = metricasKytto.getRevenue(comandas, hoje, hoje);

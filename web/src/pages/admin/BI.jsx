@@ -132,6 +132,7 @@ function exportCSV(rows, headers, filename) {
 export default function BI() {
   const { toast } = useToast()
   const [data, setData] = useState(null)
+  const [metricasData, setMetricasData] = useState(null)
   const [dashData, setDashData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState(null)
@@ -141,8 +142,12 @@ export default function BI() {
 
   async function fetchData() {
     try {
-      const bi = await api.get(`/api/analytics/resumo?periodo=${encodeURIComponent(periodoAtivo)}`)
+      const [bi, metricas] = await Promise.all([
+        api.get(`/api/analytics/resumo?periodo=${encodeURIComponent(periodoAtivo)}`),
+        api.get(`/api/admin/metricas/operacional?periodo=${encodeURIComponent(periodoAtivo)}`),
+      ])
       setData(bi)
+      setMetricasData(metricas?.ok ? metricas : null)
       setDashData(null)
       setLastUpdate(new Date())
     } catch {
@@ -225,12 +230,29 @@ export default function BI() {
   if (loading) return <div style={S.page}><p style={{ color: 'var(--muted)' }}>Carregando…</p></div>
   if (!data) return <div style={S.page}><p style={{ color: 'var(--muted)' }}>Sem dados disponíveis.</p></div>
 
-  const op = data.operacao || {}
+  // Os dados da operação usam as métricas canônicas do backend quando disponíveis.
+  const metricas = metricasData || {}
+  const faturamentoCan = metricas.faturamento || {}
+  const estoqueCan = metricas.estoque || {}
+  const comandasCan = metricas.comandas || {}
+  const operacaoBase = data.operacao || {}
+  const op = {
+    ...operacaoBase,
+    faturamento: faturamentoCan.total ?? operacaoBase.faturamento ?? 0,
+    numeroVendas: faturamentoCan.quantidade ?? operacaoBase.numeroVendas ?? 0,
+    ticketMedio: (faturamentoCan.quantidade ?? 0) > 0
+      ? Number((faturamentoCan.total / faturamentoCan.quantidade).toFixed(2))
+      : (operacaoBase.ticketMedio ?? 0),
+    margemBrutaPercentual: faturamentoCan.margemBruta ?? operacaoBase.margemBrutaPercentual ?? 0,
+    margemBruta: faturamentoCan.total != null
+      ? Number((faturamentoCan.total - (faturamentoCan.cmv || 0)).toFixed(2))
+      : (operacaoBase.margemBruta ?? 0),
+  }
   const bm = data.benchmarks || {}
   const faturamentoSerie = op.faturamentoSerie || []
   const despesasSerie = op.despesasSerie || []
-  const estoque = data.estoque || {}
-  const pedidos = data.pedidos || {}
+  const estoque = { ...data.estoque, semEstoque: estoqueCan.semEstoque ?? data.estoque?.semEstoque ?? 0, estoqueCritico: estoqueCan.baixo ?? data.estoque?.estoqueCritico ?? 0 }
+  const pedidos = { ...data.pedidos, abertos: comandasCan.abertas ?? data.pedidos?.abertos ?? 0, emPreparo: comandasCan.abertas ?? data.pedidos?.emPreparo ?? 0 }
   const fiscal = data.fiscal || {}
   const previsao = data.previsao?.proximosSeteDias || []
   const demandaProdutos = data.previsao?.demandaProdutos || []
@@ -240,7 +262,7 @@ export default function BI() {
   const dash = dashData || {}
   const ind = dash.indicadores || {}
   const reservasHoje = ind.reservasHoje ?? ind.reservas ?? null
-  const comandasAbertas = ind.comandasAbertas ?? ind.mesas ?? null
+  const comandasAbertas = comandasCan.abertas ?? ind.comandasAbertas ?? ind.mesas ?? null
 
   return (
     <div style={S.page}>

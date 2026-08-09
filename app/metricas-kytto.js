@@ -22,7 +22,9 @@ export function getStockStatus(item) {
   if (!item) return { saldoAtual: 0, minimo: 0, status: 'SEM_ESTOQUE' }
 
   const saldo = Number(item.qtd || 0)
-  const minimo = Number(item.minimo || 0)
+  // Suporta o campo legado `min` e a nomenclatura canônica `minimo`.
+  // A compatibilidade evita divergências enquanto os registros existentes são migrados.
+  const minimo = Number(item.minimo ?? item.min ?? 0)
 
   // Regra clara:
   // - SEM_ESTOQUE: saldo <= 0
@@ -125,6 +127,22 @@ export function getOpenTabs(todasAsComandas = []) {
 // ============================================================================
 
 /**
+ * Converte um instante para o dia operacional no fuso oficial do Kytto.
+ * Evita que uma venda no início/fim do dia seja atribuída ao período errado.
+ */
+export function dataOperacionalCuiaba(valor) {
+  if (!valor) return ''
+  const data = new Date(valor)
+  if (Number.isNaN(data.getTime())) return String(valor).slice(0, 10)
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Cuiaba',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(data)
+  const obter = (tipo) => partes.find(parte => parte.type === tipo)?.value || ''
+  return `${obter('year')}-${obter('month')}-${obter('day')}`
+}
+
+/**
  * Filtra comandas fechadas (vendas efetivadas) por período
  * @param {array} todasAsComandas - Array de todas as comandas da empresa
  * @param {string} dataInicio - Data ISO (YYYY-MM-DD) ou vazio para sem limite
@@ -135,7 +153,7 @@ export function filtrarVendasPorPeriodo(todasAsComandas = [], dataInicio = '', d
   return todasAsComandas.filter(cmd => {
     if (cmd.status !== 'fechada') return false
 
-    const dataCmd = String(cmd.fechadaEm || cmd.atualizadaEm || cmd.abertaEm).slice(0, 10)
+    const dataCmd = dataOperacionalCuiaba(cmd.fechadaEm || cmd.atualizadaEm || cmd.abertaEm)
 
     if (dataInicio && dataCmd < dataInicio) return false
     if (dataFim && dataCmd > dataFim) return false
@@ -312,6 +330,7 @@ export default {
   calcularValorEstoque,
   calcularTotalComanda,
   filtrarComandasAbertas,
+  dataOperacionalCuiaba,
   getOpenTabs,
   filtrarVendasPorPeriodo,
   getRevenue,

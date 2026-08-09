@@ -24,6 +24,7 @@ function exportCSV(lista) {
 export default function Estoque() {
   const { toast } = useToast()
   const [estoque, setEstoque]       = useState([])
+  const [resumo, setResumo]         = useState({ total: 0, ok: 0, baixo: 0, semEstoque: 0, valorTotal: 0 })
   const [loading, setLoading]       = useState(true)
   const [filtro, setFiltro]         = useState('todos')   // 'todos' | 'baixo' | 'ok'
   const [busca, setBusca]           = useState('')
@@ -47,6 +48,7 @@ export default function Estoque() {
       // API retorna array plano ou { estoque, alertas }
       const lista = Array.isArray(data) ? data : (data.estoque || [])
       setEstoque(lista)
+      setResumo(data?.resumo || { total: lista.length, ok: 0, baixo: 0, semEstoque: 0, valorTotal: 0 })
     } catch {
       toast('Erro ao carregar estoque', true)
     } finally {
@@ -152,8 +154,10 @@ export default function Estoque() {
     }
   }
 
-  const alertas = estoque.filter(it => (it.qtd ?? 0) < (it.min ?? 0))
-  const valorTotal = estoque.reduce((s, it) => s + (it.qtd || 0) * (it.custo || 0), 0)
+  // A API já calcula `statusEstoque` pela regra canônica SSOT.
+  const alertas = estoque.filter(it => it.statusEstoque === 'BAIXO')
+  const semEstoque = estoque.filter(it => it.statusEstoque === 'SEM_ESTOQUE')
+  const valorTotal = resumo.valorTotal ?? estoque.reduce((s, it) => s + (it.qtd || 0) * (it.custoMedioPonderado ?? it.custo ?? 0), 0)
 
   // Extrair categorias únicas
   const categorias = useMemo(() => {
@@ -173,9 +177,9 @@ export default function Estoque() {
 
   const lista = useMemo(() => {
     let base = filtro === 'baixo'
-      ? estoque.filter(it => (it.qtd ?? 0) < (it.min ?? 0))
+      ? estoque.filter(it => ['BAIXO', 'SEM_ESTOQUE'].includes(it.statusEstoque))
       : filtro === 'ok'
-      ? estoque.filter(it => (it.qtd ?? 0) >= (it.min ?? 0))
+      ? estoque.filter(it => it.statusEstoque === 'OK')
       : estoque
     if (filtroCat !== 'Todas') {
       base = base.filter(it => (it.cat || 'Sem categoria') === filtroCat)
@@ -270,8 +274,8 @@ export default function Estoque() {
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(155px,1fr))', gap:10, marginBottom:20 }}>
         <div style={{ background:'var(--surface)', border:'1px solid var(--line)', borderRadius:10, padding:'12px 16px',
           borderLeft:`4px solid ${alertas.length > 0 ? '#e74c3c' : '#FF6B2C'}` }}>
-          <div style={{ fontSize:11, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'.5px', marginBottom:4 }}>Alertas Baixo</div>
-          <div style={{ fontSize:22, fontWeight:800, color: alertas.length > 0 ? '#e74c3c' : '#FF6B2C' }}>{alertas.length}</div>
+          <div style={{ fontSize:11, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'.5px', marginBottom:4 }}>Abaixo do Mínimo</div>
+          <div style={{ fontSize:22, fontWeight:800, color: alertas.length > 0 ? '#e74c3c' : '#FF6B2C' }}>{resumo.baixo ?? alertas.length}</div>
           {alertas.length > 0 && <div style={{ fontSize:10, color:'#e74c3c', marginTop:3 }}>{alertas.slice(0,2).map(a=>a.nome).join(', ')}{alertas.length>2?` +${alertas.length-2}`:''}</div>}
         </div>
         <div style={{ background:'var(--surface)', border:'1px solid var(--line)', borderRadius:10, padding:'12px 16px',
@@ -280,9 +284,9 @@ export default function Estoque() {
           <div style={{ fontSize:20, fontWeight:800, color:'#FFB703' }}>{fmtR(valorTotal)}</div>
         </div>
         <div style={{ background:'var(--surface)', border:'1px solid var(--line)', borderRadius:10, padding:'12px 16px',
-          borderLeft:'4px solid #3b82f6' }}>
-          <div style={{ fontSize:11, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'.5px', marginBottom:4 }}>Itens Cadastrados</div>
-          <div style={{ fontSize:22, fontWeight:800, color:'#3b82f6' }}>{estoque.length}</div>
+          borderLeft:`4px solid ${(resumo.semEstoque ?? semEstoque.length) > 0 ? '#e74c3c' : '#3b82f6'}` }}>
+          <div style={{ fontSize:11, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'.5px', marginBottom:4 }}>Sem Estoque</div>
+          <div style={{ fontSize:22, fontWeight:800, color:(resumo.semEstoque ?? semEstoque.length) > 0 ? '#e74c3c' : '#3b82f6' }}>{resumo.semEstoque ?? semEstoque.length}</div>
         </div>
         {valorPorCat.length > 0 && (
           <div style={{ background:'var(--surface)', border:'1px solid var(--line)', borderRadius:10, padding:'12px 16px',
@@ -371,9 +375,12 @@ export default function Estoque() {
             {lista.map(it => {
               const key         = it.id ?? it.produtoId
               const qtd         = it.qtd ?? 0
-              const min         = it.min ?? 0
-              const baixo       = qtd < min
-              const pct         = min > 0 ? Math.min(100, Math.round((qtd / min) * 100)) : 100
+              const min         = it.minimo ?? it.min ?? 0
+              const status      = it.statusEstoque || 'OK'
+              const baixo       = status === 'BAIXO'
+              const zerado      = status === 'SEM_ESTOQUE'
+              const critico     = baixo || zerado
+              const pct         = min > 0 ? Math.min(100, Math.round((qtd / min) * 100)) : (qtd > 0 ? 100 : 0)
               const editandoMin = editMin[key] !== undefined
               const hist        = it.historico || []
               const aberto      = !!expandido[key]
@@ -381,19 +388,19 @@ export default function Estoque() {
                 <>
                   <tr
                     key={key}
-                    className={baixo ? 'row-baixo' : ''}
-                    style={baixo ? {
+                    className={critico ? 'row-baixo' : ''}
+                    style={critico ? {
                       background: 'rgba(192,57,43,.08)',
                     } : {}}
                   >
                     <td>
-                      <strong style={{ color: baixo ? '#e74c3c' : 'inherit' }}>{it.nome}</strong>
-                      {baixo && (
+                      <strong style={{ color: critico ? '#e74c3c' : 'inherit' }}>{it.nome}</strong>
+                      {critico && (
                         <span
                           className="badge badge-red badge-alerta-anim"
                           style={{ marginLeft: 8 }}
                         >
-                          Baixo
+                          {zerado ? 'Sem estoque' : 'Baixo'}
                         </span>
                       )}
                     </td>
@@ -405,7 +412,7 @@ export default function Estoque() {
                           className="nivel-bar-fill"
                           style={{
                             width: pct + '%',
-                            background: baixo ? '#e74c3c' : '#FF6B2C',
+                            background: critico ? '#e74c3c' : '#FF6B2C',
                           }}
                         />
                       </div>
@@ -415,7 +422,7 @@ export default function Estoque() {
                     </td>
 
                     <td style={{ textAlign: 'center' }}>
-                      <span style={{ color: baixo ? '#e74c3c' : 'var(--text)', fontWeight: 700 }}>
+                      <span style={{ color: critico ? '#e74c3c' : 'var(--text)', fontWeight: 700 }}>
                         {qtd}
                       </span>
                     </td>
