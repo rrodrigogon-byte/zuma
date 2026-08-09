@@ -268,7 +268,9 @@ export function calcularCMV(vendas = [], estoque = {}) {
     for (const item of venda.itens || []) {
       const produtoId = item.produtoId || item.id
       const ficha = estoque[produtoId]
-      const custo = Number(ficha?.custoMedioPonderado || ficha?.custo || 0)
+      // Novas comandas preservam o custo vigente no próprio item; para dados
+      // históricos sem snapshot, utiliza o CMP atual como fallback compatível.
+      const custo = Number(item.custoUnitario ?? ficha?.custoMedioPonderado ?? ficha?.custo ?? 0)
       const qtd = Number(item.qtd || 0)
       cmvTotal += custo * qtd
     }

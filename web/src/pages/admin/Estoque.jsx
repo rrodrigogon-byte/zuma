@@ -10,9 +10,10 @@ function exportCSV(lista) {
   const headers = ['Produto','Categoria','Qtd Atual','Mínimo','Custo Unit.','Valor Total','Status']
   const rows = lista.map(it => {
     const qtd = it.qtd ?? 0
-    const min = it.min ?? 0
-    const custo = it.custo || 0
-    return [it.nome, it.cat || '—', qtd, min, fmtR(custo), fmtR(qtd*custo), qtd < min ? 'Baixo' : 'OK']
+    const min = it.minimo ?? it.min ?? 0
+    const custo = it.custoMedioPonderado ?? it.custo ?? 0
+    const status = it.statusEstoque || (qtd <= 0 ? 'SEM_ESTOQUE' : (min > 0 && qtd <= min ? 'BAIXO' : 'OK'))
+    return [it.nome, it.cat || '—', qtd, min, fmtR(custo), fmtR(qtd*custo), status]
   })
   const csv = [headers, ...rows].map(r => r.map(v => `"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n')
   const blob = new Blob(['\uFEFF' + csv], { type:'text/csv;charset=utf-8;' })
@@ -30,6 +31,8 @@ export default function Estoque() {
   const [busca, setBusca]           = useState('')
   const [filtroCat, setFiltroCat]   = useState('Todas')
   const [modal, setModal]           = useState(false)
+  const [minCategoriaModal, setMinCategoriaModal] = useState(false)
+  const [minCategoriaForm, setMinCategoriaForm] = useState({ categoria: '', minimo: '', aplicarAItensSemMinimo: true })
   const [inventarioModal, setInventarioModal] = useState(false)
   const [inventarioForm, setInventarioForm] = useState(EMPTY_INVENTARIO)
   const [form, setForm]             = useState(EMPTY_ENTRADA)
@@ -73,6 +76,24 @@ export default function Estoque() {
       load()
     } catch (e) {
       toast(e.message || 'Erro ao registrar entrada', true)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function salvarMinimoCategoria() {
+    const minimo = Number(minCategoriaForm.minimo)
+    if (!minCategoriaForm.categoria) return toast('Selecione uma categoria', true)
+    if (!Number.isFinite(minimo) || minimo < 0) return toast('Mínimo por categoria inválido', true)
+    setSaving(true)
+    try {
+      const resultado = await api.post('/api/admin/estoque/minimos-categoria', { ...minCategoriaForm, minimo })
+      toast(`Mínimo da categoria atualizado${resultado.itensAtualizados ? ` em ${resultado.itensAtualizados} item(ns)` : ''}`)
+      setMinCategoriaModal(false)
+      setMinCategoriaForm({ categoria: '', minimo: '', aplicarAItensSemMinimo: true })
+      load()
+    } catch (error) {
+      toast(error.message || 'Erro ao atualizar mínimo por categoria', true)
     } finally {
       setSaving(false)
     }
@@ -170,7 +191,7 @@ export default function Estoque() {
     const map = {}
     estoque.forEach(it => {
       const cat = it.cat || 'Sem categoria'
-      map[cat] = (map[cat] || 0) + (it.qtd || 0) * (it.custo || 0)
+      map[cat] = (map[cat] || 0) + (it.qtd || 0) * (it.custoMedioPonderado ?? it.custo ?? 0)
     })
     return Object.entries(map).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1])
   }, [estoque])
@@ -231,6 +252,7 @@ export default function Estoque() {
         <h1 className="page-title" style={{ margin: 0 }}>Estoque</h1>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-ghost btn-sm" onClick={() => exportCSV(lista)} title="Exportar CSV">📥 CSV</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setMinCategoriaModal(true)}>◫ Mínimo por Categoria</button>
           <button className="btn btn-ghost btn-sm" onClick={sincronizarCardapio} disabled={sincronizando}>🔄 {sincronizando ? 'Sincronizando…' : 'Sincronizar Cardápio'}</button>
           <button className="btn btn-secondary btn-sm" onClick={() => { setInventarioForm(EMPTY_INVENTARIO); setInventarioModal(true) }}>📋 Inventário</button>
           <button className="btn btn-secondary btn-sm" onClick={load}>↺ Atualizar</button>
@@ -358,7 +380,8 @@ export default function Estoque() {
               <th>Nível</th>
               <th style={{ textAlign: 'center' }}>Qtd Atual</th>
               <th style={{ textAlign: 'center' }}>Mínimo</th>
-              <th>Custo Unit.</th>
+              <th>Custo Médio</th>
+              <th>Margem</th>
               <th>Valor Total</th>
               <th style={{ textAlign: 'center' }}>Ajuste Rápido</th>
               <th></th>
@@ -367,7 +390,7 @@ export default function Estoque() {
           <tbody>
             {lista.length === 0 && (
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', color: 'var(--muted)', padding: '24px 0' }}>
+                <td colSpan={9} style={{ textAlign: 'center', color: 'var(--muted)', padding: '24px 0' }}>
                   Nenhum item encontrado.
                 </td>
               </tr>
@@ -452,8 +475,9 @@ export default function Estoque() {
                       )}
                     </td>
 
-                    <td>{it.custo != null ? fmtR(it.custo) : '—'}</td>
-                    <td>{fmtR(qtd * (it.custo || 0))}</td>
+                    <td>{fmtR(it.custoMedioPonderado ?? it.custo ?? 0)}</td>
+                    <td><span style={{ color: it.margemBruta > 0 ? '#16806b' : 'var(--muted)', fontWeight: 700 }}>{Number(it.margemBruta ?? 0).toFixed(1)}%</span></td>
+                    <td>{fmtR(qtd * (it.custoMedioPonderado ?? it.custo ?? 0))}</td>
                     <td style={{ textAlign: 'center' }}>
                       <div style={{ display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
                         <button
@@ -486,7 +510,7 @@ export default function Estoque() {
                   {/* Linha de histórico expandível */}
                   {aberto && hist.length > 0 && (
                     <tr key={`${key}-hist`}>
-                      <td colSpan={8} style={{ padding: '8px 16px 12px', background: 'rgba(0,0,0,.2)' }}>
+                      <td colSpan={9} style={{ padding: '8px 16px 12px', background: 'rgba(0,0,0,.2)' }}>
                         <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6, fontWeight: 600 }}>
                           Últimas movimentações
                         </div>
@@ -532,6 +556,19 @@ export default function Estoque() {
           </tbody>
         </table>
       </div>
+
+      {/* Modal: mínimo padrão por categoria */}
+      {minCategoriaModal && (
+        <Modal title="Mínimo padrão por categoria" onClose={() => setMinCategoriaModal(false)}>
+          <div style={{ padding: '4px 0 8px' }}>
+            <p style={{ marginTop: 0, color: 'var(--muted)', fontSize: 13, lineHeight: 1.55 }}>Define o nível mínimo padrão. Opcionalmente aplica aos itens da categoria que ainda não possuem mínimo individual.</p>
+            <div className="form-group"><label>Categoria *</label><select value={minCategoriaForm.categoria} onChange={e => setMinCategoriaForm(f => ({ ...f, categoria: e.target.value }))}><option value="">Selecione…</option>{categorias.filter(c => c !== 'Todas').map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+            <div className="form-group"><label>Mínimo padrão *</label><input type="number" min="0" value={minCategoriaForm.minimo} onChange={e => setMinCategoriaForm(f => ({ ...f, minimo: e.target.value }))} placeholder="Ex.: 12" /></div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--muted)', fontSize: 13 }}><input type="checkbox" checked={minCategoriaForm.aplicarAItensSemMinimo} onChange={e => setMinCategoriaForm(f => ({ ...f, aplicarAItensSemMinimo: e.target.checked }))} /> Aplicar aos itens da categoria sem mínimo definido</label>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 18 }}><button className="btn btn-ghost btn-sm" onClick={() => setMinCategoriaModal(false)}>Cancelar</button><button className="btn btn-primary" onClick={salvarMinimoCategoria} disabled={saving}>{saving ? 'Salvando…' : 'Salvar mínimo'}</button></div>
+          </div>
+        </Modal>
+      )}
 
       {/* Modal: contagem de inventário */}
       {inventarioModal && (

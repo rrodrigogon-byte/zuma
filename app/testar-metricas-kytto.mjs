@@ -124,4 +124,9 @@ const vendasComCusto = [
 const cmv = calcularCMV(vendasComCusto, estoque)
 assert(cmv === 90, `CMV (5×10 + 2×20): R$ ${cmv} (esperado 90)`)
 
+const cmvHistorico = calcularCMV([
+  { id: 'cmd-historico', status: 'fechada', itens: [{ produtoId: 'prod-1', qtd: 3, custoUnitario: 7.5 }] },
+], estoque)
+assert(cmvHistorico === 22.5, `CMV usa snapshot de custo na venda: R$ ${cmvHistorico} (esperado 22.5)`)
+
 console.log('\n✨ TODOS OS TESTES PASSARAM!\n')

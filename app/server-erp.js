@@ -802,7 +802,20 @@ async function iniciar() {
     return estado.estoquePorEmpresa[empresaId];
   }
 
+  function configuracaoEstoque(empresaId) {
+    const estado = db();
+    estado.estoqueConfiguracaoPorEmpresa ||= {};
+    estado.estoqueConfiguracaoPorEmpresa[empresaId] ||= { minimosPorCategoria: {}, atualizadoEm: new Date().toISOString() };
+    return estado.estoqueConfiguracaoPorEmpresa[empresaId];
+  }
+
+  function minimoPadraoDaCategoria(empresaId, categoria) {
+    const config = configuracaoEstoque(empresaId);
+    return Math.max(0, Number(config.minimosPorCategoria?.[String(categoria || 'Sem categoria')] || 0));
+  }
+
   function fichaEstoque(produto, empresaId) {
+    const minimoPadrao = minimoPadraoDaCategoria(empresaId, produto.cat || 'Sem categoria');
     return {
       id: produto.id,
       empresaId,
@@ -814,8 +827,8 @@ async function iniciar() {
       ativo: true,
       qtd: 0,
       // `min` é mantido por compatibilidade; `minimo` é a fonte canônica.
-      min: 0,
-      minimo: 0,
+      min: minimoPadrao,
+      minimo: minimoPadrao,
       custo: 0,
       custoMedioPonderado: 0,
       historico: [],
@@ -897,14 +910,30 @@ async function iniciar() {
   // entre empresas. A quantidade de inventário é gerida no módulo de estoque;
   // itens sem bloqueio explícito continuam vendáveis no PDV.
   app.get('/api/cardapio', requerOperacaoComanda, (req, res) => {
+    // Cardápio operacional recebe dados comerciais derivados do estoque da empresa ativa.
+    const estoquePorProduto = new Map(listarEstoqueCardapio(req.empresaId).map(ficha => [String(ficha.produtoId || ficha.id), ficha]));
     const itens = cardapioPersistido(req.empresaId)
       .filter((item) => !item.indisponivel)
-      .map((item) => ({ ...item }));
+      .map((item) => {
+        const ficha = estoquePorProduto.get(String(item.id));
+        const custoMedioPonderado = Number(ficha?.custoMedioPonderado ?? ficha?.custo ?? 0);
+        return {
+          ...item,
+          custoMedioPonderado,
+          margemBruta: metricasKytto.calcularMargemBruta(item.preco, custoMedioPonderado),
+        };
+      });
     res.json(itens);
   });
 
   app.get('/api/admin/cardapio', requerEditorCatalogo, (req, res) => {
-    res.json(cardapioPersistido(req.empresaId));
+    const estoquePorProduto = new Map(listarEstoqueCardapio(req.empresaId).map(ficha => [String(ficha.produtoId || ficha.id), ficha]));
+    const itens = cardapioPersistido(req.empresaId).map((item) => {
+      const ficha = estoquePorProduto.get(String(item.id));
+      const custoMedioPonderado = Number(ficha?.custoMedioPonderado ?? ficha?.custo ?? 0);
+      return { ...item, custoMedioPonderado, margemBruta: metricasKytto.calcularMargemBruta(item.preco, custoMedioPonderado) };
+    });
+    res.json(itens);
   });
 
   app.get('/api/admin/estoque', requerEditorCatalogo, (req, res) => {
@@ -930,6 +959,38 @@ async function iniciar() {
     } });
   });
 
+  app.get('/api/admin/estoque/minimos-categoria', requerEditorCatalogo, (req, res) => {
+    const config = configuracaoEstoque(req.empresaId);
+    res.json({ ok: true, minimosPorCategoria: config.minimosPorCategoria || {} });
+  });
+
+  app.post('/api/admin/estoque/minimos-categoria', requerEditorCatalogo, (req, res) => {
+    const categoria = String(req.body?.categoria || '').trim().slice(0, 120);
+    const minimo = Number(req.body?.minimo);
+    const aplicarAItensSemMinimo = req.body?.aplicarAItensSemMinimo !== false;
+    if (!categoria) return res.status(400).json({ erro: 'Categoria é obrigatória.' });
+    if (!Number.isFinite(minimo) || minimo < 0) return res.status(400).json({ erro: 'Mínimo por categoria inválido.' });
+
+    const config = configuracaoEstoque(req.empresaId);
+    config.minimosPorCategoria ||= {};
+    config.minimosPorCategoria[categoria] = Math.floor(minimo);
+    config.atualizadoEm = new Date().toISOString();
+
+    let itensAtualizados = 0;
+    if (aplicarAItensSemMinimo) {
+      for (const ficha of Object.values(estoquePersistido(req.empresaId))) {
+        if (ficha.ativo !== false && String(ficha.cat || 'Sem categoria') === categoria && Number(ficha.minimo ?? ficha.min ?? 0) === 0) {
+          ficha.min = Math.floor(minimo);
+          ficha.minimo = Math.floor(minimo);
+          ficha.atualizadoEm = config.atualizadoEm;
+          itensAtualizados++;
+        }
+      }
+    }
+    save();
+    res.json({ ok: true, categoria, minimo: Math.floor(minimo), itensAtualizados, minimosPorCategoria: config.minimosPorCategoria });
+  });
+
   app.post('/api/admin/estoque/sincronizar-cardapio', requerEditorCatalogo, (req, res) => {
     const resumo = sincronizarEstoqueCardapio(req.empresaId);
     save();
@@ -946,14 +1007,25 @@ async function iniciar() {
     if (custo !== null && (!Number.isFinite(custo) || custo < 0)) return res.status(400).json({ erro: 'Custo unitário inválido.' });
     const dataOperacao = req.body?.dataOperacao || new Date().toISOString();
     const movimentoId = `est-${Date.now().toString(36)}-${produtoId}`;
-    ficha.qtd = Number(ficha.qtd || 0) + qtd;
-    if (custo !== null) ficha.custo = custo;
+    const saldoAnterior = Number(ficha.qtd || 0);
+    const custoAnterior = Number(ficha.custoMedioPonderado ?? ficha.custo ?? 0);
+    const custoEntrada = custo ?? custoAnterior;
+    const custoMedioPonderado = custo !== null
+      ? metricasKytto.calcularCustoMedioPonderado(saldoAnterior, custoAnterior, qtd, custoEntrada)
+      : custoAnterior;
+    ficha.qtd = saldoAnterior + qtd;
+    // `custo` é mantido para consumidores legados; CMP é a fonte canônica.
+    ficha.custo = custoMedioPonderado;
+    ficha.custoMedioPonderado = custoMedioPonderado;
     ficha.historico ||= [];
     ficha.historico.push({
       id: movimentoId,
       tipo: 'entrada',
       qtd,
-      custo: custo ?? ficha.custo ?? 0,
+      custo: custoEntrada,
+      custoMedioPonderado,
+      saldoAnterior,
+      saldoFinal: ficha.qtd,
       ts: dataOperacao,
       origem: 'administracao',
       fornecedorId: req.body?.fornecedorId || null,
@@ -966,7 +1038,7 @@ async function iniciar() {
       produtoId,
       produtoNome: ficha.nome,
       qtd,
-      custo: custo ?? ficha.custo ?? 0,
+      custo: custoEntrada,
       fornecedorId: req.body?.fornecedorId,
       documento: req.body?.documento,
       usuario: req.usuario?.email,
@@ -2282,6 +2354,8 @@ async function iniciar() {
       const item = {
         id: `it-${Date.now().toString(36)}-${String(comanda.itens.length + 1).padStart(3, '0')}`,
         produtoId: produto.id, nome: produto.nome, preco: Number(produto.preco || 0), qtd,
+        // Snapshot do custo no lançamento: preserva o CMV histórico da venda.
+        custoUnitario: Number(ficha?.custoMedioPonderado ?? ficha?.custo ?? 0),
         obs: String(entrada?.obs || '').trim().slice(0, 300), setor,
         cozinha, status: 'novo', criadoEm: new Date().toISOString(),
       };
