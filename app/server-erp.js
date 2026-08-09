@@ -2226,6 +2226,44 @@ async function iniciar() {
     res.json(listarMesasOperacionais(req.empresaId));
   });
 
+  // Vendas consolidadas: alimenta a aba Vendas do PDV e os relatórios a partir
+  // da única fonte operacional de verdade — as comandas efetivamente fechadas.
+  app.get('/api/admin/vendas', requerEditorCatalogo, (req, res) => {
+    const hoje = new Date().toISOString().slice(0, 10);
+    const somenteHoje = ['1', 'true', 'sim'].includes(String(req.query?.hoje || '').toLowerCase());
+    const de = String(req.query?.de || (somenteHoje ? hoje : '')).slice(0, 10);
+    const ate = String(req.query?.ate || (somenteHoje ? hoje : '')).slice(0, 10);
+    const vendas = comandasDaEmpresa(req.empresaId)
+      .filter((comanda) => comanda.status === 'fechada')
+      .map((comanda) => ({
+        id: comanda.id,
+        empresaId: comanda.empresaId,
+        createdAt: comanda.fechadaEm || comanda.atualizadaEm || comanda.abertaEm,
+        fechadoEm: comanda.fechadaEm || null,
+        data: comanda.fechadaEm || comanda.atualizadaEm || comanda.abertaEm,
+        total: Number(comanda.totalPago ?? totalComanda(comanda) ?? 0),
+        subtotal: totalComanda(comanda),
+        desconto: Number(comanda.desconto || 0),
+        taxaServico: Number(comanda.taxaServico || 0),
+        formaPagamento: (comanda.pagamentos || []).map((item) => item.meio).filter(Boolean).join(' + ') || comanda.pagamento || 'dinheiro',
+        meio: comanda.pagamento || (comanda.pagamentos || [])[0]?.meio || 'dinheiro',
+        pagamentos: [...(comanda.pagamentos || [])],
+        itens: (comanda.itens || []).map((item) => ({ ...item })),
+        mesa: comanda.mesa || (comanda.mesaNum ? `Mesa ${comanda.mesaNum}` : null),
+        mesaNum: comanda.mesaNum || null,
+        cliente: comanda.nome || 'Atendimento',
+        tipo: comanda.tipo,
+        status: 'paga',
+      }))
+      .filter((venda) => !de || String(venda.data).slice(0, 10) >= de)
+      .filter((venda) => !ate || String(venda.data).slice(0, 10) <= ate)
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    res.json({ ok: true, vendas, resumo: {
+      quantidade: vendas.length,
+      total: Number(vendas.reduce((soma, venda) => soma + Number(venda.total || 0), 0).toFixed(2)),
+    } });
+  });
+
   app.get('/api/comanda/:id', requerOperacaoComanda, (req, res) => {
     const comanda = obterComandaOperacional(req.empresaId, req.params.id);
     if (!comanda) return res.status(404).json({ erro: 'Comanda não encontrada na empresa ativa.' });

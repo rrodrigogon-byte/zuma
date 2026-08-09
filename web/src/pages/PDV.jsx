@@ -1150,21 +1150,30 @@ export default function PDV() {
             <div style={{ fontSize: 13, opacity: 0.45, textAlign: 'center', padding: 24 }}>Nenhuma venda fechada hoje</div>
           ) : (
             <div style={S.vendasList}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, opacity: 0.55, padding: '0 4px 6px', borderBottom: '1px solid #294F6C' }}>
-                <span>Total do dia</span>
-                <span style={{ color: '#FF9B72', fontWeight: 700 }}>
-                  {fmtR(vendas.reduce((s, v) => s + (v.total || v.valor || 0), 0))}
-                </span>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, marginBottom: 12 }}>
+                <div style={{ background: '#153550', border: '1px solid #294F6C', borderRadius: 10, padding: '10px 12px' }}>
+                  <div style={{ fontSize: 10, opacity: 0.62, textTransform: 'uppercase', fontWeight: 800 }}>Total do dia</div>
+                  <strong style={{ display: 'block', color: '#FF9B72', marginTop: 4, fontSize: 17 }}>{fmtR(vendas.reduce((s, v) => s + Number(v.total || v.valor || 0), 0))}</strong>
+                </div>
+                <div style={{ background: '#153550', border: '1px solid #294F6C', borderRadius: 10, padding: '10px 12px' }}>
+                  <div style={{ fontSize: 10, opacity: 0.62, textTransform: 'uppercase', fontWeight: 800 }}>Comandas pagas</div>
+                  <strong style={{ display: 'block', color: '#fff', marginTop: 4, fontSize: 17 }}>{vendas.length}</strong>
+                </div>
+                <div style={{ background: '#153550', border: '1px solid #294F6C', borderRadius: 10, padding: '10px 12px' }}>
+                  <div style={{ fontSize: 10, opacity: 0.62, textTransform: 'uppercase', fontWeight: 800 }}>Ticket médio</div>
+                  <strong style={{ display: 'block', color: '#fff', marginTop: 4, fontSize: 17 }}>{fmtR(vendas.reduce((s, v) => s + Number(v.total || v.valor || 0), 0) / vendas.length)}</strong>
+                </div>
               </div>
+              <div style={{ fontSize: 11, opacity: 0.55, padding: '0 4px 7px', borderBottom: '1px solid #294F6C' }}>Comandas fechadas hoje</div>
               {vendas.map((v, i) => (
                 <div key={v.id || i} style={S.vendaRow}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>{v.mesa || v.nome || `Comanda #${v.id}`}</div>
-                    <div style={{ fontSize: 11, opacity: 0.55 }}>
-                      {fmtMeio(v.meio || v.meioPagamento)} · {v.hora || v.fechadoEm ? new Date(v.fechadoEm || v.hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.mesa || v.cliente || v.nome || `Comanda #${v.id}`}</div>
+                    <div style={{ fontSize: 11, opacity: 0.62, marginTop: 2 }}>
+                      {fmtMeio(v.formaPagamento || v.meio || v.meioPagamento)} · {Array.isArray(v.itens) ? `${v.itens.reduce((s, item) => s + Number(item.qtd || item.quantidade || 1), 0)} item(ns)` : '—'} · {v.fechadoEm ? new Date(v.fechadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'}
                     </div>
                   </div>
-                  <div style={{ fontWeight: 700, color: '#FF9B72' }}>{fmtR(v.total || v.valor || 0)}</div>
+                  <div style={{ fontWeight: 800, color: '#FF9B72', whiteSpace: 'nowrap' }}>{fmtR(v.total || v.valor || 0)}</div>
                 </div>
               ))}
             </div>
