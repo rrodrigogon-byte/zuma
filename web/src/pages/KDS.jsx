@@ -23,19 +23,12 @@ function minutosDecorridos(criadoEm) {
 }
 
 // Cor de urgência baseada no tempo
-function corUrgencia(mins, status) {
-  if (status === 'pronto') return STATUS_COLOR.pronto
-  if (status === 'novo') {
-    if (mins >= 10) return '#ff0000' // crítico: vermelho intenso
-    if (mins >= 5)  return '#ff4500' // urgente: laranja-vermelho
-    return STATUS_COLOR.novo
-  }
-  if (status === 'em_preparo') {
-    if (mins >= 20) return '#ff6b00' // crítico em preparo
-    if (mins >= 12) return '#e6a817'
-    return STATUS_COLOR.em_preparo
-  }
-  return '#aaa'
+function corUrgencia(item) {
+  const sla = item.sla || { statusSla:'no_prazo' }
+  if (item.status === 'pronto') return STATUS_COLOR.pronto
+  if (sla.statusSla === 'atrasado') return '#ff0000'
+  if (sla.statusSla === 'atencao') return '#e6a817'
+  return STATUS_COLOR[item.status] || '#aaa'
 }
 
 function Clock() {
@@ -52,16 +45,16 @@ function Clock() {
 }
 
 // Componente de timer que atualiza a cada segundo
-function ElapsedTimer({ criadoEm, status }) {
+function ElapsedTimer({ criadoEm, status, sla }) {
   const [mins, setMins] = useState(minutosDecorridos(criadoEm))
   useEffect(() => {
     const t = setInterval(() => setMins(minutosDecorridos(criadoEm)), 10000)
     return () => clearInterval(t)
   }, [criadoEm])
   if (!criadoEm || status === 'pronto') return null
-  const urgent = mins >= 10 && status === 'novo'
-  const warn = mins >= 5 && status === 'novo'
-  const urgPreparo = mins >= 20 && status === 'em_preparo'
+  const urgent = sla?.statusSla === 'atrasado'
+  const warn = sla?.statusSla === 'atencao'
+  const urgPreparo = urgent && status === 'em_preparo'
   return (
     <span style={{
       fontSize: 13, fontWeight: 700, padding: '2px 8px', borderRadius: 10,
@@ -69,17 +62,17 @@ function ElapsedTimer({ criadoEm, status }) {
       color: (urgent || urgPreparo) ? '#ff5555' : warn ? '#ff8c42' : '#888',
       animation: (urgent || urgPreparo) ? 'pulse 1s infinite' : 'none',
     }}>
-      ⏱ {mins}min
+      ⏱ {mins}min{sla?.slaMinutos ? ` / ${sla.slaMinutos}min` : ''}
     </span>
   )
 }
 
-function ItemCard({ item, onStatusChange }) {
+function ItemCard({ item, onStatusChange, onReprint }) {
   const next = STATUS_ORDER[STATUS_ORDER.indexOf(item.status) + 1]
   const mins = minutosDecorridos(item.criadoEm)
-  const color = corUrgencia(mins, item.status)
-  const isPulsing = item.status === 'novo' || (item.status === 'em_preparo' && mins >= 15)
-  const isUrgent = (item.status === 'novo' && mins >= 8) || (item.status === 'em_preparo' && mins >= 20)
+  const color = corUrgencia(item)
+  const isPulsing = item.status === 'novo' || item.sla?.statusSla === 'atrasado'
+  const isUrgent = item.sla?.statusSla === 'atrasado'
 
   return (
     <div
@@ -113,8 +106,9 @@ function ItemCard({ item, onStatusChange }) {
           )}
           <div style={{ marginTop: 8, fontSize: 14, color: '#888', display: 'flex', alignItems: 'center', gap: 10 }}>
             <span>#{item.comandaId}</span>
-            <ElapsedTimer criadoEm={item.criadoEm} status={item.status} />
-            {isUrgent && <span style={{ color: '#ff5555', fontWeight: 700, fontSize: 13 }}>🔥 URGENTE</span>}
+            <ElapsedTimer criadoEm={item.criadoEm} status={item.status} sla={item.sla} />
+            {item.prioridade === 'alta' && <span style={{ color: '#f1c40f', fontWeight: 700, fontSize: 13 }}>⚡ PRIORIDADE</span>}
+            {isUrgent && <span style={{ color: '#ff5555', fontWeight: 700, fontSize: 13 }}>🔥 SLA ATRASADO</span>}
           </div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
@@ -129,18 +123,15 @@ function ItemCard({ item, onStatusChange }) {
           }}>
             {STATUS_LABEL[item.status] || item.status}
           </div>
-          {next && (
-            <div style={{ fontSize: 11, color: '#555', textAlign: 'center' }}>
-              toque para avançar →
-            </div>
-          )}
+          {next && (<div style={{ fontSize: 11, color: '#555', textAlign: 'center' }}>toque para avançar →</div>)}
+          <button onClick={(event) => { event.stopPropagation(); onReprint(item) }} style={{ background:'transparent', color:'#FF9B72', border:'1px solid #FF9B72', borderRadius:6, padding:'3px 6px', fontSize:10, cursor:'pointer' }}>🖨 Reimprimir</button>
         </div>
       </div>
     </div>
   )
 }
 
-function CommandaGroup({ comanda, items, onStatusChange }) {
+function CommandaGroup({ comanda, items, onStatusChange, onReprint }) {
   const mesaFormatada = String(comanda.mesa || '').trim() || (comanda.mesaNum ? `Mesa ${comanda.mesaNum}` : 'Atendimento')
   const title = comanda.tipo === 'virtual'
     ? `${mesaFormatada}${comanda.local ? ` · ${comanda.local}` : ''}`
@@ -168,14 +159,14 @@ function CommandaGroup({ comanda, items, onStatusChange }) {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {items.map(item => (
-          <ItemCard key={`${item.comandaId}-${item.idx}`} item={item} onStatusChange={onStatusChange} />
+          <ItemCard key={`${item.comandaId}-${item.idx}`} item={item} onStatusChange={onStatusChange} onReprint={onReprint} />
         ))}
       </div>
     </div>
   )
 }
 
-function Panel({ title, items, onStatusChange, hidePronto }) {
+function Panel({ title, items, onStatusChange, onReprint, hidePronto }) {
   const visible = hidePronto ? items.filter(i => i.status !== 'pronto') : items
   const pending = visible.filter(i => i.status !== 'pronto').length
 
@@ -225,6 +216,7 @@ function Panel({ title, items, onStatusChange, hidePronto }) {
               comanda={meta}
               items={gItems}
               onStatusChange={onStatusChange}
+              onReprint={onReprint}
             />
           ))
         )}
@@ -239,14 +231,16 @@ export default function KDS() {
   const [loading, setLoading]           = useState(true)
   const [filtroSetor, setFiltroSetor]   = useState('todos') // 'todos'|'bar'|'cozinha'
   const [somAtivo, setSomAtivo]         = useState(false)
+  const [metricas, setMetricas]         = useState({ atrasados:0, filaImpressao:0 })
   const prevPendentesRef = useRef(0)
   const { toast } = useToast()
   const intervalRef = useRef(null)
 
   async function load() {
     try {
-      const data = await api.get('/api/setores/pedidos')
+      const [data, dadosMetricas] = await Promise.all([api.get('/api/setores/pedidos'), api.get('/api/admin/kds/metricas')])
       const pedidos = Array.isArray(data?.pedidos) ? data.pedidos : []
+      setMetricas(dadosMetricas?.metricas || { atrasados:0, filaImpressao:0 })
       const itens = pedidos.flatMap((pedido) =>
         (pedido.itens || []).map(({ indice, ...item }) => ({
           ...item,
@@ -287,6 +281,11 @@ export default function KDS() {
     }
   }
 
+  async function reimprimir(item) {
+    try { await api.post(`/api/kds/comanda/${item.comandaId}/item/${item.idx}/reimprimir`, {}); toast(`Item ${item.nome} adicionado à fila de impressão`) }
+    catch { toast('Erro ao reimprimir item', 'error') }
+  }
+
   function limparProntos() {
     setItems(prev => prev.filter(i => i.status !== 'pronto'))
   }
@@ -324,11 +323,11 @@ export default function KDS() {
   }
 
   const isCozinha = (item) => {
-    const setor = String(item.setor || '').toLowerCase()
+    const setor = String(item.setorRoteado || item.setor || '').toLowerCase()
     return Boolean(item.cozinha) || ['cozinha', 'chapa', 'restaurante'].includes(setor)
   }
   const isBar = (item) => {
-    const setor = String(item.setor || '').toLowerCase()
+    const setor = String(item.setorRoteado || item.setor || '').toLowerCase()
     return !Boolean(item.cozinha) && setor === 'bar'
   }
   const barItems     = useMemo(() => items.filter(i => isBar(i)), [items])
@@ -407,6 +406,8 @@ export default function KDS() {
                 )}
               </button>
             ))}
+            {metricas.atrasados > 0 && <span style={{ color:'#ff5555', fontWeight:800, fontSize:13 }}>🔥 {metricas.atrasados} SLA atrasado(s)</span>}
+            {metricas.filaImpressao > 0 && <span style={{ color:'#FF9B72', fontWeight:700, fontSize:13 }}>🖨 {metricas.filaImpressao} na fila</span>}
             <div style={{ width:1, height:28, background:'#294F6C', margin:'0 4px' }} />
             <button onClick={marcarTodosProntos} title="Marcar todos os visíveis como prontos"
               style={{ background:'#294F6C', color:'#FF6B2C', border:'1px solid #FF6B2C', borderRadius:8, padding:'7px 14px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
@@ -448,6 +449,7 @@ export default function KDS() {
                 title={`🍺 BAR${barPendentes > 0 ? ` (${barPendentes})` : ''}`}
                 items={barItems}
                 onStatusChange={handleStatusChange}
+                onReprint={reimprimir}
                 hidePronto={hidePronto}
               />
             )}
@@ -457,6 +459,7 @@ export default function KDS() {
                 title={`🍽 COZINHA${cozinhaPendentes > 0 ? ` (${cozinhaPendentes})` : ''}`}
                 items={cozinhaItems}
                 onStatusChange={handleStatusChange}
+                onReprint={reimprimir}
                 hidePronto={hidePronto}
               />
             )}

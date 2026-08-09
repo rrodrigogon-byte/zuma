@@ -28,6 +28,7 @@ import { gerarRepresentacaoAuxiliarNfce } from './representacao-fiscal-kytto.js'
 import * as modificadoresCombosKytto from './modificadores-combos-kytto.js';
 import * as reservasKytto from './reservas-kytto.js';
 import * as perdasInventarioKytto from './perdas-inventario-kytto.js';
+import * as kdsAvancadoKytto from './kds-avancado-kytto.js';
 import { OAuth2Client } from 'google-auth-library';
 import bcrypt from 'bcryptjs';
 import * as cadastrosMestres from './cadastros-mestres-kytto.js';
@@ -2964,7 +2965,7 @@ async function iniciar() {
           continue;
         }
       }
-      const setor = String(produto.setor || (produto.cozinha ? 'cozinha' : 'bar')).trim().toLowerCase() || 'bar';
+      const setor = kdsAvancadoKytto.resolverSetor(empresaId, produto);
       const cozinha = Boolean(produto.cozinha) || ['cozinha', 'chapa', 'restaurante'].includes(setor);
       const item = {
         id: `it-${Date.now().toString(36)}-${String(comanda.itens.length + 1).padStart(3, '0')}`,
@@ -2975,10 +2976,12 @@ async function iniciar() {
         fichaTecnicaId: fichaTecnica?.id || null,
         insumosBaixados: baixaInsumos.movimentacoes || [], adicionaisBaixados,
         modificadores: resolucaoModificadores.itens, adicionalPreco: Number(resolucaoModificadores.adicionalPreco || 0),
-        obs: String(entrada?.obs || '').trim().slice(0, 300), setor,
-        cozinha, status: 'novo', criadoEm: new Date().toISOString(),
+        obs: String(entrada?.obs || '').trim().slice(0, 300), setor, setorRoteado: setor, categoria: produto.cat || 'Sem categoria',
+        cozinha, prioridade: String(entrada?.prioridade || (comanda.tipo === 'delivery' ? 'alta' : 'normal')).toLowerCase(), status: 'novo', criadoEm: new Date().toISOString(), recebidoEm: new Date().toISOString(), statusHistorico: [],
       };
+      kdsAvancadoKytto.registrarTransicao(item, 'novo', 'sistema');
       comanda.itens.push(item);
+      kdsAvancadoKytto.enfileirarImpressao(empresaId, { comanda, item, indice: comanda.itens.length - 1, motivo: 'novo_pedido', usuario: 'sistema' });
       adicionados.push(item);
       if (baixarProdutoFinal && ficha?.controlaEstoque === true) {
         ficha.qtd = Number(ficha.qtd || 0) - qtd;
@@ -3387,6 +3390,23 @@ async function iniciar() {
   });
 
   // Produção/KDS: filas de itens de cozinha e atualização de preparo.
+  app.get('/api/admin/kds/config', requerEditorCatalogo, (req, res) => res.json({ ok: true, configuracao: kdsAvancadoKytto.configuracaoKds(req.empresaId) }));
+  app.patch('/api/admin/kds/config', requerEditorCatalogo, (req, res) => {
+    try { const configuracao = kdsAvancadoKytto.atualizarConfiguracaoKds(req.empresaId, req.body || {}); save(); res.json({ ok: true, configuracao }); }
+    catch (erro) { res.status(422).json({ erro: erro.message }); }
+  });
+  app.get('/api/admin/kds/metricas', requerOperacaoComanda, (req, res) => res.json({ ok: true, metricas: kdsAvancadoKytto.metricasKds(req.empresaId, comandasDaEmpresa(req.empresaId)) }));
+  app.get('/api/admin/kds/impressao', requerOperacaoComanda, (req, res) => res.json({ ok: true, fila: kdsAvancadoKytto.listarFilaImpressao(req.empresaId, req.query || {}) }));
+  app.post('/api/admin/kds/impressao/:id/status', requerOperacaoComanda, (req, res) => {
+    try { const job = kdsAvancadoKytto.atualizarImpressao(req.empresaId, req.params.id, String(req.body?.status || ''), req.usuario?.email); if (!job) return res.status(404).json({ erro: 'Job de impressão não encontrado na empresa ativa.' }); save(); res.json({ ok: true, job }); }
+    catch (erro) { res.status(422).json({ erro: erro.message }); }
+  });
+  app.post('/api/kds/comanda/:id/item/:indice/reimprimir', requerOperacaoComanda, (req, res) => {
+    const comanda = obterComandaOperacional(req.empresaId, req.params.id, { ativa: true }); const indice = Number(req.params.indice); const item = comanda?.itens?.[indice];
+    if (!comanda || !item) return res.status(404).json({ erro: 'Item operacional não encontrado na comanda.' });
+    try { const job = kdsAvancadoKytto.enfileirarImpressao(req.empresaId, { comanda, item, indice, motivo: 'reimpressao', usuario: req.usuario?.email }); save(); res.status(201).json({ ok: true, job }); }
+    catch (erro) { res.status(422).json({ erro: erro.message }); }
+  });
   app.get('/api/setores/pedidos', requerOperacaoComanda, (req, res) => {
     const setorFiltro = String(req.query.setor || '').toLowerCase();
     const pedidos = comandasDaEmpresa(req.empresaId)
@@ -3399,8 +3419,8 @@ async function iniciar() {
         tipo: comanda.tipo,
         local: comanda.local,
         abertaEm: comanda.abertaEm,
-        itens: (comanda.itens || []).map((item, indice) => ({ ...item, indice }))
-          .filter((item) => !setorFiltro || String(item.setor || 'bar').toLowerCase() === setorFiltro)
+        itens: (comanda.itens || []).map((item, indice) => ({ ...kdsAvancadoKytto.anotarItemKds(req.empresaId, item), indice }))
+          .filter((item) => !setorFiltro || String(item.setorRoteado || item.setor || 'bar').toLowerCase() === setorFiltro)
           .filter((item) => ['novo', 'em_preparo', 'pronto'].includes(item.status)),
       }))
       .filter((pedido) => pedido.itens.length > 0);
@@ -3418,7 +3438,7 @@ async function iniciar() {
         tipo: comanda.tipo,
         local: comanda.local,
         abertaEm: comanda.abertaEm,
-        itens: (comanda.itens || []).map((item, indice) => ({ ...item, indice })).filter((item) => ['novo', 'em_preparo', 'pronto'].includes(item.status)),
+        itens: (comanda.itens || []).map((item, indice) => ({ ...kdsAvancadoKytto.anotarItemKds(req.empresaId, item), indice })).filter((item) => ['novo', 'em_preparo', 'pronto'].includes(item.status)),
       }))
       .filter((pedido) => pedido.itens.length > 0);
     res.json({ ok: true, pedidos });
@@ -3441,7 +3461,7 @@ async function iniciar() {
       return res.status(409).json({ erro: `Transição inválida de ${item.status || 'novo'} para ${status || 'vazio'}.` });
     }
     item.status = status;
-    item.atualizadoEm = new Date().toISOString();
+    kdsAvancadoKytto.registrarTransicao(item, status, req.usuario?.email);
     comanda.atualizadaEm = item.atualizadoEm;
     if (comanda.tipo === 'fisica') sincronizarMesaComanda(req.empresaId, comanda.mesaNum);
     save();

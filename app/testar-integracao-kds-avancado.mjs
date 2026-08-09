@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+const baseUrl = process.env.BASE_URL || 'http://127.0.0.1:3109'; const email = process.env.TEST_ADMIN_EMAIL || 'admin@setpoint-ultra.local'; const senha = process.env.TEST_ADMIN_SENHA || 'SetPoint@2026Temp';
+async function request(path, { method='GET', token, body } = {}) { const resposta = await fetch(`${baseUrl}${path}`, { method, headers:{ 'Content-Type':'application/json', ...(token ? { Authorization:`Bearer ${token}` } : {}) }, body:body === undefined ? undefined : JSON.stringify(body) }); const dados = await resposta.json().catch(() => ({})); if (!resposta.ok) throw new Error(`${method} ${path}: ${dados.erro || resposta.status}`); return dados; }
+const login = await request('/api/auth/login', { method:'POST', body:{ email, senha } }); const token = login.token || login.accessToken; assert.ok(token);
+await request('/api/admin/kds/config', { method:'PATCH', token, body:{ setores:{ chapa:{ slaMinutos:10, impressora:'teste-chapa' } }, roteamentoCategorias:{ Carnes:'chapa' } } });
+const criado = await request('/api/admin/cardapio', { method:'POST', token, body:{ nome:`KDS carne ${Date.now()}`, preco:18, cat:'Carnes', setor:'bar' } }); const produto = criado.item || criado.produto || criado; assert.ok(produto.id);
+const comandaCriada = await request('/api/mesa-virtual', { method:'POST', token, body:{ nome:'Teste KDS', itens:[{ produtoId:produto.id, qtd:1 }] } }); const comanda = comandaCriada.comanda; const item = comanda.itens[0]; assert.equal(item.setorRoteado, 'chapa');
+const pedidos = await request('/api/setores/pedidos?setor=chapa', { token }); const pedidoItem = pedidos.pedidos[0].itens[0]; assert.equal(pedidoItem.setorRoteado, 'chapa'); assert.equal(pedidoItem.sla.slaMinutos, 10);
+const fila = await request('/api/admin/kds/impressao', { token }); assert.equal(fila.fila.length, 1); assert.equal(fila.fila[0].impressora, 'teste-chapa');
+const reimpressao = await request(`/api/kds/comanda/${comanda.id}/item/0/reimprimir`, { method:'POST', token, body:{} }); assert.equal(reimpressao.job.motivo, 'reimpressao');
+await request(`/api/kds/comanda/${comanda.id}/item/0/status`, { method:'PATCH', token, body:{ status:'em_preparo' } }); const pronto = await request(`/api/kds/comanda/${comanda.id}/item/0/status`, { method:'PATCH', token, body:{ status:'pronto' } }); assert.ok(pronto.item.inicioPreparoEm); assert.ok(pronto.item.prontoEm);
+const metricas = await request('/api/admin/kds/metricas', { token }); assert.ok(metricas.metricas.porSetor.some(item => item.setor === 'chapa')); assert.equal(metricas.metricas.filaImpressao, 2);
+const atualizado = await request(`/api/admin/kds/impressao/${fila.fila[0].id}/status`, { method:'POST', token, body:{ status:'impresso' } }); assert.equal(atualizado.job.status, 'impresso');
+console.log('✓ KDS avançado: rota → SLA → impressão → reimpressão → transições → métricas validado');
