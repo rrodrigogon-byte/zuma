@@ -84,8 +84,8 @@ export default function Usuarios() {
   const load = () => {
     setLoading(true)
     api
-      .get('/api/admin/usuarios')
-      .then(setUsuarios)
+      .get('/api/admin/usuarios-mestres')
+      .then(res => setUsuarios(res.usuarios || []))
       .catch(() => toast('Erro ao carregar usuários', 'error'))
       .finally(() => setLoading(false))
   }
