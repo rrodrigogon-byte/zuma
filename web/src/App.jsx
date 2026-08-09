@@ -68,6 +68,7 @@ const Agenda     = lazy(() => import('./pages/admin/Agenda'))
 const Inscricoes = lazy(() => import('./pages/admin/Inscricoes'))
 const Cardapio   = lazy(() => import('./pages/admin/Cardapio'))
 const Estoque    = lazy(() => import('./pages/admin/Estoque'))
+const PerdasInventario = lazy(() => import('./pages/admin/PerdasInventario'))
 const FichasTecnicas = lazy(() => import('./pages/admin/FichasTecnicas'))
 const ModificadoresCombos = lazy(() => import('./pages/admin/ModificadoresCombos'))
 const Mesas      = lazy(() => import('./pages/admin/Mesas'))
@@ -162,6 +163,7 @@ export default function App() {
           <Route path="/admin/inscricoes"   element={<Layout><Inscricoes /></Layout>} />
           <Route path="/admin/cardapio"     element={<Layout><Cardapio /></Layout>} />
           <Route path="/admin/estoque"      element={<Layout><Estoque /></Layout>} />
+          <Route path="/admin/perdas-inventario" element={<Layout><PerdasInventario /></Layout>} />
           <Route path="/admin/fichas-tecnicas" element={<Layout><FichasTecnicas /></Layout>} />
           <Route path="/admin/modificadores-combos" element={<Layout><ModificadoresCombos /></Layout>} />
           <Route path="/admin/mesas"        element={<Layout><Mesas /></Layout>} />

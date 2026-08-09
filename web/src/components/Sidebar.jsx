@@ -89,6 +89,7 @@ const NAV_ADMIN_GROUPS = [
       { to: '/admin/reservas', icon: '📅', label: 'Reservas & Fila' },
       { to: '/admin/cardapio', icon: '🍽️', label: 'Cardápio' },
       { to: '/admin/estoque',  icon: '📦', label: 'Estoque' },
+      { to: '/admin/perdas-inventario', icon: '🧾', label: 'Perdas & Inventário' },
       { to: '/admin/fichas-tecnicas', icon: '🧪', label: 'Fichas Técnicas' },
       { to: '/admin/modificadores-combos', icon: '➕', label: 'Adicionais & Combos' },
       { to: '/admin/pagamentos',icon: '💳', label: 'Pagamentos' },

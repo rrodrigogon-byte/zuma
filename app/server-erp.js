@@ -27,6 +27,7 @@ import * as fiscalXmlKytto from './fiscal-xml-kytto.js';
 import { gerarRepresentacaoAuxiliarNfce } from './representacao-fiscal-kytto.js';
 import * as modificadoresCombosKytto from './modificadores-combos-kytto.js';
 import * as reservasKytto from './reservas-kytto.js';
+import * as perdasInventarioKytto from './perdas-inventario-kytto.js';
 import { OAuth2Client } from 'google-auth-library';
 import bcrypt from 'bcryptjs';
 import * as cadastrosMestres from './cadastros-mestres-kytto.js';
@@ -1444,6 +1445,48 @@ async function iniciar() {
     const itens = listarEstoqueCardapio(req.empresaId);
     res.json({ ok: true, geradoEm: new Date().toISOString(), itens: itens.map(({ id, nome, cat, unidade, qtd, min }) => ({ id, nome, cat, unidade, qtd, min })) });
   });
+
+  app.get('/api/admin/estoque/ocorrencias', requerEditorCatalogo, (req, res) => {
+    res.json({ ok: true, ocorrencias: perdasInventarioKytto.listarOcorrencias(req.empresaId, req.query || {}) });
+  });
+
+  app.post('/api/admin/estoque/ocorrencias', requerEditorCatalogo, (req, res) => {
+    try {
+      const produtoId = String(req.body?.produtoId || ''); const qtd = Number(req.body?.qtd ?? req.body?.quantidade);
+      const ficha = estoquePersistido(req.empresaId)[produtoId];
+      if (!ficha || ficha.ativo === false) return res.status(404).json({ erro: 'Produto de estoque não encontrado.' });
+      if (!Number.isFinite(qtd) || qtd <= 0) return res.status(422).json({ erro: 'Quantidade da ocorrência inválida.' });
+      const empresa = cadastrosMestres.obterEmpresa(req.empresaId) || {}; const permiteNegativo = empresa.permitirEstoqueNegativo !== false;
+      const saldoAnterior = Number(ficha.qtd || 0); if (ficha.controlaEstoque === true && !permiteNegativo && saldoAnterior < qtd) return res.status(422).json({ erro: `Estoque insuficiente para registrar a baixa. Disponível: ${saldoAnterior}.` });
+      const saldoFinal = Number((saldoAnterior - qtd).toFixed(4)); ficha.qtd = saldoFinal; ficha.historico ||= [];
+      const registro = perdasInventarioKytto.registrarOcorrencia(req.empresaId, { ...req.body, produtoId, produtoNome: ficha.nome, unidade: ficha.unidade, qtd, custoUnitario: ficha.custoMedioPonderado ?? ficha.custo ?? 0, saldoAnterior, saldoFinal, usuario: req.usuario?.email });
+      ficha.historico.push({ id: registro.id, tipo: `ocorrencia_${registro.tipo}`, qtd, saldoAnterior, saldoFinal, origem: 'perdas_inventario', motivo: registro.motivo, usuario: req.usuario?.email, ts: registro.criadoEm }); ficha.historico = ficha.historico.slice(-100); ficha.atualizadoEm = registro.criadoEm;
+      const lancamentoFinanceiro = Number(registro.valorImpacto || 0) > 0 ? financeiroKytto.registrarLancamento(req.empresaId, { tipo: 'despesa', categoria: 'Perdas e quebras', descricao: `${registro.tipo.replace('_', ' ')} — ${ficha.nome}`, valor: registro.valorImpacto, origem: `estoque_${registro.tipo}`, status: 'pago', vencimento: registro.criadoEm, dataOperacao: registro.criadoEm, pagoEm: registro.criadoEm, meioPagamento: 'ajuste', referencia: { produtoId, ocorrenciaId: registro.id }, usuario: req.usuario?.email, automatico: true }) : null;
+      save(); res.status(201).json({ ok: true, ocorrencia: registro, item: ficha, lancamentoFinanceiro });
+    } catch (erro) { res.status(422).json({ erro: erro.message }); }
+  });
+
+  app.get('/api/admin/estoque/inventarios', requerEditorCatalogo, (req, res) => res.json({ ok: true, inventarios: perdasInventarioKytto.listarInventarios(req.empresaId) }));
+  app.get('/api/admin/estoque/inventarios/:id', requerEditorCatalogo, (req, res) => { const inventario = perdasInventarioKytto.obterInventario(req.empresaId, req.params.id); if (!inventario) return res.status(404).json({ erro: 'Inventário não encontrado na empresa ativa.' }); res.json({ ok: true, inventario }); });
+  app.post('/api/admin/estoque/inventarios', requerEditorCatalogo, (req, res) => {
+    try {
+      const tipo = req.body?.tipo === 'geral' ? 'geral' : 'rotativo'; const categoria = String(req.body?.categoria || '').trim(); const ids = Array.isArray(req.body?.produtoIds) ? new Set(req.body.produtoIds.map(String)) : null;
+      const itens = listarEstoqueCardapio(req.empresaId).filter(item => item.ativo !== false).filter(item => tipo === 'geral' || !categoria || item.cat === categoria).filter(item => !ids || ids.has(String(item.produtoId || item.id)));
+      const inventario = perdasInventarioKytto.criarInventario(req.empresaId, { ...req.body, tipo, categoria, iniciadoPor: req.usuario?.email }, itens); save(); res.status(201).json({ ok: true, inventario });
+    } catch (erro) { res.status(422).json({ erro: erro.message }); }
+  });
+  app.post('/api/admin/estoque/inventarios/:id/contagens', requerEditorCatalogo, (req, res) => {
+    try { const inventario = perdasInventarioKytto.registrarContagem(req.empresaId, req.params.id, String(req.body?.produtoId || ''), req.body?.contado ?? req.body?.qtd, req.usuario?.email); if (!inventario) return res.status(404).json({ erro: 'Inventário não encontrado na empresa ativa.' }); save(); res.json({ ok: true, inventario }); }
+    catch (erro) { res.status(422).json({ erro: erro.message }); }
+  });
+  app.post('/api/admin/estoque/inventarios/:id/concluir', requerEditorCatalogo, (req, res) => {
+    try {
+      const resultado = perdasInventarioKytto.concluirInventario(req.empresaId, req.params.id, req.usuario?.email); if (!resultado) return res.status(404).json({ erro: 'Inventário não encontrado na empresa ativa.' });
+      const movimentos = []; for (const ajuste of resultado.ajustes) { const ficha = estoquePersistido(req.empresaId)[ajuste.produtoId]; if (!ficha) continue; const saldoAnterior = Number(ficha.qtd || 0); const saldoFinal = Number(ajuste.contado || 0); ficha.qtd = saldoFinal; ficha.historico ||= []; const movimento = { id: `inv-aj-${Date.now().toString(36)}-${ajuste.produtoId}`, tipo: 'inventario_rotativo', qtd: Math.abs(Number((saldoFinal - saldoAnterior).toFixed(4))), saldoAnterior, saldoFinal, divergencia: ajuste.divergencia, inventarioId: resultado.inventario.id, origem: 'perdas_inventario', usuario: req.usuario?.email, ts: resultado.inventario.concluidoEm }; ficha.historico.push(movimento); ficha.historico = ficha.historico.slice(-100); ficha.atualizadoEm = resultado.inventario.concluidoEm; movimentos.push(movimento); }
+      save(); res.json({ ok: true, inventario: resultado.inventario, movimentos });
+    } catch (erro) { res.status(422).json({ erro: erro.message }); }
+  });
+  app.get('/api/admin/estoque/acuracidade', requerEditorCatalogo, (req, res) => res.json({ ok: true, relatorio: perdasInventarioKytto.relatorioAcuracidade(req.empresaId, req.query || {}) }));
 
   app.get('/api/admin/cardapio/catalogo-bebidas', requerEditorCatalogo, (req, res) => {
     const cadastrados = cardapioPersistido(req.empresaId).filter((item) => item.catalogoSeed === 'kytto-bebidas-v1').length;

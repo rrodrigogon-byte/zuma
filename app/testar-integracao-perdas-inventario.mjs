@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+const baseUrl = process.env.BASE_URL || 'http://127.0.0.1:3108'; const email = process.env.TEST_ADMIN_EMAIL || 'admin@setpoint-ultra.local'; const senha = process.env.TEST_ADMIN_SENHA || 'SetPoint@2026Temp';
+async function request(path, { method = 'GET', token, body } = {}) { const resposta = await fetch(`${baseUrl}${path}`, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) }); const dados = await resposta.json().catch(() => ({})); if (!resposta.ok) throw new Error(`${method} ${path}: ${dados.erro || resposta.status}`); return dados; }
+const login = await request('/api/auth/login', { method:'POST', body:{ email, senha } }); const token = login.token || login.accessToken; assert.ok(token);
+const criado = await request('/api/admin/cardapio', { method:'POST', token, body:{ nome:`Insumo inventário ${Date.now()}`, preco:10, cat:'Insumos', setor:'bar' } }); const produto = criado.item || criado.produto || criado; assert.ok(produto.id);
+await request('/api/admin/estoque/entrada', { method:'POST', token, body:{ produtoId:produto.id, qtd:10, custo:4, registrarFinanceiro:false } });
+await request(`/api/admin/estoque/ajuste`, { method:'POST', token, body:{ produtoId:produto.id, controlaEstoque:true } });
+const perda = await request('/api/admin/estoque/ocorrencias', { method:'POST', token, body:{ tipo:'quebra', produtoId:produto.id, qtd:2, motivo:'Teste de quebra' } }); assert.equal(perda.item.qtd, 8); assert.equal(perda.ocorrencia.valorImpacto, 8); assert.ok(perda.lancamentoFinanceiro?.id);
+const inventarioCriado = await request('/api/admin/estoque/inventarios', { method:'POST', token, body:{ tipo:'rotativo', categoria:'Insumos', observacao:'Teste integrado' } }); const inventario = inventarioCriado.inventario; assert.equal(inventario.itens.length, 1); assert.equal(inventario.itens[0].saldoSistema, 8);
+const contado = await request(`/api/admin/estoque/inventarios/${inventario.id}/contagens`, { method:'POST', token, body:{ produtoId:produto.id, contado:7 } }); assert.equal(contado.inventario.itens[0].divergencia, -1);
+const concluido = await request(`/api/admin/estoque/inventarios/${inventario.id}/concluir`, { method:'POST', token, body:{} }); assert.equal(concluido.movimentos.length, 1);
+const estoque = await request('/api/admin/estoque', { token }); assert.equal(estoque.estoque.find(item => item.produtoId === produto.id).qtd, 7);
+const relatorio = await request('/api/admin/estoque/acuracidade', { token }); assert.equal(relatorio.relatorio.inventariosConcluidos, 1); assert.equal(relatorio.relatorio.acuracidade, 0); assert.equal(relatorio.relatorio.rankingPerdas[0].produtoId, produto.id);
+console.log('✓ Integração perda → financeiro → inventário → ajuste → acuracidade validada');
