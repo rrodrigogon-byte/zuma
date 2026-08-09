@@ -1,6 +1,7 @@
 const base = process.env.KYTTO_BASE_URL || 'https://setpoint-ultra-nedqnqyahq-rj.a.run.app';
 const usuario = process.env.KYTTO_ADMIN_USER || 'admin@setpoint-ultra.local';
-const senha = process.env.KYTTO_ADMIN_PASSWORD || 'SetPoint@2026Temp';
+const senha = process.env.KYTTO_ADMIN_PASSWORD;
+if (!senha) throw new Error('Defina KYTTO_ADMIN_PASSWORD antes de executar este script.');
 
 function precoInicial(item) {
   const nome = String(item.nome || '').toLowerCase();

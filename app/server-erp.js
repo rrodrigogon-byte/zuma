@@ -102,9 +102,11 @@ app.get('/login', (req, res, next) => {
 });
 
 // Em produção, servir o build React antes das rotas. As chamadas /api/*
-// continuam sendo resolvidas pelos módulos registrados abaixo.
+// continuam sendo resolvidas pelos módulos registrados abaixo. PUBLIC_DIR permite
+// testes do build atual sem alterar o bundle legado local em app/public.
+const publicDir = process.env.PUBLIC_DIR || path.join(__dirname, 'public');
 if (PROD) {
-  app.use(express.static(path.join(__dirname, 'public'), {
+  app.use(express.static(publicDir, {
     maxAge: '1h',
     etag: true,
     setHeaders: (res, filePath) => {
@@ -132,9 +134,10 @@ if (!PROD) {
 // Armazenamento em memória (em produção, usar banco de dados)
 const usuarios = new Map();
 
-// Usuário admin padrão (será criado na inicialização)
-const ADMIN_TEMP_PASSWORD = 'SetPoint@2026Temp';
-const ADMIN_EMAIL = 'admin@setpoint-ultra.local';
+// Usuário admin de bootstrap: em produção, a senha só pode vir de secret/variável.
+// O valor de teste é limitado explicitamente a NODE_ENV=test, nunca à execução produtiva.
+const ADMIN_TEMP_PASSWORD = process.env.KYTTO_BOOTSTRAP_ADMIN_PASSWORD || (process.env.NODE_ENV === 'test' ? 'SetPoint@2026Temp' : '');
+const ADMIN_EMAIL = process.env.KYTTO_BOOTSTRAP_ADMIN_EMAIL || 'admin@setpoint-ultra.local';
 
 // Senhas novas usam bcrypt. O comparador aceita o hash legado apenas para
 // migração transparente da conta administrativa já existente.
@@ -193,6 +196,7 @@ function criarAdminPadrao() {
   }
   let usuario = cadastrosMestres.obterUsuarioPorEmail(ADMIN_EMAIL);
   if (!usuario) {
+    if (!ADMIN_TEMP_PASSWORD) throw new Error('Bootstrap administrativo ausente: configure KYTTO_BOOTSTRAP_ADMIN_PASSWORD em ambiente novo.');
     usuario = cadastrosMestres.criarUsuario(cadastrosMestres.EMPRESA_PADRAO_ID, {
       nome: 'Administrador', email: ADMIN_EMAIL, roles: ['admin', 'gerente-financeiro'],
       tipoUsuario: 'administrador', perfis: ['administrador'],
@@ -3818,7 +3822,7 @@ async function iniciar() {
     }
     // SPA fallback: a página-base não pode reutilizar o bundle de um deploy anterior.
     res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.sendFile(path.join(publicDir, 'index.html'));
   });
 
   app.use((err, req, res, next) => {
