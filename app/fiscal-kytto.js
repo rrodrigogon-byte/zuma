@@ -111,7 +111,7 @@ function decryptBuffer(payload) {
 function fiscalStore() {
   const state = db();
   if (!state.fiscalKytto || typeof state.fiscalKytto !== 'object') {
-    state.fiscalKytto = { configuracoes: {}, certificados: {}, documentos: {}, numeracoes: {}, eventos: {}, tabelaUf: {}, tabelasIbpt: {}, inventarios: [] };
+    state.fiscalKytto = { configuracoes: {}, certificados: {}, documentos: {}, numeracoes: {}, eventos: {}, tabelaUf: {}, tabelasIbpt: {}, arquivos: {}, contingencias: {}, inventarios: [] };
   }
   state.fiscalKytto.configuracoes ||= {};
   state.fiscalKytto.certificados ||= {};
@@ -120,6 +120,8 @@ function fiscalStore() {
   state.fiscalKytto.eventos ||= {};
   state.fiscalKytto.tabelaUf ||= {};
   state.fiscalKytto.tabelasIbpt ||= {};
+  state.fiscalKytto.arquivos ||= {};
+  state.fiscalKytto.contingencias ||= {};
   return state.fiscalKytto;
 }
 
@@ -438,6 +440,8 @@ export function atualizarDocumentoFiscalRascunho(tenantId = 'principal', documen
   if (!['rascunho', 'validado_local', 'rejeitado_local'].includes(documento.status)) {
     throw new Error(`O documento no status ${documento.status} não pode ser alterado localmente.`);
   }
+  const jaArquivado = Object.values(store.arquivos || {}).some((arquivo) => arquivo.tenantId === key && arquivo.documentoId === documentoId && arquivo.tipo === 'xml_assinado');
+  if (jaArquivado) throw new Error('O XML possui guarda legal registrada e não pode mais ser alterado localmente.');
   const camposPermitidos = ['itens', 'pagamentos', 'tributos', 'valorTotal', 'xmlBruto', 'xmlAssinado', 'hashXmlAssinado', 'schema', 'validacao', 'destinatario', 'tipo', 'modelo'];
   for (const campo of camposPermitidos) {
     if (atualizacao[campo] !== undefined) documento[campo] = atualizacao[campo];
@@ -524,6 +528,113 @@ export function obterAliquotasIbpt(tenantId = 'principal', ncm) {
   return linha ? { nacional: Number(linha.nacional || 0), importado: Number(linha.importado || 0), versao: tabela.versao, ncm: codigo } : null;
 }
 
+export function arquivarDocumentoFiscal(tenantId = 'principal', documentoId) {
+  const key = tenantKey(tenantId);
+  const store = fiscalStore();
+  const documento = store.documentos[documentoId];
+  if (!documento || documento.tenantId !== key) throw new Error('Documento fiscal não encontrado para arquivamento.');
+  if (!documento.xmlAssinado || !documento.hashXmlAssinado) throw new Error('Somente XML assinado e validado localmente pode ser arquivado.');
+  const existente = Object.values(store.arquivos).find((arquivo) => arquivo.tenantId === key && arquivo.documentoId === documentoId && arquivo.tipo === 'xml_assinado');
+  if (existente) return { ...existente };
+  const agora = new Date();
+  const retencaoAte = new Date(agora);
+  retencaoAte.setUTCFullYear(retencaoAte.getUTCFullYear() + 5);
+  const arquivo = {
+    id: `arquivo-fiscal-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`,
+    tenantId: key, documentoId, tipo: 'xml_assinado', hashSha256: documento.hashXmlAssinado,
+    tamanhoBytes: Buffer.byteLength(documento.xmlAssinado, 'utf8'), criadoEm: agora.toISOString(),
+    retencaoAte: retencaoAte.toISOString(), armazenamento: process.env.GCS_BUCKET ? 'gcs_db_replicado' : 'local_teste',
+    imutavel: true,
+  };
+  store.arquivos[arquivo.id] = arquivo;
+  save();
+  registrarEventoFiscal(key, documentoId, 'arquivo_legal_registrado', { arquivoId: arquivo.id, hashSha256: arquivo.hashSha256, retencaoAte: arquivo.retencaoAte });
+  return { ...arquivo };
+}
+
+export function listarArquivosFiscais(tenantId = 'principal', documentoId = null) {
+  const key = tenantKey(tenantId);
+  return Object.values(fiscalStore().arquivos)
+    .filter((arquivo) => arquivo.tenantId === key && (!documentoId || arquivo.documentoId === documentoId))
+    .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))
+    .map((arquivo) => ({ ...arquivo }));
+}
+
+const EVENTOS_INTERNOS_PERMITIDOS = new Set(['intencao_cancelamento', 'intencao_cce', 'intencao_inutilizacao', 'contingencia_ativada', 'contingencia_resolvida', 'reprocessamento_local']);
+
+export function registrarEventoInternoFiscal(tenantId = 'principal', documentoId, tipo, detalhes = {}) {
+  if (!EVENTOS_INTERNOS_PERMITIDOS.has(String(tipo))) throw new Error('Tipo de evento interno fiscal não permitido.');
+  const evento = registrarEventoFiscal(tenantId, documentoId, String(tipo), { ...detalhes, natureza: 'interna_sem_efeito_sefaz' });
+  return { ...evento, natureza: 'interna_sem_efeito_sefaz' };
+}
+
+export function enfileirarContingenciaFiscal(tenantId = 'principal', documentoId, { motivo, tipo = 'offline', usuario = null } = {}) {
+  const key = tenantKey(tenantId);
+  const store = fiscalStore();
+  const documento = store.documentos[documentoId];
+  if (!documento || documento.tenantId !== key) throw new Error('Documento fiscal não encontrado para contingência.');
+  if (!documento.xmlAssinado || documento.status !== 'validado_local') throw new Error('A contingência interna exige rascunho assinado e validado localmente.');
+  const existente = Object.values(store.contingencias).find((item) => item.tenantId === key && item.documentoId === documentoId && item.status === 'pendente');
+  if (existente) return { ...existente };
+  const registro = {
+    id: `contingencia-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`,
+    tenantId: key, documentoId, tipo: String(tipo || 'offline').slice(0, 40), motivo: String(motivo || 'Falha de comunicação registrada pelo operador.').trim().slice(0, 500),
+    status: 'pendente', tentativas: 0, criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString(),
+    usuario: String(usuario || '').trim().slice(0, 160) || null,
+    bloqueio: 'Nenhuma transmissão automática é realizada; requer homologação e ação explícita futura.',
+  };
+  store.contingencias[registro.id] = registro;
+  save();
+  registrarEventoInternoFiscal(key, documentoId, 'contingencia_ativada', { contingenciaId: registro.id, motivo: registro.motivo, tipo: registro.tipo });
+  return { ...registro };
+}
+
+export function listarContingenciasFiscais(tenantId = 'principal', { status = null } = {}) {
+  const key = tenantKey(tenantId);
+  return Object.values(fiscalStore().contingencias)
+    .filter((item) => item.tenantId === key && (!status || item.status === status))
+    .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))
+    .map((item) => ({ ...item }));
+}
+
+export function resolverContingenciaInterna(tenantId = 'principal', contingenciaId, { observacao = '', usuario = null } = {}) {
+  const key = tenantKey(tenantId);
+  const store = fiscalStore();
+  const registro = store.contingencias[contingenciaId];
+  if (!registro || registro.tenantId !== key) throw new Error('Registro de contingência não encontrado.');
+  if (registro.status === 'resolvida') return { ...registro };
+  registro.status = 'resolvida';
+  registro.resolvidaEm = new Date().toISOString();
+  registro.atualizadoEm = registro.resolvidaEm;
+  registro.observacaoResolucao = String(observacao || '').trim().slice(0, 500) || null;
+  registro.usuarioResolucao = String(usuario || '').trim().slice(0, 160) || null;
+  save();
+  registrarEventoInternoFiscal(key, registro.documentoId, 'contingencia_resolvida', { contingenciaId: registro.id, observacao: registro.observacaoResolucao });
+  return { ...registro };
+}
+
+export function obterObservabilidadeFiscal(tenantId = 'principal') {
+  const key = tenantKey(tenantId);
+  const documentos = listarDocumentos(key);
+  const arquivos = listarArquivosFiscais(key);
+  const contingencias = listarContingenciasFiscais(key);
+  const eventos = listarEventosFiscais(key);
+  const certificados = Object.values(fiscalStore().certificados).filter((certificado) => certificado.tenantId === key && certificado.ativo);
+  const certificado = certificados.sort((a, b) => String(b.validTo).localeCompare(String(a.validTo)))[0] || null;
+  const diasCertificado = certificado?.validTo ? Math.floor((new Date(certificado.validTo).valueOf() - Date.now()) / 86400000) : null;
+  const documentosAssinados = documentos.filter((documento) => Boolean(documento.xmlAssinado));
+  const documentosArquivados = new Set(arquivos.filter((arquivo) => arquivo.tipo === 'xml_assinado').map((arquivo) => arquivo.documentoId));
+  const pendentesArquivo = documentosAssinados.filter((documento) => !documentosArquivados.has(documento.id));
+  return {
+    tenantId: key, geradoEm: new Date().toISOString(),
+    documentos: { total: documentos.length, rascunhos: documentos.filter((doc) => doc.status === 'rascunho').length, validadosLocalmente: documentos.filter((doc) => doc.status === 'validado_local').length, rejeitadosLocalmente: documentos.filter((doc) => doc.status === 'rejeitado_local').length },
+    arquivoLegal: { total: arquivos.length, documentosAssinados: documentosAssinados.length, pendentesArquivo: pendentesArquivo.length, conforme: pendentesArquivo.length === 0 },
+    contingencia: { pendentes: contingencias.filter((item) => item.status === 'pendente').length, resolvidas: contingencias.filter((item) => item.status === 'resolvida').length, transmissaoAutomatica: false },
+    certificado: certificado ? { id: certificado.id, validoAte: certificado.validTo, diasParaExpirar: diasCertificado, alerta: diasCertificado !== null && diasCertificado <= 30 } : { alerta: true, motivo: 'Nenhum certificado ativo.' },
+    eventos: { total: eventos.length, ultimos: eventos.slice(0, 10) },
+  };
+}
+
 export function listarDocumentos(tenantId = 'principal') {
   const key = tenantKey(tenantId);
   return Object.values(fiscalStore().documentos)
@@ -565,6 +676,7 @@ export default {
   listarCertificados, ativarCertificado, verificarProntidao, carregarMaterialAtivo,
   listarConfiguracoesUf, obterConfiguracaoUf, obterUrlsNfce, reservarNumeracaoFiscal,
   criarDocumentoFiscalRascunho, registrarPreflightEmissao, atualizarDocumentoFiscalRascunho, registrarEventoFiscal,
-  listarEventosFiscais, importarTabelaIbpt, listarTabelasIbpt, obterAliquotasIbpt,
+  listarEventosFiscais, registrarEventoInternoFiscal, enfileirarContingenciaFiscal, listarContingenciasFiscais, resolverContingenciaInterna,
+  arquivarDocumentoFiscal, listarArquivosFiscais, obterObservabilidadeFiscal, importarTabelaIbpt, listarTabelasIbpt, obterAliquotasIbpt,
   listarDocumentos, migrarTenant, limparDadosSensiveis,
 };

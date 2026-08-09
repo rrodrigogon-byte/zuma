@@ -16,6 +16,7 @@ export default function NotasFiscais() {
   const { toast } = useToast()
   const [documentos, setDocumentos] = useState([])
   const [vendas, setVendas] = useState([])
+  const [observabilidade, setObservabilidade] = useState(null)
   const [loading, setLoading] = useState(true)
   const [filtro, setFiltro] = useState('')
   const [previsao, setPrevisao] = useState(null)
@@ -23,12 +24,14 @@ export default function NotasFiscais() {
 
   const carregar = useCallback(async (quiet = false) => {
     try {
-      const [docs, vendasResposta] = await Promise.all([
+      const [docs, vendasResposta, monitoramento] = await Promise.all([
         api.get('/api/v1/fiscal/documentos'),
         api.get('/api/admin/vendas?hoje=1'),
+        api.get('/api/v1/fiscal/observabilidade'),
       ])
       setDocumentos(Array.isArray(docs?.documentos) ? docs.documentos : [])
       setVendas(Array.isArray(vendasResposta?.vendas) ? vendasResposta.vendas : [])
+      setObservabilidade(monitoramento?.observabilidade || null)
     } catch (erro) {
       if (!quiet) toast(erro.message || 'Não foi possível carregar a central fiscal.', 'error')
     } finally { setLoading(false) }
@@ -63,8 +66,39 @@ export default function NotasFiscais() {
     } finally { setBusy(null) }
   }
 
-  const baixarXml = documento => {
-    window.open(`/api/v1/fiscal/documentos/${documento.id}/xml`, '_blank', 'noopener,noreferrer')
+  const baixarProtegido = async (rota, nome) => {
+    const token = localStorage.getItem('sp_token') || localStorage.getItem('sp_site_token') || ''
+    const loja = (() => { try { return JSON.parse(localStorage.getItem('sp_loja_ativa') || 'null')?.id || '' } catch { return '' } })()
+    const resposta = await fetch(rota, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(loja ? { 'X-Loja-Id': loja } : {}) } })
+    if (!resposta.ok) { const erro = await resposta.json().catch(() => ({})); throw new Error(erro.erro || `Erro ${resposta.status}`) }
+    const arquivo = await resposta.blob()
+    const url = URL.createObjectURL(arquivo)
+    const link = document.createElement('a')
+    link.href = url; link.download = nome; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url)
+  }
+
+  const baixarXml = async documento => {
+    try { await baixarProtegido(`/api/v1/fiscal/documentos/${documento.id}/xml`, `${documento.chaveAcesso || documento.id}.xml`) }
+    catch (erro) { toast(erro.message || 'Não foi possível baixar o XML.', 'error') }
+  }
+
+  const abrirRepresentacao = async documento => {
+    try {
+      const token = localStorage.getItem('sp_token') || localStorage.getItem('sp_site_token') || ''
+      const resposta = await fetch(`/api/v1/fiscal/documentos/${documento.id}/representacao`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      if (!resposta.ok) { const erro = await resposta.json().catch(() => ({})); throw new Error(erro.erro || `Erro ${resposta.status}`) }
+      const html = await resposta.text()
+      const janela = window.open('', '_blank', 'noopener,noreferrer')
+      if (!janela) throw new Error('O navegador bloqueou a abertura da representação auxiliar.')
+      janela.document.open(); janela.document.write(html); janela.document.close()
+    } catch (erro) { toast(erro.message || 'Não foi possível abrir a representação auxiliar.', 'error') }
+  }
+
+  const arquivarXml = async documento => {
+    setBusy(`archive-${documento.id}`)
+    try { const resposta = await api.post(`/api/v1/fiscal/documentos/${documento.id}/arquivar`, {}); toast(resposta.mensagem || 'Guarda legal registrada.'); await carregar(true) }
+    catch (erro) { toast(erro.message || 'Não foi possível registrar a guarda legal.', 'error') }
+    finally { setBusy(null) }
   }
 
   const filtrados = useMemo(() => {
@@ -78,7 +112,8 @@ export default function NotasFiscais() {
     validados: documentos.filter(doc => doc.status === 'validado_local').length,
     pendentes: documentos.filter(doc => ['rascunho', 'rejeitado_local'].includes(doc.status)).length,
     valor: documentos.filter(doc => doc.status === 'validado_local').reduce((soma, doc) => soma + Number(doc.valorTotal || 0), 0),
-  }), [documentos])
+    contingencias: Number(observabilidade?.contingencia?.pendentes || 0),
+  }), [documentos, observabilidade])
 
   return (
     <div className="page" style={{ padding: 16 }}>
@@ -96,6 +131,7 @@ export default function NotasFiscais() {
           ['Validados localmente', kpis.validados, '#107A48'],
           ['Pendências locais', kpis.pendentes, '#B54708'],
           ['Valor validado', fmtR(kpis.valor), '#FF6B2C'],
+          ['Contingências internas', kpis.contingencias, kpis.contingencias ? '#B54708' : '#107A48'],
         ].map(([label, valor, cor]) => <div key={label} className="card" style={{ padding: 14 }}><div style={{ color: 'var(--muted)', fontSize: 12 }}>{label}</div><div style={{ color: cor, fontSize: 22, fontWeight: 800, marginTop: 4 }}>{valor}</div></div>)}
       </div>
 
@@ -129,7 +165,7 @@ export default function NotasFiscais() {
           <div><h2 style={{ margin: 0, fontSize: 17, color: '#12283F' }}>Documentos fiscais internos</h2><div style={{ color: 'var(--muted)', fontSize: 13, marginTop: 3 }}>XML disponível apenas para rascunhos validados localmente. Autorização SEFAZ permanece desligada.</div></div>
           <input className="input" placeholder="Buscar número, chave ou status" value={filtro} onChange={evento => setFiltro(evento.target.value)} style={{ maxWidth: 280 }} />
         </div>
-        {loading ? <div style={{ padding: 28, textAlign: 'center' }}><div className="spinner" /></div> : filtrados.length === 0 ? <div style={{ padding: 28, textAlign: 'center', color: 'var(--muted)' }}>Nenhum rascunho fiscal foi criado ainda.</div> : <div className="table-wrap" style={{ marginTop: 12 }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}><thead><tr style={{ textAlign: 'left', color: 'var(--muted)', borderBottom: '1px solid var(--line)' }}><th style={{ padding: 8 }}>Número/Série</th><th style={{ padding: 8 }}>Modelo</th><th style={{ padding: 8 }}>Valor</th><th style={{ padding: 8 }}>Criado</th><th style={{ padding: 8 }}>Status</th><th style={{ padding: 8, textAlign: 'right' }}>Ação</th></tr></thead><tbody>{filtrados.map(doc => { const badge = statusFiscal(doc.status); return <tr key={doc.id} style={{ borderBottom: '1px solid var(--line)' }}><td style={{ padding: 8, fontWeight: 700 }}>{doc.numero}/{doc.serie}</td><td style={{ padding: 8 }}>{doc.tipo || (doc.modelo === '65' ? 'NFC-e' : 'NF-e')}</td><td style={{ padding: 8, color: '#12283F', fontWeight: 700 }}>{fmtR(doc.valorTotal || 0)}</td><td style={{ padding: 8, color: 'var(--muted)' }}>{fmtDate ? fmtDate(doc.criadoEm) : String(doc.criadoEm || '').slice(0, 16).replace('T', ' ')}</td><td style={{ padding: 8 }}><span style={{ background: badge.bg, color: badge.cor, borderRadius: 20, padding: '3px 9px', fontWeight: 800, fontSize: 11 }}>{badge.label}</span></td><td style={{ padding: 8, textAlign: 'right' }}>{doc.xmlDisponivel && <button className="btn" onClick={() => baixarXml(doc)}>Baixar XML</button>}</td></tr> })}</tbody></table></div>}
+        {loading ? <div style={{ padding: 28, textAlign: 'center' }}><div className="spinner" /></div> : filtrados.length === 0 ? <div style={{ padding: 28, textAlign: 'center', color: 'var(--muted)' }}>Nenhum rascunho fiscal foi criado ainda.</div> : <div className="table-wrap" style={{ marginTop: 12 }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}><thead><tr style={{ textAlign: 'left', color: 'var(--muted)', borderBottom: '1px solid var(--line)' }}><th style={{ padding: 8 }}>Número/Série</th><th style={{ padding: 8 }}>Modelo</th><th style={{ padding: 8 }}>Valor</th><th style={{ padding: 8 }}>Criado</th><th style={{ padding: 8 }}>Status</th><th style={{ padding: 8, textAlign: 'right' }}>Ação</th></tr></thead><tbody>{filtrados.map(doc => { const badge = statusFiscal(doc.status); return <tr key={doc.id} style={{ borderBottom: '1px solid var(--line)' }}><td style={{ padding: 8, fontWeight: 700 }}>{doc.numero}/{doc.serie}</td><td style={{ padding: 8 }}>{doc.tipo || (doc.modelo === '65' ? 'NFC-e' : 'NF-e')}</td><td style={{ padding: 8, color: '#12283F', fontWeight: 700 }}>{fmtR(doc.valorTotal || 0)}</td><td style={{ padding: 8, color: 'var(--muted)' }}>{fmtDate ? fmtDate(doc.criadoEm) : String(doc.criadoEm || '').slice(0, 16).replace('T', ' ')}</td><td style={{ padding: 8 }}><span style={{ background: badge.bg, color: badge.cor, borderRadius: 20, padding: '3px 9px', fontWeight: 800, fontSize: 11 }}>{badge.label}</span></td><td style={{ padding: 8, textAlign: 'right', whiteSpace: 'nowrap' }}>{doc.xmlDisponivel && <><button className="btn" onClick={() => abrirRepresentacao(doc)} style={{ marginRight: 5 }}>Representação</button><button className="btn" onClick={() => baixarXml(doc)} style={{ marginRight: 5 }}>XML</button><button className="btn" disabled={busy === `archive-${doc.id}`} onClick={() => arquivarXml(doc)}>Arquivar</button></>}</td></tr> })}</tbody></table></div>}
       </section>
     </div>
   )

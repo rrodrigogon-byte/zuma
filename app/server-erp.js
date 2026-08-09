@@ -24,6 +24,7 @@ import * as clientesKytto from './clientes-contas-kytto.js';
 import * as fiscalKytto from './fiscal-kytto.js';
 import * as tributacaoKytto from './tributacao-kytto.js';
 import * as fiscalXmlKytto from './fiscal-xml-kytto.js';
+import { gerarRepresentacaoAuxiliarNfce } from './representacao-fiscal-kytto.js';
 import { OAuth2Client } from 'google-auth-library';
 import bcrypt from 'bcryptjs';
 import * as cadastrosMestres from './cadastros-mestres-kytto.js';
@@ -997,6 +998,58 @@ async function iniciar() {
     if (!documento) return res.status(404).json({ erro: 'Documento fiscal não encontrado na empresa ativa.' });
     if (!documento.xmlAssinado) return res.status(409).json({ erro: 'O documento ainda não possui XML fiscal validado localmente.' });
     res.type('application/xml').set('Content-Disposition', `attachment; filename="${documento.chaveAcesso || documento.id}.xml"`).send(documento.xmlAssinado);
+  });
+
+  app.post('/api/v1/fiscal/documentos/:id/arquivar', requerEditorCatalogo, (req, res) => {
+    try {
+      const arquivo = fiscalKytto.arquivarDocumentoFiscal(fiscalTenantId(req), req.params.id);
+      res.status(201).json({ ok: true, arquivo, mensagem: 'Guarda legal do XML registrada com hash e retenção mínima de cinco anos.' });
+    } catch (error) { res.status(422).json({ erro: error.message }); }
+  });
+
+  app.get('/api/v1/fiscal/documentos/:id/arquivos', requerEditorCatalogo, (req, res) => {
+    try { res.json({ ok: true, arquivos: fiscalKytto.listarArquivosFiscais(fiscalTenantId(req), req.params.id) }); }
+    catch (error) { res.status(422).json({ erro: error.message }); }
+  });
+
+  app.post('/api/v1/fiscal/documentos/:id/eventos-internos', requerEditorCatalogo, (req, res) => {
+    try {
+      const evento = fiscalKytto.registrarEventoInternoFiscal(fiscalTenantId(req), req.params.id, req.body?.tipo, { motivo: req.body?.motivo, usuario: req.usuario?.email || null });
+      res.status(201).json({ ok: true, evento, mensagem: 'Evento interno registrado sem efeito perante a SEFAZ.' });
+    } catch (error) { res.status(422).json({ erro: error.message }); }
+  });
+
+  app.post('/api/v1/fiscal/documentos/:id/contingencia', requerEditorCatalogo, (req, res) => {
+    try {
+      const contingencia = fiscalKytto.enfileirarContingenciaFiscal(fiscalTenantId(req), req.params.id, { ...req.body, usuario: req.usuario?.email || null });
+      res.status(201).json({ ok: true, contingencia, mensagem: 'Documento incluído na fila interna de contingência; não houve transmissão automática.' });
+    } catch (error) { res.status(422).json({ erro: error.message }); }
+  });
+
+  app.get('/api/v1/fiscal/contingencias', requerEditorCatalogo, (req, res) => {
+    res.json({ ok: true, contingencias: fiscalKytto.listarContingenciasFiscais(fiscalTenantId(req), { status: req.query?.status || null }), transmissaoAutomatica: false });
+  });
+
+  app.post('/api/v1/fiscal/contingencias/:id/resolver', requerEditorCatalogo, (req, res) => {
+    try {
+      const contingencia = fiscalKytto.resolverContingenciaInterna(fiscalTenantId(req), req.params.id, { observacao: req.body?.observacao, usuario: req.usuario?.email || null });
+      res.json({ ok: true, contingencia, mensagem: 'Contingência interna resolvida sem transmissão à SEFAZ.' });
+    } catch (error) { res.status(422).json({ erro: error.message }); }
+  });
+
+  app.get('/api/v1/fiscal/observabilidade', requerEditorCatalogo, (req, res) => {
+    res.json({ ok: true, observabilidade: fiscalKytto.obterObservabilidadeFiscal(fiscalTenantId(req)), emissaoExternaBloqueada: true });
+  });
+
+  app.get('/api/v1/fiscal/documentos/:id/representacao', requerEditorCatalogo, async (req, res) => {
+    try {
+      const documento = fiscalKytto.listarDocumentos(fiscalTenantId(req)).find((item) => item.id === req.params.id);
+      if (!documento) return res.status(404).json({ erro: 'Documento fiscal não encontrado na empresa ativa.' });
+      if (!documento.xmlAssinado || documento.status !== 'validado_local') return res.status(409).json({ erro: 'A representação auxiliar exige XML assinado e validado localmente.' });
+      const contingencia = fiscalKytto.listarContingenciasFiscais(fiscalTenantId(req)).find((item) => item.documentoId === documento.id && item.status === 'pendente') || null;
+      const html = await gerarRepresentacaoAuxiliarNfce({ xmlAssinado: documento.xmlAssinado, documento: { ...documento, contingencia }, modo: 'rascunho' });
+      res.type('html').set('Cache-Control', 'no-store').send(html);
+    } catch (error) { res.status(422).json({ erro: error.message }); }
   });
 
   function cardapioPersistido(empresaId = cadastrosMestres.EMPRESA_PADRAO_ID) {

@@ -45,4 +45,8 @@ assert.equal(preview.previa.comandaId, comandaId);
 assert.equal(preview.previa.modelo, '65');
 assert.ok(Array.isArray(preview.previa.itens) && preview.previa.itens.length > 0);
 assert.ok(Array.isArray(preview.previa.pendencias), 'A prévia precisa explicitar pendências fiscais quando existirem.');
+const observabilidade = await request('/api/v1/fiscal/observabilidade', { token });
+assert.equal(observabilidade.ok, true);
+assert.equal(observabilidade.emissaoExternaBloqueada, true);
+assert.equal(observabilidade.observabilidade.contingencia.transmissaoAutomatica, false);
 console.log('✓ Fluxo PDV → comanda fechada → prévia fiscal validado sem transmissão externa');

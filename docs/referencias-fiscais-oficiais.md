@@ -40,3 +40,20 @@
 ## Evidência do pacote de schemas
 
 Em 09/08/2026 foi obtido no portal oficial DFe/SVRS o pacote `PL_010b_NT2025_002_v1.30.zip`, identificado na página como **Pacote de Liberação nº 010b v1.30**, que contempla NT 2025.002 v1.30, NT 2024.003 e NT 2025.001. O arquivo será mantido como insumo de validação local, com SHA-256 registrado na instalação do artefato.
+
+
+## Contingência, eventos e DANFE — referências consultadas em 09/08/2026
+
+| Fonte | Constatação técnica | Decisão no Kytto |
+|---|---|---|
+| [MOC 7.00 — Anexo III](https://www.confaz.fazenda.gov.br/legislacao/arquivo-manuais/moc7-anexo-iii-manual-contingencia-nf-e.pdf) | Para NF-e 55, as modalidades descritas incluem normal, FS-DA, SVC e EPEC. A SVC somente é utilizável quando ativada pela SEFAZ de origem; `tpEmis` deve refletir a modalidade e documentos pendentes exigem tratamento posterior. | A contingência será uma fila local auditável. O motor não ativará SVC, não alterará `tpEmis` e não transmitirá por conta própria. |
+| [Portal SVRS](https://dfe-portal.svrs.rs.gov.br/Nfce/Documentos) | O portal lista MOC 7.00, manual de contingência offline para NFC-e, Manual DANFE/QR Code e, em 2026, atualizações RTC e tabela de meios de pagamento. | Todo pacote de schema e tabela de domínio exigirá versão e hash; a homologação externa será bloqueada se a versão não for aprovada. |
+| [Manual DANFE NFC-e v6.0](https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=k/IuuaW4YiY=) | O DANFE é representação auxiliar baseada no XML. Em contingência, deve destacar “EMITIDA EM CONTINGÊNCIA Pendente de autorização”; em homologação, deve exibir “EMITIDA EM AMBIENTE DE HOMOLOGAÇÃO – SEM VALOR FISCAL”. | A representação Kytto será marcada como **rascunho sem valor fiscal** até autorização oficial; dados exibidos serão derivados exclusivamente do XML validado. |
+| [SPED/PR — Eventos NF-e](https://sped.fazenda.pr.gov.br/NFe/Pagina/Eventos-NF-e) | Eventos são documentos eletrônicos assinados. Cancelamento requer NF-e autorizada; CC-e possui limitações materiais e o arquivo/protocolo integra a NF-e. | Antes de existir integração SEFAZ, o sistema registrará somente intenções e eventos internos auditáveis, que não terão semântica de cancelamento ou CC-e autorizados. |
+
+> O motor fiscal preservará a separação entre **evento interno**, **rascunho local validado**, **documento pendente de transmissão** e **evento autorizado pela SEFAZ**. As últimas duas categorias permanecem bloqueadas até a fase de homologação formal.
+
+[6]: https://www.confaz.fazenda.gov.br/legislacao/arquivo-manuais/moc7-anexo-iii-manual-contingencia-nf-e.pdf "MOC 7.00 — Anexo III, Manual de Contingência NF-e"
+[7]: https://dfe-portal.svrs.rs.gov.br/Nfce/Documentos "Portal SVRS — Documentos NFC-e"
+[8]: https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=k/IuuaW4YiY= "Manual de Padrões DANFE NFC-e e QR Code v6.0"
+[9]: https://sped.fazenda.pr.gov.br/NFe/Pagina/Eventos-NF-e "SPED/PR — Eventos NF-e"
