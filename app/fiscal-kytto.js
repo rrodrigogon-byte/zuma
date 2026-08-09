@@ -26,7 +26,11 @@ const TABELA_UF_PADRAO = Object.freeze({
   MT: {
     uf: 'MT', codigoUf: 51, habilitada: true,
     versaoLayout: '4.00', modelos: ['55', '65'],
-    observacao: 'Configuração inicial. Os endpoints oficiais serão injetados pelo adaptador SEFAZ versionado.',
+    observacao: 'Configuração inicial. A autorização SEFAZ será habilitada somente após homologação controlada.',
+    nfce: {
+      qrCode: { producao: 'https://www.sefaz.mt.gov.br/nfce/qrcode', homologacao: 'https://homologacao.sefaz.mt.gov.br/nfce/qrcode', versao: '3' },
+      consultaChave: { producao: 'https://www.sefaz.mt.gov.br/nfce/consultanfce', homologacao: 'https://homologacao.sefaz.mt.gov.br/nfce/consultanfce' },
+    },
   },
   SP: {
     uf: 'SP', codigoUf: 35, habilitada: false,
@@ -348,6 +352,15 @@ export function obterConfiguracaoUf(uf = 'MT') {
   return { ...encontrada, modelos: [...(encontrada.modelos || [])] };
 }
 
+export function obterUrlsNfce(uf = 'MT', ambiente = 'homologacao') {
+  const configUf = obterConfiguracaoUf(uf);
+  const chaveAmbiente = ambiente === 'producao' ? 'producao' : 'homologacao';
+  const qrCodeUrl = configUf.nfce?.qrCode?.[chaveAmbiente];
+  const urlChave = configUf.nfce?.consultaChave?.[chaveAmbiente];
+  if (!qrCodeUrl || !urlChave) throw new Error(`A UF ${configUf.uf} não possui URLs NFC-e configuradas para ${chaveAmbiente}.`);
+  return { qrCodeUrl, urlChave, versaoQrCode: String(configUf.nfce?.qrCode?.versao || '3'), uf: configUf.uf, ambiente: chaveAmbiente };
+}
+
 export function reservarNumeracaoFiscal(tenantId = 'principal', modelo = '65') {
   const key = tenantKey(tenantId);
   const modeloNormalizado = String(modelo);
@@ -415,6 +428,29 @@ export function criarDocumentoFiscalRascunho(tenantId = 'principal', venda = {},
 
 export function registrarPreflightEmissao(tenantId = 'principal', venda = {}) {
   return criarDocumentoFiscalRascunho(tenantId, venda, { modelo: '65', origemId: venda.origemId || venda.comandaId || venda.vendaId || null });
+}
+
+export function atualizarDocumentoFiscalRascunho(tenantId = 'principal', documentoId, atualizacao = {}) {
+  const key = tenantKey(tenantId);
+  const store = fiscalStore();
+  const documento = store.documentos[documentoId];
+  if (!documento || documento.tenantId !== key) throw new Error('Documento fiscal não encontrado para esta empresa.');
+  if (!['rascunho', 'validado_local', 'rejeitado_local'].includes(documento.status)) {
+    throw new Error(`O documento no status ${documento.status} não pode ser alterado localmente.`);
+  }
+  const camposPermitidos = ['itens', 'pagamentos', 'tributos', 'valorTotal', 'xmlBruto', 'xmlAssinado', 'hashXmlAssinado', 'schema', 'validacao', 'destinatario', 'tipo', 'modelo'];
+  for (const campo of camposPermitidos) {
+    if (atualizacao[campo] !== undefined) documento[campo] = atualizacao[campo];
+  }
+  documento.status = atualizacao.status === 'rejeitado_local' ? 'rejeitado_local' : 'validado_local';
+  documento.atualizadoEm = new Date().toISOString();
+  save();
+  registrarEventoFiscal(key, documentoId, documento.status === 'validado_local' ? 'xml_validado_localmente' : 'xml_rejeitado_localmente', {
+    schemaVersao: documento.schema?.versao || null,
+    hashXmlAssinado: documento.hashXmlAssinado || null,
+    erros: Array.isArray(documento.validacao?.erros) ? documento.validacao.erros.slice(0, 12) : [],
+  });
+  return { ...documento };
 }
 
 export function registrarEventoFiscal(tenantId = 'principal', documentoId, tipo, detalhes = {}) {
@@ -527,8 +563,8 @@ export default {
   calcularDigitoVerificadorChave, gerarChaveAcessoFiscal, validarChaveAcessoFiscal,
   obterConfiguracaoFiscal, salvarConfiguracaoFiscal, importarCertificadoA1,
   listarCertificados, ativarCertificado, verificarProntidao, carregarMaterialAtivo,
-  listarConfiguracoesUf, obterConfiguracaoUf, reservarNumeracaoFiscal,
-  criarDocumentoFiscalRascunho, registrarPreflightEmissao, registrarEventoFiscal,
+  listarConfiguracoesUf, obterConfiguracaoUf, obterUrlsNfce, reservarNumeracaoFiscal,
+  criarDocumentoFiscalRascunho, registrarPreflightEmissao, atualizarDocumentoFiscalRascunho, registrarEventoFiscal,
   listarEventosFiscais, importarTabelaIbpt, listarTabelasIbpt, obterAliquotasIbpt,
   listarDocumentos, migrarTenant, limparDadosSensiveis,
 };

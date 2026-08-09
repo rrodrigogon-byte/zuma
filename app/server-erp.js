@@ -16,12 +16,14 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import crypto from 'crypto';
 import { db, save, hydrate, flush } from './db.js';
 import { CATALOGO_BEBIDAS_KYTTO, RESUMO_CATALOGO_BEBIDAS } from './catalogo-bebidas.js';
 import { CATALOGO_ESPETINHOS_KYTTO, RESUMO_CATALOGO_ESPETINHOS } from './catalogo-espetinhos.js';
 import * as clientesKytto from './clientes-contas-kytto.js';
 import * as fiscalKytto from './fiscal-kytto.js';
 import * as tributacaoKytto from './tributacao-kytto.js';
+import * as fiscalXmlKytto from './fiscal-xml-kytto.js';
 import { OAuth2Client } from 'google-auth-library';
 import bcrypt from 'bcryptjs';
 import * as cadastrosMestres from './cadastros-mestres-kytto.js';
@@ -885,6 +887,116 @@ async function iniciar() {
     } catch (error) {
       res.status(422).json({ erro: error.message });
     }
+  });
+
+  function documentoFiscalSeguro(documento) {
+    if (!documento) return documento;
+    const { xmlBruto, xmlAssinado, ...seguro } = documento;
+    return { ...seguro, xmlDisponivel: Boolean(xmlAssinado), xmlBrutoDisponivel: Boolean(xmlBruto) };
+  }
+
+  function pagamentosFiscaisDaComanda(comanda) {
+    return (comanda.pagamentos || []).map((pagamento) => ({
+      meio: pagamento.meio || pagamento.metodo || 'dinheiro',
+      valor: Number(pagamento.valor || 0),
+      integrado: Boolean(pagamento.integrado),
+      cnpjCredenciadora: pagamento.cnpjCredenciadora || pagamento.cnpj_credenciadora || '',
+      bandeira: pagamento.bandeira || '',
+      codigoAutorizacao: pagamento.codigoAutorizacao || pagamento.autorizacao || '',
+    }));
+  }
+
+  function baseFiscalDaComanda(req, comanda, { modelo = '65', destinatario = null } = {}) {
+    const tenantId = fiscalTenantId(req);
+    const config = fiscalKytto.obterConfiguracaoFiscal(tenantId);
+    const pendencias = [];
+    if (!comanda || comanda.empresaId !== req.empresaId) throw new Error('Comanda não encontrada na empresa ativa.');
+    if (comanda.status !== 'fechada') pendencias.push('A comanda precisa estar fechada e integralmente quitada antes de gerar o documento fiscal.');
+    if (!(comanda.itens || []).length) pendencias.push('A comanda não possui itens para faturamento fiscal.');
+    const taxaServico = Number(comanda.taxaServico || 0);
+    if (taxaServico > 0) pendencias.push('A taxa de serviço exige regra fiscal específica antes de gerar o documento.');
+    if (String(modelo) === '55' && !destinatario) pendencias.push('NF-e modelo 55 exige destinatário identificado.');
+    const subtotal = Number(totalComanda(comanda) || 0);
+    const descontoTotal = Math.max(0, Number(comanda.desconto || 0));
+    let descontoRestante = descontoTotal;
+    const itens = (comanda.itens || []).map((item, indice, lista) => {
+      const base = itemParaCalculoFiscal(req.empresaId, item, tenantId);
+      const valorProduto = Number(base.quantidade || 0) * Number(base.valorUnitario || 0);
+      const desconto = indice === lista.length - 1
+        ? descontoRestante
+        : Number((subtotal > 0 ? (valorProduto / subtotal) * descontoTotal : 0).toFixed(2));
+      descontoRestante = Number(Math.max(0, descontoRestante - desconto).toFixed(2));
+      return { ...base, desconto };
+    });
+    const calculo = tributacaoKytto.totalizarDocumentoFiscal(itens, contextoTributarioFiscal(req, { exigirNcm: true }));
+    for (const pendencia of calculo.pendencias) pendencias.push(`Item ${pendencia.item}: ${pendencia.pendencia}`);
+    const pagamentos = pagamentosFiscaisDaComanda(comanda);
+    if (!pagamentos.length && comanda.status === 'fechada') pendencias.push('A comanda fechada não possui meios de pagamento registrados.');
+    const totalPago = Number(pagamentos.reduce((soma, pagamento) => soma + Number(pagamento.valor || 0), 0).toFixed(2));
+    if (Math.abs(totalPago - Number(calculo.totais.valorTotal || 0)) > 0.02) pendencias.push('Os pagamentos da comanda divergem do total fiscal calculado.');
+    const preflight = config.preflight || fiscalKytto.verificarProntidao(config, config.certificado);
+    return {
+      modelo: String(modelo), origemId: comanda.id, comandaId: comanda.id,
+      config, preflight, itens: calculo.itens, totais: calculo.totais, pagamentos, destinatario,
+      pendencias, aptoParaRascunho: preflight.pronto && pendencias.length === 0,
+      valorOperacional: Number(comanda.totalPago ?? totalComanda(comanda) ?? 0),
+    };
+  }
+
+  // Prévia determinística: não reserva número, não lê certificado e não transmite.
+  app.get('/api/v1/fiscal/comandas/:id/preview', requerEditorCatalogo, (req, res) => {
+    try {
+      const modelo = ['55', '65'].includes(String(req.query?.modelo)) ? String(req.query.modelo) : '65';
+      const comanda = comandasDaEmpresa(req.empresaId).find((item) => item.id === req.params.id);
+      const previa = baseFiscalDaComanda(req, comanda, { modelo });
+      res.json({ ok: true, previa: { ...previa, config: fiscalResposta(previa.config) }, emissaoExternaBloqueada: true });
+    } catch (error) {
+      res.status(422).json({ erro: error.message });
+    }
+  });
+
+  // Cria e assina um rascunho local, validado contra o XSD oficial. A rota não
+  // chama SEFAZ, não autoriza nota e não é acionada automaticamente pelo PDV.
+  app.post('/api/v1/fiscal/comandas/:id/rascunho', requerEditorCatalogo, async (req, res) => {
+    try {
+      const modelo = ['55', '65'].includes(String(req.body?.modelo)) ? String(req.body.modelo) : '65';
+      const comanda = comandasDaEmpresa(req.empresaId).find((item) => item.id === req.params.id);
+      const base = baseFiscalDaComanda(req, comanda, { modelo, destinatario: req.body?.destinatario || null });
+      if (!base.aptoParaRascunho) return res.status(422).json({ erro: 'Prévia fiscal possui pendências.', pendencias: [...base.preflight.pendencias, ...base.pendencias] });
+      const tenantId = fiscalTenantId(req);
+      const documento = fiscalKytto.criarDocumentoFiscalRascunho(tenantId, {
+        origemId: comanda.id, itens: base.itens, pagamentos: base.pagamentos, valorTotal: base.totais.valorTotal,
+      }, { modelo, origemId: comanda.id });
+      if (documento.status === 'validado_local') return res.json({ ok: true, documento: documentoFiscalSeguro(documento), idempotente: true, emissaoExternaBloqueada: true });
+      const material = await fiscalKytto.carregarMaterialAtivo(tenantId);
+      const urlsNfce = modelo === '65' ? fiscalKytto.obterUrlsNfce(material.config.uf, material.config.ambiente) : null;
+      const xmlBruto = fiscalXmlKytto.montarXmlFiscalV400({
+        config: material.config, modelo, numero: documento.numero, serie: documento.serie, chaveAcesso: documento.chaveAcesso,
+        codigoNumerico: documento.codigoNumerico, dataEmissao: new Date().toISOString(), itens: base.itens,
+        totais: base.totais, pagamentos: base.pagamentos, destinatario: base.destinatario,
+        qrCodeUrl: urlsNfce?.qrCodeUrl, urlChave: urlsNfce?.urlChave, qrCodeVersao: urlsNfce?.versaoQrCode,
+      });
+      const assinado = fiscalXmlKytto.assinarXmlFiscal(xmlBruto, material);
+      const validacao = fiscalXmlKytto.validarXmlFiscal(assinado.xml);
+      const documentoAtualizado = fiscalKytto.atualizarDocumentoFiscalRascunho(tenantId, documento.id, {
+        status: validacao.valido ? 'validado_local' : 'rejeitado_local', itens: base.itens, pagamentos: base.pagamentos,
+        tributos: base.totais, valorTotal: base.totais.valorTotal, destinatario: base.destinatario,
+        xmlBruto, xmlAssinado: assinado.xml, hashXmlAssinado: crypto.createHash('sha256').update(assinado.xml).digest('hex'),
+        schema: { versao: validacao.xsd?.schema?.manifest?.descricao || 'NFe 4.00', sha256: validacao.xsd?.schema?.sha256 || null },
+        validacao: { valido: validacao.valido, erros: validacao.xsd?.erros || validacao.estrutura?.erros || [] },
+      });
+      if (!validacao.valido) return res.status(422).json({ erro: 'O XML fiscal foi rejeitado na validação local.', documento: documentoFiscalSeguro(documentoAtualizado), validacao: documentoAtualizado.validacao });
+      res.status(201).json({ ok: true, documento: documentoFiscalSeguro(documentoAtualizado), emissaoExternaBloqueada: true, mensagem: 'Rascunho fiscal assinado e validado localmente; nenhuma transmissão à SEFAZ foi realizada.' });
+    } catch (error) {
+      res.status(422).json({ erro: error.message });
+    }
+  });
+
+  app.get('/api/v1/fiscal/documentos/:id/xml', requerEditorCatalogo, (req, res) => {
+    const documento = fiscalKytto.listarDocumentos(fiscalTenantId(req)).find((item) => item.id === req.params.id);
+    if (!documento) return res.status(404).json({ erro: 'Documento fiscal não encontrado na empresa ativa.' });
+    if (!documento.xmlAssinado) return res.status(409).json({ erro: 'O documento ainda não possui XML fiscal validado localmente.' });
+    res.type('application/xml').set('Content-Disposition', `attachment; filename="${documento.chaveAcesso || documento.id}.xml"`).send(documento.xmlAssinado);
   });
 
   function cardapioPersistido(empresaId = cadastrosMestres.EMPRESA_PADRAO_ID) {

@@ -91,6 +91,18 @@ test('cria rascunho fiscal idempotente por origem da venda', () => {
   assert.equal(fiscal.validarChaveAcessoFiscal(primeira.chaveAcesso), true);
 });
 
+test('persiste rascunho XML validado localmente com hash e evento de auditoria', () => {
+  const documento = fiscal.criarDocumentoFiscalRascunho(tenant, { valorTotal: 20 }, { modelo: '65', origemId: 'comanda-test-xml-001' });
+  const atualizado = fiscal.atualizarDocumentoFiscalRascunho(tenant, documento.id, {
+    status: 'validado_local', valorTotal: 20, xmlBruto: '<NFe/>', xmlAssinado: '<NFe><Signature/></NFe>', hashXmlAssinado: 'a'.repeat(64),
+    schema: { versao: 'PL 010b', sha256: 'b'.repeat(64) }, validacao: { valido: true, erros: [] },
+  });
+  const eventos = fiscal.listarEventosFiscais(tenant, documento.id);
+  assert.equal(atualizado.status, 'validado_local');
+  assert.equal(atualizado.hashXmlAssinado.length, 64);
+  assert.equal(eventos.some((evento) => evento.tipo === 'xml_validado_localmente'), true);
+});
+
 test('registra eventos auditáveis por documento e empresa', () => {
   const documento = fiscal.criarDocumentoFiscalRascunho(tenant, { valorTotal: 10 }, { modelo: '55', origemId: 'pedido-test-001' });
   const evento = fiscal.registrarEventoFiscal(tenant, documento.id, 'validacao_manual', { operador: 'admin-teste' });
