@@ -89,6 +89,7 @@ const NAV_ADMIN_GROUPS = [
       { to: '/admin/cardapio', icon: '🍽️', label: 'Cardápio' },
       { to: '/admin/estoque',  icon: '📦', label: 'Estoque' },
       { to: '/admin/fichas-tecnicas', icon: '🧪', label: 'Fichas Técnicas' },
+      { to: '/admin/modificadores-combos', icon: '➕', label: 'Adicionais & Combos' },
       { to: '/admin/pagamentos',icon: '💳', label: 'Pagamentos' },
       { to: '/admin/notas',    icon: '🧾', label: 'Notas Fiscais' },
       { to: '/admin/cadastros-mestres', icon: '🗂️', label: 'Cadastros Mestres' },

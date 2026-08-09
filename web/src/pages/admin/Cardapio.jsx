@@ -48,6 +48,7 @@ const EMPTY_FORM = {
   setor: 'bar',
   cozinha: false,
   indisponivel: false,
+  modificadorGrupoIds: [],
 }
 
 // Preview do PDV — simula como o cardápio aparece na tela do atendente
@@ -116,6 +117,7 @@ function PreviewPDV({ itens }) {
 export default function Cardapio() {
   const { toast } = useToast()
   const [itens, setItens] = useState([])
+  const [gruposModificadores, setGruposModificadores] = useState([])
   const [loading, setLoading] = useState(true)
   const [novoForm, setNovoForm] = useState({ ...EMPTY_FORM })
   const [novoCategoria, setNovoCategoria] = useState(null)
@@ -131,9 +133,8 @@ export default function Cardapio() {
 
   const load = () => {
     setLoading(true)
-    api
-      .get('/api/admin/cardapio')
-      .then(setItens)
+    Promise.all([api.get('/api/admin/cardapio'), api.get('/api/admin/modificadores/grupos')])
+      .then(([cardapio, modificadores]) => { setItens(cardapio); setGruposModificadores(Array.isArray(modificadores?.grupos) ? modificadores.grupos : []) })
       .catch(() => toast('Erro ao carregar cardápio', 'error'))
       .finally(() => setLoading(false))
   }
@@ -265,6 +266,7 @@ export default function Cardapio() {
       setor: item.setor || 'bar',
       cozinha: !!item.cozinha,
       indisponivel: !!item.indisponivel,
+      modificadorGrupoIds: Array.isArray(item.modificadorGrupoIds) ? item.modificadorGrupoIds : [],
       fiscal: { ncm: '', cfop: '', cstCsosn: '', unidade: 'UN', origem: 0, ...(item.fiscal || {}) },
     })
     setEditModal(item)
@@ -650,6 +652,13 @@ export default function Cardapio() {
                 Sem álcool
               </label>
             </div>
+
+            <details style={{ background: 'rgba(255,107,44,.06)', border: '1px solid rgba(255,107,44,.2)', borderRadius: 8, padding: '8px 12px' }}>
+              <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 700, color: 'var(--gold,#FF6B2C)' }}>➕ Modificadores e adicionais</summary>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 8, marginTop: 10 }}>
+                {gruposModificadores.length === 0 ? <div style={{ fontSize: 12, color: 'var(--muted)' }}>Nenhum grupo cadastrado. Crie-os em “Adicionais & Combos”.</div> : gruposModificadores.map(grupo => <label key={grupo.id} style={{ display: 'flex', gap: 7, alignItems: 'flex-start', color: '#ddd', fontSize: 13, cursor: 'pointer' }}><input type="checkbox" checked={(editForm.modificadorGrupoIds || []).includes(grupo.id)} onChange={e => setEditForm(form => ({ ...form, modificadorGrupoIds: e.target.checked ? [...new Set([...(form.modificadorGrupoIds || []), grupo.id])] : (form.modificadorGrupoIds || []).filter(id => id !== grupo.id) }))} /><span><strong>{grupo.nome}</strong><br /><small style={{ color: 'var(--muted)' }}>{grupo.minimo}–{grupo.maximo} opção(ões){grupo.obrigatorio ? ' · obrigatório' : ''}</small></span></label>)}
+              </div>
+            </details>
 
             {/* Dados fiscais (NFC-e) — usados na emissão da nota do bar */}
             <details style={{ background: 'rgba(255,107,44,.06)', border: '1px solid rgba(255,107,44,.2)', borderRadius: 8, padding: '8px 12px' }}>

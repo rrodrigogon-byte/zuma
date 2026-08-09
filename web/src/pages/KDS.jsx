@@ -101,6 +101,11 @@ function ItemCard({ item, onStatusChange }) {
             <span style={{ fontSize: 40, color: '#FF6B2C', marginRight: 10 }}>×{item.qtd}</span>
             {item.nome}
           </div>
+          {(item.modificadores || []).length > 0 && (
+            <div style={{ marginTop: 6, fontSize: 16, color: '#FF9B72', fontWeight: 700 }}>
+              + {(item.modificadores || []).map(modificador => modificador.nome).join(' · ')}
+            </div>
+          )}
           {item.obs && (
             <div style={{ marginTop: 6, fontSize: 18, color: '#f1c40f', fontWeight: 600 }}>
               ⚠ {item.obs}

@@ -384,6 +384,7 @@ export default function PDV() {
   const { user, lojaAtiva } = useAuth()
   const [mesas, setMesas] = useState({ fisicas: [], virtuais: [] })
   const [cardapio, setCardapio] = useState([])
+  const [combos, setCombos] = useState([])
   const [comanda, setComanda] = useState(null)
   const [sheet, setSheet] = useState(null)
   const [overlay, setOverlay] = useState(null)
@@ -418,7 +419,7 @@ export default function PDV() {
   const [caixaMov, setCaixaMov] = useState({ tipo: 'sangria', valor: '', motivo: '' })
 
   // Item obs modal
-  const [itemObs, setItemObs] = useState({ prod: null, obs: '' })
+  const [itemObs, setItemObs] = useState({ prod: null, obs: '', qtd: 1, grupos: [], selecoes: [] })
 
   // Troco
   const [valorRecebido, setValorRecebido] = useState('')
@@ -459,9 +460,10 @@ export default function PDV() {
   const loadCardapio = useCallback(async () => {
     const chaveCache = `kytto_pdv_catalogo_${lojaAtiva?.id || 'padrao'}`
     try {
-      const data = await api.get('/api/cardapio')
+      const [data, dadosCombos] = await Promise.all([api.get('/api/cardapio'), api.get('/api/combos').catch(() => ({ combos: [] }))])
       const itens = data.filter(p => !p.indisponivel)
       setCardapio(itens)
+      setCombos(Array.isArray(dadosCombos?.combos) ? dadosCombos.combos : [])
       localStorage.setItem(chaveCache, JSON.stringify({ atualizado_em: new Date().toISOString(), itens }))
     } catch {
       try {
@@ -553,6 +555,11 @@ export default function PDV() {
   // Troco (considera divisão)
   const totalPorPessoa = dividir > 1 ? totalFinal / dividir : totalFinal
   const trocoVal = valorRecebido ? (parseFloat(valorRecebido.replace(',', '.')) || 0) - totalPorPessoa : 0
+  const adicionalItemObs = (itemObs.selecoes || []).reduce((soma, selecao) => {
+    const grupo = (itemObs.grupos || []).find(item => item.id === selecao.grupoId)
+    const opcao = (grupo?.opcoes || []).find(item => item.id === selecao.opcaoId)
+    return soma + Number(opcao?.precoAdicional || 0)
+  }, 0)
 
   // Abrir mesa física
   const handleMesaClick = async (mesa) => {
@@ -625,37 +632,64 @@ export default function PDV() {
   const setQtd = (id, v) => setQtdMap(prev => ({ ...prev, [id]: Math.max(1, Math.min(99, v)) }))
 
   // Abrir modal de obs do item antes de adicionar
-  const abrirObsItem = (prod) => {
-    setItemObs({ prod, obs: '', qtd: getQtd(prod.id) })
+  const abrirObsItem = async (prod) => {
+    setItemObs({ prod, obs: '', qtd: getQtd(prod.id), grupos: [], selecoes: [] })
     setOverlay('obs-item')
+    try {
+      const resposta = await api.get(`/api/cardapio/${prod.id}/modificadores`)
+      setItemObs(atual => atual.prod?.id === prod.id ? { ...atual, grupos: Array.isArray(resposta?.grupos) ? resposta.grupos : [] } : atual)
+    } catch (erro) { toast(erro.message || 'Não foi possível carregar os adicionais do item.', 'error') }
   }
 
-  // Confirmar adição com obs
+  const alternarModificador = (grupo, opcao) => {
+    setItemObs(atual => {
+      const selecoes = Array.isArray(atual.selecoes) ? atual.selecoes : []
+      const existe = selecoes.some(selecao => selecao.grupoId === grupo.id && selecao.opcaoId === opcao.id)
+      if (existe) return { ...atual, selecoes: selecoes.filter(selecao => !(selecao.grupoId === grupo.id && selecao.opcaoId === opcao.id)) }
+      const doGrupo = selecoes.filter(selecao => selecao.grupoId === grupo.id)
+      if (doGrupo.length >= Number(grupo.maximo || 1)) { toast(`Máximo de ${grupo.maximo || 1} opção(ões) em ${grupo.nome}.`, 'error'); return atual }
+      return { ...atual, selecoes: [...selecoes, { grupoId: grupo.id, opcaoId: opcao.id }] }
+    })
+  }
+
+  // Confirmar adição com observação e modificadores estruturados
   const confirmarAdicionarItem = async () => {
     if (!itemObs.prod) return
-    await adicionarItem(itemObs.prod.id, itemObs.qtd || 1, itemObs.obs)
+    const sucesso = await adicionarItem(itemObs.prod.id, itemObs.qtd || 1, itemObs.obs, itemObs.selecoes || [])
+    if (!sucesso) return
     setOverlay('cardapio')
-    setItemObs({ prod: null, obs: '', qtd: 1 })
+    setItemObs({ prod: null, obs: '', qtd: 1, grupos: [], selecoes: [] })
   }
 
-  // Lançamento rápido: adiciona direto sem obs
+  // Lançamento rápido: abre configuração sempre que o produto possuir grupos de modificadores.
   const lancamentoRapido = async (prod) => {
     if (!comanda?.id) return
+    if ((prod.modificadorGrupoIds || []).length) { await abrirObsItem(prod); return }
     const qtd = getQtd(prod.id)
     await adicionarItem(prod.id, qtd, '')
     setQtdMap(prev => ({ ...prev, [prod.id]: 1 }))
   }
 
-  // Adicionar item
-  const adicionarItem = async (produtoId, qtd = 1, obs = '') => {
+  const lancarCombo = async (combo) => {
     if (!comanda?.id) return
     try {
-      await api.post(`/api/comanda/${comanda.id}/adicionar`, { itens: [{ produtoId, qtd, obs }] })
+      await api.post(`/api/comanda/${comanda.id}/adicionar`, { itens: [{ comboId: combo.id, qtd: 1 }] })
+      await loadComanda(comanda.id); await loadMesas(); toast(`Combo “${combo.nome}” adicionado!`, 'success')
+    } catch (erro) { toast(erro.message || 'Não foi possível lançar o combo.', 'error') }
+  }
+
+  // Adicionar item
+  const adicionarItem = async (produtoId, qtd = 1, obs = '', modificadores = []) => {
+    if (!comanda?.id) return false
+    try {
+      await api.post(`/api/comanda/${comanda.id}/adicionar`, { itens: [{ produtoId, qtd, obs, modificadores }] })
       await loadComanda(comanda.id)
       await loadMesas()
       toast('Item adicionado!', 'success')
+      return true
     } catch (e) {
       toast(e.message || 'Erro ao adicionar', 'error')
+      return false
     }
   }
 
@@ -1393,6 +1427,7 @@ export default function PDV() {
 
             {/* Grid de produtos — VISUAL RICO */}
             <div style={{ overflowY: 'auto', flex: 1, padding: '4px 16px 16px' }}>
+              {combos.filter(combo => !buscaCardapio || combo.nome.toLowerCase().includes(buscaCardapio.toLowerCase())).length > 0 && (catFiltro === 'Tudo' || buscaCardapio) && <section style={{ margin: '5px 0 14px' }}><div style={{ fontSize: 11, fontWeight: 900, letterSpacing: '.08em', color: '#FF9B72', marginBottom: 7 }}>COMBOS E PROMOÇÕES</div><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(155px, 1fr))', gap: 10 }}>{combos.filter(combo => !buscaCardapio || combo.nome.toLowerCase().includes(buscaCardapio.toLowerCase())).map(combo => <button key={combo.id} onClick={() => lancarCombo(combo)} style={{ border: '1.5px solid #FF6B2C', borderRadius: 12, padding: 12, cursor: 'pointer', textAlign: 'left', background: 'linear-gradient(135deg,#402114,#12283F)', color: '#FFF4EC' }}><div style={{ fontSize: 23, marginBottom: 4 }}>🎁</div><div style={{ fontWeight: 800, fontSize: 13 }}>{combo.nome}</div><div style={{ opacity: .65, fontSize: 10, margin: '4px 0' }}>{(combo.componentes || []).map(componente => `${componente.qtd}× ${componente.nome}`).join(' · ')}</div><div style={{ color: '#FF6B2C', fontWeight: 900, fontSize: 15 }}>{fmtR(combo.preco)}</div></button>)}</div></section>}
               {prodsFiltrados.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 0', opacity: 0.4 }}>
                   <div style={{ fontSize: 32, marginBottom: 8 }}>🔍</div>
@@ -1559,10 +1594,22 @@ export default function PDV() {
                   +
                 </button>
                 <div style={{ flex: 1, textAlign: 'right', fontSize: 14, fontWeight: 700, color: '#FF9B72' }}>
-                  = {fmtR((itemObs.prod.preco || 0) * (itemObs.qtd || 1))}
+                  = {fmtR(((itemObs.prod.preco || 0) + adicionalItemObs) * (itemObs.qtd || 1))}
                 </div>
               </div>
             </div>
+
+            {/* Modificadores e adicionais */}
+            {(itemObs.grupos || []).map(grupo => {
+              const selecionados = (itemObs.selecoes || []).filter(selecao => selecao.grupoId === grupo.id).map(selecao => selecao.opcaoId)
+              return <div key={grupo.id} style={{ marginBottom: 12, padding: '10px 12px', background: '#17354F', borderRadius: 10, border: '1px solid #294F6C' }}>
+                <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 7 }}>{grupo.nome} {grupo.obrigatorio && <span style={{ color: '#FF9B72' }}>*</span>} <span style={{ opacity: .55, fontWeight: 500 }}>({grupo.minimo || 0}–{grupo.maximo || 1})</span></div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{(grupo.opcoes || []).map(opcao => {
+                  const ativo = selecionados.includes(opcao.id)
+                  return <button key={opcao.id} onClick={() => alternarModificador(grupo, opcao)} style={{ border: `1px solid ${ativo ? '#FF6B2C' : '#294F6C'}`, borderRadius: 8, background: ativo ? '#4B2718' : '#12283F', color: ativo ? '#FFF4EC' : '#D9E4EC', padding: '7px 9px', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>{ativo ? '✓ ' : ''}{opcao.nome}{Number(opcao.precoAdicional || 0) > 0 ? ` +${fmtR(opcao.precoAdicional)}` : ''}</button>
+                })}</div>
+              </div>
+            })}
 
             {/* Observação */}
             <div style={{ marginBottom: 14 }}>

@@ -25,6 +25,7 @@ import * as fiscalKytto from './fiscal-kytto.js';
 import * as tributacaoKytto from './tributacao-kytto.js';
 import * as fiscalXmlKytto from './fiscal-xml-kytto.js';
 import { gerarRepresentacaoAuxiliarNfce } from './representacao-fiscal-kytto.js';
+import * as modificadoresCombosKytto from './modificadores-combos-kytto.js';
 import { OAuth2Client } from 'google-auth-library';
 import bcrypt from 'bcryptjs';
 import * as cadastrosMestres from './cadastros-mestres-kytto.js';
@@ -1175,6 +1176,7 @@ async function iniciar() {
       indisponivel: Boolean(payload.indisponivel),
       precoPendente: Boolean(payload.precoPendente),
       semAlcool: Boolean(payload.semAlcool),
+      modificadorGrupoIds: [...new Set((Array.isArray(payload.modificadorGrupoIds) ? payload.modificadorGrupoIds : []).map((id) => texto(id, 100)).filter(Boolean))],
       fiscal: payload.fiscal && typeof payload.fiscal === 'object'
         ? tributacaoKytto.normalizarClassificacaoFiscalProduto(payload.fiscal)
         : (payload.fiscal === null ? undefined : tributacaoKytto.normalizarClassificacaoFiscalProduto({})),
@@ -1201,6 +1203,24 @@ async function iniciar() {
     res.json(itens);
   });
 
+  app.get('/api/combos', requerOperacaoComanda, (req, res) => {
+    const produtos = new Map(cardapioPersistido(req.empresaId).filter((produto) => !produto.indisponivel).map((produto) => [produto.id, produto]));
+    const combos = modificadoresCombosKytto.listarCombos(req.empresaId)
+      .filter((combo) => combo.ativo !== false && (combo.componentes || []).every((componente) => produtos.has(componente.produtoId)))
+      .map((combo) => ({ ...combo, componentes: combo.componentes.map((componente) => ({ ...componente, nome: produtos.get(componente.produtoId)?.nome || componente.produtoId })) }));
+    res.json({ ok: true, combos });
+  });
+
+  app.get('/api/cardapio/:id/modificadores', requerOperacaoComanda, (req, res) => {
+    const produto = cardapioPersistido(req.empresaId).find((item) => item.id === String(req.params.id) && !item.indisponivel);
+    if (!produto) return res.status(404).json({ erro: 'Produto não encontrado ou indisponível.' });
+    const ids = new Set(produto.modificadorGrupoIds || []);
+    const grupos = modificadoresCombosKytto.listarGruposModificadores(req.empresaId)
+      .filter((grupo) => ids.has(grupo.id) && grupo.ativo !== false)
+      .map((grupo) => ({ ...grupo, opcoes: (grupo.opcoes || []).filter((opcao) => opcao.ativo !== false) }));
+    res.json({ ok: true, produtoId: produto.id, grupos });
+  });
+
   app.get('/api/admin/cardapio', requerEditorCatalogo, (req, res) => {
     const estoquePorProduto = new Map(listarEstoqueCardapio(req.empresaId).map(ficha => [String(ficha.produtoId || ficha.id), ficha]));
     const itens = cardapioPersistido(req.empresaId).map((item) => {
@@ -1209,6 +1229,46 @@ async function iniciar() {
       return { ...item, custoMedioPonderado, margemBruta: metricasKytto.calcularMargemBruta(item.preco, custoMedioPonderado) };
     });
     res.json(itens);
+  });
+
+  // Grupos de modificadores e adicionais: configurados por empresa e associados aos produtos pelo campo modificadorGrupoIds.
+  app.get('/api/admin/modificadores/grupos', requerEditorCatalogo, (req, res) => {
+    res.json({ ok: true, grupos: modificadoresCombosKytto.listarGruposModificadores(req.empresaId) });
+  });
+  app.post('/api/admin/modificadores/grupos', requerEditorCatalogo, (req, res) => {
+    try { const grupo = modificadoresCombosKytto.criarGrupoModificadores(req.empresaId, req.body || {}); res.status(201).json({ ok: true, grupo }); }
+    catch (error) { res.status(422).json({ erro: error.message }); }
+  });
+  app.patch('/api/admin/modificadores/grupos/:id', requerEditorCatalogo, (req, res) => {
+    try { const grupo = modificadoresCombosKytto.atualizarGrupoModificadores(req.empresaId, req.params.id, req.body || {}); res.json({ ok: true, grupo }); }
+    catch (error) { res.status(422).json({ erro: error.message }); }
+  });
+  app.delete('/api/admin/modificadores/grupos/:id', requerEditorCatalogo, (req, res) => {
+    try {
+      const emUso = cardapioPersistido(req.empresaId).some((produto) => (produto.modificadorGrupoIds || []).includes(req.params.id));
+      if (emUso) return res.status(409).json({ erro: 'O grupo está associado a produtos. Remova a associação antes de excluir.' });
+      res.json({ ok: true, removido: modificadoresCombosKytto.excluirGrupoModificadores(req.empresaId, req.params.id) });
+    } catch (error) { res.status(422).json({ erro: error.message }); }
+  });
+
+  app.get('/api/admin/combos', requerEditorCatalogo, (req, res) => {
+    res.json({ ok: true, combos: modificadoresCombosKytto.listarCombos(req.empresaId) });
+  });
+  app.post('/api/admin/combos', requerEditorCatalogo, (req, res) => {
+    try {
+      const componentes = Array.isArray(req.body?.componentes) ? req.body.componentes : [];
+      const catalogo = new Set(cardapioPersistido(req.empresaId).map((produto) => produto.id));
+      if (componentes.some((componente) => !catalogo.has(String(componente?.produtoId || '')))) return res.status(422).json({ erro: 'Todo componente do combo deve existir no cardápio da empresa ativa.' });
+      const combo = modificadoresCombosKytto.criarCombo(req.empresaId, req.body || {}); res.status(201).json({ ok: true, combo });
+    } catch (error) { res.status(422).json({ erro: error.message }); }
+  });
+  app.patch('/api/admin/combos/:id', requerEditorCatalogo, (req, res) => {
+    try { const combo = modificadoresCombosKytto.atualizarCombo(req.empresaId, req.params.id, req.body || {}); res.json({ ok: true, combo }); }
+    catch (error) { res.status(422).json({ erro: error.message }); }
+  });
+  app.delete('/api/admin/combos/:id', requerEditorCatalogo, (req, res) => {
+    try { res.json({ ok: true, removido: modificadoresCombosKytto.excluirCombo(req.empresaId, req.params.id) }); }
+    catch (error) { res.status(422).json({ erro: error.message }); }
   });
 
   app.get('/api/admin/estoque', requerEditorCatalogo, (req, res) => {
@@ -1341,6 +1401,10 @@ async function iniciar() {
       ficha.minimo = Math.floor(min);
       alterado = true;
     }
+    if (req.body?.controlaEstoque !== undefined) {
+      ficha.controlaEstoque = Boolean(req.body.controlaEstoque);
+      alterado = true;
+    }
     if (req.body?.qtd !== undefined) {
       const qtd = Number(req.body.qtd);
       if (!Number.isFinite(qtd) || qtd < 0) return res.status(400).json({ erro: 'Quantidade inventariada inválida.' });
@@ -1352,7 +1416,7 @@ async function iniciar() {
       ficha.historico = ficha.historico.slice(-100);
       alterado = true;
     }
-    if (!alterado) return res.status(400).json({ erro: 'Informe uma quantidade ou um estoque mínimo.' });
+    if (!alterado) return res.status(400).json({ erro: 'Informe quantidade, estoque mínimo ou controle de estoque.' });
     ficha.atualizadoEm = agora;
     const lancamentoFinanceiro = ajusteEstoque && ajusteEstoque.variacao < 0 && Number(ficha.custo || 0) > 0
       ? financeiroKytto.registrarLancamento(req.empresaId, {
@@ -2725,12 +2789,66 @@ async function iniciar() {
     const erros = [];
     const adicionados = [];
     for (const entrada of Array.isArray(itens) ? itens : []) {
-      const produto = catalogo.find((item) => item.id === String(entrada?.produtoId || '') && item.empresaId === empresaId && !item.indisponivel);
+      const produtoSolicitado = String(entrada?.produtoId || '');
+      const produto = catalogo.find((item) => item.id === produtoSolicitado && item.empresaId === empresaId && !item.indisponivel);
       if (!produto) {
-        erros.push('Produto não encontrado ou indisponível.');
+        const combo = modificadoresCombosKytto.obterCombo(empresaId, String(entrada?.comboId || produtoSolicitado));
+        if (combo?.ativo !== false) {
+          const primeiroNovo = comanda.itens.length;
+          const qtdCombo = Math.max(1, Math.floor(Number(entrada?.qtd) || 1));
+          const resultadoCombo = adicionarItensComanda(empresaId, comanda, combo.componentes.map((componente) => ({
+            produtoId: componente.produtoId, qtd: Math.max(1, Math.floor(Number(componente.qtd || 1) * qtdCombo)), obs: [entrada?.obs, componente.observacao].filter(Boolean).join(' · '), modificadores: componente.modificadores || [],
+          })));
+          if (resultadoCombo.erros.length) {
+            for (let indice = comanda.itens.length - 1; indice >= primeiroNovo; indice -= 1) removerItemComanda(empresaId, comanda, indice);
+            erros.push(`Combo ${combo.nome}: ${resultadoCombo.erros.join(' ')}`);
+            continue;
+          }
+          const itensCombo = comanda.itens.slice(primeiroNovo);
+          const valorBase = Number(itensCombo.reduce((soma, item) => soma + Number(item.preco || 0) * Number(item.qtd || 0), 0).toFixed(2));
+          const valorPromocional = Number((Number(combo.preco || 0) * qtdCombo).toFixed(2));
+          let restante = valorPromocional;
+          itensCombo.forEach((item, indice) => {
+            const totalLinha = indice === itensCombo.length - 1
+              ? restante
+              : Number((valorBase > 0 ? (Number(item.preco || 0) * Number(item.qtd || 0) / valorBase) * valorPromocional : 0).toFixed(2));
+            restante = Number((restante - totalLinha).toFixed(2));
+            item.precoOriginal = Number(item.preco || 0);
+            item.preco = Number((totalLinha / Math.max(1, Number(item.qtd || 1))).toFixed(2));
+            item.comboId = combo.id; item.comboNome = combo.nome; item.comboPrecoPromocional = valorPromocional;
+          });
+          adicionados.push(...itensCombo);
+          continue;
+        }
+        erros.push('Produto ou combo não encontrado, indisponível ou inativo.');
         continue;
       }
       const qtd = Math.max(1, Math.floor(Number(entrada?.qtd) || 1));
+      let resolucaoModificadores;
+      try {
+        resolucaoModificadores = modificadoresCombosKytto.resolverModificadoresProduto(empresaId, produto, entrada?.modificadores || []);
+      } catch (erroModificador) {
+        erros.push(`${produto.nome}: ${erroModificador.message}`);
+        continue;
+      }
+      const adicionaisBaixados = [];
+      let custoAdicionalEstoque = 0;
+      let modificadorSemEstoque = null;
+      for (const modificador of resolucaoModificadores.itens) {
+        if (!modificador.produtoId) continue;
+        const saldoAdicional = estoque[modificador.produtoId];
+        const qtdBaixa = Number((Number(modificador.quantidadeEstoque || 0) * qtd).toFixed(4));
+        if (!saldoAdicional || saldoAdicional.ativo === false) { modificadorSemEstoque = `O adicional “${modificador.nome}” não possui item de estoque ativo.`; break; }
+        if (saldoAdicional.controlaEstoque === true && !permitirEstoqueNegativo && Number(saldoAdicional.qtd || 0) < qtdBaixa) { modificadorSemEstoque = `Estoque insuficiente para o adicional “${modificador.nome}” (disponível: ${saldoAdicional.qtd || 0}).`; break; }
+        const custoConfigurado = Number(modificador.custoAdicional || 0);
+        const custoUnitarioAdicional = custoConfigurado > 0
+          ? custoConfigurado
+          : Number(saldoAdicional.custoMedioPonderado ?? saldoAdicional.custo ?? 0) * Number(modificador.quantidadeEstoque || 0);
+        // O custo configurado já vem em adicionalCusto; só complementar pelo custo médio do estoque quando a opção não o definiu.
+        if (custoConfigurado <= 0) custoAdicionalEstoque += custoUnitarioAdicional;
+        adicionaisBaixados.push({ produtoId: modificador.produtoId, nome: modificador.nome, qtd: qtdBaixa, custoUnitario: custoUnitarioAdicional, grupoId: modificador.grupoId, opcaoId: modificador.opcaoId });
+      }
+      if (modificadorSemEstoque) { erros.push(`${produto.nome}: ${modificadorSemEstoque}`); continue; }
       const ficha = estoque[produto.id];
       const fichaTecnica = fichasTecnicasKytto.obterFichaPorProduto(empresaId, produto.id);
       const baixarProdutoFinal = !fichaTecnica || fichaTecnica.baixarProdutoFinal === true;
@@ -2762,11 +2880,13 @@ async function iniciar() {
       const cozinha = Boolean(produto.cozinha) || ['cozinha', 'chapa', 'restaurante'].includes(setor);
       const item = {
         id: `it-${Date.now().toString(36)}-${String(comanda.itens.length + 1).padStart(3, '0')}`,
-        produtoId: produto.id, nome: produto.nome, preco: Number(produto.preco || 0), qtd,
-        // Snapshot do custo no lançamento: preserva o CMV histórico da venda.
-        custoUnitario: Number(custoFicha?.custoPorRendimento ?? ficha?.custoMedioPonderado ?? ficha?.custo ?? 0),
+        produtoId: produto.id, nome: produto.nome,
+        precoBase: Number(produto.preco || 0), preco: Number((Number(produto.preco || 0) + Number(resolucaoModificadores.adicionalPreco || 0)).toFixed(2)), qtd,
+        // Snapshot do custo no lançamento: preserva o CMV histórico da venda, inclusive adicionais.
+        custoUnitario: Number((Number(custoFicha?.custoPorRendimento ?? ficha?.custoMedioPonderado ?? ficha?.custo ?? 0) + Number(resolucaoModificadores.adicionalCusto || 0) + custoAdicionalEstoque).toFixed(4)),
         fichaTecnicaId: fichaTecnica?.id || null,
-        insumosBaixados: baixaInsumos.movimentacoes || [],
+        insumosBaixados: baixaInsumos.movimentacoes || [], adicionaisBaixados,
+        modificadores: resolucaoModificadores.itens, adicionalPreco: Number(resolucaoModificadores.adicionalPreco || 0),
         obs: String(entrada?.obs || '').trim().slice(0, 300), setor,
         cozinha, status: 'novo', criadoEm: new Date().toISOString(),
       };
@@ -2778,6 +2898,15 @@ async function iniciar() {
         ficha.historico.push({ tipo: 'saida_comanda', qtd, saldoFinal: ficha.qtd, comandaId: comanda.id, ts: new Date().toISOString() });
         ficha.historico = ficha.historico.slice(-100);
         ficha.atualizadoEm = new Date().toISOString();
+      }
+      for (const adicional of adicionaisBaixados) {
+        const saldoAdicional = estoque[adicional.produtoId];
+        if (!saldoAdicional || saldoAdicional.controlaEstoque !== true) continue;
+        saldoAdicional.qtd = Number((Number(saldoAdicional.qtd || 0) - Number(adicional.qtd || 0)).toFixed(4));
+        saldoAdicional.historico ||= [];
+        saldoAdicional.historico.push({ tipo: 'saida_modificador', qtd: adicional.qtd, saldoFinal: saldoAdicional.qtd, comandaId: comanda.id, produtoFinalId: produto.id, grupoId: adicional.grupoId, opcaoId: adicional.opcaoId, ts: new Date().toISOString() });
+        saldoAdicional.historico = saldoAdicional.historico.slice(-100);
+        saldoAdicional.atualizadoEm = new Date().toISOString();
       }
     }
     comanda.atualizadaEm = new Date().toISOString();
@@ -2792,8 +2921,8 @@ async function iniciar() {
       const novaQtd = Math.max(1, Math.floor(Number(dados.qtd) || 1));
       const diferenca = novaQtd - Number(item.qtd || 0);
       const ficha = estoquePersistido(empresaId)[item.produtoId];
-      if (item.fichaTecnicaId && diferenca !== 0) {
-        throw new Error('Para alterar a quantidade de um item com ficha técnica, cancele-o e lance novamente para preservar a baixa de insumos.');
+      if ((item.fichaTecnicaId || (item.adicionaisBaixados || []).length) && diferenca !== 0) {
+        throw new Error('Para alterar a quantidade de item com ficha técnica ou adicionais, cancele-o e lance novamente para preservar a baixa de estoque.');
       }
       if (ficha?.controlaEstoque === true && diferenca > 0 && Number(ficha.qtd || 0) < diferenca) {
         throw new Error('Estoque insuficiente para aumentar a quantidade.');
@@ -2832,6 +2961,15 @@ async function iniciar() {
       saldo.qtd = Number((Number(saldo.qtd || 0) + Number(insumo.qtd || 0)).toFixed(4));
       saldo.historico ||= [];
       saldo.historico.push({ tipo: 'estorno_ficha_tecnica', qtd: insumo.qtd, saldoFinal: saldo.qtd, produtoFinalId: item.produtoId, fichaTecnicaId: item.fichaTecnicaId, comandaId: comanda.id, ts: new Date().toISOString() });
+      saldo.historico = saldo.historico.slice(-100);
+      saldo.atualizadoEm = new Date().toISOString();
+    }
+    for (const adicional of item.adicionaisBaixados || []) {
+      const saldo = estoque[adicional.produtoId];
+      if (!saldo || saldo.controlaEstoque !== true) continue;
+      saldo.qtd = Number((Number(saldo.qtd || 0) + Number(adicional.qtd || 0)).toFixed(4));
+      saldo.historico ||= [];
+      saldo.historico.push({ tipo: 'estorno_modificador', qtd: adicional.qtd, saldoFinal: saldo.qtd, produtoFinalId: item.produtoId, comandaId: comanda.id, grupoId: adicional.grupoId, opcaoId: adicional.opcaoId, ts: new Date().toISOString() });
       saldo.historico = saldo.historico.slice(-100);
       saldo.atualizadoEm = new Date().toISOString();
     }
@@ -3097,6 +3235,14 @@ async function iniciar() {
             saldo.qtd = Number((Number(saldo.qtd || 0) + Number(insumo.qtd || 0)).toFixed(4));
             saldo.historico ||= [];
             saldo.historico.push({ tipo: 'reversao_ficha_tecnica_reabertura', qtd: insumo.qtd, saldoFinal: saldo.qtd, produtoFinalId: item.produtoId, fichaTecnicaId: item.fichaTecnicaId, comandaId: comanda.id, ts: new Date().toISOString() });
+            saldo.historico = saldo.historico.slice(-100);
+          }
+          for (const adicional of item.adicionaisBaixados || []) {
+            const saldo = estoque[adicional.produtoId];
+            if (!saldo || saldo.controlaEstoque !== true) continue;
+            saldo.qtd = Number((Number(saldo.qtd || 0) + Number(adicional.qtd || 0)).toFixed(4));
+            saldo.historico ||= [];
+            saldo.historico.push({ tipo: 'reversao_modificador_reabertura', qtd: adicional.qtd, saldoFinal: saldo.qtd, produtoFinalId: item.produtoId, comandaId: comanda.id, grupoId: adicional.grupoId, opcaoId: adicional.opcaoId, ts: new Date().toISOString() });
             saldo.historico = saldo.historico.slice(-100);
           }
         }
