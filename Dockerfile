@@ -21,8 +21,8 @@ FROM node:22-alpine
 ENV NODE_ENV=production
 ENV PORT=8080
 
-# Instalar dependências de sistema para geração de PDF (DANFE)
-RUN apk add --no-cache fontconfig ttf-dejavu
+# Dependências de sistema para DANFE e validação XSD fiscal oficial.
+RUN apk add --no-cache fontconfig ttf-dejavu libxml2-utils
 
 WORKDIR /app
 

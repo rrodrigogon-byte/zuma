@@ -23,3 +23,20 @@
 [1]: https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=LrBx7WT9PuA= "Manual de Orientação do Contribuinte — MOC 7.00"
 [2]: https://dfe-portal.svrs.rs.gov.br/NFe/Documentos "Portal DFe da SEFAZ Virtual do Rio Grande do Sul — Documentos"
 [3]: https://www.sefaz.mt.gov.br/portal/nfce/?pg=cGdJbmZvcm1hY2Fv "SEFAZ-MT — NFC-e: endereços de Web Service"
+
+## Atualização de XML, QR Code e Schemas — 09/08/2026
+
+| Fonte | Achado verificado | Decisão de implementação |
+|---|---|---|
+| [NT 2025.001](https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=trSXReoZPuY=) | A NT introduz QR Code NFC-e versão 3, com assinatura de campos específicos para contingência, e define resposta síncrona para lote de uma NF-e. | O QR Code será construído por adaptador com versão explícita por UF. A emissão unitária será preparada como síncrona; nenhum envio será realizado nesta fase. |
+| [Portal DFe SVRS](https://dfe-portal.svrs.rs.gov.br/NFe/Documentos) | O pacote de schemas de NF-e/NFC-e lista a NT 2025.001 e a NT 2025.002; o portal também registra atualizações de 2026. | A versão do schema será um artefato versionado, com verificação de hash e bloqueio explícito quando o pacote oficial não estiver instalado/validado. |
+| [NT 2025.001, grupo ZX](https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=trSXReoZPuY=) | `infNFeSupl` inclui `qrCode` e `urlChave` para NFC-e. As regras de pagamento, cartão e PIX são validadas pela SEFAZ. | O serializador validará campos de pagamento e manterá `infNFeSupl` isolado da assinatura do XML. |
+
+> Em 2026 há novas notas técnicas de RTC e atualizações de documentação. Portanto, o Kytto não tratará um XSD estático como definitivo: o cadastro de schemas preservará versão, origem, data e SHA-256 do pacote oficial.
+
+[4]: https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=trSXReoZPuY= "Nota Técnica 2025.001 — QR Code NFC-e versão 3 e resposta síncrona"
+[5]: https://dfe-portal.svrs.rs.gov.br/NFe/Documentos "Portal DFe SVRS — Schemas, manuais e notas técnicas"
+
+## Evidência do pacote de schemas
+
+Em 09/08/2026 foi obtido no portal oficial DFe/SVRS o pacote `PL_010b_NT2025_002_v1.30.zip`, identificado na página como **Pacote de Liberação nº 010b v1.30**, que contempla NT 2025.002 v1.30, NT 2024.003 e NT 2025.001. O arquivo será mantido como insumo de validação local, com SHA-256 registrado na instalação do artefato.
