@@ -23,6 +23,7 @@ export default function RelatoriosOperacionais() {
   const [days, setDays] = useState('30')
   const [report, setReport] = useState(null)
   const [metricas, setMetricas] = useState(null)
+  const [analise, setAnalise] = useState(null)
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
@@ -31,12 +32,14 @@ export default function RelatoriosOperacionais() {
       const end = new Date(); const start = new Date(end)
       start.setDate(start.getDate() - Number(days) + 1); start.setHours(0, 0, 0, 0)
       const periodo = Number(days) === 7 ? 'semana' : 'mes'
-      const [result, metricasRes] = await Promise.all([
+      const [result, metricasRes, analiseRes] = await Promise.all([
         api.get(`/api/admin/relatorios/operacional?dataInicio=${encodeURIComponent(start.toISOString())}&dataFim=${encodeURIComponent(end.toISOString())}`),
         api.get(`/api/admin/metricas/operacional?periodo=${periodo}`),
+        api.get(`/api/admin/analytics/vendas?periodo=${periodo}`),
       ])
       setReport(result.relatorio)
       setMetricas(metricasRes?.ok ? metricasRes : null)
+      setAnalise(analiseRes?.ok ? analiseRes.analise : null)
     } catch (error) { toast(error.message || 'Falha ao gerar relatório operacional.', 'error') }
     finally { setLoading(false) }
   }, [days, toast])
@@ -63,6 +66,11 @@ export default function RelatoriosOperacionais() {
         <section className="card"><h2 style={{ fontSize: 16, color: '#12283F', margin: '0 0 15px' }}>Estoque</h2><div style={{ display: 'grid', gap: 10, color: 'var(--muted)', fontSize: 13 }}><div>Itens de cardápio: <strong style={{ color: '#12283F' }}>{estoqueCan.total ?? report.estoque.itensCatalogo}</strong></div><div>Itens controlados: <strong style={{ color: '#12283F' }}>{estoqueCan.total ?? report.estoque.itensControlados}</strong></div><div>Sem estoque: <strong style={{ color: (estoqueCan.semEstoque ?? report.estoque.semEstoque) ? '#b23a48' : '#16806b' }}>{estoqueCan.semEstoque ?? report.estoque.semEstoque}</strong></div><div>Abaixo do mínimo: <strong style={{ color: (estoqueCan.baixo ?? report.estoque.baixo.length) ? '#c47a00' : '#16806b' }}>{estoqueCan.baixo ?? report.estoque.baixo.length}</strong></div></div></section>
       </div>
       <section className="card" style={{ marginTop: 16 }}><h2 style={{ fontSize: 16, color: '#12283F', margin: '0 0 12px' }}>Receita por meio de pagamento</h2><div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{Object.entries(report.vendas.porMetodo || {}).map(([metodo, valor]) => <div key={metodo} style={{ padding: '10px 13px', background: 'var(--surface-2)', borderRadius: 8, minWidth: 130 }}><div style={{ color: 'var(--muted)', textTransform: 'capitalize', fontSize: 11 }}>{metodo}</div><strong style={{ color: '#12283F' }}>{fmtR(valor)}</strong></div>)}</div></section>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 16, marginTop: 16 }}>
+        <section className="card"><h2 style={{ fontSize: 16, color: '#12283F', margin: '0 0 12px' }}>Mais vendidos</h2>{(analise?.maisVendidos || []).length === 0 ? <p style={{ color: 'var(--muted)' }}>Sem vendas fechadas no período.</p> : <div style={{ display: 'grid', gap: 8 }}>{analise.maisVendidos.slice(0, 5).map((item, index) => <div key={item.produtoId} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13 }}><span><strong style={{ color: '#FF6B2C' }}>{index + 1}.</strong> {item.nome}<small style={{ color: 'var(--muted)' }}> · {item.qtd} un.</small></span><strong style={{ color: '#12283F' }}>{fmtR(item.faturamento)}</strong></div>)}</div>}</section>
+        <section className="card"><h2 style={{ fontSize: 16, color: '#12283F', margin: '0 0 12px' }}>Horário de pico</h2><div style={{ color: '#FF6B2C', fontSize: 30, fontWeight: 850 }}>{String(analise?.horarioPico?.hora ?? 0).padStart(2, '0')}:00</div><p style={{ color: 'var(--muted)', margin: '6px 0 0', fontSize: 13 }}>{analise?.horarioPico?.vendas || 0} venda(s) · {fmtR(analise?.horarioPico?.faturamento || 0)} no período selecionado.</p></section>
+        <section className="card"><h2 style={{ fontSize: 16, color: '#12283F', margin: '0 0 12px' }}>Curva ABC</h2>{(analise?.curvaABC || []).length === 0 ? <p style={{ color: 'var(--muted)' }}>Sem itens vendidos no período.</p> : <div style={{ display: 'grid', gap: 7 }}>{analise.curvaABC.slice(0, 6).map(item => <div key={item.produtoId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}><span><b style={{ color: item.classe === 'A' ? '#16806b' : item.classe === 'B' ? '#c47a00' : '#6b7280' }}>{item.classe}</b> · {item.nome}</span><span style={{ color: 'var(--muted)' }}>{item.participacao}%</span></div>)}</div>}</section>
+      </div>
     </>}
   </div>
 }

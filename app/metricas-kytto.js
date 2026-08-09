@@ -280,6 +280,67 @@ export function calcularCMV(vendas = [], estoque = {}) {
 }
 
 // ============================================================================
+// ANÁLISES OPERACIONAIS — PRODUTOS, HORÁRIOS E CURVA ABC
+// ============================================================================
+
+function horaOperacionalCuiaba(valor) {
+  const data = new Date(valor)
+  if (Number.isNaN(data.getTime())) return null
+  const partes = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba', hour: '2-digit', hour12: false }).formatToParts(data)
+  const hora = Number(partes.find(parte => parte.type === 'hour')?.value)
+  return Number.isInteger(hora) ? hora : null
+}
+
+/**
+ * Consolida itens de comandas fechadas. O resultado usa exclusivamente a fonte
+ * oficial de faturamento e permite que relatórios e BI exibam os mesmos dados.
+ */
+export function analisarMixVendas(vendas = []) {
+  const produtos = new Map()
+  const horas = Array.from({ length: 24 }, (_, hora) => ({ hora, vendas: 0, faturamento: 0 }))
+  let faturamento = 0
+
+  for (const venda of vendas) {
+    const totalVenda = Number(venda.totalPago ?? calcularTotalComanda(venda) ?? 0)
+    faturamento += totalVenda
+    const hora = horaOperacionalCuiaba(venda.fechadaEm || venda.atualizadaEm || venda.abertaEm)
+    if (hora !== null) {
+      horas[hora].vendas += 1
+      horas[hora].faturamento = Number((horas[hora].faturamento + totalVenda).toFixed(2))
+    }
+    for (const item of venda.itens || []) {
+      const id = String(item.produtoId || item.id || item.nome || 'sem-produto')
+      const qtd = Number(item.qtd || 0)
+      const receita = Number((Number(item.preco || 0) * qtd).toFixed(2))
+      const atual = produtos.get(id) || { produtoId: id, nome: item.nome || 'Produto não identificado', qtd: 0, faturamento: 0, cmv: 0 }
+      atual.qtd += qtd
+      atual.faturamento = Number((atual.faturamento + receita).toFixed(2))
+      atual.cmv = Number((atual.cmv + Number(item.custoUnitario || 0) * qtd).toFixed(2))
+      produtos.set(id, atual)
+    }
+  }
+
+  const ordenados = [...produtos.values()]
+    .map(item => ({ ...item, margemBruta: item.faturamento > 0 ? Number(((item.faturamento - item.cmv) / item.faturamento * 100).toFixed(2)) : 0 }))
+    .sort((a, b) => b.faturamento - a.faturamento || b.qtd - a.qtd)
+  let acumulado = 0
+  const curvaABC = ordenados.map((item) => {
+    acumulado += item.faturamento
+    const participacaoAcumulada = faturamento > 0 ? Number((acumulado / faturamento * 100).toFixed(2)) : 0
+    const classe = participacaoAcumulada <= 80 ? 'A' : participacaoAcumulada <= 95 ? 'B' : 'C'
+    return { ...item, participacao: faturamento > 0 ? Number((item.faturamento / faturamento * 100).toFixed(2)) : 0, participacaoAcumulada, classe }
+  })
+
+  return {
+    faturamento: Number(faturamento.toFixed(2)),
+    maisVendidos: ordenados.slice(0, 10),
+    curvaABC,
+    horarioPico: [...horas].sort((a, b) => b.faturamento - a.faturamento || b.vendas - a.vendas)[0] || { hora: 0, vendas: 0, faturamento: 0 },
+    vendasPorHora: horas,
+  }
+}
+
+// ============================================================================
 // GUARDRAILS DE CONSISTÊNCIA
 // ============================================================================
 
@@ -340,5 +401,6 @@ export default {
   calcularCustoMedioPonderado,
   calcularMargemBruta,
   calcularCMV,
+  analisarMixVendas,
   validarConsistenciaMetricas,
 }

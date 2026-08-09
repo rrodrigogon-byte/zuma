@@ -28,6 +28,7 @@ import { pagamentosPix, listarProvedoresPagamento } from './pagamentos-pix-kytto
 import { gerarRelatorioOperacional } from './relatorios-operacionais-kytto.js';
 import * as canaisKytto from './canais-fidelidade-kytto.js';
 import * as financeiroKytto from './financeiro-central-kytto.js';
+import * as fichasTecnicasKytto from './fichas-tecnicas-kytto.js';
 import * as caixaKytto from './caixa-diario-kytto.js';
 import * as comprasKytto from './compras-kytto.js';
 import * as metricasKytto from './metricas-kytto.js';
@@ -1935,6 +1936,69 @@ async function iniciar() {
     }
   });
 
+  // ── FICHAS TÉCNICAS E INSUMOS ──────────────────────────────────────────────
+  function dadosFichaTecnicaValidados(empresaId, dados = {}) {
+    const catalogo = cardapioPersistido(empresaId);
+    const produtoFinal = catalogo.find(item => item.id === String(dados.produtoFinalId || '') && item.indisponivel !== true);
+    if (!produtoFinal) throw new Error('Produto final não encontrado no cardápio da empresa ativa.');
+    const itens = (Array.isArray(dados.itens) ? dados.itens : []).map((item) => {
+      const produto = catalogo.find(candidato => candidato.id === String(item?.produtoId || '') && candidato.indisponivel !== true);
+      if (!produto) throw new Error('Um dos insumos não pertence ao cardápio da empresa ativa.');
+      return { ...item, produtoId: produto.id, nome: produto.nome, unidade: produto.unidade || 'UN' };
+    });
+    return { ...dados, produtoFinalId: produtoFinal.id, nomeProduto: produtoFinal.nome, itens };
+  }
+
+  app.get('/api/admin/fichas-tecnicas', requerEditorCatalogo, (req, res) => {
+    const estoque = estoquePersistido(req.empresaId);
+    const fichas = fichasTecnicasKytto.listarFichasTecnicas(req.empresaId).map((ficha) => ({
+      ...ficha,
+      custo: fichasTecnicasKytto.custoFichaTecnica(req.empresaId, ficha.produtoFinalId, estoque),
+    }));
+    res.json({ ok: true, fichas });
+  });
+
+  function ativarControleDeInsumosFicha(empresaId, dadosFicha) {
+    listarEstoqueCardapio(empresaId);
+    const estoque = estoquePersistido(empresaId);
+    for (const insumo of dadosFicha.itens || []) {
+      const ficha = estoque[insumo.produtoId];
+      if (!ficha) continue;
+      ficha.controlaEstoque = true;
+      ficha.atualizadoEm = new Date().toISOString();
+    }
+  }
+
+  app.post('/api/admin/fichas-tecnicas', requerEditorCatalogo, (req, res) => {
+    try {
+      const dadosFicha = dadosFichaTecnicaValidados(req.empresaId, req.body || {});
+      ativarControleDeInsumosFicha(req.empresaId, dadosFicha);
+      const ficha = fichasTecnicasKytto.salvarFichaTecnica(req.empresaId, dadosFicha);
+      save();
+      res.status(201).json({ ok: true, ficha });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.patch('/api/admin/fichas-tecnicas/:fichaId', requerEditorCatalogo, (req, res) => {
+    try {
+      const dadosFicha = dadosFichaTecnicaValidados(req.empresaId, req.body || {});
+      ativarControleDeInsumosFicha(req.empresaId, dadosFicha);
+      const ficha = fichasTecnicasKytto.salvarFichaTecnica(req.empresaId, dadosFicha, req.params.fichaId);
+      save();
+      res.json({ ok: true, ficha });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.delete('/api/admin/fichas-tecnicas/:fichaId', requerEditorCatalogo, (req, res) => {
+    if (!fichasTecnicasKytto.removerFichaTecnica(req.empresaId, req.params.fichaId)) return res.status(404).json({ erro: 'Ficha técnica não encontrada.' });
+    save();
+    res.json({ ok: true });
+  });
+
   // ── MÉTRICAS CANÔNICAS (SSOT) ──────────────────────────────────────────────
   function dataCuiabaAgora() {
     return metricasKytto.dataOperacionalCuiaba(new Date());
@@ -2018,6 +2082,16 @@ async function iniciar() {
     }
   });
   
+  app.get('/api/admin/analytics/vendas', requerEditorCatalogo, (req, res) => {
+    try {
+      const recorte = resolverPeriodoMetricas(req.query);
+      const vendas = metricasKytto.filtrarVendasPorPeriodo(comandasDaEmpresa(req.empresaId), recorte.de, recorte.ate);
+      res.json({ ok: true, periodo: { nome: recorte.nome, inicio: recorte.de, fim: recorte.ate, fuso: 'America/Cuiaba' }, analise: metricasKytto.analisarMixVendas(vendas) });
+    } catch (erro) {
+      res.status(500).json({ erro: 'Erro ao analisar vendas.', detalhes: erro.message });
+    }
+  });
+
   app.get('/api/admin/metricas/consistencia', requerEditorCatalogo, (req, res) => {
     try {
       // Guardrail: valida que Dashboard, BI e Relatórios retornam os mesmos totais
@@ -2384,14 +2458,31 @@ async function iniciar() {
       }
       const qtd = Math.max(1, Math.floor(Number(entrada?.qtd) || 1));
       const ficha = estoque[produto.id];
-      // Validar estoque: se a empresa não permite estoque negativo e o saldo é insuficiente, bloquear
-      if (ficha?.controlaEstoque === true && !permitirEstoqueNegativo && Number(ficha.qtd || 0) < qtd) {
+      const fichaTecnica = fichasTecnicasKytto.obterFichaPorProduto(empresaId, produto.id);
+      const baixarProdutoFinal = !fichaTecnica || fichaTecnica.baixarProdutoFinal === true;
+      // Validar estoque do produto final apenas quando a ficha técnica também o controla.
+      if (baixarProdutoFinal && ficha?.controlaEstoque === true && !permitirEstoqueNegativo && Number(ficha.qtd || 0) < qtd) {
         erros.push(`${produto.nome}: estoque insuficiente (disponível: ${ficha.qtd || 0}, solicitado: ${qtd}).`);
         continue;
       }
       // Se permite estoque negativo, permitir venda mesmo com saldo zero ou negativo
-      if (ficha?.controlaEstoque === true && permitirEstoqueNegativo && Number(ficha.qtd || 0) < qtd) {
+      if (baixarProdutoFinal && ficha?.controlaEstoque === true && permitirEstoqueNegativo && Number(ficha.qtd || 0) < qtd) {
         console.warn(`[ESTOQUE NEGATIVO] ${produto.nome}: saldo ${ficha.qtd || 0} insuficiente para ${qtd}, mas empresa permite estoque negativo.`);
+      }
+      let baixaInsumos = { movimentacoes: [] };
+      let custoFicha = null;
+      if (fichaTecnica) {
+        try {
+          baixaInsumos = fichasTecnicasKytto.baixarInsumosFichaTecnica(empresaId, produto.id, qtd, estoque, {
+            permitirEstoqueNegativo,
+            comandaId: comanda.id,
+            usuario: 'sistema',
+          });
+          custoFicha = fichasTecnicasKytto.custoFichaTecnica(empresaId, produto.id, estoque);
+        } catch (erroFicha) {
+          erros.push(`${produto.nome}: ${erroFicha.message}`);
+          continue;
+        }
       }
       const setor = String(produto.setor || (produto.cozinha ? 'cozinha' : 'bar')).trim().toLowerCase() || 'bar';
       const cozinha = Boolean(produto.cozinha) || ['cozinha', 'chapa', 'restaurante'].includes(setor);
@@ -2399,13 +2490,15 @@ async function iniciar() {
         id: `it-${Date.now().toString(36)}-${String(comanda.itens.length + 1).padStart(3, '0')}`,
         produtoId: produto.id, nome: produto.nome, preco: Number(produto.preco || 0), qtd,
         // Snapshot do custo no lançamento: preserva o CMV histórico da venda.
-        custoUnitario: Number(ficha?.custoMedioPonderado ?? ficha?.custo ?? 0),
+        custoUnitario: Number(custoFicha?.custoPorRendimento ?? ficha?.custoMedioPonderado ?? ficha?.custo ?? 0),
+        fichaTecnicaId: fichaTecnica?.id || null,
+        insumosBaixados: baixaInsumos.movimentacoes || [],
         obs: String(entrada?.obs || '').trim().slice(0, 300), setor,
         cozinha, status: 'novo', criadoEm: new Date().toISOString(),
       };
       comanda.itens.push(item);
       adicionados.push(item);
-      if (ficha?.controlaEstoque === true) {
+      if (baixarProdutoFinal && ficha?.controlaEstoque === true) {
         ficha.qtd = Number(ficha.qtd || 0) - qtd;
         ficha.historico ||= [];
         ficha.historico.push({ tipo: 'saida_comanda', qtd, saldoFinal: ficha.qtd, comandaId: comanda.id, ts: new Date().toISOString() });
@@ -2425,6 +2518,9 @@ async function iniciar() {
       const novaQtd = Math.max(1, Math.floor(Number(dados.qtd) || 1));
       const diferenca = novaQtd - Number(item.qtd || 0);
       const ficha = estoquePersistido(empresaId)[item.produtoId];
+      if (item.fichaTecnicaId && diferenca !== 0) {
+        throw new Error('Para alterar a quantidade de um item com ficha técnica, cancele-o e lance novamente para preservar a baixa de insumos.');
+      }
       if (ficha?.controlaEstoque === true && diferenca > 0 && Number(ficha.qtd || 0) < diferenca) {
         throw new Error('Estoque insuficiente para aumentar a quantidade.');
       }
@@ -2446,12 +2542,24 @@ async function iniciar() {
     const posicao = Number(indice);
     const item = comanda.itens[posicao];
     if (!item) return null;
-    const ficha = estoquePersistido(empresaId)[item.produtoId];
-    if (ficha?.controlaEstoque === true) {
+    const estoque = estoquePersistido(empresaId);
+    const ficha = estoque[item.produtoId];
+    const fichaTecnica = item.fichaTecnicaId ? fichasTecnicasKytto.obterFichaPorProduto(empresaId, item.produtoId) : null;
+    const baixarProdutoFinal = !fichaTecnica || fichaTecnica.baixarProdutoFinal === true;
+    if (baixarProdutoFinal && ficha?.controlaEstoque === true) {
       ficha.qtd = Number(ficha.qtd || 0) + Number(item.qtd || 0);
       ficha.historico ||= [];
       ficha.historico.push({ tipo: 'estorno_comanda', qtd: item.qtd, saldoFinal: ficha.qtd, comandaId: comanda.id, ts: new Date().toISOString() });
       ficha.historico = ficha.historico.slice(-100);
+    }
+    for (const insumo of item.insumosBaixados || []) {
+      const saldo = estoque[insumo.produtoId];
+      if (!saldo || saldo.controlaEstoque !== true) continue;
+      saldo.qtd = Number((Number(saldo.qtd || 0) + Number(insumo.qtd || 0)).toFixed(4));
+      saldo.historico ||= [];
+      saldo.historico.push({ tipo: 'estorno_ficha_tecnica', qtd: insumo.qtd, saldoFinal: saldo.qtd, produtoFinalId: item.produtoId, fichaTecnicaId: item.fichaTecnicaId, comandaId: comanda.id, ts: new Date().toISOString() });
+      saldo.historico = saldo.historico.slice(-100);
+      saldo.atualizadoEm = new Date().toISOString();
     }
     comanda.itens.splice(posicao, 1);
     comanda.atualizadaEm = new Date().toISOString();
@@ -2702,11 +2810,20 @@ async function iniciar() {
         const estoque = estoquePersistido(req.empresaId);
         for (const item of comanda.itens || []) {
           const ficha = estoque[item.produtoId];
-          if (ficha?.controlaEstoque === true) {
+          const fichaTecnica = item.fichaTecnicaId ? fichasTecnicasKytto.obterFichaPorProduto(req.empresaId, item.produtoId) : null;
+          if ((!fichaTecnica || fichaTecnica.baixarProdutoFinal === true) && ficha?.controlaEstoque === true) {
             ficha.qtd = Number(ficha.qtd || 0) + Number(item.qtd || 0);
             ficha.historico ||= [];
             ficha.historico.push({ tipo: 'reversao_comanda_reabertura', qtd: item.qtd, saldoFinal: ficha.qtd, comandaId: comanda.id, ts: new Date().toISOString() });
             ficha.historico = ficha.historico.slice(-100);
+          }
+          for (const insumo of item.insumosBaixados || []) {
+            const saldo = estoque[insumo.produtoId];
+            if (!saldo || saldo.controlaEstoque !== true) continue;
+            saldo.qtd = Number((Number(saldo.qtd || 0) + Number(insumo.qtd || 0)).toFixed(4));
+            saldo.historico ||= [];
+            saldo.historico.push({ tipo: 'reversao_ficha_tecnica_reabertura', qtd: insumo.qtd, saldoFinal: saldo.qtd, produtoFinalId: item.produtoId, fichaTecnicaId: item.fichaTecnicaId, comandaId: comanda.id, ts: new Date().toISOString() });
+            saldo.historico = saldo.historico.slice(-100);
           }
         }
       }
