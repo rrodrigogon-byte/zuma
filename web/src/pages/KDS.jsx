@@ -239,8 +239,22 @@ export default function KDS() {
 
   async function load() {
     try {
-      const data = await api.get('/api/kds')
-      setItems(Array.isArray(data) ? data : [])
+      const data = await api.get('/api/setores/pedidos')
+      const pedidos = Array.isArray(data?.pedidos) ? data.pedidos : []
+      const itens = pedidos.flatMap((pedido) =>
+        (pedido.itens || []).map(({ indice, ...item }) => ({
+          ...item,
+          idx: indice,
+          comandaId: pedido.comandaId,
+          mesa: pedido.mesa,
+          mesaNum: pedido.mesaNum,
+          cliente: pedido.cliente,
+          tipo: pedido.tipo,
+          local: pedido.local,
+          abertaEm: pedido.abertaEm,
+        }))
+      )
+      setItems(itens)
     } catch {
       // silently retry
     } finally {
@@ -256,7 +270,7 @@ export default function KDS() {
 
   async function handleStatusChange(comandaId, idx, newStatus) {
     try {
-      await api.post('/api/admin/kds/status', { comandaId, idx, status: newStatus })
+      await api.patch(`/api/kds/comanda/${comandaId}/item/${idx}/status`, { status: newStatus })
       setItems(prev =>
         prev.map(i =>
           i.comandaId === comandaId && i.idx === idx ? { ...i, status: newStatus } : i
@@ -273,11 +287,11 @@ export default function KDS() {
 
   async function marcarTodosProntos() {
     const pendentes = items.filter(i => i.status !== 'pronto' &&
-      (filtroSetor === 'todos' || (filtroSetor === 'bar' && !i.cozinha) || (filtroSetor === 'cozinha' && i.cozinha)))
+      (filtroSetor === 'todos' || (filtroSetor === 'bar' && !isCozinha(i)) || (filtroSetor === 'cozinha' && isCozinha(i))))
     if (!pendentes.length) return
     if (!confirm(`Marcar ${pendentes.length} itens como PRONTOS?`)) return
     for (const item of pendentes) {
-      try { await api.post('/api/admin/kds/status', { comandaId:item.comandaId, idx:item.idx, status:'pronto' }) } catch {}
+      try { await api.patch(`/api/kds/comanda/${item.comandaId}/item/${item.idx}/status`, { status:'pronto' }) } catch {}
     }
     setItems(prev => prev.map(i => {
       const match = pendentes.find(p => p.comandaId===i.comandaId && p.idx===i.idx)
@@ -303,8 +317,9 @@ export default function KDS() {
     } catch {}
   }
 
-  const barItems     = useMemo(() => items.filter(i => !i.cozinha), [items])
-  const cozinhaItems = useMemo(() => items.filter(i => i.cozinha), [items])
+  const isCozinha = (item) => Boolean(item.cozinha) || ['cozinha', 'chapa', 'restaurante'].includes(String(item.setor || '').toLowerCase())
+  const barItems     = useMemo(() => items.filter(i => !isCozinha(i)), [items])
+  const cozinhaItems = useMemo(() => items.filter(i => isCozinha(i)), [items])
   const totalPendentes   = useMemo(() => items.filter(i => i.status !== 'pronto').length, [items])
   const barPendentes     = useMemo(() => barItems.filter(i => i.status !== 'pronto').length, [barItems])
   const cozinhaPendentes = useMemo(() => cozinhaItems.filter(i => i.status !== 'pronto').length, [cozinhaItems])

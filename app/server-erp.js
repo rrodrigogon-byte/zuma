@@ -2125,11 +2125,13 @@ async function iniciar() {
       if (ficha?.controlaEstoque === true && permitirEstoqueNegativo && Number(ficha.qtd || 0) < qtd) {
         console.warn(`[ESTOQUE NEGATIVO] ${produto.nome}: saldo ${ficha.qtd || 0} insuficiente para ${qtd}, mas empresa permite estoque negativo.`);
       }
+      const setor = String(produto.setor || (produto.cozinha ? 'cozinha' : 'bar')).trim().toLowerCase() || 'bar';
+      const cozinha = Boolean(produto.cozinha) || ['cozinha', 'chapa', 'restaurante'].includes(setor);
       const item = {
         id: `it-${Date.now().toString(36)}-${String(comanda.itens.length + 1).padStart(3, '0')}`,
         produtoId: produto.id, nome: produto.nome, preco: Number(produto.preco || 0), qtd,
-        obs: String(entrada?.obs || '').trim().slice(0, 300), setor: produto.setor || 'bar',
-        cozinha: Boolean(produto.cozinha), status: produto.cozinha ? 'novo' : 'entregue', criadoEm: new Date().toISOString(),
+        obs: String(entrada?.obs || '').trim().slice(0, 300), setor,
+        cozinha, status: 'novo', criadoEm: new Date().toISOString(),
       };
       comanda.itens.push(item);
       adicionados.push(item);
@@ -2303,6 +2305,8 @@ async function iniciar() {
         mesa: comanda.mesa,
         mesaNum: comanda.mesaNum,
         cliente: comanda.nome,
+        tipo: comanda.tipo,
+        local: comanda.local,
         abertaEm: comanda.abertaEm,
         itens: (comanda.itens || []).map((item, indice) => ({ ...item, indice }))
           .filter((item) => !setorFiltro || String(item.setor || 'bar').toLowerCase() === setorFiltro)
@@ -2320,8 +2324,10 @@ async function iniciar() {
         mesa: comanda.mesa,
         mesaNum: comanda.mesaNum,
         cliente: comanda.nome,
+        tipo: comanda.tipo,
+        local: comanda.local,
         abertaEm: comanda.abertaEm,
-        itens: (comanda.itens || []).map((item, indice) => ({ ...item, indice })).filter((item) => item.cozinha && ['novo', 'em_preparo', 'pronto'].includes(item.status)),
+        itens: (comanda.itens || []).map((item, indice) => ({ ...item, indice })).filter((item) => ['novo', 'em_preparo', 'pronto'].includes(item.status)),
       }))
       .filter((pedido) => pedido.itens.length > 0);
     res.json({ ok: true, pedidos });
@@ -2331,7 +2337,7 @@ async function iniciar() {
     const comanda = obterComandaOperacional(req.empresaId, req.params.id, { ativa: true });
     if (!comanda || comanda.status !== 'aberta') return res.status(409).json({ erro: 'A comanda não está aberta para atualização de produção.' });
     const item = comanda.itens?.[Number(req.params.indice)];
-    if (!item || item.cozinha !== true) return res.status(404).json({ erro: 'Item de produção não encontrado na comanda.' });
+    if (!item || !String(item.setor || '').trim()) return res.status(404).json({ erro: 'Item operacional não encontrado na comanda.' });
     const status = String(req.body?.status || '').toLowerCase();
     const transicoes = {
       novo: ['em_preparo', 'cancelado'],
