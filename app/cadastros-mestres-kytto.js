@@ -196,6 +196,12 @@ export function migrarPerfisUsuarios() {
   return migrados;
 }
 
+export function obterUsuario(empresaId, usuarioId) {
+  const usuario = bucket('usuarios', empresaId)[String(usuarioId || '')];
+  if (!usuario || usuario.empresaId !== empresaId) return null;
+  return usuario;
+}
+
 export function listarUsuarios(empresaId) {
   return Object.values(bucket('usuarios', empresaId))
     .filter((usuario) => usuario.ativo !== false || usuario.incluirInativos)
@@ -311,6 +317,7 @@ export default {
   atualizarEmpresa,
   criarUsuario,
   atualizarUsuario,
+  obterUsuario,
   listarUsuarios,
   obterUsuarioPorEmail,
   criarFuncionario,

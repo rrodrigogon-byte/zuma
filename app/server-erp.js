@@ -130,11 +130,14 @@ function verificarPassword(pwd, hash) {
 
 function espelharUsuarioEmMemoria(usuario) {
   if (!usuario?.email) return null;
+  const perfis = Array.isArray(usuario.perfis) ? usuario.perfis : [];
+  const roles = Array.isArray(usuario.roles) ? usuario.roles : [];
+  const administrador = usuario.platformAdmin === true || perfis.includes('administrador') || roles.includes('administrador') || roles.includes('admin') || ['admin', 'administrador'].includes(String(usuario.role || '').toLowerCase());
   const espelho = {
     ...usuario,
     senha: usuario.senhaHash || usuario.senha || '',
-    tipo: (usuario.roles || [usuario.role || usuario.tipo || 'operador']).includes('admin') ? 'admin' : (usuario.tipo || 'operador'),
-    role: usuario.role || (usuario.roles || [])[0] || 'operador',
+    tipo: administrador ? 'admin' : (usuario.tipo || 'operador'),
+    role: administrador ? 'admin' : (usuario.role || roles[0] || 'operador'),
     ativo: usuario.ativo !== false,
   };
   usuarios.set(String(espelho.email).toLowerCase(), espelho);
@@ -220,11 +223,13 @@ app.post('/api/admin/login', authLimiter, (req, res) => {
     if (!empresas.length) return res.status(403).json({ error: 'Usuário sem empresa ativa associada.' });
     const empresaAtiva = empresas[0];
     const token = Buffer.from(`${email}:${Date.now()}:${empresaAtiva.id}`).toString('base64');
-    const papel = usuario.role || ((usuario.roles || []).includes('admin') ? 'admin' : ((usuario.roles || [])[0] || 'operador'));
+    const acesso = resumoAcessoUsuario(usuario);
+    const administrador = usuario.platformAdmin === true || acesso.perfis.includes('administrador') || (usuario.roles || []).includes('admin') || (usuario.roles || []).includes('administrador');
+    const papel = administrador ? 'admin' : (usuario.role || ((usuario.roles || [])[0] || 'operador'));
 
     res.json({
       token,
-      user: { email: usuario.email, nome: usuario.nome, role: papel, empresaId: empresaAtiva.id, roles: usuario.roles || [papel], perfis: resumoAcessoUsuario(usuario).perfis, tipoUsuario: resumoAcessoUsuario(usuario).tipoUsuario, permissoes: resumoAcessoUsuario(usuario).permissoes, platformAdmin: usuario.platformAdmin === true },
+      user: { email: usuario.email, nome: usuario.nome, role: papel, empresaId: empresaAtiva.id, roles: usuario.roles || [papel], perfis: acesso.perfis, tipoUsuario: acesso.tipoUsuario, permissoes: administrador ? { ...acesso.permissoes, plataforma: ['ler', 'criar', 'editar', 'excluir'] } : acesso.permissoes, platformAdmin: administrador },
       role: papel,
       sessao: {
         loja_ativa: { id: empresaAtiva.id, nome: empresaAtiva.nomeFantasia || empresaAtiva.nome, ativa: empresaAtiva.ativa !== false, empresaId: empresaAtiva.id },
@@ -630,6 +635,26 @@ async function iniciar() {
 
     req.usuario = { ...usuario, ...acesso };
     req.permissoes = acesso.permissoes;
+    req.empresaId = empresa.id;
+    req.empresa = empresa;
+    next();
+  }
+
+  // Autenticação simples para operações próprias do usuário, sem exigir
+  // privilégio administrativo de um módulo específico.
+  function requerAutenticacao(req, res, next) {
+    const usuario = usuarioDoToken(req) || espelharUsuarioEmMemoria(cadastrosMestres.obterUsuarioPorEmail(
+      (() => {
+        try { return Buffer.from(String(req.headers.authorization || '').replace(/^Bearer\s+/i, ''), 'base64').toString('utf8').split(':')[0]; }
+        catch { return ''; }
+      })()
+    ));
+    if (!usuario || usuario.ativo === false) return res.status(401).json({ erro: 'Autenticação necessária.' });
+    const empresas = cadastrosMestres.empresasDoUsuario(usuario);
+    const solicitada = String(req.get('X-Loja-Id') || '').trim();
+    const empresa = solicitada ? empresas.find((item) => item.id === solicitada && item.ativa !== false) : empresas[0];
+    if (!empresa) return res.status(403).json({ erro: 'Empresa ativa inválida ou sem permissão para este usuário.' });
+    req.usuario = { ...usuario, ...resumoAcessoUsuario(usuario) };
     req.empresaId = empresa.id;
     req.empresa = empresa;
     next();

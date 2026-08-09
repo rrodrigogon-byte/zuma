@@ -90,7 +90,6 @@ function scheduleUpload(){
   if(!GCS_BUCKET || !_hydrated || _uploadTimer) return;
   // debounce: agrupa rajadas de save() (ex.: nextId()+save()) num único upload.
   _uploadTimer = setTimeout(runUpload, 1500);
-  if(_uploadTimer.unref) _uploadTimer.unref();
 }
 
 async function runUpload(){

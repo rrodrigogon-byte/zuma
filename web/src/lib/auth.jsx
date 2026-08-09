@@ -62,10 +62,13 @@ export function AuthProvider({ children }) {
     setLojasAcessiveis([])
   }
 
-  const role = user?.role?.toLowerCase?.()
-  const isAdmin = role === 'admin'
-  const isOrg = ['admin', 'organizador', 'gerente'].includes(role)
-  const isStaff = ['admin', 'organizador', 'staff', 'gerente', 'vendedor', 'garcom', 'barbeiro', 'caixa', 'operador'].includes(role)
+  const role = String(user?.role || '').trim().toLowerCase()
+  const perfis = Array.isArray(user?.perfis) ? user.perfis.map((perfil) => String(perfil || '').trim().toLowerCase()) : []
+  const roles = Array.isArray(user?.roles) ? user.roles.map((perfil) => String(perfil || '').trim().toLowerCase()) : []
+  const isPlatformAdmin = user?.platformAdmin === true || perfis.includes('administrador') || roles.includes('administrador') || roles.includes('admin')
+  const isAdmin = isPlatformAdmin || ['admin', 'administrador', 'super_admin'].includes(role)
+  const isOrg = isAdmin || ['organizador', 'gerente', 'gerente_operacional'].includes(role)
+  const isStaff = isOrg || ['staff', 'vendedor', 'garcom', 'barbeiro', 'caixa', 'operador', 'operador_pdv', 'cozinha'].includes(role)
   const isAtleta = role === 'atleta'
 
   return (
@@ -78,6 +81,7 @@ export function AuthProvider({ children }) {
       trocarLoja,
       atualizarContextoLojas,
       isAdmin,
+      isPlatformAdmin,
       isOrg,
       isStaff,
       isAtleta,
