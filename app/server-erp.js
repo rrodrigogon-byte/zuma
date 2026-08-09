@@ -27,6 +27,9 @@ import * as cadastrosMestres from './cadastros-mestres-kytto.js';
 import { pagamentosPix } from './pagamentos-pix-kytto.js';
 import { gerarRelatorioOperacional } from './relatorios-operacionais-kytto.js';
 import * as canaisKytto from './canais-fidelidade-kytto.js';
+import * as financeiroKytto from './financeiro-central-kytto.js';
+import * as caixaKytto from './caixa-diario-kytto.js';
+import * as comprasKytto from './compras-kytto.js';
 import { acaoDaRequisicao, moduloDaRota, resumoAcessoUsuario, temPermissao } from './perfis-usuarios-kytto.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -55,10 +58,13 @@ app.use(cors({
   credentials: true
 }));
 
-// Rate limit global: 300 req/min por IP
+// Rate limit global: 300 req/min por IP em produção. A simulação isolada
+// usa uma chave explícita de ambiente e não compartilha dados com produção;
+// nesse único contexto, o limite elevado evita falsos negativos de carga sintética.
+const simulationMode = process.env.SIMULATION_MODE === 'true';
 app.use(rateLimit({
   windowMs: 60 * 1000,
-  max: 300,
+  max: simulationMode ? 100000 : 300,
   standardHeaders: true,
   legacyHeaders: false,
   message: { erro: 'Muitas requisições. Aguarde um momento.' }
@@ -875,14 +881,39 @@ async function iniciar() {
     if (!ficha || ficha.ativo === false) return res.status(404).json({ erro: 'Produto de estoque não encontrado.' });
     if (!Number.isFinite(qtd) || qtd <= 0) return res.status(400).json({ erro: 'Quantidade de entrada inválida.' });
     if (custo !== null && (!Number.isFinite(custo) || custo < 0)) return res.status(400).json({ erro: 'Custo unitário inválido.' });
+    const dataOperacao = req.body?.dataOperacao || new Date().toISOString();
+    const movimentoId = `est-${Date.now().toString(36)}-${produtoId}`;
     ficha.qtd = Number(ficha.qtd || 0) + qtd;
     if (custo !== null) ficha.custo = custo;
     ficha.historico ||= [];
-    ficha.historico.push({ tipo: 'entrada', qtd, custo: custo ?? ficha.custo ?? 0, ts: new Date().toISOString(), origem: 'administracao' });
+    ficha.historico.push({
+      id: movimentoId,
+      tipo: 'entrada',
+      qtd,
+      custo: custo ?? ficha.custo ?? 0,
+      ts: dataOperacao,
+      origem: 'administracao',
+      fornecedorId: req.body?.fornecedorId || null,
+      documento: req.body?.documento || null,
+    });
     ficha.historico = ficha.historico.slice(-100);
     ficha.atualizadoEm = new Date().toISOString();
+    const statusFinanceiro = req.body?.statusFinanceiro === 'pago' ? 'pago' : 'pendente';
+    const lancamentoFinanceiro = req.body?.registrarFinanceiro === false ? null : financeiroKytto.registrarEntradaEstoque(req.empresaId, {
+      produtoId,
+      produtoNome: ficha.nome,
+      qtd,
+      custo: custo ?? ficha.custo ?? 0,
+      fornecedorId: req.body?.fornecedorId,
+      documento: req.body?.documento,
+      usuario: req.usuario?.email,
+      dataOperacao,
+      meioPagamento: req.body?.meioPagamento,
+      status: statusFinanceiro,
+      movimentoId,
+    });
     save();
-    res.json({ ok: true, item: ficha });
+    res.json({ ok: true, item: ficha, lancamentoFinanceiro });
   });
 
   app.post('/api/admin/estoque/ajuste', requerEditorCatalogo, (req, res) => {
@@ -891,6 +922,7 @@ async function iniciar() {
     if (!ficha || ficha.ativo === false) return res.status(404).json({ erro: 'Produto de estoque não encontrado.' });
     const agora = new Date().toISOString();
     let alterado = false;
+    let ajusteEstoque = null;
     if (req.body?.min !== undefined) {
       const min = Number(req.body.min);
       if (!Number.isFinite(min) || min < 0) return res.status(400).json({ erro: 'Estoque mínimo inválido.' });
@@ -903,14 +935,32 @@ async function iniciar() {
       const anterior = Number(ficha.qtd || 0);
       ficha.qtd = qtd;
       ficha.historico ||= [];
+      ajusteEstoque = { anterior, qtd, variacao: qtd - anterior };
       ficha.historico.push({ tipo: 'inventario', qtd: Math.abs(qtd - anterior), saldoAnterior: anterior, saldoFinal: qtd, ts: agora, origem: 'administracao' });
       ficha.historico = ficha.historico.slice(-100);
       alterado = true;
     }
     if (!alterado) return res.status(400).json({ erro: 'Informe uma quantidade ou um estoque mínimo.' });
     ficha.atualizadoEm = agora;
+    const lancamentoFinanceiro = ajusteEstoque && ajusteEstoque.variacao < 0 && Number(ficha.custo || 0) > 0
+      ? financeiroKytto.registrarLancamento(req.empresaId, {
+        tipo: 'despesa',
+        categoria: 'Alimentação/Bebidas',
+        descricao: `Ajuste de inventário — perda de ${ficha.nome} (${Math.abs(ajusteEstoque.variacao)} un.)`,
+        valor: Math.abs(ajusteEstoque.variacao) * Number(ficha.custo || 0),
+        origem: 'estoque_ajuste',
+        status: 'pago',
+        vencimento: req.body?.dataOperacao || agora,
+        dataOperacao: req.body?.dataOperacao || agora,
+        pagoEm: req.body?.dataOperacao || agora,
+        meioPagamento: 'ajuste',
+        referencia: { produtoId, movimentoId: `inv-${Date.now().toString(36)}-${produtoId}` },
+        usuario: req.usuario?.email,
+        automatico: true,
+      })
+      : null;
     save();
-    res.json({ ok: true, item: ficha });
+    res.json({ ok: true, item: ficha, lancamentoFinanceiro });
   });
 
   app.get('/api/admin/estoque/inventario', requerEditorCatalogo, (req, res) => {
@@ -1048,9 +1098,11 @@ async function iniciar() {
     return `${obter('year')}-${obter('month')}-${obter('day')}`;
   }
 
-  function executarRotinaFinanceiraDiaria(empresaId, origem = 'manual') {
+  function executarRotinaFinanceiraDiaria(empresaId, origem = 'manual', dataReferencia = null) {
     const alertas = clientesKytto.verificarAlertasVencimento(empresaId);
-    const data = dataOperacional();
+    const referencia = dataReferencia ? new Date(dataReferencia) : new Date();
+    if (Number.isNaN(referencia.valueOf())) throw new Error('Data de fechamento inválida.');
+    const data = dataOperacional(referencia);
     let fechamento = clientesKytto.obterFechamentoDiario(empresaId, data);
     let fechadoAgora = false;
     if (!fechamento) {
@@ -1062,8 +1114,13 @@ async function iniciar() {
       });
       fechadoAgora = true;
     }
+    const fechamentoFinanceiro = financeiroKytto.fecharDia(
+      empresaId,
+      data,
+      origem === 'agendador' ? 'agendador-financeiro@kytto.local' : String(empresaId)
+    );
     save();
-    return { empresaId, data, alertas, fechamento, fechadoAgora };
+    return { empresaId, data, alertas, fechamento, fechamentoFinanceiro, fechadoAgora };
   }
 
   app.post('/api/internal/financeiro/rotina-diaria', validarAgendador, (req, res) => {
@@ -1105,8 +1162,12 @@ async function iniciar() {
   app.post('/api/admin/contas-receber', requerEditorCatalogo, (req, res) => {
     try {
       const conta = clientesKytto.criarContaReceber(req.empresaId, req.body);
+      const lancamentoFinanceiro = financeiroKytto.sincronizarContaReceber(req.empresaId, conta, {
+        usuario: req.usuario?.email,
+        meioPagamento: req.body?.meioPagamento || 'conta',
+      });
       save();
-      res.status(201).json({ ok: true, conta });
+      res.status(201).json({ ok: true, conta, lancamentoFinanceiro });
     } catch (error) {
       res.status(400).json({ erro: error.message });
     }
@@ -1125,8 +1186,12 @@ async function iniciar() {
     try {
       const conta = clientesKytto.atualizarContaReceber(req.empresaId, req.params.contaId, req.body);
       if (!conta) return res.status(404).json({ erro: 'Conta a receber não encontrada.' });
+      const lancamentoFinanceiro = financeiroKytto.sincronizarContaReceber(req.empresaId, conta, {
+        usuario: req.usuario?.email,
+        meioPagamento: req.body?.meioPagamento,
+      });
       save();
-      res.json({ ok: true, conta });
+      res.json({ ok: true, conta, lancamentoFinanceiro });
     } catch (error) {
       res.status(400).json({ erro: error.message });
     }
@@ -1144,8 +1209,8 @@ async function iniciar() {
 
   app.post('/api/admin/fechamento-diario', requerEditorCatalogo, (req, res) => {
     try {
-      const resultado = executarRotinaFinanceiraDiaria(req.empresaId, 'manual');
-      res.status(resultado.fechadoAgora ? 201 : 200).json({ ok: true, fechamento: resultado.fechamento, alertas: resultado.alertas, fechadoAgora: resultado.fechadoAgora });
+      const resultado = executarRotinaFinanceiraDiaria(req.empresaId, 'manual', req.body?.data || null);
+      res.status(resultado.fechadoAgora ? 201 : 200).json({ ok: true, fechamento: resultado.fechamento, fechamentoFinanceiro: resultado.fechamentoFinanceiro, alertas: resultado.alertas, fechadoAgora: resultado.fechadoAgora });
     } catch (error) {
       res.status(400).json({ erro: error.message });
     }
@@ -1155,6 +1220,194 @@ async function iniciar() {
     try {
       const fechamentos = clientesKytto.listarFechamentosDiarios(req.empresaId);
       res.json({ ok: true, fechamentos });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  // ── FINANCEIRO CENTRAL MULTIENTIDADE ─────────────────────────────────────
+  // O livro-caixa consolida automaticamente vendas de comandas, entradas de
+  // estoque e contas de clientes. Lançamentos manuais continuam disponíveis
+  // para notas, boletos, ajustes e demais eventos administrativos.
+  app.get('/api/admin/financeiro/lancamentos', requerEditorCatalogo, (req, res) => {
+    try {
+      res.json(financeiroKytto.listarLancamentos(req.empresaId, req.query));
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.post('/api/admin/financeiro/lancamentos', requerEditorCatalogo, (req, res) => {
+    try {
+      const lancamento = financeiroKytto.registrarLancamento(req.empresaId, {
+        ...req.body,
+        origem: 'manual',
+        usuario: req.usuario?.email,
+        automatico: false,
+      });
+      save();
+      res.status(201).json(lancamento);
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.patch('/api/admin/financeiro/lancamentos/:id', requerEditorCatalogo, (req, res) => {
+    try {
+      const lancamento = financeiroKytto.atualizarLancamento(req.empresaId, req.params.id, req.body || {});
+      if (!lancamento) return res.status(404).json({ erro: 'Lançamento financeiro não encontrado na empresa ativa.' });
+      save();
+      res.json(lancamento);
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.delete('/api/admin/financeiro/lancamentos/:id', requerEditorCatalogo, (req, res) => {
+    try {
+      const lancamento = financeiroKytto.cancelarLancamento(req.empresaId, req.params.id, req.usuario?.email);
+      if (!lancamento) return res.status(404).json({ erro: 'Lançamento financeiro não encontrado na empresa ativa.' });
+      save();
+      res.json({ ok: true, lancamento });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.get('/api/admin/financeiro/resumo', requerEditorCatalogo, (req, res) => {
+    try {
+      res.json(financeiroKytto.resumoFinanceiro(req.empresaId, { hoje: req.query?.data || undefined }));
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.get('/api/admin/financeiro/fluxo', requerEditorCatalogo, (req, res) => {
+    try {
+      const meses = Math.max(1, Math.min(36, Number(req.query?.meses || 12)));
+      res.json(financeiroKytto.fluxoFinanceiro(req.empresaId, meses, req.query?.data || undefined));
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.get('/api/admin/financeiro/categorias', requerEditorCatalogo, (req, res) => {
+    res.json(financeiroKytto.CATEGORIAS_FINANCEIRAS);
+  });
+
+  app.get('/api/admin/financeiro/contas-pagar', requerEditorCatalogo, (req, res) => {
+    try {
+      res.json(financeiroKytto.listarLancamentos(req.empresaId, { ...req.query, tipo: 'despesa' }));
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.post('/api/admin/financeiro/contas-pagar', requerEditorCatalogo, (req, res) => {
+    try {
+      const lancamento = financeiroKytto.registrarLancamento(req.empresaId, {
+        ...req.body,
+        tipo: 'despesa',
+        origem: req.body?.origem || 'contas_pagar',
+        usuario: req.usuario?.email,
+        automatico: false,
+      });
+      save();
+      res.status(201).json({ ok: true, contaPagar: lancamento });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.post('/api/admin/financeiro/pagamento', requerEditorCatalogo, (req, res) => {
+    try {
+      const id = String(req.body?.lancamentoId || req.body?.id || '');
+      if (!id) return res.status(400).json({ erro: 'Informe o lançamento financeiro a liquidar.' });
+      const lancamento = financeiroKytto.atualizarLancamento(req.empresaId, id, {
+        status: 'pago',
+        pagoEm: req.body?.dataPagamento || new Date().toISOString(),
+        meioPagamento: req.body?.meioPagamento,
+        observacao: req.body?.observacao,
+      }, { permitirAutomatico: true });
+      if (!lancamento) return res.status(404).json({ erro: 'Lançamento financeiro não encontrado na empresa ativa.' });
+      save();
+      res.json({ ok: true, lancamento });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.post('/api/admin/financeiro/fechamento', requerEditorCatalogo, (req, res) => {
+    try {
+      const fechamento = financeiroKytto.fecharDia(req.empresaId, req.body?.data || new Date().toISOString(), req.usuario?.email);
+      save();
+      res.status(fechamento.criadoAgora ? 201 : 200).json({ ok: true, fechamento });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.get('/api/admin/financeiro/fechamentos', requerEditorCatalogo, (req, res) => {
+    try {
+      res.json({ ok: true, fechamentos: financeiroKytto.listarFechamentos(req.empresaId) });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  // ── CAIXA DIÁRIO ─────────────────────────────────────────────────────────
+  app.post('/api/admin/caixa/abrir', requerEditorCatalogo, (req, res) => {
+    try {
+      const caixa = caixaKytto.abrirCaixa(req.empresaId, { ...req.body, usuario: req.usuario?.email });
+      save();
+      res.status(201).json({ ok: true, caixa });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.get('/api/admin/caixa', requerEditorCatalogo, (req, res) => {
+    try {
+      res.json({ ok: true, caixas: caixaKytto.listarCaixas(req.empresaId, req.query) });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.post('/api/admin/caixa/sangria', requerEditorCatalogo, (req, res) => {
+    try {
+      const movimento = caixaKytto.registrarMovimento(req.empresaId, { ...req.body, tipo: 'sangria', usuario: req.usuario?.email });
+      save();
+      res.status(201).json({ ok: true, movimento });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.post('/api/admin/caixa/suprimento', requerEditorCatalogo, (req, res) => {
+    try {
+      const movimento = caixaKytto.registrarMovimento(req.empresaId, { ...req.body, tipo: 'suprimento', usuario: req.usuario?.email });
+      save();
+      res.status(201).json({ ok: true, movimento });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.post('/api/admin/caixa/fechar', requerEditorCatalogo, (req, res) => {
+    try {
+      const caixa = caixaKytto.obterCaixa(req.empresaId, req.body?.caixaId || req.body?.caixa_id);
+      if (!caixa) return res.status(404).json({ erro: 'Caixa não encontrado na empresa ativa.' });
+      const recebimentosDinheiro = financeiroKytto.listarLancamentos(req.empresaId)
+        .filter((item) => item.tipo === 'receita' && item.status === 'pago' && item.meioPagamento === 'dinheiro' && item.pagoEm?.slice(0, 10) === caixa.data)
+        .reduce((soma, item) => soma + Number(item.valor || 0), 0);
+      const resultado = caixaKytto.fecharCaixa(req.empresaId, {
+        ...req.body,
+        recebimentosDinheiro,
+        dataOperacao: req.body?.dataOperacao || `${caixa.data}T23:59:59.000Z`,
+      });
+      save();
+      res.json({ ok: true, ...resultado });
     } catch (error) {
       res.status(400).json({ erro: error.message });
     }
@@ -1181,8 +1434,24 @@ async function iniciar() {
     const acessiveis = cadastrosMestres.empresasDoUsuario(req.usuario).map((empresa) => ({
       id: empresa.id, nome: empresa.nome, nomeFantasia: empresa.nomeFantasia,
       cnpj: empresa.cnpj, ativa: empresa.ativa !== false, modulos: empresa.modulos || [],
+      permitirEstoqueNegativo: empresa.permitirEstoqueNegativo !== false,
     }));
     res.json({ ok: true, empresa: req.empresa, empresasAcessiveis: acessiveis });
+  });
+
+  app.patch('/api/admin/empresa-ativa/configuracoes', requerEditorCatalogo, (req, res) => {
+    try {
+      if (req.body?.permitirEstoqueNegativo === undefined) {
+        return res.status(400).json({ erro: 'Informe permitirEstoqueNegativo como verdadeiro ou falso.' });
+      }
+      const empresa = cadastrosMestres.atualizarEmpresa(req.empresaId, {
+        permitirEstoqueNegativo: Boolean(req.body.permitirEstoqueNegativo),
+      });
+      save();
+      res.json({ ok: true, empresa, mensagem: `Estoque negativo ${empresa.permitirEstoqueNegativo ? 'permitido' : 'bloqueado'} para a empresa ativa.` });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
   });
 
   app.get('/api/admin/funcionarios', requerEditorCatalogo, (req, res) => {
@@ -1231,6 +1500,98 @@ async function iniciar() {
     }
   });
 
+  // ── COMPRAS: PEDIDO → APROVAÇÃO → RECEBIMENTO → ESTOQUE/FINANCEIRO ──────
+  app.get('/api/admin/compras/pedidos', requerEditorCatalogo, (req, res) => {
+    try {
+      res.json({ ok: true, pedidos: comprasKytto.listarPedidosCompra(req.empresaId, req.query) });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.post('/api/admin/compras/pedidos', requerEditorCatalogo, (req, res) => {
+    try {
+      const fornecedorId = String(req.body?.fornecedorId || req.body?.fornecedor_id || '');
+      const fornecedor = cadastrosMestres.listarFornecedores(req.empresaId).find((item) => item.id === fornecedorId);
+      if (!fornecedor) return res.status(404).json({ erro: 'Fornecedor não encontrado na empresa ativa.' });
+      const resultado = comprasKytto.criarPedidoCompra(req.empresaId, { ...req.body, solicitante: req.usuario?.email });
+      save();
+      res.status(201).json({ ok: true, ...resultado });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.post('/api/admin/compras/pedidos/:pedidoId/aprovar', requerEditorCatalogo, (req, res) => {
+    try {
+      const pedido = comprasKytto.aprovarPedidoCompra(req.empresaId, req.params.pedidoId, req.usuario?.email);
+      if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado na empresa ativa.' });
+      save();
+      res.json({ ok: true, pedido });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.post('/api/admin/compras/pedidos/:pedidoId/receber', requerEditorCatalogo, (req, res) => {
+    try {
+      const resultado = comprasKytto.receberPedidoCompra(req.empresaId, req.params.pedidoId, req.body?.itens || [], req.usuario?.email);
+      if (!resultado) return res.status(404).json({ erro: 'Pedido não encontrado na empresa ativa.' });
+      const estoque = estoquePersistido(req.empresaId);
+      const catalogo = cardapioPersistido(req.empresaId);
+      const dataOperacao = req.body?.dataOperacao || new Date().toISOString();
+      const statusFinanceiro = req.body?.statusFinanceiro === 'pago' ? 'pago' : 'pendente';
+      const totalItensRecebidos = resultado.movimentos.reduce((soma, movimento) => soma + Number(movimento.valorTotal || 0), 0);
+      const lancamentosFinanceiros = [];
+      for (const movimento of resultado.movimentos) {
+        const produto = catalogo.find((item) => item.id === movimento.produtoId);
+        if (!produto) throw new Error(`Produto ${movimento.produtoId} não está cadastrado no cardápio da empresa ativa.`);
+        estoque[movimento.produtoId] ||= fichaEstoque(produto, req.empresaId);
+        const ficha = estoque[movimento.produtoId];
+        const freteRateadoTotal = totalItensRecebidos > 0
+          ? Number((Number(resultado.pedido.valorFrete || 0) * Number(movimento.valorTotal || 0) / totalItensRecebidos).toFixed(2))
+          : 0;
+        const rateioFrete = Number((freteRateadoTotal / Math.max(1, movimento.quantidade)).toFixed(4));
+        const custoComFrete = Number((Number(movimento.valorUnitario || 0) + rateioFrete).toFixed(4));
+        ficha.qtd = Number(ficha.qtd || 0) + Number(movimento.quantidade || 0);
+        ficha.custo = custoComFrete;
+        ficha.historico ||= [];
+        ficha.historico.push({
+          id: movimento.id,
+          tipo: 'entrada_compra',
+          qtd: movimento.quantidade,
+          custo: custoComFrete,
+          saldoFinal: ficha.qtd,
+          pedidoId: resultado.pedido.id,
+          fornecedorId: resultado.pedido.fornecedorId,
+          ts: dataOperacao,
+          origem: 'compras',
+        });
+        ficha.historico = ficha.historico.slice(-100);
+        ficha.atualizadoEm = new Date().toISOString();
+        const lancamento = financeiroKytto.registrarEntradaEstoque(req.empresaId, {
+          produtoId: movimento.produtoId,
+          produtoNome: produto.nome,
+          qtd: movimento.quantidade,
+          custo: custoComFrete,
+          valorTotal: Number((Number(movimento.valorTotal || 0) + freteRateadoTotal).toFixed(2)),
+          fornecedorId: resultado.pedido.fornecedorId,
+          documento: req.body?.documento || resultado.pedido.numero,
+          usuario: req.usuario?.email,
+          dataOperacao,
+          meioPagamento: req.body?.meioPagamento,
+          status: statusFinanceiro,
+          movimentoId: movimento.id,
+        });
+        if (lancamento) lancamentosFinanceiros.push(lancamento);
+      }
+      save();
+      res.json({ ok: true, pedido: resultado.pedido, entradasEstoque: resultado.movimentos, lancamentosFinanceiros });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
   app.get('/api/admin/usuarios-mestres', requerEditorCatalogo, (req, res) => {
     res.json({ ok: true, usuarios: cadastrosMestres.listarUsuarios(req.empresaId) });
   });
@@ -1251,6 +1612,17 @@ async function iniciar() {
     }
   });
 
+  app.get('/api/admin/usuarios-mestres/:usuarioId', requerEditorCatalogo, (req, res) => {
+    try {
+      const usuario = cadastrosMestres.obterUsuario(req.empresaId, req.params.usuarioId);
+      if (!usuario) return res.status(404).json({ erro: 'Usuário não encontrado na empresa ativa.' });
+      const { senhaHash, ...resposta } = usuario;
+      res.json({ ok: true, usuario: resposta });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
   app.patch('/api/admin/usuarios-mestres/:usuarioId', requerEditorCatalogo, (req, res) => {
     try {
       const payload = { ...req.body };
@@ -1266,6 +1638,71 @@ async function iniciar() {
       espelharUsuarioEmMemoria(usuario);
       const { senhaHash, ...resposta } = usuario;
       res.json({ ok: true, usuario: resposta });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.delete('/api/admin/usuarios-mestres/:usuarioId', requerEditorCatalogo, (req, res) => {
+    try {
+      const usuario = cadastrosMestres.obterUsuario(req.empresaId, req.params.usuarioId);
+      if (!usuario) return res.status(404).json({ erro: 'Usuário não encontrado na empresa ativa.' });
+      if (usuario.id === req.usuario?.id) return res.status(400).json({ erro: 'Você não pode remover sua própria conta.' });
+      usuario.ativo = false;
+      usuario.atualizadoEm = new Date().toISOString();
+      save();
+      res.json({ ok: true, mensagem: 'Usuário desativado com sucesso.' });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.post('/api/admin/usuarios-mestres/:usuarioId/ativar', requerEditorCatalogo, (req, res) => {
+    try {
+      const usuario = cadastrosMestres.obterUsuario(req.empresaId, req.params.usuarioId);
+      if (!usuario) return res.status(404).json({ erro: 'Usuário não encontrado na empresa ativa.' });
+      usuario.ativo = true;
+      usuario.atualizadoEm = new Date().toISOString();
+      save();
+      const { senhaHash, ...resposta } = usuario;
+      res.json({ ok: true, usuario: resposta, mensagem: 'Usuário ativado com sucesso.' });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.patch('/api/usuario/alterar-senha', requerAutenticacao, (req, res) => {
+    try {
+      const senhaAtual = String(req.body?.senhaAtual || '');
+      const senhaNova = String(req.body?.senhaNova || '');
+      if (!senhaAtual || !senhaNova) return res.status(400).json({ erro: 'Informe a senha atual e a nova senha.' });
+      if (senhaNova.length < 8) return res.status(400).json({ erro: 'A nova senha deve possuir pelo menos 8 caracteres.' });
+      const usuario = cadastrosMestres.obterUsuario(req.empresaId, req.usuario.id);
+      if (!usuario || !verificarSenha(senhaAtual, usuario.senhaHash)) {
+        return res.status(401).json({ erro: 'Senha atual incorreta.' });
+      }
+      usuario.senhaHash = hashPassword(senhaNova);
+      usuario.atualizadoEm = new Date().toISOString();
+      espelharUsuarioEmMemoria(usuario);
+      save();
+      res.json({ ok: true, mensagem: 'Senha alterada com sucesso.' });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.post('/api/admin/usuarios-mestres/:usuarioId/resetar-senha', requerEditorCatalogo, (req, res) => {
+    try {
+      const senhaTemporaria = String(req.body?.senhaTemporaria || 'Temp@2026');
+      if (senhaTemporaria.length < 8) return res.status(400).json({ erro: 'A senha temporária deve possuir pelo menos 8 caracteres.' });
+      const usuario = cadastrosMestres.obterUsuario(req.empresaId, req.params.usuarioId);
+      if (!usuario) return res.status(404).json({ erro: 'Usuário não encontrado na empresa ativa.' });
+      usuario.senhaHash = hashPassword(senhaTemporaria);
+      usuario.atualizadoEm = new Date().toISOString();
+      espelharUsuarioEmMemoria(usuario);
+      save();
+      const { senhaHash, ...resposta } = usuario;
+      res.json({ ok: true, usuario: resposta, senhaTemporaria, mensagem: 'Senha resetada com sucesso. Compartilhe a senha temporária com o usuário.' });
     } catch (error) {
       res.status(400).json({ erro: error.message });
     }
@@ -1535,7 +1972,8 @@ async function iniciar() {
   }
 
   function totalComanda(comanda) {
-    return Number((comanda?.itens || []).reduce((soma, item) => soma + (Number(item.preco) || 0) * (Number(item.qtd) || 0), 0).toFixed(2));
+    const soma = (comanda?.itens || []).reduce((total, item) => total + (Number(item.preco) || 0) * (Number(item.qtd) || 0), 0);
+    return Number(Number(soma).toFixed(2)) || 0;
   }
 
   function comandasDaEmpresa(empresaId) {
@@ -1620,7 +2058,7 @@ async function iniciar() {
         id: `it-${Date.now().toString(36)}-${String(comanda.itens.length + 1).padStart(3, '0')}`,
         produtoId: produto.id, nome: produto.nome, preco: Number(produto.preco || 0), qtd,
         obs: String(entrada?.obs || '').trim().slice(0, 300), setor: produto.setor || 'bar',
-        cozinha: Boolean(produto.cozinha), status: produto.cozinha ? 'em_preparo' : 'entregue', criadoEm: new Date().toISOString(),
+        cozinha: Boolean(produto.cozinha), status: produto.cozinha ? 'novo' : 'entregue', criadoEm: new Date().toISOString(),
       };
       comanda.itens.push(item);
       adicionados.push(item);
@@ -1784,10 +2222,52 @@ async function iniciar() {
     res.json(respostaComanda(comanda));
   });
 
+  // Produção/KDS: filas de itens de cozinha e atualização de preparo.
+  app.get('/api/kds/pedidos', requerOperacaoComanda, (req, res) => {
+    const pedidos = comandasDaEmpresa(req.empresaId)
+      .filter((comanda) => ['aberta', 'conta'].includes(comanda.status))
+      .map((comanda) => ({
+        comandaId: comanda.id,
+        mesa: comanda.mesa,
+        mesaNum: comanda.mesaNum,
+        cliente: comanda.nome,
+        abertaEm: comanda.abertaEm,
+        itens: (comanda.itens || []).map((item, indice) => ({ ...item, indice })).filter((item) => item.cozinha && ['novo', 'em_preparo', 'pronto'].includes(item.status)),
+      }))
+      .filter((pedido) => pedido.itens.length > 0);
+    res.json({ ok: true, pedidos });
+  });
+
+  app.patch('/api/kds/comanda/:id/item/:indice/status', requerOperacaoComanda, (req, res) => {
+    const comanda = obterComandaOperacional(req.empresaId, req.params.id, { ativa: true });
+    if (!comanda || comanda.status !== 'aberta') return res.status(409).json({ erro: 'A comanda não está aberta para atualização de produção.' });
+    const item = comanda.itens?.[Number(req.params.indice)];
+    if (!item || item.cozinha !== true) return res.status(404).json({ erro: 'Item de produção não encontrado na comanda.' });
+    const status = String(req.body?.status || '').toLowerCase();
+    const transicoes = {
+      novo: ['em_preparo', 'cancelado'],
+      em_preparo: ['pronto', 'cancelado'],
+      pronto: ['entregue', 'cancelado'],
+      entregue: [],
+      cancelado: [],
+    };
+    if (!transicoes[item.status]?.includes(status)) {
+      return res.status(409).json({ erro: `Transição inválida de ${item.status || 'novo'} para ${status || 'vazio'}.` });
+    }
+    item.status = status;
+    item.atualizadoEm = new Date().toISOString();
+    comanda.atualizadaEm = item.atualizadoEm;
+    if (comanda.tipo === 'fisica') sincronizarMesaComanda(req.empresaId, comanda.mesaNum);
+    save();
+    res.json({ ok: true, item, comanda: respostaComanda(comanda) });
+  });
+
   app.post('/api/comanda/:id/conta', requerOperacaoComanda, (req, res) => {
     const comanda = obterComandaOperacional(req.empresaId, req.params.id, { ativa: true });
     if (!comanda || comanda.status !== 'aberta') return res.status(409).json({ erro: 'A comanda não está aberta para solicitar a conta.' });
     if (!comanda.itens.length) return res.status(400).json({ erro: 'Inclua ao menos um item antes de pedir a conta.' });
+    const itensEmProducao = (comanda.itens || []).filter((item) => item.cozinha && ['novo', 'em_preparo', 'pronto'].includes(item.status));
+    if (itensEmProducao.length) return res.status(409).json({ erro: 'Existem itens de cozinha pendentes de entrega nesta comanda.' });
     comanda.status = 'conta';
     comanda.contaPedida = true;
     comanda.atualizadaEm = new Date().toISOString();
@@ -1839,6 +2319,8 @@ async function iniciar() {
       contasReceber.push(conta);
     }
 
+    const dataOperacao = req.body?.dataOperacao ? new Date(req.body.dataOperacao) : new Date();
+    if (Number.isNaN(dataOperacao.valueOf())) return res.status(400).json({ erro: 'Data operacional inválida.' });
     comanda.status = 'fechada';
     comanda.contaPedida = false;
     comanda.pagamento = pagamentos[0]?.meio || 'dinheiro';
@@ -1847,11 +2329,20 @@ async function iniciar() {
     comanda.taxaServico = servico;
     comanda.totalPago = total;
     comanda.contasReceberIds = contasReceber.map((conta) => conta.id);
-    comanda.fechadaEm = new Date().toISOString();
+    comanda.fechadaEm = dataOperacao.toISOString();
     comanda.atualizadaEm = comanda.fechadaEm;
-    if (comanda.tipo === 'fisica') sincronizarMesaComanda(req.empresaId, comanda.mesaNum);
+    const lancamentosFinanceiros = financeiroKytto.registrarVendaComanda(req.empresaId, {
+      comanda,
+      pagamentos,
+      contasReceber,
+      usuario: req.usuario?.email,
+      dataOperacao: comanda.fechadaEm,
+    });
     save();
-    res.json({ ok: true, total, pagamentos, contasReceber, comanda: respostaComanda(comanda) });
+    if (comanda.tipo === 'fisica') {
+      sincronizarMesaComanda(req.empresaId, comanda.mesaNum);
+    }
+    res.json({ ok: true, total, pagamentos, contasReceber, lancamentosFinanceiros, comanda: respostaComanda(comanda) });
   });
 
 

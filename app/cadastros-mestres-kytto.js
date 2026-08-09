@@ -45,6 +45,7 @@ function empresaPadrao() {
     ativa: true,
     plano: 'premium',
     modulos: ['pdv', 'fiscal', 'financeiro', 'estoque', 'compras', 'rh', 'cardapio', 'mesas'],
+    permitirEstoqueNegativo: true,
     criadaEm: agora(),
     atualizadaEm: agora(),
   };
@@ -87,6 +88,7 @@ export function criarEmpresa(payload = {}) {
     ativa: payload.ativa !== false,
     plano: texto(payload.plano, 40) || 'standard',
     modulos: Array.isArray(payload.modulos) ? payload.modulos.map((modulo) => texto(modulo, 40)).filter(Boolean) : [],
+    permitirEstoqueNegativo: payload.permitirEstoqueNegativo !== false,
     criadaEm: agora(),
     atualizadaEm: agora(),
   };
@@ -104,6 +106,7 @@ export function atualizarEmpresa(empresaId, payload = {}) {
   }
   if (payload.ativa !== undefined) empresa.ativa = Boolean(payload.ativa);
   if (Array.isArray(payload.modulos)) empresa.modulos = payload.modulos.map((modulo) => texto(modulo, 40)).filter(Boolean);
+  if (payload.permitirEstoqueNegativo !== undefined) empresa.permitirEstoqueNegativo = Boolean(payload.permitirEstoqueNegativo);
   empresa.atualizadaEm = agora();
   save();
   return empresa;
