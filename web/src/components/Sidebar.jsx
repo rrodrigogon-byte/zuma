@@ -247,6 +247,11 @@ export default function Sidebar() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const pendentes = usePendingOrders(isStaff)
 
+  // 🔒 SEGURANÇA: Ocultar sidebar completamente se não autenticado
+  if (!user) {
+    return null // Sem sidebar se não há usuário
+  }
+
   // Mapeia badges por rota (PDV e KDS recebem o total de pendentes)
   const badgesMap = {
     '/pdv': pendentes,
@@ -409,7 +414,16 @@ export default function Sidebar() {
               )}
               <button
                 className="btn btn-ghost btn-sm btn-block"
-                onClick={() => { logout(); navigate('/login') }}
+                onClick={() => {
+                  // 🔒 Limpar localStorage antes de fazer logout
+                  localStorage.removeItem('sp_token')
+                  localStorage.removeItem('sp_user')
+                  localStorage.removeItem('sp_loja_ativa')
+                  localStorage.removeItem('sp_lojas_acessiveis')
+                  localStorage.removeItem('sp_empresa_ativa')
+                  logout()
+                  navigate('/login')
+                }}
               >
                 Sair
               </button>
