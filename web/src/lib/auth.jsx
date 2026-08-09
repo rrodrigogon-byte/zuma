@@ -62,7 +62,7 @@ export function AuthProvider({ children }) {
     setLojasAcessiveis([])
   }
 
-  const role = user?.role
+  const role = user?.role?.toLowerCase?.()
   const isAdmin = role === 'admin'
   const isOrg = ['admin', 'organizador', 'gerente'].includes(role)
   const isStaff = ['admin', 'organizador', 'staff', 'gerente', 'vendedor', 'garcom', 'barbeiro', 'caixa', 'operador'].includes(role)
