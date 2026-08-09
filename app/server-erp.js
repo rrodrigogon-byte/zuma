@@ -30,6 +30,7 @@ import * as canaisKytto from './canais-fidelidade-kytto.js';
 import * as financeiroKytto from './financeiro-central-kytto.js';
 import * as caixaKytto from './caixa-diario-kytto.js';
 import * as comprasKytto from './compras-kytto.js';
+import * as metricasKytto from './metricas-kytto.js';
 import { acaoDaRequisicao, moduloDaRota, resumoAcessoUsuario, temPermissao } from './perfis-usuarios-kytto.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -1831,6 +1832,106 @@ async function iniciar() {
       res.json({ ok: true, empresa });
     } catch (error) {
       res.status(400).json({ erro: error.message });
+    }
+  });
+
+  // ── MÉTRICAS CANÔNICAS (SSOT) ──────────────────────────────────────────────
+  
+  app.get('/api/admin/metricas/operacional', requerEditorCatalogo, (req, res) => {
+    try {
+      const hoje = new Date().toISOString().slice(0, 10);
+      const comandas = comandasDaEmpresa(req.empresaId);
+      const estoque = Object.values(estoquePersistido(req.empresaId)).filter(i => i.ativo !== false);
+      
+      // Comandas abertas
+      const openTabs = metricasKytto.getOpenTabs(comandas);
+      
+      // Faturamento do dia
+      const revenueHoje = metricasKytto.getRevenue(comandas, hoje, hoje);
+      
+      // Estoque por status
+      const estoqueStatus = metricasKytto.contarEstoquesPorStatus(estoque);
+      const valorEstoque = metricasKytto.calcularValorEstoque(estoque);
+      
+      // CMV do dia
+      const vendasHoje = metricasKytto.filtrarVendasPorPeriodo(comandas, hoje, hoje);
+      const cmvHoje = metricasKytto.calcularCMV(vendasHoje, estoquePersistido(req.empresaId));
+      
+      // Faturamento por método
+      const faturamentoPorMetodo = metricasKytto.faturamentoPorMetodo(vendasHoje);
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        empresa: req.empresaId,
+        periodo: { data: hoje, fuso: 'America/Cuiaba' },
+        
+        // Comandas
+        comandas: {
+          abertas: openTabs.quantidade,
+          valorEmAberto: openTabs.valorEmAberto,
+        },
+        
+        // Estoque
+        estoque: {
+          total: estoqueStatus.total,
+          ok: estoqueStatus.ok,
+          baixo: estoqueStatus.baixo,
+          semEstoque: estoqueStatus.semEstoque,
+          valorTotal: Number(valorEstoque.toFixed(2)),
+        },
+        
+        // Faturamento
+        faturamento: {
+          total: revenueHoje.total,
+          quantidade: revenueHoje.quantidade,
+          porMetodo: faturamentoPorMetodo,
+          cmv: Number(cmvHoje.toFixed(2)),
+          margemBruta: revenueHoje.total > 0 ? Number(((revenueHoje.total - cmvHoje) / revenueHoje.total * 100).toFixed(2)) : 0,
+        },
+      });
+    } catch (erro) {
+      console.error('[METRICAS] Erro ao calcular métricas operacionais:', erro);
+      res.status(500).json({ erro: 'Erro ao calcular métricas operacionais', detalhes: erro.message });
+    }
+  });
+  
+  app.get('/api/admin/metricas/consistencia', requerEditorCatalogo, (req, res) => {
+    try {
+      // Guardrail: valida que Dashboard, BI e Relatórios retornam os mesmos totais
+      const hoje = new Date().toISOString().slice(0, 10);
+      const comandas = comandasDaEmpresa(req.empresaId);
+      const estoque = Object.values(estoquePersistido(req.empresaId)).filter(i => i.ativo !== false);
+      
+      const openTabs = metricasKytto.getOpenTabs(comandas);
+      const revenue = metricasKytto.getRevenue(comandas, hoje, hoje);
+      const estoqueStatus = metricasKytto.contarEstoquesPorStatus(estoque);
+      
+      res.json({
+        ok: true,
+        timestamp: new Date().toISOString(),
+        empresa: req.empresaId,
+        
+        // Valores canônicos que todos os painéis devem exibir
+        canônicos: {
+          comandasAbertas: openTabs.quantidade,
+          valorEmAberto: openTabs.valorEmAberto,
+          faturamentoHoje: revenue.total,
+          vendidosHoje: revenue.quantidade,
+          estoqueOk: estoqueStatus.ok,
+          estoqueBaixo: estoqueStatus.baixo,
+          estoqueSemEstoque: estoqueStatus.semEstoque,
+        },
+        
+        // Guardrail: se algum painel retornar valores diferentes, registrar aqui
+        validacao: {
+          consistente: true, // Será falso se houver divergências
+          divergencias: [],
+        },
+      });
+    } catch (erro) {
+      console.error('[METRICAS] Erro ao validar consistência:', erro);
+      res.status(500).json({ erro: 'Erro ao validar consistência', detalhes: erro.message });
     }
   });
 

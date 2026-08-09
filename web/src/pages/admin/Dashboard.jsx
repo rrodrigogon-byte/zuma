@@ -305,7 +305,7 @@ function KPI({ label, value, icon, color, trend, sub }) {
         <span style={{ fontSize: 13, color: 'var(--muted)' }}>{label}</span>
         <span style={{ fontSize: 22 }}>{icon}</span>
       </div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: '#fff', letterSpacing: '-0.5px' }}>
+      <div style={{ fontSize: 26, fontWeight: 700, color: color || '#FF6B2C', letterSpacing: '-0.5px' }}>
         {value}
       </div>
       {trend && (
@@ -342,11 +342,13 @@ export default function Dashboard() {
       api.get('/api/admin/dashboard'),
       api.get('/api/noticias?publicado=1&limit=3').catch(() => []),
       api.get('/api/mesas').catch(() => ({ fisicas: [], virtuais: [] })),
+      api.get('/api/admin/metricas/operacional').catch(() => ({})),
     ])
-      .then(([infoRes, dashRes, noticiasRes, mesasRes]) => {
+      .then(([infoRes, dashRes, noticiasRes, mesasRes, metricasRes]) => {
         setInfo(infoRes)
         // Normaliza campos do dashboard para o formato esperado pelos KPIs
         const ind = dashRes?.indicadores || {}
+        const metricas = metricasRes?.ok ? metricasRes : {}
         const fisicas = mesasRes?.fisicas || []
         const mesasOcupadas = fisicas.filter(m => m.status !== 'livre').length
         const totalMesas = fisicas.length
@@ -368,6 +370,8 @@ export default function Dashboard() {
             totalMesas,
             mesasOcupadas_ontem: null,
             comandasAbertas: ind.comandasAbertas ?? 0,
+            estoqueSemEstoque: metricas.estoque?.semEstoque ?? 0,
+            estoqueBaixo: metricas.estoque?.baixo ?? 0,
             comandasAbertas_ontem: null,
           },
           // Normaliza alertas (servidor usa nivel/txt, dashboard usa tipo/msg)
