@@ -287,7 +287,7 @@ export default function KDS() {
 
   async function marcarTodosProntos() {
     const pendentes = items.filter(i => i.status !== 'pronto' &&
-      (filtroSetor === 'todos' || (filtroSetor === 'bar' && !isCozinha(i)) || (filtroSetor === 'cozinha' && isCozinha(i))))
+      (filtroSetor === 'todos' || (filtroSetor === 'bar' && isBar(i)) || (filtroSetor === 'cozinha' && isCozinha(i))))
     if (!pendentes.length) return
     if (!confirm(`Marcar ${pendentes.length} itens como PRONTOS?`)) return
     for (const item of pendentes) {
@@ -317,8 +317,15 @@ export default function KDS() {
     } catch {}
   }
 
-  const isCozinha = (item) => Boolean(item.cozinha) || ['cozinha', 'chapa', 'restaurante'].includes(String(item.setor || '').toLowerCase())
-  const barItems     = useMemo(() => items.filter(i => !isCozinha(i)), [items])
+  const isCozinha = (item) => {
+    const setor = String(item.setor || '').toLowerCase()
+    return Boolean(item.cozinha) || ['cozinha', 'chapa', 'restaurante'].includes(setor)
+  }
+  const isBar = (item) => {
+    const setor = String(item.setor || '').toLowerCase()
+    return !Boolean(item.cozinha) && setor === 'bar'
+  }
+  const barItems     = useMemo(() => items.filter(i => isBar(i)), [items])
   const cozinhaItems = useMemo(() => items.filter(i => isCozinha(i)), [items])
   const totalPendentes   = useMemo(() => items.filter(i => i.status !== 'pronto').length, [items])
   const barPendentes     = useMemo(() => barItems.filter(i => i.status !== 'pronto').length, [barItems])
