@@ -107,7 +107,7 @@ function decryptBuffer(payload) {
 function fiscalStore() {
   const state = db();
   if (!state.fiscalKytto || typeof state.fiscalKytto !== 'object') {
-    state.fiscalKytto = { configuracoes: {}, certificados: {}, documentos: {}, numeracoes: {}, eventos: {}, tabelaUf: {}, inventarios: [] };
+    state.fiscalKytto = { configuracoes: {}, certificados: {}, documentos: {}, numeracoes: {}, eventos: {}, tabelaUf: {}, tabelasIbpt: {}, inventarios: [] };
   }
   state.fiscalKytto.configuracoes ||= {};
   state.fiscalKytto.certificados ||= {};
@@ -115,6 +115,7 @@ function fiscalStore() {
   state.fiscalKytto.numeracoes ||= {};
   state.fiscalKytto.eventos ||= {};
   state.fiscalKytto.tabelaUf ||= {};
+  state.fiscalKytto.tabelasIbpt ||= {};
   return state.fiscalKytto;
 }
 
@@ -441,6 +442,52 @@ export function listarEventosFiscais(tenantId = 'principal', documentoId = null)
     .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)));
 }
 
+function normalizarLinhaIbpt(raw = {}) {
+  const ncm = somenteDigitos(raw.ncm || raw.codigoNcm || raw.codigo || '').slice(0, 8);
+  const nacional = Math.min(100, Math.max(0, Number(raw.nacional ?? raw.aliquotaNacional ?? raw.percentualNacional ?? 0) || 0));
+  const importado = Math.min(100, Math.max(0, Number(raw.importado ?? raw.aliquotaImportado ?? raw.percentualImportado ?? 0) || 0));
+  return { ncm, nacional, importado, descricao: String(raw.descricao || raw.ex || '').trim().slice(0, 300) };
+}
+
+export function importarTabelaIbpt(tenantId = 'principal', { versao, vigenciaInicio, vigenciaFim, linhas = [] } = {}) {
+  const key = tenantKey(tenantId);
+  const versaoNormalizada = String(versao || '').trim().slice(0, 80);
+  if (!versaoNormalizada) throw new Error('Informe a versão de referência da tabela IBPT.');
+  if (!Array.isArray(linhas) || !linhas.length) throw new Error('Informe ao menos uma linha válida da tabela IBPT.');
+  const registros = linhas.map(normalizarLinhaIbpt).filter((linha) => linha.ncm.length === 8);
+  if (!registros.length) throw new Error('A tabela IBPT não possui NCMs válidos com 8 dígitos.');
+  const deduplicado = Object.fromEntries(registros.map((linha) => [linha.ncm, linha]));
+  const store = fiscalStore();
+  store.tabelasIbpt[key] ||= [];
+  const tabela = {
+    id: `ibpt-${key}-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`,
+    tenantId: key, versao: versaoNormalizada,
+    vigenciaInicio: vigenciaInicio ? new Date(vigenciaInicio).toISOString() : null,
+    vigenciaFim: vigenciaFim ? new Date(vigenciaFim).toISOString() : null,
+    linhas: deduplicado, quantidadeLinhas: Object.keys(deduplicado).length,
+    criadaEm: new Date().toISOString(), ativa: true,
+  };
+  for (const existente of store.tabelasIbpt[key]) existente.ativa = false;
+  store.tabelasIbpt[key].push(tabela);
+  save();
+  return { ...tabela, linhas: undefined };
+}
+
+export function listarTabelasIbpt(tenantId = 'principal') {
+  const key = tenantKey(tenantId);
+  return (fiscalStore().tabelasIbpt[key] || [])
+    .map(({ linhas, ...tabela }) => ({ ...tabela }))
+    .sort((a, b) => String(b.criadaEm).localeCompare(String(a.criadaEm)));
+}
+
+export function obterAliquotasIbpt(tenantId = 'principal', ncm) {
+  const key = tenantKey(tenantId);
+  const codigo = somenteDigitos(ncm).slice(0, 8);
+  const tabela = (fiscalStore().tabelasIbpt[key] || []).find((item) => item.ativa);
+  const linha = tabela?.linhas?.[codigo];
+  return linha ? { nacional: Number(linha.nacional || 0), importado: Number(linha.importado || 0), versao: tabela.versao, ncm: codigo } : null;
+}
+
 export function listarDocumentos(tenantId = 'principal') {
   const key = tenantKey(tenantId);
   return Object.values(fiscalStore().documentos)
@@ -482,5 +529,6 @@ export default {
   listarCertificados, ativarCertificado, verificarProntidao, carregarMaterialAtivo,
   listarConfiguracoesUf, obterConfiguracaoUf, reservarNumeracaoFiscal,
   criarDocumentoFiscalRascunho, registrarPreflightEmissao, registrarEventoFiscal,
-  listarEventosFiscais, listarDocumentos, migrarTenant, limparDadosSensiveis,
+  listarEventosFiscais, importarTabelaIbpt, listarTabelasIbpt, obterAliquotasIbpt,
+  listarDocumentos, migrarTenant, limparDadosSensiveis,
 };

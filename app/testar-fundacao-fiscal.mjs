@@ -105,5 +105,17 @@ test('mantém tabela de UF pronta para MT e estrutura de expansão', () => {
   assert.equal(ufs.some((item) => item.uf === 'SP'), true);
 });
 
+test('importa tabela IBPT versionada e mantém isolamento por empresa', () => {
+  const tabela = fiscal.importarTabelaIbpt(tenant, {
+    versao: 'IBPT-Teste-2026.08', vigenciaInicio: '2026-08-01', vigenciaFim: '2026-12-31',
+    linhas: [{ ncm: '22030000', nacional: 38.5, importado: 55.2, descricao: 'Bebidas de malte' }],
+  });
+  const aliquotas = fiscal.obterAliquotasIbpt(tenant, '22030000');
+  assert.equal(tabela.ativa, true);
+  assert.equal(aliquotas.nacional, 38.5);
+  assert.equal(aliquotas.importado, 55.2);
+  assert.equal(fiscal.obterAliquotasIbpt('empresa-sem-ibpt', '22030000'), null);
+});
+
 if (!process.exitCode) console.log(`\n✅ Fundação fiscal: ${total} testes passaram`);
 process.exit(process.exitCode || 0);

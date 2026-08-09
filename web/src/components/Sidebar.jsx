@@ -113,6 +113,7 @@ const NAV_ADMIN_GROUPS = [
       { to: '/admin/varejo',        icon: '🛒', label: 'Varejo Geral' },
       { to: '/admin/compras',       icon: '📦', label: 'Compras & Fornec.' },
       { to: '/admin/fiscal/config', icon: '⚙️', label: 'Config. Fiscal' },
+      { to: '/admin/fiscal/classificacao', icon: '🏷️', label: 'Classificação Fiscal' },
     ],
   },
   {

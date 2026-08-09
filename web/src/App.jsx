@@ -98,6 +98,7 @@ const Agropecuaria    = lazy(() => import('./pages/admin/Agropecuaria'))
 const Varejo          = lazy(() => import('./pages/admin/Varejo'))
 const Compras         = lazy(() => import('./pages/admin/Compras'))
 const ConfiguracaoFiscal = lazy(() => import('./pages/admin/ConfiguracaoFiscal'))
+const ClassificacaoFiscal = lazy(() => import('./pages/admin/ClassificacaoFiscal'))
 const Clientes = lazy(() => import('./pages/admin/Clientes'))
 const ContasReceber = lazy(() => import('./pages/admin/ContasReceber'))
 const FechamentoDiario = lazy(() => import('./pages/admin/FechamentoDiario'))
@@ -193,6 +194,7 @@ export default function App() {
           <Route path="/admin/varejo"          element={<Layout><Varejo /></Layout>} />
           <Route path="/admin/compras"         element={<Layout><Compras /></Layout>} />
           <Route path="/admin/fiscal/config"   element={<Layout><ConfiguracaoFiscal /></Layout>} />
+          <Route path="/admin/fiscal/classificacao" element={<Layout><ClassificacaoFiscal /></Layout>} />
           <Route path="/admin/loja-moda"       element={<Layout><LojaModa /></Layout>} />
           <Route path="/admin/barbearia-erp"   element={<Layout><BarbeariaERP /></Layout>} />
           <Route path="/admin/barbearia"        element={<Layout><Barbearia /></Layout>} />

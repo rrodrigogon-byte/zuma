@@ -21,6 +21,7 @@ import { CATALOGO_BEBIDAS_KYTTO, RESUMO_CATALOGO_BEBIDAS } from './catalogo-bebi
 import { CATALOGO_ESPETINHOS_KYTTO, RESUMO_CATALOGO_ESPETINHOS } from './catalogo-espetinhos.js';
 import * as clientesKytto from './clientes-contas-kytto.js';
 import * as fiscalKytto from './fiscal-kytto.js';
+import * as tributacaoKytto from './tributacao-kytto.js';
 import { OAuth2Client } from 'google-auth-library';
 import bcrypt from 'bcryptjs';
 import * as cadastrosMestres from './cadastros-mestres-kytto.js';
@@ -768,6 +769,86 @@ async function iniciar() {
     }
   });
 
+  function contextoTributarioFiscal(req, extras = {}) {
+    const config = fiscalKytto.obterConfiguracaoFiscal(fiscalTenantId(req));
+    return {
+      regimeTributario: config.regimeTributario,
+      uf: config.uf,
+      operacao: extras.operacao || 'venda_presencial',
+      exigirNcm: Boolean(extras.exigirNcm),
+      regras: extras.regras && typeof extras.regras === 'object' ? extras.regras : {},
+    };
+  }
+
+  function itemParaCalculoFiscal(empresaId, item = {}, tenantFiscalId = null) {
+    const produtoId = item.produtoId || item.id;
+    const produto = produtoId ? cardapioPersistido(empresaId).find((registro) => registro.id === produtoId) : null;
+    const fiscalBase = item.fiscal && typeof item.fiscal === 'object' ? item.fiscal : produto?.fiscal || {};
+    const ibpt = tenantFiscalId ? fiscalKytto.obterAliquotasIbpt(tenantFiscalId, fiscalBase.ncm) : null;
+    return {
+      ...produto,
+      ...item,
+      produtoId: produtoId || produto?.id || null,
+      descricao: item.descricao || item.nome || produto?.nome || '',
+      fiscal: {
+        ...fiscalBase,
+        aliquotaIbptNacional: Number(fiscalBase.aliquotaIbptNacional || 0) || Number(ibpt?.nacional || 0),
+        aliquotaIbptImportado: Number(fiscalBase.aliquotaIbptImportado || 0) || Number(ibpt?.importado || 0),
+      },
+      quantidade: item.quantidade ?? item.qtd ?? 1,
+      valorUnitario: item.valorUnitario ?? item.valor_unitario ?? item.preco ?? produto?.preco ?? 0,
+    };
+  }
+
+  app.get('/api/v1/fiscal/produtos/classificacao', requerEditorCatalogo, (req, res) => {
+    const itens = cardapioPersistido(req.empresaId).map((produto) => {
+      const validacao = tributacaoKytto.validarClassificacaoFiscalProduto(produto.fiscal || {}, { exigirNcm: false });
+      return {
+        id: produto.id, nome: produto.nome, categoria: produto.cat, preco: produto.preco,
+        fiscal: validacao.fiscal, classificacaoCompleta: validacao.valido, pendencias: validacao.pendencias,
+      };
+    });
+    res.json({ ok: true, itens });
+  });
+
+  app.patch('/api/v1/fiscal/produtos/:id/classificacao', requerEditorCatalogo, (req, res) => {
+    const produto = cardapioPersistido(req.empresaId).find((item) => item.id === req.params.id && item.empresaId === req.empresaId);
+    if (!produto) return res.status(404).json({ erro: 'Produto não encontrado na empresa ativa.' });
+    const validacao = tributacaoKytto.validarClassificacaoFiscalProduto(req.body?.fiscal || req.body || {}, { exigirNcm: false });
+    produto.fiscal = validacao.fiscal;
+    produto.atualizadoEm = new Date().toISOString();
+    save();
+    res.json({ ok: true, produto: { id: produto.id, nome: produto.nome, fiscal: produto.fiscal }, validacao });
+  });
+
+  app.get('/api/v1/fiscal/ibpt', requerEditorCatalogo, (req, res) => {
+    res.json({ ok: true, tabelas: fiscalKytto.listarTabelasIbpt(fiscalTenantId(req)) });
+  });
+
+  app.post('/api/v1/fiscal/ibpt/importar', requerEditorCatalogo, (req, res) => {
+    try {
+      const tabela = fiscalKytto.importarTabelaIbpt(fiscalTenantId(req), req.body || {});
+      res.status(201).json({ ok: true, tabela, mensagem: 'Tabela IBPT importada, versionada e ativada para a empresa.' });
+    } catch (error) {
+      res.status(422).json({ erro: error.message });
+    }
+  });
+
+  app.post('/api/v1/fiscal/calcular', requerEditorCatalogo, (req, res) => {
+    try {
+      const itens = Array.isArray(req.body?.itens) ? req.body.itens : [];
+      if (!itens.length) return res.status(400).json({ erro: 'Informe ao menos um item para a simulação tributária.' });
+      const contexto = contextoTributarioFiscal(req, req.body || {});
+      const resultado = tributacaoKytto.totalizarDocumentoFiscal(
+        itens.map((item) => itemParaCalculoFiscal(req.empresaId, item, fiscalTenantId(req))),
+        contexto,
+      );
+      res.json({ ok: true, contexto: { regimeTributario: contexto.regimeTributario, uf: contexto.uf, operacao: contexto.operacao }, ...resultado });
+    } catch (error) {
+      res.status(422).json({ erro: error.message });
+    }
+  });
+
   app.get('/api/v1/fiscal/documentos', requerEditorCatalogo, (req, res) => {
     res.json({ ok: true, documentos: fiscalKytto.listarDocumentos(fiscalTenantId(req)) });
   });
@@ -929,7 +1010,9 @@ async function iniciar() {
       indisponivel: Boolean(payload.indisponivel),
       precoPendente: Boolean(payload.precoPendente),
       semAlcool: Boolean(payload.semAlcool),
-      fiscal: payload.fiscal && typeof payload.fiscal === 'object' ? payload.fiscal : undefined,
+      fiscal: payload.fiscal && typeof payload.fiscal === 'object'
+        ? tributacaoKytto.normalizarClassificacaoFiscalProduto(payload.fiscal)
+        : (payload.fiscal === null ? undefined : tributacaoKytto.normalizarClassificacaoFiscalProduto({})),
     };
   }
 
