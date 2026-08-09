@@ -206,9 +206,15 @@ export default function GarcomView() {
     loadMesas()
     loadCardapio()
     loadClientesConta()
-    autoRef.current = setInterval(() => loadMesas(true), 15000)
+    autoRef.current = setInterval(() => loadMesas(true), 8000)
     return () => clearInterval(autoRef.current)
   }, [loadMesas, loadCardapio, loadClientesConta])
+
+  useEffect(() => {
+    if (!sheet?.id) return undefined
+    const sincronizador = setInterval(() => loadComanda(sheet.id), 6000)
+    return () => clearInterval(sincronizador)
+  }, [sheet?.id, loadComanda])
 
   /* ── dados derivados ── */
   const abertas  = useMemo(() => [...(mesas.fisicas || []), ...(mesas.virtuais || [])].filter(m => m.status !== 'livre'), [mesas])
@@ -257,7 +263,11 @@ export default function GarcomView() {
     setLoading(true)
     try {
       const itens = cart.map(ci => ({ produtoId: ci.prod.id, qtd: ci.qty, obs: ci.obs || undefined }))
-      await api.post(`/api/comanda/${sheet.id}/adicionar`, { itens })
+      const resposta = await api.post(`/api/comanda/${sheet.id}/adicionar`, { itens })
+      if (resposta?.offlineQueued) {
+        toast(`✓ ${cartCount} item(s) salvo(s) offline; sincronização automática ao reconectar.`)
+        setCart([]); setOverlay('comanda'); return
+      }
       await loadComanda(sheet.id)
       await loadMesas(true)
       toast(`✓ ${cartCount} item(s) adicionado(s)!`)

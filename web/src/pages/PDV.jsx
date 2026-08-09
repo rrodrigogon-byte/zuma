@@ -516,9 +516,15 @@ export default function PDV() {
     timerRef.current = setInterval(() => {
       loadMesas()
       loadCaixaHoje()
-    }, 15000)
+    }, 8000)
     return () => clearInterval(timerRef.current)
   }, [loadMesas, loadCardapio, loadClientesConta, loadCaixaHoje])
+
+  useEffect(() => {
+    if (!comanda?.id) return undefined
+    const sincronizador = setInterval(() => loadComanda(comanda.id), 6000)
+    return () => clearInterval(sincronizador)
+  }, [comanda?.id, loadComanda])
 
   const atualizarResumoOffline = useCallback(async () => {
     try { setResumoOffline(await resumoFilaOffline()) } catch { /* IndexedDB indisponível */ }
@@ -673,7 +679,8 @@ export default function PDV() {
   const lancarCombo = async (combo) => {
     if (!comanda?.id) return
     try {
-      await api.post(`/api/comanda/${comanda.id}/adicionar`, { itens: [{ comboId: combo.id, qtd: 1 }] })
+      const resposta = await api.post(`/api/comanda/${comanda.id}/adicionar`, { itens: [{ comboId: combo.id, qtd: 1 }] })
+      if (resposta?.offlineQueued) { toast('Combo salvo offline; será sincronizado ao reconectar.', 'success'); return }
       await loadComanda(comanda.id); await loadMesas(); toast(`Combo “${combo.nome}” adicionado!`, 'success')
     } catch (erro) { toast(erro.message || 'Não foi possível lançar o combo.', 'error') }
   }
@@ -682,7 +689,8 @@ export default function PDV() {
   const adicionarItem = async (produtoId, qtd = 1, obs = '', modificadores = []) => {
     if (!comanda?.id) return false
     try {
-      await api.post(`/api/comanda/${comanda.id}/adicionar`, { itens: [{ produtoId, qtd, obs, modificadores }] })
+      const resposta = await api.post(`/api/comanda/${comanda.id}/adicionar`, { itens: [{ produtoId, qtd, obs, modificadores }] })
+      if (resposta?.offlineQueued) { toast('Item salvo offline; será sincronizado ao reconectar.', 'success'); return true }
       await loadComanda(comanda.id)
       await loadMesas()
       toast('Item adicionado!', 'success')

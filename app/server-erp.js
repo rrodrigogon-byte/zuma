@@ -2870,6 +2870,16 @@ async function iniciar() {
     return { ...comanda, total: totalComanda(comanda) };
   }
 
+  function idempotenciaOperacional(empresaId, req, escopo) {
+    const chave = String(req.get('Idempotency-Key') || req.body?.idempotencyKey || '').trim().slice(0, 160);
+    if (!chave) return { chave: null, anterior: null, registrar: () => {} };
+    const dados = db(); dados.idempotenciaOperacionalKytto ||= { empresas: {} }; dados.idempotenciaOperacionalKytto.empresas ||= {};
+    const empresa = dados.idempotenciaOperacionalKytto.empresas[empresaId] ||= {};
+    const id = `${escopo}:${chave}`; const anterior = empresa[id];
+    const registrar = (resposta) => { empresa[id] = { resposta, criadoEm: new Date().toISOString(), usuario: req.usuario?.email || null }; const chaves = Object.keys(empresa); if (chaves.length > 500) chaves.sort((a, b) => String(empresa[a].criadoEm).localeCompare(String(empresa[b].criadoEm))).slice(0, chaves.length - 500).forEach(chaveAntiga => delete empresa[chaveAntiga]); };
+    return { chave, anterior, registrar };
+  }
+
   function adicionarItensComanda(empresaId, comanda, itens = []) {
     const catalogo = cardapioPersistido(empresaId);
     const estoque = estoquePersistido(empresaId);
@@ -3349,13 +3359,15 @@ async function iniciar() {
   });
 
   app.post('/api/comanda/:id/adicionar', requerOperacaoComanda, (req, res) => {
+    const idempotencia = idempotenciaOperacional(req.empresaId, req, `comanda:${req.params.id}:adicionar`);
+    if (idempotencia.anterior) return res.json({ ...idempotencia.anterior.resposta, idempotente: true });
     const comanda = obterComandaOperacional(req.empresaId, req.params.id, { ativa: true });
     if (!comanda || comanda.status !== 'aberta') return res.status(409).json({ erro: 'A comanda não está aberta para novos itens.' });
     const itens = Array.isArray(req.body?.itens) ? req.body.itens : [req.body || {}];
     const { erros } = adicionarItensComanda(req.empresaId, comanda, itens);
-    save();
-    if (erros.length) return res.status(409).json({ erro: erros.join(' '), parcial: comanda.itens.length > 0, comanda: respostaComanda(comanda) });
-    res.json(respostaComanda(comanda));
+    if (erros.length) { save(); return res.status(409).json({ erro: erros.join(' '), parcial: comanda.itens.length > 0, comanda: respostaComanda(comanda) }); }
+    const resposta = respostaComanda(comanda); idempotencia.registrar(resposta); save();
+    res.json(resposta);
   });
 
   app.patch('/api/comanda/:id/item/:indice', requerOperacaoComanda, (req, res) => {

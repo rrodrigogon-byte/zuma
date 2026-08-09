@@ -1,3 +1,5 @@
+import { deveEnfileirarOffline, enfileirarOperacao, prepararOperacao, sincronizarFila } from './offline-queue'
+
 function getToken() {
   return localStorage.getItem('sp_token') || localStorage.getItem('sp_site_token') || ''
 }
@@ -12,15 +14,23 @@ function getLojaAtivaId() {
 }
 
 async function request(path, opts = {}) {
+  const preparado = prepararOperacao(path, opts)
   const token = getToken()
   const lojaId = getLojaAtivaId()
   const headers = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: 'Bearer ' + token } : {}),
     ...(lojaId ? { 'X-Loja-Id': lojaId } : {}),
-    ...(opts.headers || {}),
+    ...(preparado.headers || {}),
   }
-  const res = await fetch(path, { ...opts, headers })
+  let res
+  try {
+    if (!navigator.onLine && deveEnfileirarOffline(path, preparado)) return enfileirarOperacao(path, { ...preparado, headers })
+    res = await fetch(path, { ...preparado, headers })
+  } catch (erro) {
+    if (deveEnfileirarOffline(path, preparado)) return enfileirarOperacao(path, { ...preparado, headers })
+    throw erro
+  }
   if (res.status === 401) {
     localStorage.removeItem('sp_token')
     localStorage.removeItem('sp_site_token')
@@ -52,6 +62,14 @@ apiFn.post   = (path, body) => request(path, { method: 'POST',   body: JSON.stri
 apiFn.patch  = (path, body) => request(path, { method: 'PATCH',  body: JSON.stringify(body) })
 apiFn.put    = (path, body) => request(path, { method: 'PUT',    body: JSON.stringify(body) })
 apiFn.delete = (path, body) => request(path, { method: 'DELETE', ...(body ? { body: JSON.stringify(body) } : {}) })
+apiFn.sincronizarFilaOffline = () => sincronizarFila((path, opts) => {
+  const token = getToken(); const lojaId = getLojaAtivaId()
+  return fetch(path, { ...opts, headers: { 'Content-Type':'application/json', ...(token ? { Authorization:`Bearer ${token}` } : {}), ...(lojaId ? { 'X-Loja-Id':lojaId } : {}), ...(opts.headers || {}), 'X-Offline-Replay':'1' } })
+})
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => { apiFn.sincronizarFilaOffline().catch(() => {}) })
+}
 
 export const api = apiFn
 

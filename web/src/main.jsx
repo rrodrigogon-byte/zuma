@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from './lib/auth'
 import { ToastProvider } from './hooks/useToast'
 import App from './App'
+import { api } from './lib/api'
 import './theme.css'
 
 // Quando uma nova revisão substitui os arquivos com hash, uma aba já aberta pode
@@ -36,24 +37,16 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   </React.StrictMode>
 )
 
-// ── Recuperação de cache de versões anteriores ───────────────────────────────
-// O PWA legado mantinha assets antigos em Cache Storage em alguns navegadores.
-// A aplicação passa a depender dos assets hashados e da rede, evitando entregar
-// uma interface antiga após um novo deploy.
+// ── PWA Kytto: rede prioritária, fallback offline e atualização controlada ──
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const registrations = await navigator.serviceWorker.getRegistrations()
-      await Promise.all(registrations.map(registration => registration.unregister()))
-
-      if ('caches' in window) {
-        const cacheNames = await caches.keys()
-        // Cache Storage é isolado por domínio. Limpar todos os nomes desta origem
-        // remove também o cache "setpoint-*" que continha a interface anterior.
-        await Promise.all(cacheNames.map(name => caches.delete(name)))
-      }
+      const registro = await navigator.serviceWorker.register('/service-worker.js', { updateViaCache: 'none' })
+      registro.update().catch(() => {})
+      await api.sincronizarFilaOffline().catch(() => {})
     } catch (error) {
-      console.warn('[KYTTO] Não foi possível limpar o cache legado:', error)
+      console.warn('[KYTTO] Não foi possível ativar o modo offline:', error)
     }
   })
 }
+window.addEventListener('online', () => api.sincronizarFilaOffline().catch(() => {}))
