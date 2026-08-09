@@ -119,12 +119,12 @@ export default function Usuarios() {
     setSaving(true)
     try {
       if (modal === 'novo') {
-        await api.post('/api/admin/usuarios', form)
+        await api.post('/api/admin/usuarios-mestres', form)
         toast('Usuário criado', 'success')
       } else {
         const payload = { nome: form.nome, email: form.email, role: form.role }
         if (form.senha) payload.senha = form.senha
-        await api.patch(`/api/admin/usuarios/${modal.id}`, payload)
+        await api.patch(`/api/admin/usuarios-mestres/${modal.id}`, payload)
         toast('Usuário atualizado', 'success')
       }
       closeModal()
@@ -138,7 +138,7 @@ export default function Usuarios() {
 
   const toggleAtivo = async (u) => {
     try {
-      await api.patch(`/api/admin/usuarios/${u.id}`, { ativo: !u.ativo })
+      await api.patch(`/api/admin/usuarios-mestres/${u.id}`, { ativo: !u.ativo })
       load()
     } catch {
       toast('Erro ao alterar status', 'error')
@@ -148,8 +148,8 @@ export default function Usuarios() {
   const handleDelete = async (u) => {
     if (!confirm(`Excluir usuário "${u.nome}"?`)) return
     try {
-      await api.delete(`/api/admin/usuarios/${u.id}`)
-      toast('Usuário excluído', 'success')
+      await api.delete(`/api/admin/usuarios-mestres/${u.id}`)
+      toast('Usuário excluído', 'success')
       load()
     } catch {
       toast('Erro ao excluir', 'error')
