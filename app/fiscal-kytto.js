@@ -13,6 +13,67 @@ import { db, save } from './db.js';
 const CERT_OBJECT_PREFIX = 'setpoint-ultra/certificados';
 const CERT_FORMATS = new Set(['.p12', '.pfx']);
 
+// A tabela mantém o domínio preparado para múltiplas UFs. Os URLs de cada
+// serviço são versionados e atualizados no adaptador de transporte fiscal;
+// esta camada decide somente qual configuração deve ser usada pelo documento.
+const CODIGOS_UF = Object.freeze({
+  AC: 12, AL: 27, AM: 13, AP: 16, BA: 29, CE: 23, DF: 53, ES: 32, GO: 52,
+  MA: 21, MG: 31, MS: 50, MT: 51, PA: 15, PB: 25, PE: 26, PI: 22, PR: 41,
+  RJ: 33, RN: 24, RO: 11, RR: 14, RS: 43, SC: 42, SE: 28, SP: 35, TO: 17,
+});
+
+const TABELA_UF_PADRAO = Object.freeze({
+  MT: {
+    uf: 'MT', codigoUf: 51, habilitada: true,
+    versaoLayout: '4.00', modelos: ['55', '65'],
+    observacao: 'Configuração inicial. Os endpoints oficiais serão injetados pelo adaptador SEFAZ versionado.',
+  },
+  SP: {
+    uf: 'SP', codigoUf: 35, habilitada: false,
+    versaoLayout: '4.00', modelos: ['55', '65'],
+    observacao: 'Estrutura de prova multi-UF; requer homologação específica antes de ativação.',
+  },
+});
+
+function somenteDigitos(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+export function calcularDigitoVerificadorChave(chaveSemDv) {
+  const chave = somenteDigitos(chaveSemDv);
+  if (chave.length !== 43) throw new Error('A chave sem dígito verificador deve conter 43 dígitos.');
+  let soma = 0;
+  let peso = 2;
+  for (let index = chave.length - 1; index >= 0; index -= 1) {
+    soma += Number(chave[index]) * peso;
+    peso = peso === 9 ? 2 : peso + 1;
+  }
+  const resto = soma % 11;
+  return resto < 2 ? '0' : String(11 - resto);
+}
+
+export function gerarChaveAcessoFiscal({ uf = 'MT', dhEmi, cnpj, modelo = '65', serie = 1, numero, tpEmis = 1, codigoNumerico }) {
+  const cUf = String(CODIGOS_UF[String(uf).toUpperCase()] || CODIGOS_UF.MT).padStart(2, '0');
+  const emissao = new Date(dhEmi || new Date().toISOString());
+  if (Number.isNaN(emissao.valueOf())) throw new Error('Data de emissão inválida para gerar chave de acesso.');
+  const aamm = `${String(emissao.getUTCFullYear()).slice(-2)}${String(emissao.getUTCMonth() + 1).padStart(2, '0')}`;
+  const cnpjNormalizado = somenteDigitos(cnpj);
+  if (cnpjNormalizado.length !== 14) throw new Error('CNPJ inválido para gerar chave de acesso.');
+  const mod = String(modelo).padStart(2, '0');
+  if (!['55', '65'].includes(mod)) throw new Error('Modelo fiscal deve ser 55 ou 65.');
+  const serieNormalizada = String(Math.max(1, Number(serie) || 1)).padStart(3, '0');
+  const numeroNormalizado = String(Math.max(1, Number(numero) || 1)).padStart(9, '0');
+  const emissaoNormalizada = String(tpEmis || 1).slice(0, 1);
+  const codigo = String(codigoNumerico ?? crypto.randomInt(0, 100000000)).replace(/\D/g, '').padStart(8, '0').slice(-8);
+  const semDv = `${cUf}${aamm}${cnpjNormalizado}${mod}${serieNormalizada}${numeroNormalizado}${emissaoNormalizada}${codigo}`;
+  return `${semDv}${calcularDigitoVerificadorChave(semDv)}`;
+}
+
+export function validarChaveAcessoFiscal(chave) {
+  const normalizada = somenteDigitos(chave);
+  return normalizada.length === 44 && normalizada.slice(-1) === calcularDigitoVerificadorChave(normalizada.slice(0, -1));
+}
+
 function tenantKey(value = 'principal') {
   return String(value || 'principal').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80) || 'principal';
 }
@@ -46,11 +107,14 @@ function decryptBuffer(payload) {
 function fiscalStore() {
   const state = db();
   if (!state.fiscalKytto || typeof state.fiscalKytto !== 'object') {
-    state.fiscalKytto = { configuracoes: {}, certificados: {}, documentos: {}, inventarios: [] };
+    state.fiscalKytto = { configuracoes: {}, certificados: {}, documentos: {}, numeracoes: {}, eventos: {}, tabelaUf: {}, inventarios: [] };
   }
   state.fiscalKytto.configuracoes ||= {};
   state.fiscalKytto.certificados ||= {};
   state.fiscalKytto.documentos ||= {};
+  state.fiscalKytto.numeracoes ||= {};
+  state.fiscalKytto.eventos ||= {};
+  state.fiscalKytto.tabelaUf ||= {};
   return state.fiscalKytto;
 }
 
@@ -98,9 +162,10 @@ function describeCertificate(pfxBuffer, password) {
 function emptyConfig(tenantId) {
   return {
     tenantId,
-    cnpj: '', ie: '', im: '', razaoSocial: '', nomeFantasia: '', uf: 'MT',
-    regimeTributario: 'simples', ambiente: 'homologacao', cscId: '', csc: '',
+    cnpj: '', ie: '', im: '', cnae: '', razaoSocial: '', nomeFantasia: '', uf: 'MT',
+    regimeTributario: 'simples', crt: '1', ambiente: 'homologacao', cscId: '', csc: '',
     serieNfce: 1, serieNfe: 1, proximoNumeroNfce: 1, proximoNumeroNfe: 1,
+    naturezaOperacaoNfce: 'VENDA DE MERCADORIA', naturezaOperacaoNfe: 'VENDA DE MERCADORIA',
     endereco: { logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', codigoMunicipio: '', cep: '' },
     certificadoAtivoId: null, emissaoAutomaticaAtiva: false, updatedAt: null,
   };
@@ -117,6 +182,8 @@ function normalizarConfig(tenantId, raw = {}, anterior = emptyConfig(tenantId)) 
     cnpj: text(raw.cnpj ?? anterior.cnpj, 22).replace(/[^0-9]/g, ''),
     ie: text(raw.ie ?? anterior.ie, 30),
     im: text(raw.im ?? anterior.im, 30),
+    cnae: text(raw.cnae ?? anterior.cnae, 10).replace(/[^0-9]/g, ''),
+    crt: ['1', '2', '3'].includes(String(raw.crt ?? anterior.crt)) ? String(raw.crt ?? anterior.crt) : anterior.crt,
     razaoSocial: text(raw.razaoSocial ?? raw.razao_social ?? anterior.razaoSocial),
     nomeFantasia: text(raw.nomeFantasia ?? raw.nome_fantasia ?? anterior.nomeFantasia),
     uf: text(raw.uf ?? anterior.uf, 2).toUpperCase() || 'MT',
@@ -128,6 +195,8 @@ function normalizarConfig(tenantId, raw = {}, anterior = emptyConfig(tenantId)) 
     csc: text(raw.csc, 220) || anterior.csc,
     serieNfce: number(raw.serieNfce ?? raw.serie_nfce, anterior.serieNfce),
     serieNfe: number(raw.serieNfe ?? raw.serie_nfe, anterior.serieNfe),
+    naturezaOperacaoNfce: text(raw.naturezaOperacaoNfce ?? raw.natureza_operacao_nfce ?? anterior.naturezaOperacaoNfce),
+    naturezaOperacaoNfe: text(raw.naturezaOperacaoNfe ?? raw.natureza_operacao_nfe ?? anterior.naturezaOperacaoNfe),
     endereco: {
       logradouro: text(sourceAddress.logradouro ?? raw.endereco_logradouro ?? previousAddress.logradouro),
       numero: text(sourceAddress.numero ?? raw.endereco_numero ?? previousAddress.numero, 30),
@@ -225,7 +294,14 @@ export function verificarProntidao(config, cert) {
   const pendencias = [];
   if (!cert) pendencias.push('Importe e ative um certificado A1 válido.');
   else if (new Date(cert.validTo) <= new Date()) pendencias.push('O certificado A1 ativo está expirado.');
+  else if (cert.cnpj && config.cnpj && cert.cnpj !== config.cnpj) pendencias.push('O CNPJ do certificado A1 não corresponde ao CNPJ configurado para a empresa.');
   if (!/^\d{14}$/.test(config.cnpj || '')) pendencias.push('Informe um CNPJ válido com 14 dígitos.');
+  try {
+    const uf = obterConfiguracaoUf(config.uf || 'MT');
+    if (!uf.habilitada) pendencias.push(`A UF ${config.uf} ainda não está habilitada para emissão neste motor fiscal.`);
+  } catch (error) {
+    pendencias.push(error.message);
+  }
   if (!String(config.ie || '').trim()) pendencias.push('Informe a Inscrição Estadual.');
   if (!String(config.razaoSocial || '').trim()) pendencias.push('Informe a razão social.');
   const endereco = config.endereco || {};
@@ -253,23 +329,116 @@ export async function carregarMaterialAtivo(tenantId = 'principal') {
   return { config, cert, pfx, password };
 }
 
-export function registrarPreflightEmissao(tenantId = 'principal', venda = {}) {
+function chaveNumeracao(tenantId, modelo, serie) {
+  return `${tenantKey(tenantId)}:${String(modelo)}:${String(serie)}`;
+}
+
+export function listarConfiguracoesUf() {
+  const customizadas = fiscalStore().tabelaUf || {};
+  return Object.values({ ...TABELA_UF_PADRAO, ...customizadas })
+    .map((item) => ({ ...item, modelos: [...(item.modelos || [])] }))
+    .sort((a, b) => String(a.uf).localeCompare(String(b.uf)));
+}
+
+export function obterConfiguracaoUf(uf = 'MT') {
+  const chave = String(uf || 'MT').toUpperCase();
+  const encontrada = fiscalStore().tabelaUf?.[chave] || TABELA_UF_PADRAO[chave];
+  if (!encontrada) throw new Error(`UF ${chave} ainda não possui configuração fiscal cadastrada.`);
+  return { ...encontrada, modelos: [...(encontrada.modelos || [])] };
+}
+
+export function reservarNumeracaoFiscal(tenantId = 'principal', modelo = '65') {
   const key = tenantKey(tenantId);
-  const config = obterConfiguracaoFiscal(key);
-  if (!config.preflight.pronto) throw new Error(`Emissão bloqueada: ${config.preflight.pendencias.join(' ')}`);
+  const modeloNormalizado = String(modelo);
+  if (!['55', '65'].includes(modeloNormalizado)) throw new Error('Modelo fiscal deve ser 55 ou 65.');
   const store = fiscalStore();
-  const id = `nfce-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
+  const config = store.configuracoes[key] || emptyConfig(key);
+  const serie = modeloNormalizado === '65' ? config.serieNfce : config.serieNfe;
+  const campoProximo = modeloNormalizado === '65' ? 'proximoNumeroNfce' : 'proximoNumeroNfe';
+  const referencia = chaveNumeracao(key, modeloNormalizado, serie);
+  const controle = store.numeracoes[referencia] || {
+    tenantId: key, modelo: modeloNormalizado, serie, proximoNumero: Math.max(1, Number(config[campoProximo]) || 1),
+    atualizadoEm: null,
+  };
+  const numero = Math.max(1, Number(controle.proximoNumero) || 1);
+  controle.proximoNumero = numero + 1;
+  controle.atualizadoEm = new Date().toISOString();
+  store.numeracoes[referencia] = controle;
+  config[campoProximo] = controle.proximoNumero;
+  config.updatedAt = new Date().toISOString();
+  store.configuracoes[key] = config;
+  save();
+  return { tenantId: key, modelo: modeloNormalizado, serie, numero, referencia };
+}
+
+export function criarDocumentoFiscalRascunho(tenantId = 'principal', venda = {}, { modelo = '65', origemId = null } = {}) {
+  const key = tenantKey(tenantId);
+  const modeloNormalizado = String(modelo);
+  const configResposta = obterConfiguracaoFiscal(key);
+  if (!configResposta.preflight.pronto) throw new Error(`Emissão bloqueada: ${configResposta.preflight.pendencias.join(' ')}`);
+  const configuracaoUf = obterConfiguracaoUf(configResposta.uf);
+  if (!configuracaoUf.habilitada || !configuracaoUf.modelos.includes(modeloNormalizado)) {
+    throw new Error(`O modelo ${modeloNormalizado} ainda não está habilitado para a UF ${configResposta.uf}.`);
+  }
+  const store = fiscalStore();
+  if (origemId) {
+    const existente = Object.values(store.documentos).find((documento) =>
+      documento.tenantId === key && documento.modelo === modeloNormalizado && documento.origemId === String(origemId)
+        && !['cancelado', 'inutilizado'].includes(documento.status),
+    );
+    if (existente) return existente;
+  }
+  const numeracao = reservarNumeracaoFiscal(key, modeloNormalizado);
+  const criadoEm = new Date().toISOString();
+  const codigoNumerico = String(crypto.randomInt(0, 100000000)).padStart(8, '0');
+  const chaveAcesso = gerarChaveAcessoFiscal({
+    uf: configResposta.uf, dhEmi: criadoEm, cnpj: configResposta.cnpj, modelo: modeloNormalizado,
+    serie: numeracao.serie, numero: numeracao.numero, codigoNumerico,
+  });
+  const id = `fiscal-${modeloNormalizado}-${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`;
   const documento = {
-    id, tenantId: key, tipo: 'NFC-e', status: 'pronto_para_autorizacao',
-    ambiente: config.ambiente, serie: config.serieNfce, numero: config.proximoNumeroNfce,
-    valorTotal: Number(venda.valorTotal || 0), itens: Array.isArray(venda.itens) ? venda.itens.length : 0,
-    criadoEm: new Date().toISOString(),
+    id, tenantId: key, origemId: origemId ? String(origemId) : null,
+    tipo: modeloNormalizado === '65' ? 'NFC-e' : 'NF-e', modelo: modeloNormalizado,
+    status: 'rascunho', ambiente: configResposta.ambiente,
+    serie: numeracao.serie, numero: numeracao.numero, codigoNumerico, chaveAcesso,
+    versaoLayout: configuracaoUf.versaoLayout, uf: configResposta.uf,
+    valorTotal: Number(venda.valorTotal || venda.total || 0), itens: Array.isArray(venda.itens) ? venda.itens : [],
+    pagamentos: Array.isArray(venda.pagamentos) ? venda.pagamentos : [],
+    tributos: {}, eventos: [], criadoEm, atualizadoEm: criadoEm,
   };
   store.documentos[id] = documento;
-  const persisted = store.configuracoes[key];
-  persisted.proximoNumeroNfce += 1;
   save();
+  registrarEventoFiscal(key, id, 'rascunho_criado', { origemId: documento.origemId, referenciaNumeracao: numeracao.referencia });
   return documento;
+}
+
+export function registrarPreflightEmissao(tenantId = 'principal', venda = {}) {
+  return criarDocumentoFiscalRascunho(tenantId, venda, { modelo: '65', origemId: venda.origemId || venda.comandaId || venda.vendaId || null });
+}
+
+export function registrarEventoFiscal(tenantId = 'principal', documentoId, tipo, detalhes = {}) {
+  const key = tenantKey(tenantId);
+  const store = fiscalStore();
+  const documento = store.documentos[documentoId];
+  if (!documento || documento.tenantId !== key) throw new Error('Documento fiscal não encontrado para esta empresa.');
+  const eventoId = `evento-fiscal-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
+  const evento = {
+    id: eventoId, documentoId, tenantId: key, tipo: String(tipo || 'evento'),
+    detalhes: detalhes && typeof detalhes === 'object' ? { ...detalhes } : {}, criadoEm: new Date().toISOString(),
+  };
+  store.eventos[eventoId] = evento;
+  documento.eventos ||= [];
+  documento.eventos.push(eventoId);
+  documento.atualizadoEm = evento.criadoEm;
+  save();
+  return evento;
+}
+
+export function listarEventosFiscais(tenantId = 'principal', documentoId = null) {
+  const key = tenantKey(tenantId);
+  return Object.values(fiscalStore().eventos)
+    .filter((evento) => evento.tenantId === key && (!documentoId || evento.documentoId === documentoId))
+    .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)));
 }
 
 export function listarDocumentos(tenantId = 'principal') {
@@ -308,7 +477,10 @@ export function limparDadosSensiveis(config) {
 }
 
 export default {
+  calcularDigitoVerificadorChave, gerarChaveAcessoFiscal, validarChaveAcessoFiscal,
   obterConfiguracaoFiscal, salvarConfiguracaoFiscal, importarCertificadoA1,
   listarCertificados, ativarCertificado, verificarProntidao, carregarMaterialAtivo,
-  registrarPreflightEmissao, listarDocumentos, migrarTenant, limparDadosSensiveis,
+  listarConfiguracoesUf, obterConfiguracaoUf, reservarNumeracaoFiscal,
+  criarDocumentoFiscalRascunho, registrarPreflightEmissao, registrarEventoFiscal,
+  listarEventosFiscais, listarDocumentos, migrarTenant, limparDadosSensiveis,
 };

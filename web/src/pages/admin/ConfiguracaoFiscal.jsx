@@ -3,9 +3,9 @@ import { api } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
 const EMPTY_CONFIG = {
-  cnpj: '', ie: '', im: '', razaoSocial: '', nomeFantasia: '', uf: 'MT',
+  cnpj: '', ie: '', im: '', cnae: '', crt: '1', razaoSocial: '', nomeFantasia: '', uf: 'MT',
   regimeTributario: 'simples', ambiente: 'homologacao', cscId: '', csc: '',
-  serieNfce: 1, serieNfe: 1,
+  serieNfce: 1, serieNfe: 1, naturezaOperacaoNfce: 'VENDA DE MERCADORIA', naturezaOperacaoNfe: 'VENDA DE MERCADORIA',
   endereco: { logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', codigoMunicipio: '', cep: '' },
 }
 
@@ -171,10 +171,12 @@ export default function ConfiguracaoFiscal() {
         <Field label="CNPJ" required value={form.cnpj} onChange={e => update('cnpj', e.target.value)} placeholder="00.000.000/0001-00" />
         <Field label="Inscrição Estadual" required value={form.ie} onChange={e => update('ie', e.target.value)} placeholder="Inscrição estadual" />
         <Field label="Inscrição Municipal" value={form.im} onChange={e => update('im', e.target.value)} placeholder="Inscrição municipal" />
+        <Field label="CNAE principal" value={form.cnae} onChange={e => update('cnae', e.target.value)} placeholder="Ex.: 5611201" />
         <Field label="UF" required value={form.uf} onChange={e => update('uf', e.target.value.toUpperCase())} placeholder="MT" />
         <Field label="Razão social" required value={form.razaoSocial} onChange={e => update('razaoSocial', e.target.value)} placeholder="Razão social do emitente" />
         <Field label="Nome fantasia" value={form.nomeFantasia} onChange={e => update('nomeFantasia', e.target.value)} placeholder="Nome de exibição" />
         <div><label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 5, fontWeight: 700 }}>Regime tributário</label><select value={form.regimeTributario} onChange={e => update('regimeTributario', e.target.value)} style={fieldStyle}><option value="simples">Simples Nacional (CRT 1)</option><option value="lucro_presumido">Lucro Presumido (CRT 3)</option><option value="lucro_real">Lucro Real (CRT 3)</option></select></div>
+        <div><label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 5, fontWeight: 700 }}>CRT</label><select value={form.crt} onChange={e => update('crt', e.target.value)} style={fieldStyle}><option value="1">1 — Simples Nacional</option><option value="2">2 — Simples Nacional (excesso sublimite)</option><option value="3">3 — Regime Normal</option></select></div>
         <div><label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 5, fontWeight: 700 }}>Ambiente SEFAZ</label><select value={form.ambiente} onChange={e => update('ambiente', e.target.value)} style={fieldStyle}><option value="homologacao">Homologação — testes</option><option value="producao">Produção — documentos válidos</option></select></div>
       </div>
     </Section>
@@ -199,6 +201,8 @@ export default function ConfiguracaoFiscal() {
         <Field label="CSC" type="password" value={form.csc} onChange={e => update('csc', e.target.value)} placeholder={config?.cscConfigurado ? 'CSC já configurado — deixe em branco para manter' : 'Token CSC da SEFAZ'} />
         <Field label="Série NFC-e" type="number" value={form.serieNfce} onChange={e => update('serieNfce', e.target.value)} placeholder="1" />
         <Field label="Série NF-e" type="number" value={form.serieNfe} onChange={e => update('serieNfe', e.target.value)} placeholder="1" />
+        <Field label="Natureza da operação NFC-e" value={form.naturezaOperacaoNfce} onChange={e => update('naturezaOperacaoNfce', e.target.value)} placeholder="VENDA DE MERCADORIA" />
+        <Field label="Natureza da operação NF-e" value={form.naturezaOperacaoNfe} onChange={e => update('naturezaOperacaoNfe', e.target.value)} placeholder="VENDA DE MERCADORIA" />
       </div>
     </Section>
 

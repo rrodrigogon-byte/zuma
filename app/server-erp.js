@@ -725,6 +725,10 @@ async function iniciar() {
     res.json({ ok: true, config: fiscalResposta(fiscalKytto.obterConfiguracaoFiscal(fiscalTenantId(req))) });
   });
 
+  app.get('/api/v1/fiscal/ufs', requerEditorCatalogo, (_req, res) => {
+    res.json({ ok: true, ufs: fiscalKytto.listarConfiguracoesUf() });
+  });
+
   app.post('/api/v1/fiscal/config', requerEditorCatalogo, (req, res) => {
     try {
       const config = fiscalKytto.salvarConfiguracaoFiscal(fiscalTenantId(req), req.body || {});
@@ -768,6 +772,14 @@ async function iniciar() {
     res.json({ ok: true, documentos: fiscalKytto.listarDocumentos(fiscalTenantId(req)) });
   });
 
+  app.get('/api/v1/fiscal/documentos/:id/eventos', requerEditorCatalogo, (req, res) => {
+    try {
+      res.json({ ok: true, eventos: fiscalKytto.listarEventosFiscais(fiscalTenantId(req), req.params.id) });
+    } catch (error) {
+      res.status(404).json({ erro: error.message });
+    }
+  });
+
   // Este endpoint valida prontidão, reserva numeração e registra a solicitação.
   // O envio à SEFAZ permanece bloqueado até que os requisitos cadastrais e as
   // regras fiscais por produto estejam completos, evitando emissão inválida.
@@ -775,6 +787,20 @@ async function iniciar() {
     try {
       const documento = fiscalKytto.registrarPreflightEmissao(fiscalTenantId(req), req.body || {});
       res.status(201).json({ ok: true, documento, mensagem: 'NFC-e preparada para autorização após a validação fiscal.' });
+    } catch (error) {
+      res.status(422).json({ erro: error.message });
+    }
+  });
+
+  // Rascunho de NF-e (55) para testes de domínio. Este endpoint não transmite
+  // nem autoriza qualquer documento na SEFAZ.
+  app.post('/api/v1/fiscal/nfe/preflight', requerEditorCatalogo, (req, res) => {
+    try {
+      const venda = req.body || {};
+      const documento = fiscalKytto.criarDocumentoFiscalRascunho(fiscalTenantId(req), venda, {
+        modelo: '55', origemId: venda.origemId || venda.pedidoId || venda.vendaId || null,
+      });
+      res.status(201).json({ ok: true, documento, mensagem: 'NF-e preparada como rascunho; nenhuma transmissão foi realizada.' });
     } catch (error) {
       res.status(422).json({ erro: error.message });
     }
