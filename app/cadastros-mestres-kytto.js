@@ -10,7 +10,10 @@ export const EMPRESA_PADRAO_ID = 'emp-kytto-001';
 function agora() { return new Date().toISOString(); }
 function texto(valor, limite = 160) { return String(valor ?? '').trim().slice(0, limite); }
 function numeroNaoNegativo(valor) { return Math.max(0, Number(valor || 0) || 0); }
+function cnpjNormalizado(valor) { return String(valor ?? '').replace(/\D/g, ''); }
 function id(prefixo) { return `${prefixo}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`; }
+
+const MODULOS_INICIAIS = ['pdv', 'fiscal', 'financeiro', 'estoque', 'compras', 'cardapio', 'mesas', 'kds', 'pagamentos'];
 
 function base() {
   const estado = db();
@@ -75,20 +78,31 @@ export function listarEmpresas({ incluirInativas = false } = {}) {
 export function criarEmpresa(payload = {}) {
   const nome = texto(payload.nome, 160);
   if (!nome) throw new Error('Nome da empresa é obrigatório.');
+  const cnpj = texto(payload.cnpj, 20);
+  const documento = cnpjNormalizado(cnpj);
+  if (documento && documento.length !== 14) throw new Error('Informe um CNPJ com 14 dígitos ou deixe o campo em branco durante o rascunho.');
   const store = base();
+  if (documento && Object.values(store.empresas).some((empresa) => cnpjNormalizado(empresa.cnpj) === documento)) {
+    throw new Error('Já existe uma empresa cadastrada com este CNPJ.');
+  }
   const empresa = {
     id: id('emp'),
     nome,
     nomeFantasia: texto(payload.nomeFantasia || payload.nome_fantasia, 160) || nome,
-    cnpj: texto(payload.cnpj, 20),
+    cnpj,
+    cnpjNormalizado: documento,
     inscricaoEstadual: texto(payload.inscricaoEstadual || payload.inscricao_estadual, 30),
     endereco: texto(payload.endereco, 240),
     telefone: texto(payload.telefone, 30),
     email: texto(payload.email, 120).toLowerCase(),
     ativa: payload.ativa !== false,
     plano: texto(payload.plano, 40) || 'standard',
-    modulos: Array.isArray(payload.modulos) ? payload.modulos.map((modulo) => texto(modulo, 40)).filter(Boolean) : [],
+    modulos: Array.isArray(payload.modulos) && payload.modulos.length
+      ? payload.modulos.map((modulo) => texto(modulo, 40)).filter(Boolean)
+      : [...MODULOS_INICIAIS],
     permitirEstoqueNegativo: payload.permitirEstoqueNegativo !== false,
+    statusOnboarding: ['rascunho', 'configuracao', 'pronta'].includes(String(payload.statusOnboarding)) ? String(payload.statusOnboarding) : 'configuracao',
+    criadoPorUsuarioId: texto(payload.criadoPorUsuarioId, 80),
     criadaEm: agora(),
     atualizadaEm: agora(),
   };
@@ -100,13 +114,25 @@ export function criarEmpresa(payload = {}) {
 export function atualizarEmpresa(empresaId, payload = {}) {
   const empresa = obterEmpresa(empresaId);
   if (!empresa) return null;
-  const campos = ['nome', 'nomeFantasia', 'cnpj', 'inscricaoEstadual', 'endereco', 'telefone', 'email', 'plano'];
+  const campos = ['nome', 'nomeFantasia', 'inscricaoEstadual', 'endereco', 'telefone', 'email', 'plano'];
   for (const campo of campos) {
     if (payload[campo] !== undefined) empresa[campo] = texto(payload[campo], campo === 'endereco' ? 240 : 160);
+  }
+  if (payload.cnpj !== undefined) {
+    const cnpj = texto(payload.cnpj, 20);
+    const documento = cnpjNormalizado(cnpj);
+    if (documento && documento.length !== 14) throw new Error('Informe um CNPJ com 14 dígitos ou deixe o campo em branco durante o rascunho.');
+    const duplicada = documento && Object.values(base().empresas).some((item) => item.id !== empresa.id && cnpjNormalizado(item.cnpj) === documento);
+    if (duplicada) throw new Error('Já existe outra empresa cadastrada com este CNPJ.');
+    empresa.cnpj = cnpj;
+    empresa.cnpjNormalizado = documento;
   }
   if (payload.ativa !== undefined) empresa.ativa = Boolean(payload.ativa);
   if (Array.isArray(payload.modulos)) empresa.modulos = payload.modulos.map((modulo) => texto(modulo, 40)).filter(Boolean);
   if (payload.permitirEstoqueNegativo !== undefined) empresa.permitirEstoqueNegativo = Boolean(payload.permitirEstoqueNegativo);
+  if (payload.statusOnboarding !== undefined && ['rascunho', 'configuracao', 'pronta'].includes(String(payload.statusOnboarding))) {
+    empresa.statusOnboarding = String(payload.statusOnboarding);
+  }
   empresa.atualizadaEm = agora();
   save();
   return empresa;
@@ -130,6 +156,7 @@ function normalizarUsuario(payload = {}) {
     ativo: payload.ativo !== false,
     funcionarioId: texto(payload.funcionarioId || payload.funcionario_id, 80),
     platformAdmin: Boolean(payload.platformAdmin),
+    platformConsultor: Boolean(payload.platformConsultor),
   };
 }
 

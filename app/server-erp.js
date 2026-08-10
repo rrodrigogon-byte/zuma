@@ -270,12 +270,25 @@ app.post('/api/admin/login', authLimiter, (req, res) => {
     const empresaAtiva = empresas[0];
     const token = Buffer.from(`${email}:${Date.now()}:${empresaAtiva.id}`).toString('base64');
     const acesso = resumoAcessoUsuario(usuario);
-    const administrador = usuario.platformAdmin === true || acesso.perfis.includes('administrador') || (usuario.roles || []).includes('admin') || (usuario.roles || []).includes('administrador');
-    const papel = administrador ? 'admin' : (usuario.role || ((usuario.roles || [])[0] || 'operador'));
+    const administradorLocal = acesso.perfis.includes('administrador') || (usuario.roles || []).includes('admin') || (usuario.roles || []).includes('administrador');
+    const administradorPlataforma = usuario.platformAdmin === true;
+    const consultorPlataforma = usuario.platformConsultor === true;
+    const papel = administradorLocal ? 'admin' : (usuario.role || ((usuario.roles || [])[0] || 'operador'));
 
     res.json({
       token,
-      user: { email: usuario.email, nome: usuario.nome, role: papel, empresaId: empresaAtiva.id, roles: usuario.roles || [papel], perfis: acesso.perfis, tipoUsuario: acesso.tipoUsuario, permissoes: administrador ? { ...acesso.permissoes, plataforma: ['ler', 'criar', 'editar', 'excluir'] } : acesso.permissoes, platformAdmin: administrador },
+      user: {
+        email: usuario.email,
+        nome: usuario.nome,
+        role: papel,
+        empresaId: empresaAtiva.id,
+        roles: usuario.roles || [papel],
+        perfis: acesso.perfis,
+        tipoUsuario: acesso.tipoUsuario,
+        permissoes: administradorPlataforma ? { ...acesso.permissoes, plataforma: ['ler', 'criar', 'editar', 'excluir'] } : acesso.permissoes,
+        platformAdmin: administradorPlataforma,
+        platformConsultor: consultorPlataforma,
+      },
       role: papel,
       sessao: {
         loja_ativa: { id: empresaAtiva.id, nome: empresaAtiva.nomeFantasia || empresaAtiva.nome, ativa: empresaAtiva.ativa !== false, empresaId: empresaAtiva.id },
@@ -648,7 +661,7 @@ async function iniciar() {
   function requerEditorCatalogo(req, res, next) {
     const usuario = usuarioDoToken(req) || espelharUsuarioEmMemoria(cadastrosMestres.obterUsuarioPorEmail(
       (() => {
-        try { return Buffer.from(String(req.headers.authorization || '').replace(/^Bearer\\s+/i, ''), 'base64').toString('utf8').split(':')[0]; }
+        try { return Buffer.from(String(req.headers.authorization || '').replace(/^Bearer\s+/i, ''), 'base64').toString('utf8').split(':')[0]; }
         catch { return ''; }
       })()
     ));
@@ -1959,18 +1972,39 @@ async function iniciar() {
     }
   });
 
-  function requerAdministradorPlataforma(req, res, next) {
-    const usuario = usuarioDoToken(req) || espelharUsuarioEmMemoria(cadastrosMestres.obterUsuarioPorEmail(
+  function usuarioAutenticadoDaRequisicao(req) {
+    return usuarioDoToken(req) || espelharUsuarioEmMemoria(cadastrosMestres.obterUsuarioPorEmail(
       (() => {
-        try { return Buffer.from(String(req.headers.authorization || '').replace(/^Bearer\\s+/i, ''), 'base64').toString('utf8').split(':')[0]; }
+        try { return Buffer.from(String(req.headers.authorization || '').replace(/^Bearer\s+/i, ''), 'base64').toString('utf8').split(':')[0]; }
         catch { return ''; }
       })()
     ));
+  }
+
+  function requerAdministradorPlataforma(req, res, next) {
+    const usuario = usuarioAutenticadoDaRequisicao(req);
     if (!usuario || usuario.ativo === false || usuario.platformAdmin !== true) {
       return res.status(403).json({ erro: 'Permissão de administração da plataforma necessária.' });
     }
     req.usuario = usuario;
     next();
+  }
+
+  // Consultor de plataforma é uma delegação explícita e separada do perfil
+  // operacional "consultor". Somente ele ou um administrador da plataforma
+  // podem criar e configurar empresas às quais tenham acesso.
+  function requerGestorOnboarding(req, res, next) {
+    const usuario = usuarioAutenticadoDaRequisicao(req);
+    if (!usuario || usuario.ativo === false || (usuario.platformAdmin !== true && usuario.platformConsultor !== true)) {
+      return res.status(403).json({ erro: 'Permissão de consultoria ou administração da plataforma necessária.' });
+    }
+    req.usuario = usuario;
+    next();
+  }
+
+  function podeGerirEmpresaNoOnboarding(usuario, empresaId) {
+    if (usuario?.platformAdmin === true) return true;
+    return cadastrosMestres.empresasDoUsuario(usuario).some((empresa) => empresa.id === String(empresaId) && empresa.ativa !== false);
   }
 
   // ── CADASTROS MESTRES MULTIENTIDADE ──────────────────────────────────────
@@ -2146,8 +2180,13 @@ async function iniciar() {
     try {
       const senhaInicial = String(req.body?.senhaInicial || req.body?.senha || '');
       if (senhaInicial.length < 8) return res.status(400).json({ erro: 'A senha inicial deve possuir pelo menos 8 caracteres.' });
+      const dadosUsuario = { ...(req.body || {}) };
+      // Delegações de plataforma não podem ser concedidas por administradores
+      // locais; elas exigem a rota específica protegida abaixo.
+      delete dadosUsuario.platformAdmin;
+      delete dadosUsuario.platformConsultor;
       const usuario = cadastrosMestres.criarUsuario(req.empresaId, {
-        ...req.body, senhaHash: hashPassword(senhaInicial),
+        ...dadosUsuario, senhaHash: hashPassword(senhaInicial),
         empresasAcessiveis: [req.empresaId],
       });
       espelharUsuarioEmMemoria(usuario);
@@ -2171,7 +2210,9 @@ async function iniciar() {
 
   app.patch('/api/admin/usuarios-mestres/:usuarioId', requerEditorCatalogo, (req, res) => {
     try {
-      const payload = { ...req.body };
+      const payload = { ...(req.body || {}) };
+      delete payload.platformAdmin;
+      delete payload.platformConsultor;
       if (payload.senhaInicial || payload.senha) {
         const novaSenha = String(payload.senhaInicial || payload.senha);
         if (novaSenha.length < 8) return res.status(400).json({ erro: 'A senha deve possuir pelo menos 8 caracteres.' });
@@ -2289,14 +2330,21 @@ async function iniciar() {
     }
   });
 
-  // ── GESTÃO DE EMPRESAS (SOMENTE ADMINISTRADOR DA PLATAFORMA) ────────────
-  app.get('/api/admin/plataforma/empresas', requerAdministradorPlataforma, (req, res) => {
-    res.json({ ok: true, empresas: cadastrosMestres.listarEmpresas({ incluirInativas: true }) });
+  // ── GESTÃO DE EMPRESAS E ONBOARDING MULTIENTIDADE ──────────────────────
+  app.get('/api/admin/plataforma/empresas', requerGestorOnboarding, (req, res) => {
+    const empresas = req.usuario.platformAdmin === true
+      ? cadastrosMestres.listarEmpresas({ incluirInativas: true })
+      : cadastrosMestres.empresasDoUsuario(req.usuario);
+    res.json({ ok: true, empresas });
   });
 
-  app.post('/api/admin/plataforma/empresas', requerAdministradorPlataforma, (req, res) => {
+  app.post('/api/admin/plataforma/empresas', requerGestorOnboarding, (req, res) => {
     try {
-      const empresa = cadastrosMestres.criarEmpresa(req.body || {});
+      const dadosAdmin = req.body?.administrador;
+      if (!dadosAdmin?.nome || !dadosAdmin?.email || String(dadosAdmin?.senhaInicial || '').length < 8) {
+        return res.status(400).json({ erro: 'Informe nome, email e senha inicial com ao menos 8 caracteres para o administrador da empresa.' });
+      }
+      const empresa = cadastrosMestres.criarEmpresa({ ...(req.body || {}), criadoPorUsuarioId: req.usuario.id, statusOnboarding: 'configuracao' });
       // Todo novo tenant recebe uma configuração fiscal independente, ainda em
       // homologação e sem emissão automática. A NFC-e só é liberada após o
       // checklist fiscal completo da própria empresa.
@@ -2307,19 +2355,17 @@ async function iniciar() {
         ambiente: 'homologacao',
         emissaoAutomaticaAtiva: false,
       });
-      let administrador = null;
-      const dadosAdmin = req.body?.administrador;
-      if (dadosAdmin?.email || dadosAdmin?.nome || dadosAdmin?.senhaInicial) {
-        const senhaInicial = String(dadosAdmin.senhaInicial || '');
-        if (!dadosAdmin?.nome || !dadosAdmin?.email || senhaInicial.length < 8) {
-          return res.status(400).json({ erro: 'Para criar o administrador da empresa, informe nome, email e senha inicial com ao menos 8 caracteres.' });
-        }
-        administrador = cadastrosMestres.criarUsuario(empresa.id, {
-          nome: dadosAdmin.nome, email: dadosAdmin.email, telefone: dadosAdmin.telefone || '',
-          roles: ['admin', 'gerente'], senhaHash: hashPassword(senhaInicial), empresasAcessiveis: [empresa.id],
-        });
-        espelharUsuarioEmMemoria(administrador);
-      }
+      const administrador = cadastrosMestres.criarUsuario(empresa.id, {
+        nome: dadosAdmin.nome,
+        email: dadosAdmin.email,
+        telefone: dadosAdmin.telefone || '',
+        tipoUsuario: 'administrador',
+        perfis: ['administrador'],
+        roles: ['administrador'],
+        senhaHash: hashPassword(String(dadosAdmin.senhaInicial)),
+        empresasAcessiveis: [empresa.id],
+      });
+      espelharUsuarioEmMemoria(administrador);
       // O administrador de plataforma também recebe acesso à empresa recém-criada
       // para auditoria e suporte, sem conceder esse acesso a nenhum outro usuário.
       if (req.usuario?.id && req.usuario?.empresaId) {
@@ -2334,11 +2380,31 @@ async function iniciar() {
     }
   });
 
-  app.patch('/api/admin/plataforma/empresas/:empresaId', requerAdministradorPlataforma, (req, res) => {
+  app.patch('/api/admin/plataforma/empresas/:empresaId', requerGestorOnboarding, (req, res) => {
     try {
-      const empresa = cadastrosMestres.atualizarEmpresa(req.params.empresaId, req.body || {});
+      if (!podeGerirEmpresaNoOnboarding(req.usuario, req.params.empresaId)) {
+        return res.status(403).json({ erro: 'Você não possui acesso de consultoria a esta empresa.' });
+      }
+      const permitidos = ['nome', 'nomeFantasia', 'cnpj', 'inscricaoEstadual', 'endereco', 'telefone', 'email', 'plano', 'modulos', 'permitirEstoqueNegativo', 'statusOnboarding'];
+      const payload = Object.fromEntries(Object.entries(req.body || {}).filter(([campo]) => permitidos.includes(campo)));
+      const empresa = cadastrosMestres.atualizarEmpresa(req.params.empresaId, payload);
       if (!empresa) return res.status(404).json({ erro: 'Empresa não encontrada.' });
       res.json({ ok: true, empresa });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
+  app.patch('/api/admin/plataforma/consultores/:empresaId/:usuarioId', requerAdministradorPlataforma, (req, res) => {
+    try {
+      const usuario = cadastrosMestres.obterUsuario(req.params.empresaId, req.params.usuarioId);
+      if (!usuario) return res.status(404).json({ erro: 'Usuário não encontrado na empresa informada.' });
+      const atualizado = cadastrosMestres.atualizarUsuario(req.params.empresaId, req.params.usuarioId, {
+        platformConsultor: Boolean(req.body?.ativo),
+      });
+      espelharUsuarioEmMemoria(atualizado);
+      const { senhaHash, ...resposta } = atualizado;
+      res.json({ ok: true, usuario: resposta, mensagem: atualizado.platformConsultor ? 'Consultor de plataforma habilitado.' : 'Consultor de plataforma desabilitado.' });
     } catch (error) {
       res.status(400).json({ erro: error.message });
     }

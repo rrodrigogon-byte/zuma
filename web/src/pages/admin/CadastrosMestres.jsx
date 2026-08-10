@@ -54,10 +54,11 @@ export default function CadastrosMestres() {
   const [modal, setModal] = useState(null)
   const [modalEmpresa, setModalEmpresa] = useState(false)
   const [form, setForm] = useState(EMPTY.funcionarios)
-  const [empresaForm, setEmpresaForm] = useState({ nome: '', nomeFantasia: '', cnpj: '', email: '', telefone: '', administrador: { nome: '', email: '', senhaInicial: '' } })
+  const [empresaForm, setEmpresaForm] = useState({ nome: '', nomeFantasia: '', cnpj: '', inscricaoEstadual: '', endereco: '', email: '', telefone: '', permitirEstoqueNegativo: false, administrador: { nome: '', email: '', senhaInicial: '' } })
   const [saving, setSaving] = useState(false)
 
   const aba = useMemo(() => TABS.find((item) => item.id === tab), [tab])
+  const podeGerenciarEmpresas = Boolean(user?.platformAdmin || user?.platformConsultor)
 
   const carregar = useCallback(async () => {
     setLoading(true)
@@ -92,7 +93,7 @@ export default function CadastrosMestres() {
       await api.post('/api/admin/plataforma/empresas', empresaForm)
       toast('Empresa criada com isolamento próprio. Faça novo login para selecioná-la na sessão.')
       setModalEmpresa(false)
-      setEmpresaForm({ nome: '', nomeFantasia: '', cnpj: '', email: '', telefone: '', administrador: { nome: '', email: '', senhaInicial: '' } })
+      setEmpresaForm({ nome: '', nomeFantasia: '', cnpj: '', inscricaoEstadual: '', endereco: '', email: '', telefone: '', permitirEstoqueNegativo: false, administrador: { nome: '', email: '', senhaInicial: '' } })
     } catch (error) {
       toast(error.message || 'Não foi possível criar a empresa.', true)
     } finally {
@@ -157,7 +158,7 @@ export default function CadastrosMestres() {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-secondary btn-sm" onClick={carregar}>↺ Atualizar</button>
-          {user?.platformAdmin && <button className="btn btn-secondary btn-sm" onClick={() => setModalEmpresa(true)}>🏢 Nova Empresa</button>}
+          {podeGerenciarEmpresas && <button className="btn btn-secondary btn-sm" onClick={() => setModalEmpresa(true)}>🏢 Nova Empresa</button>}
           <button className="btn btn-primary btn-sm" onClick={abrirNovo}>+ Novo {aba?.label?.slice(0, -1)}</button>
         </div>
       </div>
@@ -221,11 +222,13 @@ export default function CadastrosMestres() {
         <Modal title="Nova empresa isolada" onClose={() => setModalEmpresa(false)} width={620}>
           <div style={{ display: 'grid', gap: 12, paddingBottom: 16 }}>
             <div className="card" style={{ fontSize: 12, color: 'var(--muted)', background: 'rgba(255,107,44,.06)' }}>
-              A nova empresa terá cadastros, cardápio, estoque, mesas, financeiro e fiscal próprios. O administrador abaixo visualizará somente os dados dela.
+              A nova empresa terá cadastros, cardápio, estoque, mesas, financeiro, fiscal e pagamentos próprios. O administrador inicial visualizará apenas os dados dela; PIX, adquirentes e TEF permanecerão desativados até a homologação do provedor.
             </div>
             <Linha><Campo label="Razão social *"><input value={empresaForm.nome} onChange={(e) => setEmpresaForm({ ...empresaForm, nome: e.target.value })} /></Campo><Campo label="Nome fantasia"><input value={empresaForm.nomeFantasia} onChange={(e) => setEmpresaForm({ ...empresaForm, nomeFantasia: e.target.value })} /></Campo></Linha>
-            <Linha><Campo label="CNPJ"><input value={empresaForm.cnpj} onChange={(e) => setEmpresaForm({ ...empresaForm, cnpj: e.target.value })} /></Campo><Campo label="Email corporativo"><input type="email" value={empresaForm.email} onChange={(e) => setEmpresaForm({ ...empresaForm, email: e.target.value })} /></Campo></Linha>
-            <Campo label="Telefone"><input value={empresaForm.telefone} onChange={(e) => setEmpresaForm({ ...empresaForm, telefone: e.target.value })} /></Campo>
+            <Linha><Campo label="CNPJ"><input inputMode="numeric" value={empresaForm.cnpj} onChange={(e) => setEmpresaForm({ ...empresaForm, cnpj: e.target.value })} /></Campo><Campo label="Inscrição estadual"><input value={empresaForm.inscricaoEstadual} onChange={(e) => setEmpresaForm({ ...empresaForm, inscricaoEstadual: e.target.value })} /></Campo></Linha>
+            <Linha><Campo label="Email corporativo"><input type="email" value={empresaForm.email} onChange={(e) => setEmpresaForm({ ...empresaForm, email: e.target.value })} /></Campo><Campo label="Telefone"><input value={empresaForm.telefone} onChange={(e) => setEmpresaForm({ ...empresaForm, telefone: e.target.value })} /></Campo></Linha>
+            <Campo label="Endereço fiscal"><input value={empresaForm.endereco} onChange={(e) => setEmpresaForm({ ...empresaForm, endereco: e.target.value })} /></Campo>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 }}><input type="checkbox" checked={empresaForm.permitirEstoqueNegativo} onChange={(e) => setEmpresaForm({ ...empresaForm, permitirEstoqueNegativo: e.target.checked })} />Permitir estoque negativo nesta empresa</label>
             <h3 style={{ margin: '8px 0 0', color: '#12283F', fontSize: 15 }}>Administrador inicial</h3>
             <Linha><Campo label="Nome *"><input value={empresaForm.administrador.nome} onChange={(e) => setEmpresaForm({ ...empresaForm, administrador: { ...empresaForm.administrador, nome: e.target.value } })} /></Campo><Campo label="Email *"><input type="email" value={empresaForm.administrador.email} onChange={(e) => setEmpresaForm({ ...empresaForm, administrador: { ...empresaForm.administrador, email: e.target.value } })} /></Campo></Linha>
             <Campo label="Senha inicial *"><input type="password" value={empresaForm.administrador.senhaInicial} onChange={(e) => setEmpresaForm({ ...empresaForm, administrador: { ...empresaForm.administrador, senhaInicial: e.target.value } })} /></Campo>
