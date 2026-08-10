@@ -15,3 +15,7 @@ O smoke test autenticado foi concluído no ambiente equivalente à produção. A
 ### Produção — 10/08/2026 02:06 UTC
 
 A revisão `setpoint-ultra-00080-lv2` foi promovida para 100% do tráfego. Os endpoints `/health` nas URLs oficial e `setpoint.kytto.com.br` responderam HTTP 200 com os módulos operacionais ativos. A validação visual autenticada carregou o dashboard e o menu administrativo completo. A inspeção do navegador confirmou o bundle atual `index-C9ESDXxg.js` e um service worker controlador ativo na origem de produção.
+
+### Correção final de domínio — 10/08/2026 02:12 UTC
+
+A revisão `setpoint-ultra-00081-sb4` foi promovida para 100% do tráfego. O endpoint `https://setpoint.kytto.com.br/login` respondeu HTTP 200, sem cabeçalho `Location`, com o bundle atual `index-C9ESDXxg.js` e cabeçalhos HSTS, `X-Frame-Options`, `X-Content-Type-Options` e `Cache-Control: no-store`. A validação visual no domínio Kytto confirmou que a sessão autenticada acessa o dashboard e o menu administrativo completo, sem redirecionamento para a URL técnica do Cloud Run.
