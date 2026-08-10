@@ -90,16 +90,9 @@ const authLimiter = rateLimit({
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// A landing institucional usa setpoint.kytto.com.br como atalho. Para manter
-// uma URL canônica única de autenticação e evitar sessão/cache em origem
-// diferente, o atalho sempre segue para o login oficial do Cloud Run.
-app.get('/login', (req, res, next) => {
-  const host = String(req.get('host') || '').toLowerCase().split(':')[0];
-  if (host === 'setpoint.kytto.com.br') {
-    return res.redirect(302, 'https://setpoint-ultra-nedqnqyahq-rj.a.run.app/login');
-  }
-  next();
-});
+// A autenticação deve permanecer no domínio de acesso escolhido pelo usuário.
+// O fallback SPA abaixo entrega a mesma aplicação para /login sem expor a URL
+// técnica do Cloud Run nem fragmentar a sessão entre origens.
 
 // Em produção, servir o build React antes das rotas. As chamadas /api/*
 // continuam sendo resolvidas pelos módulos registrados abaixo. PUBLIC_DIR permite
