@@ -131,9 +131,29 @@ function gcsBucket() {
   return new Storage().bucket(bucketName);
 }
 
+function apenasDigitos(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function cnpjFromCommonName(commonName) {
+  const normalized = String(commonName || '').trim();
+  // Certificados ICP-Brasil podem exibir o CNPJ do titular no final do CN,
+  // com pontuação, barra ou espaços: "Empresa: 12.345.678/0001-90".
+  const match = normalized.match(/:\s*([0-9.\-/\s]+)$/);
+  const cnpj = apenasDigitos(match?.[1] || '');
+  return cnpj.length === 14 ? cnpj : '';
+}
+
 function cnpjFromSubject(subject) {
-  const match = String(subject || '').match(/(?:CNPJ|OU=|OU\s*=\s*)(\d{14})/i);
-  return match ? match[1] : '';
+  const match = String(subject || '').match(/(?:CNPJ|OU=|OU\s*=\s*)([0-9.\-/\s]{14,})/i);
+  const cnpj = apenasDigitos(match?.[1] || '');
+  return cnpj.length === 14 ? cnpj : '';
+}
+
+function cnpjDoCertificado(certificado) {
+  // O CN identifica o titular do e-CNPJ e deve prevalecer sobre OUs da cadeia
+  // ICP-Brasil, que podem conter CNPJs de entidades certificadoras.
+  return cnpjFromCommonName(certificado?.commonName) || apenasDigitos(certificado?.cnpj);
 }
 
 function describeCertificate(pfxBuffer, password) {
@@ -156,7 +176,7 @@ function describeCertificate(pfxBuffer, password) {
       commonName: cn,
       // O CN do e-CNPJ identifica o titular; priorizá-lo evita confundir CNPJs
       // presentes em OUs da cadeia ICP-Brasil com o CNPJ do emitente.
-      cnpj: (cn.match(/(\d{14})/) || [])[1] || cnpjFromSubject(subject) || '',
+      cnpj: cnpjFromCommonName(cn) || cnpjFromSubject(subject) || '',
       validFrom,
       validTo,
       fingerprint: crypto.createHash('sha256').update(pfxBuffer).digest('hex'),
@@ -226,7 +246,7 @@ export function obterConfiguracaoFiscal(tenantId = 'principal') {
   return {
     ...config,
     certificado: cert ? {
-      id: cert.id, nomeArquivo: cert.nomeArquivo, commonName: cert.commonName, cnpj: cert.cnpj,
+      id: cert.id, nomeArquivo: cert.nomeArquivo, commonName: cert.commonName, cnpj: cnpjDoCertificado(cert) || cert.cnpj,
       validFrom: cert.validFrom, validTo: cert.validTo, fingerprint: cert.fingerprint,
       ativo: true,
     } : null,
@@ -301,7 +321,7 @@ export function verificarProntidao(config, cert) {
   const pendencias = [];
   if (!cert) pendencias.push('Importe e ative um certificado A1 válido.');
   else if (new Date(cert.validTo) <= new Date()) pendencias.push('O certificado A1 ativo está expirado.');
-  else if (cert.cnpj && config.cnpj && cert.cnpj !== config.cnpj) pendencias.push('O CNPJ do certificado A1 não corresponde ao CNPJ configurado para a empresa.');
+  else if (cnpjDoCertificado(cert) && config.cnpj && cnpjDoCertificado(cert) !== config.cnpj) pendencias.push('O CNPJ do certificado A1 não corresponde ao CNPJ configurado para a empresa.');
   if (!/^\d{14}$/.test(config.cnpj || '')) pendencias.push('Informe um CNPJ válido com 14 dígitos.');
   try {
     const uf = obterConfiguracaoUf(config.uf || 'MT');

@@ -1002,7 +1002,7 @@ async function iniciar() {
       const urlsNfce = modelo === '65' ? fiscalKytto.obterUrlsNfce(material.config.uf, material.config.ambiente) : null;
       const xmlBruto = fiscalXmlKytto.montarXmlFiscalV400({
         config: material.config, modelo, numero: documento.numero, serie: documento.serie, chaveAcesso: documento.chaveAcesso,
-        codigoNumerico: documento.codigoNumerico, dataEmissao: new Date().toISOString(), itens: base.itens,
+        codigoNumerico: documento.codigoNumerico, dataEmissao: fiscalXmlKytto.agoraFiscalCuiaba(), itens: base.itens,
         totais: base.totais, pagamentos: base.pagamentos, destinatario: base.destinatario,
         qrCodeUrl: urlsNfce?.qrCodeUrl, urlChave: urlsNfce?.urlChave, qrCodeVersao: urlsNfce?.versaoQrCode,
       });
