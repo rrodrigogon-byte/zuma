@@ -359,9 +359,9 @@ export default function Dashboard() {
             // Mapeia inscricoes → inscritos
             inscritos: ind.inscricoes ?? ind.atletas ?? 0,
             inscritos_ontem: null,
-            // Faturamento total = bar + loja + inscrições
-            receita: ind.fatTotal ?? ind.faturamentoBar ?? ind.receitaPagamentos ?? 0,
-            fatBar: ind.faturamentoBar ?? 0,
+            // Fonte única de verdade: faturamento de comandas fechadas no período canônico.
+            receita: metricas.faturamento?.total ?? ind.fatTotal ?? ind.faturamentoBar ?? ind.receitaPagamentos ?? 0,
+            fatBar: metricas.faturamento?.total ?? ind.faturamentoBar ?? 0,
             fatLoja: ind.fatLoja ?? 0,
             fatInsc: ind.fatInsc ?? 0,
             receita_ontem: null,
@@ -369,7 +369,8 @@ export default function Dashboard() {
             mesasOcupadas,
             totalMesas,
             mesasOcupadas_ontem: null,
-            comandasAbertas: ind.comandasAbertas ?? 0,
+            // Fonte única de verdade: mesma métrica consumida por BI e Relatórios.
+            comandasAbertas: metricas.comandas?.abertas ?? ind.comandasAbertas ?? 0,
             estoqueSemEstoque: metricas.estoque?.semEstoque ?? 0,
             estoqueBaixo: metricas.estoque?.baixo ?? 0,
             comandasAbertas_ontem: null,

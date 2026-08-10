@@ -40,6 +40,8 @@ import * as fichasTecnicasKytto from './fichas-tecnicas-kytto.js';
 import * as caixaKytto from './caixa-diario-kytto.js';
 import * as comprasKytto from './compras-kytto.js';
 import * as metricasKytto from './metricas-kytto.js';
+import { observabilidade } from './observabilidade-kytto.js';
+import { backupRecuperacao } from './backup-recuperacao-kytto.js';
 import { acaoDaRequisicao, moduloDaRota, resumoAcessoUsuario, temPermissao } from './perfis-usuarios-kytto.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -119,6 +121,32 @@ if (!PROD) {
     next();
   });
 }
+
+// Middleware de observabilidade: registrar latência de endpoints
+app.use((req, res, next) => {
+  const inicio = Date.now();
+  const originalSend = res.send;
+  
+  res.send = function(data) {
+    const latencia = Date.now() - inicio;
+    const statusCode = res.statusCode || 200;
+    
+    // Registrar latência apenas para endpoints /api/
+    if (req.path.startsWith('/api/')) {
+      observabilidade.registrarLatencia(
+        req.path,
+        req.method,
+        latencia,
+        statusCode,
+        req.usuario?.email
+      );
+    }
+    
+    return originalSend.call(this, data);
+  };
+  
+  next();
+});
 
 // ============================================================================
 // AUTENTICAÇÃO E USUÁRIOS
@@ -2509,6 +2537,98 @@ async function iniciar() {
     } catch (erro) {
       console.error('[METRICAS] Erro ao validar consistência:', erro);
       res.status(500).json({ erro: 'Erro ao validar consistência', detalhes: erro.message });
+    }
+  });
+
+  // ── OBSERVABILIDADE ────────────────────────────────────────────────────────
+  app.get('/api/admin/observabilidade/metricas', requerEditorCatalogo, (req, res) => {
+    try {
+      const metricas = observabilidade.obterMetricas();
+      res.json({ ok: true, metricas });
+    } catch (erro) {
+      console.error('[OBSERVABILIDADE] Erro ao obter métricas:', erro);
+      res.status(500).json({ erro: 'Erro ao obter métricas de observabilidade', detalhes: erro.message });
+    }
+  });
+
+  app.get('/api/admin/observabilidade/alertas', requerEditorCatalogo, (req, res) => {
+    try {
+      const alertas = observabilidade.obterAlertas(req.query);
+      res.json({ ok: true, alertas });
+    } catch (erro) {
+      console.error('[OBSERVABILIDADE] Erro ao obter alertas:', erro);
+      res.status(500).json({ erro: 'Erro ao obter alertas', detalhes: erro.message });
+    }
+  });
+
+  app.post('/api/admin/observabilidade/alertas/:id/resolver', requerEditorCatalogo, (req, res) => {
+    try {
+      const resolvido = observabilidade.resolverAlerta(req.params.id);
+      if (!resolvido) {
+        return res.status(404).json({ erro: 'Alerta não encontrado' });
+      }
+      observabilidade.registrarOperacao('alerta_resolvido', { alertaId: req.params.id }, req.usuario?.email, req.empresaId);
+      res.json({ ok: true, mensagem: 'Alerta resolvido com sucesso' });
+    } catch (erro) {
+      console.error('[OBSERVABILIDADE] Erro ao resolver alerta:', erro);
+      res.status(500).json({ erro: 'Erro ao resolver alerta', detalhes: erro.message });
+    }
+  });
+
+  app.get('/api/admin/observabilidade/relatorio', requerEditorCatalogo, (req, res) => {
+    try {
+      const relatorio = observabilidade.exportarRelatorio();
+      res.json({ ok: true, relatorio });
+    } catch (erro) {
+      console.error('[OBSERVABILIDADE] Erro ao exportar relatório:', erro);
+      res.status(500).json({ erro: 'Erro ao exportar relatório', detalhes: erro.message });
+    }
+  });
+
+  // ── BACKUP E RECUPERAÇÃO ────────────────────────────────────────────────────────
+  app.post('/api/admin/backup/snapshot', requerEditorCatalogo, async (req, res) => {
+    try {
+      const resultado = await backupRecuperacao.criarSnapshot(req.body.descricao || '');
+      observabilidade.registrarOperacao('backup_snapshot_criado', resultado, req.usuario?.email, req.empresaId);
+      res.status(201).json({ ok: true, ...resultado });
+    } catch (erro) {
+      console.error('[BACKUP] Erro ao criar snapshot:', erro);
+      res.status(500).json({ erro: 'Erro ao criar snapshot', detalhes: erro.message });
+    }
+  });
+
+  app.get('/api/admin/backup/listar', requerEditorCatalogo, async (req, res) => {
+    try {
+      const snapshots = await backupRecuperacao.listarSnapshots();
+      res.json({ ok: true, snapshots });
+    } catch (erro) {
+      console.error('[BACKUP] Erro ao listar snapshots:', erro);
+      res.status(500).json({ erro: 'Erro ao listar snapshots', detalhes: erro.message });
+    }
+  });
+
+  app.post('/api/admin/backup/restaurar', requerEditorCatalogo, async (req, res) => {
+    try {
+      const { nomeSnapshot } = req.body;
+      if (!nomeSnapshot) {
+        return res.status(400).json({ erro: 'nomeSnapshot é obrigatório' });
+      }
+      const resultado = await backupRecuperacao.restaurarSnapshot(nomeSnapshot, req.usuario?.email);
+      observabilidade.registrarOperacao('backup_snapshot_restaurado', { nomeSnapshot }, req.usuario?.email, req.empresaId);
+      res.json({ ok: true, ...resultado });
+    } catch (erro) {
+      console.error('[BACKUP] Erro ao restaurar snapshot:', erro);
+      res.status(500).json({ erro: 'Erro ao restaurar snapshot', detalhes: erro.message });
+    }
+  });
+
+  app.get('/api/admin/backup/informacoes', requerEditorCatalogo, async (req, res) => {
+    try {
+      const informacoes = await backupRecuperacao.obterInformacoes();
+      res.json(informacoes);
+    } catch (erro) {
+      console.error('[BACKUP] Erro ao obter informações:', erro);
+      res.status(500).json({ erro: 'Erro ao obter informações de backup', detalhes: erro.message });
     }
   });
 
