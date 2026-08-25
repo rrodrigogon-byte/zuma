@@ -41,7 +41,12 @@ async function request(path, opts = {}) {
     return
   }
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || data.erro || `Erro ${res.status}`)
+  if (!res.ok) {
+    const error = new Error(data.error || data.erro || `Erro ${res.status}`)
+    error.status = res.status
+    error.code = data.code || ''
+    throw error
+  }
   return data
 }
 

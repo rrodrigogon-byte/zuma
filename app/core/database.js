@@ -22,15 +22,22 @@ export const initializePool = () => {
     return pool;
   }
 
+  const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL || '';
+  const poolConfig = connectionString
+    ? {
+        connectionString,
+        ssl: process.env.DB_SSL === 'false' ? false : { rejectUnauthorized: false },
+      }
+    : {
+        host: config.database.postgres.host,
+        port: config.database.postgres.port,
+        database: config.database.postgres.database,
+        user: config.database.postgres.user,
+        password: config.database.postgres.password,
+        ssl: config.database.postgres.ssl ? { rejectUnauthorized: false } : false,
+      };
   pool = new Pool({
-    host: config.database.postgres.host,
-    port: config.database.postgres.port,
-    database: config.database.postgres.database,
-    user: config.database.postgres.user,
-    password: config.database.postgres.password,
-    ssl: config.database.postgres.ssl
-      ? { rejectUnauthorized: false }
-      : false,
+    ...poolConfig,
     max: config.database.postgres.max,
     idleTimeoutMillis: config.database.postgres.idleTimeoutMillis,
     connectionTimeoutMillis: config.database.postgres.connectionTimeoutMillis,

@@ -14,6 +14,18 @@ const ETAPAS = [
   { key: 'entregue',   label: 'Entregue',        emoji: '📦' },
 ]
 const VERDE = '#FF6B2C'
+const CORE_STATUS = { pending_payment: 'pendente', payment_failed: 'pendente', fraud_review: 'pendente', paid: 'preparando', processing: 'preparando', ready: 'pronto', ready_for_pickup: 'pronto', shipped: 'entregue', out_for_delivery: 'entregue', delivered: 'entregue', picked_up: 'entregue', completed: 'entregue', cancelled: 'cancelado', refunded: 'cancelado', partially_refunded: 'cancelado', returned: 'cancelado' }
+
+function normalizeCoreOrder(order) {
+  return {
+    ...order,
+    codigo: order.public_code,
+    status: CORE_STATUS[order.status] || 'pendente',
+    pagamento: order.status === 'paid' || order.status === 'completed' ? 'pago' : 'pix-pendente',
+    itens: (order.items || []).map(item => ({ nome: item.nome, qtd: item.quantidade, preco: item.preco, subtotal: item.subtotal })),
+    isCore: true,
+  }
+}
 
 export default function AcompanharPedido() {
   const { codigo } = useParams()
@@ -23,8 +35,15 @@ export default function AcompanharPedido() {
 
   const load = useCallback(async () => {
     try {
-      const d = await api.get(`/api/loja/pedido/${encodeURIComponent(codigo)}`)
-      setPedido(d); setErro('')
+      try {
+        const core = await api.get(`/api/storefront/orders/${encodeURIComponent(codigo)}`)
+        setPedido(normalizeCoreOrder(core))
+      } catch (coreError) {
+        if (coreError.status !== 404) throw coreError
+        const legacy = await api.get(`/api/loja/pedido/${encodeURIComponent(codigo)}`)
+        setPedido(legacy)
+      }
+      setErro('')
     } catch (e) {
       setErro(e.message || 'Pedido não encontrado')
     } finally { setLoading(false) }
@@ -103,7 +122,7 @@ export default function AcompanharPedido() {
 
               <div style={{ marginTop: 12, fontSize: '0.8rem', color: '#5A6570' }}>
                 Pagamento: <b>{pedido.pagamento === 'pago' ? 'confirmado ✓' : 'Pix pendente ⏳'}</b>
-                {pedido.status === 'pronto' && <div style={{ marginTop: 8, background: '#FFF9F5', border: `1px solid ${VERDE}`, borderRadius: 10, padding: '10px 12px', color: '#12283F', fontWeight: 600 }}>🎾 Seu pedido está pronto! Retire no Tangará Tênis Clube apresentando o código <b>{codigo}</b>.</div>}
+                {pedido.status === 'pronto' && <div style={{ marginTop: 8, background: '#FFF9F5', border: `1px solid ${VERDE}`, borderRadius: 10, padding: '10px 12px', color: '#12283F', fontWeight: 600 }}>{pedido.entrega?.mode === 'entrega' ? 'Seu pedido está pronto para entrega.' : 'Seu pedido está pronto! Retire no local apresentando o código'} <b>{codigo}</b>.</div>}
               </div>
             </>
           )}

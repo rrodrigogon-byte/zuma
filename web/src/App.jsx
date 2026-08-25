@@ -45,6 +45,7 @@ const KDS        = lazy(() => import('./pages/KDS'))
 const Portaria   = lazy(() => import('./pages/Portaria'))
 const GarcomView = lazy(() => import('./pages/GarcomView'))
 const LojaAtendimento = lazy(() => import('./pages/admin/LojaAtendimento'))
+const EcommerceAdmin = lazy(() => import('./pages/admin/EcommerceAdmin'))
 
 const Home       = lazy(() => import('./pages/public/Home'))
 const Inscricao  = lazy(() => import('./pages/public/Inscricao'))
@@ -125,6 +126,7 @@ const AgentesIA          = lazy(() => import('./pages/public/Agentes'))
 const DadosIA            = lazy(() => import('./pages/public/Dados'))
 const AIJur              = lazy(() => import('./pages/public/AIJur'))
 const Solucoes           = lazy(() => import('./pages/public/Solucoes'))
+const Ecommerce          = lazy(() => import('./pages/public/Ecommerce'))
 
 function Loading() {
   return (
@@ -175,6 +177,7 @@ export default function App() {
           <Route path="/admin/socios"       element={<Layout><Socios /></Layout>} />
           <Route path="/admin/pagamentos"   element={<Layout><Pagamentos /></Layout>} />
           <Route path="/admin/loja"         element={<Layout><AdminLoja /></Layout>} />
+          <Route path="/admin/ecommerce"   element={<Layout><EcommerceAdmin /></Layout>} />
           <Route path="/admin/aulas"        element={<Layout><Aulas /></Layout>} />
           <Route path="/admin/crm"          element={<Layout><CRM /></Layout>} />
           <Route path="/admin/bi"           element={<Layout><BI /></Layout>} />
@@ -223,7 +226,8 @@ export default function App() {
         <Route path="/ia/agentes" element={<AgentesIA />} />
         <Route path="/ia/dados"   element={<DadosIA />} />
         <Route path="/ia/aijur"   element={<AIJur />} />
-        <Route path="/solucoes"   element={<Solucoes />} />
+          <Route path="/solucoes"   element={<Solucoes />} />
+          <Route path="/ecommerce"  element={<Layout marketing><Ecommerce /></Layout>} />
         <Route path="/inscricao"  element={<Layout><Inscricao /></Layout>} />
         <Route path="/ranking"    element={<Layout><Ranking /></Layout>} />
         <Route path="/loja"       element={<Layout><Loja /></Layout>} />

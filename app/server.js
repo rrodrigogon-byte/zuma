@@ -21,13 +21,14 @@ import QRCode from 'qrcode';
 import { wpp } from './whatsapp.js';
 import { mail } from './email.js';
 import { emitir as nfceEmitir, cancelar as nfceCancelar, nfceConfigurado } from './nfce.js';
+import { createCommerceAdminRouter, createCommercePublicRouter, createCommerceWebhookRouter } from './core/commerce-routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 // Atrás do proxy do Render: confia no X-Forwarded-For para que req.ip seja o IP real
 // do cliente (importante para rate-limit e auditoria).
 app.set('trust proxy', 1);
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '1mb', verify: (req, res, buf) => { if (req.originalUrl?.startsWith('/api/webhooks/')) req.rawBody = Buffer.from(buf); } }));
 
 // SSE — realtime para KDS, Mesas, Portaria
 const sseClients = new Set();
@@ -153,7 +154,7 @@ function auth(req,res,next){
 }
 const requireRole = (...roles)=> (req,res,next)=> (req.user && roles.includes(req.user.role)) ? next() : res.status(403).json({error:'sem permissão'});
 const requireStaff = (req,res,next)=> (req.user && STAFF.includes(req.user.role)) ? next() : res.status(403).json({error:'acesso restrito à organização'});
-const tokenFor = u => jwt.sign({ id:u.id, nome:u.nome, role:u.role }, JWT_SECRET, { expiresIn:'12h' });
+const tokenFor = u => jwt.sign({ id:u.id, nome:u.nome, role:u.role, ...(u.empresaId ? { empresaId:u.empresaId } : {}), ...(u.lojaId ? { lojaId:u.lojaId } : {}) }, JWT_SECRET, { expiresIn:'12h' });
 
 // ---- rate-limit simples (anti força-bruta no login) ----
 const tentativas = new Map(); // chave -> { n, until }
@@ -204,6 +205,18 @@ app.use('/api/admin', (req,res,next)=>{
     next();
   }));
 });
+
+// Commerce Core PostgreSQL fica opt-in até DATABASE_URL, migrations, tenant e
+// checklist de rollout estarem aprovados. O runtime legado continua intacto.
+if(process.env.COMMERCE_CORE_ENABLED === '1'){
+  if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL && !process.env.DB_HOST) {
+    throw new Error('COMMERCE_CORE_ENABLED requer DATABASE_URL/POSTGRES_URL ou DB_HOST explícito');
+  }
+  app.use('/api/storefront', createCommercePublicRouter());
+  app.use('/api/admin/commerce', createCommerceAdminRouter());
+  app.use('/api/webhooks', createCommerceWebhookRouter());
+  console.log('Commerce Core PostgreSQL habilitado (rotas /api/storefront e /api/admin/commerce)');
+}
 
 // ---- helpers de chave ----
 function clearDownstream(rounds, r, idx){
@@ -2079,6 +2092,18 @@ function seedLoja(){
 seedLoja();
 
 // Mapa de imagens por código AOT — geradas do Catálogo Técnico 4ª Edição 2026
+function precoEfetivoLoja(produto){
+  const base = Number(produto?.preco || 0);
+  const promo = produto?.precoPromocional === null || produto?.precoPromocional === undefined || produto?.precoPromocional === ''
+    ? null : Number(produto.precoPromocional);
+  return Number.isFinite(promo) && promo >= 0 && promo < base ? promo : base;
+}
+function precoPromocionalSeguro(valor, base){
+  if(valor === null || valor === undefined || String(valor).trim() === '') return null;
+  const promo = Number(valor), original = Number(base || 0);
+  return Number.isFinite(promo) && promo >= 0 && promo < original ? promo : null;
+}
+
 const IMAGEM_LOJA = {
   'AOT-001':'/produtos/aot-001-camiseta-oficial.jpg',
   'AOT-002':'/produtos/aot-002-bone-oficial.jpg',
@@ -2102,7 +2127,8 @@ app.get('/api/loja', (req,res)=> {
   seedLoja();
   res.json((db().loja||[]).filter(p=>p.ativo!==false).map(p=>({
     id:p.id, cod:p.cod||'', nome:p.nome, cat:p.cat, emoji:p.emoji||'📦',
-    preco:p.preco, estoque:p.estoque, esgotado:p.estoque<=0,
+    preco:precoEfetivoLoja(p), precoOriginal:Number(p.preco||0), precoPromocional:precoPromocionalSeguro(p.precoPromocional, p.preco),
+    promocaoAtiva:precoEfetivoLoja(p) < Number(p.preco||0), estoque:p.estoque, esgotado:p.estoque<=0,
     // descricao: aceita tanto 'descricao' (admin) quanto 'desc' (seed legado)
     descricao: p.descricao || p.desc || '',
     // imagem: prioriza campo salvo no admin, depois mapa legacy, depois null
@@ -2118,8 +2144,9 @@ app.post('/api/loja/:id/reservar', (req,res)=>{
   const { nome, email, tel, qtd, tamanho } = req.body||{};
   if(!nome||!email) return res.status(400).json({erro:'nome e e-mail obrigatórios'});
   const q=Math.max(1,Math.min(parseInt(qtd)||1,p.estoque));
+  const preco = precoEfetivoLoja(p);
   p.estoque-=q;
-  const r={ id:nextId(), produtoId:p.id, cod:p.cod||'', produto:p.nome, qtd:q, tamanho:tamanho||'', preco:p.preco, total:p.preco*q, nome, email, tel:tel||'', status:'reservado', criadoEm:new Date().toISOString(), pagamento:'pix-pendente' };
+  const r={ id:nextId(), produtoId:p.id, cod:p.cod||'', produto:p.nome, qtd:q, tamanho:tamanho||'', preco, total:preco*q, nome, email, tel:tel||'', status:'reservado', criadoEm:new Date().toISOString(), pagamento:'pix-pendente' };
   if(!db().reservasLoja) db().reservasLoja=[];
   db().reservasLoja.push(r); save();
   res.json({ ok:true, reservaId:r.id, produto:p.nome, total:r.total, msg:'Reserva confirmada! Leve o comprovante Pix na recepção do Tangará Tênis Clube para retirar.' });
@@ -2130,15 +2157,17 @@ app.get('/api/admin/loja', auth, requireStaff, (req,res)=>{
 });
 app.post('/api/admin/loja', auth, requireStaff, (req,res)=>{
   const b=req.body||{}; if(!b.nome) return res.status(400).json({error:'nome obrigatório'});
-  const p={ id:nextId(), nome:b.nome, cat:b.cat||'Geral', preco:Number(b.preco)||0, estoque:parseInt(b.estoque)||0,
-    descricao:b.descricao||'', imagem:b.imagem||'', ativo:true, criadoEm:new Date().toISOString() };
+  const preco = Math.max(0, Number(b.preco)||0);
+  const p={ id:nextId(), cod:String(b.cod||'').trim(), nome:b.nome, cat:b.cat||'Geral', preco, precoPromocional:precoPromocionalSeguro(b.precoPromocional, preco), estoque:Math.max(0, parseInt(b.estoque)||0),
+    descricao:b.descricao||'', imagem:b.imagem||'', ativo:b.ativo!==false, criadoEm:new Date().toISOString() };
   db().loja.push(p); save(); res.json(p);
 });
 app.patch('/api/admin/loja/:id', auth, requireStaff, (req,res)=>{
   const p=(db().loja||[]).find(x=>x.id==req.params.id); if(!p) return res.status(404).json({error:'não encontrado'});
-  ['nome','cat','ativo','descricao','imagem'].forEach(k=>{ if(req.body[k]!==undefined) p[k]=req.body[k]; });
-  if(req.body.preco!==undefined) p.preco=Number(req.body.preco);
-  if(req.body.estoque!==undefined) p.estoque=parseInt(req.body.estoque)||0;
+  ['cod','nome','cat','ativo','descricao','imagem'].forEach(k=>{ if(req.body[k]!==undefined) p[k]=req.body[k]; });
+  if(req.body.preco!==undefined){ p.preco=Math.max(0, Number(req.body.preco)||0); p.precoPromocional=precoPromocionalSeguro(req.body.precoPromocional, p.preco); }
+  else if(req.body.precoPromocional!==undefined) p.precoPromocional=precoPromocionalSeguro(req.body.precoPromocional, p.preco);
+  if(req.body.estoque!==undefined) p.estoque=Math.max(0, parseInt(req.body.estoque)||0);
   save(); res.json(p);
 });
 app.delete('/api/admin/loja/:id', auth, requireStaff, (req,res)=>{ const d=db(); d.loja=(d.loja||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true}); });
@@ -2151,7 +2180,7 @@ app.post('/api/admin/loja/vender', auth, requireStaff, (req,res)=>{
     const p=(db().loja||[]).find(x=>x.id==it.produtoId); if(!p) return res.status(400).json({error:'produto inválido'});
     const q=Math.max(1,parseInt(it.qtd)||1);
     if(p.estoque<q) return res.status(400).json({error:`estoque insuficiente de ${p.nome}`});
-    p.estoque-=q; total+=p.preco*q; linhas.push({ produtoId:p.id, nome:p.nome, qtd:q, preco:p.preco });
+    const preco = precoEfetivoLoja(p); p.estoque-=q; total+=preco*q; linhas.push({ produtoId:p.id, nome:p.nome, qtd:q, preco });
   }
   const v={ id:nextId(), itens:linhas, total, pagamento:pagamento||'pix', cliente:cliente||'', em:new Date().toISOString() };
   db().vendasLoja.push(v); save(); res.json({ ok:true, venda:v });
@@ -2165,13 +2194,18 @@ const LOJA_STATUS_LABEL = { pendente:'Aguardando preparo', preparando:'Em prepar
 function gerarCodigoPedido(){ return 'LJ-' + crypto.randomBytes(3).toString('hex').toUpperCase(); }
 function pedidoPublico(p){
   return { codigo:p.codigo, status:p.status, statusLabel:LOJA_STATUS_LABEL[p.status]||p.status,
-    itens:p.itens, total:p.total, pagamento:p.pagamento, criadoEm:p.criadoEm, atualizadoEm:p.atualizadoEm };
+    itens:p.itens, total:p.total, pagamento:p.pagamento, entrega:p.entrega||{mode:'retirada'},
+    observacao:p.observacao||'', criadoEm:p.criadoEm, atualizadoEm:p.atualizadoEm };
 }
 
 // PÚBLICO: cliente lança o pedido (carrinho inteiro num único pedido agrupado)
 app.post('/api/loja/pedido', publicLimit(), (req,res)=>{
-  const { cliente, itens } = req.body||{};
+  const { cliente, itens, entrega, observacao, idempotencyKey } = req.body||{};
   const nome = (cliente?.nome||'').trim(), email = (cliente?.email||'').trim();
+  const idem = String(idempotencyKey||'').trim().slice(0,120);
+  const entregaNormalizada = { mode: entrega?.mode === 'entrega' ? 'entrega' : 'retirada', endereco: String(entrega?.endereco||'').trim().slice(0,300) };
+  if(entregaNormalizada.mode==='entrega' && !entregaNormalizada.endereco) return res.status(400).json({error:'informe o endereço para entrega'});
+  if(idem && db().idempotenciaLoja?.[idem]) return res.json(db().idempotenciaLoja[idem]);
   if(!nome || !email) return res.status(400).json({error:'nome e e-mail do cliente são obrigatórios'});
   if(!Array.isArray(itens) || !itens.length) return res.status(400).json({error:'carrinho vazio'});
   const d=db();
@@ -2186,20 +2220,26 @@ app.post('/api/loja/pedido', publicLimit(), (req,res)=>{
   }
   let total=0; const itensPedido=[];
   for(const { p, q, tamanho } of linhas){
-    p.estoque -= q; total += p.preco*q;
-    itensPedido.push({ produtoId:p.id, cod:p.cod||'', nome:p.nome, qtd:q, tamanho, preco:p.preco, subtotal:p.preco*q });
+    const preco = precoEfetivoLoja(p);
+    p.estoque -= q; total += preco*q;
+    itensPedido.push({ produtoId:p.id, cod:p.cod||'', nome:p.nome, qtd:q, tamanho, preco, subtotal:preco*q });
   }
   const agora=new Date().toISOString();
   const pedido={ id:nextId(), codigo:gerarCodigoPedido(), cliente:{ nome, email, tel:(cliente?.tel||'') },
-    itens:itensPedido, total, status:'pendente', pagamento:'pix-pendente',
+    itens:itensPedido, total, status:'pendente', pagamento:'pix-pendente', entrega:entregaNormalizada,
+    observacao:String(observacao||'').trim().slice(0,500),
     criadoEm:agora, atualizadoEm:agora, historico:[{ status:'pendente', ts:agora }] };
   if(!d.pedidosLoja) d.pedidosLoja=[];
-  d.pedidosLoja.push(pedido); save();
+  d.pedidosLoja.push(pedido);
+  const resposta={ ok:true, codigo:pedido.codigo, id:pedido.id, total, status:pedido.status,
+    pagamento:pedido.pagamento, entrega:pedido.entrega,
+    msg:pedido.entrega.mode==='entrega' ? 'Pedido recebido! A operação confirmará a disponibilidade e o endereço informado.' : 'Pedido recebido! Acompanhe pelo código e retire no Tangará Tênis Clube após a confirmação.' };
+  if(idem){ d.idempotenciaLoja=d.idempotenciaLoja||{}; d.idempotenciaLoja[idem]=resposta; }
+  save();
   sseBroadcast('loja', { tipo:'novo', id:pedido.id, codigo:pedido.codigo, status:pedido.status });
   // Confirmação ao cliente (fire-and-forget; simulado se faltar API key)
   if(email) mail.lojaPedidoRecebido(email, nome, pedido.codigo, total).catch(()=>{});
-  res.json({ ok:true, codigo:pedido.codigo, id:pedido.id, total, status:pedido.status,
-    msg:'Pedido recebido! Acompanhe pelo código e retire no Tangará Tênis Clube após a confirmação.' });
+  res.json(resposta);
 });
 
 // PÚBLICO: cliente acompanha o status pelo código
