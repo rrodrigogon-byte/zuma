@@ -27,7 +27,7 @@ A Kytto reúne software, dados, automação e inteligência artificial para faze
 | Solução | Papel editorial | Link |
 |---|---|---|
 | GemOps | Operações e CSC inteligente, automação, compras, viagens e aprovações | https://gemops-digital-108835006988.us-central1.run.app/app |
-| LakeX | Indústria, gêmeos digitais, observabilidade e decisão em tempo real | https://lakex.uisa.com.br |
+| LakeX | Indústria, gêmeos digitais, observabilidade e decisão em tempo real | https://lakex.com.br |
 | Setpoint | Operação e gestão, com acesso ao ambiente de produção | https://setpoint.kytto.com.br/admin |
 | Nossa Gente AI | Pessoas, performance, inteligência e apoio à gestão | https://ai-nossagente-web-nedqnqyahq-rj.a.run.app/login |
 
@@ -56,7 +56,7 @@ A rota local `/admin` redirecionou corretamente para `/login`, confirmando que a
 
 O PR #18 foi mesclado no branch `fix/kytto-comandas-pdv-20260808` com o commit `fef52b39dd9a64dc1f68206bba5e4cb11039af7d`. A validação externa após 90 segundos ainda encontrou a Home antiga do Agro Open em `https://kytto.com.br/?locale=pt-BR`, com ETag `W/\"a9d-1a03a334268\"`, embora o host estivesse saudável no Render e `/admin` retornasse HTTP 200. Isso indica que o Render ainda não disparou/concluiu o deploy do commit mesclado ou está conectado a outra branch.
 
-Os destinos externos testados no ambiente de validação foram: GemOps HTTP 200; Setpoint `/admin` HTTP 200; Nossa Gente AI `/login` HTTP 200; LakeX em `https://lakex.uisa.com.br` não resolveu DNS publicamente durante o teste e precisa ser confirmado/corrigido antes de apresentar esse link como destino público garantido.
+Os destinos externos testados no ambiente de validação foram: GemOps HTTP 200; Setpoint `/admin` HTTP 200; Nossa Gente AI `/login` HTTP 200; LakeX em `https://lakex.com.br` não resolveu DNS publicamente durante o teste e precisa ser confirmado/corrigido antes de apresentar esse link como destino público garantido.
 
 
 ## Publicação no Render
@@ -82,3 +82,28 @@ A validação externa mostrou que o deploy novo está live, mas `https://kytto.c
 ## Configuração live encontrada
 
 Após o deploy, o serviço Render está corretamente conectado à branch `fix/kytto-comandas-pdv-20260808`. Entretanto, a configuração live de **Build Command** ainda é `cd web && npm install --include=dev && npm run build && cd ../app && npm install`, sem a etapa necessária de limpar/copiar `web/dist` para `app/public`. Como `app/server.js` publica somente `app/public`, esse é o ponto exato que mantém o HTML legado em produção.
+
+
+## Build Command corrigido no Render
+
+O campo live de Build Command foi editado para executar `npm run build`, limpar `app/public/assets` e copiar `web/dist` para `app/public`, mantendo o start `cd app && node server.js`. A configuração está preenchida e pronta para salvar, o que deve iniciar o deploy final do commit já mesclado.
+
+
+## Novo deploy do Render
+
+Após salvar o Build Command corrigido, o Render iniciou o deploy `dep-da700jm7bikc73eeodd0` com o commit `7837cab`. O deploy entrou em estado `building` e, na última observação, ainda estava na etapa `Downloading cache...` / `Cloning from https://github.com/rrodrigogon-byte/agro-open`. Nenhum erro de build ou healthcheck foi registrado até esse ponto.
+
+
+## Acompanhamento do deploy
+
+Na observação seguinte, o deploy `dep-da700jm7bikc73eeodd0` ainda permanecia em `building`, com os últimos logs visíveis em `Downloading cache...` e `Cloning from https://github.com/rrodrigogon-byte/agro-open`. A configuração foi salva corretamente; ainda não havia sucesso ou erro de build disponível.
+
+
+## Bloqueio do deploy automático
+
+Mesmo após aproximadamente um minuto, o deploy `dep-da700jm7bikc73eeodd0` permaneceu em `building` somente com `Downloading cache...` e `Cloning from https://github.com/rrodrigogon-byte/agro-open`. A configuração de branch está correta, mas a clonagem não avançou para o build; é necessário revisar a credencial/conexão GitHub do serviço Render ou disparar uma nova execução após a conexão ser renovada.
+
+
+## Segunda validação pós-deploy
+
+Depois do novo deploy, a resposta HTTP passou a entregar `Kytto | Sistemas inteligentes para negócios`, os bundles `index-BuWrdq6r.js` e `index-BiAAD82A.css` e os marcadores da nova Home. Porém, o navegador ainda exibiu uma tela branca; o console do navegador não mostrou erros. O problema residual pode ser causado pelo service worker ainda em cache, pela ausência de carregamento do módulo no contexto do navegador ou por incompatibilidade silenciosa do bundle, e requer inspeção do HTML/JS servido e dos registros de carregamento antes da entrega final.

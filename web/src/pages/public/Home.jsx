@@ -34,7 +34,7 @@ const PRODUCT_LINKS = [
     name: 'LakeX',
     title: 'A planta vista como um sistema vivo.',
     text: 'Gêmeos digitais, observabilidade e IA autônoma para decidir melhor sobre ativos e processos.',
-    href: 'https://lakex.uisa.com.br',
+    href: 'https://lakex.com.br',
     icon: Factory,
     tone: 'blue',
     outcome: 'Conectar, observar, decidir e agir.',
