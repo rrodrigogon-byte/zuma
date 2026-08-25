@@ -1,5 +1,11 @@
 node_modules
-.env
+# Nunca copiar segredos ou ambientes locais para a imagem
+.env*
+**/.env*
+!/.env.example
+!/app/.env.example
+!/app/.env.production.example
+
 app/data
 *.zip
 assets-pdf

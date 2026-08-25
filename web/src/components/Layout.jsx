@@ -64,9 +64,9 @@ export default function Layout({ children, noSidebar = false, marketing = false 
   }, [])
 
   // Páginas públicas "premium" (Home/Clube/Regulamento) têm header/hero próprios.
-  // Para visitante anônimo, renderiza full-bleed (sem a barra admin de 220px, que
-  // espremia o layout). Usuário logado mantém a Sidebar para voltar ao painel.
-  if (noSidebar || (marketing && !user)) return <>{children}</>
+  // Sempre renderizam em full-bleed, inclusive para usuários autenticados; a Home
+  // oferece um CTA contextual para retornar ao painel sem misturar os layouts.
+  if (noSidebar || marketing) return <>{children}</>
 
   const hasTopBar = !!user
   const topBarH = hasTopBar ? 50 : 0

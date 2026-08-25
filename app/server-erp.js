@@ -92,6 +92,19 @@ const authLimiter = rateLimit({
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Host público canônico. O DNS/TLS do apex precisa apontar para esta mesma
+// publicação antes que o redirecionamento possa ser executado pela aplicação.
+const PUBLIC_APP_URL = (process.env.PUBLIC_APP_URL || 'https://setpoint.kytto.com.br').replace(/\/+$/, '');
+const PUBLIC_APP_HOST = new URL(PUBLIC_APP_URL).hostname.toLowerCase();
+const LEGACY_PUBLIC_HOSTS = new Set(['kytto.com.br', 'www.kytto.com.br']);
+app.use((req, res, next) => {
+  const host = String(req.hostname || '').toLowerCase();
+  if (PROD && LEGACY_PUBLIC_HOSTS.has(host) && host !== PUBLIC_APP_HOST) {
+    return res.redirect(308, `${PUBLIC_APP_URL}${req.originalUrl}`);
+  }
+  next();
+});
+
 // A autenticação deve permanecer no domínio de acesso escolhido pelo usuário.
 // O fallback SPA abaixo entrega a mesma aplicação para /login sem expor a URL
 // técnica do Cloud Run nem fragmentar a sessão entre origens.

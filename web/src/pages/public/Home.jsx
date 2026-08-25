@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
+import { useAuth } from '../../lib/auth'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS / HOOKS
@@ -52,7 +53,7 @@ function SectionLabel({ text, color = '#FF6B2C' }) {
 // COMPONENTES DE SEÇÃO
 // ─────────────────────────────────────────────────────────────────────────────
 
-function HeroInstitucional() {
+function HeroInstitucional({ painelPath = '/login', painelLabel = 'Acessar Plataforma →' }) {
   return (
     <section style={{
       background: 'linear-gradient(135deg, #12283F 0%, #0D1D2E 100%)',
@@ -109,7 +110,7 @@ function HeroInstitucional() {
           </p>
 
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            <Link to="/login" style={{
+            <Link to={painelPath} style={{
               background: '#FF6B2C', color: '#fff', padding: '16px 32px',
               borderRadius: 12, fontWeight: 800, textDecoration: 'none',
               fontSize: '1.1rem', transition: 'background 0.2s, transform 0.2s',
@@ -119,7 +120,7 @@ function HeroInstitucional() {
             onMouseEnter={e => { e.currentTarget.style.background = '#e85c22'; e.currentTarget.style.transform = 'translateY(-2px)' }}
             onMouseLeave={e => { e.currentTarget.style.background = '#FF6B2C'; e.currentTarget.style.transform = '' }}
             >
-              Acessar Plataforma →
+              {painelLabel}
             </Link>
 
             <a href="#solucoes" style={{
@@ -393,9 +394,13 @@ function CTAFinal() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function Home() {
+  const { user, isOrg, isStaff, isAtleta } = useAuth()
+  const painelPath = isOrg ? '/admin' : isStaff ? '/pdv' : isAtleta ? '/meu-painel' : '/login'
+  const painelLabel = user ? 'Abrir meu painel →' : 'Acessar Plataforma →'
+
   return (
     <div style={{ width: '100%', overflowX: 'hidden' }}>
-      <HeroInstitucional />
+      <HeroInstitucional painelPath={painelPath} painelLabel={painelLabel} />
       <SolucoesSection />
       <OrigemSection />
       <CaseAgroOpenSection />

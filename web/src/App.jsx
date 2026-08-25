@@ -32,13 +32,10 @@ function ProtectedOutlet({ need }) {
   return dest ? <Navigate to={dest} replace /> : <Outlet />
 }
 
-// A rota raiz é institucional apenas para visitantes. Uma sessão operacional
-// não pode permanecer na landing, especialmente em mobile: administradores vão
-// ao painel completo e colaboradores ao PDV.
+// A rota raiz é a página institucional pública. Usuários autenticados também
+// podem consultá-la; o CTA da Home oferece o retorno ao painel correspondente.
+// O acesso a /admin continua protegido pelas rotas abaixo.
 function EntradaPrincipal() {
-  const auth = useAuth()
-  if (auth.user && auth.isOrg) return <Navigate to="/admin" replace />
-  if (auth.user && auth.isStaff) return <Navigate to="/pdv" replace />
   return <Layout marketing><Home /></Layout>
 }
 
