@@ -1,13 +1,13 @@
-# SetPoint Ultra — pipeline de produção no Cloud Build
-# Publica no Artifact Registry e atualiza o Cloud Run em southamerica-east1.
+# Kytto — pipeline de produção no Cloud Build
+# Publica no Artifact Registry e atualiza o serviço kytto-erp em us-central1.
 
 substitutions:
-  _REGION: southamerica-east1
-  _REPOSITORY: cloud-run-source-deploy
-  _SERVICE_NAME: setpoint-ultra
+  # Alinhado ao serviço e à imagem existentes no projeto GCP.
+  _REGION: us-central1
+  _REPOSITORY: kytto-erp
+  _IMAGE_NAME: app
+  _SERVICE_NAME: kytto-erp
   _IMAGE_TAG: latest
-  _GCS_BUCKET: setpoint-kytto-data-avd-108835006988
-  _GCS_OBJECT: setpoint-ultra/db.json
 
 steps:
   - id: build-image
@@ -15,9 +15,9 @@ steps:
     args:
       - build
       - --tag
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE_NAME}:${_IMAGE_TAG}
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE_NAME}:${_IMAGE_TAG}
       - --tag
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE_NAME}:latest
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE_NAME}:latest
       - .
     timeout: 900s
 
@@ -26,7 +26,7 @@ steps:
     args:
       - push
       - --all-tags
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE_NAME}
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE_NAME}
     waitFor:
       - build-image
 
@@ -38,32 +38,15 @@ steps:
       - deploy
       - ${_SERVICE_NAME}
       - --image
-      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE_NAME}:${_IMAGE_TAG}
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE_NAME}:${_IMAGE_TAG}
       - --region
       - ${_REGION}
       - --platform
       - managed
       - --allow-unauthenticated
-      - --port
-      - '8080'
-      - --memory
-      - 1Gi
-      - --cpu
-      - '1'
-      - --min-instances
-      - '0'
-      # O catálogo é persistido em um único JSON no Cloud Storage; uma instância
-      # evita concorrência de escrita e preserva a consistência operacional.
-      - --max-instances
-      - '1'
-      - --concurrency
-      - '1'
-      - --timeout
-      - 60s
-      - --set-env-vars
-      - NODE_ENV=production,TZ=America/Cuiaba,PUBLIC_APP_URL=https://setpoint.kytto.com.br,GCS_BUCKET=${_GCS_BUCKET},GCS_OBJECT=${_GCS_OBJECT},SCHEDULER_SERVICE_ACCOUNT=108835006988-compute@developer.gserviceaccount,SCHEDULER_AUDIENCE=https://setpoint.kytto.com.br/api/internal/financeiro/rotina-diaria
-      - --update-secrets
-      - FISCAL_CERT_MASTER_KEY=setpoint-ultra-fiscal-master-key:latest,PAYMENTS_MASTER_KEY=setpoint-ultra-payments-master-key:latest
+      # Trocar a imagem sem sobrescrever escala, timeout, recursos, DB_* ou secrets.
+      - --update-env-vars
+      - PUBLIC_APP_URL=https://setpoint.kytto.com.br
     waitFor:
       - push-image
 
@@ -87,8 +70,8 @@ steps:
       - deploy-cloud-run
 
 images:
-  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE_NAME}:${_IMAGE_TAG}
-  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE_NAME}:latest
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE_NAME}:${_IMAGE_TAG}
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE_NAME}:latest
 
 options:
   logging: CLOUD_LOGGING_ONLY
