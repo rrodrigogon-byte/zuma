@@ -6,7 +6,7 @@ services:
     runtime: node
     plan: starter            # free/starter; suba conforme a demanda
     region: oregon
-    buildCommand: cd web && npm install && npm run build && cd ../app && npm install
+    buildCommand: cd web && npm install --include=dev && npm run build && rm -rf ../app/public/assets && cp -R dist/. ../app/public/ && cd ../app && npm install
     startCommand: cd app && node server.js
     healthCheckPath: /api/info
     autoDeploy: true

@@ -50,3 +50,35 @@ O preview local em `http://localhost:4173/?locale=pt-BR` renderizou a nova Home 
 ## Validação de rotas
 
 A rota local `/admin` redirecionou corretamente para `/login`, confirmando que a guarda de autenticação permanece ativa. A Home local em `/?locale=pt-BR` renderizou o novo conteúdo institucional, com título `Kytto | Sistemas inteligentes para negócios`, hero, quatro cards de solução, links de CTA, seção de capacidades e footer. O conteúdo antigo do torneio não aparece no novo bundle.
+
+
+## Estado pós-merge em produção
+
+O PR #18 foi mesclado no branch `fix/kytto-comandas-pdv-20260808` com o commit `fef52b39dd9a64dc1f68206bba5e4cb11039af7d`. A validação externa após 90 segundos ainda encontrou a Home antiga do Agro Open em `https://kytto.com.br/?locale=pt-BR`, com ETag `W/\"a9d-1a03a334268\"`, embora o host estivesse saudável no Render e `/admin` retornasse HTTP 200. Isso indica que o Render ainda não disparou/concluiu o deploy do commit mesclado ou está conectado a outra branch.
+
+Os destinos externos testados no ambiente de validação foram: GemOps HTTP 200; Setpoint `/admin` HTTP 200; Nossa Gente AI `/login` HTTP 200; LakeX em `https://lakex.uisa.com.br` não resolveu DNS publicamente durante o teste e precisa ser confirmado/corrigido antes de apresentar esse link como destino público garantido.
+
+
+## Publicação no Render
+
+O serviço `setpoint` foi alterado de `main` para `fix/kytto-comandas-pdv-20260808`, conforme autorizado. O Render iniciou o deploy `dep-da6vnk2fngtc73br7j9g` usando o commit `fef52b39dd9a64dc1f68206bba5e4cb11039af7d`. O build terminou com sucesso (`vite build`, 1.921 módulos transformados), e a revisão avançou para o deploy, aguardando apenas o healthcheck interno em `kytto.com.br:10000/api/info`.
+
+
+## Deploy live concluído
+
+O Render publicou com sucesso o commit `fef52b39dd9a64dc1f68206bba5e4cb11039af7d` na branch `fix/kytto-comandas-pdv-20260808`. O build Vite passou, o servidor iniciou em `http://localhost:10000`, o healthcheck interno foi aprovado e o Render marcou a revisão como **live** em 25/08/2026 às 20:33. O serviço informa `https://kytto.com.br` como URL primária.
+
+
+## Validação pós-publicação
+
+O Render marcou o deploy como live e o domínio público respondeu HTTP 200, mas a validação de navegador em `https://kytto.com.br/?locale=pt-BR` ainda mostrou o título antigo `4ª Agro Open de Tênis 2026 | SetPoint — Tangará Tênis Clube` e uma tela sem conteúdo montado. O HTML inicial também ainda continha marcadores do Agro Open, enquanto o serviço `setpoint` estava live no commit novo. Isso indica cache/HTML estático antigo ou incompatibilidade de assets/runtime no caminho público, e exige uma correção adicional antes de considerar o redesenho entregue.
+
+
+## Causa técnica da Home antiga/tela branca
+
+A validação externa mostrou que o deploy novo está live, mas `https://kytto.com.br/?locale=pt-BR` continua entregando um HTML com título e metadados do Agro Open, além dos bundles `/assets/index-BPqCqGCI.js` e `/assets/index-CUce7jsh.css`. Esses assets respondem HTTP 200, porém o navegador segue sem montar conteúdo. O `service-worker.js` também está sendo servido com `cache-control: public, max-age=0` pelo Render/Cloudflare e seu conteúdo retornado é o HTML antigo, indicando que o servidor está tratando o service worker como fallback SPA. A causa provável é o `server.js` do Render apontar para um diretório/artefato estático antigo ou servir fallback para arquivos públicos que não existem na revisão nova; é necessário comparar o diretório estático usado pelo servidor com `web/dist` e corrigir a entrega de assets antes de considerar a publicação concluída.
+
+
+## Configuração live encontrada
+
+Após o deploy, o serviço Render está corretamente conectado à branch `fix/kytto-comandas-pdv-20260808`. Entretanto, a configuração live de **Build Command** ainda é `cd web && npm install --include=dev && npm run build && cd ../app && npm install`, sem a etapa necessária de limpar/copiar `web/dist` para `app/public`. Como `app/server.js` publica somente `app/public`, esse é o ponto exato que mantém o HTML legado em produção.

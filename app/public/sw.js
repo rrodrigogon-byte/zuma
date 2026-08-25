@@ -1,9 +1,9 @@
-// SetPoint PWA Service Worker — v1.0.0
+// Kytto PWA Service Worker — v1.1.0 (invalida caches da Home anterior)
 // Estratégia: Cache-First para assets estáticos, Network-First para /api/
 
-const CACHE_NAME = 'kytto-v3'
-const STATIC_CACHE = 'kytto-static-v3'
-const API_CACHE = 'kytto-api-v3'
+const CACHE_NAME = 'kytto-v4'
+const STATIC_CACHE = 'kytto-static-v4'
+const API_CACHE = 'kytto-api-v4'
 
 // Assets estáticos para pré-caching
 const PRE_CACHE_URLS = [
