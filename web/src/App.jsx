@@ -120,6 +120,11 @@ const Clube           = lazy(() => import('./pages/public/Clube'))
 const Liga            = lazy(() => import('./pages/public/Liga'))
 const PerfilAtleta    = lazy(() => import('./pages/public/PerfilAtleta'))
 const CardapioMesaPublico = lazy(() => import('./pages/public/CardapioMesaPublico'))
+const IAHub              = lazy(() => import('./pages/public/IA'))
+const AgentesIA          = lazy(() => import('./pages/public/Agentes'))
+const DadosIA            = lazy(() => import('./pages/public/Dados'))
+const AIJur              = lazy(() => import('./pages/public/AIJur'))
+const Solucoes           = lazy(() => import('./pages/public/Solucoes'))
 
 function Loading() {
   return (
@@ -214,6 +219,11 @@ export default function App() {
 
         {/* Público */}
         <Route path="/"            element={<EntradaPrincipal />} />
+        <Route path="/ia"          element={<IAHub />} />
+        <Route path="/ia/agentes" element={<AgentesIA />} />
+        <Route path="/ia/dados"   element={<DadosIA />} />
+        <Route path="/ia/aijur"   element={<AIJur />} />
+        <Route path="/solucoes"   element={<Solucoes />} />
         <Route path="/inscricao"  element={<Layout><Inscricao /></Layout>} />
         <Route path="/ranking"    element={<Layout><Ranking /></Layout>} />
         <Route path="/loja"       element={<Layout><Loja /></Layout>} />
