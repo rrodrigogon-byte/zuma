@@ -3,7 +3,9 @@ import {
   ArrowRight,
   ArrowUpRight,
   Bot,
+  Beer,
   Boxes,
+  Building2,
   Check,
   CircleDot,
   Database,
@@ -12,7 +14,11 @@ import {
   Gauge,
   Network,
   ShieldCheck,
+  ShoppingBag,
+  Scissors,
   Sparkles,
+  Store,
+  Utensils,
   Users,
   Workflow,
   Zap,
@@ -59,6 +65,25 @@ const PRODUCT_LINKS = [
     tone: 'sand',
     outcome: 'Pessoas no centro da evolução.',
   },
+  {
+    eyebrow: 'Jurídico & governança',
+    name: 'AIJur',
+    title: 'Contexto para o jurídico trabalhar melhor.',
+    text: 'Inteligência aplicada a documentos, assuntos, prazos e tarefas, com governança e revisão profissional.',
+    href: '/ia/aijur',
+    icon: ShieldCheck,
+    tone: 'blue',
+    outcome: 'IA responsável para profissionais do Direito.',
+  },
+]
+
+const SECTOR_LINKS = [
+  { name: 'Barbearias & salões', icon: Scissors },
+  { name: 'Mercados', icon: ShoppingBag },
+  { name: 'Lojas & varejo', icon: Store },
+  { name: 'Restaurantes', icon: Utensils },
+  { name: 'Bares & eventos', icon: Beer },
+  { name: 'Operações multinegócio', icon: Building2 },
 ]
 
 const PILLARS = [
@@ -116,8 +141,9 @@ function ArrowLink({ href, children, light = false }) {
 
 function ProductCard({ product }) {
   const Icon = product.icon
+  const external = product.href.startsWith('http')
   return (
-    <a className={`kh-product-card kh-product-${product.tone}`} href={product.href} target="_blank" rel="noreferrer">
+    <a className={`kh-product-card kh-product-${product.tone}`} href={product.href} target={external ? '_blank' : undefined} rel={external ? 'noreferrer' : undefined}>
       <div className="kh-product-card-top">
         <div className="kh-product-icon"><Icon size={22} strokeWidth={1.8} /></div>
         <ArrowUpRight className="kh-product-arrow" size={19} strokeWidth={2} />
@@ -216,7 +242,7 @@ export default function Home() {
         .kh-section-head h2 { max-width: 620px; margin: 16px 0 0; color: var(--kh-navy); font-family: 'Outfit', sans-serif; font-size: clamp(2.3rem, 4.1vw, 4rem); font-weight: 800; letter-spacing: -.055em; line-height: .98; }
         .kh-section-head h2 em { color: var(--kh-orange); font-style: normal; }
         .kh-section-head p { max-width: 380px; margin: 0 0 3px; color: var(--kh-muted); font-size: 14px; line-height: 1.65; }
-        .kh-product-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
+        .kh-product-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; }
         .kh-product-card { position: relative; display: flex; min-height: 410px; flex-direction: column; padding: 25px; overflow: hidden; border: 1px solid var(--kh-line); border-radius: 20px; background: #fff; text-decoration: none; transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease; }
         .kh-product-card::before { content: ''; position: absolute; inset: 0 0 auto; height: 3px; background: var(--kh-orange); opacity: .85; }
         .kh-product-card:hover { border-color: rgba(255,107,44,.55); box-shadow: 0 22px 45px rgba(18,40,63,.1); transform: translateY(-7px); }
@@ -263,6 +289,14 @@ export default function Home() {
         .kh-layer-card span { display: block; margin-top: 3px; color: var(--kh-muted); font-size: 11px; line-height: 1.3; }
         .kh-layer-card:first-child span { color: rgba(255,244,236,.6); }
         .kh-layer-dot { width: 8px; height: 8px; margin-left: auto; flex: 0 0 auto; border-radius: 50%; background: var(--kh-orange); box-shadow: 0 0 0 6px rgba(255,107,44,.1); }
+        .kh-sector-band { padding: 42px 0; background: var(--kh-sand); border-top: 1px solid var(--kh-line); border-bottom: 1px solid var(--kh-line); }
+        .kh-sector-band-head { display: flex; align-items: center; justify-content: space-between; gap: 25px; margin-bottom: 19px; }
+        .kh-sector-band-title { color: var(--kh-navy); font-family: 'Outfit', sans-serif; font-size: 17px; font-weight: 800; letter-spacing: -.03em; }
+        .kh-sector-band-link { color: var(--kh-orange); font-size: 12px; font-weight: 800; text-decoration: none; }
+        .kh-sector-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 9px; }
+        .kh-sector-pill { display: flex; align-items: center; gap: 9px; min-height: 54px; padding: 11px 13px; border: 1px solid var(--kh-line); border-radius: 11px; color: var(--kh-navy); background: rgba(255,255,255,.68); font-size: 11px; font-weight: 750; line-height: 1.25; text-decoration: none; transition: transform .18s ease, border-color .18s ease, background .18s ease; }
+        .kh-sector-pill svg { flex: 0 0 auto; color: var(--kh-orange); }
+        .kh-sector-pill:hover, .kh-sector-pill:focus-visible { transform: translateY(-3px); border-color: rgba(255,107,44,.55); background: #fff; }
         .kh-capabilities { background: var(--kh-navy); }
         .kh-capabilities .kh-section-head h2 { color: #FFF4EC; }
         .kh-capabilities .kh-section-head p { color: rgba(255,244,236,.6); }
@@ -273,6 +307,7 @@ export default function Home() {
         .kh-cap-card .kh-product-eyebrow { color: var(--kh-coral); }
         .kh-cap-card h3 { max-width: 260px; margin: 11px 0 14px; color: #FFF4EC; font-family: 'Outfit', sans-serif; font-size: 22px; font-weight: 800; letter-spacing: -.035em; line-height: 1.05; }
         .kh-cap-card p { color: rgba(255,244,236,.6); font-size: 13px; line-height: 1.6; }
+        .kh-cap-link { margin-top: 18px; }
         .kh-flow-section { padding-bottom: 120px; background: #fff; }
         .kh-flow-line { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
         .kh-flow-line::before { content: ''; position: absolute; top: 32px; right: 10%; left: 10%; height: 1px; background: var(--kh-line); }
@@ -298,7 +333,7 @@ export default function Home() {
         @media (max-width: 1050px) {
           .kh-hero-grid { grid-template-columns: 1fr .83fr; gap: 35px; }
           .kh-orbit { transform: scale(.86); transform-origin: center right; }
-          .kh-product-grid { grid-template-columns: repeat(2, 1fr); }
+          .kh-product-grid { grid-template-columns: repeat(3, 1fr); }
         }
         @media (max-width: 780px) {
           .kh-container { width: min(100% - 32px, 620px); }
@@ -331,6 +366,9 @@ export default function Home() {
           .kh-section-head h2 { font-size: 2.7rem; }
           .kh-section-head p { margin-top: 20px; }
           .kh-product-grid, .kh-cap-grid { grid-template-columns: 1fr; }
+          .kh-sector-grid { grid-template-columns: repeat(2, 1fr); }
+          .kh-sector-band-head { display: block; }
+          .kh-sector-band-link { display: inline-block; margin-top: 10px; }
           .kh-product-card { min-height: 340px; }
           .kh-platform { grid-template-columns: 1fr; gap: 49px; }
           .kh-layers { margin-right: 17px; }
@@ -359,7 +397,8 @@ export default function Home() {
             <nav className="kh-nav-links" aria-label="Navegação principal">
               <a href="#plataforma">Plataforma</a>
               <a href="#solucoes">Soluções</a>
-              <a href="#inteligencia">Inteligência aplicada</a>
+              <a href="/ia">IA aplicada</a>
+              <a href="/ia/aijur">AIJur</a>
               <a href="#contato">Contato</a>
             </nav>
             <a className="kh-nav-cta" href={painelPath}>{painelLabel} <ArrowUpRight size={14} /></a>
@@ -435,11 +474,18 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="kh-sector-band" aria-label="SetPoint por setor">
+        <div className="kh-container">
+          <div className="kh-sector-band-head"><span className="kh-sector-band-title">SetPoint para a operação que você vive.</span><a className="kh-sector-band-link" href="/solucoes">Ver todos os setores <ArrowUpRight size={14} style={{ verticalAlign: '-3px' }} /></a></div>
+          <div className="kh-sector-grid">{SECTOR_LINKS.map(({ name, icon: Icon }) => <a className="kh-sector-pill" href="/solucoes" key={name}><Icon size={17} strokeWidth={1.8} />{name}</a>)}</div>
+        </div>
+      </section>
+
       <section className="kh-section kh-capabilities" id="inteligencia">
         <div className="kh-container">
           <div className="kh-section-head">
             <div><Eyebrow light>O diferencial</Eyebrow><h2>IA que <em>age</em>,<br />não só sugere.</h2></div>
-            <p>Inteligência aplicada só cria valor quando chega ao chão da operação — com contexto, confiança e capacidade de execução.</p>
+            <div><p>Inteligência aplicada só cria valor quando chega ao chão da operação — com contexto, confiança e capacidade de execução.</p><a className="kh-btn kh-btn-ghost kh-cap-link" href="/ia">Explorar o hub de IA <ArrowUpRight size={15} /></a></div>
           </div>
           <div className="kh-cap-grid">
             {CAPABILITIES.map(({ icon: Icon, eyebrow, title, text }) => (
@@ -487,7 +533,7 @@ export default function Home() {
           <div className="kh-footer-main">
             <div><img className="kh-footer-logo" src="/brand/kytto-negativo.svg" alt="Kytto" /><p className="kh-footer-copy">Sistemas que fazem o negócio subir.</p></div>
             <nav className="kh-footer-links" aria-label="Links de soluções">
-              {PRODUCT_LINKS.map(product => <a key={product.name} href={product.href} target="_blank" rel="noreferrer">{product.name}</a>)}
+              {PRODUCT_LINKS.map(product => { const external = product.href.startsWith('http'); return <a key={product.name} href={product.href} target={external ? '_blank' : undefined} rel={external ? 'noreferrer' : undefined}>{product.name}</a> })}
               <a href={painelPath}>{painelLabel}</a>
             </nav>
           </div>

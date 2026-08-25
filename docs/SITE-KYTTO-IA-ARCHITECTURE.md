@@ -42,3 +42,18 @@ A rota `/ia/aijur` renderizou corretamente o posicionamento de inteligência jur
 
 
 A rota `/ia/dados` renderizou a narrativa de contexto, observabilidade e governança, com CTAs para IA e soluções. A rota `/admin` no preview continuou protegida e redirecionou para `/login`, confirmando que as novas rotas públicas não atravessaram a guarda administrativa.
+
+
+## Deploy das subpáginas
+
+O PR #21 foi integrado ao branch de produção e o Render concluiu o deploy automático com o commit `23ab17a`, em aproximadamente 32 segundos. A publicação ocorreu no serviço `setpoint`, conectado ao branch `fix/kytto-comandas-pdv-20260808`.
+
+
+## Verificação ao vivo — investigação adicional
+
+As rotas públicas retornaram HTTP 200 após o deploy `23ab17a`, mas a tentativa de navegação do navegador para `/ia?locale=pt-BR` exibiu inicialmente `Carregando…` e depois caiu para `about:blank`. Será necessário verificar o HTML, o manifest e os chunks lazy publicados para garantir que a nova página não está sendo servida apenas como shell sem os assets correspondentes.
+
+
+## Validação em produção
+
+Após o deploy automático do Render, as rotas `/ia`, `/ia/agentes`, `/ia/dados`, `/ia/aijur` e `/solucoes` retornaram HTTP 200 e foram montadas pelo Chromium headless com seus títulos e conteúdos específicos. Os destinos GemOps, LakeX, SetPoint e Nossa Gente AI também retornaram HTTP 200. A rota `/admin` permanece protegida e redireciona para `/login` quando não autenticada.

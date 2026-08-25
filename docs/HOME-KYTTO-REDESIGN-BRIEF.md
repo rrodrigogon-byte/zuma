@@ -107,3 +107,8 @@ Mesmo após aproximadamente um minuto, o deploy `dep-da700jm7bikc73eeodd0` perma
 ## Segunda validação pós-deploy
 
 Depois do novo deploy, a resposta HTTP passou a entregar `Kytto | Sistemas inteligentes para negócios`, os bundles `index-BuWrdq6r.js` e `index-BiAAD82A.css` e os marcadores da nova Home. Porém, o navegador ainda exibiu uma tela branca; o console do navegador não mostrou erros. O problema residual pode ser causado pelo service worker ainda em cache, pela ausência de carregamento do módulo no contexto do navegador ou por incompatibilidade silenciosa do bundle, e requer inspeção do HTML/JS servido e dos registros de carregamento antes da entrega final.
+
+
+## Correção do domínio LakeX
+
+O PR #20 foi integrado e o Render concluiu o deploy automático `dep-da70gv942hec73eu4ha0` com o commit `89dc27b`, duração aproximada de 35 segundos. O serviço permaneceu conectado ao branch `fix/kytto-comandas-pdv-20260808` e entrou na lista de deploys concluídos.
