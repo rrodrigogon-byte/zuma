@@ -1,4 +1,14 @@
 /* MIGRAÇÃO 022: vínculo de promoções aplicadas em pedidos */
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'uq_commerce_promotion_code_empresa_id'
+  ) THEN
+    ALTER TABLE commerce_promotion_codes
+      ADD CONSTRAINT uq_commerce_promotion_code_empresa_id UNIQUE (empresa_id, id);
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS commerce_order_promotions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   empresa_id UUID NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
