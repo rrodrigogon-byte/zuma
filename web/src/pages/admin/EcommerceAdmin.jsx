@@ -149,6 +149,7 @@ export default function EcommerceAdmin() {
   }
 
   async function loadReports() {
+    setError('')
     try {
       if (mode !== 'core') throw new Error('Relatórios do Commerce Core exigem PostgreSQL ativo.')
       setReports(await loadCoreReports())
