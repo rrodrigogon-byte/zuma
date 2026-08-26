@@ -1,0 +1,114 @@
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import * as dbPg from '../db-pg.js';
+
+const migrationDir = path.dirname(fileURLToPath(import.meta.url));
+const migrationFiles = [
+  '001_erp_foundation.sql',
+  '003_multiloja_auditoria_imutavel.sql',
+  '019_commerce_core.sql',
+  '020_commerce_legacy_import.sql',
+  '021_commerce_promotions_permissions.sql',
+  '022_commerce_order_promotions.sql',
+];
+const advisoryLockKey = 825410732;
+
+function checksum(sql) {
+  return createHash('sha256').update(sql).digest('hex');
+}
+
+function hasManagedDatabaseUrl() {
+  return Boolean(process.env.DATABASE_URL || process.env.POSTGRES_URL);
+}
+
+async function ensureControlTable() {
+  await dbPg.query(`
+    CREATE TABLE IF NOT EXISTS commerce_schema_migrations (
+      id BIGSERIAL PRIMARY KEY,
+      arquivo VARCHAR(255) NOT NULL UNIQUE,
+      checksum CHAR(64) NOT NULL,
+      aplicado_em TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+}
+
+async function applyMigration(fileName) {
+  const filePath = path.join(migrationDir, fileName);
+  const sql = await readFile(filePath, 'utf8');
+  const hash = checksum(sql);
+  const existing = await dbPg.query(
+    'SELECT checksum FROM commerce_schema_migrations WHERE arquivo = $1',
+    [fileName]
+  );
+
+  if (existing.rows.length > 0) {
+    if (existing.rows[0].checksum !== hash) {
+      throw new Error(
+        `A migration ${fileName} já foi aplicada com outro checksum; crie uma nova migration incremental.`
+      );
+    }
+    console.log(`↷ ${fileName} já aplicada`);
+    return false;
+  }
+
+  console.log(`→ Aplicando ${fileName}`);
+  const client = await dbPg.beginTransaction();
+  try {
+    await dbPg.queryInTransaction(client, sql);
+    await dbPg.queryInTransaction(
+      client,
+      'INSERT INTO commerce_schema_migrations (arquivo, checksum) VALUES ($1, $2)',
+      [fileName, hash]
+    );
+    await dbPg.commit(client);
+    console.log(`✓ ${fileName} aplicada`);
+    return true;
+  } catch (error) {
+    await dbPg.rollback(client);
+    throw new Error(`Falha na migration ${fileName}: ${error.message}`);
+  }
+}
+
+export async function runCommerceSchemaMigrations({ dryRun = false } = {}) {
+  if (dryRun) {
+    console.log('Dry-run: nenhuma conexão ou escrita foi executada.');
+    for (const fileName of migrationFiles) console.log(`- ${fileName}`);
+    return { applied: [], files: [...migrationFiles], dryRun: true };
+  }
+
+  if (!hasManagedDatabaseUrl()) {
+    throw new Error('Schema do Commerce Core requer DATABASE_URL ou POSTGRES_URL gerenciada; fallback local bloqueado.');
+  }
+
+  await ensureControlTable();
+  await dbPg.query('SELECT pg_advisory_lock($1)', [advisoryLockKey]);
+  const applied = [];
+  try {
+    for (const fileName of migrationFiles) {
+      if (await applyMigration(fileName)) applied.push(fileName);
+    }
+    return { applied, files: [...migrationFiles], dryRun: false };
+  } finally {
+    await dbPg.query('SELECT pg_advisory_unlock($1)', [advisoryLockKey]);
+  }
+}
+
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  const dryRun = process.argv.includes('--dry-run');
+  runCommerceSchemaMigrations({ dryRun })
+    .then(({ applied, files }) => {
+      console.log(`Schema Commerce Core concluído. Arquivos: ${files.length}; novos: ${applied.length}.`);
+    })
+    .catch((error) => {
+      console.error(`Erro no schema Commerce Core: ${error.message}`);
+      process.exitCode = 1;
+    })
+    .finally(async () => {
+      if (!dryRun) await dbPg.closePool();
+    });
+}
+
+export { migrationFiles };

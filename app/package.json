@@ -7,6 +7,8 @@
   "scripts": {
     "start": "node server-erp.js",
     "dev": "node --watch server-erp.js",
+    "commerce:schema:dry-run": "node migrations/run-commerce-schema-migrations.js --dry-run",
+    "commerce:schema:apply": "node migrations/run-commerce-schema-migrations.js",
     "commerce:import:dry-run": "node migrations/import-legacy-commerce.js",
     "commerce:import:apply": "node migrations/import-legacy-commerce.js --apply"
   },

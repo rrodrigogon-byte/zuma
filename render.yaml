@@ -7,6 +7,7 @@ services:
     plan: starter            # free/starter; suba conforme a demanda
     region: oregon
     buildCommand: cd web && npm install --include=dev && npm run build && rm -rf ../app/public/assets && cp -R dist/. ../app/public/ && cd ../app && npm install
+    preDeployCommand: cd app && npm run commerce:schema:apply
     startCommand: cd app && node server.js
     healthCheckPath: /api/info
     autoDeploy: true
