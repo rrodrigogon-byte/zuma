@@ -159,8 +159,8 @@ async function importProduct(trx, { empresaId, storefront, product, categoryCach
   if (product.imagem) {
     await trx.query(
       `INSERT INTO commerce_product_media (empresa_id, product_id, variant_id, storage_key, public_url, mime_type, alt_text)
-       SELECT $1, $2, $3, $4, $4, 'image/*', $5
-       WHERE NOT EXISTS (SELECT 1 FROM commerce_product_media WHERE empresa_id = $1 AND product_id = $2 AND public_url = $4)`,
+       SELECT $1::uuid, $2::uuid, $3::uuid, $4::text, $4::text, 'image/*', $5::text
+       WHERE NOT EXISTS (SELECT 1 FROM commerce_product_media WHERE empresa_id = $1::uuid AND product_id = $2::uuid AND public_url = $4::text)`,
       [empresaId, productId, variantId, text(product.imagem, 1000), name],
     );
   }
