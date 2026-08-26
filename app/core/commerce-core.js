@@ -336,6 +336,16 @@ export async function transitionOrder(trx, context, input) {
 export async function createPendingOrder(trx, context, input = {}) {
   const { empresaId } = tenantContext(context);
   const storefront = await resolveStorefront(trx, { ...context, empresaId }, input.storefrontId);
+  const shippingMethodId = input.shippingMethodId ? assertUuid(input.shippingMethodId, 'shippingMethodId') : null;
+  if (shippingMethodId) {
+    const method = await trx.query(
+      `SELECT id FROM commerce_shipping_methods
+        WHERE empresa_id = $1 AND storefront_id = $2 AND id = $3 AND ativo = true
+        LIMIT 1`,
+      [empresaId, storefront.id, shippingMethodId],
+    );
+    if (!method.rows[0]) throw new CommerceError('método de entrega não encontrado para o storefront', 'SHIPPING_METHOD_NOT_FOUND');
+  }
   const lines = Array.isArray(input.items) ? input.items.map(item => {
     const quantity = Number(item.quantity);
     if (!Number.isInteger(quantity) || quantity <= 0) throw new CommerceError('quantidade deve ser um inteiro positivo', 'INVALID_QUANTITY');
@@ -351,6 +361,8 @@ export async function createPendingOrder(trx, context, input = {}) {
     customer: input.customer || null,
     shippingAddress: input.shippingAddress || null,
     billingAddress: input.billingAddress || null,
+    shippingMethodId,
+    locationId: input.locationId || null,
     shippingAmount: input.shippingAmount || 0,
     discountAmount: input.discountAmount || 0,
     taxAmount: input.taxAmount || 0,
@@ -452,10 +464,10 @@ export async function createPendingOrder(trx, context, input = {}) {
   await trx.query(
     `INSERT INTO commerce_orders
       (id, empresa_id, storefront_id, customer_id, public_code, status, origem, moeda,
-       subtotal, desconto, frete, impostos, total, endereco_entrega, endereco_cobranca, observacao)
-     VALUES ($1, $2, $3, $4, $5, $6, 'web', $7, $8, $9, $10, $11, $12, $13::jsonb, $14::jsonb, $15)`,
+       subtotal, desconto, frete, impostos, total, endereco_entrega, endereco_cobranca, observacao, shipping_method_id)
+     VALUES ($1, $2, $3, $4, $5, $6, 'web', $7, $8, $9, $10, $11, $12, $13::jsonb, $14::jsonb, $15, $16)`,
     [orderId, empresaId, storefront.id, customerId, publicCode, status, storefront.moeda || 'BRL', subtotal, discount, shipping, taxes, total,
-      JSON.stringify(input.shippingAddress || null), JSON.stringify(input.billingAddress || null), String(input.note || '').slice(0, 1000) || null],
+      JSON.stringify(input.shippingAddress || null), JSON.stringify(input.billingAddress || null), String(input.note || '').slice(0, 1000) || null, shippingMethodId],
   );
   for (const line of normalizedLines) {
     await trx.query(
@@ -508,7 +520,7 @@ export async function createPendingOrder(trx, context, input = {}) {
      VALUES ($1, $2, NULL, $3, 'checkout', $4, $5, $6::jsonb)`,
     [empresaId, orderId, status, context.usuarioId || null, requestId(input.correlationId), JSON.stringify({ lineCount: normalizedLines.length })],
   );
-  const result = { id: orderId, publicCode, status, currency: storefront.moeda || 'BRL', subtotal, discount, shipping, taxes, total, customerId };
+  const result = { id: orderId, publicCode, status, currency: storefront.moeda || 'BRL', subtotal, discount, shipping, taxes, total, customerId, shippingMethodId };
   if (idem) {
     await trx.query(
       `UPDATE commerce_idempotency_keys SET response_status = 201, response_body = $3::jsonb

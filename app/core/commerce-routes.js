@@ -138,7 +138,7 @@ export function createCommercePublicRouter() {
   router.get('/context', async (req, res) => {
     try {
       const storefront = await resolvePublicStorefront(req);
-      res.json({ storefront: { id: storefront.id, codigo: storefront.codigo, nome: storefront.nome, moeda: storefront.moeda, timezone: storefront.timezone }, capabilities: { catalog: true, cart: true, checkout: true, payments: false, shipping: false } });
+      res.json({ storefront: { id: storefront.id, codigo: storefront.codigo, nome: storefront.nome, moeda: storefront.moeda, timezone: storefront.timezone }, capabilities: { catalog: true, cart: true, checkout: true, payments: false, shipping: true } });
     } catch (error) { jsonError(res, error); }
   });
   router.get('/products', async (req, res) => {
@@ -146,6 +146,19 @@ export function createCommercePublicRouter() {
       const storefront = await resolvePublicStorefront(req);
       const products = await listPublishedProducts({ empresaId: storefront.empresa_id, lojaId: storefront.loja_id }, { storefrontId: storefront.id, query: req.query.q, categoryId: req.query.categoryId, limit: req.query.limit, offset: req.query.offset });
       res.json({ storefrontId: storefront.id, items: products });
+    } catch (error) { jsonError(res, error); }
+  });
+  router.get('/shipping-methods', async (req, res) => {
+    try {
+      const storefront = await resolvePublicStorefront(req);
+      const result = await db.query(
+        `SELECT id, codigo, nome, tipo, configuracao
+           FROM commerce_shipping_methods
+          WHERE empresa_id = $1 AND storefront_id = $2 AND ativo = true
+          ORDER BY nome ASC`,
+        [storefront.empresa_id, storefront.id],
+      );
+      res.json({ storefrontId: storefront.id, items: result.rows });
     } catch (error) { jsonError(res, error); }
   });
   router.post('/orders', async (req, res) => {

@@ -130,8 +130,10 @@ test('adjustInventory retorna a mesma resposta para uma chave repetida', async (
 
 test('createPendingOrder reserva estoque para produto físico', async () => {
   let available = 5;
+  const shippingMethodId = '88888888-8888-4888-8888-888888888888';
   const { trx, calls } = queryRecorder((sql, values) => {
     if (sql.includes('FROM commerce_storefronts')) return { rows: [{ id: storefrontId, empresa_id: empresaId, loja_id: lojaId, codigo: 'web', nome: 'Web', status: 'active', moeda: 'BRL', timezone: 'America/Sao_Paulo' }] };
+    if (sql.includes('FROM commerce_shipping_methods')) return { rows: [{ id: shippingMethodId }] };
     if (sql.includes('FROM commerce_product_variants')) return { rows: [{ id: variantId, sku: 'SKU-1', variant_name: 'Tamanho único', product_name: 'Produto físico', product_type: 'physical', price: '29.90', promotional: false }] };
     if (sql.includes('SELECT id FROM commerce_customers')) return { rows: [] };
     if (sql.includes('INSERT INTO commerce_customers')) return { rows: [{ id: '99999999-9999-4999-8999-999999999999' }] };
@@ -145,12 +147,14 @@ test('createPendingOrder reserva estoque para produto físico', async () => {
     items: [{ variantId, quantity: 2 }],
     customer: { nome: 'Cliente de teste' },
     locationId,
+    shippingMethodId,
     shippingAmount: 999,
     discountAmount: 999,
     taxAmount: 999,
   });
   assert.equal(result.status, 'pending_payment');
   assert.equal(result.total, 59.8);
+  assert.equal(result.shippingMethodId, shippingMethodId);
   assert.equal(available, 3);
   assert.equal(calls.filter(call => call.sql.includes('INSERT INTO commerce_inventory_reservations')).length, 1);
 });
