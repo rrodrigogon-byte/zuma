@@ -6,6 +6,8 @@ import { createPaymentAttempt, verifyPaymentWebhook } from './payment-adapters.j
 import { resolveCommerceIdentity } from './commerce-identity-bridge.js';
 import { applyPromotionToOrder, createPromotion, createPromotionCode, listPromotions } from './commerce-promotions.js';
 import { createMembership, listMemberships, listRoles, updateMembership } from './commerce-admin-users.js';
+import { createCustomer, createCustomerAddress, deleteCustomerAddress, getCustomer, listCustomerAddresses, updateCustomer, updateCustomerAddress } from './commerce-customers.js';
+import { createStorefrontDomain, listStorefrontDomains, setPrimaryStorefrontDomain, verifyStorefrontDomain } from './commerce-domains.js';
 import {
   CommerceError,
   adjustInventory,
@@ -267,6 +269,33 @@ export function createCommerceAdminRouter() {
     try {
       const context = await requirePermission(req, 'users.write');
       const result = await withCommerceTransaction(trx => updateMembership(trx, context, req.params.id, req.body));
+      res.json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.get('/storefront/domains', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'catalog.read');
+      res.json(await listStorefrontDomains(db, context, req.query.storefrontId || null));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/storefront/domains', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'catalog.publish');
+      const result = await withCommerceTransaction(trx => createStorefrontDomain(trx, context, req.body));
+      res.status(201).json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/storefront/domains/:id/verify', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'catalog.publish');
+      const result = await withCommerceTransaction(trx => verifyStorefrontDomain(trx, context, req.params.id));
+      res.json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/storefront/domains/:id/primary', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'catalog.publish');
+      const result = await withCommerceTransaction(trx => setPrimaryStorefrontDomain(trx, context, req.params.id));
       res.json(result);
     } catch (error) { jsonError(res, error); }
   });
@@ -535,6 +564,53 @@ export function createCommerceAdminRouter() {
         [context.empresaId],
       );
       res.json({ items: result.rows });
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/customers', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'customers.write');
+      const result = await withCommerceTransaction(trx => createCustomer(trx, context, req.body));
+      res.status(201).json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.patch('/customers/:id', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'customers.write');
+      const result = await withCommerceTransaction(trx => updateCustomer(trx, context, req.params.id, req.body));
+      res.json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.get('/customers/:id', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'customers.read');
+      res.json(await getCustomer(db, context, req.params.id));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.get('/customers/:id/addresses', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'customers.read');
+      res.json(await listCustomerAddresses(db, context, req.params.id));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/customers/:id/addresses', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'customers.write');
+      const result = await withCommerceTransaction(trx => createCustomerAddress(trx, context, req.params.id, req.body));
+      res.status(201).json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.patch('/customers/:id/addresses/:addressId', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'customers.write');
+      const result = await withCommerceTransaction(trx => updateCustomerAddress(trx, context, req.params.id, req.params.addressId, req.body));
+      res.json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.delete('/customers/:id/addresses/:addressId', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'customers.write');
+      const result = await withCommerceTransaction(trx => deleteCustomerAddress(trx, context, req.params.id, req.params.addressId));
+      res.json(result);
     } catch (error) { jsonError(res, error); }
   });
   router.post('/orders/:id/payments', async (req, res) => {

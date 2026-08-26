@@ -89,7 +89,7 @@ async function loadLegacy() {
 
 export async function loadCommerceAdmin() {
   try {
-    const [storefrontData, productData, categoryData, promotionData, roleData, membershipData, orderData, customerData, locations] = await Promise.all([
+    const [storefrontData, productData, categoryData, promotionData, roleData, membershipData, orderData, customerData, locations, shippingData, fulfillmentData, domainData] = await Promise.all([
       api.get('/api/admin/commerce/storefront'),
       api.get('/api/admin/commerce/catalog/products'),
       api.get('/api/admin/commerce/catalog/categories'),
@@ -114,6 +114,18 @@ export async function loadCommerceAdmin() {
         if (error.status === 403) return { items: [] }
         throw error
       }),
+      api.get('/api/admin/commerce/shipping/methods').catch(error => {
+        if (error.status === 403) return { items: [] }
+        throw error
+      }),
+      api.get('/api/admin/commerce/fulfillments').catch(error => {
+        if (error.status === 403) return { items: [] }
+        throw error
+      }),
+      api.get('/api/admin/commerce/storefront/domains').catch(error => {
+        if (error.status === 403) return { items: [] }
+        throw error
+      }),
     ])
     return {
       mode: 'core',
@@ -126,6 +138,9 @@ export async function loadCommerceAdmin() {
       products: (productData?.items || []).map(normalizeCoreProduct),
       orders: (orderData?.items || []).map(normalizeCoreOrder),
       customers: customerData?.items || [],
+      shippingMethods: shippingData?.items || [],
+      fulfillments: fulfillmentData?.items || [],
+      domains: domainData?.items || [],
     }
   } catch (error) {
     if (error.status !== 404) throw error
@@ -224,6 +239,54 @@ export async function createCorePromotion(form) {
 
 export async function updateCoreMembership(id, payload) {
   return api.patch(`/api/admin/commerce/users/memberships/${id}`, payload)
+}
+
+export async function createCoreCustomer(payload) {
+  return api.post('/api/admin/commerce/customers', payload)
+}
+
+export async function updateCoreCustomer(id, payload) {
+  return api.patch(`/api/admin/commerce/customers/${id}`, payload)
+}
+
+export async function loadCoreCustomerAddresses(customerId) {
+  return api.get(`/api/admin/commerce/customers/${customerId}/addresses`)
+}
+
+export async function createCoreCustomerAddress(customerId, payload) {
+  return api.post(`/api/admin/commerce/customers/${customerId}/addresses`, payload)
+}
+
+export async function updateCoreCustomerAddress(customerId, addressId, payload) {
+  return api.patch(`/api/admin/commerce/customers/${customerId}/addresses/${addressId}`, payload)
+}
+
+export async function deleteCoreCustomerAddress(customerId, addressId) {
+  return api.delete(`/api/admin/commerce/customers/${customerId}/addresses/${addressId}`)
+}
+
+export async function createCoreShippingMethod(payload) {
+  return api.post('/api/admin/commerce/shipping/methods', payload)
+}
+
+export async function createCoreDomain(payload) {
+  return api.post('/api/admin/commerce/storefront/domains', payload)
+}
+
+export async function verifyCoreDomain(id) {
+  return api.post(`/api/admin/commerce/storefront/domains/${id}/verify`, {})
+}
+
+export async function setPrimaryCoreDomain(id) {
+  return api.post(`/api/admin/commerce/storefront/domains/${id}/primary`, {})
+}
+
+export async function createCoreFulfillment(payload) {
+  return api.post('/api/admin/commerce/fulfillments', payload)
+}
+
+export async function updateCoreFulfillment(id, payload) {
+  return api.patch(`/api/admin/commerce/fulfillments/${id}`, payload)
 }
 
 export async function loadCoreReports() {

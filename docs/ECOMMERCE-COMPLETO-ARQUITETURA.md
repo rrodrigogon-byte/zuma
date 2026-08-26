@@ -165,3 +165,14 @@ A ativação real ainda exige uma conta de vendedor, uma aplicação Mercado Pag
 [3] [Mercado Pago — Possíveis erros da API](https://www.mercadopago.com.br/developers/en/docs/checkout-api-orders/payment-management/integration-errors). A documentação lista erros de credenciais, idempotência, propriedades, rate limit e conflitos de estado.
 
 [4] [Render — Criar e conectar Postgres](https://render.com/docs/postgresql-creating-connecting). A documentação descreve URLs internas/externas, região do banco e conexão por secret manager.
+
+
+## Incremento operacional pós-Core — agosto de 2026
+
+O Commerce Core agora possui uma camada administrativa tenant-aware para clientes e endereços. O backoffice pode criar e editar clientes, bloquear contas, listar endereços, definir endereço padrão e remover endereços, sempre com whitelist de campos, validação de email/CEP/UF e auditoria. Documentos pessoais continuam restritos a valores já mascarados; o serviço não recebe ou persiste documento em claro.
+
+A operação de fulfillment foi conectada ao backoffice. Cada loja pode cadastrar métodos de retirada, delivery, transportadora, digital ou serviço, criar um fulfillment pendente para um pedido e avançar o fulfillment somente por transições válidas. Ocorrências são registradas na operação e não há cotação, rastreio ou transportadora fictícios.
+
+A publicação por canal ganhou gestão de domínios com verificação DNS TXT. O domínio é criado como pendente com um desafio exclusivo, exibido apenas para o usuário autenticado com permissão `catalog.publish`. O servidor consulta o TXT antes de preencher `verificado_em`; domínio não verificado não resolve storefront público e não pode ser definido como principal. A migration `023_commerce_domain_verification.sql` adiciona o token de desafio com checksum no executor oficial.
+
+Esses recursos permanecem sujeitos ao mesmo rollout seguro: catálogo público só é exposto após empresa, storefront, preço, domínio e política de publicação serem revisados; pagamentos continuam condicionados à homologação do provedor; logística externa exige contrato, regras e credenciais próprias.

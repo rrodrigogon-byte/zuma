@@ -12,6 +12,7 @@ const migrationFiles = [
   '020_commerce_legacy_import.sql',
   '021_commerce_promotions_permissions.sql',
   '022_commerce_order_promotions.sql',
+  '023_commerce_domain_verification.sql',
 ];
 const advisoryLockKey = 825410732;
 
