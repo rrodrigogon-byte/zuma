@@ -313,7 +313,8 @@ CREATE TABLE IF NOT EXISTS commerce_price_lists (
   moeda CHAR(3) NOT NULL DEFAULT 'BRL',
   ativo BOOLEAN NOT NULL DEFAULT true,
   criado_em TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT uq_commerce_price_list_empresa_codigo UNIQUE (empresa_id, codigo)
+  CONSTRAINT uq_commerce_price_list_empresa_codigo UNIQUE (empresa_id, codigo),
+  CONSTRAINT uq_commerce_price_list_empresa_id UNIQUE (empresa_id, id)
 );
 
 CREATE TABLE IF NOT EXISTS commerce_variant_prices (
