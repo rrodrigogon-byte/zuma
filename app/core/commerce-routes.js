@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 import express from 'express';
 import { db } from './database.js';
 import { customerReport, inventoryReport, salesReport } from './commerce-reports.js';
