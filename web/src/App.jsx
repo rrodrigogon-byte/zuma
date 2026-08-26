@@ -32,10 +32,12 @@ function ProtectedOutlet({ need }) {
   return dest ? <Navigate to={dest} replace /> : <Outlet />
 }
 
-// A rota raiz é a página institucional pública. Usuários autenticados também
-// podem consultá-la; o CTA da Home oferece o retorno ao painel correspondente.
-// O acesso a /admin continua protegido pelas rotas abaixo.
+// A rota raiz é a página institucional pública no domínio principal. O host
+// dedicado do Commerce renderiza o storefront Core diretamente, sem expor o
+// catálogo em kytto.com.br antes de uma publicação explícita por canal.
 function EntradaPrincipal() {
+  const host = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
+  if (host === 'loja.kytto.com.br') return <Ecommerce />
   return <Layout marketing><Home /></Layout>
 }
 
