@@ -1,5 +1,5 @@
-import { db } from './database.js';
 import { CommerceError, tenantContext } from './commerce-core.js';
+import { db } from './database.js';
 
 function clean(value, max = 180) {
   return String(value || '').trim().slice(0, max);
