@@ -716,6 +716,7 @@ CREATE TABLE IF NOT EXISTS commerce_shipping_methods (
   configuracao JSONB NOT NULL DEFAULT '{}'::jsonb,
   criado_em TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT uq_commerce_shipping_method UNIQUE (empresa_id, storefront_id, codigo),
+  CONSTRAINT uq_commerce_shipping_method_empresa_id UNIQUE (empresa_id, id),
   CONSTRAINT fk_commerce_shipping_storefront FOREIGN KEY (empresa_id, storefront_id)
     REFERENCES commerce_storefronts (empresa_id, id) ON DELETE CASCADE,
   CONSTRAINT chk_commerce_shipping_type CHECK (tipo IN ('pickup','delivery','carrier','digital','service'))
@@ -758,6 +759,7 @@ CREATE TABLE IF NOT EXISTS commerce_promotions (
   usos INTEGER NOT NULL DEFAULT 0,
   ativo BOOLEAN NOT NULL DEFAULT true,
   criado_em TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT uq_commerce_promotion_empresa_id UNIQUE (empresa_id, id),
   CONSTRAINT chk_commerce_promotion_type CHECK (tipo IN ('percentage','fixed','free_shipping','bundle')),
   CONSTRAINT chk_commerce_promotion_value CHECK (valor >= 0)
 );
