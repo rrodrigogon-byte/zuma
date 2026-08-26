@@ -79,7 +79,11 @@ export async function runCommerceSchemaMigrations({ dryRun = false } = {}) {
   }
 
   if (!hasManagedDatabaseUrl()) {
-    throw new Error('Schema do Commerce Core requer DATABASE_URL ou POSTGRES_URL gerenciada; fallback local bloqueado.');
+    if (process.env.COMMERCE_SCHEMA_REQUIRED === '1') {
+      throw new Error('Schema do Commerce Core requer DATABASE_URL ou POSTGRES_URL gerenciada; fallback local bloqueado.');
+    }
+    console.warn('Schema Commerce Core não executado: DATABASE_URL/POSTGRES_URL ausente; serviço legado preservado.');
+    return { applied: [], files: [...migrationFiles], dryRun: false, skipped: true };
   }
 
   await ensureControlTable();
