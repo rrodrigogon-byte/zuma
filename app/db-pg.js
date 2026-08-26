@@ -13,14 +13,24 @@ import { promisify } from 'util';
 
 const { Pool } = pg;
 
-// Configuração do pool de conexões
+// Configuração do pool de conexões. Em produção, a URL gerenciada tem
+// precedência; nenhuma credencial é impressa ou persistida pelo executor.
+const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL || '';
+const poolConfig = connectionString
+  ? {
+      connectionString,
+      ssl: process.env.DB_SSL === 'false' ? false : { rejectUnauthorized: false },
+    }
+  : {
+      host: process.env.DB_HOST || 'localhost',
+      port: process.env.DB_PORT || 5432,
+      database: process.env.DB_NAME || 'erp_modular',
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD || 'postgres',
+    };
 const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'erp_modular',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'postgres',
-  max: 20, // Máximo de conexões
+  ...poolConfig,
+  max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
 });

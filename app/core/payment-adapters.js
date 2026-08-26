@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { db } from './database.js';
 import { CommerceError, assertUuid, requestId, tenantContext, withCommerceTransaction } from './commerce-core.js';
+import { createMercadoPagoAdapter, mercadoPagoConfigured } from './mercadopago-adapter.js';
 
 export class PaymentProviderRegistry {
   constructor() { this.adapters = new Map(); }
@@ -17,6 +18,7 @@ export class PaymentProviderRegistry {
 // Nenhum gateway é registrado automaticamente. O tenant deve configurar um
 // provider homologado e um secret_ref gerenciado fora do Git e do frontend.
 export const paymentProviders = new PaymentProviderRegistry();
+if (mercadoPagoConfigured()) paymentProviders.register('mercadopago', createMercadoPagoAdapter());
 
 export function validatePaymentMethod(method) {
   const value = String(method || '').toLowerCase();
@@ -44,9 +46,10 @@ async function preparePayment(trx, context, input, provider, method, idem, reque
   }
   const orderId = assertUuid(input.orderId, 'orderId');
   const orderResult = await trx.query(
-    `SELECT id, storefront_id, status, total, moeda
-       FROM commerce_orders
-      WHERE empresa_id = $1 AND id = $2
+    `SELECT o.id, o.storefront_id, o.status, o.total, o.moeda, c.email AS customer_email
+       FROM commerce_orders o
+       LEFT JOIN commerce_customers c ON c.empresa_id = o.empresa_id AND c.id = o.customer_id
+      WHERE o.empresa_id = $1 AND o.id = $2
       FOR UPDATE`,
     [context.empresaId, orderId],
   );
@@ -122,7 +125,7 @@ export async function createPaymentAttempt(contextInput, input = {}) {
   try {
     checkout = await adapter.createCheckout({
       payment: prepared.payment,
-      order: { id: prepared.order.id, total: prepared.order.total, currency: prepared.order.moeda },
+      order: { id: prepared.order.id, total: prepared.order.total, currency: prepared.order.moeda, customerEmail: prepared.order.customer_email },
       account: { id: prepared.account.id, secretRef: prepared.account.secret_ref, publicConfig: prepared.account.public_config },
       requestId: prepared.requestId,
       idempotencyKey: idem,

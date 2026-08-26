@@ -115,7 +115,15 @@ As consultas de `app/core/commerce-reports.js` entregam vendas, estoque e client
 
 No checkout público, `shippingAmount`, `discountAmount` e `taxAmount` enviados pelo navegador são deliberadamente ignorados. O pedido usa o subtotal dos preços vigentes do canal e deixa frete, promoções/cuponagem e impostos em zero até que regras server-side, cálculo de frete e integrações fiscais sejam implementados e homologados. Isso evita que o cliente altere o total por inspeção do frontend.
 
-O storefront `/ecommerce` e o backoffice `/admin/ecommerce` validados nesta etapa são a superfície inicial de experiência e operação sobre as APIs legadas. Eles não devem ser apresentados aos clientes como o Commerce Core completo até que o rollout PostgreSQL substitua o fluxo JSON de pedidos/estoque e os adapters de pagamento/logística sejam homologados.
+O storefront `/ecommerce` e o backoffice `/admin/ecommerce` usam uma camada de seleção Core→legado. Quando `COMMERCE_CORE_ENABLED=1` e a sessão possui empresa/loja com membership PostgreSQL, o backoffice consome catálogo, categorias, preços, saldo, pedidos e clientes do Core; quando o namespace Core responde 404, preserva a operação legada. O modo exibido na interface deixa explícito `Core PostgreSQL` ou `Catálogo legado`.
+
+A migration `020_commerce_legacy_import.sql` cria `commerce_legacy_imports`, uma tabela de correspondência por tenant, entidade e chave legada. O script `app/migrations/import-legacy-commerce.js` faz dry-run por padrão, exige `--apply`, `COMMERCE_IMPORT_CONFIRM=IMPORT_LEGACY_TO_COMMERCE`, `DATABASE_URL`/`POSTGRES_URL`/`DB_HOST` e os IDs explícitos de empresa, storefront e local de estoque. Produtos, variantes, preços, publicação, mídia, saldo inicial, clientes e pedidos históricos são importados com hash, retry idempotente e status de pagamento preservado; senhas, cartões, secrets e aprovações de pagamento nunca são migrados.
+
+As migrations `021_commerce_promotions_permissions.sql` e `022_commerce_order_promotions.sql` acrescentam permissões granulares, campanhas, códigos de cupom e vínculo transacional entre pedido e desconto. O checkout Core aceita `promotionCode`, valida o período, limites e tipo no servidor e atualiza o total dentro da mesma transação; o modo legado não recebe desconto implícito.
+
+A ponte `app/core/commerce-identity-bridge.js` resolve o usuário autenticado por e-mail no PostgreSQL e valida a membership, empresa e loja antes de qualquer operação administrativa. Headers de empresa/loja são somente seleção solicitada e nunca substituem a validação server-side. O backoffice já expõe catálogo, categorias, estoque, pedidos, promoções/cupons e relatórios no modo Core, com o badge de origem `Core PostgreSQL` ou `Catálogo legado`.
+
+Enquanto o Core estiver desligado, `/api/admin/commerce/*` responde `404 COMMERCE_CORE_DISABLED` antes do middleware administrativo legado, permitindo fallback determinístico em vez de mascarar a ausência do módulo como erro de autenticação. O storefront e o backoffice continuam funcionando, mas só devem ser apresentados aos clientes como Commerce Core operacional depois que o rollout PostgreSQL, a migração auditada e os adapters de pagamento/logística forem homologados.
 
 ## Qualidade, segurança e operação
 
@@ -140,3 +148,20 @@ A partir desta definição, a camada de foundation foi preparada, mas ainda depe
 [1]: https://shopify.dev/docs/storefronts/headless/building-with-the-storefront-api "Shopify — Building with the Storefront API"
 [2]: https://shopify.dev/docs/storefronts/headless/bring-your-own-stack "Shopify — Bring your own headless stack"
 [3]: https://shopify.dev/docs/storefronts/headless/getting-started/build-options "Shopify — Options for building headless"
+
+
+## Adapter Mercado Pago e condição de ativação
+
+Foi criado `app/core/mercadopago-adapter.js` como adapter opt-in. Ele suporta inicialmente Pix por meio do endpoint de pagamentos, envia `X-Idempotency-Key`, retorna os dados de QR/copia-e-cola quando o provedor responder e valida webhooks com `x-signature`, `x-request-id` e `data.id`. O adapter somente é registrado quando `MP_ACCESS_TOKEN` e `MP_WEBHOOK_SECRET` existem no secret manager; sem essas variáveis, o erro permanece `PAYMENT_PROVIDER_NOT_CONFIGURED` e nenhuma chamada externa é realizada.
+
+A ativação real ainda exige uma conta de vendedor, uma aplicação Mercado Pago, credenciais de teste/produção, chave Pix quando aplicável, URL HTTPS de webhook e teste de compra. O sistema não grava token, cartão ou segredo no repositório e não considera um pedido pago pela criação do checkout: a confirmação depende do webhook assinado e da consulta do recurso no provedor.
+
+### Referências oficiais
+
+[1] [Mercado Pago — Envio de pagamentos Pix](https://www.mercadopago.com.br/developers/pt/docs/checkout-bricks/payment-brick/payment-submission/pix). A documentação descreve o endpoint `/v1/payments`, `payment_method_id: pix`, dados de pagador e o header obrigatório `X-Idempotency-Key`.
+
+[2] [Mercado Pago — Webhooks](https://www.mercadopago.com.br/developers/en/docs/your-integrations/notifications/webhooks). A documentação descreve `x-signature`, `x-request-id`, `data.id`, validação HMAC, HTTPS e respostas 200/201.
+
+[3] [Mercado Pago — Possíveis erros da API](https://www.mercadopago.com.br/developers/en/docs/checkout-api-orders/payment-management/integration-errors). A documentação lista erros de credenciais, idempotência, propriedades, rate limit e conflitos de estado.
+
+[4] [Render — Criar e conectar Postgres](https://render.com/docs/postgresql-creating-connecting). A documentação descreve URLs internas/externas, região do banco e conexão por secret manager.

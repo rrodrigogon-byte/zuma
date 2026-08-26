@@ -3,6 +3,9 @@ import express from 'express';
 import { db } from './database.js';
 import { customerReport, inventoryReport, salesReport } from './commerce-reports.js';
 import { createPaymentAttempt, verifyPaymentWebhook } from './payment-adapters.js';
+import { resolveCommerceIdentity } from './commerce-identity-bridge.js';
+import { applyPromotionToOrder, createPromotion, createPromotionCode, listPromotions } from './commerce-promotions.js';
+import { createMembership, listMemberships, listRoles, updateMembership } from './commerce-admin-users.js';
 import {
   CommerceError,
   adjustInventory,
@@ -60,6 +63,8 @@ function jsonError(res, error) {
     INVALID_ORDER_STATUS: 400,
     INVALID_ORDER_TRANSITION: 409,
     TENANT_CONTEXT_REQUIRED: 401,
+    TENANT_SELECTION_REQUIRED: 400,
+    STORE_SELECTION_REQUIRED: 400,
     PERMISSION_DENIED: 403,
     CATEGORY_REQUIRED: 400,
     CATEGORY_NOT_FOUND: 404,
@@ -89,18 +94,28 @@ function jsonError(res, error) {
     SHIPPING_METHOD_NOT_FOUND: 404,
     FULFILLMENT_NOT_FOUND: 404,
     INVALID_FULFILLMENT_TRANSITION: 409,
+    PROMOTION_INVALID: 400,
+    PROMOTION_CODE_INVALID: 400,
+    PROMOTION_NOT_FOUND: 404,
+    PROMOTION_ORDER_STATE_INVALID: 409,
+    PROMOTION_ALREADY_APPLIED: 409,
+    PROMOTION_TYPE_UNSUPPORTED: 400,
+    USER_NOT_FOUND: 404,
+    ROLE_NOT_FOUND: 404,
+    MEMBERSHIP_NOT_FOUND: 404,
+    STORE_SCOPE_MISMATCH: 409,
+    STORE_SELECTION_REQUIRED: 400,
   };
   const status = statusByCode[error?.code] || 500;
   return res.status(status).json({ error: status >= 500 ? 'erro interno do Commerce Core' : error.message, code: error?.code || 'COMMERCE_ERROR', details: error?.details || {} });
 }
 
-function adminContext(req) {
-  if (!req.user?.empresaId) throw new CommerceError('sessão sem empresa efetiva; ativação do Commerce Core requer membership PostgreSQL', 'TENANT_CONTEXT_REQUIRED');
-  return tenantContext({ empresaId: req.user.empresaId, lojaId: req.user.lojaId, usuarioId: req.user.id });
+async function adminContext(req) {
+  return resolveCommerceIdentity(req);
 }
 
 async function requirePermission(req, permission) {
-  const context = adminContext(req);
+  const context = await adminContext(req);
   const result = await db.query(
     `SELECT 1
        FROM commerce_memberships m
@@ -134,7 +149,13 @@ export function createCommercePublicRouter() {
   router.post('/orders', async (req, res) => {
     try {
       const storefront = await resolvePublicStorefront(req);
-      const result = await withCommerceTransaction(trx => createPendingOrder(trx, { empresaId: storefront.empresa_id, lojaId: storefront.loja_id }, { ...req.body, storefrontId: storefront.id }));
+      const result = await withCommerceTransaction(async trx => {
+        const order = await createPendingOrder(trx, { empresaId: storefront.empresa_id, lojaId: storefront.loja_id }, { ...req.body, storefrontId: storefront.id });
+        const promotionCode = String(req.body?.promotionCode || '').trim();
+        if (!promotionCode) return order;
+        const promotion = await applyPromotionToOrder(trx, { empresaId: storefront.empresa_id, lojaId: storefront.loja_id }, { orderId: order.id, codigo: promotionCode });
+        return { ...order, discount: promotion.desconto, total: promotion.total, promotionCode: promotion.codigo };
+      });
       res.status(201).json(result);
     } catch (error) { jsonError(res, error); }
   });
@@ -163,8 +184,14 @@ export function createCommerceWebhookRouter() {
   router.post('/:provider/payments', async (req, res) => {
     const provider = String(req.params.provider || '').trim().toLowerCase();
     try {
-      const verified = await verifyPaymentWebhook(provider, req.body || {}, req.headers['x-signature'] || req.headers['x-webhook-signature'] || '', { rawBody: req.rawBody || Buffer.from(JSON.stringify(req.body || {})) });
-      const empresaId = tenantContext({ empresaId: verified.empresaId }).empresaId;
+      const verified = await verifyPaymentWebhook(provider, req.body || {}, req.headers['x-signature'] || req.headers['x-webhook-signature'] || '', {
+        rawBody: req.rawBody || Buffer.from(JSON.stringify(req.body || {})),
+        requestId: req.headers['x-request-id'] || '',
+        dataId: req.query['data.id'] || req.body?.data?.id || '',
+      });
+      const owner = await db.query(`SELECT empresa_id FROM commerce_payments WHERE provider = $1 AND provider_payment_id = $2 LIMIT 1`, [provider, verified.providerPaymentId]);
+      if (!owner.rows[0]) return res.status(200).json({ ok: true, ignored: true });
+      const empresaId = tenantContext({ empresaId: owner.rows[0].empresa_id }).empresaId;
       const eventId = String(verified.eventId || '').trim().slice(0, 180);
       if (!eventId) throw new CommerceError('webhook sem identificador do provedor', 'PAYMENT_WEBHOOK_INVALID');
       const payloadHash = crypto.createHash('sha256').update(req.rawBody || JSON.stringify(req.body || {})).digest('hex');
@@ -217,6 +244,46 @@ export function createCommerceWebhookRouter() {
 
 export function createCommerceAdminRouter() {
   const router = express.Router();
+  router.get('/users/roles', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'users.write');
+      res.json(await listRoles(db, context));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.get('/users/memberships', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'users.write');
+      res.json(await listMemberships(db, context));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/users/memberships', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'users.write');
+      const result = await withCommerceTransaction(trx => createMembership(trx, context, req.body));
+      res.status(201).json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.patch('/users/memberships/:id', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'users.write');
+      const result = await withCommerceTransaction(trx => updateMembership(trx, context, req.params.id, req.body));
+      res.json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.get('/storefront', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'catalog.read');
+      const result = await db.query(
+        `SELECT id, codigo, nome, canal, moeda, timezone, loja_id
+           FROM commerce_storefronts
+          WHERE empresa_id = $1 AND status = 'active'
+            AND ($2::uuid IS NULL OR loja_id = $2 OR loja_id IS NULL)
+          ORDER BY CASE WHEN loja_id = $2 THEN 0 ELSE 1 END, nome ASC`,
+        [context.empresaId, context.lojaId],
+      );
+      res.json({ items: result.rows });
+    } catch (error) { jsonError(res, error); }
+  });
   router.get('/catalog/products', async (req, res) => {
     try {
       const context = await requirePermission(req, 'catalog.read');
@@ -228,12 +295,38 @@ export function createCommerceAdminRouter() {
       }
       if (req.query.status) { values.push(String(req.query.status)); predicates.push(`p.status = $${values.length}`); }
       const result = await db.query(
-        `SELECT p.id, p.slug, p.nome, p.tipo, p.status, p.descricao, p.descricao_curta, p.category_id, p.criado_em, p.atualizado_em,
-                COALESCE(jsonb_agg(DISTINCT jsonb_build_object('id', v.id, 'sku', v.sku, 'nome', v.nome, 'atributos', v.atributos)) FILTER (WHERE v.id IS NOT NULL), '[]'::jsonb) AS variants
+        `SELECT p.id, p.slug, p.nome, p.tipo, p.status, p.descricao, p.descricao_curta, p.category_id,
+                c.nome AS category_name, p.criado_em, p.atualizado_em,
+                COALESCE((
+                  SELECT jsonb_agg(jsonb_build_object(
+                    'id', v.id,
+                    'sku', v.sku,
+                    'nome', v.nome,
+                    'atributos', v.atributos,
+                    'preco', vp.preco,
+                    'precoPromocional', vp.preco_promocional,
+                    'estoque', COALESCE((SELECT SUM(il.disponivel) FROM commerce_inventory_levels il WHERE il.empresa_id = v.empresa_id AND il.variant_id = v.id), 0)
+                  ) ORDER BY v.criado_em ASC)
+                    FROM commerce_product_variants v
+                    LEFT JOIN LATERAL (
+                      SELECT price.preco, price.preco_promocional
+                        FROM commerce_variant_prices price
+                       JOIN commerce_product_channels channel
+                         ON channel.empresa_id = price.empresa_id
+                        AND channel.price_list_id = price.price_list_id
+                        AND channel.product_id = p.id
+                        AND channel.storefront_id = ANY(ARRAY(SELECT s2.id FROM commerce_storefronts s2 WHERE s2.empresa_id = p.empresa_id ${context.lojaId ? `AND s2.loja_id = $${values.length}` : ''}))
+                        AND channel.publicado = true
+                       WHERE price.empresa_id = v.empresa_id AND price.variant_id = v.id
+                         AND price.vigencia_inicio <= CURRENT_TIMESTAMP
+                         AND (price.vigencia_fim IS NULL OR price.vigencia_fim > CURRENT_TIMESTAMP)
+                       ORDER BY price.vigencia_inicio DESC LIMIT 1
+                    ) vp ON true
+                   WHERE v.empresa_id = p.empresa_id AND v.product_id = p.id
+                ), '[]'::jsonb) AS variants
            FROM commerce_products p
-           LEFT JOIN commerce_product_variants v ON v.empresa_id = p.empresa_id AND v.product_id = p.id
+           LEFT JOIN commerce_categories c ON c.empresa_id = p.empresa_id AND c.id = p.category_id
           WHERE ${predicates.join(' AND ')}
-          GROUP BY p.id
           ORDER BY p.atualizado_em DESC
           LIMIT 100`,
         values,
@@ -294,6 +387,33 @@ export function createCommerceAdminRouter() {
       const context = await requirePermission(req, 'catalog.write');
       const result = await withCommerceTransaction(trx => archiveCatalogProduct(trx, context, req.params.id));
       res.json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.get('/promotions', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'promotions.read');
+      res.json(await listPromotions(db, context));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/promotions', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'promotions.write');
+      const result = await withCommerceTransaction(trx => createPromotion(trx, context, req.body));
+      res.status(201).json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/promotions/codes', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'promotions.write');
+      const result = await withCommerceTransaction(trx => createPromotionCode(trx, context, req.body));
+      res.status(201).json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/orders/:id/promotion', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'promotions.write');
+      const result = await withCommerceTransaction(trx => applyPromotionToOrder(trx, context, { ...req.body, orderId: req.params.id }));
+      res.status(201).json(result);
     } catch (error) { jsonError(res, error); }
   });
   router.post('/shipping/methods', async (req, res) => {

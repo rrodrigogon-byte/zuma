@@ -6,7 +6,9 @@
   "main": "server-erp.js",
   "scripts": {
     "start": "node server-erp.js",
-    "dev": "node --watch server-erp.js"
+    "dev": "node --watch server-erp.js",
+    "commerce:import:dry-run": "node migrations/import-legacy-commerce.js",
+    "commerce:import:apply": "node migrations/import-legacy-commerce.js --apply"
   },
   "engines": {
     "node": ">=18"

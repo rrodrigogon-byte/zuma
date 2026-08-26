@@ -154,7 +154,7 @@ function auth(req,res,next){
 }
 const requireRole = (...roles)=> (req,res,next)=> (req.user && roles.includes(req.user.role)) ? next() : res.status(403).json({error:'sem permissão'});
 const requireStaff = (req,res,next)=> (req.user && STAFF.includes(req.user.role)) ? next() : res.status(403).json({error:'acesso restrito à organização'});
-const tokenFor = u => jwt.sign({ id:u.id, nome:u.nome, role:u.role, ...(u.empresaId ? { empresaId:u.empresaId } : {}), ...(u.lojaId ? { lojaId:u.lojaId } : {}) }, JWT_SECRET, { expiresIn:'12h' });
+const tokenFor = u => jwt.sign({ id:u.id, nome:u.nome, email:u.email, role:u.role, ...(u.empresaId ? { empresaId:u.empresaId } : {}), ...(u.lojaId ? { lojaId:u.lojaId } : {}) }, JWT_SECRET, { expiresIn:'12h' });
 
 // ---- rate-limit simples (anti força-bruta no login) ----
 const tentativas = new Map(); // chave -> { n, until }
@@ -193,6 +193,13 @@ function auditoria(user, acao, detalhe){
     acao, detalhe: detalhe||'', ip: '' });
   if(d.auditoria.length > 1000) d.auditoria = d.auditoria.slice(-1000);
 }
+
+// Namespace do Commerce Core deve retornar 404 quando o módulo opt-in está desligado.
+// Isso evita que o middleware legado `/api/admin` transforme o fallback Core → legado em 401.
+app.use('/api/admin/commerce', (req, res, next) => {
+  if (process.env.COMMERCE_CORE_ENABLED === '1') return next();
+  return res.status(404).json({ error: 'Commerce Core desativado', code: 'COMMERCE_CORE_DISABLED' });
+});
 
 // Trava global: tudo em /api/admin exige login de staff (exceto o próprio login)
 app.use('/api/admin', (req,res,next)=>{
