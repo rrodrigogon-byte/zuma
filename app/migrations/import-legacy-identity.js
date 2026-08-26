@@ -120,7 +120,7 @@ async function apply(empresaId) {
       await trx.query(
         `INSERT INTO commerce_legacy_imports
           (empresa_id, loja_id, source, entity, legacy_key, target_id, payload_hash, metadata)
-         VALUES ($1, NULL, 'legacy-json', 'identity', $2, $3, encode(digest($2, 'sha256'), 'hex'), $4::jsonb)
+         VALUES ($1::uuid, NULL, 'legacy-json', 'identity', $2::text, $3::uuid, encode(digest($2::text, 'sha256'), 'hex'), $4::jsonb)
          ON CONFLICT (empresa_id, source, entity, legacy_key) DO UPDATE SET
            target_id = EXCLUDED.target_id,
            metadata = EXCLUDED.metadata`,
