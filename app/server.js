@@ -28,6 +28,11 @@ const app = express();
 // Atrás do proxy do Render: confia no X-Forwarded-For para que req.ip seja o IP real
 // do cliente (importante para rate-limit e auditoria).
 app.set('trust proxy', 1);
+app.use((req, res, next) => {
+  req.requestId = crypto.randomUUID();
+  res.setHeader('X-Request-Id', req.requestId);
+  next();
+});
 app.use(express.json({ limit: '1mb', verify: (req, res, buf) => { if (req.originalUrl?.startsWith('/api/webhooks/')) req.rawBody = Buffer.from(buf); } }));
 
 // SSE — realtime para KDS, Mesas, Portaria
@@ -177,6 +182,24 @@ function publicLimit(max=20, janelaMs=10*60*1000){
   };
 }
 
+function commercePublicLimit(max, janelaMs=10*60*1000){
+  return (req,res,next)=>{
+    const route = String(req.originalUrl || req.path || '').split('?')[0];
+    const chave = `commerce:${route}:${req.ip || ''}`;
+    if(!rateLimit(chave, max, janelaMs)) return res.status(429).json({ error:'muitas requisições, tente novamente em alguns minutos', code:'PUBLIC_RATE_LIMIT' });
+    next();
+  };
+}
+
+function commerceCheckoutGuard(req,res,next){
+  const route = String(req.originalUrl || '').split('?')[0].replace(/^\/api\/storefront/, '') || '/';
+  if (req.method === 'GET' && route.startsWith('/shipping/address/')) return commercePublicLimit(80)(req,res,next);
+  if (req.method === 'POST' && route === '/shipping/quotes') return commercePublicLimit(30)(req,res,next);
+  if (req.method === 'POST' && (route === '/orders' || /^\/orders\/[^/]+\/payments$/.test(route))) return commercePublicLimit(12)(req,res,next);
+  if (req.method === 'GET' && /^\/orders\/[^/]+$/.test(route)) return commercePublicLimit(30)(req,res,next);
+  return next();
+}
+
 // ---- trilha de auditoria das ações administrativas ----
 function audit(req, acao, detalhe){
   const d = db(); d.auditoria = d.auditoria || [];
@@ -219,7 +242,7 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
   if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL && !process.env.DB_HOST) {
     throw new Error('COMMERCE_CORE_ENABLED requer DATABASE_URL/POSTGRES_URL ou DB_HOST explícito');
   }
-  app.use('/api/storefront', createCommercePublicRouter());
+  app.use('/api/storefront', commerceCheckoutGuard, createCommercePublicRouter());
   app.use('/api/admin/commerce', createCommerceAdminRouter());
   app.use('/api/webhooks', createCommerceWebhookRouter());
   console.log('Commerce Core PostgreSQL habilitado (rotas /api/storefront e /api/admin/commerce)');

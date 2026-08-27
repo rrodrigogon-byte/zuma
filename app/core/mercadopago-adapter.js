@@ -34,25 +34,43 @@ function requestHeaders(token, idempotencyKey) {
 }
 
 async function mpRequest(path, options = {}) {
-  const response = await fetch(`${API_BASE}${path}`, options);
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(body.message || body.error || `Mercado Pago HTTP ${response.status}`);
-    error.status = response.status;
-    error.providerBody = body;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await fetch(`${API_BASE}${path}`, { ...options, signal: options.signal || controller.signal });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(body.message || body.error || `Mercado Pago HTTP ${response.status}`);
+      error.status = response.status;
+      error.providerBody = body;
+      throw error;
+    }
+    return body;
+  } catch (error) {
+    if (error.name === 'AbortError') throw new CommerceError('Mercado Pago não respondeu no prazo', 'PAYMENT_PROVIDER_TIMEOUT');
+    if (error instanceof CommerceError) throw error;
     throw error;
+  } finally {
+    clearTimeout(timer);
   }
-  return body;
+}
+
+function accountSecretRef(account) {
+  return account?.secretRef || account?.secret_ref || '';
+}
+
+function accountWebhookSecretRef(account) {
+  return account?.publicConfig?.webhookSecretRef || account?.public_config?.webhookSecretRef || '';
 }
 
 function accessToken(account) {
-  const token = envSecret(account?.secretRef, 'MP_ACCESS_TOKEN');
+  const token = envSecret(accountSecretRef(account), 'MP_ACCESS_TOKEN');
   if (!token) throw new CommerceError('access token do Mercado Pago não configurado no secret manager', 'PAYMENT_ACCOUNT_NOT_CONFIGURED');
   return token;
 }
 
 function webhookSecret(account) {
-  return envSecret(account?.secretRef ? `${account.secretRef}_WEBHOOK_SECRET` : '', 'MP_WEBHOOK_SECRET');
+  return envSecret(accountWebhookSecretRef(account), 'MP_WEBHOOK_SECRET');
 }
 
 export function createMercadoPagoAdapter() {
@@ -86,6 +104,17 @@ export function createMercadoPagoAdapter() {
           ticketUrl: transaction.ticket_url || null,
         },
       };
+    },
+
+    async getStatus({ payment, account }) {
+      const providerPaymentId = String(payment?.provider_payment_id || payment?.providerPaymentId || '').trim();
+      if (!providerPaymentId) throw new CommerceError('pagamento ainda não possui identificador no Mercado Pago', 'PAYMENT_PROVIDER_PAYMENT_NOT_FOUND');
+      const token = accessToken(account);
+      const response = await mpRequest(`/v1/payments/${encodeURIComponent(providerPaymentId)}`, { headers: requestHeaders(token) });
+      const statusMap = { approved: 'captured', pending: 'pending', in_process: 'pending', rejected: 'failed', cancelled: 'cancelled', refunded: 'refunded', charged_back: 'refunded' };
+      const status = statusMap[String(response.status || '').toLowerCase()];
+      if (!status) throw new CommerceError('status Mercado Pago não suportado', 'PAYMENT_PROVIDER_STATUS_INVALID');
+      return { providerPaymentId, status, amount: response.transaction_amount, summary: { mpStatus: response.status, statusDetail: response.status_detail || null } };
     },
 
     async verifyWebhook({ payload, signature, context }) {

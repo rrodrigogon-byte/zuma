@@ -179,3 +179,61 @@ Esses recursos permanecem sujeitos ao mesmo rollout seguro: catálogo público s
 
 
 O checkout Core também passou a persistir `shipping_method_id` no pedido por meio da migration `024_commerce_order_shipping.sql`. O método é validado contra o storefront, empresa e status ativo antes da criação; a escolha entra no hash de idempotência. O endpoint público `/api/storefront/shipping-methods` retorna somente métodos ativos do storefront resolvido por domínio verificado. O valor de frete continua calculado apenas por regra server-side homologada e permanece zero até a política comercial ser configurada.
+
+
+### Camada administrativa de pagamentos e rollout controlado
+
+A operação financeira do Commerce OS foi expandida com endpoints tenant-aware para listar provedores, cadastrar e atualizar contas por storefront, consultar transações mascaradas e iniciar uma tentativa administrativa de Pix. O contrato público de provedores expõe somente código, nome, métodos, existência do adapter e estado de registro; referências de secret, tokens, dados de cartão e valores de webhook nunca são devolvidos ao navegador.
+
+Cada conta exige uma referência no formato `env:VARIAVEL`, storefront ativo, ambiente explícito (`sandbox` ou `production`) e permanece inativa por padrão. A ativação só é aceita quando o adapter está registrado e as referências exigidas estão presentes no secret manager do processo. Para Mercado Pago, isso inclui a referência do access token e a referência do segredo HMAC do webhook. O backoffice apresenta `Aguardando configuração` quando essas condições não são satisfeitas e não oferece uma cobrança simulada.
+
+A tentativa de pagamento exige `accountId` explícito, verifica empresa, loja, pedido, storefront, ambiente, provedor e conta ativa na mesma transação curta e persiste `payment_account_id` por meio da migration `026_commerce_payment_account_link.sql`. A chave de idempotência é específica para cada tentativa; uma tentativa pendente por pedido bloqueia uma segunda cobrança concorrente. O status do pedido só avança para pago depois de webhook validado e consulta ao provedor, nunca apenas pela criação do checkout.
+
+O endpoint público de webhook é montado em `/api/webhooks/:provider/payments` (por exemplo, `/api/webhooks/mercadopago/payments`). A empresa e a conta são resolvidas a partir do `provider_payment_id` armazenado antes da validação HMAC, evitando confiar em tenant enviado pelo payload. Eventos são deduplicados por `(provider, provider_event_id)`, o valor recebido é comparado ao valor persistido e somente estados reconhecidos alteram pagamento, reservas e pedido. A migration 026 é aplicada pelo executor canônico com lock, checksum e comportamento idempotente; pagamentos históricos sem conta vinculada permanecem compatíveis, mas não podem ser usados para iniciar novas cobranças.
+
+A aba **Pagamentos** do backoffice mostra contas ativas, transações persistidas, estados capturados e provedores registrados. Sem credenciais reais no Render, Mercado Pago permanece indisponível, o registro fica inativo e a ação Pix não é exibida como pronta. A homologação exige decisão operacional separada: escolher a conta merchant, inserir os secrets diretamente no secret manager, cadastrar a URL HTTPS no painel do provedor, executar compra sandbox, validar assinatura/idempotência/reconciliação e somente então aprovar eventual ativação de produção.
+
+
+### Checkout estruturado, cotação por CEP e expedição real
+
+O checkout público do storefront Core agora separa identificação do cliente, endereço de entrega, seleção de método, cotação e pagamento. O CEP é consultado server-side pelo endpoint `GET /api/storefront/shipping/address/:cep`, que usa o ViaCEP apenas para localizar e preencher logradouro, bairro, cidade e UF; o ViaCEP não é tratado como fonte de preço ou prazo de frete. A entrega exige endereço estruturado, CEP válido, número, bairro, cidade, UF e CPF/CNPJ do destinatário. O endereço final é persistido no pedido como snapshot transacional para preservar o que foi informado no momento da compra.
+
+Para delivery ou transportadora, o cliente chama `POST /api/storefront/shipping/quotes` com o método publicado e as variantes/quantidades do carrinho. O servidor valida catálogo publicado, peso, largura, altura, comprimento, preço, empresa, storefront, conta logística e origem. A chamada externa de cotação ocorre fora da transação curta de persistência; a resposta é armazenada com hash do carrinho/CEP, opções públicas, snapshot do provedor e expiração de 15 minutos. O pedido só aceita a cotação e opção correspondentes ao carrinho, método e CEP atuais. O total server-side é `subtotal + frete + impostos - desconto`, sem aceitar preço ou frete calculado pelo navegador.
+
+A primeira implementação operacional é o adapter do Melhor Envio, mantendo o registry provider-neutral para futura inclusão de Frenet ou outro transportador. A conta é vinculada ao storefront e ao ambiente (`sandbox` ou `production`), exige referências `env:ME_ACCESS_TOKEN` e `env:ME_WEBHOOK_SECRET`, origem completa para expedição e permanece inativa por padrão. O checkout só publica cotação quando existe adapter registrado, conta ativa, origem e secrets realmente presentes no processo. Sem essas condições, a vitrine preserva a retirada configurada e exibe a indisponibilidade de cotação, nunca um valor fictício.
+
+A operação administrativa utiliza `POST /api/admin/commerce/shipping/accounts`, `PATCH /api/admin/commerce/shipping/accounts/:id`, `POST /api/admin/commerce/fulfillments/:id/label` e `POST /api/admin/commerce/fulfillments/:id/track`. Uma etiqueta só pode ser gerada para fulfillment da mesma empresa/storefront, com cotação selecionada, pedido pago ou em processamento, conta pronta, origem fiscal completa e política explícita de nota fiscal ou declaração de conteúdo. A operação de etiqueta grava uma chave idempotente, marca o fulfillment como `processing`, chama o provedor fora da transação e finaliza com `provider_shipment_id`, transportadora, URL privada da etiqueta e tracking. Falhas ficam auditadas e podem ser retentadas sem permitir duas operações concorrentes para o mesmo fulfillment.
+
+O Melhor Envio monta o envio usando os dados da cotação, remetente, destinatário, produtos e volumes. A compra consome o fluxo real da conta do provedor — carrinho, checkout, geração e impressão — e pode depender de saldo disponível na carteira da conta. Por essa razão, o botão do backoffice apresenta confirmação explícita e não é executado automaticamente após o pagamento. A chave de NF ou a política de declaração de conteúdo deve ser definida antes da expedição; o Kytto não cria documento fiscal fictício nem marca uma etiqueta como paga localmente.
+
+O webhook público é `POST /api/webhooks/melhorenvio/shipping`. A associação é resolvida pelo `provider_shipment_id` persistido no fulfillment, antes de aceitar o evento. O corpo bruto é validado com HMAC-SHA256 no cabeçalho `X-ME-Signature`, usando o secret do aplicativo; eventos são deduplicados por empresa, provider e identificador do evento. Eventos `order.posted`, `order.delivered`, `order.cancelled` e demais estados suportados atualizam tracking e ocorrência; a máquina de estados do fulfillment só avança quando a transição é permitida. O cliente acompanha o status, transportadora, código e URL de rastreio pelo endpoint público do pedido, sem receber segredos ou identificadores internos de conta.
+
+| Etapa | Endpoint/ação | Fonte de verdade | Condição de disponibilidade |
+|---|---|---|---|
+| Consulta de CEP | `GET /api/storefront/shipping/address/:cep` | ViaCEP, somente dados postais | CEP válido e serviço respondendo |
+| Cotação | `POST /api/storefront/shipping/quotes` | Melhor Envio via adapter | Conta ativa, secrets, origem, dimensões e estoque/catálogo válidos |
+| Criação do pedido | `POST /api/storefront/orders` | PostgreSQL Commerce Core | Carrinho, método e cotação ainda válidos; endereço completo em delivery |
+| Pagamento | `GET /payment-methods` e `POST /orders/:publicCode/payments` | Adapter Mercado Pago ou futuro provider | Conta merchant ativa e homologada; nenhuma aprovação local |
+| Etiqueta | `POST /api/admin/commerce/fulfillments/:id/label` | Melhor Envio | Pedido pago, cotação selecionada, origem/destino e política fiscal válidos |
+| Tracking | Webhook `POST /api/webhooks/melhorenvio/shipping` ou sync administrativo | Melhor Envio | Etiqueta gerada pelo mesmo aplicativo que possui o webhook |
+
+A migration `027_commerce_shipping_quotes.sql` sustenta contas, cotações, snapshots, vínculo pedido-cotação, conta/quote no fulfillment, operação idempotente de etiqueta e webhooks logísticos. O executor canônico já inclui a migration com lock e checksum. Nenhuma conta Melhor Envio, secret, etiqueta, cobrança ou mudança de DNS é criada automaticamente pela aplicação.
+
+As propriedades do Melhor Envio descritas acima seguem a [documentação de cálculo de fretes][1], a [documentação de inserção e compra de fretes][2] e a [documentação oficial de Webhooks][3]. A consulta de endereço usa a [API pública do ViaCEP][4].
+
+#### Referências
+
+[1]: https://docs.melhorenvio.com.br/reference/calculo-de-fretes-por-produtos "Melhor Envio — cálculo de fretes por produtos"
+[2]: https://docs.melhorenvio.com.br/reference/inserir-fretes-no-carrinho "Melhor Envio — inserir fretes no carrinho"
+[3]: https://docs.melhorenvio.com.br/docs/webhooks "Melhor Envio — Webhooks"
+[4]: https://viacep.com.br/ "ViaCEP — API de consulta de CEP"
+
+## Incremento de robustez operacional
+
+A camada pública agora aplica limites por IP às consultas de CEP, cotações, criação de pedido, início de pagamento e acompanhamento público, reduzindo abuso e enumeração sem afetar webhooks assinados. Cada resposta recebe `X-Request-Id`; pedidos públicos usam o identificador gerado pelo servidor para auditoria, em vez de aceitar correlation id arbitrário do navegador.
+
+O endereço de entrega valida matematicamente CPF/CNPJ antes de cotar ou criar pedido. A origem do remetente precisa conter documento válido para emissão de etiqueta; uma conta pode estar pronta para cotação sem ser considerada pronta para expedição fiscal. Delivery e transportadora são tratados como modos de entrega equivalentes no storefront, e o método publicado aceita de forma consistente `shippingAccountId` ou o alias legado `accountId`.
+
+O backoffice dispõe de reconciliação manual do status de pagamento. A consulta ocorre no adapter real do gateway, exige o vínculo persistido da conta, confere `provider_payment_id` e valor, usa timeout de 12 segundos e só aplica transições permitidas. Respostas atrasadas não rebaixam pagamentos capturados ou estornados. A reconciliação é auditada sem armazenar payload bruto ou credenciais.
+
+Fulfillment só pode ser criado depois da confirmação de pagamento e a cotação usada deve pertencer ao mesmo pedido, storefront e empresa. A geração de etiqueta continua fora da transação longa, com chave operacional e proteção contra concorrência; falha, sucesso, tracking e webhook permanecem identificáveis para recuperação operacional.

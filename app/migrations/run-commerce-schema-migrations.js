@@ -15,6 +15,8 @@ const migrationFiles = [
   '023_commerce_domain_verification.sql',
   '024_commerce_order_shipping.sql',
   '025_commerce_fulfillment_permissions.sql',
+  '026_commerce_payment_account_link.sql',
+  '027_commerce_shipping_quotes.sql',
 ];
 const advisoryLockKey = 825410732;
 

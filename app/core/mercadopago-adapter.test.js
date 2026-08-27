@@ -49,3 +49,18 @@ test('Mercado Pago rejeita assinatura inválida antes de consultar pagamento', a
     global.fetch = previous.fetch;
   }
 });
+
+test('Mercado Pago classifica timeout do gateway sem vazar erro interno', async () => {
+  const previous = { token: process.env.MP_ACCESS_TOKEN, fetch: global.fetch };
+  process.env.MP_ACCESS_TOKEN = 'test-access-token';
+  global.fetch = async () => { const error = new Error('aborted'); error.name = 'AbortError'; throw error; };
+  try {
+    await assert.rejects(
+      () => createMercadoPagoAdapter().getStatus({ payment: { provider_payment_id: '123' }, account: { secret_ref: 'env:MP_ACCESS_TOKEN' } }),
+      error => error.code === 'PAYMENT_PROVIDER_TIMEOUT' && /não respondeu/.test(error.message),
+    );
+  } finally {
+    if (previous.token === undefined) delete process.env.MP_ACCESS_TOKEN; else process.env.MP_ACCESS_TOKEN = previous.token;
+    global.fetch = previous.fetch;
+  }
+});

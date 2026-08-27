@@ -4,6 +4,7 @@ import {
   adjustInventory,
   CommerceError,
   createPendingOrder,
+  createFulfillment,
   ORDER_TRANSITIONS,
   assertUuid,
   reserveInventory,
@@ -126,6 +127,36 @@ test('adjustInventory retorna a mesma resposta para uma chave repetida', async (
   assert.deepEqual(second, first);
   assert.equal(level.disponivel, 6);
   assert.equal(calls.filter(call => call.sql.includes('UPDATE commerce_inventory_levels')).length, 1);
+});
+
+test('createFulfillment herda cotação e conta somente do storefront do pedido', async () => {
+  const shippingMethodId = '88888888-8888-4888-8888-888888888888';
+  const shippingQuoteId = '99999999-9999-4999-8999-999999999999';
+  const shippingAccountId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const { trx, calls } = queryRecorder(sql => {
+    if (sql.includes('SELECT id, storefront_id, status, endereco_entrega, shipping_method_id, shipping_quote_id')) return { rows: [{ id: orderId, storefront_id: storefrontId, status: 'paid', endereco_entrega: { cep: '20040002' }, shipping_method_id: shippingMethodId, shipping_quote_id: shippingQuoteId }] };
+    if (sql.includes('SELECT id, tipo FROM commerce_shipping_methods')) return { rows: [{ id: shippingMethodId, tipo: 'delivery' }] };
+    if (sql.includes('FROM commerce_shipping_quotes')) return { rows: [{ id: shippingQuoteId, storefront_id: storefrontId, order_id: orderId, shipping_method_id: shippingMethodId, shipping_account_id: shippingAccountId }] };
+    if (sql.includes('FROM commerce_shipping_accounts')) return { rows: [{ id: shippingAccountId }] };
+    if (sql.includes('INSERT INTO commerce_fulfillments')) return { rows: [{ id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', status: 'pending', shipping_quote_id: shippingQuoteId, shipping_account_id: shippingAccountId }] };
+    return { rows: [] };
+  });
+  const result = await createFulfillment(trx, { empresaId, lojaId }, { orderId });
+  assert.equal(result.status, 'pending');
+  assert.equal(result.shipping_quote_id, shippingQuoteId);
+  assert.equal(result.shipping_account_id, shippingAccountId);
+  assert.equal(calls.filter(call => call.sql.includes('INSERT INTO commerce_fulfillments')).length, 1);
+});
+
+test('createFulfillment rejeita pedido sem pagamento confirmado', async () => {
+  const { trx } = queryRecorder(sql => {
+    if (sql.includes('SELECT id, storefront_id, status, endereco_entrega, shipping_method_id, shipping_quote_id')) return { rows: [{ id: orderId, storefront_id: storefrontId, status: 'pending_payment', endereco_entrega: { cep: '20040002' }, shipping_method_id: null, shipping_quote_id: null }] };
+    throw new Error(`query não deveria ser executada: ${sql}`);
+  });
+  await assert.rejects(
+    () => createFulfillment(trx, { empresaId, lojaId }, { orderId }),
+    error => error instanceof CommerceError && error.code === 'FULFILLMENT_ORDER_NOT_PAID',
+  );
 });
 
 test('createPendingOrder reserva estoque para produto físico', async () => {

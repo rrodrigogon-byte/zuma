@@ -63,6 +63,10 @@ function normalizeCoreOrder(order) {
   }
 }
 
+function normalizePayment(payment) {
+  return { ...payment, amount: number(payment.amount), fee: payment.fee == null ? null : number(payment.fee) }
+}
+
 function normalizeLegacy(data) {
   return {
     mode: 'legacy',
@@ -89,7 +93,7 @@ async function loadLegacy() {
 
 export async function loadCommerceAdmin() {
   try {
-    const [storefrontData, productData, categoryData, promotionData, roleData, membershipData, orderData, customerData, locations, shippingData, fulfillmentData, domainData] = await Promise.all([
+    const [storefrontData, productData, categoryData, promotionData, roleData, membershipData, orderData, customerData, locations, shippingData, shippingProviderData, shippingAccountData, fulfillmentData, domainData, providerData, accountData, paymentData] = await Promise.all([
       api.get('/api/admin/commerce/storefront'),
       api.get('/api/admin/commerce/catalog/products'),
       api.get('/api/admin/commerce/catalog/categories'),
@@ -118,11 +122,31 @@ export async function loadCommerceAdmin() {
         if (error.status === 403) return { items: [] }
         throw error
       }),
+      api.get('/api/admin/commerce/shipping/providers').catch(error => {
+        if (error.status === 403) return { items: [] }
+        throw error
+      }),
+      api.get('/api/admin/commerce/shipping/accounts').catch(error => {
+        if (error.status === 403) return { items: [] }
+        throw error
+      }),
       api.get('/api/admin/commerce/fulfillments').catch(error => {
         if (error.status === 403) return { items: [] }
         throw error
       }),
       api.get('/api/admin/commerce/storefront/domains').catch(error => {
+        if (error.status === 403) return { items: [] }
+        throw error
+      }),
+      api.get('/api/admin/commerce/payments/providers').catch(error => {
+        if (error.status === 403) return { items: [] }
+        throw error
+      }),
+      api.get('/api/admin/commerce/payments/accounts').catch(error => {
+        if (error.status === 403) return { items: [] }
+        throw error
+      }),
+      api.get('/api/admin/commerce/payments').catch(error => {
         if (error.status === 403) return { items: [] }
         throw error
       }),
@@ -139,8 +163,13 @@ export async function loadCommerceAdmin() {
       orders: (orderData?.items || []).map(normalizeCoreOrder),
       customers: customerData?.items || [],
       shippingMethods: shippingData?.items || [],
+      shippingProviders: shippingProviderData?.items || [],
+      shippingAccounts: shippingAccountData?.items || [],
       fulfillments: fulfillmentData?.items || [],
       domains: domainData?.items || [],
+      paymentProviders: providerData?.items || [],
+      paymentAccounts: accountData?.items || [],
+      payments: (paymentData?.items || []).map(normalizePayment),
     }
   } catch (error) {
     if (error.status !== 404) throw error
@@ -269,6 +298,22 @@ export async function createCoreShippingMethod(payload) {
   return api.post('/api/admin/commerce/shipping/methods', payload)
 }
 
+export async function createCoreShippingAccount(payload) {
+  return api.post('/api/admin/commerce/shipping/accounts', payload)
+}
+
+export async function updateCoreShippingAccount(id, payload) {
+  return api.patch(`/api/admin/commerce/shipping/accounts/${id}`, payload)
+}
+
+export async function createCoreShippingLabel(id, payload = {}) {
+  return api.post(`/api/admin/commerce/fulfillments/${id}/label`, payload)
+}
+
+export async function syncCoreShippingTracking(id) {
+  return api.post(`/api/admin/commerce/fulfillments/${id}/track`, {})
+}
+
 export async function createCoreDomain(payload) {
   return api.post('/api/admin/commerce/storefront/domains', payload)
 }
@@ -287,6 +332,22 @@ export async function createCoreFulfillment(payload) {
 
 export async function updateCoreFulfillment(id, payload) {
   return api.patch(`/api/admin/commerce/fulfillments/${id}`, payload)
+}
+
+export async function createCorePaymentAccount(payload) {
+  return api.post('/api/admin/commerce/payments/accounts', payload)
+}
+
+export async function updateCorePaymentAccount(id, payload) {
+  return api.patch(`/api/admin/commerce/payments/accounts/${id}`, payload)
+}
+
+export async function createCorePaymentAttempt(orderId, payload) {
+  return api.post(`/api/admin/commerce/orders/${orderId}/payments`, payload)
+}
+
+export async function syncCorePayment(paymentId) {
+  return api.post(`/api/admin/commerce/payments/${paymentId}/sync`, {})
 }
 
 export async function loadCoreReports() {

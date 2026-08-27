@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { db } from './database.js';
+import { resolveShippingSelection } from './commerce-shipping.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -46,6 +47,32 @@ export function tenantContext(input = {}) {
 export function requestId(input) {
   const value = String(input || '').trim();
   return value ? value.slice(0, 160) : crypto.randomUUID();
+}
+
+const AUDIT_SENSITIVE_KEYS = new Set(['secret_ref', 'secretRef', 'webhookSecret', 'webhookSecretRef', 'accessToken', 'access_token', 'token', 'password', 'pan', 'cvv']);
+
+function safeAuditValue(value, depth = 0) {
+  if (depth > 5 || value === null || value === undefined) return value ?? null;
+  if (Array.isArray(value)) return value.slice(0, 50).map(item => safeAuditValue(item, depth + 1));
+  if (typeof value !== 'object') return typeof value === 'string' ? value.slice(0, 2000) : value;
+  return Object.fromEntries(Object.entries(value).slice(0, 100).map(([key, item]) => [key, AUDIT_SENSITIVE_KEYS.has(key) ? '[REDACTED]' : safeAuditValue(item, depth + 1)]));
+}
+
+export async function auditLog(trx, context, input = {}) {
+  const { empresaId, lojaId, usuarioId } = tenantContext(context);
+  const entidade = String(input.entidade || '').trim().slice(0, 100);
+  const acao = String(input.acao || '').trim().slice(0, 100);
+  if (!entidade || !acao) throw new CommerceError('entidade e ação são obrigatórias na auditoria', 'AUDIT_INVALID');
+  const entidadeId = input.entidadeId ? assertUuid(input.entidadeId, 'entidadeId') : null;
+  const auditLojaId = input.lojaId ? assertUuid(input.lojaId, 'lojaId') : lojaId;
+  if (auditLojaId && lojaId && auditLojaId !== lojaId) throw new CommerceError('loja da auditoria fora do escopo', 'STORE_SCOPE_MISMATCH');
+  await trx.query(
+    `INSERT INTO commerce_audit_logs
+      (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, antes, depois, correlation_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9)`,
+    [empresaId, auditLojaId, usuarioId, entidade, entidadeId, acao, JSON.stringify(safeAuditValue(input.antes ?? null)), JSON.stringify(safeAuditValue(input.depois ?? null)), requestId(input.correlationId)],
+  );
+  return { empresaId, lojaId: auditLojaId, usuarioId, entidade, entidadeId, acao };
 }
 
 export async function withCommerceTransaction(callback) {
@@ -337,14 +364,16 @@ export async function createPendingOrder(trx, context, input = {}) {
   const { empresaId } = tenantContext(context);
   const storefront = await resolveStorefront(trx, { ...context, empresaId }, input.storefrontId);
   const shippingMethodId = input.shippingMethodId ? assertUuid(input.shippingMethodId, 'shippingMethodId') : null;
+  let shippingMethod = null;
   if (shippingMethodId) {
     const method = await trx.query(
-      `SELECT id FROM commerce_shipping_methods
+      `SELECT id, tipo FROM commerce_shipping_methods
         WHERE empresa_id = $1 AND storefront_id = $2 AND id = $3 AND ativo = true
         LIMIT 1`,
       [empresaId, storefront.id, shippingMethodId],
     );
-    if (!method.rows[0]) throw new CommerceError('método de entrega não encontrado para o storefront', 'SHIPPING_METHOD_NOT_FOUND');
+    shippingMethod = method.rows[0] || null;
+    if (!shippingMethod) throw new CommerceError('método de entrega não encontrado para o storefront', 'SHIPPING_METHOD_NOT_FOUND');
   }
   const lines = Array.isArray(input.items) ? input.items.map(item => {
     const quantity = Number(item.quantity);
@@ -353,19 +382,26 @@ export async function createPendingOrder(trx, context, input = {}) {
   }) : [];
   if (!lines.length) throw new CommerceError('o carrinho está vazio', 'EMPTY_CART');
   const uniqueVariantIds = [...new Set(lines.map(line => line.variantId))];
+  if (shippingMethod?.tipo === 'delivery' || shippingMethod?.tipo === 'carrier') {
+    if (!input.shippingQuoteId || !input.shippingOptionId) throw new CommerceError('delivery exige cotação e opção de frete válidas', 'SHIPPING_QUOTE_REQUIRED');
+  } else if (input.shippingQuoteId || input.shippingOptionId) {
+    throw new CommerceError('cotação de frete só pode ser usada com método delivery/carrier', 'SHIPPING_QUOTE_INVALID');
+  }
+  const shippingSelection = (shippingMethod?.tipo === 'delivery' || shippingMethod?.tipo === 'carrier')
+    ? await resolveShippingSelection(trx, { ...context, empresaId }, { shippingQuoteId: input.shippingQuoteId, shippingOptionId: input.shippingOptionId, shippingAddress: input.shippingAddress }, { storefrontId: storefront.id, shippingMethodId, lines })
+    : null;
   const idem = input.idempotencyKey ? String(input.idempotencyKey).trim().slice(0, 180) : null;
   const requestHash = crypto.createHash('sha256').update(JSON.stringify({
     storefrontId: storefront.id,
     lines,
     customerId: input.customerId || null,
     customer: input.customer || null,
-    shippingAddress: input.shippingAddress || null,
+    shippingAddress: shippingSelection?.address || input.shippingAddress || null,
     billingAddress: input.billingAddress || null,
     shippingMethodId,
+    shippingQuoteId: input.shippingQuoteId || null,
+    shippingOptionId: input.shippingOptionId || null,
     locationId: input.locationId || null,
-    shippingAmount: input.shippingAmount || 0,
-    discountAmount: input.discountAmount || 0,
-    taxAmount: input.taxAmount || 0,
     note: input.note || '',
   })).digest('hex');
 
@@ -455,19 +491,19 @@ export async function createPendingOrder(trx, context, input = {}) {
   // O checkout público não pode definir valores comerciais no navegador.
   // Frete, descontos e impostos devem ser calculados por serviços server-side
   // antes de serem habilitados; até lá, permanecem zero e explícitos.
-  const shipping = 0;
+  const shipping = shippingSelection?.amount || 0;
   const discount = 0;
   const taxes = 0;
-  const total = subtotal;
+  const total = Number((subtotal + shipping + taxes - discount).toFixed(2));
   const status = 'pending_payment';
 
   await trx.query(
     `INSERT INTO commerce_orders
       (id, empresa_id, storefront_id, customer_id, public_code, status, origem, moeda,
-       subtotal, desconto, frete, impostos, total, endereco_entrega, endereco_cobranca, observacao, shipping_method_id)
-     VALUES ($1, $2, $3, $4, $5, $6, 'web', $7, $8, $9, $10, $11, $12, $13::jsonb, $14::jsonb, $15, $16)`,
+       subtotal, desconto, frete, impostos, total, endereco_entrega, endereco_cobranca, observacao, shipping_method_id, shipping_quote_id)
+     VALUES ($1, $2, $3, $4, $5, $6, 'web', $7, $8, $9, $10, $11, $12, $13::jsonb, $14::jsonb, $15, $16, $17)`,
     [orderId, empresaId, storefront.id, customerId, publicCode, status, storefront.moeda || 'BRL', subtotal, discount, shipping, taxes, total,
-      JSON.stringify(input.shippingAddress || null), JSON.stringify(input.billingAddress || null), String(input.note || '').slice(0, 1000) || null, shippingMethodId],
+      JSON.stringify(shippingSelection?.address || input.shippingAddress || null), JSON.stringify(input.billingAddress || null), String(input.note || '').slice(0, 1000) || null, shippingMethodId, shippingSelection?.quote.id || null],
   );
   for (const line of normalizedLines) {
     await trx.query(
@@ -514,13 +550,16 @@ export async function createPendingOrder(trx, context, input = {}) {
       });
     }
   }
+  if (shippingSelection) {
+    await trx.query(`UPDATE commerce_shipping_quotes SET status = 'used', order_id = $3, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2`, [empresaId, shippingSelection.quote.id, orderId]);
+  }
   await trx.query(
     `INSERT INTO commerce_order_events
       (empresa_id, order_id, de_status, para_status, origem, usuario_id, correlation_id, payload_resumido)
      VALUES ($1, $2, NULL, $3, 'checkout', $4, $5, $6::jsonb)`,
-    [empresaId, orderId, status, context.usuarioId || null, requestId(input.correlationId), JSON.stringify({ lineCount: normalizedLines.length })],
+    [empresaId, orderId, status, context.usuarioId || null, requestId(input.correlationId), JSON.stringify({ lineCount: normalizedLines.length, shipping: shippingSelection ? { quoteId: shippingSelection.quote.id, optionId: shippingSelection.optionId, amount: shippingSelection.amount } : null })],
   );
-  const result = { id: orderId, publicCode, status, currency: storefront.moeda || 'BRL', subtotal, discount, shipping, taxes, total, customerId, shippingMethodId };
+  const result = { id: orderId, publicCode, status, currency: storefront.moeda || 'BRL', subtotal, discount, shipping, taxes, total, customerId, shippingMethodId, shippingQuoteId: shippingSelection?.quote.id || null, shippingOptionId: shippingSelection?.optionId || null, shippingOption: shippingSelection?.option || null };
   if (idem) {
     await trx.query(
       `UPDATE commerce_idempotency_keys SET response_status = 201, response_body = $3::jsonb
@@ -762,17 +801,32 @@ export async function createShippingMethod(trx, context, input = {}) {
 export async function createFulfillment(trx, context, input = {}) {
   const { empresaId } = tenantContext(context);
   const orderId = assertUuid(input.orderId, 'orderId');
-  const order = await trx.query(`SELECT id, storefront_id, status, endereco_entrega FROM commerce_orders WHERE empresa_id = $1 AND id = $2 FOR UPDATE`, [empresaId, orderId]);
+  const order = await trx.query(`SELECT id, storefront_id, status, endereco_entrega, shipping_method_id, shipping_quote_id FROM commerce_orders WHERE empresa_id = $1 AND id = $2 FOR UPDATE`, [empresaId, orderId]);
   if (!order.rows[0]) throw new CommerceError('pedido não encontrado no tenant', 'ORDER_NOT_FOUND');
-  const shippingMethodId = input.shippingMethodId ? assertUuid(input.shippingMethodId, 'shippingMethodId') : null;
+  if (!['paid', 'processing', 'ready', 'shipped', 'ready_for_pickup'].includes(order.rows[0].status)) throw new CommerceError('fulfillment só pode ser criado após pagamento confirmado', 'FULFILLMENT_ORDER_NOT_PAID');
+  const shippingMethodId = input.shippingMethodId ? assertUuid(input.shippingMethodId, 'shippingMethodId') : order.rows[0].shipping_method_id || null;
+  const shippingQuoteId = input.shippingQuoteId ? assertUuid(input.shippingQuoteId, 'shippingQuoteId') : order.rows[0].shipping_quote_id || null;
+  let shippingAccountId = input.shippingAccountId ? assertUuid(input.shippingAccountId, 'shippingAccountId') : null;
+  let shippingMethodType = null;
   if (shippingMethodId) {
-    const method = await trx.query(`SELECT id FROM commerce_shipping_methods WHERE empresa_id = $1 AND storefront_id = $2 AND id = $3 AND ativo = true LIMIT 1`, [empresaId, order.rows[0].storefront_id, shippingMethodId]);
+    const method = await trx.query(`SELECT id, tipo FROM commerce_shipping_methods WHERE empresa_id = $1 AND storefront_id = $2 AND id = $3 AND ativo = true LIMIT 1`, [empresaId, order.rows[0].storefront_id, shippingMethodId]);
     if (!method.rows[0]) throw new CommerceError('método de entrega não encontrado para a loja', 'SHIPPING_METHOD_NOT_FOUND');
+    shippingMethodType = method.rows[0].tipo;
+  }
+  if (['delivery', 'carrier'].includes(shippingMethodType) && !shippingQuoteId) throw new CommerceError('fulfillment de entrega exige cotação selecionada', 'SHIPPING_QUOTE_REQUIRED');
+  if (shippingQuoteId) {
+    const quote = await trx.query(`SELECT id, storefront_id, order_id, shipping_method_id, shipping_account_id FROM commerce_shipping_quotes WHERE empresa_id = $1 AND id = $2 AND storefront_id = $3 AND order_id = $4 LIMIT 1`, [empresaId, shippingQuoteId, order.rows[0].storefront_id, orderId]);
+    if (!quote.rows[0] || (shippingMethodId && quote.rows[0].shipping_method_id !== shippingMethodId)) throw new CommerceError('cotação não pertence ao método ou pedido informado', 'SHIPPING_QUOTE_MISMATCH');
+    shippingAccountId = shippingAccountId || quote.rows[0].shipping_account_id;
+  }
+  if (shippingAccountId) {
+    const account = await trx.query(`SELECT id FROM commerce_shipping_accounts WHERE empresa_id = $1 AND id = $2 AND storefront_id = $3 LIMIT 1`, [empresaId, shippingAccountId, order.rows[0].storefront_id]);
+    if (!account.rows[0]) throw new CommerceError('conta logística não pertence ao storefront do pedido', 'SHIPPING_ACCOUNT_SCOPE_MISMATCH');
   }
   const result = await trx.query(
-    `INSERT INTO commerce_fulfillments (empresa_id, order_id, shipping_method_id, status, endereco_entrega)
-     VALUES ($1, $2, $3, 'pending', COALESCE($4::jsonb, $5::jsonb)) RETURNING *`,
-    [empresaId, orderId, shippingMethodId, input.enderecoEntrega ? JSON.stringify(input.enderecoEntrega) : null, JSON.stringify(order.rows[0].endereco_entrega || null)],
+    `INSERT INTO commerce_fulfillments (empresa_id, order_id, shipping_method_id, shipping_quote_id, shipping_account_id, status, endereco_entrega)
+     VALUES ($1, $2, $3, $4, $5, 'pending', COALESCE($6::jsonb, $7::jsonb)) RETURNING *`,
+    [empresaId, orderId, shippingMethodId, shippingQuoteId, shippingAccountId, input.enderecoEntrega ? JSON.stringify(input.enderecoEntrega) : null, JSON.stringify(order.rows[0].endereco_entrega || null)],
   );
   return result.rows[0];
 }
@@ -788,12 +842,12 @@ export async function updateFulfillment(trx, context, fulfillmentId, input = {})
   const occurrence = input.ocorrencia ? { at: new Date().toISOString(), status: nextStatus, description: String(input.ocorrencia).slice(0, 500) } : null;
   const occurrences = occurrence ? [...(Array.isArray(current.ocorrencias) ? current.ocorrencias : []), occurrence].slice(-100) : current.ocorrencias || [];
   const result = await trx.query(
-    `UPDATE commerce_fulfillments SET status = $3, tracking_code = COALESCE($4, tracking_code), carrier = COALESCE($5, carrier), ocorrencias = $6::jsonb,
+    `UPDATE commerce_fulfillments SET status = $3, tracking_code = COALESCE($4, tracking_code), carrier = COALESCE($5, carrier), provider_shipment_id = COALESCE($7, provider_shipment_id), tracking_url = COALESCE($8, tracking_url), label_url = COALESCE($9, label_url), ocorrencias = $6::jsonb,
        enviado_em = CASE WHEN $3 = 'shipped' AND enviado_em IS NULL THEN CURRENT_TIMESTAMP ELSE enviado_em END,
        entregue_em = CASE WHEN $3 IN ('delivered','picked_up') AND entregue_em IS NULL THEN CURRENT_TIMESTAMP ELSE entregue_em END,
        atualizado_em = CURRENT_TIMESTAMP
       WHERE empresa_id = $1 AND id = $2 RETURNING *`,
-    [empresaId, id, nextStatus, input.trackingCode ? String(input.trackingCode).slice(0, 160) : null, input.carrier ? String(input.carrier).slice(0, 120) : null, JSON.stringify(occurrences)],
+    [empresaId, id, nextStatus, input.trackingCode ? String(input.trackingCode).slice(0, 160) : null, input.carrier ? String(input.carrier).slice(0, 120) : null, JSON.stringify(occurrences), input.providerShipmentId ? String(input.providerShipmentId).slice(0, 180) : null, input.trackingUrl ? String(input.trackingUrl).slice(0, 600) : null, input.labelUrl ? String(input.labelUrl).slice(0, 600) : null],
   );
   await trx.query(
     `INSERT INTO commerce_audit_logs (empresa_id, usuario_id, entidade, entidade_id, acao, depois)
