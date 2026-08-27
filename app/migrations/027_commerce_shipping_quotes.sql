@@ -17,6 +17,14 @@ CREATE TABLE IF NOT EXISTS commerce_shipping_accounts (
   CONSTRAINT chk_commerce_shipping_account_environment CHECK (ambiente IN ('sandbox','production'))
 );
 
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_commerce_shipping_account_empresa_id') THEN
+    ALTER TABLE commerce_shipping_accounts
+      ADD CONSTRAINT uq_commerce_shipping_account_empresa_id UNIQUE (empresa_id, id);
+  END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_commerce_shipping_account_active
   ON commerce_shipping_accounts (empresa_id, storefront_id, ativo);
 
