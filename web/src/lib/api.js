@@ -31,16 +31,16 @@ async function request(path, opts = {}) {
     if (deveEnfileirarOffline(path, preparado)) return enfileirarOperacao(path, { ...preparado, headers })
     throw erro
   }
+  const data = await res.json().catch(() => ({}))
   if (res.status === 401) {
     localStorage.removeItem('sp_token')
     localStorage.removeItem('sp_site_token')
     localStorage.removeItem('sp_user')
     localStorage.removeItem('sp_loja_ativa')
     localStorage.removeItem('sp_lojas_acessiveis')
-    window.location.href = '/login'
-    return
+    const rotaDeLogin = /^\/api\/(?:admin\/login|auth\/login)$/.test(String(path || '').split('?')[0])
+    if (!rotaDeLogin && typeof window !== 'undefined' && window.location.pathname !== '/login') window.location.href = '/login'
   }
-  const data = await res.json().catch(() => ({}))
   if (!res.ok) {
     const error = new Error(data.error || data.erro || `Erro ${res.status}`)
     error.status = res.status

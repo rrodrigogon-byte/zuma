@@ -38,6 +38,18 @@ export default function Login() {
     setModoRecuperacao(false)
   }
 
+  const validarRespostaLogin = (data) => {
+    if (!data || typeof data !== 'object' || !data.token) {
+      const erro = new Error('O servidor não retornou uma sessão válida. Tente novamente.')
+      erro.code = 'INVALID_LOGIN_RESPONSE'
+      throw erro
+    }
+    const usuario = data.user && typeof data.user === 'object'
+      ? data.user
+      : { nome: typeof data.user === 'string' ? data.user : user, role: data.role || '' }
+    return { ...data, user: usuario }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setErro('')
@@ -50,12 +62,12 @@ export default function Login() {
         return
       }
       if (aba === 'painel') {
-        const data = await api.post('/api/admin/login', { user, senha })
+        const data = validarRespostaLogin(await api.post('/api/admin/login', { user, senha }))
         login(data.token, data.user, false, data.sessao || {})
-        if (['org', 'admin', 'organizador', 'gerente'].includes(data.user.role)) navigate(proximoSeguro || '/admin', { replace: true })
+        if (['org', 'admin', 'organizador', 'gerente'].includes(String(data.user.role || '').toLowerCase())) navigate(proximoSeguro || '/admin', { replace: true })
         else navigate(proximoSeguro || '/pdv', { replace: true })
       } else {
-        const data = await api.post('/api/auth/login', { email: user, senha })
+        const data = validarRespostaLogin(await api.post('/api/auth/login', { email: user, senha }))
         login(data.token, data.user, false, data.sessao || {})
         navigate('/meu-painel')
       }

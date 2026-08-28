@@ -438,15 +438,16 @@ app.get('/api/inscricoes-count', (req,res)=>{
 // =================== API ADMIN ===================
 // Login do SISTEMA (admin/organizador/staff) — compatível com o painel atual
 app.post('/api/admin/login', (req,res)=>{
-  const { user, pass } = req.body || {};
+  const { user, pass, senha } = req.body || {};
+  const senhaInformada = pass ?? senha;
   const chave = 'adm:'+(req.ip||'')+':'+norm(user);
   if(!rateLimit(chave)) return res.status(429).json({error:'muitas tentativas. Tente novamente em alguns minutos.'});
   const u = findUser(user);
-  if(!u || !u.ativo || !bcrypt.compareSync(pass||'', u.senhaHash)) return res.status(401).json({error:'usuário ou senha inválidos'});
+  if(!u || !u.ativo || !bcrypt.compareSync(senhaInformada||'', u.senhaHash)) return res.status(401).json({error:'usuário ou senha inválidos', code:'INVALID_CREDENTIALS'});
   if(!STAFF.includes(u.role)) return res.status(403).json({error:'esta conta não tem acesso ao painel'});
   limparTentativas(chave);
   audit({user:{nome:u.nome,role:u.role}, ip:req.ip}, 'LOGIN painel'); save();
-  res.json({ token: tokenFor(u), user: u.nome, role: u.role });
+  res.json({ token: tokenFor(u), user: publicUser(u), role: u.role });
 });
 
 // ---- AUTH unificada (site + sistema) ----
