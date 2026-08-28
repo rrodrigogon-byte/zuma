@@ -42,6 +42,7 @@ function EntradaPrincipal() {
 }
 
 const Login      = lazy(() => import('./pages/Login'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const PDV        = lazy(() => import('./pages/PDV'))
 const KDS        = lazy(() => import('./pages/KDS'))
 const Portaria   = lazy(() => import('./pages/Portaria'))
@@ -149,6 +150,7 @@ export default function App() {
       <Routes>
         {/* Auth */}
         <Route path="/login" element={<Layout noSidebar><Login /></Layout>} />
+        <Route path="/redefinir-senha" element={<ResetPassword />} />
 
         {/* Operacional (staff) — com aliases /admin/* para URLs amigáveis */}
         <Route path="/pdv"            element={<Protected need="staff"><Layout><PDV /></Layout></Protected>} />

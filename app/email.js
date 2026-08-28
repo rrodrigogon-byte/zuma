@@ -11,6 +11,7 @@ const FROM = process.env.EMAIL_FROM || 'SetPoint <no-reply@setpoint.app>'
 function ativo() { return !!KEY }
 
 const brl = v => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v || 0))
+const escapeHtml = value => String(value ?? '').replace(/[&<>\"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#39;' }[char]))
 
 // Layout HTML base com a identidade da marca
 function layout(titulo, corpoHtml) {
@@ -98,13 +99,17 @@ export const mail = {
     return enviar({ to, subject: `SetPoint · Pedido ${codigo} pronto para retirada`, html })
   },
 
-  // Senha temporária (recuperação) — nominal ao titular da conta
-  async senhaTemporaria(to, nome, senha) {
-    const html = layout('Recuperação de senha 🔑', `
-      <p>Olá, <b>${nome}</b>!</p>
-      <p>Você solicitou a recuperação de senha. Use a senha temporária abaixo para entrar e, em seguida, troque-a no seu perfil:</p>
-      <p style="font-size:22px;font-weight:bold;letter-spacing:3px;background:#F4F6EF;border:1px dashed #C9A656;border-radius:10px;padding:14px;text-align:center">${senha}</p>
-      <p>Se não foi você que solicitou, ignore este e-mail — sua senha atual continua válida até o primeiro acesso com a senha temporária.</p>`)
-    return enviar({ to, subject: 'SetPoint · Recuperação de senha', html })
+  // Recuperação — link nominal de uso único; nenhuma senha é enviada por e-mail.
+  async redefinicaoSenha(to, nome, resetUrl, expiresAt) {
+    const nomeSeguro = escapeHtml(nome || 'cliente')
+    const urlSegura = escapeHtml(resetUrl)
+    const expira = expiresAt ? new Date(expiresAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'em breve'
+    const html = layout('Recuperação segura de acesso 🔐', `
+      <p>Olá, <b>${nomeSeguro}</b>!</p>
+      <p>Recebemos uma solicitação para criar uma nova senha na sua conta Kytto.</p>
+      <p><a href="${urlSegura}" style="display:inline-block;background:#FF6B2C;color:#fff;text-decoration:none;border-radius:10px;padding:13px 18px;font-weight:bold">Criar nova senha</a></p>
+      <p>Este link é de uso único e expira em <b>${expira}</b>. Se você não solicitou a recuperação, ignore esta mensagem.</p>`)
+    const text = `Olá, ${nome || 'cliente'}! Acesse ${resetUrl} para criar uma nova senha. O link é de uso único e expira em ${expira}.`
+    return enviar({ to, subject: 'Kytto · Recuperação segura de acesso', html, text })
   },
 }

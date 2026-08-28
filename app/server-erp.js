@@ -43,6 +43,7 @@ import * as metricasKytto from './metricas-kytto.js';
 import { observabilidade } from './observabilidade-kytto.js';
 import { backupRecuperacao } from './backup-recuperacao-kytto.js';
 import { acaoDaRequisicao, moduloDaRota, resumoAcessoUsuario, temPermissao } from './perfis-usuarios-kytto.js';
+import { issuePasswordReset, validatePasswordResetToken, consumePasswordReset, normalizarEmail, passwordPolicy } from './password-reset-kytto.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -168,10 +169,11 @@ app.use((req, res, next) => {
 // Armazenamento em memória (em produção, usar banco de dados)
 const usuarios = new Map();
 
-// Usuário admin de bootstrap: em produção, a senha só pode vir de secret/variável.
-// O valor de teste é limitado explicitamente a NODE_ENV=test, nunca à execução produtiva.
-const ADMIN_TEMP_PASSWORD = process.env.KYTTO_BOOTSTRAP_ADMIN_PASSWORD || (process.env.NODE_ENV === 'test' ? 'SetPoint@2026Temp' : '');
-const ADMIN_EMAIL = process.env.KYTTO_BOOTSTRAP_ADMIN_EMAIL || 'admin@setpoint-ultra.local';
+// Os administradores são criados com hash aleatório e definem a própria senha
+// por recuperação individual; nenhuma senha compartilhada entra no boot.
+const ADMIN_EMAILS = String(process.env.KYTTO_BOOTSTRAP_ADMIN_EMAILS || 'rrodrigogon@gmail.com,l.dospsilva@gmail.com')
+  .split(',').map(normalizarEmail).filter(Boolean);
+const ADMIN_EMAIL = ADMIN_EMAILS[0] || 'admin@setpoint-ultra.local';
 
 // Senhas novas usam bcrypt. O comparador aceita o hash legado apenas para
 // migração transparente da conta administrativa já existente.
@@ -202,13 +204,10 @@ function espelharUsuarioEmMemoria(usuario) {
   return espelho;
 }
 
-// Cria a empresa operacional e a conta administradora padrão apenas na primeira
-// inicialização. Nenhuma senha é escrita em log.
+// Cria a empresa operacional e garante os administradores solicitados apenas na
+// primeira inicialização. Nenhuma senha é escrita em log ou definida no código.
 function criarAdminPadrao() {
   cadastrosMestres.garantirEmpresaPadrao();
-  // Bootstrap idempotente do catálogo da empresa padrão. Esta rotina não usa a
-  // função operacional de cardápio, que pertence ao escopo de rotas abaixo,
-  // evitando que uma inicialização limpa interrompa a subida do servidor.
   const estado = db();
   estado.cardapioPorEmpresa ||= {};
   const empresaId = cadastrosMestres.EMPRESA_PADRAO_ID;
@@ -228,25 +227,38 @@ function criarAdminPadrao() {
     cardapio.push(...itens);
     console.log(`✅ Catálogo Kytto inicializado: ${itens.length} itens`);
   }
-  let usuario = cadastrosMestres.obterUsuarioPorEmail(ADMIN_EMAIL);
-  if (!usuario) {
-    if (!ADMIN_TEMP_PASSWORD) throw new Error('Bootstrap administrativo ausente: configure KYTTO_BOOTSTRAP_ADMIN_PASSWORD em ambiente novo.');
-    usuario = cadastrosMestres.criarUsuario(cadastrosMestres.EMPRESA_PADRAO_ID, {
-      nome: 'Administrador', email: ADMIN_EMAIL, roles: ['admin', 'gerente-financeiro'],
-      tipoUsuario: 'administrador', perfis: ['administrador'],
-      platformAdmin: true, senhaHash: hashPassword(ADMIN_TEMP_PASSWORD),
-    });
-    usuario.empresasAcessiveis = [cadastrosMestres.EMPRESA_PADRAO_ID];
-    cadastrosMestres.atualizarUsuario(cadastrosMestres.EMPRESA_PADRAO_ID, usuario.id, { senhaHash: usuario.senhaHash });
-    console.log(`✅ Administrador padrão associado à empresa ${cadastrosMestres.EMPRESA_PADRAO_ID}`);
-  }
-  // Atualiza instalações que já haviam criado o administrador antes da inclusão
-  // explícita do papel de administrador da plataforma.
-  if (usuario && usuario.platformAdmin !== true && usuario.id && usuario.empresaId) {
-    usuario = cadastrosMestres.atualizarUsuario(usuario.empresaId, usuario.id, { platformAdmin: true });
-  }
-  usuario.empresasAcessiveis ||= [usuario.empresaId || cadastrosMestres.EMPRESA_PADRAO_ID];
-  return espelharUsuarioEmMemoria(usuario);
+
+  const administradores = ADMIN_EMAILS.map((email) => {
+    let usuario = cadastrosMestres.obterUsuarioPorEmail(email);
+    if (!usuario) {
+      const senhaHash = hashPassword(crypto.randomBytes(32).toString('hex'));
+      usuario = cadastrosMestres.criarUsuario(empresaId, {
+        nome: email.split('@')[0],
+        email,
+        roles: ['admin', 'gerente-financeiro'],
+        tipoUsuario: 'administrador',
+        perfis: ['administrador'],
+        platformAdmin: true,
+        senhaHash,
+      });
+      usuario.empresasAcessiveis = [empresaId];
+      usuario.senhaResetObrigatorio = true;
+      usuario.passwordChangedAt = null;
+      save();
+      console.log(`✅ Administrador ${email} preparado para recuperação individual`);
+    } else {
+      usuario = cadastrosMestres.atualizarUsuario(usuario.empresaId || empresaId, usuario.id, {
+        roles: ['admin', 'gerente-financeiro'],
+        tipoUsuario: 'administrador',
+        perfis: ['administrador'],
+        platformAdmin: true,
+      }) || usuario;
+      usuario.empresasAcessiveis ||= [usuario.empresaId || empresaId];
+    }
+    return espelharUsuarioEmMemoria(usuario);
+  });
+
+  return administradores;
 }
 
 // Rota: Login Admin (Painel)
@@ -264,6 +276,10 @@ app.post('/api/admin/login', authLimiter, (req, res) => {
 
     if (!usuario || !verificarPassword(senhaInformada, usuario.senhaHash || usuario.senha)) {
       return res.status(401).json({ error: 'Usuário ou senha inválidos' });
+    }
+
+    if (usuario.senhaResetObrigatorio === true) {
+      return res.status(403).json({ error: 'Defina uma nova senha pelo link de recuperação.', code: 'PASSWORD_RESET_REQUIRED' });
     }
 
     if (!usuario.ativo) {
@@ -393,83 +409,51 @@ app.post('/api/auth/registro', authLimiter, (req, res) => {
   }
 });
 
-// Rota: Recuperação de Senha
-app.post('/api/auth/forgot-password', authLimiter, (req, res) => {
+// Recuperação por e-mail: resposta neutra, token hash persistido e uso único.
+async function solicitarRecuperacao(req, res) {
   try {
-    const { email } = req.body;
-    
-    if (!email) {
-      return res.status(400).json({ erro: 'Email é obrigatório' });
+    const email = normalizarEmail(req.body?.email);
+    if (!email || !email.includes('@')) {
+      return res.status(200).json({ ok: true, message: 'Se este e-mail estiver cadastrado, você receberá as instruções em breve.' });
     }
-    
-    const usuario = usuarios.get(email);
-    
-    if (!usuario) {
-      // Não revelar se o email existe (segurança)
-      return res.json({
-        sucesso: true,
-        mensagem: 'Se o email existe, um link de recuperação foi enviado'
-      });
-    }
-    
-    // Gerar token de recuperação
-    const tokenRecuperacao = Buffer.from(`${email}:${Date.now()}:recover`).toString('base64');
-    usuario.tokenRecuperacao = tokenRecuperacao;
-    usuario.expiracaoRecuperacao = Date.now() + (3600 * 1000); // 1 hora
-    
-    res.json({
-      sucesso: true,
-      mensagem: 'Link de recuperação enviado para o email',
-      // Em produção, enviar por email. Para teste:
-      _debug: PROD ? undefined : { token: tokenRecuperacao }
-    });
-  } catch (err) {
-    res.status(500).json({ erro: 'Erro ao processar recuperação' });
+    const usuario = usuarios.get(email) || espelharUsuarioEmMemoria(cadastrosMestres.obterUsuarioPorEmail(email));
+    if (usuario) await issuePasswordReset(usuario, { ip: req.ip });
+    return res.status(200).json({ ok: true, message: 'Se este e-mail estiver cadastrado, você receberá as instruções em breve.' });
+  } catch (error) {
+    console.error('[AUTH] erro controlado ao solicitar recuperação:', error?.message || error);
+    return res.status(200).json({ ok: true, message: 'Se este e-mail estiver cadastrado, você receberá as instruções em breve.' });
   }
-});
+}
 
-// Rota: Redefinir Senha
-app.post('/api/auth/reset-password', (req, res) => {
+app.post(['/api/auth/forgot-password', '/api/auth/esqueci-senha'], authLimiter, solicitarRecuperacao);
+
+function validarTokenRecuperacao(req, res) {
+  const token = String(req.query?.token || '').trim();
+  return res.status(200).json(validatePasswordResetToken(token));
+}
+
+app.get(['/api/auth/reset-password/validate', '/api/auth/redefinir-senha/validar'], validarTokenRecuperacao);
+
+function redefinirSenha(req, res) {
   try {
-    const { token, novaSenha, novasenhaConfirm } = req.body;
-    
-    if (!token || !novaSenha) {
-      return res.status(400).json({ erro: 'Token e nova senha são obrigatórios' });
-    }
-    
-    if (novaSenha !== novasenhaConfirm) {
-      return res.status(400).json({ erro: 'Senhas não conferem' });
-    }
-    
-    if (novaSenha.length < 8) {
-      return res.status(400).json({ erro: 'Senha deve ter no mínimo 8 caracteres' });
-    }
-    
-    // Procurar usuário com este token
-    let usuarioEncontrado = null;
-    for (const [email, usuario] of usuarios.entries()) {
-      if (usuario.tokenRecuperacao === token && usuario.expiracaoRecuperacao > Date.now()) {
-        usuarioEncontrado = usuario;
-        break;
-      }
-    }
-    
-    if (!usuarioEncontrado) {
-      return res.status(401).json({ erro: 'Token inválido ou expirado' });
-    }
-    
-    usuarioEncontrado.senha = hashPassword(novaSenha);
-    usuarioEncontrado.tokenRecuperacao = null;
-    usuarioEncontrado.expiracaoRecuperacao = null;
-    
-    res.json({
-      sucesso: true,
-      mensagem: 'Senha alterada com sucesso'
-    });
-  } catch (err) {
-    res.status(500).json({ erro: 'Erro ao redefinir senha' });
+    const token = String(req.body?.token || '').trim();
+    const novaSenha = String(req.body?.novaSenha || req.body?.password || '');
+    const confirmacao = req.body?.confirmacao || req.body?.novasenhaConfirm || req.body?.confirmPassword;
+    if (!token || !novaSenha) return res.status(400).json({ error: 'Token e nova senha são obrigatórios.' });
+    if (confirmacao !== undefined && novaSenha !== String(confirmacao)) return res.status(400).json({ error: 'As senhas não coincidem.' });
+    const policyError = passwordPolicy(novaSenha);
+    if (policyError) return res.status(400).json({ error: policyError, code: 'WEAK_PASSWORD' });
+    const result = consumePasswordReset(token, novaSenha);
+    if (!result.ok) return res.status(401).json({ error: result.message, code: result.code });
+    const atualizado = espelharUsuarioEmMemoria(result.user);
+    return res.status(200).json({ ok: true, sucesso: true, message: 'Senha alterada com sucesso.', user: { email: atualizado?.email } });
+  } catch (error) {
+    console.error('[AUTH] erro controlado ao redefinir senha:', error?.message || error);
+    return res.status(500).json({ error: 'Não foi possível redefinir a senha.' });
   }
-});
+}
+
+app.post(['/api/auth/reset-password', '/api/auth/redefinir-senha'], redefinirSenha);
 
 // ============================================================================
 // HEALTH CHECK
@@ -664,8 +648,12 @@ async function iniciar() {
     if (!header.startsWith('Bearer ')) return null;
     try {
       const decoded = Buffer.from(header.slice(7), 'base64').toString('utf8');
-      const email = decoded.split(':')[0]?.trim().toLowerCase();
-      return email ? usuarios.get(email) || null : null;
+      const partes = decoded.split(':');
+      const email = partes[0]?.trim().toLowerCase();
+      const emitidoEm = Number(partes[1] || 0);
+      const usuario = email ? usuarios.get(email) || null : null;
+      if (usuario?.passwordChangedAt && emitidoEm && emitidoEm < new Date(usuario.passwordChangedAt).getTime()) return null;
+      return usuario;
     } catch {
       return null;
     }
@@ -2276,12 +2264,16 @@ async function iniciar() {
       const senhaAtual = String(req.body?.senhaAtual || '');
       const senhaNova = String(req.body?.senhaNova || '');
       if (!senhaAtual || !senhaNova) return res.status(400).json({ erro: 'Informe a senha atual e a nova senha.' });
-      if (senhaNova.length < 8) return res.status(400).json({ erro: 'A nova senha deve possuir pelo menos 8 caracteres.' });
+      const politica = passwordPolicy(senhaNova);
+      if (politica) return res.status(400).json({ erro: politica });
       const usuario = cadastrosMestres.obterUsuario(req.empresaId, req.usuario.id);
       if (!usuario || !verificarSenha(senhaAtual, usuario.senhaHash)) {
         return res.status(401).json({ erro: 'Senha atual incorreta.' });
       }
       usuario.senhaHash = hashPassword(senhaNova);
+      usuario.senha = undefined;
+      usuario.senhaResetObrigatorio = false;
+      usuario.passwordChangedAt = new Date().toISOString();
       usuario.atualizadoEm = new Date().toISOString();
       espelharUsuarioEmMemoria(usuario);
       save();
@@ -2291,56 +2283,22 @@ async function iniciar() {
     }
   });
 
-  app.post('/api/admin/usuarios-mestres/:usuarioId/resetar-senha', requerEditorCatalogo, (req, res) => {
+  app.post('/api/admin/usuarios-mestres/:usuarioId/resetar-senha', requerEditorCatalogo, async (req, res) => {
     try {
-      const senhaTemporaria = String(req.body?.senhaTemporaria || 'Temp@2026');
-      if (senhaTemporaria.length < 8) return res.status(400).json({ erro: 'A senha temporária deve possuir pelo menos 8 caracteres.' });
       const usuario = cadastrosMestres.obterUsuario(req.empresaId, req.params.usuarioId);
       if (!usuario) return res.status(404).json({ erro: 'Usuário não encontrado na empresa ativa.' });
-      usuario.senhaHash = hashPassword(senhaTemporaria);
-      usuario.atualizadoEm = new Date().toISOString();
-      espelharUsuarioEmMemoria(usuario);
-      save();
-      const { senhaHash, ...resposta } = usuario;
-      res.json({ ok: true, usuario: resposta, senhaTemporaria, mensagem: 'Senha resetada com sucesso. Compartilhe a senha temporária com o usuário.' });
+      await issuePasswordReset(usuario, { ip: req.ip });
+      const { senhaHash, senha, ...resposta } = usuario;
+      res.json({ ok: true, usuario: resposta, mensagem: 'Link individual de redefinição enviado, se o e-mail estiver configurado.' });
     } catch (error) {
       res.status(400).json({ erro: error.message });
     }
   });
 
-  // ── ENDPOINT ESPECIAL: CRIAR USUÁRIO ADMINISTRATIVO (BOOTSTRAP) ────────────
-  app.post('/api/admin/bootstrap/usuario-admin', (req, res) => {
-    try {
-      const senhaBootstrap = String(req.body?.senhaBootstrap || '');
-      if (senhaBootstrap !== 'bootstrap-kytto-2026') {
-        return res.status(403).json({ erro: 'Chave de bootstrap inválida.' });
-      }
-      const email = String(req.body?.email || '').toLowerCase().trim();
-      const senha = String(req.body?.senha || '');
-      if (!email || !senha || senha.length < 8) {
-        return res.status(400).json({ erro: 'Email e senha (mín. 8 caracteres) são obrigatórios.' });
-      }
-      const usuarioExistente = Object.values(cadastrosMestres.listarUsuarios('emp-kytto-001')).find((u) => u.email === email);
-      if (usuarioExistente) {
-        return res.status(409).json({ erro: 'Usuário com este email já existe.' });
-      }
-      const usuario = cadastrosMestres.criarUsuario('emp-kytto-001', {
-        nome: String(req.body?.nome || email.split('@')[0]),
-        email,
-        senhaHash: hashPassword(senha),
-        roles: ['administrador'],
-        tipoUsuario: 'administrador',
-        perfis: ['administrador'],
-        platformAdmin: true,
-        empresasAcessiveis: ['emp-kytto-001'],
-      });
-      espelharUsuarioEmMemoria(usuario);
-      save();
-      const { senhaHash, ...resposta } = usuario;
-      res.status(201).json({ ok: true, usuario: resposta, mensagem: 'Usuário administrativo criado com sucesso.' });
-    } catch (error) {
-      res.status(400).json({ erro: error.message });
-    }
+  // Bootstrap público removido: a criação inicial ocorre de forma idempotente no
+  // boot e a gestão posterior exige uma sessão administrativa autenticada.
+  app.post('/api/admin/bootstrap/usuario-admin', (_req, res) => {
+    res.status(410).json({ erro: 'Bootstrap público desativado. Use o convite ou a recuperação individual por e-mail.' });
   });
 
   // ── GESTÃO DE EMPRESAS E ONBOARDING MULTIENTIDADE ──────────────────────

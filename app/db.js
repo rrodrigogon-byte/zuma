@@ -20,7 +20,7 @@ const GCS_BUCKET = process.env.GCS_BUCKET || '';
 const GCS_OBJECT = process.env.GCS_OBJECT || 'db.json';
 
 const DEFAULT = { admins: [], usuarios: [], inscricoes: [], chaves: {}, ranking: { players: {}, arquivados: {} }, campeoes: {}, torneios: [], assinaturas: [], ingressos: [], comandas: [], reservas: [], patrocinadores: [], estoque: {},
-  ligas: {}, professores: [], aulas: [], loja: [], vendasLoja: [], cupons: [],
+  ligas: {}, professores: [], aulas: [], loja: [], vendasLoja: [], cupons: [], passwordResets: [],
   elo: { players: {} }, gruposEventos: {}, suicos: {}, duplas: {}, socios: [], campanhas: [], pagamentos: [], auditoria: [], agenda: [], cardapio: [], contatos: [], config: {}, partidas_avulsas: [], reservasLoja: [], vendasLoja: [], pedidosLoja: [], tefTransacoes: [], notasFiscais: [], nfceEventos: [], seq: 1 };
 
 function ensureDir(){ fs.mkdirSync(path.dirname(DB_PATH), { recursive: true }); }
