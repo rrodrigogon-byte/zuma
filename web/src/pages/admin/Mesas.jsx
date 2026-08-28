@@ -216,8 +216,7 @@ export default function Mesas() {
       setComanda(c => ({ ...c, data }))
       load(true)
     } catch (e) {
-      // Endpoint pode não existir — simulação amigável
-      toast(`Transferência de "${item.nome}" registrada (simulado)`)
+      toast(e?.message || `Não foi possível transferir o item "${item.nome}"`, true)
       setTransferindo(null)
     }
   }

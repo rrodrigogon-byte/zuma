@@ -201,6 +201,21 @@ export async function listPayments(client, contextInput, options = {}) {
   const parsedOffset = Number.parseInt(options.offset, 10);
   const limit = Number.isFinite(parsedLimit) ? Math.min(200, Math.max(1, parsedLimit)) : 100;
   const offset = Number.isFinite(parsedOffset) ? Math.min(10000, Math.max(0, parsedOffset)) : 0;
+  const values = [context.empresaId, context.lojaId];
+  const predicates = ['p.empresa_id = $1', '($2::uuid IS NULL OR o.loja_id = $2)'];
+  const status = String(options.status || '').trim().toLowerCase();
+  if (status && /^[a-z_]+$/.test(status)) { values.push(status); predicates.push(`p.status = $${values.length}`); }
+  const query = String(options.q || '').trim().slice(0, 160);
+  if (query) { values.push(`%${query}%`); predicates.push(`(o.public_code ILIKE $${values.length} OR c.nome ILIKE $${values.length} OR p.provider_payment_id ILIKE $${values.length})`); }
+  const where = predicates.join(' AND ');
+  const count = await client.query(
+    `SELECT COUNT(*)::int AS total
+       FROM commerce_payments p
+       JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id
+       LEFT JOIN commerce_customers c ON c.empresa_id = p.empresa_id AND c.id = o.customer_id
+      WHERE ${where}`,
+    values,
+  );
   const result = await client.query(
     `SELECT p.id, p.order_id, o.public_code AS order_code, p.provider, p.method, p.status,
             p.amount, p.fee, p.provider_payment_id, p.criado_em, p.atualizado_em,
@@ -208,11 +223,11 @@ export async function listPayments(client, contextInput, options = {}) {
        FROM commerce_payments p
        JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id
        LEFT JOIN commerce_customers c ON c.empresa_id = p.empresa_id AND c.id = o.customer_id
-      WHERE p.empresa_id = $1
-        AND ($2::uuid IS NULL OR o.loja_id = $2)
+      WHERE ${where}
       ORDER BY p.criado_em DESC
-      LIMIT $3 OFFSET $4`,
-    [context.empresaId, context.lojaId, limit, offset],
+      LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+    [...values, limit, offset],
   );
-  return { items: result.rows, pagination: { limit, offset, hasMore: result.rows.length === limit } };
+  const total = Number(count.rows[0]?.total || 0);
+  return { items: result.rows, pagination: { limit, offset, total, hasMore: offset + result.rows.length < total } };
 }

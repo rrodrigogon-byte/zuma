@@ -38,10 +38,10 @@ function accountPublicConfig(account) {
   return account?.publicConfig || account?.public_config || {};
 }
 
-function providerBaseUrl(environment) {
-  return String(environment || '').toLowerCase() === 'production'
-    ? 'https://melhorenvio.com.br'
-    : 'https://sandbox.melhorenvio.com.br';
+function providerBaseUrl(provider, environment) {
+  const production = String(environment || '').toLowerCase() === 'production';
+  if (String(provider || '').toLowerCase() === 'correios') return production ? 'https://api.correios.com.br' : 'https://apihom.correios.com.br';
+  return production ? 'https://melhorenvio.com.br' : 'https://sandbox.melhorenvio.com.br';
 }
 
 function safeNumber(value, fallback = null) {
@@ -110,7 +110,9 @@ function accountCredentials(account) {
   const token = referenceEnv(accountSecretRef(account));
   if (!token) throw new CommerceError('token do provedor logístico não configurado no secret manager', 'SHIPPING_ACCOUNT_NOT_CONFIGURED');
   const config = accountPublicConfig(account);
-  return { token, config, baseUrl: providerBaseUrl(account?.ambiente || account?.environment), userAgent: config.userAgent || process.env.ME_USER_AGENT || process.env.MELHOR_ENVIO_USER_AGENT || DEFAULT_USER_AGENT };
+  const provider = String(account?.provider || config.provider || '').toLowerCase();
+  const userAgent = config.userAgent || (provider === 'correios' ? process.env.CORREIOS_USER_AGENT : process.env.ME_USER_AGENT || process.env.MELHOR_ENVIO_USER_AGENT) || DEFAULT_USER_AGENT;
+  return { token, config, provider, baseUrl: providerBaseUrl(provider, account?.ambiente || account?.environment), userAgent };
 }
 
 async function providerRequest(account, path, options = {}) {
@@ -135,6 +137,47 @@ async function providerRequest(account, path, options = {}) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+function parseProviderMoney(value) {
+  if (value == null || value === '') return null;
+  const normalized = String(value).replace(/R\$\s*/gi, '').replace(/\./g, '').replace(',', '.').trim();
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : null;
+}
+
+function correiosPackages(products) {
+  const normalized = products.map(product => ({
+    width: positiveNumber(product.width, 'largura'),
+    height: positiveNumber(product.height, 'altura'),
+    length: positiveNumber(product.length, 'comprimento'),
+    weight: positiveNumber(product.weight, 'peso'),
+    quantity: Math.max(1, Math.trunc(Number(product.quantity) || 1)),
+  }));
+  return {
+    width: Math.max(...normalized.map(item => item.width)),
+    height: Math.max(...normalized.map(item => item.height)),
+    length: normalized.reduce((sum, item) => sum + item.length, 0),
+    weightGrams: Math.max(1, Math.round(normalized.reduce((sum, item) => sum + item.weight * item.quantity, 0) * 1000)),
+  };
+}
+
+function correiosServiceCodes(account, services) {
+  const config = accountPublicConfig(account);
+  const configured = Array.isArray(services) && services.length ? services : config.services;
+  return (Array.isArray(configured) ? configured : String(configured || '').split(',')).map(value => String(value).replace(/\D/g, '')).filter(value => value.length >= 4 && value.length <= 8).slice(0, 20);
+}
+
+function correiosStatusFromObject(object) {
+  const events = Array.isArray(object?.eventos) ? object.eventos : [];
+  const latest = events[0] || events[events.length - 1] || {};
+  const description = String(latest.descricao || latest.description || '').toLowerCase();
+  const code = String(latest.codigo || '').toUpperCase();
+  if (/(entregue|entrega realizada|objeto entregue)/.test(description) || ['BDE', 'BDI'].includes(code)) return 'delivered';
+  if (/(saiu para entrega|em rota|distribuição)/.test(description) || ['OEC', 'OEC1'].includes(code)) return 'out_for_delivery';
+  if (/(cancel|devolvido|recusado)/.test(description)) return 'cancelled';
+  if (/(postado|objeto recebido|encaminhado)/.test(description) || ['PO', 'RO', 'DO'].includes(code)) return 'posted';
+  return null;
 }
 
 function createMelhorEnvioAdapter() {
@@ -252,7 +295,57 @@ function createMelhorEnvioAdapter() {
   };
 }
 
+function createCorreiosAdapter() {
+  return {
+    async quote({ account, originPostalCode, destinationPostalCode, products, services }) {
+      const codes = correiosServiceCodes(account, services);
+      if (!codes.length) throw new CommerceError('configure ao menos um código de serviço contratado dos Correios', 'SHIPPING_SERVICE_CODES_REQUIRED');
+      const pack = correiosPackages(products);
+      const config = accountPublicConfig(account);
+      const additionalServices = (Array.isArray(config.servicesAdditional) ? config.servicesAdditional : []).map(value => String(value).replace(/\D/g, '')).filter(Boolean);
+      const declaredValue = Number(products.reduce((sum, product) => sum + Math.max(0, safeNumber(product.insuranceValue, 0)) * Math.max(1, Math.trunc(Number(product.quantity) || 1)), 0).toFixed(2));
+      const priceRows = await Promise.all(codes.map(async (code) => {
+        const params = new URLSearchParams({ cepDestino: destinationPostalCode, cepOrigem: originPostalCode, psObjeto: String(pack.weightGrams), tpObjeto: String(config.objectType || '2'), comprimento: String(Math.ceil(pack.length)), largura: String(Math.ceil(pack.width)), altura: String(Math.ceil(pack.height)) });
+        if (declaredValue > 0) params.set('vlDeclarado', String(declaredValue));
+        additionalServices.forEach(value => params.append('servicosAdicionais', value));
+        const price = await providerRequest(account, `/preco/v1/nacional/${encodeURIComponent(code)}?${params.toString()}`, { method: 'GET' });
+        const prazo = await providerRequest(account, `/prazo/v1/nacional/${encodeURIComponent(code)}?cepOrigem=${encodeURIComponent(originPostalCode)}&cepDestino=${encodeURIComponent(destinationPostalCode)}`, { method: 'GET' });
+        return { code, price: safeJson(price), prazo: safeJson(prazo) };
+      }));
+      const optionsWithSnapshots = priceRows.map(row => {
+        const amount = parseProviderMoney(row.price?.pcFinal ?? row.price?.pcTotal ?? row.price?.pcBaseGeral ?? row.price?.pcBase ?? row.price?.valor);
+        if (amount === null || amount < 0) return null;
+        const days = safeNumber(row.prazo?.prazoEntrega ?? row.prazo?.prazo ?? row.prazoEntrega);
+        const name = config.serviceNames?.[row.code] || `Correios ${row.code}`;
+        const publicOption = { id: row.code, name: String(name).slice(0, 160), amount, currency: 'BRL', deliveryDays: days === null ? null : Math.max(0, Math.round(days)), deliveryRange: { min: days === null ? null : Math.max(0, Math.round(days)), max: days === null ? null : Math.max(0, Math.round(days)) }, carrier: 'Correios', carrierId: row.code };
+        return { public: publicOption, raw: { price: row.price, prazo: row.prazo, packages: [{ width: pack.width, height: pack.height, length: pack.length, weight: pack.weightGrams / 1000 }] } };
+      }).filter(Boolean);
+      if (!optionsWithSnapshots.length) throw new CommerceError('Correios não retornou preço válido para os serviços configurados', 'SHIPPING_NO_OPTIONS');
+      return { options: optionsWithSnapshots.map(item => item.public), providerOptions: optionsWithSnapshots, provider: 'correios' };
+    },
+
+    async createShipment() {
+      throw new CommerceError('pré-postagem Correios depende da API 36 e do schema autorizado no CWS desta conta; valide a documentação antes de habilitar etiqueta', 'SHIPPING_PROVIDER_CAPABILITY_UNAVAILABLE');
+    },
+
+    async track({ account, providerShipmentId }) {
+      const code = String(providerShipmentId || '').trim().toUpperCase();
+      if (!/^[A-Z]{2}\d{9}[A-Z]{2}$/.test(code)) throw new CommerceError('código de rastreio dos Correios inválido', 'SHIPPING_TRACKING_INVALID');
+      const response = await providerRequest(account, `/srorastro/v1/objetos/${encodeURIComponent(code)}?resultado=T`, { method: 'GET' });
+      const object = Array.isArray(response?.objetos) ? response.objetos[0] : response?.objeto || response;
+      const rawEvents = Array.isArray(object?.eventos) ? object.eventos : [];
+      const events = rawEvents.slice(0, 100).map(event => ({ at: event.dtHrCriado || event.data || null, status: event.codigo || null, description: String(event.descricao || '').slice(0, 300), location: event.unidade?.endereco ? { city: event.unidade.endereco.cidade || null, state: event.unidade.endereco.uf || null } : null }));
+      return { providerStatus: correiosStatusFromObject(object), trackingCode: String(object?.codObjeto || object?.codigo || code).trim(), trackingUrl: `https://rastreamento.correios.com.br/app/index.php?objetos=${encodeURIComponent(code)}`, events, providerData: safeJson({ codigo: object?.codObjeto || object?.codigo || code, eventos: events }) };
+    },
+
+    async verifyWebhook() {
+      throw new CommerceError('Correios não possui webhook logístico habilitado neste adapter; use sincronização autenticada de rastreamento', 'SHIPPING_WEBHOOK_UNSUPPORTED');
+    },
+  };
+}
+
 shippingProviders.register('melhorenvio', createMelhorEnvioAdapter());
+shippingProviders.register('correios', createCorreiosAdapter());
 
 export function melhorEnvioConfigured() {
   return Boolean(process.env.ME_ACCESS_TOKEN || process.env.MELHOR_ENVIO_ACCESS_TOKEN);

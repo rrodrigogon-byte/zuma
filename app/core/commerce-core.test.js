@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import {
   adjustInventory,
   CommerceError,
+  createCatalogMedia,
+  createCatalogVariant,
+  updateCategory,
+  updateShippingMethod,
   createPendingOrder,
   createFulfillment,
   ORDER_TRANSITIONS,
@@ -129,6 +133,27 @@ test('adjustInventory retorna a mesma resposta para uma chave repetida', async (
   assert.equal(calls.filter(call => call.sql.includes('UPDATE commerce_inventory_levels')).length, 1);
 });
 
+test('updateShippingMethod valida escopo, conta logística e estado ativo', async () => {
+  const methodId = '88888888-8888-4888-8888-888888888888';
+  const shippingAccountId = '99999999-9999-4999-8999-999999999999';
+  const { trx, calls } = queryRecorder((sql, values) => {
+    if (sql.includes('FROM commerce_shipping_methods sm')) return { rows: [{ id: methodId, empresa_id: empresaId, storefront_id: storefrontId, codigo: 'correios', nome: 'Correios', tipo: 'carrier', ativo: true, configuracao: {} }] };
+    if (sql.includes('FROM commerce_shipping_accounts')) return { rows: [{ id: shippingAccountId }] };
+    if (sql.includes('UPDATE commerce_shipping_methods')) return { rows: [{ id: methodId, codigo: 'correios-expresso', nome: 'Correios Expresso', tipo: 'carrier', ativo: false, configuracao: { shippingAccountId } }] };
+    return { rows: [] };
+  });
+  const result = await updateShippingMethod(trx, { empresaId, lojaId }, methodId, { codigo: 'Correios Expresso', nome: 'Correios Expresso', ativo: false, configuracao: { shippingAccountId } });
+  assert.equal(result.ativo, false);
+  assert.equal(result.configuracao.shippingAccountId, shippingAccountId);
+  assert.equal(calls.filter(call => call.sql.includes('UPDATE commerce_shipping_methods')).length, 1);
+
+  const invalid = queryRecorder(sql => sql.includes('FROM commerce_shipping_methods sm') ? { rows: [{ id: methodId, empresa_id: empresaId, storefront_id: storefrontId, tipo: 'pickup', configuracao: {} }] } : { rows: [] });
+  await assert.rejects(
+    () => updateShippingMethod(invalid.trx, { empresaId, lojaId }, methodId, { ativo: 'false' }),
+    error => error instanceof CommerceError && error.code === 'SHIPPING_METHOD_INVALID',
+  );
+});
+
 test('createFulfillment herda cotação e conta somente do storefront do pedido', async () => {
   const shippingMethodId = '88888888-8888-4888-8888-888888888888';
   const shippingQuoteId = '99999999-9999-4999-8999-999999999999';
@@ -188,4 +213,48 @@ test('createPendingOrder reserva estoque para produto físico', async () => {
   assert.equal(result.shippingMethodId, shippingMethodId);
   assert.equal(available, 3);
   assert.equal(calls.filter(call => call.sql.includes('INSERT INTO commerce_inventory_reservations')).length, 1);
+});
+
+
+test('updateCategory mantém edição e parent no tenant com auditoria', async () => {
+  const categoryId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const parentId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const { trx, calls } = queryRecorder((sql) => {
+    if (sql.includes('SELECT * FROM commerce_categories')) return { rows: [{ id: categoryId, nome: 'Bebidas', ativo: true }] };
+    if (sql.includes('SELECT id FROM commerce_categories')) return { rows: [{ id: parentId }] };
+    if (sql.includes('UPDATE commerce_categories')) return { rows: [{ id: categoryId, nome: 'Bebidas frias', parent_id: parentId, ativo: true }] };
+    return { rows: [] };
+  });
+  const result = await updateCategory(trx, { empresaId, lojaId, usuarioId }, categoryId, { nome: 'Bebidas frias', parentId, ordem: 2 });
+  assert.equal(result.nome, 'Bebidas frias');
+  assert.equal(calls.filter(call => call.sql.includes('UPDATE commerce_categories')).length, 1);
+  assert.equal(calls.filter(call => call.sql.includes('INSERT INTO commerce_audit_logs')).length, 1);
+});
+
+test('createCatalogVariant valida produto do tenant antes de criar SKU', async () => {
+  const productId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const newVariantId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const { trx, calls } = queryRecorder((sql) => {
+    if (sql.includes('SELECT id, nome FROM commerce_products')) return { rows: [{ id: productId, nome: 'Camiseta' }] };
+    if (sql.includes('INSERT INTO commerce_product_variants')) return { rows: [{ id: newVariantId, product_id: productId, sku: 'CAM-AZ-M' }] };
+    return { rows: [] };
+  });
+  const result = await createCatalogVariant(trx, { empresaId, lojaId, usuarioId }, productId, { sku: 'CAM-AZ-M', nome: 'Azul M', atributos: { cor: 'azul', tamanho: 'M' }, ativo: true });
+  assert.equal(result.sku, 'CAM-AZ-M');
+  assert.equal(calls.filter(call => call.sql.includes('INSERT INTO commerce_product_variants')).length, 1);
+  await assert.rejects(() => createCatalogVariant(trx, { empresaId }, productId, {}), error => error instanceof CommerceError && error.code === 'VARIANT_REQUIRED');
+});
+
+test('createCatalogMedia bloqueia variante de outro produto e persiste mídia no tenant', async () => {
+  const productId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+  const variantId = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+  const { trx, calls } = queryRecorder((sql) => {
+    if (sql.includes('SELECT id FROM commerce_products')) return { rows: [{ id: productId }] };
+    if (sql.includes('SELECT id FROM commerce_product_variants')) return { rows: [{ id: variantId }] };
+    if (sql.includes('INSERT INTO commerce_product_media')) return { rows: [{ id: '99999999-9999-4999-8999-999999999998', product_id: productId, public_url: 'https://cdn.example/image.jpg' }] };
+    return { rows: [] };
+  });
+  const result = await createCatalogMedia(trx, { empresaId, lojaId, usuarioId }, productId, { variantId, url: 'https://cdn.example/image.jpg', altText: 'Camiseta azul' });
+  assert.equal(result.product_id, productId);
+  assert.equal(calls.filter(call => call.sql.includes('INSERT INTO commerce_product_media')).length, 1);
 });

@@ -237,3 +237,43 @@ O endereço de entrega valida matematicamente CPF/CNPJ antes de cotar ou criar p
 O backoffice dispõe de reconciliação manual do status de pagamento. A consulta ocorre no adapter real do gateway, exige o vínculo persistido da conta, confere `provider_payment_id` e valor, usa timeout de 12 segundos e só aplica transições permitidas. Respostas atrasadas não rebaixam pagamentos capturados ou estornados. A reconciliação é auditada sem armazenar payload bruto ou credenciais.
 
 Fulfillment só pode ser criado depois da confirmação de pagamento e a cotação usada deve pertencer ao mesmo pedido, storefront e empresa. A geração de etiqueta continua fora da transação longa, com chave operacional e proteção contra concorrência; falha, sucesso, tracking e webhook permanecem identificáveis para recuperação operacional.
+
+## Incremento de governança e administração do backoffice
+A rota administrativa de auditoria agora aceita paginação limitada, filtros seguros de entidade e ação e aplica o escopo de loja quando a membership estiver vinculada a uma loja. O retorno informa total e `hasMore`, enquanto o backoffice apresenta busca, correlation id e dados saneados pelo servidor; referências de segredo não são exibidas.
+
+O catálogo ganhou cadastro rápido de categorias com categoria pai, descrição e ordem, reutilizando a operação transacional do Commerce Core e atualizando os seletores do produto. A área de clientes passou a permitir editar endereços existentes, além de criar e remover, mantendo a auditoria e as validações do Core.
+
+
+## Evolução de administração de catálogo e Correios
+
+O Commerce OS agora expõe operações tenant-aware para edição de categorias, criação/edição/arquivamento de variantes e gestão de múltiplas mídias por produto. Cada variante pode manter SKU, barcode, atributos, peso, dimensões, status e histórico de preço; as mídias possuem URL, chave, texto alternativo, ordem e associação opcional à variante. As operações são transacionais e registradas na auditoria.
+
+A integração dos Correios foi adicionada ao contrato provider-neutral de logística. O adapter usa o token server-side e os endpoints oficiais de preço e prazo por serviço para cotar origem, destino, peso, dimensões, valor declarado e serviços adicionais. O rastreamento é consultado pela API autenticada de objetos e seus eventos são normalizados para a máquina de estados do fulfillment.
+
+A emissão de etiqueta/pré-postagem dos Correios permanece bloqueada até validar a API 36 e o schema autorizado no CWS da conta contratada. O sistema não cria pré-postagem com payload especulativo, não compra postagem e não exibe uma etiqueta inexistente. A conta só fica pronta para cotação quando possuir token, origem e códigos de serviço; o backoffice informa separadamente que a expedição depende da validação oficial.
+
+
+## Escala das listas administrativas
+
+As listagens administrativas de produtos, pedidos e clientes passaram a aceitar `limit` e `offset` com limites server-side, retornando total e `hasMore`. Pedidos e clientes aceitam busca textual limitada por código, nome e e-mail; a aplicação nunca monta SQL com coluna recebida do navegador. O filtro de empresa e, quando aplicável, de loja continua sendo derivado da membership autenticada.
+
+O Commerce OS também oferece busca local nas filas de pedidos e clientes para reduzir tempo operacional sem mudar o contrato legado. A paginação é deliberadamente limitada e auditável; uma etapa posterior poderá acrescentar carregamento incremental e exportação assíncrona para tenants com volume maior, sem remover a proteção atual contra consultas ilimitadas.
+
+
+## Evolução da operação administrativa
+
+As filas administrativas de produtos, pedidos e clientes agora retornam paginação server-side limitada, contagem total e indicação de continuação. Os pedidos podem ser filtrados por código público, cliente ou e-mail; clientes podem ser filtrados por nome, e-mail ou telefone. O backoffice mantém busca local para resposta imediata e não expõe dados fiscais completos.
+
+A listagem de pedidos também carrega os itens snapshot, quantidades, preços, subtotal, frete, método/cotação associados e status de pagamento persistido. Isso permite que a operação prepare e audite um pedido sem reconstruir seus dados a partir do catálogo atual, preservando a consistência histórica do checkout.
+
+
+## Índices de escala administrativa
+
+A migration `028_commerce_admin_indexes.sql` adiciona índices idempotentes iniciados por `empresa_id` para produtos, pedidos, clientes, itens e mídias. Pedidos também possuem índice por storefront e data de criação. Esses índices suportam paginação e detalhamento do backoffice sem remover as predicates tenant-aware nem introduzir extensões opcionais no PostgreSQL.
+
+
+## Painel de saúde operacional
+
+O endpoint administrativo `/api/admin/commerce/operations/health` retorna somente contagens agregadas e o instante de geração para o tenant e, quando aplicável, a loja da membership. Ele reúne pagamentos por status, fulfillments por status e webhooks de pagamento/logística por status; não retorna payloads, referências de segredo, tokens ou identificadores de gateway. A visão geral do Commerce OS transforma essas contagens em atalhos para as filas de pedidos, pagamentos, entrega e auditoria.
+
+A listagem administrativa de pagamentos agora aceita busca limitada por código público, cliente ou identificador externo persistido, filtro de status e paginação com total. O identificador externo continua sendo exibido apenas na área administrativa autorizada e não é retornado no acompanhamento público.

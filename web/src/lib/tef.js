@@ -5,12 +5,9 @@
  * (middleware SiTef/PayGo) por HTTP em localhost. A nuvem (KYTTO Clube) só recebe o
  * RESULTADO da captura (NSU/autorização) para baixar a venda.
  *
- * Sem `config.tef.agenteUrl` configurado, opera em MODO SIMULADO (aprova com
- * NSU/autorização fictícios) — mesmo padrão do Mercado Pago/e-mail/WhatsApp.
+ * Sem `config.tef.agenteUrl` configurado, a operação é bloqueada. O sistema não
+ * aprova transações com NSU/autorização fictícios.
  */
-
-const BANDEIRAS = ['Visa', 'Mastercard', 'Elo', 'Amex', 'Hipercard']
-const novoNsu = () => Math.floor(Math.random() * 1e9).toString().padStart(9, '0')
 
 export function tefConfigurado(tef) {
   return !!(tef && String(tef.agenteUrl || '').trim())
@@ -58,17 +55,7 @@ export async function pagarTef({ valor, modalidade = 'credito_avista', parcelas 
     }
   }
 
-  // ── Modo simulado (sem agente configurado) ──
-  await new Promise(r => setTimeout(r, 900)) // simula o tempo da captura no pinpad
-  const nsu = novoNsu()
-  const par = modalidade === 'credito_parcelado' ? Math.max(2, parcelas || 2) : 1
-  return {
-    aprovado: true, simulado: true,
-    nsu, autorizacao: novoNsu().slice(0, 6),
-    adquirente: tef.adquirente || 'SIMULADO',
-    bandeira: BANDEIRAS[Math.floor(Math.random() * BANDEIRAS.length)],
-    parcelas: par, modalidade,
-    comprovanteCliente: `*** COMPROVANTE SIMULADO (TEF) ***\nNSU: ${nsu}\nVALOR: R$ ${Number(valor).toFixed(2)}\n${modalidade.toUpperCase()}${par > 1 ? ` ${par}x` : ''}`,
-    comprovanteEstabelecimento: '',
-  }
+  const error = new Error('TEF não configurado: conecte o agente local da maquininha antes de cobrar')
+  error.code = 'TEF_NOT_CONFIGURED'
+  throw error
 }

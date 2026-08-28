@@ -42,6 +42,9 @@ function normalizeCoreProduct(product) {
     preco: number(variant.preco),
     precoPromocional: variant.precoPromocional == null ? null : number(variant.precoPromocional),
     estoque: number(variant.estoque),
+    imagem: product.media?.[0]?.publicUrl || product.media?.[0]?.public_url || '',
+    variantes: Array.isArray(product.variants) ? product.variants : [],
+    media: Array.isArray(product.media) ? product.media : [],
     ativo: product.status === 'active',
     variantId: variant.id || null,
     core: true,
@@ -56,9 +59,14 @@ function normalizeCoreOrder(order) {
     status: CORE_TO_LEGACY[order.status] || 'pendente',
     coreStatus: order.status,
     cliente: { nome: order.customer_name || 'Cliente', email: order.customer_email || '' },
+    subtotal: number(order.subtotal),
+    frete: number(order.frete),
     total: number(order.total),
+    paymentStatus: order.payment_status || null,
+    shippingMethodId: order.shipping_method_id || null,
+    shippingQuoteId: order.shipping_quote_id || null,
     criadoEm: order.criado_em,
-    itens: [],
+    itens: Array.isArray(order.items) ? order.items.map(item => ({ ...item, qtd: Number(item.quantidade || 0), nome: item.nome || item.nome_snapshot, preco: number(item.preco), subtotal: number(item.subtotal) })) : [],
     core: true,
   }
 }
@@ -93,7 +101,7 @@ async function loadLegacy() {
 
 export async function loadCommerceAdmin() {
   try {
-    const [storefrontData, productData, categoryData, promotionData, roleData, membershipData, orderData, customerData, locations, shippingData, shippingProviderData, shippingAccountData, fulfillmentData, domainData, providerData, accountData, paymentData] = await Promise.all([
+    const [storefrontData, productData, categoryData, promotionData, roleData, membershipData, orderData, customerData, locations, shippingData, shippingProviderData, shippingAccountData, fulfillmentData, domainData, providerData, accountData, paymentData, auditData, healthData] = await Promise.all([
       api.get('/api/admin/commerce/storefront'),
       api.get('/api/admin/commerce/catalog/products'),
       api.get('/api/admin/commerce/catalog/categories'),
@@ -150,6 +158,14 @@ export async function loadCommerceAdmin() {
         if (error.status === 403) return { items: [] }
         throw error
       }),
+      api.get('/api/admin/commerce/audit').catch(error => {
+        if (error.status === 403) return { items: [], pagination: { total: 0, limit: 100, offset: 0, hasMore: false } }
+        throw error
+      }),
+      api.get('/api/admin/commerce/operations/health').catch(error => {
+        if (error.status === 403) return {}
+        throw error
+      }),
     ])
     return {
       mode: 'core',
@@ -170,11 +186,46 @@ export async function loadCommerceAdmin() {
       paymentProviders: providerData?.items || [],
       paymentAccounts: accountData?.items || [],
       payments: (paymentData?.items || []).map(normalizePayment),
+      audit: auditData?.items || [],
+      auditPagination: auditData?.pagination || { total: auditData?.items?.length || 0, limit: 100, offset: 0, hasMore: false },
+      health: healthData || {},
     }
   } catch (error) {
     if (error.status !== 404) throw error
     return loadLegacy()
   }
+}
+
+export async function createCoreCategory(payload) {
+  return api.post('/api/admin/commerce/catalog/categories', payload)
+}
+
+export async function updateCoreCategory(id, payload) {
+  return api.patch(`/api/admin/commerce/catalog/categories/${id}`, payload)
+}
+
+export async function createCoreVariant(productId, payload) {
+  return api.post(`/api/admin/commerce/catalog/products/${productId}/variants`, payload)
+}
+
+export async function updateCoreVariant(id, payload) {
+  return api.patch(`/api/admin/commerce/catalog/variants/${id}`, payload)
+}
+
+export async function archiveCoreVariant(id) {
+  return api.delete(`/api/admin/commerce/catalog/variants/${id}`)
+}
+
+export async function listCoreProductMedia(productId) {
+  return api.get(`/api/admin/commerce/catalog/products/${productId}/media`)
+}
+
+export async function createCoreProductMedia(productId, payload) {
+  return api.post(`/api/admin/commerce/catalog/products/${productId}/media`, payload)
+}
+
+export async function deleteCoreProductMedia(id) {
+  return api.delete(`/api/admin/commerce/catalog/media/${id}`)
 }
 
 export async function saveCoreProduct({ editingId, current, form, storefrontId, locationId }) {
@@ -296,6 +347,10 @@ export async function deleteCoreCustomerAddress(customerId, addressId) {
 
 export async function createCoreShippingMethod(payload) {
   return api.post('/api/admin/commerce/shipping/methods', payload)
+}
+
+export async function updateCoreShippingMethod(id, payload) {
+  return api.patch(`/api/admin/commerce/shipping/methods/${id}`, payload)
 }
 
 export async function createCoreShippingAccount(payload) {

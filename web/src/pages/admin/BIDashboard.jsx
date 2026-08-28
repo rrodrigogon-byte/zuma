@@ -145,15 +145,17 @@ export default function BIDashboard() {
   const [periodo, setPeriodo] = useState('mes_atual')
   const [loading, setLoading] = useState(true)
   const [dados, setDados] = useState(null)
+  const [erro, setErro] = useState(null)
 
   const carregar = useCallback(async () => {
     setLoading(true)
+    setErro(null)
     try {
       const res = await api.get(`/api/bi/dashboard?periodo=${periodo}`)
       setDados(res)
-    } catch {
-      // Dados de demonstração quando API não está disponível
-      setDados(mockDados())
+    } catch (e) {
+      setDados(null)
+      setErro(e?.message || 'Não foi possível carregar os dados reais do BI.')
     } finally {
       setLoading(false)
     }
@@ -166,6 +168,17 @@ export default function BIDashboard() {
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 36, marginBottom: 12 }}>📊</div>
         <div>Carregando dados...</div>
+      </div>
+    </div>
+  )
+
+  if (erro) return (
+    <div style={{ padding: '48px 24px', color: T.cream, maxWidth: 720, margin: '0 auto' }}>
+      <div style={{ background: T.surface, border: `1px solid ${T.line}`, borderRadius: 14, padding: 28, textAlign: 'center' }}>
+        <div style={{ fontSize: 36, marginBottom: 12 }}>⚠️</div>
+        <h1 style={{ fontSize: 20, margin: '0 0 8px' }}>Dados reais indisponíveis</h1>
+        <p style={{ color: T.muted, lineHeight: 1.5, margin: '0 0 18px' }}>{erro}</p>
+        <button type="button" onClick={carregar} style={{ background: T.green, color: T.deep, border: 0, borderRadius: 8, padding: '10px 18px', fontWeight: 800, cursor: 'pointer' }}>Tentar novamente</button>
       </div>
     </div>
   )
@@ -508,72 +521,4 @@ export default function BIDashboard() {
       )}
     </div>
   )
-}
-
-// ─── Mock de dados para demonstração ─────────────────────────────────────────
-function mockDados() {
-  const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
-  return {
-    faturamento_total: 187450.00, var_faturamento: 12.3,
-    ticket_medio: 87.50, var_ticket: 5.1,
-    margem_bruta_pct: 38.5, var_margem: -1.2,
-    clientes_ativos: 1247, var_clientes: 8.7,
-    vendas_hoje: 12340.00, a_receber: 45600.00,
-    a_pagar: 28900.00, saldo_caixa: 67800.00,
-    total_entradas: 210000, total_saidas: 142200, saldo_final: 67800,
-    evolucao_mensal: meses.map((m, i) => ({ label: m, valor: 120000 + Math.random() * 80000 })),
-    mix_segmentos: [
-      { label: 'Supermercado', valor: 45, cor: T.blue },
-      { label: 'Varejo', valor: 25, cor: T.green },
-      { label: 'Barbearia', valor: 15, cor: T.yellow },
-      { label: 'Oficina', valor: 10, cor: T.purple },
-      { label: 'Outros', valor: 5, cor: T.muted },
-    ],
-    top_produtos: Array.from({ length: 10 }, (_, i) => ({ nome: `Produto ${i + 1}`, faturamento: 15000 - i * 1200 })),
-    formas_pagamento: [
-      { forma: 'PIX', total: 72000, cor: T.green },
-      { forma: 'Crédito', total: 58000, cor: T.blue },
-      { forma: 'Débito', total: 35000, cor: T.yellow },
-      { forma: 'Dinheiro', total: 22000, cor: T.muted },
-    ],
-    dre: {
-      receita_bruta: 187450, deducoes: 18745, receita_liquida: 168705,
-      cmv: 103900, lucro_bruto: 64805,
-      despesas_operacionais: 38200,
-      desp_pessoal: 22000, desp_aluguel: 6000, desp_energia: 2800, desp_marketing: 3400, desp_outras: 4000,
-      ebitda: 26605, depreciacao: 3200, resultado_financeiro: -1800, lair: 21605, irpj_csll: 4321, lucro_liquido: 17284,
-      margem_bruta_pct: 34.6, margem_ebitda_pct: 14.2, margem_liquida_pct: 9.2,
-    },
-    dre_mensal: meses.map((m, i) => ({ label: m, valor: 8000 + Math.random() * 12000 })),
-    fluxo_caixa: Array.from({ length: 15 }, (_, i) => {
-      const d = new Date(); d.setDate(d.getDate() + i)
-      const entradas = 5000 + Math.random() * 8000
-      const saidas = 3000 + Math.random() * 5000
-      return { data: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), entradas, saidas, saldo_acumulado: 67800 + (entradas - saidas) * (i + 1) }
-    }),
-    contas_vencer: [
-      { descricao: 'Fornecedor ABC', vencimento: '28/07', valor: 8500 },
-      { descricao: 'Aluguel', vencimento: '30/07', valor: 6000 },
-      { descricao: 'Energia Elétrica', vencimento: '01/08', valor: 2800 },
-    ],
-    curva_a_qtd: 48, curva_a_fat: 149960, curva_b_qtd: 120, curva_b_fat: 28117, curva_c_qtd: 380, curva_c_fat: 9373,
-    curva_abc: Array.from({ length: 12 }, (_, i) => ({
-      nome: `Produto ${i + 1}`, faturamento: 18000 - i * 1200,
-      percentual: (18000 - i * 1200) / 1874.5,
-      curva: i < 3 ? 'A' : i < 7 ? 'B' : 'C',
-    })),
-    ranking_vendedores: [
-      { nome: 'Ana Silva', faturamento: 48200, total_vendas: 312, ticket_medio: 154.5, comissao: 2410 },
-      { nome: 'Carlos Souza', faturamento: 41800, total_vendas: 287, ticket_medio: 145.6, comissao: 2090 },
-      { nome: 'Maria Oliveira', faturamento: 38600, total_vendas: 265, ticket_medio: 145.7, comissao: 1930 },
-      { nome: 'João Santos', faturamento: 32100, total_vendas: 218, ticket_medio: 147.2, comissao: 1605 },
-    ],
-    kpis_segmentos: [
-      { nome: 'Supermercado', icon: '🏪', faturamento: 84352, transacoes: 1820, ticket_medio: 46.3, margem_bruta_pct: 28.5, participacao: 45, cor: T.blue, evolucao: meses.slice(0, 6).map((m, i) => ({ label: m, valor: 70000 + i * 2500 })) },
-      { nome: 'Varejo Geral', icon: '🛒', faturamento: 46862, transacoes: 342, ticket_medio: 137.0, margem_bruta_pct: 42.1, participacao: 25, cor: T.green, evolucao: meses.slice(0, 6).map((m, i) => ({ label: m, valor: 38000 + i * 1800 })) },
-      { nome: 'Barbearia', icon: '✂️', faturamento: 28117, transacoes: 512, ticket_medio: 54.9, margem_bruta_pct: 68.3, participacao: 15, cor: T.yellow, evolucao: meses.slice(0, 6).map((m, i) => ({ label: m, valor: 22000 + i * 1200 })) },
-      { nome: 'Oficina', icon: '🔧', faturamento: 18745, transacoes: 87, ticket_medio: 215.5, margem_bruta_pct: 55.2, participacao: 10, cor: T.purple, evolucao: meses.slice(0, 6).map((m, i) => ({ label: m, valor: 14000 + i * 900 })) },
-      { nome: 'Loja de Moda', icon: '👗', faturamento: 9374, transacoes: 156, ticket_medio: 60.1, margem_bruta_pct: 51.8, participacao: 5, cor: T.red, evolucao: meses.slice(0, 6).map((m, i) => ({ label: m, valor: 7000 + i * 500 })) },
-    ],
-  }
 }

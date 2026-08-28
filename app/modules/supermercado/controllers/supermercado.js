@@ -1,3 +1,328 @@
 /**
  * ============================================================================
- * MÓDULO SUPERMERCADO - AUTOATENDIMENTO E PESAGEM\n * ============================================================================\n * Arquivo: modules/supermercado/controllers/supermercado.js\n * Descrição: Gerenciar autoatendimento, pesagem e promoções\n * ============================================================================\n */\n\nimport * as dbPg from '../../../db-pg.js';\n\n/**\n * Iniciar sessão de autoatendimento\n */\nexport async function iniciarSessaoAutoatendimento(req, res) {\n  try {\n    const { empresa_id, caixa_id } = req.body;\n\n    const result = await dbPg.query(\n      `INSERT INTO sessoes_autoatendimento (empresa_id, caixa_id, status, data_inicio)\n       VALUES ($1, $2, $3, NOW())\n       RETURNING *`,\n      [empresa_id, caixa_id, 'ativa']\n    );\n\n    res.json({\n      sucesso: true,\n      sessao: result.rows[0]\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Adicionar item via código de barras\n */\nexport async function adicionarItemPorCodigoBarras(req, res) {\n  try {\n    const { sessao_id, codigo_barras, quantidade } = req.body;\n\n    // Buscar produto\n    const produtoResult = await dbPg.query(\n      `SELECT * FROM produtos WHERE codigo_barras = $1`,\n      [codigo_barras]\n    );\n\n    if (produtoResult.rows.length === 0) {\n      return res.status(404).json({ sucesso: false, erro: 'Produto não encontrado' });\n    }\n\n    const produto = produtoResult.rows[0];\n    const valor_total = produto.preco * quantidade;\n\n    const result = await dbPg.query(\n      `INSERT INTO itens_autoatendimento (sessao_id, produto_id, quantidade, preco_unitario, valor_total)\n       VALUES ($1, $2, $3, $4, $5)\n       RETURNING *`,\n      [sessao_id, produto.id, quantidade, produto.preco, valor_total]\n    );\n\n    // Atualizar total da sessão\n    await atualizarTotalSessao(sessao_id);\n\n    res.json({\n      sucesso: true,\n      item: result.rows[0]\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Adicionar item pesado\n */\nexport async function adicionarItemPesado(req, res) {\n  try {\n    const { sessao_id, produto_id, peso_kg } = req.body;\n\n    // Buscar produto\n    const produtoResult = await dbPg.query(\n      `SELECT * FROM produtos WHERE id = $1`,\n      [produto_id]\n    );\n\n    if (produtoResult.rows.length === 0) {\n      return res.status(404).json({ sucesso: false, erro: 'Produto não encontrado' });\n    }\n\n    const produto = produtoResult.rows[0];\n    const valor_total = produto.preco_kg * peso_kg;\n\n    const result = await dbPg.query(\n      `INSERT INTO itens_autoatendimento (sessao_id, produto_id, quantidade, peso_kg, preco_unitario, valor_total)\n       VALUES ($1, $2, $3, $4, $5, $6)\n       RETURNING *`,\n      [sessao_id, produto_id, 1, peso_kg, produto.preco_kg, valor_total]\n    );\n\n    // Atualizar total da sessão\n    await atualizarTotalSessao(sessao_id);\n\n    res.json({\n      sucesso: true,\n      item: result.rows[0]\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Remover item\n */\nexport async function removerItem(req, res) {\n  try {\n    const { item_id, sessao_id } = req.body;\n\n    await dbPg.query(\n      `DELETE FROM itens_autoatendimento WHERE id = $1`,\n      [item_id]\n    );\n\n    // Atualizar total da sessão\n    await atualizarTotalSessao(sessao_id);\n\n    res.json({ sucesso: true });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Aplicar cupom de desconto\n */\nexport async function aplicarCupom(req, res) {\n  try {\n    const { sessao_id, codigo_cupom } = req.body;\n\n    // Buscar cupom\n    const cupomResult = await dbPg.query(\n      `SELECT * FROM cupons WHERE codigo = $1 AND status = 'ativo'`,\n      [codigo_cupom]\n    );\n\n    if (cupomResult.rows.length === 0) {\n      return res.status(404).json({ sucesso: false, erro: 'Cupom inválido' });\n    }\n\n    const cupom = cupomResult.rows[0];\n\n    // Atualizar sessão\n    const result = await dbPg.query(\n      `UPDATE sessoes_autoatendimento SET cupom_id = $1, desconto_cupom = $2\n       WHERE id = $3\n       RETURNING *`,\n      [cupom.id, cupom.valor_desconto, sessao_id]\n    );\n\n    // Atualizar total\n    await atualizarTotalSessao(sessao_id);\n\n    res.json({\n      sucesso: true,\n      sessao: result.rows[0]\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Finalizar compra\n */\nexport async function finalizarCompra(req, res) {\n  try {\n    const { sessao_id, forma_pagamento } = req.body;\n\n    // Obter sessão\n    const sessaoResult = await dbPg.query(\n      `SELECT * FROM sessoes_autoatendimento WHERE id = $1`,\n      [sessao_id]\n    );\n\n    if (sessaoResult.rows.length === 0) {\n      return res.status(404).json({ sucesso: false, erro: 'Sessão não encontrada' });\n    }\n\n    const sessao = sessaoResult.rows[0];\n\n    // Criar venda\n    const vendaResult = await dbPg.query(\n      `INSERT INTO vendas (empresa_id, operador_id, valor_total, desconto, status, data_venda)\n       VALUES ($1, $2, $3, $4, $5, NOW())\n       RETURNING *`,\n      [sessao.empresa_id, sessao.caixa_id, sessao.valor_total, sessao.desconto_cupom || 0, 'fechada']\n    );\n\n    const venda_id = vendaResult.rows[0].id;\n\n    // Copiar itens para venda\n    const itensResult = await dbPg.query(\n      `SELECT * FROM itens_autoatendimento WHERE sessao_id = $1`,\n      [sessao_id]\n    );\n\n    for (const item of itensResult.rows) {\n      await dbPg.query(\n        `INSERT INTO itens_venda (venda_id, produto_id, quantidade, preco_unitario, valor_total)\n         VALUES ($1, $2, $3, $4, $5)`,\n        [venda_id, item.produto_id, item.quantidade, item.preco_unitario, item.valor_total]\n      );\n    }\n\n    // Registrar pagamento\n    await dbPg.query(\n      `INSERT INTO pagamentos (venda_id, forma, valor, status)\n       VALUES ($1, $2, $3, $4)`,\n      [venda_id, forma_pagamento, sessao.valor_total, 'confirmado']\n    );\n\n    // Finalizar sessão\n    await dbPg.query(\n      `UPDATE sessoes_autoatendimento SET status = 'finalizada', data_fim = NOW()\n       WHERE id = $1`,\n      [sessao_id]\n    );\n\n    res.json({\n      sucesso: true,\n      venda: vendaResult.rows[0]\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Listar promoções\n */\nexport async function listarPromocoes(req, res) {\n  try {\n    const { empresa_id } = req.params;\n\n    const result = await dbPg.query(\n      `SELECT * FROM promocoes\n       WHERE empresa_id = $1 AND status = 'ativa'\n       AND data_inicio <= NOW() AND data_fim >= NOW()\n       ORDER BY data_inicio DESC`,\n      [empresa_id]\n    );\n\n    res.json({\n      sucesso: true,\n      promocoes: result.rows\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Obter sessão com itens\n */\nexport async function obterSessao(req, res) {\n  try {\n    const { sessao_id } = req.params;\n\n    const sessaoResult = await dbPg.query(\n      `SELECT * FROM sessoes_autoatendimento WHERE id = $1`,\n      [sessao_id]\n    );\n\n    if (sessaoResult.rows.length === 0) {\n      return res.status(404).json({ sucesso: false, erro: 'Sessão não encontrada' });\n    }\n\n    const itensResult = await dbPg.query(\n      `SELECT ia.*, p.nome, p.descricao FROM itens_autoatendimento ia\n       JOIN produtos p ON ia.produto_id = p.id\n       WHERE ia.sessao_id = $1`,\n      [sessao_id]\n    );\n\n    res.json({\n      sucesso: true,\n      sessao: sessaoResult.rows[0],\n      itens: itensResult.rows\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Atualizar total da sessão\n */\nasync function atualizarTotalSessao(sessao_id) {\n  const result = await dbPg.query(\n    `SELECT SUM(valor_total) as total FROM itens_autoatendimento WHERE sessao_id = $1`,\n    [sessao_id]\n  );\n\n  const total = result.rows[0].total || 0;\n  const desconto = (await dbPg.query(\n    `SELECT desconto_cupom FROM sessoes_autoatendimento WHERE id = $1`,\n    [sessao_id]\n  )).rows[0]?.desconto_cupom || 0;\n\n  const valor_final = total - desconto;\n\n  await dbPg.query(\n    `UPDATE sessoes_autoatendimento SET valor_total = $1 WHERE id = $2`,\n    [valor_final, sessao_id]\n  );\n}\n\nexport default {\n  iniciarSessaoAutoatendimento,\n  adicionarItemPorCodigoBarras,\n  adicionarItemPesado,\n  removerItem,\n  aplicarCupom,\n  finalizarCompra,\n  listarPromocoes,\n  obterSessao\n};\n
+ * MÓDULO SUPERMERCADO - AUTOATENDIMENTO E PESAGEM
+ * ============================================================================
+ * Arquivo: modules/supermercado/controllers/supermercado.js
+ * Descrição: Gerenciar autoatendimento, pesagem e promoções
+ * ============================================================================
+ */
+
+import * as dbPg from '../../../db-pg.js';
+
+/**
+ * Iniciar sessão de autoatendimento
+ */
+export async function iniciarSessaoAutoatendimento(req, res) {
+  try {
+    const { empresa_id, caixa_id } = req.body;
+
+    const result = await dbPg.query(
+      `INSERT INTO sessoes_autoatendimento (empresa_id, caixa_id, status, data_inicio)
+       VALUES ($1, $2, $3, NOW())
+       RETURNING *`,
+      [empresa_id, caixa_id, 'ativa']
+    );
+
+    res.json({
+      sucesso: true,
+      sessao: result.rows[0]
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Adicionar item via código de barras
+ */
+export async function adicionarItemPorCodigoBarras(req, res) {
+  try {
+    const { sessao_id, codigo_barras, quantidade } = req.body;
+
+    // Buscar produto
+    const produtoResult = await dbPg.query(
+      `SELECT * FROM produtos WHERE codigo_barras = $1`,
+      [codigo_barras]
+    );
+
+    if (produtoResult.rows.length === 0) {
+      return res.status(404).json({ sucesso: false, erro: 'Produto não encontrado' });
+    }
+
+    const produto = produtoResult.rows[0];
+    const valor_total = produto.preco * quantidade;
+
+    const result = await dbPg.query(
+      `INSERT INTO itens_autoatendimento (sessao_id, produto_id, quantidade, preco_unitario, valor_total)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [sessao_id, produto.id, quantidade, produto.preco, valor_total]
+    );
+
+    // Atualizar total da sessão
+    await atualizarTotalSessao(sessao_id);
+
+    res.json({
+      sucesso: true,
+      item: result.rows[0]
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Adicionar item pesado
+ */
+export async function adicionarItemPesado(req, res) {
+  try {
+    const { sessao_id, produto_id, peso_kg } = req.body;
+
+    // Buscar produto
+    const produtoResult = await dbPg.query(
+      `SELECT * FROM produtos WHERE id = $1`,
+      [produto_id]
+    );
+
+    if (produtoResult.rows.length === 0) {
+      return res.status(404).json({ sucesso: false, erro: 'Produto não encontrado' });
+    }
+
+    const produto = produtoResult.rows[0];
+    const valor_total = produto.preco_kg * peso_kg;
+
+    const result = await dbPg.query(
+      `INSERT INTO itens_autoatendimento (sessao_id, produto_id, quantidade, peso_kg, preco_unitario, valor_total)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [sessao_id, produto_id, 1, peso_kg, produto.preco_kg, valor_total]
+    );
+
+    // Atualizar total da sessão
+    await atualizarTotalSessao(sessao_id);
+
+    res.json({
+      sucesso: true,
+      item: result.rows[0]
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Remover item
+ */
+export async function removerItem(req, res) {
+  try {
+    const { item_id, sessao_id } = req.body;
+
+    await dbPg.query(
+      `DELETE FROM itens_autoatendimento WHERE id = $1`,
+      [item_id]
+    );
+
+    // Atualizar total da sessão
+    await atualizarTotalSessao(sessao_id);
+
+    res.json({ sucesso: true });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Aplicar cupom de desconto
+ */
+export async function aplicarCupom(req, res) {
+  try {
+    const { sessao_id, codigo_cupom } = req.body;
+
+    // Buscar cupom
+    const cupomResult = await dbPg.query(
+      `SELECT * FROM cupons WHERE codigo = $1 AND status = 'ativo'`,
+      [codigo_cupom]
+    );
+
+    if (cupomResult.rows.length === 0) {
+      return res.status(404).json({ sucesso: false, erro: 'Cupom inválido' });
+    }
+
+    const cupom = cupomResult.rows[0];
+
+    // Atualizar sessão
+    const result = await dbPg.query(
+      `UPDATE sessoes_autoatendimento SET cupom_id = $1, desconto_cupom = $2
+       WHERE id = $3
+       RETURNING *`,
+      [cupom.id, cupom.valor_desconto, sessao_id]
+    );
+
+    // Atualizar total
+    await atualizarTotalSessao(sessao_id);
+
+    res.json({
+      sucesso: true,
+      sessao: result.rows[0]
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Finalizar compra
+ */
+export async function finalizarCompra(req, res) {
+  try {
+    const { sessao_id, forma_pagamento } = req.body;
+
+    // Obter sessão
+    const sessaoResult = await dbPg.query(
+      `SELECT * FROM sessoes_autoatendimento WHERE id = $1`,
+      [sessao_id]
+    );
+
+    if (sessaoResult.rows.length === 0) {
+      return res.status(404).json({ sucesso: false, erro: 'Sessão não encontrada' });
+    }
+
+    const sessao = sessaoResult.rows[0];
+
+    // Criar venda
+    const vendaResult = await dbPg.query(
+      `INSERT INTO vendas (empresa_id, operador_id, valor_total, desconto, status, data_venda)
+       VALUES ($1, $2, $3, $4, $5, NOW())
+       RETURNING *`,
+      [sessao.empresa_id, sessao.caixa_id, sessao.valor_total, sessao.desconto_cupom || 0, 'fechada']
+    );
+
+    const venda_id = vendaResult.rows[0].id;
+
+    // Copiar itens para venda
+    const itensResult = await dbPg.query(
+      `SELECT * FROM itens_autoatendimento WHERE sessao_id = $1`,
+      [sessao_id]
+    );
+
+    for (const item of itensResult.rows) {
+      await dbPg.query(
+        `INSERT INTO itens_venda (venda_id, produto_id, quantidade, preco_unitario, valor_total)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [venda_id, item.produto_id, item.quantidade, item.preco_unitario, item.valor_total]
+      );
+    }
+
+    // Registrar pagamento
+    await dbPg.query(
+      `INSERT INTO pagamentos (venda_id, forma, valor, status)
+       VALUES ($1, $2, $3, $4)`,
+      [venda_id, forma_pagamento, sessao.valor_total, 'confirmado']
+    );
+
+    // Finalizar sessão
+    await dbPg.query(
+      `UPDATE sessoes_autoatendimento SET status = 'finalizada', data_fim = NOW()
+       WHERE id = $1`,
+      [sessao_id]
+    );
+
+    res.json({
+      sucesso: true,
+      venda: vendaResult.rows[0]
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Listar promoções
+ */
+export async function listarPromocoes(req, res) {
+  try {
+    const { empresa_id } = req.params;
+
+    const result = await dbPg.query(
+      `SELECT * FROM promocoes
+       WHERE empresa_id = $1 AND status = 'ativa'
+       AND data_inicio <= NOW() AND data_fim >= NOW()
+       ORDER BY data_inicio DESC`,
+      [empresa_id]
+    );
+
+    res.json({
+      sucesso: true,
+      promocoes: result.rows
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Obter sessão com itens
+ */
+export async function obterSessao(req, res) {
+  try {
+    const { sessao_id } = req.params;
+
+    const sessaoResult = await dbPg.query(
+      `SELECT * FROM sessoes_autoatendimento WHERE id = $1`,
+      [sessao_id]
+    );
+
+    if (sessaoResult.rows.length === 0) {
+      return res.status(404).json({ sucesso: false, erro: 'Sessão não encontrada' });
+    }
+
+    const itensResult = await dbPg.query(
+      `SELECT ia.*, p.nome, p.descricao FROM itens_autoatendimento ia
+       JOIN produtos p ON ia.produto_id = p.id
+       WHERE ia.sessao_id = $1`,
+      [sessao_id]
+    );
+
+    res.json({
+      sucesso: true,
+      sessao: sessaoResult.rows[0],
+      itens: itensResult.rows
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Atualizar total da sessão
+ */
+async function atualizarTotalSessao(sessao_id) {
+  const result = await dbPg.query(
+    `SELECT SUM(valor_total) as total FROM itens_autoatendimento WHERE sessao_id = $1`,
+    [sessao_id]
+  );
+
+  const total = result.rows[0].total || 0;
+  const desconto = (await dbPg.query(
+    `SELECT desconto_cupom FROM sessoes_autoatendimento WHERE id = $1`,
+    [sessao_id]
+  )).rows[0]?.desconto_cupom || 0;
+
+  const valor_final = total - desconto;
+
+  await dbPg.query(
+    `UPDATE sessoes_autoatendimento SET valor_total = $1 WHERE id = $2`,
+    [valor_final, sessao_id]
+  );
+}
+
+export default {
+  iniciarSessaoAutoatendimento,
+  adicionarItemPorCodigoBarras,
+  adicionarItemPesado,
+  removerItem,
+  aplicarCupom,
+  finalizarCompra,
+  listarPromocoes,
+  obterSessao
+};

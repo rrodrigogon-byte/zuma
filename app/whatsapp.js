@@ -9,18 +9,31 @@ function ativo() { return !!(BASE && KEY) }
 
 async function enviar(telefone, mensagem) {
   if (!ativo()) {
-    console.log(`[WPP-SIM] ${telefone}: ${mensagem.slice(0,80)}…`)
-    return { ok: true, simulado: true }
+    const error = new Error('WhatsApp não configurado: informe WPP_BASE_URL e WPP_APIKEY no servidor')
+    error.code = 'WHATSAPP_NOT_CONFIGURED'
+    throw error
   }
-  const numero = telefone.replace(/\D/g, '')
-  const url = `${BASE}/message/sendText/${INST}`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', apikey: KEY },
-    body: JSON.stringify({ number: `55${numero}`, text: mensagem }),
-  })
-  const data = await res.json()
-  return { ok: res.ok, data }
+  const numero = String(telefone || '').replace(/\D/g, '')
+  if (numero.length < 10) {
+    const error = new Error('telefone inválido para WhatsApp')
+    error.code = 'WHATSAPP_INVALID_PHONE'
+    throw error
+  }
+  const url = `${BASE.replace(/\/$/, '')}/message/sendText/${encodeURIComponent(INST)}`
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 10000)
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: KEY },
+      body: JSON.stringify({ number: `55${numero}`, text: String(mensagem || '').slice(0, 4000) }),
+      signal: controller.signal,
+    })
+    const data = await res.json().catch(() => null)
+    return { ok: res.ok, data }
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 // Templates de mensagem

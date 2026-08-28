@@ -5,6 +5,7 @@ import { isValidCpfCnpj, normalizeCep, normalizeShippingAddress, publicShippingM
 const originalFetch = global.fetch;
 const originalToken = process.env.ME_ACCESS_TOKEN;
 const originalWebhook = process.env.ME_WEBHOOK_SECRET;
+const originalCorreiosToken = process.env.CORREIOS_API_TOKEN;
 
 test.afterEach(() => {
   global.fetch = originalFetch;
@@ -12,6 +13,8 @@ test.afterEach(() => {
   else process.env.ME_ACCESS_TOKEN = originalToken;
   if (originalWebhook === undefined) delete process.env.ME_WEBHOOK_SECRET;
   else process.env.ME_WEBHOOK_SECRET = originalWebhook;
+  if (originalCorreiosToken === undefined) delete process.env.CORREIOS_API_TOKEN;
+  else process.env.CORREIOS_API_TOKEN = originalCorreiosToken;
 });
 
 test('normaliza CEP e exige documento em endereço de entrega', () => {
@@ -85,4 +88,13 @@ test('cotação chama o provedor real fora da transação e persiste snapshot id
   assert.equal(result.provider, 'melhorenvio');
   assert.equal(result.items[0].amount, 25);
   assert.equal(queries.some(item => item.sql.includes('INSERT INTO commerce_shipping_quotes')), true);
+});
+
+
+test('conta Correios só fica pronta com token, origem e serviço contratado', () => {
+  process.env.CORREIOS_API_TOKEN = 'correios-token';
+  const base = { id: '10000000-0000-4000-8000-000000000108', provider: 'correios', ativo: true, secret_ref: 'env:CORREIOS_API_TOKEN', public_config: { origemCep: '01001000' } };
+  assert.equal(shippingAccountReady(base), false);
+  assert.equal(shippingAccountReady({ ...base, public_config: { origemCep: '01001000', services: ['03220'] } }), true);
+  assert.equal(shippingAccountReady({ ...base, public_config: { origemCep: '01001000', services: ['03220'] }, ambiente: 'sandbox' }), true);
 });

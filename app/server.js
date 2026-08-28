@@ -19,6 +19,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import QRCode from 'qrcode';
 import { wpp } from './whatsapp.js';
+import * as modificadoresCombosKytto from './modificadores-combos-kytto.js';
 import { mail } from './email.js';
 import { emitir as nfceEmitir, cancelar as nfceCancelar, nfceConfigurado } from './nfce.js';
 import { createCommerceAdminRouter, createCommercePublicRouter, createCommerceWebhookRouter } from './core/commerce-routes.js';
@@ -41,16 +42,6 @@ function sseBroadcast(event, data) {
   const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const res of sseClients) { try { res.write(msg); } catch {} }
 }
-app.get('/api/events', (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-  res.flushHeaders();
-  res.write(': connected\n\n');
-  sseClients.add(res);
-  req.on('close', () => sseClients.delete(res));
-});
 
 // CORS: API e SPA são servidas no mesmo host (same-origin não precisa de CORS).
 // Só liberamos origens explicitamente listadas em CORS_ORIGINS — nunca refletimos
@@ -182,6 +173,19 @@ function publicLimit(max=20, janelaMs=10*60*1000){
   };
 }
 
+// O SSE legado carrega eventos de operação (comandas, pedidos e NFC-e). Ele não pode
+// permanecer público: a conexão é mantida e os broadcasts não são destinados ao cliente final.
+app.get('/api/events', auth, requireStaff, (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+  res.write(': connected\\n\\n');
+  sseClients.add(res);
+  req.on('close', () => sseClients.delete(res));
+});
+
 function commercePublicLimit(max, janelaMs=10*60*1000){
   return (req,res,next)=>{
     const route = String(req.originalUrl || req.path || '').split('?')[0];
@@ -279,7 +283,7 @@ app.get('/api/info', (req,res)=>{
 
 // Informações públicas do Pix configurado (chave, nome, cidade, copia-e-cola sem valor)
 app.get('/api/pix-info', (req,res)=>{
-  if(!pixInfo) return res.json({ ativo:false, modo:'simulado' });
+  if(!pixInfo) return res.json({ ativo:false, disponivel:false, modo:'indisponivel' });
   const { valor } = req.query; // ?valor=150.00 (opcional) gera copia-e-cola com valor fixado
   const v = valor ? parseFloat(valor) : null;
   const copiaECola = gerarBrCode({
@@ -719,20 +723,18 @@ app.delete('/api/admin/contatos/:id', auth, requireStaff, (req,res)=>{
   d.contatos.splice(i,1); save(); res.json({ok:true});
 });
 
-app.post('/api/assinar', (req,res)=>{
+app.post('/api/assinar', publicLimit(10), (req,res)=>{
   const { plano, nome, email, tipo, telefone } = req.body || {};
   const p = PLANOS.find(x=>x.id===plano);
   if(!p) return res.status(400).json({error:'plano inválido'});
   if(!nome || !email) return res.status(400).json({error:'nome e e-mail obrigatórios'});
+  if(Number(p.preco) > 0) return res.status(503).json({ ok:false, error:'checkout real para planos pagos ainda não está configurado', code:'PAID_SUBSCRIPTION_CHECKOUT_UNAVAILABLE' });
   const ass = { id: nextId(), plano:p.id, planoNome:p.nome, publico:p.publico, preco:p.preco,
     nome, email, telefone:telefone||'', tipo:tipo||p.publico,
     status: p.preco>0 ? 'pendente_pagamento' : 'ativo', criadoEm:new Date().toISOString() };
   db().assinaturas.push(ass); save();
-  // STUB de pagamento: integrar Mercado Pago/Stripe aqui (criar preferência e retornar checkoutUrl)
-  const checkoutUrl = process.env.MP_ACCESS_TOKEN ? null : null;
   res.json({ ok:true, id:ass.id, status:ass.status,
-    message: p.preco>0 ? 'Adesão registrada. Pagamento será habilitado ao conectar o gateway (Mercado Pago/Stripe).' : 'Plano ativado!',
-    checkoutUrl });
+    message: 'Plano gratuito ativado.' });
 });
 app.get('/api/admin/assinaturas', auth, (req,res)=> res.json(db().assinaturas||[]));
 
@@ -1387,7 +1389,7 @@ app.post('/api/mesa-virtual', (req,res)=>{
 });
 
 // KDS — cozinha
-app.get('/api/kds', (req,res)=>{
+app.get('/api/kds', auth, requireStaff, (req,res)=>{
   const fila=[];
   db().comandas.filter(c=>c.status==='aberta').forEach(c=>{
     c.itens.forEach((it,idx)=>{ if(it.cozinha && it.status!=='entregue'){ fila.push({ comandaId:c.id, idx,
@@ -1655,6 +1657,92 @@ app.delete('/api/admin/cardapio/:id', auth, requireStaff, (req,res)=>{
   if(idx<0) return res.status(404).json({error:'produto não encontrado'});
   db().cardapio.splice(idx,1); save(); res.json({ok:true});
 });
+
+// ── COMBOS E MODIFICADORES ────────────────────────────────────────────────────
+// O runtime efetivo do Render é server.js (não server-erp.js). Estas rotas
+// reutilizam o domínio já testado e mantêm os dados separados por empresa.
+function legacyEmpresaId(req){ return req.user?.empresaId || 'principal'; }
+function produtosCardapioAtivos(){ return getCardapio().filter(produto => !produto.indisponivel); }
+
+app.get('/api/combos', auth, requireStaff, (req,res)=>{
+  const produtos = new Map(produtosCardapioAtivos().map(produto => [String(produto.id), produto]));
+  const combos = modificadoresCombosKytto.listarCombos(legacyEmpresaId(req))
+    .filter(combo => combo.ativo !== false && (combo.componentes || []).every(componente => produtos.has(String(componente.produtoId))))
+    .map(combo => ({ ...combo, componentes: combo.componentes.map(componente => ({
+      ...componente, nome: produtos.get(String(componente.produtoId))?.nome || String(componente.produtoId),
+    })) }));
+  res.json({ ok:true, combos });
+});
+
+app.get('/api/cardapio/:id/modificadores', auth, requireStaff, (req,res)=>{
+  const produto = produtosCardapioAtivos().find(item => String(item.id) === String(req.params.id));
+  if(!produto) return res.status(404).json({ error:'produto não encontrado ou indisponível' });
+  const ids = new Set(Array.isArray(produto.modificadorGrupoIds) ? produto.modificadorGrupoIds.map(String) : []);
+  const grupos = modificadoresCombosKytto.listarGruposModificadores(legacyEmpresaId(req))
+    .filter(grupo => ids.has(String(grupo.id)) && grupo.ativo !== false)
+    .map(grupo => ({ ...grupo, opcoes:(grupo.opcoes || []).filter(opcao => opcao.ativo !== false) }));
+  res.json({ ok:true, produtoId:produto.id, grupos });
+});
+
+app.get('/api/admin/modificadores/grupos', auth, requireStaff, (req,res)=>{
+  res.json({ ok:true, grupos:modificadoresCombosKytto.listarGruposModificadores(legacyEmpresaId(req)) });
+});
+app.post('/api/admin/modificadores/grupos', auth, requireStaff, (req,res)=>{
+  try {
+    const grupo = modificadoresCombosKytto.criarGrupoModificadores(legacyEmpresaId(req), req.body || {});
+    audit(req, 'CRIAR_GRUPO_MODIFICADORES', { grupoId:grupo.id, nome:grupo.nome });
+    res.status(201).json({ ok:true, grupo });
+  } catch(error){ res.status(422).json({ error:error.message, code:'INVALID_MODIFIER_GROUP' }); }
+});
+app.patch('/api/admin/modificadores/grupos/:id', auth, requireStaff, (req,res)=>{
+  try {
+    const grupo = modificadoresCombosKytto.atualizarGrupoModificadores(legacyEmpresaId(req), req.params.id, req.body || {});
+    audit(req, 'ATUALIZAR_GRUPO_MODIFICADORES', { grupoId:grupo.id, nome:grupo.nome });
+    res.json({ ok:true, grupo });
+  } catch(error){ res.status(422).json({ error:error.message, code:'INVALID_MODIFIER_GROUP' }); }
+});
+app.delete('/api/admin/modificadores/grupos/:id', auth, requireStaff, (req,res)=>{
+  const grupoId = String(req.params.id);
+  const emUso = getCardapio().some(produto => (produto.modificadorGrupoIds || []).map(String).includes(grupoId));
+  if(emUso) return res.status(409).json({ error:'O grupo está associado a produtos. Remova a associação antes de excluir.', code:'MODIFIER_GROUP_IN_USE' });
+  try {
+    const removido = modificadoresCombosKytto.excluirGrupoModificadores(legacyEmpresaId(req), grupoId);
+    audit(req, 'EXCLUIR_GRUPO_MODIFICADORES', { grupoId });
+    res.json({ ok:true, removido });
+  } catch(error){ res.status(422).json({ error:error.message, code:'INVALID_MODIFIER_GROUP' }); }
+});
+
+app.get('/api/admin/combos', auth, requireStaff, (req,res)=>{
+  res.json({ ok:true, combos:modificadoresCombosKytto.listarCombos(legacyEmpresaId(req)) });
+});
+app.post('/api/admin/combos', auth, requireStaff, (req,res)=>{
+  try {
+    const componentes = Array.isArray(req.body?.componentes) ? req.body.componentes : [];
+    const catalogo = new Set(getCardapio().map(produto => String(produto.id)));
+    if(componentes.length === 0) return res.status(422).json({ error:'O combo precisa ter ao menos um componente.', code:'INVALID_COMBO' });
+    if(componentes.some(componente => !catalogo.has(String(componente?.produtoId || '')))) return res.status(422).json({ error:'Todo componente do combo deve existir no cardápio.', code:'INVALID_COMBO_COMPONENT' });
+    const combo = modificadoresCombosKytto.criarCombo(legacyEmpresaId(req), req.body || {});
+    audit(req, 'CRIAR_COMBO', { comboId:combo.id, nome:combo.nome });
+    res.status(201).json({ ok:true, combo });
+  } catch(error){ res.status(422).json({ error:error.message, code:'INVALID_COMBO' }); }
+});
+app.patch('/api/admin/combos/:id', auth, requireStaff, (req,res)=>{
+  try {
+    const componentes = Array.isArray(req.body?.componentes) ? req.body.componentes : null;
+    if(componentes && componentes.some(componente => !getCardapio().some(produto => String(produto.id) === String(componente?.produtoId || '')))) return res.status(422).json({ error:'Todo componente do combo deve existir no cardápio.', code:'INVALID_COMBO_COMPONENT' });
+    const combo = modificadoresCombosKytto.atualizarCombo(legacyEmpresaId(req), req.params.id, req.body || {});
+    audit(req, 'ATUALIZAR_COMBO', { comboId:combo.id, nome:combo.nome });
+    res.json({ ok:true, combo });
+  } catch(error){ res.status(422).json({ error:error.message, code:'INVALID_COMBO' }); }
+});
+app.delete('/api/admin/combos/:id', auth, requireStaff, (req,res)=>{
+  try {
+    const removido = modificadoresCombosKytto.excluirCombo(legacyEmpresaId(req), req.params.id);
+    audit(req, 'EXCLUIR_COMBO', { comboId:String(req.params.id) });
+    res.json({ ok:true, removido });
+  } catch(error){ res.status(422).json({ error:error.message, code:'INVALID_COMBO' }); }
+});
+
 // Restaurar cardápio padrão (sobrescreve com CARDAPIO hardcoded)
 app.post('/api/admin/cardapio/reset', auth, requireRole('admin'), (req,res)=>{
   db().cardapio = [...CARDAPIO];
@@ -2167,7 +2255,9 @@ app.get('/api/loja', (req,res)=> {
 });
 
 // Reserva via site público (loja — pré-venda Pix)
-app.post('/api/loja/:id/reservar', (req,res)=>{
+app.post('/api/loja/:id/reservar', publicLimit(20), (req,res)=>{
+  const idem = String(req.body?.idempotencyKey || '').trim().slice(0, 120);
+  if (idem && db().idempotenciaReservasLoja?.[idem]) return res.json(db().idempotenciaReservasLoja[idem]);
   const p=(db().loja||[]).find(x=>x.id==req.params.id && x.ativo!==false);
   if(!p) return res.status(404).json({erro:'produto não encontrado'});
   if(p.estoque<=0) return res.status(409).json({erro:'produto esgotado'});
@@ -2178,8 +2268,11 @@ app.post('/api/loja/:id/reservar', (req,res)=>{
   p.estoque-=q;
   const r={ id:nextId(), produtoId:p.id, cod:p.cod||'', produto:p.nome, qtd:q, tamanho:tamanho||'', preco, total:preco*q, nome, email, tel:tel||'', status:'reservado', criadoEm:new Date().toISOString(), pagamento:'pix-pendente' };
   if(!db().reservasLoja) db().reservasLoja=[];
-  db().reservasLoja.push(r); save();
-  res.json({ ok:true, reservaId:r.id, produto:p.nome, total:r.total, msg:'Reserva confirmada! Leve o comprovante Pix na recepção do Tangará Tênis Clube para retirar.' });
+  db().reservasLoja.push(r);
+  const resposta = { ok:true, reservaId:r.id, produto:p.nome, total:r.total, msg:'Reserva confirmada! Leve o comprovante Pix na recepção do Tangará Tênis Clube para retirar.' };
+  if (idem) { db().idempotenciaReservasLoja = db().idempotenciaReservasLoja || {}; db().idempotenciaReservasLoja[idem] = resposta; }
+  save();
+  res.json(resposta);
 });
 app.get('/api/admin/loja', auth, requireStaff, (req,res)=>{
   seedLoja();
@@ -2814,7 +2907,11 @@ app.post('/api/admin/dupla/resultado', auth, requireStaff, (req,res)=>{
 app.delete('/api/admin/dupla/:categoria', auth, requireStaff, (req,res)=>{ delete db().duplas[req.params.categoria]; save(); res.json({ok:true}); });
 
 // =================== PAGAMENTOS · PIX / CARTÃO (cap. 12.3 / 15) ===================
-app.get('/api/pagamentos/status', (req,res)=> res.json({ ativo: pagamentosAtivos, modo: pagamentosAtivos?'mercadopago':'simulado' }));
+app.get('/api/pagamentos/status', (req,res)=> res.json({
+  ativo: pagamentosAtivos,
+  disponivel: pagamentosAtivos,
+  modo: pixInfo ? 'pix-estatico' : (pagamentosAtivos ? 'mercadopago' : 'indisponivel'),
+}));
 
 // Valor real do pedido, lido do servidor (fonte da verdade). Para tipos de preço fixo,
 // não confiamos no valor enviado pelo cliente — senão dava para pagar R$0,01 por uma
@@ -2831,6 +2928,7 @@ function valorEsperado(d, tipo, refId){
 
 // Cria uma cobrança Pix para um pedido (ingresso, inscrição, reserva, recarga, mensalidade, assinatura, loja)
 app.post('/api/pagar', publicLimit(40), async (req,res)=>{
+  if (!pagamentosAtivos) return res.status(503).json({ error:'pagamentos reais ainda não configurados', code:'PAYMENT_PROVIDER_UNAVAILABLE' });
   const { tipo, refId, valor, descricao, email, usuarioId } = req.body||{};
   const tiposOk = ['ingresso','inscricao','reserva','carteira','mensalidade','assinatura','loja','generico'];
   if(!tiposOk.includes(tipo)) return res.status(400).json({error:'tipo de pedido inválido'});
@@ -2846,42 +2944,41 @@ app.post('/api/pagar', publicLimit(40), async (req,res)=>{
       status:'pendente', criadoEm:new Date().toISOString() };
     db().pagamentos.push(pg); save();
     res.json({ ok:true, pagamentoId:pg.id, status:pg.status, provedor:pg.provedor, copiaECola:pg.copiaECola, qrBase64:pg.qrBase64,
-      modo: pagamentosAtivos?'mercadopago':'simulado', valor:pg.valor, taxaPlataforma:pg.taxaPlataforma });
+      modo: pg.provedor, valor:pg.valor, taxaPlataforma:pg.taxaPlataforma });
   }catch(e){ res.status(400).json({error:e.message}); }
 });
 
 app.get('/api/pagamento/:id', async (req,res)=>{
   const pg=(db().pagamentos||[]).find(p=>p.id==req.params.id); if(!pg) return res.status(404).json({error:'não encontrado'});
+  if (pg.provedor === 'simulado') return res.status(410).json({ error:'pagamento legado simulado desativado', code:'SIMULATED_PAYMENT_DISABLED' });
   if(pg.status==='pendente' && pg.provedor==='mercadopago'){ const st=await consultarStatus(pg.externalId); if(st && st!=='pendente'){ pg.status=st==='aprovado'?'aprovado':'recusado'; if(pg.status==='aprovado') fulfill(pg); save(); } }
   res.json({ id:pg.id, tipo:pg.tipo, status:pg.status, valor:pg.valor, copiaECola:pg.copiaECola, qrBase64:pg.qrBase64 });
 });
 
 // Webhook do Mercado Pago (produção): confirma e libera o pedido
 app.post('/api/pagamento/webhook', async (req,res)=>{
+  if (!pagamentosAtivos || pixInfo || !process.env.MP_ACCESS_TOKEN) return res.status(503).json({ error:'Mercado Pago não configurado', code:'MP_PROVIDER_UNAVAILABLE' });
   const extId = req.body?.data?.id || req.query['data.id'] || req.query.id;
-  // Verificação de assinatura (defesa em profundidade) — só quando MP_WEBHOOK_SECRET definido.
+  // Webhook do gateway exige segredo configurado; sem ele não há reconciliação de evento confiável.
   // Advisory: o gate real é o consultarStatus (re-consulta o MP; "aprovado" não é forjável).
   const secret = process.env.MP_WEBHOOK_SECRET;
-  if(secret){
-    try {
-      const sig = req.headers['x-signature']||''; const reqId = req.headers['x-request-id']||'';
-      const ts = (sig.match(/ts=([^,]+)/)||[])[1]; const v1 = (sig.match(/v1=([^,]+)/)||[])[1];
-      const manifest = `id:${String(extId||'').toLowerCase()};request-id:${reqId};ts:${ts};`;
-      const calc = crypto.createHmac('sha256', secret).update(manifest).digest('hex');
-      if(!v1 || calc !== v1) console.warn('[MP webhook] assinatura não confere (processando via re-consulta de status)');
-    } catch(e){ console.warn('[MP webhook] erro ao validar assinatura:', e.message); }
-  }
+  if(!secret) return res.status(503).json({ error:'webhook do Mercado Pago não configurado', code:'MP_WEBHOOK_NOT_CONFIGURED' });
+  try {
+    const sig = req.headers['x-signature']||''; const reqId = req.headers['x-request-id']||'';
+    const ts = (sig.match(/ts=([^,]+)/)||[])[1]; const v1 = (sig.match(/v1=([^,]+)/)||[])[1];
+    const manifest = `id:${String(extId||'').toLowerCase()};request-id:${reqId};ts:${ts};`;
+    const calc = crypto.createHmac('sha256', secret).update(manifest).digest('hex');
+    if(!v1 || !crypto.timingSafeEqual(Buffer.from(calc), Buffer.from(v1))) return res.status(401).json({ error:'assinatura do webhook inválida', code:'INVALID_WEBHOOK_SIGNATURE' });
+  } catch(e){ return res.status(401).json({ error:'assinatura do webhook inválida', code:'INVALID_WEBHOOK_SIGNATURE' }); }
   if(extId){ const pg=(db().pagamentos||[]).find(p=>p.externalId==String(extId)); if(pg && pg.status==='pendente'){ const st=await consultarStatus(extId); if(st==='aprovado'){ pg.status='aprovado'; if(!pg.fulfilledEm){ fulfill(pg); pg.fulfilledEm=new Date().toISOString(); } save(); } } }
   res.sendStatus(200);
 });
 
-// Confirmação MANUAL — disponível apenas no modo simulação (para testar o fluxo ponta a ponta)
-app.post('/api/pagamento/:id/confirmar', (req,res)=>{
-  if(pagamentosAtivos) return res.status(403).json({error:'em produção, a confirmação vem do provedor (webhook)'});
-  const pg=(db().pagamentos||[]).find(p=>p.id==req.params.id); if(!pg) return res.status(404).json({error:'não encontrado'});
-  if(pg.status!=='aprovado'){ pg.status='aprovado'; pg.confirmadoEm=new Date().toISOString(); fulfill(pg); save(); }
-  res.json({ ok:true, status:pg.status, fulfill:pg.fulfillMsg||'' });
-});
+// Confirmação manual pública removida: nenhuma rota pode aprovar pagamento localmente.
+app.post('/api/pagamento/:id/confirmar', (req,res)=> res.status(410).json({
+  error:'confirmação manual desativada; aguarde o gateway real',
+  code:'MANUAL_PAYMENT_CONFIRMATION_DISABLED',
+}));
 // Normaliza o pagamento para o painel: o front usa pago/pendente/cancelado,
 // o backend usa aprovado/pendente/recusado. Também expõe meio/usuário e os campos Pix.
 const mapPagStatus = s => s==='aprovado' ? 'pago' : (s==='recusado' ? 'cancelado' : (s||'pendente'));
@@ -3538,10 +3635,14 @@ app.get('/api/admin/whatsapp/status', auth, requireStaff, (req,res)=>{
 app.post('/api/admin/whatsapp/testar', auth, requireRole('admin','organizador'), async (req,res)=>{
   const { telefone, mensagem } = req.body||{};
   if(!telefone) return res.status(400).json({error:'telefone obrigatório'});
+  if(!wpp.ativo()) return res.status(503).json({ ok:false, error:'WhatsApp não configurado', code:'WHATSAPP_NOT_CONFIGURED' });
   try {
     const r = await wpp.enviar(telefone, mensagem||'🎾 Teste de mensagem do SetPoint!');
-    res.json({ ok:true, simulado:!!r.simulado, resultado:r });
-  } catch(e){ res.status(500).json({error:e.message}); }
+    res.json({ ok:true, resultado:r });
+  } catch(e){
+    const status = e?.code === 'WHATSAPP_INVALID_PHONE' ? 400 : 502;
+    res.status(status).json({ ok:false, error:e.message, code:e?.code || 'WHATSAPP_PROVIDER_ERROR' });
+  }
 });
 // Disparar notificação manual de mensalidade vencendo
 app.post('/api/admin/whatsapp/cobrar', auth, requireRole('admin','organizador'), async (req,res)=>{

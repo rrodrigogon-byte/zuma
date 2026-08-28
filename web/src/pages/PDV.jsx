@@ -76,12 +76,11 @@ function PixQRModal({ valor, comandaId, onClose, onPago, toast }) {
   const [pagamentoId, setPagamentoId] = useState(null)
   const [copiaECola, setCopiaECola] = useState('')
   const [qrBase64, setQrBase64] = useState(null)
-  const [modo, setModo] = useState('simulado')        // 'mercadopago' | 'simulado'
+  const [modo, setModo] = useState('indisponivel')   // 'mercadopago' | 'pix-estatico' | 'indisponivel'
   // Estado do polling
   const [status, setStatus] = useState('aguardando')  // aguardando | aprovado | erro
   const [tentativas, setTentativas] = useState(0)
   const [copied, setCopied] = useState(false)
-  const [confirmando, setConfirmando] = useState(false)
   const pollRef = useRef(null)
 
   // Passo 1: criar o registro de pagamento no backend ao abrir o modal
@@ -98,7 +97,7 @@ function PixQRModal({ valor, comandaId, onClose, onPago, toast }) {
         setPagamentoId(r.pagamentoId)
         setCopiaECola(r.copiaECola || '')
         setQrBase64(r.qrBase64 || null)
-        setModo(r.modo || 'simulado')
+        setModo(r.modo || 'indisponivel')
         setIniciando(false)
       } catch (e) {
         if (cancelled) return
@@ -129,31 +128,15 @@ function PixQRModal({ valor, comandaId, onClose, onPago, toast }) {
 
   // Copiar copia-e-cola (retornado pelo backend, não o EMV local)
   function copiar() {
-    const texto = copiaECola || buildPixEMV({ valor, txid: `CMD${comandaId || 0}` })
+    const texto = copiaECola
+    if (!texto) return
     navigator.clipboard?.writeText(texto).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2500)
     })
   }
 
-  // Confirmar simulação (dev/staging apenas — botão visível somente quando modo === 'simulado')
-  async function confirmarSimulacao() {
-    if (!pagamentoId) return
-    setConfirmando(true)
-    try {
-      await api.post(`/api/pagamento/${pagamentoId}/confirmar`, {})
-      setStatus('aprovado')
-      clearInterval(pollRef.current)
-      setTimeout(() => onPago?.(), 1500)
-    } catch (e) {
-      toast?.(e?.message || 'Erro ao confirmar', 'error')
-    } finally {
-      setConfirmando(false)
-    }
-  }
-
-  // QR a exibir: prioriza base64 do backend (Mercado Pago real), fallback para API externa
-  const emvFallback = buildPixEMV({ valor, txid: `CMD${comandaId || 0}` })
+  // QR/copia-e-cola só podem vir do servidor após criação em um provedor real.
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.85)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
@@ -194,40 +177,33 @@ function PixQRModal({ valor, comandaId, onClose, onPago, toast }) {
         {/* QR Code + ações */}
         {!iniciando && !erroInicio && status !== 'aprovado' && (
           <>
-            {/* QR: base64 do backend (MP) ou fallback externo */}
-            <div style={{ background: '#FFF4EC', borderRadius: 12, padding: 12, marginBottom: 14 }}>
-              {qrBase64 ? (
-                <img
-                  src={`data:image/png;base64,${qrBase64}`}
-                  width={200} height={200} alt="QR Code PIX"
-                  style={{ borderRadius: 10, display: 'block', margin: '0 auto' }}
-                />
-              ) : (
-                <PixQRSVG emv={emvFallback} size={200} />
-              )}
-            </div>
+              {/* QR: somente retorno do gateway ou BR Code estático retornado pelo servidor */}
+              <div style={{ background: '#FFF4EC', borderRadius: 12, padding: 12, marginBottom: 14 }}>
+                {qrBase64 ? (
+                  <img
+                    src={`data:image/png;base64,${qrBase64}`}
+                    width={200} height={200} alt="QR Code PIX"
+                    style={{ borderRadius: 10, display: 'block', margin: '0 auto' }}
+                  />
+                ) : copiaECola ? (
+                  <PixQRSVG emv={copiaECola} size={200} />
+                ) : (
+                  <div style={{ padding: '54px 14px', color: '#8A5B4A', fontSize: 13 }}>QR ainda não retornado pelo provedor.</div>
+                )}
+              </div>
 
             <div style={{ fontSize: 22, fontWeight: 800, color: '#FF9B72', marginBottom: 4 }}>
               {fmtR(valor)}
             </div>
             <div style={{ fontSize: 12, opacity: 0.55, marginBottom: 14 }}>
-              {modo === 'mercadopago' ? 'QR dinâmico Mercado Pago' : 'Escaneie o QR code no app do banco'}
+              {modo === 'mercadopago' ? 'QR dinâmico Mercado Pago' : (modo === 'pix-estatico' ? 'Pix estático configurado pela loja' : 'Pagamento real indisponível')}
             </div>
 
             {/* Copiar copia-e-cola (do backend) */}
-            <button onClick={copiar} style={{ width: '100%', background: '#294F6C', border: '1.5px solid #FF6B2C', borderRadius: 10, color: '#FF9B72', padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: 10 }}>
+                          <button onClick={copiar} disabled={!copiaECola} style={{ width: '100%', background: '#294C65', border: '1.5px solid #FF6B2C', borderRadius: 10, color: '#FF9B72', padding: '10px', fontSize: 13, fontWeight: 700, cursor: copiaECola ? 'pointer' : 'not-allowed', marginBottom: 10, opacity: copiaECola ? 1 : 0.55 }}>
+
               {copied ? '✓ Copiado!' : '📋 Copiar código PIX'}
             </button>
-
-            {/* Botão de simulação (dev/staging — só aparece em modo simulado) */}
-            {modo === 'simulado' && (
-              <button
-                onClick={confirmarSimulacao}
-                disabled={confirmando}
-                style={{ width: '100%', background: '#314C65', border: '1.5px solid #FF9B72', borderRadius: 10, color: '#FF9B72', padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: 10, opacity: confirmando ? 0.6 : 1 }}>
-                {confirmando ? '⏳ Confirmando...' : '✓ Confirmar pagamento (simulação)'}
-              </button>
-            )}
 
             {/* Status de polling */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', fontSize: 12, opacity: 0.55 }}>
@@ -511,7 +487,7 @@ export default function PDV() {
     loadCardapio()
     loadClientesConta()
     loadCaixaHoje()
-    // Config do TEF (agente local, adquirente, parcelamento). Sem agenteUrl → simulado.
+    // Config do TEF (agente local, adquirente, parcelamento). Sem agenteUrl, o pagamento fica bloqueado.
     api.get('/api/admin/config').then(cfg => setTefCfg(cfg?.tef || {})).catch(() => setTefCfg({}))
     timerRef.current = setInterval(() => {
       loadMesas()
@@ -863,7 +839,7 @@ export default function PDV() {
         return
       }
       toast(tefResult
-        ? `Pago na maquininha ✓ NSU ${tefResult.nsu}${tefResult.simulado ? ' (simulado)' : ''}`
+        ? `Pago na maquininha ✓ NSU ${tefResult.nsu}`
         : 'Pagamento registrado! ✓', 'success')
       setOverlay(null)
       setSheet(null)
@@ -1888,7 +1864,7 @@ export default function PDV() {
                 )}
                 <div style={{ fontSize: 11, opacity: 0.55, marginTop: 8 }}>
                   {tefCfg && !String(tefCfg.agenteUrl || '').trim()
-                    ? '⚠️ Agente TEF não configurado — modo SIMULADO (aprova automaticamente).'
+                    ? '⚠️ Agente TEF não configurado — pagamento bloqueado até conectar a maquininha.'
                     : '💳 Insira/aproxime o cartão na maquininha ao confirmar.'}
                 </div>
               </div>

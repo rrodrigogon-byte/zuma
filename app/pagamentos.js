@@ -1,8 +1,8 @@
 // Camada de pagamentos (cap. 12.3 / 15) — Pix e cartão.
-// Modos de operação (em ordem de prioridade):
+// Modos de operação reais (em ordem de prioridade):
 //   1. PIX_CHAVE definida → gera BR Code EMV com a chave estática real, sem gateway externo.
 //   2. MP_ACCESS_TOKEN definido → usa Mercado Pago (cobranças dinâmicas com QR único por valor).
-//   3. Nenhum → modo SIMULAÇÃO para desenvolvimento local.
+//   3. Nenhum → pagamentos indisponíveis; nunca gerar cobrança simulada.
 import crypto from 'crypto';
 
 const MP_TOKEN  = process.env.MP_ACCESS_TOKEN || '';
@@ -115,28 +115,15 @@ export async function criarPix({ valor, descricao, email }) {
     };
   }
 
-  // ── Modo 3: Simulação (desenvolvimento) ──
-  const txid = 'SIMPIX' + crypto.randomBytes(8).toString('hex').toUpperCase();
-  const copiaECola = gerarBrCode({
-    chave: '00000000000000',
-    nome: 'SETPOINT DEMO',
-    cidade: 'TANGARA MT',
-    valor: valorNum,
-    txid,
-  });
-  return {
-    provedor: 'simulado',
-    status: 'pendente',
-    externalId: txid,
-    copiaECola,
-    taxaPlataforma: +(valorNum * PLATFORM_FEE / 100).toFixed(2),
-  };
+  const error = new Error('nenhum provedor de pagamento real configurado');
+  error.code = 'PAYMENT_PROVIDER_UNAVAILABLE';
+  throw error;
 }
 
 // Consulta status de um pagamento no provedor.
 export async function consultarStatus(externalId) {
   if (PIX_CHAVE) return null;   // estático: confirmação manual
-  if (!MP_TOKEN) return null;   // simulação: confirmação manual
+  if (!MP_TOKEN) return null;   // sem gateway dinâmico: não há status remoto para consultar
   const r = await fetch(`https://api.mercadopago.com/v1/payments/${externalId}`, {
     headers: { 'Authorization': `Bearer ${MP_TOKEN}` },
   });

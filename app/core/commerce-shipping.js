@@ -4,10 +4,11 @@ import { shippingProviders, shippingSecretConfigured } from './shipping-adapters
 
 const SECRET_REF = /^env:[A-Z][A-Z0-9_]{2,}$/;
 const CEP = /^\d{8}$/;
-const ALLOWED_METHODS = new Set(['melhorenvio']);
+const ALLOWED_METHODS = new Set(['melhorenvio', 'correios']);
 
 const SHIPPING_PROVIDERS = [
   { code: 'melhorenvio', name: 'Melhor Envio', adapter: true, methods: ['quote', 'label', 'tracking'] },
+  { code: 'correios', name: 'Correios', adapter: true, methods: ['quote', 'tracking'], label: false, note: 'Pré-postagem depende da API 36 e do schema autorizado no CWS.' },
   { code: 'frenet', name: 'Frenet', adapter: false, methods: ['quote', 'label', 'tracking'] },
 ];
 
@@ -81,6 +82,12 @@ function safeConfig(input = {}) {
     };
   }
   if (source.services !== undefined) config.services = Array.isArray(source.services) ? source.services.map(value => String(value).replace(/\D/g, '')).filter(Boolean).slice(0, 20) : [];
+  if (source.servicesAdditional !== undefined) config.servicesAdditional = Array.isArray(source.servicesAdditional) ? source.servicesAdditional.map(value => String(value).replace(/\D/g, '')).filter(Boolean).slice(0, 20) : [];
+  if (source.contractNumber) config.contractNumber = text(source.contractNumber, 40);
+  if (source.postingCard || source.cardNumber) config.postingCard = text(source.postingCard || source.cardNumber, 40);
+  if (source.objectType) config.objectType = text(source.objectType, 8);
+  if (source.prepostagemApiEnabled !== undefined) config.prepostagemApiEnabled = source.prepostagemApiEnabled === true;
+  if (source.serviceNames && typeof source.serviceNames === 'object') config.serviceNames = Object.fromEntries(Object.entries(source.serviceNames).slice(0, 20).map(([key, value]) => [String(key).replace(/\D/g, '').slice(0, 8), text(value, 160)]).filter(([key, value]) => key && value));
   if (source.options && typeof source.options === 'object') config.options = { receipt: source.options.receipt === true, ownHand: source.options.ownHand === true };
   if (source.userAgent) config.userAgent = text(source.userAgent, 240);
   if (source.webhookSecretRef) {
@@ -103,6 +110,8 @@ function safePublicConfig(config = {}) {
     ...(source.provider ? { provider: text(source.provider, 60).toLowerCase() } : {}),
     ...(source.origemCep ? { origemCep: String(source.origemCep) } : {}),
     ...(Array.isArray(source.services) ? { services: source.services.slice(0, 20) } : {}),
+    ...(Array.isArray(source.servicesAdditional) ? { servicesAdditional: source.servicesAdditional.slice(0, 20) } : {}),
+    ...(source.objectType ? { objectType: text(source.objectType, 8) } : {}),
     ...(source.options ? { options: { receipt: source.options.receipt === true, ownHand: source.options.ownHand === true } } : {}),
   };
 }
@@ -118,9 +127,15 @@ function accountSenderConfigured(config = {}) {
   return accountOriginConfigured(config) && Boolean(origin.name && origin.email && origin.phone && origin.address && origin.number && origin.district && origin.city && origin.stateAbbr && document && isValidCpfCnpj(document));
 }
 
+function accountQuoteConfigured(provider, config = {}) {
+  if (provider !== 'correios') return true;
+  return Array.isArray(config.services) && config.services.length > 0;
+}
+
 export function shippingAccountReady(row) {
   const provider = text(row?.provider, 60).toLowerCase();
-  return Boolean(row?.id && row?.ativo && shippingProviders.get(provider) && accountOriginConfigured(row.public_config || {}) && shippingSecretConfigured(row.secret_ref) && (provider !== 'melhorenvio' || shippingSecretConfigured(row.public_config?.webhookSecretRef)));
+  const config = row?.public_config || {};
+  return Boolean(row?.id && row?.ativo && shippingProviders.get(provider) && accountOriginConfigured(config) && accountQuoteConfigured(provider, config) && shippingSecretConfigured(row.secret_ref) && (provider !== 'melhorenvio' || shippingSecretConfigured(config.webhookSecretRef)));
 }
 
 export function publicShippingMethod(method) {
@@ -169,8 +184,8 @@ function accountRow(row) {
     nome: row.nome,
     ativo: row.ativo,
     registered,
-    ready: registered && accountOriginConfigured(row.public_config || {}) && tokenConfigured && webhookConfigured,
-    label_ready: registered && accountSenderConfigured(row.public_config || {}) && tokenConfigured && webhookConfigured,
+    ready: registered && accountOriginConfigured(row.public_config || {}) && accountQuoteConfigured(provider, row.public_config || {}) && tokenConfigured && webhookConfigured,
+    label_ready: provider === 'melhorenvio' && registered && accountSenderConfigured(row.public_config || {}) && tokenConfigured && webhookConfigured,
     secret_configured: tokenConfigured,
     webhook_configured: webhookConfigured,
     public_config: safePublicConfig(row.public_config),
@@ -197,7 +212,7 @@ function secretRef(value) {
 }
 
 function accountReadyForActivation(provider, secretReference, config) {
-  return Boolean(shippingProviders.get(provider) && accountOriginConfigured(config) && shippingSecretConfigured(secretReference) && (provider !== 'melhorenvio' || shippingSecretConfigured(config.webhookSecretRef)));
+  return Boolean(shippingProviders.get(provider) && accountOriginConfigured(config) && accountQuoteConfigured(provider, config) && shippingSecretConfigured(secretReference) && (provider !== 'melhorenvio' || shippingSecretConfigured(config.webhookSecretRef)));
 }
 
 export async function listShippingAccounts(client, contextInput) {
@@ -223,7 +238,7 @@ export async function createShippingAccount(trx, contextInput, input = {}) {
   if (!nome || !['sandbox', 'production'].includes(ambiente)) throw new CommerceError('nome e ambiente logístico válidos são obrigatórios', 'SHIPPING_ACCOUNT_INVALID');
   const secretReference = secretRef(input.secretRef);
   const config = safeConfig(input.publicConfig);
-  if (!config.webhookSecretRef) throw new CommerceError('a conta logística exige webhookSecretRef para tracking assinado', 'SHIPPING_ACCOUNT_INVALID');
+  if (definition.code === 'melhorenvio' && !config.webhookSecretRef) throw new CommerceError('a conta Melhor Envio exige webhookSecretRef para tracking assinado', 'SHIPPING_ACCOUNT_INVALID');
   if (input.ativo === true && !accountReadyForActivation(definition.code, secretReference, config)) throw new CommerceError('não é possível ativar a conta logística sem adapter e secrets configurados', 'SHIPPING_ACCOUNT_NOT_CONFIGURED');
   const storefront = await trx.query(`SELECT id FROM commerce_storefronts WHERE empresa_id = $1 AND id = $2 AND status = 'active' AND ($3::uuid IS NULL OR loja_id = $3) LIMIT 1`, [context.empresaId, storefrontId, context.lojaId]);
   if (!storefront.rows[0]) throw new CommerceError('storefront fora do escopo da loja', 'STORE_SCOPE_MISMATCH');

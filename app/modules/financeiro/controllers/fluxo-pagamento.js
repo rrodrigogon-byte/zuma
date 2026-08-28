@@ -1,1 +1,430 @@
-/**\n * ============================================================================\n * MÓDULO FLUXO DE PAGAMENTO - CONTAS A RECEBER/PAGAR E RECONCILIAÇÃO\n * ============================================================================\n * Arquivo: modules/financeiro/controllers/fluxo-pagamento.js\n * Descrição: Gerenciar contas a receber, contas a pagar e reconciliação\n * ============================================================================\n */\n\nimport * as dbPg from '../../../db-pg.js';\n\n/**\n * Criar conta a receber\n */\nexport async function criarContaReceber(req, res) {\n  try {\n    const {\n      empresa_id,\n      cliente_id,\n      venda_id,\n      valor,\n      data_vencimento,\n      forma_pagamento,\n      observacoes\n    } = req.body;\n\n    const result = await dbPg.query(\n      `INSERT INTO contas_receber (\n        empresa_id, cliente_id, venda_id, valor, data_vencimento,\n        forma_pagamento, status, observacoes, data_criacao\n      )\n       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())\n       RETURNING *`,\n      [\n        empresa_id,\n        cliente_id,\n        venda_id,\n        valor,\n        data_vencimento,\n        forma_pagamento,\n        'pendente',\n        observacoes\n      ]\n    );\n\n    res.json({\n      sucesso: true,\n      conta: result.rows[0]\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Receber pagamento\n */\nexport async function receberPagamento(req, res) {\n  try {\n    const {\n      conta_id,\n      valor_recebido,\n      data_pagamento,\n      forma_pagamento,\n      numero_documento\n    } = req.body;\n\n    // Buscar conta\n    const contaResult = await dbPg.query(\n      `SELECT * FROM contas_receber WHERE id = $1`,\n      [conta_id]\n    );\n\n    if (contaResult.rows.length === 0) {\n      return res.status(404).json({ sucesso: false, erro: 'Conta não encontrada' });\n    }\n\n    const conta = contaResult.rows[0];\n\n    // Determinar status\n    let status = 'paga';\n    let juros = 0;\n    let desconto = 0;\n\n    if (valor_recebido < conta.valor) {\n      status = 'parcialmente_paga';\n      desconto = conta.valor - valor_recebido;\n    } else if (valor_recebido > conta.valor) {\n      juros = valor_recebido - conta.valor;\n    }\n\n    // Atualizar conta\n    const updateResult = await dbPg.query(\n      `UPDATE contas_receber SET\n        status = $1,\n        data_pagamento = $2,\n        valor_recebido = $3,\n        juros = $4,\n        desconto = $5,\n        forma_pagamento_realizada = $6,\n        numero_documento = $7\n       WHERE id = $8\n       RETURNING *`,\n      [status, data_pagamento, valor_recebido, juros, desconto, forma_pagamento, numero_documento, conta_id]\n    );\n\n    // Registrar movimento de caixa\n    await dbPg.query(\n      `INSERT INTO movimentacoes_caixa (\n        empresa_id, tipo, descricao, valor, data_movimento, referencia_id\n      )\n       VALUES ($1, $2, $3, $4, $5, $6)`,\n      [\n        conta.empresa_id,\n        'entrada',\n        `Recebimento de ${conta.cliente_id}`,\n        valor_recebido,\n        data_pagamento,\n        conta_id\n      ]\n    );\n\n    res.json({\n      sucesso: true,\n      conta: updateResult.rows[0]\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Criar conta a pagar\n */\nexport async function criarContaPagar(req, res) {\n  try {\n    const {\n      empresa_id,\n      fornecedor_id,\n      compra_id,\n      valor,\n      data_vencimento,\n      forma_pagamento,\n      observacoes\n    } = req.body;\n\n    const result = await dbPg.query(\n      `INSERT INTO contas_pagar (\n        empresa_id, fornecedor_id, compra_id, valor, data_vencimento,\n        forma_pagamento, status, observacoes, data_criacao\n      )\n       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())\n       RETURNING *`,\n      [\n        empresa_id,\n        fornecedor_id,\n        compra_id,\n        valor,\n        data_vencimento,\n        forma_pagamento,\n        'pendente',\n        observacoes\n      ]\n    );\n\n    res.json({\n      sucesso: true,\n      conta: result.rows[0]\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Pagar conta\n */\nexport async function pagarConta(req, res) {\n  try {\n    const {\n      conta_id,\n      valor_pago,\n      data_pagamento,\n      forma_pagamento,\n      numero_documento\n    } = req.body;\n\n    // Buscar conta\n    const contaResult = await dbPg.query(\n      `SELECT * FROM contas_pagar WHERE id = $1`,\n      [conta_id]\n    );\n\n    if (contaResult.rows.length === 0) {\n      return res.status(404).json({ sucesso: false, erro: 'Conta não encontrada' });\n    }\n\n    const conta = contaResult.rows[0];\n\n    // Determinar status\n    let status = 'paga';\n    let juros = 0;\n    let desconto = 0;\n\n    if (valor_pago < conta.valor) {\n      status = 'parcialmente_paga';\n      desconto = conta.valor - valor_pago;\n    } else if (valor_pago > conta.valor) {\n      juros = valor_pago - conta.valor;\n    }\n\n    // Atualizar conta\n    const updateResult = await dbPg.query(\n      `UPDATE contas_pagar SET\n        status = $1,\n        data_pagamento = $2,\n        valor_pago = $3,\n        juros = $4,\n        desconto = $5,\n        forma_pagamento_realizada = $6,\n        numero_documento = $7\n       WHERE id = $8\n       RETURNING *`,\n      [status, data_pagamento, valor_pago, juros, desconto, forma_pagamento, numero_documento, conta_id]\n    );\n\n    // Registrar movimento de caixa\n    await dbPg.query(\n      `INSERT INTO movimentacoes_caixa (\n        empresa_id, tipo, descricao, valor, data_movimento, referencia_id\n      )\n       VALUES ($1, $2, $3, $4, $5, $6)`,\n      [\n        conta.empresa_id,\n        'saida',\n        `Pagamento para ${conta.fornecedor_id}`,\n        valor_pago,\n        data_pagamento,\n        conta_id\n      ]\n    );\n\n    res.json({\n      sucesso: true,\n      conta: updateResult.rows[0]\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Listar contas a receber\n */\nexport async function listarContasReceber(req, res) {\n  try {\n    const { empresa_id } = req.params;\n    const { status, cliente_id, data_inicio, data_fim } = req.query;\n\n    let query = `SELECT cr.*, c.nome as cliente_nome\n                 FROM contas_receber cr\n                 JOIN clientes c ON cr.cliente_id = c.id\n                 WHERE cr.empresa_id = $1`;\n    const params = [empresa_id];\n\n    if (status) {\n      query += ` AND cr.status = $${params.length + 1}`;\n      params.push(status);\n    }\n\n    if (cliente_id) {\n      query += ` AND cr.cliente_id = $${params.length + 1}`;\n      params.push(cliente_id);\n    }\n\n    if (data_inicio) {\n      query += ` AND cr.data_vencimento >= $${params.length + 1}`;\n      params.push(data_inicio);\n    }\n\n    if (data_fim) {\n      query += ` AND cr.data_vencimento <= $${params.length + 1}`;\n      params.push(data_fim);\n    }\n\n    query += ` ORDER BY cr.data_vencimento ASC`;\n\n    const result = await dbPg.query(query, params);\n\n    res.json({\n      sucesso: true,\n      contas: result.rows\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Listar contas a pagar\n */\nexport async function listarContasPagar(req, res) {\n  try {\n    const { empresa_id } = req.params;\n    const { status, fornecedor_id, data_inicio, data_fim } = req.query;\n\n    let query = `SELECT cp.*, f.nome as fornecedor_nome\n                 FROM contas_pagar cp\n                 JOIN fornecedores f ON cp.fornecedor_id = f.id\n                 WHERE cp.empresa_id = $1`;\n    const params = [empresa_id];\n\n    if (status) {\n      query += ` AND cp.status = $${params.length + 1}`;\n      params.push(status);\n    }\n\n    if (fornecedor_id) {\n      query += ` AND cp.fornecedor_id = $${params.length + 1}`;\n      params.push(fornecedor_id);\n    }\n\n    if (data_inicio) {\n      query += ` AND cp.data_vencimento >= $${params.length + 1}`;\n      params.push(data_inicio);\n    }\n\n    if (data_fim) {\n      query += ` AND cp.data_vencimento <= $${params.length + 1}`;\n      params.push(data_fim);\n    }\n\n    query += ` ORDER BY cp.data_vencimento ASC`;\n\n    const result = await dbPg.query(query, params);\n\n    res.json({\n      sucesso: true,\n      contas: result.rows\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Obter fluxo de caixa\n */\nexport async function obterFluxoCaixa(req, res) {\n  try {\n    const { empresa_id } = req.params;\n    const { data_inicio, data_fim } = req.query;\n\n    const result = await dbPg.query(\n      `SELECT\n        DATE(data_movimento) as data,\n        tipo,\n        COUNT(*) as total_movimentacoes,\n        SUM(valor) as valor_total\n       FROM movimentacoes_caixa\n       WHERE empresa_id = $1\n       AND data_movimento >= $2\n       AND data_movimento <= $3\n       GROUP BY DATE(data_movimento), tipo\n       ORDER BY DATE(data_movimento) DESC`,\n      [empresa_id, data_inicio, data_fim]\n    );\n\n    res.json({\n      sucesso: true,\n      fluxo: result.rows\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Reconciliar pagamentos\n */\nexport async function reconciliarPagamentos(req, res) {\n  try {\n    const { empresa_id, data_inicio, data_fim } = req.body;\n\n    // Contas a receber reconciliadas\n    const recebimentosResult = await dbPg.query(\n      `SELECT\n        COUNT(*) as total,\n        SUM(CASE WHEN status = 'paga' THEN valor_recebido ELSE 0 END) as valor_recebido,\n        SUM(CASE WHEN status = 'pendente' THEN valor ELSE 0 END) as valor_pendente\n       FROM contas_receber\n       WHERE empresa_id = $1\n       AND data_vencimento >= $2\n       AND data_vencimento <= $3`,\n      [empresa_id, data_inicio, data_fim]\n    );\n\n    // Contas a pagar reconciliadas\n    const pagamentosResult = await dbPg.query(\n      `SELECT\n        COUNT(*) as total,\n        SUM(CASE WHEN status = 'paga' THEN valor_pago ELSE 0 END) as valor_pago,\n        SUM(CASE WHEN status = 'pendente' THEN valor ELSE 0 END) as valor_pendente\n       FROM contas_pagar\n       WHERE empresa_id = $1\n       AND data_vencimento >= $2\n       AND data_vencimento <= $3`,\n      [empresa_id, data_inicio, data_fim]\n    );\n\n    res.json({\n      sucesso: true,\n      recebimentos: recebimentosResult.rows[0],\n      pagamentos: pagamentosResult.rows[0]\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\nexport default {\n  criarContaReceber,\n  receberPagamento,\n  criarContaPagar,\n  pagarConta,\n  listarContasReceber,\n  listarContasPagar,\n  obterFluxoCaixa,\n  reconciliarPagamentos\n};\n
+/**
+ * ============================================================================
+ * MÓDULO FLUXO DE PAGAMENTO - CONTAS A RECEBER/PAGAR E RECONCILIAÇÃO
+ * ============================================================================
+ * Arquivo: modules/financeiro/controllers/fluxo-pagamento.js
+ * Descrição: Gerenciar contas a receber, contas a pagar e reconciliação
+ * ============================================================================
+ */
+
+import * as dbPg from '../../../db-pg.js';
+
+/**
+ * Criar conta a receber
+ */
+export async function criarContaReceber(req, res) {
+  try {
+    const {
+      empresa_id,
+      cliente_id,
+      venda_id,
+      valor,
+      data_vencimento,
+      forma_pagamento,
+      observacoes
+    } = req.body;
+
+    const result = await dbPg.query(
+      `INSERT INTO contas_receber (
+        empresa_id, cliente_id, venda_id, valor, data_vencimento,
+        forma_pagamento, status, observacoes, data_criacao
+      )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+       RETURNING *`,
+      [
+        empresa_id,
+        cliente_id,
+        venda_id,
+        valor,
+        data_vencimento,
+        forma_pagamento,
+        'pendente',
+        observacoes
+      ]
+    );
+
+    res.json({
+      sucesso: true,
+      conta: result.rows[0]
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Receber pagamento
+ */
+export async function receberPagamento(req, res) {
+  try {
+    const {
+      conta_id,
+      valor_recebido,
+      data_pagamento,
+      forma_pagamento,
+      numero_documento
+    } = req.body;
+
+    // Buscar conta
+    const contaResult = await dbPg.query(
+      `SELECT * FROM contas_receber WHERE id = $1`,
+      [conta_id]
+    );
+
+    if (contaResult.rows.length === 0) {
+      return res.status(404).json({ sucesso: false, erro: 'Conta não encontrada' });
+    }
+
+    const conta = contaResult.rows[0];
+
+    // Determinar status
+    let status = 'paga';
+    let juros = 0;
+    let desconto = 0;
+
+    if (valor_recebido < conta.valor) {
+      status = 'parcialmente_paga';
+      desconto = conta.valor - valor_recebido;
+    } else if (valor_recebido > conta.valor) {
+      juros = valor_recebido - conta.valor;
+    }
+
+    // Atualizar conta
+    const updateResult = await dbPg.query(
+      `UPDATE contas_receber SET
+        status = $1,
+        data_pagamento = $2,
+        valor_recebido = $3,
+        juros = $4,
+        desconto = $5,
+        forma_pagamento_realizada = $6,
+        numero_documento = $7
+       WHERE id = $8
+       RETURNING *`,
+      [status, data_pagamento, valor_recebido, juros, desconto, forma_pagamento, numero_documento, conta_id]
+    );
+
+    // Registrar movimento de caixa
+    await dbPg.query(
+      `INSERT INTO movimentacoes_caixa (
+        empresa_id, tipo, descricao, valor, data_movimento, referencia_id
+      )
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        conta.empresa_id,
+        'entrada',
+        `Recebimento de ${conta.cliente_id}`,
+        valor_recebido,
+        data_pagamento,
+        conta_id
+      ]
+    );
+
+    res.json({
+      sucesso: true,
+      conta: updateResult.rows[0]
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Criar conta a pagar
+ */
+export async function criarContaPagar(req, res) {
+  try {
+    const {
+      empresa_id,
+      fornecedor_id,
+      compra_id,
+      valor,
+      data_vencimento,
+      forma_pagamento,
+      observacoes
+    } = req.body;
+
+    const result = await dbPg.query(
+      `INSERT INTO contas_pagar (
+        empresa_id, fornecedor_id, compra_id, valor, data_vencimento,
+        forma_pagamento, status, observacoes, data_criacao
+      )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+       RETURNING *`,
+      [
+        empresa_id,
+        fornecedor_id,
+        compra_id,
+        valor,
+        data_vencimento,
+        forma_pagamento,
+        'pendente',
+        observacoes
+      ]
+    );
+
+    res.json({
+      sucesso: true,
+      conta: result.rows[0]
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Pagar conta
+ */
+export async function pagarConta(req, res) {
+  try {
+    const {
+      conta_id,
+      valor_pago,
+      data_pagamento,
+      forma_pagamento,
+      numero_documento
+    } = req.body;
+
+    // Buscar conta
+    const contaResult = await dbPg.query(
+      `SELECT * FROM contas_pagar WHERE id = $1`,
+      [conta_id]
+    );
+
+    if (contaResult.rows.length === 0) {
+      return res.status(404).json({ sucesso: false, erro: 'Conta não encontrada' });
+    }
+
+    const conta = contaResult.rows[0];
+
+    // Determinar status
+    let status = 'paga';
+    let juros = 0;
+    let desconto = 0;
+
+    if (valor_pago < conta.valor) {
+      status = 'parcialmente_paga';
+      desconto = conta.valor - valor_pago;
+    } else if (valor_pago > conta.valor) {
+      juros = valor_pago - conta.valor;
+    }
+
+    // Atualizar conta
+    const updateResult = await dbPg.query(
+      `UPDATE contas_pagar SET
+        status = $1,
+        data_pagamento = $2,
+        valor_pago = $3,
+        juros = $4,
+        desconto = $5,
+        forma_pagamento_realizada = $6,
+        numero_documento = $7
+       WHERE id = $8
+       RETURNING *`,
+      [status, data_pagamento, valor_pago, juros, desconto, forma_pagamento, numero_documento, conta_id]
+    );
+
+    // Registrar movimento de caixa
+    await dbPg.query(
+      `INSERT INTO movimentacoes_caixa (
+        empresa_id, tipo, descricao, valor, data_movimento, referencia_id
+      )
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        conta.empresa_id,
+        'saida',
+        `Pagamento para ${conta.fornecedor_id}`,
+        valor_pago,
+        data_pagamento,
+        conta_id
+      ]
+    );
+
+    res.json({
+      sucesso: true,
+      conta: updateResult.rows[0]
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Listar contas a receber
+ */
+export async function listarContasReceber(req, res) {
+  try {
+    const { empresa_id } = req.params;
+    const { status, cliente_id, data_inicio, data_fim } = req.query;
+
+    let query = `SELECT cr.*, c.nome as cliente_nome
+                 FROM contas_receber cr
+                 JOIN clientes c ON cr.cliente_id = c.id
+                 WHERE cr.empresa_id = $1`;
+    const params = [empresa_id];
+
+    if (status) {
+      query += ` AND cr.status = $${params.length + 1}`;
+      params.push(status);
+    }
+
+    if (cliente_id) {
+      query += ` AND cr.cliente_id = $${params.length + 1}`;
+      params.push(cliente_id);
+    }
+
+    if (data_inicio) {
+      query += ` AND cr.data_vencimento >= $${params.length + 1}`;
+      params.push(data_inicio);
+    }
+
+    if (data_fim) {
+      query += ` AND cr.data_vencimento <= $${params.length + 1}`;
+      params.push(data_fim);
+    }
+
+    query += ` ORDER BY cr.data_vencimento ASC`;
+
+    const result = await dbPg.query(query, params);
+
+    res.json({
+      sucesso: true,
+      contas: result.rows
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Listar contas a pagar
+ */
+export async function listarContasPagar(req, res) {
+  try {
+    const { empresa_id } = req.params;
+    const { status, fornecedor_id, data_inicio, data_fim } = req.query;
+
+    let query = `SELECT cp.*, f.nome as fornecedor_nome
+                 FROM contas_pagar cp
+                 JOIN fornecedores f ON cp.fornecedor_id = f.id
+                 WHERE cp.empresa_id = $1`;
+    const params = [empresa_id];
+
+    if (status) {
+      query += ` AND cp.status = $${params.length + 1}`;
+      params.push(status);
+    }
+
+    if (fornecedor_id) {
+      query += ` AND cp.fornecedor_id = $${params.length + 1}`;
+      params.push(fornecedor_id);
+    }
+
+    if (data_inicio) {
+      query += ` AND cp.data_vencimento >= $${params.length + 1}`;
+      params.push(data_inicio);
+    }
+
+    if (data_fim) {
+      query += ` AND cp.data_vencimento <= $${params.length + 1}`;
+      params.push(data_fim);
+    }
+
+    query += ` ORDER BY cp.data_vencimento ASC`;
+
+    const result = await dbPg.query(query, params);
+
+    res.json({
+      sucesso: true,
+      contas: result.rows
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Obter fluxo de caixa
+ */
+export async function obterFluxoCaixa(req, res) {
+  try {
+    const { empresa_id } = req.params;
+    const { data_inicio, data_fim } = req.query;
+
+    const result = await dbPg.query(
+      `SELECT
+        DATE(data_movimento) as data,
+        tipo,
+        COUNT(*) as total_movimentacoes,
+        SUM(valor) as valor_total
+       FROM movimentacoes_caixa
+       WHERE empresa_id = $1
+       AND data_movimento >= $2
+       AND data_movimento <= $3
+       GROUP BY DATE(data_movimento), tipo
+       ORDER BY DATE(data_movimento) DESC`,
+      [empresa_id, data_inicio, data_fim]
+    );
+
+    res.json({
+      sucesso: true,
+      fluxo: result.rows
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Reconciliar pagamentos
+ */
+export async function reconciliarPagamentos(req, res) {
+  try {
+    const { empresa_id, data_inicio, data_fim } = req.body;
+
+    // Contas a receber reconciliadas
+    const recebimentosResult = await dbPg.query(
+      `SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'paga' THEN valor_recebido ELSE 0 END) as valor_recebido,
+        SUM(CASE WHEN status = 'pendente' THEN valor ELSE 0 END) as valor_pendente
+       FROM contas_receber
+       WHERE empresa_id = $1
+       AND data_vencimento >= $2
+       AND data_vencimento <= $3`,
+      [empresa_id, data_inicio, data_fim]
+    );
+
+    // Contas a pagar reconciliadas
+    const pagamentosResult = await dbPg.query(
+      `SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'paga' THEN valor_pago ELSE 0 END) as valor_pago,
+        SUM(CASE WHEN status = 'pendente' THEN valor ELSE 0 END) as valor_pendente
+       FROM contas_pagar
+       WHERE empresa_id = $1
+       AND data_vencimento >= $2
+       AND data_vencimento <= $3`,
+      [empresa_id, data_inicio, data_fim]
+    );
+
+    res.json({
+      sucesso: true,
+      recebimentos: recebimentosResult.rows[0],
+      pagamentos: pagamentosResult.rows[0]
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+export default {
+  criarContaReceber,
+  receberPagamento,
+  criarContaPagar,
+  pagarConta,
+  listarContasReceber,
+  listarContasPagar,
+  obterFluxoCaixa,
+  reconciliarPagamentos
+};

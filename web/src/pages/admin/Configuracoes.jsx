@@ -92,10 +92,8 @@ export default function Configuracoes() {
   const [savingBar, setSavingBar] = useState(false)
   const [savingPix, setSavingPix] = useState(false)
 
-  // Pagamentos
-  const [modoSimulado, setModoSimulado]   = useState(false)   // config.pagamentos.modoSimulado
-  const [pagAtivos, setPagAtivos]         = useState(false)   // env-based (lido-only)
-  const [savingPag, setSavingPag]         = useState(false)
+  // Pagamentos: somente status server-side de provedor real; não existe modo simulado.
+  const [pagAtivos, setPagAtivos] = useState(false)
 
   // TEF / Maquininha (presencial)
   const [tef, setTef] = useState({ ativo: false, adquirente: '', terminal: '', ambiente: 'homologacao', agenteUrl: '', maxParcelas: 12, valorMinParcela: 20 })
@@ -127,7 +125,6 @@ export default function Configuracoes() {
       if (data.bar)    setBar({ mesasFisicas: data.bar.mesasFisicas ?? '', taxaServico: data.bar.taxaServico ?? '' })
       if (data.pix)    setPix({ chave: data.pix.chave ?? '', nome: data.pix.nome ?? '', cidade: data.pix.cidade ?? '' })
       setPagAtivos(!!status.ativo)
-      setModoSimulado(!!(data.pagamentos?.modoSimulado))
       if (data.tef) setTef(t => ({ ...t, ...data.tef }))
       if (data.fiscal) setFiscal(f => ({ ...f, ...data.fiscal }))
       if (Array.isArray(cats) && cats.length) {
@@ -156,10 +153,6 @@ export default function Configuracoes() {
     } finally {
       setSaving(false)
     }
-  }
-
-  async function savePagamentos() {
-    await saveSection({ pagamentos: { modoSimulado } }, setSavingPag)
   }
 
   async function saveCategorias() {
@@ -305,11 +298,7 @@ export default function Configuracoes() {
       </SectionCard>
 
       {/* Pagamentos — Mercado Pago */}
-      <SectionCard
-        title="💳 Pagamentos & Mercado Pago"
-        onSave={savePagamentos}
-        saving={savingPag}
-      >
+      <SectionCard title="💳 Pagamentos & Mercado Pago">
         {/* Status atual (env-based, read-only) */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10,
@@ -323,34 +312,14 @@ export default function Configuracoes() {
           }} />
           <div>
             <strong style={{ color: pagAtivos ? 'var(--green)' : 'var(--gold)' }}>
-              {pagAtivos ? 'Mercado Pago ativo' : 'Modo simulado (sem env vars de produção)'}
+              {pagAtivos ? 'Pagamento real configurado' : 'Pagamentos reais indisponíveis'}
             </strong>
             <p style={{ margin: '2px 0 0', color: 'var(--muted)', fontSize: 12 }}>
               {pagAtivos
-                ? 'Variáveis PIX_CHAVE / MP_TOKEN detectadas no servidor.'
-                : 'Configure PIX_CHAVE ou MP_TOKEN nas variáveis de ambiente do servidor para ativar pagamentos reais.'}
+                ? 'O servidor detectou uma configuração de pagamento real.'
+                : 'Configure o provedor no secret manager do servidor e conclua a homologação antes de cobrar.'}
             </p>
           </div>
-        </div>
-
-        {/* Toggle forçar simulação */}
-        <div style={{
-          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-          gap: 16, padding: '14px 0', borderTop: '1px solid var(--line)',
-        }}>
-          <div style={{ flex: 1 }}>
-            <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 700, color: 'var(--cream)' }}>
-              Forçar modo simulado
-            </p>
-            <p style={{ margin: 0, fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
-              Quando ativado, todos os pagamentos entram em modo simulação — mesmo que as variáveis de produção estejam configuradas.
-              Útil para testes sem movimentar dinheiro real.
-            </p>
-          </div>
-          <Toggle
-            checked={modoSimulado}
-            onChange={setModoSimulado}
-          />
         </div>
 
         {/* Toggle pagamentos por meio disponíveis */}
@@ -381,16 +350,9 @@ export default function Configuracoes() {
           </p>
         </div>
 
-        {/* Aviso quando modoSimulado ativo */}
-        {modoSimulado && (
-          <div style={{
-            marginTop: 16,
-            background: 'rgba(255,107,44,.10)', border: '1px solid rgba(255,107,44,.35)',
-            borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--gold)',
-          }}>
-            ⚠️ <strong>Modo simulado ativo:</strong> ao salvar, todos os pagamentos PIX passarão a exigir confirmação manual — nenhum valor real será cobrado.
-          </div>
-        )}
+        <div style={{ marginTop: 16, background: 'rgba(255,107,44,.08)', border: '1px solid rgba(255,107,44,.25)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--muted)' }}>
+          Pagamentos somente são aprovados por retorno verificável do provedor real. Não há confirmação manual ou modo simulado neste ambiente.
+        </div>
       </SectionCard>
 
       {/* TEF / Maquininha */}
@@ -407,7 +369,7 @@ export default function Configuracoes() {
         }}>
           {String(tef.agenteUrl || '').trim()
             ? '✓ Agente TEF configurado — o PDV captura no pinpad físico.'
-            : '⚠️ Sem agente TEF: o PDV opera em modo SIMULADO (aprova automaticamente, sem cobrança real). Informe o endereço do agente local para produção.'}
+            : '⚠️ Sem agente TEF: o pagamento fica bloqueado até o agente local da maquininha ser configurado.'}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
           <Field label="Adquirente (Stone/Cielo/Rede/PagBank)">

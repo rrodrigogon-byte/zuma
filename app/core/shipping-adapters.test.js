@@ -6,12 +6,15 @@ import { shippingProviders } from './shipping-adapters.js';
 const originalFetch = global.fetch;
 const originalToken = process.env.ME_ACCESS_TOKEN;
 const originalWebhook = process.env.ME_WEBHOOK_SECRET;
+const originalCorreiosToken = process.env.CORREIOS_API_TOKEN;
 
 function restoreEnvironment() {
   if (originalToken === undefined) delete process.env.ME_ACCESS_TOKEN;
   else process.env.ME_ACCESS_TOKEN = originalToken;
   if (originalWebhook === undefined) delete process.env.ME_WEBHOOK_SECRET;
   else process.env.ME_WEBHOOK_SECRET = originalWebhook;
+  if (originalCorreiosToken === undefined) delete process.env.CORREIOS_API_TOKEN;
+  else process.env.CORREIOS_API_TOKEN = originalCorreiosToken;
   global.fetch = originalFetch;
 }
 
@@ -84,4 +87,45 @@ test('webhook Melhor Envio valida X-ME-Signature e normaliza evento order.posted
   assert.equal(result.providerStatus, 'posted');
   assert.equal(result.trackingCode, 'BR123');
   await assert.rejects(() => adapter.verifyWebhook({ payload, signature: 'invalid', context: { rawBody, account: { public_config: { webhookSecretRef: 'env:ME_WEBHOOK_SECRET' } } } }), /assinatura do webhook/);
+});
+
+
+test('adapter Correios consulta preço e prazo por serviço com token server-side', async () => {
+  process.env.CORREIOS_API_TOKEN = 'correios-token';
+  const requests = [];
+  global.fetch = async (url, options) => {
+    requests.push({ url, options });
+    assert.equal(options.headers.Authorization, 'Bearer correios-token');
+    if (url.includes('/preco/v1/nacional/03220')) return new Response(JSON.stringify({ coProduto: '03220', pcFinal: 'R$ 18,90', psCobrado: '500' }), { status: 200 });
+    if (url.includes('/prazo/v1/nacional/03220')) return new Response(JSON.stringify({ coProduto: '03220', prazoEntrega: 5, entregaDomiciliar: 'S' }), { status: 200 });
+    throw new Error(`URL inesperada ${url}`);
+  };
+  const result = await shippingProviders.get('correios').quote({
+    account: { provider: 'correios', secret_ref: 'env:CORREIOS_API_TOKEN', ambiente: 'sandbox', public_config: { services: ['03220'] } },
+    originPostalCode: '01001000',
+    destinationPostalCode: '20040002',
+    products: [{ id: 'SKU-1', width: 10, height: 5, length: 20, weight: 0.5, insuranceValue: 39.9, quantity: 1 }],
+  });
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].url.startsWith('https://apihom.correios.com.br/preco/v1/nacional/03220?'), true);
+  assert.equal(requests[1].url.startsWith('https://apihom.correios.com.br/prazo/v1/nacional/03220?'), true);
+  assert.equal(result.provider, 'correios');
+  assert.equal(result.options[0].id, '03220');
+  assert.equal(result.options[0].amount, 18.9);
+  assert.equal(result.options[0].deliveryDays, 5);
+  assert.equal(result.options[0].carrier, 'Correios');
+});
+
+test('adapter Correios consulta rastreamento e recusa pré-postagem não validada', async () => {
+  process.env.CORREIOS_API_TOKEN = 'correios-token';
+  global.fetch = async (url, options) => {
+    assert.equal(options.headers.Authorization, 'Bearer correios-token');
+    assert.equal(url, 'https://apihom.correios.com.br/srorastro/v1/objetos/AA123456789BR?resultado=T');
+    return new Response(JSON.stringify({ objetos: [{ codObjeto: 'AA123456789BR', eventos: [{ codigo: 'PO', descricao: 'Objeto postado', dtHrCriado: '2026-08-28T10:00:00', unidade: { endereco: { cidade: 'São Paulo', uf: 'SP' } } }] }] }), { status: 200 });
+  };
+  const result = await shippingProviders.get('correios').track({ account: { provider: 'correios', secret_ref: 'env:CORREIOS_API_TOKEN', ambiente: 'sandbox', public_config: {} }, providerShipmentId: 'AA123456789BR' });
+  assert.equal(result.providerStatus, 'posted');
+  assert.equal(result.trackingCode, 'AA123456789BR');
+  assert.equal(result.events[0].status, 'PO');
+  await assert.rejects(() => shippingProviders.get('correios').createShipment({}), error => error.code === 'SHIPPING_PROVIDER_CAPABILITY_UNAVAILABLE');
 });

@@ -1,2 +1,316 @@
 /**
- * ============================================================================\n * MÓDULO BARBEARIA - AGENDAMENTOS E SERVIÇOS\n * ============================================================================\n * Arquivo: modules/barbearia/controllers/barbearia.js\n * Descrição: Gerenciar agendamentos, serviços e clientes\n * ============================================================================\n */\n\nimport * as dbPg from '../../../db-pg.js';\n\n/**\n * Criar agendamento\n */\nexport async function criarAgendamento(req, res) {\n  try {\n    const {\n      empresa_id,\n      cliente_nome,\n      cliente_telefone,\n      barbeiro_id,\n      servico_id,\n      data_agendamento,\n      hora_agendamento,\n      observacoes\n    } = req.body;\n\n    const result = await dbPg.query(\n      `INSERT INTO agendamentos (\n        empresa_id, cliente_nome, cliente_telefone, barbeiro_id, servico_id,\n        data_agendamento, hora_agendamento, status, observacoes, data_criacao\n      )\n       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())\n       RETURNING *`,\n      [\n        empresa_id,\n        cliente_nome,\n        cliente_telefone,\n        barbeiro_id,\n        servico_id,\n        data_agendamento,\n        hora_agendamento,\n        'agendado',\n        observacoes\n      ]\n    );\n\n    res.json({\n      sucesso: true,\n      agendamento: result.rows[0]\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Confirmar agendamento\n */\nexport async function confirmarAgendamento(req, res) {\n  try {\n    const { agendamento_id } = req.body;\n\n    const result = await dbPg.query(\n      `UPDATE agendamentos SET status = 'confirmado', data_confirmacao = NOW()\n       WHERE id = $1\n       RETURNING *`,\n      [agendamento_id]\n    );\n\n    res.json({\n      sucesso: true,\n      agendamento: result.rows[0]\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Iniciar atendimento\n */\nexport async function iniciarAtendimento(req, res) {\n  try {\n    const { agendamento_id } = req.body;\n\n    const result = await dbPg.query(\n      `UPDATE agendamentos SET status = 'em_atendimento', data_inicio = NOW()\n       WHERE id = $1\n       RETURNING *`,\n      [agendamento_id]\n    );\n\n    res.json({\n      sucesso: true,\n      agendamento: result.rows[0]\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Finalizar atendimento\n */\nexport async function finalizarAtendimento(req, res) {\n  try {\n    const { agendamento_id, valor_servico, forma_pagamento } = req.body;\n\n    const result = await dbPg.query(\n      `UPDATE agendamentos SET status = 'finalizado', data_fim = NOW(), valor_servico = $1\n       WHERE id = $2\n       RETURNING *`,\n      [valor_servico, agendamento_id]\n    );\n\n    // Registrar pagamento\n    await dbPg.query(\n      `INSERT INTO pagamentos (agendamento_id, forma, valor, status)\n       VALUES ($1, $2, $3, $4)`,\n      [agendamento_id, forma_pagamento, valor_servico, 'confirmado']\n    );\n\n    res.json({\n      sucesso: true,\n      agendamento: result.rows[0]\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Cancelar agendamento\n */\nexport async function cancelarAgendamento(req, res) {\n  try {\n    const { agendamento_id, motivo } = req.body;\n\n    const result = await dbPg.query(\n      `UPDATE agendamentos SET status = 'cancelado', motivo_cancelamento = $1, data_cancelamento = NOW()\n       WHERE id = $2\n       RETURNING *`,\n      [motivo, agendamento_id]\n    );\n\n    res.json({\n      sucesso: true,\n      agendamento: result.rows[0]\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Listar agendamentos\n */\nexport async function listarAgendamentos(req, res) {\n  try {\n    const { empresa_id } = req.params;\n    const { data, barbeiro_id, status } = req.query;\n\n    let query = `SELECT a.*, s.nome as servico_nome, s.duracao, b.nome as barbeiro_nome\n                 FROM agendamentos a\n                 JOIN servicos s ON a.servico_id = s.id\n                 JOIN barbeiros b ON a.barbeiro_id = b.id\n                 WHERE a.empresa_id = $1`;\n    const params = [empresa_id];\n\n    if (data) {\n      query += ` AND DATE(a.data_agendamento) = $${params.length + 1}`;\n      params.push(data);\n    }\n\n    if (barbeiro_id) {\n      query += ` AND a.barbeiro_id = $${params.length + 1}`;\n      params.push(barbeiro_id);\n    }\n\n    if (status) {\n      query += ` AND a.status = $${params.length + 1}`;\n      params.push(status);\n    }\n\n    query += ` ORDER BY a.data_agendamento, a.hora_agendamento`;\n\n    const result = await dbPg.query(query, params);\n\n    res.json({\n      sucesso: true,\n      agendamentos: result.rows\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Criar serviço\n */\nexport async function criarServico(req, res) {\n  try {\n    const { empresa_id, nome, descricao, preco, duracao_minutos } = req.body;\n\n    const result = await dbPg.query(\n      `INSERT INTO servicos (empresa_id, nome, descricao, preco, duracao_minutos)\n       VALUES ($1, $2, $3, $4, $5)\n       RETURNING *`,\n      [empresa_id, nome, descricao, preco, duracao_minutos]\n    );\n\n    res.json({\n      sucesso: true,\n      servico: result.rows[0]\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Listar serviços\n */\nexport async function listarServicos(req, res) {\n  try {\n    const { empresa_id } = req.params;\n\n    const result = await dbPg.query(\n      `SELECT * FROM servicos WHERE empresa_id = $1 ORDER BY nome`,\n      [empresa_id]\n    );\n\n    res.json({\n      sucesso: true,\n      servicos: result.rows\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Obter agenda do barbeiro\n */\nexport async function obterAgendaBarbeiro(req, res) {\n  try {\n    const { barbeiro_id } = req.params;\n    const { data } = req.query;\n\n    const result = await dbPg.query(\n      `SELECT a.*, s.nome as servico_nome, s.duracao\n       FROM agendamentos a\n       JOIN servicos s ON a.servico_id = s.id\n       WHERE a.barbeiro_id = $1\n       AND DATE(a.data_agendamento) = $2\n       AND a.status IN ('agendado', 'confirmado', 'em_atendimento')\n       ORDER BY a.hora_agendamento`,\n      [barbeiro_id, data]\n    );\n\n    res.json({\n      sucesso: true,\n      agendamentos: result.rows\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\n/**\n * Relatório de faturamento\n */\nexport async function relatorioFaturamento(req, res) {\n  try {\n    const { empresa_id } = req.params;\n    const { data_inicio, data_fim } = req.query;\n\n    const result = await dbPg.query(\n      `SELECT\n        DATE(a.data_fim) as data,\n        b.nome as barbeiro,\n        COUNT(a.id) as total_atendimentos,\n        SUM(a.valor_servico) as faturamento\n       FROM agendamentos a\n       JOIN barbeiros b ON a.barbeiro_id = b.id\n       WHERE a.empresa_id = $1\n       AND a.status = 'finalizado'\n       AND a.data_fim >= $2\n       AND a.data_fim <= $3\n       GROUP BY DATE(a.data_fim), b.nome\n       ORDER BY DATE(a.data_fim) DESC`,\n      [empresa_id, data_inicio, data_fim]\n    );\n\n    res.json({\n      sucesso: true,\n      relatorio: result.rows\n    });\n  } catch (error) {\n    res.status(500).json({ sucesso: false, erro: error.message });\n  }\n}\n\nexport default {\n  criarAgendamento,\n  confirmarAgendamento,\n  iniciarAtendimento,\n  finalizarAtendimento,\n  cancelarAgendamento,\n  listarAgendamentos,\n  criarServico,\n  listarServicos,\n  obterAgendaBarbeiro,\n  relatorioFaturamento\n};\n
+ * ============================================================================
+ * MÓDULO BARBEARIA - AGENDAMENTOS E SERVIÇOS
+ * ============================================================================
+ * Arquivo: modules/barbearia/controllers/barbearia.js
+ * Descrição: Gerenciar agendamentos, serviços e clientes
+ * ============================================================================
+ */
+
+import * as dbPg from '../../../db-pg.js';
+
+/**
+ * Criar agendamento
+ */
+export async function criarAgendamento(req, res) {
+  try {
+    const {
+      empresa_id,
+      cliente_nome,
+      cliente_telefone,
+      barbeiro_id,
+      servico_id,
+      data_agendamento,
+      hora_agendamento,
+      observacoes
+    } = req.body;
+
+    const result = await dbPg.query(
+      `INSERT INTO agendamentos (
+        empresa_id, cliente_nome, cliente_telefone, barbeiro_id, servico_id,
+        data_agendamento, hora_agendamento, status, observacoes, data_criacao
+      )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+       RETURNING *`,
+      [
+        empresa_id,
+        cliente_nome,
+        cliente_telefone,
+        barbeiro_id,
+        servico_id,
+        data_agendamento,
+        hora_agendamento,
+        'agendado',
+        observacoes
+      ]
+    );
+
+    res.json({
+      sucesso: true,
+      agendamento: result.rows[0]
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Confirmar agendamento
+ */
+export async function confirmarAgendamento(req, res) {
+  try {
+    const { agendamento_id } = req.body;
+
+    const result = await dbPg.query(
+      `UPDATE agendamentos SET status = 'confirmado', data_confirmacao = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [agendamento_id]
+    );
+
+    res.json({
+      sucesso: true,
+      agendamento: result.rows[0]
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Iniciar atendimento
+ */
+export async function iniciarAtendimento(req, res) {
+  try {
+    const { agendamento_id } = req.body;
+
+    const result = await dbPg.query(
+      `UPDATE agendamentos SET status = 'em_atendimento', data_inicio = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [agendamento_id]
+    );
+
+    res.json({
+      sucesso: true,
+      agendamento: result.rows[0]
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Finalizar atendimento
+ */
+export async function finalizarAtendimento(req, res) {
+  try {
+    const { agendamento_id, valor_servico, forma_pagamento } = req.body;
+
+    const result = await dbPg.query(
+      `UPDATE agendamentos SET status = 'finalizado', data_fim = NOW(), valor_servico = $1
+       WHERE id = $2
+       RETURNING *`,
+      [valor_servico, agendamento_id]
+    );
+
+    // Registrar pagamento
+    await dbPg.query(
+      `INSERT INTO pagamentos (agendamento_id, forma, valor, status)
+       VALUES ($1, $2, $3, $4)`,
+      [agendamento_id, forma_pagamento, valor_servico, 'confirmado']
+    );
+
+    res.json({
+      sucesso: true,
+      agendamento: result.rows[0]
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Cancelar agendamento
+ */
+export async function cancelarAgendamento(req, res) {
+  try {
+    const { agendamento_id, motivo } = req.body;
+
+    const result = await dbPg.query(
+      `UPDATE agendamentos SET status = 'cancelado', motivo_cancelamento = $1, data_cancelamento = NOW()
+       WHERE id = $2
+       RETURNING *`,
+      [motivo, agendamento_id]
+    );
+
+    res.json({
+      sucesso: true,
+      agendamento: result.rows[0]
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Listar agendamentos
+ */
+export async function listarAgendamentos(req, res) {
+  try {
+    const { empresa_id } = req.params;
+    const { data, barbeiro_id, status } = req.query;
+
+    let query = `SELECT a.*, s.nome as servico_nome, s.duracao, b.nome as barbeiro_nome
+                 FROM agendamentos a
+                 JOIN servicos s ON a.servico_id = s.id
+                 JOIN barbeiros b ON a.barbeiro_id = b.id
+                 WHERE a.empresa_id = $1`;
+    const params = [empresa_id];
+
+    if (data) {
+      query += ` AND DATE(a.data_agendamento) = $${params.length + 1}`;
+      params.push(data);
+    }
+
+    if (barbeiro_id) {
+      query += ` AND a.barbeiro_id = $${params.length + 1}`;
+      params.push(barbeiro_id);
+    }
+
+    if (status) {
+      query += ` AND a.status = $${params.length + 1}`;
+      params.push(status);
+    }
+
+    query += ` ORDER BY a.data_agendamento, a.hora_agendamento`;
+
+    const result = await dbPg.query(query, params);
+
+    res.json({
+      sucesso: true,
+      agendamentos: result.rows
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Criar serviço
+ */
+export async function criarServico(req, res) {
+  try {
+    const { empresa_id, nome, descricao, preco, duracao_minutos } = req.body;
+
+    const result = await dbPg.query(
+      `INSERT INTO servicos (empresa_id, nome, descricao, preco, duracao_minutos)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [empresa_id, nome, descricao, preco, duracao_minutos]
+    );
+
+    res.json({
+      sucesso: true,
+      servico: result.rows[0]
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Listar serviços
+ */
+export async function listarServicos(req, res) {
+  try {
+    const { empresa_id } = req.params;
+
+    const result = await dbPg.query(
+      `SELECT * FROM servicos WHERE empresa_id = $1 ORDER BY nome`,
+      [empresa_id]
+    );
+
+    res.json({
+      sucesso: true,
+      servicos: result.rows
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Obter agenda do barbeiro
+ */
+export async function obterAgendaBarbeiro(req, res) {
+  try {
+    const { barbeiro_id } = req.params;
+    const { data } = req.query;
+
+    const result = await dbPg.query(
+      `SELECT a.*, s.nome as servico_nome, s.duracao
+       FROM agendamentos a
+       JOIN servicos s ON a.servico_id = s.id
+       WHERE a.barbeiro_id = $1
+       AND DATE(a.data_agendamento) = $2
+       AND a.status IN ('agendado', 'confirmado', 'em_atendimento')
+       ORDER BY a.hora_agendamento`,
+      [barbeiro_id, data]
+    );
+
+    res.json({
+      sucesso: true,
+      agendamentos: result.rows
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+/**
+ * Relatório de faturamento
+ */
+export async function relatorioFaturamento(req, res) {
+  try {
+    const { empresa_id } = req.params;
+    const { data_inicio, data_fim } = req.query;
+
+    const result = await dbPg.query(
+      `SELECT
+        DATE(a.data_fim) as data,
+        b.nome as barbeiro,
+        COUNT(a.id) as total_atendimentos,
+        SUM(a.valor_servico) as faturamento
+       FROM agendamentos a
+       JOIN barbeiros b ON a.barbeiro_id = b.id
+       WHERE a.empresa_id = $1
+       AND a.status = 'finalizado'
+       AND a.data_fim >= $2
+       AND a.data_fim <= $3
+       GROUP BY DATE(a.data_fim), b.nome
+       ORDER BY DATE(a.data_fim) DESC`,
+      [empresa_id, data_inicio, data_fim]
+    );
+
+    res.json({
+      sucesso: true,
+      relatorio: result.rows
+    });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+}
+
+export default {
+  criarAgendamento,
+  confirmarAgendamento,
+  iniciarAtendimento,
+  finalizarAtendimento,
+  cancelarAgendamento,
+  listarAgendamentos,
+  criarServico,
+  listarServicos,
+  obterAgendaBarbeiro,
+  relatorioFaturamento
+};

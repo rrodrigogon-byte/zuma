@@ -46,13 +46,9 @@ export default function LojaAtendimento() {
   useEffect(() => {
     load()
     pollRef.current = setInterval(() => load(true), 8000)
-    // SSE: refetch imediato quando um pedido muda no servidor (best-effort)
-    let es
-    try {
-      es = new EventSource('/api/events')
-      es.addEventListener('loja', () => load(true))
-    } catch { /* sem SSE → segue só com polling */ }
-    return () => { clearInterval(pollRef.current); if (es) es.close() }
+    // O endpoint SSE requer Authorization e EventSource não permite headers customizados.
+    // O polling autenticado mantém a fila consistente sem colocar o JWT na URL.
+    return () => { clearInterval(pollRef.current) }
   }, [load])
 
   const mudarStatus = async (p, status) => {

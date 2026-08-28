@@ -16,7 +16,10 @@ import {
   auditLog,
   adjustInventory,
   archiveCatalogProduct,
+  archiveCatalogVariant,
+  createCatalogMedia,
   createCatalogProduct,
+  createCatalogVariant,
   createCategory,
   createFulfillment,
   createInventoryLocation,
@@ -24,7 +27,12 @@ import {
   listPublishedProducts,
   publishCatalogProduct,
   setVariantPrice,
+  updateCategory,
+  updateCatalogVariant,
+  deleteCatalogMedia,
+  listCatalogMedia,
   createShippingMethod,
+  updateShippingMethod,
   tenantContext,
   transitionOrder,
   updateCatalogProduct,
@@ -53,6 +61,19 @@ async function resolvePublicStorefront(req) {
   return result.rows[0];
 }
 
+export function parsePagination(req, defaultLimit = 100, maxLimit = 500) {
+  const parsedLimit = Number.parseInt(String(req.query.limit || defaultLimit), 10);
+  const parsedOffset = Number.parseInt(String(req.query.offset || 0), 10);
+  return { limit: Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), maxLimit) : defaultLimit, offset: Number.isFinite(parsedOffset) ? Math.max(parsedOffset, 0) : 0 };
+}
+
+function statusCounts(rows = []) {
+  return rows.reduce((result, row) => {
+    result[String(row.status)] = Number(row.total || 0);
+    return result;
+  }, {});
+}
+
 function jsonError(res, error) {
   const statusByCode = {
     INVALID_ID: 400,
@@ -75,6 +96,8 @@ function jsonError(res, error) {
     PERMISSION_DENIED: 403,
     CATEGORY_REQUIRED: 400,
     CATEGORY_NOT_FOUND: 404,
+    CATEGORY_INVALID: 400,
+    CATEGORY_SELF_PARENT: 400,
     PRODUCT_REQUIRED: 400,
     PRODUCT_NOT_FOUND: 404,
     NO_CHANGES: 400,
@@ -85,6 +108,10 @@ function jsonError(res, error) {
     INVENTORY_LOCATION_SCOPE_MISMATCH: 409,
     INVALID_PRICE: 400,
     VARIANT_NOT_FOUND: 404,
+    VARIANT_REQUIRED: 400,
+    VARIANT_INVALID: 400,
+    MEDIA_REQUIRED: 400,
+    MEDIA_NOT_FOUND: 404,
     LOCATION_REQUIRED: 400,
     STORE_NOT_FOUND: 404,
     INVALID_REPORT_PERIOD: 400,
@@ -124,6 +151,10 @@ function jsonError(res, error) {
     SHIPPING_PACKAGE_DATA_REQUIRED: 422,
     SHIPPING_PROVIDER_UNSUPPORTED: 400,
     SHIPPING_PROVIDER_NOT_CONFIGURED: 503,
+    SHIPPING_PROVIDER_CAPABILITY_UNAVAILABLE: 409,
+    SHIPPING_SERVICE_CODES_REQUIRED: 422,
+    SHIPPING_TRACKING_INVALID: 400,
+    SHIPPING_WEBHOOK_UNSUPPORTED: 409,
     SHIPPING_ACCOUNT_INVALID: 400,
     SHIPPING_ACCOUNT_NOT_FOUND: 404,
     SHIPPING_ACCOUNT_NOT_CONFIGURED: 409,
@@ -506,6 +537,8 @@ export function createCommerceAdminRouter() {
         predicates.push(`EXISTS (SELECT 1 FROM commerce_product_channels pc JOIN commerce_storefronts s ON s.empresa_id = pc.empresa_id AND s.id = pc.storefront_id WHERE pc.empresa_id = p.empresa_id AND pc.product_id = p.id AND s.loja_id = $${values.length})`);
       }
       if (req.query.status) { values.push(String(req.query.status)); predicates.push(`p.status = $${values.length}`); }
+      const { limit, offset } = parsePagination(req, 100, 500);
+      const count = await db.query(`SELECT COUNT(*)::int AS total FROM commerce_products p LEFT JOIN commerce_categories c ON c.empresa_id = p.empresa_id AND c.id = p.category_id WHERE ${predicates.join(' AND ')}`, values);
       const result = await db.query(
         `SELECT p.id, p.slug, p.nome, p.tipo, p.status, p.descricao, p.descricao_curta, p.category_id,
                 c.nome AS category_name, p.criado_em, p.atualizado_em,
@@ -515,6 +548,12 @@ export function createCommerceAdminRouter() {
                     'sku', v.sku,
                     'nome', v.nome,
                     'atributos', v.atributos,
+                    'barcode', v.barcode,
+                    'pesoGramas', v.peso_gramas,
+                    'larguraCm', v.largura_cm,
+                    'alturaCm', v.altura_cm,
+                    'comprimentoCm', v.comprimento_cm,
+                    'ativo', v.ativo,
                     'preco', vp.preco,
                     'precoPromocional', vp.preco_promocional,
                     'estoque', COALESCE((SELECT SUM(il.disponivel) FROM commerce_inventory_levels il WHERE il.empresa_id = v.empresa_id AND il.variant_id = v.id), 0)
@@ -535,15 +574,29 @@ export function createCommerceAdminRouter() {
                        ORDER BY price.vigencia_inicio DESC LIMIT 1
                     ) vp ON true
                    WHERE v.empresa_id = p.empresa_id AND v.product_id = p.id
-                ), '[]'::jsonb) AS variants
+                ), '[]'::jsonb) AS variants,
+                COALESCE((
+                  SELECT jsonb_agg(jsonb_build_object(
+                    'id', m.id,
+                    'variantId', m.variant_id,
+                    'storageKey', m.storage_key,
+                    'publicUrl', m.public_url,
+                    'mimeType', m.mime_type,
+                    'altText', m.alt_text,
+                    'ordem', m.ordem
+                  ) ORDER BY m.ordem ASC, m.criado_em ASC)
+                    FROM commerce_product_media m
+                   WHERE m.empresa_id = p.empresa_id AND m.product_id = p.id
+                ), '[]'::jsonb) AS media
            FROM commerce_products p
            LEFT JOIN commerce_categories c ON c.empresa_id = p.empresa_id AND c.id = p.category_id
           WHERE ${predicates.join(' AND ')}
           ORDER BY p.atualizado_em DESC
-          LIMIT 100`,
-        values,
+          LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+        [...values, limit, offset],
       );
-      res.json({ items: result.rows });
+      const total = Number(count.rows[0]?.total || 0);
+      res.json({ items: result.rows, pagination: { limit, offset, total, hasMore: offset + result.rows.length < total } });
     } catch (error) { jsonError(res, error); }
   });
   router.get('/catalog/categories', async (req, res) => {
@@ -571,6 +624,54 @@ export function createCommerceAdminRouter() {
       const context = await requirePermission(req, 'catalog.write');
       const result = await withCommerceTransaction(trx => createCatalogProduct(trx, context, req.body));
       res.status(201).json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.patch('/catalog/categories/:id', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'catalog.write');
+      const result = await withCommerceTransaction(trx => updateCategory(trx, context, req.params.id, req.body));
+      res.json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/catalog/products/:id/variants', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'catalog.write');
+      const result = await withCommerceTransaction(trx => createCatalogVariant(trx, context, req.params.id, req.body));
+      res.status(201).json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.patch('/catalog/variants/:id', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'catalog.write');
+      const result = await withCommerceTransaction(trx => updateCatalogVariant(trx, context, req.params.id, req.body));
+      res.json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.delete('/catalog/variants/:id', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'catalog.write');
+      const result = await withCommerceTransaction(trx => archiveCatalogVariant(trx, context, req.params.id));
+      res.json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.get('/catalog/products/:id/media', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'catalog.read');
+      res.json(await listCatalogMedia(db, context, req.params.id));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/catalog/products/:id/media', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'catalog.write');
+      const result = await withCommerceTransaction(trx => createCatalogMedia(trx, context, req.params.id, req.body));
+      res.status(201).json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.delete('/catalog/media/:id', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'catalog.write');
+      const result = await withCommerceTransaction(trx => deleteCatalogMedia(trx, context, req.params.id));
+      res.json(result);
     } catch (error) { jsonError(res, error); }
   });
   router.post('/catalog/products/:id/publish', async (req, res) => {
@@ -635,14 +736,25 @@ export function createCommerceAdminRouter() {
       res.status(201).json(result);
     } catch (error) { jsonError(res, error); }
   });
+  router.patch('/shipping/methods/:id', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'fulfillment.write');
+      const result = await withCommerceTransaction(async trx => {
+        const method = await updateShippingMethod(trx, context, req.params.id, req.body);
+        await auditLog(trx, context, { entidade: 'shipping_method', entidadeId: method.id, acao: 'updated', depois: { nome: method.nome, tipo: method.tipo, ativo: method.ativo, configuracao: method.configuracao } });
+        return method;
+      });
+      res.json(result);
+    } catch (error) { jsonError(res, error); }
+  });
   router.get('/shipping/methods', async (req, res) => {
     try {
       const context = await requirePermission(req, 'fulfillment.read');
       const values = [context.empresaId];
-      const predicates = ['sm.empresa_id = $1', 'sm.ativo = true'];
+      const predicates = ['sm.empresa_id = $1'];
       if (context.lojaId) { values.push(context.lojaId); predicates.push(`s.loja_id = $${values.length}`); }
       const result = await db.query(
-        `SELECT sm.id, sm.storefront_id, sm.codigo, sm.nome, sm.tipo, sm.configuracao
+        `SELECT sm.id, sm.storefront_id, sm.codigo, sm.nome, sm.tipo, sm.ativo, sm.configuracao
            FROM commerce_shipping_methods sm
            JOIN commerce_storefronts s ON s.empresa_id = sm.empresa_id AND s.id = sm.storefront_id
           WHERE ${predicates.join(' AND ')}
@@ -801,15 +913,23 @@ export function createCommerceAdminRouter() {
   router.get('/customers', async (req, res) => {
     try {
       const context = await requirePermission(req, 'customers.read');
+      const { limit, offset } = parsePagination(req, 100, 500);
+      const values = [context.empresaId];
+      const predicates = ['empresa_id = $1'];
+      const query = String(req.query.q || '').trim().slice(0, 160);
+      if (query) { values.push(`%${query}%`); predicates.push(`(nome ILIKE $${values.length} OR email ILIKE $${values.length})`); }
+      const where = predicates.join(' AND ');
+      const count = await db.query(`SELECT COUNT(*)::int AS total FROM commerce_customers WHERE ${where}`, values);
       const result = await db.query(
         `SELECT id, nome, email, telefone, documento_mascarado, bloqueado, criado_em, atualizado_em
            FROM commerce_customers
-          WHERE empresa_id = $1
+          WHERE ${where}
           ORDER BY atualizado_em DESC
-          LIMIT 500`,
-        [context.empresaId],
+          LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+        [...values, limit, offset],
       );
-      res.json({ items: result.rows });
+      const total = Number(count.rows[0]?.total || 0);
+      res.json({ items: result.rows, pagination: { limit, offset, total, hasMore: offset + result.rows.length < total } });
     } catch (error) { jsonError(res, error); }
   });
   router.post('/customers', async (req, res) => {
@@ -914,6 +1034,34 @@ export function createCommerceAdminRouter() {
       res.json(result);
     } catch (error) { jsonError(res, error); }
   });
+  router.get('/operations/health', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'reports.read');
+      const scope = [context.empresaId, context.lojaId || null];
+      const [payments, fulfillments, paymentWebhooks, shippingWebhooks] = await Promise.all([
+        db.query(`SELECT p.status, COUNT(*)::int AS total
+                    FROM commerce_payments p
+                    JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id
+                    JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id
+                   WHERE p.empresa_id = $1 AND ($2::uuid IS NULL OR s.loja_id = $2)
+                   GROUP BY p.status`, scope),
+        db.query(`SELECT f.status, COUNT(*)::int AS total
+                    FROM commerce_fulfillments f
+                    JOIN commerce_orders o ON o.empresa_id = f.empresa_id AND o.id = f.order_id
+                    JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id
+                   WHERE f.empresa_id = $1 AND ($2::uuid IS NULL OR s.loja_id = $2)
+                   GROUP BY f.status`, scope),
+        db.query(`SELECT status, COUNT(*)::int AS total FROM commerce_payment_webhooks WHERE empresa_id = $1 GROUP BY status`, [context.empresaId]),
+        db.query(`SELECT status, COUNT(*)::int AS total FROM commerce_shipping_webhooks WHERE empresa_id = $1 GROUP BY status`, [context.empresaId]),
+      ]);
+      res.json({
+        generatedAt: new Date().toISOString(),
+        payments: statusCounts(payments.rows),
+        fulfillments: statusCounts(fulfillments.rows),
+        webhooks: { payments: statusCounts(paymentWebhooks.rows), shipping: statusCounts(shippingWebhooks.rows) },
+      });
+    } catch (error) { jsonError(res, error); }
+  });
   router.patch('/orders/:id', async (req, res) => {
     try {
       const permission = ['refunded', 'partially_refunded'].includes(req.body?.status) ? 'orders.refund' : 'orders.write';
@@ -943,36 +1091,57 @@ export function createCommerceAdminRouter() {
   router.get('/audit', async (req, res) => {
     try {
       const context = await requirePermission(req, 'audit.read');
+      const requestedLimit = Number(req.query.limit);
+      const requestedOffset = Number(req.query.offset);
+      const limit = Number.isInteger(requestedLimit) ? Math.min(100, Math.max(1, requestedLimit)) : 100;
+      const offset = Number.isInteger(requestedOffset) ? Math.min(100000, Math.max(0, requestedOffset)) : 0;
+      const values = [context.empresaId];
+      const predicates = ['empresa_id = $1'];
+      if (context.lojaId) { values.push(context.lojaId); predicates.push(`loja_id = $${values.length}`); }
+      for (const [key, column] of [['entity', 'entidade'], ['action', 'acao']]) {
+        const value = String(req.query[key] || '').trim().slice(0, 80);
+        if (value && /^[a-z0-9_-]+$/i.test(value)) { values.push(value); predicates.push(`${column} = $${values.length}`); }
+      }
+      const where = predicates.join(' AND ');
+      const count = await db.query(`SELECT COUNT(*)::int AS total FROM commerce_audit_logs WHERE ${where}`, values);
       const result = await db.query(
         `SELECT id, loja_id, usuario_id, entidade, entidade_id, acao, antes, depois, correlation_id, ip_address, criado_em
            FROM commerce_audit_logs
-          WHERE empresa_id = $1
+          WHERE ${where}
           ORDER BY criado_em DESC
-          LIMIT 500`,
-        [context.empresaId],
+          LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+        [...values, limit, offset],
       );
-      res.json({ items: result.rows });
+      res.json({ items: result.rows, pagination: { limit, offset, total: count.rows[0]?.total || 0, hasMore: offset + result.rows.length < Number(count.rows[0]?.total || 0) } });
     } catch (error) { jsonError(res, error); }
   });
   router.get('/orders', async (req, res) => {
     try {
       const context = await requirePermission(req, 'orders.read');
+      const { limit, offset } = parsePagination(req, 100, 500);
       const values = [context.empresaId];
       const predicates = ['o.empresa_id = $1'];
       if (context.lojaId) { values.push(context.lojaId); predicates.push(`s.loja_id = $${values.length}`); }
       if (req.query.status) { values.push(String(req.query.status)); predicates.push(`o.status = $${values.length}`); }
+      const query = String(req.query.q || '').trim().slice(0, 160);
+      if (query) { values.push(`%${query}%`); predicates.push(`(o.public_code ILIKE $${values.length} OR c.nome ILIKE $${values.length} OR c.email ILIKE $${values.length})`); }
+      const where = predicates.join(' AND ');
+      const count = await db.query(`SELECT COUNT(*)::int AS total FROM commerce_orders o JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id LEFT JOIN commerce_customers c ON c.empresa_id = o.empresa_id AND c.id = o.customer_id WHERE ${where}`, values);
       const result = await db.query(
-        `SELECT o.id, o.public_code, o.status, o.origem, o.total, o.criado_em, o.atualizado_em,
-                c.nome AS customer_name, c.email AS customer_email
+        `SELECT o.id, o.public_code, o.status, o.origem, o.subtotal, o.desconto, o.frete, o.impostos, o.total, o.shipping_method_id, o.shipping_quote_id, o.criado_em, o.atualizado_em,
+                c.nome AS customer_name, c.email AS customer_email,
+                (SELECT p.status FROM commerce_payments p WHERE p.empresa_id = o.empresa_id AND p.order_id = o.id ORDER BY p.criado_em DESC LIMIT 1) AS payment_status,
+                COALESCE((SELECT jsonb_agg(jsonb_build_object('nome', i.nome_snapshot, 'sku', i.sku_snapshot, 'quantidade', i.quantidade, 'preco', i.preco_unitario, 'subtotal', i.subtotal) ORDER BY i.criado_em ASC) FROM commerce_order_items i WHERE i.empresa_id = o.empresa_id AND i.order_id = o.id), '[]'::jsonb) AS items
            FROM commerce_orders o
            JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id
            LEFT JOIN commerce_customers c ON c.empresa_id = o.empresa_id AND c.id = o.customer_id
-          WHERE ${predicates.join(' AND ')}
+          WHERE ${where}
           ORDER BY o.criado_em DESC
-          LIMIT 100`,
-        values,
+          LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+        [...values, limit, offset],
       );
-      res.json({ items: result.rows });
+      const total = Number(count.rows[0]?.total || 0);
+      res.json({ items: result.rows, pagination: { limit, offset, total, hasMore: offset + result.rows.length < total } });
     } catch (error) { jsonError(res, error); }
   });
   return router;
