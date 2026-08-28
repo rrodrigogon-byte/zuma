@@ -12,8 +12,8 @@ CREATE INDEX IF NOT EXISTS idx_commerce_orders_tenant_storefront_created
 CREATE INDEX IF NOT EXISTS idx_commerce_customers_tenant_updated
   ON commerce_customers (empresa_id, atualizado_em DESC);
 
-CREATE INDEX IF NOT EXISTS idx_commerce_order_items_tenant_order_created
-  ON commerce_order_items (empresa_id, order_id, criado_em ASC);
+CREATE INDEX IF NOT EXISTS idx_commerce_order_items_tenant_order_id
+  ON commerce_order_items (empresa_id, order_id, id ASC);
 
 CREATE INDEX IF NOT EXISTS idx_commerce_product_media_tenant_product_order
   ON commerce_product_media (empresa_id, product_id, ordem ASC, criado_em ASC);
