@@ -15,6 +15,7 @@ import { gerarSuico, proximaRodada, tabelaSuico } from './swiss.js';
 import { sortearLiga, sortearProximaRodada, calcularTabela, registrarResultado, podeFinalizar } from './liga.js';
 import { gerarDuplaElim, reportDupla } from './doubleelim.js';
 import { criarPix, consultarStatus, pagamentosAtivos, pixInfo, gerarBrCode } from './pagamentos.js';
+import { simulateCheckout, createIdempotencyKey, reservationExpiry, publicCheckoutOrder, consumeCoupon, availableShipping } from './checkout-core.js';
 import crypto from 'crypto';
 import fs from 'fs';
 import QRCode from 'qrcode';
@@ -2253,6 +2254,123 @@ app.get('/api/loja', (req,res)=> {
     // imagem: prioriza campo salvo no admin, depois mapa legacy, depois null
     imagem: p.imagem || IMAGEM_LOJA[p.cod] || null,
   })));
+});
+
+// =================== CHECKOUT WEB DA LOJA ===================
+// O checkout dedicado mantém o carrinho no navegador, mas calcula preço,
+// estoque, cupom, entrega e total no servidor. O pedido é idempotente.
+app.get('/api/loja/checkout/opcoes-entrega', publicLimit(60), (req,res)=>{
+  res.json({ opcoes:availableShipping() });
+});
+
+app.post('/api/loja/checkout/simular', publicLimit(60), (req,res)=>{
+  try {
+    const sim = simulateCheckout({
+      catalog: db().loja || [],
+      coupons: db().cupons || [],
+      items: req.body?.itens,
+      couponCode: req.body?.cupomCodigo || req.body?.cupom,
+      shippingMethod: req.body?.metodoEntrega || 'pickup',
+      address: req.body?.endereco || {},
+    });
+    res.json({ ok:true, ...sim });
+  } catch (e) {
+    res.status(400).json({ ok:false, error:e.message });
+  }
+});
+
+app.post('/api/loja/checkout/pedido', publicLimit(40), (req,res)=>{
+  const d = db();
+  if (!d.pedidosLoja) d.pedidosLoja = [];
+  const idempotencyKey = createIdempotencyKey(req.body?.idempotencyKey || req.headers['x-idempotency-key']);
+  const replay = d.pedidosLoja.find(p => p.idempotencyKey === idempotencyKey);
+  if (replay) {
+    return res.json({ ok:true, replayed:true, pedidoId:replay.id, codigo:replay.codigo, pedido:publicCheckoutOrder(replay) });
+  }
+
+  const cliente = req.body?.cliente || {};
+  const nome = String(cliente.nome || '').trim();
+  const email = String(cliente.email || '').trim().toLowerCase();
+  if (!nome || !email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return res.status(400).json({ error:'nome e e-mail válidos são obrigatórios' });
+  }
+
+  try {
+    const sim = simulateCheckout({
+      catalog: d.loja || [], coupons:d.cupons || [], items:req.body?.itens,
+      couponCode:req.body?.cupomCodigo || req.body?.cupom,
+      shippingMethod:req.body?.metodoEntrega || 'pickup', address:req.body?.endereco || {},
+    });
+    // Revalidação all-or-nothing antes de baixar estoque.
+    for (const item of sim.itens) {
+      const p = (d.loja || []).find(x => x.id == item.produtoId && x.ativo !== false);
+      if (!p || Number(p.estoque || 0) < item.qtd) throw new Error(`estoque insuficiente de ${item.nome}`);
+    }
+    for (const item of sim.itens) {
+      const p = d.loja.find(x => x.id == item.produtoId);
+      p.estoque -= item.qtd;
+    }
+
+    const agora = new Date().toISOString();
+    const pedido = {
+      id:nextId(), checkoutId:sim.checkoutId, idempotencyKey,
+      codigo:gerarCodigoPedido(),
+      cliente:{ nome, email, tel:String(cliente.tel || '').slice(0,30) },
+      itens:sim.itens, subtotal:sim.subtotal, desconto:sim.desconto, frete:sim.frete,
+      totalFinal:sim.totalFinal, total:sim.totalFinal, cupom:sim.cupom, cupomConsumido:false,
+      metodoEntrega:sim.metodoEntrega, enderecoEntrega:sim.enderecoEntrega,
+      status:'pendente', pagamento:'pix-pendente', paymentStatus:'pendente',
+      reservadoAte:reservationExpiry(), criadoEm:agora, atualizadoEm:agora,
+      historico:[{ status:'pendente', ts:agora, evento:'checkout_criado' }],
+    };
+    d.pedidosLoja.push(pedido); save();
+    sseBroadcast('loja', { tipo:'novo', id:pedido.id, codigo:pedido.codigo, status:pedido.status });
+    if (email) mail.lojaPedidoRecebido(email, nome, pedido.codigo, pedido.totalFinal).catch(()=>{});
+    res.json({ ok:true, pedidoId:pedido.id, codigo:pedido.codigo, pedido:publicCheckoutOrder(pedido) });
+  } catch (e) {
+    res.status(400).json({ error:e.message });
+  }
+});
+
+app.get('/api/loja/checkout/:id', (req,res)=>{
+  const p = (db().pedidosLoja || []).find(x => x.id == req.params.id || x.codigo === String(req.params.id).toUpperCase());
+  if (!p) return res.status(404).json({ error:'checkout não encontrado' });
+  res.json({ ok:true, pedido:publicCheckoutOrder(p) });
+});
+
+app.post('/api/loja/checkout/:id/pagamento', publicLimit(40), async (req,res)=>{
+  const d = db();
+  const p = (d.pedidosLoja || []).find(x => x.id == req.params.id || x.codigo === String(req.params.id).toUpperCase());
+  if (!p) return res.status(404).json({ error:'pedido não encontrado' });
+  if (p.status === 'cancelado' || p.status === 'expirado') return res.status(409).json({ error:'pedido não está disponível para pagamento' });
+  if (p.pagamentoId) {
+    const antigo = (d.pagamentos || []).find(pg => pg.id == p.pagamentoId);
+    if (antigo) return res.json({ ok:true, replayed:true, pedido:publicCheckoutOrder(p), pagamentoId:antigo.id, pagamento:{ status:antigo.status, copiaECola:antigo.copiaECola, qrBase64:antigo.qrBase64 || null } });
+  }
+  const metodo = req.body?.metodoPagamento || 'pix';
+  if (metodo !== 'pix') return res.status(400).json({ error:'método de pagamento indisponível nesta versão' });
+  try {
+    const key = createIdempotencyKey(req.body?.idempotencyKey || `${p.idempotencyKey}:payment`);
+    const pagamentoExistente = (d.pagamentos || []).find(pg => pg.tipo === 'loja' && pg.refId == p.id && pg.idempotencyKey === key);
+    if (pagamentoExistente) return res.json({ ok:true, replayed:true, pedido:publicCheckoutOrder(p), pagamentoId:pagamentoExistente.id, pagamento:{ status:pagamentoExistente.status, provedor:pagamentoExistente.provedor, copiaECola:pagamentoExistente.copiaECola, qrBase64:pagamentoExistente.qrBase64 || null, valor:pagamentoExistente.valor } });
+    const pix = await criarPix({ valor:p.totalFinal, descricao:`Kytto · Pedido ${p.codigo}`, email:p.cliente?.email, idempotencyKey:key });
+    const pg = { id:nextId(), tipo:'loja', refId:p.id, pedidoCodigo:p.codigo, idempotencyKey:key, valor:p.totalFinal,
+      descricao:`Kytto · Pedido ${p.codigo}`, email:p.cliente?.email || '', provedor:pix.provedor,
+      externalId:pix.externalId, copiaECola:pix.copiaECola, qrBase64:pix.qrBase64 || null,
+      taxaPlataforma:pix.taxaPlataforma, status:pix.status || 'pendente', criadoEm:new Date().toISOString() };
+    if (!d.pagamentos) d.pagamentos=[];
+    d.pagamentos.push(pg);
+    if (p.cupom?.id != null && !p.cupomConsumido) {
+      consumeCoupon(d.cupons || [], p.cupom.id);
+      p.cupomConsumido = true;
+    }
+    p.pagamentoId=pg.id; p.pagamento='pix-pendente'; p.paymentStatus=pg.status || 'pendente';
+    p.atualizadoEm=new Date().toISOString(); p.historico=p.historico||[];
+    p.historico.push({ status:p.status, ts:p.atualizadoEm, evento:'pagamento_criado', pagamentoId:pg.id });
+    save();
+    res.json({ ok:true, pedido:publicCheckoutOrder(p), pagamentoId:pg.id,
+      pagamento:{ status:pg.status, provedor:pg.provedor, copiaECola:pg.copiaECola, qrBase64:pg.qrBase64, valor:pg.valor } });
+  } catch (e) { res.status(400).json({ error:e.message }); }
 });
 
 // Reserva via site público (loja — pré-venda Pix)

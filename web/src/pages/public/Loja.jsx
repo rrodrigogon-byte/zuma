@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { api, fmtR } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
@@ -488,11 +488,19 @@ function CheckoutModal({ itens, produtos, onClose, onSuccess }) {
 // ── Main Loja ───────────────────────────────────────────────────────────────
 
 export default function Loja() {
+  const navigate = useNavigate()
   const { toast } = useToast()
   const [produtos, setProdutos] = useState([])
   const [loading, setLoading] = useState(true)
-  // Carrinho: [ { produtoId, qtd, tamanho } ]
-  const [carrinho, setCarrinho] = useState([])
+  // Carrinho persistente: [ { produtoId, qtd, tamanho } ]
+  const [carrinho, setCarrinho] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('kytto_cart_v2') || '[]')
+      return Array.isArray(saved) ? saved : []
+    } catch {
+      return []
+    }
+  })
   const [showCarrinho, setShowCarrinho] = useState(false)
   const [showCheckout, setShowCheckout] = useState(false)
   const [filtroCat, setFiltroCat] = useState('todos')
@@ -502,6 +510,10 @@ export default function Loja() {
       .then(d => { setProdutos(Array.isArray(d) ? d : []); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    try { localStorage.setItem('kytto_cart_v2', JSON.stringify(carrinho)) } catch { /* storage opcional */ }
+  }, [carrinho])
 
   // Categorias únicas para filtro
   const cats = useMemo(() => {
@@ -652,7 +664,7 @@ export default function Loja() {
           onClose={() => setShowCarrinho(false)}
           onRemove={removeCart}
           onQtdChange={changeQtd}
-          onCheckout={() => { setShowCarrinho(false); setShowCheckout(true) }}
+          onCheckout={() => { setShowCarrinho(false); navigate('/checkout') }}
         />
       )}
 

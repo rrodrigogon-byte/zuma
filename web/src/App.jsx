@@ -54,6 +54,7 @@ const Home       = lazy(() => import('./pages/public/Home'))
 const Inscricao  = lazy(() => import('./pages/public/Inscricao'))
 const Ranking    = lazy(() => import('./pages/public/Ranking'))
 const Loja       = lazy(() => import('./pages/public/Loja'))
+const Checkout   = lazy(() => import('./pages/public/Checkout'))
 const Regulamento = lazy(() => import('./pages/public/Regulamento'))
 const Bracket     = lazy(() => import('./pages/public/Bracket'))
 const AcompanharPedido = lazy(() => import('./pages/public/AcompanharPedido'))
@@ -239,6 +240,7 @@ export default function App() {
         <Route path="/inscricao"  element={<Layout><Inscricao /></Layout>} />
         <Route path="/ranking"    element={<Layout><Ranking /></Layout>} />
         <Route path="/loja"       element={<Layout><Loja /></Layout>} />
+        <Route path="/checkout"   element={<Layout noSidebar><Checkout /></Layout>} />
         <Route path="/pedido/:codigo" element={<Layout marketing><AcompanharPedido /></Layout>} />
         <Route path="/cardapio/mesa/:token" element={<CardapioMesaPublico />} />
         <Route path="/agendar/:slug" element={<AgendamentoOnline />} />
