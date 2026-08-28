@@ -6,6 +6,9 @@ export const PRODUCT_LINKS = [
   { name: 'LakeX', label: 'Indústria & inteligência', href: 'https://lakex.com.br' },
   { name: 'SetPoint', label: 'Operação & gestão', href: 'https://setpoint.kytto.com.br/admin' },
   { name: 'Nossa Gente AI', label: 'Pessoas & performance', href: 'https://ai-nossagente-web-nedqnqyahq-rj.a.run.app/login' },
+  { name: 'Kytto Commerce', label: 'Comércio & operação', href: 'https://loja.kytto.com.br/' },
+  { name: 'MedFocus.IA', label: 'Saúde & educação médica', href: 'https://medfocus.ia.br/' },
+  { name: 'AIJur', label: 'Jurídico & governança', href: '/ia/aijur' },
 ]
 
 export function MarketingHeader({ dark = true }) {
@@ -22,7 +25,7 @@ export function MarketingHeader({ dark = true }) {
           <a href="/ia/aijur">AIJur</a>
           <a href="/solucoes">Soluções</a>
         </nav>
-        <a className="km-header-cta" href="/login">Falar com a Kytto <ArrowUpRight size={14} /></a>
+        <a className="km-header-cta" href="/login">Acessar portal <ArrowUpRight size={14} /></a>
       </div>
     </header>
   )
@@ -46,7 +49,7 @@ export function MarketingFooter() {
           </div>
           <div className="km-footer-column">
             <span>Soluções</span>
-            {PRODUCT_LINKS.map(product => <a key={product.name} href={product.href} target="_blank" rel="noreferrer">{product.name}</a>)}
+            {PRODUCT_LINKS.map(product => { const external = product.href.startsWith('http'); return <a key={product.name} href={product.href} target={external ? '_blank' : undefined} rel={external ? 'noreferrer' : undefined}>{product.name}</a> })}
           </div>
         </div>
         <div className="km-footer-bottom">

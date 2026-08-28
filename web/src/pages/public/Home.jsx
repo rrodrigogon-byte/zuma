@@ -12,10 +12,12 @@ import {
   Eye,
   Factory,
   Gauge,
+  HeartPulse,
   Network,
   ShieldCheck,
   ShoppingBag,
   Scissors,
+  Stethoscope,
   Sparkles,
   Store,
   Utensils,
@@ -66,6 +68,26 @@ const PRODUCT_LINKS = [
     outcome: 'Pessoas no centro da evolução.',
   },
   {
+    eyebrow: 'Comércio & operação',
+    name: 'Kytto Commerce',
+    title: 'Venda, estoque e entrega no mesmo fluxo.',
+    text: 'E-commerce multiempresa com catálogo, variantes, clientes, pedidos, pagamentos, frete e fulfillment preparados para a operação real.',
+    href: 'https://loja.kytto.com.br/',
+    icon: ShoppingBag,
+    tone: 'coral',
+    outcome: 'Do produto publicado ao pedido acompanhado.',
+  },
+  {
+    eyebrow: 'Saúde & educação médica',
+    name: 'MedFocus.IA',
+    title: 'Apoio médico com contexto e evidência.',
+    text: 'O Dr. Focus reúne apoio diagnóstico, transcrição, pesquisa, calculadoras, farmacologia e ferramentas de estudo para profissionais e estudantes.',
+    href: 'https://medfocus.ia.br/',
+    icon: Stethoscope,
+    tone: 'sand',
+    outcome: 'Apoio à decisão — nunca substituição do profissional.',
+  },
+  {
     eyebrow: 'Jurídico & governança',
     name: 'AIJur',
     title: 'Contexto para o jurídico trabalhar melhor.',
@@ -83,7 +105,9 @@ const SECTOR_LINKS = [
   { name: 'Lojas & varejo', icon: Store },
   { name: 'Restaurantes', icon: Utensils },
   { name: 'Bares & eventos', icon: Beer },
-  { name: 'Operações multinegócio', icon: Building2 },
+  { name: 'Clínicas & consultórios', icon: HeartPulse },
+  { name: 'Pequenas & médias empresas', icon: Building2 },
+  { name: 'Operações multinegócio', icon: Gauge },
 ]
 
 const PILLARS = [
@@ -242,7 +266,7 @@ export default function Home() {
         .kh-section-head h2 { max-width: 620px; margin: 16px 0 0; color: var(--kh-navy); font-family: 'Outfit', sans-serif; font-size: clamp(2.3rem, 4.1vw, 4rem); font-weight: 800; letter-spacing: -.055em; line-height: .98; }
         .kh-section-head h2 em { color: var(--kh-orange); font-style: normal; }
         .kh-section-head p { max-width: 380px; margin: 0 0 3px; color: var(--kh-muted); font-size: 14px; line-height: 1.65; }
-        .kh-product-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; }
+        .kh-product-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
         .kh-product-card { position: relative; display: flex; min-height: 410px; flex-direction: column; padding: 25px; overflow: hidden; border: 1px solid var(--kh-line); border-radius: 20px; background: #fff; text-decoration: none; transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease; }
         .kh-product-card::before { content: ''; position: absolute; inset: 0 0 auto; height: 3px; background: var(--kh-orange); opacity: .85; }
         .kh-product-card:hover { border-color: rgba(255,107,44,.55); box-shadow: 0 22px 45px rgba(18,40,63,.1); transform: translateY(-7px); }
@@ -293,7 +317,7 @@ export default function Home() {
         .kh-sector-band-head { display: flex; align-items: center; justify-content: space-between; gap: 25px; margin-bottom: 19px; }
         .kh-sector-band-title { color: var(--kh-navy); font-family: 'Outfit', sans-serif; font-size: 17px; font-weight: 800; letter-spacing: -.03em; }
         .kh-sector-band-link { color: var(--kh-orange); font-size: 12px; font-weight: 800; text-decoration: none; }
-        .kh-sector-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 9px; }
+        .kh-sector-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; }
         .kh-sector-pill { display: flex; align-items: center; gap: 9px; min-height: 54px; padding: 11px 13px; border: 1px solid var(--kh-line); border-radius: 11px; color: var(--kh-navy); background: rgba(255,255,255,.68); font-size: 11px; font-weight: 750; line-height: 1.25; text-decoration: none; transition: transform .18s ease, border-color .18s ease, background .18s ease; }
         .kh-sector-pill svg { flex: 0 0 auto; color: var(--kh-orange); }
         .kh-sector-pill:hover, .kh-sector-pill:focus-visible { transform: translateY(-3px); border-color: rgba(255,107,44,.55); background: #fff; }
@@ -397,6 +421,7 @@ export default function Home() {
             <nav className="kh-nav-links" aria-label="Navegação principal">
               <a href="#plataforma">Plataforma</a>
               <a href="#solucoes">Soluções</a>
+              <a href="#setores">Setores</a>
               <a href="/ia">IA aplicada</a>
               <a href="/ia/aijur">AIJur</a>
               <a href="#contato">Contato</a>
@@ -409,7 +434,7 @@ export default function Home() {
           <div>
             <Eyebrow light>Techco de IA aplicada · 2026</Eyebrow>
             <h1>O negócio sobe quando a <em>operação</em> aprende.</h1>
-            <p className="kh-hero-copy">A Kytto conecta inteligência artificial, dados e execução para transformar operações reais em negócios mais simples, eficientes e preparados para o próximo nível.</p>
+            <p className="kh-hero-copy">A Kytto conecta inteligência artificial, dados e execução para transformar operações reais — do varejo e e-commerce ao apoio médico, do jurídico à indústria — em negócios mais simples, eficientes e preparados para o próximo nível.</p>
             <div className="kh-hero-actions">
               <a className="kh-btn kh-btn-primary" href="#solucoes">Conhecer soluções <ArrowRight size={17} /></a>
               <a className="kh-btn kh-btn-ghost" href={painelPath}>{painelLabel} <ArrowUpRight size={16} /></a>
@@ -474,7 +499,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="kh-sector-band" aria-label="SetPoint por setor">
+      <section className="kh-sector-band" id="setores" aria-label="Soluções Kytto por setor">
         <div className="kh-container">
           <div className="kh-sector-band-head"><span className="kh-sector-band-title">SetPoint para a operação que você vive.</span><a className="kh-sector-band-link" href="/solucoes">Ver todos os setores <ArrowUpRight size={14} style={{ verticalAlign: '-3px' }} /></a></div>
           <div className="kh-sector-grid">{SECTOR_LINKS.map(({ name, icon: Icon }) => <a className="kh-sector-pill" href="/solucoes" key={name}><Icon size={17} strokeWidth={1.8} />{name}</a>)}</div>
