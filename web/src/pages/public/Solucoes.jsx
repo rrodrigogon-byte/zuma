@@ -1,4 +1,4 @@
-import { ArrowUpRight, Beer, BriefcaseBusiness, Building2, CheckCircle2, CircleDollarSign, HeartPulse, Scissors, ShoppingBag, Store, Utensils } from 'lucide-react'
+import { ArrowUpRight, Beer, BriefcaseBusiness, Building2, CheckCircle2, CircleDollarSign, HeartPulse, Scissors, ShieldCheck, ShoppingBag, Store, Utensils } from 'lucide-react'
 import { ArrowButton, Kicker, MarketingFooter, MarketingHeader, MarketingShell, OutlineButton, PRODUCT_LINKS } from './MarketingPage'
 
 const sectors = [
@@ -12,13 +12,15 @@ const sectors = [
   { icon: BriefcaseBusiness, name: 'Escritórios jurídicos', text: 'Inteligência, documentos, prazos e governança com o AIJur.' },
   { icon: Building2, name: 'Pequenas & médias empresas', text: 'ERP inteligente para organizar financeiro, compras, estoque, vendas e pessoas.' },
   { icon: CircleDollarSign, name: 'Centros de serviço', text: 'Processos, pessoas e indicadores alinhados ao resultado do dia a dia.' },
+  { icon: ShieldCheck, name: 'Gestão de terceiros', text: 'Empresas, contratos, documentos, funções, riscos, veículos, gestores e fiscais com rastreabilidade.' },
+  { icon: ShieldCheck, name: 'Segurança & portaria', text: 'Pessoas, visitantes, terminais, dispositivos, eventos, facial e operações governadas.' },
 ]
 
 export default function Solucoes() {
   return <MarketingShell>
     <MarketingHeader />
     <main>
-      <section className="km-hero"><div className="km-container km-hero-grid"><div><Kicker light>Portfólio Kytto</Kicker><h1>Uma plataforma. <em>Muitos negócios.</em></h1><p className="km-hero-lede">Da operação de uma barbearia ao backoffice de uma PME, do e-commerce ao apoio médico: a Kytto conecta software, dados e inteligência para o negócio avançar.</p><div className="km-actions"><ArrowButton href="https://loja.kytto.com.br/">Conhecer o Kytto Commerce</ArrowButton><OutlineButton href="https://medfocus.ia.br/" light>Conhecer o MedFocus.IA</OutlineButton></div></div><div className="km-hero-note"><strong>Feito para a operação real.</strong> Produtos e setores diferentes compartilham uma mesma necessidade: saber o que está acontecendo e agir melhor a cada dia.</div></div></section>
+      <section className="km-hero"><div className="km-container km-hero-grid"><div><Kicker light>Portfólio Kytto</Kicker><h1>Uma plataforma. <em>Muitos negócios.</em></h1><p className="km-hero-lede">Da operação de uma barbearia ao backoffice de uma PME, do e-commerce ao apoio médico: a Kytto conecta software, dados e inteligência para o negócio avançar.</p><div className="km-actions"><ArrowButton href="https://loja.kytto.com.br/">Conhecer o Kytto Commerce</ArrowButton><OutlineButton href="/solucoes/seguranca-acesso">Conhecer Kytto Access</OutlineButton><OutlineButton href="https://medfocus.ia.br/" light>Conhecer o MedFocus.IA</OutlineButton></div></div><div className="km-hero-note"><strong>Feito para a operação real.</strong> Produtos e setores diferentes compartilham uma mesma necessidade: saber o que está acontecendo e agir melhor a cada dia.</div></div></section>
 
       <section className="km-section"><div className="km-container"><div className="km-section-head"><div><Kicker>SetPoint multissetorial</Kicker><h2>O contexto muda. A inteligência acompanha.</h2></div><p className="km-section-intro">Escolha o setor. A plataforma se adapta ao seu fluxo de trabalho, às suas pessoas e aos indicadores que realmente importam.</p></div><div className="km-sector-grid">{sectors.map(({ icon: Icon, name, text }) => <article className="km-sector" key={name}><Icon className="km-sector-icon" size={26} strokeWidth={1.6} /><div><strong>{name}</strong><span>{text}</span></div></article>)}</div></div></section>
 

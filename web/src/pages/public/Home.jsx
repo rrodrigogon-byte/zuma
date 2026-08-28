@@ -97,6 +97,16 @@ const PRODUCT_LINKS = [
     tone: 'blue',
     outcome: 'IA responsável para profissionais do Direito.',
   },
+  {
+    eyebrow: 'Terceiros, acesso & portaria',
+    name: 'Kytto Access',
+    title: 'Segurança operacional com contexto.',
+    text: 'Gestão de terceiros, documentos, riscos, visitantes, dispositivos, portarias, veículos e automações governadas com IA.',
+    href: '/solucoes/seguranca-acesso',
+    icon: ShieldCheck,
+    tone: 'orange',
+    outcome: 'Do cadastro e risco à decisão auditável.',
+  },
 ]
 
 const SECTOR_LINKS = [
@@ -108,6 +118,8 @@ const SECTOR_LINKS = [
   { name: 'Clínicas & consultórios', icon: HeartPulse },
   { name: 'Pequenas & médias empresas', icon: Building2 },
   { name: 'Operações multinegócio', icon: Gauge },
+  { name: 'Gestão de terceiros', icon: Building2 },
+  { name: 'Segurança & portaria', icon: ShieldCheck },
 ]
 
 const PILLARS = [
@@ -122,7 +134,7 @@ const CAPABILITIES = [
     icon: Bot,
     eyebrow: '01 · Agentes autônomos',
     title: 'IA que executa o próximo passo.',
-    text: 'Agentes que trabalham sobre processos reais, com contexto, regras e rastreabilidade — não apenas recomendações soltas.',
+    text: 'Agentes que trabalham sobre processos reais, incluindo compradores inteligentes com contexto, regras e rastreabilidade — não apenas recomendações soltas.',
   },
   {
     icon: Eye,
@@ -331,7 +343,9 @@ export default function Home() {
         .kh-cap-card .kh-product-eyebrow { color: var(--kh-coral); }
         .kh-cap-card h3 { max-width: 260px; margin: 11px 0 14px; color: #FFF4EC; font-family: 'Outfit', sans-serif; font-size: 22px; font-weight: 800; letter-spacing: -.035em; line-height: 1.05; }
         .kh-cap-card p { color: rgba(255,244,236,.6); font-size: 13px; line-height: 1.6; }
-        .kh-cap-link { margin-top: 18px; }
+        .kh-cap-actions { display: flex; flex-wrap: wrap; gap: 13px; margin-top: 18px; }
+        .kh-cap-link { margin-top: 0; }
+        .kh-cap-link-secondary { color: var(--kh-cream); border-color: rgba(255,244,236,.26); background: rgba(255,255,255,.04); }
         .kh-flow-section { padding-bottom: 120px; background: #fff; }
         .kh-flow-line { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
         .kh-flow-line::before { content: ''; position: absolute; top: 32px; right: 10%; left: 10%; height: 1px; background: var(--kh-line); }
@@ -423,6 +437,7 @@ export default function Home() {
               <a href="#solucoes">Soluções</a>
               <a href="#setores">Setores</a>
               <a href="/ia">IA aplicada</a>
+              <a href="/ia/compradores">Compradores</a>
               <a href="/ia/aijur">AIJur</a>
               <a href="#contato">Contato</a>
             </nav>
@@ -510,7 +525,7 @@ export default function Home() {
         <div className="kh-container">
           <div className="kh-section-head">
             <div><Eyebrow light>O diferencial</Eyebrow><h2>IA que <em>age</em>,<br />não só sugere.</h2></div>
-            <div><p>Inteligência aplicada só cria valor quando chega ao chão da operação — com contexto, confiança e capacidade de execução.</p><a className="kh-btn kh-btn-ghost kh-cap-link" href="/ia">Explorar o hub de IA <ArrowUpRight size={15} /></a></div>
+            <div><p>Inteligência aplicada só cria valor quando chega ao chão da operação — com contexto, confiança e capacidade de execução.</p><div className="kh-cap-actions"><a className="kh-btn kh-btn-ghost kh-cap-link" href="/ia">Explorar o hub de IA <ArrowUpRight size={15} /></a><a className="kh-btn kh-btn-ghost kh-cap-link kh-cap-link-secondary" href="/ia/compradores">Conhecer compradores inteligentes <ArrowUpRight size={15} /></a></div></div>
           </div>
           <div className="kh-cap-grid">
             {CAPABILITIES.map(({ icon: Icon, eyebrow, title, text }) => (

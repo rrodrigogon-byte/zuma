@@ -43,6 +43,11 @@
 .km-button-outline:hover, .km-button-outline:focus-visible { background: #fff; color: var(--km-ink); border-color: #fff; }
 .km-section { padding: clamp(68px, 9vw, 120px) 0; }
 .km-section-dark { background: var(--km-ink); color: #fff; }
+.km-section-accent { background: var(--km-acid); color: var(--km-ink); }
+.km-accent-inner { display: grid; grid-template-columns: 1fr .8fr auto; gap: 40px; align-items: end; }
+.km-accent-inner h2 { max-width: 600px; margin-top: 16px; }
+.km-accent-inner p { max-width: 390px; margin: 0; color: rgba(16,22,29,.72); font-size: 16px; line-height: 1.6; }
+.km-accent-inner .km-button { white-space: nowrap; }
 .km-section-head { display: flex; justify-content: space-between; align-items: end; gap: 40px; margin-bottom: 42px; }
 .km-section h2 { max-width: 720px; margin: 16px 0 0; font-size: clamp(33px, 5vw, 61px); line-height: .98; letter-spacing: -.055em; }
 .km-section-intro { max-width: 460px; color: var(--km-muted); font-size: 17px; line-height: 1.6; }
@@ -85,14 +90,17 @@
 .km-check-list { display: grid; gap: 14px; margin-top: 28px; }
 .km-check-item { display: flex; align-items: flex-start; gap: 10px; color: var(--km-muted); font-size: 14px; line-height: 1.45; }
 .km-check-item svg { flex: 0 0 auto; margin-top: 2px; color: var(--km-orange); }
+.km-disclaimer { display: flex; align-items: flex-start; gap: 10px; max-width: 760px; margin-top: 28px; color: var(--km-muted); font-size: 12px; line-height: 1.55; }
+.km-disclaimer svg { flex: 0 0 auto; margin-top: 2px; color: var(--km-orange); }
 .kytto-marketing a:focus-visible { outline: 3px solid var(--km-orange); outline-offset: 4px; }
 @media (max-width: 880px) {
   .km-nav { display: none; }
-  .km-hero-grid, .km-split { grid-template-columns: 1fr; gap: 38px; }
+  .km-hero-grid, .km-split, .km-accent-inner { grid-template-columns: 1fr; gap: 38px; }
   .km-card-grid { grid-template-columns: repeat(2, 1fr); }
   .km-sector-grid { grid-template-columns: repeat(2, 1fr); }
   .km-section-head { display: block; }
   .km-section-intro { margin-top: 22px; }
+  .km-accent-inner p { max-width: 540px; }
 }
 @media (max-width: 560px) {
   .km-container { width: min(100% - 32px, 1180px); }

@@ -9,6 +9,7 @@ export const PRODUCT_LINKS = [
   { name: 'Kytto Commerce', label: 'Comércio & operação', href: 'https://loja.kytto.com.br/' },
   { name: 'MedFocus.IA', label: 'Saúde & educação médica', href: 'https://medfocus.ia.br/' },
   { name: 'AIJur', label: 'Jurídico & governança', href: '/ia/aijur' },
+  { name: 'Kytto Access', label: 'Terceiros, acesso & portaria', href: '/solucoes/seguranca-acesso' },
 ]
 
 export function MarketingHeader({ dark = true }) {
@@ -21,6 +22,7 @@ export function MarketingHeader({ dark = true }) {
         <nav className="km-nav" aria-label="Navegação institucional">
           <a href="/ia">IA aplicada</a>
           <a href="/ia/agentes">Agentes</a>
+          <a href="/ia/compradores">Compradores</a>
           <a href="/ia/dados">Dados</a>
           <a href="/ia/aijur">AIJur</a>
           <a href="/solucoes">Soluções</a>
@@ -44,6 +46,8 @@ export function MarketingFooter() {
             <span>Explorar</span>
             <a href="/ia">IA aplicada</a>
             <a href="/ia/agentes">Agentes autônomos</a>
+            <a href="/ia/compradores">Compradores inteligentes</a>
+            <a href="/solucoes/seguranca-acesso">Terceiros e acesso</a>
             <a href="/ia/dados">Dados e decisões</a>
             <a href="/solucoes">Portfólio Kytto</a>
           </div>

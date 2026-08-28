@@ -126,6 +126,8 @@ const PerfilAtleta    = lazy(() => import('./pages/public/PerfilAtleta'))
 const CardapioMesaPublico = lazy(() => import('./pages/public/CardapioMesaPublico'))
 const IAHub              = lazy(() => import('./pages/public/IA'))
 const AgentesIA          = lazy(() => import('./pages/public/Agentes'))
+const CompradoresIA      = lazy(() => import('./pages/public/Compradores'))
+const SegurancaAcesso    = lazy(() => import('./pages/public/SegurancaAcesso'))
 const DadosIA            = lazy(() => import('./pages/public/Dados'))
 const AIJur              = lazy(() => import('./pages/public/AIJur'))
 const Solucoes           = lazy(() => import('./pages/public/Solucoes'))
@@ -228,6 +230,8 @@ export default function App() {
         <Route path="/"            element={<EntradaPrincipal />} />
         <Route path="/ia"          element={<IAHub />} />
         <Route path="/ia/agentes" element={<AgentesIA />} />
+        <Route path="/ia/compradores" element={<CompradoresIA />} />
+        <Route path="/solucoes/seguranca-acesso" element={<SegurancaAcesso />} />
         <Route path="/ia/dados"   element={<DadosIA />} />
         <Route path="/ia/aijur"   element={<AIJur />} />
           <Route path="/solucoes"   element={<Solucoes />} />

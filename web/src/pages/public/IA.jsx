@@ -36,6 +36,7 @@ export default function IA() {
               <div className="km-actions">
                 <ArrowButton href="/solucoes">Conhecer as soluções</ArrowButton>
                 <OutlineButton href="/ia/agentes" light>Explorar agentes</OutlineButton>
+                <OutlineButton href="/ia/compradores" light>Conhecer compradores</OutlineButton>
               </div>
             </div>
             <div className="km-hero-note">
@@ -70,7 +71,7 @@ export default function IA() {
           <div className="km-container">
             <div className="km-section-head"><div><Kicker>Comece por onde dói</Kicker><h2>IA aplicada a problemas que já existem.</h2></div><p className="km-section-intro">Automatize o repetitivo, dê contexto ao complexo e crie uma operação mais preparada para o próximo ciclo.</p></div>
             <CheckList items={['Processos mais rápidos, sem perder o controle.', 'Indicadores que apontam o próximo passo, não apenas o passado.', 'Experiências melhores para clientes, equipes e gestores.']} />
-            <div className="km-actions"><ArrowButton href="/ia/agentes">Ver agentes em ação</ArrowButton><OutlineButton href="/contato">Conversar sobre um desafio</OutlineButton></div>
+            <div className="km-actions"><ArrowButton href="/ia/agentes">Ver agentes em ação</ArrowButton><OutlineButton href="/ia/compradores">Ver compradores inteligentes</OutlineButton><OutlineButton href="/contato">Conversar sobre um desafio</OutlineButton></div>
           </div>
         </section>
       </main>
