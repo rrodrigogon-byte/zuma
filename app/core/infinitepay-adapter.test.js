@@ -20,7 +20,7 @@ test('InfinitePay envia o payload operacional com items em centavos', async () =
   let requestBody;
   globalThis.fetch = async (_url, options) => {
     requestBody = JSON.parse(options.body);
-    return new Response(JSON.stringify({ url: 'https://checkout.infinitepay.com.br/checkout-test' }), {
+    return new Response(JSON.stringify({ link: 'https://checkout.infinitepay.com.br/checkout-test', slug: 'slug-test' }), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     });
@@ -28,6 +28,7 @@ test('InfinitePay envia o payload operacional com items em centavos', async () =
   try {
     const result = await adapter.createCheckout({ order, account: account() });
     assert.equal(result.publicData.url, 'https://checkout.infinitepay.com.br/checkout-test');
+    assert.equal(result.publicData.slug, 'slug-test');
     assert.deepEqual(requestBody.items, [{ quantity: 1, price: 8500, description: 'Pedido Kytto KC-TESTE-INFINITEPAY' }]);
     assert.equal('itens' in requestBody, false);
   } finally {
