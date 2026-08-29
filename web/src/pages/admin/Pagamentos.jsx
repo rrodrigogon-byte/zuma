@@ -8,6 +8,18 @@ const EMPTY_TERMINAL = { nome: '', tipo: 'mercado_pago_point', ambiente: 'homolo
 const EMPTY_MP = { publicKey: '', accessToken: '', webhookSecret: '', userId: '' }
 
 const statusColor = (status) => ({ aprovado: '#16806b', pendente: '#c47a00', recusado: '#b23a48', cancelado: '#6b7280' }[status] || '#6b7280')
+const CORE_PAYMENT_STATUS = { paid: 'aprovado', authorized: 'aprovado', approved: 'aprovado', pending: 'pendente', pending_payment: 'pendente', processing: 'pendente', failed: 'recusado', cancelled: 'cancelado', refunded: 'cancelado' }
+function normalizeCorePayment(payment) {
+  return {
+    id: payment.id,
+    criadaEm: payment.criado_em,
+    metodo: payment.method || 'pix',
+    descricao: payment.order_code ? `Pedido ${payment.order_code}` : 'Pagamento Commerce Core',
+    valor: Number(payment.amount || 0),
+    status: CORE_PAYMENT_STATUS[payment.status] || 'pendente',
+    coreStatus: payment.status,
+  }
+}
 
 function Kpi({ label, value, color = '#FF6B2C', detail }) {
   return <div className="card" style={{ flex: 1, minWidth: 168, borderLeft: `4px solid ${color}`, padding: '15px 17px' }}>
@@ -39,10 +51,47 @@ export default function Pagamentos() {
   const [transactionForm, setTransactionForm] = useState(EMPTY_TRANSACTION)
   const [terminalForm, setTerminalForm] = useState(EMPTY_TERMINAL)
   const [mpForm, setMpForm] = useState(EMPTY_MP)
+  const [coreMode, setCoreMode] = useState(false)
+  const [coreStorefrontId, setCoreStorefrontId] = useState(null)
 
   const carregar = useCallback(async () => {
     setLoading(true)
     try {
+      const storefrontRes = await api.get('/api/admin/commerce/storefront').catch(error => {
+        if (error.status === 404) return null
+        throw error
+      })
+      const storefront = storefrontRes?.items?.[0]
+      if (storefront?.id) {
+        setCoreMode(true)
+        setCoreStorefrontId(storefront.id)
+        const [accountsRes, paymentsRes] = await Promise.all([
+          api.get('/api/admin/commerce/payments/accounts').catch(() => ({ items: [] })),
+          api.get('/api/admin/commerce/payments').catch(() => ({ items: [] })),
+        ])
+        const account = (accountsRes.items || []).find(item => item.provider === 'mercadopago') || null
+        const payments = (paymentsRes.items || []).map(normalizeCorePayment)
+        setPix([])
+        setAdquirentes([])
+        setMercadoPago(account ? {
+          accessTokenConfigurado: account.secret_configured === true,
+          webhookConfigurado: account.webhook_configured === true,
+          userId: account.ready ? 'configurado' : 'pendente',
+          ativo: account.ativo === true,
+          ready: account.ready === true,
+          ambiente: account.ambiente,
+        } : null)
+        setTransacoes(payments)
+        setTotais({
+          total: payments.reduce((sum, item) => sum + item.valor, 0),
+          aprovado: payments.filter(item => item.status === 'aprovado').reduce((sum, item) => sum + item.valor, 0),
+          pendente: payments.filter(item => item.status === 'pendente').reduce((sum, item) => sum + item.valor, 0),
+          porMetodo: {},
+        })
+        return
+      }
+      setCoreMode(false)
+      setCoreStorefrontId(null)
       const [pixRes, terminaisRes, mpRes, transacoesRes] = await Promise.all([
         api.get('/api/admin/pagamentos/pix'),
         api.get('/api/admin/pagamentos/adquirentes'),
@@ -95,11 +144,29 @@ export default function Pagamentos() {
   }
 
   const salvarMercadoPago = async () => {
-    if (!mpForm.accessToken) return toast('Informe o Access Token do Mercado Pago.', 'error')
     setSaving(true)
     try {
-      await api.post('/api/admin/pagamentos/mercadopago/config', mpForm)
-      toast('Mercado Pago configurado com credenciais protegidas. A ativação real depende do webhook e dos terminais autorizados.')
+      if (coreMode) {
+        if (!coreStorefrontId) throw new Error('Storefront Commerce Core não identificado para a empresa ativa.')
+        const accountsRes = await api.get('/api/admin/commerce/payments/accounts')
+        const existing = (accountsRes.items || []).find(item => item.provider === 'mercadopago')
+        const payload = {
+          provider: 'mercadopago',
+          ambiente: 'production',
+          nome: 'Mercado Pago · Produção',
+          secretRef: 'env:MP_ACCESS_TOKEN',
+          storefrontId: coreStorefrontId,
+          ativo: true,
+          publicConfig: { webhookSecretRef: 'env:MP_WEBHOOK_SECRET', methods: ['pix'] },
+        }
+        if (existing) await api.patch(`/api/admin/commerce/payments/accounts/${existing.id}`, payload)
+        else await api.post('/api/admin/commerce/payments/accounts', payload)
+        toast('Mercado Pago enviado ao Commerce Core. A prontidão depende dos secrets produtivos no ambiente e do webhook validado.')
+      } else {
+        if (!mpForm.accessToken) return toast('Informe o Access Token do Mercado Pago.', 'error')
+        await api.post('/api/admin/pagamentos/mercadopago/config', mpForm)
+        toast('Mercado Pago configurado com credenciais protegidas. A ativação real depende do webhook e dos terminais autorizados.')
+      }
       setModal(null); setMpForm(EMPTY_MP); carregar()
     } catch (error) { toast(error.message || 'Não foi possível salvar a configuração do Mercado Pago.', 'error') }
     finally { setSaving(false) }
