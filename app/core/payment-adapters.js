@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { db } from './database.js';
 import { CommerceError, assertUuid, requestId, tenantContext, transitionOrder, withCommerceTransaction } from './commerce-core.js';
 import { createMercadoPagoAdapter, mercadoPagoConfigured } from './mercadopago-adapter.js';
+import { createInfinitePayAdapter, infinitePayConfigured } from './infinitepay-adapter.js';
 
 export class PaymentProviderRegistry {
   constructor() { this.adapters = new Map(); }
@@ -19,6 +20,7 @@ export class PaymentProviderRegistry {
 // provider homologado e um secret_ref gerenciado fora do Git e do frontend.
 export const paymentProviders = new PaymentProviderRegistry();
 if (mercadoPagoConfigured()) paymentProviders.register('mercadopago', createMercadoPagoAdapter());
+if (infinitePayConfigured()) paymentProviders.register('infinitepay', createInfinitePayAdapter());
 
 export function validatePaymentMethod(method) {
   const value = String(method || '').toLowerCase();
@@ -86,7 +88,7 @@ async function preparePayment(trx, context, input, provider, method, idem, reque
   const accountId = assertUuid(input.accountId, 'accountId');
   const environment = environmentName(input.environment);
   const orderResult = await trx.query(
-    `SELECT o.id, o.loja_id, o.storefront_id, o.status, o.total, o.moeda, c.email AS customer_email
+    `SELECT o.id, o.public_code, o.loja_id, o.storefront_id, o.status, o.total, o.moeda, c.email AS customer_email
        FROM commerce_orders o
        LEFT JOIN commerce_customers c ON c.empresa_id = o.empresa_id AND c.id = o.customer_id
       WHERE o.empresa_id = $1 AND o.id = $2
@@ -196,7 +198,7 @@ export async function createPaymentAttempt(contextInput, input = {}) {
   try {
     checkout = await adapter.createCheckout({
       payment: prepared.payment,
-      order: { id: prepared.order.id, total: prepared.order.total, currency: prepared.order.moeda, customerEmail: prepared.order.customer_email },
+      order: { id: prepared.order.id, publicCode: prepared.order.public_code, total: prepared.order.total, currency: prepared.order.moeda, customerEmail: prepared.order.customer_email },
       account: { id: prepared.account.id, secretRef: prepared.account.secret_ref, publicConfig: prepared.account.public_config },
       requestId: prepared.requestId,
       idempotencyKey: idem,
@@ -218,7 +220,7 @@ export async function syncPaymentAttempt(contextInput, paymentIdInput) {
   const paymentId = assertUuid(paymentIdInput, 'paymentId');
   const prepared = await withCommerceTransaction(async trx => {
     const result = await trx.query(
-      `SELECT p.id, p.order_id, p.provider, p.method, p.status, p.amount, p.provider_payment_id,
+      `SELECT p.id, p.order_id, p.provider, p.method, p.status, p.amount, p.provider_payment_id, p.metadata,
               o.status AS order_status, o.storefront_id, a.id AS account_id, a.ambiente,
               a.secret_ref, a.public_config
          FROM commerce_payments p

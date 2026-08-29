@@ -6,6 +6,7 @@ import Modal from '../../components/Modal'
 const EMPTY_TRANSACTION = { valor: '', metodo: 'pix', descricao: '', referencia: '' }
 const EMPTY_TERMINAL = { nome: '', tipo: 'mercado_pago_point', ambiente: 'homologacao', terminal: '', loja: '', chavePublica: '', chavePrivada: '', webhookSecret: '' }
 const EMPTY_MP = { publicKey: '', accessToken: '', webhookSecret: '', userId: '' }
+const EMPTY_INFINITEPAY = { handle: '' }
 
 const statusColor = (status) => ({ aprovado: '#16806b', pendente: '#c47a00', recusado: '#b23a48', cancelado: '#6b7280' }[status] || '#6b7280')
 const CORE_PAYMENT_STATUS = { paid: 'aprovado', authorized: 'aprovado', approved: 'aprovado', pending: 'pendente', pending_payment: 'pendente', processing: 'pendente', failed: 'recusado', cancelled: 'cancelado', refunded: 'cancelado' }
@@ -51,6 +52,8 @@ export default function Pagamentos() {
   const [transactionForm, setTransactionForm] = useState(EMPTY_TRANSACTION)
   const [terminalForm, setTerminalForm] = useState(EMPTY_TERMINAL)
   const [mpForm, setMpForm] = useState(EMPTY_MP)
+  const [infinitePay, setInfinitePay] = useState(null)
+  const [infinitePayForm, setInfinitePayForm] = useState(EMPTY_INFINITEPAY)
   const [coreMode, setCoreMode] = useState(false)
   const [coreStorefrontId, setCoreStorefrontId] = useState(null)
 
@@ -70,6 +73,7 @@ export default function Pagamentos() {
           api.get('/api/admin/commerce/payments').catch(() => ({ items: [] })),
         ])
         const account = (accountsRes.items || []).find(item => item.provider === 'mercadopago') || null
+        const infiniteAccount = (accountsRes.items || []).find(item => item.provider === 'infinitepay') || null
         const payments = (paymentsRes.items || []).map(normalizeCorePayment)
         setPix([])
         setAdquirentes([])
@@ -80,6 +84,13 @@ export default function Pagamentos() {
           ativo: account.ativo === true,
           ready: account.ready === true,
           ambiente: account.ambiente,
+        } : null)
+        setInfinitePay(infiniteAccount ? {
+          handle: infiniteAccount.public_config?.handle || 'configurado',
+          secretConfigurado: infiniteAccount.secret_configured === true,
+          ativo: infiniteAccount.ativo === true,
+          ready: infiniteAccount.ready === true,
+          ambiente: infiniteAccount.ambiente,
         } : null)
         setTransacoes(payments)
         setTotais({
@@ -172,6 +183,36 @@ export default function Pagamentos() {
     finally { setSaving(false) }
   }
 
+  const salvarInfinitePay = async () => {
+    if (!coreMode || !coreStorefrontId) return toast('O storefront Commerce Core do tenant ativo não foi identificado.', 'error')
+    const handle = String(infinitePayForm.handle || '').trim().replace(/^\$/, '')
+    if (!handle) return toast('Informe a InfiniteTag/handle da conta InfinitePay.', 'error')
+    setSaving(true)
+    try {
+      const accountsRes = await api.get('/api/admin/commerce/payments/accounts')
+      const existing = (accountsRes.items || []).find(item => item.provider === 'infinitepay')
+      const payload = {
+        provider: 'infinitepay',
+        ambiente: 'production',
+        nome: 'InfinitePay Checkout · Produção',
+        secretRef: 'env:INFINITEPAY_HANDLE',
+        storefrontId: coreStorefrontId,
+        ativo: true,
+        publicConfig: {
+          handle,
+          methods: ['pix', 'credit_card'],
+          webhookUrl: 'https://loja.kytto.com.br/api/webhooks/infinitepay/payments',
+          redirectUrl: 'https://loja.kytto.com.br/checkout',
+        },
+      }
+      if (existing) await api.patch(`/api/admin/commerce/payments/accounts/${existing.id}`, payload)
+      else await api.post('/api/admin/commerce/payments/accounts', payload)
+      toast('InfinitePay enviada ao Commerce Core. A prontidão depende do handle configurado no ambiente seguro.')
+      setModal(null); setInfinitePayForm(EMPTY_INFINITEPAY); carregar()
+    } catch (error) { toast(error.message || 'Não foi possível salvar a configuração da InfinitePay.', 'error') }
+    finally { setSaving(false) }
+  }
+
   const recentes = useMemo(() => transacoes.slice(0, 10), [transacoes])
 
   return <div className="page">
@@ -184,6 +225,7 @@ export default function Pagamentos() {
         <button className="btn btn-secondary btn-sm" onClick={carregar}>↺ Atualizar</button>
         <button className="btn btn-secondary btn-sm" onClick={() => setModal('terminal')}>▣ Terminal</button>
         <button className="btn btn-secondary btn-sm" onClick={() => setModal('mercadopago')}>MP Mercado Pago</button>
+        {coreMode && <button className="btn btn-secondary btn-sm" onClick={() => setModal('infinitepay')}>IP InfinitePay</button>}
         <button className="btn btn-primary btn-sm" onClick={() => setModal('transacao')}>+ Registrar transação</button>
       </div>
     </div>
@@ -220,6 +262,18 @@ export default function Pagamentos() {
       </section>
 
       <section className="card">
+        <h2 style={{ margin: '0 0 12px', fontSize: 16, color: '#12283F' }}>InfinitePay Checkout</h2>
+        {infinitePay ? <>
+          <p style={{ margin: '0 0 8px', color: infinitePay.ready ? '#16806b' : '#c47a00', fontWeight: 750 }}>{infinitePay.ready ? 'Configuração pronta' : 'Aguardando ambiente seguro'}</p>
+          <div style={{ color: 'var(--muted)', fontSize: 12, display: 'grid', gap: 4 }}>
+            <span>Handle: {infinitePay.handle}</span>
+            <span>Checkout hospedado: {infinitePay.ativo ? 'ativo' : 'inativo'}</span>
+            <span>Ambiente: {infinitePay.ambiente || 'production'}</span>
+          </div>
+        </> : <p style={{ color: 'var(--muted)' }}>Ainda não configurado. A InfinitePay usa checkout hospedado por link.</p>}
+      </section>
+
+      <section className="card">
         <h2 style={{ margin: '0 0 12px', fontSize: 16, color: '#12283F' }}>Terminais e adquirentes</h2>
         {adquirentes.length === 0 ? <p style={{ color: 'var(--muted)' }}>Nenhum terminal configurado.</p> : adquirentes.map((terminal) => <div key={terminal.id} style={{ padding: '10px 0', borderTop: '1px solid var(--line)' }}>
           <strong>{terminal.nome}</strong><br /><span style={{ color: 'var(--muted)', fontSize: 12 }}>{terminal.tipo} · {terminal.ambiente || 'homologacao'} · {terminal.terminal || 'Terminal não identificado'} · {terminal.credencialConfigurada ? 'Credencial protegida' : 'Sem credencial'} · {terminal.statusHomologacao || 'não iniciada'}</span><br />{terminal.credencialConfigurada && terminal.webhookConfigurado && terminal.statusHomologacao !== 'webhook_validado' && <button className="btn btn-ghost btn-sm" style={{ marginTop: 7 }} onClick={() => homologarTerminal(terminal)} disabled={saving}>Preparar homologação</button>}
@@ -239,6 +293,7 @@ export default function Pagamentos() {
     {modal === 'terminal' && <Modal title="Configurar terminal / adquirente" onClose={() => setModal(null)} width={620}><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}><Field label="Nome do terminal *"><input style={inputStyle} value={terminalForm.nome} onChange={(e) => setTerminalForm({ ...terminalForm, nome: e.target.value })} /></Field><Field label="Provedor *"><select style={inputStyle} value={terminalForm.tipo} onChange={(e) => setTerminalForm({ ...terminalForm, tipo: e.target.value })}><option value="mercado_pago_point">Mercado Pago Point</option><option value="cielo">Cielo</option><option value="rede">Rede</option><option value="stone">Stone</option><option value="getnet">Getnet</option><option value="sicoob">Sicoob (PIX)</option><option value="sicredi">Sicredi (PIX)</option><option value="outro">Outro</option></select></Field><Field label="Ambiente"><select style={inputStyle} value={terminalForm.ambiente} onChange={(e) => setTerminalForm({ ...terminalForm, ambiente: e.target.value })}><option value="homologacao">Homologação</option><option value="producao">Produção</option></select></Field><Field label="Identificação do terminal"><input style={inputStyle} value={terminalForm.terminal} onChange={(e) => setTerminalForm({ ...terminalForm, terminal: e.target.value })} /></Field><Field label="Loja / estabelecimento"><input style={inputStyle} value={terminalForm.loja} onChange={(e) => setTerminalForm({ ...terminalForm, loja: e.target.value })} /></Field><Field label="Chave pública" wide><input style={inputStyle} value={terminalForm.chavePublica} onChange={(e) => setTerminalForm({ ...terminalForm, chavePublica: e.target.value })} /></Field><Field label="Credencial privada" wide><input type="password" style={inputStyle} value={terminalForm.chavePrivada} onChange={(e) => setTerminalForm({ ...terminalForm, chavePrivada: e.target.value })} /></Field><Field label="Segredo de assinatura do webhook" wide><input type="password" style={inputStyle} value={terminalForm.webhookSecret} onChange={(e) => setTerminalForm({ ...terminalForm, webhookSecret: e.target.value })} /></Field></div><p style={{ color: 'var(--muted)', fontSize: 12 }}>Credenciais e assinaturas de webhook são cifradas antes da persistência e não voltam a ser exibidas. Mantenha em homologação até validar uma transação do provedor.</p><Actions onCancel={() => setModal(null)} onSave={salvarTerminal} saving={saving} label="Salvar terminal" /></Modal>}
 
     {modal === 'mercadopago' && <Modal title="Configurar Mercado Pago" onClose={() => setModal(null)} width={620}><div style={{ display: 'grid', gap: 12 }}><Field label="Public Key"><input style={inputStyle} value={mpForm.publicKey} onChange={(e) => setMpForm({ ...mpForm, publicKey: e.target.value })} /></Field><Field label="Access Token *"><input type="password" style={inputStyle} value={mpForm.accessToken} onChange={(e) => setMpForm({ ...mpForm, accessToken: e.target.value })} /></Field><Field label="Assinatura secreta de webhook"><input type="password" style={inputStyle} value={mpForm.webhookSecret} onChange={(e) => setMpForm({ ...mpForm, webhookSecret: e.target.value })} /></Field><Field label="ID do usuário vendedor"><input style={inputStyle} value={mpForm.userId} onChange={(e) => setMpForm({ ...mpForm, userId: e.target.value })} /></Field></div><p style={{ color: 'var(--muted)', fontSize: 12 }}>Use credenciais produtivas somente após testar o webhook. O token e a assinatura serão cifrados em repouso.</p><Actions onCancel={() => setModal(null)} onSave={salvarMercadoPago} saving={saving} label="Salvar configuração protegida" /></Modal>}
+    {modal === 'infinitepay' && <Modal title="Configurar InfinitePay Checkout" onClose={() => setModal(null)} width={620}><div style={{ display: 'grid', gap: 12 }}><Field label="InfiniteTag / handle *"><input style={inputStyle} value={infinitePayForm.handle} onChange={(e) => setInfinitePayForm({ ...infinitePayForm, handle: e.target.value })} placeholder="sua_infinite_tag" /></Field></div><p style={{ color: 'var(--muted)', fontSize: 12 }}>O checkout usa a InfiniteTag para gerar um link hospedado com Pix e cartão. O handle é público; a ativação também exige a variável segura <code>INFINITEPAY_HANDLE</code> no ambiente do servidor. Nunca informe tokens neste formulário.</p><Actions onCancel={() => setModal(null)} onSave={salvarInfinitePay} saving={saving} label="Salvar InfinitePay" /></Modal>}
   </div>
 }
 

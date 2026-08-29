@@ -4,6 +4,7 @@ import { CommerceError, assertUuid, tenantContext } from './commerce-core.js';
 const SECRET_REF = /^env:[A-Z][A-Z0-9_]{2,}$/;
 const PROVIDERS = [
   { code: 'mercadopago', name: 'Mercado Pago', adapter: true, methods: ['pix'], secretRefs: ['env:MP_ACCESS_TOKEN', 'env:MP_WEBHOOK_SECRET'] },
+  { code: 'infinitepay', name: 'InfinitePay Checkout', adapter: true, methods: ['pix', 'credit_card'], secretRefs: ['env:INFINITEPAY_HANDLE'] },
   { code: 'stripe', name: 'Stripe', adapter: false, methods: [], secretRefs: [] },
   { code: 'pagarme', name: 'Pagar.me', adapter: false, methods: [], secretRefs: [] },
   { code: 'stone', name: 'Stone', adapter: false, methods: [], secretRefs: [] },
@@ -32,6 +33,8 @@ function publicConfig(input = {}) {
   const config = {};
   if (source.webhookSecretRef) config.webhookSecretRef = secretRef(source.webhookSecretRef, 'webhookSecretRef');
   if (source.webhookUrl) config.webhookUrl = String(source.webhookUrl).trim().slice(0, 500);
+  if (source.redirectUrl) config.redirectUrl = String(source.redirectUrl).trim().slice(0, 500);
+  if (source.handle) config.handle = String(source.handle).trim().replace(/^\$/, '').slice(0, 120);
   if (Array.isArray(source.methods)) config.methods = source.methods.map(value => String(value).toLowerCase()).filter(value => ['pix', 'credit_card', 'debit_card', 'boleto'].includes(value)).slice(0, 10);
   return config;
 }
@@ -51,6 +54,8 @@ function safePublicConfig(config = {}) {
   const source = config && typeof config === 'object' ? config : {};
   return {
     ...(source.webhookUrl ? { webhookUrl: String(source.webhookUrl).slice(0, 500) } : {}),
+    ...(source.redirectUrl ? { redirectUrl: String(source.redirectUrl).slice(0, 500) } : {}),
+    ...(source.handle ? { handle: String(source.handle).slice(0, 120) } : {}),
     ...(Array.isArray(source.methods) ? { methods: source.methods.slice(0, 10) } : {}),
   };
 }
@@ -117,6 +122,9 @@ export async function createPaymentAccount(trx, contextInput, input = {}) {
   if (definition.code === 'mercadopago' && !config.webhookSecretRef) {
     throw new CommerceError('Mercado Pago exige webhookSecretRef por referência de ambiente', 'PAYMENT_ACCOUNT_INVALID');
   }
+  if (definition.code === 'infinitepay' && !config.handle) {
+    throw new CommerceError('InfinitePay exige a InfiniteTag/handle da conta', 'PAYMENT_ACCOUNT_INVALID');
+  }
   if (ativo && !accountCredentialsConfigured({ secret_ref: secretRefValue, public_config: config }, definition.code)) {
     throw new CommerceError('não é possível ativar uma conta sem credenciais presentes no secret manager e adapter registrado', 'PAYMENT_ACCOUNT_NOT_CONFIGURED');
   }
@@ -176,6 +184,7 @@ export async function updatePaymentAccount(trx, contextInput, idInput, input = {
   if (input.publicConfig !== undefined) {
     nextPublicConfig = { ...nextPublicConfig, ...publicConfig(input.publicConfig) };
     if (definition.code === 'mercadopago' && !nextPublicConfig.webhookSecretRef) throw new CommerceError('Mercado Pago exige webhookSecretRef por referência de ambiente', 'PAYMENT_ACCOUNT_INVALID');
+    if (definition.code === 'infinitepay' && !nextPublicConfig.handle) throw new CommerceError('InfinitePay exige a InfiniteTag/handle da conta', 'PAYMENT_ACCOUNT_INVALID');
     values.push(JSON.stringify(nextPublicConfig)); sets.push(`public_config = $${values.length}::jsonb`);
   }
   if (input.ativo !== undefined) {

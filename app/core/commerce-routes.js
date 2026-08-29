@@ -291,6 +291,21 @@ export function createCommercePublicRouter() {
       res.status(201).json(result);
     } catch (error) { jsonError(res, error); }
   });
+  router.post('/orders/:publicCode/payments/return', async (req, res) => {
+    try {
+      const storefront = await resolvePublicStorefront(req)
+      const transactionNsu = String(req.body?.transactionNsu || req.body?.transaction_nsu || '').trim().slice(0, 180)
+      const slug = String(req.body?.slug || req.body?.invoice_slug || '').trim().slice(0, 180)
+      if (!transactionNsu || !slug) throw new CommerceError('retorno InfinitePay sem identificadores suficientes', 'PAYMENT_WEBHOOK_INVALID')
+      const order = await db.query(`SELECT id FROM commerce_orders WHERE empresa_id = $1 AND storefront_id = $2 AND public_code = $3 LIMIT 1`, [storefront.empresa_id, storefront.id, String(req.params.publicCode || '').toUpperCase()])
+      if (!order.rows[0]) throw new CommerceError('pedido não encontrado', 'ORDER_NOT_FOUND')
+      const payment = await db.query(`SELECT p.id FROM commerce_payments p WHERE p.empresa_id = $1 AND p.order_id = $2 AND p.provider = 'infinitepay' ORDER BY p.criado_em DESC LIMIT 1`, [storefront.empresa_id, order.rows[0].id])
+      if (!payment.rows[0]) throw new CommerceError('tentativa InfinitePay não encontrada', 'PAYMENT_NOT_FOUND')
+      await withCommerceTransaction(trx => trx.query(`UPDATE commerce_payments SET provider_payment_id = COALESCE(provider_payment_id, $3), metadata = metadata || $4::jsonb, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2`, [storefront.empresa_id, payment.rows[0].id, transactionNsu, JSON.stringify({ checkout: { orderNsu: String(req.params.publicCode || '').toUpperCase(), transactionNsu, slug } })]))
+      const result = await syncPaymentAttempt({ empresaId: storefront.empresa_id, lojaId: storefront.loja_id }, payment.rows[0].id)
+      res.json(result)
+    } catch (error) { jsonError(res, error) }
+  })
   router.post('/orders', async (req, res) => {
     try {
       const storefront = await resolvePublicStorefront(req);
@@ -377,16 +392,19 @@ export function createCommerceWebhookRouter() {
   router.post('/:provider/payments', async (req, res) => {
     const provider = String(req.params.provider || '').trim().toLowerCase();
     try {
-      const dataId = String(req.query['data.id'] || req.body?.data?.id || '').trim().slice(0, 180);
-      if (!dataId) throw new CommerceError('webhook sem identificador do pagamento', 'PAYMENT_WEBHOOK_INVALID');
+      const dataId = String(req.query['data.id'] || req.body?.data?.id || req.body?.transaction_nsu || req.body?.transactionNsu || '').trim().slice(0, 180);
+      const orderNsu = String(req.body?.order_nsu || req.body?.orderNsu || '').trim().slice(0, 180);
+      if (!dataId && !orderNsu) throw new CommerceError('webhook sem identificador do pagamento', 'PAYMENT_WEBHOOK_INVALID');
       const owner = await db.query(
         `SELECT p.empresa_id, p.payment_account_id, a.secret_ref, a.public_config
            FROM commerce_payments p
+           JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id
            LEFT JOIN commerce_payment_accounts a
              ON a.empresa_id = p.empresa_id AND a.id = p.payment_account_id
-          WHERE p.provider = $1 AND p.provider_payment_id = $2
+          WHERE p.provider = $1
+            AND (p.provider_payment_id = $2 OR ($1 = 'infinitepay' AND (o.public_code = $3 OR o.id::text = $3)))
           LIMIT 2`,
-        [provider, dataId],
+        [provider, dataId || null, orderNsu || null],
       );
       if (!owner.rows[0]) return res.status(200).json({ ok: true, ignored: true });
       if (owner.rows.length > 1) throw new CommerceError('webhook associado a mais de uma tentativa persistida', 'PAYMENT_WEBHOOK_AMBIGUOUS');
@@ -396,6 +414,7 @@ export function createCommerceWebhookRouter() {
         rawBody: req.rawBody || Buffer.from(JSON.stringify(req.body || {})),
         requestId: req.headers['x-request-id'] || '',
         dataId,
+        orderNsu,
         account: { secret_ref: ownerRow.secret_ref, public_config: ownerRow.public_config },
         empresaId: ownerRow.empresa_id,
       });
@@ -414,18 +433,22 @@ export function createCommerceWebhookRouter() {
         );
         if (!inserted.rows[0]) return { duplicate: true };
         const payment = await trx.query(
-          `SELECT p.id, p.order_id, p.amount, p.status, o.status AS order_status
+          `SELECT p.id, p.order_id, p.amount, p.status, p.provider_payment_id, o.status AS order_status
              FROM commerce_payments p
              JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id
-            WHERE p.empresa_id = $1 AND p.provider = $2 AND p.provider_payment_id = $3
+            WHERE p.empresa_id = $1 AND p.provider = $2
+              AND (p.provider_payment_id = $3 OR ($2 = 'infinitepay' AND (o.public_code = $4 OR o.id::text = $4)))
             FOR UPDATE OF p`,
-          [empresaId, provider, String(verified.providerPaymentId || '').slice(0, 180)],
+          [empresaId, provider, String(verified.providerPaymentId || '').slice(0, 180), orderNsu || null],
         );
         if (!payment.rows[0]) {
           await trx.query(`UPDATE commerce_payment_webhooks SET status = 'ignored', processado_em = CURRENT_TIMESTAMP WHERE id = $1`, [inserted.rows[0].id]);
           return { ignored: true };
         }
         const current = payment.rows[0];
+        if (provider === 'infinitepay' && verified.providerPaymentId && !current.provider_payment_id) {
+          await trx.query(`UPDATE commerce_payments SET provider_payment_id = $3, metadata = metadata || $4::jsonb, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2`, [empresaId, current.id, String(verified.providerPaymentId).slice(0, 180), JSON.stringify({ checkout: { orderNsu, transactionNsu: String(verified.providerPaymentId).slice(0, 180), slug: verified.summary?.slug || null } })]);
+        }
         if (verified.amount != null && Math.abs(Number(verified.amount) - Number(current.amount)) > 0.01) {
           await trx.query(`UPDATE commerce_payment_webhooks SET status = 'failed', processado_em = CURRENT_TIMESTAMP WHERE id = $1`, [inserted.rows[0].id]);
           throw new CommerceError('valor do webhook diverge do pedido', 'PAYMENT_AMOUNT_MISMATCH');

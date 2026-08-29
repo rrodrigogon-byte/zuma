@@ -61,7 +61,7 @@ test('pedido fora da loja do contexto é rejeitado pelo filtro tenant-aware', as
       calls.push({ sql, values });
       if (sql.includes('SELECT request_hash')) return { rows: [] };
       if (sql.includes("INSERT INTO commerce_idempotency_keys")) return { rows: [] };
-      if (sql.includes('SELECT o.id, o.loja_id')) return { rows: [] };
+      if (sql.includes('SELECT o.id, o.public_code, o.loja_id')) return { rows: [] };
       throw new Error(`query não prevista: ${sql}`);
     },
   });
@@ -70,7 +70,7 @@ test('pedido fora da loja do contexto é rejeitado pelo filtro tenant-aware', as
       () => createPaymentAttempt({ empresaId, lojaId }, { orderId, accountId, provider: 'testgateway', method: 'pix', environment: 'sandbox', idempotencyKey: 'payment-store-scope' }),
       error => error instanceof CommerceError && error.code === 'ORDER_NOT_FOUND',
     );
-    const orderQuery = calls.find(call => call.sql.includes('SELECT o.id, o.loja_id'));
+    const orderQuery = calls.find(call => call.sql.includes('SELECT o.id, o.public_code, o.loja_id'));
     assert.deepEqual(orderQuery.values, [empresaId, orderId, lojaId]);
   } finally {
     db.transaction = original;
@@ -118,7 +118,7 @@ test('conta ativa sem secret presente é bloqueada antes do createCheckout', asy
     query: async sql => {
       if (sql.includes('SELECT request_hash')) return { rows: [] };
       if (sql.includes("INSERT INTO commerce_idempotency_keys")) return { rows: [] };
-      if (sql.includes('SELECT o.id, o.loja_id')) return { rows: [{ id: orderId, loja_id: lojaId, storefront_id: storefrontId, status: 'pending_payment', total: '10.00', moeda: 'BRL', customer_email: 'cliente@example.com' }] };
+      if (sql.includes('SELECT o.id, o.public_code, o.loja_id')) return { rows: [{ id: orderId, public_code: 'KC-TESTE', loja_id: lojaId, storefront_id: storefrontId, status: 'pending_payment', total: '10.00', moeda: 'BRL', customer_email: 'cliente@example.com' }] };
       if (sql.includes('SELECT id, secret_ref, public_config')) return { rows: [{ id: accountId, secret_ref: 'env:TEST_PAYMENT_ACCESS', public_config: {} }] };
       throw new Error(`query não prevista: ${sql}`);
     },
