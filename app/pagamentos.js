@@ -62,7 +62,7 @@ export function gerarBrCode({ chave, nome, cidade, valor = null, txid = '***' })
 // ── API pública ────────────────────────────────────────────────────────────
 
 // Cria uma cobrança Pix. Retorna { provedor, status, copiaECola, externalId? }.
-export async function criarPix({ valor, descricao, email }) {
+export async function criarPix({ valor, descricao, email, idempotencyKey }) {
   const valorNum = Math.round(Number(valor) * 100) / 100;
   if (!(valorNum > 0)) throw new Error('valor inválido');
 
@@ -90,7 +90,7 @@ export async function criarPix({ valor, descricao, email }) {
 
   // ── Modo 2: Mercado Pago ──
   if (MP_TOKEN) {
-    const idem = crypto.randomUUID();
+    const idem = String(idempotencyKey || crypto.randomUUID()).slice(0, 120);
     const r = await fetch('https://api.mercadopago.com/v1/payments', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${MP_TOKEN}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': idem },
