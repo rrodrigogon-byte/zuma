@@ -59,7 +59,7 @@ const PRODUCT_LINKS = [
   },
   {
     eyebrow: 'Pessoas & performance',
-    name: 'Nossa Gente AI',
+    name: 'JURAI',
     title: 'Tecnologia que desenvolve quem faz.',
     text: 'Inteligência para metas, performance, talentos e decisões melhores para cada pessoa da operação.',
     href: 'https://ai-nossagente-web-nedqnqyahq-rj.a.run.app/login',

@@ -5,7 +5,7 @@ export const PRODUCT_LINKS = [
   { name: 'GemOps', label: 'Ops & automação', href: 'https://gemops-digital-108835006988.us-central1.run.app/app' },
   { name: 'LakeX', label: 'Indústria & inteligência', href: 'https://lakex.com.br' },
   { name: 'SetPoint', label: 'Operação & gestão', href: 'https://setpoint.kytto.com.br/admin' },
-  { name: 'Nossa Gente AI', label: 'Pessoas & performance', href: 'https://ai-nossagente-web-nedqnqyahq-rj.a.run.app/login' },
+  { name: 'JURAI', label: 'Pessoas & performance', href: 'https://ai-nossagente-web-nedqnqyahq-rj.a.run.app/login' },
   { name: 'Kytto Commerce', label: 'Comércio & operação', href: 'https://loja.kytto.com.br/' },
   { name: 'MedFocus.IA', label: 'Saúde & educação médica', href: 'https://medfocus.ia.br/' },
   { name: 'AIJur', label: 'Jurídico & governança', href: '/ia/aijur' },
