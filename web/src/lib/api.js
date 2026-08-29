@@ -58,6 +58,7 @@ async function request(path, opts = {}) {
     const error = new Error(data.error || data.erro || `Erro ${res.status}`)
     error.status = res.status
     error.code = data.code || ''
+    error.details = data.details && typeof data.details === 'object' ? data.details : {}
     error.requestId = res.headers.get('X-Request-Id') || data.requestId || ''
     throw error
   }

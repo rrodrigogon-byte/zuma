@@ -17,11 +17,12 @@ function money(value) { return fmtR(Number(value || 0)) }
 function idem(prefix = 'checkout') { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}` }
 
 function hostedPaymentUrl(checkout) {
-  const candidate = checkout?.url || checkout?.checkoutUrl || checkout?.ticketUrl || ''
+  const candidate = checkout?.url || checkout?.link || checkout?.checkoutUrl || checkout?.ticketUrl || ''
   if (!candidate) return ''
   try {
     const url = new URL(candidate, window.location.origin)
-    return url.protocol === 'https:' && url.hostname === 'checkout.infinitepay.com.br' ? url.toString() : ''
+    const allowedHosts = new Set(['checkout.infinitepay.com.br', 'checkout.infinitepay.io'])
+    return url.protocol === 'https:' && allowedHosts.has(url.hostname) ? url.toString() : ''
   } catch { return '' }
 }
 
@@ -230,7 +231,7 @@ export default function CommerceCheckout() {
     const checkout = payment?.checkout || {}
     const pixCode = checkout.qrCode || checkout.qr_code || null
     const qr = checkout.qrCodeBase64 || checkout.qr_code_base64 || null
-    const hostedUrl = checkout.url || checkout.checkoutUrl || checkout.ticketUrl || null
+    const hostedUrl = checkout.url || checkout.link || checkout.checkoutUrl || checkout.ticketUrl || null
     const paid = ['captured', 'paid', 'approved', 'authorized'].includes(String(order.payment_status || payment?.status || '').toLowerCase())
     return <main className="checkout-result-shell"><div className="checkout-result-card">
       <div className="checkout-result-icon"><CheckCircle2 size={30} /></div>
