@@ -108,6 +108,10 @@ function seedUsuarios(){
 }
 seedUsuarios();
 const findUser = login => db().usuarios.find(u=>u.email===norm(login));
+function senhaConfere(senha, hash){
+  if(typeof senha !== 'string' || typeof hash !== 'string' || !hash) return false;
+  try { return bcrypt.compareSync(senha, hash); } catch { return false; }
+}
 const publicUser = u => ({ id:u.id, nome:u.nome, email:u.email, role:u.role, telefone:u.telefone, ativo:u.ativo });
 
 // Recuperação do admin: se ADMIN_PASS_RESET=1 e ADMIN_PASS definido, redefine a senha
@@ -444,7 +448,7 @@ app.post('/api/admin/login', (req,res)=>{
   const chave = 'adm:'+(req.ip||'')+':'+norm(user);
   if(!rateLimit(chave)) return res.status(429).json({error:'muitas tentativas. Tente novamente em alguns minutos.'});
   const u = findUser(user);
-  if(!u || !u.ativo || !bcrypt.compareSync(senhaInformada||'', u.senhaHash)) return res.status(401).json({error:'usuário ou senha inválidos', code:'INVALID_CREDENTIALS'});
+  if(!u || !u.ativo || !senhaConfere(String(senhaInformada || ''), u.senhaHash)) return res.status(401).json({error:'usuário ou senha inválidos', code:'INVALID_CREDENTIALS'});
   if(!STAFF.includes(u.role)) return res.status(403).json({error:'esta conta não tem acesso ao painel'});
   limparTentativas(chave);
   audit({user:{nome:u.nome,role:u.role}, ip:req.ip}, 'LOGIN painel'); save();
@@ -468,7 +472,7 @@ app.post('/api/auth/login', (req,res)=>{
   const chave = 'site:'+(req.ip||'')+':'+norm(email);
   if(!rateLimit(chave)) return res.status(429).json({error:'muitas tentativas. Tente novamente em alguns minutos.'});
   const u = findUser(email);
-  if(!u || !u.ativo || !bcrypt.compareSync(senha||'', u.senhaHash)) return res.status(401).json({error:'e-mail ou senha inválidos'});
+  if(!u || !u.ativo || !senhaConfere(String(senha || ''), u.senhaHash)) return res.status(401).json({error:'e-mail ou senha inválidos'});
   limparTentativas(chave);
   res.json({ token: tokenFor(u), user: publicUser(u) });
 });
