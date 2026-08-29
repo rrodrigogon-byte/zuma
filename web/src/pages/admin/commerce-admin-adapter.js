@@ -112,11 +112,13 @@ async function loadLegacy() {
 export async function loadCommerceAdmin() {
   const warnings = []
   try {
-    const [storefrontData, productData, categoryData, promotionData, roleData, membershipData, orderData, customerData, locations, shippingData, shippingProviderData, shippingAccountData, fulfillmentData, domainData, providerData, accountData, paymentData, auditData, healthData] = await Promise.all([
+    const [storefrontData, storefrontsData, productData, categoryData, promotionData, templateData, roleData, membershipData, orderData, customerData, locations, shippingData, shippingProviderData, shippingAccountData, fulfillmentData, domainData, providerData, accountData, paymentData, auditData, healthData] = await Promise.all([
       api.get('/api/admin/commerce/storefront'),
+      safeCoreGet('/api/admin/commerce/storefronts', { items: [] }, warnings, 'lojas Commerce'),
       api.get('/api/admin/commerce/catalog/products'),
       safeCoreGet('/api/admin/commerce/catalog/categories', { items: [] }, warnings, 'categorias'),
       safeCoreGet('/api/admin/commerce/promotions', { items: [] }, warnings, 'promoções'),
+      safeCoreGet('/api/admin/commerce/promotions/templates', { items: [] }, warnings, 'templates promocionais'),
       safeCoreGet('/api/admin/commerce/users/roles', { items: [] }, warnings, 'papéis'),
       safeCoreGet('/api/admin/commerce/users/memberships', { items: [] }, warnings, 'usuários'),
       api.get('/api/admin/commerce/orders'),
@@ -136,9 +138,11 @@ export async function loadCommerceAdmin() {
     return {
       mode: 'core',
       storefrontId: storefrontData?.items?.[0]?.id || null,
+      storefronts: storefrontsData?.items || [],
       locationId: locations?.items?.[0]?.id || null,
       categories: categoryData?.items || [],
       promotions: promotionData?.items || [],
+      promotionTemplates: templateData?.items || [],
       roles: roleData?.items || [],
       memberships: membershipData?.items || [],
       products: (productData?.items || []).map(normalizeCoreProduct),
@@ -161,6 +165,18 @@ export async function loadCommerceAdmin() {
     if (error.status !== 404) throw error
     return loadLegacy()
   }
+}
+
+export async function createCoreStorefront(payload) {
+  return api.post('/api/admin/commerce/storefronts', payload)
+}
+
+export async function updateCoreStorefront(id, payload) {
+  return api.patch(`/api/admin/commerce/storefronts/${id}`, payload)
+}
+
+export async function createCorePromotionTemplate(payload) {
+  return api.post('/api/admin/commerce/promotions/templates', payload)
 }
 
 export async function createCoreCategory(payload) {
@@ -271,6 +287,7 @@ export async function createCorePromotion(form) {
     tipo: form.tipo,
     valor: Number(form.valor),
     limiteUso: form.limiteUso ? Number(form.limiteUso) : null,
+    templateId: form.templateId || null,
     ativo: true,
   })
   if (form.codigo?.trim()) {

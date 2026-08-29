@@ -5,7 +5,8 @@ import { customerReport, inventoryReport, salesReport } from './commerce-reports
 import { canTransitionPaymentStatus, createPaymentAttempt, paymentAccountReady, paymentProviders, syncPaymentAttempt, validatePaymentMethod, verifyPaymentWebhook } from './payment-adapters.js';
 import { createPaymentAccount, listPaymentAccounts, listPaymentProviders, listPayments, updatePaymentAccount } from './commerce-payment-admin.js';
 import { resolveCommerceIdentity } from './commerce-identity-bridge.js';
-import { applyPromotionToOrder, createPromotion, createPromotionCode, listPromotions } from './commerce-promotions.js';
+import { applyPromotionToOrder, createPromotion, createPromotionCode, createPromotionTemplate, listPromotionTemplates, listPromotions } from './commerce-promotions.js';
+import { createStorefront, listStorefronts, updateStorefront } from './commerce-storefronts.js';
 import { createMembership, listMemberships, listRoles, updateMembership } from './commerce-admin-users.js';
 import { createCustomer, createCustomerAddress, deleteCustomerAddress, getCustomer, listCustomerAddresses, updateCustomer, updateCustomerAddress } from './commerce-customers.js';
 import { createStorefrontDomain, listStorefrontDomains, setPrimaryStorefrontDomain, verifyStorefrontDomain } from './commerce-domains.js';
@@ -192,6 +193,15 @@ function jsonError(res, error) {
     ROLE_NOT_FOUND: 404,
     MEMBERSHIP_NOT_FOUND: 404,
     STORE_SCOPE_MISMATCH: 409,
+    STOREFRONT_CODE_INVALID: 400,
+    STOREFRONT_NAME_REQUIRED: 400,
+    STOREFRONT_CURRENCY_INVALID: 400,
+    STOREFRONT_CHANNEL_INVALID: 400,
+    STOREFRONT_STATUS_INVALID: 400,
+    STOREFRONT_CONFLICT: 409,
+    STOREFRONT_NOT_FOUND: 404,
+    PROMOTION_TEMPLATE_NOT_FOUND: 404,
+    PROMOTION_TEMPLATE_INVALID: 400,
     STORE_SELECTION_REQUIRED: 400,
   };
   const status = statusByCode[error?.code] || 500;
@@ -545,6 +555,26 @@ export function createCommerceAdminRouter() {
       res.json(result);
     } catch (error) { jsonError(res, error); }
   });
+  router.get('/storefronts', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'catalog.read');
+      res.json(await listStorefronts(db, context));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/storefronts', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'settings.write');
+      const result = await withCommerceTransaction(trx => createStorefront(trx, context, req.body));
+      res.status(201).json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.patch('/storefronts/:id', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'settings.write');
+      const result = await withCommerceTransaction(trx => updateStorefront(trx, context, req.params.id, req.body));
+      res.json(result);
+    } catch (error) { jsonError(res, error); }
+  });
   router.get('/storefront', async (req, res) => {
     try {
       const context = await requirePermission(req, 'catalog.read');
@@ -732,6 +762,19 @@ export function createCommerceAdminRouter() {
       const context = await requirePermission(req, 'catalog.write');
       const result = await withCommerceTransaction(trx => archiveCatalogProduct(trx, context, req.params.id));
       res.json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.get('/promotions/templates', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'promotions.read');
+      res.json(await listPromotionTemplates(db, context));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/promotions/templates', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'promotions.write');
+      const result = await withCommerceTransaction(trx => createPromotionTemplate(trx, context, req.body));
+      res.status(201).json(result);
     } catch (error) { jsonError(res, error); }
   });
   router.get('/promotions', async (req, res) => {

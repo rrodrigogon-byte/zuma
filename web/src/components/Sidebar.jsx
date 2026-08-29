@@ -108,6 +108,7 @@ const NAV_ADMIN_GROUPS = [
     label: 'ERP Comercial',
     items: [
       { to: '/admin/erp',           icon: '🏢', label: 'Hub ERP' },
+      { to: '/admin/ecommerce',     icon: '🛒', label: 'E-commerce' },
       { to: '/admin/supermercado',  icon: '🏪', label: 'Supermercado' },
       { to: '/admin/loja-moda',     icon: '👗', label: 'Loja de Moda' },
       { to: '/admin/barbearia-erp', icon: '✂️', label: 'Barbearia & Salão (Legacy)' },

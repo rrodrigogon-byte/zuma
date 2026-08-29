@@ -1,4 +1,4 @@
-import { CommerceError, assertUuid, tenantContext } from './commerce-core.js';
+import { CommerceError, assertUuid, auditLog, tenantContext } from './commerce-core.js';
 
 const PROMOTION_TYPES = new Set(['percentage', 'fixed']);
 
@@ -6,20 +6,63 @@ function text(value, max = 160) { return String(value || '').trim().slice(0, max
 function number(value) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
 function round(value) { return Math.round((number(value) + Number.EPSILON) * 100) / 100; }
 
-export async function createPromotion(trx, context, input = {}) {
+export async function listPromotionTemplates(client, context) {
+  const { empresaId } = tenantContext(context);
+  const result = await client.query(
+    `SELECT id, empresa_id, codigo, nome, descricao, tipo, valor, regras, ativo, sistema, criado_em, atualizado_em
+       FROM commerce_promotion_templates
+      WHERE ativo = true AND (empresa_id IS NULL OR empresa_id = $1)
+      ORDER BY CASE WHEN empresa_id IS NULL THEN 0 ELSE 1 END, nome ASC
+      LIMIT 100`,
+    [empresaId],
+  );
+  return { items: result.rows };
+}
+
+export async function createPromotionTemplate(trx, context, input = {}) {
   const { empresaId, usuarioId } = tenantContext(context);
+  const codigo = text(input.codigo, 80).toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
   const nome = text(input.nome);
   const tipo = text(input.tipo, 30);
   const valor = number(input.valor);
+  if (!codigo || !nome || !PROMOTION_TYPES.has(tipo) || valor <= 0) throw new CommerceError('código, nome, tipo e valor de template válidos são obrigatórios', 'PROMOTION_TEMPLATE_INVALID');
+  if (tipo === 'percentage' && valor > 100) throw new CommerceError('percentual do template deve estar entre 0 e 100', 'PROMOTION_TEMPLATE_INVALID');
+  const result = await trx.query(
+    `INSERT INTO commerce_promotion_templates (empresa_id, codigo, nome, descricao, tipo, valor, regras, ativo, sistema, criado_por)
+     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, true, false, $8)
+     RETURNING *`,
+    [empresaId, codigo, nome, text(input.descricao, 500) || null, tipo, valor, JSON.stringify(input.regras || {}), usuarioId],
+  );
+  await auditLog(trx, context, { entidade: 'promotion_template', entidadeId: result.rows[0].id, acao: 'created', depois: { codigo, nome, tipo, valor } });
+  return result.rows[0];
+}
+
+export async function createPromotion(trx, context, input = {}) {
+  const { empresaId, usuarioId } = tenantContext(context);
+  let template = null;
+  if (input.templateId) {
+    const templateResult = await trx.query(
+      `SELECT id, nome, tipo, valor, regras FROM commerce_promotion_templates
+        WHERE id = $1 AND ativo = true AND (empresa_id IS NULL OR empresa_id = $2)
+        LIMIT 1`,
+      [assertUuid(input.templateId, 'templateId'), empresaId],
+    );
+    template = templateResult.rows[0];
+    if (!template) throw new CommerceError('template promocional não encontrado no tenant', 'PROMOTION_TEMPLATE_NOT_FOUND');
+  }
+  const nome = text(input.nome || template?.nome);
+  const tipo = text(input.tipo || template?.tipo, 30);
+  const valor = number(input.valor == null || input.valor === '' ? template?.valor : input.valor);
+  const regras = input.regras || template?.regras || {};
   const inicio = input.inicio || new Date().toISOString();
   const fim = input.fim || null;
   if (!nome || !PROMOTION_TYPES.has(tipo) || valor <= 0) throw new CommerceError('nome, tipo e valor de promoção válidos são obrigatórios', 'PROMOTION_INVALID');
   if (tipo === 'percentage' && valor > 100) throw new CommerceError('percentual da promoção deve estar entre 0 e 100', 'PROMOTION_INVALID');
   const result = await trx.query(
-    `INSERT INTO commerce_promotions (empresa_id, nome, tipo, valor, regras, inicio, fim, limite_uso, ativo)
-     VALUES ($1, $2, $3, $4, $5::jsonb, $6::timestamptz, $7::timestamptz, $8, $9)
+    `INSERT INTO commerce_promotions (empresa_id, nome, tipo, valor, regras, inicio, fim, limite_uso, ativo, template_id)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6::timestamptz, $7::timestamptz, $8, $9, $10)
      RETURNING *`,
-    [empresaId, nome, tipo, valor, JSON.stringify(input.regras || {}), inicio, fim, input.limiteUso == null ? null : Math.max(1, Number(input.limiteUso) || 1), input.ativo !== false],
+    [empresaId, nome, tipo, valor, JSON.stringify(regras), inicio, fim, input.limiteUso == null ? null : Math.max(1, Number(input.limiteUso) || 1), input.ativo !== false, template?.id || null],
   );
   const promotion = result.rows[0];
   await trx.query(
@@ -48,12 +91,14 @@ export async function createPromotionCode(trx, context, input = {}) {
 export async function listPromotions(trx, context) {
   const { empresaId } = tenantContext(context);
   const result = await trx.query(
-    `SELECT p.id, p.nome, p.tipo, p.valor, p.inicio, p.fim, p.limite_uso, p.usos, p.ativo,
+    `SELECT p.id, p.nome, p.tipo, p.valor, p.inicio, p.fim, p.limite_uso, p.usos, p.ativo, p.template_id,
+            t.nome AS template_nome,
             COALESCE(jsonb_agg(jsonb_build_object('id', c.id, 'codigo', c.codigo, 'usoMaximo', c.uso_maximo, 'usos', c.usos, 'ativo', c.ativo)) FILTER (WHERE c.id IS NOT NULL), '[]'::jsonb) AS codigos
        FROM commerce_promotions p
+       LEFT JOIN commerce_promotion_templates t ON t.id = p.template_id
        LEFT JOIN commerce_promotion_codes c ON c.empresa_id = p.empresa_id AND c.promotion_id = p.id
       WHERE p.empresa_id = $1
-      GROUP BY p.id
+      GROUP BY p.id, t.nome
       ORDER BY p.inicio DESC, p.nome ASC
       LIMIT 500`,
     [empresaId],
