@@ -12,9 +12,18 @@ function publicConfig(account) {
   return account?.publicConfig || account?.public_config || {};
 }
 
+function normalizeHandle(value) {
+  return String(value || '').trim().replace(/^\$/, '');
+}
+
 function handleFor(account) {
   const config = publicConfig(account);
-  const handle = envValue(account?.secretRef || account?.secret_ref) || String(config.handle || '').trim().replace(/^\$/, '');
+  const configuredHandle = normalizeHandle(config.handle);
+  const environmentHandle = normalizeHandle(envValue(account?.secretRef || account?.secret_ref));
+  if (configuredHandle && environmentHandle && configuredHandle !== environmentHandle) {
+    throw new CommerceError('o handle InfinitePay salvo no Commerce não coincide com o handle do ambiente', 'PAYMENT_ACCOUNT_INVALID', { reason: 'handle_mismatch' });
+  }
+  const handle = configuredHandle || environmentHandle;
   if (!handle) throw new CommerceError('InfinitePay não configurada: informe a InfiniteTag/handle no secret manager', 'PAYMENT_ACCOUNT_NOT_CONFIGURED');
   return handle;
 }
@@ -41,10 +50,12 @@ async function infinitePayRequest(path, body) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload?.success === false) {
-      throw new CommerceError('InfinitePay rejeitou a solicitação', 'PAYMENT_PROVIDER_REJECTED', {
-        providerStatus: response.status,
-        providerCode: String(payload?.code || payload?.error || payload?.message || '').slice(0, 80) || null,
-      });
+      const providerCode = String(payload?.code || payload?.error || payload?.message || '').slice(0, 80) || null;
+      const details = { providerStatus: response.status, providerCode };
+      if (providerCode === 'external_checkout_not_enabled') {
+        throw new CommerceError('o Checkout Integrado da InfinitePay está desabilitado para o perfil configurado', 'PAYMENT_PROVIDER_NOT_READY', details);
+      }
+      throw new CommerceError('InfinitePay rejeitou a solicitação', 'PAYMENT_PROVIDER_REJECTED', details);
     }
     return payload;
   } catch (error) {
