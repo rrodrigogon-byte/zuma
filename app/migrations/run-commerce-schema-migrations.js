@@ -18,6 +18,7 @@ const migrationFiles = [
   '026_commerce_payment_account_link.sql',
   '027_commerce_shipping_quotes.sql',
   '028_commerce_admin_indexes.sql',
+  '029_commerce_orders_schema_hardening.sql',
 ];
 const advisoryLockKey = 825410732;
 

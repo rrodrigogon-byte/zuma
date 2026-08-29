@@ -4,6 +4,15 @@ function getToken() {
   return localStorage.getItem('sp_token') || localStorage.getItem('sp_site_token') || ''
 }
 
+function getEmpresaAtivaId() {
+  try {
+    const empresa = JSON.parse(localStorage.getItem('sp_empresa_ativa') || 'null')
+    return empresa?.id || ''
+  } catch {
+    return ''
+  }
+}
+
 function getLojaAtivaId() {
   try {
     const loja = JSON.parse(localStorage.getItem('sp_loja_ativa') || 'null')
@@ -16,10 +25,12 @@ function getLojaAtivaId() {
 async function request(path, opts = {}) {
   const preparado = prepararOperacao(path, opts)
   const token = getToken()
+  const empresaId = getEmpresaAtivaId()
   const lojaId = getLojaAtivaId()
   const headers = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: 'Bearer ' + token } : {}),
+    ...(empresaId ? { 'X-Empresa-Id': empresaId } : {}),
     ...(lojaId ? { 'X-Loja-Id': lojaId } : {}),
     ...(preparado.headers || {}),
   }
@@ -36,6 +47,8 @@ async function request(path, opts = {}) {
     localStorage.removeItem('sp_token')
     localStorage.removeItem('sp_site_token')
     localStorage.removeItem('sp_user')
+    localStorage.removeItem('sp_empresa_ativa')
+    localStorage.removeItem('sp_empresas_acessiveis')
     localStorage.removeItem('sp_loja_ativa')
     localStorage.removeItem('sp_lojas_acessiveis')
     const rotaDeLogin = /^\/api\/(?:admin\/login|auth\/login)$/.test(String(path || '').split('?')[0])
@@ -69,8 +82,8 @@ apiFn.patch  = (path, body) => request(path, { method: 'PATCH',  body: JSON.stri
 apiFn.put    = (path, body) => request(path, { method: 'PUT',    body: JSON.stringify(body) })
 apiFn.delete = (path, body) => request(path, { method: 'DELETE', ...(body ? { body: JSON.stringify(body) } : {}) })
 apiFn.sincronizarFilaOffline = () => sincronizarFila((path, opts) => {
-  const token = getToken(); const lojaId = getLojaAtivaId()
-  return fetch(path, { ...opts, headers: { 'Content-Type':'application/json', ...(token ? { Authorization:`Bearer ${token}` } : {}), ...(lojaId ? { 'X-Loja-Id':lojaId } : {}), ...(opts.headers || {}), 'X-Offline-Replay':'1' } })
+  const token = getToken(); const empresaId = getEmpresaAtivaId(); const lojaId = getLojaAtivaId()
+  return fetch(path, { ...opts, headers: { 'Content-Type':'application/json', ...(token ? { Authorization:`Bearer ${token}` } : {}), ...(empresaId ? { 'X-Empresa-Id':empresaId } : {}), ...(lojaId ? { 'X-Loja-Id':lojaId } : {}), ...(opts.headers || {}), 'X-Offline-Replay':'1' } })
 })
 
 if (typeof window !== 'undefined') {

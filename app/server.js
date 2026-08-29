@@ -24,6 +24,7 @@ import * as modificadoresCombosKytto from './modificadores-combos-kytto.js';
 import { mail } from './email.js';
 import { emitir as nfceEmitir, cancelar as nfceCancelar, nfceConfigurado } from './nfce.js';
 import { createCommerceAdminRouter, createCommercePublicRouter, createCommerceWebhookRouter } from './core/commerce-routes.js';
+import { db as commerceDb } from './core/database.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -109,6 +110,41 @@ function seedUsuarios(){
 seedUsuarios();
 const findUser = login => db().usuarios.find(u=>u.email===norm(login));
 const publicUser = u => ({ id:u.id, nome:u.nome, email:u.email, role:u.role, telefone:u.telefone, ativo:u.ativo });
+
+// O login legado continua sendo a porta de entrada, mas o Commerce Core precisa
+// receber o contexto multiempresa/multiloja da membership PostgreSQL. A consulta
+// é somente leitura e falha de forma neutra quando o Core está desligado ou ainda
+// não possui uma membership para este usuário.
+async function commerceSessionFor(user) {
+  if (process.env.COMMERCE_CORE_ENABLED !== '1' || !user?.email) return {};
+  try {
+    const result = await commerceDb.query(
+      `SELECT DISTINCT m.empresa_id, m.loja_id
+         FROM commerce_memberships m
+         JOIN usuarios u ON u.empresa_id = m.empresa_id AND u.id = m.usuario_id
+        WHERE lower(u.email) = $1 AND u.ativo = true AND m.ativo = true
+        ORDER BY m.empresa_id, m.loja_id NULLS FIRST`,
+      [norm(user.email)],
+    );
+    const rows = result.rows || [];
+    const empresaIds = [...new Set(rows.map(row => row.empresa_id).filter(Boolean))];
+    const lojas = rows.filter(row => row.loja_id).map(row => ({ id: row.loja_id, empresaId: row.empresa_id }));
+    const lojaIds = [...new Set(lojas.map(row => row.id))];
+    const empresaId = empresaIds.length === 1 ? empresaIds[0] : null;
+    const loja = lojaIds.length === 1 ? lojas.find(row => row.id === lojaIds[0]) : null;
+    return {
+      empresas_acessiveis: empresaIds.map(id => ({ id })),
+      empresa: empresaId ? { id: empresaId } : null,
+      empresaId,
+      lojas_acessiveis: lojas,
+      loja: loja ? { id: loja.id, empresaId: loja.empresaId } : null,
+      lojaId: loja?.id || null,
+    };
+  } catch (error) {
+    console.error('Não foi possível carregar o contexto Commerce no login:', error.message);
+    return {};
+  }
+}
 
 // Recuperação do admin: se ADMIN_PASS_RESET=1 e ADMIN_PASS definido, redefine a senha
 // do admin no boot (evita lockout se a senha de produção for perdida). Remova a flag depois.
@@ -438,7 +474,7 @@ app.get('/api/inscricoes-count', (req,res)=>{
 
 // =================== API ADMIN ===================
 // Login do SISTEMA (admin/organizador/staff) — compatível com o painel atual
-app.post('/api/admin/login', (req,res)=>{
+app.post('/api/admin/login', async (req,res)=>{
   const { user, pass, senha } = req.body || {};
   const senhaInformada = pass ?? senha;
   const chave = 'adm:'+(req.ip||'')+':'+norm(user);
@@ -448,7 +484,8 @@ app.post('/api/admin/login', (req,res)=>{
   if(!STAFF.includes(u.role)) return res.status(403).json({error:'esta conta não tem acesso ao painel'});
   limparTentativas(chave);
   audit({user:{nome:u.nome,role:u.role}, ip:req.ip}, 'LOGIN painel'); save();
-  res.json({ token: tokenFor(u), user: publicUser(u), role: u.role });
+  const sessao = await commerceSessionFor(u);
+  res.json({ token: tokenFor({ ...u, empresaId: sessao.empresaId, lojaId: sessao.lojaId }), user: publicUser(u), role: u.role, sessao });
 });
 
 // ---- AUTH unificada (site + sistema) ----
