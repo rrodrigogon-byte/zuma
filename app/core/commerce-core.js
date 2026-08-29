@@ -118,7 +118,7 @@ export async function listPublishedProducts(context, options = {}) {
   const limit = Math.min(Math.max(Number(options.limit) || 24, 1), 100);
   const offset = Math.max(Number(options.offset) || 0, 0);
   values.push(limit, offset);
-  const result = await db.query(
+  const result = await db.queryRead(
     `SELECT p.id, p.slug, p.nome, p.tipo, p.descricao, p.descricao_curta,
             c.id AS category_id, c.nome AS category_name,
             COALESCE(jsonb_agg(DISTINCT jsonb_build_object(
