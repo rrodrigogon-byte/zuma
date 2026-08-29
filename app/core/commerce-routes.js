@@ -196,7 +196,7 @@ function jsonError(res, error) {
   };
   const status = statusByCode[error?.code] || 500;
   const publicMessages = {
-    PAYMENT_PROVIDER_REJECTED: 'O gateway recusou a solicitação. Verifique se o Checkout Integrado está habilitado na conta e tente novamente.',
+    PAYMENT_PROVIDER_REJECTED: 'O gateway recusou a solicitação. Confirme no painel InfinitePay que o Checkout Integrado está habilitado no mesmo perfil configurado no Commerce, com Pix e cartão ativos, e tente novamente.',
     PAYMENT_PROVIDER_TIMEOUT: 'O gateway demorou para responder. Verifique a conexão e tente novamente.',
     PAYMENT_ADAPTER_INVALID_RESPONSE: 'O gateway não retornou um link de checkout válido. Tente novamente em instantes.',
     PAYMENT_PROVIDER_ERROR: 'Não foi possível comunicar com o gateway. Tente novamente em instantes.',
