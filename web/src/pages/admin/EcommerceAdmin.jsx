@@ -128,6 +128,9 @@ export default function EcommerceAdmin() {
       setAudit(data.audit || [])
       setAuditPagination(data.auditPagination || { total: data.audit?.length || 0, limit: 100, offset: 0, hasMore: false })
       setHealth(data.health || {})
+      if (Array.isArray(data.warnings) && data.warnings.length > 0) {
+        setNotice(`Alguns módulos estão indisponíveis: ${data.warnings.map(item => item.label).join(', ')}. Os dados carregados continuam disponíveis.`)
+      }
     } catch (err) { setError(err.message || 'Não foi possível carregar a operação comercial.') }
     finally { setLoading(false); setRefreshing(false) }
   }

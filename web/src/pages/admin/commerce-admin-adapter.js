@@ -86,6 +86,16 @@ function normalizeLegacy(data) {
   }
 }
 
+async function safeCoreGet(path, fallback, warnings, label) {
+  try {
+    return await api.get(path)
+  } catch (error) {
+    if (![403, 404, 500, 502, 503].includes(Number(error.status))) throw error
+    warnings.push({ path, label, status: error.status || 0, code: error.code || '' })
+    return fallback
+  }
+}
+
 async function loadLegacy() {
   const [productData, orderData, customerData] = await Promise.all([
     api.get('/api/admin/loja'),
@@ -100,72 +110,28 @@ async function loadLegacy() {
 }
 
 export async function loadCommerceAdmin() {
+  const warnings = []
   try {
     const [storefrontData, productData, categoryData, promotionData, roleData, membershipData, orderData, customerData, locations, shippingData, shippingProviderData, shippingAccountData, fulfillmentData, domainData, providerData, accountData, paymentData, auditData, healthData] = await Promise.all([
       api.get('/api/admin/commerce/storefront'),
       api.get('/api/admin/commerce/catalog/products'),
-      api.get('/api/admin/commerce/catalog/categories'),
-      api.get('/api/admin/commerce/promotions').catch(error => {
-        if (error.status === 403) return { items: [] }
-        throw error
-      }),
-      api.get('/api/admin/commerce/users/roles').catch(error => {
-        if (error.status === 403) return { items: [] }
-        throw error
-      }),
-      api.get('/api/admin/commerce/users/memberships').catch(error => {
-        if (error.status === 403) return { items: [] }
-        throw error
-      }),
+      safeCoreGet('/api/admin/commerce/catalog/categories', { items: [] }, warnings, 'categorias'),
+      safeCoreGet('/api/admin/commerce/promotions', { items: [] }, warnings, 'promoções'),
+      safeCoreGet('/api/admin/commerce/users/roles', { items: [] }, warnings, 'papéis'),
+      safeCoreGet('/api/admin/commerce/users/memberships', { items: [] }, warnings, 'usuários'),
       api.get('/api/admin/commerce/orders'),
-      api.get('/api/admin/commerce/customers').catch(error => {
-        if (error.status === 403) return { items: [] }
-        throw error
-      }),
-      api.get('/api/admin/commerce/inventory/locations').catch(error => {
-        if (error.status === 403) return { items: [] }
-        throw error
-      }),
-      api.get('/api/admin/commerce/shipping/methods').catch(error => {
-        if (error.status === 403) return { items: [] }
-        throw error
-      }),
-      api.get('/api/admin/commerce/shipping/providers').catch(error => {
-        if (error.status === 403) return { items: [] }
-        throw error
-      }),
-      api.get('/api/admin/commerce/shipping/accounts').catch(error => {
-        if (error.status === 403) return { items: [] }
-        throw error
-      }),
-      api.get('/api/admin/commerce/fulfillments').catch(error => {
-        if (error.status === 403) return { items: [] }
-        throw error
-      }),
-      api.get('/api/admin/commerce/storefront/domains').catch(error => {
-        if (error.status === 403) return { items: [] }
-        throw error
-      }),
-      api.get('/api/admin/commerce/payments/providers').catch(error => {
-        if (error.status === 403) return { items: [] }
-        throw error
-      }),
-      api.get('/api/admin/commerce/payments/accounts').catch(error => {
-        if (error.status === 403) return { items: [] }
-        throw error
-      }),
-      api.get('/api/admin/commerce/payments').catch(error => {
-        if (error.status === 403) return { items: [] }
-        throw error
-      }),
-      api.get('/api/admin/commerce/audit').catch(error => {
-        if (error.status === 403) return { items: [], pagination: { total: 0, limit: 100, offset: 0, hasMore: false } }
-        throw error
-      }),
-      api.get('/api/admin/commerce/operations/health').catch(error => {
-        if (error.status === 403) return {}
-        throw error
-      }),
+      safeCoreGet('/api/admin/commerce/customers', { items: [] }, warnings, 'clientes'),
+      safeCoreGet('/api/admin/commerce/inventory/locations', { items: [] }, warnings, 'locais de estoque'),
+      safeCoreGet('/api/admin/commerce/shipping/methods', { items: [] }, warnings, 'métodos de entrega'),
+      safeCoreGet('/api/admin/commerce/shipping/providers', { items: [] }, warnings, 'provedores logísticos'),
+      safeCoreGet('/api/admin/commerce/shipping/accounts', { items: [] }, warnings, 'contas logísticas'),
+      safeCoreGet('/api/admin/commerce/fulfillments', { items: [] }, warnings, 'fulfillments'),
+      safeCoreGet('/api/admin/commerce/storefront/domains', { items: [] }, warnings, 'domínios'),
+      safeCoreGet('/api/admin/commerce/payments/providers', { items: [] }, warnings, 'provedores de pagamento'),
+      safeCoreGet('/api/admin/commerce/payments/accounts', { items: [] }, warnings, 'contas de pagamento'),
+      safeCoreGet('/api/admin/commerce/payments', { items: [] }, warnings, 'pagamentos'),
+      safeCoreGet('/api/admin/commerce/audit', { items: [], pagination: { total: 0, limit: 100, offset: 0, hasMore: false } }, warnings, 'auditoria'),
+      safeCoreGet('/api/admin/commerce/operations/health', {}, warnings, 'saúde operacional'),
     ])
     return {
       mode: 'core',
@@ -189,6 +155,7 @@ export async function loadCommerceAdmin() {
       audit: auditData?.items || [],
       auditPagination: auditData?.pagination || { total: auditData?.items?.length || 0, limit: 100, offset: 0, hasMore: false },
       health: healthData || {},
+      warnings,
     }
   } catch (error) {
     if (error.status !== 404) throw error
