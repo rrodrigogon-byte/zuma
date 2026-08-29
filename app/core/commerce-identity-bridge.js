@@ -35,7 +35,7 @@ export async function resolveCommerceIdentity(req) {
     values.push(lojaId);
     predicates.push(`(m.loja_id = $${values.length} OR m.loja_id IS NULL)`);
   }
-  const result = await db.query(
+  const result = await db.queryRead(
     `SELECT u.id AS usuario_id, m.empresa_id, m.loja_id, m.role_id
        FROM usuarios u
        JOIN commerce_memberships m ON m.usuario_id = u.id

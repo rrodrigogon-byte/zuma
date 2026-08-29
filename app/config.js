@@ -6,6 +6,11 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+export const positiveInt = (value, fallback, minimum = 1) => {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  return Number.isFinite(parsed) ? Math.max(minimum, parsed) : fallback;
+};
+
 export const config = {
   // ============================================================================
   // AMBIENTE
@@ -35,9 +40,9 @@ export const config = {
       user: process.env.DB_USER || 'postgres',
       password: process.env.DB_PASSWORD || 'postgres',
       ssl: process.env.DB_SSL === 'true',
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
+      max: positiveInt(process.env.PG_POOL_MAX, 12, 4),
+      idleTimeoutMillis: positiveInt(process.env.PG_IDLE_TIMEOUT_MS, 30000, 10000),
+      connectionTimeoutMillis: positiveInt(process.env.PG_CONNECTION_TIMEOUT_MS, 10000, 5000),
     },
 
     // Redis para cache e sessões
