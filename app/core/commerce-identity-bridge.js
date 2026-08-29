@@ -47,9 +47,15 @@ export async function resolveCommerceIdentity(req) {
   if (!result.rows.length) throw new CommerceError('usuário sem membership ativa no Commerce Core', 'TENANT_CONTEXT_REQUIRED');
   const uniqueTenants = [...new Set(result.rows.map(row => row.empresa_id))];
   if (!empresaId && uniqueTenants.length > 1) throw new CommerceError('selecione a empresa antes de acessar o Commerce Core', 'TENANT_SELECTION_REQUIRED', { tenants: uniqueTenants });
+  const tenantWideMembership = result.rows.find(row => row.loja_id === null);
   const uniqueStores = [...new Set(result.rows.map(row => row.loja_id).filter(Boolean))];
-  if (!lojaId && uniqueStores.length > 1) throw new CommerceError('selecione a loja antes de acessar o Commerce Core', 'STORE_SELECTION_REQUIRED', { stores: uniqueStores });
-  const row = result.rows[0];
+  // A membership sem loja representa o tenant inteiro. Ela autoriza o usuário
+  // a visualizar e administrar as lojas do próprio tenant, sem exigir um
+  // X-Loja-Id arbitrário no primeiro carregamento do backoffice.
+  if (!lojaId && !tenantWideMembership && uniqueStores.length > 1) throw new CommerceError('selecione a loja antes de acessar o Commerce Core', 'STORE_SELECTION_REQUIRED', { stores: uniqueStores });
+  const row = lojaId
+    ? (result.rows.find(item => item.loja_id === lojaId) || tenantWideMembership || result.rows[0])
+    : (tenantWideMembership || result.rows[0]);
   if (lojaId && row.loja_id && row.loja_id !== lojaId) throw new CommerceError('loja fora do escopo da membership', 'STORE_SCOPE_MISMATCH');
   return tenantContext({ empresaId: row.empresa_id, lojaId: row.loja_id || lojaId || null, usuarioId: row.usuario_id });
 }

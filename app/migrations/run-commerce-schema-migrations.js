@@ -23,6 +23,7 @@ const migrationFiles = [
   '031_commerce_payments_schema_hardening.sql',
   '032_commerce_order_store_scope.sql',
   '033_commerce_storefront_templates.sql',
+  '034_commerce_multistore_access.sql',
 ];
 const advisoryLockKey = 825410732;
 
