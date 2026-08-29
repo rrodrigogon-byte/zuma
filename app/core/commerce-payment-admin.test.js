@@ -124,6 +124,47 @@ test('listagem usa empresa e loja do contexto e mascara configuração sensível
   assert.equal(result.items[0].public_config.webhookUrl, 'https://example.test/webhook');
 });
 
+test('update bloqueia somente a conta de pagamento e salva o handle InfinitePay', async () => {
+  const queries = [];
+  const trx = {
+    query: async (sql, values) => {
+      queries.push({ sql, values });
+      if (sql.includes('SELECT a.id')) {
+        return { rows: [{
+          id: accountId,
+          storefront_id: storefrontId,
+          provider: 'infinitepay',
+          ambiente: 'production',
+          nome: 'InfinitePay Checkout · Produção',
+          secret_ref: 'env:INFINITEPAY_HANDLE',
+          public_config: { handle: 'AGRO-OPEN-TTC', methods: ['pix'] },
+          ativo: false,
+        }] };
+      }
+      if (sql.includes('UPDATE commerce_payment_accounts')) {
+        return { rows: [{
+          id: accountId,
+          storefront_id: storefrontId,
+          provider: 'infinitepay',
+          ambiente: 'production',
+          nome: 'InfinitePay Checkout · Produção',
+          secret_ref: 'env:INFINITEPAY_HANDLE',
+          public_config: { handle: 'rodrigo-ribeiro-d8a', methods: ['pix', 'credit_card'] },
+          ativo: false,
+        }] };
+      }
+      throw new Error(`consulta inesperada: ${sql}`);
+    },
+  };
+  const result = await updatePaymentAccount(trx, context, accountId, {
+    publicConfig: { handle: 'rodrigo-ribeiro-d8a', methods: ['pix', 'credit_card'] },
+    ativo: false,
+  });
+  assert.match(queries[0].sql, /FOR UPDATE OF a/);
+  assert.equal(result.public_config.handle, 'rodrigo-ribeiro-d8a');
+  assert.deepEqual(result.public_config.methods, ['pix', 'credit_card']);
+});
+
 test('update rejeita conta de outra loja antes de executar alterações', async () => {
   const trx = {
     query: async (sql) => {

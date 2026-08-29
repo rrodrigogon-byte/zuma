@@ -156,7 +156,7 @@ export async function updatePaymentAccount(trx, contextInput, idInput, input = {
        LEFT JOIN commerce_storefronts s ON s.empresa_id = a.empresa_id AND s.id = a.storefront_id
       WHERE a.empresa_id = $1 AND a.id = $2
         AND ($3::uuid IS NULL OR s.loja_id = $3 OR a.storefront_id IS NULL)
-      FOR UPDATE`,
+      FOR UPDATE OF a`,
     [context.empresaId, id, context.lojaId],
   );
   const current = existing.rows[0];

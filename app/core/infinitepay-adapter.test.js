@@ -54,3 +54,42 @@ test('InfinitePay classifica rejeição do provedor sem expor payload', async ()
     globalThis.fetch = originalFetch;
   }
 });
+
+test('InfinitePay identifica Checkout Integrado desabilitado', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    success: false,
+    error: 'external_checkout_not_enabled',
+    message: 'External checkout is not enabled for this merchant.',
+  }), {
+    status: 404,
+    headers: { 'content-type': 'application/json' },
+  });
+  try {
+    await assert.rejects(
+      () => adapter.createCheckout({ order, account: account() }),
+      error => error instanceof CommerceError
+        && error.code === 'PAYMENT_PROVIDER_NOT_READY'
+        && error.details?.providerStatus === 404
+        && error.details?.providerCode === 'external_checkout_not_enabled',
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('InfinitePay bloqueia handle divergente entre Commerce e ambiente', async () => {
+  const originalHandle = process.env.INFINITEPAY_HANDLE;
+  process.env.INFINITEPAY_HANDLE = 'handle-do-ambiente';
+  try {
+    await assert.rejects(
+      () => adapter.createCheckout({ order, account: { ...account(), secretRef: 'env:INFINITEPAY_HANDLE' } }),
+      error => error instanceof CommerceError
+        && error.code === 'PAYMENT_ACCOUNT_INVALID'
+        && error.details?.reason === 'handle_mismatch',
+    );
+  } finally {
+    if (originalHandle === undefined) delete process.env.INFINITEPAY_HANDLE;
+    else process.env.INFINITEPAY_HANDLE = originalHandle;
+  }
+});
