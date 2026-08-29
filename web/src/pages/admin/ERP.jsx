@@ -8,6 +8,7 @@ const MODULOS = [
   {
     categoria: '🏪 Comércio & Varejo',
     items: [
+      { icon: '🛒', label: 'E-commerce', desc: 'Produtos, promoções, pedidos, estoque e lojas multicanal', href: '/admin/ecommerce' },
       { icon: '🛒', label: 'Varejo Geral', desc: 'Orçamentos, pedidos, multi-estoque, entregas', href: '/admin/varejo' },
       { icon: '👗', label: 'Loja de Moda', desc: 'Grade Cor×Tamanho, crediário, condicional', href: '/admin/loja-moda' },
       { icon: '🏪', label: 'Supermercado', desc: 'Balança, lotes, validade, gôndola', href: '/admin/supermercado' },
