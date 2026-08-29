@@ -76,7 +76,10 @@ export function createInfinitePayAdapter() {
         order_nsu: orderNsu,
         redirect_url: String(config.redirectUrl || `${appOrigin()}/checkout?order=${encodeURIComponent(orderNsu)}`).slice(0, 500),
         webhook_url: String(config.webhookUrl || `${appOrigin()}/api/webhooks/infinitepay/payments`).slice(0, 500),
-        itens: [{ quantity: 1, price: cents(order.total), description: `Pedido Kytto ${orderNsu}` }],
+        // A API documenta o campo como `items` no exemplo operacional do Checkout Integrado.
+        // `itens` aparece apenas no editor interativo da página principal; o payload gerado
+        // e a Central de Ajuda usam `items`, que é o contrato enviado em produção.
+        items: [{ quantity: 1, price: cents(order.total), description: `Pedido Kytto ${orderNsu}` }],
         ...(customer ? { customer } : {}),
       };
       const response = await infinitePayRequest('/links', payload);
