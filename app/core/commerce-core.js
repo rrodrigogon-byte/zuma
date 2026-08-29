@@ -499,10 +499,10 @@ export async function createPendingOrder(trx, context, input = {}) {
 
   await trx.query(
     `INSERT INTO commerce_orders
-      (id, empresa_id, storefront_id, customer_id, public_code, status, origem, moeda,
+      (id, empresa_id, storefront_id, loja_id, customer_id, public_code, status, origem, moeda,
        subtotal, desconto, frete, impostos, total, endereco_entrega, endereco_cobranca, observacao, shipping_method_id, shipping_quote_id)
-     VALUES ($1, $2, $3, $4, $5, $6, 'web', $7, $8, $9, $10, $11, $12, $13::jsonb, $14::jsonb, $15, $16, $17)`,
-    [orderId, empresaId, storefront.id, customerId, publicCode, status, storefront.moeda || 'BRL', subtotal, discount, shipping, taxes, total,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, 'web', $8, $9, $10, $11, $12, $13, $14::jsonb, $15::jsonb, $16, $17, $18)`,
+    [orderId, empresaId, storefront.id, storefront.loja_id || null, customerId, publicCode, status, storefront.moeda || 'BRL', subtotal, discount, shipping, taxes, total,
       JSON.stringify(shippingSelection?.address || input.shippingAddress || null), JSON.stringify(input.billingAddress || null), String(input.note || '').slice(0, 1000) || null, shippingMethodId, shippingSelection?.quote.id || null],
   );
   for (const line of normalizedLines) {
