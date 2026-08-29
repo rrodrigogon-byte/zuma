@@ -21,6 +21,7 @@ const migrationFiles = [
   '029_commerce_orders_schema_hardening.sql',
   '030_commerce_read_model_hardening.sql',
   '031_commerce_payments_schema_hardening.sql',
+  '032_commerce_order_store_scope.sql',
 ];
 const advisoryLockKey = 825410732;
 
