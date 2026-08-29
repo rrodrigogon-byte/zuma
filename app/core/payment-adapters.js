@@ -91,7 +91,7 @@ async function preparePayment(trx, context, input, provider, method, idem, reque
        LEFT JOIN commerce_customers c ON c.empresa_id = o.empresa_id AND c.id = o.customer_id
       WHERE o.empresa_id = $1 AND o.id = $2
         AND ($3::uuid IS NULL OR o.loja_id = $3)
-      FOR UPDATE`,
+      FOR UPDATE OF o`,
     [context.empresaId, orderId, context.lojaId],
   );
   const order = orderResult.rows[0];
