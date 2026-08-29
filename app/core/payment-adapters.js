@@ -205,7 +205,7 @@ export async function createPaymentAttempt(contextInput, input = {}) {
     });
   } catch (error) {
     await markPaymentFailed(context, prepared.payment.id, error);
-    if (error instanceof CommerceError && ['PAYMENT_PROVIDER_TIMEOUT', 'PAYMENT_ACCOUNT_NOT_CONFIGURED', 'PAYMENT_PROVIDER_UNSUPPORTED', 'PAYMENT_PROVIDER_REJECTED', 'PAYMENT_PROVIDER_NOT_READY', 'PAYMENT_ADAPTER_INVALID_RESPONSE'].includes(error.code)) throw error;
+    if (error instanceof CommerceError && ['PAYMENT_PROVIDER_TIMEOUT', 'PAYMENT_ACCOUNT_NOT_CONFIGURED', 'PAYMENT_PROVIDER_UNSUPPORTED', 'PAYMENT_PROVIDER_REJECTED', 'PAYMENT_PROVIDER_NOT_READY', 'PAYMENT_ACCOUNT_INVALID', 'PAYMENT_ADAPTER_INVALID_RESPONSE'].includes(error.code)) throw error;
     throw new CommerceError('não foi possível iniciar o checkout no gateway', 'PAYMENT_PROVIDER_ERROR', { provider });
   }
   if (!checkout || typeof checkout !== 'object') {

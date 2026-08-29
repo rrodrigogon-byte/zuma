@@ -28,6 +28,8 @@ services:
         fromDatabase:
           name: kytto-commerce-core
           property: connectionString
+      - key: INFINITEPAY_HANDLE
+        value: "rodrigo-ribeiro-d8a"
       - key: PIX_CHAVE
         value: "43084070000188"   # CNPJ do clube — chave Pix estática
       - key: PIX_NOME
