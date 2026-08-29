@@ -77,7 +77,7 @@ function apiFn(path, opts = {}) {
 }
 
 apiFn.get    = (path)       => request(path)
-apiFn.post   = (path, body) => request(path, { method: 'POST',   body: JSON.stringify(body) })
+apiFn.post   = (path, body, opts = {}) => request(path, { ...opts, method: 'POST',   body: JSON.stringify(body) })
 apiFn.patch  = (path, body) => request(path, { method: 'PATCH',  body: JSON.stringify(body) })
 apiFn.put    = (path, body) => request(path, { method: 'PUT',    body: JSON.stringify(body) })
 apiFn.delete = (path, body) => request(path, { method: 'DELETE', ...(body ? { body: JSON.stringify(body) } : {}) })
