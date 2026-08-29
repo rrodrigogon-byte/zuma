@@ -83,11 +83,12 @@ export function createInfinitePayAdapter() {
         ...(customer ? { customer } : {}),
       };
       const response = await infinitePayRequest('/links', payload);
-      const url = String(response?.url || response?.checkout_url || response?.checkoutUrl || '').trim();
-      if (!url || !/^https:\/\/checkout\.infinitepay\.com\.br\//i.test(url)) throw new CommerceError('InfinitePay retornou um checkout inválido', 'PAYMENT_ADAPTER_INVALID_RESPONSE');
+      const url = String(response?.url || response?.link || response?.checkout_url || response?.checkoutUrl || '').trim();
+      if (!url || !/^https:\/\/checkout\.infinitepay(?:\.com\.br|\.io)\//i.test(url)) throw new CommerceError('InfinitePay retornou um checkout inválido', 'PAYMENT_ADAPTER_INVALID_RESPONSE');
+      const slug = normalizeSlug(response);
       return {
         providerPaymentId: null,
-        publicData: { provider: 'infinitepay', status: 'pending', url, orderNsu, captureMethods: ['pix', 'credit_card'] },
+        publicData: { provider: 'infinitepay', status: 'pending', url, orderNsu, slug: slug || null, captureMethods: ['pix', 'credit_card'] },
       };
     },
 
