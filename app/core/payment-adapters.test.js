@@ -138,6 +138,40 @@ test('nova tentativa reabre pagamento falho somente após checkout válido', asy
   }
 });
 
+test('erro de handle divergente preserva diagnóstico de configuração', async () => {
+  const { db } = await import('./database.js');
+  process.env.TEST_PAYMENT_ACCESS = 'token';
+  const adapter = {
+    createCheckout: async () => { throw new CommerceError('handle divergente', 'PAYMENT_ACCOUNT_INVALID', { reason: 'handle_mismatch' }); },
+    verifyWebhook: async () => ({ eventId: 'evt' }),
+  };
+  paymentProviders.register('testgateway', adapter);
+  const original = db.transaction;
+  db.transaction = async callback => callback({
+    query: async (sql, values) => {
+      if (sql.includes('SELECT request_hash')) return { rows: [] };
+      if (sql.includes("INSERT INTO commerce_idempotency_keys")) return { rows: [] };
+      if (sql.includes('SELECT o.id, o.public_code, o.loja_id')) return { rows: [{ id: orderId, public_code: 'KC-HANDLE', loja_id: lojaId, storefront_id: storefrontId, status: 'pending_payment', total: '10.00', moeda: 'BRL', customer_email: 'cliente@example.com' }] };
+      if (sql.includes('SELECT id, secret_ref, public_config')) return { rows: [{ id: accountId, secret_ref: 'env:TEST_PAYMENT_ACCESS', public_config: { handle: 'handle-commerce' } }] };
+      if (sql.includes('SELECT id, status, amount, provider, method, payment_account_id')) return { rows: [] };
+      if (sql.includes('SELECT id, status, amount, provider, method, provider_payment_id')) return { rows: [] };
+      if (sql.includes('INSERT INTO commerce_payments')) return { rows: [{ id: '55555555-5555-4555-8555-555555555558', status: 'pending', amount: '10.00', provider: 'testgateway', method: 'pix', provider_payment_id: null, metadata: {} }] };
+      if (sql.includes('UPDATE commerce_payments')) return { rows: [] };
+      throw new Error(`query não prevista: ${sql}`);
+    },
+  });
+  try {
+    await assert.rejects(
+      () => createPaymentAttempt({ empresaId, lojaId }, { orderId, accountId, provider: 'testgateway', method: 'pix', environment: 'sandbox', idempotencyKey: 'payment-handle-mismatch' }),
+      error => error instanceof CommerceError && error.code === 'PAYMENT_ACCOUNT_INVALID' && error.details?.reason === 'handle_mismatch',
+    );
+  } finally {
+    db.transaction = original;
+    paymentProviders.adapters.delete('testgateway');
+    delete process.env.TEST_PAYMENT_ACCESS;
+  }
+});
+
 test('conta ativa sem secret presente é bloqueada antes do createCheckout', async () => {
   const { db } = await import('./database.js');
   const adapter = { createCheckout: async () => { throw new Error('não deveria chamar gateway'); }, verifyWebhook: async () => ({ eventId: 'evt' }) };
