@@ -40,10 +40,11 @@ async function mpRequest(path, options = {}) {
     const response = await fetch(`${API_BASE}${path}`, { ...options, signal: options.signal || controller.signal });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const error = new Error(body.message || body.error || `Mercado Pago HTTP ${response.status}`);
-      error.status = response.status;
-      error.providerBody = body;
-      throw error;
+      const providerCause = Array.isArray(body.cause) ? body.cause.find(item => item && (item.code || item.description)) : null;
+      throw new CommerceError('Mercado Pago rejeitou a solicitação', 'PAYMENT_PROVIDER_REJECTED', {
+        providerStatus: response.status,
+        providerCode: String(providerCause?.code || body.code || body.error || '').slice(0, 80) || null,
+      });
     }
     return body;
   } catch (error) {
