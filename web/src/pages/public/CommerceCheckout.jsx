@@ -16,6 +16,15 @@ function readCart() {
 function money(value) { return fmtR(Number(value || 0)) }
 function idem(prefix = 'checkout') { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}` }
 
+function hostedPaymentUrl(checkout) {
+  const candidate = checkout?.url || checkout?.checkoutUrl || checkout?.ticketUrl || ''
+  if (!candidate) return ''
+  try {
+    const url = new URL(candidate, window.location.origin)
+    return url.protocol === 'https:' && url.hostname === 'checkout.infinitepay.com.br' ? url.toString() : ''
+  } catch { return '' }
+}
+
 function ProductThumb({ item }) {
   return item.imagem
     ? <img className="checkout-summary-thumb" src={item.imagem} alt="" />
@@ -51,6 +60,7 @@ export default function CommerceCheckout() {
   const [selectedPayment, setSelectedPayment] = useState('')
   const [loading, setLoading] = useState(true)
   const [working, setWorking] = useState(false)
+  const [redirecting, setRedirecting] = useState(false)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
 
@@ -175,6 +185,11 @@ export default function CommerceCheckout() {
     try {
       const result = await api.post(`/api/storefront/orders/${encodeURIComponent(code)}/payments`, { provider, method, idempotencyKey: idem('payment') })
       setPayment(result)
+      const hostedUrl = provider === 'infinitepay' ? hostedPaymentUrl(result?.checkout) : ''
+      if (hostedUrl) {
+        setRedirecting(true)
+        window.location.assign(hostedUrl)
+      }
     } catch (err) { setError(err.message || 'O provedor recusou a criação do pagamento.') }
     finally { setWorking(false) }
   }
@@ -200,7 +215,7 @@ export default function CommerceCheckout() {
       <h1>{paid ? 'Pagamento confirmado' : payment ? 'Pagamento iniciado' : 'Pedido criado'}</h1>
       <p className="checkout-result-lead">{paid ? 'O pagamento foi confirmado pelo provedor e o pedido seguirá para preparação.' : payment ? 'Conclua o pagamento no provedor. O status será atualizado automaticamente.' : 'Escolha um método para concluir o pagamento com segurança.'}</p>
       {error && <div className="checkout-form-error" role="alert">{error}</div>}
-      {!payment && !paid && <div className="checkout-payment-box"><strong>Escolha como pagar</strong>{paymentMethods.length ? paymentMethods.map(item => { const value = `${item.provider}:${item.method}`; return <label key={value} className={`payment-option ${selectedPayment === value ? 'is-selected' : ''}`}><input type="radio" name="payment" value={value} checked={selectedPayment === value} onChange={() => setSelectedPayment(value)} /><span className="payment-option-copy"><strong>{item.method === 'pix' ? 'Pix' : item.method === 'credit_card' ? 'Cartão de crédito' : item.method}</strong><small>{item.provider === 'mercadopago' ? 'Mercado Pago' : item.provider === 'infinitepay' ? 'InfinitePay Checkout' : item.provider}</small></span></label> }) : <small>Nenhum provedor de pagamento está publicado para esta loja.</small>}<button type="button" className="checkout-primary" onClick={startPayment} disabled={working || !paymentMethods.length}>{working ? 'Iniciando pagamento…' : 'Continuar para pagamento'}</button></div>}
+      {!payment && !paid && <div className="checkout-payment-box"><strong>Escolha como pagar</strong>{paymentMethods.length ? paymentMethods.map(item => { const value = `${item.provider}:${item.method}`; return <label key={value} className={`payment-option ${selectedPayment === value ? 'is-selected' : ''}`}><input type="radio" name="payment" value={value} checked={selectedPayment === value} onChange={() => setSelectedPayment(value)} /><span className="payment-option-copy"><strong>{item.method === 'pix' ? 'Pix' : item.method === 'credit_card' ? 'Cartão de crédito' : item.method}</strong><small>{item.provider === 'mercadopago' ? 'Mercado Pago' : item.provider === 'infinitepay' ? 'InfinitePay Checkout' : item.provider}</small></span></label> }) : <small>Nenhum provedor de pagamento está publicado para esta loja.</small>}<button type="button" className="checkout-primary" onClick={startPayment} disabled={working || redirecting || !paymentMethods.length}>{redirecting ? 'Abrindo checkout seguro…' : working ? 'Preparando pagamento…' : 'Iniciar pagamento'}</button><small className="checkout-payment-helper">InfinitePay abre o ambiente seguro do provedor. Mercado Pago exibe o Pix nesta tela.</small></div>}
       {payment && !paid && <div className="checkout-payment-box"><strong>Pagamento pendente</strong>{qr && <img className="checkout-qr" src={qr.startsWith('data:') ? qr : `data:image/png;base64,${qr}`} alt="QR Code do pagamento" />}{pixCode && <div className="checkout-pix-box"><label>Código Pix</label><textarea readOnly rows={4} value={pixCode} aria-label="Código Pix" /><button type="button" className="checkout-primary" onClick={() => copyCode(pixCode)}><Copy size={15} />{copied ? 'Código copiado' : 'Copiar código'}</button></div>}{hostedUrl && <a className="checkout-primary" href={hostedUrl} target="_blank" rel="noreferrer">Abrir checkout do provedor <ArrowRight size={16} /></a>}{!qr && !pixCode && !hostedUrl && <small>O provedor recebeu a solicitação, mas ainda não retornou uma instrução pública de pagamento. Aguarde o webhook ou consulte o pedido.</small>}<small>Status: {payment.status || order.payment_status || 'pending'}.</small></div>}
       <div className="checkout-result-meta"><div><span>Total</span><strong>{money(order.total || total)}</strong></div><div><span>Pedido</span><strong>{code}</strong></div></div>
       <div className="checkout-result-actions"><Link className="checkout-primary" to={`/pedido/${encodeURIComponent(code)}`}>Acompanhar pedido <ArrowRight size={16} /></Link><Link className="checkout-secondary" to="/">Voltar para a loja</Link></div>
