@@ -1131,7 +1131,7 @@ export function createCommerceAdminRouter() {
         `SELECT o.id, o.public_code, o.status, o.origem, o.subtotal, o.desconto, o.frete, o.impostos, o.total, o.shipping_method_id, o.shipping_quote_id, o.criado_em, o.atualizado_em,
                 c.nome AS customer_name, c.email AS customer_email,
                 (SELECT p.status FROM commerce_payments p WHERE p.empresa_id = o.empresa_id AND p.order_id = o.id ORDER BY p.criado_em DESC LIMIT 1) AS payment_status,
-                COALESCE((SELECT jsonb_agg(jsonb_build_object('nome', i.nome_snapshot, 'sku', i.sku_snapshot, 'quantidade', i.quantidade, 'preco', i.preco_unitario, 'subtotal', i.subtotal) ORDER BY i.criado_em ASC) FROM commerce_order_items i WHERE i.empresa_id = o.empresa_id AND i.order_id = o.id), '[]'::jsonb) AS items
+                COALESCE((SELECT jsonb_agg(jsonb_build_object('nome', i.nome_snapshot, 'sku', i.sku_snapshot, 'quantidade', i.quantidade, 'preco', i.preco_unitario, 'subtotal', i.subtotal) ORDER BY i.id ASC) FROM commerce_order_items i WHERE i.empresa_id = o.empresa_id AND i.order_id = o.id), '[]'::jsonb) AS items
            FROM commerce_orders o
            JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id
            LEFT JOIN commerce_customers c ON c.empresa_id = o.empresa_id AND c.id = o.customer_id

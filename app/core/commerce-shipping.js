@@ -420,7 +420,7 @@ export async function prepareShippingLabel(trx, contextInput, fulfillmentIdInput
   if (!fulfillment.selected_option_id || !fulfillment.response_snapshot?.providerOptions?.length) throw new CommerceError('fulfillment não possui cotação escolhida válida', 'SHIPPING_QUOTE_INVALID');
   const selected = fulfillment.response_snapshot.providerOptions.find(item => String(item.public?.id || '') === String(fulfillment.selected_option_id));
   if (!selected) throw new CommerceError('opção selecionada não está presente na cotação armazenada', 'SHIPPING_OPTION_INVALID');
-  const orderItems = await trx.query(`SELECT nome_snapshot, quantidade, preco_unitario FROM commerce_order_items WHERE empresa_id = $1 AND order_id = $2 ORDER BY criado_em ASC`, [context.empresaId, fulfillment.order_id]);
+  const orderItems = await trx.query(`SELECT nome_snapshot, quantidade, preco_unitario FROM commerce_order_items WHERE empresa_id = $1 AND order_id = $2 ORDER BY id ASC`, [context.empresaId, fulfillment.order_id]);
   const operationKey = `shipping-${fulfillment.id}-${crypto.randomUUID()}`.slice(0, 180);
   await trx.query(`UPDATE commerce_fulfillments SET shipping_operation_status = 'processing', shipping_operation_key = $3, shipping_operation_started_at = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2`, [context.empresaId, fulfillment.id, operationKey]);
   return {
