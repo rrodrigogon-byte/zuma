@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, CheckCircle2, Copy, Loader2, ShieldCheck, Store } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api, fmtR } from '../../lib/api'
@@ -23,6 +23,17 @@ function hostedPaymentUrl(checkout) {
     const url = new URL(candidate, window.location.origin)
     return url.protocol === 'https:' && url.hostname === 'checkout.infinitepay.com.br' ? url.toString() : ''
   } catch { return '' }
+}
+
+function paymentIdempotencyKey(code, provider, method) {
+  const storageKey = `kytto_payment_attempt:${String(code || '').toUpperCase()}:${provider}:${method}`
+  try {
+    const existing = localStorage.getItem(storageKey)
+    if (existing) return existing
+    const generated = idem('payment')
+    localStorage.setItem(storageKey, generated)
+    return generated
+  } catch { return idem('payment') }
 }
 
 function ProductThumb({ item }) {
@@ -63,6 +74,7 @@ export default function CommerceCheckout() {
   const [redirecting, setRedirecting] = useState(false)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  const paymentRequestRef = useRef(false)
 
   const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + Number(item.preco || 0) * Number(item.qtd || 0), 0), [cart])
   const selectedShipping = shippingMethods.find(item => String(item.id) === String(shippingMethodId))
@@ -177,21 +189,32 @@ export default function CommerceCheckout() {
   }
 
   async function startPayment() {
-    if (!order) return
+    if (!order || paymentRequestRef.current) return
     const code = order.codigo || order.publicCode || order.public_code
     const [provider, method] = selectedPayment.split(':')
     if (!provider || !method) return setError('Nenhum método de pagamento está disponível para esta loja.')
-    setWorking(true); setError('')
+    paymentRequestRef.current = true
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 20000)
+    setWorking(true); setRedirecting(false); setError('')
     try {
-      const result = await api.post(`/api/storefront/orders/${encodeURIComponent(code)}/payments`, { provider, method, idempotencyKey: idem('payment') })
+      const result = await api.post(`/api/storefront/orders/${encodeURIComponent(code)}/payments`, { provider, method, idempotencyKey: paymentIdempotencyKey(code, provider, method) }, { signal: controller.signal })
+      if (!result || typeof result !== 'object') throw new Error('O Commerce Core não retornou uma resposta válida.')
+      const hostedUrl = provider === 'infinitepay' ? hostedPaymentUrl(result.checkout) : ''
+      if (provider === 'infinitepay' && !hostedUrl) throw new Error('A InfinitePay não retornou o link do checkout. Tente novamente em instantes.')
       setPayment(result)
-      const hostedUrl = provider === 'infinitepay' ? hostedPaymentUrl(result?.checkout) : ''
       if (hostedUrl) {
         setRedirecting(true)
         window.location.assign(hostedUrl)
       }
-    } catch (err) { setError(err.message || 'O provedor recusou a criação do pagamento.') }
-    finally { setWorking(false) }
+    } catch (err) {
+      const message = err?.name === 'AbortError' ? 'O gateway demorou para responder. Verifique sua conexão e tente novamente.' : err.message || 'O provedor recusou a criação do pagamento.'
+      setError(message)
+    } finally {
+      window.clearTimeout(timeout)
+      paymentRequestRef.current = false
+      setWorking(false)
+    }
   }
 
   async function copyCode(value) {
