@@ -221,7 +221,7 @@ async function adminContext(req) {
 
 async function requirePermission(req, permission) {
   const context = await adminContext(req);
-  const result = await db.query(
+  const result = await db.queryRead(
     `SELECT 1
        FROM commerce_memberships m
        JOIN commerce_roles r ON r.id = m.role_id AND (r.empresa_id = $1 OR r.empresa_id IS NULL)

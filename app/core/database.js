@@ -14,6 +14,23 @@ const { Pool } = pg;
 
 let pool = null;
 
+const TRANSIENT_READ_ERROR_CODES = new Set(['08001', '08003', '08004', '08006', '08007', '08P01', '57P01', '57P02', '57P03', '53300']);
+
+function isTransientReadError(error) {
+  const code = String(error?.code || '');
+  const message = String(error?.message || '').toLowerCase();
+  return TRANSIENT_READ_ERROR_CODES.has(code)
+    || message.includes('connection terminated')
+    || message.includes('connection timeout')
+    || message.includes('connection reset')
+    || message.includes('connection refused')
+    || message.includes('connection ended unexpectedly');
+}
+
+function wait(milliseconds) {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
 /**
  * Inicializar pool de conexões
  */
@@ -41,6 +58,8 @@ export const initializePool = () => {
     max: config.database.postgres.max,
     idleTimeoutMillis: config.database.postgres.idleTimeoutMillis,
     connectionTimeoutMillis: config.database.postgres.connectionTimeoutMillis,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
   });
 
   // Event listeners
@@ -92,6 +111,26 @@ export const db = {
       console.error('Valores:', values);
       throw error;
     }
+  },
+
+  /**
+   * Executar consulta de leitura com recuperação de conexões transitórias.
+   * Não deve ser usado para INSERT/UPDATE/DELETE ou qualquer operação com efeito colateral.
+   */
+  queryRead: async (text, values = []) => {
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        return await db.query(text, values);
+      } catch (error) {
+        if (!isTransientReadError(error) || attempt === maxAttempts) {
+          console.error('Erro em consulta de leitura do Commerce:', error?.code || error?.message || 'erro desconhecido');
+          throw error;
+        }
+        await wait(150 * attempt);
+      }
+    }
+    throw new Error('consulta de leitura não concluída');
   },
 
   /**
