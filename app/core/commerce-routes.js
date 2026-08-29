@@ -195,7 +195,14 @@ function jsonError(res, error) {
     STORE_SELECTION_REQUIRED: 400,
   };
   const status = statusByCode[error?.code] || 500;
-  return res.status(status).json({ error: status >= 500 ? 'erro interno do Commerce Core' : error.message, code: error?.code || 'COMMERCE_ERROR', details: error?.details || {} });
+  const publicMessages = {
+    PAYMENT_PROVIDER_REJECTED: 'O gateway recusou a solicitação. Verifique se o Checkout Integrado está habilitado na conta e tente novamente.',
+    PAYMENT_PROVIDER_TIMEOUT: 'O gateway demorou para responder. Verifique a conexão e tente novamente.',
+    PAYMENT_ADAPTER_INVALID_RESPONSE: 'O gateway não retornou um link de checkout válido. Tente novamente em instantes.',
+    PAYMENT_PROVIDER_ERROR: 'Não foi possível comunicar com o gateway. Tente novamente em instantes.',
+  };
+  const publicMessage = publicMessages[error?.code] || (status >= 500 ? 'erro interno do Commerce Core' : error.message);
+  return res.status(status).json({ error: publicMessage, code: error?.code || 'COMMERCE_ERROR', details: error?.details || {} });
 }
 
 async function adminContext(req) {
