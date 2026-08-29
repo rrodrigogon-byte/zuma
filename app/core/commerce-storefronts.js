@@ -56,6 +56,15 @@ async function createOperationalStore(trx, context, input, code, name) {
        ON CONFLICT (usuario_id, loja_id) DO UPDATE SET ativo = true, role_loja = EXCLUDED.role_loja`,
       [usuarioId, loja.id],
     );
+    await trx.query(
+      `INSERT INTO commerce_memberships (empresa_id, usuario_id, loja_id, role_id, ativo)
+       SELECT $1, $2, $3, r.id, true
+         FROM commerce_roles r
+        WHERE r.empresa_id IS NULL AND r.codigo = 'store_admin'
+       ON CONFLICT (empresa_id, usuario_id, loja_id)
+       DO UPDATE SET role_id = EXCLUDED.role_id, ativo = true, atualizado_em = CURRENT_TIMESTAMP`,
+      [empresaId, usuarioId, loja.id],
+    );
   }
   return loja;
 }
