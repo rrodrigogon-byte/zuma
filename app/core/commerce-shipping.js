@@ -9,7 +9,7 @@ const ALLOWED_METHODS = new Set(['melhorenvio', 'correios', 'manual']);
 const SHIPPING_PROVIDERS = [
   { code: 'melhorenvio', name: 'Melhor Envio', adapter: true, methods: ['quote', 'label', 'tracking'] },
   { code: 'correios', name: 'Correios', adapter: true, methods: ['quote', 'label', 'tracking'], label: true, note: 'Pré-postagem e rótulo dependem de API 36/serviço contratado liberados no CWS.' },
-  { code: 'manual', name: 'Tabela manual Kytto', adapter: true, methods: ['quote'], label: false, note: 'Tabela comercial configurável por storefront; não gera etiqueta nem rastreamento automático.' },
+  { code: 'manual', name: 'Tabela manual Kytto', adapter: true, methods: ['quote'], note: 'Regras por município/UF definidas pela loja; não gera etiqueta nem rastreio automático.' },
   { code: 'frenet', name: 'Frenet', adapter: false, methods: ['quote', 'label', 'tracking'] },
 ];
 
@@ -150,16 +150,13 @@ export function shippingAccountReady(row) {
 
 export function publicShippingMethod(method) {
   const config = method?.configuracao && typeof method.configuracao === 'object' ? method.configuracao : {};
-  const provider = config.provider ? text(config.provider, 60).toLowerCase() : null;
-  const manual = provider === 'manual';
-  const externalAccountReady = Boolean((config.shippingAccountId || config.accountId) && method.shipping_account_ready === true);
   return {
     id: method.id,
     codigo: method.codigo,
     nome: method.nome,
     tipo: method.tipo,
-    quoteEnabled: ['delivery', 'carrier'].includes(method.tipo) && Boolean(provider && (manual || externalAccountReady)),
-    provider,
+    quoteEnabled: ['delivery', 'carrier'].includes(method.tipo) && (config.provider === 'manual' || Boolean(config.provider && (config.shippingAccountId || config.accountId) && method.shipping_account_ready === true)),
+    provider: config.provider ? text(config.provider, 60).toLowerCase() : null,
     configuracao: safePublicConfig(config),
   };
 }
@@ -319,21 +316,24 @@ async function loadQuoteContext(client, contextInput, input = {}) {
   const methodConfig = method.configuracao && typeof method.configuracao === 'object' ? method.configuracao : {};
   const provider = text(methodConfig.provider || 'melhorenvio', 60).toLowerCase();
   const definition = providerDefinition(provider);
-  const manual = provider === 'manual';
-  const accountId = manual ? null : assertUuid(methodConfig.shippingAccountId || methodConfig.accountId, 'shippingAccountId');
-  const accountResult = manual ? { rows: [] } : await client.query(`SELECT id, storefront_id, provider, ambiente, secret_ref, public_config, ativo FROM commerce_shipping_accounts WHERE empresa_id = $1 AND id = $2 AND storefront_id = $3 AND provider = $4 AND ativo = true LIMIT 1`, [context.empresaId, accountId, storefrontId, provider]);
-  const account = manual
-    ? { id: null, storefront_id: storefrontId, provider: 'manual', ambiente: 'production', secret_ref: null, public_config: methodConfig, ativo: true }
-    : accountResult.rows[0];
-  if (!manual && (!account || !shippingAccountReady(account))) throw new CommerceError('conta logística ativa ainda não está configurada no secret manager ou não possui origem', 'SHIPPING_ACCOUNT_NOT_CONFIGURED');
-  let destinationCity = text(input.destinationCity || input.destination?.cidade || input.destination?.city, 120);
-  let destinationState = text(input.destinationState || input.destination?.estado || input.destination?.state, 2).toUpperCase();
-  if (manual && (!destinationCity || !/^[A-Z]{2}$/.test(destinationState))) {
+  const isManual = provider === 'manual';
+  let account = null;
+  if (!isManual) {
+    const accountId = assertUuid(methodConfig.shippingAccountId || methodConfig.accountId, 'shippingAccountId');
+    const accountResult = await client.query(`SELECT id, storefront_id, provider, ambiente, secret_ref, public_config, ativo FROM commerce_shipping_accounts WHERE empresa_id = $1 AND id = $2 AND storefront_id = $3 AND provider = $4 AND ativo = true LIMIT 1`, [context.empresaId, accountId, storefrontId, provider]);
+    account = accountResult.rows[0];
+    if (!account || !shippingAccountReady(account)) throw new CommerceError('conta logística ativa ainda não está configurada no secret manager ou não possui origem', 'SHIPPING_ACCOUNT_NOT_CONFIGURED');
+  }
+  const originCep = storefrontConfigOrigin(method, methodConfig, account?.public_config || {});
+  const destinationAddressInput = input.destinationAddress || input.destination || input.shippingAddress || { cep: destinationCep };
+  let destinationCity = text(input.destinationCity || input.destination?.cidade || input.destination?.city || destinationAddressInput.cidade || destinationAddressInput.city, 120);
+  let destinationState = text(input.destinationState || input.destination?.estado || input.destination?.state || destinationAddressInput.estado || destinationAddressInput.state, 2).toUpperCase();
+  if (isManual && (!destinationCity || !/^[A-Z]{2}$/.test(destinationState))) {
     const lookup = await lookupPostalCode(destinationCep);
     destinationCity = destinationCity || text(lookup.cidade, 120);
     destinationState = destinationState || text(lookup.estado, 2).toUpperCase();
   }
-  const originCep = storefrontConfigOrigin(method, methodConfig, account.public_config || {});
+  const destinationAddress = { ...destinationAddressInput, cep: destinationCep, cidade: destinationCity || null, estado: destinationState || null };
   const lines = Array.isArray(input.items) ? input.items.map(item => ({ variantId: assertUuid(item.variantId, 'variantId'), quantity: Number(item.quantity) })) : [];
   if (!lines.length || lines.some(line => !Number.isInteger(line.quantity) || line.quantity <= 0)) throw new CommerceError('itens válidos são obrigatórios para cotação', 'SHIPPING_ITEMS_REQUIRED');
   const variantIds = [...new Set(lines.map(line => line.variantId))];
@@ -353,20 +353,20 @@ async function loadQuoteContext(client, contextInput, input = {}) {
   const products = lines.map(line => {
     const variant = variantMap.get(line.variantId);
     const dimensions = [variant.largura_cm, variant.altura_cm, variant.comprimento_cm].map(value => number(value));
-    if (!manual && (dimensions.some(value => value === null || value <= 0) || number(variant.peso_gramas) === null || number(variant.peso_gramas) <= 0)) throw new CommerceError(`dimensões e peso ausentes para ${variant.nome || variant.sku}`, 'SHIPPING_PACKAGE_DATA_REQUIRED');
-    return { id: variant.sku || variant.id, width: dimensions[0], height: dimensions[1], length: dimensions[2], weight: number(variant.peso_gramas) === null ? null : number(variant.peso_gramas) / 1000, insuranceValue: round(number(variant.price, 0)), quantity: line.quantity };
+    if (!isManual && (dimensions.some(value => value === null || value <= 0) || number(variant.peso_gramas) === null || number(variant.peso_gramas) <= 0)) throw new CommerceError(`dimensões e peso ausentes para ${variant.nome || variant.sku}`, 'SHIPPING_PACKAGE_DATA_REQUIRED');
+    return { id: variant.sku || variant.id, width: dimensions[0], height: dimensions[1], length: dimensions[2], weight: number(variant.peso_gramas) / 1000, insuranceValue: round(number(variant.price, 0)), quantity: line.quantity };
   });
-  const snapshot = { storefrontId, shippingMethodId, shippingAccountId: account.id, provider, ambiente: account.ambiente, originCep, destinationCep, destinationCity, destinationState, lines };
-  return { context, storefront: method, method, account, provider: definition.code, originCep, destinationCep, destinationCity, destinationState, products, snapshot, hash: requestHash(snapshot), services: methodConfig.services || [], options: methodConfig.options || {} };
+  const snapshot = { storefrontId, shippingMethodId, shippingAccountId: account?.id || null, provider, ambiente: account?.ambiente || 'manual', originCep, destinationCep, destination: { cidade: destinationCity || null, estado: destinationState || null }, lines };
+  return { context, storefront: method, method, methodConfig, account, provider: definition.code, originCep, destinationCep, destinationCity, destinationState, destinationAddress, products, snapshot, hash: requestHash(snapshot), services: methodConfig.services || [], options: methodConfig.options || {} };
 }
 
 export async function quoteShipping(client, contextInput, input = {}) {
   const prepared = await loadQuoteContext(client, contextInput, input);
   const adapter = shippingProviders.get(prepared.provider);
   if (!adapter) throw new CommerceError('adapter logístico não registrado', 'SHIPPING_PROVIDER_NOT_CONFIGURED');
-  const quoted = await adapter.quote({ account: prepared.account, originPostalCode: prepared.originCep, destinationPostalCode: prepared.destinationCep, destinationCity: prepared.destinationCity, destinationState: prepared.destinationState, products: prepared.products, services: prepared.services, options: prepared.options });
+  const quoted = await adapter.quote({ account: prepared.account, methodConfig: prepared.methodConfig, destinationAddress: prepared.destinationAddress, destinationCity: prepared.destinationCity || prepared.destinationAddress?.cidade, destinationState: prepared.destinationState || prepared.destinationAddress?.estado, originPostalCode: prepared.originCep, destinationPostalCode: prepared.destinationCep, products: prepared.products, services: prepared.services, options: prepared.options });
   return client.transaction(async trx => {
-    if (prepared.provider !== 'manual') {
+    if (prepared.account) {
       const accountCheck = await trx.query(`SELECT id FROM commerce_shipping_accounts WHERE empresa_id = $1 AND id = $2 AND storefront_id = $3 AND ativo = true FOR UPDATE`, [prepared.context.empresaId, prepared.account.id, prepared.storefront.id]);
       if (!accountCheck.rows[0]) throw new CommerceError('conta logística foi alterada durante a cotação', 'SHIPPING_ACCOUNT_NOT_CONFIGURED');
     }
@@ -375,7 +375,7 @@ export async function quoteShipping(client, contextInput, input = {}) {
         (empresa_id, storefront_id, shipping_method_id, shipping_account_id, provider, ambiente, origem_cep, destino_cep, request_hash, request_snapshot, response_snapshot, expires_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, CURRENT_TIMESTAMP + INTERVAL '15 minutes')
        RETURNING id, expires_at`,
-      [prepared.context.empresaId, prepared.storefront.id, prepared.method.id, prepared.account.id, prepared.provider, prepared.account.ambiente, prepared.originCep, prepared.destinationCep, prepared.hash, JSON.stringify(prepared.snapshot), JSON.stringify({ options: quoted.options, providerOptions: quoted.providerOptions })],
+      [prepared.context.empresaId, prepared.storefront.id, prepared.method.id, prepared.account?.id || null, prepared.provider, prepared.account?.ambiente || 'manual', prepared.originCep, prepared.destinationCep, prepared.hash, JSON.stringify(prepared.snapshot), JSON.stringify({ options: quoted.options, providerOptions: quoted.providerOptions })],
     );
     return { quoteId: result.rows[0].id, expiresAt: result.rows[0].expires_at, provider: prepared.provider, shippingMethodId: prepared.method.id, items: quoted.options };
   });
@@ -397,7 +397,7 @@ export async function resolveShippingSelection(trx, contextInput, input = {}, { 
   );
   const quote = result.rows[0];
   if (!quote) throw new CommerceError('cotação não encontrada, expirada ou já utilizada', 'SHIPPING_QUOTE_EXPIRED');
-  const expectedSnapshot = { ...quote.request_snapshot, lines: lines.map(line => ({ variantId: line.variantId, quantity: line.quantity })), destinationCep: destination.cep, destinationCity: text(destination.cidade, 120), destinationState: text(destination.estado, 2).toUpperCase() };
+  const expectedSnapshot = { ...quote.request_snapshot, lines: lines.map(line => ({ variantId: line.variantId, quantity: line.quantity })), destinationCep: destination.cep };
   if (requestHash(expectedSnapshot) !== quote.request_hash) throw new CommerceError('cotação não corresponde ao carrinho ou CEP atual', 'SHIPPING_QUOTE_MISMATCH');
   const providerOptions = Array.isArray(quote.response_snapshot?.providerOptions) ? quote.response_snapshot.providerOptions : [];
   const selected = providerOptions.find(item => String(item.public?.id || '') === optionId);

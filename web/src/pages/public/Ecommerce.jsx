@@ -24,6 +24,7 @@ function shippingOptionMeta(option) {
   const base = Number(option?.providerAmount)
   const surcharge = Number(option?.surchargeAmount)
   const total = Number(option?.amount)
+  if (option?.provider === 'manual' || option?.carrier === 'Kytto Entrega') return `${timing} · Tabela manual Kytto · total: ${money(total)}`
   return Number.isFinite(base) && Number.isFinite(surcharge) && Number.isFinite(total)
     ? `${timing} · Tarifa Correios ${money(base)} + 12% (${money(surcharge)}) = ${money(total)}`
     : timing
@@ -226,7 +227,7 @@ export default function Ecommerce() {
     setShippingQuoteLoading(true)
     setCheckoutError('')
     try {
-      const quote = await api.post('/api/storefront/shipping/quotes', { shippingMethodId, destinationCep: shippingAddress.cep, destinationCity: shippingAddress.cidade, destinationState: shippingAddress.estado, items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })) })
+      const quote = await api.post('/api/storefront/shipping/quotes', { shippingMethodId, destinationCep: shippingAddress.cep, destination: { cep: shippingAddress.cep, cidade: shippingAddress.cidade, estado: shippingAddress.estado }, items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })) })
       setShippingQuote(quote)
       setShippingOptionId(quote.items?.[0]?.id || '')
     } catch (err) { setCheckoutError(err.message || 'Não foi possível calcular o frete neste momento.') }

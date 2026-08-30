@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
-import { api, fmtR } from '../../lib/api'
+import { api, asArray, fmtR } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
+import { useAuth } from '../../lib/auth'
 
 function exportCSV(itens) {
   const headers = ['ID', 'Nome', 'Categoria', 'Setor', 'Preço', 'Disponível', 'Cozinha']
@@ -29,7 +30,7 @@ function KpiCard({ label, value, sub, color }) {
   )
 }
 
-const CATEGORIAS = ['Bebidas', 'Petiscos', 'Espetinhos', 'Cozinha', 'Sobremesas']
+const CATEGORIAS = ['Bebidas', 'Porções', 'Espetos', 'Burgers']
 const SETORES = ['bar', 'cozinha', 'chapa']
 
 const EMPTY_FORM = {
@@ -116,6 +117,7 @@ function PreviewPDV({ itens }) {
 
 export default function Cardapio() {
   const { toast } = useToast()
+  const { isPlatformAdmin } = useAuth()
   const [itens, setItens] = useState([])
   const [gruposModificadores, setGruposModificadores] = useState([])
   const [loading, setLoading] = useState(true)
@@ -128,13 +130,12 @@ export default function Cardapio() {
   const [busca, setBusca]           = useState('')
   const [filtroCat, setFiltroCat]   = useState('Todas')
   const [filtroDisp, setFiltroDisp] = useState('todos') // 'todos'|'disponiveis'|'indisponiveis'
-  const [importandoBebidas, setImportandoBebidas] = useState(false)
-  const [importandoEspetinhos, setImportandoEspetinhos] = useState(false)
+  const [replicando, setReplicando] = useState(false)
 
   const load = () => {
     setLoading(true)
     Promise.all([api.get('/api/admin/cardapio'), api.get('/api/admin/modificadores/grupos')])
-      .then(([cardapio, modificadores]) => { setItens(cardapio); setGruposModificadores(Array.isArray(modificadores?.grupos) ? modificadores.grupos : []) })
+      .then(([cardapio, modificadores]) => { setItens(asArray(cardapio, ['itens', 'produtos', 'cardapio'])); setGruposModificadores(asArray(modificadores, ['grupos'])) })
       .catch(() => toast('Erro ao carregar cardápio', 'error'))
       .finally(() => setLoading(false))
   }
@@ -227,7 +228,7 @@ export default function Cardapio() {
   }
 
   const openNovoInline = (cat) => {
-    setNovoForm({ ...EMPTY_FORM, cat, setor: cat === 'Bebidas' ? 'bar' : cat === 'Espetinhos' ? 'chapa' : 'cozinha' })
+    setNovoForm({ ...EMPTY_FORM, cat, setor: cat === 'Bebidas' ? 'bar' : cat === 'Espetos' ? 'chapa' : 'cozinha' })
     setNovoCategoria(cat)
   }
 
@@ -290,45 +291,19 @@ export default function Cardapio() {
     }
   }
 
-  const handleImportarCatalogoBebidas = async () => {
-    if (!confirm('Importar o catálogo inicial Kytto de bebidas? Os itens entram indisponíveis e com preço pendente para você revisar antes da venda.')) return
-    setImportandoBebidas(true)
+  const handleReplicarTodasEmpresas = async () => {
+    if (!confirm('Replicar o catálogo oficial para todas as empresas ativas? Itens já existentes não serão duplicados e nenhum preço será sobrescrito.')) return
+    setReplicando(true)
     try {
-      const resultado = await api.post('/api/admin/cardapio/catalogo-bebidas', {})
-      toast(`${resultado.adicionados || 0} itens de bebidas adicionados para revisão`, 'success')
+      const resultado = await api.post('/api/admin/cardapio/replicar-todas-empresas', {})
+      toast(`${resultado.totalAdicionados || 0} itens replicados em ${resultado.totalEmpresas || 0} empresas`, 'success')
       load()
     } catch (e) {
-      toast(e?.message || 'Erro ao importar catálogo de bebidas', 'error')
+      toast(e?.message || 'Erro ao replicar cardápios', 'error')
     } finally {
-      setImportandoBebidas(false)
+      setReplicando(false)
     }
   }
-
-  const handleImportarCatalogoEspetinhos = async () => {
-    if (!confirm('Importar os sabores iniciais de espetinhos? Os itens serão cadastrados na chapa, indisponíveis e com preço pendente para revisão antes da venda.')) return
-    setImportandoEspetinhos(true)
-    try {
-      const resultado = await api.post('/api/admin/cardapio/catalogo-espetinhos', {})
-      toast(`${resultado.adicionados || 0} espetinhos adicionados para revisão comercial`, 'success')
-      load()
-    } catch (e) {
-      toast(e?.message || 'Erro ao importar espetinhos', 'error')
-    } finally {
-      setImportandoEspetinhos(false)
-    }
-  }
-
-  const handleRestaurarPadrao = async () => {
-    if (!confirm('Restaurar cardápio padrão? Isso substituirá TODOS os itens atuais pelo cardápio original do sistema.')) return
-    try {
-      await api.post('/api/admin/cardapio/reset', {})
-      toast('Cardápio restaurado com sucesso', 'success')
-      load()
-    } catch (e) {
-      toast(e?.message || 'Erro ao restaurar', 'error')
-    }
-  }
-
   return (
     <div className="page">
       {/* Header */}
@@ -336,21 +311,17 @@ export default function Cardapio() {
         <h1 className="page-title" style={{ margin: 0 }}>Cardápio</h1>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-ghost btn-sm" onClick={() => exportCSV(itensFiltrados)}>⬇ CSV</button>
-          <button className="btn btn-primary btn-sm" onClick={handleImportarCatalogoBebidas} disabled={importandoBebidas}>
-            {importandoBebidas ? 'Importando…' : '🍺 Importar bebidas'}
-          </button>
-          <button className="btn btn-secondary btn-sm" onClick={handleImportarCatalogoEspetinhos} disabled={importandoEspetinhos}>
-            {importandoEspetinhos ? 'Importando…' : '🍢 Importar espetinhos'}
-          </button>
           <button
             className={`btn btn-sm ${showPreview ? 'btn-primary' : 'btn-ghost'}`}
             onClick={() => setShowPreview(v => !v)}
           >
             👁 Preview PDV
           </button>
-          <button className="btn btn-secondary btn-sm" onClick={handleRestaurarPadrao}>
-            ↩ Restaurar padrão
-          </button>
+          {isPlatformAdmin && (
+            <button className="btn btn-primary btn-sm" onClick={handleReplicarTodasEmpresas} disabled={replicando}>
+              {replicando ? 'Replicando…' : '↗ Aplicar catálogo oficial'}
+            </button>
+          )}
         </div>
       </div>
 

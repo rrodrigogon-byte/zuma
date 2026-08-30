@@ -18,8 +18,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import crypto from 'crypto';
 import { db, save, hydrate, flush } from './db.js';
-import { CATALOGO_BEBIDAS_KYTTO, RESUMO_CATALOGO_BEBIDAS } from './catalogo-bebidas.js';
-import { CATALOGO_ESPETINHOS_KYTTO, RESUMO_CATALOGO_ESPETINHOS } from './catalogo-espetinhos.js';
+import { CATALOGO_BAR_TTC_OFICIAL, CATALOGO_BAR_TTC_SKUS, RESUMO_CATALOGO_BAR_TTC } from './catalogo-bar-ttc-oficial.js';
 import * as clientesKytto from './clientes-contas-kytto.js';
 import * as fiscalKytto from './fiscal-kytto.js';
 import * as tributacaoKytto from './tributacao-kytto.js';
@@ -44,6 +43,7 @@ import { observabilidade } from './observabilidade-kytto.js';
 import { backupRecuperacao } from './backup-recuperacao-kytto.js';
 import { acaoDaRequisicao, moduloDaRota, resumoAcessoUsuario, temPermissao } from './perfis-usuarios-kytto.js';
 import { issuePasswordReset, validatePasswordResetToken, consumePasswordReset, normalizarEmail, passwordPolicy } from './password-reset-kytto.js';
+import { registerEsportivoPontosLigas } from './esportivo-pontos-ligas.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -212,14 +212,24 @@ function criarAdminPadrao() {
   estado.cardapioPorEmpresa ||= {};
   const empresaId = cadastrosMestres.EMPRESA_PADRAO_ID;
   estado.cardapioPorEmpresa[empresaId] ||= [];
-  const cardapio = estado.cardapioPorEmpresa[empresaId];
+      const cardapio = estado.cardapioPorEmpresa[empresaId];
+  // Remove exclusivamente seeds antigos do sistema. Itens criados pelo operador
+  // permanecem intactos; depois, se não houver itens reais, semeia o catálogo oficial.
+  const antes = cardapio.length;
+  for (let indice = cardapio.length - 1; indice >= 0; indice -= 1) {
+    const produto = cardapio[indice];
+    if (String(produto?.id || '').startsWith('seed-') || ['kytto-bebidas-v1', 'kytto-espetinhos-v1'].includes(produto?.catalogoSeed)) cardapio.splice(indice, 1);
+  }
+  if (cardapio.length !== antes) save();
   if (cardapio.length === 0) {
     const agora = new Date().toISOString();
-    const sementes = [...CATALOGO_BEBIDAS_KYTTO, ...CATALOGO_ESPETINHOS_KYTTO];
+    const sementes = CATALOGO_BAR_TTC_SKUS;
+
     const itens = sementes.map((item, indice) => ({
       ...item,
       empresaId,
-      id: item.id || `seed-${Date.now().toString(36)}-${String(indice + 1).padStart(3, '0')}`,
+      id: item.id || `bar-ttc-${String(item.sku || indice + 1).toLowerCase()}`,
+      catalogoSeed: RESUMO_CATALOGO_BAR_TTC.versao,
       indisponivel: item.indisponivel === true,
       criadoEm: item.criadoEm || agora,
       atualizadoEm: agora,
@@ -762,6 +772,15 @@ async function iniciar() {
     next();
   }
 
+  registerEsportivoPontosLigas({
+    app,
+    db,
+    save,
+    cadastrosMestres,
+    requerEditorCatalogo,
+    requerAutenticacao,
+  });
+
   // ── FISCAL / CERTIFICADOS A1 ──────────────────────────────────────────────
   // Usa a mesma autenticação administrativa do catálogo e mantém certificados
   // cifrados em objeto dedicado do GCS. Nunca retorna senha, CSC ou arquivo A1.
@@ -1225,6 +1244,121 @@ async function iniciar() {
     };
   }
 
+  const QUADRAS_PADRAO = [
+    { id: 'q1', nome: 'Quadra 1 · Central', tipo: 'Saibro', preco: 80, cor: '#5FB335' },
+    { id: 'q2', nome: 'Quadra 2 · Saibro', tipo: 'Saibro', preco: 70, cor: '#5FB335' },
+    { id: 'q3', nome: 'Quadra 3 · Saibro', tipo: 'Saibro', preco: 70, cor: '#5FB335' },
+    { id: 'q4', nome: 'Quadra 4 · Saibro', tipo: 'Saibro', preco: 70, cor: '#5FB335' },
+    { id: 'q5', nome: 'Quadra 5 · Saibro', tipo: 'Saibro', preco: 70, cor: '#5FB335' },
+    { id: 'q6', nome: 'Quadra 6 · Rápida', tipo: 'Rápida', preco: 90, cor: '#5FB335' },
+    { id: 'q7', nome: 'Quadra 7 · Rápida', tipo: 'Rápida', preco: 90, cor: '#5FB335' },
+  ];
+
+  function novoIdCatalogo(prefixo, empresaId) {
+    return `${prefixo}-${Date.now().toString(36)}-${String(empresaId || '').slice(-8)}-${crypto.randomBytes(4).toString('hex')}`;
+  }
+
+  function quadrasPersistidas(empresaId = cadastrosMestres.EMPRESA_PADRAO_ID) {
+    const estado = db();
+    estado.quadrasPorEmpresa ||= {};
+    const empresaPadraoId = cadastrosMestres.EMPRESA_PADRAO_ID;
+    if (!Object.prototype.hasOwnProperty.call(estado.quadrasPorEmpresa, empresaPadraoId)) {
+      const legadas = Array.isArray(estado.quadras) && estado.quadras.length
+        ? estado.quadras.map((quadra) => ({ ...quadra, empresaId: empresaPadraoId }))
+        : QUADRAS_PADRAO.map((quadra) => ({ ...quadra, ativa: true, empresaId: empresaPadraoId, criadoEm: new Date().toISOString() }));
+      estado.quadrasPorEmpresa[empresaPadraoId] = legadas;
+      save();
+    }
+    estado.quadrasPorEmpresa[empresaId] ||= [];
+    return estado.quadrasPorEmpresa[empresaId];
+  }
+
+  function reservasQuadrasPersistidas(empresaId = cadastrosMestres.EMPRESA_PADRAO_ID) {
+    const estado = db();
+    estado.reservasQuadrasPorEmpresa ||= {};
+    const empresaPadraoId = cadastrosMestres.EMPRESA_PADRAO_ID;
+    if (!Object.prototype.hasOwnProperty.call(estado.reservasQuadrasPorEmpresa, empresaPadraoId)) {
+      const legadas = Array.isArray(estado.reservas)
+        ? estado.reservas.filter((reserva) => reserva?.quadraId !== undefined && reserva?.quadraId !== null)
+          .map((reserva) => ({ ...reserva, empresaId: empresaPadraoId }))
+        : [];
+      estado.reservasQuadrasPorEmpresa[empresaPadraoId] = legadas;
+      save();
+    }
+    estado.reservasQuadrasPorEmpresa[empresaId] ||= [];
+    return estado.reservasQuadrasPorEmpresa[empresaId];
+  }
+
+  function normalizarQuadra(payload = {}, anterior = {}) {
+    const nome = String(payload.nome ?? anterior.nome ?? '').trim().slice(0, 120);
+    const tipos = ['Tênis', 'Padel', 'Beach Tennis', 'Squash', 'Poliesportiva', 'Saibro', 'Rápida', 'Outros'];
+    const tipo = tipos.includes(String(payload.tipo ?? anterior.tipo)) ? String(payload.tipo ?? anterior.tipo) : 'Tênis';
+    const preco = Number(String(payload.preco ?? anterior.preco ?? 0).replace(',', '.'));
+    return {
+      nome,
+      tipo,
+      preco: Number.isFinite(preco) && preco >= 0 ? Number(preco.toFixed(2)) : 0,
+      cor: /^#[0-9a-f]{6}$/i.test(String(payload.cor ?? anterior.cor ?? '')) ? String(payload.cor ?? anterior.cor) : '#5FB335',
+      descricao: String(payload.descricao ?? anterior.descricao ?? '').trim().slice(0, 300),
+      ativa: payload.ativa === undefined ? anterior.ativa !== false : Boolean(payload.ativa),
+    };
+  }
+
+  function chaveNaturalProduto(produto = {}) {
+    return [produto.nome, produto.cat, produto.marca, produto.tipo, produto.embalagem]
+      .map((valor) => String(valor || '').trim().toLocaleLowerCase('pt-BR')).join('|');
+  }
+
+  function replicarCatalogoParaEmpresas(origemEmpresaId) {
+    const origemId = String(origemEmpresaId || '').trim();
+    const origem = cadastrosMestres.obterEmpresa(origemId);
+    if (!origem || origem.ativa === false) throw new Error('Empresa de origem não encontrada ou inativa.');
+    const produtosOrigem = cardapioPersistido(origemId).filter((produto) => produto && produto.nome);
+    if (!produtosOrigem.length) throw new Error('A empresa de origem não possui produtos no cardápio para replicar.');
+
+    const agora = new Date().toISOString();
+    const resultados = [];
+    for (const empresa of cadastrosMestres.listarEmpresas()) {
+      const destinoId = String(empresa.id);
+      if (destinoId === origemId) {
+        resultados.push({ empresaId: destinoId, empresa: empresa.nomeFantasia || empresa.nome, adicionados: 0, existentes: produtosOrigem.length, total: produtosOrigem.length, origem: true });
+        continue;
+      }
+
+      const destino = cardapioPersistido(destinoId);
+      const porOrigem = new Map(destino.filter((produto) => produto.origemEmpresaId === origemId && produto.origemProdutoId).map((produto) => [String(produto.origemProdutoId), produto]));
+      const porChave = new Map(destino.map((produto) => [chaveNaturalProduto(produto), produto]));
+      let adicionados = 0;
+      let existentes = 0;
+      for (const produtoOrigem of produtosOrigem) {
+        const existente = porOrigem.get(String(produtoOrigem.id)) || porChave.get(chaveNaturalProduto(produtoOrigem));
+        if (existente) {
+          existentes++;
+          continue;
+        }
+        const copia = structuredClone(produtoOrigem);
+        const id = novoIdCatalogo('prd', destinoId);
+        Object.assign(copia, {
+          id,
+          empresaId: destinoId,
+          origemEmpresaId: origemId,
+          origemProdutoId: String(produtoOrigem.id),
+          ordem: destino.length + 1,
+          criadoEm: agora,
+          atualizadoEm: agora,
+        });
+        destino.push(copia);
+        porOrigem.set(String(produtoOrigem.id), copia);
+        porChave.set(chaveNaturalProduto(copia), copia);
+        adicionados++;
+      }
+      const estoque = sincronizarEstoqueCardapio(destinoId);
+      resultados.push({ empresaId: destinoId, empresa: empresa.nomeFantasia || empresa.nome, adicionados, existentes, total: destino.length, estoque });
+    }
+    save();
+    return { origem: { id: origemId, nome: origem.nomeFantasia || origem.nome }, empresas: resultados, totalAdicionados: resultados.reduce((soma, item) => soma + item.adicionados, 0), totalEmpresas: resultados.length };
+  }
+
   // Leitura operacional do cardápio: exige empresa ativa e não vaza produtos
   // entre empresas. A quantidade de inventário é gerida no módulo de estoque;
   // itens sem bloqueio explícito continuam vendáveis no PDV.
@@ -1529,64 +1663,47 @@ async function iniciar() {
   app.get('/api/admin/estoque/acuracidade', requerEditorCatalogo, (req, res) => res.json({ ok: true, relatorio: perdasInventarioKytto.relatorioAcuracidade(req.empresaId, req.query || {}) }));
 
   app.get('/api/admin/cardapio/catalogo-bebidas', requerEditorCatalogo, (req, res) => {
-    const cadastrados = cardapioPersistido(req.empresaId).filter((item) => item.catalogoSeed === 'kytto-bebidas-v1').length;
-    res.json({ ...RESUMO_CATALOGO_BEBIDAS, cadastrados, versao: 'kytto-bebidas-v1' });
+    const cadastrados = cardapioPersistido(req.empresaId).filter((item) => item.catalogoSeed === RESUMO_CATALOGO_BAR_TTC.versao && item.cat === 'Bebidas').length;
+    res.json({ ...RESUMO_CATALOGO_BAR_TTC, itens: CATALOGO_BAR_TTC_OFICIAL.filter((item) => item.cat === 'Bebidas').length, cadastrados, versao: RESUMO_CATALOGO_BAR_TTC.versao, escopo: 'bebidas-oficiais' });
   });
 
   app.post('/api/admin/cardapio/catalogo-bebidas', requerEditorCatalogo, (req, res) => {
     const itens = cardapioPersistido(req.empresaId);
-    const existentes = new Set(itens.map((item) => `${item.marca}|${item.tipo}|${item.embalagem}`.toLowerCase()));
+    const oficiais = CATALOGO_BAR_TTC_SKUS.filter((item) => item.cat === 'Bebidas');
+    const existentes = new Set(itens.map((item) => String(item.sku || item.nome || '').toLowerCase()));
     const agora = new Date().toISOString();
     const adicionados = [];
-
-    for (const produtoBase of CATALOGO_BEBIDAS_KYTTO) {
+    for (const produtoBase of oficiais) {
       const produto = normalizarProduto(produtoBase);
-      const chave = `${produto.marca}|${produto.tipo}|${produto.embalagem}`.toLowerCase();
+      const chave = String(produtoBase.sku || produto.nome).toLowerCase();
       if (existentes.has(chave)) continue;
-      const id = `beb-${Date.now().toString(36)}-${String(itens.length + adicionados.length + 1).padStart(3, '0')}`;
-      adicionados.push({
-        ...produto,
-        empresaId: req.empresaId,
-        id,
-        ordem: itens.length + adicionados.length + 1,
-        catalogoSeed: 'kytto-bebidas-v1',
-        criadoEm: agora,
-        atualizadoEm: agora,
-      });
+      adicionados.push({ ...produto, sku: produtoBase.sku, empresaId: req.empresaId, id: `bar-ttc-${produtoBase.sku.toLowerCase()}`, ordem: itens.length + adicionados.length + 1, catalogoSeed: RESUMO_CATALOGO_BAR_TTC.versao, criadoEm: agora, atualizadoEm: agora });
       existentes.add(chave);
     }
-
-    if (adicionados.length) {
-      itens.push(...adicionados);
-      sincronizarEstoqueCardapio(req.empresaId);
-      save();
-    }
-    res.status(201).json({ ok: true, adicionados: adicionados.length, total: itens.length, versao: 'kytto-bebidas-v1' });
+    if (adicionados.length) { itens.push(...adicionados); sincronizarEstoqueCardapio(req.empresaId); save(); }
+    res.status(201).json({ ok: true, adicionados: adicionados.length, total: itens.length, versao: RESUMO_CATALOGO_BAR_TTC.versao, fonte: RESUMO_CATALOGO_BAR_TTC.fonte });
   });
 
   app.get('/api/admin/cardapio/catalogo-espetinhos', requerEditorCatalogo, (req, res) => {
-    const cadastrados = cardapioPersistido(req.empresaId).filter((item) => item.catalogoSeed === 'kytto-espetinhos-v1').length;
-    res.json({ ...RESUMO_CATALOGO_ESPETINHOS, cadastrados, versao: 'kytto-espetinhos-v1' });
+    const cadastrados = cardapioPersistido(req.empresaId).filter((item) => item.catalogoSeed === RESUMO_CATALOGO_BAR_TTC.versao && item.cat === 'Espetos').length;
+    res.json({ ...RESUMO_CATALOGO_BAR_TTC, itens: CATALOGO_BAR_TTC_OFICIAL.filter((item) => item.cat === 'Espetos').length, cadastrados, versao: RESUMO_CATALOGO_BAR_TTC.versao, escopo: 'espetos-oficiais' });
   });
 
   app.post('/api/admin/cardapio/catalogo-espetinhos', requerEditorCatalogo, (req, res) => {
     const itens = cardapioPersistido(req.empresaId);
-    const existentes = new Set(itens.map((item) => String(item.nome || '').toLocaleLowerCase('pt-BR')));
+    const oficiais = CATALOGO_BAR_TTC_SKUS.filter((item) => item.cat === 'Espetos');
+    const existentes = new Set(itens.map((item) => String(item.sku || item.nome || '').toLowerCase()));
     const agora = new Date().toISOString();
     const adicionados = [];
-    for (const produtoBase of CATALOGO_ESPETINHOS_KYTTO) {
+    for (const produtoBase of oficiais) {
       const produto = normalizarProduto(produtoBase);
-      const chave = produto.nome.toLocaleLowerCase('pt-BR');
+      const chave = String(produtoBase.sku || produto.nome).toLowerCase();
       if (existentes.has(chave)) continue;
-      adicionados.push({ ...produto, empresaId: req.empresaId, id: `esp-${Date.now().toString(36)}-${String(itens.length + adicionados.length + 1).padStart(3, '0')}`, ordem: itens.length + adicionados.length + 1, catalogoSeed: 'kytto-espetinhos-v1', criadoEm: agora, atualizadoEm: agora });
+      adicionados.push({ ...produto, sku: produtoBase.sku, empresaId: req.empresaId, id: `bar-ttc-${produtoBase.sku.toLowerCase()}`, ordem: itens.length + adicionados.length + 1, catalogoSeed: RESUMO_CATALOGO_BAR_TTC.versao, criadoEm: agora, atualizadoEm: agora });
       existentes.add(chave);
     }
-    if (adicionados.length) {
-      itens.push(...adicionados);
-      sincronizarEstoqueCardapio(req.empresaId);
-      save();
-    }
-    res.status(201).json({ ok: true, adicionados: adicionados.length, total: itens.length, versao: 'kytto-espetinhos-v1' });
+    if (adicionados.length) { itens.push(...adicionados); sincronizarEstoqueCardapio(req.empresaId); save(); }
+    res.status(201).json({ ok: true, adicionados: adicionados.length, total: itens.length, versao: RESUMO_CATALOGO_BAR_TTC.versao, fonte: RESUMO_CATALOGO_BAR_TTC.fonte });
   });
 
   app.post('/api/admin/cardapio', requerEditorCatalogo, (req, res) => {
@@ -1625,6 +1742,144 @@ async function iniciar() {
     sincronizarEstoqueCardapio(req.empresaId, { registrarHistorico: true });
     save();
     res.json({ ok: true, removido: { id: removido.id, nome: removido.nome } });
+  });
+
+  // Replicação explícita e idempotente. Somente o administrador da plataforma
+  // pode copiar dados entre tenants; uma empresa nunca pode escolher ou ler um
+  // destino fora da lista de empresas ativas do cadastro mestre.
+  app.post('/api/admin/cardapio/replicar-todas-empresas', requerAdministradorPlataforma, (req, res) => {
+    try {
+      const origemEmpresaId = String(req.body?.origemEmpresaId || req.get('X-Loja-Id') || cadastrosMestres.EMPRESA_PADRAO_ID).trim();
+      const resultado = replicarCatalogoParaEmpresas(origemEmpresaId);
+      res.json({ ok: true, ...resultado, mensagem: 'Produtos e cardápios replicados de forma idempotente para todas as empresas ativas.' });
+    } catch (error) {
+      res.status(422).json({ erro: error.message });
+    }
+  });
+
+  function filtrarReservasQuadras(lista, query = {}) {
+    const quadraId = String(query.quadraId || '').trim();
+    const data = String(query.data || '').trim();
+    const de = String(query.de || '').trim();
+    const ate = String(query.ate || '').trim();
+    return lista
+      .filter((reserva) => !quadraId || String(reserva.quadraId) === quadraId)
+      .filter((reserva) => !data || String(reserva.data) === data)
+      .filter((reserva) => !de || String(reserva.data) >= de)
+      .filter((reserva) => !ate || String(reserva.data) <= ate)
+      .sort((a, b) => String(a.data).localeCompare(String(b.data)) || String(a.horaInicio).localeCompare(String(b.horaInicio)));
+  }
+
+  function validarReservaQuadra(empresaId, payload = {}, { ignorarId = '' } = {}) {
+    const quadraId = String(payload.quadraId || '').trim();
+    const data = String(payload.data || '').trim();
+    const horaInicio = String(payload.horaInicio || '').trim();
+    const horaFim = String(payload.horaFim || '').trim();
+    const horarioValido = (valor) => /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(valor);
+    if (!quadraId || !/^\d{4}-\d{2}-\d{2}$/.test(data) || !horarioValido(horaInicio) || !horarioValido(horaFim)) {
+      throw new Error('quadraId, data, horaInicio e horaFim são obrigatórios e devem estar em formato válido.');
+    }
+    if (data < new Date().toISOString().slice(0, 10)) throw new Error('Não é possível reservar uma data passada.');
+    if (horaInicio >= horaFim) throw new Error('O horário final deve ser posterior ao horário inicial.');
+    const quadra = quadrasPersistidas(empresaId).find((item) => String(item.id) === quadraId && item.ativa !== false);
+    if (!quadra) throw new Error('Quadra não encontrada ou inativa na empresa ativa.');
+    const conflito = reservasQuadrasPersistidas(empresaId).find((reserva) => String(reserva.id) !== String(ignorarId || '') && String(reserva.quadraId) === quadraId && reserva.data === data && reserva.status !== 'cancelada' && reserva.horaInicio < horaFim && reserva.horaFim > horaInicio);
+    if (conflito) throw new Error('Horário indisponível para esta quadra.');
+    return { quadra, quadraId, data, horaInicio, horaFim };
+  }
+
+  function serializarQuadra(quadra, empresaId) {
+    return { ...quadra, empresaId };
+  }
+
+  // Quadras públicas usam a empresa padrão, enquanto as rotas administrativas
+  // resolvem a empresa pelo mesmo middleware do cardápio/PDV.
+  app.get('/api/quadras', (req, res) => {
+    res.json(quadrasPersistidas(cadastrosMestres.EMPRESA_PADRAO_ID).filter((quadra) => quadra.ativa !== false).map((quadra) => serializarQuadra(quadra, cadastrosMestres.EMPRESA_PADRAO_ID)));
+  });
+  app.get('/api/admin/quadras', requerEditorCatalogo, (req, res) => {
+    res.json(quadrasPersistidas(req.empresaId).map((quadra) => serializarQuadra(quadra, req.empresaId)));
+  });
+  app.post('/api/admin/quadras', requerEditorCatalogo, (req, res) => {
+    try {
+      const dados = normalizarQuadra(req.body || {});
+      if (!dados.nome) return res.status(400).json({ erro: 'Nome da quadra é obrigatório.' });
+      const quadras = quadrasPersistidas(req.empresaId);
+      const duplicada = quadras.some((quadra) => quadra.ativa !== false && quadra.nome.toLocaleLowerCase('pt-BR') === dados.nome.toLocaleLowerCase('pt-BR'));
+      if (duplicada) return res.status(409).json({ erro: 'Já existe uma quadra ativa com este nome na empresa.' });
+      const quadra = { ...dados, id: novoIdCatalogo('qdr', req.empresaId), empresaId: req.empresaId, criadoEm: new Date().toISOString(), atualizadoEm: new Date().toISOString() };
+      quadras.push(quadra);
+      save();
+      res.status(201).json(quadra);
+    } catch (error) { res.status(422).json({ erro: error.message }); }
+  });
+  app.patch('/api/admin/quadras/:id', requerEditorCatalogo, (req, res) => {
+    const quadra = quadrasPersistidas(req.empresaId).find((item) => String(item.id) === String(req.params.id));
+    if (!quadra) return res.status(404).json({ erro: 'Quadra não encontrada na empresa ativa.' });
+    const dados = normalizarQuadra(req.body || {}, quadra);
+    if (!dados.nome) return res.status(400).json({ erro: 'Nome da quadra é obrigatório.' });
+    Object.assign(quadra, dados, { empresaId: req.empresaId, atualizadoEm: new Date().toISOString() });
+    save();
+    res.json(quadra);
+  });
+  app.delete('/api/admin/quadras/:id', requerEditorCatalogo, (req, res) => {
+    const quadras = quadrasPersistidas(req.empresaId);
+    const indice = quadras.findIndex((item) => String(item.id) === String(req.params.id));
+    if (indice < 0) return res.status(404).json({ erro: 'Quadra não encontrada na empresa ativa.' });
+    const [removida] = quadras.splice(indice, 1);
+    const reservas = reservasQuadrasPersistidas(req.empresaId);
+    for (const reserva of reservas) if (String(reserva.quadraId) === String(removida.id) && reserva.status !== 'cancelada') reserva.status = 'cancelada';
+    save();
+    res.json({ ok: true, removido: { id: removida.id, nome: removida.nome } });
+  });
+
+  app.get('/api/reservas', (req, res) => {
+    res.json(filtrarReservasQuadras(reservasQuadrasPersistidas(cadastrosMestres.EMPRESA_PADRAO_ID), req.query || {}));
+  });
+  app.get('/api/admin/quadras/reservas', requerEditorCatalogo, (req, res) => {
+    res.json(filtrarReservasQuadras(reservasQuadrasPersistidas(req.empresaId), req.query || {}));
+  });
+  app.post('/api/reservas', requerAutenticacao, (req, res) => {
+    try {
+      const validada = validarReservaQuadra(req.empresaId, req.body || {}, { exigirUsuario: true });
+      const reservas = reservasQuadrasPersistidas(req.empresaId);
+      const agora = new Date().toISOString();
+      const reserva = {
+        id: novoIdCatalogo('res', req.empresaId), empresaId: req.empresaId, quadraId: validada.quadraId,
+        quadraNome: validada.quadra.nome, data: validada.data, horaInicio: validada.horaInicio, horaFim: validada.horaFim,
+        socioId: req.usuario.id, socioNome: req.usuario.nome || req.usuario.email, usuarioId: req.usuario.id,
+        status: 'confirmada', obs: String(req.body?.obs || '').trim().slice(0, 300), criadoEm: agora, atualizadoEm: agora,
+      };
+      reservas.push(reserva);
+      save();
+      res.status(201).json(reserva);
+    } catch (error) { res.status(422).json({ erro: error.message }); }
+  });
+  app.patch('/api/reservas/:id/cancelar', requerAutenticacao, (req, res) => {
+    const reserva = reservasQuadrasPersistidas(req.empresaId).find((item) => String(item.id) === String(req.params.id));
+    if (!reserva) return res.status(404).json({ erro: 'Reserva não encontrada na empresa ativa.' });
+    if (reserva.usuarioId !== req.usuario.id && !temPermissao({ ...req.usuario, ...resumoAcessoUsuario(req.usuario) }, 'cardapio', 'editar')) return res.status(403).json({ erro: 'Sem permissão para cancelar esta reserva.' });
+    reserva.status = 'cancelada'; reserva.canceladoEm = new Date().toISOString(); reserva.atualizadoEm = reserva.canceladoEm;
+    save();
+    res.json(reserva);
+  });
+  app.patch('/api/admin/quadras/reservas/:id', requerEditorCatalogo, (req, res) => {
+    const reservas = reservasQuadrasPersistidas(req.empresaId);
+    const reserva = reservas.find((item) => String(item.id) === String(req.params.id));
+    if (!reserva) return res.status(404).json({ erro: 'Reserva não encontrada na empresa ativa.' });
+    try {
+      const dados = validarReservaQuadra(req.empresaId, { ...reserva, ...req.body }, { ignorarId: reserva.id });
+      Object.assign(reserva, {
+        quadraId: dados.quadraId,
+        data: dados.data,
+        horaInicio: dados.horaInicio,
+        horaFim: dados.horaFim,
+        quadraNome: dados.quadra.nome,
+        atualizadoEm: new Date().toISOString(),
+      });
+      save();
+      res.json(reserva);
+    } catch (error) { res.status(422).json({ erro: error.message }); }
   });
 
   // Rota: Notícias

@@ -10,12 +10,11 @@ import { useToast } from '../hooks/useToast'
 
 /* ─── emojis por categoria ─────────────────────────────────────── */
 const CAT_EMOJI = {
-  'Bebidas':    '🍺',
-  'Petiscos':   '🍟',
-  'Espetinhos': '🍢',
-  'Cozinha':    '🍽️',
-  'Sobremesas': '🍦',
-  'Tudo':       '🔍',
+  'Bebidas': '🍺',
+  'Porções': '🍟',
+  'Espetos': '🍢',
+  'Burgers': '🍔',
+  'Tudo': '🔍',
 }
 const catEmoji = (c) => CAT_EMOJI[c] || '📦'
 

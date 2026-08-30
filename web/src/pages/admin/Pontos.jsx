@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { api } from '../../lib/api'
+import { api, asArray } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
 // ── Gráfico de linha SVG — evolução do Elo ───────────────────────────────────
@@ -178,11 +178,18 @@ export default function Pontos() {
         api.get('/api/admin/pontos'),
         api.get('/api/admin/socios'),
       ])
-      setSaldos(s); setHistorico(h); setSocios(sc)
+      const saldosLista = asArray(s, ['saldos', 'items'])
+      const historicoLista = asArray(h, ['pontos', 'historico', 'items'])
+      const sociosLista = asArray(sc, ['socios', 'items'])
+      setSaldos(saldosLista)
+      setHistorico(historicoLista)
+      setSocios(sociosLista)
       // Define o primeiro sócio como padrão do gráfico Elo
-      if (s.length > 0 && !eloJogador) setEloJogador(s[0].nome)
+      if (saldosLista.length > 0 && !eloJogador) setEloJogador(saldosLista[0].nome)
+    } catch (error) {
+      toast(error.message || 'Erro ao carregar o Programa de Pontos', true)
     } finally { setLoading(false) }
-  }, [])
+  }, [toast])
 
   useEffect(() => { load() }, [load])
 
@@ -480,8 +487,14 @@ export default function Pontos() {
               <span style={S.lbl}>Sócio *</span>
               <select required value={form.socioId} onChange={e => setForm(f => ({ ...f, socioId: e.target.value }))} style={S.inp}>
                 <option value="">Selecione…</option>
+                {socios.length === 0 && <option value="" disabled>Nenhum sócio cadastrado</option>}
                 {socios.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
               </select>
+              {socios.length === 0 && (
+                <div style={{ marginTop: 6, fontSize: 11, color: 'var(--muted)' }}>
+                  Cadastre um sócio em <a href="/admin/socios" style={{ color: 'var(--green)', fontWeight: 700 }}>Sócios</a> antes de creditar pontos.
+                </div>
+              )}
             </label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
               <label>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { api } from '../../lib/api'
+import { api, asArray } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 import { useAuth } from '../../lib/auth'
 
@@ -34,12 +34,12 @@ export default function AgendaQuadras() {
   const [confirmando, setConfirmando] = useState(false)
 
   useEffect(() => {
-    api.get('/api/quadras').then(setQuadras)
+    api.get('/api/quadras').then(data => setQuadras(asArray(data, ['quadras', 'itens'])))
   }, [])
 
   useEffect(() => {
     if (!data) return
-    api.get(`/api/reservas?data=${data}`).then(setReservas)
+    api.get(`/api/reservas?data=${data}`).then(result => setReservas(asArray(result, ['reservas', 'itens'])))
   }, [data])
 
   function ocupado(qId, hIni, hFim) {
@@ -62,7 +62,7 @@ export default function AgendaQuadras() {
       toast(`Reserva confirmada! ${quadraSel.nome} — ${slot.horaInicio} às ${slot.horaFim}`)
       setQuadraSel(null); setSlot({ horaInicio: '', horaFim: '' }); setObs('')
       const r = await api.get(`/api/reservas?data=${data}`)
-      setReservas(r)
+      setReservas(asArray(r, ['reservas', 'itens']))
     } catch (e) { toast(e.message, true) }
     finally { setConfirmando(false) }
   }
