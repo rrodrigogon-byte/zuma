@@ -15,14 +15,20 @@ const ETAPAS = [
 ]
 const VERDE = '#FF6B2C'
 const CORE_STATUS = { pending_payment: 'pendente', payment_failed: 'pendente', fraud_review: 'pendente', paid: 'preparando', processing: 'preparando', ready: 'pronto', ready_for_pickup: 'pronto', shipped: 'entregue', out_for_delivery: 'entregue', delivered: 'entregue', picked_up: 'entregue', completed: 'entregue', cancelled: 'cancelado', refunded: 'cancelado', partially_refunded: 'cancelado', returned: 'cancelado' }
+const CORE_STATUS_LABEL = { pending_payment: 'Aguardando pagamento', payment_failed: 'Pagamento recusado', paid: 'Pagamento confirmado', processing: 'Em preparação', ready: 'Pronto para envio', shipped: 'Enviado', delivered: 'Entregue', completed: 'Concluído', cancelled: 'Cancelado' }
+const FULFILLMENT_LABEL = { pending: 'Aguardando preparação', preparing: 'Em separação', ready: 'Pronto para envio', shipped: 'Enviado', out_for_delivery: 'Em rota de entrega', delivered: 'Entregue', picked_up: 'Retirado', failed: 'Falha na entrega', cancelled: 'Entrega cancelada' }
+function fmtDate(value) { if (!value) return 'Atualização'; const date = new Date(value); return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('pt-BR') }
 
 function normalizeCoreOrder(order) {
   return {
     ...order,
     codigo: order.public_code,
+    coreStatus: order.status || null,
     status: CORE_STATUS[order.status] || 'pendente',
     pagamento: order.status === 'paid' || order.status === 'completed' ? 'pago' : 'pix-pendente',
     itens: (order.items || []).map(item => ({ nome: item.nome, qtd: item.quantidade, preco: item.preco, subtotal: item.subtotal })),
+    fulfillments: Array.isArray(order.fulfillments) ? order.fulfillments : [],
+    timeline: Array.isArray(order.timeline) ? order.timeline : [],
     isCore: true,
   }
 }
@@ -106,6 +112,13 @@ export default function AcompanharPedido() {
                   })}
                 </div>
               )}
+
+              {/* Pós-venda e rastreio */}
+              {(pedido.isCore || pedido.fulfillments?.length || pedido.timeline?.length) && <section style={{ marginTop: 18, border: '1px solid #F0DED2', borderRadius: 14, padding: '16px', background: '#FFFCFA' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}><div><div style={{ color: VERDE, fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Pós-venda</div><h2 style={{ margin: '3px 0 0', color: '#12283F', fontSize: '1.05rem' }}>Entrega e acompanhamento</h2></div><span style={{ color: '#12283F', background: '#FFF0E8', borderRadius: 999, padding: '6px 10px', fontSize: '0.72rem', fontWeight: 800 }}>{CORE_STATUS_LABEL[pedido.coreStatus || ''] || pedido.coreStatus || pedido.status}</span></div>
+                {pedido.fulfillments?.[0] ? <div style={{ marginTop: 14, display: 'grid', gap: 10 }}><div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><span style={{ color: VERDE, fontSize: '1.2rem' }}>▣</span><div><strong style={{ display: 'block', color: '#12283F' }}>{FULFILLMENT_LABEL[pedido.fulfillments[0].status] || pedido.fulfillments[0].status}</strong><small style={{ color: '#5A6570' }}>{pedido.fulfillments[0].carrier || 'Logística da loja'}</small></div></div>{pedido.fulfillments[0].trackingCode && <div style={{ background: '#FFF4EC', borderRadius: 10, padding: '10px 12px' }}><small style={{ color: '#5A6570', display: 'block' }}>Código de rastreio</small><strong style={{ color: '#12283F', letterSpacing: '0.05em' }}>{pedido.fulfillments[0].trackingCode}</strong></div>}{pedido.fulfillments[0].trackingUrl && <a href={pedido.fulfillments[0].trackingUrl} target="_blank" rel="noreferrer" style={{ color: VERDE, fontWeight: 800, fontSize: '0.84rem' }}>Acompanhar na transportadora →</a>}{Array.isArray(pedido.fulfillments[0].ocorrencias) && pedido.fulfillments[0].ocorrencias.slice(0, 5).map((event, index) => <div key={`${event.at || index}-${index}`} style={{ borderTop: '1px solid #F0DED2', paddingTop: 8 }}><small style={{ color: '#8AA9C0', display: 'block' }}>{fmtDate(event.at || event.data)}</small><span style={{ color: '#12283F', fontSize: '0.82rem' }}>{event.description || event.descricao || event.status || event.mensagem || 'Movimentação registrada'}</span></div>)}</div> : <div style={{ marginTop: 12, color: '#5A6570', fontSize: '0.82rem' }}>Após a confirmação do pagamento, a loja separará o pedido e publicará o código de rastreio nesta área.</div>}
+                {pedido.timeline?.length > 0 && <div style={{ marginTop: 14, display: 'grid', gap: 8 }}>{pedido.timeline.slice(-6).map((event, index) => <div key={`${event.at || index}-${index}`} style={{ display: 'grid', gridTemplateColumns: 'minmax(100px, 0.8fr) 1fr', gap: 8, borderTop: '1px solid #F0DED2', paddingTop: 8 }}><small style={{ color: '#8AA9C0' }}>{fmtDate(event.at)}</small><span style={{ color: '#12283F', fontWeight: 700, fontSize: '0.82rem' }}>{CORE_STATUS_LABEL[event.toStatus] || event.toStatus || 'Atualização do pedido'}</span></div>)}</div>}
+              </section>}
 
               {/* Itens */}
               <div style={{ marginTop: 16, background: '#FFF9F5', borderRadius: 12, padding: '12px 14px' }}>

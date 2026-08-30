@@ -100,3 +100,64 @@ export async function customerReport(contextInput, options = {}) {
   );
   return { period: { from, to }, summary: result.rows[0], top: top.rows };
 }
+
+
+export async function fulfillmentReport(contextInput, options = {}) {
+  const context = tenantContext(contextInput);
+  const { from, to } = period(options);
+  const values = [context.empresaId, from, to];
+  const store = storeFilter(context, values);
+  const summary = await db.query(
+    `WITH scoped_orders AS (
+       SELECT o.id, o.storefront_id, o.status, o.total
+         FROM commerce_orders o
+         JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id
+        WHERE o.empresa_id = $1 AND o.criado_em >= $2::timestamptz AND o.criado_em < $3::timestamptz${store}
+     )
+     SELECT (SELECT COUNT(*)::integer FROM scoped_orders) AS orders,
+            (SELECT COUNT(*)::integer FROM scoped_orders WHERE status NOT IN ('cancelled','refunded')) AS active_orders,
+            (SELECT COALESCE(SUM(total), 0)::numeric FROM scoped_orders WHERE status NOT IN ('cancelled','refunded')) AS gross_total,
+            COUNT(DISTINCT f.id) FILTER (WHERE f.status IN ('pending','preparing','ready'))::integer AS awaiting_dispatch,
+            COUNT(DISTINCT f.id) FILTER (WHERE f.status = 'shipped')::integer AS shipped,
+            COUNT(DISTINCT f.id) FILTER (WHERE f.status = 'delivered')::integer AS delivered,
+            COUNT(DISTINCT f.id) FILTER (WHERE f.status = 'failed')::integer AS failed
+       FROM scoped_orders o
+       LEFT JOIN commerce_fulfillments f ON f.empresa_id = $1 AND f.order_id = o.id`,
+    values,
+  );
+  const providers = await db.query(
+    `SELECT COALESCE(q.provider, 'pickup') AS provider, COUNT(DISTINCT f.id)::integer AS fulfillments,
+            COUNT(DISTINCT f.id) FILTER (WHERE f.status = 'delivered')::integer AS delivered,
+            COUNT(DISTINCT f.id) FILTER (WHERE f.status IN ('pending','preparing','ready'))::integer AS pending
+       FROM commerce_fulfillments f
+       JOIN commerce_orders o ON o.empresa_id = f.empresa_id AND o.id = f.order_id
+       JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id
+       LEFT JOIN commerce_shipping_quotes q ON q.empresa_id = f.empresa_id AND q.id = f.shipping_quote_id
+      WHERE o.empresa_id = $1 AND o.criado_em >= $2::timestamptz AND o.criado_em < $3::timestamptz${store}
+      GROUP BY 1 ORDER BY fulfillments DESC, provider ASC`,
+    values,
+  );
+  const recentValues = [context.empresaId, from, to];
+  const recentStore = storeFilter(context, recentValues);
+  recentValues.push(50);
+  const recent = await db.query(
+    `SELECT o.public_code, o.status AS order_status, o.total, o.criado_em, o.atualizado_em,
+            c.nome AS customer_name, c.email AS customer_email,
+            f.status AS fulfillment_status, f.carrier, f.tracking_code, f.tracking_url,
+            f.label_url, f.ocorrencias, q.provider
+       FROM commerce_orders o
+       JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id
+       LEFT JOIN commerce_customers c ON c.empresa_id = o.empresa_id AND c.id = o.customer_id
+       LEFT JOIN commerce_fulfillments f ON f.empresa_id = o.empresa_id AND f.id = (
+         SELECT latest.id FROM commerce_fulfillments latest
+          WHERE latest.empresa_id = o.empresa_id AND latest.order_id = o.id
+          ORDER BY latest.atualizado_em DESC NULLS LAST LIMIT 1
+       )
+       LEFT JOIN commerce_shipping_quotes q ON q.empresa_id = f.empresa_id AND q.id = f.shipping_quote_id
+      WHERE o.empresa_id = $1 AND o.criado_em >= $2::timestamptz AND o.criado_em < $3::timestamptz${recentStore}
+      ORDER BY o.criado_em DESC
+      LIMIT $${recentValues.length}`,
+    recentValues,
+  );
+  return { period: { from, to }, summary: summary.rows[0] || {}, providers: providers.rows, recent: recent.rows };
+}

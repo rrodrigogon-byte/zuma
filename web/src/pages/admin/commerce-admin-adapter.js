@@ -63,6 +63,7 @@ function normalizeCoreOrder(order) {
     frete: number(order.frete),
     total: number(order.total),
     paymentStatus: order.payment_status || null,
+    fulfillment: order.fulfillment || null,
     shippingMethodId: order.shipping_method_id || null,
     shippingQuoteId: order.shipping_quote_id || null,
     criadoEm: order.criado_em,
@@ -390,12 +391,13 @@ export async function syncCorePayment(paymentId) {
 }
 
 export async function loadCoreReports() {
-  const [sales, inventory, customers] = await Promise.all([
+  const [sales, fulfillment, inventory, customers] = await Promise.all([
     api.get('/api/admin/commerce/reports/sales'),
+    api.get('/api/admin/commerce/reports/fulfillment'),
     api.get('/api/admin/commerce/reports/inventory'),
     api.get('/api/admin/commerce/reports/customers'),
   ])
-  return { sales, inventory, customers }
+  return { sales, fulfillment, inventory, customers }
 }
 
 export { CORE_TO_LEGACY, LEGACY_TO_CORE }

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createCommerceAdminRouter, parsePagination } from './commerce-routes.js';
+import { createCommerceAdminRouter, createCommercePublicRouter, parsePagination } from './commerce-routes.js';
+import { fulfillmentReport } from './commerce-reports.js';
 import { db } from './database.js';
 
 const empresaId = '11111111-1111-4111-8111-111111111111';
@@ -35,6 +36,13 @@ function healthHandler() {
   return layer.route.stack[0].handle;
 }
 
+function publicOrderHandler() {
+  const router = createCommercePublicRouter();
+  const layer = router.stack.find(item => item.route?.path === '/orders/:publicCode');
+  assert.ok(layer?.route?.stack?.[0]?.handle, 'rota pública de pedido não encontrada');
+  return layer.route.stack[0].handle;
+}
+
 async function invoke(handler, dbQuery, query = {}) {
   const original = db.query;
   db.query = dbQuery;
@@ -50,6 +58,23 @@ async function invoke(handler, dbQuery, query = {}) {
       headers: { 'x-empresa-id': empresaId, 'x-loja-id': lojaId },
       query,
     }, response);
+    return response;
+  } finally {
+    db.query = original;
+  }
+}
+
+async function invokePublicOrder(dbQuery) {
+  const original = db.query;
+  db.query = dbQuery;
+  const response = {
+    statusCode: 200,
+    body: null,
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
+  };
+  try {
+    await publicOrderHandler()({ hostname: 'loja.kytto.com.br', headers: {}, params: { publicCode: 'KC-TEST' } }, response);
     return response;
   } finally {
     db.query = original;
@@ -140,4 +165,48 @@ test('parsePagination limita entradas inválidas e não aceita offset negativo',
   assert.deepEqual(parsePagination({ query: { limit: '99999', offset: '-10' } }), { limit: 500, offset: 0 });
   assert.deepEqual(parsePagination({ query: { limit: 'abc', offset: 'xyz' } }), { limit: 100, offset: 0 });
   assert.deepEqual(parsePagination({ query: { limit: '25', offset: '50' } }), { limit: 25, offset: 50 });
+});
+
+test('resposta pública de pedido sanitiza fulfillment sem labelUrl ou providerData', async () => {
+  let count = 0;
+  const response = await invokePublicOrder(async sql => {
+    count += 1;
+    if (count === 1) return { rows: [{ id: '33333333-3333-4333-8333-333333333333', empresa_id: empresaId, loja_id: lojaId }] };
+    assert.match(sql, /public_code/);
+    return { rows: [{
+      public_code: 'KC-TEST',
+      status: 'shipped',
+      fulfillments: [{ id: '44444444-4444-4444-8444-444444444444', status: 'shipped', trackingCode: 'AA123456789BR', trackingUrl: 'https://rastreamento.correios.com.br/app/index.php?objetos=AA123456789BR', labelUrl: 'https://private.example/label.pdf', ocorrencias: [{ status: 'posted', description: 'Objeto postado', providerData: { token: 'should-not-leak' } }] }],
+      timeline: [{ fromStatus: 'paid', toStatus: 'shipped', source: 'system', at: '2026-08-30T00:00:00.000Z', payload: { secret: 'should-not-leak' } }],
+    }] };
+  });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.fulfillments[0].trackingCode, 'AA123456789BR');
+  assert.equal(response.body.fulfillments[0].ocorrencias[0].description, 'Objeto postado');
+  assert.equal('labelUrl' in response.body.fulfillments[0], false);
+  assert.equal('providerData' in response.body.fulfillments[0].ocorrencias[0], false);
+  assert.equal('payload' in response.body.timeline[0], false);
+});
+
+test('relatório de fulfillment aplica escopo de loja e retorna resumo/provedores/recentes', async () => {
+  const original = db.query;
+  const calls = [];
+  db.query = async (sql, params) => {
+    calls.push({ sql, params });
+    if (sql.includes('WITH scoped_orders')) return { rows: [{ orders: 3, active_orders: 2, gross_total: '199.90', awaiting_dispatch: 1, shipped: 1, delivered: 1, failed: 0 }] };
+    if (sql.includes('COALESCE(q.provider')) return { rows: [{ provider: 'correios', fulfillments: 2, delivered: 1, pending: 1 }] };
+    return { rows: [{ public_code: 'KC-TEST', order_status: 'shipped', fulfillment_status: 'shipped', provider: 'correios', tracking_code: 'AA123456789BR' }] };
+  };
+  let result;
+  try {
+    result = await fulfillmentReport({ empresaId, lojaId }, { from: '2026-08-01T00:00:00.000Z', to: '2026-09-01T00:00:00.000Z' });
+  } finally {
+    db.query = original;
+  }
+  assert.equal(calls.length, 3);
+  assert.deepEqual(calls[0].params, [empresaId, '2026-08-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z', lojaId]);
+  assert.deepEqual(calls[2].params, [empresaId, '2026-08-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z', lojaId, 50]);
+  assert.equal(result.summary.orders, 3);
+  assert.equal(result.providers[0].provider, 'correios');
+  assert.equal(result.recent[0].tracking_code, 'AA123456789BR');
 });
