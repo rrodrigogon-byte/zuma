@@ -876,7 +876,14 @@ export async function createCatalogMedia(trx, context, productId, input = {}) {
     const variant = await trx.query('SELECT id FROM commerce_product_variants WHERE empresa_id = $1 AND id = $2 AND product_id = $3 LIMIT 1', [empresaId, variantId, id]);
     if (!variant.rows[0]) throw new CommerceError('variante não pertence ao produto', 'VARIANT_NOT_FOUND');
   }
-  const result = await trx.query(`INSERT INTO commerce_product_media (empresa_id, product_id, variant_id, storage_key, public_url, mime_type, alt_text, ordem) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`, [empresaId, id, variantId, String(input.storageKey || url).slice(0, 500), url, String(input.mimeType || 'image/*').slice(0, 120), String(input.altText || '').slice(0, 255) || null, Number.isInteger(Number(input.ordem)) ? Number(input.ordem) : 0]);
+  const mediaId = input.mediaId ? assertUuid(input.mediaId, 'mediaId') : null;
+  const storageKey = String(input.storageKey || url).slice(0, 500);
+  const mimeType = String(input.mimeType || 'image/*').slice(0, 120);
+  const altText = String(input.altText || '').slice(0, 255) || null;
+  const ordem = Number.isInteger(Number(input.ordem)) ? Number(input.ordem) : 0;
+  const result = mediaId
+    ? await trx.query(`INSERT INTO commerce_product_media (id, empresa_id, product_id, variant_id, storage_key, public_url, mime_type, alt_text, ordem) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`, [mediaId, empresaId, id, variantId, storageKey, url, mimeType, altText, ordem])
+    : await trx.query(`INSERT INTO commerce_product_media (empresa_id, product_id, variant_id, storage_key, public_url, mime_type, alt_text, ordem) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`, [empresaId, id, variantId, storageKey, url, mimeType, altText, ordem]);
   await trx.query(`INSERT INTO commerce_audit_logs (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, depois) VALUES ($1, $2, $3, 'product_media', $4, 'created', $5::jsonb)`, [empresaId, context.lojaId || null, usuarioId, result.rows[0].id, JSON.stringify({ productId: id, variantId })]);
   return result.rows[0];
 }

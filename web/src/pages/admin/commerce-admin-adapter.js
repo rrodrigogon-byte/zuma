@@ -36,6 +36,11 @@ function normalizeCoreProduct(product) {
   return {
     ...product,
     nome: product.nome,
+    tipo: product.tipo || 'physical',
+    slug: product.slug || '',
+    descricaoCurta: product.descricao_curta || product.descricaoCurta || '',
+    seo: product.seo && typeof product.seo === 'object' ? product.seo : {},
+    dadosFiscais: product.dados_fiscais && typeof product.dados_fiscais === 'object' ? product.dados_fiscais : {},
     cat: product.category_name || 'Geral',
     categoryId: product.category_id || '',
     cod: variant.sku || 'Sem SKU',
@@ -208,6 +213,16 @@ export async function createCoreProductMedia(productId, payload) {
   return api.post(`/api/admin/commerce/catalog/products/${productId}/media`, payload)
 }
 
+export async function uploadCoreProductMedia(productId, file, { altText = '', ordem = 0, variantId = null } = {}) {
+  if (!file) throw new Error('Selecione uma imagem antes de enviar.')
+  const headers = {
+    'X-Image-Alt': String(altText || file.name || '').slice(0, 255),
+    'X-Image-Order': String(Number.isInteger(Number(ordem)) ? Number(ordem) : 0),
+  }
+  if (variantId) headers['X-Variant-Id'] = variantId
+  return api.upload(`/api/admin/commerce/catalog/products/${productId}/media/upload`, file, headers)
+}
+
 export async function deleteCoreProductMedia(id) {
   return api.delete(`/api/admin/commerce/catalog/media/${id}`)
 }
@@ -218,8 +233,13 @@ export async function saveCoreProduct({ editingId, current, form, storefrontId, 
   if (editingId) {
     const product = await api.patch(`/api/admin/commerce/catalog/products/${editingId}`, {
       nome: form.nome,
+      slug: form.slug || undefined,
+      tipo: form.tipo || 'physical',
       categoryId: form.categoryId || null,
       descricao: form.descricao,
+      descricaoCurta: form.descricaoCurta,
+      seo: { title: form.seoTitulo || '', description: form.seoDescricao || '' },
+      dadosFiscais: form.dadosFiscais || {},
       status: form.ativo ? 'active' : 'archived',
     })
     if (current?.variantId) {
@@ -243,8 +263,13 @@ export async function saveCoreProduct({ editingId, current, form, storefrontId, 
   }
   const created = await api.post('/api/admin/commerce/catalog/products', {
     nome: form.nome,
+    slug: form.slug || undefined,
+    tipo: form.tipo || 'physical',
     categoryId: form.categoryId || null,
     descricao: form.descricao,
+    descricaoCurta: form.descricaoCurta,
+    seo: { title: form.seoTitulo || '', description: form.seoDescricao || '' },
+    dadosFiscais: form.dadosFiscais || {},
     status: form.ativo ? 'active' : 'draft',
     preco: price,
     precoPromocional: promotional,

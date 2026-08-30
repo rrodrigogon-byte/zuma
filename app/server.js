@@ -242,6 +242,7 @@ function commerceCheckoutGuard(req,res,next){
   if (req.method === 'POST' && route === '/shipping/quotes') return commercePublicLimit(30)(req,res,next);
   if (req.method === 'POST' && (route === '/orders' || /^\/orders\/[^/]+\/payments$/.test(route))) return commercePublicLimit(12)(req,res,next);
   if (req.method === 'GET' && /^\/orders\/[^/]+$/.test(route)) return commercePublicLimit(30)(req,res,next);
+  if (req.method === 'GET' && /^\/media\/[^/]+$/.test(route)) return commercePublicLimit(120)(req,res,next);
   return next();
 }
 
