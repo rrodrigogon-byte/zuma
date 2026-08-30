@@ -141,7 +141,11 @@ async function providerRequest(account, path, options = {}) {
 
 function parseProviderMoney(value) {
   if (value == null || value === '') return null;
-  const normalized = String(value).replace(/R\$\s*/gi, '').replace(/\./g, '').replace(',', '.').trim();
+  const raw = String(value).replace(/R\$\s*/gi, '').replace(/[^0-9,.-]/g, '').trim();
+  if (!raw) return null;
+  const normalized = raw.includes(',') && raw.includes('.')
+    ? (raw.lastIndexOf(',') > raw.lastIndexOf('.') ? raw.replace(/\./g, '').replace(',', '.') : raw.replace(/,/g, ''))
+    : raw.includes(',') ? raw.replace(',', '.') : raw;
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : null;
 }
@@ -365,6 +369,14 @@ function correiosTrackingUrl(code) {
 }
 
 const CORREIOS_PREPARATION_DAYS = 2;
+const CORREIOS_SURCHARGE_RATE = 0.12;
+
+function correiosPriceBreakdown(providerAmount) {
+  const base = Number(Number(providerAmount).toFixed(2));
+  const surchargeAmount = Number((base * CORREIOS_SURCHARGE_RATE).toFixed(2));
+  const totalAmount = Number((base + surchargeAmount).toFixed(2));
+  return { providerAmount: base, surchargeRate: CORREIOS_SURCHARGE_RATE, surchargeAmount, totalAmount };
+}
 
 function correiosPrepostPath(path) {
   return `/prepostagem${path}`;
@@ -395,12 +407,13 @@ function createCorreiosAdapter() {
         return { code, price: safeJson(price), prazo: safeJson(prazo) };
       }));
       const optionsWithSnapshots = priceRows.map(row => {
-        const amount = parseProviderMoney(row.price?.pcFinal ?? row.price?.pcTotal ?? row.price?.pcBaseGeral ?? row.price?.pcBase ?? row.price?.valor);
-        if (amount === null || amount < 0) return null;
+        const providerAmount = parseProviderMoney(row.price?.pcFinal ?? row.price?.pcTotal ?? row.price?.pcBaseGeral ?? row.price?.pcBase ?? row.price?.valor);
+        if (providerAmount === null || providerAmount < 0) return null;
+        const pricing = correiosPriceBreakdown(providerAmount);
         const days = safeNumber(row.prazo?.prazoEntrega ?? row.prazo?.prazo ?? row.prazoEntrega);
         const name = config.serviceNames?.[row.code] || `Correios ${row.code}`;
         const timing = correiosDeliveryTiming(days);
-        const publicOption = { id: row.code, name: String(name).slice(0, 160), amount, currency: 'BRL', ...timing, carrier: 'Correios', carrierId: row.code };
+        const publicOption = { id: row.code, name: String(name).slice(0, 160), amount: pricing.totalAmount, currency: 'BRL', providerAmount: pricing.providerAmount, surchargeRate: pricing.surchargeRate, surchargeAmount: pricing.surchargeAmount, priceNote: 'Tarifa oficial dos Correios + 12% de operação logística', priceBreakdown: { providerAmount: pricing.providerAmount, surchargeAmount: pricing.surchargeAmount, totalAmount: pricing.totalAmount }, ...timing, carrier: 'Correios', carrierId: row.code };
         return { public: publicOption, raw: { price: row.price, prazo: row.prazo, packages: [{ width: pack.width, height: pack.height, length: pack.length, weight: pack.weightGrams / 1000 }] } };
       }).filter(Boolean);
       if (!optionsWithSnapshots.length) throw new CommerceError('Correios não retornou preço válido para os serviços configurados', 'SHIPPING_NO_OPTIONS');

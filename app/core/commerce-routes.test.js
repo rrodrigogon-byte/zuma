@@ -176,12 +176,17 @@ test('resposta pública de pedido sanitiza fulfillment sem labelUrl ou providerD
     return { rows: [{
       public_code: 'KC-TEST',
       status: 'shipped',
-      shipping_option: { id: '03220', name: 'PAC', amount: 18.9, currency: 'BRL', providerDeliveryDays: 5, preparationDays: 2, deliveryDays: 7, deliveryRange: { min: 7, max: 7 }, deliveryNote: 'Prazo Correios mais 2 dias úteis de preparação e postagem', carrier: 'Correios', raw: { token: 'should-not-leak' } },
+      shipping_option: { id: '03220', name: 'PAC', amount: 21.17, currency: 'BRL', providerAmount: 18.9, surchargeRate: 0.12, surchargeAmount: 2.27, priceNote: 'Tarifa oficial dos Correios + 12% de operação logística', priceBreakdown: { providerAmount: 18.9, surchargeAmount: 2.27, totalAmount: 21.17 }, providerDeliveryDays: 5, preparationDays: 2, deliveryDays: 7, deliveryRange: { min: 7, max: 7 }, deliveryNote: 'Prazo Correios mais 2 dias úteis de preparação e postagem', carrier: 'Correios', raw: { token: 'should-not-leak' } },
       fulfillments: [{ id: '44444444-4444-4444-8444-444444444444', status: 'shipped', trackingCode: 'AA123456789BR', trackingUrl: 'https://rastreamento.correios.com.br/app/index.php?objetos=AA123456789BR', labelUrl: 'https://private.example/label.pdf', ocorrencias: [{ status: 'posted', description: 'Objeto postado', providerData: { token: 'should-not-leak' } }] }],
       timeline: [{ fromStatus: 'paid', toStatus: 'shipped', source: 'system', at: '2026-08-30T00:00:00.000Z', payload: { secret: 'should-not-leak' } }],
     }] };
   });
   assert.equal(response.statusCode, 200);
+  assert.equal(response.body.shippingOption.amount, 21.17);
+  assert.equal(response.body.shippingOption.providerAmount, 18.9);
+  assert.equal(response.body.shippingOption.surchargeRate, 0.12);
+  assert.equal(response.body.shippingOption.surchargeAmount, 2.27);
+  assert.deepEqual(response.body.shippingOption.priceBreakdown, { providerAmount: 18.9, surchargeAmount: 2.27, totalAmount: 21.17 });
   assert.equal(response.body.shippingOption.providerDeliveryDays, 5);
   assert.equal(response.body.shippingOption.preparationDays, 2);
   assert.equal(response.body.shippingOption.deliveryDays, 7);
