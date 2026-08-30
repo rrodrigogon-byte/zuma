@@ -132,5 +132,7 @@ test('cotação manual usa cidade e persiste quote sem conta logística externa'
   assert.equal(result.items[0].deliveryDays, 1);
   const insert = queries.find(item => item.sql.includes('INSERT INTO commerce_shipping_quotes'));
   assert.ok(insert);
+  assert.equal(insert.params[1], '10000000-0000-4000-8000-000000000103');
+  assert.equal(insert.params[2], '10000000-0000-4000-8000-000000000109');
   assert.equal(insert.params[3], null);
 });
