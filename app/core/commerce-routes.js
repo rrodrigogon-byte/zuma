@@ -323,12 +323,14 @@ export function createCommercePublicRouter() {
   router.get('/context', async (req, res) => {
     try {
       const storefront = await resolvePublicStorefront(req);
-      const [paymentAccounts, shippingAccounts] = await Promise.all([
+      const [paymentAccounts, shippingAccounts, shippingMethods] = await Promise.all([
         db.query(`SELECT id, provider, ambiente, secret_ref, public_config, ativo FROM commerce_payment_accounts WHERE empresa_id = $1 AND storefront_id = $2 AND ambiente = 'production' AND ativo = true`, [storefront.empresa_id, storefront.id]),
         db.query(`SELECT id, provider, secret_ref, public_config, ativo FROM commerce_shipping_accounts WHERE empresa_id = $1 AND storefront_id = $2 AND ambiente = 'production' AND ativo = true`, [storefront.empresa_id, storefront.id]),
+        db.query(`SELECT tipo, configuracao FROM commerce_shipping_methods WHERE empresa_id = $1 AND storefront_id = $2 AND ativo = true AND tipo IN ('delivery', 'carrier')`, [storefront.empresa_id, storefront.id]),
       ]);
       const paymentsReady = paymentAccounts.rows.some(paymentAccountReady);
-      const shippingReady = shippingAccounts.rows.some(shippingAccountReady);
+      const manualShippingReady = shippingMethods.rows.some(row => String(row.configuracao?.provider || '').toLowerCase() === 'manual');
+      const shippingReady = shippingAccounts.rows.some(shippingAccountReady) || manualShippingReady;
       res.json({ storefront: { id: storefront.id, codigo: storefront.codigo, nome: storefront.nome, moeda: storefront.moeda, timezone: storefront.timezone }, capabilities: { catalog: true, cart: true, checkout: true, payments: paymentsReady, shipping: shippingReady } });
     } catch (error) { jsonError(res, error); }
   });
