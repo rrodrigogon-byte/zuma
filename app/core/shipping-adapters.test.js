@@ -112,7 +112,11 @@ test('adapter Correios consulta preço e prazo por serviço com token server-sid
   assert.equal(result.provider, 'correios');
   assert.equal(result.options[0].id, '03220');
   assert.equal(result.options[0].amount, 18.9);
-  assert.equal(result.options[0].deliveryDays, 5);
+  assert.equal(result.options[0].providerDeliveryDays, 5);
+  assert.equal(result.options[0].preparationDays, 2);
+  assert.equal(result.options[0].deliveryDays, 7);
+  assert.deepEqual(result.options[0].deliveryRange, { min: 7, max: 7 });
+  assert.equal(result.options[0].deliveryNote, 'Prazo Correios mais 2 dias úteis de preparação e postagem');
   assert.equal(result.options[0].carrier, 'Correios');
 });
 

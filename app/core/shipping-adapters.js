@@ -364,8 +364,17 @@ function correiosTrackingUrl(code) {
   return /^[A-Z]{2}\d{9}[A-Z]{2}$/.test(normalized) ? `https://rastreamento.correios.com.br/app/index.php?objetos=${encodeURIComponent(normalized)}` : null;
 }
 
+const CORREIOS_PREPARATION_DAYS = 2;
+
 function correiosPrepostPath(path) {
   return `/prepostagem${path}`;
+}
+
+function correiosDeliveryTiming(days) {
+  const providerDays = days === null ? null : Math.max(0, Math.round(days));
+  if (providerDays === null) return { providerDeliveryDays: null, preparationDays: null, deliveryDays: null, deliveryRange: { min: null, max: null } };
+  const totalDays = providerDays + CORREIOS_PREPARATION_DAYS;
+  return { providerDeliveryDays: providerDays, preparationDays: CORREIOS_PREPARATION_DAYS, deliveryDays: totalDays, deliveryRange: { min: totalDays, max: totalDays }, deliveryNote: 'Prazo Correios mais 2 dias úteis de preparação e postagem' };
 }
 
 function createCorreiosAdapter() {
@@ -390,7 +399,8 @@ function createCorreiosAdapter() {
         if (amount === null || amount < 0) return null;
         const days = safeNumber(row.prazo?.prazoEntrega ?? row.prazo?.prazo ?? row.prazoEntrega);
         const name = config.serviceNames?.[row.code] || `Correios ${row.code}`;
-        const publicOption = { id: row.code, name: String(name).slice(0, 160), amount, currency: 'BRL', deliveryDays: days === null ? null : Math.max(0, Math.round(days)), deliveryRange: { min: days === null ? null : Math.max(0, Math.round(days)), max: days === null ? null : Math.max(0, Math.round(days)) }, carrier: 'Correios', carrierId: row.code };
+        const timing = correiosDeliveryTiming(days);
+        const publicOption = { id: row.code, name: String(name).slice(0, 160), amount, currency: 'BRL', ...timing, carrier: 'Correios', carrierId: row.code };
         return { public: publicOption, raw: { price: row.price, prazo: row.prazo, packages: [{ width: pack.width, height: pack.height, length: pack.length, weight: pack.weightGrams / 1000 }] } };
       }).filter(Boolean);
       if (!optionsWithSnapshots.length) throw new CommerceError('Correios não retornou preço válido para os serviços configurados', 'SHIPPING_NO_OPTIONS');

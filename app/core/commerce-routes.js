@@ -97,9 +97,32 @@ function sanitizePublicFulfillment(value = {}) {
   };
 }
 
-function sanitizePublicOrderTracking(row = {}) {
+function sanitizePublicShippingOption(value = {}) {
+  if (!value || typeof value !== 'object') return null;
+  const asNumber = input => Number.isFinite(Number(input)) ? Number(input) : null;
+  const min = asNumber(value.deliveryRange?.min);
+  const max = asNumber(value.deliveryRange?.max);
   return {
-    ...row,
+    id: String(value.id || '').slice(0, 80) || null,
+    name: String(value.name || '').slice(0, 160) || null,
+    amount: asNumber(value.amount),
+    currency: String(value.currency || 'BRL').slice(0, 8),
+    deliveryDays: asNumber(value.deliveryDays),
+    providerDeliveryDays: asNumber(value.providerDeliveryDays),
+    preparationDays: asNumber(value.preparationDays),
+    deliveryRange: { min, max },
+    deliveryNote: String(value.deliveryNote || '').slice(0, 180) || null,
+    carrier: String(value.carrier || '').slice(0, 120) || null,
+  };
+}
+
+function sanitizePublicOrderTracking(row = {}) {
+  const safeRow = { ...row };
+  delete safeRow.shipping_option;
+  delete safeRow.shippingOption;
+  return {
+    ...safeRow,
+    shippingOption: sanitizePublicShippingOption(row.shipping_option || row.shippingOption),
     fulfillments: Array.isArray(row.fulfillments) ? row.fulfillments.map(sanitizePublicFulfillment) : [],
     timeline: Array.isArray(row.timeline) ? row.timeline.slice(-100).map(event => ({
       fromStatus: String(event?.fromStatus || '').slice(0, 30) || null,
@@ -386,6 +409,8 @@ export function createCommercePublicRouter() {
         `SELECT o.id, o.public_code, o.status, o.moeda, o.subtotal, o.desconto, o.frete, o.impostos, o.total,
                 (SELECT p.status FROM commerce_payments p WHERE p.empresa_id = o.empresa_id AND p.order_id = o.id ORDER BY p.criado_em DESC LIMIT 1) AS payment_status,
                 CASE WHEN o.endereco_entrega IS NULL THEN NULL ELSE jsonb_build_object('cidade', o.endereco_entrega->>'cidade', 'estado', o.endereco_entrega->>'estado', 'cep', CASE WHEN length(o.endereco_entrega->>'cep') = 8 THEN left(o.endereco_entrega->>'cep', 5) || '***' ELSE NULL END) END AS endereco_entrega, o.shipping_method_id, o.shipping_quote_id, o.criado_em, o.atualizado_em,
+                (SELECT (SELECT option->'public' FROM jsonb_array_elements(COALESCE(q.response_snapshot->'providerOptions', '[]'::jsonb)) AS option WHERE option->'public'->>'id' = q.selected_option_id LIMIT 1)
+                   FROM commerce_shipping_quotes q WHERE q.empresa_id = o.empresa_id AND q.id = o.shipping_quote_id LIMIT 1) AS shipping_option,
                 COALESCE(jsonb_agg(jsonb_build_object('nome', i.nome_snapshot, 'sku', i.sku_snapshot, 'quantidade', i.quantidade, 'preco', i.preco_unitario, 'subtotal', i.subtotal)) FILTER (WHERE i.id IS NOT NULL), '[]'::jsonb) AS items,
                 COALESCE((SELECT jsonb_agg(jsonb_build_object('id', f.id, 'status', f.status, 'trackingCode', f.tracking_code, 'trackingUrl', f.tracking_url, 'carrier', f.carrier, 'ocorrencias', f.ocorrencias) ORDER BY f.criado_em DESC)
                             FROM commerce_fulfillments f WHERE f.empresa_id = o.empresa_id AND f.order_id = o.id), '[]'::jsonb) AS fulfillments,
