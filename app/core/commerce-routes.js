@@ -452,7 +452,8 @@ export function createCommerceWebhookRouter() {
     try {
       const dataId = String(req.query['data.id'] || req.body?.data?.id || req.body?.transaction_nsu || req.body?.transactionNsu || '').trim().slice(0, 180);
       const orderNsu = String(req.body?.order_nsu || req.body?.orderNsu || '').trim().slice(0, 180);
-      if (!dataId && !orderNsu) throw new CommerceError('webhook sem identificador do pagamento', 'PAYMENT_WEBHOOK_INVALID');
+      const invoiceSlug = String(req.body?.invoice_slug || req.body?.invoiceSlug || req.body?.slug || '').trim().slice(0, 180);
+      if (!dataId && !orderNsu && !invoiceSlug) throw new CommerceError('webhook sem identificador do pagamento', 'PAYMENT_WEBHOOK_INVALID');
       const owner = await db.query(
         `SELECT p.empresa_id, p.payment_account_id, a.secret_ref, a.public_config
            FROM commerce_payments p
@@ -460,9 +461,16 @@ export function createCommerceWebhookRouter() {
            LEFT JOIN commerce_payment_accounts a
              ON a.empresa_id = p.empresa_id AND a.id = p.payment_account_id
           WHERE p.provider = $1
-            AND (p.provider_payment_id = $2 OR ($1 = 'infinitepay' AND (o.public_code = $3 OR o.id::text = $3)))
+            AND (
+              p.provider_payment_id = $2
+              OR ($1 = 'infinitepay' AND (
+                o.public_code = $3
+                OR o.id::text = $3
+                OR p.metadata->'checkout'->>'slug' = $4
+              ))
+            )
           LIMIT 2`,
-        [provider, dataId || null, orderNsu || null],
+        [provider, dataId || null, orderNsu || null, invoiceSlug || null],
       );
       if (!owner.rows[0]) return res.status(200).json({ ok: true, ignored: true });
       if (owner.rows.length > 1) throw new CommerceError('webhook associado a mais de uma tentativa persistida', 'PAYMENT_WEBHOOK_AMBIGUOUS');
@@ -505,7 +513,7 @@ export function createCommerceWebhookRouter() {
         }
         const current = payment.rows[0];
         if (provider === 'infinitepay' && verified.providerPaymentId && !current.provider_payment_id) {
-          await trx.query(`UPDATE commerce_payments SET provider_payment_id = $3, metadata = metadata || $4::jsonb, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2`, [empresaId, current.id, String(verified.providerPaymentId).slice(0, 180), JSON.stringify({ checkout: { orderNsu, transactionNsu: String(verified.providerPaymentId).slice(0, 180), slug: verified.summary?.slug || null } })]);
+          await trx.query(`UPDATE commerce_payments SET provider_payment_id = $3, metadata = metadata || $4::jsonb, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2`, [empresaId, current.id, String(verified.providerPaymentId).slice(0, 180), JSON.stringify({ checkout: { orderNsu: orderNsu || verified.summary?.orderNsu || null, transactionNsu: String(verified.providerPaymentId).slice(0, 180), slug: verified.summary?.slug || invoiceSlug || null, receiptUrl: verified.summary?.receiptUrl || null, captureMethod: verified.summary?.captureMethod || null } })]);
         }
         if (verified.amount != null && Math.abs(Number(verified.amount) - Number(current.amount)) > 0.01) {
           await trx.query(`UPDATE commerce_payment_webhooks SET status = 'failed', processado_em = CURRENT_TIMESTAMP WHERE id = $1`, [inserted.rows[0].id]);

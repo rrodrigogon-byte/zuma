@@ -78,6 +78,31 @@ test('InfinitePay identifica Checkout Integrado desabilitado', async () => {
   }
 });
 
+test('InfinitePay normaliza webhook aprovado com identificadores e comprovante', async () => {
+  const originalFetch = globalThis.fetch;
+  let requestBody;
+  globalThis.fetch = async (_url, options) => {
+    requestBody = JSON.parse(options.body);
+    return new Response(JSON.stringify({ success: true, paid: true, amount: 8500, capture_method: 'credit_card' }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+  try {
+    const result = await adapter.verifyWebhook({
+      payload: { invoice_slug: 'slug-test', order_nsu: 'KC-TESTE-INFINITEPAY', transaction_nsu: 'tx-9001', capture_method: 'credit_card', receipt_url: 'https://receipt.example/tx-9001' },
+      context: { account: account() },
+    });
+    assert.equal(result.status, 'captured');
+    assert.equal(result.providerPaymentId, 'tx-9001');
+    assert.equal(result.amount, 85);
+    assert.deepEqual(requestBody, { handle: 'handle-teste', order_nsu: 'KC-TESTE-INFINITEPAY', transaction_nsu: 'tx-9001', slug: 'slug-test' });
+    assert.deepEqual(result.summary, { paid: true, orderNsu: 'KC-TESTE-INFINITEPAY', transactionNsu: 'tx-9001', captureMethod: 'credit_card', receiptUrl: 'https://receipt.example/tx-9001', slug: 'slug-test' });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('InfinitePay bloqueia handle divergente entre Commerce e ambiente', async () => {
   const originalHandle = process.env.INFINITEPAY_HANDLE;
   process.env.INFINITEPAY_HANDLE = 'handle-do-ambiente';
