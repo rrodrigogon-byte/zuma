@@ -963,10 +963,13 @@ export async function updateShippingMethod(trx, context, methodId, input = {}) {
     const config = input.configuracao && typeof input.configuracao === 'object' ? input.configuracao : {};
     const nextType = input.tipo === undefined ? current.tipo : String(input.tipo);
     if (['delivery', 'carrier'].includes(nextType)) {
-      const accountId = config.shippingAccountId || config.accountId;
-      if (!accountId || !assertUuid(accountId, 'shippingAccountId')) throw new CommerceError('método de entrega exige conta logística válida', 'SHIPPING_ACCOUNT_REQUIRED');
-      const account = await trx.query(`SELECT id FROM commerce_shipping_accounts WHERE empresa_id = $1 AND id = $2 AND storefront_id = $3 AND ativo = true LIMIT 1`, [empresaId, accountId, current.storefront_id]);
-      if (!account.rows[0]) throw new CommerceError('conta logística ativa não pertence ao storefront do método', 'SHIPPING_ACCOUNT_SCOPE_MISMATCH');
+      const provider = String(config.provider || '').trim().toLowerCase();
+      if (provider !== 'manual') {
+        const accountId = config.shippingAccountId || config.accountId;
+        if (!accountId || !assertUuid(accountId, 'shippingAccountId')) throw new CommerceError('método de entrega exige conta logística válida', 'SHIPPING_ACCOUNT_REQUIRED');
+        const account = await trx.query(`SELECT id FROM commerce_shipping_accounts WHERE empresa_id = $1 AND id = $2 AND storefront_id = $3 AND ativo = true LIMIT 1`, [empresaId, accountId, current.storefront_id]);
+        if (!account.rows[0]) throw new CommerceError('conta logística ativa não pertence ao storefront do método', 'SHIPPING_ACCOUNT_SCOPE_MISMATCH');
+      }
     }
     values.push(JSON.stringify(config)); sets.push(`configuracao = $${values.length}::jsonb`);
   }

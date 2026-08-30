@@ -4,11 +4,12 @@ import { shippingProviders, shippingSecretConfigured } from './shipping-adapters
 
 const SECRET_REF = /^env:[A-Z][A-Z0-9_]{2,}$/;
 const CEP = /^\d{8}$/;
-const ALLOWED_METHODS = new Set(['melhorenvio', 'correios']);
+const ALLOWED_METHODS = new Set(['melhorenvio', 'correios', 'manual']);
 
 const SHIPPING_PROVIDERS = [
   { code: 'melhorenvio', name: 'Melhor Envio', adapter: true, methods: ['quote', 'label', 'tracking'] },
   { code: 'correios', name: 'Correios', adapter: true, methods: ['quote', 'label', 'tracking'], label: true, note: 'Pré-postagem e rótulo dependem de API 36/serviço contratado liberados no CWS.' },
+  { code: 'manual', name: 'Tabela manual Kytto', adapter: true, methods: ['quote'], note: 'Regras por município/UF definidas pela loja; não gera etiqueta nem rastreio automático.' },
   { code: 'frenet', name: 'Frenet', adapter: false, methods: ['quote', 'label', 'tracking'] },
 ];
 
@@ -154,7 +155,7 @@ export function publicShippingMethod(method) {
     codigo: method.codigo,
     nome: method.nome,
     tipo: method.tipo,
-    quoteEnabled: ['delivery', 'carrier'].includes(method.tipo) && Boolean(config.provider && (config.shippingAccountId || config.accountId) && method.shipping_account_ready === true),
+    quoteEnabled: ['delivery', 'carrier'].includes(method.tipo) && (config.provider === 'manual' || Boolean(config.provider && (config.shippingAccountId || config.accountId) && method.shipping_account_ready === true)),
     provider: config.provider ? text(config.provider, 60).toLowerCase() : null,
     configuracao: safePublicConfig(config),
   };
@@ -315,11 +316,16 @@ async function loadQuoteContext(client, contextInput, input = {}) {
   const methodConfig = method.configuracao && typeof method.configuracao === 'object' ? method.configuracao : {};
   const provider = text(methodConfig.provider || 'melhorenvio', 60).toLowerCase();
   const definition = providerDefinition(provider);
-  const accountId = assertUuid(methodConfig.shippingAccountId || methodConfig.accountId, 'shippingAccountId');
-  const accountResult = await client.query(`SELECT id, storefront_id, provider, ambiente, secret_ref, public_config, ativo FROM commerce_shipping_accounts WHERE empresa_id = $1 AND id = $2 AND storefront_id = $3 AND provider = $4 AND ativo = true LIMIT 1`, [context.empresaId, accountId, storefrontId, provider]);
-  const account = accountResult.rows[0];
-  if (!account || !shippingAccountReady(account)) throw new CommerceError('conta logística ativa ainda não está configurada no secret manager ou não possui origem', 'SHIPPING_ACCOUNT_NOT_CONFIGURED');
-  const originCep = storefrontConfigOrigin(method, methodConfig, account.public_config || {});
+  const isManual = provider === 'manual';
+  let account = null;
+  if (!isManual) {
+    const accountId = assertUuid(methodConfig.shippingAccountId || methodConfig.accountId, 'shippingAccountId');
+    const accountResult = await client.query(`SELECT id, storefront_id, provider, ambiente, secret_ref, public_config, ativo FROM commerce_shipping_accounts WHERE empresa_id = $1 AND id = $2 AND storefront_id = $3 AND provider = $4 AND ativo = true LIMIT 1`, [context.empresaId, accountId, storefrontId, provider]);
+    account = accountResult.rows[0];
+    if (!account || !shippingAccountReady(account)) throw new CommerceError('conta logística ativa ainda não está configurada no secret manager ou não possui origem', 'SHIPPING_ACCOUNT_NOT_CONFIGURED');
+  }
+  const originCep = storefrontConfigOrigin(method, methodConfig, account?.public_config || {});
+  const destinationAddress = input.destinationAddress || input.destination || input.shippingAddress || { cep: destinationCep };
   const lines = Array.isArray(input.items) ? input.items.map(item => ({ variantId: assertUuid(item.variantId, 'variantId'), quantity: Number(item.quantity) })) : [];
   if (!lines.length || lines.some(line => !Number.isInteger(line.quantity) || line.quantity <= 0)) throw new CommerceError('itens válidos são obrigatórios para cotação', 'SHIPPING_ITEMS_REQUIRED');
   const variantIds = [...new Set(lines.map(line => line.variantId))];
@@ -342,24 +348,26 @@ async function loadQuoteContext(client, contextInput, input = {}) {
     if (dimensions.some(value => value === null || value <= 0) || number(variant.peso_gramas) === null || number(variant.peso_gramas) <= 0) throw new CommerceError(`dimensões e peso ausentes para ${variant.nome || variant.sku}`, 'SHIPPING_PACKAGE_DATA_REQUIRED');
     return { id: variant.sku || variant.id, width: dimensions[0], height: dimensions[1], length: dimensions[2], weight: number(variant.peso_gramas) / 1000, insuranceValue: round(number(variant.price, 0)), quantity: line.quantity };
   });
-  const snapshot = { storefrontId, shippingMethodId, shippingAccountId: account.id, provider, ambiente: account.ambiente, originCep, destinationCep, lines };
-  return { context, storefront: method, method, account, provider: definition.code, originCep, destinationCep, products, snapshot, hash: requestHash(snapshot), services: methodConfig.services || [], options: methodConfig.options || {} };
+  const snapshot = { storefrontId, shippingMethodId, shippingAccountId: account?.id || null, provider, ambiente: account?.ambiente || 'manual', originCep, destinationCep, destination: { cidade: text(destinationAddress.cidade || destinationAddress.city, 120) || null, estado: text(destinationAddress.estado || destinationAddress.state, 2).toUpperCase() || null }, lines };
+  return { context, storefront: method, method, methodConfig, account, provider: definition.code, originCep, destinationCep, destinationAddress, products, snapshot, hash: requestHash(snapshot), services: methodConfig.services || [], options: methodConfig.options || {} };
 }
 
 export async function quoteShipping(client, contextInput, input = {}) {
   const prepared = await loadQuoteContext(client, contextInput, input);
   const adapter = shippingProviders.get(prepared.provider);
   if (!adapter) throw new CommerceError('adapter logístico não registrado', 'SHIPPING_PROVIDER_NOT_CONFIGURED');
-  const quoted = await adapter.quote({ account: prepared.account, originPostalCode: prepared.originCep, destinationPostalCode: prepared.destinationCep, products: prepared.products, services: prepared.services, options: prepared.options });
+  const quoted = await adapter.quote({ account: prepared.account, methodConfig: prepared.methodConfig, destinationAddress: prepared.destinationAddress, originPostalCode: prepared.originCep, destinationPostalCode: prepared.destinationCep, products: prepared.products, services: prepared.services, options: prepared.options });
   return client.transaction(async trx => {
-    const accountCheck = await trx.query(`SELECT id FROM commerce_shipping_accounts WHERE empresa_id = $1 AND id = $2 AND storefront_id = $3 AND ativo = true FOR UPDATE`, [prepared.context.empresaId, prepared.account.id, prepared.storefront.id]);
-    if (!accountCheck.rows[0]) throw new CommerceError('conta logística foi alterada durante a cotação', 'SHIPPING_ACCOUNT_NOT_CONFIGURED');
+    if (prepared.account) {
+      const accountCheck = await trx.query(`SELECT id FROM commerce_shipping_accounts WHERE empresa_id = $1 AND id = $2 AND storefront_id = $3 AND ativo = true FOR UPDATE`, [prepared.context.empresaId, prepared.account.id, prepared.storefront.id]);
+      if (!accountCheck.rows[0]) throw new CommerceError('conta logística foi alterada durante a cotação', 'SHIPPING_ACCOUNT_NOT_CONFIGURED');
+    }
     const result = await trx.query(
       `INSERT INTO commerce_shipping_quotes
         (empresa_id, storefront_id, shipping_method_id, shipping_account_id, provider, ambiente, origem_cep, destino_cep, request_hash, request_snapshot, response_snapshot, expires_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, CURRENT_TIMESTAMP + INTERVAL '15 minutes')
        RETURNING id, expires_at`,
-      [prepared.context.empresaId, prepared.storefront.id, prepared.method.id, prepared.account.id, prepared.provider, prepared.account.ambiente, prepared.originCep, prepared.destinationCep, prepared.hash, JSON.stringify(prepared.snapshot), JSON.stringify({ options: quoted.options, providerOptions: quoted.providerOptions })],
+      [prepared.context.empresaId, prepared.storefront.id, prepared.method.id, prepared.account?.id || null, prepared.provider, prepared.account?.ambiente || 'manual', prepared.originCep, prepared.destinationCep, prepared.hash, JSON.stringify(prepared.snapshot), JSON.stringify({ options: quoted.options, providerOptions: quoted.providerOptions })],
     );
     return { quoteId: result.rows[0].id, expiresAt: result.rows[0].expires_at, provider: prepared.provider, shippingMethodId: prepared.method.id, items: quoted.options };
   });
