@@ -8,7 +8,7 @@ const ALLOWED_METHODS = new Set(['melhorenvio', 'correios']);
 
 const SHIPPING_PROVIDERS = [
   { code: 'melhorenvio', name: 'Melhor Envio', adapter: true, methods: ['quote', 'label', 'tracking'] },
-  { code: 'correios', name: 'Correios', adapter: true, methods: ['quote', 'tracking'], label: false, note: 'Pré-postagem depende da API 36 e do schema autorizado no CWS.' },
+  { code: 'correios', name: 'Correios', adapter: true, methods: ['quote', 'label', 'tracking'], label: true, note: 'Pré-postagem e rótulo dependem de API 36/serviço contratado liberados no CWS.' },
   { code: 'frenet', name: 'Frenet', adapter: false, methods: ['quote', 'label', 'tracking'] },
 ];
 
@@ -87,6 +87,10 @@ function safeConfig(input = {}) {
   if (source.postingCard || source.cardNumber) config.postingCard = text(source.postingCard || source.cardNumber, 40);
   if (source.objectType) config.objectType = text(source.objectType, 8);
   if (source.prepostagemApiEnabled !== undefined) config.prepostagemApiEnabled = source.prepostagemApiEnabled === true;
+  if (source.modalidadePagamento !== undefined) config.modalidadePagamento = text(source.modalidadePagamento, 1);
+  if (source.labelType !== undefined) config.labelType = text(source.labelType, 1).toUpperCase();
+  if (source.labelFormat !== undefined) config.labelFormat = text(source.labelFormat, 2).toUpperCase();
+  if (source.labelLayout !== undefined) config.labelLayout = text(source.labelLayout, 30).toUpperCase();
   if (source.serviceNames && typeof source.serviceNames === 'object') config.serviceNames = Object.fromEntries(Object.entries(source.serviceNames).slice(0, 20).map(([key, value]) => [String(key).replace(/\D/g, '').slice(0, 8), text(value, 160)]).filter(([key, value]) => key && value));
   if (source.options && typeof source.options === 'object') config.options = { receipt: source.options.receipt === true, ownHand: source.options.ownHand === true };
   if (source.userAgent) config.userAgent = text(source.userAgent, 240);
@@ -111,6 +115,11 @@ function safePublicConfig(config = {}) {
     ...(source.origemCep ? { origemCep: String(source.origemCep) } : {}),
     ...(Array.isArray(source.services) ? { services: source.services.slice(0, 20) } : {}),
     ...(Array.isArray(source.servicesAdditional) ? { servicesAdditional: source.servicesAdditional.slice(0, 20) } : {}),
+    ...(source.prepostagemApiEnabled === true ? { prepostagemApiEnabled: true } : {}),
+    ...(source.modalidadePagamento ? { modalidadePagamento: text(source.modalidadePagamento, 1) } : {}),
+    ...(source.labelType ? { labelType: text(source.labelType, 1).toUpperCase() } : {}),
+    ...(source.labelFormat ? { labelFormat: text(source.labelFormat, 2).toUpperCase() } : {}),
+    ...(source.labelLayout ? { labelLayout: text(source.labelLayout, 30).toUpperCase() } : {}),
     ...(source.objectType ? { objectType: text(source.objectType, 8) } : {}),
     ...(source.options ? { options: { receipt: source.options.receipt === true, ownHand: source.options.ownHand === true } } : {}),
   };
@@ -185,7 +194,7 @@ function accountRow(row) {
     ativo: row.ativo,
     registered,
     ready: registered && accountOriginConfigured(row.public_config || {}) && accountQuoteConfigured(provider, row.public_config || {}) && tokenConfigured && webhookConfigured,
-    label_ready: provider === 'melhorenvio' && registered && accountSenderConfigured(row.public_config || {}) && tokenConfigured && webhookConfigured,
+    label_ready: registered && accountSenderConfigured(row.public_config || {}) && tokenConfigured && webhookConfigured && (provider === 'melhorenvio' || (provider === 'correios' && row.public_config?.prepostagemApiEnabled === true && ['1', '2', '3', '4'].includes(String(row.public_config?.modalidadePagamento || '')))),
     secret_configured: tokenConfigured,
     webhook_configured: webhookConfigured,
     public_config: safePublicConfig(row.public_config),
@@ -416,7 +425,8 @@ export async function prepareShippingLabel(trx, contextInput, fulfillmentIdInput
   const senderOrigin = senderConfig.origin || {};
   if (!accountOriginConfigured(senderConfig) || !senderOrigin.name || !senderOrigin.email || !senderOrigin.phone || !senderOrigin.address || !senderOrigin.number || !senderOrigin.district || !senderOrigin.city || !senderOrigin.stateAbbr) throw new CommerceError('origem logística incompleta: preencha endereço e contato do remetente', 'SHIPPING_ORIGIN_INCOMPLETE');
   if (!isValidCpfCnpj(senderOrigin.document || senderOrigin.companyDocument)) throw new CommerceError('CPF ou CNPJ do remetente é inválido', 'SHIPPING_ORIGIN_DOCUMENT_INVALID');
-  if (fulfillment.account_provider !== 'melhorenvio' || !shippingProviders.get(fulfillment.account_provider)) throw new CommerceError('adapter logístico do fulfillment indisponível', 'SHIPPING_PROVIDER_NOT_CONFIGURED');
+  const correiosLabelEnabled = fulfillment.account_provider === 'correios' && fulfillment.public_config?.prepostagemApiEnabled === true && ['1', '2', '3', '4'].includes(String(fulfillment.public_config?.modalidadePagamento || ''));
+  if (!['melhorenvio', 'correios'].includes(fulfillment.account_provider) || !shippingProviders.get(fulfillment.account_provider) || (fulfillment.account_provider === 'correios' && !correiosLabelEnabled)) throw new CommerceError('adapter logístico do fulfillment indisponível ou capability de pré-postagem não habilitada', 'SHIPPING_PROVIDER_CAPABILITY_UNAVAILABLE');
   if (!fulfillment.selected_option_id || !fulfillment.response_snapshot?.providerOptions?.length) throw new CommerceError('fulfillment não possui cotação escolhida válida', 'SHIPPING_QUOTE_INVALID');
   const selected = fulfillment.response_snapshot.providerOptions.find(item => String(item.public?.id || '') === String(fulfillment.selected_option_id));
   if (!selected) throw new CommerceError('opção selecionada não está presente na cotação armazenada', 'SHIPPING_OPTION_INVALID');
@@ -440,15 +450,69 @@ export async function prepareShippingLabel(trx, contextInput, fulfillmentIdInput
 export async function finalizeShippingLabel(trx, contextInput, fulfillmentIdInput, operationKey, result) {
   const context = tenantContext(contextInput);
   const fulfillmentId = assertUuid(fulfillmentIdInput, 'fulfillmentId');
-  const current = await trx.query(`SELECT id FROM commerce_fulfillments WHERE empresa_id = $1 AND id = $2 AND shipping_operation_key = $3 FOR UPDATE`, [context.empresaId, fulfillmentId, operationKey]);
+  const current = await trx.query(`SELECT id, ocorrencias FROM commerce_fulfillments WHERE empresa_id = $1 AND id = $2 AND shipping_operation_key = $3 FOR UPDATE`, [context.empresaId, fulfillmentId, operationKey]);
   if (!current.rows[0]) throw new CommerceError('operação de etiqueta não encontrada ou já finalizada', 'SHIPPING_OPERATION_CONFLICT');
+  const metadata = result?.publicData && typeof result.publicData === 'object' ? {
+    prepostagemId: text(result.publicData.prepostagemId, 180) || null,
+    trackingCode: text(result.publicData.trackingCode, 80) || null,
+    labelReceipt: text(result.publicData.labelReceipt, 180) || null,
+    labelRequestError: result.publicData.labelRequestError ? { code: text(result.publicData.labelRequestError.code, 80), message: text(result.publicData.labelRequestError.message, 240) } : null,
+  } : null;
+  const occurrences = Array.isArray(current.rows[0].ocorrencias) ? current.rows[0].ocorrencias : [];
+  if (metadata && (metadata.prepostagemId || metadata.labelReceipt || metadata.labelRequestError)) occurrences.push({ at: new Date().toISOString(), status: result.providerStatus || 'shipping_created', description: 'Operação logística registrada no provedor', providerData: metadata });
   const updated = await trx.query(
     `UPDATE commerce_fulfillments
-        SET shipping_operation_status = 'succeeded', provider_shipment_id = $3, tracking_code = COALESCE($4, tracking_code), tracking_url = COALESCE($5, tracking_url), label_url = COALESCE($6, label_url), carrier = COALESCE($7, carrier), atualizado_em = CURRENT_TIMESTAMP
+        SET shipping_operation_status = 'succeeded', provider_shipment_id = $3, tracking_code = COALESCE($4, tracking_code), tracking_url = COALESCE($5, tracking_url), label_url = COALESCE($6, label_url), carrier = COALESCE($7, carrier), ocorrencias = $8::jsonb, atualizado_em = CURRENT_TIMESTAMP
       WHERE empresa_id = $1 AND id = $2
       RETURNING *`,
-    [context.empresaId, fulfillmentId, result.providerShipmentId, result.trackingCode || null, result.trackingUrl || null, result.labelUrl || null, result.carrier || null],
+    [context.empresaId, fulfillmentId, result.providerShipmentId, result.trackingCode || null, result.trackingUrl || null, result.labelUrl || null, result.carrier || null, JSON.stringify(occurrences.slice(-100))],
   );
+  return updated.rows[0];
+}
+
+export async function prepareShippingCancellation(trx, contextInput, fulfillmentIdInput) {
+  const context = tenantContext(contextInput);
+  const fulfillmentId = assertUuid(fulfillmentIdInput, 'fulfillmentId');
+  const result = await trx.query(
+    `SELECT f.id, f.status, f.provider_shipment_id, f.tracking_code, f.shipping_operation_status, f.shipping_operation_started_at,
+            o.storefront_id, q.provider, q.ambiente, q.shipping_account_id,
+            a.id AS account_id, a.provider AS account_provider, a.ambiente AS account_environment, a.secret_ref, a.public_config, a.ativo AS account_active
+       FROM commerce_fulfillments f
+       JOIN commerce_orders o ON o.empresa_id = f.empresa_id AND o.id = f.order_id
+       LEFT JOIN commerce_shipping_quotes q ON q.empresa_id = f.empresa_id AND q.id = f.shipping_quote_id
+       LEFT JOIN commerce_shipping_accounts a ON a.empresa_id = f.empresa_id AND a.id = COALESCE(f.shipping_account_id, q.shipping_account_id)
+      WHERE f.empresa_id = $1 AND f.id = $2 AND ($3::uuid IS NULL OR o.storefront_id IN (SELECT id FROM commerce_storefronts WHERE empresa_id = $1 AND loja_id = $3))
+      FOR UPDATE OF f`,
+    [context.empresaId, fulfillmentId, context.lojaId],
+  );
+  const fulfillment = result.rows[0];
+  if (!fulfillment) throw new CommerceError('fulfillment não encontrado no tenant', 'FULFILLMENT_NOT_FOUND');
+  if (fulfillment.status === 'cancelled') return { replay: true, fulfillment };
+  if (['delivered', 'picked_up', 'out_for_delivery'].includes(fulfillment.status)) throw new CommerceError('pré-postagem não pode ser cancelada após entrada em rota ou entrega', 'SHIPPING_CANCELLATION_NOT_ALLOWED');
+  if (fulfillment.account_provider !== 'correios' || !shippingProviders.get('correios')?.cancelShipment) throw new CommerceError('cancelamento Correios indisponível para este fulfillment', 'SHIPPING_PROVIDER_CAPABILITY_UNAVAILABLE');
+  if (!fulfillment.provider_shipment_id) throw new CommerceError('fulfillment ainda não possui pré-postagem no provedor', 'SHIPPING_SHIPMENT_NOT_FOUND');
+  if (!fulfillment.account_id || !fulfillment.account_active || !shippingSecretConfigured(fulfillment.secret_ref)) throw new CommerceError('conta Correios do fulfillment não está pronta', 'SHIPPING_ACCOUNT_NOT_CONFIGURED');
+  if (fulfillment.shipping_operation_status === 'processing' && fulfillment.shipping_operation_started_at && Date.now() - new Date(fulfillment.shipping_operation_started_at).getTime() < 20 * 60 * 1000) throw new CommerceError('o cancelamento deste fulfillment já está em andamento', 'SHIPPING_OPERATION_IN_PROGRESS');
+  const operationKey = `shipping-cancel-${fulfillment.id}-${crypto.randomUUID()}`.slice(0, 180);
+  await trx.query(`UPDATE commerce_fulfillments SET shipping_operation_status = 'processing', shipping_operation_key = $3, shipping_operation_started_at = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2`, [context.empresaId, fulfillment.id, operationKey]);
+  return {
+    replay: false,
+    operationKey,
+    fulfillment,
+    account: { id: fulfillment.account_id, provider: fulfillment.account_provider, ambiente: fulfillment.account_environment, secret_ref: fulfillment.secret_ref, public_config: fulfillment.public_config },
+    providerShipmentId: fulfillment.provider_shipment_id,
+    trackingCode: fulfillment.tracking_code,
+  };
+}
+
+export async function finalizeShippingCancellation(trx, contextInput, fulfillmentIdInput, operationKey, result) {
+  const context = tenantContext(contextInput);
+  const fulfillmentId = assertUuid(fulfillmentIdInput, 'fulfillmentId');
+  const current = await trx.query(`SELECT id, status, ocorrencias FROM commerce_fulfillments WHERE empresa_id = $1 AND id = $2 AND shipping_operation_key = $3 FOR UPDATE`, [context.empresaId, fulfillmentId, operationKey]);
+  if (!current.rows[0]) throw new CommerceError('operação de cancelamento não encontrada ou já finalizada', 'SHIPPING_OPERATION_CONFLICT');
+  const occurrences = Array.isArray(current.rows[0].ocorrencias) ? current.rows[0].ocorrencias : [];
+  occurrences.push({ at: new Date().toISOString(), status: 'cancelled', description: 'Pré-postagem cancelada no provedor Correios', providerData: result?.publicData && typeof result.publicData === 'object' ? { result: text(result.publicData.result, 120) || null, message: text(result.publicData.message, 240) || null } : null });
+  const updated = await trx.query(`UPDATE commerce_fulfillments SET status = 'cancelled', shipping_operation_status = 'succeeded', ocorrencias = $3::jsonb, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 RETURNING *`, [context.empresaId, fulfillmentId, JSON.stringify(occurrences.slice(-100))]);
   return updated.rows[0];
 }
 

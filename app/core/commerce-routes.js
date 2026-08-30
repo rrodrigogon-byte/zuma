@@ -10,7 +10,7 @@ import { createStorefront, listStorefronts, updateStorefront } from './commerce-
 import { createMembership, listMemberships, listRoles, updateMembership } from './commerce-admin-users.js';
 import { createCustomer, createCustomerAddress, deleteCustomerAddress, getCustomer, listCustomerAddresses, updateCustomer, updateCustomerAddress } from './commerce-customers.js';
 import { createStorefrontDomain, listStorefrontDomains, setPrimaryStorefrontDomain, verifyStorefrontDomain } from './commerce-domains.js';
-import { createShippingAccount, failShippingLabel, finalizeShippingLabel, listShippingAccounts, listShippingProviders, lookupPostalCode, prepareShippingLabel, publicShippingMethod, quoteShipping, shippingAccountReady, updateShippingAccount, updateShippingTracking } from './commerce-shipping.js';
+import { createShippingAccount, failShippingLabel, finalizeShippingCancellation, finalizeShippingLabel, listShippingAccounts, listShippingProviders, lookupPostalCode, prepareShippingCancellation, prepareShippingLabel, publicShippingMethod, quoteShipping, shippingAccountReady, updateShippingAccount, updateShippingTracking } from './commerce-shipping.js';
 import { shippingProviders } from './shipping-adapters.js';
 import {
   CommerceError,
@@ -208,10 +208,14 @@ function jsonError(res, error) {
     SHIPPING_QUOTE_MISMATCH: 409,
     SHIPPING_OPTION_INVALID: 400,
     SHIPPING_INVOICE_REQUIRED: 422,
+    SHIPPING_INVOICE_INVALID: 422,
+    SHIPPING_DECLARATION_REQUIRED: 422,
+    SHIPPING_PREPOST_PAYMENT_MODE_REQUIRED: 422,
     SHIPPING_ORDER_NOT_PAID: 409,
     SHIPPING_ORIGIN_INCOMPLETE: 422,
     SHIPPING_ORIGIN_DOCUMENT_INVALID: 422,
     SHIPPING_SHIPMENT_NOT_FOUND: 409,
+    SHIPPING_CANCELLATION_NOT_ALLOWED: 409,
     SHIPPING_ACCOUNT_SCOPE_MISMATCH: 409,
     SHIPPING_WEBHOOK_INVALID: 400,
     SHIPPING_OPERATION_IN_PROGRESS: 409,
@@ -924,6 +928,28 @@ export function createCommerceAdminRouter() {
       res.status(201).json(finalized);
     } catch (error) { jsonError(res, error); }
   });
+  router.post('/fulfillments/:id/cancel-label', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'fulfillment.write');
+      const prepared = await withCommerceTransaction(trx => prepareShippingCancellation(trx, context, req.params.id));
+      if (prepared.replay) return res.json(prepared.fulfillment);
+      const adapter = shippingProviders.get(prepared.account.provider);
+      if (!adapter?.cancelShipment) throw new CommerceError('adapter Correios não oferece cancelamento documentado', 'SHIPPING_PROVIDER_CAPABILITY_UNAVAILABLE');
+      let external;
+      try {
+        external = await adapter.cancelShipment({ account: prepared.account, providerShipmentId: prepared.providerShipmentId, trackingCode: prepared.trackingCode, idempotencyKey: prepared.operationKey });
+      } catch (error) {
+        await withCommerceTransaction(trx => failShippingLabel(trx, context, req.params.id, prepared.operationKey, error));
+        throw error;
+      }
+      const cancelled = await withCommerceTransaction(async trx => {
+        const row = await finalizeShippingCancellation(trx, context, req.params.id, prepared.operationKey, external);
+        await auditLog(trx, context, { entidade: 'fulfillment', entidadeId: req.params.id, acao: 'provider_prepostagem_cancelled', depois: { provider: prepared.account.provider, providerStatus: external.providerStatus } });
+        return row;
+      });
+      res.json(cancelled);
+    } catch (error) { jsonError(res, error); }
+  });
   router.post('/fulfillments/:id/track', async (req, res) => {
     try {
       const context = await requirePermission(req, 'fulfillment.write');
@@ -957,10 +983,13 @@ export function createCommerceAdminRouter() {
       if (req.query.status) { values.push(String(req.query.status)); predicates.push(`f.status = $${values.length}`); }
       const result = await db.query(
         `SELECT f.id, f.order_id, f.status, f.tracking_code, f.carrier, f.ocorrencias, f.criado_em, f.atualizado_em,
-                o.public_code, o.total, s.nome AS storefront_name, f.shipping_quote_id, f.shipping_account_id, f.provider_shipment_id, f.tracking_url, f.label_url, f.shipping_operation_status
+                o.public_code, o.total, s.nome AS storefront_name, f.shipping_quote_id, f.shipping_account_id, a.provider, f.provider_shipment_id, f.tracking_url, f.label_url, f.shipping_operation_status,
+                CASE WHEN a.provider = 'correios' AND a.public_config->>'prepostagemApiEnabled' = 'true' AND a.public_config->>'modalidadePagamento' IN ('1', '2', '3', '4') THEN true ELSE false END AS correios_label_ready
            FROM commerce_fulfillments f
            JOIN commerce_orders o ON o.empresa_id = f.empresa_id AND o.id = f.order_id
            JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id
+           LEFT JOIN commerce_shipping_quotes q ON q.empresa_id = f.empresa_id AND q.id = f.shipping_quote_id
+           LEFT JOIN commerce_shipping_accounts a ON a.empresa_id = f.empresa_id AND a.id = COALESCE(f.shipping_account_id, q.shipping_account_id)
           WHERE ${predicates.join(' AND ')}
           ORDER BY f.atualizado_em DESC
           LIMIT 500`,

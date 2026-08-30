@@ -354,6 +354,10 @@ export async function syncCoreShippingTracking(id) {
   return api.post(`/api/admin/commerce/fulfillments/${id}/track`, {})
 }
 
+export async function cancelCoreShippingLabel(id) {
+  return api.post(`/api/admin/commerce/fulfillments/${id}/cancel-label`, {})
+}
+
 export async function createCoreDomain(payload) {
   return api.post('/api/admin/commerce/storefront/domains', payload)
 }
