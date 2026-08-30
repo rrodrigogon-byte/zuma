@@ -98,3 +98,39 @@ test('conta Correios só fica pronta com token, origem e serviço contratado', (
   assert.equal(shippingAccountReady({ ...base, public_config: { origemCep: '01001000', services: ['03220'] } }), true);
   assert.equal(shippingAccountReady({ ...base, public_config: { origemCep: '01001000', services: ['03220'] }, ambiente: 'sandbox' }), true);
 });
+
+test('método manual habilita cotação sem conta externa e mantém regras internas fora do contrato público', () => {
+  const method = { id: '10000000-0000-4000-8000-000000000109', codigo: 'kytto-regional', nome: 'Entrega regional Kytto', tipo: 'delivery', configuracao: { provider: 'manual', origemCep: '78300000', rules: [{ id: 'private-rule', amount: 99, cities: ['Cidade Interna'] }] } };
+  const publicMethod = publicShippingMethod({ ...method, shipping_account_ready: false });
+  assert.equal(publicMethod.quoteEnabled, true);
+  assert.equal(publicMethod.provider, 'manual');
+  assert.equal(publicMethod.configuracao.rules, undefined);
+  assert.equal(publicMethod.configuracao.origin, undefined);
+});
+
+test('cotação manual usa cidade e persiste quote sem conta logística externa', async () => {
+  const queries = [];
+  const client = {
+    async query(sql, params) {
+      queries.push({ sql, params });
+      if (sql.includes('FROM commerce_shipping_methods')) return { rows: [{ id: '10000000-0000-4000-8000-000000000109', codigo: 'kytto-regional', nome: 'Entrega regional Kytto', tipo: 'delivery', configuracao: { provider: 'manual', origemCep: '78300000' }, storefront_id: '10000000-0000-4000-8000-000000000103', loja_id: '10000000-0000-4000-8000-000000000104', configuracoes: {} }] };
+      if (sql.includes('FROM commerce_product_variants')) return { rows: [{ id: '10000000-0000-4000-8000-000000000105', sku: 'SKU-1', nome: 'Produto', peso_gramas: 500, largura_cm: 10, altura_cm: 5, comprimento_cm: 20, price: 39.9 }] };
+      throw new Error(`query inesperada: ${sql}`);
+    },
+    async transaction(callback) {
+      return callback({ query: async (sql, params) => {
+        queries.push({ sql, params });
+        if (sql.includes('INSERT INTO commerce_shipping_quotes')) return { rows: [{ id: 'manual-quote-1', expires_at: '2099-01-01T00:00:00.000Z' }] };
+        throw new Error(`query transacional inesperada: ${sql}`);
+      } });
+    },
+  };
+  const result = await quoteShipping(client, { empresaId: '10000000-0000-4000-8000-000000000106', lojaId: '10000000-0000-4000-8000-000000000104' }, { storefrontId: '10000000-0000-4000-8000-000000000103', shippingMethodId: '10000000-0000-4000-8000-000000000109', destinationCep: '78365000', destination: { cep: '78365000', cidade: 'Nova Olímpia', estado: 'MT' }, items: [{ variantId: '10000000-0000-4000-8000-000000000105', quantity: 1 }] });
+  assert.equal(result.quoteId, 'manual-quote-1');
+  assert.equal(result.provider, 'manual');
+  assert.equal(result.items[0].amount, 20);
+  assert.equal(result.items[0].deliveryDays, 1);
+  const insert = queries.find(item => item.sql.includes('INSERT INTO commerce_shipping_quotes'));
+  assert.ok(insert);
+  assert.equal(insert.params[3], null);
+});

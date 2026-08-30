@@ -82,6 +82,76 @@ function normalizeProviderOption(option) {
   };
 }
 
+const DEFAULT_MANUAL_SHIPPING_RULES = Object.freeze([
+  { id: 'tangara-da-serra', label: 'Tangará da Serra', uf: 'MT', cities: ['Tangará da Serra'], amount: 25, deliveryDays: 1, priority: 100 },
+  { id: 'regional-150km', label: 'Região até 150 km de Tangará da Serra', uf: 'MT', cities: ['Nova Olímpia', 'Barra do Bugres', 'Denise', 'Porto Estrela'], amount: 20, deliveryDays: 1, priority: 80 },
+  { id: 'grande-cuiaba', label: 'Grande Cuiabá', uf: 'MT', cities: ['Cuiabá', 'Várzea Grande', 'Acorizal', 'Chapada dos Guimarães', 'Nossa Senhora do Livramento', 'Santo Antônio do Leverger', 'Campo Verde'], amount: 25, deliveryDays: 1, priority: 70 },
+  { id: 'fallback-nacional', label: 'Demais localidades', amount: 30, deliveryDays: 10, priority: -100, fallback: true },
+]);
+
+function normalizeManualCity(value) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function manualShippingRules(config = {}) {
+  const rules = Array.isArray(config.rules) && config.rules.length ? config.rules : DEFAULT_MANUAL_SHIPPING_RULES;
+  return rules.map((rule, index) => ({
+    id: String(rule?.id || `manual-${index + 1}`).slice(0, 80),
+    label: String(rule?.label || rule?.name || 'Entrega manual').slice(0, 160),
+    uf: String(rule?.uf || '').trim().toUpperCase().slice(0, 2),
+    cities: Array.isArray(rule?.cities) ? rule.cities.map(normalizeManualCity).filter(Boolean) : [],
+    amount: Number(rule?.amount),
+    deliveryDays: Math.max(1, Math.round(Number(rule?.deliveryDays || rule?.businessDays || 1))),
+    priority: Number.isFinite(Number(rule?.priority)) ? Number(rule.priority) : 0,
+    fallback: rule?.fallback === true,
+  })).filter(rule => Number.isFinite(rule.amount) && rule.amount >= 0 && rule.label);
+}
+
+function selectManualShippingRule(config, destinationAddress = {}) {
+  const city = normalizeManualCity(destinationAddress.cidade || destinationAddress.city);
+  const uf = String(destinationAddress.estado || destinationAddress.state || '').trim().toUpperCase();
+  const rules = manualShippingRules(config);
+  return rules.filter(rule => {
+    if (rule.fallback) return true;
+    if (rule.uf && rule.uf !== uf) return false;
+    return !rule.cities.length || rule.cities.includes(city);
+  }).sort((left, right) => right.priority - left.priority)[0] || null;
+}
+
+function createManualShippingAdapter() {
+  return {
+    async quote({ methodConfig = {}, destinationAddress = {} }) {
+      const rule = selectManualShippingRule(methodConfig, destinationAddress);
+      if (!rule) throw new CommerceError('nenhuma regra de tabela manual está disponível para este destino', 'SHIPPING_DESTINATION_UNAVAILABLE');
+      const deliveryDays = rule.deliveryDays;
+      const publicOption = {
+        id: rule.id,
+        name: rule.label,
+        amount: Number(rule.amount.toFixed(2)),
+        currency: 'BRL',
+        provider: 'manual',
+        providerAmount: Number(rule.amount.toFixed(2)),
+        surchargeRate: 0,
+        surchargeAmount: 0,
+        priceNote: 'Tabela manual Kytto; não é cotação Correios',
+        priceBreakdown: { providerAmount: Number(rule.amount.toFixed(2)), surchargeAmount: 0, totalAmount: Number(rule.amount.toFixed(2)) },
+        deliveryDays,
+        providerDeliveryDays: null,
+        preparationDays: null,
+        deliveryRange: { min: deliveryDays, max: deliveryDays },
+        deliveryNote: deliveryDays === 1 ? 'Entrega regional em até 24 horas úteis' : 'Prazo comercial de até 10 dias úteis',
+        carrier: 'Kytto Entrega',
+        carrierId: 'kytto-manual',
+        manualZone: rule.id,
+      };
+      return { options: [publicOption], providerOptions: [{ public: publicOption, raw: { ruleId: rule.id, label: rule.label, amount: publicOption.amount, deliveryDays } }], provider: 'manual' };
+    },
+    async createShipment() { throw new CommerceError('a tabela manual não gera etiqueta; faça a expedição pela operação da loja', 'SHIPPING_PROVIDER_CAPABILITY_UNAVAILABLE'); },
+    async track() { throw new CommerceError('a tabela manual não possui rastreamento automático', 'SHIPPING_TRACKING_UNSUPPORTED'); },
+    async verifyWebhook() { throw new CommerceError('a tabela manual não possui webhook de rastreamento', 'SHIPPING_WEBHOOK_UNSUPPORTED'); },
+  };
+}
+
 function hmacBase64(secret, rawBody) {
   return crypto.createHmac('sha256', secret).update(rawBody).digest('base64');
 }
@@ -516,6 +586,7 @@ function createCorreiosAdapter() {
 
 shippingProviders.register('melhorenvio', createMelhorEnvioAdapter());
 shippingProviders.register('correios', createCorreiosAdapter());
+shippingProviders.register('manual', createManualShippingAdapter());
 
 export function melhorEnvioConfigured() {
   return Boolean(process.env.ME_ACCESS_TOKEN || process.env.MELHOR_ENVIO_ACCESS_TOKEN);

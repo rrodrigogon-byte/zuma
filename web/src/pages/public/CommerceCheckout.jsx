@@ -15,16 +15,18 @@ function readCart() {
 
 function money(value) { return fmtR(Number(value || 0)) }
 function shippingPromise(option) {
-  const total = option?.deliveryRange?.max ?? option?.deliveryDays;
+  const total = option?.deliveryRange?.max ?? option?.deliveryDays
   if (option?.preparationDays !== null && option?.preparationDays !== undefined && option?.providerDeliveryDays !== null && option?.providerDeliveryDays !== undefined && total !== null && total !== undefined) {
     return `${option.carrier || 'Transportadora'} · ${option.preparationDays} dias úteis de preparação e postagem + ${option.providerDeliveryDays} dias úteis de transporte · total estimado: ${total} dias úteis`;
   }
+  if (option?.provider === 'manual' || option?.carrier === 'Kytto Entrega') return `${option?.carrier || 'Entrega Kytto'} · ${total === 1 ? 'até 24 horas úteis' : `até ${total || 10} dias úteis`}`
   return `${option?.carrier || 'Transportadora'}${option?.deliveryRange?.max ? ` · até ${option.deliveryRange.max} dias úteis` : ''}`;
 }
 function shippingPriceSummary(option) {
   const base = Number(option?.providerAmount);
   const surcharge = Number(option?.surchargeAmount);
   const total = Number(option?.amount);
+  if (option?.provider === 'manual' || option?.carrier === 'Kytto Entrega') return `Tabela manual Kytto · total de entrega ${money(total)}`
   return Number.isFinite(base) && Number.isFinite(surcharge) && Number.isFinite(total)
     ? `Tarifa Correios ${money(base)} + 12% (${money(surcharge)}) = total de entrega ${money(total)}`
     : '';
@@ -167,7 +169,7 @@ export default function CommerceCheckout() {
     if (address.cep.replace(/\D/g, '').length !== 8) return setError('Informe um CEP válido antes de calcular o frete.')
     setWorking(true); setError('')
     try {
-      const quote = await api.post('/api/storefront/shipping/quotes', { shippingMethodId, destinationCep: address.cep, items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })) })
+      const quote = await api.post('/api/storefront/shipping/quotes', { shippingMethodId, destinationCep: address.cep, destination: { cep: address.cep, cidade: address.cidade, estado: address.estado }, items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })) })
       setShippingQuote(quote)
       setShippingOptionId(quote.items?.[0]?.id || '')
     } catch (err) { setError(err.message || 'Não foi possível calcular o frete.') }
