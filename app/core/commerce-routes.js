@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import express from 'express';
 import { db } from './database.js';
 import { customerReport, fulfillmentReport, inventoryReport, salesReport } from './commerce-reports.js';
-import { canTransitionPaymentStatus, createPaymentAttempt, paymentAccountReady, paymentProviders, syncPaymentAttempt, validatePaymentMethod, verifyPaymentWebhook } from './payment-adapters.js';
+import { canTransitionPaymentStatus, createPaymentAttempt, paymentAccountReady, paymentProviders, reconcilePaymentByIdentifiers, syncPaymentAttempt, validatePaymentMethod, verifyPaymentWebhook } from './payment-adapters.js';
 import { createPaymentAccount, listPaymentAccounts, listPaymentProviders, listPayments, updatePaymentAccount } from './commerce-payment-admin.js';
 import { resolveCommerceIdentity } from './commerce-identity-bridge.js';
 import { applyPromotionToOrder, createPromotion, createPromotionCode, createPromotionTemplate, listPromotionTemplates, listPromotions } from './commerce-promotions.js';
@@ -1207,6 +1207,14 @@ export function createCommerceAdminRouter() {
       const context = await requirePermission(req, 'payments.write');
       const result = await syncPaymentAttempt(context, req.params.id);
       await withCommerceTransaction(trx => auditLog(trx, context, { entidade: 'payment', entidadeId: result.paymentId, acao: 'status_reconciled', correlationId: req.requestId || '', depois: { orderId: result.orderId, provider: result.provider, status: result.status, changed: result.changed, stale: Boolean(result.stale) } }));
+      res.json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/payments/:id/reconcile', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'payments.write');
+      const result = await reconcilePaymentByIdentifiers(context, req.params.id, req.body || {});
+      await withCommerceTransaction(trx => auditLog(trx, context, { entidade: 'payment', entidadeId: result.paymentId, acao: 'manual_reconciled', correlationId: req.requestId || '', depois: { orderId: result.orderId, provider: result.provider, status: result.status, changed: result.changed, stale: Boolean(result.stale) } }));
       res.json(result);
     } catch (error) { jsonError(res, error); }
   });

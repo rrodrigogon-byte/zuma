@@ -5,6 +5,7 @@ import {
   canTransitionPaymentStatus,
   createPaymentAttempt,
   paymentProviders,
+  reconcilePaymentByIdentifiers,
   syncPaymentAttempt,
   validatePaymentMethod,
 } from './payment-adapters.js';
@@ -106,6 +107,37 @@ test('reconciliação consulta gateway, confirma valor e evita downgrade de paga
   } finally {
     db.transaction = original;
     paymentProviders.adapters.delete('testgateway');
+    delete process.env.TEST_PAYMENT_ACCESS;
+  }
+});
+
+test('reconciliação manual vincula InfinitePay por NSU e slug antes de confirmar o status', async () => {
+  const { db } = await import('./database.js');
+  process.env.TEST_PAYMENT_ACCESS = 'token';
+  const calls = [];
+  const adapter = { createCheckout: async () => ({}), verifyWebhook: async () => ({ eventId: 'evt' }), getStatus: async ({ payment }) => ({ providerPaymentId: payment.provider_payment_id, status: 'captured', amount: 30, summary: { paid: true } }) };
+  paymentProviders.register('infinitepay', adapter);
+  const original = db.transaction;
+  db.transaction = async callback => callback({ query: async (sql, values) => {
+    calls.push({ sql, values });
+    if (sql.includes('SELECT p.id, p.order_id, p.provider, p.status')) return { rows: [{ id: '55555555-5555-4555-8555-555555555558', order_id: orderId, provider: 'infinitepay', status: 'pending', amount: '30.00', provider_payment_id: null, metadata: {}, payment_account_id: accountId, order_code: 'KC-APROVADO', storefront_id: storefrontId, order_status: 'pending_payment' }] };
+    if (sql.includes('SELECT id FROM commerce_payments')) return { rows: [] };
+    if (sql.includes('SELECT p.id, p.order_id, p.provider, p.method')) return { rows: [{ id: '55555555-5555-4555-8555-555555555558', order_id: orderId, provider: 'infinitepay', method: 'credit_card', status: 'pending', amount: '30.00', provider_payment_id: 'tx-3001', metadata: { checkout: { slug: 'slug-3001' } }, account_id: accountId, ambiente: 'production', secret_ref: 'env:TEST_PAYMENT_ACCESS', public_config: {} }] };
+    if (sql.includes('SELECT p.id, p.order_id, p.status, p.amount')) return { rows: [{ id: '55555555-5555-4555-8555-555555555558', order_id: orderId, status: 'pending', amount: '30.00', order_status: 'pending_payment' }] };
+    if (sql.includes('SELECT id, status, storefront_id')) return { rows: [{ id: orderId, status: 'pending_payment', storefront_id: storefrontId, total: '30.00' }] };
+    return { rows: [] };
+  } });
+  try {
+    const result = await reconcilePaymentByIdentifiers({ empresaId, lojaId }, '55555555-5555-4555-8555-555555555558', { transactionNsu: 'tx-3001', slug: 'slug-3001', captureMethod: 'credit_card' });
+    assert.equal(result.status, 'captured');
+    assert.equal(result.changed, true);
+    const update = calls.find(call => call.sql.includes('UPDATE commerce_payments') && call.sql.includes('provider_payment_id = $3'));
+    assert.deepEqual(update.values.slice(0, 3), [empresaId, '55555555-5555-4555-8555-555555555558', 'tx-3001']);
+    assert.match(update.values[3], /slug-3001/);
+    assert.match(update.values[3], /manualReconciliation/);
+  } finally {
+    db.transaction = original;
+    paymentProviders.adapters.delete('infinitepay');
     delete process.env.TEST_PAYMENT_ACCESS;
   }
 });
