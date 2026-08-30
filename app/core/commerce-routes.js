@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import { db } from './database.js';
-import { customerReport, inventoryReport, salesReport } from './commerce-reports.js';
+import { customerReport, fulfillmentReport, inventoryReport, salesReport } from './commerce-reports.js';
 import { canTransitionPaymentStatus, createPaymentAttempt, paymentAccountReady, paymentProviders, syncPaymentAttempt, validatePaymentMethod, verifyPaymentWebhook } from './payment-adapters.js';
 import { createPaymentAccount, listPaymentAccounts, listPaymentProviders, listPayments, updatePaymentAccount } from './commerce-payment-admin.js';
 import { resolveCommerceIdentity } from './commerce-identity-bridge.js';
@@ -73,6 +73,41 @@ function statusCounts(rows = []) {
     result[String(row.status)] = Number(row.total || 0);
     return result;
   }, {});
+}
+
+function safePublicUrl(value) {
+  const candidate = String(value || '').trim();
+  return /^https?:\/\//i.test(candidate) ? candidate.slice(0, 600) : null;
+}
+
+function sanitizePublicFulfillment(value = {}) {
+  const occurrences = Array.isArray(value.ocorrencias) ? value.ocorrencias.slice(-100).map((event = {}) => ({
+    at: event.at || event.data || event.dtHrCriado || null,
+    status: String(event.status || event.codigo || 'tracking_update').slice(0, 80),
+    description: String(event.description || event.descricao || event.mensagem || 'Movimentação registrada').slice(0, 300),
+    ...(event.location && typeof event.location === 'object' ? { location: { city: String(event.location.city || '').slice(0, 120) || null, state: String(event.location.state || '').slice(0, 2).toUpperCase() || null } } : {}),
+  })).filter(event => event.at || event.description) : [];
+  return {
+    id: value.id || null,
+    status: String(value.status || 'pending').slice(0, 30),
+    trackingCode: String(value.trackingCode || '').slice(0, 160) || null,
+    trackingUrl: safePublicUrl(value.trackingUrl),
+    carrier: String(value.carrier || '').slice(0, 120) || null,
+    ocorrencias: occurrences,
+  };
+}
+
+function sanitizePublicOrderTracking(row = {}) {
+  return {
+    ...row,
+    fulfillments: Array.isArray(row.fulfillments) ? row.fulfillments.map(sanitizePublicFulfillment) : [],
+    timeline: Array.isArray(row.timeline) ? row.timeline.slice(-100).map(event => ({
+      fromStatus: String(event?.fromStatus || '').slice(0, 30) || null,
+      toStatus: String(event?.toStatus || '').slice(0, 30) || null,
+      source: String(event?.source || 'system').slice(0, 40),
+      at: event?.at || null,
+    })) : [],
+  };
 }
 
 function jsonError(res, error) {
@@ -348,8 +383,10 @@ export function createCommercePublicRouter() {
                 (SELECT p.status FROM commerce_payments p WHERE p.empresa_id = o.empresa_id AND p.order_id = o.id ORDER BY p.criado_em DESC LIMIT 1) AS payment_status,
                 CASE WHEN o.endereco_entrega IS NULL THEN NULL ELSE jsonb_build_object('cidade', o.endereco_entrega->>'cidade', 'estado', o.endereco_entrega->>'estado', 'cep', CASE WHEN length(o.endereco_entrega->>'cep') = 8 THEN left(o.endereco_entrega->>'cep', 5) || '***' ELSE NULL END) END AS endereco_entrega, o.shipping_method_id, o.shipping_quote_id, o.criado_em, o.atualizado_em,
                 COALESCE(jsonb_agg(jsonb_build_object('nome', i.nome_snapshot, 'sku', i.sku_snapshot, 'quantidade', i.quantidade, 'preco', i.preco_unitario, 'subtotal', i.subtotal)) FILTER (WHERE i.id IS NOT NULL), '[]'::jsonb) AS items,
-                COALESCE((SELECT jsonb_agg(jsonb_build_object('id', f.id, 'status', f.status, 'trackingCode', f.tracking_code, 'trackingUrl', f.tracking_url, 'carrier', f.carrier, 'labelUrl', f.label_url, 'ocorrencias', f.ocorrencias) ORDER BY f.criado_em DESC)
-                            FROM commerce_fulfillments f WHERE f.empresa_id = o.empresa_id AND f.order_id = o.id), '[]'::jsonb) AS fulfillments
+                COALESCE((SELECT jsonb_agg(jsonb_build_object('id', f.id, 'status', f.status, 'trackingCode', f.tracking_code, 'trackingUrl', f.tracking_url, 'carrier', f.carrier, 'ocorrencias', f.ocorrencias) ORDER BY f.criado_em DESC)
+                            FROM commerce_fulfillments f WHERE f.empresa_id = o.empresa_id AND f.order_id = o.id), '[]'::jsonb) AS fulfillments,
+                COALESCE((SELECT jsonb_agg(jsonb_build_object('fromStatus', e.de_status, 'toStatus', e.para_status, 'source', e.origem, 'at', e.criado_em) ORDER BY e.criado_em ASC)
+                            FROM commerce_order_events e WHERE e.empresa_id = o.empresa_id AND e.order_id = o.id), '[]'::jsonb) AS timeline
            FROM commerce_orders o
            LEFT JOIN commerce_order_items i ON i.empresa_id = o.empresa_id AND i.order_id = o.id
           WHERE o.empresa_id = $1 AND o.storefront_id = $2 AND o.public_code = $3
@@ -358,7 +395,7 @@ export function createCommercePublicRouter() {
         [storefront.empresa_id, storefront.id, String(req.params.publicCode || '').toUpperCase()],
       );
       if (!result.rows[0]) return res.status(404).json({ error: 'pedido não encontrado', code: 'ORDER_NOT_FOUND' });
-      res.json(result.rows[0]);
+      res.json(sanitizePublicOrderTracking(result.rows[0]));
     } catch (error) { jsonError(res, error); }
   });
   return router;
@@ -1153,6 +1190,12 @@ export function createCommerceAdminRouter() {
       res.json(await salesReport(context, { from: req.query.from, to: req.query.to }));
     } catch (error) { jsonError(res, error); }
   });
+  router.get('/reports/fulfillment', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'reports.read');
+      res.json(await fulfillmentReport(context, { from: req.query.from, to: req.query.to }));
+    } catch (error) { jsonError(res, error); }
+  });
   router.get('/reports/inventory', async (req, res) => {
     try {
       const context = await requirePermission(req, 'reports.read');
@@ -1208,6 +1251,8 @@ export function createCommerceAdminRouter() {
         `SELECT o.id, o.public_code, o.status, o.origem, o.subtotal, o.desconto, o.frete, o.impostos, o.total, o.shipping_method_id, o.shipping_quote_id, o.criado_em, o.atualizado_em,
                 c.nome AS customer_name, c.email AS customer_email,
                 (SELECT p.status FROM commerce_payments p WHERE p.empresa_id = o.empresa_id AND p.order_id = o.id ORDER BY p.criado_em DESC LIMIT 1) AS payment_status,
+                (SELECT jsonb_build_object('status', f.status, 'carrier', f.carrier, 'trackingCode', f.tracking_code, 'trackingUrl', f.tracking_url, 'ocorrencias', f.ocorrencias)
+                   FROM commerce_fulfillments f WHERE f.empresa_id = o.empresa_id AND f.order_id = o.id ORDER BY f.atualizado_em DESC NULLS LAST LIMIT 1) AS fulfillment,
                 COALESCE((SELECT jsonb_agg(jsonb_build_object('nome', i.nome_snapshot, 'sku', i.sku_snapshot, 'quantidade', i.quantidade, 'preco', i.preco_unitario, 'subtotal', i.subtotal) ORDER BY i.id ASC) FROM commerce_order_items i WHERE i.empresa_id = o.empresa_id AND i.order_id = o.id), '[]'::jsonb) AS items
            FROM commerce_orders o
            JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id
