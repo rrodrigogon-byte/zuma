@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { api, fmtR } from '../lib/api'
+import { api, asArray, fmtR } from '../lib/api'
 import { pagarTef, MODALIDADES_TEF } from '../lib/tef'
 import { enfileirarVendaOffline, entregarFilaAoAgente, imprimirViaAgenteLocal, resumoFilaOffline } from '../lib/pdvOffline'
 import { useToast } from '../hooks/useToast'
@@ -429,7 +429,10 @@ export default function PDV() {
   const loadMesas = useCallback(async () => {
     try {
       const data = await api.get('/api/mesas')
-      setMesas(data)
+      setMesas({
+        fisicas: asArray(data, ['fisicas', 'mesas']),
+        virtuais: asArray(data, ['virtuais']),
+      })
     } catch { /* silencioso */ }
   }, [])
 
@@ -437,7 +440,7 @@ export default function PDV() {
     const chaveCache = `kytto_pdv_catalogo_${lojaAtiva?.id || 'padrao'}`
     try {
       const [data, dadosCombos] = await Promise.all([api.get('/api/cardapio'), api.get('/api/combos').catch(() => ({ combos: [] }))])
-      const itens = data.filter(p => !p.indisponivel)
+      const itens = asArray(data, ['itens', 'produtos', 'cardapio']).filter(p => p && !p.indisponivel)
       setCardapio(itens)
       setCombos(Array.isArray(dadosCombos?.combos) ? dadosCombos.combos : [])
       localStorage.setItem(chaveCache, JSON.stringify({ atualizado_em: new Date().toISOString(), itens }))
