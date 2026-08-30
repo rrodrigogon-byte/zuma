@@ -295,6 +295,88 @@ function createMelhorEnvioAdapter() {
   };
 }
 
+function correiosDigits(value, max = 240) {
+  return String(value || '').replace(/\D/g, '').slice(0, max);
+}
+
+function correiosPhoneFields(value) {
+  const digits = correiosDigits(value, 20);
+  if (digits.length === 11) return { dddCelular: digits.slice(0, 2), celular: digits.slice(2) };
+  if (digits.length === 10) return { dddTelefone: digits.slice(0, 2), telefone: digits.slice(2) };
+  if (digits.length >= 8) return { telefone: digits.slice(-8) };
+  return {};
+}
+
+function correiosRequiredAddress(input, role) {
+  const address = {
+    cep: correiosDigits(input?.postal_code || input?.cep, 8),
+    logradouro: String(input?.address || input?.logradouro || '').trim().slice(0, 50),
+    numero: String(input?.number || input?.numero || '').trim().slice(0, 6),
+    complemento: String(input?.complement || input?.complemento || '').trim().slice(0, 30),
+    bairro: String(input?.district || input?.bairro || '').trim().slice(0, 30),
+    cidade: String(input?.city || input?.cidade || '').trim().slice(0, 30),
+    uf: String(input?.state_abbr || input?.estado || input?.uf || '').trim().toUpperCase().slice(0, 2),
+    pais: 'BR',
+  };
+  if (!/^\d{8}$/.test(address.cep) || !address.logradouro || !address.numero || !address.bairro || !address.cidade || !/^[A-Z]{2}$/.test(address.uf)) {
+    throw new CommerceError(`${role} incompleto para pré-postagem Correios`, 'SHIPPING_ADDRESS_INCOMPLETE');
+  }
+  if (role === 'destinatário') address.regiao = '';
+  return address;
+}
+
+function correiosPerson(input, role) {
+  const name = String(input?.name || input?.destinatario || '').trim().slice(0, 50);
+  if (name.length < 3) throw new CommerceError(`${role} deve ter ao menos 3 caracteres`, 'SHIPPING_ADDRESS_REQUIRED');
+  const person = { nome: name, endereco: correiosRequiredAddress(input, role) };
+  const phone = correiosPhoneFields(input?.phone || input?.telefone);
+  Object.assign(person, phone);
+  if (input?.email) person.email = String(input.email).trim().slice(0, 255).toLowerCase();
+  const document = correiosDigits(input?.document || input?.documento, 14);
+  if (document) person.cpfCnpj = document;
+  return person;
+}
+
+function correiosShipmentVolumes(selectedOption, volumes) {
+  const source = volumes?.length ? volumes : selectedOption?.raw?.packages || selectedOption?.providerSnapshot?.packages || [];
+  const normalized = source.map(volume => ({
+    width: positiveNumber(volume.width ?? volume.dimensions?.width, 'largura'),
+    height: positiveNumber(volume.height ?? volume.dimensions?.height, 'altura'),
+    length: positiveNumber(volume.length ?? volume.dimensions?.length, 'comprimento'),
+    weight: positiveNumber(volume.weight, 'peso'),
+  }));
+  if (!normalized.length) throw new CommerceError('a cotação não trouxe volumes para pré-postagem Correios', 'SHIPPING_PACKAGE_DATA_REQUIRED');
+  return {
+    width: Math.max(...normalized.map(item => item.width)),
+    height: Math.max(...normalized.map(item => item.height)),
+    length: normalized.reduce((sum, item) => sum + item.length, 0),
+    weightGrams: Math.max(1, Math.round(normalized.reduce((sum, item) => sum + item.weight, 0) * 1000)),
+  };
+}
+
+function correiosReceipt(value) {
+  if (typeof value === 'string') return value.trim().slice(0, 180) || null;
+  return String(value?.idRecibo || value?.recibo || value?.reciboSolicitacaoAssincrona || value?.reciboSolicitacaoAssincronaRotulo || value?.id || '').trim().slice(0, 180) || null;
+}
+
+function correiosTrackingUrl(code) {
+  const normalized = String(code || '').trim().toUpperCase();
+  return /^[A-Z]{2}\d{9}[A-Z]{2}$/.test(normalized) ? `https://rastreamento.correios.com.br/app/index.php?objetos=${encodeURIComponent(normalized)}` : null;
+}
+
+const CORREIOS_PREPARATION_DAYS = 2;
+
+function correiosPrepostPath(path) {
+  return `/prepostagem${path}`;
+}
+
+function correiosDeliveryTiming(days) {
+  const providerDays = days === null ? null : Math.max(0, Math.round(days));
+  if (providerDays === null) return { providerDeliveryDays: null, preparationDays: null, deliveryDays: null, deliveryRange: { min: null, max: null } };
+  const totalDays = providerDays + CORREIOS_PREPARATION_DAYS;
+  return { providerDeliveryDays: providerDays, preparationDays: CORREIOS_PREPARATION_DAYS, deliveryDays: totalDays, deliveryRange: { min: totalDays, max: totalDays }, deliveryNote: 'Prazo Correios mais 2 dias úteis de preparação e postagem' };
+}
+
 function createCorreiosAdapter() {
   return {
     async quote({ account, originPostalCode, destinationPostalCode, products, services }) {
@@ -317,15 +399,90 @@ function createCorreiosAdapter() {
         if (amount === null || amount < 0) return null;
         const days = safeNumber(row.prazo?.prazoEntrega ?? row.prazo?.prazo ?? row.prazoEntrega);
         const name = config.serviceNames?.[row.code] || `Correios ${row.code}`;
-        const publicOption = { id: row.code, name: String(name).slice(0, 160), amount, currency: 'BRL', deliveryDays: days === null ? null : Math.max(0, Math.round(days)), deliveryRange: { min: days === null ? null : Math.max(0, Math.round(days)), max: days === null ? null : Math.max(0, Math.round(days)) }, carrier: 'Correios', carrierId: row.code };
+        const timing = correiosDeliveryTiming(days);
+        const publicOption = { id: row.code, name: String(name).slice(0, 160), amount, currency: 'BRL', ...timing, carrier: 'Correios', carrierId: row.code };
         return { public: publicOption, raw: { price: row.price, prazo: row.prazo, packages: [{ width: pack.width, height: pack.height, length: pack.length, weight: pack.weightGrams / 1000 }] } };
       }).filter(Boolean);
       if (!optionsWithSnapshots.length) throw new CommerceError('Correios não retornou preço válido para os serviços configurados', 'SHIPPING_NO_OPTIONS');
       return { options: optionsWithSnapshots.map(item => item.public), providerOptions: optionsWithSnapshots, provider: 'correios' };
     },
 
-    async createShipment() {
-      throw new CommerceError('pré-postagem Correios depende da API 36 e do schema autorizado no CWS desta conta; valide a documentação antes de habilitar etiqueta', 'SHIPPING_PROVIDER_CAPABILITY_UNAVAILABLE');
+    async createShipment({ account, selectedOption, from, to, products, volumes, shipmentOptions = {}, idempotencyKey }) {
+      const credentials = accountCredentials(account);
+      const config = accountPublicConfig(account);
+      if (config.prepostagemApiEnabled !== true) throw new CommerceError('pré-postagem Correios desabilitada: valide a API 36 no CWS e ative a capability da conta', 'SHIPPING_PROVIDER_CAPABILITY_UNAVAILABLE');
+      const policy = config.shipment || {};
+      const modalidadePagamento = String(config.modalidadePagamento || '').trim();
+      if (!['1', '2', '3', '4'].includes(modalidadePagamento)) throw new CommerceError('configure a modalidade de pagamento Correios da conta antes da pré-postagem', 'SHIPPING_PREPOST_PAYMENT_MODE_REQUIRED');
+      const nonCommercial = shipmentOptions.nonCommercial === true || policy.nonCommercial === true;
+      const invoiceNumber = String(shipmentOptions.invoiceNumber || policy.invoiceNumber || '').replace(/\D/g, '');
+      const invoiceKey = String(shipmentOptions.invoiceKey || policy.invoiceKey || '').replace(/\D/g, '');
+      if (!nonCommercial && !invoiceNumber && !invoiceKey) throw new CommerceError('informe NF, chave NFe ou declaração de conteúdo antes da pré-postagem Correios', 'SHIPPING_INVOICE_REQUIRED');
+      if (invoiceNumber && !/^\d{1,12}$/.test(invoiceNumber)) throw new CommerceError('número da nota fiscal inválido para pré-postagem Correios', 'SHIPPING_INVOICE_INVALID');
+      if (invoiceKey && !/^\d{44}$/.test(invoiceKey)) throw new CommerceError('chave NFe inválida para pré-postagem Correios', 'SHIPPING_INVOICE_INVALID');
+      const serviceCode = String(selectedOption?.id || selectedOption?.raw?.coProduto || '').replace(/\D/g, '').slice(0, 8);
+      if (serviceCode.length < 4) throw new CommerceError('serviço Correios da cotação é inválido', 'SHIPPING_QUOTE_INVALID');
+      const pack = correiosShipmentVolumes(selectedOption, volumes);
+      const declaration = (products || []).map(product => ({
+        conteudo: String(product.name || 'Produto').trim().slice(0, 60).padEnd(2, 'P'),
+        quantidade: String(Math.max(1, Math.trunc(Number(product.quantity) || 1))),
+        valor: Math.max(0, safeNumber(product.unitaryValue, 0)).toFixed(2),
+      }));
+      if (!declaration.length) throw new CommerceError('a pré-postagem Correios exige ao menos um item na declaração de conteúdo', 'SHIPPING_DECLARATION_REQUIRED');
+      const payload = {
+        remetente: correiosPerson(from, 'remetente'),
+        destinatario: correiosPerson(to, 'destinatário'),
+        codigoServico: serviceCode,
+        ...(invoiceNumber ? { numeroNotaFiscal: invoiceNumber } : {}),
+        ...(invoiceKey ? { chaveNFe: invoiceKey } : {}),
+        ...(config.postingCard ? { numeroCartaoPostagem: String(config.postingCard).slice(0, 40) } : {}),
+        listaServicoAdicional: (Array.isArray(config.servicesAdditional) ? config.servicesAdditional : []).map(code => ({ codigoServicoAdicional: String(code).replace(/\D/g, '').slice(0, 3) })).filter(item => item.codigoServicoAdicional.length === 3),
+        itensDeclaracaoConteudo: declaration,
+        pesoInformado: String(pack.weightGrams),
+        codigoFormatoObjetoInformado: ['1', '2', '3'].includes(String(config.objectType || '2')) ? String(config.objectType || '2') : '2',
+        alturaInformada: String(Math.ceil(pack.height)),
+        larguraInformada: String(Math.ceil(pack.width)),
+        comprimentoInformado: String(Math.ceil(pack.length)),
+        cienteObjetoNaoProibido: '1',
+        solicitarColeta: 'N',
+        embalagem: 'S',
+        logisticaReversa: 'N',
+        modalidadePagamento,
+        observacao: String(shipmentOptions.orderCode || '').trim().slice(0, 50) || undefined,
+        canalExternoOrigem: 'KYTTO',
+        pedidoExternoOrigem: String(shipmentOptions.orderCode || '').trim().slice(0, 25) || undefined,
+      };
+      Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
+      const prepostagem = await providerRequest(account, correiosPrepostPath('/v1/prepostagens'), { method: 'POST', body: JSON.stringify(payload), idempotencyKey });
+      const prepost = prepostagem?.prePostagem || prepostagem?.prepostagem || prepostagem?.data || prepostagem;
+      const prepostagemId = String(prepost?.id || '').trim();
+      const trackingCode = String(prepost?.codigoObjeto || '').trim().toUpperCase() || null;
+      if (!prepostagemId) throw new CommerceError('Correios não retornou o identificador da pré-postagem', 'SHIPPING_ADAPTER_INVALID_RESPONSE');
+      let labelReceipt = null;
+      let labelRequestError = null;
+      try {
+        const labelResponse = await providerRequest(account, correiosPrepostPath('/v1/prepostagens/rotulo/assincrono/pdf'), { method: 'POST', body: JSON.stringify({ idsPrePostagem: [prepostagemId], tipoRotulo: String(config.labelType || 'P').toUpperCase() === 'R' ? 'R' : 'P', formatoRotulo: String(config.labelFormat || 'ET').toUpperCase() === 'EV' ? 'EV' : 'ET', imprimeRemetente: 'S', layoutImpressao: String(config.labelLayout || 'PADRAO').slice(0, 30) }), idempotencyKey });
+        labelReceipt = correiosReceipt(labelResponse);
+      } catch (error) {
+        labelRequestError = { code: String(error.code || 'SHIPPING_LABEL_REQUEST_FAILED').slice(0, 80), message: String(error.message || 'não foi possível solicitar o rótulo').slice(0, 240) };
+      }
+      return {
+        providerShipmentId: prepostagemId,
+        trackingCode,
+        trackingUrl: correiosTrackingUrl(trackingCode),
+        labelUrl: null,
+        providerStatus: labelReceipt ? 'preposted_label_requested' : 'preposted_label_request_failed',
+        publicData: { prepostagemId, trackingCode, labelReceipt, ...(labelRequestError ? { labelRequestError } : {}) },
+      };
+    },
+
+    async cancelShipment({ account, providerShipmentId, trackingCode, idempotencyKey }) {
+      const id = String(providerShipmentId || '').trim();
+      const code = String(trackingCode || '').trim().toUpperCase();
+      if (!id && !/^[A-Z]{2}\d{9}[A-Z]{2}$/.test(code)) throw new CommerceError('pré-postagem Correios sem identificador para cancelamento', 'SHIPPING_SHIPMENT_NOT_FOUND');
+      const path = correiosPrepostPath(/^[A-Z]{2}\d{9}[A-Z]{2}$/.test(code) ? `/v1/prepostagens/objeto/${encodeURIComponent(code)}` : `/v1/prepostagens/${encodeURIComponent(id)}`);
+      const response = await providerRequest(account, path, { method: 'DELETE', idempotencyKey });
+      return { providerStatus: 'cancelled', publicData: { result: String(response?.resultadoCancelamento || '').slice(0, 120) || null, message: String(response?.mensagem || '').slice(0, 240) || null } };
     },
 
     async track({ account, providerShipmentId }) {
