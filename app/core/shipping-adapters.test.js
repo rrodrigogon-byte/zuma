@@ -96,7 +96,7 @@ test('adapter Correios consulta preço e prazo por serviço com token server-sid
   global.fetch = async (url, options) => {
     requests.push({ url, options });
     assert.equal(options.headers.Authorization, 'Bearer correios-token');
-    if (url.includes('/preco/v1/nacional/03220')) return new Response(JSON.stringify({ coProduto: '03220', pcFinal: 'R$ 18,90', psCobrado: '500' }), { status: 200 });
+    if (url.includes('/preco/v1/nacional/03220')) return new Response(JSON.stringify({ coProduto: '03220', pcFinal: 18.9, psCobrado: '500' }), { status: 200 });
     if (url.includes('/prazo/v1/nacional/03220')) return new Response(JSON.stringify({ coProduto: '03220', prazoEntrega: 5, entregaDomiciliar: 'S' }), { status: 200 });
     throw new Error(`URL inesperada ${url}`);
   };
@@ -111,7 +111,12 @@ test('adapter Correios consulta preço e prazo por serviço com token server-sid
   assert.equal(requests[1].url.startsWith('https://apihom.correios.com.br/prazo/v1/nacional/03220?'), true);
   assert.equal(result.provider, 'correios');
   assert.equal(result.options[0].id, '03220');
-  assert.equal(result.options[0].amount, 18.9);
+  assert.equal(result.options[0].amount, 21.17);
+  assert.equal(result.options[0].providerAmount, 18.9);
+  assert.equal(result.options[0].surchargeRate, 0.12);
+  assert.equal(result.options[0].surchargeAmount, 2.27);
+  assert.deepEqual(result.options[0].priceBreakdown, { providerAmount: 18.9, surchargeAmount: 2.27, totalAmount: 21.17 });
+  assert.equal(result.options[0].priceNote, 'Tarifa oficial dos Correios + 12% de operação logística');
   assert.equal(result.options[0].providerDeliveryDays, 5);
   assert.equal(result.options[0].preparationDays, 2);
   assert.equal(result.options[0].deliveryDays, 7);
