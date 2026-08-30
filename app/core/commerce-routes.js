@@ -12,8 +12,10 @@ import { createCustomer, createCustomerAddress, deleteCustomerAddress, getCustom
 import { createStorefrontDomain, listStorefrontDomains, setPrimaryStorefrontDomain, verifyStorefrontDomain } from './commerce-domains.js';
 import { createShippingAccount, failShippingLabel, finalizeShippingCancellation, finalizeShippingLabel, listShippingAccounts, listShippingProviders, lookupPostalCode, prepareShippingCancellation, prepareShippingLabel, publicShippingMethod, quoteShipping, shippingAccountReady, updateShippingAccount, updateShippingTracking } from './commerce-shipping.js';
 import { shippingProviders } from './shipping-adapters.js';
+import { newCommerceMediaId, streamCommerceImage, uploadCommerceImage } from './commerce-media.js';
 import {
   CommerceError,
+  assertUuid,
   auditLog,
   adjustInventory,
   archiveCatalogProduct,
@@ -170,7 +172,11 @@ function jsonError(res, error) {
     VARIANT_REQUIRED: 400,
     VARIANT_INVALID: 400,
     MEDIA_REQUIRED: 400,
+    MEDIA_UPLOAD_EMPTY: 400,
+    MEDIA_IMAGE_INVALID: 422,
     MEDIA_NOT_FOUND: 404,
+    MEDIA_STORAGE_NOT_CONFIGURED: 503,
+    MEDIA_UPLOAD_TOO_LARGE: 413,
     LOCATION_REQUIRED: 400,
     STORE_NOT_FOUND: 404,
     INVALID_REPORT_PERIOD: 400,
@@ -320,6 +326,27 @@ export function createCommercePublicRouter() {
       const products = await listPublishedProducts({ empresaId: storefront.empresa_id, lojaId: storefront.loja_id }, { storefrontId: storefront.id, query: req.query.q, categoryId: req.query.categoryId, limit: req.query.limit, offset: req.query.offset });
       res.json({ storefrontId: storefront.id, items: products });
     } catch (error) { jsonError(res, error); }
+  });
+  router.get('/media/:id', async (req, res) => {
+    try {
+      const storefront = await resolvePublicStorefront(req);
+      const mediaId = assertUuid(req.params.id, 'mediaId');
+      const result = await db.query(
+        `SELECT m.storage_key, m.mime_type
+           FROM commerce_product_media m
+           JOIN commerce_product_channels pc
+             ON pc.empresa_id = m.empresa_id AND pc.product_id = m.product_id
+            AND pc.storefront_id = $2 AND pc.publicado = true
+          WHERE m.empresa_id = $1 AND m.id = $3
+          LIMIT 1`,
+        [storefront.empresa_id, storefront.id, mediaId],
+      );
+      if (!result.rows[0]) throw new CommerceError('mídia não encontrada neste storefront', 'MEDIA_NOT_FOUND');
+      await streamCommerceImage({ storageKey: result.rows[0].storage_key, mimeType: result.rows[0].mime_type, res });
+    } catch (error) {
+      if (!res.headersSent) jsonError(res, error);
+      else res.destroy(error);
+    }
   });
   router.get('/shipping/address/:cep', async (req, res) => {
     try { res.json(await lookupPostalCode(req.params.cep)); } catch (error) { jsonError(res, error); }
@@ -678,7 +705,7 @@ export function createCommerceAdminRouter() {
       const { limit, offset } = parsePagination(req, 100, 500);
       const count = await db.query(`SELECT COUNT(*)::int AS total FROM commerce_products p LEFT JOIN commerce_categories c ON c.empresa_id = p.empresa_id AND c.id = p.category_id WHERE ${predicates.join(' AND ')}`, values);
       const result = await db.query(
-        `SELECT p.id, p.slug, p.nome, p.tipo, p.status, p.descricao, p.descricao_curta, p.category_id,
+        `SELECT p.id, p.slug, p.nome, p.tipo, p.status, p.descricao, p.descricao_curta, p.dados_fiscais, p.seo, p.category_id,
                 c.nome AS category_name, p.criado_em, p.atualizado_em,
                 COALESCE((
                   SELECT jsonb_agg(jsonb_build_object(
@@ -796,6 +823,31 @@ export function createCommerceAdminRouter() {
     try {
       const context = await requirePermission(req, 'catalog.read');
       res.json(await listCatalogMedia(db, context, req.params.id));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/catalog/products/:id/media/upload', express.raw({ type: ['image/*', 'application/octet-stream'], limit: '8mb' }), async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'catalog.write');
+      const productId = assertUuid(req.params.id, 'productId');
+      const product = await db.query('SELECT id FROM commerce_products WHERE empresa_id = $1 AND id = $2 LIMIT 1', [context.empresaId, productId]);
+      if (!product.rows[0]) throw new CommerceError('produto não encontrado no tenant', 'PRODUCT_NOT_FOUND');
+      const variantId = req.headers['x-variant-id'] ? assertUuid(req.headers['x-variant-id'], 'variantId') : null;
+      if (variantId) {
+        const variant = await db.query('SELECT id FROM commerce_product_variants WHERE empresa_id = $1 AND id = $2 AND product_id = $3 LIMIT 1', [context.empresaId, variantId, productId]);
+        if (!variant.rows[0]) throw new CommerceError('variante não pertence ao produto', 'VARIANT_NOT_FOUND');
+      }
+      const mediaId = newCommerceMediaId();
+      const uploaded = await uploadCommerceImage({ empresaId: context.empresaId, productId, mediaId, buffer: Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0), mimeType: req.headers['content-type'] });
+      const result = await withCommerceTransaction(trx => createCatalogMedia(trx, context, productId, {
+        mediaId,
+        storageKey: uploaded.storageKey,
+        publicUrl: `/api/storefront/media/${mediaId}`,
+        mimeType: uploaded.mimeType,
+        altText: String(req.headers['x-image-alt'] || '').slice(0, 255),
+        ordem: Number.isInteger(Number(req.headers['x-image-order'])) ? Number(req.headers['x-image-order']) : 0,
+        variantId,
+      }));
+      res.status(201).json(result);
     } catch (error) { jsonError(res, error); }
   });
   router.post('/catalog/products/:id/media', async (req, res) => {

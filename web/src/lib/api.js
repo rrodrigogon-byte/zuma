@@ -82,6 +82,14 @@ apiFn.post   = (path, body, opts = {}) => request(path, { ...opts, method: 'POST
 apiFn.patch  = (path, body) => request(path, { method: 'PATCH',  body: JSON.stringify(body) })
 apiFn.put    = (path, body) => request(path, { method: 'PUT',    body: JSON.stringify(body) })
 apiFn.delete = (path, body) => request(path, { method: 'DELETE', ...(body ? { body: JSON.stringify(body) } : {}) })
+apiFn.upload = (path, file, extraHeaders = {}) => request(path, {
+  method: 'POST',
+  body: file,
+  headers: {
+    'Content-Type': file?.type || 'application/octet-stream',
+    ...extraHeaders,
+  },
+})
 apiFn.sincronizarFilaOffline = () => sincronizarFila((path, opts) => {
   const token = getToken(); const empresaId = getEmpresaAtivaId(); const lojaId = getLojaAtivaId()
   return fetch(path, { ...opts, headers: { 'Content-Type':'application/json', ...(token ? { Authorization:`Bearer ${token}` } : {}), ...(empresaId ? { 'X-Empresa-Id':empresaId } : {}), ...(lojaId ? { 'X-Loja-Id':lojaId } : {}), ...(opts.headers || {}), 'X-Offline-Replay':'1' } })

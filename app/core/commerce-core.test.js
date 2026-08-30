@@ -248,13 +248,17 @@ test('createCatalogVariant valida produto do tenant antes de criar SKU', async (
 test('createCatalogMedia bloqueia variante de outro produto e persiste mídia no tenant', async () => {
   const productId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
   const variantId = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+  const mediaId = '99999999-9999-4999-8999-999999999998';
   const { trx, calls } = queryRecorder((sql) => {
     if (sql.includes('SELECT id FROM commerce_products')) return { rows: [{ id: productId }] };
     if (sql.includes('SELECT id FROM commerce_product_variants')) return { rows: [{ id: variantId }] };
     if (sql.includes('INSERT INTO commerce_product_media')) return { rows: [{ id: '99999999-9999-4999-8999-999999999998', product_id: productId, public_url: 'https://cdn.example/image.jpg' }] };
     return { rows: [] };
   });
-  const result = await createCatalogMedia(trx, { empresaId, lojaId, usuarioId }, productId, { variantId, url: 'https://cdn.example/image.jpg', altText: 'Camiseta azul' });
+  const result = await createCatalogMedia(trx, { empresaId, lojaId, usuarioId }, productId, { mediaId, variantId, url: '/api/storefront/media/99999999-9999-4999-8999-999999999998', storageKey: 'commerce-media/tenant/product/media.png', mimeType: 'image/png', altText: 'Camiseta azul' });
   assert.equal(result.product_id, productId);
+  const mediaInsert = calls.find(call => call.sql.includes('INSERT INTO commerce_product_media'));
+  assert.equal(mediaInsert.values[0], mediaId);
+  assert.equal(mediaInsert.values[5], '/api/storefront/media/99999999-9999-4999-8999-999999999998');
   assert.equal(calls.filter(call => call.sql.includes('INSERT INTO commerce_product_media')).length, 1);
 });
