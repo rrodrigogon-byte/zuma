@@ -116,7 +116,7 @@ test('adapter Correios consulta preço e prazo por serviço com token server-sid
   assert.equal(result.options[0].carrier, 'Correios');
 });
 
-test('adapter Correios consulta rastreamento e recusa pré-postagem não validada', async () => {
+test('adapter Correios consulta rastreamento e mantém o contrato público', async () => {
   process.env.CORREIOS_API_TOKEN = 'correios-token';
   global.fetch = async (url, options) => {
     assert.equal(options.headers.Authorization, 'Bearer correios-token');
@@ -127,5 +127,62 @@ test('adapter Correios consulta rastreamento e recusa pré-postagem não validad
   assert.equal(result.providerStatus, 'posted');
   assert.equal(result.trackingCode, 'AA123456789BR');
   assert.equal(result.events[0].status, 'PO');
-  await assert.rejects(() => shippingProviders.get('correios').createShipment({}), error => error.code === 'SHIPPING_PROVIDER_CAPABILITY_UNAVAILABLE');
+});
+
+test('adapter Correios cria pré-postagem e solicita rótulo assíncrono com schema oficial', async () => {
+  process.env.CORREIOS_API_TOKEN = 'correios-token';
+  const requests = [];
+  global.fetch = async (url, options) => {
+    requests.push({ url, options, body: options.body ? JSON.parse(options.body) : null });
+    assert.equal(options.headers.Authorization, 'Bearer correios-token');
+    if (url.endsWith('/prepostagem/v1/prepostagens')) return new Response(JSON.stringify({ id: 'prepost-1', codigoObjeto: 'AA123456789BR' }), { status: 200 });
+    if (url.endsWith('/prepostagem/v1/prepostagens/rotulo/assincrono/pdf')) return new Response(JSON.stringify({ idRecibo: 'label-receipt-1' }), { status: 200 });
+    throw new Error(`URL inesperada ${url}`);
+  };
+  const result = await shippingProviders.get('correios').createShipment({
+    account: { provider: 'correios', secret_ref: 'env:CORREIOS_API_TOKEN', ambiente: 'sandbox', public_config: { prepostagemApiEnabled: true, modalidadePagamento: '2', postingCard: '1234567890', servicesAdditional: ['019'], shipment: { nonCommercial: true } } },
+    selectedOption: { id: '03220', raw: { packages: [{ width: 10, height: 5, length: 20, weight: 0.5 }] } },
+    from: { name: 'Loja Kytto', email: 'loja@example.com', phone: '11999999999', document: '12345678909', address: 'Rua A', number: '10', district: 'Centro', city: 'São Paulo', postal_code: '01001000', state_abbr: 'SP' },
+    to: { name: 'Cliente Kytto', email: 'cliente@example.com', document: '98765432100', address: 'Rua B', number: '20', district: 'Centro', city: 'Rio de Janeiro', postal_code: '20040002', state_abbr: 'RJ' },
+    products: [{ name: 'Produto físico', quantity: 2, unitaryValue: 19.95 }],
+    idempotencyKey: 'shipping-prepost-1',
+  });
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].url, 'https://apihom.correios.com.br/prepostagem/v1/prepostagens');
+  assert.equal(requests[0].options.headers['X-Idempotency-Key'], 'shipping-prepost-1');
+  assert.equal(requests[0].body.codigoServico, '03220');
+  assert.equal(requests[0].body.numeroCartaoPostagem, '1234567890');
+  assert.equal(requests[0].body.remetente.endereco.cep, '01001000');
+  assert.equal(requests[0].body.destinatario.endereco.regiao, '');
+  assert.deepEqual(requests[0].body.itensDeclaracaoConteudo[0], { conteudo: 'Produto físico', quantidade: '2', valor: '19.95' });
+  assert.deepEqual(requests[0].body.listaServicoAdicional, [{ codigoServicoAdicional: '019' }]);
+  assert.equal(requests[1].url, 'https://apihom.correios.com.br/prepostagem/v1/prepostagens/rotulo/assincrono/pdf');
+  assert.deepEqual(requests[1].body, { idsPrePostagem: ['prepost-1'], tipoRotulo: 'P', formatoRotulo: 'ET', imprimeRemetente: 'S', layoutImpressao: 'PADRAO' });
+  assert.equal(result.providerShipmentId, 'prepost-1');
+  assert.equal(result.trackingCode, 'AA123456789BR');
+  assert.equal(result.trackingUrl.includes('AA123456789BR'), true);
+  assert.equal(result.publicData.labelReceipt, 'label-receipt-1');
+});
+
+test('adapter Correios não cria pré-postagem sem capability explícita', async () => {
+  process.env.CORREIOS_API_TOKEN = 'correios-token';
+  let calls = 0;
+  global.fetch = async () => { calls += 1; return new Response('{}', { status: 200 }); };
+  await assert.rejects(() => shippingProviders.get('correios').createShipment({ account: { provider: 'correios', secret_ref: 'env:CORREIOS_API_TOKEN', ambiente: 'sandbox', public_config: {} } }), error => error.code === 'SHIPPING_PROVIDER_CAPABILITY_UNAVAILABLE');
+  assert.equal(calls, 0);
+});
+
+test('adapter Correios cancela pré-postagem por código de objeto com idempotência', async () => {
+  process.env.CORREIOS_API_TOKEN = 'correios-token';
+  let captured;
+  global.fetch = async (url, options) => {
+    captured = { url, options };
+    return new Response(JSON.stringify({ resultadoCancelamento: 'OK', mensagem: 'Cancelado' }), { status: 200 });
+  };
+  const result = await shippingProviders.get('correios').cancelShipment({ account: { provider: 'correios', secret_ref: 'env:CORREIOS_API_TOKEN', ambiente: 'sandbox', public_config: {} }, providerShipmentId: 'prepost-1', trackingCode: 'AA123456789BR', idempotencyKey: 'shipping-cancel-1' });
+  assert.equal(captured.url, 'https://apihom.correios.com.br/prepostagem/v1/prepostagens/objeto/AA123456789BR');
+  assert.equal(captured.options.method, 'DELETE');
+  assert.equal(captured.options.headers['X-Idempotency-Key'], 'shipping-cancel-1');
+  assert.equal(result.providerStatus, 'cancelled');
+  assert.equal(result.publicData.result, 'OK');
 });
