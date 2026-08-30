@@ -44,6 +44,7 @@ import { observabilidade } from './observabilidade-kytto.js';
 import { backupRecuperacao } from './backup-recuperacao-kytto.js';
 import { acaoDaRequisicao, moduloDaRota, resumoAcessoUsuario, temPermissao } from './perfis-usuarios-kytto.js';
 import { issuePasswordReset, validatePasswordResetToken, consumePasswordReset, normalizarEmail, passwordPolicy } from './password-reset-kytto.js';
+import { registerEsportivoPontosLigas } from './esportivo-pontos-ligas.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -761,6 +762,15 @@ async function iniciar() {
     req.empresa = empresa;
     next();
   }
+
+  registerEsportivoPontosLigas({
+    app,
+    db,
+    save,
+    cadastrosMestres,
+    requerEditorCatalogo,
+    requerAutenticacao,
+  });
 
   // ── FISCAL / CERTIFICADOS A1 ──────────────────────────────────────────────
   // Usa a mesma autenticação administrativa do catálogo e mantém certificados
