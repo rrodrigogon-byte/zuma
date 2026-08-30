@@ -514,8 +514,85 @@ function createCorreiosAdapter() {
   };
 }
 
+const DEFAULT_MANUAL_SHIPPING_RULES = Object.freeze([
+  { id: 'tangara-da-serra', label: 'Tangará da Serra', uf: 'MT', cities: ['Tangará da Serra'], amount: 25, deliveryDays: 1, priority: 100 },
+  { id: 'regional-150km', label: 'Região até 150 km de Tangará da Serra', uf: 'MT', cities: ['Nova Olímpia', 'Barra do Bugres', 'Denise', 'Porto Estrela'], amount: 20, deliveryDays: 1, priority: 80 },
+  { id: 'grande-cuiaba', label: 'Grande Cuiabá', uf: 'MT', cities: ['Cuiabá', 'Várzea Grande', 'Acorizal', 'Chapada dos Guimarães', 'Nossa Senhora do Livramento', 'Santo Antônio do Leverger', 'Campo Verde'], amount: 25, deliveryDays: 1, priority: 70 },
+  { id: 'fallback-nacional', label: 'Demais localidades', amount: 30, deliveryDays: 10, priority: -100, fallback: true },
+]);
+
+function normalizeManualCity(value) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function manualShippingRules(account) {
+  const configured = accountPublicConfig(account).rules;
+  const source = Array.isArray(configured) && configured.length ? configured : DEFAULT_MANUAL_SHIPPING_RULES;
+  return source.map(rule => ({
+    id: String(rule.id || '').trim().slice(0, 80),
+    label: String(rule.label || rule.id || 'Entrega Kytto').trim().slice(0, 160),
+    uf: String(rule.uf || '').trim().toUpperCase().slice(0, 2),
+    cities: Array.isArray(rule.cities) ? rule.cities.map(normalizeManualCity).filter(Boolean).slice(0, 100) : [],
+    amount: safeNumber(rule.amount),
+    deliveryDays: safeNumber(rule.deliveryDays),
+    priority: safeNumber(rule.priority, 0),
+    fallback: rule.fallback === true,
+  })).filter(rule => rule.id && rule.amount !== null && rule.amount >= 0 && rule.deliveryDays !== null && rule.deliveryDays >= 0);
+}
+
+function createManualShippingAdapter() {
+  return {
+    async quote({ account, destinationCity, destinationState }) {
+      const city = normalizeManualCity(destinationCity);
+      const state = String(destinationState || '').trim().toUpperCase();
+      if (!city || !/^[A-Z]{2}$/.test(state)) throw new CommerceError('cidade e UF são obrigatórias para a tabela regional de frete', 'SHIPPING_DESTINATION_CITY_REQUIRED');
+      const rules = manualShippingRules(account);
+      const matching = rules
+        .filter(rule => !rule.fallback && (!rule.uf || rule.uf === state) && (!rule.cities.length || rule.cities.includes(city)))
+        .sort((left, right) => right.priority - left.priority);
+      const selected = matching[0] || rules.find(rule => rule.fallback);
+      if (!selected) throw new CommerceError('não há regra manual de frete para este destino', 'SHIPPING_NO_OPTIONS');
+      const amount = Number(selected.amount.toFixed(2));
+      const deliveryDays = Math.max(0, Math.round(selected.deliveryDays));
+      const publicOption = {
+        id: selected.id,
+        name: selected.label,
+        amount,
+        currency: 'BRL',
+        provider: 'manual',
+        zone: selected.id,
+        deliveryDays,
+        deliveryRange: { min: deliveryDays, max: deliveryDays },
+        deliveryNote: deliveryDays <= 1 ? 'Entrega em até 24 horas úteis' : 'Prazo estimado de 10 dias úteis',
+        priceNote: 'Tabela manual de frete Kytto',
+        priceBreakdown: { totalAmount: amount },
+        carrier: 'Entrega Kytto',
+        carrierId: 'kytto-manual',
+      };
+      return {
+        options: [publicOption],
+        providerOptions: [{ public: publicOption, raw: { ruleId: selected.id, city, state, amount, deliveryDays } }],
+        provider: 'manual',
+      };
+    },
+
+    async createShipment() {
+      throw new CommerceError('a tabela manual Kytto não gera etiqueta ou postagem automaticamente', 'SHIPPING_PROVIDER_CAPABILITY_UNAVAILABLE');
+    },
+
+    async track() {
+      throw new CommerceError('a tabela manual Kytto não possui rastreamento automático', 'SHIPPING_WEBHOOK_UNSUPPORTED');
+    },
+
+    async verifyWebhook() {
+      throw new CommerceError('a tabela manual Kytto não possui webhook de rastreamento', 'SHIPPING_WEBHOOK_UNSUPPORTED');
+    },
+  };
+}
+
 shippingProviders.register('melhorenvio', createMelhorEnvioAdapter());
 shippingProviders.register('correios', createCorreiosAdapter());
+shippingProviders.register('manual', createManualShippingAdapter());
 
 export function melhorEnvioConfigured() {
   return Boolean(process.env.ME_ACCESS_TOKEN || process.env.MELHOR_ENVIO_ACCESS_TOKEN);

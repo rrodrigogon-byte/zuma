@@ -195,3 +195,34 @@ test('adapter Correios cancela pré-postagem por código de objeto com idempotê
   assert.equal(result.providerStatus, 'cancelled');
   assert.equal(result.publicData.result, 'OK');
 });
+
+test('adapter manual Kytto aplica Tangará, regional, Grande Cuiabá e fallback nacional', async () => {
+  const adapter = shippingProviders.get('manual');
+  const baseAccount = { provider: 'manual', ambiente: 'production', public_config: {} };
+  const tangara = await adapter.quote({ account: baseAccount, destinationCity: 'Tangará da Serra', destinationState: 'MT' });
+  assert.equal(tangara.provider, 'manual');
+  assert.equal(tangara.options[0].amount, 25);
+  assert.equal(tangara.options[0].zone, 'tangara-da-serra');
+  assert.equal(tangara.options[0].deliveryDays, 1);
+  assert.equal(tangara.options[0].deliveryNote, 'Entrega em até 24 horas úteis');
+
+  const regional = await adapter.quote({ account: baseAccount, destinationCity: 'Barra do Bugres', destinationState: 'MT' });
+  assert.equal(regional.options[0].amount, 20);
+  assert.equal(regional.options[0].zone, 'regional-150km');
+
+  const cuiaba = await adapter.quote({ account: baseAccount, destinationCity: 'Cuiabá', destinationState: 'MT' });
+  assert.equal(cuiaba.options[0].amount, 25);
+  assert.equal(cuiaba.options[0].zone, 'grande-cuiaba');
+
+  const national = await adapter.quote({ account: baseAccount, destinationCity: 'São Paulo', destinationState: 'SP' });
+  assert.equal(national.options[0].amount, 30);
+  assert.equal(national.options[0].zone, 'fallback-nacional');
+  assert.equal(national.options[0].deliveryDays, 10);
+  assert.equal(national.options[0].deliveryNote, 'Prazo estimado de 10 dias úteis');
+});
+
+test('adapter manual Kytto exige cidade/UF e nunca gera postagem automática', async () => {
+  const adapter = shippingProviders.get('manual');
+  await assert.rejects(() => adapter.quote({ account: { provider: 'manual', public_config: {} }, destinationCity: '', destinationState: '' }), error => error.code === 'SHIPPING_DESTINATION_CITY_REQUIRED');
+  await assert.rejects(() => adapter.createShipment({ account: { provider: 'manual', public_config: {} } }), error => error.code === 'SHIPPING_PROVIDER_CAPABILITY_UNAVAILABLE');
+});

@@ -167,7 +167,7 @@ export default function CommerceCheckout() {
     if (address.cep.replace(/\D/g, '').length !== 8) return setError('Informe um CEP válido antes de calcular o frete.')
     setWorking(true); setError('')
     try {
-      const quote = await api.post('/api/storefront/shipping/quotes', { shippingMethodId, destinationCep: address.cep, items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })) })
+      const quote = await api.post('/api/storefront/shipping/quotes', { shippingMethodId, destinationCep: address.cep, destinationCity: address.cidade, destinationState: address.estado, items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })) })
       setShippingQuote(quote)
       setShippingOptionId(quote.items?.[0]?.id || '')
     } catch (err) { setError(err.message || 'Não foi possível calcular o frete.') }

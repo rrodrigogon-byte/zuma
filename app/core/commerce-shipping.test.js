@@ -98,3 +98,37 @@ test('conta Correios só fica pronta com token, origem e serviço contratado', (
   assert.equal(shippingAccountReady({ ...base, public_config: { origemCep: '01001000', services: ['03220'] } }), true);
   assert.equal(shippingAccountReady({ ...base, public_config: { origemCep: '01001000', services: ['03220'] }, ambiente: 'sandbox' }), true);
 });
+
+test('método manual Kytto publica cotação sem conta logística externa', () => {
+  const method = { id: '10000000-0000-4000-8000-000000000201', codigo: 'kytto-regional', nome: 'Entrega regional Kytto', tipo: 'delivery', configuracao: { provider: 'manual', origemCep: '78300000' } };
+  const publicMethod = publicShippingMethod({ ...method, shipping_account_ready: false });
+  assert.equal(publicMethod.quoteEnabled, true);
+  assert.equal(publicMethod.provider, 'manual');
+  assert.equal(publicMethod.configuracao.provider, 'manual');
+});
+
+test('cotação manual seleciona região por cidade e persiste sem shipping_account_id', async () => {
+  const queries = [];
+  const client = {
+    async query(sql, params) {
+      queries.push({ sql, params });
+      if (sql.includes('FROM commerce_shipping_methods')) return { rows: [{ id: '10000000-0000-4000-8000-000000000201', codigo: 'kytto-regional', nome: 'Entrega regional Kytto', tipo: 'delivery', configuracao: { provider: 'manual', origemCep: '78300000' }, storefront_id: '10000000-0000-4000-8000-000000000203', loja_id: '10000000-0000-4000-8000-000000000204', configuracoes: {} }] };
+      if (sql.includes('FROM commerce_product_variants')) return { rows: [{ id: '10000000-0000-4000-8000-000000000205', sku: 'SKU-MANUAL', nome: 'Produto sem medidas', peso_gramas: null, largura_cm: null, altura_cm: null, comprimento_cm: null, price: 39.9 }] };
+      throw new Error(`query manual inesperada: ${sql}`);
+    },
+    async transaction(callback) {
+      return callback({ query: async (sql, params) => {
+        queries.push({ sql, params });
+        if (sql.includes('INSERT INTO commerce_shipping_quotes')) return { rows: [{ id: 'quote-manual-1', expires_at: '2099-01-01T00:00:00.000Z' }] };
+        throw new Error(`query manual transacional inesperada: ${sql}`);
+      } });
+    },
+  };
+  const result = await quoteShipping(client, { empresaId: '10000000-0000-4000-8000-000000000206', lojaId: '10000000-0000-4000-8000-000000000204' }, { storefrontId: '10000000-0000-4000-8000-000000000203', shippingMethodId: '10000000-0000-4000-8000-000000000201', destinationCep: '78300000', destinationCity: 'Barra do Bugres', destinationState: 'MT', items: [{ variantId: '10000000-0000-4000-8000-000000000205', quantity: 1 }] });
+  assert.equal(result.quoteId, 'quote-manual-1');
+  assert.equal(result.provider, 'manual');
+  assert.equal(result.items[0].amount, 20);
+  assert.equal(result.items[0].deliveryDays, 1);
+  const insert = queries.find(item => item.sql.includes('INSERT INTO commerce_shipping_quotes'));
+  assert.equal(insert.params[3], null);
+});

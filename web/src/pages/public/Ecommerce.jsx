@@ -226,7 +226,7 @@ export default function Ecommerce() {
     setShippingQuoteLoading(true)
     setCheckoutError('')
     try {
-      const quote = await api.post('/api/storefront/shipping/quotes', { shippingMethodId, destinationCep: shippingAddress.cep, items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })) })
+      const quote = await api.post('/api/storefront/shipping/quotes', { shippingMethodId, destinationCep: shippingAddress.cep, destinationCity: shippingAddress.cidade, destinationState: shippingAddress.estado, items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })) })
       setShippingQuote(quote)
       setShippingOptionId(quote.items?.[0]?.id || '')
     } catch (err) { setCheckoutError(err.message || 'Não foi possível calcular o frete neste momento.') }
