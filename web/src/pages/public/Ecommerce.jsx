@@ -14,11 +14,22 @@ function readCart() {
 function money(value) { return fmtR(Number(value || 0)) }
 function checkoutKey() { return `kytto-${Date.now()}-${Math.random().toString(36).slice(2,10)}` }
 
+function productMedia(product) {
+  const media = Array.isArray(product?.media) ? product.media : []
+  return media.filter(item => item?.url).map((item, index) => ({
+    id: item.id || item.url || `media-${index}`,
+    url: item.url,
+    altText: item.altText || product?.nome || 'Imagem do produto',
+    ordem: Number(item.ordem || 0),
+  })).sort((a, b) => a.ordem - b.ordem)
+}
+
 function normalizeCatalog(data, source) {
   const items = Array.isArray(data) ? data : data?.items || []
   if (source === 'legacy') return items
   return items.map(product => {
-    const media = product.media?.find(item => item.url)?.url || ''
+    const media = productMedia(product)
+    const primaryMedia = media[0]?.url || ''
     const variants = (product.variants || []).map((variant, index) => {
       const price = variant.prices?.[0] || {}
       const effective = Number(price.precoPromocional ?? price.preco ?? 0)
@@ -43,7 +54,9 @@ function normalizeCatalog(data, source) {
       nome: product.nome,
       cat: product.category_name || 'Produto',
       descricao: product.descricao_curta || product.descricao || '',
-      imagem: media,
+      descricaoDetalhada: product.descricao || '',
+      imagem: primaryMedia,
+      media,
       ...primary,
       variants,
       emoji: '▦',
@@ -53,17 +66,32 @@ function normalizeCatalog(data, source) {
 
 function selectedProductVariant(product, variantId) {
   const variant = product?.variants?.find(item => item.variantId === variantId) || product?.variants?.[0]
-  return variant ? { ...product, ...variant, id: product.id, nome: product.nome, cat: product.cat, descricao: product.descricao, imagem: product.imagem } : product
+  return variant ? { ...product, ...variant, id: product.id, nome: product.nome, cat: product.cat, descricao: product.descricao, descricaoDetalhada: product.descricaoDetalhada, imagem: product.imagem, media: product.media } : product
 }
 
 function availableStock(product, variantId) {
   return Math.max(0, Number(selectedProductVariant(product, variantId)?.estoque || 0))
 }
 
-function ProductImage({ product, large = false }) {
-  return product.imagem
-    ? <img src={product.imagem} alt={product.nome} loading={large ? 'eager' : 'lazy'} decoding="async" className={`commerce-product-image ${large ? 'is-large' : ''}`} />
-    : <div className={`commerce-product-placeholder ${large ? 'is-large' : ''}`} aria-hidden="true">{product.emoji || '▦'}</div>
+function ProductImage({ product, large = false, mediaUrl = '' }) {
+  const image = mediaUrl || product?.imagem || productMedia(product)[0]?.url || ''
+  const alt = productMedia(product).find(item => item.url === image)?.altText || product?.nome || 'Produto'
+  return image
+    ? <img src={image} alt={alt} loading={large ? 'eager' : 'lazy'} decoding="async" className={`commerce-product-image ${large ? 'is-large' : ''}`} />
+    : <div className={`commerce-product-placeholder ${large ? 'is-large' : ''}`} aria-hidden="true">{product?.emoji || '▦'}</div>
+}
+
+function ProductGallery({ product }) {
+  const media = productMedia(product)
+  const items = media.length ? media : (product?.imagem ? [{ id: product.imagem, url: product.imagem, altText: product.nome || 'Produto', ordem: 0 }] : [])
+  const [activeId, setActiveId] = useState(items[0]?.id || '')
+  useEffect(() => { setActiveId(items[0]?.id || '') }, [product?.id])
+  const active = items.find(item => item.id === activeId) || items[0]
+  return <div className="commerce-product-gallery">
+    <div className="commerce-product-gallery-main"><ProductImage product={product} large mediaUrl={active?.url || ''} /></div>
+    {items.length > 1 && <div className="commerce-product-gallery-thumbs" role="list" aria-label="Imagens do produto">{items.map(item => <button type="button" key={item.id} className={`commerce-product-gallery-thumb ${active?.id === item.id ? 'is-active' : ''}`} onClick={() => setActiveId(item.id)} aria-label={`Ver imagem ${items.indexOf(item) + 1} de ${items.length}`} aria-pressed={active?.id === item.id}><img src={item.url} alt="" loading="lazy" decoding="async" /></button>)}</div>}
+    {items.length > 1 && <small className="commerce-product-gallery-count">{items.indexOf(active) + 1} de {items.length} imagens</small>}
+  </div>
 }
 
 function QuantityControl({ value, onChange, max }) {
@@ -348,7 +376,7 @@ export default function Ecommerce() {
       <div><strong>Pedido rastreável</strong><span>Acompanhe cada etapa com seu código.</span></div>
     </section>
 
-    {selected && <div className="commerce-overlay" role="dialog" aria-modal="true" aria-label="Detalhes do produto"><div className="commerce-modal commerce-product-modal"><button type="button" className="commerce-close" onClick={() => setSelected(null)} aria-label="Fechar"><X size={18} /></button><ProductImage product={selectedVariant} large /><div><span className="commerce-eyebrow">{selected.cat || 'Produto'}</span><h2>{selected.nome}</h2><p>{selected.descricao || 'Produto disponível no catálogo Kytto.'}</p>{selected.variants?.length > 1 && <label className="commerce-variant-select">Variação<select value={selectedVariant.variantId || ''} onChange={event => setSelectedVariantId(event.target.value)}>{selected.variants.map(variant => <option key={variant.variantId} value={variant.variantId}>{variant.label || variant.cod || 'Opção'}{variant.esgotado ? ' · esgotado' : ''}</option>)}</select></label>}<div className="commerce-modal-price"><strong>{money(selectedVariant.preco)}</strong>{selectedVariant.promocaoAtiva && <s>{money(selectedVariant.precoOriginal)}</s>}</div><div className="commerce-modal-actions"><button type="button" className="commerce-button commerce-button-primary" disabled={selectedVariant.esgotado} onClick={() => addToCart(selectedVariant)}>{selectedVariant.esgotado ? 'Produto esgotado' : 'Adicionar ao carrinho'} <ShoppingBag size={16} /></button><small>{selectedVariant.esgotado ? 'Sem estoque no momento.' : `${selectedVariant.estoque} unidade(s) disponíveis`}</small></div></div></div></div>}
+    {selected && <div className="commerce-overlay" role="dialog" aria-modal="true" aria-label="Detalhes do produto"><div className="commerce-modal commerce-product-modal"><button type="button" className="commerce-close" onClick={() => setSelected(null)} aria-label="Fechar"><X size={18} /></button><ProductGallery product={selectedVariant} /><div><span className="commerce-eyebrow">{selected.cat || 'Produto'}</span><h2>{selected.nome}</h2><p>{selected.descricao || 'Produto disponível no catálogo Kytto.'}</p>{selectedVariant.descricaoDetalhada && selectedVariant.descricaoDetalhada !== selectedVariant.descricao && <p className="commerce-product-long-description">{selectedVariant.descricaoDetalhada}</p>}<div className="commerce-product-meta"><span><small>SKU</small><strong>{selectedVariant.cod || '—'}</strong></span><span><small>Disponibilidade</small><strong>{selectedVariant.esgotado ? 'Esgotado' : `${selectedVariant.estoque} em estoque`}</strong></span></div>{selected.variants?.length > 1 && <label className="commerce-variant-select">Variação<select value={selectedVariant.variantId || ''} onChange={event => setSelectedVariantId(event.target.value)}>{selected.variants.map(variant => <option key={variant.variantId} value={variant.variantId}>{variant.label || variant.cod || 'Opção'}{variant.esgotado ? ' · esgotado' : ''}</option>)}</select></label>}<div className="commerce-modal-price"><strong>{money(selectedVariant.preco)}</strong>{selectedVariant.promocaoAtiva && <s>{money(selectedVariant.precoOriginal)}</s>}</div><div className="commerce-modal-actions"><button type="button" className="commerce-button commerce-button-primary" disabled={selectedVariant.esgotado} onClick={() => addToCart(selectedVariant)}>{selectedVariant.esgotado ? 'Produto esgotado' : 'Adicionar ao carrinho'} <ShoppingBag size={16} /></button><small>{selectedVariant.esgotado ? 'Sem estoque no momento.' : `${selectedVariant.estoque} unidade(s) disponíveis`}</small></div></div></div></div>}
 
     {checkoutOpen && <div className="commerce-overlay" role="dialog" aria-modal="true" aria-label="Carrinho e checkout"><div className="commerce-modal commerce-checkout-modal"><button type="button" className="commerce-close" onClick={() => setCheckoutOpen(false)} aria-label="Fechar"><X size={18} /></button><div className="commerce-modal-heading"><span className="commerce-eyebrow">Checkout</span><h2>Finalize seu pedido</h2><p>O pedido será encaminhado para a operação da loja e você receberá um código de acompanhamento.</p></div><div className="commerce-checkout-layout"><div className="commerce-cart-list">{cart.map(item => <div className="commerce-cart-row" key={`${item.produtoId}-${item.variantId || 'base'}`}><ProductImage product={item} /><div><strong>{item.nome}</strong><span>{money(item.preco)} cada</span></div><QuantityControl value={item.qtd} max={Math.max(1, availableStock(products.find(product => product.id === item.produtoId), item.variantId))} onChange={value => updateCart(item.produtoId, item.variantId, value)} /><b>{money(item.qtd * item.preco)}</b></div>)}<div className="commerce-cart-total"><span>Subtotal</span><strong>{money(cartTotal)}</strong></div>{selectedShippingOption && <div className="commerce-cart-total commerce-cart-shipping"><span>Frete · {selectedShippingOption.name}</span><strong>{money(selectedShippingOption.amount)}</strong></div>}<div className="commerce-cart-total"><span>Total{selectedShippingMethod?.tipo === 'pickup' ? ' · retirada' : ''}</span><strong>{money(checkoutTotal)}</strong></div><Link className="commerce-button commerce-button-primary commerce-dedicated-checkout-link" to="/checkout">Continuar para checkout seguro <ArrowRight size={16} /></Link></div><form className="commerce-form" onSubmit={submitOrder}>
 <label>Nome completo<input name="nome" autoComplete="name" required /></label><label>E-mail<input name="email" type="email" autoComplete="email" required /></label><label>WhatsApp ou telefone<input name="tel" autoComplete="tel" value={shippingAddress.telefone} onChange={event => changeShippingAddress('telefone', event.target.value)} /></label><fieldset><legend>Como receber</legend><label className="commerce-radio"><input type="radio" name="delivery" checked={delivery.mode === 'retirada'} disabled={!pickupAvailable} onChange={() => chooseDelivery('retirada')} /> Retirada no local</label><label className="commerce-radio"><input type="radio" name="delivery" checked={delivery.mode === 'entrega'} disabled={!deliveryAvailable} onChange={() => chooseDelivery('entrega')} /> Entrega/delivery</label></fieldset>{catalogSource === 'core' && <label>Forma de entrega<select value={shippingMethodId} onChange={event => { setShippingMethodId(event.target.value); setShippingQuote(null); setShippingOptionId('') }} disabled={!shippingMethods.length} required><option value="">Selecione uma opção configurada</option>{shippingMethods.filter(method => delivery.mode === 'entrega' ? ['delivery', 'carrier'].includes(method.tipo) && method.quoteEnabled : method.tipo === 'pickup').map(method => <option key={method.id} value={method.id}>{method.nome}</option>)}</select>{!shippingMethods.length && <small>Nenhum método publicado para este storefront.</small>}{selectedShippingMethod?.tipo === 'pickup' && <small>Retirada confirmada no local. O pagamento será concluído conforme gateway homologado.</small>}</label>}{delivery.mode === 'entrega' && <div className="commerce-address-fields"><label>CPF ou CNPJ do destinatário<input name="documento" inputMode="numeric" autoComplete="shipping" required value={shippingAddress.documento} onChange={event => changeShippingAddress('documento', event.target.value)} /></label><label className="commerce-cep-field">CEP<div className="commerce-inline-field"><input name="cep" inputMode="numeric" autoComplete="shipping postal-code" required value={shippingAddress.cep} onChange={event => changeShippingAddress('cep', event.target.value)} onBlur={() => shippingAddress.cep.replace(/\D/g, '').length === 8 && lookupCep()} placeholder="00000-000" /><button type="button" className="commerce-button commerce-button-quiet" onClick={lookupCep} disabled={addressLookupLoading}>{addressLookupLoading ? 'Consultando…' : 'Consultar CEP'}</button></div></label><label>Logradouro<input name="logradouro" autoComplete="shipping address-line1" required value={shippingAddress.logradouro} onChange={event => changeShippingAddress('logradouro', event.target.value)} /></label><label>Número<input name="numero" autoComplete="shipping address-line2" required value={shippingAddress.numero} onChange={event => changeShippingAddress('numero', event.target.value)} /></label><label>Bairro<input name="bairro" autoComplete="shipping address-level3" required value={shippingAddress.bairro} onChange={event => changeShippingAddress('bairro', event.target.value)} /></label><label>Cidade<input name="cidade" autoComplete="shipping address-level2" required value={shippingAddress.cidade} onChange={event => changeShippingAddress('cidade', event.target.value)} /></label><label>UF<input name="estado" maxLength="2" autoComplete="shipping address-level1" required value={shippingAddress.estado} onChange={event => changeShippingAddress('estado', event.target.value.toUpperCase())} /></label><label>Complemento<input name="complemento" value={shippingAddress.complemento} onChange={event => changeShippingAddress('complemento', event.target.value)} /></label><label className="wide">Referência<input name="referencia" value={shippingAddress.referencia} onChange={event => changeShippingAddress('referencia', event.target.value)} /></label>{selectedShippingMethod?.quoteEnabled ? <div className="commerce-shipping-quote-box wide"><div className="commerce-quote-heading"><strong>Opções de frete</strong><button type="button" className="commerce-button commerce-button-quiet" onClick={requestShippingQuote} disabled={shippingQuoteLoading || !cart.length}>{shippingQuoteLoading ? 'Calculando…' : shippingQuote ? 'Atualizar cotação' : 'Calcular frete'}</button></div>{shippingQuote?.expiresAt && <small>Cotação válida até {new Date(shippingQuote.expiresAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.</small>}<div className="commerce-shipping-options">{shippingQuote?.items?.map(option => <label className="commerce-shipping-option" key={option.id}><input type="radio" name="shippingOption" value={option.id} checked={shippingOptionId === option.id} onChange={event => setShippingOptionId(event.target.value)} /><span><strong>{option.name}</strong><small>{option.carrier || 'Transportadora'}{option.deliveryRange?.max ? ` · até ${option.deliveryRange.max} dias úteis` : ''}</small></span><b>{money(option.amount)}</b></label>)}</div>{!shippingQuote && <small>Informe o CEP e calcule o frete para continuar.</small>}</div> : <small className="wide">Esta forma de entrega ainda não está conectada a um cotador real.</small>}</div>}<label>Observação<textarea name="observacao" rows="2" placeholder="Preferências ou instruções para a loja" /></label>{catalogSource === 'core' && <label>Cupom de desconto<input name="promotionCode" placeholder="Código do cupom (opcional)" /></label>}{checkoutError && <div className="commerce-form-error">{checkoutError}</div>}<button className="commerce-button commerce-button-primary" type="submit" disabled={submitting || !cart.length || checkoutBlocked}>{submitting ? <><Loader2 className="commerce-spin" size={16} /> Enviando…</> : <>Confirmar pedido <ArrowRight size={16} /></>}</button>{checkoutBlocked && <small className="commerce-checkout-note">A loja ainda não publicou uma forma de entrega para este canal.</small>}</form></div></div></div>}
