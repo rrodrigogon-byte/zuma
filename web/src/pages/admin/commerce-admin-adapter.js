@@ -390,6 +390,10 @@ export async function syncCorePayment(paymentId) {
   return api.post(`/api/admin/commerce/payments/${paymentId}/sync`, {})
 }
 
+export async function reconcileCorePayment(paymentId, payload) {
+  return api.post(`/api/admin/commerce/payments/${paymentId}/reconcile`, payload)
+}
+
 export async function loadCoreReports() {
   const [sales, fulfillment, inventory, customers] = await Promise.all([
     api.get('/api/admin/commerce/reports/sales'),

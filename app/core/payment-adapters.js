@@ -277,6 +277,56 @@ export async function syncPaymentAttempt(contextInput, paymentIdInput) {
   });
 }
 
+export async function reconcilePaymentByIdentifiers(contextInput, paymentIdInput, input = {}) {
+  const context = tenantContext(contextInput);
+  const paymentId = assertUuid(paymentIdInput, 'paymentId');
+  const transactionNsu = String(input.transactionNsu || input.transaction_nsu || '').trim().slice(0, 180);
+  const slug = String(input.slug || input.invoiceSlug || input.invoice_slug || '').trim().slice(0, 180);
+  const receiptUrl = String(input.receiptUrl || input.receipt_url || '').trim().slice(0, 500);
+  const captureMethod = String(input.captureMethod || input.capture_method || '').trim().slice(0, 40);
+  if (!transactionNsu || !slug) throw new CommerceError('transaction_nsu e slug são obrigatórios para reconciliar a venda', 'PAYMENT_RECONCILIATION_INPUT_INVALID');
+  await withCommerceTransaction(async trx => {
+    const result = await trx.query(
+      `SELECT p.id, p.order_id, p.provider, p.status, p.amount, p.provider_payment_id, p.metadata, p.payment_account_id,
+              o.public_code AS order_code, o.storefront_id, o.status AS order_status
+         FROM commerce_payments p
+         JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id
+        WHERE p.empresa_id = $1 AND p.id = $2
+          AND ($3::uuid IS NULL OR o.loja_id = $3)
+        FOR UPDATE OF p`,
+      [context.empresaId, paymentId, context.lojaId],
+    );
+    const payment = result.rows[0];
+    if (!payment) throw new CommerceError('pagamento não encontrado no tenant ou na loja ativa', 'PAYMENT_NOT_FOUND');
+    if (payment.provider !== 'infinitepay') throw new CommerceError('a reconciliação manual por NSU está disponível somente para InfinitePay', 'PAYMENT_RECONCILIATION_PROVIDER_UNSUPPORTED');
+    if (payment.provider_payment_id && payment.provider_payment_id !== transactionNsu) throw new CommerceError('o pagamento já possui outro identificador InfinitePay', 'PAYMENT_RECONCILIATION_CONFLICT');
+    const duplicate = await trx.query(
+      `SELECT id FROM commerce_payments
+        WHERE empresa_id = $1 AND provider = 'infinitepay' AND provider_payment_id = $2 AND id <> $3
+        LIMIT 1`,
+      [context.empresaId, transactionNsu, paymentId],
+    );
+    if (duplicate.rows[0]) throw new CommerceError('transaction_nsu já está vinculado a outro pagamento', 'PAYMENT_RECONCILIATION_CONFLICT');
+    const checkout = {
+      ...(payment.metadata?.checkout || {}),
+      orderNsu: payment.order_code,
+      transactionNsu,
+      slug,
+      ...(receiptUrl ? { receiptUrl } : {}),
+      ...(captureMethod ? { captureMethod } : {}),
+    };
+    await trx.query(
+      `UPDATE commerce_payments
+          SET provider_payment_id = $3,
+              metadata = COALESCE(metadata, '{}'::jsonb) || $4::jsonb,
+              atualizado_em = CURRENT_TIMESTAMP
+        WHERE empresa_id = $1 AND id = $2`,
+      [context.empresaId, paymentId, transactionNsu, JSON.stringify({ checkout, manualReconciliation: { at: new Date().toISOString(), source: 'admin' } })],
+    );
+  });
+  return syncPaymentAttempt(context, paymentId);
+}
+
 export async function verifyPaymentWebhook(provider, payload, signature, context = {}) {
   const adapter = paymentProviders.get(provider);
   if (!adapter) throw new CommerceError('gateway não registrado', 'PAYMENT_PROVIDER_NOT_CONFIGURED', { provider });
