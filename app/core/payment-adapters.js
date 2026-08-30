@@ -228,7 +228,7 @@ export async function syncPaymentAttempt(contextInput, paymentIdInput) {
          LEFT JOIN commerce_payment_accounts a ON a.empresa_id = p.empresa_id AND a.id = p.payment_account_id
         WHERE p.empresa_id = $1 AND p.id = $2
           AND ($3::uuid IS NULL OR o.loja_id = $3)
-        FOR UPDATE`,
+        FOR UPDATE OF p`,
       [context.empresaId, paymentId, context.lojaId],
     );
     const payment = result.rows[0];
@@ -250,7 +250,7 @@ export async function syncPaymentAttempt(contextInput, paymentIdInput) {
   if (!statusResult?.status || String(statusResult.providerPaymentId || '') !== String(prepared.provider_payment_id)) throw new CommerceError('adapter retornou um pagamento diferente do registro persistido', 'PAYMENT_PROVIDER_STATUS_INVALID');
   if (statusResult.amount != null && Math.abs(Number(statusResult.amount) - Number(prepared.amount)) > 0.01) throw new CommerceError('valor consultado no gateway diverge do pedido', 'PAYMENT_AMOUNT_MISMATCH');
   return withCommerceTransaction(async trx => {
-    const currentResult = await trx.query(`SELECT p.id, p.order_id, p.status, p.amount, o.status AS order_status FROM commerce_payments p JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id WHERE p.empresa_id = $1 AND p.id = $2 FOR UPDATE`, [context.empresaId, paymentId]);
+    const currentResult = await trx.query(`SELECT p.id, p.order_id, p.status, p.amount, o.status AS order_status FROM commerce_payments p JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id WHERE p.empresa_id = $1 AND p.id = $2 FOR UPDATE OF p`, [context.empresaId, paymentId]);
     const current = currentResult.rows[0];
     if (!current) throw new CommerceError('pagamento não encontrado no tenant', 'PAYMENT_NOT_FOUND');
     const next = String(statusResult.status).toLowerCase();
