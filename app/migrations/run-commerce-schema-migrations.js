@@ -24,6 +24,7 @@ const migrationFiles = [
   '032_commerce_order_store_scope.sql',
   '033_commerce_storefront_templates.sql',
   '034_commerce_multistore_access.sql',
+  '035_agro_open_public_store_mapping.sql',
 ];
 const advisoryLockKey = 825410732;
 
