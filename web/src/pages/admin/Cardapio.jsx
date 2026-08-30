@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
-import { api, fmtR } from '../../lib/api'
+import { api, asArray, fmtR } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
+import { useAuth } from '../../lib/auth'
 
 function exportCSV(itens) {
   const headers = ['ID', 'Nome', 'Categoria', 'Setor', 'Preço', 'Disponível', 'Cozinha']
@@ -116,6 +117,7 @@ function PreviewPDV({ itens }) {
 
 export default function Cardapio() {
   const { toast } = useToast()
+  const { isPlatformAdmin } = useAuth()
   const [itens, setItens] = useState([])
   const [gruposModificadores, setGruposModificadores] = useState([])
   const [loading, setLoading] = useState(true)
@@ -128,11 +130,12 @@ export default function Cardapio() {
   const [busca, setBusca]           = useState('')
   const [filtroCat, setFiltroCat]   = useState('Todas')
   const [filtroDisp, setFiltroDisp] = useState('todos') // 'todos'|'disponiveis'|'indisponiveis'
+  const [replicando, setReplicando] = useState(false)
 
   const load = () => {
     setLoading(true)
     Promise.all([api.get('/api/admin/cardapio'), api.get('/api/admin/modificadores/grupos')])
-      .then(([cardapio, modificadores]) => { setItens(cardapio); setGruposModificadores(Array.isArray(modificadores?.grupos) ? modificadores.grupos : []) })
+      .then(([cardapio, modificadores]) => { setItens(asArray(cardapio, ['itens', 'produtos', 'cardapio'])); setGruposModificadores(asArray(modificadores, ['grupos'])) })
       .catch(() => toast('Erro ao carregar cardápio', 'error'))
       .finally(() => setLoading(false))
   }
@@ -288,6 +291,19 @@ export default function Cardapio() {
     }
   }
 
+  const handleReplicarTodasEmpresas = async () => {
+    if (!confirm('Replicar o catálogo oficial para todas as empresas ativas? Itens já existentes não serão duplicados e nenhum preço será sobrescrito.')) return
+    setReplicando(true)
+    try {
+      const resultado = await api.post('/api/admin/cardapio/replicar-todas-empresas', {})
+      toast(`${resultado.totalAdicionados || 0} itens replicados em ${resultado.totalEmpresas || 0} empresas`, 'success')
+      load()
+    } catch (e) {
+      toast(e?.message || 'Erro ao replicar cardápios', 'error')
+    } finally {
+      setReplicando(false)
+    }
+  }
   return (
     <div className="page">
       {/* Header */}
@@ -301,6 +317,11 @@ export default function Cardapio() {
           >
             👁 Preview PDV
           </button>
+          {isPlatformAdmin && (
+            <button className="btn btn-primary btn-sm" onClick={handleReplicarTodasEmpresas} disabled={replicando}>
+              {replicando ? 'Replicando…' : '↗ Aplicar catálogo oficial'}
+            </button>
+          )}
         </div>
       </div>
 
