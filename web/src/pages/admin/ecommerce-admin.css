@@ -246,3 +246,5 @@
 }
 .commerce-storefront-meta b { color: #315247; font-size: 9px; text-transform: uppercase; letter-spacing: .05em; }
 @media (max-width: 520px) { .commerce-storefront-meta { grid-template-columns: 1fr; } }
+
+.commerce-inventory-report-panel{margin-top:16px}.commerce-inventory-report-panel .ecommerce-admin-table td strong{display:block}.commerce-inventory-report-panel .ecommerce-admin-table td small{display:block;color:#788a84;margin-top:3px}.commerce-inventory-report-panel .commerce-payment-status{white-space:nowrap}@media(max-width:800px){.commerce-inventory-report-panel .ecommerce-admin-table{min-width:720px}}
