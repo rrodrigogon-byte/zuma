@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { db, save, nextId, hydrate, flush } from './db.js';
+import { CATALOGO_BAR_TTC_SKUS, RESUMO_CATALOGO_BAR_TTC } from './catalogo-bar-ttc-oficial.js';
 import { sortear } from './bracket.js';
 import { applyChaveToRanking, rankingList, applyPartidaToRanking, temporadasList, resetTemporada } from './ranking.js';
 import { ranking as tennisRanking, noticias as tennisNews } from './tennis.js';
@@ -1280,7 +1281,42 @@ const CARDAPIO = [
   { id:'acai_300',    nome:'Açaí 300ml',               cat:'Sobremesas', preco:16, setor:'bar',     cozinha:false },
   { id:'sorvete',     nome:'Sorvete 2 bolas',          cat:'Sobremesas', preco:12, setor:'bar',     cozinha:false },
 ];
-// prod() usa cardápio dinâmico (admin pode editar) com fallback no hardcoded
+// O catálogo oficial é a fonte do Bar/Restaurante. A lista hardcoded acima é mantida
+// apenas para compatibilidade de leitura histórica, mas nunca mais é usada como fonte.
+const LEGACY_CARDAPIO_IDS = new Set(CARDAPIO.map((produto) => String(produto.id)));
+const OFICIAL_CARDAPIO_VERSION = RESUMO_CATALOGO_BAR_TTC.versao;
+function criarCardapioOficial() {
+  const agora = new Date().toISOString();
+  return CATALOGO_BAR_TTC_SKUS.map((produto, indice) => ({
+    ...produto,
+    id: `bar-ttc-${produto.sku.toLowerCase()}`,
+    empresaId: 'principal',
+    catalogoSeed: OFICIAL_CARDAPIO_VERSION,
+    ordem: indice + 1,
+    criadoEm: agora,
+    atualizadoEm: agora,
+  }));
+}
+function garantirCardapioOficial() {
+  const estado = db();
+  const atual = Array.isArray(estado.cardapio) ? estado.cardapio : [];
+  const limpo = atual.filter((produto) => {
+    const id = String(produto?.id || '');
+    return !LEGACY_CARDAPIO_IDS.has(id) && !id.startsWith('seed-') && !['kytto-bebidas-v1', 'kytto-espetinhos-v1'].includes(produto?.catalogoSeed);
+  });
+  const existentes = new Set(limpo.map((produto) => String(produto?.sku || '').toLowerCase()).filter(Boolean));
+  const oficiais = criarCardapioOficial();
+  for (const produto of oficiais) {
+    if (existentes.has(produto.sku.toLowerCase())) continue;
+    limpo.push(produto);
+    existentes.add(produto.sku.toLowerCase());
+  }
+  const mudou = limpo.length !== atual.length || limpo.some((produto, indice) => produto !== atual[indice]);
+  if (mudou) { estado.cardapio = limpo; save(); }
+  else if (!Array.isArray(estado.cardapio)) { estado.cardapio = limpo; save(); }
+  return Array.isArray(estado.cardapio) ? estado.cardapio : limpo;
+}
+// prod() usa cardápio oficial + itens explicitamente cadastrados pelo administrador.
 const prod = id => getCardapio().find(p=>p.id===id);
 const comandaTotal = c => c.itens.reduce((s,i)=>s + i.preco*i.qtd, 0);
 const openComandaMesa = num => db().comandas.find(c=>c.tipo==='fisica' && c.mesaNum===num && c.status==='aberta');
@@ -1669,11 +1705,11 @@ app.post('/api/admin/mesas/abrir', auth, requireStaff, (req,res)=>{
 });
 
 // ── CARDÁPIO CRUD ────────────────────────────────────────────────────────────
-function getCardapio(){ return db().cardapio && db().cardapio.length ? db().cardapio : CARDAPIO; }
+function getCardapio(){ return garantirCardapioOficial(); }
 
 app.get('/api/admin/cardapio', auth, requireStaff, (req,res)=> res.json(getCardapio()));
 app.post('/api/admin/cardapio', auth, requireStaff, (req,res)=>{
-  if(!db().cardapio||!db().cardapio.length) db().cardapio=[...CARDAPIO];
+  garantirCardapioOficial();
   const {nome,cat,preco,setor,cozinha,emoji,ordem} = req.body||{};
   if(!nome||!cat||!preco) return res.status(400).json({error:'nome, cat e preco são obrigatórios'});
   const id='p'+nextId();
@@ -1685,7 +1721,7 @@ app.post('/api/admin/cardapio', auth, requireStaff, (req,res)=>{
   save(); res.json({ok:true,id});
 });
 app.patch('/api/admin/cardapio/:id', auth, requireStaff, (req,res)=>{
-  if(!db().cardapio||!db().cardapio.length) db().cardapio=[...CARDAPIO];
+  garantirCardapioOficial();
   const p=db().cardapio.find(x=>x.id===req.params.id);
   if(!p) return res.status(404).json({error:'produto não encontrado'});
   const {nome,cat,preco,setor,cozinha,indisponivel,emoji,ordem} = req.body||{};
@@ -1696,7 +1732,7 @@ app.patch('/api/admin/cardapio/:id', auth, requireStaff, (req,res)=>{
   save(); res.json({ok:true});
 });
 app.delete('/api/admin/cardapio/:id', auth, requireStaff, (req,res)=>{
-  if(!db().cardapio||!db().cardapio.length) db().cardapio=[...CARDAPIO];
+  garantirCardapioOficial();
   const idx=db().cardapio.findIndex(x=>x.id===req.params.id);
   if(idx<0) return res.status(404).json({error:'produto não encontrado'});
   db().cardapio.splice(idx,1); save(); res.json({ok:true});
@@ -1787,10 +1823,10 @@ app.delete('/api/admin/combos/:id', auth, requireStaff, (req,res)=>{
   } catch(error){ res.status(422).json({ error:error.message, code:'INVALID_COMBO' }); }
 });
 
-// Restaurar cardápio padrão (sobrescreve com CARDAPIO hardcoded)
+// Restaurar cardápio oficial do Bar TTC, sem itens genéricos ou fictícios.
 app.post('/api/admin/cardapio/reset', auth, requireRole('admin'), (req,res)=>{
-  db().cardapio = [...CARDAPIO];
-  save(); res.json({ok:true, total: CARDAPIO.length});
+  db().cardapio = criarCardapioOficial();
+  save(); res.json({ ok:true, total: db().cardapio.length, versao: OFICIAL_CARDAPIO_VERSION, fonte: RESUMO_CATALOGO_BAR_TTC.fonte });
 });
 
 // Reset geral de dados (admin apenas) — Configuracoes.jsx
