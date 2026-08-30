@@ -26,6 +26,10 @@ import { mail } from './email.js';
 import { emitir as nfceEmitir, cancelar as nfceCancelar, nfceConfigurado } from './nfce.js';
 import { createCommerceAdminRouter, createCommercePublicRouter, createCommerceWebhookRouter } from './core/commerce-routes.js';
 import { db as commerceDb } from './core/database.js';
+import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
+import * as clientesKytto from './clientes-contas-kytto.js';
+import * as financeiroKytto from './financeiro-central-kytto.js';
+import * as caixaKytto from './caixa-diario-kytto.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -1743,6 +1747,176 @@ app.delete('/api/admin/cardapio/:id', auth, requireStaff, (req,res)=>{
 // reutilizam o domínio já testado e mantêm os dados separados por empresa.
 function legacyEmpresaId(req){ return req.user?.empresaId || 'principal'; }
 function produtosCardapioAtivos(){ return getCardapio().filter(produto => !produto.indisponivel); }
+
+// ── BARBEARIA ERP — CONTRATO ADMINISTRATIVO NO RUNTIME DO RENDER ─────────────
+// O Render inicia server.js. Este contrato usa o empresaId presente no JWT e
+// preserva o módulo v1 legado, que possui outro modelo de dados.
+function sanitizarClienteBarbearia(cliente) {
+  if (!cliente) return cliente;
+  return {
+    id: cliente.id, empresaId: cliente.empresaId, nome: cliente.nome, tipo: cliente.tipo,
+    telefone: cliente.telefone, email: cliente.email, endereco: cliente.endereco,
+    limiteCreditoMensal: cliente.limiteCreditoMensal, diasVencimento: cliente.diasVencimento,
+    observacao: cliente.observacao, saldoDevedor: cliente.saldoDevedor,
+    scoreCredito: cliente.scoreCredito, risco: cliente.risco,
+    criadoEm: cliente.criadoEm, atualizadoEm: cliente.atualizadoEm,
+  };
+}
+
+function clientesBarbeariaSomenteLeitura(empresaId) {
+  const clientes = db().clientesKytto?.empresas?.[String(empresaId)]?.clientes || {};
+  return Object.values(clientes)
+    .filter(cliente => cliente.empresaId === String(empresaId) && cliente.status !== 'deletado')
+    .sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'))
+    .map(sanitizarClienteBarbearia);
+}
+
+function enriquecerAgendamentoBarbearia(empresaId, agendamento) {
+  const profissional = barbeariaErpKytto.listarProfissionais(empresaId, { incluirInativos: true }).find(item => item.id === agendamento.profissionalId);
+  const servico = barbeariaErpKytto.listarServicos(empresaId, { incluirInativos: true }).find(item => item.id === agendamento.servicoId);
+  const cliente = clientesBarbeariaSomenteLeitura(empresaId).find(item => item.id === agendamento.clienteId);
+  return {
+    ...agendamento,
+    clienteNome: agendamento.clienteNome || cliente?.nome || '',
+    clienteTelefone: agendamento.clienteTelefone || cliente?.telefone || '',
+    profissionalNome: profissional?.nome || '',
+    servicoNome: servico?.nome || '',
+    cliente_nome: agendamento.clienteNome || cliente?.nome || '',
+    profissional_nome: profissional?.nome || '',
+    servico_nome: servico?.nome || '',
+    duracao_minutos: agendamento.duracaoMinutos,
+    meio_pagamento: agendamento.meioPagamento,
+  };
+}
+
+function listarAgendamentosBarbearia(empresaId, filtros = {}) {
+  return barbeariaErpKytto.listarAgendamentos(empresaId, filtros).map(item => enriquecerAgendamentoBarbearia(empresaId, item));
+}
+
+app.get('/api/admin/barbearia/dashboard', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const data = String(req.query?.data || new Date().toISOString().slice(0, 10)).slice(0, 10);
+    const clientes = clientesBarbeariaSomenteLeitura(empresaId);
+    const caixas = caixaKytto.listarCaixas(empresaId, { data });
+    const dashboard = barbeariaErpKytto.obterDashboard(empresaId, {
+      data, clientesAtivos: clientes.length,
+      financeiro: financeiroKytto.resumoFinanceiro(empresaId, { hoje: data }),
+      caixa: { data, caixas, aberto: caixas.find(item => item.status === 'aberto') || null },
+    });
+    dashboard.proximosAgendamentos = dashboard.proximosAgendamentos.map(item => enriquecerAgendamentoBarbearia(empresaId, item));
+    res.json({ ok: true, ...dashboard });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.get('/api/admin/barbearia/configuracoes', (req, res) => res.json({ ok: true, configuracao: barbeariaErpKytto.obterConfiguracao(legacyEmpresaId(req)) }));
+app.patch('/api/admin/barbearia/configuracoes', (req, res) => {
+  try { res.json({ ok: true, configuracao: barbeariaErpKytto.atualizarConfiguracao(legacyEmpresaId(req), req.body || {}) }); }
+  catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.get('/api/admin/barbearia/profissionais', (req, res) => res.json({ ok: true, profissionais: barbeariaErpKytto.listarProfissionais(legacyEmpresaId(req), { incluirInativos: String(req.query?.incluirInativos) === 'true' }) }));
+app.post('/api/admin/barbearia/profissionais', (req, res) => {
+  try { res.status(201).json({ ok: true, profissional: barbeariaErpKytto.criarProfissional(legacyEmpresaId(req), req.body || {}) }); }
+  catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.patch('/api/admin/barbearia/profissionais/:id', (req, res) => {
+  try {
+    const profissional = barbeariaErpKytto.atualizarProfissional(legacyEmpresaId(req), req.params.id, req.body || {});
+    if (!profissional) return res.status(404).json({ error: 'Profissional não encontrado na empresa ativa.' });
+    res.json({ ok: true, profissional });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.get('/api/admin/barbearia/servicos', (req, res) => res.json({ ok: true, servicos: barbeariaErpKytto.listarServicos(legacyEmpresaId(req), { incluirInativos: String(req.query?.incluirInativos) === 'true' }) }));
+app.post('/api/admin/barbearia/servicos', (req, res) => {
+  try { res.status(201).json({ ok: true, servico: barbeariaErpKytto.criarServico(legacyEmpresaId(req), req.body || {}) }); }
+  catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.patch('/api/admin/barbearia/servicos/:id', (req, res) => {
+  try {
+    const servico = barbeariaErpKytto.atualizarServico(legacyEmpresaId(req), req.params.id, req.body || {});
+    if (!servico) return res.status(404).json({ error: 'Serviço não encontrado na empresa ativa.' });
+    res.json({ ok: true, servico });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.get('/api/admin/barbearia/agenda', (req, res) => {
+  try {
+    const agendamentos = listarAgendamentosBarbearia(legacyEmpresaId(req), {
+      data: req.query?.data || req.query?.date, status: req.query?.status,
+      profissionalId: req.query?.profissionalId || req.query?.profissional_id,
+    });
+    res.json({ ok: true, agendamentos, total: agendamentos.length });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.get('/api/admin/barbearia/agenda/:id', (req, res) => {
+  const agendamento = listarAgendamentosBarbearia(legacyEmpresaId(req)).find(item => item.id === String(req.params.id));
+  if (!agendamento) return res.status(404).json({ error: 'Agendamento não encontrado na empresa ativa.' });
+  res.json({ ok: true, agendamento });
+});
+app.post('/api/admin/barbearia/agenda', (req, res) => {
+  try { res.status(201).json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(legacyEmpresaId(req), barbeariaErpKytto.criarAgendamento(legacyEmpresaId(req), req.body || {})) }); }
+  catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.patch('/api/admin/barbearia/agenda/:id', (req, res) => {
+  try {
+    const agendamento = barbeariaErpKytto.atualizarAgendamento(legacyEmpresaId(req), req.params.id, req.body || {});
+    if (!agendamento) return res.status(404).json({ error: 'Agendamento não encontrado na empresa ativa.' });
+    res.json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(legacyEmpresaId(req), agendamento) });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.patch('/api/admin/barbearia/agenda/:id/status', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const status = String(req.body?.status || '');
+    let agendamento = barbeariaErpKytto.alterarStatusAgendamento(empresaId, req.params.id, status, req.body || {});
+    if (!agendamento) return res.status(404).json({ error: 'Agendamento não encontrado na empresa ativa.' });
+    let financeiro = null;
+    if (status === 'concluido' && req.body?.registrarFinanceiro === true) {
+      if (req.body?.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita do recebimento é obrigatória.' });
+      const meioPagamento = String(req.body?.meioPagamento || '').trim().toLowerCase();
+      const valor = Number(req.body?.valorRecebido ?? agendamento.valor);
+      if (!meioPagamento || !Number.isFinite(valor) || valor <= 0) return res.status(400).json({ error: 'Informe valor recebido positivo e meio de pagamento.' });
+      financeiro = financeiroKytto.registrarLancamento(empresaId, {
+        tipo: 'receita', categoria: 'Serviços', descricao: `Atendimento de barbearia ${agendamento.id}`,
+        valor, origem: 'barbearia_atendimento', status: 'pago', meioPagamento,
+        dataOperacao: new Date().toISOString(), pagoEm: new Date().toISOString(), usuario: req.user?.email,
+        automatico: true, chaveIdempotencia: `barbearia_atendimento:${empresaId}:${agendamento.id}`,
+        referencia: { agendamentoId: agendamento.id, servicoId: agendamento.servicoId, profissionalId: agendamento.profissionalId },
+      });
+      agendamento = barbeariaErpKytto.vincularLancamentoFinanceiro(empresaId, agendamento.id, financeiro.id) || agendamento;
+    }
+    res.json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(empresaId, agendamento), financeiro });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.get('/api/admin/barbearia/clientes', (req, res) => res.json({ ok: true, clientes: clientesBarbeariaSomenteLeitura(legacyEmpresaId(req)) }));
+app.post('/api/admin/barbearia/clientes', (req, res) => {
+  try { res.status(201).json({ ok: true, cliente: sanitizarClienteBarbearia(clientesKytto.criarCliente(legacyEmpresaId(req), req.body || {})) }); }
+  catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.patch('/api/admin/barbearia/clientes/:id', (req, res) => {
+  try {
+    const cliente = clientesKytto.atualizarCliente(legacyEmpresaId(req), req.params.id, req.body || {});
+    if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado na empresa ativa.' });
+    res.json({ ok: true, cliente: sanitizarClienteBarbearia(cliente) });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.get('/api/admin/barbearia/relatorios/operacional', (req, res) => {
+  const empresaId = legacyEmpresaId(req);
+  const data = String(req.query?.data || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const agenda = listarAgendamentosBarbearia(empresaId, { data });
+  const profissionais = barbeariaErpKytto.listarProfissionais(empresaId, { incluirInativos: true });
+  const porStatus = Object.fromEntries([...new Set(agenda.map(item => item.status))].map(status => [status, agenda.filter(item => item.status === status).length]));
+  const porProfissional = profissionais.map(profissional => {
+    const itens = agenda.filter(item => item.profissionalId === profissional.id);
+    return { profissionalId: profissional.id, profissionalNome: profissional.nome, atendimentos: itens.length,
+      concluidos: itens.filter(item => item.status === 'concluido').length,
+      faturamento: Number(itens.filter(item => item.status === 'concluido').reduce((soma, item) => soma + Number(item.valorRecebido || item.valor || 0), 0).toFixed(2)) };
+  });
+  res.json({ ok: true, data, totalAgendamentos: agenda.length, porStatus, porProfissional });
+});
 
 app.get('/api/combos', auth, requireStaff, (req,res)=>{
   const produtos = new Map(produtosCardapioAtivos().map(produto => [String(produto.id), produto]));
