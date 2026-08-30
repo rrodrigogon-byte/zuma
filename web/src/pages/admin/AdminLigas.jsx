@@ -220,7 +220,7 @@ function ModalResultado({ ligaId, rodadaIdx, jogo, onClose, onSave }) {
 }
 
 /* ── Painel de detalhe da liga ──────────────────────────────────────────── */
-function DetalheAdmin({ ligaId, onBack, showToast }) {
+function DetalheAdmin({ ligaId, onBack, toast }) {
   const [liga, setLiga] = useState(null)
   const [loading, setLoading] = useState(true)
   const [sortando, setSortando] = useState(false)
@@ -233,9 +233,9 @@ function DetalheAdmin({ ligaId, onBack, showToast }) {
     try {
       const d = await api.get(`/api/admin/ligas/${ligaId}`)
       setLiga(d)
-    } catch { showToast('Erro ao carregar liga', 'error') }
+    } catch { toast('Erro ao carregar liga', 'error') }
     finally { setLoading(false) }
-  }, [ligaId])
+  }, [ligaId, toast])
 
   useEffect(() => { carregar() }, [carregar])
 
@@ -244,9 +244,9 @@ function DetalheAdmin({ ligaId, onBack, showToast }) {
     setSortando(true)
     try {
       await api.post(`/api/admin/ligas/${ligaId}/sortear`)
-      showToast('Rodadas sorteadas!', 'success')
+      toast('Rodadas sorteadas!', 'success')
       carregar()
-    } catch (e) { showToast(e.message, 'error') }
+    } catch (e) { toast(e.message, 'error') }
     finally { setSortando(false) }
   }
 
@@ -254,9 +254,9 @@ function DetalheAdmin({ ligaId, onBack, showToast }) {
     setProximaRd(true)
     try {
       await api.post(`/api/admin/ligas/${ligaId}/proxima-rodada`)
-      showToast('Próxima rodada iniciada!', 'success')
+      toast('Próxima rodada iniciada!', 'success')
       carregar()
-    } catch (e) { showToast(e.message, 'error') }
+    } catch (e) { toast(e.message, 'error') }
     finally { setProximaRd(false) }
   }
 
@@ -265,27 +265,27 @@ function DetalheAdmin({ ligaId, onBack, showToast }) {
     setFinalizando(true)
     try {
       await api.post(`/api/admin/ligas/${ligaId}/finalizar`)
-      showToast('Liga finalizada!', 'success')
+      toast('Liga finalizada!', 'success')
       carregar()
-    } catch (e) { showToast(e.message, 'error') }
+    } catch (e) { toast(e.message, 'error') }
     finally { setFinalizando(false) }
   }
 
   const mudarStatus = async (status) => {
     try {
       await api.post(`/api/admin/ligas/${ligaId}/status`, { status })
-      showToast('Status atualizado!', 'success')
+      toast('Status atualizado!', 'success')
       carregar()
-    } catch (e) { showToast(e.message, 'error') }
+    } catch (e) { toast(e.message, 'error') }
   }
 
   const removerInscrito = async (inscId) => {
     if (!confirm('Remover inscrito?')) return
     try {
       await api.delete(`/api/admin/ligas/${ligaId}/participantes/${inscId}`)
-      showToast('Inscrito removido.', 'success')
+      toast('Inscrito removido.', 'success')
       carregar()
-    } catch (e) { showToast(e.message, 'error') }
+    } catch (e) { toast(e.message, 'error') }
   }
 
   if (loading) return <div style={{ textAlign: 'center', padding: 60, color: 'var(--muted)' }}>Carregando…</div>
@@ -588,7 +588,7 @@ function DetalheAdmin({ ligaId, onBack, showToast }) {
    COMPONENTE PRINCIPAL
 ══════════════════════════════════════════════════════════════════════════════ */
 export default function AdminLigas() {
-  const { showToast, ToastContainer } = useToast()
+  const { toast } = useToast()
   const [ligas, setLigas] = useState([])
   const [loading, setLoading] = useState(true)
   const [modalCreate, setModalCreate] = useState(false)
@@ -599,11 +599,11 @@ export default function AdminLigas() {
 
   const carregar = useCallback(async () => {
     try {
-      const data = await api.get('/api/ligas')
-      setLigas(data)
-    } catch { showToast('Erro ao carregar ligas', 'error') }
+      const data = await api.get('/api/admin/ligas')
+      setLigas(Array.isArray(data) ? data : Array.isArray(data?.ligas) ? data.ligas : [])
+    } catch { toast('Erro ao carregar ligas', 'error') }
     finally { setLoading(false) }
-  }, [])
+  }, [toast])
 
   useEffect(() => { carregar() }, [carregar])
 
@@ -611,15 +611,15 @@ export default function AdminLigas() {
     if (!confirm(`Deletar liga "${nome}"? Todos os dados serão perdidos.`)) return
     try {
       await api.delete(`/api/admin/ligas/${id}`)
-      showToast('Liga deletada.', 'success')
+      toast('Liga deletada.', 'success')
       carregar()
-    } catch (e) { showToast(e.message, 'error') }
+    } catch (e) { toast(e.message, 'error') }
   }
 
   const onSave = (nova) => {
     setModalCreate(false)
     setModalEdit(null)
-    showToast(nova.nome ? `Liga "${nova.nome}" salva!` : 'Liga salva!', 'success')
+    toast(nova.nome ? `Liga "${nova.nome}" salva!` : 'Liga salva!', 'success')
     carregar()
   }
 
@@ -633,11 +633,10 @@ export default function AdminLigas() {
   if (detalheId) {
     return (
       <div style={{ padding: '20px 24px' }}>
-        <ToastContainer />
         <DetalheAdmin
           ligaId={detalheId}
           onBack={() => { setDetalheId(null); carregar() }}
-          showToast={showToast}
+          toast={toast}
         />
       </div>
     )
@@ -645,7 +644,6 @@ export default function AdminLigas() {
 
   return (
     <div style={{ padding: '20px 24px' }}>
-      <ToastContainer />
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
