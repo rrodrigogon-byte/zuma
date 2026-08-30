@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { api } from '../../lib/api'
+import { api, asArray } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 
 const fmtData = s => s ? new Date(s + 'T12:00:00').toLocaleDateString('pt-BR') : '—'
@@ -97,10 +97,13 @@ export default function Quadras() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [q, r] = await Promise.all([api.get('/api/admin/quadras'), api.get('/api/admin/reservas')])
-      setQuadras(q); setReservas(r)
+      const [q, r] = await Promise.all([api.get('/api/admin/quadras'), api.get('/api/admin/quadras/reservas')])
+      setQuadras(asArray(q)); setReservas(asArray(r, ['reservas']))
+    } catch (error) {
+      toast(error?.message || 'Erro ao carregar quadras e reservas', 'error')
+      setQuadras([]); setReservas([])
     } finally { setLoading(false) }
-  }, [])
+  }, [toast])
 
   useEffect(() => { load() }, [load])
 
@@ -158,7 +161,7 @@ export default function Quadras() {
     e.preventDefault()
     try {
       if (modalReserva?.id) {
-        await api.patch(`/api/admin/reservas/${modalReserva.id}`, fr)
+        await api.patch(`/api/admin/quadras/reservas/${modalReserva.id}`, fr)
         toast('Reserva atualizada')
       } else {
         await api.post('/api/reservas', fr)

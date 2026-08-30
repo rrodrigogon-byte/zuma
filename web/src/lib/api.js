@@ -101,6 +101,16 @@ if (typeof window !== 'undefined') {
 
 export const api = apiFn
 
+// Contratos legados e módulos novos podem devolver uma lista pura ou um
+// envelope ({ itens, produtos, reservas, ... }). As telas usam este helper para
+// nunca aplicar métodos de Array em respostas de erro/envelopes desconhecidos.
+export function asArray(value, keys = []) {
+  if (Array.isArray(value)) return value
+  const candidatos = Array.isArray(keys) ? keys : [keys]
+  for (const chave of candidatos) if (Array.isArray(value?.[chave])) return value[chave]
+  return []
+}
+
 // Formatação pt-BR (ponto de milhar, vírgula decimal)
 const _brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const _int = new Intl.NumberFormat('pt-BR')
