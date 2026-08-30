@@ -136,7 +136,7 @@ export function createInfinitePayAdapter() {
         providerPaymentId: transactionNsu,
         status: paid ? 'captured' : 'pending',
         amount: Number.isFinite(amountCents) && amountCents > 0 ? amountCents / 100 : null,
-        summary: { paid, captureMethod: checked?.capture_method || payload?.capture_method || null, slug },
+        summary: { paid, orderNsu, transactionNsu, captureMethod: checked?.capture_method || payload?.capture_method || null, receiptUrl: payload?.receipt_url || payload?.receiptUrl || null, slug },
       };
     },
   };

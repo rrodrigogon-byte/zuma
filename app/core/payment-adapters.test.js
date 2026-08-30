@@ -85,11 +85,12 @@ test('reconciliação consulta gateway, confirma valor e evita downgrade de paga
   const adapter = { createCheckout: async () => ({}), verifyWebhook: async () => ({ eventId: 'evt' }), getStatus: async ({ payment }) => { assert.equal(payment.provider_payment_id, '9001'); return { providerPaymentId: '9001', status: 'captured', amount: 10, summary: { source: 'test' } }; } };
   paymentProviders.register('testgateway', adapter);
   const original = db.transaction;
+  let lockQuery = '';
   db.transaction = async callback => {
     transactionCount += 1;
     return callback({ query: async (sql, values) => {
       if (sql.includes('SELECT p.id, p.order_id, p.provider, p.method')) return { rows: [{ id: '55555555-5555-4555-8555-555555555556', order_id: orderId, provider: 'testgateway', method: 'pix', status: 'pending', amount: '10.00', provider_payment_id: '9001', order_status: 'pending_payment', storefront_id: storefrontId, account_id: accountId, ambiente: 'sandbox', secret_ref: 'env:TEST_PAYMENT_ACCESS', public_config: {} }] };
-      if (sql.includes('SELECT p.id, p.order_id, p.status, p.amount')) return { rows: [{ id: '55555555-5555-4555-8555-555555555556', order_id: orderId, status: 'pending', amount: '10.00', order_status: 'pending_payment' }] };
+      if (sql.includes('SELECT p.id, p.order_id, p.status, p.amount')) { lockQuery = sql; return { rows: [{ id: '55555555-5555-4555-8555-555555555556', order_id: orderId, status: 'pending', amount: '10.00', order_status: 'pending_payment' }] }; }
       if (sql.includes('SELECT id, status, storefront_id')) return { rows: [{ id: orderId, status: 'pending_payment', storefront_id: storefrontId, total: '10.00' }] };
       return { rows: [] };
     } });
@@ -99,6 +100,7 @@ test('reconciliação consulta gateway, confirma valor e evita downgrade de paga
     assert.equal(result.status, 'captured');
     assert.equal(result.changed, true);
     assert.equal(transactionCount, 2);
+    assert.match(lockQuery, /FOR UPDATE OF p/);
     assert.equal(canTransitionPaymentStatus('captured', 'pending'), false);
     assert.equal(canTransitionPaymentStatus('captured', 'refunded'), true);
   } finally {
