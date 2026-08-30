@@ -246,4 +246,3 @@
 }
 .commerce-storefront-meta b { color: #315247; font-size: 9px; text-transform: uppercase; letter-spacing: .05em; }
 @media (max-width: 520px) { .commerce-storefront-meta { grid-template-columns: 1fr; } }
-
