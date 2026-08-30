@@ -27,6 +27,7 @@ export const MODULOS_PERMISSAO = [
   { id: 'usuarios', nome: 'Cadastros mestres e usuários' },
   { id: 'fechamento', nome: 'Fechamento diário' },
   { id: 'canais_delivery', nome: 'Canais, delivery e fidelidade' },
+  { id: 'barbearia', nome: 'Barbearia e salão' },
 ];
 
 const TODAS_ACOES = ['ler', 'criar', 'editar', 'excluir'];
@@ -44,16 +45,16 @@ export const PERFIS_ACESSO = [
     id: 'gerente_operacional', nome: 'Gerente Operacional', tipoUsuario: 'gerente', descricao: 'Gestão de operação, clientes, estoque, mesas, recebimentos e relatórios.',
     permissoes: {
       dashboard: LER, cardapio: OPERAR, estoque: OPERAR, mesas: OPERAR, clientes: OPERAR,
-      contas_receber: OPERAR, pagamentos: LER, relatorios: LER, fechamento: LER, canais_delivery: OPERAR,
+      contas_receber: OPERAR, pagamentos: LER, relatorios: LER, fechamento: LER, canais_delivery: OPERAR, barbearia: OPERAR,
     },
   },
   {
     id: 'operador_pdv', nome: 'Operador de PDV', tipoUsuario: 'operador_pdv', descricao: 'Registra vendas e pagamentos no atendimento.',
-    permissoes: { dashboard: LER, pdv: OPERAR, cardapio: LER, estoque: LER, pagamentos: OPERAR, clientes: CRIAR_LER, mesas: LER },
+    permissoes: { dashboard: LER, pdv: OPERAR, cardapio: LER, estoque: LER, pagamentos: OPERAR, clientes: CRIAR_LER, mesas: LER, barbearia: OPERAR },
   },
   {
     id: 'caixa', nome: 'Caixa', tipoUsuario: 'caixa', descricao: 'Controla recebimentos, transações e fechamento de caixa.',
-    permissoes: { dashboard: LER, pagamentos: OPERAR, contas_receber: OPERAR, fechamento: OPERAR, relatorios: LER, clientes: LER },
+    permissoes: { dashboard: LER, pagamentos: OPERAR, contas_receber: OPERAR, fechamento: OPERAR, relatorios: LER, clientes: LER, barbearia: OPERAR },
   },
   {
     id: 'gerente_estoque', nome: 'Gerente de Estoque', tipoUsuario: 'estoque', descricao: 'Controla estoque, inventário e consulta de produtos.',
@@ -69,7 +70,7 @@ export const PERFIS_ACESSO = [
   },
   {
     id: 'consultor', nome: 'Consultor', tipoUsuario: 'consultor', descricao: 'Acesso de consulta a indicadores e relatórios.',
-    permissoes: { dashboard: LER, relatorios: LER, estoque: LER, clientes: LER, contas_receber: LER, pagamentos: LER },
+    permissoes: { dashboard: LER, relatorios: LER, estoque: LER, clientes: LER, contas_receber: LER, pagamentos: LER, barbearia: LER },
   },
 ];
 
@@ -176,6 +177,7 @@ export function moduloDaRota(pathname = '') {
   if (path.includes('/fechamento')) return 'fechamento';
   if (path.includes('/pagamentos')) return 'pagamentos';
   if (path.includes('/relatorios')) return 'relatorios';
+  if (path.startsWith('/api/admin/barbearia') || path.startsWith('/api/v1/barbearia')) return 'barbearia';
   if (path.includes('/canais-venda') || path.includes('/fidelidade') || path.includes('/delivery')) return 'canais_delivery';
   if (path.includes('/funcionarios') || path.includes('/fornecedores') || path.includes('/usuarios') || path.includes('/plataforma/empresas')) return 'usuarios';
   if (path.includes('/kds') || path.includes('/cozinha')) return 'cozinha';
