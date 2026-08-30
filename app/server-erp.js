@@ -18,8 +18,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import crypto from 'crypto';
 import { db, save, hydrate, flush } from './db.js';
-import { CATALOGO_BEBIDAS_KYTTO, RESUMO_CATALOGO_BEBIDAS } from './catalogo-bebidas.js';
-import { CATALOGO_ESPETINHOS_KYTTO, RESUMO_CATALOGO_ESPETINHOS } from './catalogo-espetinhos.js';
+import { CATALOGO_BAR_TTC_OFICIAL, CATALOGO_BAR_TTC_SKUS, RESUMO_CATALOGO_BAR_TTC } from './catalogo-bar-ttc-oficial.js';
 import * as clientesKytto from './clientes-contas-kytto.js';
 import * as fiscalKytto from './fiscal-kytto.js';
 import * as tributacaoKytto from './tributacao-kytto.js';
@@ -213,14 +212,24 @@ function criarAdminPadrao() {
   estado.cardapioPorEmpresa ||= {};
   const empresaId = cadastrosMestres.EMPRESA_PADRAO_ID;
   estado.cardapioPorEmpresa[empresaId] ||= [];
-  const cardapio = estado.cardapioPorEmpresa[empresaId];
+      const cardapio = estado.cardapioPorEmpresa[empresaId];
+  // Remove exclusivamente seeds antigos do sistema. Itens criados pelo operador
+  // permanecem intactos; depois, se não houver itens reais, semeia o catálogo oficial.
+  const antes = cardapio.length;
+  for (let indice = cardapio.length - 1; indice >= 0; indice -= 1) {
+    const produto = cardapio[indice];
+    if (String(produto?.id || '').startsWith('seed-') || ['kytto-bebidas-v1', 'kytto-espetinhos-v1'].includes(produto?.catalogoSeed)) cardapio.splice(indice, 1);
+  }
+  if (cardapio.length !== antes) save();
   if (cardapio.length === 0) {
     const agora = new Date().toISOString();
-    const sementes = [...CATALOGO_BEBIDAS_KYTTO, ...CATALOGO_ESPETINHOS_KYTTO];
+    const sementes = CATALOGO_BAR_TTC_SKUS;
+
     const itens = sementes.map((item, indice) => ({
       ...item,
       empresaId,
-      id: item.id || `seed-${Date.now().toString(36)}-${String(indice + 1).padStart(3, '0')}`,
+      id: item.id || `bar-ttc-${String(item.sku || indice + 1).toLowerCase()}`,
+      catalogoSeed: RESUMO_CATALOGO_BAR_TTC.versao,
       indisponivel: item.indisponivel === true,
       criadoEm: item.criadoEm || agora,
       atualizadoEm: agora,
@@ -1654,64 +1663,47 @@ async function iniciar() {
   app.get('/api/admin/estoque/acuracidade', requerEditorCatalogo, (req, res) => res.json({ ok: true, relatorio: perdasInventarioKytto.relatorioAcuracidade(req.empresaId, req.query || {}) }));
 
   app.get('/api/admin/cardapio/catalogo-bebidas', requerEditorCatalogo, (req, res) => {
-    const cadastrados = cardapioPersistido(req.empresaId).filter((item) => item.catalogoSeed === 'kytto-bebidas-v1').length;
-    res.json({ ...RESUMO_CATALOGO_BEBIDAS, cadastrados, versao: 'kytto-bebidas-v1' });
+    const cadastrados = cardapioPersistido(req.empresaId).filter((item) => item.catalogoSeed === RESUMO_CATALOGO_BAR_TTC.versao && item.cat === 'Bebidas').length;
+    res.json({ ...RESUMO_CATALOGO_BAR_TTC, itens: CATALOGO_BAR_TTC_OFICIAL.filter((item) => item.cat === 'Bebidas').length, cadastrados, versao: RESUMO_CATALOGO_BAR_TTC.versao, escopo: 'bebidas-oficiais' });
   });
 
   app.post('/api/admin/cardapio/catalogo-bebidas', requerEditorCatalogo, (req, res) => {
     const itens = cardapioPersistido(req.empresaId);
-    const existentes = new Set(itens.map((item) => `${item.marca}|${item.tipo}|${item.embalagem}`.toLowerCase()));
+    const oficiais = CATALOGO_BAR_TTC_SKUS.filter((item) => item.cat === 'Bebidas');
+    const existentes = new Set(itens.map((item) => String(item.sku || item.nome || '').toLowerCase()));
     const agora = new Date().toISOString();
     const adicionados = [];
-
-    for (const produtoBase of CATALOGO_BEBIDAS_KYTTO) {
+    for (const produtoBase of oficiais) {
       const produto = normalizarProduto(produtoBase);
-      const chave = `${produto.marca}|${produto.tipo}|${produto.embalagem}`.toLowerCase();
+      const chave = String(produtoBase.sku || produto.nome).toLowerCase();
       if (existentes.has(chave)) continue;
-      const id = `beb-${Date.now().toString(36)}-${String(itens.length + adicionados.length + 1).padStart(3, '0')}`;
-      adicionados.push({
-        ...produto,
-        empresaId: req.empresaId,
-        id,
-        ordem: itens.length + adicionados.length + 1,
-        catalogoSeed: 'kytto-bebidas-v1',
-        criadoEm: agora,
-        atualizadoEm: agora,
-      });
+      adicionados.push({ ...produto, sku: produtoBase.sku, empresaId: req.empresaId, id: `bar-ttc-${produtoBase.sku.toLowerCase()}`, ordem: itens.length + adicionados.length + 1, catalogoSeed: RESUMO_CATALOGO_BAR_TTC.versao, criadoEm: agora, atualizadoEm: agora });
       existentes.add(chave);
     }
-
-    if (adicionados.length) {
-      itens.push(...adicionados);
-      sincronizarEstoqueCardapio(req.empresaId);
-      save();
-    }
-    res.status(201).json({ ok: true, adicionados: adicionados.length, total: itens.length, versao: 'kytto-bebidas-v1' });
+    if (adicionados.length) { itens.push(...adicionados); sincronizarEstoqueCardapio(req.empresaId); save(); }
+    res.status(201).json({ ok: true, adicionados: adicionados.length, total: itens.length, versao: RESUMO_CATALOGO_BAR_TTC.versao, fonte: RESUMO_CATALOGO_BAR_TTC.fonte });
   });
 
   app.get('/api/admin/cardapio/catalogo-espetinhos', requerEditorCatalogo, (req, res) => {
-    const cadastrados = cardapioPersistido(req.empresaId).filter((item) => item.catalogoSeed === 'kytto-espetinhos-v1').length;
-    res.json({ ...RESUMO_CATALOGO_ESPETINHOS, cadastrados, versao: 'kytto-espetinhos-v1' });
+    const cadastrados = cardapioPersistido(req.empresaId).filter((item) => item.catalogoSeed === RESUMO_CATALOGO_BAR_TTC.versao && item.cat === 'Espetos').length;
+    res.json({ ...RESUMO_CATALOGO_BAR_TTC, itens: CATALOGO_BAR_TTC_OFICIAL.filter((item) => item.cat === 'Espetos').length, cadastrados, versao: RESUMO_CATALOGO_BAR_TTC.versao, escopo: 'espetos-oficiais' });
   });
 
   app.post('/api/admin/cardapio/catalogo-espetinhos', requerEditorCatalogo, (req, res) => {
     const itens = cardapioPersistido(req.empresaId);
-    const existentes = new Set(itens.map((item) => String(item.nome || '').toLocaleLowerCase('pt-BR')));
+    const oficiais = CATALOGO_BAR_TTC_SKUS.filter((item) => item.cat === 'Espetos');
+    const existentes = new Set(itens.map((item) => String(item.sku || item.nome || '').toLowerCase()));
     const agora = new Date().toISOString();
     const adicionados = [];
-    for (const produtoBase of CATALOGO_ESPETINHOS_KYTTO) {
+    for (const produtoBase of oficiais) {
       const produto = normalizarProduto(produtoBase);
-      const chave = produto.nome.toLocaleLowerCase('pt-BR');
+      const chave = String(produtoBase.sku || produto.nome).toLowerCase();
       if (existentes.has(chave)) continue;
-      adicionados.push({ ...produto, empresaId: req.empresaId, id: `esp-${Date.now().toString(36)}-${String(itens.length + adicionados.length + 1).padStart(3, '0')}`, ordem: itens.length + adicionados.length + 1, catalogoSeed: 'kytto-espetinhos-v1', criadoEm: agora, atualizadoEm: agora });
+      adicionados.push({ ...produto, sku: produtoBase.sku, empresaId: req.empresaId, id: `bar-ttc-${produtoBase.sku.toLowerCase()}`, ordem: itens.length + adicionados.length + 1, catalogoSeed: RESUMO_CATALOGO_BAR_TTC.versao, criadoEm: agora, atualizadoEm: agora });
       existentes.add(chave);
     }
-    if (adicionados.length) {
-      itens.push(...adicionados);
-      sincronizarEstoqueCardapio(req.empresaId);
-      save();
-    }
-    res.status(201).json({ ok: true, adicionados: adicionados.length, total: itens.length, versao: 'kytto-espetinhos-v1' });
+    if (adicionados.length) { itens.push(...adicionados); sincronizarEstoqueCardapio(req.empresaId); save(); }
+    res.status(201).json({ ok: true, adicionados: adicionados.length, total: itens.length, versao: RESUMO_CATALOGO_BAR_TTC.versao, fonte: RESUMO_CATALOGO_BAR_TTC.fonte });
   });
 
   app.post('/api/admin/cardapio', requerEditorCatalogo, (req, res) => {
