@@ -176,11 +176,17 @@ test('resposta pública de pedido sanitiza fulfillment sem labelUrl ou providerD
     return { rows: [{
       public_code: 'KC-TEST',
       status: 'shipped',
+      shipping_option: { id: '03220', name: 'PAC', amount: 18.9, currency: 'BRL', providerDeliveryDays: 5, preparationDays: 2, deliveryDays: 7, deliveryRange: { min: 7, max: 7 }, deliveryNote: 'Prazo Correios mais 2 dias úteis de preparação e postagem', carrier: 'Correios', raw: { token: 'should-not-leak' } },
       fulfillments: [{ id: '44444444-4444-4444-8444-444444444444', status: 'shipped', trackingCode: 'AA123456789BR', trackingUrl: 'https://rastreamento.correios.com.br/app/index.php?objetos=AA123456789BR', labelUrl: 'https://private.example/label.pdf', ocorrencias: [{ status: 'posted', description: 'Objeto postado', providerData: { token: 'should-not-leak' } }] }],
       timeline: [{ fromStatus: 'paid', toStatus: 'shipped', source: 'system', at: '2026-08-30T00:00:00.000Z', payload: { secret: 'should-not-leak' } }],
     }] };
   });
   assert.equal(response.statusCode, 200);
+  assert.equal(response.body.shippingOption.providerDeliveryDays, 5);
+  assert.equal(response.body.shippingOption.preparationDays, 2);
+  assert.equal(response.body.shippingOption.deliveryDays, 7);
+  assert.equal('raw' in response.body.shippingOption, false);
+  assert.equal('shipping_option' in response.body, false);
   assert.equal(response.body.fulfillments[0].trackingCode, 'AA123456789BR');
   assert.equal(response.body.fulfillments[0].ocorrencias[0].description, 'Objeto postado');
   assert.equal('labelUrl' in response.body.fulfillments[0], false);
