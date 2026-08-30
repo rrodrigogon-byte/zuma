@@ -330,8 +330,8 @@ app.post('/api/admin/login', authLimiter, (req, res) => {
       },
       role: papel,
       sessao: {
-        loja_ativa: { id: empresaAtiva.id, nome: empresaAtiva.nomeFantasia || empresaAtiva.nome, ativa: empresaAtiva.ativa !== false, empresaId: empresaAtiva.id },
-        lojas_acessiveis: empresas.map((empresa) => ({ id: empresa.id, nome: empresa.nomeFantasia || empresa.nome, ativa: empresa.ativa !== false, empresaId: empresa.id })),
+        loja_ativa: { id: empresaAtiva.id, nome: empresaAtiva.nomeFantasia || empresaAtiva.nome, ativa: empresaAtiva.ativa !== false, empresaId: empresaAtiva.id, modulos: empresaAtiva.modulos || [], plano: empresaAtiva.plano || 'standard' },
+        lojas_acessiveis: empresas.map((empresa) => ({ id: empresa.id, nome: empresa.nomeFantasia || empresa.nome, ativa: empresa.ativa !== false, empresaId: empresa.id, modulos: empresa.modulos || [], plano: empresa.plano || 'standard' })),
       }
     });
   } catch (err) {

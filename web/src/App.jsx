@@ -32,6 +32,13 @@ function ProtectedOutlet({ need }) {
   return dest ? <Navigate to={dest} replace /> : <Outlet />
 }
 
+function PlatformOnly({ children }) {
+  const auth = useAuth()
+  if (!auth.user) return <Navigate to="/login?next=/admin/plataforma" replace />
+  if (!auth.isPlatformAdmin) return <Navigate to="/admin" replace />
+  return children
+}
+
 // A rota raiz é a página institucional pública no domínio principal. O host
 // dedicado do Commerce renderiza o storefront Core diretamente, sem expor o
 // catálogo em kytto.com.br antes de uma publicação explícita por canal.
@@ -115,6 +122,7 @@ const Clientes = lazy(() => import('./pages/admin/Clientes'))
 const ContasReceber = lazy(() => import('./pages/admin/ContasReceber'))
 const FechamentoDiario = lazy(() => import('./pages/admin/FechamentoDiario'))
 const CadastrosMestres = lazy(() => import('./pages/admin/CadastrosMestres'))
+const AdminPlataforma = lazy(() => import('./pages/admin/AdminPlataforma'))
 const ERP             = lazy(() => import('./pages/admin/ERP'))
 const LojaModa        = lazy(() => import('./pages/admin/LojaModa'))
 const BarbeariaERP    = lazy(() => import('./pages/admin/BarbeariaERP'))
@@ -175,6 +183,7 @@ export default function App() {
         {/* Admin (admin/organizador) — guarda única via Outlet */}
         <Route element={<ProtectedOutlet need="org" />}>
           <Route path="/admin"              element={<Layout><Dashboard /></Layout>} />
+          <Route path="/admin/plataforma"  element={<PlatformOnly><Layout><AdminPlataforma /></Layout></PlatformOnly>} />
           <Route path="/admin/usuarios"     element={<Layout><Usuarios /></Layout>} />
           <Route path="/admin/torneios"     element={<Layout><Torneios /></Layout>} />
           <Route path="/admin/agenda"       element={<Layout><Agenda /></Layout>} />

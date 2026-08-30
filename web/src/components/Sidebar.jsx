@@ -152,6 +152,46 @@ const NAV_ADMIN_GROUPS = [
 // Lista plana para compatibilidade
 const NAV_ADMIN = NAV_ADMIN_GROUPS.flatMap(g => g.items)
 
+const NAV_PLATFORM = [
+  { to: '/admin/plataforma', icon: '🏢', label: 'Empresas e Módulos' },
+]
+
+// O backend continua sendo a autoridade final. Este mapa apenas mantém o menu
+// coerente com o contrato da empresa ativa e evita oferecer links não contratados.
+const ROUTE_MODULES = [
+  ['/admin/pdv', 'pdv'], ['/pdv', 'pdv'], ['/admin/garcom', 'pdv'], ['/garcom', 'pdv'],
+  ['/admin/kds', 'kds'], ['/kds', 'kds'], ['/admin/loja-atendimento', 'loja'], ['/loja-atendimento', 'loja'],
+  ['/admin/portaria', 'portaria'], ['/portaria', 'portaria'],
+  ['/admin/torneios', 'torneios'], ['/admin/agenda', 'torneios'], ['/admin/sumula', 'torneios'],
+  ['/admin/inscricoes', 'torneios'], ['/admin/quadras', 'quadras'], ['/admin/pontos', 'pontos'],
+  ['/admin/ranking', 'torneios'], ['/admin/ligas', 'ligas'],
+  ['/admin/mesas', 'mesas'], ['/admin/reservas', 'mesas'], ['/admin/cardapio', 'cardapio'],
+  ['/admin/estoque', 'estoque'], ['/admin/perdas-inventario', 'estoque'], ['/admin/fichas-tecnicas', 'estoque'],
+  ['/admin/modificadores-combos', 'cardapio'], ['/admin/pagamentos', 'pagamentos'], ['/admin/notas', 'fiscal'],
+  ['/admin/cadastros-mestres', 'cadastros'], ['/admin/clientes', 'clientes'], ['/admin/contas-receber', 'financeiro'],
+  ['/admin/fechamento-diario', 'financeiro'], ['/admin/cupons', 'pdv'], ['/admin/pdv-offline', 'pdv'],
+  ['/admin/omnichannel', 'delivery'], ['/admin/erp', 'erp'], ['/admin/ecommerce', 'ecommerce'],
+  ['/admin/supermercado', 'supermercado'], ['/admin/loja-moda', 'loja_moda'], ['/admin/barbearia-erp', 'barbearia'],
+  ['/admin/barbearia', 'barbearia'], ['/admin/oficina', 'oficina'], ['/admin/agropecuaria', 'agropecuaria'],
+  ['/admin/varejo', 'varejo'], ['/admin/compras', 'compras'], ['/admin/fiscal', 'fiscal'],
+  ['/admin/usuarios', 'usuarios'], ['/admin/socios', 'socios'], ['/admin/mensalidades', 'socios'],
+  ['/admin/aulas', 'socios'], ['/admin/crm', 'crm'], ['/admin/loja', 'loja'], ['/admin/lojas', 'loja'],
+  ['/admin/noticias', 'conteudo'], ['/admin/contatos', 'conteudo'],
+]
+
+function moduloDaRota(to) {
+  const path = String(to || '').split('?')[0]
+  return ROUTE_MODULES.find(([prefix]) => path === prefix || path.startsWith(`${prefix}/`))?.[1] || null
+}
+
+function itemDisponivel(item, isPlatformAdmin, empresa) {
+  if (isPlatformAdmin) return true
+  const modulos = Array.isArray(empresa?.modulos) ? empresa.modulos.map((modulo) => String(modulo).toLowerCase()) : null
+  if (!modulos) return true
+  const modulo = moduloDaRota(item.to)
+  return !modulo || modulos.includes(modulo)
+}
+
 const NAV_ATLETA = [
   { to: '/meu-painel',  icon: '🏠', label: 'Visão Geral', end: true },
   { to: '/meu-painel?tab=jogos',       icon: '🎾', label: 'Meus Jogos' },
@@ -231,24 +271,26 @@ function Section({ label, items, onNavClick, collapsible = false, badgesMap = {}
   )
 }
 
-function AdminGroups({ groups, onNavClick }) {
+function AdminGroups({ groups, onNavClick, isPlatformAdmin, empresa }) {
   return (
     <>
-      {groups.map(g => (
-        <Section
-          key={g.label}
-          label={g.label}
-          items={g.items}
-          onNavClick={onNavClick}
-          collapsible
-        />
-      ))}
+      {groups.map(g => ({ ...g, items: g.items.filter((item) => itemDisponivel(item, isPlatformAdmin, empresa)) }))
+        .filter((group) => group.items.length > 0)
+        .map(g => (
+          <Section
+            key={g.label}
+            label={g.label}
+            items={g.items}
+            onNavClick={onNavClick}
+            collapsible
+          />
+        ))}
     </>
   )
 }
 
 export default function Sidebar() {
-  const { user, logout, isOrg, isStaff, isAtleta, lojaAtiva, lojasAcessiveis, trocarLoja } = useAuth()
+  const { user, logout, isOrg, isStaff, isAtleta, isPlatformAdmin, empresaAtiva, lojaAtiva, lojasAcessiveis, trocarLoja } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
@@ -264,6 +306,7 @@ export default function Sidebar() {
     '/pdv': pendentes,
     '/kds': pendentes,
   }
+  const empresaDoMenu = lojaAtiva || empresaAtiva
 
   useEffect(() => {
     const handler = () => {
@@ -381,7 +424,8 @@ export default function Sidebar() {
         )}
 
         {isStaff && <Section label="Operações" items={NAV_OP} onNavClick={handleNavClick} badgesMap={badgesMap} />}
-        {isOrg   && <AdminGroups groups={NAV_ADMIN_GROUPS} onNavClick={handleNavClick} />}
+        {isOrg && <AdminGroups groups={NAV_ADMIN_GROUPS} onNavClick={handleNavClick} isPlatformAdmin={isPlatformAdmin} empresa={empresaDoMenu} />}
+        {isPlatformAdmin && <Section label="Administração da Plataforma" items={NAV_PLATFORM} onNavClick={handleNavClick} />}
         {isAtleta && <Section label="Portal do Atleta" items={NAV_ATLETA} onNavClick={handleNavClick} />}
         <Section label="Site Público" items={NAV_PUBLIC} onNavClick={handleNavClick} />
 
