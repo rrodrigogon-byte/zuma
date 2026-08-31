@@ -2574,11 +2574,18 @@ async function iniciar() {
 
   app.post('/api/admin/plataforma/empresas', requerGestorOnboarding, (req, res) => {
     try {
-      const dadosAdmin = req.body?.administrador;
-      if (!dadosAdmin?.nome || !dadosAdmin?.email || String(dadosAdmin?.senhaInicial || '').length < 8) {
-        return res.status(400).json({ erro: 'Informe nome, email e senha inicial com ao menos 8 caracteres para o administrador da empresa.' });
+      const dadosAdmin = req.body?.administrador || {};
+      const camposAdmin = [dadosAdmin.nome, dadosAdmin.email, dadosAdmin.senhaInicial].filter((valor) => String(valor || '').trim());
+      const gestorCompleto = Boolean(dadosAdmin.nome && dadosAdmin.email && String(dadosAdmin.senhaInicial || '').length >= 8);
+      if (camposAdmin.length > 0 && !gestorCompleto) {
+        return res.status(400).json({ erro: 'Para cadastrar o gestor agora, informe nome, email e senha inicial com ao menos 8 caracteres. Ou deixe os três campos vazios para criar a empresa como rascunho.' });
       }
-      const empresa = cadastrosMestres.criarEmpresa({ ...(req.body || {}), criadoPorUsuarioId: req.usuario.id, statusOnboarding: 'configuracao' });
+      const empresa = cadastrosMestres.criarEmpresa({
+        ...(req.body || {}),
+        criadoPorUsuarioId: req.usuario.id,
+        statusOnboarding: gestorCompleto ? 'configuracao' : 'rascunho',
+        modulos: gestorCompleto && Array.isArray(req.body?.modulos) ? req.body.modulos : [],
+      });
       // Todo novo tenant recebe uma configuração fiscal independente, ainda em
       // homologação e sem emissão automática. A NFC-e só é liberada após o
       // checklist fiscal completo da própria empresa.
@@ -2589,17 +2596,20 @@ async function iniciar() {
         ambiente: 'homologacao',
         emissaoAutomaticaAtiva: false,
       });
-      const administrador = cadastrosMestres.criarUsuario(empresa.id, {
-        nome: dadosAdmin.nome,
-        email: dadosAdmin.email,
-        telefone: dadosAdmin.telefone || '',
-        tipoUsuario: 'administrador',
-        perfis: ['administrador'],
-        roles: ['administrador'],
-        senhaHash: hashPassword(String(dadosAdmin.senhaInicial)),
-        empresasAcessiveis: [empresa.id],
-      });
-      espelharUsuarioEmMemoria(administrador);
+      let administrador = null;
+      if (gestorCompleto) {
+        administrador = cadastrosMestres.criarUsuario(empresa.id, {
+          nome: dadosAdmin.nome,
+          email: dadosAdmin.email,
+          telefone: dadosAdmin.telefone || '',
+          tipoUsuario: 'administrador',
+          perfis: ['administrador'],
+          roles: ['administrador'],
+          senhaHash: hashPassword(String(dadosAdmin.senhaInicial)),
+          empresasAcessiveis: [empresa.id],
+        });
+        espelharUsuarioEmMemoria(administrador);
+      }
       // O administrador de plataforma também recebe acesso à empresa recém-criada
       // para auditoria e suporte, sem conceder esse acesso a nenhum outro usuário.
       if (req.usuario?.id && req.usuario?.empresaId) {
@@ -2608,7 +2618,7 @@ async function iniciar() {
         espelharUsuarioEmMemoria(atualizado);
       }
       const respostaAdmin = administrador ? (({ senhaHash, ...safe }) => safe)(administrador) : null;
-      res.status(201).json({ ok: true, empresa, administrador: respostaAdmin });
+      res.status(201).json({ ok: true, empresa, administrador: respostaAdmin, pendente: !gestorCompleto });
     } catch (error) {
       res.status(400).json({ erro: error.message });
     }

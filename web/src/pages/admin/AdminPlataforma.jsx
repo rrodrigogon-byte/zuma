@@ -29,7 +29,7 @@ const MODULOS = [
   { id: 'ligas', label: 'Ligas de ranking', grupo: 'Clube' },
 ]
 
-const MODULOS_PADRAO_BARBEARIA = ['pdv', 'mesas', 'kds', 'cardapio', 'pagamentos', 'financeiro', 'fiscal', 'estoque', 'compras', 'usuarios', 'barbearia']
+const MODULOS_PADRAO_BARBEARIA = []
 
 const EMPTY_EMPRESA = {
   nome: 'Barbearia do Dino',
@@ -138,15 +138,21 @@ export default function AdminPlataforma() {
 
   const criarEmpresa = async (event) => {
     event.preventDefault()
-    const administrador = empresaForm.administrador
-    if (!empresaForm.nome || !administrador.nome || !administrador.email || String(administrador.senhaInicial).length < 8) {
-      toast('Informe o nome da empresa e os dados do gestor inicial. A senha deve ter ao menos 8 caracteres.', true)
+    const administrador = empresaForm.administrador || {}
+    const camposAdmin = [administrador.nome, administrador.email, administrador.senhaInicial].filter((valor) => String(valor || '').trim())
+    const gestorCompleto = Boolean(administrador.nome && administrador.email && String(administrador.senhaInicial || '').length >= 8)
+    if (!empresaForm.nome) {
+      toast('Informe o nome da empresa.', true)
+      return
+    }
+    if (camposAdmin.length > 0 && !gestorCompleto) {
+      toast('Preencha nome, e-mail e senha do gestor, ou deixe os três campos vazios para criar um rascunho.', true)
       return
     }
     setCreating(true)
     try {
       const resposta = await api.post('/api/admin/plataforma/empresas', empresaForm)
-      toast(`Empresa ${resposta?.empresa?.nomeFantasia || empresaForm.nome} criada com isolamento próprio.`)
+      toast(resposta?.pendente ? `Empresa ${resposta?.empresa?.nomeFantasia || empresaForm.nome} criada como rascunho.` : `Empresa ${resposta?.empresa?.nomeFantasia || empresaForm.nome} criada com isolamento próprio.`)
       setEmpresaForm({ ...EMPTY_EMPRESA, administrador: { ...EMPTY_EMPRESA.administrador } })
       setShowCreate(false)
       setExpanded(resposta?.empresa?.id || '')
@@ -180,7 +186,7 @@ export default function AdminPlataforma() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <div>
             <h2 style={{ margin: 0, color: '#12283F', fontSize: 18 }}>Nova empresa</h2>
-            <div style={{ marginTop: 4, color: 'var(--muted)', fontSize: 12 }}>A criação exige um gestor inicial e uma senha individual. Nenhuma senha é exibida depois do cadastro.</div>
+            <div style={{ marginTop: 4, color: 'var(--muted)', fontSize: 12 }}>Você pode criar primeiro o tenant com o nome. Gestor, plano e módulos podem ser configurados depois; um rascunho não tem acesso operacional.</div>
           </div>
           <button className="btn btn-ghost btn-sm" onClick={() => setShowCreate((value) => !value)}>{showCreate ? 'Fechar formulário' : 'Abrir formulário'}</button>
         </div>
@@ -199,7 +205,7 @@ export default function AdminPlataforma() {
               {campoLabel('Telefone', empresaForm.telefone, (value) => setEmpresaForm({ ...empresaForm, telefone: value }))}
             </div>
             {campoLabel('Endereço fiscal', empresaForm.endereco, (value) => setEmpresaForm({ ...empresaForm, endereco: value }))}
-            <h3 style={{ margin: '4px 0 0', color: '#12283F', fontSize: 15 }}>Gestor inicial da empresa</h3>
+            <h3 style={{ margin: '4px 0 0', color: '#12283F', fontSize: 15 }}>Gestor inicial da empresa <span style={{ color: 'var(--muted)', fontSize: 11, fontWeight: 500 }}>(opcional nesta etapa)</span></h3>
             <div className="form-row">
               {campoLabel('Nome completo *', empresaForm.administrador.nome, (value) => setEmpresaForm({ ...empresaForm, administrador: { ...empresaForm.administrador, nome: value } }))}
               {campoLabel('E-mail de acesso *', empresaForm.administrador.email, (value) => setEmpresaForm({ ...empresaForm, administrador: { ...empresaForm.administrador, email: value } }), { type: 'email' })}
@@ -210,7 +216,7 @@ export default function AdminPlataforma() {
               <ModulosEditor value={empresaForm.modulos} onChange={(modulos) => setEmpresaForm({ ...empresaForm, modulos })} />
             </div>
             <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, color: 'var(--muted)' }}><input type="checkbox" checked={empresaForm.permitirEstoqueNegativo} onChange={(event) => setEmpresaForm({ ...empresaForm, permitirEstoqueNegativo: event.target.checked })} />Permitir estoque negativo</label>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}><button className="btn btn-primary" disabled={creating}>{creating ? 'Criando empresa...' : 'Criar empresa e gestor'}</button></div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}><button className="btn btn-primary" disabled={creating}>{creating ? 'Criando empresa...' : 'Criar empresa'}</button></div>
           </form>
         )}
       </div>
@@ -228,7 +234,7 @@ export default function AdminPlataforma() {
           <div className="card" key={empresa.id} style={{ marginBottom: 12, border: isOpen ? '1px solid rgba(255,107,44,.35)' : undefined }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
               <div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><strong style={{ color: '#12283F', fontSize: 15 }}>{empresa.nomeFantasia || empresa.nome}</strong><span className="badge" style={{ color: empresa.ativa === false ? '#B91C1C' : '#16803C', background: empresa.ativa === false ? '#FEE2E2' : '#DCFCE7' }}>{empresa.ativa === false ? 'inativa' : 'ativa'}</span></div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><strong style={{ color: '#12283F', fontSize: 15 }}>{empresa.nomeFantasia || empresa.nome}</strong><span className="badge" style={{ color: empresa.ativa === false ? '#B91C1C' : '#16803C', background: empresa.ativa === false ? '#FEE2E2' : '#DCFCE7' }}>{empresa.ativa === false ? 'inativa' : 'ativa'}</span><span className="badge" style={{ color: empresa.statusOnboarding === 'rascunho' ? '#9A6700' : '#38556F', background: empresa.statusOnboarding === 'rascunho' ? '#FFF7D6' : '#EEF4F8' }}>{empresa.statusOnboarding === 'rascunho' ? 'rascunho' : empresa.statusOnboarding === 'pronta' ? 'pronta' : 'em configuração'}</span></div>
                 <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 4 }}>{empresa.nome} · plano {empresa.plano || 'standard'} · {Array.isArray(empresa.modulos) ? empresa.modulos.length : 0} módulos liberados</div>
               </div>
               <button className="btn btn-secondary btn-sm" onClick={() => setExpanded(isOpen ? '' : empresa.id)}>{isOpen ? 'Fechar módulos' : 'Gerenciar módulos'}</button>
