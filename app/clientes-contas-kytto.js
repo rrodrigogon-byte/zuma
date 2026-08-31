@@ -7,6 +7,30 @@ const EMPRESA_PADRAO_ID = 'emp-kytto-001';
 const agora = () => new Date().toISOString();
 const texto = (valor, limite = 160) => String(valor ?? '').trim().slice(0, limite);
 const numero = (valor) => Number(valor ?? 0) || 0;
+function hashEmpresa(empresaId) {
+  return Array.from(String(empresaId || '')).reduce((hash, caractere) => (hash * 31 + caractere.charCodeAt(0)) % 1000000007, 7).toString(36);
+}
+const CANAIS_CONSENTIMENTO = Object.freeze(['whatsapp', 'email']);
+const FINALIDADES_CONSENTIMENTO = Object.freeze(['atendimento', 'marketing']);
+
+function consentimentosPadrao() {
+  return Object.fromEntries(CANAIS_CONSENTIMENTO.map((canal) => [canal, Object.fromEntries(FINALIDADES_CONSENTIMENTO.map((finalidade) => [finalidade, { concedido: false, atualizadoEm: null, origem: null }]))]));
+}
+
+function garantirConsentimentos(cliente) {
+  cliente.consentimentos ||= consentimentosPadrao();
+  for (const canal of CANAIS_CONSENTIMENTO) {
+    cliente.consentimentos[canal] ||= {};
+    for (const finalidade of FINALIDADES_CONSENTIMENTO) {
+      const atual = cliente.consentimentos[canal][finalidade];
+      cliente.consentimentos[canal][finalidade] = typeof atual === 'object' && atual !== null
+        ? { concedido: Boolean(atual.concedido), atualizadoEm: atual.atualizadoEm || null, origem: atual.origem || null }
+        : { concedido: Boolean(atual), atualizadoEm: null, origem: null };
+    }
+  }
+  cliente.consentimentoHistorico ||= [];
+  return cliente;
+}
 
 function normalizarCliente(payload = {}) {
   return {
@@ -91,7 +115,7 @@ function clientePadrao(empresaId, id, dados = {}) {
   const ts = agora();
   return {
     id, empresaId, ...normalizarCliente(dados), status: 'ativo', saldoDevedor: 0,
-    scoreCredito: 100, risco: 'baixo', criadoEm: ts, atualizadoEm: ts,
+    scoreCredito: 100, risco: 'baixo', consentimentos: consentimentosPadrao(), consentimentoHistorico: [], criadoEm: ts, atualizadoEm: ts,
   };
 }
 
@@ -121,7 +145,7 @@ export function garantirClientePadrao(empresaId = EMPRESA_PADRAO_ID) {
 
 export function criarCliente(empresaId, dados) {
   const store = clientesPersistidos(empresaId);
-  const cliente = clientePadrao(empresaId, `cli-${Date.now().toString(36)}-${String(Object.keys(store.clientes).length + 1).padStart(3, '0')}`, dados);
+  const cliente = clientePadrao(empresaId, `cli-${hashEmpresa(empresaId)}-${Date.now().toString(36)}-${String(Object.keys(store.clientes).length + 1).padStart(3, '0')}`, dados);
   if (!cliente.nome) throw new Error('Nome do cliente é obrigatório.');
   if (cliente.cpfCnpj && Object.values(store.clientes).some((item) => item.cpfCnpj === cliente.cpfCnpj && item.status !== 'deletado')) {
     throw new Error('Já existe cliente ativo com este CPF/CNPJ nesta empresa.');
@@ -134,6 +158,29 @@ export function atualizarCliente(empresaId, clienteId, dados) {
   const cliente = clientesPersistidos(empresaId).clientes[clienteId];
   if (!cliente || cliente.empresaId !== empresaId) return null;
   Object.assign(cliente, normalizarCliente({ ...cliente, ...dados }), { atualizadoEm: agora() });
+  garantirConsentimentos(cliente);
+  return cliente;
+}
+
+export function atualizarConsentimentoCliente(empresaId, clienteId, dados = {}) {
+  const cliente = clientesPersistidos(empresaId).clientes[clienteId];
+  if (!cliente || cliente.empresaId !== String(empresaId)) return null;
+  const canal = texto(dados.canal, 30).toLowerCase();
+  const finalidade = texto(dados.finalidade, 40).toLowerCase();
+  if (!CANAIS_CONSENTIMENTO.includes(canal) || !FINALIDADES_CONSENTIMENTO.includes(finalidade)) throw new Error('Canal ou finalidade de consentimento inválidos.');
+  garantirConsentimentos(cliente);
+  const concedido = Boolean(dados.concedido);
+  const atualizadoEm = agora();
+  const origem = texto(dados.origem || 'painel_barbearia', 80);
+  cliente.consentimentos[canal][finalidade] = { concedido, atualizadoEm, origem };
+  cliente.consentimentoHistorico.unshift({
+    id: `cons-${Date.now().toString(36)}-${cliente.consentimentoHistorico.length + 1}`,
+    canal, finalidade, concedido, origem,
+    responsavel: texto(dados.responsavel, 120), registradoEm: atualizadoEm,
+  });
+  cliente.consentimentoHistorico = cliente.consentimentoHistorico.slice(0, 100);
+  cliente.atualizadoEm = atualizadoEm;
+  saveFn();
   return cliente;
 }
 
@@ -146,7 +193,7 @@ export function listarClientes(empresaId) {
 
 export function obterCliente(empresaId, clienteId) {
   const cliente = clientesPersistidos(empresaId).clientes[clienteId];
-  return cliente?.empresaId === empresaId ? cliente : null;
+  return cliente?.empresaId === empresaId ? garantirConsentimentos(cliente) : null;
 }
 
 export function criarContaReceber(empresaId, dados) {
@@ -253,7 +300,7 @@ export function obterFechamentoDiario(empresaId, dataFechamento) {
 export { saveFn as save };
 
 export default {
-  clientesPersistidos, garantirClientePadrao, criarCliente, atualizarCliente, listarClientes, obterCliente,
+  clientesPersistidos, garantirClientePadrao, criarCliente, atualizarCliente, atualizarConsentimentoCliente, listarClientes, obterCliente,
   criarContaReceber, atualizarContaReceber, listarContasReceber, verificarAlertasVencimento,
   listarAlertas, criarFechamentoDiario, listarFechamentosDiarios, obterFechamentoDiario,
 };

@@ -21,7 +21,7 @@ function empresaVazia() {
       whatsapp: { id: 'whatsapp', nome: 'WhatsApp', ativo: false, tipo: 'mensageria' },
       loja_online: { id: 'loja_online', nome: 'Loja online', ativo: false, tipo: 'ecommerce' },
     },
-    fidelidade: { regra: { pontosPorReal: 1, valorPonto: 0.01, ativa: true }, membros: {} },
+    fidelidade: { regra: { pontosPorReal: 1, valorPonto: 0.01, ativa: true }, membros: {}, movimentos: {} },
     pedidos: {},
   }
 }
@@ -62,12 +62,17 @@ export function salvarCanal(empresaId, payload = {}) {
 
 export function obterFidelidade(empresaId) {
   const data = empresa(empresaId, false)
-  const membros = Object.values(data.fidelidade.membros).sort((a, b) => Number(b.pontos || 0) - Number(a.pontos || 0))
-  return { regra: data.fidelidade.regra, membros }
+  const fidelidade = data.fidelidade || { regra: { pontosPorReal: 1, valorPonto: 0.01, ativa: true }, membros: {}, movimentos: {} }
+  const membros = Object.values(fidelidade.membros || {}).sort((a, b) => Number(b.pontos || 0) - Number(a.pontos || 0))
+  const movimentos = Object.values(fidelidade.movimentos || {}).sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))
+  return { regra: fidelidade.regra, membros, movimentos }
 }
 
 export function salvarRegraFidelidade(empresaId, payload = {}) {
   const data = empresa(empresaId)
+  data.fidelidade ||= { regra: { pontosPorReal: 1, valorPonto: 0.01, ativa: true }, membros: {}, movimentos: {} }
+  data.fidelidade.membros ||= {}
+  data.fidelidade.movimentos ||= {}
   data.fidelidade.regra = {
     ...data.fidelidade.regra,
     ativa: payload.ativa !== undefined ? Boolean(payload.ativa) : data.fidelidade.regra.ativa,
@@ -81,28 +86,44 @@ export function salvarRegraFidelidade(empresaId, payload = {}) {
 
 export function cadastrarMembroFidelidade(empresaId, payload = {}) {
   const data = empresa(empresaId)
+  data.fidelidade ||= { regra: { pontosPorReal: 1, valorPonto: 0.01, ativa: true }, membros: {}, movimentos: {} }
+  data.fidelidade.membros ||= {}
+  data.fidelidade.movimentos ||= {}
   const clienteId = texto(payload.clienteId, 90)
   const nome = texto(payload.nome, 120)
   if (!clienteId || !nome) throw new Error('Cliente e nome são obrigatórios para fidelização.')
   const existente = Object.values(data.fidelidade.membros).find((membro) => membro.clienteId === clienteId)
   if (existente) return existente
-  const membro = { id: id('fid'), clienteId, nome, telefone: texto(payload.telefone, 30), pontos: 0, nivel: 'bronze', criadoEm: agora(), atualizadoEm: agora() }
+  const membro = { id: id('fid'), clienteId, nome, telefone: texto(payload.telefone, 30), status: 'ativo', pontos: 0, pontosAcumulados: 0, nivel: 'bronze', criadoEm: agora(), atualizadoEm: agora() }
   data.fidelidade.membros[membro.id] = membro
   save()
   return membro
 }
 
-export function creditarFidelidade(empresaId, clienteId, valor, origem = 'venda') {
+export function creditarFidelidade(empresaId, clienteId, valor, origem = 'venda', opcoes = {}) {
   const data = empresa(empresaId)
+  data.fidelidade ||= { regra: { pontosPorReal: 1, valorPonto: 0.01, ativa: true }, membros: {}, movimentos: {} }
+  data.fidelidade.membros ||= {}
+  data.fidelidade.movimentos ||= {}
   if (!data.fidelidade.regra.ativa) return null
-  const membro = Object.values(data.fidelidade.membros).find((item) => item.clienteId === clienteId)
+  const membro = Object.values(data.fidelidade.membros).find((item) => item.clienteId === clienteId && item.status !== 'inativo')
   if (!membro) return null
   const pontos = Math.floor(Math.max(0, Number(valor) || 0) * Number(data.fidelidade.regra.pontosPorReal || 0))
+  if (pontos <= 0) return { membro, pontosCreditados: 0, repetido: false }
+  const chaveIdempotencia = texto(opcoes?.chaveIdempotencia ?? opcoes?.chave_idempotencia, 220)
+  if (chaveIdempotencia) {
+    const repetido = Object.values(data.fidelidade.movimentos).find((movimento) => movimento.chaveIdempotencia === chaveIdempotencia)
+    if (repetido) return { membro, pontosCreditados: 0, repetido: true, movimento: repetido }
+  }
+  const registradoEm = agora()
   membro.pontos = Number(membro.pontos || 0) + pontos
+  membro.pontosAcumulados = Number(membro.pontosAcumulados || 0) + pontos
   membro.nivel = membro.pontos >= 5000 ? 'ouro' : membro.pontos >= 1500 ? 'prata' : 'bronze'
-  membro.ultimaOrigem = texto(origem, 40); membro.atualizadaEm = agora()
+  membro.ultimaOrigem = texto(typeof origem === 'string' ? origem : origem?.origem || 'venda', 40); membro.atualizadoEm = registradoEm
+  const movimento = { id: id('fidmov'), empresaId, membroId: membro.id, clienteId, valor: Number(Number(valor || 0).toFixed(2)), pontos, origem: membro.ultimaOrigem, chaveIdempotencia: chaveIdempotencia || null, criadoEm: registradoEm }
+  data.fidelidade.movimentos[movimento.id] = movimento
   save()
-  return { membro, pontosCreditados: pontos }
+  return { membro, pontosCreditados: pontos, repetido: false, movimento }
 }
 
 export function criarPedidoCanal(empresaId, payload = {}) {

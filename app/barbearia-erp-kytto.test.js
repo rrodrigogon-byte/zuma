@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { db, reset } from './db.js';
 import { moduloDaRota, obterPerfil, temPermissao } from './perfis-usuarios-kytto.js';
 import { listarLancamentos, registrarLancamento } from './financeiro-central-kytto.js';
-import { obterFidelidade } from './canais-fidelidade-kytto.js';
+import { obterFidelidade, cadastrarMembroFidelidade, creditarFidelidade } from './canais-fidelidade-kytto.js';
+import { criarCliente, atualizarConsentimentoCliente } from './clientes-contas-kytto.js';
 import {
   atualizarConfiguracao,
   atualizarConfiguracaoLoja,
@@ -43,6 +44,7 @@ import {
   atualizarComandaBarbearia,
   alterarStatusComandaBarbearia,
   registrarPagamentoComandaBarbearia,
+  registrarConsumoInternoComandaBarbearia,
 } from './barbearia-erp-kytto.js';
 
 const EMPRESA_A = 'empresa-teste-a';
@@ -317,8 +319,56 @@ test('rejeita item de produto de outra empresa na comanda', () => {
 
 test('leitura de fidelidade sem dados não cria estrutura no store', () => {
   assert.equal(db().canaisKytto, undefined);
-  assert.deepEqual(obterFidelidade(EMPRESA_A), { regra: { pontosPorReal: 1, valorPonto: 0.01, ativa: true }, membros: [] });
+  assert.deepEqual(obterFidelidade(EMPRESA_A), { regra: { pontosPorReal: 1, valorPonto: 0.01, ativa: true }, membros: [], movimentos: [] });
   assert.equal(db().canaisKytto, undefined);
+});
+
+test('mantém consentimento de CRM isolado por empresa e registra alteração', () => {
+  const clienteA = criarCliente(EMPRESA_A, { nome: 'Cliente consentimento', telefone: '65999999999' });
+  const clienteB = criarCliente(EMPRESA_B, { nome: 'Cliente outra empresa', telefone: '65988888888' });
+  const atualizado = atualizarConsentimentoCliente(EMPRESA_A, clienteA.id, { canal: 'whatsapp', finalidade: 'atendimento', concedido: true, responsavel: 'operador-teste' });
+  assert.equal(atualizado.consentimentos.whatsapp.atendimento.concedido, true);
+  assert.equal(atualizado.consentimentoHistorico.length, 1);
+  assert.equal(atualizado.consentimentoHistorico[0].responsavel, 'operador-teste');
+  assert.equal(atualizarConsentimentoCliente(EMPRESA_B, clienteA.id, { canal: 'whatsapp', finalidade: 'marketing', concedido: true }), null);
+  assert.equal(clienteB.consentimentos.whatsapp.marketing.concedido, false);
+  assert.throws(() => atualizarConsentimentoCliente(EMPRESA_A, clienteA.id, { canal: 'sms', finalidade: 'marketing', concedido: true }), /inválidos/);
+});
+
+test('pontua comanda paga uma única vez quando cliente aderiu à fidelidade', () => {
+  const cliente = criarCliente(EMPRESA_A, { nome: 'Cliente fiel', telefone: '65977777777' });
+  cadastrarMembroFidelidade(EMPRESA_A, { clienteId: cliente.id, nome: cliente.nome, telefone: cliente.telefone });
+  const servico = baseServico();
+  const comanda = criarComandaBarbearia(EMPRESA_A, { clienteId: cliente.id, clienteNome: cliente.nome, itens: [{ tipo: 'servico', servicoId: servico.id }] });
+  const primeira = registrarPagamentoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true, meioPagamento: 'pix', valor: 50, clienteId: cliente.id, chaveIdempotencia: 'pagamento-fiel-1' });
+  assert.equal(primeira.status, 'paga');
+  assert.equal(primeira.fidelidadeValorPontuado, 50);
+  assert.equal(obterFidelidade(EMPRESA_A).membros[0].pontos, 50);
+  const repetida = registrarPagamentoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true, meioPagamento: 'pix', valor: 50, clienteId: cliente.id, chaveIdempotencia: 'pagamento-fiel-1' });
+  assert.equal(repetida.fidelidadeValorPontuado, 50);
+  assert.equal(obterFidelidade(EMPRESA_A).movimentos.length, 1);
+  const chaveCredito = obterFidelidade(EMPRESA_A).movimentos[0].chaveIdempotencia;
+  assert.equal(creditarFidelidade(EMPRESA_A, cliente.id, 50, 'teste', { chaveIdempotencia: chaveCredito }).repetido, true);
+});
+
+test('impede ficha técnica de serviço com insumo de outra empresa', () => {
+  const produtoB = criarProdutoRevenda(EMPRESA_B, { nome: 'Produto privado B', precoVenda: 12, estoqueAtual: 2 });
+  assert.throws(() => criarServico(EMPRESA_A, { nome: 'Serviço inválido', preco: 30, consumoInterno: [{ produtoId: produtoB.id, quantidade: 1 }] }), /empresa ativa/);
+});
+
+test('baixa insumos da ficha técnica apenas após faturamento integral e de forma idempotente', () => {
+  const insumo = criarProdutoRevenda(EMPRESA_A, { nome: 'Shampoo consumo', precoVenda: 20, estoqueAtual: 5 });
+  const servico = criarServico(EMPRESA_A, { nome: 'Lavagem com insumo', preco: 45, consumoInterno: [{ produtoId: insumo.id, quantidade: 2 }] });
+  const comanda = criarComandaBarbearia(EMPRESA_A, { lojaId: 'loja-a', clienteNome: 'Cliente consumo', itens: [{ tipo: 'servico', servicoId: servico.id, quantidade: 2 }] });
+  assert.throws(() => registrarConsumoInternoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true }), /faturamento integral/);
+  const paga = registrarPagamentoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true, meioPagamento: 'pix', valor: 90 });
+  assert.equal(paga.status, 'paga');
+  assert.equal(listarProdutosRevenda(EMPRESA_A).find((item) => item.id === insumo.id).estoqueAtual, 1);
+  assert.equal(listarMovimentosEstoque(EMPRESA_A, { produtoId: insumo.id }).filter((item) => item.tipo === 'consumo_servico').length, 1);
+  const repetido = registrarConsumoInternoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true });
+  assert.equal(repetido.movimentos.length, 0);
+  assert.equal(listarProdutosRevenda(EMPRESA_A).find((item) => item.id === insumo.id).estoqueAtual, 1);
+  assert.equal(registrarConsumoInternoComandaBarbearia(EMPRESA_B, comanda.id, { confirmado: true }), null);
 });
 
 test('valida e persiste configurações de funcionamento', () => {
