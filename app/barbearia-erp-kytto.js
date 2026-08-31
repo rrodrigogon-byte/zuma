@@ -177,6 +177,25 @@ function feriadosNormalizados(valor, fallback = []) {
     : actualOrDefault(fallback, []);
 }
 
+function configuracaoPublicaNormalizada(dados = {}, anterior = {}) {
+  const slugRecebido = texto(dados.slugPublico ?? dados.slug_publico ?? anterior.slugPublico, 100)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  const ativoRecebido = dados.agendamentoPublicoAtivo ?? dados.agendamento_publico_ativo;
+  return {
+    slugPublico: slugRecebido,
+    nomePublico: texto(dados.nomePublico ?? dados.nome_publico ?? anterior.nomePublico, 160),
+    whatsappPublico: texto(dados.whatsappPublico ?? dados.whatsapp_publico ?? anterior.whatsappPublico, 30),
+    enderecoPublico: texto(dados.enderecoPublico ?? dados.endereco_publico ?? anterior.enderecoPublico, 240),
+    emojiPublico: texto(dados.emojiPublico ?? dados.emoji_publico ?? anterior.emojiPublico, 8) || '✂️',
+    lojaPublicaId: texto(dados.lojaPublicaId ?? dados.loja_publica_id ?? anterior.lojaPublicaId, 120),
+    agendamentoPublicoAtivo: ativoRecebido === undefined ? anterior.agendamentoPublicoAtivo !== false : Boolean(ativoRecebido),
+  };
+}
+
 function calendarioNormalizado(dados = {}, anterior = {}) {
   const horarioAbertura = texto(dados.horarioAbertura ?? dados.horario_abertura ?? anterior.horarioAbertura, 5) || '08:00';
   const horarioFechamento = texto(dados.horarioFechamento ?? dados.horario_fechamento ?? anterior.horarioFechamento, 5) || '20:00';
@@ -213,6 +232,7 @@ function agendamentoNormalizado(dados = {}, anterior = {}) {
     status,
     observacoes: texto(dados.observacoes ?? anterior.observacoes, 600),
     origem: texto(dados.origem ?? anterior.origem, 40) || 'admin',
+    codigoConfirmacao: texto(dados.codigoConfirmacao ?? dados.codigo_confirmacao ?? anterior.codigoConfirmacao, 20).toUpperCase(),
     meioPagamento: texto(dados.meioPagamento ?? dados.meio_pagamento ?? anterior.meioPagamento, 40).toLowerCase(),
     valorRecebido: dinheiro(dados.valorRecebido ?? dados.valor_recebido ?? anterior.valorRecebido),
     financeiroLancamentoId: texto(dados.financeiroLancamentoId ?? dados.financeiro_lancamento_id ?? anterior.financeiroLancamentoId, 120),
@@ -246,7 +266,7 @@ export function obterConfiguracaoLoja(empresaId, lojaId) {
 export function atualizarConfiguracao(empresaId, dados = {}) {
   const estado = estadoEmpresa(empresaId);
   const atual = estado.configuracao;
-  Object.assign(atual, calendarioNormalizado(dados, atual));
+  Object.assign(atual, calendarioNormalizado(dados, atual), configuracaoPublicaNormalizada(dados, atual));
   save();
   return { ...atual, lojas: { ...(atual.lojas || {}) } };
 }
@@ -1217,6 +1237,102 @@ function verificarConflito(estado, dados, ignorarId = '') {
     const outroFim = outroInicio + item.duracaoMinutos * 60 * 1000;
     return inicio < outroFim && outroInicio < fim;
   });
+}
+
+function minutosHoraPublica(valor) {
+  if (!horaValida(valor)) return NaN;
+  const [hora, minuto] = String(valor).split(':').map(Number);
+  return hora * 60 + minuto;
+}
+
+function horaPublica(minutos) {
+  return `${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`;
+}
+
+function offsetPublico(valor) {
+  const recebido = texto(valor || process.env.BUSINESS_TIMEZONE_OFFSET || '-04:00', 6);
+  return /^(?:Z|[+-](?:0\d|1[0-4]):[0-5]\d)$/.test(recebido) ? recebido : '-04:00';
+}
+
+function dataHoraPublica(dataAgenda, horaLocal, utcOffset) {
+  const iso = new Date(`${dataAgenda}T${horaLocal}:00${offsetPublico(utcOffset)}`).toISOString();
+  if (!iso) throw new Error('Data e horário do atendimento são inválidos.');
+  return iso;
+}
+
+function contextoDisponibilidadePublica(empresaId, dados = {}) {
+  const estado = estadoEmpresa(empresaId, false);
+  const dataAgenda = texto(dados.data ?? dados.dataAgenda ?? dados.data_agenda, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataAgenda)) throw new Error('Data do agendamento é obrigatória e deve usar o formato AAAA-MM-DD.');
+  const servicoId = texto(dados.servicoId ?? dados.servico_id, 100);
+  const servico = estado.servicos[servicoId];
+  if (!servico || servico.ativo === false || servico.permiteAgendamentoOnline === false) throw new Error('Serviço indisponível para agendamento online.');
+  const lojaId = texto(dados.lojaId ?? dados.loja_id, 120);
+  const calendario = obterCalendarioLoja(estado, lojaId);
+  const dia = new Date(`${dataAgenda}T12:00:00Z`);
+  if (Number.isNaN(dia.valueOf())) throw new Error('Data operacional inválida.');
+  if (calendario.feriados?.includes(dataAgenda) || (Array.isArray(calendario.diasFuncionamento) && !calendario.diasFuncionamento.includes(dia.getUTCDay()))) {
+    return { estado, dataAgenda, servico, lojaId, calendario, profissionais: [] };
+  }
+  const limiteHoje = new Date();
+  limiteHoje.setUTCHours(12, 0, 0, 0);
+  const limiteFinal = new Date(limiteHoje);
+  limiteFinal.setUTCDate(limiteFinal.getUTCDate() + Number(calendario.janelaReservaDias || 60));
+  if (dia < limiteHoje || dia > limiteFinal) return { estado, dataAgenda, servico, lojaId, calendario, profissionais: [] };
+  const profissionalId = texto(dados.profissionalId ?? dados.profissional_id, 100);
+  const profissionais = Object.values(estado.profissionais)
+    .filter((item) => item.ativo !== false)
+    .filter((item) => !profissionalId || profissionalId === 'qualquer' || item.id === profissionalId)
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  if (profissionalId && profissionalId !== 'qualquer' && profissionais.length === 0) throw new Error('Profissional indisponível para agendamento online.');
+  return { estado, dataAgenda, servico, lojaId, calendario, profissionais };
+}
+
+function disponibilidadeNoHorario(contexto, horaLocal, utcOffset) {
+  const { estado, dataAgenda, servico, lojaId, calendario, profissionais } = contexto;
+  const dataHora = dataHoraPublica(dataAgenda, horaLocal, utcOffset);
+  if (new Date(dataHora).valueOf() < Date.now() + Number(calendario.antecedenciaMinutos || 0) * 60000) return null;
+  for (const profissional of profissionais) {
+    const candidato = {
+      dataAgenda,
+      horaLocal,
+      dataHora,
+      duracaoMinutos: servico.duracaoMinutos,
+      servicoId: servico.id,
+      profissionalId: profissional.id,
+      lojaId,
+    };
+    try {
+      validarCalendarioAgendamento(estado, candidato, profissional);
+      if (!verificarConflito(estado, candidato)) return { profissional, dataHora };
+    } catch (_) {}
+  }
+  return null;
+}
+
+export function listarHorariosDisponiveis(empresaId, dados = {}) {
+  const contexto = contextoDisponibilidadePublica(empresaId, dados);
+  if (contexto.profissionais.length === 0) return [];
+  const abertura = minutosHoraPublica(contexto.calendario.horarioAbertura);
+  const fechamento = minutosHoraPublica(contexto.calendario.horarioFechamento);
+  const intervalo = Math.max(5, Number(contexto.calendario.intervaloMinutos || 30));
+  if (!Number.isFinite(abertura) || !Number.isFinite(fechamento) || fechamento <= abertura) throw new Error('Horário de funcionamento inválido.');
+  const horarios = [];
+  for (let minuto = abertura; minuto + contexto.servico.duracaoMinutos <= fechamento; minuto += intervalo) {
+    const horario = horaPublica(minuto);
+    const livre = disponibilidadeNoHorario(contexto, horario, dados.utcOffset ?? dados.utc_offset);
+    horarios.push({ horario, disponivel: Boolean(livre) });
+  }
+  return horarios;
+}
+
+export function resolverProfissionalDisponivel(empresaId, dados = {}) {
+  const contexto = contextoDisponibilidadePublica(empresaId, dados);
+  const horaLocal = texto(dados.horario ?? dados.horaLocal ?? dados.hora_local, 5);
+  if (!horaValida(horaLocal)) throw new Error('Horário do agendamento é inválido.');
+  const livre = disponibilidadeNoHorario(contexto, horaLocal, dados.utcOffset ?? dados.utc_offset);
+  if (!livre) throw new Error('Horário indisponível. Escolha outra opção.');
+  return { profissional: { ...livre.profissional }, dataHora: livre.dataHora, dataAgenda: contexto.dataAgenda, horaLocal };
 }
 
 export function criarAgendamento(empresaId, dados = {}) {

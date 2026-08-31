@@ -18,6 +18,14 @@ async function request(base, route, options = {}) {
   return { response, body };
 }
 
+function proximaDataOperacional() {
+  const data = new Date();
+  data.setUTCDate(data.getUTCDate() + 2);
+  data.setUTCHours(12, 0, 0, 0);
+  while (data.getUTCDay() === 0) data.setUTCDate(data.getUTCDate() + 1);
+  return data.toISOString().slice(0, 10);
+}
+
 async function aguardarServidor(base, processo) {
   const inicio = Date.now();
   while (Date.now() - inicio < 12000) {
@@ -82,11 +90,49 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     assert.equal(unidadeHeaderArbitrario.body.lojaId, 'loja-runtime');
     const unidadeAtualizada = await request(base, '/api/admin/barbearia/configuracoes/unidade-ativa', { method: 'PATCH', headers, body: JSON.stringify({ horarioAbertura: '09:00', horarioFechamento: '19:00', feriados: ['2030-06-20'] }) });
     assert.equal(unidadeAtualizada.response.status, 200);
+    const configuracaoPublica = await request(base, '/api/admin/barbearia/configuracoes', { method: 'PATCH', headers, body: JSON.stringify({ slugPublico: 'runtime-dino', nomePublico: 'Dino Runtime', whatsappPublico: '65999990000', lojaPublicaId: 'loja-runtime', agendamentoPublicoAtivo: true, antecedenciaMinutos: 0, janelaReservaDias: 365 }) });
+    assert.equal(configuracaoPublica.response.status, 200);
+    assert.equal(configuracaoPublica.body.configuracao.slugPublico, 'runtime-dino');
 
     const servico = await request(base, '/api/admin/barbearia/servicos', { method: 'POST', headers, body: JSON.stringify({ nome: 'Corte runtime', duracaoMinutos: 45, preco: 50 }) });
     assert.equal(servico.response.status, 201);
     const profissional = await request(base, '/api/admin/barbearia/profissionais', { method: 'POST', headers, body: JSON.stringify({ nome: 'Profissional runtime' }) });
     assert.equal(profissional.response.status, 201);
+
+    const slugInexistente = await request(base, '/api/publico/agendamento/inexistente-runtime');
+    assert.equal(slugInexistente.response.status, 404);
+    const catalogoPublico = await request(base, '/api/publico/agendamento/runtime-dino');
+    assert.equal(catalogoPublico.response.status, 200);
+    assert.equal(catalogoPublico.body.estabelecimento.nome, 'Dino Runtime');
+    assert.equal(catalogoPublico.body.servicos[0].id, servico.body.servico.id);
+    assert.equal(catalogoPublico.body.profissionais[0].id, profissional.body.profissional.id);
+    const dataPublica = proximaDataOperacional();
+    const horariosPublicos = await request(base, `/api/publico/agendamento/runtime-dino/horarios?data=${dataPublica}&servico_id=${servico.body.servico.id}&profissional_id=${profissional.body.profissional.id}`);
+    assert.equal(horariosPublicos.response.status, 200);
+    const horarioLivre = horariosPublicos.body.horarios.find((item) => item.disponivel)?.horario;
+    assert.ok(horarioLivre);
+    const payloadPublico = { servico_id: servico.body.servico.id, profissional_id: profissional.body.profissional.id, data: dataPublica, horario: horarioLivre, cliente_nome: 'Cliente público runtime', cliente_telefone: '65999998888', observacoes: 'Contrato público isolado.' };
+    const confirmacaoPublica = await request(base, '/api/publico/agendamento/runtime-dino/confirmar', { method: 'POST', body: JSON.stringify(payloadPublico) });
+    assert.equal(confirmacaoPublica.response.status, 201);
+    assert.match(confirmacaoPublica.body.agendamento.codigo, /^[A-F0-9]{8}$/);
+    assert.equal(confirmacaoPublica.body.agendamento.status, 'agendado');
+    assert.equal(confirmacaoPublica.body.agendamento.profissional, 'Profissional runtime');
+    const conflitoPublico = await request(base, '/api/publico/agendamento/runtime-dino/confirmar', { method: 'POST', body: JSON.stringify(payloadPublico) });
+    assert.equal(conflitoPublico.response.status, 409);
+    const telefoneInvalido = await request(base, '/api/publico/agendamento/runtime-dino/confirmar', { method: 'POST', body: JSON.stringify({ ...payloadPublico, horario: horariosPublicos.body.horarios.find((item) => item.disponivel && item.horario !== horarioLivre)?.horario || horarioLivre, cliente_telefone: '123' }) });
+    assert.equal(telefoneInvalido.response.status, 400);
+    const canalDesativado = await request(base, '/api/admin/barbearia/configuracoes', { method: 'PATCH', headers, body: JSON.stringify({ agendamentoPublicoAtivo: false }) });
+    assert.equal(canalDesativado.response.status, 200);
+    const catalogoDesativado = await request(base, '/api/publico/agendamento/runtime-dino');
+    assert.equal(catalogoDesativado.response.status, 404);
+    const canalReativado = await request(base, '/api/admin/barbearia/configuracoes', { method: 'PATCH', headers, body: JSON.stringify({ agendamentoPublicoAtivo: true }) });
+    assert.equal(canalReativado.response.status, 200);
+    const agendaPublicaPersistida = await request(base, `/api/admin/barbearia/agenda?data=${dataPublica}`, { headers });
+    assert.equal(agendaPublicaPersistida.response.status, 200);
+    assert.equal(agendaPublicaPersistida.body.agendamentos.length, 1);
+    assert.equal(agendaPublicaPersistida.body.agendamentos[0].origem, 'agendamento_online');
+    assert.equal(agendaPublicaPersistida.body.agendamentos[0].codigoConfirmacao, confirmacaoPublica.body.agendamento.codigo);
+
     const agenda = await request(base, '/api/admin/barbearia/agenda', { method: 'POST', headers, body: JSON.stringify({ clienteNome: 'Cliente runtime', profissionalId: profissional.body.profissional.id, servicoId: servico.body.servico.id, dataAgenda: '2030-06-10', dataHora: '2030-06-10T13:00:00.000Z' }) });
     assert.equal(agenda.response.status, 201);
     assert.equal(agenda.body.agendamento.lojaId, 'loja-runtime');

@@ -8,17 +8,31 @@ import { useParams } from 'react-router-dom'
 
 const API = import.meta.env.VITE_API_URL || ''
 
-// Paleta de cores para o tema público
+function dataLocalIso() {
+  const agora = new Date()
+  const local = new Date(agora.valueOf() - agora.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 10)
+}
+
+function linkWhatsApp(numero, mensagem) {
+  const digitos = String(numero || '').replace(/\D/g, '')
+  if (!digitos) return ''
+  const destino = digitos.startsWith('55') ? digitos : `55${digitos}`
+  return `https://wa.me/${destino}?text=${encodeURIComponent(mensagem)}`
+}
+
+// Paleta Dino: grafite profundo e índigo profissional. A chave `green` é
+// mantida apenas para compatibilidade interna com o componente existente.
 const theme = {
-  bg: '#0f1117',
-  surface: '#1a1d27',
-  card: '#22263a',
-  green: '#FF6B2C',
-  muted: '#8a8fa8',
-  cream: '#e8e6df',
-  line: '#2e3248',
-  red: '#e05c5c',
-  yellow: '#f5a623',
+  bg: '#0E1014',
+  surface: '#161922',
+  card: '#1C202B',
+  green: '#6E7CE0',
+  muted: '#A4AABE',
+  cream: '#E8EAF2',
+  line: '#2B3140',
+  red: '#F27A89',
+  yellow: '#E0B24B',
 }
 
 const s = {
@@ -26,7 +40,7 @@ const s = {
     minHeight: '100vh',
     background: theme.bg,
     color: theme.cream,
-    fontFamily: "'Inter', sans-serif",
+    fontFamily: "'Plus Jakarta Sans', 'Inter', system-ui, sans-serif",
     padding: '0 0 60px',
   },
   header: {
@@ -36,7 +50,7 @@ const s = {
     textAlign: 'center',
   },
   logo: { fontSize: 36, marginBottom: 8 },
-  nomeEstab: { fontSize: 22, fontWeight: 900, color: theme.green },
+  nomeEstab: { fontSize: 22, fontWeight: 800, color: theme.cream, fontFamily: "'Sora', 'Plus Jakarta Sans', sans-serif", letterSpacing: '-.2px' },
   subtitulo: { fontSize: 13, color: theme.muted, marginTop: 4 },
   container: { maxWidth: 520, margin: '0 auto', padding: '24px 16px' },
   card: {
@@ -69,22 +83,23 @@ const s = {
   stepTitle: { fontSize: 18, fontWeight: 800, marginBottom: 16 },
   badge: (cor) => ({
     display: 'inline-block', padding: '3px 10px',
-    background: cor === 'green' ? 'rgba(255,107,44,.15)' : 'rgba(240,180,60,.15)',
+    background: cor === 'green' ? 'rgba(110,124,224,.15)' : 'rgba(224,178,75,.15)',
     color: cor === 'green' ? theme.green : theme.yellow,
     borderRadius: 20, fontSize: 11, fontWeight: 700,
   }),
   grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 },
   profCard: (sel) => ({
-    background: sel ? 'rgba(255,107,44,.12)' : theme.surface,
+    width: '100%', background: sel ? 'rgba(110,124,224,.12)' : theme.surface,
     border: `1.5px solid ${sel ? theme.green : theme.line}`,
-    borderRadius: 12, padding: '14px 12px', cursor: 'pointer',
-    transition: 'all .15s', textAlign: 'center',
+    borderRadius: 12, padding: '14px 12px', cursor: 'pointer', color: theme.cream,
+    transition: 'all .15s', textAlign: 'center', fontFamily: 'inherit',
   }),
   servicoCard: (sel) => ({
-    background: sel ? 'rgba(255,107,44,.12)' : theme.surface,
+    width: '100%', background: sel ? 'rgba(110,124,224,.12)' : theme.surface,
     border: `1.5px solid ${sel ? theme.green : theme.line}`,
-    borderRadius: 12, padding: '12px 14px', cursor: 'pointer',
+    borderRadius: 12, padding: '12px 14px', cursor: 'pointer', color: theme.cream,
     transition: 'all .15s', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    textAlign: 'left', fontFamily: 'inherit',
   }),
   horarioBtn: (sel, dis) => ({
     padding: '10px 0', textAlign: 'center',
@@ -93,12 +108,18 @@ const s = {
     borderRadius: 10, cursor: dis ? 'not-allowed' : 'pointer',
     color: dis ? theme.muted : sel ? '#fff' : theme.cream,
     fontSize: 13, fontWeight: 700, opacity: dis ? .4 : 1,
-    transition: 'all .15s',
+    transition: 'all .15s', fontFamily: 'inherit',
+
   }),
   sucesso: {
     textAlign: 'center', padding: '40px 24px',
     background: theme.card, border: `1px solid ${theme.line}`,
     borderRadius: 20,
+  },
+  alerta: {
+    padding: '12px 14px', marginBottom: 16, borderRadius: 10,
+    border: `1px solid ${theme.red}`, background: 'rgba(242,122,137,.1)',
+    color: theme.red, fontSize: 13, fontWeight: 700, lineHeight: 1.45,
   },
 }
 
@@ -112,6 +133,8 @@ export default function AgendamentoOnline() {
   const [horariosDisponiveis, setHorariosDisponiveis] = useState([])
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
+  const [erroFluxo, setErroFluxo] = useState('')
+  const [carregandoHorarios, setCarregandoHorarios] = useState(false)
   const [enviando, setEnviando] = useState(false)
 
   // Seleções do usuário
@@ -129,9 +152,10 @@ export default function AgendamentoOnline() {
   async function carregarDados() {
     try {
       setLoading(true)
-      const res = await fetch(`${API}/api/publico/agendamento/${slug}`)
-      if (!res.ok) throw new Error('Estabelecimento não encontrado')
-      const data = await res.json()
+      setErro(null)
+      const res = await fetch(`${API}/api/publico/agendamento/${encodeURIComponent(slug)}`)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Estabelecimento não encontrado')
       setEstabelecimento(data.estabelecimento)
       setProfissionais(data.profissionais || [])
       setServicos(data.servicos || [])
@@ -144,29 +168,38 @@ export default function AgendamentoOnline() {
 
   async function carregarHorarios() {
     if (!profissionalSel || !dataSel || !servicoSel) return
+    setCarregandoHorarios(true)
+    setErroFluxo('')
+    setHorariosDisponiveis([])
     try {
       const res = await fetch(
-        `${API}/api/publico/agendamento/${slug}/horarios?profissional_id=${profissionalSel.id}&data=${dataSel}&duracao=${servicoSel.duracao_min}`
+        `${API}/api/publico/agendamento/${encodeURIComponent(slug)}/horarios?profissional_id=${encodeURIComponent(profissionalSel.id)}&data=${encodeURIComponent(dataSel)}&servico_id=${encodeURIComponent(servicoSel.id)}`
       )
-      const data = await res.json()
-      setHorariosDisponiveis(data.horarios || [])
-    } catch {
-      setHorariosDisponiveis([])
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Não foi possível consultar os horários.')
+      setHorariosDisponiveis(Array.isArray(data.horarios) ? data.horarios : [])
+    } catch (err) {
+      setErroFluxo(err.message || 'Não foi possível consultar os horários.')
+    } finally {
+      setCarregandoHorarios(false)
     }
   }
 
   useEffect(() => {
-    if (passo === 3 && profissionalSel && dataSel) carregarHorarios()
-  }, [passo, dataSel, profissionalSel])
+    if (passo === 3 && profissionalSel && dataSel && servicoSel) carregarHorarios()
+  }, [passo, dataSel, profissionalSel, servicoSel])
 
   async function confirmarAgendamento() {
-    if (!form.nome || !form.telefone) {
-      alert('Preencha seu nome e telefone')
+    const nome = form.nome.trim()
+    const telefone = form.telefone.replace(/\D/g, '')
+    if (nome.length < 2 || telefone.length < 10) {
+      setErroFluxo('Informe seu nome e um telefone válido com DDD.')
       return
     }
+    setErroFluxo('')
     setEnviando(true)
     try {
-      const res = await fetch(`${API}/api/publico/agendamento/${slug}/confirmar`, {
+      const res = await fetch(`${API}/api/publico/agendamento/${encodeURIComponent(slug)}/confirmar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -174,24 +207,24 @@ export default function AgendamentoOnline() {
           profissional_id: profissionalSel.id,
           data: dataSel,
           horario: horarioSel,
-          cliente_nome: form.nome,
-          cliente_telefone: form.telefone,
+          cliente_nome: nome,
+          cliente_telefone: telefone,
           observacoes: form.observacoes,
         }),
       })
-      const data = await res.json()
-      if (!data.ok) throw new Error(data.error || 'Erro ao confirmar')
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Não foi possível confirmar o agendamento.')
       setAgendamento(data.agendamento)
       setPasso(5)
     } catch (err) {
-      alert(err.message)
+      setErroFluxo(err.message || 'Não foi possível confirmar o agendamento.')
     } finally {
       setEnviando(false)
     }
   }
 
   // Data mínima = hoje
-  const hoje = new Date().toISOString().split('T')[0]
+  const hoje = dataLocalIso()
 
   // ── Tela de loading / erro ──────────────────────────────────────────────────
   if (loading) return (
@@ -222,7 +255,7 @@ export default function AgendamentoOnline() {
         <div style={s.subtitulo}>📍 {estabelecimento.endereco}</div>
       )}
       {/* Indicador de passos */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 16 }}>
+      <div role="progressbar" aria-label={`Etapa ${Math.min(passo, 4)} de 4`} aria-valuemin="1" aria-valuemax="4" aria-valuenow={Math.min(passo, 4)} style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 16 }}>
         {[1, 2, 3, 4].map(p => (
           <div key={p} style={{
             width: 28, height: 4, borderRadius: 2,
@@ -242,23 +275,26 @@ export default function AgendamentoOnline() {
         <div style={s.card}>
           <div style={s.stepTitle}>🛠️ Qual serviço deseja?</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {servicos.length === 0 && <p role="status" style={{ color: theme.muted, fontSize: 13 }}>Nenhum serviço está habilitado para agendamento online.</p>}
             {servicos.map(sv => (
-              <div
+              <button
+                type="button"
                 key={sv.id}
+                aria-pressed={servicoSel?.id === sv.id}
                 style={s.servicoCard(servicoSel?.id === sv.id)}
-                onClick={() => setServicoSel(sv)}
+                onClick={() => { setServicoSel(sv); setErroFluxo('') }}
               >
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>{sv.nome}</div>
-                  <div style={{ color: theme.muted, fontSize: 12, marginTop: 2 }}>⏱ {sv.duracao_min} min</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontWeight: 800, color: theme.green, fontSize: 15 }}>
+                <span>
+                  <span style={{ display: 'block', fontWeight: 700, fontSize: 14 }}>{sv.nome}</span>
+                  <span style={{ display: 'block', color: theme.muted, fontSize: 12, marginTop: 2 }}>⏱ {sv.duracao_min} min</span>
+                </span>
+                <span style={{ textAlign: 'right' }}>
+                  <span style={{ display: 'block', fontWeight: 800, color: theme.green, fontSize: 15 }}>
                     R$ {parseFloat(sv.preco).toFixed(2).replace('.', ',')}
-                  </div>
-                  {servicoSel?.id === sv.id && <div style={{ fontSize: 16, marginTop: 2 }}>✅</div>}
-                </div>
-              </div>
+                  </span>
+                  {servicoSel?.id === sv.id && <span aria-hidden="true" style={{ display: 'block', fontSize: 16, marginTop: 2 }}>✓</span>}
+                </span>
+              </button>
             ))}
           </div>
         </div>
@@ -282,25 +318,29 @@ export default function AgendamentoOnline() {
           <div style={s.stepTitle}>👤 Com quem prefere?</div>
           <div style={s.grid2}>
             {/* Opção "Qualquer disponível" */}
-            <div
+            <button
+              type="button"
+              aria-pressed={profissionalSel?.id === 'qualquer'}
               style={s.profCard(profissionalSel?.id === 'qualquer')}
-              onClick={() => setProfissionalSel({ id: 'qualquer', nome: 'Qualquer disponível' })}
+              onClick={() => { setProfissionalSel({ id: 'qualquer', nome: 'Qualquer disponível' }); setErroFluxo('') }}
             >
-              <div style={{ fontSize: 28, marginBottom: 6 }}>🎲</div>
-              <div style={{ fontSize: 12, fontWeight: 700 }}>Qualquer disponível</div>
-            </div>
+              <span aria-hidden="true" style={{ display: 'block', fontSize: 28, marginBottom: 6 }}>🎲</span>
+              <span style={{ fontSize: 12, fontWeight: 700 }}>Qualquer disponível</span>
+            </button>
             {profissionais.map(p => (
-              <div
+              <button
+                type="button"
                 key={p.id}
+                aria-pressed={profissionalSel?.id === p.id}
                 style={s.profCard(profissionalSel?.id === p.id)}
-                onClick={() => setProfissionalSel(p)}
+                onClick={() => { setProfissionalSel(p); setErroFluxo('') }}
               >
-                <div style={{ fontSize: 28, marginBottom: 6 }}>{p.foto_emoji || '💇'}</div>
-                <div style={{ fontSize: 12, fontWeight: 700 }}>{p.nome}</div>
+                <span aria-hidden="true" style={{ display: 'block', fontSize: 28, marginBottom: 6 }}>{p.foto_emoji || '💇'}</span>
+                <span style={{ display: 'block', fontSize: 12, fontWeight: 700 }}>{p.nome}</span>
                 {p.especialidade && (
-                  <div style={{ fontSize: 10, color: theme.muted, marginTop: 2 }}>{p.especialidade}</div>
+                  <span style={{ display: 'block', fontSize: 10, color: theme.muted, marginTop: 2 }}>{p.especialidade}</span>
                 )}
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -325,8 +365,10 @@ export default function AgendamentoOnline() {
       <div style={s.container}>
         <div style={s.card}>
           <div style={s.stepTitle}>📅 Quando prefere?</div>
-          <label style={s.label}>Data</label>
+          {erroFluxo && <div role="alert" aria-live="assertive" style={s.alerta}>{erroFluxo}</div>}
+          <label htmlFor="agendamento-data" style={s.label}>Data</label>
           <input
+            id="agendamento-data"
             type="date"
             min={hoje}
             value={dataSel}
@@ -336,20 +378,26 @@ export default function AgendamentoOnline() {
           {dataSel && (
             <>
               <label style={s.label}>Horário disponível</label>
-              {horariosDisponiveis.length === 0 ? (
-                <p style={{ color: theme.muted, fontSize: 13, textAlign: 'center', padding: '20px 0' }}>
+              {carregandoHorarios ? (
+                <p role="status" aria-live="polite" style={{ color: theme.muted, fontSize: 13, textAlign: 'center', padding: '20px 0' }}>Consultando a agenda…</p>
+              ) : horariosDisponiveis.length === 0 ? (
+                <p role="status" style={{ color: theme.muted, fontSize: 13, textAlign: 'center', padding: '20px 0' }}>
                   Nenhum horário disponível nesta data
                 </p>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                   {horariosDisponiveis.map(h => (
-                    <div
+                    <button
+                      type="button"
                       key={h.horario}
+                      disabled={!h.disponivel}
+                      aria-pressed={horarioSel === h.horario}
+                      aria-label={`${h.horario}${h.disponivel ? '' : ', indisponível'}`}
                       style={s.horarioBtn(horarioSel === h.horario, !h.disponivel)}
-                      onClick={() => h.disponivel && setHorarioSel(h.horario)}
+                      onClick={() => { setHorarioSel(h.horario); setErroFluxo('') }}
                     >
                       {h.horario}
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -376,6 +424,7 @@ export default function AgendamentoOnline() {
       <Header />
       <div style={s.container}>
         {/* Resumo */}
+        {erroFluxo && <div role="alert" aria-live="assertive" style={s.alerta}>{erroFluxo}</div>}
         <div style={{ ...s.card, borderColor: theme.green }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: theme.green, marginBottom: 10 }}>📋 Resumo do agendamento</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
@@ -408,27 +457,41 @@ export default function AgendamentoOnline() {
           <div style={s.stepTitle}>📱 Seus dados</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
-              <label style={s.label}>Seu nome *</label>
+              <label htmlFor="agendamento-nome" style={s.label}>Seu nome *</label>
               <input
+                id="agendamento-nome"
+                name="nome"
+                required
+                autoComplete="name"
+                maxLength={160}
                 style={s.input}
                 placeholder="Como prefere ser chamado(a)?"
                 value={form.nome}
-                onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
+                onChange={e => { setForm(f => ({ ...f, nome: e.target.value })); setErroFluxo('') }}
               />
             </div>
             <div>
-              <label style={s.label}>WhatsApp *</label>
+              <label htmlFor="agendamento-telefone" style={s.label}>Telefone com DDD *</label>
               <input
+                id="agendamento-telefone"
+                name="telefone"
+                required
+                autoComplete="tel"
+                inputMode="tel"
+                maxLength={18}
                 style={s.input}
                 placeholder="(65) 9 9999-9999"
                 type="tel"
                 value={form.telefone}
-                onChange={e => setForm(f => ({ ...f, telefone: e.target.value }))}
+                onChange={e => { setForm(f => ({ ...f, telefone: e.target.value })); setErroFluxo('') }}
               />
             </div>
             <div>
-              <label style={s.label}>Observações (opcional)</label>
+              <label htmlFor="agendamento-observacoes" style={s.label}>Observações (opcional)</label>
               <textarea
+                id="agendamento-observacoes"
+                name="observacoes"
+                maxLength={600}
                 style={{ ...s.input, resize: 'vertical', minHeight: 70 }}
                 placeholder="Alguma preferência ou informação importante?"
                 value={form.observacoes}
@@ -457,13 +520,13 @@ export default function AgendamentoOnline() {
     <div style={s.page}>
       <Header />
       <div style={s.container}>
-        <div style={s.sucesso}>
+        <div role="status" aria-live="polite" style={s.sucesso}>
           <div style={{ fontSize: 56, marginBottom: 16 }}>🎉</div>
           <div style={{ fontSize: 22, fontWeight: 900, color: theme.green, marginBottom: 8 }}>
-            Agendamento confirmado!
+            Agendamento solicitado!
           </div>
           <div style={{ color: theme.muted, fontSize: 14, marginBottom: 24 }}>
-            Você receberá uma confirmação via WhatsApp em breve.
+            A solicitação entrou na agenda. Guarde o código abaixo para acompanhar com o estabelecimento.
           </div>
 
           {/* Código de confirmação */}
@@ -483,7 +546,7 @@ export default function AgendamentoOnline() {
           <div style={{ textAlign: 'left', background: theme.surface, borderRadius: 12, padding: 16, marginBottom: 20 }}>
             {[
               ['Serviço', servicoSel?.nome],
-              ['Profissional', profissionalSel?.nome],
+              ['Profissional', agendamento?.profissional || profissionalSel?.nome],
               ['Data', new Date(dataSel + 'T12:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })],
               ['Horário', horarioSel],
               ['Valor', `R$ ${parseFloat(servicoSel?.preco || 0).toFixed(2).replace('.', ',')}`],
@@ -498,7 +561,7 @@ export default function AgendamentoOnline() {
           {/* Botão WhatsApp */}
           {estabelecimento?.whatsapp && (
             <a
-              href={`https://wa.me/55${estabelecimento.whatsapp.replace(/\D/g, '')}?text=Olá! Acabei de agendar o serviço ${servicoSel?.nome} para ${dataSel} às ${horarioSel}. Código: ${agendamento?.codigo}`}
+              href={linkWhatsApp(estabelecimento.whatsapp, `Olá! Solicitei o serviço ${servicoSel?.nome} para ${dataSel} às ${horarioSel}. Código: ${agendamento?.codigo}`)}
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -514,7 +577,7 @@ export default function AgendamentoOnline() {
 
           <button
             style={{ ...s.btnSecondary, width: '100%' }}
-            onClick={() => { setPasso(1); setServicoSel(null); setProfissionalSel(null); setDataSel(''); setHorarioSel(''); setForm({ nome: '', telefone: '', observacoes: '' }) }}
+            onClick={() => { setPasso(1); setServicoSel(null); setProfissionalSel(null); setDataSel(''); setHorarioSel(''); setHorariosDisponiveis([]); setAgendamento(null); setErroFluxo(''); setForm({ nome: '', telefone: '', observacoes: '' }) }}
           >
             + Fazer outro agendamento
           </button>

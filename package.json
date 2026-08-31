@@ -11,9 +11,10 @@
     "migrate:sql": "node app/migrations/run-sql-migrations.js",
     "worker:omnichannel": "node app/workers/omnichannel-worker.js --once",
     "check:omnichannel-worker": "node --check app/workers/omnichannel-worker.js",
-    "test": "jest --coverage",
-    "test:watch": "jest --watch",
-    "test:e2e": "jest --testPathPattern=e2e",
+    "test": "npm run test:node && npm run test:vitest",
+    "test:node": "node --test --test-concurrency=1 app/*.test.js app/core/*.test.js app/migrations/*.test.js app/tests/pdv-barbearia.test.js web/src/lib/*.test.js",
+    "test:vitest": "vitest run app/tests/crediario.test.js app/tests/fiscal.test.js",
+    "test:watch": "vitest",
     "lint": "eslint app/",
     "format": "prettier --write app/",
     "docker:build": "docker build -t erp-modular:latest .",
@@ -54,7 +55,8 @@
     "jest": "^29.7.0",
     "nodemon": "^3.0.1",
     "prettier": "^3.0.3",
-    "supertest": "^6.3.3"
+    "supertest": "^6.3.3",
+    "vitest": "^2.1.9"
   },
   "engines": {
     "node": ">=18.0.0",

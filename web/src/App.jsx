@@ -1,8 +1,9 @@
-import { lazy, Suspense } from 'react'
-import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
+import { lazy, Suspense, useEffect } from 'react'
+import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
 import { useAuth } from './lib/auth'
+import { applyBrand, resolveBrand } from './lib/brand'
 
 // Redireciona atletas logados para o portal e não-atletas para a página pública de perfil
 function PerfilRoute() {
@@ -148,6 +149,16 @@ const AIJur              = lazy(() => import('./pages/public/AIJur'))
 const Solucoes           = lazy(() => import('./pages/public/Solucoes'))
 const Ecommerce          = lazy(() => import('./pages/public/Ecommerce'))
 
+function RouteBrandSync() {
+  const location = useLocation()
+
+  useEffect(() => {
+    applyBrand(resolveBrand(location.pathname, location.search))
+  }, [location.pathname, location.search])
+
+  return null
+}
+
 function Loading() {
   return (
     <div style={{
@@ -163,6 +174,7 @@ function Loading() {
 export default function App() {
   return (
     <ErrorBoundary>
+    <RouteBrandSync />
     <Suspense fallback={<Loading />}>
       <Routes>
         {/* Auth */}

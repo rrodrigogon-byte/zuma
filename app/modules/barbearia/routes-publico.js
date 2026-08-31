@@ -1,252 +1,171 @@
-/**
- * Routes Públicas: Agendamento Online
- * SetPoint Ultra — Sem autenticação, acessível via link público
- * Rota base: /api/publico/agendamento/:slug
- */
-import { Router } from 'express';
-import { db } from '../../core/database.js';
-import {
-  notificarConfirmacaoAgendamento
-} from '../../core/whatsapp.js';
+import crypto from 'crypto';
+import express from 'express';
+import { db } from '../../db.js';
+import * as barbearia from '../../barbearia-erp-kytto.js';
 
-const router = Router();
+const router = express.Router();
+const EMPRESA_PADRAO_ID = 'emp-kytto-001';
 
-// ── Carregar dados do estabelecimento pelo slug ───────────────────────────────
-router.get('/:slug', async (req, res) => {
-  try {
-    const { slug } = req.params;
+function texto(valor, limite = 160) {
+  return String(valor ?? '').trim().slice(0, limite);
+}
 
-    // Buscar tenant pelo slug
-    const tenantResult = await db.query(
-      `SELECT id, nome, slug, whatsapp, endereco, emoji, configuracoes
-       FROM tenants
-       WHERE slug = $1 AND ativo = TRUE`,
-      [slug]
-    );
+function slug(valor) {
+  return texto(valor, 100)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
 
-    if (!tenantResult.rows.length) {
-      return res.status(404).json({ ok: false, error: 'Estabelecimento não encontrado' });
-    }
+function empresaCadastrada(estado, empresaId) {
+  return estado.cadastrosMestresKytto?.empresas?.[empresaId]
+    || estado.empresas?.[empresaId]
+    || null;
+}
 
-    const tenant = tenantResult.rows[0];
+function identidadePublica(slugRecebido) {
+  const solicitado = slug(slugRecebido);
+  if (!solicitado) return null;
+  const estado = db();
+  const barbearias = estado.barbearias || {};
 
-    // Buscar profissionais ativos
-    const profResult = await db.query(
-      `SELECT id, nome, especialidade, foto_emoji
-       FROM barbearia_profissionais
-       WHERE tenant_id = $1 AND ativo = TRUE AND aceita_agendamento_online = TRUE
-       ORDER BY nome`,
-      [tenant.id]
-    );
-
-    // Buscar serviços ativos com agendamento online habilitado
-    const servResult = await db.query(
-      `SELECT id, nome, descricao, preco, duracao_min
-       FROM barbearia_servicos
-       WHERE tenant_id = $1 AND ativo = TRUE AND disponivel_online = TRUE
-       ORDER BY nome`,
-      [tenant.id]
-    );
-
-    res.json({
-      ok: true,
+  for (const [empresaId, dados] of Object.entries(barbearias)) {
+    const configuracao = dados?.configuracao || {};
+    const empresa = empresaCadastrada(estado, empresaId);
+    const slugConfigurado = slug(configuracao.slugPublico || configuracao.slugAgendamento);
+    const aliasDino = solicitado === 'dino' && empresaId === EMPRESA_PADRAO_ID;
+    if (!aliasDino && (!slugConfigurado || slugConfigurado !== solicitado)) continue;
+    if (configuracao.agendamentoPublicoAtivo === false || empresa?.ativa === false) return null;
+    return {
+      empresaId,
+      lojaId: texto(configuracao.lojaPublicaId, 120),
       estabelecimento: {
-        nome: tenant.nome,
-        slug: tenant.slug,
-        whatsapp: tenant.whatsapp,
-        endereco: tenant.endereco,
-        emoji: tenant.emoji || '✂️',
+        nome: texto(configuracao.nomePublico, 160) || (aliasDino ? 'Dino' : texto(empresa?.nomeFantasia || empresa?.nome, 160)) || 'Barbearia',
+        slug: aliasDino ? 'dino' : slugConfigurado,
+        whatsapp: texto(configuracao.whatsappPublico || empresa?.telefone, 30),
+        endereco: texto(configuracao.enderecoPublico || empresa?.endereco, 240),
+        emoji: texto(configuracao.emojiPublico, 8) || '✂️',
       },
-      profissionais: profResult.rows,
-      servicos: servResult.rows,
+    };
+  }
+  return null;
+}
+
+function servicoPublico(item) {
+  return {
+    id: item.id,
+    nome: item.nome,
+    descricao: item.descricao || '',
+    preco: Number(item.preco || 0),
+    duracao_min: Number(item.duracaoMinutos || 30),
+  };
+}
+
+function profissionalPublico(item) {
+  return {
+    id: item.id,
+    nome: item.nome,
+    especialidade: item.especialidade || 'Barbeiro',
+    foto_emoji: texto(item.fotoEmoji, 8) || '✂️',
+  };
+}
+
+function erroHttp(res, erro) {
+  const mensagem = texto(erro?.message || 'Não foi possível concluir o agendamento.', 240);
+  const indisponivel = /indisponível|indisponivel|conflito/i.test(mensagem);
+  const entradaInvalida = /obrigatóri|inválid|indisponível para agendamento online|não funciona|fora do funcionamento|não trabalha/i.test(mensagem);
+  const status = indisponivel ? 409 : entradaInvalida ? 400 : 500;
+  if (status === 500) console.error('[Agendamento público]', erro);
+  return res.status(status).json({ ok: false, error: status === 500 ? 'Não foi possível concluir o agendamento.' : mensagem });
+}
+
+router.get('/:slug', (req, res) => {
+  try {
+    const identidade = identidadePublica(req.params.slug);
+    if (!identidade) return res.status(404).json({ ok: false, error: 'Estabelecimento não encontrado.' });
+    const profissionais = barbearia.listarProfissionais(identidade.empresaId)
+      .filter((item) => item.ativo !== false)
+      .map(profissionalPublico);
+    const servicos = barbearia.listarServicos(identidade.empresaId)
+      .filter((item) => item.ativo !== false && item.permiteAgendamentoOnline !== false)
+      .map(servicoPublico);
+    res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+    return res.json({ ok: true, estabelecimento: identidade.estabelecimento, profissionais, servicos });
+  } catch (erro) {
+    return erroHttp(res, erro);
+  }
+});
+
+router.get('/:slug/horarios', (req, res) => {
+  try {
+    const identidade = identidadePublica(req.params.slug);
+    if (!identidade) return res.status(404).json({ ok: false, error: 'Estabelecimento não encontrado.' });
+    const servicoId = texto(req.query.servico_id, 100);
+    if (!servicoId) return res.status(400).json({ ok: false, error: 'servico_id é obrigatório.' });
+    const horarios = barbearia.listarHorariosDisponiveis(identidade.empresaId, {
+      data: req.query.data,
+      servicoId,
+      profissionalId: req.query.profissional_id,
+      lojaId: identidade.lojaId,
     });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ ok: true, horarios });
+  } catch (erro) {
+    return erroHttp(res, erro);
   }
 });
 
-// ── Horários disponíveis ──────────────────────────────────────────────────────
-router.get('/:slug/horarios', async (req, res) => {
+router.post('/:slug/confirmar', (req, res) => {
   try {
-    const { slug } = req.params;
-    const { profissional_id, data, duracao } = req.query;
+    const identidade = identidadePublica(req.params.slug);
+    if (!identidade) return res.status(404).json({ ok: false, error: 'Estabelecimento não encontrado.' });
+    const corpo = req.body || {};
+    const nome = texto(corpo.cliente_nome, 160);
+    const telefone = String(corpo.cliente_telefone || '').replace(/\D/g, '').slice(0, 13);
+    const servicoId = texto(corpo.servico_id, 100);
+    const profissionalId = texto(corpo.profissional_id || 'qualquer', 100);
+    const data = texto(corpo.data, 10);
+    const horario = texto(corpo.horario, 5);
+    if (nome.length < 2) return res.status(400).json({ ok: false, error: 'Informe seu nome.' });
+    if (telefone.length < 10) return res.status(400).json({ ok: false, error: 'Informe um telefone válido com DDD.' });
+    if (!servicoId || !data || !horario) return res.status(400).json({ ok: false, error: 'Serviço, data e horário são obrigatórios.' });
 
-    if (!data || !duracao) {
-      return res.status(400).json({ ok: false, error: 'data e duracao são obrigatórios' });
-    }
-
-    // Buscar tenant
-    const tenantResult = await db.query(
-      'SELECT id FROM tenants WHERE slug = $1 AND ativo = TRUE',
-      [slug]
-    );
-    if (!tenantResult.rows.length) {
-      return res.status(404).json({ ok: false, error: 'Estabelecimento não encontrado' });
-    }
-    const tenantId = tenantResult.rows[0].id;
-
-    // Buscar horários de funcionamento (padrão: 8h-18h, intervalo 30min)
-    const diasSemana = new Date(data + 'T12:00').getDay(); // 0=Dom, 6=Sab
-    const horarioAbertura = '08:00';
-    const horarioFechamento = diasSemana === 6 ? '13:00' : '18:00';
-    const intervaloMin = 30;
-    const duracaoMin = parseInt(duracao) || 30;
-
-    // Gerar slots
-    const slots = [];
-    let hora = parseInt(horarioAbertura.split(':')[0]);
-    let minuto = parseInt(horarioAbertura.split(':')[1]);
-    const [hFim, mFim] = horarioFechamento.split(':').map(Number);
-
-    while (hora * 60 + minuto + duracaoMin <= hFim * 60 + mFim) {
-      slots.push(`${String(hora).padStart(2, '0')}:${String(minuto).padStart(2, '0')}`);
-      minuto += intervaloMin;
-      if (minuto >= 60) { hora++; minuto -= 60; }
-    }
-
-    // Buscar agendamentos já existentes nessa data
-    const agendadosResult = await db.query(
-      `SELECT horario, duracao_min
-       FROM agendamentos
-       WHERE tenant_id = $1
-         AND DATE(data_hora) = $2
-         AND ($3::uuid IS NULL OR profissional_id = $3::uuid)
-         AND status NOT IN ('cancelado', 'nao_compareceu')`,
-      [tenantId, data, profissional_id === 'qualquer' ? null : profissional_id || null]
-    );
-
-    const agendados = agendadosResult.rows.map(a => a.horario);
-
-    // Marcar disponibilidade
-    const horarios = slots.map(h => ({
-      horario: h,
-      disponivel: !agendados.includes(h),
-    }));
-
-    res.json({ ok: true, horarios });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// ── Confirmar agendamento ─────────────────────────────────────────────────────
-router.post('/:slug/confirmar', async (req, res) => {
-  try {
-    const { slug } = req.params;
-    const {
-      servico_id, profissional_id, data, horario,
-      cliente_nome, cliente_telefone, observacoes
-    } = req.body;
-
-    if (!servico_id || !data || !horario || !cliente_nome || !cliente_telefone) {
-      return res.status(400).json({ ok: false, error: 'Campos obrigatórios faltando' });
-    }
-
-    // Buscar tenant
-    const tenantResult = await db.query(
-      'SELECT id, nome, whatsapp FROM tenants WHERE slug = $1 AND ativo = TRUE',
-      [slug]
-    );
-    if (!tenantResult.rows.length) {
-      return res.status(404).json({ ok: false, error: 'Estabelecimento não encontrado' });
-    }
-    const tenant = tenantResult.rows[0];
-
-    // Buscar serviço
-    const servicoResult = await db.query(
-      'SELECT * FROM barbearia_servicos WHERE id = $1 AND tenant_id = $2',
-      [servico_id, tenant.id]
-    );
-    if (!servicoResult.rows.length) {
-      return res.status(404).json({ ok: false, error: 'Serviço não encontrado' });
-    }
-    const servico = servicoResult.rows[0];
-
-    // Verificar se horário ainda está disponível
-    const conflito = await db.query(
-      `SELECT id FROM agendamentos
-       WHERE tenant_id = $1 AND DATE(data_hora) = $2 AND horario = $3
-         AND ($4::uuid IS NULL OR profissional_id = $4::uuid)
-         AND status NOT IN ('cancelado', 'nao_compareceu')`,
-      [tenant.id, data, horario, profissional_id === 'qualquer' ? null : profissional_id || null]
-    );
-
-    if (conflito.rows.length > 0) {
-      return res.status(409).json({ ok: false, error: 'Horário não está mais disponível. Por favor, escolha outro.' });
-    }
-
-    // Gerar código de confirmação
-    const codigo = Math.random().toString(36).substring(2, 8).toUpperCase();
-
-    // Inserir ou buscar cliente
-    let clienteId = null;
-    const clienteExist = await db.query(
-      'SELECT id FROM clientes WHERE tenant_id = $1 AND telefone = $2 LIMIT 1',
-      [tenant.id, cliente_telefone]
-    );
-    if (clienteExist.rows.length) {
-      clienteId = clienteExist.rows[0].id;
-    } else {
-      const novoCliente = await db.query(
-        `INSERT INTO clientes (tenant_id, nome, telefone, origem)
-         VALUES ($1,$2,$3,'agendamento_online') RETURNING id`,
-        [tenant.id, cliente_nome, cliente_telefone]
-      );
-      clienteId = novoCliente.rows[0].id;
-    }
-
-    // Criar agendamento
-    const agResult = await db.query(
-      `INSERT INTO agendamentos
-        (tenant_id, cliente_id, servico_id, profissional_id,
-         data_hora, horario, duracao_min, status,
-         cliente_nome, cliente_telefone, observacoes, codigo_confirmacao, origem)
-       VALUES ($1,$2,$3,$4,
-         ($5::date + $6::time)::timestamp,
-         $6, $7, 'confirmado',
-         $8, $9, $10, $11, 'online')
-       RETURNING id, codigo_confirmacao`,
-      [
-        tenant.id, clienteId, servico_id,
-        profissional_id === 'qualquer' ? null : profissional_id || null,
-        data, horario, servico.duracao_min,
-        cliente_nome, cliente_telefone, observacoes || null, codigo
-      ]
-    );
-
-    const agendamento = agResult.rows[0];
-
-    // Buscar nome do profissional
-    let profissionalNome = 'A definir';
-    if (profissional_id && profissional_id !== 'qualquer') {
-      const profResult = await db.query(
-        'SELECT nome FROM barbearia_profissionais WHERE id = $1',
-        [profissional_id]
-      );
-      profissionalNome = profResult.rows[0]?.nome || 'A definir';
-    }
-
-    // Enviar WhatsApp de confirmação (não bloqueia a resposta)
-    notificarConfirmacaoAgendamento(tenant, {
-      cliente_nome,
-      cliente_telefone,
-      servico: servico.nome,
-      profissional: profissionalNome,
+    const disponibilidade = barbearia.resolverProfissionalDisponivel(identidade.empresaId, {
       data,
       horario,
-      codigo,
-    }).catch(err => console.error('[WhatsApp] Falha ao enviar confirmação:', err.message));
-
-    res.status(201).json({
+      servicoId,
+      profissionalId,
+      lojaId: identidade.lojaId,
+    });
+    const codigo = crypto.randomBytes(4).toString('hex').toUpperCase();
+    const agendamento = barbearia.criarAgendamento(identidade.empresaId, {
+      clienteNome: nome,
+      clienteTelefone: telefone,
+      profissionalId: disponibilidade.profissional.id,
+      servicoId,
+      dataHora: disponibilidade.dataHora,
+      dataAgenda: disponibilidade.dataAgenda,
+      horaLocal: disponibilidade.horaLocal,
+      lojaId: identidade.lojaId,
+      observacoes: texto(corpo.observacoes, 600),
+      origem: 'agendamento_online',
+      status: 'agendado',
+      codigoConfirmacao: codigo,
+    });
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(201).json({
       ok: true,
       agendamento: {
         id: agendamento.id,
-        codigo: agendamento.codigo_confirmacao,
+        codigo: agendamento.codigoConfirmacao,
+        status: agendamento.status,
+        profissional: disponibilidade.profissional.nome,
       },
     });
-  } catch (err) {
-    console.error('[Agendamento Online] Erro:', err);
-    res.status(500).json({ ok: false, error: err.message });
+  } catch (erro) {
+    return erroHttp(res, erro);
   }
 });
 

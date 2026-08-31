@@ -5153,6 +5153,17 @@ app.get('/api/me/chave', auth, (req, res) => {
   res.json(minhasChaves);
 });
 
+// Agendamento público da Barbearia: o módulo é carregado de forma não-fatal para
+// que uma indisponibilidade isolada nunca impeça o painel, o PDV ou o healthcheck
+// de iniciarem. As confirmações recebem um limite mais restritivo que as leituras.
+try {
+  const { default: agendamentoPublico } = await import('./modules/barbearia/routes-publico.js');
+  app.use('/api/publico/agendamento', (req, res, next) => publicLimit(req.method === 'POST' ? 8 : 80)(req, res, next), agendamentoPublico);
+  console.log('Agendamento público Dino ativo em /api/publico/agendamento/:slug');
+} catch (error) {
+  console.warn('Agendamento público Dino indisponível; servidor seguirá sem o módulo:', error?.message || error);
+}
+
 // ---- estático: serve React SPA (build do web/) ----
 app.use(express.static(path.join(__dirname, 'public')));
 
