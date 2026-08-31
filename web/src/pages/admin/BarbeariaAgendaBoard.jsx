@@ -1,8 +1,6 @@
 import { useMemo } from 'react'
 
-const INICIO_MINUTOS = 8 * 60
-const FIM_MINUTOS = 20 * 60
-const INTERVALO_MINUTOS = 30
+const PADRAO_GRADE = { inicio: 8 * 60, fim: 20 * 60, intervalo: 30 }
 const ALTURA_SLOT = 48
 
 const STATUS = {
@@ -37,6 +35,19 @@ function horaLabel(minutos) {
   return `${String(Math.floor(minutos / 60)).padStart(2, '0')}:${String(minutos % 60).padStart(2, '0')}`
 }
 
+function minutosHorario(value, fallback) {
+  const [hora, minuto] = String(value || '').split(':').map(Number)
+  if (!Number.isFinite(hora) || !Number.isFinite(minuto) || hora < 0 || hora > 23 || minuto < 0 || minuto > 59) return fallback
+  return hora * 60 + minuto
+}
+
+function gradeDaUnidade(configuracao = {}) {
+  const inicio = minutosHorario(configuracao.horarioAbertura, PADRAO_GRADE.inicio)
+  const fim = minutosHorario(configuracao.horarioFechamento, PADRAO_GRADE.fim)
+  const intervalo = Math.min(120, Math.max(5, Number(configuracao.intervaloMinutos || PADRAO_GRADE.intervalo)))
+  return { inicio, fim: Math.max(inicio + intervalo, fim), intervalo }
+}
+
 function iniciais(nome) {
   return String(nome || '?').split(/\s+/).slice(0, 2).map((item) => item[0]).join('').toUpperCase()
 }
@@ -45,21 +56,23 @@ function moeda(value) {
   return Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
-function eventoPosicao(item) {
-  const inicio = Math.max(INICIO_MINUTOS, Math.min(FIM_MINUTOS - INTERVALO_MINUTOS, minutosDoDia(item.dataHora)))
-  const duracao = Math.max(INTERVALO_MINUTOS, Number(item.duracaoMinutos || item.duracao_minutos || INTERVALO_MINUTOS))
-  const fim = Math.min(FIM_MINUTOS, inicio + duracao)
-  return { top: ((inicio - INICIO_MINUTOS) / INTERVALO_MINUTOS) * ALTURA_SLOT, height: Math.max(36, ((fim - inicio) / INTERVALO_MINUTOS) * ALTURA_SLOT - 6) }
+function eventoPosicao(item, grade) {
+  const inicio = Math.max(grade.inicio, Math.min(grade.fim - grade.intervalo, minutosDoDia(item.dataHora)))
+  const duracao = Math.max(grade.intervalo, Number(item.duracaoMinutos || item.duracao_minutos || grade.intervalo))
+  const fim = Math.min(grade.fim, inicio + duracao)
+  return { top: ((inicio - grade.inicio) / grade.intervalo) * ALTURA_SLOT, height: Math.max(36, ((fim - inicio) / grade.intervalo) * ALTURA_SLOT - 6) }
 }
 
-export default function BarbeariaAgendaBoard({ data, agendamentos = [], profissionais = [], bloqueios = [], onDateChange, onNew, onOpenAppointment }) {
+export default function BarbeariaAgendaBoard({ data, configuracao = {}, agendamentos = [], profissionais = [], bloqueios = [], onDateChange, onNew, onOpenAppointment }) {
   const profissionaisAtivos = useMemo(() => profissionais.filter((item) => item.ativo !== false), [profissionais])
+  const grade = useMemo(() => gradeDaUnidade(configuracao), [configuracao])
   const colunas = useMemo(() => {
-    const base = profissionaisAtivos.map((item) => ({ id: item.id, nome: item.nome, especialidade: item.especialidade, avatar: iniciais(item.nome) }))
+    const base = profissionaisAtivos.map((item) => ({ id: item.id, nome: item.nome, especialidade: item.especialidade, avatar: iniciais(item.nome), horarioInicio: item.horarioInicio, horarioFim: item.horarioFim, diasTrabalho: item.diasTrabalho || [] }))
     if (agendamentos.some((item) => !item.profissionalId)) base.push({ id: '__sem_profissional__', nome: 'Sem atendente', especialidade: 'A definir', avatar: '?' })
     return base.length ? base : [{ id: '__sem_profissional__', nome: 'Sem atendente', especialidade: 'Cadastre a equipe', avatar: '?' }]
   }, [agendamentos, profissionaisAtivos])
-  const linhas = useMemo(() => Array.from({ length: (FIM_MINUTOS - INICIO_MINUTOS) / INTERVALO_MINUTOS + 1 }, (_, index) => INICIO_MINUTOS + index * INTERVALO_MINUTOS), [])
+  const linhas = useMemo(() => Array.from({ length: Math.floor((grade.fim - grade.inicio) / grade.intervalo) + 1 }, (_, index) => grade.inicio + index * grade.intervalo), [grade])
+  const diaDaSemana = new Date(`${data}T12:00:00-04:00`).getDay()
   const porColuna = useMemo(() => {
     const resultado = new Map(colunas.map((coluna) => [coluna.id, []]))
     agendamentos.filter((item) => !['cancelado', 'nao_compareceu'].includes(item.status)).forEach((item) => {
@@ -92,14 +105,16 @@ export default function BarbeariaAgendaBoard({ data, agendamentos = [], profissi
     <div style={styles.hint}><strong>Leitura rápida:</strong> cada cartão representa um atendimento. Clique no cartão para abrir os detalhes e executar a próxima ação permitida; os bloqueios aparecem hachurados.</div>
     <div style={styles.scroll}>
       <div style={{ minWidth: Math.max(760, 170 + colunas.length * 230) }}>
-        <div style={styles.boardHeader}><div style={styles.timeHeader}>Horário</div>{colunas.map((coluna) => <div key={coluna.id} style={styles.columnHeader}><div style={{ ...styles.avatar, width: 30, height: 30, fontSize: 11, background: coluna.id === '__sem_profissional__' ? '#e6edf5' : 'var(--accent)', color: coluna.id === '__sem_profissional__' ? 'var(--muted)' : '#fff' }}>{coluna.avatar}</div><div><strong>{coluna.nome}</strong><small style={styles.sub}>{coluna.especialidade}</small></div></div>)}</div>
+        <div style={styles.boardHeader}><div style={styles.timeHeader}>Horário</div>{colunas.map((coluna) => <div key={coluna.id} style={styles.columnHeader}><div style={{ ...styles.avatar, width: 30, height: 30, fontSize: 11, background: coluna.id === '__sem_profissional__' ? '#e6edf5' : 'var(--accent)', color: coluna.id === '__sem_profissional__' ? 'var(--muted)' : '#fff' }}>{coluna.avatar}</div><div><strong>{coluna.nome}</strong><small style={styles.sub}>{coluna.especialidade || 'Equipe'} · {coluna.horarioInicio && coluna.horarioFim ? `${coluna.horarioInicio}–${coluna.horarioFim}` : 'jornada não definida'}</small></div></div>)}</div>
         <div style={styles.boardBody}>
-          <div style={styles.timeColumn}>{linhas.slice(0, -1).map((minutos) => <div key={minutos} style={{ height: ALTURA_SLOT, position: 'relative' }}><span style={styles.timeText}>{horaLabel(minutos)}</span></div>)}</div>
-          {colunas.map((coluna) => <div key={coluna.id} style={styles.timelineColumn}>
+          <div style={styles.timeColumn}>            {linhas.slice(0, -1).map((minutos) => <div key={minutos} style={{ height: ALTURA_SLOT, position: 'relative' }}><span style={styles.timeText}>{horaLabel(minutos)}</span></div>)}
+</div>
+          {colunas.map((coluna) => { const trabalhaHoje = coluna.id === '__sem_profissional__' || !coluna.diasTrabalho.length || coluna.diasTrabalho.includes(diaDaSemana); return <div key={coluna.id} style={{ ...styles.timelineColumn, opacity: trabalhaHoje ? 1 : .68 }}>
             {linhas.slice(0, -1).map((minutos) => <div key={minutos} style={{ height: ALTURA_SLOT, borderBottom: '1px solid var(--line)', borderTop: minutos % 60 === 0 ? '1px solid var(--line)' : undefined }} />)}
-            {bloqueios.filter((item) => !item.profissionalId || item.profissionalId === coluna.id).map((bloqueio) => { const posicao = eventoPosicao({ dataHora: bloqueio.inicio, duracaoMinutos: (new Date(bloqueio.fim).valueOf() - new Date(bloqueio.inicio).valueOf()) / 60000 }); return <div key={bloqueio.id} style={{ ...styles.blocked, top: posicao.top, height: posicao.height }} title={bloqueio.titulo}>{bloqueio.titulo}</div> })}
-            {(porColuna.get(coluna.id) || []).map((item) => { const posicao = eventoPosicao(item); const status = STATUS[item.status] || STATUS.agendado; return <button key={item.id} type="button" onClick={() => onOpenAppointment(item)} style={{ ...styles.event, top: posicao.top, height: posicao.height, borderLeftColor: status.color, background: `${status.color}18` }} title={`${item.clienteNome || 'Cliente'} · ${item.servicoNome || 'Serviço'}`}><strong>{item.clienteNome || 'Cliente sem nome'}</strong><span>{item.servicoNome || 'Serviço não informado'}</span><small>{horaLabel(minutosDoDia(item.dataHora))} · {item.duracaoMinutos || 30} min · {moeda(item.valor)}</small></button> })}
-          </div>)}
+            {bloqueios.filter((item) => !item.profissionalId || item.profissionalId === coluna.id).map((bloqueio) => { const posicao = eventoPosicao({ dataHora: bloqueio.inicio, duracaoMinutos: (new Date(bloqueio.fim).valueOf() - new Date(bloqueio.inicio).valueOf()) / 60000 }, grade); return <div key={bloqueio.id} style={{ ...styles.blocked, top: posicao.top, height: posicao.height }} title={bloqueio.titulo}>{bloqueio.titulo}</div> })}
+            {!trabalhaHoje && <div style={styles.offDayOverlay}>Folga do atendente<br /><small>{dataLonga(data)}</small></div>}
+            {(porColuna.get(coluna.id) || []).map((item) => { const posicao = eventoPosicao(item, grade); const status = STATUS[item.status] || STATUS.agendado; return <button key={item.id} type="button" onClick={() => onOpenAppointment(item)} style={{ ...styles.event, top: posicao.top, height: posicao.height, borderLeftColor: status.color, background: `${status.color}18` }} title={`${item.clienteNome || 'Cliente'} · ${item.servicoNome || 'Serviço'}`}><strong>{item.clienteNome || 'Cliente sem nome'}</strong><span>{item.servicoNome || 'Serviço não informado'}</span><small>{horaLabel(minutosDoDia(item.dataHora))} · {item.duracaoMinutos || grade.intervalo} min · {moeda(item.valor)}</small></button> })}
+          </div> })}
         </div>
       </div>
     </div>
@@ -127,7 +142,8 @@ const styles = {
   timeText: { position: 'absolute', right: 9, top: -8, color: 'var(--muted)', fontSize: 11, fontWeight: 700 },
   timelineColumn: { minWidth: 210, position: 'relative', background: 'var(--card)' },
   blocked: { position: 'absolute', left: 3, right: 3, zIndex: 1, borderRadius: 7, padding: '7px 8px', overflow: 'hidden', color: '#9b6a00', background: 'repeating-linear-gradient(135deg, rgba(245,158,11,.16), rgba(245,158,11,.16) 6px, rgba(245,158,11,.05) 6px, rgba(245,158,11,.05) 12px)', border: '1px dashed #f59e0b', fontSize: 11, fontWeight: 800 },
-  event: { position: 'absolute', left: 7, right: 7, zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, overflow: 'hidden', textAlign: 'left', border: '1px solid var(--line)', borderLeft: '4px solid', borderRadius: 9, padding: '7px 8px', color: 'var(--fg)', cursor: 'pointer', font: 'inherit', transition: 'transform 160ms ease-out, box-shadow 160ms ease-out' },
+  offDayOverlay: { position: 'absolute', inset: 0, zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', color: 'var(--muted)', fontSize: 12, fontWeight: 800, pointerEvents: 'none', background: 'repeating-linear-gradient(135deg, rgba(136,136,136,.05), rgba(136,136,136,.05) 8px, rgba(136,136,136,.11) 8px, rgba(136,136,136,.11) 16px)' },
+  event: { position: 'absolute', left: 7, right: 7, zIndex: 4, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, overflow: 'hidden', textAlign: 'left', border: '1px solid var(--line)', borderLeft: '4px solid', borderRadius: 9, padding: '7px 8px', color: 'var(--fg)', cursor: 'pointer', font: 'inherit', transition: 'transform 160ms ease-out, box-shadow 160ms ease-out' },
   legend: { display: 'flex', gap: 14, flexWrap: 'wrap', color: 'var(--muted)', fontSize: 11 },
   legendItem: { display: 'inline-flex', alignItems: 'center', gap: 5 },
 }
