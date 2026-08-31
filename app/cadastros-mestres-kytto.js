@@ -97,7 +97,7 @@ export function criarEmpresa(payload = {}) {
     email: texto(payload.email, 120).toLowerCase(),
     ativa: payload.ativa !== false,
     plano: texto(payload.plano, 40) || 'standard',
-    modulos: Array.isArray(payload.modulos) && payload.modulos.length
+    modulos: Array.isArray(payload.modulos)
       ? payload.modulos.map((modulo) => texto(modulo, 40)).filter(Boolean)
       : [...MODULOS_INICIAIS],
     permitirEstoqueNegativo: payload.permitirEstoqueNegativo !== false,
