@@ -633,8 +633,58 @@ export default function BarbeariaERP() {
     const whatsapp = integracoes?.whatsapp
     const ia = integracoes?.ia
     return <div style={{ display: 'grid', gap: 18 }}>
-      <Card style={{ padding: 20, background: 'linear-gradient(135deg, color-mix(in srgb, #25d366 10%, var(--card)), var(--card))' }}><div style={styles.sectionTitle}><div><div style={styles.kicker}>Canais e automação controlada</div><h2 style={{ ...styles.h2, fontSize: 22, marginTop: 5 }}>Integrações da Barbearia</h2><p style={styles.sub}>WhatsApp e IA trabalham como apoio ao operador. Nenhuma mensagem, reserva, pagamento ou alteração é disparada automaticamente.</p></div><button type="button" style={styles.secondary} onClick={carregar}>Atualizar status</button></div><div style={styles.integrationGrid}><div style={styles.integrationCard}><div style={styles.integrationHeading}><div style={{ ...styles.integrationIcon, background: '#25d366' }}>W</div><div><strong>WhatsApp</strong><span style={styles.sub}>{whatsapp?.envioManualDisponivel ? 'Canal configurado no servidor' : 'Canal ainda não configurado'}</span></div><Badge status={whatsapp?.envioManualDisponivel ? 'configurado' : 'pendente_configuracao'} /></div><div style={styles.metricLine}><span>Credencial do provedor</span><strong>{whatsapp?.credencialConfigurada ? 'Configurada' : 'Pendente'}</strong></div><div style={styles.metricLine}><span>Disparo automático</span><strong>Desativado</strong></div><p style={styles.sub}>O envio manual exige telefone, mensagem e confirmação adicional do operador. A credencial nunca é exibida na tela.</p><form onSubmit={enviarWhatsApp} style={{ display: 'grid', gap: 10, marginTop: 14 }}><Field label="Telefone"><input value={formWhatsApp.telefone} onChange={(event) => setFormWhatsApp((atual) => ({ ...atual, telefone: event.target.value }))} placeholder="DDD + número" style={inputStyle} disabled={!whatsapp?.envioManualDisponivel} /></Field><Field label="Mensagem"><textarea rows={4} value={formWhatsApp.mensagem} onChange={(event) => setFormWhatsApp((atual) => ({ ...atual, mensagem: event.target.value }))} placeholder="Escreva uma mensagem operacional…" style={{ ...inputStyle, resize: 'vertical' }} disabled={!whatsapp?.envioManualDisponivel} /></Field><button type="submit" style={{ ...styles.primary, background: '#25d366' }} disabled={!whatsapp?.envioManualDisponivel || salvando}>{whatsapp?.envioManualDisponivel ? 'Enviar manualmente' : 'Configurar provedor para enviar'}</button></form></div><div style={styles.integrationCard}><div style={styles.integrationHeading}><div style={{ ...styles.integrationIcon, background: '#6d5dfc' }}>IA</div><div><strong>Assistente IA operacional</strong><span style={styles.sub}>{ia?.configurada ? `Modelo disponível${ia.modelo ? ` · ${ia.modelo}` : ''}` : 'Modelo ainda não configurado no servidor'}</span></div><Badge status={ia?.configurada ? 'configurado' : 'pendente_configuracao'} /></div><div style={styles.metricLine}><span>Escopo da consulta</span><strong>Agenda, serviços e equipe</strong></div><div style={styles.metricLine}><span>Ações executadas pela IA</span><strong>Nenhuma</strong></div><p style={styles.sub}>A IA pode resumir a operação e sugerir organização. Ela não cria reserva, não altera cadastro e não confirma pagamento.</p><form onSubmit={consultarAssistente} style={{ display: 'grid', gap: 10, marginTop: 14 }}><Field label="Pergunta para o assistente"><textarea rows={4} value={assistentePergunta} onChange={(event) => setAssistentePergunta(event.target.value)} placeholder="Ex.: quais horários estão mais ocupados hoje?" style={{ ...inputStyle, resize: 'vertical' }} /></Field><button type="submit" style={styles.primary} disabled={consultandoAssistente}>{consultandoAssistente ? 'Analisando…' : 'Consultar assistente'}</button></form>{assistenteResposta?.resposta && <div style={styles.aiResponse}><strong>Resposta do assistente</strong><div style={{ whiteSpace: 'pre-wrap', marginTop: 8, lineHeight: 1.55 }}>{assistenteResposta.resposta}</div><small style={styles.sub}>Resposta gerada a partir dos dados operacionais selecionados; confirme qualquer decisão manualmente.</small></div>}{assistenteResposta?.erro && <div style={{ ...styles.notice, borderColor: '#e05c5c' }}><strong>Consulta não disponível</strong><div style={styles.sub}>{assistenteResposta.erro}</div></div>}</div></div></div>
-      <Card style={{ padding: 18 }}><h2 style={styles.h2}>Próximas ativações</h2><p style={styles.sub}>Para ativar o WhatsApp, é necessário configurar um provedor compatível no ambiente do servidor. Para ativar a IA, é necessário configurar um provedor/modelo no ambiente do servidor. Nesta etapa não foram incluídas credenciais, webhooks, cron ou polling.</p><div style={styles.readinessGrid}><div style={styles.readinessItem}><strong>Confirmação</strong><span style={{ color: '#14b87a', fontWeight: 800 }}>Manual</span><small style={styles.sub}>Toda comunicação externa depende de ação explícita.</small></div><div style={styles.readinessItem}><strong>Privacidade</strong><span style={{ color: '#14b87a', fontWeight: 800 }}>Protegida</span><small style={styles.sub}>Não enviar documentos pessoais ao assistente.</small></div><div style={styles.readinessItem}><strong>Auditoria</strong><span style={{ color: '#14b87a', fontWeight: 800 }}>Ativa</span><small style={styles.sub}>O backend retorna estados sem expor segredos.</small></div></div></Card>
+      <Card style={{ padding: 20, background: 'linear-gradient(135deg, color-mix(in srgb, #25d366 10%, var(--card)), var(--card))' }}>
+        <div style={styles.sectionTitle}>
+          <div>
+            <div style={styles.kicker}>Canais e automação controlada</div>
+            <h2 style={{ ...styles.h2, fontSize: 22, marginTop: 5 }}>Integrações da Barbearia</h2>
+            <p style={styles.sub}>WhatsApp e IA trabalham como apoio ao operador. Nenhuma mensagem, reserva, pagamento ou alteração é disparada automaticamente.</p>
+          </div>
+          <button type="button" style={styles.secondary} onClick={carregar}>Atualizar status</button>
+        </div>
+        <div style={styles.integrationGrid}>
+          <div style={styles.integrationCard}>
+            <div style={styles.integrationHeading}>
+              <div style={{ ...styles.integrationIcon, background: '#25d366' }}>W</div>
+              <div><strong>WhatsApp</strong><span style={styles.sub}>{whatsapp?.envioManualDisponivel ? 'Canal configurado no servidor' : 'Canal ainda não configurado'}</span></div>
+              <Badge status={whatsapp?.envioManualDisponivel ? 'configurado' : 'pendente_configuracao'} />
+            </div>
+            <div style={styles.metricLine}><span>Credencial do provedor</span><strong>{whatsapp?.credencialConfigurada ? 'Configurada' : 'Pendente'}</strong></div>
+            <div style={styles.metricLine}><span>Disparo automático</span><strong>Desativado</strong></div>
+            <p style={styles.sub}>O envio manual exige telefone, mensagem e confirmação adicional do operador. A credencial nunca é exibida na tela.</p>
+            <form onSubmit={enviarWhatsApp} style={{ display: 'grid', gap: 10, marginTop: 14 }}>
+              <Field label="Telefone"><input value={formWhatsApp.telefone} onChange={(event) => setFormWhatsApp((atual) => ({ ...atual, telefone: event.target.value }))} placeholder="DDD + número" style={inputStyle} disabled={!whatsapp?.envioManualDisponivel} /></Field>
+              <Field label="Mensagem"><textarea rows={4} value={formWhatsApp.mensagem} onChange={(event) => setFormWhatsApp((atual) => ({ ...atual, mensagem: event.target.value }))} placeholder="Escreva uma mensagem operacional…" style={{ ...inputStyle, resize: 'vertical' }} disabled={!whatsapp?.envioManualDisponivel} /></Field>
+              <button type="submit" style={{ ...styles.primary, background: '#25d366' }} disabled={!whatsapp?.envioManualDisponivel || salvando}>{whatsapp?.envioManualDisponivel ? 'Enviar manualmente' : 'Configurar provedor para enviar'}</button>
+            </form>
+          </div>
+          <div style={styles.integrationCard}>
+            <div style={styles.integrationHeading}>
+              <div style={{ ...styles.integrationIcon, background: '#6d5dfc' }}>IA</div>
+              <div><strong>Assistente IA operacional</strong><span style={styles.sub}>{ia?.configurada ? `Modelo disponível${ia.modelo ? ` · ${ia.modelo}` : ''}` : 'Modelo ainda não configurado no servidor'}</span></div>
+              <Badge status={ia?.configurada ? 'configurado' : 'pendente_configuracao'} />
+            </div>
+            <div style={styles.metricLine}><span>Escopo da consulta</span><strong>Agenda, serviços e equipe</strong></div>
+            <div style={styles.metricLine}><span>Ações executadas pela IA</span><strong>Nenhuma</strong></div>
+            <p style={styles.sub}>A IA pode resumir a operação e sugerir organização. Ela não cria reserva, não altera cadastro e não confirma pagamento.</p>
+            <form onSubmit={consultarAssistente} style={{ display: 'grid', gap: 10, marginTop: 14 }}>
+              <Field label="Pergunta para o assistente"><textarea rows={4} value={assistentePergunta} onChange={(event) => setAssistentePergunta(event.target.value)} placeholder="Ex.: quais horários estão mais ocupados hoje?" style={{ ...inputStyle, resize: 'vertical' }} /></Field>
+              <button type="submit" style={styles.primary} disabled={consultandoAssistente}>{consultandoAssistente ? 'Analisando…' : 'Consultar assistente'}</button>
+            </form>
+            {assistenteResposta?.resposta && <div style={styles.aiResponse}><strong>Resposta do assistente</strong><div style={{ whiteSpace: 'pre-wrap', marginTop: 8, lineHeight: 1.55 }}>{assistenteResposta.resposta}</div><small style={styles.sub}>Resposta gerada a partir dos dados operacionais selecionados; confirme qualquer decisão manualmente.</small></div>}
+            {assistenteResposta?.erro && <div style={{ ...styles.notice, borderColor: '#e05c5c' }}><strong>Consulta não disponível</strong><div style={styles.sub}>{assistenteResposta.erro}</div></div>}
+          </div>
+        </div>
+      </Card>
+      <Card style={{ padding: 18 }}>
+        <h2 style={styles.h2}>Próximas ativações</h2>
+        <p style={styles.sub}>Para ativar o WhatsApp, é necessário configurar um provedor compatível no ambiente do servidor. Para ativar a IA, é necessário configurar um provedor/modelo no ambiente do servidor. Nesta etapa não foram incluídas credenciais, webhooks, cron ou polling.</p>
+        <div style={styles.readinessGrid}>
+          <div style={styles.readinessItem}><strong>Confirmação</strong><span style={{ color: '#14b87a', fontWeight: 800 }}>Manual</span><small style={styles.sub}>Toda comunicação externa depende de ação explícita.</small></div>
+          <div style={styles.readinessItem}><strong>Privacidade</strong><span style={{ color: '#14b87a', fontWeight: 800 }}>Protegida</span><small style={styles.sub}>Não enviar documentos pessoais ao assistente.</small></div>
+          <div style={styles.readinessItem}><strong>Auditoria</strong><span style={{ color: '#14b87a', fontWeight: 800 }}>Ativa</span><small style={styles.sub}>O backend retorna estados sem expor segredos.</small></div>
+        </div>
+      </Card>
     </div>
   }
 
