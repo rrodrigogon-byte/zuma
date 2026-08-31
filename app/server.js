@@ -1863,6 +1863,15 @@ app.get('/api/admin/barbearia/overview', (req, res) => {
     dashboard.proximosAgendamentos = dashboard.proximosAgendamentos.map(item => enriquecerAgendamentoBarbearia(empresaId, item));
     let configuracaoUnidade = null;
     try { configuracaoUnidade = barbeariaErpKytto.obterConfiguracaoLoja(empresaId, lojaId); } catch (_) { configuracaoUnidade = null; }
+    const comandas = barbeariaErpKytto.listarComandasBarbearia(empresaId, { data, lojaId });
+    const resumoComandas = {
+      total: comandas.length,
+      abertas: comandas.filter((item) => item.status === 'aberta').length,
+      aguardandoPagamento: comandas.filter((item) => item.status === 'aguardando_pagamento' || item.status === 'parcialmente_paga').length,
+      pagas: comandas.filter((item) => item.status === 'paga').length,
+      emConta: comandas.filter((item) => item.status === 'em_conta').length,
+      receitaPaga: comandas.filter((item) => item.status === 'paga').reduce((soma, item) => soma + Number(item.total || 0), 0),
+    };
     const canais = canaisFidelidadeKytto.obterCanais(empresaId);
     const whatsapp = canais.find((canal) => canal.id === 'whatsapp') || { id: 'whatsapp', nome: 'WhatsApp', ativo: false, tipo: 'mensageria', credencialConfigurada: false };
     const aiConfigured = Boolean(process.env.AI_API_KEY || process.env.OPENAI_API_KEY);
@@ -1884,6 +1893,8 @@ app.get('/api/admin/barbearia/overview', (req, res) => {
       comissoes: barbeariaErpKytto.obterComissoes(empresaId, { data, lojaId }),
       produtos: barbeariaErpKytto.listarProdutosRevenda(empresaId, { incluirInativos: false }),
       vendas: barbeariaErpKytto.listarVendasRevenda(empresaId, { lojaId }),
+      comandas,
+      resumoComandas,
       integracoes: { whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: wpp.ativo() }, ia: { configurada: aiConfigured, modelo: process.env.AI_MODEL || process.env.OPENAI_MODEL || '', analiseOperacionalDisponivel: aiConfigured } },
     });
   } catch (error) { res.status(400).json({ error: error.message }); }
@@ -1976,6 +1987,107 @@ app.patch('/api/admin/barbearia/agenda/:id/status', (req, res) => {
       agendamento = barbeariaErpKytto.vincularLancamentoFinanceiro(empresaId, agendamento.id, financeiro.id) || agendamento;
     }
     res.json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(empresaId, agendamento), financeiro });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+function comandaBarbeariaDaSessao(req, id) {
+  const comanda = barbeariaErpKytto.obterComandaBarbearia(legacyEmpresaId(req), id);
+  const lojaId = legacyLojaId(req);
+  if (!comanda || (lojaId && comanda.lojaId && comanda.lojaId !== lojaId)) return null;
+  return comanda;
+}
+
+function payloadComandaBarbearia(req) {
+  return { ...(req.body || {}), lojaId: legacyLojaId(req), usuario: req.user?.email || req.user?.nome || '' };
+}
+
+app.get('/api/admin/barbearia/comandas', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId(req);
+    const comandas = barbeariaErpKytto.listarComandasBarbearia(empresaId, {
+      data: req.query?.data || req.query?.date,
+      status: req.query?.status,
+      clienteId: req.query?.clienteId || req.query?.cliente_id,
+      lojaId,
+    });
+    res.json({ ok: true, comandas, total: comandas.length });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.get('/api/admin/barbearia/comandas/:id', (req, res) => {
+  const comanda = comandaBarbeariaDaSessao(req, req.params.id);
+  if (!comanda) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+  res.json({ ok: true, comanda });
+});
+app.post('/api/admin/barbearia/comandas', (req, res) => {
+  try {
+    const body = payloadComandaBarbearia(req);
+    body.chaveIdempotencia = req.get('Idempotency-Key') || body.chaveIdempotencia || body.chave_idempotencia;
+    const comanda = barbeariaErpKytto.criarComandaBarbearia(legacyEmpresaId(req), body);
+    res.status(201).json({ ok: true, comanda });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.patch('/api/admin/barbearia/comandas/:id', (req, res) => {
+  try {
+    if (!comandaBarbeariaDaSessao(req, req.params.id)) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    const comanda = barbeariaErpKytto.atualizarComandaBarbearia(legacyEmpresaId(req), req.params.id, payloadComandaBarbearia(req));
+    res.json({ ok: true, comanda });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.post('/api/admin/barbearia/comandas/:id/itens', (req, res) => {
+  try {
+    if (!comandaBarbeariaDaSessao(req, req.params.id)) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    const itens = Array.isArray(req.body?.itens) ? req.body.itens : [req.body || {}];
+    const comanda = barbeariaErpKytto.adicionarItensComandaBarbearia(legacyEmpresaId(req), req.params.id, itens);
+    res.status(201).json({ ok: true, comanda });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.patch('/api/admin/barbearia/comandas/:id/itens/:itemId', (req, res) => {
+  try {
+    if (!comandaBarbeariaDaSessao(req, req.params.id)) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    const comanda = barbeariaErpKytto.atualizarItemComandaBarbearia(legacyEmpresaId(req), req.params.id, req.params.itemId, req.body || {});
+    if (!comanda) return res.status(404).json({ error: 'Item não encontrado na comanda.' });
+    res.json({ ok: true, comanda });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.delete('/api/admin/barbearia/comandas/:id/itens/:itemId', (req, res) => {
+  try {
+    if (!comandaBarbeariaDaSessao(req, req.params.id)) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    const comanda = barbeariaErpKytto.removerItemComandaBarbearia(legacyEmpresaId(req), req.params.id, req.params.itemId);
+    if (!comanda) return res.status(404).json({ error: 'Item não encontrado na comanda.' });
+    res.json({ ok: true, comanda });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.post('/api/admin/barbearia/comandas/:id/aguardar-pagamento', (req, res) => {
+  try {
+    if (!comandaBarbeariaDaSessao(req, req.params.id)) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    const comanda = barbeariaErpKytto.alterarStatusComandaBarbearia(legacyEmpresaId(req), req.params.id, 'aguardando_pagamento', payloadComandaBarbearia(req));
+    res.json({ ok: true, comanda });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.patch('/api/admin/barbearia/comandas/:id/status', (req, res) => {
+  try {
+    if (!comandaBarbeariaDaSessao(req, req.params.id)) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    const comanda = barbeariaErpKytto.alterarStatusComandaBarbearia(legacyEmpresaId(req), req.params.id, req.body?.status, payloadComandaBarbearia(req));
+    res.json({ ok: true, comanda });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.post('/api/admin/barbearia/comandas/:id/pagamentos', (req, res) => {
+  try {
+    if (!comandaBarbeariaDaSessao(req, req.params.id)) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    const body = payloadComandaBarbearia(req);
+    body.chaveIdempotencia = req.get('Idempotency-Key') || body.chaveIdempotencia || body.chave_idempotencia;
+    if (body.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita do recebimento é obrigatória.' });
+    const comanda = barbeariaErpKytto.registrarPagamentoComandaBarbearia(legacyEmpresaId(req), req.params.id, body);
+    const possuiDinheiro = (comanda.pagamentos || []).some((item) => item.meio === 'dinheiro');
+    res.json({ ok: true, comanda, aviso: possuiDinheiro && !(body.caixaId || body.caixa_id) ? 'Recebimento em dinheiro confirmado sem vínculo a um caixa aberto.' : null });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.post('/api/admin/barbearia/comandas/:id/cancelar', (req, res) => {
+  try {
+    if (!comandaBarbeariaDaSessao(req, req.params.id)) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    const comanda = barbeariaErpKytto.cancelarComandaBarbearia(legacyEmpresaId(req), req.params.id, req.body || {});
+    res.json({ ok: true, comanda });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 

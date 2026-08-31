@@ -1,5 +1,7 @@
 import { db, save } from './db.js';
 import * as financeiroKytto from './financeiro-central-kytto.js';
+import * as clientesKytto from './clientes-contas-kytto.js';
+import * as caixaKytto from './caixa-diario-kytto.js';
 
 const STATUS = new Set(['agendado', 'confirmado', 'em_atendimento', 'concluido', 'cancelado', 'nao_compareceu']);
 const TRANSICOES = {
@@ -38,6 +40,17 @@ function novoId(prefixo, bucket) {
   return `${prefixo}-${Date.now().toString(36)}-${String(Object.keys(bucket).length + 1).padStart(3, '0')}`;
 }
 
+const STATUS_COMANDA_BARBEARIA = new Set(['aberta', 'aguardando_pagamento', 'parcialmente_paga', 'em_conta', 'paga', 'cancelada']);
+const TRANSICOES_COMANDA_BARBEARIA = {
+  aberta: new Set(['aguardando_pagamento', 'parcialmente_paga', 'em_conta', 'paga', 'cancelada']),
+  aguardando_pagamento: new Set(['parcialmente_paga', 'em_conta', 'paga', 'cancelada']),
+  parcialmente_paga: new Set(['em_conta', 'paga', 'cancelada']),
+  em_conta: new Set(),
+  paga: new Set(),
+  cancelada: new Set(),
+};
+const MEIOS_PAGAMENTO_COMANDA_BARBEARIA = new Set(['dinheiro', 'pix', 'cartao', 'credito', 'debito', 'transferencia', 'tef', 'carteira', 'conta']);
+
 function estadoVazio() {
   return {
     profissionais: {},
@@ -51,6 +64,7 @@ function estadoVazio() {
     produtosRevenda: {},
     movimentosEstoque: {},
     vendasRevenda: {},
+    comandas: {},
     configuracao: {
       horarioAbertura: '08:00',
       horarioFechamento: '20:00',
@@ -89,6 +103,7 @@ function estadoEmpresa(empresaId, criar = true) {
       produtosRevenda: estado.produtosRevenda || {},
       movimentosEstoque: estado.movimentosEstoque || {},
       vendasRevenda: estado.vendasRevenda || {},
+      comandas: estado.comandas || {},
       configuracao: { ...vazio.configuracao, ...(estado.configuracao || {}), lojas: { ...(vazio.configuracao.lojas || {}), ...(estado.configuracao?.lojas || {}) } },
     };
   }
@@ -103,6 +118,7 @@ function estadoEmpresa(empresaId, criar = true) {
   estado.produtosRevenda ||= {};
   estado.movimentosEstoque ||= {};
   estado.vendasRevenda ||= {};
+  estado.comandas ||= {};
   estado.configuracao ||= {};
   estado.configuracao.lojas ||= {};
   return estado;
@@ -761,6 +777,317 @@ export function finalizarVendaRevenda(empresaId, vendaId, dados = {}) {
   return { ...venda, itens: venda.itens.map((item) => ({ ...item })) };
 }
 
+function copiarComandaBarbearia(comanda, idempotente = false) {
+  if (!comanda) return null;
+  const subtotal = Number((comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0).toFixed(2));
+  const desconto = Number(Math.min(subtotal, Math.max(0, Number(comanda.desconto || 0))).toFixed(2));
+  const gorjeta = Number(Math.max(0, Number(comanda.gorjeta || 0)).toFixed(2));
+  const total = Number(Math.max(0, subtotal - desconto + gorjeta).toFixed(2));
+  return {
+    ...comanda,
+    subtotal,
+    desconto,
+    gorjeta,
+    total,
+    totalFaturado: Number((comanda.totalFaturado ?? (comanda.pagamentos || []).reduce((soma, item) => soma + Number(item.valor || 0), 0)).toFixed(2)),
+    totalPago: Number((comanda.totalPago ?? (comanda.pagamentos || []).filter((item) => item.meio !== 'conta').reduce((soma, item) => soma + Number(item.valor || 0), 0)).toFixed(2)),
+    saldoPendente: Number(Math.max(0, total - Number(comanda.totalFaturado ?? 0)).toFixed(2)),
+    itens: (comanda.itens || []).map((item) => ({ ...item })),
+    pagamentos: (comanda.pagamentos || []).map((item) => ({ ...item })),
+    financeiroLancamentoIds: [...(comanda.financeiroLancamentoIds || [])],
+    contasReceberIds: [...(comanda.contasReceberIds || [])],
+    idempotente,
+  };
+}
+
+function itemComandaBarbeariaNormalizado(estado, comanda, dados = {}) {
+  const tipo = String(dados.tipo || (dados.servicoId || dados.servico_id ? 'servico' : 'produto')).toLowerCase();
+  const id = String(dados.itemId || dados.servicoId || dados.servico_id || dados.produtoId || dados.produto_id || '').trim();
+  const quantidade = Math.max(1, Math.round(numero(dados.quantidade ?? dados.qtd, 1)));
+  if (!id) throw new Error('Informe o serviço ou produto do item.');
+  if (!['servico', 'produto'].includes(tipo)) throw new Error('Tipo de item inválido.');
+  const cadastro = tipo === 'servico' ? estado.servicos[id] : estado.produtosRevenda[id];
+  if (!cadastro || cadastro.empresaId !== String(comanda.empresaId) || cadastro.ativo === false) throw new Error(`${tipo === 'servico' ? 'Serviço' : 'Produto'} não encontrado ou inativo na empresa ativa.`);
+  const profissionalId = texto(dados.profissionalId ?? dados.profissional_id ?? comanda.profissionalId, 120);
+  if (profissionalId && (!estado.profissionais[profissionalId] || estado.profissionais[profissionalId].ativo === false)) throw new Error('Profissional responsável não encontrado ou inativo.');
+  const precoUnitario = dinheiro(tipo === 'servico' ? cadastro.preco : cadastro.precoVenda);
+  if (precoUnitario <= 0) throw new Error('O item precisa possuir preço positivo.');
+  if (tipo === 'produto' && Number(cadastro.estoqueAtual || 0) < quantidade) throw new Error(`Estoque insuficiente para ${cadastro.nome} (disponível: ${cadastro.estoqueAtual || 0}).`);
+  return {
+    id: novoId('citem', estado.comandas),
+    tipo,
+    servicoId: tipo === 'servico' ? cadastro.id : null,
+    produtoId: tipo === 'produto' ? cadastro.id : null,
+    nome: texto(cadastro.nome, 160),
+    categoria: texto(cadastro.categoria, 100),
+    quantidade,
+    precoUnitario,
+    subtotal: dinheiro(precoUnitario * quantidade),
+    duracaoMinutos: tipo === 'servico' ? Number(cadastro.duracaoMinutos || 0) : 0,
+    profissionalId: profissionalId || null,
+    observacao: texto(dados.observacao ?? dados.obs, 400),
+    criadoEm: dataAtual(),
+  };
+}
+
+function validarEstoqueComandaBarbearia(estado, comanda) {
+  const quantidades = new Map();
+  for (const item of comanda.itens || []) {
+    if (item.tipo !== 'produto' || !item.produtoId) continue;
+    quantidades.set(item.produtoId, (quantidades.get(item.produtoId) || 0) + Number(item.quantidade || 0));
+  }
+  for (const [produtoId, quantidade] of quantidades) {
+    const produto = estado.produtosRevenda[produtoId];
+    if (!produto || produto.ativo === false) throw new Error('Existe produto de revenda inativo na comanda.');
+    if (Number(produto.estoqueAtual || 0) < quantidade) throw new Error(`Estoque insuficiente para ${produto.nome} (disponível: ${produto.estoqueAtual || 0}).`);
+  }
+}
+
+export function listarComandasBarbearia(empresaId, filtros = {}) {
+  return Object.values(estadoEmpresa(empresaId, false).comandas)
+    .filter((item) => !filtros.status || item.status === String(filtros.status))
+    .filter((item) => !filtros.lojaId || item.lojaId === String(filtros.lojaId))
+    .filter((item) => !filtros.clienteId || item.clienteId === String(filtros.clienteId))
+    .filter((item) => !filtros.data || String(item.dataAtendimento || item.criadoEm).slice(0, 10) === String(filtros.data).slice(0, 10))
+    .sort((a, b) => String(b.atualizadoEm || b.criadoEm).localeCompare(String(a.atualizadoEm || a.criadoEm)))
+    .map((item) => copiarComandaBarbearia(item));
+}
+
+export function obterComandaBarbearia(empresaId, comandaId) {
+  const comanda = estadoEmpresa(empresaId, false).comandas[String(comandaId)];
+  return comanda && comanda.empresaId === String(empresaId) ? copiarComandaBarbearia(comanda) : null;
+}
+
+export function criarComandaBarbearia(empresaId, dados = {}) {
+  const estado = estadoEmpresa(empresaId);
+  const chaveIdempotencia = texto(dados.chaveIdempotencia ?? dados.chave_idempotencia, 220);
+  if (chaveIdempotencia) {
+    const existente = Object.values(estado.comandas).find((item) => item.chaveIdempotencia === chaveIdempotencia);
+    if (existente) return copiarComandaBarbearia(existente, true);
+  }
+  const agendamentoId = texto(dados.agendamentoId ?? dados.agendamento_id, 120);
+  const agendamento = agendamentoId ? estado.agendamentos[agendamentoId] : null;
+  if (agendamentoId && (!agendamento || agendamento.empresaId !== String(empresaId))) throw new Error('Agendamento não encontrado na empresa ativa.');
+  const lojaId = texto(dados.lojaId ?? dados.loja_id ?? agendamento?.lojaId, 120);
+  const profissionalId = texto(dados.profissionalId ?? dados.profissional_id ?? agendamento?.profissionalId, 120);
+  if (profissionalId && (!estado.profissionais[profissionalId] || estado.profissionais[profissionalId].ativo === false)) throw new Error('Profissional responsável não encontrado ou inativo.');
+  const agora = dataAtual();
+  const id = novoId('cmdbar', estado.comandas);
+  const comanda = {
+    id,
+    empresaId: String(empresaId),
+    lojaId,
+    clienteId: texto(dados.clienteId ?? dados.cliente_id ?? agendamento?.clienteId, 120),
+    clienteNome: texto(dados.clienteNome ?? dados.cliente_nome ?? agendamento?.clienteNome, 160),
+    clienteTelefone: texto(dados.clienteTelefone ?? dados.cliente_telefone ?? agendamento?.clienteTelefone, 30),
+    agendamentoId: agendamento?.id || null,
+    profissionalId,
+    status: 'aberta',
+    itens: [],
+    pagamentos: [],
+    desconto: dinheiro(dados.desconto),
+    descontoMotivo: texto(dados.descontoMotivo ?? dados.desconto_motivo, 240),
+    gorjeta: dinheiro(dados.gorjeta),
+    totalPago: 0,
+    totalFaturado: 0,
+    saldoPendente: 0,
+    estoqueBaixado: false,
+    financeiroLancamentoIds: [],
+    contasReceberIds: [],
+    chaveIdempotencia: chaveIdempotencia || null,
+    observacoes: texto(dados.observacoes ?? dados.observacao, 600),
+    criadoPor: texto(dados.usuario, 120),
+    criadoEm: agora,
+    atualizadoEm: agora,
+    fechadaEm: null,
+  };
+  estado.comandas[id] = comanda;
+  const itensIniciais = Array.isArray(dados.itens) ? dados.itens : (agendamento?.servicoId ? [{ tipo: 'servico', servicoId: agendamento.servicoId, profissionalId }] : []);
+  if (itensIniciais.length) {
+    const itens = itensIniciais.map((item) => itemComandaBarbeariaNormalizado(estado, comanda, item));
+    comanda.itens.push(...itens);
+  }
+  save();
+  return copiarComandaBarbearia(comanda);
+}
+
+export function atualizarComandaBarbearia(empresaId, comandaId, dados = {}) {
+  const estado = estadoEmpresa(empresaId);
+  const comanda = estado.comandas[String(comandaId)];
+  if (!comanda || comanda.empresaId !== String(empresaId)) return null;
+  if (!['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(comanda.status)) throw new Error('A comanda não está aberta para edição.');
+  if (dados.desconto !== undefined) comanda.desconto = dinheiro(dados.desconto);
+  if (dados.descontoMotivo !== undefined || dados.desconto_motivo !== undefined) comanda.descontoMotivo = texto(dados.descontoMotivo ?? dados.desconto_motivo, 240);
+  if (dados.gorjeta !== undefined) comanda.gorjeta = dinheiro(dados.gorjeta);
+  if (dados.observacoes !== undefined || dados.observacao !== undefined) comanda.observacoes = texto(dados.observacoes ?? dados.observacao, 600);
+  if (Array.isArray(dados.financeiroLancamentoIds)) comanda.financeiroLancamentoIds = [...new Set(dados.financeiroLancamentoIds.map((item) => texto(item, 120)).filter(Boolean))];
+  if (Array.isArray(dados.contasReceberIds)) comanda.contasReceberIds = [...new Set(dados.contasReceberIds.map((item) => texto(item, 120)).filter(Boolean))];
+  comanda.atualizadoEm = dataAtual();
+  save();
+  return copiarComandaBarbearia(comanda);
+}
+
+export function adicionarItensComandaBarbearia(empresaId, comandaId, itens = []) {
+  const estado = estadoEmpresa(empresaId);
+  const comanda = estado.comandas[String(comandaId)];
+  if (!comanda || comanda.empresaId !== String(empresaId)) return null;
+  if (!['aberta', 'aguardando_pagamento'].includes(comanda.status)) throw new Error('A comanda não está disponível para novos itens.');
+  const entradas = Array.isArray(itens) ? itens : [itens];
+  if (!entradas.length) throw new Error('Inclua ao menos um item na comanda.');
+  const novos = entradas.map((item) => itemComandaBarbeariaNormalizado(estado, comanda, item));
+  comanda.itens.push(...novos);
+  comanda.status = 'aberta';
+  comanda.atualizadoEm = dataAtual();
+  save();
+  return copiarComandaBarbearia(comanda);
+}
+
+export function atualizarItemComandaBarbearia(empresaId, comandaId, itemId, dados = {}) {
+  const estado = estadoEmpresa(empresaId);
+  const comanda = estado.comandas[String(comandaId)];
+  if (!comanda || comanda.empresaId !== String(empresaId)) return null;
+  if (!['aberta', 'aguardando_pagamento'].includes(comanda.status)) throw new Error('A comanda não está disponível para edição.');
+  const atual = comanda.itens.find((item) => item.id === String(itemId));
+  if (!atual) return null;
+  const quantidade = dados.quantidade !== undefined || dados.qtd !== undefined ? Math.max(1, Math.round(numero(dados.quantidade ?? dados.qtd, atual.quantidade))) : atual.quantidade;
+  if (atual.tipo === 'produto') {
+    const produto = estado.produtosRevenda[atual.produtoId];
+    if (!produto || Number(produto.estoqueAtual || 0) < quantidade) throw new Error(`Estoque insuficiente para ${atual.nome}.`);
+  }
+  atual.quantidade = quantidade;
+  atual.subtotal = dinheiro(atual.precoUnitario * quantidade);
+  if (dados.observacao !== undefined || dados.obs !== undefined) atual.observacao = texto(dados.observacao ?? dados.obs, 400);
+  atual.atualizadoEm = dataAtual();
+  comanda.atualizadoEm = atual.atualizadoEm;
+  save();
+  return copiarComandaBarbearia(comanda);
+}
+
+export function removerItemComandaBarbearia(empresaId, comandaId, itemId) {
+  const estado = estadoEmpresa(empresaId);
+  const comanda = estado.comandas[String(comandaId)];
+  if (!comanda || comanda.empresaId !== String(empresaId)) return null;
+  if (!['aberta', 'aguardando_pagamento'].includes(comanda.status)) throw new Error('A comanda não está disponível para edição.');
+  const indice = comanda.itens.findIndex((item) => item.id === String(itemId));
+  if (indice < 0) return null;
+  comanda.itens.splice(indice, 1);
+  comanda.atualizadoEm = dataAtual();
+  save();
+  return copiarComandaBarbearia(comanda);
+}
+
+export function alterarStatusComandaBarbearia(empresaId, comandaId, status, dados = {}) {
+  const estado = estadoEmpresa(empresaId);
+  const comanda = estado.comandas[String(comandaId)];
+  if (!comanda || comanda.empresaId !== String(empresaId)) return null;
+  const novoStatus = String(status || '').toLowerCase();
+  if (!STATUS_COMANDA_BARBEARIA.has(novoStatus)) throw new Error('Status de comanda inválido.');
+  if (novoStatus !== comanda.status && !TRANSICOES_COMANDA_BARBEARIA[comanda.status]?.has(novoStatus)) throw new Error(`Transição de comanda ${comanda.status} para ${novoStatus} não permitida.`);
+  if (novoStatus === 'aguardando_pagamento' && !comanda.itens.length) throw new Error('Inclua ao menos um item antes de aguardar pagamento.');
+  comanda.status = novoStatus;
+  comanda.observacoes = dados.observacoes !== undefined ? texto(dados.observacoes, 600) : comanda.observacoes;
+  comanda.atualizadoEm = dataAtual();
+  save();
+  return copiarComandaBarbearia(comanda);
+}
+
+export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados = {}) {
+  const estado = estadoEmpresa(empresaId);
+  const comanda = estado.comandas[String(comandaId)];
+  if (!comanda || comanda.empresaId !== String(empresaId)) return null;
+  if (comanda.status === 'paga' || comanda.status === 'em_conta') return copiarComandaBarbearia(comanda, true);
+  if (comanda.status === 'cancelada') throw new Error('Não é possível receber uma comanda cancelada.');
+  if (dados.confirmado !== true) throw new Error('A confirmação explícita do pagamento é obrigatória.');
+  const chaveIdempotencia = texto(dados.chaveIdempotencia ?? dados.chave_idempotencia, 220);
+  if (chaveIdempotencia && (comanda.pagamentos || []).some((item) => item.chaveIdempotencia === chaveIdempotencia)) return copiarComandaBarbearia(comanda, true);
+  if (!comanda.itens.length) throw new Error('Não é possível receber uma comanda sem itens.');
+  const subtotal = Number((comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0).toFixed(2));
+  const desconto = Number(Math.min(subtotal, Math.max(0, Number(comanda.desconto || 0))).toFixed(2));
+  const total = Number(Math.max(0, subtotal - desconto + Math.max(0, Number(comanda.gorjeta || 0))).toFixed(2));
+  const pagamentosEntrada = Array.isArray(dados.pagamentos) && dados.pagamentos.length ? dados.pagamentos : [{ meio: dados.meioPagamento ?? dados.meio_pagamento, valor: dados.valor }];
+  const saldoAnterior = Number(Math.max(0, total - Number(comanda.totalPago || 0)).toFixed(2));
+  const pagamentos = pagamentosEntrada.map((item, indice) => {
+    const meio = texto(item?.meio ?? item?.meioPagamento, 40).toLowerCase();
+    const valor = dinheiro(item?.valor);
+    if (!MEIOS_PAGAMENTO_COMANDA_BARBEARIA.has(meio) || valor <= 0) throw new Error('Informe meio e valor válidos para cada pagamento.');
+    const caixaId = texto(item?.caixaId ?? item?.caixa_id ?? dados.caixaId ?? dados.caixa_id, 120) || null;
+    if (meio === 'dinheiro' && caixaId) {
+      const caixa = caixaKytto.obterCaixa(empresaId, caixaId);
+      if (!caixa || caixa.status !== 'aberto') throw new Error('O caixa informado não está aberto na empresa ativa.');
+    }
+    return { id: texto(item?.id, 120) || `pagbar-${Date.now().toString(36)}-${String(indice + 1).padStart(2, '0')}`, meio, valor, caixaId, chaveIdempotencia: texto(item?.chaveIdempotencia ?? item?.chave_idempotencia ?? chaveIdempotencia, 220) || null, registradoEm: dataAtual() };
+  });
+  const valorNovo = Number(pagamentos.reduce((soma, item) => soma + item.valor, 0).toFixed(2));
+  if (valorNovo - saldoAnterior > 0.02) throw new Error(`O pagamento excede o saldo pendente de ${saldoAnterior.toFixed(2)}.`);
+  validarEstoqueComandaBarbearia(estado, comanda);
+  const clienteId = texto(dados.clienteId ?? dados.cliente_id ?? comanda.clienteId, 120) || null;
+  const lancamentosFinanceiros = [];
+  const contasReceber = [];
+  for (const pagamento of pagamentos) {
+    let conta = null;
+    if (pagamento.meio === 'conta') {
+      const cliente = clienteId ? clientesKytto.obterCliente(empresaId, clienteId) : null;
+      if (!cliente || cliente.padrao) throw new Error('Para lançar em conta, selecione um cliente cadastrado da empresa ativa.');
+      conta = clientesKytto.criarContaReceber(empresaId, { clienteId: cliente.id, descricao: `Comanda de barbearia ${comanda.id}`, valor: pagamento.valor, dataVencimento: dados.dataVencimento || undefined, observacao: 'Pagamento em conta gerado pela comanda da Barbearia.' });
+      contasReceber.push(conta);
+    }
+    const lancamento = financeiroKytto.registrarLancamento(empresaId, {
+      tipo: 'receita', categoria: pagamento.meio === 'conta' ? 'Contas a receber' : 'Barbearia',
+      descricao: `Comanda de barbearia ${comanda.id} — ${comanda.clienteNome || 'Atendimento'} (${pagamento.meio})`,
+      valor: pagamento.valor, origem: 'barbearia_comanda', status: pagamento.meio === 'conta' ? 'pendente' : 'pago',
+      vencimento: pagamento.meio === 'conta' ? conta?.dataVencimento : dataAtual(), dataOperacao: dataAtual(),
+      pagoEm: pagamento.meio === 'conta' ? null : dataAtual(), meioPagamento: pagamento.meio,
+      usuario: texto(dados.usuario, 120), automatico: true,
+      chaveIdempotencia: `barbearia_comanda:${empresaId}:${comanda.id}:pagamento:${pagamento.id}`,
+      referencia: { comandaId: comanda.id, clienteId: clienteId || undefined, profissionalId: comanda.profissionalId || undefined, contaReceberId: conta?.id, caixaId: pagamento.caixaId || undefined },
+    });
+    pagamento.financeiroLancamentoId = lancamento.id;
+    pagamento.contaReceberId = conta?.id || null;
+    lancamentosFinanceiros.push(lancamento);
+  }
+  comanda.pagamentos = [...(comanda.pagamentos || []), ...pagamentos];
+  const valorRecebido = Number(pagamentos.filter((item) => item.meio !== 'conta').reduce((soma, item) => soma + item.valor, 0).toFixed(2));
+  comanda.totalPago = Number((Number(comanda.totalPago || 0) + valorRecebido).toFixed(2));
+  comanda.totalFaturado = Number((Number(comanda.totalFaturado || 0) + valorNovo).toFixed(2));
+  comanda.saldoPendente = Number(Math.max(0, total - comanda.totalFaturado).toFixed(2));
+  comanda.pagamento = comanda.pagamentos[0]?.meio || null;
+  comanda.financeiroLancamentoIds = [...new Set([...(comanda.financeiroLancamentoIds || []), ...lancamentosFinanceiros.map((item) => item.id)].map(String))];
+  comanda.contasReceberIds = [...new Set([...(comanda.contasReceberIds || []), ...contasReceber.map((item) => item.id)].map(String))];
+  const faturada = comanda.saldoPendente <= 0.02;
+  const possuiConta = comanda.pagamentos.some((item) => item.meio === 'conta');
+  comanda.status = faturada ? (possuiConta ? 'em_conta' : 'paga') : (comanda.totalPago > 0 ? 'parcialmente_paga' : 'aguardando_pagamento');
+  comanda.estoqueBaixado = Boolean(comanda.estoqueBaixado || faturada);
+  if (faturada && !comanda.estoqueBaixadoAntes) {
+    for (const item of comanda.itens.filter((linha) => linha.tipo === 'produto')) {
+      const produto = estado.produtosRevenda[item.produtoId];
+      const anterior = Number(produto.estoqueAtual || 0);
+      produto.estoqueAtual = anterior - item.quantidade;
+      produto.atualizadoEm = dataAtual();
+      produto.ultimoMovimentoEm = produto.atualizadoEm;
+      const movimentoId = novoId('mov', estado.movimentosEstoque);
+      estado.movimentosEstoque[movimentoId] = { id: movimentoId, empresaId: String(empresaId), produtoId: produto.id, tipo: 'saida_comanda', quantidade: item.quantidade, estoqueAnterior: anterior, estoquePosterior: produto.estoqueAtual, comandaId: comanda.id, criadoEm: produto.atualizadoEm };
+    }
+    comanda.estoqueBaixadoAntes = true;
+  }
+  comanda.atualizadoEm = dataAtual();
+  if (faturada) comanda.fechadaEm = comanda.atualizadoEm;
+  save();
+  return copiarComandaBarbearia(comanda);
+}
+
+export function cancelarComandaBarbearia(empresaId, comandaId, dados = {}) {
+  const estado = estadoEmpresa(empresaId);
+  const comanda = estado.comandas[String(comandaId)];
+  if (!comanda || comanda.empresaId !== String(empresaId)) return null;
+  if (comanda.status === 'paga' || comanda.status === 'em_conta') throw new Error('Uma comanda já faturada não pode ser cancelada neste fluxo.');
+  if (comanda.status === 'cancelada') return copiarComandaBarbearia(comanda, true);
+  comanda.status = 'cancelada';
+  comanda.observacoes = [comanda.observacoes, texto(dados.motivo, 300) ? `Cancelamento: ${texto(dados.motivo, 300)}` : 'Cancelamento manual.'].filter(Boolean).join(' · ');
+  comanda.atualizadoEm = dataAtual();
+  save();
+  return copiarComandaBarbearia(comanda);
+}
+
 function validarCalendarioAgendamento(estado, agendamento, profissional) {
   const dataAgenda = String(agendamento.dataAgenda || chaveDia(agendamento.dataHora)).slice(0, 10);
   const calendario = obterCalendarioLoja(estado, agendamento.lojaId);
@@ -857,11 +1184,37 @@ export function alterarStatusAgendamento(empresaId, agendamentoId, status, dados
 export function obterComissoes(empresaId, { data = '', lojaId = '' } = {}) {
   const estado = estadoEmpresa(empresaId, false);
   const filtrarLoja = (item) => !lojaId || !item.lojaId || item.lojaId === String(lojaId);
-  const atendimentos = Object.values(estado.agendamentos).filter(filtrarLoja).filter((item) => item.status === 'concluido').filter((item) => !data || String(item.dataAgenda || chaveDia(item.dataHora)).slice(0, 10) === String(data).slice(0, 10));
-  const vendas = Object.values(estado.vendasRevenda).filter(filtrarLoja).filter((item) => item.status === 'pago').filter((item) => !data || String(item.criadoEm).slice(0, 10) === String(data).slice(0, 10));
+  const comandasPagas = Object.values(estado.comandas)
+    .filter(filtrarLoja)
+    .filter((item) => item.status === 'paga')
+    .filter((item) => !data || String(item.fechadaEm || item.atualizadoEm).slice(0, 10) === String(data).slice(0, 10));
+  const agendamentosEmComanda = new Set(comandasPagas.map((item) => item.agendamentoId).filter(Boolean));
+  const atendimentos = Object.values(estado.agendamentos)
+    .filter(filtrarLoja)
+    .filter((item) => item.status === 'concluido')
+    .filter((item) => !agendamentosEmComanda.has(item.id))
+    .filter((item) => !data || String(item.dataAgenda || chaveDia(item.dataHora)).slice(0, 10) === String(data).slice(0, 10));
+  const vendasLegadas = Object.values(estado.vendasRevenda)
+    .filter(filtrarLoja)
+    .filter((item) => item.status === 'pago')
+    .filter((item) => !data || String(item.criadoEm).slice(0, 10) === String(data).slice(0, 10));
+  const servicosComanda = comandasPagas.flatMap((comanda) => (comanda.itens || [])
+    .filter((item) => item.tipo === 'servico')
+    .map((item) => ({ ...item, profissionalId: item.profissionalId || comanda.profissionalId, valorRecebido: item.subtotal, valor: item.subtotal, meioPagamento: comanda.pagamentos?.find((pagamento) => pagamento.meio !== 'conta')?.meio || comanda.pagamento })));
+  const produtosComanda = comandasPagas.map((comanda) => ({
+    id: comanda.id,
+    empresaId: comanda.empresaId,
+    lojaId: comanda.lojaId,
+    profissionalId: comanda.profissionalId || null,
+    total: dinheiro((comanda.itens || []).filter((item) => item.tipo === 'produto').reduce((soma, item) => soma + Number(item.subtotal || 0), 0)),
+    pagamento: { meioPagamento: comanda.pagamentos?.find((pagamento) => pagamento.meio !== 'conta')?.meio || comanda.pagamento },
+    criadoEm: comanda.fechadaEm || comanda.atualizadoEm,
+  }));
+  const vendas = [...vendasLegadas, ...produtosComanda.filter((item) => item.total > 0)];
+  const atendimentosConsolidados = [...atendimentos, ...servicosComanda];
   const taxas = { credito: 0.0249, debito: 0.0149, pix: 0.0089, dinheiro: 0, transferencia: 0 };
   const porProfissional = Object.values(estado.profissionais).map((profissional) => {
-    const servicos = atendimentos.filter((item) => item.profissionalId === profissional.id);
+    const servicos = atendimentosConsolidados.filter((item) => item.profissionalId === profissional.id);
     const produtos = vendas.filter((item) => item.profissionalId === profissional.id);
     const brutoServicos = servicos.reduce((soma, item) => soma + Number(item.valorRecebido || item.valor || 0), 0);
     const brutoProdutos = produtos.reduce((soma, item) => soma + Number(item.total || 0), 0);

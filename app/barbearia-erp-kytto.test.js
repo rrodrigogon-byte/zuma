@@ -36,6 +36,13 @@ import {
   finalizarVendaRevenda,
   listarVendasRevenda,
   obterComissoes,
+  criarComandaBarbearia,
+  obterComandaBarbearia,
+  listarComandasBarbearia,
+  adicionarItensComandaBarbearia,
+  atualizarComandaBarbearia,
+  alterarStatusComandaBarbearia,
+  registrarPagamentoComandaBarbearia,
 } from './barbearia-erp-kytto.js';
 
 const EMPRESA_A = 'empresa-teste-a';
@@ -265,6 +272,47 @@ test('calcula repasse indicativo de serviços e produtos pagos sem lançar pagam
   assert.equal(linha.repasse, 37);
   assert.equal(resultado.vendasSemProfissional, 1);
   assert.equal(semProfissionalPaga.financeiroLancamentoId !== null, true);
+});
+
+test('integra comanda de serviço e revenda com recebimento explícito e baixa idempotente', () => {
+  const profissional = baseProfissional();
+  const servico = baseServico();
+  const produto = criarProdutoRevenda(EMPRESA_A, { nome: 'Pomada comanda', sku: 'POM-001', precoVenda: 35, estoqueAtual: 2, estoqueMinimo: 1 });
+  const comanda = criarComandaBarbearia(EMPRESA_A, { lojaId: 'loja-a', clienteNome: 'Cliente comanda', profissionalId: profissional.id, itens: [{ tipo: 'servico', servicoId: servico.id, profissionalId: profissional.id }] });
+  assert.equal(comanda.status, 'aberta');
+  assert.equal(comanda.total, 50);
+  assert.equal(listarComandasBarbearia(EMPRESA_A, { lojaId: 'loja-a' }).length, 1);
+  adicionarItensComandaBarbearia(EMPRESA_A, comanda.id, [{ tipo: 'produto', produtoId: produto.id, quantidade: 1 }]);
+  const comandaComItens = atualizarComandaBarbearia(EMPRESA_A, comanda.id, { gorjeta: 10, observacoes: 'Atendimento presencial' });
+  assert.equal(comandaComItens.total, 95);
+  assert.throws(() => registrarPagamentoComandaBarbearia(EMPRESA_A, comanda.id, { meioPagamento: 'pix', valor: 95 }), /confirmação explícita/);
+  const aguardando = alterarStatusComandaBarbearia(EMPRESA_A, comanda.id, 'aguardando_pagamento');
+  assert.equal(aguardando.status, 'aguardando_pagamento');
+  const paga = registrarPagamentoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true, meioPagamento: 'pix', valor: 95, chaveIdempotencia: 'cmd-pag-1', usuario: 'teste' });
+  assert.equal(paga.status, 'paga');
+  assert.equal(paga.totalPago, 95);
+  assert.equal(paga.financeiroLancamentoIds.length, 1);
+  assert.equal(db().barbearias[EMPRESA_A].produtosRevenda[produto.id].estoqueAtual, 1);
+  assert.equal(Object.values(db().barbearias[EMPRESA_A].movimentosEstoque).filter((item) => item.comandaId === comanda.id).length, 1);
+  const repetida = registrarPagamentoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true, meioPagamento: 'pix', valor: 95, chaveIdempotencia: 'cmd-pag-1', usuario: 'teste' });
+  assert.equal(repetida.idempotente, true);
+  assert.equal(listarLancamentos(EMPRESA_A, { origem: 'barbearia_comanda' }).length, 1);
+  assert.equal(obterComandaBarbearia(EMPRESA_A, comanda.id).status, 'paga');
+  assert.equal(listarComandasBarbearia(EMPRESA_B).length, 0);
+});
+
+test('não baixa estoque nem lança financeiro quando pagamento fica pendente em conta', () => {
+  const produto = criarProdutoRevenda(EMPRESA_A, { nome: 'Pomada conta', precoVenda: 30, estoqueAtual: 2 });
+  const comanda = criarComandaBarbearia(EMPRESA_A, { clienteNome: 'Cliente conta', itens: [{ tipo: 'produto', produtoId: produto.id, quantidade: 1 }] });
+  assert.throws(() => registrarPagamentoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true, meioPagamento: 'conta', valor: 30 }), /cliente cadastrado/);
+  assert.equal(db().barbearias[EMPRESA_A].produtosRevenda[produto.id].estoqueAtual, 2);
+  assert.equal(listarLancamentos(EMPRESA_A, { origem: 'barbearia_comanda' }).length, 0);
+});
+
+test('rejeita item de produto de outra empresa na comanda', () => {
+  const produto = criarProdutoRevenda(EMPRESA_B, { nome: 'Produto isolado', precoVenda: 12, estoqueAtual: 1 });
+  const comanda = criarComandaBarbearia(EMPRESA_A, { clienteNome: 'Cliente isolado' });
+  assert.throws(() => adicionarItensComandaBarbearia(EMPRESA_A, comanda.id, [{ tipo: 'produto', produtoId: produto.id }]), /não encontrado/);
 });
 
 test('leitura de fidelidade sem dados não cria estrutura no store', () => {
