@@ -945,6 +945,7 @@ export function criarComandaBarbearia(empresaId, dados = {}) {
     clienteNome: texto(dados.clienteNome ?? dados.cliente_nome ?? agendamento?.clienteNome, 160),
     clienteTelefone: texto(dados.clienteTelefone ?? dados.cliente_telefone ?? agendamento?.clienteTelefone, 30),
     agendamentoId: agendamento?.id || null,
+    dataAtendimento: texto(dados.dataAtendimento ?? dados.data_atendimento ?? agendamento?.dataAgenda ?? agendamento?.dataHora, 30) || null,
     profissionalId,
     status: 'aberta',
     itens: [],

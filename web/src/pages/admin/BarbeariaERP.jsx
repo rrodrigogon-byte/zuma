@@ -175,10 +175,12 @@ export default function BarbeariaERP() {
   const [formRecebimento, setFormRecebimento] = useState({ meioPagamento: 'pix', valorRecebido: '' })
   const [formConfig, setFormConfig] = useState({})
   const [formFila, setFormFila] = useState({ clienteId: '', clienteNome: '', clienteTelefone: '', servicoId: '', preferenciaProfissionalId: '', previsaoMinutos: 30, observacoes: '' })
+  const [formFilaChamada, setFormFilaChamada] = useState({ mesaOuPosicao: '' })
   const [formBloqueio, setFormBloqueio] = useState({ titulo: '', motivo: '', inicioHora: '08:00', fimHora: '20:00', profissionalId: '' })
   const [formPlano, setFormPlano] = useState({ nome: '', descricao: '', ciclo: 'mensal', preco: '', sessoesIncluidas: 4, validadeDias: 30, servicosIds: [] })
   const [formAssinatura, setFormAssinatura] = useState({ clienteId: '', clienteNome: '', planoId: '', observacoes: '' })
   const [formProdutoRevenda, setFormProdutoRevenda] = useState({ nome: '', sku: '', categoria: 'Revenda', unidade: 'un', precoVenda: '', custoUnitario: '', estoqueAtual: 0, estoqueMinimo: 0 })
+  const [formMovimentoRevenda, setFormMovimentoRevenda] = useState({ quantidade: 1, observacao: 'Movimento manual no módulo Barbearia.' })
   const [formVendaRevenda, setFormVendaRevenda] = useState({ clienteId: '', clienteNome: '', profissionalId: '', observacao: '', produtoId: '', quantidade: 1 })
   const [formPagamentoVendaRevenda, setFormPagamentoVendaRevenda] = useState({ meioPagamento: 'pix' })
   const [formWhatsApp, setFormWhatsApp] = useState({ clienteId: '', finalidade: 'atendimento', telefone: '', mensagem: '', consentimentoConfirmado: false })
@@ -527,10 +529,21 @@ export default function BarbeariaERP() {
     await executar(() => api.post('/api/admin/barbearia/fila', payload), 'Cliente adicionado à fila.')
   }
 
-  async function alterarFila(item, status) {
-    const mesaOuPosicao = status === 'chamado' ? window.prompt(`Posição ou cadeira para ${item.senha}:`, item.mesaOuPosicao || '') : item.mesaOuPosicao
-    if (status === 'chamado' && mesaOuPosicao === null) return
-    await executar(() => api.patch(`/api/admin/barbearia/fila/${item.id}/status`, { status, mesaOuPosicao: mesaOuPosicao || '' }), `Fila atualizada para ${status}.`)
+  function alterarFila(item, status) {
+    if (status === 'chamado') {
+      setFormFilaChamada({ mesaOuPosicao: item.mesaOuPosicao || '' })
+      setModal({ tipo: 'filaChamada', item })
+      return
+    }
+    return executar(() => api.patch(`/api/admin/barbearia/fila/${item.id}/status`, { status, mesaOuPosicao: item.mesaOuPosicao || '' }), `Fila atualizada para ${status}.`)
+  }
+
+  async function concluirChamadaFila(event) {
+    event.preventDefault()
+    const item = modal?.item
+    const mesaOuPosicao = formFilaChamada.mesaOuPosicao.trim()
+    if (!item || !mesaOuPosicao) return
+    await executar(() => api.patch(`/api/admin/barbearia/fila/${item.id}/status`, { status: 'chamado', mesaOuPosicao }), 'Cliente chamado e posição registrada.')
   }
 
   async function salvarBloqueio(event) {
@@ -597,11 +610,20 @@ export default function BarbeariaERP() {
     await executar(() => api.post('/api/admin/barbearia/estoque-revenda', { ...formProdutoRevenda, precoVenda: Number(formProdutoRevenda.precoVenda), custoUnitario: Number(formProdutoRevenda.custoUnitario || 0), estoqueAtual: Number(formProdutoRevenda.estoqueAtual || 0), estoqueMinimo: Number(formProdutoRevenda.estoqueMinimo || 0) }), 'Produto de revenda cadastrado.')
   }
 
-  async function movimentarProdutoRevenda(produto, tipo) {
-    const quantidade = Number(window.prompt(`Quantidade para ${tipo === 'entrada' ? 'entrada' : tipo === 'saida_manual' ? 'saída manual' : 'ajuste'} de ${produto.nome}:`, '1'))
-    if (!Number.isInteger(quantidade) || quantidade <= 0) return
-    if (!window.confirm(`Confirmar ${tipo === 'entrada' ? 'entrada' : tipo === 'saida_manual' ? 'saída manual' : 'ajuste'} de ${quantidade} ${produto.unidade || 'un'} em ${produto.nome}?`)) return
-    await executar(() => api.post(`/api/admin/barbearia/estoque-revenda/${produto.id}/movimentos`, { tipo, quantidade, confirmado: true, observacao: 'Movimento manual no módulo Barbearia.' }), 'Movimento de estoque registrado.')
+  function movimentarProdutoRevenda(produto, tipo) {
+    setFormMovimentoRevenda({ quantidade: 1, observacao: 'Movimento manual no módulo Barbearia.' })
+    setModal({ tipo: 'movimentoRevenda', produto, movimentoTipo: tipo })
+  }
+
+  async function concluirMovimentoRevenda(event) {
+    event.preventDefault()
+    const produto = modal?.produto
+    const tipo = modal?.movimentoTipo
+    const quantidade = Number(formMovimentoRevenda.quantidade)
+    const movimentoLabel = tipo === 'entrada' ? 'entrada' : tipo === 'saida_manual' ? 'saída manual' : 'ajuste'
+    if (!produto || !tipo || !Number.isInteger(quantidade) || quantidade <= 0) return
+    if (!window.confirm(`Confirmar ${movimentoLabel} de ${quantidade} ${produto.unidade || 'un'} em ${produto.nome}?`)) return
+    await executar(() => api.post(`/api/admin/barbearia/estoque-revenda/${produto.id}/movimentos`, { tipo, quantidade, confirmado: true, observacao: formMovimentoRevenda.observacao.trim() || 'Movimento manual no módulo Barbearia.' }), 'Movimento de estoque registrado.')
   }
 
   function adicionarItemVendaRevenda(event) {
@@ -940,6 +962,15 @@ export default function BarbeariaERP() {
   }
 
   function renderModal() {
+    if (modal?.tipo === 'filaChamada') {
+      const item = modal.item
+      return <Modal title={`Chamar ${item.senha}`} onClose={() => setModal(null)}><form onSubmit={concluirChamadaFila} style={{ display: 'grid', gap: 16 }}><div style={styles.notice}><strong>{item.clienteNome || 'Cliente eventual'}</strong><div style={styles.sub}>Registre a cadeira, posição ou estação antes de atualizar o status da fila.</div></div><Field label="Cadeira ou posição *" full hint="Exemplos: Cadeira 2, Estação A, Sala 1"><input required autoFocus value={formFilaChamada.mesaOuPosicao} onChange={(event) => setFormFilaChamada({ mesaOuPosicao: event.target.value })} style={inputStyle} placeholder="Cadeira 2" /></Field><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando || !formFilaChamada.mesaOuPosicao.trim()}>{salvando ? 'Atualizando…' : 'Confirmar chamada'}</button></div></form></Modal>
+    }
+    if (modal?.tipo === 'movimentoRevenda') {
+      const produto = modal.produto
+      const movimentoLabel = modal.movimentoTipo === 'entrada' ? 'Entrada' : modal.movimentoTipo === 'saida_manual' ? 'Saída manual' : 'Ajuste'
+      return <Modal title={`${movimentoLabel} de estoque`} onClose={() => setModal(null)}><form onSubmit={concluirMovimentoRevenda} style={{ display: 'grid', gap: 16 }}><div style={styles.notice}><strong>{produto.nome}</strong><div style={styles.sub}>Saldo atual: {produto.estoqueAtual} {produto.unidade || 'un'}. A saída manual não registra venda, pagamento ou receita.</div></div><Field label="Quantidade *"><input required autoFocus type="number" min="1" step="1" value={formMovimentoRevenda.quantidade} onChange={(event) => setFormMovimentoRevenda((atual) => ({ ...atual, quantidade: event.target.value }))} style={inputStyle} /></Field><Field label="Observação" full><textarea rows={3} value={formMovimentoRevenda.observacao} onChange={(event) => setFormMovimentoRevenda((atual) => ({ ...atual, observacao: event.target.value }))} style={{ ...inputStyle, resize: 'vertical' }} /></Field><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando || !Number.isInteger(Number(formMovimentoRevenda.quantidade)) || Number(formMovimentoRevenda.quantidade) <= 0}>{salvando ? 'Registrando…' : `Confirmar ${movimentoLabel.toLowerCase()}`}</button></div></form></Modal>
+    }
     if (modal === 'profissional') return <Modal title="Novo profissional" onClose={() => setModal(null)} wide><form onSubmit={salvarProfissional} style={{ display: 'grid', gap: 16 }}><div style={styles.formGrid}><Field label="Nome *" full><input required value={formProf.nome} onChange={(event) => setFormProf((atual) => ({ ...atual, nome: event.target.value }))} style={inputStyle} /></Field><Field label="Telefone"><input value={formProf.telefone} onChange={(event) => setFormProf((atual) => ({ ...atual, telefone: event.target.value }))} style={inputStyle} /></Field><Field label="E-mail"><input type="email" value={formProf.email} onChange={(event) => setFormProf((atual) => ({ ...atual, email: event.target.value }))} style={inputStyle} /></Field><Field label="Especialidade"><input value={formProf.especialidade} onChange={(event) => setFormProf((atual) => ({ ...atual, especialidade: event.target.value }))} style={inputStyle} /></Field><Field label="Tipo"><select value={formProf.tipo} onChange={(event) => setFormProf((atual) => ({ ...atual, tipo: event.target.value }))} style={inputStyle}><option value="parceiro">Parceiro</option><option value="funcionario">Funcionário</option><option value="autonomo">Autônomo</option></select></Field><Field label="Comissão de serviços (%)"><input type="number" min="0" max="100" value={formProf.percentualComissao} onChange={(event) => setFormProf((atual) => ({ ...atual, percentualComissao: event.target.value }))} style={inputStyle} /></Field><Field label="Comissão de produtos (%)"><input type="number" min="0" max="100" value={formProf.percentualComissaoProduto} onChange={(event) => setFormProf((atual) => ({ ...atual, percentualComissaoProduto: event.target.value }))} style={inputStyle} /></Field><Field label="Início"><input type="time" value={formProf.horarioInicio} onChange={(event) => setFormProf((atual) => ({ ...atual, horarioInicio: event.target.value }))} style={inputStyle} /></Field><Field label="Fim"><input type="time" value={formProf.horarioFim} onChange={(event) => setFormProf((atual) => ({ ...atual, horarioFim: event.target.value }))} style={inputStyle} /></Field><Field label="Dias de trabalho" full><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{DIAS.map((dia, indice) => <button type="button" key={dia} onClick={() => setFormProf((atual) => ({ ...atual, diasTrabalho: atual.diasTrabalho.includes(indice) ? atual.diasTrabalho.filter((item) => item !== indice) : [...atual.diasTrabalho, indice].sort() }))} style={{ ...styles.small, background: formProf.diasTrabalho.includes(indice) ? 'var(--accent)' : 'var(--card2)', color: formProf.diasTrabalho.includes(indice) ? '#fff' : 'var(--fg)' }}>{dia}</button>)}</div></Field></div><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar profissional'}</button></div></form></Modal>
     if (modal === 'servico') return <Modal title="Novo serviço" onClose={() => setModal(null)}><form onSubmit={salvarServico} style={{ display: 'grid', gap: 16 }}><div style={styles.formGrid}><Field label="Nome *" full><input required value={formServico.nome} onChange={(event) => setFormServico((atual) => ({ ...atual, nome: event.target.value }))} style={inputStyle} /></Field><Field label="Categoria"><input value={formServico.categoria} onChange={(event) => setFormServico((atual) => ({ ...atual, categoria: event.target.value }))} style={inputStyle} /></Field><Field label="Preço (R$) *"><input required type="number" min="0.01" step="0.01" value={formServico.preco} onChange={(event) => setFormServico((atual) => ({ ...atual, preco: event.target.value }))} style={inputStyle} /></Field><Field label="Duração (minutos)"><input required type="number" min="5" value={formServico.duracaoMinutos} onChange={(event) => setFormServico((atual) => ({ ...atual, duracaoMinutos: event.target.value }))} style={inputStyle} /></Field><Field label="Descrição" full><textarea rows={4} value={formServico.descricao} onChange={(event) => setFormServico((atual) => ({ ...atual, descricao: event.target.value }))} style={{ ...inputStyle, resize: 'vertical' }} /></Field></div><label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--muted)', fontSize: 13 }}><input type="checkbox" checked={formServico.permiteAgendamentoOnline !== false} onChange={(event) => setFormServico((atual) => ({ ...atual, permiteAgendamentoOnline: event.target.checked }))} /> Permitir este serviço nos canais de agendamento online</label><div style={styles.notice}><strong>Ficha técnica e consumo interno</strong><div style={styles.sub}>Ao faturar integralmente uma comanda, o estoque de revenda baixa os insumos configurados. Essa baixa não cria venda, pagamento ou vínculo com o Commerce.</div>{(formServico.consumoInterno || []).map((insumo, indice) => <div key={`${insumo.produtoId || 'novo'}-${indice}`} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 110px auto', gap: 8, alignItems: 'end', marginTop: 10 }}><select aria-label={`Produto de consumo ${indice + 1}`} value={insumo.produtoId} onChange={(event) => setFormServico((atual) => ({ ...atual, consumoInterno: atual.consumoInterno.map((item, index) => index === indice ? { ...item, produtoId: event.target.value } : item) }))} style={inputStyle}><option value="">Selecionar produto</option>{produtosRevenda.filter((produto) => produto.ativo !== false).map((produto) => <option key={produto.id} value={produto.id}>{produto.nome} · {produto.unidade || 'un'}</option>)}</select><input aria-label={`Quantidade de consumo ${indice + 1}`} type="number" min="1" step="1" value={insumo.quantidade} onChange={(event) => setFormServico((atual) => ({ ...atual, consumoInterno: atual.consumoInterno.map((item, index) => index === indice ? { ...item, quantidade: event.target.value } : item) }))} style={inputStyle} /><button type="button" style={styles.small} onClick={() => setFormServico((atual) => ({ ...atual, consumoInterno: atual.consumoInterno.filter((_, index) => index !== indice) }))}>Remover</button></div>)}<button type="button" style={{ ...styles.secondary, marginTop: 10 }} onClick={() => setFormServico((atual) => ({ ...atual, consumoInterno: [...(atual.consumoInterno || []), { produtoId: '', quantidade: 1 }] }))} disabled={produtosRevenda.filter((produto) => produto.ativo !== false).length === 0}>+ Adicionar insumo</button></div><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar serviço'}</button></div></form></Modal>
     if (modal === 'cliente') return <Modal title="Novo cliente no CRM" onClose={() => setModal(null)}><form onSubmit={salvarCliente} style={{ display: 'grid', gap: 16 }}><div style={styles.formGrid}><Field label="Nome *" full><input required value={formCliente.nome} onChange={(event) => setFormCliente((atual) => ({ ...atual, nome: event.target.value }))} style={inputStyle} /></Field><Field label="Telefone"><input value={formCliente.telefone} onChange={(event) => setFormCliente((atual) => ({ ...atual, telefone: event.target.value }))} style={inputStyle} /></Field><Field label="E-mail"><input type="email" value={formCliente.email} onChange={(event) => setFormCliente((atual) => ({ ...atual, email: event.target.value }))} style={inputStyle} /></Field><Field label="Observação" full><textarea rows={4} value={formCliente.observacao} onChange={(event) => setFormCliente((atual) => ({ ...atual, observacao: event.target.value }))} style={{ ...inputStyle, resize: 'vertical' }} /></Field></div><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar cliente'}</button></div></form></Modal>
