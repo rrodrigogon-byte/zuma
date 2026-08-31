@@ -173,65 +173,28 @@ export default function BarbeariaERP() {
       const query = new URLSearchParams({ data: dataSelecionada })
       if (statusFiltro) query.set('status', statusFiltro)
       if (profissionalFiltro) query.set('profissionalId', profissionalFiltro)
-      const respostas = await Promise.allSettled([
-        api.get(`/api/admin/barbearia/dashboard?data=${encodeURIComponent(dataSelecionada)}`),
-        api.get(`/api/admin/barbearia/agenda?${query.toString()}`),
-        api.get('/api/admin/barbearia/profissionais?incluirInativos=true'),
-        api.get('/api/admin/barbearia/servicos?incluirInativos=true'),
-        api.get('/api/admin/barbearia/clientes'),
-        api.get('/api/admin/barbearia/configuracoes'),
-        api.get(`/api/admin/barbearia/fila?data=${encodeURIComponent(dataSelecionada)}`),
-        api.get(`/api/admin/barbearia/bloqueios?data=${encodeURIComponent(dataSelecionada)}`),
-        api.get('/api/admin/barbearia/planos'),
-        api.get('/api/admin/barbearia/assinaturas'),
-        api.get('/api/admin/barbearia/fidelidade'),
-        api.get('/api/admin/barbearia/configuracoes/unidade-ativa').catch(() => null),
-        api.get(`/api/admin/barbearia/relatorios/operacional?data=${encodeURIComponent(dataSelecionada)}`),
-        api.get(`/api/admin/barbearia/comissoes?data=${encodeURIComponent(dataSelecionada)}`),
-        api.get('/api/admin/barbearia/estoque-revenda'),
-        api.get('/api/admin/barbearia/vendas-revenda'),
-        api.get('/api/admin/barbearia/integracoes').catch(() => null),
-      ])
-      const lerResposta = (indice, fallback) => respostas[indice]?.status === 'fulfilled' ? respostas[indice].value : fallback
-      const falhasParciais = respostas.filter((resposta) => resposta.status === 'rejected').length
-      const dashData = lerResposta(0, {})
-      const agendaData = lerResposta(1, {})
-      const profData = lerResposta(2, {})
-      const servData = lerResposta(3, {})
-      const cliData = lerResposta(4, {})
-      const configData = lerResposta(5, {})
-      const filaData = lerResposta(6, {})
-      const bloqueiosData = lerResposta(7, {})
-      const planosData = lerResposta(8, {})
-      const assinaturasData = lerResposta(9, {})
-      const fidelidadeData = lerResposta(10, {})
-      const configUnidadeData = lerResposta(11, null)
-      const relatorioData = lerResposta(12, {})
-      const comissoesData = lerResposta(13, {})
-      const produtosData = lerResposta(14, {})
-      const vendasData = lerResposta(15, {})
-      const integracoesData = lerResposta(16, null)
-      setErro(falhasParciais ? `${falhasParciais} painel(is) não responderam. Os demais dados continuam disponíveis; tente atualizar novamente.` : '')
-      setDashboard(dashData)
-      setAgendamentos(Array.isArray(agendaData?.agendamentos) ? agendaData.agendamentos : [])
-      setProfissionais(Array.isArray(profData?.profissionais) ? profData.profissionais : [])
-      setServicos(Array.isArray(servData?.servicos) ? servData.servicos : [])
-      setClientes(Array.isArray(cliData?.clientes) ? cliData.clientes : [])
-      setConfiguracao(configData?.configuracao || null)
-      setFormConfig(configData?.configuracao || {})
-      setFila(Array.isArray(filaData?.fila) ? filaData.fila : [])
-      setBloqueios(Array.isArray(bloqueiosData?.bloqueios) ? bloqueiosData.bloqueios : [])
-      setPlanos(Array.isArray(planosData?.planos) ? planosData.planos : [])
-      setAssinaturas(Array.isArray(assinaturasData?.assinaturas) ? assinaturasData.assinaturas : [])
-      setFidelidade(fidelidadeData?.fidelidade || { regra: {}, membros: [] })
-      setFormFidelidade(fidelidadeData?.fidelidade?.regra || { pontosPorReal: 1, valorPonto: 0.01, ativa: true })
-      setConfiguracaoUnidade(configUnidadeData || null)
-      setRelatorio(relatorioData || null)
-      setComissoes(comissoesData?.comissoes || null)
-      setProdutosRevenda(Array.isArray(produtosData?.produtos) ? produtosData.produtos : [])
-      setVendasRevenda(Array.isArray(vendasData?.vendas) ? vendasData.vendas : [])
-      setIntegracoes(integracoesData || null)
+      const payload = await api.get(`/api/admin/barbearia/overview?${query.toString()}`)
+      setDashboard(payload?.dashboard || {})
+      setAgendamentos(Array.isArray(payload?.agendamentos) ? payload.agendamentos : [])
+      setProfissionais(Array.isArray(payload?.profissionais) ? payload.profissionais : [])
+      setServicos(Array.isArray(payload?.servicos) ? payload.servicos : [])
+      setClientes(Array.isArray(payload?.clientes) ? payload.clientes : [])
+      setConfiguracao(payload?.configuracao || null)
+      setFormConfig(payload?.configuracao || {})
+      setFila(Array.isArray(payload?.fila) ? payload.fila : [])
+      setBloqueios(Array.isArray(payload?.bloqueios) ? payload.bloqueios : [])
+      setPlanos(Array.isArray(payload?.planos) ? payload.planos : [])
+      setAssinaturas(Array.isArray(payload?.assinaturas) ? payload.assinaturas : [])
+      setFidelidade(payload?.fidelidade || { regra: {}, membros: [] })
+      setFormFidelidade(payload?.fidelidade?.regra || { pontosPorReal: 1, valorPonto: 0.01, ativa: true })
+      setConfiguracaoUnidade(payload?.configuracaoUnidade || null)
+      setRelatorio(payload?.relatorio || null)
+      setComissoes(payload?.comissoes || null)
+      setProdutosRevenda(Array.isArray(payload?.produtos) ? payload.produtos : [])
+      setVendasRevenda(Array.isArray(payload?.vendas) ? payload.vendas : [])
+      setIntegracoes(payload?.integracoes || null)
     } catch (error) {
+      setDashboard(null)
       setErro(error.message || 'Não foi possível carregar o módulo de Barbearia.')
     } finally {
       setLoading(false)

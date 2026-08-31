@@ -139,6 +139,20 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     assert.equal(dashboard.response.status, 200);
     assert.equal(dashboard.body.indicadores.agendamentosHoje, 1);
     assert.equal(dashboard.body.indicadores.vendasRevendaHoje, 0);
+
+    const overview = await request(base, '/api/admin/barbearia/overview?data=2030-06-10', { headers });
+    assert.equal(overview.response.status, 200);
+    assert.equal(overview.body.dashboard.indicadores.agendamentosHoje, 1);
+    assert.equal(overview.body.agendamentos.length, 1);
+    assert.equal(overview.body.agendamentos[0].servicoNome, 'Corte runtime');
+    assert.equal(overview.body.profissionais.length, 1);
+    assert.equal(overview.body.servicos.length, 1);
+    assert.equal(overview.body.clientes.length, 0);
+    assert.equal(overview.body.fidelidade.membros.length, 0);
+    assert.equal(overview.body.produtos.length, 1);
+    assert.equal(overview.body.vendas.length, 1);
+    assert.equal(overview.body.comissoes.porProfissional.length, 1);
+    assert.equal(overview.body.integracoes.whatsapp.envioManualDisponivel, false);
   } finally {
     processo.kill('SIGTERM');
     await Promise.race([once(processo, 'exit'), new Promise((resolve) => setTimeout(resolve, 3000))]);

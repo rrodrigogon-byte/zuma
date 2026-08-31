@@ -1819,6 +1819,19 @@ function listarAgendamentosBarbearia(empresaId, filtros = {}) {
   return barbeariaErpKytto.listarAgendamentos(empresaId, filtros).map(item => enriquecerAgendamentoBarbearia(empresaId, item));
 }
 
+function relatorioOperacionalBarbearia(empresaId, { data, lojaId } = {}) {
+  const agenda = listarAgendamentosBarbearia(empresaId, { data, lojaId });
+  const profissionais = barbeariaErpKytto.listarProfissionais(empresaId, { incluirInativos: true });
+  const porStatus = Object.fromEntries([...new Set(agenda.map(item => item.status))].map(status => [status, agenda.filter(item => item.status === status).length]));
+  const porProfissional = profissionais.map(profissional => {
+    const itens = agenda.filter(item => item.profissionalId === profissional.id);
+    return { profissionalId: profissional.id, profissionalNome: profissional.nome, atendimentos: itens.length,
+      concluidos: itens.filter(item => item.status === 'concluido').length,
+      faturamento: Number(itens.filter(item => item.status === 'concluido').reduce((soma, item) => soma + Number(item.valorRecebido || item.valor || 0), 0).toFixed(2)) };
+  });
+  return { data, totalAgendamentos: agenda.length, porStatus, porProfissional };
+}
+
 app.get('/api/admin/barbearia/dashboard', (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
@@ -1832,6 +1845,47 @@ app.get('/api/admin/barbearia/dashboard', (req, res) => {
     });
     dashboard.proximosAgendamentos = dashboard.proximosAgendamentos.map(item => enriquecerAgendamentoBarbearia(empresaId, item));
     res.json({ ok: true, ...dashboard });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.get('/api/admin/barbearia/overview', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const data = String(req.query?.data || new Date().toISOString().slice(0, 10)).slice(0, 10);
+    const lojaId = legacyLojaId(req);
+    const clientes = clientesBarbeariaSomenteLeitura(empresaId);
+    const caixas = caixaKytto.listarCaixas(empresaId, { data });
+    const dashboard = barbeariaErpKytto.obterDashboard(empresaId, {
+      data, lojaId, clientesAtivos: clientes.length,
+      financeiro: financeiroKytto.resumoFinanceiro(empresaId, { hoje: data }),
+      caixa: { data, caixas, aberto: caixas.find(item => item.status === 'aberto') || null },
+    });
+    dashboard.proximosAgendamentos = dashboard.proximosAgendamentos.map(item => enriquecerAgendamentoBarbearia(empresaId, item));
+    let configuracaoUnidade = null;
+    try { configuracaoUnidade = barbeariaErpKytto.obterConfiguracaoLoja(empresaId, lojaId); } catch (_) { configuracaoUnidade = null; }
+    const canais = canaisFidelidadeKytto.obterCanais(empresaId);
+    const whatsapp = canais.find((canal) => canal.id === 'whatsapp') || { id: 'whatsapp', nome: 'WhatsApp', ativo: false, tipo: 'mensageria', credencialConfigurada: false };
+    const aiConfigured = Boolean(process.env.AI_API_KEY || process.env.OPENAI_API_KEY);
+    res.json({
+      ok: true,
+      dashboard,
+      agendamentos: listarAgendamentosBarbearia(empresaId, { data, status: req.query?.status, profissionalId: req.query?.profissionalId, lojaId }),
+      profissionais: barbeariaErpKytto.listarProfissionais(empresaId, { incluirInativos: true }),
+      servicos: barbeariaErpKytto.listarServicos(empresaId, { incluirInativos: true }),
+      clientes,
+      configuracao: barbeariaErpKytto.obterConfiguracao(empresaId),
+      configuracaoUnidade,
+      fila: barbeariaErpKytto.listarFilaEspera(empresaId, { data, lojaId }),
+      bloqueios: barbeariaErpKytto.listarBloqueios(empresaId, { data, lojaId }),
+      planos: barbeariaErpKytto.listarPlanos(empresaId, { incluirInativos: true }),
+      assinaturas: barbeariaErpKytto.listarAssinaturas(empresaId, {}),
+      fidelidade: canaisFidelidadeKytto.obterFidelidade(empresaId),
+      relatorio: relatorioOperacionalBarbearia(empresaId, { data, lojaId }),
+      comissoes: barbeariaErpKytto.obterComissoes(empresaId, { data, lojaId }),
+      produtos: barbeariaErpKytto.listarProdutosRevenda(empresaId, { incluirInativos: false }),
+      vendas: barbeariaErpKytto.listarVendasRevenda(empresaId, { lojaId }),
+      integracoes: { whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: wpp.ativo() }, ia: { configurada: aiConfigured, modelo: process.env.AI_MODEL || process.env.OPENAI_MODEL || '', analiseOperacionalDisponivel: aiConfigured } },
+    });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
@@ -2123,16 +2177,8 @@ app.post('/api/admin/barbearia/fidelidade/creditar', (req, res) => {
 app.get('/api/admin/barbearia/relatorios/operacional', (req, res) => {
   const empresaId = legacyEmpresaId(req);
   const data = String(req.query?.data || new Date().toISOString().slice(0, 10)).slice(0, 10);
-  const agenda = listarAgendamentosBarbearia(empresaId, { data, lojaId: legacyLojaId(req) });
-  const profissionais = barbeariaErpKytto.listarProfissionais(empresaId, { incluirInativos: true });
-  const porStatus = Object.fromEntries([...new Set(agenda.map(item => item.status))].map(status => [status, agenda.filter(item => item.status === status).length]));
-  const porProfissional = profissionais.map(profissional => {
-    const itens = agenda.filter(item => item.profissionalId === profissional.id);
-    return { profissionalId: profissional.id, profissionalNome: profissional.nome, atendimentos: itens.length,
-      concluidos: itens.filter(item => item.status === 'concluido').length,
-      faturamento: Number(itens.filter(item => item.status === 'concluido').reduce((soma, item) => soma + Number(item.valorRecebido || item.valor || 0), 0).toFixed(2)) };
-  });
-  res.json({ ok: true, data, totalAgendamentos: agenda.length, porStatus, porProfissional });
+  const relatorio = relatorioOperacionalBarbearia(empresaId, { data, lojaId: legacyLojaId(req) });
+  res.json({ ok: true, ...relatorio });
 });
 
 app.get('/api/combos', auth, requireStaff, (req,res)=>{
