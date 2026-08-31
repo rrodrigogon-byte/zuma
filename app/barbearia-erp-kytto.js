@@ -157,6 +157,7 @@ function servicoNormalizado(dados = {}, anterior = {}) {
     preco,
     ativo: dados.ativo ?? anterior.ativo ?? true,
     permiteAgendamentoOnline: dados.permiteAgendamentoOnline ?? dados.permite_agendamento_online ?? anterior.permiteAgendamentoOnline ?? true,
+    consumoInterno: (Array.isArray(dados.consumoInterno ?? dados.consumo_interno) ? (dados.consumoInterno ?? dados.consumo_interno) : (anterior.consumoInterno || [])).map((item) => ({ produtoId: texto(item?.produtoId ?? item?.produto_id, 120), quantidade: Math.max(1, Math.round(numero(item?.quantidade ?? item?.qtd, 1))) })).filter((item) => item.produtoId),
   };
 }
 
@@ -831,17 +832,70 @@ function itemComandaBarbeariaNormalizado(estado, comanda, dados = {}) {
   };
 }
 
-function validarEstoqueComandaBarbearia(estado, comanda) {
+function planejarConsumoInternoComanda(estado, comanda) {
+  const porProduto = new Map();
+  for (const item of comanda.itens || []) {
+    if (item.tipo !== 'servico' || !item.servicoId) continue;
+    const servico = estado.servicos[item.servicoId];
+    for (const insumo of servico?.consumoInterno || []) {
+      const produtoId = String(insumo.produtoId || '');
+      const quantidade = Math.max(1, Math.round(numero(insumo.quantidade, 1))) * Math.max(1, Math.round(numero(item.quantidade, 1)));
+      if (!produtoId || quantidade <= 0) continue;
+      const atual = porProduto.get(produtoId) || { produtoId, quantidade: 0, servicoIds: [] };
+      atual.quantidade += quantidade;
+      if (!atual.servicoIds.includes(item.servicoId)) atual.servicoIds.push(item.servicoId);
+      porProduto.set(produtoId, atual);
+    }
+  }
+  return [...porProduto.values()];
+}
+
+function validarEstoqueComandaBarbearia(estado, comanda, consumoPlanejado = planejarConsumoInternoComanda(estado, comanda)) {
   const quantidades = new Map();
   for (const item of comanda.itens || []) {
     if (item.tipo !== 'produto' || !item.produtoId) continue;
     quantidades.set(item.produtoId, (quantidades.get(item.produtoId) || 0) + Number(item.quantidade || 0));
   }
+  for (const consumo of consumoPlanejado) quantidades.set(consumo.produtoId, (quantidades.get(consumo.produtoId) || 0) + consumo.quantidade);
   for (const [produtoId, quantidade] of quantidades) {
     const produto = estado.produtosRevenda[produtoId];
-    if (!produto || produto.ativo === false) throw new Error('Existe produto de revenda inativo na comanda.');
-    if (Number(produto.estoqueAtual || 0) < quantidade) throw new Error(`Estoque insuficiente para ${produto.nome} (disponível: ${produto.estoqueAtual || 0}).`);
+    if (!produto || produto.ativo === false) throw new Error('Existe produto de revenda inativo na comanda ou na ficha técnica.');
+    if (Number(produto.estoqueAtual || 0) < quantidade) throw new Error(`Estoque insuficiente para ${produto.nome} (disponível: ${produto.estoqueAtual || 0}, necessário: ${quantidade}).`);
   }
+}
+
+function aplicarConsumoInternoComanda(estado, comanda, consumoPlanejado = planejarConsumoInternoComanda(estado, comanda)) {
+  if (comanda.consumoInternoBaixado) return [];
+  const movimentos = [];
+  const agora = dataAtual();
+  for (const consumo of consumoPlanejado) {
+    const produto = estado.produtosRevenda[consumo.produtoId];
+    const anterior = Number(produto.estoqueAtual || 0);
+    produto.estoqueAtual = anterior - consumo.quantidade;
+    produto.atualizadoEm = agora;
+    produto.ultimoMovimentoEm = agora;
+    const movimentoId = novoId('mov', estado.movimentosEstoque);
+    const movimento = { id: movimentoId, empresaId: String(comanda.empresaId), lojaId: comanda.lojaId || null, produtoId: produto.id, tipo: 'consumo_servico', quantidade: consumo.quantidade, estoqueAnterior: anterior, estoquePosterior: produto.estoqueAtual, comandaId: comanda.id, servicoIds: consumo.servicoIds, observacao: `Consumo interno da comanda ${comanda.id}`, criadoEm: agora };
+    estado.movimentosEstoque[movimentoId] = movimento;
+    movimentos.push(movimento);
+  }
+  comanda.consumoInternoBaixado = true;
+  comanda.consumoInternoMovimentoIds = movimentos.map((item) => item.id);
+  return movimentos;
+}
+
+export function registrarConsumoInternoComandaBarbearia(empresaId, comandaId, dados = {}) {
+  const estado = estadoEmpresa(empresaId);
+  const comanda = estado.comandas[String(comandaId)];
+  if (!comanda || comanda.empresaId !== String(empresaId)) return null;
+  if (dados.confirmado !== true) throw new Error('A confirmação explícita do consumo interno é obrigatória.');
+  if (!['paga', 'em_conta'].includes(comanda.status)) throw new Error('O consumo interno só pode ocorrer após faturamento integral da comanda.');
+  if (comanda.consumoInternoBaixado) return { comanda: copiarComandaBarbearia(comanda), movimentos: [] };
+  const consumoPlanejado = planejarConsumoInternoComanda(estado, comanda);
+  validarEstoqueComandaBarbearia(estado, { ...comanda, itens: [] }, consumoPlanejado);
+  const movimentos = aplicarConsumoInternoComanda(estado, comanda, consumoPlanejado);
+  save();
+  return { comanda: copiarComandaBarbearia(comanda), movimentos };
 }
 
 export function listarComandasBarbearia(empresaId, filtros = {}) {
@@ -1021,7 +1075,9 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
   });
   const valorNovo = Number(pagamentos.reduce((soma, item) => soma + item.valor, 0).toFixed(2));
   if (valorNovo - saldoAnterior > 0.02) throw new Error(`O pagamento excede o saldo pendente de ${saldoAnterior.toFixed(2)}.`);
-  validarEstoqueComandaBarbearia(estado, comanda);
+  const faturamentoCompleto = saldoAnterior - valorNovo <= 0.02;
+  const consumoPlanejado = faturamentoCompleto ? planejarConsumoInternoComanda(estado, comanda) : [];
+  validarEstoqueComandaBarbearia(estado, comanda, consumoPlanejado);
   const clienteId = texto(dados.clienteId ?? dados.cliente_id ?? comanda.clienteId, 120) || null;
   const lancamentosFinanceiros = [];
   const contasReceber = [];
@@ -1085,6 +1141,7 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
     }
     comanda.estoqueBaixadoAntes = true;
   }
+  if (faturada) aplicarConsumoInternoComanda(estado, comanda, consumoPlanejado);
   comanda.atualizadoEm = dataAtual();
   if (faturada) comanda.fechadaEm = comanda.atualizadoEm;
   if (faturada && !possuiConta && clienteId && comanda.totalPago > Number(comanda.fidelidadeValorPontuado || 0)) {

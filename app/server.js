@@ -1947,7 +1947,8 @@ app.get('/api/admin/barbearia/overview', (req, res) => {
        relacionamento: resumoRelacionamentoBarbearia(req),
        operacao: resumoOperacaoBarbearia(req),
 
-      integracoes: { whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: wpp.ativo() }, ia: { configurada: aiConfigured, modelo: process.env.AI_MODEL || process.env.OPENAI_MODEL || '', analiseOperacionalDisponivel: aiConfigured } },
+             integracoes: { whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: wpp.ativo() }, ia: { configurada: aiConfigured, modelo: process.env.AI_MODEL || process.env.OPENAI_MODEL || '', analiseOperacionalDisponivel: aiConfigured }, commerce: { contrato: 'catalogo-vitrine-pedido-fulfillment', separado: true, estoqueCompartilhado: false, sincronizacaoAutomatica: false, status: 'aguardando_contrato_aprovado' } },
+
     });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
@@ -2134,6 +2135,13 @@ app.post('/api/admin/barbearia/comandas/:id/pagamentos', (req, res) => {
     const pagamentosEntrada = Array.isArray(body.pagamentos) && body.pagamentos.length ? body.pagamentos : [body];
     const possuiDinheiroSemCaixa = pagamentosEntrada.some((item) => String(item?.meio ?? item?.meioPagamento ?? body.meioPagamento ?? '').toLowerCase() === 'dinheiro' && !(item?.caixaId || item?.caixa_id || body.caixaId || body.caixa_id));
     res.json({ ok: true, comanda, aviso: possuiDinheiroSemCaixa ? 'Recebimento em dinheiro confirmado sem vínculo a um caixa aberto.' : null });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.post('/api/admin/barbearia/comandas/:id/consumo-interno', (req, res) => {
+  try {
+    if (!comandaBarbeariaDaSessao(req, req.params.id)) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    const resultado = barbeariaErpKytto.registrarConsumoInternoComandaBarbearia(legacyEmpresaId(req), req.params.id, { ...(req.body || {}), lojaId: legacyLojaId(req), usuario: req.user?.email || req.user?.nome || '' });
+    res.json({ ok: true, ...resultado });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.post('/api/admin/barbearia/comandas/:id/cancelar', (req, res) => {
@@ -2342,7 +2350,7 @@ app.get('/api/admin/barbearia/integracoes', (req, res) => {
   const canais = canaisFidelidadeKytto.obterCanais(legacyEmpresaId(req));
   const whatsapp = canais.find((canal) => canal.id === 'whatsapp') || { id: 'whatsapp', nome: 'WhatsApp', ativo: false, tipo: 'mensageria', credencialConfigurada: false };
   const aiConfigured = Boolean(process.env.AI_API_KEY || process.env.OPENAI_API_KEY);
-  res.json({ ok: true, whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: wpp.ativo() }, ia: { configurada: aiConfigured, modelo: process.env.AI_MODEL || process.env.OPENAI_MODEL || '', analiseOperacionalDisponivel: aiConfigured } });
+  res.json({ ok: true, whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: wpp.ativo() }, ia: { configurada: aiConfigured, modelo: process.env.AI_MODEL || process.env.OPENAI_MODEL || '', analiseOperacionalDisponivel: aiConfigured }, commerce: { contrato: 'catalogo-vitrine-pedido-fulfillment', separado: true, estoqueCompartilhado: false, sincronizacaoAutomatica: false, status: 'aguardando_contrato_aprovado' } });
 });
 
 app.post('/api/admin/barbearia/whatsapp/enviar', requireRole('admin', 'organizador'), async (req, res) => {

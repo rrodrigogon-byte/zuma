@@ -7,6 +7,9 @@ const EMPRESA_PADRAO_ID = 'emp-kytto-001';
 const agora = () => new Date().toISOString();
 const texto = (valor, limite = 160) => String(valor ?? '').trim().slice(0, limite);
 const numero = (valor) => Number(valor ?? 0) || 0;
+function hashEmpresa(empresaId) {
+  return Array.from(String(empresaId || '')).reduce((hash, caractere) => (hash * 31 + caractere.charCodeAt(0)) % 1000000007, 7).toString(36);
+}
 const CANAIS_CONSENTIMENTO = Object.freeze(['whatsapp', 'email']);
 const FINALIDADES_CONSENTIMENTO = Object.freeze(['atendimento', 'marketing']);
 
@@ -142,7 +145,7 @@ export function garantirClientePadrao(empresaId = EMPRESA_PADRAO_ID) {
 
 export function criarCliente(empresaId, dados) {
   const store = clientesPersistidos(empresaId);
-  const cliente = clientePadrao(empresaId, `cli-${Date.now().toString(36)}-${String(Object.keys(store.clientes).length + 1).padStart(3, '0')}`, dados);
+  const cliente = clientePadrao(empresaId, `cli-${hashEmpresa(empresaId)}-${Date.now().toString(36)}-${String(Object.keys(store.clientes).length + 1).padStart(3, '0')}`, dados);
   if (!cliente.nome) throw new Error('Nome do cliente é obrigatório.');
   if (cliente.cpfCnpj && Object.values(store.clientes).some((item) => item.cpfCnpj === cliente.cpfCnpj && item.status !== 'deletado')) {
     throw new Error('Já existe cliente ativo com este CPF/CNPJ nesta empresa.');

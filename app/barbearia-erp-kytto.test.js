@@ -44,6 +44,7 @@ import {
   atualizarComandaBarbearia,
   alterarStatusComandaBarbearia,
   registrarPagamentoComandaBarbearia,
+  registrarConsumoInternoComandaBarbearia,
 } from './barbearia-erp-kytto.js';
 
 const EMPRESA_A = 'empresa-teste-a';
@@ -348,6 +349,21 @@ test('pontua comanda paga uma única vez quando cliente aderiu à fidelidade', (
   assert.equal(obterFidelidade(EMPRESA_A).movimentos.length, 1);
   const chaveCredito = obterFidelidade(EMPRESA_A).movimentos[0].chaveIdempotencia;
   assert.equal(creditarFidelidade(EMPRESA_A, cliente.id, 50, 'teste', { chaveIdempotencia: chaveCredito }).repetido, true);
+});
+
+test('baixa insumos da ficha técnica apenas após faturamento integral e de forma idempotente', () => {
+  const insumo = criarProdutoRevenda(EMPRESA_A, { nome: 'Shampoo consumo', precoVenda: 20, estoqueAtual: 5 });
+  const servico = criarServico(EMPRESA_A, { nome: 'Lavagem com insumo', preco: 45, consumoInterno: [{ produtoId: insumo.id, quantidade: 2 }] });
+  const comanda = criarComandaBarbearia(EMPRESA_A, { lojaId: 'loja-a', clienteNome: 'Cliente consumo', itens: [{ tipo: 'servico', servicoId: servico.id, quantidade: 2 }] });
+  assert.throws(() => registrarConsumoInternoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true }), /faturamento integral/);
+  const paga = registrarPagamentoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true, meioPagamento: 'pix', valor: 90 });
+  assert.equal(paga.status, 'paga');
+  assert.equal(listarProdutosRevenda(EMPRESA_A).find((item) => item.id === insumo.id).estoqueAtual, 1);
+  assert.equal(listarMovimentosEstoque(EMPRESA_A, { produtoId: insumo.id }).filter((item) => item.tipo === 'consumo_servico').length, 1);
+  const repetido = registrarConsumoInternoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true });
+  assert.equal(repetido.movimentos.length, 0);
+  assert.equal(listarProdutosRevenda(EMPRESA_A).find((item) => item.id === insumo.id).estoqueAtual, 1);
+  assert.equal(registrarConsumoInternoComandaBarbearia(EMPRESA_B, comanda.id, { confirmado: true }), null);
 });
 
 test('valida e persiste configurações de funcionamento', () => {
