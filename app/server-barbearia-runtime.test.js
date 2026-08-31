@@ -61,6 +61,11 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     assert.equal(integracoes.response.status, 200);
     assert.equal(integracoes.body.whatsapp.envioManualDisponivel, false);
     assert.equal(integracoes.body.ia.configurada, false);
+    assert.equal(integracoes.body.commerce.estoqueCompartilhado, false);
+    const clienteSemConsentimento = await request(base, '/api/admin/barbearia/clientes', { method: 'POST', headers, body: JSON.stringify({ nome: 'Cliente consentimento runtime', telefone: '65999999999' }) });
+    assert.equal(clienteSemConsentimento.response.status, 201);
+    const whatsappSemConsentimento = await request(base, '/api/admin/barbearia/whatsapp/enviar', { method: 'POST', headers, body: JSON.stringify({ confirmado: true, clienteId: clienteSemConsentimento.body.cliente.id, finalidade: 'atendimento', mensagem: 'teste' }) });
+    assert.equal(whatsappSemConsentimento.response.status, 409);
     const whatsappSemConfirmacao = await request(base, '/api/admin/barbearia/whatsapp/enviar', { method: 'POST', headers, body: JSON.stringify({ telefone: '65999999999', mensagem: 'teste' }) });
     assert.equal(whatsappSemConfirmacao.response.status, 400);
     const assistenteSemConfig = await request(base, '/api/admin/barbearia/ia/assistente', { method: 'POST', headers, body: JSON.stringify({ pergunta: 'Quais são os horários livres?' }) });
@@ -174,6 +179,7 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     assert.equal(overview.body.resumoComandas.pagas, 1);
     assert.equal(overview.body.comissoes.porProfissional.length, 1);
     assert.equal(overview.body.integracoes.whatsapp.envioManualDisponivel, false);
+    assert.equal(overview.body.integracoes.commerce.sincronizacaoAutomatica, false);
   } finally {
     processo.kill('SIGTERM');
     await Promise.race([once(processo, 'exit'), new Promise((resolve) => setTimeout(resolve, 3000))]);

@@ -178,7 +178,7 @@ export default function BarbeariaERP() {
   const [formAssinatura, setFormAssinatura] = useState({ clienteId: '', clienteNome: '', planoId: '', observacoes: '' })
   const [formProdutoRevenda, setFormProdutoRevenda] = useState({ nome: '', sku: '', categoria: 'Revenda', unidade: 'un', precoVenda: '', custoUnitario: '', estoqueAtual: 0, estoqueMinimo: 0 })
   const [formVendaRevenda, setFormVendaRevenda] = useState({ clienteId: '', clienteNome: '', profissionalId: '', observacao: '', produtoId: '', quantidade: 1 })
-  const [formWhatsApp, setFormWhatsApp] = useState({ telefone: '', mensagem: '' })
+  const [formWhatsApp, setFormWhatsApp] = useState({ clienteId: '', finalidade: 'atendimento', telefone: '', mensagem: '', consentimentoConfirmado: false })
   const [itensVendaRevenda, setItensVendaRevenda] = useState([])
 
   const carregar = useCallback(async () => {
@@ -593,10 +593,21 @@ export default function BarbeariaERP() {
 
   async function enviarWhatsApp(event) {
     event.preventDefault()
-    if (!formWhatsApp.telefone.trim() || !formWhatsApp.mensagem.trim()) return
-    if (!window.confirm('Confirmar o envio desta mensagem pelo WhatsApp? O envio será feito agora para o telefone informado.')) return
-    await executar(() => api.post('/api/admin/barbearia/whatsapp/enviar', { ...formWhatsApp, confirmado: true }), 'Mensagem enviada pelo WhatsApp.')
-    setFormWhatsApp({ telefone: '', mensagem: '' })
+    const cliente = clientes.find((item) => item.id === formWhatsApp.clienteId)
+    const telefone = formWhatsApp.telefone.trim() || cliente?.telefone || ''
+    const consentiu = cliente?.consentimentos?.whatsapp?.[formWhatsApp.finalidade]?.concedido === true
+    if (!telefone || !formWhatsApp.mensagem.trim()) return
+    if (cliente && !consentiu) {
+      toast('O cliente ainda não possui consentimento para esta finalidade.', 'error')
+      return
+    }
+    if (!cliente && !formWhatsApp.consentimentoConfirmado) {
+      toast('Confirme a autorização do destinatário antes de enviar.', 'error')
+      return
+    }
+    if (!window.confirm('Confirmar o envio desta mensagem pelo WhatsApp? O envio será feito agora para o destinatário autorizado.')) return
+    await executar(() => api.post('/api/admin/barbearia/whatsapp/enviar', { ...formWhatsApp, telefone, confirmado: true }), 'Mensagem enviada pelo WhatsApp.')
+    setFormWhatsApp({ clienteId: '', finalidade: 'atendimento', telefone: '', mensagem: '', consentimentoConfirmado: false })
   }
 
   async function consultarAssistente(event) {
@@ -929,8 +940,11 @@ export default function BarbeariaERP() {
             <div style={styles.metricLine}><span>Disparo automático</span><strong>Desativado</strong></div>
             <p style={styles.sub}>O envio manual exige telefone, mensagem e confirmação adicional do operador. A credencial nunca é exibida na tela.</p>
             <form onSubmit={enviarWhatsApp} style={{ display: 'grid', gap: 10, marginTop: 14 }}>
-              <Field label="Telefone"><input value={formWhatsApp.telefone} onChange={(event) => setFormWhatsApp((atual) => ({ ...atual, telefone: event.target.value }))} placeholder="DDD + número" style={inputStyle} disabled={!whatsapp?.envioManualDisponivel} /></Field>
+              <Field label="Cliente com consentimento"><select value={formWhatsApp.clienteId} onChange={(event) => { const cliente = clientes.find((item) => item.id === event.target.value); setFormWhatsApp((atual) => ({ ...atual, clienteId: event.target.value, telefone: cliente?.telefone || atual.telefone, consentimentoConfirmado: false })) }} style={inputStyle} disabled={!whatsapp?.envioManualDisponivel}><option value="">Contato avulso (exige autorização abaixo)</option>{clientes.filter((cliente) => cliente.padrao !== true).map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}{cliente.telefone ? ` · ${cliente.telefone}` : ''}</option>)}</select></Field>
+              <Field label="Finalidade"><select value={formWhatsApp.finalidade} onChange={(event) => setFormWhatsApp((atual) => ({ ...atual, finalidade: event.target.value }))} style={inputStyle} disabled={!whatsapp?.envioManualDisponivel}><option value="atendimento">Atendimento</option><option value="marketing">Marketing</option></select></Field>
+              <Field label="Telefone"><input value={formWhatsApp.telefone} onChange={(event) => setFormWhatsApp((atual) => ({ ...atual, telefone: event.target.value }))} placeholder="DDD + número" style={inputStyle} disabled={!whatsapp?.envioManualDisponivel || Boolean(formWhatsApp.clienteId)} /></Field>
               <Field label="Mensagem"><textarea rows={4} value={formWhatsApp.mensagem} onChange={(event) => setFormWhatsApp((atual) => ({ ...atual, mensagem: event.target.value }))} placeholder="Escreva uma mensagem operacional…" style={{ ...inputStyle, resize: 'vertical' }} disabled={!whatsapp?.envioManualDisponivel} /></Field>
+              {!formWhatsApp.clienteId && <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: 'var(--muted)', fontSize: 13 }}><input type="checkbox" checked={formWhatsApp.consentimentoConfirmado} onChange={(event) => setFormWhatsApp((atual) => ({ ...atual, consentimentoConfirmado: event.target.checked }))} disabled={!whatsapp?.envioManualDisponivel} /> Confirmo que o destinatário autorizou este contato.</label>}
               <button type="submit" style={{ ...styles.primary, background: '#25d366' }} disabled={!whatsapp?.envioManualDisponivel || salvando}>{whatsapp?.envioManualDisponivel ? 'Enviar manualmente' : 'Configurar provedor para enviar'}</button>
             </form>
           </div>

@@ -2355,7 +2355,15 @@ app.get('/api/admin/barbearia/integracoes', (req, res) => {
 
 app.post('/api/admin/barbearia/whatsapp/enviar', requireRole('admin', 'organizador'), async (req, res) => {
   if (req.body?.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita do envio de WhatsApp é obrigatória.' });
-  const telefone = String(req.body?.telefone || '').trim();
+  const empresaId = legacyEmpresaId(req);
+  const finalidade = String(req.body?.finalidade || 'atendimento').trim().toLowerCase();
+  if (!['atendimento', 'marketing'].includes(finalidade)) return res.status(400).json({ error: 'Finalidade de WhatsApp inválida.' });
+  const clienteId = String(req.body?.clienteId || '').trim();
+  const cliente = clienteId ? clientesKytto.obterCliente(empresaId, clienteId) : null;
+  if (clienteId && !cliente) return res.status(404).json({ error: 'Cliente não encontrado na empresa ativa.' });
+  if (clienteId && cliente?.consentimentos?.whatsapp?.[finalidade]?.concedido !== true) return res.status(409).json({ error: `O cliente não possui consentimento de WhatsApp para ${finalidade}.`, code: 'WHATSAPP_CONSENT_REQUIRED' });
+  if (!clienteId && req.body?.consentimentoConfirmado !== true) return res.status(400).json({ error: 'Confirme que o destinatário autorizou o contato ou selecione um cliente com consentimento registrado.' });
+  const telefone = String(req.body?.telefone || cliente?.telefone || '').trim();
   const mensagem = String(req.body?.mensagem || '').trim();
   if (!telefone || !mensagem) return res.status(400).json({ error: 'Telefone e mensagem são obrigatórios.' });
   if (!wpp.ativo()) return res.status(503).json({ ok: false, error: 'WhatsApp não configurado no servidor.', code: 'WHATSAPP_NOT_CONFIGURED' });
