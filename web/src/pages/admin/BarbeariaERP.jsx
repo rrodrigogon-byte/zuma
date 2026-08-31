@@ -104,10 +104,10 @@ function Kpi({ label, value, note, color = 'var(--accent)' }) {
 }
 
 function Modal({ title, children, onClose, wide = false }) {
-  return <div role="dialog" aria-modal="true" style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+  return <div role="dialog" aria-modal="true" aria-labelledby="barbearia-modal-title" onKeyDown={(event) => { if (event.key === 'Escape') onClose() }} tabIndex={-1} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
     <div style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 16, padding: 24, width: '100%', maxWidth: wide ? 760 : 560, maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 22px 80px rgba(0,0,0,.35)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 22 }}>
-        <h2 style={{ margin: 0, fontSize: 20 }}>{title}</h2>
+        <h2 id="barbearia-modal-title" style={{ margin: 0, fontSize: 20 }}>{title}</h2>
         <button type="button" onClick={onClose} aria-label="Fechar" style={styles.iconButton}>×</button>
       </div>
       {children}
@@ -1043,15 +1043,15 @@ const styles = {
   teamSummary: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 1, padding: 1, background: 'var(--line)', overflow: 'hidden' },
   teamSummaryItem: { display: 'grid', gap: 3, padding: '13px 14px', background: 'var(--card)' },
   kicker: { color: 'var(--accent)', fontSize: 11, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.08em' },
-  integrationGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 },
+  integrationGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 14 },
   serviceSummary: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginTop: 18 },
   serviceSummaryItem: { display: 'grid', gap: 4, padding: 12, background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 10 },
-  serviceGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 },
+  serviceGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 14 },
   serviceCardTop: { display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' },
   serviceCategory: { display: 'inline-flex', padding: '4px 8px', borderRadius: 999, background: 'color-mix(in srgb, #8b5cf6 14%, var(--card))', color: '#8b5cf6', fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.05em' },
   serviceFacts: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', color: 'var(--muted)', fontSize: 12 },
   integrationCard: { display: 'grid', gap: 12, padding: 16, background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 12 },
-  integrationHeading: { display: 'flex', alignItems: 'center', gap: 10 },
+  integrationHeading: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
   integrationIcon: { width: 38, height: 38, borderRadius: 11, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 900, flexShrink: 0 },
   detailHero: { display: 'flex', alignItems: 'center', gap: 12, padding: 14, borderRadius: 12, background: 'var(--card)', flexWrap: 'wrap' },
   detailGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 },
@@ -1080,9 +1080,9 @@ const styles = {
   attendanceCard: { display: 'grid', gap: 4, width: '100%', boxSizing: 'border-box', padding: 12, border: '1px solid var(--line)', borderLeft: '4px solid', borderRadius: 10, background: 'var(--bg)', color: 'var(--fg)', textAlign: 'left', font: 'inherit', cursor: 'pointer', transition: 'transform 160ms ease-out, box-shadow 160ms ease-out' },
   attendanceMeta: { display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', color: 'var(--muted)', fontSize: 11 },
   avatar: { width: 46, height: 46, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 },
-  profileGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 18 },
+  profileGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8, marginTop: 18 },
   formGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14 },
-  modalActions: { display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 },
+  modalActions: { display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4, flexWrap: 'wrap' },
   contextBar: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 1, padding: 1, marginBottom: 12, background: 'var(--line)', borderRadius: 12, overflow: 'hidden' },
   contextBarItem: { display: 'grid', gap: 4, padding: '11px 13px', background: 'var(--card)' },
   areaNav: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8, marginBottom: 10 },
