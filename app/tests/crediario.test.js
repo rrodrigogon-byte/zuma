@@ -22,11 +22,12 @@ function calcularJurosMora(valorOriginal, diasAtraso, taxaDiaria = 0.001, multa 
 }
 
 function gerarDatasVencimento(numParcelas, diaVencimento) {
+  const base = new Date();
   return Array.from({ length: numParcelas }, (_, k) => {
-    const d = new Date();
-    d.setMonth(d.getMonth() + k + 1);
-    d.setDate(diaVencimento);
-    return d.toISOString().split('T')[0];
+    const primeiroDia = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + k + 1, 1));
+    const ultimoDia = new Date(Date.UTC(primeiroDia.getUTCFullYear(), primeiroDia.getUTCMonth() + 1, 0)).getUTCDate();
+    primeiroDia.setUTCDate(Math.min(Number(diaVencimento), ultimoDia));
+    return primeiroDia.toISOString().split('T')[0];
   });
 }
 
@@ -44,7 +45,7 @@ describe('Crediário — Cálculos Financeiros', () => {
 
     it('deve calcular parcela com juros de 1.5% ao mês', () => {
       const parcela = calcularParcelasPrice(5000, 12, 1.5);
-      expect(parcela).toBeCloseTo(477.83, 1);
+      expect(parcela).toBeCloseTo(458.40, 1);
     });
 
     it('deve retornar valor positivo para qualquer entrada válida', () => {

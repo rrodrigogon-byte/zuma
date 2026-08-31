@@ -222,8 +222,8 @@ const linkStyle = {
 }
 const activeStyle = {
   ...linkStyle,
-  background: 'rgba(255,107,44,.12)', color: 'var(--green)',
-  borderLeft: '3px solid var(--green)',
+  background: 'var(--accent-soft)', color: 'var(--accent)',
+  borderLeft: '3px solid var(--accent)',
 }
 
 function NavItem({ to, icon, label, end, onClick, badgeCount }) {
@@ -361,8 +361,8 @@ export default function Sidebar() {
         {/* Logo + close button (mobile) */}
         <div style={{
           padding: '20px 18px 18px',
-          background: 'var(--navy)',
-          borderBottom: '4px solid var(--orange)',
+          background: 'var(--brand-header)',
+          borderBottom: '4px solid var(--brand-header-accent)',
           display: 'flex', alignItems: 'center', gap: 10,
           boxShadow: '0 8px 20px rgba(18,40,63,.14)',
         }}>
@@ -370,11 +370,15 @@ export default function Sidebar() {
             <img
               src="/brand/kytto-negativo.svg"
               alt="Kytto — Sistemas inteligentes para negócios"
-              className="kytto-mark"
+              className="kytto-mark sidebar-brand-kytto"
               style={{ width: 184, height: 52, objectFit: 'contain', objectPosition: 'left center' }}
             />
-            <div style={{
-              marginTop: 8, color: '#FFF4EC', fontFamily: 'var(--font-mono)',
+            <div className="sidebar-brand-dino" aria-label="Dino — gestão para barbearias">
+              <strong>DINO</strong>
+              <span>Barbearia inteligente</span>
+            </div>
+            <div className="sidebar-brand-subtitle" style={{
+              marginTop: 8, color: 'var(--brand-header-text)', fontFamily: 'var(--font-mono)',
               fontSize: 9, fontWeight: 800, letterSpacing: '.16em', textTransform: 'uppercase', opacity: .92,
             }}>
               Plataforma multinegócio
@@ -452,9 +456,9 @@ export default function Sidebar() {
                     fontSize: 12,
                     fontWeight: 700,
                     textDecoration: 'none',
-                    background: isActive ? 'rgba(255,107,44,.22)' : 'rgba(255,107,44,.08)',
-                    color: 'var(--green)',
-                    border: '1px solid rgba(255,107,44,.25)',
+                    background: isActive ? 'var(--accent-soft)' : 'transparent',
+                    color: 'var(--accent)',
+                    border: '1px solid var(--accent)',
                     transition: 'background 0.15s',
                   })}
                   onClick={handleNavClick}

@@ -22,8 +22,8 @@ function TopBar() {
       {/* Atleta: botão painel */}
       {isAtleta && (
         <button onClick={() => navigate('/meu-painel')}
-          style={{ padding: '5px 14px', borderRadius: 8, border: '1px solid rgba(255,107,44,.3)',
-            background: 'rgba(255,107,44,.08)', color: 'var(--green)',
+          style={{ padding: '5px 14px', borderRadius: 8, border: '1px solid var(--accent)',
+            background: 'var(--accent-soft)', color: 'var(--accent)',
             cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
           🏠 Meu Painel
         </button>
@@ -37,7 +37,7 @@ function TopBar() {
         padding: '4px 10px', borderRadius: 8,
         border: '1px solid var(--line)', background: 'var(--card)' }}>
         <div style={{ width: 26, height: 26, borderRadius: '50%',
-          background: 'var(--green)', display: 'flex', alignItems: 'center',
+          background: 'var(--accent)', display: 'flex', alignItems: 'center',
           justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 12 }}>
           {(user.nome || user.user || '?')[0].toUpperCase()}
         </div>
@@ -79,6 +79,8 @@ export default function Layout({ children, noSidebar = false, marketing = false 
         marginLeft: isMobile ? 0 : 256,
         marginTop: hasTopBar && !isMobile ? topBarH : 0,
         flex: 1, minHeight: '100vh',
+        background: 'var(--bg)',
+        color: 'var(--fg)',
       }}>
         {children}
       </main>
