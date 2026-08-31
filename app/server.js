@@ -1837,7 +1837,7 @@ app.get('/api/admin/barbearia/dashboard', (req, res) => {
     const empresaId = legacyEmpresaId(req);
     const data = String(req.query?.data || new Date().toISOString().slice(0, 10)).slice(0, 10);
     const clientes = clientesBarbeariaSomenteLeitura(empresaId);
-    const caixas = caixaKytto.listarCaixas(empresaId, { data });
+    const caixas = caixaKytto.listarCaixas(empresaId, { data, lojaId: legacyLojaId(req) });
     const dashboard = barbeariaErpKytto.obterDashboard(empresaId, {
       data, lojaId: legacyLojaId(req), clientesAtivos: clientes.length,
       financeiro: financeiroKytto.resumoFinanceiro(empresaId, { hoje: data }),
@@ -1854,7 +1854,7 @@ app.get('/api/admin/barbearia/overview', (req, res) => {
     const data = String(req.query?.data || new Date().toISOString().slice(0, 10)).slice(0, 10);
     const lojaId = legacyLojaId(req);
     const clientes = clientesBarbeariaSomenteLeitura(empresaId);
-    const caixas = caixaKytto.listarCaixas(empresaId, { data });
+    const caixas = caixaKytto.listarCaixas(empresaId, { data, lojaId: legacyLojaId(req) });
     const dashboard = barbeariaErpKytto.obterDashboard(empresaId, {
       data, lojaId, clientesAtivos: clientes.length,
       financeiro: financeiroKytto.resumoFinanceiro(empresaId, { hoje: data }),
@@ -1895,6 +1895,7 @@ app.get('/api/admin/barbearia/overview', (req, res) => {
       vendas: barbeariaErpKytto.listarVendasRevenda(empresaId, { lojaId }),
       comandas,
       resumoComandas,
+      operacao: resumoOperacaoBarbearia(req),
       integracoes: { whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: wpp.ativo() }, ia: { configurada: aiConfigured, modelo: process.env.AI_MODEL || process.env.OPENAI_MODEL || '', analiseOperacionalDisponivel: aiConfigured } },
     });
   } catch (error) { res.status(400).json({ error: error.message }); }
@@ -2079,8 +2080,9 @@ app.post('/api/admin/barbearia/comandas/:id/pagamentos', (req, res) => {
     body.chaveIdempotencia = req.get('Idempotency-Key') || body.chaveIdempotencia || body.chave_idempotencia;
     if (body.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita do recebimento é obrigatória.' });
     const comanda = barbeariaErpKytto.registrarPagamentoComandaBarbearia(legacyEmpresaId(req), req.params.id, body);
-    const possuiDinheiro = (comanda.pagamentos || []).some((item) => item.meio === 'dinheiro');
-    res.json({ ok: true, comanda, aviso: possuiDinheiro && !(body.caixaId || body.caixa_id) ? 'Recebimento em dinheiro confirmado sem vínculo a um caixa aberto.' : null });
+    const pagamentosEntrada = Array.isArray(body.pagamentos) && body.pagamentos.length ? body.pagamentos : [body];
+    const possuiDinheiroSemCaixa = pagamentosEntrada.some((item) => String(item?.meio ?? item?.meioPagamento ?? body.meioPagamento ?? '').toLowerCase() === 'dinheiro' && !(item?.caixaId || item?.caixa_id || body.caixaId || body.caixa_id));
+    res.json({ ok: true, comanda, aviso: possuiDinheiroSemCaixa ? 'Recebimento em dinheiro confirmado sem vínculo a um caixa aberto.' : null });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.post('/api/admin/barbearia/comandas/:id/cancelar', (req, res) => {
@@ -2088,6 +2090,87 @@ app.post('/api/admin/barbearia/comandas/:id/cancelar', (req, res) => {
     if (!comandaBarbeariaDaSessao(req, req.params.id)) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
     const comanda = barbeariaErpKytto.cancelarComandaBarbearia(legacyEmpresaId(req), req.params.id, req.body || {});
     res.json({ ok: true, comanda });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+function caixaBarbeariaDaSessao(req, caixaId) {
+  const caixa = caixaKytto.obterCaixa(legacyEmpresaId(req), caixaId);
+  const lojaId = legacyLojaId(req);
+  if (!caixa || (lojaId && caixa.lojaId !== lojaId)) return null;
+  return caixa;
+}
+
+function resumoOperacaoBarbearia(req) {
+  const empresaId = legacyEmpresaId(req);
+  const data = String(req.query?.data || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const lojaId = legacyLojaId(req);
+  const caixas = caixaKytto.listarCaixas(empresaId, { data, lojaId });
+  const caixaAberto = caixas.find((item) => item.status === 'aberto') || null;
+  const movimentos = caixas.flatMap((caixa) => caixaKytto.movimentosDoCaixa(empresaId, caixa.id));
+  const comandas = barbeariaErpKytto.listarComandasBarbearia(empresaId, { data, lojaId });
+  const comandasFaturadas = comandas.filter((item) => item.status !== 'cancelada' && Number(item.totalFaturado ?? item.total ?? 0) > 0);
+  const pagamentos = comandas.filter((item) => item.status !== 'cancelada').flatMap((item) => item.pagamentos || []);
+  const receitaRecebida = pagamentos.filter((item) => item.meio !== 'conta').reduce((soma, item) => soma + Number(item.valor || 0), 0);
+  const faturadoEmConta = pagamentos.filter((item) => item.meio === 'conta').reduce((soma, item) => soma + Number(item.valor || 0), 0);
+  const porMeio = Object.fromEntries([...new Set(pagamentos.map((item) => item.meio).filter(Boolean))].map((meio) => [meio, Number(pagamentos.filter((item) => item.meio === meio).reduce((soma, item) => soma + Number(item.valor || 0), 0).toFixed(2))]));
+  return {
+    data, lojaId: lojaId || null, caixas, caixaAberto,
+    movimentos, comandasAbertas: comandas.filter((item) => ['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(item.status)).length,
+    comandasPagas: comandas.filter((item) => item.status === 'paga').length,
+    emConta: comandas.filter((item) => item.status === 'em_conta').length,
+    faturamentoComandas: Number(comandasFaturadas.reduce((soma, item) => soma + Number(item.totalFaturado ?? item.total ?? 0), 0).toFixed(2)),
+    receitaRecebida: Number(receitaRecebida.toFixed(2)),
+    faturadoEmConta: Number(faturadoEmConta.toFixed(2)),
+    porMeio,
+    recebimentosDinheiro: Number(movimentos.filter((item) => item.tipo === 'recebimento').reduce((soma, item) => soma + Number(item.valor || 0), 0).toFixed(2)),
+    sangrias: Number(movimentos.filter((item) => item.tipo === 'sangria').reduce((soma, item) => soma + Number(item.valor || 0), 0).toFixed(2)),
+    suprimentos: Number(movimentos.filter((item) => item.tipo === 'suprimento').reduce((soma, item) => soma + Number(item.valor || 0), 0).toFixed(2)),
+  };
+}
+
+app.get('/api/admin/barbearia/operacao/resumo', (req, res) => {
+  try { res.json({ ok: true, operacao: resumoOperacaoBarbearia(req) }); }
+  catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.get('/api/admin/barbearia/operacao/caixas', (req, res) => {
+  try { res.json({ ok: true, caixas: caixaKytto.listarCaixas(legacyEmpresaId(req), { data: req.query?.data, status: req.query?.status, lojaId: legacyLojaId(req) }) }); }
+  catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.post('/api/admin/barbearia/operacao/caixas', (req, res) => {
+  try {
+    if (req.body?.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita da abertura do caixa é obrigatória.' });
+    const caixa = caixaKytto.abrirCaixa(legacyEmpresaId(req), { ...(req.body || {}), lojaId: legacyLojaId(req), usuario: req.user?.email || req.user?.nome });
+    res.status(201).json({ ok: true, caixa });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.get('/api/admin/barbearia/operacao/caixas/:id/movimentos', (req, res) => {
+  const caixa = caixaBarbeariaDaSessao(req, req.params.id);
+  if (!caixa) return res.status(404).json({ error: 'Caixa não encontrado na empresa/unidade ativa.' });
+  res.json({ ok: true, caixa, movimentos: caixaKytto.movimentosDoCaixa(legacyEmpresaId(req), caixa.id) });
+});
+app.post('/api/admin/barbearia/operacao/caixas/:id/movimentos', (req, res) => {
+  try {
+    const caixa = caixaBarbeariaDaSessao(req, req.params.id);
+    if (!caixa) return res.status(404).json({ error: 'Caixa não encontrado na empresa/unidade ativa.' });
+    if (req.body?.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita da movimentação é obrigatória.' });
+    const movimento = caixaKytto.registrarMovimento(legacyEmpresaId(req), { ...(req.body || {}), caixaId: caixa.id, lojaId: legacyLojaId(req), usuario: req.user?.email || req.user?.nome, descricao: req.body?.descricao || req.body?.motivo });
+    res.status(201).json({ ok: true, movimento });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.post('/api/admin/barbearia/operacao/caixas/:id/fechamento', (req, res) => {
+  try {
+    const caixa = caixaBarbeariaDaSessao(req, req.params.id);
+    if (!caixa) return res.status(404).json({ error: 'Caixa não encontrado na empresa/unidade ativa.' });
+    if (req.body?.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita do fechamento é obrigatória.' });
+    const fechamento = caixaKytto.fecharCaixa(legacyEmpresaId(req), { ...(req.body || {}), caixaId: caixa.id, lojaId: legacyLojaId(req), usuario: req.user?.email || req.user?.nome });
+    res.json({ ok: true, ...fechamento });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.post('/api/admin/barbearia/operacao/fechar-dia', (req, res) => {
+  try {
+    if (req.body?.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita do fechamento diário é obrigatória.' });
+    const dia = String(req.body?.data || new Date().toISOString().slice(0, 10)).slice(0, 10);
+    res.json({ ok: true, fechamento: financeiroKytto.fecharDia(legacyEmpresaId(req), dia, req.user?.email || req.user?.nome) });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 

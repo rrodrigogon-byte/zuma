@@ -1005,6 +1005,7 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
   const desconto = Number(Math.min(subtotal, Math.max(0, Number(comanda.desconto || 0))).toFixed(2));
   const total = Number(Math.max(0, subtotal - desconto + Math.max(0, Number(comanda.gorjeta || 0))).toFixed(2));
   const pagamentosEntrada = Array.isArray(dados.pagamentos) && dados.pagamentos.length ? dados.pagamentos : [{ meio: dados.meioPagamento ?? dados.meio_pagamento, valor: dados.valor }];
+  const lojaIdOperacao = texto(dados.lojaId ?? comanda.lojaId, 120) || null;
   const saldoAnterior = Number(Math.max(0, total - Number(comanda.totalPago || 0)).toFixed(2));
   const pagamentos = pagamentosEntrada.map((item, indice) => {
     const meio = texto(item?.meio ?? item?.meioPagamento, 40).toLowerCase();
@@ -1013,7 +1014,7 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
     const caixaId = texto(item?.caixaId ?? item?.caixa_id ?? dados.caixaId ?? dados.caixa_id, 120) || null;
     if (meio === 'dinheiro' && caixaId) {
       const caixa = caixaKytto.obterCaixa(empresaId, caixaId);
-      if (!caixa || caixa.status !== 'aberto') throw new Error('O caixa informado não está aberto na empresa ativa.');
+      if (!caixa || caixa.status !== 'aberto' || (lojaIdOperacao && caixa.lojaId !== lojaIdOperacao)) throw new Error('O caixa informado não está aberto ou não pertence à unidade ativa.');
     }
     return { id: texto(item?.id, 120) || `pagbar-${Date.now().toString(36)}-${String(indice + 1).padStart(2, '0')}`, meio, valor, caixaId, chaveIdempotencia: texto(item?.chaveIdempotencia ?? item?.chave_idempotencia ?? chaveIdempotencia, 220) || null, registradoEm: dataAtual() };
   });
@@ -1023,6 +1024,7 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
   const clienteId = texto(dados.clienteId ?? dados.cliente_id ?? comanda.clienteId, 120) || null;
   const lancamentosFinanceiros = [];
   const contasReceber = [];
+  const recebimentosCaixa = [];
   for (const pagamento of pagamentos) {
     let conta = null;
     if (pagamento.meio === 'conta') {
@@ -1043,6 +1045,19 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
     });
     pagamento.financeiroLancamentoId = lancamento.id;
     pagamento.contaReceberId = conta?.id || null;
+    if (pagamento.meio === 'dinheiro' && pagamento.caixaId) {
+      const recebimento = caixaKytto.registrarRecebimento(empresaId, {
+        caixaId: pagamento.caixaId,
+        lojaId: lojaIdOperacao,
+        valor: pagamento.valor,
+        descricao: `Recebimento em dinheiro da comanda ${comanda.id}`,
+        referencia: comanda.id,
+        usuario: texto(dados.usuario, 120),
+        chaveIdempotencia: `barbearia_comanda:${empresaId}:${comanda.id}:caixa_recebimento:${pagamento.id}`,
+      });
+      pagamento.caixaMovimentoId = recebimento.id;
+      recebimentosCaixa.push(recebimento);
+    }
     lancamentosFinanceiros.push(lancamento);
   }
   comanda.pagamentos = [...(comanda.pagamentos || []), ...pagamentos];
