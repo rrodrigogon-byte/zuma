@@ -1783,8 +1783,10 @@ function sanitizarClienteBarbearia(cliente) {
     telefone: cliente.telefone, email: cliente.email, endereco: cliente.endereco,
     limiteCreditoMensal: cliente.limiteCreditoMensal, diasVencimento: cliente.diasVencimento,
     observacao: cliente.observacao, saldoDevedor: cliente.saldoDevedor,
-    scoreCredito: cliente.scoreCredito, risco: cliente.risco,
-    criadoEm: cliente.criadoEm, atualizadoEm: cliente.atualizadoEm,
+         scoreCredito: cliente.scoreCredito, risco: cliente.risco,
+     consentimentos: cliente.consentimentos || { whatsapp: { atendimento: { concedido: false }, marketing: { concedido: false } }, email: { atendimento: { concedido: false }, marketing: { concedido: false } } },
+     criadoEm: cliente.criadoEm, atualizadoEm: cliente.atualizadoEm,
+
   };
 }
 
@@ -1817,6 +1819,53 @@ function enriquecerAgendamentoBarbearia(empresaId, agendamento) {
 
 function listarAgendamentosBarbearia(empresaId, filtros = {}) {
   return barbeariaErpKytto.listarAgendamentos(empresaId, filtros).map(item => enriquecerAgendamentoBarbearia(empresaId, item));
+}
+
+function resumoRelacionamentoBarbearia(req) {
+  const empresaId = legacyEmpresaId(req);
+  const lojaId = legacyLojaId(req);
+  const clientes = clientesBarbeariaSomenteLeitura(empresaId);
+  const agenda = listarAgendamentosBarbearia(empresaId, { lojaId });
+  const comandas = barbeariaErpKytto.listarComandasBarbearia(empresaId, { lojaId });
+  const vendas = barbeariaErpKytto.listarVendasRevenda(empresaId, { lojaId });
+  const contas = clientesKytto.listarContasReceber(empresaId);
+  const fidelidade = canaisFidelidadeKytto.obterFidelidade(empresaId);
+  const porCliente = clientes.map((cliente) => {
+    const clienteId = cliente.id;
+    const agendaCliente = agenda.filter((item) => item.clienteId === clienteId);
+    const comandasCliente = comandas.filter((item) => item.clienteId === clienteId);
+    const vendasCliente = vendas.filter((item) => item.clienteId === clienteId);
+    const contasCliente = contas.filter((item) => item.clienteId === clienteId);
+    const membro = fidelidade.membros.find((item) => item.clienteId === clienteId) || null;
+    const datas = [...agendaCliente.map((item) => item.dataHora || item.criadoEm), ...comandasCliente.map((item) => item.atualizadoEm || item.criadoEm), ...vendasCliente.map((item) => item.atualizadoEm || item.criadoEm)].filter(Boolean).map((item) => new Date(item).valueOf()).filter(Number.isFinite);
+    const receitaComandas = comandasCliente.filter((item) => item.status === 'paga').reduce((soma, item) => soma + Number(item.totalPago || item.total || 0), 0);
+    const receitaRevenda = vendasCliente.filter((item) => item.status === 'pago').reduce((soma, item) => soma + Number(item.total || 0), 0);
+    const aReceber = contasCliente.filter((item) => item.status !== 'paga').reduce((soma, item) => soma + Number(item.valor || 0), 0);
+    return {
+      clienteId, visitas: agendaCliente.filter((item) => item.status === 'concluido').length,
+      agendamentos: agendaCliente.length, comandas: comandasCliente.length,
+      receitaRecebida: Number((receitaComandas + receitaRevenda).toFixed(2)),
+      aReceber: Number(aReceber.toFixed(2)),
+      ultimaAtividadeEm: datas.length ? new Date(Math.max(...datas)).toISOString() : null,
+      fidelidade: membro ? { membroId: membro.id, pontos: Number(membro.pontos || 0), nivel: membro.nivel || 'bronze' } : null,
+    };
+  });
+  const consentimentos = clientes.reduce((totais, cliente) => {
+    for (const canal of ['whatsapp', 'email']) for (const finalidade of ['atendimento', 'marketing']) {
+      if (cliente.consentimentos?.[canal]?.[finalidade]?.concedido === true) totais[`${canal}${finalidade[0].toUpperCase()}${finalidade.slice(1)}`] += 1;
+    }
+    return totais;
+  }, { whatsappAtendimento: 0, whatsappMarketing: 0, emailAtendimento: 0, emailMarketing: 0 });
+  return {
+    indicadores: {
+      clientesAtivos: clientes.length,
+      clientesComVisita: porCliente.filter((item) => item.visitas > 0).length,
+      clientesComSaldo: porCliente.filter((item) => item.aReceber > 0).length,
+      membrosFidelidade: fidelidade.membros.length,
+      receitaRecebida: Number(porCliente.reduce((soma, item) => soma + item.receitaRecebida, 0).toFixed(2)),
+    },
+    consentimentos, porCliente,
+  };
 }
 
 function relatorioOperacionalBarbearia(empresaId, { data, lojaId } = {}) {
@@ -1894,8 +1943,10 @@ app.get('/api/admin/barbearia/overview', (req, res) => {
       produtos: barbeariaErpKytto.listarProdutosRevenda(empresaId, { incluirInativos: false }),
       vendas: barbeariaErpKytto.listarVendasRevenda(empresaId, { lojaId }),
       comandas,
-      resumoComandas,
-      operacao: resumoOperacaoBarbearia(req),
+             resumoComandas,
+       relacionamento: resumoRelacionamentoBarbearia(req),
+       operacao: resumoOperacaoBarbearia(req),
+
       integracoes: { whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: wpp.ativo() }, ia: { configurada: aiConfigured, modelo: process.env.AI_MODEL || process.env.OPENAI_MODEL || '', analiseOperacionalDisponivel: aiConfigured } },
     });
   } catch (error) { res.status(400).json({ error: error.message }); }
@@ -2185,6 +2236,20 @@ app.patch('/api/admin/barbearia/clientes/:id', (req, res) => {
     if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado na empresa ativa.' });
     res.json({ ok: true, cliente: sanitizarClienteBarbearia(cliente) });
   } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.patch('/api/admin/barbearia/clientes/:id/consentimentos', (req, res) => {
+  try {
+    if (req.body?.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita do consentimento é obrigatória.' });
+    const cliente = clientesKytto.atualizarConsentimentoCliente(legacyEmpresaId(req), req.params.id, {
+      ...req.body, responsavel: req.user?.email || req.user?.nome || '', origem: req.body?.origem || 'painel_barbearia',
+    });
+    if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado na empresa ativa.' });
+    res.json({ ok: true, cliente: sanitizarClienteBarbearia(cliente) });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.get('/api/admin/barbearia/crm/resumo', (req, res) => {
+  try { res.json({ ok: true, relacionamento: resumoRelacionamentoBarbearia(req) }); }
+  catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.get('/api/admin/barbearia/fila', (req, res) => {
   const empresaId = legacyEmpresaId(req);

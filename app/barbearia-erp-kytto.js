@@ -2,6 +2,7 @@ import { db, save } from './db.js';
 import * as financeiroKytto from './financeiro-central-kytto.js';
 import * as clientesKytto from './clientes-contas-kytto.js';
 import * as caixaKytto from './caixa-diario-kytto.js';
+import * as canaisFidelidadeKytto from './canais-fidelidade-kytto.js';
 
 const STATUS = new Set(['agendado', 'confirmado', 'em_atendimento', 'concluido', 'cancelado', 'nao_compareceu']);
 const TRANSICOES = {
@@ -1086,6 +1087,16 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
   }
   comanda.atualizadoEm = dataAtual();
   if (faturada) comanda.fechadaEm = comanda.atualizadoEm;
+  if (faturada && !possuiConta && clienteId && comanda.totalPago > Number(comanda.fidelidadeValorPontuado || 0)) {
+    const valorElegivel = Number((comanda.totalPago - Number(comanda.fidelidadeValorPontuado || 0)).toFixed(2));
+    const credito = canaisFidelidadeKytto.creditarFidelidade(empresaId, clienteId, valorElegivel, 'barbearia_comanda', {
+      chaveIdempotencia: `barbearia_comanda:${empresaId}:${comanda.id}:fidelidade:${comanda.totalPago.toFixed(2)}`,
+    });
+    if (credito) {
+      comanda.fidelidadeValorPontuado = Number((Number(comanda.fidelidadeValorPontuado || 0) + valorElegivel).toFixed(2));
+      comanda.fidelidadeMovimentoId = credito.movimento?.id || comanda.fidelidadeMovimentoId || null;
+    }
+  }
   save();
   return copiarComandaBarbearia(comanda);
 }
