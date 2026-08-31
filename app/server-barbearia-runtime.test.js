@@ -73,6 +73,33 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
 
     const confirmado = await request(base, `/api/admin/barbearia/agenda/${agenda.body.agendamento.id}/status`, { method: 'PATCH', headers, body: JSON.stringify({ status: 'confirmado' }) });
     assert.equal(confirmado.response.status, 200);
+
+    const fila = await request(base, '/api/admin/barbearia/fila', { method: 'POST', headers, body: JSON.stringify({ clienteNome: 'Fila runtime', dataAgenda: '2030-06-10', servicoId: servico.body.servico.id }) });
+    assert.equal(fila.response.status, 201);
+    assert.match(fila.body.item.senha, /^B/);
+    const filaListada = await request(base, '/api/admin/barbearia/fila?data=2030-06-10', { headers });
+    assert.equal(filaListada.response.status, 200);
+    assert.equal(filaListada.body.fila.length, 1);
+
+    const bloqueio = await request(base, '/api/admin/barbearia/bloqueios', { method: 'POST', headers, body: JSON.stringify({ titulo: 'Bloqueio runtime', inicio: '2030-06-10T15:00:00.000Z', fim: '2030-06-10T16:00:00.000Z', profissionalId: profissional.body.profissional.id }) });
+    assert.equal(bloqueio.response.status, 201);
+    const bloqueios = await request(base, '/api/admin/barbearia/bloqueios?data=2030-06-10', { headers });
+    assert.equal(bloqueios.response.status, 200);
+    assert.equal(bloqueios.body.bloqueios.length, 1);
+
+    const plano = await request(base, '/api/admin/barbearia/planos', { method: 'POST', headers, body: JSON.stringify({ nome: 'Plano runtime', preco: 100, sessoesIncluidas: 4, validadeDias: 30, servicosIds: [servico.body.servico.id] }) });
+    assert.equal(plano.response.status, 201);
+    const assinatura = await request(base, '/api/admin/barbearia/assinaturas', { method: 'POST', headers, body: JSON.stringify({ clienteNome: 'Cliente assinatura runtime', planoId: plano.body.plano.id }) });
+    assert.equal(assinatura.response.status, 201);
+    assert.equal(assinatura.body.assinatura.status, 'pendente_ativacao');
+    const assinaturas = await request(base, '/api/admin/barbearia/assinaturas', { headers });
+    assert.equal(assinaturas.response.status, 200);
+    assert.equal(assinaturas.body.assinaturas.length, 1);
+
+    const fidelidade = await request(base, '/api/admin/barbearia/fidelidade', { headers });
+    assert.equal(fidelidade.response.status, 200);
+    assert.equal(Array.isArray(fidelidade.body.fidelidade.membros), true);
+
     const dashboard = await request(base, '/api/admin/barbearia/dashboard?data=2030-06-10', { headers });
     assert.equal(dashboard.response.status, 200);
     assert.equal(dashboard.body.indicadores.agendamentosHoje, 1);

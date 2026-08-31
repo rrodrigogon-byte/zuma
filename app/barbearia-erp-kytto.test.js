@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { db, reset } from './db.js';
 import { moduloDaRota, obterPerfil, temPermissao } from './perfis-usuarios-kytto.js';
 import { listarLancamentos, registrarLancamento } from './financeiro-central-kytto.js';
+import { obterFidelidade } from './canais-fidelidade-kytto.js';
 import {
   atualizarConfiguracao,
   alterarStatusAgendamento,
@@ -14,6 +15,21 @@ import {
   listarServicos,
   obterConfiguracao,
   obterDashboard,
+  criarBloqueio,
+  listarBloqueios,
+  criarFilaEspera,
+  listarFilaEspera,
+  alterarStatusFila,
+  criarPlano,
+  listarPlanos,
+  criarAssinatura,
+  alterarStatusAssinatura,
+  listarAssinaturas,
+  criarProdutoRevenda,
+  atualizarProdutoRevenda,
+  listarProdutosRevenda,
+  ajustarEstoqueRevenda,
+  listarMovimentosEstoque,
 } from './barbearia-erp-kytto.js';
 
 const EMPRESA_A = 'empresa-teste-a';
@@ -135,6 +151,60 @@ test('permite o fluxo operacional de atendimento e rejeita salto de estado', () 
   assert.equal(concluido.status, 'concluido');
   assert.equal(concluido.meioPagamento, 'pix');
   assert.equal(concluido.valorRecebido, 50);
+});
+
+test('bloqueia agenda em indisponibilidade global ou do profissional, sem vazar entre empresas', () => {
+  const profissionalA = baseProfissional();
+  const servicoA = baseServico();
+  const bloqueio = criarBloqueio(EMPRESA_A, { titulo: 'Almoço', inicio: '2030-03-10T12:00:00.000Z', fim: '2030-03-10T13:00:00.000Z', profissionalId: profissionalA.id });
+  assert.equal(listarBloqueios(EMPRESA_A, { data: '2030-03-10' }).length, 1);
+  assert.throws(() => criarAgendamento(EMPRESA_A, { clienteNome: 'Bloqueado', profissionalId: profissionalA.id, servicoId: servicoA.id, dataHora: '2030-03-10T12:30:00.000Z' }), /Horário indisponível/);
+  assert.equal(listarBloqueios(EMPRESA_B, { data: '2030-03-10' }).length, 0);
+  assert.equal(criarAgendamento(EMPRESA_B, { clienteNome: 'Livre', servicoId: baseServico(EMPRESA_B).id, dataHora: '2030-03-10T12:30:00.000Z' }).status, 'agendado');
+  assert.equal(bloqueio.empresaId, EMPRESA_A);
+});
+
+test('mantém fila por empresa e aplica transições sem saltos', () => {
+  const item = criarFilaEspera(EMPRESA_A, { clienteNome: 'Fila A', dataAgenda: '2030-03-11', previsaoMinutos: 25 });
+  criarFilaEspera(EMPRESA_A, { clienteNome: 'Fila A2', dataAgenda: '2030-03-11' });
+  criarFilaEspera(EMPRESA_B, { clienteNome: 'Fila B', dataAgenda: '2030-03-11' });
+  assert.equal(listarFilaEspera(EMPRESA_A, { data: '2030-03-11' }).length, 2);
+  assert.equal(listarFilaEspera(EMPRESA_B, { data: '2030-03-11' }).length, 1);
+  assert.throws(() => alterarStatusFila(EMPRESA_A, item.id, 'atendido'), /Transição/);
+  assert.equal(alterarStatusFila(EMPRESA_A, item.id, 'chamado', { mesaOuPosicao: 'Cadeira 2' }).status, 'chamado');
+  assert.equal(alterarStatusFila(EMPRESA_A, item.id, 'atendido').status, 'atendido');
+});
+
+test('cria plano e assinatura pendente sem cobrança e exige confirmação para ativar', () => {
+  const servico = baseServico();
+  const plano = criarPlano(EMPRESA_A, { nome: 'Plano mensal', preco: 120, sessoesIncluidas: 4, validadeDias: 30, servicosIds: [servico.id] });
+  assert.equal(listarPlanos(EMPRESA_A).length, 1);
+  const assinatura = criarAssinatura(EMPRESA_A, { clienteId: 'cliente-a', clienteNome: 'Cliente A', planoId: plano.id });
+  assert.equal(assinatura.status, 'pendente_ativacao');
+  assert.equal(assinatura.cobrancaAutomatica, false);
+  assert.throws(() => alterarStatusAssinatura(EMPRESA_A, assinatura.id, 'ativa'), /confirmação explícita/);
+  const ativa = alterarStatusAssinatura(EMPRESA_A, assinatura.id, 'ativa', { confirmadoSemCobranca: true });
+  assert.equal(ativa.status, 'ativa');
+  assert.equal(listarAssinaturas(EMPRESA_A, { status: 'ativa' }).length, 1);
+});
+
+test('mantém estoque de revenda separado por empresa e exige histórico para alterações', () => {
+  const produto = criarProdutoRevenda(EMPRESA_A, { nome: 'Pomada teste', sku: 'P-001', precoVenda: 35, custoUnitario: 18, estoqueAtual: 2, estoqueMinimo: 1 });
+  assert.equal(listarProdutosRevenda(EMPRESA_A)[0].statusEstoque, 'ok');
+  assert.equal(listarProdutosRevenda(EMPRESA_B).length, 0);
+  assert.throws(() => ajustarEstoqueRevenda(EMPRESA_A, produto.id, { tipo: 'saida_manual', quantidade: 3 }), /insuficiente/);
+  const entrada = ajustarEstoqueRevenda(EMPRESA_A, produto.id, { tipo: 'entrada', quantidade: 3, observacao: 'Reposição teste' });
+  assert.equal(entrada.produto.estoqueAtual, 5);
+  const saida = ajustarEstoqueRevenda(EMPRESA_A, produto.id, { tipo: 'saida_manual', quantidade: 2, observacao: 'Uso interno teste' });
+  assert.equal(saida.produto.estoqueAtual, 3);
+  assert.equal(listarMovimentosEstoque(EMPRESA_A, { produtoId: produto.id }).length, 3);
+  assert.throws(() => atualizarProdutoRevenda(EMPRESA_A, produto.id, { nome: 'Pomada teste', precoVenda: 35, estoqueAtual: 9 }), /endpoint de ajuste/);
+});
+
+test('leitura de fidelidade sem dados não cria estrutura no store', () => {
+  assert.equal(db().canaisKytto, undefined);
+  assert.deepEqual(obterFidelidade(EMPRESA_A), { regra: { pontosPorReal: 1, valorPonto: 0.01, ativa: true }, membros: [] });
+  assert.equal(db().canaisKytto, undefined);
 });
 
 test('valida e persiste configurações de funcionamento', () => {

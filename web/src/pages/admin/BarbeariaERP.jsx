@@ -10,6 +10,11 @@ const TABS = [
   ['Profissionais', 'Equipe e repasse'],
   ['Serviços', 'Catálogo de serviços'],
   ['Comissões', 'Apuração indicativa'],
+  ['Fila e bloqueios', 'Espera e indisponibilidades'],
+  ['Planos e assinaturas', 'Pacotes sem cobrança automática'],
+  ['Fidelidade', 'Pontos do CRM'],
+  ['Estoque de revenda', 'Produtos e movimentos manuais'],
+  ['Relatórios', 'Indicadores operacionais'],
   ['Configuração', 'Horários e políticas'],
 ]
 
@@ -20,6 +25,13 @@ const STATUS = {
   concluido: { label: 'Concluído', color: '#14b87a' },
   cancelado: { label: 'Cancelado', color: '#e05c5c' },
   nao_compareceu: { label: 'Não compareceu', color: '#888' },
+  aguardando: { label: 'Aguardando', color: '#4a9eff' },
+  chamado: { label: 'Chamado', color: '#f59e0b' },
+  atendido: { label: 'Atendido', color: '#14b87a' },
+  ausente: { label: 'Ausente', color: '#888' },
+  pendente_ativacao: { label: 'Pendente de ativação', color: '#f59e0b' },
+  pausada: { label: 'Pausada', color: '#888' },
+  expirada: { label: 'Expirada', color: '#e05c5c' },
 }
 
 const TRANSICOES = {
@@ -102,6 +114,15 @@ export default function BarbeariaERP() {
   const [servicos, setServicos] = useState([])
   const [clientes, setClientes] = useState([])
   const [configuracao, setConfiguracao] = useState(null)
+  const [fila, setFila] = useState([])
+  const [bloqueios, setBloqueios] = useState([])
+  const [planos, setPlanos] = useState([])
+  const [assinaturas, setAssinaturas] = useState([])
+  const [fidelidade, setFidelidade] = useState({ regra: {}, membros: [] })
+  const [formFidelidade, setFormFidelidade] = useState({ pontosPorReal: 1, valorPonto: 0.01, ativa: true })
+  const [clienteFidelidadeId, setClienteFidelidadeId] = useState('')
+  const [relatorio, setRelatorio] = useState(null)
+  const [produtosRevenda, setProdutosRevenda] = useState([])
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState('')
   const [modal, setModal] = useState(null)
@@ -112,6 +133,11 @@ export default function BarbeariaERP() {
   const [formAgenda, setFormAgenda] = useState({ clienteId: '', clienteNome: '', clienteTelefone: '', profissionalId: '', servicoId: '', hora: '10:00', observacoes: '' })
   const [formRecebimento, setFormRecebimento] = useState({ meioPagamento: 'pix', valorRecebido: '' })
   const [formConfig, setFormConfig] = useState({})
+  const [formFila, setFormFila] = useState({ clienteId: '', clienteNome: '', clienteTelefone: '', servicoId: '', preferenciaProfissionalId: '', previsaoMinutos: 30, observacoes: '' })
+  const [formBloqueio, setFormBloqueio] = useState({ titulo: '', motivo: '', inicioHora: '08:00', fimHora: '20:00', profissionalId: '' })
+  const [formPlano, setFormPlano] = useState({ nome: '', descricao: '', ciclo: 'mensal', preco: '', sessoesIncluidas: 4, validadeDias: 30, servicosIds: [] })
+  const [formAssinatura, setFormAssinatura] = useState({ clienteId: '', clienteNome: '', planoId: '', observacoes: '' })
+  const [formProdutoRevenda, setFormProdutoRevenda] = useState({ nome: '', sku: '', categoria: 'Revenda', unidade: 'un', precoVenda: '', custoUnitario: '', estoqueAtual: 0, estoqueMinimo: 0 })
 
   const carregar = useCallback(async () => {
     setLoading(true)
@@ -120,13 +146,20 @@ export default function BarbeariaERP() {
       const query = new URLSearchParams({ data: dataSelecionada })
       if (statusFiltro) query.set('status', statusFiltro)
       if (profissionalFiltro) query.set('profissionalId', profissionalFiltro)
-      const [dashData, agendaData, profData, servData, cliData, configData] = await Promise.all([
+      const [dashData, agendaData, profData, servData, cliData, configData, filaData, bloqueiosData, planosData, assinaturasData, fidelidadeData, relatorioData, produtosData] = await Promise.all([
         api.get(`/api/admin/barbearia/dashboard?data=${encodeURIComponent(dataSelecionada)}`),
         api.get(`/api/admin/barbearia/agenda?${query.toString()}`),
         api.get('/api/admin/barbearia/profissionais'),
         api.get('/api/admin/barbearia/servicos'),
         api.get('/api/admin/barbearia/clientes'),
         api.get('/api/admin/barbearia/configuracoes'),
+        api.get(`/api/admin/barbearia/fila?data=${encodeURIComponent(dataSelecionada)}`),
+        api.get(`/api/admin/barbearia/bloqueios?data=${encodeURIComponent(dataSelecionada)}`),
+        api.get('/api/admin/barbearia/planos'),
+        api.get('/api/admin/barbearia/assinaturas'),
+        api.get('/api/admin/barbearia/fidelidade'),
+        api.get(`/api/admin/barbearia/relatorios/operacional?data=${encodeURIComponent(dataSelecionada)}`),
+        api.get('/api/admin/barbearia/estoque-revenda'),
       ])
       setDashboard(dashData)
       setAgendamentos(Array.isArray(agendaData?.agendamentos) ? agendaData.agendamentos : [])
@@ -135,6 +168,14 @@ export default function BarbeariaERP() {
       setClientes(Array.isArray(cliData?.clientes) ? cliData.clientes : [])
       setConfiguracao(configData?.configuracao || null)
       setFormConfig(configData?.configuracao || {})
+      setFila(Array.isArray(filaData?.fila) ? filaData.fila : [])
+      setBloqueios(Array.isArray(bloqueiosData?.bloqueios) ? bloqueiosData.bloqueios : [])
+      setPlanos(Array.isArray(planosData?.planos) ? planosData.planos : [])
+      setAssinaturas(Array.isArray(assinaturasData?.assinaturas) ? assinaturasData.assinaturas : [])
+      setFidelidade(fidelidadeData?.fidelidade || { regra: {}, membros: [] })
+      setFormFidelidade(fidelidadeData?.fidelidade?.regra || { pontosPorReal: 1, valorPonto: 0.01, ativa: true })
+      setRelatorio(relatorioData || null)
+      setProdutosRevenda(Array.isArray(produtosData?.produtos) ? produtosData.produtos : [])
     } catch (error) {
       setErro(error.message || 'Não foi possível carregar o módulo de Barbearia.')
     } finally {
@@ -252,6 +293,70 @@ export default function BarbeariaERP() {
     await executar(() => api.patch('/api/admin/barbearia/configuracoes', formConfig), 'Configurações atualizadas.')
   }
 
+  async function salvarFila(event) {
+    event.preventDefault()
+    const cliente = clientes.find((item) => item.id === formFila.clienteId)
+    const payload = { ...formFila, clienteNome: cliente?.nome || formFila.clienteNome, clienteTelefone: cliente?.telefone || formFila.clienteTelefone, previsaoMinutos: Number(formFila.previsaoMinutos) }
+    await executar(() => api.post('/api/admin/barbearia/fila', payload), 'Cliente adicionado à fila.')
+  }
+
+  async function alterarFila(item, status) {
+    const mesaOuPosicao = status === 'chamado' ? window.prompt(`Posição ou cadeira para ${item.senha}:`, item.mesaOuPosicao || '') : item.mesaOuPosicao
+    if (status === 'chamado' && mesaOuPosicao === null) return
+    await executar(() => api.patch(`/api/admin/barbearia/fila/${item.id}/status`, { status, mesaOuPosicao: mesaOuPosicao || '' }), `Fila atualizada para ${status}.`)
+  }
+
+  async function salvarBloqueio(event) {
+    event.preventDefault()
+    const inicio = new Date(`${dataSelecionada}T${formBloqueio.inicioHora}:00`).toISOString()
+    const fim = new Date(`${dataSelecionada}T${formBloqueio.fimHora}:00`).toISOString()
+    await executar(() => api.post('/api/admin/barbearia/bloqueios', { titulo: formBloqueio.titulo, motivo: formBloqueio.motivo, inicio, fim, profissionalId: formBloqueio.profissionalId }), 'Bloqueio criado.')
+  }
+
+  async function desativarBloqueio(bloqueio) {
+    if (!window.confirm(`Desativar o bloqueio “${bloqueio.titulo}”?`)) return
+    await executar(() => api.delete(`/api/admin/barbearia/bloqueios/${bloqueio.id}`), 'Bloqueio desativado.')
+  }
+
+  async function salvarPlano(event) {
+    event.preventDefault()
+    await executar(() => api.post('/api/admin/barbearia/planos', { ...formPlano, preco: Number(formPlano.preco), sessoesIncluidas: Number(formPlano.sessoesIncluidas), validadeDias: Number(formPlano.validadeDias) }), 'Plano criado.')
+  }
+
+  async function salvarAssinatura(event) {
+    event.preventDefault()
+    const cliente = clientes.find((item) => item.id === formAssinatura.clienteId)
+    await executar(() => api.post('/api/admin/barbearia/assinaturas', { ...formAssinatura, clienteNome: cliente?.nome || formAssinatura.clienteNome }), 'Assinatura criada como pendente de ativação.')
+  }
+
+  async function ativarAssinatura(assinatura) {
+    if (!window.confirm('Ativar esta assinatura sem cobrança automática? Confirme apenas se a contratação foi validada fora deste fluxo.')) return
+    await executar(() => api.patch(`/api/admin/barbearia/assinaturas/${assinatura.id}/status`, { status: 'ativa', confirmadoSemCobranca: true, pagamentoConfirmado: false }), 'Assinatura ativada sem cobrança automática.')
+  }
+
+  async function aderirFidelidade(cliente) {
+    await executar(() => api.post('/api/admin/barbearia/fidelidade/membros', { clienteId: cliente.id }), 'Cliente aderiu ao programa de fidelidade.')
+  }
+
+  async function creditarFidelidade(membro) {
+    const valor = Number(window.prompt(`Valor elegível para pontuação de ${membro.nome} (R$):`, ''))
+    if (!Number.isFinite(valor) || valor <= 0) return
+    if (!window.confirm(`Confirmar crédito de pontos com base em R$ ${valor.toFixed(2)} para ${membro.nome}?`)) return
+    await executar(() => api.post('/api/admin/barbearia/fidelidade/creditar', { clienteId: membro.clienteId, valor, origem: 'barbearia_atendimento', confirmado: true }), 'Pontos creditados.')
+  }
+
+  async function salvarProdutoRevenda(event) {
+    event.preventDefault()
+    await executar(() => api.post('/api/admin/barbearia/estoque-revenda', { ...formProdutoRevenda, precoVenda: Number(formProdutoRevenda.precoVenda), custoUnitario: Number(formProdutoRevenda.custoUnitario || 0), estoqueAtual: Number(formProdutoRevenda.estoqueAtual || 0), estoqueMinimo: Number(formProdutoRevenda.estoqueMinimo || 0) }), 'Produto de revenda cadastrado.')
+  }
+
+  async function movimentarProdutoRevenda(produto, tipo) {
+    const quantidade = Number(window.prompt(`Quantidade para ${tipo === 'entrada' ? 'entrada' : tipo === 'saida_manual' ? 'saída manual' : 'ajuste'} de ${produto.nome}:`, '1'))
+    if (!Number.isInteger(quantidade) || quantidade <= 0) return
+    if (!window.confirm(`Confirmar ${tipo === 'entrada' ? 'entrada' : tipo === 'saida_manual' ? 'saída manual' : 'ajuste'} de ${quantidade} ${produto.unidade || 'un'} em ${produto.nome}?`)) return
+    await executar(() => api.post(`/api/admin/barbearia/estoque-revenda/${produto.id}/movimentos`, { tipo, quantidade, confirmado: true, observacao: 'Movimento manual no módulo Barbearia.' }), 'Movimento de estoque registrado.')
+  }
+
   function renderAgendaTabela(itens = agendamentos) {
     return <Card style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 820 }}>
@@ -289,6 +394,8 @@ export default function BarbeariaERP() {
         <Kpi label="Em atendimento" value={indicadores.emAtendimento || 0} note="Fila operacional atual" color="#f59e0b" />
         <Kpi label="Concluídos hoje" value={indicadores.concluidosHoje || 0} note={moeda(indicadores.faturamentoHoje)} color="#14b87a" />
         <Kpi label="Clientes no CRM" value={indicadores.clientesAtivos || 0} note={`${indicadores.profissionaisAtivos || 0} profissionais ativos`} color="#8b5cf6" />
+        <Kpi label="Fila ativa" value={indicadores.filaAguardando || 0} note="Aguardando ou chamados" color="#4a9eff" />
+        <Kpi label="Bloqueios hoje" value={indicadores.bloqueiosHoje || 0} note={`${indicadores.assinaturasAtivas || 0} assinaturas ativas`} color="#f59e0b" />
       </div>
       <div style={styles.twoColumns}>
         <Card style={{ padding: 20 }}>
@@ -351,6 +458,61 @@ export default function BarbeariaERP() {
     return <div style={{ display: 'grid', gap: 16 }}><Card style={{ padding: 18 }}><div style={styles.toolbar}><div><h2 style={styles.h2}>Comissões e rateio</h2><p style={styles.sub}>Apuração indicativa com base nos atendimentos concluídos em {fmtDateOnly(dataSelecionada)}. Não cria lançamento nem repasse.</p></div><a href="/admin/financeiro" style={styles.secondary}>Ver livro financeiro</a></div></Card><Card style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 680 }}><thead><tr style={styles.tableHead}>{['Profissional', 'Atendimentos', 'Bruto', 'Comissão', 'Parcela salão'].map((coluna) => <th key={coluna} style={styles.th}>{coluna}</th>)}</tr></thead><tbody>{porProfissional.length === 0 ? <tr><td colSpan={5} style={styles.empty}>Ainda não há atendimentos concluídos para apuração.</td></tr> : porProfissional.map((item) => <tr key={item.id} style={{ borderTop: '1px solid var(--line)' }}><td style={styles.td}><strong>{item.nome}</strong><div style={styles.sub}>{item.percentualComissao}% configurado</div></td><td style={styles.td}>{item.atendimentos}</td><td style={{ ...styles.td, fontWeight: 800 }}>{moeda(item.bruto)}</td><td style={{ ...styles.td, fontWeight: 800, color: '#8b5cf6' }}>{moeda(item.comissao)}</td><td style={{ ...styles.td, fontWeight: 800, color: '#14b87a' }}>{moeda(item.sala)}</td></tr>)}</tbody></table></Card></div>
   }
 
+  function renderFilaBloqueios() {
+    const filaAtiva = fila.filter((item) => item.status === 'aguardando' || item.status === 'chamado')
+    return <div style={{ display: 'grid', gap: 16 }}>
+      <div style={styles.twoColumns}>
+        <Card style={{ padding: 18 }}><div style={styles.sectionTitle}><div><h2 style={styles.h2}>Fila de espera</h2><p style={styles.sub}>Senha por empresa e dia operacional; nenhum aviso externo é enviado automaticamente.</p></div><strong style={{ color: 'var(--accent)' }}>{filaAtiva.length} ativos</strong></div><form onSubmit={salvarFila} style={{ display: 'grid', gap: 14 }}><div style={styles.formGrid}><Field label="Cliente cadastrado"><select value={formFila.clienteId} onChange={(event) => setFormFila((atual) => ({ ...atual, clienteId: event.target.value, clienteNome: '' }))} style={inputStyle}><option value="">Selecionar cliente</option>{clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}</select></Field><Field label="Nome eventual"><input value={formFila.clienteNome} onChange={(event) => setFormFila((atual) => ({ ...atual, clienteNome: event.target.value, clienteId: '' }))} style={inputStyle} placeholder="Se não estiver no CRM" /></Field><Field label="Serviço"><select value={formFila.servicoId} onChange={(event) => setFormFila((atual) => ({ ...atual, servicoId: event.target.value }))} style={inputStyle}><option value="">Qualquer serviço</option>{servicos.filter((item) => item.ativo !== false).map((servico) => <option key={servico.id} value={servico.id}>{servico.nome}</option>)}</select></Field><Field label="Preferência de profissional"><select value={formFila.preferenciaProfissionalId} onChange={(event) => setFormFila((atual) => ({ ...atual, preferenciaProfissionalId: event.target.value }))} style={inputStyle}><option value="">Qualquer profissional</option>{profissionais.filter((item) => item.ativo !== false).map((profissional) => <option key={profissional.id} value={profissional.id}>{profissional.nome}</option>)}</select></Field><Field label="Previsão (min.)"><input type="number" min="0" max="720" value={formFila.previsaoMinutos} onChange={(event) => setFormFila((atual) => ({ ...atual, previsaoMinutos: event.target.value }))} style={inputStyle} /></Field><Field label="Telefone eventual"><input value={formFila.clienteTelefone} onChange={(event) => setFormFila((atual) => ({ ...atual, clienteTelefone: event.target.value }))} style={inputStyle} /></Field></div><button type="submit" style={styles.primary} disabled={salvando}>Adicionar à fila</button></form></Card>
+        <Card style={{ padding: 18 }}><div style={styles.sectionTitle}><div><h2 style={styles.h2}>Bloqueios da agenda</h2><p style={styles.sub}>Indisponibilidade global ou por profissional para {fmtDateOnly(dataSelecionada)}.</p></div><strong style={{ color: '#f59e0b' }}>{bloqueios.length} ativos</strong></div><form onSubmit={salvarBloqueio} style={{ display: 'grid', gap: 14 }}><div style={styles.formGrid}><Field label="Título"><input required value={formBloqueio.titulo} onChange={(event) => setFormBloqueio((atual) => ({ ...atual, titulo: event.target.value }))} style={inputStyle} placeholder="Almoço, manutenção…" /></Field><Field label="Profissional"><select value={formBloqueio.profissionalId} onChange={(event) => setFormBloqueio((atual) => ({ ...atual, profissionalId: event.target.value }))} style={inputStyle}><option value="">Toda a unidade</option>{profissionais.filter((item) => item.ativo !== false).map((profissional) => <option key={profissional.id} value={profissional.id}>{profissional.nome}</option>)}</select></Field><Field label="Início"><input type="time" required value={formBloqueio.inicioHora} onChange={(event) => setFormBloqueio((atual) => ({ ...atual, inicioHora: event.target.value }))} style={inputStyle} /></Field><Field label="Fim"><input type="time" required value={formBloqueio.fimHora} onChange={(event) => setFormBloqueio((atual) => ({ ...atual, fimHora: event.target.value }))} style={inputStyle} /></Field><Field label="Motivo" full><input value={formBloqueio.motivo} onChange={(event) => setFormBloqueio((atual) => ({ ...atual, motivo: event.target.value }))} style={inputStyle} /></Field></div><button type="submit" style={styles.primary} disabled={salvando}>Criar bloqueio</button></form></Card>
+      </div>
+      <Card style={{ padding: 18 }}><div style={styles.sectionTitle}><div><h2 style={styles.h2}>Fila ativa de {fmtDateOnly(dataSelecionada)}</h2><p style={styles.sub}>Chamar, marcar como atendido, ausente ou cancelar são ações manuais.</p></div></div>{fila.length === 0 ? <div style={styles.empty}>Nenhuma senha registrada para esta data.</div> : <div style={{ display: 'grid', gap: 8 }}>{fila.map((item) => <div key={item.id} style={styles.listRow}><div><strong>{item.senha} · {item.clienteNome || 'Cliente eventual'}</strong><div style={styles.sub}>{item.servicoId ? servicos.find((servico) => servico.id === item.servicoId)?.nome || 'Serviço' : 'Qualquer serviço'} · previsão {item.previsaoMinutos} min{item.mesaOuPosicao ? ` · ${item.mesaOuPosicao}` : ''}</div></div><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}><Badge status={item.status === 'aguardando' ? 'agendado' : item.status === 'chamado' ? 'em_atendimento' : item.status} /><>{item.status === 'aguardando' && <button type="button" style={styles.small} onClick={() => alterarFila(item, 'chamado')}>Chamar</button>}{item.status === 'chamado' && <button type="button" style={styles.small} onClick={() => alterarFila(item, 'atendido')}>Atendido</button>}{['aguardando', 'chamado'].includes(item.status) && <button type="button" style={styles.small} onClick={() => alterarFila(item, 'cancelado')}>Cancelar</button>}</></div></div>)}</div>}</Card>
+      <Card style={{ padding: 18 }}><div style={styles.sectionTitle}><div><h2 style={styles.h2}>Bloqueios ativos</h2><p style={styles.sub}>A agenda recusa novos horários que sobreponham estes intervalos.</p></div></div>{bloqueios.length === 0 ? <div style={styles.empty}>Nenhum bloqueio para esta data.</div> : <div style={{ display: 'grid', gap: 8 }}>{bloqueios.map((item) => <div key={item.id} style={styles.listRow}><div><strong>{item.titulo}</strong><div style={styles.sub}>{horario(item.inicio)}–{horario(item.fim)} · {item.profissionalId ? profissionais.find((profissional) => profissional.id === item.profissionalId)?.nome || 'Profissional' : 'Toda a unidade'}{item.motivo ? ` · ${item.motivo}` : ''}</div></div><button type="button" style={styles.small} onClick={() => desativarBloqueio(item)}>Desativar</button></div>)}</div>}</Card>
+    </div>
+  }
+
+  function renderPlanosAssinaturas() {
+    return <div style={{ display: 'grid', gap: 16 }}>
+      <div style={styles.twoColumns}>
+        <Card style={{ padding: 18 }}>
+          <div style={styles.sectionTitle}>
+            <div><h2 style={styles.h2}>Planos de recorrência</h2><p style={styles.sub}>Definições comerciais sem cobrança automática.</p></div>
+            <button type="button" style={styles.primary} onClick={() => { setFormPlano({ nome: '', descricao: '', ciclo: 'mensal', preco: '', sessoesIncluidas: 4, validadeDias: 30, servicosIds: [] }); setModal('plano') }}>+ Novo plano</button>
+          </div>
+          {planos.length === 0 ? <div style={styles.empty}>Nenhum plano cadastrado.</div> : <div style={{ display: 'grid', gap: 8 }}>{planos.map((plano) => <div key={plano.id} style={styles.listRow}><div><strong>{plano.nome}</strong><div style={styles.sub}>{plano.sessoesIncluidas} sessões · ciclo {plano.ciclo} · validade {plano.validadeDias} dias</div></div><strong>{moeda(plano.preco)}</strong></div>)}</div>}
+        </Card>
+        <Card style={{ padding: 18 }}>
+          <div style={styles.sectionTitle}><div><h2 style={styles.h2}>Nova assinatura</h2><p style={styles.sub}>Fica pendente de ativação até uma confirmação operacional externa.</p></div></div>
+          <form onSubmit={salvarAssinatura} style={{ display: 'grid', gap: 14 }}>
+            <Field label="Cliente cadastrado"><select required value={formAssinatura.clienteId} onChange={(event) => setFormAssinatura((atual) => ({ ...atual, clienteId: event.target.value, clienteNome: '' }))} style={inputStyle}><option value="">Selecionar cliente</option>{clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}</select></Field>
+            <Field label="Plano"><select required value={formAssinatura.planoId} onChange={(event) => setFormAssinatura((atual) => ({ ...atual, planoId: event.target.value }))} style={inputStyle}><option value="">Selecionar plano</option>{planos.map((plano) => <option key={plano.id} value={plano.id}>{plano.nome} · {moeda(plano.preco)}</option>)}</select></Field>
+            <Field label="Observações" full><textarea rows={3} value={formAssinatura.observacoes} onChange={(event) => setFormAssinatura((atual) => ({ ...atual, observacoes: event.target.value }))} style={{ ...inputStyle, resize: 'vertical' }} /></Field>
+            <button type="submit" style={styles.primary} disabled={salvando || planos.length === 0}>Criar assinatura pendente</button>
+          </form>
+        </Card>
+      </div>
+      <Card style={{ padding: 18 }}>
+        <div style={styles.sectionTitle}><div><h2 style={styles.h2}>Assinaturas da empresa</h2><p style={styles.sub}>Status operacional; não representa pagamento aprovado.</p></div></div>
+        {assinaturas.length === 0 ? <div style={styles.empty}>Nenhuma assinatura cadastrada.</div> : <div style={{ display: 'grid', gap: 8 }}>{assinaturas.map((assinatura) => <div key={assinatura.id} style={styles.listRow}><div><strong>{assinatura.clienteNome || 'Cliente'}</strong><div style={styles.sub}>{planos.find((plano) => plano.id === assinatura.planoId)?.nome || 'Plano'} · {assinatura.sessoesUsadas}/{assinatura.sessoesContratadas} sessões usadas</div></div><div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><Badge status={assinatura.status === 'ativa' ? 'concluido' : assinatura.status} />{assinatura.status === 'pendente_ativacao' && <button type="button" style={styles.small} onClick={() => ativarAssinatura(assinatura)}>Ativar sem cobrança</button>}</div></div>)}</div>}
+      </Card>
+    </div>
+  }
+
+  function renderFidelidade() {
+    const membrosIds = new Set((fidelidade.membros || []).map((membro) => membro.clienteId))
+    const disponiveis = clientes.filter((cliente) => !membrosIds.has(cliente.id))
+    return <div style={{ display: 'grid', gap: 16 }}><Card style={{ padding: 18 }}><div style={styles.sectionTitle}><div><h2 style={styles.h2}>Programa de fidelidade</h2><p style={styles.sub}>Pontos vinculados ao CRM da empresa ativa. Crédito exige ação e confirmação manual.</p></div></div><form onSubmit={(event) => { event.preventDefault(); const cliente = clientes.find((item) => item.id === clienteFidelidadeId); if (cliente) aderirFidelidade(cliente) }} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}><Field label="Adicionar cliente"><select value={clienteFidelidadeId} onChange={(event) => setClienteFidelidadeId(event.target.value)} style={{ ...inputStyle, minWidth: 260 }}><option value="">Selecionar cliente do CRM</option>{disponiveis.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}</select></Field><button type="submit" style={styles.primary} disabled={!clienteFidelidadeId || salvando}>Aderir ao programa</button></form></Card><Card style={{ padding: 18 }}><div style={styles.sectionTitle}><div><h2 style={styles.h2}>Regra de pontos</h2><p style={styles.sub}>A configuração não altera caixa nem financeiro.</p></div></div><form onSubmit={(event) => { event.preventDefault(); executar(() => api.patch('/api/admin/barbearia/fidelidade/regra', formFidelidade), 'Regra de fidelidade atualizada.') }} style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'end' }}><Field label="Pontos por R$ 1,00"><input type="number" min="0" value={formFidelidade.pontosPorReal ?? 0} onChange={(event) => setFormFidelidade((atual) => ({ ...atual, pontosPorReal: event.target.value }))} style={{ ...inputStyle, width: 160 }} /></Field><Field label="Valor estimado do ponto"><input type="number" min="0" step="0.01" value={formFidelidade.valorPonto ?? 0} onChange={(event) => setFormFidelidade((atual) => ({ ...atual, valorPonto: event.target.value }))} style={{ ...inputStyle, width: 160 }} /></Field><label style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 10 }}><input type="checkbox" checked={formFidelidade.ativa !== false} onChange={(event) => setFormFidelidade((atual) => ({ ...atual, ativa: event.target.checked }))} /> Programa ativo</label><button type="submit" style={styles.primary} disabled={salvando}>Salvar regra</button></form></Card><Card style={{ padding: 18 }}><div style={styles.sectionTitle}><div><h2 style={styles.h2}>Membros</h2><p style={styles.sub}>{fidelidade.membros?.length || 0} clientes aderidos.</p></div></div>{!fidelidade.membros?.length ? <div style={styles.empty}>Nenhum cliente aderiu ao programa.</div> : <div style={{ display: 'grid', gap: 8 }}>{fidelidade.membros.map((membro) => <div key={membro.id} style={styles.listRow}><div><strong>{membro.nome}</strong><div style={styles.sub}>{membro.pontos || 0} pontos · nível {membro.nivel || 'bronze'}</div></div><button type="button" style={styles.small} onClick={() => creditarFidelidade(membro)}>Creditar pontos</button></div>)}</div>}</Card></div>
+  }
+
+  function renderEstoqueRevenda() {
+    const baixos = produtosRevenda.filter((produto) => produto.statusEstoque !== 'ok')
+    return <div style={{ display: 'grid', gap: 16 }}><Card style={{ padding: 18 }}><div style={styles.sectionTitle}><div><h2 style={styles.h2}>Estoque de revenda</h2><p style={styles.sub}>Catálogo exclusivo da empresa ativa. Não é o estoque de cardápio e não se conecta automaticamente ao Commerce.</p></div><button type="button" style={styles.primary} onClick={() => { setFormProdutoRevenda({ nome: '', sku: '', categoria: 'Revenda', unidade: 'un', precoVenda: '', custoUnitario: '', estoqueAtual: 0, estoqueMinimo: 0 }); setModal('produtoRevenda') }}>+ Novo produto</button></div><div style={styles.kpiGrid}><Kpi label="Produtos ativos" value={produtosRevenda.filter((produto) => produto.ativo !== false).length} /><Kpi label="Abaixo do mínimo" value={baixos.length} color={baixos.length ? '#f59e0b' : '#14b87a'} /><Kpi label="Sem estoque" value={produtosRevenda.filter((produto) => produto.statusEstoque === 'sem_estoque').length} color="#e05c5c" /></div></Card><Card style={{ padding: 18, overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}><thead><tr style={styles.tableHead}>{['Produto', 'Categoria', 'Preço', 'Saldo', 'Mínimo', 'Situação', 'Movimento'].map((coluna) => <th key={coluna} style={styles.th}>{coluna}</th>)}</tr></thead><tbody>{produtosRevenda.length === 0 ? <tr><td colSpan={7} style={styles.empty}>Nenhum produto de revenda cadastrado.</td></tr> : produtosRevenda.map((produto) => <tr key={produto.id} style={{ borderTop: '1px solid var(--line)', opacity: produto.ativo === false ? .58 : 1 }}><td style={styles.td}><strong>{produto.nome}</strong><div style={styles.sub}>{produto.sku || 'Sem SKU'} · {produto.unidade || 'un'}</div></td><td style={styles.td}>{produto.categoria}</td><td style={{ ...styles.td, fontWeight: 800 }}>{moeda(produto.precoVenda)}</td><td style={{ ...styles.td, fontWeight: 800 }}>{produto.estoqueAtual}</td><td style={styles.td}>{produto.estoqueMinimo}</td><td style={styles.td}><Badge status={produto.statusEstoque === 'ok' ? 'concluido' : produto.statusEstoque === 'baixo' ? 'chamado' : 'cancelado'} /></td><td style={styles.td}><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button type="button" style={styles.small} onClick={() => movimentarProdutoRevenda(produto, 'entrada')}>Entrada</button><button type="button" style={styles.small} onClick={() => movimentarProdutoRevenda(produto, 'saida_manual')}>Saída manual</button></div></td></tr>)}</tbody></table><p style={{ ...styles.sub, marginBottom: 0 }}>A saída manual não registra venda, pagamento ou receita. Para vender, o fluxo de checkout/PDV deve ser integrado em uma etapa própria.</p></Card></div>
+  }
+
+  function renderRelatorios() {
+    const porStatus = Object.entries(relatorio?.porStatus || {})
+    return <div style={{ display: 'grid', gap: 16 }}><div style={styles.kpiGrid}><Kpi label="Atendimentos no dia" value={relatorio?.totalAgendamentos || 0} note={fmtDateOnly(dataSelecionada)} /><Kpi label="Concluídos" value={relatorio?.porStatus?.concluido || 0} color="#14b87a" /><Kpi label="Cancelados" value={relatorio?.porStatus?.cancelado || 0} color="#e05c5c" /><Kpi label="Não compareceu" value={relatorio?.porStatus?.nao_compareceu || 0} color="#888" /></div><Card style={{ padding: 18 }}><div style={styles.sectionTitle}><div><h2 style={styles.h2}>Distribuição por status</h2><p style={styles.sub}>Dados derivados da agenda da empresa ativa; selecione outra data acima para atualizar.</p></div></div>{porStatus.length === 0 ? <div style={styles.empty}>Sem atendimentos para a data selecionada.</div> : <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>{porStatus.map(([status, quantidade]) => <div key={status} style={{ padding: '12px 16px', background: 'var(--bg)', borderRadius: 10 }}><Badge status={status} /><strong style={{ marginLeft: 10 }}>{quantidade}</strong></div>)}</div>}</Card><Card style={{ padding: 18, overflowX: 'auto' }}><div style={styles.sectionTitle}><div><h2 style={styles.h2}>Desempenho por profissional</h2><p style={styles.sub}>Faturamento é apuração operacional e não cria repasse.</p></div></div><table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 580 }}><thead><tr style={styles.tableHead}>{['Profissional', 'Atendimentos', 'Concluídos', 'Faturamento'].map((coluna) => <th key={coluna} style={styles.th}>{coluna}</th>)}</tr></thead><tbody>{(relatorio?.porProfissional || []).length === 0 ? <tr><td colSpan={4} style={styles.empty}>Nenhum profissional cadastrado.</td></tr> : relatorio.porProfissional.map((item) => <tr key={item.profissionalId} style={{ borderTop: '1px solid var(--line)' }}><td style={styles.td}><strong>{item.profissionalNome}</strong></td><td style={styles.td}>{item.atendimentos}</td><td style={styles.td}>{item.concluidos}</td><td style={{ ...styles.td, fontWeight: 800 }}>{moeda(item.faturamento)}</td></tr>)}</tbody></table></Card></div>
+  }
+
   function renderConfiguracao() {
     const diasSelecionados = formConfig.diasFuncionamento || []
     return <Card style={{ padding: 20, maxWidth: 760 }}><form onSubmit={salvarConfiguracao} style={{ display: 'grid', gap: 18 }}><div><h2 style={styles.h2}>Horários e políticas</h2><p style={styles.sub}>As regras ficam isoladas na empresa ativa e orientam a operação administrativa.</p></div><div style={styles.formGrid}><Field label="Abertura"><input type="time" value={formConfig.horarioAbertura || ''} onChange={(event) => setFormConfig((atual) => ({ ...atual, horarioAbertura: event.target.value }))} style={inputStyle} /></Field><Field label="Fechamento"><input type="time" value={formConfig.horarioFechamento || ''} onChange={(event) => setFormConfig((atual) => ({ ...atual, horarioFechamento: event.target.value }))} style={inputStyle} /></Field><Field label="Intervalo entre horários (min)"><input type="number" min="5" value={formConfig.intervaloMinutos ?? ''} onChange={(event) => setFormConfig((atual) => ({ ...atual, intervaloMinutos: event.target.value }))} style={inputStyle} /></Field><Field label="Antecedência mínima (min)"><input type="number" min="0" value={formConfig.antecedenciaMinutos ?? ''} onChange={(event) => setFormConfig((atual) => ({ ...atual, antecedenciaMinutos: event.target.value }))} style={inputStyle} /></Field><Field label="Janela de reservas (dias)"><input type="number" min="1" value={formConfig.janelaReservaDias ?? ''} onChange={(event) => setFormConfig((atual) => ({ ...atual, janelaReservaDias: event.target.value }))} style={inputStyle} /></Field><Field label="Cancelamento sem penalidade (horas)"><input type="number" min="0" value={formConfig.politicaCancelamentoHoras ?? ''} onChange={(event) => setFormConfig((atual) => ({ ...atual, politicaCancelamentoHoras: event.target.value }))} style={inputStyle} /></Field><Field label="Dias de funcionamento" full><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{DIAS.map((dia, indice) => <button type="button" key={dia} onClick={() => setFormConfig((atual) => ({ ...atual, diasFuncionamento: diasSelecionados.includes(indice) ? diasSelecionados.filter((item) => item !== indice) : [...diasSelecionados, indice].sort() }))} style={{ ...styles.small, background: diasSelecionados.includes(indice) ? 'var(--accent)' : 'var(--card2)', color: diasSelecionados.includes(indice) ? '#fff' : 'var(--fg)' }}>{dia}</button>)}</div></Field></div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar configurações'}</button></div></form></Card>
@@ -362,6 +524,8 @@ export default function BarbeariaERP() {
     if (modal === 'cliente') return <Modal title="Novo cliente no CRM" onClose={() => setModal(null)}><form onSubmit={salvarCliente} style={{ display: 'grid', gap: 16 }}><div style={styles.formGrid}><Field label="Nome *" full><input required value={formCliente.nome} onChange={(event) => setFormCliente((atual) => ({ ...atual, nome: event.target.value }))} style={inputStyle} /></Field><Field label="Telefone"><input value={formCliente.telefone} onChange={(event) => setFormCliente((atual) => ({ ...atual, telefone: event.target.value }))} style={inputStyle} /></Field><Field label="E-mail"><input type="email" value={formCliente.email} onChange={(event) => setFormCliente((atual) => ({ ...atual, email: event.target.value }))} style={inputStyle} /></Field><Field label="Observação" full><textarea rows={4} value={formCliente.observacao} onChange={(event) => setFormCliente((atual) => ({ ...atual, observacao: event.target.value }))} style={{ ...inputStyle, resize: 'vertical' }} /></Field></div><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar cliente'}</button></div></form></Modal>
     if (modal === 'agenda') return <Modal title={`Novo agendamento · ${fmtDateOnly(dataSelecionada)}`} onClose={() => setModal(null)}><form onSubmit={salvarAgenda} style={{ display: 'grid', gap: 16 }}><div style={styles.formGrid}><Field label="Cliente cadastrado"><select value={formAgenda.clienteId} onChange={(event) => setFormAgenda((atual) => ({ ...atual, clienteId: event.target.value, clienteNome: '' }))} style={inputStyle}><option value="">Selecionar ou informar abaixo</option>{clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}{cliente.telefone ? ` · ${cliente.telefone}` : ''}</option>)}</select></Field><Field label="Nome do cliente"><input value={formAgenda.clienteNome} onChange={(event) => setFormAgenda((atual) => ({ ...atual, clienteNome: event.target.value, clienteId: '' }))} placeholder="Para atendimento eventual" style={inputStyle} /></Field><Field label="Profissional"><select value={formAgenda.profissionalId} onChange={(event) => setFormAgenda((atual) => ({ ...atual, profissionalId: event.target.value }))} style={inputStyle}><option value="">Sem profissional definido</option>{profissionais.filter((item) => item.ativo !== false).map((profissional) => <option key={profissional.id} value={profissional.id}>{profissional.nome}</option>)}</select></Field><Field label="Serviço *"><select required value={formAgenda.servicoId} onChange={(event) => setFormAgenda((atual) => ({ ...atual, servicoId: event.target.value }))} style={inputStyle}><option value="">Selecionar serviço</option>{servicos.filter((item) => item.ativo !== false).map((servico) => <option key={servico.id} value={servico.id}>{servico.nome} · {moeda(servico.preco)} · {servico.duracaoMinutos} min</option>)}</select></Field><Field label="Horário *"><input required type="time" value={formAgenda.hora} onChange={(event) => setFormAgenda((atual) => ({ ...atual, hora: event.target.value }))} style={inputStyle} /></Field><Field label="Telefone eventual"><input value={formAgenda.clienteTelefone} onChange={(event) => setFormAgenda((atual) => ({ ...atual, clienteTelefone: event.target.value }))} style={inputStyle} /></Field><Field label="Observações" full><textarea rows={4} value={formAgenda.observacoes} onChange={(event) => setFormAgenda((atual) => ({ ...atual, observacoes: event.target.value }))} style={{ ...inputStyle, resize: 'vertical' }} /></Field></div><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Salvando…' : 'Confirmar agendamento'}</button></div></form></Modal>
     if (modal?.tipo === 'recebimento') return <Modal title="Registrar recebimento" onClose={() => setModal(null)}><div style={{ display: 'grid', gap: 16 }}><div style={{ background: 'var(--card)', borderRadius: 10, padding: 14 }}><strong>{modal.agendamento.clienteNome || modal.agendamento.cliente_nome}</strong><div style={styles.sub}>{modal.agendamento.servicoNome || modal.agendamento.servico_nome} · valor previsto {moeda(modal.agendamento.valor)}</div></div><Field label="Meio de pagamento"><select value={formRecebimento.meioPagamento} onChange={(event) => setFormRecebimento((atual) => ({ ...atual, meioPagamento: event.target.value }))} style={inputStyle}><option value="pix">PIX</option><option value="dinheiro">Dinheiro</option><option value="debito">Cartão de débito</option><option value="credito">Cartão de crédito</option><option value="transferencia">Transferência</option></select></Field><Field label="Valor recebido (R$)" hint="Esta ação criará uma receita paga no livro financeiro central."><input type="number" min="0.01" step="0.01" value={formRecebimento.valorRecebido} onChange={(event) => setFormRecebimento((atual) => ({ ...atual, valorRecebido: event.target.value }))} style={inputStyle} /></Field><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="button" style={styles.primary} disabled={salvando} onClick={concluirEReceber}>{salvando ? 'Registrando…' : 'Confirmar recebimento'}</button></div></div></Modal>
+    if (modal === 'plano') return <Modal title="Novo plano de recorrência" onClose={() => setModal(null)} wide><form onSubmit={salvarPlano} style={{ display: 'grid', gap: 16 }}><div style={styles.formGrid}><Field label="Nome *" full><input required value={formPlano.nome} onChange={(event) => setFormPlano((atual) => ({ ...atual, nome: event.target.value }))} style={inputStyle} placeholder="Plano mensal corte" /></Field><Field label="Preço do ciclo (R$) *"><input required type="number" min="0.01" step="0.01" value={formPlano.preco} onChange={(event) => setFormPlano((atual) => ({ ...atual, preco: event.target.value }))} style={inputStyle} /></Field><Field label="Ciclo"><select value={formPlano.ciclo} onChange={(event) => setFormPlano((atual) => ({ ...atual, ciclo: event.target.value }))} style={inputStyle}><option value="mensal">Mensal</option><option value="trimestral">Trimestral</option><option value="anual">Anual</option></select></Field><Field label="Sessões incluídas"><input required type="number" min="1" max="100" value={formPlano.sessoesIncluidas} onChange={(event) => setFormPlano((atual) => ({ ...atual, sessoesIncluidas: event.target.value }))} style={inputStyle} /></Field><Field label="Validade (dias)"><input required type="number" min="1" value={formPlano.validadeDias} onChange={(event) => setFormPlano((atual) => ({ ...atual, validadeDias: event.target.value }))} style={inputStyle} /></Field><Field label="Serviços cobertos" full><select multiple value={formPlano.servicosIds} onChange={(event) => setFormPlano((atual) => ({ ...atual, servicosIds: Array.from(event.target.selectedOptions).map((option) => option.value) }))} style={{ ...inputStyle, minHeight: 110 }}>{servicos.filter((item) => item.ativo !== false).map((servico) => <option key={servico.id} value={servico.id}>{servico.nome}</option>)}</select><small style={styles.sub}>Use Ctrl/Cmd para selecionar mais de um serviço.</small></Field><Field label="Descrição" full><textarea rows={3} value={formPlano.descricao} onChange={(event) => setFormPlano((atual) => ({ ...atual, descricao: event.target.value }))} style={{ ...inputStyle, resize: 'vertical' }} /></Field></div><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar plano'}</button></div></form></Modal>
+    if (modal === 'produtoRevenda') return <Modal title="Novo produto de revenda" onClose={() => setModal(null)} wide><form onSubmit={salvarProdutoRevenda} style={{ display: 'grid', gap: 16 }}><div style={styles.formGrid}><Field label="Nome *" full><input required value={formProdutoRevenda.nome} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, nome: event.target.value }))} style={inputStyle} placeholder="Pomada modeladora" /></Field><Field label="SKU"><input value={formProdutoRevenda.sku} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, sku: event.target.value }))} style={inputStyle} /></Field><Field label="Categoria"><input value={formProdutoRevenda.categoria} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, categoria: event.target.value }))} style={inputStyle} /></Field><Field label="Unidade"><input value={formProdutoRevenda.unidade} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, unidade: event.target.value }))} style={inputStyle} /></Field><Field label="Preço de venda (R$) *"><input required type="number" min="0.01" step="0.01" value={formProdutoRevenda.precoVenda} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, precoVenda: event.target.value }))} style={inputStyle} /></Field><Field label="Custo unitário (R$)"><input type="number" min="0" step="0.01" value={formProdutoRevenda.custoUnitario} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, custoUnitario: event.target.value }))} style={inputStyle} /></Field><Field label="Estoque inicial"><input type="number" min="0" step="1" value={formProdutoRevenda.estoqueAtual} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, estoqueAtual: event.target.value }))} style={inputStyle} /></Field><Field label="Estoque mínimo"><input type="number" min="0" step="1" value={formProdutoRevenda.estoqueMinimo} onChange={(event) => setFormProdutoRevenda((atual) => ({ ...atual, estoqueMinimo: event.target.value }))} style={inputStyle} /></Field></div><p style={styles.sub}>O estoque inicial gera apenas um movimento de entrada inicial; nenhum financeiro é criado.</p><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Salvando…' : 'Cadastrar produto'}</button></div></form></Modal>
     return null
   }
 
@@ -373,6 +537,11 @@ export default function BarbeariaERP() {
     if (tab === 'Profissionais') return renderProfissionais()
     if (tab === 'Serviços') return renderServicos()
     if (tab === 'Comissões') return renderComissoes()
+    if (tab === 'Fila e bloqueios') return renderFilaBloqueios()
+    if (tab === 'Planos e assinaturas') return renderPlanosAssinaturas()
+    if (tab === 'Fidelidade') return renderFidelidade()
+    if (tab === 'Estoque de revenda') return renderEstoqueRevenda()
+    if (tab === 'Relatórios') return renderRelatorios()
     return renderConfiguracao()
   }
 

@@ -30,6 +30,7 @@ import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
 import * as clientesKytto from './clientes-contas-kytto.js';
 import * as financeiroKytto from './financeiro-central-kytto.js';
 import * as caixaKytto from './caixa-diario-kytto.js';
+import * as canaisFidelidadeKytto from './canais-fidelidade-kytto.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -1903,6 +1904,118 @@ app.patch('/api/admin/barbearia/clientes/:id', (req, res) => {
     res.json({ ok: true, cliente: sanitizarClienteBarbearia(cliente) });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
+app.get('/api/admin/barbearia/fila', (req, res) => {
+  const empresaId = legacyEmpresaId(req);
+  res.json({ ok: true, fila: barbeariaErpKytto.listarFilaEspera(empresaId, { data: req.query?.data, status: req.query?.status }) });
+});
+app.post('/api/admin/barbearia/fila', (req, res) => {
+  try { res.status(201).json({ ok: true, item: barbeariaErpKytto.criarFilaEspera(legacyEmpresaId(req), req.body || {}) }); }
+  catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.patch('/api/admin/barbearia/fila/:id/status', (req, res) => {
+  try {
+    const item = barbeariaErpKytto.alterarStatusFila(legacyEmpresaId(req), req.params.id, req.body?.status, req.body || {});
+    if (!item) return res.status(404).json({ error: 'Item da fila não encontrado na empresa ativa.' });
+    res.json({ ok: true, item });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.get('/api/admin/barbearia/bloqueios', (req, res) => res.json({ ok: true, bloqueios: barbeariaErpKytto.listarBloqueios(legacyEmpresaId(req), { data: req.query?.data, profissionalId: req.query?.profissionalId, incluirInativos: String(req.query?.incluirInativos) === 'true' }) }));
+app.post('/api/admin/barbearia/bloqueios', (req, res) => {
+  try { res.status(201).json({ ok: true, bloqueio: barbeariaErpKytto.criarBloqueio(legacyEmpresaId(req), req.body || {}) }); }
+  catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.patch('/api/admin/barbearia/bloqueios/:id', (req, res) => {
+  try {
+    const bloqueio = barbeariaErpKytto.atualizarBloqueio(legacyEmpresaId(req), req.params.id, req.body || {});
+    if (!bloqueio) return res.status(404).json({ error: 'Bloqueio não encontrado na empresa ativa.' });
+    res.json({ ok: true, bloqueio });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.delete('/api/admin/barbearia/bloqueios/:id', (req, res) => {
+  try {
+    const bloqueio = barbeariaErpKytto.desativarBloqueio(legacyEmpresaId(req), req.params.id);
+    if (!bloqueio) return res.status(404).json({ error: 'Bloqueio não encontrado na empresa ativa.' });
+    res.json({ ok: true, bloqueio });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.get('/api/admin/barbearia/planos', (req, res) => res.json({ ok: true, planos: barbeariaErpKytto.listarPlanos(legacyEmpresaId(req), { incluirInativos: String(req.query?.incluirInativos) === 'true' }) }));
+app.post('/api/admin/barbearia/planos', (req, res) => {
+  try { res.status(201).json({ ok: true, plano: barbeariaErpKytto.criarPlano(legacyEmpresaId(req), req.body || {}) }); }
+  catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.patch('/api/admin/barbearia/planos/:id', (req, res) => {
+  try {
+    const plano = barbeariaErpKytto.atualizarPlano(legacyEmpresaId(req), req.params.id, req.body || {});
+    if (!plano) return res.status(404).json({ error: 'Plano não encontrado na empresa ativa.' });
+    res.json({ ok: true, plano });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.get('/api/admin/barbearia/assinaturas', (req, res) => res.json({ ok: true, assinaturas: barbeariaErpKytto.listarAssinaturas(legacyEmpresaId(req), { status: req.query?.status, clienteId: req.query?.clienteId }) }));
+app.post('/api/admin/barbearia/assinaturas', (req, res) => {
+  try { res.status(201).json({ ok: true, assinatura: barbeariaErpKytto.criarAssinatura(legacyEmpresaId(req), req.body || {}) }); }
+  catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.patch('/api/admin/barbearia/assinaturas/:id/status', (req, res) => {
+  try {
+    const assinatura = barbeariaErpKytto.alterarStatusAssinatura(legacyEmpresaId(req), req.params.id, req.body?.status, req.body || {});
+    if (!assinatura) return res.status(404).json({ error: 'Assinatura não encontrada na empresa ativa.' });
+    res.json({ ok: true, assinatura });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.get('/api/admin/barbearia/estoque-revenda', (req, res) => res.json({ ok: true, produtos: barbeariaErpKytto.listarProdutosRevenda(legacyEmpresaId(req), { incluirInativos: String(req.query?.incluirInativos) === 'true' }) }));
+app.post('/api/admin/barbearia/estoque-revenda', (req, res) => {
+  try { res.status(201).json({ ok: true, produto: barbeariaErpKytto.criarProdutoRevenda(legacyEmpresaId(req), req.body || {}) }); }
+  catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.patch('/api/admin/barbearia/estoque-revenda/:id', (req, res) => {
+  try {
+    const produto = barbeariaErpKytto.atualizarProdutoRevenda(legacyEmpresaId(req), req.params.id, req.body || {});
+    if (!produto) return res.status(404).json({ error: 'Produto de revenda não encontrado na empresa ativa.' });
+    res.json({ ok: true, produto });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.get('/api/admin/barbearia/estoque-revenda/movimentos', (req, res) => res.json({ ok: true, movimentos: barbeariaErpKytto.listarMovimentosEstoque(legacyEmpresaId(req), { produtoId: req.query?.produtoId }) }));
+app.post('/api/admin/barbearia/estoque-revenda/:id/movimentos', (req, res) => {
+  try {
+    if (req.body?.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita do movimento de estoque é obrigatória.' });
+    const resultado = barbeariaErpKytto.ajustarEstoqueRevenda(legacyEmpresaId(req), req.params.id, req.body || {});
+    if (!resultado) return res.status(404).json({ error: 'Produto de revenda não encontrado na empresa ativa.' });
+    res.json({ ok: true, ...resultado });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.get('/api/admin/barbearia/fidelidade', (req, res) => res.json({ ok: true, fidelidade: canaisFidelidadeKytto.obterFidelidade(legacyEmpresaId(req)) }));
+app.patch('/api/admin/barbearia/fidelidade/regra', (req, res) => {
+  try { res.json({ ok: true, regra: canaisFidelidadeKytto.salvarRegraFidelidade(legacyEmpresaId(req), req.body || {}) }); }
+  catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.post('/api/admin/barbearia/fidelidade/membros', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const cliente = clientesBarbeariaSomenteLeitura(empresaId).find(item => item.id === String(req.body?.clienteId || ''));
+    if (!cliente) return res.status(404).json({ error: 'Cliente do CRM não encontrado na empresa ativa.' });
+    const membro = canaisFidelidadeKytto.cadastrarMembroFidelidade(empresaId, { clienteId: cliente.id, nome: cliente.nome, telefone: cliente.telefone });
+    res.status(201).json({ ok: true, membro });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.post('/api/admin/barbearia/fidelidade/creditar', (req, res) => {
+  try {
+    if (req.body?.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita do crédito de fidelidade é obrigatória.' });
+    const clienteId = String(req.body?.clienteId || '');
+    const valor = Number(req.body?.valor || 0);
+    if (!clienteId || !Number.isFinite(valor) || valor <= 0) return res.status(400).json({ error: 'Informe cliente e valor positivo.' });
+    const empresaId = legacyEmpresaId(req);
+    if (!clientesBarbeariaSomenteLeitura(empresaId).some(item => item.id === clienteId)) return res.status(404).json({ error: 'Cliente do CRM não encontrado na empresa ativa.' });
+    const resultado = canaisFidelidadeKytto.creditarFidelidade(empresaId, clienteId, valor, req.body?.origem || 'barbearia_atendimento');
+    if (!resultado) return res.status(409).json({ error: 'Cliente não aderido ou programa de fidelidade inativo.' });
+    res.json({ ok: true, ...resultado });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
 app.get('/api/admin/barbearia/relatorios/operacional', (req, res) => {
   const empresaId = legacyEmpresaId(req);
   const data = String(req.query?.data || new Date().toISOString().slice(0, 10)).slice(0, 10);

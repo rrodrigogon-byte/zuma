@@ -4,16 +4,16 @@ const agora = () => new Date().toISOString()
 const id = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 const texto = (value, max = 180) => String(value ?? '').trim().slice(0, max)
 
-function store() {
+function store(criar = true) {
   const state = db()
+  if (!criar && !state.canaisKytto?.empresas) return {}
   state.canaisKytto ||= { empresas: {} }
   state.canaisKytto.empresas ||= {}
   return state.canaisKytto.empresas
 }
 
-function empresa(empresaId) {
-  const empresas = store()
-  empresas[empresaId] ||= {
+function empresaVazia() {
+  return {
     canais: {
       pdv: { id: 'pdv', nome: 'PDV Kytto', ativo: true, tipo: 'interno' },
       delivery_proprio: { id: 'delivery_proprio', nome: 'Delivery próprio', ativo: false, tipo: 'delivery' },
@@ -24,11 +24,18 @@ function empresa(empresaId) {
     fidelidade: { regra: { pontosPorReal: 1, valorPonto: 0.01, ativa: true }, membros: {} },
     pedidos: {},
   }
+}
+
+function empresa(empresaId, criar = true) {
+  const empresas = store(criar)
+  if (!criar && !empresas[empresaId]) return empresaVazia()
+  empresas[empresaId] ||= empresaVazia()
   return empresas[empresaId]
 }
 
+
 export function obterCanais(empresaId) {
-  const data = empresa(empresaId)
+  const data = empresa(empresaId, false)
   return Object.values(data.canais).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
 }
 
@@ -54,7 +61,7 @@ export function salvarCanal(empresaId, payload = {}) {
 }
 
 export function obterFidelidade(empresaId) {
-  const data = empresa(empresaId)
+  const data = empresa(empresaId, false)
   const membros = Object.values(data.fidelidade.membros).sort((a, b) => Number(b.pontos || 0) - Number(a.pontos || 0))
   return { regra: data.fidelidade.regra, membros }
 }
@@ -115,7 +122,7 @@ export function criarPedidoCanal(empresaId, payload = {}) {
 }
 
 export function listarPedidosCanal(empresaId, filtros = {}) {
-  const data = empresa(empresaId)
+  const data = empresa(empresaId, false)
   return Object.values(data.pedidos).filter((pedido) => !filtros.canal || pedido.canal === filtros.canal).filter((pedido) => !filtros.status || pedido.status === filtros.status).sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))
 }
 
