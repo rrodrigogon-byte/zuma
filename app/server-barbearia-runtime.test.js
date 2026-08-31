@@ -43,7 +43,7 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
   const base = `http://127.0.0.1:${port}`;
   const processo = spawn(process.execPath, ['server.js'], {
     cwd: path.join(ROOT, 'app'),
-    env: { ...process.env, NODE_ENV: 'development', PORT: String(port), DB_PATH: dbPath, JWT_SECRET: 'runtime-only-jwt-secret', COMMERCE_CORE_ENABLED: '0', SEED_DEMO: '0' },
+    env: { ...process.env, NODE_ENV: 'development', PORT: String(port), DB_PATH: dbPath, JWT_SECRET: 'runtime-only-jwt-secret', COMMERCE_CORE_ENABLED: '0', SEED_DEMO: '0', WPP_BASE_URL: '', WPP_APIKEY: '', AI_API_KEY: '', OPENAI_API_KEY: '' },
     stdio: 'ignore',
   });
 
@@ -57,12 +57,24 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     assert.ok(token);
     const headers = { Authorization: `Bearer ${token}` };
 
+    const integracoes = await request(base, '/api/admin/barbearia/integracoes', { headers });
+    assert.equal(integracoes.response.status, 200);
+    assert.equal(integracoes.body.whatsapp.envioManualDisponivel, false);
+    assert.equal(integracoes.body.ia.configurada, false);
+    const whatsappSemConfirmacao = await request(base, '/api/admin/barbearia/whatsapp/enviar', { method: 'POST', headers, body: JSON.stringify({ telefone: '65999999999', mensagem: 'teste' }) });
+    assert.equal(whatsappSemConfirmacao.response.status, 400);
+    const assistenteSemConfig = await request(base, '/api/admin/barbearia/ia/assistente', { method: 'POST', headers, body: JSON.stringify({ pergunta: 'Quais são os horários livres?' }) });
+    assert.equal(assistenteSemConfig.response.status, 503);
+
     const configuracoes = await request(base, '/api/admin/barbearia/configuracoes', { headers });
     assert.equal(configuracoes.response.status, 200);
     assert.equal(configuracoes.body.configuracao.intervaloMinutos, 30);
     const unidade = await request(base, '/api/admin/barbearia/configuracoes/unidade-ativa', { headers });
     assert.equal(unidade.response.status, 200);
     assert.equal(unidade.body.lojaId, 'loja-runtime');
+    const unidadeHeaderArbitrario = await request(base, '/api/admin/barbearia/configuracoes/unidade-ativa', { headers: { ...headers, 'X-Loja-Id': 'loja-fora-do-escopo' } });
+    assert.equal(unidadeHeaderArbitrario.response.status, 200);
+    assert.equal(unidadeHeaderArbitrario.body.lojaId, 'loja-runtime');
     const unidadeAtualizada = await request(base, '/api/admin/barbearia/configuracoes/unidade-ativa', { method: 'PATCH', headers, body: JSON.stringify({ horarioAbertura: '09:00', horarioFechamento: '19:00', feriados: ['2030-06-20'] }) });
     assert.equal(unidadeAtualizada.response.status, 200);
 

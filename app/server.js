@@ -26,6 +26,7 @@ import { mail } from './email.js';
 import { emitir as nfceEmitir, cancelar as nfceCancelar, nfceConfigurado } from './nfce.js';
 import { createCommerceAdminRouter, createCommercePublicRouter, createCommerceWebhookRouter } from './core/commerce-routes.js';
 import { db as commerceDb } from './core/database.js';
+import { resolveCommerceIdentity } from './core/commerce-identity-bridge.js';
 import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
 import * as clientesKytto from './clientes-contas-kytto.js';
 import * as financeiroKytto from './financeiro-central-kytto.js';
@@ -1748,8 +1749,8 @@ app.delete('/api/admin/cardapio/:id', auth, requireStaff, (req,res)=>{
 // ── COMBOS E MODIFICADORES ────────────────────────────────────────────────────
 // O runtime efetivo do Render é server.js (não server-erp.js). Estas rotas
 // reutilizam o domínio já testado e mantêm os dados separados por empresa.
-function legacyEmpresaId(req){ return req.user?.empresaId || 'principal'; }
-function legacyLojaId(req){ return req.user?.lojaId || ''; }
+function legacyEmpresaId(req){ return req.barbeariaContext?.empresaId || req.user?.empresaId || 'principal'; }
+function legacyLojaId(req){ return req.barbeariaContext?.lojaId || req.user?.lojaId || ''; }
 function produtosCardapioAtivos(){ return getCardapio().filter(produto => !produto.indisponivel); }
 
 // ── BARBEARIA ERP — CONTRATO ADMINISTRATIVO NO RUNTIME DO RENDER ─────────────
@@ -1757,7 +1758,24 @@ function produtosCardapioAtivos(){ return getCardapio().filter(produto => !produ
 // preserva o módulo v1 legado, que possui outro modelo de dados.
 // A guarda é aplicada no prefixo para impedir que qualquer leitura ou mutação
 // operacional seja acessível sem sessão autenticada e perfil de equipe.
-app.use('/api/admin/barbearia', auth, requireStaff);
+async function resolverEscopoBarbearia(req, res, next) {
+  const requestedEmpresa = String(req.headers['x-empresa-id'] || '').trim();
+  const requestedLoja = String(req.headers['x-loja-id'] || '').trim();
+  const signedEmpresa = String(req.user?.empresaId || '').trim();
+  const signedLoja = String(req.user?.lojaId || '').trim();
+  if (process.env.COMMERCE_CORE_ENABLED === '1' && (requestedEmpresa || requestedLoja)) {
+    try {
+      const contexto = await resolveCommerceIdentity(req);
+      req.barbeariaContext = { empresaId: contexto.empresaId, lojaId: contexto.lojaId || '' };
+      return next();
+    } catch (error) {
+      return res.status(403).json({ error: 'A empresa ou unidade selecionada não está autorizada para esta sessão.', code: error?.code || 'STORE_SCOPE_MISMATCH' });
+    }
+  }
+  req.barbeariaContext = { empresaId: signedEmpresa || 'principal', lojaId: signedLoja };
+  next();
+}
+app.use('/api/admin/barbearia', auth, requireStaff, resolverEscopoBarbearia);
 function sanitizarClienteBarbearia(cliente) {
   if (!cliente) return cliente;
   return {
@@ -2005,6 +2023,53 @@ app.post('/api/admin/barbearia/estoque-revenda/:id/movimentos', (req, res) => {
 
 app.get('/api/admin/barbearia/vendas-revenda', (req, res) => res.json({ ok: true, vendas: barbeariaErpKytto.listarVendasRevenda(legacyEmpresaId(req), { status: req.query?.status, data: req.query?.data, profissionalId: req.query?.profissionalId, lojaId: legacyLojaId(req) }) }));
 app.get('/api/admin/barbearia/comissoes', (req, res) => res.json({ ok: true, comissoes: barbeariaErpKytto.obterComissoes(legacyEmpresaId(req), { data: req.query?.data, lojaId: legacyLojaId(req) }) }));
+
+app.get('/api/admin/barbearia/integracoes', (req, res) => {
+  const canais = canaisFidelidadeKytto.obterCanais(legacyEmpresaId(req));
+  const whatsapp = canais.find((canal) => canal.id === 'whatsapp') || { id: 'whatsapp', nome: 'WhatsApp', ativo: false, tipo: 'mensageria', credencialConfigurada: false };
+  const aiConfigured = Boolean(process.env.AI_API_KEY || process.env.OPENAI_API_KEY);
+  res.json({ ok: true, whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: wpp.ativo() }, ia: { configurada: aiConfigured, modelo: process.env.AI_MODEL || process.env.OPENAI_MODEL || '', analiseOperacionalDisponivel: aiConfigured } });
+});
+
+app.post('/api/admin/barbearia/whatsapp/enviar', requireRole('admin', 'organizador'), async (req, res) => {
+  if (req.body?.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita do envio de WhatsApp é obrigatória.' });
+  const telefone = String(req.body?.telefone || '').trim();
+  const mensagem = String(req.body?.mensagem || '').trim();
+  if (!telefone || !mensagem) return res.status(400).json({ error: 'Telefone e mensagem são obrigatórios.' });
+  if (!wpp.ativo()) return res.status(503).json({ ok: false, error: 'WhatsApp não configurado no servidor.', code: 'WHATSAPP_NOT_CONFIGURED' });
+  try {
+    const resultado = await wpp.enviar(telefone, mensagem);
+    if (!resultado?.ok) return res.status(502).json({ ok: false, error: 'O provedor de WhatsApp não confirmou o envio.', code: 'WHATSAPP_PROVIDER_ERROR' });
+    res.json({ ok: true, enviado: true });
+  } catch (error) {
+    res.status(error?.code === 'WHATSAPP_INVALID_PHONE' ? 400 : 502).json({ ok: false, error: error.message, code: error?.code || 'WHATSAPP_PROVIDER_ERROR' });
+  }
+});
+
+app.post('/api/admin/barbearia/ia/assistente', requireRole('admin', 'organizador'), async (req, res) => {
+  const pergunta = String(req.body?.pergunta || '').trim().slice(0, 1200);
+  if (!pergunta) return res.status(400).json({ error: 'Informe uma pergunta para o assistente.' });
+  const apiKey = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || '';
+  if (!apiKey) return res.status(503).json({ ok: false, error: 'Assistente IA não configurado no servidor.', code: 'AI_NOT_CONFIGURED' });
+  const baseUrl = String(process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
+  const model = process.env.AI_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  const empresaId = legacyEmpresaId(req);
+  const data = String(req.body?.data || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const agenda = listarAgendamentosBarbearia(empresaId, { data, lojaId: legacyLojaId(req) }).map((item) => ({ horario: item.horaLocal || item.dataHora, status: item.status, atendente: item.profissionalNome || 'sem atendente', servico: item.servicoNome || 'sem serviço', duracaoMinutos: item.duracaoMinutos, valor: item.valor }));
+  const servicos = barbeariaErpKytto.listarServicos(empresaId).map((item) => ({ nome: item.nome, categoria: item.categoria, duracaoMinutos: item.duracaoMinutos, preco: item.preco, permiteAgendamentoOnline: item.permiteAgendamentoOnline }));
+  const profissionais = barbeariaErpKytto.listarProfissionais(empresaId).map((item) => ({ nome: item.nome, especialidade: item.especialidade, horarioInicio: item.horarioInicio, horarioFim: item.horarioFim, diasTrabalho: item.diasTrabalho }));
+  const prompt = JSON.stringify({ data, agenda, servicos, profissionais });
+  try {
+    const response = await fetch(`${baseUrl}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }, body: JSON.stringify({ model, temperature: 0.2, messages: [{ role: 'system', content: 'Você é o assistente operacional de uma barbearia. Responda em português brasileiro, use somente os dados fornecidos, sinalize quando algo não estiver disponível e não invente clientes, pagamentos, reservas, estoque ou integrações. Você pode sugerir organização de agenda e catálogo, mas nunca executar ações.' }, { role: 'user', content: `Pergunta: ${pergunta}\nDados operacionais sem documentos pessoais: ${prompt}` }] }), signal: AbortSignal.timeout(20000) });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) return res.status(502).json({ ok: false, error: 'O provedor de IA não respondeu corretamente.', code: 'AI_PROVIDER_ERROR' });
+    const resposta = body?.choices?.[0]?.message?.content;
+    if (!resposta) return res.status(502).json({ ok: false, error: 'O provedor de IA retornou uma resposta vazia.', code: 'AI_EMPTY_RESPONSE' });
+    res.json({ ok: true, modelo: model, resposta: String(resposta).slice(0, 12000) });
+  } catch (error) {
+    res.status(502).json({ ok: false, error: 'Não foi possível consultar o assistente IA.', code: error?.name === 'TimeoutError' ? 'AI_TIMEOUT' : 'AI_PROVIDER_ERROR' });
+  }
+});
 app.get('/api/admin/barbearia/vendas-revenda/:id', (req, res) => {
   const venda = barbeariaErpKytto.obterVendaRevenda(legacyEmpresaId(req), req.params.id);
   if (!venda) return res.status(404).json({ error: 'Venda de revenda não encontrada na empresa ativa.' });
