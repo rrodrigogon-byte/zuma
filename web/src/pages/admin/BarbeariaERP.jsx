@@ -133,6 +133,7 @@ export default function BarbeariaERP() {
   const [profissionalFiltro, setProfissionalFiltro] = useState('')
   const [agendaModo, setAgendaModo] = useState('timeline')
   const [busca, setBusca] = useState('')
+  const [buscaGlobal, setBuscaGlobal] = useState('')
   const [dashboard, setDashboard] = useState(null)
   const [agendamentos, setAgendamentos] = useState([])
   const [profissionais, setProfissionais] = useState([])
@@ -238,6 +239,28 @@ export default function BarbeariaERP() {
     return servicos.filter((servico) => !termo || [servico.nome, servico.categoria, servico.descricao].some((item) => String(item || '').toLowerCase().includes(termo)))
   }, [servicos, busca])
   const relacionamentoPorCliente = useMemo(() => Object.fromEntries((relacionamento?.porCliente || []).map((item) => [item.clienteId, item])), [relacionamento])
+  const resultadosBuscaGlobal = useMemo(() => {
+    const termo = buscaGlobal.trim().toLowerCase()
+    if (!termo) return []
+    const candidatos = [
+      ...clientes.map((item) => ({ id: `cliente-${item.id}`, tipo: 'Cliente', nome: item.nome, meta: item.telefone || item.email || 'CRM', tab: 'Clientes', item })),
+      ...profissionais.map((item) => ({ id: `profissional-${item.id}`, tipo: 'Atendente', nome: item.nome, meta: item.especialidade || 'Equipe', tab: 'Profissionais', item })),
+      ...servicos.map((item) => ({ id: `servico-${item.id}`, tipo: 'Serviço', nome: item.nome, meta: `${item.categoria || 'Geral'} · ${moeda(item.preco)}`, tab: 'Serviços', item })),
+      ...produtosRevenda.map((item) => ({ id: `produto-${item.id}`, tipo: 'Revenda', nome: item.nome, meta: `${item.sku || 'Sem SKU'} · estoque ${item.estoqueAtual ?? 0}`, tab: 'Estoque de revenda', item })),
+      ...agendamentos.map((item) => ({ id: `agenda-${item.id}`, tipo: 'Agenda', nome: item.clienteNome || item.cliente_nome || 'Cliente sem nome', meta: `${horario(item.dataHora)} · ${item.servicoNome || item.servico_nome || 'Serviço'}`, tab: 'Agenda', item })),
+    ]
+    return candidatos.filter((item) => [item.nome, item.meta, item.tipo].some((valor) => String(valor || '').toLowerCase().includes(termo))).slice(0, 8)
+  }, [agendamentos, buscaGlobal, clientes, profissionais, produtosRevenda, servicos])
+
+  function abrirResultadoBusca(resultado) {
+    setBuscaGlobal('')
+    if (resultado.tipo === 'Agenda') {
+      setModal({ tipo: 'detalheAgenda', agendamento: resultado.item })
+      return
+    }
+    setTab(resultado.tab)
+    setBusca(resultado.nome)
+  }
 
   async function executar(operacao, sucesso) {
     setSalvando(true)
@@ -662,6 +685,12 @@ export default function BarbeariaERP() {
 
   function renderVisaoGeral() {
     const proximos = dashboard?.proximosAgendamentos || []
+    const atividadeRecente = [
+      ...agendamentos.map((item) => ({ id: `agenda-${item.id}`, titulo: `Atendimento · ${item.clienteNome || item.cliente_nome || 'Cliente'}`, nota: `${item.servicoNome || item.servico_nome || 'Serviço'} · ${STATUS[item.status]?.label || item.status || 'Sem status'}`, ts: item.atualizadoEm || item.criadoEm || item.dataHora, status: item.status })),
+      ...comandas.map((item) => ({ id: `comanda-${item.id}`, titulo: `Comanda ${item.id}`, nota: `${item.clienteNome || 'Cliente eventual'} · ${moeda(item.total)} · ${STATUS[item.status]?.label || item.status || 'Sem status'}`, ts: item.atualizadoEm || item.criadoEm, status: item.status })),
+      ...vendasRevenda.map((item) => ({ id: `venda-${item.id}`, titulo: `Revenda · ${item.id}`, nota: `${item.clienteNome || 'Venda balcão'} · ${moeda(item.total)} · ${STATUS[item.status === 'pago' ? 'paga' : item.status]?.label || item.status || 'Sem status'}`, ts: item.atualizadoEm || item.criadoEm, status: item.status === 'pago' ? 'paga' : item.status })),
+    ].filter((item) => item.ts).sort((a, b) => String(b.ts).localeCompare(String(a.ts))).slice(0, 6)
+    const rankingAtendentes = [...(comissoes?.porProfissional || [])].sort((a, b) => (Number(b.brutoServicos || 0) + Number(b.brutoProdutos || 0)) - (Number(a.brutoServicos || 0) + Number(a.brutoProdutos || 0))).slice(0, 5)
     return <div style={{ display: 'grid', gap: 20 }}>
       <Card style={styles.todayHero}>
         <div style={styles.todayHeroTop}>
@@ -701,6 +730,10 @@ export default function BarbeariaERP() {
       <div style={styles.twoColumns}>
         <Card style={{ padding: 20 }}><div style={styles.sectionTitle}><div><div style={styles.kicker}>Recepção</div><h2 style={{ ...styles.h2, marginTop: 4 }}>Fila e capacidade agora</h2><p style={styles.sub}>Acompanhe a espera da unidade sem sair da visão principal.</p></div><button type="button" style={styles.secondary} onClick={() => setTab('Fila e bloqueios')}>Gerenciar fila</button></div>{(dashboard?.filaEspera || []).length === 0 ? <div style={styles.inlineEmpty}><strong>Fila vazia</strong><span>Nenhum cliente aguardando ou chamado para a data selecionada.</span></div> : <div style={{ display: 'grid', gap: 8 }}>{dashboard.filaEspera.slice(0, 5).map((item) => <div key={item.id} style={styles.queueRow}><div><strong>{item.senha} · {item.clienteNome || 'Cliente eventual'}</strong><small>{item.previsaoMinutos || 0} min de previsão</small></div><Badge status={item.status === 'aguardando' ? 'agendado' : 'em_atendimento'} /></div>)}</div>}</Card>
         <Card style={{ padding: 20 }}><div style={styles.sectionTitle}><div><div style={styles.kicker}>Controle</div><h2 style={{ ...styles.h2, marginTop: 4 }}>Pendências do dia</h2><p style={styles.sub}>Ações recomendadas com base nos dados carregados.</p></div></div><div style={{ display: 'grid', gap: 8 }}>{[[indicadores.profissionaisAtivos ? 'Equipe cadastrada' : 'Cadastrar equipe', indicadores.profissionaisAtivos ? `${indicadores.profissionaisAtivos} atendente(s) ativo(s)` : 'A agenda precisa de atendentes', 'Profissionais', indicadores.profissionaisAtivos ? 'ok' : 'attention'], [indicadores.servicosAtivos ? 'Catálogo disponível' : 'Cadastrar serviços', indicadores.servicosAtivos ? `${indicadores.servicosAtivos} serviço(s) ativo(s)` : 'Defina preço e duração para agendar', 'Serviços', indicadores.servicosAtivos ? 'ok' : 'attention'], [dashboard?.caixa?.aberto ? 'Caixa aberto' : 'Conferir caixa', dashboard?.caixa?.aberto ? 'Operação financeira em andamento' : 'Abra o caixa antes do primeiro recebimento', 'Caixa e fechamento', dashboard?.caixa?.aberto ? 'ok' : 'attention']].map(([titulo, nota, destino, estado]) => <button type="button" key={titulo} onClick={() => setTab(destino === 'Gestão' ? 'Configuração' : destino)} style={{ ...styles.actionRow, ...(estado === 'attention' ? styles.actionRowAttention : {}) }}><span><strong>{titulo}</strong><small>{nota}</small></span><span aria-hidden="true">›</span></button>)}</div></Card>
+      </div>
+      <div style={styles.twoColumns}>
+        <Card style={{ padding: 20 }}><div style={styles.sectionTitle}><div><div style={styles.kicker}>Ritmo da unidade</div><h2 style={styles.h2}>Atividade recente</h2><p style={styles.sub}>Eventos persistidos no overview, sem simulação ou atualização automática.</p></div><button type="button" style={styles.secondary} onClick={carregar}>Atualizar</button></div>{atividadeRecente.length === 0 ? <div style={styles.inlineEmpty}><strong>Nenhuma atividade recente</strong><span>Agendamentos, comandas e revendas aparecerão aqui quando existirem na unidade.</span></div> : <div style={{ display: 'grid', gap: 8 }}>{atividadeRecente.map((item) => <div key={item.id} style={styles.feedRow}><div><strong>{item.titulo}</strong><small>{item.nota}</small></div><div style={{ textAlign: 'right' }}><Badge status={item.status} /><small>{fmtDate(item.ts)}</small></div></div>)}</div>}</Card>
+        <Card style={{ padding: 20 }}><div style={styles.sectionTitle}><div><div style={styles.kicker}>Desempenho</div><h2 style={styles.h2}>Top atendentes</h2><p style={styles.sub}>Ranking indicativo por bruto apurado no recorte selecionado.</p></div><button type="button" style={styles.secondary} onClick={() => setTab('Comissões')}>Ver comissões</button></div>{rankingAtendentes.length === 0 ? <div style={styles.inlineEmpty}><strong>Sem apuração ainda</strong><span>Conclua atendimentos ou confirme vendas para formar o ranking real.</span></div> : <div style={{ display: 'grid', gap: 8 }}>{rankingAtendentes.map((item, indice) => <div key={item.profissionalId} style={styles.feedRow}><div><strong>{indice + 1}. {item.profissionalNome}</strong><small>{item.atendimentos || 0} atendimento(s) · {item.vendasProdutos || 0} revenda(s)</small></div><strong>{moeda(Number(item.brutoServicos || 0) + Number(item.brutoProdutos || 0))}</strong></div>)}</div>}</Card>
       </div>
       <Card style={{ padding: 20 }}>
         <div style={styles.sectionTitle}><div><div style={styles.kicker}>Próximas ações</div><h2 style={{ ...styles.h2, marginTop: 4 }}>Prontidão operacional</h2><p style={styles.sub}>O módulo reutiliza cadastros e livros existentes; nenhuma venda, reserva ou pagamento é simulado.</p></div><span style={styles.contextPill}>{indicadores.profissionaisAtivos && indicadores.servicosAtivos ? 'Base pronta' : 'Completar cadastros'}</span></div>
@@ -1005,7 +1038,7 @@ export default function BarbeariaERP() {
 
   return <div style={{ padding: '24px clamp(16px, 3vw, 36px)', maxWidth: 1440, margin: '0 auto' }}>
     <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap', marginBottom: 14 }}>
-      <div><div style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em' }}>ERP operacional · empresa ativa</div><h1 style={{ margin: '7px 0 5px', fontSize: 'clamp(25px, 4vw, 34px)' }}>Barbearia & Salão</h1><p style={{ margin: 0, color: 'var(--muted)', maxWidth: 720 }}>A operação da unidade em um fluxo único: agenda, atendimento, relacionamento, catálogo e gestão.</p></div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button type="button" style={styles.secondary} onClick={carregar}>Atualizar</button><button type="button" style={styles.primary} onClick={() => setTab('Atendimento')}>Atender agora</button>{tab === 'Agenda' && <button type="button" style={styles.primary} onClick={abrirNovoAgendamento}>+ Agendamento</button>}</div>
+      <div><div style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em' }}>ERP operacional · empresa ativa</div><h1 style={{ margin: '7px 0 5px', fontSize: 'clamp(25px, 4vw, 34px)' }}>Barbearia & Salão</h1><p style={{ margin: 0, color: 'var(--muted)', maxWidth: 720 }}>A operação da unidade em um fluxo único: agenda, atendimento, relacionamento, catálogo e gestão.</p></div><div style={styles.headerActions}><div style={styles.globalSearch}><input aria-label="Buscar na Barbearia" aria-expanded={Boolean(buscaGlobal.trim())} aria-controls="barbearia-global-search-results" value={buscaGlobal} onChange={(event) => setBuscaGlobal(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setBuscaGlobal(''); if (event.key === 'Enter' && resultadosBuscaGlobal[0]) abrirResultadoBusca(resultadosBuscaGlobal[0]) }} placeholder="Buscar cliente, serviço ou agenda…" style={{ ...inputStyle, paddingRight: 40 }} /><span aria-hidden="true" style={styles.searchIcon}>⌕</span>{buscaGlobal.trim() && <div id="barbearia-global-search-results" role="listbox" aria-label="Resultados da busca" style={styles.globalSearchResults}>{resultadosBuscaGlobal.length === 0 ? <div style={styles.globalSearchEmpty}>Nenhum registro encontrado no overview carregado.</div> : resultadosBuscaGlobal.map((resultado) => <button key={resultado.id} type="button" role="option" style={styles.globalSearchItem} onClick={() => abrirResultadoBusca(resultado)}><span><strong>{resultado.nome}</strong><small>{resultado.tipo} · {resultado.meta}</small></span><span aria-hidden="true">›</span></button>)}</div>}</div><button type="button" style={styles.secondary} onClick={carregar}>Atualizar</button><button type="button" style={styles.primary} onClick={() => setTab('Atendimento')}>Atender agora</button>{tab === 'Agenda' && <button type="button" style={styles.primary} onClick={abrirNovoAgendamento}>+ Agendamento</button>}</div>
     </header>
     <div style={styles.contextBar} aria-label="Contexto operacional"><div style={styles.contextBarItem}><span>Área ativa</span><strong>{areaAtual.label}</strong></div><div style={styles.contextBarItem}><span>Unidade</span><strong>{unidadeLabel}</strong></div><div style={styles.contextBarItem}><span>Data operacional</span><strong>{fmtDateOnly(dataSelecionada)}</strong></div><div style={styles.contextBarItem}><span>Estado</span><strong>{loading ? 'Atualizando…' : erro ? 'Revisar dados' : 'Dados sincronizados'}</strong></div></div>
     <nav aria-label="Áreas da Barbearia" style={styles.areaNav}>
@@ -1032,6 +1065,12 @@ const styles = {
   empty: { padding: 42, textAlign: 'center', color: 'var(--muted)' },
   h2: { margin: 0, fontSize: 18 },
   sectionTitle: { display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', marginBottom: 18, flexWrap: 'wrap' },
+  headerActions: { display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap', minWidth: 0 },
+  globalSearch: { position: 'relative', width: 'min(360px, 100%)', minWidth: 220 },
+  searchIcon: { position: 'absolute', right: 12, top: 9, color: 'var(--muted)', fontSize: 20, lineHeight: 1, pointerEvents: 'none' },
+  globalSearchResults: { position: 'absolute', zIndex: 40, top: 'calc(100% + 6px)', left: 0, right: 0, display: 'grid', gap: 4, padding: 6, background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 11, boxShadow: '0 16px 32px rgba(0,0,0,.18)' },
+  globalSearchItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, width: '100%', padding: '9px 10px', border: 0, borderRadius: 8, background: 'transparent', color: 'var(--fg)', textAlign: 'left', font: 'inherit', cursor: 'pointer' },
+  globalSearchEmpty: { padding: '10px 9px', color: 'var(--muted)', fontSize: 12 },
   toolbar: { display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'end', flexWrap: 'wrap' },
   agendaToolbar: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, alignItems: 'end' },
   agendaMeta: { display: 'grid', gap: 3, alignContent: 'end', padding: '0 4px 2px', color: 'var(--muted)', fontSize: 12 },
@@ -1066,6 +1105,7 @@ const styles = {
   paymentPanel: { padding: 16, borderColor: 'color-mix(in srgb, var(--accent) 35%, var(--line))', background: 'color-mix(in srgb, var(--accent) 6%, var(--card))' },
   twoColumns: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 16 },
   listRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--line)' },
+  feedRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--line)' },
   metricLine: { display: 'flex', justifyContent: 'space-between', gap: 16, paddingBottom: 12, borderBottom: '1px solid var(--line)', color: 'var(--muted)' },
   tableActions: { display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 8 },
   inlineEmpty: { display: 'grid', gap: 4, padding: 16, borderRadius: 10, background: 'var(--bg)', color: 'var(--muted)' },
