@@ -1,4 +1,5 @@
 import { db, save } from './db.js';
+import * as financeiroKytto from './financeiro-central-kytto.js';
 
 const STATUS = new Set(['agendado', 'confirmado', 'em_atendimento', 'concluido', 'cancelado', 'nao_compareceu']);
 const TRANSICOES = {
@@ -49,6 +50,7 @@ function estadoVazio() {
     assinaturas: {},
     produtosRevenda: {},
     movimentosEstoque: {},
+    vendasRevenda: {},
     configuracao: {
       horarioAbertura: '08:00',
       horarioFechamento: '20:00',
@@ -57,6 +59,8 @@ function estadoVazio() {
       antecedenciaMinutos: 60,
       janelaReservaDias: 60,
       politicaCancelamentoHoras: 4,
+      feriados: [],
+      lojas: {},
     },
   };
 }
@@ -84,7 +88,8 @@ function estadoEmpresa(empresaId, criar = true) {
       assinaturas: estado.assinaturas || {},
       produtosRevenda: estado.produtosRevenda || {},
       movimentosEstoque: estado.movimentosEstoque || {},
-      configuracao: { ...vazio.configuracao, ...(estado.configuracao || {}) },
+      vendasRevenda: estado.vendasRevenda || {},
+      configuracao: { ...vazio.configuracao, ...(estado.configuracao || {}), lojas: { ...(vazio.configuracao.lojas || {}), ...(estado.configuracao?.lojas || {}) } },
     };
   }
   estado.profissionais ||= {};
@@ -97,7 +102,9 @@ function estadoEmpresa(empresaId, criar = true) {
   estado.assinaturas ||= {};
   estado.produtosRevenda ||= {};
   estado.movimentosEstoque ||= {};
+  estado.vendasRevenda ||= {};
   estado.configuracao ||= {};
+  estado.configuracao.lojas ||= {};
   return estado;
 }
 
@@ -136,6 +143,38 @@ function servicoNormalizado(dados = {}, anterior = {}) {
   };
 }
 
+function horaValida(valor) {
+  return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(valor || ''));
+}
+
+function diasNormalizados(valor, fallback) {
+  return Array.isArray(valor)
+    ? [...new Set(valor.map((item) => numero(item, -1)).filter((item) => item >= 0 && item <= 6))].sort()
+    : actualOrDefault(fallback, [1, 2, 3, 4, 5, 6]);
+}
+
+function feriadosNormalizados(valor, fallback = []) {
+  return Array.isArray(valor)
+    ? [...new Set(valor.map((item) => texto(item, 10)).filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item)))].sort()
+    : actualOrDefault(fallback, []);
+}
+
+function calendarioNormalizado(dados = {}, anterior = {}) {
+  const horarioAbertura = texto(dados.horarioAbertura ?? dados.horario_abertura ?? anterior.horarioAbertura, 5) || '08:00';
+  const horarioFechamento = texto(dados.horarioFechamento ?? dados.horario_fechamento ?? anterior.horarioFechamento, 5) || '20:00';
+  if (!horaValida(horarioAbertura) || !horaValida(horarioFechamento) || horarioFechamento <= horarioAbertura) throw new Error('Horário de funcionamento inválido.');
+  return {
+    horarioAbertura,
+    horarioFechamento,
+    intervaloMinutos: Math.max(5, Math.min(240, Math.round(numero(dados.intervaloMinutos ?? dados.intervalo_minutos ?? anterior.intervaloMinutos, 30)))),
+    diasFuncionamento: diasNormalizados(dados.diasFuncionamento ?? dados.dias_funcionamento, anterior.diasFuncionamento),
+    feriados: feriadosNormalizados(dados.feriados, anterior.feriados),
+    antecedenciaMinutos: Math.max(0, Math.min(10080, Math.round(numero(dados.antecedenciaMinutos ?? dados.antecedencia_minutos ?? anterior.antecedenciaMinutos, 60)))),
+    janelaReservaDias: Math.max(1, Math.min(365, Math.round(numero(dados.janelaReservaDias ?? dados.janela_reserva_dias ?? anterior.janelaReservaDias, 60)))),
+    politicaCancelamentoHoras: Math.max(0, Math.min(168, Math.round(numero(dados.politicaCancelamentoHoras ?? dados.politica_cancelamento_horas ?? anterior.politicaCancelamentoHoras, 4)))),
+  };
+}
+
 function agendamentoNormalizado(dados = {}, anterior = {}) {
   const dataHora = texto(dados.dataHora ?? dados.data_hora ?? anterior.dataHora, 40);
   const status = STATUS.has(String(dados.status ?? anterior.status)) ? String(dados.status ?? anterior.status) : 'agendado';
@@ -143,8 +182,11 @@ function agendamentoNormalizado(dados = {}, anterior = {}) {
     clienteId: texto(dados.clienteId ?? dados.cliente_id ?? anterior.clienteId, 100),
     clienteNome: texto(dados.clienteNome ?? dados.cliente_nome ?? anterior.clienteNome, 160),
     clienteTelefone: texto(dados.clienteTelefone ?? dados.cliente_telefone ?? anterior.clienteTelefone, 30),
-    clienteEmail: texto(dados.clienteEmail ?? dados.cliente_email ?? anterior.clienteEmail, 160).toLowerCase(),
-    profissionalId: texto(dados.profissionalId ?? dados.profissional_id ?? anterior.profissionalId, 100),
+        clienteEmail: texto(dados.clienteEmail ?? dados.cliente_email ?? anterior.clienteEmail, 160).toLowerCase(),
+    lojaId: texto(dados.lojaId ?? dados.loja_id ?? anterior.lojaId, 120),
+    horaLocal: texto(dados.horaLocal ?? dados.hora_local ?? anterior.horaLocal, 5),
+    profissionalId:
+ texto(dados.profissionalId ?? dados.profissional_id ?? anterior.profissionalId, 100),
     servicoId: texto(dados.servicoId ?? dados.servico_id ?? anterior.servicoId, 100),
     dataHora,
     dataAgenda: texto(dados.dataAgenda ?? dados.data_agenda ?? anterior.dataAgenda, 10) || chaveDia(dataHora),
@@ -164,26 +206,41 @@ function ordenarPorData(a, b) {
 }
 
 export function obterConfiguracao(empresaId) {
-  return { ...estadoEmpresa(empresaId, false).configuracao };
+  const configuracao = estadoEmpresa(empresaId, false).configuracao;
+  return { ...configuracao, lojas: { ...(configuracao.lojas || {}) } };
+}
+
+function obterCalendarioLoja(estado, lojaId) {
+  const id = String(lojaId || '');
+  return id && estado.configuracao.lojas?.[id]
+    ? { ...estado.configuracao, ...estado.configuracao.lojas[id], lojas: undefined }
+    : { ...estado.configuracao, lojas: undefined };
+}
+
+export function obterConfiguracaoLoja(empresaId, lojaId) {
+  const id = texto(lojaId, 120);
+  if (!id) throw new Error('Unidade ativa não informada na sessão.');
+  const estado = estadoEmpresa(empresaId, false);
+  const calendario = obterCalendarioLoja(estado, id);
+  return { lojaId: id, herdadaDaEmpresa: !estado.configuracao.lojas?.[id], calendario: { ...calendario, lojas: undefined } };
 }
 
 export function atualizarConfiguracao(empresaId, dados = {}) {
   const estado = estadoEmpresa(empresaId);
   const atual = estado.configuracao;
-  const dias = Array.isArray(dados.diasFuncionamento ?? dados.dias_funcionamento)
-    ? [...new Set((dados.diasFuncionamento ?? dados.dias_funcionamento).map((item) => numero(item, -1)).filter((item) => item >= 0 && item <= 6))].sort()
-    : actualOrDefault(atual.diasFuncionamento, [1, 2, 3, 4, 5, 6]);
-  Object.assign(atual, {
-    horarioAbertura: texto(dados.horarioAbertura ?? dados.horario_abertura ?? atual.horarioAbertura, 5) || '08:00',
-    horarioFechamento: texto(dados.horarioFechamento ?? dados.horario_fechamento ?? atual.horarioFechamento, 5) || '20:00',
-    intervaloMinutos: Math.max(5, Math.min(240, Math.round(numero(dados.intervaloMinutos ?? dados.intervalo_minutos ?? atual.intervaloMinutos, 30)))),
-    diasFuncionamento: dias,
-    antecedenciaMinutos: Math.max(0, Math.min(10080, Math.round(numero(dados.antecedenciaMinutos ?? dados.antecedencia_minutos ?? atual.antecedenciaMinutos, 60)))),
-    janelaReservaDias: Math.max(1, Math.min(365, Math.round(numero(dados.janelaReservaDias ?? dados.janela_reserva_dias ?? atual.janelaReservaDias, 60)))),
-    politicaCancelamentoHoras: Math.max(0, Math.min(168, Math.round(numero(dados.politicaCancelamentoHoras ?? dados.politica_cancelamento_horas ?? atual.politicaCancelamentoHoras, 4)))),
-  });
+  Object.assign(atual, calendarioNormalizado(dados, atual));
   save();
-  return { ...atual };
+  return { ...atual, lojas: { ...(atual.lojas || {}) } };
+}
+
+export function atualizarConfiguracaoLoja(empresaId, lojaId, dados = {}) {
+  const id = texto(lojaId, 120);
+  if (!id) throw new Error('Unidade ativa não informada na sessão.');
+  const estado = estadoEmpresa(empresaId);
+  const atual = estado.configuracao.lojas[id] || obterCalendarioLoja(estado, id);
+  estado.configuracao.lojas[id] = { lojaId: id, ...calendarioNormalizado(dados, atual), atualizadoEm: dataAtual() };
+  save();
+  return { lojaId: id, herdadaDaEmpresa: false, calendario: { ...estado.configuracao.lojas[id] } };
 }
 
 function actualOrDefault(value, fallback) {
@@ -256,6 +313,7 @@ export function listarAgendamentos(empresaId, filtros = {}) {
     .filter((item) => !filtros.data || String(item.dataAgenda || chaveDia(item.dataHora)).slice(0, 10) === String(filtros.data).slice(0, 10))
     .filter((item) => !filtros.status || item.status === String(filtros.status))
     .filter((item) => !filtros.profissionalId || item.profissionalId === String(filtros.profissionalId))
+    .filter((item) => !filtros.lojaId || !item.lojaId || item.lojaId === String(filtros.lojaId))
     .sort(ordenarPorData);
   return itens.map((item) => ({ ...item }));
 }
@@ -301,6 +359,7 @@ function bloqueioNormalizado(dados = {}, anterior = {}) {
     fim,
     profissionalId: texto(dados.profissionalId ?? dados.profissional_id ?? anterior.profissionalId, 100),
     ativo: dados.ativo ?? anterior.ativo ?? true,
+    lojaId: texto(dados.lojaId ?? dados.loja_id ?? anterior.lojaId, 120),
   };
 }
 
@@ -309,6 +368,7 @@ export function listarBloqueios(empresaId, filtros = {}) {
     .filter((item) => filtros.incluirInativos || item.ativo !== false)
     .filter((item) => !filtros.data || chaveDia(item.inicio) <= String(filtros.data).slice(0, 10) && chaveDia(item.fim) >= String(filtros.data).slice(0, 10))
     .filter((item) => !filtros.profissionalId || !item.profissionalId || item.profissionalId === String(filtros.profissionalId))
+    .filter((item) => !filtros.lojaId || !item.lojaId || item.lojaId === String(filtros.lojaId))
     .sort((a, b) => new Date(a.inicio).valueOf() - new Date(b.inicio).valueOf())
     .map((item) => ({ ...item }));
 }
@@ -349,6 +409,7 @@ function filaNormalizada(dados = {}, anterior = {}) {
     previsaoMinutos: Math.max(0, Math.min(720, Math.round(numero(dados.previsaoMinutos ?? dados.previsao_minutos ?? anterior.previsaoMinutos, 30)))),
     observacoes: texto(dados.observacoes ?? dados.observacao ?? anterior.observacoes, 500),
     dataAgenda: texto(dados.dataAgenda ?? dados.data_agenda ?? anterior.dataAgenda, 10) || chaveDia(dataAtual()),
+    lojaId: texto(dados.lojaId ?? dados.loja_id ?? anterior.lojaId, 120),
   };
 }
 
@@ -356,6 +417,7 @@ export function listarFilaEspera(empresaId, filtros = {}) {
   return Object.values(estadoEmpresa(empresaId, false).filaEspera)
     .filter((item) => !filtros.status || item.status === String(filtros.status))
     .filter((item) => !filtros.data || String(item.dataAgenda || chaveDia(item.criadoEm)).slice(0, 10) === String(filtros.data).slice(0, 10))
+    .filter((item) => !filtros.lojaId || !item.lojaId || item.lojaId === String(filtros.lojaId))
     .sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0) || String(a.criadoEm).localeCompare(String(b.criadoEm)))
     .map((item) => ({ ...item }));
 }
@@ -586,15 +648,151 @@ export function listarMovimentosEstoque(empresaId, filtros = {}) {
     .map((item) => ({ ...item }));
 }
 
+function itensVendaNormalizados(estado, empresaId, itens = []) {
+  if (!Array.isArray(itens) || itens.length === 0) throw new Error('A venda deve conter pelo menos um produto.');
+  const normalizados = itens.map((item) => {
+    const produtoId = String(item?.produtoId || item?.produto_id || '');
+    const produto = estado.produtosRevenda[produtoId];
+    const quantidade = Math.round(numero(item?.quantidade ?? item?.qtd, NaN));
+    if (!produto || produto.empresaId !== String(empresaId)) throw new Error('Produto de revenda inválido para a empresa ativa.');
+    if (produto.ativo === false) throw new Error(`Produto inativo: ${produto.nome}.`);
+    if (!Number.isFinite(quantidade) || quantidade <= 0) throw new Error('Quantidade positiva é obrigatória para cada produto.');
+    return { produtoId, nome: produto.nome, unidade: produto.unidade, quantidade, precoUnitario: produto.precoVenda, subtotal: dinheiro(produto.precoVenda * quantidade) };
+  });
+  return normalizados;
+}
+
+function estoqueVendaDisponivel(estado, itens) {
+  const porProduto = new Map();
+  for (const item of itens) porProduto.set(item.produtoId, (porProduto.get(item.produtoId) || 0) + item.quantidade);
+  for (const [produtoId, quantidade] of porProduto) {
+    const produto = estado.produtosRevenda[produtoId];
+    if (Number(produto.estoqueAtual || 0) < quantidade) throw new Error(`Estoque insuficiente para ${produto.nome} (disponível: ${produto.estoqueAtual || 0}).`);
+  }
+}
+
+export function listarVendasRevenda(empresaId, filtros = {}) {
+  return Object.values(estadoEmpresa(empresaId, false).vendasRevenda)
+    .filter((item) => !filtros.status || item.status === String(filtros.status))
+    .filter((item) => !filtros.data || String(item.criadoEm).slice(0, 10) === String(filtros.data).slice(0, 10))
+    .filter((item) => !filtros.profissionalId || item.profissionalId === String(filtros.profissionalId))
+    .filter((item) => !filtros.lojaId || !item.lojaId || item.lojaId === String(filtros.lojaId))
+    .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))
+    .map((item) => ({ ...item, itens: item.itens.map((linha) => ({ ...linha })) }));
+}
+
+export function obterVendaRevenda(empresaId, vendaId) {
+  const venda = estadoEmpresa(empresaId, false).vendasRevenda[String(vendaId)];
+  return venda && venda.empresaId === String(empresaId) ? { ...venda, itens: venda.itens.map((item) => ({ ...item })) } : null;
+}
+
+export function criarVendaRevenda(empresaId, dados = {}) {
+  const estado = estadoEmpresa(empresaId);
+  const chaveIdempotencia = texto(dados.chaveIdempotencia ?? dados.chave_idempotencia, 220);
+  if (chaveIdempotencia) {
+    const existente = Object.values(estado.vendasRevenda).find((item) => item.chaveIdempotencia === chaveIdempotencia);
+    if (existente) return { ...existente, itens: existente.itens.map((item) => ({ ...item })) };
+  }
+  const itens = itensVendaNormalizados(estado, empresaId, dados.itens);
+  const profissionalId = texto(dados.profissionalId ?? dados.profissional_id, 120);
+  if (profissionalId && (!estado.profissionais[profissionalId] || estado.profissionais[profissionalId].ativo === false)) throw new Error('Profissional responsável não encontrado ou inativo.');
+  const agora = dataAtual();
+  const id = novoId('vrev', estado.vendasRevenda);
+  const venda = {
+    id,
+    empresaId: String(empresaId),
+    lojaId: texto(dados.lojaId ?? dados.loja_id, 120),
+    clienteId: texto(dados.clienteId ?? dados.cliente_id, 120),
+    clienteNome: texto(dados.clienteNome ?? dados.cliente_nome, 160),
+    profissionalId,
+    observacao: texto(dados.observacao ?? dados.obs, 300),
+    itens,
+    total: dinheiro(itens.reduce((total, item) => total + item.subtotal, 0)),
+    status: 'aguardando_pagamento',
+    estoqueBaixado: false,
+    pagamento: null,
+    financeiroLancamentoId: null,
+    chaveIdempotencia: chaveIdempotencia || null,
+    criadoEm: agora,
+    atualizadoEm: agora,
+  };
+  estado.vendasRevenda[id] = venda;
+  save();
+  return { ...venda, itens: venda.itens.map((item) => ({ ...item })) };
+}
+
+export function finalizarVendaRevenda(empresaId, vendaId, dados = {}) {
+  const estado = estadoEmpresa(empresaId);
+  const venda = estado.vendasRevenda[String(vendaId)];
+  if (!venda || venda.empresaId !== String(empresaId)) return null;
+  if (venda.status === 'pago') return { ...venda, itens: venda.itens.map((item) => ({ ...item })) };
+  if (dados.confirmadoPagamento !== true) throw new Error('A confirmação explícita do pagamento é obrigatória.');
+  const meioPagamento = texto(dados.meioPagamento ?? dados.meio_pagamento, 40).toLowerCase();
+  if (!meioPagamento) throw new Error('Meio de pagamento é obrigatório.');
+  const valorRecebido = dinheiro(dados.valorRecebido ?? dados.valor_recebido, venda.total);
+  if (valorRecebido !== venda.total) throw new Error(`Valor recebido deve ser ${venda.total.toFixed(2)}.`);
+  estoqueVendaDisponivel(estado, venda.itens);
+  const agora = dataAtual();
+  const financeiro = financeiroKytto.registrarLancamento(empresaId, {
+    tipo: 'receita',
+    categoria: 'Barbearia - Revenda',
+    descricao: `Revenda Barbearia ${venda.id}`,
+    valor: venda.total,
+    origem: 'barbearia_revenda',
+    status: 'pago',
+    dataOperacao: agora,
+    pagoEm: agora,
+    meioPagamento,
+    usuario: dados.usuario,
+    referencia: { pedidoId: venda.id },
+    chaveIdempotencia: `barbearia_revenda:${empresaId}:${venda.id}`,
+  });
+  for (const item of venda.itens) {
+    const produto = estado.produtosRevenda[item.produtoId];
+    const anterior = Number(produto.estoqueAtual || 0);
+    produto.estoqueAtual = anterior - item.quantidade;
+    produto.atualizadoEm = agora;
+    produto.ultimoMovimentoEm = agora;
+    const movimentoId = novoId('mov', estado.movimentosEstoque);
+    estado.movimentosEstoque[movimentoId] = { id: movimentoId, empresaId: String(empresaId), produtoId: produto.id, tipo: 'saida_venda', quantidade: item.quantidade, estoqueAnterior: anterior, estoquePosterior: produto.estoqueAtual, vendaId: venda.id, observacao: `Baixa da venda ${venda.id}.`, criadoEm: agora };
+  }
+  Object.assign(venda, { status: 'pago', estoqueBaixado: true, pagamento: { meioPagamento, valorRecebido, confirmadoEm: agora }, financeiroLancamentoId: financeiro.id, atualizadoEm: agora });
+  save();
+  return { ...venda, itens: venda.itens.map((item) => ({ ...item })) };
+}
+
+function validarCalendarioAgendamento(estado, agendamento, profissional) {
+  const dataAgenda = String(agendamento.dataAgenda || chaveDia(agendamento.dataHora)).slice(0, 10);
+  const calendario = obterCalendarioLoja(estado, agendamento.lojaId);
+  if (calendario.feriados?.includes(dataAgenda)) throw new Error('A unidade não recebe reservas nesta data: feriado configurado.');
+  const dataLocal = new Date(`${dataAgenda}T12:00:00Z`);
+  if (Number.isNaN(dataLocal.valueOf())) throw new Error('Data operacional inválida.');
+  if (Array.isArray(calendario.diasFuncionamento) && !calendario.diasFuncionamento.includes(dataLocal.getUTCDay())) throw new Error('A unidade não funciona neste dia da semana.');
+  if (!agendamento.horaLocal) return;
+  const [hora, minuto] = agendamento.horaLocal.split(':').map(Number);
+  const inicioMinutos = hora * 60 + minuto;
+  const fimMinutos = inicioMinutos + agendamento.duracaoMinutos;
+  const abertura = calendario.horarioAbertura.split(':').map(Number);
+  const fechamento = calendario.horarioFechamento.split(':').map(Number);
+  if (inicioMinutos < abertura[0] * 60 + abertura[1] || fimMinutos > fechamento[0] * 60 + fechamento[1]) throw new Error('Horário fora do funcionamento da unidade.');
+  if (profissional) {
+    if (Array.isArray(profissional.diasTrabalho) && !profissional.diasTrabalho.includes(dataLocal.getUTCDay())) throw new Error('O profissional não trabalha neste dia.');
+    const inicioProf = profissional.horarioInicio.split(':').map(Number);
+    const fimProf = profissional.horarioFim.split(':').map(Number);
+    if (inicioMinutos < inicioProf[0] * 60 + inicioProf[1] || fimMinutos > fimProf[0] * 60 + fimProf[1]) throw new Error('Horário fora da jornada do profissional.');
+  }
+}
+
 function verificarConflito(estado, dados, ignorarId = '') {
   const inicio = new Date(dados.dataHora).valueOf();
   if (!Number.isFinite(inicio)) throw new Error('Data e horário do atendimento são inválidos.');
   const fim = inicio + dados.duracaoMinutos * 60 * 1000;
-  const bloqueio = Object.values(estado.bloqueios).find((item) => item.ativo !== false && (!item.profissionalId || item.profissionalId === dados.profissionalId) && sobrepoe(dados.dataHora, new Date(fim).toISOString(), item.inicio, item.fim));
+  const bloqueio = Object.values(estado.bloqueios).find((item) => item.ativo !== false && (!dados.lojaId || !item.lojaId || item.lojaId === dados.lojaId) && (!item.profissionalId || item.profissionalId === dados.profissionalId) && sobrepoe(dados.dataHora, new Date(fim).toISOString(), item.inicio, item.fim));
   if (bloqueio) return { tipo: 'bloqueio', ...bloqueio };
   return Object.values(estado.agendamentos).find((item) => {
     if (item.id === ignorarId || item.status === 'cancelado' || item.status === 'nao_compareceu') return false;
     if (!dados.profissionalId || item.profissionalId !== dados.profissionalId) return false;
+    if (dados.lojaId && item.lojaId && item.lojaId !== dados.lojaId) return false;
     const outroInicio = new Date(item.dataHora).valueOf();
     const outroFim = outroInicio + item.duracaoMinutos * 60 * 1000;
     return inicio < outroFim && outroInicio < fim;
@@ -607,9 +805,11 @@ export function criarAgendamento(empresaId, dados = {}) {
   if (!agendamento.clienteNome && !agendamento.clienteId) throw new Error('Informe o cliente do atendimento.');
   if (!agendamento.servicoId || !estado.servicos[agendamento.servicoId] || estado.servicos[agendamento.servicoId].ativo === false) throw new Error('Serviço ativo é obrigatório.');
   if (agendamento.profissionalId && (!estado.profissionais[agendamento.profissionalId] || estado.profissionais[agendamento.profissionalId].ativo === false)) throw new Error('Profissional não encontrado ou inativo.');
+  const profissional = agendamento.profissionalId ? estado.profissionais[agendamento.profissionalId] : null;
   const servico = estado.servicos[agendamento.servicoId];
   agendamento.duracaoMinutos = servico.duracaoMinutos;
   agendamento.valor = agendamento.valor > 0 ? agendamento.valor : servico.preco;
+  validarCalendarioAgendamento(estado, agendamento, profissional);
   if (verificarConflito(estado, agendamento)) throw new Error('Horário indisponível para o profissional selecionado.');
   const id = novoId('age', estado.agendamentos);
   const agora = dataAtual();
@@ -627,6 +827,7 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}) {
   if (!agendamento.servicoId || !estado.servicos[agendamento.servicoId] || estado.servicos[agendamento.servicoId].ativo === false) throw new Error('Serviço ativo é obrigatório.');
   agendamento.duracaoMinutos = estado.servicos[agendamento.servicoId].duracaoMinutos;
   agendamento.valor = agendamento.valor > 0 ? agendamento.valor : estado.servicos[agendamento.servicoId].preco;
+  validarCalendarioAgendamento(estado, agendamento, agendamento.profissionalId ? estado.profissionais[agendamento.profissionalId] : null);
   if (verificarConflito(estado, agendamento, atual.id)) throw new Error('Horário indisponível para o profissional selecionado.');
   Object.assign(atual, agendamento, { atualizadoEm: dataAtual() });
   save();
@@ -653,6 +854,36 @@ export function alterarStatusAgendamento(empresaId, agendamentoId, status, dados
   return { ...atual };
 }
 
+export function obterComissoes(empresaId, { data = '', lojaId = '' } = {}) {
+  const estado = estadoEmpresa(empresaId, false);
+  const filtrarLoja = (item) => !lojaId || !item.lojaId || item.lojaId === String(lojaId);
+  const atendimentos = Object.values(estado.agendamentos).filter(filtrarLoja).filter((item) => item.status === 'concluido').filter((item) => !data || String(item.dataAgenda || chaveDia(item.dataHora)).slice(0, 10) === String(data).slice(0, 10));
+  const vendas = Object.values(estado.vendasRevenda).filter(filtrarLoja).filter((item) => item.status === 'pago').filter((item) => !data || String(item.criadoEm).slice(0, 10) === String(data).slice(0, 10));
+  const taxas = { credito: 0.0249, debito: 0.0149, pix: 0.0089, dinheiro: 0, transferencia: 0 };
+  const porProfissional = Object.values(estado.profissionais).map((profissional) => {
+    const servicos = atendimentos.filter((item) => item.profissionalId === profissional.id);
+    const produtos = vendas.filter((item) => item.profissionalId === profissional.id);
+    const brutoServicos = servicos.reduce((soma, item) => soma + Number(item.valorRecebido || item.valor || 0), 0);
+    const brutoProdutos = produtos.reduce((soma, item) => soma + Number(item.total || 0), 0);
+    const taxaServicos = servicos.reduce((soma, item) => {
+      const meio = String(item.meioPagamento || '').toLowerCase();
+      return soma + (profissional.descontaTaxaMaquininha && meio !== 'dinheiro' ? (Number(item.valorRecebido || item.valor || 0) * (taxas[meio] || 0) + 0.39) : 0);
+    }, 0);
+    const taxaProdutos = produtos.reduce((soma, item) => {
+      const meio = String(item.pagamento?.meioPagamento || '').toLowerCase();
+      return soma + (profissional.descontaTaxaMaquininha && meio !== 'dinheiro' ? Number(item.total || 0) * (taxas[meio] || 0) + 0.39 : 0);
+    }, 0);
+    const comissaoServicos = (brutoServicos - taxaServicos) * Number(profissional.percentualComissao || 0) / 100;
+    const comissaoProdutos = (brutoProdutos - taxaProdutos) * Number(profissional.percentualComissaoProduto || 0) / 100;
+    const bruto = brutoServicos + brutoProdutos;
+    const taxasTotal = taxaServicos + taxaProdutos;
+    const repasse = Math.max(0, comissaoServicos + comissaoProdutos);
+    return { profissionalId: profissional.id, profissionalNome: profissional.nome, percentualComissao: Number(profissional.percentualComissao || 0), percentualComissaoProduto: Number(profissional.percentualComissaoProduto || 0), atendimentos: servicos.length, vendasProdutos: produtos.length, brutoServicos: dinheiro(brutoServicos), brutoProdutos: dinheiro(brutoProdutos), bruto: dinheiro(bruto), taxas: dinheiro(taxasTotal), comissaoServicos: dinheiro(comissaoServicos), comissaoProdutos: dinheiro(comissaoProdutos), repasse: dinheiro(repasse), parcelaSalao: dinheiro(Math.max(0, bruto - taxasTotal - repasse)) };
+  }).filter((item) => item.atendimentos > 0 || item.vendasProdutos > 0 || estado.profissionais[item.profissionalId].ativo !== false);
+  const vendasSemProfissional = vendas.filter((item) => !item.profissionalId);
+  return { data: String(data || '').slice(0, 10), porProfissional, vendasSemProfissional: vendasSemProfissional.length, brutoSemProfissional: dinheiro(vendasSemProfissional.reduce((soma, item) => soma + Number(item.total || 0), 0)) };
+}
+
 export function vincularLancamentoFinanceiro(empresaId, agendamentoId, lancamentoId) {
   const estado = estadoEmpresa(empresaId);
   const atual = estado.agendamentos[String(agendamentoId)];
@@ -664,14 +895,16 @@ export function vincularLancamentoFinanceiro(empresaId, agendamentoId, lancament
   return { ...atual };
 }
 
-export function obterDashboard(empresaId, { data = chaveDia(dataAtual()), clientesAtivos = 0, financeiro = null, caixa = null } = {}) {
+export function obterDashboard(empresaId, { data = chaveDia(dataAtual()), lojaId = '', clientesAtivos = 0, financeiro = null, caixa = null } = {}) {
   const estado = estadoEmpresa(empresaId, false);
-  const agendamentos = Object.values(estado.agendamentos);
-  const fila = Object.values(estado.filaEspera).filter((item) => item.status === 'aguardando' || item.status === 'chamado');
-  const bloqueiosHoje = Object.values(estado.bloqueios).filter((item) => item.ativo !== false && chaveDia(item.inicio) <= String(data).slice(0, 10) && chaveDia(item.fim) >= String(data).slice(0, 10));
+  const filtrarLoja = (item) => !lojaId || !item.lojaId || item.lojaId === String(lojaId);
+  const agendamentos = Object.values(estado.agendamentos).filter(filtrarLoja);
+  const fila = Object.values(estado.filaEspera).filter(filtrarLoja).filter((item) => item.status === 'aguardando' || item.status === 'chamado');
+  const bloqueiosHoje = Object.values(estado.bloqueios).filter(filtrarLoja).filter((item) => item.ativo !== false && chaveDia(item.inicio) <= String(data).slice(0, 10) && chaveDia(item.fim) >= String(data).slice(0, 10));
   const assinaturasAtivas = Object.values(estado.assinaturas).filter((item) => item.status === 'ativa');
   const hoje = agendamentos.filter((item) => String(item.dataAgenda || chaveDia(item.dataHora)).slice(0, 10) === String(data).slice(0, 10));
   const concluidosHoje = hoje.filter((item) => item.status === 'concluido');
+  const vendasRevendaHoje = Object.values(estado.vendasRevenda).filter(filtrarLoja).filter((item) => item.status === 'pago' && String(item.criadoEm).slice(0, 10) === String(data).slice(0, 10));
   const proximos = agendamentos.filter((item) => item.status !== 'cancelado' && item.status !== 'concluido' && new Date(item.dataHora).valueOf() >= Date.now()).sort(ordenarPorData).slice(0, 8);
   return {
     data: String(data).slice(0, 10),
@@ -687,6 +920,8 @@ export function obterDashboard(empresaId, { data = chaveDia(dataAtual()), client
       filaAguardando: fila.length,
       bloqueiosHoje: bloqueiosHoje.length,
       assinaturasAtivas: assinaturasAtivas.length,
+      vendasRevendaHoje: vendasRevendaHoje.length,
+      receitaRevendaHoje: dinheiro(vendasRevendaHoje.reduce((soma, item) => soma + Number(item.total || 0), 0)),
     },
     filaEspera: fila.sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0)).slice(0, 8),
     bloqueios: bloqueiosHoje,
@@ -709,5 +944,6 @@ export function exportarEstado(empresaId) {
     assinaturas: listarAssinaturas(empresaId),
     produtosRevenda: listarProdutosRevenda(empresaId, { incluirInativos: true }),
     movimentosEstoque: listarMovimentosEstoque(empresaId),
+    vendasRevenda: listarVendasRevenda(empresaId),
   };
 }

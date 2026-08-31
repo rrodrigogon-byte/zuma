@@ -496,7 +496,9 @@ app.post('/api/admin/login', async (req,res)=>{
   limparTentativas(chave);
   audit({user:{nome:u.nome,role:u.role}, ip:req.ip}, 'LOGIN painel'); save();
   const sessao = await commerceSessionFor(u);
-  res.json({ token: tokenFor({ ...u, empresaId: sessao.empresaId, lojaId: sessao.lojaId }), user: publicUser(u), role: u.role, sessao });
+  const empresaId = sessao.empresaId ?? u.empresaId;
+  const lojaId = sessao.lojaId ?? u.lojaId;
+  res.json({ token: tokenFor({ ...u, empresaId, lojaId }), user: publicUser(u), role: u.role, sessao: { ...sessao, empresaId, lojaId } });
 });
 
 // ---- AUTH unificada (site + sistema) ----
@@ -1747,11 +1749,15 @@ app.delete('/api/admin/cardapio/:id', auth, requireStaff, (req,res)=>{
 // O runtime efetivo do Render é server.js (não server-erp.js). Estas rotas
 // reutilizam o domínio já testado e mantêm os dados separados por empresa.
 function legacyEmpresaId(req){ return req.user?.empresaId || 'principal'; }
+function legacyLojaId(req){ return req.user?.lojaId || ''; }
 function produtosCardapioAtivos(){ return getCardapio().filter(produto => !produto.indisponivel); }
 
 // ── BARBEARIA ERP — CONTRATO ADMINISTRATIVO NO RUNTIME DO RENDER ─────────────
 // O Render inicia server.js. Este contrato usa o empresaId presente no JWT e
 // preserva o módulo v1 legado, que possui outro modelo de dados.
+// A guarda é aplicada no prefixo para impedir que qualquer leitura ou mutação
+// operacional seja acessível sem sessão autenticada e perfil de equipe.
+app.use('/api/admin/barbearia', auth, requireStaff);
 function sanitizarClienteBarbearia(cliente) {
   if (!cliente) return cliente;
   return {
@@ -1787,6 +1793,7 @@ function enriquecerAgendamentoBarbearia(empresaId, agendamento) {
     servico_nome: servico?.nome || '',
     duracao_minutos: agendamento.duracaoMinutos,
     meio_pagamento: agendamento.meioPagamento,
+    lojaId: agendamento.lojaId || '',
   };
 }
 
@@ -1801,7 +1808,7 @@ app.get('/api/admin/barbearia/dashboard', (req, res) => {
     const clientes = clientesBarbeariaSomenteLeitura(empresaId);
     const caixas = caixaKytto.listarCaixas(empresaId, { data });
     const dashboard = barbeariaErpKytto.obterDashboard(empresaId, {
-      data, clientesAtivos: clientes.length,
+      data, lojaId: legacyLojaId(req), clientesAtivos: clientes.length,
       financeiro: financeiroKytto.resumoFinanceiro(empresaId, { hoje: data }),
       caixa: { data, caixas, aberto: caixas.find(item => item.status === 'aberto') || null },
     });
@@ -1811,6 +1818,14 @@ app.get('/api/admin/barbearia/dashboard', (req, res) => {
 });
 
 app.get('/api/admin/barbearia/configuracoes', (req, res) => res.json({ ok: true, configuracao: barbeariaErpKytto.obterConfiguracao(legacyEmpresaId(req)) }));
+app.get('/api/admin/barbearia/configuracoes/unidade-ativa', (req, res) => {
+  try { res.json({ ok: true, ...barbeariaErpKytto.obterConfiguracaoLoja(legacyEmpresaId(req), legacyLojaId(req)) }); }
+  catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.patch('/api/admin/barbearia/configuracoes/unidade-ativa', (req, res) => {
+  try { res.json({ ok: true, ...barbeariaErpKytto.atualizarConfiguracaoLoja(legacyEmpresaId(req), legacyLojaId(req), req.body || {}) }); }
+  catch (error) { res.status(400).json({ error: error.message }); }
+});
 app.patch('/api/admin/barbearia/configuracoes', (req, res) => {
   try { res.json({ ok: true, configuracao: barbeariaErpKytto.atualizarConfiguracao(legacyEmpresaId(req), req.body || {}) }); }
   catch (error) { res.status(400).json({ error: error.message }); }
@@ -1846,23 +1861,23 @@ app.get('/api/admin/barbearia/agenda', (req, res) => {
   try {
     const agendamentos = listarAgendamentosBarbearia(legacyEmpresaId(req), {
       data: req.query?.data || req.query?.date, status: req.query?.status,
-      profissionalId: req.query?.profissionalId || req.query?.profissional_id,
+      profissionalId: req.query?.profissionalId || req.query?.profissional_id, lojaId: legacyLojaId(req),
     });
     res.json({ ok: true, agendamentos, total: agendamentos.length });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.get('/api/admin/barbearia/agenda/:id', (req, res) => {
-  const agendamento = listarAgendamentosBarbearia(legacyEmpresaId(req)).find(item => item.id === String(req.params.id));
+  const agendamento = listarAgendamentosBarbearia(legacyEmpresaId(req), { lojaId: legacyLojaId(req) }).find(item => item.id === String(req.params.id));
   if (!agendamento) return res.status(404).json({ error: 'Agendamento não encontrado na empresa ativa.' });
   res.json({ ok: true, agendamento });
 });
 app.post('/api/admin/barbearia/agenda', (req, res) => {
-  try { res.status(201).json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(legacyEmpresaId(req), barbeariaErpKytto.criarAgendamento(legacyEmpresaId(req), req.body || {})) }); }
+  try { const body = { ...(req.body || {}), lojaId: legacyLojaId(req) }; res.status(201).json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(legacyEmpresaId(req), barbeariaErpKytto.criarAgendamento(legacyEmpresaId(req), body)) }); }
   catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.patch('/api/admin/barbearia/agenda/:id', (req, res) => {
   try {
-    const agendamento = barbeariaErpKytto.atualizarAgendamento(legacyEmpresaId(req), req.params.id, req.body || {});
+    const agendamento = barbeariaErpKytto.atualizarAgendamento(legacyEmpresaId(req), req.params.id, { ...(req.body || {}), lojaId: legacyLojaId(req) });
     if (!agendamento) return res.status(404).json({ error: 'Agendamento não encontrado na empresa ativa.' });
     res.json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(legacyEmpresaId(req), agendamento) });
   } catch (error) { res.status(400).json({ error: error.message }); }
@@ -1906,10 +1921,10 @@ app.patch('/api/admin/barbearia/clientes/:id', (req, res) => {
 });
 app.get('/api/admin/barbearia/fila', (req, res) => {
   const empresaId = legacyEmpresaId(req);
-  res.json({ ok: true, fila: barbeariaErpKytto.listarFilaEspera(empresaId, { data: req.query?.data, status: req.query?.status }) });
+  res.json({ ok: true, fila: barbeariaErpKytto.listarFilaEspera(empresaId, { data: req.query?.data, status: req.query?.status, lojaId: legacyLojaId(req) }) });
 });
 app.post('/api/admin/barbearia/fila', (req, res) => {
-  try { res.status(201).json({ ok: true, item: barbeariaErpKytto.criarFilaEspera(legacyEmpresaId(req), req.body || {}) }); }
+  try { res.status(201).json({ ok: true, item: barbeariaErpKytto.criarFilaEspera(legacyEmpresaId(req), { ...(req.body || {}), lojaId: legacyLojaId(req) }) }); }
   catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.patch('/api/admin/barbearia/fila/:id/status', (req, res) => {
@@ -1920,14 +1935,14 @@ app.patch('/api/admin/barbearia/fila/:id/status', (req, res) => {
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
-app.get('/api/admin/barbearia/bloqueios', (req, res) => res.json({ ok: true, bloqueios: barbeariaErpKytto.listarBloqueios(legacyEmpresaId(req), { data: req.query?.data, profissionalId: req.query?.profissionalId, incluirInativos: String(req.query?.incluirInativos) === 'true' }) }));
+app.get('/api/admin/barbearia/bloqueios', (req, res) => res.json({ ok: true, bloqueios: barbeariaErpKytto.listarBloqueios(legacyEmpresaId(req), { data: req.query?.data, profissionalId: req.query?.profissionalId, lojaId: legacyLojaId(req), incluirInativos: String(req.query?.incluirInativos) === 'true' }) }));
 app.post('/api/admin/barbearia/bloqueios', (req, res) => {
-  try { res.status(201).json({ ok: true, bloqueio: barbeariaErpKytto.criarBloqueio(legacyEmpresaId(req), req.body || {}) }); }
+  try { res.status(201).json({ ok: true, bloqueio: barbeariaErpKytto.criarBloqueio(legacyEmpresaId(req), { ...(req.body || {}), lojaId: legacyLojaId(req) }) }); }
   catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.patch('/api/admin/barbearia/bloqueios/:id', (req, res) => {
   try {
-    const bloqueio = barbeariaErpKytto.atualizarBloqueio(legacyEmpresaId(req), req.params.id, req.body || {});
+    const bloqueio = barbeariaErpKytto.atualizarBloqueio(legacyEmpresaId(req), req.params.id, { ...(req.body || {}), lojaId: legacyLojaId(req) });
     if (!bloqueio) return res.status(404).json({ error: 'Bloqueio não encontrado na empresa ativa.' });
     res.json({ ok: true, bloqueio });
   } catch (error) { res.status(400).json({ error: error.message }); }
@@ -1988,6 +2003,30 @@ app.post('/api/admin/barbearia/estoque-revenda/:id/movimentos', (req, res) => {
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
+app.get('/api/admin/barbearia/vendas-revenda', (req, res) => res.json({ ok: true, vendas: barbeariaErpKytto.listarVendasRevenda(legacyEmpresaId(req), { status: req.query?.status, data: req.query?.data, profissionalId: req.query?.profissionalId, lojaId: legacyLojaId(req) }) }));
+app.get('/api/admin/barbearia/comissoes', (req, res) => res.json({ ok: true, comissoes: barbeariaErpKytto.obterComissoes(legacyEmpresaId(req), { data: req.query?.data, lojaId: legacyLojaId(req) }) }));
+app.get('/api/admin/barbearia/vendas-revenda/:id', (req, res) => {
+  const venda = barbeariaErpKytto.obterVendaRevenda(legacyEmpresaId(req), req.params.id);
+  if (!venda) return res.status(404).json({ error: 'Venda de revenda não encontrada na empresa ativa.' });
+  res.json({ ok: true, venda });
+});
+app.post('/api/admin/barbearia/vendas-revenda', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const body = { ...(req.body || {}), lojaId: legacyLojaId(req), usuario: req.user?.email, chaveIdempotencia: req.body?.chaveIdempotencia || req.get('Idempotency-Key') || '' };
+    let venda = barbeariaErpKytto.criarVendaRevenda(empresaId, body);
+    if (body.confirmadoPagamento === true) venda = barbeariaErpKytto.finalizarVendaRevenda(empresaId, venda.id, { ...body, usuario: req.user?.email });
+    res.status(201).json({ ok: true, venda });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.post('/api/admin/barbearia/vendas-revenda/:id/confirmar-pagamento', (req, res) => {
+  try {
+    const venda = barbeariaErpKytto.finalizarVendaRevenda(legacyEmpresaId(req), req.params.id, { ...(req.body || {}), usuario: req.user?.email });
+    if (!venda) return res.status(404).json({ error: 'Venda de revenda não encontrada na empresa ativa.' });
+    res.json({ ok: true, venda });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
 app.get('/api/admin/barbearia/fidelidade', (req, res) => res.json({ ok: true, fidelidade: canaisFidelidadeKytto.obterFidelidade(legacyEmpresaId(req)) }));
 app.patch('/api/admin/barbearia/fidelidade/regra', (req, res) => {
   try { res.json({ ok: true, regra: canaisFidelidadeKytto.salvarRegraFidelidade(legacyEmpresaId(req), req.body || {}) }); }
@@ -2019,7 +2058,7 @@ app.post('/api/admin/barbearia/fidelidade/creditar', (req, res) => {
 app.get('/api/admin/barbearia/relatorios/operacional', (req, res) => {
   const empresaId = legacyEmpresaId(req);
   const data = String(req.query?.data || new Date().toISOString().slice(0, 10)).slice(0, 10);
-  const agenda = listarAgendamentosBarbearia(empresaId, { data });
+  const agenda = listarAgendamentosBarbearia(empresaId, { data, lojaId: legacyLojaId(req) });
   const profissionais = barbeariaErpKytto.listarProfissionais(empresaId, { incluirInativos: true });
   const porStatus = Object.fromEntries([...new Set(agenda.map(item => item.status))].map(status => [status, agenda.filter(item => item.status === status).length]));
   const porProfissional = profissionais.map(profissional => {

@@ -14,6 +14,7 @@ const TABS = [
   ['Planos e assinaturas', 'Pacotes sem cobrança automática'],
   ['Fidelidade', 'Pontos do CRM'],
   ['Estoque de revenda', 'Produtos e movimentos manuais'],
+  ['Vendas de revenda', 'Venda, pagamento e baixa auditáveis'],
   ['Relatórios', 'Indicadores operacionais'],
   ['Configuração', 'Horários e políticas'],
 ]
@@ -114,6 +115,7 @@ export default function BarbeariaERP() {
   const [servicos, setServicos] = useState([])
   const [clientes, setClientes] = useState([])
   const [configuracao, setConfiguracao] = useState(null)
+  const [configuracaoUnidade, setConfiguracaoUnidade] = useState(null)
   const [fila, setFila] = useState([])
   const [bloqueios, setBloqueios] = useState([])
   const [planos, setPlanos] = useState([])
@@ -122,7 +124,9 @@ export default function BarbeariaERP() {
   const [formFidelidade, setFormFidelidade] = useState({ pontosPorReal: 1, valorPonto: 0.01, ativa: true })
   const [clienteFidelidadeId, setClienteFidelidadeId] = useState('')
   const [relatorio, setRelatorio] = useState(null)
+  const [comissoes, setComissoes] = useState(null)
   const [produtosRevenda, setProdutosRevenda] = useState([])
+  const [vendasRevenda, setVendasRevenda] = useState([])
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState('')
   const [modal, setModal] = useState(null)
@@ -138,6 +142,8 @@ export default function BarbeariaERP() {
   const [formPlano, setFormPlano] = useState({ nome: '', descricao: '', ciclo: 'mensal', preco: '', sessoesIncluidas: 4, validadeDias: 30, servicosIds: [] })
   const [formAssinatura, setFormAssinatura] = useState({ clienteId: '', clienteNome: '', planoId: '', observacoes: '' })
   const [formProdutoRevenda, setFormProdutoRevenda] = useState({ nome: '', sku: '', categoria: 'Revenda', unidade: 'un', precoVenda: '', custoUnitario: '', estoqueAtual: 0, estoqueMinimo: 0 })
+  const [formVendaRevenda, setFormVendaRevenda] = useState({ clienteId: '', clienteNome: '', observacao: '', produtoId: '', quantidade: 1 })
+  const [itensVendaRevenda, setItensVendaRevenda] = useState([])
 
   const carregar = useCallback(async () => {
     setLoading(true)
@@ -146,7 +152,7 @@ export default function BarbeariaERP() {
       const query = new URLSearchParams({ data: dataSelecionada })
       if (statusFiltro) query.set('status', statusFiltro)
       if (profissionalFiltro) query.set('profissionalId', profissionalFiltro)
-      const [dashData, agendaData, profData, servData, cliData, configData, filaData, bloqueiosData, planosData, assinaturasData, fidelidadeData, relatorioData, produtosData] = await Promise.all([
+      const [dashData, agendaData, profData, servData, cliData, configData, filaData, bloqueiosData, planosData, assinaturasData, fidelidadeData, configUnidadeData, relatorioData, comissoesData, produtosData, vendasData] = await Promise.all([
         api.get(`/api/admin/barbearia/dashboard?data=${encodeURIComponent(dataSelecionada)}`),
         api.get(`/api/admin/barbearia/agenda?${query.toString()}`),
         api.get('/api/admin/barbearia/profissionais'),
@@ -158,8 +164,11 @@ export default function BarbeariaERP() {
         api.get('/api/admin/barbearia/planos'),
         api.get('/api/admin/barbearia/assinaturas'),
         api.get('/api/admin/barbearia/fidelidade'),
+        api.get('/api/admin/barbearia/configuracoes/unidade-ativa').catch(() => null),
         api.get(`/api/admin/barbearia/relatorios/operacional?data=${encodeURIComponent(dataSelecionada)}`),
+        api.get(`/api/admin/barbearia/comissoes?data=${encodeURIComponent(dataSelecionada)}`),
         api.get('/api/admin/barbearia/estoque-revenda'),
+        api.get('/api/admin/barbearia/vendas-revenda'),
       ])
       setDashboard(dashData)
       setAgendamentos(Array.isArray(agendaData?.agendamentos) ? agendaData.agendamentos : [])
@@ -174,8 +183,11 @@ export default function BarbeariaERP() {
       setAssinaturas(Array.isArray(assinaturasData?.assinaturas) ? assinaturasData.assinaturas : [])
       setFidelidade(fidelidadeData?.fidelidade || { regra: {}, membros: [] })
       setFormFidelidade(fidelidadeData?.fidelidade?.regra || { pontosPorReal: 1, valorPonto: 0.01, ativa: true })
+      setConfiguracaoUnidade(configUnidadeData || null)
       setRelatorio(relatorioData || null)
+      setComissoes(comissoesData?.comissoes || null)
       setProdutosRevenda(Array.isArray(produtosData?.produtos) ? produtosData.produtos : [])
+      setVendasRevenda(Array.isArray(vendasData?.vendas) ? vendasData.vendas : [])
     } catch (error) {
       setErro(error.message || 'Não foi possível carregar o módulo de Barbearia.')
     } finally {
@@ -293,6 +305,13 @@ export default function BarbeariaERP() {
     await executar(() => api.patch('/api/admin/barbearia/configuracoes', formConfig), 'Configurações atualizadas.')
   }
 
+  async function salvarConfiguracaoUnidade(event) {
+    event.preventDefault()
+    if (!configuracaoUnidade?.calendario) return
+    if (!window.confirm('Confirmar a atualização do calendário da unidade ativa?')) return
+    await executar(() => api.patch('/api/admin/barbearia/configuracoes/unidade-ativa', configuracaoUnidade.calendario), 'Calendário da unidade atualizado.')
+  }
+
   async function salvarFila(event) {
     event.preventDefault()
     const cliente = clientes.find((item) => item.id === formFila.clienteId)
@@ -357,6 +376,34 @@ export default function BarbeariaERP() {
     await executar(() => api.post(`/api/admin/barbearia/estoque-revenda/${produto.id}/movimentos`, { tipo, quantidade, confirmado: true, observacao: 'Movimento manual no módulo Barbearia.' }), 'Movimento de estoque registrado.')
   }
 
+  function adicionarItemVendaRevenda(event) {
+    event.preventDefault()
+    const produto = produtosRevenda.find((item) => item.id === formVendaRevenda.produtoId)
+    const quantidade = Number(formVendaRevenda.quantidade)
+    if (!produto || !Number.isInteger(quantidade) || quantidade <= 0) return
+    setItensVendaRevenda((itens) => {
+      const existente = itens.find((item) => item.produtoId === produto.id)
+      if (existente) return itens.map((item) => item.produtoId === produto.id ? { ...item, quantidade: item.quantidade + quantidade } : item)
+      return [...itens, { produtoId: produto.id, nome: produto.nome, unidade: produto.unidade, precoUnitario: produto.precoVenda, quantidade }]
+    })
+    setFormVendaRevenda((atual) => ({ ...atual, produtoId: '', quantidade: 1 }))
+  }
+
+  async function salvarVendaRevenda(event) {
+    event.preventDefault()
+    if (itensVendaRevenda.length === 0) return
+    await executar(() => api.post('/api/admin/barbearia/vendas-revenda', { clienteId: formVendaRevenda.clienteId, clienteNome: formVendaRevenda.clienteNome, profissionalId: formVendaRevenda.profissionalId, observacao: formVendaRevenda.observacao, itens: itensVendaRevenda.map(({ produtoId, quantidade }) => ({ produtoId, quantidade })) }), 'Venda de revenda criada como pendente.')
+    setItensVendaRevenda([])
+    setFormVendaRevenda({ clienteId: '', clienteNome: '', profissionalId: '', observacao: '', produtoId: '', quantidade: 1 })
+  }
+
+  async function confirmarVendaRevenda(venda) {
+    if (!window.confirm(`Confirmar recebimento manual de ${moeda(venda.total)} para a venda ${venda.id}? Esta ação baixa estoque e registra receita no financeiro.`)) return
+    const meioPagamento = window.prompt('Meio de pagamento confirmado (pix, dinheiro, debito, credito ou transferencia):', 'pix')
+    if (!meioPagamento) return
+    await executar(() => api.post(`/api/admin/barbearia/vendas-revenda/${venda.id}/confirmar-pagamento`, { confirmadoPagamento: true, meioPagamento, valorRecebido: venda.total }), 'Venda confirmada, estoque baixado e receita registrada.')
+  }
+
   function renderAgendaTabela(itens = agendamentos) {
     return <Card style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 820 }}>
@@ -396,6 +443,7 @@ export default function BarbeariaERP() {
         <Kpi label="Clientes no CRM" value={indicadores.clientesAtivos || 0} note={`${indicadores.profissionaisAtivos || 0} profissionais ativos`} color="#8b5cf6" />
         <Kpi label="Fila ativa" value={indicadores.filaAguardando || 0} note="Aguardando ou chamados" color="#4a9eff" />
         <Kpi label="Bloqueios hoje" value={indicadores.bloqueiosHoje || 0} note={`${indicadores.assinaturasAtivas || 0} assinaturas ativas`} color="#f59e0b" />
+        <Kpi label="Revendas pagas" value={indicadores.vendasRevendaHoje || 0} note={moeda(indicadores.receitaRevendaHoje)} color="#14b87a" />
       </div>
       <div style={styles.twoColumns}>
         <Card style={{ padding: 20 }}>
@@ -449,13 +497,8 @@ export default function BarbeariaERP() {
   }
 
   function renderComissoes() {
-    const concluidos = agendamentos.filter((item) => item.status === 'concluido')
-    const porProfissional = profissionais.map((profissional) => {
-      const itens = concluidos.filter((item) => item.profissionalId === profissional.id)
-      const bruto = itens.reduce((soma, item) => soma + Number(item.valorRecebido || item.valor || 0), 0)
-      return { ...profissional, atendimentos: itens.length, bruto, comissao: bruto * Number(profissional.percentualComissao || 0) / 100, sala: bruto * (100 - Number(profissional.percentualComissao || 0)) / 100 }
-    }).filter((item) => item.atendimentos > 0 || item.ativo !== false)
-    return <div style={{ display: 'grid', gap: 16 }}><Card style={{ padding: 18 }}><div style={styles.toolbar}><div><h2 style={styles.h2}>Comissões e rateio</h2><p style={styles.sub}>Apuração indicativa com base nos atendimentos concluídos em {fmtDateOnly(dataSelecionada)}. Não cria lançamento nem repasse.</p></div><a href="/admin/financeiro" style={styles.secondary}>Ver livro financeiro</a></div></Card><Card style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 680 }}><thead><tr style={styles.tableHead}>{['Profissional', 'Atendimentos', 'Bruto', 'Comissão', 'Parcela salão'].map((coluna) => <th key={coluna} style={styles.th}>{coluna}</th>)}</tr></thead><tbody>{porProfissional.length === 0 ? <tr><td colSpan={5} style={styles.empty}>Ainda não há atendimentos concluídos para apuração.</td></tr> : porProfissional.map((item) => <tr key={item.id} style={{ borderTop: '1px solid var(--line)' }}><td style={styles.td}><strong>{item.nome}</strong><div style={styles.sub}>{item.percentualComissao}% configurado</div></td><td style={styles.td}>{item.atendimentos}</td><td style={{ ...styles.td, fontWeight: 800 }}>{moeda(item.bruto)}</td><td style={{ ...styles.td, fontWeight: 800, color: '#8b5cf6' }}>{moeda(item.comissao)}</td><td style={{ ...styles.td, fontWeight: 800, color: '#14b87a' }}>{moeda(item.sala)}</td></tr>)}</tbody></table></Card></div>
+    const porProfissional = comissoes?.porProfissional || []
+    return <div style={{ display: 'grid', gap: 16 }}><Card style={{ padding: 18 }}><div style={styles.toolbar}><div><h2 style={styles.h2}>Comissões e rateio</h2><p style={styles.sub}>Apuração indicativa de serviços concluídos e produtos pagos em {fmtDateOnly(dataSelecionada)}. Taxas seguem a configuração do profissional. Não cria lançamento, fechamento ou pagamento de repasse.</p></div><a href="/admin/financeiro" style={styles.secondary}>Ver livro financeiro</a></div></Card><Card style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 940 }}><thead><tr style={styles.tableHead}>{['Profissional', 'Serviços', 'Produtos', 'Bruto serviços', 'Bruto produtos', 'Comissão serviços', 'Comissão produtos', 'Repasse indicativo'].map((coluna) => <th key={coluna} style={styles.th}>{coluna}</th>)}</tr></thead><tbody>{porProfissional.length === 0 ? <tr><td colSpan={8} style={styles.empty}>Ainda não há atendimentos concluídos ou vendas de produtos atribuídas para apuração.</td></tr> : porProfissional.map((item) => <tr key={item.profissionalId} style={{ borderTop: '1px solid var(--line)' }}><td style={styles.td}><strong>{item.profissionalNome}</strong><div style={styles.sub}>{item.percentualComissao}% serviços · {item.percentualComissaoProduto}% produtos</div></td><td style={styles.td}>{item.atendimentos}</td><td style={styles.td}>{item.vendasProdutos}</td><td style={{ ...styles.td, fontWeight: 800 }}>{moeda(item.brutoServicos)}</td><td style={{ ...styles.td, fontWeight: 800 }}>{moeda(item.brutoProdutos)}</td><td style={{ ...styles.td, fontWeight: 800, color: '#8b5cf6' }}>{moeda(item.comissaoServicos)}</td><td style={{ ...styles.td, fontWeight: 800, color: '#8b5cf6' }}>{moeda(item.comissaoProdutos)}</td><td style={{ ...styles.td, fontWeight: 800, color: '#14b87a' }}>{moeda(item.repasse)}</td></tr>)}</tbody></table></Card>{(comissoes?.vendasSemProfissional || 0) > 0 && <Card style={{ padding: 18 }}><strong>Vendas sem profissional atribuído</strong><div style={styles.sub}>{comissoes.vendasSemProfissional} venda(s), total de {moeda(comissoes.brutoSemProfissional)}. Elas não entram em repasse até uma atribuição operacional explícita.</div></Card>}</div>
   }
 
   function renderFilaBloqueios() {
@@ -508,6 +551,12 @@ export default function BarbeariaERP() {
     return <div style={{ display: 'grid', gap: 16 }}><Card style={{ padding: 18 }}><div style={styles.sectionTitle}><div><h2 style={styles.h2}>Estoque de revenda</h2><p style={styles.sub}>Catálogo exclusivo da empresa ativa. Não é o estoque de cardápio e não se conecta automaticamente ao Commerce.</p></div><button type="button" style={styles.primary} onClick={() => { setFormProdutoRevenda({ nome: '', sku: '', categoria: 'Revenda', unidade: 'un', precoVenda: '', custoUnitario: '', estoqueAtual: 0, estoqueMinimo: 0 }); setModal('produtoRevenda') }}>+ Novo produto</button></div><div style={styles.kpiGrid}><Kpi label="Produtos ativos" value={produtosRevenda.filter((produto) => produto.ativo !== false).length} /><Kpi label="Abaixo do mínimo" value={baixos.length} color={baixos.length ? '#f59e0b' : '#14b87a'} /><Kpi label="Sem estoque" value={produtosRevenda.filter((produto) => produto.statusEstoque === 'sem_estoque').length} color="#e05c5c" /></div></Card><Card style={{ padding: 18, overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}><thead><tr style={styles.tableHead}>{['Produto', 'Categoria', 'Preço', 'Saldo', 'Mínimo', 'Situação', 'Movimento'].map((coluna) => <th key={coluna} style={styles.th}>{coluna}</th>)}</tr></thead><tbody>{produtosRevenda.length === 0 ? <tr><td colSpan={7} style={styles.empty}>Nenhum produto de revenda cadastrado.</td></tr> : produtosRevenda.map((produto) => <tr key={produto.id} style={{ borderTop: '1px solid var(--line)', opacity: produto.ativo === false ? .58 : 1 }}><td style={styles.td}><strong>{produto.nome}</strong><div style={styles.sub}>{produto.sku || 'Sem SKU'} · {produto.unidade || 'un'}</div></td><td style={styles.td}>{produto.categoria}</td><td style={{ ...styles.td, fontWeight: 800 }}>{moeda(produto.precoVenda)}</td><td style={{ ...styles.td, fontWeight: 800 }}>{produto.estoqueAtual}</td><td style={styles.td}>{produto.estoqueMinimo}</td><td style={styles.td}><Badge status={produto.statusEstoque === 'ok' ? 'concluido' : produto.statusEstoque === 'baixo' ? 'chamado' : 'cancelado'} /></td><td style={styles.td}><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button type="button" style={styles.small} onClick={() => movimentarProdutoRevenda(produto, 'entrada')}>Entrada</button><button type="button" style={styles.small} onClick={() => movimentarProdutoRevenda(produto, 'saida_manual')}>Saída manual</button></div></td></tr>)}</tbody></table><p style={{ ...styles.sub, marginBottom: 0 }}>A saída manual não registra venda, pagamento ou receita. Para vender, o fluxo de checkout/PDV deve ser integrado em uma etapa própria.</p></Card></div>
   }
 
+  function renderVendasRevenda() {
+    const total = itensVendaRevenda.reduce((soma, item) => soma + Number(item.precoUnitario || 0) * Number(item.quantidade || 0), 0)
+    const vendasOrdenadas = [...vendasRevenda].sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))
+    return <div style={{ display: 'grid', gap: 16 }}><div style={styles.twoColumns}><Card style={{ padding: 18 }}><div style={styles.sectionTitle}><div><h2 style={styles.h2}>Nova venda de revenda</h2><p style={styles.sub}>Crie o pedido pendente e confirme o recebimento somente depois de o pagamento ser verificado.</p></div></div><form onSubmit={adicionarItemVendaRevenda} style={{ display: 'grid', gap: 14 }}><Field label="Produto disponível"><select required value={formVendaRevenda.produtoId} onChange={(event) => setFormVendaRevenda((atual) => ({ ...atual, produtoId: event.target.value }))} style={inputStyle}><option value="">Selecionar produto</option>{produtosRevenda.filter((produto) => produto.ativo !== false && Number(produto.estoqueAtual || 0) > 0).map((produto) => <option key={produto.id} value={produto.id}>{produto.nome} · {produto.estoqueAtual} disponíveis · {moeda(produto.precoVenda)}</option>)}</select></Field><Field label="Quantidade"><input required type="number" min="1" step="1" value={formVendaRevenda.quantidade} onChange={(event) => setFormVendaRevenda((atual) => ({ ...atual, quantidade: event.target.value }))} style={inputStyle} /></Field><button type="submit" style={styles.secondary} disabled={produtosRevenda.filter((produto) => produto.ativo !== false && Number(produto.estoqueAtual || 0) > 0).length === 0}>Adicionar item</button></form>{itensVendaRevenda.length === 0 ? <div style={styles.empty}>Nenhum item adicionado à venda.</div> : <div style={{ display: 'grid', gap: 8, marginTop: 18 }}>{itensVendaRevenda.map((item) => <div key={item.produtoId} style={styles.listRow}><div><strong>{item.nome}</strong><div style={styles.sub}>{item.quantidade} {item.unidade || 'un'} · {moeda(item.precoUnitario)} cada</div></div><div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><strong>{moeda(Number(item.precoUnitario || 0) * Number(item.quantidade || 0))}</strong><button type="button" style={styles.small} onClick={() => setItensVendaRevenda((itens) => itens.filter((linha) => linha.produtoId !== item.produtoId))}>Remover</button></div></div>)}</div>}<form onSubmit={salvarVendaRevenda} style={{ display: 'grid', gap: 14, marginTop: 18, paddingTop: 18, borderTop: '1px solid var(--line)' }}><div style={styles.formGrid}><Field label="Cliente cadastrado"><select value={formVendaRevenda.clienteId} onChange={(event) => setFormVendaRevenda((atual) => ({ ...atual, clienteId: event.target.value, clienteNome: '' }))} style={inputStyle}><option value="">Venda balcão</option>{clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}</select></Field><Field label="Nome eventual"><input value={formVendaRevenda.clienteNome} onChange={(event) => setFormVendaRevenda((atual) => ({ ...atual, clienteNome: event.target.value, clienteId: '' }))} style={inputStyle} /></Field><Field label="Profissional responsável"><select value={formVendaRevenda.profissionalId} onChange={(event) => setFormVendaRevenda((atual) => ({ ...atual, profissionalId: event.target.value }))} style={inputStyle}><option value="">Sem repasse atribuído</option>{profissionais.filter((item) => item.ativo !== false).map((profissional) => <option key={profissional.id} value={profissional.id}>{profissional.nome}</option>)}</select></Field><Field label="Observação" full><textarea rows={2} value={formVendaRevenda.observacao} onChange={(event) => setFormVendaRevenda((atual) => ({ ...atual, observacao: event.target.value }))} style={{ ...inputStyle, resize: 'vertical' }} /></Field></div><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}><strong>Total: {moeda(total)}</strong><button type="submit" style={styles.primary} disabled={salvando || itensVendaRevenda.length === 0}>Salvar venda pendente</button></div></form></Card><Card style={{ padding: 18 }}><div style={styles.sectionTitle}><div><h2 style={styles.h2}>Controles da operação</h2><p style={styles.sub}>A venda é separada do PDV global porque o estoque legado do Bar ainda não é tenant-aware.</p></div></div><div style={{ display: 'grid', gap: 12 }}><div style={styles.notice}><strong>Pedido pendente</strong><div style={styles.sub}>Não baixa estoque e não cria receita.</div></div><div style={styles.notice}><strong>Pagamento confirmado</strong><div style={styles.sub}>Baixa estoque da revenda, gera histórico e registra uma receita idempotente em <code>barbearia_revenda</code>.</div></div><div style={styles.notice}><strong>Sem cobrança simulada</strong><div style={styles.sub}>A tela pede confirmação manual e o meio de pagamento; não chama gateway externo nesta etapa.</div></div></div></Card></div><Card style={{ padding: 18 }}><div style={styles.sectionTitle}><div><h2 style={styles.h2}>Vendas registradas</h2><p style={styles.sub}>Pedidos desta empresa; a confirmação de pendentes é uma mutação operacional explícita.</p></div></div>{vendasOrdenadas.length === 0 ? <div style={styles.empty}>Nenhuma venda de revenda registrada.</div> : <div style={{ display: 'grid', gap: 8 }}>{vendasOrdenadas.map((venda) => <div key={venda.id} style={styles.listRow}><div><strong>{venda.id} · {venda.clienteNome || 'Venda balcão'}</strong><div style={styles.sub}>{venda.itens.map((item) => `${item.quantidade}× ${item.nome}`).join(' · ')} · {moeda(venda.total)}</div></div><div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}><Badge status={venda.status === 'pago' ? 'concluido' : venda.status} />{venda.status === 'aguardando_pagamento' && <button type="button" style={styles.small} onClick={() => confirmarVendaRevenda(venda)}>Confirmar recebimento</button>}{venda.status === 'pago' && <span style={styles.sub}>Estoque e financeiro registrados</span>}</div></div>)}</div>}</Card></div>
+  }
+
   function renderRelatorios() {
     const porStatus = Object.entries(relatorio?.porStatus || {})
     return <div style={{ display: 'grid', gap: 16 }}><div style={styles.kpiGrid}><Kpi label="Atendimentos no dia" value={relatorio?.totalAgendamentos || 0} note={fmtDateOnly(dataSelecionada)} /><Kpi label="Concluídos" value={relatorio?.porStatus?.concluido || 0} color="#14b87a" /><Kpi label="Cancelados" value={relatorio?.porStatus?.cancelado || 0} color="#e05c5c" /><Kpi label="Não compareceu" value={relatorio?.porStatus?.nao_compareceu || 0} color="#888" /></div><Card style={{ padding: 18 }}><div style={styles.sectionTitle}><div><h2 style={styles.h2}>Distribuição por status</h2><p style={styles.sub}>Dados derivados da agenda da empresa ativa; selecione outra data acima para atualizar.</p></div></div>{porStatus.length === 0 ? <div style={styles.empty}>Sem atendimentos para a data selecionada.</div> : <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>{porStatus.map(([status, quantidade]) => <div key={status} style={{ padding: '12px 16px', background: 'var(--bg)', borderRadius: 10 }}><Badge status={status} /><strong style={{ marginLeft: 10 }}>{quantidade}</strong></div>)}</div>}</Card><Card style={{ padding: 18, overflowX: 'auto' }}><div style={styles.sectionTitle}><div><h2 style={styles.h2}>Desempenho por profissional</h2><p style={styles.sub}>Faturamento é apuração operacional e não cria repasse.</p></div></div><table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 580 }}><thead><tr style={styles.tableHead}>{['Profissional', 'Atendimentos', 'Concluídos', 'Faturamento'].map((coluna) => <th key={coluna} style={styles.th}>{coluna}</th>)}</tr></thead><tbody>{(relatorio?.porProfissional || []).length === 0 ? <tr><td colSpan={4} style={styles.empty}>Nenhum profissional cadastrado.</td></tr> : relatorio.porProfissional.map((item) => <tr key={item.profissionalId} style={{ borderTop: '1px solid var(--line)' }}><td style={styles.td}><strong>{item.profissionalNome}</strong></td><td style={styles.td}>{item.atendimentos}</td><td style={styles.td}>{item.concluidos}</td><td style={{ ...styles.td, fontWeight: 800 }}>{moeda(item.faturamento)}</td></tr>)}</tbody></table></Card></div>
@@ -515,7 +564,9 @@ export default function BarbeariaERP() {
 
   function renderConfiguracao() {
     const diasSelecionados = formConfig.diasFuncionamento || []
-    return <Card style={{ padding: 20, maxWidth: 760 }}><form onSubmit={salvarConfiguracao} style={{ display: 'grid', gap: 18 }}><div><h2 style={styles.h2}>Horários e políticas</h2><p style={styles.sub}>As regras ficam isoladas na empresa ativa e orientam a operação administrativa.</p></div><div style={styles.formGrid}><Field label="Abertura"><input type="time" value={formConfig.horarioAbertura || ''} onChange={(event) => setFormConfig((atual) => ({ ...atual, horarioAbertura: event.target.value }))} style={inputStyle} /></Field><Field label="Fechamento"><input type="time" value={formConfig.horarioFechamento || ''} onChange={(event) => setFormConfig((atual) => ({ ...atual, horarioFechamento: event.target.value }))} style={inputStyle} /></Field><Field label="Intervalo entre horários (min)"><input type="number" min="5" value={formConfig.intervaloMinutos ?? ''} onChange={(event) => setFormConfig((atual) => ({ ...atual, intervaloMinutos: event.target.value }))} style={inputStyle} /></Field><Field label="Antecedência mínima (min)"><input type="number" min="0" value={formConfig.antecedenciaMinutos ?? ''} onChange={(event) => setFormConfig((atual) => ({ ...atual, antecedenciaMinutos: event.target.value }))} style={inputStyle} /></Field><Field label="Janela de reservas (dias)"><input type="number" min="1" value={formConfig.janelaReservaDias ?? ''} onChange={(event) => setFormConfig((atual) => ({ ...atual, janelaReservaDias: event.target.value }))} style={inputStyle} /></Field><Field label="Cancelamento sem penalidade (horas)"><input type="number" min="0" value={formConfig.politicaCancelamentoHoras ?? ''} onChange={(event) => setFormConfig((atual) => ({ ...atual, politicaCancelamentoHoras: event.target.value }))} style={inputStyle} /></Field><Field label="Dias de funcionamento" full><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{DIAS.map((dia, indice) => <button type="button" key={dia} onClick={() => setFormConfig((atual) => ({ ...atual, diasFuncionamento: diasSelecionados.includes(indice) ? diasSelecionados.filter((item) => item !== indice) : [...diasSelecionados, indice].sort() }))} style={{ ...styles.small, background: diasSelecionados.includes(indice) ? 'var(--accent)' : 'var(--card2)', color: diasSelecionados.includes(indice) ? '#fff' : 'var(--fg)' }}>{dia}</button>)}</div></Field></div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar configurações'}</button></div></form></Card>
+    const unidade = configuracaoUnidade?.calendario
+    const diasUnidade = unidade?.diasFuncionamento || []
+    return <div style={{ display: 'grid', gap: 16 }}><Card style={{ padding: 20, maxWidth: 760 }}><form onSubmit={salvarConfiguracao} style={{ display: 'grid', gap: 18 }}><div><h2 style={styles.h2}>Horários corporativos</h2><p style={styles.sub}>A configuração da empresa serve como padrão para unidades que não possuem uma regra própria.</p></div><div style={styles.formGrid}><Field label="Abertura"><input type="time" value={formConfig.horarioAbertura || ''} onChange={(event) => setFormConfig((atual) => ({ ...atual, horarioAbertura: event.target.value }))} style={inputStyle} /></Field><Field label="Fechamento"><input type="time" value={formConfig.horarioFechamento || ''} onChange={(event) => setFormConfig((atual) => ({ ...atual, horarioFechamento: event.target.value }))} style={inputStyle} /></Field><Field label="Intervalo entre horários (min)"><input type="number" min="5" value={formConfig.intervaloMinutos ?? ''} onChange={(event) => setFormConfig((atual) => ({ ...atual, intervaloMinutos: event.target.value }))} style={inputStyle} /></Field><Field label="Antecedência mínima (min)"><input type="number" min="0" value={formConfig.antecedenciaMinutos ?? ''} onChange={(event) => setFormConfig((atual) => ({ ...atual, antecedenciaMinutos: event.target.value }))} style={inputStyle} /></Field><Field label="Janela de reservas (dias)"><input type="number" min="1" value={formConfig.janelaReservaDias ?? ''} onChange={(event) => setFormConfig((atual) => ({ ...atual, janelaReservaDias: event.target.value }))} style={inputStyle} /></Field><Field label="Cancelamento sem penalidade (horas)"><input type="number" min="0" value={formConfig.politicaCancelamentoHoras ?? ''} onChange={(event) => setFormConfig((atual) => ({ ...atual, politicaCancelamentoHoras: event.target.value }))} style={inputStyle} /></Field><Field label="Dias de funcionamento" full><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{DIAS.map((dia, indice) => <button type="button" key={dia} onClick={() => setFormConfig((atual) => ({ ...atual, diasFuncionamento: diasSelecionados.includes(indice) ? diasSelecionados.filter((item) => item !== indice) : [...diasSelecionados, indice].sort() }))} style={{ ...styles.small, background: diasSelecionados.includes(indice) ? 'var(--accent)' : 'var(--card2)', color: diasSelecionados.includes(indice) ? '#fff' : 'var(--fg)' }}>{dia}</button>)}</div></Field></div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar configuração corporativa'}</button></div></form></Card><Card style={{ padding: 20, maxWidth: 760 }}><form onSubmit={salvarConfiguracaoUnidade} style={{ display: 'grid', gap: 18 }}><div><h2 style={styles.h2}>Calendário da unidade ativa</h2><p style={styles.sub}>{unidade ? `Unidade ${configuracaoUnidade.lojaId}. ${configuracaoUnidade.herdadaDaEmpresa ? 'No momento, ela herda o padrão corporativo.' : 'Esta unidade possui regras próprias.'}` : 'A sessão atual não informou uma unidade no JWT; a configuração específica não está disponível.'}</p></div>{!unidade ? <div style={styles.empty}>Selecione uma unidade na sessão do SetPoint para editar este calendário.</div> : <><div style={styles.formGrid}><Field label="Abertura"><input type="time" value={unidade.horarioAbertura || ''} onChange={(event) => setConfiguracaoUnidade((atual) => ({ ...atual, calendario: { ...atual.calendario, horarioAbertura: event.target.value } }))} style={inputStyle} /></Field><Field label="Fechamento"><input type="time" value={unidade.horarioFechamento || ''} onChange={(event) => setConfiguracaoUnidade((atual) => ({ ...atual, calendario: { ...atual.calendario, horarioFechamento: event.target.value } }))} style={inputStyle} /></Field><Field label="Intervalo entre horários (min)"><input type="number" min="5" value={unidade.intervaloMinutos ?? ''} onChange={(event) => setConfiguracaoUnidade((atual) => ({ ...atual, calendario: { ...atual.calendario, intervaloMinutos: event.target.value } }))} style={inputStyle} /></Field><Field label="Feriados (AAAA-MM-DD, separados por vírgula)" full><input value={(unidade.feriados || []).join(', ')} onChange={(event) => setConfiguracaoUnidade((atual) => ({ ...atual, calendario: { ...atual.calendario, feriados: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) } }))} style={inputStyle} /></Field><Field label="Dias de funcionamento" full><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{DIAS.map((dia, indice) => <button type="button" key={dia} onClick={() => setConfiguracaoUnidade((atual) => ({ ...atual, calendario: { ...atual.calendario, diasFuncionamento: diasUnidade.includes(indice) ? diasUnidade.filter((item) => item !== indice) : [...diasUnidade, indice].sort() } }))} style={{ ...styles.small, background: diasUnidade.includes(indice) ? 'var(--accent)' : 'var(--card2)', color: diasUnidade.includes(indice) ? '#fff' : 'var(--fg)' }}>{dia}</button>)}</div></Field></div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar calendário da unidade'}</button></div></>}</form></Card></div>
   }
 
   function renderModal() {
@@ -541,6 +592,7 @@ export default function BarbeariaERP() {
     if (tab === 'Planos e assinaturas') return renderPlanosAssinaturas()
     if (tab === 'Fidelidade') return renderFidelidade()
     if (tab === 'Estoque de revenda') return renderEstoqueRevenda()
+    if (tab === 'Vendas de revenda') return renderVendasRevenda()
     if (tab === 'Relatórios') return renderRelatorios()
     return renderConfiguracao()
   }

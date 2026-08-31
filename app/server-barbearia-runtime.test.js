@@ -37,7 +37,7 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
   const senhaTeste = 'runtime-only-test-pass';
   fs.writeFileSync(dbPath, JSON.stringify({
     seq: 1,
-    usuarios: [{ id: 1, nome: 'Usuário de Teste', email: 'runtime@example.com', senhaHash: bcrypt.hashSync(senhaTeste, 4), role: 'admin', ativo: true }],
+    usuarios: [{ id: 1, nome: 'Usuário de Teste', email: 'runtime@example.com', senhaHash: bcrypt.hashSync(senhaTeste, 4), role: 'admin', ativo: true, empresaId: 'empresa-runtime', lojaId: 'loja-runtime' }],
   }));
   const port = 32000 + Math.floor(Math.random() * 500);
   const base = `http://127.0.0.1:${port}`;
@@ -49,6 +49,8 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
 
   try {
     await aguardarServidor(base, processo);
+    const semSessao = await request(base, '/api/admin/barbearia/dashboard');
+    assert.equal(semSessao.response.status, 401);
     const login = await request(base, '/api/admin/login', { method: 'POST', body: JSON.stringify({ user: 'runtime@example.com', pass: senhaTeste }) });
     assert.equal(login.response.status, 200);
     const token = login.body.token;
@@ -58,6 +60,11 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     const configuracoes = await request(base, '/api/admin/barbearia/configuracoes', { headers });
     assert.equal(configuracoes.response.status, 200);
     assert.equal(configuracoes.body.configuracao.intervaloMinutos, 30);
+    const unidade = await request(base, '/api/admin/barbearia/configuracoes/unidade-ativa', { headers });
+    assert.equal(unidade.response.status, 200);
+    assert.equal(unidade.body.lojaId, 'loja-runtime');
+    const unidadeAtualizada = await request(base, '/api/admin/barbearia/configuracoes/unidade-ativa', { method: 'PATCH', headers, body: JSON.stringify({ horarioAbertura: '09:00', horarioFechamento: '19:00', feriados: ['2030-06-20'] }) });
+    assert.equal(unidadeAtualizada.response.status, 200);
 
     const servico = await request(base, '/api/admin/barbearia/servicos', { method: 'POST', headers, body: JSON.stringify({ nome: 'Corte runtime', duracaoMinutos: 45, preco: 50 }) });
     assert.equal(servico.response.status, 201);
@@ -65,6 +72,7 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     assert.equal(profissional.response.status, 201);
     const agenda = await request(base, '/api/admin/barbearia/agenda', { method: 'POST', headers, body: JSON.stringify({ clienteNome: 'Cliente runtime', profissionalId: profissional.body.profissional.id, servicoId: servico.body.servico.id, dataAgenda: '2030-06-10', dataHora: '2030-06-10T13:00:00.000Z' }) });
     assert.equal(agenda.response.status, 201);
+    assert.equal(agenda.body.agendamento.lojaId, 'loja-runtime');
 
     const listagem = await request(base, '/api/admin/barbearia/agenda?data=2030-06-10', { headers });
     assert.equal(listagem.response.status, 200);
@@ -100,9 +108,25 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     assert.equal(fidelidade.response.status, 200);
     assert.equal(Array.isArray(fidelidade.body.fidelidade.membros), true);
 
+    const produto = await request(base, '/api/admin/barbearia/estoque-revenda', { method: 'POST', headers, body: JSON.stringify({ nome: 'Pomada runtime', precoVenda: 30, estoqueAtual: 2, estoqueMinimo: 1 }) });
+    assert.equal(produto.response.status, 201);
+    const venda = await request(base, '/api/admin/barbearia/vendas-revenda', { method: 'POST', headers, body: JSON.stringify({ clienteNome: 'Cliente venda runtime', profissionalId: profissional.body.profissional.id, itens: [{ produtoId: produto.body.produto.id, quantidade: 1 }] }) });
+    assert.equal(venda.response.status, 201);
+    assert.equal(venda.body.venda.status, 'aguardando_pagamento');
+    const recebimento = await request(base, `/api/admin/barbearia/vendas-revenda/${venda.body.venda.id}/confirmar-pagamento`, { method: 'POST', headers, body: JSON.stringify({ confirmadoPagamento: true, meioPagamento: 'pix', valorRecebido: 30 }) });
+    assert.equal(recebimento.response.status, 200);
+    assert.equal(recebimento.body.venda.status, 'pago');
+    const vendasPagas = await request(base, '/api/admin/barbearia/vendas-revenda?status=pago', { headers });
+    assert.equal(vendasPagas.response.status, 200);
+    assert.equal(vendasPagas.body.vendas.length, 1);
+    const comissoes = await request(base, '/api/admin/barbearia/comissoes', { headers });
+    assert.equal(comissoes.response.status, 200);
+    assert.equal(comissoes.body.comissoes.porProfissional.find((item) => item.profissionalId === profissional.body.profissional.id).vendasProdutos, 1);
+
     const dashboard = await request(base, '/api/admin/barbearia/dashboard?data=2030-06-10', { headers });
     assert.equal(dashboard.response.status, 200);
     assert.equal(dashboard.body.indicadores.agendamentosHoje, 1);
+    assert.equal(dashboard.body.indicadores.vendasRevendaHoje, 0);
   } finally {
     processo.kill('SIGTERM');
     await Promise.race([once(processo, 'exit'), new Promise((resolve) => setTimeout(resolve, 3000))]);
