@@ -351,6 +351,11 @@ test('pontua comanda paga uma única vez quando cliente aderiu à fidelidade', (
   assert.equal(creditarFidelidade(EMPRESA_A, cliente.id, 50, 'teste', { chaveIdempotencia: chaveCredito }).repetido, true);
 });
 
+test('impede ficha técnica de serviço com insumo de outra empresa', () => {
+  const produtoB = criarProdutoRevenda(EMPRESA_B, { nome: 'Produto privado B', precoVenda: 12, estoqueAtual: 2 });
+  assert.throws(() => criarServico(EMPRESA_A, { nome: 'Serviço inválido', preco: 30, consumoInterno: [{ produtoId: produtoB.id, quantidade: 1 }] }), /empresa ativa/);
+});
+
 test('baixa insumos da ficha técnica apenas após faturamento integral e de forma idempotente', () => {
   const insumo = criarProdutoRevenda(EMPRESA_A, { nome: 'Shampoo consumo', precoVenda: 20, estoqueAtual: 5 });
   const servico = criarServico(EMPRESA_A, { nome: 'Lavagem com insumo', preco: 45, consumoInterno: [{ produtoId: insumo.id, quantidade: 2 }] });

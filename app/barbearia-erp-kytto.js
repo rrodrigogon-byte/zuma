@@ -299,11 +299,19 @@ export function listarServicos(empresaId, { incluirInativos = false } = {}) {
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
+function validarConsumoInternoServico(estado, empresaId, servico) {
+  for (const insumo of servico.consumoInterno || []) {
+    const produto = estado.produtosRevenda[insumo.produtoId];
+    if (!produto || produto.empresaId !== String(empresaId) || produto.ativo === false) throw new Error('Insumo de consumo interno inválido para a empresa ativa.');
+  }
+}
+
 export function criarServico(empresaId, dados = {}) {
   const estado = estadoEmpresa(empresaId);
   const servico = servicoNormalizado(dados);
   if (!servico.nome) throw new Error('Nome do serviço é obrigatório.');
   if (servico.preco <= 0) throw new Error('Preço do serviço deve ser positivo.');
+  validarConsumoInternoServico(estado, empresaId, servico);
   if (Object.values(estado.servicos).some((item) => item.ativo !== false && item.nome.toLowerCase() === servico.nome.toLowerCase())) {
     throw new Error('Já existe um serviço ativo com este nome.');
   }
@@ -321,6 +329,7 @@ export function atualizarServico(empresaId, servicoId, dados = {}) {
   const servico = servicoNormalizado(dados, atual);
   if (!servico.nome) throw new Error('Nome do serviço é obrigatório.');
   if (servico.preco <= 0) throw new Error('Preço do serviço deve ser positivo.');
+  validarConsumoInternoServico(estado, empresaId, servico);
   Object.assign(atual, servico, { atualizadoEm: dataAtual() });
   save();
   return { ...atual };
