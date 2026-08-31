@@ -171,7 +171,8 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     assert.equal(overview.body.agendamentos[0].servicoNome, 'Corte runtime');
     assert.equal(overview.body.profissionais.length, 1);
     assert.equal(overview.body.servicos.length, 1);
-    assert.equal(overview.body.clientes.length, 0);
+    assert.equal(overview.body.clientes.length, 1);
+    assert.equal(overview.body.clientes[0].id, clienteSemConsentimento.body.cliente.id);
     assert.equal(overview.body.fidelidade.membros.length, 0);
     assert.equal(overview.body.produtos.length, 1);
     assert.equal(overview.body.vendas.length, 1);

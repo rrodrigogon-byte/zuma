@@ -134,6 +134,7 @@ export default function BarbeariaERP() {
   const [agendaModo, setAgendaModo] = useState('timeline')
   const [busca, setBusca] = useState('')
   const [buscaGlobal, setBuscaGlobal] = useState('')
+  const [filtroClientes, setFiltroClientes] = useState('todos')
   const [dashboard, setDashboard] = useState(null)
   const [agendamentos, setAgendamentos] = useState([])
   const [profissionais, setProfissionais] = useState([])
@@ -174,11 +175,14 @@ export default function BarbeariaERP() {
   const [formRecebimento, setFormRecebimento] = useState({ meioPagamento: 'pix', valorRecebido: '' })
   const [formConfig, setFormConfig] = useState({})
   const [formFila, setFormFila] = useState({ clienteId: '', clienteNome: '', clienteTelefone: '', servicoId: '', preferenciaProfissionalId: '', previsaoMinutos: 30, observacoes: '' })
+  const [formFilaChamada, setFormFilaChamada] = useState({ mesaOuPosicao: '' })
   const [formBloqueio, setFormBloqueio] = useState({ titulo: '', motivo: '', inicioHora: '08:00', fimHora: '20:00', profissionalId: '' })
   const [formPlano, setFormPlano] = useState({ nome: '', descricao: '', ciclo: 'mensal', preco: '', sessoesIncluidas: 4, validadeDias: 30, servicosIds: [] })
   const [formAssinatura, setFormAssinatura] = useState({ clienteId: '', clienteNome: '', planoId: '', observacoes: '' })
   const [formProdutoRevenda, setFormProdutoRevenda] = useState({ nome: '', sku: '', categoria: 'Revenda', unidade: 'un', precoVenda: '', custoUnitario: '', estoqueAtual: 0, estoqueMinimo: 0 })
+  const [formMovimentoRevenda, setFormMovimentoRevenda] = useState({ quantidade: 1, observacao: 'Movimento manual no módulo Barbearia.' })
   const [formVendaRevenda, setFormVendaRevenda] = useState({ clienteId: '', clienteNome: '', profissionalId: '', observacao: '', produtoId: '', quantidade: 1 })
+  const [formPagamentoVendaRevenda, setFormPagamentoVendaRevenda] = useState({ meioPagamento: 'pix' })
   const [formWhatsApp, setFormWhatsApp] = useState({ clienteId: '', finalidade: 'atendimento', telefone: '', mensagem: '', consentimentoConfirmado: false })
   const [itensVendaRevenda, setItensVendaRevenda] = useState([])
 
@@ -226,10 +230,20 @@ export default function BarbeariaERP() {
   const indicadores = dashboard?.indicadores || {}
   const areaAtual = AREAS.find((area) => area.id === TAB_AREA[tab]) || AREAS[0]
   const unidadeLabel = configuracaoUnidade?.lojaId ? `Unidade ${configuracaoUnidade.lojaId}` : 'Unidade definida pela sessão'
+  const relacionamentoPorCliente = useMemo(() => Object.fromEntries((relacionamento?.porCliente || []).map((item) => [item.clienteId, item])), [relacionamento])
   const listaBuscaClientes = useMemo(() => {
     const termo = busca.trim().toLowerCase()
-    return clientes.filter((cliente) => !termo || [cliente.nome, cliente.telefone, cliente.email].some((item) => String(item || '').toLowerCase().includes(termo)))
-  }, [clientes, busca])
+    const membros = new Set((fidelidade?.membros || []).map((item) => item.clienteId))
+    return clientes.filter((cliente) => {
+      const resumo = relacionamentoPorCliente[cliente.id] || {}
+      const consentimentos = cliente.consentimentos || {}
+      const temConsentimento = ['whatsapp', 'email'].some((canal) => ['atendimento', 'marketing'].some((finalidade) => consentimentos[canal]?.[finalidade]?.concedido === true))
+      const temVisita = Number(resumo.visitas || 0) > 0
+      const passaFiltro = filtroClientes === 'todos' || (filtroClientes === 'ativos' && temVisita) || (filtroClientes === 'fidelidade' && membros.has(cliente.id)) || (filtroClientes === 'consentimento' && temConsentimento) || (filtroClientes === 'inativos' && !temVisita)
+      const passaBusca = !termo || [cliente.nome, cliente.telefone, cliente.email].some((item) => String(item || '').toLowerCase().includes(termo))
+      return passaFiltro && passaBusca
+    })
+  }, [clientes, busca, filtroClientes, fidelidade, relacionamentoPorCliente])
   const listaBuscaProfissionais = useMemo(() => {
     const termo = busca.trim().toLowerCase()
     return profissionais.filter((profissional) => !termo || [profissional.nome, profissional.especialidade, profissional.email].some((item) => String(item || '').toLowerCase().includes(termo)))
@@ -238,7 +252,6 @@ export default function BarbeariaERP() {
     const termo = busca.trim().toLowerCase()
     return servicos.filter((servico) => !termo || [servico.nome, servico.categoria, servico.descricao].some((item) => String(item || '').toLowerCase().includes(termo)))
   }, [servicos, busca])
-  const relacionamentoPorCliente = useMemo(() => Object.fromEntries((relacionamento?.porCliente || []).map((item) => [item.clienteId, item])), [relacionamento])
   const resultadosBuscaGlobal = useMemo(() => {
     const termo = buscaGlobal.trim().toLowerCase()
     if (!termo) return []
@@ -516,10 +529,21 @@ export default function BarbeariaERP() {
     await executar(() => api.post('/api/admin/barbearia/fila', payload), 'Cliente adicionado à fila.')
   }
 
-  async function alterarFila(item, status) {
-    const mesaOuPosicao = status === 'chamado' ? window.prompt(`Posição ou cadeira para ${item.senha}:`, item.mesaOuPosicao || '') : item.mesaOuPosicao
-    if (status === 'chamado' && mesaOuPosicao === null) return
-    await executar(() => api.patch(`/api/admin/barbearia/fila/${item.id}/status`, { status, mesaOuPosicao: mesaOuPosicao || '' }), `Fila atualizada para ${status}.`)
+  function alterarFila(item, status) {
+    if (status === 'chamado') {
+      setFormFilaChamada({ mesaOuPosicao: item.mesaOuPosicao || '' })
+      setModal({ tipo: 'filaChamada', item })
+      return
+    }
+    return executar(() => api.patch(`/api/admin/barbearia/fila/${item.id}/status`, { status, mesaOuPosicao: item.mesaOuPosicao || '' }), `Fila atualizada para ${status}.`)
+  }
+
+  async function concluirChamadaFila(event) {
+    event.preventDefault()
+    const item = modal?.item
+    const mesaOuPosicao = formFilaChamada.mesaOuPosicao.trim()
+    if (!item || !mesaOuPosicao) return
+    await executar(() => api.patch(`/api/admin/barbearia/fila/${item.id}/status`, { status: 'chamado', mesaOuPosicao }), 'Cliente chamado e posição registrada.')
   }
 
   async function salvarBloqueio(event) {
@@ -586,11 +610,20 @@ export default function BarbeariaERP() {
     await executar(() => api.post('/api/admin/barbearia/estoque-revenda', { ...formProdutoRevenda, precoVenda: Number(formProdutoRevenda.precoVenda), custoUnitario: Number(formProdutoRevenda.custoUnitario || 0), estoqueAtual: Number(formProdutoRevenda.estoqueAtual || 0), estoqueMinimo: Number(formProdutoRevenda.estoqueMinimo || 0) }), 'Produto de revenda cadastrado.')
   }
 
-  async function movimentarProdutoRevenda(produto, tipo) {
-    const quantidade = Number(window.prompt(`Quantidade para ${tipo === 'entrada' ? 'entrada' : tipo === 'saida_manual' ? 'saída manual' : 'ajuste'} de ${produto.nome}:`, '1'))
-    if (!Number.isInteger(quantidade) || quantidade <= 0) return
-    if (!window.confirm(`Confirmar ${tipo === 'entrada' ? 'entrada' : tipo === 'saida_manual' ? 'saída manual' : 'ajuste'} de ${quantidade} ${produto.unidade || 'un'} em ${produto.nome}?`)) return
-    await executar(() => api.post(`/api/admin/barbearia/estoque-revenda/${produto.id}/movimentos`, { tipo, quantidade, confirmado: true, observacao: 'Movimento manual no módulo Barbearia.' }), 'Movimento de estoque registrado.')
+  function movimentarProdutoRevenda(produto, tipo) {
+    setFormMovimentoRevenda({ quantidade: 1, observacao: 'Movimento manual no módulo Barbearia.' })
+    setModal({ tipo: 'movimentoRevenda', produto, movimentoTipo: tipo })
+  }
+
+  async function concluirMovimentoRevenda(event) {
+    event.preventDefault()
+    const produto = modal?.produto
+    const tipo = modal?.movimentoTipo
+    const quantidade = Number(formMovimentoRevenda.quantidade)
+    const movimentoLabel = tipo === 'entrada' ? 'entrada' : tipo === 'saida_manual' ? 'saída manual' : 'ajuste'
+    if (!produto || !tipo || !Number.isInteger(quantidade) || quantidade <= 0) return
+    if (!window.confirm(`Confirmar ${movimentoLabel} de ${quantidade} ${produto.unidade || 'un'} em ${produto.nome}?`)) return
+    await executar(() => api.post(`/api/admin/barbearia/estoque-revenda/${produto.id}/movimentos`, { tipo, quantidade, confirmado: true, observacao: formMovimentoRevenda.observacao.trim() || 'Movimento manual no módulo Barbearia.' }), 'Movimento de estoque registrado.')
   }
 
   function adicionarItemVendaRevenda(event) {
@@ -647,11 +680,17 @@ export default function BarbeariaERP() {
     }
   }
 
-  async function confirmarVendaRevenda(venda) {
+  function confirmarVendaRevenda(venda) {
+    setFormPagamentoVendaRevenda({ meioPagamento: 'pix' })
+    setModal({ tipo: 'pagamentoVendaRevenda', venda })
+  }
+
+  async function concluirPagamentoVendaRevenda(event) {
+    event.preventDefault()
+    const venda = modal?.venda
+    if (!venda || !formPagamentoVendaRevenda.meioPagamento) return
     if (!window.confirm(`Confirmar recebimento manual de ${moeda(venda.total)} para a venda ${venda.id}? Esta ação baixa estoque e registra receita no financeiro.`)) return
-    const meioPagamento = window.prompt('Meio de pagamento confirmado (pix, dinheiro, debito, credito ou transferencia):', 'pix')
-    if (!meioPagamento) return
-    await executar(() => api.post(`/api/admin/barbearia/vendas-revenda/${venda.id}/confirmar-pagamento`, { confirmadoPagamento: true, meioPagamento, valorRecebido: venda.total }), 'Venda confirmada, estoque baixado e receita registrada.')
+    await executar(() => api.post(`/api/admin/barbearia/vendas-revenda/${venda.id}/confirmar-pagamento`, { confirmadoPagamento: true, meioPagamento: formPagamentoVendaRevenda.meioPagamento, valorRecebido: venda.total }), 'Venda confirmada, estoque baixado e receita registrada.')
   }
 
   function renderAgendaTabela(itens = agendamentos) {
@@ -795,7 +834,8 @@ export default function BarbeariaERP() {
           <Kpi label="Membros fidelidade" value={indicadoresRelacionamento.membrosFidelidade || 0} note="Adesão registrada" color="#f59e0b" />
           <Kpi label="Receita recebida" value={moeda(indicadoresRelacionamento.receitaRecebida || 0)} note="Comandas e revenda pagas" color="#14b87a" />
         </div>
-        <input value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Buscar por nome, telefone ou e-mail" style={{ ...inputStyle, marginTop: 16, maxWidth: 520 }} />
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end', marginTop: 16 }}><label style={{ flex: '1 1 280px', minWidth: 0 }}><span style={{ display: 'block', color: 'var(--muted)', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Buscar cliente</span><input value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Nome, telefone ou e-mail" style={inputStyle} /></label><label style={{ flex: '0 1 230px', minWidth: 190 }}><span style={{ display: 'block', color: 'var(--muted)', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Segmento operacional</span><select value={filtroClientes} onChange={(event) => setFiltroClientes(event.target.value)} style={inputStyle}><option value="todos">Todos os clientes</option><option value="ativos">Com visita registrada</option><option value="fidelidade">Membros de fidelidade</option><option value="consentimento">Com consentimento</option><option value="inativos">Sem visita registrada</option></select></label></div>
+
       </Card>
       <Card style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 980 }}>
@@ -922,6 +962,15 @@ export default function BarbeariaERP() {
   }
 
   function renderModal() {
+    if (modal?.tipo === 'filaChamada') {
+      const item = modal.item
+      return <Modal title={`Chamar ${item.senha}`} onClose={() => setModal(null)}><form onSubmit={concluirChamadaFila} style={{ display: 'grid', gap: 16 }}><div style={styles.notice}><strong>{item.clienteNome || 'Cliente eventual'}</strong><div style={styles.sub}>Registre a cadeira, posição ou estação antes de atualizar o status da fila.</div></div><Field label="Cadeira ou posição *" full hint="Exemplos: Cadeira 2, Estação A, Sala 1"><input required autoFocus value={formFilaChamada.mesaOuPosicao} onChange={(event) => setFormFilaChamada({ mesaOuPosicao: event.target.value })} style={inputStyle} placeholder="Cadeira 2" /></Field><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando || !formFilaChamada.mesaOuPosicao.trim()}>{salvando ? 'Atualizando…' : 'Confirmar chamada'}</button></div></form></Modal>
+    }
+    if (modal?.tipo === 'movimentoRevenda') {
+      const produto = modal.produto
+      const movimentoLabel = modal.movimentoTipo === 'entrada' ? 'Entrada' : modal.movimentoTipo === 'saida_manual' ? 'Saída manual' : 'Ajuste'
+      return <Modal title={`${movimentoLabel} de estoque`} onClose={() => setModal(null)}><form onSubmit={concluirMovimentoRevenda} style={{ display: 'grid', gap: 16 }}><div style={styles.notice}><strong>{produto.nome}</strong><div style={styles.sub}>Saldo atual: {produto.estoqueAtual} {produto.unidade || 'un'}. A saída manual não registra venda, pagamento ou receita.</div></div><Field label="Quantidade *"><input required autoFocus type="number" min="1" step="1" value={formMovimentoRevenda.quantidade} onChange={(event) => setFormMovimentoRevenda((atual) => ({ ...atual, quantidade: event.target.value }))} style={inputStyle} /></Field><Field label="Observação" full><textarea rows={3} value={formMovimentoRevenda.observacao} onChange={(event) => setFormMovimentoRevenda((atual) => ({ ...atual, observacao: event.target.value }))} style={{ ...inputStyle, resize: 'vertical' }} /></Field><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando || !Number.isInteger(Number(formMovimentoRevenda.quantidade)) || Number(formMovimentoRevenda.quantidade) <= 0}>{salvando ? 'Registrando…' : `Confirmar ${movimentoLabel.toLowerCase()}`}</button></div></form></Modal>
+    }
     if (modal === 'profissional') return <Modal title="Novo profissional" onClose={() => setModal(null)} wide><form onSubmit={salvarProfissional} style={{ display: 'grid', gap: 16 }}><div style={styles.formGrid}><Field label="Nome *" full><input required value={formProf.nome} onChange={(event) => setFormProf((atual) => ({ ...atual, nome: event.target.value }))} style={inputStyle} /></Field><Field label="Telefone"><input value={formProf.telefone} onChange={(event) => setFormProf((atual) => ({ ...atual, telefone: event.target.value }))} style={inputStyle} /></Field><Field label="E-mail"><input type="email" value={formProf.email} onChange={(event) => setFormProf((atual) => ({ ...atual, email: event.target.value }))} style={inputStyle} /></Field><Field label="Especialidade"><input value={formProf.especialidade} onChange={(event) => setFormProf((atual) => ({ ...atual, especialidade: event.target.value }))} style={inputStyle} /></Field><Field label="Tipo"><select value={formProf.tipo} onChange={(event) => setFormProf((atual) => ({ ...atual, tipo: event.target.value }))} style={inputStyle}><option value="parceiro">Parceiro</option><option value="funcionario">Funcionário</option><option value="autonomo">Autônomo</option></select></Field><Field label="Comissão de serviços (%)"><input type="number" min="0" max="100" value={formProf.percentualComissao} onChange={(event) => setFormProf((atual) => ({ ...atual, percentualComissao: event.target.value }))} style={inputStyle} /></Field><Field label="Comissão de produtos (%)"><input type="number" min="0" max="100" value={formProf.percentualComissaoProduto} onChange={(event) => setFormProf((atual) => ({ ...atual, percentualComissaoProduto: event.target.value }))} style={inputStyle} /></Field><Field label="Início"><input type="time" value={formProf.horarioInicio} onChange={(event) => setFormProf((atual) => ({ ...atual, horarioInicio: event.target.value }))} style={inputStyle} /></Field><Field label="Fim"><input type="time" value={formProf.horarioFim} onChange={(event) => setFormProf((atual) => ({ ...atual, horarioFim: event.target.value }))} style={inputStyle} /></Field><Field label="Dias de trabalho" full><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{DIAS.map((dia, indice) => <button type="button" key={dia} onClick={() => setFormProf((atual) => ({ ...atual, diasTrabalho: atual.diasTrabalho.includes(indice) ? atual.diasTrabalho.filter((item) => item !== indice) : [...atual.diasTrabalho, indice].sort() }))} style={{ ...styles.small, background: formProf.diasTrabalho.includes(indice) ? 'var(--accent)' : 'var(--card2)', color: formProf.diasTrabalho.includes(indice) ? '#fff' : 'var(--fg)' }}>{dia}</button>)}</div></Field></div><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar profissional'}</button></div></form></Modal>
     if (modal === 'servico') return <Modal title="Novo serviço" onClose={() => setModal(null)}><form onSubmit={salvarServico} style={{ display: 'grid', gap: 16 }}><div style={styles.formGrid}><Field label="Nome *" full><input required value={formServico.nome} onChange={(event) => setFormServico((atual) => ({ ...atual, nome: event.target.value }))} style={inputStyle} /></Field><Field label="Categoria"><input value={formServico.categoria} onChange={(event) => setFormServico((atual) => ({ ...atual, categoria: event.target.value }))} style={inputStyle} /></Field><Field label="Preço (R$) *"><input required type="number" min="0.01" step="0.01" value={formServico.preco} onChange={(event) => setFormServico((atual) => ({ ...atual, preco: event.target.value }))} style={inputStyle} /></Field><Field label="Duração (minutos)"><input required type="number" min="5" value={formServico.duracaoMinutos} onChange={(event) => setFormServico((atual) => ({ ...atual, duracaoMinutos: event.target.value }))} style={inputStyle} /></Field><Field label="Descrição" full><textarea rows={4} value={formServico.descricao} onChange={(event) => setFormServico((atual) => ({ ...atual, descricao: event.target.value }))} style={{ ...inputStyle, resize: 'vertical' }} /></Field></div><label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--muted)', fontSize: 13 }}><input type="checkbox" checked={formServico.permiteAgendamentoOnline !== false} onChange={(event) => setFormServico((atual) => ({ ...atual, permiteAgendamentoOnline: event.target.checked }))} /> Permitir este serviço nos canais de agendamento online</label><div style={styles.notice}><strong>Ficha técnica e consumo interno</strong><div style={styles.sub}>Ao faturar integralmente uma comanda, o estoque de revenda baixa os insumos configurados. Essa baixa não cria venda, pagamento ou vínculo com o Commerce.</div>{(formServico.consumoInterno || []).map((insumo, indice) => <div key={`${insumo.produtoId || 'novo'}-${indice}`} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 110px auto', gap: 8, alignItems: 'end', marginTop: 10 }}><select aria-label={`Produto de consumo ${indice + 1}`} value={insumo.produtoId} onChange={(event) => setFormServico((atual) => ({ ...atual, consumoInterno: atual.consumoInterno.map((item, index) => index === indice ? { ...item, produtoId: event.target.value } : item) }))} style={inputStyle}><option value="">Selecionar produto</option>{produtosRevenda.filter((produto) => produto.ativo !== false).map((produto) => <option key={produto.id} value={produto.id}>{produto.nome} · {produto.unidade || 'un'}</option>)}</select><input aria-label={`Quantidade de consumo ${indice + 1}`} type="number" min="1" step="1" value={insumo.quantidade} onChange={(event) => setFormServico((atual) => ({ ...atual, consumoInterno: atual.consumoInterno.map((item, index) => index === indice ? { ...item, quantidade: event.target.value } : item) }))} style={inputStyle} /><button type="button" style={styles.small} onClick={() => setFormServico((atual) => ({ ...atual, consumoInterno: atual.consumoInterno.filter((_, index) => index !== indice) }))}>Remover</button></div>)}<button type="button" style={{ ...styles.secondary, marginTop: 10 }} onClick={() => setFormServico((atual) => ({ ...atual, consumoInterno: [...(atual.consumoInterno || []), { produtoId: '', quantidade: 1 }] }))} disabled={produtosRevenda.filter((produto) => produto.ativo !== false).length === 0}>+ Adicionar insumo</button></div><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar serviço'}</button></div></form></Modal>
     if (modal === 'cliente') return <Modal title="Novo cliente no CRM" onClose={() => setModal(null)}><form onSubmit={salvarCliente} style={{ display: 'grid', gap: 16 }}><div style={styles.formGrid}><Field label="Nome *" full><input required value={formCliente.nome} onChange={(event) => setFormCliente((atual) => ({ ...atual, nome: event.target.value }))} style={inputStyle} /></Field><Field label="Telefone"><input value={formCliente.telefone} onChange={(event) => setFormCliente((atual) => ({ ...atual, telefone: event.target.value }))} style={inputStyle} /></Field><Field label="E-mail"><input type="email" value={formCliente.email} onChange={(event) => setFormCliente((atual) => ({ ...atual, email: event.target.value }))} style={inputStyle} /></Field><Field label="Observação" full><textarea rows={4} value={formCliente.observacao} onChange={(event) => setFormCliente((atual) => ({ ...atual, observacao: event.target.value }))} style={{ ...inputStyle, resize: 'vertical' }} /></Field></div><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar cliente'}</button></div></form></Modal>
@@ -937,6 +986,7 @@ export default function BarbeariaERP() {
     }
     if (modal?.tipo === 'detalheCliente') return <Modal title="Perfil operacional do cliente" onClose={() => setModal(null)}><div style={{ display: 'grid', gap: 16 }}><div style={styles.detailHero}><div style={styles.avatar}>{iniciais(modal.cliente.nome)}</div><div><strong style={{ fontSize: 20 }}>{modal.cliente.nome}</strong><div style={styles.sub}>{modal.cliente.tipo === 'pj' ? 'Pessoa jurídica' : 'Pessoa física'} · cadastro do CRM</div></div></div><div style={styles.detailGrid}><div><small style={styles.sub}>Telefone</small><strong>{modal.cliente.telefone || 'Não informado'}</strong></div><div><small style={styles.sub}>E-mail</small><strong>{modal.cliente.email || 'Não informado'}</strong></div><div><small style={styles.sub}>Saldo devedor</small><strong>{moeda(modal.cliente.saldoDevedor)}</strong></div><div><small style={styles.sub}>Atualizado em</small><strong>{modal.cliente.atualizadoEm ? fmtDate(modal.cliente.atualizadoEm) : 'Sem registro'}</strong></div></div>{modal.cliente.observacao && <div style={styles.notice}><strong>Observação</strong><div style={styles.sub}>{modal.cliente.observacao}</div></div>}<Card style={{ padding: 14 }}><div style={styles.sectionTitle}><div><h3 style={{ margin: 0 }}>Consentimentos</h3><p style={styles.sub}>Cada alteração é confirmada pelo operador e registrada com canal, finalidade e responsável.</p></div></div><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10 }}>{[['whatsapp', 'atendimento', 'WhatsApp · atendimento'], ['whatsapp', 'marketing', 'WhatsApp · marketing'], ['email', 'atendimento', 'E-mail · atendimento'], ['email', 'marketing', 'E-mail · marketing']].map(([canal, finalidade, label]) => { const ativo = modal.cliente.consentimentos?.[canal]?.[finalidade]?.concedido === true; return <div key={`${canal}-${finalidade}`} style={styles.notice}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}><strong>{label}</strong><span style={{ color: ativo ? '#14b87a' : 'var(--muted)', fontWeight: 800, fontSize: 12 }}>{ativo ? 'Concedido' : 'Não concedido'}</span></div><button type="button" style={styles.small} onClick={() => atualizarConsentimento(modal.cliente, canal, finalidade, !ativo)}>{ativo ? 'Revogar' : 'Conceder'}</button></div> })}</div></Card><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => { setModal(null); agendarParaCliente(modal.cliente) }}>Agendar atendimento</button><button type="button" style={styles.primary} onClick={() => { setModal(null); setTab('Fidelidade') }}>Ver fidelidade</button></div></div></Modal>
     if (modal?.tipo === 'creditoFidelidade') return <Modal title={`Ajuste de pontos · ${modal.membro?.nome || 'Membro'}`} onClose={() => setModal(null)}><form onSubmit={creditarFidelidade} style={{ display: 'grid', gap: 16 }}><div style={styles.notice}><strong>Ajuste manual auditável</strong><div style={styles.sub}>Use somente para corrigir ou reconhecer uma operação validada. O ajuste não cria receita, pagamento ou desconto.</div></div><Field label="Valor elegível para pontos (R$)"><input required type="number" min="0.01" step="0.01" value={formCreditoFidelidade.valor} onChange={(event) => setFormCreditoFidelidade({ valor: event.target.value })} style={inputStyle} autoFocus /></Field><div style={styles.sub}>Regra atual: {fidelidade.regra?.pontosPorReal || 0} ponto(s) por R$ 1,00. O sistema calcula os pontos no servidor.</div><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Registrando…' : 'Confirmar ajuste'}</button></div></form></Modal>
+    if (modal?.tipo === 'pagamentoVendaRevenda') return <Modal title={`Confirmar recebimento · ${modal.venda?.id || 'Venda'}`} onClose={() => setModal(null)}><form onSubmit={concluirPagamentoVendaRevenda} style={{ display: 'grid', gap: 16 }}><div style={styles.notice}><strong>{modal.venda?.clienteNome || 'Venda balcão'}</strong><div style={styles.sub}>{modal.venda?.itens?.map((item) => `${item.quantidade}× ${item.nome}`).join(' · ') || 'Itens da venda'} · total {moeda(modal.venda?.total || 0)}</div></div><Field label="Meio de pagamento"><select required value={formPagamentoVendaRevenda.meioPagamento} onChange={(event) => setFormPagamentoVendaRevenda({ meioPagamento: event.target.value })} style={inputStyle}><option value="pix">PIX</option><option value="dinheiro">Dinheiro</option><option value="debito">Cartão de débito</option><option value="credito">Cartão de crédito</option><option value="transferencia">Transferência</option></select></Field><div style={styles.notice}><strong>O que será efetivado</strong><div style={styles.sub}>A confirmação baixa o estoque tenant-aware e registra a receita idempotente. Nenhum gateway externo será acionado por esta tela.</div></div><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Confirmando…' : 'Confirmar recebimento'}</button></div></form></Modal>
     if (modal?.tipo === 'recebimento') return <Modal title="Registrar recebimento" onClose={() => setModal(null)}><div style={{ display: 'grid', gap: 16 }}>
 <div style={{ background: 'var(--card)', borderRadius: 10, padding: 14 }}><strong>{modal.agendamento.clienteNome || modal.agendamento.cliente_nome}</strong><div style={styles.sub}>{modal.agendamento.servicoNome || modal.agendamento.servico_nome} · valor previsto {moeda(modal.agendamento.valor)}</div></div><Field label="Meio de pagamento"><select value={formRecebimento.meioPagamento} onChange={(event) => setFormRecebimento((atual) => ({ ...atual, meioPagamento: event.target.value }))} style={inputStyle}><option value="pix">PIX</option><option value="dinheiro">Dinheiro</option><option value="debito">Cartão de débito</option><option value="credito">Cartão de crédito</option><option value="transferencia">Transferência</option></select></Field><Field label="Valor recebido (R$)" hint="Esta ação criará uma receita paga no livro financeiro central."><input type="number" min="0.01" step="0.01" value={formRecebimento.valorRecebido} onChange={(event) => setFormRecebimento((atual) => ({ ...atual, valorRecebido: event.target.value }))} style={inputStyle} /></Field><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="button" style={styles.primary} disabled={salvando} onClick={concluirEReceber}>{salvando ? 'Registrando…' : 'Confirmar recebimento'}</button></div></div></Modal>
     if (modal?.tipo === 'detalheAgenda') {
