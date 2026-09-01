@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { loadAllStorefrontProducts, normalizeStorefrontAlias, storefrontAliasFromPath, storefrontApiBase, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from './storefront.js';
+import { loadAllStorefrontProducts, normalizeStorefrontAlias, storefrontAliasFromPath, storefrontApiBase, storefrontCartSessionKey, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from './storefront.js';
 
 test('normaliza apenas aliases públicos seguros', () => {
   assert.equal(normalizeStorefrontAlias(' DINO '), 'dino');
@@ -35,6 +35,18 @@ test('carrinho e entrega são particionados por alias', () => {
   assert.equal(storefrontStorageKey('', 'cart'), 'kytto_commerce_cart:host');
   assert.notEqual(storefrontStorageKey('dino', 'cart'), storefrontStorageKey('agro-open', 'cart'));
   assert.notEqual(storefrontStorageKey('dino', 'cart'), storefrontStorageKey('dino', 'delivery'));
+});
+
+test('sessionKey do carrinho é opaca, estável e particionada por alias', () => {
+  const storage = new Map();
+  const original = globalThis.localStorage;
+  globalThis.localStorage = { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value) };
+  try {
+    const dino = storefrontCartSessionKey('dino');
+    assert.match(dino, /^[A-Za-z0-9_-]{24,180}$/);
+    assert.equal(storefrontCartSessionKey('dino'), dino);
+    assert.notEqual(storefrontCartSessionKey('agro-open'), dino);
+  } finally { globalThis.localStorage = original; }
 });
 
 test('extrai alias somente das rotas Commerce conhecidas', () => {

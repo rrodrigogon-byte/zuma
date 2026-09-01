@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, CheckCircle2, Copy, Loader2, MapPin, PackageCheck, ShieldCheck, Store, Truck } from 'lucide-react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, fmtR } from '../../lib/api'
-import { normalizeStorefrontAlias, storefrontApiBase, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
+import { normalizeStorefrontAlias, storefrontApiBase, storefrontCartSessionKey, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
 
 const EMPTY_ADDRESS = { cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '', referencia: '' }
 
@@ -83,6 +83,8 @@ export default function CommerceCheckout() {
   const orderRoute = storefrontRoute(storeAlias, 'order')
   const cartStorageKey = storefrontStorageKey(storeAlias, 'cart')
   const customerStorageKey = storefrontStorageKey(storeAlias, 'customer')
+  const [cartSessionKey] = useState(() => storefrontCartSessionKey(storeAlias))
+  const [orderIdempotencyKey] = useState(() => idem('order'))
   const [searchParams] = useSearchParams()
   const orderCode = searchParams.get('order') || searchParams.get('order_nsu') || ''
   const returnTransactionNsu = searchParams.get('transaction_nsu') || searchParams.get('transactionNsu') || ''
@@ -98,6 +100,7 @@ export default function CommerceCheckout() {
   const [address, setAddress] = useState(EMPTY_ADDRESS)
   const [deliveryMode, setDeliveryMode] = useState('retirada')
   const [form, setForm] = useState({ nome: '', email: '', telefone: '', documento: '' })
+  const [recoveryPreference, setRecoveryPreference] = useState(null)
   const [order, setOrder] = useState(null)
   const [payment, setPayment] = useState(null)
   const [selectedPayment, setSelectedPayment] = useState('')
@@ -163,6 +166,23 @@ export default function CommerceCheckout() {
     load()
     return () => { active = false }
   }, [orderCode, storefrontApi])
+
+  useEffect(() => {
+    if (order) return undefined
+    const timer = window.setTimeout(() => {
+      const validContact = form.nome.trim().length >= 2 && form.telefone.replace(/\D/g, '').length >= 10
+      const consentPayload = recoveryPreference === null ? {} : recoveryPreference === false
+        ? { recoveryConsent: false }
+        : validContact ? {
+            recoveryConsent: true,
+            recoverySource: 'checkout_checkbox',
+            recoveryEvidence: { checkbox: true, notice: 'Autorizo um único lembrete por WhatsApp sobre este carrinho. Posso revogar respondendo SAIR.', sourcePage: window.location.pathname },
+            contact: { name: form.nome.trim(), email: form.email.trim(), phone: form.telefone.trim() },
+          } : {}
+      api.post(`${storefrontApi}/cart`, { sessionKey: cartSessionKey, items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })), ...consentPayload }).catch(() => {})
+    }, 500)
+    return () => window.clearTimeout(timer)
+  }, [cart, cartSessionKey, form.email, form.nome, form.telefone, order, recoveryPreference, storefrontApi])
 
   useEffect(() => {
     if (!order?.public_code || payment || !returnTransactionNsu || !returnSlug) return undefined
@@ -234,7 +254,8 @@ export default function CommerceCheckout() {
       const created = await api.post(`${storefrontApi}/orders`, {
         customer: { nome: form.nome.trim(), email: form.email.trim(), telefone: form.telefone.trim() },
         items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })),
-        idempotencyKey: idem('order'),
+        idempotencyKey: orderIdempotencyKey,
+        cartSessionKey,
         shippingAddress: deliveryMode === 'entrega' ? { ...address, destinatario: form.nome, email: form.email, telefone: form.telefone, documento: form.documento } : { modo: 'retirada' },
         shippingMethodId,
         ...(deliveryMode === 'entrega' ? { shippingQuoteId: shippingQuote.quoteId, shippingOptionId } : {}),
@@ -242,6 +263,7 @@ export default function CommerceCheckout() {
       const code = created.codigo || created.publicCode || created.public_code
       localStorage.removeItem(cartStorageKey)
       if (created.customerId) localStorage.setItem(customerStorageKey, created.customerId)
+      localStorage.removeItem(storefrontStorageKey(storeAlias, 'cart_session'))
       setCart([])
       setOrder(created)
       const customerPayments = await api.get(`${storefrontApi}/payment-methods?customerId=${encodeURIComponent(created.customerId || '')}`).catch(() => null)
@@ -327,6 +349,7 @@ export default function CommerceCheckout() {
     <div className="checkout-content"><div className="checkout-main-column"><Link className="checkout-back" to={storeRoute}> <ArrowLeft size={14} /> Voltar para a loja</Link><Stepper paymentReady={false} /><section className="checkout-card"><div className="checkout-card-title"><div><span className="eyebrow">Checkout Commerce</span><h1>Finalize sua compra</h1><p>Seu pedido será criado primeiro; o pagamento acontece depois no provedor escolhido.</p></div><span className="checkout-card-icon"><Store size={20} /></span></div>
       <form onSubmit={createOrder}>
         <div className="checkout-form-grid"><label className="checkout-field"><span>Nome completo *</span><input value={form.nome} onChange={e => setForm(current => ({ ...current, nome: e.target.value }))} autoComplete="name" required /></label><label className="checkout-field"><span>E-mail *</span><input type="email" value={form.email} onChange={e => setForm(current => ({ ...current, email: e.target.value }))} autoComplete="email" required /></label><label className="checkout-field"><span>WhatsApp ou telefone</span><input value={form.telefone} onChange={e => setForm(current => ({ ...current, telefone: e.target.value }))} autoComplete="tel" /></label></div>
+        <label className="checkout-recovery-consent"><input type="checkbox" checked={recoveryPreference === true} onChange={event => setRecoveryPreference(event.target.checked)} /><span><strong>Lembrar meu carrinho por WhatsApp</strong><small>Opcional. Autorizo um único lembrete sobre este carrinho. Posso revogar desmarcando ou respondendo SAIR.</small></span></label>
         <div className="checkout-info-banner"><ShieldCheck size={18} /><div><strong>Pagamento fora do formulário.</strong><br />A Kytto não coleta dados de cartão. Você será levado ao checkout seguro do provedor habilitado.</div></div>
         <div className="checkout-address"><div className="checkout-address-heading"><h2>Como receber</h2><span>Escolha uma opção publicada</span></div><div className="shipping-options">{pickupAvailable && <button type="button" className={`shipping-option ${deliveryMode === 'retirada' ? 'is-selected' : ''}`} onClick={() => { setDeliveryMode('retirada'); setShippingMethodId(shippingMethods.find(item => item.tipo === 'pickup')?.id || '') }}><span className="shipping-option-radio">{deliveryMode === 'retirada' ? '✓' : ''}</span><span className="shipping-option-copy"><strong>Retirada no local</strong><small>Confirme com a operação da loja.</small></span><b>Grátis</b></button>}{deliveryAvailable && <button type="button" className={`shipping-option ${deliveryMode === 'entrega' ? 'is-selected' : ''}`} onClick={() => { setDeliveryMode('entrega'); setShippingMethodId(shippingMethods.find(item => ['delivery', 'carrier'].includes(item.tipo) && item.quoteEnabled)?.id || '') }}><span className="shipping-option-radio">{deliveryMode === 'entrega' ? '✓' : ''}</span><span className="shipping-option-copy"><strong>Entrega</strong><small>Calcule o valor e o prazo por CEP.</small></span><b>Consultar</b></button>}</div></div>
         {deliveryMode === 'entrega' && <div className="checkout-address"><div className="checkout-form-grid"><label className="checkout-field"><span>CEP *</span><div className="checkout-inline-field"><input value={address.cep} onChange={e => updateAddress('cep', e.target.value)} onBlur={() => address.cep.replace(/\D/g, '').length === 8 && lookupCep()} inputMode="numeric" autoComplete="postal-code" placeholder="00000-000" required /><button type="button" className="checkout-secondary" onClick={lookupCep} disabled={working}>{working ? 'Consultando…' : 'Consultar CEP'}</button></div></label><label className="checkout-field"><span>Número *</span><input ref={addressNumberRef} value={address.numero} onChange={e => updateAddress('numero', e.target.value)} required /></label><label className="checkout-field"><span>Logradouro *</span><input value={address.logradouro} onChange={e => updateAddress('logradouro', e.target.value)} required /></label><label className="checkout-field"><span>Bairro *</span><input value={address.bairro} onChange={e => updateAddress('bairro', e.target.value)} required /></label><label className="checkout-field"><span>Cidade *</span><input value={address.cidade} onChange={e => updateAddress('cidade', e.target.value)} required /></label><label className="checkout-field"><span>UF *</span><input value={address.estado} onChange={e => updateAddress('estado', e.target.value.toUpperCase())} maxLength={2} required /></label></div><button type="button" className="checkout-secondary" onClick={quoteShipping} disabled={working}>{working ? 'Calculando…' : 'Calcular frete'}</button>{shippingQuote?.items?.map(option => <label className="commerce-shipping-option" key={option.id}><input type="radio" name="shippingOption" checked={shippingOptionId === option.id} onChange={() => setShippingOptionId(option.id)} /><span><strong>{option.name}</strong><small>{shippingPromise(option)}</small>{shippingPriceSummary(option) && <small className="checkout-shipping-price-note">{shippingPriceSummary(option)}</small>}</span><b>{money(option.amount)}</b></label>)}</div>}

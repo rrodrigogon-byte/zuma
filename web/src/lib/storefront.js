@@ -30,6 +30,18 @@ export function storefrontStorageKey(value, kind) {
   return `kytto_commerce_${safeKind}:${alias}`
 }
 
+export function storefrontCartSessionKey(value) {
+  const storageKey = storefrontStorageKey(value, 'cart_session')
+  const generate = () => globalThis.crypto?.randomUUID?.().replace(/-/g, '') || `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`
+  try {
+    const existing = globalThis.localStorage?.getItem(storageKey)
+    if (/^[A-Za-z0-9_-]{24,180}$/.test(existing || '')) return existing
+    const generated = generate()
+    globalThis.localStorage?.setItem(storageKey, generated)
+    return generated
+  } catch { return generate() }
+}
+
 export function storefrontAliasFromPath(pathname) {
   const match = String(pathname || '').match(/^\/(?:ecommerce|perfumaria|checkout|pedido)\/([^/?#]+)/i)
   return normalizeStorefrontAlias(match?.[1])

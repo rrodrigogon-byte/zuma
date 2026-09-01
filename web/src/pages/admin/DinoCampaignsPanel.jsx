@@ -5,6 +5,7 @@ import './dino-campaigns.css'
 
 const EMPTY_FORM = { name: '', message: '', city: '', state: '', tag: '', createdWithinDays: '', scheduledAt: '' }
 const STATUS_LABELS = { rascunho: 'Rascunho', confirmada: 'Confirmada', agendada: 'Agendada', enviando: 'Enviando', enviada: 'Enviada', parcial: 'Parcial', cancelada: 'Cancelada' }
+const CART_STATUS_LABELS = { not_requested: 'Sem opt-in', consented: 'Opt-in registrado', queued: 'Lembrete agendado', sent: 'Lembrete enviado', revoked: 'Revogado', converted: 'Convertido', expired: 'Expirado', failed: 'Falha segura' }
 
 function number(value) { return new Intl.NumberFormat('pt-BR').format(Number(value || 0)) }
 function dateTime(value) { return value ? new Date(value).toLocaleString('pt-BR') : '—' }
@@ -27,6 +28,19 @@ export default function DinoCampaignsPanel() {
   const [consentOrigin, setConsentOrigin] = useState('cliente_solicitou')
   const [evidenceNote, setEvidenceNote] = useState('')
   const [consentConfirmed, setConsentConfirmed] = useState(false)
+  const [carts, setCarts] = useState([])
+  const [cartMetrics, setCartMetrics] = useState(null)
+
+  const loadCartRecovery = useCallback(async () => {
+    try {
+      const [list, metricsResponse] = await Promise.all([
+        api.get('/api/admin/commerce/cart-recovery?limit=50'),
+        api.get('/api/admin/commerce/cart-recovery/metrics'),
+      ])
+      setCarts(list.items || [])
+      setCartMetrics(metricsResponse || null)
+    } catch (error) { toast(error.message || 'Não foi possível carregar os carrinhos.', 'error') }
+  }, [toast])
 
   const loadCampaigns = useCallback(async () => {
     setLoading(true)
@@ -45,7 +59,7 @@ export default function DinoCampaignsPanel() {
     } catch (error) { toast(error.message || 'Não foi possível carregar a base autorizada.', 'error') }
   }, [toast])
 
-  useEffect(() => { loadCampaigns(); loadAudience('') }, [loadCampaigns, loadAudience])
+  useEffect(() => { loadCampaigns(); loadAudience(''); loadCartRecovery() }, [loadCampaigns, loadAudience, loadCartRecovery])
 
   const criteria = useMemo(() => ({
     city: form.city.trim(),
@@ -153,8 +167,22 @@ export default function DinoCampaignsPanel() {
   return <section className="dino-campaigns" aria-labelledby="dino-campaigns-title">
     <header className="dino-campaigns-heading">
       <div><span>RELACIONAMENTO & IA</span><h2 id="dino-campaigns-title">Campanhas WhatsApp</h2><p>Segmentação com consentimento LGPD, preview obrigatório, fila idempotente e métricas do provedor.</p></div>
-      <button type="button" onClick={loadCampaigns} disabled={busy || loading}>Atualizar</button>
+      <button type="button" onClick={() => { loadCampaigns(); loadAudience(audienceSearch); loadCartRecovery() }} disabled={busy || loading}>Atualizar</button>
     </header>
+
+    <section className="dino-cart-recovery" aria-label="Recuperação de carrinhos">
+      <div className="dino-campaign-audience-head"><div><h3>Carrinhos abandonados</h3><p>Sync server-side sem contato por padrão. Um único lembrete é elegível somente após opt-in explícito no checkout.</p></div><span>Somente leitura</span></div>
+      <div className="dino-campaign-preview-grid">
+        <div><small>Ativos</small><strong>{number(cartMetrics?.active)}</strong></div>
+        <div><small>Agendados</small><strong>{number(cartMetrics?.queued)}</strong></div>
+        <div><small>Enviados</small><strong>{number(cartMetrics?.sent)}</strong></div>
+        <div><small>Convertidos</small><strong>{number(cartMetrics?.converted)}</strong></div>
+        <div><small>Revogados</small><strong>{number(cartMetrics?.revoked)}</strong></div>
+        <div><small>Valor aberto</small><strong>{fmtR(cartMetrics?.open_value || 0)}</strong></div>
+      </div>
+      {carts.length === 0 ? <p>Nenhum carrinho server-side registrado neste tenant e loja.</p> : <div className="dino-cart-recovery-list">{carts.map(cart => <article key={cart.id}><div><strong>{cart.customer_name || 'Sessão sem contato'}</strong><small>{cart.phone_masked || 'Telefone não coletado'} · {number(cart.item_count)} item(ns) · {fmtR(cart.subtotal || 0)}</small></div><div><span className={`status is-${cart.recovery_status}`}>{CART_STATUS_LABELS[cart.recovery_status] || cart.recovery_status}</span><small>{dateTime(cart.last_activity_at)}</small></div></article>)}</div>}
+      <p className="dino-cart-recovery-note">Nenhum consentimento pode ser criado nesta tela. Conversão, revogação e opt-out cancelam automaticamente a tarefa; falhas de envio não têm retry ambíguo.</p>
+    </section>
 
     <section className="dino-campaign-audience" aria-label="Base de consentimentos">
       <div className="dino-campaign-audience-head"><div><h3>Base autorizada</h3><p>Somente opt-ins explícitos de WhatsApp para marketing entram nos previews.</p></div><div><input value={audienceSearch} onChange={event => setAudienceSearch(event.target.value)} placeholder="Buscar cliente" /><button type="button" onClick={() => loadAudience(audienceSearch)} disabled={busy}>Buscar</button></div></div>

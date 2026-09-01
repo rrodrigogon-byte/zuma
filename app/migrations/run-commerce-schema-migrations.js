@@ -32,6 +32,7 @@ const migrationFiles = [
   '040_commerce_own_delivery.sql',
   '041_commerce_customer_credit.sql',
   '042_dino_own_delivery_defaults.sql',
+  '043_commerce_abandoned_cart_recovery.sql',
 ];
 const advisoryLockKey = 825410732;
 

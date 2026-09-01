@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { db } from './database.js';
 import { resolveShippingSelection } from './commerce-shipping.js';
+import { markCartConverted } from './commerce-abandoned-carts.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -403,6 +404,7 @@ export async function createPendingOrder(trx, context, input = {}) {
     shippingOptionId: input.shippingOptionId || null,
     locationId: input.locationId || null,
     note: input.note || '',
+    ...(input.cartSessionKey ? { cartSessionHash: crypto.createHash('sha256').update(String(input.cartSessionKey)).digest('hex') } : {}),
   })).digest('hex');
 
   if (idem) {
@@ -415,7 +417,10 @@ export async function createPendingOrder(trx, context, input = {}) {
     );
     if (existing.rows[0]) {
       if (existing.rows[0].request_hash !== requestHash) throw new CommerceError('chave de idempotência reutilizada com payload diferente', 'IDEMPOTENCY_CONFLICT');
-      if (existing.rows[0].response_body) return existing.rows[0].response_body;
+      if (existing.rows[0].response_body) {
+        await markCartConverted(trx, { ...context, empresaId, lojaId: storefront.loja_id }, { cartSessionKey: input.cartSessionKey, storefrontId: storefront.id, orderId: existing.rows[0].response_body.id });
+        return existing.rows[0].response_body;
+      }
     } else {
       await trx.query(
         `INSERT INTO commerce_idempotency_keys
@@ -560,6 +565,7 @@ export async function createPendingOrder(trx, context, input = {}) {
     [empresaId, orderId, status, context.usuarioId || null, requestId(input.correlationId), JSON.stringify({ lineCount: normalizedLines.length, shipping: shippingSelection ? { quoteId: shippingSelection.quote.id, optionId: shippingSelection.optionId, amount: shippingSelection.amount } : null })],
   );
   const result = { id: orderId, publicCode, status, currency: storefront.moeda || 'BRL', subtotal, discount, shipping, taxes, total, customerId, shippingMethodId, shippingQuoteId: shippingSelection?.quote.id || null, shippingOptionId: shippingSelection?.optionId || null, shippingOption: shippingSelection?.option || null };
+  await markCartConverted(trx, { ...context, empresaId, lojaId: storefront.loja_id }, { cartSessionKey: input.cartSessionKey, storefrontId: storefront.id, orderId });
   if (idem) {
     await trx.query(
       `UPDATE commerce_idempotency_keys SET response_status = 201, response_body = $3::jsonb
