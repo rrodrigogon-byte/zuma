@@ -627,7 +627,7 @@ export async function createCatalogProduct(trx, context, input = {}) {
   const productResult = await trx.query(
     `INSERT INTO commerce_products
       (empresa_id, category_id, slug, nome, tipo, status, descricao, descricao_curta, dados_fiscais, seo, criado_por, publicado_em)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11, CASE WHEN $6 = 'active' THEN CURRENT_TIMESTAMP ELSE NULL END)
+     VALUES ($1, $2, $3, $4, $5, $6::varchar, $7, $8, $9::jsonb, $10::jsonb, $11, CASE WHEN $6::varchar = 'active' THEN CURRENT_TIMESTAMP ELSE NULL END)
      RETURNING *`,
     [empresaId, categoryId, slug, nome, input.tipo || 'physical', status, String(input.descricao || '').slice(0, 10000) || null, String(input.descricaoCurta || '').slice(0, 500) || null, JSON.stringify(input.dadosFiscais || {}), JSON.stringify(input.seo || {}), usuarioId],
   );

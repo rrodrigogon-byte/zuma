@@ -151,10 +151,12 @@ const Ecommerce          = lazy(() => import('./pages/public/Ecommerce'))
 
 function RouteBrandSync() {
   const location = useLocation()
+  const { empresaAtiva } = useAuth()
+  const tenantBrand = [empresaAtiva?.slug, empresaAtiva?.codigo, empresaAtiva?.nome].some((value) => String(value || '').toLowerCase().includes('dino')) ? 'dino' : 'kytto'
 
   useEffect(() => {
-    applyBrand(resolveBrand(location.pathname, location.search))
-  }, [location.pathname, location.search])
+    applyBrand(resolveBrand(location.pathname, location.search, tenantBrand))
+  }, [location.pathname, location.search, tenantBrand])
 
   return null
 }
@@ -264,12 +266,16 @@ export default function App() {
         <Route path="/ia/aijur"   element={<AIJur />} />
           <Route path="/solucoes"   element={<Solucoes />} />
           <Route path="/ecommerce"  element={<Layout marketing><Ecommerce /></Layout>} />
+          <Route path="/ecommerce/:storeAlias" element={<Ecommerce />} />
+          <Route path="/perfumaria/:storeAlias" element={<Ecommerce />} />
         <Route path="/inscricao"  element={<Layout><Inscricao /></Layout>} />
         <Route path="/ranking"    element={<Layout><Ranking /></Layout>} />
         <Route path="/loja"       element={<Layout><Loja /></Layout>} />
         <Route path="/checkout"   element={<CheckoutEntry />} />
+        <Route path="/checkout/:storeAlias" element={<CommerceCheckout />} />
         <Route path="/ecommerce/checkout" element={<CheckoutEntry />} />
         <Route path="/pedido/:codigo" element={<Layout marketing><AcompanharPedido /></Layout>} />
+        <Route path="/pedido/:storeAlias/:codigo" element={<AcompanharPedido />} />
         <Route path="/cardapio/mesa/:token" element={<CardapioMesaPublico />} />
         <Route path="/agendar/:slug" element={<AgendamentoOnline />} />
         <Route path="/regulamento" element={<Layout marketing><Regulamento /></Layout>} />

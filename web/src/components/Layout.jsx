@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import NotifBell from './NotifBell'
 import { useAuth } from '../lib/auth'
+import { readSidebarCollapsed, writeSidebarCollapsed } from '../lib/layout-preferences'
 
-function TopBar() {
+function TopBar({ sidebarCollapsed = false }) {
   const { user, isStaff, isAtleta, logout } = useAuth()
   const navigate = useNavigate()
 
@@ -12,12 +13,13 @@ function TopBar() {
 
   return (
     <div style={{
-      position: 'fixed', top: 0, right: 0, left: 256,
+      position: 'fixed', top: 0, right: 0, left: sidebarCollapsed ? 78 : 256,
       height: 50, background: 'var(--surface)',
       borderBottom: '1px solid var(--line)',
       display: 'flex', alignItems: 'center',
       justifyContent: 'flex-end',
       padding: '0 20px', gap: 10, zIndex: 40,
+      transition: 'left .2s ease',
     }} className="topbar">
       {/* Atleta: botão painel */}
       {isAtleta && (
@@ -55,6 +57,7 @@ function TopBar() {
 
 export default function Layout({ children, noSidebar = false, marketing = false }) {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed)
   const { user } = useAuth()
 
   useEffect(() => {
@@ -62,6 +65,14 @@ export default function Layout({ children, noSidebar = false, marketing = false 
     window.addEventListener('resize', handler)
     return () => window.removeEventListener('resize', handler)
   }, [])
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed((current) => {
+      const next = !current
+      writeSidebarCollapsed(next)
+      return next
+    })
+  }
 
   // Páginas públicas "premium" (Home/Clube/Regulamento) têm header/hero próprios.
   // Sempre renderizam em full-bleed, inclusive para usuários autenticados; a Home
@@ -73,14 +84,15 @@ export default function Layout({ children, noSidebar = false, marketing = false 
 
   return (
     <div style={{ display: 'flex' }}>
-      <Sidebar />
-      {hasTopBar && !isMobile && <TopBar />}
+      <Sidebar collapsed={sidebarCollapsed} onToggleCollapse={toggleSidebar} />
+      {hasTopBar && !isMobile && <TopBar sidebarCollapsed={sidebarCollapsed} />}
       <main style={{
-        marginLeft: isMobile ? 0 : 256,
+        marginLeft: isMobile ? 0 : (sidebarCollapsed ? 78 : 256),
         marginTop: hasTopBar && !isMobile ? topBarH : 0,
         flex: 1, minHeight: '100vh',
         background: 'var(--bg)',
         color: 'var(--fg)',
+        transition: 'margin-left .2s ease',
       }}>
         {children}
       </main>

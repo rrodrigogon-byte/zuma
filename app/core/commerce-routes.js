@@ -7,6 +7,7 @@ import { createPaymentAccount, listPaymentAccounts, listPaymentProviders, listPa
 import { resolveCommerceIdentity } from './commerce-identity-bridge.js';
 import { applyPromotionToOrder, createPromotion, createPromotionCode, createPromotionTemplate, listPromotionTemplates, listPromotions } from './commerce-promotions.js';
 import { createStorefront, listStorefronts, updateStorefront } from './commerce-storefronts.js';
+import { resolveStorefrontAlias } from './commerce-tenants.js';
 import { createMembership, listMemberships, listRoles, updateMembership } from './commerce-admin-users.js';
 import { createCustomer, createCustomerAddress, deleteCustomerAddress, getCustomer, listCustomerAddresses, updateCustomer, updateCustomerAddress } from './commerce-customers.js';
 import { createStorefrontDomain, listStorefrontDomains, setPrimaryStorefrontDomain, verifyStorefrontDomain } from './commerce-domains.js';
@@ -49,10 +50,12 @@ function publicHost(req) {
 }
 
 async function resolvePublicStorefront(req) {
+  if (req.publicStoreAlias) return resolveStorefrontAlias(req.publicStoreAlias);
   const dominio = publicHost(req);
   if (!dominio) throw new CommerceError('domínio da loja não resolvido', 'STOREFRONT_DOMAIN_REQUIRED');
   const result = await db.query(
-    `SELECT s.id, s.empresa_id, s.loja_id, s.codigo, s.nome, s.canal, s.status, s.moeda, s.timezone
+    `SELECT s.id, s.empresa_id, s.loja_id, s.codigo, s.nome, s.canal, s.status, s.moeda, s.timezone,
+            s.configuracoes, '{}'::jsonb AS public_config, COALESCE(s.configuracoes->>'brandKey', 'default') AS brand_key
        FROM commerce_store_domains d
        JOIN commerce_storefronts s
          ON s.empresa_id = d.empresa_id AND s.id = d.storefront_id
@@ -80,6 +83,28 @@ function statusCounts(rows = []) {
 function safePublicUrl(value) {
   const candidate = String(value || '').trim();
   return /^https?:\/\//i.test(candidate) ? candidate.slice(0, 600) : null;
+}
+
+function sanitizePublicStorefrontConfig(storefront = {}) {
+  const source = storefront.public_config && typeof storefront.public_config === 'object'
+    ? storefront.public_config
+    : storefront.configuracoes?.public && typeof storefront.configuracoes.public === 'object'
+      ? storefront.configuracoes.public
+      : {};
+  const safeColor = (value, fallback) => /^#[0-9a-f]{6}$/i.test(String(value || '')) ? String(value).toUpperCase() : fallback;
+  return {
+    brandKey: /^[a-z0-9][a-z0-9_-]{1,79}$/.test(String(storefront.brand_key || '')) ? String(storefront.brand_key) : 'default',
+    displayName: String(source.displayName || storefront.nome || '').trim().slice(0, 120),
+    tagline: String(source.tagline || '').trim().slice(0, 240),
+    logoUrl: safePublicUrl(source.logoUrl) || '',
+    colors: {
+      accent: safeColor(source.colors?.accent, '#FF6B2C'),
+      accentStrong: safeColor(source.colors?.accentStrong, '#D84A16'),
+      background: safeColor(source.colors?.background, '#F7F8FA'),
+      surface: safeColor(source.colors?.surface, '#FFFFFF'),
+      text: safeColor(source.colors?.text, '#172033'),
+    },
+  };
 }
 
 function sanitizePublicFulfillment(value = {}) {
@@ -331,7 +356,7 @@ export function createCommercePublicRouter() {
       const paymentsReady = paymentAccounts.rows.some(paymentAccountReady);
       const manualShippingReady = shippingMethods.rows.some(row => String(row.configuracao?.provider || '').toLowerCase() === 'manual');
       const shippingReady = shippingAccounts.rows.some(shippingAccountReady) || manualShippingReady;
-      res.json({ storefront: { id: storefront.id, codigo: storefront.codigo, nome: storefront.nome, moeda: storefront.moeda, timezone: storefront.timezone }, capabilities: { catalog: true, cart: true, checkout: true, payments: paymentsReady, shipping: shippingReady } });
+      res.json({ storefront: { id: storefront.id, codigo: storefront.codigo, nome: storefront.nome, moeda: storefront.moeda, timezone: storefront.timezone, public: sanitizePublicStorefrontConfig(storefront) }, capabilities: { catalog: true, cart: true, checkout: true, payments: paymentsReady, shipping: shippingReady } });
     } catch (error) { jsonError(res, error); }
   });
   router.get('/products', async (req, res) => {

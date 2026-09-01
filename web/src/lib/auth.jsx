@@ -65,7 +65,12 @@ export function AuthProvider({ children }) {
   }
 
   const trocarLoja = (lojaId) => {
-    const proxima = lojasAcessiveis.find((loja) => loja.id === lojaId && loja.ativa !== false)
+    if (!lojaId) {
+      localStorage.removeItem('sp_loja_ativa')
+      setLojaAtiva(null)
+      return true
+    }
+    const proxima = lojasAcessiveis.find((loja) => loja.id === lojaId && loja.ativa !== false && (!empresaAtiva?.id || loja.empresaId === empresaAtiva.id))
     if (!proxima) return false
     localStorage.setItem('sp_loja_ativa', JSON.stringify(proxima))
     setLojaAtiva(proxima)

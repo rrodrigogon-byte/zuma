@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowRight, CheckCircle2, Loader2, Minus, Plus, Search, ShoppingBag, Store, X } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, fmtR } from '../../lib/api'
+import { normalizeStorefrontAlias, storefrontApiBase, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
 import './commerce.css'
 
-const CART_KEY = 'kytto_commerce_cart'
-const DELIVERY_KEY = 'kytto_commerce_delivery'
-
-function readCart() {
-  try { return JSON.parse(localStorage.getItem(CART_KEY) || '[]') } catch { return [] }
+function readCart(storeAlias) {
+  try {
+    const value = JSON.parse(localStorage.getItem(storefrontStorageKey(storeAlias, 'cart')) || '[]')
+    return Array.isArray(value) ? value : []
+  } catch { return [] }
 }
 
 function money(value) { return fmtR(Number(value || 0)) }
@@ -120,12 +121,20 @@ function QuantityControl({ value, onChange, max }) {
 
 export default function Ecommerce() {
   const navigate = useNavigate()
+  const { storeAlias: routeAlias = '' } = useParams()
+  const storeAlias = normalizeStorefrontAlias(routeAlias)
+  const storefrontApi = storefrontApiBase(storeAlias)
+  const storeRoute = storefrontRoute(storeAlias, 'store')
+  const checkoutRoute = storefrontRoute(storeAlias, 'checkout')
+  const cartStorageKey = storefrontStorageKey(storeAlias, 'cart')
+  const deliveryStorageKey = storefrontStorageKey(storeAlias, 'delivery')
+  const [storeContext, setStoreContext] = useState(null)
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('Todos')
-  const [cart, setCart] = useState(readCart)
+  const [cart, setCart] = useState(() => readCart(storeAlias))
   const [selected, setSelected] = useState(null)
   const [selectedVariantId, setSelectedVariantId] = useState('')
   const [checkoutOpen, setCheckoutOpen] = useState(false)
@@ -135,7 +144,7 @@ export default function Ecommerce() {
   const [checkoutIdempotency, setCheckoutIdempotency] = useState(checkoutKey)
   const [catalogSource, setCatalogSource] = useState('detecting')
   const [delivery, setDelivery] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(DELIVERY_KEY) || '{"mode":"retirada"}') } catch { return { mode: 'retirada' } }
+    try { return JSON.parse(localStorage.getItem(deliveryStorageKey) || '{"mode":"retirada"}') } catch { return { mode: 'retirada' } }
   })
   const [shippingMethods, setShippingMethods] = useState([])
   const [shippingMethodId, setShippingMethodId] = useState('')
@@ -156,18 +165,18 @@ export default function Ecommerce() {
   const [trackingError, setTrackingError] = useState('')
 
   useEffect(() => {
-    api.get('/api/storefront/context')
-      .then(() => Promise.all([api.get('/api/storefront/products'), api.get('/api/storefront/shipping-methods'), api.get('/api/storefront/payment-methods').catch(() => ({ items: [] }))]).then(([data, shipping, payments]) => { setCatalogSource('core'); setProducts(normalizeCatalog(data, 'core')); const methods = shipping?.items || []; setShippingMethods(methods); const hasReadyDelivery = methods.some(item => ['delivery', 'carrier'].includes(item.tipo) && item.quoteEnabled); const effectiveMode = delivery.mode === 'entrega' && !hasReadyDelivery ? 'retirada' : delivery.mode; if (effectiveMode !== delivery.mode) setDelivery({ mode: effectiveMode }); setShippingMethodId(methods.find(item => (effectiveMode === 'entrega' ? ['delivery', 'carrier'].includes(item.tipo) && item.quoteEnabled : item.tipo === 'pickup'))?.id || ''); const availablePayments = payments?.items || []; setPaymentMethods(availablePayments); setSelectedPaymentMethod(current => current || paymentKey(availablePayments.find(item => item.method === 'pix') || availablePayments[0] || {})) }))
+    api.get(`${storefrontApi}/context`)
+      .then((context) => { setStoreContext(context?.storefront || null); return Promise.all([api.get(`${storefrontApi}/products`), api.get(`${storefrontApi}/shipping-methods`), api.get(`${storefrontApi}/payment-methods`).catch(() => ({ items: [] }))]).then(([data, shipping, payments]) => { setCatalogSource('core'); setProducts(normalizeCatalog(data, 'core')); const methods = shipping?.items || []; setShippingMethods(methods); const hasReadyDelivery = methods.some(item => ['delivery', 'carrier'].includes(item.tipo) && item.quoteEnabled); const effectiveMode = delivery.mode === 'entrega' && !hasReadyDelivery ? 'retirada' : delivery.mode; if (effectiveMode !== delivery.mode) setDelivery({ mode: effectiveMode }); setShippingMethodId(methods.find(item => (effectiveMode === 'entrega' ? ['delivery', 'carrier'].includes(item.tipo) && item.quoteEnabled : item.tipo === 'pickup'))?.id || ''); const availablePayments = payments?.items || []; setPaymentMethods(availablePayments); setSelectedPaymentMethod(current => current || paymentKey(availablePayments.find(item => item.method === 'pix') || availablePayments[0] || {})) }) })
       .catch(err => {
-        if (err.status !== 404) throw err
+        if (storeAlias || err.status !== 404) throw err
         return api.get('/api/loja').then(data => { setCatalogSource('legacy'); setProducts(normalizeCatalog(data, 'legacy')) })
       })
       .catch(err => setError(err.message || 'Não foi possível carregar o catálogo.'))
       .finally(() => setLoading(false))
-  }, [])
+  }, [storefrontApi, storeAlias])
 
-  useEffect(() => localStorage.setItem(CART_KEY, JSON.stringify(cart)), [cart])
-  useEffect(() => localStorage.setItem(DELIVERY_KEY, JSON.stringify(delivery)), [delivery])
+  useEffect(() => localStorage.setItem(cartStorageKey, JSON.stringify(cart)), [cart, cartStorageKey])
+  useEffect(() => localStorage.setItem(deliveryStorageKey, JSON.stringify(delivery)), [delivery, deliveryStorageKey])
   useEffect(() => {
     if (!products.length) return
     setCart(previous => previous.map(item => {
@@ -212,7 +221,7 @@ export default function Ecommerce() {
     setAddressLookupLoading(true)
     setCheckoutError('')
     try {
-      const address = await api.get(`/api/storefront/shipping/address/${cep}`)
+      const address = await api.get(`${storefrontApi}/shipping/address/${cep}`)
       setShippingAddress(current => ({ ...current, ...address, cep: address.cep?.replace(/\D/g, '') || cep }))
       setShippingQuote(null)
       setShippingOptionId('')
@@ -227,7 +236,7 @@ export default function Ecommerce() {
     setShippingQuoteLoading(true)
     setCheckoutError('')
     try {
-      const quote = await api.post('/api/storefront/shipping/quotes', { shippingMethodId, destinationCep: shippingAddress.cep, destination: { cep: shippingAddress.cep, cidade: shippingAddress.cidade, estado: shippingAddress.estado }, items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })) })
+      const quote = await api.post(`${storefrontApi}/shipping/quotes`, { shippingMethodId, destinationCep: shippingAddress.cep, destination: { cep: shippingAddress.cep, cidade: shippingAddress.cidade, estado: shippingAddress.estado }, items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })) })
       setShippingQuote(quote)
       setShippingOptionId(quote.items?.[0]?.id || '')
     } catch (err) { setCheckoutError(err.message || 'Não foi possível calcular o frete neste momento.') }
@@ -244,7 +253,7 @@ export default function Ecommerce() {
       const code = order.codigo || order.publicCode || order.public_code
       const idempotencyKey = paymentIdempotencyKey || checkoutKey()
       if (!paymentIdempotencyKey) setPaymentIdempotencyKey(idempotencyKey)
-      const payment = await api.post(`/api/storefront/orders/${encodeURIComponent(code)}/payments`, { provider: selectedPayment.provider, method: selectedPayment.method, idempotencyKey })
+      const payment = await api.post(`${storefrontApi}/orders/${encodeURIComponent(code)}/payments`, { provider: selectedPayment.provider, method: selectedPayment.method, idempotencyKey })
       setPaymentResult(payment)
     } catch (err) { setCheckoutError(err.message || 'Não foi possível iniciar o pagamento no gateway.') }
     finally { setPaymentLoading(false) }
@@ -256,7 +265,7 @@ export default function Ecommerce() {
     let active = true
     const refresh = async () => {
       try {
-        const latest = await api.get(`/api/storefront/orders/${encodeURIComponent(code)}`)
+        const latest = await api.get(`${storefrontApi}/orders/${encodeURIComponent(code)}`)
         if (active) setOrder(current => current ? { ...current, ...latest } : current)
       } catch { /* a próxima tentativa ou o acompanhamento manual poderá recuperar */ }
     }
@@ -272,7 +281,7 @@ export default function Ecommerce() {
     setTrackingError('')
     setTrackingOrder(null)
     try {
-      const path = catalogSource === 'core' ? `/api/storefront/orders/${encodeURIComponent(code)}` : `/api/loja/pedido/${encodeURIComponent(code)}`
+      const path = catalogSource === 'core' ? `${storefrontApi}/orders/${encodeURIComponent(code)}` : `/api/loja/pedido/${encodeURIComponent(code)}`
       setTrackingOrder(await api.get(path))
     } catch (err) {
       setTrackingError(err.message || 'Não foi possível localizar este pedido.')
@@ -319,7 +328,7 @@ export default function Ecommerce() {
     try {
       const observacao = String(form.get('observacao') || '').trim()
       const result = catalogSource === 'core'
-        ? await api.post('/api/storefront/orders', {
+        ? await api.post(`${storefrontApi}/orders`, {
             customer: { nome, email, telefone: String(form.get('tel') || '').trim() },
             items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })),
             idempotencyKey: checkoutIdempotency,
@@ -340,8 +349,8 @@ export default function Ecommerce() {
       setCart([])
       setCheckoutOpen(false)
       if (catalogSource === 'core' && code) {
-        localStorage.removeItem(CART_KEY)
-        navigate(`/checkout?order=${encodeURIComponent(code)}`)
+        localStorage.removeItem(cartStorageKey)
+        navigate(`${checkoutRoute}?order=${encodeURIComponent(code)}`)
         return
       }
       setOrder(result)
@@ -354,12 +363,16 @@ export default function Ecommerce() {
     } finally { setSubmitting(false) }
   }
 
-  return <main className="commerce-shell">
+  const publicBrand = storeContext?.public || {}
+  const brandName = publicBrand.displayName || storeContext?.nome || (storeAlias ? storeAlias : 'Kytto Commerce')
+  const brandTagline = publicBrand.tagline || 'Uma experiência de compra completa para produtos, serviços e operações locais — com catálogo, atendimento e gestão conectados.'
+
+  return <main className="commerce-shell" data-storefront-alias={storeAlias || undefined}>
     <section className="commerce-hero">
       <div>
-        <span className="commerce-eyebrow"><Store size={14} /> Kytto Commerce</span>
-        <h1>Venda melhor. <em>Opere com inteligência.</em></h1>
-        <p>Uma experiência de compra completa para produtos, serviços e operações locais — com catálogo, atendimento e gestão conectados.</p>
+        <span className="commerce-eyebrow"><Store size={14} /> {brandName}</span>
+        <h1>{storeAlias === 'dino' ? <>Autocuidado, estilo e bem-estar. <em>Compre com confiança.</em></> : <>Venda melhor. <em>Opere com inteligência.</em></>}</h1>
+        <p>{brandTagline}</p>
         <div className="commerce-hero-actions">
           <a className="commerce-button commerce-button-primary" href="#catalogo">Explorar catálogo <ArrowRight size={16} /></a>
           <button type="button" className="commerce-button commerce-button-quiet" onClick={openTracking}>Acompanhar pedido</button>
@@ -382,7 +395,7 @@ export default function Ecommerce() {
     {!loading && !error && <section className="commerce-product-grid">
       {filtered.map(product => <article className="commerce-product-card" key={product.id}>
         <button type="button" className="commerce-product-open" onClick={() => { setSelected(product); setSelectedVariantId(product.variantId || product.variants?.[0]?.variantId || '') }} aria-label={`Ver detalhes de ${product.nome}`}><ProductImage product={product} /></button>
-        <div className="commerce-product-content"><span>{product.cat || 'Produto'}</span><h2>{product.nome}</h2><p>{product.descricao || 'Produto disponível no catálogo Kytto.'}</p><div className="commerce-product-buy"><div className="commerce-price"><strong>{money(product.preco)}</strong>{product.promocaoAtiva && <s>{money(product.precoOriginal)}</s>}</div><button type="button" onClick={() => addToCart(product)} disabled={product.esgotado}>{product.esgotado ? 'Esgotado' : 'Adicionar'}</button></div></div>
+        <div className="commerce-product-content"><span>{product.cat || 'Produto'}</span><h2>{product.nome}</h2><p>{product.descricao || `Produto disponível no catálogo ${brandName}.`}</p><div className="commerce-product-buy"><div className="commerce-price"><strong>{money(product.preco)}</strong>{product.promocaoAtiva && <s>{money(product.precoOriginal)}</s>}</div><button type="button" onClick={() => addToCart(product)} disabled={product.esgotado}>{product.esgotado ? 'Esgotado' : 'Adicionar'}</button></div></div>
       </article>)}
       {!filtered.length && <div className="commerce-state">Nenhum item encontrado para esta busca.</div>}
     </section>}
@@ -395,7 +408,7 @@ export default function Ecommerce() {
 
     {selected && <div className="commerce-overlay" role="dialog" aria-modal="true" aria-label="Detalhes do produto"><div className="commerce-modal commerce-product-modal"><button type="button" className="commerce-close" onClick={() => setSelected(null)} aria-label="Fechar"><X size={18} /></button><ProductGallery product={selectedVariant} /><div><span className="commerce-eyebrow">{selected.cat || 'Produto'}</span><h2>{selected.nome}</h2><p>{selected.descricao || 'Produto disponível no catálogo Kytto.'}</p>{selectedVariant.descricaoDetalhada && selectedVariant.descricaoDetalhada !== selectedVariant.descricao && <p className="commerce-product-long-description">{selectedVariant.descricaoDetalhada}</p>}<div className="commerce-product-meta"><span><small>SKU</small><strong>{selectedVariant.cod || '—'}</strong></span><span><small>Disponibilidade</small><strong>{selectedVariant.esgotado ? 'Esgotado' : `${selectedVariant.estoque} em estoque`}</strong></span></div>{selected.variants?.length > 1 && <label className="commerce-variant-select">Variação<select value={selectedVariant.variantId || ''} onChange={event => setSelectedVariantId(event.target.value)}>{selected.variants.map(variant => <option key={variant.variantId} value={variant.variantId}>{variant.label || variant.cod || 'Opção'}{variant.esgotado ? ' · esgotado' : ''}</option>)}</select></label>}<div className="commerce-modal-price"><strong>{money(selectedVariant.preco)}</strong>{selectedVariant.promocaoAtiva && <s>{money(selectedVariant.precoOriginal)}</s>}</div><div className="commerce-modal-actions"><button type="button" className="commerce-button commerce-button-primary" disabled={selectedVariant.esgotado} onClick={() => addToCart(selectedVariant)}>{selectedVariant.esgotado ? 'Produto esgotado' : 'Adicionar ao carrinho'} <ShoppingBag size={16} /></button><small>{selectedVariant.esgotado ? 'Sem estoque no momento.' : `${selectedVariant.estoque} unidade(s) disponíveis`}</small></div></div></div></div>}
 
-    {checkoutOpen && <div className="commerce-overlay" role="dialog" aria-modal="true" aria-label="Carrinho e checkout"><div className="commerce-modal commerce-checkout-modal"><button type="button" className="commerce-close" onClick={() => setCheckoutOpen(false)} aria-label="Fechar"><X size={18} /></button><div className="commerce-modal-heading"><span className="commerce-eyebrow">Checkout</span><h2>Finalize seu pedido</h2><p>O pedido será encaminhado para a operação da loja e você receberá um código de acompanhamento.</p></div><div className="commerce-checkout-layout"><div className="commerce-cart-list">{cart.map(item => <div className="commerce-cart-row" key={`${item.produtoId}-${item.variantId || 'base'}`}><ProductImage product={item} /><div><strong>{item.nome}</strong><span>{money(item.preco)} cada</span></div><QuantityControl value={item.qtd} max={Math.max(1, availableStock(products.find(product => product.id === item.produtoId), item.variantId))} onChange={value => updateCart(item.produtoId, item.variantId, value)} /><b>{money(item.qtd * item.preco)}</b></div>)}<div className="commerce-cart-total"><span>Subtotal</span><strong>{money(cartTotal)}</strong></div>{selectedShippingOption && <div className="commerce-cart-total commerce-cart-shipping"><span>Frete · {selectedShippingOption.name}<small>{shippingOptionMeta(selectedShippingOption)}</small></span><strong>{money(selectedShippingOption.amount)}</strong></div>}<div className="commerce-cart-total"><span>Total{selectedShippingMethod?.tipo === 'pickup' ? ' · retirada' : ''}</span><strong>{money(checkoutTotal)}</strong></div><Link className="commerce-button commerce-button-primary commerce-dedicated-checkout-link" to="/checkout">Continuar para checkout seguro <ArrowRight size={16} /></Link></div><form className="commerce-form" onSubmit={submitOrder}>
+    {checkoutOpen && <div className="commerce-overlay" role="dialog" aria-modal="true" aria-label="Carrinho e checkout"><div className="commerce-modal commerce-checkout-modal"><button type="button" className="commerce-close" onClick={() => setCheckoutOpen(false)} aria-label="Fechar"><X size={18} /></button><div className="commerce-modal-heading"><span className="commerce-eyebrow">Checkout</span><h2>Finalize seu pedido</h2><p>O pedido será encaminhado para a operação da loja e você receberá um código de acompanhamento.</p></div><div className="commerce-checkout-layout"><div className="commerce-cart-list">{cart.map(item => <div className="commerce-cart-row" key={`${item.produtoId}-${item.variantId || 'base'}`}><ProductImage product={item} /><div><strong>{item.nome}</strong><span>{money(item.preco)} cada</span></div><QuantityControl value={item.qtd} max={Math.max(1, availableStock(products.find(product => product.id === item.produtoId), item.variantId))} onChange={value => updateCart(item.produtoId, item.variantId, value)} /><b>{money(item.qtd * item.preco)}</b></div>)}<div className="commerce-cart-total"><span>Subtotal</span><strong>{money(cartTotal)}</strong></div>{selectedShippingOption && <div className="commerce-cart-total commerce-cart-shipping"><span>Frete · {selectedShippingOption.name}<small>{shippingOptionMeta(selectedShippingOption)}</small></span><strong>{money(selectedShippingOption.amount)}</strong></div>}<div className="commerce-cart-total"><span>Total{selectedShippingMethod?.tipo === 'pickup' ? ' · retirada' : ''}</span><strong>{money(checkoutTotal)}</strong></div><Link className="commerce-button commerce-button-primary commerce-dedicated-checkout-link" to={checkoutRoute}>Continuar para checkout seguro <ArrowRight size={16} /></Link></div><form className="commerce-form" onSubmit={submitOrder}>
 <label>Nome completo<input name="nome" autoComplete="name" required /></label><label>E-mail<input name="email" type="email" autoComplete="email" required /></label><label>WhatsApp ou telefone<input name="tel" autoComplete="tel" value={shippingAddress.telefone} onChange={event => changeShippingAddress('telefone', event.target.value)} /></label><fieldset><legend>Como receber</legend><label className="commerce-radio"><input type="radio" name="delivery" checked={delivery.mode === 'retirada'} disabled={!pickupAvailable} onChange={() => chooseDelivery('retirada')} /> Retirada no local</label><label className="commerce-radio"><input type="radio" name="delivery" checked={delivery.mode === 'entrega'} disabled={!deliveryAvailable} onChange={() => chooseDelivery('entrega')} /> Entrega/delivery</label></fieldset>{catalogSource === 'core' && !deliveryAvailable && <small className="commerce-delivery-unavailable">Delivery não está habilitado para este storefront. Configure uma conta Correios ativa, origem/remetente e método de entrega no backoffice para liberar cotação real por CEP.</small>}{catalogSource === 'core' && <label>Forma de entrega<select value={shippingMethodId} onChange={event => { setShippingMethodId(event.target.value); setShippingQuote(null); setShippingOptionId('') }} disabled={!shippingMethods.length} required><option value="">Selecione uma opção configurada</option>{shippingMethods.filter(method => delivery.mode === 'entrega' ? ['delivery', 'carrier'].includes(method.tipo) && method.quoteEnabled : method.tipo === 'pickup').map(method => <option key={method.id} value={method.id}>{method.nome}</option>)}</select>{!shippingMethods.length && <small>Nenhum método publicado para este storefront.</small>}{selectedShippingMethod?.tipo === 'pickup' && <small>Retirada confirmada no local. O pagamento será concluído conforme gateway homologado.</small>}</label>}{delivery.mode === 'entrega' && <div className="commerce-address-fields"><label>CPF ou CNPJ do destinatário<input name="documento" inputMode="numeric" autoComplete="shipping" required value={shippingAddress.documento} onChange={event => changeShippingAddress('documento', event.target.value)} /></label><label className="commerce-cep-field">CEP<div className="commerce-inline-field"><input name="cep" inputMode="numeric" autoComplete="shipping postal-code" required value={shippingAddress.cep} onChange={event => changeShippingAddress('cep', event.target.value)} onBlur={() => shippingAddress.cep.replace(/\D/g, '').length === 8 && lookupCep()} placeholder="00000-000" /><button type="button" className="commerce-button commerce-button-quiet" onClick={lookupCep} disabled={addressLookupLoading}>{addressLookupLoading ? 'Consultando…' : 'Consultar CEP'}</button></div></label><label>Logradouro<input name="logradouro" autoComplete="shipping address-line1" required value={shippingAddress.logradouro} onChange={event => changeShippingAddress('logradouro', event.target.value)} /></label><label>Número<input name="numero" autoComplete="shipping address-line2" required value={shippingAddress.numero} onChange={event => changeShippingAddress('numero', event.target.value)} /></label><label>Bairro<input name="bairro" autoComplete="shipping address-level3" required value={shippingAddress.bairro} onChange={event => changeShippingAddress('bairro', event.target.value)} /></label><label>Cidade<input name="cidade" autoComplete="shipping address-level2" required value={shippingAddress.cidade} onChange={event => changeShippingAddress('cidade', event.target.value)} /></label><label>UF<input name="estado" maxLength="2" autoComplete="shipping address-level1" required value={shippingAddress.estado} onChange={event => changeShippingAddress('estado', event.target.value.toUpperCase())} /></label><label>Complemento<input name="complemento" value={shippingAddress.complemento} onChange={event => changeShippingAddress('complemento', event.target.value)} /></label><label className="wide">Referência<input name="referencia" value={shippingAddress.referencia} onChange={event => changeShippingAddress('referencia', event.target.value)} /></label>{selectedShippingMethod?.quoteEnabled ? <div className="commerce-shipping-quote-box wide"><div className="commerce-quote-heading"><strong>Opções de frete</strong><button type="button" className="commerce-button commerce-button-quiet" onClick={requestShippingQuote} disabled={shippingQuoteLoading || !cart.length}>{shippingQuoteLoading ? 'Calculando…' : shippingQuote ? 'Atualizar cotação' : 'Calcular frete'}</button></div>{shippingQuote?.expiresAt && <small>Cotação válida até {new Date(shippingQuote.expiresAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.</small>}<div className="commerce-shipping-options">{shippingQuote?.items?.map(option => <label className="commerce-shipping-option" key={option.id}><input type="radio" name="shippingOption" value={option.id} checked={shippingOptionId === option.id} onChange={event => setShippingOptionId(event.target.value)} /><span><strong>{option.name}</strong><small>{shippingOptionMeta(option)}</small></span><b>{money(option.amount)}</b></label>)}</div>{!shippingQuote && <small>Informe o CEP e calcule o frete para continuar.</small>}</div> : <small className="wide">Esta forma de entrega ainda não está conectada a um cotador real.</small>}</div>}<label>Observação<textarea name="observacao" rows="2" placeholder="Preferências ou instruções para a loja" /></label>{catalogSource === 'core' && <label>Cupom de desconto<input name="promotionCode" placeholder="Código do cupom (opcional)" /></label>}{checkoutError && <div className="commerce-form-error">{checkoutError}</div>}<button className="commerce-button commerce-button-primary" type="submit" disabled={submitting || !cart.length || checkoutBlocked}>{submitting ? <><Loader2 className="commerce-spin" size={16} /> Enviando…</> : <>Confirmar pedido <ArrowRight size={16} /></>}</button>{checkoutBlocked && <small className="commerce-checkout-note">A loja ainda não publicou uma forma de entrega para este canal.</small>}</form></div></div></div>}
 
     {trackingOpen && <div className="commerce-overlay" role="dialog" aria-modal="true" aria-label="Acompanhar pedido"><div className="commerce-modal commerce-tracking-modal"><button type="button" className="commerce-close" onClick={() => setTrackingOpen(false)} aria-label="Fechar"><X size={18} /></button><span className="commerce-eyebrow">Acompanhamento</span><h2>Onde está seu pedido?</h2><p>Informe o código recebido após a confirmação. A consulta usa somente o canal desta loja.</p><form className="commerce-tracking-form" onSubmit={findOrder}><label>Código do pedido<input value={trackingCode} onChange={event => setTrackingCode(event.target.value)} placeholder="Ex.: LJ-123456" autoComplete="off" /></label><button type="submit" className="commerce-button commerce-button-primary" disabled={trackingLoading}>{trackingLoading ? <><Loader2 className="commerce-spin" size={16} /> Consultando…</> : <>Consultar <ArrowRight size={16} /></>}</button></form>{trackingError && <div className="commerce-form-error" role="alert">{trackingError}</div>}{trackingOrder && <div className="commerce-tracking-result" aria-live="polite"><span className="commerce-eyebrow">Pedido encontrado</span><strong>{trackingOrder.codigo || trackingOrder.publicCode || trackingOrder.public_code}</strong><b>{trackingOrder.status || 'Em processamento'}</b><small>Atualizado em {trackingOrder.atualizado_em ? new Date(trackingOrder.atualizado_em).toLocaleString('pt-BR') : '—'}</small>{trackingOrder.fulfillments?.map(item => <div className="commerce-tracking-fulfillment" key={item.id || `${item.status}-${item.trackingCode}`}><b>{item.carrier || 'Entrega'} · {item.status}</b>{item.trackingCode && <span>Código: {item.trackingCode}</span>}{item.trackingUrl && <a href={item.trackingUrl} target="_blank" rel="noreferrer">Abrir rastreio</a>}{item.ocorrencias?.slice?.(-3).map((event, index) => <small key={`${event.at || index}`}>{event.description || event.status}</small>)}</div>)}</div>}</div></div>}

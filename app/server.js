@@ -27,11 +27,13 @@ import { emitir as nfceEmitir, cancelar as nfceCancelar, nfceConfigurado } from 
 import { createCommerceAdminRouter, createCommercePublicRouter, createCommerceWebhookRouter } from './core/commerce-routes.js';
 import { db as commerceDb } from './core/database.js';
 import { resolveCommerceIdentity } from './core/commerce-identity-bridge.js';
+import { listCommerceTenants, provisionCommerceTenant } from './core/commerce-tenants.js';
 import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
 import * as clientesKytto from './clientes-contas-kytto.js';
 import * as financeiroKytto from './financeiro-central-kytto.js';
 import * as caixaKytto from './caixa-diario-kytto.js';
 import * as canaisFidelidadeKytto from './canais-fidelidade-kytto.js';
+import { answerDinoOperationalQuestion, buildDinoOperationalSnapshot } from './dino-assistant.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -101,6 +103,8 @@ export const CATEGORIAS = [
 const ROLES = ['admin','organizador','staff','atleta'];
 const STAFF = ['admin','organizador','staff']; // acesso ao sistema/painel
 const norm = s => String(s||'').trim().toLowerCase();
+const PLATFORM_ADMIN_EMAILS = new Set((process.env.PLATFORM_ADMIN_EMAILS || '').split(',').map(norm).filter(Boolean));
+const isPlatformAdminUser = user => Boolean(user?.platformAdmin === true || PLATFORM_ADMIN_EMAILS.has(norm(user?.email)));
 
 // ---- seed do administrador (em usuarios) ----
 function seedUsuarios(){
@@ -120,7 +124,7 @@ function senhaConfere(senha, hash){
   if(typeof senha !== 'string' || typeof hash !== 'string' || !hash) return false;
   try { return bcrypt.compareSync(senha, hash); } catch { return false; }
 }
-const publicUser = u => ({ id:u.id, nome:u.nome, email:u.email, role:u.role, telefone:u.telefone, ativo:u.ativo });
+const publicUser = u => ({ id:u.id, nome:u.nome, email:u.email, role:u.role, telefone:u.telefone, ativo:u.ativo, platformAdmin:isPlatformAdminUser(u) });
 
 // O login legado continua sendo a porta de entrada, mas o Commerce Core precisa
 // receber o contexto multiempresa/multiloja da membership PostgreSQL. A consulta
@@ -130,22 +134,31 @@ async function commerceSessionFor(user) {
   if (process.env.COMMERCE_CORE_ENABLED !== '1' || !user?.email) return {};
   try {
     const result = await commerceDb.query(
-      `SELECT DISTINCT m.empresa_id, m.loja_id
+      `SELECT DISTINCT m.empresa_id, l.id AS loja_id, e.nome AS empresa_nome,
+                       l.codigo AS loja_codigo, l.nome AS loja_nome, l.ativa AS loja_ativa,
+                       COALESCE((SELECT a.brand_key FROM commerce_storefront_aliases a
+                         WHERE a.empresa_id = m.empresa_id AND a.ativo = true
+                         ORDER BY a.criado_em ASC LIMIT 1), 'default') AS brand_key
          FROM commerce_memberships m
          JOIN usuarios u ON u.empresa_id = m.empresa_id AND u.id = m.usuario_id
+         JOIN empresas e ON e.id = m.empresa_id AND e.ativa = true
+         LEFT JOIN lojas l ON l.empresa_id = m.empresa_id
+          AND (l.id = m.loja_id OR m.loja_id IS NULL)
+          AND l.ativa = true
         WHERE lower(u.email) = $1 AND u.ativo = true AND m.ativo = true
-        ORDER BY m.empresa_id, m.loja_id NULLS FIRST`,
+        ORDER BY m.empresa_id, l.id NULLS FIRST`,
       [norm(user.email)],
     );
     const rows = result.rows || [];
     const empresaIds = [...new Set(rows.map(row => row.empresa_id).filter(Boolean))];
-    const lojas = rows.filter(row => row.loja_id).map(row => ({ id: row.loja_id, empresaId: row.empresa_id }));
+    const empresas = empresaIds.map(id => { const row = rows.find(item => item.empresa_id === id); return { id, nome: row?.empresa_nome || id, brandKey: row?.brand_key || 'default' }; });
+    const lojas = rows.filter(row => row.loja_id).map(row => ({ id: row.loja_id, empresaId: row.empresa_id, codigo: row.loja_codigo || '', nome: row.loja_nome || row.loja_id, ativa: row.loja_ativa !== false }));
     const lojaIds = [...new Set(lojas.map(row => row.id))];
     const empresaId = empresaIds.length === 1 ? empresaIds[0] : null;
     const loja = lojaIds.length === 1 ? lojas.find(row => row.id === lojaIds[0]) : null;
     return {
-      empresas_acessiveis: empresaIds.map(id => ({ id })),
-      empresa: empresaId ? { id: empresaId } : null,
+      empresas_acessiveis: empresas,
+      empresa: empresaId ? empresas.find(item => item.id === empresaId) || { id: empresaId } : null,
       empresaId,
       lojas_acessiveis: lojas,
       loja: loja ? { id: loja.id, empresaId: loja.empresaId } : null,
@@ -198,7 +211,8 @@ function auth(req,res,next){
 }
 const requireRole = (...roles)=> (req,res,next)=> (req.user && roles.includes(req.user.role)) ? next() : res.status(403).json({error:'sem permissão'});
 const requireStaff = (req,res,next)=> (req.user && STAFF.includes(req.user.role)) ? next() : res.status(403).json({error:'acesso restrito à organização'});
-const tokenFor = u => jwt.sign({ id:u.id, nome:u.nome, email:u.email, role:u.role, ...(u.empresaId ? { empresaId:u.empresaId } : {}), ...(u.lojaId ? { lojaId:u.lojaId } : {}) }, JWT_SECRET, { expiresIn:'12h' });
+const requirePlatformAdmin = (req,res,next)=> isPlatformAdminUser(req.user) ? next() : res.status(403).json({error:'acesso restrito à administração da plataforma', code:'PLATFORM_ADMIN_REQUIRED'});
+const tokenFor = u => jwt.sign({ id:u.id, nome:u.nome, email:u.email, role:u.role, platformAdmin:isPlatformAdminUser(u), ...(u.empresaId ? { empresaId:u.empresaId } : {}), ...(u.lojaId ? { lojaId:u.lojaId } : {}) }, JWT_SECRET, { expiresIn:'12h' });
 
 // ---- rate-limit simples (anti força-bruta no login) ----
 const tentativas = new Map(); // chave -> { n, until }
@@ -244,12 +258,13 @@ function commercePublicLimit(max, janelaMs=10*60*1000){
 }
 
 function commerceCheckoutGuard(req,res,next){
-  const route = String(req.originalUrl || '').split('?')[0].replace(/^\/api\/storefront/, '') || '/';
+  const route = String(req.originalUrl || '').split('?')[0].replace(/^\/api\/(?:storefront|public\/storefront\/[^/]+)/, '') || '/';
   if (req.method === 'GET' && route.startsWith('/shipping/address/')) return commercePublicLimit(80)(req,res,next);
   if (req.method === 'POST' && route === '/shipping/quotes') return commercePublicLimit(30)(req,res,next);
   if (req.method === 'POST' && (route === '/orders' || /^\/orders\/[^/]+\/payments$/.test(route))) return commercePublicLimit(12)(req,res,next);
   if (req.method === 'GET' && /^\/orders\/[^/]+$/.test(route)) return commercePublicLimit(30)(req,res,next);
   if (req.method === 'GET' && /^\/media\/[^/]+$/.test(route)) return commercePublicLimit(120)(req,res,next);
+  if (req.method === 'GET') return commercePublicLimit(180)(req,res,next);
   return next();
 }
 
@@ -296,9 +311,30 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
     throw new Error('COMMERCE_CORE_ENABLED requer DATABASE_URL/POSTGRES_URL ou DB_HOST explícito');
   }
   app.use('/api/storefront', commerceCheckoutGuard, createCommercePublicRouter());
+  app.use('/api/public/storefront/:storeAlias', (req,res,next)=>{ req.publicStoreAlias = req.params.storeAlias; next(); }, commerceCheckoutGuard, createCommercePublicRouter());
+  app.get('/api/admin/commerce-session', async (req,res)=>{
+    try { res.json(await commerceSessionFor(req.user)); }
+    catch(error){ res.status(500).json({ error:'não foi possível atualizar o contexto multiempresa', code:'COMMERCE_SESSION_ERROR' }); }
+  });
+  app.get('/api/admin/platform/commerce-tenants', requirePlatformAdmin, async (req,res)=>{
+    try { res.json(await listCommerceTenants()); }
+    catch(error){ res.status(500).json({ error:'não foi possível listar os tenants do Commerce', code:error?.code || 'TENANT_LIST_ERROR' }); }
+  });
+  app.post('/api/admin/platform/commerce-tenants', requirePlatformAdmin, async (req,res)=>{
+    try {
+      const result = await provisionCommerceTenant(req.body || {});
+      audit(req, 'PROVISION COMMERCE TENANT', `empresa=${result.empresa.id}; alias=${result.alias}`); save();
+      res.status(result.created ? 201 : 200).json({ ok:true, ...result });
+    } catch(error){
+      const status = ['TENANT_ADMIN_EMAIL_INVALID','TENANT_ADMIN_ACCESS_CONFIRMATION_REQUIRED','TENANT_CNPJ_INVALID','TENANT_IDENTITY_REQUIRED','STOREFRONT_ALIAS_INVALID','STOREFRONT_BRAND_INVALID','STORE_CODE_INVALID','STOREFRONT_CODE_INVALID'].includes(error?.code) ? 400
+        : ['TENANT_CNPJ_CONFLICT','STOREFRONT_ALIAS_CONFLICT'].includes(error?.code) ? 409
+          : ['TENANT_ADMIN_USER_NOT_FOUND','TENANT_ROLE_NOT_FOUND','TENANT_INACTIVE'].includes(error?.code) ? 422 : 500;
+      res.status(status).json({ error:status >= 500 ? 'não foi possível provisionar o tenant do Commerce' : error.message, code:error?.code || 'TENANT_PROVISION_ERROR' });
+    }
+  });
   app.use('/api/admin/commerce', createCommerceAdminRouter());
   app.use('/api/webhooks', createCommerceWebhookRouter());
-  console.log('Commerce Core PostgreSQL habilitado (rotas /api/storefront e /api/admin/commerce)');
+  console.log('Commerce Core PostgreSQL habilitado (host, alias público e backoffice multiempresa)');
 }
 
 // ---- helpers de chave ----
@@ -2350,7 +2386,7 @@ app.get('/api/admin/barbearia/integracoes', (req, res) => {
   const canais = canaisFidelidadeKytto.obterCanais(legacyEmpresaId(req));
   const whatsapp = canais.find((canal) => canal.id === 'whatsapp') || { id: 'whatsapp', nome: 'WhatsApp', ativo: false, tipo: 'mensageria', credencialConfigurada: false };
   const aiConfigured = Boolean(process.env.AI_API_KEY || process.env.OPENAI_API_KEY);
-  res.json({ ok: true, whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: wpp.ativo() }, ia: { configurada: aiConfigured, modelo: process.env.AI_MODEL || process.env.OPENAI_MODEL || '', analiseOperacionalDisponivel: aiConfigured }, commerce: { contrato: 'catalogo-vitrine-pedido-fulfillment', separado: true, estoqueCompartilhado: false, sincronizacaoAutomatica: false, status: 'aguardando_contrato_aprovado' } });
+  res.json({ ok: true, whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: wpp.ativo() }, ia: { configurada: aiConfigured, modelo: process.env.AI_MODEL || process.env.OPENAI_MODEL || 'regras-dino-local', analiseOperacionalDisponivel: true, fallbackLocal: true }, commerce: { contrato: 'commerce-core-v1', separado: true, estoqueCompartilhado: false, sincronizacaoAutomatica: false, status: process.env.COMMERCE_CORE_ENABLED === '1' ? 'disponivel_por_tenant' : 'desativado' } });
 });
 
 app.post('/api/admin/barbearia/whatsapp/enviar', requireRole('admin', 'organizador'), async (req, res) => {
@@ -2379,25 +2415,46 @@ app.post('/api/admin/barbearia/whatsapp/enviar', requireRole('admin', 'organizad
 app.post('/api/admin/barbearia/ia/assistente', requireRole('admin', 'organizador'), async (req, res) => {
   const pergunta = String(req.body?.pergunta || '').trim().slice(0, 1200);
   if (!pergunta) return res.status(400).json({ error: 'Informe uma pergunta para o assistente.' });
+  const empresaId = legacyEmpresaId(req);
+  const lojaId = legacyLojaId(req);
+  const data = String(req.body?.data || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const agenda = listarAgendamentosBarbearia(empresaId, { data, lojaId }).map((item) => ({ horario: item.horaLocal || item.dataHora, status: item.status, atendente: item.profissionalNome || 'sem atendente', servico: item.servicoNome || 'sem serviço', duracaoMinutos: item.duracaoMinutos, valor: item.valor }));
+  const servicos = barbeariaErpKytto.listarServicos(empresaId).map((item) => ({ nome: item.nome, categoria: item.categoria, duracaoMinutos: item.duracaoMinutos, preco: item.preco, permiteAgendamentoOnline: item.permiteAgendamentoOnline, ativo: item.ativo }));
+  const profissionais = barbeariaErpKytto.listarProfissionais(empresaId).map((item) => ({ nome: item.nome, especialidade: item.especialidade, horarioInicio: item.horarioInicio, horarioFim: item.horarioFim, diasTrabalho: item.diasTrabalho, ativo: item.ativo }));
+  const financeiro = financeiroKytto.resumoFinanceiro(empresaId, { hoje: data });
+  const caixas = caixaKytto.listarCaixas(empresaId, { data, lojaId });
+  let commerce = {};
+  if (process.env.COMMERCE_CORE_ENABLED === '1') {
+    try {
+      const context = await resolveCommerceIdentity(req);
+      const result = await commerceDb.queryRead(
+        `SELECT
+           (SELECT COUNT(DISTINCT pc.product_id)::int FROM commerce_product_channels pc JOIN commerce_storefronts s ON s.empresa_id = pc.empresa_id AND s.id = pc.storefront_id WHERE pc.empresa_id = $1 AND pc.publicado = true AND ($2::uuid IS NULL OR s.loja_id = $2 OR s.loja_id IS NULL)) AS produtos_publicados,
+           (SELECT COUNT(*)::int FROM commerce_orders o JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id WHERE o.empresa_id = $1 AND o.status NOT IN ('cancelled','completed','refunded') AND ($2::uuid IS NULL OR s.loja_id = $2 OR s.loja_id IS NULL)) AS pedidos_abertos,
+           (SELECT COUNT(*)::int FROM commerce_orders o JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id WHERE o.empresa_id = $1 AND ($2::uuid IS NULL OR s.loja_id = $2 OR s.loja_id IS NULL)) AS pedidos_total,
+           (SELECT COUNT(*)::int FROM commerce_payments p JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id WHERE p.empresa_id = $1 AND p.status = 'pending' AND ($2::uuid IS NULL OR s.loja_id = $2 OR s.loja_id IS NULL)) AS pagamentos_pendentes`,
+        [context.empresaId, context.lojaId],
+      );
+      const row = result.rows?.[0] || {};
+      commerce = { produtosPublicados: row.produtos_publicados, pedidosAbertos: row.pedidos_abertos, pedidosTotal: row.pedidos_total, pagamentosPendentes: row.pagamentos_pendentes };
+    } catch (error) {
+      console.warn('Resumo Commerce indisponível para o assistente Dino:', error?.code || error?.message || 'erro desconhecido');
+    }
+  }
+  const snapshot = buildDinoOperationalSnapshot({ data, agenda, servicos, profissionais, financeiro, caixas, commerce });
   const apiKey = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || '';
-  if (!apiKey) return res.status(503).json({ ok: false, error: 'Assistente IA não configurado no servidor.', code: 'AI_NOT_CONFIGURED' });
+  if (!apiKey) return res.json({ ok: true, modelo: 'regras-dino-local', modo: 'local', snapshot, resposta: answerDinoOperationalQuestion(pergunta, snapshot) });
   const baseUrl = String(process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
   const model = process.env.AI_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini';
-  const empresaId = legacyEmpresaId(req);
-  const data = String(req.body?.data || new Date().toISOString().slice(0, 10)).slice(0, 10);
-  const agenda = listarAgendamentosBarbearia(empresaId, { data, lojaId: legacyLojaId(req) }).map((item) => ({ horario: item.horaLocal || item.dataHora, status: item.status, atendente: item.profissionalNome || 'sem atendente', servico: item.servicoNome || 'sem serviço', duracaoMinutos: item.duracaoMinutos, valor: item.valor }));
-  const servicos = barbeariaErpKytto.listarServicos(empresaId).map((item) => ({ nome: item.nome, categoria: item.categoria, duracaoMinutos: item.duracaoMinutos, preco: item.preco, permiteAgendamentoOnline: item.permiteAgendamentoOnline }));
-  const profissionais = barbeariaErpKytto.listarProfissionais(empresaId).map((item) => ({ nome: item.nome, especialidade: item.especialidade, horarioInicio: item.horarioInicio, horarioFim: item.horarioFim, diasTrabalho: item.diasTrabalho }));
-  const prompt = JSON.stringify({ data, agenda, servicos, profissionais });
   try {
-    const response = await fetch(`${baseUrl}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }, body: JSON.stringify({ model, temperature: 0.2, messages: [{ role: 'system', content: 'Você é o assistente operacional de uma barbearia. Responda em português brasileiro, use somente os dados fornecidos, sinalize quando algo não estiver disponível e não invente clientes, pagamentos, reservas, estoque ou integrações. Você pode sugerir organização de agenda e catálogo, mas nunca executar ações.' }, { role: 'user', content: `Pergunta: ${pergunta}\nDados operacionais sem documentos pessoais: ${prompt}` }] }), signal: AbortSignal.timeout(20000) });
+    const response = await fetch(`${baseUrl}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }, body: JSON.stringify({ model, temperature: 0.2, messages: [{ role: 'system', content: 'Você é o assistente operacional do tenant Dino. Responda em português brasileiro, use somente o resumo numérico fornecido, sinalize quando algo não estiver disponível e não invente clientes, pagamentos, reservas, estoque ou integrações. Nunca execute ações.' }, { role: 'user', content: `Pergunta: ${pergunta}\nResumo operacional sem dados pessoais: ${JSON.stringify(snapshot)}` }] }), signal: AbortSignal.timeout(20000) });
     const body = await response.json().catch(() => null);
-    if (!response.ok) return res.status(502).json({ ok: false, error: 'O provedor de IA não respondeu corretamente.', code: 'AI_PROVIDER_ERROR' });
+    if (!response.ok) return res.json({ ok: true, modelo: 'regras-dino-local', modo: 'fallback', snapshot, resposta: answerDinoOperationalQuestion(pergunta, snapshot) });
     const resposta = body?.choices?.[0]?.message?.content;
-    if (!resposta) return res.status(502).json({ ok: false, error: 'O provedor de IA retornou uma resposta vazia.', code: 'AI_EMPTY_RESPONSE' });
-    res.json({ ok: true, modelo: model, resposta: String(resposta).slice(0, 12000) });
+    if (!resposta) return res.json({ ok: true, modelo: 'regras-dino-local', modo: 'fallback', snapshot, resposta: answerDinoOperationalQuestion(pergunta, snapshot) });
+    res.json({ ok: true, modelo: model, modo: 'provedor', snapshot, resposta: String(resposta).slice(0, 12000) });
   } catch (error) {
-    res.status(502).json({ ok: false, error: 'Não foi possível consultar o assistente IA.', code: error?.name === 'TimeoutError' ? 'AI_TIMEOUT' : 'AI_PROVIDER_ERROR' });
+    res.json({ ok: true, modelo: 'regras-dino-local', modo: error?.name === 'TimeoutError' ? 'fallback-timeout' : 'fallback', snapshot, resposta: answerDinoOperationalQuestion(pergunta, snapshot) });
   }
 });
 app.get('/api/admin/barbearia/vendas-revenda/:id', (req, res) => {

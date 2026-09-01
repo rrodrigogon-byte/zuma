@@ -14,16 +14,17 @@ export default function Login() {
   const [emailRecuperacao, setEmailRecuperacao] = useState('')
   const [recuperacaoEnviada, setRecuperacaoEnviada] = useState(false)
 
-  const { login, user: usuarioAtual, isOrg, isStaff } = useAuth()
+  const { login, user: usuarioAtual, empresaAtiva, isOrg, isStaff } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const proximoSeguro = searchParams.get('next')?.startsWith('/') ? searchParams.get('next') : null
 
   useEffect(() => {
     if (!usuarioAtual) return
-    if (isOrg) navigate(proximoSeguro || '/admin', { replace: true })
+    const destinoAdmin = empresaAtiva?.brandKey === 'dino' ? '/admin/ecommerce' : '/admin'
+    if (isOrg) navigate(proximoSeguro || destinoAdmin, { replace: true })
     else if (isStaff) navigate(proximoSeguro || '/pdv', { replace: true })
-  }, [usuarioAtual, isOrg, isStaff, navigate, proximoSeguro])
+  }, [usuarioAtual, empresaAtiva?.brandKey, isOrg, isStaff, navigate, proximoSeguro])
 
   const abrirRecuperacao = () => {
     setEmailRecuperacao(user.includes('@') ? user : '')
@@ -64,7 +65,10 @@ export default function Login() {
       if (aba === 'painel') {
         const data = validarRespostaLogin(await api.post('/api/admin/login', { user, senha }))
         login(data.token, data.user, false, data.sessao || {})
-        if (['org', 'admin', 'organizador', 'gerente'].includes(String(data.user.role || '').toLowerCase())) navigate(proximoSeguro || '/admin', { replace: true })
+        if (['org', 'admin', 'organizador', 'gerente'].includes(String(data.user.role || '').toLowerCase())) {
+          const destinoAdmin = data.sessao?.empresa?.brandKey === 'dino' ? '/admin/ecommerce' : '/admin'
+          navigate(proximoSeguro || destinoAdmin, { replace: true })
+        }
         else navigate(proximoSeguro || '/pdv', { replace: true })
       } else {
         const data = validarRespostaLogin(await api.post('/api/auth/login', { email: user, senha }))
