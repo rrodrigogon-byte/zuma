@@ -259,3 +259,24 @@
 .commerce-import-preview .commerce-checkbox{display:flex;gap:9px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);line-height:1.45}
 .commerce-import-preview .commerce-checkbox input{width:18px;height:18px;flex:0 0 18px;margin-top:1px}
 @media(max-width:760px){.commerce-catalog-import{padding:14px}.commerce-catalog-import .ecommerce-admin-header-actions{width:100%}.commerce-catalog-import .ecommerce-admin-button{justify-content:center;flex:1 1 160px}}
+
+.commerce-storefront-activation {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #f2cf7d;
+  border-radius: 12px;
+  background: #fff9e8;
+  color: #5f4a18;
+}
+.commerce-storefront-activation > div:first-child { display: grid; gap: 4px; }
+.commerce-storefront-activation strong { color: #49380f; font-size: 12px; }
+.commerce-storefront-activation span { color: #715d2a; font-size: 11px; line-height: 1.45; }
+@media (max-width: 700px) {
+  .commerce-storefront-activation { grid-template-columns: 1fr; }
+  .commerce-storefront-activation .ecommerce-admin-header-actions { width: 100%; }
+  .commerce-storefront-activation .ecommerce-admin-button { flex: 1; }
+}
