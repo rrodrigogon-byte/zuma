@@ -3,7 +3,7 @@ import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
 import { useAuth } from './lib/auth'
-import { applyBrand, resolveBrand } from './lib/brand'
+import { applyBrand, applyThemeMode, resolveBrand, storedThemeMode } from './lib/brand'
 
 // Redireciona atletas logados para o portal e não-atletas para a página pública de perfil
 function PerfilRoute() {
@@ -155,7 +155,9 @@ function RouteBrandSync() {
   const tenantBrand = [empresaAtiva?.slug, empresaAtiva?.codigo, empresaAtiva?.nome].some((value) => String(value || '').toLowerCase().includes('dino')) ? 'dino' : 'kytto'
 
   useEffect(() => {
-    applyBrand(resolveBrand(location.pathname, location.search, tenantBrand))
+    const brand = resolveBrand(location.pathname, location.search, tenantBrand)
+    applyBrand(brand)
+    applyThemeMode(brand === 'dino' ? storedThemeMode() : 'system')
   }, [location.pathname, location.search, tenantBrand])
 
   return null

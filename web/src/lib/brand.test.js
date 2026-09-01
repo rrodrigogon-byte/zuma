@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { applyBrand, resolveBrand } from './brand.js'
+import { applyBrand, applyThemeMode, normalizeThemeMode, resolveBrand, storedThemeMode } from './brand.js'
 
 test('resolveBrand aplica Dino em todo o backoffice somente quando Dino é o tenant ativo', () => {
   assert.equal(resolveBrand('/admin', '', 'dino'), 'dino')
@@ -30,7 +30,22 @@ test('resolveBrand preserva Kytto e Agro Open nas demais rotas e aliases', () =>
   assert.equal(resolveBrand('/agendar/outra-barbearia'), 'kytto')
 })
 
-test('applyBrand é inofensivo fora do navegador', () => {
+test('applyBrand e applyThemeMode são inofensivos fora do navegador', () => {
   assert.doesNotThrow(() => applyBrand('dino'))
   assert.doesNotThrow(() => applyBrand('kytto'))
+  assert.equal(applyThemeMode('dark'), 'system')
+})
+
+test('normalizeThemeMode limita o tema aos três estados suportados', () => {
+  assert.equal(normalizeThemeMode('light'), 'light')
+  assert.equal(normalizeThemeMode('DARK'), 'dark')
+  assert.equal(normalizeThemeMode('system'), 'system')
+  assert.equal(normalizeThemeMode('qualquer'), 'system')
+})
+
+test('storedThemeMode lê a preferência sem depender do localStorage real', () => {
+  assert.equal(storedThemeMode({ getItem: () => 'dark' }), 'dark')
+  assert.equal(storedThemeMode({ getItem: () => 'light' }), 'light')
+  assert.equal(storedThemeMode({ getItem: () => null }), 'system')
+  assert.equal(storedThemeMode({ getItem: () => { throw new Error('bloqueado') } }), 'system')
 })

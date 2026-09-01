@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, fmtDate, fmtDateOnly, fmtR } from '../../lib/api'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useToast } from '../../hooks/useToast'
+import { useAuth } from '../../lib/auth'
 import BarbeariaAgendaBoard, { agendaBoardColumns } from './BarbeariaAgendaBoard'
 import BarbeariaOperacaoPanel from './BarbeariaOperacaoPanel'
+import DinoBusinessDashboard from './DinoBusinessDashboard'
 
 const TABS = [
   ['Visão geral', 'Resumo da operação'],
@@ -136,8 +138,14 @@ const inputStyle = { width: '100%', boxSizing: 'border-box', padding: '10px 12px
 
 export default function BarbeariaERP() {
   const { toast } = useToast()
+  const { user } = useAuth()
+  const activeTenant = user?.empresaAtiva || user?.empresa || user?.tenant || {}
+  const isDinoBrand = String(activeTenant.brandKey || activeTenant.brand_key || activeTenant.slug || activeTenant.alias || activeTenant.nome || '').toLowerCase().includes('dino')
   const navigate = useNavigate()
-  const [tab, setTab] = useState('Visão geral')
+  const [searchParams] = useSearchParams()
+  const requestedTab = searchParams.get('tab')
+  const validRequestedTab = TABS.some(([name]) => name === requestedTab) ? requestedTab : null
+  const [tab, setTab] = useState(() => validRequestedTab || 'Visão geral')
   const [dataSelecionada, setDataSelecionada] = useState(hojeLocal)
   const [statusFiltro, setStatusFiltro] = useState('')
   const [profissionalFiltro, setProfissionalFiltro] = useState('')
@@ -242,6 +250,12 @@ export default function BarbeariaERP() {
   }, [dataSelecionada, profissionalFiltro, statusFiltro])
 
   useEffect(() => { carregar() }, [carregar])
+  useEffect(() => {
+    if (validRequestedTab && validRequestedTab !== tab) {
+      setTab(validRequestedTab)
+      setBusca('')
+    }
+  }, [tab, validRequestedTab])
 
   const indicadores = dashboard?.indicadores || {}
   const areaAtual = AREAS.find((area) => area.id === TAB_AREA[tab]) || AREAS[0]
@@ -773,6 +787,7 @@ export default function BarbeariaERP() {
     ].filter((item) => item.ts).sort((a, b) => String(b.ts).localeCompare(String(a.ts))).slice(0, 6)
     const rankingAtendentes = [...(comissoes?.porProfissional || [])].sort((a, b) => (Number(b.brutoServicos || 0) + Number(b.brutoProdutos || 0)) - (Number(a.brutoServicos || 0) + Number(a.brutoProdutos || 0))).slice(0, 5)
     return <div style={{ display: 'grid', gap: 20 }}>
+      {isDinoBrand && <DinoBusinessDashboard onOpenTab={(targetTab) => { setTab(targetTab); setBusca('') }} />}
       <Card style={styles.todayHero}>
         <div style={styles.todayHeroTop}>
           <div><div style={styles.kicker}>Ritual de abertura</div><h2 style={{ ...styles.h2, fontSize: 23, marginTop: 5 }}>Hoje na unidade</h2><p style={{ ...styles.sub, maxWidth: 700 }}>Comece pela agenda, acompanhe quem está aguardando e resolva as pendências antes do primeiro atendimento.</p></div>

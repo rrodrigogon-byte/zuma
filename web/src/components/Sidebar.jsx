@@ -1,7 +1,8 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
+import { applyThemeMode, storedThemeMode } from '../lib/brand'
 
 // ── Badge de pedidos pendentes ─────────────────────────────────────────────────
 function usePendingOrders(isStaff) {
@@ -148,6 +149,68 @@ const NAV_ADMIN_GROUPS = [
   },
 ]
 
+const NAV_DINO_GROUPS = [
+  {
+    label: 'Visão do negócio',
+    items: [
+      { to: '/admin/barbearia-erp', icon: '◫', label: 'Central Dino', end: true },
+      { to: '/admin/bi', icon: '↗', label: 'BI & Analytics' },
+      { to: '/admin/relatorios-operacionais', icon: '▤', label: 'Relatórios' },
+      { to: '/admin/financeiro', icon: '◇', label: 'Financeiro' },
+    ],
+  },
+  {
+    label: 'Loja',
+    items: [
+      { to: '/admin/ecommerce?tab=overview', icon: '▦', label: 'Visão da loja' },
+      { to: '/admin/ecommerce?tab=catalog', icon: '□', label: 'Produtos e estoque' },
+      { to: '/admin/ecommerce?tab=orders', icon: '◧', label: 'Pedidos e entregas' },
+      { to: '/admin/ecommerce?tab=promotions', icon: '%', label: 'Promoções' },
+      { to: '/admin/ecommerce?tab=customers', icon: '○', label: 'Clientes da loja' },
+      { to: '/admin/ecommerce?tab=shipping', icon: '↝', label: 'Frete e retirada' },
+      { to: '/admin/ecommerce?tab=payments', icon: '▰', label: 'Pagamentos' },
+      { to: '/admin/ecommerce?tab=domains', icon: '◎', label: 'Domínios' },
+    ],
+  },
+  {
+    label: 'Barbearia',
+    items: [
+      { to: '/admin/barbearia-erp?area=operacao&tab=Visão+geral', icon: '⌂', label: 'Operação hoje' },
+      { to: '/admin/barbearia-erp?area=operacao&tab=Agenda', icon: '▣', label: 'Agenda' },
+      { to: '/admin/barbearia-erp?area=operacao&tab=Atendimento', icon: '✂', label: 'Atendimento e comandas' },
+      { to: '/admin/barbearia-erp?area=operacao&tab=Caixa+e+fechamento', icon: '▱', label: 'Caixa e fechamento' },
+      { to: '/admin/barbearia-erp?area=catalogo&tab=Profissionais', icon: '♙', label: 'Equipe' },
+      { to: '/admin/barbearia-erp?area=catalogo&tab=Serviços', icon: '≡', label: 'Serviços' },
+      { to: '/admin/barbearia-erp?area=catalogo&tab=Planos+e+assinaturas', icon: '◆', label: 'Planos e assinaturas' },
+    ],
+  },
+  {
+    label: 'Relacionamento & IA',
+    items: [
+      { to: '/admin/barbearia-erp?area=integracoes&tab=Integrações', icon: '✦', label: 'Atendente IA' },
+      { to: '/admin/omnichannel', icon: '↻', label: 'Marketing WhatsApp' },
+      { to: '/admin/barbearia-erp?area=relacionamento&tab=Clientes', icon: '◉', label: 'Clientes' },
+      { to: '/admin/barbearia-erp?area=relacionamento&tab=Fidelidade', icon: '☆', label: 'Fidelidade' },
+    ],
+  },
+  {
+    label: 'Gestão',
+    items: [
+      { to: '/admin/compras', icon: '▧', label: 'Compras e fornecedores' },
+      { to: '/admin/fiscal/config', icon: '⌁', label: 'Fiscal' },
+      { to: '/admin/barbearia-erp?area=gestao&tab=Comissões', icon: '△', label: 'Comissões' },
+      { to: '/admin/usuarios', icon: '♧', label: 'Usuários' },
+      { to: '/admin/auditoria', icon: '◌', label: 'Auditoria' },
+      { to: '/admin/configuracoes', icon: '⚙', label: 'Configurações' },
+    ],
+  },
+]
+
+const NAV_DINO_PUBLIC = [
+  { to: '/perfumaria/dino', icon: '↗', label: 'Abrir loja Dino' },
+  { to: '/agendar/dino', icon: '▣', label: 'Agendamento público' },
+]
+
 // Lista plana para compatibilidade
 const NAV_ADMIN = NAV_ADMIN_GROUPS.flatMap(g => g.items)
 
@@ -227,11 +290,22 @@ const activeStyle = {
 }
 
 function NavItem({ to, icon, label, end, onClick, badgeCount, sidebarCollapsed = false }) {
+  const location = useLocation()
+  const [targetPath, targetQuery = ''] = String(to || '').split('?')
+  const queryAware = Boolean(targetQuery) || ['/admin/barbearia-erp', '/admin/ecommerce'].includes(targetPath)
+  const targetParams = new URLSearchParams(targetQuery)
+  const currentParams = new URLSearchParams(location.search)
+  const searchMatches = targetQuery
+    ? [...targetParams.entries()].every(([key, value]) => currentParams.get(key) === value)
+    : !currentParams.has('tab') && !currentParams.has('area')
   return (
     <NavLink
       to={to}
       end={end}
-      style={({ isActive }) => ({ ...(isActive ? activeStyle : linkStyle), ...(sidebarCollapsed ? { justifyContent: 'center', padding: '10px 8px', borderLeftWidth: isActive ? 3 : 0 } : {}) })}
+      style={({ isActive }) => {
+        const selected = isActive && (!queryAware || searchMatches)
+        return { ...(selected ? activeStyle : linkStyle), ...(sidebarCollapsed ? { justifyContent: 'center', padding: '10px 8px', borderLeftWidth: selected ? 3 : 0 } : {}) }
+      }}
       onClick={onClick}
       aria-label={sidebarCollapsed ? label : undefined}
       title={sidebarCollapsed ? label : undefined}
@@ -298,6 +372,9 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
   const [open, setOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const pendentes = usePendingOrders(isStaff)
+  const isDino = [empresaAtiva?.brandKey, empresaAtiva?.slug, empresaAtiva?.codigo, empresaAtiva?.nome]
+    .some((value) => String(value || '').toLowerCase().includes('dino'))
+  const [themeMode, setThemeMode] = useState(() => storedThemeMode())
 
   // 🔒 SEGURANÇA: Ocultar sidebar completamente se não autenticado
   if (!user) {
@@ -325,6 +402,12 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
   // Close sidebar on nav (mobile)
   const handleNavClick = () => {
     if (isMobile) setOpen(false)
+  }
+
+  const changeThemeMode = (mode) => {
+    const applied = applyThemeMode(mode)
+    setThemeMode(applied)
+    try { localStorage.setItem('sp_theme_mode', applied) } catch { /* preferência opcional */ }
   }
 
   const sidebarStyle = {
@@ -379,10 +462,11 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
               className="kytto-mark sidebar-brand-kytto"
               style={{ width: 184, height: 52, objectFit: 'contain', objectPosition: 'left center' }}
             />
-            <div className="sidebar-brand-dino" aria-label="Dino — gestão para barbearias">
-              <strong>DINO</strong>
-              <span>Barbearia inteligente</span>
-            </div>
+            <img
+              src="/brand/dino-logo.png"
+              alt="Dino — Barbearia e Perfumaria"
+              className="sidebar-brand-dino"
+            />
             <div className="sidebar-brand-subtitle" style={{
               marginTop: 8, color: 'var(--brand-header-text)', fontFamily: 'var(--font-mono)',
               fontSize: 9, fontWeight: 800, letterSpacing: '.16em', textTransform: 'uppercase', opacity: .92,
@@ -458,11 +542,23 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
           </div>
         )}
 
-        {isStaff && <Section label="Operações" items={NAV_OP} onNavClick={handleNavClick} badgesMap={badgesMap} sidebarCollapsed={collapsed && !isMobile} />}
-        {isOrg && <AdminGroups groups={NAV_ADMIN_GROUPS} onNavClick={handleNavClick} isPlatformAdmin={isPlatformAdmin} empresa={empresaDoMenu} sidebarCollapsed={collapsed && !isMobile} />}
+        {isDino && !collapsed && (
+          <div className="sidebar-theme-switch" aria-label="Tema do painel Dino">
+            <span>Tema</span>
+            {[
+              ['system', 'Sistema'],
+              ['light', 'Claro'],
+              ['dark', 'Escuro'],
+            ].map(([mode, label]) => (
+              <button key={mode} type="button" className={themeMode === mode ? 'active' : ''} onClick={() => changeThemeMode(mode)} aria-pressed={themeMode === mode}>{label}</button>
+            ))}
+          </div>
+        )}
+        {isStaff && !isDino && <Section label="Operações" items={NAV_OP} onNavClick={handleNavClick} badgesMap={badgesMap} sidebarCollapsed={collapsed && !isMobile} />}
+        {isOrg && <AdminGroups groups={isDino ? NAV_DINO_GROUPS : NAV_ADMIN_GROUPS} onNavClick={handleNavClick} isPlatformAdmin={isPlatformAdmin} empresa={empresaDoMenu} sidebarCollapsed={collapsed && !isMobile} />}
         {isPlatformAdmin && <Section label="Administração da Plataforma" items={NAV_PLATFORM} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />}
         {isAtleta && <Section label="Portal do Atleta" items={NAV_ATLETA} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />}
-        <Section label="Site Público" items={NAV_PUBLIC} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />
+        <Section label={isDino ? 'Dino público' : 'Site Público'} items={isDino ? NAV_DINO_PUBLIC : NAV_PUBLIC} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />
 
         {/* Bottom user area */}
         <div style={{ marginTop: 'auto', padding: collapsed && !isMobile ? '10px 8px' : '12px 16px', borderTop: '1px solid var(--line)' }}>

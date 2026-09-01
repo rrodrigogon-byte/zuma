@@ -15,4 +15,22 @@ export function applyBrand(brand) {
   else delete html.dataset.brand
 }
 
+export function normalizeThemeMode(value) {
+  const mode = String(value || '').trim().toLowerCase()
+  return ['light', 'dark'].includes(mode) ? mode : 'system'
+}
+
+export function applyThemeMode(value) {
+  if (typeof document === 'undefined') return 'system'
+  const mode = normalizeThemeMode(value)
+  if (mode === 'system') delete document.documentElement.dataset.theme
+  else document.documentElement.dataset.theme = mode
+  return mode
+}
+
+export function storedThemeMode(storage = typeof localStorage === 'undefined' ? null : localStorage) {
+  try { return normalizeThemeMode(storage?.getItem('sp_theme_mode')) }
+  catch { return 'system' }
+}
+
 export const isDinoBrand = (brand) => brand === 'dino'

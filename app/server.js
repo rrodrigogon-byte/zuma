@@ -38,6 +38,8 @@ import * as caixaKytto from './caixa-diario-kytto.js';
 import * as canaisFidelidadeKytto from './canais-fidelidade-kytto.js';
 import { answerDinoOperationalQuestion, buildDinoOperationalSnapshot } from './dino-assistant.js';
 import { loadBarbeariaCommerceStatus, unavailableBarbeariaCommerceStatus } from './core/barbearia-commerce-status.js';
+import { customerReport, inventoryReport, salesReport } from './core/commerce-reports.js';
+import { buildDinoDashboardAnalytics, dashboardPeriod } from './dino-dashboard.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -1987,6 +1989,48 @@ async function whatsappAiIntegrationForBarbearia(req) {
     return unavailableWhatsappAiStatus(code);
   }
 }
+
+app.get('/api/admin/barbearia/analytics', async (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId(req);
+    const now = new Date();
+    const range = dashboardPeriod(req.query?.period || 30, now);
+    let commerceAvailable = false;
+    let commerceCurrent = {};
+    let commercePrevious = {};
+    try {
+      const context = await requireCommercePermission(req, 'reports.read');
+      const currentOptions = { from: range.from, to: range.to };
+      const previousOptions = { from: range.previousFrom, to: range.previousTo };
+      const [currentSales, previousSales, currentCustomers, previousCustomers, inventory] = await Promise.all([
+        salesReport(context, currentOptions), salesReport(context, previousOptions),
+        customerReport(context, currentOptions), customerReport(context, previousOptions), inventoryReport(context),
+      ]);
+      commerceAvailable = true;
+      commerceCurrent = { sales: currentSales, customers: currentCustomers, inventory };
+      commercePrevious = { sales: previousSales, customers: previousCustomers };
+    } catch (error) {
+      const code = String(error?.code || 'COMMERCE_REPORTS_UNAVAILABLE');
+      console.warn(`Analytics Dino sem agregados Commerce: ${code}`);
+    }
+    const analytics = buildDinoDashboardAnalytics({
+      commerceAvailable,
+      commerceCurrent,
+      commercePrevious,
+      appointments: barbeariaErpKytto.listarAgendamentos(empresaId, { lojaId }),
+      retailSales: barbeariaErpKytto.listarVendasRevenda(empresaId, { lojaId }),
+      commands: barbeariaErpKytto.listarComandasBarbearia(empresaId, { lojaId }),
+      customers: clientesKytto.listarClientes(empresaId),
+      financeEntries: financeiroKytto.listarLancamentos(empresaId, {}),
+      inventory: barbeariaErpKytto.listarProdutosRevenda(empresaId, { incluirInativos: false }),
+      subscriptions: barbeariaErpKytto.listarAssinaturas(empresaId, {}),
+    }, { period: range.days, now });
+    res.json({ ok: true, ...analytics });
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Não foi possível carregar os indicadores.', code: error.code || 'DINO_ANALYTICS_UNAVAILABLE' });
+  }
+});
 
 app.get('/api/admin/barbearia/overview', async (req, res) => {
   try {
