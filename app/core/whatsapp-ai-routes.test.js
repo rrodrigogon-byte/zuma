@@ -34,9 +34,11 @@ test('webhook Evolution valida token e enfileira conversa sem processamento inli
   };
   Object.assign(process.env, { FEATURE_WHATSAPP_AI: 'true', GEMINI_API_KEY: 'gemini-test', EVOLUTION_API_URL: 'https://evolution.example', EVOLUTION_API_KEY: 'evolution-test', EVOLUTION_INSTANCE: 'dino', WHATSAPP_AI_WEBHOOK_SECRET: 'webhook-test' });
   const originalRead = db.queryRead;
+  const originalQuery = db.query;
   const originalTransaction = db.transaction;
   const queries = [];
   db.queryRead = async () => ({ rows: [{ id: CHANNEL, empresa_id: EMPRESA, loja_id: LOJA, codigo_publico: PUBLIC, provedor: 'whatsapp', status: 'ativo', algoritmo_assinatura: 'token_estatico', cabecalho_assinatura: 'x-setpoint-webhook-token', credencial_referencia: 'ENV:WHATSAPP_AI_WEBHOOK_SECRET', configuracao: {} }] });
+  db.query = async (sql, params) => { queries.push({ sql, params }); return { rows: [] }; };
   db.transaction = async callback => callback({
     async query(sql, params) {
       queries.push({ sql, params });
@@ -62,6 +64,7 @@ test('webhook Evolution valida token e enfileira conversa sem processamento inli
     });
   } finally {
     db.queryRead = originalRead;
+    db.query = originalQuery;
     db.transaction = originalTransaction;
     for (const [key, value] of Object.entries(env)) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;

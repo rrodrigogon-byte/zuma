@@ -28,6 +28,7 @@ const migrationFiles = [
   '036_commerce_manual_shipping_table.sql',
   '037_commerce_storefront_aliases.sql',
   '038_whatsapp_ai_conversations.sql',
+  '039_crm_campaigns_governance.sql',
 ];
 const advisoryLockKey = 825410732;
 

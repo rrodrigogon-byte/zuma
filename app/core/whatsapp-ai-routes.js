@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import express from 'express';
 import { db } from './database.js';
 import { parseEvolutionMessage, whatsappAiReady } from './whatsapp-ai.js';
+import { campaignOptOutRequested, recordCampaignOptOut, recordCampaignProviderEvent } from './commerce-campaigns.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -48,9 +49,10 @@ export function createWhatsappAiWebhookRouter() {
       const channel = channelResult.rows[0];
       if (!channel) return res.status(404).json({ error: 'canal não encontrado ou inativo' });
       if (!validSignature(req, channel)) return res.status(401).json({ error: 'assinatura inválida' });
-      if (!whatsappAiReady()) return res.status(503).json({ error: 'atendimento automático temporariamente indisponível' });
 
       const parsed = parseEvolutionMessage(req.body || {});
+      const aiReady = whatsappAiReady();
+      const optOutRequested = campaignOptOutRequested(parsed);
       const externalId = parsed.externalId || String(req.get('x-event-id') || '').slice(0, 200);
       if (!externalId) return res.status(202).json({ accepted: true, ignored: true, reason: parsed.reason || 'missing_event_id' });
       const hash = crypto.createHash('sha256').update(rawBody(req)).digest('hex');
@@ -63,10 +65,10 @@ export function createWhatsappAiWebhookRouter() {
            ON CONFLICT (canal_id, evento_externo_id) DO NOTHING
            RETURNING id`,
           [channel.empresa_id, channel.loja_id, channel.id, externalId, parsed.event || 'evento_desconhecido', hash,
-            JSON.stringify(req.body || {}), parsed.ignored ? 'ignorado' : 'recebido', parsed.ignored ? parsed.reason : null],
+            JSON.stringify(req.body || {}), parsed.ignored || !aiReady || optOutRequested ? 'ignorado' : 'recebido', parsed.ignored ? parsed.reason : (optOutRequested ? 'marketing_opt_out' : (!aiReady ? 'ai_not_ready' : null))],
         );
         if (!eventResult.rows[0]) return { duplicate: true };
-        if (!parsed.ignored) {
+        if (!parsed.ignored && aiReady && !optOutRequested) {
           await trx.query(
             `INSERT INTO tarefas_integracao_canais
               (empresa_id, loja_id, canal_id, evento_integracao_id, tipo, referencia_externa, payload)
@@ -78,10 +80,18 @@ export function createWhatsappAiWebhookRouter() {
           `UPDATE canais_integracao SET ultimo_evento_em = CURRENT_TIMESTAMP, data_atualizacao = CURRENT_TIMESTAMP WHERE id = $1`,
           [channel.id],
         );
-        return { duplicate: false, ignored: parsed.ignored, reason: parsed.reason || null };
+        return { duplicate: false, ignored: parsed.ignored || !aiReady || optOutRequested, reason: parsed.reason || (optOutRequested ? 'marketing_opt_out' : (!aiReady ? 'ai_not_ready' : null)) };
       });
 
-      return res.status(202).json({ accepted: true, ...result });
+      let campaignMetrics = { updatedCampaigns: [] };
+      let marketingOptOut = { optedOut: false };
+      try {
+        marketingOptOut = await recordCampaignOptOut(channel, parsed);
+        campaignMetrics = await recordCampaignProviderEvent(channel, req.body || {}, parsed);
+      } catch (metricsError) {
+        console.warn('[WhatsApp] métrica de campanha pendente de reconciliação:', String(metricsError?.message || metricsError).slice(0, 300));
+      }
+      return res.status(202).json({ accepted: true, ...result, campaignMetrics, marketingOptOut });
     } catch (error) {
       console.error('[WhatsApp AI] erro no webhook:', String(error?.message || error).slice(0, 500));
       return res.status(500).json({ error: 'falha ao receber evento' });

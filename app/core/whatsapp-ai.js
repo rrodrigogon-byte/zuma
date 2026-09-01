@@ -376,11 +376,15 @@ export async function releaseWhatsappAiHandoff(context = {}, sessionId) {
   return result.rows[0];
 }
 
+export function whatsappMessagingReady() {
+  return Boolean(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE);
+}
+
 export function whatsappAiReady() {
   const gemini = configuredGeminiModel();
   return process.env.FEATURE_WHATSAPP_AI === 'true'
     && gemini.configured
-    && Boolean(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE);
+    && whatsappMessagingReady();
 }
 
 function envReference(value) {

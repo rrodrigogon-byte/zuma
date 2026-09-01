@@ -15,7 +15,7 @@ test('cleanupWhatsappAiRetention remove apenas sessões antigas fora de handoff 
   } finally { db.query = original; }
 });
 
-test('claimWhatsappAiTasks reivindica somente conversas com SKIP LOCKED e limite seguro', async () => {
+test('claimWhatsappAiTasks reivindica conversas e campanhas prontas com SKIP LOCKED e limite seguro', async () => {
   const original = db.transaction;
   let captured;
   db.transaction = async callback => callback({
@@ -28,8 +28,11 @@ test('claimWhatsappAiTasks reivindica somente conversas com SKIP LOCKED e limite
     const rows = await claimWhatsappAiTasks(3);
     assert.equal(rows.length, 1);
     assert.match(captured.sql, /tipo = 'processar_conversa'/);
+    assert.match(captured.sql, /tipo = 'enviar_campanha'/);
     assert.match(captured.sql, /FOR UPDATE SKIP LOCKED/);
     assert.match(captured.sql, /tentativas = t\.tentativas \+ 1/);
     assert.equal(captured.params[1], 3);
+    assert.equal(typeof captured.params[2], 'boolean');
+    assert.equal(typeof captured.params[3], 'boolean');
   } finally { db.transaction = original; }
 });

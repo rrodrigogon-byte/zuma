@@ -16,6 +16,7 @@ import { createShippingAccount, failShippingLabel, finalizeShippingCancellation,
 import { shippingProviders } from './shipping-adapters.js';
 import { commerceMediaIdForIdempotencyKey, newCommerceMediaId, streamCommerceImage, uploadCommerceImage } from './commerce-media.js';
 import { configureWhatsappAiChannel, listWhatsappAiSessions, releaseWhatsappAiHandoff, syncWhatsappAiWebhook, testWhatsappAiGemini, whatsappAiOperationalStatus } from './whatsapp-ai.js';
+import { campaignMetrics, cancelCampaign, confirmCampaign, createCampaign, listCampaignAudience, listCampaigns, previewCampaign, updateCampaignConsent } from './commerce-campaigns.js';
 import {
   CommerceError,
   assertUuid,
@@ -242,6 +243,12 @@ function jsonError(res, error) {
     MEDIA_NOT_FOUND: 404,
     MEDIA_STORAGE_NOT_CONFIGURED: 503,
     MEDIA_UPLOAD_TOO_LARGE: 413,
+    VALIDATION_ERROR: 400,
+    CONFIRMATION_REQUIRED: 400,
+    STALE_PREVIEW: 409,
+    PRECONDITION_FAILED: 409,
+    NOT_FOUND: 404,
+    CONFLICT: 409,
     LOCATION_REQUIRED: 400,
     STORE_NOT_FOUND: 404,
     INVALID_REPORT_PERIOD: 400,
@@ -1409,6 +1416,54 @@ export function createCommerceAdminRouter() {
     try {
       const context = await requirePermission(req, 'settings.write');
       res.json(await releaseWhatsappAiHandoff(context, req.params.id));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.get('/campaigns', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'reports.read');
+      res.json(await listCampaigns(context, parsePagination(req, 50, 100)));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/campaigns', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'settings.write');
+      res.status(201).json(await createCampaign(context, req.body || {}));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.get('/campaigns/audience', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'customers.read');
+      res.json(await listCampaignAudience(context, { search: req.query.search, ...parsePagination(req, 100, 200) }));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.patch('/campaigns/audience/:customerId/consent', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'settings.write');
+      res.json(await updateCampaignConsent(context, req.params.customerId, req.body || {}));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.get('/campaigns/:id/preview', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'reports.read');
+      res.json(await previewCampaign(context, req.params.id));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/campaigns/:id/confirm', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'settings.write');
+      res.json(await confirmCampaign(context, req.params.id, req.body || {}));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/campaigns/:id/cancel', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'settings.write');
+      res.json(await cancelCampaign(context, req.params.id));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.get('/campaigns/:id/metrics', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'reports.read');
+      res.json(await campaignMetrics(context, req.params.id));
     } catch (error) { jsonError(res, error); }
   });
   router.get('/operations/health', async (req, res) => {

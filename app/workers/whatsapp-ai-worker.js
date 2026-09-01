@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { db } from '../core/database.js';
-import { processWhatsappConversationTask, whatsappAiReady } from '../core/whatsapp-ai.js';
+import { processWhatsappConversationTask, whatsappAiReady, whatsappMessagingReady } from '../core/whatsapp-ai.js';
+import { processCampaignDeliveryTask } from '../core/commerce-campaigns.js';
 
 const MAX_ATTEMPTS = Math.max(1, Number.parseInt(process.env.WHATSAPP_AI_MAX_ATTEMPTS || '6', 10));
 const BATCH_SIZE = Math.min(20, Math.max(1, Number.parseInt(process.env.WHATSAPP_AI_WORKER_BATCH || '5', 10)));
@@ -21,7 +22,7 @@ export async function claimWhatsappAiTasks(limit = BATCH_SIZE) {
       `WITH candidates AS (
          SELECT id
            FROM tarefas_integracao_canais
-          WHERE tipo = 'processar_conversa'
+          WHERE ((tipo = 'processar_conversa' AND $3::boolean) OR (tipo = 'enviar_campanha' AND $4::boolean))
             AND status IN ('pendente', 'falha')
             AND tentativas < $1
             AND (proxima_tentativa_em IS NULL OR proxima_tentativa_em <= CURRENT_TIMESTAMP)
@@ -35,7 +36,7 @@ export async function claimWhatsappAiTasks(limit = BATCH_SIZE) {
          FROM candidates c
         WHERE t.id = c.id
        RETURNING t.*`,
-      [MAX_ATTEMPTS, Math.min(BATCH_SIZE, Math.max(1, Number(limit) || BATCH_SIZE))],
+      [MAX_ATTEMPTS, Math.min(BATCH_SIZE, Math.max(1, Number(limit) || BATCH_SIZE)), whatsappAiReady(), whatsappMessagingReady()],
     );
     return result.rows;
   });
@@ -53,12 +54,12 @@ async function completeTask(task, response) {
 }
 
 async function failTask(task, error) {
-  const exhausted = Number(task.tentativas) >= MAX_ATTEMPTS;
+  const exhausted = task.tipo === 'enviar_campanha' || Number(task.tentativas) >= MAX_ATTEMPTS;
   const delay = retryDelay(task.tentativas);
   const message = safeError(error);
   await db.query(
     `UPDATE tarefas_integracao_canais
-        SET status = 'falha', erro = $2, resposta = NULL,
+        SET status = CASE WHEN $3 THEN 'cancelada' ELSE 'falha' END, erro = $2, resposta = NULL,
             proxima_tentativa_em = CASE WHEN $3 THEN NULL ELSE CURRENT_TIMESTAMP + ($4::text || ' seconds')::interval END,
             data_atualizacao = CURRENT_TIMESTAMP
       WHERE id = $1 AND status = 'processando'`,
@@ -87,13 +88,15 @@ export async function cleanupWhatsappAiRetention(days = RETENTION_DAYS) {
 }
 
 export async function runWhatsappAiBatch({ limit = BATCH_SIZE } = {}) {
-  if (!whatsappAiReady()) return { skipped: true, reason: 'whatsapp_ai_not_ready', claimed: 0, completed: 0, failed: 0 };
+  if (!whatsappAiReady() && !whatsappMessagingReady()) return { skipped: true, reason: 'whatsapp_not_ready', claimed: 0, completed: 0, failed: 0 };
   const removed = await cleanupWhatsappAiRetention();
   const tasks = await claimWhatsappAiTasks(limit);
   const summary = { worker: 'whatsapp-ai', runId: crypto.randomUUID(), retentionRemoved: removed, claimed: tasks.length, completed: 0, failed: 0 };
   for (const task of tasks) {
     try {
-      const response = await processWhatsappConversationTask(task);
+      const response = task.tipo === 'enviar_campanha'
+        ? await processCampaignDeliveryTask(task)
+        : await processWhatsappConversationTask(task);
       await completeTask(task, response);
       summary.completed += 1;
     } catch (error) {
@@ -105,8 +108,8 @@ export async function runWhatsappAiBatch({ limit = BATCH_SIZE } = {}) {
 }
 
 export function startWhatsappAiWorker({ intervalMs = INTERVAL_MS } = {}) {
-  if (!whatsappAiReady()) {
-    console.log('[WhatsApp AI] worker inativo: feature flag, Gemini ou Evolution pendente');
+  if (!whatsappAiReady() && !whatsappMessagingReady()) {
+    console.log('[WhatsApp] worker inativo: Evolution pendente');
     return { started: false, stop() {} };
   }
   let running = false;
@@ -125,7 +128,7 @@ export function startWhatsappAiWorker({ intervalMs = INTERVAL_MS } = {}) {
   const timer = setInterval(tick, Math.min(60000, Math.max(2000, Number(intervalMs) || INTERVAL_MS)));
   timer.unref?.();
   setTimeout(tick, 1000).unref?.();
-  console.log(`[WhatsApp AI] worker ativo a cada ${Math.min(60000, Math.max(2000, Number(intervalMs) || INTERVAL_MS))}ms`);
+  console.log(`[WhatsApp] worker ativo a cada ${Math.min(60000, Math.max(2000, Number(intervalMs) || INTERVAL_MS))}ms`);
   return { started: true, stop() { clearInterval(timer); } };
 }
 
