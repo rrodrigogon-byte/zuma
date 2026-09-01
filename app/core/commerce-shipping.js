@@ -293,7 +293,8 @@ export async function updateShippingAccount(trx, contextInput, idInput, input = 
 
 function storefrontConfigOrigin(storefront, methodConfig, accountConfig = {}) {
   const configured = methodConfig.origin || methodConfig.origem || accountConfig.origin || storefront.configuracoes?.shipping?.origin || storefront.configuracoes?.logistica?.origem || {};
-  return normalizeCep(configured.cep || configured.postalCode || configured.originPostalCode || methodConfig.origemCep || accountConfig.origemCep || storefront.configuracoes?.shipping?.originPostalCode || '');
+  const candidate = configured.cep || configured.postalCode || configured.originPostalCode || methodConfig.origemCep || accountConfig.origemCep || storefront.configuracoes?.shipping?.originPostalCode || '';
+  return candidate ? normalizeCep(candidate) : null;
 }
 
 function requestHash(snapshot) { return crypto.createHash('sha256').update(JSON.stringify(snapshot)).digest('hex'); }
@@ -325,6 +326,7 @@ async function loadQuoteContext(client, contextInput, input = {}) {
     if (!account || !shippingAccountReady(account)) throw new CommerceError('conta logística ativa ainda não está configurada no secret manager ou não possui origem', 'SHIPPING_ACCOUNT_NOT_CONFIGURED');
   }
   const originCep = storefrontConfigOrigin(method, methodConfig, account?.public_config || {});
+  if (!isManual && !originCep) throw new CommerceError('CEP de origem logística é obrigatório para provedores externos', 'SHIPPING_ORIGIN_CEP_REQUIRED');
   const destinationAddressInput = input.destinationAddress || input.destination || input.shippingAddress || { cep: destinationCep };
   let destinationCity = text(input.destinationCity || input.destination?.cidade || input.destination?.city || destinationAddressInput.cidade || destinationAddressInput.city, 120);
   let destinationState = text(input.destinationState || input.destination?.estado || input.destination?.state || destinationAddressInput.estado || destinationAddressInput.state, 2).toUpperCase();
@@ -356,15 +358,16 @@ async function loadQuoteContext(client, contextInput, input = {}) {
     if (!isManual && (dimensions.some(value => value === null || value <= 0) || number(variant.peso_gramas) === null || number(variant.peso_gramas) <= 0)) throw new CommerceError(`dimensões e peso ausentes para ${variant.nome || variant.sku}`, 'SHIPPING_PACKAGE_DATA_REQUIRED');
     return { id: variant.sku || variant.id, width: dimensions[0], height: dimensions[1], length: dimensions[2], weight: number(variant.peso_gramas) / 1000, insuranceValue: round(number(variant.price, 0)), quantity: line.quantity };
   });
-  const snapshot = { storefrontId, shippingMethodId, shippingAccountId: account?.id || null, provider, ambiente: account?.ambiente || 'manual', originCep, destinationCep, destination: { cidade: destinationCity || null, estado: destinationState || null }, lines };
-  return { context, storefront: { id: storefrontId, loja_id: method.loja_id, empresa_id: context.empresaId }, method, methodConfig, account, provider: definition.code, originCep, destinationCep, destinationCity, destinationState, destinationAddress, products, snapshot, hash: requestHash(snapshot), services: methodConfig.services || [], options: methodConfig.options || {} };
+  const subtotal = round(products.reduce((sum, product) => sum + product.insuranceValue * product.quantity, 0));
+  const snapshot = { storefrontId, shippingMethodId, shippingAccountId: account?.id || null, provider, ambiente: account?.ambiente || 'manual', originCep, destinationCep, destination: { cidade: destinationCity || null, estado: destinationState || null }, subtotal, lines };
+  return { context, storefront: { id: storefrontId, loja_id: method.loja_id, empresa_id: context.empresaId }, method, methodConfig, account, provider: definition.code, originCep, destinationCep, destinationCity, destinationState, destinationAddress, products, subtotal, snapshot, hash: requestHash(snapshot), services: methodConfig.services || [], options: methodConfig.options || {} };
 }
 
 export async function quoteShipping(client, contextInput, input = {}) {
   const prepared = await loadQuoteContext(client, contextInput, input);
   const adapter = shippingProviders.get(prepared.provider);
   if (!adapter) throw new CommerceError('adapter logístico não registrado', 'SHIPPING_PROVIDER_NOT_CONFIGURED');
-  const quoted = await adapter.quote({ account: prepared.account, methodConfig: prepared.methodConfig, destinationAddress: prepared.destinationAddress, destinationCity: prepared.destinationCity || prepared.destinationAddress?.cidade, destinationState: prepared.destinationState || prepared.destinationAddress?.estado, originPostalCode: prepared.originCep, destinationPostalCode: prepared.destinationCep, products: prepared.products, services: prepared.services, options: prepared.options });
+  const quoted = await adapter.quote({ account: prepared.account, methodConfig: prepared.methodConfig, destinationAddress: prepared.destinationAddress, destinationCity: prepared.destinationCity || prepared.destinationAddress?.cidade, destinationState: prepared.destinationState || prepared.destinationAddress?.estado, originPostalCode: prepared.originCep, destinationPostalCode: prepared.destinationCep, products: prepared.products, subtotal: prepared.subtotal, services: prepared.services, options: prepared.options });
   return client.transaction(async trx => {
     if (prepared.account) {
       const accountCheck = await trx.query(`SELECT id FROM commerce_shipping_accounts WHERE empresa_id = $1 AND id = $2 AND storefront_id = $3 AND ativo = true FOR UPDATE`, [prepared.context.empresaId, prepared.account.id, prepared.storefront.id]);

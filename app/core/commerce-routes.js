@@ -11,6 +11,7 @@ import { resolveStorefrontAlias } from './commerce-tenants.js';
 import { executeCatalogImport, previewCatalogImport } from './commerce-catalog-import.js';
 import { createMembership, listMemberships, listRoles, updateMembership } from './commerce-admin-users.js';
 import { createCustomer, createCustomerAddress, deleteCustomerAddress, getCustomer, listCustomerAddresses, updateCustomer, updateCustomerAddress } from './commerce-customers.js';
+import { createCreditAccount, createCreditPayment, listCreditAccounts, listCreditEntries, updateCreditAccount } from './commerce-credit.js';
 import { createStorefrontDomain, listStorefrontDomains, setPrimaryStorefrontDomain, verifyStorefrontDomain } from './commerce-domains.js';
 import { createShippingAccount, failShippingLabel, finalizeShippingCancellation, finalizeShippingLabel, listShippingAccounts, listShippingProviders, lookupPostalCode, prepareShippingCancellation, prepareShippingLabel, publicShippingMethod, quoteShipping, shippingAccountReady, updateShippingAccount, updateShippingTracking } from './commerce-shipping.js';
 import { shippingProviders } from './shipping-adapters.js';
@@ -396,12 +397,13 @@ export function createCommercePublicRouter() {
   router.get('/context', async (req, res) => {
     try {
       const storefront = await resolvePublicStorefront(req);
-      const [paymentAccounts, shippingAccounts, shippingMethods] = await Promise.all([
+      const [paymentAccounts, shippingAccounts, shippingMethods, creditAccounts] = await Promise.all([
         db.query(`SELECT id, provider, ambiente, secret_ref, public_config, ativo FROM commerce_payment_accounts WHERE empresa_id = $1 AND storefront_id = $2 AND ambiente = 'production' AND ativo = true`, [storefront.empresa_id, storefront.id]),
         db.query(`SELECT id, provider, secret_ref, public_config, ativo FROM commerce_shipping_accounts WHERE empresa_id = $1 AND storefront_id = $2 AND ambiente = 'production' AND ativo = true`, [storefront.empresa_id, storefront.id]),
         db.query(`SELECT tipo, configuracao FROM commerce_shipping_methods WHERE empresa_id = $1 AND storefront_id = $2 AND ativo = true AND tipo IN ('delivery', 'carrier')`, [storefront.empresa_id, storefront.id]),
+        db.query(`SELECT id FROM commerce_customer_credit_accounts WHERE empresa_id = $1 AND storefront_id = $2 AND status = 'active' LIMIT 1`, [storefront.empresa_id, storefront.id]).catch(() => ({ rows: [] })),
       ]);
-      const paymentsReady = paymentAccounts.rows.some(paymentAccountReady);
+      const paymentsReady = paymentAccounts.rows.some(paymentAccountReady) || creditAccounts.rows.length > 0;
       const manualShippingReady = shippingMethods.rows.some(row => String(row.configuracao?.provider || '').toLowerCase() === 'manual');
       const shippingReady = shippingAccounts.rows.some(shippingAccountReady) || manualShippingReady;
       res.json({ storefront: { id: storefront.id, codigo: storefront.codigo, nome: storefront.nome, moeda: storefront.moeda, timezone: storefront.timezone, public: sanitizePublicStorefrontConfig(storefront) }, capabilities: { catalog: true, cart: true, checkout: true, payments: paymentsReady, shipping: shippingReady } });
@@ -472,6 +474,12 @@ export function createCommercePublicRouter() {
           try { items.push({ provider: account.provider, method: validatePaymentMethod(method), ambiente: account.ambiente }); } catch { /* configuração inválida não é publicada */ }
         }
       }
+      const customerId = req.query.customerId ? assertUuid(req.query.customerId, 'customerId') : null;
+      const customerEmail = String(req.query.customerEmail || '').trim().toLowerCase().slice(0, 320);
+      const credit = customerId || customerEmail
+        ? await db.query(`SELECT ca.id FROM commerce_customer_credit_accounts ca JOIN commerce_customers c ON c.empresa_id = ca.empresa_id AND c.id = ca.customer_id WHERE ca.empresa_id = $1 AND ca.storefront_id = $2 AND ca.status = 'active' AND ($3::uuid IS NOT NULL AND c.id = $3 OR $3::uuid IS NULL AND lower(c.email) = $4) LIMIT 1`, [storefront.empresa_id, storefront.id, customerId, customerEmail]).catch(() => ({ rows: [] }))
+        : { rows: [] };
+      if (credit.rows[0]) items.push({ provider: 'crediario', method: 'account', ambiente: 'production', label: 'Marcar na conta' });
       res.json({ storefrontId: storefront.id, available: items.length > 0, items: items.filter((item, index, all) => all.findIndex(candidate => candidate.provider === item.provider && candidate.method === item.method && candidate.ambiente === item.ambiente) === index) });
     } catch (error) { jsonError(res, error); }
   });
@@ -482,6 +490,10 @@ export function createCommercePublicRouter() {
       const provider = String(req.body?.provider || '').trim().toLowerCase();
       const order = await db.query(`SELECT o.id FROM commerce_orders o WHERE o.empresa_id = $1 AND o.storefront_id = $2 AND o.public_code = $3 LIMIT 1`, [storefront.empresa_id, storefront.id, String(req.params.publicCode || '').toUpperCase()]);
       if (!order.rows[0]) throw new CommerceError('pedido não encontrado', 'ORDER_NOT_FOUND');
+      if (provider === 'crediario' && method === 'account') {
+        const result = await createCreditPayment({ empresaId: storefront.empresa_id, lojaId: storefront.loja_id }, { orderId: order.rows[0].id, idempotencyKey: String(req.body?.idempotencyKey || '').trim().slice(0, 180) });
+        return res.status(201).json(result);
+      }
       const account = await db.query(`SELECT id, provider, ambiente FROM commerce_payment_accounts WHERE empresa_id = $1 AND storefront_id = $2 AND provider = $3 AND ambiente = 'production' AND ativo = true ORDER BY provider LIMIT 1`, [storefront.empresa_id, storefront.id, provider]);
       if (!account.rows[0]) throw new CommerceError('nenhum gateway ativo para este storefront', 'PAYMENT_PROVIDER_NOT_CONFIGURED');
       const result = await createPaymentAttempt({ empresaId: storefront.empresa_id, lojaId: storefront.loja_id }, { orderId: order.rows[0].id, provider, method, environment: account.rows[0].ambiente, accountId: account.rows[0].id, idempotencyKey: String(req.body?.idempotencyKey || '').trim().slice(0, 180) });
@@ -1317,6 +1329,32 @@ export function createCommerceAdminRouter() {
       const context = await requirePermission(req, 'customers.write');
       const result = await withCommerceTransaction(trx => deleteCustomerAddress(trx, context, req.params.id, req.params.addressId));
       res.json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.get('/credit/accounts', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'customers.read');
+      res.json(await listCreditAccounts(db, context, { storefrontId: req.query.storefrontId || null }));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/credit/accounts', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'customers.write');
+      const result = await withCommerceTransaction(trx => createCreditAccount(trx, context, req.body));
+      res.status(201).json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.patch('/credit/accounts/:id', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'customers.write');
+      const result = await withCommerceTransaction(trx => updateCreditAccount(trx, context, req.params.id, req.body));
+      res.json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.get('/credit/accounts/:id/entries', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'customers.read');
+      res.json(await listCreditEntries(db, context, req.params.id));
     } catch (error) { jsonError(res, error); }
   });
   router.get('/payments/providers', async (req, res) => {
