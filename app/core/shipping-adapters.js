@@ -98,9 +98,28 @@ function normalizeRuleCep(value) {
   return /^\d{8}$/.test(digits) ? digits : '';
 }
 
+export const OWN_DELIVERY_TYPES = new Set(['motoboy', 'regional_table', 'express', 'free_shipping']);
+
+const BRAZIL_REGION_UFS = {
+  norte: ['AC', 'AP', 'AM', 'PA', 'RO', 'RR', 'TO'],
+  nordeste: ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE'],
+  'centro-oeste': ['DF', 'GO', 'MS', 'MT'],
+  sudeste: ['ES', 'MG', 'RJ', 'SP'],
+  sul: ['PR', 'RS', 'SC'],
+};
+
+function normalizeRegion(value) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase().replace(/[ _]+/g, '-');
+}
+
+function listValues(value) {
+  if (Array.isArray(value)) return value;
+  return String(value || '').split(',');
+}
+
 function ownDeliveryKind(config = {}) {
   const value = String(config.deliveryType || config.kind || config.tipoEntrega || config.ownDeliveryType || 'regional_table').trim().toLowerCase();
-  return new Set(['motoboy', 'regional_table', 'express', 'free_shipping']).has(value) ? value : 'regional_table';
+  return OWN_DELIVERY_TYPES.has(value) ? value : 'regional_table';
 }
 
 function ownDeliveryLabel(kind) {
@@ -114,9 +133,14 @@ function manualShippingRules(config = {}) {
     id: String(rule?.id || `manual-${index + 1}`).slice(0, 80),
     label: String(rule?.label || rule?.name || 'Entrega manual').slice(0, 160),
     uf: String(rule?.uf || '').trim().toUpperCase().slice(0, 2),
-    cities: Array.isArray(rule?.cities) ? rule.cities.map(normalizeManualCity).filter(Boolean) : [],
+    ufs: [...new Set([
+      ...listValues(rule?.ufs).map(value => String(value || '').trim().toUpperCase()),
+      ...listValues(rule?.regions || rule?.region).flatMap(value => BRAZIL_REGION_UFS[normalizeRegion(value)] || []),
+    ].filter(value => /^[A-Z]{2}$/.test(value)))],
+    cities: listValues(rule?.cities).map(normalizeManualCity).filter(Boolean),
     cepFrom: normalizeRuleCep(rule?.cepFrom || rule?.cepInicial || rule?.postalCodeFrom),
     cepTo: normalizeRuleCep(rule?.cepTo || rule?.cepFinal || rule?.postalCodeTo),
+    zone: Number.isFinite(Number(rule?.zone || rule?.zona)) ? Number(rule.zone || rule.zona) : null,
     distanceKm: Number.isFinite(Number(rule?.distanceKm || rule?.km)) ? Number(rule.distanceKm || rule.km) : null,
     amount: rule?.amount == null || rule?.amount === '' ? null : Number(rule.amount),
     deliveryDays: Math.max(1, Math.round(Number(rule?.deliveryDays || rule?.businessDays || 1))),
@@ -133,6 +157,7 @@ function selectManualShippingRule(config, destinationAddress = {}) {
   return rules.filter(rule => {
     if (rule.fallback) return true;
     if (rule.uf && rule.uf !== uf) return false;
+    if (rule.ufs.length && !rule.ufs.includes(uf)) return false;
     if (rule.cities.length && !rule.cities.includes(city)) return false;
     if (rule.cepFrom && (!cep || cep < rule.cepFrom)) return false;
     if (rule.cepTo && (!cep || cep > rule.cepTo)) return false;
@@ -145,13 +170,25 @@ function ownDeliveryQuote(methodConfig = {}, destinationAddress = {}, subtotal =
   const rule = selectManualShippingRule(methodConfig, destinationAddress);
   const baseFee = Math.max(0, safeNumber(methodConfig.baseFee ?? methodConfig.taxaBase ?? methodConfig.base, 0));
   const perKm = Math.max(0, safeNumber(methodConfig.pricePerKm ?? methodConfig.valorPorKm ?? methodConfig.perKm, 0));
+  const perZone = Math.max(0, safeNumber(methodConfig.pricePerZone ?? methodConfig.valorPorZona ?? methodConfig.perZone, 0));
+  const zone = Math.max(0, safeNumber(rule?.zone ?? methodConfig.zone ?? methodConfig.zona, 0));
   const distanceKm = Math.max(0, safeNumber(rule?.distanceKm ?? methodConfig.distanceKm ?? methodConfig.distanciaKm, 0));
   const maxRadiusKm = safeNumber(methodConfig.maxRadiusKm ?? methodConfig.raioKm ?? methodConfig.raioAtendimentoKm, null);
   if (maxRadiusKm !== null && distanceKm > maxRadiusKm) throw new CommerceError('este destino está fora do raio de atendimento da loja', 'SHIPPING_DESTINATION_OUTSIDE_RADIUS');
   if ((kind === 'regional_table' || (['motoboy', 'express', 'free_shipping'].includes(kind) && Array.isArray(methodConfig.rules) && methodConfig.rules.length)) && !rule) throw new CommerceError('nenhuma regra de entrega própria está disponível para este destino', 'SHIPPING_DESTINATION_UNAVAILABLE');
   const fixedFee = Math.max(0, safeNumber(methodConfig.fixedFee ?? methodConfig.taxaFixa ?? methodConfig.fee, baseFee));
-  let amount = kind === 'free_shipping' ? 0 : kind === 'express' ? (rule?.amount ?? fixedFee) : kind === 'motoboy' ? (rule?.amount ?? baseFee + perKm * distanceKm) : (rule?.amount ?? baseFee);
+  const additionalFeeInput = methodConfig.additionalFee ?? methodConfig.adicionalExpresso;
+  const hasAdditionalFee = additionalFeeInput !== undefined && additionalFeeInput !== null && additionalFeeInput !== '';
+  const additionalFee = Math.max(0, safeNumber(additionalFeeInput, 0));
   const freeAbove = safeNumber(methodConfig.freeShippingAbove ?? methodConfig.freteGratisAcima, null);
+  if (kind === 'free_shipping' && freeAbove !== null && Number(subtotal) < freeAbove) throw new CommerceError('o valor mínimo para frete grátis ainda não foi atingido', 'SHIPPING_FREE_SHIPPING_THRESHOLD_NOT_MET', { minimum: freeAbove });
+  let amount = kind === 'free_shipping'
+    ? 0
+    : kind === 'express'
+      ? (hasAdditionalFee ? (rule?.amount ?? baseFee) + additionalFee : (rule?.amount ?? fixedFee))
+      : kind === 'motoboy'
+        ? (rule?.amount ?? baseFee + (zone > 0 && perZone > 0 ? perZone * zone : perKm * distanceKm))
+        : (rule?.amount ?? baseFee);
   const freeShippingApplied = freeAbove !== null && Number(subtotal) >= freeAbove;
   if (freeShippingApplied) amount = 0;
   const deliveryDays = Math.max(1, Math.round(Number(rule?.deliveryDays || methodConfig.deliveryDays || methodConfig.prazoDias || (kind === 'express' ? 1 : kind === 'motoboy' ? 1 : 3))));
@@ -180,9 +217,10 @@ function ownDeliveryQuote(methodConfig = {}, destinationAddress = {}, subtotal =
     carrierId: `kytto-${kind}`,
     manualZone: rule?.id || null,
     distanceKm,
+    zone,
     freeShippingApplied,
   };
-  return { public: publicOption, raw: { ruleId: rule?.id || null, kind, amount: totalAmount, deliveryDays, distanceKm, subtotal: Number(subtotal) || 0 } };
+  return { public: publicOption, raw: { ruleId: rule?.id || null, kind, amount: totalAmount, deliveryDays, distanceKm, zone, subtotal: Number(subtotal) || 0 } };
 }
 
 function createManualShippingAdapter() {

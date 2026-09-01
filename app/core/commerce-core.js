@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { db } from './database.js';
-import { resolveShippingSelection } from './commerce-shipping.js';
+import { normalizeOwnDeliveryConfig, resolveShippingSelection } from './commerce-shipping.js';
 import { markCartConverted } from './commerce-abandoned-carts.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -922,18 +922,56 @@ export const FULFILLMENT_TRANSITIONS = {
   cancelled: [],
 };
 
+function normalizeExternalShippingMethodConfig(input, provider, shippingAccountId) {
+  const normalized = { provider, shippingAccountId };
+  const originCep = String(input.origemCep || input.originPostalCode || '').replace(/\D/g, '');
+  if (originCep) {
+    if (originCep.length !== 8) throw new CommerceError('CEP de origem do método deve ter 8 dígitos', 'SHIPPING_METHOD_CONFIG_INVALID', { field: 'origemCep' });
+    normalized.origemCep = originCep;
+  }
+  const rawServices = Array.isArray(input.services) ? input.services : String(input.services || '').split(',');
+  const services = [...new Set(rawServices.map(value => String(value || '').trim()).filter(Boolean))];
+  if (services.length > 40 || services.some(value => !/^[A-Za-z0-9_-]{1,32}$/.test(value))) throw new CommerceError('serviços logísticos inválidos', 'SHIPPING_METHOD_CONFIG_INVALID', { field: 'services' });
+  if (services.length) normalized.services = services;
+  if (input.options !== undefined) {
+    if (!input.options || Array.isArray(input.options) || typeof input.options !== 'object') throw new CommerceError('opções logísticas devem ser um objeto', 'SHIPPING_METHOD_CONFIG_INVALID', { field: 'options' });
+    const options = {};
+    for (const field of ['receipt', 'ownHand']) {
+      if (input.options[field] !== undefined && typeof input.options[field] !== 'boolean') throw new CommerceError(`opção ${field} deve ser booleana`, 'SHIPPING_METHOD_CONFIG_INVALID', { field: `options.${field}` });
+      if (input.options[field] !== undefined) options[field] = input.options[field];
+    }
+    if (Object.keys(options).length) normalized.options = options;
+  }
+  return normalized;
+}
+
+async function validateShippingMethodConfiguration(trx, empresaId, storefrontId, tipo, input) {
+  if (!input || Array.isArray(input) || typeof input !== 'object') throw new CommerceError('configuração do método deve ser um objeto', 'SHIPPING_METHOD_CONFIG_INVALID');
+  if (!['delivery', 'carrier'].includes(tipo)) return {};
+  const provider = String(input.provider || '').trim().toLowerCase();
+  if (!provider) throw new CommerceError('provedor do método de entrega é obrigatório', 'SHIPPING_PROVIDER_UNSUPPORTED');
+  if (provider === 'manual') return normalizeOwnDeliveryConfig(input);
+  if (!['melhorenvio', 'correios'].includes(provider)) throw new CommerceError('provedor logístico não suportado', 'SHIPPING_PROVIDER_UNSUPPORTED', { provider });
+  const accountId = assertUuid(input.shippingAccountId || input.accountId, 'shippingAccountId');
+  const account = await trx.query(`SELECT id, provider FROM commerce_shipping_accounts WHERE empresa_id = $1 AND id = $2 AND storefront_id = $3 AND provider = $4 AND ativo = true LIMIT 1`, [empresaId, accountId, storefrontId, provider]);
+  if (!account.rows[0]) throw new CommerceError('conta logística ativa não pertence ao storefront ou provedor do método', 'SHIPPING_ACCOUNT_SCOPE_MISMATCH');
+  return normalizeExternalShippingMethodConfig(input, provider, accountId);
+}
+
 export async function createShippingMethod(trx, context, input = {}) {
   const { empresaId } = tenantContext(context);
   const storefrontId = assertUuid(input.storefrontId, 'storefrontId');
   await resolveStorefront(trx, context, storefrontId);
   const codigo = String(input.codigo || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').slice(0, 80);
-  const nome = String(input.nome || '').trim();
+  const nome = String(input.nome || '').trim().slice(0, 160);
   const tipo = String(input.tipo || '').trim();
   if (!codigo || !nome || !['pickup', 'delivery', 'carrier', 'digital', 'service'].includes(tipo)) throw new CommerceError('código, nome e tipo de entrega válidos são obrigatórios', 'SHIPPING_METHOD_INVALID');
+  if (input.ativo !== undefined && typeof input.ativo !== 'boolean') throw new CommerceError('ativo do método deve ser booleano', 'SHIPPING_METHOD_INVALID');
+  const configuracao = await validateShippingMethodConfiguration(trx, empresaId, storefrontId, tipo, input.configuracao || {});
   const result = await trx.query(
     `INSERT INTO commerce_shipping_methods (empresa_id, storefront_id, codigo, nome, tipo, ativo, configuracao)
      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb) RETURNING *`,
-    [empresaId, storefrontId, codigo, nome, tipo, input.ativo !== false, JSON.stringify(input.configuracao || {})],
+    [empresaId, storefrontId, codigo, nome, tipo, input.ativo !== false, JSON.stringify(configuracao)],
   );
   return result.rows[0];
 }
@@ -966,17 +1004,8 @@ export async function updateShippingMethod(trx, context, methodId, input = {}) {
     values.push(input.ativo); sets.push(`ativo = $${values.length}`);
   }
   if (input.configuracao !== undefined) {
-    const config = input.configuracao && typeof input.configuracao === 'object' ? input.configuracao : {};
     const nextType = input.tipo === undefined ? current.tipo : String(input.tipo);
-    if (['delivery', 'carrier'].includes(nextType)) {
-      const provider = String(config.provider || '').trim().toLowerCase();
-      if (provider !== 'manual') {
-        const accountId = config.shippingAccountId || config.accountId;
-        if (!accountId || !assertUuid(accountId, 'shippingAccountId')) throw new CommerceError('método de entrega exige conta logística válida', 'SHIPPING_ACCOUNT_REQUIRED');
-        const account = await trx.query(`SELECT id FROM commerce_shipping_accounts WHERE empresa_id = $1 AND id = $2 AND storefront_id = $3 AND ativo = true LIMIT 1`, [empresaId, accountId, current.storefront_id]);
-        if (!account.rows[0]) throw new CommerceError('conta logística ativa não pertence ao storefront do método', 'SHIPPING_ACCOUNT_SCOPE_MISMATCH');
-      }
-    }
+    const config = await validateShippingMethodConfiguration(trx, empresaId, current.storefront_id, nextType, input.configuracao);
     values.push(JSON.stringify(config)); sets.push(`configuracao = $${values.length}::jsonb`);
   }
   if (!sets.length) throw new CommerceError('nenhuma alteração informada', 'NO_CHANGES');

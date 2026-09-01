@@ -109,6 +109,86 @@ function safeConfig(input = {}) {
   return config;
 }
 
+const OWN_DELIVERY_TYPES = new Set(['motoboy', 'regional_table', 'express', 'free_shipping']);
+const OWN_DELIVERY_NUMBERS = ['baseFee', 'pricePerKm', 'pricePerZone', 'fixedFee', 'additionalFee', 'freeShippingAbove', 'maxRadiusKm', 'distanceKm'];
+const BRAZIL_REGIONS = new Set(['norte', 'nordeste', 'centro-oeste', 'sudeste', 'sul']);
+const BRAZIL_UFS = new Set(['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO']);
+
+function stringList(value, max = 50) {
+  const values = Array.isArray(value) ? value : String(value || '').split(',');
+  return [...new Set(values.map(item => text(item, 120)).filter(Boolean))].slice(0, max);
+}
+
+function nonNegative(value, field, { nullable = true } = {}) {
+  if (value === undefined || value === null || value === '') return nullable ? null : 0;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new CommerceError(`${field} deve ser um número não negativo`, 'SHIPPING_METHOD_CONFIG_INVALID', { field });
+  return round(parsed);
+}
+
+function normalizeOwnDeliveryRule(input = {}, index = 0) {
+  if (!input || Array.isArray(input) || typeof input !== 'object') throw new CommerceError('cada faixa de entrega deve ser um objeto', 'SHIPPING_METHOD_CONFIG_INVALID', { field: `rules[${index}]` });
+  const id = text(input.id || `regra-${index + 1}`, 80).toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+  const label = text(input.label || input.name, 160);
+  if (!id || !label) throw new CommerceError('cada faixa exige identificador e nome', 'SHIPPING_METHOD_CONFIG_INVALID', { field: `rules[${index}]` });
+  const uf = text(input.uf, 2).toUpperCase();
+  if (uf && !BRAZIL_UFS.has(uf)) throw new CommerceError('UF inválida na faixa de entrega', 'SHIPPING_METHOD_CONFIG_INVALID', { field: `rules[${index}].uf` });
+  const ufs = stringList(input.ufs).map(value => value.toUpperCase());
+  if (ufs.some(value => !BRAZIL_UFS.has(value))) throw new CommerceError('lista de UFs inválida na faixa de entrega', 'SHIPPING_METHOD_CONFIG_INVALID', { field: `rules[${index}].ufs` });
+  const regions = stringList(input.regions || input.region).map(value => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[ _]+/g, '-'));
+  if (regions.some(value => !BRAZIL_REGIONS.has(value))) throw new CommerceError('região brasileira inválida na faixa de entrega', 'SHIPPING_METHOD_CONFIG_INVALID', { field: `rules[${index}].regions` });
+  const cepFromRaw = text(input.cepFrom || input.cepInicial || input.postalCodeFrom, 20);
+  const cepToRaw = text(input.cepTo || input.cepFinal || input.postalCodeTo, 20);
+  const cepFrom = cepFromRaw ? normalizeCep(cepFromRaw) : '';
+  const cepTo = cepToRaw ? normalizeCep(cepToRaw) : '';
+  if (cepFrom && cepTo && cepFrom > cepTo) throw new CommerceError('faixa de CEP está invertida', 'SHIPPING_METHOD_CONFIG_INVALID', { field: `rules[${index}]` });
+  const deliveryDays = Math.round(nonNegative(input.deliveryDays ?? input.businessDays ?? 1, `rules[${index}].deliveryDays`, { nullable: false }));
+  if (deliveryDays < 1 || deliveryDays > 90) throw new CommerceError('prazo da faixa deve ficar entre 1 e 90 dias úteis', 'SHIPPING_METHOD_CONFIG_INVALID', { field: `rules[${index}].deliveryDays` });
+  const fallback = input.fallback === true;
+  const cities = stringList(input.cities);
+  if (!fallback && !uf && !ufs.length && !regions.length && !cities.length && !cepFrom && !cepTo) throw new CommerceError('cada faixa deve informar cidade, UF, região, CEP ou ser fallback', 'SHIPPING_METHOD_CONFIG_INVALID', { field: `rules[${index}]` });
+  return {
+    id,
+    label,
+    ...(uf ? { uf } : {}),
+    ...(ufs.length ? { ufs } : {}),
+    ...(regions.length ? { regions } : {}),
+    ...(cities.length ? { cities } : {}),
+    ...(cepFrom ? { cepFrom } : {}),
+    ...(cepTo ? { cepTo } : {}),
+    ...(input.zone !== undefined || input.zona !== undefined ? { zone: nonNegative(input.zone ?? input.zona, `rules[${index}].zone`, { nullable: false }) } : {}),
+    ...(input.distanceKm !== undefined || input.km !== undefined ? { distanceKm: nonNegative(input.distanceKm ?? input.km, `rules[${index}].distanceKm`, { nullable: false }) } : {}),
+    ...(input.amount !== undefined && input.amount !== '' ? { amount: nonNegative(input.amount, `rules[${index}].amount`, { nullable: false }) } : {}),
+    deliveryDays,
+    priority: Number.isFinite(Number(input.priority)) ? Math.round(Number(input.priority)) : 0,
+    ...(fallback ? { fallback: true } : {}),
+  };
+}
+
+export function normalizeOwnDeliveryConfig(input = {}) {
+  if (!input || Array.isArray(input) || typeof input !== 'object') throw new CommerceError('configuração da entrega própria deve ser um objeto', 'SHIPPING_METHOD_CONFIG_INVALID');
+  const rawType = text(input.deliveryType || input.kind || input.tipoEntrega || input.ownDeliveryType || 'regional_table', 40).toLowerCase();
+  if (!OWN_DELIVERY_TYPES.has(rawType)) throw new CommerceError('modalidade de entrega própria inválida', 'SHIPPING_METHOD_CONFIG_INVALID', { field: 'deliveryType' });
+  const rulesInput = input.rules === undefined ? [] : input.rules;
+  if (!Array.isArray(rulesInput) || rulesInput.length > 80) throw new CommerceError('faixas de entrega devem ser uma lista com no máximo 80 itens', 'SHIPPING_METHOD_CONFIG_INVALID', { field: 'rules' });
+  const rules = rulesInput.map(normalizeOwnDeliveryRule);
+  if (new Set(rules.map(rule => rule.id)).size !== rules.length) throw new CommerceError('identificadores das faixas devem ser únicos', 'SHIPPING_METHOD_CONFIG_INVALID', { field: 'rules' });
+  if (rules.filter(rule => rule.fallback).length > 1) throw new CommerceError('apenas uma faixa pode ser fallback', 'SHIPPING_METHOD_CONFIG_INVALID', { field: 'rules' });
+  if (['motoboy', 'regional_table'].includes(rawType) && !rules.length) throw new CommerceError('motoboy e tabela regional exigem pelo menos uma faixa explícita', 'SHIPPING_METHOD_CONFIG_INVALID', { field: 'rules' });
+  const deliveryDays = Math.round(nonNegative(input.deliveryDays ?? input.prazoDias ?? (rawType === 'express' || rawType === 'motoboy' ? 1 : 3), 'deliveryDays', { nullable: false }));
+  if (deliveryDays < 1 || deliveryDays > 90) throw new CommerceError('prazo deve ficar entre 1 e 90 dias úteis', 'SHIPPING_METHOD_CONFIG_INVALID', { field: 'deliveryDays' });
+  const normalized = { provider: 'manual', deliveryType: rawType, deliveryDays };
+  if (input.origemCep || input.originPostalCode) normalized.origemCep = normalizeCep(input.origemCep || input.originPostalCode);
+  const aliases = { pricePerZone: input.valorPorZona, additionalFee: input.adicionalExpresso, freeShippingAbove: input.freteGratisAcima, maxRadiusKm: input.raioKm, distanceKm: input.distanciaKm, baseFee: input.taxaBase, pricePerKm: input.valorPorKm, fixedFee: input.taxaFixa };
+  for (const field of OWN_DELIVERY_NUMBERS) {
+    const value = input[field] ?? aliases[field];
+    if (value !== undefined && value !== '') normalized[field] = nonNegative(value, field, { nullable: false });
+  }
+  if (rawType === 'free_shipping' && !(normalized.freeShippingAbove > 0)) throw new CommerceError('frete grátis exige valor mínimo maior que zero', 'SHIPPING_METHOD_CONFIG_INVALID', { field: 'freeShippingAbove' });
+  if (rules.length) normalized.rules = rules;
+  return normalized;
+}
+
 function safePublicConfig(config = {}) {
   const source = config && typeof config === 'object' ? config : {};
   return {
@@ -314,10 +394,11 @@ async function loadQuoteContext(client, contextInput, input = {}) {
   );
   const method = methodResult.rows[0];
   if (!method || !['delivery', 'carrier'].includes(method.tipo)) throw new CommerceError('método de entrega não habilitado para cotação', 'SHIPPING_METHOD_NOT_FOUND');
-  const methodConfig = method.configuracao && typeof method.configuracao === 'object' ? method.configuracao : {};
-  const provider = text(methodConfig.provider || 'melhorenvio', 60).toLowerCase();
+  const storedMethodConfig = method.configuracao && typeof method.configuracao === 'object' ? method.configuracao : {};
+  const provider = text(storedMethodConfig.provider || 'melhorenvio', 60).toLowerCase();
   const definition = providerDefinition(provider);
   const isManual = provider === 'manual';
+  const methodConfig = isManual ? normalizeOwnDeliveryConfig(storedMethodConfig) : storedMethodConfig;
   let account = null;
   if (!isManual) {
     const accountId = assertUuid(methodConfig.shippingAccountId || methodConfig.accountId, 'shippingAccountId');
@@ -336,8 +417,8 @@ async function loadQuoteContext(client, contextInput, input = {}) {
     destinationState = destinationState || text(lookup.estado, 2).toUpperCase();
   }
   const destinationAddress = { ...destinationAddressInput, cep: destinationCep, cidade: destinationCity || null, estado: destinationState || null };
-  const lines = Array.isArray(input.items) ? input.items.map(item => ({ variantId: assertUuid(item.variantId, 'variantId'), quantity: Number(item.quantity) })) : [];
-  if (!lines.length || lines.some(line => !Number.isInteger(line.quantity) || line.quantity <= 0)) throw new CommerceError('itens válidos são obrigatórios para cotação', 'SHIPPING_ITEMS_REQUIRED');
+  const lines = Array.isArray(input.items) ? input.items.slice(0, 101).map(item => ({ variantId: assertUuid(item.variantId, 'variantId'), quantity: Number(item.quantity) })) : [];
+  if (!lines.length || lines.length > 100 || lines.some(line => !Number.isInteger(line.quantity) || line.quantity <= 0 || line.quantity > 999)) throw new CommerceError('a cotação exige de 1 a 100 itens, com quantidades entre 1 e 999', 'SHIPPING_ITEMS_REQUIRED');
   const variantIds = [...new Set(lines.map(line => line.variantId))];
   const variants = await client.query(
     `SELECT v.id, v.sku, COALESCE(v.nome, p.nome) AS nome, v.peso_gramas, v.largura_cm, v.altura_cm, v.comprimento_cm,
@@ -382,6 +463,54 @@ export async function quoteShipping(client, contextInput, input = {}) {
     );
     return { quoteId: result.rows[0].id, expiresAt: result.rows[0].expires_at, provider: prepared.provider, shippingMethodId: prepared.method.id, items: quoted.options };
   });
+}
+
+const OPTIONAL_QUOTE_ERRORS = new Set([
+  'SHIPPING_DESTINATION_OUTSIDE_RADIUS',
+  'SHIPPING_DESTINATION_UNAVAILABLE',
+  'SHIPPING_FREE_SHIPPING_THRESHOLD_NOT_MET',
+  'SHIPPING_ACCOUNT_NOT_CONFIGURED',
+  'SHIPPING_PACKAGE_DATA_REQUIRED',
+  'SHIPPING_ORIGIN_CEP_REQUIRED',
+  'SHIPPING_METHOD_CONFIG_INVALID',
+  'SHIPPING_PROVIDER_UNSUPPORTED',
+  'SHIPPING_PROVIDER_NOT_CONFIGURED',
+  'SHIPPING_PROVIDER_ERROR',
+  'SHIPPING_PROVIDER_TIMEOUT',
+  'SHIPPING_NO_OPTIONS',
+  'SHIPPING_ADAPTER_INVALID_RESPONSE',
+]);
+
+export async function quoteAvailableShipping(client, contextInput, input = {}) {
+  const context = tenantContext(contextInput);
+  const storefrontId = assertUuid(input.storefrontId, 'storefrontId');
+  const destinationCep = normalizeCep(input.destinationCep || input.destination?.cep);
+  const destinationInput = input.destination && typeof input.destination === 'object' ? input.destination : {};
+  const destination = destinationInput.cidade && destinationInput.estado
+    ? { ...destinationInput, cep: destinationCep }
+    : { ...destinationInput, ...(await lookupPostalCode(destinationCep)), cep: destinationCep };
+  const methods = await client.query(
+    `SELECT id, codigo, nome
+       FROM commerce_shipping_methods
+      WHERE empresa_id = $1 AND storefront_id = $2 AND ativo = true AND tipo IN ('delivery', 'carrier')
+      ORDER BY nome ASC
+      LIMIT 12`,
+    [context.empresaId, storefrontId],
+  );
+  const items = [];
+  const unavailable = [];
+  for (const method of methods.rows) {
+    try {
+      const quote = await quoteShipping(client, context, { ...input, storefrontId, shippingMethodId: method.id, destinationCep, destination });
+      for (const option of quote.items || []) items.push({ ...option, quoteId: quote.quoteId, expiresAt: quote.expiresAt, shippingMethodId: quote.shippingMethodId, shippingMethodCode: method.codigo, shippingMethodName: method.nome, selectionId: `${quote.quoteId}:${option.id}` });
+    } catch (error) {
+      if (!OPTIONAL_QUOTE_ERRORS.has(error?.code)) throw error;
+      unavailable.push({ shippingMethodId: method.id, code: error.code });
+    }
+  }
+  if (!items.length) throw new CommerceError('nenhuma opção de entrega está disponível para este CEP e carrinho', 'SHIPPING_DESTINATION_UNAVAILABLE');
+  const expiresAt = items.map(item => item.expiresAt).filter(Boolean).sort()[0] || null;
+  return { storefrontId, destination: { cep: destinationCep, cidade: destination.cidade || null, estado: destination.estado || null }, expiresAt, items, unavailable };
 }
 
 export async function resolveShippingSelection(trx, contextInput, input = {}, { storefrontId, lines } = {}) {
