@@ -203,7 +203,7 @@ test('adapter de tabela manual aplica as faixas regionais e não gera etiqueta',
   assert.equal(tangara.provider, 'manual');
   assert.equal(tangara.options[0].amount, 25);
   assert.equal(tangara.options[0].deliveryDays, 1);
-  assert.equal(tangara.options[0].deliveryNote, 'Entrega regional em até 24 horas úteis');
+  assert.equal(tangara.options[0].deliveryNote, 'Entrega em até 24 horas úteis');
   assert.equal(tangara.options[0].carrier, 'Kytto Entrega');
 
   const regional = await adapter.quote({ ...common, destinationAddress: { cidade: 'Nova Olímpia', estado: 'MT' } });
@@ -217,7 +217,7 @@ test('adapter de tabela manual aplica as faixas regionais e não gera etiqueta',
   const national = await adapter.quote({ ...common, destinationAddress: { cidade: 'São Paulo', estado: 'SP' } });
   assert.equal(national.options[0].amount, 30);
   assert.equal(national.options[0].deliveryDays, 10);
-  assert.equal(national.options[0].deliveryNote, 'Prazo comercial de até 10 dias úteis');
+  assert.equal(national.options[0].deliveryNote, 'Prazo estimado de até 10 dias úteis');
   await assert.rejects(() => adapter.createShipment({}), error => error.code === 'SHIPPING_PROVIDER_CAPABILITY_UNAVAILABLE');
   await assert.rejects(() => adapter.track({}), error => error.code === 'SHIPPING_TRACKING_UNSUPPORTED');
 });
