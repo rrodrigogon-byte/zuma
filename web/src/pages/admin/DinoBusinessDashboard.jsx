@@ -36,15 +36,13 @@ function KpiCard({ item, series }) {
 }
 
 function RevenueChart({ rows = [] }) {
-  const max = Math.max(...rows.map((item) => Number(item.total || 0)), 1)
-  const points = rows.length > 1 ? rows.map((item, index) => `${(index / (rows.length - 1)) * 100},${94 - (Number(item.total || 0) / max) * 82}`).join(' ') : ''
-  const labels = rows.length > 8 ? rows.filter((_, index) => index === 0 || index === rows.length - 1 || index % Math.ceil(rows.length / 5) === 0) : rows
+  const visible = rows.length > 30 ? rows.slice(-30) : rows
+  const max = Math.max(...visible.map((item) => Number(item.total || 0)), 1)
   return <div className="dino-revenue-chart">
-    <div className="dino-chart-canvas" role="img" aria-label="Faturamento diário no período">
-      <svg viewBox="0 0 100 100" preserveAspectRatio="none"><defs><linearGradient id="dinoRevenueFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="var(--accent)" stopOpacity=".32"/><stop offset="1" stopColor="var(--accent)" stopOpacity=".02"/></linearGradient></defs>{points && <><polygon points={`0,100 ${points} 100,100`} fill="url(#dinoRevenueFill)"/><polyline points={points} fill="none" stroke="var(--accent)" strokeWidth="2.4" vectorEffect="non-scaling-stroke"/></>}</svg>
-      {!rows.some((item) => Number(item.total) > 0) && <div className="dino-chart-empty">Nenhum faturamento registrado neste período.</div>}
+    <div className="dino-revenue-bars" role="img" aria-label="Faturamento diário no período">
+      {visible.map((item, index) => <div key={item.day} className={index === visible.length - 1 ? 'is-latest' : ''} title={`${String(item.day).split('-').reverse().join('/')}: ${fmtR(Number(item.total || 0))}`}><i style={{ height: `${Math.max(Number(item.total || 0) > 0 ? 4 : 1, Number(item.total || 0) / max * 100)}%` }} /><span>{visible.length <= 7 || index === 0 || index === visible.length - 1 || index % Math.ceil(visible.length / 6) === 0 ? String(item.day).slice(5).split('-').reverse().join('/') : ''}</span></div>)}
+      {!visible.some((item) => Number(item.total) > 0) && <div className="dino-chart-empty">Nenhum faturamento registrado neste período.</div>}
     </div>
-    <div className="dino-chart-labels">{labels.map((item) => <span key={item.day}>{String(item.day).slice(5).split('-').reverse().join('/')}</span>)}</div>
   </div>
 }
 
