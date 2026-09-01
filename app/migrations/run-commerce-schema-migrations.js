@@ -29,6 +29,9 @@ const migrationFiles = [
   '037_commerce_storefront_aliases.sql',
   '038_whatsapp_ai_conversations.sql',
   '039_crm_campaigns_governance.sql',
+  '040_commerce_own_delivery.sql',
+  '041_commerce_customer_credit.sql',
+  '042_dino_own_delivery_defaults.sql',
 ];
 const advisoryLockKey = 825410732;
 

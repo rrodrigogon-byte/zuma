@@ -14,19 +14,24 @@ function readCart(storeAlias) {
 }
 
 function money(value) { return fmtR(Number(value || 0)) }
+function formatCep(value) {
+  const digits = String(value || '').replace(/\D/g, '').slice(0, 8)
+  return digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits
+}
+function paymentLabel(item) { return item?.provider === 'crediario' || item?.method === 'account' ? 'Marcar na conta' : item?.method === 'credit_card' ? 'Cartão de crédito' : item?.method === 'pix' ? 'Pix' : item?.method || 'Pagamento online' }
 function shippingPromise(option) {
   const total = option?.deliveryRange?.max ?? option?.deliveryDays
   if (option?.preparationDays !== null && option?.preparationDays !== undefined && option?.providerDeliveryDays !== null && option?.providerDeliveryDays !== undefined && total !== null && total !== undefined) {
     return `${option.carrier || 'Transportadora'} · ${option.preparationDays} dias úteis de preparação e postagem + ${option.providerDeliveryDays} dias úteis de transporte · total estimado: ${total} dias úteis`;
   }
-  if (option?.provider === 'manual' || option?.carrier === 'Kytto Entrega') return `${option?.carrier || 'Entrega Kytto'} · ${total === 1 ? 'até 24 horas úteis' : `até ${total || 10} dias úteis`}`
+  if (option?.provider === 'manual' || option?.carrier === 'Kytto Entrega' || option?.carrier === 'Motoboy local' || option?.carrier === 'Kytto Express') return `${option?.carrier || 'Entrega própria'} · ${option.priceNote || (total === 1 ? 'até 24 horas úteis' : `até ${total || 10} dias úteis`)}`
   return `${option?.carrier || 'Transportadora'}${option?.deliveryRange?.max ? ` · até ${option.deliveryRange.max} dias úteis` : ''}`;
 }
 function shippingPriceSummary(option) {
   const base = Number(option?.providerAmount);
   const surcharge = Number(option?.surchargeAmount);
   const total = Number(option?.amount);
-  if (option?.provider === 'manual' || option?.carrier === 'Kytto Entrega') return `Tabela manual Kytto · total de entrega ${money(total)}`
+  if (option?.provider === 'manual' || option?.carrier === 'Kytto Entrega' || option?.carrier === 'Motoboy local' || option?.carrier === 'Kytto Express') return `${option.priceNote || 'Entrega própria'} · total de entrega ${money(total)}`
   return Number.isFinite(base) && Number.isFinite(surcharge) && Number.isFinite(total)
     ? `Tarifa Correios ${money(base)} + 12% (${money(surcharge)}) = total de entrega ${money(total)}`
     : '';
@@ -77,6 +82,7 @@ export default function CommerceCheckout() {
   const checkoutRoute = storefrontRoute(storeAlias, 'checkout')
   const orderRoute = storefrontRoute(storeAlias, 'order')
   const cartStorageKey = storefrontStorageKey(storeAlias, 'cart')
+  const customerStorageKey = storefrontStorageKey(storeAlias, 'customer')
   const [searchParams] = useSearchParams()
   const orderCode = searchParams.get('order') || searchParams.get('order_nsu') || ''
   const returnTransactionNsu = searchParams.get('transaction_nsu') || searchParams.get('transactionNsu') || ''
@@ -101,6 +107,7 @@ export default function CommerceCheckout() {
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
   const paymentRequestRef = useRef(false)
+  const addressNumberRef = useRef(null)
 
   const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + Number(item.preco || 0) * Number(item.qtd || 0), 0), [cart])
   const selectedShipping = shippingMethods.find(item => String(item.id) === String(shippingMethodId))
@@ -114,12 +121,15 @@ export default function CommerceCheckout() {
     let active = true
     const load = async () => {
       setLoading(true)
+      let savedCustomerId = ''
+      try { savedCustomerId = localStorage.getItem(customerStorageKey) || '' } catch { /* armazenamento opcional */ }
       try {
+        const paymentPath = savedCustomerId ? `${storefrontApi}/payment-methods?customerId=${encodeURIComponent(savedCustomerId)}` : `${storefrontApi}/payment-methods`
         const [context, catalog, shipping, payments] = await Promise.all([
           api.get(`${storefrontApi}/context`),
           api.get(`${storefrontApi}/products`),
           api.get(`${storefrontApi}/shipping-methods`),
-          api.get(`${storefrontApi}/payment-methods`),
+          api.get(paymentPath),
         ])
         if (!active) return
         setStoreContext(context?.storefront || null)
@@ -137,6 +147,14 @@ export default function CommerceCheckout() {
           if (!active) return
           setOrder(existing)
           setForm(current => ({ ...current, nome: existing.customer_name || existing.customer?.nome || '', email: existing.customer_email || existing.customer?.email || '' }))
+          const existingCustomerId = existing.customer_id || existing.customerId || existing.customer?.id || savedCustomerId
+          if (existingCustomerId) {
+            const customerPayments = await api.get(`${storefrontApi}/payment-methods?customerId=${encodeURIComponent(existingCustomerId)}`).catch(() => null)
+            if (customerPayments?.items) {
+              setPaymentMethods(customerPayments.items)
+              setSelectedPayment(customerPayments.items[0] ? `${customerPayments.items[0].provider}:${customerPayments.items[0].method}` : '')
+            }
+          }
         }
       } catch (err) {
         if (active) setError(err.message || 'Não foi possível carregar o checkout.')
@@ -186,8 +204,23 @@ export default function CommerceCheckout() {
   }
 
   function updateAddress(key, value) {
-    setAddress(current => ({ ...current, [key]: value }))
+    const nextValue = key === 'cep' ? formatCep(value) : value
+    setAddress(current => ({ ...current, [key]: nextValue }))
     if (key === 'cep') { setShippingQuote(null); setShippingOptionId('') }
+  }
+
+  async function lookupCep() {
+    const cep = address.cep.replace(/\D/g, '')
+    if (cep.length !== 8) return setError('Informe um CEP válido antes de consultar.')
+    setWorking(true); setError('')
+    try {
+      const result = await api.get(`${storefrontApi}/shipping/address/${cep}`)
+      setAddress(current => ({ ...current, ...result, cep: formatCep(result.cep || cep) }))
+      setShippingQuote(null)
+      setShippingOptionId('')
+      window.setTimeout(() => addressNumberRef.current?.focus(), 0)
+    } catch (err) { setError(err.message || 'Não foi possível consultar o CEP.') }
+    finally { setWorking(false) }
   }
 
   async function createOrder(event) {
@@ -208,8 +241,14 @@ export default function CommerceCheckout() {
       })
       const code = created.codigo || created.publicCode || created.public_code
       localStorage.removeItem(cartStorageKey)
+      if (created.customerId) localStorage.setItem(customerStorageKey, created.customerId)
       setCart([])
       setOrder(created)
+      const customerPayments = await api.get(`${storefrontApi}/payment-methods?customerId=${encodeURIComponent(created.customerId || '')}`).catch(() => null)
+      if (customerPayments?.items) {
+        setPaymentMethods(customerPayments.items)
+        setSelectedPayment(customerPayments.items[0] ? `${customerPayments.items[0].provider}:${customerPayments.items[0].method}` : '')
+      }
       navigate(`${checkoutRoute}?order=${encodeURIComponent(code)}`, { replace: true })
     } catch (err) { setError(err.message || 'Não foi possível criar o pedido.') }
     finally { setWorking(false) }
@@ -271,7 +310,7 @@ export default function CommerceCheckout() {
       <h1>{paid ? 'Pagamento confirmado' : payment ? 'Pagamento iniciado' : 'Pedido criado'}</h1>
       <p className="checkout-result-lead">{paid ? 'O pagamento foi confirmado pelo provedor e o pedido seguirá para preparação.' : payment ? 'Conclua o pagamento no provedor. O status será atualizado automaticamente.' : 'Escolha um método para concluir o pagamento com segurança.'}</p>
       {error && <div className="checkout-form-error" role="alert">{error}</div>}
-      {!payment && !paid && <div className="checkout-payment-box"><strong>Escolha como pagar</strong>{paymentMethods.length ? paymentMethods.map(item => { const value = `${item.provider}:${item.method}`; return <label key={value} className={`payment-option ${selectedPayment === value ? 'is-selected' : ''}`}><input type="radio" name="payment" value={value} checked={selectedPayment === value} onChange={() => setSelectedPayment(value)} /><span className="payment-option-copy"><strong>{item.method === 'pix' ? 'Pix' : item.method === 'credit_card' ? 'Cartão de crédito' : item.method}</strong><small>{item.provider === 'mercadopago' ? 'Mercado Pago' : item.provider === 'infinitepay' ? 'InfinitePay Checkout' : item.provider}</small></span></label> }) : <small>Nenhum provedor de pagamento está publicado para esta loja.</small>}<button type="button" className="checkout-primary" onClick={startPayment} disabled={working || redirecting || !paymentMethods.length}>{redirecting ? 'Abrindo checkout seguro…' : working ? 'Preparando pagamento…' : 'Iniciar pagamento'}</button><small className="checkout-payment-helper">InfinitePay abre o ambiente seguro do provedor. Mercado Pago exibe o Pix nesta tela.</small></div>}
+      {!payment && !paid && <div className="checkout-payment-box"><strong>Escolha como pagar</strong>{paymentMethods.length ? paymentMethods.map(item => { const value = `${item.provider}:${item.method}`; return <label key={value} className={`payment-option ${selectedPayment === value ? 'is-selected' : ''}`}><input type="radio" name="payment" value={value} checked={selectedPayment === value} onChange={() => setSelectedPayment(value)} /><span className="payment-option-copy"><strong>{paymentLabel(item)}</strong><small>{item.provider === 'mercadopago' ? 'Mercado Pago' : item.provider === 'infinitepay' ? 'InfinitePay Checkout' : item.provider === 'crediario' ? 'Crediário da loja' : item.provider}</small></span></label> }) : <small>Nenhum provedor de pagamento está publicado para esta loja.</small>}<button type="button" className="checkout-primary" onClick={startPayment} disabled={working || redirecting || !paymentMethods.length}>{redirecting ? 'Abrindo checkout seguro…' : working ? 'Preparando pagamento…' : 'Iniciar pagamento'}</button><small className="checkout-payment-helper">InfinitePay abre o ambiente seguro do provedor. Mercado Pago exibe o Pix nesta tela.</small></div>}
       {payment && !paid && <div className="checkout-payment-box"><strong>Pagamento pendente</strong>{qr && <img className="checkout-qr" src={qr.startsWith('data:') ? qr : `data:image/png;base64,${qr}`} alt="QR Code do pagamento" />}{pixCode && <div className="checkout-pix-box"><label>Código Pix</label><textarea readOnly rows={4} value={pixCode} aria-label="Código Pix" /><button type="button" className="checkout-primary" onClick={() => copyCode(pixCode)}><Copy size={15} />{copied ? 'Código copiado' : 'Copiar código'}</button></div>}{hostedUrl && <a className="checkout-primary" href={hostedUrl} target="_blank" rel="noreferrer">Abrir checkout do provedor <ArrowRight size={16} /></a>}{!qr && !pixCode && !hostedUrl && <small>O provedor recebeu a solicitação, mas ainda não retornou uma instrução pública de pagamento. Aguarde o webhook ou consulte o pedido.</small>}<small>Status: {payment.status || order.payment_status || 'pending'}.</small></div>}
       <section className="checkout-tracking-panel" aria-label="Acompanhamento da entrega"><div className="checkout-tracking-heading"><div><span className="eyebrow"><PackageCheck size={14} /> Pós-venda</span><h2>Acompanhe seu pedido</h2></div><span className="checkout-status-pill">{orderStatusLabels[order.status] || order.status || 'Em atualização'}</span></div>{latestFulfillment ? <><div className="checkout-tracking-summary"><div><Truck size={17} /><span><strong>{fulfillmentLabels[latestFulfillment.status] || latestFulfillment.status}</strong><small>{latestFulfillment.carrier || 'Logística da loja'}</small></span></div>{latestFulfillment.trackingCode && <div><MapPin size={17} /><span><strong>{latestFulfillment.trackingCode}</strong><small>Código de rastreio</small></span></div>}{shippingOption?.deliveryDays !== null && shippingOption?.deliveryDays !== undefined && <div><PackageCheck size={17} /><span><strong>Prazo total estimado</strong><small>{shippingPromise(shippingOption)}</small>{shippingPriceSummary(shippingOption) && <small className="checkout-shipping-price-note">{shippingPriceSummary(shippingOption)}</small>}</span></div>}</div>{latestFulfillment.trackingUrl && <a className="checkout-tracking-link" href={latestFulfillment.trackingUrl} target="_blank" rel="noreferrer">Acompanhar no site da transportadora <ArrowRight size={15} /></a>}{Array.isArray(latestFulfillment.ocorrencias) && latestFulfillment.ocorrencias.length > 0 && <div className="checkout-tracking-events">{latestFulfillment.ocorrencias.slice(0, 5).map((event, index) => <div key={`${event.at || event.data || index}-${index}`}><span>{event.at || event.data || 'Atualização'}</span><strong>{event.description || event.descricao || event.status || event.mensagem || 'Movimentação registrada'}</strong></div>)}</div>}</> : <div className="checkout-tracking-empty"><PackageCheck size={18} /><span>Após a confirmação do pagamento, a loja separará o pedido e disponibilizará o rastreio nesta área.</span></div>}{!latestFulfillment && shippingOption?.deliveryDays !== null && shippingOption?.deliveryDays !== undefined && <div className="checkout-tracking-eta"><PackageCheck size={17} /><span><strong>Prazo total estimado</strong><small>{shippingPromise(shippingOption)}</small>{shippingPriceSummary(shippingOption) && <small className="checkout-shipping-price-note">{shippingPriceSummary(shippingOption)}</small>}</span></div>}{timeline.length > 0 && <div className="checkout-order-timeline">{timeline.slice(-6).map((event, index) => <div key={`${event.at || index}-${index}`}><span>{event.at ? new Date(event.at).toLocaleString('pt-BR') : 'Atualização'}</span><strong>{orderStatusLabels[event.toStatus] || event.toStatus || 'Atualização do pedido'}</strong><small>{event.source === 'system' ? 'Sistema' : event.source || 'Operação'}</small></div>)}</div>}</section>
       <div className="checkout-result-meta"><div><span>Total</span><strong>{money(order.total || total)}</strong></div><div><span>Pedido</span><strong>{code}</strong></div></div>
@@ -290,7 +329,7 @@ export default function CommerceCheckout() {
         <div className="checkout-form-grid"><label className="checkout-field"><span>Nome completo *</span><input value={form.nome} onChange={e => setForm(current => ({ ...current, nome: e.target.value }))} autoComplete="name" required /></label><label className="checkout-field"><span>E-mail *</span><input type="email" value={form.email} onChange={e => setForm(current => ({ ...current, email: e.target.value }))} autoComplete="email" required /></label><label className="checkout-field"><span>WhatsApp ou telefone</span><input value={form.telefone} onChange={e => setForm(current => ({ ...current, telefone: e.target.value }))} autoComplete="tel" /></label></div>
         <div className="checkout-info-banner"><ShieldCheck size={18} /><div><strong>Pagamento fora do formulário.</strong><br />A Kytto não coleta dados de cartão. Você será levado ao checkout seguro do provedor habilitado.</div></div>
         <div className="checkout-address"><div className="checkout-address-heading"><h2>Como receber</h2><span>Escolha uma opção publicada</span></div><div className="shipping-options">{pickupAvailable && <button type="button" className={`shipping-option ${deliveryMode === 'retirada' ? 'is-selected' : ''}`} onClick={() => { setDeliveryMode('retirada'); setShippingMethodId(shippingMethods.find(item => item.tipo === 'pickup')?.id || '') }}><span className="shipping-option-radio">{deliveryMode === 'retirada' ? '✓' : ''}</span><span className="shipping-option-copy"><strong>Retirada no local</strong><small>Confirme com a operação da loja.</small></span><b>Grátis</b></button>}{deliveryAvailable && <button type="button" className={`shipping-option ${deliveryMode === 'entrega' ? 'is-selected' : ''}`} onClick={() => { setDeliveryMode('entrega'); setShippingMethodId(shippingMethods.find(item => ['delivery', 'carrier'].includes(item.tipo) && item.quoteEnabled)?.id || '') }}><span className="shipping-option-radio">{deliveryMode === 'entrega' ? '✓' : ''}</span><span className="shipping-option-copy"><strong>Entrega</strong><small>Calcule o valor e o prazo por CEP.</small></span><b>Consultar</b></button>}</div></div>
-        {deliveryMode === 'entrega' && <div className="checkout-address"><div className="checkout-form-grid"><label className="checkout-field"><span>CEP *</span><input value={address.cep} onChange={e => updateAddress('cep', e.target.value)} inputMode="numeric" autoComplete="postal-code" required /></label><label className="checkout-field"><span>Número *</span><input value={address.numero} onChange={e => updateAddress('numero', e.target.value)} required /></label><label className="checkout-field"><span>Logradouro *</span><input value={address.logradouro} onChange={e => updateAddress('logradouro', e.target.value)} required /></label><label className="checkout-field"><span>Bairro *</span><input value={address.bairro} onChange={e => updateAddress('bairro', e.target.value)} required /></label><label className="checkout-field"><span>Cidade *</span><input value={address.cidade} onChange={e => updateAddress('cidade', e.target.value)} required /></label><label className="checkout-field"><span>UF *</span><input value={address.estado} onChange={e => updateAddress('estado', e.target.value.toUpperCase())} maxLength={2} required /></label></div><button type="button" className="checkout-secondary" onClick={quoteShipping} disabled={working}>{working ? 'Calculando…' : 'Calcular frete'}</button>{shippingQuote?.items?.map(option => <label className="commerce-shipping-option" key={option.id}><input type="radio" name="shippingOption" checked={shippingOptionId === option.id} onChange={() => setShippingOptionId(option.id)} /><span><strong>{option.name}</strong><small>{shippingPromise(option)}</small>{shippingPriceSummary(option) && <small className="checkout-shipping-price-note">{shippingPriceSummary(option)}</small>}</span><b>{money(option.amount)}</b></label>)}</div>}
+        {deliveryMode === 'entrega' && <div className="checkout-address"><div className="checkout-form-grid"><label className="checkout-field"><span>CEP *</span><div className="checkout-inline-field"><input value={address.cep} onChange={e => updateAddress('cep', e.target.value)} onBlur={() => address.cep.replace(/\D/g, '').length === 8 && lookupCep()} inputMode="numeric" autoComplete="postal-code" placeholder="00000-000" required /><button type="button" className="checkout-secondary" onClick={lookupCep} disabled={working}>{working ? 'Consultando…' : 'Consultar CEP'}</button></div></label><label className="checkout-field"><span>Número *</span><input ref={addressNumberRef} value={address.numero} onChange={e => updateAddress('numero', e.target.value)} required /></label><label className="checkout-field"><span>Logradouro *</span><input value={address.logradouro} onChange={e => updateAddress('logradouro', e.target.value)} required /></label><label className="checkout-field"><span>Bairro *</span><input value={address.bairro} onChange={e => updateAddress('bairro', e.target.value)} required /></label><label className="checkout-field"><span>Cidade *</span><input value={address.cidade} onChange={e => updateAddress('cidade', e.target.value)} required /></label><label className="checkout-field"><span>UF *</span><input value={address.estado} onChange={e => updateAddress('estado', e.target.value.toUpperCase())} maxLength={2} required /></label></div><button type="button" className="checkout-secondary" onClick={quoteShipping} disabled={working}>{working ? 'Calculando…' : 'Calcular frete'}</button>{shippingQuote?.items?.map(option => <label className="commerce-shipping-option" key={option.id}><input type="radio" name="shippingOption" checked={shippingOptionId === option.id} onChange={() => setShippingOptionId(option.id)} /><span><strong>{option.name}</strong><small>{shippingPromise(option)}</small>{shippingPriceSummary(option) && <small className="checkout-shipping-price-note">{shippingPriceSummary(option)}</small>}</span><b>{money(option.amount)}</b></label>)}</div>}
         {error && <div className="checkout-form-error" role="alert">{error}</div>}<div className="checkout-actions"><span>Estoque e valor serão revalidados no servidor.</span><button type="submit" className="checkout-primary checkout-primary-large" disabled={working || !cart.length}>{working ? <><Loader2 className="commerce-spin" size={16} /> Criando pedido…</> : <>Continuar para pagamento <ArrowRight size={16} /></>}</button></div>
       </form></section></div><aside className="checkout-summary"><div className="checkout-summary-heading"><div><span className="eyebrow">Seu pedido</span><h2>Resumo da compra</h2></div><span className="checkout-secure">Seguro</span></div><div className="checkout-summary-items">{cart.map(item => <div className="checkout-summary-item" key={`${item.produtoId}-${item.variantId || 'base'}`}><ProductThumb item={item} /><div className="checkout-summary-item-copy"><strong>{item.nome}</strong><span>{item.qtd} unidade(s)</span></div><b>{money(item.qtd * item.preco)}</b></div>)}</div><div className="checkout-totals"><div><span>Subtotal</span><b>{money(cartTotal)}</b></div>{selectedOption && <div><span>Entrega</span><b>{money(selectedOption.amount)}</b></div>}<div className="checkout-total"><span>Total</span><strong>{money(total)}</strong></div></div><div className="checkout-trust-list"><span>✓ Estoque revalidado no servidor</span><span>✓ Pagamento no provedor escolhido</span><span>✓ Acompanhamento por código do pedido</span></div></aside></div>
   </main>

@@ -136,3 +136,33 @@ test('cotação manual usa cidade e persiste quote sem conta logística externa'
   assert.equal(insert.params[2], '10000000-0000-4000-8000-000000000109');
   assert.equal(insert.params[3], null);
 });
+
+test('entrega própria calcula motoboy, expressa e frete grátis sem depender de Correios', async () => {
+  let methodConfig = { provider: 'manual', deliveryType: 'motoboy', baseFee: 5, pricePerKm: 2, distanceKm: 3, deliveryDays: 1 };
+  const client = {
+    async query(sql) {
+      if (sql.includes('FROM commerce_shipping_methods')) return { rows: [{ id: '10000000-0000-4000-8000-000000000119', codigo: 'entrega-propria', nome: 'Entrega própria', tipo: 'delivery', configuracao: methodConfig, storefront_id: '10000000-0000-4000-8000-000000000103', loja_id: '10000000-0000-4000-8000-000000000104' }] };
+      if (sql.includes('FROM commerce_product_variants')) return { rows: [{ id: '10000000-0000-4000-8000-000000000105', sku: 'SKU-1', nome: 'Produto', peso_gramas: 500, largura_cm: 10, altura_cm: 5, comprimento_cm: 20, price: 39.9 }] };
+      throw new Error(`query inesperada: ${sql}`);
+    },
+    async transaction(callback) {
+      return callback({ query: async sql => {
+        if (sql.includes('INSERT INTO commerce_shipping_quotes')) return { rows: [{ id: 'own-quote-1', expires_at: '2099-01-01T00:00:00.000Z' }] };
+        throw new Error(`query transacional inesperada: ${sql}`);
+      } });
+    },
+  };
+  const baseInput = { storefrontId: '10000000-0000-4000-8000-000000000103', shippingMethodId: '10000000-0000-4000-8000-000000000119', destinationCep: '01001000', destination: { cep: '01001000', cidade: 'São Paulo', estado: 'SP' }, items: [{ variantId: '10000000-0000-4000-8000-000000000105', quantity: 2 }] };
+  let result = await quoteShipping(client, { empresaId: '10000000-0000-4000-8000-000000000106', lojaId: '10000000-0000-4000-8000-000000000104' }, baseInput);
+  assert.equal(result.items[0].amount, 11);
+  assert.equal(result.items[0].carrier, 'Motoboy local');
+  assert.equal(result.items[0].deliveryType, 'motoboy');
+  methodConfig = { provider: 'manual', deliveryType: 'express', fixedFee: 19.9, deliveryDays: 1 };
+  result = await quoteShipping(client, { empresaId: '10000000-0000-4000-8000-000000000106', lojaId: '10000000-0000-4000-8000-000000000104' }, baseInput);
+  assert.equal(result.items[0].amount, 19.9);
+  assert.equal(result.items[0].carrier, 'Kytto Express');
+  methodConfig = { provider: 'manual', deliveryType: 'motoboy', baseFee: 12, freeShippingAbove: 70, deliveryDays: 2 };
+  result = await quoteShipping(client, { empresaId: '10000000-0000-4000-8000-000000000106', lojaId: '10000000-0000-4000-8000-000000000104' }, baseInput);
+  assert.equal(result.items[0].amount, 0);
+  assert.equal(result.items[0].freeShippingApplied, true);
+});

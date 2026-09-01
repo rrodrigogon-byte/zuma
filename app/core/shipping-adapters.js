@@ -93,62 +93,107 @@ function normalizeManualCity(value) {
   return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+function normalizeRuleCep(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  return /^\d{8}$/.test(digits) ? digits : '';
+}
+
+function ownDeliveryKind(config = {}) {
+  const value = String(config.deliveryType || config.kind || config.tipoEntrega || config.ownDeliveryType || 'regional_table').trim().toLowerCase();
+  return new Set(['motoboy', 'regional_table', 'express', 'free_shipping']).has(value) ? value : 'regional_table';
+}
+
+function ownDeliveryLabel(kind) {
+  return { motoboy: 'Motoboy / entrega local', regional_table: 'Tabela regional', express: 'Entrega expressa', free_shipping: 'Frete grátis' }[kind] || 'Entrega própria';
+}
+
 function manualShippingRules(config = {}) {
-  const rules = Array.isArray(config.rules) && config.rules.length ? config.rules : DEFAULT_MANUAL_SHIPPING_RULES;
+  const kind = ownDeliveryKind(config);
+  const rules = Array.isArray(config.rules) && config.rules.length ? config.rules : kind === 'regional_table' ? DEFAULT_MANUAL_SHIPPING_RULES : [];
   return rules.map((rule, index) => ({
     id: String(rule?.id || `manual-${index + 1}`).slice(0, 80),
     label: String(rule?.label || rule?.name || 'Entrega manual').slice(0, 160),
     uf: String(rule?.uf || '').trim().toUpperCase().slice(0, 2),
     cities: Array.isArray(rule?.cities) ? rule.cities.map(normalizeManualCity).filter(Boolean) : [],
-    amount: Number(rule?.amount),
+    cepFrom: normalizeRuleCep(rule?.cepFrom || rule?.cepInicial || rule?.postalCodeFrom),
+    cepTo: normalizeRuleCep(rule?.cepTo || rule?.cepFinal || rule?.postalCodeTo),
+    distanceKm: Number.isFinite(Number(rule?.distanceKm || rule?.km)) ? Number(rule.distanceKm || rule.km) : null,
+    amount: rule?.amount == null || rule?.amount === '' ? null : Number(rule.amount),
     deliveryDays: Math.max(1, Math.round(Number(rule?.deliveryDays || rule?.businessDays || 1))),
     priority: Number.isFinite(Number(rule?.priority)) ? Number(rule.priority) : 0,
     fallback: rule?.fallback === true,
-  })).filter(rule => Number.isFinite(rule.amount) && rule.amount >= 0 && rule.label);
+  })).filter(rule => (rule.amount === null || (Number.isFinite(rule.amount) && rule.amount >= 0)) && rule.label);
 }
 
 function selectManualShippingRule(config, destinationAddress = {}) {
+  const cep = normalizeRuleCep(destinationAddress.cep || destinationAddress.postalCode);
   const city = normalizeManualCity(destinationAddress.cidade || destinationAddress.city);
   const uf = String(destinationAddress.estado || destinationAddress.state || '').trim().toUpperCase();
   const rules = manualShippingRules(config);
   return rules.filter(rule => {
     if (rule.fallback) return true;
     if (rule.uf && rule.uf !== uf) return false;
-    return !rule.cities.length || rule.cities.includes(city);
+    if (rule.cities.length && !rule.cities.includes(city)) return false;
+    if (rule.cepFrom && (!cep || cep < rule.cepFrom)) return false;
+    if (rule.cepTo && (!cep || cep > rule.cepTo)) return false;
+    return true;
   }).sort((left, right) => right.priority - left.priority)[0] || null;
+}
+
+function ownDeliveryQuote(methodConfig = {}, destinationAddress = {}, subtotal = 0) {
+  const kind = ownDeliveryKind(methodConfig);
+  const rule = selectManualShippingRule(methodConfig, destinationAddress);
+  const baseFee = Math.max(0, safeNumber(methodConfig.baseFee ?? methodConfig.taxaBase ?? methodConfig.base, 0));
+  const perKm = Math.max(0, safeNumber(methodConfig.pricePerKm ?? methodConfig.valorPorKm ?? methodConfig.perKm, 0));
+  const distanceKm = Math.max(0, safeNumber(rule?.distanceKm ?? methodConfig.distanceKm ?? methodConfig.distanciaKm, 0));
+  const maxRadiusKm = safeNumber(methodConfig.maxRadiusKm ?? methodConfig.raioKm ?? methodConfig.raioAtendimentoKm, null);
+  if (maxRadiusKm !== null && distanceKm > maxRadiusKm) throw new CommerceError('este destino está fora do raio de atendimento da loja', 'SHIPPING_DESTINATION_OUTSIDE_RADIUS');
+  if ((kind === 'regional_table' || (['motoboy', 'express', 'free_shipping'].includes(kind) && Array.isArray(methodConfig.rules) && methodConfig.rules.length)) && !rule) throw new CommerceError('nenhuma regra de entrega própria está disponível para este destino', 'SHIPPING_DESTINATION_UNAVAILABLE');
+  const fixedFee = Math.max(0, safeNumber(methodConfig.fixedFee ?? methodConfig.taxaFixa ?? methodConfig.fee, baseFee));
+  let amount = kind === 'free_shipping' ? 0 : kind === 'express' ? (rule?.amount ?? fixedFee) : kind === 'motoboy' ? (rule?.amount ?? baseFee + perKm * distanceKm) : (rule?.amount ?? baseFee);
+  const freeAbove = safeNumber(methodConfig.freeShippingAbove ?? methodConfig.freteGratisAcima, null);
+  const freeShippingApplied = freeAbove !== null && Number(subtotal) >= freeAbove;
+  if (freeShippingApplied) amount = 0;
+  const deliveryDays = Math.max(1, Math.round(Number(rule?.deliveryDays || methodConfig.deliveryDays || methodConfig.prazoDias || (kind === 'express' ? 1 : kind === 'motoboy' ? 1 : 3))));
+  const label = rule?.label || ownDeliveryLabel(kind);
+  const carrier = kind === 'motoboy' ? 'Motoboy local' : kind === 'express' ? 'Kytto Express' : 'Kytto Entrega';
+  const totalAmount = Number(Math.max(0, amount).toFixed(2));
+  const priceNote = freeShippingApplied ? `Frete grátis a partir de ${Number(freeAbove).toFixed(2)}` : `${ownDeliveryLabel(kind)} · operação própria, sem Correios`;
+  const publicOption = {
+    id: `${kind}:${rule?.id || 'default'}`,
+    name: freeShippingApplied ? `${label} · frete grátis` : label,
+    amount: totalAmount,
+    currency: 'BRL',
+    provider: 'manual',
+    deliveryType: kind,
+    providerAmount: totalAmount,
+    surchargeRate: 0,
+    surchargeAmount: 0,
+    priceNote,
+    priceBreakdown: { providerAmount: totalAmount, surchargeAmount: 0, totalAmount },
+    deliveryDays,
+    providerDeliveryDays: null,
+    preparationDays: null,
+    deliveryRange: { min: deliveryDays, max: deliveryDays },
+    deliveryNote: deliveryDays === 1 ? 'Entrega em até 24 horas úteis' : `Prazo estimado de até ${deliveryDays} dias úteis`,
+    carrier,
+    carrierId: `kytto-${kind}`,
+    manualZone: rule?.id || null,
+    distanceKm,
+    freeShippingApplied,
+  };
+  return { public: publicOption, raw: { ruleId: rule?.id || null, kind, amount: totalAmount, deliveryDays, distanceKm, subtotal: Number(subtotal) || 0 } };
 }
 
 function createManualShippingAdapter() {
   return {
-    async quote({ methodConfig = {}, destinationAddress = {} }) {
-      const rule = selectManualShippingRule(methodConfig, destinationAddress);
-      if (!rule) throw new CommerceError('nenhuma regra de tabela manual está disponível para este destino', 'SHIPPING_DESTINATION_UNAVAILABLE');
-      const deliveryDays = rule.deliveryDays;
-      const publicOption = {
-        id: rule.id,
-        name: rule.label,
-        amount: Number(rule.amount.toFixed(2)),
-        currency: 'BRL',
-        provider: 'manual',
-        providerAmount: Number(rule.amount.toFixed(2)),
-        surchargeRate: 0,
-        surchargeAmount: 0,
-        priceNote: 'Tabela manual Kytto; não é cotação Correios',
-        priceBreakdown: { providerAmount: Number(rule.amount.toFixed(2)), surchargeAmount: 0, totalAmount: Number(rule.amount.toFixed(2)) },
-        deliveryDays,
-        providerDeliveryDays: null,
-        preparationDays: null,
-        deliveryRange: { min: deliveryDays, max: deliveryDays },
-        deliveryNote: deliveryDays === 1 ? 'Entrega regional em até 24 horas úteis' : 'Prazo comercial de até 10 dias úteis',
-        carrier: 'Kytto Entrega',
-        carrierId: 'kytto-manual',
-        manualZone: rule.id,
-      };
-      return { options: [publicOption], providerOptions: [{ public: publicOption, raw: { ruleId: rule.id, label: rule.label, amount: publicOption.amount, deliveryDays } }], provider: 'manual' };
+    async quote({ methodConfig = {}, destinationAddress = {}, subtotal = 0 }) {
+      const option = ownDeliveryQuote(methodConfig, destinationAddress, subtotal);
+      return { options: [option.public], providerOptions: [option], provider: 'manual' };
     },
-    async createShipment() { throw new CommerceError('a tabela manual não gera etiqueta; faça a expedição pela operação da loja', 'SHIPPING_PROVIDER_CAPABILITY_UNAVAILABLE'); },
-    async track() { throw new CommerceError('a tabela manual não possui rastreamento automático', 'SHIPPING_TRACKING_UNSUPPORTED'); },
-    async verifyWebhook() { throw new CommerceError('a tabela manual não possui webhook de rastreamento', 'SHIPPING_WEBHOOK_UNSUPPORTED'); },
+    async createShipment() { throw new CommerceError('a entrega própria não gera etiqueta automática; faça a expedição pela operação da loja', 'SHIPPING_PROVIDER_CAPABILITY_UNAVAILABLE'); },
+    async track() { throw new CommerceError('a entrega própria não possui rastreamento automático', 'SHIPPING_TRACKING_UNSUPPORTED'); },
+    async verifyWebhook() { throw new CommerceError('a entrega própria não possui webhook de rastreamento', 'SHIPPING_WEBHOOK_UNSUPPORTED'); },
   };
 }
 

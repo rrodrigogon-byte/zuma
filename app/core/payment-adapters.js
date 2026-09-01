@@ -24,7 +24,7 @@ if (infinitePayConfigured()) paymentProviders.register('infinitepay', createInfi
 
 export function validatePaymentMethod(method) {
   const value = String(method || '').toLowerCase();
-  if (!['pix', 'credit_card', 'debit_card', 'boleto', 'external'].includes(value)) {
+  if (!['pix', 'credit_card', 'debit_card', 'boleto', 'external', 'account'].includes(value)) {
     throw new CommerceError('método de pagamento não suportado', 'PAYMENT_METHOD_INVALID');
   }
   return value;

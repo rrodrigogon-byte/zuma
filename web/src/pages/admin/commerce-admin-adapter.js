@@ -119,7 +119,7 @@ async function loadLegacy() {
 export async function loadCommerceAdmin() {
   const warnings = []
   try {
-    const [storefrontData, storefrontsData, productData, categoryData, promotionData, templateData, roleData, membershipData, orderData, customerData, locations, shippingData, shippingProviderData, shippingAccountData, fulfillmentData, domainData, providerData, accountData, paymentData, auditData, healthData] = await Promise.all([
+    const [storefrontData, storefrontsData, productData, categoryData, promotionData, templateData, roleData, membershipData, orderData, customerData, locations, shippingData, shippingProviderData, shippingAccountData, fulfillmentData, domainData, providerData, accountData, paymentData, creditData, auditData, healthData] = await Promise.all([
       api.get('/api/admin/commerce/storefront'),
       safeCoreGet('/api/admin/commerce/storefronts', { items: [] }, warnings, 'lojas Commerce'),
       loadAllStorefrontProducts(({ limit, offset }) => api.get(`/api/admin/commerce/catalog/products?limit=${limit}&offset=${offset}`)).then(items => ({ items })),
@@ -139,6 +139,7 @@ export async function loadCommerceAdmin() {
       safeCoreGet('/api/admin/commerce/payments/providers', { items: [] }, warnings, 'provedores de pagamento'),
       safeCoreGet('/api/admin/commerce/payments/accounts', { items: [] }, warnings, 'contas de pagamento'),
       safeCoreGet('/api/admin/commerce/payments', { items: [] }, warnings, 'pagamentos'),
+      safeCoreGet('/api/admin/commerce/credit/accounts', { items: [] }, warnings, 'contas de crediário'),
       safeCoreGet('/api/admin/commerce/audit', { items: [], pagination: { total: 0, limit: 100, offset: 0, hasMore: false } }, warnings, 'auditoria'),
       safeCoreGet('/api/admin/commerce/operations/health', {}, warnings, 'saúde operacional'),
     ])
@@ -163,6 +164,7 @@ export async function loadCommerceAdmin() {
       paymentProviders: providerData?.items || [],
       paymentAccounts: accountData?.items || [],
       payments: (paymentData?.items || []).map(normalizePayment),
+      creditAccounts: creditData?.items || [],
       audit: auditData?.items || [],
       auditPagination: auditData?.pagination || { total: auditData?.items?.length || 0, limit: 100, offset: 0, hasMore: false },
       health: healthData || {},
@@ -359,6 +361,14 @@ export async function deleteCoreCustomerAddress(customerId, addressId) {
 
 export async function createCoreShippingMethod(payload) {
   return api.post('/api/admin/commerce/shipping/methods', payload)
+}
+
+export async function createCoreCreditAccount(payload) {
+  return api.post('/api/admin/commerce/credit/accounts', payload)
+}
+
+export async function updateCoreCreditAccount(id, payload) {
+  return api.patch(`/api/admin/commerce/credit/accounts/${id}`, payload)
 }
 
 export async function updateCoreShippingMethod(id, payload) {
