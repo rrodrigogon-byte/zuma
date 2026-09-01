@@ -3,6 +3,7 @@ import express from 'express';
 import { db } from './database.js';
 import { parseEvolutionMessage, whatsappAiReady } from './whatsapp-ai.js';
 import { campaignOptOutRequested, recordCampaignOptOut, recordCampaignProviderEvent } from './commerce-campaigns.js';
+import { recordCartRecoveryOptOut } from './commerce-abandoned-carts.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -85,13 +86,15 @@ export function createWhatsappAiWebhookRouter() {
 
       let campaignMetrics = { updatedCampaigns: [] };
       let marketingOptOut = { optedOut: false };
+      let cartRecoveryOptOut = { optedOut: false, carts: 0 };
       try {
+        cartRecoveryOptOut = await recordCartRecoveryOptOut(channel, parsed);
         marketingOptOut = await recordCampaignOptOut(channel, parsed);
         campaignMetrics = await recordCampaignProviderEvent(channel, req.body || {}, parsed);
       } catch (metricsError) {
         console.warn('[WhatsApp] métrica de campanha pendente de reconciliação:', String(metricsError?.message || metricsError).slice(0, 300));
       }
-      return res.status(202).json({ accepted: true, ...result, campaignMetrics, marketingOptOut });
+      return res.status(202).json({ accepted: true, ...result, campaignMetrics, marketingOptOut, cartRecoveryOptOut });
     } catch (error) {
       console.error('[WhatsApp AI] erro no webhook:', String(error?.message || error).slice(0, 500));
       return res.status(500).json({ error: 'falha ao receber evento' });

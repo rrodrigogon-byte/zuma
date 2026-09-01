@@ -18,6 +18,7 @@ import { shippingProviders } from './shipping-adapters.js';
 import { commerceMediaIdForIdempotencyKey, newCommerceMediaId, streamCommerceImage, uploadCommerceImage } from './commerce-media.js';
 import { configureWhatsappAiChannel, listWhatsappAiSessions, releaseWhatsappAiHandoff, syncWhatsappAiWebhook, testWhatsappAiGemini, whatsappAiOperationalStatus } from './whatsapp-ai.js';
 import { campaignMetrics, cancelCampaign, confirmCampaign, createCampaign, listCampaignAudience, listCampaigns, previewCampaign, updateCampaignConsent } from './commerce-campaigns.js';
+import { cartRecoveryMetrics, listAbandonedCarts, syncPublicCart } from './commerce-abandoned-carts.js';
 import {
   CommerceError,
   assertUuid,
@@ -47,6 +48,21 @@ import {
   updateFulfillment,
   withCommerceTransaction,
 } from './commerce-core.js';
+
+const publicCartRequests = new Map();
+function publicCartRateLimit(req, res, next) {
+  const now = Date.now();
+  const windowMs = 5 * 60 * 1000;
+  const key = `${req.ip || req.socket?.remoteAddress || 'unknown'}:${req.publicStoreAlias || publicHost(req)}`;
+  const recent = (publicCartRequests.get(key) || []).filter(at => now - at < windowMs);
+  if (recent.length >= 30) return res.status(429).json({ error: 'Muitas solicitações. Tente novamente em alguns minutos.', code: 'RATE_LIMIT' });
+  recent.push(now);
+  publicCartRequests.set(key, recent);
+  if (publicCartRequests.size > 10000) {
+    for (const [candidate, values] of publicCartRequests.entries()) if (!values.length || now - values[values.length - 1] >= windowMs) publicCartRequests.delete(candidate);
+  }
+  next();
+}
 
 function publicHost(req) {
   const forwarded = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim();
@@ -206,6 +222,9 @@ function jsonError(res, error) {
   const statusByCode = {
     INVALID_ID: 400,
     EMPTY_CART: 400,
+    VALIDATION_ERROR: 400,
+    CONSENT_EVIDENCE_REQUIRED: 400,
+    CONTACT_CONFLICT: 409,
     CUSTOMER_REQUIRED: 400,
     STOREFRONT_DOMAIN_REQUIRED: 400,
     STOREFRONT_NOT_FOUND: 404,
@@ -460,6 +479,13 @@ export function createCommercePublicRouter() {
       const storefront = await resolvePublicStorefront(req);
       const result = await quoteShipping(db, { empresaId: storefront.empresa_id, lojaId: storefront.loja_id }, { ...req.body, storefrontId: storefront.id });
       res.status(201).json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/cart', publicCartRateLimit, async (req, res) => {
+    try {
+      const storefront = await resolvePublicStorefront(req);
+      const result = await syncPublicCart({ empresaId: storefront.empresa_id, lojaId: storefront.loja_id, storefrontId: storefront.id }, req.body || {});
+      res.json(result);
     } catch (error) { jsonError(res, error); }
   });
   router.get('/payment-methods', async (req, res) => {
@@ -1454,6 +1480,18 @@ export function createCommerceAdminRouter() {
     try {
       const context = await requirePermission(req, 'settings.write');
       res.json(await releaseWhatsappAiHandoff(context, req.params.id));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.get('/cart-recovery', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'reports.read');
+      res.json(await listAbandonedCarts(context, parsePagination(req, 50, 100)));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.get('/cart-recovery/metrics', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'reports.read');
+      res.json(await cartRecoveryMetrics(context));
     } catch (error) { jsonError(res, error); }
   });
   router.get('/campaigns', async (req, res) => {

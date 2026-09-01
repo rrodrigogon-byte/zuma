@@ -51,6 +51,20 @@ function publicOrderHandler() {
   return layer.route.stack[0].handle;
 }
 
+function cartRecoveryHandler() {
+  const router = createCommerceAdminRouter();
+  const layer = router.stack.find(item => item.route?.path === '/cart-recovery');
+  assert.ok(layer?.route?.stack?.[0]?.handle, 'rota administrativa de carrinhos não encontrada');
+  return layer.route.stack[0].handle;
+}
+
+function publicCartLayer() {
+  const router = createCommercePublicRouter();
+  const layer = router.stack.find(item => item.route?.path === '/cart');
+  assert.ok(layer?.route, 'rota pública de sync de carrinho não encontrada');
+  return layer.route;
+}
+
 async function invoke(handler, dbQuery, query = {}) {
   const original = db.query;
   db.query = dbQuery;
@@ -111,6 +125,18 @@ test('upload de mídia retorna replay idempotente tenant-scoped sem acessar o bu
   assert.equal(response.body.idempotentReplay, true);
   const existingQuery = calls.find(call => call.sql.includes('FROM commerce_product_media'));
   assert.deepEqual(existingQuery.params.slice(0, 2), [empresaId, productId]);
+});
+
+test('rota pública de carrinho possui rate limit antes do handler de sync', () => {
+  const route = publicCartLayer();
+  assert.equal(route.methods.post, true);
+  assert.equal(route.stack.length, 2);
+});
+
+test('visão administrativa de carrinhos rejeita sessão sem membership', async () => {
+  const response = await invoke(cartRecoveryHandler(), async () => ({ rows: [] }));
+  assert.equal(response.statusCode, 401);
+  assert.equal(response.body.code, 'TENANT_CONTEXT_REQUIRED');
 });
 
 test('endpoint de reconciliação rejeita sessão sem membership antes do gateway', async () => {
