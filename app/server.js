@@ -1955,6 +1955,39 @@ async function commerceIntegrationForBarbearia(req) {
   }
 }
 
+function unavailableWhatsappAiStatus(code = 'TENANT_CONTEXT_REQUIRED') {
+  const normalized = String(code || 'TENANT_CONTEXT_REQUIRED').slice(0, 80);
+  const contextRequired = ['TENANT_CONTEXT_REQUIRED', 'TENANT_SELECTION_REQUIRED', 'STORE_SELECTION_REQUIRED', 'STORE_SCOPE_MISMATCH'].includes(normalized);
+  return {
+    unavailable: true,
+    code: normalized,
+    featureEnabled: process.env.FEATURE_WHATSAPP_AI === 'true',
+    gemini: {
+      configured: Boolean(process.env.GEMINI_API_KEY),
+      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+    },
+    evolutionConfigured: Boolean(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE),
+    channel: null,
+    sessions: {},
+    tasks: {},
+    error: contextRequired
+      ? 'Selecione uma empresa e uma loja Commerce autorizadas para consultar o atendente WhatsApp.'
+      : 'O status do atendente WhatsApp está temporariamente indisponível.',
+  };
+}
+
+async function whatsappAiIntegrationForBarbearia(req) {
+  if (process.env.COMMERCE_CORE_ENABLED !== '1') return unavailableWhatsappAiStatus('COMMERCE_DISABLED');
+  try {
+    const context = await requireCommercePermission(req, 'reports.read');
+    return await whatsappAiOperationalStatus(context);
+  } catch (error) {
+    const code = String(error?.code || 'WHATSAPP_AI_STATUS_UNAVAILABLE');
+    console.warn(`IA WhatsApp da Barbearia em modo degradado: ${code}`);
+    return unavailableWhatsappAiStatus(code);
+  }
+}
+
 app.get('/api/admin/barbearia/overview', async (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
@@ -1983,7 +2016,7 @@ app.get('/api/admin/barbearia/overview', async (req, res) => {
     const whatsapp = canais.find((canal) => canal.id === 'whatsapp') || { id: 'whatsapp', nome: 'WhatsApp', ativo: false, tipo: 'mensageria', credencialConfigurada: false };
     const aiConfigured = Boolean(process.env.GEMINI_API_KEY || process.env.AI_API_KEY || process.env.OPENAI_API_KEY);
     const commerce = await commerceIntegrationForBarbearia(req);
-    const whatsappAi = await whatsappAiOperationalStatus({ empresaId, lojaId }).catch((error) => ({ unavailable: true, error: error.message }));
+    const whatsappAi = await whatsappAiIntegrationForBarbearia(req);
     res.json({
       ok: true,
       dashboard,
@@ -2412,7 +2445,7 @@ app.get('/api/admin/barbearia/integracoes', async (req, res) => {
     const whatsapp = canais.find((canal) => canal.id === 'whatsapp') || { id: 'whatsapp', nome: 'WhatsApp', ativo: false, tipo: 'mensageria', credencialConfigurada: false };
     const aiConfigured = Boolean(process.env.GEMINI_API_KEY || process.env.AI_API_KEY || process.env.OPENAI_API_KEY);
     const commerce = await commerceIntegrationForBarbearia(req);
-    const whatsappAi = await whatsappAiOperationalStatus({ empresaId: legacyEmpresaId(req), lojaId: legacyLojaId(req) }).catch((error) => ({ unavailable: true, error: error.message }));
+    const whatsappAi = await whatsappAiIntegrationForBarbearia(req);
     res.json({ ok: true, whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: wpp.ativo(), ai: whatsappAi }, ia: { configurada: aiConfigured, modelo: process.env.GEMINI_API_KEY ? (process.env.GEMINI_MODEL || 'gemini-2.5-flash') : (process.env.AI_MODEL || process.env.OPENAI_MODEL || 'regras-dino-local'), analiseOperacionalDisponivel: true, fallbackLocal: true, whatsapp: whatsappAi }, commerce });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
