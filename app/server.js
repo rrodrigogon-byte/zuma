@@ -26,7 +26,7 @@ import { mail } from './email.js';
 import { emitir as nfceEmitir, cancelar as nfceCancelar, nfceConfigurado } from './nfce.js';
 import { createCommerceAdminRouter, createCommercePublicRouter, createCommerceWebhookRouter } from './core/commerce-routes.js';
 import { db as commerceDb } from './core/database.js';
-import { resolveCommerceIdentity } from './core/commerce-identity-bridge.js';
+import { requireCommercePermission, resolveCommerceIdentity } from './core/commerce-identity-bridge.js';
 import { listCommerceTenants, provisionCommerceTenant } from './core/commerce-tenants.js';
 import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
 import * as clientesKytto from './clientes-contas-kytto.js';
@@ -34,6 +34,7 @@ import * as financeiroKytto from './financeiro-central-kytto.js';
 import * as caixaKytto from './caixa-diario-kytto.js';
 import * as canaisFidelidadeKytto from './canais-fidelidade-kytto.js';
 import { answerDinoOperationalQuestion, buildDinoOperationalSnapshot } from './dino-assistant.js';
+import { loadBarbeariaCommerceStatus, unavailableBarbeariaCommerceStatus } from './core/barbearia-commerce-status.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -1933,7 +1934,24 @@ app.get('/api/admin/barbearia/dashboard', (req, res) => {
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
-app.get('/api/admin/barbearia/overview', (req, res) => {
+async function commerceIntegrationForBarbearia(req) {
+  if (process.env.COMMERCE_CORE_ENABLED !== '1') return unavailableBarbeariaCommerceStatus('desativado');
+  try {
+    const context = await requireCommercePermission(req, 'reports.read');
+    return await loadBarbeariaCommerceStatus(context);
+  } catch (error) {
+    const code = String(error?.code || '');
+    const reason = code === 'PERMISSION_DENIED'
+      ? 'sem_permissao'
+      : ['TENANT_CONTEXT_REQUIRED', 'TENANT_SELECTION_REQUIRED', 'STORE_SELECTION_REQUIRED', 'STORE_SCOPE_MISMATCH'].includes(code)
+        ? 'sem_membership'
+        : 'temporariamente_indisponivel';
+    console.warn(`Commerce da Barbearia em modo degradado: ${code || 'erro_de_leitura'}`);
+    return unavailableBarbeariaCommerceStatus(reason);
+  }
+}
+
+app.get('/api/admin/barbearia/overview', async (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
     const data = String(req.query?.data || new Date().toISOString().slice(0, 10)).slice(0, 10);
@@ -1960,6 +1978,7 @@ app.get('/api/admin/barbearia/overview', (req, res) => {
     const canais = canaisFidelidadeKytto.obterCanais(empresaId);
     const whatsapp = canais.find((canal) => canal.id === 'whatsapp') || { id: 'whatsapp', nome: 'WhatsApp', ativo: false, tipo: 'mensageria', credencialConfigurada: false };
     const aiConfigured = Boolean(process.env.AI_API_KEY || process.env.OPENAI_API_KEY);
+    const commerce = await commerceIntegrationForBarbearia(req);
     res.json({
       ok: true,
       dashboard,
@@ -1983,7 +2002,7 @@ app.get('/api/admin/barbearia/overview', (req, res) => {
        relacionamento: resumoRelacionamentoBarbearia(req),
        operacao: resumoOperacaoBarbearia(req),
 
-             integracoes: { whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: wpp.ativo() }, ia: { configurada: aiConfigured, modelo: process.env.AI_MODEL || process.env.OPENAI_MODEL || '', analiseOperacionalDisponivel: aiConfigured }, commerce: { contrato: 'catalogo-vitrine-pedido-fulfillment', separado: true, estoqueCompartilhado: false, sincronizacaoAutomatica: false, status: 'aguardando_contrato_aprovado' } },
+             integracoes: { whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: wpp.ativo() }, ia: { configurada: aiConfigured, modelo: process.env.AI_MODEL || process.env.OPENAI_MODEL || 'regras-dino-local', analiseOperacionalDisponivel: true, fallbackLocal: true }, commerce },
 
     });
   } catch (error) { res.status(400).json({ error: error.message }); }
@@ -2382,11 +2401,14 @@ app.post('/api/admin/barbearia/estoque-revenda/:id/movimentos', (req, res) => {
 app.get('/api/admin/barbearia/vendas-revenda', (req, res) => res.json({ ok: true, vendas: barbeariaErpKytto.listarVendasRevenda(legacyEmpresaId(req), { status: req.query?.status, data: req.query?.data, profissionalId: req.query?.profissionalId, lojaId: legacyLojaId(req) }) }));
 app.get('/api/admin/barbearia/comissoes', (req, res) => res.json({ ok: true, comissoes: barbeariaErpKytto.obterComissoes(legacyEmpresaId(req), { data: req.query?.data, lojaId: legacyLojaId(req) }) }));
 
-app.get('/api/admin/barbearia/integracoes', (req, res) => {
-  const canais = canaisFidelidadeKytto.obterCanais(legacyEmpresaId(req));
-  const whatsapp = canais.find((canal) => canal.id === 'whatsapp') || { id: 'whatsapp', nome: 'WhatsApp', ativo: false, tipo: 'mensageria', credencialConfigurada: false };
-  const aiConfigured = Boolean(process.env.AI_API_KEY || process.env.OPENAI_API_KEY);
-  res.json({ ok: true, whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: wpp.ativo() }, ia: { configurada: aiConfigured, modelo: process.env.AI_MODEL || process.env.OPENAI_MODEL || 'regras-dino-local', analiseOperacionalDisponivel: true, fallbackLocal: true }, commerce: { contrato: 'commerce-core-v1', separado: true, estoqueCompartilhado: false, sincronizacaoAutomatica: false, status: process.env.COMMERCE_CORE_ENABLED === '1' ? 'disponivel_por_tenant' : 'desativado' } });
+app.get('/api/admin/barbearia/integracoes', async (req, res) => {
+  try {
+    const canais = canaisFidelidadeKytto.obterCanais(legacyEmpresaId(req));
+    const whatsapp = canais.find((canal) => canal.id === 'whatsapp') || { id: 'whatsapp', nome: 'WhatsApp', ativo: false, tipo: 'mensageria', credencialConfigurada: false };
+    const aiConfigured = Boolean(process.env.AI_API_KEY || process.env.OPENAI_API_KEY);
+    const commerce = await commerceIntegrationForBarbearia(req);
+    res.json({ ok: true, whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: wpp.ativo() }, ia: { configurada: aiConfigured, modelo: process.env.AI_MODEL || process.env.OPENAI_MODEL || 'regras-dino-local', analiseOperacionalDisponivel: true, fallbackLocal: true }, commerce });
+  } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
 app.post('/api/admin/barbearia/whatsapp/enviar', requireRole('admin', 'organizador'), async (req, res) => {
