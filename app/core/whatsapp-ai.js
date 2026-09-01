@@ -13,6 +13,20 @@ function cleanText(value, limit = 4000) {
   return String(value || '').trim().replace(/\u0000/g, '').slice(0, limit);
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function requiredTenantUuid(value, field) {
+  const normalized = cleanText(value, 60);
+  if (!UUID_PATTERN.test(normalized)) {
+    const error = new Error(field === 'lojaId'
+      ? 'Selecione uma loja Commerce autorizada para operar a IA WhatsApp.'
+      : 'Selecione uma empresa Commerce autorizada para operar a IA WhatsApp.');
+    error.code = field === 'lojaId' ? 'STORE_SELECTION_REQUIRED' : 'TENANT_CONTEXT_REQUIRED';
+    throw error;
+  }
+  return normalized;
+}
+
 function plain(value) {
   return cleanText(value, 200).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
@@ -299,8 +313,8 @@ export async function processWhatsappConversationTask(task) {
 }
 
 export async function whatsappAiOperationalStatus(context = {}) {
-  const empresaId = cleanText(context.empresaId, 60);
-  const lojaId = cleanText(context.lojaId, 60);
+  const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
+  const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
   const [channel, sessions, tasks] = await Promise.all([
     db.queryRead(
       `SELECT id, codigo_publico, nome, status, api_base_url, configuracao, ultimo_evento_em,
@@ -345,7 +359,7 @@ export async function listWhatsappAiSessions(context = {}, { limit = 50 } = {}) 
        FROM whatsapp_ai_sessions
       WHERE empresa_id = $1 AND loja_id = $2
       ORDER BY ultima_interacao_em DESC LIMIT $3`,
-    [cleanText(context.empresaId, 60), cleanText(context.lojaId, 60), Math.min(100, Math.max(1, Number(limit) || 50))],
+    [requiredTenantUuid(context.empresaId, 'empresaId'), requiredTenantUuid(context.lojaId, 'lojaId'), Math.min(100, Math.max(1, Number(limit) || 50))],
   );
   return result.rows.map(row => ({ ...row, telefone: row.telefone ? `***${row.telefone.slice(-4)}` : '' }));
 }
@@ -356,7 +370,7 @@ export async function releaseWhatsappAiHandoff(context = {}, sessionId) {
         SET status = 'ativo', estado = estado - 'handoffReason', atualizado_em = CURRENT_TIMESTAMP
       WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'humano'
       RETURNING id, status, atualizado_em`,
-    [cleanText(sessionId, 60), cleanText(context.empresaId, 60), cleanText(context.lojaId, 60)],
+    [cleanText(sessionId, 60), requiredTenantUuid(context.empresaId, 'empresaId'), requiredTenantUuid(context.lojaId, 'lojaId')],
   );
   if (!result.rows[0]) throw new Error('sessão em handoff não encontrada');
   return result.rows[0];
@@ -397,8 +411,8 @@ function safeChannelView(row) {
 }
 
 export async function configureWhatsappAiChannel(context = {}, input = {}) {
-  const empresaId = cleanText(context.empresaId, 60);
-  const lojaId = cleanText(context.lojaId, 60);
+  const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
+  const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
   const usuarioId = context.usuarioId || null;
   const status = safeChannelStatus(input.status);
   const secretEnv = envReference(input.webhookSecretEnv || 'WHATSAPP_AI_WEBHOOK_SECRET');
@@ -446,8 +460,8 @@ export async function configureWhatsappAiChannel(context = {}, input = {}) {
 }
 
 export async function syncWhatsappAiWebhook(context = {}, { publicBaseUrl } = {}) {
-  const empresaId = cleanText(context.empresaId, 60);
-  const lojaId = cleanText(context.lojaId, 60);
+  const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
+  const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
   const result = await db.queryRead(
     `SELECT * FROM canais_integracao
       WHERE empresa_id = $1 AND loja_id = $2 AND provedor = 'whatsapp' AND status = 'ativo' LIMIT 1`,
