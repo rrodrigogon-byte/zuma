@@ -1,6 +1,51 @@
 const SUPPORTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024
 
+function readTarText(bytes) {
+  return new TextDecoder().decode(bytes).replace(/\0.*$/s, '').trim()
+}
+
+function parseTarOctal(bytes) {
+  const value = readTarText(bytes).replace(/\s/g, '')
+  if (!value) return 0
+  if (!/^[0-7]+$/.test(value)) throw new Error('Pacote TAR contém tamanho inválido.')
+  return Number.parseInt(value, 8)
+}
+
+export function extractCatalogEnrichmentTar(payload) {
+  const bytes = payload instanceof Uint8Array ? payload : new Uint8Array(payload)
+  const files = []
+  const seen = new Set()
+  let offset = 0
+  while (offset + 512 <= bytes.length) {
+    const header = bytes.subarray(offset, offset + 512)
+    if (header.every(byte => byte === 0)) break
+    const name = readTarText(header.subarray(0, 100))
+    const prefix = readTarText(header.subarray(345, 500))
+    const fullName = prefix ? `${prefix}/${name}` : name
+    const fileName = fullName.split('/').filter(Boolean).pop() || ''
+    const size = parseTarOctal(header.subarray(124, 136))
+    const type = String.fromCharCode(header[156] || 48)
+    const dataOffset = offset + 512
+    const nextOffset = dataOffset + Math.ceil(size / 512) * 512
+    if (nextOffset > bytes.length) throw new Error('Pacote TAR truncado ou corrompido.')
+    if ((type === '0' || type === '\0') && fileName) {
+      const extension = fileName.toLowerCase().split('.').pop()
+      const mimeType = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' }[extension]
+      if (mimeType) {
+        if (size <= 0 || size > MAX_IMAGE_BYTES) throw new Error(`${fileName}: arquivo vazio ou maior que 8 MB.`)
+        const normalizedName = fileName.toLowerCase()
+        if (seen.has(normalizedName)) throw new Error(`${fileName}: nome duplicado no pacote TAR.`)
+        seen.add(normalizedName)
+        files.push({ name: fileName, type: mimeType, bytes: bytes.slice(dataOffset, dataOffset + size) })
+      }
+    }
+    offset = nextOffset
+  }
+  if (!files.length) throw new Error('O pacote TAR não contém imagens suportadas.')
+  return files
+}
+
 export function normalizeCatalogEnrichmentManifest(payload) {
   const source = typeof payload === 'string' ? JSON.parse(payload) : payload
   const items = Array.isArray(source) ? source : Array.isArray(source?.items) ? source.items : []
