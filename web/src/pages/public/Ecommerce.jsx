@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowRight, CheckCircle2, Loader2, Minus, Plus, Search, ShoppingBag, Store, X } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, fmtR } from '../../lib/api'
-import { normalizeStorefrontAlias, storefrontApiBase, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
+import { loadAllStorefrontProducts, normalizeStorefrontAlias, storefrontApiBase, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
 import './commerce.css'
 
 function readCart(storeAlias) {
@@ -29,6 +29,14 @@ function shippingOptionMeta(option) {
   return Number.isFinite(base) && Number.isFinite(surcharge) && Number.isFinite(total)
     ? `${timing} · Tarifa Correios ${money(base)} + 12% (${money(surcharge)}) = ${money(total)}`
     : timing
+}
+
+function formatPublicAddress(address = {}) {
+  const postal = String(address.postalCode || '').replace(/\D/g, '')
+  const cep = postal.length === 8 ? `${postal.slice(0, 5)}-${postal.slice(5)}` : ''
+  const first = [address.street, address.number].filter(Boolean).join(', ')
+  const second = [address.neighborhood, address.city, address.state].filter(Boolean).join(' · ')
+  return [first, address.complement, second, cep].filter(Boolean).join(' — ')
 }
 
 function productMedia(product) {
@@ -166,7 +174,7 @@ export default function Ecommerce() {
 
   useEffect(() => {
     api.get(`${storefrontApi}/context`)
-      .then((context) => { setStoreContext(context?.storefront || null); return Promise.all([api.get(`${storefrontApi}/products`), api.get(`${storefrontApi}/shipping-methods`), api.get(`${storefrontApi}/payment-methods`).catch(() => ({ items: [] }))]).then(([data, shipping, payments]) => { setCatalogSource('core'); setProducts(normalizeCatalog(data, 'core')); const methods = shipping?.items || []; setShippingMethods(methods); const hasReadyDelivery = methods.some(item => ['delivery', 'carrier'].includes(item.tipo) && item.quoteEnabled); const effectiveMode = delivery.mode === 'entrega' && !hasReadyDelivery ? 'retirada' : delivery.mode; if (effectiveMode !== delivery.mode) setDelivery({ mode: effectiveMode }); setShippingMethodId(methods.find(item => (effectiveMode === 'entrega' ? ['delivery', 'carrier'].includes(item.tipo) && item.quoteEnabled : item.tipo === 'pickup'))?.id || ''); const availablePayments = payments?.items || []; setPaymentMethods(availablePayments); setSelectedPaymentMethod(current => current || paymentKey(availablePayments.find(item => item.method === 'pix') || availablePayments[0] || {})) }) })
+      .then((context) => { setStoreContext(context?.storefront || null); return Promise.all([loadAllStorefrontProducts(({ limit, offset }) => api.get(`${storefrontApi}/products?limit=${limit}&offset=${offset}`)), api.get(`${storefrontApi}/shipping-methods`), api.get(`${storefrontApi}/payment-methods`).catch(() => ({ items: [] }))]).then(([data, shipping, payments]) => { setCatalogSource('core'); setProducts(normalizeCatalog(data, 'core')); const methods = shipping?.items || []; setShippingMethods(methods); const hasReadyDelivery = methods.some(item => ['delivery', 'carrier'].includes(item.tipo) && item.quoteEnabled); const effectiveMode = delivery.mode === 'entrega' && !hasReadyDelivery ? 'retirada' : delivery.mode; if (effectiveMode !== delivery.mode) setDelivery({ mode: effectiveMode }); setShippingMethodId(methods.find(item => (effectiveMode === 'entrega' ? ['delivery', 'carrier'].includes(item.tipo) && item.quoteEnabled : item.tipo === 'pickup'))?.id || ''); const availablePayments = payments?.items || []; setPaymentMethods(availablePayments); setSelectedPaymentMethod(current => current || paymentKey(availablePayments.find(item => item.method === 'pix') || availablePayments[0] || {})) }) })
       .catch(err => {
         if (storeAlias || err.status !== 404) throw err
         return api.get('/api/loja').then(data => { setCatalogSource('legacy'); setProducts(normalizeCatalog(data, 'legacy')) })
@@ -366,6 +374,15 @@ export default function Ecommerce() {
   const publicBrand = storeContext?.public || {}
   const brandName = publicBrand.displayName || storeContext?.nome || (storeAlias ? storeAlias : 'Kytto Commerce')
   const brandTagline = publicBrand.tagline || 'Uma experiência de compra completa para produtos, serviços e operações locais — com catálogo, atendimento e gestão conectados.'
+  const publicAddress = formatPublicAddress(publicBrand.address)
+  const publicPhone = String(publicBrand.contact?.phone || '')
+  const publicEmail = String(publicBrand.contact?.email || '')
+  const publicPolicies = [
+    ['Política de privacidade', publicBrand.policies?.privacyUrl],
+    ['Trocas e devoluções', publicBrand.policies?.returnsUrl],
+    ['Entrega e retirada', publicBrand.policies?.shippingUrl],
+    ['Termos de uso', publicBrand.policies?.termsUrl],
+  ].filter(([, url]) => url)
 
   return <main className="commerce-shell" data-storefront-alias={storeAlias || undefined}>
     <section className="commerce-hero">
@@ -405,6 +422,12 @@ export default function Ecommerce() {
       <div><strong>Estoque em tempo real</strong><span>Disponibilidade validada antes do pedido.</span></div>
       <div><strong>Pedido rastreável</strong><span>Acompanhe cada etapa com seu código.</span></div>
     </section>
+
+    {(publicAddress || publicPhone || publicEmail || publicPolicies.length > 0) && <section className="commerce-store-details" aria-label="Informações da loja">
+      <div><span className="commerce-eyebrow">Retirada e atendimento</span><h2>{brandName}</h2>{publicAddress && <address>{publicAddress}</address>}{publicBrand.pickup?.instructions && <p>{publicBrand.pickup.instructions}</p>}{Number(publicBrand.pickup?.leadTimeHours) > 0 && <small>Prazo de preparação para retirada: até {publicBrand.pickup.leadTimeHours} hora(s).</small>}</div>
+      <div className="commerce-store-contact">{publicPhone && <a href={`tel:${publicPhone}`}><strong>Telefone</strong><span>{publicPhone}</span></a>}{publicEmail && <a href={`mailto:${publicEmail}`}><strong>E-mail</strong><span>{publicEmail}</span></a>}</div>
+      {publicPolicies.length > 0 && <nav aria-label="Políticas da loja">{publicPolicies.map(([label, url]) => <a key={label} href={url} target="_blank" rel="noreferrer">{label}</a>)}</nav>}
+    </section>}
 
     {selected && <div className="commerce-overlay" role="dialog" aria-modal="true" aria-label="Detalhes do produto"><div className="commerce-modal commerce-product-modal"><button type="button" className="commerce-close" onClick={() => setSelected(null)} aria-label="Fechar"><X size={18} /></button><ProductGallery product={selectedVariant} /><div><span className="commerce-eyebrow">{selected.cat || 'Produto'}</span><h2>{selected.nome}</h2><p>{selected.descricao || 'Produto disponível no catálogo Kytto.'}</p>{selectedVariant.descricaoDetalhada && selectedVariant.descricaoDetalhada !== selectedVariant.descricao && <p className="commerce-product-long-description">{selectedVariant.descricaoDetalhada}</p>}<div className="commerce-product-meta"><span><small>SKU</small><strong>{selectedVariant.cod || '—'}</strong></span><span><small>Disponibilidade</small><strong>{selectedVariant.esgotado ? 'Esgotado' : `${selectedVariant.estoque} em estoque`}</strong></span></div>{selected.variants?.length > 1 && <label className="commerce-variant-select">Variação<select value={selectedVariant.variantId || ''} onChange={event => setSelectedVariantId(event.target.value)}>{selected.variants.map(variant => <option key={variant.variantId} value={variant.variantId}>{variant.label || variant.cod || 'Opção'}{variant.esgotado ? ' · esgotado' : ''}</option>)}</select></label>}<div className="commerce-modal-price"><strong>{money(selectedVariant.preco)}</strong>{selectedVariant.promocaoAtiva && <s>{money(selectedVariant.precoOriginal)}</s>}</div><div className="commerce-modal-actions"><button type="button" className="commerce-button commerce-button-primary" disabled={selectedVariant.esgotado} onClick={() => addToCart(selectedVariant)}>{selectedVariant.esgotado ? 'Produto esgotado' : 'Adicionar ao carrinho'} <ShoppingBag size={16} /></button><small>{selectedVariant.esgotado ? 'Sem estoque no momento.' : `${selectedVariant.estoque} unidade(s) disponíveis`}</small></div></div></div></div>}
 

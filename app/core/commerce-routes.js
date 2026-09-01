@@ -8,6 +8,7 @@ import { resolveCommerceIdentity } from './commerce-identity-bridge.js';
 import { applyPromotionToOrder, createPromotion, createPromotionCode, createPromotionTemplate, listPromotionTemplates, listPromotions } from './commerce-promotions.js';
 import { createStorefront, listStorefronts, updateStorefront } from './commerce-storefronts.js';
 import { resolveStorefrontAlias } from './commerce-tenants.js';
+import { executeCatalogImport, previewCatalogImport } from './commerce-catalog-import.js';
 import { createMembership, listMemberships, listRoles, updateMembership } from './commerce-admin-users.js';
 import { createCustomer, createCustomerAddress, deleteCustomerAddress, getCustomer, listCustomerAddresses, updateCustomer, updateCustomerAddress } from './commerce-customers.js';
 import { createStorefrontDomain, listStorefrontDomains, setPrimaryStorefrontDomain, verifyStorefrontDomain } from './commerce-domains.js';
@@ -92,11 +93,38 @@ function sanitizePublicStorefrontConfig(storefront = {}) {
       ? storefront.configuracoes.public
       : {};
   const safeColor = (value, fallback) => /^#[0-9a-f]{6}$/i.test(String(value || '')) ? String(value).toUpperCase() : fallback;
+  const phone = String(source.contact?.phone || '').replace(/[^+\d]/g, '').slice(0, 16);
+  const email = String(source.contact?.email || '').trim().toLowerCase().slice(0, 255);
+  const address = source.address && typeof source.address === 'object' ? source.address : {};
+  const policies = source.policies && typeof source.policies === 'object' ? source.policies : {};
   return {
     brandKey: /^[a-z0-9][a-z0-9_-]{1,79}$/.test(String(storefront.brand_key || '')) ? String(storefront.brand_key) : 'default',
     displayName: String(source.displayName || storefront.nome || '').trim().slice(0, 120),
     tagline: String(source.tagline || '').trim().slice(0, 240),
     logoUrl: safePublicUrl(source.logoUrl) || '',
+    contact: {
+      phone: /^\+?\d{10,15}$/.test(phone) ? phone : '',
+      email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : '',
+    },
+    address: {
+      street: String(address.street || '').trim().slice(0, 180),
+      number: String(address.number || '').trim().slice(0, 30),
+      complement: String(address.complement || '').trim().slice(0, 100),
+      neighborhood: String(address.neighborhood || '').trim().slice(0, 100),
+      city: String(address.city || '').trim().slice(0, 100),
+      state: /^[A-Z]{2}$/.test(String(address.state || '').toUpperCase()) ? String(address.state).toUpperCase() : '',
+      postalCode: String(address.postalCode || '').replace(/\D/g, '').slice(0, 8),
+    },
+    pickup: {
+      instructions: String(source.pickup?.instructions || '').trim().slice(0, 500),
+      leadTimeHours: Math.max(0, Math.min(720, Number(source.pickup?.leadTimeHours) || 0)),
+    },
+    policies: {
+      privacyUrl: safePublicUrl(policies.privacyUrl),
+      returnsUrl: safePublicUrl(policies.returnsUrl),
+      shippingUrl: safePublicUrl(policies.shippingUrl),
+      termsUrl: safePublicUrl(policies.termsUrl),
+    },
     colors: {
       accent: safeColor(source.colors?.accent, '#FF6B2C'),
       accentStrong: safeColor(source.colors?.accentStrong, '#D84A16'),
@@ -309,6 +337,18 @@ function jsonError(res, error) {
     PROMOTION_TEMPLATE_NOT_FOUND: 404,
     PROMOTION_TEMPLATE_INVALID: 400,
     STORE_SELECTION_REQUIRED: 400,
+    CATALOG_IMPORT_SIZE_INVALID: 400,
+    CATALOG_IMPORT_SKU_INVALID: 400,
+    CATALOG_IMPORT_PRODUCT_INVALID: 400,
+    CATALOG_IMPORT_PRICE_INVALID: 400,
+    CATALOG_IMPORT_STOCK_INVALID: 400,
+    CATALOG_IMPORT_DUPLICATE_SKU: 409,
+    CATALOG_IMPORT_SCOPE_INVALID: 400,
+    CATALOG_IMPORT_SCOPE_MISMATCH: 409,
+    CATALOG_IMPORT_CONFIRMATION_REQUIRED: 400,
+    CATALOG_IMPORT_IDEMPOTENCY_REQUIRED: 400,
+    CATALOG_IMPORT_PREVIEW_REQUIRED: 400,
+    CATALOG_IMPORT_PREVIEW_STALE: 409,
   };
   const status = statusByCode[error?.code] || 500;
   const publicMessages = {
@@ -795,7 +835,7 @@ export function createCommerceAdminRouter() {
            FROM commerce_products p
            LEFT JOIN commerce_categories c ON c.empresa_id = p.empresa_id AND c.id = p.category_id
           WHERE ${predicates.join(' AND ')}
-          ORDER BY p.atualizado_em DESC
+          ORDER BY p.atualizado_em DESC, p.id ASC
           LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
         [...values, limit, offset],
       );
@@ -814,6 +854,21 @@ export function createCommerceAdminRouter() {
         [context.empresaId],
       );
       res.json({ items: result.rows });
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/catalog/import/preview', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'catalog.read');
+      await requirePermission(req, 'inventory.read');
+      res.json(await previewCatalogImport(context, req.body || {}));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/catalog/import/execute', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'catalog.write');
+      await requirePermission(req, 'catalog.publish');
+      await requirePermission(req, 'inventory.write');
+      res.json(await executeCatalogImport(context, req.body || {}));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/catalog/categories', async (req, res) => {
