@@ -40,7 +40,11 @@ function checksum(sql) {
 }
 
 function hasManagedDatabaseUrl() {
-  return Boolean(process.env.DATABASE_URL || process.env.POSTGRES_URL);
+  return Boolean(
+    process.env.DATABASE_URL
+    || process.env.POSTGRES_URL
+    || (process.env.DB_HOST && process.env.DB_NAME && process.env.DB_USER && process.env.DB_PASSWORD)
+  );
 }
 
 async function ensureControlTable() {
@@ -100,9 +104,9 @@ export async function runCommerceSchemaMigrations({ dryRun = false } = {}) {
 
   if (!hasManagedDatabaseUrl()) {
     if (process.env.COMMERCE_SCHEMA_REQUIRED === '1') {
-      throw new Error('Schema do Commerce Core requer DATABASE_URL ou POSTGRES_URL gerenciada; fallback local bloqueado.');
+      throw new Error('Schema do Commerce Core requer DATABASE_URL/POSTGRES_URL ou DB_HOST + DB_NAME + DB_USER + DB_PASSWORD; fallback local bloqueado.');
     }
-    console.warn('Schema Commerce Core não executado: DATABASE_URL/POSTGRES_URL ausente; serviço legado preservado.');
+    console.warn('Schema Commerce Core não executado: conexão PostgreSQL gerenciada ausente; serviço legado preservado.');
     return { applied: [], files: [...migrationFiles], dryRun: false, skipped: true };
   }
 
