@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createStorefront, listStorefronts, storefrontCode } from './commerce-storefronts.js';
+import { createStorefront, listStorefronts, storefrontCode, updateStorefront } from './commerce-storefronts.js';
 import { listPromotionTemplates } from './commerce-promotions.js';
 
 const empresaId = '11111111-1111-4111-8111-111111111111';
@@ -29,6 +29,36 @@ test('listStorefronts retorna todos os canais do tenant sem loja ativa fixa', as
   assert.equal(result.items.length, 2);
   assert.match(queries[0].sql, /\$2::uuid IS NULL OR s\.loja_id = \$2/);
   assert.deepEqual(queries[0].values, [empresaId, null]);
+});
+
+test('updateStorefront ativa canal no tenant correto e registra auditoria', async () => {
+  const storefrontId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const lojaId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const current = { id: storefrontId, empresa_id: empresaId, loja_id: lojaId, codigo: 'dino-web', nome: 'Dino Web', status: 'draft' };
+  const active = { ...current, status: 'active' };
+  const responses = [{ rows: [current] }, { rows: [active] }, { rows: [] }];
+  const queries = [];
+  const client = { query: async (sql, values) => {
+    queries.push({ sql, values });
+    return responses.shift() || { rows: [] };
+  } };
+
+  const result = await updateStorefront(client, context, storefrontId, { status: 'active' });
+
+  assert.equal(result.status, 'active');
+  assert.match(queries[0].sql, /s\.empresa_id = \$1 AND s\.id = \$2/);
+  assert.deepEqual(queries[0].values, [empresaId, storefrontId]);
+  const update = queries.find(item => /UPDATE commerce_storefronts/.test(item.sql));
+  assert.ok(update);
+  assert.match(update.sql, /status = \$3/);
+  assert.deepEqual(update.values, [empresaId, storefrontId, 'active']);
+  const audit = queries.find(item => /INSERT INTO commerce_audit_logs/.test(item.sql));
+  assert.ok(audit);
+  assert.equal(audit.values[0], empresaId);
+  assert.equal(audit.values[1], lojaId);
+  assert.equal(audit.values[3], 'storefront');
+  assert.equal(audit.values[5], 'updated');
+  assert.deepEqual(JSON.parse(audit.values[7]), { fields: ['status'] });
 });
 
 test('createStorefront cria membership de loja para o administrador responsável', async () => {
