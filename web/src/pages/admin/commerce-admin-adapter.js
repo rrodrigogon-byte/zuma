@@ -214,13 +214,14 @@ export async function createCoreProductMedia(productId, payload) {
   return api.post(`/api/admin/commerce/catalog/products/${productId}/media`, payload)
 }
 
-export async function uploadCoreProductMedia(productId, file, { altText = '', ordem = 0, variantId = null } = {}) {
+export async function uploadCoreProductMedia(productId, file, { altText = '', ordem = 0, variantId = null, idempotencyKey = '' } = {}) {
   if (!file) throw new Error('Selecione uma imagem antes de enviar.')
   const headers = {
     'X-Image-Alt': String(altText || file.name || '').slice(0, 255),
     'X-Image-Order': String(Number.isInteger(Number(ordem)) ? Number(ordem) : 0),
   }
   if (variantId) headers['X-Variant-Id'] = variantId
+  if (idempotencyKey) headers['X-Idempotency-Key'] = String(idempotencyKey).slice(0, 200)
   return api.upload(`/api/admin/commerce/catalog/products/${productId}/media/upload`, file, headers)
 }
 

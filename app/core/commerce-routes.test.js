@@ -36,6 +36,14 @@ function healthHandler() {
   return layer.route.stack[0].handle;
 }
 
+function mediaUploadHandler() {
+  const router = createCommerceAdminRouter();
+  const layer = router.stack.find(item => item.route?.path === '/catalog/products/:id/media/upload');
+  const handler = layer?.route?.stack?.at(-1)?.handle;
+  assert.ok(handler, 'rota de upload de mídia não encontrada');
+  return handler;
+}
+
 function publicOrderHandler() {
   const router = createCommercePublicRouter();
   const layer = router.stack.find(item => item.route?.path === '/orders/:publicCode');
@@ -80,6 +88,30 @@ async function invokePublicOrder(dbQuery) {
     db.query = original;
   }
 }
+
+test('upload de mídia retorna replay idempotente tenant-scoped sem acessar o bucket', async () => {
+  const original = db.query;
+  const productId = '88888888-8888-4888-8888-888888888888';
+  const calls = [];
+  db.query = async (sql, params) => {
+    calls.push({ sql, params });
+    if (calls.length === 1) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
+    if (calls.length === 2) return { rows: [{ codigo: 'catalog.write' }] };
+    if (sql.includes('SELECT id FROM commerce_products')) return { rows: [{ id: productId }] };
+    if (sql.includes('FROM commerce_product_media')) return { rows: [{ id: '55555555-5555-5555-8555-555555555555', product_id: productId, public_url: '/api/storefront/media/55555555-5555-5555-8555-555555555555' }] };
+    return { rows: [] };
+  };
+  const response = { statusCode: 200, body: null, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
+  try {
+    await mediaUploadHandler()({ user: { email: 'admin@example.com' }, headers: { 'x-empresa-id': empresaId, 'x-loja-id': lojaId, 'x-idempotency-key': 'catalog-enrichment-test', 'content-type': 'image/png' }, params: { id: productId }, body: Buffer.from('não deve ser enviado') }, response);
+  } finally {
+    db.query = original;
+  }
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.idempotentReplay, true);
+  const existingQuery = calls.find(call => call.sql.includes('FROM commerce_product_media'));
+  assert.deepEqual(existingQuery.params.slice(0, 2), [empresaId, productId]);
+});
 
 test('endpoint de reconciliação rejeita sessão sem membership antes do gateway', async () => {
   const response = await invoke(paymentSyncHandler(), async () => ({ rows: [] }));

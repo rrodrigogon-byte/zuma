@@ -14,7 +14,7 @@ import { createCustomer, createCustomerAddress, deleteCustomerAddress, getCustom
 import { createStorefrontDomain, listStorefrontDomains, setPrimaryStorefrontDomain, verifyStorefrontDomain } from './commerce-domains.js';
 import { createShippingAccount, failShippingLabel, finalizeShippingCancellation, finalizeShippingLabel, listShippingAccounts, listShippingProviders, lookupPostalCode, prepareShippingCancellation, prepareShippingLabel, publicShippingMethod, quoteShipping, shippingAccountReady, updateShippingAccount, updateShippingTracking } from './commerce-shipping.js';
 import { shippingProviders } from './shipping-adapters.js';
-import { newCommerceMediaId, streamCommerceImage, uploadCommerceImage } from './commerce-media.js';
+import { commerceMediaIdForIdempotencyKey, newCommerceMediaId, streamCommerceImage, uploadCommerceImage } from './commerce-media.js';
 import {
   CommerceError,
   assertUuid,
@@ -930,7 +930,17 @@ export function createCommerceAdminRouter() {
         const variant = await db.query('SELECT id FROM commerce_product_variants WHERE empresa_id = $1 AND id = $2 AND product_id = $3 LIMIT 1', [context.empresaId, variantId, productId]);
         if (!variant.rows[0]) throw new CommerceError('variante não pertence ao produto', 'VARIANT_NOT_FOUND');
       }
-      const mediaId = newCommerceMediaId();
+      const idempotencyKey = String(req.headers['x-idempotency-key'] || '').trim();
+      const mediaId = idempotencyKey
+        ? commerceMediaIdForIdempotencyKey({ empresaId: context.empresaId, productId, idempotencyKey })
+        : newCommerceMediaId();
+      if (idempotencyKey) {
+        const existing = await db.query(
+          'SELECT id, product_id, variant_id, storage_key, public_url, mime_type, alt_text, ordem, criado_em FROM commerce_product_media WHERE empresa_id = $1 AND product_id = $2 AND id = $3 LIMIT 1',
+          [context.empresaId, productId, mediaId],
+        );
+        if (existing.rows[0]) return res.json({ ...existing.rows[0], idempotentReplay: true });
+      }
       const uploaded = await uploadCommerceImage({ empresaId: context.empresaId, productId, mediaId, buffer: Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0), mimeType: req.headers['content-type'] });
       const result = await withCommerceTransaction(trx => createCatalogMedia(trx, context, productId, {
         mediaId,
