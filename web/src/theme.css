@@ -38,38 +38,114 @@
 }
 
 html[data-brand='dino'] {
+  color-scheme: light;
+  --orange: #4B57A6;
+  --orange-dark: #3E4A94;
+  --navy: #161A20;
+  --sand: #F5F6F9;
+  --graphite: #69707E;
+  --line: #E4E6EC;
+  --success: #2F7D6B;
+  --danger: #C0492F;
+  --deep: #161A20;
+  --green: #4B57A6;
+  --lime: #3E4A94;
+  --gold: #B0832E;
+  --cream: #161A20;
+  --bg: #F5F6F9;
+  --surface: #FFFFFF;
+  --surface-2: #F0F1F5;
+  --card: #FFFFFF;
+  --card2: #F7F8FB;
+  --muted: #69707E;
+  --text: #161A20;
+  --fg: #161A20;
+  --accent: #4B57A6;
+  --accent-strong: #3E4A94;
+  --accent-soft: rgba(75,87,166,.10);
+  --focus-ring: rgba(75,87,166,.42);
+  --brand-header: #FFFFFF;
+  --brand-header-accent: #4B57A6;
+  --brand-header-text: #161A20;
+  --shadow: 0 1px 2px rgba(20,22,30,.04), 0 8px 24px rgba(20,22,30,.06);
+  --shadow-lg: 0 12px 48px rgba(20,22,30,.18);
+  --chart-1: #4B57A6;
+  --chart-2: #2E9E7B;
+  --chart-3: #E0A83B;
+  --chart-4: #D96A5B;
+  --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: 'Sora', 'Plus Jakarta Sans', sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  html[data-brand='dino']:not([data-theme='light']) {
+    color-scheme: dark;
+    --orange: #6E7CE0;
+    --orange-dark: #8390E8;
+    --navy: #E8EAF2;
+    --sand: #0D0F14;
+    --graphite: #949BAC;
+    --line: #272D3A;
+    --success: #54B79E;
+    --danger: #E07E67;
+    --deep: #0D0F14;
+    --green: #6E7CE0;
+    --lime: #8390E8;
+    --gold: #D9AE5C;
+    --cream: #E8EAF2;
+    --bg: #0D0F14;
+    --surface: #151922;
+    --surface-2: #1B2028;
+    --card: #1C202B;
+    --card2: #171B24;
+    --muted: #949BAC;
+    --text: #E8EAF2;
+    --fg: #E8EAF2;
+    --accent: #6E7CE0;
+    --accent-strong: #8390E8;
+    --accent-soft: rgba(110,124,224,.16);
+    --focus-ring: rgba(110,124,224,.56);
+    --brand-header: #11141C;
+    --brand-header-accent: #6E7CE0;
+    --brand-header-text: #E8EAF2;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.4);
+    --shadow-lg: 0 16px 50px rgba(0,0,0,.55);
+  }
+}
+
+html[data-brand='dino'][data-theme='dark'] {
   color-scheme: dark;
   --orange: #6E7CE0;
-  --orange-dark: #8E9AF0;
+  --orange-dark: #8390E8;
   --navy: #E8EAF2;
-  --sand: #0E1014;
-  --graphite: #A4AABE;
-  --line: #2B3140;
-  --success: #52C7A7;
-  --danger: #F27A89;
-  --deep: #0E1014;
+  --sand: #0D0F14;
+  --graphite: #949BAC;
+  --line: #272D3A;
+  --success: #54B79E;
+  --danger: #E07E67;
+  --deep: #0D0F14;
   --green: #6E7CE0;
-  --lime: #8E9AF0;
-  --gold: #CBD0FF;
+  --lime: #8390E8;
+  --gold: #D9AE5C;
   --cream: #E8EAF2;
-  --bg: #0E1014;
-  --surface: #161922;
-  --surface-2: #1A1E28;
+  --bg: #0D0F14;
+  --surface: #151922;
+  --surface-2: #1B2028;
   --card: #1C202B;
   --card2: #171B24;
-  --muted: #A4AABE;
+  --muted: #949BAC;
   --text: #E8EAF2;
   --fg: #E8EAF2;
   --accent: #6E7CE0;
-  --accent-strong: #8E9AF0;
-  --accent-soft: rgba(110,124,224,.15);
+  --accent-strong: #8390E8;
+  --accent-soft: rgba(110,124,224,.16);
   --focus-ring: rgba(110,124,224,.56);
   --brand-header: #11141C;
   --brand-header-accent: #6E7CE0;
   --brand-header-text: #E8EAF2;
-  --shadow: 0 18px 44px rgba(0,0,0,.34);
-  --font: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-display: 'Sora', 'Plus Jakarta Sans', 'Inter', sans-serif;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.4);
+  --shadow-lg: 0 16px 50px rgba(0,0,0,.55);
 }
 
 html[data-brand='dino'],
@@ -576,3 +652,131 @@ html[data-brand='dino'] .shipping-option.is-selected,
 html[data-brand='dino'] .payment-option.is-selected { background: rgba(110,124,224,.12); border-color: #6E7CE0; box-shadow: 0 0 0 3px rgba(110,124,224,.1); }
 html[data-brand='dino'] .checkout-secondary { background: #181C25; border-color: #343B4D; color: #E8EAF2; }
 html[data-brand='dino'] .checkout-secondary:hover { background: #202532; border-color: #6E7CE0; color: #FFFFFF; }
+
+/* ── Dino design system: tipografia, logo e tema administrável ── */
+html[data-brand='dino'] body,
+html[data-brand='dino'] button,
+html[data-brand='dino'] input,
+html[data-brand='dino'] select,
+html[data-brand='dino'] textarea {
+  font-family: var(--font-body, var(--font));
+}
+
+html[data-brand='dino'] h1,
+html[data-brand='dino'] h2,
+html[data-brand='dino'] h3,
+html[data-brand='dino'] h4,
+html[data-brand='dino'] .page-title,
+html[data-brand='dino'] .kpi-num,
+html[data-brand='dino'] .kpi-value,
+html[data-brand='dino'] .hero-title,
+html[data-brand='dino'] .ecommerce-admin-kpis strong,
+html[data-brand='dino'] .commerce-report-grid strong {
+  font-family: var(--font-display) !important;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+
+html[data-brand='dino'] .sidebar-brand-dino {
+  display: block;
+  width: 158px;
+  height: 54px;
+  min-height: 0;
+  object-fit: contain;
+  object-position: left center;
+  filter: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  html[data-brand='dino']:not([data-theme='light']) .sidebar-brand-dino {
+    filter: invert(1) brightness(2);
+  }
+}
+
+html[data-brand='dino'][data-theme='dark'] .sidebar-brand-dino {
+  filter: invert(1) brightness(2);
+}
+
+html[data-brand='dino'][data-theme='light'] .sidebar-brand-dino {
+  filter: none;
+}
+
+.sidebar-theme-switch {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  margin: 10px 12px 6px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.sidebar-theme-switch > span {
+  grid-column: 1 / -1;
+  padding: 2px 5px 3px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.sidebar-theme-switch button {
+  min-width: 0;
+  padding: 6px 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.sidebar-theme-switch button.active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 4px 12px var(--accent-soft);
+}
+
+html[data-brand='dino'] .ecommerce-admin-shell {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body, var(--font));
+}
+
+html[data-brand='dino'] .ecommerce-admin-panel,
+html[data-brand='dino'] .ecommerce-admin-orders,
+html[data-brand='dino'] .ecommerce-admin-kpis article,
+html[data-brand='dino'] .commerce-promotion-list article,
+html[data-brand='dino'] .commerce-report-grid article {
+  border-color: var(--line);
+  background: var(--card);
+  color: var(--fg);
+}
+
+html[data-brand='dino'] .ecommerce-admin-tabs button,
+html[data-brand='dino'] .ecommerce-admin-tabs a,
+html[data-brand='dino'] .ecommerce-admin-button.ghost,
+html[data-brand='dino'] .ecommerce-row-actions button {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--fg);
+}
+
+html[data-brand='dino'] .ecommerce-admin-tabs button.active,
+html[data-brand='dino'] .ecommerce-admin-button.primary,
+html[data-brand='dino'] .ecommerce-row-actions button:hover {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+html[data-brand='dino'] .ecommerce-admin-tabs b {
+  background: var(--accent);
+}
+
+html[data-brand='dino'] :focus-visible {
+  outline-color: var(--focus-ring);
+}

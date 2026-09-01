@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowRight, CheckCircle2, Eye, Loader2, Minus, Plus, Search, ShoppingBag, Store, X } from 'lucide-react'
+import { ArrowRight, CheckCircle2, Eye, Loader2, Minus, Monitor, Moon, Plus, Search, ShoppingBag, Store, Sun, X } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, fmtR } from '../../lib/api'
 import { loadAllStorefrontProducts, normalizeStorefrontAlias, storefrontApiBase, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
+import { applyThemeMode, storedThemeMode } from '../../lib/brand'
 import './commerce.css'
 
 function readCart(storeAlias) {
@@ -137,6 +138,7 @@ export default function Ecommerce() {
   const cartStorageKey = storefrontStorageKey(storeAlias, 'cart')
   const deliveryStorageKey = storefrontStorageKey(storeAlias, 'delivery')
   const [storeContext, setStoreContext] = useState(null)
+  const [themeMode, setThemeMode] = useState(() => storedThemeMode())
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -171,6 +173,10 @@ export default function Ecommerce() {
   const [trackingOrder, setTrackingOrder] = useState(null)
   const [trackingLoading, setTrackingLoading] = useState(false)
   const [trackingError, setTrackingError] = useState('')
+
+  const changeThemeMode = (mode) => {
+    setThemeMode(applyThemeMode(mode, { persist: true }))
+  }
 
   useEffect(() => {
     api.get(`${storefrontApi}/context`)
@@ -386,6 +392,7 @@ export default function Ecommerce() {
 
   return <main className="commerce-shell" data-storefront-alias={storeAlias || undefined}>
     <section className="commerce-hero">
+      {storeAlias === 'dino' && <div className="commerce-dino-brandbar"><img src="/brand/dino-logo.png" alt="Dino" /><div role="group" aria-label="Tema da loja">{[["system", Monitor, "Sistema"], ["light", Sun, "Claro"], ["dark", Moon, "Escuro"]].map(([mode, Icon, label]) => <button type="button" key={mode} onClick={() => changeThemeMode(mode)} className={themeMode === mode ? 'active' : ''} aria-pressed={themeMode === mode} title={`Tema ${label.toLowerCase()}`}><Icon size={14} /><span>{label}</span></button>)}</div></div>}
       <div>
         <span className="commerce-eyebrow"><Store size={14} /> {brandName}</span>
         <h1>{storeAlias === 'dino' ? <>Autocuidado, estilo e bem-estar. <em>Compre com confiança.</em></> : <>Venda melhor. <em>Opere com inteligência.</em></>}</h1>
