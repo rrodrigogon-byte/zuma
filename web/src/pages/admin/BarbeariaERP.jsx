@@ -7,6 +7,7 @@ import { isDinoBrandContext } from '../../lib/brand'
 import BarbeariaAgendaBoard, { agendaBoardColumns } from './BarbeariaAgendaBoard'
 import BarbeariaOperacaoPanel from './BarbeariaOperacaoPanel'
 import DinoBusinessDashboard from './DinoBusinessDashboard'
+import DinoCampaignsPanel from './DinoCampaignsPanel'
 
 const TABS = [
   ['Visão geral', 'Resumo da operação'],
@@ -882,7 +883,7 @@ export default function BarbeariaERP() {
     return <div style={{ display: 'grid', gap: 16 }}>
       <Card style={{ padding: 16 }}>
         <div style={styles.sectionTitle}>
-          <div><div style={styles.kicker}>CRM 360°</div><h2 style={styles.h2}>Relacionamento da unidade</h2><p style={styles.sub}>Uma leitura consolidada de visitas, receita, contas e permissões de contato. O painel não envia mensagens nem cria campanhas.</p></div>
+          <div><div style={styles.kicker}>CRM 360°</div><h2 style={styles.h2}>Relacionamento da unidade</h2><p style={styles.sub}>{isDinoBrand ? 'Visitas, receita, contas e consentimentos conectados à central governada de campanhas WhatsApp.' : 'Uma leitura consolidada de visitas, receita, contas e permissões de contato. O painel não envia mensagens nem cria campanhas.'}</p></div>
           <div style={styles.tableActions}><button type="button" style={styles.primary} onClick={() => { setFormCliente({ nome: '', telefone: '', email: '', observacao: '' }); setModal('cliente') }}>+ Novo cliente</button><a href="/admin/clientes" style={styles.secondary}>CRM completo</a></div>
         </div>
         <div style={styles.kpiGrid}>
@@ -894,6 +895,7 @@ export default function BarbeariaERP() {
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end', marginTop: 16 }}><label style={{ flex: '1 1 280px', minWidth: 0 }}><span style={{ display: 'block', color: 'var(--muted)', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Buscar cliente</span><input value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Nome, telefone ou e-mail" style={inputStyle} /></label><label style={{ flex: '0 1 230px', minWidth: 190 }}><span style={{ display: 'block', color: 'var(--muted)', fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Segmento operacional</span><select value={filtroClientes} onChange={(event) => setFiltroClientes(event.target.value)} style={inputStyle}><option value="todos">Todos os clientes</option><option value="ativos">Com visita registrada</option><option value="fidelidade">Membros de fidelidade</option><option value="consentimento">Com consentimento</option><option value="inativos">Sem visita registrada</option></select></label></div>
 
       </Card>
+      {isDinoBrand && <DinoCampaignsPanel />}
       <Card style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 980 }}>
           <thead><tr style={styles.tableHead}>{['Cliente', 'Contato', 'Visitas', 'Receita', 'A receber', 'Consentimentos', 'Última atividade'].map((coluna) => <th key={coluna} style={styles.th}>{coluna}</th>)}</tr></thead>
