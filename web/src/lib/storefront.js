@@ -10,6 +10,13 @@ export function storefrontApiBase(value) {
   return alias ? `/api/public/storefront/${encodeURIComponent(alias)}` : '/api/storefront'
 }
 
+export function storefrontMediaUrl(value, storeAlias) {
+  const url = String(value || '').trim()
+  const match = url.match(/^\/api\/storefront\/media\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i)
+  if (!match) return url
+  return `${storefrontApiBase(storeAlias)}/media/${match[1]}`
+}
+
 export function storefrontRoute(value, destination = 'store') {
   const alias = normalizeStorefrontAlias(value)
   if (destination === 'checkout') return alias ? `/checkout/${encodeURIComponent(alias)}` : '/checkout'
