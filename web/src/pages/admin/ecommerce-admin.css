@@ -183,6 +183,18 @@
 .commerce-category-form select:focus,
 .commerce-inline-form select:focus { border-color: #8fcf41; outline: 0; box-shadow: 0 0 0 3px rgba(143,207,65,.16); }
 .commerce-storefront-switcher { box-shadow: 0 5px 14px rgba(29,65,51,.05); }
+.commerce-own-delivery-rules { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--ux-line); border-radius: 14px; background: #f8fbf9; }
+.commerce-own-delivery-rules > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.commerce-own-delivery-rules > header strong,
+.commerce-own-delivery-rules > header small { display: block; }
+.commerce-own-delivery-rules > header small { margin-top: 4px; color: var(--ux-muted); font-size: 11px; font-weight: 600; }
+.commerce-own-delivery-rule { display: grid; gap: 12px; padding: 13px; border: 1px solid #dce8e2; border-radius: 12px; background: #fff; }
+.commerce-own-delivery-rule-heading { display: flex; align-items: center; gap: 12px; }
+.commerce-own-delivery-rule-heading > strong { margin-right: auto; color: var(--ux-ink); }
+.commerce-own-delivery-rule-heading > button { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid #efd7d2; border-radius: 9px; background: #fff7f5; color: #9a4435; cursor: pointer; }
+.commerce-own-delivery-rules details { border-top: 1px solid var(--ux-line); padding-top: 10px; }
+.commerce-own-delivery-rules summary { cursor: pointer; color: var(--ux-muted); font-size: 11px; font-weight: 800; }
+.commerce-own-delivery-rules details textarea { width: 100%; margin-top: 9px; }
 @media (max-width: 900px) {
   .ecommerce-admin-header { align-items: flex-start; flex-direction: column; }
   .ecommerce-admin-header-actions { width: 100%; justify-content: flex-start; }
@@ -203,7 +215,11 @@
   .commerce-category-form .ecommerce-admin-button { grid-column: auto; width: 100%; justify-self: stretch; }
   .commerce-category-list article { align-items: flex-start; flex-direction: column; }
   .commerce-category-list article button { align-self: flex-start; }
+  .commerce-own-delivery-rules > header { flex-direction: column; }
+  .commerce-own-delivery-rules > header .ecommerce-admin-button { width: 100%; justify-content: center; }
+  .commerce-own-delivery-rule-heading { align-items: flex-start; flex-wrap: wrap; }
 }
+
 
 
 .commerce-catalog-summary {

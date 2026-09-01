@@ -221,3 +221,26 @@ test('adapter de tabela manual aplica as faixas regionais e não gera etiqueta',
   await assert.rejects(() => adapter.createShipment({}), error => error.code === 'SHIPPING_PROVIDER_CAPABILITY_UNAVAILABLE');
   await assert.rejects(() => adapter.track({}), error => error.code === 'SHIPPING_TRACKING_UNSUPPORTED');
 });
+
+test('entrega própria aplica grupo regional, zona e adicional expresso sem Correios', async () => {
+  const adapter = shippingProviders.get('manual');
+  const destinationAddress = { cep: '78000000', cidade: 'Cuiabá', estado: 'MT' };
+  const motoboy = await adapter.quote({ methodConfig: { provider: 'manual', deliveryType: 'motoboy', baseFee: 5, pricePerZone: 8, rules: [{ id: 'zona-3', label: 'Zona 3', regions: ['centro-oeste'], zone: 3, deliveryDays: 1 }] }, destinationAddress, subtotal: 50 });
+  assert.equal(motoboy.options[0].amount, 29);
+  assert.equal(motoboy.options[0].zone, 3);
+  const express = await adapter.quote({ methodConfig: { provider: 'manual', deliveryType: 'express', additionalFee: 40, rules: [{ id: 'centro-oeste', label: 'Centro-Oeste expresso', regions: ['centro-oeste'], amount: 30, deliveryDays: 1 }] }, destinationAddress, subtotal: 50 });
+  assert.equal(express.options[0].amount, 70);
+  assert.equal(express.options[0].carrier, 'Kytto Express');
+});
+
+test('frete grátis só fica elegível quando o subtotal atinge o mínimo', async () => {
+  const adapter = shippingProviders.get('manual');
+  const methodConfig = { provider: 'manual', deliveryType: 'free_shipping', freeShippingAbove: 150, deliveryDays: 5 };
+  await assert.rejects(
+    () => adapter.quote({ methodConfig, destinationAddress: { cep: '01001000', cidade: 'São Paulo', estado: 'SP' }, subtotal: 149.99 }),
+    error => error.code === 'SHIPPING_FREE_SHIPPING_THRESHOLD_NOT_MET',
+  );
+  const eligible = await adapter.quote({ methodConfig, destinationAddress: { cep: '01001000', cidade: 'São Paulo', estado: 'SP' }, subtotal: 150 });
+  assert.equal(eligible.options[0].amount, 0);
+  assert.equal(eligible.options[0].freeShippingApplied, true);
+});

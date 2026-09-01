@@ -65,6 +65,20 @@ function publicCartLayer() {
   return layer.route;
 }
 
+function publicShippingLayer(path) {
+  const router = createCommercePublicRouter();
+  const layer = router.stack.find(item => item.route?.path === path);
+  assert.ok(layer?.route, `rota pública de entrega não encontrada: ${path}`);
+  return layer.route;
+}
+
+function shippingMethodCreateHandler() {
+  const router = createCommerceAdminRouter();
+  const layer = router.stack.find(item => item.route?.path === '/shipping/methods' && item.route.methods.post);
+  assert.ok(layer?.route?.stack?.[0]?.handle, 'rota administrativa de criação de método não encontrada');
+  return layer.route.stack[0].handle;
+}
+
 async function invoke(handler, dbQuery, query = {}) {
   const original = db.query;
   db.query = dbQuery;
@@ -131,6 +145,21 @@ test('rota pública de carrinho possui rate limit antes do handler de sync', () 
   const route = publicCartLayer();
   assert.equal(route.methods.post, true);
   assert.equal(route.stack.length, 2);
+});
+
+test('CEP e cotação agregada possuem rate limit antes dos handlers públicos', () => {
+  const address = publicShippingLayer('/shipping/address/:cep');
+  const available = publicShippingLayer('/shipping/quotes/available');
+  assert.equal(address.methods.get, true);
+  assert.equal(available.methods.post, true);
+  assert.equal(address.stack.length, 2);
+  assert.equal(available.stack.length, 2);
+});
+
+test('cadastro de método de entrega rejeita sessão sem membership', async () => {
+  const response = await invoke(shippingMethodCreateHandler(), async () => ({ rows: [] }));
+  assert.equal(response.statusCode, 401);
+  assert.equal(response.body.code, 'TENANT_CONTEXT_REQUIRED');
 });
 
 test('visão administrativa de carrinhos rejeita sessão sem membership', async () => {

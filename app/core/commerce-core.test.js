@@ -9,6 +9,7 @@ import {
   updateShippingMethod,
   createPendingOrder,
   createFulfillment,
+  createShippingMethod,
   ORDER_TRANSITIONS,
   assertUuid,
   reserveInventory,
@@ -133,24 +134,62 @@ test('adjustInventory retorna a mesma resposta para uma chave repetida', async (
   assert.equal(calls.filter(call => call.sql.includes('UPDATE commerce_inventory_levels')).length, 1);
 });
 
+test('createShippingMethod exige storefront do tenant e persiste configuração própria normalizada', async () => {
+  const { trx, calls } = queryRecorder((sql, values) => {
+    if (sql.includes('FROM commerce_storefronts')) return { rows: [{ id: storefrontId, empresa_id: empresaId, loja_id: lojaId }] };
+    if (sql.includes('INSERT INTO commerce_shipping_methods')) return { rows: [{ id: '88888888-8888-4888-8888-888888888887', empresa_id: empresaId, storefront_id: storefrontId, configuracao: JSON.parse(values[6]) }] };
+    return { rows: [] };
+  });
+  const result = await createShippingMethod(trx, { empresaId, lojaId }, { storefrontId, codigo: 'Motoboy Zona 1', nome: 'Motoboy Zona 1', tipo: 'delivery', configuracao: { provider: 'manual', deliveryType: 'motoboy', baseFee: 5, pricePerZone: 8, rules: [{ id: 'zona-1', label: 'Zona 1', ufs: 'MT', zone: 1, deliveryDays: 1 }] } });
+  assert.equal(result.configuracao.provider, 'manual');
+  assert.deepEqual(result.configuracao.rules[0].ufs, ['MT']);
+  const lookup = calls.find(call => call.sql.includes('FROM commerce_storefronts'));
+  assert.deepEqual(lookup.values, [empresaId, storefrontId]);
+
+  const outside = queryRecorder(sql => sql.includes('FROM commerce_storefronts') ? { rows: [{ id: storefrontId, empresa_id: empresaId, loja_id: '55555555-5555-4555-8555-555555555556' }] } : { rows: [] });
+  await assert.rejects(
+    () => createShippingMethod(outside.trx, { empresaId, lojaId }, { storefrontId, codigo: 'fora', nome: 'Fora', tipo: 'pickup', configuracao: {} }),
+    error => error instanceof CommerceError && error.code === 'STORE_SCOPE_MISMATCH',
+  );
+});
+
 test('updateShippingMethod valida escopo, conta logística e estado ativo', async () => {
   const methodId = '88888888-8888-4888-8888-888888888888';
   const shippingAccountId = '99999999-9999-4999-8999-999999999999';
   const { trx, calls } = queryRecorder((sql, values) => {
     if (sql.includes('FROM commerce_shipping_methods sm')) return { rows: [{ id: methodId, empresa_id: empresaId, storefront_id: storefrontId, codigo: 'correios', nome: 'Correios', tipo: 'carrier', ativo: true, configuracao: {} }] };
-    if (sql.includes('FROM commerce_shipping_accounts')) return { rows: [{ id: shippingAccountId }] };
-    if (sql.includes('UPDATE commerce_shipping_methods')) return { rows: [{ id: methodId, codigo: 'correios-expresso', nome: 'Correios Expresso', tipo: 'carrier', ativo: false, configuracao: { shippingAccountId } }] };
+    if (sql.includes('FROM commerce_shipping_accounts')) return { rows: [{ id: shippingAccountId, provider: 'correios' }] };
+    if (sql.includes('UPDATE commerce_shipping_methods')) return { rows: [{ id: methodId, codigo: 'correios-expresso', nome: 'Correios Expresso', tipo: 'carrier', ativo: false, configuracao: JSON.parse(values.at(-1)) }] };
     return { rows: [] };
   });
-  const result = await updateShippingMethod(trx, { empresaId, lojaId }, methodId, { codigo: 'Correios Expresso', nome: 'Correios Expresso', ativo: false, configuracao: { shippingAccountId } });
+  const result = await updateShippingMethod(trx, { empresaId, lojaId }, methodId, { codigo: 'Correios Expresso', nome: 'Correios Expresso', ativo: false, configuracao: { provider: 'correios', shippingAccountId, services: '03220, 04669', apiToken: 'não-persistir' } });
   assert.equal(result.ativo, false);
   assert.equal(result.configuracao.shippingAccountId, shippingAccountId);
+  assert.deepEqual(result.configuracao.services, ['03220', '04669']);
+  assert.equal('apiToken' in result.configuracao, false);
   assert.equal(calls.filter(call => call.sql.includes('UPDATE commerce_shipping_methods')).length, 1);
 
   const invalid = queryRecorder(sql => sql.includes('FROM commerce_shipping_methods sm') ? { rows: [{ id: methodId, empresa_id: empresaId, storefront_id: storefrontId, tipo: 'pickup', configuracao: {} }] } : { rows: [] });
   await assert.rejects(
     () => updateShippingMethod(invalid.trx, { empresaId, lojaId }, methodId, { ativo: 'false' }),
     error => error instanceof CommerceError && error.code === 'SHIPPING_METHOD_INVALID',
+  );
+});
+
+test('updateShippingMethod normaliza entrega própria e rejeita faixa fora do contrato', async () => {
+  const methodId = '88888888-8888-4888-8888-888888888889';
+  const { trx, calls } = queryRecorder((sql, values) => {
+    if (sql.includes('FROM commerce_shipping_methods sm')) return { rows: [{ id: methodId, empresa_id: empresaId, storefront_id: storefrontId, codigo: 'motoboy', nome: 'Motoboy', tipo: 'delivery', ativo: true, configuracao: {} }] };
+    if (sql.includes('UPDATE commerce_shipping_methods')) return { rows: [{ id: methodId, configuracao: JSON.parse(values[2]) }] };
+    return { rows: [] };
+  });
+  const result = await updateShippingMethod(trx, { empresaId, lojaId }, methodId, { configuracao: { provider: 'manual', deliveryType: 'motoboy', baseFee: 5, pricePerZone: 8, rules: [{ id: 'zona-1', label: 'Zona 1', ufs: 'MT', zone: 1, deliveryDays: 1 }] } });
+  assert.equal(result.configuracao.provider, 'manual');
+  assert.deepEqual(result.configuracao.rules[0].ufs, ['MT']);
+  assert.equal(calls.filter(call => call.sql.includes('UPDATE commerce_shipping_methods')).length, 1);
+  await assert.rejects(
+    () => updateShippingMethod(trx, { empresaId, lojaId }, methodId, { configuracao: { provider: 'manual', deliveryType: 'free_shipping', freeShippingAbove: 0 } }),
+    error => error instanceof CommerceError && error.code === 'SHIPPING_METHOD_CONFIG_INVALID',
   );
 });
 

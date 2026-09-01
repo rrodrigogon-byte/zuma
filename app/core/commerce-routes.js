@@ -13,7 +13,7 @@ import { createMembership, listMemberships, listRoles, updateMembership } from '
 import { createCustomer, createCustomerAddress, deleteCustomerAddress, getCustomer, listCustomerAddresses, updateCustomer, updateCustomerAddress } from './commerce-customers.js';
 import { createCreditAccount, createCreditPayment, listCreditAccounts, listCreditEntries, updateCreditAccount } from './commerce-credit.js';
 import { createStorefrontDomain, listStorefrontDomains, setPrimaryStorefrontDomain, verifyStorefrontDomain } from './commerce-domains.js';
-import { createShippingAccount, failShippingLabel, finalizeShippingCancellation, finalizeShippingLabel, listShippingAccounts, listShippingProviders, lookupPostalCode, prepareShippingCancellation, prepareShippingLabel, publicShippingMethod, quoteShipping, shippingAccountReady, updateShippingAccount, updateShippingTracking } from './commerce-shipping.js';
+import { createShippingAccount, failShippingLabel, finalizeShippingCancellation, finalizeShippingLabel, listShippingAccounts, listShippingProviders, lookupPostalCode, prepareShippingCancellation, prepareShippingLabel, publicShippingMethod, quoteAvailableShipping, quoteShipping, shippingAccountReady, updateShippingAccount, updateShippingTracking } from './commerce-shipping.js';
 import { shippingProviders } from './shipping-adapters.js';
 import { commerceMediaIdForIdempotencyKey, newCommerceMediaId, streamCommerceImage, uploadCommerceImage } from './commerce-media.js';
 import { configureWhatsappAiChannel, listWhatsappAiSessions, releaseWhatsappAiHandoff, syncWhatsappAiWebhook, testWhatsappAiGemini, whatsappAiOperationalStatus } from './whatsapp-ai.js';
@@ -50,6 +50,20 @@ import {
 } from './commerce-core.js';
 
 const publicCartRequests = new Map();
+const publicShippingRequests = new Map();
+function publicShippingRateLimit(req, res, next) {
+  const now = Date.now();
+  const windowMs = 5 * 60 * 1000;
+  const key = `${req.ip || req.socket?.remoteAddress || 'unknown'}:${req.publicStoreAlias || publicHost(req)}`;
+  const recent = (publicShippingRequests.get(key) || []).filter(at => now - at < windowMs);
+  if (recent.length >= 20) return res.status(429).json({ error: 'Muitas consultas de entrega. Tente novamente em alguns minutos.', code: 'RATE_LIMIT' });
+  recent.push(now);
+  publicShippingRequests.set(key, recent);
+  if (publicShippingRequests.size > 10000) {
+    for (const [candidate, values] of publicShippingRequests.entries()) if (!values.length || now - values[values.length - 1] >= windowMs) publicShippingRequests.delete(candidate);
+  }
+  next();
+}
 function publicCartRateLimit(req, res, next) {
   const now = Date.now();
   const windowMs = 5 * 60 * 1000;
@@ -297,6 +311,7 @@ function jsonError(res, error) {
     PAYMENT_PROVIDER_STATUS_UNAVAILABLE: 503,
     AUDIT_INVALID: 400,
     SHIPPING_METHOD_INVALID: 400,
+    SHIPPING_METHOD_CONFIG_INVALID: 400,
     SHIPPING_METHOD_NOT_FOUND: 404,
     SHIPPING_CEP_INVALID: 400,
     SHIPPING_CEP_NOT_FOUND: 404,
@@ -323,6 +338,8 @@ function jsonError(res, error) {
     SHIPPING_PROVIDER_TIMEOUT: 504,
     SHIPPING_NO_OPTIONS: 422,
     SHIPPING_DESTINATION_UNAVAILABLE: 422,
+    SHIPPING_DESTINATION_OUTSIDE_RADIUS: 422,
+    SHIPPING_FREE_SHIPPING_THRESHOLD_NOT_MET: 422,
     SHIPPING_ADAPTER_INVALID_RESPONSE: 502,
     SHIPPING_QUOTE_REQUIRED: 400,
     SHIPPING_QUOTE_INVALID: 400,
@@ -456,7 +473,7 @@ export function createCommercePublicRouter() {
       else res.destroy(error);
     }
   });
-  router.get('/shipping/address/:cep', async (req, res) => {
+  router.get('/shipping/address/:cep', publicShippingRateLimit, async (req, res) => {
     try { res.json(await lookupPostalCode(req.params.cep)); } catch (error) { jsonError(res, error); }
   });
   router.get('/shipping-methods', async (req, res) => {
@@ -474,10 +491,17 @@ export function createCommercePublicRouter() {
       res.json({ storefrontId: storefront.id, items: result.rows.map(row => publicShippingMethod({ ...row, shipping_account_ready: shippingAccountReady({ id: row.active_shipping_account_id, provider: row.active_shipping_provider, secret_ref: row.active_shipping_secret_ref, public_config: row.active_shipping_public_config, ativo: row.active_shipping_account }) })) });
     } catch (error) { jsonError(res, error); }
   });
-  router.post('/shipping/quotes', async (req, res) => {
+  router.post('/shipping/quotes', publicShippingRateLimit, async (req, res) => {
     try {
       const storefront = await resolvePublicStorefront(req);
       const result = await quoteShipping(db, { empresaId: storefront.empresa_id, lojaId: storefront.loja_id }, { ...req.body, storefrontId: storefront.id });
+      res.status(201).json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/shipping/quotes/available', publicShippingRateLimit, async (req, res) => {
+    try {
+      const storefront = await resolvePublicStorefront(req);
+      const result = await quoteAvailableShipping(db, { empresaId: storefront.empresa_id, lojaId: storefront.loja_id }, { ...req.body, storefrontId: storefront.id });
       res.status(201).json(result);
     } catch (error) { jsonError(res, error); }
   });
@@ -1085,7 +1109,11 @@ export function createCommerceAdminRouter() {
   router.post('/shipping/methods', async (req, res) => {
     try {
       const context = await requirePermission(req, 'fulfillment.write');
-      const result = await withCommerceTransaction(trx => createShippingMethod(trx, context, req.body));
+      const result = await withCommerceTransaction(async trx => {
+        const method = await createShippingMethod(trx, context, req.body);
+        await auditLog(trx, context, { entidade: 'shipping_method', entidadeId: method.id, acao: 'created', depois: { storefrontId: method.storefront_id, nome: method.nome, tipo: method.tipo, ativo: method.ativo, configuracao: method.configuracao } });
+        return method;
+      });
       res.status(201).json(result);
     } catch (error) { jsonError(res, error); }
   });

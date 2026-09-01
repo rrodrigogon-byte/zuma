@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isValidCpfCnpj, normalizeCep, normalizeShippingAddress, publicShippingMethod, quoteShipping, shippingAccountReady, updateShippingTracking } from './commerce-shipping.js';
+import { isValidCpfCnpj, normalizeCep, normalizeOwnDeliveryConfig, normalizeShippingAddress, publicShippingMethod, quoteAvailableShipping, quoteShipping, shippingAccountReady, updateShippingTracking } from './commerce-shipping.js';
 
 const originalFetch = global.fetch;
 const originalToken = process.env.ME_ACCESS_TOKEN;
@@ -113,7 +113,7 @@ test('cotação manual usa cidade e persiste quote sem conta logística externa'
   const client = {
     async query(sql, params) {
       queries.push({ sql, params });
-      if (sql.includes('FROM commerce_shipping_methods')) return { rows: [{ id: '10000000-0000-4000-8000-000000000109', codigo: 'kytto-regional', nome: 'Entrega regional Kytto', tipo: 'delivery', configuracao: { provider: 'manual', origemCep: '78300000' }, storefront_id: '10000000-0000-4000-8000-000000000103', loja_id: '10000000-0000-4000-8000-000000000104', configuracoes: {} }] };
+      if (sql.includes('FROM commerce_shipping_methods')) return { rows: [{ id: '10000000-0000-4000-8000-000000000109', codigo: 'kytto-regional', nome: 'Entrega regional Kytto', tipo: 'delivery', configuracao: { provider: 'manual', deliveryType: 'regional_table', origemCep: '78300000', rules: [{ id: 'nova-olimpia', label: 'Nova Olímpia', cities: ['Nova Olímpia'], uf: 'MT', amount: 20, deliveryDays: 1 }] }, storefront_id: '10000000-0000-4000-8000-000000000103', loja_id: '10000000-0000-4000-8000-000000000104', configuracoes: {} }] };
       if (sql.includes('FROM commerce_product_variants')) return { rows: [{ id: '10000000-0000-4000-8000-000000000105', sku: 'SKU-1', nome: 'Produto', peso_gramas: 500, largura_cm: 10, altura_cm: 5, comprimento_cm: 20, price: 39.9 }] };
       throw new Error(`query inesperada: ${sql}`);
     },
@@ -138,7 +138,7 @@ test('cotação manual usa cidade e persiste quote sem conta logística externa'
 });
 
 test('entrega própria calcula motoboy, expressa e frete grátis sem depender de Correios', async () => {
-  let methodConfig = { provider: 'manual', deliveryType: 'motoboy', baseFee: 5, pricePerKm: 2, distanceKm: 3, deliveryDays: 1 };
+  let methodConfig = { provider: 'manual', deliveryType: 'motoboy', baseFee: 5, pricePerKm: 2, distanceKm: 3, deliveryDays: 1, rules: [{ id: 'local', label: 'Local', fallback: true, deliveryDays: 1 }] };
   const client = {
     async query(sql) {
       if (sql.includes('FROM commerce_shipping_methods')) return { rows: [{ id: '10000000-0000-4000-8000-000000000119', codigo: 'entrega-propria', nome: 'Entrega própria', tipo: 'delivery', configuracao: methodConfig, storefront_id: '10000000-0000-4000-8000-000000000103', loja_id: '10000000-0000-4000-8000-000000000104' }] };
@@ -161,8 +161,52 @@ test('entrega própria calcula motoboy, expressa e frete grátis sem depender de
   result = await quoteShipping(client, { empresaId: '10000000-0000-4000-8000-000000000106', lojaId: '10000000-0000-4000-8000-000000000104' }, baseInput);
   assert.equal(result.items[0].amount, 19.9);
   assert.equal(result.items[0].carrier, 'Kytto Express');
-  methodConfig = { provider: 'manual', deliveryType: 'motoboy', baseFee: 12, freeShippingAbove: 70, deliveryDays: 2 };
+  methodConfig = { provider: 'manual', deliveryType: 'motoboy', baseFee: 12, freeShippingAbove: 70, deliveryDays: 2, rules: [{ id: 'local', label: 'Local', fallback: true, deliveryDays: 2 }] };
   result = await quoteShipping(client, { empresaId: '10000000-0000-4000-8000-000000000106', lojaId: '10000000-0000-4000-8000-000000000104' }, baseInput);
   assert.equal(result.items[0].amount, 0);
   assert.equal(result.items[0].freeShippingApplied, true);
+});
+
+test('normaliza faixas próprias com zonas e regiões e rejeita configurações ambíguas', () => {
+  const config = normalizeOwnDeliveryConfig({ provider: 'manual', deliveryType: 'motoboy', baseFee: 5, pricePerZone: 8, rules: [{ id: 'zona-2', label: 'Zona 2', region: 'Centro-Oeste', ufs: 'MT, GO', cepFrom: '78000-000', cepTo: '78999-999', zone: 2, deliveryDays: 1 }] });
+  assert.equal(config.pricePerZone, 8);
+  assert.deepEqual(config.rules[0].ufs, ['MT', 'GO']);
+  assert.deepEqual(config.rules[0].regions, ['centro-oeste']);
+  assert.equal(config.rules[0].cepFrom, '78000000');
+  assert.throws(() => normalizeOwnDeliveryConfig({ provider: 'manual', deliveryType: 'regional_table', rules: [] }), error => error.code === 'SHIPPING_METHOD_CONFIG_INVALID');
+  assert.throws(() => normalizeOwnDeliveryConfig({ provider: 'manual', deliveryType: 'free_shipping', freeShippingAbove: 0 }), error => error.code === 'SHIPPING_METHOD_CONFIG_INVALID');
+  assert.throws(() => normalizeOwnDeliveryConfig({ provider: 'manual', deliveryType: 'regional_table', rules: [{ id: 'invertida', label: 'Inválida', cepFrom: '79000000', cepTo: '78000000' }] }), error => error.code === 'SHIPPING_METHOD_CONFIG_INVALID');
+});
+
+test('cotação agregada retorna somente métodos aplicáveis e preserva quoteId por opção', async () => {
+  const storefrontId = '10000000-0000-4000-8000-000000000103';
+  const motoboyId = '10000000-0000-4000-8000-000000000119';
+  const freeId = '10000000-0000-4000-8000-000000000120';
+  let inserts = 0;
+  const client = {
+    async query(sql, params) {
+      if (sql.includes('SELECT id, codigo, nome') && sql.includes('commerce_shipping_methods')) return { rows: [{ id: motoboyId, codigo: 'motoboy', nome: 'Motoboy' }, { id: freeId, codigo: 'gratis', nome: 'Frete grátis' }] };
+      if (sql.includes('SELECT sm.id') && sql.includes('commerce_shipping_methods')) {
+        const config = params[2] === motoboyId
+          ? { provider: 'manual', deliveryType: 'motoboy', baseFee: 5, pricePerZone: 8, rules: [{ id: 'zona-2', label: 'Zona 2', ufs: ['MT'], zone: 2, deliveryDays: 1 }] }
+          : { provider: 'manual', deliveryType: 'free_shipping', freeShippingAbove: 100, deliveryDays: 5 };
+        return { rows: [{ id: params[2], codigo: params[2] === motoboyId ? 'motoboy' : 'gratis', nome: 'Entrega', tipo: 'delivery', configuracao: config, storefront_id: storefrontId, loja_id: '10000000-0000-4000-8000-000000000104', configuracoes: {} }] };
+      }
+      if (sql.includes('FROM commerce_product_variants')) return { rows: [{ id: '10000000-0000-4000-8000-000000000105', sku: 'SKU-1', nome: 'Produto', peso_gramas: 0, largura_cm: 0, altura_cm: 0, comprimento_cm: 0, price: 39.9 }] };
+      throw new Error(`query inesperada: ${sql}`);
+    },
+    async transaction(callback) {
+      return callback({ query: async sql => {
+        if (sql.includes('INSERT INTO commerce_shipping_quotes')) { inserts += 1; return { rows: [{ id: `10000000-0000-4000-8000-${String(inserts).padStart(12, '0')}`, expires_at: '2099-01-01T00:00:00.000Z' }] }; }
+        throw new Error(`query transacional inesperada: ${sql}`);
+      } });
+    },
+  };
+  const result = await quoteAvailableShipping(client, { empresaId: '10000000-0000-4000-8000-000000000106', lojaId: '10000000-0000-4000-8000-000000000104' }, { storefrontId, destinationCep: '78300055', destination: { cep: '78300055', cidade: 'Tangará da Serra', estado: 'MT' }, items: [{ variantId: '10000000-0000-4000-8000-000000000105', quantity: 1 }] });
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].amount, 21);
+  assert.equal(result.items[0].shippingMethodId, motoboyId);
+  assert.match(result.items[0].selectionId, new RegExp(`:${result.items[0].id}$`));
+  assert.deepEqual(result.unavailable, [{ shippingMethodId: freeId, code: 'SHIPPING_FREE_SHIPPING_THRESHOLD_NOT_MET' }]);
+  assert.equal(inserts, 1);
 });
