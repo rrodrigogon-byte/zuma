@@ -1,115 +1,82 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Building2, CheckCircle2, ExternalLink, Loader2, Plus, RefreshCw, ShieldCheck, Store } from 'lucide-react'
 import { api } from '../../lib/api'
+import { useAuth } from '../../lib/auth'
 import { useToast } from '../../hooks/useToast'
 
-const MODULOS = [
-  { id: 'pdv', label: 'PDV', grupo: 'Operação' },
-  { id: 'mesas', label: 'Mesas e comandas', grupo: 'Operação' },
-  { id: 'kds', label: 'Cozinha / KDS', grupo: 'Operação' },
-  { id: 'cardapio', label: 'Cardápio', grupo: 'Operação' },
-  { id: 'pagamentos', label: 'Pagamentos', grupo: 'Financeiro' },
-  { id: 'financeiro', label: 'Financeiro', grupo: 'Financeiro' },
-  { id: 'fiscal', label: 'Fiscal', grupo: 'Financeiro' },
-  { id: 'estoque', label: 'Estoque', grupo: 'Gestão' },
-  { id: 'compras', label: 'Compras e fornecedores', grupo: 'Gestão' },
-  { id: 'crm', label: 'CRM', grupo: 'Gestão' },
-  { id: 'usuarios', label: 'Usuários', grupo: 'Gestão' },
-  { id: 'socios', label: 'Sócios e fidelidade', grupo: 'Gestão' },
-  { id: 'barbearia', label: 'Barbearia e salão', grupo: 'Especializados' },
-  { id: 'supermercado', label: 'Supermercado', grupo: 'Especializados' },
-  { id: 'loja_moda', label: 'Loja de moda', grupo: 'Especializados' },
-  { id: 'oficina', label: 'Oficina mecânica', grupo: 'Especializados' },
-  { id: 'agropecuaria', label: 'Agropecuária e pet', grupo: 'Especializados' },
-  { id: 'varejo', label: 'Varejo geral', grupo: 'Especializados' },
-  { id: 'ecommerce', label: 'E-commerce', grupo: 'Canais' },
-  { id: 'delivery', label: 'Delivery e fidelidade', grupo: 'Canais' },
-  { id: 'torneios', label: 'Torneios', grupo: 'Clube' },
-  { id: 'quadras', label: 'Quadras', grupo: 'Clube' },
-  { id: 'pontos', label: 'Pontos e Elo', grupo: 'Clube' },
-  { id: 'ligas', label: 'Ligas de ranking', grupo: 'Clube' },
-]
-
-const MODULOS_PADRAO_BARBEARIA = []
-
-const EMPTY_EMPRESA = {
-  nome: 'Barbearia do Dino',
-  nomeFantasia: 'Barbearia do Dino',
+const EMPTY_TENANT = {
+  nomeFantasia: 'Dino',
+  razaoSocial: '',
   cnpj: '',
-  inscricaoEstadual: '',
-  endereco: '',
-  email: '',
-  telefone: '',
-  plano: 'standard',
-  permitirEstoqueNegativo: false,
-  modulos: MODULOS_PADRAO_BARBEARIA,
-  administrador: { nome: '', email: '', senhaInicial: '' },
+  tipoNegocio: 'barbearia',
+  adminName: '',
+  adminEmail: '',
+  alias: 'dino',
+  brandKey: 'dino',
+  lojaCodigo: 'DINO-MATRIZ',
+  storefrontCodigo: 'dino-web',
+  tagline: 'Barbearia, perfumaria e autocuidado em uma experiência integrada.',
+  confirmAdminAccess: false,
 }
 
-function campoLabel(label, value, onChange, props = {}) {
-  return (
-    <label className="form-group">
-      <span>{label}</span>
-      <input value={value} onChange={(event) => onChange(event.target.value)} {...props} />
-    </label>
-  )
+function onlyDigits(value) {
+  return String(value || '').replace(/\D/g, '').slice(0, 14)
 }
 
-function ModulosEditor({ value, onChange, compact = false }) {
-  const ativos = new Set(Array.isArray(value) ? value : [])
-  const grupos = [...new Set(MODULOS.map((modulo) => modulo.grupo))]
+function TenantCard({ tenant }) {
+  const storefronts = Array.isArray(tenant.storefronts) ? tenant.storefronts : []
   return (
-    <div style={{ display: 'grid', gap: compact ? 8 : 14 }}>
-      {grupos.map((grupo) => (
-        <div key={grupo}>
-          <div style={{ color: '#12283F', fontWeight: 800, fontSize: compact ? 11 : 12, marginBottom: 6 }}>{grupo}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 6 }}>
-            {MODULOS.filter((modulo) => modulo.grupo === grupo).map((modulo) => (
-              <label key={modulo.id} style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12, color: 'var(--muted)', padding: '6px 8px', border: '1px solid var(--line)', borderRadius: 7, background: ativos.has(modulo.id) ? 'rgba(255,107,44,.08)' : 'var(--surface-2)' }}>
-                <input
-                  type="checkbox"
-                  checked={ativos.has(modulo.id)}
-                  onChange={(event) => {
-                    const proximo = new Set(ativos)
-                    if (event.target.checked) proximo.add(modulo.id)
-                    else proximo.delete(modulo.id)
-                    onChange([...proximo])
-                  }}
-                />
-                {modulo.label}
-              </label>
-            ))}
-          </div>
+    <article className="card" style={{ display: 'grid', gap: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
+        <div>
+          <div className="badge" style={{ marginBottom: 8 }}>{tenant.tipo_negocio || 'empresa'}</div>
+          <h2 style={{ margin: 0, fontSize: 20 }}>{tenant.nome}</h2>
+          <p style={{ margin: '5px 0 0', color: 'var(--muted)', fontSize: 12 }}>{tenant.razao_social || 'Razão social não informada'} · CNPJ {tenant.cnpj || '—'}</p>
         </div>
-      ))}
-    </div>
+        <span className="badge" style={{ color: tenant.ativa === false ? 'var(--bad)' : 'var(--good)', background: tenant.ativa === false ? 'var(--bad-wash)' : 'var(--good-wash)' }}>
+          {tenant.ativa === false ? 'Inativa' : 'Ativa'}
+        </span>
+      </div>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {storefronts.length === 0 ? <div style={{ color: 'var(--muted)', fontSize: 13 }}>Nenhum storefront Commerce associado.</div> : storefronts.map((storefront) => {
+          const aliases = Array.isArray(storefront.aliases) ? storefront.aliases : []
+          return (
+            <div key={storefront.id} style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 14, background: 'var(--surface-2)', display: 'grid', gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <strong style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}><Store size={16} /> {storefront.nome}</strong>
+                <span className="badge">{storefront.status}</span>
+              </div>
+              <small style={{ color: 'var(--muted)' }}>Código: {storefront.codigo} · Loja: {storefront.lojaId || 'tenant-wide'}</small>
+              {aliases.map((item) => (
+                <a key={item.alias} href={`/ecommerce/${encodeURIComponent(item.alias)}`} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', gap: 6, alignItems: 'center', color: 'var(--accent)', fontWeight: 800, fontSize: 12 }}>
+                  /ecommerce/{item.alias} · {item.brandKey} {item.ativo === false ? '(inativo)' : ''} <ExternalLink size={13} />
+                </a>
+              ))}
+            </div>
+          )
+        })}
+      </div>
+    </article>
   )
 }
 
 export default function AdminPlataforma() {
   const { toast } = useToast()
-  const [empresas, setEmpresas] = useState([])
+  const { atualizarContextoLojas } = useAuth()
+  const [tenants, setTenants] = useState([])
   const [loading, setLoading] = useState(true)
-  const [savingId, setSavingId] = useState('')
   const [creating, setCreating] = useState(false)
   const [showCreate, setShowCreate] = useState(true)
-  const [empresaForm, setEmpresaForm] = useState(EMPTY_EMPRESA)
-  const [expanded, setExpanded] = useState('')
-  const [drafts, setDrafts] = useState({})
+  const [form, setForm] = useState(EMPTY_TENANT)
+  const [result, setResult] = useState(null)
 
   const carregar = useCallback(async () => {
     setLoading(true)
     try {
-      const resposta = await api.get('/api/admin/plataforma/empresas')
-      const lista = Array.isArray(resposta) ? resposta : (resposta.empresas || [])
-      setEmpresas(lista)
-      setDrafts(Object.fromEntries(lista.map((empresa) => [empresa.id, {
-        modulos: Array.isArray(empresa.modulos) ? empresa.modulos : [],
-        plano: empresa.plano || 'standard',
-        statusOnboarding: empresa.statusOnboarding || 'configuracao',
-        ativa: empresa.ativa !== false,
-      }])))
+      const response = await api.get('/api/admin/platform/commerce-tenants')
+      setTenants(Array.isArray(response?.items) ? response.items : [])
     } catch (error) {
-      toast(error.message || 'Não foi possível carregar as empresas da plataforma.', true)
+      toast(error.message || 'Não foi possível carregar os tenants do Commerce.', true)
     } finally {
       setLoading(false)
     }
@@ -117,143 +84,99 @@ export default function AdminPlataforma() {
 
   useEffect(() => { carregar() }, [carregar])
 
-  const atualizarDraft = (empresaId, campo, valor) => {
-    setDrafts((atual) => ({ ...atual, [empresaId]: { ...atual[empresaId], [campo]: valor } }))
+  const aliasValido = /^[a-z0-9][a-z0-9_-]{1,79}$/.test(form.alias)
+  const formValido = useMemo(() => (
+    Boolean(form.nomeFantasia.trim() && form.razaoSocial.trim() && onlyDigits(form.cnpj).length === 14 && form.adminEmail.trim() && aliasValido && form.confirmAdminAccess)
+  ), [form, aliasValido])
+
+  function change(field, value) {
+    setForm((current) => ({ ...current, [field]: value }))
+    setResult(null)
   }
 
-  const salvarEmpresa = async (empresa) => {
-    const draft = drafts[empresa.id]
-    if (!draft) return
-    setSavingId(empresa.id)
-    try {
-      await api.patch(`/api/admin/plataforma/empresas/${empresa.id}`, draft)
-      toast(`Módulos de ${empresa.nomeFantasia || empresa.nome} atualizados.`)
-      await carregar()
-    } catch (error) {
-      toast(error.message || 'Não foi possível atualizar a empresa.', true)
-    } finally {
-      setSavingId('')
-    }
-  }
-
-  const criarEmpresa = async (event) => {
+  async function provisionar(event) {
     event.preventDefault()
-    const administrador = empresaForm.administrador || {}
-    const camposAdmin = [administrador.nome, administrador.email, administrador.senhaInicial].filter((valor) => String(valor || '').trim())
-    const gestorCompleto = Boolean(administrador.nome && administrador.email && String(administrador.senhaInicial || '').length >= 8)
-    if (!empresaForm.nome) {
-      toast('Informe o nome da empresa.', true)
-      return
-    }
-    if (camposAdmin.length > 0 && !gestorCompleto) {
-      toast('Preencha nome, e-mail e senha do gestor, ou deixe os três campos vazios para criar um rascunho.', true)
-      return
-    }
+    if (!formValido) return toast('Revise nome, razão social, CNPJ, administrador e alias.', true)
     setCreating(true)
+    setResult(null)
     try {
-      const resposta = await api.post('/api/admin/plataforma/empresas', empresaForm)
-      toast(resposta?.pendente ? `Empresa ${resposta?.empresa?.nomeFantasia || empresaForm.nome} criada como rascunho.` : `Empresa ${resposta?.empresa?.nomeFantasia || empresaForm.nome} criada com isolamento próprio.`)
-      setEmpresaForm({ ...EMPTY_EMPRESA, administrador: { ...EMPTY_EMPRESA.administrador } })
-      setShowCreate(false)
-      setExpanded(resposta?.empresa?.id || '')
+      const response = await api.post('/api/admin/platform/commerce-tenants', {
+        nomeFantasia: form.nomeFantasia.trim(),
+        razaoSocial: form.razaoSocial.trim(),
+        cnpj: onlyDigits(form.cnpj),
+        tipoNegocio: form.tipoNegocio,
+        adminName: form.adminName.trim(),
+        adminEmail: form.adminEmail.trim().toLowerCase(),
+        alias: form.alias.trim().toLowerCase(),
+        brandKey: form.brandKey.trim().toLowerCase(),
+        lojaCodigo: form.lojaCodigo.trim().toUpperCase(),
+        storefrontCodigo: form.storefrontCodigo.trim().toLowerCase(),
+        publicConfig: { displayName: form.nomeFantasia.trim(), tagline: form.tagline.trim(), colors: { accent: '#6E7CE0', accentStrong: '#4B57A6', background: '#101114', surface: '#181A20', text: '#F4F5F7' } },
+        confirmAdminAccess: form.confirmAdminAccess,
+      })
+      const session = await api.get('/api/admin/commerce-session')
+      atualizarContextoLojas(session)
+      setResult(response)
+      toast(response.created ? `Tenant ${response.empresa?.nome || form.nomeFantasia} criado em modo rascunho.` : `Tenant ${response.empresa?.nome || form.nomeFantasia} reconciliado com segurança.`)
       await carregar()
     } catch (error) {
-      toast(error.message || 'Não foi possível criar a empresa.', true)
+      toast(error.message || 'Não foi possível provisionar o tenant.', true)
     } finally {
       setCreating(false)
     }
   }
 
   return (
-    <div className="page">
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 24 }}>
+    <main className="page" style={{ display: 'grid', gap: 22 }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div>
-          <div className="badge" style={{ color: '#FF6B2C', background: 'rgba(255,107,44,.12)', marginBottom: 8 }}>ADMINISTRAÇÃO GERAL</div>
-          <h1 className="page-title" style={{ margin: 0 }}>🏢 Empresas e Módulos</h1>
-          <p style={{ color: 'var(--muted)', fontSize: 13, maxWidth: 700, lineHeight: 1.55, margin: '8px 0 0' }}>
-            Painel exclusivo do administrador da plataforma. Crie tenants, defina o plano contratado e libere somente os módulos que cada gestor poderá utilizar.
-          </p>
+          <div className="badge" style={{ color: 'var(--accent)', background: 'var(--accent-soft)', marginBottom: 8 }}>ADMINISTRAÇÃO DA PLATAFORMA</div>
+          <h1 className="page-title" style={{ margin: 0 }}>Empresas e Commerce</h1>
+          <p style={{ color: 'var(--muted)', maxWidth: 760, lineHeight: 1.6, margin: '8px 0 0' }}>Cada empresa recebe identidade, usuários, lojas, catálogo, estoque, pedidos e pagamentos isolados. O provisionamento não cria produtos, preços, saldo ou credenciais.</p>
         </div>
-        <button className="btn btn-secondary btn-sm" onClick={carregar}>↺ Atualizar</button>
-      </div>
-
-      <div className="card" style={{ marginBottom: 18, border: '1px solid rgba(255,107,44,.25)', background: 'rgba(255,107,44,.05)' }}>
-        <strong style={{ color: '#FF6B2C', fontSize: 13 }}>Separação de acesso ativa.</strong>
-        <span style={{ color: 'var(--muted)', fontSize: 12, marginLeft: 8 }}>Gestores de empresa não acessam esta tela e não podem alterar plano, módulos ou outras empresas. O backend valida essa regra em cada operação.</span>
-      </div>
-
-      <div className="card" style={{ marginBottom: 18 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <div>
-            <h2 style={{ margin: 0, color: '#12283F', fontSize: 18 }}>Nova empresa</h2>
-            <div style={{ marginTop: 4, color: 'var(--muted)', fontSize: 12 }}>Você pode criar primeiro o tenant com o nome. Gestor, plano e módulos podem ser configurados depois; um rascunho não tem acesso operacional.</div>
-          </div>
-          <button className="btn btn-ghost btn-sm" onClick={() => setShowCreate((value) => !value)}>{showCreate ? 'Fechar formulário' : 'Abrir formulário'}</button>
+        <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-secondary" onClick={carregar} disabled={loading}><RefreshCw size={15} /> Atualizar</button>
+          <button type="button" className="btn btn-primary" onClick={() => setShowCreate((value) => !value)}><Plus size={15} /> Novo tenant</button>
         </div>
-        {showCreate && (
-          <form onSubmit={criarEmpresa} style={{ display: 'grid', gap: 14, marginTop: 18 }}>
-            <div className="form-row">
-              {campoLabel('Razão social *', empresaForm.nome, (value) => setEmpresaForm({ ...empresaForm, nome: value }))}
-              {campoLabel('Nome fantasia', empresaForm.nomeFantasia, (value) => setEmpresaForm({ ...empresaForm, nomeFantasia: value }))}
-            </div>
-            <div className="form-row">
-              {campoLabel('CNPJ', empresaForm.cnpj, (value) => setEmpresaForm({ ...empresaForm, cnpj: value }), { inputMode: 'numeric' })}
-              {campoLabel('Plano', empresaForm.plano, (value) => setEmpresaForm({ ...empresaForm, plano: value }))}
-            </div>
-            <div className="form-row">
-              {campoLabel('E-mail corporativo', empresaForm.email, (value) => setEmpresaForm({ ...empresaForm, email: value }), { type: 'email' })}
-              {campoLabel('Telefone', empresaForm.telefone, (value) => setEmpresaForm({ ...empresaForm, telefone: value }))}
-            </div>
-            {campoLabel('Endereço fiscal', empresaForm.endereco, (value) => setEmpresaForm({ ...empresaForm, endereco: value }))}
-            <h3 style={{ margin: '4px 0 0', color: '#12283F', fontSize: 15 }}>Gestor inicial da empresa <span style={{ color: 'var(--muted)', fontSize: 11, fontWeight: 500 }}>(opcional nesta etapa)</span></h3>
-            <div className="form-row">
-              {campoLabel('Nome completo *', empresaForm.administrador.nome, (value) => setEmpresaForm({ ...empresaForm, administrador: { ...empresaForm.administrador, nome: value } }))}
-              {campoLabel('E-mail de acesso *', empresaForm.administrador.email, (value) => setEmpresaForm({ ...empresaForm, administrador: { ...empresaForm.administrador, email: value } }), { type: 'email' })}
-            </div>
-            {campoLabel('Senha inicial *', empresaForm.administrador.senhaInicial, (value) => setEmpresaForm({ ...empresaForm, administrador: { ...empresaForm.administrador, senhaInicial: value } }), { type: 'password', minLength: 8, autoComplete: 'new-password' })}
-            <div>
-              <h3 style={{ margin: '4px 0 8px', color: '#12283F', fontSize: 15 }}>Módulos contratados</h3>
-              <ModulosEditor value={empresaForm.modulos} onChange={(modulos) => setEmpresaForm({ ...empresaForm, modulos })} />
-            </div>
-            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, color: 'var(--muted)' }}><input type="checkbox" checked={empresaForm.permitirEstoqueNegativo} onChange={(event) => setEmpresaForm({ ...empresaForm, permitirEstoqueNegativo: event.target.checked })} />Permitir estoque negativo</label>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}><button className="btn btn-primary" disabled={creating}>{creating ? 'Criando empresa...' : 'Criar empresa'}</button></div>
-          </form>
-        )}
-      </div>
+      </header>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <h2 style={{ margin: 0, color: '#12283F', fontSize: 18 }}>Empresas cadastradas</h2>
-        <span style={{ color: 'var(--muted)', fontSize: 12 }}>{empresas.length} tenant{empresas.length === 1 ? '' : 's'}</span>
-      </div>
-      {loading && <div className="card">Carregando empresas...</div>}
-      {!loading && empresas.length === 0 && <div className="card" style={{ color: 'var(--muted)' }}>Nenhuma empresa cadastrada.</div>}
-      {!loading && empresas.map((empresa) => {
-        const draft = drafts[empresa.id] || { modulos: empresa.modulos || [], plano: empresa.plano || 'standard', statusOnboarding: empresa.statusOnboarding || 'configuracao', ativa: empresa.ativa !== false }
-        const isOpen = expanded === empresa.id
-        return (
-          <div className="card" key={empresa.id} style={{ marginBottom: 12, border: isOpen ? '1px solid rgba(255,107,44,.35)' : undefined }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><strong style={{ color: '#12283F', fontSize: 15 }}>{empresa.nomeFantasia || empresa.nome}</strong><span className="badge" style={{ color: empresa.ativa === false ? '#B91C1C' : '#16803C', background: empresa.ativa === false ? '#FEE2E2' : '#DCFCE7' }}>{empresa.ativa === false ? 'inativa' : 'ativa'}</span><span className="badge" style={{ color: empresa.statusOnboarding === 'rascunho' ? '#9A6700' : '#38556F', background: empresa.statusOnboarding === 'rascunho' ? '#FFF7D6' : '#EEF4F8' }}>{empresa.statusOnboarding === 'rascunho' ? 'rascunho' : empresa.statusOnboarding === 'pronta' ? 'pronta' : 'em configuração'}</span></div>
-                <div style={{ color: 'var(--muted)', fontSize: 12, marginTop: 4 }}>{empresa.nome} · plano {empresa.plano || 'standard'} · {Array.isArray(empresa.modulos) ? empresa.modulos.length : 0} módulos liberados</div>
-              </div>
-              <button className="btn btn-secondary btn-sm" onClick={() => setExpanded(isOpen ? '' : empresa.id)}>{isOpen ? 'Fechar módulos' : 'Gerenciar módulos'}</button>
-            </div>
-            {isOpen && (
-              <div style={{ borderTop: '1px solid var(--line)', marginTop: 16, paddingTop: 16, display: 'grid', gap: 14 }}>
-                <div className="form-row">
-                  <label className="form-group"><span>Plano contratado</span><input value={draft.plano} onChange={(event) => atualizarDraft(empresa.id, 'plano', event.target.value)} /></label>
-                  <label className="form-group"><span>Status do onboarding</span><select value={draft.statusOnboarding} onChange={(event) => atualizarDraft(empresa.id, 'statusOnboarding', event.target.value)}><option value="rascunho">Rascunho</option><option value="configuracao">Em configuração</option><option value="pronta">Pronta</option></select></label>
-                </div>
-                <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, color: 'var(--muted)' }}><input type="checkbox" checked={draft.ativa} onChange={(event) => atualizarDraft(empresa.id, 'ativa', event.target.checked)} />Empresa ativa</label>
-                <ModulosEditor value={draft.modulos} onChange={(modulos) => atualizarDraft(empresa.id, 'modulos', modulos)} compact />
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}><button className="btn btn-primary btn-sm" onClick={() => salvarEmpresa(empresa)} disabled={savingId === empresa.id}>{savingId === empresa.id ? 'Salvando...' : 'Salvar plano e módulos'}</button></div>
-              </div>
-            )}
+      <section className="card" style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 13, alignItems: 'start', borderColor: 'var(--accent)' }}>
+        <ShieldCheck size={24} color="var(--accent)" />
+        <div><strong>Provisionamento seguro e idempotente</strong><p style={{ color: 'var(--muted)', margin: '5px 0 0', lineHeight: 1.55, fontSize: 13 }}>O alias público é único em toda a plataforma. Um CNPJ ou alias já ligado a outro tenant bloqueia a operação inteira, sem gravação parcial.</p></div>
+      </section>
+
+      {showCreate && (
+        <form className="card" onSubmit={provisionar} style={{ display: 'grid', gap: 17 }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><Building2 size={20} color="var(--accent)" /><div><h2 style={{ margin: 0, fontSize: 19 }}>Provisionar tenant Dino</h2><small style={{ color: 'var(--muted)' }}>Informe somente dados reais e aprovados pelo responsável.</small></div></div>
+          <div className="form-grid">
+            <label className="form-group"><span>Nome fantasia</span><input value={form.nomeFantasia} onChange={(event) => change('nomeFantasia', event.target.value)} required /></label>
+            <label className="form-group"><span>Razão social</span><input value={form.razaoSocial} onChange={(event) => change('razaoSocial', event.target.value)} required /></label>
+            <label className="form-group"><span>CNPJ</span><input value={form.cnpj} onChange={(event) => change('cnpj', onlyDigits(event.target.value))} inputMode="numeric" placeholder="14 dígitos" required /><small>{onlyDigits(form.cnpj).length}/14 dígitos</small></label>
+            <label className="form-group"><span>Tipo de negócio</span><select value={form.tipoNegocio} onChange={(event) => change('tipoNegocio', event.target.value)}><option value="barbearia">Barbearia e perfumaria</option><option value="loja">Loja</option><option value="outro">Outro</option></select></label>
+            <label className="form-group"><span>Nome do administrador</span><input value={form.adminName} onChange={(event) => change('adminName', event.target.value)} /></label>
+            <label className="form-group"><span>E-mail de acesso existente</span><input type="email" value={form.adminEmail} onChange={(event) => change('adminEmail', event.target.value)} required /><small>O e-mail já deve conseguir entrar no SetPoint.</small></label>
+            <label className="form-group"><span>Alias público</span><input value={form.alias} onChange={(event) => change('alias', event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))} required /><small style={{ color: aliasValido ? 'var(--good)' : 'var(--bad)' }}>/ecommerce/{form.alias || 'alias'}</small></label>
+            <label className="form-group"><span>Identidade</span><input value={form.brandKey} onChange={(event) => change('brandKey', event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))} required /></label>
+            <label className="form-group"><span>Código da unidade</span><input value={form.lojaCodigo} onChange={(event) => change('lojaCodigo', event.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ''))} required /></label>
+            <label className="form-group"><span>Código do storefront</span><input value={form.storefrontCodigo} onChange={(event) => change('storefrontCodigo', event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))} required /></label>
+            <label className="form-group" style={{ gridColumn: '1 / -1' }}><span>Mensagem pública</span><textarea rows="3" value={form.tagline} onChange={(event) => change('tagline', event.target.value)} /></label>
           </div>
-        )
-      })}
-    </div>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: 13, border: '1px solid var(--line)', borderRadius: 11, background: 'var(--surface-2)', fontSize: 13, lineHeight: 1.5 }}>
+            <input type="checkbox" checked={form.confirmAdminAccess} onChange={(event) => change('confirmAdminAccess', event.target.checked)} style={{ width: 18, height: 18, flex: '0 0 18px', marginTop: 1 }} />
+            <span>Confirmo que o titular de <strong>{form.adminEmail || 'e-mail informado'}</strong> foi autorizado a administrar o tenant e que a operação não cria produtos, saldos ou credenciais.</span>
+          </label>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <small style={{ color: 'var(--muted)' }}>O storefront nasce em <strong>rascunho</strong>. Catálogo, estoque, pagamento e entrega exigem configuração própria.</small>
+            <button type="submit" className="btn btn-primary" disabled={creating || !formValido}>{creating ? <><Loader2 className="spin" size={15} /> Provisionando…</> : <>Criar tenant isolado</>}</button>
+          </div>
+          {result && <div role="status" style={{ display: 'flex', gap: 9, alignItems: 'center', color: 'var(--good)', background: 'var(--good-wash)', padding: 12, borderRadius: 10 }}><CheckCircle2 size={18} /> Tenant {result.empresa?.nome} vinculado ao alias /ecommerce/{result.alias}.</div>}
+        </form>
+      )}
+
+      <section>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12 }}><div><h2 style={{ margin: 0, fontSize: 20 }}>Tenants do Commerce</h2><small style={{ color: 'var(--muted)' }}>Visão global exclusiva do administrador da plataforma.</small></div><span className="badge">{tenants.length} empresa(s)</span></div>
+        {loading ? <div className="card" role="status" style={{ color: 'var(--muted)' }}><Loader2 className="spin" size={16} /> Carregando empresas…</div> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 }}>{tenants.map((tenant) => <TenantCard key={tenant.id} tenant={tenant} />)}{!tenants.length && <div className="card" style={{ color: 'var(--muted)' }}>Nenhum tenant Commerce disponível.</div>}</div>}
+      </section>
+    </main>
   )
 }
-

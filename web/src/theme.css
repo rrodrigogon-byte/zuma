@@ -479,3 +479,100 @@ html[data-brand='dino'] .sidebar-brand-dino span {
 .checkout-tracking-panel{margin-top:16px;border:1px solid #f0ded2;border-radius:16px;padding:16px;background:#fffcfa;text-align:left}.checkout-tracking-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}.checkout-tracking-heading h2{margin:4px 0 0;font-size:1.05rem;color:#12283f}.checkout-tracking-heading .eyebrow{display:inline-flex;align-items:center;gap:6px}.checkout-status-pill{background:#fff0e8;color:#12283f;border-radius:999px;padding:6px 10px;font-size:.72rem;font-weight:800}.checkout-tracking-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}.checkout-tracking-summary>div{display:flex;align-items:center;gap:9px;border-radius:11px;padding:11px;background:#fff;border:1px solid #f0ded2;color:#ff6b2c}.checkout-tracking-summary span{display:grid;gap:2px}.checkout-tracking-summary strong{color:#12283f;font-size:.84rem;overflow-wrap:anywhere}.checkout-tracking-summary small,.checkout-tracking-events span,.checkout-order-timeline small{color:#7e8994}.checkout-tracking-link{display:inline-flex;align-items:center;gap:7px;margin-top:12px;color:#ff6b2c;font-weight:800;font-size:.82rem}.checkout-tracking-events,.checkout-order-timeline{display:grid;gap:9px;margin-top:13px}.checkout-tracking-events>div,.checkout-order-timeline>div{display:grid;gap:3px;border-top:1px solid #f0ded2;padding-top:9px}.checkout-tracking-events strong,.checkout-order-timeline strong{color:#12283f;font-size:.82rem}.checkout-tracking-empty{display:flex;gap:9px;align-items:flex-start;margin-top:12px;color:#65717b;font-size:.82rem}@media(max-width:560px){.checkout-tracking-panel{padding:13px}.checkout-tracking-summary{grid-template-columns:1fr}}
 
 .checkout-page .commerce-shipping-option{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start;gap:10px;margin-top:9px;padding:12px;border:1px solid #f0ded2;border-radius:12px;background:#fff;cursor:pointer;text-align:left}.checkout-page .commerce-shipping-option:has(input:checked){border-color:#ff6b2c;box-shadow:0 0 0 2px rgba(255,107,44,.12)}.checkout-page .commerce-shipping-option input{margin-top:3px;accent-color:#ff6b2c}.checkout-page .commerce-shipping-option>span{display:grid;gap:4px;min-width:0}.checkout-page .commerce-shipping-option>span>strong{color:#12283f;font-size:.84rem}.checkout-page .commerce-shipping-option>span>small{color:#7e8994;font-size:.74rem;line-height:1.45;overflow-wrap:anywhere}.checkout-page .commerce-shipping-option>b{color:#12283f;white-space:nowrap;font-size:.84rem}.checkout-shipping-price-note{color:#ff6b2c!important;font-weight:700!important}.checkout-page .commerce-shipping-option+.commerce-shipping-option{margin-top:7px}@media(max-width:560px){.checkout-page .commerce-shipping-option{grid-template-columns:auto minmax(0,1fr)}.checkout-page .commerce-shipping-option>b{grid-column:2;justify-self:start}}
+
+/* ── Dino Commerce — escopo por alias/rota, sem recolorir outros storefronts ─ */
+html[data-brand='dino'] .commerce-shell {
+  --commerce-ink: #E8EAF2;
+  --commerce-muted: #A4AABE;
+  --commerce-line: #2B3140;
+  --commerce-paper: #0E1014;
+  --commerce-lime: #6E7CE0;
+  --commerce-orange: #8E9AF0;
+  background: #0E1014;
+  color: #E8EAF2;
+}
+html[data-brand='dino'] .commerce-hero { background: linear-gradient(135deg, #11141C, #1A1E2B); }
+html[data-brand='dino'] .commerce-hero::after { border-color: rgba(110,124,224,.35); box-shadow: 0 0 0 48px rgba(110,124,224,.06), 0 0 0 96px rgba(110,124,224,.035); }
+html[data-brand='dino'] .commerce-hero p { color: #C2C7D7; }
+html[data-brand='dino'] .commerce-toolbar,
+html[data-brand='dino'] .commerce-product-card,
+html[data-brand='dino'] .commerce-trust-grid > div,
+html[data-brand='dino'] .commerce-modal,
+html[data-brand='dino'] .commerce-tracking-result,
+html[data-brand='dino'] .commerce-shipping-quote-box,
+html[data-brand='dino'] .commerce-payment-box,
+html[data-brand='dino'] .commerce-product-gallery-main,
+html[data-brand='dino'] .commerce-product-meta span { background: #181C25; border-color: #2B3140; color: #E8EAF2; }
+html[data-brand='dino'] .commerce-product-content h2,
+html[data-brand='dino'] .commerce-modal h2,
+html[data-brand='dino'] .commerce-price strong,
+html[data-brand='dino'] .commerce-product-meta strong,
+html[data-brand='dino'] .commerce-cart-row strong,
+html[data-brand='dino'] .commerce-cart-total strong,
+html[data-brand='dino'] .commerce-tracking-result strong { color: #E8EAF2; }
+html[data-brand='dino'] .commerce-product-content p,
+html[data-brand='dino'] .commerce-modal p,
+html[data-brand='dino'] .commerce-trust-grid span,
+html[data-brand='dino'] .commerce-cart-row span { color: #A4AABE; }
+html[data-brand='dino'] .commerce-search,
+html[data-brand='dino'] .commerce-search input,
+html[data-brand='dino'] .commerce-form input,
+html[data-brand='dino'] .commerce-form textarea,
+html[data-brand='dino'] .commerce-form select,
+html[data-brand='dino'] .commerce-tracking-form input,
+html[data-brand='dino'] .commerce-shipping-option,
+html[data-brand='dino'] .commerce-payment-method,
+html[data-brand='dino'] .commerce-product-gallery-thumb,
+html[data-brand='dino'] .commerce-pix-copy code { background: #11141C; border-color: #343B4D; color: #E8EAF2; }
+html[data-brand='dino'] .commerce-categories button.is-active,
+html[data-brand='dino'] .commerce-product-buy button,
+html[data-brand='dino'] .commerce-cart-button,
+html[data-brand='dino'] .commerce-button-primary { background: #6E7CE0; color: #FFFFFF; }
+html[data-brand='dino'] .commerce-product-buy button:hover,
+html[data-brand='dino'] .commerce-cart-button:hover,
+html[data-brand='dino'] .commerce-button-primary:hover { background: #5967C7; }
+
+html[data-brand='dino'] .checkout-page,
+html[data-brand='dino'] .checkout-result-shell { background: #0E1014; color: #E8EAF2; }
+html[data-brand='dino'] .checkout-header { background: #11141C; color: #E8EAF2; border-bottom-color: #2B3140; }
+html[data-brand='dino'] .checkout-brand { color: #F4F5F7; }
+html[data-brand='dino'] .checkout-brand-mark,
+html[data-brand='dino'] .checkout-primary,
+html[data-brand='dino'] .checkout-step.is-active .checkout-step-dot,
+html[data-brand='dino'] .is-selected .shipping-option-radio { background: #6E7CE0; color: #FFFFFF; border-color: #6E7CE0; box-shadow: 0 6px 18px rgba(110,124,224,.24); }
+html[data-brand='dino'] .checkout-card,
+html[data-brand='dino'] .checkout-summary,
+html[data-brand='dino'] .checkout-result-card,
+html[data-brand='dino'] .checkout-payment-box,
+html[data-brand='dino'] .checkout-tracking-panel,
+html[data-brand='dino'] .shipping-option,
+html[data-brand='dino'] .payment-option,
+html[data-brand='dino'] .checkout-step-dot { background: #181C25; border-color: #2B3140; color: #E8EAF2; }
+html[data-brand='dino'] .checkout-card-title h1,
+html[data-brand='dino'] .checkout-summary h2,
+html[data-brand='dino'] .checkout-summary-item-copy strong,
+html[data-brand='dino'] .checkout-totals b,
+html[data-brand='dino'] .checkout-address-heading h2,
+html[data-brand='dino'] .shipping-option-copy strong,
+html[data-brand='dino'] .payment-option-copy strong,
+html[data-brand='dino'] .checkout-result-card h1,
+html[data-brand='dino'] .checkout-result-meta strong { color: #E8EAF2; }
+html[data-brand='dino'] .checkout-card-title p,
+html[data-brand='dino'] .checkout-summary-item-copy span,
+html[data-brand='dino'] .checkout-totals > div,
+html[data-brand='dino'] .checkout-trust-list,
+html[data-brand='dino'] .checkout-address-heading span,
+html[data-brand='dino'] .shipping-option-copy small,
+html[data-brand='dino'] .payment-option-copy small,
+html[data-brand='dino'] .checkout-result-lead { color: #A4AABE; }
+html[data-brand='dino'] .checkout-field input,
+html[data-brand='dino'] .checkout-field textarea,
+html[data-brand='dino'] .checkout-field select,
+html[data-brand='dino'] .checkout-pix-box textarea { background: #11141C; border-color: #343B4D; color: #E8EAF2; }
+html[data-brand='dino'] .checkout-info-banner,
+html[data-brand='dino'] .checkout-security-panel,
+html[data-brand='dino'] .checkout-final-note { background: rgba(110,124,224,.12); color: #C2C7D7; }
+html[data-brand='dino'] .shipping-option.is-selected,
+html[data-brand='dino'] .payment-option.is-selected { background: rgba(110,124,224,.12); border-color: #6E7CE0; box-shadow: 0 0 0 3px rgba(110,124,224,.1); }
+html[data-brand='dino'] .checkout-secondary { background: #181C25; border-color: #343B4D; color: #E8EAF2; }
+html[data-brand='dino'] .checkout-secondary:hover { background: #202532; border-color: #6E7CE0; color: #FFFFFF; }

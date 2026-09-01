@@ -1,10 +1,9 @@
-const DINO_ADMIN_ROUTES = ['/admin/barbearia', '/admin/barbearia-erp']
-
-export function resolveBrand(pathname = '/', search = '') {
+export function resolveBrand(pathname = '/', search = '', tenantBrand = '') {
   const path = String(pathname || '/').toLowerCase()
   const params = new URLSearchParams(String(search || ''))
-  if (DINO_ADMIN_ROUTES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) return 'dino'
+  if (String(tenantBrand || '').toLowerCase() === 'dino' && (path === '/admin' || path.startsWith('/admin/'))) return 'dino'
   if (path === '/agendar/dino' || path.startsWith('/agendar/dino/')) return 'dino'
+  if (['/ecommerce/dino', '/perfumaria/dino', '/checkout/dino', '/pedido/dino'].some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) return 'dino'
   if (path === '/loja' && params.get('marca') === 'dino') return 'dino'
   return 'kytto'
 }

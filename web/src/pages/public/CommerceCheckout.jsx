@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, CheckCircle2, Copy, Loader2, MapPin, PackageCheck, ShieldCheck, Store, Truck } from 'lucide-react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, fmtR } from '../../lib/api'
+import { normalizeStorefrontAlias, storefrontApiBase, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
 
-const CART_KEY = 'kytto_commerce_cart'
 const EMPTY_ADDRESS = { cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '', referencia: '' }
 
-function readCart() {
+function readCart(storeAlias) {
   try {
-    const value = JSON.parse(localStorage.getItem(CART_KEY) || '[]')
+    const value = JSON.parse(localStorage.getItem(storefrontStorageKey(storeAlias, 'cart')) || '[]')
     return Array.isArray(value) ? value : []
   } catch { return [] }
 }
@@ -43,8 +43,8 @@ function hostedPaymentUrl(checkout) {
   } catch { return '' }
 }
 
-function paymentIdempotencyKey(code, provider, method) {
-  const storageKey = `kytto_payment_attempt:${String(code || '').toUpperCase()}:${provider}:${method}`
+function paymentIdempotencyKey(code, provider, method, storeAlias) {
+  const storageKey = `kytto_payment_attempt:${normalizeStorefrontAlias(storeAlias) || 'host'}:${String(code || '').toUpperCase()}:${provider}:${method}`
   try {
     const existing = localStorage.getItem(storageKey)
     if (existing) return existing
@@ -70,11 +70,19 @@ function Stepper({ paymentReady }) {
 
 export default function CommerceCheckout() {
   const navigate = useNavigate()
+  const { storeAlias: routeAlias = '' } = useParams()
+  const storeAlias = normalizeStorefrontAlias(routeAlias)
+  const storefrontApi = storefrontApiBase(storeAlias)
+  const storeRoute = storefrontRoute(storeAlias, 'store')
+  const checkoutRoute = storefrontRoute(storeAlias, 'checkout')
+  const orderRoute = storefrontRoute(storeAlias, 'order')
+  const cartStorageKey = storefrontStorageKey(storeAlias, 'cart')
   const [searchParams] = useSearchParams()
   const orderCode = searchParams.get('order') || searchParams.get('order_nsu') || ''
   const returnTransactionNsu = searchParams.get('transaction_nsu') || searchParams.get('transactionNsu') || ''
   const returnSlug = searchParams.get('slug') || searchParams.get('invoice_slug') || ''
-  const [cart, setCart] = useState(readCart)
+  const [cart, setCart] = useState(() => readCart(storeAlias))
+  const [storeContext, setStoreContext] = useState(null)
   const [products, setProducts] = useState([])
   const [shippingMethods, setShippingMethods] = useState([])
   const [paymentMethods, setPaymentMethods] = useState([])
@@ -108,12 +116,13 @@ export default function CommerceCheckout() {
       setLoading(true)
       try {
         const [context, catalog, shipping, payments] = await Promise.all([
-          api.get('/api/storefront/context'),
-          api.get('/api/storefront/products'),
-          api.get('/api/storefront/shipping-methods'),
-          api.get('/api/storefront/payment-methods'),
+          api.get(`${storefrontApi}/context`),
+          api.get(`${storefrontApi}/products`),
+          api.get(`${storefrontApi}/shipping-methods`),
+          api.get(`${storefrontApi}/payment-methods`),
         ])
         if (!active) return
+        setStoreContext(context?.storefront || null)
         const methods = shipping?.items || []
         const methodsPayments = payments?.items || []
         if (!context?.capabilities?.checkout) throw new Error('Checkout não está habilitado para este storefront.')
@@ -124,7 +133,7 @@ export default function CommerceCheckout() {
         const initialShipping = methods.find(item => item.tipo === 'pickup') || methods[0]
         if (initialShipping) setShippingMethodId(initialShipping.id)
         if (orderCode) {
-          const existing = await api.get(`/api/storefront/orders/${encodeURIComponent(orderCode)}`)
+          const existing = await api.get(`${storefrontApi}/orders/${encodeURIComponent(orderCode)}`)
           if (!active) return
           setOrder(existing)
           setForm(current => ({ ...current, nome: existing.customer_name || existing.customer?.nome || '', email: existing.customer_email || existing.customer?.email || '' }))
@@ -135,7 +144,7 @@ export default function CommerceCheckout() {
     }
     load()
     return () => { active = false }
-  }, [orderCode])
+  }, [orderCode, storefrontApi])
 
   useEffect(() => {
     if (!order?.public_code || payment || !returnTransactionNsu || !returnSlug) return undefined
@@ -143,33 +152,33 @@ export default function CommerceCheckout() {
     const reconcileReturn = async () => {
       setWorking(true); setError('')
       try {
-        const result = await api.post(`/api/storefront/orders/${encodeURIComponent(order.public_code)}/payments/return`, { transactionNsu: returnTransactionNsu, slug: returnSlug })
+        const result = await api.post(`${storefrontApi}/orders/${encodeURIComponent(order.public_code)}/payments/return`, { transactionNsu: returnTransactionNsu, slug: returnSlug })
         if (active) setPayment({ provider: 'infinitepay', status: result.status, returnConfirmed: true })
       } catch (err) { if (active) setError(err.message || 'Não foi possível confirmar o retorno do provedor.') }
       finally { if (active) setWorking(false) }
     }
     reconcileReturn()
     return () => { active = false }
-  }, [order?.public_code, payment, returnTransactionNsu, returnSlug])
+  }, [order?.public_code, payment, returnTransactionNsu, returnSlug, storefrontApi])
 
   useEffect(() => {
     if (!order?.public_code || payment?.checkout) return undefined
     let active = true
     const timer = window.setInterval(async () => {
       try {
-        const latest = await api.get(`/api/storefront/orders/${encodeURIComponent(order.public_code)}`)
+        const latest = await api.get(`${storefrontApi}/orders/${encodeURIComponent(order.public_code)}`)
         if (active) setOrder(current => current ? { ...current, ...latest } : latest)
       } catch { /* o acompanhamento manual continua disponível */ }
     }, 10000)
     return () => { active = false; window.clearInterval(timer) }
-  }, [order?.public_code, payment?.checkout])
+  }, [order?.public_code, payment?.checkout, storefrontApi])
 
   async function quoteShipping() {
     if (!selectedShipping?.quoteEnabled) return setError('Este método ainda não possui cotação configurada.')
     if (address.cep.replace(/\D/g, '').length !== 8) return setError('Informe um CEP válido antes de calcular o frete.')
     setWorking(true); setError('')
     try {
-      const quote = await api.post('/api/storefront/shipping/quotes', { shippingMethodId, destinationCep: address.cep, destination: { cep: address.cep, cidade: address.cidade, estado: address.estado }, items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })) })
+      const quote = await api.post(`${storefrontApi}/shipping/quotes`, { shippingMethodId, destinationCep: address.cep, destination: { cep: address.cep, cidade: address.cidade, estado: address.estado }, items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })) })
       setShippingQuote(quote)
       setShippingOptionId(quote.items?.[0]?.id || '')
     } catch (err) { setError(err.message || 'Não foi possível calcular o frete.') }
@@ -189,7 +198,7 @@ export default function CommerceCheckout() {
     if (deliveryMode === 'entrega' && (!shippingQuote || !shippingOptionId)) return setError('Calcule o frete e selecione uma opção antes de continuar.')
     setWorking(true)
     try {
-      const created = await api.post('/api/storefront/orders', {
+      const created = await api.post(`${storefrontApi}/orders`, {
         customer: { nome: form.nome.trim(), email: form.email.trim(), telefone: form.telefone.trim() },
         items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })),
         idempotencyKey: idem('order'),
@@ -198,10 +207,10 @@ export default function CommerceCheckout() {
         ...(deliveryMode === 'entrega' ? { shippingQuoteId: shippingQuote.quoteId, shippingOptionId } : {}),
       })
       const code = created.codigo || created.publicCode || created.public_code
-      localStorage.removeItem(CART_KEY)
+      localStorage.removeItem(cartStorageKey)
       setCart([])
       setOrder(created)
-      navigate(`/checkout?order=${encodeURIComponent(code)}`, { replace: true })
+      navigate(`${checkoutRoute}?order=${encodeURIComponent(code)}`, { replace: true })
     } catch (err) { setError(err.message || 'Não foi possível criar o pedido.') }
     finally { setWorking(false) }
   }
@@ -216,7 +225,7 @@ export default function CommerceCheckout() {
     const timeout = window.setTimeout(() => controller.abort(), 20000)
     setWorking(true); setRedirecting(false); setError('')
     try {
-      const result = await api.post(`/api/storefront/orders/${encodeURIComponent(code)}/payments`, { provider, method, idempotencyKey: paymentIdempotencyKey(code, provider, method) }, { signal: controller.signal })
+      const result = await api.post(`${storefrontApi}/orders/${encodeURIComponent(code)}/payments`, { provider, method, idempotencyKey: paymentIdempotencyKey(code, provider, method, storeAlias) }, { signal: controller.signal })
       if (!result || typeof result !== 'object') throw new Error('O Commerce Core não retornou uma resposta válida.')
       const hostedUrl = provider === 'infinitepay' ? hostedPaymentUrl(result.checkout) : ''
       if (provider === 'infinitepay' && !hostedUrl) throw new Error('A InfinitePay não retornou o link do checkout. Tente novamente em instantes.')
@@ -241,7 +250,7 @@ export default function CommerceCheckout() {
 
   if (loading) return <main className="checkout-page"><div className="checkout-loading"><div className="checkout-spinner" />Carregando checkout seguro…</div></main>
 
-  if (!order && !cart.length) return <main className="checkout-page"><div className="checkout-empty"><div className="checkout-empty-icon">🛒</div><h1>Seu carrinho está vazio</h1><p>Adicione produtos na loja para iniciar o checkout.</p><Link className="checkout-primary" to="/">Voltar para a loja</Link></div></main>
+  if (!order && !cart.length) return <main className="checkout-page"><div className="checkout-empty"><div className="checkout-empty-icon">🛒</div><h1>Seu carrinho está vazio</h1><p>Adicione produtos na loja para iniciar o checkout.</p><Link className="checkout-primary" to={storeRoute}>Voltar para a loja</Link></div></main>
 
   if (order) {
     const code = order.codigo || order.publicCode || order.public_code
@@ -266,13 +275,17 @@ export default function CommerceCheckout() {
       {payment && !paid && <div className="checkout-payment-box"><strong>Pagamento pendente</strong>{qr && <img className="checkout-qr" src={qr.startsWith('data:') ? qr : `data:image/png;base64,${qr}`} alt="QR Code do pagamento" />}{pixCode && <div className="checkout-pix-box"><label>Código Pix</label><textarea readOnly rows={4} value={pixCode} aria-label="Código Pix" /><button type="button" className="checkout-primary" onClick={() => copyCode(pixCode)}><Copy size={15} />{copied ? 'Código copiado' : 'Copiar código'}</button></div>}{hostedUrl && <a className="checkout-primary" href={hostedUrl} target="_blank" rel="noreferrer">Abrir checkout do provedor <ArrowRight size={16} /></a>}{!qr && !pixCode && !hostedUrl && <small>O provedor recebeu a solicitação, mas ainda não retornou uma instrução pública de pagamento. Aguarde o webhook ou consulte o pedido.</small>}<small>Status: {payment.status || order.payment_status || 'pending'}.</small></div>}
       <section className="checkout-tracking-panel" aria-label="Acompanhamento da entrega"><div className="checkout-tracking-heading"><div><span className="eyebrow"><PackageCheck size={14} /> Pós-venda</span><h2>Acompanhe seu pedido</h2></div><span className="checkout-status-pill">{orderStatusLabels[order.status] || order.status || 'Em atualização'}</span></div>{latestFulfillment ? <><div className="checkout-tracking-summary"><div><Truck size={17} /><span><strong>{fulfillmentLabels[latestFulfillment.status] || latestFulfillment.status}</strong><small>{latestFulfillment.carrier || 'Logística da loja'}</small></span></div>{latestFulfillment.trackingCode && <div><MapPin size={17} /><span><strong>{latestFulfillment.trackingCode}</strong><small>Código de rastreio</small></span></div>}{shippingOption?.deliveryDays !== null && shippingOption?.deliveryDays !== undefined && <div><PackageCheck size={17} /><span><strong>Prazo total estimado</strong><small>{shippingPromise(shippingOption)}</small>{shippingPriceSummary(shippingOption) && <small className="checkout-shipping-price-note">{shippingPriceSummary(shippingOption)}</small>}</span></div>}</div>{latestFulfillment.trackingUrl && <a className="checkout-tracking-link" href={latestFulfillment.trackingUrl} target="_blank" rel="noreferrer">Acompanhar no site da transportadora <ArrowRight size={15} /></a>}{Array.isArray(latestFulfillment.ocorrencias) && latestFulfillment.ocorrencias.length > 0 && <div className="checkout-tracking-events">{latestFulfillment.ocorrencias.slice(0, 5).map((event, index) => <div key={`${event.at || event.data || index}-${index}`}><span>{event.at || event.data || 'Atualização'}</span><strong>{event.description || event.descricao || event.status || event.mensagem || 'Movimentação registrada'}</strong></div>)}</div>}</> : <div className="checkout-tracking-empty"><PackageCheck size={18} /><span>Após a confirmação do pagamento, a loja separará o pedido e disponibilizará o rastreio nesta área.</span></div>}{!latestFulfillment && shippingOption?.deliveryDays !== null && shippingOption?.deliveryDays !== undefined && <div className="checkout-tracking-eta"><PackageCheck size={17} /><span><strong>Prazo total estimado</strong><small>{shippingPromise(shippingOption)}</small>{shippingPriceSummary(shippingOption) && <small className="checkout-shipping-price-note">{shippingPriceSummary(shippingOption)}</small>}</span></div>}{timeline.length > 0 && <div className="checkout-order-timeline">{timeline.slice(-6).map((event, index) => <div key={`${event.at || index}-${index}`}><span>{event.at ? new Date(event.at).toLocaleString('pt-BR') : 'Atualização'}</span><strong>{orderStatusLabels[event.toStatus] || event.toStatus || 'Atualização do pedido'}</strong><small>{event.source === 'system' ? 'Sistema' : event.source || 'Operação'}</small></div>)}</div>}</section>
       <div className="checkout-result-meta"><div><span>Total</span><strong>{money(order.total || total)}</strong></div><div><span>Pedido</span><strong>{code}</strong></div></div>
-      <div className="checkout-result-actions"><Link className="checkout-primary" to={`/pedido/${encodeURIComponent(code)}`}>Acompanhar pedido <ArrowRight size={16} /></Link><Link className="checkout-secondary" to="/">Voltar para a loja</Link></div>
+      <div className="checkout-result-actions"><Link className="checkout-primary" to={`${orderRoute}/${encodeURIComponent(code)}`}>Acompanhar pedido <ArrowRight size={16} /></Link><Link className="checkout-secondary" to={storeRoute}>Voltar para a loja</Link></div>
     </div></main>
   }
 
-  return <main className="checkout-page">
-    <header className="checkout-header"><div className="checkout-header-inner"><Link className="checkout-brand" to="/"><span className="checkout-brand-mark">K</span><span>Kytto Commerce</span></Link><div className="checkout-header-security"><ShieldCheck size={16} /> Checkout protegido</div></div></header>
-    <div className="checkout-content"><div className="checkout-main-column"><Link className="checkout-back" to="/"> <ArrowLeft size={14} /> Voltar para a loja</Link><Stepper paymentReady={false} /><section className="checkout-card"><div className="checkout-card-title"><div><span className="eyebrow">Checkout Commerce</span><h1>Finalize sua compra</h1><p>Seu pedido será criado primeiro; o pagamento acontece depois no provedor escolhido.</p></div><span className="checkout-card-icon"><Store size={20} /></span></div>
+  const publicBrand = storeContext?.public || {}
+  const brandName = publicBrand.displayName || storeContext?.nome || (storeAlias ? storeAlias : 'Kytto Commerce')
+  const brandMark = storeAlias === 'dino' ? 'D' : 'K'
+
+  return <main className="checkout-page" data-storefront-alias={storeAlias || undefined}>
+    <header className="checkout-header"><div className="checkout-header-inner"><Link className="checkout-brand" to={storeRoute}><span className="checkout-brand-mark">{brandMark}</span><span>{brandName}</span></Link><div className="checkout-header-security"><ShieldCheck size={16} /> Checkout protegido</div></div></header>
+    <div className="checkout-content"><div className="checkout-main-column"><Link className="checkout-back" to={storeRoute}> <ArrowLeft size={14} /> Voltar para a loja</Link><Stepper paymentReady={false} /><section className="checkout-card"><div className="checkout-card-title"><div><span className="eyebrow">Checkout Commerce</span><h1>Finalize sua compra</h1><p>Seu pedido será criado primeiro; o pagamento acontece depois no provedor escolhido.</p></div><span className="checkout-card-icon"><Store size={20} /></span></div>
       <form onSubmit={createOrder}>
         <div className="checkout-form-grid"><label className="checkout-field"><span>Nome completo *</span><input value={form.nome} onChange={e => setForm(current => ({ ...current, nome: e.target.value }))} autoComplete="name" required /></label><label className="checkout-field"><span>E-mail *</span><input type="email" value={form.email} onChange={e => setForm(current => ({ ...current, email: e.target.value }))} autoComplete="email" required /></label><label className="checkout-field"><span>WhatsApp ou telefone</span><input value={form.telefone} onChange={e => setForm(current => ({ ...current, telefone: e.target.value }))} autoComplete="tel" /></label></div>
         <div className="checkout-info-banner"><ShieldCheck size={18} /><div><strong>Pagamento fora do formulário.</strong><br />A Kytto não coleta dados de cartão. Você será levado ao checkout seguro do provedor habilitado.</div></div>

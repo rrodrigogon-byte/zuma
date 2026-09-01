@@ -77,7 +77,10 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     const whatsappSemConfirmacao = await request(base, '/api/admin/barbearia/whatsapp/enviar', { method: 'POST', headers, body: JSON.stringify({ telefone: '65999999999', mensagem: 'teste' }) });
     assert.equal(whatsappSemConfirmacao.response.status, 400);
     const assistenteSemConfig = await request(base, '/api/admin/barbearia/ia/assistente', { method: 'POST', headers, body: JSON.stringify({ pergunta: 'Quais são os horários livres?' }) });
-    assert.equal(assistenteSemConfig.response.status, 503);
+    assert.equal(assistenteSemConfig.response.status, 200);
+    assert.equal(assistenteSemConfig.body.modo, 'local');
+    assert.equal(assistenteSemConfig.body.modelo, 'regras-dino-local');
+    assert.match(assistenteSemConfig.body.resposta, /somente informativa/i);
 
     const configuracoes = await request(base, '/api/admin/barbearia/configuracoes', { headers });
     assert.equal(configuracoes.response.status, 200);

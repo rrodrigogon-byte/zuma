@@ -226,26 +226,28 @@ const activeStyle = {
   borderLeft: '3px solid var(--accent)',
 }
 
-function NavItem({ to, icon, label, end, onClick, badgeCount }) {
+function NavItem({ to, icon, label, end, onClick, badgeCount, sidebarCollapsed = false }) {
   return (
     <NavLink
       to={to}
       end={end}
-      style={({ isActive }) => isActive ? activeStyle : linkStyle}
+      style={({ isActive }) => ({ ...(isActive ? activeStyle : linkStyle), ...(sidebarCollapsed ? { justifyContent: 'center', padding: '10px 8px', borderLeftWidth: isActive ? 3 : 0 } : {}) })}
       onClick={onClick}
+      aria-label={sidebarCollapsed ? label : undefined}
+      title={sidebarCollapsed ? label : undefined}
     >
-      <span style={{ fontSize: 16 }}>{icon}</span>
-      <span style={{ flex: 1 }}>{label}</span>
+      <span style={{ fontSize: 16 }} aria-hidden="true">{icon}</span>
+      {!sidebarCollapsed && <span style={{ flex: 1 }}>{label}</span>}
       {badgeCount > 0 && <Badge count={badgeCount} />}
     </NavLink>
   )
 }
 
-function Section({ label, items, onNavClick, collapsible = false, badgesMap = {} }) {
+function Section({ label, items, onNavClick, collapsible = false, badgesMap = {}, sidebarCollapsed = false }) {
   const [collapsed, setCollapsed] = useState(false)
   return (
     <div style={{ padding: '4px 0', borderBottom: '1px solid var(--line)' }}>
-      <div
+      {!sidebarCollapsed && <div
         style={{
           fontSize: 10, fontWeight: 800, color: 'var(--muted)',
           padding: '6px 16px 4px', textTransform: 'uppercase', letterSpacing: '.8px',
@@ -257,20 +259,21 @@ function Section({ label, items, onNavClick, collapsible = false, badgesMap = {}
       >
         <span>{label}</span>
         {collapsible && <span style={{ fontSize: 9 }}>{collapsed ? '▶' : '▼'}</span>}
-      </div>
-      {!collapsed && items.map(n => (
+      </div>}
+      {(!collapsed || sidebarCollapsed) && items.map(n => (
         <NavItem
           key={n.to}
           {...n}
           onClick={onNavClick}
           badgeCount={n.badge ? (badgesMap[n.to] || 0) : 0}
+          sidebarCollapsed={sidebarCollapsed}
         />
       ))}
     </div>
   )
 }
 
-function AdminGroups({ groups, onNavClick, isPlatformAdmin, empresa }) {
+function AdminGroups({ groups, onNavClick, isPlatformAdmin, empresa, sidebarCollapsed = false }) {
   return (
     <>
       {groups.map(g => ({ ...g, items: g.items.filter((item) => itemDisponivel(item, isPlatformAdmin, empresa)) }))
@@ -282,14 +285,15 @@ function AdminGroups({ groups, onNavClick, isPlatformAdmin, empresa }) {
             items={g.items}
             onNavClick={onNavClick}
             collapsible
+            sidebarCollapsed={sidebarCollapsed}
           />
         ))}
     </>
   )
 }
 
-export default function Sidebar() {
-  const { user, logout, isOrg, isStaff, isAtleta, isPlatformAdmin, empresaAtiva, lojaAtiva, lojasAcessiveis, trocarLoja } = useAuth()
+export default function Sidebar({ collapsed = false, onToggleCollapse = () => {} }) {
+  const { user, logout, isOrg, isStaff, isAtleta, isPlatformAdmin, empresaAtiva, empresasAcessiveis, lojaAtiva, lojasAcessiveis, trocarEmpresa, trocarLoja } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
@@ -305,7 +309,8 @@ export default function Sidebar() {
     '/pdv': pendentes,
     '/kds': pendentes,
   }
-  const empresaDoMenu = lojaAtiva || empresaAtiva
+  const empresaDoMenu = empresaAtiva
+  const lojasDaEmpresa = lojasAcessiveis.filter((loja) => !empresaAtiva?.id || loja.empresaId === empresaAtiva.id)
 
   useEffect(() => {
     const handler = () => {
@@ -323,7 +328,7 @@ export default function Sidebar() {
   }
 
   const sidebarStyle = {
-    width: 256,
+    width: collapsed && !isMobile ? 78 : 256,
     background: 'var(--surface)',
     borderRight: '1px solid var(--line)',
     height: '100vh',
@@ -334,7 +339,8 @@ export default function Sidebar() {
     flexDirection: 'column',
     zIndex: 50,
     overflowY: 'auto',
-    transition: 'transform .25s ease',
+    overflowX: 'hidden',
+    transition: 'transform .25s ease, width .2s ease',
     ...(isMobile && !open ? { transform: 'translateX(-100%)' } : { transform: 'translateX(0)' }),
   }
 
@@ -360,13 +366,13 @@ export default function Sidebar() {
       <nav style={sidebarStyle}>
         {/* Logo + close button (mobile) */}
         <div style={{
-          padding: '20px 18px 18px',
+          padding: collapsed && !isMobile ? '14px 10px' : '20px 18px 18px',
           background: 'var(--brand-header)',
           borderBottom: '4px solid var(--brand-header-accent)',
           display: 'flex', alignItems: 'center', gap: 10,
           boxShadow: '0 8px 20px rgba(18,40,63,.14)',
         }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ flex: 1, minWidth: 0, display: collapsed && !isMobile ? 'none' : 'block' }}>
             <img
               src="/brand/kytto-negativo.svg"
               alt="Kytto — Sistemas inteligentes para negócios"
@@ -384,6 +390,23 @@ export default function Sidebar() {
               Plataforma multinegócio
             </div>
           </div>
+          {!isMobile && (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              style={{
+                width: 36, height: 36, flex: '0 0 36px', display: 'grid', placeItems: 'center',
+                margin: collapsed ? '0 auto' : 0, background: 'rgba(255,255,255,.08)',
+                border: '1px solid rgba(255,255,255,.18)', borderRadius: 10,
+                color: 'var(--brand-header-text)', fontSize: 17, cursor: 'pointer',
+              }}
+              aria-label={collapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+              aria-expanded={!collapsed}
+              title={collapsed ? 'Expandir menu' : 'Recolher menu'}
+            >
+              {collapsed ? '›' : '‹'}
+            </button>
+          )}
           {isMobile && (
             <button
               onClick={() => setOpen(false)}
@@ -398,8 +421,15 @@ export default function Sidebar() {
           )}
         </div>
 
-        {user && lojasAcessiveis.length > 0 && (
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
+        {user && !collapsed && (
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--line)', display: 'grid', gap: 10 }}>
+            {empresasAcessiveis.length > 1 && <label htmlFor="empresa-ativa" style={{ display: 'grid', gap: 6, fontSize: 10, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.8px' }}>
+              Empresa ativa
+              <select id="empresa-ativa" value={empresaAtiva?.id || ''} onChange={(event) => trocarEmpresa(event.target.value)} style={{ width: '100%', padding: '8px 9px', borderRadius: 7, border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--cream)', fontSize: 12, fontWeight: 700 }}>
+                {empresasAcessiveis.map((empresa) => <option key={empresa.id} value={empresa.id}>{empresa.nome || empresa.slug || empresa.id}</option>)}
+              </select>
+            </label>}
+            {lojasDaEmpresa.length > 0 && <div>
             <label htmlFor="loja-ativa" style={{
               display: 'block', marginBottom: 6, fontSize: 10, fontWeight: 800,
               color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.8px',
@@ -417,34 +447,36 @@ export default function Sidebar() {
               }}
               aria-label="Selecionar loja ativa"
             >
-              {lojasAcessiveis.map((loja) => (
+              <option value="">Todas as lojas da empresa</option>
+              {lojasDaEmpresa.map((loja) => (
                 <option key={loja.id} value={loja.id}>
                   {loja.codigo ? `${loja.codigo} — ` : ''}{loja.nome || loja.nome_fantasia}
                 </option>
               ))}
             </select>
+            </div>}
           </div>
         )}
 
-        {isStaff && <Section label="Operações" items={NAV_OP} onNavClick={handleNavClick} badgesMap={badgesMap} />}
-        {isOrg && <AdminGroups groups={NAV_ADMIN_GROUPS} onNavClick={handleNavClick} isPlatformAdmin={isPlatformAdmin} empresa={empresaDoMenu} />}
-        {isPlatformAdmin && <Section label="Administração da Plataforma" items={NAV_PLATFORM} onNavClick={handleNavClick} />}
-        {isAtleta && <Section label="Portal do Atleta" items={NAV_ATLETA} onNavClick={handleNavClick} />}
-        <Section label="Site Público" items={NAV_PUBLIC} onNavClick={handleNavClick} />
+        {isStaff && <Section label="Operações" items={NAV_OP} onNavClick={handleNavClick} badgesMap={badgesMap} sidebarCollapsed={collapsed && !isMobile} />}
+        {isOrg && <AdminGroups groups={NAV_ADMIN_GROUPS} onNavClick={handleNavClick} isPlatformAdmin={isPlatformAdmin} empresa={empresaDoMenu} sidebarCollapsed={collapsed && !isMobile} />}
+        {isPlatformAdmin && <Section label="Administração da Plataforma" items={NAV_PLATFORM} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />}
+        {isAtleta && <Section label="Portal do Atleta" items={NAV_ATLETA} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />}
+        <Section label="Site Público" items={NAV_PUBLIC} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />
 
         {/* Bottom user area */}
-        <div style={{ marginTop: 'auto', padding: '12px 16px', borderTop: '1px solid var(--line)' }}>
+        <div style={{ marginTop: 'auto', padding: collapsed && !isMobile ? '10px 8px' : '12px 16px', borderTop: '1px solid var(--line)' }}>
           {user ? (
             <>
-              <div style={{ marginBottom: 10 }}>
+              {!collapsed && <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--cream)' }}>
                   {user.nome || user.user}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2, textTransform: 'uppercase' }}>
                   {user.role}
                 </div>
-              </div>
-              {isAtleta && (
+              </div>}
+              {isAtleta && !collapsed && (
                 <NavLink
                   to="/meu-painel"
                   style={({ isActive }) => ({
@@ -478,8 +510,10 @@ export default function Sidebar() {
                   logout()
                   navigate('/login')
                 }}
+                aria-label="Sair do sistema"
+                title={collapsed ? 'Sair' : undefined}
               >
-                Sair
+                {collapsed && !isMobile ? '↪' : 'Sair'}
               </button>
             </>
           ) : (
