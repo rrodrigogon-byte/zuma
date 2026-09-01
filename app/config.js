@@ -372,6 +372,7 @@ export const config = {
     offlineMode: process.env.FEATURE_OFFLINE_MODE === 'true',
     mobileApp: process.env.FEATURE_MOBILE_APP === 'true',
     aiInsights: process.env.FEATURE_AI_INSIGHTS === 'true',
+    whatsappAi: process.env.FEATURE_WHATSAPP_AI === 'true',
     advancedReporting: process.env.FEATURE_ADVANCED_REPORTING === 'true',
     apiMarketplace: process.env.FEATURE_API_MARKETPLACE === 'true',
     customModules: process.env.FEATURE_CUSTOM_MODULES === 'true',

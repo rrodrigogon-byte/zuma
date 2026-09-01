@@ -15,6 +15,7 @@ import { createStorefrontDomain, listStorefrontDomains, setPrimaryStorefrontDoma
 import { createShippingAccount, failShippingLabel, finalizeShippingCancellation, finalizeShippingLabel, listShippingAccounts, listShippingProviders, lookupPostalCode, prepareShippingCancellation, prepareShippingLabel, publicShippingMethod, quoteShipping, shippingAccountReady, updateShippingAccount, updateShippingTracking } from './commerce-shipping.js';
 import { shippingProviders } from './shipping-adapters.js';
 import { commerceMediaIdForIdempotencyKey, newCommerceMediaId, streamCommerceImage, uploadCommerceImage } from './commerce-media.js';
+import { configureWhatsappAiChannel, listWhatsappAiSessions, releaseWhatsappAiHandoff, syncWhatsappAiWebhook, testWhatsappAiGemini, whatsappAiOperationalStatus } from './whatsapp-ai.js';
 import {
   CommerceError,
   assertUuid,
@@ -1372,6 +1373,42 @@ export function createCommerceAdminRouter() {
       const result = await reconcilePaymentByIdentifiers(context, req.params.id, req.body || {});
       await withCommerceTransaction(trx => auditLog(trx, context, { entidade: 'payment', entidadeId: result.paymentId, acao: 'manual_reconciled', correlationId: req.requestId || '', depois: { orderId: result.orderId, provider: result.provider, status: result.status, changed: result.changed, stale: Boolean(result.stale) } }));
       res.json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.get('/whatsapp-ai/status', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'reports.read');
+      res.json(await whatsappAiOperationalStatus(context));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.get('/whatsapp-ai/sessions', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'reports.read');
+      res.json({ items: await listWhatsappAiSessions(context, { limit: req.query.limit }) });
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/whatsapp-ai/channel', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'settings.write');
+      res.json(await configureWhatsappAiChannel(context, req.body || {}));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/whatsapp-ai/diagnostics/gemini', async (req, res) => {
+    try {
+      await requirePermission(req, 'settings.write');
+      res.json(await testWhatsappAiGemini());
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/whatsapp-ai/channel/sync-webhook', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'settings.write');
+      res.json(await syncWhatsappAiWebhook(context));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/whatsapp-ai/sessions/:id/release', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'settings.write');
+      res.json(await releaseWhatsappAiHandoff(context, req.params.id));
     } catch (error) { jsonError(res, error); }
   });
   router.get('/operations/health', async (req, res) => {
