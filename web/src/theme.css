@@ -683,25 +683,16 @@ html[data-brand='dino'] .commerce-report-grid strong {
 
 html[data-brand='dino'] .sidebar-brand-dino {
   display: block;
-  width: 158px;
-  height: 54px;
+  width: 92px;
+  height: 92px;
   min-height: 0;
+  padding: 6px;
+  border: 1px solid rgba(255,255,255,.38);
+  border-radius: 16px;
+  background: #fff;
   object-fit: contain;
-  object-position: left center;
-  filter: none;
-}
-
-@media (prefers-color-scheme: dark) {
-  html[data-brand='dino']:not([data-theme='light']) .sidebar-brand-dino {
-    filter: invert(1) brightness(2);
-  }
-}
-
-html[data-brand='dino'][data-theme='dark'] .sidebar-brand-dino {
-  filter: invert(1) brightness(2);
-}
-
-html[data-brand='dino'][data-theme='light'] .sidebar-brand-dino {
+  object-position: center;
+  box-shadow: 0 10px 24px rgba(0,0,0,.2);
   filter: none;
 }
 

@@ -5,6 +5,7 @@
  */
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
+import { DINO_BARBERSHOP_LOGO } from '../../lib/brand'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -50,6 +51,7 @@ const s = {
     textAlign: 'center',
   },
   logo: { fontSize: 36, marginBottom: 8 },
+  brandLogo: { display: 'block', width: 132, height: 132, objectFit: 'contain', margin: '0 auto 12px', padding: 8, background: '#FFFFFF', borderRadius: 20, boxShadow: '0 12px 28px rgba(0,0,0,.24)' },
   nomeEstab: { fontSize: 22, fontWeight: 800, color: theme.cream, fontFamily: "'Sora', 'Plus Jakarta Sans', sans-serif", letterSpacing: '-.2px' },
   subtitulo: { fontSize: 13, color: theme.muted, marginTop: 4 },
   container: { maxWidth: 520, margin: '0 auto', padding: '24px 16px' },
@@ -126,6 +128,7 @@ const s = {
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function AgendamentoOnline() {
   const { slug } = useParams()
+  const isDino = String(slug || '').trim().toLowerCase() === 'dino'
   const [passo, setPasso] = useState(1) // 1=serviço 2=profissional 3=data/hora 4=dados 5=confirmado
   const [estabelecimento, setEstabelecimento] = useState(null)
   const [profissionais, setProfissionais] = useState([])
@@ -249,8 +252,8 @@ export default function AgendamentoOnline() {
   // ── Cabeçalho ───────────────────────────────────────────────────────────────
   const Header = () => (
     <div style={s.header}>
-      <div style={s.logo}>{estabelecimento?.emoji || '✂️'}</div>
-      <div style={s.nomeEstab}>{estabelecimento?.nome || 'Agendamento Online'}</div>
+      {isDino ? <img src={DINO_BARBERSHOP_LOGO} alt="Barbearia Dino — desde 1997" style={s.brandLogo} /> : <div style={s.logo}>{estabelecimento?.emoji || '✂️'}</div>}
+      <div style={s.nomeEstab}>{estabelecimento?.nome || (isDino ? 'Barbearia Dino' : 'Agendamento Online')}</div>
       {estabelecimento?.endereco && (
         <div style={s.subtitulo}>📍 {estabelecimento.endereco}</div>
       )}

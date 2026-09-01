@@ -1,6 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { applyBrand, applyThemeMode, isDinoBrandContext, normalizeThemeMode, resolveBrand, storedThemeMode } from './brand.js'
+import { applyBrand, applyThemeMode, DINO_BARBERSHOP_LOGO, DINO_COMMERCE_LOGO, isDinoBrandContext, normalizeThemeMode, resolveBrand, storedThemeMode } from './brand.js'
+
+test('Barbearia Dino e Dino Perfumaria usam assets de marca distintos', () => {
+  assert.equal(DINO_BARBERSHOP_LOGO, '/brand/dino-barbearia-logo.png')
+  assert.equal(DINO_COMMERCE_LOGO, '/brand/dino-logo.png')
+  assert.notEqual(DINO_BARBERSHOP_LOGO, DINO_COMMERCE_LOGO)
+})
 
 test('resolveBrand aplica Dino em todo o backoffice somente quando Dino é o tenant ativo', () => {
   assert.equal(resolveBrand('/admin', '', 'dino'), 'dino')

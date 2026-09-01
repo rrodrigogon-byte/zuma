@@ -1,3 +1,6 @@
+export const DINO_BARBERSHOP_LOGO = '/brand/dino-barbearia-logo.png'
+export const DINO_COMMERCE_LOGO = '/brand/dino-logo.png'
+
 export function resolveBrand(pathname = '/', search = '', tenantBrand = '') {
   const path = String(pathname || '/').toLowerCase()
   const params = new URLSearchParams(String(search || ''))
