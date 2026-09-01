@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowRight, CheckCircle2, Loader2, Minus, Plus, Search, ShoppingBag, Store, X } from 'lucide-react'
+import { ArrowRight, CheckCircle2, Eye, Loader2, Minus, Plus, Search, ShoppingBag, Store, X } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, fmtR } from '../../lib/api'
 import { loadAllStorefrontProducts, normalizeStorefrontAlias, storefrontApiBase, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
@@ -412,7 +412,7 @@ export default function Ecommerce() {
     {!loading && !error && <section className="commerce-product-grid">
       {filtered.map(product => <article className="commerce-product-card" key={product.id}>
         <button type="button" className="commerce-product-open" onClick={() => { setSelected(product); setSelectedVariantId(product.variantId || product.variants?.[0]?.variantId || '') }} aria-label={`Ver detalhes de ${product.nome}`}><ProductImage product={product} /></button>
-        <div className="commerce-product-content"><span>{product.cat || 'Produto'}</span><h2>{product.nome}</h2><p>{product.descricao || `Produto disponível no catálogo ${brandName}.`}</p><div className="commerce-product-buy"><div className="commerce-price"><strong>{money(product.preco)}</strong>{product.promocaoAtiva && <s>{money(product.precoOriginal)}</s>}</div><button type="button" onClick={() => addToCart(product)} disabled={product.esgotado}>{product.esgotado ? 'Esgotado' : 'Adicionar'}</button></div></div>
+        <div className="commerce-product-content"><span>{product.cat || 'Produto'}</span><h2>{product.nome}</h2><p>{product.descricao || `Produto disponível no catálogo ${brandName}.`}</p><button type="button" className="commerce-product-details-button" onClick={() => { setSelected(product); setSelectedVariantId(product.variantId || product.variants?.[0]?.variantId || '') }}><Eye size={15} /> Ver detalhes</button><div className="commerce-product-buy"><div className="commerce-price"><strong>{money(product.preco)}</strong>{product.promocaoAtiva && <s>{money(product.precoOriginal)}</s>}</div><button type="button" onClick={() => addToCart(product)} disabled={product.esgotado}>{product.esgotado ? 'Esgotado' : 'Adicionar'}</button></div></div>
       </article>)}
       {!filtered.length && <div className="commerce-state">Nenhum item encontrado para esta busca.</div>}
     </section>}
