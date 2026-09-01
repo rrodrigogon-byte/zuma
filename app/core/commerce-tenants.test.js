@@ -24,6 +24,10 @@ const validInput = {
   lojaCodigo: 'DINO-MATRIZ',
   storefrontCodigo: 'dino-web',
   confirmAdminAccess: true,
+  confirmPublicContact: true,
+  phone: '+5565993360000',
+  address: { street: 'Rua de Teste', number: '80 W', neighborhood: 'Centro', city: 'Tangará da Serra', state: 'MT', postalCode: '78300055' },
+  pickup: { instructions: 'Retirada no estabelecimento após confirmação.', leadTimeHours: 2 },
   publicConfig: { displayName: 'Dino', tagline: 'Barbearia e perfumaria.' },
 };
 

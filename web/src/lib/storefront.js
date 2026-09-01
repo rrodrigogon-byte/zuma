@@ -27,3 +27,19 @@ export function storefrontAliasFromPath(pathname) {
   const match = String(pathname || '').match(/^\/(?:ecommerce|perfumaria|checkout|pedido)\/([^/?#]+)/i)
   return normalizeStorefrontAlias(match?.[1])
 }
+
+export async function loadAllStorefrontProducts(fetchPage, { pageSize = 100, maxItems = 2000 } = {}) {
+  if (typeof fetchPage !== 'function') throw new TypeError('fetchPage deve ser uma função')
+  const safePageSize = Math.min(Math.max(Number(pageSize) || 100, 1), 100)
+  const safeMaxItems = Math.min(Math.max(Number(maxItems) || 2000, safePageSize), 5000)
+  const items = []
+  let offset = 0
+  while (items.length < safeMaxItems) {
+    const response = await fetchPage({ limit: safePageSize, offset })
+    const batch = Array.isArray(response) ? response : response?.items || []
+    items.push(...batch.slice(0, safeMaxItems - items.length))
+    if (batch.length < safePageSize) break
+    offset += batch.length
+  }
+  return items
+}

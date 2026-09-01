@@ -1,4 +1,5 @@
 import { api } from '../../lib/api'
+import { loadAllStorefrontProducts } from '../../lib/storefront'
 
 const LEGACY_TO_CORE = {
   pendente: 'pending_payment',
@@ -121,7 +122,7 @@ export async function loadCommerceAdmin() {
     const [storefrontData, storefrontsData, productData, categoryData, promotionData, templateData, roleData, membershipData, orderData, customerData, locations, shippingData, shippingProviderData, shippingAccountData, fulfillmentData, domainData, providerData, accountData, paymentData, auditData, healthData] = await Promise.all([
       api.get('/api/admin/commerce/storefront'),
       safeCoreGet('/api/admin/commerce/storefronts', { items: [] }, warnings, 'lojas Commerce'),
-      api.get('/api/admin/commerce/catalog/products'),
+      loadAllStorefrontProducts(({ limit, offset }) => api.get(`/api/admin/commerce/catalog/products?limit=${limit}&offset=${offset}`)).then(items => ({ items })),
       safeCoreGet('/api/admin/commerce/catalog/categories', { items: [] }, warnings, 'categorias'),
       safeCoreGet('/api/admin/commerce/promotions', { items: [] }, warnings, 'promoções'),
       safeCoreGet('/api/admin/commerce/promotions/templates', { items: [] }, warnings, 'templates promocionais'),

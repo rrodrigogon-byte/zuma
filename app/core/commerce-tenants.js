@@ -21,6 +21,62 @@ function email(value) {
   return normalized;
 }
 
+function cnpj(value) {
+  const normalized = digits(value, 14);
+  if (normalized.length !== 14 || /^(\d)\1{13}$/.test(normalized)) {
+    throw new CommerceError('CNPJ deve possuir 14 dígitos válidos', 'TENANT_CNPJ_INVALID');
+  }
+  const calculate = (base, weights) => {
+    const total = base.split('').reduce((sum, digit, index) => sum + Number(digit) * weights[index], 0);
+    const result = 11 - (total % 11);
+    return result >= 10 ? '0' : String(result);
+  };
+  const first = calculate(normalized.slice(0, 12), [5,4,3,2,9,8,7,6,5,4,3,2]);
+  const second = calculate(`${normalized.slice(0, 12)}${first}`, [6,5,4,3,2,9,8,7,6,5,4,3,2]);
+  if (!normalized.endsWith(`${first}${second}`)) {
+    throw new CommerceError('CNPJ deve possuir 14 dígitos válidos', 'TENANT_CNPJ_INVALID');
+  }
+  return normalized;
+}
+
+function phone(value) {
+  const normalized = digits(value, 13);
+  if (normalized.length < 10 || normalized.length > 13) {
+    throw new CommerceError('telefone deve incluir DDD e número válidos', 'TENANT_PHONE_INVALID');
+  }
+  return normalized.startsWith('55') ? `+${normalized}` : `+55${normalized}`;
+}
+
+function httpsUrl(value) {
+  const normalized = text(value, 600);
+  return /^https:\/\//i.test(normalized) ? normalized : '';
+}
+
+function addressConfig(input = {}) {
+  const postalCode = digits(input.postalCode || input.cep, 8);
+  const state = text(input.state || input.uf, 2).toUpperCase();
+  if (postalCode && postalCode.length !== 8) throw new CommerceError('CEP deve possuir 8 dígitos', 'TENANT_POSTAL_CODE_INVALID');
+  if (state && !/^[A-Z]{2}$/.test(state)) throw new CommerceError('UF inválida', 'TENANT_STATE_INVALID');
+  return {
+    street: text(input.street || input.logradouro, 180),
+    number: text(input.number || input.numero, 30),
+    complement: text(input.complement || input.complemento, 100),
+    neighborhood: text(input.neighborhood || input.bairro, 100),
+    city: text(input.city || input.cidade, 100),
+    state,
+    postalCode,
+  };
+}
+
+function policiesConfig(input = {}) {
+  return {
+    privacyUrl: httpsUrl(input.privacyUrl),
+    returnsUrl: httpsUrl(input.returnsUrl),
+    shippingUrl: httpsUrl(input.shippingUrl),
+    termsUrl: httpsUrl(input.termsUrl),
+  };
+}
+
 function alias(value) {
   const normalized = text(value, 80).toLowerCase();
   if (!ALIAS_PATTERN.test(normalized)) {
@@ -59,11 +115,21 @@ function color(value, fallback) {
 }
 
 function publicConfig(input = {}, fallbackName = '') {
-  const logoUrl = text(input.logoUrl, 600);
+  const address = addressConfig(input.address || {});
   return {
     displayName: text(input.displayName || fallbackName, 120),
     tagline: text(input.tagline, 240),
-    logoUrl: /^https:\/\//i.test(logoUrl) ? logoUrl : '',
+    logoUrl: httpsUrl(input.logoUrl),
+    contact: {
+      phone: input.phone ? phone(input.phone) : '',
+      email: input.email ? email(input.email) : '',
+    },
+    address,
+    pickup: {
+      instructions: text(input.pickup?.instructions, 500),
+      leadTimeHours: Math.max(0, Math.min(720, Number(input.pickup?.leadTimeHours) || 0)),
+    },
+    policies: policiesConfig(input.policies || {}),
     colors: {
       accent: color(input.colors?.accent, '#6E7CE0'),
       accentStrong: color(input.colors?.accentStrong, '#4B57A6'),
@@ -76,8 +142,8 @@ function publicConfig(input = {}, fallbackName = '') {
 
 function validateProvisioningInput(input = {}) {
   if (input.confirmAdminAccess !== true) throw new CommerceError('confirme explicitamente a concessão de acesso administrativo ao tenant', 'TENANT_ADMIN_ACCESS_CONFIRMATION_REQUIRED');
-  const cnpj = digits(input.cnpj, 14);
-  if (cnpj.length !== 14) throw new CommerceError('CNPJ deve possuir 14 dígitos', 'TENANT_CNPJ_INVALID');
+  if (input.confirmPublicContact !== true) throw new CommerceError('confirme explicitamente endereço e contato públicos do tenant', 'TENANT_PUBLIC_CONTACT_CONFIRMATION_REQUIRED');
+  const tenantCnpj = cnpj(input.cnpj);
   const nome = text(input.nomeFantasia || input.nome, 255);
   const razaoSocial = text(input.razaoSocial, 255);
   if (!nome || !razaoSocial) throw new CommerceError('nome fantasia e razão social são obrigatórios', 'TENANT_IDENTITY_REQUIRED');
@@ -87,8 +153,19 @@ function validateProvisioningInput(input = {}) {
   const brand = brandKey(input.brandKey || storeAlias);
   const unitCode = storeCode(input.lojaCodigo || `${storeAlias}-matriz`);
   const channelCode = storefrontCode(input.storefrontCodigo || `${storeAlias}-web`);
+  const publicDetails = publicConfig({
+    ...(input.publicConfig || {}),
+    phone: input.phone || input.publicConfig?.phone,
+    email: input.contactEmail || input.publicConfig?.email,
+    address: input.address || input.publicConfig?.address,
+    pickup: input.pickup || input.publicConfig?.pickup,
+    policies: input.policies || input.publicConfig?.policies,
+  }, nome);
+  if (!publicDetails.contact.phone || !publicDetails.address.street || !publicDetails.address.number || !publicDetails.address.neighborhood || !publicDetails.address.city || !publicDetails.address.state || !publicDetails.address.postalCode) {
+    throw new CommerceError('telefone e endereço público completo são obrigatórios', 'TENANT_PUBLIC_CONTACT_REQUIRED');
+  }
   return {
-    cnpj,
+    cnpj: tenantCnpj,
     nome,
     razaoSocial,
     tipoNegocio,
@@ -99,7 +176,7 @@ function validateProvisioningInput(input = {}) {
     unitCode,
     channelCode,
     timezone: text(input.timezone || 'America/Sao_Paulo', 64),
-    public: publicConfig(input.publicConfig, nome),
+    public: publicDetails,
   };
 }
 
@@ -210,7 +287,7 @@ export async function provisionCommerceTenant(input = {}) {
                      configuracoes = lojas.configuracoes || EXCLUDED.configuracoes,
                      data_atualizacao = CURRENT_TIMESTAMP
        RETURNING id, empresa_id, codigo, nome, nome_fantasia, timezone, ativa`,
-      [empresa.id, payload.unitCode, payload.nome, payload.timezone, JSON.stringify({ commerceStorefront: true, brandKey: payload.brand })],
+      [empresa.id, payload.unitCode, payload.nome, payload.timezone, JSON.stringify({ commerceStorefront: true, brandKey: payload.brand, contact: payload.public.contact, address: payload.public.address, pickup: payload.public.pickup })],
     );
     const loja = lojaResult.rows[0];
     await ensureTenantMembership(trx, empresa.id, usuario.id, loja.id);
@@ -257,7 +334,13 @@ export async function provisionCommerceTenant(input = {}) {
        VALUES ($1, $2, 'retirada', 'Retirada no estabelecimento', 'pickup', true, $3::jsonb)
        ON CONFLICT (empresa_id, storefront_id, codigo)
        DO UPDATE SET nome = EXCLUDED.nome, ativo = true, configuracao = EXCLUDED.configuracao`,
-      [empresa.id, storefront.id, JSON.stringify({ instructions: 'A retirada será combinada com o estabelecimento.', brandKey: payload.brand })],
+      [empresa.id, storefront.id, JSON.stringify({
+        instructions: payload.public.pickup.instructions || 'A retirada será combinada com o estabelecimento.',
+        leadTimeHours: payload.public.pickup.leadTimeHours,
+        address: payload.public.address,
+        contact: payload.public.contact,
+        brandKey: payload.brand,
+      })],
     );
     return {
       empresa,
@@ -277,7 +360,8 @@ export async function listCommerceTenants() {
             COALESCE(jsonb_agg(DISTINCT jsonb_build_object(
               'id', s.id, 'codigo', s.codigo, 'nome', s.nome, 'status', s.status,
               'lojaId', s.loja_id, 'aliases', COALESCE((SELECT jsonb_agg(jsonb_build_object(
-                'alias', a.alias, 'brandKey', a.brand_key, 'ativo', a.ativo
+                'alias', a.alias, 'brandKey', a.brand_key, 'ativo', a.ativo,
+                'publicConfig', a.public_config
               ) ORDER BY a.alias) FROM commerce_storefront_aliases a
                 WHERE a.empresa_id = s.empresa_id AND a.storefront_id = s.id), '[]'::jsonb)
             )) FILTER (WHERE s.id IS NOT NULL), '[]'::jsonb) AS storefronts
@@ -307,4 +391,4 @@ export async function resolveStorefrontAlias(storeAlias) {
   return result.rows[0];
 }
 
-export { validateProvisioningInput, publicConfig };
+export { addressConfig, cnpj, phone, publicConfig, validateProvisioningInput };

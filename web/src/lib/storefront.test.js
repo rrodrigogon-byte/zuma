@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeStorefrontAlias, storefrontAliasFromPath, storefrontApiBase, storefrontRoute, storefrontStorageKey } from './storefront.js';
+import { loadAllStorefrontProducts, normalizeStorefrontAlias, storefrontAliasFromPath, storefrontApiBase, storefrontRoute, storefrontStorageKey } from './storefront.js';
 
 test('normaliza apenas aliases públicos seguros', () => {
   assert.equal(normalizeStorefrontAlias(' DINO '), 'dino');
@@ -34,4 +34,20 @@ test('extrai alias somente das rotas Commerce conhecidas', () => {
   assert.equal(storefrontAliasFromPath('/checkout/dino'), 'dino');
   assert.equal(storefrontAliasFromPath('/pedido/dino/DINO-123'), 'dino');
   assert.equal(storefrontAliasFromPath('/admin/ecommerce'), '');
+});
+
+test('carrega todas as páginas do catálogo sem truncar após o primeiro lote', async () => {
+  const source = Array.from({ length: 164 }, (_, index) => ({ id: index + 1 }));
+  const calls = [];
+  const items = await loadAllStorefrontProducts(({ limit, offset }) => {
+    calls.push({ limit, offset });
+    return { items: source.slice(offset, offset + limit) };
+  });
+  assert.equal(items.length, 164);
+  assert.deepEqual(calls, [{ limit: 100, offset: 0 }, { limit: 100, offset: 100 }]);
+});
+
+test('respeita o limite máximo de segurança da paginação', async () => {
+  const items = await loadAllStorefrontProducts(({ limit, offset }) => ({ items: Array.from({ length: limit }, (_, index) => ({ id: offset + index })) }), { pageSize: 100, maxItems: 250 });
+  assert.equal(items.length, 250);
 });
