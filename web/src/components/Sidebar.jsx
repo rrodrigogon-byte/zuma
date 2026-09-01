@@ -2,7 +2,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
-import { applyThemeMode, storedThemeMode } from '../lib/brand'
+import { applyThemeMode, isDinoBrandContext, storedThemeMode } from '../lib/brand'
 
 // ── Badge de pedidos pendentes ─────────────────────────────────────────────────
 function usePendingOrders(isStaff) {
@@ -372,8 +372,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
   const [open, setOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const pendentes = usePendingOrders(isStaff)
-  const isDino = [empresaAtiva?.brandKey, empresaAtiva?.slug, empresaAtiva?.codigo, empresaAtiva?.nome]
-    .some((value) => String(value || '').toLowerCase().includes('dino'))
+  const isDino = isDinoBrandContext(empresaAtiva)
   const [themeMode, setThemeMode] = useState(() => storedThemeMode())
 
   // 🔒 SEGURANÇA: Ocultar sidebar completamente se não autenticado
@@ -405,9 +404,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
   }
 
   const changeThemeMode = (mode) => {
-    const applied = applyThemeMode(mode)
-    setThemeMode(applied)
-    try { localStorage.setItem('sp_theme_mode', applied) } catch { /* preferência opcional */ }
+    setThemeMode(applyThemeMode(mode, { persist: true }))
   }
 
   const sidebarStyle = {

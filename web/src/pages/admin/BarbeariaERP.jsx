@@ -3,6 +3,7 @@ import { api, fmtDate, fmtDateOnly, fmtR } from '../../lib/api'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useToast } from '../../hooks/useToast'
 import { useAuth } from '../../lib/auth'
+import { isDinoBrandContext } from '../../lib/brand'
 import BarbeariaAgendaBoard, { agendaBoardColumns } from './BarbeariaAgendaBoard'
 import BarbeariaOperacaoPanel from './BarbeariaOperacaoPanel'
 import DinoBusinessDashboard from './DinoBusinessDashboard'
@@ -138,9 +139,8 @@ const inputStyle = { width: '100%', boxSizing: 'border-box', padding: '10px 12px
 
 export default function BarbeariaERP() {
   const { toast } = useToast()
-  const { user } = useAuth()
-  const activeTenant = user?.empresaAtiva || user?.empresa || user?.tenant || {}
-  const isDinoBrand = String(activeTenant.brandKey || activeTenant.brand_key || activeTenant.slug || activeTenant.alias || activeTenant.nome || '').toLowerCase().includes('dino')
+  const { user, empresaAtiva } = useAuth()
+  const isDinoBrand = isDinoBrandContext(empresaAtiva, user?.empresaAtiva, user?.empresa, user?.tenant)
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const requestedTab = searchParams.get('tab')

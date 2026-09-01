@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { applyBrand, applyThemeMode, normalizeThemeMode, resolveBrand, storedThemeMode } from './brand.js'
+import { applyBrand, applyThemeMode, isDinoBrandContext, normalizeThemeMode, resolveBrand, storedThemeMode } from './brand.js'
 
 test('resolveBrand aplica Dino em todo o backoffice somente quando Dino é o tenant ativo', () => {
   assert.equal(resolveBrand('/admin', '', 'dino'), 'dino')
@@ -33,7 +33,21 @@ test('resolveBrand preserva Kytto e Agro Open nas demais rotas e aliases', () =>
 test('applyBrand e applyThemeMode são inofensivos fora do navegador', () => {
   assert.doesNotThrow(() => applyBrand('dino'))
   assert.doesNotThrow(() => applyBrand('kytto'))
-  assert.equal(applyThemeMode('dark'), 'system')
+  assert.equal(applyThemeMode('dark'), 'dark')
+})
+
+test('isDinoBrandContext reconhece o objeto empresaAtiva do AuthContext sem contaminar outros tenants', () => {
+  assert.equal(isDinoBrandContext({ id: 'empresa-1', nome: 'Barbearia Dino' }), true)
+  assert.equal(isDinoBrandContext({ brandKey: 'dino' }), true)
+  assert.equal(isDinoBrandContext({ id: 'empresa-2', nome: 'AGRO OPEN TTC' }), false)
+  assert.equal(isDinoBrandContext(null, undefined, 'kytto'), false)
+})
+
+test('applyThemeMode persiste a preferência da loja quando solicitado', () => {
+  const writes = []
+  const storage = { setItem: (...args) => writes.push(args) }
+  assert.equal(applyThemeMode('LIGHT', { persist: true, storage }), 'light')
+  assert.deepEqual(writes, [['sp_theme_mode', 'light']])
 })
 
 test('normalizeThemeMode limita o tema aos três estados suportados', () => {
