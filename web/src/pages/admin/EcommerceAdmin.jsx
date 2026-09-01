@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Archive, BarChart3, Check, ChevronRight, ClipboardList, CreditCard, Edit3, Eye, FileBarChart, Globe2, Layers3, PackagePlus, Plus, RefreshCw, Search, Settings2, ShieldCheck, ShoppingBag, Sparkles, Store, Tag, Trash2, Truck, X } from 'lucide-react'
 import { fmtDate, fmtR } from '../../lib/api'
+import { useSearchParams } from 'react-router-dom'
 import { archiveCoreVariant, createCoreCategory, createCoreCustomer, createCoreCustomerAddress, createCoreDomain, createCoreFulfillment, createCorePaymentAccount, createCorePaymentAttempt, createCoreProductMedia, createCorePromotionTemplate, createCoreShippingLabel, cancelCoreShippingLabel, createCoreShippingAccount, createCoreShippingMethod, createCoreStorefront, reconcileCorePayment, updateCoreStorefront, updateCoreShippingMethod, createCorePromotion, createCoreVariant, deleteCoreCustomerAddress, deleteCoreProduct, deleteCoreProductMedia, listCoreProductMedia, loadCommerceAdmin, loadCoreCustomerAddresses, loadCoreReports, saveCoreProduct, setPrimaryCoreDomain, syncCorePayment, syncCoreShippingTracking, toggleCoreProduct, updateCoreCategory, updateCoreCustomer, updateCoreCustomerAddress, updateCoreFulfillment, updateCoreMembership, updateCoreOrder, updateCorePaymentAccount, updateCoreShippingAccount, updateCoreVariant, uploadCoreProductMedia, verifyCoreDomain } from './commerce-admin-adapter'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
@@ -33,6 +34,7 @@ const EMPTY_DOMAIN = { dominio: '', principal: false }
 const EMPTY_CATEGORY = { nome: '', descricao: '', ordem: 0, parentId: '' }
 const EMPTY_STOREFRONT = { codigo: '', nome: '', lojaId: '', lojaCodigo: '', lojaNome: '', nomeFantasia: '', criarUnidade: true, canal: 'web', moeda: 'BRL', timezone: 'America/Sao_Paulo', status: 'active', dominio: '' }
 const EMPTY_TEMPLATE = { codigo: '', nome: '', descricao: '', tipo: 'percentage', valor: '', regrasJson: '{}' }
+const COMMERCE_TAB_BY_QUERY = { overview: 'visao', stores: 'lojas', catalog: 'catalogo', orders: 'pedidos', promotions: 'promocoes', reports: 'relatorios', customers: 'clientes', shipping: 'fulfillment', fulfillment: 'fulfillment', domains: 'dominios', payments: 'pagamentos', users: 'usuarios', audit: 'auditoria' }
 
 function money(value) { return fmtR(Number(value || 0)) }
 function auditValue(value) {
@@ -43,6 +45,8 @@ function auditValue(value) {
 
 export default function EcommerceAdmin() {
   const { lojasAcessiveis, atualizarContextoLojas } = useAuth()
+  const [searchParams] = useSearchParams()
+  const requestedTab = searchParams.get('tab')
   const [products, setProducts] = useState([])
   const [storefronts, setStorefronts] = useState([])
   const [promotionTemplates, setPromotionTemplates] = useState([])
@@ -95,7 +99,7 @@ export default function EcommerceAdmin() {
   const [query, setQuery] = useState('')
   const [orderQuery, setOrderQuery] = useState('')
   const [customerQuery, setCustomerQuery] = useState('')
-  const [tab, setTab] = useState('visao')
+  const [tab, setTab] = useState(() => COMMERCE_TAB_BY_QUERY[requestedTab] || 'visao')
   const [form, setForm] = useState(EMPTY_FORM)
   const [editingId, setEditingId] = useState(null)
   const [editingProduct, setEditingProduct] = useState(null)
@@ -180,6 +184,11 @@ export default function EcommerceAdmin() {
   }
 
   useEffect(() => { loadData() }, [])
+
+  useEffect(() => {
+    const nextTab = COMMERCE_TAB_BY_QUERY[requestedTab]
+    if (nextTab) setTab(nextTab)
+  }, [requestedTab])
 
   useEffect(() => {
     if (mode !== 'core' || !storefronts.length) return

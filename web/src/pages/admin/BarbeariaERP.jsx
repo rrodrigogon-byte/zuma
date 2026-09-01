@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, fmtDate, fmtDateOnly, fmtR } from '../../lib/api'
+import { useNavigate } from 'react-router-dom'
 import { useToast } from '../../hooks/useToast'
 import BarbeariaAgendaBoard, { agendaBoardColumns } from './BarbeariaAgendaBoard'
 import BarbeariaOperacaoPanel from './BarbeariaOperacaoPanel'
@@ -56,6 +57,14 @@ const STATUS = {
   em_conta: { label: 'Em conta', color: '#8b5cf6' },
   paga: { label: 'Paga', color: '#14b87a' },
   cancelada: { label: 'Cancelada', color: '#e05c5c' },
+  operacional: { label: 'Operacional', color: '#14b87a' },
+  configuracao_pendente: { label: 'Configuração pendente', color: '#f59e0b' },
+  aguardando_provisionamento: { label: 'Aguardando provisionamento', color: '#4a9eff' },
+  sem_membership: { label: 'Tenant sem vínculo', color: '#f59e0b' },
+  sem_permissao: { label: 'Sem permissão Commerce', color: '#f59e0b' },
+  temporariamente_indisponivel: { label: 'Temporariamente indisponível', color: '#e05c5c' },
+  indisponivel: { label: 'Indisponível', color: '#e05c5c' },
+  desativado: { label: 'Desativado', color: '#888' },
 }
 
 const TRANSICOES = {
@@ -127,6 +136,7 @@ const inputStyle = { width: '100%', boxSizing: 'border-box', padding: '10px 12px
 
 export default function BarbeariaERP() {
   const { toast } = useToast()
+  const navigate = useNavigate()
   const [tab, setTab] = useState('Visão geral')
   const [dataSelecionada, setDataSelecionada] = useState(hojeLocal)
   const [statusFiltro, setStatusFiltro] = useState('')
@@ -1002,6 +1012,10 @@ export default function BarbeariaERP() {
   function renderIntegracoes() {
     const whatsapp = integracoes?.whatsapp
     const ia = integracoes?.ia
+    const commerce = integracoes?.commerce || {}
+    const iaDisponivel = Boolean(ia?.analiseOperacionalDisponivel)
+    const prontidaoCommerce = Number(commerce?.prontidao?.percentual || 0)
+    const commerceDisponivel = !['desativado', 'indisponivel', 'temporariamente_indisponivel', 'sem_membership', 'sem_permissao'].includes(commerce?.status)
     return <div style={{ display: 'grid', gap: 18 }}>
       <Card style={{ padding: 20, background: 'linear-gradient(135deg, color-mix(in srgb, #25d366 10%, var(--card)), var(--card))' }}>
         <div style={styles.sectionTitle}>
@@ -1034,10 +1048,10 @@ export default function BarbeariaERP() {
           <div style={styles.integrationCard}>
             <div style={styles.integrationHeading}>
               <div style={{ ...styles.integrationIcon, background: '#6d5dfc' }}>IA</div>
-              <div><strong>Assistente IA operacional</strong><span style={styles.sub}>{ia?.configurada ? `Modelo disponível${ia.modelo ? ` · ${ia.modelo}` : ''}` : 'Modelo ainda não configurado no servidor'}</span></div>
-              <Badge status={ia?.configurada ? 'configurado' : 'pendente_configuracao'} />
+              <div><strong>Assistente IA operacional</strong><span style={styles.sub}>{ia?.configurada ? `Provedor disponível${ia.modelo ? ` · ${ia.modelo}` : ''}` : iaDisponivel ? `Modo local tenant-aware · ${ia?.modelo || 'regras-dino-local'}` : 'Assistente indisponível'}</span></div>
+              <Badge status={iaDisponivel ? 'configurado' : 'pendente_configuracao'} />
             </div>
-            <div style={styles.metricLine}><span>Escopo da consulta</span><strong>Agenda, serviços e equipe</strong></div>
+            <div style={styles.metricLine}><span>Escopo da consulta</span><strong>Agenda, caixa, financeiro e Commerce</strong></div>
             <div style={styles.metricLine}><span>Ações executadas pela IA</span><strong>Nenhuma</strong></div>
             <p style={styles.sub}>A IA pode resumir a operação e sugerir organização. Ela não cria reserva, não altera cadastro e não confirma pagamento.</p>
             <form onSubmit={consultarAssistente} style={{ display: 'grid', gap: 10, marginTop: 14 }}>
@@ -1048,20 +1062,52 @@ export default function BarbeariaERP() {
             {assistenteResposta?.erro && <div style={{ ...styles.notice, borderColor: '#e05c5c' }}><strong>Consulta não disponível</strong><div style={styles.sub}>{assistenteResposta.erro}</div></div>}
           </div>
         </div>
-        <div style={{ ...styles.notice, marginTop: 14 }}>
-          <div style={styles.integrationHeading}><div style={{ ...styles.integrationIcon, background: '#f59e0b' }}>C</div><div><strong>Commerce Kytto</strong><span style={styles.sub}>Contrato explícito em preparação</span></div><Badge status="pendente_configuracao" /></div>
-          <div style={styles.metricLine}><span>Escopo planejado</span><strong>Catálogo · vitrine · pedido · fulfillment</strong></div>
-          <div style={styles.metricLine}><span>Estoque compartilhado</span><strong>Não</strong></div>
-          <p style={styles.sub}>A Barbearia mantém catálogo e estoque próprios. Uma futura integração deverá operar por contrato aprovado, sem acesso direto ao estoque do Commerce e sem sincronização automática nesta etapa.</p>
+        <div style={{ ...styles.notice, marginTop: 14, display: 'grid', gap: 14 }}>
+          <div style={styles.integrationHeading}>
+            <div style={{ ...styles.integrationIcon, background: 'var(--accent)' }}>C</div>
+            <div style={{ flex: 1 }}><strong>{commerce?.storefront?.nome || 'Commerce Dino'}</strong><span style={styles.sub}>{commerce?.storefront ? `${commerce.storefront.lojaNome || 'Loja da sessão'} · ${commerce.storefront.status}` : 'Canal digital da empresa ativa'}</span></div>
+            <Badge status={commerce?.status || 'temporariamente_indisponivel'} />
+            <button type="button" style={styles.iconButton} onClick={carregar} disabled={loading} aria-label="Atualizar status do Commerce" title="Atualizar status do Commerce">↻</button>
+          </div>
+          <small style={styles.sub}>Status somente leitura atualizado {commerce?.geradoEm ? fmtDate(commerce.geradoEm) : 'agora'}.</small>
+          <div aria-label={`Prontidão do Commerce: ${prontidaoCommerce}%`} style={{ display: 'grid', gap: 6 }}>
+            <div style={styles.metricLine}><span>Prontidão comercial</span><strong>{prontidaoCommerce}%</strong></div>
+            <div style={{ height: 8, borderRadius: 999, background: 'var(--line)', overflow: 'hidden' }}><div style={{ width: `${Math.min(100, Math.max(0, prontidaoCommerce))}%`, height: '100%', background: commerce?.prontidao?.pronto ? '#14b87a' : 'var(--accent)', transition: 'width .2s ease' }} /></div>
+          </div>
+          <div style={styles.readinessGrid}>
+            <div style={styles.readinessItem}><strong>Catálogo publicado</strong><span style={{ color: 'var(--fg)', fontWeight: 800 }}>{commerce?.catalogo?.publicados || 0} produto(s)</span><small style={styles.sub}>{commerce?.catalogo?.variantesPublicadas || 0} variante(s) · {commerce?.catalogo?.semPreco || 0} sem preço</small></div>
+            <div style={styles.readinessItem}><strong>Estoque digital</strong><span style={{ color: 'var(--fg)', fontWeight: 800 }}>{commerce?.estoque?.disponivel || 0} disponível(is)</span><small style={styles.sub}>{commerce?.estoque?.reservado || 0} reservado(s) · {commerce?.estoque?.estoqueBaixo || 0} em atenção</small></div>
+            <div style={styles.readinessItem}><strong>Pedidos</strong><span style={{ color: 'var(--fg)', fontWeight: 800 }}>{commerce?.pedidos?.abertos || 0} aberto(s)</span><small style={styles.sub}>{commerce?.pedidos?.total || 0} no histórico do tenant</small></div>
+            <div style={styles.readinessItem}><strong>Fulfillment</strong><span style={{ color: commerce?.fulfillment?.emAtencao ? '#f59e0b' : '#14b87a', fontWeight: 800 }}>{commerce?.fulfillment?.emAtencao || 0} em atenção</span><small style={styles.sub}>Separação, retirada, entrega e tracking</small></div>
+            <div style={styles.readinessItem}><strong>Pagamentos</strong><span style={{ color: commerce?.pagamentos?.contasProntas ? '#14b87a' : '#f59e0b', fontWeight: 800 }}>{commerce?.pagamentos?.contasProntas || 0} conta(s) pronta(s)</span><small style={styles.sub}>{commerce?.pagamentos?.aguardando || 0} pagamento(s) aguardando</small></div>
+            <div style={styles.readinessItem}><strong>Entrega e retirada</strong><span style={{ color: commerce?.frete?.metodosAtivos ? '#14b87a' : '#f59e0b', fontWeight: 800 }}>{commerce?.frete?.metodosAtivos || 0} método(s) ativo(s)</span><small style={styles.sub}>{commerce?.frete?.retiradaAtiva ? 'Retirada ativa' : `${commerce?.frete?.contasProntas || 0} conta(s) logística(s) pronta(s)`}</small></div>
+            <div style={styles.readinessItem}><strong>Endereço público</strong><span style={{ color: commerce?.urlPublica ? '#14b87a' : '#f59e0b', fontWeight: 800 }}>{commerce?.alias?.alias || commerce?.dominios?.principal || 'Pendente'}</span><small style={styles.sub}>{commerce?.dominios?.verificados || 0} domínio(s) verificado(s)</small></div>
+            <div style={styles.readinessItem}><strong>Saúde do canal</strong><span style={{ color: commerce?.saude?.banco === 'healthy' && !commerce?.saude?.webhooksComFalha ? '#14b87a' : '#f59e0b', fontWeight: 800 }}>{commerce?.saude?.banco === 'healthy' ? 'Core acessível' : 'Core indisponível'}</span><small style={styles.sub}>{commerce?.saude?.webhooksComFalha || 0} webhook(s) com falha</small></div>
+          </div>
+          <div style={styles.metricLine}><span>Fonte de verdade digital</span><strong>Commerce Core PostgreSQL</strong></div>
+          <div style={styles.metricLine}><span>Estoque da revenda presencial compartilhado</span><strong>Não</strong></div>
+          {commerce?.prontidao?.bloqueadores?.length > 0 && <div style={{ ...styles.notice, borderColor: '#f59e0b' }}><strong>Para ativar o canal</strong><div style={{ ...styles.sub, marginTop: 6 }}>{commerce.prontidao.bloqueadores.map((item) => item.label).join(' · ')}</div></div>}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" style={styles.primary} disabled={!commerceDisponivel} onClick={() => navigate(commerce?.links?.admin || '/admin/ecommerce')}>Abrir Commerce</button>
+            <button type="button" style={styles.secondary} disabled={!commerceDisponivel} onClick={() => navigate(commerce?.links?.catalogo || '/admin/ecommerce?tab=catalog')}>Catálogo</button>
+            <button type="button" style={styles.secondary} disabled={!commerceDisponivel} onClick={() => navigate(commerce?.links?.estoque || '/admin/ecommerce?tab=inventory')}>Estoque</button>
+            <button type="button" style={styles.secondary} disabled={!commerceDisponivel} onClick={() => navigate(commerce?.links?.pedidos || '/admin/ecommerce?tab=orders')}>Pedidos</button>
+            <button type="button" style={styles.secondary} disabled={!commerceDisponivel} onClick={() => navigate(commerce?.links?.pagamentos || '/admin/ecommerce?tab=payments')}>Pagamentos</button>
+            <button type="button" style={styles.secondary} disabled={!commerceDisponivel} onClick={() => navigate(commerce?.links?.frete || '/admin/ecommerce?tab=shipping')}>Entrega</button>
+            <button type="button" style={styles.secondary} disabled={!commerceDisponivel} onClick={() => navigate(commerce?.links?.dominios || '/admin/ecommerce?tab=domains')}>Domínios</button>
+            {commerce?.urlPublica && <a href={commerce.urlPublica} target="_blank" rel="noreferrer" style={{ ...styles.secondary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Abrir vitrine</a>}
+          </div>
+          <p style={styles.sub}>A operação presencial continua na Barbearia ERP. O canal digital usa catálogo, preço, estoque, pedido e fulfillment próprios do Commerce; nenhuma sincronização automática ou baixa dupla é executada.</p>
         </div>
       </Card>
       <Card style={{ padding: 18 }}>
-        <h2 style={styles.h2}>Próximas ativações</h2>
-        <p style={styles.sub}>Para ativar o WhatsApp, é necessário configurar um provedor compatível no ambiente do servidor. Para ativar a IA, é necessário configurar um provedor/modelo no ambiente do servidor. Nesta etapa não foram incluídas credenciais, webhooks, cron ou polling.</p>
+        <h2 style={styles.h2}>Ativações governadas</h2>
+        <p style={styles.sub}>O WhatsApp depende de provedor e credenciais reais no ambiente do servidor. O assistente já opera em modo local somente leitura; um modelo externo é opcional. O Commerce informa os bloqueadores reais de catálogo, estoque, entrega e pagamento sem criar dados ou credenciais.</p>
         <div style={styles.readinessGrid}>
-          <div style={styles.readinessItem}><strong>Confirmação</strong><span style={{ color: '#14b87a', fontWeight: 800 }}>Manual</span><small style={styles.sub}>Toda comunicação externa depende de ação explícita.</small></div>
-          <div style={styles.readinessItem}><strong>Privacidade</strong><span style={{ color: '#14b87a', fontWeight: 800 }}>Protegida</span><small style={styles.sub}>Não enviar documentos pessoais ao assistente.</small></div>
-          <div style={styles.readinessItem}><strong>Auditoria</strong><span style={{ color: '#14b87a', fontWeight: 800 }}>Ativa</span><small style={styles.sub}>O backend retorna estados sem expor segredos.</small></div>
+          <div style={styles.readinessItem}><strong>WhatsApp</strong><span style={{ color: whatsapp?.envioManualDisponivel ? '#14b87a' : '#f59e0b', fontWeight: 800 }}>{whatsapp?.envioManualDisponivel ? 'Envio manual ativo' : 'Provedor pendente'}</span><small style={styles.sub}>Toda comunicação externa depende de consentimento e confirmação.</small></div>
+          <div style={styles.readinessItem}><strong>Assistente</strong><span style={{ color: iaDisponivel ? '#14b87a' : '#f59e0b', fontWeight: 800 }}>{ia?.configurada ? 'Provedor externo ativo' : iaDisponivel ? 'Modo local ativo' : 'Indisponível'}</span><small style={styles.sub}>Somente leitura; nenhuma reserva, cobrança ou alteração automática.</small></div>
+          <div style={styles.readinessItem}><strong>Commerce</strong><span style={{ color: commerce?.prontidao?.pronto ? '#14b87a' : '#f59e0b', fontWeight: 800 }}>{commerce?.prontidao?.pronto ? 'Pronto para operar' : `${prontidaoCommerce}% configurado`}</span><small style={styles.sub}>{commerce?.prontidao?.bloqueadores?.length || 0} bloqueador(es) obrigatório(s).</small></div>
+          <div style={styles.readinessItem}><strong>Auditoria e privacidade</strong><span style={{ color: '#14b87a', fontWeight: 800 }}>Ativas</span><small style={styles.sub}>Segredos não são exibidos e as ações críticas permanecem confirmadas.</small></div>
         </div>
       </Card>
     </div>

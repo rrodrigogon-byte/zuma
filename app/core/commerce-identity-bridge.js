@@ -60,4 +60,23 @@ export async function resolveCommerceIdentity(req) {
   return tenantContext({ empresaId: row.empresa_id, lojaId: row.loja_id || lojaId || null, usuarioId: row.usuario_id });
 }
 
+export async function requireCommercePermission(req, permissionInput) {
+  const permission = clean(permissionInput, 120);
+  if (!permission) throw new CommerceError('permissão do Commerce é obrigatória', 'PERMISSION_DENIED');
+  const context = await resolveCommerceIdentity(req);
+  const result = await db.queryRead(
+    `SELECT 1
+       FROM commerce_memberships m
+       JOIN commerce_roles r ON r.id = m.role_id AND (r.empresa_id = $1 OR r.empresa_id IS NULL)
+       JOIN commerce_role_permissions rp ON rp.role_id = r.id
+       JOIN commerce_permissions p ON p.id = rp.permission_id AND p.codigo = $2
+      WHERE m.empresa_id = $1 AND m.usuario_id = $3 AND m.ativo = true
+        AND (m.loja_id IS NULL OR m.loja_id = $4)
+      LIMIT 1`,
+    [context.empresaId, permission, context.usuarioId, context.lojaId],
+  );
+  if (!result.rows[0]) throw new CommerceError('permissão insuficiente para esta operação', 'PERMISSION_DENIED', { permission });
+  return context;
+}
+
 export { requestedScope };
