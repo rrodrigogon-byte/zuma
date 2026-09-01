@@ -27,6 +27,7 @@ const migrationFiles = [
   '035_agro_open_public_store_mapping.sql',
   '036_commerce_manual_shipping_table.sql',
   '037_commerce_storefront_aliases.sql',
+  '038_whatsapp_ai_conversations.sql',
 ];
 const advisoryLockKey = 825410732;
 

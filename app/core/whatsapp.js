@@ -23,7 +23,7 @@ function formatarTelefone(tel) {
   return digits;
 }
 
-async function enviarMensagem(tenant, telefone, mensagem) {
+export async function enviarMensagem(tenant, telefone, mensagem) {
   const cfg = getConfig(tenant);
   const numero = formatarTelefone(telefone);
 

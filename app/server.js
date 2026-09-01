@@ -25,6 +25,9 @@ import * as modificadoresCombosKytto from './modificadores-combos-kytto.js';
 import { mail } from './email.js';
 import { emitir as nfceEmitir, cancelar as nfceCancelar, nfceConfigurado } from './nfce.js';
 import { createCommerceAdminRouter, createCommercePublicRouter, createCommerceWebhookRouter } from './core/commerce-routes.js';
+import { createWhatsappAiWebhookRouter } from './core/whatsapp-ai-routes.js';
+import { whatsappAiOperationalStatus } from './core/whatsapp-ai.js';
+import { startWhatsappAiWorker } from './workers/whatsapp-ai-worker.js';
 import { db as commerceDb } from './core/database.js';
 import { requireCommercePermission, resolveCommerceIdentity } from './core/commerce-identity-bridge.js';
 import { listCommerceTenants, provisionCommerceTenant } from './core/commerce-tenants.js';
@@ -334,6 +337,7 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
     }
   });
   app.use('/api/admin/commerce', createCommerceAdminRouter());
+  app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   app.use('/api/webhooks', createCommerceWebhookRouter());
   console.log('Commerce Core PostgreSQL habilitado (host, alias público e backoffice multiempresa)');
 }
@@ -1977,8 +1981,9 @@ app.get('/api/admin/barbearia/overview', async (req, res) => {
     };
     const canais = canaisFidelidadeKytto.obterCanais(empresaId);
     const whatsapp = canais.find((canal) => canal.id === 'whatsapp') || { id: 'whatsapp', nome: 'WhatsApp', ativo: false, tipo: 'mensageria', credencialConfigurada: false };
-    const aiConfigured = Boolean(process.env.AI_API_KEY || process.env.OPENAI_API_KEY);
+    const aiConfigured = Boolean(process.env.GEMINI_API_KEY || process.env.AI_API_KEY || process.env.OPENAI_API_KEY);
     const commerce = await commerceIntegrationForBarbearia(req);
+    const whatsappAi = await whatsappAiOperationalStatus({ empresaId, lojaId }).catch((error) => ({ unavailable: true, error: error.message }));
     res.json({
       ok: true,
       dashboard,
@@ -2002,7 +2007,7 @@ app.get('/api/admin/barbearia/overview', async (req, res) => {
        relacionamento: resumoRelacionamentoBarbearia(req),
        operacao: resumoOperacaoBarbearia(req),
 
-             integracoes: { whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: wpp.ativo() }, ia: { configurada: aiConfigured, modelo: process.env.AI_MODEL || process.env.OPENAI_MODEL || 'regras-dino-local', analiseOperacionalDisponivel: true, fallbackLocal: true }, commerce },
+             integracoes: { whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: wpp.ativo(), ai: whatsappAi }, ia: { configurada: aiConfigured, modelo: process.env.GEMINI_API_KEY ? (process.env.GEMINI_MODEL || 'gemini-2.5-flash') : (process.env.AI_MODEL || process.env.OPENAI_MODEL || 'regras-dino-local'), analiseOperacionalDisponivel: true, fallbackLocal: true, whatsapp: whatsappAi }, commerce },
 
     });
   } catch (error) { res.status(400).json({ error: error.message }); }
@@ -2405,9 +2410,10 @@ app.get('/api/admin/barbearia/integracoes', async (req, res) => {
   try {
     const canais = canaisFidelidadeKytto.obterCanais(legacyEmpresaId(req));
     const whatsapp = canais.find((canal) => canal.id === 'whatsapp') || { id: 'whatsapp', nome: 'WhatsApp', ativo: false, tipo: 'mensageria', credencialConfigurada: false };
-    const aiConfigured = Boolean(process.env.AI_API_KEY || process.env.OPENAI_API_KEY);
+    const aiConfigured = Boolean(process.env.GEMINI_API_KEY || process.env.AI_API_KEY || process.env.OPENAI_API_KEY);
     const commerce = await commerceIntegrationForBarbearia(req);
-    res.json({ ok: true, whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: wpp.ativo() }, ia: { configurada: aiConfigured, modelo: process.env.AI_MODEL || process.env.OPENAI_MODEL || 'regras-dino-local', analiseOperacionalDisponivel: true, fallbackLocal: true }, commerce });
+    const whatsappAi = await whatsappAiOperationalStatus({ empresaId: legacyEmpresaId(req), lojaId: legacyLojaId(req) }).catch((error) => ({ unavailable: true, error: error.message }));
+    res.json({ ok: true, whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: wpp.ativo(), ai: whatsappAi }, ia: { configurada: aiConfigured, modelo: process.env.GEMINI_API_KEY ? (process.env.GEMINI_MODEL || 'gemini-2.5-flash') : (process.env.AI_MODEL || process.env.OPENAI_MODEL || 'regras-dino-local'), analiseOperacionalDisponivel: true, fallbackLocal: true, whatsapp: whatsappAi }, commerce });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
@@ -5270,6 +5276,7 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
 ;(async () => {
   await hydrate();
   app.listen(PORT, ()=> console.log(`SetPoint React SPA em http://localhost:${PORT}`));
+  startWhatsappAiWorker();
 })();
 
 // Encerramento gracioso: garante o flush do último estado para o GCS antes de morrer
