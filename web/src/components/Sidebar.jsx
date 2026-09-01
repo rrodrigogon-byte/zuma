@@ -2,7 +2,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
-import { applyThemeMode, isDinoBrandContext, storedThemeMode } from '../lib/brand'
+import { applyThemeMode, DINO_BARBERSHOP_LOGO, isDinoBrandContext, storedThemeMode } from '../lib/brand'
 
 // ── Badge de pedidos pendentes ─────────────────────────────────────────────────
 function usePendingOrders(isStaff) {
@@ -460,8 +460,8 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
               style={{ width: 184, height: 52, objectFit: 'contain', objectPosition: 'left center' }}
             />
             <img
-              src="/brand/dino-logo.png"
-              alt="Dino — Barbearia e Perfumaria"
+              src={DINO_BARBERSHOP_LOGO}
+              alt="Barbearia Dino — desde 1997"
               className="sidebar-brand-dino"
             />
             <div className="sidebar-brand-subtitle" style={{
