@@ -686,13 +686,20 @@ html[data-brand='dino'] .sidebar-brand-dino {
   width: 92px;
   height: 92px;
   min-height: 0;
-  padding: 6px;
-  border: 1px solid rgba(255,255,255,.38);
+  padding: 8px;
+  box-sizing: border-box;
+  border: 1px solid rgba(18,40,63,.12);
   border-radius: 16px;
   background: #fff;
   object-fit: contain;
   object-position: center;
-  box-shadow: 0 10px 24px rgba(0,0,0,.2);
+  box-shadow: 0 10px 24px rgba(18,40,63,.16);
+  filter: none;
+}
+
+html[data-brand='dino'][data-theme='dark'] .sidebar-brand-dino,
+html[data-brand='dino']:not([data-theme='light']) .sidebar-brand-dino {
+  background: #fff;
   filter: none;
 }
 
