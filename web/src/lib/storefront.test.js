@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { loadAllStorefrontProducts, normalizeStorefrontAlias, storefrontAliasFromPath, storefrontApiBase, storefrontRoute, storefrontStorageKey } from './storefront.js';
+import { loadAllStorefrontProducts, normalizeStorefrontAlias, storefrontAliasFromPath, storefrontApiBase, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from './storefront.js';
 
 test('normaliza apenas aliases públicos seguros', () => {
   assert.equal(normalizeStorefrontAlias(' DINO '), 'dino');
@@ -13,6 +13,15 @@ test('separa endpoints públicos do Dino e do storefront resolvido por host', ()
   assert.equal(storefrontApiBase('dino'), '/api/public/storefront/dino');
   assert.equal(storefrontApiBase(''), '/api/storefront');
   assert.notEqual(storefrontApiBase('dino'), storefrontApiBase('agro-open'));
+});
+
+test('mantém a mídia pública no mesmo alias do catálogo', () => {
+  const mediaId = '37b91a0c-78f0-56b2-b074-33ca5063100d';
+  assert.equal(storefrontMediaUrl(`/api/storefront/media/${mediaId}`, 'dino'), `/api/public/storefront/dino/media/${mediaId}`);
+  assert.equal(storefrontMediaUrl(`/api/storefront/media/${mediaId}`, ''), `/api/storefront/media/${mediaId}`);
+  assert.equal(storefrontMediaUrl(`/api/public/storefront/agro-open/media/${mediaId}`, 'dino'), `/api/public/storefront/agro-open/media/${mediaId}`);
+  assert.equal(storefrontMediaUrl('https://cdn.example.com/produto.webp', 'dino'), 'https://cdn.example.com/produto.webp');
+  assert.equal(storefrontMediaUrl('/api/storefront/media/../segredo', 'dino'), '/api/storefront/media/../segredo');
 });
 
 test('mantém vitrine, checkout e pedido no mesmo alias', () => {

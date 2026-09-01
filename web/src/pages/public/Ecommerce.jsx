@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowRight, CheckCircle2, Eye, Loader2, Minus, Plus, Search, ShoppingBag, Store, X } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, fmtR } from '../../lib/api'
-import { loadAllStorefrontProducts, normalizeStorefrontAlias, storefrontApiBase, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
+import { loadAllStorefrontProducts, normalizeStorefrontAlias, storefrontApiBase, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
 import './commerce.css'
 
 function readCart(storeAlias) {
@@ -39,21 +39,21 @@ function formatPublicAddress(address = {}) {
   return [first, address.complement, second, cep].filter(Boolean).join(' — ')
 }
 
-function productMedia(product) {
+function productMedia(product, storeAlias = '') {
   const media = Array.isArray(product?.media) ? product.media : []
   return media.filter(item => item?.url).map((item, index) => ({
     id: item.id || item.url || `media-${index}`,
-    url: item.url,
+    url: storefrontMediaUrl(item.url, storeAlias),
     altText: item.altText || product?.nome || 'Imagem do produto',
     ordem: Number(item.ordem || 0),
   })).sort((a, b) => a.ordem - b.ordem)
 }
 
-function normalizeCatalog(data, source) {
+function normalizeCatalog(data, source, storeAlias = '') {
   const items = Array.isArray(data) ? data : data?.items || []
   if (source === 'legacy') return items
   return items.map(product => {
-    const media = productMedia(product)
+    const media = productMedia(product, storeAlias)
     const primaryMedia = media[0]?.url || ''
     const variants = (product.variants || []).map((variant, index) => {
       const price = variant.prices?.[0] || {}
@@ -174,7 +174,7 @@ export default function Ecommerce() {
 
   useEffect(() => {
     api.get(`${storefrontApi}/context`)
-      .then((context) => { setStoreContext(context?.storefront || null); return Promise.all([loadAllStorefrontProducts(({ limit, offset }) => api.get(`${storefrontApi}/products?limit=${limit}&offset=${offset}`)), api.get(`${storefrontApi}/shipping-methods`), api.get(`${storefrontApi}/payment-methods`).catch(() => ({ items: [] }))]).then(([data, shipping, payments]) => { setCatalogSource('core'); setProducts(normalizeCatalog(data, 'core')); const methods = shipping?.items || []; setShippingMethods(methods); const hasReadyDelivery = methods.some(item => ['delivery', 'carrier'].includes(item.tipo) && item.quoteEnabled); const effectiveMode = delivery.mode === 'entrega' && !hasReadyDelivery ? 'retirada' : delivery.mode; if (effectiveMode !== delivery.mode) setDelivery({ mode: effectiveMode }); setShippingMethodId(methods.find(item => (effectiveMode === 'entrega' ? ['delivery', 'carrier'].includes(item.tipo) && item.quoteEnabled : item.tipo === 'pickup'))?.id || ''); const availablePayments = payments?.items || []; setPaymentMethods(availablePayments); setSelectedPaymentMethod(current => current || paymentKey(availablePayments.find(item => item.method === 'pix') || availablePayments[0] || {})) }) })
+      .then((context) => { setStoreContext(context?.storefront || null); return Promise.all([loadAllStorefrontProducts(({ limit, offset }) => api.get(`${storefrontApi}/products?limit=${limit}&offset=${offset}`)), api.get(`${storefrontApi}/shipping-methods`), api.get(`${storefrontApi}/payment-methods`).catch(() => ({ items: [] }))]).then(([data, shipping, payments]) => { setCatalogSource('core'); setProducts(normalizeCatalog(data, 'core', storeAlias)); const methods = shipping?.items || []; setShippingMethods(methods); const hasReadyDelivery = methods.some(item => ['delivery', 'carrier'].includes(item.tipo) && item.quoteEnabled); const effectiveMode = delivery.mode === 'entrega' && !hasReadyDelivery ? 'retirada' : delivery.mode; if (effectiveMode !== delivery.mode) setDelivery({ mode: effectiveMode }); setShippingMethodId(methods.find(item => (effectiveMode === 'entrega' ? ['delivery', 'carrier'].includes(item.tipo) && item.quoteEnabled : item.tipo === 'pickup'))?.id || ''); const availablePayments = payments?.items || []; setPaymentMethods(availablePayments); setSelectedPaymentMethod(current => current || paymentKey(availablePayments.find(item => item.method === 'pix') || availablePayments[0] || {})) }) })
       .catch(err => {
         if (storeAlias || err.status !== 404) throw err
         return api.get('/api/loja').then(data => { setCatalogSource('legacy'); setProducts(normalizeCatalog(data, 'legacy')) })
