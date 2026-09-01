@@ -683,17 +683,17 @@ html[data-brand='dino'] .commerce-report-grid strong {
 
 html[data-brand='dino'] .sidebar-brand-dino {
   display: block;
-  width: 92px;
-  height: 92px;
+  width: 104px;
+  height: 104px;
   min-height: 0;
   padding: 8px;
   box-sizing: border-box;
   border: 1px solid rgba(18,40,63,.12);
-  border-radius: 16px;
+  border-radius: 18px;
   background: #fff;
   object-fit: contain;
   object-position: center;
-  box-shadow: 0 10px 24px rgba(18,40,63,.16);
+  box-shadow: 0 12px 26px rgba(18,40,63,.16);
   filter: none;
 }
 
