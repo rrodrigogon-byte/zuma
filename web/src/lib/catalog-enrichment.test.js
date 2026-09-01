@@ -1,6 +1,52 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildCatalogEnrichmentPreview, catalogEnrichmentIdempotencyKey, normalizeCatalogEnrichmentManifest } from './catalog-enrichment.js'
+import { buildCatalogEnrichmentPreview, catalogEnrichmentIdempotencyKey, extractCatalogEnrichmentTar, normalizeCatalogEnrichmentManifest } from './catalog-enrichment.js'
+
+function buildTar(entries) {
+  const blocks = []
+  for (const entry of entries) {
+    const content = Buffer.from(entry.content)
+    const header = Buffer.alloc(512)
+    header.write(entry.name, 0, 100, 'utf8')
+    header.write('0000644\0', 100, 8, 'ascii')
+    header.write('0000000\0', 108, 8, 'ascii')
+    header.write('0000000\0', 116, 8, 'ascii')
+    header.write(`${content.length.toString(8).padStart(11, '0')}\0`, 124, 12, 'ascii')
+    header.write('00000000000\0', 136, 12, 'ascii')
+    header.fill(0x20, 148, 156)
+    header.write('0', 156, 1, 'ascii')
+    header.write('ustar\0', 257, 6, 'ascii')
+    blocks.push(header, content, Buffer.alloc((512 - (content.length % 512)) % 512))
+  }
+  blocks.push(Buffer.alloc(1024))
+  return Buffer.concat(blocks)
+}
+
+test('extrai imagens suportadas de pacote TAR e ignora arquivos auxiliares', () => {
+  const tar = buildTar([
+    { name: 'production-images/DINO-1.webp', content: Buffer.from('524946460000000057454250', 'hex') },
+    { name: 'DINO-2.png', content: Buffer.from('89504e470d0a1a0a', 'hex') },
+    { name: 'README.txt', content: 'ignorar' },
+  ])
+  const files = extractCatalogEnrichmentTar(tar)
+  assert.deepEqual(files.map(file => [file.name, file.type, file.bytes.length]), [
+    ['DINO-1.webp', 'image/webp', 12],
+    ['DINO-2.png', 'image/png', 8],
+  ])
+})
+
+test('rejeita nomes de imagem duplicados no pacote TAR', () => {
+  const tar = buildTar([
+    { name: 'a/DINO-1.webp', content: 'primeiro' },
+    { name: 'b/DINO-1.webp', content: 'segundo' },
+  ])
+  assert.throws(() => extractCatalogEnrichmentTar(tar), /nome duplicado/)
+})
+
+test('rejeita pacote TAR truncado', () => {
+  const tar = buildTar([{ name: 'DINO-1.webp', content: Buffer.alloc(700) }])
+  assert.throws(() => extractCatalogEnrichmentTar(tar.subarray(0, 800)), /truncado ou corrompido/)
+})
 
 test('normaliza manifesto e reconcilia SKU com produto e arquivo', () => {
   const manifest = normalizeCatalogEnrichmentManifest({

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { CheckCircle2, FileImage, Loader2, ShieldCheck, Upload } from 'lucide-react'
 import { api } from '../../lib/api'
-import { buildCatalogEnrichmentPreview, catalogEnrichmentIdempotencyKey, normalizeCatalogEnrichmentManifest } from '../../lib/catalog-enrichment'
+import { buildCatalogEnrichmentPreview, catalogEnrichmentIdempotencyKey, extractCatalogEnrichmentTar, normalizeCatalogEnrichmentManifest } from '../../lib/catalog-enrichment'
 import { uploadCoreProductMedia } from './commerce-admin-adapter'
 
 function toHex(buffer) {
@@ -16,6 +16,7 @@ export default function CommerceCatalogEnrichment({ mode, products = [], onImpor
   const [manifest, setManifest] = useState(null)
   const [manifestName, setManifestName] = useState('')
   const [imageFiles, setImageFiles] = useState([])
+  const [imagePackageName, setImagePackageName] = useState('')
   const [preview, setPreview] = useState(null)
   const [hashErrors, setHashErrors] = useState([])
   const [confirmed, setConfirmed] = useState(false)
@@ -54,14 +55,35 @@ export default function CommerceCatalogEnrichment({ mode, products = [], onImpor
     }
   }
 
-  function selectImages(event) {
-    setImageFiles(Array.from(event.target.files || []))
+  function resetSelectionState() {
     setPreview(null)
     setHashErrors([])
     setConfirmed(false)
     setResult(null)
     setError('')
     setNotice('')
+  }
+
+  function selectImages(event) {
+    setImageFiles(Array.from(event.target.files || []))
+    setImagePackageName('')
+    resetSelectionState()
+  }
+
+  async function selectImagePackage(event) {
+    const file = event.target.files?.[0]
+    setImageFiles([])
+    setImagePackageName('')
+    resetSelectionState()
+    if (!file) return
+    try {
+      const extracted = extractCatalogEnrichmentTar(await file.arrayBuffer())
+      setImageFiles(extracted.map(item => new File([item.bytes], item.name, { type: item.type })))
+      setImagePackageName(file.name)
+      setNotice(`${extracted.length} imagem(ns) extraídas localmente de ${file.name}. Gere o preview antes de executar.`)
+    } catch (err) {
+      setError(err.message || 'Não foi possível ler o pacote TAR de imagens.')
+    }
   }
 
   async function generatePreview() {
@@ -148,7 +170,8 @@ export default function CommerceCatalogEnrichment({ mode, products = [], onImpor
     </div>
     <div className="commerce-catalog-enrichment-inputs">
       <label>Manifesto JSON<input type="file" accept="application/json,.json" onChange={selectManifest} disabled={executing} /><small>{manifestName || 'Nenhum manifesto selecionado'}</small></label>
-      <label>Imagens aprovadas<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={selectImages} disabled={executing} /><small>{selectedFileSummary.count} arquivo(s) · {(selectedFileSummary.bytes / 1024 / 1024).toFixed(2)} MB</small></label>
+      <label>Imagens individuais<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={selectImages} disabled={executing} /><small>{imagePackageName ? 'Substituídas pelo pacote TAR' : `${selectedFileSummary.count} arquivo(s) · ${(selectedFileSummary.bytes / 1024 / 1024).toFixed(2)} MB`}</small></label>
+      <label>Pacote TAR para lote<input type="file" accept="application/x-tar,.tar" onChange={selectImagePackage} disabled={executing} /><small>{imagePackageName || 'Opcional · extração local no navegador'}</small></label>
       <button type="button" className="ecommerce-admin-button ghost" onClick={generatePreview} disabled={!manifest || checking || executing}>{checking ? <><Loader2 className="commerce-spin" size={15} /> Validando…</> : <><Upload size={15} /> Gerar preview</>}</button>
     </div>
     {preview && <>
