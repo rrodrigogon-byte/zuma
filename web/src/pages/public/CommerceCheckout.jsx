@@ -121,6 +121,7 @@ export default function CommerceCheckout() {
   const selectedOption = shippingQuote?.items?.find(item => (item.selectionId || item.id) === shippingOptionId)
   const total = cartTotal + Number(selectedOption?.amount || 0)
   const automaticShippingQuoteKey = shippingQuoteKey({ deliveryMode, address, cart })
+  const shippingQuoteIsCurrent = Boolean(shippingQuote && automaticShippingQuoteKey && lastShippingQuoteKeyRef.current === automaticShippingQuoteKey)
   const deliveryAvailable = shippingMethods.some(item => ['delivery', 'carrier'].includes(item.tipo) && item.quoteEnabled)
   const pickupAvailable = shippingMethods.some(item => item.tipo === 'pickup')
   const paymentReady = Boolean(order && payment)
@@ -236,7 +237,8 @@ export default function CommerceCheckout() {
   }
 
   function updateAddress(key, value) {
-    const nextValue = key === 'cep' ? formatCep(value) : value
+    setError('')
+    const nextValue = key === 'cep' ? formatCep(value) : key === 'estado' ? String(value || '').toUpperCase().slice(0, 2) : value
     const changedCep = key === 'cep' && String(address.cep || '').replace(/\D/g, '') !== String(nextValue || '').replace(/\D/g, '')
     if (changedCep) lastLookupCepRef.current = ''
     setAddress(current => {
@@ -244,7 +246,7 @@ export default function CommerceCheckout() {
       const changed = String(current.cep || '').replace(/\D/g, '') !== String(nextValue || '').replace(/\D/g, '')
       return changed ? { ...EMPTY_ADDRESS, cep: nextValue } : { ...current, cep: nextValue }
     })
-    if (key === 'cep') { setShippingQuote(null); setShippingOptionId(''); lastShippingQuoteKeyRef.current = '' }
+    if (['cep', 'cidade', 'estado'].includes(key)) { setShippingQuote(null); setShippingOptionId(''); lastShippingQuoteKeyRef.current = '' }
   }
 
   async function lookupCep(value = address.cep, { force = false } = {}) {
@@ -284,7 +286,7 @@ export default function CommerceCheckout() {
     setError('')
     if (!form.nome.trim() || !/^\S+@\S+\.\S+$/.test(form.email)) return setError('Informe nome e e-mail válidos.')
     if (!shippingMethodId) return setError('A loja ainda não publicou uma forma de entrega.')
-    if (deliveryMode === 'entrega' && (!shippingQuote || !shippingOptionId || !selectedOption)) return setError('Calcule o frete e selecione uma opção válida antes de continuar.')
+    if (deliveryMode === 'entrega' && (!shippingQuoteIsCurrent || !shippingOptionId || !selectedOption)) return setError('Consulte o CEP e recalcule o frete antes de continuar.')
     setWorking(true)
     try {
       const created = await api.post(`${storefrontApi}/orders`, {
@@ -308,8 +310,21 @@ export default function CommerceCheckout() {
         setSelectedPayment(customerPayments.items[0] ? `${customerPayments.items[0].provider}:${customerPayments.items[0].method}` : '')
       }
       navigate(`${checkoutRoute}?order=${encodeURIComponent(code)}`, { replace: true })
-    } catch (err) { setError(err.message || 'Não foi possível criar o pedido.') }
-    finally { setWorking(false) }
+    } catch (err) {
+      if (['SHIPPING_QUOTE_EXPIRED', 'SHIPPING_QUOTE_MISMATCH', 'SHIPPING_OPTION_INVALID'].includes(err.code)) {
+        setShippingQuote(null)
+        setShippingOptionId('')
+        lastShippingQuoteKeyRef.current = ''
+      }
+      const shippingError = err.code === 'SHIPPING_QUOTE_MISMATCH'
+        ? 'A cotação mudou porque o CEP, endereço ou carrinho foi atualizado. Recalcule o frete para continuar.'
+        : err.code === 'SHIPPING_QUOTE_EXPIRED'
+          ? 'A cotação expirou. Calcule o frete novamente para continuar.'
+          : err.code === 'SHIPPING_OPTION_INVALID'
+            ? 'A opção de frete ficou indisponível. Calcule o frete novamente e selecione outra opção.'
+            : ''
+      setError(shippingError || err.message || 'Não foi possível criar o pedido.')
+    } finally { setWorking(false) }
   }
 
   async function startPayment() {
