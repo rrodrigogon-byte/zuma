@@ -174,3 +174,85 @@ html[data-brand='dino'] .commerce-dino-theme button {
     white-space: normal;
   }
 }
+
+
+/* Mobile hardening: checkout inline sem overflow horizontal ou controles espremidos. */
+.commerce-shell,
+.commerce-overlay,
+.commerce-modal,
+.commerce-checkout-modal,
+.commerce-checkout-layout,
+.commerce-cart-list,
+.commerce-form,
+.commerce-form > *,
+.commerce-form fieldset,
+.commerce-form label,
+.commerce-shipping-quote-box,
+.commerce-shipping-options {
+  min-width: 0;
+  max-width: 100%;
+}
+.commerce-shell,
+.commerce-overlay {
+  width: 100%;
+  overflow-x: clip;
+}
+.commerce-modal {
+  box-sizing: border-box;
+}
+.commerce-form fieldset {
+  width: 100%;
+}
+.commerce-form .commerce-radio {
+  flex: 1 1 220px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.commerce-form .commerce-radio input[type='radio'] {
+  flex: 0 0 18px;
+  width: 18px !important;
+  min-width: 18px;
+  height: 18px;
+  padding: 0;
+  margin: 0;
+}
+.commerce-form .commerce-inline-field {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+}
+.commerce-form .commerce-inline-field .commerce-button {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+}
+.commerce-form input,
+.commerce-form textarea,
+.commerce-form select,
+.commerce-form .commerce-button,
+.commerce-form .commerce-form-error {
+  max-width: 100%;
+}
+.commerce-form .commerce-form-error {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+@media(max-width:700px){
+  .commerce-overlay { padding: 10px; }
+  .commerce-checkout-modal { width: 100%; max-height: calc(100dvh - 20px); padding: 18px 13px; }
+  .commerce-checkout-layout { grid-template-columns: 1fr; gap: 14px; }
+  .commerce-cart-list { padding: 12px; }
+  .commerce-form { gap: 11px; }
+  .commerce-form fieldset { gap: 8px; padding: 11px; }
+  .commerce-form .commerce-radio { flex: 1 1 100%; width: 100%; }
+  .commerce-form .commerce-inline-field { grid-template-columns: 1fr; }
+  .commerce-form .commerce-inline-field .commerce-button { width: 100%; }
+  .commerce-form > .commerce-button { width: 100%; min-height: 48px; }
+  .commerce-form .wide { grid-column: auto; }
+}
+@media(max-width:380px){
+  .commerce-overlay { padding: 6px; }
+  .commerce-checkout-modal { padding-inline: 10px; }
+  .commerce-modal-heading h2 { font-size: 27px; }
+  .commerce-form fieldset { padding-inline: 9px; }
+}

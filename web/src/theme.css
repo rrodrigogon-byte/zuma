@@ -810,3 +810,142 @@ html[data-brand='dino'] .sidebar-brand-header:not(.is-collapsed) .sidebar-brand-
     height: 116px;
   }
 }
+
+
+/* Checkout mobile hardening: todos os elementos respeitam a viewport e quebram sem sobreposição. */
+.checkout-page,
+.checkout-result-shell,
+.checkout-header,
+.checkout-content,
+.checkout-main-column,
+.checkout-card,
+.checkout-summary,
+.checkout-form,
+.checkout-form-grid,
+.checkout-field,
+.checkout-address,
+.shipping-options,
+.shipping-option,
+.payment-option,
+.checkout-actions,
+.checkout-form-error {
+  min-width: 0;
+  max-width: 100%;
+}
+.checkout-page,
+.checkout-result-shell {
+  width: 100%;
+  overflow-x: clip;
+}
+.checkout-content,
+.checkout-card,
+.checkout-summary,
+.checkout-form,
+.checkout-field,
+.checkout-field input,
+.checkout-field textarea,
+.checkout-field select,
+.checkout-actions > *,
+.checkout-form-error {
+  box-sizing: border-box;
+}
+.checkout-field input,
+.checkout-field textarea,
+.checkout-field select,
+.checkout-form-error,
+.shipping-option-copy,
+.payment-option-copy,
+.checkout-address-heading,
+.checkout-tracking-heading,
+.checkout-tracking-summary span,
+.checkout-order-timeline strong,
+.checkout-order-timeline small {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.checkout-inline-field {
+  min-width: 0;
+}
+.checkout-inline-field .checkout-secondary {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+}
+.shipping-option,
+.payment-option {
+  min-width: 0;
+}
+.shipping-option input[type='radio'],
+.payment-option input[type='radio'] {
+  flex: 0 0 18px;
+  width: 18px !important;
+  min-width: 18px;
+  height: 18px;
+  padding: 0;
+}
+.checkout-primary,
+.checkout-secondary,
+.checkout-primary-large {
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
+  text-align: center;
+}
+@media(max-width:600px){
+  .checkout-header-inner { width: 100%; padding-inline: 14px; gap: 10px; }
+  .checkout-brand { min-width: 0; max-width: 62%; }
+  .checkout-brand-logo { width: min(154px, 100%); max-width: 100%; }
+  .checkout-header-security { min-width: 0; max-width: 38%; text-align: right; }
+  .checkout-content { width: 100%; padding-inline: 12px; }
+  .checkout-card,
+  .checkout-summary { width: 100%; padding-inline: 14px; }
+  .checkout-card-title { align-items: flex-start; gap: 10px; }
+  .checkout-card-title > div { min-width: 0; }
+  .checkout-card-title p { overflow-wrap: anywhere; }
+  .checkout-form-grid { display: block; }
+  .checkout-form-grid > .checkout-field:first-child { grid-column: auto; }
+  .checkout-inline-field { grid-template-columns: 1fr; }
+  .checkout-inline-field .checkout-secondary { width: 100%; }
+  .shipping-option { align-items: flex-start; }
+  .shipping-option-copy strong,
+  .shipping-option-copy small,
+  .payment-option-copy strong,
+  .payment-option-copy small { white-space: normal; }
+  .checkout-actions { width: 100%; }
+  .checkout-actions > span { width: 100%; }
+  .checkout-actions .checkout-primary-large { width: 100%; min-width: 0; }
+}
+@media(max-width:380px){
+  .checkout-content { padding-inline: 8px; }
+  .checkout-card,
+  .checkout-summary { padding-inline: 11px; }
+  .checkout-step { font-size: 9px; }
+  .checkout-step-line { width: 10px; margin-inline: 3px; }
+}
+
+
+/* Garantia global de viewport: nenhum módulo deve criar rolagem horizontal no mobile. */
+html,
+body,
+#root {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+/* Carrinho inline: conteúdo longo não pode empurrar a quantidade/preço para fora da tela. */
+.commerce-cart-row > div:nth-child(2) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.commerce-cart-row > div:nth-child(2) strong,
+.commerce-cart-row > div:nth-child(2) span {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+@media(max-width:700px){
+  .commerce-cart-row { min-width: 0; }
+  .commerce-cart-row > b { justify-self: end; white-space: nowrap; }
+  .commerce-cart-row .commerce-quantity { min-width: 0; }
+}
