@@ -10,6 +10,10 @@ const BATCH_SIZE = Math.min(20, Math.max(1, Number.parseInt(process.env.WHATSAPP
 const INTERVAL_MS = Math.min(60000, Math.max(2000, Number.parseInt(process.env.WHATSAPP_AI_WORKER_INTERVAL_MS || '5000', 10)));
 const RETENTION_DAYS = Math.min(365, Math.max(7, Number.parseInt(process.env.WHATSAPP_AI_RETENTION_DAYS || '30', 10)));
 const HANDOFF_RETENTION_DAYS = Math.min(730, Math.max(30, Number.parseInt(process.env.WHATSAPP_AI_HANDOFF_RETENTION_DAYS || '90', 10)));
+const PROVIDER_RETENTION_DAYS = Math.min(730, Math.max(30, Number.parseInt(process.env.WHATSAPP_AI_PROVIDER_RETENTION_DAYS || '90', 10)));
+const POLICY_RETENTION_DAYS = Math.min(730, Math.max(90, Number.parseInt(process.env.WHATSAPP_AI_POLICY_RETENTION_DAYS || '180', 10)));
+const RETENTION_INTERVAL_SECONDS = Math.min(86400, Math.max(900, Number.parseInt(process.env.WHATSAPP_AI_RETENTION_INTERVAL_SECONDS || '3600', 10)));
+const MAINTENANCE_INTERVAL_MS = Math.min(86400000, Math.max(3600000, Number.parseInt(process.env.WHATSAPP_AI_MAINTENANCE_INTERVAL_MS || '21600000', 10)));
 const LEASE_SECONDS = Math.min(900, Math.max(30, Number.parseInt(process.env.WHATSAPP_AI_TASK_LEASE_SECONDS || '120', 10)));
 const WORKER_ID = cleanWorkerId(process.env.RENDER_INSTANCE_ID || process.env.HOSTNAME || crypto.randomUUID());
 
@@ -53,6 +57,21 @@ export async function acquireWhatsappAiWorkerLease({ holder = WORKER_ID, seconds
         OR whatsapp_ai_worker_leases.titular = EXCLUDED.titular
      RETURNING nome, titular, expira_em`,
     [cleanWorkerId(holder), Math.min(900, Math.max(30, Number(seconds) || LEASE_SECONDS))],
+  );
+  return result.rows[0] || null;
+}
+
+async function acquireWhatsappAiRetentionLease({ holder = WORKER_ID, seconds = RETENTION_INTERVAL_SECONDS } = {}) {
+  const result = await db.query(
+    `INSERT INTO whatsapp_ai_worker_leases (nome, titular, expira_em)
+     VALUES ('whatsapp-ai-retention', $1, CURRENT_TIMESTAMP + ($2::text || ' seconds')::interval)
+     ON CONFLICT (nome) DO UPDATE SET
+       titular = EXCLUDED.titular,
+       expira_em = EXCLUDED.expira_em,
+       atualizado_em = CURRENT_TIMESTAMP
+     WHERE whatsapp_ai_worker_leases.expira_em <= CURRENT_TIMESTAMP
+     RETURNING nome, titular, expira_em`,
+    [cleanWorkerId(holder), Math.min(86400, Math.max(900, Number(seconds) || RETENTION_INTERVAL_SECONDS))],
   );
   return result.rows[0] || null;
 }
@@ -174,20 +193,67 @@ export async function cleanupWhatsappAiRetention(days = RETENTION_DAYS, handoffD
           AND status = 'humano'`,
       [normalizedHandoff],
     );
-    return Number(regular.rowCount || 0) + Number(handoff.rowCount || 0);
+    const redactedEvents = await trx.query(
+      `UPDATE eventos_integracao_canais e
+          SET payload = '{"redacted":true}'::jsonb,
+              erro_processamento = CASE WHEN e.erro_processamento IS NULL THEN NULL ELSE split_part(e.erro_processamento, ':', 1) END
+        WHERE e.recebido_em < CURRENT_TIMESTAMP - ($1::text || ' days')::interval
+          AND e.payload <> '{"redacted":true}'::jsonb
+          AND EXISTS (
+            SELECT 1 FROM canais_integracao c
+             WHERE c.id = e.canal_id AND c.empresa_id = e.empresa_id AND c.provedor = 'whatsapp'
+          )`,
+      [normalized],
+    );
+    const scrubbedTasks = await trx.query(
+      `UPDATE tarefas_integracao_canais
+          SET referencia_externa = NULL, payload = '{}'::jsonb, resposta = NULL,
+              erro = CASE WHEN erro_codigo IS NULL THEN NULL ELSE erro_codigo END
+        WHERE data_atualizacao < CURRENT_TIMESTAMP - ($1::text || ' days')::interval
+          AND tipo IN ('processar_conversa','enviar_campanha','recuperar_carrinho','notificar_agendamento')
+          AND status IN ('concluida','cancelada')
+          AND (referencia_externa IS NOT NULL OR payload <> '{}'::jsonb OR resposta IS NOT NULL OR erro IS DISTINCT FROM erro_codigo)`,
+      [normalized],
+    );
+    const deletedEvents = await trx.query(
+      `DELETE FROM eventos_integracao_canais e
+        WHERE e.recebido_em < CURRENT_TIMESTAMP - ($1::text || ' days')::interval
+          AND EXISTS (
+            SELECT 1 FROM canais_integracao c
+             WHERE c.id = e.canal_id AND c.empresa_id = e.empresa_id AND c.provedor = 'whatsapp'
+          )`,
+      [normalizedHandoff],
+    );
+    const deletedProviderRuns = await trx.query(
+      `DELETE FROM whatsapp_ai_provider_runs
+        WHERE criado_em < CURRENT_TIMESTAMP - ($1::text || ' days')::interval`,
+      [PROVIDER_RETENTION_DAYS],
+    );
+    const deletedPolicyEvents = await trx.query(
+      `DELETE FROM whatsapp_ai_policy_events
+        WHERE criado_em < CURRENT_TIMESTAMP - ($1::text || ' days')::interval`,
+      [POLICY_RETENTION_DAYS],
+    );
+    return [regular, handoff, redactedEvents, scrubbedTasks, deletedEvents, deletedProviderRuns, deletedPolicyEvents]
+      .reduce((total, result) => total + Number(result.rowCount || 0), 0);
   });
 }
 
+async function cleanupWhatsappAiRetentionIfDue() {
+  const lease = await acquireWhatsappAiRetentionLease();
+  return lease ? cleanupWhatsappAiRetention() : 0;
+}
+
 export async function runWhatsappAiBatch({ limit = BATCH_SIZE } = {}) {
-  if (!whatsappAiReady() && !whatsappMessagingReady()) return { skipped: true, reason: 'whatsapp_not_ready', claimed: 0, completed: 0, failed: 0 };
+  const retentionRemoved = await cleanupWhatsappAiRetentionIfDue();
+  if (!whatsappAiReady() && !whatsappMessagingReady()) return { skipped: true, reason: 'whatsapp_not_ready', retentionRemoved, claimed: 0, completed: 0, failed: 0 };
   const lease = await acquireWhatsappAiWorkerLease();
   if (!lease) return { skipped: true, reason: 'worker_lease_held', claimed: 0, completed: 0, failed: 0 };
   try {
-    const removed = await cleanupWhatsappAiRetention();
     const recoveriesQueued = whatsappMessagingReady() ? await enqueueDueCartRecoveries() : 0;
     const appointmentRemindersQueued = whatsappMessagingReady() ? await enqueueDueAppointmentReminders() : 0;
     const tasks = await claimWhatsappAiTasks(limit);
-    const summary = { worker: 'whatsapp-ai', runId: crypto.randomUUID(), retentionRemoved: removed, recoveriesQueued, appointmentRemindersQueued, claimed: tasks.length, completed: 0, failed: 0, deadLettered: 0 };
+    const summary = { worker: 'whatsapp-ai', runId: crypto.randomUUID(), retentionRemoved, recoveriesQueued, appointmentRemindersQueued, claimed: tasks.length, completed: 0, failed: 0, deadLettered: 0 };
     for (const task of tasks) {
       try {
         const response = task.tipo === 'enviar_campanha'
@@ -212,10 +278,11 @@ export async function runWhatsappAiBatch({ limit = BATCH_SIZE } = {}) {
 }
 
 export function startWhatsappAiWorker({ intervalMs = INTERVAL_MS } = {}) {
-  if (!whatsappAiReady() && !whatsappMessagingReady()) {
-    console.log('[WhatsApp] worker inativo: Evolution pendente');
-    return { started: false, stop() {} };
-  }
+  const providersReady = whatsappAiReady() || whatsappMessagingReady();
+  const effectiveInterval = providersReady
+    ? Math.min(60000, Math.max(2000, Number(intervalMs) || INTERVAL_MS))
+    : MAINTENANCE_INTERVAL_MS;
+  if (!providersReady) console.log('[WhatsApp] provedores inativos; apenas retenção LGPD periódica será executada');
   let running = false;
   const tick = async () => {
     if (running) return;
@@ -229,10 +296,10 @@ export function startWhatsappAiWorker({ intervalMs = INTERVAL_MS } = {}) {
       running = false;
     }
   };
-  const timer = setInterval(tick, Math.min(60000, Math.max(2000, Number(intervalMs) || INTERVAL_MS)));
+  const timer = setInterval(tick, effectiveInterval);
   timer.unref?.();
   setTimeout(tick, 1000).unref?.();
-  console.log(`[WhatsApp] worker ativo a cada ${Math.min(60000, Math.max(2000, Number(intervalMs) || INTERVAL_MS))}ms`);
+  console.log(`[WhatsApp] worker ${providersReady ? 'ativo' : 'em modo manutenção'} a cada ${effectiveInterval}ms`);
   return { started: true, stop() { clearInterval(timer); } };
 }
 

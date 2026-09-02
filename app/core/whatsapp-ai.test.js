@@ -6,9 +6,14 @@ import {
   buildWhatsappAiSystemPrompt,
   claimWhatsappAiHandoff,
   closeWhatsappAiHandoff,
+  configureWhatsappAiChannel,
+  configureWhatsappAiPolicy,
+  listWhatsappAiSessions,
   parseEvolutionMessage,
   processWhatsappConversationTask,
   releaseWhatsappAiHandoff,
+  syncWhatsappAiWebhook,
+  testWhatsappAiGemini,
   whatsappAiOperationalStatus,
 } from './whatsapp-ai.js';
 
@@ -83,6 +88,63 @@ test('status operacional exige loja Commerce UUID mesmo com empresa válida', as
       return true;
     },
   );
+});
+
+test('política administrativa preserva defaults governados, exige escopo e audita sem conteúdo', async () => {
+  const original = db.transaction;
+  const calls = [];
+  db.transaction = async callback => callback({
+    async query(sql, params) {
+      calls.push({ sql, params });
+      if (/UPDATE canais_integracao/.test(sql)) return { rows: [{ id: SESSAO, codigo_publico: SESSAO, nome: 'Dino', status: 'rascunho', configuracao: { ai_policy: JSON.parse(params[2]) } }] };
+      return { rows: [], rowCount: 1 };
+    },
+  });
+  try {
+    const result = await configureWhatsappAiPolicy({ empresaId: EMPRESA, lojaId: LOJA, usuarioId: USUARIO }, {
+      personalizationEnabled: true,
+      opportunitiesEnabled: true,
+      cooldownDays: 45,
+      privacyNotice: 'Atendimento virtual com personalização consentida.',
+      confirmed: true,
+    });
+    assert.equal(result.policy.personalizationEnabled, true);
+    assert.equal(result.policy.opportunitiesEnabled, true);
+    assert.equal(result.policy.maxOpportunities, 1);
+    assert.match(calls[0].sql, /empresa_id = \$1 AND loja_id = \$2/);
+    assert.match(calls[1].sql, /commerce_audit_logs/);
+    assert.doesNotMatch(JSON.stringify(calls), /telefone|conteudo|GEMINI_API_KEY|EVOLUTION_API_KEY/);
+    await assert.rejects(() => configureWhatsappAiPolicy({ empresaId: EMPRESA, lojaId: LOJA }, { personalizationEnabled: true }), /confirmação humana/i);
+    await assert.rejects(() => configureWhatsappAiPolicy({ empresaId: EMPRESA, lojaId: LOJA }, { personalizationEnabled: false, opportunitiesEnabled: true, confirmed: true }), /exigem personalização/i);
+  } finally { db.transaction = original; }
+});
+
+test('operações sensíveis rejeitam chamadas sem confirmação server-side', async () => {
+  await assert.rejects(
+    () => configureWhatsappAiChannel({ empresaId: EMPRESA, lojaId: LOJA }, { status: 'ativo', instance: 'dino' }),
+    /confirmação humana/i,
+  );
+  await assert.rejects(() => syncWhatsappAiWebhook({ empresaId: EMPRESA, lojaId: LOJA }), /confirmação humana/i);
+  await assert.rejects(() => testWhatsappAiGemini({ empresaId: EMPRESA, lojaId: LOJA }), /confirmação humana/i);
+});
+
+test('lista de sessões expõe somente DTO operacional mascarado', async () => {
+  const original = db.queryRead;
+  db.queryRead = async () => ({ rows: [{
+    id: SESSAO, telefone: '5511999999999', nome: 'Cliente', status: 'humano', assigned_to: USUARIO,
+    has_pending_action: true, marketing_opt_out: false, handoff_reason: 'pedido_do_cliente',
+    priority: 3, opportunity_count: 1, estado: { secret: 'não expor' }, acao_pendente: { request: 'não expor' },
+  }] });
+  try {
+    const rows = await listWhatsappAiSessions({ empresaId: EMPRESA, lojaId: LOJA }, { limit: 10 });
+    assert.equal(rows[0].telefone, '***9999');
+    assert.equal(rows[0].hasPendingAction, true);
+    assert.equal(rows[0].assigned, true);
+    assert.equal(rows[0].assigned_to, undefined);
+    assert.equal(rows[0].estado, undefined);
+    assert.equal(rows[0].acao_pendente, undefined);
+    assert.doesNotMatch(JSON.stringify(rows), /não expor/);
+  } finally { db.queryRead = original; }
 });
 
 test('status operacional retorna apenas readiness e métricas agregadas, sem URL de API ou segredo', async () => {
