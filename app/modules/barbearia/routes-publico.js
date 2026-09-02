@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import express from 'express';
 import { db } from '../../db.js';
 import * as barbearia from '../../barbearia-erp-kytto.js';
+import { queueAppointmentNotifications } from '../../core/barbershop-appointment-notifications.js';
 
 const router = express.Router();
 const EMPRESA_PADRAO_ID = 'emp-kytto-001';
@@ -117,7 +118,7 @@ router.get('/:slug/horarios', (req, res) => {
   }
 });
 
-router.post('/:slug/confirmar', (req, res) => {
+router.post('/:slug/confirmar', async (req, res) => {
   try {
     const identidade = identidadePublica(req.params.slug);
     if (!identidade) return res.status(404).json({ ok: false, error: 'Estabelecimento não encontrado.' });
@@ -154,6 +155,7 @@ router.post('/:slug/confirmar', (req, res) => {
       status: 'agendado',
       codigoConfirmacao: codigo,
     });
+    await queueAppointmentNotifications({ empresaId: identidade.empresaId, lojaId: identidade.lojaId, legacyEmpresaId: identidade.empresaId }, agendamento, 'criado').catch(() => null);
     res.setHeader('Cache-Control', 'no-store');
     return res.status(201).json({
       ok: true,

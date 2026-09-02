@@ -259,10 +259,10 @@ export async function syncPaymentAttempt(contextInput, paymentIdInput) {
     if (current.status !== next) {
       await trx.query(
         `UPDATE commerce_payments
-            SET status = $3,
-                authorized_at = CASE WHEN $3 = 'authorized' THEN COALESCE(authorized_at, CURRENT_TIMESTAMP) ELSE authorized_at END,
-                captured_at = CASE WHEN $3 = 'captured' THEN COALESCE(captured_at, CURRENT_TIMESTAMP) ELSE captured_at END,
-                refunded_at = CASE WHEN $3 IN ('refunded','partially_refunded') THEN COALESCE(refunded_at, CURRENT_TIMESTAMP) ELSE refunded_at END,
+            SET status = $3::text,
+                authorized_at = CASE WHEN $3::text = 'authorized' THEN COALESCE(authorized_at, CURRENT_TIMESTAMP) ELSE authorized_at END,
+                captured_at = CASE WHEN $3::text = 'captured' THEN COALESCE(captured_at, CURRENT_TIMESTAMP) ELSE captured_at END,
+                refunded_at = CASE WHEN $3::text IN ('refunded','partially_refunded') THEN COALESCE(refunded_at, CURRENT_TIMESTAMP) ELSE refunded_at END,
                 metadata = metadata || $4::jsonb,
                 atualizado_em = CURRENT_TIMESTAMP
           WHERE empresa_id = $1 AND id = $2`,

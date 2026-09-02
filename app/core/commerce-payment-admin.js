@@ -28,14 +28,50 @@ function booleanInput(value, field) {
   return value;
 }
 
+function publicHttpsUrl(value, field) {
+  const normalized = String(value || '').trim().slice(0, 500);
+  if (!normalized) return '';
+  try {
+    const parsed = new URL(normalized);
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password) throw new Error('invalid');
+    return parsed.toString();
+  } catch {
+    throw new CommerceError(`${field} deve ser uma URL HTTPS pública sem credenciais`, 'PAYMENT_ACCOUNT_INVALID', { field });
+  }
+}
+
+function normalizeInfinitePayHandle(value) {
+  return String(value || '').trim().replace(/^\$/, '').slice(0, 120);
+}
+
+function assertInfinitePayEndpoints(config, domains = []) {
+  const allowedHosts = new Set((Array.isArray(domains) ? domains : []).map(value => String(value || '').trim().toLowerCase()).filter(Boolean));
+  const redirect = new URL(config.redirectUrl);
+  const webhook = new URL(config.webhookUrl);
+  if (!allowedHosts.has(redirect.hostname.toLowerCase()) || !allowedHosts.has(webhook.hostname.toLowerCase())) {
+    throw new CommerceError('URLs InfinitePay devem usar um domínio verificado do storefront', 'PAYMENT_ACCOUNT_INVALID', { field: 'publicConfig' });
+  }
+  if (!/^\/checkout(?:\/[^/?#]+)?\/?$/.test(redirect.pathname) || webhook.pathname !== '/api/webhooks/infinitepay/payments') {
+    throw new CommerceError('rotas de retorno ou webhook InfinitePay são inválidas', 'PAYMENT_ACCOUNT_INVALID', { field: 'publicConfig' });
+  }
+}
+
+async function verifiedStorefrontDomains(trx, empresaId, storefrontId) {
+  const result = await trx.query(
+    `SELECT dominio FROM commerce_store_domains WHERE empresa_id = $1 AND storefront_id = $2 AND verificado_em IS NOT NULL`,
+    [empresaId, storefrontId],
+  );
+  return result.rows.map(row => row.dominio);
+}
+
 function publicConfig(input = {}) {
   const source = input && typeof input === 'object' ? input : {};
   const config = {};
   if (source.webhookSecretRef) config.webhookSecretRef = secretRef(source.webhookSecretRef, 'webhookSecretRef');
-  if (source.webhookUrl) config.webhookUrl = String(source.webhookUrl).trim().slice(0, 500);
-  if (source.redirectUrl) config.redirectUrl = String(source.redirectUrl).trim().slice(0, 500);
-  if (source.handle) config.handle = String(source.handle).trim().replace(/^\$/, '').slice(0, 120);
-  if (Array.isArray(source.methods)) config.methods = source.methods.map(value => String(value).toLowerCase()).filter(value => ['pix', 'credit_card', 'debit_card', 'boleto'].includes(value)).slice(0, 10);
+  if (source.webhookUrl) config.webhookUrl = publicHttpsUrl(source.webhookUrl, 'webhookUrl');
+  if (source.redirectUrl) config.redirectUrl = publicHttpsUrl(source.redirectUrl, 'redirectUrl');
+  if (source.handle) config.handle = normalizeInfinitePayHandle(source.handle);
+  if (Array.isArray(source.methods)) config.methods = [...new Set(source.methods.map(value => String(value).toLowerCase()).filter(value => ['pix', 'credit_card', 'debit_card', 'boleto'].includes(value)))].slice(0, 10);
   return config;
 }
 
@@ -47,6 +83,14 @@ function envReferenceConfigured(reference) {
 function accountCredentialsConfigured(account, provider) {
   if (!paymentProviders.get(provider) || !envReferenceConfigured(account?.secret_ref)) return false;
   if (provider === 'mercadopago') return envReferenceConfigured(account?.public_config?.webhookSecretRef);
+  if (provider === 'infinitepay') {
+    const config = account?.public_config || {};
+    const environmentHandle = normalizeInfinitePayHandle(process.env[String(account.secret_ref).slice(4)]);
+    const configuredHandle = normalizeInfinitePayHandle(config.handle);
+    const methods = Array.isArray(config.methods) ? config.methods : [];
+    return Boolean(configuredHandle && environmentHandle && configuredHandle === environmentHandle
+      && config.redirectUrl && config.webhookUrl && methods.includes('pix') && methods.includes('credit_card'));
+  }
   return true;
 }
 
@@ -62,7 +106,9 @@ function safePublicConfig(config = {}) {
 
 function accountRow(row) {
   const secretConfigured = envReferenceConfigured(row.secret_ref);
-  const webhookConfigured = row.provider === 'mercadopago' ? envReferenceConfigured(row.public_config?.webhookSecretRef) : true;
+  const webhookConfigured = row.provider === 'mercadopago'
+    ? envReferenceConfigured(row.public_config?.webhookSecretRef)
+    : row.provider === 'infinitepay' ? Boolean(row.public_config?.webhookUrl) : true;
   const registered = Boolean(paymentProviders.get(row.provider));
   return {
     id: row.id,
@@ -73,7 +119,7 @@ function accountRow(row) {
     nome: row.nome,
     ativo: row.ativo,
     registered,
-    ready: registered && secretConfigured && webhookConfigured,
+    ready: registered && accountCredentialsConfigured(row, row.provider),
     public_config: safePublicConfig(row.public_config),
     secret_configured: secretConfigured,
     webhook_configured: webhookConfigured,
@@ -122,8 +168,8 @@ export async function createPaymentAccount(trx, contextInput, input = {}) {
   if (definition.code === 'mercadopago' && !config.webhookSecretRef) {
     throw new CommerceError('Mercado Pago exige webhookSecretRef por referência de ambiente', 'PAYMENT_ACCOUNT_INVALID');
   }
-  if (definition.code === 'infinitepay' && !config.handle) {
-    throw new CommerceError('InfinitePay exige a InfiniteTag/handle da conta', 'PAYMENT_ACCOUNT_INVALID');
+  if (definition.code === 'infinitepay' && (!config.handle || !config.redirectUrl || !config.webhookUrl || !config.methods?.includes('pix') || !config.methods?.includes('credit_card'))) {
+    throw new CommerceError('InfinitePay exige handle, URLs públicas e métodos Pix/cartão', 'PAYMENT_ACCOUNT_INVALID');
   }
   if (ativo && !accountCredentialsConfigured({ secret_ref: secretRefValue, public_config: config }, definition.code)) {
     throw new CommerceError('não é possível ativar uma conta sem credenciais presentes no secret manager e adapter registrado', 'PAYMENT_ACCOUNT_NOT_CONFIGURED');
@@ -136,6 +182,7 @@ export async function createPaymentAccount(trx, contextInput, input = {}) {
       [context.empresaId, storefrontId, context.lojaId],
     );
     if (!storefront.rows[0]) throw new CommerceError('storefront fora do escopo da loja', 'STORE_SCOPE_MISMATCH');
+    if (definition.code === 'infinitepay') assertInfinitePayEndpoints(config, await verifiedStorefrontDomains(trx, context.empresaId, storefrontId));
   }
   const result = await trx.query(
     `INSERT INTO commerce_payment_accounts
@@ -184,7 +231,10 @@ export async function updatePaymentAccount(trx, contextInput, idInput, input = {
   if (input.publicConfig !== undefined) {
     nextPublicConfig = { ...nextPublicConfig, ...publicConfig(input.publicConfig) };
     if (definition.code === 'mercadopago' && !nextPublicConfig.webhookSecretRef) throw new CommerceError('Mercado Pago exige webhookSecretRef por referência de ambiente', 'PAYMENT_ACCOUNT_INVALID');
-    if (definition.code === 'infinitepay' && !nextPublicConfig.handle) throw new CommerceError('InfinitePay exige a InfiniteTag/handle da conta', 'PAYMENT_ACCOUNT_INVALID');
+    if (definition.code === 'infinitepay') {
+      if (!nextPublicConfig.handle || !nextPublicConfig.redirectUrl || !nextPublicConfig.webhookUrl || !nextPublicConfig.methods?.includes('pix') || !nextPublicConfig.methods?.includes('credit_card')) throw new CommerceError('InfinitePay exige handle, URLs públicas e métodos Pix/cartão', 'PAYMENT_ACCOUNT_INVALID');
+      assertInfinitePayEndpoints(nextPublicConfig, await verifiedStorefrontDomains(trx, context.empresaId, current.storefront_id));
+    }
     values.push(JSON.stringify(nextPublicConfig)); sets.push(`public_config = $${values.length}::jsonb`);
   }
   if (input.ativo !== undefined) {

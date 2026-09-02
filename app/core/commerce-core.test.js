@@ -67,6 +67,8 @@ test('transitionOrder grava atualização e eventos no mesmo fluxo transacional'
   assert.equal(calls.filter(call => call.sql.includes('UPDATE commerce_orders')).length, 1);
   assert.equal(calls.filter(call => call.sql.includes('INSERT INTO commerce_order_events')).length, 1);
   assert.equal(calls.filter(call => call.sql.includes('INSERT INTO commerce_audit_logs')).length, 1);
+  const auditInsert = calls.find(call => call.sql.includes('INSERT INTO commerce_audit_logs'));
+  assert.match(auditInsert.sql, /jsonb_build_object\('status', \$4::text\)/);
 });
 
 test('reserveInventory trava saldo, rejeita estoque insuficiente e registra movimentação', async () => {

@@ -4,12 +4,13 @@ import { db, reset } from './db.js';
 import { moduloDaRota, obterPerfil, temPermissao } from './perfis-usuarios-kytto.js';
 import { listarLancamentos, registrarLancamento } from './financeiro-central-kytto.js';
 import { obterFidelidade, cadastrarMembroFidelidade, creditarFidelidade } from './canais-fidelidade-kytto.js';
-import { criarCliente, atualizarConsentimentoCliente } from './clientes-contas-kytto.js';
+import { criarCliente, atualizarConsentimentoCliente, obterSituacaoCredito, listarContasReceber } from './clientes-contas-kytto.js';
 import {
   atualizarConfiguracao,
   atualizarConfiguracaoLoja,
   obterConfiguracaoLoja,
   alterarStatusAgendamento,
+  atualizarAgendamento,
   criarAgendamento,
   criarProfissional,
   atualizarProfissional,
@@ -135,6 +136,21 @@ test('cria agenda com preço e duração do serviço e bloqueia conflito do mesm
   assert.equal(agendamento.dataAgenda, '2030-01-15');
   assert.throws(() => criarAgendamento(EMPRESA_A, { ...dados, clienteNome: 'Outro cliente' }), /Horário indisponível/);
   assert.equal(listarAgendamentos(EMPRESA_A, { data: '2030-01-15' }).length, 1);
+});
+
+test('remarca atendimento com histórico, preserva escopo e bloqueia conflito', () => {
+  const profissional = baseProfissional();
+  const servico = baseServico();
+  const agendamento = criarAgendamento(EMPRESA_A, { clienteNome: 'Cliente remarcação', profissionalId: profissional.id, servicoId: servico.id, dataHora: '2030-01-15T10:00:00.000Z', dataAgenda: '2030-01-15' });
+  criarAgendamento(EMPRESA_A, { clienteNome: 'Horário ocupado', profissionalId: profissional.id, servicoId: servico.id, dataHora: '2030-01-15T11:00:00.000Z', dataAgenda: '2030-01-15' });
+
+  const remarcado = atualizarAgendamento(EMPRESA_A, agendamento.id, { dataHora: '2030-01-15T12:00:00.000Z', dataAgenda: '2030-01-15', profissionalId: profissional.id, servicoId: servico.id, origem: 'admin', usuario: 'operador-teste' });
+  assert.equal(remarcado.dataHora, '2030-01-15T12:00:00.000Z');
+  assert.equal(remarcado.historicoRemarcacoes.length, 1);
+  assert.equal(remarcado.historicoRemarcacoes[0].antes.dataHora, '2030-01-15T10:00:00.000Z');
+  assert.equal(remarcado.historicoRemarcacoes[0].responsavel, 'operador-teste');
+  assert.throws(() => atualizarAgendamento(EMPRESA_A, agendamento.id, { dataHora: '2030-01-15T11:00:00.000Z', dataAgenda: '2030-01-15', profissionalId: profissional.id, servicoId: servico.id }), /Horário indisponível/);
+  assert.equal(atualizarAgendamento(EMPRESA_B, agendamento.id, { dataHora: '2030-01-15T13:00:00.000Z' }), null);
 });
 
 test('aplica calendário por unidade e não cruza conflito entre lojas diferentes', () => {
@@ -290,8 +306,30 @@ test('calcula repasse indicativo de serviços e produtos pagos sem lançar pagam
   assert.equal(linha.comissaoServicos, 25);
   assert.equal(linha.comissaoProdutos, 12);
   assert.equal(linha.repasse, 37);
+  assert.equal(linha.taxas, 0);
+  assert.equal(resultado.taxasConfiguradas, false);
   assert.equal(resultado.vendasSemProfissional, 1);
   assert.equal(semProfissionalPaga.financeiroLancamentoId !== null, true);
+});
+
+test('desconta taxa da comissão somente quando existe regra real com fonte cadastrada', () => {
+  const profissional = baseProfissional();
+  const servico = baseServico();
+  const agendamento = criarAgendamento(EMPRESA_A, { clienteNome: 'Cliente taxa real', profissionalId: profissional.id, servicoId: servico.id, dataHora: '2030-04-03T10:00:00.000Z', dataAgenda: '2030-04-03', horaLocal: '10:00' });
+  alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'confirmado');
+  alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'em_atendimento');
+  alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'concluido', { meioPagamento: 'pix', valorRecebido: 50 });
+  const semTaxa = obterComissoes(EMPRESA_A);
+  assert.equal(semTaxa.porProfissional.find((item) => item.profissionalId === profissional.id).taxas, 0);
+  assert.deepEqual(semTaxa.meiosSemTaxaConfigurada, ['pix']);
+  assert.throws(() => atualizarConfiguracao(EMPRESA_A, { taxasPagamento: { pix: { percentual: 2, fixa: 0.5 } } }), /fonte da taxa real/);
+  atualizarConfiguracao(EMPRESA_A, { taxasPagamento: { pix: { percentual: 2, fixa: 0.5, fonte: 'Contrato adquirente teste' } } });
+  const comTaxa = obterComissoes(EMPRESA_A);
+  const linha = comTaxa.porProfissional.find((item) => item.profissionalId === profissional.id);
+  assert.equal(comTaxa.taxasConfiguradas, true);
+  assert.equal(linha.taxas, 1.5);
+  assert.equal(linha.comissaoServicos, 24.25);
+  assert.deepEqual(comTaxa.meiosSemTaxaConfigurada, []);
 });
 
 test('integra comanda de serviço e revenda com recebimento explícito e baixa idempotente', () => {
@@ -327,6 +365,25 @@ test('não baixa estoque nem lança financeiro quando pagamento fica pendente em
   assert.throws(() => registrarPagamentoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true, meioPagamento: 'conta', valor: 30 }), /cliente cadastrado/);
   assert.equal(db().barbearias[EMPRESA_A].produtosRevenda[produto.id].estoqueAtual, 2);
   assert.equal(listarLancamentos(EMPRESA_A, { origem: 'barbearia_comanda' }).length, 0);
+});
+
+test('aplica limite, saldo e vencimento antes de lançar a comanda na conta do cliente', () => {
+  const cliente = criarCliente(EMPRESA_A, { nome: 'Cliente crédito', limiteCreditoMensal: 100, diasVencimento: 15 });
+  const servico = baseServico();
+  const primeira = criarComandaBarbearia(EMPRESA_A, { clienteId: cliente.id, clienteNome: cliente.nome, itens: [{ tipo: 'servico', servicoId: servico.id }] });
+  const faturada = registrarPagamentoComandaBarbearia(EMPRESA_A, primeira.id, { confirmado: true, clienteId: cliente.id, meioPagamento: 'conta', valor: 50, chaveIdempotencia: 'conta-limite-1' });
+  assert.equal(faturada.status, 'em_conta');
+  assert.equal(obterSituacaoCredito(EMPRESA_A, cliente.id, 50).disponivel, 50);
+  const contas = listarContasReceber(EMPRESA_A, { clienteId: cliente.id });
+  assert.equal(contas.length, 1);
+  const dias = Math.round((new Date(contas[0].dataVencimento).valueOf() - Date.now()) / 86400000);
+  assert.ok(dias >= 14 && dias <= 15);
+
+  const segunda = criarComandaBarbearia(EMPRESA_A, { clienteId: cliente.id, clienteNome: cliente.nome, itens: [{ tipo: 'servico', servicoId: servico.id, quantidade: 2 }] });
+  assert.throws(() => registrarPagamentoComandaBarbearia(EMPRESA_A, segunda.id, { confirmado: true, clienteId: cliente.id, meioPagamento: 'conta', valor: 100, chaveIdempotencia: 'conta-limite-2' }), /Limite de crédito insuficiente/);
+  assert.equal(listarContasReceber(EMPRESA_A, { clienteId: cliente.id }).length, 1);
+  assert.equal(listarLancamentos(EMPRESA_A, { origem: 'barbearia_comanda' }).length, 1);
+  assert.equal(obterSituacaoCredito(EMPRESA_B, cliente.id, 10), null);
 });
 
 test('rejeita item de produto de outra empresa na comanda', () => {

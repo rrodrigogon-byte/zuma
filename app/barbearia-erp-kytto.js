@@ -51,6 +51,7 @@ const TRANSICOES_COMANDA_BARBEARIA = {
   cancelada: new Set(),
 };
 const MEIOS_PAGAMENTO_COMANDA_BARBEARIA = new Set(['dinheiro', 'pix', 'cartao', 'credito', 'debito', 'transferencia', 'tef', 'carteira', 'conta']);
+const MEIOS_TAXA_COMISSAO = new Set(['pix', 'cartao', 'credito', 'debito', 'transferencia', 'tef', 'carteira']);
 
 function estadoVazio() {
   return {
@@ -75,6 +76,7 @@ function estadoVazio() {
       janelaReservaDias: 60,
       politicaCancelamentoHoras: 4,
       feriados: [],
+      taxasPagamento: {},
       lojas: {},
     },
   };
@@ -177,6 +179,24 @@ function feriadosNormalizados(valor, fallback = []) {
     : actualOrDefault(fallback, []);
 }
 
+function taxasPagamentoNormalizadas(dados = {}, anterior = {}) {
+  const recebidas = dados.taxasPagamento ?? dados.taxas_pagamento;
+  if (recebidas === undefined) return { ...(anterior.taxasPagamento || {}) };
+  if (!recebidas || typeof recebidas !== 'object' || Array.isArray(recebidas)) throw new Error('Configuração de taxas por pagamento inválida.');
+  const taxas = {};
+  for (const [meioRecebido, regraRecebida] of Object.entries(recebidas)) {
+    const meio = texto(meioRecebido, 30).toLowerCase();
+    if (!MEIOS_TAXA_COMISSAO.has(meio) || !regraRecebida || typeof regraRecebida !== 'object' || Array.isArray(regraRecebida)) continue;
+    const percentual = Math.max(0, Math.min(100, numero(regraRecebida.percentual)));
+    const fixa = dinheiro(regraRecebida.fixa);
+    const fonte = texto(regraRecebida.fonte, 160);
+    if (percentual <= 0 && fixa <= 0) continue;
+    if (!fonte) throw new Error(`Informe a fonte da taxa real de ${meio}.`);
+    taxas[meio] = { percentual: Number(percentual.toFixed(4)), fixa, fonte };
+  }
+  return taxas;
+}
+
 function configuracaoPublicaNormalizada(dados = {}, anterior = {}) {
   const slugRecebido = texto(dados.slugPublico ?? dados.slug_publico ?? anterior.slugPublico, 100)
     .normalize('NFD')
@@ -193,6 +213,7 @@ function configuracaoPublicaNormalizada(dados = {}, anterior = {}) {
     emojiPublico: texto(dados.emojiPublico ?? dados.emoji_publico ?? anterior.emojiPublico, 8) || '✂️',
     lojaPublicaId: texto(dados.lojaPublicaId ?? dados.loja_publica_id ?? anterior.lojaPublicaId, 120),
     agendamentoPublicoAtivo: ativoRecebido === undefined ? anterior.agendamentoPublicoAtivo !== false : Boolean(ativoRecebido),
+    taxasPagamento: taxasPagamentoNormalizadas(dados, anterior),
   };
 }
 
@@ -1122,6 +1143,15 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
   const consumoPlanejado = faturamentoCompleto ? planejarConsumoInternoComanda(estado, comanda) : [];
   validarEstoqueComandaBarbearia(estado, comanda, consumoPlanejado);
   const clienteId = texto(dados.clienteId ?? dados.cliente_id ?? comanda.clienteId, 120) || null;
+  const valorEmConta = Number(pagamentos.filter((item) => item.meio === 'conta').reduce((soma, item) => soma + item.valor, 0).toFixed(2));
+  if (valorEmConta > 0) {
+    const credito = clienteId ? clientesKytto.obterSituacaoCredito(empresaId, clienteId, valorEmConta) : null;
+    if (!credito) throw new Error('Para lançar em conta, selecione um cliente cadastrado da empresa ativa.');
+    if (!credito.permitido) {
+      if (!credito.limite) throw new Error('O cliente não possui limite de crédito configurado para pagar na conta.');
+      throw new Error(`Limite de crédito insuficiente. Disponível: R$ ${credito.disponivel.toFixed(2)}.`);
+    }
+  }
   const lancamentosFinanceiros = [];
   const contasReceber = [];
   const recebimentosCaixa = [];
@@ -1371,6 +1401,7 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}) {
   const estado = estadoEmpresa(empresaId);
   const atual = estado.agendamentos[String(agendamentoId)];
   if (!atual || atual.empresaId !== String(empresaId)) return null;
+  const antes = { dataHora: atual.dataHora, dataAgenda: atual.dataAgenda, profissionalId: atual.profissionalId, servicoId: atual.servicoId };
   const agendamento = agendamentoNormalizado(dados, atual);
   agendamento.status = atual.status;
   if (!agendamento.servicoId || !estado.servicos[agendamento.servicoId] || estado.servicos[agendamento.servicoId].ativo === false) throw new Error('Serviço ativo é obrigatório.');
@@ -1378,6 +1409,19 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}) {
   agendamento.valor = agendamento.valor > 0 ? agendamento.valor : estado.servicos[agendamento.servicoId].preco;
   validarCalendarioAgendamento(estado, agendamento, agendamento.profissionalId ? estado.profissionais[agendamento.profissionalId] : null);
   if (verificarConflito(estado, agendamento, atual.id)) throw new Error('Horário indisponível para o profissional selecionado.');
+  const remarcado = ['dataHora', 'dataAgenda', 'profissionalId', 'servicoId'].some((campo) => String(antes[campo] || '') !== String(agendamento[campo] || ''));
+  if (remarcado) {
+    atual.historicoRemarcacoes ||= [];
+    atual.historicoRemarcacoes.unshift({
+      id: `rem-${Date.now().toString(36)}-${atual.historicoRemarcacoes.length + 1}`,
+      antes,
+      depois: { dataHora: agendamento.dataHora, dataAgenda: agendamento.dataAgenda, profissionalId: agendamento.profissionalId, servicoId: agendamento.servicoId },
+      origem: texto(dados.origem || 'admin', 60),
+      responsavel: texto(dados.usuario, 120) || null,
+      registradoEm: dataAtual(),
+    });
+    atual.historicoRemarcacoes = atual.historicoRemarcacoes.slice(0, 50);
+  }
   Object.assign(atual, agendamento, { atualizadoEm: dataAtual() });
   save();
   return { ...atual };
@@ -1434,7 +1478,18 @@ export function obterComissoes(empresaId, { data = '', lojaId = '' } = {}) {
   }));
   const vendas = [...vendasLegadas, ...produtosComanda.filter((item) => item.total > 0)];
   const atendimentosConsolidados = [...atendimentos, ...servicosComanda];
-  const taxas = { credito: 0.0249, debito: 0.0149, pix: 0.0089, dinheiro: 0, transferencia: 0 };
+  const taxas = estado.configuracao.taxasPagamento || {};
+  const meiosSemTaxaConfigurada = new Set();
+  const calcularTaxa = (valor, meio, profissional) => {
+    const normalizado = String(meio || '').toLowerCase();
+    if (!profissional.descontaTaxaMaquininha || normalizado === 'dinheiro' || normalizado === 'conta') return 0;
+    const regra = taxas[normalizado];
+    if (!regra) {
+      if (normalizado) meiosSemTaxaConfigurada.add(normalizado);
+      return 0;
+    }
+    return Number(valor || 0) * Number(regra.percentual || 0) / 100 + Number(regra.fixa || 0);
+  };
   const porProfissional = Object.values(estado.profissionais).map((profissional) => {
     const servicos = atendimentosConsolidados.filter((item) => item.profissionalId === profissional.id);
     const produtos = vendas.filter((item) => item.profissionalId === profissional.id);
@@ -1442,11 +1497,11 @@ export function obterComissoes(empresaId, { data = '', lojaId = '' } = {}) {
     const brutoProdutos = produtos.reduce((soma, item) => soma + Number(item.total || 0), 0);
     const taxaServicos = servicos.reduce((soma, item) => {
       const meio = String(item.meioPagamento || '').toLowerCase();
-      return soma + (profissional.descontaTaxaMaquininha && meio !== 'dinheiro' ? (Number(item.valorRecebido || item.valor || 0) * (taxas[meio] || 0) + 0.39) : 0);
+      return soma + calcularTaxa(Number(item.valorRecebido || item.valor || 0), meio, profissional);
     }, 0);
     const taxaProdutos = produtos.reduce((soma, item) => {
       const meio = String(item.pagamento?.meioPagamento || '').toLowerCase();
-      return soma + (profissional.descontaTaxaMaquininha && meio !== 'dinheiro' ? Number(item.total || 0) * (taxas[meio] || 0) + 0.39 : 0);
+      return soma + calcularTaxa(Number(item.total || 0), meio, profissional);
     }, 0);
     const comissaoServicos = (brutoServicos - taxaServicos) * Number(profissional.percentualComissao || 0) / 100;
     const comissaoProdutos = (brutoProdutos - taxaProdutos) * Number(profissional.percentualComissaoProduto || 0) / 100;
@@ -1456,7 +1511,7 @@ export function obterComissoes(empresaId, { data = '', lojaId = '' } = {}) {
     return { profissionalId: profissional.id, profissionalNome: profissional.nome, percentualComissao: Number(profissional.percentualComissao || 0), percentualComissaoProduto: Number(profissional.percentualComissaoProduto || 0), atendimentos: servicos.length, vendasProdutos: produtos.length, brutoServicos: dinheiro(brutoServicos), brutoProdutos: dinheiro(brutoProdutos), bruto: dinheiro(bruto), taxas: dinheiro(taxasTotal), comissaoServicos: dinheiro(comissaoServicos), comissaoProdutos: dinheiro(comissaoProdutos), repasse: dinheiro(repasse), parcelaSalao: dinheiro(Math.max(0, bruto - taxasTotal - repasse)) };
   }).filter((item) => item.atendimentos > 0 || item.vendasProdutos > 0 || estado.profissionais[item.profissionalId].ativo !== false);
   const vendasSemProfissional = vendas.filter((item) => !item.profissionalId);
-  return { data: String(data || '').slice(0, 10), porProfissional, vendasSemProfissional: vendasSemProfissional.length, brutoSemProfissional: dinheiro(vendasSemProfissional.reduce((soma, item) => soma + Number(item.total || 0), 0)) };
+  return { data: String(data || '').slice(0, 10), porProfissional, vendasSemProfissional: vendasSemProfissional.length, brutoSemProfissional: dinheiro(vendasSemProfissional.reduce((soma, item) => soma + Number(item.total || 0), 0)), taxasConfiguradas: Object.keys(taxas).length > 0, taxasPagamento: { ...taxas }, meiosSemTaxaConfigurada: [...meiosSemTaxaConfigurada].sort() };
 }
 
 export function vincularLancamentoFinanceiro(empresaId, agendamentoId, lancamentoId) {

@@ -196,11 +196,38 @@ export function obterCliente(empresaId, clienteId) {
   return cliente?.empresaId === empresaId ? garantirConsentimentos(cliente) : null;
 }
 
+export function obterSituacaoCredito(empresaId, clienteId, valorSolicitado = 0) {
+  const cliente = obterCliente(empresaId, clienteId);
+  if (!cliente || cliente.padrao) return null;
+  const limite = Math.max(0, numero(cliente.limiteCreditoMensal));
+  const saldoDevedor = Math.max(0, numero(cliente.saldoDevedor));
+  const disponivel = Math.max(0, limite - saldoDevedor);
+  const solicitado = Math.max(0, numero(valorSolicitado));
+  const diasVencimento = Math.max(1, Math.min(90, Math.floor(numero(cliente.diasVencimento) || 30)));
+  const vencimento = new Date();
+  vencimento.setUTCDate(vencimento.getUTCDate() + diasVencimento);
+  return {
+    clienteId: cliente.id,
+    limite: Number(limite.toFixed(2)),
+    saldoDevedor: Number(saldoDevedor.toFixed(2)),
+    disponivel: Number(disponivel.toFixed(2)),
+    solicitado: Number(solicitado.toFixed(2)),
+    diasVencimento,
+    dataVencimento: vencimento.toISOString(),
+    permitido: limite > 0 && solicitado > 0 && solicitado - disponivel <= 0.005,
+  };
+}
+
 export function criarContaReceber(empresaId, dados) {
   const store = clientesPersistidos(empresaId);
   const cliente = obterCliente(empresaId, dados?.clienteId);
   if (!cliente) throw new Error('Cliente não encontrado no escopo da empresa ativa.');
-  const conta = contaPadrao(empresaId, `ctr-${Date.now().toString(36)}-${String(Object.keys(store.contasReceber).length + 1).padStart(3, '0')}`, dados);
+  const credito = obterSituacaoCredito(empresaId, cliente.id, dados?.valor);
+  if (!credito?.permitido) {
+    if (!credito?.limite) throw new Error('O cliente não possui limite de crédito configurado para pagar na conta.');
+    throw new Error(`Limite de crédito insuficiente. Disponível: R$ ${credito.disponivel.toFixed(2)}.`);
+  }
+  const conta = contaPadrao(empresaId, `ctr-${Date.now().toString(36)}-${String(Object.keys(store.contasReceber).length + 1).padStart(3, '0')}`, { ...dados, dataVencimento: dados?.dataVencimento || credito.dataVencimento });
   if (!conta.descricao || conta.valor <= 0) throw new Error('Descrição e valor positivo são obrigatórios.');
   store.contasReceber[conta.id] = conta;
   if (conta.status !== 'paga') cliente.saldoDevedor = Number(cliente.saldoDevedor || 0) + conta.valor;
@@ -300,7 +327,7 @@ export function obterFechamentoDiario(empresaId, dataFechamento) {
 export { saveFn as save };
 
 export default {
-  clientesPersistidos, garantirClientePadrao, criarCliente, atualizarCliente, atualizarConsentimentoCliente, listarClientes, obterCliente,
+  clientesPersistidos, garantirClientePadrao, criarCliente, atualizarCliente, atualizarConsentimentoCliente, listarClientes, obterCliente, obterSituacaoCredito,
   criarContaReceber, atualizarContaReceber, listarContasReceber, verificarAlertasVencimento,
   listarAlertas, criarFechamentoDiario, listarFechamentosDiarios, obterFechamentoDiario,
 };
