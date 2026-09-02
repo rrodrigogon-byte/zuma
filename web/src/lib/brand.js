@@ -1,5 +1,5 @@
 export const DINO_BARBERSHOP_LOGO = '/brand/dino-barbearia-logo.png'
-export const DINO_COMMERCE_LOGO = '/brand/dino-logo-horizontal.png'
+export const DINO_COMMERCE_LOGO = '/brand/dino-logo-horizontal-tight.png'
 
 export function commerceDisplayName(alias, publicName = '', storefrontName = '') {
   if (String(alias || '').trim().toLowerCase() === 'dino') return 'Dino Perfumaria'

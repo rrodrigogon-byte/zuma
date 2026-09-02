@@ -4,7 +4,7 @@ import { applyBrand, applyThemeMode, commerceDisplayName, DINO_BARBERSHOP_LOGO, 
 
 test('Barbearia Dino e Dino Perfumaria usam assets de marca distintos', () => {
   assert.equal(DINO_BARBERSHOP_LOGO, '/brand/dino-barbearia-logo.png')
-  assert.equal(DINO_COMMERCE_LOGO, '/brand/dino-logo-horizontal.png')
+  assert.equal(DINO_COMMERCE_LOGO, '/brand/dino-logo-horizontal-tight.png')
   assert.notEqual(DINO_BARBERSHOP_LOGO, DINO_COMMERCE_LOGO)
 })
 
