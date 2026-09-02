@@ -148,15 +148,13 @@ export default function BarbeariaERP() {
   const requestedArea = searchParams.get('area')
   const validRequestedTab = TABS.some(([name]) => name === requestedTab) ? requestedTab : null
   const validRequestedArea = AREAS.find((area) => area.id === requestedArea) || null
-  const [tab, setTab] = useState(() => validRequestedTab || validRequestedArea?.tabs[0] || 'Visão geral')
+  const tab = validRequestedTab || validRequestedArea?.tabs[0] || 'Visão geral'
 
   function navegarParaTab(nome) {
-    setTab(nome)
     setBusca('')
-    const proximo = new URLSearchParams(searchParams)
-    proximo.set('area', TAB_AREA[nome] || 'operacao')
-    proximo.set('tab', nome)
-    setSearchParams(proximo, { replace: true })
+    const area = TAB_AREA[nome] || 'operacao'
+    if (searchParams.get('area') === area && searchParams.get('tab') === nome) return
+    setSearchParams({ area, tab: nome }, { replace: true })
   }
   const [dataSelecionada, setDataSelecionada] = useState(hojeLocal)
   const [statusFiltro, setStatusFiltro] = useState('')
@@ -266,13 +264,6 @@ export default function BarbeariaERP() {
   }, [dataSelecionada, profissionalFiltro, statusFiltro])
 
   useEffect(() => { carregar() }, [carregar])
-  useEffect(() => {
-    const tabDaUrl = validRequestedTab || validRequestedArea?.tabs[0] || null
-    if (tabDaUrl && tabDaUrl !== tab) {
-      setTab(tabDaUrl)
-      setBusca('')
-    }
-  }, [tab, validRequestedArea, validRequestedTab])
 
   const indicadores = dashboard?.indicadores || {}
   const areaAtual = AREAS.find((area) => area.id === TAB_AREA[tab]) || AREAS[0]
@@ -881,13 +872,13 @@ export default function BarbeariaERP() {
     ].filter((item) => item.ts).sort((a, b) => String(b.ts).localeCompare(String(a.ts))).slice(0, 6)
     const rankingAtendentes = [...(comissoes?.porProfissional || [])].sort((a, b) => (Number(b.brutoServicos || 0) + Number(b.brutoProdutos || 0)) - (Number(a.brutoServicos || 0) + Number(a.brutoProdutos || 0))).slice(0, 5)
     return <div style={{ display: 'grid', gap: 20 }}>
-      {isDinoBrand && <DinoBusinessDashboard onOpenTab={(targetTab) => { setTab(targetTab); setBusca('') }} />}
+      {isDinoBrand && <DinoBusinessDashboard onOpenTab={navegarParaTab} />}
       <Card style={styles.todayHero}>
         <div style={styles.todayHeroTop}>
           <div><div style={styles.kicker}>Ritual de abertura</div><h2 style={{ ...styles.h2, fontSize: 23, marginTop: 5 }}>Hoje na unidade</h2><p style={{ ...styles.sub, maxWidth: 700 }}>Comece pela agenda, acompanhe quem está aguardando e resolva as pendências antes do primeiro atendimento.</p></div>
           <div style={styles.todayStatus}><span>Data operacional</span><strong>{fmtDateOnly(dataSelecionada)}</strong><input aria-label="Escolher data operacional" type="date" value={dataSelecionada} onChange={(event) => setDataSelecionada(event.target.value)} style={styles.compactDate} /><small>{dashboard?.caixa?.aberto ? 'Caixa aberto' : 'Caixa ainda não aberto'}</small></div>
         </div>
-        <div style={styles.quickActions} aria-label="Atalhos da operação"><button type="button" style={styles.primary} onClick={() => setTab('Agenda')}>Abrir agenda</button><button type="button" style={styles.secondary} onClick={() => setTab('Atendimento')}>Abrir atendimento</button><button type="button" style={styles.secondary} onClick={() => setTab('Caixa e fechamento')}>Abrir caixa</button><button type="button" style={styles.secondary} onClick={() => setTab('Fila e bloqueios')}>Ver fila e bloqueios</button><button type="button" style={styles.secondary} onClick={() => { setFormCliente({ nome: '', telefone: '', email: '', observacao: '' }); setModal('cliente') }}>Cadastrar cliente</button></div>
+        <div style={styles.quickActions} aria-label="Atalhos da operação"><button type="button" style={styles.primary} onClick={() => navegarParaTab('Agenda')}>Abrir agenda</button><button type="button" style={styles.secondary} onClick={() => navegarParaTab('Atendimento')}>Abrir atendimento</button><button type="button" style={styles.secondary} onClick={() => navegarParaTab('Caixa e fechamento')}>Abrir caixa</button><button type="button" style={styles.secondary} onClick={() => navegarParaTab('Fila e bloqueios')}>Ver fila e bloqueios</button><button type="button" style={styles.secondary} onClick={() => { setFormCliente({ nome: '', telefone: '', email: '', observacao: '' }); setModal('cliente') }}>Cadastrar cliente</button></div>
       </Card>
       <div style={styles.kpiGrid}>
         <Kpi label="Atendimentos hoje" value={indicadores.agendamentosHoje || 0} note={`${indicadores.confirmadosHoje || 0} confirmados`} />
@@ -918,12 +909,12 @@ export default function BarbeariaERP() {
         </Card>
       </div>
       <div style={styles.twoColumns}>
-        <Card style={{ padding: 20 }}><div style={styles.sectionTitle}><div><div style={styles.kicker}>Recepção</div><h2 style={{ ...styles.h2, marginTop: 4 }}>Fila e capacidade agora</h2><p style={styles.sub}>Acompanhe a espera da unidade sem sair da visão principal.</p></div><button type="button" style={styles.secondary} onClick={() => setTab('Fila e bloqueios')}>Gerenciar fila</button></div>{(dashboard?.filaEspera || []).length === 0 ? <div style={styles.inlineEmpty}><strong>Fila vazia</strong><span>Nenhum cliente aguardando ou chamado para a data selecionada.</span></div> : <div style={{ display: 'grid', gap: 8 }}>{dashboard.filaEspera.slice(0, 5).map((item) => <div key={item.id} style={styles.queueRow}><div><strong>{item.senha} · {item.clienteNome || 'Cliente eventual'}</strong><small>{item.previsaoMinutos || 0} min de previsão</small></div><Badge status={item.status === 'aguardando' ? 'agendado' : 'em_atendimento'} /></div>)}</div>}</Card>
-        <Card style={{ padding: 20 }}><div style={styles.sectionTitle}><div><div style={styles.kicker}>Controle</div><h2 style={{ ...styles.h2, marginTop: 4 }}>Pendências do dia</h2><p style={styles.sub}>Ações recomendadas com base nos dados carregados.</p></div></div><div style={{ display: 'grid', gap: 8 }}>{[[indicadores.profissionaisAtivos ? 'Equipe cadastrada' : 'Cadastrar equipe', indicadores.profissionaisAtivos ? `${indicadores.profissionaisAtivos} atendente(s) ativo(s)` : 'A agenda precisa de atendentes', 'Profissionais', indicadores.profissionaisAtivos ? 'ok' : 'attention'], [indicadores.servicosAtivos ? 'Catálogo disponível' : 'Cadastrar serviços', indicadores.servicosAtivos ? `${indicadores.servicosAtivos} serviço(s) ativo(s)` : 'Defina preço e duração para agendar', 'Serviços', indicadores.servicosAtivos ? 'ok' : 'attention'], [dashboard?.caixa?.aberto ? 'Caixa aberto' : 'Conferir caixa', dashboard?.caixa?.aberto ? 'Operação financeira em andamento' : 'Abra o caixa antes do primeiro recebimento', 'Caixa e fechamento', dashboard?.caixa?.aberto ? 'ok' : 'attention']].map(([titulo, nota, destino, estado]) => <button type="button" key={titulo} onClick={() => setTab(destino === 'Gestão' ? 'Configuração' : destino)} style={{ ...styles.actionRow, ...(estado === 'attention' ? styles.actionRowAttention : {}) }}><span><strong>{titulo}</strong><small>{nota}</small></span><span aria-hidden="true">›</span></button>)}</div></Card>
+        <Card style={{ padding: 20 }}><div style={styles.sectionTitle}><div><div style={styles.kicker}>Recepção</div><h2 style={{ ...styles.h2, marginTop: 4 }}>Fila e capacidade agora</h2><p style={styles.sub}>Acompanhe a espera da unidade sem sair da visão principal.</p></div><button type="button" style={styles.secondary} onClick={() => navegarParaTab('Fila e bloqueios')}>Gerenciar fila</button></div>{(dashboard?.filaEspera || []).length === 0 ? <div style={styles.inlineEmpty}><strong>Fila vazia</strong><span>Nenhum cliente aguardando ou chamado para a data selecionada.</span></div> : <div style={{ display: 'grid', gap: 8 }}>{dashboard.filaEspera.slice(0, 5).map((item) => <div key={item.id} style={styles.queueRow}><div><strong>{item.senha} · {item.clienteNome || 'Cliente eventual'}</strong><small>{item.previsaoMinutos || 0} min de previsão</small></div><Badge status={item.status === 'aguardando' ? 'agendado' : 'em_atendimento'} /></div>)}</div>}</Card>
+        <Card style={{ padding: 20 }}><div style={styles.sectionTitle}><div><div style={styles.kicker}>Controle</div><h2 style={{ ...styles.h2, marginTop: 4 }}>Pendências do dia</h2><p style={styles.sub}>Ações recomendadas com base nos dados carregados.</p></div></div><div style={{ display: 'grid', gap: 8 }}>{[[indicadores.profissionaisAtivos ? 'Equipe cadastrada' : 'Cadastrar equipe', indicadores.profissionaisAtivos ? `${indicadores.profissionaisAtivos} atendente(s) ativo(s)` : 'A agenda precisa de atendentes', 'Profissionais', indicadores.profissionaisAtivos ? 'ok' : 'attention'], [indicadores.servicosAtivos ? 'Catálogo disponível' : 'Cadastrar serviços', indicadores.servicosAtivos ? `${indicadores.servicosAtivos} serviço(s) ativo(s)` : 'Defina preço e duração para agendar', 'Serviços', indicadores.servicosAtivos ? 'ok' : 'attention'], [dashboard?.caixa?.aberto ? 'Caixa aberto' : 'Conferir caixa', dashboard?.caixa?.aberto ? 'Operação financeira em andamento' : 'Abra o caixa antes do primeiro recebimento', 'Caixa e fechamento', dashboard?.caixa?.aberto ? 'ok' : 'attention']].map(([titulo, nota, destino, estado]) => <button type="button" key={titulo} onClick={() => navegarParaTab(destino === 'Gestão' ? 'Configuração' : destino)} style={{ ...styles.actionRow, ...(estado === 'attention' ? styles.actionRowAttention : {}) }}><span><strong>{titulo}</strong><small>{nota}</small></span><span aria-hidden="true">›</span></button>)}</div></Card>
       </div>
       <div style={styles.twoColumns}>
         <Card style={{ padding: 20 }}><div style={styles.sectionTitle}><div><div style={styles.kicker}>Ritmo da unidade</div><h2 style={styles.h2}>Atividade recente</h2><p style={styles.sub}>Eventos persistidos no overview, sem simulação ou atualização automática.</p></div><button type="button" style={styles.secondary} onClick={carregar}>Atualizar</button></div>{atividadeRecente.length === 0 ? <div style={styles.inlineEmpty}><strong>Nenhuma atividade recente</strong><span>Agendamentos, comandas e revendas aparecerão aqui quando existirem na unidade.</span></div> : <div style={{ display: 'grid', gap: 8 }}>{atividadeRecente.map((item) => <div key={item.id} style={styles.feedRow}><div><strong>{item.titulo}</strong><small>{item.nota}</small></div><div style={{ textAlign: 'right' }}><Badge status={item.status} /><small>{fmtDate(item.ts)}</small></div></div>)}</div>}</Card>
-        <Card style={{ padding: 20 }}><div style={styles.sectionTitle}><div><div style={styles.kicker}>Desempenho</div><h2 style={styles.h2}>Top atendentes</h2><p style={styles.sub}>Ranking indicativo por bruto apurado no recorte selecionado.</p></div><button type="button" style={styles.secondary} onClick={() => setTab('Comissões')}>Ver comissões</button></div>{rankingAtendentes.length === 0 ? <div style={styles.inlineEmpty}><strong>Sem apuração ainda</strong><span>Conclua atendimentos ou confirme vendas para formar o ranking real.</span></div> : <div style={{ display: 'grid', gap: 8 }}>{rankingAtendentes.map((item, indice) => <div key={item.profissionalId} style={styles.feedRow}><div><strong>{indice + 1}. {item.profissionalNome}</strong><small>{item.atendimentos || 0} atendimento(s) · {item.vendasProdutos || 0} revenda(s)</small></div><strong>{moeda(Number(item.brutoServicos || 0) + Number(item.brutoProdutos || 0))}</strong></div>)}</div>}</Card>
+        <Card style={{ padding: 20 }}><div style={styles.sectionTitle}><div><div style={styles.kicker}>Desempenho</div><h2 style={styles.h2}>Top atendentes</h2><p style={styles.sub}>Ranking indicativo por bruto apurado no recorte selecionado.</p></div><button type="button" style={styles.secondary} onClick={() => navegarParaTab('Comissões')}>Ver comissões</button></div>{rankingAtendentes.length === 0 ? <div style={styles.inlineEmpty}><strong>Sem apuração ainda</strong><span>Conclua atendimentos ou confirme vendas para formar o ranking real.</span></div> : <div style={{ display: 'grid', gap: 8 }}>{rankingAtendentes.map((item, indice) => <div key={item.profissionalId} style={styles.feedRow}><div><strong>{indice + 1}. {item.profissionalNome}</strong><small>{item.atendimentos || 0} atendimento(s) · {item.vendasProdutos || 0} revenda(s)</small></div><strong>{moeda(Number(item.brutoServicos || 0) + Number(item.brutoProdutos || 0))}</strong></div>)}</div>}</Card>
       </div>
       <Card style={{ padding: 20 }}>
         <div style={styles.sectionTitle}><div><div style={styles.kicker}>Próximas ações</div><h2 style={{ ...styles.h2, marginTop: 4 }}>Prontidão operacional</h2><p style={styles.sub}>O módulo reutiliza cadastros e livros existentes; nenhuma venda, reserva ou pagamento é simulado.</p></div><span style={styles.contextPill}>{indicadores.profissionaisAtivos && indicadores.servicosAtivos ? 'Base pronta' : 'Completar cadastros'}</span></div>
