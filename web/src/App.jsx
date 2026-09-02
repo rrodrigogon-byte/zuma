@@ -152,13 +152,14 @@ const Ecommerce          = lazy(() => import('./pages/public/Ecommerce'))
 function RouteBrandSync() {
   const location = useLocation()
   const { empresaAtiva } = useAuth()
+  const hostName = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
   const tenantBrand = isDinoBrandContext(empresaAtiva) ? 'dino' : 'kytto'
 
   useEffect(() => {
-    const brand = resolveBrand(location.pathname, location.search, tenantBrand)
+    const brand = hostName === 'dino.kytto.com.br' ? 'dino' : resolveBrand(location.pathname, location.search, tenantBrand)
     applyBrand(brand)
     applyThemeMode(brand === 'dino' ? storedThemeMode() : 'system')
-  }, [location.pathname, location.search, tenantBrand])
+  }, [hostName, location.pathname, location.search, tenantBrand])
 
   return null
 }
