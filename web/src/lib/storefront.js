@@ -42,6 +42,11 @@ export function storefrontCartSessionKey(value) {
   } catch { return generate() }
 }
 
+export function decrementCartQuantity(value) {
+  const quantity = Math.max(0, Math.trunc(Number(value) || 0))
+  return Math.max(0, quantity - 1)
+}
+
 export function storefrontAliasFromPath(pathname) {
   const match = String(pathname || '').match(/^\/(?:ecommerce|perfumaria|checkout|pedido)\/([^/?#]+)/i)
   return normalizeStorefrontAlias(match?.[1])

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, CheckCircle2, Eye, Loader2, Minus, Monitor, Moon, Plus, Search, ShoppingBag, Store, Sun, X } from 'lucide-react'
+import { ArrowRight, CheckCircle2, Eye, Loader2, Minus, Monitor, Moon, Plus, Search, ShoppingBag, Store, Sun, Trash2, X } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, fmtR } from '../../lib/api'
-import { loadAllStorefrontProducts, normalizeStorefrontAlias, storefrontApiBase, storefrontCartSessionKey, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
+import { decrementCartQuantity, loadAllStorefrontProducts, normalizeStorefrontAlias, storefrontApiBase, storefrontCartSessionKey, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
 import { applyThemeMode, DINO_COMMERCE_LOGO, storedThemeMode } from '../../lib/brand'
 import './commerce.css'
 
@@ -125,8 +125,9 @@ function ProductGallery({ product }) {
 }
 
 function QuantityControl({ value, onChange, max }) {
+  const removesItem = value <= 1
   return <div className="commerce-quantity" aria-label="Quantidade">
-    <button type="button" aria-label="Diminuir quantidade" disabled={value <= 1} onClick={() => onChange(Math.max(1, value - 1))}><Minus size={14} /></button>
+    <button type="button" aria-label={removesItem ? 'Remover item' : 'Diminuir quantidade'} title={removesItem ? 'Remover item' : 'Diminuir quantidade'} onClick={() => onChange(decrementCartQuantity(value))}>{removesItem ? <Trash2 size={14} /> : <Minus size={14} />}</button>
     <strong>{value}</strong>
     <button type="button" aria-label="Aumentar quantidade" disabled={value >= max} onClick={() => onChange(Math.min(max, value + 1))}><Plus size={14} /></button>
   </div>
