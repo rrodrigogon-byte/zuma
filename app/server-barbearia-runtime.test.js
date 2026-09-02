@@ -139,6 +139,12 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     const agenda = await request(base, '/api/admin/barbearia/agenda', { method: 'POST', headers, body: JSON.stringify({ clienteNome: 'Cliente runtime', profissionalId: profissional.body.profissional.id, servicoId: servico.body.servico.id, dataAgenda: '2030-06-10', dataHora: '2030-06-10T13:00:00.000Z' }) });
     assert.equal(agenda.response.status, 201);
     assert.equal(agenda.body.agendamento.lojaId, 'loja-runtime');
+    assert.equal(agenda.body.notificacao.skipped, true);
+    assert.equal(agenda.body.notificacao.reason, 'commerce_scope_unavailable');
+    const remarcado = await request(base, `/api/admin/barbearia/agenda/${agenda.body.agendamento.id}`, { method: 'PATCH', headers, body: JSON.stringify({ dataAgenda: '2030-06-10', dataHora: '2030-06-10T14:30:00.000Z', horaLocal: '10:30' }) });
+    assert.equal(remarcado.response.status, 200);
+    assert.equal(remarcado.body.agendamento.historicoRemarcacoes.length, 1);
+    assert.equal(remarcado.body.notificacao.skipped, true);
 
     const listagem = await request(base, '/api/admin/barbearia/agenda?data=2030-06-10', { headers });
     assert.equal(listagem.response.status, 200);
@@ -207,6 +213,10 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     const comandaPagaRepetida = await request(base, `/api/admin/barbearia/comandas/${comanda.body.comanda.id}/pagamentos`, { method: 'POST', headers, body: JSON.stringify(pagamentoComandaPayload) });
     assert.equal(comandaPagaRepetida.response.status, 200);
     assert.equal(comandaPagaRepetida.body.comanda.pagamentos.length, 1);
+    const fiscal = await request(base, `/api/admin/barbearia/comandas/${comanda.body.comanda.id}/fiscal/rascunho`, { method: 'POST', headers, body: JSON.stringify({ confirmado: true, chaveIdempotencia: `runtime:fiscal:${comanda.body.comanda.id}` }) });
+    assert.equal(fiscal.response.status, 201);
+    assert.equal(fiscal.body.documento.status, 'rascunho_pendente_integracao');
+    assert.equal(fiscal.body.documento.transmitido, false);
 
     const dashboard = await request(base, '/api/admin/barbearia/dashboard?data=2030-06-10', { headers });
     assert.equal(dashboard.response.status, 200);
@@ -228,6 +238,8 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     assert.equal(overview.body.comandas.length, 1);
     assert.equal(overview.body.resumoComandas.pagas, 1);
     assert.equal(overview.body.comissoes.porProfissional.length, 1);
+    assert.deepEqual(overview.body.notificacoesAgenda, { queued: 0, sent: 0, failed: 0, canceled: 0 });
+    assert.equal(overview.body.documentosFiscais.length, 1);
     assert.equal(overview.body.integracoes.whatsapp.envioManualDisponivel, false);
     assert.equal(overview.body.integracoes.commerce.sincronizacaoAutomatica, false);
   } finally {

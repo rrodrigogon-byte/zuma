@@ -3,6 +3,7 @@ import { db } from '../core/database.js';
 import { processWhatsappConversationTask, whatsappAiReady, whatsappMessagingReady } from '../core/whatsapp-ai.js';
 import { processCampaignDeliveryTask } from '../core/commerce-campaigns.js';
 import { enqueueDueCartRecoveries, processCartRecoveryTask } from '../core/commerce-abandoned-carts.js';
+import { enqueueDueAppointmentReminders, processAppointmentNotificationTask } from '../core/barbershop-appointment-notifications.js';
 
 const MAX_ATTEMPTS = Math.max(1, Number.parseInt(process.env.WHATSAPP_AI_MAX_ATTEMPTS || '6', 10));
 const BATCH_SIZE = Math.min(20, Math.max(1, Number.parseInt(process.env.WHATSAPP_AI_WORKER_BATCH || '5', 10)));
@@ -23,7 +24,7 @@ export async function claimWhatsappAiTasks(limit = BATCH_SIZE) {
       `WITH candidates AS (
          SELECT id
            FROM tarefas_integracao_canais
-          WHERE ((tipo = 'processar_conversa' AND $3::boolean) OR (tipo IN ('enviar_campanha','recuperar_carrinho') AND $4::boolean))
+          WHERE ((tipo = 'processar_conversa' AND $3::boolean) OR (tipo IN ('enviar_campanha','recuperar_carrinho','notificar_agendamento') AND $4::boolean))
             AND status IN ('pendente', 'falha')
             AND tentativas < $1
             AND (proxima_tentativa_em IS NULL OR proxima_tentativa_em <= CURRENT_TIMESTAMP)
@@ -55,7 +56,7 @@ async function completeTask(task, response) {
 }
 
 async function failTask(task, error) {
-  const exhausted = ['enviar_campanha','recuperar_carrinho'].includes(task.tipo) || Number(task.tentativas) >= MAX_ATTEMPTS;
+  const exhausted = ['enviar_campanha','recuperar_carrinho','notificar_agendamento'].includes(task.tipo) || Number(task.tentativas) >= MAX_ATTEMPTS;
   const delay = retryDelay(task.tentativas);
   const message = safeError(error);
   await db.query(
@@ -99,15 +100,18 @@ export async function runWhatsappAiBatch({ limit = BATCH_SIZE } = {}) {
   if (!whatsappAiReady() && !whatsappMessagingReady()) return { skipped: true, reason: 'whatsapp_not_ready', claimed: 0, completed: 0, failed: 0 };
   const removed = await cleanupWhatsappAiRetention();
   const recoveriesQueued = whatsappMessagingReady() ? await enqueueDueCartRecoveries() : 0;
+  const appointmentRemindersQueued = whatsappMessagingReady() ? await enqueueDueAppointmentReminders() : 0;
   const tasks = await claimWhatsappAiTasks(limit);
-  const summary = { worker: 'whatsapp-ai', runId: crypto.randomUUID(), retentionRemoved: removed, recoveriesQueued, claimed: tasks.length, completed: 0, failed: 0 };
+  const summary = { worker: 'whatsapp-ai', runId: crypto.randomUUID(), retentionRemoved: removed, recoveriesQueued, appointmentRemindersQueued, claimed: tasks.length, completed: 0, failed: 0 };
   for (const task of tasks) {
     try {
       const response = task.tipo === 'enviar_campanha'
         ? await processCampaignDeliveryTask(task)
         : task.tipo === 'recuperar_carrinho'
           ? await processCartRecoveryTask(task)
-          : await processWhatsappConversationTask(task);
+          : task.tipo === 'notificar_agendamento'
+            ? await processAppointmentNotificationTask(task)
+            : await processWhatsappConversationTask(task);
       await completeTask(task, response);
       summary.completed += 1;
     } catch (error) {
