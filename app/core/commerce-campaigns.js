@@ -276,6 +276,13 @@ function externalMessageId(data = {}) {
   return clean(data?.key?.id || data?.message?.key?.id || data?.id || data?.messageId, 200);
 }
 
+function campaignDeliveryError(message, code, retryable = false) {
+  const error = new Error(message);
+  error.code = code;
+  error.retryable = retryable;
+  return error;
+}
+
 export async function processCampaignDeliveryTask(task) {
   const deliveryId = uuid(task?.payload?.campaignDeliveryId, 'campaignDeliveryId');
   const result = await db.query(
@@ -292,6 +299,11 @@ export async function processCampaignDeliveryTask(task) {
   const delivery = result.rows[0];
   if (!delivery) fail('destinatário de campanha não encontrado', 'NOT_FOUND');
   if (['enviado','entregue','lido','respondido','convertido'].includes(delivery.status)) return { idempotent: true, status: delivery.status };
+  if (delivery.status === 'incerto' || (delivery.status === 'processando' && task.delivery_started_at)) {
+    await db.query(`UPDATE envios_campanha SET status = 'incerto', erro = 'resultado de envio incerto; revisão humana obrigatória', atualizado_em = CURRENT_TIMESTAMP WHERE id = $1`, [delivery.id]);
+    await refreshCampaignMetrics(delivery.campanha_id);
+    throw campaignDeliveryError('resultado anterior de campanha incerto', 'CAMPAIGN_DELIVERY_UNKNOWN', false);
+  }
   if (delivery.campanha_status === 'cancelada') {
     await db.query(`UPDATE envios_campanha SET status = 'cancelado', atualizado_em = CURRENT_TIMESTAMP WHERE id = $1`, [delivery.id]);
     return { cancelled: true };
@@ -306,7 +318,10 @@ export async function processCampaignDeliveryTask(task) {
     await refreshCampaignMetrics(delivery.campanha_id);
     return { blocked: true };
   }
-  await db.query(`UPDATE envios_campanha SET status = 'processando', tentativas = tentativas + 1, erro = NULL, atualizado_em = CURRENT_TIMESTAMP WHERE id = $1`, [delivery.id]);
+  await db.transaction(async trx => {
+    await trx.query(`UPDATE envios_campanha SET status = 'processando', tentativas = tentativas + 1, erro = NULL, atualizado_em = CURRENT_TIMESTAMP WHERE id = $1`, [delivery.id]);
+    await trx.query(`UPDATE tarefas_integracao_canais SET delivery_started_at = CURRENT_TIMESTAMP WHERE id = $1 AND status = 'processando' AND lease_token = $2::uuid`, [task.id, task.lease_token]);
+  });
   let response;
   try {
     response = await enviarMensagem({
@@ -320,16 +335,26 @@ export async function processCampaignDeliveryTask(task) {
     throw new Error('falha ao enviar destinatário da campanha');
   }
   if (!response?.ok) {
-    await db.query(`UPDATE envios_campanha SET status = 'falha', erro = $2, atualizado_em = CURRENT_TIMESTAMP WHERE id = $1`, [delivery.id, clean(response?.error || response?.data?.message || 'falha Evolution', 1000)]);
+    const unknown = response?.uncertain === true;
+    await db.transaction(async trx => {
+      await trx.query(
+        `UPDATE envios_campanha SET status = $2, erro = $3, atualizado_em = CURRENT_TIMESTAMP WHERE id = $1`,
+        [delivery.id, unknown ? 'incerto' : 'falha', unknown ? 'resultado de envio incerto; revisão humana obrigatória' : clean(response?.data?.message || response?.error || 'falha Evolution', 1000)],
+      );
+      if (!unknown) await trx.query(`UPDATE tarefas_integracao_canais SET delivery_started_at = NULL WHERE id = $1`, [task.id]);
+    });
     await refreshCampaignMetrics(delivery.campanha_id);
-    throw new Error('falha ao enviar destinatário da campanha');
+    throw campaignDeliveryError(unknown ? 'resultado de campanha incerto' : 'falha ao enviar destinatário da campanha', unknown ? 'CAMPAIGN_DELIVERY_UNKNOWN' : 'CAMPAIGN_SEND_FAILED', !unknown && response?.retryable === true);
   }
   const providerId = externalMessageId(response.data);
-  await db.query(
-    `UPDATE envios_campanha SET status = 'enviado', evento_externo_id = NULLIF($2, ''), enviado_em = CURRENT_TIMESTAMP,
-            erro = NULL, atualizado_em = CURRENT_TIMESTAMP WHERE id = $1`,
-    [delivery.id, providerId],
-  );
+  await db.transaction(async trx => {
+    await trx.query(
+      `UPDATE envios_campanha SET status = 'enviado', evento_externo_id = NULLIF($2, ''), enviado_em = CURRENT_TIMESTAMP,
+              erro = NULL, atualizado_em = CURRENT_TIMESTAMP WHERE id = $1`,
+      [delivery.id, providerId],
+    );
+    await trx.query(`UPDATE tarefas_integracao_canais SET provider_message_id = $2 WHERE id = $1`, [task.id, providerId || null]);
+  });
   await refreshCampaignMetrics(delivery.campanha_id);
   return { sent: true, providerMessageId: providerId || null };
 }
@@ -339,7 +364,7 @@ export async function refreshCampaignMetrics(campaignId) {
     `WITH metrics AS (
        SELECT campanha_id,
               COUNT(*) FILTER (WHERE status IN ('enviado','entregue','lido','respondido','convertido'))::int AS sent,
-              COUNT(*) FILTER (WHERE status IN ('falha','bloqueado'))::int AS failed,
+              COUNT(*) FILTER (WHERE status IN ('falha','incerto','bloqueado'))::int AS failed,
               COUNT(*) FILTER (WHERE status IN ('entregue','lido','respondido','convertido'))::int AS delivered,
               COUNT(*) FILTER (WHERE status IN ('lido','respondido','convertido'))::int AS read,
               COUNT(*) FILTER (WHERE status IN ('respondido','convertido'))::int AS responses,

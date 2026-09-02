@@ -256,8 +256,16 @@ export async function enqueueDueCartRecoveries(limit = 100) {
   });
 }
 
+function cartDeliveryError(message, code, retryable = false) {
+  const error = new Error(message);
+  error.code = code;
+  error.retryable = retryable;
+  return error;
+}
+
 export async function processCartRecoveryTask(task = {}) {
   const cartId = uuid(task.referencia_externa, 'cartId');
+  if (task.delivery_started_at) throw cartDeliveryError('resultado anterior do lembrete incerto; revisão humana obrigatória', 'CART_RECOVERY_DELIVERY_UNKNOWN', false);
   const snapshot = await db.transaction(async trx => {
     const locked = await trx.query(
       `SELECT * FROM commerce_carts WHERE empresa_id=$1 AND id=$2 FOR UPDATE`,
@@ -293,15 +301,25 @@ export async function processCartRecoveryTask(task = {}) {
   const alias = clean(snapshot.alias || '', 80);
   const resumeUrl = alias ? `${publicOrigin()}/ecommerce/${encodeURIComponent(alias)}` : publicOrigin();
   const message = `Olá, ${clean(snapshot.customer_name, 80)}. Você deixou ${items || 'itens'} no carrinho da ${clean(snapshot.storefront_name, 120)}. Se quiser concluir, retome em ${resumeUrl}. Para não receber lembretes deste carrinho, responda SAIR.`;
+  await db.query(
+    `UPDATE tarefas_integracao_canais SET delivery_started_at = CURRENT_TIMESTAMP
+      WHERE id = $1 AND status = 'processando' AND lease_token = $2::uuid`,
+    [task.id, task.lease_token],
+  );
   const sent = await enviarMensagem({
     whatsapp_api_url: process.env.EVOLUTION_API_URL || snapshot.api_base_url,
     whatsapp_api_key: process.env.EVOLUTION_API_KEY,
     whatsapp_instance: snapshot.configuracao?.instance || process.env.EVOLUTION_INSTANCE,
   }, snapshot.telefone, message);
-  if (!sent?.ok) fail('falha ao enviar lembrete pelo provedor', 'CART_RECOVERY_SEND_FAILED');
+  if (!sent?.ok) {
+    const unknown = sent?.uncertain === true;
+    if (!unknown) await db.query(`UPDATE tarefas_integracao_canais SET delivery_started_at = NULL WHERE id = $1`, [task.id]);
+    throw cartDeliveryError(unknown ? 'resultado do lembrete incerto' : 'falha ao enviar lembrete pelo provedor', unknown ? 'CART_RECOVERY_DELIVERY_UNKNOWN' : 'CART_RECOVERY_SEND_FAILED', !unknown && sent?.retryable === true);
+  }
   const providerId = clean(sent?.data?.key?.id || sent?.data?.id || '', 200) || null;
   await db.transaction(async trx => {
     await trx.query(`UPDATE commerce_carts SET recovery_status='sent',recovery_reminded_at=CURRENT_TIMESTAMP,recovery_provider_id=$3,atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$1 AND id=$2 AND recovery_reminded_at IS NULL`, [snapshot.empresa_id, snapshot.id, providerId]);
+    await trx.query(`UPDATE tarefas_integracao_canais SET provider_message_id=$2 WHERE id=$1`, [task.id, providerId]);
     await event(trx, { empresaId: snapshot.empresa_id, lojaId: snapshot.loja_id, cartId: snapshot.id, customerId: snapshot.customer_id, type: 'sent', metadata: { providerId } });
   });
   return { sent: true, providerMessageId: providerId, cartId: snapshot.id };
