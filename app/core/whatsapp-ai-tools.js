@@ -8,6 +8,16 @@ import {
   listSchedulingServices,
   SchedulingError,
 } from './barbershop-scheduling.js';
+import {
+  ensureWhatsappLead,
+  getWhatsappLeadProfile,
+  updateWhatsappMarketingConsent,
+  listWhatsappCustomerAppointments,
+  listActiveWhatsappPromotions,
+  queueWhatsappPromotion,
+  rescheduleWhatsappAppointment,
+  cancelWhatsappAppointment,
+} from './whatsapp-ai-crm.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -38,7 +48,25 @@ function contextScope(context = {}) {
     phone: cleanText(context.phone, 20).replace(/\D/g, ''),
     customerName: cleanText(context.customerName, 100),
     externalEventId: cleanText(context.externalEventId, 180),
+    capabilities: {
+      humanized: context.capabilities?.humanized !== false,
+      captureLeads: context.capabilities?.captureLeads !== false,
+      operateStore: context.capabilities?.operateStore !== false,
+      manageAppointments: context.capabilities?.manageAppointments !== false,
+      sendPromotions: context.capabilities?.sendPromotions === true,
+      reminders: context.capabilities?.reminders !== false,
+      humanHandoff: context.capabilities?.humanHandoff !== false,
+    },
   };
+}
+
+function capabilityAllows(name, capabilities = {}) {
+  if (name === 'solicitar_humano') return capabilities.humanHandoff !== false;
+  if (name === 'captar_cliente' || name === 'consultar_perfil_cliente') return capabilities.captureLeads !== false;
+  if (name.includes('promoc') || name === 'listar_promocoes_ativas' || name === 'atualizar_consentimento_marketing') return capabilities.sendPromotions === true;
+  if (name.includes('agendamento') || name.includes('remarcacao') || name.includes('cancelamento') || name === 'listar_servicos' || name === 'listar_profissionais' || name === 'consultar_disponibilidade' || name === 'consultar_meus_agendamentos') return capabilities.manageAppointments !== false;
+  if (name.includes('pedido') || name === 'buscar_produtos' || name === 'consultar_status_pedido') return capabilities.operateStore !== false;
+  return true;
 }
 
 async function activeStorefront({ empresaId, lojaId }) {
@@ -262,6 +290,109 @@ async function toolPrepareOrder(context, args = {}) {
   return savePreparedAction(scope, 'pedido', request, summary);
 }
 
+async function toolCaptureLead(context, args = {}) {
+  const scope = contextScope(context);
+  const lead = await ensureWhatsappLead(scope, {
+    phone: scope.phone,
+    name: cleanText(args.name || scope.customerName, 100),
+    text: cleanText(args.notes, 1200),
+  });
+  if (!lead) throw new WhatsappAiToolError('não foi possível identificar o telefone deste contato', 'LEAD_PHONE_REQUIRED');
+  return {
+    ok: true,
+    cliente: {
+      id: lead.id,
+      nome: lead.nome,
+      telefone: lead.telefone,
+      email: lead.email || '',
+      marketingConsent: lead.marketingConsent === true,
+      status: 'captado',
+    },
+  };
+}
+
+async function toolCustomerProfile(context) {
+  const scope = contextScope(context);
+  const profile = await getWhatsappLeadProfile(scope);
+  return { ok: true, encontrado: Boolean(profile), cliente: profile || null };
+}
+
+async function toolCustomerAppointments(context, args = {}) {
+  const scope = contextScope(context);
+  return {
+    ok: true,
+    agendamentos: await listWhatsappCustomerAppointments(scope, {
+      includePast: args.includePast === true,
+      limit: Math.min(10, Math.max(1, Number(args.limit) || 8)),
+    }),
+  };
+}
+
+async function toolMarketingConsent(context, args = {}) {
+  const scope = contextScope(context);
+  const granted = args.granted === true;
+  if (granted && cleanText(args.evidence, 20).length < 5) {
+    throw new WhatsappAiToolError('registre a confirmação expressa do cliente antes de ativar promoções', 'MARKETING_EVIDENCE_REQUIRED');
+  }
+  const result = await updateWhatsappMarketingConsent(scope, { granted, evidence: cleanText(args.evidence, 500) });
+  return { ok: true, consentimento: result };
+}
+
+async function toolPromotions(context, args = {}) {
+  const scope = contextScope(context);
+  const profile = await getWhatsappLeadProfile(scope);
+  const promotions = await listActiveWhatsappPromotions(scope, { limit: Math.min(8, Math.max(1, Number(args.limit) || 6)) });
+  return {
+    ok: true,
+    autorizadoMarketing: profile?.marketingConsent === true,
+    instrucoes: profile?.marketingConsent === true
+      ? 'O cliente tem opt-in de marketing. Só envie uma oferta após preparar e confirmar a ação.'
+      : 'O cliente ainda não autorizou marketing. Apresente as ofertas apenas se ele pedir e solicite opt-in antes de enviar mensagens promocionais.',
+    promocoes: promotions,
+  };
+}
+
+async function toolPreparePromotion(context, args = {}) {
+  const scope = contextScope(context);
+  const profile = await getWhatsappLeadProfile(scope);
+  if (!profile?.marketingConsent) throw new WhatsappAiToolError('o cliente precisa autorizar o recebimento de promoções antes do envio', 'MARKETING_CONSENT_REQUIRED');
+  const promotions = await listActiveWhatsappPromotions(scope, { limit: 20 });
+  const promotion = promotions.find(item => item.id === String(args.promotionId || '') || item.codigos.some(code => code.codigo === String(args.code || '').toUpperCase()));
+  if (!promotion) throw new WhatsappAiToolError('promoção ativa não encontrada para esta loja', 'PROMOTION_NOT_FOUND');
+  const message = cleanText(args.message, 1500);
+  if (message.length < 10) throw new WhatsappAiToolError('mensagem da promoção é obrigatória', 'PROMOTION_MESSAGE_REQUIRED');
+  const code = promotion.codigos.find(item => item.codigo === String(args.code || '').toUpperCase())?.codigo || promotion.codigos[0]?.codigo || '';
+  const value = promotion.tipo === 'percentage' ? `${promotion.valor}% de desconto` : `R$ ${Number(promotion.valor).toFixed(2).replace('.', ',')} de desconto`;
+  return savePreparedAction(scope, 'promocao_cliente', {
+    promotionId: promotion.id,
+    promotionName: promotion.nome,
+    code,
+    message: `Olá, ${scope.customerName || 'tudo bem'}! ${message}`,
+  }, `${promotion.nome}: ${value}${code ? ` · cupom ${code}` : ''}. Envio pelo WhatsApp após confirmação.`);
+}
+
+async function toolPrepareReschedule(context, args = {}) {
+  const scope = contextScope(context);
+  const appointmentId = cleanText(args.appointmentId, 80);
+  const date = cleanText(args.date, 10);
+  const time = cleanText(args.time, 5);
+  const appointments = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 20 });
+  const appointment = appointments.find(item => item.id === appointmentId);
+  if (!appointment) throw new WhatsappAiToolError('agendamento não encontrado para este contato', 'APPOINTMENT_NOT_FOUND');
+  const availability = await listSchedulingAvailability(scope, { serviceId: appointment.servico.id, professionalId: appointment.profissional.id, date });
+  if (!availability.slots.includes(time)) throw new SchedulingError('horário indisponível', 'SLOT_UNAVAILABLE');
+  return savePreparedAction(scope, 'remarcacao', { appointmentId, date, time }, `${appointment.servico.nome} com ${appointment.profissional.nome} será remarcado para ${date} às ${time}.`);
+}
+
+async function toolPrepareCancellation(context, args = {}) {
+  const scope = contextScope(context);
+  const appointmentId = cleanText(args.appointmentId, 80);
+  const appointments = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 20 });
+  const appointment = appointments.find(item => item.id === appointmentId);
+  if (!appointment) throw new WhatsappAiToolError('agendamento não encontrado para este contato', 'APPOINTMENT_NOT_FOUND');
+  return savePreparedAction(scope, 'cancelamento', { appointmentId }, `Cancelamento de ${appointment.servico.nome} com ${appointment.profissional.nome} em ${new Date(appointment.dataHora).toLocaleString('pt-BR')}.`);
+}
+
 async function toolHuman(context, args = {}) {
   const scope = contextScope(context);
   const reason = cleanText(args.reason, 500) || 'Solicitação do cliente';
@@ -282,7 +413,15 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'listar_profissionais', description: 'Lista profissionais ativos da unidade.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'consultar_disponibilidade', description: 'Consulta horários disponíveis para serviço, profissional e data.', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, professionalId: { type: 'STRING' }, date: { type: 'STRING', description: 'Data ISO AAAA-MM-DD' } }, required: ['serviceId', 'professionalId', 'date'] } },
   { name: 'consultar_status_pedido', description: 'Consulta um pedido somente quando pertence ao telefone desta conversa.', parameters: { type: 'OBJECT', properties: { orderCode: { type: 'STRING' } }, required: ['orderCode'] } },
+  { name: 'captar_cliente', description: 'Registra ou atualiza o lead que iniciou a conversa e anota a interação no CRM da empresa.', parameters: { type: 'OBJECT', properties: { name: { type: 'STRING' }, notes: { type: 'STRING' } } } },
+  { name: 'consultar_perfil_cliente', description: 'Consulta o perfil, consentimento de marketing, interações e quantidade de agendamentos do contato atual.', parameters: { type: 'OBJECT', properties: {} } },
+  { name: 'consultar_meus_agendamentos', description: 'Lista os agendamentos do contato atual para confirmação, remarcação ou cancelamento.', parameters: { type: 'OBJECT', properties: { includePast: { type: 'BOOLEAN' }, limit: { type: 'INTEGER' } } } },
+  { name: 'atualizar_consentimento_marketing', description: 'Registra ou revoga a autorização do cliente para receber promoções no WhatsApp. Para conceder, exige evidência da solicitação expressa.', parameters: { type: 'OBJECT', properties: { granted: { type: 'BOOLEAN' }, evidence: { type: 'STRING' } }, required: ['granted'] } },
+  { name: 'listar_promocoes_ativas', description: 'Lista somente promoções ativas e vigentes da unidade. Nunca invente ofertas, valores ou cupons.', parameters: { type: 'OBJECT', properties: { limit: { type: 'INTEGER' } } } },
+  { name: 'preparar_promocao_cliente', description: 'Prepara o envio de uma promoção ao cliente com opt-in. O envio só ocorre após CONFIRMAR.', parameters: { type: 'OBJECT', properties: { promotionId: { type: 'STRING' }, code: { type: 'STRING' }, message: { type: 'STRING' } }, required: ['promotionId', 'message'] } },
   { name: 'preparar_agendamento', description: 'Prepara um agendamento para confirmação. Não grava o agendamento.', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, professionalId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' }, customerName: { type: 'STRING' }, notes: { type: 'STRING' } }, required: ['serviceId', 'professionalId', 'date', 'time', 'customerName'] } },
+  { name: 'preparar_remarcacao', description: 'Prepara a remarcação de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' } }, required: ['appointmentId', 'date', 'time'] } },
+  { name: 'preparar_cancelamento', description: 'Prepara o cancelamento de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' } }, required: ['appointmentId'] } },
   { name: 'preparar_pedido', description: 'Prepara um pedido de retirada para confirmação. Não cria o pedido.', parameters: { type: 'OBJECT', properties: { customerName: { type: 'STRING' }, items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { variantId: { type: 'STRING' }, quantity: { type: 'INTEGER' } }, required: ['variantId', 'quantity'] } } }, required: ['customerName', 'items'] } },
   { name: 'solicitar_humano', description: 'Encaminha a conversa para atendimento humano em dúvidas sensíveis, exceções, reclamações ou pedido explícito.', parameters: { type: 'OBJECT', properties: { reason: { type: 'STRING' } }, required: ['reason'] } },
 ];
@@ -294,7 +433,15 @@ const TOOL_MAP = {
   listar_profissionais: toolProfessionals,
   consultar_disponibilidade: toolAvailability,
   consultar_status_pedido: toolOrderStatus,
+  captar_cliente: toolCaptureLead,
+  consultar_perfil_cliente: toolCustomerProfile,
+  consultar_meus_agendamentos: toolCustomerAppointments,
+  atualizar_consentimento_marketing: toolMarketingConsent,
+  listar_promocoes_ativas: toolPromotions,
+  preparar_promocao_cliente: toolPreparePromotion,
   preparar_agendamento: toolPrepareAppointment,
+  preparar_remarcacao: toolPrepareReschedule,
+  preparar_cancelamento: toolPrepareCancellation,
   preparar_pedido: toolPrepareOrder,
   solicitar_humano: toolHuman,
 };
@@ -304,6 +451,8 @@ export function createWhatsappAiToolExecutor(context) {
   return async (name, args) => {
     const tool = TOOL_MAP[name];
     if (!tool) throw new WhatsappAiToolError('ferramenta não permitida', 'TOOL_NOT_ALLOWED');
+    const scoped = contextScope(context);
+    if (!capabilityAllows(name, scoped.capabilities)) throw new WhatsappAiToolError('esta capacidade está desativada para a unidade', 'CAPABILITY_DISABLED');
     if (name.startsWith('preparar_')) {
       if (preparedAction) throw new WhatsappAiToolError('apenas uma ação pode ser preparada por mensagem', 'MULTIPLE_ACTIONS_NOT_ALLOWED');
       preparedAction = true;
@@ -372,6 +521,12 @@ export async function confirmPendingAction(context) {
         idempotencyKey: action.chave_idempotencia,
         correlationId: `whatsapp:${action.id}`,
       });
+    } else if (action.tipo === 'remarcacao') {
+      response = await rescheduleWhatsappAppointment(trx, scope, action.solicitacao);
+    } else if (action.tipo === 'cancelamento') {
+      response = await cancelWhatsappAppointment(trx, scope, action.solicitacao.appointmentId);
+    } else if (action.tipo === 'promocao_cliente') {
+      response = await queueWhatsappPromotion(trx, scope, action.solicitacao);
     } else {
       throw new WhatsappAiToolError('tipo de ação não permitido', 'ACTION_TYPE_NOT_ALLOWED');
     }

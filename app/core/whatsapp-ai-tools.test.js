@@ -38,3 +38,10 @@ test('confirmPendingAction devolve ação concluída sem executar nova mutação
     assert.deepEqual(calls[1].params.slice(1), [CONTEXT.empresaId, CONTEXT.lojaId]);
   } finally { db.transaction = original; }
 });
+
+test('executor bloqueia promoções quando a capacidade não está habilitada no canal', async () => {
+  await assert.rejects(
+    () => createWhatsappAiToolExecutor({ ...CONTEXT, capabilities: { sendPromotions: false } })('listar_promocoes_ativas', {}),
+    error => error instanceof WhatsappAiToolError && error.code === 'CAPABILITY_DISABLED',
+  );
+});
