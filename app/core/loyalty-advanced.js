@@ -450,7 +450,7 @@ export async function listRewardRedemptions(db, { empresaId, lojaId, limit = 50 
     `SELECT rr.id, rr.cliente_id, c.nome AS cliente_nome, rr.recompensa_id,
             r.nome AS recompensa_nome, rr.pontos_resgatados, rr.quantidade,
             rr.status, rr.observacao, rr.criado_em, rr.entregue_em, rr.cancelado_em
-       FROM fidelidade_resgates_recompensa rr
+       FROM commerce_loyalty_reward_redemptions rr
        JOIN commerce_customers c ON c.id = rr.cliente_id AND c.empresa_id = rr.empresa_id
        JOIN fidelidade_recompensas r ON r.id = rr.recompensa_id AND r.empresa_id = rr.empresa_id
       WHERE rr.empresa_id = $1 AND rr.loja_id = $2
@@ -539,7 +539,7 @@ export async function redeemReward(db, {
     const replay = await db.queryInTransaction(
       client,
       `SELECT rr.*, r.nome AS recompensa_nome, c.nome AS cliente_nome
-         FROM fidelidade_resgates_recompensa rr
+         FROM commerce_loyalty_reward_redemptions rr
          JOIN fidelidade_recompensas r ON r.id = rr.recompensa_id
          JOIN commerce_customers c ON c.id = rr.cliente_id AND c.empresa_id = rr.empresa_id
         WHERE rr.empresa_id = $1 AND rr.idempotency_key = $2
@@ -582,7 +582,7 @@ export async function redeemReward(db, {
       const used = await db.queryInTransaction(
         client,
         `SELECT COALESCE(SUM(quantidade), 0)::int AS total
-           FROM fidelidade_resgates_recompensa
+           FROM commerce_loyalty_reward_redemptions
           WHERE empresa_id = $1 AND loja_id = $2 AND cliente_id = $3 AND recompensa_id = $4
             AND status IN ('confirmado', 'entregue')`,
         [empresaId, lojaId, clienteId, recompensaId],
@@ -626,7 +626,7 @@ export async function redeemReward(db, {
     await db.queryInTransaction(client, 'UPDATE fidelidade_recompensas SET quantidade_resgatada = quantidade_resgatada + $1 WHERE id = $2 AND empresa_id = $3 AND loja_id = $4', [quantity, recompensaId, empresaId, lojaId]);
     const inserted = await db.queryInTransaction(
       client,
-      `INSERT INTO fidelidade_resgates_recompensa
+      `INSERT INTO commerce_loyalty_reward_redemptions
        (id, empresa_id, loja_id, cliente_id, recompensa_id, ledger_debito_id,
         pontos_resgatados, quantidade, idempotency_key, observacao, criado_por)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -650,7 +650,7 @@ export async function markRewardDelivered(db, { empresaId, lojaId, redemptionId,
   try {
     const current = await db.queryInTransaction(
       client,
-      `SELECT * FROM fidelidade_resgates_recompensa
+      `SELECT * FROM commerce_loyalty_reward_redemptions
         WHERE id = $1 AND empresa_id = $2 AND loja_id = $3
         FOR UPDATE`,
       [redemptionId, empresaId, lojaId],
@@ -664,7 +664,7 @@ export async function markRewardDelivered(db, { empresaId, lojaId, redemptionId,
     if (redemption.status === 'cancelado') throw new LoyaltyAdvancedError('Resgate cancelado não pode ser entregue.', 409, 'REDEMPTION_CANCELLED');
     const result = await db.queryInTransaction(
       client,
-      `UPDATE fidelidade_resgates_recompensa
+      `UPDATE commerce_loyalty_reward_redemptions
           SET status = 'entregue', entregue_em = CURRENT_TIMESTAMP
         WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'confirmado'
         RETURNING *`,
@@ -689,7 +689,7 @@ export async function cancelRewardRedemption(db, { empresaId, lojaId, redemption
     const result = await db.queryInTransaction(
       client,
       `SELECT rr.*, r.nome AS recompensa_nome
-         FROM fidelidade_resgates_recompensa rr
+         FROM commerce_loyalty_reward_redemptions rr
          JOIN fidelidade_recompensas r ON r.id = rr.recompensa_id
         WHERE rr.id = $1 AND rr.empresa_id = $2 AND rr.loja_id = $3
         FOR UPDATE OF rr, r`,
@@ -733,7 +733,7 @@ export async function cancelRewardRedemption(db, { empresaId, lojaId, redemption
     await db.queryInTransaction(client, 'UPDATE fidelidade_recompensas SET quantidade_resgatada = GREATEST(0, quantidade_resgatada - $1) WHERE id = $2 AND empresa_id = $3 AND loja_id = $4', [redemption.quantidade, redemption.recompensa_id, empresaId, lojaId]);
     const updated = await db.queryInTransaction(
       client,
-      `UPDATE fidelidade_resgates_recompensa
+      `UPDATE commerce_loyalty_reward_redemptions
           SET status = 'cancelado', cancelado_em = CURRENT_TIMESTAMP,
               observacao = LEFT(CONCAT_WS(' | ', observacao, $1::text, $2::text), 500)
         WHERE id = $3 AND empresa_id = $4 AND loja_id = $5

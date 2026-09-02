@@ -191,7 +191,7 @@ test('resgate confirmado debita saldo e estoque uma única vez em transação te
     if (sql.includes('INSERT INTO commerce_loyalty_ledger')) return { rows: [{ id: LEDGER }] };
     if (sql.includes('UPDATE commerce_loyalty_accounts')) return { rows: [] };
     if (sql.includes('UPDATE fidelidade_recompensas')) return { rows: [] };
-    if (sql.includes('INSERT INTO fidelidade_resgates_recompensa')) return { rows: [{
+    if (sql.includes('INSERT INTO commerce_loyalty_reward_redemptions')) return { rows: [{
       id: REDEMPTION, empresa_id: SCOPE.empresaId, loja_id: SCOPE.lojaId,
       cliente_id: CUSTOMER, recompensa_id: REWARD, pontos_resgatados: 500, quantidade: 1,
     }] };
@@ -253,7 +253,7 @@ test('reutilização da chave idempotente com outra quantidade é rejeitada sem 
 
 test('confirmação de entrega é idempotente e não executa segundo UPDATE', async () => {
   const db = mockDb(sql => {
-    if (sql.includes('SELECT * FROM fidelidade_resgates_recompensa')) return { rows: [{
+    if (sql.includes('SELECT * FROM commerce_loyalty_reward_redemptions')) return { rows: [{
       id: REDEMPTION, empresa_id: SCOPE.empresaId, loja_id: SCOPE.lojaId, status: 'entregue',
     }] };
     throw new Error(`SQL inesperado: ${sql}`);
@@ -262,13 +262,13 @@ test('confirmação de entrega é idempotente e não executa segundo UPDATE', as
     ...SCOPE, redemptionId: REDEMPTION, confirmar: true,
   });
   assert.equal(result.replay, true);
-  assert.equal(db.state.calls.some(call => call.sql.includes('UPDATE fidelidade_resgates_recompensa')), false);
+  assert.equal(db.state.calls.some(call => call.sql.includes('UPDATE commerce_loyalty_reward_redemptions')), false);
   assert.equal(db.state.commits, 1);
 });
 
 test('cancelamento de recompensa entregue é bloqueado sem estorno', async () => {
   const db = mockDb(sql => {
-    if (sql.includes('FROM fidelidade_resgates_recompensa rr')) return { rows: [{
+    if (sql.includes('FROM commerce_loyalty_reward_redemptions rr')) return { rows: [{
       id: REDEMPTION, status: 'entregue', recompensa_nome: 'Corte',
     }] };
     throw new Error(`SQL inesperado: ${sql}`);

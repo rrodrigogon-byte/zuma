@@ -36,6 +36,7 @@ const migrationFiles = [
   '044_commerce_loyalty_legacy_compat.sql',
   '044_commerce_loyalty_trigger_compat.sql',
   '044_loyalty_levels_rewards.sql',
+  '045_commerce_loyalty_ledger.sql',
 ];
 const advisoryLockKey = 825410732;
 
