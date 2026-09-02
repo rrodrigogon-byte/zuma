@@ -293,3 +293,67 @@ html[data-brand='dino'] .commerce-dino-logo-frame img {
     padding: 9px 14px;
   }
 }
+
+
+/* Dino contrast pass: blue accents must remain readable on the navy hero. */
+html[data-brand='dino'] .commerce-shell {
+  --commerce-lime: #BFC9FF;
+  --commerce-orange: #8F9DFF;
+}
+html[data-brand='dino'] .commerce-hero {
+  background: linear-gradient(135deg, #0B1222 0%, #111B31 55%, #172542 100%);
+  color: #F7F8FF;
+}
+html[data-brand='dino'] .commerce-hero .commerce-eyebrow {
+  color: #D4DBFF;
+}
+html[data-brand='dino'] .commerce-hero h1 {
+  color: #FFFFFF;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, .16);
+}
+html[data-brand='dino'] .commerce-hero h1 em {
+  color: #C4CEFF;
+  text-shadow: 0 1px 14px rgba(133, 151, 255, .18);
+}
+html[data-brand='dino'] .commerce-hero p {
+  color: #D7DDF0;
+}
+html[data-brand='dino'] .commerce-hero-orbit::before {
+  border-color: rgba(194, 205, 255, .62);
+}
+html[data-brand='dino'] .commerce-hero-orbit::after {
+  border-color: rgba(194, 205, 255, .38);
+}
+html[data-brand='dino'] .commerce-hero-orbit span {
+  color: #E5E9FF;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, .45);
+}
+html[data-brand='dino'] .commerce-hero-orbit strong {
+  color: #C4CEFF;
+  text-shadow: 0 0 24px rgba(143, 157, 255, .28);
+}
+html[data-brand='dino'] .commerce-dino-brand-copy span {
+  color: #C4CEFF;
+}
+html[data-brand='dino'] .commerce-dino-brand-copy strong {
+  color: #FFFFFF;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, .22);
+}
+html[data-brand='dino'] .commerce-dino-brand-copy small {
+  color: #D7DDF0;
+}
+html[data-brand='dino'] .commerce-dino-theme button {
+  color: #5A6480;
+}
+html[data-brand='dino'] .commerce-dino-theme button.active {
+  background: #5868CF;
+  color: #FFFFFF;
+}
+@media(max-width:700px){
+  html[data-brand='dino'] .commerce-hero h1 em {
+    display: inline;
+  }
+  html[data-brand='dino'] .commerce-hero-orbit span {
+    text-shadow: none;
+  }
+}
