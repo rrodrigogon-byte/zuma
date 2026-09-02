@@ -3,7 +3,7 @@ import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
 import { useAuth } from './lib/auth'
-import { applyBrand, applyThemeMode, resolveBrand, storedThemeMode } from './lib/brand'
+import { applyBrand, applyThemeMode, isDinoBrandContext, resolveBrand, storedThemeMode } from './lib/brand'
 
 // Redireciona atletas logados para o portal e não-atletas para a página pública de perfil
 function PerfilRoute() {
@@ -152,7 +152,7 @@ const Ecommerce          = lazy(() => import('./pages/public/Ecommerce'))
 function RouteBrandSync() {
   const location = useLocation()
   const { empresaAtiva } = useAuth()
-  const tenantBrand = [empresaAtiva?.slug, empresaAtiva?.codigo, empresaAtiva?.nome].some((value) => String(value || '').toLowerCase().includes('dino')) ? 'dino' : 'kytto'
+  const tenantBrand = isDinoBrandContext(empresaAtiva) ? 'dino' : 'kytto'
 
   useEffect(() => {
     const brand = resolveBrand(location.pathname, location.search, tenantBrand)
