@@ -8,6 +8,8 @@ const EMPTY_REWARD = {
   limite_por_cliente: '', inicio_em: '', fim_em: '', status: 'rascunho',
 }
 
+const EMPTY_SETTINGS = { ativo: false, pontos_por_real: 1, valor_minimo_compra: 0, validade_dias: '' }
+
 function numberOrNull(value) {
   if (value === '' || value === null || value === undefined) return null
   const parsed = Number(value)
@@ -74,12 +76,22 @@ function RewardStatusEditor({ reward, busy, onSaved, notify }) {
 
 export default function LoyaltyAdvancedPanel({ data, customer, customerDetail, busy, setBusy, notify, onRefresh, onCustomerRefresh }) {
   const [levels, setLevels] = useState([])
+  const [settings, setSettings] = useState(EMPTY_SETTINGS)
   const [reward, setReward] = useState(EMPTY_REWARD)
   const [redemption, setRedemption] = useState({ rewardId: '', quantity: 1, confirmed: false, note: '', idempotencyKey: idempotencyKey() })
 
   useEffect(() => {
     setLevels((data?.levels || []).map(item => ({ ...item, beneficios_texto: benefitsText(item.beneficios) })))
   }, [data?.levels])
+
+  useEffect(() => {
+    setSettings({
+      ativo: data?.settings?.ativo === true,
+      pontos_por_real: data?.settings?.pontos_por_real ?? 1,
+      valor_minimo_compra: data?.settings?.valor_minimo_compra ?? 0,
+      validade_dias: data?.settings?.validade_dias ?? '',
+    })
+  }, [data?.settings])
 
   const activeRewards = useMemo(
     () => (data?.rewards || []).filter(item => item.status === 'ativa' && (item.estoque_disponivel === null || Number(item.estoque_disponivel) > 0)),
@@ -91,6 +103,25 @@ export default function LoyaltyAdvancedPanel({ data, customer, customerDetail, b
       setRedemption(current => ({ ...current, rewardId: '', confirmed: false }))
     }
   }, [activeRewards, redemption.rewardId])
+
+  const saveSettings = async (event) => {
+    event.preventDefault()
+    setBusy(true)
+    try {
+      await api.put(`${LOYALTY_API}/configuracao`, {
+        ativo: settings.ativo,
+        pontos_por_real: Number(settings.pontos_por_real),
+        valor_minimo_compra: Number(settings.valor_minimo_compra),
+        validade_dias: numberOrNull(settings.validade_dias),
+      })
+      notify('sucesso', settings.ativo ? 'Programa de fidelidade ativado para a loja.' : 'Programa de fidelidade mantido inativo.')
+      await onRefresh()
+    } catch (error) {
+      notify('erro', error.message || 'Não foi possível salvar a configuração de fidelidade.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const saveLevels = async (event) => {
     event.preventDefault()
@@ -222,6 +253,19 @@ export default function LoyaltyAdvancedPanel({ data, customer, customerDetail, b
         </div>
       </header>
 
+      <article className="omni-panel omni-loyalty-settings">
+        <div className="omni-panel-heading"><div><h3>Acúmulo de pontos</h3><p>O crédito ocorre uma única vez quando o pedido Commerce é confirmado como pago.</p></div><span className={`omni-status omni-status--${settings.ativo ? 'ativa' : 'pausada'}`}>{settings.ativo ? 'Ativo' : 'Inativo'}</span></div>
+        <form className="omni-form" onSubmit={saveSettings}>
+          <div className="omni-form-grid">
+            <label>Pontos por R$ 1,00<input required type="number" min="0" max="1000" step="0.0001" value={settings.pontos_por_real} onChange={event => setSettings(current => ({ ...current, pontos_por_real: event.target.value }))} /></label>
+            <label>Compra mínima (R$)<input required type="number" min="0" step="0.01" value={settings.valor_minimo_compra} onChange={event => setSettings(current => ({ ...current, valor_minimo_compra: event.target.value }))} /></label>
+            <label>Validade em dias<input type="number" min="1" max="3650" step="1" value={settings.validade_dias} placeholder="Sem expiração" onChange={event => setSettings(current => ({ ...current, validade_dias: event.target.value }))} /></label>
+          </div>
+          <label className="omni-switch"><input type="checkbox" checked={settings.ativo} onChange={event => setSettings(current => ({ ...current, ativo: event.target.checked }))} /><span>Ativar o crédito automático de pontos para pedidos pagos desta loja.</span></label>
+          <button className="omni-button" type="submit" disabled={busy}>{busy ? 'Salvando…' : 'Salvar regra de acúmulo'}</button>
+        </form>
+      </article>
+
       <div className="omni-loyalty-advanced-grid">
         <article className="omni-panel">
           <div className="omni-panel-heading"><div><h3>Níveis da loja</h3><p>{data?.levelsPersisted ? 'Configuração persistida.' : 'Sugestão padrão ainda não salva.'}</p></div><button type="button" className="omni-link-button" onClick={addLevel}>Adicionar nível</button></div>
@@ -261,7 +305,7 @@ export default function LoyaltyAdvancedPanel({ data, customer, customerDetail, b
           <div className="omni-panel-heading"><div><h3>Resgatar recompensa</h3><p>Requer cliente selecionado, confirmação humana e chave idempotente.</p></div></div>
           {!customer ? <p className="omni-empty omni-empty--card">Selecione um cliente na consulta acima para iniciar um resgate.</p> : (
             <form className="omni-form" onSubmit={redeem}>
-              <p><strong>{customer.nome}</strong> · {fmtNum(customerDetail?.programa?.pontos || customer.pontos || 0)} pontos disponíveis</p>
+              <p><strong>{customer.nome}</strong> · {fmtNum(customerDetail?.saldo_pontos ?? customer.pontos ?? 0)} pontos disponíveis</p>
               <label>Recompensa<select required value={redemption.rewardId} onChange={event => setRedemption(current => ({ ...current, rewardId: event.target.value, confirmed: false, idempotencyKey: idempotencyKey() }))}><option value="">Selecione</option>{activeRewards.map(item => <option key={item.id} value={item.id}>{item.nome} — {fmtNum(item.custo_pontos)} pts</option>)}</select></label>
               <label>Quantidade<input required type="number" min="1" max="20" step="1" value={redemption.quantity} onChange={event => setRedemption(current => ({ ...current, quantity: event.target.value, confirmed: false, idempotencyKey: idempotencyKey() }))} /></label>
               <label>Observação opcional<textarea rows="2" maxLength="500" value={redemption.note} onChange={event => setRedemption(current => ({ ...current, note: event.target.value }))} /></label>

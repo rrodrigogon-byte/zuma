@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   cancelRewardRedemption,
+  creditPaidOrderLoyaltyPoints,
   defaultLoyaltyLevels,
   getLoyaltyRanking,
   markRewardDelivered,
   normalizeLoyaltyLevels,
+  normalizeLoyaltySettings,
   normalizeRewardInput,
   redeemReward,
   updateReward,
@@ -19,7 +21,9 @@ const SCOPE = {
 const CUSTOMER = '44444444-4444-4444-8444-444444444444';
 const REWARD = '55555555-5555-4555-8555-555555555555';
 const REDEMPTION = '66666666-6666-4666-8666-666666666666';
-const EXTRACT = '77777777-7777-4777-8777-777777777777';
+const LEDGER = '77777777-7777-4777-8777-777777777777';
+const ACCOUNT = '88888888-8888-4888-8888-888888888888';
+const ORDER = '99999999-9999-4999-8999-999999999999';
 
 function mockDb(handler) {
   const state = { calls: [], commits: 0, rollbacks: 0 };
@@ -78,7 +82,48 @@ test('ranking aplica nível virtual quando a loja ainda não persistiu níveis',
   }] }));
   const ranking = await getLoyaltyRanking(db, { ...SCOPE, limit: 10 });
   assert.equal(ranking[0].nivel_nome, 'Prata');
-  assert.match(db.state.calls[0].sql, /ep\.empresa_id = \$1 AND ep\.loja_id = \$2/);
+  assert.match(db.state.calls[0].sql, /a\.empresa_id = \$1 AND a\.loja_id = \$2/);
+});
+
+test('configuração de acúmulo é inerte por padrão e valida limites', () => {
+  assert.deepEqual(normalizeLoyaltySettings({}), {
+    ativo: false, pontos_por_real: 1, valor_minimo_compra: 0, validade_dias: null,
+  });
+  assert.throws(() => normalizeLoyaltySettings({ pontos_por_real: -1 }), /intervalo permitido/);
+  assert.throws(() => normalizeLoyaltySettings({ validade_dias: 0 }), /inteiro fora/);
+});
+
+test('crédito de pedido pago usa a regra ativa e atualiza o ledger uma única vez', async () => {
+  const calls = [];
+  const trx = { async query(sql) {
+    calls.push(sql);
+    if (sql.includes('FROM commerce_orders o')) return { rows: [{ id: ORDER, customer_id: CUSTOMER, total: '259.00', public_code: 'DINO-1', loja_id: SCOPE.lojaId }] };
+    if (sql.includes('FROM commerce_loyalty_settings')) return { rows: [{ pontos_por_real: '1.0000', valor_minimo_compra: '10.00', validade_dias: 365 }] };
+    if (sql.includes('FROM commerce_loyalty_ledger')) return { rows: [] };
+    if (sql.includes('INSERT INTO commerce_loyalty_accounts')) return { rows: [] };
+    if (sql.includes('FROM commerce_loyalty_accounts')) return { rows: [{ id: ACCOUNT, saldo_pontos: 10, pontos_acumulados: 10 }] };
+    if (sql.includes('INSERT INTO commerce_loyalty_ledger')) return { rows: [{ id: LEDGER }] };
+    if (sql.includes('UPDATE commerce_loyalty_accounts')) return { rows: [] };
+    throw new Error(`SQL inesperado: ${sql}`);
+  } };
+  const result = await creditPaidOrderLoyaltyPoints(trx, { ...SCOPE, orderId: ORDER });
+  assert.deepEqual(result, { credited: true, points: 259, customerId: CUSTOMER, lojaId: SCOPE.lojaId });
+  assert.equal(calls.filter(sql => sql.includes('INSERT INTO commerce_loyalty_ledger')).length, 1);
+  assert.equal(calls.filter(sql => sql.includes('UPDATE commerce_loyalty_accounts')).length, 1);
+});
+
+test('crédito de pedido pago retorna replay sem alterar a conta', async () => {
+  const calls = [];
+  const trx = { async query(sql) {
+    calls.push(sql);
+    if (sql.includes('FROM commerce_orders o')) return { rows: [{ id: ORDER, customer_id: CUSTOMER, total: '259.00', public_code: 'DINO-1', loja_id: SCOPE.lojaId }] };
+    if (sql.includes('FROM commerce_loyalty_settings')) return { rows: [{ pontos_por_real: '1.0000', valor_minimo_compra: '0.00', validade_dias: null }] };
+    if (sql.includes('FROM commerce_loyalty_ledger')) return { rows: [{ id: LEDGER, pontos: 259 }] };
+    throw new Error(`SQL inesperado: ${sql}`);
+  } };
+  const result = await creditPaidOrderLoyaltyPoints(trx, { ...SCOPE, orderId: ORDER });
+  assert.equal(result.replay, true);
+  assert.equal(calls.some(sql => sql.includes('UPDATE commerce_loyalty_accounts')), false);
 });
 
 test('edição rejeita recompensa de outra loja sem executar UPDATE', async () => {
@@ -134,17 +179,17 @@ test('resgate confirmado debita saldo e estoque uma única vez em transação te
     if (sql.includes('pg_advisory_xact_lock')) return { rows: [] };
     if (sql.includes('WHERE rr.empresa_id = $1 AND rr.idempotency_key')) return { rows: [] };
     if (sql.includes('SELECT id FROM lojas')) return { rows: [{ id: SCOPE.lojaId }] };
-    if (sql.includes('SELECT id, nome FROM clientes')) return { rows: [{ id: CUSTOMER, nome: 'Cliente A' }] };
-    if (sql.includes('SELECT id FROM configuracoes_fidelidade_loja')) return { rows: [{ id: 'config' }] };
+    if (sql.includes('SELECT id, nome FROM commerce_customers')) return { rows: [{ id: CUSTOMER, nome: 'Cliente A' }] };
+    if (sql.includes('SELECT id FROM commerce_loyalty_settings')) return { rows: [{ id: 'config' }] };
     if (sql.includes('SELECT * FROM fidelidade_recompensas')) return { rows: [{
       id: REWARD, empresa_id: SCOPE.empresaId, loja_id: SCOPE.lojaId, nome: 'Corte', status: 'ativa',
       custo_pontos: 500, estoque_total: 10, quantidade_resgatada: 1, limite_por_cliente: 2,
       inicio_em: null, fim_em: null,
     }] };
     if (sql.includes('COALESCE(SUM(quantidade)')) return { rows: [{ total: 0 }] };
-    if (sql.includes('SELECT * FROM programa_fidelidade')) return { rows: [{ pontos: 900 }] };
-    if (sql.includes('INSERT INTO extrato_pontos')) return { rows: [{ id: EXTRACT }] };
-    if (sql.includes('UPDATE programa_fidelidade')) return { rows: [] };
+    if (sql.includes('SELECT id, saldo_pontos, pontos_acumulados')) return { rows: [{ id: ACCOUNT, saldo_pontos: 900, pontos_acumulados: 1200 }] };
+    if (sql.includes('INSERT INTO commerce_loyalty_ledger')) return { rows: [{ id: LEDGER }] };
+    if (sql.includes('UPDATE commerce_loyalty_accounts')) return { rows: [] };
     if (sql.includes('UPDATE fidelidade_recompensas')) return { rows: [] };
     if (sql.includes('INSERT INTO fidelidade_resgates_recompensa')) return { rows: [{
       id: REDEMPTION, empresa_id: SCOPE.empresaId, loja_id: SCOPE.lojaId,
@@ -160,8 +205,8 @@ test('resgate confirmado debita saldo e estoque uma única vez em transação te
   assert.equal(result.redemption.pontos_resgatados, 500);
   assert.equal(db.state.commits, 1);
   assert.equal(db.state.rollbacks, 0);
-  assert.equal(db.state.calls.filter(call => call.sql.includes('INSERT INTO extrato_pontos')).length, 1);
-  assert.equal(db.state.calls.filter(call => call.sql.includes('UPDATE programa_fidelidade')).length, 1);
+  assert.equal(db.state.calls.filter(call => call.sql.includes('INSERT INTO commerce_loyalty_ledger')).length, 1);
+  assert.equal(db.state.calls.filter(call => call.sql.includes('UPDATE commerce_loyalty_accounts')).length, 1);
   assert.equal(db.state.calls.filter(call => call.sql.includes('UPDATE fidelidade_recompensas')).length, 1);
 });
 
@@ -181,7 +226,7 @@ test('replay idempotente retorna o resgate existente sem novo débito', async ()
     idempotencyKey: 'loyalty-reward:1234567890abcdef',
   });
   assert.equal(result.replay, true);
-  assert.equal(db.state.calls.some(call => call.sql.includes('INSERT INTO extrato_pontos')), false);
+  assert.equal(db.state.calls.some(call => call.sql.includes('INSERT INTO commerce_loyalty_ledger')), false);
   assert.equal(db.state.commits, 1);
 });
 
@@ -202,7 +247,7 @@ test('reutilização da chave idempotente com outra quantidade é rejeitada sem 
     }),
     error => error.statusCode === 409 && error.code === 'IDEMPOTENCY_CONFLICT',
   );
-  assert.equal(db.state.calls.some(call => call.sql.includes('INSERT INTO extrato_pontos')), false);
+  assert.equal(db.state.calls.some(call => call.sql.includes('INSERT INTO commerce_loyalty_ledger')), false);
   assert.equal(db.state.rollbacks, 1);
 });
 
@@ -234,6 +279,6 @@ test('cancelamento de recompensa entregue é bloqueado sem estorno', async () =>
     }),
     error => error.statusCode === 409 && error.code === 'REDEMPTION_DELIVERED',
   );
-  assert.equal(db.state.calls.some(call => call.sql.includes('INSERT INTO extrato_pontos')), false);
+  assert.equal(db.state.calls.some(call => call.sql.includes('INSERT INTO commerce_loyalty_ledger')), false);
   assert.equal(db.state.rollbacks, 1);
 });

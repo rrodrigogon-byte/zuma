@@ -25,7 +25,8 @@ test('visão avançada exige customers.read no runtime produtivo', () => {
   assert.match(routeBlock('get', '/api/admin/fidelidade/avancada/clientes/:id'), /loyaltyAdvancedContext\(req, 'customers\.read'\)/);
 });
 
-test('níveis e catálogo exigem customers.write no runtime produtivo', () => {
+test('configuração exige settings.write e níveis e catálogo exigem customers.write no runtime produtivo', () => {
+  assert.match(routeBlock('put', '/api/admin/fidelidade/avancada/configuracao'), /loyaltyAdvancedContext\(req, 'settings\.write'\)/);
   assert.match(routeBlock('put', '/api/admin/fidelidade/avancada/niveis'), /loyaltyAdvancedContext\(req, 'customers\.write'\)/);
   assert.match(routeBlock('post', '/api/admin/fidelidade/avancada/recompensas'), /loyaltyAdvancedContext\(req, 'customers\.write'\)/);
   assert.match(routeBlock('put', '/api/admin/fidelidade/avancada/recompensas/:id'), /loyaltyAdvancedContext\(req, 'customers\.write'\)/);
@@ -42,12 +43,14 @@ test('resgate, entrega e cancelamento exigem orders.write e confirmação do ser
 test('tela canônica carrega e renderiza o painel avançado com falha isolada', () => {
   assert.match(page, /Promise\.allSettled/);
   assert.match(page, /api\.get\('\/api\/admin\/fidelidade\/avancada'\)/);
+  assert.doesNotMatch(page, /api\.(get|post|patch)\('\/api\/admin\/fidelidade(\/regra|\/membros)?'\)/);
   assert.match(page, /<LoyaltyAdvancedPanel/);
   assert.match(page, /Selecione um cliente ranqueado/);
 });
 
 test('painel usa somente o namespace administrativo produtivo', () => {
   assert.match(panel, /const LOYALTY_API = '\/api\/admin\/fidelidade\/avancada'/);
+  assert.match(panel, /`\$\{LOYALTY_API\}\/configuracao`/);
   assert.doesNotMatch(panel, /\/api\/omnichannel\/fidelidade/);
   assert.match(panel, /confirmar:\s*true/);
   assert.match(panel, /idempotency_key:\s*redemption\.idempotencyKey/);

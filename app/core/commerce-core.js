@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { db } from './database.js';
 import { normalizeOwnDeliveryConfig, resolveShippingSelection } from './commerce-shipping.js';
 import { markCartConverted } from './commerce-abandoned-carts.js';
+import { creditPaidOrderLoyaltyPoints } from './loyalty-advanced.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -358,7 +359,10 @@ export async function transitionOrder(trx, context, input) {
       WHERE s.empresa_id = $1 AND s.id = $3`,
     [empresaId, orderId, order.storefront_id, nextStatus, requestId(input.correlationId), usuarioId, JSON.stringify({ status: order.status })],
   );
-  return { ...order, status: nextStatus };
+  const loyalty = nextStatus === 'paid'
+    ? await creditPaidOrderLoyaltyPoints(trx, { empresaId, orderId, usuarioId })
+    : null;
+  return { ...order, status: nextStatus, ...(loyalty ? { loyalty } : {}) };
 }
 
 export async function createPendingOrder(trx, context, input = {}) {
