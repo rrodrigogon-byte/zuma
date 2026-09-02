@@ -112,6 +112,8 @@ test('transitionOrder confirma reserva quando o pagamento é aprovado', async ()
   assert.equal(result.status, 'paid');
   assert.deepEqual(level, { disponivel: 7, reservado: 0, comprometido: 3 });
   assert.equal(calls.filter(call => call.sql.includes("'compromisso'") || call.values.includes('compromisso')).length, 1);
+  assert.equal(calls.filter(call => call.sql.includes('FROM commerce_orders o') && call.sql.includes("o.status = 'paid'")).length, 1);
+  assert.equal(calls.some(call => call.sql.includes('INSERT INTO commerce_loyalty_ledger')), false);
 });
 
 test('adjustInventory retorna a mesma resposta para uma chave repetida', async () => {

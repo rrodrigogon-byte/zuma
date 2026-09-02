@@ -40,6 +40,7 @@ import {
   redeemReward,
   replaceLoyaltyLevels,
   updateReward,
+  upsertLoyaltySettings,
 } from './core/loyalty-advanced.js';
 import { requireCommercePermission, resolveCommerceIdentity } from './core/commerce-identity-bridge.js';
 import { listCommerceTenants, provisionCommerceTenant } from './core/commerce-tenants.js';
@@ -396,6 +397,27 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
       return res.json({ ok: true, ...(await getAdvancedLoyaltyOverview(loyaltyDb, context)) });
     } catch (error) {
       return respondLoyaltyAdvancedError(res, error, 'Não foi possível carregar a fidelidade avançada.');
+    }
+  });
+
+  app.put('/api/admin/fidelidade/avancada/configuracao', async (req, res) => {
+    try {
+      const context = await loyaltyAdvancedContext(req, 'settings.write');
+      const settings = await upsertLoyaltySettings(loyaltyDb, { ...context, input: req.body || {}, usuarioId: context.usuarioId });
+      await auditLoyaltyAdvanced(req, context, {
+        table: 'commerce_loyalty_settings',
+        operation: 'UPSERT',
+        recordId: settings.id,
+        after: {
+          ativo: settings.ativo,
+          pontos_por_real: settings.pontos_por_real,
+          valor_minimo_compra: settings.valor_minimo_compra,
+          validade_dias: settings.validade_dias,
+        },
+      });
+      return res.json({ ok: true, configuracao: settings });
+    } catch (error) {
+      return respondLoyaltyAdvancedError(res, error, 'Não foi possível salvar a configuração de fidelidade.');
     }
   });
 

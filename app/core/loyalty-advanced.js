@@ -135,6 +135,69 @@ function normalizeIdempotencyKey(value) {
   return result;
 }
 
+function decimal(value, { min = 0, max = 100000000 } = {}) {
+  const result = Number(value);
+  if (!Number.isFinite(result) || result < min || result > max) {
+    throw new LoyaltyAdvancedError('Valor decimal fora do intervalo permitido.');
+  }
+  return Number(result.toFixed(4));
+}
+
+export function normalizeLoyaltySettings(input = {}) {
+  return {
+    ativo: input.ativo === true,
+    pontos_por_real: decimal(input.pontos_por_real ?? 1, { min: 0, max: 1000 }),
+    valor_minimo_compra: decimal(input.valor_minimo_compra ?? 0, { min: 0, max: 100000000 }),
+    validade_dias: integer(input.validade_dias, { min: 1, max: 3650, nullable: true }),
+  };
+}
+
+export async function getLoyaltySettings(db, { empresaId, lojaId }) {
+  requireScope({ empresaId, lojaId });
+  const result = await db.query(
+    `SELECT id, ativo, pontos_por_real, valor_minimo_compra, validade_dias, atualizado_em
+       FROM commerce_loyalty_settings
+      WHERE empresa_id = $1 AND loja_id = $2`,
+    [empresaId, lojaId],
+  );
+  return result.rows[0] || {
+    ativo: false,
+    pontos_por_real: 1,
+    valor_minimo_compra: 0,
+    validade_dias: null,
+    persistido: false,
+  };
+}
+
+export async function upsertLoyaltySettings(db, { empresaId, lojaId, usuarioId, input }) {
+  requireScope({ empresaId, lojaId });
+  const settings = normalizeLoyaltySettings(input);
+  const client = await db.beginTransaction();
+  try {
+    await assertStore(db, client, empresaId, lojaId);
+    const result = await db.queryInTransaction(
+      client,
+      `INSERT INTO commerce_loyalty_settings
+       (empresa_id, loja_id, ativo, pontos_por_real, valor_minimo_compra, validade_dias, criado_por, atualizado_por)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+       ON CONFLICT (empresa_id, loja_id) DO UPDATE
+         SET ativo = EXCLUDED.ativo,
+             pontos_por_real = EXCLUDED.pontos_por_real,
+             valor_minimo_compra = EXCLUDED.valor_minimo_compra,
+             validade_dias = EXCLUDED.validade_dias,
+             atualizado_por = EXCLUDED.atualizado_por,
+             atualizado_em = CURRENT_TIMESTAMP
+       RETURNING id, ativo, pontos_por_real, valor_minimo_compra, validade_dias, atualizado_em`,
+      [empresaId, lojaId, settings.ativo, settings.pontos_por_real, settings.valor_minimo_compra, settings.validade_dias, usuarioId],
+    );
+    await db.commit(client);
+    return { ...result.rows[0], persistido: true };
+  } catch (error) {
+    await db.rollback(client);
+    throw error;
+  }
+}
+
 async function assertStore(db, client, empresaId, lojaId) {
   const result = await db.queryInTransaction(
     client,
@@ -142,6 +205,79 @@ async function assertStore(db, client, empresaId, lojaId) {
     [lojaId, empresaId],
   );
   if (!result.rows[0]) throw new LoyaltyAdvancedError('Loja não encontrada no tenant ativo.', 404, 'STORE_NOT_FOUND');
+}
+
+export async function creditPaidOrderLoyaltyPoints(trx, { empresaId, orderId, usuarioId = null }) {
+  if (!UUID_REGEX.test(empresaId || '') || !UUID_REGEX.test(orderId || '')) {
+    throw new LoyaltyAdvancedError('Empresa ou pedido inválido.', 403, 'INVALID_SCOPE');
+  }
+  const orderResult = await trx.query(
+    `SELECT o.id, o.customer_id, o.total, o.public_code, s.loja_id
+       FROM commerce_orders o
+       JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id
+      WHERE o.empresa_id = $1 AND o.id = $2 AND o.status = 'paid'
+      FOR UPDATE OF o`,
+    [empresaId, orderId],
+  );
+  const order = orderResult.rows[0];
+  if (!order) return { credited: false, reason: 'order_not_paid' };
+  if (!order.customer_id || !order.loja_id) return { credited: false, reason: 'customer_or_store_missing' };
+  const settingsResult = await trx.query(
+    `SELECT pontos_por_real, valor_minimo_compra, validade_dias
+       FROM commerce_loyalty_settings
+      WHERE empresa_id = $1 AND loja_id = $2 AND ativo = true
+      FOR UPDATE`,
+    [empresaId, order.loja_id],
+  );
+  const settings = settingsResult.rows[0];
+  if (!settings) return { credited: false, reason: 'loyalty_inactive' };
+  const orderTotal = Number(order.total || 0);
+  if (orderTotal < Number(settings.valor_minimo_compra || 0)) return { credited: false, reason: 'minimum_not_reached' };
+  const points = Math.floor(orderTotal * Number(settings.pontos_por_real || 0));
+  if (points <= 0) return { credited: false, reason: 'zero_points' };
+  const existing = await trx.query(
+    `SELECT id, pontos
+       FROM commerce_loyalty_ledger
+      WHERE empresa_id = $1 AND loja_id = $2
+        AND referencia_tipo = 'commerce_order' AND referencia_id = $3 AND tipo = 'credito'`,
+    [empresaId, order.loja_id, orderId],
+  );
+  if (existing.rows[0]) return { credited: false, replay: true, points: Number(existing.rows[0].pontos) };
+  await trx.query(
+    `INSERT INTO commerce_loyalty_accounts (empresa_id, loja_id, customer_id)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (empresa_id, loja_id, customer_id) DO NOTHING`,
+    [empresaId, order.loja_id, order.customer_id],
+  );
+  const accountResult = await trx.query(
+    `SELECT id, saldo_pontos, pontos_acumulados
+       FROM commerce_loyalty_accounts
+      WHERE empresa_id = $1 AND loja_id = $2 AND customer_id = $3
+      FOR UPDATE`,
+    [empresaId, order.loja_id, order.customer_id],
+  );
+  const account = accountResult.rows[0];
+  const balanceBefore = Number(account.saldo_pontos || 0);
+  const balanceAfter = balanceBefore + points;
+  await trx.query(
+    `INSERT INTO commerce_loyalty_ledger
+     (empresa_id, loja_id, account_id, customer_id, tipo, pontos, saldo_anterior,
+      saldo_posterior, descricao, referencia_tipo, referencia_id, expira_em, criado_por)
+     VALUES ($1, $2, $3, $4, 'credito', $5, $6, $7, $8, 'commerce_order', $9,
+             CASE WHEN $10::int IS NULL THEN NULL ELSE CURRENT_TIMESTAMP + make_interval(days => $10::int) END,
+             $11)`,
+    [empresaId, order.loja_id, account.id, order.customer_id, points, balanceBefore, balanceAfter,
+      `Crédito do pedido ${order.public_code}`.slice(0, 240), orderId, settings.validade_dias, usuarioId],
+  );
+  await trx.query(
+    `UPDATE commerce_loyalty_accounts
+        SET saldo_pontos = $1,
+            pontos_acumulados = pontos_acumulados + $2,
+            atualizado_em = CURRENT_TIMESTAMP
+      WHERE empresa_id = $3 AND loja_id = $4 AND customer_id = $5`,
+    [balanceAfter, points, empresaId, order.loja_id, order.customer_id],
+  );
+  return { credited: true, points, customerId: order.customer_id, lojaId: order.loja_id };
 }
 
 export async function getLoyaltyLevels(db, scope) {
@@ -262,34 +398,33 @@ export async function getLoyaltyRanking(db, { empresaId, lojaId, limit = 50 }) {
   requireScope({ empresaId, lojaId });
   const safeLimit = integer(limit, { min: 1, max: 100 });
   const result = await db.query(
-    `WITH ledger AS (
-       SELECT ep.cliente_id,
-              COALESCE(SUM(CASE WHEN ep.tipo = 'credito' AND ep.pontos > 0 THEN ep.pontos ELSE 0 END), 0)::int AS pontos_acumulados,
-              COALESCE(SUM(ep.pontos), 0)::int AS saldo_loja,
-              COALESCE(SUM(CASE WHEN ep.tipo = 'credito' AND ep.pontos > 0
-                                      AND ep.expira_em > CURRENT_TIMESTAMP
-                                      AND ep.expira_em <= CURRENT_TIMESTAMP + INTERVAL '30 days'
-                                THEN ep.pontos ELSE 0 END), 0)::int AS pontos_a_expirar_30d
-         FROM extrato_pontos ep
-        WHERE ep.empresa_id = $1 AND ep.loja_id = $2
-        GROUP BY ep.cliente_id
-     )
-     SELECT ROW_NUMBER() OVER (ORDER BY l.pontos_acumulados DESC, COALESCE(pf.pontos, 0) DESC, c.nome ASC)::int AS posicao,
+    `SELECT ROW_NUMBER() OVER (ORDER BY a.pontos_acumulados DESC, a.saldo_pontos DESC, c.nome ASC)::int AS posicao,
             c.id AS cliente_id, c.nome,
-            l.pontos_acumulados, l.saldo_loja, l.pontos_a_expirar_30d,
-            COALESCE(pf.pontos, 0)::int AS saldo_total,
+            a.pontos_acumulados::int,
+            a.saldo_pontos::int AS saldo_loja,
+            a.saldo_pontos::int AS saldo_total,
+            LEAST(a.saldo_pontos, COALESCE(expiring.pontos, 0))::int AS pontos_a_expirar_30d,
             nivel.codigo AS nivel_codigo, nivel.nome AS nivel_nome, nivel.beneficios AS nivel_beneficios
-       FROM ledger l
-       JOIN clientes c ON c.id = l.cliente_id AND c.empresa_id = $1 AND c.ativo = true
-       LEFT JOIN programa_fidelidade pf ON pf.empresa_id = $1 AND pf.cliente_id = c.id
+       FROM commerce_loyalty_accounts a
+       JOIN commerce_customers c
+         ON c.empresa_id = a.empresa_id AND c.id = a.customer_id AND c.bloqueado = false
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(SUM(l.pontos), 0)::int AS pontos
+           FROM commerce_loyalty_ledger l
+          WHERE l.empresa_id = a.empresa_id AND l.loja_id = a.loja_id
+            AND l.customer_id = a.customer_id AND l.tipo = 'credito'
+            AND l.expira_em > CURRENT_TIMESTAMP
+            AND l.expira_em <= CURRENT_TIMESTAMP + INTERVAL '30 days'
+       ) expiring ON true
        LEFT JOIN LATERAL (
          SELECT n.codigo, n.nome, n.beneficios
            FROM fidelidade_niveis_loja n
-          WHERE n.empresa_id = $1 AND n.loja_id = $2 AND n.ativo = true
-            AND n.pontos_minimos <= l.pontos_acumulados
+          WHERE n.empresa_id = a.empresa_id AND n.loja_id = a.loja_id AND n.ativo = true
+            AND n.pontos_minimos <= a.pontos_acumulados
           ORDER BY n.pontos_minimos DESC
           LIMIT 1
        ) nivel ON true
+      WHERE a.empresa_id = $1 AND a.loja_id = $2
       ORDER BY posicao
       LIMIT $3`,
     [empresaId, lojaId, safeLimit],
@@ -316,8 +451,8 @@ export async function listRewardRedemptions(db, { empresaId, lojaId, limit = 50 
             r.nome AS recompensa_nome, rr.pontos_resgatados, rr.quantidade,
             rr.status, rr.observacao, rr.criado_em, rr.entregue_em, rr.cancelado_em
        FROM fidelidade_resgates_recompensa rr
-       JOIN clientes c ON c.id = rr.cliente_id AND c.empresa_id = rr.empresa_id
-       JOIN fidelidade_recompensas r ON r.id = rr.recompensa_id
+       JOIN commerce_customers c ON c.id = rr.cliente_id AND c.empresa_id = rr.empresa_id
+       JOIN fidelidade_recompensas r ON r.id = rr.recompensa_id AND r.empresa_id = rr.empresa_id
       WHERE rr.empresa_id = $1 AND rr.loja_id = $2
       ORDER BY rr.criado_em DESC
       LIMIT $3`,
@@ -327,13 +462,15 @@ export async function listRewardRedemptions(db, { empresaId, lojaId, limit = 50 
 }
 
 export async function getAdvancedLoyaltyOverview(db, scope) {
-  const [levels, rewards, ranking, redemptions] = await Promise.all([
+  const [settings, levels, rewards, ranking, redemptions] = await Promise.all([
+    getLoyaltySettings(db, scope),
     getLoyaltyLevels(db, scope),
     listRewards(db, scope),
     getLoyaltyRanking(db, { ...scope, limit: 50 }),
     listRewardRedemptions(db, { ...scope, limit: 50 }),
   ]);
   return {
+    settings,
     levels,
     levelsPersisted: levels.some(level => level.persistido === true),
     rewards,
@@ -352,28 +489,32 @@ export async function getCustomerLoyaltyStatus(db, { empresaId, lojaId, clienteI
   requireScope({ empresaId, lojaId });
   requireUuid(clienteId, 'Cliente');
   const result = await db.query(
-    `WITH ledger AS (
-       SELECT COALESCE(SUM(CASE WHEN tipo = 'credito' AND pontos > 0 THEN pontos ELSE 0 END), 0)::int AS pontos_acumulados,
-              COALESCE(SUM(CASE WHEN tipo = 'credito' AND pontos > 0
-                                     AND expira_em > CURRENT_TIMESTAMP
-                                     AND expira_em <= CURRENT_TIMESTAMP + INTERVAL '30 days'
-                                THEN pontos ELSE 0 END), 0)::int AS pontos_a_expirar_30d
-         FROM extrato_pontos
-        WHERE empresa_id = $1 AND loja_id = $2 AND cliente_id = $3
-     )
-     SELECT l.pontos_acumulados, l.pontos_a_expirar_30d,
+    `SELECT COALESCE(a.saldo_pontos, 0)::int AS saldo_pontos,
+            COALESCE(a.pontos_acumulados, 0)::int AS pontos_acumulados,
+            LEAST(COALESCE(a.saldo_pontos, 0), COALESCE(expiring.pontos, 0))::int AS pontos_a_expirar_30d,
             n.codigo AS nivel_codigo, n.nome AS nivel_nome, n.beneficios AS nivel_beneficios
-       FROM ledger l
+       FROM commerce_customers c
+       LEFT JOIN commerce_loyalty_accounts a
+         ON a.empresa_id = c.empresa_id AND a.loja_id = $2 AND a.customer_id = c.id
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(SUM(l.pontos), 0)::int AS pontos
+           FROM commerce_loyalty_ledger l
+          WHERE l.empresa_id = c.empresa_id AND l.loja_id = $2 AND l.customer_id = c.id
+            AND l.tipo = 'credito' AND l.expira_em > CURRENT_TIMESTAMP
+            AND l.expira_em <= CURRENT_TIMESTAMP + INTERVAL '30 days'
+       ) expiring ON true
        LEFT JOIN LATERAL (
          SELECT codigo, nome, beneficios
            FROM fidelidade_niveis_loja
-          WHERE empresa_id = $1 AND loja_id = $2 AND ativo = true
-            AND pontos_minimos <= l.pontos_acumulados
+          WHERE empresa_id = c.empresa_id AND loja_id = $2 AND ativo = true
+            AND pontos_minimos <= COALESCE(a.pontos_acumulados, 0)
           ORDER BY pontos_minimos DESC LIMIT 1
-       ) n ON true`,
+       ) n ON true
+      WHERE c.empresa_id = $1 AND c.id = $3 AND c.bloqueado = false`,
     [empresaId, lojaId, clienteId],
   );
-  const status = result.rows[0] || { pontos_acumulados: 0, pontos_a_expirar_30d: 0 };
+  const status = result.rows[0];
+  if (!status) throw new LoyaltyAdvancedError('Cliente não encontrado no tenant ativo.', 404, 'CUSTOMER_NOT_FOUND');
   if (!status.nivel_nome) {
     const virtual = defaultLoyaltyLevels().filter(level => level.ativo && level.pontos_minimos <= Number(status.pontos_acumulados || 0)).at(-1);
     return { ...status, nivel_codigo: virtual?.codigo || 'bronze', nivel_nome: virtual?.nome || 'Bronze', nivel_beneficios: virtual?.beneficios || [] };
@@ -400,7 +541,7 @@ export async function redeemReward(db, {
       `SELECT rr.*, r.nome AS recompensa_nome, c.nome AS cliente_nome
          FROM fidelidade_resgates_recompensa rr
          JOIN fidelidade_recompensas r ON r.id = rr.recompensa_id
-         JOIN clientes c ON c.id = rr.cliente_id
+         JOIN commerce_customers c ON c.id = rr.cliente_id AND c.empresa_id = rr.empresa_id
         WHERE rr.empresa_id = $1 AND rr.idempotency_key = $2
         FOR UPDATE OF rr`,
       [empresaId, key],
@@ -417,9 +558,9 @@ export async function redeemReward(db, {
       return { redemption: existing, replay: true };
     }
     await assertStore(db, client, empresaId, lojaId);
-    const customer = await db.queryInTransaction(client, 'SELECT id, nome FROM clientes WHERE id = $1 AND empresa_id = $2 AND ativo = true FOR UPDATE', [clienteId, empresaId]);
+    const customer = await db.queryInTransaction(client, 'SELECT id, nome FROM commerce_customers WHERE id = $1 AND empresa_id = $2 AND bloqueado = false FOR UPDATE', [clienteId, empresaId]);
     if (!customer.rows[0]) throw new LoyaltyAdvancedError('Cliente não encontrado no tenant ativo.', 404, 'CUSTOMER_NOT_FOUND');
-    const config = await db.queryInTransaction(client, 'SELECT id FROM configuracoes_fidelidade_loja WHERE empresa_id = $1 AND loja_id = $2 AND ativo = true FOR UPDATE', [empresaId, lojaId]);
+    const config = await db.queryInTransaction(client, 'SELECT id FROM commerce_loyalty_settings WHERE empresa_id = $1 AND loja_id = $2 AND ativo = true FOR UPDATE', [empresaId, lojaId]);
     if (!config.rows[0]) throw new LoyaltyAdvancedError('Programa de fidelidade não está ativo nesta loja.', 409, 'LOYALTY_INACTIVE');
     const rewardResult = await db.queryInTransaction(
       client,
@@ -451,29 +592,46 @@ export async function redeemReward(db, {
       }
     }
     const points = Number(reward.custo_pontos) * quantity;
-    const program = await db.queryInTransaction(client, 'SELECT * FROM programa_fidelidade WHERE empresa_id = $1 AND cliente_id = $2 FOR UPDATE', [empresaId, clienteId]);
-    if (!program.rows[0] || Number(program.rows[0].pontos) < points) {
+    const accountResult = await db.queryInTransaction(
+      client,
+      `SELECT id, saldo_pontos, pontos_acumulados
+         FROM commerce_loyalty_accounts
+        WHERE empresa_id = $1 AND loja_id = $2 AND customer_id = $3
+        FOR UPDATE`,
+      [empresaId, lojaId, clienteId],
+    );
+    const account = accountResult.rows[0];
+    if (!account || Number(account.saldo_pontos) < points) {
       throw new LoyaltyAdvancedError('Saldo de pontos insuficiente.', 409, 'INSUFFICIENT_POINTS');
     }
     const redemptionId = randomUUID();
-    const extract = await db.queryInTransaction(
+    const balanceAfter = Number(account.saldo_pontos) - points;
+    const ledger = await db.queryInTransaction(
       client,
-      `INSERT INTO extrato_pontos
-       (empresa_id, loja_id, cliente_id, tipo, pontos, descricao, referencia_id)
-       VALUES ($1, $2, $3, 'debito', $4, $5, $6)
+      `INSERT INTO commerce_loyalty_ledger
+       (empresa_id, loja_id, account_id, customer_id, tipo, pontos, saldo_anterior,
+        saldo_posterior, descricao, referencia_tipo, referencia_id, criado_por)
+       VALUES ($1, $2, $3, $4, 'resgate', $5, $6, $7, $8, 'reward_redemption', $9, $10)
        RETURNING id`,
-      [empresaId, lojaId, clienteId, -points, `Resgate de recompensa: ${reward.nome}`.slice(0, 200), redemptionId],
+      [empresaId, lojaId, account.id, clienteId, -points, Number(account.saldo_pontos), balanceAfter,
+        `Resgate de recompensa: ${reward.nome}`.slice(0, 240), redemptionId, usuarioId],
     );
-    await db.queryInTransaction(client, 'UPDATE programa_fidelidade SET pontos = pontos - $1, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $2 AND cliente_id = $3', [points, empresaId, clienteId]);
+    await db.queryInTransaction(
+      client,
+      `UPDATE commerce_loyalty_accounts
+          SET saldo_pontos = $1, atualizado_em = CURRENT_TIMESTAMP
+        WHERE empresa_id = $2 AND loja_id = $3 AND customer_id = $4`,
+      [balanceAfter, empresaId, lojaId, clienteId],
+    );
     await db.queryInTransaction(client, 'UPDATE fidelidade_recompensas SET quantidade_resgatada = quantidade_resgatada + $1 WHERE id = $2 AND empresa_id = $3 AND loja_id = $4', [quantity, recompensaId, empresaId, lojaId]);
     const inserted = await db.queryInTransaction(
       client,
       `INSERT INTO fidelidade_resgates_recompensa
-       (id, empresa_id, loja_id, cliente_id, recompensa_id, extrato_debito_id,
+       (id, empresa_id, loja_id, cliente_id, recompensa_id, ledger_debito_id,
         pontos_resgatados, quantidade, idempotency_key, observacao, criado_por)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
-      [redemptionId, empresaId, lojaId, clienteId, recompensaId, extract.rows[0].id,
+      [redemptionId, empresaId, lojaId, clienteId, recompensaId, ledger.rows[0].id,
         points, quantity, key, text(observacao, 500), usuarioId],
     );
     await db.commit(client);
@@ -544,15 +702,34 @@ export async function cancelRewardRedemption(db, { empresaId, lojaId, redemption
       return { redemption, replay: true };
     }
     if (redemption.status === 'entregue') throw new LoyaltyAdvancedError('Recompensa já entregue não pode ser cancelada.', 409, 'REDEMPTION_DELIVERED');
-    await db.queryInTransaction(client, 'SELECT id FROM programa_fidelidade WHERE empresa_id = $1 AND cliente_id = $2 FOR UPDATE', [empresaId, redemption.cliente_id]);
+    const accountResult = await db.queryInTransaction(
+      client,
+      `SELECT id, saldo_pontos
+         FROM commerce_loyalty_accounts
+        WHERE empresa_id = $1 AND loja_id = $2 AND customer_id = $3
+        FOR UPDATE`,
+      [empresaId, lojaId, redemption.cliente_id],
+    );
+    const account = accountResult.rows[0];
+    if (!account) throw new LoyaltyAdvancedError('Conta de fidelidade não encontrada.', 409, 'LOYALTY_ACCOUNT_NOT_FOUND');
+    const balanceAfter = Number(account.saldo_pontos) + Number(redemption.pontos_resgatados);
     await db.queryInTransaction(
       client,
-      `INSERT INTO extrato_pontos
-       (empresa_id, loja_id, cliente_id, tipo, pontos, descricao, referencia_id)
-       VALUES ($1, $2, $3, 'credito', $4, $5, $6)`,
-      [empresaId, lojaId, redemption.cliente_id, redemption.pontos_resgatados, `Estorno de recompensa: ${redemption.recompensa_nome}`.slice(0, 200), redemption.id],
+      `INSERT INTO commerce_loyalty_ledger
+       (empresa_id, loja_id, account_id, customer_id, tipo, pontos, saldo_anterior,
+        saldo_posterior, descricao, referencia_tipo, referencia_id, criado_por)
+       VALUES ($1, $2, $3, $4, 'estorno', $5, $6, $7, $8, 'reward_redemption', $9, $10)`,
+      [empresaId, lojaId, account.id, redemption.cliente_id, Number(redemption.pontos_resgatados),
+        Number(account.saldo_pontos), balanceAfter,
+        `Estorno de recompensa: ${redemption.recompensa_nome}`.slice(0, 240), redemption.id, usuarioId],
     );
-    await db.queryInTransaction(client, 'UPDATE programa_fidelidade SET pontos = pontos + $1, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $2 AND cliente_id = $3', [redemption.pontos_resgatados, empresaId, redemption.cliente_id]);
+    await db.queryInTransaction(
+      client,
+      `UPDATE commerce_loyalty_accounts
+          SET saldo_pontos = $1, atualizado_em = CURRENT_TIMESTAMP
+        WHERE empresa_id = $2 AND loja_id = $3 AND customer_id = $4`,
+      [balanceAfter, empresaId, lojaId, redemption.cliente_id],
+    );
     await db.queryInTransaction(client, 'UPDATE fidelidade_recompensas SET quantidade_resgatada = GREATEST(0, quantidade_resgatada - $1) WHERE id = $2 AND empresa_id = $3 AND loja_id = $4', [redemption.quantidade, redemption.recompensa_id, empresaId, lojaId]);
     const updated = await db.queryInTransaction(
       client,
