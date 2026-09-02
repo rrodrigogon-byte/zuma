@@ -1,6 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { api, fmtR, fmtDate } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
+import { useAuth } from '../../lib/auth'
+import { isDinoBrandContext } from '../../lib/brand'
+import DinoBusinessDashboard from './DinoBusinessDashboard'
 
 const LINKS = [
   { label: 'Atletas', href: '/admin/atletas', icon: '🎾' },
@@ -327,7 +330,7 @@ function KPI({ label, value, icon, color, trend, sub }) {
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
-export default function Dashboard() {
+function EventDashboard() {
   const { toast } = useToast()
   const [info, setInfo] = useState(null)
   const [dash, setDash] = useState(null)
@@ -709,4 +712,12 @@ export default function Dashboard() {
       </div>
     </div>
   )
+}
+
+
+export default function Dashboard() {
+  const { empresaAtiva, lojaAtiva, user } = useAuth()
+  const isDino = isDinoBrandContext(empresaAtiva, user?.empresaAtiva, user?.empresa, user?.tenant)
+  const scopeKey = `${empresaAtiva?.id || 'empresa'}:${lojaAtiva?.id || 'todas'}`
+  return isDino ? <DinoBusinessDashboard key={scopeKey} /> : <EventDashboard />
 }

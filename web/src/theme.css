@@ -782,3 +782,29 @@ html[data-brand='dino'] .ecommerce-admin-tabs b {
 html[data-brand='dino'] :focus-visible {
   outline-color: var(--focus-ring);
 }
+
+
+/* Cabeçalho Dino: aproveita melhor a área superior da Sidebar sem afetar o menu recolhido. */
+html[data-brand='dino'] .sidebar-brand-header:not(.is-collapsed) {
+  padding: 10px 14px !important;
+  gap: 8px;
+}
+
+html[data-brand='dino'] .sidebar-brand-header:not(.is-collapsed) .sidebar-brand-dino {
+  width: 128px;
+  height: 128px;
+  padding: 5px;
+  border-radius: 22px;
+  box-shadow: 0 14px 30px rgba(18, 40, 63, .18);
+}
+
+@media (max-width: 768px) {
+  html[data-brand='dino'] .sidebar-brand-header:not(.is-collapsed) {
+    padding: 10px 12px !important;
+  }
+
+  html[data-brand='dino'] .sidebar-brand-header:not(.is-collapsed) .sidebar-brand-dino {
+    width: 116px;
+    height: 116px;
+  }
+}

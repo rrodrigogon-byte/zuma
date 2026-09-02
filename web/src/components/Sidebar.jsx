@@ -445,7 +445,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
 
       <nav style={sidebarStyle}>
         {/* Logo + close button (mobile) */}
-        <div style={{
+        <div className={`sidebar-brand-header${collapsed && !isMobile ? ' is-collapsed' : ''}`} style={{
           padding: collapsed && !isMobile ? '14px 10px' : '20px 18px 18px',
           background: 'var(--brand-header)',
           borderBottom: '4px solid var(--brand-header-accent)',
