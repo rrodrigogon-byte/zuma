@@ -29,6 +29,18 @@ import { createWhatsappAiWebhookRouter } from './core/whatsapp-ai-routes.js';
 import { whatsappAiOperationalStatus } from './core/whatsapp-ai.js';
 import { startWhatsappAiWorker } from './workers/whatsapp-ai-worker.js';
 import { db as commerceDb } from './core/database.js';
+import * as loyaltyDb from './db-pg.js';
+import {
+  LoyaltyAdvancedError,
+  cancelRewardRedemption,
+  createReward,
+  getAdvancedLoyaltyOverview,
+  getCustomerLoyaltyStatus,
+  markRewardDelivered,
+  redeemReward,
+  replaceLoyaltyLevels,
+  updateReward,
+} from './core/loyalty-advanced.js';
 import { requireCommercePermission, resolveCommerceIdentity } from './core/commerce-identity-bridge.js';
 import { listCommerceTenants, provisionCommerceTenant } from './core/commerce-tenants.js';
 import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
@@ -274,6 +286,44 @@ function commerceCheckoutGuard(req,res,next){
   return next();
 }
 
+async function loyaltyAdvancedContext(req, permission) {
+  const context = await requireCommercePermission(req, permission);
+  if (!context.lojaId) throw new LoyaltyAdvancedError('Selecione uma loja para operar a fidelidade.', 409, 'STORE_SELECTION_REQUIRED');
+  return context;
+}
+
+function respondLoyaltyAdvancedError(res, error, fallback) {
+  if (error instanceof LoyaltyAdvancedError) {
+    return res.status(error.statusCode).json({ error: error.message, code: error.code });
+  }
+  if (error?.code === 'PERMISSION_DENIED') return res.status(403).json({ error: 'Permissão insuficiente para esta operação.', code: error.code });
+  if (['TENANT_CONTEXT_REQUIRED', 'TENANT_SELECTION_REQUIRED', 'STORE_SELECTION_REQUIRED', 'STORE_SCOPE_MISMATCH'].includes(error?.code)) {
+    return res.status(409).json({ error: 'Selecione uma empresa e uma loja autorizadas.', code: error.code });
+  }
+  if (error?.code === '23505') return res.status(409).json({ error: 'Registro de fidelidade duplicado.', code: 'LOYALTY_CONFLICT' });
+  console.error(fallback, error?.code || error?.message || error);
+  return res.status(500).json({ error: fallback, code: 'LOYALTY_ADVANCED_UNAVAILABLE' });
+}
+
+async function auditLoyaltyAdvanced(req, context, { table, operation, recordId = null, before = null, after = null }) {
+  try {
+    await loyaltyDb.registrarAuditoria({
+      empresa_id: context.empresaId,
+      loja_id: context.lojaId,
+      usuario_id: context.usuarioId,
+      tabela: table,
+      operacao: operation,
+      registro_id: recordId,
+      dados_anterior: before,
+      dados_novo: after,
+      ip_address: req.ip,
+      user_agent: req.get('user-agent'),
+    });
+  } catch (error) {
+    console.error('Falha ao registrar auditoria da fidelidade avançada:', error?.code || error?.message || error);
+  }
+}
+
 // ---- trilha de auditoria das ações administrativas ----
 function audit(req, acao, detalhe){
   const d = db(); d.auditoria = d.auditoria || [];
@@ -339,6 +389,100 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
     }
   });
   app.use('/api/admin/commerce', createCommerceAdminRouter());
+
+  app.get('/api/admin/fidelidade/avancada', async (req, res) => {
+    try {
+      const context = await loyaltyAdvancedContext(req, 'customers.read');
+      return res.json({ ok: true, ...(await getAdvancedLoyaltyOverview(loyaltyDb, context)) });
+    } catch (error) {
+      return respondLoyaltyAdvancedError(res, error, 'Não foi possível carregar a fidelidade avançada.');
+    }
+  });
+
+  app.get('/api/admin/fidelidade/avancada/clientes/:id', async (req, res) => {
+    try {
+      const context = await loyaltyAdvancedContext(req, 'customers.read');
+      return res.json({ ok: true, ...(await getCustomerLoyaltyStatus(loyaltyDb, { ...context, clienteId: req.params.id })) });
+    } catch (error) {
+      return respondLoyaltyAdvancedError(res, error, 'Não foi possível carregar o cliente da fidelidade.');
+    }
+  });
+
+  app.put('/api/admin/fidelidade/avancada/niveis', async (req, res) => {
+    try {
+      const context = await loyaltyAdvancedContext(req, 'customers.write');
+      const levels = await replaceLoyaltyLevels(loyaltyDb, { ...context, levels: req.body?.niveis, usuarioId: context.usuarioId });
+      await auditLoyaltyAdvanced(req, context, { table: 'fidelidade_niveis_loja', operation: 'REPLACE', after: { quantidade: levels.length } });
+      return res.json({ ok: true, niveis: levels });
+    } catch (error) {
+      return respondLoyaltyAdvancedError(res, error, 'Não foi possível salvar os níveis de fidelidade.');
+    }
+  });
+
+  app.post('/api/admin/fidelidade/avancada/recompensas', async (req, res) => {
+    try {
+      const context = await loyaltyAdvancedContext(req, 'customers.write');
+      const reward = await createReward(loyaltyDb, { ...context, input: req.body || {}, usuarioId: context.usuarioId });
+      await auditLoyaltyAdvanced(req, context, { table: 'fidelidade_recompensas', operation: 'INSERT', recordId: reward.id, after: { codigo: reward.codigo, status: reward.status, custo_pontos: reward.custo_pontos } });
+      return res.status(201).json({ ok: true, recompensa: reward });
+    } catch (error) {
+      return respondLoyaltyAdvancedError(res, error, 'Não foi possível cadastrar a recompensa.');
+    }
+  });
+
+  app.put('/api/admin/fidelidade/avancada/recompensas/:id', async (req, res) => {
+    try {
+      const context = await loyaltyAdvancedContext(req, 'customers.write');
+      const result = await updateReward(loyaltyDb, { ...context, rewardId: req.params.id, input: req.body || {} });
+      await auditLoyaltyAdvanced(req, context, { table: 'fidelidade_recompensas', operation: 'UPDATE', recordId: result.reward.id, before: { status: result.before.status }, after: { status: result.reward.status, custo_pontos: result.reward.custo_pontos } });
+      return res.json({ ok: true, recompensa: result.reward });
+    } catch (error) {
+      return respondLoyaltyAdvancedError(res, error, 'Não foi possível atualizar a recompensa.');
+    }
+  });
+
+  app.post('/api/admin/fidelidade/avancada/recompensas/:id/resgatar', async (req, res) => {
+    try {
+      const context = await loyaltyAdvancedContext(req, 'orders.write');
+      const result = await redeemReward(loyaltyDb, {
+        ...context,
+        recompensaId: req.params.id,
+        clienteId: req.body?.cliente_id,
+        quantidade: req.body?.quantidade,
+        confirmar: req.body?.confirmar,
+        idempotencyKey: req.body?.idempotency_key || req.get('Idempotency-Key'),
+        observacao: req.body?.observacao,
+        usuarioId: context.usuarioId,
+      });
+      if (!result.replay) await auditLoyaltyAdvanced(req, context, { table: 'fidelidade_resgates_recompensa', operation: 'INSERT', recordId: result.redemption.id, after: { cliente_id: result.redemption.cliente_id, recompensa_id: result.redemption.recompensa_id, pontos_resgatados: result.redemption.pontos_resgatados } });
+      return res.status(result.replay ? 200 : 201).json({ ok: true, replay: result.replay, resgate: result.redemption });
+    } catch (error) {
+      return respondLoyaltyAdvancedError(res, error, 'Não foi possível resgatar a recompensa.');
+    }
+  });
+
+  app.patch('/api/admin/fidelidade/avancada/resgates/:id/entregar', async (req, res) => {
+    try {
+      const context = await loyaltyAdvancedContext(req, 'orders.write');
+      const redemption = await markRewardDelivered(loyaltyDb, { ...context, redemptionId: req.params.id, confirmar: req.body?.confirmar });
+      if (!redemption.replay) await auditLoyaltyAdvanced(req, context, { table: 'fidelidade_resgates_recompensa', operation: 'UPDATE', recordId: redemption.id, after: { status: redemption.status } });
+      return res.json({ ok: true, replay: Boolean(redemption.replay), resgate: redemption });
+    } catch (error) {
+      return respondLoyaltyAdvancedError(res, error, 'Não foi possível confirmar a entrega da recompensa.');
+    }
+  });
+
+  app.post('/api/admin/fidelidade/avancada/resgates/:id/cancelar', async (req, res) => {
+    try {
+      const context = await loyaltyAdvancedContext(req, 'orders.write');
+      const result = await cancelRewardRedemption(loyaltyDb, { ...context, redemptionId: req.params.id, confirmar: req.body?.confirmar, motivo: req.body?.motivo, usuarioId: context.usuarioId });
+      if (!result.replay) await auditLoyaltyAdvanced(req, context, { table: 'fidelidade_resgates_recompensa', operation: 'UPDATE', recordId: result.redemption.id, after: { status: result.redemption.status, estorno_extrato_id: result.refundLedgerId } });
+      return res.json({ ok: true, replay: result.replay, resgate: result.redemption });
+    } catch (error) {
+      return respondLoyaltyAdvancedError(res, error, 'Não foi possível cancelar o resgate.');
+    }
+  });
+
   app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   app.use('/api/webhooks', createCommerceWebhookRouter());
   console.log('Commerce Core PostgreSQL habilitado (host, alias público e backoffice multiempresa)');
