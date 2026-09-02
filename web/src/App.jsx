@@ -45,13 +45,13 @@ function PlatformOnly({ children }) {
 // catálogo em kytto.com.br antes de uma publicação explícita por canal.
 function EntradaPrincipal() {
   const host = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
-  if (host === 'loja.kytto.com.br') return <Ecommerce />
+  if (host === 'loja.kytto.com.br' || host === 'dino.kytto.com.br') return <Ecommerce />
   return <Layout marketing><Home /></Layout>
 }
 
 function CheckoutEntry() {
   const host = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
-  return host === 'loja.kytto.com.br' ? <CommerceCheckout /> : <Layout noSidebar><Checkout /></Layout>
+  return host === 'loja.kytto.com.br' || host === 'dino.kytto.com.br' ? <CommerceCheckout /> : <Layout noSidebar><Checkout /></Layout>
 }
 
 const Login      = lazy(() => import('./pages/Login'))
