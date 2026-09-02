@@ -354,7 +354,7 @@ export async function transitionOrder(trx, context, input) {
     `INSERT INTO commerce_audit_logs
       (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, antes, depois, correlation_id)
      SELECT $1, s.loja_id, $6, 'order', $2, 'status_changed', $7::jsonb,
-            jsonb_build_object('status', $4), $5
+            jsonb_build_object('status', $4::text), $5
        FROM commerce_storefronts s
       WHERE s.empresa_id = $1 AND s.id = $3`,
     [empresaId, orderId, order.storefront_id, nextStatus, requestId(input.correlationId), usuarioId, JSON.stringify({ status: order.status })],
