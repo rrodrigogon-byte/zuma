@@ -136,6 +136,8 @@ export default function Ecommerce() {
   const navigate = useNavigate()
   const { storeAlias: routeAlias = '' } = useParams()
   const storeAlias = normalizeStorefrontAlias(routeAlias)
+  const hostName = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
+  const isDinoStorefront = storeAlias === 'dino' || (hostName === 'dino.kytto.com.br' && !storeAlias)
   const storefrontApi = storefrontApiBase(storeAlias)
   const storeRoute = storefrontRoute(storeAlias, 'store')
   const checkoutRoute = storefrontRoute(storeAlias, 'checkout')
@@ -422,10 +424,10 @@ export default function Ecommerce() {
 
   return <main className="commerce-shell" data-storefront-alias={storeAlias || undefined}>
     <section className="commerce-hero">
-      {storeAlias === 'dino' && <div className="commerce-dino-brandbar"><img src={DINO_COMMERCE_LOGO} alt="Dino Perfumaria" /><div role="group" aria-label="Tema da loja">{[["system", Monitor, "Sistema"], ["light", Sun, "Claro"], ["dark", Moon, "Escuro"]].map(([mode, Icon, label]) => <button type="button" key={mode} onClick={() => changeThemeMode(mode)} className={themeMode === mode ? 'active' : ''} aria-pressed={themeMode === mode} title={`Tema ${label.toLowerCase()}`}><Icon size={14} /><span>{label}</span></button>)}</div></div>}
+      {isDinoStorefront && <div className="commerce-dino-brandbar"><img src={DINO_COMMERCE_LOGO} alt="Dino Perfumaria" /><div role="group" aria-label="Tema da loja">{[["system", Monitor, "Sistema"], ["light", Sun, "Claro"], ["dark", Moon, "Escuro"]].map(([mode, Icon, label]) => <button type="button" key={mode} onClick={() => changeThemeMode(mode)} className={themeMode === mode ? 'active' : ''} aria-pressed={themeMode === mode} title={`Tema ${label.toLowerCase()}`}><Icon size={14} /><span>{label}</span></button>)}</div></div>}
       <div>
         <span className="commerce-eyebrow"><Store size={14} /> {brandName}</span>
-        <h1>{storeAlias === 'dino' ? <>Autocuidado, estilo e bem-estar. <em>Compre com confiança.</em></> : <>Venda melhor. <em>Opere com inteligência.</em></>}</h1>
+        <h1>{isDinoStorefront ? <>Autocuidado, estilo e bem-estar. <em>Compre com confiança.</em></> : <>Venda melhor. <em>Opere com inteligência.</em></>}</h1>
         <p>{brandTagline}</p>
         <div className="commerce-hero-actions">
           <a className="commerce-button commerce-button-primary" href="#catalogo">Explorar catálogo <ArrowRight size={16} /></a>
