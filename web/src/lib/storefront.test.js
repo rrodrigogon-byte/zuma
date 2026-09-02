@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { loadAllStorefrontProducts, normalizeStorefrontAlias, storefrontAliasFromPath, storefrontApiBase, storefrontCartSessionKey, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from './storefront.js';
+import { decrementCartQuantity, loadAllStorefrontProducts, normalizeStorefrontAlias, storefrontAliasFromPath, storefrontApiBase, storefrontCartSessionKey, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from './storefront.js';
 
 test('normaliza apenas aliases públicos seguros', () => {
   assert.equal(normalizeStorefrontAlias(' DINO '), 'dino');
@@ -47,6 +47,13 @@ test('sessionKey do carrinho é opaca, estável e particionada por alias', () =>
     assert.equal(storefrontCartSessionKey('dino'), dino);
     assert.notEqual(storefrontCartSessionKey('agro-open'), dino);
   } finally { globalThis.localStorage = original; }
+});
+
+test('decremento permite remover a última unidade sem produzir quantidade negativa', () => {
+  assert.equal(decrementCartQuantity(2), 1);
+  assert.equal(decrementCartQuantity(1), 0);
+  assert.equal(decrementCartQuantity(0), 0);
+  assert.equal(decrementCartQuantity('inválido'), 0);
 });
 
 test('extrai alias somente das rotas Commerce conhecidas', () => {
