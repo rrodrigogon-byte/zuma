@@ -6,6 +6,8 @@
 -- migrations legadas 014/016 que criavam as tabelas de fidelidade. Esta
 -- migration cria somente os contratos necessários ao módulo avançado, sem
 -- inserir clientes, saldos, pontos ou recompensas.
+-- Os vínculos com pedidos/vendas ficam como UUIDs opcionais porque esses
+-- módulos legados podem não existir em todas as instalações do Commerce Core.
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS programa_fidelidade (
@@ -32,11 +34,11 @@ CREATE TABLE IF NOT EXISTS extrato_pontos (
 );
 
 ALTER TABLE extrato_pontos
-  ADD COLUMN IF NOT EXISTS loja_id UUID REFERENCES lojas(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS loja_id UUID;
 ALTER TABLE extrato_pontos
-  ADD COLUMN IF NOT EXISTS pedido_id UUID REFERENCES pedidos_omnichannel(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS pedido_id UUID;
 ALTER TABLE extrato_pontos
-  ADD COLUMN IF NOT EXISTS venda_id UUID REFERENCES vendas(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS venda_id UUID;
 ALTER TABLE extrato_pontos
   ADD COLUMN IF NOT EXISTS expira_em TIMESTAMPTZ;
 
