@@ -13,6 +13,8 @@ import {
   atualizarAgendamento,
   criarAgendamento,
   criarProfissional,
+  atualizarProfissional,
+  excluirProfissional,
   criarServico,
   listarAgendamentos,
   listarProfissionais,
@@ -83,6 +85,22 @@ test('classifica as rotas como Barbearia e respeita perfis operacionais', () => 
   assert.equal(temPermissao({ ativo: true, perfis: ['gerente_operacional'] }, 'barbearia', 'criar'), true);
   assert.equal(temPermissao({ ativo: true, perfis: ['consultor'] }, 'barbearia', 'criar'), false);
   assert.ok(obterPerfil('administrador')?.permissoes?.barbearia?.includes('excluir'));
+});
+
+test('permite editar, arquivar e reativar profissionais sem cruzar empresas', () => {
+  const profissional = criarProfissional(EMPRESA_A, { nome: 'Dino Inicial', tipo: 'funcionario', percentualComissao: 40 });
+  const atualizado = atualizarProfissional(EMPRESA_A, profissional.id, { nome: 'Dino Atualizado', percentualComissao: 55, diasTrabalho: [1, 3, 5] });
+  assert.equal(atualizado.nome, 'Dino Atualizado');
+  assert.equal(atualizado.percentualComissao, 55);
+  assert.deepEqual(atualizado.diasTrabalho, [1, 3, 5]);
+  assert.equal(atualizarProfissional(EMPRESA_B, profissional.id, { nome: 'Não permitido' }), null);
+  const excluido = excluirProfissional(EMPRESA_A, profissional.id);
+  assert.equal(excluido.ativo, false);
+  assert.equal(listarProfissionais(EMPRESA_A).length, 0);
+  assert.equal(listarProfissionais(EMPRESA_A, { incluirInativos: true })[0].nome, 'Dino Atualizado');
+  const reativado = atualizarProfissional(EMPRESA_A, profissional.id, { ativo: true });
+  assert.equal(reativado.ativo, true);
+  assert.equal(listarProfissionais(EMPRESA_A).length, 1);
 });
 
 test('mantém profissionais e serviços isolados por empresa', () => {
