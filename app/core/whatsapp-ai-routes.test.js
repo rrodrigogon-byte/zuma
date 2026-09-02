@@ -48,7 +48,7 @@ test('webhook Evolution valida token e enfileira conversa sem processamento inli
   });
   try {
     await withServer(async base => {
-      const payload = { event: 'MESSAGES_UPSERT', data: { key: { id: 'MSG-1', remoteJid: '5565999999999@s.whatsapp.net', fromMe: false }, message: { conversation: 'Olá' } } };
+      const payload = { event: 'MESSAGES_UPSERT', providerSecretMetadata: 'não persistir', data: { key: { id: 'MSG-1', remoteJid: '5565999999999@s.whatsapp.net', fromMe: false }, message: { conversation: 'Olá' }, unrelated: { nested: 'não persistir' } } };
       const invalid = await fetch(`${base}/api/webhooks/whatsapp/${PUBLIC}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-setpoint-webhook-token': 'wrong' }, body: JSON.stringify(payload) });
       assert.equal(invalid.status, 401);
       await invalid.text();
@@ -57,6 +57,11 @@ test('webhook Evolution valida token e enfileira conversa sem processamento inli
       const body = await response.json();
       assert.equal(body.accepted, true);
       assert.equal(body.duplicate, false);
+      const storedEvent = queries.find(item => item.sql.includes('INSERT INTO eventos_integracao_canais'));
+      const storedPayload = JSON.parse(storedEvent.params[6]);
+      assert.equal(storedPayload.providerSecretMetadata, undefined);
+      assert.equal(storedPayload.data.unrelated, undefined);
+      assert.equal(storedPayload.data.message.conversation, 'Olá');
       const task = queries.find(item => item.sql.includes('INSERT INTO tarefas_integracao_canais'));
       assert.ok(task);
       assert.deepEqual(task.params.slice(0, 3), [EMPRESA, LOJA, CHANNEL]);

@@ -16,7 +16,7 @@ import { createStorefrontDomain, listStorefrontDomains, setPrimaryStorefrontDoma
 import { createShippingAccount, failShippingLabel, finalizeShippingCancellation, finalizeShippingLabel, listShippingAccounts, listShippingProviders, lookupPostalCode, prepareShippingCancellation, prepareShippingLabel, publicShippingMethod, quoteAvailableShipping, quoteShipping, shippingAccountReady, updateShippingAccount, updateShippingTracking } from './commerce-shipping.js';
 import { shippingProviders } from './shipping-adapters.js';
 import { commerceMediaIdForIdempotencyKey, newCommerceMediaId, streamCommerceImage, uploadCommerceImage } from './commerce-media.js';
-import { claimWhatsappAiHandoff, closeWhatsappAiHandoff, configureWhatsappAiChannel, listWhatsappAiSessions, releaseWhatsappAiHandoff, syncWhatsappAiWebhook, testWhatsappAiGemini, whatsappAiOperationalStatus } from './whatsapp-ai.js';
+import { claimWhatsappAiHandoff, closeWhatsappAiHandoff, configureWhatsappAiChannel, configureWhatsappAiPolicy, listWhatsappAiSessions, releaseWhatsappAiHandoff, syncWhatsappAiWebhook, testWhatsappAiGemini, whatsappAiOperationalStatus } from './whatsapp-ai.js';
 import { campaignMetrics, cancelCampaign, confirmCampaign, createCampaign, listCampaignAudience, listCampaigns, previewCampaign, updateCampaignConsent } from './commerce-campaigns.js';
 import { cartRecoveryMetrics, listAbandonedCarts, syncPublicCart } from './commerce-abandoned-carts.js';
 import {
@@ -1492,16 +1492,22 @@ export function createCommerceAdminRouter() {
       res.json(await configureWhatsappAiChannel(context, req.body || {}));
     } catch (error) { jsonError(res, error); }
   });
+  router.patch('/whatsapp-ai/policy', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'settings.write');
+      res.json(await configureWhatsappAiPolicy(context, req.body || {}));
+    } catch (error) { jsonError(res, error); }
+  });
   router.post('/whatsapp-ai/diagnostics/gemini', async (req, res) => {
     try {
       const context = await requirePermission(req, 'settings.write');
-      res.json(await testWhatsappAiGemini(context));
+      res.json(await testWhatsappAiGemini(context, { confirmed: req.body?.confirmed === true }));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/whatsapp-ai/channel/sync-webhook', async (req, res) => {
     try {
       const context = await requirePermission(req, 'settings.write');
-      res.json(await syncWhatsappAiWebhook(context));
+      res.json(await syncWhatsappAiWebhook(context, { confirmed: req.body?.confirmed === true }));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/whatsapp-ai/sessions/:id/claim', async (req, res) => {

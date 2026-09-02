@@ -214,7 +214,8 @@ export default function BarbeariaERP() {
   const [formVendaRevenda, setFormVendaRevenda] = useState({ clienteId: '', clienteNome: '', profissionalId: '', observacao: '', produtoId: '', quantidade: 1 })
   const [formPagamentoVendaRevenda, setFormPagamentoVendaRevenda] = useState({ meioPagamento: 'pix' })
   const [formWhatsApp, setFormWhatsApp] = useState({ clienteId: '', finalidade: 'atendimento', telefone: '', mensagem: '', consentimentoConfirmado: false })
-  const [formWhatsappAi, setFormWhatsappAi] = useState({ instance: 'dino', displayName: 'Barbearia Dino', humanized: true, captureLeads: true, operateStore: true, manageAppointments: true, sendPromotions: false, reminders: true, humanHandoff: true })
+  const [formWhatsappAi, setFormWhatsappAi] = useState({ instance: 'dino', displayName: 'Atendimento WhatsApp', humanized: true, captureLeads: true, operateStore: true, manageAppointments: true, sendPromotions: false, reminders: true, humanHandoff: true })
+  const [formWhatsappAiPolicy, setFormWhatsappAiPolicy] = useState({ personalizationEnabled: false, opportunitiesEnabled: false, cooldownDays: 30, privacyNotice: '' })
   const [whatsappAiSessions, setWhatsappAiSessions] = useState([])
   const [itensVendaRevenda, setItensVendaRevenda] = useState([])
 
@@ -255,6 +256,12 @@ export default function BarbeariaERP() {
       setNotificacoesAgenda(payload?.notificacoesAgenda || { queued: 0, sent: 0, failed: 0, canceled: 0 })
       const whatsappAi = payload?.integracoes?.whatsapp?.ai
       if (whatsappAi?.channel) setFormWhatsappAi((atual) => ({ ...atual, instance: whatsappAi.channel.instance || atual.instance, displayName: whatsappAi.channel.nome || atual.displayName, ...(whatsappAi.channel.capabilities || {}) }))
+      if (whatsappAi?.policy) setFormWhatsappAiPolicy({
+        personalizationEnabled: whatsappAi.policy.personalizationEnabled === true,
+        opportunitiesEnabled: whatsappAi.policy.opportunitiesEnabled === true,
+        cooldownDays: Number(whatsappAi.policy.cooldownDays || 30),
+        privacyNotice: whatsappAi.policy.privacyNotice || '',
+      })
     } catch (error) {
       setDashboard(null)
       setErro(error.message || 'Não foi possível carregar o módulo de Barbearia.')
@@ -768,6 +775,7 @@ export default function BarbeariaERP() {
       instance: formWhatsappAi.instance,
       displayName: formWhatsappAi.displayName,
       status,
+      confirmed: status === 'ativo',
       webhookSecretEnv: 'WHATSAPP_AI_WEBHOOK_SECRET',
       webhookHeader: 'x-setpoint-webhook-token',
       capabilities: {
@@ -782,14 +790,36 @@ export default function BarbeariaERP() {
     }), status === 'ativo' ? 'Atendente WhatsApp ativado.' : 'Configuração do canal salva.')
   }
 
+  async function salvarPoliticaWhatsappAi() {
+    if (!whatsappAi?.channel) {
+      toast('Salve primeiro o canal WhatsApp em rascunho.', 'error')
+      return
+    }
+    if (formWhatsappAiPolicy.opportunitiesEnabled && !formWhatsappAiPolicy.personalizationEnabled) {
+      toast('Oportunidades exigem personalização habilitada.', 'error')
+      return
+    }
+    const resumo = formWhatsappAiPolicy.opportunitiesEnabled
+      ? 'Confirmar política com personalização e oportunidades? Isso não ativa o canal nem envia mensagens, mas permitirá esses recursos quando o atendente for ativado separadamente.'
+      : 'Confirmar a política de atendimento desta unidade? Isso não ativa o canal nem envia mensagens.'
+    if (!window.confirm(resumo)) return
+    await executar(() => api.patch('/api/admin/commerce/whatsapp-ai/policy', {
+      personalizationEnabled: formWhatsappAiPolicy.personalizationEnabled,
+      opportunitiesEnabled: formWhatsappAiPolicy.opportunitiesEnabled,
+      cooldownDays: Number(formWhatsappAiPolicy.cooldownDays || 30),
+      privacyNotice: formWhatsappAiPolicy.privacyNotice.trim(),
+      confirmed: true,
+    }), 'Política do atendente atualizada e auditada.')
+  }
+
   async function sincronizarWhatsappAi() {
     if (!window.confirm('Confirmar a sincronização do webhook na Evolution API? Essa ação altera a configuração externa da instância informada.')) return
-    await executar(() => api.post('/api/admin/commerce/whatsapp-ai/channel/sync-webhook', {}), 'Webhook Evolution sincronizado.')
+    await executar(() => api.post('/api/admin/commerce/whatsapp-ai/channel/sync-webhook', { confirmed: true }), 'Webhook Evolution sincronizado.')
   }
 
   async function testarGeminiWhatsappAi() {
     if (!window.confirm('Executar um diagnóstico curto do Gemini? O teste consome uma chamada mínima e não envia mensagem nem executa ferramentas.')) return
-    await executar(() => api.post('/api/admin/commerce/whatsapp-ai/diagnostics/gemini', {}), 'Gemini respondeu ao diagnóstico com sucesso.')
+    await executar(() => api.post('/api/admin/commerce/whatsapp-ai/diagnostics/gemini', { confirmed: true }), 'Gemini respondeu ao diagnóstico com sucesso.')
   }
 
   async function assumirSessaoWhatsappAi(sessionId) {
@@ -1239,7 +1269,7 @@ export default function BarbeariaERP() {
           <div style={{ ...styles.integrationCard, gridColumn: '1 / -1' }}>
             <div style={styles.integrationHeading}>
               <div style={{ ...styles.integrationIcon, background: '#111827' }}>AI</div>
-              <div style={{ flex: 1 }}><strong>Atendente humanizado da Barbearia Dino</strong><span style={styles.sub}>WhatsApp conectado à loja, agenda, clientes, vendas e operação da unidade</span></div>
+              <div style={{ flex: 1 }}><strong>{formWhatsappAi.displayName || 'Atendente humanizado da unidade'}</strong><span style={styles.sub}>WhatsApp conectado à loja, agenda, clientes, vendas e operação da unidade</span></div>
               <Badge status={whatsappAiActive ? 'configurado' : 'pendente_configuracao'} />
             </div>
             <div style={styles.readinessGrid}>
@@ -1256,7 +1286,7 @@ export default function BarbeariaERP() {
             {whatsappAi.unavailable && <div style={{ ...styles.notice, borderColor: '#f59e0b', marginTop: 12 }}><strong>Status indisponível</strong><div style={styles.sub}>{whatsappAi.error || 'A migration da IA ainda não foi aplicada.'}</div></div>}
             <form onSubmit={(event) => event.preventDefault()} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, marginTop: 14 }}>
               <Field label="Instância Evolution"><input value={formWhatsappAi.instance} onChange={(event) => setFormWhatsappAi((atual) => ({ ...atual, instance: event.target.value }))} placeholder="dino" style={inputStyle} /></Field>
-              <Field label="Nome do atendimento"><input value={formWhatsappAi.displayName} onChange={(event) => setFormWhatsappAi((atual) => ({ ...atual, displayName: event.target.value }))} placeholder="Barbearia Dino" style={inputStyle} /></Field>
+              <Field label="Nome do atendimento"><input value={formWhatsappAi.displayName} onChange={(event) => setFormWhatsappAi((atual) => ({ ...atual, displayName: event.target.value }))} placeholder="Atendimento da unidade" style={inputStyle} /></Field>
             </form>
             <div style={{ marginTop: 14, padding: 14, border: '1px solid var(--line)', borderRadius: 12, background: 'color-mix(in srgb, var(--card) 88%, var(--accent))' }}>
               <strong>Capacidades da operação</strong>
@@ -1273,6 +1303,21 @@ export default function BarbeariaERP() {
               </div>
               <small style={{ ...styles.sub, display: 'block', marginTop: 10 }}>Promoções começam desativadas. Mesmo ativadas, o cliente precisa autorizar marketing e responder CONFIRMAR para cada envio preparado.</small>
             </div>
+            <div style={{ ...styles.notice, marginTop: 12, display: 'grid', gap: 10 }}>
+              <div style={styles.sectionTitle}><div><strong>Política de perfil e oportunidades</strong><div style={styles.sub}>Inativa por padrão; consentimento de personalização é separado de marketing e revogável pelo cliente.</div></div><Badge status={whatsappAi.policy?.opportunitiesEnabled ? 'configurado' : 'rascunho'} /></div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: 'var(--muted)', fontSize: 13 }}><input type="checkbox" checked={formWhatsappAiPolicy.personalizationEnabled} onChange={(event) => setFormWhatsappAiPolicy((atual) => ({ ...atual, personalizationEnabled: event.target.checked, opportunitiesEnabled: event.target.checked ? atual.opportunitiesEnabled : false }))} /> Usar perfil somente após consentimento específico</label>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: 'var(--muted)', fontSize: 13 }}><input type="checkbox" checked={formWhatsappAiPolicy.opportunitiesEnabled} onChange={(event) => setFormWhatsappAiPolicy((atual) => ({ ...atual, opportunitiesEnabled: event.target.checked }))} disabled={!formWhatsappAiPolicy.personalizationEnabled} /> Permitir uma oportunidade relevante por conversa, com marketing autorizado</label>
+                <Field label="Cooldown após recusa (dias)"><input type="number" min="7" max="90" value={formWhatsappAiPolicy.cooldownDays} onChange={(event) => setFormWhatsappAiPolicy((atual) => ({ ...atual, cooldownDays: event.target.value }))} style={inputStyle} /></Field>
+                <Field label="Aviso de privacidade opcional"><textarea rows={3} value={formWhatsappAiPolicy.privacyNotice} onChange={(event) => setFormWhatsappAiPolicy((atual) => ({ ...atual, privacyNotice: event.target.value }))} placeholder="Vazio usa o aviso seguro padrão da unidade" style={{ ...inputStyle, resize: 'vertical' }} /></Field>
+              </div>
+              <div style={styles.readinessGrid}>
+                <div style={styles.readinessItem}><strong>Perfil 24h</strong><span style={{ fontWeight: 800 }}>{Number(whatsappAi.policy24h?.profile_resolved || 0)}</span><small style={styles.sub}>{Number(whatsappAi.policy24h?.profile_ambiguous || 0)} ambiguidade(s) bloqueada(s)</small></div>
+                <div style={styles.readinessItem}><strong>Oportunidades 24h</strong><span style={{ fontWeight: 800 }}>{Number(whatsappAi.policy24h?.opportunity_offered || 0)}</span><small style={styles.sub}>{Number(whatsappAi.policy24h?.opportunity_blocked || 0)} bloqueada(s) pelo gate</small></div>
+                <div style={styles.readinessItem}><strong>Segurança 24h</strong><span style={{ fontWeight: 800 }}>{Number(whatsappAi.policy24h?.output_blocked || 0)}</span><small style={styles.sub}>{Number(whatsappAi.policy24h?.injection_suspected || 0)} injeção(ões) suspeita(s)</small></div>
+              </div>
+              <button type="button" style={styles.secondary} disabled={salvando || !whatsappAi.channel} onClick={salvarPoliticaWhatsappAi}>Salvar política sem ativar o canal</button>
+            </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
               <button type="button" style={styles.secondary} disabled={salvando || !whatsappAi.gemini?.configured} onClick={testarGeminiWhatsappAi}>Testar Gemini</button>
               {!whatsappAi.channel && <button type="button" style={styles.secondary} disabled={salvando || !formWhatsappAi.instance.trim()} onClick={() => configurarWhatsappAi('rascunho')}>Salvar canal em rascunho</button>}
@@ -1282,16 +1327,16 @@ export default function BarbeariaERP() {
             </div>
             {whatsappAiCircuitOpen && <div style={{ ...styles.notice, borderColor: '#e05c5c', marginTop: 12 }}><strong>Circuit breaker aberto</strong><div style={styles.sub}>Novas conversas serão encaminhadas à equipe até {whatsappAi.channel?.aiCircuitOpenUntil ? fmtDate(whatsappAi.channel.aiCircuitOpenUntil) : 'a recuperação do provedor'}.</div></div>}
             {(whatsappAiDeadLetter > 0 || whatsappAiUnknown > 0) && <div style={{ ...styles.notice, borderColor: '#f59e0b', marginTop: 12 }}><strong>Revisão humana necessária</strong><div style={styles.sub}>{whatsappAiDeadLetter} tarefa(s) em dead-letter e {whatsappAiUnknown} entrega(s) com resultado incerto. O sistema não repete essas mensagens automaticamente.</div></div>}
-            <p style={{ ...styles.sub, marginTop: 12 }}>O atendimento é reativo, tenant-aware e informa que usa um assistente virtual. Captação, agenda e loja usam os dados reais da Barbearia Dino. Pedidos, agendamentos, remarcações, cancelamentos e promoções só são concluídos após o cliente responder CONFIRMAR; pagamentos externos não são ativados. Handoff interrompe respostas automáticas até a equipe retomar a sessão.</p>
+            <p style={{ ...styles.sub, marginTop: 12 }}>O atendimento é reativo, tenant-aware e informa que usa um assistente virtual. Captação, agenda e loja usam somente os dados reais da unidade selecionada. Pedidos, agendamentos, remarcações, cancelamentos e promoções só são concluídos após o cliente responder CONFIRMAR; pagamentos externos não são ativados. Handoff interrompe respostas automáticas até a equipe retomar a sessão.</p>
             {whatsappAiSessions.filter((item) => item.status === 'humano').length > 0 && <div style={{ marginTop: 14 }}>
               <div style={styles.sectionTitle}><div><strong>Fila de atendimento humano</strong><div style={styles.sub}>Telefones mascarados; conteúdo da conversa não é exibido neste painel.</div></div><Badge status="pendente" /></div>
               <div style={{ display: 'grid', gap: 10, marginTop: 8 }}>
                 {whatsappAiSessions.filter((item) => item.status === 'humano').map((item) => <div key={item.id} style={{ ...styles.notice, display: 'grid', gap: 8 }}>
                   <div style={styles.metricLine}><span><strong>{item.nome || 'Contato'}</strong> · {item.telefone || 'telefone protegido'}</span><strong>Prioridade {Number(item.priority || 0)}</strong></div>
-                  <div style={styles.sub}>Motivo: {item.handoff_reason || item.estado?.handoffReason || 'revisão humana'} · aguardando desde {item.handoff_requested_at ? fmtDate(item.handoff_requested_at) : fmtDate(item.ultima_interacao_em)}</div>
+                  <div style={styles.sub}>Motivo: {item.handoff_reason || 'revisão humana'} · aguardando desde {item.handoff_requested_at ? fmtDate(item.handoff_requested_at) : fmtDate(item.ultima_interacao_em)}</div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {!item.assigned_to && <button type="button" style={styles.secondary} disabled={salvando} onClick={() => assumirSessaoWhatsappAi(item.id)}>Assumir conversa</button>}
-                    {item.assigned_to && <span style={{ ...styles.sub, alignSelf: 'center' }}>Atribuída {item.assigned_at ? fmtDate(item.assigned_at) : ''}</span>}
+                    {!item.assigned && <button type="button" style={styles.secondary} disabled={salvando} onClick={() => assumirSessaoWhatsappAi(item.id)}>Assumir conversa</button>}
+                    {item.assigned && <span style={{ ...styles.sub, alignSelf: 'center' }}>Atribuída {item.assigned_at ? fmtDate(item.assigned_at) : ''}</span>}
                     <button type="button" style={styles.secondary} disabled={salvando} onClick={() => liberarSessaoWhatsappAi(item.id)}>Retomar automação</button>
                     <button type="button" style={styles.secondary} disabled={salvando} onClick={() => encerrarSessaoWhatsappAi(item.id)}>Encerrar</button>
                   </div>

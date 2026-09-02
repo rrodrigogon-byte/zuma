@@ -11,19 +11,27 @@ import {
 test('cleanupWhatsappAiRetention aplica prazo mínimo a sessões regulares e handoffs antigos', async () => {
   const original = db.transaction;
   const captured = [];
+  const rowCounts = [4, 2, 3, 2, 1, 5, 6];
   db.transaction = async callback => callback({
     async query(sql, params) {
       captured.push({ sql, params });
-      return { rowCount: captured.length === 1 ? 4 : 2 };
+      return { rowCount: rowCounts[captured.length - 1] };
     },
   });
   try {
     const removed = await cleanupWhatsappAiRetention(1, 10);
-    assert.equal(removed, 6);
+    assert.equal(removed, rowCounts.reduce((total, value) => total + value, 0));
+    assert.equal(captured.length, 7);
     assert.match(captured[0].sql, /status <> 'humano'/);
     assert.equal(captured[0].params[0], 7);
     assert.match(captured[1].sql, /status = 'humano'/);
     assert.equal(captured[1].params[0], 30);
+    assert.match(captured[2].sql, /UPDATE eventos_integracao_canais/);
+    assert.match(captured[2].sql, /redacted/);
+    assert.match(captured[3].sql, /UPDATE tarefas_integracao_canais/);
+    assert.match(captured[4].sql, /DELETE FROM eventos_integracao_canais/);
+    assert.match(captured[5].sql, /DELETE FROM whatsapp_ai_provider_runs/);
+    assert.match(captured[6].sql, /DELETE FROM whatsapp_ai_policy_events/);
   } finally { db.transaction = original; }
 });
 

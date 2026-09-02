@@ -7,6 +7,8 @@ import { recordCartRecoveryOptOut } from './commerce-abandoned-carts.js';
 import { recordAppointmentNotificationOptOut } from './barbershop-appointment-notifications.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const WEBHOOK_MAX_BYTES = Math.min(524288, Math.max(16384, Number.parseInt(process.env.WHATSAPP_AI_WEBHOOK_MAX_BYTES || '262144', 10)));
+const WEBHOOK_EVENTS_PER_MINUTE = Math.min(1000, Math.max(20, Number.parseInt(process.env.WHATSAPP_AI_WEBHOOK_EVENTS_PER_MINUTE || '120', 10)));
 
 function rawBody(req) {
   if (Buffer.isBuffer(req.rawBody)) return req.rawBody;
@@ -23,6 +25,34 @@ function referencedSecret(channel) {
   const reference = String(channel.credencial_referencia || channel.configuracao?.segredo_env || '').replace(/^ENV:/i, '').trim();
   if (!/^[A-Z][A-Z0-9_]{2,149}$/.test(reference)) return null;
   return process.env[reference] || null;
+}
+
+function minimalEventPayload(parsed = {}) {
+  if (parsed.ignored) return {
+    event: parsed.event || 'EVENTO_DESCONHECIDO',
+    eventId: parsed.externalId || null,
+    ignored: true,
+    reason: parsed.reason || 'ignored',
+  };
+  return {
+    event: parsed.event,
+    data: {
+      key: { id: parsed.externalId, remoteJid: parsed.remoteJid, fromMe: false },
+      pushName: parsed.name || '',
+      messageTimestamp: parsed.timestamp || null,
+      message: { conversation: parsed.text },
+    },
+  };
+}
+
+async function webhookRateLimited(channelId) {
+  const result = await db.queryRead(
+    `SELECT COUNT(*)::int AS total
+       FROM eventos_integracao_canais
+      WHERE canal_id = $1 AND recebido_em >= CURRENT_TIMESTAMP - INTERVAL '1 minute'`,
+    [channelId],
+  );
+  return Number(result.rows[0]?.total || 0) >= WEBHOOK_EVENTS_PER_MINUTE;
 }
 
 function validSignature(req, channel) {
@@ -51,6 +81,8 @@ export function createWhatsappAiWebhookRouter() {
       const channel = channelResult.rows[0];
       if (!channel) return res.status(404).json({ error: 'canal não encontrado ou inativo' });
       if (!validSignature(req, channel)) return res.status(401).json({ error: 'assinatura inválida' });
+      if (rawBody(req).byteLength > WEBHOOK_MAX_BYTES) return res.status(413).json({ error: 'evento excede o limite permitido' });
+      if (await webhookRateLimited(channel.id)) return res.status(429).json({ error: 'limite temporário de eventos atingido' });
 
       const parsed = parseEvolutionMessage(req.body || {});
       const aiReady = whatsappAiReady();
@@ -67,7 +99,7 @@ export function createWhatsappAiWebhookRouter() {
            ON CONFLICT (canal_id, evento_externo_id) DO NOTHING
            RETURNING id`,
           [channel.empresa_id, channel.loja_id, channel.id, externalId, parsed.event || 'evento_desconhecido', hash,
-            JSON.stringify(req.body || {}), parsed.ignored || !aiReady || optOutRequested ? 'ignorado' : 'recebido', parsed.ignored ? parsed.reason : (optOutRequested ? 'marketing_opt_out' : (!aiReady ? 'ai_not_ready' : null))],
+            JSON.stringify(minimalEventPayload(parsed)), parsed.ignored || !aiReady || optOutRequested ? 'ignorado' : 'recebido', parsed.ignored ? parsed.reason : (optOutRequested ? 'marketing_opt_out' : (!aiReady ? 'ai_not_ready' : null))],
         );
         if (!eventResult.rows[0]) return { duplicate: true };
         if (!parsed.ignored && aiReady && !optOutRequested) {
