@@ -33,6 +33,7 @@ const migrationFiles = [
   '041_commerce_customer_credit.sql',
   '042_dino_own_delivery_defaults.sql',
   '043_commerce_abandoned_cart_recovery.sql',
+  '044_commerce_loyalty_legacy_compat.sql',
   '044_loyalty_levels_rewards.sql',
 ];
 const advisoryLockKey = 825410732;
