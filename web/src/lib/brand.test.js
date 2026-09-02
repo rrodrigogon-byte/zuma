@@ -1,11 +1,18 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { applyBrand, applyThemeMode, DINO_BARBERSHOP_LOGO, DINO_COMMERCE_LOGO, isDinoBrandContext, normalizeThemeMode, resolveBrand, storedThemeMode } from './brand.js'
+import { applyBrand, applyThemeMode, commerceDisplayName, DINO_BARBERSHOP_LOGO, DINO_COMMERCE_LOGO, isDinoBrandContext, normalizeThemeMode, resolveBrand, storedThemeMode } from './brand.js'
 
 test('Barbearia Dino e Dino Perfumaria usam assets de marca distintos', () => {
   assert.equal(DINO_BARBERSHOP_LOGO, '/brand/dino-barbearia-logo.png')
   assert.equal(DINO_COMMERCE_LOGO, '/brand/dino-logo-horizontal.png')
   assert.notEqual(DINO_BARBERSHOP_LOGO, DINO_COMMERCE_LOGO)
+})
+
+test('nome comercial do Commerce usa Dino Perfumaria sem alterar outros storefronts', () => {
+  assert.equal(commerceDisplayName('dino', 'Barbearia Dino', 'DINO-MATRIZ'), 'Dino Perfumaria')
+  assert.equal(commerceDisplayName('outra-loja', 'Loja Exemplo', 'Matriz'), 'Loja Exemplo')
+  assert.equal(commerceDisplayName('outra-loja', '', 'Matriz'), 'Matriz')
+  assert.equal(commerceDisplayName('', '', ''), 'Kytto Commerce')
 })
 
 test('resolveBrand aplica Dino em todo o backoffice somente quando Dino é o tenant ativo', () => {

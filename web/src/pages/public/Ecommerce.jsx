@@ -3,7 +3,7 @@ import { ArrowRight, CheckCircle2, Eye, Loader2, Minus, Monitor, Moon, Plus, Sea
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, fmtR } from '../../lib/api'
 import { decrementCartQuantity, loadAllStorefrontProducts, normalizeStorefrontAlias, storefrontApiBase, storefrontCartSessionKey, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
-import { applyThemeMode, DINO_COMMERCE_LOGO, storedThemeMode } from '../../lib/brand'
+import { applyThemeMode, commerceDisplayName, DINO_COMMERCE_LOGO, storedThemeMode } from '../../lib/brand'
 import './commerce.css'
 
 function readCart(storeAlias) {
@@ -424,7 +424,8 @@ export default function Ecommerce() {
   }
 
   const publicBrand = storeContext?.public || {}
-  const brandName = publicBrand.displayName || storeContext?.nome || (storeAlias ? storeAlias : 'Kytto Commerce')
+  const operationalName = publicBrand.displayName || storeContext?.nome || (storeAlias ? storeAlias : 'Kytto Commerce')
+  const brandName = commerceDisplayName(storeAlias, publicBrand.displayName, storeContext?.nome)
   const brandTagline = publicBrand.tagline || 'Uma experiência de compra completa para produtos, serviços e operações locais — com catálogo, atendimento e gestão conectados.'
   const publicAddress = formatPublicAddress(publicBrand.address)
   const publicPhone = String(publicBrand.contact?.phone || '')
@@ -477,7 +478,7 @@ export default function Ecommerce() {
     </section>
 
     {(publicAddress || publicPhone || publicEmail || publicPolicies.length > 0) && <section className="commerce-store-details" aria-label="Informações da loja">
-      <div><span className="commerce-eyebrow">Retirada e atendimento</span><h2>{brandName}</h2>{publicAddress && <address>{publicAddress}</address>}{publicBrand.pickup?.instructions && <p>{publicBrand.pickup.instructions}</p>}{Number(publicBrand.pickup?.leadTimeHours) > 0 && <small>Prazo de preparação para retirada: até {publicBrand.pickup.leadTimeHours} hora(s).</small>}</div>
+      <div><span className="commerce-eyebrow">Retirada e atendimento</span><h2>{operationalName}</h2>{publicAddress && <address>{publicAddress}</address>}{publicBrand.pickup?.instructions && <p>{publicBrand.pickup.instructions}</p>}{Number(publicBrand.pickup?.leadTimeHours) > 0 && <small>Prazo de preparação para retirada: até {publicBrand.pickup.leadTimeHours} hora(s).</small>}</div>
       <div className="commerce-store-contact">{publicPhone && <a href={`tel:${publicPhone}`}><strong>Telefone</strong><span>{publicPhone}</span></a>}{publicEmail && <a href={`mailto:${publicEmail}`}><strong>E-mail</strong><span>{publicEmail}</span></a>}</div>
       {publicPolicies.length > 0 && <nav aria-label="Políticas da loja">{publicPolicies.map(([label, url]) => <a key={label} href={url} target="_blank" rel="noreferrer">{label}</a>)}</nav>}
     </section>}
