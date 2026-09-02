@@ -313,6 +313,19 @@ export function atualizarProfissional(empresaId, profissionalId, dados = {}) {
   return { ...atual };
 }
 
+// Exclusão lógica: profissionais podem estar referenciados por agenda,
+// comandas e comissões. Mantemos o registro histórico e retiramos o acesso
+// às novas operações ao marcar ativo=false.
+export function excluirProfissional(empresaId, profissionalId) {
+  const estado = estadoEmpresa(empresaId);
+  const atual = estado.profissionais[String(profissionalId)];
+  if (!atual || atual.empresaId !== String(empresaId)) return null;
+  const agora = dataAtual();
+  Object.assign(atual, { ativo: false, removidoEm: atual.removidoEm || agora, atualizadoEm: agora });
+  save();
+  return { ...atual };
+}
+
 export function listarServicos(empresaId, { incluirInativos = false } = {}) {
   return Object.values(estadoEmpresa(empresaId, false).servicos)
     .filter((item) => incluirInativos || item.ativo !== false)

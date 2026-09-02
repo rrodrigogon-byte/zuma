@@ -2381,6 +2381,16 @@ async function iniciar() {
     }
   });
 
+  app.delete('/api/admin/barbearia/profissionais/:id', requerEditorCatalogo, (req, res) => {
+    try {
+      const profissional = barbeariaErpKytto.excluirProfissional(req.empresaId, req.params.id);
+      if (!profissional) return res.status(404).json({ erro: 'Profissional não encontrado na empresa ativa.' });
+      res.json({ ok: true, profissional, exclusao: 'logica' });
+    } catch (error) {
+      res.status(400).json({ erro: error.message });
+    }
+  });
+
   app.get('/api/admin/barbearia/servicos', requerEditorCatalogo, (req, res) => {
     res.json({ ok: true, servicos: barbeariaErpKytto.listarServicos(req.empresaId, { incluirInativos: incluirInativos(req.query) }) });
   });

@@ -2282,6 +2282,13 @@ app.patch('/api/admin/barbearia/profissionais/:id', (req, res) => {
     res.json({ ok: true, profissional });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
+app.delete('/api/admin/barbearia/profissionais/:id', (req, res) => {
+  try {
+    const profissional = barbeariaErpKytto.excluirProfissional(legacyEmpresaId(req), req.params.id);
+    if (!profissional) return res.status(404).json({ error: 'Profissional não encontrado na empresa ativa.' });
+    res.json({ ok: true, profissional, exclusao: 'logica' });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
 
 app.get('/api/admin/barbearia/servicos', (req, res) => res.json({ ok: true, servicos: barbeariaErpKytto.listarServicos(legacyEmpresaId(req), { incluirInativos: String(req.query?.incluirInativos) === 'true' }) }));
 app.post('/api/admin/barbearia/servicos', (req, res) => {
