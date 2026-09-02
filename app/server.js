@@ -45,6 +45,8 @@ import {
 import { requireCommercePermission, resolveCommerceIdentity } from './core/commerce-identity-bridge.js';
 import { listCommerceTenants, provisionCommerceTenant } from './core/commerce-tenants.js';
 import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
+import * as barbeariaFiscalKytto from './barbearia-fiscal-kytto.js';
+import { appointmentNotificationMetrics, queueAppointmentNotifications } from './core/barbershop-appointment-notifications.js';
 import * as clientesKytto from './clientes-contas-kytto.js';
 import * as financeiroKytto from './financeiro-central-kytto.js';
 import * as caixaKytto from './caixa-diario-kytto.js';
@@ -2227,6 +2229,7 @@ app.get('/api/admin/barbearia/overview', async (req, res) => {
     const aiConfigured = Boolean(process.env.GEMINI_API_KEY || process.env.AI_API_KEY || process.env.OPENAI_API_KEY);
     const commerce = await commerceIntegrationForBarbearia(req);
     const whatsappAi = await whatsappAiIntegrationForBarbearia(req);
+    const notificacoesAgenda = await appointmentNotificationMetrics({ empresaId, lojaId }).catch(() => ({ queued: 0, sent: 0, failed: 0, canceled: 0 }));
     res.json({
       ok: true,
       dashboard,
@@ -2246,9 +2249,11 @@ app.get('/api/admin/barbearia/overview', async (req, res) => {
       produtos: barbeariaErpKytto.listarProdutosRevenda(empresaId, { incluirInativos: false }),
       vendas: barbeariaErpKytto.listarVendasRevenda(empresaId, { lojaId }),
       comandas,
+      documentosFiscais: barbeariaFiscalKytto.listarDocumentosFiscais(empresaId, { lojaId }).slice(0, 50),
              resumoComandas,
        relacionamento: resumoRelacionamentoBarbearia(req),
        operacao: resumoOperacaoBarbearia(req),
+       notificacoesAgenda,
 
              integracoes: { whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: wpp.ativo(), ai: whatsappAi }, ia: { configurada: aiConfigured, modelo: process.env.GEMINI_API_KEY ? (process.env.GEMINI_MODEL || 'gemini-2.5-flash') : (process.env.AI_MODEL || process.env.OPENAI_MODEL || 'regras-dino-local'), analiseOperacionalDisponivel: true, fallbackLocal: true, whatsapp: whatsappAi }, commerce },
 
@@ -2310,18 +2315,31 @@ app.get('/api/admin/barbearia/agenda/:id', (req, res) => {
   if (!agendamento) return res.status(404).json({ error: 'Agendamento não encontrado na empresa ativa.' });
   res.json({ ok: true, agendamento });
 });
-app.post('/api/admin/barbearia/agenda', (req, res) => {
-  try { const body = { ...(req.body || {}), lojaId: legacyLojaId(req) }; res.status(201).json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(legacyEmpresaId(req), barbeariaErpKytto.criarAgendamento(legacyEmpresaId(req), body)) }); }
-  catch (error) { res.status(400).json({ error: error.message }); }
-});
-app.patch('/api/admin/barbearia/agenda/:id', (req, res) => {
+app.post('/api/admin/barbearia/agenda', async (req, res) => {
   try {
-    const agendamento = barbeariaErpKytto.atualizarAgendamento(legacyEmpresaId(req), req.params.id, { ...(req.body || {}), lojaId: legacyLojaId(req) });
-    if (!agendamento) return res.status(404).json({ error: 'Agendamento não encontrado na empresa ativa.' });
-    res.json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(legacyEmpresaId(req), agendamento) });
+    const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId(req);
+    const body = { ...(req.body || {}), lojaId };
+    const agendamento = enriquecerAgendamentoBarbearia(empresaId, barbeariaErpKytto.criarAgendamento(empresaId, body));
+    const notificacao = await queueAppointmentNotifications({ empresaId, lojaId, legacyEmpresaId: empresaId }, agendamento, 'criado').catch(() => ({ queued: 0, skipped: true, reason: 'queue_unavailable' }));
+    res.status(201).json({ ok: true, agendamento, notificacao });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
-app.patch('/api/admin/barbearia/agenda/:id/status', (req, res) => {
+app.patch('/api/admin/barbearia/agenda/:id', async (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId(req);
+    const anterior = listarAgendamentosBarbearia(empresaId, { lojaId }).find((item) => item.id === String(req.params.id));
+    const agendamento = barbeariaErpKytto.atualizarAgendamento(empresaId, req.params.id, { ...(req.body || {}), lojaId, usuario: req.user?.email || req.user?.nome || '', origem: 'admin' });
+    if (!agendamento) return res.status(404).json({ error: 'Agendamento não encontrado na empresa ativa.' });
+    const remarcado = anterior && ['dataHora', 'dataAgenda', 'profissionalId', 'servicoId'].some((campo) => String(anterior[campo] || '') !== String(agendamento[campo] || ''));
+    const notificacao = remarcado
+      ? await queueAppointmentNotifications({ empresaId, lojaId, legacyEmpresaId: empresaId }, agendamento, 'remarcado').catch(() => ({ queued: 0, skipped: true, reason: 'queue_unavailable' }))
+      : { queued: 0, skipped: true, reason: 'schedule_unchanged' };
+    res.json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(empresaId, agendamento), notificacao });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.patch('/api/admin/barbearia/agenda/:id/status', async (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
     const status = String(req.body?.status || '');
@@ -2342,7 +2360,10 @@ app.patch('/api/admin/barbearia/agenda/:id/status', (req, res) => {
       });
       agendamento = barbeariaErpKytto.vincularLancamentoFinanceiro(empresaId, agendamento.id, financeiro.id) || agendamento;
     }
-    res.json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(empresaId, agendamento), financeiro });
+    const notificacao = status === 'cancelado'
+      ? await queueAppointmentNotifications({ empresaId, lojaId: legacyLojaId(req), legacyEmpresaId: empresaId }, agendamento, 'cancelado').catch(() => ({ queued: 0, skipped: true, reason: 'queue_unavailable' }))
+      : { queued: 0, skipped: true, reason: 'event_not_notifiable' };
+    res.json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(empresaId, agendamento), financeiro, notificacao });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
@@ -2440,6 +2461,37 @@ app.post('/api/admin/barbearia/comandas/:id/pagamentos', (req, res) => {
     res.json({ ok: true, comanda, aviso: possuiDinheiroSemCaixa ? 'Recebimento em dinheiro confirmado sem vínculo a um caixa aberto.' : null });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
+app.get('/api/admin/barbearia/fiscal/documentos', (req, res) => {
+  try {
+    const documentos = barbeariaFiscalKytto.listarDocumentosFiscais(legacyEmpresaId(req), { lojaId: legacyLojaId(req), origemTipo: req.query?.origemTipo, origemId: req.query?.origemId });
+    res.json({ ok: true, documentos, total: documentos.length });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.post('/api/admin/barbearia/comandas/:id/fiscal/rascunho', (req, res) => {
+  try {
+    const comanda = comandaBarbeariaDaSessao(req, req.params.id);
+    if (!comanda) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
+    if (!['paga', 'em_conta'].includes(comanda.status)) return res.status(409).json({ error: 'Somente comandas faturadas podem preparar rascunho fiscal.' });
+    const chaveIdempotencia = req.get('Idempotency-Key') || req.body?.chaveIdempotencia || `barbearia:fiscal:${legacyEmpresaId(req)}:${comanda.id}`;
+    const resultado = barbeariaFiscalKytto.prepararDocumentoFiscal(legacyEmpresaId(req), {
+      confirmado: req.body?.confirmado === true,
+      lojaId: legacyLojaId(req),
+      origemTipo: 'comanda',
+      origemId: comanda.id,
+      chaveIdempotencia,
+      clienteId: comanda.clienteId,
+      desconto: comanda.desconto,
+      gorjeta: comanda.gorjeta,
+      total: comanda.total,
+      observacoes: req.body?.observacoes || 'Rascunho preparado pela Barbearia. Emissão depende de integração fiscal externa configurada.',
+      usuario: req.user?.email || req.user?.nome || '',
+      itens: (comanda.itens || []).map((item) => ({ tipo: item.tipo, descricao: item.nome, quantidade: item.quantidade || 1, valorUnitario: item.precoUnitario, total: item.subtotal, referenciaId: item.servicoId || item.produtoId })),
+    });
+    res.status(resultado.idempotente ? 200 : 201).json({ ok: true, ...resultado });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
 app.post('/api/admin/barbearia/comandas/:id/consumo-interno', (req, res) => {
   try {
     if (!comandaBarbeariaDaSessao(req, req.params.id)) return res.status(404).json({ error: 'Comanda não encontrada na empresa/unidade ativa.' });
