@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, CheckCircle2, Copy, Loader2, MapPin, PackageCheck, ShieldCheck, Store, Truck } from 'lucide-react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, fmtR } from '../../lib/api'
-import { DINO_COMMERCE_LOGO } from '../../lib/brand'
+import { commerceDisplayName, DINO_COMMERCE_LOGO } from '../../lib/brand'
 import { normalizeStorefrontAlias, storefrontApiBase, storefrontCartSessionKey, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
 
 const EMPTY_ADDRESS = { cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '', referencia: '' }
@@ -358,7 +358,7 @@ export default function CommerceCheckout() {
 
   const publicBrand = storeContext?.public || {}
   const isDinoCommerce = storeAlias === 'dino'
-  const brandName = isDinoCommerce ? 'Dino Perfumaria' : (publicBrand.displayName || storeContext?.nome || (storeAlias ? storeAlias : 'Kytto Commerce'))
+  const brandName = commerceDisplayName(storeAlias, publicBrand.displayName, storeContext?.nome)
   const brandMark = 'K'
 
   return <main className="checkout-page">
