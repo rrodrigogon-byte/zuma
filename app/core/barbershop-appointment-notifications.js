@@ -145,8 +145,16 @@ function mensagem(snapshot, agendamento, cliente, evento) {
   return `${cabecalho} Seu agendamento foi registrado para ${quando}. Serviço: ${servico}. Profissional: ${profissional}. ${rodape}`;
 }
 
+function appointmentDeliveryError(message, code, retryable = false) {
+  const error = new Error(message);
+  error.code = code;
+  error.retryable = retryable;
+  return error;
+}
+
 export async function processAppointmentNotificationTask(task = {}) {
   const payload = task.payload || {};
+  if (task.delivery_started_at) throw appointmentDeliveryError('resultado anterior da notificação incerto; revisão humana obrigatória', 'APPOINTMENT_DELIVERY_UNKNOWN', false);
   const legacyEmpresaId = limpo(payload.legacyEmpresaId, 120);
   const appointmentId = limpo(payload.appointmentId, 120);
   const evento = limpo(payload.eventType, 30).toLowerCase();
@@ -171,13 +179,24 @@ export async function processAppointmentNotificationTask(task = {}) {
   );
   const canal = channelResult.rows[0];
   if (!canal) return { skipped: true, reason: 'whatsapp_channel_inactive' };
+  await db.query(
+    `UPDATE tarefas_integracao_canais SET delivery_started_at = CURRENT_TIMESTAMP
+      WHERE id = $1 AND status = 'processando' AND lease_token = $2::uuid`,
+    [task.id, task.lease_token],
+  );
   const resultado = await enviarMensagem({
     whatsapp_api_url: process.env.EVOLUTION_API_URL || canal.api_base_url,
     whatsapp_api_key: process.env.EVOLUTION_API_KEY,
     whatsapp_instance: canal.configuracao?.instance || process.env.EVOLUTION_INSTANCE,
   }, elegibilidade.telefone, mensagem(snapshot, agendamento, elegibilidade.cliente, evento));
-  if (!resultado?.ok) throw new Error('Evolution não confirmou o envio da notificação de agenda.');
-  return { sent: true, appointmentId, eventType: evento, providerMessageId: limpo(resultado?.data?.key?.id || resultado?.data?.id, 200) || null };
+  if (!resultado?.ok) {
+    const unknown = resultado?.uncertain === true;
+    if (!unknown) await db.query(`UPDATE tarefas_integracao_canais SET delivery_started_at = NULL WHERE id = $1`, [task.id]);
+    throw appointmentDeliveryError(unknown ? 'resultado da notificação incerto' : 'Evolution recusou a notificação de agenda', unknown ? 'APPOINTMENT_DELIVERY_UNKNOWN' : 'APPOINTMENT_SEND_FAILED', !unknown && resultado?.retryable === true);
+  }
+  const providerMessageId = limpo(resultado?.data?.key?.id || resultado?.data?.id, 200) || null;
+  await db.query(`UPDATE tarefas_integracao_canais SET provider_message_id = $2 WHERE id = $1`, [task.id, providerMessageId]);
+  return { sent: true, appointmentId, eventType: evento, providerMessageId };
 }
 
 export async function recordAppointmentNotificationOptOut(channel = {}, parsed = {}) {

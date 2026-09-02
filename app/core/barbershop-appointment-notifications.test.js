@@ -121,8 +121,8 @@ test('processa aviso com revalidação de consentimento e canal e não expõe te
     assert.equal(resultado.sent, true);
     assert.equal(resultado.providerMessageId, 'provider-test-1');
     assert.equal('phone' in resultado, false);
-    assert.match(body.textMessage.text, /mensagem de atendimento/);
-    assert.match(body.textMessage.text, /responda SAIR/);
+    assert.match(body.text, /mensagem de atendimento/);
+    assert.match(body.text, /responda SAIR/);
     assert.equal(body.number, '5565999990000');
   } finally {
     db.query = originalQuery;
