@@ -1009,7 +1009,6 @@ export async function updateShippingMethod(trx, context, methodId, input = {}) {
     values.push(JSON.stringify(config)); sets.push(`configuracao = $${values.length}::jsonb`);
   }
   if (!sets.length) throw new CommerceError('nenhuma alteração informada', 'NO_CHANGES');
-  sets.push('atualizado_em = CURRENT_TIMESTAMP');
   const result = await trx.query(`UPDATE commerce_shipping_methods SET ${sets.join(', ')} WHERE empresa_id = $1 AND id = $2 RETURNING *`, values);
   return result.rows[0];
 }

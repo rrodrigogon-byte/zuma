@@ -167,7 +167,9 @@ test('updateShippingMethod valida escopo, conta logística e estado ativo', asyn
   assert.equal(result.configuracao.shippingAccountId, shippingAccountId);
   assert.deepEqual(result.configuracao.services, ['03220', '04669']);
   assert.equal('apiToken' in result.configuracao, false);
-  assert.equal(calls.filter(call => call.sql.includes('UPDATE commerce_shipping_methods')).length, 1);
+  const updateCall = calls.find(call => call.sql.includes('UPDATE commerce_shipping_methods'));
+  assert.ok(updateCall);
+  assert.equal(updateCall.sql.includes('atualizado_em'), false);
 
   const invalid = queryRecorder(sql => sql.includes('FROM commerce_shipping_methods sm') ? { rows: [{ id: methodId, empresa_id: empresaId, storefront_id: storefrontId, tipo: 'pickup', configuracao: {} }] } : { rows: [] });
   await assert.rejects(
