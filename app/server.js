@@ -476,7 +476,7 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
         observacao: req.body?.observacao,
         usuarioId: context.usuarioId,
       });
-      if (!result.replay) await auditLoyaltyAdvanced(req, context, { table: 'fidelidade_resgates_recompensa', operation: 'INSERT', recordId: result.redemption.id, after: { cliente_id: result.redemption.cliente_id, recompensa_id: result.redemption.recompensa_id, pontos_resgatados: result.redemption.pontos_resgatados } });
+      if (!result.replay) await auditLoyaltyAdvanced(req, context, { table: 'commerce_loyalty_reward_redemptions', operation: 'INSERT', recordId: result.redemption.id, after: { cliente_id: result.redemption.cliente_id, recompensa_id: result.redemption.recompensa_id, pontos_resgatados: result.redemption.pontos_resgatados } });
       return res.status(result.replay ? 200 : 201).json({ ok: true, replay: result.replay, resgate: result.redemption });
     } catch (error) {
       return respondLoyaltyAdvancedError(res, error, 'Não foi possível resgatar a recompensa.');
@@ -487,7 +487,7 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
     try {
       const context = await loyaltyAdvancedContext(req, 'orders.write');
       const redemption = await markRewardDelivered(loyaltyDb, { ...context, redemptionId: req.params.id, confirmar: req.body?.confirmar });
-      if (!redemption.replay) await auditLoyaltyAdvanced(req, context, { table: 'fidelidade_resgates_recompensa', operation: 'UPDATE', recordId: redemption.id, after: { status: redemption.status } });
+      if (!redemption.replay) await auditLoyaltyAdvanced(req, context, { table: 'commerce_loyalty_reward_redemptions', operation: 'UPDATE', recordId: redemption.id, after: { status: redemption.status } });
       return res.json({ ok: true, replay: Boolean(redemption.replay), resgate: redemption });
     } catch (error) {
       return respondLoyaltyAdvancedError(res, error, 'Não foi possível confirmar a entrega da recompensa.');
@@ -498,7 +498,7 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
     try {
       const context = await loyaltyAdvancedContext(req, 'orders.write');
       const result = await cancelRewardRedemption(loyaltyDb, { ...context, redemptionId: req.params.id, confirmar: req.body?.confirmar, motivo: req.body?.motivo, usuarioId: context.usuarioId });
-      if (!result.replay) await auditLoyaltyAdvanced(req, context, { table: 'fidelidade_resgates_recompensa', operation: 'UPDATE', recordId: result.redemption.id, after: { status: result.redemption.status, estorno_extrato_id: result.refundLedgerId } });
+      if (!result.replay) await auditLoyaltyAdvanced(req, context, { table: 'commerce_loyalty_reward_redemptions', operation: 'UPDATE', recordId: result.redemption.id, after: { status: result.redemption.status, estorno_extrato_id: result.refundLedgerId } });
       return res.json({ ok: true, replay: result.replay, resgate: result.redemption });
     } catch (error) {
       return respondLoyaltyAdvancedError(res, error, 'Não foi possível cancelar o resgate.');

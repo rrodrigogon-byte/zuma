@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
@@ -7,6 +8,9 @@ const render = readFileSync(new URL('../render.yaml', import.meta.url), 'utf8');
 const app = readFileSync(new URL('../web/src/App.jsx', import.meta.url), 'utf8');
 const page = readFileSync(new URL('../web/src/pages/admin/CanaisFidelidade.jsx', import.meta.url), 'utf8');
 const panel = readFileSync(new URL('../web/src/pages/admin/LoyaltyAdvancedPanel.jsx', import.meta.url), 'utf8');
+const migrationRunner = readFileSync(new URL('./migrations/run-commerce-schema-migrations.js', import.meta.url), 'utf8');
+const migration044 = readFileSync(new URL('./migrations/044_loyalty_levels_rewards.sql', import.meta.url), 'utf8');
+const migration045 = readFileSync(new URL('./migrations/045_commerce_loyalty_ledger.sql', import.meta.url), 'utf8');
 
 function routeBlock(method, path) {
   const marker = `app.${method}('${path}'`;
@@ -18,6 +22,14 @@ function routeBlock(method, path) {
 test('Render publica server.js e a rota de interface monta CanaisFidelidade', () => {
   assert.match(render, /startCommand:\s*cd app && node server\.js/);
   assert.match(app, /path="\/admin\/omnichannel"\s+element=\{<Layout><CanaisFidelidade \/><\/Layout>\}/);
+});
+
+test('migration 044 permanece imutável e o ledger Commerce entra somente pela 045 incremental', () => {
+  const checksum044 = createHash('sha256').update(migration044).digest('hex');
+  assert.equal(checksum044, 'f4df3519812df770ef3468b2325c25bd4b35d3ceb4ac8274ed8e3e82639d6aec');
+  assert.ok(migrationRunner.indexOf("'044_loyalty_levels_rewards.sql'") < migrationRunner.indexOf("'045_commerce_loyalty_ledger.sql'"));
+  assert.match(migration045, /CREATE TABLE IF NOT EXISTS commerce_loyalty_ledger/);
+  assert.match(migration045, /CREATE TABLE IF NOT EXISTS commerce_loyalty_reward_redemptions/);
 });
 
 test('visão avançada exige customers.read no runtime produtivo', () => {
