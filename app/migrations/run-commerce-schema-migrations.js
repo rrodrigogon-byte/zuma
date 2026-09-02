@@ -38,6 +38,7 @@ const migrationFiles = [
   '044_loyalty_levels_rewards.sql',
   '045_commerce_loyalty_ledger.sql',
   '046_barbershop_appointment_notifications.sql',
+  '047_whatsapp_ai_operational_hardening.sql',
 ];
 const advisoryLockKey = 825410732;
 

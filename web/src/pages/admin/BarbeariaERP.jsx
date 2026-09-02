@@ -792,9 +792,19 @@ export default function BarbeariaERP() {
     await executar(() => api.post('/api/admin/commerce/whatsapp-ai/diagnostics/gemini', {}), 'Gemini respondeu ao diagnóstico com sucesso.')
   }
 
+  async function assumirSessaoWhatsappAi(sessionId) {
+    if (!window.confirm('Assumir esta conversa na fila humana? A automação continuará pausada.')) return
+    await executar(() => api.post(`/api/admin/commerce/whatsapp-ai/sessions/${sessionId}/claim`, {}), 'Conversa atribuída ao operador.')
+  }
+
   async function liberarSessaoWhatsappAi(sessionId) {
-    if (!window.confirm('Retomar o atendimento automático desta conversa após o handoff humano?')) return
+    if (!window.confirm('Retomar o atendimento automático desta conversa após concluir o handoff humano?')) return
     await executar(() => api.post(`/api/admin/commerce/whatsapp-ai/sessions/${sessionId}/release`, {}), 'Atendimento automático retomado.')
+  }
+
+  async function encerrarSessaoWhatsappAi(sessionId) {
+    if (!window.confirm('Encerrar esta conversa humana? A ação pendente será descartada e a automação não enviará resposta nesta sessão.')) return
+    await executar(() => api.post(`/api/admin/commerce/whatsapp-ai/sessions/${sessionId}/close`, {}), 'Conversa humana encerrada.')
   }
 
   async function enviarWhatsApp(event) {
@@ -1173,6 +1183,11 @@ export default function BarbeariaERP() {
     const whatsappAi = whatsapp?.ai || ia?.whatsapp || {}
     const whatsappAiReady = Boolean(whatsappAi.featureEnabled && whatsappAi.gemini?.configured && whatsappAi.evolutionConfigured)
     const whatsappAiActive = whatsappAi.channel?.status === 'ativo'
+    const whatsappAiCircuitOpen = whatsappAi.channel?.aiCircuitOpen === true
+    const whatsappAiQueue = Number(whatsappAi.tasks?.pendente || 0) + Number(whatsappAi.tasks?.processando || 0)
+    const whatsappAiFailed = Number(whatsappAi.tasks?.falha || 0)
+    const whatsappAiDeadLetter = Number(whatsappAi.tasks?.deadLetter || 0)
+    const whatsappAiUnknown = Number(whatsappAi.deliveries?.unknown || 0)
     const iaDisponivel = Boolean(ia?.analiseOperacionalDisponivel)
     const prontidaoCommerce = Number(commerce?.prontidao?.percentual || 0)
     const commerceDisponivel = !['desativado', 'indisponivel', 'temporariamente_indisponivel', 'sem_membership', 'sem_permissao'].includes(commerce?.status)
@@ -1182,7 +1197,7 @@ export default function BarbeariaERP() {
           <div>
             <div style={styles.kicker}>Canais e automação controlada</div>
             <h2 style={{ ...styles.h2, fontSize: 22, marginTop: 5 }}>Integrações da Barbearia</h2>
-            <p style={styles.sub}>WhatsApp e IA trabalham como apoio ao operador. Nenhuma mensagem, reserva, pagamento ou alteração é disparada automaticamente.</p>
+            <p style={styles.sub}>WhatsApp e IA operam com consentimento, limites e handoff. O canal permanece inerte enquanto não estiver explicitamente configurado e ativo.</p>
           </div>
           <button type="button" style={styles.secondary} onClick={carregar}>Atualizar status</button>
         </div>
@@ -1228,12 +1243,15 @@ export default function BarbeariaERP() {
               <Badge status={whatsappAiActive ? 'configurado' : 'pendente_configuracao'} />
             </div>
             <div style={styles.readinessGrid}>
-              <div style={styles.readinessItem}><strong>Feature flag</strong><span style={{ fontWeight: 800, color: whatsappAi.featureEnabled ? '#14b87a' : '#f59e0b' }}>{whatsappAi.featureEnabled ? 'Ativa' : 'Desativada'}</span><small style={styles.sub}>FEATURE_WHATSAPP_AI</small></div>
-              <div style={styles.readinessItem}><strong>Gemini</strong><span style={{ fontWeight: 800, color: whatsappAi.gemini?.configured ? '#14b87a' : '#f59e0b' }}>{whatsappAi.gemini?.configured ? whatsappAi.gemini.model : 'Pendente'}</span><small style={styles.sub}>Credencial nunca exibida</small></div>
-              <div style={styles.readinessItem}><strong>Evolution</strong><span style={{ fontWeight: 800, color: whatsappAi.evolutionConfigured ? '#14b87a' : '#f59e0b' }}>{whatsappAi.evolutionConfigured ? 'Configurada' : 'Pendente'}</span><small style={styles.sub}>API, chave e instância</small></div>
+              <div style={styles.readinessItem}><strong>Feature flag</strong><span style={{ fontWeight: 800, color: whatsappAi.featureEnabled ? '#14b87a' : '#f59e0b' }}>{whatsappAi.featureEnabled ? 'Ativa' : 'Desativada'}</span><small style={styles.sub}>Ativação separada do deploy</small></div>
+              <div style={styles.readinessItem}><strong>Gemini</strong><span style={{ fontWeight: 800, color: whatsappAi.gemini?.configured ? '#14b87a' : '#f59e0b' }}>{whatsappAi.gemini?.configured ? whatsappAi.gemini.model : 'Pendente'}</span><small style={styles.sub}>{whatsappAiCircuitOpen ? 'Circuito aberto · handoff obrigatório' : `${Number(whatsappAi.provider24h?.total || 0)} execução(ões) em 24h`}</small></div>
+              <div style={styles.readinessItem}><strong>Evolution</strong><span style={{ fontWeight: 800, color: whatsappAi.evolutionConfigured ? '#14b87a' : '#f59e0b' }}>{whatsappAi.evolutionConfigured ? 'Configurada' : 'Pendente'}</span><small style={styles.sub}>API, chave e instância protegidas</small></div>
               <div style={styles.readinessItem}><strong>Canal</strong><span style={{ fontWeight: 800 }}>{whatsappAi.channel?.status || 'Não criado'}</span><small style={styles.sub}>{whatsappAi.channel?.lastEventAt ? `Último evento ${fmtDate(whatsappAi.channel.lastEventAt)}` : 'Sem eventos recebidos'}</small></div>
-              <div style={styles.readinessItem}><strong>Sessões</strong><span style={{ fontWeight: 800 }}>{Object.values(whatsappAi.sessions || {}).reduce((total, item) => total + Number(item || 0), 0)}</span><small style={styles.sub}>{Number(whatsappAi.sessions?.humano || 0)} em atendimento humano</small></div>
-              <div style={styles.readinessItem}><strong>Fila</strong><span style={{ fontWeight: 800 }}>{Number(whatsappAi.tasks?.pendente || 0) + Number(whatsappAi.tasks?.processando || 0)}</span><small style={styles.sub}>{Number(whatsappAi.tasks?.falha || 0)} falha(s)</small></div>
+              <div style={styles.readinessItem}><strong>Fila humana</strong><span style={{ fontWeight: 800 }}>{Number(whatsappAi.sessions?.humano || 0)}</span><small style={styles.sub}>{Number(whatsappAi.humanQueue?.unassigned || 0)} sem responsável</small></div>
+              <div style={styles.readinessItem}><strong>Fila técnica</strong><span style={{ fontWeight: 800 }}>{whatsappAiQueue}</span><small style={styles.sub}>{whatsappAiFailed} aguardando retry · {whatsappAiDeadLetter} dead-letter</small></div>
+              <div style={styles.readinessItem}><strong>Entregas 24h</strong><span style={{ fontWeight: 800 }}>{Number(whatsappAi.deliveries?.sent || 0)} enviadas</span><small style={styles.sub}>{whatsappAiUnknown} incerta(s) · nunca reenviadas automaticamente</small></div>
+              <div style={styles.readinessItem}><strong>Latência Gemini</strong><span style={{ fontWeight: 800 }}>{Number(whatsappAi.provider24h?.avgLatencyMs || 0)} ms</span><small style={styles.sub}>{Number(whatsappAi.provider24h?.failed || 0)} falha(s) · {Number(whatsappAi.provider24h?.toolCalls || 0)} ferramenta(s)</small></div>
+              <div style={styles.readinessItem}><strong>Worker</strong><span style={{ fontWeight: 800 }}>{whatsappAi.worker?.lastHeartbeatAt ? 'Observável' : 'Sem ciclos'}</span><small style={styles.sub}>{whatsappAi.worker?.lastHeartbeatAt ? `Último ciclo ${fmtDate(whatsappAi.worker.lastHeartbeatAt)}` : 'Inerte enquanto provedores estiverem pendentes'}</small></div>
             </div>
             {whatsappAi.unavailable && <div style={{ ...styles.notice, borderColor: '#f59e0b', marginTop: 12 }}><strong>Status indisponível</strong><div style={styles.sub}>{whatsappAi.error || 'A migration da IA ainda não foi aplicada.'}</div></div>}
             <form onSubmit={(event) => event.preventDefault()} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, marginTop: 14 }}>
@@ -1258,12 +1276,28 @@ export default function BarbeariaERP() {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
               <button type="button" style={styles.secondary} disabled={salvando || !whatsappAi.gemini?.configured} onClick={testarGeminiWhatsappAi}>Testar Gemini</button>
               {!whatsappAi.channel && <button type="button" style={styles.secondary} disabled={salvando || !formWhatsappAi.instance.trim()} onClick={() => configurarWhatsappAi('rascunho')}>Salvar canal em rascunho</button>}
-              {!whatsappAiActive && <button type="button" style={styles.primary} disabled={salvando || !whatsappAiReady || !formWhatsappAi.instance.trim()} onClick={() => configurarWhatsappAi('ativo')}>Ativar atendente IA</button>}
+              {!whatsappAiActive && <button type="button" style={styles.primary} disabled={salvando || !whatsappAiReady || whatsappAiCircuitOpen || !formWhatsappAi.instance.trim()} onClick={() => configurarWhatsappAi('ativo')}>Ativar atendente IA</button>}
               {whatsappAiActive && <button type="button" style={styles.secondary} disabled={salvando} onClick={() => configurarWhatsappAi('pausado')}>Pausar atendente</button>}
               <button type="button" style={styles.secondary} disabled={salvando || !whatsappAiActive || !whatsappAiReady} onClick={sincronizarWhatsappAi}>Sincronizar webhook Evolution</button>
             </div>
-            <p style={{ ...styles.sub, marginTop: 12 }}>O atendimento é reativo e tenant-aware. Captação, agenda e loja usam os dados reais da Barbearia Dino. Pedidos, agendamentos, remarcações, cancelamentos e promoções só são concluídos após o cliente responder CONFIRMAR; pagamentos externos não são ativados. Handoff interrompe respostas automáticas até a equipe retomar a sessão.</p>
-            {whatsappAiSessions.filter((item) => item.status === 'humano').length > 0 && <div style={{ marginTop: 14 }}><strong>Conversas aguardando equipe</strong><div style={{ display: 'grid', gap: 8, marginTop: 8 }}>{whatsappAiSessions.filter((item) => item.status === 'humano').map((item) => <div key={item.id} style={styles.metricLine}><span>{item.nome || 'Contato'} · {item.telefone || 'telefone protegido'}</span><button type="button" style={styles.secondary} disabled={salvando} onClick={() => liberarSessaoWhatsappAi(item.id)}>Retomar automação</button></div>)}</div></div>}
+            {whatsappAiCircuitOpen && <div style={{ ...styles.notice, borderColor: '#e05c5c', marginTop: 12 }}><strong>Circuit breaker aberto</strong><div style={styles.sub}>Novas conversas serão encaminhadas à equipe até {whatsappAi.channel?.aiCircuitOpenUntil ? fmtDate(whatsappAi.channel.aiCircuitOpenUntil) : 'a recuperação do provedor'}.</div></div>}
+            {(whatsappAiDeadLetter > 0 || whatsappAiUnknown > 0) && <div style={{ ...styles.notice, borderColor: '#f59e0b', marginTop: 12 }}><strong>Revisão humana necessária</strong><div style={styles.sub}>{whatsappAiDeadLetter} tarefa(s) em dead-letter e {whatsappAiUnknown} entrega(s) com resultado incerto. O sistema não repete essas mensagens automaticamente.</div></div>}
+            <p style={{ ...styles.sub, marginTop: 12 }}>O atendimento é reativo, tenant-aware e informa que usa um assistente virtual. Captação, agenda e loja usam os dados reais da Barbearia Dino. Pedidos, agendamentos, remarcações, cancelamentos e promoções só são concluídos após o cliente responder CONFIRMAR; pagamentos externos não são ativados. Handoff interrompe respostas automáticas até a equipe retomar a sessão.</p>
+            {whatsappAiSessions.filter((item) => item.status === 'humano').length > 0 && <div style={{ marginTop: 14 }}>
+              <div style={styles.sectionTitle}><div><strong>Fila de atendimento humano</strong><div style={styles.sub}>Telefones mascarados; conteúdo da conversa não é exibido neste painel.</div></div><Badge status="pendente" /></div>
+              <div style={{ display: 'grid', gap: 10, marginTop: 8 }}>
+                {whatsappAiSessions.filter((item) => item.status === 'humano').map((item) => <div key={item.id} style={{ ...styles.notice, display: 'grid', gap: 8 }}>
+                  <div style={styles.metricLine}><span><strong>{item.nome || 'Contato'}</strong> · {item.telefone || 'telefone protegido'}</span><strong>Prioridade {Number(item.priority || 0)}</strong></div>
+                  <div style={styles.sub}>Motivo: {item.handoff_reason || item.estado?.handoffReason || 'revisão humana'} · aguardando desde {item.handoff_requested_at ? fmtDate(item.handoff_requested_at) : fmtDate(item.ultima_interacao_em)}</div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {!item.assigned_to && <button type="button" style={styles.secondary} disabled={salvando} onClick={() => assumirSessaoWhatsappAi(item.id)}>Assumir conversa</button>}
+                    {item.assigned_to && <span style={{ ...styles.sub, alignSelf: 'center' }}>Atribuída {item.assigned_at ? fmtDate(item.assigned_at) : ''}</span>}
+                    <button type="button" style={styles.secondary} disabled={salvando} onClick={() => liberarSessaoWhatsappAi(item.id)}>Retomar automação</button>
+                    <button type="button" style={styles.secondary} disabled={salvando} onClick={() => encerrarSessaoWhatsappAi(item.id)}>Encerrar</button>
+                  </div>
+                </div>)}
+              </div>
+            </div>}
           </div>
         </div>
         <div style={{ ...styles.notice, marginTop: 14, display: 'grid', gap: 14 }}>

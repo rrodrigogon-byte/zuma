@@ -15,6 +15,20 @@ function cleanText(value, limit = 4000) {
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const AI_CIRCUIT_FAILURES = Math.min(10, Math.max(2, Number.parseInt(process.env.WHATSAPP_AI_CIRCUIT_FAILURES || '3', 10)));
+const AI_CIRCUIT_MINUTES = Math.min(60, Math.max(1, Number.parseInt(process.env.WHATSAPP_AI_CIRCUIT_MINUTES || '10', 10)));
+const CONTACT_HOURLY_LIMIT = Math.min(120, Math.max(3, Number.parseInt(process.env.WHATSAPP_AI_CONTACT_HOURLY_LIMIT || '20', 10)));
+const CHANNEL_HOURLY_LIMIT = Math.min(5000, Math.max(20, Number.parseInt(process.env.WHATSAPP_AI_CHANNEL_HOURLY_LIMIT || '500', 10)));
+const PRIVACY_NOTICE = 'Sou o assistente virtual da Barbearia Dino. Uso os dados desta conversa apenas para atender sua solicitação e posso encaminhar você para uma pessoa.';
+
+function safeErrorCode(error, fallback = 'WHATSAPP_AI_ERROR') {
+  const value = String(error?.code || error?.name || fallback).toUpperCase().replace(/[^A-Z0-9_:-]/g, '_');
+  return value.slice(0, 80) || fallback;
+}
+
+function providerMessageId(result = {}) {
+  return cleanText(result?.data?.key?.id || result?.data?.messageId || result?.data?.id, 200) || null;
+}
 
 function requiredTenantUuid(value, field) {
   const normalized = cleanText(value, 60);
@@ -94,7 +108,11 @@ async function ensureSession(task, message) {
          ultima_interacao_em = CURRENT_TIMESTAMP,
          expira_em = CURRENT_TIMESTAMP + INTERVAL '24 hours',
          atualizado_em = CURRENT_TIMESTAMP,
-         status = CASE WHEN whatsapp_ai_sessions.expira_em < CURRENT_TIMESTAMP THEN 'ativo' ELSE whatsapp_ai_sessions.status END
+         status = CASE
+           WHEN whatsapp_ai_sessions.expira_em < CURRENT_TIMESTAMP AND whatsapp_ai_sessions.status <> 'humano' THEN 'ativo'
+           ELSE whatsapp_ai_sessions.status
+         END,
+         closed_at = CASE WHEN whatsapp_ai_sessions.expira_em < CURRENT_TIMESTAMP AND whatsapp_ai_sessions.status <> 'humano' THEN NULL ELSE whatsapp_ai_sessions.closed_at END
        RETURNING *`,
       [task.empresa_id, task.loja_id, task.canal_id, message.remoteJid, message.phone, message.name || null, message.externalId],
     );
@@ -132,35 +150,111 @@ async function existingOutput(task, message) {
 }
 
 async function saveOutput(task, session, message, text, metadata = {}) {
+  const externalId = `${message.externalId}:out`;
   const result = await db.query(
     `INSERT INTO whatsapp_ai_messages
-      (empresa_id, loja_id, canal_id, sessao_id, direcao, papel, evento_externo_id, conteudo, metadados)
-     VALUES ($1, $2, $3, $4, 'saida', 'assistant', $5, $6, $7::jsonb)
-     ON CONFLICT (canal_id, evento_externo_id) WHERE evento_externo_id IS NOT NULL DO UPDATE SET conteudo = EXCLUDED.conteudo
+      (empresa_id, loja_id, canal_id, sessao_id, direcao, papel, evento_externo_id, conteudo, metadados, delivery_status)
+     VALUES ($1, $2, $3, $4, 'saida', 'assistant', $5, $6, $7::jsonb, 'prepared')
+     ON CONFLICT (canal_id, evento_externo_id) WHERE evento_externo_id IS NOT NULL DO NOTHING
      RETURNING *`,
-    [task.empresa_id, task.loja_id, task.canal_id, session.id, `${message.externalId}:out`, cleanText(text, 4000), JSON.stringify(metadata)],
+    [task.empresa_id, task.loja_id, task.canal_id, session.id, externalId, cleanText(text, 4000), JSON.stringify(metadata)],
   );
-  return result.rows[0];
+  if (result.rows[0]) return result.rows[0];
+  const existing = await db.queryRead(
+    `SELECT * FROM whatsapp_ai_messages
+      WHERE empresa_id = $1 AND loja_id = $2 AND canal_id = $3 AND evento_externo_id = $4 LIMIT 1`,
+    [task.empresa_id, task.loja_id, task.canal_id, externalId],
+  );
+  return existing.rows[0];
 }
 
-async function markOutputDelivered(output, providerResult) {
+async function outputRateLimit(session, output) {
+  const result = await db.queryRead(
+    `SELECT
+       COUNT(*) FILTER (WHERE sessao_id = $3)::int AS contact_total,
+       COUNT(*)::int AS channel_total
+     FROM whatsapp_ai_messages
+     WHERE empresa_id = $1 AND loja_id = $2 AND canal_id = $4
+       AND direcao = 'saida' AND criado_em >= CURRENT_TIMESTAMP - INTERVAL '1 hour'
+       AND delivery_status IN ('sending','sent','unknown') AND id <> $5`,
+    [session.empresa_id, session.loja_id, session.id, session.canal_id, output.id],
+  );
+  const counts = result.rows[0] || {};
+  return {
+    exceeded: Number(counts.contact_total || 0) >= CONTACT_HOURLY_LIMIT || Number(counts.channel_total || 0) >= CHANNEL_HOURLY_LIMIT,
+    contactTotal: Number(counts.contact_total || 0),
+    channelTotal: Number(counts.channel_total || 0),
+  };
+}
+
+async function claimOutputForSending(session, output) {
+  const result = await db.query(
+    `UPDATE whatsapp_ai_messages
+        SET delivery_status = 'sending', delivery_attempts = delivery_attempts + 1,
+            sending_started_at = CURRENT_TIMESTAMP, last_delivery_error = NULL
+      WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND canal_id = $4
+        AND COALESCE(delivery_status, 'prepared') IN ('prepared','failed')
+      RETURNING *`,
+    [output.id, session.empresa_id, session.loja_id, session.canal_id],
+  );
+  return result.rows[0] || null;
+}
+
+async function deliveryError(session, output, status, code, message, metadata = {}) {
   await db.query(
     `UPDATE whatsapp_ai_messages
-        SET metadados = metadados || $2::jsonb
-      WHERE id = $1`,
-    [output.id, JSON.stringify({ delivered: true, deliveredAt: new Date().toISOString(), providerMessageId: providerResult?.data?.key?.id || null })],
+        SET delivery_status = $5, last_delivery_error = $6,
+            metadados = metadados || $7::jsonb
+      WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND canal_id = $4`,
+    [output.id, session.empresa_id, session.loja_id, session.canal_id, status, cleanText(message, 500), JSON.stringify(metadata)],
+  );
+  const error = new Error(message);
+  error.code = code;
+  error.retryable = status === 'failed' && metadata.retryable === true;
+  return error;
+}
+
+async function markOutputDelivered(session, output, providerResult) {
+  const messageId = providerMessageId(providerResult);
+  await db.query(
+    `UPDATE whatsapp_ai_messages
+        SET delivery_status = 'sent', provider_message_id = $5, delivered_at = CURRENT_TIMESTAMP,
+            last_delivery_error = NULL,
+            metadados = metadados || $6::jsonb
+      WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND canal_id = $4`,
+    [output.id, session.empresa_id, session.loja_id, session.canal_id, messageId,
+      JSON.stringify({ delivered: true, deliveredAt: new Date().toISOString(), providerMessageId: messageId })],
   );
 }
 
 async function sendOutput(channel, session, output) {
-  if (output.metadados?.delivered === true) return { skipped: true, delivered: true };
+  const state = output.delivery_status || (output.metadados?.delivered === true ? 'sent' : 'prepared');
+  if (state === 'sent') return { skipped: true, delivered: true };
+  if (state === 'unknown' || state === 'sending') {
+    throw await deliveryError(session, output, 'unknown', 'WHATSAPP_DELIVERY_UNKNOWN', 'resultado anterior de envio incerto; revisão humana obrigatória');
+  }
+  if (state === 'skipped') return { skipped: true, delivered: false };
+
+  const limit = await outputRateLimit(session, output);
+  if (limit.exceeded) {
+    throw await deliveryError(session, output, 'skipped', 'WHATSAPP_RATE_LIMIT', 'limite operacional de mensagens atingido');
+  }
+  const claimed = await claimOutputForSending(session, output);
+  if (!claimed) {
+    throw await deliveryError(session, output, 'unknown', 'WHATSAPP_DELIVERY_RACE', 'estado de entrega alterado por outro worker; revisão humana obrigatória');
+  }
   const result = await enviarMensagem({
     nome: channel.configuracao?.display_name || channel.nome || 'Barbearia Dino',
     whatsapp_api_url: channel.api_base_url || undefined,
     whatsapp_instance: channel.configuracao?.instance || undefined,
-  }, session.telefone, output.conteudo);
-  if (!result?.ok) throw new Error(`Evolution não confirmou o envio: ${cleanText(result?.error || JSON.stringify(result?.data || {}), 500)}`);
-  await markOutputDelivered(output, result);
+  }, session.telefone, claimed.conteudo);
+  if (result?.uncertain) {
+    throw await deliveryError(session, claimed, 'unknown', 'WHATSAPP_DELIVERY_UNKNOWN', 'Evolution não confirmou se a mensagem foi aceita');
+  }
+  if (!result?.ok) {
+    throw await deliveryError(session, claimed, 'failed', 'WHATSAPP_PROVIDER_REJECTED', `Evolution recusou o envio${result?.status ? ` (HTTP ${result.status})` : ''}`, { retryable: result?.retryable === true, status: result?.status || null });
+  }
+  await markOutputDelivered(session, claimed, result);
   return result;
 }
 
@@ -207,6 +301,76 @@ function confirmationReply(result) {
   return `Pedido confirmado para retirada. Código ${order.publicCode}; total R$ ${Number(order.total).toFixed(2).replace('.', ',')}. A equipe dará sequência ao pagamento e à retirada.`;
 }
 
+async function putSessionInHandoff(session, reason, priority = 2) {
+  await db.query(
+    `UPDATE whatsapp_ai_sessions
+        SET status = 'humano', handoff_requested_at = COALESCE(handoff_requested_at, CURRENT_TIMESTAMP),
+            handoff_reason = $4, priority = GREATEST(priority, $5),
+            assigned_to = NULL, assigned_at = NULL,
+            estado = jsonb_set(estado, '{handoffReason}', to_jsonb($4::text), true),
+            atualizado_em = CURRENT_TIMESTAMP
+      WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`,
+    [session.id, session.empresa_id, session.loja_id, cleanText(reason, 500), Math.min(5, Math.max(0, Number(priority) || 0))],
+  );
+}
+
+async function recordProviderRun(record, session, { status, model = null, metrics = {}, errorCode = null } = {}) {
+  await db.query(
+    `INSERT INTO whatsapp_ai_provider_runs
+      (empresa_id, loja_id, canal_id, sessao_id, evento_externo_id, provider, model, status,
+       latency_ms, input_chars, output_chars, tool_calls, error_code)
+     VALUES ($1, $2, $3, $4, $5, 'gemini', $6, $7, $8, $9, $10, $11, $12)`,
+    [record.empresa_id, record.loja_id, record.canal_id, session.id, null,
+      cleanText(model, 120) || null, status, Math.max(0, Number(metrics.latencyMs) || 0),
+      Math.max(0, Number(metrics.inputChars) || 0), Math.max(0, Number(metrics.outputChars) || 0),
+      Math.max(0, Number(metrics.toolCalls) || 0), cleanText(errorCode, 80) || null],
+  ).catch(() => null);
+}
+
+async function markGeminiSuccess(record) {
+  await db.query(
+    `UPDATE canais_integracao
+        SET ai_consecutive_failures = 0, ai_circuit_open_until = NULL, ai_last_error_code = NULL,
+            data_atualizacao = CURRENT_TIMESTAMP
+      WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`,
+    [record.canal_id, record.empresa_id, record.loja_id],
+  );
+}
+
+async function markGeminiFailure(record, error) {
+  const result = await db.query(
+    `UPDATE canais_integracao
+        SET ai_consecutive_failures = ai_consecutive_failures + 1,
+            ai_last_error_code = $4,
+            ai_circuit_open_until = CASE
+              WHEN ai_consecutive_failures + 1 >= $5
+                THEN CURRENT_TIMESTAMP + ($6::text || ' minutes')::interval
+              ELSE ai_circuit_open_until
+            END,
+            data_atualizacao = CURRENT_TIMESTAMP
+      WHERE id = $1 AND empresa_id = $2 AND loja_id = $3
+      RETURNING ai_consecutive_failures, ai_circuit_open_until`,
+    [record.canal_id, record.empresa_id, record.loja_id, safeErrorCode(error), AI_CIRCUIT_FAILURES, AI_CIRCUIT_MINUTES],
+  );
+  return result.rows[0] || null;
+}
+
+function channelCircuitOpen(channel) {
+  return channel.ai_circuit_open_until && new Date(channel.ai_circuit_open_until).getTime() > Date.now();
+}
+
+async function withPrivacyNotice(session, text) {
+  if (!text || session.privacy_notice_at) return text;
+  const result = await db.query(
+    `UPDATE whatsapp_ai_sessions
+        SET privacy_notice_at = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP
+      WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND privacy_notice_at IS NULL
+      RETURNING id`,
+    [session.id, session.empresa_id, session.loja_id],
+  );
+  return result.rows[0] ? `${PRIVACY_NOTICE}\n\n${text}` : text;
+}
+
 async function deterministicResponse(task, channel, session, message) {
   const context = {
     empresaId: task.empresa_id,
@@ -219,11 +383,8 @@ async function deterministicResponse(task, channel, session, message) {
     capabilities: channel.configuracao?.capabilities || {},
   };
 
-  if (resumeIntent(message.text)) {
-    await db.query(`UPDATE whatsapp_ai_sessions SET status = 'ativo', atualizado_em = CURRENT_TIMESTAMP WHERE id = $1`, [session.id]);
-    return { text: 'Atendimento automático retomado. Como posso ajudar?', kind: 'resume' };
-  }
   if (session.status === 'humano') return { text: null, kind: 'human_queue' };
+  if (resumeIntent(message.text)) return { text: 'A automação só pode ser retomada pela equipe após concluir o atendimento humano.', kind: 'resume_blocked' };
   if (optOutIntent(message.text)) {
     await db.query(
       `UPDATE whatsapp_ai_sessions
@@ -235,12 +396,7 @@ async function deterministicResponse(task, channel, session, message) {
     return { text: 'Preferência registrada. Você não receberá mensagens de marketing por este atendimento. Ainda posso responder solicitações que você iniciar.', kind: 'opt_out' };
   }
   if (handoffIntent(message.text)) {
-    await db.query(
-      `UPDATE whatsapp_ai_sessions
-          SET status = 'humano', estado = jsonb_set(estado, '{handoffReason}', '"pedido_do_cliente"'::jsonb, true), atualizado_em = CURRENT_TIMESTAMP
-        WHERE id = $1`,
-      [session.id],
-    );
+    await putSessionInHandoff(session, 'pedido_do_cliente', 3);
     return { text: 'Certo. Encaminhei sua conversa para a equipe humana da Barbearia Dino.', kind: 'handoff' };
   }
   if (session.acao_pendente) {
@@ -252,21 +408,41 @@ async function deterministicResponse(task, channel, session, message) {
     }
   }
 
+  if (channelCircuitOpen(channel)) {
+    await putSessionInHandoff(session, 'gemini_circuit_open', 4);
+    await recordProviderRun(task, session, { status: 'skipped', model: configuredGeminiModel().model, errorCode: 'GEMINI_CIRCUIT_OPEN' });
+    return { text: 'Nosso assistente virtual está temporariamente indisponível. Encaminhei sua conversa para a equipe humana.', kind: 'gemini_fallback' };
+  }
+
   const history = await historyForSession(session);
-  const gemini = await runGeminiWithTools({
-    systemInstruction: buildWhatsappAiSystemPrompt({ storeName: channel.configuracao?.display_name || channel.nome, pendingAction: session.acao_pendente }),
-    history: history.slice(0, -1),
-    userText: message.text,
-    tools: WHATSAPP_AI_TOOL_DECLARATIONS,
-    executeTool: createWhatsappAiToolExecutor(context),
-  });
-  return { text: gemini.text, kind: 'gemini', model: gemini.model, traces: gemini.traces };
+  try {
+    const gemini = await runGeminiWithTools({
+      systemInstruction: buildWhatsappAiSystemPrompt({ storeName: channel.configuracao?.display_name || channel.nome, pendingAction: session.acao_pendente }),
+      history: history.slice(0, -1),
+      userText: message.text,
+      tools: WHATSAPP_AI_TOOL_DECLARATIONS,
+      executeTool: createWhatsappAiToolExecutor(context),
+    });
+    await markGeminiSuccess(task);
+    await recordProviderRun(task, session, { status: 'success', model: gemini.model, metrics: gemini.metrics });
+    return { text: gemini.text, kind: 'gemini', model: gemini.model, traces: gemini.traces };
+  } catch (error) {
+    await markGeminiFailure(task, error);
+    await recordProviderRun(task, session, {
+      status: safeErrorCode(error) === 'GEMINI_BLOCKED' ? 'blocked' : 'failed',
+      model: configuredGeminiModel().model,
+      errorCode: safeErrorCode(error),
+    });
+    await putSessionInHandoff(session, `gemini:${safeErrorCode(error)}`, 4);
+    return { text: 'Não consegui concluir com segurança pelo assistente virtual. Encaminhei sua conversa para a equipe humana.', kind: 'gemini_fallback' };
+  }
 }
 
 export async function processWhatsappConversationTask(task) {
   const loaded = await db.queryRead(
     `SELECT t.*, e.payload AS event_payload, e.tipo_evento, c.nome AS canal_nome,
-            c.provedor, c.status AS canal_status, c.api_base_url, c.configuracao
+            c.provedor, c.status AS canal_status, c.api_base_url, c.configuracao,
+            c.ai_circuit_open_until, c.ai_consecutive_failures, c.ai_last_error_code
        FROM tarefas_integracao_canais t
        JOIN eventos_integracao_canais e ON e.id = t.evento_integracao_id AND e.empresa_id = t.empresa_id
        JOIN canais_integracao c ON c.id = t.canal_id AND c.empresa_id = t.empresa_id AND c.loja_id = t.loja_id
@@ -301,12 +477,27 @@ export async function processWhatsappConversationTask(task) {
     console.warn('[WhatsApp AI] captação CRM não bloqueou atendimento:', cleanText(leadError?.message || leadError, 300));
   }
   const priorOutput = await existingOutput(record, message);
-  if (priorOutput?.metadados?.delivered === true) return { delivered: true, replay: true, sessionId: session.id };
+  const priorDelivery = priorOutput?.delivery_status || (priorOutput?.metadados?.delivered === true ? 'sent' : null);
+  if (priorDelivery === 'sent') return { delivered: true, replay: true, sessionId: session.id };
+  if (['unknown', 'sending', 'skipped'].includes(priorDelivery)) {
+    await putSessionInHandoff(session, priorDelivery === 'skipped' ? 'whatsapp_delivery_skipped' : 'whatsapp_delivery_unknown', 5);
+    await db.query(
+      `UPDATE eventos_integracao_canais
+          SET status_processamento = 'processado', processado_em = CURRENT_TIMESTAMP,
+              erro_processamento = $2
+        WHERE id = $1`,
+      [record.evento_integracao_id, priorDelivery === 'skipped' ? 'WHATSAPP_DELIVERY_SKIPPED' : 'WHATSAPP_DELIVERY_UNKNOWN'],
+    );
+    return { delivered: false, handoff: true, uncertain: priorDelivery !== 'skipped', sessionId: session.id };
+  }
   const channel = {
     id: record.canal_id,
     nome: record.canal_nome,
     api_base_url: record.api_base_url,
     configuracao: record.configuracao || {},
+    ai_circuit_open_until: record.ai_circuit_open_until,
+    ai_consecutive_failures: Number(record.ai_consecutive_failures || 0),
+    ai_last_error_code: record.ai_last_error_code || null,
   };
   const response = priorOutput
     ? { text: priorOutput.conteudo, kind: 'replay', traces: priorOutput.metadados?.traces || [] }
@@ -319,13 +510,19 @@ export async function processWhatsappConversationTask(task) {
     return { delivered: false, handoff: true, sessionId: session.id };
   }
 
-  const output = priorOutput || await saveOutput(record, session, message, response.text, {
+  const responseText = priorOutput ? priorOutput.conteudo : await withPrivacyNotice(session, response.text);
+  const output = priorOutput || await saveOutput(record, session, message, responseText, {
     delivered: false,
     kind: response.kind,
     model: response.model || null,
     traces: response.traces || [],
   });
-  await sendOutput(channel, session, output);
+  try {
+    await sendOutput(channel, session, output);
+  } catch (error) {
+    if (error?.retryable === false) await putSessionInHandoff(session, `delivery:${safeErrorCode(error)}`, 5);
+    throw error;
+  }
   await db.query(
     `UPDATE eventos_integracao_canais
         SET status_processamento = 'processado', processado_em = CURRENT_TIMESTAMP, erro_processamento = NULL
@@ -344,66 +541,181 @@ export async function processWhatsappConversationTask(task) {
 export async function whatsappAiOperationalStatus(context = {}) {
   const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
   const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
-  const [channel, sessions, tasks] = await Promise.all([
+  const [channel, sessions, tasks, deliveries, providerRuns, workerLease] = await Promise.all([
     db.queryRead(
       `SELECT id, codigo_publico, nome, status, api_base_url, configuracao, ultimo_evento_em,
-              ultima_sincronizacao_em, ultimo_erro
+              ultima_sincronizacao_em, ultimo_erro, ai_circuit_open_until,
+              ai_consecutive_failures, ai_last_error_code
          FROM canais_integracao
         WHERE empresa_id = $1 AND loja_id = $2 AND provedor = 'whatsapp' LIMIT 1`,
       [empresaId, lojaId],
     ),
     db.queryRead(
-      `SELECT status, COUNT(*)::int AS total FROM whatsapp_ai_sessions
+      `SELECT status, COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE status = 'humano' AND assigned_to IS NULL)::int AS unassigned
+         FROM whatsapp_ai_sessions
         WHERE empresa_id = $1 AND loja_id = $2 GROUP BY status`,
       [empresaId, lojaId],
     ),
     db.queryRead(
-      `SELECT status, COUNT(*)::int AS total FROM tarefas_integracao_canais
-        WHERE empresa_id = $1 AND loja_id = $2 AND tipo = 'processar_conversa' GROUP BY status`,
+      `SELECT status, COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE dead_letter_em IS NOT NULL)::int AS dead_letter
+         FROM tarefas_integracao_canais
+        WHERE empresa_id = $1 AND loja_id = $2
+          AND tipo IN ('processar_conversa','enviar_campanha','recuperar_carrinho','notificar_agendamento')
+        GROUP BY status`,
       [empresaId, lojaId],
     ),
+    db.queryRead(
+      `SELECT delivery_status AS status, COUNT(*)::int AS total
+         FROM whatsapp_ai_messages
+        WHERE empresa_id = $1 AND loja_id = $2 AND direcao = 'saida'
+          AND criado_em >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
+        GROUP BY delivery_status`,
+      [empresaId, lojaId],
+    ),
+    db.queryRead(
+      `SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE status = 'success')::int AS success,
+              COUNT(*) FILTER (WHERE status IN ('failed','blocked'))::int AS failed,
+              COALESCE(ROUND(AVG(latency_ms)), 0)::int AS avg_latency_ms,
+              COALESCE(SUM(tool_calls), 0)::int AS tool_calls
+         FROM whatsapp_ai_provider_runs
+        WHERE empresa_id = $1 AND loja_id = $2
+          AND criado_em >= CURRENT_TIMESTAMP - INTERVAL '24 hours'`,
+      [empresaId, lojaId],
+    ),
+    db.queryRead(
+      `SELECT titular, expira_em, atualizado_em,
+              (expira_em > CURRENT_TIMESTAMP) AS active
+         FROM whatsapp_ai_worker_leases WHERE nome = 'whatsapp-ai' LIMIT 1`,
+      [],
+    ),
   ]);
+  const channelRow = channel.rows[0];
+  const provider = providerRuns.rows[0] || {};
+  const taskMap = Object.fromEntries(tasks.rows.map(row => [row.status, Number(row.total)]));
   return {
     featureEnabled: process.env.FEATURE_WHATSAPP_AI === 'true',
     gemini: configuredGeminiModel(),
     evolutionConfigured: Boolean(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE),
-    channel: channel.rows[0] ? {
-      id: channel.rows[0].id,
-      publicCode: channel.rows[0].codigo_publico,
-      nome: channel.rows[0].nome,
-      status: channel.rows[0].status,
-      instance: channel.rows[0].configuracao?.instance || '',
-      lastEventAt: channel.rows[0].ultimo_evento_em,
-      lastSyncAt: channel.rows[0].ultima_sincronizacao_em,
-      lastError: channel.rows[0].ultimo_erro,
-      capabilities: safeCapabilities(channel.rows[0].configuracao?.capabilities),
+    channel: channelRow ? {
+      id: channelRow.id,
+      publicCode: channelRow.codigo_publico,
+      nome: channelRow.nome,
+      status: channelRow.status,
+      instance: channelRow.configuracao?.instance || '',
+      lastEventAt: channelRow.ultimo_evento_em,
+      lastSyncAt: channelRow.ultima_sincronizacao_em,
+      lastError: channelRow.ultimo_erro,
+      capabilities: safeCapabilities(channelRow.configuracao?.capabilities),
+      aiCircuitOpenUntil: channelRow.ai_circuit_open_until,
+      aiCircuitOpen: Boolean(channelRow.ai_circuit_open_until && new Date(channelRow.ai_circuit_open_until).getTime() > Date.now()),
+      aiConsecutiveFailures: Number(channelRow.ai_consecutive_failures || 0),
+      aiLastErrorCode: channelRow.ai_last_error_code || null,
     } : null,
     sessions: Object.fromEntries(sessions.rows.map(row => [row.status, Number(row.total)])),
-    tasks: Object.fromEntries(tasks.rows.map(row => [row.status, Number(row.total)])),
+    humanQueue: {
+      unassigned: sessions.rows.reduce((total, row) => total + Number(row.unassigned || 0), 0),
+    },
+    tasks: { ...taskMap, deadLetter: tasks.rows.reduce((total, row) => total + Number(row.dead_letter || 0), 0) },
+    deliveries: Object.fromEntries(deliveries.rows.map(row => [row.status || 'legacy', Number(row.total)])),
+    provider24h: {
+      total: Number(provider.total || 0),
+      success: Number(provider.success || 0),
+      failed: Number(provider.failed || 0),
+      avgLatencyMs: Number(provider.avg_latency_ms || 0),
+      toolCalls: Number(provider.tool_calls || 0),
+    },
+    worker: workerLease.rows[0] ? {
+      active: workerLease.rows[0].active === true,
+      leaseExpiresAt: workerLease.rows[0].expira_em,
+      lastHeartbeatAt: workerLease.rows[0].atualizado_em,
+    } : { active: false, leaseExpiresAt: null, lastHeartbeatAt: null },
   };
 }
 
 export async function listWhatsappAiSessions(context = {}, { limit = 50 } = {}) {
   const result = await db.queryRead(
-    `SELECT id, telefone, nome, status, estado, acao_pendente, ultima_interacao_em, atualizado_em
+    `SELECT id, telefone, nome, status, estado, acao_pendente, ultima_interacao_em, atualizado_em,
+            handoff_requested_at, handoff_reason, assigned_to, assigned_at, closed_at, priority,
+            privacy_notice_at
        FROM whatsapp_ai_sessions
       WHERE empresa_id = $1 AND loja_id = $2
-      ORDER BY ultima_interacao_em DESC LIMIT $3`,
+      ORDER BY CASE WHEN status = 'humano' THEN 0 ELSE 1 END,
+               priority DESC, handoff_requested_at ASC NULLS LAST, ultima_interacao_em DESC
+      LIMIT $3`,
     [requiredTenantUuid(context.empresaId, 'empresaId'), requiredTenantUuid(context.lojaId, 'lojaId'), Math.min(100, Math.max(1, Number(limit) || 50))],
   );
   return result.rows.map(row => ({ ...row, telefone: row.telefone ? `***${row.telefone.slice(-4)}` : '' }));
 }
 
-export async function releaseWhatsappAiHandoff(context = {}, sessionId) {
-  const result = await db.query(
-    `UPDATE whatsapp_ai_sessions
-        SET status = 'ativo', estado = estado - 'handoffReason', atualizado_em = CURRENT_TIMESTAMP
-      WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'humano'
-      RETURNING id, status, atualizado_em`,
-    [cleanText(sessionId, 60), requiredTenantUuid(context.empresaId, 'empresaId'), requiredTenantUuid(context.lojaId, 'lojaId')],
+async function auditHandoff(trx, context, sessionId, action, after = {}) {
+  await trx.query(
+    `INSERT INTO commerce_audit_logs
+      (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, depois)
+     VALUES ($1, $2, $3, 'whatsapp_ai_session', $4, $5, $6::jsonb)`,
+    [context.empresaId, context.lojaId, context.usuarioId || null, sessionId, action, JSON.stringify(after)],
   );
-  if (!result.rows[0]) throw new Error('sessão em handoff não encontrada');
-  return result.rows[0];
+}
+
+export async function claimWhatsappAiHandoff(context = {}, sessionId) {
+  const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
+  const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
+  if (!UUID_PATTERN.test(String(context.usuarioId || ''))) throw new Error('usuário autenticado é obrigatório');
+  return db.transaction(async trx => {
+    const result = await trx.query(
+      `UPDATE whatsapp_ai_sessions
+          SET assigned_to = $4, assigned_at = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP
+        WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'humano'
+          AND (assigned_to IS NULL OR assigned_to = $4)
+        RETURNING id, status, assigned_to, assigned_at, priority, handoff_reason`,
+      [cleanText(sessionId, 60), empresaId, lojaId, context.usuarioId],
+    );
+    if (!result.rows[0]) throw new Error('sessão indisponível para atribuição');
+    await auditHandoff(trx, context, result.rows[0].id, 'claimed', { priority: result.rows[0].priority });
+    return result.rows[0];
+  });
+}
+
+export async function releaseWhatsappAiHandoff(context = {}, sessionId) {
+  const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
+  const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
+  return db.transaction(async trx => {
+    const result = await trx.query(
+      `UPDATE whatsapp_ai_sessions
+          SET status = 'ativo', estado = estado - 'handoffReason',
+              handoff_requested_at = NULL, handoff_reason = NULL,
+              assigned_to = NULL, assigned_at = NULL, priority = 0, closed_at = NULL,
+              atualizado_em = CURRENT_TIMESTAMP
+        WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'humano'
+        RETURNING id, status, atualizado_em`,
+      [cleanText(sessionId, 60), empresaId, lojaId],
+    );
+    if (!result.rows[0]) throw new Error('sessão em handoff não encontrada');
+    await auditHandoff(trx, context, result.rows[0].id, 'automation_resumed');
+    return result.rows[0];
+  });
+}
+
+export async function closeWhatsappAiHandoff(context = {}, sessionId) {
+  const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
+  const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
+  return db.transaction(async trx => {
+    const result = await trx.query(
+      `UPDATE whatsapp_ai_sessions
+          SET status = 'encerrado', closed_at = CURRENT_TIMESTAMP,
+              assigned_to = COALESCE(assigned_to, $4),
+              assigned_at = COALESCE(assigned_at, CURRENT_TIMESTAMP),
+              acao_pendente = NULL, atualizado_em = CURRENT_TIMESTAMP
+        WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'humano'
+        RETURNING id, status, closed_at`,
+      [cleanText(sessionId, 60), empresaId, lojaId, context.usuarioId || null],
+    );
+    if (!result.rows[0]) throw new Error('sessão em handoff não encontrada');
+    await auditHandoff(trx, context, result.rows[0].id, 'closed');
+    return result.rows[0];
+  });
 }
 
 export function whatsappMessagingReady() {
@@ -454,6 +766,9 @@ function safeChannelView(row) {
     lastEventAt: row.ultimo_evento_em,
     lastSyncAt: row.ultima_sincronizacao_em,
     lastError: row.ultimo_erro,
+    aiCircuitOpenUntil: row.ai_circuit_open_until || null,
+    aiConsecutiveFailures: Number(row.ai_consecutive_failures || 0),
+    aiLastErrorCode: row.ai_last_error_code || null,
   };
 }
 
@@ -546,13 +861,25 @@ export async function syncWhatsappAiWebhook(context = {}, { publicBaseUrl } = {}
   let body = {};
   try { body = raw ? JSON.parse(raw) : {}; } catch { body = { message: raw.slice(0, 300) }; }
   if (!response.ok) throw new Error(`Evolution recusou o webhook: HTTP ${response.status}`);
-  await db.query(
-    `UPDATE canais_integracao
-        SET configuracao = configuracao || $2::jsonb, ultimo_erro = NULL, data_atualizacao = CURRENT_TIMESTAMP
-      WHERE id = $1`,
-    [channel.id, JSON.stringify({ webhook_synced_at: new Date().toISOString(), webhook_url: webhookUrl })],
-  );
-  return { ok: true, webhookUrl, channel: safeChannelView(channel), provider: { configured: true, status: response.status, response: body?.webhook ? { enabled: body.webhook.enabled } : {} } };
+  const syncedAt = new Date().toISOString();
+  const updated = await db.transaction(async trx => {
+    const saved = await trx.query(
+      `UPDATE canais_integracao
+          SET configuracao = configuracao || $2::jsonb, ultimo_erro = NULL,
+              ultima_sincronizacao_em = CURRENT_TIMESTAMP, data_atualizacao = CURRENT_TIMESTAMP
+        WHERE id = $1 AND empresa_id = $3 AND loja_id = $4
+        RETURNING *`,
+      [channel.id, JSON.stringify({ webhook_synced_at: syncedAt, webhook_url: webhookUrl }), empresaId, lojaId],
+    );
+    await trx.query(
+      `INSERT INTO commerce_audit_logs
+        (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, depois)
+       VALUES ($1, $2, $3, 'whatsapp_ai_channel', $4, 'webhook_synced', $5::jsonb)`,
+      [empresaId, lojaId, context.usuarioId || null, channel.id, JSON.stringify({ instance, webhookUrl, status: response.status })],
+    );
+    return saved.rows[0];
+  });
+  return { ok: true, webhookUrl, channel: safeChannelView(updated), provider: { configured: true, status: response.status, response: body?.webhook ? { enabled: body.webhook.enabled } : {} } };
 }
 
 function referencedChannelSecret(channel) {
@@ -560,15 +887,44 @@ function referencedChannelSecret(channel) {
   return /^[A-Z][A-Z0-9_]{2,149}$/.test(reference) ? process.env[reference] || null : null;
 }
 
-export async function testWhatsappAiGemini() {
+export async function testWhatsappAiGemini(context = {}) {
+  const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
+  const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
   const startedAt = Date.now();
-  const result = await runGeminiWithTools({
-    systemInstruction: 'Você é um diagnóstico técnico. Responda somente com a palavra OK.',
-    userText: 'Confirme disponibilidade.',
-    tools: [],
-    executeTool: async () => { throw new Error('ferramentas desabilitadas no diagnóstico'); },
-    maxSteps: 1,
-  });
-  if (!/^ok[.!]?$/.test(plain(result.text))) throw new Error('Gemini respondeu fora do contrato de diagnóstico');
-  return { ok: true, model: result.model, latencyMs: Date.now() - startedAt, checkedAt: new Date().toISOString() };
+  try {
+    const result = await runGeminiWithTools({
+      systemInstruction: 'Você é um diagnóstico técnico. Responda somente com a palavra OK.',
+      userText: 'Confirme disponibilidade.',
+      tools: [],
+      executeTool: async () => { throw new Error('ferramentas desabilitadas no diagnóstico'); },
+      maxSteps: 1,
+    });
+    if (!/^ok[.!]?$/.test(plain(result.text))) throw new Error('Gemini respondeu fora do contrato de diagnóstico');
+    await db.transaction(async trx => {
+      await trx.query(
+        `INSERT INTO whatsapp_ai_provider_runs
+          (empresa_id, loja_id, canal_id, provider, model, status, latency_ms, input_chars, output_chars, tool_calls)
+         SELECT $1, $2, id, 'gemini', $3, 'success', $4, $5, $6, 0
+           FROM canais_integracao
+          WHERE empresa_id = $1 AND loja_id = $2 AND provedor = 'whatsapp'
+          LIMIT 1`,
+        [empresaId, lojaId, result.model, Number(result.metrics?.latencyMs || Date.now() - startedAt), Number(result.metrics?.inputChars || 0), Number(result.metrics?.outputChars || 0)],
+      );
+      await trx.query(
+        `INSERT INTO commerce_audit_logs
+          (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, depois)
+         VALUES ($1, $2, $3, 'whatsapp_ai_diagnostic', NULL, 'gemini_checked', $4::jsonb)`,
+        [empresaId, lojaId, context.usuarioId || null, JSON.stringify({ ok: true, model: result.model, latencyMs: Date.now() - startedAt })],
+      );
+    });
+    return { ok: true, model: result.model, latencyMs: Date.now() - startedAt, checkedAt: new Date().toISOString() };
+  } catch (error) {
+    await db.query(
+      `INSERT INTO commerce_audit_logs
+        (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, depois)
+       VALUES ($1, $2, $3, 'whatsapp_ai_diagnostic', NULL, 'gemini_failed', $4::jsonb)`,
+      [empresaId, lojaId, context.usuarioId || null, JSON.stringify({ ok: false, errorCode: safeErrorCode(error), latencyMs: Date.now() - startedAt })],
+    ).catch(() => null);
+    throw error;
+  }
 }

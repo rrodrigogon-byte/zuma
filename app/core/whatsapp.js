@@ -9,8 +9,9 @@ import fetch from 'node-fetch';
 function getConfig(tenant) {
   return {
     baseUrl: tenant?.whatsapp_api_url || process.env.EVOLUTION_API_URL || 'http://localhost:8080',
-    apiKey:  tenant?.whatsapp_api_key  || process.env.EVOLUTION_API_KEY  || '',
+    apiKey: tenant?.whatsapp_api_key || process.env.EVOLUTION_API_KEY || '',
     instance: tenant?.whatsapp_instance || process.env.EVOLUTION_INSTANCE || 'setpoint',
+    payloadVersion: String(process.env.EVOLUTION_SEND_PAYLOAD_VERSION || 'current').trim().toLowerCase(),
   };
 }
 
@@ -26,26 +27,40 @@ function formatarTelefone(tel) {
 export async function enviarMensagem(tenant, telefone, mensagem) {
   const cfg = getConfig(tenant);
   const numero = formatarTelefone(telefone);
+  const text = String(mensagem || '').slice(0, 4000);
+  const body = cfg.payloadVersion === 'legacy'
+    ? { number: numero, options: { delay: 1200, presence: 'composing' }, textMessage: { text } }
+    : { number: numero, text, delay: 1200 };
 
   try {
-    const res = await fetch(`${cfg.baseUrl}/message/sendText/${cfg.instance}`, {
+    const res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/message/sendText/${encodeURIComponent(cfg.instance)}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': cfg.apiKey,
+        apikey: cfg.apiKey,
       },
-      body: JSON.stringify({
-        number: numero,
-        options: { delay: 1200, presence: 'composing' },
-        textMessage: { text: mensagem },
-      }),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(20000),
     });
-
-    const data = await res.json();
-    return { ok: res.ok, data };
+    const raw = await res.text();
+    let data = {};
+    try { data = raw ? JSON.parse(raw) : {}; } catch { data = { message: raw.slice(0, 300) }; }
+    const uncertain = !res.ok && (res.status === 408 || res.status >= 500);
+    return {
+      ok: res.ok,
+      status: res.status,
+      retryable: !res.ok && !uncertain && (res.status === 425 || res.status === 429),
+      uncertain,
+      data,
+    };
   } catch (err) {
-    console.error('[WhatsApp] Erro ao enviar:', err.message);
-    return { ok: false, error: err.message };
+    return {
+      ok: false,
+      status: null,
+      retryable: false,
+      uncertain: true,
+      error: String(err?.name || 'NETWORK_ERROR').slice(0, 80),
+    };
   }
 }
 
