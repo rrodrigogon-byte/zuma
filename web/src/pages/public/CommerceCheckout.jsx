@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, CheckCircle2, Copy, Loader2, MapPin, PackageCheck, ShieldCheck, Store, Truck } from 'lucide-react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, fmtR } from '../../lib/api'
+import { DINO_COMMERCE_LOGO } from '../../lib/brand'
 import { normalizeStorefrontAlias, storefrontApiBase, storefrontCartSessionKey, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
 
 const EMPTY_ADDRESS = { cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '', referencia: '' }
@@ -356,11 +357,12 @@ export default function CommerceCheckout() {
   }
 
   const publicBrand = storeContext?.public || {}
-  const brandName = publicBrand.displayName || storeContext?.nome || (storeAlias ? storeAlias : 'Kytto Commerce')
-  const brandMark = storeAlias === 'dino' ? 'D' : 'K'
+  const isDinoCommerce = storeAlias === 'dino'
+  const brandName = isDinoCommerce ? 'Dino Perfumaria' : (publicBrand.displayName || storeContext?.nome || (storeAlias ? storeAlias : 'Kytto Commerce'))
+  const brandMark = 'K'
 
-  return <main className="checkout-page" data-storefront-alias={storeAlias || undefined}>
-    <header className="checkout-header"><div className="checkout-header-inner"><Link className="checkout-brand" to={storeRoute}><span className="checkout-brand-mark">{brandMark}</span><span>{brandName}</span></Link><div className="checkout-header-security"><ShieldCheck size={16} /> Checkout protegido</div></div></header>
+  return <main className="checkout-page">
+    <header className="checkout-header"><div className="checkout-header-inner"><Link className={`checkout-brand${isDinoCommerce ? ' checkout-brand-dino-commerce' : ''}`} to={storeRoute} aria-label={`Voltar para ${brandName}`}>{isDinoCommerce ? <img className="checkout-brand-logo" src={DINO_COMMERCE_LOGO} alt="Dino Perfumaria" /> : <><span className="checkout-brand-mark">{brandMark}</span><span>{brandName}</span></>}</Link><div className="checkout-header-security"><ShieldCheck size={16} /> Checkout protegido</div></div></header>
     <div className="checkout-content"><div className="checkout-main-column"><Link className="checkout-back" to={storeRoute}> <ArrowLeft size={14} /> Voltar para a loja</Link><Stepper paymentReady={false} /><section className="checkout-card"><div className="checkout-card-title"><div><span className="eyebrow">Checkout Commerce</span><h1>Finalize sua compra</h1><p>Seu pedido será criado primeiro; o pagamento acontece depois no provedor escolhido.</p></div><span className="checkout-card-icon"><Store size={20} /></span></div>
       <form onSubmit={createOrder}>
         <div className="checkout-form-grid"><label className="checkout-field"><span>Nome completo *</span><input value={form.nome} onChange={e => setForm(current => ({ ...current, nome: e.target.value }))} autoComplete="name" required /></label><label className="checkout-field"><span>E-mail *</span><input type="email" value={form.email} onChange={e => setForm(current => ({ ...current, email: e.target.value }))} autoComplete="email" required /></label><label className="checkout-field"><span>WhatsApp ou telefone</span><input value={form.telefone} onChange={e => setForm(current => ({ ...current, telefone: e.target.value }))} autoComplete="tel" /></label></div>

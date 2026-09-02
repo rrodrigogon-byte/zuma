@@ -372,6 +372,8 @@ html[data-brand='dino'] .sidebar-brand-dino span {
 .checkout-header-inner { max-width: 1180px; min-height: 72px; padding: 0 24px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .checkout-brand { display: inline-flex; align-items: center; gap: 10px; color: var(--sand); font-size: 22px; font-weight: 900; letter-spacing: -.04em; }
 .checkout-brand-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: var(--orange); color: var(--navy); font-size: 18px; }
+.checkout-brand-dino-commerce { gap: 0; }
+.checkout-brand-logo { display: block; width: 154px; max-width: 42vw; height: 38px; padding: 5px 10px; border-radius: 10px; background: #FFFFFF; object-fit: contain; object-position: left center; }
 .checkout-header-security { display: inline-flex; align-items: center; gap: 7px; color: #d9e6ef; font-size: 12px; font-weight: 700; }
 .checkout-header-security > span:first-child { display: grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--success); border-radius: 50%; color: var(--orange); }
 .checkout-header-count { margin-left: 12px; padding-left: 12px; border-left: 1px solid rgba(255,255,255,.18); color: var(--sand); font-weight: 600; }
