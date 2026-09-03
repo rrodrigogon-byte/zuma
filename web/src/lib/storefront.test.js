@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { decrementCartQuantity, loadAllStorefrontProducts, normalizeStorefrontAlias, storefrontAliasFromPath, storefrontApiBase, storefrontCartSessionKey, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from './storefront.js';
+import { clearStorefrontCheckoutIdempotencyKey, decrementCartQuantity, loadAllStorefrontProducts, normalizeStorefrontAlias, storefrontAliasFromPath, storefrontApiBase, storefrontCartSessionKey, storefrontCheckoutIdempotencyKey, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from './storefront.js';
 
 test('normaliza apenas aliases públicos seguros', () => {
   assert.equal(normalizeStorefrontAlias(' DINO '), 'dino');
@@ -47,6 +47,24 @@ test('sessionKey do carrinho é opaca, estável e particionada por alias', () =>
     assert.equal(storefrontCartSessionKey('dino'), dino);
     assert.notEqual(storefrontCartSessionKey('agro-open'), dino);
   } finally { globalThis.localStorage = original; }
+});
+
+test('chave do pedido é estável no checkout, isolada por alias e rotacionável após sucesso', () => {
+  const storage = new Map();
+  const original = globalThis.sessionStorage;
+  globalThis.sessionStorage = {
+    getItem: key => storage.get(key) || null,
+    setItem: (key, value) => storage.set(key, value),
+    removeItem: key => storage.delete(key),
+  };
+  try {
+    const dino = storefrontCheckoutIdempotencyKey('dino');
+    assert.match(dino, /^order-[A-Za-z0-9_-]{18,180}$/);
+    assert.equal(storefrontCheckoutIdempotencyKey('dino'), dino);
+    assert.notEqual(storefrontCheckoutIdempotencyKey('agro-open'), dino);
+    clearStorefrontCheckoutIdempotencyKey('dino');
+    assert.notEqual(storefrontCheckoutIdempotencyKey('dino'), dino);
+  } finally { globalThis.sessionStorage = original; }
 });
 
 test('decremento permite remover a última unidade sem produzir quantidade negativa', () => {
