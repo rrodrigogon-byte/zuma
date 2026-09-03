@@ -42,6 +42,22 @@ export function storefrontCartSessionKey(value) {
   } catch { return generate() }
 }
 
+export function storefrontCheckoutIdempotencyKey(value) {
+  const storageKey = storefrontStorageKey(value, 'checkout_idempotency')
+  const generate = () => `order-${globalThis.crypto?.randomUUID?.().replace(/-/g, '') || `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`}`
+  try {
+    const existing = globalThis.sessionStorage?.getItem(storageKey)
+    if (/^[A-Za-z0-9_-]{24,180}$/.test(existing || '')) return existing
+    const generated = generate()
+    globalThis.sessionStorage?.setItem(storageKey, generated)
+    return generated
+  } catch { return generate() }
+}
+
+export function clearStorefrontCheckoutIdempotencyKey(value) {
+  try { globalThis.sessionStorage?.removeItem(storefrontStorageKey(value, 'checkout_idempotency')) } catch { /* armazenamento opcional */ }
+}
+
 export function decrementCartQuantity(value) {
   const quantity = Math.max(0, Math.trunc(Number(value) || 0))
   return Math.max(0, quantity - 1)

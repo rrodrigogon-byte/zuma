@@ -307,3 +307,35 @@ test('createCatalogMedia bloqueia variante de outro produto e persiste mídia no
   assert.equal(mediaInsert.values[5], '/api/storefront/media/99999999-9999-4999-8999-999999999998');
   assert.equal(calls.filter(call => call.sql.includes('INSERT INTO commerce_product_media')).length, 1);
 });
+
+
+test('createPendingOrder reaproveita a resposta idempotente e inclui cupom no conflito de payload', async () => {
+  let storedHash = null;
+  let storedResponse = null;
+  let orderInserts = 0;
+  const { trx } = queryRecorder((sql, values) => {
+    if (sql.includes('FROM commerce_storefronts')) return { rows: [{ id: storefrontId, empresa_id: empresaId, loja_id: lojaId, codigo: 'web', nome: 'Web', status: 'active', moeda: 'BRL', timezone: 'America/Sao_Paulo' }] };
+    if (sql.includes("scope = 'order.create'") && sql.includes('FROM commerce_idempotency_keys')) return { rows: storedHash ? [{ request_hash: storedHash, response_body: storedResponse }] : [] };
+    if (sql.includes("VALUES ($1, 'order.create'")) { storedHash = values[2]; return { rows: [] }; }
+    if (sql.includes('FROM commerce_product_variants')) return { rows: [{ id: variantId, sku: 'SERV-1', variant_name: 'Padrão', product_name: 'Serviço', product_type: 'service', price: '15.00', promotional: false }] };
+    if (sql.includes('INSERT INTO commerce_customers')) return { rows: [{ id: '99999999-9999-4999-8999-999999999999' }] };
+    if (sql.includes('INSERT INTO commerce_orders')) { orderInserts += 1; return { rows: [] }; }
+    if (sql.includes("scope = 'order.create'") && sql.includes('UPDATE commerce_idempotency_keys')) { storedResponse = JSON.parse(values[2]); return { rows: [] }; }
+    return { rows: [] };
+  });
+  const input = {
+    storefrontId,
+    items: [{ variantId, quantity: 1 }],
+    customer: { nome: 'Cliente idempotente' },
+    idempotencyKey: 'checkout-repeat-001',
+    promotionCode: ' DINO10 ',
+  };
+  const first = await createPendingOrder(trx, { empresaId, lojaId }, input);
+  const replay = await createPendingOrder(trx, { empresaId, lojaId }, { ...input, promotionCode: 'dino10' });
+  assert.deepEqual(replay, first);
+  assert.equal(orderInserts, 1);
+  await assert.rejects(
+    () => createPendingOrder(trx, { empresaId, lojaId }, { ...input, promotionCode: 'OUTRO20' }),
+    error => error instanceof CommerceError && error.code === 'IDEMPOTENCY_CONFLICT',
+  );
+});

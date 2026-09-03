@@ -408,6 +408,7 @@ export async function createPendingOrder(trx, context, input = {}) {
     shippingOptionId: input.shippingOptionId || null,
     locationId: input.locationId || null,
     note: input.note || '',
+    promotionCode: String(input.promotionCode || '').trim().toUpperCase() || null,
     ...(input.cartSessionKey ? { cartSessionHash: crypto.createHash('sha256').update(String(input.cartSessionKey)).digest('hex') } : {}),
   })).digest('hex');
 

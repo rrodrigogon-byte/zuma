@@ -121,8 +121,18 @@ export async function applyPromotionToOrder(trx, context, input = {}) {
   const order = orderResult.rows[0];
   if (!order) throw new CommerceError('pedido não encontrado no tenant', 'ORDER_NOT_FOUND');
   if (!['draft', 'pending_payment'].includes(order.status)) throw new CommerceError('cupom só pode ser aplicado antes do processamento do pedido', 'PROMOTION_ORDER_STATE_INVALID');
-  const already = await trx.query(`SELECT id FROM commerce_order_promotions WHERE empresa_id = $1 AND order_id = $2 LIMIT 1`, [empresaId, orderId]);
-  if (already.rows[0]) throw new CommerceError('o pedido já possui promoção aplicada', 'PROMOTION_ALREADY_APPLIED');
+  const already = await trx.query(
+    `SELECT id, codigo, tipo, desconto
+       FROM commerce_order_promotions
+      WHERE empresa_id = $1 AND order_id = $2
+      LIMIT 1`,
+    [empresaId, orderId],
+  );
+  if (already.rows[0]) {
+    const applied = already.rows[0];
+    if (String(applied.codigo || '').toUpperCase() !== codigo) throw new CommerceError('o pedido já possui outra promoção aplicada', 'PROMOTION_ALREADY_APPLIED');
+    return { orderId, codigo: applied.codigo, tipo: applied.tipo, desconto: round(applied.desconto), total: round(order.total) };
+  }
   const promotionResult = await trx.query(
     `SELECT p.id AS promotion_id, p.tipo, p.valor, p.regras, c.id AS promotion_code_id, c.codigo
        FROM commerce_promotion_codes c
