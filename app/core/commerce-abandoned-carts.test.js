@@ -57,6 +57,40 @@ test('sync sem contato persiste somente hash, itens e preço revalidado no tenan
   } finally { db.transaction = original; }
 });
 
+test('sync vazio versionado cria tombstone e impede reabertura por requisição atrasada', async () => {
+  const original = db.transaction;
+  const calls = [];
+  db.transaction = async callback => callback({ async query(sql, params) {
+    calls.push({ sql, params });
+    if (sql.includes('SELECT * FROM commerce_carts')) return { rows: [] };
+    return { rows: [], rowCount: 1 };
+  } });
+  try {
+    const result = await syncPublicCart(CONTEXT, { sessionKey: SESSION, items: [], syncVersion: 200 });
+    assert.deepEqual(result, { status: 'expired', itemCount: 0, syncVersion: 200 });
+    const tombstone = calls.find(call => call.sql.includes('INSERT INTO commerce_carts'));
+    assert.match(tombstone.sql, /client_sync_version,recovery_status/);
+    assert.deepEqual(tombstone.params.slice(-1), [200]);
+  } finally { db.transaction = original; }
+});
+
+test('sync mais antigo não sobrescreve o carrinho já atualizado', async () => {
+  const original = db.transaction;
+  const calls = [];
+  db.transaction = async callback => callback({ async query(sql, params) {
+    calls.push({ sql, params });
+    if (sql.includes('pg_advisory_xact_lock')) return { rows: [] };
+    if (sql.includes('SELECT * FROM commerce_carts')) return { rows: [{ id: CART, status: 'expired', client_sync_version: '300' }] };
+    throw new Error(`consulta inesperada: ${sql}`);
+  } });
+  try {
+    const result = await syncPublicCart(CONTEXT, { sessionKey: SESSION, items: [{ variantId: VARIANT, quantity: 1 }], syncVersion: 299 });
+    assert.deepEqual(result, { status: 'expired', stale: true, syncVersion: 300 });
+    assert.equal(calls.length, 2);
+    assert.match(calls[0].sql, /pg_advisory_xact_lock/);
+  } finally { db.transaction = original; }
+});
+
 test('conversão do pedido é tenant/storefront-scoped e cancela apenas a tarefa desse tenant', async () => {
   const calls = [];
   const trx = { async query(sql, params) {
