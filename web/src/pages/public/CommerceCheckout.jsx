@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, fmtR } from '../../lib/api'
 import { commerceDisplayName, DINO_COMMERCE_LOGO } from '../../lib/brand'
 import { clearStorefrontCheckoutIdempotencyKey, normalizeStorefrontAlias, storefrontApiBase, storefrontCartSessionKey, storefrontCheckoutIdempotencyKey, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
-import { recommendedShippingOption, shippingQuoteKey } from '../../lib/checkout-shipping'
+import { checkoutTotal, recommendedShippingOption, selectedShippingOption, shippingQuoteKey } from '../../lib/checkout-shipping'
 
 const EMPTY_ADDRESS = { cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '', referencia: '' }
 
@@ -110,6 +110,8 @@ export default function CommerceCheckout() {
   const [payment, setPayment] = useState(null)
   const [selectedPayment, setSelectedPayment] = useState('')
   const [loading, setLoading] = useState(true)
+  const [shippingQuoteLoading, setShippingQuoteLoading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [working, setWorking] = useState(false)
   const [redirecting, setRedirecting] = useState(false)
   const [error, setError] = useState('')
@@ -119,12 +121,13 @@ export default function CommerceCheckout() {
   const addressNumberRef = useRef(null)
   const lastLookupCepRef = useRef('')
   const lastShippingQuoteKeyRef = useRef('')
+  const shippingQuoteRequestRef = useRef(0)
 
   const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + Number(item.preco || 0) * Number(item.qtd || 0), 0), [cart])
-  const selectedOption = shippingQuote?.items?.find(item => (item.selectionId || item.id) === shippingOptionId)
-  const total = cartTotal + Number(selectedOption?.amount || 0)
   const automaticShippingQuoteKey = shippingQuoteKey({ deliveryMode, address, cart })
   const shippingQuoteIsCurrent = Boolean(shippingQuote && automaticShippingQuoteKey && lastShippingQuoteKeyRef.current === automaticShippingQuoteKey)
+  const selectedOption = selectedShippingOption({ deliveryMode, shippingQuote, shippingOptionId, shippingQuoteIsCurrent })
+  const total = checkoutTotal(cartTotal, selectedOption)
   const deliveryAvailable = shippingMethods.some(item => ['delivery', 'carrier'].includes(item.tipo) && item.quoteEnabled)
   const pickupAvailable = shippingMethods.some(item => item.tipo === 'pickup')
   const paymentReady = Boolean(order && payment)
@@ -224,19 +227,24 @@ export default function CommerceCheckout() {
     if (!deliveryAvailable) return setError('Esta loja ainda não publicou uma opção de entrega pronta.')
     if (address.cep.replace(/\D/g, '').length !== 8) return setError('Informe um CEP válido antes de calcular o frete.')
     const effectiveQuoteKey = quoteKey || shippingQuoteKey({ deliveryMode, address, cart })
-    setWorking(true); setError('')
+    const requestId = ++shippingQuoteRequestRef.current
+    setShippingQuoteLoading(true); setError('')
     try {
       const quote = await api.post(`${storefrontApi}/shipping/quotes/available`, { destinationCep: address.cep, destination: { cep: address.cep, cidade: address.cidade, estado: address.estado }, items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })) })
+      if (requestId !== shippingQuoteRequestRef.current) return
       const first = recommendedShippingOption(quote)
       if (!first) throw new Error('Nenhuma opção de frete está disponível para este CEP e carrinho.')
       setShippingQuote(quote)
-      setShippingOptionId(first ? (first.selectionId || first.id) : '')
-      setShippingMethodId(first?.shippingMethodId || '')
+      setShippingOptionId(first.selectionId || first.id)
+      setShippingMethodId(first.shippingMethodId || '')
       lastShippingQuoteKeyRef.current = effectiveQuoteKey
     } catch (err) {
+      if (requestId !== shippingQuoteRequestRef.current) return
       lastShippingQuoteKeyRef.current = effectiveQuoteKey
       setError(err.message || 'Não foi possível calcular o frete.')
-    } finally { setWorking(false) }
+    } finally {
+      if (requestId === shippingQuoteRequestRef.current) setShippingQuoteLoading(false)
+    }
   }
 
   function updateAddress(key, value) {
@@ -249,7 +257,12 @@ export default function CommerceCheckout() {
       const changed = String(current.cep || '').replace(/\D/g, '') !== String(nextValue || '').replace(/\D/g, '')
       return changed ? { ...EMPTY_ADDRESS, cep: nextValue } : { ...current, cep: nextValue }
     })
-    if (['cep', 'cidade', 'estado'].includes(key)) { setShippingQuote(null); setShippingOptionId(''); lastShippingQuoteKeyRef.current = '' }
+    if (['cep', 'cidade', 'estado'].includes(key)) {
+      shippingQuoteRequestRef.current += 1
+      setShippingQuote(null)
+      setShippingOptionId('')
+      lastShippingQuoteKeyRef.current = ''
+    }
   }
 
   async function lookupCep(value = address.cep, { force = false } = {}) {
@@ -261,8 +274,10 @@ export default function CommerceCheckout() {
     try {
       const result = await api.get(`${storefrontApi}/shipping/address/${cep}`)
       setAddress(current => ({ ...current, ...result, cep: formatCep(result.cep || cep) }))
+      shippingQuoteRequestRef.current += 1
       setShippingQuote(null)
       setShippingOptionId('')
+      lastShippingQuoteKeyRef.current = ''
       window.setTimeout(() => addressNumberRef.current?.focus(), 0)
     } catch (err) {
       lastLookupCepRef.current = ''
@@ -279,20 +294,20 @@ export default function CommerceCheckout() {
   }, [address.cep, deliveryMode, storefrontApi])
 
   useEffect(() => {
-    if (!automaticShippingQuoteKey || automaticShippingQuoteKey === lastShippingQuoteKeyRef.current || working) return undefined
+    if (!automaticShippingQuoteKey || automaticShippingQuoteKey === lastShippingQuoteKeyRef.current || shippingQuoteLoading) return undefined
     const timer = window.setTimeout(() => quoteShipping({ quoteKey: automaticShippingQuoteKey }), 300)
     return () => window.clearTimeout(timer)
-  }, [automaticShippingQuoteKey, working])
+  }, [automaticShippingQuoteKey, shippingQuoteLoading])
 
   async function createOrder(event) {
     event.preventDefault()
-    if (orderRequestRef.current) return
+    if (orderRequestRef.current || submitting || shippingQuoteLoading) return
     setError('')
     if (!form.nome.trim() || !/^\S+@\S+\.\S+$/.test(form.email)) return setError('Informe nome e e-mail válidos.')
     if (!shippingMethodId) return setError('A loja ainda não publicou uma forma de entrega.')
     if (deliveryMode === 'entrega' && (!shippingQuoteIsCurrent || !shippingOptionId || !selectedOption)) return setError('Consulte o CEP e recalcule o frete antes de continuar.')
     orderRequestRef.current = true
-    setWorking(true)
+    setSubmitting(true)
     try {
       const created = await api.post(`${storefrontApi}/orders`, {
         customer: { nome: form.nome.trim(), email: form.email.trim(), telefone: form.telefone.trim() },
@@ -303,7 +318,7 @@ export default function CommerceCheckout() {
         shippingMethodId,
         note: note.trim(),
         ...(promotionCode.trim() ? { promotionCode: promotionCode.trim() } : {}),
-        ...(deliveryMode === 'entrega' ? { shippingQuoteId: selectedOption?.quoteId || shippingQuote.quoteId, shippingOptionId: selectedOption?.id || shippingOptionId } : {}),
+        ...(deliveryMode === 'entrega' ? { shippingQuoteId: selectedOption.quoteId || shippingQuote?.quoteId, shippingOptionId: selectedOption.id } : {}),
       })
       const code = created.codigo || created.publicCode || created.public_code
       localStorage.removeItem(cartStorageKey)
@@ -332,7 +347,7 @@ export default function CommerceCheckout() {
             ? 'A opção de frete ficou indisponível. Calcule o frete novamente e selecione outra opção.'
             : ''
       setError(shippingError || err.message || 'Não foi possível criar o pedido.')
-    } finally { orderRequestRef.current = false; setWorking(false) }
+    } finally { orderRequestRef.current = false; setSubmitting(false) }
   }
 
   async function startPayment() {
@@ -411,10 +426,10 @@ export default function CommerceCheckout() {
         <div className="checkout-form-grid"><label className="checkout-field"><span>Nome completo *</span><input value={form.nome} onChange={e => setForm(current => ({ ...current, nome: e.target.value }))} autoComplete="name" required /></label><label className="checkout-field"><span>E-mail *</span><input type="email" value={form.email} onChange={e => setForm(current => ({ ...current, email: e.target.value }))} autoComplete="email" required /></label><label className="checkout-field"><span>WhatsApp ou telefone</span><input value={form.telefone} onChange={e => setForm(current => ({ ...current, telefone: e.target.value }))} autoComplete="tel" /></label><label className="checkout-field"><span>Cupom de desconto</span><input value={promotionCode} onChange={e => setPromotionCode(e.target.value.toUpperCase())} autoComplete="off" placeholder="Opcional" /></label></div>
         <label className="checkout-recovery-consent"><input type="checkbox" checked={recoveryPreference === true} onChange={event => setRecoveryPreference(event.target.checked)} /><span><strong>Lembrar meu carrinho por WhatsApp</strong><small>Opcional. Autorizo um único lembrete sobre este carrinho. Posso revogar desmarcando ou respondendo SAIR.</small></span></label>
         <div className="checkout-info-banner"><ShieldCheck size={18} /><div><strong>Pagamento fora do formulário.</strong><br />A Kytto não coleta dados de cartão. Você será levado ao checkout seguro do provedor habilitado.</div></div>
-        <div className="checkout-address"><div className="checkout-address-heading"><h2>Como receber</h2><span>Escolha uma opção publicada</span></div><div className="shipping-options">{pickupAvailable && <button type="button" className={`shipping-option ${deliveryMode === 'retirada' ? 'is-selected' : ''}`} onClick={() => { setDeliveryMode('retirada'); setShippingMethodId(shippingMethods.find(item => item.tipo === 'pickup')?.id || '') }}><span className="shipping-option-radio">{deliveryMode === 'retirada' ? '✓' : ''}</span><span className="shipping-option-copy"><strong>Retirada no local</strong><small>Confirme com a operação da loja.</small></span><b>Grátis</b></button>}{deliveryAvailable && <button type="button" className={`shipping-option ${deliveryMode === 'entrega' ? 'is-selected' : ''}`} onClick={() => { setDeliveryMode('entrega'); setShippingMethodId(shippingMethods.find(item => ['delivery', 'carrier'].includes(item.tipo) && item.quoteEnabled)?.id || '') }}><span className="shipping-option-radio">{deliveryMode === 'entrega' ? '✓' : ''}</span><span className="shipping-option-copy"><strong>Entrega</strong><small>O valor e o prazo são calculados automaticamente pelo CEP.</small></span><b>{selectedOption ? money(selectedOption.amount) : 'Consultar'}</b></button>}</div></div>
-        {deliveryMode === 'entrega' && <div className="checkout-address"><div className="checkout-form-grid"><label className="checkout-field"><span>CPF ou CNPJ do destinatário *</span><input value={form.documento} onChange={e => setForm(current => ({ ...current, documento: e.target.value }))} inputMode="numeric" autoComplete="off" required /></label><label className="checkout-field"><span>CEP *</span><div className="checkout-inline-field"><input value={address.cep} onChange={e => updateAddress('cep', e.target.value)} onBlur={() => address.cep.replace(/\D/g, '').length === 8 && lookupCep()} inputMode="numeric" autoComplete="postal-code" placeholder="00000-000" required /><button type="button" className="checkout-secondary" onClick={() => lookupCep(address.cep, { force: true })} disabled={addressLookupLoading}>{addressLookupLoading ? 'Consultando…' : 'Consultar CEP'}</button></div></label><label className="checkout-field"><span>Número *</span><input ref={addressNumberRef} value={address.numero} onChange={e => updateAddress('numero', e.target.value)} required /></label><label className="checkout-field"><span>Logradouro *</span><input value={address.logradouro} onChange={e => updateAddress('logradouro', e.target.value)} required /></label><label className="checkout-field"><span>Bairro *</span><input value={address.bairro} onChange={e => updateAddress('bairro', e.target.value)} required /></label><label className="checkout-field"><span>Cidade *</span><input value={address.cidade} onChange={e => updateAddress('cidade', e.target.value)} required /></label><label className="checkout-field"><span>UF *</span><input value={address.estado} onChange={e => updateAddress('estado', e.target.value.toUpperCase())} maxLength={2} required /></label></div><button type="button" className="checkout-secondary" onClick={quoteShipping} disabled={working}>{working ? 'Calculando…' : 'Calcular frete'}</button>{shippingQuote?.items?.map(option => { const selectionId = option.selectionId || option.id; return <label className="commerce-shipping-option" key={selectionId}><input type="radio" name="shippingOption" checked={shippingOptionId === selectionId} onChange={() => { setShippingOptionId(selectionId); setShippingMethodId(option.shippingMethodId || shippingMethodId) }} /><span><strong>{option.name}</strong><small>{shippingPromise(option)}</small>{shippingPriceSummary(option) && <small className="checkout-shipping-price-note">{shippingPriceSummary(option)}</small>}</span><b>{money(option.amount)}</b></label> })}</div>}
+        <div className="checkout-address"><div className="checkout-address-heading"><h2>Como receber</h2><span>Escolha uma opção publicada</span></div><div className="shipping-options">{pickupAvailable && <button type="button" className={`shipping-option ${deliveryMode === 'retirada' ? 'is-selected' : ''}`} onClick={() => { shippingQuoteRequestRef.current += 1; setDeliveryMode('retirada'); setShippingMethodId(shippingMethods.find(item => item.tipo === 'pickup')?.id || ''); setShippingQuote(null); setShippingOptionId(''); lastShippingQuoteKeyRef.current = '' }}><span className="shipping-option-radio">{deliveryMode === 'retirada' ? '✓' : ''}</span><span className="shipping-option-copy"><strong>Retirada no local</strong><small>Confirme com a operação da loja.</small></span><b>Grátis</b></button>}{deliveryAvailable && <button type="button" className={`shipping-option ${deliveryMode === 'entrega' ? 'is-selected' : ''}`} onClick={() => { shippingQuoteRequestRef.current += 1; setDeliveryMode('entrega'); setShippingMethodId(shippingMethods.find(item => ['delivery', 'carrier'].includes(item.tipo) && item.quoteEnabled)?.id || ''); setShippingQuote(null); setShippingOptionId(''); lastShippingQuoteKeyRef.current = '' }}><span className="shipping-option-radio">{deliveryMode === 'entrega' ? '✓' : ''}</span><span className="shipping-option-copy"><strong>Entrega</strong><small>O valor e o prazo são calculados automaticamente pelo CEP.</small></span><b>{selectedOption ? money(selectedOption.amount) : 'Consultar'}</b></button>}</div></div>
+        {deliveryMode === 'entrega' && <div className="checkout-address"><div className="checkout-form-grid"><label className="checkout-field"><span>CPF ou CNPJ do destinatário *</span><input value={form.documento} onChange={e => setForm(current => ({ ...current, documento: e.target.value }))} inputMode="numeric" autoComplete="off" required /></label><label className="checkout-field"><span>CEP *</span><div className="checkout-inline-field"><input value={address.cep} onChange={e => updateAddress('cep', e.target.value)} onBlur={() => address.cep.replace(/\D/g, '').length === 8 && lookupCep()} inputMode="numeric" autoComplete="postal-code" placeholder="00000-000" required /><button type="button" className="checkout-secondary" onClick={() => lookupCep(address.cep, { force: true })} disabled={addressLookupLoading}>{addressLookupLoading ? 'Consultando…' : 'Consultar CEP'}</button></div></label><label className="checkout-field"><span>Número *</span><input ref={addressNumberRef} value={address.numero} onChange={e => updateAddress('numero', e.target.value)} required /></label><label className="checkout-field"><span>Logradouro *</span><input value={address.logradouro} onChange={e => updateAddress('logradouro', e.target.value)} required /></label><label className="checkout-field"><span>Bairro *</span><input value={address.bairro} onChange={e => updateAddress('bairro', e.target.value)} required /></label><label className="checkout-field"><span>Cidade *</span><input value={address.cidade} onChange={e => updateAddress('cidade', e.target.value)} required /></label><label className="checkout-field"><span>UF *</span><input value={address.estado} onChange={e => updateAddress('estado', e.target.value.toUpperCase())} maxLength={2} required /></label></div><button type="button" className="checkout-secondary" onClick={quoteShipping} disabled={shippingQuoteLoading}>{shippingQuoteLoading ? 'Calculando…' : 'Calcular frete'}</button>{shippingQuote?.items?.map(option => { const selectionId = option.selectionId || option.id; return <label className="commerce-shipping-option" key={selectionId}><input type="radio" name="shippingOption" checked={shippingOptionId === selectionId} onChange={() => { setShippingOptionId(selectionId); setShippingMethodId(option.shippingMethodId || shippingMethodId) }} /><span><strong>{option.name}</strong><small>{shippingPromise(option)}</small>{shippingPriceSummary(option) && <small className="checkout-shipping-price-note">{shippingPriceSummary(option)}</small>}</span><b>{money(option.amount)}</b></label> })}</div>}
         <label className="checkout-field"><span>Observação</span><textarea rows={2} value={note} onChange={e => setNote(e.target.value)} maxLength={1000} placeholder="Preferências ou instruções para a loja" /></label>
-        {error && <div className="checkout-form-error" role="alert">{error}</div>}<div className="checkout-actions"><span>{deliveryMode === 'entrega' && selectedOption ? `Frete de ${money(selectedOption.amount)} incluído. Estoque e total serão revalidados no servidor.` : 'Estoque e valor serão revalidados no servidor.'}</span><button type="submit" className="checkout-primary checkout-primary-large" disabled={working || !cart.length}>{working ? <><Loader2 className="commerce-spin" size={16} /> Criando pedido…</> : <>Continuar para pagamento <ArrowRight size={16} /></>}</button></div>
+        {error && <div className="checkout-form-error" role="alert">{error}</div>}<div className="checkout-actions"><span>{deliveryMode === 'entrega' && selectedOption ? `Frete de ${money(selectedOption.amount)} incluído. Estoque e total serão revalidados no servidor.` : 'Estoque e valor serão revalidados no servidor.'}</span><button type="submit" className="checkout-primary checkout-primary-large" disabled={submitting || shippingQuoteLoading || !cart.length}>{submitting ? <><Loader2 className="commerce-spin" size={16} /> Criando pedido…</> : shippingQuoteLoading ? 'Aguardando cálculo do frete…' : <>Continuar para pagamento <ArrowRight size={16} /></>}</button></div>
       </form></section></div><aside className="checkout-summary"><div className="checkout-summary-heading"><div><span className="eyebrow">Seu pedido</span><h2>Resumo da compra</h2></div><span className="checkout-secure">Seguro</span></div><div className="checkout-summary-items">{cart.map(item => <div className="checkout-summary-item" key={`${item.produtoId}-${item.variantId || 'base'}`}><ProductThumb item={item} /><div className="checkout-summary-item-copy"><strong>{item.nome}</strong><span>{item.qtd} unidade(s)</span></div><b>{money(item.qtd * item.preco)}</b></div>)}</div><div className="checkout-totals"><div><span>Subtotal</span><b>{money(cartTotal)}</b></div>{selectedOption && <div><span>Entrega</span><b>{money(selectedOption.amount)}</b></div>}<div className="checkout-total"><span>Total</span><strong>{money(total)}</strong></div></div><div className="checkout-trust-list"><span>✓ Estoque revalidado no servidor</span><span>✓ Pagamento no provedor escolhido</span><span>✓ Acompanhamento por código do pedido</span></div></aside></div>
   </main>
 }
