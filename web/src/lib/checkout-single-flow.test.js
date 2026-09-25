@@ -5,10 +5,23 @@ import test from 'node:test';
 const storefrontSource = readFileSync(new URL('../pages/public/Ecommerce.jsx', import.meta.url), 'utf8');
 const checkoutSource = readFileSync(new URL('../pages/public/CommerceCheckout.jsx', import.meta.url), 'utf8');
 const storefrontLibSource = readFileSync(new URL('./storefront.js', import.meta.url), 'utf8');
+const cartDrawerSource = readFileSync(new URL('../components/store/CartDrawer.jsx', import.meta.url), 'utf8');
+
+test('troca de storefront remonta a vitrine e isola estados locais e respostas assíncronas', () => {
+  assert.match(storefrontSource, /const storefrontIdentity = `\$\{hostName\}\|\$\{storeAlias \|\| 'host'\}`/);
+  assert.match(storefrontSource, /<EcommerceStorefront key=\{storefrontIdentity\} routeAlias=\{routeAlias\} hostName=\{hostName\}/);
+});
+
+test('gaveta desabilita semanticamente incrementos além do estoque', () => {
+  assert.match(cartDrawerSource, /disabled=\{atLimit\}/);
+  assert.match(cartDrawerSource, /aria-label=\{atLimit \? 'Limite de estoque atingido' : 'Aumentar quantidade'\}/);
+});
 
 test('Commerce Core navega do carrinho para uma única página dedicada de checkout', () => {
   assert.match(storefrontSource, /if \(catalogSource === 'core'\) \{\s*navigate\(checkoutRoute\)/);
-  assert.match(storefrontSource, /onClick=\{openCheckout\}/);
+  // O botão Carrinho abre a gaveta; "Finalizar compra" leva à mesma página única de checkout.
+  assert.match(storefrontSource, /onCheckout=\{checkoutFromCart\}/);
+  assert.match(storefrontSource, /function checkoutFromCart\(\) \{ setCartOpen\(false\); openCheckout\(\) \}/);
   assert.doesNotMatch(storefrontSource, /form="commerce-inline-checkout-form"/);
   assert.equal((storefrontSource.match(/id="commerce-inline-checkout-form"/g) || []).length, 1);
 });

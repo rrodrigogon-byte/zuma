@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, CheckCircle2, Eye, Loader2, Minus, Monitor, Moon, Plus, Search, ShoppingBag, Store, Sun, Trash2, X } from 'lucide-react'
+import { AlertCircle, ArrowRight, Check, CheckCircle2, Eye, Loader2, Minus, Monitor, Moon, Plus, Search, ShoppingBag, Store, Sun, Trash2, X } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, fmtR } from '../../lib/api'
 import { decrementCartQuantity, loadAllStorefrontProducts, normalizeStorefrontAlias, storefrontApiBase, storefrontCartSessionKey, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
 import { recommendedShippingOption, shippingQuoteKey } from '../../lib/checkout-shipping'
 import { applyThemeMode, commerceDisplayName, DINO_COMMERCE_LOGO, storedThemeMode } from '../../lib/brand'
+import { addProductToCart, filterCatalog, stockState } from '../../lib/storefront-catalog'
+import AddToCartSuccess from '../../components/store/AddToCartSuccess'
+import CartDrawer from '../../components/store/CartDrawer'
 import './commerce.css'
+import './storefront-ux.css'
 
 function readCart(storeAlias) {
   try {
@@ -107,8 +111,10 @@ function availableStock(product, variantId) {
 function ProductImage({ product, large = false, mediaUrl = '' }) {
   const image = mediaUrl || product?.imagem || productMedia(product)[0]?.url || ''
   const alt = productMedia(product).find(item => item.url === image)?.altText || product?.nome || 'Produto'
+  const [brokenImage, setBrokenImage] = useState('')
+  if (image && brokenImage === image) return <div className={`commerce-product-placeholder sf-image-fallback ${large ? 'is-large' : ''}`} role="img" aria-label={`${product?.nome || 'Produto'} — imagem indisponível`}><Store size={large ? 40 : 28} aria-hidden="true" /><span>Imagem indisponível</span></div>
   return image
-    ? <img src={image} alt={alt} loading={large ? 'eager' : 'lazy'} decoding="async" className={`commerce-product-image ${large ? 'is-large' : ''}`} />
+    ? <img onError={() => setBrokenImage(image)} src={image} alt={alt} loading={large ? 'eager' : 'lazy'} decoding="async" className={`commerce-product-image ${large ? 'is-large' : ''}`} />
     : <div className={`commerce-product-placeholder ${large ? 'is-large' : ''}`} aria-hidden="true">{product?.emoji || '▦'}</div>
 }
 
@@ -135,10 +141,16 @@ function QuantityControl({ value, onChange, max }) {
 }
 
 export default function Ecommerce() {
-  const navigate = useNavigate()
   const { storeAlias: routeAlias = '' } = useParams()
   const storeAlias = normalizeStorefrontAlias(routeAlias)
   const hostName = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
+  const storefrontIdentity = `${hostName}|${storeAlias || 'host'}`
+  return <EcommerceStorefront key={storefrontIdentity} routeAlias={routeAlias} hostName={hostName} />
+}
+
+function EcommerceStorefront({ routeAlias, hostName }) {
+  const navigate = useNavigate()
+  const storeAlias = normalizeStorefrontAlias(routeAlias)
   const isDinoStorefront = storeAlias === 'dino' || (hostName === 'dino.kytto.com.br' && !storeAlias)
   const storefrontApi = storefrontApiBase(storeAlias)
   const storeRoute = storefrontRoute(storeAlias, 'store')
@@ -153,6 +165,13 @@ export default function Ecommerce() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const [cartOpen, setCartOpen] = useState(false)
+  const [addedItem, setAddedItem] = useState(null)
+  const [justAdded, setJustAdded] = useState({})
+  const [addError, setAddError] = useState('')
+  const [cartBump, setCartBump] = useState(false)
+  const addLockRef = useRef(new Set())
   const [category, setCategory] = useState('Todos')
   const [cart, setCart] = useState(() => readCart(storeAlias))
   const [selected, setSelected] = useState(null)
@@ -234,10 +253,22 @@ export default function Ecommerce() {
   }, [products])
 
   const categories = useMemo(() => ['Todos', ...new Set(products.map(item => item.cat).filter(Boolean))], [products])
-  const filtered = useMemo(() => products.filter(product => {
-    const text = `${product.nome} ${product.descricao || ''} ${product.cod || ''}`.toLowerCase()
-    return (category === 'Todos' || product.cat === category) && (!query.trim() || text.includes(query.trim().toLowerCase()))
-  }), [products, query, category])
+  const filtered = useMemo(() => filterCatalog(products, { query, category }), [products, query, category])
+  useEffect(() => {
+    const timer = window.setTimeout(() => setQuery(searchInput), 220)
+    return () => window.clearTimeout(timer)
+  }, [searchInput])
+  useEffect(() => {
+    if (!addError) return undefined
+    const timer = window.setTimeout(() => setAddError(''), 3800)
+    return () => window.clearTimeout(timer)
+  }, [addError])
+  useEffect(() => {
+    if (!cartOpen && !addedItem) return undefined
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previous }
+  }, [cartOpen, addedItem])
   const cartCount = cart.reduce((sum, item) => sum + item.qtd, 0)
   const cartTotal = cart.reduce((sum, item) => sum + item.qtd * Number(item.preco || 0), 0)
   const pickupAvailable = catalogSource !== 'core' || shippingMethods.some(item => item.tipo === 'pickup')
@@ -395,16 +426,40 @@ export default function Ecommerce() {
   }
 
   function addToCart(product, qtd = 1) {
-    const available = availableStock(product, product.variantId)
-    if (!available) return
     const cartKey = product.variantId || product.id
-    setCart(previous => {
-      const found = previous.find(item => (item.variantId || item.produtoId) === cartKey)
-      if (found) return previous.map(item => (item.variantId || item.produtoId) === cartKey ? { ...item, qtd: Math.min(available, item.qtd + qtd) } : item)
-      return [...previous, { produtoId: product.id, variantId: product.variantId || null, nome: product.nome, preco: product.preco, imagem: product.imagem, emoji: product.emoji, qtd: Math.min(available, qtd) }]
-    })
+    if (addLockRef.current.has(cartKey)) return
+    const available = availableStock(product, product.variantId)
+    const result = addProductToCart(cart, product, qtd, available)
+    if (!result.ok) {
+      setAddedItem(null)
+      setAddError(result.reason === 'stock_limit'
+        ? `Limite de estoque atingido: ${result.quantity} ${result.quantity === 1 ? 'unidade' : 'unidades'} de ${product.nome} já no carrinho.`
+        : `${product.nome} está esgotado no momento.`)
+      return
+    }
+    addLockRef.current.add(cartKey)
+    setAddError('')
+    setCart(result.cart)
     setSelected(null)
+    setAddedItem({ key: cartKey, nome: product.nome, imagem: product.imagem, added: result.added, quantity: result.quantity })
+    setJustAdded(current => ({ ...current, [cartKey]: true }))
+    setCartBump(true)
+    window.setTimeout(() => setCartBump(false), 450)
+    window.setTimeout(() => {
+      addLockRef.current.delete(cartKey)
+      setJustAdded(current => { const next = { ...current }; delete next[cartKey]; return next })
+    }, 650)
   }
+
+  function clearSearch() { setSearchInput(''); setQuery('') }
+  function clearFilters() { clearSearch(); setCategory('Todos') }
+  function openProduct(product) { setSelected(product); setSelectedVariantId(product.variantId || product.variants?.[0]?.variantId || '') }
+  function describeCartItem(item) {
+    const product = products.find(entry => entry.id === item.produtoId)
+    const variant = selectedProductVariant(product, item.variantId)
+    return { cod: variant?.cod || '', label: product?.variants?.length > 1 ? (variant?.label || '') : '', available: product ? availableStock(product, item.variantId) : item.qtd }
+  }
+  function checkoutFromCart() { setCartOpen(false); openCheckout() }
 
   function updateCart(productId, variantId, qtd) {
     setCheckoutError('')
@@ -498,7 +553,7 @@ export default function Ecommerce() {
     ['Termos de uso', publicBrand.policies?.termsUrl],
   ].filter(([, url]) => url)
 
-  return <main className="commerce-shell" data-storefront-alias={storeAlias || undefined}>
+  return <main className="commerce-shell sf-ux" data-storefront-alias={storeAlias || undefined}>
     <section className="commerce-hero">
       {isDinoStorefront && <div className="commerce-dino-brandbar"><div className="commerce-dino-identity"><div className="commerce-dino-logo-frame"><img src={DINO_COMMERCE_LOGO} alt="Dino — Barbearia e Perfumaria" /></div><div className="commerce-dino-brand-copy"><span>Dino</span><strong>Barbearia &amp; Perfumaria</strong><small>Estilo, cuidado e presença.</small></div></div><div className="commerce-dino-theme" role="group" aria-label="Tema da loja">{[["system", Monitor, "Sistema"], ["light", Sun, "Claro"], ["dark", Moon, "Escuro"]].map(([mode, Icon, label]) => <button type="button" key={mode} onClick={() => changeThemeMode(mode)} className={themeMode === mode ? 'active' : ''} aria-pressed={themeMode === mode} title={`Tema ${label.toLowerCase()}`}><Icon size={14} /><span>{label}</span></button>)}</div></div>}
       <div>
@@ -515,21 +570,27 @@ export default function Ecommerce() {
     </section>
 
     <section className="commerce-toolbar" id="catalogo">
-      <div className="commerce-search"><Search size={17} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar produto, SKU ou categoria" aria-label="Buscar no catálogo" /></div>
-      <div className="commerce-categories" role="tablist" aria-label="Categorias">
-        {categories.map(item => <button key={item} type="button" role="tab" aria-selected={category === item} className={category === item ? 'is-active' : ''} onClick={() => setCategory(item)}>{item}</button>)}
+      <div className="sf-search" role="search"><Search size={18} aria-hidden="true" /><input type="search" value={searchInput} onChange={event => setSearchInput(event.target.value)} onKeyDown={event => { if (event.key === 'Escape' && searchInput) { event.preventDefault(); clearSearch() } }} placeholder="Buscar produto, SKU ou categoria" aria-label="Buscar produto, SKU ou categoria" autoComplete="off" enterKeyHint="search" />{searchInput && <button type="button" className="sf-search-clear" onClick={clearSearch} aria-label="Limpar busca"><X size={17} /></button>}</div>
+      <div className="commerce-categories" role="group" aria-label="Filtrar por categoria">
+        {categories.map(item => <button key={item} type="button" aria-pressed={category === item} className={category === item ? 'is-active' : ''} onClick={() => setCategory(item)}>{item}</button>)}
       </div>
-      <button type="button" className="commerce-cart-button" onClick={openCheckout} disabled={!cart.length}><ShoppingBag size={18} /><span>Carrinho</span>{cartCount > 0 && <b>{cartCount}</b>}</button>
+      <button type="button" className={`commerce-cart-button ${cartBump ? 'is-bumped' : ''}`} onClick={() => setCartOpen(true)} aria-label={`Abrir carrinho, ${cartCount} ${cartCount === 1 ? 'item' : 'itens'}`}><ShoppingBag size={19} aria-hidden="true" /><span>Carrinho</span><b className={cartCount ? '' : 'is-empty'} aria-hidden="true">{cartCount}</b></button>
     </section>
 
     {loading && <div className="commerce-state"><Loader2 className="commerce-spin" /> Carregando catálogo…</div>}
     {!loading && error && <div className="commerce-state commerce-state-error">{error}</div>}
-    {!loading && !error && <section className="commerce-product-grid">
-      {filtered.map(product => <article className="commerce-product-card" key={product.id}>
-        <button type="button" className="commerce-product-open" onClick={() => { setSelected(product); setSelectedVariantId(product.variantId || product.variants?.[0]?.variantId || '') }} aria-label={`Ver detalhes de ${product.nome}`}><ProductImage product={product} /></button>
-        <div className="commerce-product-content"><span>{product.cat || 'Produto'}</span><h2>{product.nome}</h2><p>{product.descricao || `Produto disponível no catálogo ${brandName}.`}</p><button type="button" className="commerce-product-details-button" onClick={() => { setSelected(product); setSelectedVariantId(product.variantId || product.variants?.[0]?.variantId || '') }}><Eye size={15} /> Ver detalhes</button><div className="commerce-product-buy"><div className="commerce-price"><strong>{money(product.preco)}</strong>{product.promocaoAtiva && <s>{money(product.precoOriginal)}</s>}</div><button type="button" onClick={() => addToCart(product)} disabled={product.esgotado}>{product.esgotado ? 'Esgotado' : 'Adicionar'}</button></div></div>
-      </article>)}
-      {!filtered.length && <div className="commerce-state">Nenhum item encontrado para esta busca.</div>}
+    {!loading && !error && (query || category !== 'Todos') && <p className="sf-results-meta" aria-live="polite">{filtered.length === 1 ? '1 produto encontrado' : `${filtered.length} produtos encontrados`}</p>}
+    {!loading && !error && <section className="commerce-product-grid" aria-label="Produtos">
+      {filtered.map(product => {
+        const stock = stockState(product)
+        const cartKey = product.variantId || product.id
+        const added = Boolean(justAdded[cartKey])
+        return <article className={`commerce-product-card ${stock.kind === 'out' ? 'is-soldout' : ''}`} key={product.id}>
+          <button type="button" className="commerce-product-open" onClick={() => openProduct(product)} aria-label={`Ver detalhes de ${product.nome}`}>{stock.kind !== 'ok' && <span className={`sf-stock-badge is-${stock.kind}`}>{stock.label}</span>}<ProductImage product={product} /></button>
+          <div className="commerce-product-content"><span>{product.cat || 'Produto'}</span><h2 title={product.nome}>{product.nome}</h2><p>{product.descricao || `Produto disponível no catálogo ${brandName}.`}</p><button type="button" className="commerce-product-details-button" onClick={() => openProduct(product)}><Eye size={15} aria-hidden="true" /> Ver detalhes</button><div className="commerce-product-buy"><div className="commerce-price"><strong>{money(product.preco)}</strong>{product.promocaoAtiva && <s>{money(product.precoOriginal)}</s>}</div>{stock.kind === 'ok' && <span className="sf-stock-line">Em estoque</span>}<button type="button" className={`sf-add ${added ? 'is-added' : ''}`} onClick={() => addToCart(product)} disabled={stock.kind === 'out' || added} aria-label={stock.kind === 'out' ? `${product.nome} — esgotado` : `Adicionar ${product.nome} ao carrinho`}>{stock.kind === 'out' ? 'Esgotado' : added ? <><Check size={17} aria-hidden="true" /> Adicionado</> : <><ShoppingBag size={17} aria-hidden="true" /> Adicionar</>}</button></div></div>
+        </article>
+      })}
+      {!filtered.length && <div className="sf-empty" role="status"><strong>Nenhum produto encontrado</strong><p>Tente outro nome, SKU ou categoria.</p><button type="button" className="sf-btn sf-btn-secondary" onClick={clearFilters}>Limpar filtros</button></div>}
     </section>}
 
     <section className="commerce-trust-grid">
@@ -552,5 +613,8 @@ export default function Ecommerce() {
     {trackingOpen && <div className="commerce-overlay" role="dialog" aria-modal="true" aria-label="Acompanhar pedido"><div className="commerce-modal commerce-tracking-modal"><button type="button" className="commerce-close" onClick={() => setTrackingOpen(false)} aria-label="Fechar"><X size={18} /></button><span className="commerce-eyebrow">Acompanhamento</span><h2>Onde está seu pedido?</h2><p>Informe o código recebido após a confirmação. A consulta usa somente o canal desta loja.</p><form className="commerce-tracking-form" onSubmit={findOrder}><label>Código do pedido<input value={trackingCode} onChange={event => setTrackingCode(event.target.value)} placeholder="Ex.: LJ-123456" autoComplete="off" /></label><button type="submit" className="commerce-button commerce-button-primary" disabled={trackingLoading}>{trackingLoading ? <><Loader2 className="commerce-spin" size={16} /> Consultando…</> : <>Consultar <ArrowRight size={16} /></>}</button></form>{trackingError && <div className="commerce-form-error" role="alert">{trackingError}</div>}{trackingOrder && <div className="commerce-tracking-result" aria-live="polite"><span className="commerce-eyebrow">Pedido encontrado</span><strong>{trackingOrder.codigo || trackingOrder.publicCode || trackingOrder.public_code}</strong><b>{trackingOrder.status || 'Em processamento'}</b><small>Atualizado em {trackingOrder.atualizado_em ? new Date(trackingOrder.atualizado_em).toLocaleString('pt-BR') : '—'}</small>{trackingOrder.fulfillments?.map(item => <div className="commerce-tracking-fulfillment" key={item.id || `${item.status}-${item.trackingCode}`}><b>{item.carrier || 'Entrega'} · {item.status}</b>{item.trackingCode && <span>Código: {item.trackingCode}</span>}{item.trackingUrl && <a href={item.trackingUrl} target="_blank" rel="noreferrer">Abrir rastreio</a>}{item.ocorrencias?.slice?.(-3).map((event, index) => <small key={`${event.at || index}`}>{event.description || event.status}</small>)}</div>)}</div>}</div></div>}
 
     {order && <div className="commerce-overlay" role="dialog" aria-modal="true" aria-label="Pedido criado"><div className="commerce-modal commerce-success-modal"><CheckCircle2 size={42} /><span className="commerce-eyebrow">Pedido recebido</span><h2>Seu pedido está na fila.</h2><p>Guarde o código abaixo para acompanhar o preparo.</p><strong className="commerce-order-code">{order.codigo || order.publicCode || order.public_code}</strong>{checkoutError && <div className="commerce-form-error" role="alert">{checkoutError}</div>}{paymentMethods.length ? <div className="commerce-payment-box"><strong>Forma de pagamento</strong><small>Escolha um método publicado pela loja. Pix e cartão dependem do gateway; “Marcar na conta” valida o crediário aprovado do cliente.</small><div className="commerce-payment-methods" role="radiogroup" aria-label="Método de pagamento">{paymentMethods.map(item => <label key={paymentKey(item)} className="commerce-payment-method"><input type="radio" name="publicPaymentMethod" value={paymentKey(item)} checked={selectedPaymentMethod === paymentKey(item)} onChange={event => setSelectedPaymentMethod(event.target.value)} disabled={paymentLoading || Boolean(paymentResult)} /><span><strong>{paymentLabel(item)}</strong><small>{item.provider === 'mercadopago' ? 'Mercado Pago' : item.provider === 'infinitepay' ? 'InfinitePay' : item.provider === 'crediario' ? 'Crediário da loja' : item.provider}</small></span></label>)}</div><button type="button" className="commerce-button commerce-button-primary" onClick={startPayment} disabled={paymentLoading || paymentResult || !selectedPaymentMethod}>{paymentLoading ? <><Loader2 className="commerce-spin" size={16} /> Iniciando pagamento…</> : paymentResult ? 'Pagamento iniciado' : `Pagar com ${paymentLabel(paymentMethods.find(item => paymentKey(item) === selectedPaymentMethod))}`}</button>{paymentResult?.checkout?.qrCodeBase64 && <img className="commerce-pix-qr" src={`data:image/png;base64,${paymentResult.checkout.qrCodeBase64}`} alt="QR Code Pix gerado pelo gateway" />}{paymentResult?.checkout?.qrCode && <div className="commerce-pix-copy"><small>Pix copia e cola</small><code>{paymentResult.checkout.qrCode}</code><button type="button" className="commerce-button commerce-button-quiet" onClick={() => navigator.clipboard?.writeText(paymentResult.checkout.qrCode)}>Copiar código</button></div>}{paymentResult?.checkout?.ticketUrl && <a className="commerce-button commerce-button-quiet" href={paymentResult.checkout.ticketUrl} target="_blank" rel="noreferrer">Abrir checkout do provedor</a>}{paymentResult && <small>Status informado pelo gateway: {paymentResult.checkout?.status || paymentResult.status || 'pending'}. Status persistido do pedido: {order.payment_status || 'aguardando webhook'}. Esta tela atualiza automaticamente.</small>}</div> : <div className="commerce-payment-box commerce-payment-unavailable"><strong>Pagamento online ainda não habilitado</strong><small>A loja precisa concluir a homologação e configurar um gateway real. Nenhum pagamento foi simulado.</small></div>}<button type="button" className="commerce-button commerce-button-primary" onClick={() => { setOrder(null); setTrackingCode(order.codigo || order.publicCode || order.public_code || ''); openTracking() }}>Acompanhar pedido <ArrowRight size={16} /></button><button type="button" className="commerce-button commerce-button-quiet" onClick={() => setOrder(null)}>Voltar ao catálogo</button></div></div>}
+    <AddToCartSuccess item={addedItem} onClose={() => setAddedItem(null)} onViewCart={() => { setAddedItem(null); setCartOpen(true) }} />
+    <CartDrawer open={cartOpen} cart={cart} describe={describeCartItem} money={money} onClose={() => setCartOpen(false)} onChangeQty={(item, qtd) => updateCart(item.produtoId, item.variantId, qtd)} onRemove={item => updateCart(item.produtoId, item.variantId, 0)} onCheckout={checkoutFromCart} checkoutDisabled={!cart.length} />
+    {addError && <div className="sf-toast" role="alert"><AlertCircle size={18} aria-hidden="true" /> {addError}</div>}
   </main>
 }
