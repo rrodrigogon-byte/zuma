@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, CheckCircle2, Copy, Loader2, MapPin, PackageCheck, ShieldCheck, Store, Truck } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CheckCircle2, Copy, Loader2, MapPin, PackageCheck, ShieldCheck, Store, Trash2, Truck } from 'lucide-react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, fmtR } from '../../lib/api'
 import { commerceDisplayName, DINO_COMMERCE_LOGO } from '../../lib/brand'
-import { clearStorefrontCheckoutIdempotencyKey, normalizeStorefrontAlias, storefrontApiBase, storefrontCartSessionKey, storefrontCheckoutIdempotencyKey, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
+import { checkoutPaymentChoices, clearStorefrontCheckoutIdempotencyKey, nextStorefrontCartSyncVersion, normalizeStorefrontAlias, removeStorefrontCartItem, storefrontApiBase, storefrontCartSessionKey, storefrontCheckoutIdempotencyKey, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
 import { checkoutTotal, recommendedShippingOption, selectedShippingOption, shippingQuoteKey } from '../../lib/checkout-shipping'
 
 const EMPTY_ADDRESS = { cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '', referencia: '' }
@@ -20,7 +20,17 @@ function formatCep(value) {
   const digits = String(value || '').replace(/\D/g, '').slice(0, 8)
   return digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits
 }
-function paymentLabel(item) { return item?.provider === 'crediario' || item?.method === 'account' ? 'Marcar na conta' : item?.method === 'credit_card' ? 'Cartão de crédito' : item?.method === 'pix' ? 'Pix' : item?.method || 'Pagamento online' }
+function paymentLabel(item) { return item?.label || (item?.provider === 'crediario' || item?.method === 'account' ? 'Marcar na conta' : item?.method === 'credit_card' ? 'Cartão de crédito' : item?.method === 'pix' ? 'Pix' : item?.method || 'Pagamento online') }
+function paymentDescription(item) {
+  if (item?.provider === 'infinitepay') {
+    const labels = (item.captureMethods || []).map(method => method === 'credit_card' ? 'cartão' : method === 'pix' ? 'Pix' : '').filter(Boolean)
+    const methods = labels.length > 1 ? `${labels.slice(0, -1).join(', ')} ou ${labels.at(-1)}` : labels[0] || 'a forma de pagamento'
+    return `Escolha ${methods} uma única vez, no ambiente seguro da InfinitePay.`
+  }
+  if (item?.provider === 'mercadopago') return 'Mercado Pago'
+  if (item?.provider === 'crediario') return 'Crediário da loja'
+  return item?.provider || 'Provedor seguro'
+}
 function shippingPromise(option) {
   const total = option?.deliveryRange?.max ?? option?.deliveryDays
   if (option?.preparationDays !== null && option?.preparationDays !== undefined && option?.providerDeliveryDays !== null && option?.providerDeliveryDays !== undefined && total !== null && total !== undefined) {
@@ -86,7 +96,7 @@ export default function CommerceCheckout() {
   const cartStorageKey = storefrontStorageKey(storeAlias, 'cart')
   const customerStorageKey = storefrontStorageKey(storeAlias, 'customer')
   const [cartSessionKey] = useState(() => storefrontCartSessionKey(storeAlias))
-  const [orderIdempotencyKey] = useState(() => storefrontCheckoutIdempotencyKey(storeAlias))
+  const [orderIdempotencyKey, setOrderIdempotencyKey] = useState(() => storefrontCheckoutIdempotencyKey(storeAlias))
   const [searchParams] = useSearchParams()
   const orderCode = searchParams.get('order') || searchParams.get('order_nsu') || ''
   const returnTransactionNsu = searchParams.get('transaction_nsu') || searchParams.get('transactionNsu') || ''
@@ -116,8 +126,12 @@ export default function CommerceCheckout() {
   const [redirecting, setRedirecting] = useState(false)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [cartAnnouncement, setCartAnnouncement] = useState('')
   const orderRequestRef = useRef(false)
   const paymentRequestRef = useRef(false)
+  const cartSyncControllerRef = useRef(null)
+  const removedCartIndexRef = useRef(null)
+  const emptyCartLinkRef = useRef(null)
   const addressNumberRef = useRef(null)
   const lastLookupCepRef = useRef('')
   const lastShippingQuoteKeyRef = useRef('')
@@ -131,6 +145,8 @@ export default function CommerceCheckout() {
   const deliveryAvailable = shippingMethods.some(item => ['delivery', 'carrier'].includes(item.tipo) && item.quoteEnabled)
   const pickupAvailable = shippingMethods.some(item => item.tipo === 'pickup')
   const paymentReady = Boolean(order && payment)
+  const paymentChoices = useMemo(() => checkoutPaymentChoices(paymentMethods), [paymentMethods])
+  const selectedPaymentChoice = paymentChoices.find(item => `${item.provider}:${item.method}` === selectedPayment) || null
 
   useEffect(() => {
     let active = true
@@ -154,7 +170,8 @@ export default function CommerceCheckout() {
         setProducts(catalog?.items || [])
         setShippingMethods(methods)
         setPaymentMethods(methodsPayments)
-        setSelectedPayment(methodsPayments[0] ? `${methodsPayments[0].provider}:${methodsPayments[0].method}` : '')
+        const initialPaymentChoices = checkoutPaymentChoices(methodsPayments)
+        setSelectedPayment(initialPaymentChoices[0] ? `${initialPaymentChoices[0].provider}:${initialPaymentChoices[0].method}` : '')
         const initialShipping = methods.find(item => item.tipo === 'pickup') || methods[0]
         if (initialShipping) setShippingMethodId(initialShipping.id)
         if (orderCode) {
@@ -167,7 +184,8 @@ export default function CommerceCheckout() {
             const customerPayments = await api.get(`${storefrontApi}/payment-methods?customerId=${encodeURIComponent(existingCustomerId)}`).catch(() => null)
             if (customerPayments?.items) {
               setPaymentMethods(customerPayments.items)
-              setSelectedPayment(customerPayments.items[0] ? `${customerPayments.items[0].provider}:${customerPayments.items[0].method}` : '')
+              const customerPaymentChoices = checkoutPaymentChoices(customerPayments.items)
+              setSelectedPayment(customerPaymentChoices[0] ? `${customerPaymentChoices[0].provider}:${customerPaymentChoices[0].method}` : '')
             }
           }
         }
@@ -181,6 +199,9 @@ export default function CommerceCheckout() {
 
   useEffect(() => {
     if (order) return undefined
+    cartSyncControllerRef.current?.abort()
+    const controller = new AbortController()
+    cartSyncControllerRef.current = controller
     const timer = window.setTimeout(() => {
       const validContact = form.nome.trim().length >= 2 && form.telefone.replace(/\D/g, '').length >= 10
       const consentPayload = recoveryPreference === null ? {} : recoveryPreference === false
@@ -191,10 +212,41 @@ export default function CommerceCheckout() {
             recoveryEvidence: { checkbox: true, notice: 'Autorizo um único lembrete por WhatsApp sobre este carrinho. Posso revogar respondendo SAIR.', sourcePage: window.location.pathname },
             contact: { name: form.nome.trim(), email: form.email.trim(), phone: form.telefone.trim() },
           } : {}
-      api.post(`${storefrontApi}/cart`, { sessionKey: cartSessionKey, items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })), ...consentPayload }).catch(() => {})
+      api.post(`${storefrontApi}/cart`, { sessionKey: cartSessionKey, syncVersion: nextStorefrontCartSyncVersion(storeAlias), items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })), ...consentPayload }, { signal: controller.signal }).catch(() => {})
     }, 500)
-    return () => window.clearTimeout(timer)
-  }, [cart, cartSessionKey, form.email, form.nome, form.telefone, order, recoveryPreference, storefrontApi])
+    return () => {
+      window.clearTimeout(timer)
+      controller.abort()
+      if (cartSyncControllerRef.current === controller) cartSyncControllerRef.current = null
+    }
+  }, [cart, cartSessionKey, form.email, form.nome, form.telefone, order, recoveryPreference, storeAlias, storefrontApi])
+
+  useEffect(() => {
+    const syncCartFromAnotherTab = event => {
+      if (order || event.storageArea !== window.localStorage || event.key !== cartStorageKey) return
+      try {
+        const nextCart = event.newValue ? JSON.parse(event.newValue) : []
+        setCart(Array.isArray(nextCart) ? nextCart : [])
+        setShippingQuote(null)
+        setShippingOptionId('')
+        lastShippingQuoteKeyRef.current = ''
+        setCartAnnouncement('O carrinho foi atualizado em outra aba.')
+      } catch { /* valor inválido de outra aba é ignorado */ }
+    }
+    window.addEventListener('storage', syncCartFromAnotherTab)
+    return () => window.removeEventListener('storage', syncCartFromAnotherTab)
+  }, [cartStorageKey, order])
+
+  useEffect(() => {
+    if (removedCartIndexRef.current === null) return
+    const removedIndex = removedCartIndexRef.current
+    removedCartIndexRef.current = null
+    window.setTimeout(() => {
+      if (!cart.length) return emptyCartLinkRef.current?.focus()
+      const buttons = document.querySelectorAll('.checkout-remove-item')
+      buttons[Math.min(removedIndex, buttons.length - 1)]?.focus()
+    }, 0)
+  }, [cart])
 
   useEffect(() => {
     if (!order?.public_code || payment || !returnTransactionNsu || !returnSlug) return undefined
@@ -299,6 +351,24 @@ export default function CommerceCheckout() {
     return () => window.clearTimeout(timer)
   }, [automaticShippingQuoteKey, shippingQuoteLoading])
 
+  function removeCartItem(item) {
+    if (working || order) return
+    setError('')
+    removedCartIndexRef.current = Math.max(0, cart.findIndex(candidate => candidate.produtoId === item.produtoId && String(candidate.variantId || '') === String(item.variantId || '')))
+    setShippingQuote(null)
+    setShippingOptionId('')
+    lastShippingQuoteKeyRef.current = ''
+    const nextCart = removeStorefrontCartItem(cart, item.produtoId, item.variantId)
+    try {
+      if (nextCart.length) localStorage.setItem(cartStorageKey, JSON.stringify(nextCart))
+      else localStorage.removeItem(cartStorageKey)
+    } catch { /* armazenamento local opcional */ }
+    clearStorefrontCheckoutIdempotencyKey(storeAlias)
+    setOrderIdempotencyKey(storefrontCheckoutIdempotencyKey(storeAlias))
+    setCart(nextCart)
+    setCartAnnouncement(`${item.nome} foi excluído do carrinho. ${nextCart.length ? `${nextCart.length} item(ns) restante(s).` : 'O carrinho está vazio.'}`)
+  }
+
   async function createOrder(event) {
     event.preventDefault()
     if (orderRequestRef.current || submitting || shippingQuoteLoading) return
@@ -330,7 +400,8 @@ export default function CommerceCheckout() {
       const customerPayments = await api.get(`${storefrontApi}/payment-methods?customerId=${encodeURIComponent(created.customerId || '')}`).catch(() => null)
       if (customerPayments?.items) {
         setPaymentMethods(customerPayments.items)
-        setSelectedPayment(customerPayments.items[0] ? `${customerPayments.items[0].provider}:${customerPayments.items[0].method}` : '')
+        const customerPaymentChoices = checkoutPaymentChoices(customerPayments.items)
+        setSelectedPayment(customerPaymentChoices[0] ? `${customerPaymentChoices[0].provider}:${customerPaymentChoices[0].method}` : '')
       }
       navigate(`${checkoutRoute}?order=${encodeURIComponent(code)}`, { replace: true })
     } catch (err) {
@@ -385,7 +456,7 @@ export default function CommerceCheckout() {
 
   if (loading) return <main className="checkout-page"><div className="checkout-loading"><div className="checkout-spinner" />Carregando checkout seguro…</div></main>
 
-  if (!order && !cart.length) return <main className="checkout-page"><div className="checkout-empty"><div className="checkout-empty-icon">🛒</div><h1>Seu carrinho está vazio</h1><p>Adicione produtos na loja para iniciar o checkout.</p><Link className="checkout-primary" to={storeRoute}>Voltar para a loja</Link></div></main>
+  if (!order && !cart.length) return <main className="checkout-page"><span className="sr-only" role="status" aria-live="polite">{cartAnnouncement}</span><div className="checkout-empty"><div className="checkout-empty-icon">🛒</div><h1>Seu carrinho está vazio</h1><p>Adicione produtos na loja para iniciar o checkout.</p><Link ref={emptyCartLinkRef} className="checkout-primary" to={storeRoute}>Voltar para a loja</Link></div></main>
 
   if (order) {
     const code = order.codigo || order.publicCode || order.public_code
@@ -406,7 +477,7 @@ export default function CommerceCheckout() {
       <h1>{paid ? 'Pagamento confirmado' : payment ? 'Pagamento iniciado' : 'Pedido criado'}</h1>
       <p className="checkout-result-lead">{paid ? 'O pagamento foi confirmado pelo provedor e o pedido seguirá para preparação.' : payment ? 'Conclua o pagamento no provedor. O status será atualizado automaticamente.' : 'Escolha um método para concluir o pagamento com segurança.'}</p>
       {error && <div className="checkout-form-error" role="alert">{error}</div>}
-      {!payment && !paid && <div className="checkout-payment-box"><strong>Escolha como pagar</strong>{paymentMethods.length ? paymentMethods.map(item => { const value = `${item.provider}:${item.method}`; return <label key={value} className={`payment-option ${selectedPayment === value ? 'is-selected' : ''}`}><input type="radio" name="payment" value={value} checked={selectedPayment === value} onChange={() => setSelectedPayment(value)} /><span className="payment-option-copy"><strong>{paymentLabel(item)}</strong><small>{item.provider === 'mercadopago' ? 'Mercado Pago' : item.provider === 'infinitepay' ? 'InfinitePay Checkout' : item.provider === 'crediario' ? 'Crediário da loja' : item.provider}</small></span></label> }) : <small>Nenhum provedor de pagamento está publicado para esta loja.</small>}<button type="button" className="checkout-primary" onClick={startPayment} disabled={working || redirecting || !paymentMethods.length}>{redirecting ? 'Abrindo checkout seguro…' : working ? 'Preparando pagamento…' : 'Iniciar pagamento'}</button><small className="checkout-payment-helper">InfinitePay abre o ambiente seguro do provedor. Mercado Pago exibe o Pix nesta tela.</small></div>}
+      {!payment && !paid && <div className="checkout-payment-box"><strong>Como deseja continuar?</strong>{paymentChoices.length ? paymentChoices.map(item => { const value = `${item.provider}:${item.method}`; const copy = <span className="payment-option-copy"><strong>{paymentLabel(item)}</strong><small>{paymentDescription(item)}</small>{item.provider === 'infinitepay' && <span className="payment-provider-badges">{item.captureMethods.map(method => <span key={method}>{method === 'credit_card' ? 'Cartão' : 'Pix'}</span>)}</span>}</span>; return paymentChoices.length === 1 ? <div key={value} className="payment-option payment-provider-option is-selected"><span className="payment-option-radio" aria-hidden="true">✓</span>{copy}</div> : <label key={value} className={`payment-option ${selectedPayment === value ? 'is-selected' : ''}`}><input type="radio" name="payment" value={value} checked={selectedPayment === value} onChange={() => setSelectedPayment(value)} />{copy}</label> }) : <small>Nenhum provedor de pagamento está publicado para esta loja.</small>}<button type="button" className="checkout-primary" onClick={startPayment} disabled={working || redirecting || !paymentChoices.length}>{redirecting ? 'Abrindo checkout seguro…' : working ? 'Preparando pagamento…' : selectedPaymentChoice?.provider === 'infinitepay' ? 'Continuar na InfinitePay' : 'Iniciar pagamento'}</button><small className="checkout-payment-helper">{selectedPaymentChoice?.provider === 'infinitepay' ? 'Na próxima tela, escolha Pix ou cartão uma única vez. Nenhum dado de cartão passa pela Kytto.' : 'O pagamento será processado pelo provedor publicado para esta loja.'}</small></div>}
       {payment && !paid && <div className="checkout-payment-box"><strong>Pagamento pendente</strong>{qr && <img className="checkout-qr" src={qr.startsWith('data:') ? qr : `data:image/png;base64,${qr}`} alt="QR Code do pagamento" />}{pixCode && <div className="checkout-pix-box"><label>Código Pix</label><textarea readOnly rows={4} value={pixCode} aria-label="Código Pix" /><button type="button" className="checkout-primary" onClick={() => copyCode(pixCode)}><Copy size={15} />{copied ? 'Código copiado' : 'Copiar código'}</button></div>}{hostedUrl && <a className="checkout-primary" href={hostedUrl} target="_blank" rel="noreferrer">Abrir checkout do provedor <ArrowRight size={16} /></a>}{!qr && !pixCode && !hostedUrl && <small>O provedor recebeu a solicitação, mas ainda não retornou uma instrução pública de pagamento. Aguarde o webhook ou consulte o pedido.</small>}<small>Status: {payment.status || order.payment_status || 'pending'}.</small></div>}
       <section className="checkout-tracking-panel" aria-label="Acompanhamento da entrega"><div className="checkout-tracking-heading"><div><span className="eyebrow"><PackageCheck size={14} /> Pós-venda</span><h2>Acompanhe seu pedido</h2></div><span className="checkout-status-pill">{orderStatusLabels[order.status] || order.status || 'Em atualização'}</span></div>{latestFulfillment ? <><div className="checkout-tracking-summary"><div><Truck size={17} /><span><strong>{fulfillmentLabels[latestFulfillment.status] || latestFulfillment.status}</strong><small>{latestFulfillment.carrier || 'Logística da loja'}</small></span></div>{latestFulfillment.trackingCode && <div><MapPin size={17} /><span><strong>{latestFulfillment.trackingCode}</strong><small>Código de rastreio</small></span></div>}{shippingOption?.deliveryDays !== null && shippingOption?.deliveryDays !== undefined && <div><PackageCheck size={17} /><span><strong>Prazo total estimado</strong><small>{shippingPromise(shippingOption)}</small>{shippingPriceSummary(shippingOption) && <small className="checkout-shipping-price-note">{shippingPriceSummary(shippingOption)}</small>}</span></div>}</div>{latestFulfillment.trackingUrl && <a className="checkout-tracking-link" href={latestFulfillment.trackingUrl} target="_blank" rel="noreferrer">Acompanhar no site da transportadora <ArrowRight size={15} /></a>}{Array.isArray(latestFulfillment.ocorrencias) && latestFulfillment.ocorrencias.length > 0 && <div className="checkout-tracking-events">{latestFulfillment.ocorrencias.slice(0, 5).map((event, index) => <div key={`${event.at || event.data || index}-${index}`}><span>{event.at || event.data || 'Atualização'}</span><strong>{event.description || event.descricao || event.status || event.mensagem || 'Movimentação registrada'}</strong></div>)}</div>}</> : <div className="checkout-tracking-empty"><PackageCheck size={18} /><span>Após a confirmação do pagamento, a loja separará o pedido e disponibilizará o rastreio nesta área.</span></div>}{!latestFulfillment && shippingOption?.deliveryDays !== null && shippingOption?.deliveryDays !== undefined && <div className="checkout-tracking-eta"><PackageCheck size={17} /><span><strong>Prazo total estimado</strong><small>{shippingPromise(shippingOption)}</small>{shippingPriceSummary(shippingOption) && <small className="checkout-shipping-price-note">{shippingPriceSummary(shippingOption)}</small>}</span></div>}{timeline.length > 0 && <div className="checkout-order-timeline">{timeline.slice(-6).map((event, index) => <div key={`${event.at || index}-${index}`}><span>{event.at ? new Date(event.at).toLocaleString('pt-BR') : 'Atualização'}</span><strong>{orderStatusLabels[event.toStatus] || event.toStatus || 'Atualização do pedido'}</strong><small>{event.source === 'system' ? 'Sistema' : event.source || 'Operação'}</small></div>)}</div>}</section>
       <div className="checkout-result-meta"><div><span>Total</span><strong>{money(order.total || total)}</strong></div><div><span>Pedido</span><strong>{code}</strong></div></div>
@@ -420,6 +491,7 @@ export default function CommerceCheckout() {
   const brandMark = 'K'
 
   return <main className="checkout-page">
+    <span className="sr-only" role="status" aria-live="polite">{cartAnnouncement}</span>
     <header className="checkout-header"><div className="checkout-header-inner"><Link className={`checkout-brand${isDinoCommerce ? ' checkout-brand-dino-commerce' : ''}`} to={storeRoute} aria-label={`Voltar para ${brandName}`}>{isDinoCommerce ? <img className="checkout-brand-logo" src={DINO_COMMERCE_LOGO} alt="Dino Perfumaria" /> : <><span className="checkout-brand-mark">{brandMark}</span><span>{brandName}</span></>}</Link><div className="checkout-header-security"><ShieldCheck size={16} /> Checkout protegido</div></div></header>
     <div className="checkout-content"><div className="checkout-main-column"><Link className="checkout-back" to={storeRoute}> <ArrowLeft size={14} /> Voltar para a loja</Link><Stepper paymentReady={false} /><section className="checkout-card"><div className="checkout-card-title"><div><span className="eyebrow">Checkout Commerce</span><h1>Finalize sua compra</h1><p>Seu pedido será criado primeiro; o pagamento acontece depois no provedor escolhido.</p></div><span className="checkout-card-icon"><Store size={20} /></span></div>
       <form onSubmit={createOrder}>
@@ -429,7 +501,12 @@ export default function CommerceCheckout() {
         <div className="checkout-address"><div className="checkout-address-heading"><h2>Como receber</h2><span>Escolha uma opção publicada</span></div><div className="shipping-options">{pickupAvailable && <button type="button" className={`shipping-option ${deliveryMode === 'retirada' ? 'is-selected' : ''}`} onClick={() => { shippingQuoteRequestRef.current += 1; setDeliveryMode('retirada'); setShippingMethodId(shippingMethods.find(item => item.tipo === 'pickup')?.id || ''); setShippingQuote(null); setShippingOptionId(''); lastShippingQuoteKeyRef.current = '' }}><span className="shipping-option-radio">{deliveryMode === 'retirada' ? '✓' : ''}</span><span className="shipping-option-copy"><strong>Retirada no local</strong><small>Confirme com a operação da loja.</small></span><b>Grátis</b></button>}{deliveryAvailable && <button type="button" className={`shipping-option ${deliveryMode === 'entrega' ? 'is-selected' : ''}`} onClick={() => { shippingQuoteRequestRef.current += 1; setDeliveryMode('entrega'); setShippingMethodId(shippingMethods.find(item => ['delivery', 'carrier'].includes(item.tipo) && item.quoteEnabled)?.id || ''); setShippingQuote(null); setShippingOptionId(''); lastShippingQuoteKeyRef.current = '' }}><span className="shipping-option-radio">{deliveryMode === 'entrega' ? '✓' : ''}</span><span className="shipping-option-copy"><strong>Entrega</strong><small>O valor e o prazo são calculados automaticamente pelo CEP.</small></span><b>{selectedOption ? money(selectedOption.amount) : 'Consultar'}</b></button>}</div></div>
         {deliveryMode === 'entrega' && <div className="checkout-address"><div className="checkout-form-grid"><label className="checkout-field"><span>CPF ou CNPJ do destinatário *</span><input value={form.documento} onChange={e => setForm(current => ({ ...current, documento: e.target.value }))} inputMode="numeric" autoComplete="off" required /></label><label className="checkout-field"><span>CEP *</span><div className="checkout-inline-field"><input value={address.cep} onChange={e => updateAddress('cep', e.target.value)} onBlur={() => address.cep.replace(/\D/g, '').length === 8 && lookupCep()} inputMode="numeric" autoComplete="postal-code" placeholder="00000-000" required /><button type="button" className="checkout-secondary" onClick={() => lookupCep(address.cep, { force: true })} disabled={addressLookupLoading}>{addressLookupLoading ? 'Consultando…' : 'Consultar CEP'}</button></div></label><label className="checkout-field"><span>Número *</span><input ref={addressNumberRef} value={address.numero} onChange={e => updateAddress('numero', e.target.value)} required /></label><label className="checkout-field"><span>Logradouro *</span><input value={address.logradouro} onChange={e => updateAddress('logradouro', e.target.value)} required /></label><label className="checkout-field"><span>Bairro *</span><input value={address.bairro} onChange={e => updateAddress('bairro', e.target.value)} required /></label><label className="checkout-field"><span>Cidade *</span><input value={address.cidade} onChange={e => updateAddress('cidade', e.target.value)} required /></label><label className="checkout-field"><span>UF *</span><input value={address.estado} onChange={e => updateAddress('estado', e.target.value.toUpperCase())} maxLength={2} required /></label></div><button type="button" className="checkout-secondary" onClick={quoteShipping} disabled={shippingQuoteLoading}>{shippingQuoteLoading ? 'Calculando…' : 'Calcular frete'}</button>{shippingQuote?.items?.map(option => { const selectionId = option.selectionId || option.id; return <label className="commerce-shipping-option" key={selectionId}><input type="radio" name="shippingOption" checked={shippingOptionId === selectionId} onChange={() => { setShippingOptionId(selectionId); setShippingMethodId(option.shippingMethodId || shippingMethodId) }} /><span><strong>{option.name}</strong><small>{shippingPromise(option)}</small>{shippingPriceSummary(option) && <small className="checkout-shipping-price-note">{shippingPriceSummary(option)}</small>}</span><b>{money(option.amount)}</b></label> })}</div>}
         <label className="checkout-field"><span>Observação</span><textarea rows={2} value={note} onChange={e => setNote(e.target.value)} maxLength={1000} placeholder="Preferências ou instruções para a loja" /></label>
+<<<<<<< HEAD
         {error && <div className="checkout-form-error" role="alert">{error}</div>}<div className="checkout-actions"><span>{deliveryMode === 'entrega' && selectedOption ? `Frete de ${money(selectedOption.amount)} incluído. Estoque e total serão revalidados no servidor.` : 'Estoque e valor serão revalidados no servidor.'}</span><button type="submit" className="checkout-primary checkout-primary-large" disabled={submitting || shippingQuoteLoading || !cart.length}>{submitting ? <><Loader2 className="commerce-spin" size={16} /> Criando pedido…</> : shippingQuoteLoading ? 'Aguardando cálculo do frete…' : <>Continuar para pagamento <ArrowRight size={16} /></>}</button></div>
       </form></section></div><aside className="checkout-summary"><div className="checkout-summary-heading"><div><span className="eyebrow">Seu pedido</span><h2>Resumo da compra</h2></div><span className="checkout-secure">Seguro</span></div><div className="checkout-summary-items">{cart.map(item => <div className="checkout-summary-item" key={`${item.produtoId}-${item.variantId || 'base'}`}><ProductThumb item={item} /><div className="checkout-summary-item-copy"><strong>{item.nome}</strong><span>{item.qtd} unidade(s)</span></div><b>{money(item.qtd * item.preco)}</b></div>)}</div><div className="checkout-totals"><div><span>Subtotal</span><b>{money(cartTotal)}</b></div>{selectedOption && <div><span>Entrega</span><b>{money(selectedOption.amount)}</b></div>}<div className="checkout-total"><span>Total</span><strong>{money(total)}</strong></div></div><div className="checkout-trust-list"><span>✓ Estoque revalidado no servidor</span><span>✓ Pagamento no provedor escolhido</span><span>✓ Acompanhamento por código do pedido</span></div></aside></div>
+=======
+        {error && <div className="checkout-form-error" role="alert">{error}</div>}<div className="checkout-actions"><span>{deliveryMode === 'entrega' && selectedOption ? `Frete de ${money(selectedOption.amount)} incluído. Estoque e total serão revalidados no servidor.` : 'Estoque e valor serão revalidados no servidor.'}</span><button type="submit" className="checkout-primary checkout-primary-large" disabled={working || !cart.length}>{working ? <><Loader2 className="commerce-spin" size={16} /> Criando pedido…</> : <>Continuar para pagamento <ArrowRight size={16} /></>}</button></div>
+      </form></section></div><aside className="checkout-summary"><div className="checkout-summary-heading"><div><span className="eyebrow">Seu pedido</span><h2>Resumo da compra</h2></div><span className="checkout-secure">Seguro</span></div><div className="checkout-summary-items">{cart.map(item => <div className="checkout-summary-item" key={`${item.produtoId}-${item.variantId || 'base'}`}><ProductThumb item={item} /><div className="checkout-summary-item-copy"><strong>{item.nome}</strong><span>{item.qtd} unidade(s)</span></div><div className="checkout-summary-item-actions"><b>{money(item.qtd * item.preco)}</b><button type="button" className="checkout-remove-item" onClick={() => removeCartItem(item)} disabled={working} aria-label={`Excluir ${item.nome} do carrinho`} title="Excluir item do carrinho"><Trash2 size={14} aria-hidden="true" /><span>Excluir</span></button></div></div>)}</div><div className="checkout-totals"><div><span>Subtotal</span><b>{money(cartTotal)}</b></div>{selectedOption && <div><span>Entrega</span><b>{money(selectedOption.amount)}</b></div>}<div className="checkout-total"><span>Total</span><strong>{money(total)}</strong></div></div><div className="checkout-trust-list"><span>✓ Estoque revalidado no servidor</span><span>✓ Pagamento no provedor escolhido</span><span>✓ Acompanhamento por código do pedido</span></div></aside></div>
+>>>>>>> origin/fix/kytto-comandas-pdv-20260808
   </main>
 }

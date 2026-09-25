@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { clearStorefrontCheckoutIdempotencyKey, decrementCartQuantity, loadAllStorefrontProducts, normalizeStorefrontAlias, storefrontAliasFromPath, storefrontApiBase, storefrontCartSessionKey, storefrontCheckoutIdempotencyKey, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from './storefront.js';
+import { checkoutPaymentChoices, clearStorefrontCheckoutIdempotencyKey, decrementCartQuantity, loadAllStorefrontProducts, nextStorefrontCartSyncVersion, normalizeStorefrontAlias, removeStorefrontCartItem, storefrontAliasFromPath, storefrontApiBase, storefrontCartItemKey, storefrontCartSessionKey, storefrontCheckoutIdempotencyKey, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from './storefront.js';
 
 test('normaliza apenas aliases públicos seguros', () => {
   assert.equal(normalizeStorefrontAlias(' DINO '), 'dino');
@@ -72,6 +72,43 @@ test('decremento permite remover a última unidade sem produzir quantidade negat
   assert.equal(decrementCartQuantity(1), 0);
   assert.equal(decrementCartQuantity(0), 0);
   assert.equal(decrementCartQuantity('inválido'), 0);
+});
+
+test('remoção do checkout exclui somente a variante escolhida e preserva os demais itens', () => {
+  const cart = [
+    { produtoId: 'produto-1', variantId: 'variante-a', qtd: 1 },
+    { produtoId: 'produto-1', variantId: 'variante-b', qtd: 2 },
+    { produtoId: 'produto-2', variantId: null, qtd: 1 },
+  ];
+  assert.equal(storefrontCartItemKey(cart[0]), 'variante-a');
+  assert.equal(storefrontCartItemKey(cart[2]), 'produto-2');
+  assert.deepEqual(removeStorefrontCartItem(cart, 'produto-1', 'variante-a'), [cart[1], cart[2]]);
+  assert.deepEqual(removeStorefrontCartItem(cart, 'produto-2'), [cart[0], cart[1]]);
+  assert.deepEqual(removeStorefrontCartItem(cart, '', ''), cart);
+});
+
+test('InfinitePay vira uma única escolha de provedor e deixa Pix ou cartão para o checkout seguro', () => {
+  assert.deepEqual(checkoutPaymentChoices([
+    { provider: 'infinitepay', method: 'pix', ambiente: 'production' },
+    { provider: 'infinitepay', method: 'credit_card', ambiente: 'production' },
+    { provider: 'crediario', method: 'account', ambiente: 'production', label: 'Marcar na conta' },
+  ]), [
+    { provider: 'infinitepay', method: 'external', label: 'Pagar com InfinitePay', captureMethods: ['pix', 'credit_card'] },
+    { provider: 'crediario', method: 'account', ambiente: 'production', label: 'Marcar na conta' },
+  ]);
+});
+
+test('versão de sync do carrinho cresce por storefront mesmo no mesmo milissegundo', () => {
+  const storage = new Map();
+  const original = globalThis.localStorage;
+  globalThis.localStorage = { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value) };
+  try {
+    const first = nextStorefrontCartSyncVersion('dino', 1000);
+    const second = nextStorefrontCartSyncVersion('dino', 1000);
+    assert.ok(second > first);
+    assert.ok(nextStorefrontCartSyncVersion('agro-open', 1000) >= 1000000);
+    assert.equal(storage.size, 2);
+  } finally { globalThis.localStorage = original; }
 });
 
 test('extrai alias somente das rotas Commerce conhecidas', () => {

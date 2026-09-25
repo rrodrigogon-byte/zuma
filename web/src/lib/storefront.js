@@ -63,6 +63,52 @@ export function decrementCartQuantity(value) {
   return Math.max(0, quantity - 1)
 }
 
+export function storefrontCartItemKey(item = {}) {
+  const variantId = String(item.variantId || '').trim()
+  const productId = String(item.produtoId || item.productId || '').trim()
+  return variantId || productId
+}
+
+export function removeStorefrontCartItem(items, productId, variantId = '') {
+  const cart = Array.isArray(items) ? items : []
+  const targetKey = storefrontCartItemKey({ produtoId: productId, variantId })
+  return targetKey ? cart.filter(item => storefrontCartItemKey(item) !== targetKey) : [...cart]
+}
+
+export function nextStorefrontCartSyncVersion(value, now = Date.now()) {
+  const storageKey = storefrontStorageKey(value, 'cart_sync_version')
+  const base = Math.max(1, Math.trunc(Number(now) || Date.now())) * 1000
+  try {
+    const previous = Math.max(0, Math.trunc(Number(globalThis.localStorage?.getItem(storageKey)) || 0))
+    const next = Math.max(base + Math.floor(Math.random() * 1000), previous + 1)
+    globalThis.localStorage?.setItem(storageKey, String(next))
+    return next
+  } catch { return base + Math.floor(Math.random() * 1000) }
+}
+
+export function checkoutPaymentChoices(methods) {
+  const source = Array.isArray(methods) ? methods : []
+  const result = []
+  const seen = new Set()
+  for (const item of source) {
+    const provider = String(item?.provider || '').trim().toLowerCase()
+    const method = String(item?.method || '').trim().toLowerCase()
+    if (!provider || !method) continue
+    if (provider === 'infinitepay') {
+      if (seen.has('infinitepay:external')) continue
+      const captureMethods = [...new Set(source.filter(candidate => String(candidate?.provider || '').trim().toLowerCase() === provider).map(candidate => String(candidate?.method || '').trim().toLowerCase()).filter(candidate => ['pix', 'credit_card'].includes(candidate)))]
+      result.push({ provider, method: 'external', label: 'Pagar com InfinitePay', captureMethods })
+      seen.add('infinitepay:external')
+      continue
+    }
+    const key = `${provider}:${method}`
+    if (seen.has(key)) continue
+    result.push({ ...item, provider, method })
+    seen.add(key)
+  }
+  return result
+}
+
 export function storefrontAliasFromPath(pathname) {
   const match = String(pathname || '').match(/^\/(?:ecommerce|perfumaria|checkout|pedido)\/([^/?#]+)/i)
   return normalizeStorefrontAlias(match?.[1])

@@ -30,6 +30,16 @@ export function validatePaymentMethod(method) {
   return value;
 }
 
+export function resolvedPaymentMethod(provider, currentMethod, captureMethod) {
+  const current = String(currentMethod || '').trim().toLowerCase();
+  const captured = String(captureMethod || '').trim().toLowerCase();
+  return String(provider || '').trim().toLowerCase() === 'infinitepay'
+    && current === 'external'
+    && ['pix', 'credit_card'].includes(captured)
+    ? captured
+    : current;
+}
+
 function environmentName(value) {
   const environment = String(value || 'sandbox').trim().toLowerCase();
   if (!['sandbox', 'production'].includes(environment)) throw new CommerceError('ambiente de pagamento inválido', 'PAYMENT_ACCOUNT_INVALID');
@@ -120,7 +130,8 @@ async function preparePayment(trx, context, input, provider, method, idem, reque
   );
   if (pending.rows[0]) {
     const current = pending.rows[0];
-    const sameAttempt = current.provider === provider && current.method === method && current.payment_account_id === accountId;
+    const sameHostedAttempt = provider === 'infinitepay' && current.provider === provider && method === 'external' && ['external', 'pix', 'credit_card'].includes(current.method);
+    const sameAttempt = current.provider === provider && (current.method === method || sameHostedAttempt) && current.payment_account_id === accountId;
     if (sameAttempt && (current.provider_payment_id || current.metadata?.checkout)) {
       return {
         replay: true,
@@ -250,30 +261,32 @@ export async function syncPaymentAttempt(contextInput, paymentIdInput) {
   if (!statusResult?.status || String(statusResult.providerPaymentId || '') !== String(prepared.provider_payment_id)) throw new CommerceError('adapter retornou um pagamento diferente do registro persistido', 'PAYMENT_PROVIDER_STATUS_INVALID');
   if (statusResult.amount != null && Math.abs(Number(statusResult.amount) - Number(prepared.amount)) > 0.01) throw new CommerceError('valor consultado no gateway diverge do pedido', 'PAYMENT_AMOUNT_MISMATCH');
   return withCommerceTransaction(async trx => {
-    const currentResult = await trx.query(`SELECT p.id, p.order_id, p.status, p.amount, o.status AS order_status FROM commerce_payments p JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id WHERE p.empresa_id = $1 AND p.id = $2 FOR UPDATE OF p`, [context.empresaId, paymentId]);
+    const currentResult = await trx.query(`SELECT p.id, p.order_id, p.method, p.status, p.amount, o.status AS order_status FROM commerce_payments p JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id WHERE p.empresa_id = $1 AND p.id = $2 FOR UPDATE OF p`, [context.empresaId, paymentId]);
     const current = currentResult.rows[0];
-    if (!current) throw new CommerceError('pagamento não encontrado no tenant', 'PAYMENT_NOT_FOUND');
+    if (!current) throw new CommerceError('pagamento não encontrado', 'PAYMENT_NOT_FOUND');
     const next = String(statusResult.status).toLowerCase();
+    const nextMethod = resolvedPaymentMethod(prepared.provider, current.method, statusResult.summary?.captureMethod);
     const eventKey = `reconcile:${prepared.provider}:${statusResult.providerPaymentId || prepared.provider_payment_id}:${next}`;
     if (current.status !== next && !canTransitionPaymentStatus(current.status, next)) return { paymentId, orderId: current.order_id, status: current.status, provider: prepared.provider, changed: false, stale: true, summary: statusResult.summary || {} };
-    if (current.status !== next) {
+    if (current.status !== next || current.method !== nextMethod) {
       await trx.query(
         `UPDATE commerce_payments
             SET status = $3::text,
+                method = $5::text,
                 authorized_at = CASE WHEN $3::text = 'authorized' THEN COALESCE(authorized_at, CURRENT_TIMESTAMP) ELSE authorized_at END,
                 captured_at = CASE WHEN $3::text = 'captured' THEN COALESCE(captured_at, CURRENT_TIMESTAMP) ELSE captured_at END,
                 refunded_at = CASE WHEN $3::text IN ('refunded','partially_refunded') THEN COALESCE(refunded_at, CURRENT_TIMESTAMP) ELSE refunded_at END,
                 metadata = metadata || $4::jsonb,
                 atualizado_em = CURRENT_TIMESTAMP
           WHERE empresa_id = $1 AND id = $2`,
-        [context.empresaId, paymentId, next, JSON.stringify({ reconciliation: { eventKey, summary: statusResult.summary || {} } })],
+        [context.empresaId, paymentId, next, JSON.stringify({ reconciliation: { eventKey, summary: statusResult.summary || {} } }), nextMethod],
       );
       if (next === 'captured' && ['draft', 'pending_payment', 'payment_failed'].includes(current.order_status)) await transitionOrder(trx, { empresaId: context.empresaId }, { orderId: current.order_id, status: 'paid', origin: 'payment_reconciliation', correlationId: eventKey, payload: { provider: prepared.provider, eventKey } });
       if (next === 'failed' && ['draft', 'pending_payment'].includes(current.order_status)) await transitionOrder(trx, { empresaId: context.empresaId }, { orderId: current.order_id, status: 'payment_failed', origin: 'payment_reconciliation', correlationId: eventKey, payload: { provider: prepared.provider, eventKey } });
       if (next === 'partially_refunded' && current.order_status === 'completed') await transitionOrder(trx, { empresaId: context.empresaId }, { orderId: current.order_id, status: 'partially_refunded', origin: 'payment_reconciliation', correlationId: eventKey, payload: { provider: prepared.provider, eventKey } });
       if (next === 'refunded' && ['paid', 'completed'].includes(current.order_status)) await transitionOrder(trx, { empresaId: context.empresaId }, { orderId: current.order_id, status: 'refunded', origin: 'payment_reconciliation', correlationId: eventKey, payload: { provider: prepared.provider, eventKey } });
     }
-    return { paymentId, orderId: current.order_id, status: next, provider: prepared.provider, changed: current.status !== next, summary: statusResult.summary || {} };
+    return { paymentId, orderId: current.order_id, status: next, provider: prepared.provider, method: nextMethod, changed: current.status !== next || current.method !== nextMethod, summary: statusResult.summary || {} };
   });
 }
 
