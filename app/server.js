@@ -55,6 +55,7 @@ import { answerDinoOperationalQuestion, buildDinoOperationalSnapshot } from './d
 import { loadBarbeariaCommerceStatus, unavailableBarbeariaCommerceStatus } from './core/barbearia-commerce-status.js';
 import { customerReport, inventoryReport, salesReport } from './core/commerce-reports.js';
 import { buildDinoDashboardAnalytics, dashboardPeriod } from './dino-dashboard.js';
+import { registerCustomer360Routes } from './customer360-routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -1987,6 +1988,7 @@ async function resolverEscopoBarbearia(req, res, next) {
   next();
 }
 app.use('/api/admin/barbearia', auth, requireStaff, resolverEscopoBarbearia);
+registerCustomer360Routes(app, { legacyEmpresaId, legacyLojaId, clientesKytto, barbeariaErpKytto, canaisFidelidadeKytto, listarAgendamentosBarbearia, requireCommercePermission, audit, save });
 function sanitizarClienteBarbearia(cliente) {
   if (!cliente) return cliente;
   return {

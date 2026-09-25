@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import { useState, useEffect, useMemo } from 'react'
 import { api, fmtR, fmtDate } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
@@ -715,9 +716,14 @@ function EventDashboard() {
 }
 
 
+// Abas do Central Dino alcançadas pelos atalhos do painel do negócio.
+const DINO_TAB_AREA = { 'Agenda': 'operacao', 'Caixa e fechamento': 'operacao', 'Estoque de revenda': 'catalogo', 'Planos e assinaturas': 'catalogo' }
+
 export default function Dashboard() {
   const { empresaAtiva, lojaAtiva, user } = useAuth()
   const isDino = isDinoBrandContext(empresaAtiva, user?.empresaAtiva, user?.empresa, user?.tenant)
   const scopeKey = `${empresaAtiva?.id || 'empresa'}:${lojaAtiva?.id || 'todas'}`
-  return isDino ? <DinoBusinessDashboard key={scopeKey} /> : <EventDashboard />
+  const navigate = useNavigate()
+  const openDinoTab = (tab) => navigate(`/admin/barbearia-erp?area=${DINO_TAB_AREA[tab] || 'operacao'}&tab=${encodeURIComponent(tab)}`)
+  return isDino ? <DinoBusinessDashboard key={scopeKey} onOpenTab={openDinoTab} /> : <EventDashboard />
 }

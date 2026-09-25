@@ -120,6 +120,7 @@ const Compras         = lazy(() => import('./pages/admin/Compras'))
 const ConfiguracaoFiscal = lazy(() => import('./pages/admin/ConfiguracaoFiscal'))
 const ClassificacaoFiscal = lazy(() => import('./pages/admin/ClassificacaoFiscal'))
 const Clientes = lazy(() => import('./pages/admin/Clientes'))
+const Customer360 = lazy(() => import('./pages/admin/Customer360'))
 const ContasReceber = lazy(() => import('./pages/admin/ContasReceber'))
 const FechamentoDiario = lazy(() => import('./pages/admin/FechamentoDiario'))
 const CadastrosMestres = lazy(() => import('./pages/admin/CadastrosMestres'))
@@ -237,6 +238,8 @@ export default function App() {
           <Route path="/admin/lojas"          element={<Layout><Lojas /></Layout>} />
           <Route path="/admin/notas"          element={<Layout><NotasFiscais /></Layout>} />
           <Route path="/admin/clientes"       element={<Layout><Clientes /></Layout>} />
+          <Route path="/admin/clientes-360"   element={<Layout><Customer360 /></Layout>} />
+          <Route path="/admin/clientes-360/:ref" element={<Layout><Customer360 /></Layout>} />
           <Route path="/admin/cadastros-mestres" element={<Layout><CadastrosMestres /></Layout>} />
           <Route path="/admin/contas-receber" element={<Layout><ContasReceber /></Layout>} />
           <Route path="/admin/fechamento-diario" element={<Layout><FechamentoDiario /></Layout>} />

@@ -151,7 +151,7 @@ function upcomingAppointments(appointments, now, timeZone) {
     .filter(({ item, date }) => date && date >= now && !['cancelado', 'nao_compareceu', 'concluido'].includes(item.status))
     .sort((a, b) => a.date - b.date)
     .slice(0, 8)
-    .map(({ item, date }) => ({ id: item.id, at: date.toISOString(), day: dayKey(date, timeZone), customer: item.clienteNome || item.cliente_nome || 'Cliente', service: item.servicoNome || item.servico_nome || 'Serviço', professional: item.profissionalNome || item.profissional_nome || 'A definir', status: item.status || 'agendado' }));
+    .map(({ item, date }) => ({ id: item.id, at: date.toISOString(), day: dayKey(date, timeZone), customerId: item.clienteId || '', customer: item.clienteNome || item.cliente_nome || 'Cliente', service: item.servicoNome || item.servico_nome || 'Serviço', professional: item.profissionalNome || item.profissional_nome || 'A definir', status: item.status || 'agendado' }));
 }
 
 function activityFeed(input, now) {

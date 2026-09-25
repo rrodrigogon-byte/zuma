@@ -23,6 +23,7 @@
   --muted:   var(--graphite);
   --text:    var(--navy);
   --radius:  14px;
+  --border:  var(--line);
   --shadow:  0 12px 32px rgba(18,40,63,.10);
   --font:    'Work Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-display: 'Outfit', 'Work Sans', sans-serif;
@@ -167,7 +168,8 @@ html[data-brand='dino'] select option { background: var(--card); color: var(--fg
 html[data-brand='dino'] input::placeholder,
 html[data-brand='dino'] textarea::placeholder { color: #777F94; }
 html[data-brand='dino'] th { background: var(--card2); }
-html[data-brand='dino'] tr:hover td { background: #202532; }
+html[data-brand='dino'] tr:hover td { background: var(--accent-soft); }
+html[data-brand='dino'][data-theme='dark'] tr:hover td { background: #202532; }
 html[data-brand='dino'] .table-wrap { background: var(--card); }
 html[data-brand='dino'] .modal-body,
 html[data-brand='dino'] .sheet-body { background: var(--surface); }

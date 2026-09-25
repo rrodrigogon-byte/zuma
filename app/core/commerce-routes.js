@@ -1690,7 +1690,7 @@ export function createCommerceAdminRouter() {
       const count = await db.query(`SELECT COUNT(*)::int AS total FROM commerce_orders o JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id LEFT JOIN commerce_customers c ON c.empresa_id = o.empresa_id AND c.id = o.customer_id WHERE ${where}`, values);
       const result = await db.query(
         `SELECT o.id, o.public_code, o.status, o.origem, o.subtotal, o.desconto, o.frete, o.impostos, o.total, o.shipping_method_id, o.shipping_quote_id, o.criado_em, o.atualizado_em,
-                c.nome AS customer_name, c.email AS customer_email,
+                o.customer_id, c.nome AS customer_name, c.email AS customer_email,
                 (SELECT p.status FROM commerce_payments p WHERE p.empresa_id = o.empresa_id AND p.order_id = o.id ORDER BY p.criado_em DESC LIMIT 1) AS payment_status,
                 (SELECT jsonb_build_object('status', f.status, 'carrier', f.carrier, 'trackingCode', f.tracking_code, 'trackingUrl', f.tracking_url, 'ocorrencias', f.ocorrencias)
                    FROM commerce_fulfillments f WHERE f.empresa_id = o.empresa_id AND f.order_id = o.id ORDER BY f.atualizado_em DESC NULLS LAST LIMIT 1) AS fulfillment,

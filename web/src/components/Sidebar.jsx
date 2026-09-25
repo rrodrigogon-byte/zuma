@@ -153,6 +153,7 @@ const NAV_DINO_GROUPS = [
   {
     label: 'Visão do negócio',
     items: [
+      { to: '/admin', icon: '◔', label: 'Painel do negócio', end: true },
       { to: '/admin/barbearia-erp', icon: '◫', label: 'Central Dino', end: true },
       { to: '/admin/bi', icon: '↗', label: 'BI & Analytics' },
       { to: '/admin/relatorios-operacionais', icon: '▤', label: 'Relatórios' },
@@ -188,8 +189,9 @@ const NAV_DINO_GROUPS = [
     label: 'Relacionamento & IA',
     items: [
       { to: '/admin/barbearia-erp?area=integracoes&tab=Integrações', icon: '✦', label: 'Atendente IA' },
-      { to: '/admin/omnichannel', icon: '↻', label: 'Marketing WhatsApp' },
-      { to: '/admin/barbearia-erp?area=relacionamento&tab=Clientes', icon: '◉', label: 'Clientes' },
+      { to: '/admin/clientes-360', icon: '◉', label: 'Clientes 360' },
+      { to: '/admin/barbearia-erp?area=relacionamento&tab=Clientes', icon: '↻', label: 'CRM e campanhas' },
+      { to: '/admin/omnichannel', icon: '⇄', label: 'Canais e resgates' },
       { to: '/admin/barbearia-erp?area=relacionamento&tab=Fidelidade', icon: '☆', label: 'Fidelidade' },
     ],
   },
