@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import express from 'express';
 import { db } from './database.js';
 import { customerReport, fulfillmentReport, inventoryReport, salesReport } from './commerce-reports.js';
-import { canTransitionPaymentStatus, createPaymentAttempt, paymentAccountReady, paymentProviders, reconcilePaymentByIdentifiers, syncPaymentAttempt, validatePaymentMethod, verifyPaymentWebhook } from './payment-adapters.js';
+import { canTransitionPaymentStatus, createPaymentAttempt, paymentAccountReady, paymentProviders, reconcilePaymentByIdentifiers, resolvedPaymentMethod, syncPaymentAttempt, validatePaymentMethod, verifyPaymentWebhook } from './payment-adapters.js';
 import { createPaymentAccount, listPaymentAccounts, listPaymentProviders, listPayments, updatePaymentAccount } from './commerce-payment-admin.js';
 import { resolveCommerceIdentity } from './commerce-identity-bridge.js';
 import { applyPromotionToOrder, createPromotion, createPromotionCode, createPromotionTemplate, listPromotionTemplates, listPromotions } from './commerce-promotions.js';
@@ -704,7 +704,7 @@ export function createCommerceWebhookRouter() {
         );
         if (!inserted.rows[0]) return { duplicate: true };
         const payment = await trx.query(
-          `SELECT p.id, p.order_id, p.amount, p.status, p.provider_payment_id, o.status AS order_status
+          `SELECT p.id, p.order_id, p.method, p.amount, p.status, p.provider_payment_id, o.status AS order_status
              FROM commerce_payments p
              JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id
             WHERE p.empresa_id = $1 AND p.provider = $2
@@ -727,17 +727,18 @@ export function createCommerceWebhookRouter() {
         const statusMap = { authorized: 'authorized', paid: 'captured', captured: 'captured', failed: 'failed', cancelled: 'cancelled', refunded: 'refunded', partially_refunded: 'partially_refunded' };
         const nextPaymentStatus = statusMap[String(verified.status || '').toLowerCase()];
         if (!nextPaymentStatus) throw new CommerceError('status de webhook não suportado', 'PAYMENT_WEBHOOK_INVALID');
+        const nextPaymentMethod = resolvedPaymentMethod(provider, current.method, verified.summary?.captureMethod);
         if (!canTransitionPaymentStatus(current.status, nextPaymentStatus)) {
           await trx.query(`UPDATE commerce_payment_webhooks SET status = 'ignored', processado_em = CURRENT_TIMESTAMP WHERE id = $1`, [inserted.rows[0].id]);
           return { stale: true, paymentId: current.id, orderId: current.order_id, status: current.status };
         }
         await trx.query(
-          `UPDATE commerce_payments SET status = $3::text, authorized_at = CASE WHEN $3::text = 'authorized' THEN COALESCE(authorized_at, CURRENT_TIMESTAMP) ELSE authorized_at END,
+          `UPDATE commerce_payments SET status = $3::text, method = $5::text, authorized_at = CASE WHEN $3::text = 'authorized' THEN COALESCE(authorized_at, CURRENT_TIMESTAMP) ELSE authorized_at END,
                   captured_at = CASE WHEN $3::text = 'captured' THEN COALESCE(captured_at, CURRENT_TIMESTAMP) ELSE captured_at END,
                   refunded_at = CASE WHEN $3::text IN ('refunded','partially_refunded') THEN COALESCE(refunded_at, CURRENT_TIMESTAMP) ELSE refunded_at END,
                   metadata = metadata || $4::jsonb, atualizado_em = CURRENT_TIMESTAMP
             WHERE empresa_id = $1 AND id = $2`,
-          [empresaId, current.id, nextPaymentStatus, JSON.stringify({ webhookEventId: eventId })],
+          [empresaId, current.id, nextPaymentStatus, JSON.stringify({ webhookEventId: eventId }), nextPaymentMethod],
         );
         if (nextPaymentStatus === 'captured' && ['draft', 'pending_payment', 'payment_failed'].includes(current.order_status)) await transitionOrder(trx, { empresaId }, { orderId: current.order_id, status: 'paid', origin: 'payment_webhook', correlationId: eventId, payload: { provider, eventId } });
         if (nextPaymentStatus === 'failed' && ['draft', 'pending_payment'].includes(current.order_status)) await transitionOrder(trx, { empresaId }, { orderId: current.order_id, status: 'payment_failed', origin: 'payment_webhook', correlationId: eventId, payload: { provider, eventId } });

@@ -40,6 +40,7 @@ const migrationFiles = [
   '046_barbershop_appointment_notifications.sql',
   '047_whatsapp_ai_operational_hardening.sql',
   '048_whatsapp_ai_consent_profile_guardrails.sql',
+  '049_commerce_cart_sync_ordering.sql',
 ];
 const advisoryLockKey = 825410732;
 

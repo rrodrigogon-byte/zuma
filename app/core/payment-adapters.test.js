@@ -6,6 +6,7 @@ import {
   createPaymentAttempt,
   paymentProviders,
   reconcilePaymentByIdentifiers,
+  resolvedPaymentMethod,
   syncPaymentAttempt,
   validatePaymentMethod,
 } from './payment-adapters.js';
@@ -25,7 +26,15 @@ test('registry exige createCheckout e verifyWebhook', () => {
 test('método de pagamento aceita somente valores explícitos', () => {
   assert.equal(validatePaymentMethod('pix'), 'pix');
   assert.equal(validatePaymentMethod('credit_card'), 'credit_card');
+  assert.equal(validatePaymentMethod('external'), 'external');
   assert.throws(() => validatePaymentMethod('card_number'), error => error instanceof CommerceError && error.code === 'PAYMENT_METHOD_INVALID');
+});
+
+test('InfinitePay troca método externo pelo capture_method autoritativo', () => {
+  assert.equal(resolvedPaymentMethod('infinitepay', 'external', 'pix'), 'pix');
+  assert.equal(resolvedPaymentMethod('infinitepay', 'external', 'credit_card'), 'credit_card');
+  assert.equal(resolvedPaymentMethod('infinitepay', 'external', 'boleto'), 'external');
+  assert.equal(resolvedPaymentMethod('mercadopago', 'external', 'pix'), 'external');
 });
 
 test('nenhum gateway não registrado pode criar cobrança', async () => {
@@ -79,6 +88,33 @@ test('pedido fora da loja do contexto é rejeitado pelo filtro tenant-aware', as
   }
 });
 
+test('checkout único InfinitePay reaproveita tentativa Pix legada pendente sem criar outra cobrança', async () => {
+  const { db } = await import('./database.js');
+  process.env.TEST_PAYMENT_ACCESS = 'token';
+  let gatewayCalls = 0;
+  paymentProviders.register('infinitepay', { createCheckout: async () => { gatewayCalls += 1; return {}; }, verifyWebhook: async () => ({ eventId: 'evt' }) });
+  const original = db.transaction;
+  db.transaction = async callback => callback({ query: async sql => {
+    if (sql.includes('SELECT request_hash')) return { rows: [] };
+    if (sql.includes("INSERT INTO commerce_idempotency_keys")) return { rows: [] };
+    if (sql.includes('SELECT o.id, o.public_code, o.loja_id')) return { rows: [{ id: orderId, public_code: 'KC-LEGADO', loja_id: lojaId, storefront_id: storefrontId, status: 'pending_payment', total: '10.00', moeda: 'BRL', customer_email: 'cliente@example.com' }] };
+    if (sql.includes('SELECT id, secret_ref, public_config')) return { rows: [{ id: accountId, secret_ref: 'env:TEST_PAYMENT_ACCESS', public_config: {} }] };
+    if (sql.includes('SELECT id, status, amount, provider, method, payment_account_id')) return { rows: [{ id: '55555555-5555-4555-8555-555555555559', status: 'pending', amount: '10.00', provider: 'infinitepay', method: 'pix', payment_account_id: accountId, provider_payment_id: null, metadata: { checkout: { url: 'https://checkout.infinitepay.com.br/existente' } } }] };
+    throw new Error(`query não prevista: ${sql}`);
+  } });
+  try {
+    const result = await createPaymentAttempt({ empresaId, lojaId }, { orderId, accountId, provider: 'infinitepay', method: 'external', environment: 'production', idempotencyKey: 'payment-hosted-reuse' });
+    assert.equal(result.existingAttempt, true);
+    assert.equal(result.paymentId, '55555555-5555-4555-8555-555555555559');
+    assert.equal(result.checkout.url, 'https://checkout.infinitepay.com.br/existente');
+    assert.equal(gatewayCalls, 0);
+  } finally {
+    db.transaction = original;
+    paymentProviders.adapters.delete('infinitepay');
+    delete process.env.TEST_PAYMENT_ACCESS;
+  }
+});
+
 test('reconciliação consulta gateway, confirma valor e evita downgrade de pagamento', async () => {
   const { db } = await import('./database.js');
   process.env.TEST_PAYMENT_ACCESS = 'token';
@@ -92,7 +128,7 @@ test('reconciliação consulta gateway, confirma valor e evita downgrade de paga
     transactionCount += 1;
     return callback({ query: async (sql, values) => {
       if (sql.includes('SELECT p.id, p.order_id, p.provider, p.method')) return { rows: [{ id: '55555555-5555-4555-8555-555555555556', order_id: orderId, provider: 'testgateway', method: 'pix', status: 'pending', amount: '10.00', provider_payment_id: '9001', order_status: 'pending_payment', storefront_id: storefrontId, account_id: accountId, ambiente: 'sandbox', secret_ref: 'env:TEST_PAYMENT_ACCESS', public_config: {} }] };
-      if (sql.includes('SELECT p.id, p.order_id, p.status, p.amount')) { lockQuery = sql; return { rows: [{ id: '55555555-5555-4555-8555-555555555556', order_id: orderId, status: 'pending', amount: '10.00', order_status: 'pending_payment' }] }; }
+      if (sql.includes('SELECT p.id, p.order_id, p.method, p.status')) { lockQuery = sql; return { rows: [{ id: '55555555-5555-4555-8555-555555555556', order_id: orderId, method: 'pix', status: 'pending', amount: '10.00', order_status: 'pending_payment' }] }; }
       if (sql.includes('SELECT id, status, storefront_id')) return { rows: [{ id: orderId, status: 'pending_payment', storefront_id: storefrontId, total: '10.00' }] };
       if (sql.includes('UPDATE commerce_payments') && sql.includes('authorized_at = CASE')) statusUpdateQuery = sql;
       return { rows: [] };
@@ -127,7 +163,7 @@ test('reconciliação manual vincula InfinitePay por NSU e slug antes de confirm
     if (sql.includes('SELECT p.id, p.order_id, p.provider, p.status')) return { rows: [{ id: '55555555-5555-4555-8555-555555555558', order_id: orderId, provider: 'infinitepay', status: 'pending', amount: '30.00', provider_payment_id: null, metadata: {}, payment_account_id: accountId, order_code: 'KC-APROVADO', storefront_id: storefrontId, order_status: 'pending_payment' }] };
     if (sql.includes('SELECT id FROM commerce_payments')) return { rows: [] };
     if (sql.includes('SELECT p.id, p.order_id, p.provider, p.method')) return { rows: [{ id: '55555555-5555-4555-8555-555555555558', order_id: orderId, provider: 'infinitepay', method: 'credit_card', status: 'pending', amount: '30.00', provider_payment_id: 'tx-3001', metadata: { checkout: { slug: 'slug-3001' } }, account_id: accountId, ambiente: 'production', secret_ref: 'env:TEST_PAYMENT_ACCESS', public_config: {} }] };
-    if (sql.includes('SELECT p.id, p.order_id, p.status, p.amount')) return { rows: [{ id: '55555555-5555-4555-8555-555555555558', order_id: orderId, status: 'pending', amount: '30.00', order_status: 'pending_payment' }] };
+    if (sql.includes('SELECT p.id, p.order_id, p.method, p.status')) return { rows: [{ id: '55555555-5555-4555-8555-555555555558', order_id: orderId, method: 'credit_card', status: 'pending', amount: '30.00', order_status: 'pending_payment' }] };
     if (sql.includes('SELECT id, status, storefront_id')) return { rows: [{ id: orderId, status: 'pending_payment', storefront_id: storefrontId, total: '30.00' }] };
     return { rows: [] };
   } });

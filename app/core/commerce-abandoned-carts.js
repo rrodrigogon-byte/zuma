@@ -119,6 +119,8 @@ export async function syncPublicCart(context = {}, input = {}) {
   const storefrontId = uuid(context.storefrontId, 'storefrontId');
   const hash = sessionHash(input.sessionKey);
   const items = normalizeItems(input.items || []);
+  const requestedSyncVersion = Number(input.syncVersion);
+  const clientSyncVersion = Number.isSafeInteger(requestedSyncVersion) && requestedSyncVersion >= 0 ? requestedSyncVersion : 0;
   let requestedConsent = null;
   if (input.recoveryConsent === true) {
     const source = sourceAllowed(input.recoverySource);
@@ -129,31 +131,44 @@ export async function syncPublicCart(context = {}, input = {}) {
     requestedConsent = { source, evidence, contact };
   }
   return db.transaction(async trx => {
+    await trx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`commerce-cart-sync:${empresaId}:${storefrontId}:${hash}`]);
     const existing = await trx.query(
-      `SELECT * FROM commerce_carts WHERE empresa_id=$1 AND storefront_id=$2 AND session_key_hash=$3 AND status IN ('open','abandoned') LIMIT 1 FOR UPDATE`,
+      `SELECT * FROM commerce_carts WHERE empresa_id=$1 AND storefront_id=$2 AND session_key_hash=$3 AND status IN ('open','abandoned','expired') ORDER BY client_sync_version DESC, atualizado_em DESC LIMIT 1 FOR UPDATE`,
       [empresaId, storefrontId, hash],
     );
+    const storedSyncVersion = Number(existing.rows[0]?.client_sync_version || 0);
+    if (existing.rows[0] && storedSyncVersion > 0 && clientSyncVersion <= storedSyncVersion) {
+      return { status: existing.rows[0].status, stale: true, syncVersion: storedSyncVersion };
+    }
     if (!items.length) {
-      if (!existing.rows[0]) return { status: 'empty', itemCount: 0 };
+      if (!existing.rows[0]) {
+        if (!clientSyncVersion) return { status: 'empty', itemCount: 0 };
+        await trx.query(
+          `INSERT INTO commerce_carts (empresa_id,storefront_id,session_key_hash,status,last_activity_at,expira_em,client_sync_version,recovery_status)
+           VALUES ($1,$2,$3,'expired',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,$4,'expired')`,
+          [empresaId, storefrontId, hash, clientSyncVersion],
+        );
+        return { status: 'expired', itemCount: 0, syncVersion: clientSyncVersion };
+      }
       const cart = existing.rows[0];
       await trx.query(`DELETE FROM commerce_cart_items WHERE empresa_id=$1 AND cart_id=$2`, [empresaId, cart.id]);
-      await trx.query(`UPDATE commerce_carts SET status='expired', recovery_status='expired', recovery_due_at=NULL, last_activity_at=CURRENT_TIMESTAMP, atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$1 AND id=$2`, [empresaId, cart.id]);
+      await trx.query(`UPDATE commerce_carts SET status='expired', recovery_status='expired', recovery_due_at=NULL, last_activity_at=CURRENT_TIMESTAMP, atualizado_em=CURRENT_TIMESTAMP, client_sync_version=$3 WHERE empresa_id=$1 AND id=$2`, [empresaId, cart.id, clientSyncVersion]);
       await trx.query(`UPDATE tarefas_integracao_canais SET status='cancelada', proxima_tentativa_em=NULL, data_atualizacao=CURRENT_TIMESTAMP WHERE empresa_id=$1 AND tipo='recuperar_carrinho' AND referencia_externa=$2 AND status IN ('pendente','falha')`, [empresaId, cart.id]);
       await event(trx, { empresaId, lojaId, cartId: cart.id, customerId: cart.customer_id, type: 'expired' });
-      return { status: 'expired', itemCount: 0 };
+      return { status: 'expired', itemCount: 0, syncVersion: clientSyncVersion };
     }
     const variants = await resolveVariants(trx, empresaId, storefrontId, items);
     const byId = new Map(variants.map(row => [row.id, row]));
     let cart = existing.rows[0];
     if (!cart) {
       const inserted = await trx.query(
-        `INSERT INTO commerce_carts (empresa_id,storefront_id,session_key_hash,status,last_activity_at,expira_em)
-         VALUES ($1,$2,$3,'open',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP+INTERVAL '7 days') RETURNING *`,
-        [empresaId, storefrontId, hash],
+        `INSERT INTO commerce_carts (empresa_id,storefront_id,session_key_hash,status,last_activity_at,expira_em,client_sync_version)
+         VALUES ($1,$2,$3,'open',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP+INTERVAL '7 days',$4) RETURNING *`,
+        [empresaId, storefrontId, hash, clientSyncVersion],
       );
       cart = inserted.rows[0];
     } else {
-      const updated = await trx.query(`UPDATE commerce_carts SET status='open', last_activity_at=CURRENT_TIMESTAMP, expira_em=CURRENT_TIMESTAMP+INTERVAL '7 days', atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$1 AND id=$2 RETURNING *`, [empresaId, cart.id]);
+      const updated = await trx.query(`UPDATE commerce_carts SET status='open', last_activity_at=CURRENT_TIMESTAMP, expira_em=CURRENT_TIMESTAMP+INTERVAL '7 days', atualizado_em=CURRENT_TIMESTAMP, client_sync_version=$3 WHERE empresa_id=$1 AND id=$2 RETURNING *`, [empresaId, cart.id, clientSyncVersion]);
       cart = updated.rows[0];
     }
     await trx.query(`DELETE FROM commerce_cart_items WHERE empresa_id=$1 AND cart_id=$2`, [empresaId, cart.id]);
