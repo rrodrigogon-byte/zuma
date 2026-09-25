@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { recommendedShippingOption, shippingQuoteKey } from './checkout-shipping.js'
+import { checkoutTotal, recommendedShippingOption, selectedShippingOption, shippingQuoteKey } from './checkout-shipping.js'
 
 const cart = [{ variantId: 'variant-b', qtd: 1 }, { variantId: 'variant-a', qtd: 2 }]
 const address = { cep: '78300-055', cidade: 'Tangará da Serra', estado: 'MT' }
@@ -32,4 +32,17 @@ test('recomenda a menor tarifa aplicável e desempata pelo menor prazo', () => {
   ] }
   assert.equal(recommendedShippingOption(quote)?.id, 'regional-rapida')
   assert.equal(recommendedShippingOption({ items: [] }), null)
+})
+
+test('soma a opção selecionada ao subtotal e rejeita seleção fora da cotação atual', () => {
+  const quote = { items: [
+    { id: 'expressa', selectionId: 'quote-1:expressa', amount: 65 },
+    { id: 'gratis', selectionId: 'quote-1:gratis', amount: 0 },
+  ] }
+  const selected = selectedShippingOption({ deliveryMode: 'entrega', shippingQuote: quote, shippingOptionId: 'quote-1:expressa', shippingQuoteIsCurrent: true })
+  assert.equal(selected?.id, 'expressa')
+  assert.equal(checkoutTotal(2600, selected), 2665)
+  assert.equal(checkoutTotal(2600, { id: 'gratis', amount: 0 }), 2600)
+  assert.equal(selectedShippingOption({ deliveryMode: 'retirada', shippingQuote: quote, shippingOptionId: 'quote-1:expressa', shippingQuoteIsCurrent: true }), null)
+  assert.equal(selectedShippingOption({ deliveryMode: 'entrega', shippingQuote: quote, shippingOptionId: 'quote-old:expressa', shippingQuoteIsCurrent: false }), null)
 })

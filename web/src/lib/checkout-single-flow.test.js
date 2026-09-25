@@ -16,7 +16,7 @@ test('Commerce Core navega do carrinho para uma única página dedicada de check
 test('os dois fluxos legados restantes usam trava single-flight imperativa', () => {
   assert.match(storefrontSource, /if \(orderRequestRef\.current\) return/);
   assert.match(storefrontSource, /if \(!order \|\| !paymentMethods\.length \|\| paymentRequestRef\.current\) return/);
-  assert.match(checkoutSource, /if \(orderRequestRef\.current\) return/);
+  assert.match(checkoutSource, /if \(orderRequestRef\.current(?: \|\| [^)]+)?\) return/);
   assert.match(checkoutSource, /if \(!order \|\| paymentRequestRef\.current\) return/);
 });
 
@@ -27,6 +27,14 @@ test('checkout dedicado mantém idempotência entre reloads e preserva os campos
   assert.match(checkoutSource, /promotionCode: promotionCode\.trim\(\)/);
   assert.match(checkoutSource, /CPF ou CNPJ do destinatário/);
   assert.match(checkoutSource, /Continuar para pagamento/);
+});
+
+test('seleção de frete atualiza o total e bloqueia avanço apenas durante a cotação', () => {
+  assert.match(checkoutSource, /checkoutTotal\(cartTotal, selectedOption\)/);
+  assert.match(checkoutSource, /selectedShippingOption\(/);
+  assert.match(checkoutSource, /shippingQuoteLoading/);
+  assert.match(checkoutSource, /shippingOptionId: selectedOption\.id/);
+  assert.match(checkoutSource, /Aguardando cálculo do frete/);
 });
 
 test('checkout dedicado permite excluir item e invalida estado derivado antes de nova submissão', () => {

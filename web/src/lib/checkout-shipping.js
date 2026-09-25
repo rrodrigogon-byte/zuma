@@ -28,3 +28,14 @@ export function recommendedShippingOption(quote) {
     return days < bestDays ? item : best
   }, null)
 }
+
+export function selectedShippingOption({ deliveryMode, shippingQuote, shippingOptionId, shippingQuoteIsCurrent } = {}) {
+  if (deliveryMode !== 'entrega' || !shippingQuoteIsCurrent) return null
+  return shippingQuote?.items?.find(item => (item.selectionId || item.id) === shippingOptionId) || null
+}
+
+export function checkoutTotal(subtotal, shippingOption) {
+  const base = Number(subtotal)
+  const amount = Number(shippingOption?.amount)
+  return (Number.isFinite(base) ? base : 0) + (Number.isFinite(amount) && amount > 0 ? amount : 0)
+}
