@@ -98,7 +98,24 @@ export async function customerReport(contextInput, options = {}) {
       LIMIT 100`,
     values,
   );
-  return { period: { from, to }, summary: result.rows[0], top: top.rows };
+  const satisfactionValues = [context.empresaId, from, to];
+  let satisfactionStore = '';
+  if (context.lojaId) {
+    satisfactionValues.push(context.lojaId);
+    satisfactionStore = ` AND sf.loja_id = $${satisfactionValues.length}`;
+  }
+  const satisfaction = await db.query(
+    `SELECT COUNT(*)::integer AS responses,
+            ROUND(COALESCE(AVG(s.nota), 0)::numeric, 2) AS average_rating,
+            COUNT(*) FILTER (WHERE s.recomendaria = true)::integer AS recommend_count,
+            CASE WHEN COUNT(*) = 0 THEN 0 ELSE ROUND((COUNT(*) FILTER (WHERE s.recomendaria = true)::numeric / COUNT(*)::numeric) * 100, 1) END AS recommendation_rate
+       FROM commerce_order_satisfaction s
+       JOIN commerce_orders o ON o.empresa_id = s.empresa_id AND o.storefront_id = s.storefront_id AND o.id = s.order_id
+       JOIN commerce_storefronts sf ON sf.empresa_id = o.empresa_id AND sf.id = o.storefront_id
+      WHERE s.empresa_id = $1 AND s.retencao_ate > CURRENT_TIMESTAMP AND s.criado_em >= $2::timestamptz AND s.criado_em < $3::timestamptz${satisfactionStore}`,
+    satisfactionValues,
+  );
+  return { period: { from, to }, summary: result.rows[0], top: top.rows, satisfaction: satisfaction.rows[0] || { responses: 0, average_rating: 0, recommend_count: 0, recommendation_rate: 0 } };
 }
 
 

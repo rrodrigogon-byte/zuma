@@ -412,6 +412,14 @@ html[data-brand='dino'] .sidebar-brand-dino span {
 .checkout-info-banner, .checkout-security-panel, .checkout-final-note { display: flex; gap: 11px; align-items: flex-start; padding: 13px 14px; border-radius: 12px; color: #6f563f; background: #fff8ee; font-size: 12px; line-height: 1.5; }
 .checkout-info-banner > span, .checkout-security-panel > span, .checkout-final-note > span { display: grid; place-items: center; flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%; background: #ffe1ce; color: var(--orange-dark); font-weight: 900; }
 .checkout-info-banner strong, .checkout-security-panel strong { color: var(--navy); }
+.checkout-page .checkout-recovery-consent { display: flex; align-items: flex-start; gap: 12px; margin-top: 18px; padding: 14px 16px; border: 1px solid #b8c3e8; border-radius: 12px; background: #eef1ff; color: #1f2a44; cursor: pointer; }
+.checkout-page .checkout-recovery-consent > span { display: grid; min-width: 0; gap: 3px; }
+.checkout-page .checkout-recovery-consent strong { color: #172033; font-weight: 900; }
+.checkout-page .checkout-recovery-consent small { display: block; color: #48556d; font-size: 12px; line-height: 1.5; }
+.checkout-page .checkout-recovery-consent input { flex: 0 0 auto; width: 16px; height: 16px; min-height: 0; padding: 0; margin: 2px 0 0; accent-color: #4b5bd7; }
+.checkout-page .checkout-info-banner { margin-top: 10px; border: 1px solid #cbd5ef; background: #f3f5ff; color: #35415c; }
+.checkout-page .checkout-info-banner strong { color: #172033; }
+.checkout-page .checkout-info-banner > svg { flex: 0 0 auto; color: #4b5bd7; }
 .checkout-actions { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-top: 28px; color: #8b8078; font-size: 11px; }
 .checkout-primary, .checkout-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 19px; border: 0; border-radius: 11px; font-size: 13px; font-weight: 900; text-decoration: none; cursor: pointer; transition: transform .16s ease-out, background .16s ease-out, box-shadow .16s ease-out; }
 .checkout-primary { background: var(--orange); color: #fff; box-shadow: 0 6px 16px rgba(255,107,44,.24); }
@@ -667,6 +675,29 @@ html[data-brand='dino'] .checkout-remove-item:hover:not(:disabled) { background:
 html[data-brand='dino'] .checkout-info-banner,
 html[data-brand='dino'] .checkout-security-panel,
 html[data-brand='dino'] .checkout-final-note { background: rgba(110,124,224,.12); color: #C2C7D7; }
+html[data-brand='dino'] .checkout-page .checkout-recovery-consent { border-color: #4a5578; background: #202739; color: #f4f6fb; }
+html[data-brand='dino'] .checkout-page .checkout-recovery-consent strong { color: #ffffff; }
+html[data-brand='dino'] .checkout-page .checkout-recovery-consent small { color: #d3d8e7; }
+html[data-brand='dino'] .checkout-page .checkout-info-banner { border-color: #3c4769; background: #1f2638; color: #d3d8e7; }
+html[data-brand='dino'] .checkout-page .checkout-info-banner strong { color: #ffffff; }
+html[data-brand='dino'] .checkout-page .checkout-info-banner > svg { color: #aeb8ff; }
+html[data-brand='dino'] .checkout-payment-box > strong,
+html[data-brand='dino'] .checkout-tracking-heading h2,
+html[data-brand='dino'] .checkout-tracking-summary strong,
+html[data-brand='dino'] .checkout-tracking-events strong,
+html[data-brand='dino'] .checkout-order-timeline strong { color: #f4f6fb; }
+html[data-brand='dino'] .checkout-payment-box > small,
+html[data-brand='dino'] .checkout-payment-helper,
+html[data-brand='dino'] .checkout-tracking-empty,
+html[data-brand='dino'] .checkout-tracking-summary small,
+html[data-brand='dino'] .checkout-tracking-events span,
+html[data-brand='dino'] .checkout-order-timeline span,
+html[data-brand='dino'] .checkout-order-timeline small { color: #c2c8d6; }
+html[data-brand='dino'] .checkout-status-pill { border: 1px solid #465175; background: #252d42; color: #f4f6fb; }
+html[data-brand='dino'] .checkout-tracking-summary > div,
+html[data-brand='dino'] .checkout-result-meta > div { border-color: #343b4d; background: #11141c; }
+html[data-brand='dino'] .checkout-result-meta span { color: #c2c8d6; }
+html[data-brand='dino'] .checkout-result-meta strong { color: #ffffff; }
 html[data-brand='dino'] .shipping-option.is-selected,
 html[data-brand='dino'] .payment-option.is-selected { background: rgba(110,124,224,.12); border-color: #6E7CE0; box-shadow: 0 0 0 3px rgba(110,124,224,.1); }
 html[data-brand='dino'] .payment-provider-badges > span { background: rgba(110,124,224,.18); color: #D9DDFE; }

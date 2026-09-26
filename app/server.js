@@ -24,7 +24,7 @@ import { wpp } from './whatsapp.js';
 import * as modificadoresCombosKytto from './modificadores-combos-kytto.js';
 import { mail } from './email.js';
 import { emitir as nfceEmitir, cancelar as nfceCancelar, nfceConfigurado } from './nfce.js';
-import { createCommerceAdminRouter, createCommercePublicRouter, createCommerceWebhookRouter } from './core/commerce-routes.js';
+import { createCommerceAdminRouter, createCommercePublicRateLimitGuard, createCommercePublicRouter, createCommerceWebhookRouter } from './core/commerce-routes.js';
 import { createWhatsappAiWebhookRouter } from './core/whatsapp-ai-routes.js';
 import { whatsappAiOperationalStatus } from './core/whatsapp-ai.js';
 import { startWhatsappAiWorker } from './workers/whatsapp-ai-worker.js';
@@ -54,6 +54,7 @@ import * as canaisFidelidadeKytto from './canais-fidelidade-kytto.js';
 import { answerDinoOperationalQuestion, buildDinoOperationalSnapshot } from './dino-assistant.js';
 import { loadBarbeariaCommerceStatus, unavailableBarbeariaCommerceStatus } from './core/barbearia-commerce-status.js';
 import { customerReport, inventoryReport, salesReport } from './core/commerce-reports.js';
+import { purgeExpiredCommercePublicData, startCommerceRetentionCleanup } from './core/commerce-retention.js';
 import { buildDinoDashboardAnalytics, dashboardPeriod } from './dino-dashboard.js';
 import { registerCustomer360Routes } from './customer360-routes.js';
 
@@ -270,25 +271,7 @@ app.get('/api/events', auth, requireStaff, (req, res) => {
   req.on('close', () => sseClients.delete(res));
 });
 
-function commercePublicLimit(max, janelaMs=10*60*1000){
-  return (req,res,next)=>{
-    const route = String(req.originalUrl || req.path || '').split('?')[0];
-    const chave = `commerce:${route}:${req.ip || ''}`;
-    if(!rateLimit(chave, max, janelaMs)) return res.status(429).json({ error:'muitas requisições, tente novamente em alguns minutos', code:'PUBLIC_RATE_LIMIT' });
-    next();
-  };
-}
-
-function commerceCheckoutGuard(req,res,next){
-  const route = String(req.originalUrl || '').split('?')[0].replace(/^\/api\/(?:storefront|public\/storefront\/[^/]+)/, '') || '/';
-  if (req.method === 'GET' && route.startsWith('/shipping/address/')) return commercePublicLimit(80)(req,res,next);
-  if (req.method === 'POST' && route === '/shipping/quotes') return commercePublicLimit(30)(req,res,next);
-  if (req.method === 'POST' && (route === '/orders' || /^\/orders\/[^/]+\/payments$/.test(route))) return commercePublicLimit(12)(req,res,next);
-  if (req.method === 'GET' && /^\/orders\/[^/]+$/.test(route)) return commercePublicLimit(30)(req,res,next);
-  if (req.method === 'GET' && /^\/media\/[^/]+$/.test(route)) return commercePublicLimit(120)(req,res,next);
-  if (req.method === 'GET') return commercePublicLimit(180)(req,res,next);
-  return next();
-}
+const commerceCheckoutGuard = createCommercePublicRateLimitGuard();
 
 async function loyaltyAdvancedContext(req, permission) {
   const context = await requireCommercePermission(req, permission);
@@ -5579,9 +5562,16 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
 // bucket quando existe. Sem GCS_BUCKET, resolve imediatamente.
 ;(async () => {
   await hydrate();
+  if (process.env.COMMERCE_CORE_ENABLED === '1') {
+    await purgeExpiredCommercePublicData();
+    startCommerceRetentionCleanup();
+  }
   app.listen(PORT, ()=> console.log(`SetPoint React SPA em http://localhost:${PORT}`));
   startWhatsappAiWorker();
-})();
+})().catch(error => {
+  console.error('FATAL: falha no boot seguro do SetPoint:', error?.code || error?.message || error);
+  process.exit(1);
+});
 
 // Encerramento gracioso: garante o flush do último estado para o GCS antes de morrer
 // (Cloud Run envia SIGTERM no deploy/scale-down e concede ~10s de grace period).

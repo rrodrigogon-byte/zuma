@@ -19,6 +19,8 @@ import { commerceMediaIdForIdempotencyKey, newCommerceMediaId, streamCommerceIma
 import { claimWhatsappAiHandoff, closeWhatsappAiHandoff, configureWhatsappAiChannel, configureWhatsappAiPolicy, listWhatsappAiSessions, releaseWhatsappAiHandoff, syncWhatsappAiWebhook, testWhatsappAiGemini, whatsappAiOperationalStatus } from './whatsapp-ai.js';
 import { campaignMetrics, cancelCampaign, confirmCampaign, createCampaign, listCampaignAudience, listCampaigns, previewCampaign, updateCampaignConsent } from './commerce-campaigns.js';
 import { cartRecoveryMetrics, listAbandonedCarts, syncPublicCart } from './commerce-abandoned-carts.js';
+import { consumePublicRateLimit, publicRequestFingerprint } from './commerce-public-rate-limit.js';
+import { satisfactionEligible, submitOrderSatisfaction } from './commerce-satisfaction.js';
 import {
   CommerceError,
   assertUuid,
@@ -49,42 +51,17 @@ import {
   withCommerceTransaction,
 } from './commerce-core.js';
 
-const publicCartRequests = new Map();
-const publicShippingRequests = new Map();
-function publicShippingRateLimit(req, res, next) {
-  const now = Date.now();
-  const windowMs = 5 * 60 * 1000;
-  const key = `${req.ip || req.socket?.remoteAddress || 'unknown'}:${req.publicStoreAlias || publicHost(req)}`;
-  const recent = (publicShippingRequests.get(key) || []).filter(at => now - at < windowMs);
-  if (recent.length >= 20) return res.status(429).json({ error: 'Muitas consultas de entrega. Tente novamente em alguns minutos.', code: 'RATE_LIMIT' });
-  recent.push(now);
-  publicShippingRequests.set(key, recent);
-  if (publicShippingRequests.size > 10000) {
-    for (const [candidate, values] of publicShippingRequests.entries()) if (!values.length || now - values[values.length - 1] >= windowMs) publicShippingRequests.delete(candidate);
-  }
-  next();
-}
-function publicCartRateLimit(req, res, next) {
-  const now = Date.now();
-  const windowMs = 5 * 60 * 1000;
-  const key = `${req.ip || req.socket?.remoteAddress || 'unknown'}:${req.publicStoreAlias || publicHost(req)}`;
-  const recent = (publicCartRequests.get(key) || []).filter(at => now - at < windowMs);
-  if (recent.length >= 30) return res.status(429).json({ error: 'Muitas solicitações. Tente novamente em alguns minutos.', code: 'RATE_LIMIT' });
-  recent.push(now);
-  publicCartRequests.set(key, recent);
-  if (publicCartRequests.size > 10000) {
-    for (const [candidate, values] of publicCartRequests.entries()) if (!values.length || now - values[values.length - 1] >= windowMs) publicCartRequests.delete(candidate);
-  }
-  next();
-}
-
 function publicHost(req) {
   const forwarded = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim();
   return (forwarded || req.hostname || '').split(':')[0].toLowerCase();
 }
 
 async function resolvePublicStorefront(req) {
-  if (req.publicStoreAlias) return resolveStorefrontAlias(req.publicStoreAlias);
+  if (req.publicResolvedStorefront) return req.publicResolvedStorefront;
+  if (req.publicStoreAlias) {
+    req.publicResolvedStorefront = await resolveStorefrontAlias(req.publicStoreAlias);
+    return req.publicResolvedStorefront;
+  }
   const dominio = publicHost(req);
   if (!dominio) throw new CommerceError('domínio da loja não resolvido', 'STOREFRONT_DOMAIN_REQUIRED');
   const result = await db.query(
@@ -98,7 +75,61 @@ async function resolvePublicStorefront(req) {
     [dominio],
   );
   if (!result.rows[0]) throw new CommerceError('storefront não encontrado para este domínio', 'STOREFRONT_NOT_FOUND');
-  return result.rows[0];
+  req.publicResolvedStorefront = result.rows[0];
+  return req.publicResolvedStorefront;
+}
+
+function publicSharedRateLimit({ scope, limit, windowSeconds, subject = () => '' }) {
+  return async (req, res, next) => {
+    try {
+      const storefront = await resolvePublicStorefront(req);
+      const context = { empresaId: storefront.empresa_id, lojaId: storefront.loja_id, storefrontId: storefront.id };
+      const outcome = await withCommerceTransaction(trx => consumePublicRateLimit(trx, context, {
+        scope,
+        subject: subject(req),
+        fingerprintValue: publicRequestFingerprint(req),
+        limit,
+        windowSeconds,
+      }));
+      if (!outcome.allowed) {
+        res.set('Retry-After', String(outcome.retryAfterSeconds));
+        return res.status(429).json({ error: 'Muitas solicitações. Tente novamente em alguns minutos.', code: 'RATE_LIMIT' });
+      }
+      return next();
+    } catch (error) { return jsonError(res, error); }
+  };
+}
+
+const publicShippingRateLimit = publicSharedRateLimit({ scope: 'shipping-ip', limit: 20, windowSeconds: 300 });
+const publicCartRateLimit = publicSharedRateLimit({ scope: 'cart-ip', limit: 30, windowSeconds: 300 });
+const publicSatisfactionRateLimit = publicSharedRateLimit({ scope: 'satisfaction-ip', limit: 30, windowSeconds: 600 });
+const publicSatisfactionOrderRateLimit = publicSharedRateLimit({ scope: 'satisfaction-order', limit: 5, windowSeconds: 600, subject: req => req.params.publicCode });
+
+export function publicCommercePolicy(req) {
+  const route = String(req.path || '/').split('?')[0];
+  if (req.method === 'GET' && route.startsWith('/shipping/address/')) return { scope: 'public-shipping-address', limit: 80, windowSeconds: 600 };
+  if (req.method === 'POST' && route.startsWith('/shipping/quotes')) return { scope: 'public-shipping-quote', limit: 30, windowSeconds: 600 };
+  if (req.method === 'POST' && (route === '/orders' || /^\/orders\/[^/]+\/payments$/.test(route))) return { scope: 'public-order-write', limit: 12, windowSeconds: 600 };
+  if (req.method === 'GET' && /^\/orders\/[^/]+$/.test(route)) return { scope: 'public-order-read', limit: 120, windowSeconds: 600 };
+  if (req.method === 'GET' && /^\/media\/[^/]+$/.test(route)) return { scope: 'public-media-read', limit: 600, windowSeconds: 600 };
+  if (req.method === 'GET') return { scope: 'public-general-read', limit: 300, windowSeconds: 600 };
+  return { scope: 'public-general-write', limit: 60, windowSeconds: 600 };
+}
+
+export function createCommercePublicRateLimitGuard() {
+  return async (req, res, next) => {
+    try {
+      const storefront = await resolvePublicStorefront(req);
+      const policy = publicCommercePolicy(req);
+      const context = { empresaId: storefront.empresa_id, lojaId: storefront.loja_id, storefrontId: storefront.id };
+      const outcome = await withCommerceTransaction(trx => consumePublicRateLimit(trx, context, { ...policy, fingerprintValue: publicRequestFingerprint(req) }));
+      if (!outcome.allowed) {
+        res.set('Retry-After', String(outcome.retryAfterSeconds));
+        return res.status(429).json({ error: 'Muitas solicitações. Tente novamente em alguns minutos.', code: 'PUBLIC_RATE_LIMIT' });
+      }
+      return next();
+    } catch (error) { return jsonError(res, error); }
+  };
 }
 
 export function parsePagination(req, defaultLimit = 100, maxLimit = 500) {
@@ -176,7 +207,6 @@ function sanitizePublicFulfillment(value = {}) {
     ...(event.location && typeof event.location === 'object' ? { location: { city: String(event.location.city || '').slice(0, 120) || null, state: String(event.location.state || '').slice(0, 2).toUpperCase() || null } } : {}),
   })).filter(event => event.at || event.description) : [];
   return {
-    id: value.id || null,
     status: String(value.status || 'pending').slice(0, 30),
     trackingCode: String(value.trackingCode || '').slice(0, 160) || null,
     trackingUrl: safePublicUrl(value.trackingUrl),
@@ -216,19 +246,44 @@ function sanitizePublicShippingOption(value = {}) {
 }
 
 function sanitizePublicOrderTracking(row = {}) {
-  const safeRow = { ...row };
-  delete safeRow.shipping_option;
-  delete safeRow.shippingOption;
+  const fulfillments = Array.isArray(row.fulfillments) ? row.fulfillments.map(sanitizePublicFulfillment) : [];
+  const satisfaction = row.satisfaction && typeof row.satisfaction === 'object' ? row.satisfaction : {};
+  const address = row.endereco_entrega && typeof row.endereco_entrega === 'object' ? row.endereco_entrega : null;
+  const asNumber = value => Number.isFinite(Number(value)) ? Number(value) : 0;
   return {
-    ...safeRow,
+    public_code: String(row.public_code || '').slice(0, 40),
+    status: String(row.status || 'pending_payment').slice(0, 30),
+    moeda: String(row.moeda || 'BRL').slice(0, 8),
+    subtotal: asNumber(row.subtotal),
+    desconto: asNumber(row.desconto),
+    frete: asNumber(row.frete),
+    impostos: asNumber(row.impostos),
+    total: asNumber(row.total),
+    payment_status: String(row.payment_status || 'pending').slice(0, 30),
+    endereco_entrega: address ? {
+      cidade: String(address.cidade || '').slice(0, 100) || null,
+      estado: String(address.estado || '').slice(0, 2).toUpperCase() || null,
+      cep: String(address.cep || '').slice(0, 8) || null,
+    } : null,
+    criado_em: row.criado_em || null,
+    atualizado_em: row.atualizado_em || null,
     shippingOption: sanitizePublicShippingOption(row.shipping_option || row.shippingOption),
-    fulfillments: Array.isArray(row.fulfillments) ? row.fulfillments.map(sanitizePublicFulfillment) : [],
+    items: Array.isArray(row.items) ? row.items.slice(0, 500).map(item => ({
+      nome: String(item?.nome || '').slice(0, 240),
+      sku: String(item?.sku || '').slice(0, 120) || null,
+      quantidade: Math.max(0, asNumber(item?.quantidade)),
+      preco: asNumber(item?.preco),
+      subtotal: asNumber(item?.subtotal),
+    })) : [],
+    fulfillments,
     timeline: Array.isArray(row.timeline) ? row.timeline.slice(-100).map(event => ({
       fromStatus: String(event?.fromStatus || '').slice(0, 30) || null,
       toStatus: String(event?.toStatus || '').slice(0, 30) || null,
       source: String(event?.source || 'system').slice(0, 40),
       at: event?.at || null,
     })) : [],
+    satisfactionEligible: satisfactionEligible(row.status, fulfillments),
+    satisfaction: { submitted: satisfaction.submitted === true, submittedAt: satisfaction.submittedAt || null },
   };
 }
 
@@ -394,6 +449,12 @@ function jsonError(res, error) {
     CATALOG_IMPORT_IDEMPOTENCY_REQUIRED: 400,
     CATALOG_IMPORT_PREVIEW_REQUIRED: 400,
     CATALOG_IMPORT_PREVIEW_STALE: 409,
+    SATISFACTION_RATING_INVALID: 400,
+    SATISFACTION_RECOMMENDATION_REQUIRED: 400,
+    SATISFACTION_IDEMPOTENCY_REQUIRED: 400,
+    SATISFACTION_IDEMPOTENCY_CONFLICT: 409,
+    SATISFACTION_NOT_AVAILABLE: 409,
+    SATISFACTION_ALREADY_SUBMITTED: 409,
   };
   const status = statusByCode[error?.code] || 500;
   const publicMessages = {
@@ -582,13 +643,14 @@ export function createCommercePublicRouter() {
     try {
       const storefront = await resolvePublicStorefront(req);
       const result = await db.query(
-        `SELECT o.id, o.public_code, o.status, o.moeda, o.subtotal, o.desconto, o.frete, o.impostos, o.total,
+        `SELECT o.public_code, o.status, o.moeda, o.subtotal, o.desconto, o.frete, o.impostos, o.total,
                 (SELECT p.status FROM commerce_payments p WHERE p.empresa_id = o.empresa_id AND p.order_id = o.id ORDER BY p.criado_em DESC LIMIT 1) AS payment_status,
-                CASE WHEN o.endereco_entrega IS NULL THEN NULL ELSE jsonb_build_object('cidade', o.endereco_entrega->>'cidade', 'estado', o.endereco_entrega->>'estado', 'cep', CASE WHEN length(o.endereco_entrega->>'cep') = 8 THEN left(o.endereco_entrega->>'cep', 5) || '***' ELSE NULL END) END AS endereco_entrega, o.shipping_method_id, o.shipping_quote_id, o.criado_em, o.atualizado_em,
+                COALESCE((SELECT jsonb_build_object('submitted', true, 'submittedAt', s.criado_em) FROM commerce_order_satisfaction s WHERE s.empresa_id = o.empresa_id AND s.order_id = o.id AND s.retencao_ate > CURRENT_TIMESTAMP LIMIT 1), jsonb_build_object('submitted', false)) AS satisfaction,
+                CASE WHEN o.endereco_entrega IS NULL THEN NULL ELSE jsonb_build_object('cidade', o.endereco_entrega->>'cidade', 'estado', o.endereco_entrega->>'estado', 'cep', CASE WHEN length(o.endereco_entrega->>'cep') = 8 THEN left(o.endereco_entrega->>'cep', 5) || '***' ELSE NULL END) END AS endereco_entrega, o.criado_em, o.atualizado_em,
                 (SELECT (SELECT option->'public' FROM jsonb_array_elements(COALESCE(q.response_snapshot->'providerOptions', '[]'::jsonb)) AS option WHERE option->'public'->>'id' = q.selected_option_id LIMIT 1)
                    FROM commerce_shipping_quotes q WHERE q.empresa_id = o.empresa_id AND q.id = o.shipping_quote_id LIMIT 1) AS shipping_option,
                 COALESCE(jsonb_agg(jsonb_build_object('nome', i.nome_snapshot, 'sku', i.sku_snapshot, 'quantidade', i.quantidade, 'preco', i.preco_unitario, 'subtotal', i.subtotal)) FILTER (WHERE i.id IS NOT NULL), '[]'::jsonb) AS items,
-                COALESCE((SELECT jsonb_agg(jsonb_build_object('id', f.id, 'status', f.status, 'trackingCode', f.tracking_code, 'trackingUrl', f.tracking_url, 'carrier', f.carrier, 'ocorrencias', f.ocorrencias) ORDER BY f.criado_em DESC)
+                COALESCE((SELECT jsonb_agg(jsonb_build_object('status', f.status, 'trackingCode', f.tracking_code, 'trackingUrl', f.tracking_url, 'carrier', f.carrier, 'ocorrencias', f.ocorrencias) ORDER BY f.criado_em DESC)
                             FROM commerce_fulfillments f WHERE f.empresa_id = o.empresa_id AND f.order_id = o.id), '[]'::jsonb) AS fulfillments,
                 COALESCE((SELECT jsonb_agg(jsonb_build_object('fromStatus', e.de_status, 'toStatus', e.para_status, 'source', e.origem, 'at', e.criado_em) ORDER BY e.criado_em ASC)
                             FROM commerce_order_events e WHERE e.empresa_id = o.empresa_id AND e.order_id = o.id), '[]'::jsonb) AS timeline
@@ -601,6 +663,19 @@ export function createCommercePublicRouter() {
       );
       if (!result.rows[0]) return res.status(404).json({ error: 'pedido não encontrado', code: 'ORDER_NOT_FOUND' });
       res.json(sanitizePublicOrderTracking(result.rows[0]));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/orders/:publicCode/satisfaction', publicSatisfactionRateLimit, publicSatisfactionOrderRateLimit, async (req, res) => {
+    try {
+      const storefront = await resolvePublicStorefront(req);
+      const context = { empresaId: storefront.empresa_id, lojaId: storefront.loja_id, storefrontId: storefront.id };
+      const result = await withCommerceTransaction(trx => submitOrderSatisfaction(
+        trx,
+        context,
+        req.params.publicCode,
+        { ...req.body, idempotencyKey: req.headers['x-idempotency-key'] || req.body?.idempotencyKey },
+      ));
+      res.status(result.idempotentReplay ? 200 : 201).json(result);
     } catch (error) { jsonError(res, error); }
   });
   return router;
