@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { createCommerceAdminRouter, createCommercePublicRouter, parsePagination, publicCommercePolicy } from './commerce-routes.js';
+import { createCommerceAdminRouter, createCommercePublicRouter, parsePagination, publicCommercePolicy, sanitizePublicOrderInput } from './commerce-routes.js';
 import { fulfillmentReport } from './commerce-reports.js';
 import { db } from './database.js';
 
@@ -56,6 +57,13 @@ function publicOrderHandler() {
   const router = createCommercePublicRouter();
   const layer = router.stack.find(item => item.route?.path === '/orders/:publicCode');
   assert.ok(layer?.route?.stack?.[0]?.handle, 'rota pública de pedido não encontrada');
+  return layer.route.stack[0].handle;
+}
+
+function publicPaymentHandler() {
+  const router = createCommercePublicRouter();
+  const layer = router.stack.find(item => item.route?.path === '/orders/:publicCode/payments');
+  assert.ok(layer?.route?.stack?.[0]?.handle, 'rota pública de pagamento não encontrada');
   return layer.route.stack[0].handle;
 }
 
@@ -160,6 +168,37 @@ test('rota pública de carrinho possui rate limit antes do handler de sync', () 
   const route = publicCartLayer();
   assert.equal(route.methods.post, true);
   assert.equal(route.stack.length, 2);
+});
+
+test('checkout público ignora customerId do navegador e não libera crediário sem verificação', () => {
+  const source = readFileSync(new URL('./commerce-routes.js', import.meta.url), 'utf8');
+  const sanitized = sanitizePublicOrderInput({ customerId: 'top-level', customer: { customerId: 'nested', nome: 'Comprador' }, note: 'preservar' });
+  assert.deepEqual(sanitized, { customer: { nome: 'Comprador' }, note: 'preservar' });
+  assert.match(source, /delete sanitized\.customerId/);
+  assert.match(source, /delete sanitized\.customer\.customerId/);
+  assert.doesNotMatch(source, /req\.query\.customerId/);
+  assert.doesNotMatch(source, /req\.query\.customerEmail/);
+  assert.match(source, /PAYMENT_CUSTOMER_VERIFICATION_REQUIRED/);
+});
+
+test('endpoint público recusa crediário antes de criar qualquer lançamento financeiro', async () => {
+  const original = db.query;
+  let count = 0;
+  db.query = async () => {
+    count += 1;
+    if (count === 1) return { rows: [{ id: '33333333-3333-4333-8333-333333333333', empresa_id: empresaId, loja_id: lojaId }] };
+    if (count === 2) return { rows: [{ id: '77777777-7777-4777-8777-777777777777' }] };
+    throw new Error('o bloqueio deve ocorrer antes de qualquer operação financeira');
+  };
+  const response = { statusCode: 200, body: null, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
+  try {
+    await publicPaymentHandler()({ hostname: 'loja.kytto.com.br', headers: {}, params: { publicCode: 'KC-TEST' }, body: { provider: 'crediario', method: 'account', idempotencyKey: 'safe-test' } }, response);
+  } finally {
+    db.query = original;
+  }
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.body.code, 'PAYMENT_CUSTOMER_VERIFICATION_REQUIRED');
+  assert.equal(count, 2);
 });
 
 test('pesquisa pública aplica dois rate limits compartilhados antes do handler idempotente', () => {

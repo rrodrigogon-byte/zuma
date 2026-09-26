@@ -36,6 +36,9 @@ test('os dois fluxos legados restantes usam trava single-flight imperativa', () 
 test('checkout dedicado mantém idempotência entre reloads e preserva os campos completos', () => {
   assert.match(checkoutSource, /storefrontCheckoutIdempotencyKey\(storeAlias\)/);
   assert.match(checkoutSource, /clearStorefrontCheckoutIdempotencyKey\(storeAlias\)/);
+  assert.doesNotMatch(checkoutSource, /customerIdHint/);
+  assert.doesNotMatch(checkoutSource, /payment-methods\?customerId=/);
+  assert.doesNotMatch(checkoutSource, /payment-methods\?orderCode=/);
   assert.match(checkoutSource, /note: note\.trim\(\)/);
   assert.match(checkoutSource, /promotionCode: promotionCode\.trim\(\)/);
   assert.match(checkoutSource, /CPF ou CNPJ do destinatário/);

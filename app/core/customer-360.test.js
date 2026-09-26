@@ -3,7 +3,7 @@ import test from 'node:test';
 import { db } from './database.js';
 import {
   buildIdentityGraph, customerSegment,
-  auditCustomerAccess, buildCustomer360, buildRef, loadCommerceFacets, maskDocument, maskEmail, maskPhone,
+  auditCustomerAccess, buildCustomer360, buildRef, loadCommerceDirectory, loadCommerceFacets, maskDocument, maskEmail, maskPhone,
   mergeCustomerDirectory, normalizePhone, parseRef, resolveIdentity, revealField, safeInet, searchCustomerDirectory,
 } from './customer-360.js';
 
@@ -65,6 +65,35 @@ test('identidade resolve a mesma pessoa a partir da barbearia, da loja ou do tel
   const fromPhone = resolveIdentity('tel:65993360000', { localClients, commerceCustomers });
   assert.equal(fromPhone.local.length + fromPhone.commerce.length, 2);
   assert.equal(resolveIdentity('dino:inexistente', { localClients, commerceCustomers }), null);
+});
+
+test('Customer 360 mantém customers Commerce conflitantes separados e exige seleção explícita', () => {
+  const sharedPhone = '5565999990000';
+  const customers = [
+    { id: CUSTOMER, nome: 'Cliente A', telefone_normalizado: sharedPhone, email_normalizado: 'a@example.invalid' },
+    { id: '44444444-4444-4444-8444-444444444444', nome: 'Cliente B', telefone_normalizado: sharedPhone, email_normalizado: 'b@example.invalid' },
+  ];
+  const graph = buildIdentityGraph({ commerceCustomers: customers });
+  assert.equal(graph.persons.length, 2);
+  assert.equal(graph.persons.every(person => person.commerce.length === 1 && person.contactConflict === true), true);
+  const byPhone = resolveIdentity(`tel:${sharedPhone}`, { commerceCustomers: customers });
+  assert.equal(byPhone.contactConflict, true);
+  assert.equal(byPhone.commerce.length, 0);
+  assert.deepEqual(byPhone.matchedBy, ['conflito de contato']);
+  const explicit = resolveIdentity(`loja:${CUSTOMER}`, { commerceCustomers: customers });
+  assert.equal(explicit.commerce[0].id, CUSTOMER);
+  assert.equal(explicit.contactConflict, true);
+});
+
+test('diretório Commerce consulta e retorna os contatos canônicos', async () => {
+  const original = db.queryRead;
+  let captured = '';
+  db.queryRead = async (sql) => { captured = sql; return { rows: [] }; };
+  try {
+    await loadCommerceDirectory({ empresaId: EMPRESA }, { query: 'EMAIL@EXAMPLE.INVALID' });
+    assert.match(captured, /email_normalizado/);
+    assert.match(captured, /telefone_normalizado/);
+  } finally { db.queryRead = original; }
 });
 
 test('ficha 360 consolida indicadores, mascara por padrão e revela só na exportação', () => {

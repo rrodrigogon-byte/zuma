@@ -110,6 +110,17 @@ test('conversão do pedido é tenant/storefront-scoped e cancela apenas a tarefa
   assert.equal(event.params[4], 'converted');
 });
 
+test('conversão rejeita carrinho e pedido associados a customers diferentes', async () => {
+  const trx = { async query(sql) {
+    if (sql.includes('SELECT * FROM commerce_carts')) return { rows: [{ id: CART, customer_id: CUSTOMER }] };
+    throw new Error(`consulta inesperada: ${sql}`);
+  } };
+  await assert.rejects(
+    () => markCartConverted(trx, CONTEXT, { cartSessionKey: SESSION, storefrontId: CONTEXT.storefrontId, orderId: ORDER, customerId: '88888888-8888-4888-8888-888888888888' }),
+    error => error.code === 'CONTACT_CONFLICT',
+  );
+});
+
 test('opt-out ignora texto ambíguo sem consultar banco', async () => {
   const original = db.transaction;
   let called = false;

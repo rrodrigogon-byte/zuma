@@ -70,8 +70,8 @@ export function parseRef(input) {
 
 export function identityOf(record = {}) {
   return {
-    phones: [record.telefone, record.celular, record.whatsapp].map(normalizePhone).filter(Boolean),
-    emails: [record.email].map(normalizeEmail).filter(Boolean),
+    phones: [...new Set([record.telefone_normalizado, record.telefone, record.celular, record.whatsapp].map(normalizePhone).filter(Boolean))],
+    emails: [...new Set([record.email_normalizado, record.email].map(normalizeEmail).filter(Boolean))],
   };
 }
 
@@ -113,7 +113,14 @@ export function buildIdentityGraph({ localClients = [], commerceCustomers = [], 
     for (const phone of node.identity.phones) byKey.set(`p:${phone}`, [...(byKey.get(`p:${phone}`) || []), position]);
     for (const email of node.identity.emails) byKey.set(`e:${email}`, [...(byKey.get(`e:${email}`) || []), position]);
   });
+  const contactConflictKeys = new Set();
   for (const [key, positions] of byKey) {
+    const commercePositions = positions.filter((position) => nodes[position].kind === 'commerce');
+    if (new Set(commercePositions.map((position) => nodes[position].record?.id)).size > 1) {
+      contactConflictKeys.add(key);
+      for (const position of positions) reasons.set(nodes[position].ref, new Set([...(reasons.get(nodes[position].ref) || []), 'conflito de contato']));
+      continue;
+    }
     for (let i = 1; i < positions.length; i += 1) {
       for (let j = 0; j < i; j += 1) {
         const a = nodes[positions[i]]; const b = nodes[positions[j]];
@@ -143,11 +150,16 @@ export function buildIdentityGraph({ localClients = [], commerceCustomers = [], 
     const names = [...new Set(members.map((node) => normalizeSearch(node.record?.nome)).filter(Boolean))];
     const matchedBy = [...new Set(members.flatMap((node) => [...(reasons.get(node.ref) || [])]))];
     const primary = members.find((node) => node.kind === 'local') || members[0];
+    const contactConflict = members.some((node) => [
+      ...node.identity.phones.map((phone) => `p:${phone}`),
+      ...node.identity.emails.map((email) => `e:${email}`),
+    ].some((key) => contactConflictKeys.has(key)));
     return {
       ref: primary.ref,
       refs: members.map((node) => node.ref),
       local, commerce, phones, emails, names, matchedBy,
-      ambiguous: local.length > 1 || commerce.length > 1 || names.length > 1,
+      contactConflict,
+      ambiguous: contactConflict || local.length > 1 || commerce.length > 1 || names.length > 1,
     };
   });
   const byRef = new Map();
@@ -170,6 +182,7 @@ export function mergeCustomerDirectory({ localClients = [], commerceCustomers = 
       fontes: [...(person.local.length ? ['barbearia'] : []), ...(person.commerce.length ? ['loja'] : [])],
       duplicados: Math.max(0, person.local.length - 1) + Math.max(0, person.commerce.length - 1),
       possivelDuplicidade: person.ambiguous,
+      conflitoContato: person.contactConflict,
       anonimizado: [...person.local, ...person.commerce].every((record) => record?.anonimizadoEm || record?.metadados?.anonimizadoEm),
       _person: person,
       _search: normalizeSearch([...person.local.map((i) => i.nome), ...person.commerce.map((i) => i.nome), ...person.phones, ...person.emails].join(' ')),
@@ -225,7 +238,10 @@ export function resolveIdentity(ref, { localClients = [], commerceCustomers = []
   let person = null;
   if (parsed.kind === 'tel') {
     const phone = normalizePhone(parsed.id);
-    person = graph.persons.find((item) => item.phones.includes(phone)) || { ref: buildRef('tel', phone), refs: [], local: [], commerce: [], phones: [phone], emails: [], names: [], matchedBy: [], ambiguous: false };
+    const matches = graph.persons.filter((item) => item.phones.includes(phone));
+    person = matches.length > 1
+      ? { ref: buildRef('tel', phone), refs: [], local: [], commerce: [], phones: [phone], emails: [], names: [], matchedBy: ['conflito de contato'], contactConflict: true, ambiguous: true }
+      : matches[0] || { ref: buildRef('tel', phone), refs: [], local: [], commerce: [], phones: [phone], emails: [], names: [], matchedBy: [], contactConflict: false, ambiguous: false };
   } else {
     person = graph.byRef.get(buildRef(parsed.kind, parsed.id)) || null;
   }
@@ -240,7 +256,8 @@ export function resolveIdentity(ref, { localClients = [], commerceCustomers = []
     refs: person.refs,
     seed: seed || null, local, commerce,
     phones: person.phones, emails: person.emails,
-    matchedBy: person.refs.length > 1 ? person.matchedBy : [],
+    matchedBy: person.contactConflict || person.refs.length > 1 ? person.matchedBy : [],
+    contactConflict: person.contactConflict === true,
     ambiguous: person.ambiguous,
   };
 }
@@ -434,11 +451,11 @@ export async function loadCommerceDirectory(context, { query = '', limit = 200 }
     values.push(`%${q.toLowerCase()}%`);
     const digits = onlyDigits(q);
     values.push(digits.length >= 4 ? `%${digits}%` : '__no_digits__');
-    filter = ` AND (lower(nome) LIKE $2 OR lower(COALESCE(email,'')) LIKE $2 OR regexp_replace(COALESCE(telefone,''), '\\D', '', 'g') LIKE $3)`;
+    filter = ` AND (lower(nome) LIKE $2 OR COALESCE(email_normalizado,'') LIKE $2 OR COALESCE(telefone_normalizado,'') LIKE $3)`;
   }
   values.push(Math.max(1, Math.min(5000, Number(limit) || 200)));
   const result = await db.queryRead(
-    `SELECT id, nome, email, telefone, documento_mascarado, bloqueado, criado_em
+    `SELECT id, nome, email, telefone, email_normalizado, telefone_normalizado, documento_mascarado, bloqueado, criado_em
        FROM commerce_customers
       WHERE empresa_id = $1${filter}
       ORDER BY atualizado_em DESC

@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { CommerceError } from './commerce-error.js';
+import { normalizeBrazilianPhone, resolveCommerceCustomer } from './commerce-customer-identity.js';
 import { db } from './database.js';
 import { enviarMensagem } from './whatsapp.js';
 
@@ -16,11 +18,8 @@ function clean(value, limit = 500) { return String(value || '').trim().replace(/
 function uuid(value, field) { const normalized = clean(value, 60); if (!UUID.test(normalized)) fail(`${field} inválido`); return normalized; }
 function sessionKey(value) { const normalized = clean(value, 180); if (!SESSION.test(normalized)) fail('sessionKey inválida'); return normalized; }
 function sessionHash(value) { return createHash('sha256').update(sessionKey(value)).digest('hex'); }
-function email(value) { const normalized = clean(value, 320).toLowerCase(); return /^\S+@\S+\.\S+$/.test(normalized) ? normalized : ''; }
 export function normalizeCartPhone(value) {
-  const digits = String(value || '').replace(/\D/g, '');
-  const normalized = digits.startsWith('55') ? digits : (digits.length === 10 || digits.length === 11 ? `55${digits}` : digits);
-  return normalized.length >= 12 && normalized.length <= 13 ? normalized : '';
+  try { return normalizeBrazilianPhone(value) || ''; } catch { return ''; }
 }
 function publicOrigin() { return clean(process.env.PUBLIC_APP_URL || process.env.APP_PUBLIC_URL || process.env.SERVER_URL || DEFAULT_ORIGIN, 1000).replace(/\/$/, ''); }
 function delayMinutes(value) { const parsed = Number.parseInt(value || DEFAULT_DELAY_MINUTES, 10); return Math.min(1440, Math.max(15, Number.isFinite(parsed) ? parsed : DEFAULT_DELAY_MINUTES)); }
@@ -72,39 +71,6 @@ async function resolveVariants(trx, empresaId, storefrontId, items) {
   if (result.rows.length !== ids.length) fail('um ou mais itens não estão disponíveis', 'ITEM_UNAVAILABLE');
   return result.rows;
 }
-async function resolveCustomer(trx, empresaId, contact = {}) {
-  const phone = normalizeCartPhone(contact.phone || contact.telefone);
-  const mail = email(contact.email);
-  const name = clean(contact.name || contact.nome, 240);
-  if (!phone || !name) fail('nome e WhatsApp válidos são obrigatórios para o lembrete');
-  const existing = await trx.query(
-    `SELECT * FROM commerce_customers
-      WHERE empresa_id=$1 AND bloqueado=false
-        AND (($2<>'' AND regexp_replace(COALESCE(telefone,''),'\\D','','g') IN ($2, substring($2 from 3))) OR ($3<>'' AND lower(email)=$3))
-      ORDER BY CASE WHEN regexp_replace(COALESCE(telefone,''),'\\D','','g') IN ($2, substring($2 from 3)) THEN 0 ELSE 1 END, atualizado_em DESC LIMIT 1 FOR UPDATE`,
-    [empresaId, phone, mail],
-  );
-  if (existing.rows[0]) {
-    const storedPhone = normalizeCartPhone(existing.rows[0].telefone);
-    if (storedPhone && storedPhone !== phone) fail('e-mail já associado a outro telefone; revise os dados antes de autorizar o lembrete', 'CONTACT_CONFLICT');
-    if (mail) {
-      const emailConflict = await trx.query(`SELECT id FROM commerce_customers WHERE empresa_id=$1 AND lower(email)=$2 AND id<>$3 LIMIT 1`, [empresaId, mail, existing.rows[0].id]);
-      if (emailConflict.rows[0]) fail('e-mail já associado a outro cliente; revise os dados antes de autorizar o lembrete', 'CONTACT_CONFLICT');
-    }
-    const updated = await trx.query(
-      `UPDATE commerce_customers SET nome=$3, telefone=$4, email=COALESCE(NULLIF($5,''),email), atualizado_em=CURRENT_TIMESTAMP
-        WHERE empresa_id=$1 AND id=$2 RETURNING *`,
-      [empresaId, existing.rows[0].id, name, phone, mail],
-    );
-    return updated.rows[0];
-  }
-  const inserted = await trx.query(
-    `INSERT INTO commerce_customers (empresa_id,nome,email,telefone,consentimentos,metadados)
-     VALUES ($1,$2,NULLIF($3,''),$4,'{}'::jsonb,$5::jsonb) RETURNING *`,
-    [empresaId, name, mail, phone, JSON.stringify({ source: 'cart_recovery' })],
-  );
-  return inserted.rows[0];
-}
 async function event(trx, { empresaId, lojaId, cartId, customerId, type, metadata = {} }) {
   await trx.query(
     `INSERT INTO commerce_cart_recovery_events (empresa_id,loja_id,cart_id,customer_id,tipo,metadados)
@@ -131,6 +97,9 @@ export async function syncPublicCart(context = {}, input = {}) {
     requestedConsent = { source, evidence, contact };
   }
   return db.transaction(async trx => {
+    const customerResolution = requestedConsent && items.length
+      ? await resolveCommerceCustomer(trx, { empresaId, lojaId, identitySource: 'cart_recovery' }, requestedConsent.contact)
+      : null;
     await trx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`commerce-cart-sync:${empresaId}:${storefrontId}:${hash}`]);
     const existing = await trx.query(
       `SELECT * FROM commerce_carts WHERE empresa_id=$1 AND storefront_id=$2 AND session_key_hash=$3 AND status IN ('open','abandoned','expired') ORDER BY client_sync_version DESC, atualizado_em DESC LIMIT 1 FOR UPDATE`,
@@ -186,8 +155,11 @@ export async function syncPublicCart(context = {}, input = {}) {
       return { status: 'revoked', itemCount: items.length };
     }
     if (input.recoveryConsent !== true) return { status: cart.recovery_status || 'not_requested', itemCount: items.length };
-    const { source, evidence, contact } = requestedConsent;
-    const customer = await resolveCustomer(trx, empresaId, contact);
+    const { source, evidence } = requestedConsent;
+    const customer = customerResolution.customer;
+    if (cart.customer_id && cart.customer_id !== customer.id) {
+      throw new CommerceError('o carrinho já está associado a outro cliente', 'CONTACT_CONFLICT', { reason: 'cart_customer_mismatch' });
+    }
     const dueMinutes = delayMinutes(input.delayMinutes);
     const updated = await trx.query(
       `UPDATE commerce_carts SET customer_id=$3,recovery_consent_at=CURRENT_TIMESTAMP,recovery_revoked_at=NULL,
@@ -226,13 +198,18 @@ export async function markCartConverted(trx, context = {}, input = {}) {
   const empresaId = uuid(context.empresaId, 'empresaId');
   const storefrontId = uuid(input.storefrontId, 'storefrontId');
   const orderId = uuid(input.orderId, 'orderId');
+  const customerId = input.customerId ? uuid(input.customerId, 'customerId') : null;
   const hash = sessionHash(input.cartSessionKey);
   const found = await trx.query(`SELECT * FROM commerce_carts WHERE empresa_id=$1 AND storefront_id=$2 AND session_key_hash=$3 AND status IN ('open','abandoned') LIMIT 1 FOR UPDATE`, [empresaId, storefrontId, hash]);
   const cart = found.rows[0];
   if (!cart) return null;
-  await trx.query(`UPDATE commerce_carts SET status='converted',recovery_status='converted',converted_order_id=$3,recovery_due_at=NULL,atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$1 AND id=$2`, [empresaId, cart.id, orderId]);
+  if (cart.customer_id && customerId && cart.customer_id !== customerId) {
+    throw new CommerceError('carrinho e pedido pertencem a clientes diferentes', 'CONTACT_CONFLICT', { reason: 'cart_order_customer_mismatch' });
+  }
+  const effectiveCustomerId = cart.customer_id || customerId;
+  await trx.query(`UPDATE commerce_carts SET customer_id=COALESCE(customer_id,$4),status='converted',recovery_status='converted',converted_order_id=$3,recovery_due_at=NULL,atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$1 AND id=$2`, [empresaId, cart.id, orderId, customerId]);
   await trx.query(`UPDATE tarefas_integracao_canais SET status='cancelada',proxima_tentativa_em=NULL,data_atualizacao=CURRENT_TIMESTAMP WHERE empresa_id=$1 AND tipo='recuperar_carrinho' AND referencia_externa=$2 AND status IN ('pendente','falha')`, [empresaId, cart.id]);
-  await event(trx, { empresaId, lojaId: context.lojaId, cartId: cart.id, customerId: cart.customer_id, type: 'converted', metadata: { orderId } });
+  await event(trx, { empresaId, lojaId: context.lojaId, cartId: cart.id, customerId: effectiveCustomerId, type: 'converted', metadata: { orderId } });
   return cart.id;
 }
 

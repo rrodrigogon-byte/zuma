@@ -158,7 +158,6 @@ function EcommerceStorefront({ routeAlias, hostName }) {
   const cartStorageKey = storefrontStorageKey(storeAlias, 'cart')
   const [cartSessionKey, setCartSessionKey] = useState(() => storefrontCartSessionKey(storeAlias))
   const deliveryStorageKey = storefrontStorageKey(storeAlias, 'delivery')
-  const customerStorageKey = storefrontStorageKey(storeAlias, 'customer')
   const [storeContext, setStoreContext] = useState(null)
   const [themeMode, setThemeMode] = useState(() => storedThemeMode())
   const [products, setProducts] = useState([])
@@ -512,7 +511,6 @@ function EcommerceStorefront({ routeAlias, hostName }) {
       setCheckoutOpen(false)
       if (catalogSource === 'core' && code) {
         localStorage.removeItem(cartStorageKey)
-        if (result.customerId) localStorage.setItem(customerStorageKey, result.customerId)
         localStorage.removeItem(storefrontStorageKey(storeAlias, 'cart_session'))
         setCartSessionKey(storefrontCartSessionKey(storeAlias))
         navigate(`${checkoutRoute}?order=${encodeURIComponent(code)}`)

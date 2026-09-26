@@ -94,7 +94,6 @@ export default function CommerceCheckout() {
   const checkoutRoute = storefrontRoute(storeAlias, 'checkout')
   const orderRoute = storefrontRoute(storeAlias, 'order')
   const cartStorageKey = storefrontStorageKey(storeAlias, 'cart')
-  const customerStorageKey = storefrontStorageKey(storeAlias, 'customer')
   const [cartSessionKey] = useState(() => storefrontCartSessionKey(storeAlias))
   const [orderIdempotencyKey, setOrderIdempotencyKey] = useState(() => storefrontCheckoutIdempotencyKey(storeAlias))
   const [searchParams] = useSearchParams()
@@ -152,15 +151,12 @@ export default function CommerceCheckout() {
     let active = true
     const load = async () => {
       setLoading(true)
-      let savedCustomerId = ''
-      try { savedCustomerId = localStorage.getItem(customerStorageKey) || '' } catch { /* armazenamento opcional */ }
       try {
-        const paymentPath = savedCustomerId ? `${storefrontApi}/payment-methods?customerId=${encodeURIComponent(savedCustomerId)}` : `${storefrontApi}/payment-methods`
         const [context, catalog, shipping, payments] = await Promise.all([
           api.get(`${storefrontApi}/context`),
           api.get(`${storefrontApi}/products`),
           api.get(`${storefrontApi}/shipping-methods`),
-          api.get(paymentPath),
+          api.get(`${storefrontApi}/payment-methods`),
         ])
         if (!active) return
         setStoreContext(context?.storefront || null)
@@ -179,15 +175,6 @@ export default function CommerceCheckout() {
           if (!active) return
           setOrder(existing)
           setForm(current => ({ ...current, nome: existing.customer_name || existing.customer?.nome || '', email: existing.customer_email || existing.customer?.email || '' }))
-          const existingCustomerId = existing.customer_id || existing.customerId || existing.customer?.id || savedCustomerId
-          if (existingCustomerId) {
-            const customerPayments = await api.get(`${storefrontApi}/payment-methods?customerId=${encodeURIComponent(existingCustomerId)}`).catch(() => null)
-            if (customerPayments?.items) {
-              setPaymentMethods(customerPayments.items)
-              const customerPaymentChoices = checkoutPaymentChoices(customerPayments.items)
-              setSelectedPayment(customerPaymentChoices[0] ? `${customerPaymentChoices[0].provider}:${customerPaymentChoices[0].method}` : '')
-            }
-          }
         }
       } catch (err) {
         if (active) setError(err.message || 'Não foi possível carregar o checkout.')
@@ -393,16 +380,9 @@ export default function CommerceCheckout() {
       const code = created.codigo || created.publicCode || created.public_code
       localStorage.removeItem(cartStorageKey)
       clearStorefrontCheckoutIdempotencyKey(storeAlias)
-      if (created.customerId) localStorage.setItem(customerStorageKey, created.customerId)
       localStorage.removeItem(storefrontStorageKey(storeAlias, 'cart_session'))
       setCart([])
       setOrder(created)
-      const customerPayments = await api.get(`${storefrontApi}/payment-methods?customerId=${encodeURIComponent(created.customerId || '')}`).catch(() => null)
-      if (customerPayments?.items) {
-        setPaymentMethods(customerPayments.items)
-        const customerPaymentChoices = checkoutPaymentChoices(customerPayments.items)
-        setSelectedPayment(customerPaymentChoices[0] ? `${customerPaymentChoices[0].provider}:${customerPaymentChoices[0].method}` : '')
-      }
       navigate(`${checkoutRoute}?order=${encodeURIComponent(code)}`, { replace: true })
     } catch (err) {
       if (['SHIPPING_QUOTE_EXPIRED', 'SHIPPING_QUOTE_MISMATCH', 'SHIPPING_OPTION_INVALID'].includes(err.code)) {

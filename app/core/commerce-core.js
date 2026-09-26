@@ -1,5 +1,7 @@
 import crypto from 'crypto';
 import { db } from './database.js';
+import { CommerceError } from './commerce-error.js';
+import { normalizeCustomerInput, resolveCommerceCustomer, resolveCommerceCustomerAddress } from './commerce-customer-identity.js';
 import { normalizeOwnDeliveryConfig, resolveShippingSelection } from './commerce-shipping.js';
 import { markCartConverted } from './commerce-abandoned-carts.js';
 import { creditPaidOrderLoyaltyPoints } from './loyalty-advanced.js';
@@ -25,14 +27,7 @@ export const ORDER_TRANSITIONS = {
   returned: [],
 };
 
-export class CommerceError extends Error {
-  constructor(message, code = 'COMMERCE_ERROR', details = {}) {
-    super(message);
-    this.name = 'CommerceError';
-    this.code = code;
-    this.details = details;
-  }
-}
+export { CommerceError } from './commerce-error.js';
 
 export function assertUuid(value, field = 'id') {
   if (!UUID.test(String(value || ''))) throw new CommerceError(`${field} inválido`, 'INVALID_ID', { field });
@@ -368,6 +363,7 @@ export async function transitionOrder(trx, context, input) {
 export async function createPendingOrder(trx, context, input = {}) {
   const { empresaId } = tenantContext(context);
   const storefront = await resolveStorefront(trx, { ...context, empresaId }, input.storefrontId);
+  const normalizedCustomer = normalizeCustomerInput({ ...(input.customer || {}), customerId: input.customerId || input.customer?.customerId });
   const shippingMethodId = input.shippingMethodId ? assertUuid(input.shippingMethodId, 'shippingMethodId') : null;
   let shippingMethod = null;
   if (shippingMethodId) {
@@ -399,8 +395,13 @@ export async function createPendingOrder(trx, context, input = {}) {
   const requestHash = crypto.createHash('sha256').update(JSON.stringify({
     storefrontId: storefront.id,
     lines,
-    customerId: input.customerId || null,
-    customer: input.customer || null,
+    customerId: normalizedCustomer.customerId,
+    customer: {
+      nome: normalizedCustomer.nome,
+      email: normalizedCustomer.email,
+      telefone: normalizedCustomer.telefone,
+      consentimentos: normalizedCustomer.consentimentos,
+    },
     shippingAddress: shippingSelection?.address || input.shippingAddress || null,
     billingAddress: input.billingAddress || null,
     shippingMethodId,
@@ -423,7 +424,7 @@ export async function createPendingOrder(trx, context, input = {}) {
     if (existing.rows[0]) {
       if (existing.rows[0].request_hash !== requestHash) throw new CommerceError('chave de idempotência reutilizada com payload diferente', 'IDEMPOTENCY_CONFLICT');
       if (existing.rows[0].response_body) {
-        await markCartConverted(trx, { ...context, empresaId, lojaId: storefront.loja_id }, { cartSessionKey: input.cartSessionKey, storefrontId: storefront.id, orderId: existing.rows[0].response_body.id });
+        await markCartConverted(trx, { ...context, empresaId, lojaId: storefront.loja_id }, { cartSessionKey: input.cartSessionKey, storefrontId: storefront.id, orderId: existing.rows[0].response_body.id, customerId: existing.rows[0].response_body.customerId });
         return existing.rows[0].response_body;
       }
     } else {
@@ -463,32 +464,16 @@ export async function createPendingOrder(trx, context, input = {}) {
   for (const row of variants.rows) if (!priced.has(row.id)) priced.set(row.id, row);
   if (priced.size !== uniqueVariantIds.length) throw new CommerceError('um ou mais itens não estão disponíveis no catálogo', 'ITEM_UNAVAILABLE');
 
-  let customerId = input.customerId ? assertUuid(input.customerId, 'customerId') : null;
-  const customer = input.customer || {};
-  const customerName = String(customer.nome || '').trim();
-  const customerEmail = String(customer.email || '').trim().toLowerCase() || null;
-  if (!customerId && !customerName) throw new CommerceError('nome do cliente é obrigatório', 'CUSTOMER_REQUIRED');
-  if (!customerId && customerEmail) {
-    const existing = await trx.query(
-      `SELECT id FROM commerce_customers WHERE empresa_id = $1 AND lower(email) = lower($2) LIMIT 1`,
-      [empresaId, customerEmail],
-    );
-    customerId = existing.rows[0]?.id || null;
-  }
-  if (!customerId) {
-    const created = await trx.query(
-      `INSERT INTO commerce_customers (empresa_id, nome, email, telefone, consentimentos)
-       VALUES ($1, $2, $3, $4, $5::jsonb) RETURNING id`,
-      [empresaId, customerName, customerEmail, String(customer.telefone || '').trim() || null, JSON.stringify(customer.consentimentos || {})],
-    );
-    customerId = created.rows[0].id;
-  } else {
-    const verifiedCustomer = await trx.query(
-      `SELECT id FROM commerce_customers WHERE empresa_id = $1 AND id = $2 AND bloqueado = false LIMIT 1`,
-      [empresaId, customerId],
-    );
-    if (!verifiedCustomer.rows[0]) throw new CommerceError('cliente fora do escopo ou bloqueado', 'CUSTOMER_NOT_FOUND');
-  }
+  const identityContext = { ...context, empresaId, identitySource: 'checkout', correlationId: input.correlationId };
+  const customerResolution = await resolveCommerceCustomer(trx, identityContext, normalizedCustomer);
+  const customerId = customerResolution.customer.id;
+  const customerAddressResolution = await resolveCommerceCustomerAddress(
+    trx,
+    identityContext,
+    customerId,
+    shippingSelection?.address || input.shippingAddress,
+    customerResolution.customer.nome,
+  );
 
   const orderId = crypto.randomUUID();
   const publicCode = `KC-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
@@ -569,8 +554,8 @@ export async function createPendingOrder(trx, context, input = {}) {
      VALUES ($1, $2, NULL, $3, 'checkout', $4, $5, $6::jsonb)`,
     [empresaId, orderId, status, context.usuarioId || null, requestId(input.correlationId), JSON.stringify({ lineCount: normalizedLines.length, shipping: shippingSelection ? { quoteId: shippingSelection.quote.id, optionId: shippingSelection.optionId, amount: shippingSelection.amount } : null })],
   );
-  const result = { id: orderId, publicCode, status, currency: storefront.moeda || 'BRL', subtotal, discount, shipping, taxes, total, customerId, shippingMethodId, shippingQuoteId: shippingSelection?.quote.id || null, shippingOptionId: shippingSelection?.optionId || null, shippingOption: shippingSelection?.option || null };
-  await markCartConverted(trx, { ...context, empresaId, lojaId: storefront.loja_id }, { cartSessionKey: input.cartSessionKey, storefrontId: storefront.id, orderId });
+  const result = { id: orderId, publicCode, status, currency: storefront.moeda || 'BRL', subtotal, discount, shipping, taxes, total, customerId, customerAddressId: customerAddressResolution?.address?.id || null, shippingMethodId, shippingQuoteId: shippingSelection?.quote.id || null, shippingOptionId: shippingSelection?.optionId || null, shippingOption: shippingSelection?.option || null };
+  await markCartConverted(trx, { ...context, empresaId, lojaId: storefront.loja_id }, { cartSessionKey: input.cartSessionKey, storefrontId: storefront.id, orderId, customerId });
   if (idem) {
     await trx.query(
       `UPDATE commerce_idempotency_keys SET response_status = 201, response_body = $3::jsonb

@@ -42,6 +42,7 @@ const migrationFiles = [
   '048_whatsapp_ai_consent_profile_guardrails.sql',
   '049_commerce_cart_sync_ordering.sql',
   '050_commerce_order_satisfaction.sql',
+  '051_commerce_customer_identity.sql',
 ];
 const advisoryLockKey = 825410732;
 

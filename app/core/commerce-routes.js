@@ -11,7 +11,7 @@ import { resolveStorefrontAlias } from './commerce-tenants.js';
 import { executeCatalogImport, previewCatalogImport } from './commerce-catalog-import.js';
 import { createMembership, listMemberships, listRoles, updateMembership } from './commerce-admin-users.js';
 import { createCustomer, createCustomerAddress, deleteCustomerAddress, getCustomer, listCustomerAddresses, updateCustomer, updateCustomerAddress } from './commerce-customers.js';
-import { createCreditAccount, createCreditPayment, listCreditAccounts, listCreditEntries, updateCreditAccount } from './commerce-credit.js';
+import { createCreditAccount, listCreditAccounts, listCreditEntries, updateCreditAccount } from './commerce-credit.js';
 import { createStorefrontDomain, listStorefrontDomains, setPrimaryStorefrontDomain, verifyStorefrontDomain } from './commerce-domains.js';
 import { createShippingAccount, failShippingLabel, finalizeShippingCancellation, finalizeShippingLabel, listShippingAccounts, listShippingProviders, lookupPostalCode, prepareShippingCancellation, prepareShippingLabel, publicShippingMethod, quoteAvailableShipping, quoteShipping, shippingAccountReady, updateShippingAccount, updateShippingTracking } from './commerce-shipping.js';
 import { shippingProviders } from './shipping-adapters.js';
@@ -294,7 +294,14 @@ function jsonError(res, error) {
     VALIDATION_ERROR: 400,
     CONSENT_EVIDENCE_REQUIRED: 400,
     CONTACT_CONFLICT: 409,
+    CUSTOMER_EMAIL_CONFLICT: 409,
+    CUSTOMER_PHONE_CONFLICT: 409,
     CUSTOMER_REQUIRED: 400,
+    ADDRESS_REQUIRED: 400,
+    ADDRESS_CEP_INVALID: 400,
+    ADDRESS_STATE_INVALID: 400,
+    ADDRESS_CONFLICT: 409,
+    ADDRESS_NOT_FOUND: 404,
     STOREFRONT_DOMAIN_REQUIRED: 400,
     STOREFRONT_NOT_FOUND: 404,
     ITEM_UNAVAILABLE: 409,
@@ -343,6 +350,7 @@ function jsonError(res, error) {
     INVALID_REPORT_PERIOD: 400,
     PAYMENT_PROVIDER_NOT_CONFIGURED: 503,
     PAYMENT_METHOD_INVALID: 400,
+    PAYMENT_CUSTOMER_VERIFICATION_REQUIRED: 403,
     PAYMENT_IDEMPOTENCY_REQUIRED: 400,
     PAYMENT_ACCOUNT_NOT_CONFIGURED: 409,
     PAYMENT_ATTEMPT_IN_PROGRESS: 409,
@@ -489,6 +497,16 @@ async function requirePermission(req, permission) {
   return context;
 }
 
+export function sanitizePublicOrderInput(input = {}) {
+  const sanitized = input && typeof input === 'object' && !Array.isArray(input) ? { ...input } : {};
+  delete sanitized.customerId;
+  sanitized.customer = sanitized.customer && typeof sanitized.customer === 'object' && !Array.isArray(sanitized.customer)
+    ? { ...sanitized.customer }
+    : {};
+  delete sanitized.customer.customerId;
+  return sanitized;
+}
+
 export function createCommercePublicRouter() {
   const router = express.Router();
   router.get('/context', async (req, res) => {
@@ -585,12 +603,6 @@ export function createCommercePublicRouter() {
           try { items.push({ provider: account.provider, method: validatePaymentMethod(method), ambiente: account.ambiente }); } catch { /* configuração inválida não é publicada */ }
         }
       }
-      const customerId = req.query.customerId ? assertUuid(req.query.customerId, 'customerId') : null;
-      const customerEmail = String(req.query.customerEmail || '').trim().toLowerCase().slice(0, 320);
-      const credit = customerId || customerEmail
-        ? await db.query(`SELECT ca.id FROM commerce_customer_credit_accounts ca JOIN commerce_customers c ON c.empresa_id = ca.empresa_id AND c.id = ca.customer_id WHERE ca.empresa_id = $1 AND ca.storefront_id = $2 AND ca.status = 'active' AND ($3::uuid IS NOT NULL AND c.id = $3 OR $3::uuid IS NULL AND lower(c.email) = $4) LIMIT 1`, [storefront.empresa_id, storefront.id, customerId, customerEmail]).catch(() => ({ rows: [] }))
-        : { rows: [] };
-      if (credit.rows[0]) items.push({ provider: 'crediario', method: 'account', ambiente: 'production', label: 'Marcar na conta' });
       res.json({ storefrontId: storefront.id, available: items.length > 0, items: items.filter((item, index, all) => all.findIndex(candidate => candidate.provider === item.provider && candidate.method === item.method && candidate.ambiente === item.ambiente) === index) });
     } catch (error) { jsonError(res, error); }
   });
@@ -602,8 +614,7 @@ export function createCommercePublicRouter() {
       const order = await db.query(`SELECT o.id FROM commerce_orders o WHERE o.empresa_id = $1 AND o.storefront_id = $2 AND o.public_code = $3 LIMIT 1`, [storefront.empresa_id, storefront.id, String(req.params.publicCode || '').toUpperCase()]);
       if (!order.rows[0]) throw new CommerceError('pedido não encontrado', 'ORDER_NOT_FOUND');
       if (provider === 'crediario' && method === 'account') {
-        const result = await createCreditPayment({ empresaId: storefront.empresa_id, lojaId: storefront.loja_id }, { orderId: order.rows[0].id, idempotencyKey: String(req.body?.idempotencyKey || '').trim().slice(0, 180) });
-        return res.status(201).json(result);
+        throw new CommerceError('pagamento em conta exige identidade autenticada ou verificada', 'PAYMENT_CUSTOMER_VERIFICATION_REQUIRED');
       }
       const account = await db.query(`SELECT id, provider, ambiente FROM commerce_payment_accounts WHERE empresa_id = $1 AND storefront_id = $2 AND provider = $3 AND ambiente = 'production' AND ativo = true ORDER BY provider LIMIT 1`, [storefront.empresa_id, storefront.id, provider]);
       if (!account.rows[0]) throw new CommerceError('nenhum gateway ativo para este storefront', 'PAYMENT_PROVIDER_NOT_CONFIGURED');
@@ -629,14 +640,18 @@ export function createCommercePublicRouter() {
   router.post('/orders', async (req, res) => {
     try {
       const storefront = await resolvePublicStorefront(req);
+      const publicInput = sanitizePublicOrderInput(req.body);
       const result = await withCommerceTransaction(async trx => {
-        const order = await createPendingOrder(trx, { empresaId: storefront.empresa_id, lojaId: storefront.loja_id }, { ...req.body, storefrontId: storefront.id, correlationId: req.requestId || '' });
+        const order = await createPendingOrder(trx, { empresaId: storefront.empresa_id, lojaId: storefront.loja_id }, { ...publicInput, storefrontId: storefront.id, correlationId: req.requestId || '' });
         const promotionCode = String(req.body?.promotionCode || '').trim();
         if (!promotionCode) return order;
         const promotion = await applyPromotionToOrder(trx, { empresaId: storefront.empresa_id, lojaId: storefront.loja_id }, { orderId: order.id, codigo: promotionCode });
         return { ...order, discount: promotion.desconto, total: promotion.total, promotionCode: promotion.codigo };
       });
-      res.status(201).json(result);
+      const publicResult = { ...result };
+      delete publicResult.customerId;
+      delete publicResult.customerAddressId;
+      res.status(201).json(publicResult);
     } catch (error) { jsonError(res, error); }
   });
   router.get('/orders/:publicCode', async (req, res) => {
