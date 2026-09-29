@@ -637,21 +637,19 @@ app.post('/api/inscricoes', (req,res)=>{
 // morto (nunca alcançada após o next('route')) e foi removida.
 app.get('/api/ingressos/tipos', (req,res,next)=>{ req.url='/api/ingresso-tipos'; next('route'); });
 
-// Esqueci senha (sem e-mail implementado — retorna OK)
+// Esqueci senha: NÃO troca a senha aqui. Antes, qualquer pessoa que soubesse um e-mail
+// trocava a senha da conta (e a nova senha nunca chegava), travando o acesso. Agora só
+// registra o pedido; a redefinição é feita por um administrador da mesma empresa.
 app.post('/api/auth/esqueci-senha', publicLimit(10), (req,res)=>{
   const { email } = req.body||{};
   const u = email ? findUser(email) : null;
   if(u && u.ativo){
-    // senha temporária com entropia criptográfica (substitui o stub que só logava)
-    const temp = crypto.randomBytes(5).toString('hex').toUpperCase(); // 10 chars
-    u.senhaHash = bcrypt.hashSync(temp, 10);
-    u.senhaTemporaria = true;
-    save();
-    mail.senhaTemporaria(u.email, u.nome, temp).catch(()=>{});
-    audit({ user:{ nome:u.nome, role:u.role }, ip:req.ip }, 'RESET senha (esqueci-senha)');
+    const d = db(); d.pedidosSenha = (d.pedidosSenha || []).filter(p => p.usuarioId !== u.id).slice(-200);
+    d.pedidosSenha.push({ usuarioId:u.id, em:new Date().toISOString(), ip:String(req.ip||'').slice(0,64) });
+    audit({ user:{ nome:u.nome, role:u.role }, ip:req.ip }, 'PEDIDO de redefinição de senha'); save();
   }
   // resposta neutra: não revela se o e-mail existe
-  res.json({ ok:true, message:'Se este e-mail estiver cadastrado, você receberá as instruções em breve.' });
+  res.json({ ok:true, message:'Se este e-mail estiver cadastrado, peça ao administrador da sua empresa para gerar uma senha temporária.' });
 });
 
 app.get('/api/chave/:categoria', (req,res)=>{
@@ -725,18 +723,34 @@ app.get('/api/auth/me', auth, (req,res)=>{
 });
 
 // ---- Gestão de usuários (somente admin/organizador) ----
-app.get('/api/admin/usuarios', auth, requireStaff, (req,res)=> res.json((db().usuarios||[]).map(publicUser)));
+// Usuário de uma empresa só vê e gerencia usuários da própria empresa; nunca contas
+// globais nem administradores da plataforma. O admin principal (ADMIN_USER) é global.
+const isGlobalActor = user => !user?.empresaId || isPlatformAdminUser(user) || norm(user?.email) === norm(process.env.ADMIN_USER || 'admin');
+const canManageUser = (actor, target) => {
+  if (!target) return false;
+  if (isPlatformAdminUser(target) && !isPlatformAdminUser(actor)) return false;
+  if (norm(target.email) === norm(process.env.ADMIN_USER || 'admin') && !isGlobalActor(actor)) return false;
+  if (isGlobalActor(actor)) return true;
+  return Boolean(target.empresaId) && String(target.empresaId) === String(actor.empresaId);
+};
+const usuarioGerenciavel = (req,res) => {
+  const u = (db().usuarios||[]).find(x=>x.id==req.params.id);
+  if(!u || !canManageUser(req.user, u)){ res.status(404).json({error:'não encontrado'}); return null; }
+  return u;
+};
+app.get('/api/admin/usuarios', auth, requireStaff, (req,res)=> res.json((db().usuarios||[]).filter(u => canManageUser(req.user, u) || u.id == req.user.id).map(publicUser)));
 app.post('/api/admin/usuarios', auth, requireRole('admin','organizador'), (req,res)=>{
   const { nome, email, senha, role, telefone } = req.body || {};
   if(!nome || !email || !senha) return res.status(400).json({error:'nome, e-mail e senha obrigatórios'});
   if(!ROLES.includes(role)) return res.status(400).json({error:'papel inválido'});
   if(findUser(email)) return res.status(409).json({error:'e-mail já cadastrado'});
   const u = { id: nextId(), nome, email: norm(email), senhaHash: bcrypt.hashSync(senha,10),
-    role, telefone:telefone||'', ativo:true, criadoEm:new Date().toISOString() };
+    role, telefone:telefone||'', ativo:true, criadoEm:new Date().toISOString(),
+    ...(isGlobalActor(req.user) ? {} : { empresaId: String(req.user.empresaId), ...(req.user.lojaId ? { lojaId: String(req.user.lojaId) } : {}) }) };
   db().usuarios.push(u); save(); res.json(publicUser(u));
 });
 app.patch('/api/admin/usuarios/:id', auth, requireRole('admin','organizador'), (req,res)=>{
-  const u = db().usuarios.find(x=>x.id==req.params.id); if(!u) return res.status(404).json({error:'não encontrado'});
+  const u = usuarioGerenciavel(req,res); if(!u) return;
   const b = req.body||{};
   if(b.nome) u.nome=b.nome;
   if(b.role && ROLES.includes(b.role)) u.role=b.role;
@@ -746,14 +760,15 @@ app.patch('/api/admin/usuarios/:id', auth, requireRole('admin','organizador'), (
   save(); res.json(publicUser(u));
 });
 app.post('/api/admin/usuarios/:id/reset-senha', auth, requireRole('admin','organizador'), (req,res)=>{
-  const u=db().usuarios.find(x=>x.id==req.params.id); if(!u) return res.status(404).json({error:'não encontrado'});
+  const u = usuarioGerenciavel(req,res); if(!u) return;
   const nova=crypto.randomBytes(6).toString('base64url'); // 8 chars, RNG criptográfico
   u.senhaHash=bcrypt.hashSync(nova,10); save();
   auditoria(req.user,'RESET_SENHA',{usuarioId:u.id,email:u.email});
   res.json({ ok:true, senha:nova, aviso:'Compartilhe esta senha temporária com o usuário — ela não será exibida novamente.' });
 });
 app.delete('/api/admin/usuarios/:id', auth, requireRole('admin'), (req,res)=>{
-  const d=db(); const u=d.usuarios.find(x=>x.id==req.params.id);
+  const d=db(); const u = usuarioGerenciavel(req,res); if(!u) return;
+  if(u.id == req.user.id) return res.status(400).json({error:'não é possível excluir a própria conta'});
   if(u && u.email===norm(process.env.ADMIN_USER||'admin')) return res.status(400).json({error:'não é possível excluir o admin principal'});
   d.usuarios=d.usuarios.filter(x=>x.id!=req.params.id); save(); res.json({ok:true});
 });
@@ -4721,7 +4736,16 @@ app.patch('/api/auth/perfil', auth, async (req, res) => {
     u.senhaHash = await bcrypt.hash(senhaNova, 10);
   }
   if (nome) u.nome = nome;
-  if (email) u.email = norm(email);
+  if (email && norm(email) !== u.email) {
+    // O e-mail identifica a conta (login e acesso à loja). Trocar exige a senha atual,
+    // e-mail livre e que não seja de administrador da plataforma.
+    const novo = norm(email);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(novo)) return res.status(400).json({ error: 'e-mail inválido' });
+    if (!senhaAtual || !(await bcrypt.compare(String(senhaAtual), u.senhaHash))) return res.status(401).json({ error: 'confirme a senha atual para trocar o e-mail' });
+    if (findUser(novo)) return res.status(409).json({ error: 'e-mail já cadastrado' });
+    if (PLATFORM_ADMIN_EMAILS.has(novo) || novo === norm(process.env.ADMIN_USER || 'admin')) return res.status(409).json({ error: 'e-mail reservado' });
+    u.email = novo;
+  }
   if (telefone !== undefined) u.telefone = telefone;
   save();
   res.json(publicUser(u));

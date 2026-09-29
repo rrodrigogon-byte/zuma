@@ -920,6 +920,7 @@ function TabPerfil({ me, onSaved }) {
   const [email, setEmail] = useState(me?.email || '')
   const [telefone, setTelefone] = useState(me?.telefone || '')
   const [senhaAtual, setSenhaAtual] = useState('')
+  const [senhaEmail, setSenhaEmail] = useState('')
   const [senhaNova, setSenhaNova] = useState('')
   const [senhaConf, setSenhaConf] = useState('')
   const [saving, setSaving] = useState(false)
@@ -940,8 +941,10 @@ function TabPerfil({ me, onSaved }) {
     e.preventDefault()
     setSaving(true)
     try {
-      await api.patch('/api/auth/perfil', { nome, email, telefone })
+      const trocouEmail = String(email || '').trim().toLowerCase() !== String(me?.email || '').trim().toLowerCase()
+      await api.patch('/api/auth/perfil', trocouEmail ? { nome, email, telefone, senhaAtual: senhaEmail } : { nome, telefone })
       toast('Perfil atualizado!', 'success')
+      setSenhaEmail('')
       onSaved && onSaved({ nome, email, telefone })
     } catch (err) { toast(err.message, 'error') } finally { setSaving(false) }
   }
@@ -1004,6 +1007,11 @@ function TabPerfil({ me, onSaved }) {
             <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="seu@email.com" style={inputStyle}
               onFocus={e => e.target.style.borderColor = C.green} onBlur={e => e.target.style.borderColor = C.inputBorder} />
           </div>
+          {String(email || '').trim().toLowerCase() !== String(me?.email || '').trim().toLowerCase() && (
+            <div><label style={labelStyle}>Senha atual (para trocar o e-mail)</label>
+              <input type="password" autoComplete="current-password" value={senhaEmail} onChange={e => setSenhaEmail(e.target.value)} style={inputStyle} required />
+            </div>
+          )}
           <div><label style={labelStyle}>Telefone</label>
             <input type="tel" value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(65) 99999-9999" style={inputStyle}
               onFocus={e => e.target.style.borderColor = C.green} onBlur={e => e.target.style.borderColor = C.inputBorder} />

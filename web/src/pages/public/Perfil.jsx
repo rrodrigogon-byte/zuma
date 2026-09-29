@@ -99,6 +99,7 @@ export default function Perfil() {
   // Edit profile
   const [nome, setNome] = useState('')
   const [email, setEmail] = useState('')
+  const [senhaEmail, setSenhaEmail] = useState('')
   const [telefone, setTelefone] = useState('')
   const [savingPerfil, setSavingPerfil] = useState(false)
 
@@ -130,8 +131,10 @@ export default function Perfil() {
     e.preventDefault()
     setSavingPerfil(true)
     try {
-      await api.patch('/api/auth/perfil', { nome, email, telefone })
+      const trocouEmail = String(email || '').trim().toLowerCase() !== String(me?.email || '').trim().toLowerCase()
+      await api.patch('/api/auth/perfil', trocouEmail ? { nome, email, telefone, senhaAtual: senhaEmail } : { nome, telefone })
       toast('Perfil atualizado!', 'success')
+      setSenhaEmail('')
       setMe(prev => ({ ...prev, nome, email, telefone }))
     } catch (err) {
       toast(err.message || 'Erro ao salvar', 'error')
@@ -471,6 +474,19 @@ export default function Perfil() {
               onBlur={(e) => (e.target.style.borderColor = C.inputBorder)}
             />
           </div>
+          {String(email || '').trim().toLowerCase() !== String(me?.email || '').trim().toLowerCase() && (
+            <div>
+              <label style={labelStyle}>Senha atual (para trocar o e-mail)</label>
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={senhaEmail}
+                onChange={(e) => setSenhaEmail(e.target.value)}
+                style={inputStyle}
+                required
+              />
+            </div>
+          )}
           <div>
             <label style={labelStyle}>Telefone</label>
             <input

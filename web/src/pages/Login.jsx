@@ -124,7 +124,7 @@ export default function Login() {
             </div>
             {recuperacaoEnviada ? (
               <div role="status" style={{ background: '#FFF4EC', border: '1px solid #FFB48F', color: '#7B3517', borderRadius: 12, padding: 16, lineHeight: 1.55, fontSize: '0.9rem' }}>
-                Se o e-mail estiver cadastrado, as instruções chegarão em breve. Verifique também a caixa de spam.
+                Pedido registrado. Por segurança, a senha não é trocada automaticamente: peça ao administrador da sua empresa para gerar uma senha temporária no painel (Usuários → Redefinir senha).
               </div>
             ) : (
               <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
