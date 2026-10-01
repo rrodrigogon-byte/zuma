@@ -11,8 +11,8 @@ test('relatório de clientes agrega satisfação real com escopo de loja', async
   const calls = [];
   db.query = async (sql, params) => {
     calls.push({ sql, params });
-    if (sql.includes('COUNT(*)::integer AS new_customers')) return { rows: [{ new_customers: 2, blocked_customers: 0 }] };
-    if (sql.includes('LEFT JOIN commerce_orders')) return { rows: [] };
+    if (sql.includes('COUNT(DISTINCT c.id)')) return { rows: [{ new_customers: 2, blocked_customers: 0 }] };
+    if (sql.includes('COUNT(o.id)::integer AS orders')) return { rows: [] };
     if (sql.includes('FROM commerce_order_satisfaction')) return { rows: [{ responses: 3, average_rating: '4.67', recommend_count: 3, recommendation_rate: '100.0' }] };
     throw new Error(`consulta inesperada: ${sql}`);
   };
@@ -25,6 +25,6 @@ test('relatório de clientes agrega satisfação real com escopo de loja', async
   const satisfactionCall = calls.find(call => call.sql.includes('FROM commerce_order_satisfaction'));
   assert.match(satisfactionCall.sql, /JOIN commerce_orders o ON o\.empresa_id = s\.empresa_id AND o\.storefront_id = s\.storefront_id AND o\.id = s\.order_id/);
   assert.match(satisfactionCall.sql, /s\.retencao_ate > CURRENT_TIMESTAMP/);
-  assert.match(satisfactionCall.sql, /sf\.loja_id = \$4/);
+  assert.match(satisfactionCall.sql, /o\.storefront_id IN \(SELECT id FROM commerce_storefronts WHERE empresa_id = \$1 AND loja_id = \$4\)/);
   assert.deepEqual(satisfactionCall.params, [empresaId, '2026-09-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z', lojaId]);
 });

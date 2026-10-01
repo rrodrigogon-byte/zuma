@@ -4,14 +4,31 @@ import { CommerceError } from './commerce-error.js';
 import { normalizeCustomerInput, resolveCommerceCustomer, resolveCommerceCustomerAddress } from './commerce-customer-identity.js';
 import { normalizeOwnDeliveryConfig, resolveShippingSelection } from './commerce-shipping.js';
 import { markCartConverted } from './commerce-abandoned-carts.js';
-import { creditPaidOrderLoyaltyPoints } from './loyalty-advanced.js';
+import { creditPaidOrderLoyaltyPoints, reverseOrderLoyaltyPoints } from './loyalty-advanced.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ORDER_RESERVATION_TTL_MINUTES = Math.min(24 * 60, Math.max(5, Number.parseInt(process.env.COMMERCE_RESERVATION_TTL_MINUTES || '30', 10) || 30));
+
+function canonicalJson(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(item => canonicalJson(item)).join(',')}]`;
+  const entries = Object.keys(value)
+    .filter(key => value[key] !== undefined)
+    .sort()
+    .map(key => `${JSON.stringify(key)}:${canonicalJson(value[key])}`);
+  return `{${entries.join(',')}}`;
+}
+
+function canonicalHash(value) {
+  return crypto.createHash('sha256').update(canonicalJson(value)).digest('hex');
+}
 
 export const ORDER_TRANSITIONS = {
   draft: ['pending_payment', 'cancelled'],
   pending_payment: ['paid', 'payment_failed', 'fraud_review', 'cancelled'],
-  payment_failed: ['pending_payment', 'cancelled'],
+  // Pedido com pagamento recusado já devolveu o estoque: não volta a aguardar pagamento
+  // (voltaria sem reserva e venderia o que não tem). O cliente faz um pedido novo.
+  payment_failed: ['cancelled'],
   fraud_review: ['paid', 'cancelled'],
   paid: ['processing', 'cancelled', 'refunded'],
   processing: ['ready', 'shipped', 'ready_for_pickup', 'cancelled'],
@@ -28,6 +45,16 @@ export const ORDER_TRANSITIONS = {
 };
 
 export { CommerceError } from './commerce-error.js';
+
+const envInt = (name, fallback, min, max) => {
+  const value = Number.parseInt(process.env[name] || '', 10);
+  return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
+};
+export const commerceCheckoutLimits = () => ({
+  maxLineQuantity: envInt('COMMERCE_MAX_LINE_QUANTITY', 20, 1, 10000),
+  maxOrderUnits: envInt('COMMERCE_MAX_ORDER_UNITS', 60, 1, 100000),
+  reservationTtlMinutes: ORDER_RESERVATION_TTL_MINUTES,
+});
 
 export function assertUuid(value, field = 'id') {
   if (!UUID.test(String(value || ''))) throw new CommerceError(`${field} inválido`, 'INVALID_ID', { field });
@@ -87,10 +114,93 @@ export async function resolveStorefront(trx, context, storefrontId) {
     [empresaId, id],
   );
   if (!result.rows[0]) throw new CommerceError('storefront não encontrado ou inativo', 'STOREFRONT_NOT_FOUND');
-  if (context.lojaId && result.rows[0].loja_id && result.rows[0].loja_id !== context.lojaId) {
+  if (context.lojaId && context.corporateAccess !== true && result.rows[0].loja_id !== context.lojaId) {
     throw new CommerceError('storefront fora do escopo da loja', 'STORE_SCOPE_MISMATCH');
   }
   return result.rows[0];
+}
+
+function hasVerifiedCapability(context, capability) {
+  const values = context?.capabilities instanceof Set
+    ? [...context.capabilities]
+    : Array.isArray(context?.capabilities) ? context.capabilities : [];
+  return values.includes(capability);
+}
+
+function requireVerifiedCapability(context, capability) {
+  if (!hasVerifiedCapability(context, capability)) {
+    throw new CommerceError('permissão insuficiente para esta operação', 'PERMISSION_DENIED', { permission: capability });
+  }
+}
+
+export async function resolveCatalogResourceScope(trx, context, input = {}) {
+  const { empresaId, lojaId } = tenantContext(context);
+  const corporateAccess = context?.corporateAccess === true;
+  const mutation = input.mutation === true;
+  let productId = input.productId ? assertUuid(input.productId, 'productId') : null;
+  let variant = null;
+  let media = null;
+
+  if (input.variantId) {
+    const variantId = assertUuid(input.variantId, 'variantId');
+    const result = await trx.query(
+      'SELECT id, product_id FROM commerce_product_variants WHERE empresa_id = $1 AND id = $2 LIMIT 1',
+      [empresaId, variantId],
+    );
+    variant = result.rows[0] || null;
+    if (!variant || (productId && variant.product_id !== productId)) throw new CommerceError('variante não encontrada no produto/tenant', 'VARIANT_NOT_FOUND');
+    productId = variant.product_id;
+  }
+
+  if (input.mediaId) {
+    const mediaId = assertUuid(input.mediaId, 'mediaId');
+    const result = await trx.query(
+      `SELECT id, product_id, variant_id, storage_key, public_url, mime_type, alt_text, ordem, criado_em
+         FROM commerce_product_media WHERE empresa_id = $1 AND id = $2 LIMIT 1`,
+      [empresaId, mediaId],
+    );
+    media = result.rows[0] || null;
+    if (!media || (productId && media.product_id !== productId)) throw new CommerceError('mídia não encontrada no tenant', 'MEDIA_NOT_FOUND');
+    productId = media.product_id;
+  }
+
+  if (!productId) throw new CommerceError('produto é obrigatório para validar o escopo', 'PRODUCT_NOT_FOUND');
+  const storefrontId = input.storefrontId ? assertUuid(input.storefrontId, 'storefrontId') : null;
+  if (lojaId && !corporateAccess && !storefrontId) throw new CommerceError('storefrontId é obrigatório para operar catálogo no escopo da loja', 'STOREFRONT_REQUIRED');
+  const storefront = storefrontId ? await resolveStorefront(trx, context, storefrontId) : null;
+  if (mutation && lojaId && !corporateAccess && storefront?.loja_id !== lojaId) {
+    throw new CommerceError('storefront global ou de outra loja exige autorização corporativa', 'STORE_SCOPE_MISMATCH');
+  }
+
+  const productResult = await trx.query(
+    `SELECT p.id, p.status,
+            EXISTS (
+              SELECT 1 FROM commerce_product_channels authorized
+              JOIN commerce_storefronts scoped_storefront
+                ON scoped_storefront.empresa_id = authorized.empresa_id AND scoped_storefront.id = authorized.storefront_id
+             WHERE authorized.empresa_id = p.empresa_id AND authorized.product_id = p.id
+               AND ($3::uuid IS NULL OR authorized.storefront_id = $3)
+               AND ($4::uuid IS NULL OR scoped_storefront.loja_id = $4 OR scoped_storefront.loja_id IS NULL)
+            ) AS authorized_channel,
+            EXISTS (
+              SELECT 1 FROM commerce_product_channels shared
+             WHERE shared.empresa_id = p.empresa_id AND shared.product_id = p.id
+               AND $3::uuid IS NOT NULL AND shared.storefront_id <> $3
+            ) AS outside_selected_channel
+       FROM commerce_products p
+      WHERE p.empresa_id = $1 AND p.id = $2
+      ${input.lock ? 'FOR UPDATE OF p' : ''}`,
+    [empresaId, productId, storefrontId, lojaId],
+  );
+  const product = productResult.rows[0];
+  if (!product) throw new CommerceError('produto não encontrado no tenant', 'PRODUCT_NOT_FOUND');
+  if (input.requireChannel !== false && !corporateAccess && !product.authorized_channel) {
+    throw new CommerceError('produto fora do escopo do storefront selecionado', 'PRODUCT_STOREFRONT_SCOPE_MISMATCH');
+  }
+  if (mutation && storefrontId && !corporateAccess && product.outside_selected_channel) {
+    throw new CommerceError('produto compartilhado com outro storefront exige autorização corporativa', 'PRODUCT_SHARED_SCOPE_MISMATCH');
+  }
+  return { empresaId, lojaId, corporateAccess, storefrontId, storefront, product, variant, media };
 }
 
 export async function listPublishedProducts(context, options = {}) {
@@ -138,10 +248,14 @@ export async function listPublishedProducts(context, options = {}) {
          ON m.empresa_id = p.empresa_id AND m.product_id = p.id
        LEFT JOIN LATERAL (
          SELECT COALESCE(SUM(il.disponivel), 0) AS disponivel
-           FROM commerce_inventory_levels il
+          FROM commerce_inventory_levels il
            JOIN commerce_inventory_locations l
              ON l.empresa_id = il.empresa_id AND l.id = il.location_id AND l.ativo = true
           WHERE il.empresa_id = p.empresa_id AND il.variant_id = v.id
+            AND (l.loja_id IS NULL OR l.loja_id = (
+              SELECT s.loja_id FROM commerce_storefronts s
+               WHERE s.empresa_id = p.empresa_id AND s.id = $2
+            ))
        ) stock ON true
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(jsonb_build_object(
@@ -245,15 +359,26 @@ export async function reserveInventory(trx, context, input) {
   return result;
 }
 
-async function settleOrderReservations(trx, context, orderId, nextStatus) {
+async function settleOrderReservations(trx, context, orderId, currentStatus, nextStatus) {
   const { empresaId, usuarioId } = tenantContext(context);
-  const release = ['payment_failed', 'cancelled'].includes(nextStatus);
+  let release = ['payment_failed', 'cancelled'].includes(nextStatus);
+  if (nextStatus === 'refunded' && currentStatus === 'paid') {
+    const shipped = await trx.query(
+      `SELECT 1 FROM commerce_fulfillments
+        WHERE empresa_id = $1 AND order_id = $2
+          AND status IN ('shipped','out_for_delivery','delivered','picked_up')
+        LIMIT 1`,
+      [empresaId, orderId],
+    );
+    release = !shipped.rows[0];
+  }
   const commit = nextStatus === 'paid';
   if (!release && !commit) return;
   const reservations = await trx.query(
     `SELECT id, location_id, variant_id, quantidade, status
        FROM commerce_inventory_reservations
       WHERE empresa_id = $1 AND order_id = $2 AND status IN ('pending','confirmed')
+      ORDER BY variant_id, location_id, id
       FOR UPDATE`,
     [empresaId, orderId],
   );
@@ -314,9 +439,27 @@ async function settleOrderReservations(trx, context, orderId, nextStatus) {
   }
 }
 
+// Pedido marcado na conta (crediário) e depois cancelado ou devolvido: a cobrança em aberto
+// é cancelada e sai do saldo devedor do cliente. Cobrança já quitada fica para acerto manual.
+async function reverseOrderCreditCharge(trx, { empresaId, orderId }) {
+  const charge = (await trx.query(
+    `SELECT id, account_id, valor FROM commerce_customer_credit_entries
+      WHERE empresa_id = $1 AND order_id = $2 AND tipo = 'charge' AND status = 'open' FOR UPDATE`,
+    [empresaId, orderId],
+  ).catch(error => (error?.code === '42P01' ? { rows: [] } : Promise.reject(error)))).rows[0];
+  if (!charge) return null;
+  await trx.query(`UPDATE commerce_customer_credit_entries SET status = 'cancelled', atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2`, [empresaId, charge.id]);
+  await trx.query(
+    `UPDATE commerce_customer_credit_accounts SET saldo_devedor = GREATEST(0, saldo_devedor - $3), atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2`,
+    [empresaId, charge.account_id, Number(charge.valor)],
+  );
+  return { reversed: true, amount: Number(charge.valor) };
+}
+
 export async function transitionOrder(trx, context, input) {
   const { empresaId, usuarioId } = tenantContext(context);
   const orderId = assertUuid(input.orderId, 'orderId');
+  const storefrontId = input.storefrontId ? assertUuid(input.storefrontId, 'storefrontId') : null;
   const nextStatus = String(input.status || '');
   const allowed = Object.prototype.hasOwnProperty.call(ORDER_TRANSITIONS, nextStatus);
   if (!allowed) throw new CommerceError('status de pedido inválido', 'INVALID_ORDER_STATUS');
@@ -324,8 +467,10 @@ export async function transitionOrder(trx, context, input) {
     `SELECT id, status, storefront_id, total
        FROM commerce_orders
       WHERE empresa_id = $1 AND id = $2
+        AND ($3::uuid IS NULL OR storefront_id = $3)
+        AND ($4::uuid IS NULL OR loja_id = $4)
       FOR UPDATE`,
-    [empresaId, orderId],
+    [empresaId, orderId, storefrontId, context.corporateAccess === true ? null : context.lojaId || null],
   );
   const order = locked.rows[0];
   if (!order) throw new CommerceError('pedido não encontrado', 'ORDER_NOT_FOUND');
@@ -333,7 +478,7 @@ export async function transitionOrder(trx, context, input) {
   if (!ORDER_TRANSITIONS[order.status]?.includes(nextStatus)) {
     throw new CommerceError(`transição ${order.status} → ${nextStatus} não permitida`, 'INVALID_ORDER_TRANSITION');
   }
-  await settleOrderReservations(trx, { empresaId, usuarioId }, orderId, nextStatus);
+  await settleOrderReservations(trx, { empresaId, usuarioId }, orderId, order.status, nextStatus);
   await trx.query(
     `UPDATE commerce_orders SET status = $3, atualizado_em = CURRENT_TIMESTAMP
       WHERE empresa_id = $1 AND id = $2`,
@@ -356,13 +501,19 @@ export async function transitionOrder(trx, context, input) {
   );
   const loyalty = nextStatus === 'paid'
     ? await creditPaidOrderLoyaltyPoints(trx, { empresaId, orderId, usuarioId })
-    : null;
+    : ['refunded', 'returned', 'cancelled'].includes(nextStatus)
+      ? await reverseOrderLoyaltyPoints(trx, { empresaId, orderId, usuarioId, motivo: nextStatus })
+      : null;
+  if (['refunded', 'returned', 'cancelled'].includes(nextStatus)) await reverseOrderCreditCharge(trx, { empresaId, orderId });
   return { ...order, status: nextStatus, ...(loyalty ? { loyalty } : {}) };
 }
 
 export async function createPendingOrder(trx, context, input = {}) {
   const { empresaId } = tenantContext(context);
+  const idem = String(input.idempotencyKey || '').trim().slice(0, 180);
+  if (!idem) throw new CommerceError('chave de idempotência é obrigatória para criar o pedido', 'ORDER_IDEMPOTENCY_REQUIRED');
   const storefront = await resolveStorefront(trx, { ...context, empresaId }, input.storefrontId);
+  if (!storefront.loja_id) throw new CommerceError('storefront precisa de uma unidade operacional ativa antes do checkout', 'STOREFRONT_OPERATIONAL_STORE_REQUIRED');
   const normalizedCustomer = normalizeCustomerInput({ ...(input.customer || {}), customerId: input.customerId || input.customer?.customerId });
   const shippingMethodId = input.shippingMethodId ? assertUuid(input.shippingMethodId, 'shippingMethodId') : null;
   let shippingMethod = null;
@@ -376,23 +527,35 @@ export async function createPendingOrder(trx, context, input = {}) {
     shippingMethod = method.rows[0] || null;
     if (!shippingMethod) throw new CommerceError('método de entrega não encontrado para o storefront', 'SHIPPING_METHOD_NOT_FOUND');
   }
-  const lines = Array.isArray(input.items) ? input.items.map(item => {
+  const lineQuantities = new Map();
+  if (Array.isArray(input.items)) for (const item of input.items) {
     const quantity = Number(item.quantity);
     if (!Number.isInteger(quantity) || quantity <= 0) throw new CommerceError('quantidade deve ser um inteiro positivo', 'INVALID_QUANTITY');
-    return { variantId: assertUuid(item.variantId, 'variantId'), quantity };
-  }) : [];
+    const variantId = assertUuid(item.variantId, 'variantId');
+    lineQuantities.set(variantId, (lineQuantities.get(variantId) || 0) + quantity);
+  }
+  const lines = [...lineQuantities.entries()]
+    .map(([variantId, quantity]) => ({ variantId, quantity }))
+    .sort((left, right) => left.variantId.localeCompare(right.variantId));
   if (!lines.length) throw new CommerceError('o carrinho está vazio', 'EMPTY_CART');
+  {
+    const limits = commerceCheckoutLimits();
+    const perVariant = new Map();
+    for (const line of lines) perVariant.set(line.variantId, (perVariant.get(line.variantId) || 0) + line.quantity);
+    if ([...perVariant.values()].some(qty => qty > limits.maxLineQuantity)) throw new CommerceError(`máximo de ${limits.maxLineQuantity} unidades por produto em um pedido`, 'QUANTITY_LIMIT_EXCEEDED', { max: limits.maxLineQuantity });
+    if (lines.reduce((sum, line) => sum + line.quantity, 0) > limits.maxOrderUnits) throw new CommerceError(`máximo de ${limits.maxOrderUnits} unidades por pedido`, 'QUANTITY_LIMIT_EXCEEDED', { max: limits.maxOrderUnits });
+  }
+  if (!shippingMethodId) {
+    const active = await trx.query(`SELECT 1 FROM commerce_shipping_methods WHERE empresa_id = $1 AND storefront_id = $2 AND ativo = true LIMIT 1`, [empresaId, storefront.id]);
+    if (active.rows?.[0]) throw new CommerceError('escolha a forma de entrega', 'SHIPPING_METHOD_REQUIRED');
+  }
   const uniqueVariantIds = [...new Set(lines.map(line => line.variantId))];
   if (shippingMethod?.tipo === 'delivery' || shippingMethod?.tipo === 'carrier') {
     if (!input.shippingQuoteId || !input.shippingOptionId) throw new CommerceError('delivery exige cotação e opção de frete válidas', 'SHIPPING_QUOTE_REQUIRED');
   } else if (input.shippingQuoteId || input.shippingOptionId) {
     throw new CommerceError('cotação de frete só pode ser usada com método delivery/carrier', 'SHIPPING_QUOTE_INVALID');
   }
-  const shippingSelection = (shippingMethod?.tipo === 'delivery' || shippingMethod?.tipo === 'carrier')
-    ? await resolveShippingSelection(trx, { ...context, empresaId }, { shippingQuoteId: input.shippingQuoteId, shippingOptionId: input.shippingOptionId, shippingAddress: input.shippingAddress }, { storefrontId: storefront.id, shippingMethodId, lines })
-    : null;
-  const idem = input.idempotencyKey ? String(input.idempotencyKey).trim().slice(0, 180) : null;
-  const requestHash = crypto.createHash('sha256').update(JSON.stringify({
+  const requestHash = canonicalHash({
     storefrontId: storefront.id,
     lines,
     customerId: normalizedCustomer.customerId,
@@ -402,7 +565,7 @@ export async function createPendingOrder(trx, context, input = {}) {
       telefone: normalizedCustomer.telefone,
       consentimentos: normalizedCustomer.consentimentos,
     },
-    shippingAddress: shippingSelection?.address || input.shippingAddress || null,
+    shippingAddress: input.shippingAddress || null,
     billingAddress: input.billingAddress || null,
     shippingMethodId,
     shippingQuoteId: input.shippingQuoteId || null,
@@ -411,31 +574,34 @@ export async function createPendingOrder(trx, context, input = {}) {
     note: input.note || '',
     promotionCode: String(input.promotionCode || '').trim().toUpperCase() || null,
     ...(input.cartSessionKey ? { cartSessionHash: crypto.createHash('sha256').update(String(input.cartSessionKey)).digest('hex') } : {}),
-  })).digest('hex');
+  });
 
-  if (idem) {
-    const existing = await trx.query(
-      `SELECT request_hash, response_body
-         FROM commerce_idempotency_keys
-        WHERE empresa_id = $1 AND scope = 'order.create' AND key = $2
-        FOR UPDATE`,
-      [empresaId, idem],
-    );
-    if (existing.rows[0]) {
-      if (existing.rows[0].request_hash !== requestHash) throw new CommerceError('chave de idempotência reutilizada com payload diferente', 'IDEMPOTENCY_CONFLICT');
-      if (existing.rows[0].response_body) {
-        await markCartConverted(trx, { ...context, empresaId, lojaId: storefront.loja_id }, { cartSessionKey: input.cartSessionKey, storefrontId: storefront.id, orderId: existing.rows[0].response_body.id, customerId: existing.rows[0].response_body.customerId });
-        return existing.rows[0].response_body;
-      }
-    } else {
-      await trx.query(
-        `INSERT INTO commerce_idempotency_keys
-          (empresa_id, scope, key, request_hash, expires_at)
-         VALUES ($1, 'order.create', $2, $3, CURRENT_TIMESTAMP + INTERVAL '24 hours')`,
-        [empresaId, idem, requestHash],
-      );
+  await trx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`commerce-order-create:${empresaId}:${idem}`]);
+  const existing = await trx.query(
+    `SELECT request_hash, response_body
+       FROM commerce_idempotency_keys
+      WHERE empresa_id = $1 AND scope = 'order.create' AND key = $2
+      FOR UPDATE`,
+    [empresaId, idem],
+  );
+  if (existing.rows[0]) {
+    if (existing.rows[0].request_hash !== requestHash) throw new CommerceError('chave de idempotência reutilizada com payload diferente', 'IDEMPOTENCY_CONFLICT');
+    if (existing.rows[0].response_body) {
+      await markCartConverted(trx, { ...context, empresaId, lojaId: storefront.loja_id }, { cartSessionKey: input.cartSessionKey, storefrontId: storefront.id, orderId: existing.rows[0].response_body.id, customerId: existing.rows[0].response_body.customerId });
+      return existing.rows[0].response_body;
     }
+    throw new CommerceError('a criação deste pedido ainda está em processamento', 'ORDER_IDEMPOTENCY_IN_PROGRESS');
   }
+  await trx.query(
+    `INSERT INTO commerce_idempotency_keys
+      (empresa_id, scope, key, request_hash, expires_at)
+     VALUES ($1, 'order.create', $2, $3, CURRENT_TIMESTAMP + INTERVAL '24 hours')`,
+    [empresaId, idem, requestHash],
+  );
+
+  const shippingSelection = (shippingMethod?.tipo === 'delivery' || shippingMethod?.tipo === 'carrier')
+    ? await resolveShippingSelection(trx, { ...context, empresaId }, { shippingQuoteId: input.shippingQuoteId, shippingOptionId: input.shippingOptionId, shippingAddress: input.shippingAddress }, { storefrontId: storefront.id, shippingMethodId, lines })
+    : null;
 
   const variants = await trx.query(
     `SELECT v.id, v.sku, v.nome AS variant_name, p.nome AS product_name, p.tipo AS product_type,
@@ -525,11 +691,17 @@ export async function createPendingOrder(trx, context, input = {}) {
       );
       if (!location.rows[0]) throw new CommerceError('local de estoque fora do escopo da loja', 'INVENTORY_LOCATION_SCOPE_MISMATCH');
     } else {
+      // Escolhe o local que tem saldo para todos os itens; a vitrine mostra a soma dos
+      // locais, então reservar sempre no primeiro dava "estoque insuficiente" com produto à venda.
       const location = await trx.query(
-        `SELECT id FROM commerce_inventory_locations
-          WHERE empresa_id = $1 AND (loja_id = $2 OR loja_id IS NULL) AND ativo = true
-          ORDER BY CASE WHEN loja_id = $2 THEN 0 ELSE 1 END, criado_em ASC LIMIT 1`,
-        [empresaId, storefront.loja_id],
+        `SELECT l.id FROM commerce_inventory_locations l
+          WHERE l.empresa_id = $1 AND (l.loja_id = $2 OR l.loja_id IS NULL) AND l.ativo = true
+          ORDER BY (SELECT COUNT(*) FROM jsonb_to_recordset($3::jsonb) AS need(v uuid, q int)
+                     WHERE COALESCE((SELECT il.disponivel FROM commerce_inventory_levels il
+                                      WHERE il.empresa_id = l.empresa_id AND il.location_id = l.id AND il.variant_id = need.v), 0) < need.q) ASC,
+                   CASE WHEN l.loja_id = $2 THEN 0 ELSE 1 END, l.criado_em ASC
+          LIMIT 1`,
+        [empresaId, storefront.loja_id, JSON.stringify(physical.map(line => ({ v: line.variantId, q: line.quantity })))],
       );
       locationId = location.rows[0]?.id || null;
     }
@@ -540,8 +712,8 @@ export async function createPendingOrder(trx, context, input = {}) {
         variantId: line.variantId,
         orderId,
         quantity: line.quantity,
-        idempotencyKey: idem ? `${idem}:${line.variantId}` : null,
-        expiresAt: input.reservationExpiresAt || null,
+        idempotencyKey: `${idem}:${line.variantId}`,
+        expiresAt: new Date(Date.now() + ORDER_RESERVATION_TTL_MINUTES * 60_000).toISOString(),
       });
     }
   }
@@ -556,14 +728,14 @@ export async function createPendingOrder(trx, context, input = {}) {
   );
   const result = { id: orderId, publicCode, status, currency: storefront.moeda || 'BRL', subtotal, discount, shipping, taxes, total, customerId, customerAddressId: customerAddressResolution?.address?.id || null, shippingMethodId, shippingQuoteId: shippingSelection?.quote.id || null, shippingOptionId: shippingSelection?.optionId || null, shippingOption: shippingSelection?.option || null };
   await markCartConverted(trx, { ...context, empresaId, lojaId: storefront.loja_id }, { cartSessionKey: input.cartSessionKey, storefrontId: storefront.id, orderId, customerId });
-  if (idem) {
-    await trx.query(
-      `UPDATE commerce_idempotency_keys SET response_status = 201, response_body = $3::jsonb
-        WHERE empresa_id = $1 AND scope = 'order.create' AND key = $2`,
-      [empresaId, idem, JSON.stringify(result)],
-    );
-  }
-  return result;
+  const finalResult = typeof input.finalizeResponse === 'function' ? await input.finalizeResponse(result) : result;
+  if (!finalResult || typeof finalResult !== 'object' || Array.isArray(finalResult)) throw new CommerceError('resposta final do pedido é inválida', 'ORDER_RESPONSE_INVALID');
+  await trx.query(
+    `UPDATE commerce_idempotency_keys SET response_status = 201, response_body = $3::jsonb
+      WHERE empresa_id = $1 AND scope = 'order.create' AND key = $2`,
+    [empresaId, idem, JSON.stringify(finalResult)],
+  );
+  return finalResult;
 }
 
 function slugify(value) {
@@ -574,6 +746,7 @@ function slugify(value) {
 
 export async function createCategory(trx, context, input = {}) {
   const { empresaId } = tenantContext(context);
+  requireVerifiedCapability(context, 'catalog.write');
   const nome = String(input.nome || '').trim();
   if (!nome) throw new CommerceError('nome da categoria é obrigatório', 'CATEGORY_REQUIRED');
   const slug = slugify(input.slug || nome);
@@ -607,19 +780,51 @@ async function ensureDefaultPriceList(trx, empresaId) {
   return created.rows[0].id;
 }
 
+async function resolveProductChannelPriceList(trx, context, productId, storefrontId) {
+  const { empresaId } = tenantContext(context);
+  const product = assertUuid(productId, 'productId');
+  const storefront = assertUuid(storefrontId, 'storefrontId');
+  await resolveStorefront(trx, context, storefront);
+  const channel = await trx.query(
+    `SELECT price_list_id
+       FROM commerce_product_channels
+      WHERE empresa_id = $1 AND product_id = $2 AND storefront_id = $3
+      FOR UPDATE`,
+    [empresaId, product, storefront],
+  );
+  if (!channel.rows[0]) throw new CommerceError('produto fora do escopo do storefront selecionado', 'PRODUCT_STOREFRONT_SCOPE_MISMATCH');
+  if (channel.rows[0].price_list_id) return channel.rows[0].price_list_id;
+  const priceListId = await ensureDefaultPriceList(trx, empresaId);
+  await trx.query(
+    `UPDATE commerce_product_channels
+        SET price_list_id = $4
+      WHERE empresa_id = $1 AND product_id = $2 AND storefront_id = $3`,
+    [empresaId, product, storefront, priceListId],
+  );
+  return priceListId;
+}
+
 export async function createCatalogProduct(trx, context, input = {}) {
   const { empresaId, usuarioId } = tenantContext(context);
+  requireVerifiedCapability(context, 'catalog.write');
   const nome = String(input.nome || '').trim();
   if (!nome) throw new CommerceError('nome do produto é obrigatório', 'PRODUCT_REQUIRED');
   const slug = slugify(input.slug || nome);
   const status = ['draft', 'active', 'archived'].includes(input.status) ? input.status : 'draft';
+  if (status === 'active' || input.publicado === true) requireVerifiedCapability(context, 'catalog.publish');
+  if (['estoque', 'stock', 'targetStock', 'locationId'].some(key => input[key] !== undefined)) requireVerifiedCapability(context, 'inventory.write');
   const categoryId = input.categoryId ? assertUuid(input.categoryId, 'categoryId') : null;
   const storefrontId = input.storefrontId ? assertUuid(input.storefrontId, 'storefrontId') : null;
   if (categoryId) {
     const category = await trx.query('SELECT id FROM commerce_categories WHERE empresa_id = $1 AND id = $2 LIMIT 1', [empresaId, categoryId]);
     if (!category.rows[0]) throw new CommerceError('categoria não encontrada no tenant', 'CATEGORY_NOT_FOUND');
   }
-  if (storefrontId) await resolveStorefront(trx, context, storefrontId);
+  if (storefrontId) {
+    const storefront = await resolveStorefront(trx, context, storefrontId);
+    if (context.lojaId && context.corporateAccess !== true && storefront.loja_id !== context.lojaId) throw new CommerceError('storefront global ou de outra loja exige autorização corporativa', 'STORE_SCOPE_MISMATCH');
+  } else if (context.lojaId && context.corporateAccess !== true) {
+    throw new CommerceError('storefrontId é obrigatório para criar produto no escopo da loja', 'STOREFRONT_REQUIRED');
+  }
   const productResult = await trx.query(
     `INSERT INTO commerce_products
       (empresa_id, category_id, slug, nome, tipo, status, descricao, descricao_curta, dados_fiscais, seo, criado_por, publicado_em)
@@ -658,6 +863,7 @@ export async function createCatalogProduct(trx, context, input = {}) {
     }
   }
   if (input.media?.url) {
+    if (!allowedMediaUrl(input.media.url)) throw new CommerceError('use uma imagem enviada pelo painel ou um endereço https autorizado', 'MEDIA_URL_NOT_ALLOWED');
     await trx.query(
       `INSERT INTO commerce_product_media (empresa_id, product_id, variant_id, storage_key, public_url, mime_type, alt_text, ordem)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
@@ -672,9 +878,26 @@ export async function createCatalogProduct(trx, context, input = {}) {
   return { ...product, variant: variantResult.rows[0] };
 }
 
-export async function updateCatalogProduct(trx, context, productId, input = {}) {
+export async function updateCatalogProduct(trx, context, productId, input = {}, options = {}) {
   const { empresaId, usuarioId } = tenantContext(context);
+  requireVerifiedCapability(context, 'catalog.write');
   const id = assertUuid(productId, 'productId');
+  if (input.status === 'active') requireVerifiedCapability(context, 'catalog.publish');
+  await resolveCatalogResourceScope(trx, context, { productId: id, storefrontId: input.storefrontId || options.storefrontId, mutation: true, lock: true });
+  const currentResult = await trx.query(
+    'SELECT id, status FROM commerce_products WHERE empresa_id = $1 AND id = $2 FOR UPDATE',
+    [empresaId, id],
+  );
+  if (!currentResult.rows[0]) throw new CommerceError('produto não encontrado no tenant', 'PRODUCT_NOT_FOUND');
+  if (input.status === 'archived' && options.allowArchive !== true) {
+    throw new CommerceError('arquivamento deve usar a operação dedicada', 'PRODUCT_ARCHIVE_REQUIRED');
+  }
+  if (currentResult.rows[0].status === 'archived') {
+    const nonStatusChanges = Object.keys(input).filter(key => !['status', 'storefrontId'].includes(key));
+    if (input.status !== 'archived' || nonStatusChanges.length) {
+      throw new CommerceError('produto arquivado não pode ser alterado; duplique-o como rascunho', 'PRODUCT_ARCHIVED');
+    }
+  }
   const allowed = { nome: 'nome', slug: 'slug', tipo: 'tipo', status: 'status', descricao: 'descricao', descricaoCurta: 'descricao_curta', categoryId: 'category_id', dadosFiscais: 'dados_fiscais', seo: 'seo' };
   const sets = [];
   const values = [empresaId, id];
@@ -706,18 +929,53 @@ export async function updateCatalogProduct(trx, context, productId, input = {}) 
   return result.rows[0];
 }
 
-export async function archiveCatalogProduct(trx, context, productId) {
-  return updateCatalogProduct(trx, context, productId, { status: 'archived' });
+export async function archiveCatalogProduct(trx, context, productId, input = {}) {
+  const { empresaId, usuarioId } = tenantContext(context);
+  const id = assertUuid(productId, 'productId');
+  requireVerifiedCapability(context, 'catalog.write');
+  requireVerifiedCapability(context, 'catalog.publish');
+  await trx.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`catalog-product-state:${empresaId}:${id}`]);
+  await resolveCatalogResourceScope(trx, context, { productId: id, storefrontId: input.storefrontId, mutation: true, lock: true });
+  await trx.query('SELECT storefront_id FROM commerce_product_channels WHERE empresa_id = $1 AND product_id = $2 ORDER BY storefront_id FOR UPDATE', [empresaId, id]);
+  const archived = await updateCatalogProduct(trx, context, productId, { status: 'archived' }, { allowArchive: true, storefrontId: input.storefrontId });
+  const channels = await trx.query(
+    `UPDATE commerce_product_channels
+        SET publicado = false
+      WHERE empresa_id = $1 AND product_id = $2 AND publicado = true
+      RETURNING storefront_id`,
+    [empresaId, archived.id],
+  );
+  if (channels.rows.length) {
+    await trx.query(
+      `INSERT INTO commerce_audit_logs (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, depois)
+       VALUES ($1, $2, $3, 'product_channel', $4, 'unpublished_on_archive', $5::jsonb)`,
+      [empresaId, context.lojaId || null, usuarioId, archived.id, JSON.stringify({ storefrontCount: channels.rows.length })],
+    );
+  }
+  return archived;
 }
 
 export async function publishCatalogProduct(trx, context, productId, input = {}) {
   const { empresaId, usuarioId } = tenantContext(context);
   const id = assertUuid(productId, 'productId');
   const storefrontId = assertUuid(input.storefrontId, 'storefrontId');
-  await resolveStorefront(trx, context, storefrontId);
-  const product = await trx.query('SELECT id, status FROM commerce_products WHERE empresa_id = $1 AND id = $2 LIMIT 1', [empresaId, id]);
+  requireVerifiedCapability(context, 'catalog.write');
+  requireVerifiedCapability(context, 'catalog.publish');
+  await trx.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`catalog-product-state:${empresaId}:${id}`]);
+  await resolveCatalogResourceScope(trx, context, { productId: id, storefrontId, mutation: true, requireChannel: false, lock: true });
+  const product = await trx.query('SELECT id, status FROM commerce_products WHERE empresa_id = $1 AND id = $2 FOR UPDATE', [empresaId, id]);
   if (!product.rows[0]) throw new CommerceError('produto não encontrado no tenant', 'PRODUCT_NOT_FOUND');
+  if (input.publicado !== false && product.rows[0].status === 'archived') throw new CommerceError('produto arquivado não pode ser publicado; duplique-o como rascunho', 'PRODUCT_ARCHIVED');
   const priceListId = input.priceListId ? assertUuid(input.priceListId, 'priceListId') : await ensureDefaultPriceList(trx, empresaId);
+  const priceList = await trx.query(
+    `SELECT pl.id FROM commerce_price_lists pl
+      JOIN commerce_storefronts s ON s.empresa_id = pl.empresa_id AND s.id = $3
+     WHERE pl.empresa_id = $1 AND pl.id = $2 AND pl.ativo = true AND pl.canal = 'web' AND pl.moeda = s.moeda
+     LIMIT 1`,
+    [empresaId, priceListId, storefrontId],
+  );
+  if (!priceList.rows[0]) throw new CommerceError('lista de preços inativa ou incompatível com o storefront', 'PRICE_LIST_SCOPE_MISMATCH');
+  await trx.query('SELECT storefront_id FROM commerce_product_channels WHERE empresa_id = $1 AND product_id = $2 AND storefront_id = $3 FOR UPDATE', [empresaId, id, storefrontId]);
   const publicado = input.publicado !== false;
   await trx.query(
     `INSERT INTO commerce_product_channels (empresa_id, storefront_id, product_id, price_list_id, publicado)
@@ -737,21 +995,265 @@ export async function publishCatalogProduct(trx, context, productId, input = {})
   return { productId: id, storefrontId, priceListId, publicado };
 }
 
+export function allowedMediaUrl(value) {
+  const url = String(value || '').trim();
+  if (/^\/api\/(storefront|commerce)\/media\/[0-9a-f-]{36}$/i.test(url)) return true;
+  let parsed;
+  try { parsed = new URL(url); } catch { return false; }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password) return false;
+  const hosts = String(process.env.COMMERCE_MEDIA_ALLOWED_HOSTS || 'storage.googleapis.com').split(',').map(host => host.trim().toLowerCase()).filter(Boolean);
+  return hosts.some(host => parsed.hostname === host || parsed.hostname.endsWith(`.${host}`));
+}
+
+export async function saveCatalogProductWorkspace(trx, context, input = {}) {
+  const { empresaId } = tenantContext(context);
+  requireVerifiedCapability(context, 'catalog.write');
+  requireVerifiedCapability(context, 'inventory.write');
+  if (input.published === true || input.product?.status === 'active') requireVerifiedCapability(context, 'catalog.publish');
+  const idempotencyKey = String(input.idempotencyKey || '').trim().slice(0, 180);
+  if (!idempotencyKey) throw new CommerceError('chave de idempotência é obrigatória', 'CATALOG_PRODUCT_IDEMPOTENCY_REQUIRED');
+
+  const storefrontId = assertUuid(input.storefrontId, 'storefrontId');
+  const locationId = assertUuid(input.locationId, 'locationId');
+  const productInput = input.product && typeof input.product === 'object' && !Array.isArray(input.product) ? input.product : {};
+  const variantInput = input.variant && typeof input.variant === 'object' && !Array.isArray(input.variant) ? input.variant : {};
+  const mediaInput = input.media && typeof input.media === 'object' && !Array.isArray(input.media) ? input.media : null;
+  const desiredStatus = ['draft', 'active'].includes(productInput.status) ? productInput.status : 'draft';
+  const published = input.published === true;
+  if (published && desiredStatus !== 'active') throw new CommerceError('somente produto ativo pode ser publicado', 'PRODUCT_STATE_CONFLICT');
+  const price = Number(input.price);
+  if (!Number.isFinite(price) || price < 0) throw new CommerceError('preço de venda inválido', 'INVALID_PRICE');
+  const promotionalPrice = input.promotionalPrice == null || input.promotionalPrice === '' ? null : Number(input.promotionalPrice);
+  if (promotionalPrice != null && (!Number.isFinite(promotionalPrice) || promotionalPrice < 0 || promotionalPrice >= price)) throw new CommerceError('preço promocional deve ser menor que o preço de venda', 'INVALID_PROMOTIONAL_PRICE');
+  const targetStock = Number(input.targetStock);
+  if (!Number.isInteger(targetStock) || targetStock < 0) throw new CommerceError('estoque deve ser um inteiro maior ou igual a zero', 'INVALID_QUANTITY');
+  // Estoque visto quando o formulário foi aberto. Sem ele, uma venda feita enquanto o
+  // formulário estava aberto seria apagada ao salvar (o alvo antigo sobrescreveria o saldo).
+  const expectedStock = input.expectedStock == null || input.expectedStock === '' ? null : Number(input.expectedStock);
+  if (expectedStock != null && (!Number.isInteger(expectedStock) || expectedStock < 0)) throw new CommerceError('estoque de referência inválido', 'INVALID_QUANTITY');
+  // Imagem só de origem controlada: mídia enviada pela própria plataforma ou HTTPS de host permitido.
+  if (mediaInput?.url && !allowedMediaUrl(mediaInput.url)) throw new CommerceError('imagem precisa ser enviada pelo upload da loja ou vir de um endereço HTTPS permitido', 'MEDIA_URL_NOT_ALLOWED');
+
+  const normalizedRequest = {
+    productId: input.productId ? assertUuid(input.productId, 'productId') : null,
+    storefrontId,
+    locationId,
+    product: { ...productInput, status: desiredStatus },
+    variant: variantInput,
+    media: mediaInput,
+    price,
+    promotionalPrice,
+    targetStock,
+    expectedStock,
+    published,
+  };
+  const requestHash = crypto.createHash('sha256').update(JSON.stringify(normalizedRequest)).digest('hex');
+  const existing = await trx.query(
+    `SELECT request_hash, response_body
+       FROM commerce_idempotency_keys
+      WHERE empresa_id = $1 AND scope = 'catalog.product.save' AND key = $2
+      FOR UPDATE`,
+    [empresaId, idempotencyKey],
+  );
+  if (existing.rows[0]) {
+    if (existing.rows[0].request_hash !== requestHash) throw new CommerceError('chave de idempotência reutilizada com payload diferente', 'IDEMPOTENCY_CONFLICT');
+    if (existing.rows[0].response_body) return existing.rows[0].response_body;
+  } else {
+    const inserted = await trx.query(
+      `INSERT INTO commerce_idempotency_keys (empresa_id, scope, key, request_hash, expires_at)
+       VALUES ($1, 'catalog.product.save', $2, $3, CURRENT_TIMESTAMP + INTERVAL '24 hours')
+       ON CONFLICT (empresa_id, scope, key) DO NOTHING
+       RETURNING key`,
+      [empresaId, idempotencyKey, requestHash],
+    );
+    if (!inserted.rows[0]) {
+      const raced = await trx.query(
+        `SELECT request_hash, response_body
+           FROM commerce_idempotency_keys
+          WHERE empresa_id = $1 AND scope = 'catalog.product.save' AND key = $2
+          FOR UPDATE`,
+        [empresaId, idempotencyKey],
+      );
+      if (!raced.rows[0] || raced.rows[0].request_hash !== requestHash) throw new CommerceError('chave de idempotência reutilizada com payload diferente', 'IDEMPOTENCY_CONFLICT');
+      if (raced.rows[0].response_body) return raced.rows[0].response_body;
+    }
+  }
+
+  const storefront = await resolveStorefront(trx, context, storefrontId);
+  const inventoryLojaId = storefront.loja_id || context.lojaId || null;
+  const location = await trx.query(
+    `SELECT id
+       FROM commerce_inventory_locations
+      WHERE empresa_id = $1 AND id = $2 AND ativo = true
+        AND ($3::uuid IS NULL OR loja_id = $3 OR loja_id IS NULL)
+      LIMIT 1`,
+    [empresaId, locationId, inventoryLojaId],
+  );
+  if (!location.rows[0]) throw new CommerceError('local de estoque fora do escopo da loja', 'INVENTORY_LOCATION_SCOPE_MISMATCH');
+
+  let product;
+  let variant;
+  if (normalizedRequest.productId) {
+    const current = await trx.query(
+      `SELECT p.id, p.status, pc.price_list_id, pc.publicado
+         FROM commerce_products p
+         JOIN commerce_product_channels pc
+           ON pc.empresa_id = p.empresa_id
+          AND pc.product_id = p.id
+          AND pc.storefront_id = $3
+        WHERE p.empresa_id = $1 AND p.id = $2
+        FOR UPDATE OF p, pc`,
+      [empresaId, normalizedRequest.productId, storefrontId],
+    );
+    if (!current.rows[0]) throw new CommerceError('produto fora do escopo do storefront selecionado', 'PRODUCT_STOREFRONT_SCOPE_MISMATCH');
+    if (current.rows[0].status === 'archived') throw new CommerceError('produto arquivado não pode ser alterado; duplique-o como rascunho', 'PRODUCT_ARCHIVED');
+    // Tirar da vitrine ou voltar para rascunho é uma decisão de publicação, não de edição.
+    const unpublishes = (current.rows[0].status === 'active' && desiredStatus !== 'active') || (current.rows[0].publicado === true && !published);
+    if (unpublishes && input.canPublish !== true) throw new CommerceError('só quem pode publicar produtos pode tirá-los da vitrine', 'PERMISSION_DENIED');
+    const priceListId = current.rows[0].price_list_id || await ensureDefaultPriceList(trx, empresaId);
+    product = await updateCatalogProduct(trx, context, normalizedRequest.productId, normalizedRequest.product, { storefrontId });
+    const variantResult = variantInput.id
+      ? await trx.query('SELECT * FROM commerce_product_variants WHERE empresa_id = $1 AND id = $2 AND product_id = $3 FOR UPDATE', [empresaId, assertUuid(variantInput.id, 'variantId'), product.id])
+      : await trx.query('SELECT * FROM commerce_product_variants WHERE empresa_id = $1 AND product_id = $2 ORDER BY criado_em ASC LIMIT 1 FOR UPDATE', [empresaId, product.id]);
+    if (!variantResult.rows[0]) throw new CommerceError('variante principal não encontrada no produto', 'VARIANT_NOT_FOUND');
+    variant = await updateCatalogVariant(trx, context, variantResult.rows[0].id, {
+      sku: variantInput.sku,
+      nome: variantInput.nome,
+      barcode: variantInput.barcode,
+      atributos: variantInput.atributos,
+      pesoGramas: variantInput.pesoGramas,
+      larguraCm: variantInput.larguraCm,
+      alturaCm: variantInput.alturaCm,
+      comprimentoCm: variantInput.comprimentoCm,
+      ativo: variantInput.ativo,
+      storefrontId,
+      preco: price,
+      precoPromocional: promotionalPrice,
+      priceListId,
+    });
+    await publishCatalogProduct(trx, context, product.id, { storefrontId, publicado: published, priceListId });
+    if (mediaInput?.url) await createCatalogMedia(trx, context, product.id, { ...mediaInput, variantId: variant.id, storefrontId });
+  } else {
+    product = await createCatalogProduct(trx, context, {
+      ...normalizedRequest.product,
+      storefrontId,
+      publicado: published,
+      variant: variantInput,
+      media: mediaInput,
+      preco: price,
+      precoPromocional: promotionalPrice,
+    });
+    variant = product.variant;
+  }
+
+  const level = await trx.query(
+    `SELECT disponivel
+       FROM commerce_inventory_levels
+      WHERE empresa_id = $1 AND location_id = $2 AND variant_id = $3
+      FOR UPDATE`,
+    [empresaId, locationId, variant.id],
+  );
+  const currentStock = Number(level.rows[0]?.disponivel || 0);
+  if (normalizedRequest.productId && expectedStock == null && targetStock !== currentStock) throw new CommerceError('recarregue o produto antes de alterar o estoque', 'INVENTORY_BASELINE_REQUIRED');
+  if (normalizedRequest.productId && expectedStock != null && expectedStock !== currentStock) {
+    throw new CommerceError(`o estoque mudou enquanto o formulário estava aberto (agora ${currentStock}); recarregue e confira`, 'INVENTORY_CHANGED', { current: currentStock, expected: expectedStock });
+  }
+  const delta = targetStock - currentStock;
+  const inventory = delta === 0
+    ? { empresaId, locationId, variantId: variant.id, disponivel: currentStock, delta: 0 }
+    : await adjustInventory(trx, context, {
+        locationId,
+        variantId: variant.id,
+        delta,
+        tipo: delta > 0 ? 'entrada' : 'saida',
+        observacao: 'Ajuste pelo workspace de produtos',
+      });
+
+  const response = {
+    productId: product.id,
+    variantId: variant.id,
+    status: desiredStatus,
+    published,
+    inventory,
+  };
+  await trx.query(
+    `UPDATE commerce_idempotency_keys
+        SET response_status = 200, response_body = $3::jsonb
+      WHERE empresa_id = $1 AND scope = 'catalog.product.save' AND key = $2`,
+    [empresaId, idempotencyKey, JSON.stringify(response)],
+  );
+  return response;
+}
+
 export async function setVariantPrice(trx, context, productId, input = {}) {
   const { empresaId, usuarioId } = tenantContext(context);
+  requireVerifiedCapability(context, 'catalog.write');
   const id = assertUuid(productId, 'productId');
   const variantId = assertUuid(input.variantId, 'variantId');
+  const storefrontId = input.storefrontId ? assertUuid(input.storefrontId, 'storefrontId') : null;
+  const requestedPriceListId = input.priceListId ? assertUuid(input.priceListId, 'priceListId') : null;
+  const initialChannel = storefrontId
+    ? await trx.query(
+        `SELECT pc.price_list_id
+           FROM commerce_product_channels pc
+           JOIN commerce_storefronts s ON s.empresa_id = pc.empresa_id AND s.id = pc.storefront_id AND s.status = 'active'
+          WHERE pc.empresa_id = $1 AND pc.product_id = $2 AND pc.storefront_id = $3`,
+        [empresaId, id, storefrontId],
+      )
+    : { rows: [] };
+  if (storefrontId && !initialChannel.rows[0]) throw new CommerceError('produto fora do escopo do storefront selecionado', 'PRODUCT_STOREFRONT_SCOPE_MISMATCH');
+  const initialChannelPriceListId = initialChannel.rows[0]?.price_list_id || null;
+  const lockPriceListId = requestedPriceListId || initialChannelPriceListId;
+  await trx.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`variant-price:${empresaId}:${lockPriceListId || `storefront:${storefrontId || 'default'}`}:${variantId}`]);
+  await resolveCatalogResourceScope(trx, context, { productId: id, variantId, storefrontId, mutation: true, lock: true });
   const price = Number(input.preco);
   if (!Number.isFinite(price) || price < 0) throw new CommerceError('preço de venda inválido', 'INVALID_PRICE');
   const promotional = input.precoPromocional == null || input.precoPromocional === '' ? null : Number(input.precoPromocional);
   if (promotional != null && (!Number.isFinite(promotional) || promotional < 0 || promotional >= price)) throw new CommerceError('preço promocional deve ser menor que o preço de venda', 'INVALID_PROMOTIONAL_PRICE');
   const variant = await trx.query(
-    `SELECT v.id FROM commerce_product_variants v
-      WHERE v.empresa_id = $1 AND v.id = $2 AND v.product_id = $3 LIMIT 1`,
+    `SELECT v.id, p.status AS product_status
+       FROM commerce_product_variants v
+       JOIN commerce_products p ON p.empresa_id = v.empresa_id AND p.id = v.product_id
+      WHERE v.empresa_id = $1 AND v.id = $2 AND v.product_id = $3
+      FOR UPDATE OF v, p`,
     [empresaId, variantId, id],
   );
   if (!variant.rows[0]) throw new CommerceError('variante não encontrada no produto/tenant', 'VARIANT_NOT_FOUND');
-  const priceListId = input.priceListId ? assertUuid(input.priceListId, 'priceListId') : await ensureDefaultPriceList(trx, empresaId);
+  if (variant.rows[0].product_status === 'archived') throw new CommerceError('produto arquivado não pode ser alterado; duplique-o como rascunho', 'PRODUCT_ARCHIVED');
+  const channel = storefrontId
+    ? await trx.query(
+        `SELECT pc.price_list_id
+           FROM commerce_product_channels pc
+           JOIN commerce_storefronts s ON s.empresa_id = pc.empresa_id AND s.id = pc.storefront_id AND s.status = 'active'
+          WHERE pc.empresa_id = $1 AND pc.product_id = $2 AND pc.storefront_id = $3
+          FOR UPDATE OF pc`,
+        [empresaId, id, storefrontId],
+      )
+    : { rows: [] };
+  if (storefrontId && !channel.rows[0]) throw new CommerceError('produto fora do escopo do storefront selecionado', 'PRODUCT_STOREFRONT_SCOPE_MISMATCH');
+  const channelPriceListId = channel.rows[0]?.price_list_id || null;
+  if (channelPriceListId !== initialChannelPriceListId) throw new CommerceError('vínculo da lista de preços mudou durante a atualização', 'PRICE_LIST_CONCURRENT_CHANGE');
+  const priceListId = requestedPriceListId
+    ? requestedPriceListId
+    : channelPriceListId || await ensureDefaultPriceList(trx, empresaId);
+  if (channelPriceListId && priceListId !== channelPriceListId) throw new CommerceError('lista de preços não está vinculada ao canal selecionado', 'PRICE_LIST_SCOPE_MISMATCH');
+  const priceList = await trx.query(
+    `SELECT pl.id
+       FROM commerce_price_lists pl
+       LEFT JOIN commerce_storefronts s ON s.empresa_id = pl.empresa_id AND s.id = $3
+      WHERE pl.empresa_id = $1 AND pl.id = $2 AND pl.ativo = true AND pl.canal = 'web'
+        AND ($3::uuid IS NULL OR pl.moeda = s.moeda)
+      LIMIT 1`,
+    [empresaId, priceListId, storefrontId],
+  );
+  if (!priceList.rows[0]) throw new CommerceError('lista de preços inativa ou incompatível com o storefront', 'PRICE_LIST_SCOPE_MISMATCH');
+  if (storefrontId && !channelPriceListId) {
+    await trx.query(
+      `UPDATE commerce_product_channels SET price_list_id = $4
+        WHERE empresa_id = $1 AND product_id = $2 AND storefront_id = $3`,
+      [empresaId, id, storefrontId, priceListId],
+    );
+  }
   await trx.query(
     `UPDATE commerce_variant_prices
         SET vigencia_fim = CURRENT_TIMESTAMP
@@ -767,13 +1269,14 @@ export async function setVariantPrice(trx, context, productId, input = {}) {
   await trx.query(
     `INSERT INTO commerce_audit_logs (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, depois)
      VALUES ($1, $2, $3, 'variant_price', $4, 'updated', $5::jsonb)`,
-    [empresaId, context.lojaId || null, usuarioId, variantId, JSON.stringify({ productId: id, priceListId, price, promotional })],
+    [empresaId, context.lojaId || null, usuarioId, variantId, JSON.stringify({ productId: id, storefrontId, priceListId, price, promotional })],
   );
   return result.rows[0];
 }
 
 export async function updateCategory(trx, context, categoryId, input = {}) {
   const { empresaId, usuarioId } = tenantContext(context);
+  requireVerifiedCapability(context, 'catalog.write');
   const id = assertUuid(categoryId, 'categoryId');
   const currentResult = await trx.query('SELECT * FROM commerce_categories WHERE empresa_id = $1 AND id = $2 FOR UPDATE', [empresaId, id]);
   if (!currentResult.rows[0]) throw new CommerceError('categoria não encontrada no tenant', 'CATEGORY_NOT_FOUND');
@@ -812,25 +1315,46 @@ export async function updateCategory(trx, context, categoryId, input = {}) {
 
 export async function createCatalogVariant(trx, context, productId, input = {}) {
   const { empresaId, usuarioId } = tenantContext(context);
+  requireVerifiedCapability(context, 'catalog.write');
   const id = assertUuid(productId, 'productId');
-  const product = await trx.query('SELECT id, nome FROM commerce_products WHERE empresa_id = $1 AND id = $2 LIMIT 1', [empresaId, id]);
+  await resolveCatalogResourceScope(trx, context, { productId: id, storefrontId: input.storefrontId, mutation: true, lock: true });
+  const product = await trx.query('SELECT id, nome, status FROM commerce_products WHERE empresa_id = $1 AND id = $2 FOR UPDATE', [empresaId, id]);
   if (!product.rows[0]) throw new CommerceError('produto não encontrado no tenant', 'PRODUCT_NOT_FOUND');
+  if (product.rows[0].status === 'archived') throw new CommerceError('produto arquivado não pode ser alterado; duplique-o como rascunho', 'PRODUCT_ARCHIVED');
   const sku = String(input.sku || '').trim().slice(0, 100);
   if (!sku) throw new CommerceError('SKU da variante é obrigatório', 'VARIANT_REQUIRED');
   const result = await trx.query(`INSERT INTO commerce_product_variants (empresa_id, product_id, sku, barcode, nome, atributos, peso_gramas, largura_cm, altura_cm, comprimento_cm, ativo) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11) RETURNING *`, [empresaId, id, sku, String(input.barcode || '').trim() || null, String(input.nome || '').trim() || null, JSON.stringify(input.atributos && typeof input.atributos === 'object' ? input.atributos : {}), input.pesoGramas == null ? null : Math.max(0, Number(input.pesoGramas) || 0), input.larguraCm == null ? null : Math.max(0, Number(input.larguraCm) || 0), input.alturaCm == null ? null : Math.max(0, Number(input.alturaCm) || 0), input.comprimentoCm == null ? null : Math.max(0, Number(input.comprimentoCm) || 0), input.ativo !== false]);
   const variant = result.rows[0];
-  if (input.preco !== undefined) await setVariantPrice(trx, context, id, { ...input, variantId: variant.id });
-  if (input.media?.url) await createCatalogMedia(trx, context, id, { ...input.media, variantId: variant.id });
+  if (input.preco !== undefined) {
+    const priceListId = input.storefrontId
+      ? await resolveProductChannelPriceList(trx, context, id, input.storefrontId)
+      : input.priceListId;
+    await setVariantPrice(trx, context, id, { ...input, variantId: variant.id, priceListId, storefrontId: input.storefrontId });
+  }
+  if (input.media?.url) {
+    if (!allowedMediaUrl(input.media.url)) throw new CommerceError('use uma imagem enviada pelo painel ou um endereço https autorizado', 'MEDIA_URL_NOT_ALLOWED');
+    await createCatalogMedia(trx, context, id, { ...input.media, variantId: variant.id, storefrontId: input.storefrontId });
+  }
   await trx.query(`INSERT INTO commerce_audit_logs (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, depois) VALUES ($1, $2, $3, 'variant', $4, 'created', $5::jsonb)`, [empresaId, context.lojaId || null, usuarioId, variant.id, JSON.stringify({ productId: id, sku })]);
   return variant;
 }
 
 export async function updateCatalogVariant(trx, context, variantId, input = {}) {
   const { empresaId, usuarioId } = tenantContext(context);
+  requireVerifiedCapability(context, 'catalog.write');
   const id = assertUuid(variantId, 'variantId');
-  const currentResult = await trx.query('SELECT * FROM commerce_product_variants WHERE empresa_id = $1 AND id = $2 FOR UPDATE', [empresaId, id]);
+  await resolveCatalogResourceScope(trx, context, { variantId: id, storefrontId: input.storefrontId, mutation: true, lock: true });
+  const currentResult = await trx.query(
+    `SELECT v.*, p.status AS product_status
+       FROM commerce_product_variants v
+       JOIN commerce_products p ON p.empresa_id = v.empresa_id AND p.id = v.product_id
+      WHERE v.empresa_id = $1 AND v.id = $2
+      FOR UPDATE OF v, p`,
+    [empresaId, id],
+  );
   if (!currentResult.rows[0]) throw new CommerceError('variante não encontrada no tenant', 'VARIANT_NOT_FOUND');
   const current = currentResult.rows[0];
+  if (current.product_status === 'archived') throw new CommerceError('produto arquivado não pode ser alterado; duplique-o como rascunho', 'PRODUCT_ARCHIVED');
   const allowed = { sku: 'sku', barcode: 'barcode', nome: 'nome', pesoGramas: 'peso_gramas', larguraCm: 'largura_cm', alturaCm: 'altura_cm', comprimentoCm: 'comprimento_cm', ativo: 'ativo' };
   const sets = [];
   const values = [empresaId, id];
@@ -850,21 +1374,30 @@ export async function updateCatalogVariant(trx, context, variantId, input = {}) 
     sets.push('atualizado_em = CURRENT_TIMESTAMP');
     await trx.query(`UPDATE commerce_product_variants SET ${sets.join(', ')} WHERE empresa_id = $1 AND id = $2`, values);
   }
-  if (input.preco !== undefined) await setVariantPrice(trx, context, current.product_id, { ...input, variantId: id });
+  if (input.preco !== undefined) {
+    const priceListId = input.storefrontId
+      ? await resolveProductChannelPriceList(trx, context, current.product_id, input.storefrontId)
+      : input.priceListId;
+    await setVariantPrice(trx, context, current.product_id, { ...input, variantId: id, priceListId, storefrontId: input.storefrontId });
+  }
   await trx.query(`INSERT INTO commerce_audit_logs (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, depois) VALUES ($1, $2, $3, 'variant', $4, 'updated', $5::jsonb)`, [empresaId, context.lojaId || null, usuarioId, id, JSON.stringify({ productId: current.product_id, fields: Object.keys(input) })]);
   const result = await trx.query('SELECT * FROM commerce_product_variants WHERE empresa_id = $1 AND id = $2', [empresaId, id]);
   return result.rows[0];
 }
 
-export async function archiveCatalogVariant(trx, context, variantId) {
-  return updateCatalogVariant(trx, context, variantId, { ativo: false });
+export async function archiveCatalogVariant(trx, context, variantId, input = {}) {
+  requireVerifiedCapability(context, 'catalog.write');
+  return updateCatalogVariant(trx, context, variantId, { ativo: false, storefrontId: input.storefrontId });
 }
 
 export async function createCatalogMedia(trx, context, productId, input = {}) {
   const { empresaId, usuarioId } = tenantContext(context);
+  requireVerifiedCapability(context, 'catalog.write');
   const id = assertUuid(productId, 'productId');
-  const product = await trx.query('SELECT id FROM commerce_products WHERE empresa_id = $1 AND id = $2 LIMIT 1', [empresaId, id]);
+  await resolveCatalogResourceScope(trx, context, { productId: id, storefrontId: input.storefrontId, mutation: true, lock: true });
+  const product = await trx.query('SELECT id, status FROM commerce_products WHERE empresa_id = $1 AND id = $2 FOR UPDATE', [empresaId, id]);
   if (!product.rows[0]) throw new CommerceError('produto não encontrado no tenant', 'PRODUCT_NOT_FOUND');
+  if (product.rows[0].status === 'archived') throw new CommerceError('produto arquivado não pode ser alterado; duplique-o como rascunho', 'PRODUCT_ARCHIVED');
   const url = String(input.url || input.publicUrl || '').trim().slice(0, 1000);
   if (!url) throw new CommerceError('URL da mídia é obrigatória', 'MEDIA_REQUIRED');
   const variantId = input.variantId ? assertUuid(input.variantId, 'variantId') : null;
@@ -884,20 +1417,32 @@ export async function createCatalogMedia(trx, context, productId, input = {}) {
   return result.rows[0];
 }
 
-export async function listCatalogMedia(client, context, productId) {
+export async function listCatalogMedia(client, context, productId, input = {}) {
   const { empresaId } = tenantContext(context);
   const id = assertUuid(productId, 'productId');
+  await resolveCatalogResourceScope(client, context, { productId: id, storefrontId: input.storefrontId });
   const result = await client.query('SELECT id, product_id, variant_id, storage_key, public_url, mime_type, alt_text, ordem, criado_em FROM commerce_product_media WHERE empresa_id = $1 AND product_id = $2 ORDER BY ordem ASC, criado_em ASC', [empresaId, id]);
   return { items: result.rows };
 }
 
-export async function deleteCatalogMedia(trx, context, mediaId) {
+export async function deleteCatalogMedia(trx, context, mediaId, input = {}) {
   const { empresaId, usuarioId } = tenantContext(context);
+  requireVerifiedCapability(context, 'catalog.write');
   const id = assertUuid(mediaId, 'mediaId');
-  const result = await trx.query('DELETE FROM commerce_product_media WHERE empresa_id = $1 AND id = $2 RETURNING id, product_id', [empresaId, id]);
-  if (!result.rows[0]) throw new CommerceError('mídia não encontrada no tenant', 'MEDIA_NOT_FOUND');
+  const scope = await resolveCatalogResourceScope(trx, context, { mediaId: id, storefrontId: input.storefrontId, mutation: true, lock: true });
+  const current = await trx.query(
+    `SELECT m.id, m.product_id, p.status AS product_status
+       FROM commerce_product_media m
+       JOIN commerce_products p ON p.empresa_id = m.empresa_id AND p.id = m.product_id
+      WHERE m.empresa_id = $1 AND m.id = $2
+      FOR UPDATE OF m, p`,
+    [empresaId, id],
+  );
+  if (!current.rows[0]) throw new CommerceError('mídia não encontrada no tenant', 'MEDIA_NOT_FOUND');
+  if (current.rows[0].product_status === 'archived') throw new CommerceError('produto arquivado não pode ser alterado; duplique-o como rascunho', 'PRODUCT_ARCHIVED');
+  const result = await trx.query('DELETE FROM commerce_product_media WHERE empresa_id = $1 AND id = $2 RETURNING id, product_id, storage_key', [empresaId, id]);
   await trx.query(`INSERT INTO commerce_audit_logs (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, depois) VALUES ($1, $2, $3, 'product_media', $4, 'deleted', $5::jsonb)`, [empresaId, context.lojaId || null, usuarioId, id, JSON.stringify({ productId: result.rows[0].product_id })]);
-  return result.rows[0];
+  return { ...result.rows[0], storage_key: scope.media.storage_key };
 }
 
 export const FULFILLMENT_TRANSITIONS = {
@@ -1006,7 +1551,8 @@ export async function updateShippingMethod(trx, context, methodId, input = {}) {
 export async function createFulfillment(trx, context, input = {}) {
   const { empresaId } = tenantContext(context);
   const orderId = assertUuid(input.orderId, 'orderId');
-  const order = await trx.query(`SELECT id, storefront_id, status, endereco_entrega, shipping_method_id, shipping_quote_id FROM commerce_orders WHERE empresa_id = $1 AND id = $2 FOR UPDATE`, [empresaId, orderId]);
+  const storefrontId = input.storefrontId ? assertUuid(input.storefrontId, 'storefrontId') : null;
+  const order = await trx.query(`SELECT id, storefront_id, status, endereco_entrega, shipping_method_id, shipping_quote_id FROM commerce_orders WHERE empresa_id = $1 AND id = $2 AND ($3::uuid IS NULL OR storefront_id = $3) AND ($4::uuid IS NULL OR loja_id = $4) FOR UPDATE`, [empresaId, orderId, storefrontId, context.corporateAccess === true ? null : context.lojaId || null]);
   if (!order.rows[0]) throw new CommerceError('pedido não encontrado no tenant', 'ORDER_NOT_FOUND');
   if (!['paid', 'processing', 'ready', 'shipped', 'ready_for_pickup'].includes(order.rows[0].status)) throw new CommerceError('fulfillment só pode ser criado após pagamento confirmado', 'FULFILLMENT_ORDER_NOT_PAID');
   const shippingMethodId = input.shippingMethodId ? assertUuid(input.shippingMethodId, 'shippingMethodId') : order.rows[0].shipping_method_id || null;
@@ -1039,7 +1585,8 @@ export async function createFulfillment(trx, context, input = {}) {
 export async function updateFulfillment(trx, context, fulfillmentId, input = {}) {
   const { empresaId, usuarioId } = tenantContext(context);
   const id = assertUuid(fulfillmentId, 'fulfillmentId');
-  const locked = await trx.query(`SELECT id, order_id, status, ocorrencias FROM commerce_fulfillments WHERE empresa_id = $1 AND id = $2 FOR UPDATE`, [empresaId, id]);
+  const storefrontId = input.storefrontId ? assertUuid(input.storefrontId, 'storefrontId') : null;
+  const locked = await trx.query(`SELECT f.id, f.order_id, f.status, f.ocorrencias FROM commerce_fulfillments f JOIN commerce_orders o ON o.empresa_id = f.empresa_id AND o.id = f.order_id WHERE f.empresa_id = $1 AND f.id = $2 AND ($3::uuid IS NULL OR o.storefront_id = $3) AND ($4::uuid IS NULL OR o.loja_id = $4) FOR UPDATE OF f`, [empresaId, id, storefrontId, context.corporateAccess === true ? null : context.lojaId || null]);
   const current = locked.rows[0];
   if (!current) throw new CommerceError('fulfillment não encontrado no tenant', 'FULFILLMENT_NOT_FOUND');
   const nextStatus = String(input.status || current.status);
@@ -1064,6 +1611,7 @@ export async function updateFulfillment(trx, context, fulfillmentId, input = {})
 
 export async function createInventoryLocation(trx, context, input = {}) {
   const { empresaId } = tenantContext(context);
+  requireVerifiedCapability(context, 'inventory.write');
   const nome = String(input.nome || '').trim();
   const codigo = String(input.codigo || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').slice(0, 80);
   if (!nome || !codigo) throw new CommerceError('nome e código do local são obrigatórios', 'LOCATION_REQUIRED');
@@ -1082,6 +1630,7 @@ export async function createInventoryLocation(trx, context, input = {}) {
 
 export async function adjustInventory(trx, context, input = {}) {
   const { empresaId, usuarioId } = tenantContext(context);
+  requireVerifiedCapability(context, 'inventory.write');
   const locationId = assertUuid(input.locationId, 'locationId');
   const variantId = assertUuid(input.variantId, 'variantId');
   const delta = Number(input.delta);
@@ -1146,4 +1695,18 @@ export async function adjustInventory(trx, context, input = {}) {
 export async function healthcheck() {
   const result = await db.query('SELECT 1 AS ok');
   return result.rows[0]?.ok === 1;
+}
+
+
+// Pagamento capturado num pedido já cancelado: não reabre o pedido nem mexe no estoque,
+// mas deixa rastro para a equipe estornar.
+export async function flagPaymentAfterCancellation(trx, context, { orderId, provider, eventKey }) {
+  const { empresaId } = tenantContext(context);
+  await trx.query(
+    `INSERT INTO commerce_audit_logs (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, antes, depois, correlation_id)
+     SELECT o.empresa_id, o.loja_id, NULL, 'order', o.id, 'payment_after_cancel', jsonb_build_object('status', o.status),
+            jsonb_build_object('provider', $3::text, 'acao_necessaria', 'estornar_pagamento'), $4
+       FROM commerce_orders o WHERE o.empresa_id = $1 AND o.id = $2`,
+    [empresaId, assertUuid(orderId, 'orderId'), String(provider || '').slice(0, 40), requestId(eventKey)],
+  );
 }

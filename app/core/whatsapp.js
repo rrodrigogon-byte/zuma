@@ -4,6 +4,7 @@
  * Suporte a: Oficina, Barbearia, Crediário, Agendamentos, Cobranças, Alertas
  */
 import fetch from 'node-fetch';
+import { sendTextViaChatbotBackend, whatsappProviderName } from './whatsapp-provider.js';
 
 // ─── Configuração ─────────────────────────────────────────────────────────────
 function getConfig(tenant) {
@@ -25,9 +26,15 @@ function formatarTelefone(tel) {
 }
 
 export async function enviarMensagem(tenant, telefone, mensagem) {
-  const cfg = getConfig(tenant);
-  const numero = formatarTelefone(telefone);
+  const numero = formatarTelefone(String(telefone || ''));
   const text = String(mensagem || '').slice(0, 4000);
+  // Mesmo backend do NossaGente: todas as saídas (IA, campanhas, carrinho,
+  // lembretes de agenda) passam por aqui e seguem pela instância da empresa.
+  if (whatsappProviderName() === 'chatbot_backend') {
+    const instance = tenant?.whatsapp_instance || tenant?.instance || undefined;
+    return sendTextViaChatbotBackend({ instance, number: numero, text });
+  }
+  const cfg = getConfig(tenant);
   const body = cfg.payloadVersion === 'legacy'
     ? { number: numero, options: { delay: 1200, presence: 'composing' }, textMessage: { text } }
     : { number: numero, text, delay: 1200 };

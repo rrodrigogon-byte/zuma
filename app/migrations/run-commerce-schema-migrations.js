@@ -43,11 +43,78 @@ const migrationFiles = [
   '049_commerce_cart_sync_ordering.sql',
   '050_commerce_order_satisfaction.sql',
   '051_commerce_customer_identity.sql',
+  '052_ai_brain_memory_learning.sql',
+  '053_commerce_phone_verification.sql',
+  '054_commerce_loyalty_expiry_marks.sql',
 ];
 const advisoryLockKey = 825410732;
 
 function checksum(sql) {
   return createHash('sha256').update(sql).digest('hex');
+}
+
+export function stripTopLevelTransactionControl(sql) {
+  let depth = 0;
+  let state = 'normal';
+  let dollarTag = '';
+  let statement = '';
+  let output = '';
+
+  function appendStatement(terminator = '') {
+    const normalized = statement.trim().replace(/^(?:--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/\s*)*/g, '').trim().toUpperCase();
+    if (depth === 0 && /^(?:BEGIN(?:\s+(?:WORK|TRANSACTION))?|START\s+TRANSACTION|COMMIT(?:\s+WORK)?)$/.test(normalized)) {
+      output += statement.replace(/[^\r\n]/g, ' ') + (terminator ? ' ' : '');
+    } else {
+      output += statement + terminator;
+    }
+    statement = '';
+  }
+
+  for (let index = 0; index < sql.length; index += 1) {
+    const char = sql[index];
+    const next = sql[index + 1] || '';
+    if (state === 'line-comment') {
+      statement += char;
+      if (char === '\n') state = 'normal';
+      continue;
+    }
+    if (state === 'block-comment') {
+      statement += char;
+      if (char === '*' && next === '/') { statement += next; index += 1; state = 'normal'; }
+      continue;
+    }
+    if (state === 'single-quote') {
+      statement += char;
+      if (char === "'" && next === "'") { statement += next; index += 1; }
+      else if (char === "'") state = 'normal';
+      continue;
+    }
+    if (state === 'double-quote') {
+      statement += char;
+      if (char === '"' && next === '"') { statement += next; index += 1; }
+      else if (char === '"') state = 'normal';
+      continue;
+    }
+    if (state === 'dollar-quote') {
+      if (sql.startsWith(dollarTag, index)) { statement += dollarTag; index += dollarTag.length - 1; state = 'normal'; }
+      else statement += char;
+      continue;
+    }
+    if (char === '-' && next === '-') { statement += char + next; index += 1; state = 'line-comment'; continue; }
+    if (char === '/' && next === '*') { statement += char + next; index += 1; state = 'block-comment'; continue; }
+    if (char === "'") { statement += char; state = 'single-quote'; continue; }
+    if (char === '"') { statement += char; state = 'double-quote'; continue; }
+    if (char === '$') {
+      const match = sql.slice(index).match(/^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/);
+      if (match) { dollarTag = match[0]; statement += dollarTag; index += dollarTag.length - 1; state = 'dollar-quote'; continue; }
+    }
+    if (char === '(') depth += 1;
+    else if (char === ')' && depth > 0) depth -= 1;
+    if (char === ';') appendStatement(';');
+    else statement += char;
+  }
+  appendStatement();
+  return output;
 }
 
 function hasManagedDatabaseUrl() {
@@ -91,7 +158,7 @@ async function applyMigration(fileName) {
   console.log(`→ Aplicando ${fileName}`);
   const client = await dbPg.beginTransaction();
   try {
-    await dbPg.queryInTransaction(client, sql);
+    await dbPg.queryInTransaction(client, stripTopLevelTransactionControl(sql));
     await dbPg.queryInTransaction(
       client,
       'INSERT INTO commerce_schema_migrations (arquivo, checksum) VALUES ($1, $2)',

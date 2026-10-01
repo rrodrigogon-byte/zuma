@@ -117,7 +117,7 @@ test('listagem usa empresa e loja do contexto e mascara configuração sensível
     },
   };
   const result = await listPaymentAccounts(client, context);
-  assert.deepEqual(received.values, [empresaId, lojaId]);
+  assert.deepEqual(received.values, [empresaId, lojaId, null]);
   assert.equal(result.items[0].storefront_name, 'Loja Teste');
   assert.equal(result.items[0].secret_configured, false);
   assert.equal('secret_ref' in result.items[0], false);

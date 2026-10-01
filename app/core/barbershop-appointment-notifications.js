@@ -1,3 +1,4 @@
+import { isWhatsappOptOutText, phoneMatchKey } from './whatsapp-phone.js';
 import { createHash } from 'node:crypto';
 import { db as legacyDb } from '../db.js';
 import * as barbearia from '../barbearia-erp-kytto.js';
@@ -7,7 +8,6 @@ import { enviarMensagem } from './whatsapp.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EVENTOS = new Set(['criado', 'remarcado', 'cancelado', 'lembrete']);
-const OPT_OUT = new Set(['SAIR', 'PARE', 'PARAR', 'REMOVER MEU NÚMERO']);
 
 function limpo(valor, limite = 500) { return String(valor ?? '').trim().replace(/\u0000/g, '').slice(0, limite); }
 function normalizarTelefone(valor) {
@@ -204,8 +204,8 @@ export async function recordAppointmentNotificationOptOut(channel = {}, parsed =
   const telefone = normalizarTelefone(parsed.phone || parsed.remoteJid);
   const empresaId = uuidOuVazio(channel.empresa_id);
   const lojaId = uuidOuVazio(channel.loja_id);
-  if (!OPT_OUT.has(comando) || !telefone || !empresaId || !lojaId) return { optedOut: false };
-  const clientesEmpresa = clientes.listarClientes(empresaId).filter((cliente) => normalizarTelefone(cliente.telefone) === telefone && cliente.consentimentos?.whatsapp?.atendimento?.concedido === true);
+  if (!isWhatsappOptOutText(comando) || !telefone || !empresaId || !lojaId) return { optedOut: false };
+  const clientesEmpresa = clientes.listarClientes(empresaId).filter((cliente) => phoneMatchKey(cliente.telefone) === phoneMatchKey(telefone) && cliente.consentimentos?.whatsapp?.atendimento?.concedido === true);
   for (const cliente of clientesEmpresa) clientes.atualizarConsentimentoCliente(empresaId, cliente.id, { canal: 'whatsapp', finalidade: 'atendimento', concedido: false, origem: 'whatsapp_opt_out', responsavel: 'cliente' });
   if (clientesEmpresa.length) {
     await db.query(

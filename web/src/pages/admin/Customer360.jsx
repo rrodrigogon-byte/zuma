@@ -7,6 +7,7 @@ import './customer360.css'
 import { API, Badge, daysLabel, EmptyLine, FIELD_LABELS, fmtDay, REASONS, REVEAL_PRESETS, SEGMENTS, SOURCE_LABELS, statusLabel, Table, TIMELINE_ICONS } from './customer360/shared'
 import Portfolio from './customer360/Portfolio'
 import { AccessHistory, AnonymizePanel, ConsentEditor, IdentityPanel, NotesAndTags } from './customer360/Panels'
+import AiMemoryPanel from './customer360/AiMemoryPanel'
 
 // ─────────────────────────── revelar ───────────────────────────
 
@@ -255,6 +256,8 @@ function CustomerProfile({ reference }) {
           { key: 'ultimaInteracaoEm', label: 'Última interação', render: (row) => fmtDate(row.ultimaInteracaoEm) }, { key: 'status', label: 'Status', render: (row) => statusLabel(row.status) },
           { key: 'mensagens', label: 'Mensagens', align: 'right' },
         ]} />
+        <h3>Memória do atendente</h3>
+        {!data.anonimizado ? <AiMemoryPanel reference={reference} canManage={Boolean(data.permissoes?.gerenciar)} /> : <p className="c360-muted">Cliente anonimizado.</p>}
         <h3>Campanhas recebidas</h3>
         <Table caption="Campanhas" rows={data.relacionamento.campanhas} empty="Nenhuma campanha enviada." columns={[
           { key: 'campanha', label: 'Campanha' }, { key: 'enviadoEm', label: 'Enviada', render: (row) => row.enviadoEm ? fmtDate(row.enviadoEm) : '—' },

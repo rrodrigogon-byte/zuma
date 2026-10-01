@@ -37,3 +37,19 @@ test('replay com cupom diferente preserva a promoção já aplicada e retorna co
     error => error instanceof CommerceError && error.code === 'PROMOTION_ALREADY_APPLIED',
   );
 });
+
+test('cupom que zera o pedido é recusado (pedido de R$ 0 não tem como ser pago)', async () => {
+  const calls = [];
+  const trx = { async query(sql, values = []) {
+    calls.push(sql);
+    if (sql.includes('FROM commerce_orders')) return { rows: [{ id: orderId, storefront_id: '44444444-4444-4444-8444-444444444444', customer_id: null, status: 'pending_payment', subtotal: '30.00', desconto: '0.00', frete: '0.00', impostos: '0.00', total: '30.00' }] };
+    if (sql.includes('FROM commerce_order_promotions')) return { rows: [] };
+    if (sql.includes('FROM commerce_promotion_codes')) return { rows: [{ promotion_id: '66666666-6666-4666-8666-666666666666', promotion_code_id: '77777777-7777-4777-8777-777777777777', codigo: 'GRATIS', tipo: 'percentage', valor: '100' }] };
+    return { rows: [] };
+  } };
+  await assert.rejects(
+    () => applyPromotionToOrder(trx, { empresaId, lojaId }, { orderId, codigo: 'GRATIS' }),
+    error => error instanceof CommerceError && error.code === 'PROMOTION_ZERO_TOTAL',
+  );
+  assert.ok(!calls.some(sql => sql.includes('UPDATE commerce_orders SET desconto')), 'não grava desconto');
+});

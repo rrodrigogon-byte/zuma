@@ -36,7 +36,7 @@ test('updateStorefront ativa canal no tenant correto e registra auditoria', asyn
   const lojaId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
   const current = { id: storefrontId, empresa_id: empresaId, loja_id: lojaId, codigo: 'dino-web', nome: 'Dino Web', status: 'draft' };
   const active = { ...current, status: 'active' };
-  const responses = [{ rows: [current] }, { rows: [active] }, { rows: [] }];
+  const responses = [{ rows: [current] }, { rows: [{ id: lojaId, ativa: true }] }, { rows: [active] }, { rows: [] }];
   const queries = [];
   const client = { query: async (sql, values) => {
     queries.push({ sql, values });
@@ -59,6 +59,39 @@ test('updateStorefront ativa canal no tenant correto e registra auditoria', asyn
   assert.equal(audit.values[3], 'storefront');
   assert.equal(audit.values[5], 'updated');
   assert.deepEqual(JSON.parse(audit.values[7]), { fields: ['status'] });
+});
+
+test('updateStorefront não permite remover a loja de um canal que permaneceria ativo', async () => {
+  const storefrontId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const lojaId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const queries = [];
+  const client = { query: async (sql, values) => {
+    queries.push({ sql, values });
+    if (queries.length === 1) return { rows: [{ id: storefrontId, empresa_id: empresaId, loja_id: lojaId, codigo: 'dino-web', nome: 'Dino Web', status: 'active' }] };
+    throw new Error('nenhum UPDATE deve ser executado');
+  } };
+  await assert.rejects(
+    () => updateStorefront(client, context, storefrontId, { lojaId: null }),
+    error => error.code === 'STOREFRONT_OPERATIONAL_STORE_REQUIRED',
+  );
+  assert.equal(queries.length, 1);
+});
+
+test('updateStorefront bloqueia alteração comum quando a loja atual do canal ativo está inativa', async () => {
+  const storefrontId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const lojaId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const queries = [];
+  const client = { query: async (sql, values) => {
+    queries.push({ sql, values });
+    if (sql.includes('FROM commerce_storefronts s')) return { rows: [{ id: storefrontId, empresa_id: empresaId, loja_id: lojaId, codigo: 'dino-web', nome: 'Dino Web', status: 'active' }] };
+    if (sql.includes('FROM lojas')) return { rows: [{ id: lojaId, ativa: false }] };
+    throw new Error('nenhum UPDATE deve ser executado');
+  } };
+  await assert.rejects(
+    () => updateStorefront(client, context, storefrontId, { nome: 'Novo nome' }),
+    error => error.code === 'STOREFRONT_OPERATIONAL_STORE_REQUIRED',
+  );
+  assert.equal(queries.some(item => /UPDATE commerce_storefronts/.test(item.sql)), false);
 });
 
 test('createStorefront cria membership de loja para o administrador responsável', async () => {

@@ -1,8 +1,11 @@
+import { verifyPhoneToken } from './phone-verification.js';
+import { isWhatsappOptOutText, phoneMatchKeySql } from './whatsapp-phone.js';
 import { createHash } from 'node:crypto';
 import { CommerceError } from './commerce-error.js';
 import { normalizeBrazilianPhone, resolveCommerceCustomer } from './commerce-customer-identity.js';
 import { db } from './database.js';
 import { enviarMensagem } from './whatsapp.js';
+import { whatsappProviderConfigured } from './whatsapp-provider.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SESSION = /^[A-Za-z0-9_-]{24,180}$/;
@@ -81,7 +84,7 @@ async function event(trx, { empresaId, lojaId, cartId, customerId, type, metadat
 
 export async function syncPublicCart(context = {}, input = {}) {
   const empresaId = uuid(context.empresaId, 'empresaId');
-  const lojaId = uuid(context.lojaId, 'lojaId');
+  const lojaId = context.lojaId ? uuid(context.lojaId, 'lojaId') : null;
   const storefrontId = uuid(context.storefrontId, 'storefrontId');
   const hash = sessionHash(input.sessionKey);
   const items = normalizeItems(input.items || []);
@@ -94,6 +97,8 @@ export async function syncPublicCart(context = {}, input = {}) {
     const contact = input.contact || {};
     if (!source || !evidence.checkbox || evidence.notice.length < 20) fail('consentimento de recuperação exige origem e evidência explícitas', 'CONSENT_EVIDENCE_REQUIRED');
     if (!clean(contact.name || contact.nome, 240) || !normalizeCartPhone(contact.phone || contact.telefone)) fail('nome e WhatsApp válidos são obrigatórios para o lembrete');
+    // Número confirmado por código no WhatsApp: o lembrete pode ir mesmo sem conversa anterior.
+    if (verifyPhoneToken(input.phoneVerificationToken, empresaId, contact.phone || contact.telefone)) evidence.phoneVerified = true;
     requestedConsent = { source, evidence, contact };
   }
   return db.transaction(async trx => {
@@ -102,9 +107,12 @@ export async function syncPublicCart(context = {}, input = {}) {
       : null;
     await trx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`commerce-cart-sync:${empresaId}:${storefrontId}:${hash}`]);
     const existing = await trx.query(
-      `SELECT * FROM commerce_carts WHERE empresa_id=$1 AND storefront_id=$2 AND session_key_hash=$3 AND status IN ('open','abandoned','expired') ORDER BY client_sync_version DESC, atualizado_em DESC LIMIT 1 FOR UPDATE`,
+      `SELECT * FROM commerce_carts WHERE empresa_id=$1 AND storefront_id=$2 AND session_key_hash=$3 ORDER BY CASE WHEN status='converted' THEN 0 ELSE 1 END, client_sync_version DESC, atualizado_em DESC LIMIT 1 FOR UPDATE`,
       [empresaId, storefrontId, hash],
     );
+    if (existing.rows[0]?.status === 'converted') {
+      return { status: 'converted', converted: true, orderId: existing.rows[0].converted_order_id || null, syncVersion: Number(existing.rows[0].client_sync_version || 0) };
+    }
     const storedSyncVersion = Number(existing.rows[0]?.client_sync_version || 0);
     if (existing.rows[0] && storedSyncVersion > 0 && clientSyncVersion <= storedSyncVersion) {
       return { status: existing.rows[0].status, stale: true, syncVersion: storedSyncVersion };
@@ -200,14 +208,28 @@ export async function markCartConverted(trx, context = {}, input = {}) {
   const orderId = uuid(input.orderId, 'orderId');
   const customerId = input.customerId ? uuid(input.customerId, 'customerId') : null;
   const hash = sessionHash(input.cartSessionKey);
-  const found = await trx.query(`SELECT * FROM commerce_carts WHERE empresa_id=$1 AND storefront_id=$2 AND session_key_hash=$3 AND status IN ('open','abandoned') LIMIT 1 FOR UPDATE`, [empresaId, storefrontId, hash]);
-  const cart = found.rows[0];
-  if (!cart) return null;
+  await trx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`commerce-cart-sync:${empresaId}:${storefrontId}:${hash}`]);
+  const found = await trx.query(`SELECT * FROM commerce_carts WHERE empresa_id=$1 AND storefront_id=$2 AND session_key_hash=$3 ORDER BY CASE WHEN status='converted' THEN 0 ELSE 1 END, atualizado_em DESC LIMIT 1 FOR UPDATE`, [empresaId, storefrontId, hash]);
+  let cart = found.rows[0];
+  if (cart?.status === 'converted') {
+    if (cart.converted_order_id && cart.converted_order_id !== orderId) throw new CommerceError('sessão de carrinho já convertida em outro pedido', 'CART_ALREADY_CONVERTED');
+    return cart.id;
+  }
+  if (!cart) {
+    const inserted = await trx.query(
+      `INSERT INTO commerce_carts
+        (empresa_id,storefront_id,customer_id,session_key_hash,status,recovery_status,converted_order_id,last_activity_at,expira_em)
+       VALUES ($1,$2,$3,$4,'converted','converted',$5,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+       RETURNING *`,
+      [empresaId, storefrontId, customerId, hash, orderId],
+    );
+    cart = inserted.rows[0];
+  }
   if (cart.customer_id && customerId && cart.customer_id !== customerId) {
     throw new CommerceError('carrinho e pedido pertencem a clientes diferentes', 'CONTACT_CONFLICT', { reason: 'cart_order_customer_mismatch' });
   }
   const effectiveCustomerId = cart.customer_id || customerId;
-  await trx.query(`UPDATE commerce_carts SET customer_id=COALESCE(customer_id,$4),status='converted',recovery_status='converted',converted_order_id=$3,recovery_due_at=NULL,atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$1 AND id=$2`, [empresaId, cart.id, orderId, customerId]);
+  if (cart.status !== 'converted') await trx.query(`UPDATE commerce_carts SET customer_id=COALESCE(customer_id,$4),status='converted',recovery_status='converted',converted_order_id=$3,recovery_due_at=NULL,atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$1 AND id=$2`, [empresaId, cart.id, orderId, customerId]);
   await trx.query(`UPDATE tarefas_integracao_canais SET status='cancelada',proxima_tentativa_em=NULL,data_atualizacao=CURRENT_TIMESTAMP WHERE empresa_id=$1 AND tipo='recuperar_carrinho' AND referencia_externa=$2 AND status IN ('pendente','falha')`, [empresaId, cart.id]);
   await event(trx, { empresaId, lojaId: context.lojaId, cartId: cart.id, customerId: effectiveCustomerId, type: 'converted', metadata: { orderId } });
   return cart.id;
@@ -284,7 +306,7 @@ export async function processCartRecoveryTask(task = {}) {
     if (!['open','abandoned'].includes(cart.status) || !['consented','queued'].includes(cart.recovery_status)) return { skipped: true, reason: 'cart_not_eligible' };
     if (!cart.recovery_consent_at || cart.recovery_revoked_at || cart.recovery_reminded_at) return { skipped: true, reason: 'consent_not_active' };
     if (new Date(cart.recovery_due_at || 0).getTime() > Date.now()) fail('lembrete ainda não venceu', 'CART_RECOVERY_NOT_DUE');
-    if (!cart.telefone || !(process.env.EVOLUTION_API_URL || cart.api_base_url)) fail('canal ou contato de recuperação indisponível', 'MESSAGING_NOT_READY');
+    if (!cart.telefone || !(whatsappProviderConfigured() || process.env.EVOLUTION_API_URL || cart.api_base_url)) fail('canal ou contato de recuperação indisponível', 'MESSAGING_NOT_READY');
     await trx.query(`UPDATE commerce_carts SET status='abandoned',recovery_status='queued',atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$1 AND id=$2`, [cart.empresa_id, cart.id]);
     return cart;
   });
@@ -320,7 +342,7 @@ export async function processCartRecoveryTask(task = {}) {
 export async function recordCartRecoveryOptOut(channel = {}, parsed = {}) {
   const phone = normalizeCartPhone(parsed.phone || parsed.remoteJid);
   const command = clean(parsed.text, 80).toUpperCase().replace(/[.!?]+$/g, '').trim();
-  if (!phone || !['SAIR','PARE','PARAR','REMOVER MEU NÚMERO'].includes(command)) return { optedOut: false };
+  if (!phone || !isWhatsappOptOutText(command)) return { optedOut: false };
   const empresaId = uuid(channel.empresa_id, 'empresaId');
   const lojaId = uuid(channel.loja_id, 'lojaId');
   return db.transaction(async trx => {
@@ -328,7 +350,7 @@ export async function recordCartRecoveryOptOut(channel = {}, parsed = {}) {
       `SELECT c.* FROM commerce_carts c JOIN commerce_customers cu ON cu.empresa_id=c.empresa_id AND cu.id=c.customer_id
         JOIN commerce_storefronts s ON s.empresa_id=c.empresa_id AND s.id=c.storefront_id
        WHERE c.empresa_id=$1 AND s.loja_id=$2 AND c.status IN ('open','abandoned')
-         AND regexp_replace(COALESCE(cu.telefone,''),'\\D','','g') IN ($3,substring($3 from 3))
+         AND ${phoneMatchKeySql('cu.telefone')} = ${phoneMatchKeySql('$3')}
          AND c.recovery_status IN ('consented','queued','sent') FOR UPDATE`,
       [empresaId, lojaId, phone],
     );

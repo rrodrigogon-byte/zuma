@@ -61,6 +61,18 @@ function localPathForStorageKey(storageKey) {
   return target;
 }
 
+function scopedCommerceStorageKey({ empresaId, productId, mediaId, storageKey }) {
+  const key = String(storageKey || '').trim();
+  const localPrefix = `${LOCAL_STORAGE_PREFIX}${String(empresaId)}/${String(productId)}/${String(mediaId)}.`;
+  const gcsPrefix = `${GCS_STORAGE_PREFIX}${String(empresaId)}/${String(productId)}/${String(mediaId)}.`;
+  if (!key.startsWith(localPrefix) && !key.startsWith(gcsPrefix)) {
+    const error = new Error('chave de mídia fora do escopo tenant/produto/mídia');
+    error.code = 'MEDIA_SCOPE_MISMATCH';
+    throw error;
+  }
+  return key;
+}
+
 export function detectCommerceImageMime(buffer) {
   if (!Buffer.isBuffer(buffer)) return null;
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg';
@@ -126,6 +138,18 @@ export async function uploadCommerceImage({ empresaId, productId, mediaId, buffe
   return { storageKey: key, storageProvider: 'local', mimeType: normalized.mimeType, size: normalized.size };
 }
 
+export async function deleteCommerceImage({ empresaId, productId, mediaId, storageKey }) {
+  const key = scopedCommerceStorageKey({ empresaId, productId, mediaId, storageKey });
+  if (key.startsWith(LOCAL_STORAGE_PREFIX)) {
+    await unlink(localPathForStorageKey(key)).catch(error => {
+      if (error?.code !== 'ENOENT') throw error;
+    });
+    return { deleted: true, storageProvider: 'local' };
+  }
+  await getBucket().file(key).delete({ ignoreNotFound: true });
+  return { deleted: true, storageProvider: 'gcs' };
+}
+
 export function newCommerceMediaId() {
   return crypto.randomUUID();
 }
@@ -150,8 +174,9 @@ export function commerceMediaIdForIdempotencyKey({ empresaId, productId, idempot
   return `${hex.slice(0, 8).join('')}-${hex.slice(8, 12).join('')}-${hex.slice(12, 16).join('')}-${hex.slice(16, 20).join('')}-${hex.slice(20, 32).join('')}`;
 }
 
-export async function streamCommerceImage({ storageKey, mimeType, res }) {
-  const key = String(storageKey || '').trim();
+export async function streamCommerceImage({ storageKey, mimeType, res, empresaId = null, productId = null, mediaId = null }) {
+  // Com o escopo informado, só serve o arquivo da própria empresa/produto/mídia.
+  const key = empresaId ? scopedCommerceStorageKey({ empresaId, productId, mediaId, storageKey }) : String(storageKey || '').trim();
   res.setHeader('Content-Type', MIME_EXTENSIONS[String(mimeType || '').toLowerCase()] ? String(mimeType).toLowerCase() : 'application/octet-stream');
   res.setHeader('Cache-Control', 'public, max-age=3600');
 

@@ -377,7 +377,32 @@ function storefrontConfigOrigin(storefront, methodConfig, accountConfig = {}) {
   return candidate ? normalizeCep(candidate) : null;
 }
 
-function requestHash(snapshot) { return crypto.createHash('sha256').update(JSON.stringify(snapshot)).digest('hex'); }
+function canonicalJson(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(item => canonicalJson(item)).join(',')}]`;
+  return `{${Object.keys(value).filter(key => value[key] !== undefined).sort().map(key => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`;
+}
+
+function canonicalDestination(value) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function canonicalShippingLines(items) {
+  const source = Array.isArray(items) ? items : [];
+  if (!source.length || source.length > 100) throw new CommerceError('a cotação exige de 1 a 100 itens, com quantidades entre 1 e 999', 'SHIPPING_ITEMS_REQUIRED');
+  const totals = new Map();
+  for (const item of source) {
+    const variantId = assertUuid(item.variantId, 'variantId');
+    const quantity = Number(item.quantity);
+    if (!Number.isInteger(quantity) || quantity <= 0 || quantity > 999) throw new CommerceError('a cotação exige de 1 a 100 itens, com quantidades entre 1 e 999', 'SHIPPING_ITEMS_REQUIRED');
+    totals.set(variantId, (totals.get(variantId) || 0) + quantity);
+  }
+  const lines = [...totals.entries()].map(([variantId, quantity]) => ({ variantId, quantity })).sort((left, right) => left.variantId.localeCompare(right.variantId));
+  if (!lines.length || lines.length > 100 || lines.some(line => line.quantity > 999)) throw new CommerceError('a cotação exige de 1 a 100 itens, com quantidades entre 1 e 999', 'SHIPPING_ITEMS_REQUIRED');
+  return lines;
+}
+
+function requestHash(snapshot) { return crypto.createHash('sha256').update(canonicalJson(snapshot)).digest('hex'); }
 
 async function loadQuoteContext(client, contextInput, input = {}) {
   const context = tenantContext(contextInput);
@@ -417,8 +442,7 @@ async function loadQuoteContext(client, contextInput, input = {}) {
     destinationState = destinationState || text(lookup.estado, 2).toUpperCase();
   }
   const destinationAddress = { ...destinationAddressInput, cep: destinationCep, cidade: destinationCity || null, estado: destinationState || null };
-  const lines = Array.isArray(input.items) ? input.items.slice(0, 101).map(item => ({ variantId: assertUuid(item.variantId, 'variantId'), quantity: Number(item.quantity) })) : [];
-  if (!lines.length || lines.length > 100 || lines.some(line => !Number.isInteger(line.quantity) || line.quantity <= 0 || line.quantity > 999)) throw new CommerceError('a cotação exige de 1 a 100 itens, com quantidades entre 1 e 999', 'SHIPPING_ITEMS_REQUIRED');
+  const lines = canonicalShippingLines(input.items);
   const variantIds = [...new Set(lines.map(line => line.variantId))];
   const variants = await client.query(
     `SELECT v.id, v.sku, COALESCE(v.nome, p.nome) AS nome, v.peso_gramas, v.largura_cm, v.altura_cm, v.comprimento_cm,
@@ -440,7 +464,7 @@ async function loadQuoteContext(client, contextInput, input = {}) {
     return { id: variant.sku || variant.id, width: dimensions[0], height: dimensions[1], length: dimensions[2], weight: number(variant.peso_gramas) / 1000, insuranceValue: round(number(variant.price, 0)), quantity: line.quantity };
   });
   const subtotal = round(products.reduce((sum, product) => sum + product.insuranceValue * product.quantity, 0));
-  const snapshot = { storefrontId, shippingMethodId, shippingAccountId: account?.id || null, provider, ambiente: account?.ambiente || 'manual', originCep, destinationCep, destination: { cidade: destinationCity || null, estado: destinationState || null }, subtotal, lines };
+  const snapshot = { storefrontId, shippingMethodId, shippingAccountId: account?.id || null, provider, ambiente: account?.ambiente || 'manual', originCep, destinationCep, destination: { cidade: canonicalDestination(destinationCity) || null, estado: destinationState || null }, subtotal, lines };
   return { context, storefront: { id: storefrontId, loja_id: method.loja_id, empresa_id: context.empresaId }, method, methodConfig, account, provider: definition.code, originCep, destinationCep, destinationCity, destinationState, destinationAddress, products, subtotal, snapshot, hash: requestHash(snapshot), services: methodConfig.services || [], options: methodConfig.options || {} };
 }
 
@@ -529,7 +553,18 @@ export async function resolveShippingSelection(trx, contextInput, input = {}, { 
   );
   const quote = result.rows[0];
   if (!quote) throw new CommerceError('cotação não encontrada, expirada ou já utilizada', 'SHIPPING_QUOTE_EXPIRED');
-  const expectedSnapshot = { ...quote.request_snapshot, lines: lines.map(line => ({ variantId: line.variantId, quantity: line.quantity })), destinationCep: destination.cep };
+  const canonicalLines = canonicalShippingLines(lines);
+  const expectedSnapshot = {
+    ...quote.request_snapshot,
+    lines: canonicalLines,
+    destinationCep: destination.cep,
+    destination: { cidade: canonicalDestination(destination.cidade) || null, estado: String(destination.estado || '').trim().toUpperCase() || null },
+  };
+  const quotedDestination = quote.request_snapshot?.destination || {};
+  if (canonicalDestination(quotedDestination.cidade) !== canonicalDestination(destination.cidade)
+    || String(quotedDestination.estado || '').trim().toUpperCase() !== String(destination.estado || '').trim().toUpperCase()) {
+    throw new CommerceError('cotação não corresponde à cidade ou UF do endereço atual', 'SHIPPING_QUOTE_MISMATCH');
+  }
   if (requestHash(expectedSnapshot) !== quote.request_hash) throw new CommerceError('cotação não corresponde ao carrinho ou CEP atual', 'SHIPPING_QUOTE_MISMATCH');
   const providerOptions = Array.isArray(quote.response_snapshot?.providerOptions) ? quote.response_snapshot.providerOptions : [];
   const selected = providerOptions.find(item => String(item.public?.id || '') === optionId);
@@ -544,9 +579,10 @@ export function normalizeQuoteForPublic(row) {
 
 export { safeConfig, safePublicConfig, SECRET_REF };
 
-export async function prepareShippingLabel(trx, contextInput, fulfillmentIdInput) {
+export async function prepareShippingLabel(trx, contextInput, fulfillmentIdInput, storefrontIdInput) {
   const context = tenantContext(contextInput);
   const fulfillmentId = assertUuid(fulfillmentIdInput, 'fulfillmentId');
+  const storefrontId = assertUuid(storefrontIdInput, 'storefrontId');
   const result = await trx.query(
     `SELECT f.*, o.public_code, o.customer_id, o.status AS order_status, c.email AS customer_email, c.documento_mascarado AS customer_document, o.endereco_entrega, o.storefront_id,
             q.provider, q.ambiente, q.selected_option_id, q.response_snapshot, q.expires_at AS quote_expires_at,
@@ -558,16 +594,19 @@ export async function prepareShippingLabel(trx, contextInput, fulfillmentIdInput
        LEFT JOIN commerce_shipping_quotes q ON q.empresa_id = f.empresa_id AND q.id = f.shipping_quote_id
        LEFT JOIN commerce_shipping_accounts a ON a.empresa_id = f.empresa_id AND a.id = COALESCE(f.shipping_account_id, q.shipping_account_id)
        LEFT JOIN commerce_shipping_methods m ON m.empresa_id = f.empresa_id AND m.id = f.shipping_method_id
-      WHERE f.empresa_id = $1 AND f.id = $2 AND ($3::uuid IS NULL OR o.storefront_id IN (SELECT id FROM commerce_storefronts WHERE empresa_id = $1 AND loja_id = $3))
+      WHERE f.empresa_id = $1 AND f.id = $2 AND o.storefront_id = $3
+        AND ($4::uuid IS NULL OR o.storefront_id IN (SELECT id FROM commerce_storefronts WHERE empresa_id = $1 AND loja_id = $4))
       FOR UPDATE OF f`,
-    [context.empresaId, fulfillmentId, context.lojaId],
+    [context.empresaId, fulfillmentId, storefrontId, context.lojaId],
   );
   const fulfillment = result.rows[0];
   if (!fulfillment) throw new CommerceError('fulfillment não encontrado no tenant', 'FULFILLMENT_NOT_FOUND');
   if (!['delivery', 'carrier'].includes(fulfillment.shipping_type || '')) throw new CommerceError('etiqueta só pode ser gerada para entrega ou transportadora', 'SHIPPING_METHOD_INVALID');
   if (!['paid', 'processing', 'ready', 'shipped'].includes(fulfillment.order_status)) throw new CommerceError('a etiqueta só pode ser gerada após o pagamento confirmado', 'SHIPPING_ORDER_NOT_PAID');
   if (fulfillment.provider_shipment_id && fulfillment.shipping_operation_status === 'succeeded') return { replay: true, fulfillment };
-  if (fulfillment.shipping_operation_status === 'processing' && fulfillment.shipping_operation_started_at && Date.now() - new Date(fulfillment.shipping_operation_started_at).getTime() < 20 * 60 * 1000) throw new CommerceError('a geração de etiqueta deste fulfillment já está em andamento', 'SHIPPING_OPERATION_IN_PROGRESS');
+  if (fulfillment.shipping_operation_status === 'processing' || fulfillment.shipping_operation_status === 'failed') {
+    throw new CommerceError('resultado da emissão anterior é incerto; reconcilie a chave da operação antes de tentar novamente', 'SHIPPING_OPERATION_RECONCILIATION_REQUIRED', { operationKey: fulfillment.shipping_operation_key || `shipping-${fulfillment.id}-create` });
+  }
   if (!fulfillment.account_id || !fulfillment.account_active || !shippingSecretConfigured(fulfillment.secret_ref)) throw new CommerceError('conta logística do fulfillment não está pronta', 'SHIPPING_ACCOUNT_NOT_CONFIGURED');
   const senderConfig = fulfillment.public_config || {};
   const senderOrigin = senderConfig.origin || {};
@@ -579,7 +618,7 @@ export async function prepareShippingLabel(trx, contextInput, fulfillmentIdInput
   const selected = fulfillment.response_snapshot.providerOptions.find(item => String(item.public?.id || '') === String(fulfillment.selected_option_id));
   if (!selected) throw new CommerceError('opção selecionada não está presente na cotação armazenada', 'SHIPPING_OPTION_INVALID');
   const orderItems = await trx.query(`SELECT nome_snapshot, quantidade, preco_unitario FROM commerce_order_items WHERE empresa_id = $1 AND order_id = $2 ORDER BY id ASC`, [context.empresaId, fulfillment.order_id]);
-  const operationKey = `shipping-${fulfillment.id}-${crypto.randomUUID()}`.slice(0, 180);
+  const operationKey = `shipping-${fulfillment.id}-create`.slice(0, 180);
   await trx.query(`UPDATE commerce_fulfillments SET shipping_operation_status = 'processing', shipping_operation_key = $3, shipping_operation_started_at = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2`, [context.empresaId, fulfillment.id, operationKey]);
   return {
     replay: false,
@@ -595,10 +634,18 @@ export async function prepareShippingLabel(trx, contextInput, fulfillmentIdInput
   };
 }
 
-export async function finalizeShippingLabel(trx, contextInput, fulfillmentIdInput, operationKey, result) {
+export async function finalizeShippingLabel(trx, contextInput, fulfillmentIdInput, operationKey, result, storefrontIdInput) {
   const context = tenantContext(contextInput);
   const fulfillmentId = assertUuid(fulfillmentIdInput, 'fulfillmentId');
-  const current = await trx.query(`SELECT id, ocorrencias FROM commerce_fulfillments WHERE empresa_id = $1 AND id = $2 AND shipping_operation_key = $3 FOR UPDATE`, [context.empresaId, fulfillmentId, operationKey]);
+  const storefrontId = assertUuid(storefrontIdInput, 'storefrontId');
+  const current = await trx.query(
+    `SELECT f.id, f.ocorrencias
+       FROM commerce_fulfillments f
+       JOIN commerce_orders o ON o.empresa_id = f.empresa_id AND o.id = f.order_id
+      WHERE f.empresa_id = $1 AND f.id = $2 AND f.shipping_operation_key = $3 AND o.storefront_id = $4
+      FOR UPDATE OF f`,
+    [context.empresaId, fulfillmentId, operationKey, storefrontId],
+  );
   if (!current.rows[0]) throw new CommerceError('operação de etiqueta não encontrada ou já finalizada', 'SHIPPING_OPERATION_CONFLICT');
   const metadata = result?.publicData && typeof result.publicData === 'object' ? {
     prepostagemId: text(result.publicData.prepostagemId, 180) || null,
@@ -612,15 +659,40 @@ export async function finalizeShippingLabel(trx, contextInput, fulfillmentIdInpu
     `UPDATE commerce_fulfillments
         SET shipping_operation_status = 'succeeded', provider_shipment_id = $3, tracking_code = COALESCE($4, tracking_code), tracking_url = COALESCE($5, tracking_url), label_url = COALESCE($6, label_url), carrier = COALESCE($7, carrier), ocorrencias = $8::jsonb, atualizado_em = CURRENT_TIMESTAMP
       WHERE empresa_id = $1 AND id = $2
+        AND EXISTS (SELECT 1 FROM commerce_orders o WHERE o.empresa_id = commerce_fulfillments.empresa_id AND o.id = commerce_fulfillments.order_id AND o.storefront_id = $9)
       RETURNING *`,
-    [context.empresaId, fulfillmentId, result.providerShipmentId, result.trackingCode || null, result.trackingUrl || null, result.labelUrl || null, result.carrier || null, JSON.stringify(occurrences.slice(-100))],
+    [context.empresaId, fulfillmentId, result.providerShipmentId, result.trackingCode || null, result.trackingUrl || null, result.labelUrl || null, result.carrier || null, JSON.stringify(occurrences.slice(-100)), storefrontId],
   );
   return updated.rows[0];
 }
 
-export async function prepareShippingCancellation(trx, contextInput, fulfillmentIdInput) {
+export async function issueShippingLabel(transaction, context, fulfillmentId, shipmentOptions = {}, storefrontIdInput) {
+  const storefrontId = assertUuid(storefrontIdInput, 'storefrontId');
+  const prepared = await transaction(trx => prepareShippingLabel(trx, context, fulfillmentId, storefrontId));
+  if (prepared.replay) return { replay: true, fulfillment: prepared.fulfillment };
+  const adapter = shippingProviders.get(prepared.account.provider);
+  if (!adapter) throw new CommerceError('adapter logístico indisponível', 'SHIPPING_PROVIDER_NOT_CONFIGURED');
+  let external;
+  try {
+    external = await adapter.createShipment({ account: prepared.account, selectedOption: prepared.selectedOption, from: prepared.from, to: prepared.to, products: prepared.products, volumes: prepared.volumes, shipmentOptions, idempotencyKey: prepared.operationKey });
+  } catch (error) {
+    await transaction(trx => failShippingLabel(trx, context, fulfillmentId, prepared.operationKey, error, storefrontId));
+    throw error;
+  }
+  try {
+    const fulfillment = await transaction(trx => finalizeShippingLabel(trx, context, fulfillmentId, prepared.operationKey, { ...external, carrier: prepared.selectedOption.carrier }, storefrontId));
+    return { replay: false, fulfillment };
+  } catch (error) {
+    const reconciliation = new CommerceError('a etiqueta pode ter sido emitida, mas a confirmação local falhou; reconciliação manual obrigatória', 'SHIPPING_OPERATION_RECONCILIATION_REQUIRED', { operationKey: prepared.operationKey });
+    try { await transaction(trx => failShippingLabel(trx, context, fulfillmentId, prepared.operationKey, reconciliation, storefrontId)); } catch { /* preserva o erro conservador mesmo se a marcação falhar */ }
+    throw reconciliation;
+  }
+}
+
+export async function prepareShippingCancellation(trx, contextInput, fulfillmentIdInput, storefrontIdInput) {
   const context = tenantContext(contextInput);
   const fulfillmentId = assertUuid(fulfillmentIdInput, 'fulfillmentId');
+  const storefrontId = assertUuid(storefrontIdInput, 'storefrontId');
   const result = await trx.query(
     `SELECT f.id, f.status, f.provider_shipment_id, f.tracking_code, f.shipping_operation_status, f.shipping_operation_started_at,
             o.storefront_id, q.provider, q.ambiente, q.shipping_account_id,
@@ -629,9 +701,10 @@ export async function prepareShippingCancellation(trx, contextInput, fulfillment
        JOIN commerce_orders o ON o.empresa_id = f.empresa_id AND o.id = f.order_id
        LEFT JOIN commerce_shipping_quotes q ON q.empresa_id = f.empresa_id AND q.id = f.shipping_quote_id
        LEFT JOIN commerce_shipping_accounts a ON a.empresa_id = f.empresa_id AND a.id = COALESCE(f.shipping_account_id, q.shipping_account_id)
-      WHERE f.empresa_id = $1 AND f.id = $2 AND ($3::uuid IS NULL OR o.storefront_id IN (SELECT id FROM commerce_storefronts WHERE empresa_id = $1 AND loja_id = $3))
+      WHERE f.empresa_id = $1 AND f.id = $2 AND o.storefront_id = $3
+        AND ($4::uuid IS NULL OR o.storefront_id IN (SELECT id FROM commerce_storefronts WHERE empresa_id = $1 AND loja_id = $4))
       FOR UPDATE OF f`,
-    [context.empresaId, fulfillmentId, context.lojaId],
+    [context.empresaId, fulfillmentId, storefrontId, context.lojaId],
   );
   const fulfillment = result.rows[0];
   if (!fulfillment) throw new CommerceError('fulfillment não encontrado no tenant', 'FULFILLMENT_NOT_FOUND');
@@ -653,49 +726,121 @@ export async function prepareShippingCancellation(trx, contextInput, fulfillment
   };
 }
 
-export async function finalizeShippingCancellation(trx, contextInput, fulfillmentIdInput, operationKey, result) {
+export async function finalizeShippingCancellation(trx, contextInput, fulfillmentIdInput, operationKey, result, storefrontIdInput) {
   const context = tenantContext(contextInput);
   const fulfillmentId = assertUuid(fulfillmentIdInput, 'fulfillmentId');
-  const current = await trx.query(`SELECT id, status, ocorrencias FROM commerce_fulfillments WHERE empresa_id = $1 AND id = $2 AND shipping_operation_key = $3 FOR UPDATE`, [context.empresaId, fulfillmentId, operationKey]);
+  const storefrontId = assertUuid(storefrontIdInput, 'storefrontId');
+  const current = await trx.query(
+    `SELECT f.id, f.status, f.ocorrencias
+       FROM commerce_fulfillments f
+       JOIN commerce_orders o ON o.empresa_id = f.empresa_id AND o.id = f.order_id
+      WHERE f.empresa_id = $1 AND f.id = $2 AND f.shipping_operation_key = $3 AND o.storefront_id = $4
+      FOR UPDATE OF f`,
+    [context.empresaId, fulfillmentId, operationKey, storefrontId],
+  );
   if (!current.rows[0]) throw new CommerceError('operação de cancelamento não encontrada ou já finalizada', 'SHIPPING_OPERATION_CONFLICT');
   const occurrences = Array.isArray(current.rows[0].ocorrencias) ? current.rows[0].ocorrencias : [];
   occurrences.push({ at: new Date().toISOString(), status: 'cancelled', description: 'Pré-postagem cancelada no provedor Correios', providerData: result?.publicData && typeof result.publicData === 'object' ? { result: text(result.publicData.result, 120) || null, message: text(result.publicData.message, 240) || null } : null });
-  const updated = await trx.query(`UPDATE commerce_fulfillments SET status = 'cancelled', shipping_operation_status = 'succeeded', ocorrencias = $3::jsonb, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 RETURNING *`, [context.empresaId, fulfillmentId, JSON.stringify(occurrences.slice(-100))]);
+  const updated = await trx.query(`UPDATE commerce_fulfillments SET status = 'cancelled', shipping_operation_status = 'succeeded', ocorrencias = $3::jsonb, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 AND EXISTS (SELECT 1 FROM commerce_orders o WHERE o.empresa_id = commerce_fulfillments.empresa_id AND o.id = commerce_fulfillments.order_id AND o.storefront_id = $4) RETURNING *`, [context.empresaId, fulfillmentId, JSON.stringify(occurrences.slice(-100)), storefrontId]);
   return updated.rows[0];
 }
 
-export async function failShippingLabel(trx, contextInput, fulfillmentIdInput, operationKey, error) {
+export async function failShippingLabel(trx, contextInput, fulfillmentIdInput, operationKey, error, storefrontIdInput) {
   const context = tenantContext(contextInput);
   const fulfillmentId = assertUuid(fulfillmentIdInput, 'fulfillmentId');
+  const storefrontId = assertUuid(storefrontIdInput, 'storefrontId');
   const message = text(error?.message || 'falha no provedor logístico', 300);
-  const current = await trx.query(`SELECT ocorrencias FROM commerce_fulfillments WHERE empresa_id = $1 AND id = $2 AND shipping_operation_key = $3 FOR UPDATE`, [context.empresaId, fulfillmentId, operationKey]);
+  const current = await trx.query(`SELECT f.ocorrencias FROM commerce_fulfillments f JOIN commerce_orders o ON o.empresa_id = f.empresa_id AND o.id = f.order_id WHERE f.empresa_id = $1 AND f.id = $2 AND f.shipping_operation_key = $3 AND o.storefront_id = $4 FOR UPDATE OF f`, [context.empresaId, fulfillmentId, operationKey, storefrontId]);
   if (!current.rows[0]) return null;
   const occurrences = Array.isArray(current.rows[0].ocorrencias) ? current.rows[0].ocorrencias : [];
-  occurrences.push({ at: new Date().toISOString(), status: 'shipping_failed', description: message });
-  const updated = await trx.query(`UPDATE commerce_fulfillments SET shipping_operation_status = 'failed', ocorrencias = $3::jsonb, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 RETURNING *`, [context.empresaId, fulfillmentId, JSON.stringify(occurrences.slice(-100))]);
+  occurrences.push({ at: new Date().toISOString(), status: 'shipping_unknown', description: message, providerData: { operationKey } });
+  const updated = await trx.query(`UPDATE commerce_fulfillments SET shipping_operation_status = 'failed', ocorrencias = $3::jsonb, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 AND EXISTS (SELECT 1 FROM commerce_orders o WHERE o.empresa_id = commerce_fulfillments.empresa_id AND o.id = commerce_fulfillments.order_id AND o.storefront_id = $4) RETURNING *`, [context.empresaId, fulfillmentId, JSON.stringify(occurrences.slice(-100)), storefrontId]);
   return updated.rows[0];
 }
 
-export async function updateShippingTracking(trx, contextInput, fulfillmentIdInput, tracking) {
+export async function reconcileShippingLabel(trx, contextInput, fulfillmentIdInput, input = {}, storefrontIdInput) {
   const context = tenantContext(contextInput);
   const fulfillmentId = assertUuid(fulfillmentIdInput, 'fulfillmentId');
+  const storefrontId = assertUuid(storefrontIdInput, 'storefrontId');
+  const operationKey = text(input.operationKey || input.operation_key, 180);
+  const providerShipmentId = text(input.providerShipmentId || input.provider_shipment_id, 180);
+  if (!operationKey || !providerShipmentId) throw new CommerceError('operationKey e providerShipmentId são obrigatórios', 'SHIPPING_OPERATION_RECONCILIATION_INPUT_INVALID');
+  const result = await trx.query(
+    `SELECT f.*, o.storefront_id
+       FROM commerce_fulfillments f
+       JOIN commerce_orders o ON o.empresa_id = f.empresa_id AND o.id = f.order_id
+      WHERE f.empresa_id = $1 AND f.id = $2 AND o.storefront_id = $3
+        AND ($4::uuid IS NULL OR o.storefront_id IN (
+          SELECT id FROM commerce_storefronts WHERE empresa_id = $1 AND loja_id = $4
+        ))
+      FOR UPDATE OF f`,
+    [context.empresaId, fulfillmentId, storefrontId, context.lojaId],
+  );
+  const current = result.rows[0];
+  if (!current) throw new CommerceError('fulfillment não encontrado no tenant ou na loja ativa', 'FULFILLMENT_NOT_FOUND');
+  if (current.shipping_operation_status === 'succeeded') {
+    if (current.provider_shipment_id === providerShipmentId) return { replay: true, fulfillment: current };
+    throw new CommerceError('a etiqueta já foi conciliada com outro identificador do provedor', 'SHIPPING_OPERATION_CONFLICT');
+  }
+  if (!['processing', 'failed'].includes(current.shipping_operation_status) || current.shipping_operation_key !== operationKey) {
+    throw new CommerceError('operação de etiqueta não corresponde ao estado incerto registrado', 'SHIPPING_OPERATION_CONFLICT');
+  }
+  if (current.provider_shipment_id && current.provider_shipment_id !== providerShipmentId) {
+    throw new CommerceError('o fulfillment já possui outro identificador do provedor', 'SHIPPING_OPERATION_CONFLICT');
+  }
+  const occurrences = Array.isArray(current.ocorrencias) ? current.ocorrencias : [];
+  occurrences.push({
+    at: new Date().toISOString(),
+    status: 'shipping_reconciled',
+    description: 'Etiqueta conciliada manualmente após resultado externo incerto',
+    providerData: { operationKey },
+  });
+  const updated = await trx.query(
+    `UPDATE commerce_fulfillments
+        SET shipping_operation_status = 'succeeded', provider_shipment_id = $4,
+            tracking_code = COALESCE($5, tracking_code), tracking_url = COALESCE($6, tracking_url),
+            label_url = COALESCE($7, label_url), carrier = COALESCE($8, carrier),
+            ocorrencias = $9::jsonb, atualizado_em = CURRENT_TIMESTAMP
+      WHERE empresa_id = $1 AND id = $2 AND shipping_operation_key = $3
+        AND EXISTS (SELECT 1 FROM commerce_orders o WHERE o.empresa_id = commerce_fulfillments.empresa_id AND o.id = commerce_fulfillments.order_id AND o.storefront_id = $10)
+      RETURNING *`,
+    [
+      context.empresaId,
+      fulfillmentId,
+      operationKey,
+      providerShipmentId,
+      text(input.trackingCode || input.tracking_code, 160) || null,
+      text(input.trackingUrl || input.tracking_url, 500) || null,
+      text(input.labelUrl || input.label_url, 500) || null,
+      text(input.carrier, 120) || null,
+      JSON.stringify(occurrences.slice(-100)),
+      storefrontId,
+    ],
+  );
+  return { replay: false, fulfillment: updated.rows[0] };
+}
+
+export async function updateShippingTracking(trx, contextInput, fulfillmentIdInput, tracking, storefrontIdInput) {
+  const context = tenantContext(contextInput);
+  const fulfillmentId = assertUuid(fulfillmentIdInput, 'fulfillmentId');
+  const storefrontId = assertUuid(storefrontIdInput, 'storefrontId');
   const status = text(tracking.providerStatus, 80).toLowerCase();
   const statusMap = { posted: 'shipped', delivered: 'delivered', canceled: 'cancelled', cancelled: 'cancelled', expired: 'cancelled' };
   const next = statusMap[status] || null;
   const allowedByCurrent = { pending: ['cancelled'], preparing: ['cancelled'], ready: ['shipped', 'cancelled'], shipped: ['delivered', 'cancelled'], out_for_delivery: ['delivered', 'cancelled'], failed: ['cancelled'], delivered: [], picked_up: [], cancelled: [] };
-  const result = await trx.query(`SELECT id, status, ocorrencias FROM commerce_fulfillments WHERE empresa_id = $1 AND id = $2 FOR UPDATE`, [context.empresaId, fulfillmentId]);
+  const result = await trx.query(`SELECT f.id, f.status, f.ocorrencias FROM commerce_fulfillments f JOIN commerce_orders o ON o.empresa_id = f.empresa_id AND o.id = f.order_id WHERE f.empresa_id = $1 AND f.id = $2 AND o.storefront_id = $3 FOR UPDATE OF f`, [context.empresaId, fulfillmentId, storefrontId]);
   if (!result.rows[0]) throw new CommerceError('fulfillment não encontrado no tenant', 'FULFILLMENT_NOT_FOUND');
   const current = result.rows[0];
   const occurrences = Array.isArray(current.ocorrencias) ? current.ocorrencias : [];
   occurrences.push({ at: new Date().toISOString(), status: status || 'tracking_update', description: 'Atualização recebida do provedor logístico' });
   const fields = [];
-  const values = [context.empresaId, fulfillmentId];
+  const values = [context.empresaId, fulfillmentId, storefrontId];
   const allowedTransition = next && (next === current.status || allowedByCurrent[current.status]?.includes(next));
   if (next && next !== current.status && allowedTransition) { values.push(next); fields.push(`status = $${values.length}`); }
   values.push(tracking.trackingCode || null); fields.push(`tracking_code = COALESCE($${values.length}, tracking_code)`);
   values.push(tracking.trackingUrl || null); fields.push(`tracking_url = COALESCE($${values.length}, tracking_url)`);
   values.push(JSON.stringify(occurrences.slice(-100))); fields.push(`ocorrencias = $${values.length}::jsonb`);
   fields.push(`atualizado_em = CURRENT_TIMESTAMP`);
-  const updated = await trx.query(`UPDATE commerce_fulfillments SET ${fields.join(', ')} WHERE empresa_id = $1 AND id = $2 RETURNING *`, values);
+  const updated = await trx.query(`UPDATE commerce_fulfillments SET ${fields.join(', ')} WHERE empresa_id = $1 AND id = $2 AND EXISTS (SELECT 1 FROM commerce_orders o WHERE o.empresa_id = commerce_fulfillments.empresa_id AND o.id = commerce_fulfillments.order_id AND o.storefront_id = $3) RETURNING *`, values);
   return updated.rows[0];
 }

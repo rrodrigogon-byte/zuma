@@ -54,12 +54,38 @@ import * as canaisFidelidadeKytto from './canais-fidelidade-kytto.js';
 import { answerDinoOperationalQuestion, buildDinoOperationalSnapshot } from './dino-assistant.js';
 import { loadBarbeariaCommerceStatus, unavailableBarbeariaCommerceStatus } from './core/barbearia-commerce-status.js';
 import { customerReport, inventoryReport, salesReport } from './core/commerce-reports.js';
-import { purgeExpiredCommercePublicData, startCommerceRetentionCleanup } from './core/commerce-retention.js';
+import { purgeExpiredCommercePublicData, startCommerceReservationExpiryCleanup, startCommerceRetentionCleanup, startLoyaltyExpiry } from './core/commerce-retention.js';
+import { compareLegacyAndCoreInventory, createDestructiveAdminGuard, createLegacyCommerceMutationGuard, createLegacyPaymentMutationGuard } from './core/commerce-legacy-guards.js';
 import { buildDinoDashboardAnalytics, dashboardPeriod } from './dino-dashboard.js';
 import { registerCustomer360Routes } from './customer360-routes.js';
+import { registerAiBrainRoutes } from './ai-brain-routes.js';
+import { startAiBrainSchedulers } from './ai-brain-scheduler.js';
+import { registerAtivacaoRoutes } from './dino-ativacao-routes.js';
+import { vincularClienteAoAtendimento } from './dino-clientes-vinculo.js';
+import * as dinoBi from './dino-bi.js';
+import * as dinoMetas from './dino-metas.js';
+import { funnelSummary } from './storefront-funnel.js';
+import { whatsappProviderConfigured, whatsappProviderName } from './core/whatsapp-provider.js';
+import { enviarMensagem as enviarWhatsappCore } from './core/whatsapp.js';
+import { registerWhatsappConexaoRoutes } from './whatsapp-conexao-routes.js';
+import { vigiarTodas as vigiarConexoesWhatsapp } from './whatsapp-conexao-kytto.js';
+import { registerDinoAdminRoutes, loadCommerceSalesDetail } from './dino-admin-routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+const destructiveAdminGuard = createDestructiveAdminGuard();
+const legacyCommerceMutationGuard = createLegacyCommerceMutationGuard();
+const legacyPaymentMutationGuard = createLegacyPaymentMutationGuard(process.env, {
+  tipoDoPedido(req) {
+    const rota = String(req.originalUrl || req.path || '');
+    if (rota.startsWith('/api/loja/')) return 'loja';
+    if (rota.startsWith('/api/pagar')) return req.body?.tipo || '';
+    const pagamentos = db().pagamentos || [];
+    if (req.params?.id) return pagamentos.find(p => String(p.id) === String(req.params.id))?.tipo || '';
+    const externo = String(req.body?.data?.id || req.query?.['data.id'] || req.query?.id || '');
+    return externo ? (pagamentos.find(p => String(p.externalId) === externo)?.tipo || '') : '';
+  },
+});
 // Atrás do proxy do Render: confia no X-Forwarded-For para que req.ip seja o IP real
 // do cliente (importante para rate-limit e auditoria).
 app.set('trust proxy', 1);
@@ -112,6 +138,16 @@ if(PROD && (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'agro-open-dev
   process.exit(1);
 }
 
+app.get('/health', async (req, res) => {
+  if (process.env.COMMERCE_CORE_ENABLED !== '1') return res.status(200).json({ status: 'ready' });
+  try {
+    await commerceDb.queryRead(`SELECT 1 FROM commerce_schema_migrations LIMIT 1`);
+    return res.status(200).json({ status: 'ready' });
+  } catch {
+    return res.status(503).json({ status: 'not_ready', code: 'COMMERCE_DATABASE_UNAVAILABLE' });
+  }
+});
+
 // Identidade da plataforma (SaaS) — o evento "Agro Open" roda sobre o SetPoint.
 const PLATAFORMA = { nome:'SetPoint', slogan:'A plataforma que decide o jogo.', versao:'4.5', evento:'4ª Agro Open de Tênis' };
 
@@ -128,17 +164,23 @@ const STAFF = ['admin','organizador','staff']; // acesso ao sistema/painel
 const norm = s => String(s||'').trim().toLowerCase();
 const PLATFORM_ADMIN_EMAILS = new Set((process.env.PLATFORM_ADMIN_EMAILS || '').split(',').map(norm).filter(Boolean));
 const isPlatformAdminUser = user => Boolean(user?.platformAdmin === true || PLATFORM_ADMIN_EMAILS.has(norm(user?.email)));
+// E-mails de administração (plataforma e admin principal) não podem ser cadastrados por
+// registro público nem por administrador de empresa: o e-mail sozinho daria acesso global.
+const isReservedEmail = email => PLATFORM_ADMIN_EMAILS.has(norm(email)) || norm(email) === norm(process.env.ADMIN_USER || 'admin');
 
 // ---- seed do administrador (em usuarios) ----
 function seedUsuarios(){
   const d = db();
+  d.usuarios ||= [];
   if(!d.usuarios.length){
     const email = norm(process.env.ADMIN_USER || 'admin');
-    const senha = process.env.ADMIN_PASS || 'agroopen2026';
+    // Em produção sem ADMIN_PASS, a senha inicial é aleatória e nunca vai para o log:
+    // use ADMIN_PASS_RESET=1 com ADMIN_PASS no Secret Manager para definir a senha.
+    const senha = process.env.ADMIN_PASS || (PROD ? crypto.randomBytes(18).toString('base64url') : 'agroopen2026');
     d.usuarios.push({ id: nextId(), nome:'Administrador', email, senhaHash: bcrypt.hashSync(senha,10),
       role:'admin', telefone:'', ativo:true, criadoEm:new Date().toISOString() });
     save();
-    console.log(`Admin criado: login "${email}" / senha "${senha}" (troque em produção)`);
+    console.log(`Admin criado: login "${email}"${process.env.ADMIN_PASS ? ' (senha de ADMIN_PASS)' : PROD ? ' com senha aleatória; defina ADMIN_PASS e ADMIN_PASS_RESET=1' : ' com a senha padrão de desenvolvimento'}`);
   }
 }
 seedUsuarios();
@@ -195,16 +237,20 @@ async function commerceSessionFor(user) {
 
 // Recuperação do admin: se ADMIN_PASS_RESET=1 e ADMIN_PASS definido, redefine a senha
 // do admin no boot (evita lockout se a senha de produção for perdida). Remova a flag depois.
-if(process.env.ADMIN_PASS_RESET === '1' && process.env.ADMIN_PASS){
-  const adm = db().usuarios.find(u=>u.role==='admin');
+function aplicarResetAdmin(){
+  if(process.env.ADMIN_PASS_RESET !== '1' || !process.env.ADMIN_PASS) return;
+  const usuarios = db().usuarios || [];
+  const adm = usuarios.find(u=>norm(u.email)===norm(process.env.ADMIN_USER || 'admin')) || usuarios.find(u=>u.role==='admin');
   if(adm){ adm.senhaHash = bcrypt.hashSync(process.env.ADMIN_PASS, 10); adm.ativo = true; save();
     console.log(`Senha do admin "${adm.email}" redefinida via ADMIN_PASS_RESET.`); }
 }
+aplicarResetAdmin();
 
 // Contas demo por papel — criadas apenas com SEED_DEMO=1 (idempotente). Senha via DEMO_PASS
 // ou padrão. Úteis para handoff/teste; troque/desative em produção real.
 function seedDemoUsers(){
   if(process.env.SEED_DEMO !== '1') return;
+  if(PROD && !process.env.DEMO_PASS){ console.warn('SEED_DEMO ignorado em produção sem DEMO_PASS.'); return; }
   const senha = process.env.DEMO_PASS || 'agroopen2026';
   const demos = [
     { nome:'Organizador Demo', email:'organizador@agroopen.com', role:'organizador' },
@@ -217,7 +263,7 @@ function seedDemoUsers(){
       db().usuarios.push({ id: nextId(), nome:dm.nome, email:norm(dm.email), senhaHash:bcrypt.hashSync(senha,10),
         role:dm.role, telefone:'', ativo:true, criadoEm:new Date().toISOString(), demo:true });
       criou = true;
-      console.log(`Conta demo criada: ${dm.email} / ${senha} (${dm.role})`);
+      console.log(`Conta demo criada: ${dm.email} (${dm.role})`);
     }
   }
   if(criou) save();
@@ -229,12 +275,77 @@ function auth(req,res,next){
   const h = req.headers.authorization || '';
   const token = h.startsWith('Bearer ') ? h.slice(7) : null;
   if(!token) return res.status(401).json({error:'sem token'});
-  try { req.user = jwt.verify(token, JWT_SECRET); next(); }
+  try { req.user = jwt.verify(token, JWT_SECRET); }
   catch(e){ return res.status(401).json({error:'token inválido'}); }
+  // Conta desativada ou excluída perde o acesso na hora, e mudança de papel vale já
+  // (antes o token de 12 h continuava valendo com o papel antigo).
+  const conta = (db().usuarios || []).find(x => x.id === req.user.id);
+  if (!conta || conta.ativo === false) return res.status(401).json({ error:'sessão encerrada; entre novamente', code:'SESSION_REVOKED' });
+  req.user.role = conta.role;
+  req.user.platformAdmin = isPlatformAdminUser(conta);
+  // O escopo de empresa é decidido no servidor, não só pelo token: um token sem
+  // empresaId só é global para o admin principal e para administradores da plataforma.
+  // Quem tem vínculo ativo com alguma empresa fica preso a ela mesmo que tenha entrado
+  // por /api/auth/login ou tenha vínculo com mais de uma empresa.
+  // Só equipe (quem entra no painel) precisa disso; atleta e cliente do site não dependem do banco.
+  if (req.user.empresaId || !STAFF.includes(req.user.role) || isPlatformAdminUser(req.user) || isMainAdminUser(req.user) || process.env.COMMERCE_CORE_ENABLED !== '1') return next();
+  tenantBindingFor(req.user.email).then(binding => {
+    if (binding) {
+      req.user.tenantBound = true;
+      if (binding.empresaId) req.user.empresaId = binding.empresaId;
+      if (binding.lojaId && !req.user.lojaId) req.user.lojaId = binding.lojaId;
+    }
+    return true;
+  }, () => {
+    res.status(503).json({ error:'não foi possível confirmar o acesso agora; tente de novo', code:'SCOPE_UNAVAILABLE' });
+    return false;
+  }).then(ok => { if (ok) next(); }).catch(next);
+}
+const isMainAdminUser = user => norm(user?.email) === norm(process.env.ADMIN_USER || 'admin');
+// Cache curto (60 s) do vínculo de empresa por e-mail. Erro de banco não vira acesso global.
+const tenantBindingCache = new Map();
+async function tenantBindingFor(email) {
+  const key = norm(email);
+  if (!key) return null;
+  const hit = tenantBindingCache.get(key);
+  if (hit && hit.until > Date.now()) return hit.value;
+  const result = await commerceDb.query(
+    `SELECT DISTINCT m.empresa_id, m.loja_id
+       FROM commerce_memberships m
+       JOIN usuarios u ON u.empresa_id = m.empresa_id AND u.id = m.usuario_id
+       JOIN empresas e ON e.id = m.empresa_id AND e.ativa = true
+      WHERE lower(u.email) = $1 AND u.ativo = true AND m.ativo = true`,
+    [key],
+  );
+  const rows = result.rows || [];
+  const empresas = [...new Set(rows.map(r => r.empresa_id).filter(Boolean))];
+  const lojas = [...new Set(rows.map(r => r.loja_id).filter(Boolean))];
+  const value = empresas.length ? { empresaId: empresas.length === 1 ? String(empresas[0]) : null, lojaId: empresas.length === 1 && lojas.length === 1 ? String(lojas[0]) : null } : null;
+  if (tenantBindingCache.size > 5000) tenantBindingCache.clear();
+  tenantBindingCache.set(key, { value, until: Date.now() + 60_000 });
+  return value;
 }
 const requireRole = (...roles)=> (req,res,next)=> (req.user && roles.includes(req.user.role)) ? next() : res.status(403).json({error:'sem permissão'});
 const requireStaff = (req,res,next)=> (req.user && STAFF.includes(req.user.role)) ? next() : res.status(403).json({error:'acesso restrito à organização'});
 const requirePlatformAdmin = (req,res,next)=> isPlatformAdminUser(req.user) ? next() : res.status(403).json({error:'acesso restrito à administração da plataforma', code:'PLATFORM_ADMIN_REQUIRED'});
+// Usuário preso a uma empresa (tenant) que não é administrador da plataforma.
+const isTenantScopedUser = user => (Boolean(user?.empresaId) || user?.tenantBound === true) && !isPlatformAdminUser(user) && !isMainAdminUser(user);
+// Módulos legados globais (livro-caixa do evento, configuração do evento,
+// resets e auditoria completa) não separam dados por empresa. Usuários de uma
+// empresa usam os equivalentes em /api/admin/barbearia/* e não podem ler nem
+// alterar o que é da plataforma inteira.
+// Módulos do evento (inscrições, cardápio, loja e estoque legados) são da plataforma:
+// usuário de empresa usa a loja virtual e o ERP da própria empresa, não grava aqui.
+const requireLegacyGlobalScope = (req,res,next)=> isTenantScopedUser(req.user)
+  ? res.status(403).json({ error:'módulo global da plataforma; use o módulo da sua empresa', code:'TENANT_USE_SCOPED_MODULE' })
+  : next();
+function auditEmpresaId(req){
+  const scoped = req?.barbeariaContext?.empresaId || req?.auditEmpresaId;
+  if (scoped) return String(scoped);
+  if (req?.user?.empresaId) return String(req.user.empresaId);
+  const header = String(req?.headers?.['x-empresa-id'] || '').trim();
+  return header && isPlatformAdminUser(req?.user) ? header.slice(0, 64) : null;
+}
 const tokenFor = u => jwt.sign({ id:u.id, nome:u.nome, email:u.email, role:u.role, platformAdmin:isPlatformAdminUser(u), ...(u.empresaId ? { empresaId:u.empresaId } : {}), ...(u.lojaId ? { lojaId:u.lojaId } : {}) }, JWT_SECRET, { expiresIn:'12h' });
 
 // ---- rate-limit simples (anti força-bruta no login) ----
@@ -316,7 +427,8 @@ function audit(req, acao, detalhe){
   const d = db(); d.auditoria = d.auditoria || [];
   d.auditoria.push({ id: nextId(), ts:new Date().toISOString(),
     user: req.user ? `${req.user.nome} (${req.user.role})` : 'anônimo',
-    acao, detalhe: detalhe||'', ip: req.ip || '' });
+    acao, detalhe: detalhe||'', ip: req.ip || '',
+    empresaId: auditEmpresaId(req) });
   if(d.auditoria.length > 1000) d.auditoria = d.auditoria.slice(-1000);
 }
 // alias: auditoria(user, acao, detalhe) — mesma coisa mas recebe user diretamente
@@ -324,7 +436,8 @@ function auditoria(user, acao, detalhe){
   const d = db(); d.auditoria = d.auditoria || [];
   d.auditoria.push({ id: nextId(), ts:new Date().toISOString(),
     user: user ? `${user.nome} (${user.role})` : 'anônimo',
-    acao, detalhe: detalhe||'', ip: '' });
+    acao, detalhe: detalhe||'', ip: '',
+    empresaId: user?.empresaId ? String(user.empresaId) : null });
   if(d.auditoria.length > 1000) d.auditoria = d.auditoria.slice(-1000);
 }
 
@@ -335,10 +448,20 @@ app.use('/api/admin/commerce', (req, res, next) => {
   return res.status(404).json({ error: 'Commerce Core desativado', code: 'COMMERCE_CORE_DISABLED' });
 });
 
+// Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
+const TENANT_ADMIN_MODULES = new Set(['barbearia', 'commerce', 'commerce-session', 'usuarios', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos']);
 // Trava global: tudo em /api/admin exige login de staff (exceto o próprio login)
 app.use('/api/admin', (req,res,next)=>{
   if(req.path==='/login') return next();
   auth(req,res,()=> requireStaff(req,res,()=>{
+    // Usuário de empresa só usa os módulos da própria empresa. Os demais módulos em
+    // /api/admin (inscrições, pagamentos, carteira, cupons, torneios, sócios, financeiro
+    // do evento…) são da plataforma e não separam dados por empresa: negados por padrão.
+    if(isTenantScopedUser(req.user)){
+      const modulo = String(req.path || '').split('/')[1] || '';
+      if(modulo === 'notificacoes') return req.method === 'GET' ? res.json({ notificacoes: [], total: 0 }) : res.json({ ok: true });
+      if(!TENANT_ADMIN_MODULES.has(modulo)) return res.status(403).json({ error:'módulo global da plataforma; use o módulo da sua empresa', code:'TENANT_USE_SCOPED_MODULE' });
+    }
     // registra mutações (POST/PATCH/DELETE) na auditoria
     if(['POST','PATCH','DELETE','PUT'].includes(req.method)){
       res.on('finish', ()=>{ if(res.statusCode<400){ audit(req, req.method+' '+req.baseUrl+req.path); save(); } });
@@ -373,6 +496,20 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
         : ['TENANT_CNPJ_CONFLICT','STOREFRONT_ALIAS_CONFLICT'].includes(error?.code) ? 409
           : ['TENANT_ADMIN_USER_NOT_FOUND','TENANT_ROLE_NOT_FOUND','TENANT_INACTIVE'].includes(error?.code) ? 422 : 500;
       res.status(status).json({ error:status >= 500 ? 'não foi possível provisionar o tenant do Commerce' : error.message, code:error?.code || 'TENANT_PROVISION_ERROR' });
+    }
+  });
+  app.get('/api/admin/commerce/operations/inventory-divergence', async (req, res) => {
+    try {
+      const context = await requireCommercePermission(req, 'reports.read');
+      const mapped = await commerceDb.queryRead(`SELECT li.legacy_key, p.nome AS product_name, COALESCE(SUM(il.disponivel), 0)::integer AS core_available FROM commerce_legacy_imports li JOIN commerce_products p ON p.empresa_id=li.empresa_id AND p.id=li.target_id LEFT JOIN commerce_product_variants v ON v.empresa_id=p.empresa_id AND v.product_id=p.id LEFT JOIN commerce_inventory_levels il ON il.empresa_id=v.empresa_id AND il.variant_id=v.id WHERE li.empresa_id=$1 AND li.entity='product' AND ($2::uuid IS NULL OR li.loja_id=$2) GROUP BY li.legacy_key,p.nome ORDER BY li.legacy_key`, [context.empresaId, context.lojaId]);
+      // O cadastro legado da loja é global: usuário de empresa só vê itens mapeados para a própria empresa.
+      const chavesDaEmpresa = new Set(mapped.rows.map(row => String(row.legacy_key || '').trim().toLowerCase()).filter(Boolean));
+      const doTenant = item => [item.id, item.cod, item.codigo, item.nome].some(chave => chavesDaEmpresa.has(String(chave || '').trim().toLowerCase()));
+      const legado = (db().loja || []).filter(item => item.ativo !== false).filter(item => !isTenantScopedUser(req.user) || doTenant(item));
+      res.json(compareLegacyAndCoreInventory({ legacyProducts: legado, coreMappings: mapped.rows }));
+    } catch (error) {
+      const status = ['PERMISSION_DENIED','TENANT_CONTEXT_REQUIRED'].includes(error?.code) ? 403 : 500;
+      res.status(status).json({ error: status === 500 ? 'não foi possível comparar o inventário' : error.message, code: error?.code || 'INVENTORY_DIVERGENCE_ERROR' });
     }
   });
   app.use('/api/admin/commerce', createCommerceAdminRouter());
@@ -696,9 +833,10 @@ app.post('/api/admin/login', async (req,res)=>{
 });
 
 // ---- AUTH unificada (site + sistema) ----
-app.post('/api/auth/register', (req,res)=>{
+app.post('/api/auth/register', publicLimit(10), (req,res)=>{
   const { nome, email, senha, telefone } = req.body || {};
   if(!nome || !email || !senha) return res.status(400).json({error:'nome, e-mail e senha são obrigatórios'});
+  if(isReservedEmail(email)) return res.status(409).json({error:'já existe uma conta com este e-mail'});
   if((senha||'').length < 6) return res.status(400).json({error:'a senha deve ter ao menos 6 caracteres'});
   if(findUser(email)) return res.status(409).json({error:'já existe uma conta com este e-mail'});
   const u = { id: nextId(), nome, email: norm(email), senhaHash: bcrypt.hashSync(senha,10),
@@ -725,7 +863,7 @@ app.get('/api/auth/me', auth, (req,res)=>{
 // ---- Gestão de usuários (somente admin/organizador) ----
 // Usuário de uma empresa só vê e gerencia usuários da própria empresa; nunca contas
 // globais nem administradores da plataforma. O admin principal (ADMIN_USER) é global.
-const isGlobalActor = user => !user?.empresaId || isPlatformAdminUser(user) || norm(user?.email) === norm(process.env.ADMIN_USER || 'admin');
+const isGlobalActor = user => isPlatformAdminUser(user) || isMainAdminUser(user) || (!user?.empresaId && user?.tenantBound !== true);
 const canManageUser = (actor, target) => {
   if (!target) return false;
   if (isPlatformAdminUser(target) && !isPlatformAdminUser(actor)) return false;
@@ -744,6 +882,9 @@ app.post('/api/admin/usuarios', auth, requireRole('admin','organizador'), (req,r
   if(!nome || !email || !senha) return res.status(400).json({error:'nome, e-mail e senha obrigatórios'});
   if(!ROLES.includes(role)) return res.status(400).json({error:'papel inválido'});
   if(findUser(email)) return res.status(409).json({error:'e-mail já cadastrado'});
+  if(isReservedEmail(email) && !isPlatformAdminUser(req.user)) return res.status(409).json({error:'e-mail reservado à administração da plataforma'});
+  if(role === 'admin' && req.user.role !== 'admin') return res.status(403).json({error:'só um administrador cria outro administrador'});
+  if(!isGlobalActor(req.user) && !req.user.empresaId) return res.status(409).json({error:'escolha a empresa antes de criar usuários', code:'EMPRESA_REQUIRED'});
   const u = { id: nextId(), nome, email: norm(email), senhaHash: bcrypt.hashSync(senha,10),
     role, telefone:telefone||'', ativo:true, criadoEm:new Date().toISOString(),
     ...(isGlobalActor(req.user) ? {} : { empresaId: String(req.user.empresaId), ...(req.user.lojaId ? { lojaId: String(req.user.lojaId) } : {}) }) };
@@ -753,7 +894,11 @@ app.patch('/api/admin/usuarios/:id', auth, requireRole('admin','organizador'), (
   const u = usuarioGerenciavel(req,res); if(!u) return;
   const b = req.body||{};
   if(b.nome) u.nome=b.nome;
-  if(b.role && ROLES.includes(b.role)) u.role=b.role;
+  if(b.role && ROLES.includes(b.role)){
+    if((b.role === 'admin' || u.role === 'admin') && req.user.role !== 'admin') return res.status(403).json({error:'só um administrador altera papel de administrador'});
+    if(u.id === req.user.id && b.role !== u.role) return res.status(403).json({error:'você não pode mudar o próprio papel'});
+    u.role=b.role;
+  }
   if(b.telefone!==undefined) u.telefone=b.telefone;
   if(typeof b.ativo==='boolean') u.ativo=b.ativo;
   if(b.senha){ if(b.senha.length<6) return res.status(400).json({error:'senha curta'}); u.senhaHash=bcrypt.hashSync(b.senha,10); }
@@ -779,13 +924,13 @@ app.get('/api/admin/inscricoes', auth, (req,res)=>{
   if(cat) list = list.filter(i=>i.categoria===cat);
   res.json(list);
 });
-app.patch('/api/admin/inscricoes/:id', auth, (req,res)=>{
+app.patch('/api/admin/inscricoes/:id', auth, requireLegacyGlobalScope, (req,res)=>{
   const i = db().inscricoes.find(x=>x.id==req.params.id);
   if(!i) return res.status(404).json({error:'não encontrada'});
   if(req.body.status) i.status = req.body.status;
   save(); res.json(i);
 });
-app.delete('/api/admin/inscricoes/:id', auth, (req,res)=>{
+app.delete('/api/admin/inscricoes/:id', auth, requireLegacyGlobalScope, (req,res)=>{
   const d = db(); const n = d.inscricoes.length;
   d.inscricoes = d.inscricoes.filter(x=>x.id!=req.params.id); save();
   res.json({ ok:true, removidas: n - d.inscricoes.length });
@@ -1129,7 +1274,7 @@ app.patch('/api/admin/assinaturas/:id', auth, (req,res)=>{
   if(req.body.status) a.status=req.body.status; save(); res.json(a);
 });
 
-app.post('/api/admin/reset-ranking', auth, (req,res)=>{ db().ranking = { players:{} }; db().campeoes = {}; save(); res.json({ok:true}); });
+app.post('/api/admin/reset-ranking', auth, requireLegacyGlobalScope, destructiveAdminGuard, (req,res)=>{ db().ranking = { players:{} }; db().campeoes = {}; save(); res.json({ok:true}); });
 
 // ── CRUD manual do ranking ────────────────────────────────────────────────
 // GET /api/admin/campeoes  — lista campeões por categoria (para painel admin)
@@ -1229,7 +1374,7 @@ app.get('/api/admin/ranking/temporadas', auth, (req,res)=>{
 });
 
 // POST /api/admin/ranking/temporada/reset — arquiva temporada e zera
-app.post('/api/admin/ranking/temporada/reset', auth, (req,res)=>{
+app.post('/api/admin/ranking/temporada/reset', auth, destructiveAdminGuard, (req,res)=>{
   const { temporada } = req.body || {};
   if(!temporada) return res.status(400).json({error:'temporada obrigatória'});
   db().ranking = db().ranking || { players:{} };
@@ -1252,7 +1397,7 @@ app.get('/api/admin/ranking/arquivados', auth, (req,res)=>{
 
 // POST /api/admin/ranking/seed — popula dados de demonstração para testes
 // Só executa se ranking estiver vazio (evita sobrescrever dados reais)
-app.post('/api/admin/ranking/seed', auth, requireStaff, (req,res)=>{
+app.post('/api/admin/ranking/seed', auth, requireStaff, destructiveAdminGuard, (req,res)=>{
   const d = db();
   if (!d.ranking) d.ranking = { players:{}, arquivados:{} };
   const existing = Object.keys(d.ranking.players || {}).length;
@@ -1335,7 +1480,7 @@ app.post('/api/admin/ranking/seed', auth, requireStaff, (req,res)=>{
 });
 
 // POST /api/admin/seed/campeoes — popula hall da fama com campeões das edições anteriores
-app.post('/api/admin/seed/campeoes', auth, requireStaff, (req,res)=>{
+app.post('/api/admin/seed/campeoes', auth, requireStaff, destructiveAdminGuard, (req,res)=>{
   const d = db();
   if (!d.campeoes) d.campeoes = {};
   const { force=false } = req.body || {};
@@ -1356,7 +1501,7 @@ app.post('/api/admin/seed/campeoes', auth, requireStaff, (req,res)=>{
 });
 
 // POST /api/admin/seed/demo — popula dados demo completos: torneio, inscrições, atletas, notícia
-app.post('/api/admin/seed/demo', auth, requireStaff, (req,res)=>{
+app.post('/api/admin/seed/demo', auth, requireStaff, destructiveAdminGuard, (req,res)=>{
   const d = db();
   const { force=false } = req.body || {};
   let report = [];
@@ -1926,7 +2071,7 @@ app.post('/api/admin/mesas/abrir', auth, requireStaff, (req,res)=>{
 function getCardapio(){ return garantirCardapioOficial(); }
 
 app.get('/api/admin/cardapio', auth, requireStaff, (req,res)=> res.json(getCardapio()));
-app.post('/api/admin/cardapio', auth, requireStaff, (req,res)=>{
+app.post('/api/admin/cardapio', auth, requireLegacyGlobalScope, requireStaff, (req,res)=>{
   garantirCardapioOficial();
   const {nome,cat,preco,setor,cozinha,emoji,ordem} = req.body||{};
   if(!nome||!cat||!preco) return res.status(400).json({error:'nome, cat e preco são obrigatórios'});
@@ -1938,7 +2083,7 @@ app.post('/api/admin/cardapio', auth, requireStaff, (req,res)=>{
   db().cardapio.push(novo);
   save(); res.json({ok:true,id});
 });
-app.patch('/api/admin/cardapio/:id', auth, requireStaff, (req,res)=>{
+app.patch('/api/admin/cardapio/:id', auth, requireLegacyGlobalScope, requireStaff, (req,res)=>{
   garantirCardapioOficial();
   const p=db().cardapio.find(x=>x.id===req.params.id);
   if(!p) return res.status(404).json({error:'produto não encontrado'});
@@ -1949,7 +2094,7 @@ app.patch('/api/admin/cardapio/:id', auth, requireStaff, (req,res)=>{
   if(req.body.fiscal && typeof req.body.fiscal==='object') p.fiscal={ ...(p.fiscal||{}), ...req.body.fiscal };
   save(); res.json({ok:true});
 });
-app.delete('/api/admin/cardapio/:id', auth, requireStaff, (req,res)=>{
+app.delete('/api/admin/cardapio/:id', auth, requireLegacyGlobalScope, requireStaff, (req,res)=>{
   garantirCardapioOficial();
   const idx=db().cardapio.findIndex(x=>x.id===req.params.id);
   if(idx<0) return res.status(404).json({error:'produto não encontrado'});
@@ -1982,11 +2127,30 @@ async function resolverEscopoBarbearia(req, res, next) {
       return res.status(403).json({ error: 'A empresa ou unidade selecionada não está autorizada para esta sessão.', code: error?.code || 'STORE_SCOPE_MISMATCH' });
     }
   }
+  // Usuário preso a mais de uma empresa precisa escolher qual (cabeçalho x-empresa-id);
+  // nunca cai na empresa 'principal' da plataforma.
+  if (!signedEmpresa && isTenantScopedUser(req.user)) return res.status(409).json({ error: 'Escolha a empresa antes de continuar.', code: 'EMPRESA_REQUIRED' });
   req.barbeariaContext = { empresaId: signedEmpresa || 'principal', lojaId: signedLoja };
   next();
 }
 app.use('/api/admin/barbearia', auth, requireStaff, resolverEscopoBarbearia);
 registerCustomer360Routes(app, { legacyEmpresaId, legacyLojaId, clientesKytto, barbeariaErpKytto, canaisFidelidadeKytto, listarAgendamentosBarbearia, requireCommercePermission, audit, save });
+registerDinoAdminRoutes(app, { db, legacyEmpresaId, legacyLojaId, financeiroKytto, barbeariaErpKytto, clientesKytto, commerceDb, requireCommercePermission, dashboardPeriod, audit, save, salesReport });
+registerAiBrainRoutes(app, { legacyEmpresaId, legacyLojaId, requireCommercePermission, audit, clientesKytto, commerceDb, listarAgendamentosBarbearia });
+registerAtivacaoRoutes(app, { legacyEmpresaId, requireCommercePermission, barbeariaErpKytto, audit });
+registerWhatsappConexaoRoutes(app, { legacyEmpresaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user) });
+app.get('/api/admin/barbearia/metas', (req, res) => {
+  res.json({ ok: true, metas: dinoMetas.obterMetas(legacyEmpresaId(req)), campos: dinoMetas.METAS });
+});
+app.put('/api/admin/barbearia/metas', (req, res) => {
+  if (!['admin', 'organizador'].includes(String(req.user?.role || ''))) return res.status(403).json({ error: 'Só administradores e gestores definem metas.' });
+  try {
+    const metas = dinoMetas.salvarMetas(legacyEmpresaId(req), req.body || {}, req.user?.email || req.user?.nome);
+    audit(req, 'METAS ATUALIZADAS', Object.entries(metas).filter(([, valor]) => valor).map(([chave, valor]) => `${chave}=${valor}`).join('; '));
+    save();
+    res.json({ ok: true, metas });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
 function sanitizarClienteBarbearia(cliente) {
   if (!cliente) return cliente;
   return {
@@ -2137,6 +2301,7 @@ function unavailableWhatsappAiStatus(code = 'TENANT_CONTEXT_REQUIRED') {
       model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
     },
     evolutionConfigured: Boolean(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE),
+    messagingConfigured: whatsappProviderConfigured(),
     channel: null,
     sessions: {},
     tasks: {},
@@ -2158,6 +2323,40 @@ async function whatsappAiIntegrationForBarbearia(req) {
   }
 }
 
+// Metas do mês corrente (independem do período escolhido no painel).
+async function metasDoMes({ empresaId, now, barbershopInput, commerceContext, profitFor }) {
+  const metas = dinoMetas.obterMetas(empresaId);
+  const mes = dinoMetas.monthWindow(now);
+  const configured = Object.values(metas).some(Boolean);
+  if (!configured) return { configured: false, items: [], month: mes.label, metas };
+  let commerce = null;
+  if (commerceContext) {
+    try {
+      const [sales, detail] = await Promise.all([
+        salesReport(commerceContext, { from: mes.fromDate.toISOString(), to: mes.toDate.toISOString() }),
+        loadCommerceSalesDetail(commerceDb, commerceContext, mes.fromDate.toISOString(), mes.toDate.toISOString()).catch(() => null),
+      ]);
+      commerce = { sales, cost: detail?.cost ?? null };
+    } catch { commerce = null; }
+  }
+  const win = { fromDate: mes.fromDate, toDate: mes.toDate };
+  const services = dinoBi.servicesPerformed(barbershopInput, win);
+  const retail = dinoBi.retailSold(barbershopInput, win);
+  const resultado = profitFor(win, commerce);
+  const atendimentos = services.reduce((sum, row) => sum + row.quantidade, 0);
+  const receitaServicos = services.reduce((sum, row) => sum + row.receita, 0);
+  const receitaLoja = Number(commerce?.sales?.summary?.gross_total || 0);
+  const novosClientes = clientesKytto.listarClientes(empresaId).filter((item) => !item.padrao && !item.anonimizadoEm && item.criadoEm && new Date(item.criadoEm) >= mes.fromDate).length;
+  const atual = {
+    receita: receitaServicos + retail.reduce((sum, row) => sum + row.receita, 0) + receitaLoja,
+    resultado: resultado.resultado,
+    atendimentos,
+    ticketMedio: atendimentos ? receitaServicos / atendimentos : 0,
+    novosClientes,
+  };
+  return { configured: true, month: mes.label, day: mes.day, daysInMonth: mes.daysInMonth, metas, items: dinoMetas.progressoMetas(metas, atual, mes) };
+}
+
 app.get('/api/admin/barbearia/analytics', async (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
@@ -2167,8 +2366,10 @@ app.get('/api/admin/barbearia/analytics', async (req, res) => {
     let commerceAvailable = false;
     let commerceCurrent = {};
     let commercePrevious = {};
+    let commerceContext = null;
     try {
       const context = await requireCommercePermission(req, 'reports.read');
+      commerceContext = context;
       const currentOptions = { from: range.from, to: range.to };
       const previousOptions = { from: range.previousFrom, to: range.previousTo };
       const [currentSales, previousSales, currentCustomers, previousCustomers, inventory] = await Promise.all([
@@ -2178,21 +2379,47 @@ app.get('/api/admin/barbearia/analytics', async (req, res) => {
       commerceAvailable = true;
       commerceCurrent = { sales: currentSales, customers: currentCustomers, inventory };
       commercePrevious = { sales: previousSales, customers: previousCustomers };
+      const [detailNow, detailBefore] = await Promise.all([
+        loadCommerceSalesDetail(commerceDb, context, range.from, range.to).catch(() => null),
+        loadCommerceSalesDetail(commerceDb, context, range.previousFrom, range.previousTo).catch(() => null),
+      ]);
+      commerceCurrent.cost = detailNow?.cost ?? null;
+      commercePrevious.cost = detailBefore?.cost ?? null;
     } catch (error) {
       const code = String(error?.code || 'COMMERCE_REPORTS_UNAVAILABLE');
       console.warn(`Analytics Dino sem agregados Commerce: ${code}`);
     }
+    const barbershopInput = {
+      appointments: barbeariaErpKytto.listarAgendamentos(empresaId, { lojaId }),
+      retailSales: barbeariaErpKytto.listarVendasRevenda(empresaId, { lojaId }),
+      commands: barbeariaErpKytto.listarComandasBarbearia(empresaId, { lojaId }),
+      products: barbeariaErpKytto.listarProdutosRevenda(empresaId, { incluirInativos: true }),
+      professionals: barbeariaErpKytto.listarProfissionais(empresaId, { incluirInativos: true }),
+      financeEntries: financeiroKytto.listarLancamentos(empresaId, {}),
+    };
+    const currentWindow = { fromDate: range.fromDate, toDate: range.toDate };
+    const previousWindow = { fromDate: range.previousFromDate, toDate: range.previousToDate };
+    const profitFor = (win, commerceData) => dinoBi.estimateResult({
+      services: dinoBi.servicesPerformed(barbershopInput, win),
+      retail: dinoBi.retailSold(barbershopInput, win),
+      professionals: barbershopInput.professionals,
+      financeEntries: barbershopInput.financeEntries,
+      commerce: commerceAvailable ? { revenue: Number(commerceData?.sales?.summary?.gross_total || 0), cost: commerceData?.cost ?? null } : null,
+    }, win);
     const analytics = buildDinoDashboardAnalytics({
       commerceAvailable,
       commerceCurrent,
       commercePrevious,
-      appointments: barbeariaErpKytto.listarAgendamentos(empresaId, { lojaId }),
-      retailSales: barbeariaErpKytto.listarVendasRevenda(empresaId, { lojaId }),
-      commands: barbeariaErpKytto.listarComandasBarbearia(empresaId, { lojaId }),
+      appointments: barbershopInput.appointments,
+      retailSales: barbershopInput.retailSales,
+      commands: barbershopInput.commands,
       customers: clientesKytto.listarClientes(empresaId),
-      financeEntries: financeiroKytto.listarLancamentos(empresaId, {}),
+      financeEntries: barbershopInput.financeEntries,
       inventory: barbeariaErpKytto.listarProdutosRevenda(empresaId, { incluirInativos: false }),
       subscriptions: barbeariaErpKytto.listarAssinaturas(empresaId, {}),
+      profit: { current: profitFor(currentWindow, commerceCurrent), previous: profitFor(previousWindow, commercePrevious) },
+      goals: await metasDoMes({ empresaId, now, barbershopInput, commerceContext, profitFor }),
+      funnel: commerceAvailable ? { current: funnelSummary(empresaId, range.fromDate, range.toDate), previous: funnelSummary(empresaId, range.previousFromDate, range.previousToDate) } : null,
     }, { period: range.days, now });
     res.json({ ok: true, ...analytics });
   } catch (error) {
@@ -2271,18 +2498,32 @@ app.patch('/api/admin/barbearia/configuracoes/unidade-ativa', (req, res) => {
   catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.patch('/api/admin/barbearia/configuracoes', (req, res) => {
-  try { res.json({ ok: true, configuracao: barbeariaErpKytto.atualizarConfiguracao(legacyEmpresaId(req), req.body || {}) }); }
+  // Taxas de maquininha mudam a base da comissão: só quem gerencia a unidade altera.
+  const corpo = { ...(req.body || {}) };
+  if (!['admin', 'organizador', 'gerente'].includes(String(req.user?.role || '').toLowerCase()) && (corpo.taxasPagamento !== undefined || corpo.taxas_pagamento !== undefined)) {
+    return res.status(403).json({ error: 'Só a gestão da unidade altera as taxas de pagamento.', code: 'TAXAS_RESTRITAS' });
+  }
+  try { res.json({ ok: true, configuracao: barbeariaErpKytto.atualizarConfiguracao(legacyEmpresaId(req), corpo) }); }
   catch (error) { res.status(400).json({ error: error.message }); }
 });
 
 app.get('/api/admin/barbearia/profissionais', (req, res) => res.json({ ok: true, profissionais: barbeariaErpKytto.listarProfissionais(legacyEmpresaId(req), { incluirInativos: String(req.query?.incluirInativos) === 'true' }) }));
+// Percentual de comissão e dados de repasse são definidos por quem gerencia a unidade;
+// equipe operacional (staff) pode editar o cadastro, mas não a própria remuneração.
+const CAMPOS_REMUNERACAO = ['percentualComissao', 'percentual_comissao', 'percentualComissaoProduto', 'percentual_comissao_produto', 'descontaTaxaMaquininha', 'desconta_taxa_maquininha'];
+function semCamposDeRemuneracao(req) {
+  const corpo = { ...(req.body || {}) };
+  if (['admin', 'organizador', 'gerente'].includes(String(req.user?.role || '').toLowerCase())) return corpo;
+  for (const campo of CAMPOS_REMUNERACAO) delete corpo[campo];
+  return corpo;
+}
 app.post('/api/admin/barbearia/profissionais', (req, res) => {
-  try { res.status(201).json({ ok: true, profissional: barbeariaErpKytto.criarProfissional(legacyEmpresaId(req), req.body || {}) }); }
+  try { res.status(201).json({ ok: true, profissional: barbeariaErpKytto.criarProfissional(legacyEmpresaId(req), semCamposDeRemuneracao(req)) }); }
   catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.patch('/api/admin/barbearia/profissionais/:id', (req, res) => {
   try {
-    const profissional = barbeariaErpKytto.atualizarProfissional(legacyEmpresaId(req), req.params.id, req.body || {});
+    const profissional = barbeariaErpKytto.atualizarProfissional(legacyEmpresaId(req), req.params.id, semCamposDeRemuneracao(req));
     if (!profissional) return res.status(404).json({ error: 'Profissional não encontrado na empresa ativa.' });
     res.json({ ok: true, profissional });
   } catch (error) { res.status(400).json({ error: error.message }); }
@@ -2326,10 +2567,11 @@ app.post('/api/admin/barbearia/agenda', async (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
     const lojaId = legacyLojaId(req);
-    const body = { ...(req.body || {}), lojaId };
+    const vinculo = vincularClienteAoAtendimento(empresaId, { ...(req.body || {}), lojaId }, { origem: 'agenda', usuario: req.user?.email || '' });
+    const body = vinculo.dados;
     const agendamento = enriquecerAgendamentoBarbearia(empresaId, barbeariaErpKytto.criarAgendamento(empresaId, body));
     const notificacao = await queueAppointmentNotifications({ empresaId, lojaId, legacyEmpresaId: empresaId }, agendamento, 'criado').catch(() => ({ queued: 0, skipped: true, reason: 'queue_unavailable' }));
-    res.status(201).json({ ok: true, agendamento, notificacao });
+    res.status(201).json({ ok: true, agendamento, notificacao, cliente: { id: vinculo.clienteId || null, criado: vinculo.criado } });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.patch('/api/admin/barbearia/agenda/:id', async (req, res) => {
@@ -2405,10 +2647,11 @@ app.get('/api/admin/barbearia/comandas/:id', (req, res) => {
 });
 app.post('/api/admin/barbearia/comandas', (req, res) => {
   try {
-    const body = payloadComandaBarbearia(req);
+    const vinculo = vincularClienteAoAtendimento(legacyEmpresaId(req), payloadComandaBarbearia(req), { origem: 'comanda', usuario: req.user?.email || '' });
+    const body = vinculo.dados;
     body.chaveIdempotencia = req.get('Idempotency-Key') || body.chaveIdempotencia || body.chave_idempotencia;
     const comanda = barbeariaErpKytto.criarComandaBarbearia(legacyEmpresaId(req), body);
-    res.status(201).json({ ok: true, comanda });
+    res.status(201).json({ ok: true, comanda, cliente: { id: vinculo.clienteId || null, criado: vinculo.criado } });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.patch('/api/admin/barbearia/comandas/:id', (req, res) => {
@@ -2924,20 +3167,22 @@ app.delete('/api/admin/combos/:id', auth, requireStaff, (req,res)=>{
 });
 
 // Restaurar cardápio oficial do Bar TTC, sem itens genéricos ou fictícios.
-app.post('/api/admin/cardapio/reset', auth, requireRole('admin'), (req,res)=>{
+app.post('/api/admin/cardapio/reset', auth, requireRole('admin'), destructiveAdminGuard, (req,res)=>{
   db().cardapio = criarCardapioOficial();
   save(); res.json({ ok:true, total: db().cardapio.length, versao: OFICIAL_CARDAPIO_VERSION, fonte: RESUMO_CATALOGO_BAR_TTC.fonte });
 });
 
 // Reset geral de dados (admin apenas) — Configuracoes.jsx
-app.post('/api/admin/reset', auth, requireRole('admin'), (req,res)=>{
+app.post('/api/admin/reset', auth, requireRole('admin'), requireLegacyGlobalScope, destructiveAdminGuard, (req,res)=>{
   const { tipo } = req.body||{};
   const d = db();
   if(!tipo || tipo==='ranking') { d.ranking={ players:{} }; d.campeoes={}; }
   if(!tipo || tipo==='inscricoes') { d.inscricoes=[]; }
   if(!tipo || tipo==='chaves') { d.chaves={}; d.suicos={}; d.gruposEventos={}; }
   if(!tipo || tipo==='comandas') { d.comandas=[]; }
-  if(!tipo || tipo==='auditoria') { d.auditoria=[]; }
+  // A trilha de auditoria é compartilhada: o reset só apaga registros do
+  // evento legado (sem empresa) e nunca os de empresas clientes.
+  if(!tipo || tipo==='auditoria') { d.auditoria=(d.auditoria||[]).filter(item=>item.empresaId); }
   audit(req, 'RESET_DADOS', tipo||'todos');
   save(); res.json({ok:true, message:'Dados resetados com sucesso.'});
 });
@@ -2998,7 +3243,7 @@ app.get('/api/admin/config', auth, (req,res)=>{
     },
   });
 });
-app.patch('/api/admin/config', auth, requireRole('admin'), (req,res)=>{
+app.patch('/api/admin/config', auth, requireRole('admin'), requireLegacyGlobalScope, (req,res)=>{
   const d = db();
   if(!d.config) d.config = {};
   const allowed = ['evento','bar','restaurante','quadras','horarios','ingressoTipos','categorias','socioPlanos','assinPlanos','pagamentos','tef','fiscal'];
@@ -3105,7 +3350,7 @@ app.get('/api/admin/loja/reservas', auth, requireStaff, (req,res)=>{
   const list = (db().reservasLoja||[]).slice().sort((a,b)=>(b.criadoEm||'').localeCompare(a.criadoEm||''));
   res.json(list);
 });
-app.patch('/api/admin/loja/reservas/:id', auth, requireStaff, (req,res)=>{
+app.patch('/api/admin/loja/reservas/:id', auth, requireLegacyGlobalScope, requireStaff, legacyCommerceMutationGuard, (req,res)=>{
   const d = db();
   if(!d.reservasLoja) d.reservasLoja = [];
   const r = d.reservasLoja.find(x=>x.id==req.params.id);
@@ -3190,14 +3435,14 @@ app.get('/api/admin/estoque', auth, requireStaff, (req,res)=>{
   res.json(getCardapio().map(p=>{ const e=estoqueItem(p.id); return { id:p.id, nome:p.nome, cat:p.cat, preco:p.preco,
     qtd:e.qtd, custo:e.custo, min:e.min, baixo: e.qtd<=e.min }; }));
 });
-app.post('/api/admin/estoque/entrada', auth, requireStaff, (req,res)=>{
+app.post('/api/admin/estoque/entrada', auth, requireLegacyGlobalScope, requireStaff, legacyCommerceMutationGuard, (req,res)=>{
   const { produtoId, qtd, custo } = req.body||{};
   if(!prod(produtoId)) return res.status(400).json({error:'produto inválido'});
   const q=parseInt(qtd); if(!q || q<=0) return res.status(400).json({error:'quantidade inválida'});
   const e=estoqueItem(produtoId); e.qtd+=q; if(custo!==undefined && custo!=='') e.custo=Number(custo); save();
   res.json({ ok:true, produtoId, qtd:e.qtd });
 });
-app.post('/api/admin/estoque/ajuste', auth, requireStaff, (req,res)=>{
+app.post('/api/admin/estoque/ajuste', auth, requireLegacyGlobalScope, requireStaff, legacyCommerceMutationGuard, (req,res)=>{
   const { produtoId, qtd, min } = req.body||{};
   if(!prod(produtoId)) return res.status(400).json({error:'produto inválido'});
   const e=estoqueItem(produtoId);
@@ -3457,7 +3702,7 @@ app.post('/api/loja/checkout/simular', publicLimit(60), (req,res)=>{
   }
 });
 
-app.post('/api/loja/checkout/pedido', publicLimit(40), (req,res)=>{
+app.post('/api/loja/checkout/pedido', publicLimit(40), legacyCommerceMutationGuard, (req,res)=>{
   const d = db();
   if (!d.pedidosLoja) d.pedidosLoja = [];
   const idempotencyKey = createIdempotencyKey(req.body?.idempotencyKey || req.headers['x-idempotency-key']);
@@ -3516,7 +3761,7 @@ app.get('/api/loja/checkout/:id', (req,res)=>{
   res.json({ ok:true, pedido:publicCheckoutOrder(p) });
 });
 
-app.post('/api/loja/checkout/:id/pagamento', publicLimit(40), async (req,res)=>{
+app.post('/api/loja/checkout/:id/pagamento', publicLimit(40), legacyPaymentMutationGuard, async (req,res)=>{
   const d = db();
   const p = (d.pedidosLoja || []).find(x => x.id == req.params.id || x.codigo === String(req.params.id).toUpperCase());
   if (!p) return res.status(404).json({ error:'pedido não encontrado' });
@@ -3552,7 +3797,7 @@ app.post('/api/loja/checkout/:id/pagamento', publicLimit(40), async (req,res)=>{
 });
 
 // Reserva via site público (loja — pré-venda Pix)
-app.post('/api/loja/:id/reservar', publicLimit(20), (req,res)=>{
+app.post('/api/loja/:id/reservar', publicLimit(20), legacyCommerceMutationGuard, (req,res)=>{
   const idem = String(req.body?.idempotencyKey || '').trim().slice(0, 120);
   if (idem && db().idempotenciaReservasLoja?.[idem]) return res.json(db().idempotenciaReservasLoja[idem]);
   const p=(db().loja||[]).find(x=>x.id==req.params.id && x.ativo!==false);
@@ -3575,14 +3820,14 @@ app.get('/api/admin/loja', auth, requireStaff, (req,res)=>{
   seedLoja();
   res.json(db().loja || []);
 });
-app.post('/api/admin/loja', auth, requireStaff, (req,res)=>{
+app.post('/api/admin/loja', auth, requireLegacyGlobalScope, requireStaff, legacyCommerceMutationGuard, (req,res)=>{
   const b=req.body||{}; if(!b.nome) return res.status(400).json({error:'nome obrigatório'});
   const preco = Math.max(0, Number(b.preco)||0);
   const p={ id:nextId(), cod:String(b.cod||'').trim(), nome:b.nome, cat:b.cat||'Geral', preco, precoPromocional:precoPromocionalSeguro(b.precoPromocional, preco), estoque:Math.max(0, parseInt(b.estoque)||0),
     descricao:b.descricao||'', imagem:b.imagem||'', ativo:b.ativo!==false, criadoEm:new Date().toISOString() };
   db().loja.push(p); save(); res.json(p);
 });
-app.patch('/api/admin/loja/:id', auth, requireStaff, (req,res)=>{
+app.patch('/api/admin/loja/:id', auth, requireLegacyGlobalScope, requireStaff, legacyCommerceMutationGuard, (req,res)=>{
   const p=(db().loja||[]).find(x=>x.id==req.params.id); if(!p) return res.status(404).json({error:'não encontrado'});
   ['cod','nome','cat','ativo','descricao','imagem'].forEach(k=>{ if(req.body[k]!==undefined) p[k]=req.body[k]; });
   if(req.body.preco!==undefined){ p.preco=Math.max(0, Number(req.body.preco)||0); p.precoPromocional=precoPromocionalSeguro(req.body.precoPromocional, p.preco); }
@@ -3590,9 +3835,9 @@ app.patch('/api/admin/loja/:id', auth, requireStaff, (req,res)=>{
   if(req.body.estoque!==undefined) p.estoque=Math.max(0, parseInt(req.body.estoque)||0);
   save(); res.json(p);
 });
-app.delete('/api/admin/loja/:id', auth, requireStaff, (req,res)=>{ const d=db(); d.loja=(d.loja||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true}); });
+app.delete('/api/admin/loja/:id', auth, requireLegacyGlobalScope, requireStaff, destructiveAdminGuard, legacyCommerceMutationGuard, (req,res)=>{ const d=db(); d.loja=(d.loja||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true}); });
 // Venda na loja (balcão) — baixa estoque
-app.post('/api/admin/loja/vender', auth, requireStaff, (req,res)=>{
+app.post('/api/admin/loja/vender', auth, requireLegacyGlobalScope, requireStaff, legacyCommerceMutationGuard, (req,res)=>{
   const { itens, pagamento, cliente } = req.body||{};
   if(!Array.isArray(itens) || !itens.length) return res.status(400).json({error:'informe os itens'});
   let total=0; const linhas=[];
@@ -3619,7 +3864,7 @@ function pedidoPublico(p){
 }
 
 // PÚBLICO: cliente lança o pedido (carrinho inteiro num único pedido agrupado)
-app.post('/api/loja/pedido', publicLimit(), (req,res)=>{
+app.post('/api/loja/pedido', publicLimit(), legacyCommerceMutationGuard, (req,res)=>{
   const { cliente, itens, entrega, observacao, idempotencyKey } = req.body||{};
   const nome = (cliente?.nome||'').trim(), email = (cliente?.email||'').trim();
   const idem = String(idempotencyKey||'').trim().slice(0,120);
@@ -3679,7 +3924,7 @@ app.get('/api/admin/loja/pedidos', auth, requireStaff, (req,res)=>{
 });
 
 // ADMIN: avança/altera o status do pedido (preparar, liberar, entregar, cancelar)
-app.patch('/api/admin/loja/pedidos/:id', auth, requireStaff, (req,res)=>{
+app.patch('/api/admin/loja/pedidos/:id', auth, requireLegacyGlobalScope, requireStaff, legacyCommerceMutationGuard, (req,res)=>{
   const d=db(); const p=(d.pedidosLoja||[]).find(x=>x.id==req.params.id);
   if(!p) return res.status(404).json({error:'pedido não encontrado'});
   // status é opcional: pode-se enviar só { pagamento } para marcar pago.
@@ -3741,7 +3986,7 @@ app.get('/api/admin/tef/transacoes', auth, requireStaff, (req,res)=>{
 
 // Estorno/cancelamento TEF (mesmo dia). O estorno físico ocorre no pinpad (front);
 // aqui marcamos a transação como estornada e reabrimos a venda associada.
-app.post('/api/admin/tef/estorno/:id', auth, requireStaff, (req,res)=>{
+app.post('/api/admin/tef/estorno/:id', auth, requireStaff, destructiveAdminGuard, legacyCommerceMutationGuard, (req,res)=>{
   const d=db(); const t=(d.tefTransacoes||[]).find(x=>x.id==req.params.id && x.tipo==='venda');
   if(!t) return res.status(404).json({error:'transação não encontrada'});
   if(t.status==='estornado') return res.status(409).json({error:'transação já estornada'});
@@ -3853,7 +4098,7 @@ app.post('/api/admin/notas/:id/cancelar', auth, requireStaff, async (req,res)=>{
 });
 
 // =================== FINANCEIRO / DRE CONSOLIDADO (cap. 13) ===================
-app.get('/api/admin/financeiro', auth, requireStaff, (req,res)=>{
+app.get('/api/admin/financeiro', auth, requireLegacyGlobalScope, requireStaff, (req,res)=>{
   const d=db();
   const bar=(d.comandas||[]).filter(c=>c.status==='fechada').reduce((s,c)=>s+(c.totalPago||0),0);
   const ingressos=(d.ingressos||[]).filter(i=>i.status==='valido'||i.status==='usado').reduce((s,i)=>s+(i.preco||0),0);
@@ -4224,7 +4469,7 @@ function valorEsperado(d, tipo, refId){
 }
 
 // Cria uma cobrança Pix para um pedido (ingresso, inscrição, reserva, recarga, mensalidade, assinatura, loja)
-app.post('/api/pagar', publicLimit(40), async (req,res)=>{
+app.post('/api/pagar', publicLimit(40), legacyPaymentMutationGuard, async (req,res)=>{
   if (!pagamentosAtivos) return res.status(503).json({ error:'pagamentos reais ainda não configurados', code:'PAYMENT_PROVIDER_UNAVAILABLE' });
   const { tipo, refId, valor, descricao, email, usuarioId } = req.body||{};
   const tiposOk = ['ingresso','inscricao','reserva','carteira','mensalidade','assinatura','loja','generico'];
@@ -4245,7 +4490,7 @@ app.post('/api/pagar', publicLimit(40), async (req,res)=>{
   }catch(e){ res.status(400).json({error:e.message}); }
 });
 
-app.get('/api/pagamento/:id', async (req,res)=>{
+app.get('/api/pagamento/:id', legacyPaymentMutationGuard, async (req,res)=>{
   const pg=(db().pagamentos||[]).find(p=>p.id==req.params.id); if(!pg) return res.status(404).json({error:'não encontrado'});
   if (pg.provedor === 'simulado') return res.status(410).json({ error:'pagamento legado simulado desativado', code:'SIMULATED_PAYMENT_DISABLED' });
   if(pg.status==='pendente' && pg.provedor==='mercadopago'){ const st=await consultarStatus(pg.externalId); if(st && st!=='pendente'){ pg.status=st==='aprovado'?'aprovado':'recusado'; if(pg.status==='aprovado') fulfill(pg); save(); } }
@@ -4253,7 +4498,7 @@ app.get('/api/pagamento/:id', async (req,res)=>{
 });
 
 // Webhook do Mercado Pago (produção): confirma e libera o pedido
-app.post('/api/pagamento/webhook', async (req,res)=>{
+app.post('/api/pagamento/webhook', legacyPaymentMutationGuard, async (req,res)=>{
   if (!pagamentosAtivos || pixInfo || !process.env.MP_ACCESS_TOKEN) return res.status(503).json({ error:'Mercado Pago não configurado', code:'MP_PROVIDER_UNAVAILABLE' });
   const extId = req.body?.data?.id || req.query['data.id'] || req.query.id;
   // Webhook do gateway exige segredo configurado; sem ele não há reconciliação de evento confiável.
@@ -4272,7 +4517,7 @@ app.post('/api/pagamento/webhook', async (req,res)=>{
 });
 
 // Confirmação manual pública removida: nenhuma rota pode aprovar pagamento localmente.
-app.post('/api/pagamento/:id/confirmar', (req,res)=> res.status(410).json({
+app.post('/api/pagamento/:id/confirmar', legacyPaymentMutationGuard, (req,res)=> res.status(410).json({
   error:'confirmação manual desativada; aguarde o gateway real',
   code:'MANUAL_PAYMENT_CONFIRMATION_DISABLED',
 }));
@@ -4293,7 +4538,7 @@ app.get('/api/admin/pagamentos', auth, requireStaff, (req,res)=> res.json((db().
 
 // Confirmação/estorno manual pela organização — essencial no Pix estático, onde não há
 // confirmação automática. Ao confirmar, libera o pedido (fulfill), de forma idempotente.
-app.patch('/api/admin/pagamentos/:id', auth, requireStaff, (req,res)=>{
+app.patch('/api/admin/pagamentos/:id', auth, requireStaff, legacyPaymentMutationGuard, (req,res)=>{
   const pg=(db().pagamentos||[]).find(p=>p.id==req.params.id);
   if(!pg) return res.status(404).json({error:'pagamento não encontrado'});
   const novo = req.body?.status;
@@ -4326,7 +4571,20 @@ function fulfill(pg){
 }
 
 // =================== AUDITORIA (segurança) ===================
-app.get('/api/admin/auditoria', auth, requireStaff, (req,res)=> res.json((db().auditoria||[]).slice(-200).reverse()));
+// Trilha legada: administrador da plataforma vê tudo (ou filtra por empresa);
+// usuário de empresa vê só a própria empresa; equipe do evento legado vê só
+// os registros sem empresa. IPs só aparecem para a administração da plataforma.
+app.get('/api/admin/auditoria', auth, requireStaff, (req,res)=>{
+  const platform = isPlatformAdminUser(req.user);
+  const filtro = String(req.query?.empresaId || '').trim();
+  const propria = req.user?.empresaId ? String(req.user.empresaId) : null;
+  const itens = (db().auditoria||[]).filter(item => {
+    const empresa = item.empresaId ? String(item.empresaId) : null;
+    if (platform) return !filtro || empresa === filtro;
+    return empresa === propria;
+  });
+  res.json(itens.slice(-200).reverse().map(item => platform ? item : { ...item, ip:'' }));
+});
 
 // =================== NOTIFICAÇÕES DO ADMIN ===================
 // Agrega eventos recentes em um feed de notificações para o painel
@@ -4699,9 +4957,10 @@ function usarCupom(cupomId){
 // =================== AUTH EXTRA (registro/perfil/me/inscrições) ===================
 
 // POST /api/auth/registro — alias público para registro de atleta
-app.post('/api/auth/registro', async (req, res) => {
+app.post('/api/auth/registro', publicLimit(10), async (req, res) => {
   const { nome, email, senha, telefone } = req.body || {};
   if (!nome || !email || !senha) return res.status(400).json({ error: 'nome, email e senha obrigatórios' });
+  if (isReservedEmail(email)) return res.status(409).json({ error: 'e-mail já cadastrado' });
   if ((senha || '').length < 6) return res.status(400).json({ error: 'a senha deve ter ao menos 6 caracteres' });
   const d = db();
   if (!d.usuarios) d.usuarios = [];
@@ -4854,7 +5113,7 @@ app.delete('/api/admin/mensalidades/:id', auth, requireRole('admin','organizador
 });
 
 // --- Lançamentos financeiros (contas a pagar / receber) ---
-app.get('/api/admin/financeiro/lancamentos', auth, requireStaff, (req,res)=>{
+app.get('/api/admin/financeiro/lancamentos', auth, requireLegacyGlobalScope, requireStaff, (req,res)=>{
   let list = db().lancamentos||[];
   const { tipo, status, categoria, de, ate } = req.query;
   if(tipo) list=list.filter(l=>l.tipo===tipo);
@@ -4864,7 +5123,7 @@ app.get('/api/admin/financeiro/lancamentos', auth, requireStaff, (req,res)=>{
   if(ate) list=list.filter(l=>(l.vencimento||'')<=ate);
   res.json(list.slice().sort((a,b)=>(a.vencimento||'').localeCompare(b.vencimento||'')));
 });
-app.post('/api/admin/financeiro/lancamentos', auth, requireStaff, (req,res)=>{
+app.post('/api/admin/financeiro/lancamentos', auth, requireLegacyGlobalScope, requireStaff, (req,res)=>{
   const { tipo, categoria, descricao, valor, vencimento, obs } = req.body||{};
   if(!tipo||!valor||!descricao) return res.status(400).json({error:'tipo, valor e descrição obrigatórios'});
   if(!['receita','despesa'].includes(tipo)) return res.status(400).json({error:'tipo deve ser receita ou despesa'});
@@ -4874,18 +5133,18 @@ app.post('/api/admin/financeiro/lancamentos', auth, requireStaff, (req,res)=>{
   const d=db(); d.lancamentos=d.lancamentos||[]; d.lancamentos.push(l); save();
   res.json(l);
 });
-app.patch('/api/admin/financeiro/lancamentos/:id', auth, requireStaff, (req,res)=>{
+app.patch('/api/admin/financeiro/lancamentos/:id', auth, requireLegacyGlobalScope, requireStaff, (req,res)=>{
   const d=db(); const l=(d.lancamentos||[]).find(x=>x.id==req.params.id);
   if(!l) return res.status(404).json({error:'não encontrado'});
   if(req.body.status==='pago' && !l.pagoEm) req.body.pagoEm=new Date().toISOString();
   Object.assign(l, req.body); save(); res.json(l);
 });
-app.delete('/api/admin/financeiro/lancamentos/:id', auth, requireRole('admin','organizador'), (req,res)=>{
+app.delete('/api/admin/financeiro/lancamentos/:id', auth, requireLegacyGlobalScope, requireRole('admin','organizador'), (req,res)=>{
   const d=db(); d.lancamentos=(d.lancamentos||[]).filter(x=>x.id!=req.params.id); save(); res.json({ok:true});
 });
 
 // --- Resumo financeiro e fluxo de caixa ---
-app.get('/api/admin/financeiro/resumo', auth, requireStaff, (req,res)=>{
+app.get('/api/admin/financeiro/resumo', auth, requireLegacyGlobalScope, requireStaff, (req,res)=>{
   const d=db();
   const hoje=new Date().toISOString().slice(0,10);
   const mesAtual=hoje.slice(0,7);
@@ -4909,7 +5168,7 @@ app.get('/api/admin/financeiro/resumo', auth, requireStaff, (req,res)=>{
     mensRecebidas, mensPendentes, mensVencidas, recMes, despMes, aReceber, aPagar,
     inadimplentes, inscRec, mesAtual, hoje });
 });
-app.get('/api/admin/financeiro/fluxo', auth, requireStaff, (req,res)=>{
+app.get('/api/admin/financeiro/fluxo', auth, requireLegacyGlobalScope, requireStaff, (req,res)=>{
   const d=db();
   const hoje=new Date();
   const meses=[];
@@ -4926,7 +5185,7 @@ app.get('/api/admin/financeiro/fluxo', auth, requireStaff, (req,res)=>{
     return { mes, receitas:rec+mensR, despesas:desp, saldo:(rec+mensR)-desp };
   }));
 });
-app.get('/api/admin/financeiro/categorias', auth, requireStaff, (req,res)=>{
+app.get('/api/admin/financeiro/categorias', auth, requireLegacyGlobalScope, requireStaff, (req,res)=>{
   res.json({
     receita:['Mensalidade','Inscrição Torneio','Ingresso Evento','Bar/Lanchonete','Loja','Aula/Escola','Patrocínio','Aluguel de Quadra','Outros'],
     despesa:['Pessoal/RH','Manutenção','Utilities (Água/Luz)','Material Esportivo','Alimentação/Bebidas','Marketing','Equipamentos','Impostos/Taxas','Serviços Terceiros','Outros']
@@ -5234,7 +5493,7 @@ app.patch('/api/admin/ligas/:id', auth, requireRole('admin', 'organizador'), (re
 });
 
 // ── Admin: excluir liga ────────────────────────────────────────────────────
-app.delete('/api/admin/ligas/:id', auth, requireRole('admin'), (req, res) => {
+app.delete('/api/admin/ligas/:id', auth, requireRole('admin'), destructiveAdminGuard, (req, res) => {
   const d = ensureLigas();
   if (!d.ligas[req.params.id]) return res.status(404).json({ error: 'não encontrada' });
   delete d.ligas[req.params.id]; save();
@@ -5329,7 +5588,7 @@ app.post('/api/admin/ligas/:id/proxima-rodada', auth, requireRole('admin', 'orga
 });
 
 // ── Admin: resetar rodadas ─────────────────────────────────────────────────
-app.delete('/api/admin/ligas/:id/rodadas', auth, requireRole('admin'), (req, res) => {
+app.delete('/api/admin/ligas/:id/rodadas', auth, requireRole('admin'), destructiveAdminGuard, (req, res) => {
   const d = ensureLigas();
   const liga = d.ligas[req.params.id];
   if (!liga) return res.status(404).json({ error: 'não encontrada' });
@@ -5585,13 +5844,26 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
 // já rodaram (gravação local apenas); hydrate() sobrepõe com o estado durável do
 // bucket quando existe. Sem GCS_BUCKET, resolve imediatamente.
 ;(async () => {
-  await hydrate();
+  try { await hydrate(); }
+  catch (error) { console.error('Boot interrompido: não foi possível ler o estado durável do GCS.'); process.exit(1); }
+  // O estado do GCS substitui o local: garante o admin e aplica a recuperação de senha de novo.
+  seedUsuarios();
+  aplicarResetAdmin();
   if (process.env.COMMERCE_CORE_ENABLED === '1') {
-    await purgeExpiredCommercePublicData();
+    // Falha passageira do banco não derruba o boot: a limpeza roda de novo no ciclo.
+    await purgeExpiredCommercePublicData().catch(error => console.warn('Limpeza inicial de dados públicos adiada:', error?.code || error?.message || error));
     startCommerceRetentionCleanup();
+    startCommerceReservationExpiryCleanup();
+    startLoyaltyExpiry();
   }
   app.listen(PORT, ()=> console.log(`SetPoint React SPA em http://localhost:${PORT}`));
   startWhatsappAiWorker();
+  startAiBrainSchedulers();
+  // Vigia da conexão WhatsApp (backend NossaGente): reconecta sozinho quando cai.
+  if (whatsappProviderName() === 'chatbot_backend' && process.env.WHATSAPP_CONNECTION_WATCHDOG !== 'false') {
+    const intervalo = Math.max(30, Number.parseInt(process.env.WHATSAPP_CONNECTION_WATCHDOG_SECONDS || '60', 10) || 60) * 1000;
+    setInterval(() => { vigiarConexoesWhatsapp().catch((error) => console.warn('[WhatsApp] vigia de conexão:', String(error?.message || error).slice(0, 200))); }, intervalo).unref();
+  }
 })().catch(error => {
   console.error('FATAL: falha no boot seguro do SetPoint:', error?.code || error?.message || error);
   process.exit(1);

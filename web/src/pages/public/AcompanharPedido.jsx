@@ -34,7 +34,7 @@ const JOURNEY = [
 const STATUS_COPY = {
   draft: ['Pedido em rascunho', 'A compra ainda não foi enviada.'],
   pending_payment: ['Aguardando pagamento', 'O pedido foi criado e aguarda a conclusão do pagamento no provedor seguro.'],
-  payment_failed: ['Pagamento não confirmado', 'O provedor não confirmou o pagamento. Você pode tentar novamente com segurança.'],
+  payment_failed: ['Pagamento não confirmado', 'O provedor não confirmou o pagamento e o pedido foi encerrado. Para comprar, monte um novo carrinho na loja.'],
   fraud_review: ['Pagamento em análise', 'O provedor está analisando a transação. Aguarde a próxima atualização.'],
   paid: ['Pagamento confirmado', 'O pagamento foi confirmado e a loja iniciará a preparação.'],
   processing: ['Pedido em preparação', 'A equipe está separando e conferindo os produtos.'],
@@ -226,7 +226,7 @@ export default function AcompanharPedido() {
 
           {pedido.shippingOption?.deliveryDays !== null && pedido.shippingOption?.deliveryDays !== undefined && <section className="order-shipping-promise"><Clock3 size={18} /><div><span>Prazo total estimado</span><strong>{shippingPromise(pedido.shippingOption)}</strong></div></section>}
 
-          {pedido.isCore && ['pending_payment', 'payment_failed'].includes(presentation.status) && <Link className="order-primary-action" to={`${checkoutRoute}?order=${encodeURIComponent(codigo)}`}>{presentation.status === 'payment_failed' ? 'Tentar pagamento novamente' : 'Concluir pagamento'} <ArrowRight size={17} /></Link>}
+          {pedido.isCore && presentation.status === 'pending_payment' && <Link className="order-primary-action" to={`${checkoutRoute}?order=${encodeURIComponent(codigo)}`}>Concluir pagamento <ArrowRight size={17} /></Link>}
 
           {latestFulfillment && <section className="order-fulfillment"><header><div><span>Logística</span><h2>{FULFILLMENT_LABELS[latestFulfillment.status] || latestFulfillment.status}</h2></div>{latestFulfillment.carrier && <strong>{latestFulfillment.carrier}</strong>}</header>{latestFulfillment.trackingCode && <div className="order-tracking-code"><span>Código de rastreio</span><strong>{latestFulfillment.trackingCode}</strong></div>}{latestFulfillment.trackingUrl && <a href={latestFulfillment.trackingUrl} target="_blank" rel="noreferrer">Acompanhar na transportadora <ArrowRight size={15} /></a>}{Array.isArray(latestFulfillment.ocorrencias) && latestFulfillment.ocorrencias.length > 0 && <div className="order-events">{latestFulfillment.ocorrencias.slice(-5).reverse().map((item, index) => <article key={`${item.at || item.data || index}-${index}`}><time>{fmtDate(item.at || item.data)}</time><strong>{item.description || item.descricao || item.status || item.mensagem || 'Movimentação registrada'}</strong></article>)}</div>}</section>}
 

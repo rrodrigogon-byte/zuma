@@ -9,10 +9,12 @@ const agora = () => new Date().toISOString();
 const texto = (valor, limite = 300) => String(valor ?? '').trim().slice(0, limite);
 const dinheiro = (valor) => Number(Number(valor || 0).toFixed(2));
 
+// Data do caixa no fuso da unidade: um caixa aberto às 21h de Cuiabá é do mesmo dia.
 function dataDia(valor = agora()) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(valor || ''))) return String(valor);
   const data = new Date(valor || agora());
   if (Number.isNaN(data.valueOf())) throw new Error('Data operacional inválida.');
-  return data.toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat('en-CA', { timeZone: process.env.KYTTO_TIMEZONE || 'America/Cuiaba', year: 'numeric', month: '2-digit', day: '2-digit' }).format(data);
 }
 
 function storeEmpresa(empresaId, criar = true) {

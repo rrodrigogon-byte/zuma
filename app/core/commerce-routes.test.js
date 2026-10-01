@@ -1,12 +1,17 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
-import { createCommerceAdminRouter, createCommercePublicRouter, parsePagination, publicCommercePolicy, sanitizePublicOrderInput } from './commerce-routes.js';
+import { createCommerceAdminRouter, createCommercePublicRouter, createCommerceWebhookRouter, parsePagination, publicCommercePolicy, sanitizePublicOrderInput } from './commerce-routes.js';
 import { fulfillmentReport } from './commerce-reports.js';
+import { paymentProviders } from './payment-adapters.js';
 import { db } from './database.js';
 
 const empresaId = '11111111-1111-4111-8111-111111111111';
 const lojaId = '22222222-2222-4222-8222-222222222222';
+const storefrontId = '33333333-3333-4333-8333-333333333333';
 const usuarioId = '66666666-6666-4666-8666-666666666666';
 
 test('política pública distribuída cobre pedidos, frete, mídia e leituras gerais', () => {
@@ -60,10 +65,31 @@ function publicOrderHandler() {
   return layer.route.stack[0].handle;
 }
 
+function publicOrderCreateHandler() {
+  const router = createCommercePublicRouter();
+  const layer = router.stack.find(item => item.route?.path === '/orders' && item.route.methods.post);
+  assert.ok(layer?.route?.stack?.[0]?.handle, 'rota pública de criação de pedido não encontrada');
+  return layer.route.stack[0].handle;
+}
+
+function publicContextHandler() {
+  const router = createCommercePublicRouter();
+  const layer = router.stack.find(item => item.route?.path === '/context');
+  assert.ok(layer?.route?.stack?.[0]?.handle, 'rota pública de contexto não encontrada');
+  return layer.route.stack[0].handle;
+}
+
 function publicPaymentHandler() {
   const router = createCommercePublicRouter();
   const layer = router.stack.find(item => item.route?.path === '/orders/:publicCode/payments');
   assert.ok(layer?.route?.stack?.[0]?.handle, 'rota pública de pagamento não encontrada');
+  return layer.route.stack[0].handle;
+}
+
+function paymentWebhookHandler() {
+  const router = createCommerceWebhookRouter();
+  const layer = router.stack.find(item => item.route?.path === '/:provider/payments');
+  assert.ok(layer?.route?.stack?.[0]?.handle, 'rota de webhook financeiro não encontrada');
   return layer.route.stack[0].handle;
 }
 
@@ -102,6 +128,13 @@ function shippingMethodCreateHandler() {
   return layer.route.stack[0].handle;
 }
 
+function shippingLabelReconcileHandler() {
+  const router = createCommerceAdminRouter();
+  const layer = router.stack.find(item => item.route?.path === '/fulfillments/:id/reconcile-label' && item.route.methods.post);
+  assert.ok(layer?.route?.stack?.[0]?.handle, 'rota administrativa de reconciliação de etiqueta não encontrada');
+  return layer.route.stack[0].handle;
+}
+
 async function invoke(handler, dbQuery, query = {}) {
   const original = db.query;
   db.query = dbQuery;
@@ -114,7 +147,7 @@ async function invoke(handler, dbQuery, query = {}) {
   try {
     await handler({
       user: { email: 'admin@example.com' },
-      headers: { 'x-empresa-id': empresaId, 'x-loja-id': lojaId },
+      headers: { 'x-empresa-id': empresaId, 'x-loja-id': lojaId, 'x-storefront-id': storefrontId },
       query,
     }, response);
     return response;
@@ -140,28 +173,215 @@ async function invokePublicOrder(dbQuery) {
   }
 }
 
+function publicResponse() {
+  return {
+    statusCode: 200,
+    body: null,
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
+  };
+}
+
+async function invokePublicOrderCreate({ body = {}, headers = {}, transaction } = {}) {
+  const original = db.transaction;
+  db.transaction = transaction || original;
+  const response = publicResponse();
+  try {
+    await publicOrderCreateHandler()({
+      publicResolvedStorefront: { id: '33333333-3333-4333-8333-333333333333', empresa_id: empresaId, loja_id: lojaId, status: 'active', moeda: 'BRL' },
+      headers,
+      body,
+      requestId: 'route-test',
+    }, response);
+    return response;
+  } finally {
+    db.transaction = original;
+  }
+}
+
 test('upload de mídia retorna replay idempotente tenant-scoped sem acessar o bucket', async () => {
   const original = db.query;
+  const originalTransaction = db.transaction;
   const productId = '88888888-8888-4888-8888-888888888888';
   const calls = [];
   db.query = async (sql, params) => {
     calls.push({ sql, params });
-    if (calls.length === 1) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
-    if (calls.length === 2) return { rows: [{ codigo: 'catalog.write' }] };
-    if (sql.includes('SELECT id FROM commerce_products')) return { rows: [{ id: productId }] };
-    if (sql.includes('FROM commerce_product_media')) return { rows: [{ id: '55555555-5555-5555-8555-555555555555', product_id: productId, public_url: '/api/storefront/media/55555555-5555-5555-8555-555555555555' }] };
+    if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
+    if (sql.includes('COUNT(*)::int AS grants')) return { rows: [{ grants: 1, corporate_access: false }] };
+    if (sql.includes('SELECT id, loja_id FROM commerce_storefronts')) return { rows: [{ id: storefrontId, loja_id: lojaId }] };
+    if (sql.includes('FROM commerce_products p')) return { rows: [{ id: productId, status: 'active' }] };
     return { rows: [] };
   };
+  db.transaction = async callback => callback({ query: async (sql, params) => {
+    calls.push({ sql, params });
+    if (sql.includes('pg_advisory_xact_lock')) return { rows: [] };
+    if (sql.includes('FROM commerce_product_media')) return { rows: [{ id: '55555555-5555-5555-8555-555555555555', product_id: productId, public_url: '/api/storefront/media/55555555-5555-5555-8555-555555555555' }] };
+    throw new Error(`query inesperada: ${sql}`);
+  } });
   const response = { statusCode: 200, body: null, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
   try {
-    await mediaUploadHandler()({ user: { email: 'admin@example.com' }, headers: { 'x-empresa-id': empresaId, 'x-loja-id': lojaId, 'x-idempotency-key': 'catalog-enrichment-test', 'content-type': 'image/png' }, params: { id: productId }, body: Buffer.from('não deve ser enviado') }, response);
+    await mediaUploadHandler()({ user: { email: 'admin@example.com' }, headers: { 'x-empresa-id': empresaId, 'x-loja-id': lojaId, 'x-storefront-id': storefrontId, 'x-idempotency-key': 'catalog-enrichment-test', 'content-type': 'image/png' }, params: { id: productId }, body: Buffer.from('não deve ser enviado') }, response);
   } finally {
     db.query = original;
+    db.transaction = originalTransaction;
   }
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.idempotentReplay, true);
   const existingQuery = calls.find(call => call.sql.includes('FROM commerce_product_media'));
   assert.deepEqual(existingQuery.params.slice(0, 2), [empresaId, productId]);
+});
+
+test('dois uploads concorrentes com a mesma chave produzem uma mídia e preservam o blob vencedor', async () => {
+  const originalQuery = db.query;
+  const originalTransaction = db.transaction;
+  const originalMediaDir = process.env.COMMERCE_MEDIA_DIR;
+  const mediaRoot = await mkdtemp(path.join(os.tmpdir(), 'commerce-media-race-'));
+  const productId = '88888888-8888-4888-8888-888888888888';
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+  let mediaRow = null;
+  let mediaInserts = 0;
+  let queue = Promise.resolve();
+  process.env.COMMERCE_MEDIA_DIR = mediaRoot;
+  db.query = async sql => {
+    if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
+    if (sql.includes('COUNT(*)::int AS grants')) return { rows: [{ grants: 1, corporate_access: false }] };
+    if (sql.includes('SELECT id, loja_id FROM commerce_storefronts')) return { rows: [{ id: storefrontId, loja_id: lojaId }] };
+    if (sql.includes('FROM commerce_products p')) return { rows: [{ id: productId, status: 'active' }] };
+    return { rows: [] };
+  };
+  db.transaction = async callback => {
+    let release;
+    const predecessor = queue;
+    queue = new Promise(resolve => { release = resolve; });
+    await predecessor;
+    try {
+      return await callback({ query: async (sql, values = []) => {
+        if (sql.includes('pg_advisory_xact_lock')) return { rows: [] };
+        if (sql.includes('FROM commerce_product_media') && sql.includes('id = $3')) return { rows: mediaRow ? [mediaRow] : [] };
+        if (sql.includes('FROM commerce_storefronts')) return { rows: [{ id: storefrontId, empresa_id: empresaId, loja_id: lojaId, status: 'active' }] };
+        if (sql.includes('EXISTS (') && sql.includes('authorized_channel')) return { rows: [{ id: productId, status: 'active', authorized_channel: true, outside_selected_channel: false }] };
+        if (sql.includes('SELECT id, status FROM commerce_products')) return { rows: [{ id: productId, status: 'active' }] };
+        if (sql.includes('INSERT INTO commerce_product_media')) {
+          mediaInserts += 1;
+          mediaRow = { id: values[0], product_id: values[2], variant_id: values[3], storage_key: values[4], public_url: values[5], mime_type: values[6], alt_text: values[7], ordem: values[8] };
+          return { rows: [mediaRow] };
+        }
+        if (sql.includes('INSERT INTO commerce_audit_logs')) return { rows: [] };
+        throw new Error(`query inesperada: ${sql}`);
+      } });
+    } finally { release(); }
+  };
+  const invokeUpload = async () => {
+    const response = { statusCode: 200, body: null, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
+    await mediaUploadHandler()({ user: { email: 'admin@example.com' }, headers: { 'x-empresa-id': empresaId, 'x-loja-id': lojaId, 'x-storefront-id': storefrontId, 'x-idempotency-key': 'catalog-media-race', 'content-type': 'image/png' }, params: { id: productId }, body: png }, response);
+    return response;
+  };
+  try {
+    const [first, second] = await Promise.all([invokeUpload(), invokeUpload()]);
+    assert.deepEqual([first.statusCode, second.statusCode].sort(), [200, 201]);
+    assert.equal(first.body.id, second.body.id);
+    assert.equal(mediaInserts, 1);
+    const relative = mediaRow.storage_key.replace(/^commerce-local\//, '');
+    const stored = await stat(path.join(mediaRoot, relative));
+    assert.ok(stored.size > 0);
+  } finally {
+    db.query = originalQuery;
+    db.transaction = originalTransaction;
+    if (originalMediaDir === undefined) delete process.env.COMMERCE_MEDIA_DIR;
+    else process.env.COMMERCE_MEDIA_DIR = originalMediaDir;
+    await rm(mediaRoot, { recursive: true, force: true });
+  }
+});
+
+test('cleanup de upload falho aguarda o concorrente e não apaga blob que ganhou referência', async () => {
+  const originalQuery = db.query;
+  const originalTransaction = db.transaction;
+  const originalMediaDir = process.env.COMMERCE_MEDIA_DIR;
+  const mediaRoot = await mkdtemp(path.join(os.tmpdir(), 'commerce-media-cleanup-race-'));
+  const productId = '88888888-8888-4888-8888-888888888888';
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+  let mediaRow = null;
+  let mediaInsertAttempts = 0;
+  let transactionCalls = 0;
+  let cleanupChecks = 0;
+  let queue = Promise.resolve();
+  process.env.COMMERCE_MEDIA_DIR = mediaRoot;
+  db.query = async sql => {
+    if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
+    if (sql.includes('COUNT(*)::int AS grants')) return { rows: [{ grants: 1, corporate_access: false }] };
+    if (sql.includes('SELECT id, loja_id FROM commerce_storefronts')) return { rows: [{ id: storefrontId, loja_id: lojaId }] };
+    if (sql.includes('FROM commerce_products p')) return { rows: [{ id: productId, status: 'active' }] };
+    return { rows: [] };
+  };
+  db.transaction = async callback => {
+    transactionCalls += 1;
+    let release;
+    const predecessor = queue;
+    queue = new Promise(resolve => { release = resolve; });
+    await predecessor;
+    try {
+      return await callback({ query: async (sql, values = []) => {
+        if (sql.includes('pg_advisory_xact_lock')) return { rows: [] };
+        if (sql.includes('SELECT 1 FROM commerce_product_media')) { cleanupChecks += 1; return { rows: mediaRow ? [{ '?column?': 1 }] : [] }; }
+        if (sql.includes('FROM commerce_product_media') && sql.includes('id = $3')) return { rows: mediaRow ? [mediaRow] : [] };
+        if (sql.includes('FROM commerce_storefronts')) return { rows: [{ id: storefrontId, empresa_id: empresaId, loja_id: lojaId, status: 'active' }] };
+        if (sql.includes('EXISTS (') && sql.includes('authorized_channel')) return { rows: [{ id: productId, status: 'active', authorized_channel: true, outside_selected_channel: false }] };
+        if (sql.includes('SELECT id, status FROM commerce_products')) return { rows: [{ id: productId, status: 'active' }] };
+        if (sql.includes('INSERT INTO commerce_product_media')) {
+          mediaInsertAttempts += 1;
+          if (mediaInsertAttempts === 1) throw new Error('falha simulada depois do upload');
+          mediaRow = { id: values[0], product_id: values[2], variant_id: values[3], storage_key: values[4], public_url: values[5], mime_type: values[6], alt_text: values[7], ordem: values[8] };
+          return { rows: [mediaRow] };
+        }
+        if (sql.includes('INSERT INTO commerce_audit_logs')) return { rows: [] };
+        throw new Error(`query inesperada: ${sql}`);
+      } });
+    } finally { release(); }
+  };
+  const invokeUpload = async () => {
+    const response = { statusCode: 200, body: null, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
+    await mediaUploadHandler()({ user: { email: 'admin@example.com' }, headers: { 'x-empresa-id': empresaId, 'x-loja-id': lojaId, 'x-storefront-id': storefrontId, 'x-idempotency-key': 'catalog-media-cleanup-race', 'content-type': 'image/png' }, params: { id: productId }, body: png }, response);
+    return response;
+  };
+  try {
+    const [first, second] = await Promise.all([invokeUpload(), invokeUpload()]);
+    assert.equal([first.statusCode, second.statusCode].includes(201), true);
+    assert.equal(mediaInsertAttempts, 2);
+    assert.equal(transactionCalls, 3);
+    assert.equal(cleanupChecks, 1);
+    const relative = mediaRow.storage_key.replace(/^commerce-local\//, '');
+    const stored = await stat(path.join(mediaRoot, relative));
+    assert.ok(stored.size > 0);
+  } finally {
+    db.query = originalQuery;
+    db.transaction = originalTransaction;
+    if (originalMediaDir === undefined) delete process.env.COMMERCE_MEDIA_DIR;
+    else process.env.COMMERCE_MEDIA_DIR = originalMediaDir;
+    await rm(mediaRoot, { recursive: true, force: true });
+  }
+});
+
+test('upload de mídia rejeita produto arquivado antes de acessar mídia ou bucket', async () => {
+  const original = db.query;
+  const productId = '88888888-8888-4888-8888-888888888888';
+  const calls = [];
+  db.query = async (sql, params) => {
+    calls.push({ sql, params });
+    if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
+    if (sql.includes('COUNT(*)::int AS grants')) return { rows: [{ grants: 1, corporate_access: false }] };
+    if (sql.includes('SELECT id, loja_id FROM commerce_storefronts')) return { rows: [{ id: storefrontId, loja_id: lojaId }] };
+    if (sql.includes('FROM commerce_products p')) return { rows: [{ id: productId, status: 'archived' }] };
+    return { rows: [] };
+  };
+  const response = { statusCode: 200, body: null, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
+  try {
+    await mediaUploadHandler()({ user: { email: 'admin@example.com' }, headers: { 'x-empresa-id': empresaId, 'x-loja-id': lojaId, 'x-storefront-id': storefrontId, 'x-idempotency-key': 'catalog-archived-test', 'content-type': 'image/png' }, params: { id: productId }, body: Buffer.from('não deve ser enviado') }, response);
+  } finally {
+    db.query = original;
+  }
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.body.code, 'PRODUCT_ARCHIVED');
+  assert.equal(calls.some(call => call.sql.includes('commerce_product_media')), false);
 });
 
 test('rota pública de carrinho possui rate limit antes do handler de sync', () => {
@@ -179,6 +399,133 @@ test('checkout público ignora customerId do navegador e não libera crediário 
   assert.doesNotMatch(source, /req\.query\.customerId/);
   assert.doesNotMatch(source, /req\.query\.customerEmail/);
   assert.match(source, /PAYMENT_CUSTOMER_VERIFICATION_REQUIRED/);
+});
+
+test('retorno público InfinitePay não persiste identificadores antes da verificação autoritativa', () => {
+  const source = readFileSync(new URL('./commerce-routes.js', import.meta.url), 'utf8');
+  const handler = source.split("router.post('/orders/:publicCode/payments/return'")[1].split("router.post('/orders'")[0];
+  assert.match(handler, /reconcilePaymentByIdentifiers/);
+  assert.match(handler, /source: 'public_return'/);
+  assert.match(handler, /p\.provider_payment_id = \$3/);
+  assert.match(handler, /p\.provider_payment_id IS NULL AND p\.metadata->'checkout'->>'slug' = \$4/);
+  assert.doesNotMatch(handler, /ORDER BY p\.criado_em DESC LIMIT 1/);
+  assert.doesNotMatch(handler, /UPDATE commerce_payments/);
+});
+
+test('webhook financeiro registra captura tardia como refund_required sem reabrir pedido cancelado', () => {
+  const source = readFileSync(new URL('./commerce-routes.js', import.meta.url), 'utf8');
+  assert.match(source, /captureNeedsRefund\(current\.status, current\.order_status, nextPaymentStatus, \{ otherCaptured:[\s\S]*recordLatePaymentCapture/);
+  assert.match(source, /refundRequired: Boolean\(lateCapture\?\.refundRequired\)/);
+});
+
+test('webhook InfinitePay prioriza provider_payment_id e só usa pedido+slug para tentativa ainda não vinculada', () => {
+  const source = readFileSync(new URL('./commerce-routes.js', import.meta.url), 'utf8');
+  const handler = source.split("router.post('/:provider/payments'")[1].split('return router;')[0];
+  assert.match(handler, /p\.provider_payment_id = \$2/);
+  assert.match(handler, /p\.provider_payment_id IS NULL/);
+  assert.match(handler, /\(o\.public_code = \$1 OR o\.id::text = \$1\)/);
+  assert.match(handler, /p\.metadata->'checkout'->>'slug' = \$2/);
+  assert.match(handler, /p\.id = \$3/);
+  assert.doesNotMatch(handler, /o\.public_code = \$3\s+OR/);
+});
+
+test('webhook autoritativo registra captura tardia apesar de pagamento terminal', async t => {
+  const originalQuery = db.query;
+  const originalTransaction = db.transaction;
+  paymentProviders.register('testgateway', {
+    createCheckout: async () => ({}),
+    verifyWebhook: async ({ payload }) => ({ eventId: `evt-${payload.currentStatus}`, providerPaymentId: 'tx-late-webhook', status: 'captured', amount: 10, summary: {} }),
+  });
+  try {
+    for (const { paymentStatus, orderStatus } of [
+      { paymentStatus: 'cancelled', orderStatus: 'cancelled' },
+      { paymentStatus: 'failed', orderStatus: 'cancelled' },
+      { paymentStatus: 'refunded', orderStatus: 'cancelled' },
+      { paymentStatus: 'pending', orderStatus: 'draft' },
+      { paymentStatus: 'failed', orderStatus: 'payment_failed' },
+    ]) {
+      await t.test(`${paymentStatus}/${orderStatus}`, async () => {
+        const calls = [];
+        db.query = async () => ({ rows: [{ payment_id: '55555555-5555-4555-8555-555555555562', empresa_id: empresaId, payment_account_id: '44444444-4444-4444-8444-444444444444', secret_ref: 'env:TEST_PAYMENT_ACCESS', public_config: {} }] });
+        db.transaction = async callback => callback({ query: async (sql, values = []) => {
+          calls.push({ sql, values });
+          if (sql.includes('INSERT INTO commerce_payment_webhooks')) return { rows: [{ id: '99999999-9999-4999-8999-999999999999' }] };
+          if (sql.includes('SELECT p.id, p.order_id, p.method')) return { rows: [{ id: '55555555-5555-4555-8555-555555555562', order_id: '55555555-5555-4555-8555-555555555555', method: 'pix', amount: '10.00', status: paymentStatus, provider_payment_id: 'tx-late-webhook', order_status: orderStatus }] };
+          if (sql.includes("'{lateCapture}'")) return { rows: [{ id: '55555555-5555-4555-8555-555555555562' }] };
+          return { rows: [] };
+        } });
+        const response = publicResponse();
+        await paymentWebhookHandler()({ params: { provider: 'testgateway' }, query: {}, headers: {}, body: { transactionNsu: 'tx-late-webhook', currentStatus: paymentStatus }, rawBody: Buffer.from('{}') }, response);
+        assert.equal(response.statusCode, 200);
+        assert.equal(response.body.status, 'captured');
+        assert.equal(response.body.refundRequired, true);
+        assert.ok(calls.some(call => call.sql.includes('UPDATE commerce_payments') && call.values[2] === 'captured'));
+        assert.ok(calls.some(call => call.sql.includes("'late_capture_review'")));
+      });
+    }
+  } finally {
+    db.query = originalQuery;
+    db.transaction = originalTransaction;
+    paymentProviders.adapters.delete('testgateway');
+  }
+});
+
+test('rota pública exige chave de idempotência antes de abrir transação', async () => {
+  let transactions = 0;
+  const response = await invokePublicOrderCreate({
+    body: { items: [{ variantId: '77777777-7777-4777-8777-777777777777', quantity: 1 }], customer: { nome: 'Cliente' } },
+    transaction: async () => { transactions += 1; throw new Error('não deveria abrir transação'); },
+  });
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.body.code, 'ORDER_IDEMPOTENCY_REQUIRED');
+  assert.equal(transactions, 0);
+});
+
+test('rota pública devolve exatamente a resposta persistida no replay e rejeita payload diferente', async () => {
+  const customerId = '99999999-9999-4999-8999-999999999999';
+  let storedHash = null;
+  let storedResponse = null;
+  let orderInserts = 0;
+  const transaction = async callback => callback({ query: async (sql, values = []) => {
+    if (sql.includes('FROM commerce_storefronts')) return { rows: [{ id: '33333333-3333-4333-8333-333333333333', empresa_id: empresaId, loja_id: lojaId, status: 'active', moeda: 'BRL' }] };
+    if (sql.includes("scope = 'order.create'") && sql.includes('FROM commerce_idempotency_keys')) return { rows: storedHash ? [{ request_hash: storedHash, response_body: storedResponse }] : [] };
+    if (sql.includes("VALUES ($1, 'order.create'")) { storedHash = values[2]; return { rows: [] }; }
+    if (sql.includes('FROM commerce_product_variants')) return { rows: [{ id: '77777777-7777-4777-8777-777777777777', sku: 'SERV-1', variant_name: 'Padrão', product_name: 'Serviço', product_type: 'service', price: '15.00', promotional: false }] };
+    if (sql.includes('FROM commerce_customers')) return { rows: [] };
+    if (sql.includes('INSERT INTO commerce_customers')) return { rows: [{ id: customerId, nome: 'Cliente público' }] };
+    if (sql.includes('INSERT INTO commerce_orders')) { orderInserts += 1; return { rows: [] }; }
+    if (sql.includes("scope = 'order.create'") && sql.includes('UPDATE commerce_idempotency_keys')) { storedResponse = JSON.parse(values[2]); return { rows: [] }; }
+    return { rows: [], rowCount: 1 };
+  } });
+  const body = { items: [{ variantId: '77777777-7777-4777-8777-777777777777', quantity: 1 }], customer: { nome: 'Cliente público' }, shippingAddress: { modo: 'retirada' } };
+  const first = await invokePublicOrderCreate({ body, headers: { 'idempotency-key': 'route-replay-001' }, transaction });
+  const replay = await invokePublicOrderCreate({ body: { shippingAddress: { modo: 'retirada' }, customer: { nome: 'Cliente público' }, items: [{ quantity: 1, variantId: '77777777-7777-4777-8777-777777777777' }] }, headers: { 'x-idempotency-key': 'route-replay-001' }, transaction });
+  assert.equal(first.statusCode, 201);
+  assert.deepEqual(replay.body, first.body);
+  assert.deepEqual(storedResponse, first.body);
+  assert.equal('customerId' in first.body, false);
+  assert.equal('customerAddressId' in first.body, false);
+  assert.equal(orderInserts, 1);
+
+  const conflict = await invokePublicOrderCreate({ body: { ...body, items: [{ variantId: '77777777-7777-4777-8777-777777777777', quantity: 2 }] }, headers: { 'idempotency-key': 'route-replay-001' }, transaction });
+  assert.equal(conflict.statusCode, 409);
+  assert.equal(conflict.body.code, 'IDEMPOTENCY_CONFLICT');
+  assert.equal(orderInserts, 1);
+});
+
+test('storefront público ativo sem loja operacional é recusado antes de consultar capacidades', async () => {
+  const originalQuery = db.query;
+  let queries = 0;
+  db.query = async () => { queries += 1; return { rows: [] }; };
+  const response = publicResponse();
+  try {
+    await publicContextHandler()({ publicResolvedStorefront: { id: '33333333-3333-4333-8333-333333333333', empresa_id: empresaId, loja_id: null, status: 'active' }, headers: {} }, response);
+  } finally {
+    db.query = originalQuery;
+  }
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.body.code, 'STOREFRONT_OPERATIONAL_STORE_REQUIRED');
+  assert.equal(queries, 0);
 });
 
 test('endpoint público recusa crediário antes de criar qualquer lançamento financeiro', async () => {
@@ -224,6 +571,12 @@ test('cadastro de método de entrega rejeita sessão sem membership', async () =
   assert.equal(response.body.code, 'TENANT_CONTEXT_REQUIRED');
 });
 
+test('reconciliação de etiqueta rejeita sessão sem membership antes de qualquer mutação', async () => {
+  const response = await invoke(shippingLabelReconcileHandler(), async () => ({ rows: [] }));
+  assert.equal(response.statusCode, 401);
+  assert.equal(response.body.code, 'TENANT_CONTEXT_REQUIRED');
+});
+
 test('visão administrativa de carrinhos rejeita sessão sem membership', async () => {
   const response = await invoke(cartRecoveryHandler(), async () => ({ rows: [] }));
   assert.equal(response.statusCode, 401);
@@ -255,10 +608,11 @@ test('endpoint de provedores rejeita membership sem payments.read', async () => 
 
 test('endpoint autorizado retorna apenas contrato público do provedor', async () => {
   let count = 0;
-  const response = await invoke(providerHandler(), async () => {
+  const response = await invoke(providerHandler(), async sql => {
     count += 1;
-    if (count === 1) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
-    return { rows: [{ ok: 1 }] };
+    if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
+    if (sql.includes('COUNT(*)::int AS grants')) return { rows: [{ grants: 1, corporate_access: false }] };
+    return { rows: [] };
   });
   assert.equal(response.statusCode, 200);
   assert.ok(Array.isArray(response.body.items));
@@ -271,8 +625,8 @@ test('auditoria aplica escopo de loja e paginação sem vazar payload sensível'
   const response = await invoke(auditHandler(), async (sql, params) => {
     count += 1;
     calls.push({ sql, params });
-    if (count === 1) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
-    if (count === 2) return { rows: [{ ok: 1 }] };
+    if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
+    if (sql.includes('COUNT(*)::int AS grants')) return { rows: [{ grants: 1, corporate_access: false }] };
     if (sql.includes('COUNT(*)')) return { rows: [{ total: 1 }] };
     return { rows: [{ id: '77777777-7777-4777-8777-777777777777', loja_id: lojaId, entidade: 'payment', acao: 'status_reconciled', depois: { status: 'captured' } }] };
   }, { limit: '20', offset: '40', entity: 'payment', action: 'status_reconciled' });
@@ -282,8 +636,8 @@ test('auditoria aplica escopo de loja e paginação sem vazar payload sensível'
   assert.equal(response.body.pagination.total, 1);
   assert.equal(response.body.pagination.hasMore, false);
   assert.equal(response.body.items[0].depois.status, 'captured');
-  const countQuery = calls.find(call => call.sql.includes('COUNT(*)'));
-  const listQuery = calls.find(call => call.sql.includes('SELECT id, loja_id, usuario_id'));
+  const countQuery = calls.find(call => call.sql.includes('COUNT(*)') && call.sql.includes('FROM commerce_audit_logs'));
+  const listQuery = calls.find(call => call.sql.includes('SELECT id, loja_id, usuario_id') && call.sql.includes('FROM commerce_audit_logs'));
   assert.match(countQuery.sql, /loja_id = \$2/);
   assert.match(countQuery.sql, /entidade = \$3/);
   assert.match(listQuery.sql, /LIMIT \$5 OFFSET \$6/);
@@ -295,18 +649,17 @@ test('painel de saúde retorna contagens tenant-aware sem payloads externos', as
   let count = 0;
   const response = await invoke(healthHandler(), async sql => {
     count += 1;
-    if (count === 1) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
-    if (count === 2) return { rows: [{ codigo: 'reports.read' }] };
+    if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
+    if (sql.includes('COUNT(*)::int AS grants')) return { rows: [{ grants: 1, corporate_access: false }] };
+    if (sql.includes('SELECT id, loja_id FROM commerce_storefronts')) return { rows: [{ id: storefrontId, loja_id: lojaId }] };
     if (sql.includes('commerce_payments')) return { rows: [{ status: 'pending', total: 2 }] };
     if (sql.includes('commerce_fulfillments')) return { rows: [{ status: 'failed', total: 1 }] };
-    if (sql.includes('commerce_payment_webhooks')) return { rows: [{ status: 'processed', total: 5 }] };
-    return { rows: [{ status: 'failed', total: 3 }] };
+    return { rows: [] };
   });
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.payments.pending, 2);
   assert.equal(response.body.fulfillments.failed, 1);
-  assert.equal(response.body.webhooks.payments.processed, 5);
-  assert.equal(response.body.webhooks.shipping.failed, 3);
+  assert.deepEqual(response.body.webhooks, { available: false, reason: 'storefront_correlation_unavailable' });
   assert.equal('payload' in response.body, false);
 });
 

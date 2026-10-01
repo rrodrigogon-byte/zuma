@@ -121,7 +121,15 @@ async function resolveScope(client, context, payload) {
   if (storefront.rows[0].loja_id && location.rows[0].loja_id && storefront.rows[0].loja_id !== location.rows[0].loja_id) {
     throw new CommerceError('storefront e estoque pertencem a lojas diferentes', 'CATALOG_IMPORT_SCOPE_MISMATCH');
   }
-  return { empresaId, usuarioId, lojaId, storefront: storefront.rows[0], location: location.rows[0] };
+  return {
+    empresaId,
+    usuarioId,
+    lojaId,
+    corporateAccess: context?.corporateAccess === true,
+    capabilities: context?.capabilities,
+    storefront: storefront.rows[0],
+    location: location.rows[0],
+  };
 }
 
 async function existingBySku(client, scope, items, lock = false) {
@@ -296,6 +304,7 @@ export async function executeCatalogImport(context, input = {}) {
         const classification = classify(item, before);
         if (classification.changes.includes('produto')) {
           await updateCatalogProduct(trx, scope, productId, {
+            storefrontId: scope.storefront.id,
             nome: item.name,
             slug: item.slug,
             categoryId,
@@ -304,7 +313,7 @@ export async function executeCatalogImport(context, input = {}) {
           });
         }
         if (item.price !== null && await currentProductPrice(trx, scope.empresaId, variantId) !== item.price) {
-          await setVariantPrice(trx, scope, productId, { variantId, preco: item.price });
+          await setVariantPrice(trx, scope, productId, { storefrontId: scope.storefront.id, variantId, preco: item.price });
         }
         await publishCatalogProduct(trx, scope, productId, { storefrontId: scope.storefront.id, publicado: item.action === 'publish' });
         if (classification.operation === 'update') result.updated += 1;

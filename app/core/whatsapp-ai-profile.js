@@ -1,3 +1,4 @@
+import { canonicalWhatsappPhone, phoneMatchKeySql } from './whatsapp-phone.js';
 import crypto from 'node:crypto';
 import { db } from './database.js';
 
@@ -33,9 +34,7 @@ function uuid(value, field) {
 }
 
 export function normalizeWhatsappProfilePhone(value) {
-  const digits = String(value || '').replace(/\D/g, '');
-  const normalized = digits.startsWith('55') ? digits : ((digits.length === 10 || digits.length === 11) ? `55${digits}` : digits);
-  return normalized.length >= 12 && normalized.length <= 13 ? normalized : '';
+  return canonicalWhatsappPhone(value);
 }
 
 function firstName(value) {
@@ -148,9 +147,7 @@ async function crmMatches(empresaId, phone, query = db.queryRead.bind(db)) {
     `SELECT id, nome
        FROM clientes
       WHERE empresa_id = $1 AND ativo = true
-        AND CASE WHEN regexp_replace(COALESCE(telefone, ''), '\\D', '', 'g') LIKE '55%'
-                 THEN regexp_replace(COALESCE(telefone, ''), '\\D', '', 'g')
-                 ELSE '55' || regexp_replace(COALESCE(telefone, ''), '\\D', '', 'g') END = $2
+        AND ${phoneMatchKeySql('telefone')} = ${phoneMatchKeySql('$2')}
       ORDER BY criado_em ASC LIMIT 2`,
     [empresaId, phone],
   );
@@ -177,9 +174,7 @@ async function commerceProfile(empresaId, lojaId, phone) {
        SELECT id, nome
          FROM commerce_customers
         WHERE empresa_id = $1 AND bloqueado = false
-          AND CASE WHEN regexp_replace(COALESCE(telefone, ''), '\\D', '', 'g') LIKE '55%'
-                   THEN regexp_replace(COALESCE(telefone, ''), '\\D', '', 'g')
-                   ELSE '55' || regexp_replace(COALESCE(telefone, ''), '\\D', '', 'g') END = $3
+          AND ${phoneMatchKeySql('telefone')} = ${phoneMatchKeySql('$3')}
      ), scoped_orders AS (
        SELECT o.id, o.customer_id, o.criado_em
          FROM commerce_orders o
@@ -217,9 +212,7 @@ async function barbershopProfile(empresaId, phone) {
       `SELECT nome, total_visitas, ultima_visita, preferencias
          FROM clientes_barbearia
         WHERE empresa_id = $1 AND ativo = true
-          AND CASE WHEN regexp_replace(COALESCE(telefone, ''), '\\D', '', 'g') LIKE '55%'
-                   THEN regexp_replace(COALESCE(telefone, ''), '\\D', '', 'g')
-                   ELSE '55' || regexp_replace(COALESCE(telefone, ''), '\\D', '', 'g') END = $2
+          AND ${phoneMatchKeySql('telefone')} = ${phoneMatchKeySql('$2')}
         LIMIT 2`,
       [empresaId, phone],
     );

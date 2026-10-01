@@ -122,6 +122,12 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     assert.equal(confirmacaoPublica.body.agendamento.profissional, 'Profissional runtime');
     const conflitoPublico = await request(base, '/api/publico/agendamento/runtime-dino/confirmar', { method: 'POST', body: JSON.stringify(payloadPublico) });
     assert.equal(conflitoPublico.response.status, 409);
+    const livres = horariosPublicos.body.horarios.filter((item) => item.disponivel && item.horario !== horarioLivre).map((item) => item.horario);
+    const segundo = await request(base, '/api/publico/agendamento/runtime-dino/confirmar', { method: 'POST', body: JSON.stringify({ ...payloadPublico, horario: livres.at(-1), cliente_telefone: '556599998888' }) });
+    assert.equal(segundo.response.status, 201, 'segundo horário do mesmo telefone é aceito');
+    const terceiro = await request(base, '/api/publico/agendamento/runtime-dino/confirmar', { method: 'POST', body: JSON.stringify({ ...payloadPublico, horario: livres.at(-4), cliente_telefone: '(65) 99999-8888' }) });
+    assert.equal(terceiro.response.status, 409, 'terceiro horário do mesmo telefone (em outro formato) é recusado');
+    assert.equal(terceiro.body.code, 'LIMITE_AGENDAMENTOS_TELEFONE');
     const telefoneInvalido = await request(base, '/api/publico/agendamento/runtime-dino/confirmar', { method: 'POST', body: JSON.stringify({ ...payloadPublico, horario: horariosPublicos.body.horarios.find((item) => item.disponivel && item.horario !== horarioLivre)?.horario || horarioLivre, cliente_telefone: '123' }) });
     assert.equal(telefoneInvalido.response.status, 400);
     const canalDesativado = await request(base, '/api/admin/barbearia/configuracoes', { method: 'PATCH', headers, body: JSON.stringify({ agendamentoPublicoAtivo: false }) });
@@ -132,9 +138,9 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     assert.equal(canalReativado.response.status, 200);
     const agendaPublicaPersistida = await request(base, `/api/admin/barbearia/agenda?data=${dataPublica}`, { headers });
     assert.equal(agendaPublicaPersistida.response.status, 200);
-    assert.equal(agendaPublicaPersistida.body.agendamentos.length, 1);
-    assert.equal(agendaPublicaPersistida.body.agendamentos[0].origem, 'agendamento_online');
-    assert.equal(agendaPublicaPersistida.body.agendamentos[0].codigoConfirmacao, confirmacaoPublica.body.agendamento.codigo);
+    assert.equal(agendaPublicaPersistida.body.agendamentos.length, 2);
+    const primeiroPublico = agendaPublicaPersistida.body.agendamentos.find((item) => item.codigoConfirmacao === confirmacaoPublica.body.agendamento.codigo);
+    assert.equal(primeiroPublico?.origem, 'agendamento_online');
 
     const agenda = await request(base, '/api/admin/barbearia/agenda', { method: 'POST', headers, body: JSON.stringify({ clienteNome: 'Cliente runtime', profissionalId: profissional.body.profissional.id, servicoId: servico.body.servico.id, dataAgenda: '2030-06-10', dataHora: '2030-06-10T13:00:00.000Z' }) });
     assert.equal(agenda.response.status, 201);
@@ -230,8 +236,10 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     assert.equal(overview.body.agendamentos[0].servicoNome, 'Corte runtime');
     assert.equal(overview.body.profissionais.length, 1);
     assert.equal(overview.body.servicos.length, 1);
-    assert.equal(overview.body.clientes.length, 1);
-    assert.equal(overview.body.clientes[0].id, clienteSemConsentimento.body.cliente.id);
+    // O agendamento online com nome + telefone agora gera/vincula o cadastro do cliente.
+    assert.equal(overview.body.clientes.length, 2);
+    assert.ok(overview.body.clientes.some((item) => item.id === clienteSemConsentimento.body.cliente.id));
+    assert.ok(overview.body.clientes.some((item) => item.nome === 'Cliente público runtime'));
     assert.equal(overview.body.fidelidade.membros.length, 0);
     assert.equal(overview.body.produtos.length, 1);
     assert.equal(overview.body.vendas.length, 1);

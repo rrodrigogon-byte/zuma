@@ -195,7 +195,7 @@ function ownDeliveryQuote(methodConfig = {}, destinationAddress = {}, subtotal =
   const label = rule?.label || ownDeliveryLabel(kind);
   const carrier = kind === 'motoboy' ? 'Motoboy local' : kind === 'express' ? 'Kytto Express' : 'Kytto Entrega';
   const totalAmount = Number(Math.max(0, amount).toFixed(2));
-  const priceNote = freeShippingApplied ? `Frete grátis a partir de ${Number(freeAbove).toFixed(2)}` : `${ownDeliveryLabel(kind)} · operação própria, sem Correios`;
+  const priceNote = freeShippingApplied ? `Grátis em compras a partir de ${Number(freeAbove).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}` : `${ownDeliveryLabel(kind)} · operação própria, sem Correios`;
   const publicOption = {
     id: `${kind}:${rule?.id || 'default'}`,
     name: freeShippingApplied ? `${label} · frete grátis` : label,

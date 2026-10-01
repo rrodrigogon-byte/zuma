@@ -88,3 +88,25 @@ test('não tenta upload sem armazenamento seguro configurado', async () => {
     else process.env.DB_PATH = previousDbPath;
   }
 });
+
+test('vitrine só serve o arquivo da própria empresa, produto e mídia', async () => {
+  const response = new Writable({ write(chunk, encoding, callback) { callback(); } });
+  response.setHeader = () => {};
+  await assert.rejects(
+    () => streamCommerceImage({ storageKey: 'commerce-media/outra-empresa/produto/midia.png', mimeType: 'image/png', res: response, empresaId: 'tenant-a', productId: 'produto', mediaId: 'midia' }),
+    error => error.code === 'MEDIA_SCOPE_MISMATCH',
+  );
+  await assert.rejects(
+    () => streamCommerceImage({ storageKey: 'commerce-local/tenant-a/outro-produto/midia.png', mimeType: 'image/png', res: response, empresaId: 'tenant-a', productId: 'produto', mediaId: 'midia' }),
+    error => error.code === 'MEDIA_SCOPE_MISMATCH',
+  );
+});
+
+test('URL de mídia externa só de hosts autorizados e https', async () => {
+  const { allowedMediaUrl } = await import('./commerce-core.js');
+  assert.equal(allowedMediaUrl('/api/storefront/media/99999999-9999-4999-8999-999999999999'), true);
+  assert.equal(allowedMediaUrl('https://storage.googleapis.com/bucket/x.png'), true);
+  assert.equal(allowedMediaUrl('http://storage.googleapis.com/bucket/x.png'), false);
+  assert.equal(allowedMediaUrl('https://rastreador.example/pixel.png'), false);
+  assert.equal(allowedMediaUrl('data:image/png;base64,AAAA'), false);
+});

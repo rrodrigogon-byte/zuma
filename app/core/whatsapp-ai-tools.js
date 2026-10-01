@@ -1,3 +1,4 @@
+import { isWhatsappOptInText, phoneMatchKeySql } from './whatsapp-phone.js';
 import crypto from 'node:crypto';
 import { db } from './database.js';
 import { createPendingOrder, listPublishedProducts } from './commerce-core.js';
@@ -181,15 +182,16 @@ async function toolOrderStatus(context, args = {}) {
   const scope = contextScope(context);
   const orderCode = cleanText(args.orderCode, 80).toUpperCase();
   if (!orderCode) throw new WhatsappAiToolError('código do pedido é obrigatório', 'ORDER_CODE_REQUIRED');
-  const suffix = scope.phone.slice(-8);
+  // Compara DDD + 8 últimos dígitos: mesma pessoa com ou sem o nono dígito, mas nunca
+  // alguém de outro DDD que só coincide no final do número.
   const result = await db.queryRead(
     `SELECT o.public_code, o.status, o.total, o.moeda, o.criado_em
        FROM commerce_orders o
        JOIN commerce_customers c ON c.id = o.customer_id AND c.empresa_id = o.empresa_id
       WHERE o.empresa_id = $1 AND o.loja_id = $2 AND upper(o.public_code) = $3
-        AND regexp_replace(COALESCE(c.telefone, ''), '[^0-9]', '', 'g') LIKE $4
+        AND ${phoneMatchKeySql('c.telefone')} = ${phoneMatchKeySql('$4')}
       LIMIT 1`,
-    [scope.empresaId, scope.lojaId, orderCode, `%${suffix}`],
+    [scope.empresaId, scope.lojaId, orderCode, scope.phone],
   );
   if (!result.rows[0]) throw new WhatsappAiToolError('pedido não encontrado para este contato', 'ORDER_NOT_FOUND');
   const order = result.rows[0];
@@ -357,6 +359,10 @@ async function toolMarketingConsent(context, args = {}) {
   if (granted && cleanText(args.evidence, 20).length < 5) {
     throw new WhatsappAiToolError('registre a confirmação expressa do cliente antes de ativar promoções', 'MARKETING_EVIDENCE_REQUIRED');
   }
+  // A autorização precisa estar na mensagem do cliente, não só no texto que o modelo escreveu.
+  if (granted && !isWhatsappOptInText(context.customerText)) {
+    throw new WhatsappAiToolError('o cliente ainda não pediu expressamente para receber promoções', 'MARKETING_OPT_IN_NOT_EXPLICIT');
+  }
   const result = await updateWhatsappMarketingConsent(scope, { granted, evidence: cleanText(args.evidence, 500) });
   return { ok: true, consentimento: result };
 }
@@ -453,6 +459,7 @@ async function toolHuman(context, args = {}) {
   await db.query(
     `UPDATE whatsapp_ai_sessions
         SET status = 'humano', estado = jsonb_set(estado, '{handoffReason}', to_jsonb($2::text), true),
+            acao_pendente = NULL,
             atualizado_em = CURRENT_TIMESTAMP
       WHERE id = $1 AND empresa_id = $3 AND loja_id = $4`,
     [scope.sessionId, reason, scope.empresaId, scope.lojaId],

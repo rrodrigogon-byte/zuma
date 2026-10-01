@@ -23,9 +23,10 @@ export function productSearchText(product = {}) {
 }
 
 // Todos os termos precisam aparecer (em qualquer ordem) em nome, categoria, SKU ou descrição.
-export function filterCatalog(products = [], { query = '', category = 'Todos' } = {}) {
+export function filterCatalog(products = [], { query = '', category = 'Todos', inStockOnly = false } = {}) {
   const terms = normalizeSearchText(query).split(' ').filter(Boolean)
   return products.filter(product => {
+    if (inStockOnly && stockState(product).kind === 'out') return false
     if (category && category !== 'Todos' && product.cat !== category) return false
     if (!terms.length) return true
     const text = productSearchText(product)
@@ -79,4 +80,15 @@ export function addProductToCart(cart = [], product = {}, qtd = 1, available = N
         qtd: nextQty,
       }]
   return { ok: true, cart: nextCart, added, quantity: nextQty, stock }
+}
+
+
+// Mantém a ordem editorial dentro de cada grupo de disponibilidade.
+export function sortCatalog(products = [], sort = 'available') {
+  return [...products].sort((a, b) => {
+    if (sort === 'price-asc') return Number(a.preco || 0) - Number(b.preco || 0)
+    if (sort === 'price-desc') return Number(b.preco || 0) - Number(a.preco || 0)
+    if (sort === 'name') return String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR')
+    return Number(stockState(a).kind === 'out') - Number(stockState(b).kind === 'out')
+  })
 }

@@ -67,7 +67,30 @@ async function gcsBucket(){
 // segue com o estado local (o primeiro save() recria o objeto no bucket).
 export async function hydrate(){
   if(!GCS_BUCKET){ _hydrated = true; return false; }
-  try {
+  // Falha ao ler o estado durável não pode liberar uploads: o estado local (vazio ou de
+  // seed) sobrescreveria o bucket no primeiro save(). Tenta de novo e, se continuar
+  // falhando, interrompe o boot para a plataforma manter a versão anterior no ar.
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const result = await hydrateOnce();
+      if (result !== null) return result;
+    } catch (e) {
+      lastError = e;
+      console.error(`Falha ao hidratar do GCS (tentativa ${attempt}/3):`, e.message);
+      await new Promise(resolve => setTimeout(resolve, 1500 * attempt));
+    }
+  }
+  if (lastError) {
+    console.error('Estado durável indisponível: uploads para o GCS ficam desligados e o boot é interrompido.');
+    throw Object.assign(new Error('GCS_HYDRATE_FAILED'), { cause: lastError });
+  }
+  _hydrated = true;
+  return false;
+}
+
+async function hydrateOnce(){
+  {
     const file = (await gcsBucket()).file(GCS_OBJECT);
     const [exists] = await file.exists();
     if(exists){
@@ -79,8 +102,6 @@ export async function hydrate(){
       return true;
     }
     console.log(`GCS gs://${GCS_BUCKET}/${GCS_OBJECT} ainda não existe — será criado no primeiro save()`);
-  } catch(e){
-    console.error('Falha ao hidratar do GCS (seguindo com estado local):', e.message);
   }
   _hydrated = true;   // libera uploads dos próximos save()
   return false;

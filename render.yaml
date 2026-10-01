@@ -9,7 +9,7 @@ services:
     buildCommand: cd web && npm install --include=dev && npm run build && rm -rf ../app/public/assets && cp -R dist/. ../app/public/ && cd ../app && npm install
     preDeployCommand: cd app && npm run commerce:schema:apply
     startCommand: cd app && node server.js
-    healthCheckPath: /api/info
+    healthCheckPath: /health
     autoDeploy: true
     envVars:
       - key: NODE_VERSION

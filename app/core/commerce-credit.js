@@ -126,11 +126,13 @@ export async function createCreditPayment(contextInput, input = {}) {
     const existing = await trx.query(
       `SELECT id, order_id, status, amount, provider, method, metadata
          FROM commerce_payments
-        WHERE empresa_id = $1 AND idempotency_key = $2 AND provider = 'crediario'
+        WHERE empresa_id = $1 AND idempotency_key = $2
         LIMIT 1
         FOR UPDATE`,
       [context.empresaId, idempotencyKey],
     );
+    // A mesma chave só repete a resposta do mesmo pedido no crediário.
+    if (existing.rows[0] && (existing.rows[0].order_id !== orderId || existing.rows[0].provider !== 'crediario')) throw new CommerceError('chave de idempotência já usada em outro pagamento', 'IDEMPOTENCY_CONFLICT');
     if (existing.rows[0]) return { paymentId: existing.rows[0].id, orderId: existing.rows[0].order_id, status: existing.rows[0].status, provider: 'crediario', method: 'account', checkout: { status: existing.rows[0].status, account: true } };
     const orderResult = await trx.query(
       `SELECT o.id, o.public_code, o.storefront_id, o.loja_id, o.customer_id, o.status, o.total,
@@ -144,7 +146,7 @@ export async function createCreditPayment(contextInput, input = {}) {
     const order = orderResult.rows[0];
     if (!order) throw new CommerceError('pedido não encontrado para crediário', 'ORDER_NOT_FOUND');
     if (order.bloqueado) throw new CommerceError('cliente bloqueado para compras', 'CREDIT_CUSTOMER_BLOCKED');
-    if (!['draft', 'pending_payment', 'payment_failed'].includes(order.status)) throw new CommerceError('pedido não está disponível para crediário', 'PAYMENT_ORDER_STATE_INVALID');
+    if (order.status !== 'pending_payment') throw new CommerceError('pedido não está disponível para crediário; crie um novo pedido após falha', 'PAYMENT_ORDER_STATE_INVALID');
     const accountResult = await trx.query(
       `SELECT * FROM commerce_customer_credit_accounts
         WHERE empresa_id = $1 AND storefront_id = $2 AND customer_id = $3

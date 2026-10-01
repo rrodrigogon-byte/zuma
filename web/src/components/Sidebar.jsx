@@ -151,59 +151,58 @@ const NAV_ADMIN_GROUPS = [
 
 const NAV_DINO_GROUPS = [
   {
-    label: 'Visão do negócio',
+    label: 'Hoje',
     items: [
       { to: '/admin', icon: '◔', label: 'Painel do negócio', end: true },
-      { to: '/admin/barbearia-erp', icon: '◫', label: 'Central Dino', end: true },
-      { to: '/admin/bi', icon: '↗', label: 'BI & Analytics' },
-      { to: '/admin/relatorios-operacionais', icon: '▤', label: 'Relatórios' },
-      { to: '/admin/financeiro', icon: '◇', label: 'Financeiro' },
+      { to: '/admin/barbearia-erp?area=operacao&tab=Vis%C3%A3o+geral', icon: '⌂', label: 'Operação do dia' },
+      { to: '/admin/barbearia-erp?area=operacao&tab=Agenda', icon: '▣', label: 'Agenda' },
+      { to: '/admin/barbearia-erp?area=operacao&tab=Atendimento', icon: '✂', label: 'Atendimento e comandas' },
+      { to: '/admin/barbearia-erp?area=operacao&tab=Caixa+e+fechamento', icon: '▱', label: 'Caixa e fechamento' },
     ],
   },
   {
-    label: 'Loja',
+    label: 'Clientes & WhatsApp',
+    items: [
+      { to: '/admin/clientes-360', icon: '◉', label: 'Clientes 360' },
+      { to: '/admin/barbearia-erp?area=relacionamento&tab=Clientes', icon: '↻', label: 'CRM e campanhas' },
+      { to: '/admin/barbearia-erp?area=relacionamento&tab=Fidelidade', icon: '☆', label: 'Fidelidade' },
+      { to: '/admin/whatsapp', icon: '✆', label: 'WhatsApp' },
+      { to: '/admin/cerebro-ia', icon: '◈', label: 'Cérebro do atendente' },
+      { to: '/admin/barbearia-erp?area=integracoes&tab=Integra%C3%A7%C3%B5es', icon: '✦', label: 'Atendente IA' },
+      { to: '/admin/omnichannel', icon: '⇄', label: 'Canais e resgates' },
+    ],
+  },
+  {
+    label: 'Barbearia',
+    items: [
+      { to: '/admin/barbearia-erp?area=catalogo&tab=Profissionais', icon: '♙', label: 'Equipe' },
+      { to: '/admin/barbearia-erp?area=catalogo&tab=Servi%C3%A7os', icon: '≡', label: 'Serviços' },
+      { to: '/admin/barbearia-erp?area=catalogo&tab=Planos+e+assinaturas', icon: '◆', label: 'Planos e assinaturas' },
+      { to: '/admin/barbearia-erp?area=catalogo&tab=Estoque+de+revenda', icon: '▧', label: 'Revenda e estoque' },
+      { to: '/admin/barbearia-erp?area=gestao&tab=Comiss%C3%B5es', icon: '△', label: 'Comissões' },
+    ],
+  },
+  {
+    label: 'Loja online',
     items: [
       { to: '/admin/ecommerce?tab=overview', icon: '▦', label: 'Visão da loja' },
       { to: '/admin/ecommerce?tab=catalog', icon: '□', label: 'Produtos e estoque' },
       { to: '/admin/ecommerce?tab=orders', icon: '◧', label: 'Pedidos e entregas' },
       { to: '/admin/ecommerce?tab=promotions', icon: '%', label: 'Promoções' },
-      { to: '/admin/ecommerce?tab=customers', icon: '○', label: 'Clientes da loja' },
       { to: '/admin/ecommerce?tab=shipping', icon: '↝', label: 'Frete e retirada' },
       { to: '/admin/ecommerce?tab=payments', icon: '▰', label: 'Pagamentos' },
       { to: '/admin/ecommerce?tab=domains', icon: '◎', label: 'Domínios' },
     ],
   },
   {
-    label: 'Barbearia',
-    items: [
-      { to: '/admin/barbearia-erp?area=operacao&tab=Visão+geral', icon: '⌂', label: 'Operação hoje' },
-      { to: '/admin/barbearia-erp?area=operacao&tab=Agenda', icon: '▣', label: 'Agenda' },
-      { to: '/admin/barbearia-erp?area=operacao&tab=Atendimento', icon: '✂', label: 'Atendimento e comandas' },
-      { to: '/admin/barbearia-erp?area=operacao&tab=Caixa+e+fechamento', icon: '▱', label: 'Caixa e fechamento' },
-      { to: '/admin/barbearia-erp?area=catalogo&tab=Profissionais', icon: '♙', label: 'Equipe' },
-      { to: '/admin/barbearia-erp?area=catalogo&tab=Serviços', icon: '≡', label: 'Serviços' },
-      { to: '/admin/barbearia-erp?area=catalogo&tab=Planos+e+assinaturas', icon: '◆', label: 'Planos e assinaturas' },
-    ],
-  },
-  {
-    label: 'Relacionamento & IA',
-    items: [
-      { to: '/admin/barbearia-erp?area=integracoes&tab=Integrações', icon: '✦', label: 'Atendente IA' },
-      { to: '/admin/clientes-360', icon: '◉', label: 'Clientes 360' },
-      { to: '/admin/barbearia-erp?area=relacionamento&tab=Clientes', icon: '↻', label: 'CRM e campanhas' },
-      { to: '/admin/omnichannel', icon: '⇄', label: 'Canais e resgates' },
-      { to: '/admin/barbearia-erp?area=relacionamento&tab=Fidelidade', icon: '☆', label: 'Fidelidade' },
-    ],
-  },
-  {
     label: 'Gestão',
     items: [
-      { to: '/admin/compras', icon: '▧', label: 'Compras e fornecedores' },
-      { to: '/admin/fiscal/config', icon: '⌁', label: 'Fiscal' },
-      { to: '/admin/barbearia-erp?area=gestao&tab=Comissões', icon: '△', label: 'Comissões' },
-      { to: '/admin/usuarios', icon: '♧', label: 'Usuários' },
+      { to: '/admin/bi', icon: '↗', label: 'BI & Analytics' },
+      { to: '/admin/financeiro', icon: '◇', label: 'Financeiro' },
+      { to: '/admin/barbearia-erp?area=gestao&tab=Relat%C3%B3rios', icon: '▤', label: 'Relatórios' },
+      { to: '/admin/ecommerce?tab=users', icon: '♧', label: 'Usuários e acessos' },
       { to: '/admin/auditoria', icon: '◌', label: 'Auditoria' },
-      { to: '/admin/configuracoes', icon: '⚙', label: 'Configurações' },
+      { to: '/admin/barbearia-erp?area=gestao&tab=Configura%C3%A7%C3%A3o', icon: '⚙', label: 'Configurações' },
     ],
   },
 ]

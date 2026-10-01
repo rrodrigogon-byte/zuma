@@ -173,8 +173,10 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
   const legacyPrevious = legacyRevenue(input, previousWindow);
   const commerceRevenue = num(commerceCurrent.sales?.summary?.gross_total);
   const commercePreviousRevenue = num(commercePrevious.sales?.summary?.gross_total);
-  const commerceOrders = num(commerceCurrent.sales?.summary?.orders);
-  const commercePreviousOrders = num(commercePrevious.sales?.summary?.orders);
+  const commerceOrders = num(commerceCurrent.sales?.summary?.orders_non_cancelled ?? commerceCurrent.sales?.summary?.orders);
+  const commercePreviousOrders = num(commercePrevious.sales?.summary?.orders_non_cancelled ?? commercePrevious.sales?.summary?.orders);
+  const commerceOrdersTotal = num(commerceCurrent.sales?.summary?.orders_total ?? commerceCurrent.sales?.summary?.orders);
+  const commerceCapturedRevenue = list(commerceCurrent.sales?.capturedPayments).reduce((sum, item) => sum + num(item.value), 0);
   const revenue = money(commerceRevenue + legacyCurrent.total);
   const previousRevenue = money(commercePreviousRevenue + legacyPrevious.total);
   const transactions = commerceOrders + legacyCurrent.transactions;
@@ -217,47 +219,62 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
   const trendAppointments = pct(currentAppointments.length, previousAppointments.length);
   const items = saleItems(input, window);
   const commerceAvailable = Boolean(input.commerceAvailable);
+  const profitCurrent = input.profit?.current || null;
+  const profitPrevious = input.profit?.previous || null;
+  const profitAvailable = Boolean(profitCurrent);
+  const trendProfit = profitAvailable && profitPrevious ? pct(profitCurrent.resultado, profitPrevious.resultado) : { value: null, available: false };
+  const funnelCurrent = input.funnel?.current || null;
+  const funnelPrevious = input.funnel?.previous || null;
+  const funnelAvailable = Boolean(funnelCurrent && num(funnelCurrent.visit) > 0);
+  const conversion = funnelAvailable ? Number(((commerceOrders / num(funnelCurrent.visit)) * 100).toFixed(2)) : null;
+  const previousConversion = funnelPrevious && num(funnelPrevious.visit) > 0 ? Number(((commercePreviousOrders / num(funnelPrevious.visit)) * 100).toFixed(2)) : null;
+  const trendConversion = conversion != null && previousConversion ? pct(conversion, previousConversion) : { value: null, available: false };
   return {
     period: { days: window.days, from: window.from, to: window.to, previousFrom: window.previousFrom, previousTo: window.previousTo, timeZone: window.timeZone },
     kpis: [
-      { id: 'revenue', label: 'Receita bruta', value: revenue, previousValue: previousRevenue, trendPct: trendRevenue.value, trendAvailable: trendRevenue.available, available: true, format: 'currency' },
-      { id: 'profit', label: 'Lucro', value: null, previousValue: null, trendPct: null, trendAvailable: false, available: false, format: 'currency', reason: 'Custos completos não estão disponíveis para todo o recorte.' },
+      { id: 'revenue', label: 'Valor bruto registrado', value: revenue, previousValue: previousRevenue, trendPct: trendRevenue.value, trendAvailable: trendRevenue.available, available: true, format: 'currency' },
+      profitAvailable
+        ? { id: 'profit', label: 'Lucro estimado', value: profitCurrent.resultado, previousValue: profitPrevious?.resultado ?? null, trendPct: trendProfit.value, trendAvailable: trendProfit.available, available: true, format: 'currency', margin: profitCurrent.margem, breakdown: { receita: profitCurrent.receita, comissoes: profitCurrent.comissoes, cmvRevenda: profitCurrent.cmvRevenda, despesasPagas: profitCurrent.despesasPagas }, reason: (profitCurrent.notas || []).join(' ') }
+        : { id: 'profit', label: 'Lucro', value: null, previousValue: null, trendPct: null, trendAvailable: false, available: false, format: 'currency', reason: 'Custos completos não estão disponíveis para todo o recorte.' },
       { id: 'ticket', label: 'Ticket médio bruto', value: currentTicket, previousValue: previousTicket, trendPct: trendTicket.value, trendAvailable: trendTicket.available, available: true, format: 'currency' },
       { id: 'newCustomers', label: 'Novos clientes', value: currentNewCustomers, previousValue: previousNewCustomers, trendPct: trendCustomers.value, trendAvailable: trendCustomers.available, available: true, format: 'number' },
       { id: 'appointments', label: 'Agendamentos', value: currentAppointments.length, previousValue: previousAppointments.length, trendPct: trendAppointments.value, trendAvailable: trendAppointments.available, available: true, format: 'number' },
-      { id: 'conversion', label: 'Conversão', value: null, previousValue: null, trendPct: null, trendAvailable: false, available: false, format: 'percent', reason: 'Tracking de visita e checkout ainda não está disponível.' },
+      funnelAvailable
+        ? { id: 'conversion', label: 'Conversão da loja', value: conversion, previousValue: previousConversion, trendPct: trendConversion.value, trendAvailable: trendConversion.available, available: true, format: 'percent', reason: 'Pedidos da loja online ÷ visitas únicas por dia.' }
+        : { id: 'conversion', label: 'Conversão', value: null, previousValue: null, trendPct: null, trendAvailable: false, available: false, format: 'percent', reason: input.funnel ? 'Ainda sem visitas registradas na loja neste período.' : 'Tracking de visita e checkout ainda não está disponível.' },
     ],
     miniKpis: { receivables, lowStock: { total: retailLowStock + commerceLowStock, commerce: commerceLowStock, retail: retailLowStock }, mrr },
     charts: {
       revenueDaily: daily,
       appointmentsDaily: daily.map((item) => ({ day: item.day, value: item.appointments })),
       paymentMethods: paymentBreakdown(input, window),
+      commercePaymentMethods: list(commerceCurrent.sales?.capturedPayments).map(item => ({ method: item.method, value: num(item.value) })),
       categorySales: aggregate(items, 'category').slice(0, 8),
       topProducts: aggregate(items, 'name').slice(0, 8),
       funnel: [
-        { id: 'visits', label: 'Visitas', value: null, available: false },
-        { id: 'cart', label: 'Carrinho', value: null, available: false },
-        { id: 'checkout', label: 'Checkout', value: null, available: false },
-        { id: 'orders', label: 'Pedidos', value: commerceOrders, available: commerceAvailable },
+        { id: 'visits', label: 'Visitas', value: funnelCurrent ? num(funnelCurrent.visit) : null, available: Boolean(funnelCurrent) },
+        { id: 'cart', label: 'Carrinho', value: funnelCurrent ? num(funnelCurrent.cart) : null, available: Boolean(funnelCurrent) },
+        { id: 'checkout', label: 'Checkout', value: funnelCurrent ? num(funnelCurrent.checkout) : null, available: Boolean(funnelCurrent) },
+        { id: 'orders', label: 'Pedidos', value: commerceOrdersTotal, available: commerceAvailable },
       ],
       scheduleHeatmap: scheduleHeatmap(appointments, window),
       channels: [
-        { id: 'commerce', label: 'E-commerce', revenue: money(commerceRevenue), transactions: commerceOrders, available: commerceAvailable },
+        { id: 'commerce', label: 'E-commerce', revenue: money(commerceRevenue), grossValue: money(commerceRevenue), capturedRevenue: money(commerceCapturedRevenue), pendingValue: money(commerceCurrent.sales?.summary?.pending_total), transactions: commerceOrders, ordersTotal: commerceOrdersTotal, pendingOrders: num(commerceCurrent.sales?.summary?.pending_orders), cancelledOrders: num(commerceCurrent.sales?.summary?.cancelled_orders), refundedOrders: num(commerceCurrent.sales?.summary?.refunded_orders), capturedTransactions: list(commerceCurrent.sales?.capturedPayments).reduce((sum, item) => sum + num(item.transactions), 0), available: commerceAvailable },
         { id: 'barbershop', label: 'Barbearia', revenue: money(legacyCurrent.commands.reduce((sum, item) => sum + num(item.totalPago || item.total), 0)), transactions: legacyCurrent.commands.length, available: true },
         { id: 'retail', label: 'Revenda', revenue: money(legacyCurrent.retail.reduce((sum, item) => sum + num(item.total), 0)), transactions: legacyCurrent.retail.length, available: true },
       ],
     },
-    goals: { configured: false, items: [] },
+    goals: input.goals || { configured: false, items: [] },
     activity: activityFeed(input, now),
     upcomingAppointments: upcomingAppointments(appointments, now, window.timeZone),
     dataQuality: {
       commerceAvailable,
       combinedRevenueAvailable: true,
-      profitAvailable: false,
-      funnelAvailable: false,
+      profitAvailable,
+      funnelAvailable,
       notes: [
-        'Lucro indisponível até que todos os custos do recorte estejam persistidos.',
-        'Funil parcial até a implantação do tracking de visita, carrinho e checkout.',
+        profitAvailable ? 'Lucro estimado = receita da barbearia e revenda − comissões − custo da revenda − despesas pagas no Financeiro.' : 'Lucro indisponível até que todos os custos do recorte estejam persistidos.',
+        funnelAvailable ? 'Funil da loja com visitas, carrinhos e checkouts únicos por sessão/dia.' : 'Funil parcial até a loja registrar visitas no período.',
         'Estoques Commerce e revenda são contados separadamente.',
       ],
     },

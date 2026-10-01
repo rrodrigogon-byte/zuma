@@ -140,8 +140,9 @@ export function listPaymentProviders() {
   };
 }
 
-export async function listPaymentAccounts(client, contextInput) {
+export async function listPaymentAccounts(client, contextInput, options = {}) {
   const context = tenantContext(contextInput);
+  const storefrontId = options.storefrontId ? assertUuid(options.storefrontId, 'storefrontId') : null;
   const result = await client.query(
     `SELECT a.id, a.storefront_id, s.nome AS storefront_name, a.provider, a.ambiente, a.nome,
             a.public_config, a.secret_ref, a.ativo, a.criado_em, a.atualizado_em
@@ -149,8 +150,9 @@ export async function listPaymentAccounts(client, contextInput) {
        LEFT JOIN commerce_storefronts s ON s.empresa_id = a.empresa_id AND s.id = a.storefront_id
       WHERE a.empresa_id = $1
         AND ($2::uuid IS NULL OR s.loja_id = $2 OR a.storefront_id IS NULL)
+        AND ($3::uuid IS NULL OR a.storefront_id = $3)
       ORDER BY a.atualizado_em DESC, a.nome ASC`,
-    [context.empresaId, context.lojaId],
+    [context.empresaId, context.lojaId, storefrontId],
   );
   return { items: result.rows.map(accountRow) };
 }
@@ -197,14 +199,16 @@ export async function createPaymentAccount(trx, contextInput, input = {}) {
 export async function updatePaymentAccount(trx, contextInput, idInput, input = {}) {
   const context = tenantContext(contextInput);
   const id = assertUuid(idInput, 'paymentAccountId');
+  const storefrontId = contextInput.storefrontId ? assertUuid(contextInput.storefrontId, 'storefrontId') : null;
   const existing = await trx.query(
     `SELECT a.id, a.provider, a.public_config, a.secret_ref, a.ativo, a.storefront_id
        FROM commerce_payment_accounts a
        LEFT JOIN commerce_storefronts s ON s.empresa_id = a.empresa_id AND s.id = a.storefront_id
       WHERE a.empresa_id = $1 AND a.id = $2
         AND ($3::uuid IS NULL OR s.loja_id = $3 OR a.storefront_id IS NULL)
+        AND ($4::uuid IS NULL OR a.storefront_id = $4)
       FOR UPDATE OF a`,
-    [context.empresaId, id, context.lojaId],
+    [context.empresaId, id, context.lojaId, storefrontId],
   );
   const current = existing.rows[0];
   if (!current) throw new CommerceError('conta de pagamento não encontrada', 'PAYMENT_ACCOUNT_NOT_FOUND');
@@ -262,6 +266,7 @@ export async function listPayments(client, contextInput, options = {}) {
   const offset = Number.isFinite(parsedOffset) ? Math.min(10000, Math.max(0, parsedOffset)) : 0;
   const values = [context.empresaId, context.lojaId];
   const predicates = ['p.empresa_id = $1', '($2::uuid IS NULL OR o.loja_id = $2)'];
+  if (options.storefrontId) { values.push(assertUuid(options.storefrontId, 'storefrontId')); predicates.push(`o.storefront_id = $${values.length}`); }
   const status = String(options.status || '').trim().toLowerCase();
   if (status && /^[a-z_]+$/.test(status)) { values.push(status); predicates.push(`p.status = $${values.length}`); }
   const query = String(options.q || '').trim().slice(0, 160);

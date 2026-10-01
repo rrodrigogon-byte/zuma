@@ -95,12 +95,13 @@ test('conversão do pedido é tenant/storefront-scoped e cancela apenas a tarefa
   const calls = [];
   const trx = { async query(sql, params) {
     calls.push({ sql, params });
-    if (sql.includes('SELECT * FROM commerce_carts')) return { rows: [{ id: CART, customer_id: CUSTOMER }] };
+    if (sql.includes('SELECT * FROM commerce_carts')) return { rows: [{ id: CART, customer_id: CUSTOMER, status: 'open' }] };
     return { rows: [], rowCount: 1 };
   } };
   const result = await markCartConverted(trx, CONTEXT, { cartSessionKey: SESSION, storefrontId: CONTEXT.storefrontId, orderId: ORDER });
   assert.equal(result, CART);
-  assert.match(calls[0].sql, /empresa_id=\$1 AND storefront_id=\$2 AND session_key_hash=\$3/);
+  assert.match(calls[0].sql, /pg_advisory_xact_lock/);
+  assert.match(calls.find(call => call.sql.includes('SELECT * FROM commerce_carts')).sql, /empresa_id=\$1 AND storefront_id=\$2 AND session_key_hash=\$3/);
   const cancel = calls.find(call => call.sql.includes('UPDATE tarefas_integracao_canais'));
   assert.match(cancel.sql, /empresa_id=\$1/);
   assert.deepEqual(cancel.params, [CONTEXT.empresaId, CART]);
@@ -112,6 +113,7 @@ test('conversão do pedido é tenant/storefront-scoped e cancela apenas a tarefa
 
 test('conversão rejeita carrinho e pedido associados a customers diferentes', async () => {
   const trx = { async query(sql) {
+    if (sql.includes('pg_advisory_xact_lock')) return { rows: [] };
     if (sql.includes('SELECT * FROM commerce_carts')) return { rows: [{ id: CART, customer_id: CUSTOMER }] };
     throw new Error(`consulta inesperada: ${sql}`);
   } };
@@ -119,6 +121,27 @@ test('conversão rejeita carrinho e pedido associados a customers diferentes', a
     () => markCartConverted(trx, CONTEXT, { cartSessionKey: SESSION, storefrontId: CONTEXT.storefrontId, orderId: ORDER, customerId: '88888888-8888-4888-8888-888888888888' }),
     error => error.code === 'CONTACT_CONFLICT',
   );
+});
+
+test('conversão sem carrinho cria marcador e sync atrasado nunca reabre a sessão', async () => {
+  const original = db.transaction;
+  const row = { id: CART, empresa_id: CONTEXT.empresaId, storefront_id: CONTEXT.storefrontId, customer_id: CUSTOMER, status: 'converted', recovery_status: 'converted', converted_order_id: ORDER, client_sync_version: 0 };
+  const calls = [];
+  let persisted = null;
+  const trx = { async query(sql, params) {
+    calls.push({ sql, params });
+    if (sql.includes('pg_advisory_xact_lock')) return { rows: [] };
+    if (sql.includes('SELECT * FROM commerce_carts')) return { rows: persisted ? [persisted] : [] };
+    if (sql.includes('INSERT INTO commerce_carts')) { persisted = row; return { rows: [row] }; }
+    return { rows: [], rowCount: 1 };
+  } };
+  db.transaction = async callback => callback(trx);
+  try {
+    assert.equal(await markCartConverted(trx, CONTEXT, { cartSessionKey: SESSION, storefrontId: CONTEXT.storefrontId, orderId: ORDER, customerId: CUSTOMER }), CART);
+    const late = await syncPublicCart(CONTEXT, { sessionKey: SESSION, items: [{ variantId: VARIANT, quantity: 1 }], syncVersion: 999 });
+    assert.deepEqual(late, { status: 'converted', converted: true, orderId: ORDER, syncVersion: 0 });
+    assert.equal(calls.some(call => call.sql.includes("SET status='open'")), false);
+  } finally { db.transaction = original; }
 });
 
 test('opt-out ignora texto ambíguo sem consultar banco', async () => {

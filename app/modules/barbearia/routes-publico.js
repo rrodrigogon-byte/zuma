@@ -3,6 +3,8 @@ import express from 'express';
 import { db } from '../../db.js';
 import * as barbearia from '../../barbearia-erp-kytto.js';
 import { queueAppointmentNotifications } from '../../core/barbershop-appointment-notifications.js';
+import { vincularClienteAoAtendimento } from '../../dino-clientes-vinculo.js';
+import { phoneMatchKey } from '../../core/whatsapp-phone.js';
 
 const router = express.Router();
 const EMPRESA_PADRAO_ID = 'emp-kytto-001';
@@ -32,11 +34,15 @@ function identidadePublica(slugRecebido) {
   const estado = db();
   const barbearias = estado.barbearias || {};
 
-  for (const [empresaId, dados] of Object.entries(barbearias)) {
+  // Slug configurado explicitamente vence o apelido legado "dino" da empresa padrão:
+  // a empresa real (com unidade e canal) é a que recebe agendamentos e notificações.
+  const entradas = Object.entries(barbearias);
+  const explicita = entradas.some(([, dados]) => slug(dados?.configuracao?.slugPublico || dados?.configuracao?.slugAgendamento) === solicitado);
+  for (const [empresaId, dados] of entradas) {
     const configuracao = dados?.configuracao || {};
     const empresa = empresaCadastrada(estado, empresaId);
     const slugConfigurado = slug(configuracao.slugPublico || configuracao.slugAgendamento);
-    const aliasDino = solicitado === 'dino' && empresaId === EMPRESA_PADRAO_ID;
+    const aliasDino = !explicita && solicitado === 'dino' && empresaId === EMPRESA_PADRAO_ID;
     if (!aliasDino && (!slugConfigurado || slugConfigurado !== solicitado)) continue;
     if (configuracao.agendamentoPublicoAtivo === false || empresa?.ativa === false) return null;
     return {
@@ -132,6 +138,16 @@ router.post('/:slug/confirmar', async (req, res) => {
     if (nome.length < 2) return res.status(400).json({ ok: false, error: 'Informe seu nome.' });
     if (telefone.length < 10) return res.status(400).json({ ok: false, error: 'Informe um telefone válido com DDD.' });
     if (!servicoId || !data || !horario) return res.status(400).json({ ok: false, error: 'Serviço, data e horário são obrigatórios.' });
+    // Um mesmo telefone não segura a agenda inteira: no máximo 2 horários futuros pelo site.
+    const limitePorTelefone = Math.max(1, Number.parseInt(process.env.AGENDAMENTO_PUBLICO_MAX_POR_TELEFONE || '2', 10));
+    const agora = Date.now();
+    const futurosDoTelefone = barbearia.listarAgendamentos(identidade.empresaId, {})
+      .filter((item) => !['cancelado', 'nao_compareceu', 'concluido'].includes(item.status))
+      .filter((item) => new Date(item.dataHora).valueOf() > agora)
+      .filter((item) => phoneMatchKey(item.clienteTelefone) === phoneMatchKey(telefone));
+    if (futurosDoTelefone.length >= limitePorTelefone) {
+      return res.status(409).json({ ok: false, error: 'Este telefone já tem horários marcados. Para mais um, fale com a barbearia pelo WhatsApp.', code: 'LIMITE_AGENDAMENTOS_TELEFONE' });
+    }
 
     const disponibilidade = barbearia.resolverProfissionalDisponivel(identidade.empresaId, {
       data,
@@ -141,7 +157,9 @@ router.post('/:slug/confirmar', async (req, res) => {
       lojaId: identidade.lojaId,
     });
     const codigo = crypto.randomBytes(4).toString('hex').toUpperCase();
+    const vinculo = vincularClienteAoAtendimento(identidade.empresaId, { clienteNome: nome, clienteTelefone: telefone }, { origem: 'agendamento_online' });
     const agendamento = barbearia.criarAgendamento(identidade.empresaId, {
+      clienteId: vinculo.clienteId || undefined,
       clienteNome: nome,
       clienteTelefone: telefone,
       profissionalId: disponibilidade.profissional.id,

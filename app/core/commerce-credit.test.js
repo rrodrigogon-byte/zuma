@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createCreditAccount, listCreditAccounts, updateCreditAccount } from './commerce-credit.js';
+import { createCreditAccount, createCreditPayment, listCreditAccounts, updateCreditAccount } from './commerce-credit.js';
+import { db } from './database.js';
 
 const empresaId = '10000000-0000-4000-8000-000000000201';
 const lojaId = '10000000-0000-4000-8000-000000000202';
@@ -50,4 +51,28 @@ test('lista contas de crediário pelo escopo do tenant', async () => {
   assert.equal(result.items[0].customer_name, 'Cliente Dino');
   assert.equal(received.params[0], empresaId);
   assert.equal(received.params[1], storefrontId);
+});
+
+test('crediário bloqueia rascunho e payment_failed sem executar DML financeiro', async () => {
+  const original = db.transaction;
+  const calls = [];
+  let orderStatus = 'payment_failed';
+  db.transaction = async callback => callback({ query: async (sql, params = []) => {
+    calls.push({ sql, params });
+    if (sql.includes('FROM commerce_payments')) return { rows: [] };
+    if (sql.includes('FROM commerce_orders o')) return { rows: [{ id: '10000000-0000-4000-8000-000000000207', public_code: 'KC-CREDIT', storefront_id: storefrontId, loja_id: lojaId, customer_id: customerId, status: orderStatus, total: '25.00', customer_name: 'Cliente', bloqueado: false }] };
+    throw new Error(`query inesperada: ${sql}`);
+  } });
+  try {
+    for (const status of ['payment_failed', 'draft']) {
+      orderStatus = status;
+      await assert.rejects(
+        () => createCreditPayment({ empresaId, lojaId }, { orderId: '10000000-0000-4000-8000-000000000207', idempotencyKey: `credit-${status}` }),
+        error => error?.code === 'PAYMENT_ORDER_STATE_INVALID',
+      );
+    }
+    assert.equal(calls.some(call => /^\s*(INSERT|UPDATE|DELETE)/i.test(call.sql)), false);
+  } finally {
+    db.transaction = original;
+  }
 });

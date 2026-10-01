@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, ArrowRight, Check, CheckCircle2, Eye, Loader2, Minus, Monitor, Moon, Plus, Search, ShoppingBag, Store, Sun, Trash2, X } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, fmtR } from '../../lib/api'
-import { decrementCartQuantity, loadAllStorefrontProducts, normalizeStorefrontAlias, storefrontApiBase, storefrontCartSessionKey, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
+import { decrementCartQuantity, loadAllStorefrontProducts, nextStorefrontCartSyncVersion, normalizeStorefrontAlias, storefrontApiBase, storefrontCartSessionKey, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
 import { recommendedShippingOption, shippingQuoteKey } from '../../lib/checkout-shipping'
+import { createLatestRequest } from '../../lib/latest-request'
 import { applyThemeMode, commerceDisplayName, DINO_COMMERCE_LOGO, storedThemeMode } from '../../lib/brand'
-import { addProductToCart, filterCatalog, stockState } from '../../lib/storefront-catalog'
+import { addProductToCart, filterCatalog, sortCatalog, stockState } from '../../lib/storefront-catalog'
 import AddToCartSuccess from '../../components/store/AddToCartSuccess'
 import CartDrawer from '../../components/store/CartDrawer'
 import './commerce.css'
@@ -171,7 +172,10 @@ function EcommerceStorefront({ routeAlias, hostName }) {
   const [addError, setAddError] = useState('')
   const [cartBump, setCartBump] = useState(false)
   const addLockRef = useRef(new Set())
+  const cartSyncControllerRef = useRef(null)
   const [category, setCategory] = useState('Todos')
+  const [sort, setSort] = useState('available')
+  const [inStockOnly, setInStockOnly] = useState(false)
   const [cart, setCart] = useState(() => readCart(storeAlias))
   const [selected, setSelected] = useState(null)
   const [selectedVariantId, setSelectedVariantId] = useState('')
@@ -192,6 +196,10 @@ function EcommerceStorefront({ routeAlias, hostName }) {
   const addressNumberRef = useRef(null)
   const lastLookupCepRef = useRef('')
   const lastShippingQuoteKeyRef = useRef('')
+  const postalRequestRef = useRef(createLatestRequest())
+  const postalControllerRef = useRef(null)
+  const shippingQuoteRequestRef = useRef(createLatestRequest())
+  const shippingQuoteControllerRef = useRef(null)
   const orderRequestRef = useRef(false)
   const paymentRequestRef = useRef(false)
   const [addressLookupLoading, setAddressLookupLoading] = useState(false)
@@ -225,8 +233,17 @@ function EcommerceStorefront({ routeAlias, hostName }) {
   }, [storefrontApi, storeAlias])
 
   useEffect(() => localStorage.setItem(cartStorageKey, JSON.stringify(cart)), [cart, cartStorageKey])
+  useEffect(() => () => {
+    postalRequestRef.current.invalidate()
+    shippingQuoteRequestRef.current.invalidate()
+    postalControllerRef.current?.abort()
+    shippingQuoteControllerRef.current?.abort()
+  }, [])
   useEffect(() => {
     if (catalogSource !== 'core' || order) return undefined
+    cartSyncControllerRef.current?.abort()
+    const controller = new AbortController()
+    cartSyncControllerRef.current = controller
     const timer = window.setTimeout(() => {
       const validContact = checkoutContact.nome.trim().length >= 2 && shippingAddress.telefone.replace(/\D/g, '').length >= 10
       const consentPayload = recoveryPreference === null ? {} : recoveryPreference === false
@@ -237,10 +254,14 @@ function EcommerceStorefront({ routeAlias, hostName }) {
             recoveryEvidence: { checkbox: true, notice: 'Autorizo um único lembrete por WhatsApp sobre este carrinho. Posso revogar respondendo SAIR.', sourcePage: window.location.pathname },
             contact: { name: checkoutContact.nome.trim(), email: checkoutContact.email.trim(), phone: shippingAddress.telefone.trim() },
           } : {}
-      api.post(`${storefrontApi}/cart`, { sessionKey: cartSessionKey, items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })), ...consentPayload }).catch(() => {})
+      api.post(`${storefrontApi}/cart`, { sessionKey: cartSessionKey, syncVersion: nextStorefrontCartSyncVersion(storeAlias), items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })), ...consentPayload }, { signal: controller.signal }).catch(() => {})
     }, 500)
-    return () => window.clearTimeout(timer)
-  }, [cart, cartSessionKey, catalogSource, checkoutContact.email, checkoutContact.nome, order, recoveryPreference, shippingAddress.telefone, storefrontApi])
+    return () => {
+      window.clearTimeout(timer)
+      controller.abort()
+      if (cartSyncControllerRef.current === controller) cartSyncControllerRef.current = null
+    }
+  }, [cart, cartSessionKey, catalogSource, checkoutContact.email, checkoutContact.nome, order, recoveryPreference, shippingAddress.telefone, storeAlias, storefrontApi])
   useEffect(() => localStorage.setItem(deliveryStorageKey, JSON.stringify(delivery)), [delivery, deliveryStorageKey])
   useEffect(() => {
     if (!products.length) return
@@ -252,7 +273,7 @@ function EcommerceStorefront({ routeAlias, hostName }) {
   }, [products])
 
   const categories = useMemo(() => ['Todos', ...new Set(products.map(item => item.cat).filter(Boolean))], [products])
-  const filtered = useMemo(() => filterCatalog(products, { query, category }), [products, query, category])
+  const filtered = useMemo(() => sortCatalog(filterCatalog(products, { query, category, inStockOnly }), sort), [products, query, category, inStockOnly, sort])
   useEffect(() => {
     const timer = window.setTimeout(() => setQuery(searchInput), 220)
     return () => window.clearTimeout(timer)
@@ -284,6 +305,14 @@ function EcommerceStorefront({ routeAlias, hostName }) {
 
   function chooseDelivery(mode) {
     setCheckoutError('')
+    postalRequestRef.current.invalidate()
+    shippingQuoteRequestRef.current.invalidate()
+    postalControllerRef.current?.abort()
+    shippingQuoteControllerRef.current?.abort()
+    setAddressLookupLoading(false)
+    setShippingQuoteLoading(false)
+    lastLookupCepRef.current = ''
+    lastShippingQuoteKeyRef.current = ''
     setDelivery(mode === 'entrega' ? { mode, endereco: delivery.endereco || '' } : { mode })
     setShippingQuote(null)
     setShippingOptionId('')
@@ -295,6 +324,14 @@ function EcommerceStorefront({ routeAlias, hostName }) {
     const normalizedValue = field === 'cep' ? formatCep(value) : field === 'estado' ? String(value || '').toUpperCase().slice(0, 2) : value
     const changedCep = field === 'cep' && String(shippingAddress.cep || '').replace(/\D/g, '') !== String(normalizedValue || '').replace(/\D/g, '')
     if (changedCep) lastLookupCepRef.current = ''
+    if (['cep', 'cidade', 'estado'].includes(field)) {
+      postalRequestRef.current.invalidate()
+      shippingQuoteRequestRef.current.invalidate()
+      postalControllerRef.current?.abort()
+      shippingQuoteControllerRef.current?.abort()
+      setAddressLookupLoading(false)
+      setShippingQuoteLoading(false)
+    }
     setShippingAddress(current => {
       if (field !== 'cep') return { ...current, [field]: normalizedValue }
       const changed = String(current.cep || '').replace(/\D/g, '') !== String(normalizedValue || '').replace(/\D/g, '')
@@ -314,18 +351,27 @@ function EcommerceStorefront({ routeAlias, hostName }) {
     if (cep.length !== 8) return setCheckoutError('Informe um CEP com 8 dígitos.')
     if (!force && lastLookupCepRef.current === cep) return
     lastLookupCepRef.current = cep
+    postalControllerRef.current?.abort()
+    const controller = new AbortController()
+    postalControllerRef.current = controller
     setAddressLookupLoading(true)
     setCheckoutError('')
-    try {
-      const address = await api.get(`${storefrontApi}/shipping/address/${cep}`)
-      setShippingAddress(current => ({ ...current, ...address, cep: formatCep(address.cep || cep) }))
-      setShippingQuote(null)
-      setShippingOptionId('')
-      window.setTimeout(() => addressNumberRef.current?.focus(), 0)
-    } catch (err) {
-      lastLookupCepRef.current = ''
-      setCheckoutError(err.message || 'Não foi possível consultar o CEP. Complete o endereço manualmente ou tente novamente.')
-    } finally { setAddressLookupLoading(false) }
+    await postalRequestRef.current.run(
+      () => api.get(`${storefrontApi}/shipping/address/${cep}`, { signal: controller.signal }),
+      {
+        success: address => {
+          setShippingAddress(current => ({ ...current, ...address, cep: formatCep(address.cep || cep) }))
+          setShippingQuote(null)
+          setShippingOptionId('')
+          window.setTimeout(() => addressNumberRef.current?.focus(), 0)
+        },
+        error: err => {
+          lastLookupCepRef.current = ''
+          if (err?.name !== 'AbortError') setCheckoutError(err.message || 'Não foi possível consultar o CEP. Complete o endereço manualmente ou tente novamente.')
+        },
+        settled: () => { setAddressLookupLoading(false); if (postalControllerRef.current === controller) postalControllerRef.current = null },
+      },
+    )
   }
 
   async function requestShippingQuote({ quoteKey = '' } = {}) {
@@ -333,20 +379,31 @@ function EcommerceStorefront({ routeAlias, hostName }) {
     if (!deliveryAvailable) return setCheckoutError('Esta loja ainda não possui uma opção de entrega pronta.')
     if (shippingAddress.cep.replace(/\D/g, '').length !== 8) return setCheckoutError('Consulte um CEP válido antes de calcular o frete.')
     const effectiveQuoteKey = quoteKey || shippingQuoteKey({ deliveryMode: delivery.mode, address: shippingAddress, cart })
+    shippingQuoteControllerRef.current?.abort()
+    const controller = new AbortController()
+    shippingQuoteControllerRef.current = controller
     setShippingQuoteLoading(true)
     setCheckoutError('')
-    try {
-      const quote = await api.post(`${storefrontApi}/shipping/quotes/available`, { destinationCep: shippingAddress.cep, destination: { cep: shippingAddress.cep, cidade: shippingAddress.cidade, estado: shippingAddress.estado }, items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })) })
-      const first = recommendedShippingOption(quote)
-      if (!first) throw new Error('Nenhuma opção de frete está disponível para este CEP e carrinho.')
-      setShippingQuote(quote)
-      setShippingOptionId(first ? (first.selectionId || first.id) : '')
-      setShippingMethodId(first?.shippingMethodId || '')
-      lastShippingQuoteKeyRef.current = effectiveQuoteKey
-    } catch (err) {
-      lastShippingQuoteKeyRef.current = effectiveQuoteKey
-      setCheckoutError(err.message || 'Não foi possível calcular o frete neste momento.')
-    } finally { setShippingQuoteLoading(false) }
+    await shippingQuoteRequestRef.current.run(
+      () => api.post(`${storefrontApi}/shipping/quotes/available`, { destinationCep: shippingAddress.cep, destination: { cep: shippingAddress.cep, cidade: shippingAddress.cidade, estado: shippingAddress.estado }, items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })) }, { signal: controller.signal }),
+      {
+        success: quote => {
+          const first = recommendedShippingOption(quote)
+          if (!first) throw new Error('Nenhuma opção de frete está disponível para este CEP e carrinho.')
+          setShippingQuote(quote)
+          setShippingOptionId(first.selectionId || first.id)
+          setShippingMethodId(first.shippingMethodId || '')
+          lastShippingQuoteKeyRef.current = effectiveQuoteKey
+        },
+        error: err => {
+          if (err?.name !== 'AbortError') {
+            lastShippingQuoteKeyRef.current = effectiveQuoteKey
+            setCheckoutError(err.message || 'Não foi possível calcular o frete neste momento.')
+          }
+        },
+        settled: () => { setShippingQuoteLoading(false); if (shippingQuoteControllerRef.current === controller) shippingQuoteControllerRef.current = null },
+      },
+    )
   }
 
   useEffect(() => {
@@ -451,7 +508,7 @@ function EcommerceStorefront({ routeAlias, hostName }) {
   }
 
   function clearSearch() { setSearchInput(''); setQuery('') }
-  function clearFilters() { clearSearch(); setCategory('Todos') }
+  function clearFilters() { clearSearch(); setCategory('Todos'); setInStockOnly(false) }
   function openProduct(product) { setSelected(product); setSelectedVariantId(product.variantId || product.variants?.[0]?.variantId || '') }
   function describeCartItem(item) {
     const product = products.find(entry => entry.id === item.produtoId)
@@ -462,6 +519,9 @@ function EcommerceStorefront({ routeAlias, hostName }) {
 
   function updateCart(productId, variantId, qtd) {
     setCheckoutError('')
+    shippingQuoteRequestRef.current.invalidate()
+    shippingQuoteControllerRef.current?.abort()
+    setShippingQuoteLoading(false)
     setShippingQuote(null)
     setShippingOptionId('')
     lastShippingQuoteKeyRef.current = ''
@@ -540,6 +600,11 @@ function EcommerceStorefront({ routeAlias, hostName }) {
   const publicBrand = storeContext?.public || {}
   const operationalName = publicBrand.displayName || storeContext?.nome || (storeAlias ? storeAlias : 'Kytto Commerce')
   const brandName = commerceDisplayName(storeAlias, publicBrand.displayName, storeContext?.nome)
+  useEffect(() => {
+    const previous = document.title
+    document.title = `${isDinoStorefront ? 'Dino Perfumaria' : brandName} | Loja online`
+    return () => { document.title = previous }
+  }, [brandName, isDinoStorefront])
   const brandTagline = publicBrand.tagline || 'Uma experiência de compra completa para produtos, serviços e operações locais — com catálogo, atendimento e gestão conectados.'
   const publicAddress = formatPublicAddress(publicBrand.address)
   const publicPhone = String(publicBrand.contact?.phone || '')
@@ -564,7 +629,7 @@ function EcommerceStorefront({ routeAlias, hostName }) {
         </div>
       </div>
       <div className="commerce-hero-orbit" aria-hidden="true"><span>CATÁLOGO</span><span>ESTOQUE</span><span>PEDIDOS</span><strong>∞</strong></div>
-      <div className="commerce-channel-status" role="status"><span className={catalogSource === 'core' ? 'is-live' : ''}>{catalogSource === 'core' ? 'Core PostgreSQL ativo' : catalogSource === 'legacy' ? 'Catálogo operacional' : 'Conectando catálogo'}</span><small>{catalogSource === 'core' ? 'Estoque e pedido validados no servidor.' : 'Disponibilidade sujeita à confirmação da loja.'}</small></div>
+      <div className="commerce-channel-status" role="status"><span className={catalogSource === 'core' ? 'is-live' : ''}>{catalogSource === 'core' ? 'Estoque atualizado' : catalogSource === 'legacy' ? 'Catálogo da loja' : 'Conectando catálogo'}</span><small>{catalogSource === 'core' ? 'Disponibilidade confirmada ao finalizar a compra.' : 'Disponibilidade sujeita à confirmação da loja.'}</small></div>
     </section>
 
     <section className="commerce-toolbar" id="catalogo">
@@ -573,11 +638,12 @@ function EcommerceStorefront({ routeAlias, hostName }) {
         {categories.map(item => <button key={item} type="button" aria-pressed={category === item} className={category === item ? 'is-active' : ''} onClick={() => setCategory(item)}>{item}</button>)}
       </div>
       <button type="button" className={`commerce-cart-button ${cartBump ? 'is-bumped' : ''}`} onClick={() => setCartOpen(true)} aria-label={`Abrir carrinho, ${cartCount} ${cartCount === 1 ? 'item' : 'itens'}`}><ShoppingBag size={19} aria-hidden="true" /><span>Carrinho</span><b className={cartCount ? '' : 'is-empty'} aria-hidden="true">{cartCount}</b></button>
+      <div className="sf-catalog-options"><label><input type="checkbox" checked={inStockOnly} onChange={event => setInStockOnly(event.target.checked)} /> Somente em estoque</label><label>Ordenar por <select value={sort} onChange={event => setSort(event.target.value)}><option value="available">Disponibilidade</option><option value="price-asc">Menor preço</option><option value="price-desc">Maior preço</option><option value="name">Nome A–Z</option></select></label></div>
     </section>
 
     {loading && <div className="commerce-state"><Loader2 className="commerce-spin" /> Carregando catálogo…</div>}
     {!loading && error && <div className="commerce-state commerce-state-error">{error}</div>}
-    {!loading && !error && (query || category !== 'Todos') && <p className="sf-results-meta" aria-live="polite">{filtered.length === 1 ? '1 produto encontrado' : `${filtered.length} produtos encontrados`}</p>}
+    {!loading && !error && (query || category !== 'Todos' || inStockOnly) && <p className="sf-results-meta" aria-live="polite">{filtered.length === 1 ? '1 produto encontrado' : `${filtered.length} produtos encontrados`}</p>}
     {!loading && !error && <section className="commerce-product-grid" aria-label="Produtos">
       {filtered.map(product => {
         const stock = stockState(product)

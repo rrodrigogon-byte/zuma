@@ -37,6 +37,16 @@ function chaveDia(value) {
   return Number.isNaN(date.valueOf()) ? String(value).slice(0, 10) : date.toISOString().slice(0, 10);
 }
 
+// Dia operacional no fuso da unidade (Cuiabá por padrão). toISOString() vira o dia
+// seguinte depois das 20h locais e jogava comissão e caixa para a data errada.
+function diaOperacional(value) {
+  if (!value) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return String(value);
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return String(value).slice(0, 10);
+  return new Intl.DateTimeFormat('en-CA', { timeZone: process.env.KYTTO_TIMEZONE || 'America/Cuiaba', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+}
+
 function novoId(prefixo, bucket) {
   return `${prefixo}-${Date.now().toString(36)}-${String(Object.keys(bucket).length + 1).padStart(3, '0')}`;
 }
@@ -489,7 +499,7 @@ function filaNormalizada(dados = {}, anterior = {}) {
     preferenciaProfissionalId: texto(dados.preferenciaProfissionalId ?? dados.profissionalId ?? anterior.preferenciaProfissionalId, 100),
     previsaoMinutos: Math.max(0, Math.min(720, Math.round(numero(dados.previsaoMinutos ?? dados.previsao_minutos ?? anterior.previsaoMinutos, 30)))),
     observacoes: texto(dados.observacoes ?? dados.observacao ?? anterior.observacoes, 500),
-    dataAgenda: texto(dados.dataAgenda ?? dados.data_agenda ?? anterior.dataAgenda, 10) || chaveDia(dataAtual()),
+    dataAgenda: texto(dados.dataAgenda ?? dados.data_agenda ?? anterior.dataAgenda, 10) || diaOperacional(dataAtual()),
     lojaId: texto(dados.lojaId ?? dados.loja_id ?? anterior.lojaId, 120),
   };
 }
@@ -1125,17 +1135,23 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
   const total = Number(Math.max(0, subtotal - desconto + Math.max(0, Number(comanda.gorjeta || 0))).toFixed(2));
   const pagamentosEntrada = Array.isArray(dados.pagamentos) && dados.pagamentos.length ? dados.pagamentos : [{ meio: dados.meioPagamento ?? dados.meio_pagamento, valor: dados.valor }];
   const lojaIdOperacao = texto(dados.lojaId ?? comanda.lojaId, 120) || null;
-  const saldoAnterior = Number(Math.max(0, total - Number(comanda.totalPago || 0)).toFixed(2));
+  // Saldo considera o que já foi faturado (inclusive lançado em conta), não só o recebido.
+  const saldoAnterior = Number(Math.max(0, total - Number(comanda.totalFaturado ?? comanda.totalPago ?? 0)).toFixed(2));
   const pagamentos = pagamentosEntrada.map((item, indice) => {
     const meio = texto(item?.meio ?? item?.meioPagamento, 40).toLowerCase();
     const valor = dinheiro(item?.valor);
     if (!MEIOS_PAGAMENTO_COMANDA_BARBEARIA.has(meio) || valor <= 0) throw new Error('Informe meio e valor válidos para cada pagamento.');
-    const caixaId = texto(item?.caixaId ?? item?.caixa_id ?? dados.caixaId ?? dados.caixa_id, 120) || null;
+    let caixaId = texto(item?.caixaId ?? item?.caixa_id ?? dados.caixaId ?? dados.caixa_id, 120) || null;
+    if (meio === 'dinheiro' && !caixaId) {
+      // Dinheiro sem caixa escolhido: usa o caixa aberto da unidade quando há um só.
+      const abertos = caixaKytto.listarCaixas(empresaId, { status: 'aberto', ...(lojaIdOperacao ? { lojaId: lojaIdOperacao } : {}) });
+      if (abertos.length === 1) caixaId = abertos[0].id;
+    }
     if (meio === 'dinheiro' && caixaId) {
       const caixa = caixaKytto.obterCaixa(empresaId, caixaId);
       if (!caixa || caixa.status !== 'aberto' || (lojaIdOperacao && caixa.lojaId !== lojaIdOperacao)) throw new Error('O caixa informado não está aberto ou não pertence à unidade ativa.');
     }
-    return { id: texto(item?.id, 120) || `pagbar-${Date.now().toString(36)}-${String(indice + 1).padStart(2, '0')}`, meio, valor, caixaId, chaveIdempotencia: texto(item?.chaveIdempotencia ?? item?.chave_idempotencia ?? chaveIdempotencia, 220) || null, registradoEm: dataAtual() };
+    return { id: texto(item?.id, 120) || `pagbar-${Date.now().toString(36)}-${String(indice + 1).padStart(2, '0')}`, meio, valor, caixaId, ...(meio === 'dinheiro' && !caixaId ? { semCaixa: true } : {}), chaveIdempotencia: texto(item?.chaveIdempotencia ?? item?.chave_idempotencia ?? chaveIdempotencia, 220) || null, registradoEm: dataAtual() };
   });
   const valorNovo = Number(pagamentos.reduce((soma, item) => soma + item.valor, 0).toFixed(2));
   if (valorNovo - saldoAnterior > 0.02) throw new Error(`O pagamento excede o saldo pendente de ${saldoAnterior.toFixed(2)}.`);
@@ -1450,37 +1466,61 @@ export function alterarStatusAgendamento(empresaId, agendamentoId, status, dados
 export function obterComissoes(empresaId, { data = '', lojaId = '' } = {}) {
   const estado = estadoEmpresa(empresaId, false);
   const filtrarLoja = (item) => !lojaId || !item.lojaId || item.lojaId === String(lojaId);
-  const comandasPagas = Object.values(estado.comandas)
+  const todasComandasPagas = Object.values(estado.comandas)
     .filter(filtrarLoja)
-    .filter((item) => item.status === 'paga')
-    .filter((item) => !data || String(item.fechadaEm || item.atualizadoEm).slice(0, 10) === String(data).slice(0, 10));
-  const agendamentosEmComanda = new Set(comandasPagas.map((item) => item.agendamentoId).filter(Boolean));
+    // Comanda fechada "em conta" (tudo ou parte marcado na conta do cliente) também gera
+    // comissão: o atendimento foi feito e cobrado; a comissão vale no fechamento.
+    .filter((item) => item.status === 'paga' || item.status === 'em_conta');
+  const comandasPagas = todasComandasPagas
+    .filter((item) => !data || diaOperacional(item.fechadaEm || item.atualizadoEm) === String(data).slice(0, 10));
+  // Atendimento que virou comanda conta só pela comanda, mesmo que ela seja paga em outro dia.
+  const agendamentosEmComanda = new Set(todasComandasPagas.map((item) => item.agendamentoId).filter(Boolean));
+  // Desconto da comanda reduz a base de comissão proporcionalmente em cada item.
+  const fatorDesconto = (comanda) => {
+    const subtotal = (comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0);
+    const desconto = Math.min(subtotal, Math.max(0, Number(comanda.desconto || 0)));
+    return subtotal > 0 ? (subtotal - desconto) / subtotal : 1;
+  };
+  // Comanda paga com mais de um meio: a taxa de maquininha é rateada pelo valor de cada meio.
+  const rateioPagamentos = (comanda) => {
+    const pagamentos = (comanda.pagamentos || []).filter((pagamento) => Number(pagamento.valor) > 0);
+    const soma = pagamentos.reduce((total, pagamento) => total + Number(pagamento.valor), 0);
+    return soma > 0 ? pagamentos.map((pagamento) => ({ meio: String(pagamento.meio || '').toLowerCase(), fracao: Number(pagamento.valor) / soma })) : null;
+  };
+  // Parte do item no valor da comanda: a tarifa fixa da maquininha é cobrada uma vez por
+  // pagamento, então cada item carrega só a sua parte dela.
+  const pesoNaComanda = (comanda, subtotalItem) => {
+    const subtotal = (comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0);
+    return subtotal > 0 ? Math.max(0, Math.min(1, Number(subtotalItem || 0) / subtotal)) : 1;
+  };
   const atendimentos = Object.values(estado.agendamentos)
     .filter(filtrarLoja)
     .filter((item) => item.status === 'concluido')
     .filter((item) => !agendamentosEmComanda.has(item.id))
-    .filter((item) => !data || String(item.dataAgenda || chaveDia(item.dataHora)).slice(0, 10) === String(data).slice(0, 10));
+    .filter((item) => !data || String(item.dataAgenda || diaOperacional(item.dataHora)).slice(0, 10) === String(data).slice(0, 10));
   const vendasLegadas = Object.values(estado.vendasRevenda)
     .filter(filtrarLoja)
     .filter((item) => item.status === 'pago')
-    .filter((item) => !data || String(item.criadoEm).slice(0, 10) === String(data).slice(0, 10));
+    .filter((item) => !data || diaOperacional(item.criadoEm) === String(data).slice(0, 10));
   const servicosComanda = comandasPagas.flatMap((comanda) => (comanda.itens || [])
     .filter((item) => item.tipo === 'servico')
-    .map((item) => ({ ...item, profissionalId: item.profissionalId || comanda.profissionalId, valorRecebido: item.subtotal, valor: item.subtotal, meioPagamento: comanda.pagamentos?.find((pagamento) => pagamento.meio !== 'conta')?.meio || comanda.pagamento })));
+    .map((item) => ({ ...item, profissionalId: item.profissionalId || comanda.profissionalId, valorRecebido: dinheiro(Number(item.subtotal || 0) * fatorDesconto(comanda)), valor: dinheiro(Number(item.subtotal || 0) * fatorDesconto(comanda)), pesoNaComanda: pesoNaComanda(comanda, Number(item.subtotal || 0)), rateio: rateioPagamentos(comanda), meioPagamento: comanda.pagamentos?.find((pagamento) => pagamento.meio !== 'conta')?.meio || comanda.pagamento })));
   const produtosComanda = comandasPagas.map((comanda) => ({
     id: comanda.id,
     empresaId: comanda.empresaId,
     lojaId: comanda.lojaId,
     profissionalId: comanda.profissionalId || null,
-    total: dinheiro((comanda.itens || []).filter((item) => item.tipo === 'produto').reduce((soma, item) => soma + Number(item.subtotal || 0), 0)),
+    total: dinheiro((comanda.itens || []).filter((item) => item.tipo === 'produto').reduce((soma, item) => soma + Number(item.subtotal || 0), 0) * fatorDesconto(comanda)),
     pagamento: { meioPagamento: comanda.pagamentos?.find((pagamento) => pagamento.meio !== 'conta')?.meio || comanda.pagamento },
+    rateio: rateioPagamentos(comanda),
+    pesoNaComanda: pesoNaComanda(comanda, (comanda.itens || []).filter((item) => item.tipo === 'produto').reduce((soma, item) => soma + Number(item.subtotal || 0), 0)),
     criadoEm: comanda.fechadaEm || comanda.atualizadoEm,
   }));
   const vendas = [...vendasLegadas, ...produtosComanda.filter((item) => item.total > 0)];
   const atendimentosConsolidados = [...atendimentos, ...servicosComanda];
   const taxas = estado.configuracao.taxasPagamento || {};
   const meiosSemTaxaConfigurada = new Set();
-  const calcularTaxa = (valor, meio, profissional) => {
+  const calcularTaxa = (valor, meio, profissional, parteDaTarifaFixa = 1) => {
     const normalizado = String(meio || '').toLowerCase();
     if (!profissional.descontaTaxaMaquininha || normalizado === 'dinheiro' || normalizado === 'conta') return 0;
     const regra = taxas[normalizado];
@@ -1488,7 +1528,15 @@ export function obterComissoes(empresaId, { data = '', lojaId = '' } = {}) {
       if (normalizado) meiosSemTaxaConfigurada.add(normalizado);
       return 0;
     }
-    return Number(valor || 0) * Number(regra.percentual || 0) / 100 + Number(regra.fixa || 0);
+    return Number(valor || 0) * Number(regra.percentual || 0) / 100 + Number(regra.fixa || 0) * parteDaTarifaFixa;
+  };
+  // Cada pagamento da comanda é uma transação com uma tarifa fixa; o item paga a tarifa
+  // percentual sobre a sua parte e só a sua fração (pesoNaComanda) da tarifa fixa.
+  const taxaDoItem = (valor, item, meioUnico, profissional) => {
+    const peso = Number.isFinite(Number(item.pesoNaComanda)) ? Number(item.pesoNaComanda) : 1;
+    return Array.isArray(item.rateio) && item.rateio.length
+      ? item.rateio.reduce((soma, parte) => soma + calcularTaxa(Number(valor || 0) * parte.fracao, parte.meio, profissional, peso), 0)
+      : calcularTaxa(valor, meioUnico, profissional, peso);
   };
   const porProfissional = Object.values(estado.profissionais).map((profissional) => {
     const servicos = atendimentosConsolidados.filter((item) => item.profissionalId === profissional.id);
@@ -1497,11 +1545,11 @@ export function obterComissoes(empresaId, { data = '', lojaId = '' } = {}) {
     const brutoProdutos = produtos.reduce((soma, item) => soma + Number(item.total || 0), 0);
     const taxaServicos = servicos.reduce((soma, item) => {
       const meio = String(item.meioPagamento || '').toLowerCase();
-      return soma + calcularTaxa(Number(item.valorRecebido || item.valor || 0), meio, profissional);
+      return soma + taxaDoItem(Number(item.valorRecebido || item.valor || 0), item, meio, profissional);
     }, 0);
     const taxaProdutos = produtos.reduce((soma, item) => {
       const meio = String(item.pagamento?.meioPagamento || '').toLowerCase();
-      return soma + calcularTaxa(Number(item.total || 0), meio, profissional);
+      return soma + taxaDoItem(Number(item.total || 0), item, meio, profissional);
     }, 0);
     const comissaoServicos = (brutoServicos - taxaServicos) * Number(profissional.percentualComissao || 0) / 100;
     const comissaoProdutos = (brutoProdutos - taxaProdutos) * Number(profissional.percentualComissaoProduto || 0) / 100;
@@ -1525,16 +1573,16 @@ export function vincularLancamentoFinanceiro(empresaId, agendamentoId, lancament
   return { ...atual };
 }
 
-export function obterDashboard(empresaId, { data = chaveDia(dataAtual()), lojaId = '', clientesAtivos = 0, financeiro = null, caixa = null } = {}) {
+export function obterDashboard(empresaId, { data = diaOperacional(dataAtual()), lojaId = '', clientesAtivos = 0, financeiro = null, caixa = null } = {}) {
   const estado = estadoEmpresa(empresaId, false);
   const filtrarLoja = (item) => !lojaId || !item.lojaId || item.lojaId === String(lojaId);
   const agendamentos = Object.values(estado.agendamentos).filter(filtrarLoja);
   const fila = Object.values(estado.filaEspera).filter(filtrarLoja).filter((item) => item.status === 'aguardando' || item.status === 'chamado');
   const bloqueiosHoje = Object.values(estado.bloqueios).filter(filtrarLoja).filter((item) => item.ativo !== false && chaveDia(item.inicio) <= String(data).slice(0, 10) && chaveDia(item.fim) >= String(data).slice(0, 10));
   const assinaturasAtivas = Object.values(estado.assinaturas).filter((item) => item.status === 'ativa');
-  const hoje = agendamentos.filter((item) => String(item.dataAgenda || chaveDia(item.dataHora)).slice(0, 10) === String(data).slice(0, 10));
+  const hoje = agendamentos.filter((item) => String(item.dataAgenda || diaOperacional(item.dataHora)).slice(0, 10) === String(data).slice(0, 10));
   const concluidosHoje = hoje.filter((item) => item.status === 'concluido');
-  const vendasRevendaHoje = Object.values(estado.vendasRevenda).filter(filtrarLoja).filter((item) => item.status === 'pago' && String(item.criadoEm).slice(0, 10) === String(data).slice(0, 10));
+  const vendasRevendaHoje = Object.values(estado.vendasRevenda).filter(filtrarLoja).filter((item) => item.status === 'pago' && diaOperacional(item.criadoEm) === String(data).slice(0, 10));
   const proximos = agendamentos.filter((item) => item.status !== 'cancelado' && item.status !== 'concluido' && new Date(item.dataHora).valueOf() >= Date.now()).sort(ordenarPorData).slice(0, 8);
   return {
     data: String(data).slice(0, 10),

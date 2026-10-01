@@ -119,6 +119,7 @@ export async function createStorefront(trx, context, input = {}) {
   if (duplicate.rows[0]) throw new CommerceError('já existe um storefront com este código no tenant', 'STOREFRONT_CONFLICT');
   let loja = await resolveOperationalStore(trx, context, input.lojaId);
   if (!loja && input.criarUnidade !== false) loja = await createOperationalStore(trx, context, input, code, name);
+  if (!loja && status !== 'draft') throw new CommerceError('storefront sem unidade operacional só pode permanecer em rascunho', 'STOREFRONT_OPERATIONAL_STORE_REQUIRED');
   const created = await trx.query(
     `INSERT INTO commerce_storefronts (empresa_id, loja_id, codigo, nome, canal, status, moeda, timezone, configuracoes)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
@@ -147,16 +148,34 @@ export async function updateStorefront(trx, context, storefrontId, input = {}) {
   const current = await storefrontInTenant(trx, context, storefrontId, true);
   const allowed = [];
   const values = [empresaId, current.id];
+  const nextStatus = input.status !== undefined ? String(input.status) : current.status;
+  if (!STATUSES.has(nextStatus)) throw new CommerceError('status do storefront inválido', 'STOREFRONT_STATUS_INVALID');
+  let nextStoreId = current.loja_id;
+  let requestedStore = null;
+  if (input.lojaId !== undefined) {
+    const requestedStoreId = String(input.lojaId || '').trim() || null;
+    if (!requestedStoreId && context.lojaId) throw new CommerceError('loja fora do escopo da sua membership', 'STORE_SCOPE_MISMATCH');
+    requestedStore = requestedStoreId ? await resolveOperationalStore(trx, context, requestedStoreId) : null;
+    nextStoreId = requestedStore?.id || null;
+  }
+  if (nextStatus === 'active' && nextStoreId && !requestedStore) {
+    try {
+      requestedStore = await resolveOperationalStore(trx, context, nextStoreId);
+    } catch (error) {
+      if (error?.code !== 'STORE_NOT_FOUND') throw error;
+      throw new CommerceError('vincule uma unidade operacional ativa antes de manter o storefront ativo', 'STOREFRONT_OPERATIONAL_STORE_REQUIRED');
+    }
+  }
+  if (nextStatus === 'active' && !requestedStore) throw new CommerceError('vincule uma unidade operacional antes de ativar o storefront', 'STOREFRONT_OPERATIONAL_STORE_REQUIRED');
   if (input.nome !== undefined) { const value = storefrontName(input.nome); values.push(value); allowed.push(`nome = $${values.length}`); }
   if (input.codigo !== undefined) { const value = storefrontCode(input.codigo); values.push(value); allowed.push(`codigo = $${values.length}`); }
   if (input.canal !== undefined) { const value = String(input.canal); if (!CHANNELS.has(value)) throw new CommerceError('canal do storefront inválido', 'STOREFRONT_CHANNEL_INVALID'); values.push(value); allowed.push(`canal = $${values.length}`); }
-  if (input.status !== undefined) { const value = String(input.status); if (!STATUSES.has(value)) throw new CommerceError('status do storefront inválido', 'STOREFRONT_STATUS_INVALID'); values.push(value); allowed.push(`status = $${values.length}`); }
+  if (input.status !== undefined) { values.push(nextStatus); allowed.push(`status = $${values.length}`); }
   if (input.moeda !== undefined) { const value = text(input.moeda, 3).toUpperCase(); if (!/^[A-Z]{3}$/.test(value)) throw new CommerceError('moeda deve usar código ISO de três letras', 'STOREFRONT_CURRENCY_INVALID'); values.push(value); allowed.push(`moeda = $${values.length}`); }
   if (input.timezone !== undefined) { values.push(text(input.timezone, 64)); allowed.push(`timezone = $${values.length}`); }
   if (input.configuracoes !== undefined) { values.push(JSON.stringify(input.configuracoes || {})); allowed.push(`configuracoes = $${values.length}::jsonb`); }
   if (input.lojaId !== undefined && input.lojaId !== current.loja_id) {
-    const loja = await resolveOperationalStore(trx, context, input.lojaId);
-    values.push(loja?.id || null); allowed.push(`loja_id = $${values.length}`);
+    values.push(requestedStore?.id || null); allowed.push(`loja_id = $${values.length}`);
   }
   if (!allowed.length) throw new CommerceError('nenhum campo editável informado', 'NO_CHANGES');
   const result = await trx.query(`UPDATE commerce_storefronts SET ${allowed.join(', ')}, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 RETURNING *`, values);

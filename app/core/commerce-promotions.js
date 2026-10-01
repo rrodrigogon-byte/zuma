@@ -152,6 +152,9 @@ export async function applyPromotionToOrder(trx, context, input = {}) {
   else if (promotion.tipo === 'fixed') discount = round(Math.min(base, number(promotion.valor)));
   else throw new CommerceError('tipo de promoção ainda não habilitado no checkout', 'PROMOTION_TYPE_UNSUPPORTED');
   const total = round(Math.max(0, number(order.total) - discount));
+  // Pedido de valor zero não tem como ser pago (gateway e crediário exigem valor) e ficaria
+  // reservando estoque até vencer.
+  if (total < 0.01) throw new CommerceError('este cupom zera o pedido; fale com a loja para liberar a compra', 'PROMOTION_ZERO_TOTAL');
   await trx.query(`UPDATE commerce_orders SET desconto = $3, total = $4, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2`, [empresaId, orderId, discount, total]);
   await trx.query(
     `INSERT INTO commerce_order_promotions (empresa_id, order_id, promotion_id, promotion_code_id, codigo, tipo, valor_base, desconto)

@@ -1,0 +1,115 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {
+  anthropicToolsFromDeclarations, estimateCostCents, parseJsonLoose, routeFor, routerStatus,
+  runAiTask, runAnthropicWithTools,
+} from './ai-router.js';
+
+const KEYS = ['GEMINI_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'AI_ROUTE_RESUMIR_EXTRAIR'];
+async function withEnv(values, fn) {
+  const saved = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]));
+  for (const k of KEYS) delete process.env[k];
+  Object.assign(process.env, values);
+  try { return await fn(); } finally { for (const k of KEYS) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; } }
+}
+function response(status, body) { return { ok: status < 400, status, text: async () => JSON.stringify(body) }; }
+const noRecord = async () => {};
+
+test('rota padrão e override por ambiente', async () => {
+  await withEnv({}, () => {
+    assert.deepEqual(routeFor('resumir_extrair').map((s) => s.provider), ['anthropic', 'openai', 'gemini']);
+  });
+  await withEnv({ AI_ROUTE_RESUMIR_EXTRAIR: 'gemini:smart, openai:fast, inexistente:fast' }, () => {
+    assert.deepEqual(routeFor('resumir_extrair'), [{ provider: 'gemini', tier: 'smart' }, { provider: 'openai', tier: 'fast' }]);
+  });
+});
+
+test('usa o próximo provedor quando o principal falha e registra a reserva', async () => {
+  await withEnv({ ANTHROPIC_API_KEY: 'a', OPENAI_API_KEY: 'o' }, async () => {
+    const calls = [];
+    const runs = [];
+    const fetchImpl = async (url) => {
+      calls.push(url);
+      if (url.includes('anthropic')) return response(503, { error: 'down' });
+      return response(200, { choices: [{ message: { content: '{"resumo":"ok"}' } }] });
+    };
+    const out = await runAiTask('resumir_extrair', { user: 'x', json: true, fetchImpl, recorder: async (r) => runs.push(r) });
+    assert.equal(out.provider, 'openai');
+    assert.equal(out.fallback, true);
+    assert.deepEqual(out.data, { resumo: 'ok' });
+    assert.equal(calls.length, 2);
+    assert.deepEqual(runs.map((r) => [r.provider, r.status]), [['anthropic', 'failed'], ['openai', 'success']]);
+    assert.ok(runs[1].costCents >= 0);
+  });
+});
+
+test('sem nenhuma chave, erro claro e nenhuma chamada de rede', async () => {
+  await withEnv({}, async () => {
+    let called = false;
+    await assert.rejects(runAiTask('avaliar', { user: 'x', fetchImpl: async () => { called = true; }, recorder: noRecord }), (e) => e.code === 'NO_PROVIDER_CONFIGURED');
+    assert.equal(called, false);
+  });
+});
+
+test('teto diário bloqueia antes de chamar a IA', async () => {
+  await withEnv({ GEMINI_API_KEY: 'g' }, async () => {
+    let called = false;
+    await assert.rejects(runAiTask('classificar', { user: 'x', capCents: 100, spentToday: async () => 150, fetchImpl: async () => { called = true; }, recorder: noRecord }), (e) => e.code === 'BUDGET_EXCEEDED');
+    assert.equal(called, false);
+  });
+});
+
+test('exclude evita que a juíza seja a mesma IA que atendeu', async () => {
+  await withEnv({ GEMINI_API_KEY: 'g', ANTHROPIC_API_KEY: 'a' }, async () => {
+    const out = await runAiTask('avaliar', {
+      user: 'x', exclude: ['gemini'], recorder: noRecord,
+      fetchImpl: async (url) => { assert.ok(!url.includes('generativelanguage')); return response(200, { content: [{ type: 'text', text: 'nota 5' }] }); },
+    });
+    assert.equal(out.provider, 'anthropic');
+  });
+});
+
+test('JSON solto dentro de cercas é aproveitado', () => {
+  assert.deepEqual(parseJsonLoose('```json\n{"a":1}\n```'), { a: 1 });
+  assert.deepEqual(parseJsonLoose('Segue: {"a":2} fim'), { a: 2 });
+  assert.equal(parseJsonLoose('nada'), null);
+});
+
+test('custo estimado cresce com o texto', () => {
+  assert.ok(estimateCostCents('anthropic', 'smart', 10000, 2000) > estimateCostCents('anthropic', 'smart', 1000, 200));
+});
+
+test('status nunca expõe chaves', async () => {
+  await withEnv({ ANTHROPIC_API_KEY: 'segredo-123' }, () => {
+    const status = routerStatus();
+    assert.equal(JSON.stringify(status).includes('segredo-123'), false);
+    assert.equal(status.providers.find((p) => p.id === 'anthropic').configured, true);
+  });
+});
+
+test('ferramentas do Gemini viram ferramentas do Claude com tipos em minúsculas', () => {
+  const [tool] = anthropicToolsFromDeclarations([{ name: 'x', description: 'd', parameters: { type: 'OBJECT', properties: { a: { type: 'STRING' } }, required: ['a'] } }]);
+  assert.deepEqual(tool.input_schema, { type: 'object', properties: { a: { type: 'string' } }, required: ['a'] });
+});
+
+test('Claude executa ferramenta e responde (reserva do atendimento)', async () => {
+  await withEnv({ ANTHROPIC_API_KEY: 'a' }, async () => {
+    let step = 0;
+    const executed = [];
+    const out = await runAnthropicWithTools({
+      systemInstruction: 's', history: [{ role: 'user', text: 'oi' }, { role: 'assistant', text: 'olá' }], userText: 'tem horário?',
+      tools: [{ name: 'listar_servicos', description: 'd', parameters: { type: 'OBJECT', properties: {} } }],
+      executeTool: async (name) => { executed.push(name); return { ok: true, items: [] }; },
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(init.body);
+        step += 1;
+        if (step === 1) { assert.equal(body.messages[0].role, 'user'); return response(200, { content: [{ type: 'tool_use', id: 't1', name: 'listar_servicos', input: {} }] }); }
+        assert.equal(body.messages.at(-1).content[0].type, 'tool_result');
+        return response(200, { content: [{ type: 'text', text: 'Temos corte às 10h.' }] });
+      },
+    });
+    assert.deepEqual(executed, ['listar_servicos']);
+    assert.equal(out.text, 'Temos corte às 10h.');
+    assert.equal(out.traces[0].ok, true);
+  });
+});

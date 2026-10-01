@@ -747,3 +747,89 @@ export async function cancelRewardRedemption(db, { empresaId, lojaId, redemption
     throw error;
   }
 }
+
+
+// Pedido pago que é reembolsado, devolvido ou cancelado devolve os pontos que gerou.
+// Se o cliente já gastou parte, estorna o que ainda há de saldo (nunca deixa negativo).
+export async function reverseOrderLoyaltyPoints(trx, { empresaId, orderId, usuarioId = null, motivo = 'reembolso' }) {
+  if (!UUID_REGEX.test(empresaId || '') || !UUID_REGEX.test(orderId || '')) return { reversed: false, reason: 'invalid_scope' };
+  const credit = (await trx.query(
+    `SELECT l.loja_id, l.account_id, l.customer_id, l.pontos
+       FROM commerce_loyalty_ledger l
+      WHERE l.empresa_id = $1 AND l.referencia_tipo = 'commerce_order' AND l.referencia_id = $2 AND l.tipo = 'credito'
+      LIMIT 1`,
+    [empresaId, orderId],
+  )).rows[0];
+  if (!credit) return { reversed: false, reason: 'no_credit' };
+  const done = await trx.query(
+    `SELECT 1 FROM commerce_loyalty_ledger WHERE empresa_id = $1 AND loja_id = $2 AND referencia_tipo = 'commerce_order' AND referencia_id = $3 AND tipo = 'estorno'`,
+    [empresaId, credit.loja_id, orderId],
+  );
+  if (done.rows[0]) return { reversed: false, replay: true };
+  const account = (await trx.query(
+    `SELECT id, saldo_pontos FROM commerce_loyalty_accounts WHERE empresa_id = $1 AND id = $2 FOR UPDATE`,
+    [empresaId, credit.account_id],
+  )).rows[0];
+  if (!account) return { reversed: false, reason: 'account_missing' };
+  const before = Number(account.saldo_pontos || 0);
+  const amount = Math.min(Number(credit.pontos || 0), before);
+  if (amount <= 0) return { reversed: false, reason: 'no_balance', pending: Number(credit.pontos || 0) };
+  await trx.query(
+    `INSERT INTO commerce_loyalty_ledger
+      (empresa_id, loja_id, account_id, customer_id, tipo, pontos, saldo_anterior, saldo_posterior, descricao, referencia_tipo, referencia_id, criado_por)
+     VALUES ($1, $2, $3, $4, 'estorno', $5, $6, $7, $8, 'commerce_order', $9, $10)`,
+    [empresaId, credit.loja_id, credit.account_id, credit.customer_id, -amount, before, before - amount, `Estorno de pontos (${String(motivo).slice(0, 40)})`, orderId, usuarioId],
+  );
+  await trx.query(`UPDATE commerce_loyalty_accounts SET saldo_pontos = $3, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2`, [empresaId, credit.account_id, before - amount]);
+  return { reversed: true, points: amount, shortfall: Number(credit.pontos) - amount };
+}
+
+// Pontos vencidos saem do saldo em ordem de vencimento. Pontos de créditos ainda válidos
+// ficam protegidos, então só expira o que realmente sobrou do crédito vencido.
+export async function expireLoyaltyPoints(db, { limit = 200 } = {}) {
+  const due = await db.query(
+    `SELECT c.id, c.empresa_id, c.loja_id, c.account_id, c.customer_id, c.referencia_id, c.pontos, c.expira_em
+       FROM commerce_loyalty_ledger c
+      WHERE c.tipo = 'credito' AND c.expira_em IS NOT NULL AND c.expira_em <= CURRENT_TIMESTAMP
+        AND NOT EXISTS (SELECT 1 FROM commerce_loyalty_expiry_marks m WHERE m.ledger_id = c.id)
+        AND NOT EXISTS (SELECT 1 FROM commerce_loyalty_ledger x WHERE x.empresa_id = c.empresa_id AND x.loja_id = c.loja_id
+                         AND x.referencia_tipo = c.referencia_tipo AND x.referencia_id = c.referencia_id AND x.tipo IN ('expiracao','estorno'))
+      ORDER BY c.expira_em ASC LIMIT $1`,
+    [limit],
+  );
+  let expired = 0;
+  for (const credit of due.rows) {
+    await db.transaction(async trx => {
+      const account = (await trx.query(`SELECT saldo_pontos FROM commerce_loyalty_accounts WHERE empresa_id = $1 AND id = $2 FOR UPDATE`, [credit.empresa_id, credit.account_id])).rows[0];
+      if (!account) return;
+      const again = await trx.query(`SELECT 1 FROM commerce_loyalty_ledger WHERE empresa_id = $1 AND loja_id = $2 AND referencia_tipo = 'commerce_order' AND referencia_id = $3 AND tipo IN ('expiracao','estorno')`, [credit.empresa_id, credit.loja_id, credit.referencia_id]);
+      if (again.rows[0]) return;
+      const protectedPoints = Number((await trx.query(
+        `SELECT COALESCE(SUM(c.pontos), 0)::int AS pts FROM commerce_loyalty_ledger c
+          WHERE c.empresa_id = $1 AND c.account_id = $2 AND c.tipo = 'credito' AND (c.expira_em IS NULL OR c.expira_em > CURRENT_TIMESTAMP)
+            AND NOT EXISTS (SELECT 1 FROM commerce_loyalty_ledger x WHERE x.empresa_id = c.empresa_id AND x.referencia_tipo = c.referencia_tipo AND x.referencia_id = c.referencia_id AND x.tipo = 'estorno')`,
+        [credit.empresa_id, credit.account_id])).rows[0].pts);
+      const before = Number(account.saldo_pontos || 0);
+      const amount = Math.max(0, Math.min(Number(credit.pontos), before - protectedPoints));
+      const mark = pontos => trx.query(
+        `INSERT INTO commerce_loyalty_expiry_marks (ledger_id, empresa_id, pontos_expirados) VALUES ($1, $2, $3) ON CONFLICT (ledger_id) DO NOTHING`,
+        [credit.id, credit.empresa_id, pontos],
+      );
+      if (amount <= 0) {
+        // Nada a expirar (os pontos já foram gastos): marca como avaliado para não voltar à fila.
+        await mark(0);
+        return;
+      }
+      await mark(amount);
+      await trx.query(
+        `INSERT INTO commerce_loyalty_ledger
+          (empresa_id, loja_id, account_id, customer_id, tipo, pontos, saldo_anterior, saldo_posterior, descricao, referencia_tipo, referencia_id)
+         VALUES ($1, $2, $3, $4, 'expiracao', $5, $6, $7, 'Pontos vencidos', 'commerce_order', $8)`,
+        [credit.empresa_id, credit.loja_id, credit.account_id, credit.customer_id, -amount, before, before - amount, credit.referencia_id],
+      );
+      await trx.query(`UPDATE commerce_loyalty_accounts SET saldo_pontos = $3, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2`, [credit.empresa_id, credit.account_id, before - amount]);
+      expired += amount;
+    });
+  }
+  return { checked: due.rows.length, expiredPoints: expired };
+}

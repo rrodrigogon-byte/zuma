@@ -12,10 +12,12 @@ import {
   createShippingMethod,
   ORDER_TRANSITIONS,
   assertUuid,
+  listPublishedProducts,
   reserveInventory,
   tenantContext,
   transitionOrder,
 } from './commerce-core.js';
+import { db } from './database.js';
 
 const empresaId = '11111111-1111-4111-8111-111111111111';
 const lojaId = '22222222-2222-4222-8222-222222222222';
@@ -34,6 +36,20 @@ function queryRecorder(resolver) {
   };
 }
 
+test('catálogo público soma estoque somente da loja do storefront ou de local global', async () => {
+  const original = db.queryRead;
+  let captured;
+  db.queryRead = async (sql, values) => { captured = { sql, values }; return { rows: [] }; };
+  try {
+    assert.deepEqual(await listPublishedProducts({ empresaId }, { storefrontId }), []);
+  } finally {
+    db.queryRead = original;
+  }
+  assert.match(captured.sql, /l\.loja_id IS NULL OR l\.loja_id = \(/);
+  assert.match(captured.sql, /SELECT s\.loja_id FROM commerce_storefronts s/);
+  assert.equal(captured.values[1], storefrontId);
+});
+
 test('tenantContext rejeita ids inválidos e não aceita escopo sem empresa', () => {
   assert.deepEqual(tenantContext({ empresaId, lojaId, usuarioId }), { empresaId, lojaId, usuarioId });
   assert.throws(() => tenantContext({ empresaId: 'empresa-falsa' }), error => error instanceof CommerceError && error.code === 'INVALID_ID');
@@ -50,6 +66,8 @@ test('ORDER_TRANSITIONS impede avanço fora da máquina de estados', async () =>
     error => error instanceof CommerceError && error.code === 'INVALID_ORDER_TRANSITION',
   );
   assert.deepEqual(ORDER_TRANSITIONS.paid, ['processing', 'cancelled', 'refunded']);
+  // Pagamento recusado já devolveu o estoque: não volta a aguardar pagamento sem reserva.
+  assert.deepEqual(ORDER_TRANSITIONS.payment_failed, ['cancelled']);
 });
 
 test('transitionOrder grava atualização e eventos no mesmo fluxo transacional', async () => {
@@ -131,8 +149,8 @@ test('adjustInventory retorna a mesma resposta para uma chave repetida', async (
     return { rows: [] };
   });
   const input = { locationId, variantId, delta: 2, idempotencyKey: 'adjust-test-1' };
-  const first = await adjustInventory(trx, { empresaId, usuarioId }, input);
-  const second = await adjustInventory(trx, { empresaId, usuarioId }, input);
+  const first = await adjustInventory(trx, { empresaId, usuarioId, capabilities: new Set(['inventory.write']) }, input);
+  const second = await adjustInventory(trx, { empresaId, usuarioId, capabilities: new Set(['inventory.write']) }, input);
   assert.deepEqual(second, first);
   assert.equal(level.disponivel, 6);
   assert.equal(calls.filter(call => call.sql.includes('UPDATE commerce_inventory_levels')).length, 1);
@@ -247,6 +265,7 @@ test('createPendingOrder reserva estoque para produto físico', async () => {
     storefrontId,
     items: [{ variantId, quantity: 2 }],
     customer: { nome: 'Cliente de teste' },
+    idempotencyKey: 'checkout-physical-001',
     locationId,
     shippingMethodId,
     shippingAmount: 999,
@@ -258,6 +277,17 @@ test('createPendingOrder reserva estoque para produto físico', async () => {
   assert.equal(result.shippingMethodId, shippingMethodId);
   assert.equal(available, 3);
   assert.equal(calls.filter(call => call.sql.includes('INSERT INTO commerce_inventory_reservations')).length, 1);
+  const reservation = calls.find(call => call.sql.includes('INSERT INTO commerce_inventory_reservations'));
+  assert.ok(new Date(reservation.values[6]).getTime() > Date.now());
+});
+
+test('createPendingOrder sem idempotência rejeita antes de pedido ou reserva', async () => {
+  const { trx, calls } = queryRecorder(() => { throw new Error('nenhuma query deve ocorrer sem chave'); });
+  await assert.rejects(
+    () => createPendingOrder(trx, { empresaId, lojaId }, { storefrontId, items: [{ variantId, quantity: 1 }], customer: { nome: 'Sem chave' } }),
+    error => error instanceof CommerceError && error.code === 'ORDER_IDEMPOTENCY_REQUIRED',
+  );
+  assert.equal(calls.length, 0);
 });
 
 
@@ -270,7 +300,7 @@ test('updateCategory mantém edição e parent no tenant com auditoria', async (
     if (sql.includes('UPDATE commerce_categories')) return { rows: [{ id: categoryId, nome: 'Bebidas frias', parent_id: parentId, ativo: true }] };
     return { rows: [] };
   });
-  const result = await updateCategory(trx, { empresaId, lojaId, usuarioId }, categoryId, { nome: 'Bebidas frias', parentId, ordem: 2 });
+  const result = await updateCategory(trx, { empresaId, lojaId, usuarioId, capabilities: new Set(['catalog.write']) }, categoryId, { nome: 'Bebidas frias', parentId, ordem: 2 });
   assert.equal(result.nome, 'Bebidas frias');
   assert.equal(calls.filter(call => call.sql.includes('UPDATE commerce_categories')).length, 1);
   assert.equal(calls.filter(call => call.sql.includes('INSERT INTO commerce_audit_logs')).length, 1);
@@ -280,14 +310,16 @@ test('createCatalogVariant valida produto do tenant antes de criar SKU', async (
   const productId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
   const newVariantId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
   const { trx, calls } = queryRecorder((sql) => {
-    if (sql.includes('SELECT id, nome FROM commerce_products')) return { rows: [{ id: productId, nome: 'Camiseta' }] };
+    if (sql.includes('FROM commerce_storefronts')) return { rows: [{ id: storefrontId, empresa_id: empresaId, loja_id: lojaId, status: 'active' }] };
+    if (sql.includes('FROM commerce_products p')) return { rows: [{ id: productId, status: 'active', authorized_channel: true, outside_selected_channel: false }] };
+    if (sql.includes('SELECT id, nome, status FROM commerce_products')) return { rows: [{ id: productId, nome: 'Camiseta', status: 'active' }] };
     if (sql.includes('INSERT INTO commerce_product_variants')) return { rows: [{ id: newVariantId, product_id: productId, sku: 'CAM-AZ-M' }] };
     return { rows: [] };
   });
-  const result = await createCatalogVariant(trx, { empresaId, lojaId, usuarioId }, productId, { sku: 'CAM-AZ-M', nome: 'Azul M', atributos: { cor: 'azul', tamanho: 'M' }, ativo: true });
+  const result = await createCatalogVariant(trx, { empresaId, lojaId, usuarioId, capabilities: new Set(['catalog.write']) }, productId, { storefrontId, sku: 'CAM-AZ-M', nome: 'Azul M', atributos: { cor: 'azul', tamanho: 'M' }, ativo: true });
   assert.equal(result.sku, 'CAM-AZ-M');
   assert.equal(calls.filter(call => call.sql.includes('INSERT INTO commerce_product_variants')).length, 1);
-  await assert.rejects(() => createCatalogVariant(trx, { empresaId }, productId, {}), error => error instanceof CommerceError && error.code === 'VARIANT_REQUIRED');
+  await assert.rejects(() => createCatalogVariant(trx, { empresaId, capabilities: new Set(['catalog.write']) }, productId, { storefrontId }), error => error instanceof CommerceError && error.code === 'VARIANT_REQUIRED');
 });
 
 test('createCatalogMedia bloqueia variante de outro produto e persiste mídia no tenant', async () => {
@@ -295,12 +327,14 @@ test('createCatalogMedia bloqueia variante de outro produto e persiste mídia no
   const variantId = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
   const mediaId = '99999999-9999-4999-8999-999999999998';
   const { trx, calls } = queryRecorder((sql) => {
-    if (sql.includes('SELECT id FROM commerce_products')) return { rows: [{ id: productId }] };
+    if (sql.includes('FROM commerce_storefronts')) return { rows: [{ id: storefrontId, empresa_id: empresaId, loja_id: lojaId, status: 'active' }] };
+    if (sql.includes('FROM commerce_products p')) return { rows: [{ id: productId, status: 'active', authorized_channel: true, outside_selected_channel: false }] };
+    if (sql.includes('SELECT id, status FROM commerce_products')) return { rows: [{ id: productId, status: 'active' }] };
     if (sql.includes('SELECT id FROM commerce_product_variants')) return { rows: [{ id: variantId }] };
     if (sql.includes('INSERT INTO commerce_product_media')) return { rows: [{ id: '99999999-9999-4999-8999-999999999998', product_id: productId, public_url: 'https://cdn.example/image.jpg' }] };
     return { rows: [] };
   });
-  const result = await createCatalogMedia(trx, { empresaId, lojaId, usuarioId }, productId, { mediaId, variantId, url: '/api/storefront/media/99999999-9999-4999-8999-999999999998', storageKey: 'commerce-media/tenant/product/media.png', mimeType: 'image/png', altText: 'Camiseta azul' });
+  const result = await createCatalogMedia(trx, { empresaId, lojaId, usuarioId, capabilities: new Set(['catalog.write']) }, productId, { storefrontId, mediaId, variantId, url: '/api/storefront/media/99999999-9999-4999-8999-999999999998', storageKey: 'commerce-media/tenant/product/media.png', mimeType: 'image/png', altText: 'Camiseta azul' });
   assert.equal(result.product_id, productId);
   const mediaInsert = calls.find(call => call.sql.includes('INSERT INTO commerce_product_media'));
   assert.equal(mediaInsert.values[0], mediaId);

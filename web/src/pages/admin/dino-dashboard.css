@@ -18,3 +18,23 @@
 .dino-revenue-bars{position:relative;display:grid;grid-template-columns:repeat(auto-fit,minmax(8px,1fr));align-items:end;gap:5px;height:230px;padding:18px 4px 26px;border-bottom:1px solid var(--line);background:repeating-linear-gradient(to bottom,transparent 0,transparent calc(25% - 1px),var(--line) 25%)}.dino-revenue-bars>div:not(.dino-chart-empty){position:relative;display:flex;align-items:flex-end;justify-content:center;height:100%;min-width:0}.dino-revenue-bars>div>i{display:block;width:min(22px,72%);min-height:2px;border-radius:6px 6px 2px 2px;background:color-mix(in srgb,var(--accent) 45%,var(--surface-2));transition:height .2s ease,background .2s ease}.dino-revenue-bars>div.is-latest>i{background:var(--accent);box-shadow:0 8px 18px var(--accent-soft)}.dino-revenue-bars>div>span{position:absolute;left:50%;bottom:-20px;transform:translateX(-50%);max-width:52px;color:var(--muted);font-size:8px;white-space:nowrap}.dino-revenue-bars .dino-chart-empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:12px}
 
 .dino-customer-link{color:inherit;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}.dino-customer-link:hover{color:var(--accent);text-decoration-color:currentColor}
+
+/* Metas do mês */
+.dino-goals header button { min-height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font-weight: 800; cursor: pointer; }
+.dino-goals header button:hover { border-color: var(--accent); }
+.dino-goals-meta { margin: 0 0 10px; color: var(--muted); font-size: 12.5px; }
+.dino-goal-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.dino-goal-list li { display: grid; gap: 6px; }
+.dino-goal-top { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; font-weight: 700; color: var(--fg); }
+.dino-goal-top b { font-size: 12px; font-weight: 800; color: var(--muted); white-space: nowrap; }
+.dino-goal-top b i { font-style: normal; }
+.is-atingida .dino-goal-top b { color: #2E9E7B; }
+.is-no_ritmo .dino-goal-top b { color: var(--accent); }
+.is-abaixo .dino-goal-top b { color: #C2410C; }
+.dino-goal-track { position: relative; height: 10px; border-radius: 999px; background: var(--surface-2, rgba(127,127,127,.12)); overflow: visible; }
+.dino-goal-track span { display: block; height: 100%; border-radius: 999px; background: var(--accent); min-width: 3px; }
+.is-atingida .dino-goal-track span { background: #2E9E7B; }
+.dino-goal-track em { position: absolute; top: -3px; width: 2px; height: 16px; background: var(--fg); border-radius: 1px; transform: translateX(-1px); }
+.dino-goal-list small { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.dino-wa-alert { display: block; }
+.dino-wa-alert a { font-weight: 800; }

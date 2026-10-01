@@ -1,8 +1,11 @@
+import { confirmPhoneVerification, phoneVerificationAvailable, startPhoneVerification, verifyPhoneToken } from './phone-verification.js';
+import { createCreditPayment } from './commerce-credit.js';
+import { phoneMatchKey } from './whatsapp-phone.js';
 import crypto from 'node:crypto';
 import express from 'express';
 import { db } from './database.js';
 import { customerReport, fulfillmentReport, inventoryReport, salesReport } from './commerce-reports.js';
-import { canTransitionPaymentStatus, createPaymentAttempt, paymentAccountReady, paymentProviders, reconcilePaymentByIdentifiers, resolvedPaymentMethod, syncPaymentAttempt, validatePaymentMethod, verifyPaymentWebhook } from './payment-adapters.js';
+import { canTransitionPaymentStatus, captureNeedsRefund, otherCapturedPayment, createPaymentAttempt, paymentAccountReady, paymentProviders, reconcilePaymentByIdentifiers, recordLatePaymentCapture, resolvedPaymentMethod, syncPaymentAttempt, validatePaymentMethod, verifyPaymentWebhook } from './payment-adapters.js';
 import { createPaymentAccount, listPaymentAccounts, listPaymentProviders, listPayments, updatePaymentAccount } from './commerce-payment-admin.js';
 import { resolveCommerceIdentity } from './commerce-identity-bridge.js';
 import { applyPromotionToOrder, createPromotion, createPromotionCode, createPromotionTemplate, listPromotionTemplates, listPromotions } from './commerce-promotions.js';
@@ -13,9 +16,10 @@ import { createMembership, listMemberships, listRoles, updateMembership } from '
 import { createCustomer, createCustomerAddress, deleteCustomerAddress, getCustomer, listCustomerAddresses, updateCustomer, updateCustomerAddress } from './commerce-customers.js';
 import { createCreditAccount, listCreditAccounts, listCreditEntries, updateCreditAccount } from './commerce-credit.js';
 import { createStorefrontDomain, listStorefrontDomains, setPrimaryStorefrontDomain, verifyStorefrontDomain } from './commerce-domains.js';
-import { createShippingAccount, failShippingLabel, finalizeShippingCancellation, finalizeShippingLabel, listShippingAccounts, listShippingProviders, lookupPostalCode, prepareShippingCancellation, prepareShippingLabel, publicShippingMethod, quoteAvailableShipping, quoteShipping, shippingAccountReady, updateShippingAccount, updateShippingTracking } from './commerce-shipping.js';
+import { createShippingAccount, failShippingLabel, finalizeShippingCancellation, issueShippingLabel, listShippingAccounts, listShippingProviders, lookupPostalCode, prepareShippingCancellation, publicShippingMethod, quoteAvailableShipping, quoteShipping, reconcileShippingLabel, shippingAccountReady, updateShippingAccount, updateShippingTracking } from './commerce-shipping.js';
 import { shippingProviders } from './shipping-adapters.js';
-import { commerceMediaIdForIdempotencyKey, newCommerceMediaId, streamCommerceImage, uploadCommerceImage } from './commerce-media.js';
+import { recordStorefrontEvent } from '../storefront-funnel.js';
+import { commerceMediaIdForIdempotencyKey, deleteCommerceImage, newCommerceMediaId, streamCommerceImage, uploadCommerceImage } from './commerce-media.js';
 import { claimWhatsappAiHandoff, closeWhatsappAiHandoff, configureWhatsappAiChannel, configureWhatsappAiPolicy, listWhatsappAiSessions, releaseWhatsappAiHandoff, syncWhatsappAiWebhook, testWhatsappAiGemini, whatsappAiOperationalStatus } from './whatsapp-ai.js';
 import { campaignMetrics, cancelCampaign, confirmCampaign, createCampaign, listCampaignAudience, listCampaigns, previewCampaign, updateCampaignConsent } from './commerce-campaigns.js';
 import { cartRecoveryMetrics, listAbandonedCarts, syncPublicCart } from './commerce-abandoned-carts.js';
@@ -37,6 +41,7 @@ import {
   createPendingOrder,
   listPublishedProducts,
   publishCatalogProduct,
+  saveCatalogProductWorkspace,
   setVariantPrice,
   updateCategory,
   updateCatalogVariant,
@@ -46,9 +51,11 @@ import {
   updateShippingMethod,
   tenantContext,
   transitionOrder,
+  flagPaymentAfterCancellation,
   updateCatalogProduct,
   updateFulfillment,
   withCommerceTransaction,
+  allowedMediaUrl,
 } from './commerce-core.js';
 
 function publicHost(req) {
@@ -57,16 +64,25 @@ function publicHost(req) {
 }
 
 async function resolvePublicStorefront(req) {
-  if (req.publicResolvedStorefront) return req.publicResolvedStorefront;
+  if (req.publicResolvedStorefront) {
+    if (!req.publicResolvedStorefront.loja_id) throw new CommerceError('storefront ainda não possui unidade operacional', 'STOREFRONT_OPERATIONAL_STORE_REQUIRED');
+    return req.publicResolvedStorefront;
+  }
   if (req.publicStoreAlias) {
     req.publicResolvedStorefront = await resolveStorefrontAlias(req.publicStoreAlias);
+    if (!req.publicResolvedStorefront?.loja_id) throw new CommerceError('storefront ainda não possui unidade operacional', 'STOREFRONT_OPERATIONAL_STORE_REQUIRED');
     return req.publicResolvedStorefront;
   }
   const dominio = publicHost(req);
   if (!dominio) throw new CommerceError('domínio da loja não resolvido', 'STOREFRONT_DOMAIN_REQUIRED');
   const result = await db.query(
     `SELECT s.id, s.empresa_id, s.loja_id, s.codigo, s.nome, s.canal, s.status, s.moeda, s.timezone,
-            s.configuracoes, '{}'::jsonb AS public_config, COALESCE(s.configuracoes->>'brandKey', 'default') AS brand_key
+            s.configuracoes,
+            COALESCE((SELECT a.public_config FROM commerce_storefront_aliases a
+                       WHERE a.empresa_id = s.empresa_id AND a.storefront_id = s.id AND a.ativo = true
+                         AND a.public_config <> '{}'::jsonb
+                       ORDER BY a.atualizado_em DESC NULLS LAST LIMIT 1), '{}'::jsonb) AS public_config,
+            COALESCE(s.configuracoes->>'brandKey', 'default') AS brand_key
        FROM commerce_store_domains d
        JOIN commerce_storefronts s
          ON s.empresa_id = d.empresa_id AND s.id = d.storefront_id
@@ -75,6 +91,7 @@ async function resolvePublicStorefront(req) {
     [dominio],
   );
   if (!result.rows[0]) throw new CommerceError('storefront não encontrado para este domínio', 'STOREFRONT_NOT_FOUND');
+  if (!result.rows[0].loja_id) throw new CommerceError('storefront ainda não possui unidade operacional', 'STOREFRONT_OPERATIONAL_STORE_REQUIRED');
   req.publicResolvedStorefront = result.rows[0];
   return req.publicResolvedStorefront;
 }
@@ -109,6 +126,7 @@ export function publicCommercePolicy(req) {
   const route = String(req.path || '/').split('?')[0];
   if (req.method === 'GET' && route.startsWith('/shipping/address/')) return { scope: 'public-shipping-address', limit: 80, windowSeconds: 600 };
   if (req.method === 'POST' && route.startsWith('/shipping/quotes')) return { scope: 'public-shipping-quote', limit: 30, windowSeconds: 600 };
+  if (req.method === 'POST' && route.startsWith('/phone-verification/')) return { scope: 'public-phone-verification', limit: 10, windowSeconds: 600 };
   if (req.method === 'POST' && (route === '/orders' || /^\/orders\/[^/]+\/payments$/.test(route))) return { scope: 'public-order-write', limit: 12, windowSeconds: 600 };
   if (req.method === 'GET' && /^\/orders\/[^/]+$/.test(route)) return { scope: 'public-order-read', limit: 120, windowSeconds: 600 };
   if (req.method === 'GET' && /^\/media\/[^/]+$/.test(route)) return { scope: 'public-media-read', limit: 600, windowSeconds: 600 };
@@ -150,8 +168,10 @@ function safePublicUrl(value) {
   return /^https?:\/\//i.test(candidate) ? candidate.slice(0, 600) : null;
 }
 
-function sanitizePublicStorefrontConfig(storefront = {}) {
-  const source = storefront.public_config && typeof storefront.public_config === 'object'
+export function sanitizePublicStorefrontConfig(storefront = {}) {
+  // Objeto vazio não conta como configuração: cai para configuracoes.public (antes o domínio próprio
+  // sempre recebia {} e a vitrine ficava com cor e contato padrão).
+  const source = storefront.public_config && typeof storefront.public_config === 'object' && Object.keys(storefront.public_config).length
     ? storefront.public_config
     : storefront.configuracoes?.public && typeof storefront.configuracoes.public === 'object'
       ? storefront.configuracoes.public
@@ -289,6 +309,48 @@ function sanitizePublicOrderTracking(row = {}) {
 
 function jsonError(res, error) {
   const statusByCode = {
+    QUANTITY_LIMIT_EXCEEDED: 422,
+    SHIPPING_METHOD_REQUIRED: 400,
+    CART_ALREADY_CONVERTED: 409,
+    CREDIT_ACCOUNT_CONFLICT: 409,
+    CREDIT_CUSTOMER_INVALID: 400,
+    CREDIT_DUE_DAYS_INVALID: 400,
+    CREDIT_LIMIT_BELOW_BALANCE: 409,
+    CREDIT_LIMIT_INVALID: 400,
+    CREDIT_STATUS_INVALID: 400,
+    CREDIT_STOREFRONT_SCOPE_MISMATCH: 403,
+    CREDIT_VALUE_INVALID: 400,
+    DOMAIN_CONFLICT: 409,
+    DOMAIN_NOT_FOUND: 404,
+    DOMAIN_NOT_VERIFIED: 409,
+    INVENTORY_BASELINE_REQUIRED: 409,
+    LAST_TENANT_OWNER_REQUIRED: 409,
+    MEMBERSHIP_SCOPE_INVALID: 400,
+    PAYMENT_RECONCILIATION_PROVIDER_UNSUPPORTED: 400,
+    PRICE_LIST_CONCURRENT_CHANGE: 409,
+    PRICE_LIST_SCOPE_MISMATCH: 403,
+    PRODUCT_SHARED_SCOPE_MISMATCH: 403,
+    SHIPPING_ORIGIN_CEP_REQUIRED: 400,
+    SHIPPING_TRACKING_UNSUPPORTED: 400,
+    SHIPPING_WEBHOOK_AMBIGUOUS: 409,
+    STOREFRONT_ALIAS_CONFLICT: 409,
+    STOREFRONT_ALIAS_INVALID: 400,
+    STOREFRONT_BRAND_INVALID: 400,
+    STOREFRONT_REQUIRED: 400,
+    STORE_CODE_INVALID: 400,
+    TENANT_ADMIN_ACCESS_CONFIRMATION_REQUIRED: 400,
+    TENANT_ADMIN_EMAIL_INVALID: 400,
+    TENANT_ADMIN_USER_NOT_FOUND: 404,
+    TENANT_CNPJ_CONFLICT: 409,
+    TENANT_CNPJ_INVALID: 400,
+    TENANT_IDENTITY_REQUIRED: 400,
+    TENANT_INACTIVE: 403,
+    TENANT_PHONE_INVALID: 400,
+    TENANT_POSTAL_CODE_INVALID: 400,
+    TENANT_PUBLIC_CONTACT_CONFIRMATION_REQUIRED: 400,
+    TENANT_PUBLIC_CONTACT_REQUIRED: 400,
+    TENANT_ROLE_NOT_FOUND: 404,
+    TENANT_STATE_INVALID: 400,
     INVALID_ID: 400,
     EMPTY_CART: 400,
     VALIDATION_ERROR: 400,
@@ -323,6 +385,11 @@ function jsonError(res, error) {
     CATEGORY_SELF_PARENT: 400,
     PRODUCT_REQUIRED: 400,
     PRODUCT_NOT_FOUND: 404,
+    PRODUCT_STOREFRONT_SCOPE_MISMATCH: 404,
+    PRODUCT_ARCHIVED: 409,
+    PRODUCT_ARCHIVE_REQUIRED: 409,
+    PRODUCT_STATE_CONFLICT: 409,
+    CATALOG_PRODUCT_IDEMPOTENCY_REQUIRED: 400,
     NO_CHANGES: 400,
     INVALID_PROMOTIONAL_PRICE: 400,
     INVALID_INVENTORY_DELTA: 400,
@@ -337,6 +404,8 @@ function jsonError(res, error) {
     MEDIA_UPLOAD_EMPTY: 400,
     MEDIA_IMAGE_INVALID: 422,
     MEDIA_NOT_FOUND: 404,
+    MEDIA_URL_NOT_ALLOWED: 400,
+    MEDIA_SCOPE_MISMATCH: 404,
     MEDIA_STORAGE_NOT_CONFIGURED: 503,
     MEDIA_UPLOAD_TOO_LARGE: 413,
     VALIDATION_ERROR: 400,
@@ -351,6 +420,21 @@ function jsonError(res, error) {
     PAYMENT_PROVIDER_NOT_CONFIGURED: 503,
     PAYMENT_METHOD_INVALID: 400,
     PAYMENT_CUSTOMER_VERIFICATION_REQUIRED: 403,
+    INVALID_PHONE: 400,
+    PHONE_VERIFICATION_INVALID: 400,
+    PHONE_VERIFICATION_EXPIRED: 410,
+    PHONE_VERIFICATION_LOCKED: 429,
+    PHONE_VERIFICATION_RATE_LIMIT: 429,
+    PHONE_VERIFICATION_SEND_FAILED: 409,
+    PHONE_VERIFICATION_UNAVAILABLE: 409,
+    CREDIT_ACCOUNT_NOT_FOUND: 403,
+    CREDIT_NOT_ELIGIBLE: 403,
+    PROMOTION_ZERO_TOTAL: 409,
+    PAYMENT_RECONCILIATION_CONFLICT: 409,
+    PAYMENT_RECONCILIATION_INPUT_INVALID: 400,
+    CREDIT_ACCOUNT_NOT_ACTIVE: 403,
+    CREDIT_CUSTOMER_BLOCKED: 403,
+    CREDIT_LIMIT_EXCEEDED: 409,
     PAYMENT_IDEMPOTENCY_REQUIRED: 400,
     PAYMENT_ACCOUNT_NOT_CONFIGURED: 409,
     PAYMENT_ATTEMPT_IN_PROGRESS: 409,
@@ -422,6 +506,8 @@ function jsonError(res, error) {
     SHIPPING_WEBHOOK_INVALID: 400,
     SHIPPING_OPERATION_IN_PROGRESS: 409,
     SHIPPING_OPERATION_CONFLICT: 409,
+    SHIPPING_OPERATION_RECONCILIATION_REQUIRED: 409,
+    SHIPPING_OPERATION_RECONCILIATION_INPUT_INVALID: 400,
     FULFILLMENT_NOT_FOUND: 404,
     FULFILLMENT_ORDER_NOT_PAID: 409,
     INVALID_FULFILLMENT_TRANSITION: 409,
@@ -435,6 +521,10 @@ function jsonError(res, error) {
     ROLE_NOT_FOUND: 404,
     MEMBERSHIP_NOT_FOUND: 404,
     STORE_SCOPE_MISMATCH: 409,
+    ORDER_IDEMPOTENCY_REQUIRED: 400,
+    ORDER_IDEMPOTENCY_IN_PROGRESS: 409,
+    IDEMPOTENCY_CONFLICT: 409,
+    STOREFRONT_OPERATIONAL_STORE_REQUIRED: 409,
     STOREFRONT_CODE_INVALID: 400,
     STOREFRONT_NAME_REQUIRED: 400,
     STOREFRONT_CURRENCY_INVALID: 400,
@@ -476,35 +566,94 @@ function jsonError(res, error) {
   return res.status(status).json({ error: publicMessage, code: error?.code || 'COMMERCE_ERROR', details: error?.details || {} });
 }
 
+// Com "Todas as lojas" selecionado não há loja no contexto; o atendimento de
+// WhatsApp pertence à loja onde o canal foi criado (ou à primeira loja ativa).
+async function withWhatsappLoja(context) {
+  if (context?.lojaId) return context;
+  const channel = await db.queryRead(
+    `SELECT loja_id FROM canais_integracao WHERE empresa_id = $1 AND provedor = 'whatsapp' ORDER BY data_atualizacao DESC NULLS LAST LIMIT 1`,
+    [context.empresaId],
+  ).catch(() => ({ rows: [] }));
+  let lojaId = channel.rows[0]?.loja_id || null;
+  if (!lojaId) {
+    const loja = await db.queryRead(`SELECT id FROM lojas WHERE empresa_id = $1 AND COALESCE(ativo, true) = true ORDER BY id LIMIT 1`, [context.empresaId]).catch(() => ({ rows: [] }));
+    lojaId = loja.rows[0]?.id || null;
+  }
+  return lojaId ? { ...context, lojaId, lojaInferida: true } : context;
+}
+
 async function adminContext(req) {
-  return resolveCommerceIdentity(req);
+  if (!req.commerceAdminContext) req.commerceAdminContext = await resolveCommerceIdentity(req);
+  return req.commerceAdminContext;
 }
 
 async function requirePermission(req, permission) {
   const context = await adminContext(req);
   const result = await db.queryRead(
-    `SELECT 1
+    `SELECT COUNT(*)::int AS grants, BOOL_OR(m.loja_id IS NULL) AS corporate_access
        FROM commerce_memberships m
        JOIN commerce_roles r ON r.id = m.role_id AND (r.empresa_id = $1 OR r.empresa_id IS NULL)
        JOIN commerce_role_permissions rp ON rp.role_id = r.id
        JOIN commerce_permissions p ON p.id = rp.permission_id AND p.codigo = $2
       WHERE m.empresa_id = $1 AND m.usuario_id = $3 AND m.ativo = true
         AND (m.loja_id IS NULL OR m.loja_id = $4)
-      LIMIT 1`,
+      `,
     [context.empresaId, permission, context.usuarioId, context.lojaId],
   );
-  if (!result.rows[0]) throw new CommerceError('permissão insuficiente para esta operação', 'PERMISSION_DENIED', { permission });
+  if (!Number(result.rows[0]?.grants || 0)) throw new CommerceError('permissão insuficiente para esta operação', 'PERMISSION_DENIED', { permission });
+  context.corporateAccess = context.corporateAccess === true || result.rows[0].corporate_access === true;
+  context.capabilities = context.capabilities instanceof Set ? context.capabilities : new Set(context.capabilities || []);
+  context.capabilities.add(permission);
   return context;
+}
+
+async function requireAdminStorefront(req, context, { optionalForCorporate = true } = {}) {
+  const raw = req.query?.storefrontId || req.body?.storefrontId || req.headers?.['x-storefront-id'];
+  if (!raw) {
+    if (optionalForCorporate && context.corporateAccess === true) return null;
+    throw new CommerceError('storefrontId é obrigatório para operar a vitrine selecionada', 'STOREFRONT_REQUIRED');
+  }
+  const storefrontId = assertUuid(raw, 'storefrontId');
+  const result = await db.query(
+    `SELECT id, loja_id FROM commerce_storefronts
+      WHERE empresa_id = $1 AND id = $2 AND status = 'active'
+        AND ($3::uuid IS NULL OR loja_id = $3)
+      LIMIT 1`,
+    [context.empresaId, storefrontId, context.corporateAccess === true ? null : context.lojaId],
+  );
+  if (!result.rows[0]) throw new CommerceError('storefront fora do escopo da loja', 'STORE_SCOPE_MISMATCH');
+  context.storefrontId = storefrontId;
+  return storefrontId;
 }
 
 export function sanitizePublicOrderInput(input = {}) {
   const sanitized = input && typeof input === 'object' && !Array.isArray(input) ? { ...input } : {};
   delete sanitized.customerId;
+  // Prazo de reserva é política do servidor; o cliente não escolhe por quanto tempo segura o estoque.
+  delete sanitized.reservationExpiresAt;
   sanitized.customer = sanitized.customer && typeof sanitized.customer === 'object' && !Array.isArray(sanitized.customer)
     ? { ...sanitized.customer }
     : {};
   delete sanitized.customer.customerId;
+  delete sanitized.reservationExpiresAt;
   return sanitized;
+}
+
+async function creditEligibleOrder(storefront, publicCode) {
+  const code = String(publicCode || '').trim().toUpperCase().slice(0, 40);
+  if (!code) return null;
+  const result = await db.query(
+    `SELECT o.id, o.total, c.telefone
+       FROM commerce_orders o
+       JOIN commerce_customers c ON c.empresa_id = o.empresa_id AND c.id = o.customer_id
+       JOIN commerce_customer_credit_accounts a
+         ON a.empresa_id = o.empresa_id AND a.storefront_id = o.storefront_id AND a.customer_id = o.customer_id
+        AND a.status = 'active' AND a.limite_credito - a.saldo_devedor >= o.total
+      WHERE o.empresa_id = $1 AND o.storefront_id = $2 AND o.public_code = $3 AND o.status = 'pending_payment'
+      LIMIT 1`,
+    [storefront.empresa_id, storefront.id, code],
+  ).catch(() => ({ rows: [] }));
+  return result.rows[0] || null;
 }
 
 export function createCommercePublicRouter() {
@@ -512,13 +661,14 @@ export function createCommercePublicRouter() {
   router.get('/context', async (req, res) => {
     try {
       const storefront = await resolvePublicStorefront(req);
-      const [paymentAccounts, shippingAccounts, shippingMethods, creditAccounts] = await Promise.all([
+      const [paymentAccounts, shippingAccounts, shippingMethods] = await Promise.all([
         db.query(`SELECT id, provider, ambiente, secret_ref, public_config, ativo FROM commerce_payment_accounts WHERE empresa_id = $1 AND storefront_id = $2 AND ambiente = 'production' AND ativo = true`, [storefront.empresa_id, storefront.id]),
         db.query(`SELECT id, provider, secret_ref, public_config, ativo FROM commerce_shipping_accounts WHERE empresa_id = $1 AND storefront_id = $2 AND ambiente = 'production' AND ativo = true`, [storefront.empresa_id, storefront.id]),
         db.query(`SELECT tipo, configuracao FROM commerce_shipping_methods WHERE empresa_id = $1 AND storefront_id = $2 AND ativo = true AND tipo IN ('delivery', 'carrier')`, [storefront.empresa_id, storefront.id]),
-        db.query(`SELECT id FROM commerce_customer_credit_accounts WHERE empresa_id = $1 AND storefront_id = $2 AND status = 'active' LIMIT 1`, [storefront.empresa_id, storefront.id]).catch(() => ({ rows: [] })),
       ]);
-      const paymentsReady = paymentAccounts.rows.some(paymentAccountReady) || creditAccounts.rows.length > 0;
+      // Crediário vale só para clientes aprovados, então não deixa a loja "pronta para vender"
+      // para todo mundo: sem gateway, o checkout público fica desligado.
+      const paymentsReady = paymentAccounts.rows.some(paymentAccountReady);
       const manualShippingReady = shippingMethods.rows.some(row => String(row.configuracao?.provider || '').toLowerCase() === 'manual');
       const shippingReady = shippingAccounts.rows.some(shippingAccountReady) || manualShippingReady;
       res.json({ storefront: { id: storefront.id, codigo: storefront.codigo, nome: storefront.nome, moeda: storefront.moeda, timezone: storefront.timezone, public: sanitizePublicStorefrontConfig(storefront) }, capabilities: { catalog: true, cart: true, checkout: true, payments: paymentsReady, shipping: shippingReady } });
@@ -536,7 +686,7 @@ export function createCommercePublicRouter() {
       const storefront = await resolvePublicStorefront(req);
       const mediaId = assertUuid(req.params.id, 'mediaId');
       const result = await db.query(
-        `SELECT m.storage_key, m.mime_type
+        `SELECT m.id, m.product_id, m.storage_key, m.mime_type
            FROM commerce_product_media m
            JOIN commerce_product_channels pc
              ON pc.empresa_id = m.empresa_id AND pc.product_id = m.product_id
@@ -546,7 +696,7 @@ export function createCommercePublicRouter() {
         [storefront.empresa_id, storefront.id, mediaId],
       );
       if (!result.rows[0]) throw new CommerceError('mídia não encontrada neste storefront', 'MEDIA_NOT_FOUND');
-      await streamCommerceImage({ storageKey: result.rows[0].storage_key, mimeType: result.rows[0].mime_type, res });
+      await streamCommerceImage({ storageKey: result.rows[0].storage_key, mimeType: result.rows[0].mime_type, res, empresaId: storefront.empresa_id, productId: result.rows[0].product_id, mediaId: result.rows[0].id });
     } catch (error) {
       if (!res.headersSent) jsonError(res, error);
       else res.destroy(error);
@@ -591,6 +741,14 @@ export function createCommercePublicRouter() {
       res.json(result);
     } catch (error) { jsonError(res, error); }
   });
+  // Funil anônimo da vitrine (visita → carrinho → checkout) para a conversão do painel.
+  router.post('/events', publicCartRateLimit, async (req, res) => {
+    try {
+      const storefront = await resolvePublicStorefront(req);
+      const result = recordStorefrontEvent(storefront.empresa_id, { event: String(req.body?.event || ''), sessionKey: String(req.body?.sessionKey || '') });
+      res.status(202).json({ accepted: true, recorded: result.recorded });
+    } catch (error) { jsonError(res, error); }
+  });
   router.get('/payment-methods', async (req, res) => {
     try {
       const storefront = await resolvePublicStorefront(req);
@@ -603,7 +761,30 @@ export function createCommercePublicRouter() {
           try { items.push({ provider: account.provider, method: validatePaymentMethod(method), ambiente: account.ambiente }); } catch { /* configuração inválida não é publicada */ }
         }
       }
+      // "Marcar na conta" aparece só para o pedido informado, quando o cliente dele tem
+      // crediário ativo nesta loja com limite para o total.
+      const orderCode = String(req.query?.order || '').trim();
+      if (orderCode && phoneVerificationAvailable() && await creditEligibleOrder(storefront, orderCode)) items.push({ provider: 'crediario', method: 'account', ambiente: 'production', requiresPhoneVerification: true, label: 'Marcar na conta' });
       res.json({ storefrontId: storefront.id, available: items.length > 0, items: items.filter((item, index, all) => all.findIndex(candidate => candidate.provider === item.provider && candidate.method === item.method && candidate.ambiente === item.ambiente) === index) });
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/phone-verification/start', async (req, res) => {
+    try {
+      const storefront = await resolvePublicStorefront(req);
+      // Código só vai para o WhatsApp do cliente de um pedido que pode ser marcado na conta:
+      // o endpoint não serve para mandar mensagens a números quaisquer.
+      const eligible = await creditEligibleOrder(storefront, req.body?.order);
+      if (!eligible?.telefone || (req.body?.phone && phoneMatchKey(eligible.telefone) !== phoneMatchKey(req.body.phone))) throw new CommerceError('este pedido não pode ser marcado na conta', 'CREDIT_NOT_ELIGIBLE');
+      const result = await startPhoneVerification({ empresaId: storefront.empresa_id, lojaId: storefront.loja_id, phone: eligible.telefone, storeName: storefront.nome, ip: req.ip });
+      res.status(202).json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/phone-verification/confirm', async (req, res) => {
+    try {
+      const storefront = await resolvePublicStorefront(req);
+      const eligible = req.body?.order ? await creditEligibleOrder(storefront, req.body.order) : null;
+      if (req.body?.order && !eligible?.telefone) throw new CommerceError('este pedido não pode ser marcado na conta', 'CREDIT_NOT_ELIGIBLE');
+      res.json(await confirmPhoneVerification({ empresaId: storefront.empresa_id, phone: eligible?.telefone || req.body?.phone, code: req.body?.code }));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/orders/:publicCode/payments', async (req, res) => {
@@ -611,14 +792,20 @@ export function createCommercePublicRouter() {
       const storefront = await resolvePublicStorefront(req);
       const method = validatePaymentMethod(req.body?.method);
       const provider = String(req.body?.provider || '').trim().toLowerCase();
-      const order = await db.query(`SELECT o.id FROM commerce_orders o WHERE o.empresa_id = $1 AND o.storefront_id = $2 AND o.public_code = $3 LIMIT 1`, [storefront.empresa_id, storefront.id, String(req.params.publicCode || '').toUpperCase()]);
+      const order = await db.query(`SELECT o.id, c.telefone FROM commerce_orders o LEFT JOIN commerce_customers c ON c.empresa_id = o.empresa_id AND c.id = o.customer_id WHERE o.empresa_id = $1 AND o.storefront_id = $2 AND o.public_code = $3 LIMIT 1`, [storefront.empresa_id, storefront.id, String(req.params.publicCode || '').toUpperCase()]);
       if (!order.rows[0]) throw new CommerceError('pedido não encontrado', 'ORDER_NOT_FOUND');
       if (provider === 'crediario' && method === 'account') {
-        throw new CommerceError('pagamento em conta exige identidade autenticada ou verificada', 'PAYMENT_CUSTOMER_VERIFICATION_REQUIRED');
+        // Na conta só com o número do pedido confirmado por código no WhatsApp.
+        if (!order.rows[0].telefone || !verifyPhoneToken(req.body?.phoneVerificationToken, storefront.empresa_id, order.rows[0].telefone)) {
+          throw new CommerceError('confirme o WhatsApp do pedido com o código enviado para marcar na conta', 'PAYMENT_CUSTOMER_VERIFICATION_REQUIRED');
+        }
+        const idempotencyKey = String(req.body?.idempotencyKey || '').trim().slice(0, 180);
+        const result = await createCreditPayment({ empresaId: storefront.empresa_id, lojaId: storefront.loja_id }, { orderId: order.rows[0].id, idempotencyKey });
+        return res.status(201).json(result);
       }
       const account = await db.query(`SELECT id, provider, ambiente FROM commerce_payment_accounts WHERE empresa_id = $1 AND storefront_id = $2 AND provider = $3 AND ambiente = 'production' AND ativo = true ORDER BY provider LIMIT 1`, [storefront.empresa_id, storefront.id, provider]);
       if (!account.rows[0]) throw new CommerceError('nenhum gateway ativo para este storefront', 'PAYMENT_PROVIDER_NOT_CONFIGURED');
-      const result = await createPaymentAttempt({ empresaId: storefront.empresa_id, lojaId: storefront.loja_id }, { orderId: order.rows[0].id, provider, method, environment: account.rows[0].ambiente, accountId: account.rows[0].id, idempotencyKey: String(req.body?.idempotencyKey || '').trim().slice(0, 180) });
+      const result = await createPaymentAttempt({ empresaId: storefront.empresa_id, lojaId: storefront.loja_id, storefrontId: storefront.id }, { orderId: order.rows[0].id, provider, method, environment: account.rows[0].ambiente, accountId: account.rows[0].id, idempotencyKey: String(req.body?.idempotencyKey || '').trim().slice(0, 180) });
       res.status(201).json(result);
     } catch (error) { jsonError(res, error); }
   });
@@ -630,29 +817,57 @@ export function createCommercePublicRouter() {
       if (!transactionNsu || !slug) throw new CommerceError('retorno InfinitePay sem identificadores suficientes', 'PAYMENT_WEBHOOK_INVALID')
       const order = await db.query(`SELECT id FROM commerce_orders WHERE empresa_id = $1 AND storefront_id = $2 AND public_code = $3 LIMIT 1`, [storefront.empresa_id, storefront.id, String(req.params.publicCode || '').toUpperCase()])
       if (!order.rows[0]) throw new CommerceError('pedido não encontrado', 'ORDER_NOT_FOUND')
-      const payment = await db.query(`SELECT p.id FROM commerce_payments p WHERE p.empresa_id = $1 AND p.order_id = $2 AND p.provider = 'infinitepay' ORDER BY p.criado_em DESC LIMIT 1`, [storefront.empresa_id, order.rows[0].id])
+      const payment = await db.query(
+        `SELECT p.id
+           FROM commerce_payments p
+          WHERE p.empresa_id = $1 AND p.order_id = $2 AND p.provider = 'infinitepay'
+            AND (p.provider_payment_id = $3 OR (p.provider_payment_id IS NULL AND p.metadata->'checkout'->>'slug' = $4))
+          LIMIT 2`,
+        [storefront.empresa_id, order.rows[0].id, transactionNsu, slug],
+      )
       if (!payment.rows[0]) throw new CommerceError('tentativa InfinitePay não encontrada', 'PAYMENT_NOT_FOUND')
-      await withCommerceTransaction(trx => trx.query(`UPDATE commerce_payments SET provider_payment_id = COALESCE(provider_payment_id, $3), metadata = metadata || $4::jsonb, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2`, [storefront.empresa_id, payment.rows[0].id, transactionNsu, JSON.stringify({ checkout: { orderNsu: String(req.params.publicCode || '').toUpperCase(), transactionNsu, slug } })]))
-      const result = await syncPaymentAttempt({ empresaId: storefront.empresa_id, lojaId: storefront.loja_id }, payment.rows[0].id)
+      if (payment.rows.length > 1) throw new CommerceError('retorno InfinitePay associado a mais de uma tentativa', 'PAYMENT_RECONCILIATION_CONFLICT')
+      const result = await reconcilePaymentByIdentifiers(
+        { empresaId: storefront.empresa_id, lojaId: storefront.loja_id, storefrontId: storefront.id },
+        payment.rows[0].id,
+        { transactionNsu, slug, source: 'public_return' },
+      )
       res.json(result)
     } catch (error) { jsonError(res, error) }
   })
   router.post('/orders', async (req, res) => {
     try {
       const storefront = await resolvePublicStorefront(req);
-      const publicInput = sanitizePublicOrderInput(req.body);
-      const result = await withCommerceTransaction(async trx => {
-        const order = await createPendingOrder(trx, { empresaId: storefront.empresa_id, lojaId: storefront.loja_id }, { ...publicInput, storefrontId: storefront.id, correlationId: req.requestId || '' });
-        const promotionCode = String(req.body?.promotionCode || '').trim();
-        if (!promotionCode) return order;
-        const promotion = await applyPromotionToOrder(trx, { empresaId: storefront.empresa_id, lojaId: storefront.loja_id }, { orderId: order.id, codigo: promotionCode });
-        return { ...order, discount: promotion.desconto, total: promotion.total, promotionCode: promotion.codigo };
-      });
-      const publicResult = { ...result };
-      delete publicResult.customerId;
-      delete publicResult.customerAddressId;
-      res.status(201).json(publicResult);
-    } catch (error) { jsonError(res, error); }
+      const idempotencyKey = String(req.headers['idempotency-key'] || req.headers['x-idempotency-key'] || req.body?.idempotencyKey || '').trim().slice(0, 180);
+      if (!idempotencyKey) throw new CommerceError('envie Idempotency-Key para criar o pedido', 'ORDER_IDEMPOTENCY_REQUIRED');
+      const publicInput = sanitizePublicOrderInput({ ...req.body, idempotencyKey });
+      const result = await withCommerceTransaction(trx => createPendingOrder(
+        trx,
+        { empresaId: storefront.empresa_id, lojaId: storefront.loja_id },
+        {
+          ...publicInput,
+          storefrontId: storefront.id,
+          correlationId: req.requestId || '',
+          finalizeResponse: async order => {
+            const promotionCode = String(req.body?.promotionCode || '').trim();
+            let finalOrder = order;
+            if (promotionCode) {
+              const promotion = await applyPromotionToOrder(trx, { empresaId: storefront.empresa_id, lojaId: storefront.loja_id }, { orderId: order.id, codigo: promotionCode });
+              finalOrder = { ...order, discount: promotion.desconto, total: promotion.total, promotionCode: promotion.codigo };
+            }
+            const publicResult = { ...finalOrder };
+            delete publicResult.customerId;
+            delete publicResult.customerAddressId;
+            return publicResult;
+          },
+        },
+      ));
+      res.status(201).json(result);
+    } catch (error) {
+      // Na vitrine pública, não diz se o e-mail ou o telefone já pertencem a outro cliente.
+      if (error?.code === 'CONTACT_CONFLICT') return res.status(409).json({ error: 'Não foi possível confirmar seus dados de contato. Confira e-mail e telefone ou fale com a loja.', code: 'CHECKOUT_CONTACT_REVIEW' });
+      jsonError(res, error);
+    }
   });
   router.get('/orders/:publicCode', async (req, res) => {
     try {
@@ -706,7 +921,7 @@ export function createCommerceWebhookRouter() {
       const providerShipmentId = String(req.body?.data?.id || req.body?.id || '').trim();
       if (!providerShipmentId) throw new CommerceError('webhook logístico sem id do envio', 'SHIPPING_WEBHOOK_INVALID');
       const owner = await db.query(
-        `SELECT f.id AS fulfillment_id, f.empresa_id, f.order_id, f.provider_shipment_id, s.loja_id,
+        `SELECT f.id AS fulfillment_id, f.empresa_id, f.order_id, f.provider_shipment_id, o.storefront_id, s.loja_id,
                 a.secret_ref, a.public_config, a.provider, a.ambiente
            FROM commerce_fulfillments f
            JOIN commerce_orders o ON o.empresa_id = f.empresa_id AND o.id = f.order_id
@@ -734,8 +949,8 @@ export function createCommerceWebhookRouter() {
           [ownerRow.empresa_id, provider, eventId, providerShipmentId, String(verified.eventType || 'order.status').slice(0, 100), payloadHash, JSON.stringify(verified.summary || {})],
         );
         if (!inserted.rows[0]) return { duplicate: true };
-        const updated = await updateShippingTracking(trx, { empresaId: ownerRow.empresa_id, lojaId: ownerRow.loja_id }, ownerRow.fulfillment_id, verified);
-        await auditLog(trx, { empresaId: ownerRow.empresa_id, lojaId: ownerRow.loja_id }, { entidade: 'fulfillment', entidadeId: ownerRow.fulfillment_id, acao: 'provider_webhook', depois: { provider, eventId, eventType: verified.eventType, status: verified.providerStatus, trackingCode: verified.trackingCode } });
+        const updated = await updateShippingTracking(trx, { empresaId: ownerRow.empresa_id, lojaId: ownerRow.loja_id }, ownerRow.fulfillment_id, verified, ownerRow.storefront_id);
+        await auditLog(trx, { empresaId: ownerRow.empresa_id, lojaId: ownerRow.loja_id }, { entidade: 'fulfillment', entidadeId: ownerRow.fulfillment_id, acao: 'provider_webhook', depois: { storefrontId: ownerRow.storefront_id, provider, eventId, eventType: verified.eventType, status: verified.providerStatus, trackingCode: verified.trackingCode } });
         await trx.query(`UPDATE commerce_shipping_webhooks SET status = 'processed', processado_em = CURRENT_TIMESTAMP WHERE id = $1`, [inserted.rows[0].id]);
         return { fulfillmentId: ownerRow.fulfillment_id, orderId: ownerRow.order_id, status: updated.status, providerStatus: verified.providerStatus };
       });
@@ -749,26 +964,35 @@ export function createCommerceWebhookRouter() {
       const orderNsu = String(req.body?.order_nsu || req.body?.orderNsu || '').trim().slice(0, 180);
       const invoiceSlug = String(req.body?.invoice_slug || req.body?.invoiceSlug || req.body?.slug || '').trim().slice(0, 180);
       if (!dataId && !orderNsu && !invoiceSlug) throw new CommerceError('webhook sem identificador do pagamento', 'PAYMENT_WEBHOOK_INVALID');
-      const owner = await db.query(
-        `SELECT p.empresa_id, p.payment_account_id, a.secret_ref, a.public_config
+      let owner = { rows: [] };
+      if (dataId) owner = await db.query(
+        `SELECT p.id AS payment_id, p.empresa_id, p.payment_account_id, p.amount, p.method, p.provider_payment_id, o.public_code AS order_code, a.secret_ref, a.public_config
            FROM commerce_payments p
            JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id
            LEFT JOIN commerce_payment_accounts a
              ON a.empresa_id = p.empresa_id AND a.id = p.payment_account_id
-          WHERE p.provider = $1
-            AND (
-              p.provider_payment_id = $2
-              OR ($1 = 'infinitepay' AND (
-                o.public_code = $3
-                OR o.id::text = $3
-                OR p.metadata->'checkout'->>'slug' = $4
-              ))
-            )
+          WHERE p.provider = $1 AND p.provider_payment_id = $2
           LIMIT 2`,
-        [provider, dataId || null, orderNsu || null, invoiceSlug || null],
+        [provider, dataId],
+      );
+      if (!owner.rows[0] && provider === 'infinitepay' && orderNsu && invoiceSlug) owner = await db.query(
+        `SELECT p.id AS payment_id, p.empresa_id, p.payment_account_id, p.amount, p.method, p.provider_payment_id, o.public_code AS order_code, a.secret_ref, a.public_config
+           FROM commerce_payments p
+           JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id
+           LEFT JOIN commerce_payment_accounts a
+             ON a.empresa_id = p.empresa_id AND a.id = p.payment_account_id
+          WHERE p.provider = 'infinitepay'
+            AND p.provider_payment_id IS NULL
+            AND (o.public_code = $1 OR o.id::text = $1)
+            AND p.metadata->'checkout'->>'slug' = $2
+          LIMIT 2`,
+        [orderNsu, invoiceSlug],
       );
       if (!owner.rows[0]) return res.status(200).json({ ok: true, ignored: true });
-      if (owner.rows.length > 1) throw new CommerceError('webhook associado a mais de uma tentativa persistida', 'PAYMENT_WEBHOOK_AMBIGUOUS');
+      // Mesmo pedido com várias tentativas: vale a que casa pelo identificador do gateway,
+      // depois pelo slug, depois a mais recente. Só é ambíguo se o identificador exato
+      // aparecer em duas tentativas diferentes.
+      if (owner.rows.length > 1 && dataId && owner.rows[0].provider_payment_id === dataId && owner.rows[1].provider_payment_id === dataId) throw new CommerceError('webhook associado a mais de uma tentativa persistida', 'PAYMENT_WEBHOOK_AMBIGUOUS');
       const ownerRow = owner.rows[0];
       if (!ownerRow.payment_account_id || !ownerRow.secret_ref) throw new CommerceError('conta de pagamento do webhook não está vinculada', 'PAYMENT_WEBHOOK_INVALID');
       const verified = await verifyPaymentWebhook(provider, req.body || {}, req.headers['x-signature'] || req.headers['x-webhook-signature'] || '', {
@@ -778,6 +1002,10 @@ export function createCommerceWebhookRouter() {
         orderNsu,
         account: { secret_ref: ownerRow.secret_ref, public_config: ownerRow.public_config },
         empresaId: ownerRow.empresa_id,
+        expectedOrderNsu: ownerRow.order_code,
+        expectedTransactionNsu: ownerRow.provider_payment_id || null,
+        expectedAmount: ownerRow.amount,
+        expectedMethod: ownerRow.method,
       });
       const empresaId = tenantContext({ empresaId: ownerRow.empresa_id }).empresaId;
       const eventId = String(verified.eventId || '').trim().slice(0, 180);
@@ -787,28 +1015,27 @@ export function createCommerceWebhookRouter() {
         const inserted = await trx.query(
           `INSERT INTO commerce_payment_webhooks
             (empresa_id, provider, provider_event_id, event_type, signature_valid, status, payload_hash, payload_resumido)
-           VALUES ($1, $2, $3, $4, true, 'received', $5, $6::jsonb)
+           VALUES ($1, $2, $3, $4, $5, 'received', $6, $7::jsonb)
            ON CONFLICT (provider, provider_event_id) DO NOTHING
            RETURNING id`,
-          [empresaId, provider, eventId, String(verified.eventType || verified.type || 'payment.updated').slice(0, 100), payloadHash, JSON.stringify(verified.summary || {})],
+          [empresaId, provider, eventId, String(verified.eventType || verified.type || 'payment.updated').slice(0, 100), verified.signatureValid === true, payloadHash, JSON.stringify({ ...(verified.summary || {}), verification: verified.verification || null })],
         );
         if (!inserted.rows[0]) return { duplicate: true };
         const payment = await trx.query(
           `SELECT p.id, p.order_id, p.method, p.amount, p.status, p.provider_payment_id, o.status AS order_status
              FROM commerce_payments p
              JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id
-            WHERE p.empresa_id = $1 AND p.provider = $2
-              AND (p.provider_payment_id = $3 OR ($2 = 'infinitepay' AND (o.public_code = $4 OR o.id::text = $4)))
+            WHERE p.empresa_id = $1 AND p.provider = $2 AND p.id = $3
             FOR UPDATE OF p`,
-          [empresaId, provider, String(verified.providerPaymentId || '').slice(0, 180), orderNsu || null],
+          [empresaId, provider, ownerRow.payment_id],
         );
         if (!payment.rows[0]) {
           await trx.query(`UPDATE commerce_payment_webhooks SET status = 'ignored', processado_em = CURRENT_TIMESTAMP WHERE id = $1`, [inserted.rows[0].id]);
           return { ignored: true };
         }
         const current = payment.rows[0];
-        if (provider === 'infinitepay' && verified.providerPaymentId && !current.provider_payment_id) {
-          await trx.query(`UPDATE commerce_payments SET provider_payment_id = $3, metadata = metadata || $4::jsonb, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2`, [empresaId, current.id, String(verified.providerPaymentId).slice(0, 180), JSON.stringify({ checkout: { orderNsu: orderNsu || verified.summary?.orderNsu || null, transactionNsu: String(verified.providerPaymentId).slice(0, 180), slug: verified.summary?.slug || invoiceSlug || null, receiptUrl: verified.summary?.receiptUrl || null, captureMethod: verified.summary?.captureMethod || null } })]);
+        if (provider === 'infinitepay' && verified.status === 'captured' && verified.providerPaymentId && !current.provider_payment_id) {
+          await trx.query(`UPDATE commerce_payments SET provider_payment_id = $3, metadata = metadata || $4::jsonb, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2`, [empresaId, current.id, String(verified.providerPaymentId).slice(0, 180), JSON.stringify({ checkout: { orderNsu: verified.summary?.orderNsu || null, transactionNsu: String(verified.providerPaymentId).slice(0, 180), slug: verified.summary?.slug || null, captureMethod: verified.summary?.captureMethod || null, verifiedBy: verified.verification || null } })]);
         }
         if (verified.amount != null && Math.abs(Number(verified.amount) - Number(current.amount)) > 0.01) {
           await trx.query(`UPDATE commerce_payment_webhooks SET status = 'failed', processado_em = CURRENT_TIMESTAMP WHERE id = $1`, [inserted.rows[0].id]);
@@ -818,7 +1045,8 @@ export function createCommerceWebhookRouter() {
         const nextPaymentStatus = statusMap[String(verified.status || '').toLowerCase()];
         if (!nextPaymentStatus) throw new CommerceError('status de webhook não suportado', 'PAYMENT_WEBHOOK_INVALID');
         const nextPaymentMethod = resolvedPaymentMethod(provider, current.method, verified.summary?.captureMethod);
-        if (!canTransitionPaymentStatus(current.status, nextPaymentStatus)) {
+        const lateCaptureRequired = captureNeedsRefund(current.status, current.order_status, nextPaymentStatus, { otherCaptured: nextPaymentStatus === 'captured' && current.order_status !== 'pending_payment' && await otherCapturedPayment(trx, empresaId, current.order_id, current.id) });
+        if (!lateCaptureRequired && !canTransitionPaymentStatus(current.status, nextPaymentStatus)) {
           await trx.query(`UPDATE commerce_payment_webhooks SET status = 'ignored', processado_em = CURRENT_TIMESTAMP WHERE id = $1`, [inserted.rows[0].id]);
           return { stale: true, paymentId: current.id, orderId: current.order_id, status: current.status };
         }
@@ -830,12 +1058,16 @@ export function createCommerceWebhookRouter() {
             WHERE empresa_id = $1 AND id = $2`,
           [empresaId, current.id, nextPaymentStatus, JSON.stringify({ webhookEventId: eventId }), nextPaymentMethod],
         );
-        if (nextPaymentStatus === 'captured' && ['draft', 'pending_payment', 'payment_failed'].includes(current.order_status)) await transitionOrder(trx, { empresaId }, { orderId: current.order_id, status: 'paid', origin: 'payment_webhook', correlationId: eventId, payload: { provider, eventId } });
+        if (nextPaymentStatus === 'captured' && current.order_status === 'pending_payment') await transitionOrder(trx, { empresaId }, { orderId: current.order_id, status: 'paid', origin: 'payment_webhook', correlationId: eventId, payload: { provider, eventId } });
         if (nextPaymentStatus === 'failed' && ['draft', 'pending_payment'].includes(current.order_status)) await transitionOrder(trx, { empresaId }, { orderId: current.order_id, status: 'payment_failed', origin: 'payment_webhook', correlationId: eventId, payload: { provider, eventId } });
+        if (nextPaymentStatus === 'cancelled' && ['draft', 'pending_payment', 'payment_failed', 'fraud_review'].includes(current.order_status)) await transitionOrder(trx, { empresaId }, { orderId: current.order_id, status: 'cancelled', origin: 'payment_webhook', correlationId: eventId, payload: { provider, eventId } });
         if (nextPaymentStatus === 'partially_refunded' && current.order_status === 'completed') await transitionOrder(trx, { empresaId }, { orderId: current.order_id, status: 'partially_refunded', origin: 'payment_webhook', correlationId: eventId, payload: { provider, eventId } });
         if (nextPaymentStatus === 'refunded' && ['paid', 'completed'].includes(current.order_status)) await transitionOrder(trx, { empresaId }, { orderId: current.order_id, status: 'refunded', origin: 'payment_webhook', correlationId: eventId, payload: { provider, eventId } });
+        const lateCapture = lateCaptureRequired
+          ? await recordLatePaymentCapture(trx, { empresaId }, { paymentId: current.id, orderId: current.order_id, orderStatus: current.order_status, source: 'payment_webhook', provider, correlationId: eventId })
+          : null;
         await trx.query(`UPDATE commerce_payment_webhooks SET status = 'processed', processado_em = CURRENT_TIMESTAMP WHERE id = $1`, [inserted.rows[0].id]);
-        return { paymentId: current.id, orderId: current.order_id, status: nextPaymentStatus };
+        return { paymentId: current.id, orderId: current.order_id, status: nextPaymentStatus, refundRequired: Boolean(lateCapture?.refundRequired) };
       });
       res.json({ ok: true, ...result });
     } catch (error) { jsonError(res, error); }
@@ -935,18 +1167,69 @@ export function createCommerceAdminRouter() {
   router.get('/catalog/products', async (req, res) => {
     try {
       const context = await requirePermission(req, 'catalog.read');
+      const selectedStorefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
       const values = [context.empresaId];
       const predicates = ['p.empresa_id = $1'];
+      let lojaParam = null;
+      let storefrontParam = null;
+      let locationParam = null;
       if (context.lojaId) {
         values.push(context.lojaId);
-        predicates.push(`EXISTS (SELECT 1 FROM commerce_product_channels pc JOIN commerce_storefronts s ON s.empresa_id = pc.empresa_id AND s.id = pc.storefront_id WHERE pc.empresa_id = p.empresa_id AND pc.product_id = p.id AND s.loja_id = $${values.length})`);
+        lojaParam = `$${values.length}`;
+        predicates.push(`EXISTS (SELECT 1 FROM commerce_product_channels pc JOIN commerce_storefronts s ON s.empresa_id = pc.empresa_id AND s.id = pc.storefront_id WHERE pc.empresa_id = p.empresa_id AND pc.product_id = p.id AND (s.loja_id = ${lojaParam} OR s.loja_id IS NULL))`);
+      }
+      if (selectedStorefrontId) {
+        const storefrontId = selectedStorefrontId;
+        const storefront = await db.query(
+          `SELECT id FROM commerce_storefronts
+            WHERE empresa_id = $1 AND id = $2 AND status = 'active'
+              AND ($3::uuid IS NULL OR loja_id = $3 OR loja_id IS NULL)
+            LIMIT 1`,
+          [context.empresaId, storefrontId, context.lojaId],
+        );
+        if (!storefront.rows[0]) throw new CommerceError('storefront fora do escopo da loja', 'STOREFRONT_NOT_FOUND');
+        values.push(storefrontId);
+        storefrontParam = `$${values.length}`;
+        predicates.push(`EXISTS (SELECT 1 FROM commerce_product_channels pc WHERE pc.empresa_id = p.empresa_id AND pc.product_id = p.id AND pc.storefront_id = ${storefrontParam})`);
+      }
+      if (req.query.locationId) {
+        const locationId = assertUuid(req.query.locationId, 'locationId');
+        const location = await db.query(
+          `SELECT id FROM commerce_inventory_locations
+            WHERE empresa_id = $1 AND id = $2 AND ativo = true
+              AND ($3::uuid IS NULL OR loja_id = $3 OR loja_id IS NULL)
+            LIMIT 1`,
+          [context.empresaId, locationId, context.lojaId],
+        );
+        if (!location.rows[0]) throw new CommerceError('local de estoque fora do escopo da loja', 'INVENTORY_LOCATION_SCOPE_MISMATCH');
+        values.push(locationId);
+        locationParam = `$${values.length}`;
       }
       if (req.query.status) { values.push(String(req.query.status)); predicates.push(`p.status = $${values.length}`); }
+      const channelScope = storefrontParam
+        ? `AND channel_storefront.id = ${storefrontParam}`
+        : lojaParam ? `AND (channel_storefront.loja_id = ${lojaParam} OR channel_storefront.loja_id IS NULL)` : '';
+      const priceChannelScope = storefrontParam
+        ? `AND channel.storefront_id = ${storefrontParam}`
+        : lojaParam ? `AND channel.storefront_id = ANY(ARRAY(SELECT s2.id FROM commerce_storefronts s2 WHERE s2.empresa_id = p.empresa_id AND (s2.loja_id = ${lojaParam} OR s2.loja_id IS NULL)))` : '';
+      const inventoryScope = locationParam
+        ? `AND il.location_id = ${locationParam}`
+        : lojaParam ? `AND EXISTS (SELECT 1 FROM commerce_inventory_locations scoped_location WHERE scoped_location.empresa_id = il.empresa_id AND scoped_location.id = il.location_id AND (scoped_location.loja_id = ${lojaParam} OR scoped_location.loja_id IS NULL))` : '';
       const { limit, offset } = parsePagination(req, 100, 500);
       const count = await db.query(`SELECT COUNT(*)::int AS total FROM commerce_products p LEFT JOIN commerce_categories c ON c.empresa_id = p.empresa_id AND c.id = p.category_id WHERE ${predicates.join(' AND ')}`, values);
       const result = await db.query(
         `SELECT p.id, p.slug, p.nome, p.tipo, p.status, p.descricao, p.descricao_curta, p.dados_fiscais, p.seo, p.category_id,
                 c.nome AS category_name, p.criado_em, p.atualizado_em,
+                COALESCE((
+                  SELECT BOOL_OR(pc.publicado AND p.status = 'active')
+                    FROM commerce_product_channels pc
+                    JOIN commerce_storefronts channel_storefront
+                      ON channel_storefront.empresa_id = pc.empresa_id
+                     AND channel_storefront.id = pc.storefront_id
+                   WHERE pc.empresa_id = p.empresa_id
+                     AND pc.product_id = p.id
+                     ${channelScope}
+                ), false) AS publicado,
                 COALESCE((
                   SELECT jsonb_agg(jsonb_build_object(
                     'id', v.id,
@@ -961,7 +1244,7 @@ export function createCommerceAdminRouter() {
                     'ativo', v.ativo,
                     'preco', vp.preco,
                     'precoPromocional', vp.preco_promocional,
-                    'estoque', COALESCE((SELECT SUM(il.disponivel) FROM commerce_inventory_levels il WHERE il.empresa_id = v.empresa_id AND il.variant_id = v.id), 0)
+                    'estoque', COALESCE((SELECT SUM(il.disponivel) FROM commerce_inventory_levels il WHERE il.empresa_id = v.empresa_id AND il.variant_id = v.id ${inventoryScope}), 0)
                   ) ORDER BY v.criado_em ASC)
                     FROM commerce_product_variants v
                     LEFT JOIN LATERAL (
@@ -971,8 +1254,7 @@ export function createCommerceAdminRouter() {
                          ON channel.empresa_id = price.empresa_id
                         AND channel.price_list_id = price.price_list_id
                         AND channel.product_id = p.id
-                        AND channel.storefront_id = ANY(ARRAY(SELECT s2.id FROM commerce_storefronts s2 WHERE s2.empresa_id = p.empresa_id ${context.lojaId ? `AND s2.loja_id = $${values.length}` : ''}))
-                        AND channel.publicado = true
+                        ${priceChannelScope}
                        WHERE price.empresa_id = v.empresa_id AND price.variant_id = v.id
                          AND price.vigencia_inicio <= CURRENT_TIMESTAMP
                          AND (price.vigencia_fim IS NULL OR price.vigencia_fim > CURRENT_TIMESTAMP)
@@ -1042,8 +1324,25 @@ export function createCommerceAdminRouter() {
   router.post('/catalog/products', async (req, res) => {
     try {
       const context = await requirePermission(req, 'catalog.write');
-      const result = await withCommerceTransaction(trx => createCatalogProduct(trx, context, req.body));
+      if (req.body?.status === 'active' || req.body?.publicado === true) await requirePermission(req, 'catalog.publish');
+      if (['estoque', 'stock', 'targetStock', 'locationId'].some(key => req.body?.[key] !== undefined)) await requirePermission(req, 'inventory.write');
+      const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
+      const result = await withCommerceTransaction(trx => createCatalogProduct(trx, context, { ...req.body, storefrontId }));
       res.status(201).json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.put('/catalog/products/workspace', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'catalog.write');
+      await requirePermission(req, 'inventory.write');
+      if (req.body?.published === true || req.body?.product?.status === 'active') await requirePermission(req, 'catalog.publish');
+      const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
+      const canPublish = await requirePermission(req, 'catalog.publish').then(() => true, () => false);
+      const idempotencyKey = String(req.headers['x-idempotency-key'] || '').trim();
+      const body = { ...(req.body || {}) };
+      delete body.canPublish;
+      const result = await withCommerceTransaction(trx => saveCatalogProductWorkspace(trx, context, { ...body, storefrontId, idempotencyKey, canPublish }));
+      res.json(result);
     } catch (error) { jsonError(res, error); }
   });
   router.patch('/catalog/categories/:id', async (req, res) => {
@@ -1056,104 +1355,149 @@ export function createCommerceAdminRouter() {
   router.post('/catalog/products/:id/variants', async (req, res) => {
     try {
       const context = await requirePermission(req, 'catalog.write');
-      const result = await withCommerceTransaction(trx => createCatalogVariant(trx, context, req.params.id, req.body));
+      const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
+      const result = await withCommerceTransaction(trx => createCatalogVariant(trx, context, req.params.id, { ...req.body, storefrontId }));
       res.status(201).json(result);
     } catch (error) { jsonError(res, error); }
   });
   router.patch('/catalog/variants/:id', async (req, res) => {
     try {
       const context = await requirePermission(req, 'catalog.write');
-      const result = await withCommerceTransaction(trx => updateCatalogVariant(trx, context, req.params.id, req.body));
+      const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
+      const result = await withCommerceTransaction(trx => updateCatalogVariant(trx, context, req.params.id, { ...req.body, storefrontId }));
       res.json(result);
     } catch (error) { jsonError(res, error); }
   });
   router.delete('/catalog/variants/:id', async (req, res) => {
     try {
       const context = await requirePermission(req, 'catalog.write');
-      const result = await withCommerceTransaction(trx => archiveCatalogVariant(trx, context, req.params.id));
+      const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
+      const result = await withCommerceTransaction(trx => archiveCatalogVariant(trx, context, req.params.id, { storefrontId }));
       res.json(result);
     } catch (error) { jsonError(res, error); }
   });
   router.get('/catalog/products/:id/media', async (req, res) => {
     try {
       const context = await requirePermission(req, 'catalog.read');
-      res.json(await listCatalogMedia(db, context, req.params.id));
+      const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
+      res.json(await listCatalogMedia(db, context, req.params.id, { storefrontId }));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/catalog/products/:id/media/upload', express.raw({ type: ['image/*', 'application/octet-stream'], limit: '8mb' }), async (req, res) => {
+    let uploaded = null;
+    let uploadScope = null;
+    let idempotencyKey = '';
     try {
       const context = await requirePermission(req, 'catalog.write');
       const productId = assertUuid(req.params.id, 'productId');
-      const product = await db.query('SELECT id FROM commerce_products WHERE empresa_id = $1 AND id = $2 LIMIT 1', [context.empresaId, productId]);
+      const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
+      const product = await db.query(
+        `SELECT p.id, p.status FROM commerce_products p
+          JOIN commerce_product_channels pc ON pc.empresa_id = p.empresa_id AND pc.product_id = p.id AND pc.storefront_id = $3
+          JOIN commerce_storefronts s ON s.empresa_id = pc.empresa_id AND s.id = pc.storefront_id
+         WHERE p.empresa_id = $1 AND p.id = $2
+           AND ($4::uuid IS NULL OR s.loja_id = $4)
+         LIMIT 1`,
+        [context.empresaId, productId, storefrontId, context.corporateAccess ? null : context.lojaId],
+      );
       if (!product.rows[0]) throw new CommerceError('produto não encontrado no tenant', 'PRODUCT_NOT_FOUND');
+      if (product.rows[0].status === 'archived') throw new CommerceError('produto arquivado não pode ser alterado; duplique-o como rascunho', 'PRODUCT_ARCHIVED');
       const variantId = req.headers['x-variant-id'] ? assertUuid(req.headers['x-variant-id'], 'variantId') : null;
       if (variantId) {
         const variant = await db.query('SELECT id FROM commerce_product_variants WHERE empresa_id = $1 AND id = $2 AND product_id = $3 LIMIT 1', [context.empresaId, variantId, productId]);
         if (!variant.rows[0]) throw new CommerceError('variante não pertence ao produto', 'VARIANT_NOT_FOUND');
       }
-      const idempotencyKey = String(req.headers['x-idempotency-key'] || '').trim();
+      idempotencyKey = String(req.headers['x-idempotency-key'] || '').trim();
       const mediaId = idempotencyKey
         ? commerceMediaIdForIdempotencyKey({ empresaId: context.empresaId, productId, idempotencyKey })
         : newCommerceMediaId();
-      if (idempotencyKey) {
-        const existing = await db.query(
-          'SELECT id, product_id, variant_id, storage_key, public_url, mime_type, alt_text, ordem, criado_em FROM commerce_product_media WHERE empresa_id = $1 AND product_id = $2 AND id = $3 LIMIT 1',
-          [context.empresaId, productId, mediaId],
-        );
-        if (existing.rows[0]) return res.json({ ...existing.rows[0], idempotentReplay: true });
+      const result = await withCommerceTransaction(async trx => {
+        if (idempotencyKey) {
+          await trx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`catalog-media:${context.empresaId}:${productId}:${mediaId}`]);
+          const existing = await trx.query(
+            'SELECT id, product_id, variant_id, storage_key, public_url, mime_type, alt_text, ordem, criado_em FROM commerce_product_media WHERE empresa_id = $1 AND product_id = $2 AND id = $3 LIMIT 1',
+            [context.empresaId, productId, mediaId],
+          );
+          if (existing.rows[0]) return { ...existing.rows[0], idempotentReplay: true };
+        }
+        uploaded = await uploadCommerceImage({ empresaId: context.empresaId, productId, mediaId, buffer: Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0), mimeType: req.headers['content-type'] });
+        uploadScope = { empresaId: context.empresaId, productId, mediaId, storageKey: uploaded.storageKey };
+        return createCatalogMedia(trx, context, productId, {
+          storefrontId,
+          mediaId,
+          storageKey: uploaded.storageKey,
+          publicUrl: `/api/storefront/media/${mediaId}`,
+          mimeType: uploaded.mimeType,
+          altText: String(req.headers['x-image-alt'] || '').slice(0, 255),
+          ordem: Number.isInteger(Number(req.headers['x-image-order'])) ? Number(req.headers['x-image-order']) : 0,
+          variantId,
+        });
+      });
+      res.status(result.idempotentReplay ? 200 : 201).json(result);
+    } catch (error) {
+      if (uploaded && uploadScope) {
+        await withCommerceTransaction(async trx => {
+          if (idempotencyKey) await trx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`catalog-media:${uploadScope.empresaId}:${uploadScope.productId}:${uploadScope.mediaId}`]);
+          const referenced = await trx.query('SELECT 1 FROM commerce_product_media WHERE empresa_id = $1 AND product_id = $2 AND id = $3 AND storage_key = $4 LIMIT 1', [uploadScope.empresaId, uploadScope.productId, uploadScope.mediaId, uploadScope.storageKey]);
+          if (!referenced.rows[0]) await deleteCommerceImage(uploadScope);
+        }).catch(() => {});
       }
-      const uploaded = await uploadCommerceImage({ empresaId: context.empresaId, productId, mediaId, buffer: Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0), mimeType: req.headers['content-type'] });
-      const result = await withCommerceTransaction(trx => createCatalogMedia(trx, context, productId, {
-        mediaId,
-        storageKey: uploaded.storageKey,
-        publicUrl: `/api/storefront/media/${mediaId}`,
-        mimeType: uploaded.mimeType,
-        altText: String(req.headers['x-image-alt'] || '').slice(0, 255),
-        ordem: Number.isInteger(Number(req.headers['x-image-order'])) ? Number(req.headers['x-image-order']) : 0,
-        variantId,
-      }));
-      res.status(201).json(result);
-    } catch (error) { jsonError(res, error); }
+      jsonError(res, error);
+    }
   });
   router.post('/catalog/products/:id/media', async (req, res) => {
     try {
       const context = await requirePermission(req, 'catalog.write');
-      const result = await withCommerceTransaction(trx => createCatalogMedia(trx, context, req.params.id, req.body));
+      const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
+      // Mídia por URL: só endereços permitidos; chave de armazenamento e id nunca vêm do cliente.
+      const body = req.body || {};
+      const url = String(body.url || body.publicUrl || '').trim();
+      if (!allowedMediaUrl(url)) throw new CommerceError('use uma imagem enviada pelo painel ou um endereço https autorizado', 'MEDIA_URL_NOT_ALLOWED');
+      const result = await withCommerceTransaction(trx => createCatalogMedia(trx, context, req.params.id, { url, variantId: body.variantId, altText: body.altText, ordem: body.ordem, mimeType: body.mimeType, storefrontId }));
       res.status(201).json(result);
     } catch (error) { jsonError(res, error); }
   });
   router.delete('/catalog/media/:id', async (req, res) => {
     try {
       const context = await requirePermission(req, 'catalog.write');
-      const result = await withCommerceTransaction(trx => deleteCatalogMedia(trx, context, req.params.id));
+      const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
+      const result = await withCommerceTransaction(trx => deleteCatalogMedia(trx, context, req.params.id, { storefrontId }));
+      await deleteCommerceImage({ empresaId: context.empresaId, productId: result.product_id, mediaId: result.id, storageKey: result.storage_key });
       res.json(result);
     } catch (error) { jsonError(res, error); }
   });
   router.post('/catalog/products/:id/publish', async (req, res) => {
     try {
       const context = await requirePermission(req, 'catalog.publish');
-      const result = await withCommerceTransaction(trx => publishCatalogProduct(trx, context, req.params.id, req.body));
+      await requirePermission(req, 'catalog.write');
+      const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
+      const result = await withCommerceTransaction(trx => publishCatalogProduct(trx, context, req.params.id, { ...req.body, storefrontId }));
       res.json(result);
     } catch (error) { jsonError(res, error); }
   });
   router.patch('/catalog/products/:id/price', async (req, res) => {
     try {
       const context = await requirePermission(req, 'catalog.write');
-      const result = await withCommerceTransaction(trx => setVariantPrice(trx, context, req.params.id, req.body));
+      const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
+      const result = await withCommerceTransaction(trx => setVariantPrice(trx, context, req.params.id, { ...req.body, storefrontId }));
       res.json(result);
     } catch (error) { jsonError(res, error); }
   });
   router.patch('/catalog/products/:id', async (req, res) => {
     try {
-      const context = await requirePermission(req, req.body?.status === 'active' ? 'catalog.publish' : 'catalog.write');
-      const result = await withCommerceTransaction(trx => updateCatalogProduct(trx, context, req.params.id, req.body));
+      const context = await requirePermission(req, 'catalog.write');
+      if (req.body?.status === 'active') await requirePermission(req, 'catalog.publish');
+      const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
+      const result = await withCommerceTransaction(trx => updateCatalogProduct(trx, context, req.params.id, { ...req.body, storefrontId }));
       res.json(result);
     } catch (error) { jsonError(res, error); }
   });
   router.delete('/catalog/products/:id', async (req, res) => {
     try {
       const context = await requirePermission(req, 'catalog.write');
-      const result = await withCommerceTransaction(trx => archiveCatalogProduct(trx, context, req.params.id));
+      await requirePermission(req, 'catalog.publish');
+      const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
+      const result = await withCommerceTransaction(trx => archiveCatalogProduct(trx, context, req.params.id, { storefrontId }));
       res.json(result);
     } catch (error) { jsonError(res, error); }
   });
@@ -1193,7 +1537,8 @@ export function createCommerceAdminRouter() {
   router.post('/orders/:id/promotion', async (req, res) => {
     try {
       const context = await requirePermission(req, 'promotions.write');
-      const result = await withCommerceTransaction(trx => applyPromotionToOrder(trx, context, { ...req.body, orderId: req.params.id }));
+      const storefrontId = await requireAdminStorefront(req, context);
+      const result = await withCommerceTransaction(trx => applyPromotionToOrder(trx, context, { ...req.body, orderId: req.params.id, storefrontId }));
       res.status(201).json(result);
     } catch (error) { jsonError(res, error); }
   });
@@ -1267,25 +1612,36 @@ export function createCommerceAdminRouter() {
   router.post('/fulfillments/:id/label', async (req, res) => {
     try {
       const context = await requirePermission(req, 'fulfillment.write');
-      const prepared = await withCommerceTransaction(trx => prepareShippingLabel(trx, context, req.params.id));
-      if (prepared.replay) return res.json(prepared.fulfillment);
-      const adapter = shippingProviders.get(prepared.account.provider);
-      if (!adapter) throw new CommerceError('adapter logístico indisponível', 'SHIPPING_PROVIDER_NOT_CONFIGURED');
-      let external;
-      try {
-        external = await adapter.createShipment({ account: prepared.account, selectedOption: prepared.selectedOption, from: prepared.from, to: prepared.to, products: prepared.products, volumes: prepared.volumes, shipmentOptions: req.body || {}, idempotencyKey: prepared.operationKey });
-      } catch (error) {
-        await withCommerceTransaction(trx => failShippingLabel(trx, context, req.params.id, prepared.operationKey, error));
-        throw error;
-      }
-      const finalized = await withCommerceTransaction(trx => finalizeShippingLabel(trx, context, req.params.id, prepared.operationKey, { ...external, carrier: prepared.selectedOption.carrier }));
-      res.status(201).json(finalized);
+      const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
+      const result = await issueShippingLabel(withCommerceTransaction, context, req.params.id, req.body || {}, storefrontId);
+      if (result.replay) return res.json(result.fulfillment);
+      res.status(201).json(result.fulfillment);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/fulfillments/:id/reconcile-label', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'fulfillment.write');
+      const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
+      const result = await withCommerceTransaction(async trx => {
+        const reconciled = await reconcileShippingLabel(trx, context, req.params.id, req.body || {}, storefrontId);
+        if (!reconciled.replay) {
+          await auditLog(trx, context, {
+            entidade: 'fulfillment',
+            entidadeId: req.params.id,
+            acao: 'provider_label_reconciled',
+            depois: { operationKey: req.body?.operationKey || req.body?.operation_key || '', providerShipmentIdPresent: Boolean(req.body?.providerShipmentId || req.body?.provider_shipment_id) },
+          });
+        }
+        return reconciled;
+      });
+      res.status(result.replay ? 200 : 201).json(result.fulfillment);
     } catch (error) { jsonError(res, error); }
   });
   router.post('/fulfillments/:id/cancel-label', async (req, res) => {
     try {
       const context = await requirePermission(req, 'fulfillment.write');
-      const prepared = await withCommerceTransaction(trx => prepareShippingCancellation(trx, context, req.params.id));
+      const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
+      const prepared = await withCommerceTransaction(trx => prepareShippingCancellation(trx, context, req.params.id, storefrontId));
       if (prepared.replay) return res.json(prepared.fulfillment);
       const adapter = shippingProviders.get(prepared.account.provider);
       if (!adapter?.cancelShipment) throw new CommerceError('adapter Correios não oferece cancelamento documentado', 'SHIPPING_PROVIDER_CAPABILITY_UNAVAILABLE');
@@ -1293,12 +1649,12 @@ export function createCommerceAdminRouter() {
       try {
         external = await adapter.cancelShipment({ account: prepared.account, providerShipmentId: prepared.providerShipmentId, trackingCode: prepared.trackingCode, idempotencyKey: prepared.operationKey });
       } catch (error) {
-        await withCommerceTransaction(trx => failShippingLabel(trx, context, req.params.id, prepared.operationKey, error));
+        await withCommerceTransaction(trx => failShippingLabel(trx, context, req.params.id, prepared.operationKey, error, storefrontId));
         throw error;
       }
       const cancelled = await withCommerceTransaction(async trx => {
-        const row = await finalizeShippingCancellation(trx, context, req.params.id, prepared.operationKey, external);
-        await auditLog(trx, context, { entidade: 'fulfillment', entidadeId: req.params.id, acao: 'provider_prepostagem_cancelled', depois: { provider: prepared.account.provider, providerStatus: external.providerStatus } });
+        const row = await finalizeShippingCancellation(trx, context, req.params.id, prepared.operationKey, external, storefrontId);
+        await auditLog(trx, context, { entidade: 'fulfillment', entidadeId: req.params.id, acao: 'provider_prepostagem_cancelled', depois: { storefrontId, provider: prepared.account.provider, providerStatus: external.providerStatus } });
         return row;
       });
       res.json(cancelled);
@@ -1307,15 +1663,16 @@ export function createCommerceAdminRouter() {
   router.post('/fulfillments/:id/track', async (req, res) => {
     try {
       const context = await requirePermission(req, 'fulfillment.write');
-      const owner = await db.query(`SELECT f.id, f.provider_shipment_id, a.provider, a.ambiente, a.secret_ref, a.public_config FROM commerce_fulfillments f LEFT JOIN commerce_shipping_accounts a ON a.empresa_id = f.empresa_id AND a.id = COALESCE(f.shipping_account_id, (SELECT q.shipping_account_id FROM commerce_shipping_quotes q WHERE q.empresa_id = f.empresa_id AND q.id = f.shipping_quote_id)) WHERE f.empresa_id = $1 AND f.id = $2 AND ($3::uuid IS NULL OR EXISTS (SELECT 1 FROM commerce_orders o JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id WHERE o.empresa_id = f.empresa_id AND o.id = f.order_id AND s.loja_id = $3)) LIMIT 1`, [context.empresaId, req.params.id, context.lojaId]);
+      const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
+      const owner = await db.query(`SELECT f.id, f.provider_shipment_id, a.provider, a.ambiente, a.secret_ref, a.public_config FROM commerce_fulfillments f LEFT JOIN commerce_shipping_accounts a ON a.empresa_id = f.empresa_id AND a.id = COALESCE(f.shipping_account_id, (SELECT q.shipping_account_id FROM commerce_shipping_quotes q WHERE q.empresa_id = f.empresa_id AND q.id = f.shipping_quote_id)) WHERE f.empresa_id = $1 AND f.id = $2 AND EXISTS (SELECT 1 FROM commerce_orders o WHERE o.empresa_id = f.empresa_id AND o.id = f.order_id AND ($3::uuid IS NULL OR o.storefront_id = $3) AND ($4::uuid IS NULL OR o.loja_id = $4)) LIMIT 1`, [context.empresaId, req.params.id, storefrontId, context.corporateAccess === true ? null : context.lojaId]);
       if (!owner.rows[0]) throw new CommerceError('fulfillment não encontrado', 'FULFILLMENT_NOT_FOUND');
       if (!owner.rows[0].provider_shipment_id || !owner.rows[0].provider) throw new CommerceError('fulfillment ainda não possui shipment no provedor', 'SHIPPING_SHIPMENT_NOT_FOUND');
       const adapter = shippingProviders.get(owner.rows[0].provider);
       if (!adapter) throw new CommerceError('adapter logístico indisponível', 'SHIPPING_PROVIDER_NOT_CONFIGURED');
       const external = await adapter.track({ account: { provider: owner.rows[0].provider, ambiente: owner.rows[0].ambiente, secret_ref: owner.rows[0].secret_ref, public_config: owner.rows[0].public_config }, providerShipmentId: owner.rows[0].provider_shipment_id });
       const updated = await withCommerceTransaction(async trx => {
-        const row = await updateShippingTracking(trx, context, owner.rows[0].id, external);
-        await auditLog(trx, context, { entidade: 'fulfillment', entidadeId: owner.rows[0].id, acao: 'provider_tracking_sync', depois: { provider: owner.rows[0].provider, providerStatus: external.providerStatus, trackingCode: external.trackingCode } });
+        const row = await updateShippingTracking(trx, context, owner.rows[0].id, external, storefrontId);
+        await auditLog(trx, context, { entidade: 'fulfillment', entidadeId: owner.rows[0].id, acao: 'provider_tracking_sync', depois: { storefrontId, provider: owner.rows[0].provider, providerStatus: external.providerStatus, trackingCode: external.trackingCode } });
         return row;
       });
       res.json(updated);
@@ -1324,16 +1681,19 @@ export function createCommerceAdminRouter() {
   router.post('/fulfillments', async (req, res) => {
     try {
       const context = await requirePermission(req, 'fulfillment.write');
-      const result = await withCommerceTransaction(trx => createFulfillment(trx, context, req.body));
+      const storefrontId = await requireAdminStorefront(req, context);
+      const result = await withCommerceTransaction(trx => createFulfillment(trx, context, { ...req.body, storefrontId }));
       res.status(201).json(result);
     } catch (error) { jsonError(res, error); }
   });
   router.get('/fulfillments', async (req, res) => {
     try {
       const context = await requirePermission(req, 'fulfillment.read');
+      const storefrontId = await requireAdminStorefront(req, context);
       const values = [context.empresaId];
       const predicates = ['f.empresa_id = $1'];
       if (context.lojaId) { values.push(context.lojaId); predicates.push(`s.loja_id = $${values.length}`); }
+      if (storefrontId) { values.push(storefrontId); predicates.push(`o.storefront_id = $${values.length}`); }
       if (req.query.status) { values.push(String(req.query.status)); predicates.push(`f.status = $${values.length}`); }
       const result = await db.query(
         `SELECT f.id, f.order_id, f.status, f.tracking_code, f.carrier, f.ocorrencias, f.criado_em, f.atualizado_em,
@@ -1355,7 +1715,8 @@ export function createCommerceAdminRouter() {
   router.patch('/fulfillments/:id', async (req, res) => {
     try {
       const context = await requirePermission(req, 'fulfillment.write');
-      const result = await withCommerceTransaction(trx => updateFulfillment(trx, context, req.params.id, req.body));
+      const storefrontId = await requireAdminStorefront(req, context);
+      const result = await withCommerceTransaction(trx => updateFulfillment(trx, context, req.params.id, { ...req.body, storefrontId }));
       res.json(result);
     } catch (error) { jsonError(res, error); }
   });
@@ -1511,14 +1872,16 @@ export function createCommerceAdminRouter() {
   router.get('/payments/accounts', async (req, res) => {
     try {
       const context = await requirePermission(req, 'payments.read');
-      res.json(await listPaymentAccounts(db, context));
+      const storefrontId = await requireAdminStorefront(req, context);
+      res.json(await listPaymentAccounts(db, context, { storefrontId }));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/payments/accounts', async (req, res) => {
     try {
       const context = await requirePermission(req, 'payments.write');
+      const storefrontId = await requireAdminStorefront(req, context);
       const result = await withCommerceTransaction(async trx => {
-        const account = await createPaymentAccount(trx, context, req.body);
+        const account = await createPaymentAccount(trx, context, { ...req.body, storefrontId });
         await auditLog(trx, context, { entidade: 'payment_account', entidadeId: account.id, acao: 'created', depois: account });
         return account;
       });
@@ -1528,8 +1891,9 @@ export function createCommerceAdminRouter() {
   router.patch('/payments/accounts/:id', async (req, res) => {
     try {
       const context = await requirePermission(req, 'payments.write');
+      const storefrontId = await requireAdminStorefront(req, context);
       const result = await withCommerceTransaction(async trx => {
-        const account = await updatePaymentAccount(trx, context, req.params.id, req.body);
+        const account = await updatePaymentAccount(trx, { ...context, storefrontId }, req.params.id, req.body);
         await auditLog(trx, context, { entidade: 'payment_account', entidadeId: account.id, acao: 'updated', depois: account });
         return account;
       });
@@ -1539,20 +1903,23 @@ export function createCommerceAdminRouter() {
   router.get('/payments', async (req, res) => {
     try {
       const context = await requirePermission(req, 'payments.read');
-      res.json(await listPayments(db, context, req.query));
+      const storefrontId = await requireAdminStorefront(req, context);
+      res.json(await listPayments(db, context, { ...req.query, storefrontId }));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/orders/:id/payments', async (req, res) => {
     try {
       const context = await requirePermission(req, 'payments.write');
-      const result = await createPaymentAttempt(context, { ...req.body, orderId: req.params.id });
+      const storefrontId = await requireAdminStorefront(req, context);
+      const result = await createPaymentAttempt({ ...context, storefrontId }, { ...req.body, orderId: req.params.id });
       res.status(201).json(result);
     } catch (error) { jsonError(res, error); }
   });
   router.post('/payments/:id/sync', async (req, res) => {
     try {
       const context = await requirePermission(req, 'payments.write');
-      const result = await syncPaymentAttempt(context, req.params.id);
+      const storefrontId = await requireAdminStorefront(req, context);
+      const result = await syncPaymentAttempt({ ...context, storefrontId }, req.params.id);
       await withCommerceTransaction(trx => auditLog(trx, context, { entidade: 'payment', entidadeId: result.paymentId, acao: 'status_reconciled', correlationId: req.requestId || '', depois: { orderId: result.orderId, provider: result.provider, status: result.status, changed: result.changed, stale: Boolean(result.stale) } }));
       res.json(result);
     } catch (error) { jsonError(res, error); }
@@ -1560,62 +1927,63 @@ export function createCommerceAdminRouter() {
   router.post('/payments/:id/reconcile', async (req, res) => {
     try {
       const context = await requirePermission(req, 'payments.write');
-      const result = await reconcilePaymentByIdentifiers(context, req.params.id, req.body || {});
+      const storefrontId = await requireAdminStorefront(req, context);
+      const result = await reconcilePaymentByIdentifiers({ ...context, storefrontId }, req.params.id, req.body || {});
       await withCommerceTransaction(trx => auditLog(trx, context, { entidade: 'payment', entidadeId: result.paymentId, acao: 'manual_reconciled', correlationId: req.requestId || '', depois: { orderId: result.orderId, provider: result.provider, status: result.status, changed: result.changed, stale: Boolean(result.stale) } }));
       res.json(result);
     } catch (error) { jsonError(res, error); }
   });
   router.get('/whatsapp-ai/status', async (req, res) => {
     try {
-      const context = await requirePermission(req, 'reports.read');
+      const context = await withWhatsappLoja(await requirePermission(req, 'reports.read'));
       res.json(await whatsappAiOperationalStatus(context));
     } catch (error) { jsonError(res, error); }
   });
   router.get('/whatsapp-ai/sessions', async (req, res) => {
     try {
-      const context = await requirePermission(req, 'reports.read');
+      const context = await withWhatsappLoja(await requirePermission(req, 'reports.read'));
       res.json({ items: await listWhatsappAiSessions(context, { limit: req.query.limit }) });
     } catch (error) { jsonError(res, error); }
   });
   router.post('/whatsapp-ai/channel', async (req, res) => {
     try {
-      const context = await requirePermission(req, 'settings.write');
+      const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
       res.json(await configureWhatsappAiChannel(context, req.body || {}));
     } catch (error) { jsonError(res, error); }
   });
   router.patch('/whatsapp-ai/policy', async (req, res) => {
     try {
-      const context = await requirePermission(req, 'settings.write');
+      const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
       res.json(await configureWhatsappAiPolicy(context, req.body || {}));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/whatsapp-ai/diagnostics/gemini', async (req, res) => {
     try {
-      const context = await requirePermission(req, 'settings.write');
+      const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
       res.json(await testWhatsappAiGemini(context, { confirmed: req.body?.confirmed === true }));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/whatsapp-ai/channel/sync-webhook', async (req, res) => {
     try {
-      const context = await requirePermission(req, 'settings.write');
+      const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
       res.json(await syncWhatsappAiWebhook(context, { confirmed: req.body?.confirmed === true }));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/whatsapp-ai/sessions/:id/claim', async (req, res) => {
     try {
-      const context = await requirePermission(req, 'settings.write');
+      const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
       res.json(await claimWhatsappAiHandoff(context, req.params.id));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/whatsapp-ai/sessions/:id/release', async (req, res) => {
     try {
-      const context = await requirePermission(req, 'settings.write');
+      const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
       res.json(await releaseWhatsappAiHandoff(context, req.params.id));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/whatsapp-ai/sessions/:id/close', async (req, res) => {
     try {
-      const context = await requirePermission(req, 'settings.write');
+      const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
       res.json(await closeWhatsappAiHandoff(context, req.params.id));
     } catch (error) { jsonError(res, error); }
   });
@@ -1682,28 +2050,27 @@ export function createCommerceAdminRouter() {
   router.get('/operations/health', async (req, res) => {
     try {
       const context = await requirePermission(req, 'reports.read');
-      const scope = [context.empresaId, context.lojaId || null];
-      const [payments, fulfillments, paymentWebhooks, shippingWebhooks] = await Promise.all([
+      const storefrontId = await requireAdminStorefront(req, context);
+      const scope = [context.empresaId, context.corporateAccess === true ? null : context.lojaId || null, storefrontId];
+      const [payments, fulfillments] = await Promise.all([
         db.query(`SELECT p.status, COUNT(*)::int AS total
                     FROM commerce_payments p
                     JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id
                     JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id
-                   WHERE p.empresa_id = $1 AND ($2::uuid IS NULL OR s.loja_id = $2)
+                   WHERE p.empresa_id = $1 AND ($2::uuid IS NULL OR s.loja_id = $2) AND ($3::uuid IS NULL OR o.storefront_id = $3)
                    GROUP BY p.status`, scope),
         db.query(`SELECT f.status, COUNT(*)::int AS total
                     FROM commerce_fulfillments f
                     JOIN commerce_orders o ON o.empresa_id = f.empresa_id AND o.id = f.order_id
                     JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id
-                   WHERE f.empresa_id = $1 AND ($2::uuid IS NULL OR s.loja_id = $2)
+                   WHERE f.empresa_id = $1 AND ($2::uuid IS NULL OR s.loja_id = $2) AND ($3::uuid IS NULL OR o.storefront_id = $3)
                    GROUP BY f.status`, scope),
-        db.query(`SELECT status, COUNT(*)::int AS total FROM commerce_payment_webhooks WHERE empresa_id = $1 GROUP BY status`, [context.empresaId]),
-        db.query(`SELECT status, COUNT(*)::int AS total FROM commerce_shipping_webhooks WHERE empresa_id = $1 GROUP BY status`, [context.empresaId]),
       ]);
       res.json({
         generatedAt: new Date().toISOString(),
         payments: statusCounts(payments.rows),
         fulfillments: statusCounts(fulfillments.rows),
-        webhooks: { payments: statusCounts(paymentWebhooks.rows), shipping: statusCounts(shippingWebhooks.rows) },
+        webhooks: { available: false, reason: 'storefront_correlation_unavailable' },
       });
     } catch (error) { jsonError(res, error); }
   });
@@ -1711,32 +2078,37 @@ export function createCommerceAdminRouter() {
     try {
       const permission = ['refunded', 'partially_refunded'].includes(req.body?.status) ? 'orders.refund' : 'orders.write';
       const context = await requirePermission(req, permission);
-      const result = await withCommerceTransaction(trx => transitionOrder(trx, context, { ...req.body, orderId: req.params.id }));
+      const storefrontId = await requireAdminStorefront(req, context);
+      const result = await withCommerceTransaction(trx => transitionOrder(trx, context, { status: req.body?.status, correlationId: req.body?.correlationId, payload: { motivo: String(req.body?.motivo || req.body?.reason || '').slice(0, 300) || undefined }, origin: 'admin', orderId: req.params.id, storefrontId }));
       res.json(result);
     } catch (error) { jsonError(res, error); }
   });
   router.get('/reports/sales', async (req, res) => {
     try {
       const context = await requirePermission(req, 'reports.read');
-      res.json(await salesReport(context, { from: req.query.from, to: req.query.to }));
+      const storefrontId = await requireAdminStorefront(req, context);
+      res.json(await salesReport(context, { from: req.query.from, to: req.query.to, storefrontId }));
     } catch (error) { jsonError(res, error); }
   });
   router.get('/reports/fulfillment', async (req, res) => {
     try {
       const context = await requirePermission(req, 'reports.read');
-      res.json(await fulfillmentReport(context, { from: req.query.from, to: req.query.to }));
+      const storefrontId = await requireAdminStorefront(req, context);
+      res.json(await fulfillmentReport(context, { from: req.query.from, to: req.query.to, storefrontId }));
     } catch (error) { jsonError(res, error); }
   });
   router.get('/reports/inventory', async (req, res) => {
     try {
       const context = await requirePermission(req, 'reports.read');
-      res.json(await inventoryReport(context));
+      const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
+      res.json(await inventoryReport(context, { storefrontId }));
     } catch (error) { jsonError(res, error); }
   });
   router.get('/reports/customers', async (req, res) => {
     try {
       const context = await requirePermission(req, 'reports.read');
-      res.json(await customerReport(context, { from: req.query.from, to: req.query.to }));
+      const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
+      res.json(await customerReport(context, { from: req.query.from, to: req.query.to, storefrontId }));
     } catch (error) { jsonError(res, error); }
   });
   router.get('/audit', async (req, res) => {
@@ -1769,10 +2141,12 @@ export function createCommerceAdminRouter() {
   router.get('/orders', async (req, res) => {
     try {
       const context = await requirePermission(req, 'orders.read');
+      const storefrontId = await requireAdminStorefront(req, context);
       const { limit, offset } = parsePagination(req, 100, 500);
       const values = [context.empresaId];
       const predicates = ['o.empresa_id = $1'];
       if (context.lojaId) { values.push(context.lojaId); predicates.push(`s.loja_id = $${values.length}`); }
+      if (storefrontId) { values.push(storefrontId); predicates.push(`o.storefront_id = $${values.length}`); }
       if (req.query.status) { values.push(String(req.query.status)); predicates.push(`o.status = $${values.length}`); }
       const query = String(req.query.q || '').trim().slice(0, 160);
       if (query) { values.push(`%${query}%`); predicates.push(`(o.public_code ILIKE $${values.length} OR c.nome ILIKE $${values.length} OR c.email ILIKE $${values.length})`); }

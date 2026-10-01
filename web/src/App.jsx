@@ -4,6 +4,7 @@ import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
 import { useAuth } from './lib/auth'
 import { applyBrand, applyThemeMode, isDinoBrandContext, resolveBrand, storedThemeMode } from './lib/brand'
+import { isTenantScope } from './lib/tenant-scope'
 
 // Redireciona atletas logados para o portal e não-atletas para a página pública de perfil
 function PerfilRoute() {
@@ -121,6 +122,11 @@ const ConfiguracaoFiscal = lazy(() => import('./pages/admin/ConfiguracaoFiscal')
 const ClassificacaoFiscal = lazy(() => import('./pages/admin/ClassificacaoFiscal'))
 const Clientes = lazy(() => import('./pages/admin/Clientes'))
 const Customer360 = lazy(() => import('./pages/admin/Customer360'))
+const FinanceiroEmpresa = lazy(() => import('./pages/admin/dino/FinanceiroEmpresa'))
+const AuditoriaEmpresa = lazy(() => import('./pages/admin/dino/AuditoriaEmpresa'))
+const BIBarbearia = lazy(() => import('./pages/admin/dino/BIBarbearia'))
+const WhatsappConexao = lazy(() => import('./pages/admin/dino/WhatsappConexao'))
+const CerebroIA = lazy(() => import('./pages/admin/dino/CerebroIA'))
 const ContasReceber = lazy(() => import('./pages/admin/ContasReceber'))
 const FechamentoDiario = lazy(() => import('./pages/admin/FechamentoDiario'))
 const CadastrosMestres = lazy(() => import('./pages/admin/CadastrosMestres'))
@@ -177,6 +183,13 @@ function Loading() {
   )
 }
 
+// Telas cujos módulos antigos eram globais da plataforma: com uma empresa
+// ativa, mostram a versão da empresa (ou levam ao módulo equivalente dela).
+function TenantAware({ tenant, legacy }) {
+  const { user, empresaAtiva } = useAuth()
+  return isTenantScope(user, empresaAtiva) ? tenant : legacy
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -202,7 +215,7 @@ export default function App() {
         <Route element={<ProtectedOutlet need="org" />}>
           <Route path="/admin"              element={<Layout><Dashboard /></Layout>} />
           <Route path="/admin/plataforma"  element={<PlatformOnly><Layout><AdminPlataforma /></Layout></PlatformOnly>} />
-          <Route path="/admin/usuarios"     element={<Layout><Usuarios /></Layout>} />
+          <Route path="/admin/usuarios"     element={<TenantAware tenant={<Navigate to="/admin/ecommerce?tab=users" replace />} legacy={<Layout><Usuarios /></Layout>} />} />
           <Route path="/admin/torneios"     element={<Layout><Torneios /></Layout>} />
           <Route path="/admin/agenda"       element={<Layout><Agenda /></Layout>} />
           <Route path="/admin/inscricoes"   element={<Layout><Inscricoes /></Layout>} />
@@ -220,16 +233,18 @@ export default function App() {
           <Route path="/admin/ecommerce"   element={<Layout><EcommerceAdmin /></Layout>} />
           <Route path="/admin/aulas"        element={<Layout><Aulas /></Layout>} />
           <Route path="/admin/crm"          element={<Layout><CRM /></Layout>} />
-          <Route path="/admin/bi"           element={<Layout><BI /></Layout>} />
-          <Route path="/admin/auditoria"       element={<Layout><Auditoria /></Layout>} />
-          <Route path="/admin/configuracoes"  element={<Layout><Configuracoes /></Layout>} />
+          <Route path="/admin/bi"           element={<Layout><TenantAware tenant={<BIBarbearia />} legacy={<BI />} /></Layout>} />
+          <Route path="/admin/auditoria"       element={<Layout><TenantAware tenant={<AuditoriaEmpresa />} legacy={<Auditoria />} /></Layout>} />
+          <Route path="/admin/configuracoes"  element={<TenantAware tenant={<Navigate to="/admin/barbearia-erp?area=gestao&tab=Configura%C3%A7%C3%A3o" replace />} legacy={<Layout><Configuracoes /></Layout>} />} />
           <Route path="/admin/cupons"         element={<Layout><Cupons /></Layout>} />
           <Route path="/admin/relatorios"     element={<Layout><Relatorios /></Layout>} />
-          <Route path="/admin/relatorios-operacionais" element={<Layout><RelatoriosOperacionais /></Layout>} />
+          <Route path="/admin/relatorios-operacionais" element={<TenantAware tenant={<Navigate to="/admin/barbearia-erp?area=gestao&tab=Relat%C3%B3rios" replace />} legacy={<Layout><RelatoriosOperacionais /></Layout>} />} />
           <Route path="/admin/noticias"       element={<Layout><Noticias /></Layout>} />
           <Route path="/admin/sumula"         element={<Layout><Sumula /></Layout>} />
           <Route path="/admin/mensalidades"   element={<Layout><Mensalidades /></Layout>} />
-          <Route path="/admin/financeiro"     element={<Layout><Financeiro /></Layout>} />
+          <Route path="/admin/financeiro"     element={<Layout><TenantAware tenant={<FinanceiroEmpresa />} legacy={<Financeiro />} /></Layout>} />
+          <Route path="/admin/whatsapp"       element={<Layout><WhatsappConexao /></Layout>} />
+          <Route path="/admin/cerebro-ia"     element={<Layout><CerebroIA /></Layout>} />
           <Route path="/admin/quadras"        element={<Layout><Quadras /></Layout>} />
           <Route path="/admin/pontos"         element={<Layout><Pontos /></Layout>} />
           <Route path="/admin/ranking"        element={<Layout><AdminRanking /></Layout>} />
@@ -248,7 +263,7 @@ export default function App() {
           <Route path="/admin/oficina"         element={<Layout><Oficina /></Layout>} />
           <Route path="/admin/agropecuaria"    element={<Layout><Agropecuaria /></Layout>} />
           <Route path="/admin/varejo"          element={<Layout><Varejo /></Layout>} />
-          <Route path="/admin/compras"         element={<Layout><Compras /></Layout>} />
+          <Route path="/admin/compras"         element={<TenantAware tenant={<Navigate to="/admin/barbearia-erp?area=catalogo&tab=Estoque+de+revenda" replace />} legacy={<Layout><Compras /></Layout>} />} />
           <Route path="/admin/fiscal/config"   element={<Layout><ConfiguracaoFiscal /></Layout>} />
           <Route path="/admin/fiscal/classificacao" element={<Layout><ClassificacaoFiscal /></Layout>} />
           <Route path="/admin/loja-moda"       element={<Layout><LojaModa /></Layout>} />

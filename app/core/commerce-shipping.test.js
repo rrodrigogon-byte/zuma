@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isValidCpfCnpj, normalizeCep, normalizeOwnDeliveryConfig, normalizeShippingAddress, publicShippingMethod, quoteAvailableShipping, quoteShipping, shippingAccountReady, updateShippingTracking } from './commerce-shipping.js';
+import { isValidCpfCnpj, issueShippingLabel, normalizeCep, normalizeOwnDeliveryConfig, normalizeShippingAddress, publicShippingMethod, quoteAvailableShipping, quoteShipping, reconcileShippingLabel, resolveShippingSelection, shippingAccountReady, updateShippingTracking } from './commerce-shipping.js';
+import { shippingProviders } from './shipping-adapters.js';
 
 const originalFetch = global.fetch;
 const originalToken = process.env.ME_ACCESS_TOKEN;
@@ -43,16 +44,18 @@ test('método público só habilita cotação com conta pronta e não expõe con
 });
 
 test('tracking preserva ocorrência e respeita transições válidas do fulfillment', async () => {
+  const storefrontId = '10000000-0000-4000-8000-000000000103';
   const statements = [];
   const trx = { query: async (sql, params) => {
     statements.push({ sql, params });
-    if (sql.includes('SELECT id, status, ocorrencias')) return { rows: [{ id: '10000000-0000-4000-8000-000000000107', status: 'ready', ocorrencias: [] }] };
+    if (sql.includes('SELECT f.id, f.status, f.ocorrencias')) return { rows: [{ id: '10000000-0000-4000-8000-000000000107', status: 'ready', ocorrencias: [] }] };
     if (sql.includes('UPDATE commerce_fulfillments')) return { rows: [{ id: '10000000-0000-4000-8000-000000000107', status: 'shipped', tracking_code: 'BR123' }] };
     throw new Error(`query inesperada: ${sql}`);
   } };
-  const updated = await updateShippingTracking(trx, { empresaId: '10000000-0000-4000-8000-000000000106' }, '10000000-0000-4000-8000-000000000107', { providerStatus: 'posted', trackingCode: 'BR123', trackingUrl: 'https://rastreio.test/BR123' });
+  const updated = await updateShippingTracking(trx, { empresaId: '10000000-0000-4000-8000-000000000106' }, '10000000-0000-4000-8000-000000000107', { providerStatus: 'posted', trackingCode: 'BR123', trackingUrl: 'https://rastreio.test/BR123' }, storefrontId);
   assert.equal(updated.status, 'shipped');
-  assert.equal(statements[1].sql.includes('status = $3'), true);
+  assert.equal(statements[1].sql.includes('status = $4'), true);
+  assert.equal(statements.every(statement => statement.params.includes(storefrontId)), true);
 });
 
 test('cotação chama o provedor real fora da transação e persiste snapshot idempotente', async () => {
@@ -137,6 +140,53 @@ test('cotação manual usa cidade e persiste quote sem conta logística externa'
   assert.equal(insert.params[3], null);
 });
 
+test('seleção aceita carrinho semanticamente igual com itens reordenados e cidade normalizada', async () => {
+  const variantA = '10000000-0000-4000-8000-000000000105';
+  const variantB = '10000000-0000-4000-8000-000000000106';
+  let persisted;
+  const client = {
+    async query(sql, params) {
+      if (sql.includes('FROM commerce_shipping_methods')) return { rows: [{ id: '10000000-0000-4000-8000-000000000109', codigo: 'regional', nome: 'Regional', tipo: 'delivery', configuracao: { provider: 'manual', deliveryType: 'regional_table', origemCep: '78300000', rules: [{ id: 'regional', label: 'Regional', cities: ['Nova Olímpia'], uf: 'MT', amount: 20, deliveryDays: 1 }] }, storefront_id: '10000000-0000-4000-8000-000000000103', loja_id: '10000000-0000-4000-8000-000000000104', configuracoes: {} }] };
+      if (sql.includes('FROM commerce_product_variants')) return { rows: [
+        { id: variantA, sku: 'SKU-A', nome: 'Produto A', peso_gramas: 0, largura_cm: 0, altura_cm: 0, comprimento_cm: 0, price: 10 },
+        { id: variantB, sku: 'SKU-B', nome: 'Produto B', peso_gramas: 0, largura_cm: 0, altura_cm: 0, comprimento_cm: 0, price: 5 },
+      ] };
+      throw new Error(`query inesperada: ${sql} ${params}`);
+    },
+    async transaction(callback) {
+      return callback({ query: async (sql, params) => {
+        if (sql.includes('INSERT INTO commerce_shipping_quotes')) {
+          persisted = { hash: params[8], snapshot: JSON.parse(params[9]), response: JSON.parse(params[10]) };
+          return { rows: [{ id: '10000000-0000-4000-8000-000000000199', expires_at: '2099-01-01T00:00:00.000Z' }] };
+        }
+        throw new Error(`query transacional inesperada: ${sql}`);
+      } });
+    },
+  };
+  const quote = await quoteShipping(client, { empresaId: '10000000-0000-4000-8000-000000000110', lojaId: '10000000-0000-4000-8000-000000000104' }, {
+    storefrontId: '10000000-0000-4000-8000-000000000103',
+    shippingMethodId: '10000000-0000-4000-8000-000000000109',
+    destinationCep: '78365-000',
+    destination: { cidade: 'Nova Olímpia', estado: 'mt' },
+    items: [{ variantId: variantB, quantity: 1 }, { variantId: variantA, quantity: 1 }, { variantId: variantA, quantity: 1 }],
+  });
+  assert.deepEqual(persisted.snapshot.lines, [{ variantId: variantA, quantity: 2 }, { variantId: variantB, quantity: 1 }]);
+  assert.equal(persisted.snapshot.destination.cidade, 'nova olimpia');
+  const optionId = persisted.response.providerOptions[0].public.id;
+  const trx = { query: async sql => {
+    if (sql.includes('FROM commerce_shipping_quotes q')) return { rows: [{ id: quote.quoteId, storefront_id: persisted.snapshot.storefrontId, request_hash: persisted.hash, request_snapshot: persisted.snapshot, response_snapshot: persisted.response, status: 'quoted', expires_at: '2099-01-01T00:00:00.000Z' }] };
+    if (sql.includes('UPDATE commerce_shipping_quotes')) return { rows: [] };
+    throw new Error(`query inesperada: ${sql}`);
+  } };
+  const selected = await resolveShippingSelection(trx, { empresaId: '10000000-0000-4000-8000-000000000110' }, {
+    shippingQuoteId: quote.quoteId,
+    shippingOptionId: optionId,
+    shippingAddress: { destinatario: 'Cliente', documento: '12345678909', cep: '78365000', logradouro: 'Rua A', numero: '1', bairro: 'Centro', cidade: '  NOVA   OLIMPIA ', estado: 'MT' },
+  }, { storefrontId: persisted.snapshot.storefrontId, lines: [{ variantId: variantA, quantity: 2 }, { variantId: variantB, quantity: 1 }] });
+  assert.equal(selected.amount, 20);
+  assert.equal(selected.address.cidade, 'NOVA   OLIMPIA');
+});
+
 test('entrega própria calcula motoboy, expressa e frete grátis sem depender de Correios', async () => {
   let methodConfig = { provider: 'manual', deliveryType: 'motoboy', baseFee: 5, pricePerKm: 2, distanceKm: 3, deliveryDays: 1, rules: [{ id: 'local', label: 'Local', fallback: true, deliveryDays: 1 }] };
   const client = {
@@ -209,4 +259,89 @@ test('cotação agregada retorna somente métodos aplicáveis e preserva quoteId
   assert.match(result.items[0].selectionId, new RegExp(`:${result.items[0].id}$`));
   assert.deepEqual(result.unavailable, [{ shippingMethodId: freeId, code: 'SHIPPING_FREE_SHIPPING_THRESHOLD_NOT_MET' }]);
   assert.equal(inserts, 1);
+});
+
+test('falha local pós-side-effect exige reconciliação e nunca duplica emissão da etiqueta', async () => {
+  const provider = 'melhorenvio';
+  const originalAdapter = shippingProviders.get(provider);
+  const empresaId = '10000000-0000-4000-8000-000000000106';
+  const fulfillmentId = '10000000-0000-4000-8000-000000000107';
+  const storefrontId = '10000000-0000-4000-8000-000000000103';
+  process.env.FAKE_LABEL_TOKEN = 'fake-token';
+  let emissions = 0;
+  let state = { shipping_operation_status: null, shipping_operation_key: null, ocorrencias: [] };
+  shippingProviders.register(provider, {
+    quote: async () => ({ options: [], providerOptions: [] }),
+    createShipment: async ({ idempotencyKey }) => { emissions += 1; return { providerShipmentId: `shipment-${idempotencyKey}`, trackingCode: 'FAKE123' }; },
+    track: async () => ({}),
+    verifyWebhook: async () => ({}),
+  });
+  let transactionNumber = 0;
+  const transaction = async callback => {
+    transactionNumber += 1;
+    const thisTransaction = transactionNumber;
+    return callback({ query: async (sql, params = []) => {
+      if (sql.includes('FROM commerce_fulfillments f')) return { rows: [{
+        id: fulfillmentId, empresa_id: empresaId, order_id: '10000000-0000-4000-8000-000000000108', public_code: 'KC-FAKE', order_status: 'paid', shipping_type: 'delivery',
+        shipping_operation_status: state.shipping_operation_status, shipping_operation_key: state.shipping_operation_key, provider_shipment_id: null, ocorrencias: state.ocorrencias,
+        account_id: '10000000-0000-4000-8000-000000000109', account_provider: provider, account_environment: 'sandbox', account_active: true, secret_ref: 'env:FAKE_LABEL_TOKEN',
+        public_config: { origemCep: '01001000', origin: { name: 'Loja', email: 'loja@example.com', phone: '11999999999', document: '12345678909', address: 'Rua A', number: '1', district: 'Centro', city: 'São Paulo', postalCode: '01001000', stateAbbr: 'SP' } },
+        selected_option_id: 'fake-service', response_snapshot: { providerOptions: [{ public: { id: 'fake-service', carrier: 'Fake' }, raw: {} }] }, endereco_entrega: { destinatario: 'Cliente', cep: '01001000', logradouro: 'Rua B', numero: '2', bairro: 'Centro', cidade: 'São Paulo', estado: 'SP' },
+      }] };
+      if (sql.includes('FROM commerce_order_items')) return { rows: [{ nome_snapshot: 'Produto', quantidade: 1, preco_unitario: '10.00' }] };
+      if (sql.includes("shipping_operation_status = 'processing'")) { state = { ...state, shipping_operation_status: 'processing', shipping_operation_key: params[2] }; return { rows: [] }; }
+      if (sql.includes('SELECT id, ocorrencias FROM commerce_fulfillments')) {
+        if (thisTransaction === 2) throw new Error('falha simulada ao persistir resposta do provedor');
+        return { rows: [{ id: fulfillmentId, ocorrencias: state.ocorrencias }] };
+      }
+      if (sql.includes('SELECT ocorrencias FROM commerce_fulfillments')) return { rows: [{ ocorrencias: state.ocorrencias }] };
+      if (sql.includes("shipping_operation_status = 'failed'")) { state = { ...state, shipping_operation_status: 'failed', ocorrencias: JSON.parse(params[2]) }; return { rows: [{ id: fulfillmentId, ...state }] }; }
+      throw new Error(`query inesperada: ${sql}`);
+    } });
+  };
+  try {
+    await assert.rejects(
+      () => issueShippingLabel(transaction, { empresaId }, fulfillmentId, {}, storefrontId),
+      error => error.code === 'SHIPPING_OPERATION_RECONCILIATION_REQUIRED' && error.details.operationKey === `shipping-${fulfillmentId}-create`,
+    );
+    assert.equal(emissions, 1);
+    assert.equal(state.shipping_operation_status, 'failed');
+    await assert.rejects(
+      () => issueShippingLabel(transaction, { empresaId }, fulfillmentId, {}, storefrontId),
+      error => error.code === 'SHIPPING_OPERATION_RECONCILIATION_REQUIRED',
+    );
+    assert.equal(emissions, 1);
+  } finally {
+    shippingProviders.adapters.set(provider, originalAdapter);
+    delete process.env.FAKE_LABEL_TOKEN;
+  }
+});
+
+test('reconciliação manual conclui etiqueta incerta uma vez e rejeita identificador divergente', async () => {
+  const fulfillmentId = '10000000-0000-4000-8000-000000000107';
+  const storefrontId = '10000000-0000-4000-8000-000000000103';
+  const operationKey = `shipping-${fulfillmentId}-create`;
+  let updates = 0;
+  let state = { id: fulfillmentId, storefront_id: '10000000-0000-4000-8000-000000000103', shipping_operation_status: 'failed', shipping_operation_key: operationKey, provider_shipment_id: null, ocorrencias: [] };
+  const trx = { query: async (sql, params = []) => {
+    if (sql.includes('FROM commerce_fulfillments f')) return { rows: [state] };
+    if (sql.includes('UPDATE commerce_fulfillments')) {
+      updates += 1;
+      state = { ...state, shipping_operation_status: 'succeeded', provider_shipment_id: params[3], tracking_code: params[4], ocorrencias: JSON.parse(params[8]) };
+      return { rows: [state] };
+    }
+    throw new Error(`query inesperada: ${sql}`);
+  } };
+  const first = await reconcileShippingLabel(trx, { empresaId: '10000000-0000-4000-8000-000000000106' }, fulfillmentId, { operationKey, providerShipmentId: 'provider-shipment-1', trackingCode: 'FAKE123' }, storefrontId);
+  assert.equal(first.replay, false);
+  assert.equal(first.fulfillment.provider_shipment_id, 'provider-shipment-1');
+  assert.equal(first.fulfillment.ocorrencias.at(-1).status, 'shipping_reconciled');
+  const replay = await reconcileShippingLabel(trx, { empresaId: '10000000-0000-4000-8000-000000000106' }, fulfillmentId, { operationKey, providerShipmentId: 'provider-shipment-1' }, storefrontId);
+  assert.equal(replay.replay, true);
+  assert.equal(updates, 1);
+  await assert.rejects(
+    () => reconcileShippingLabel(trx, { empresaId: '10000000-0000-4000-8000-000000000106' }, fulfillmentId, { operationKey, providerShipmentId: 'provider-shipment-2' }, storefrontId),
+    error => error.code === 'SHIPPING_OPERATION_CONFLICT',
+  );
+  assert.equal(updates, 1);
 });

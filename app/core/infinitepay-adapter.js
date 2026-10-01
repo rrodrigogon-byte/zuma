@@ -75,6 +75,44 @@ function normalizeSlug(payload) {
   return String(payload?.invoice_slug || payload?.slug || '').trim();
 }
 
+function supportedCaptureMethods(account) {
+  const configured = publicConfig(account)?.methods;
+  return Array.isArray(configured) && configured.length
+    ? configured.map(value => String(value || '').trim().toLowerCase()).filter(value => ['pix', 'credit_card'].includes(value))
+    : ['pix', 'credit_card'];
+}
+
+function assertCapturedPaymentCheck(checked, expected, errorCode) {
+  if (checked?.paid !== true) return;
+  const checkedOrderNsu = normalizeOrderNsu(checked);
+  const checkedTransactionNsu = normalizeTransactionNsu(checked);
+  const checkedSlug = normalizeSlug(checked);
+  if (!checkedOrderNsu || !checkedTransactionNsu || !checkedSlug
+    || checkedOrderNsu !== expected.orderNsu
+    || checkedTransactionNsu !== expected.transactionNsu
+    || checkedSlug !== expected.slug) {
+    throw new CommerceError('payment_check não confirmou os identificadores da venda', errorCode);
+  }
+  const amountCents = Number(checked?.amount ?? checked?.paid_amount);
+  if (!Number.isFinite(amountCents) || amountCents <= 0) {
+    throw new CommerceError('payment_check não confirmou o valor capturado', errorCode);
+  }
+  if (expected.amount != null && Math.abs((amountCents / 100) - Number(expected.amount)) > 0.01) {
+    throw new CommerceError('payment_check confirmou valor divergente do pedido', 'PAYMENT_AMOUNT_MISMATCH');
+  }
+  const captureMethod = String(checked?.capture_method || '').trim().toLowerCase();
+  if (!captureMethod || !['pix', 'credit_card'].includes(captureMethod)) {
+    throw new CommerceError('payment_check não confirmou um método suportado', errorCode);
+  }
+  const expectedMethod = String(expected.method || '').trim().toLowerCase();
+  if (['pix', 'credit_card'].includes(expectedMethod) && captureMethod !== expectedMethod) {
+    throw new CommerceError('payment_check confirmou método divergente do pagamento', errorCode);
+  }
+  if (expectedMethod === 'external' && !expected.allowedMethods.includes(captureMethod)) {
+    throw new CommerceError('payment_check confirmou método não habilitado para a conta', errorCode);
+  }
+}
+
 export function createInfinitePayAdapter() {
   return {
     async createCheckout({ order, account }) {
@@ -113,11 +151,20 @@ export function createInfinitePayAdapter() {
       if (!orderNsu || !transactionNsu || !slug) throw new CommerceError('InfinitePay ainda não possui identificadores para consulta', 'PAYMENT_PROVIDER_PAYMENT_NOT_FOUND')
       const checked = await infinitePayRequest('/payment_check', { handle, order_nsu: orderNsu, transaction_nsu: transactionNsu, slug })
       const amountCents = Number(checked?.amount ?? checked?.paid_amount ?? 0)
+      const captureMethod = String(checked?.capture_method || '').trim().toLowerCase()
+      assertCapturedPaymentCheck(checked, {
+        orderNsu,
+        transactionNsu,
+        slug,
+        amount: payment?.amount,
+        method: payment?.method,
+        allowedMethods: supportedCaptureMethods(account),
+      }, 'PAYMENT_PROVIDER_STATUS_INVALID')
       return {
-        providerPaymentId: transactionNsu,
+        providerPaymentId: checked?.paid === true ? normalizeTransactionNsu(checked) : null,
         status: checked?.paid === true ? 'captured' : 'pending',
         amount: Number.isFinite(amountCents) && amountCents > 0 ? amountCents / 100 : null,
-        summary: { paid: checked?.paid === true, captureMethod: checked?.capture_method || null, slug },
+        summary: { paid: checked?.paid === true, orderNsu: normalizeOrderNsu(checked) || null, transactionNsu: normalizeTransactionNsu(checked) || null, captureMethod: captureMethod || null, slug: normalizeSlug(checked) || null, verifiedBy: 'payment_check' },
       }
     },
 
@@ -126,17 +173,36 @@ export function createInfinitePayAdapter() {
       const transactionNsu = normalizeTransactionNsu(payload);
       const slug = normalizeSlug(payload);
       if (!orderNsu || !transactionNsu || !slug) throw new CommerceError('webhook InfinitePay incompleto', 'PAYMENT_WEBHOOK_INVALID');
+      if (context?.expectedOrderNsu && orderNsu !== String(context.expectedOrderNsu)) throw new CommerceError('webhook não corresponde ao pedido persistido', 'PAYMENT_WEBHOOK_INVALID');
+      if (context?.expectedTransactionNsu && transactionNsu !== String(context.expectedTransactionNsu)) throw new CommerceError('webhook não corresponde ao pagamento persistido', 'PAYMENT_WEBHOOK_INVALID');
       const handle = handleFor(context?.account);
       const checked = await infinitePayRequest('/payment_check', { handle, order_nsu: orderNsu, transaction_nsu: transactionNsu, slug });
+      const checkedOrderNsu = normalizeOrderNsu(checked);
+      const checkedTransactionNsu = normalizeTransactionNsu(checked);
+      const checkedSlug = normalizeSlug(checked);
       const paid = checked?.paid === true;
-      const amountCents = Number(checked?.amount ?? payload?.amount ?? 0);
+      const amountCents = Number(checked?.amount ?? checked?.paid_amount ?? 0);
+      const captureMethod = String(checked?.capture_method || '').trim().toLowerCase();
+      assertCapturedPaymentCheck(checked, {
+        orderNsu,
+        transactionNsu,
+        slug,
+        amount: context?.expectedAmount,
+        method: context?.expectedMethod,
+        allowedMethods: supportedCaptureMethods(context?.account),
+      }, 'PAYMENT_WEBHOOK_INVALID');
+      const verifiedTransactionNsu = paid ? checkedTransactionNsu : null;
       return {
-        eventId: transactionNsu,
+        // O mesmo NSU chega como pendente e depois como pago: o estado faz parte da chave,
+        // senão o aviso de pagamento seria descartado como duplicado.
+        eventId: `${transactionNsu}:${paid ? 'captured' : 'pending'}`,
         eventType: 'payment.updated',
-        providerPaymentId: transactionNsu,
+        providerPaymentId: verifiedTransactionNsu,
         status: paid ? 'captured' : 'pending',
         amount: Number.isFinite(amountCents) && amountCents > 0 ? amountCents / 100 : null,
-        summary: { paid, orderNsu, transactionNsu, captureMethod: checked?.capture_method || payload?.capture_method || null, receiptUrl: payload?.receipt_url || payload?.receiptUrl || null, slug },
+        signatureValid: false,
+        verification: 'provider_payment_check',
+        summary: { paid, orderNsu: checkedOrderNsu || orderNsu, transactionNsu: checkedTransactionNsu || transactionNsu, captureMethod: captureMethod || null, slug: checkedSlug || slug, verifiedBy: 'payment_check' },
       };
     },
   };

@@ -1,8 +1,8 @@
 import crypto from 'node:crypto';
 import { db } from './database.js';
+import { canonicalWhatsappPhone, phoneMatchKeySql } from './whatsapp-phone.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const PHONE_REGEX = /^55[1-9][0-9]{10}$/;
 
 function clean(value, limit = 500) {
   return String(value ?? '').trim().replace(/\u0000/g, '').replace(/\s+/g, ' ').slice(0, limit);
@@ -19,15 +19,12 @@ function uuid(value, field) {
 }
 
 export function normalizeWhatsappPhone(value) {
-  const digits = String(value || '').replace(/\D/g, '');
-  const normalized = digits.startsWith('55') ? digits : (digits.length === 10 || digits.length === 11 ? `55${digits}` : digits);
-  return PHONE_REGEX.test(normalized) ? normalized : '';
+  return canonicalWhatsappPhone(value);
 }
 
+// Compara pela chave 55+DDD+8 dígitos: casa JID com e sem o nono dígito.
 function phoneSql(column) {
-  return `CASE WHEN regexp_replace(COALESCE(${column}, ''), '\\D', '', 'g') LIKE '55%'
-                THEN regexp_replace(COALESCE(${column}, ''), '\\D', '', 'g')
-                ELSE '55' || regexp_replace(COALESCE(${column}, ''), '\\D', '', 'g') END`;
+  return phoneMatchKeySql(column);
 }
 
 function tenant(context = {}) {
@@ -58,7 +55,7 @@ export async function ensureWhatsappLead(context = {}, input = {}) {
     const existing = await query(
       `SELECT id, empresa_id, nome, telefone, email, cidade, uf, tags, ativo
          FROM clientes
-        WHERE empresa_id = $1 AND ativo = true AND ${phoneSql('telefone')} = $2
+        WHERE empresa_id = $1 AND ativo = true AND ${phoneSql('telefone')} = ${phoneSql('$2')}
         ORDER BY criado_em ASC, id ASC LIMIT 1 FOR UPDATE`,
       [scope.empresaId, phone],
     );
@@ -119,7 +116,7 @@ export async function getWhatsappLeadProfile(context = {}) {
        LEFT JOIN consentimentos_cliente cons
          ON cons.empresa_id = c.empresa_id AND cons.cliente_id = c.id
         AND cons.canal = 'whatsapp' AND cons.finalidade = 'marketing'
-      WHERE c.empresa_id = $1 AND c.ativo = true AND ${phoneSql('c.telefone')} = $3
+      WHERE c.empresa_id = $1 AND c.ativo = true AND ${phoneSql('c.telefone')} = ${phoneSql('$3')}
       ORDER BY c.criado_em ASC, c.id ASC LIMIT 1`,
     [scope.empresaId, scope.lojaId, phone],
   );
@@ -145,7 +142,7 @@ export async function updateWhatsappMarketingConsent(context = {}, { granted = f
   const result = await db.transaction(async trx => {
     const query = trx.query.bind(trx);
     const customer = await query(
-      `SELECT id, nome FROM clientes WHERE empresa_id = $1 AND ativo = true AND ${phoneSql('telefone')} = $2 ORDER BY criado_em ASC, id ASC LIMIT 1 FOR UPDATE`,
+      `SELECT id, nome FROM clientes WHERE empresa_id = $1 AND ativo = true AND ${phoneSql('telefone')} = ${phoneSql('$2')} ORDER BY criado_em ASC, id ASC LIMIT 1 FOR UPDATE`,
       [scope.empresaId, phone],
     );
     if (!customer.rows[0]) return { updated: false, reason: 'customer_not_found' };
@@ -158,6 +155,12 @@ export async function updateWhatsappMarketingConsent(context = {}, { granted = f
          SET concedido = EXCLUDED.concedido, origem = EXCLUDED.origem, evidencia = EXCLUDED.evidencia, atualizado_em = CURRENT_TIMESTAMP`,
       [scope.empresaId, customerId, Boolean(granted), granted ? 'cliente_solicitou' : 'whatsapp_optout', JSON.stringify({ note: clean(evidence || (granted ? 'Cliente solicitou receber promoções no WhatsApp.' : 'Cliente revogou promoções no WhatsApp.'), 500), recordedAt: new Date().toISOString() })],
     );
+    if (granted) {
+      // Pedido expresso do cliente para voltar a receber promoções desfaz o SAIR anterior;
+      // sem isto o consentimento ficava registrado, mas nada era enviado.
+      await query(`DELETE FROM ai_automation_log WHERE empresa_id = $1 AND automacao = 'opt_out' AND ${phoneSql('telefone')} = ${phoneSql('$2')}`, [scope.empresaId, phone]);
+      await query(`UPDATE whatsapp_ai_sessions SET estado = estado - 'marketingOptOut' WHERE empresa_id = $1 AND ${phoneSql('telefone')} = ${phoneSql('$2')} AND estado ? 'marketingOptOut'`, [scope.empresaId, phone]);
+    }
     await logInteraction(query, scope, customerId, granted ? 'Consentimento de marketing' : 'Revogação de marketing', granted ? 'Cliente autorizou receber promoções no WhatsApp.' : 'Cliente não deseja receber promoções no WhatsApp.', { granted, channel: 'whatsapp' });
     return { updated: true, customerId, granted: Boolean(granted), customerName: customer.rows[0].nome };
   });
@@ -176,7 +179,7 @@ export async function listWhatsappCustomerAppointments(context = {}, { includePa
        LEFT JOIN servicos s ON s.id = a.servico_id AND s.empresa_id = a.empresa_id
        LEFT JOIN usuarios u ON u.id = a.usuario_profissional_id AND u.empresa_id = a.empresa_id
       WHERE a.empresa_id = $1 AND (a.loja_id = $2 OR a.loja_id IS NULL)
-        AND ${phoneSql('a.cliente_telefone')} = $3
+        AND ${phoneSql('a.cliente_telefone')} = ${phoneSql('$3')}
         AND a.status NOT IN ('cancelado', 'nao_compareceu')
         ${includePast ? '' : 'AND a.data_agendamento >= CURRENT_TIMESTAMP'}
       ORDER BY a.data_agendamento ASC LIMIT $4`,
@@ -205,7 +208,7 @@ export async function customerAppointmentForUpdate(trx, context = {}, appointmen
        LEFT JOIN servicos s ON s.id = a.servico_id AND s.empresa_id = a.empresa_id
        LEFT JOIN usuarios u ON u.id = a.usuario_profissional_id AND u.empresa_id = a.empresa_id
       WHERE a.id = $1 AND a.empresa_id = $2 AND (a.loja_id = $3 OR a.loja_id IS NULL)
-        AND ${phoneSql('a.cliente_telefone')} = $4
+        AND ${phoneSql('a.cliente_telefone')} = ${phoneSql('$4')}
       LIMIT 1 FOR UPDATE`,
     [clean(appointmentId, 80), scope.empresaId, scope.lojaId, phone],
   );
@@ -288,7 +291,7 @@ export async function queueWhatsappPromotion(trx, context = {}, input = {}) {
   const customerResult = await trx.query(
     `SELECT c.id, c.nome, c.telefone
        FROM clientes c
-      WHERE c.empresa_id = $1 AND c.ativo = true AND ${phoneSql('c.telefone')} = $2
+      WHERE c.empresa_id = $1 AND c.ativo = true AND ${phoneSql('c.telefone')} = ${phoneSql('$2')}
       ORDER BY c.criado_em ASC, c.id ASC LIMIT 1 FOR UPDATE`,
     [scope.empresaId, phone],
   );

@@ -4,6 +4,7 @@ import { processWhatsappConversationTask, whatsappAiReady, whatsappMessagingRead
 import { processCampaignDeliveryTask } from '../core/commerce-campaigns.js';
 import { enqueueDueCartRecoveries, processCartRecoveryTask } from '../core/commerce-abandoned-carts.js';
 import { enqueueDueAppointmentReminders, processAppointmentNotificationTask } from '../core/barbershop-appointment-notifications.js';
+import { processAutomationTask } from '../core/ai-automations.js';
 
 const MAX_ATTEMPTS = Math.max(1, Number.parseInt(process.env.WHATSAPP_AI_MAX_ATTEMPTS || '6', 10));
 const BATCH_SIZE = Math.min(20, Math.max(1, Number.parseInt(process.env.WHATSAPP_AI_WORKER_BATCH || '5', 10)));
@@ -85,13 +86,26 @@ async function releaseWhatsappAiWorkerLease(holder = WORKER_ID) {
   ).catch(() => null);
 }
 
+import { marketingGate, recordMarketingSend } from '../core/whatsapp-marketing-guard.js';
+
+// Tarefa de marketing fora do horário ou acima do limite volta para a fila, sem contar tentativa.
+async function deferTask(task, until, reason) {
+  await db.query(
+    `UPDATE tarefas_integracao_canais
+        SET status = 'pendente', tentativas = GREATEST(0, tentativas - 1), proxima_tentativa_em = $2::timestamptz,
+            erro_codigo = $3, lease_token = NULL, lease_expira_em = NULL, data_atualizacao = CURRENT_TIMESTAMP
+      WHERE id = $1 AND status = 'processando' AND lease_token = $4::uuid`,
+    [task.id, until.toISOString(), String(reason).slice(0, 60), task.lease_token],
+  );
+}
+
 export async function claimWhatsappAiTasks(limit = BATCH_SIZE) {
   return db.transaction(async trx => {
     const result = await trx.query(
       `WITH candidates AS (
          SELECT id
            FROM tarefas_integracao_canais
-          WHERE ((tipo = 'processar_conversa' AND $3::boolean) OR (tipo IN ('enviar_campanha','recuperar_carrinho','notificar_agendamento') AND $4::boolean))
+          WHERE ((tipo = 'processar_conversa' AND $3::boolean) OR (tipo IN ('enviar_campanha','recuperar_carrinho','notificar_agendamento','automacao_ia') AND $4::boolean))
             AND tentativas < $1
             AND (
               (status IN ('pendente', 'falha') AND (proxima_tentativa_em IS NULL OR proxima_tentativa_em <= CURRENT_TIMESTAMP))
@@ -100,7 +114,8 @@ export async function claimWhatsappAiTasks(limit = BATCH_SIZE) {
                     OR (lease_expira_em IS NULL AND data_atualizacao <= CURRENT_TIMESTAMP - ($5::text || ' seconds')::interval)
                   ))
             )
-          ORDER BY criado_em ASC
+          -- Conversa de cliente passa na frente de campanha: um disparo grande não atrasa atendimento.
+          ORDER BY (tipo = 'processar_conversa') DESC, criado_em ASC
           FOR UPDATE SKIP LOCKED
           LIMIT $2
        )
@@ -210,7 +225,7 @@ export async function cleanupWhatsappAiRetention(days = RETENTION_DAYS, handoffD
           SET referencia_externa = NULL, payload = '{}'::jsonb, resposta = NULL,
               erro = CASE WHEN erro_codigo IS NULL THEN NULL ELSE erro_codigo END
         WHERE data_atualizacao < CURRENT_TIMESTAMP - ($1::text || ' days')::interval
-          AND tipo IN ('processar_conversa','enviar_campanha','recuperar_carrinho','notificar_agendamento')
+          AND tipo IN ('processar_conversa','enviar_campanha','recuperar_carrinho','notificar_agendamento','automacao_ia')
           AND status IN ('concluida','cancelada')
           AND (referencia_externa IS NOT NULL OR payload <> '{}'::jsonb OR resposta IS NOT NULL OR erro IS DISTINCT FROM erro_codigo)`,
       [normalized],
@@ -256,14 +271,31 @@ export async function runWhatsappAiBatch({ limit = BATCH_SIZE } = {}) {
     const summary = { worker: 'whatsapp-ai', runId: crypto.randomUUID(), retentionRemoved, recoveriesQueued, appointmentRemindersQueued, claimed: tasks.length, completed: 0, failed: 0, deadLettered: 0 };
     for (const task of tasks) {
       try {
+        // Uma conversa pode levar mais que o lease (várias chamadas de IA). Renova o lease do
+        // worker e o da tarefa antes de começar cada uma; se a tarefa já foi para outro
+        // processo, não é executada de novo aqui.
+        await acquireWhatsappAiWorkerLease();
+        const renewed = await db.query(
+          `UPDATE tarefas_integracao_canais SET lease_expira_em = CURRENT_TIMESTAMP + ($3::text || ' seconds')::interval
+            WHERE id = $1 AND status = 'processando' AND lease_token = $2::uuid`,
+          [task.id, task.lease_token, LEASE_SECONDS],
+        );
+        if (!renewed.rowCount) { summary.leaseLost = (summary.leaseLost || 0) + 1; continue; }
+        const gate = await marketingGate(task);
+        if (gate.action === 'defer') { await deferTask(task, gate.until, gate.reason); summary.deferred = (summary.deferred || 0) + 1; continue; }
+        if (gate.action === 'skip') { await completeTask(task, { skipped: true, reason: gate.reason }); summary.completed += 1; continue; }
         const response = task.tipo === 'enviar_campanha'
           ? await processCampaignDeliveryTask(task)
           : task.tipo === 'recuperar_carrinho'
             ? await processCartRecoveryTask(task)
             : task.tipo === 'notificar_agendamento'
               ? await processAppointmentNotificationTask(task)
-              : await processWhatsappConversationTask(task);
+              : task.tipo === 'automacao_ia'
+                ? await processAutomationTask(task)
+                : await processWhatsappConversationTask(task);
         await completeTask(task, response);
+        // Envio bloqueado ou cancelado não conta como mensagem de marketing entregue.
+        if (gate.phone && response && !response.idempotent && !response.skipped && !response.blocked && !response.cancelled) await recordMarketingSend(task, gate.phone);
         summary.completed += 1;
       } catch (error) {
         const failure = await failTask(task, error);

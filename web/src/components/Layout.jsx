@@ -89,7 +89,7 @@ export default function Layout({ children, noSidebar = false, marketing = false 
       <main style={{
         marginLeft: isMobile ? 0 : (sidebarCollapsed ? 78 : 256),
         marginTop: hasTopBar && !isMobile ? topBarH : 0,
-        flex: 1, minHeight: '100vh',
+        flex: 1, minWidth: 0, minHeight: '100vh',
         background: 'var(--bg)',
         color: 'var(--fg)',
         transition: 'margin-left .2s ease',

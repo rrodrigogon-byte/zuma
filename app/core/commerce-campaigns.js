@@ -1,3 +1,4 @@
+import { canonicalWhatsappPhone, isWhatsappOptOutText, phoneMatchKeySql } from './whatsapp-phone.js';
 import { createHash } from 'node:crypto';
 import { db } from './database.js';
 import { enviarMensagem } from './whatsapp.js';
@@ -22,9 +23,7 @@ function uuid(value, field) {
 }
 
 export function normalizeCampaignPhone(value) {
-  const digits = String(value || '').replace(/\D/g, '');
-  const normalized = digits.startsWith('55') ? digits : (digits.length === 10 || digits.length === 11 ? `55${digits}` : digits);
-  return normalized.length >= 12 && normalized.length <= 13 ? normalized : '';
+  return canonicalWhatsappPhone(value);
 }
 
 export function normalizeCampaignCriteria(input = {}) {
@@ -318,9 +317,13 @@ export async function processCampaignDeliveryTask(task) {
     await refreshCampaignMetrics(delivery.campanha_id);
     return { blocked: true };
   }
+  // Só um processo envia: a tarefa precisa ainda ser deste worker (lease) e o destinatário
+  // não pode ter sido pego por outro. Sem isso, dois workers com lease vencido enviavam duas vezes.
   await db.transaction(async trx => {
-    await trx.query(`UPDATE envios_campanha SET status = 'processando', tentativas = tentativas + 1, erro = NULL, atualizado_em = CURRENT_TIMESTAMP WHERE id = $1`, [delivery.id]);
-    await trx.query(`UPDATE tarefas_integracao_canais SET delivery_started_at = CURRENT_TIMESTAMP WHERE id = $1 AND status = 'processando' AND lease_token = $2::uuid`, [task.id, task.lease_token]);
+    const owned = await trx.query(`UPDATE tarefas_integracao_canais SET delivery_started_at = CURRENT_TIMESTAMP WHERE id = $1 AND status = 'processando' AND lease_token = $2::uuid AND delivery_started_at IS NULL`, [task.id, task.lease_token]);
+    if (!owned.rowCount) throw campaignDeliveryError('tarefa de campanha já está com outro processo', 'TASK_LEASE_LOST', false);
+    const claimed = await trx.query(`UPDATE envios_campanha SET status = 'processando', tentativas = tentativas + 1, erro = NULL, atualizado_em = CURRENT_TIMESTAMP WHERE id = $1 AND status NOT IN ('processando','enviado','entregue','lido','respondido','convertido','incerto','cancelado','bloqueado')`, [delivery.id]);
+    if (!claimed.rowCount) throw campaignDeliveryError('destinatário de campanha já em envio', 'CAMPAIGN_DELIVERY_UNKNOWN', false);
   });
   let response;
   try {
@@ -421,7 +424,7 @@ export async function recordCampaignProviderEvent(channel, payload = {}, parsed 
       const updated = await db.query(
         `WITH latest AS (
            SELECT id FROM envios_campanha
-            WHERE empresa_id = $1 AND canal_id = $2 AND telefone_normalizado = $3
+            WHERE empresa_id = $1 AND canal_id = $2 AND ${phoneMatchKeySql('telefone_normalizado')} = ${phoneMatchKeySql('$3')}
               AND enviado_em >= CURRENT_TIMESTAMP - INTERVAL '14 days'
               AND status IN ('enviado','entregue','lido')
             ORDER BY enviado_em DESC LIMIT 1
@@ -445,9 +448,7 @@ export async function attributeCampaignConversions(context) {
          FROM envios_campanha ec
          JOIN clientes cl ON cl.id = ec.cliente_id AND cl.empresa_id = ec.empresa_id
          JOIN commerce_customers cc ON cc.empresa_id = ec.empresa_id
-          AND CASE WHEN regexp_replace(COALESCE(cc.telefone, ''), '\\D', '', 'g') LIKE '55%'
-                   THEN regexp_replace(COALESCE(cc.telefone, ''), '\\D', '', 'g')
-                   ELSE '55' || regexp_replace(COALESCE(cc.telefone, ''), '\\D', '', 'g') END = ec.telefone_normalizado
+          AND ${phoneMatchKeySql('cc.telefone')} = ${phoneMatchKeySql('ec.telefone_normalizado')}
          JOIN commerce_orders o ON o.empresa_id = cc.empresa_id AND o.customer_id = cc.id
          JOIN commerce_storefronts sf ON sf.empresa_id = o.empresa_id AND sf.id = o.storefront_id AND sf.loja_id = ec.loja_id
         WHERE ec.empresa_id = $1 AND ec.loja_id = $2 AND ec.enviado_em IS NOT NULL
@@ -552,8 +553,7 @@ export async function updateCampaignConsent(context, customerId, payload = {}) {
 
 export function campaignOptOutRequested(parsed = {}) {
   if (parsed.ignored || !parsed.phone || !parsed.text) return false;
-  const normalized = String(parsed.text).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase().replace(/[.!?]+$/g, '').trim();
-  return new Set(['sair', 'pare', 'parar', 'nao quero receber', 'remover meu numero']).has(normalized);
+  return isWhatsappOptOutText(parsed.text);
 }
 
 export async function recordCampaignOptOut(channel = {}, parsed = {}) {
@@ -565,20 +565,20 @@ export async function recordCampaignOptOut(channel = {}, parsed = {}) {
     const customer = await query(
       `SELECT id FROM clientes
         WHERE empresa_id = $1 AND ativo = true
-          AND CASE WHEN regexp_replace(COALESCE(telefone, ''), '\\D', '', 'g') LIKE '55%'
-                   THEN regexp_replace(COALESCE(telefone, ''), '\\D', '', 'g')
-                   ELSE '55' || regexp_replace(COALESCE(telefone, ''), '\\D', '', 'g') END = $2
-        ORDER BY id ASC LIMIT 1 FOR UPDATE`,
+          AND ${phoneMatchKeySql('telefone')} = ${phoneMatchKeySql('$2')}
+        ORDER BY id ASC FOR UPDATE`,
       [channel.empresa_id, phone],
     );
     if (!customer.rows[0]) return { optedOut: false, reason: 'customer_not_found' };
+    // Cadastros duplicados com o mesmo número: o SAIR vale para todos.
+    for (const found of customer.rows) {
     await query(
       `INSERT INTO consentimentos_cliente
         (empresa_id, cliente_id, canal, finalidade, concedido, origem, evidencia)
        VALUES ($1, $2, 'whatsapp', 'marketing', false, 'whatsapp_optout', $3::jsonb)
        ON CONFLICT (empresa_id, cliente_id, canal, finalidade) DO UPDATE
          SET concedido = false, origem = EXCLUDED.origem, evidencia = EXCLUDED.evidencia, atualizado_em = CURRENT_TIMESTAMP`,
-      [channel.empresa_id, customer.rows[0].id, JSON.stringify({ externalEventId: clean(parsed.externalId, 200), recordedAt: new Date().toISOString() })],
+      [channel.empresa_id, found.id, JSON.stringify({ externalEventId: clean(parsed.externalId, 200), recordedAt: new Date().toISOString() })],
     );
     const delivery = await query(
       `WITH latest AS (
@@ -589,15 +589,16 @@ export async function recordCampaignOptOut(channel = {}, parsed = {}) {
        UPDATE envios_campanha ec SET status = CASE WHEN ec.status = 'convertido' THEN ec.status ELSE 'respondido' END,
               respondido_em = COALESCE(ec.respondido_em, CURRENT_TIMESTAMP), atualizado_em = CURRENT_TIMESTAMP
          FROM latest l WHERE ec.id = l.id RETURNING l.campanha_id`,
-      [channel.empresa_id, channel.id, customer.rows[0].id],
+      [channel.empresa_id, channel.id, found.id],
     );
     await query(
       `INSERT INTO commerce_audit_logs
         (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, depois)
        VALUES ($1, $2, NULL, 'marketing_consent', $3, 'revoked_by_whatsapp', $4::jsonb)`,
-      [channel.empresa_id, channel.loja_id || null, customer.rows[0].id, JSON.stringify({ canal: 'whatsapp', finalidade: 'marketing' })],
+      [channel.empresa_id, channel.loja_id || null, found.id, JSON.stringify({ canal: 'whatsapp', finalidade: 'marketing' })],
     );
     if (delivery.rows[0]?.campanha_id) await refreshCampaignMetrics(delivery.rows[0].campanha_id, query);
-    return { optedOut: true, customerId: customer.rows[0].id };
+    }
+    return { optedOut: true, customerId: customer.rows[0].id, customers: customer.rows.length };
   });
 }

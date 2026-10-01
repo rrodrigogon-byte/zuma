@@ -92,6 +92,15 @@ test('contas: esqueci-senha não troca senha, gestão de usuários respeita empr
       assert.notEqual(self.response.status, 200);
     }
 
+    // módulos legados do evento: usuário de empresa não grava cardápio, loja nem estoque antigos
+    for (const [metodo, rota, corpo] of [['POST', '/api/admin/cardapio', { nome: 'X', preco: 1 }], ['POST', '/api/admin/loja', { nome: 'X', preco: 1 }], ['POST', '/api/admin/estoque/ajuste', { id: 1, qtd: 1 }], ['POST', '/api/admin/loja/vender', { itens: [] }]]) {
+      const r = await request(base, rota, { method: metodo, headers: hA, body: JSON.stringify(corpo) });
+      assert.equal(r.response.status, 403, `${rota} bloqueada para empresa`);
+      assert.equal(r.body.code, 'TENANT_USE_SCOPED_MODULE');
+    }
+    const cardapioGlobal = await request(base, '/api/admin/cardapio', { method: 'POST', headers: await login('global@example.com'), body: JSON.stringify({ nome: 'Água', preco: 5, cat: 'Bebidas' }) });
+    assert.notEqual(cardapioGlobal.response.status, 403, 'admin global continua gerenciando o cardápio do evento');
+
     // global ainda gerencia todos
     const hG = await login('global@example.com');
     const listaG = await request(base, '/api/admin/usuarios', { headers: hG });

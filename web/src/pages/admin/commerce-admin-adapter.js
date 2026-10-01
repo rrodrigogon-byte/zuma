@@ -1,5 +1,6 @@
 import { api } from '../../lib/api'
 import { loadAllStorefrontProducts } from '../../lib/storefront'
+import { productChannelPublished } from '../../lib/product-management'
 
 const LEGACY_TO_CORE = {
   pendente: 'pending_payment',
@@ -32,7 +33,7 @@ function number(value) {
   return Number.isFinite(result) ? result : 0
 }
 
-function normalizeCoreProduct(product) {
+export function normalizeCoreProduct(product) {
   const variant = product.variants?.[0] || {}
   return {
     ...product,
@@ -51,7 +52,8 @@ function normalizeCoreProduct(product) {
     imagem: product.media?.[0]?.publicUrl || product.media?.[0]?.public_url || '',
     variantes: Array.isArray(product.variants) ? product.variants : [],
     media: Array.isArray(product.media) ? product.media : [],
-    ativo: product.status === 'active',
+    ativo: productChannelPublished(product),
+    publicado: productChannelPublished(product),
     variantId: variant.id || null,
     core: true,
   }
@@ -103,6 +105,12 @@ async function safeCoreGet(path, fallback, warnings, label) {
   }
 }
 
+function scopedPath(path, storefrontId) {
+  if (!storefrontId) return path
+  const separator = path.includes('?') ? '&' : '?'
+  return `${path}${separator}storefrontId=${encodeURIComponent(storefrontId)}`
+}
+
 async function loadLegacy() {
   const [productData, orderData, customerData] = await Promise.all([
     api.get('/api/admin/loja'),
@@ -116,13 +124,12 @@ async function loadLegacy() {
   })
 }
 
-export async function loadCommerceAdmin() {
+export async function loadCommerceAdmin({ storefrontId: preferredStorefrontId = null, locationId: preferredLocationId = null } = {}) {
   const warnings = []
   try {
-    const [storefrontData, storefrontsData, productData, categoryData, promotionData, templateData, roleData, membershipData, orderData, customerData, locations, shippingData, shippingProviderData, shippingAccountData, fulfillmentData, domainData, providerData, accountData, paymentData, creditData, auditData, healthData] = await Promise.all([
+    const [storefrontData, storefrontsData, categoryData, promotionData, templateData, roleData, membershipData, orderData, customerData, locations, shippingData, shippingProviderData, shippingAccountData, fulfillmentData, domainData, providerData, accountData, paymentData, creditData, auditData, healthData] = await Promise.all([
       api.get('/api/admin/commerce/storefront'),
       safeCoreGet('/api/admin/commerce/storefronts', { items: [] }, warnings, 'lojas Commerce'),
-      loadAllStorefrontProducts(({ limit, offset }) => api.get(`/api/admin/commerce/catalog/products?limit=${limit}&offset=${offset}`)).then(items => ({ items })),
       safeCoreGet('/api/admin/commerce/catalog/categories', { items: [] }, warnings, 'categorias'),
       safeCoreGet('/api/admin/commerce/promotions', { items: [] }, warnings, 'promoções'),
       safeCoreGet('/api/admin/commerce/promotions/templates', { items: [] }, warnings, 'templates promocionais'),
@@ -143,31 +150,54 @@ export async function loadCommerceAdmin() {
       safeCoreGet('/api/admin/commerce/audit', { items: [], pagination: { total: 0, limit: 100, offset: 0, hasMore: false } }, warnings, 'auditoria'),
       safeCoreGet('/api/admin/commerce/operations/health', {}, warnings, 'saúde operacional'),
     ])
+    const storefronts = storefrontsData?.items || []
+    const fallbackStorefrontId = storefrontData?.items?.[0]?.id || storefronts[0]?.id || null
+    const selectedStorefront = storefronts.find(item => item.id === preferredStorefrontId)
+      || storefronts.find(item => item.id === fallbackStorefrontId)
+      || storefronts[0]
+      || null
+    const inventoryLocations = locations?.items || []
+    const eligibleLocations = selectedStorefront?.loja_id
+      ? inventoryLocations.filter(item => item.loja_id === selectedStorefront.loja_id || item.loja_id == null)
+      : inventoryLocations
+    const selectedLocation = eligibleLocations.find(item => item.id === preferredLocationId) || eligibleLocations[0] || null
+    const scope = new URLSearchParams()
+    if (selectedStorefront?.id) scope.set('storefrontId', selectedStorefront.id)
+    if (selectedLocation?.id) scope.set('locationId', selectedLocation.id)
+    const productItems = await loadAllStorefrontProducts(({ limit, offset }) => api.get(`/api/admin/commerce/catalog/products?${scope.toString()}&limit=${limit}&offset=${offset}`))
+    const [scopedOrders, scopedFulfillments, scopedPaymentAccounts, scopedPayments, scopedHealth] = await Promise.all([
+      api.get(scopedPath('/api/admin/commerce/orders', selectedStorefront?.id)),
+      safeCoreGet(scopedPath('/api/admin/commerce/fulfillments', selectedStorefront?.id), { items: [] }, warnings, 'fulfillments'),
+      safeCoreGet(scopedPath('/api/admin/commerce/payments/accounts', selectedStorefront?.id), { items: [] }, warnings, 'contas de pagamento'),
+      safeCoreGet(scopedPath('/api/admin/commerce/payments', selectedStorefront?.id), { items: [] }, warnings, 'pagamentos'),
+      safeCoreGet(scopedPath('/api/admin/commerce/operations/health', selectedStorefront?.id), {}, warnings, 'saúde operacional'),
+    ])
     return {
       mode: 'core',
-      storefrontId: storefrontData?.items?.[0]?.id || null,
-      storefronts: storefrontsData?.items || [],
-      locationId: locations?.items?.[0]?.id || null,
+      storefrontId: selectedStorefront?.id || null,
+      storefronts,
+      locationId: selectedLocation?.id || null,
+      inventoryLocations,
       categories: categoryData?.items || [],
       promotions: promotionData?.items || [],
       promotionTemplates: templateData?.items || [],
       roles: roleData?.items || [],
       memberships: membershipData?.items || [],
-      products: (productData?.items || []).map(normalizeCoreProduct),
-      orders: (orderData?.items || []).map(normalizeCoreOrder),
+      products: productItems.map(normalizeCoreProduct),
+      orders: (scopedOrders?.items || []).map(normalizeCoreOrder),
       customers: customerData?.items || [],
       shippingMethods: shippingData?.items || [],
       shippingProviders: shippingProviderData?.items || [],
       shippingAccounts: shippingAccountData?.items || [],
-      fulfillments: fulfillmentData?.items || [],
+      fulfillments: scopedFulfillments?.items || [],
       domains: domainData?.items || [],
       paymentProviders: providerData?.items || [],
-      paymentAccounts: accountData?.items || [],
-      payments: (paymentData?.items || []).map(normalizePayment),
+      paymentAccounts: scopedPaymentAccounts?.items || [],
+      payments: (scopedPayments?.items || []).map(normalizePayment),
       creditAccounts: creditData?.items || [],
       audit: auditData?.items || [],
       auditPagination: auditData?.pagination || { total: auditData?.items?.length || 0, limit: 100, offset: 0, hasMore: false },
-      health: healthData || {},
+      health: scopedHealth || {},
       warnings,
     }
   } catch (error) {
@@ -208,15 +238,15 @@ export async function archiveCoreVariant(id) {
   return api.delete(`/api/admin/commerce/catalog/variants/${id}`)
 }
 
-export async function listCoreProductMedia(productId) {
-  return api.get(`/api/admin/commerce/catalog/products/${productId}/media`)
+export async function listCoreProductMedia(productId, storefrontId) {
+  return api.get(scopedPath(`/api/admin/commerce/catalog/products/${productId}/media`, storefrontId))
 }
 
-export async function createCoreProductMedia(productId, payload) {
-  return api.post(`/api/admin/commerce/catalog/products/${productId}/media`, payload)
+export async function createCoreProductMedia(productId, payload, storefrontId) {
+  return api.post(`/api/admin/commerce/catalog/products/${productId}/media`, { ...payload, storefrontId })
 }
 
-export async function uploadCoreProductMedia(productId, file, { altText = '', ordem = 0, variantId = null, idempotencyKey = '' } = {}) {
+export async function uploadCoreProductMedia(productId, file, { altText = '', ordem = 0, variantId = null, idempotencyKey = '', storefrontId = null } = {}) {
   if (!file) throw new Error('Selecione uma imagem antes de enviar.')
   const headers = {
     'X-Image-Alt': String(altText || file.name || '').slice(0, 255),
@@ -224,18 +254,30 @@ export async function uploadCoreProductMedia(productId, file, { altText = '', or
   }
   if (variantId) headers['X-Variant-Id'] = variantId
   if (idempotencyKey) headers['X-Idempotency-Key'] = String(idempotencyKey).slice(0, 200)
+  if (storefrontId) headers['X-Storefront-Id'] = storefrontId
   return api.upload(`/api/admin/commerce/catalog/products/${productId}/media/upload`, file, headers)
 }
 
-export async function deleteCoreProductMedia(id) {
-  return api.delete(`/api/admin/commerce/catalog/media/${id}`)
+export async function deleteCoreProductMedia(id, storefrontId) {
+  return api.delete(scopedPath(`/api/admin/commerce/catalog/media/${id}`, storefrontId))
 }
 
-export async function saveCoreProduct({ editingId, current, form, storefrontId, locationId }) {
+export async function saveCoreProduct({ editingId, current, form, storefrontId, locationId, idempotencyKey }) {
+  if (!storefrontId) throw new Error('Selecione a vitrine antes de salvar o produto.')
+  if (!locationId) throw new Error('Selecione o local de estoque antes de salvar o produto.')
+  if (!idempotencyKey) throw new Error('A sessão de salvamento expirou. Feche e reabra o formulário.')
+  if (current?.status === 'archived') throw new Error('Produto arquivado não pode ser editado. Duplique-o como rascunho.')
   const price = number(form.preco)
   const promotional = form.precoPromocional === '' ? null : number(form.precoPromocional)
-  if (editingId) {
-    const product = await api.patch(`/api/admin/commerce/catalog/products/${editingId}`, {
+  const variants = current?.variantes || current?.variants || []
+  const variantId = current?.variantId || variants[0]?.id || null
+  const mediaUrl = String(form.imagem || '').trim()
+  const knownMedia = Array.isArray(current?.media) ? current.media : []
+  const payload = {
+    productId: editingId || null,
+    storefrontId,
+    locationId,
+    product: {
       nome: form.nome,
       slug: form.slug || undefined,
       tipo: form.tipo || 'physical',
@@ -244,71 +286,37 @@ export async function saveCoreProduct({ editingId, current, form, storefrontId, 
       descricaoCurta: form.descricaoCurta,
       seo: { title: form.seoTitulo || '', description: form.seoDescricao || '' },
       dadosFiscais: form.dadosFiscais || {},
-      status: form.ativo ? 'active' : 'archived',
-    })
-    if (current?.variantId) {
-      await api.patch(`/api/admin/commerce/catalog/products/${editingId}/price`, {
-        variantId: current.variantId,
-        preco: price,
-        precoPromocional: promotional,
-      })
-      const delta = number(form.estoque) - number(current.estoque)
-      if (delta && locationId) {
-        await api.post('/api/admin/commerce/inventory/adjust', {
-          locationId,
-          variantId: current.variantId,
-          delta,
-          tipo: 'ajuste',
-          idempotencyKey: `admin-stock-${editingId}-${Date.now()}`,
-        })
-      }
-    }
-    return product
+      status: form.status || (form.ativo ? 'active' : 'draft'),
+    },
+    variant: { id: variantId, sku: form.cod || undefined },
+    price,
+    promotionalPrice: promotional,
+    targetStock: number(form.estoque),
+    // Estoque de quando o formulário abriu: o servidor recusa se houve venda nesse meio tempo.
+    expectedStock: editingId ? number(current?.estoque ?? current?.estoqueDisponivel ?? 0) : null,
+    published: form.publicado === true,
+    media: mediaUrl && !knownMedia.some(media => (media.public_url || media.publicUrl) === mediaUrl)
+      ? { url: mediaUrl, storageKey: mediaUrl, mimeType: 'image/*', altText: form.nome }
+      : null,
   }
-  const created = await api.post('/api/admin/commerce/catalog/products', {
-    nome: form.nome,
-    slug: form.slug || undefined,
-    tipo: form.tipo || 'physical',
-    categoryId: form.categoryId || null,
-    descricao: form.descricao,
-    descricaoCurta: form.descricaoCurta,
-    seo: { title: form.seoTitulo || '', description: form.seoDescricao || '' },
-    dadosFiscais: form.dadosFiscais || {},
-    status: form.ativo ? 'active' : 'draft',
-    preco: price,
-    precoPromocional: promotional,
-    storefrontId: form.ativo ? storefrontId : null,
-    publicado: form.ativo,
-    variant: { sku: form.cod || undefined },
-    media: form.imagem ? { url: form.imagem, storageKey: form.imagem, mimeType: 'image/*', altText: form.nome } : undefined,
-  })
-  if (locationId && created?.variant?.id && number(form.estoque)) {
-    await api.post('/api/admin/commerce/inventory/adjust', {
-      locationId,
-      variantId: created.variant.id,
-      delta: number(form.estoque),
-      tipo: 'entrada',
-      idempotencyKey: `admin-stock-${created.id}-${Date.now()}`,
-    })
-  }
-  return created
+  return api.put('/api/admin/commerce/catalog/products/workspace', payload, { headers: { 'X-Idempotency-Key': idempotencyKey } })
 }
 
 export async function toggleCoreProduct(product, storefrontId) {
   if (!storefrontId) throw new Error('storefront do canal não configurado')
   return api.post(`/api/admin/commerce/catalog/products/${product.id}/publish`, {
     storefrontId,
-    publicado: product.ativo === false,
+    publicado: product.publicado !== true,
   })
 }
 
-export async function deleteCoreProduct(product) {
-  return api.delete(`/api/admin/commerce/catalog/products/${product.id}`)
+export async function deleteCoreProduct(product, storefrontId) {
+  return api.delete(scopedPath(`/api/admin/commerce/catalog/products/${product.id}`, storefrontId))
 }
 
-export async function updateCoreOrder(order, status) {
+export async function updateCoreOrder(order, status, storefrontId) {
   const next = LEGACY_TO_CORE[status] || status
-  return api.patch(`/api/admin/commerce/orders/${order.id}`, { status: next })
+  return api.patch(`/api/admin/commerce/orders/${order.id}`, { status: next, storefrontId })
 }
 
 export async function createCorePromotion(form) {
@@ -383,16 +391,16 @@ export async function updateCoreShippingAccount(id, payload) {
   return api.patch(`/api/admin/commerce/shipping/accounts/${id}`, payload)
 }
 
-export async function createCoreShippingLabel(id, payload = {}) {
-  return api.post(`/api/admin/commerce/fulfillments/${id}/label`, payload)
+export async function createCoreShippingLabel(id, payload = {}, storefrontId) {
+  return api.post(`/api/admin/commerce/fulfillments/${id}/label`, { ...payload, storefrontId })
 }
 
-export async function syncCoreShippingTracking(id) {
-  return api.post(`/api/admin/commerce/fulfillments/${id}/track`, {})
+export async function syncCoreShippingTracking(id, storefrontId) {
+  return api.post(`/api/admin/commerce/fulfillments/${id}/track`, { storefrontId })
 }
 
-export async function cancelCoreShippingLabel(id) {
-  return api.post(`/api/admin/commerce/fulfillments/${id}/cancel-label`, {})
+export async function cancelCoreShippingLabel(id, storefrontId) {
+  return api.post(`/api/admin/commerce/fulfillments/${id}/cancel-label`, { storefrontId })
 }
 
 export async function createCoreDomain(payload) {
@@ -427,18 +435,18 @@ export async function createCorePaymentAttempt(orderId, payload) {
   return api.post(`/api/admin/commerce/orders/${orderId}/payments`, payload)
 }
 
-export async function syncCorePayment(paymentId) {
-  return api.post(`/api/admin/commerce/payments/${paymentId}/sync`, {})
+export async function syncCorePayment(paymentId, storefrontId) {
+  return api.post(`/api/admin/commerce/payments/${paymentId}/sync`, { storefrontId })
 }
 
-export async function reconcileCorePayment(paymentId, payload) {
-  return api.post(`/api/admin/commerce/payments/${paymentId}/reconcile`, payload)
+export async function reconcileCorePayment(paymentId, payload, storefrontId) {
+  return api.post(`/api/admin/commerce/payments/${paymentId}/reconcile`, { ...payload, storefrontId })
 }
 
-export async function loadCoreReports() {
+export async function loadCoreReports(storefrontId) {
   const [sales, fulfillment, inventory, customers] = await Promise.all([
-    api.get('/api/admin/commerce/reports/sales'),
-    api.get('/api/admin/commerce/reports/fulfillment'),
+    api.get(scopedPath('/api/admin/commerce/reports/sales', storefrontId)),
+    api.get(scopedPath('/api/admin/commerce/reports/fulfillment', storefrontId)),
     api.get('/api/admin/commerce/reports/inventory'),
     api.get('/api/admin/commerce/reports/customers'),
   ])

@@ -297,3 +297,36 @@ test('saída anterior incerta nunca chama Evolution novamente e força revisão 
     assert.equal(mock.calls.some(sql => /delivery_status = 'sending'/.test(sql)), false);
   } finally { mock.restore(); }
 });
+
+test('parser aceita os formatos do backend NossaGente (Baileys e wppconnect) sem afrouxar filtros', () => {
+  const baileys = parseEvolutionMessage({ event: 'messages.upsert', data: { messages: [{ key: { id: 'B1', remoteJid: '5565999990000@s.whatsapp.net', fromMe: false }, pushName: 'Ana', message: { conversation: 'Quero agendar' } }] } });
+  assert.equal(baileys.ignored, false);
+  assert.equal(baileys.phone, '5565999990000');
+  assert.equal(baileys.text, 'Quero agendar');
+  const wpp = parseEvolutionMessage({ event: 'onmessage', data: { id: 'W1', from: '5565988887777@c.us', body: 'Oi', type: 'chat', notifyName: 'Beto' } });
+  assert.equal(wpp.ignored, false);
+  assert.equal(wpp.name, 'Beto');
+  assert.equal(parseEvolutionMessage({ event: 'message', data: { id: 'G1', from: '123@g.us', body: 'x', isGroupMsg: true } }).reason, 'group');
+  assert.equal(parseEvolutionMessage({ event: 'message', data: { id: 'M1', from: '5565988887777@c.us', body: 'eco', fromMe: true } }).reason, 'from_me');
+  assert.equal(parseEvolutionMessage({ event: 'connection.update', data: { state: 'open' } }).reason, 'unsupported_event');
+});
+
+test('mensagem com endereço @lid usa o número real enviado pelo provedor, ou é ignorada', () => {
+  const comNumero = parseEvolutionMessage({ event: 'messages.upsert', data: { key: { id: 'LID-1', remoteJid: '123456789012345@lid', senderPn: '5565999990001@s.whatsapp.net', fromMe: false }, message: { conversation: 'SAIR' } } });
+  assert.equal(comNumero.ignored, false);
+  assert.equal(comNumero.phone, '5565999990001');
+  assert.equal(comNumero.remoteJid, '5565999990001@s.whatsapp.net', 'resposta vai para o número, não para o LID');
+  const semNumero = parseEvolutionMessage({ event: 'messages.upsert', data: { key: { id: 'LID-2', remoteJid: '123456789012345@lid', fromMe: false }, message: { conversation: 'oi' } } });
+  assert.equal(semNumero.ignored, true);
+  assert.equal(semNumero.reason, 'lid_without_phone');
+});
+
+test('segredo do webhook só pode vir de variável própria de webhook (nunca JWT_SECRET, DATABASE_URL…)', async () => {
+  for (const name of ['JWT_SECRET', 'DATABASE_URL', 'EVOLUTION_API_KEY', 'NODE_ENV']) {
+    await assert.rejects(
+      () => configureWhatsappAiChannel({ empresaId: EMPRESA, lojaId: LOJA }, { status: 'rascunho', instance: 'dino', webhookSecretEnv: name }),
+      /WHATSAPP_AI_WEBHOOK_SECRET/,
+      name,
+    );
+  }
+});
