@@ -330,10 +330,10 @@ export function NpsPanel() {
   const [periodo, setPeriodo] = useState('90')
   const { dados, erro, carregando, carregar } = useCarregar(`/api/admin/barbearia/captacao/nps${periodoNps(periodo)}`)
   const config = useCarregar('/api/admin/barbearia/captacao/configuracao')
-  const [atraso, setAtraso] = useState('120')
+  const [atraso, setAtraso] = useState('0')
   useEffect(() => {
     if (!config.dados?.configuracao) return
-    setAtraso(String(config.dados.configuracao.pedirAvaliacaoAposMinutos ?? 120))
+    setAtraso(String(config.dados.configuracao.pedirAvaliacaoAposMinutos ?? 0))
   }, [config.dados])
   async function salvar(event) {
     event.preventDefault()
@@ -350,7 +350,7 @@ export function NpsPanel() {
   return <div style={{ display: 'grid', gap: 16 }}>
     <div style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
-        <div><h2 style={h2}>Avaliações da Barbearia (NPS)</h2><p style={sub}>Questionário da própria Dino. O convite é enviado somente após atendimento concluído, com autorização para WhatsApp. Nota e comentário ficam no sistema.</p></div>
+        <div><h2 style={h2}>Avaliações da Barbearia (NPS)</h2><p style={sub}>Questionário da própria Dino. Após a conclusão, o convite é programado somente com consentimento de WhatsApp e canal ativo. Nota e comentário ficam no sistema.</p></div>
         <label style={{ display: 'grid', gap: 4, color: 'var(--muted)', fontSize: 12 }}>Período dos atendimentos
           <select style={input} value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
             <option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="todos">Todo o histórico</option>
@@ -375,6 +375,17 @@ export function NpsPanel() {
       <button type="submit" style={btnPrimary}>Salvar intervalo</button>
       <span style={{ color: 'var(--muted)', fontSize: 12 }}>O link do convite abre exclusivamente o formulário da Dino; sem integração de avaliações externas.</span>
     </form>
+    <div style={card}>
+      <strong>Convites pelo WhatsApp</strong>
+      <p style={sub}>Fila acumulada da empresa/unidade ativa, independente do filtro de período acima. “Aceito pelo provedor” não comprova entrega ou leitura pelo cliente.</p>
+      {dados?.notificacoesPesquisa?.canaisAtivos === 0 && <p role="alert" style={{ color: '#c73535', fontWeight: 700, margin: '10px 0' }}>Nenhum canal WhatsApp ativo para esta empresa/unidade. O convite automático não pode ser programado até configurar e validar o canal.</p>}
+      {dados?.notificacoesPesquisa ? <div style={{ ...grid(150), marginTop: 12 }}>
+        <div style={kpi}><div style={kpiLabel}>Pendentes</div><div style={kpiValue}>{dados.notificacoesPesquisa.pendentes}</div></div>
+        <div style={kpi}><div style={kpiLabel}>Aceitos pelo provedor</div><div style={kpiValue}>{dados.notificacoesPesquisa.aceitas_provedor}</div></div>
+        <div style={kpi}><div style={kpiLabel}>Falhas / verificar</div><div style={{ ...kpiValue, color: '#e05c5c' }}>{dados.notificacoesPesquisa.falhas}</div></div>
+        <div style={kpi}><div style={kpiLabel}>Cancelados</div><div style={kpiValue}>{dados.notificacoesPesquisa.canceladas}</div></div>
+      </div> : <div style={empty}>Fila WhatsApp indisponível para consulta. Não assuma que convites foram enviados.</div>}
+    </div>
     <div style={card}>
       <strong>Distribuição das notas</strong>
       <p style={sub}>Contagem por nota, de 0 a 10, somente nos atendimentos do período e da unidade selecionados.</p>

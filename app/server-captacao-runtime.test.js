@@ -116,8 +116,10 @@ test('captação: agendamento online com consentimento e indicação, lista de e
     const avulso = await concluirAtendimento('15:00', { registrarFinanceiro: true, confirmado: true, meioPagamento: 'pix', valorRecebido: 50 });
     assert.equal(avulso.response.status, 200, JSON.stringify(avulso.body));
     assert.equal(avulso.body.assinatura, null, 'cobrado avulso não gasta sessão do plano');
+    assert.equal(typeof avulso.body.avaliacao?.queued, 'number', 'conclusão com financeiro sempre reporta o estado da pesquisa');
     const peloPlano = await concluirAtendimento('16:00', {});
     assert.equal(peloPlano.body.assinatura.usosNoCiclo, 1, 'sem cobrança avulsa, usa o plano');
+    assert.equal(typeof peloPlano.body.avaliacao?.queued, 'number', 'conclusão por plano também reporta o estado da pesquisa');
 
     // NPS: o atendimento concluído pelo plano pode ser avaliado com código + telefone.
     const agendaAdmin = (await request(base, `/api/admin/barbearia/agenda?data=${data}`, { headers })).body;
@@ -136,6 +138,7 @@ test('captação: agendamento online com consentimento e indicação, lista de e
       assert.equal(nps.body.atendimentosConcluidos, 2);
       assert.equal(nps.body.taxaResposta, 50);
       assert.equal(nps.body.distribuicao[9].respostas, 1);
+      assert.equal(nps.body.notificacoesPesquisa, null, 'fila PG indisponível não vira contador falso');
       assert.equal(JSON.stringify(nps.body).includes('65966660001'), false, 'sem telefone no painel');
       const externo = await request(base, '/api/admin/barbearia/captacao/configuracao', { method: 'PUT', headers, body: JSON.stringify({ googleReviewUrl: 'https://g.page/r/teste/review' }) });
       assert.equal(externo.response.status, 400);

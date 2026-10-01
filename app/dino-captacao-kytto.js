@@ -74,7 +74,7 @@ function configuracaoPadrao() {
     pontosIndicado: 50,
     carenciaInadimplenciaDias: 3,
     avisosListaEsperaPorVaga: 3,
-    pedirAvaliacaoAposMinutos: 120,
+    pedirAvaliacaoAposMinutos: 0,
   };
 }
 
@@ -111,7 +111,7 @@ export function salvarConfiguracaoCaptacao(empresaId, dados = {}) {
     pontosIndicado: inteiro(dados.pontosIndicado, atual.pontosIndicado, 0, 100000),
     carenciaInadimplenciaDias: inteiro(dados.carenciaInadimplenciaDias, atual.carenciaInadimplenciaDias, 0, 60),
     avisosListaEsperaPorVaga: inteiro(dados.avisosListaEsperaPorVaga, atual.avisosListaEsperaPorVaga, 1, 20),
-    pedirAvaliacaoAposMinutos: inteiro(dados.pedirAvaliacaoAposMinutos, atual.pedirAvaliacaoAposMinutos ?? 120, 0, 2880),
+    pedirAvaliacaoAposMinutos: inteiro(dados.pedirAvaliacaoAposMinutos, atual.pedirAvaliacaoAposMinutos ?? 0, 0, 2880),
     atualizadoEm: new Date().toISOString(),
   };
   save();

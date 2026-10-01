@@ -49,7 +49,7 @@ import { listAdminUserDirectory } from './core/admin-user-directory.js';
 import { listCommerceTenants, provisionCommerceTenant } from './core/commerce-tenants.js';
 import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
 import * as barbeariaFiscalKytto from './barbearia-fiscal-kytto.js';
-import { appointmentNotificationMetrics, queueAppointmentNotifications, queueReviewRequest } from './core/barbershop-appointment-notifications.js';
+import { appointmentNotificationMetrics, queueAppointmentNotifications, queueReviewRequest, reviewNotificationMetrics } from './core/barbershop-appointment-notifications.js';
 import { avisarListaEspera } from './core/barbershop-agenda.js';
 import * as captacaoKytto from './dino-captacao-kytto.js';
 import * as clientesKytto from './clientes-contas-kytto.js';
@@ -2787,12 +2787,22 @@ app.patch('/api/admin/barbearia/agenda/:id/status', async (req, res) => {
         // Cobrado avulso (registrarFinanceiro) não usa o plano, salvo pedido explícito.
         const usarPlano = req.body?.usarPlano === true || (req.body?.usarPlano !== false && req.body?.registrarFinanceiro !== true);
         if (usarPlano) assinatura = captacaoKytto.consumirAssinaturaNaConclusao(empresaId, agendamento);
-        // NPS: pede a avaliação pelo WhatsApp algumas horas depois (só com consentimento).
-        avaliacao = await queueReviewRequest({ empresaId, lojaId: agendamento.lojaId || legacyLojaId(req), legacyEmpresaId: empresaId }, captacaoKytto.garantirCodigoConfirmacao(empresaId, agendamento.id) || agendamento).catch(() => ({ queued: 0, skipped: true, reason: 'queue_unavailable' }));
       }
     } catch (erroCaptacao) {
       // O status e o financeiro já foram gravados: captação nunca derruba a resposta.
       console.error('[Captação] pós-status:', erroCaptacao?.message || erroCaptacao);
+    }
+    if (status === 'concluido') {
+      // A pesquisa não depende de indicação/assinatura: tentar uma única tarefa
+      // por atendimento mesmo quando qualquer pós-processamento acima falhar.
+      // Somente cliente consentido e canal ativo recebem; "queued" não é "sent".
+      try {
+        const comCodigo = captacaoKytto.garantirCodigoConfirmacao(empresaId, agendamento.id) || agendamento;
+        avaliacao = await queueReviewRequest({ empresaId, lojaId: agendamento.lojaId || lojaId, legacyEmpresaId: empresaId }, comCodigo);
+      } catch (erroAvaliacao) {
+        console.error('[Avaliação] fila indisponível:', erroAvaliacao?.code || 'QUEUE_ERROR');
+        avaliacao = { queued: 0, skipped: true, reason: 'queue_unavailable' };
+      }
     }
     res.json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(empresaId, agendamento), financeiro, notificacao, listaEspera, indicacao, avaliacao, assinatura: assinatura ? { id: assinatura.assinatura.id, sessoesRestantes: assinatura.sessoesRestantes, usosNoCiclo: assinatura.usosNoCiclo } : null });
   } catch (error) { res.status(400).json({ error: error.message }); }
@@ -2820,11 +2830,14 @@ app.put('/api/admin/barbearia/captacao/configuracao', (req, res) => {
   if (!gestaoDaUnidade(req, res)) return;
   try { res.json({ ok: true, configuracao: captacaoKytto.salvarConfiguracaoCaptacao(legacyEmpresaId(req), req.body || {}) }); } catch (error) { respostaCaptacao(res, error); }
 });
-app.get('/api/admin/barbearia/captacao/nps', (req, res) => {
+app.get('/api/admin/barbearia/captacao/nps', async (req, res) => {
   // Comentários de todos os barbeiros: só a gestão da unidade vê o consolidado.
   if (!gestaoDaUnidade(req, res)) return;
   try {
-    res.json({ ok: true, ...captacaoKytto.painelNps(legacyEmpresaId(req), { inicio: req.query?.inicio, fim: req.query?.fim, lojaId: legacyLojaId(req) }) });
+    const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId(req);
+    const notificacoesPesquisa = await reviewNotificationMetrics({ empresaId, lojaId }).catch(() => null);
+    res.json({ ok: true, ...captacaoKytto.painelNps(empresaId, { inicio: req.query?.inicio, fim: req.query?.fim, lojaId }), notificacoesPesquisa });
   } catch (error) { respostaCaptacao(res, error); }
 });
 app.get('/api/admin/barbearia/captacao/lista-espera', (req, res) => {

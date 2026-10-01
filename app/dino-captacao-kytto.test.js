@@ -516,6 +516,7 @@ test('NPS: pedido de avaliação só com link público, código e consentimento'
   const cliente = clientes.criarCliente(EMPRESA, { nome: 'Sem Consentimento', telefone: '65977770200' });
   const feito = concluir(agendar({ profissional: bruno, servico: corte, data: dataLocal(Date.now() - 3600000), hora: '08:30', nome: cliente.nome, telefone: cliente.telefone, clienteId: cliente.id, codigo: 'NPSPED01' }));
   const anterior = process.env.PUBLIC_BASE_URL;
+  const ambienteAnterior = process.env.NODE_ENV;
   try {
     delete process.env.PUBLIC_BASE_URL; delete process.env.SERVER_URL; delete process.env.PUBLIC_APP_URL;
     const contexto = { empresaId: EMPRESA, lojaId: LOJA, legacyEmpresaId: EMPRESA };
@@ -524,16 +525,25 @@ test('NPS: pedido de avaliação só com link público, código e consentimento'
     assert.equal(notificacoes.linkAvaliacao(EMPRESA, feito), '', 'domínio Dino não serve outro slug');
     barbearia.atualizarConfiguracao(EMPRESA, { slugPublico: 'dino' });
     assert.equal(notificacoes.linkAvaliacao(EMPRESA, feito), 'https://dino.kytto.com.br/avaliar/dino');
+    process.env.NODE_ENV = 'production';
+    process.env.PUBLIC_BASE_URL = 'https://outro-exemplo.invalid';
+    assert.equal(notificacoes.linkAvaliacao(EMPRESA, feito), '', 'produção não redireciona o cliente para outro domínio');
+    process.env.PUBLIC_BASE_URL = 'https://dino.kytto.com.br';
+    assert.equal(notificacoes.linkAvaliacao(EMPRESA, feito), 'https://dino.kytto.com.br/avaliar/dino');
+    if (ambienteAnterior === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = ambienteAnterior;
     assert.equal((await notificacoes.queueReviewRequest(contexto, feito)).reason, 'service_consent_required');
     const semCodigo = barbearia.criarAgendamento(EMPRESA, { clienteNome: 'Balcão', clienteTelefone: '65977770201', profissionalId: bruno.id, servicoId: corte.id, dataHora: isoLocal(dataLocal(Date.now() + DIA_MS), '15:00'), dataAgenda: dataLocal(Date.now() + DIA_MS), horaLocal: '15:00', lojaId: LOJA });
     // Na hora do envio confere de novo: sem consentimento ou já avaliado, não envia.
-    const tarefa = { loja_id: LOJA, payload: { legacyEmpresaId: EMPRESA, appointmentId: feito.id, eventType: 'avaliacao' } };
+    const tarefa = { empresa_id: EMPRESA, loja_id: LOJA, payload: { legacyEmpresaId: EMPRESA, appointmentId: feito.id, customerId: cliente.id, eventType: 'avaliacao' } };
+    assert.equal((await notificacoes.processAppointmentNotificationTask({ ...tarefa, empresa_id: 'outra-empresa' })).reason, 'tenant_scope_mismatch');
+    assert.equal((await notificacoes.processAppointmentNotificationTask({ ...tarefa, payload: { ...tarefa.payload, customerId: 'outra-identidade' } })).reason, 'customer_changed');
     assert.equal((await notificacoes.processAppointmentNotificationTask(tarefa)).reason, 'service_consent_required');
     captacao.registrarAvaliacao(EMPRESA, { codigo: 'NPSPED01', telefone: cliente.telefone, nota: 8, lojaId: LOJA });
     assert.equal((await notificacoes.processAppointmentNotificationTask(tarefa)).reason, 'already_reviewed');
     assert.equal(semCodigo.codigoConfirmacao, '');
     assert.match(captacao.garantirCodigoConfirmacao(EMPRESA, semCodigo.id).codigoConfirmacao, /^[A-F0-9]{8}$/);
   } finally {
+    if (ambienteAnterior === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = ambienteAnterior;
     if (anterior === undefined) delete process.env.PUBLIC_BASE_URL; else process.env.PUBLIC_BASE_URL = anterior;
   }
 });
