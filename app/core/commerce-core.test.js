@@ -36,7 +36,7 @@ function queryRecorder(resolver) {
   };
 }
 
-test('catálogo público soma estoque somente da loja do storefront ou de local global', async () => {
+test('catálogo público expõe o máximo reservável em um único local do storefront', async () => {
   const original = db.queryRead;
   let captured;
   db.queryRead = async (sql, values) => { captured = { sql, values }; return { rows: [] }; };
@@ -45,8 +45,9 @@ test('catálogo público soma estoque somente da loja do storefront ou de local 
   } finally {
     db.queryRead = original;
   }
-  assert.match(captured.sql, /l\.loja_id IS NULL OR l\.loja_id = \(/);
-  assert.match(captured.sql, /SELECT s\.loja_id FROM commerce_storefronts s/);
+  assert.match(captured.sql, /MAX\(il\.disponivel\)/);
+  assert.match(captured.sql, /l\.loja_id IS NULL OR l\.loja_id = selected_storefront\.loja_id/);
+  assert.match(captured.sql, /inventoryLocationId/);
   assert.equal(captured.values[1], storefrontId);
 });
 
@@ -256,7 +257,8 @@ test('createPendingOrder reserva estoque para produto físico', async () => {
     if (sql.includes('FROM commerce_product_variants')) return { rows: [{ id: variantId, sku: 'SKU-1', variant_name: 'Tamanho único', product_name: 'Produto físico', product_type: 'physical', price: '29.90', promotional: false }] };
     if (sql.includes('SELECT id FROM commerce_customers')) return { rows: [] };
     if (sql.includes('INSERT INTO commerce_customers')) return { rows: [{ id: '99999999-9999-4999-8999-999999999999' }] };
-    if (sql.includes('SELECT id FROM commerce_inventory_locations')) return { rows: [{ id: locationId }] };
+    if (sql.includes('FROM commerce_inventory_locations l')) return { rows: [{ id: locationId, loja_id: lojaId, criado_em: new Date().toISOString() }] };
+    if (sql.includes('SELECT location_id, variant_id, disponivel')) return { rows: [{ location_id: locationId, variant_id: variantId, disponivel: available }] };
     if (sql.includes('FROM commerce_inventory_levels')) return { rows: [{ id: 'level-1', disponivel: available, reservado: 0, comprometido: 0 }] };
     if (sql.includes('UPDATE commerce_inventory_levels')) { available = values[3]; return { rows: [] }; }
     return { rows: [] };

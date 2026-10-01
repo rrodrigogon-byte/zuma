@@ -4,7 +4,7 @@ import { buildChecklist } from './dino-ativacao-routes.js';
 
 const base = () => ({
   agora: Date.parse('2026-09-28T20:00:00Z'), baseUrl: 'https://dino.kytto.com.br', commerce: true, migracao: true,
-  provider: 'chatbot_backend', instance: 'dino-1', env: { CHATBOT_BACKEND_KEY: true, WHATSAPP_AI_WEBHOOK_SECRET: true, FEATURE_WHATSAPP_AI: true },
+  provider: 'chatbot_backend', instance: 'dino-1', env: { CHATBOT_BACKEND_KEY: true, CHATBOT_BACKEND_URL: true, WHATSAPP_AI_WEBHOOK_SECRET: true, FEATURE_WHATSAPP_AI: true }, modo: 'isa', empresaDoNumero: true,
   ia: { gemini: true, anthropic: false, openai: false }, conexao: 'open',
   canal: { status: 'ativo', instance: 'dino-1', publicCode: 'abc123', lastEventAt: '2026-09-28T19:00:00Z' },
   politica: { personalizationEnabled: true, privacyNotice: 'x' }, cerebro: { ativo: true, autonomia: 1 }, execucoes: 1,
@@ -36,4 +36,13 @@ test('webhook mostra URL e nome do cabeçalho, nunca o valor do segredo', () => 
   assert.equal(w.dados.url, 'https://dino.kytto.com.br/api/webhooks/whatsapp/abc123');
   assert.equal(w.dados.segredo, 'WHATSAPP_AI_WEBHOOK_SECRET');
   assert.equal(r.itens.find((i) => i.id === 'canal').acao, 'ativar_canal');
+});
+
+test('modelo Isa: exige URL própria e o número ligado a esta empresa; webhook não é exigido', () => {
+  const r = buildChecklist({ ...base(), env: { CHATBOT_BACKEND_KEY: true, FEATURE_WHATSAPP_AI: true }, empresaDoNumero: false });
+  const by = Object.fromEntries(r.itens.map((i) => [i.id, i]));
+  assert.equal(by.whatsapp_url.ok, false);
+  assert.equal(by.whatsapp_empresa.ok, false);
+  assert.equal(by.webhook_segredo.ok, true);
+  assert.match(by.webhook_segredo.detalhe, /igual à Isa/);
 });

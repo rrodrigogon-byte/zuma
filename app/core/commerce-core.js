@@ -247,15 +247,18 @@ export async function listPublishedProducts(context, options = {}) {
        LEFT JOIN commerce_product_media m
          ON m.empresa_id = p.empresa_id AND m.product_id = p.id
        LEFT JOIN LATERAL (
-         SELECT COALESCE(SUM(il.disponivel), 0) AS disponivel
+         SELECT COALESCE(MAX(il.disponivel), 0) AS disponivel
           FROM commerce_inventory_levels il
            JOIN commerce_inventory_locations l
              ON l.empresa_id = il.empresa_id AND l.id = il.location_id AND l.ativo = true
+           JOIN commerce_storefronts selected_storefront
+             ON selected_storefront.empresa_id = p.empresa_id AND selected_storefront.id = $2 AND selected_storefront.status = 'active'
           WHERE il.empresa_id = p.empresa_id AND il.variant_id = v.id
-            AND (l.loja_id IS NULL OR l.loja_id = (
-              SELECT s.loja_id FROM commerce_storefronts s
-               WHERE s.empresa_id = p.empresa_id AND s.id = $2
-            ))
+            AND (l.loja_id IS NULL OR l.loja_id = selected_storefront.loja_id)
+            AND (
+              NULLIF(selected_storefront.configuracoes->>'inventoryLocationId', '') IS NULL
+              OR l.id::text = selected_storefront.configuracoes->>'inventoryLocationId'
+            )
        ) stock ON true
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(jsonb_build_object(
@@ -283,6 +286,76 @@ export async function listPublishedProducts(context, options = {}) {
     values,
   );
   return result.rows;
+}
+
+// A vitrine não oferece split fulfillment: toda a reserva de um pedido físico
+// precisa caber em um único local. O catálogo usa MAX(disponivel) pela mesma
+// regra. No checkout, os locais e saldos relevantes são travados antes da
+// escolha para que a regra não mude entre a seleção e reserveInventory().
+async function selectInventoryLocation(trx, { empresaId, storefront, lines, requestedLocationId = null }) {
+  const configuredLocationId = storefront.configuracoes?.inventoryLocationId
+    ? assertUuid(storefront.configuracoes.inventoryLocationId, 'configuracoes.inventoryLocationId')
+    : null;
+  if (configuredLocationId && requestedLocationId && configuredLocationId !== requestedLocationId) {
+    throw new CommerceError('o local operacional configurado não pode ser substituído', 'INVENTORY_LOCATION_SCOPE_MISMATCH');
+  }
+  const locationId = configuredLocationId || requestedLocationId;
+  const locationValues = [empresaId, storefront.loja_id];
+  const locationPredicates = [
+    'l.empresa_id = $1',
+    '(l.loja_id = $2 OR l.loja_id IS NULL)',
+    'l.ativo = true',
+  ];
+  if (locationId) {
+    locationValues.push(locationId);
+    locationPredicates.push(`l.id = $${locationValues.length}`);
+  }
+  const locations = await trx.query(
+    `SELECT l.id, l.loja_id, l.criado_em
+       FROM commerce_inventory_locations l
+      WHERE ${locationPredicates.join(' AND ')}
+      ORDER BY CASE WHEN l.loja_id = $2 THEN 0 ELSE 1 END, l.criado_em ASC, l.id ASC
+      FOR UPDATE`,
+    locationValues,
+  );
+  if (!locations.rows.length) {
+    if (locationId) throw new CommerceError('local de estoque fora do escopo da loja', 'INVENTORY_LOCATION_SCOPE_MISMATCH');
+    throw new CommerceError('local de estoque não configurado', 'INVENTORY_LOCATION_REQUIRED');
+  }
+
+  const locationIds = locations.rows.map(row => row.id);
+  const variantIds = lines.map(line => line.variantId);
+  const levels = await trx.query(
+    `SELECT location_id, variant_id, disponivel
+       FROM commerce_inventory_levels
+      WHERE empresa_id = $1
+        AND location_id = ANY($2::uuid[])
+        AND variant_id = ANY($3::uuid[])
+      ORDER BY location_id, variant_id
+      FOR UPDATE`,
+    [empresaId, locationIds, variantIds],
+  );
+  const available = new Map(levels.rows.map(row => [`${row.location_id}:${row.variant_id}`, Number(row.disponivel)]));
+  const candidates = locations.rows
+    .map(location => {
+      const capacities = lines.map(line => Math.floor((available.get(`${location.id}:${line.variantId}`) || 0) / line.quantity));
+      return { location, capacity: Math.min(...capacities) };
+    })
+    .filter(candidate => candidate.capacity > 0);
+  if (!candidates.length) {
+    throw new CommerceError('estoque insuficiente em um único local para todos os itens', 'INSUFFICIENT_STOCK', {
+      availableLocations: locations.rows.map(row => row.id),
+    });
+  }
+  candidates.sort((left, right) => {
+    if (right.capacity !== left.capacity) return right.capacity - left.capacity;
+    const leftStoreRank = left.location.loja_id === storefront.loja_id ? 0 : 1;
+    const rightStoreRank = right.location.loja_id === storefront.loja_id ? 0 : 1;
+    if (leftStoreRank !== rightStoreRank) return leftStoreRank - rightStoreRank;
+    const createdDifference = new Date(left.location.criado_em).getTime() - new Date(right.location.criado_em).getTime();
+    return createdDifference || left.location.id.localeCompare(right.location.id);
+  });
+  return candidates[0].location.id;
 }
 
 export async function reserveInventory(trx, context, input) {
@@ -681,31 +754,12 @@ export async function createPendingOrder(trx, context, input = {}) {
 
   const physical = normalizedLines.filter(line => line.variant.product_type === 'physical' || line.variant.product_type === 'ticket');
   if (physical.length) {
-    let locationId = input.locationId ? assertUuid(input.locationId, 'locationId') : null;
-    if (locationId) {
-      const location = await trx.query(
-        `SELECT id FROM commerce_inventory_locations
-          WHERE empresa_id = $1 AND id = $2 AND (loja_id = $3 OR loja_id IS NULL) AND ativo = true
-          LIMIT 1`,
-        [empresaId, locationId, storefront.loja_id],
-      );
-      if (!location.rows[0]) throw new CommerceError('local de estoque fora do escopo da loja', 'INVENTORY_LOCATION_SCOPE_MISMATCH');
-    } else {
-      // Escolhe o local que tem saldo para todos os itens; a vitrine mostra a soma dos
-      // locais, então reservar sempre no primeiro dava "estoque insuficiente" com produto à venda.
-      const location = await trx.query(
-        `SELECT l.id FROM commerce_inventory_locations l
-          WHERE l.empresa_id = $1 AND (l.loja_id = $2 OR l.loja_id IS NULL) AND l.ativo = true
-          ORDER BY (SELECT COUNT(*) FROM jsonb_to_recordset($3::jsonb) AS need(v uuid, q int)
-                     WHERE COALESCE((SELECT il.disponivel FROM commerce_inventory_levels il
-                                      WHERE il.empresa_id = l.empresa_id AND il.location_id = l.id AND il.variant_id = need.v), 0) < need.q) ASC,
-                   CASE WHEN l.loja_id = $2 THEN 0 ELSE 1 END, l.criado_em ASC
-          LIMIT 1`,
-        [empresaId, storefront.loja_id, JSON.stringify(physical.map(line => ({ v: line.variantId, q: line.quantity })))],
-      );
-      locationId = location.rows[0]?.id || null;
-    }
-    if (!locationId) throw new CommerceError('local de estoque não configurado', 'INVENTORY_LOCATION_REQUIRED');
+    const locationId = await selectInventoryLocation(trx, {
+      empresaId,
+      storefront,
+      lines: physical,
+      requestedLocationId: input.locationId ? assertUuid(input.locationId, 'locationId') : null,
+    });
     for (const line of physical) {
       await reserveInventory(trx, { empresaId }, {
         locationId,

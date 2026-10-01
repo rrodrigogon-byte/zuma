@@ -378,9 +378,11 @@ function storefrontConfigOrigin(storefront, methodConfig, accountConfig = {}) {
 }
 
 function canonicalJson(value) {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(item => canonicalJson(item)).join(',')}]`;
-  return `{${Object.keys(value).filter(key => value[key] !== undefined).sort().map(key => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`;
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.keys(value).filter(key => value[key] !== undefined).sort().map(key => [key, canonicalJson(value[key])]));
+  }
+  return value;
 }
 
 function canonicalDestination(value) {
@@ -402,7 +404,7 @@ function canonicalShippingLines(items) {
   return lines;
 }
 
-function requestHash(snapshot) { return crypto.createHash('sha256').update(canonicalJson(snapshot)).digest('hex'); }
+function requestHash(snapshot) { return crypto.createHash('sha256').update(JSON.stringify(canonicalJson(snapshot))).digest('hex'); }
 
 async function loadQuoteContext(client, contextInput, input = {}) {
   const context = tenantContext(contextInput);
@@ -464,7 +466,7 @@ async function loadQuoteContext(client, contextInput, input = {}) {
     return { id: variant.sku || variant.id, width: dimensions[0], height: dimensions[1], length: dimensions[2], weight: number(variant.peso_gramas) / 1000, insuranceValue: round(number(variant.price, 0)), quantity: line.quantity };
   });
   const subtotal = round(products.reduce((sum, product) => sum + product.insuranceValue * product.quantity, 0));
-  const snapshot = { storefrontId, shippingMethodId, shippingAccountId: account?.id || null, provider, ambiente: account?.ambiente || 'manual', originCep, destinationCep, destination: { cidade: canonicalDestination(destinationCity) || null, estado: destinationState || null }, subtotal, lines };
+  const snapshot = { storefrontId, shippingMethodId, shippingAccountId: account?.id || null, provider, ambiente: account?.ambiente || 'manual', originCep, destinationCep, destination: { cidade: canonicalDestination(destinationCity) || null, estado: destinationState || null }, subtotal, lines, methodConfigHash: requestHash(storedMethodConfig) };
   return { context, storefront: { id: storefrontId, loja_id: method.loja_id, empresa_id: context.empresaId }, method, methodConfig, account, provider: definition.code, originCep, destinationCep, destinationCity, destinationState, destinationAddress, products, subtotal, snapshot, hash: requestHash(snapshot), services: methodConfig.services || [], options: methodConfig.options || {} };
 }
 
@@ -474,6 +476,13 @@ export async function quoteShipping(client, contextInput, input = {}) {
   if (!adapter) throw new CommerceError('adapter logístico não registrado', 'SHIPPING_PROVIDER_NOT_CONFIGURED');
   const quoted = await adapter.quote({ account: prepared.account, methodConfig: prepared.methodConfig, destinationAddress: prepared.destinationAddress, destinationCity: prepared.destinationCity || prepared.destinationAddress?.cidade, destinationState: prepared.destinationState || prepared.destinationAddress?.estado, originPostalCode: prepared.originCep, destinationPostalCode: prepared.destinationCep, products: prepared.products, subtotal: prepared.subtotal, services: prepared.services, options: prepared.options });
   return client.transaction(async trx => {
+    const methodCheck = await trx.query(
+      `SELECT configuracao FROM commerce_shipping_methods WHERE empresa_id = $1 AND id = $2 AND storefront_id = $3 AND ativo = true FOR UPDATE`,
+      [prepared.context.empresaId, prepared.method.id, prepared.storefront.id],
+    );
+    if (!methodCheck.rows[0] || requestHash(methodCheck.rows[0].configuracao) !== prepared.snapshot.methodConfigHash) {
+      throw new CommerceError('regra de frete alterada durante a cotação; recalcule o frete', 'SHIPPING_QUOTE_EXPIRED');
+    }
     if (prepared.account) {
       const accountCheck = await trx.query(`SELECT id FROM commerce_shipping_accounts WHERE empresa_id = $1 AND id = $2 AND storefront_id = $3 AND ativo = true FOR UPDATE`, [prepared.context.empresaId, prepared.account.id, prepared.storefront.id]);
       if (!accountCheck.rows[0]) throw new CommerceError('conta logística foi alterada durante a cotação', 'SHIPPING_ACCOUNT_NOT_CONFIGURED');
@@ -537,22 +546,29 @@ export async function quoteAvailableShipping(client, contextInput, input = {}) {
   return { storefrontId, destination: { cep: destinationCep, cidade: destination.cidade || null, estado: destination.estado || null }, expiresAt, items, unavailable };
 }
 
-export async function resolveShippingSelection(trx, contextInput, input = {}, { storefrontId, lines } = {}) {
+export async function resolveShippingSelection(trx, contextInput, input = {}, { storefrontId, shippingMethodId, lines } = {}) {
   const context = tenantContext(contextInput);
   const quoteId = assertUuid(input.shippingQuoteId, 'shippingQuoteId');
+  const methodId = assertUuid(shippingMethodId, 'shippingMethodId');
   const optionId = text(input.shippingOptionId, 180);
   if (!optionId) throw new CommerceError('shippingOptionId é obrigatório', 'SHIPPING_QUOTE_INVALID');
   const destination = normalizeShippingAddress(input.shippingAddress);
   const result = await trx.query(
     `SELECT q.id, q.storefront_id, q.shipping_method_id, q.shipping_account_id, q.provider, q.ambiente, q.request_hash, q.request_snapshot,
-            q.response_snapshot, q.status, q.expires_at
+            q.response_snapshot, q.status, q.expires_at, sm.configuracao AS current_method_config
        FROM commerce_shipping_quotes q
-      WHERE q.empresa_id = $1 AND q.id = $2 AND q.storefront_id = $3 AND q.status = 'quoted' AND q.expires_at > CURRENT_TIMESTAMP
-      FOR UPDATE`,
-    [context.empresaId, quoteId, assertUuid(storefrontId, 'storefrontId')],
+       JOIN commerce_shipping_methods sm ON sm.empresa_id = q.empresa_id AND sm.storefront_id = q.storefront_id
+            AND sm.id = q.shipping_method_id AND sm.ativo = true AND sm.tipo IN ('delivery', 'carrier')
+      WHERE q.empresa_id = $1 AND q.id = $2 AND q.storefront_id = $3 AND sm.id = $4
+        AND q.status = 'quoted' AND q.expires_at > CURRENT_TIMESTAMP
+      FOR UPDATE OF q, sm`,
+    [context.empresaId, quoteId, assertUuid(storefrontId, 'storefrontId'), methodId],
   );
   const quote = result.rows[0];
-  if (!quote) throw new CommerceError('cotação não encontrada, expirada ou já utilizada', 'SHIPPING_QUOTE_EXPIRED');
+  if (!quote) throw new CommerceError('cotação indisponível, expirada ou com método desativado; recalcule o frete', 'SHIPPING_QUOTE_EXPIRED');
+  if (!quote.request_snapshot?.methodConfigHash || requestHash(quote.current_method_config) !== quote.request_snapshot.methodConfigHash) {
+    throw new CommerceError('regra de frete alterada desde a cotação; recalcule o frete', 'SHIPPING_QUOTE_EXPIRED');
+  }
   const canonicalLines = canonicalShippingLines(lines);
   const expectedSnapshot = {
     ...quote.request_snapshot,

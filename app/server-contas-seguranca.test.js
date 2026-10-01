@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
 const ROOT = path.resolve(new URL('.', import.meta.url).pathname, '..');
 
@@ -35,6 +36,7 @@ test('contas: esqueci-senha não troca senha, gestão de usuários respeita empr
     u(3, 'staff-a@example.com', 'staff', { empresaId: 'emp-a', lojaId: 'loja-a' }),
     u(4, 'dono-b@example.com', 'admin', { empresaId: 'emp-b', lojaId: 'loja-b' }),
     u(5, 'plataforma@example.com', 'admin', { empresaId: 'emp-a' }),
+    u(6, 'inativo-b@example.com', 'staff', { empresaId: 'emp-b', lojaId: 'loja-b', ativo: false }),
   ] }));
   const port = 32600 + Math.floor(Math.random() * 300);
   const base = `http://127.0.0.1:${port}`;
@@ -59,6 +61,18 @@ test('contas: esqueci-senha não troca senha, gestão de usuários respeita empr
     // 2) admin da empresa A não enxerga nem mexe em usuários de B / globais / plataforma
     const hA = await login('dono-a@example.com');
     assert.ok(hA);
+    const directoryA = await request(base, '/api/admin/usuarios-diretorio', { headers: hA });
+    assert.equal(directoryA.response.status, 200);
+    assert.equal(directoryA.body.completo, false, 'Core desligado nunca implica diretório SQL completo');
+    assert.deepEqual(directoryA.body.usuarios.map(x => x.email).sort(), ['dono-a@example.com', 'staff-a@example.com']);
+    assert.ok(directoryA.body.usuarios.every(x => x.senhaHash === undefined && x.cpf === undefined));
+    const deniedStaff = await login('staff-a@example.com');
+    assert.equal((await request(base, '/api/admin/usuarios-diretorio', { headers: deniedStaff })).response.status, 403);
+    const staleAdminToken = jwt.sign({ id: 3, email: 'staff-a@example.com', role: 'admin', empresaId: 'emp-a', lojaId: 'loja-a' }, 'contas-test-jwt');
+    assert.equal((await request(base, '/api/admin/usuarios-diretorio', { headers: { Authorization: `Bearer ${staleAdminToken}` } })).response.status, 403, 'papel atual no cadastro prevalece sobre JWT antigo');
+    const staleEmailToken = jwt.sign({ id: 2, email: 'dono-b@example.com', role: 'admin', empresaId: 'emp-a', lojaId: 'loja-a' }, 'contas-test-jwt');
+    assert.equal((await request(base, '/api/admin/usuarios-diretorio', { headers: { Authorization: `Bearer ${staleEmailToken}` } })).response.status, 401, 'e-mail atual prevalece sobre identidade do JWT');
+    assert.equal((await request(base, '/api/admin/usuarios-diretorio?empresaId=emp-b', { headers: hA })).body.usuarios.length, 2, 'query string não troca o tenant');
     const lista = await request(base, '/api/admin/usuarios', { headers: hA });
     if (lista.response.status === 200) {
       const emails = lista.body.map((x) => x.email).sort();
@@ -106,6 +120,11 @@ test('contas: esqueci-senha não troca senha, gestão de usuários respeita empr
     const listaG = await request(base, '/api/admin/usuarios', { headers: hG });
     assert.equal(listaG.response.status, 200);
     assert.ok(listaG.body.length >= 5);
+    const all = await request(base, '/api/admin/usuarios-diretorio', { headers: hG });
+    assert.equal(all.response.status, 200);
+    assert.ok(all.body.usuarios.some(x => x.email === 'inativo-b@example.com' && x.ativo === false));
+    assert.ok(all.body.usuarios.some(x => x.email === 'dono-b@example.com'));
+    assert.equal(all.response.headers.get('cache-control'), 'private, no-store');
 
     // 3) troca de e-mail no perfil exige senha, unicidade e não pode ser reservado
     const hB = await login('dono-b@example.com');

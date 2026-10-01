@@ -12,6 +12,8 @@ import {
   alterarStatusAgendamento,
   atualizarAgendamento,
   criarAgendamento,
+  vincularLancamentoFinanceiro,
+  recebimentoAgendamentoVerificado,
   criarProfissional,
   atualizarProfissional,
   excluirProfissional,
@@ -46,6 +48,7 @@ import {
   adicionarItensComandaBarbearia,
   atualizarComandaBarbearia,
   alterarStatusComandaBarbearia,
+  cancelarComandaBarbearia,
   registrarPagamentoComandaBarbearia,
   registrarConsumoInternoComandaBarbearia,
 } from './barbearia-erp-kytto.js';
@@ -66,6 +69,15 @@ function baseServico(empresaId = EMPRESA_A) {
 
 function baseProfissional(empresaId = EMPRESA_A) {
   return criarProfissional(empresaId, { nome: empresaId === EMPRESA_A ? 'Ana Barbeira' : 'Bruno Barbeiro' });
+}
+
+function receberAgenda(empresaId, agendamento, meio, valor) {
+  const lancamento = registrarLancamento(empresaId, {
+    tipo: 'receita', origem: 'barbearia_atendimento', status: 'pago',
+    valor, meioPagamento: meio,
+    chaveIdempotencia: `barbearia_atendimento:${empresaId}:${agendamento.id}`,
+  });
+  return vincularLancamentoFinanceiro(empresaId, agendamento.id, lancamento.id);
 }
 
 test('leituras de empresa sem dados não criam registros no store', () => {
@@ -209,13 +221,42 @@ test('permite o fluxo operacional de atendimento e rejeita salto de estado', () 
   assert.throws(() => alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'concluido'), /Transição/);
   assert.equal(alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'confirmado').status, 'confirmado');
   assert.equal(alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'em_atendimento').status, 'em_atendimento');
-  const concluido = alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'concluido', {
-    meioPagamento: 'pix',
-    valorRecebido: 50,
-  });
+  assert.throws(() => alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'concluido', { meioPagamento: 'pix', valorRecebido: 50 }), /fluxo de recebimento/);
+  const concluido = alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'concluido');
   assert.equal(concluido.status, 'concluido');
-  assert.equal(concluido.meioPagamento, 'pix');
-  assert.equal(concluido.valorRecebido, 50);
+  assert.equal(concluido.valorRecebido, 0);
+  assert.equal(recebimentoAgendamentoVerificado(EMPRESA_A, concluido), null);
+  const pago = receberAgenda(EMPRESA_A, concluido, 'pix', 50);
+  assert.equal(pago.meioPagamento, 'pix');
+  assert.equal(pago.valorRecebido, 50);
+  assert.equal(recebimentoAgendamentoVerificado(EMPRESA_A, pago)?.valor, 50);
+});
+
+test('agenda não aceita pagamento forjado em criação ou edição e não fatura atendimento sem ledger', () => {
+  const profissional = baseProfissional();
+  const servico = baseServico();
+  const dados = { clienteNome: 'Cliente sem cobrança', profissionalId: profissional.id, servicoId: servico.id, dataHora: '2030-02-21T13:00:00.000Z', dataAgenda: '2030-02-21' };
+  assert.throws(() => criarAgendamento(EMPRESA_A, { ...dados, status: 'concluido' }), /Status inicial/);
+  assert.throws(() => criarAgendamento(EMPRESA_A, { ...dados, financeiroLancamentoId: 'fin-forjado' }), /fluxo de recebimento/);
+  assert.throws(() => criarAgendamento(EMPRESA_A, { ...dados, valor: 1 }), /preço cadastrado/);
+  const agenda = criarAgendamento(EMPRESA_A, dados);
+  assert.equal(agenda.valor, servico.preco);
+  assert.throws(() => atualizarAgendamento(EMPRESA_A, agenda.id, { valor: 1 }), /não pode ser alterado/);
+  assert.equal(listarAgendamentos(EMPRESA_A)[0].valor, servico.preco, 'remarcação forjada não altera preço persistido');
+  assert.throws(() => atualizarAgendamento(EMPRESA_A, agenda.id, { valorRecebido: 500 }), /fluxo de recebimento/);
+  assert.equal(listarAgendamentos(EMPRESA_A)[0].valorRecebido, 0);
+  alterarStatusAgendamento(EMPRESA_A, agenda.id, 'confirmado');
+  alterarStatusAgendamento(EMPRESA_A, agenda.id, 'em_atendimento');
+  const concluido = alterarStatusAgendamento(EMPRESA_A, agenda.id, 'concluido');
+  assert.equal(obterDashboard(EMPRESA_A, { data: '2030-02-21' }).indicadores.faturamentoHoje, 0);
+  assert.equal(obterComissoes(EMPRESA_A).porProfissional.find((item) => item.profissionalId === profissional.id).brutoServicos, 0);
+  const deOutraEmpresa = registrarLancamento(EMPRESA_B, { tipo: 'receita', origem: 'barbearia_atendimento', status: 'pago', valor: 50, chaveIdempotencia: `barbearia_atendimento:${EMPRESA_A}:${agenda.id}` });
+  assert.throws(() => vincularLancamentoFinanceiro(EMPRESA_A, agenda.id, deOutraEmpresa.id), /Lançamento de recebimento/);
+  assert.equal(recebimentoAgendamentoVerificado(EMPRESA_A, concluido), null);
+  receberAgenda(EMPRESA_A, concluido, 'pix', 50);
+  const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  assert.equal(obterDashboard(EMPRESA_A, { data: hoje }).indicadores.faturamentoHoje, 50, 'receita pertence ao dia do lançamento');
+  assert.equal(obterDashboard(EMPRESA_A, { data: '2030-02-21' }).indicadores.faturamentoHoje, 0, 'não retroage à data futura do serviço');
 });
 
 test('bloqueia agenda em indisponibilidade global ou do profissional, sem vazar entre empresas', () => {
@@ -293,7 +334,7 @@ test('calcula repasse indicativo de serviços e produtos pagos sem lançar pagam
   const agendamento = criarAgendamento(EMPRESA_A, { clienteNome: 'Cliente comissão', profissionalId: profissional.id, servicoId: servico.id, dataHora: '2030-04-02T10:00:00.000Z', dataAgenda: '2030-04-02', horaLocal: '10:00' });
   alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'confirmado');
   alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'em_atendimento');
-  alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'concluido', { meioPagamento: 'dinheiro', valorRecebido: 50 });
+  receberAgenda(EMPRESA_A, alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'concluido'), 'dinheiro', 50);
   const produto = criarProdutoRevenda(EMPRESA_A, { nome: 'Pomada comissão', precoVenda: 40, estoqueAtual: 1 });
   const venda = criarVendaRevenda(EMPRESA_A, { profissionalId: profissional.id, itens: [{ produtoId: produto.id, quantidade: 1 }] });
   finalizarVendaRevenda(EMPRESA_A, venda.id, { confirmadoPagamento: true, meioPagamento: 'dinheiro', valorRecebido: 40 });
@@ -318,7 +359,7 @@ test('desconta taxa da comissão somente quando existe regra real com fonte cada
   const agendamento = criarAgendamento(EMPRESA_A, { clienteNome: 'Cliente taxa real', profissionalId: profissional.id, servicoId: servico.id, dataHora: '2030-04-03T10:00:00.000Z', dataAgenda: '2030-04-03', horaLocal: '10:00' });
   alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'confirmado');
   alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'em_atendimento');
-  alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'concluido', { meioPagamento: 'pix', valorRecebido: 50 });
+  receberAgenda(EMPRESA_A, alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'concluido'), 'pix', 50);
   const semTaxa = obterComissoes(EMPRESA_A);
   assert.equal(semTaxa.porProfissional.find((item) => item.profissionalId === profissional.id).taxas, 0);
   assert.deepEqual(semTaxa.meiosSemTaxaConfigurada, ['pix']);
@@ -357,6 +398,40 @@ test('integra comanda de serviço e revenda com recebimento explícito e baixa i
   assert.equal(listarLancamentos(EMPRESA_A, { origem: 'barbearia_comanda' }).length, 1);
   assert.equal(obterComandaBarbearia(EMPRESA_A, comanda.id).status, 'paga');
   assert.equal(listarComandasBarbearia(EMPRESA_B).length, 0);
+});
+
+test('PATCH e status não aceitam ledger forjado nem confirmam pagamento sem o fluxo de recebimento', () => {
+  const servico = baseServico();
+  const comanda = criarComandaBarbearia(EMPRESA_A, { lojaId: 'loja-a', itens: [{ tipo: 'servico', servicoId: servico.id }] });
+  const antes = obterComandaBarbearia(EMPRESA_A, comanda.id);
+  assert.throws(() => atualizarComandaBarbearia(EMPRESA_A, comanda.id, { desconto: 1, financeiroLancamentoIds: ['falso'] }), /Vínculos financeiros/);
+  assert.throws(() => atualizarComandaBarbearia(EMPRESA_A, comanda.id, { contasReceberIds: [] }), /Vínculos financeiros/);
+  for (const status of ['parcialmente_paga', 'em_conta', 'paga']) {
+    assert.throws(() => alterarStatusComandaBarbearia(EMPRESA_A, comanda.id, status), /recebimento confirmado/);
+  }
+  assert.deepEqual(obterComandaBarbearia(EMPRESA_A, comanda.id), antes);
+  assert.equal(listarLancamentos(EMPRESA_A, { origem: 'barbearia_comanda' }).length, 0);
+});
+
+test('comanda parcialmente paga não pode ser cancelada por rotas genéricas', () => {
+  const servico = baseServico();
+  const comanda = criarComandaBarbearia(EMPRESA_A, { itens: [{ tipo: 'servico', servicoId: servico.id }] });
+  const parcial = registrarPagamentoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true, meioPagamento: 'pix', valor: 20, chaveIdempotencia: 'parcial-1' });
+  assert.equal(parcial.status, 'parcialmente_paga');
+  assert.throws(() => cancelarComandaBarbearia(EMPRESA_A, comanda.id), /fluxo financeiro apropriado/);
+  assert.throws(() => alterarStatusComandaBarbearia(EMPRESA_A, comanda.id, 'cancelada'), /fluxo financeiro apropriado/);
+  assert.equal(obterComandaBarbearia(EMPRESA_A, comanda.id).status, 'parcialmente_paga');
+  assert.equal(listarLancamentos(EMPRESA_A, { origem: 'barbearia_comanda' }).length, 1);
+});
+
+test('remarcação e alteração de status rejeitam loja divergente sem mutar agendamento', () => {
+  const servico = baseServico();
+  const agendamento = criarAgendamento(EMPRESA_A, { lojaId: 'loja-a', clienteNome: 'Cliente de teste', servicoId: servico.id, dataHora: '2030-01-15T10:00:00.000Z' });
+  assert.equal(atualizarAgendamento(EMPRESA_A, agendamento.id, { lojaId: 'loja-b' }), null);
+  assert.equal(alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'concluido', { lojaId: 'loja-b' }), null);
+  const depois = listarAgendamentos(EMPRESA_A, { lojaId: 'loja-a' }).find((item) => item.id === agendamento.id);
+  assert.equal(depois.status, 'agendado');
+  assert.equal(depois.lojaId, 'loja-a');
 });
 
 test('não baixa estoque nem lança financeiro quando pagamento fica pendente em conta', () => {

@@ -10,7 +10,7 @@ import {
 } from './whatsapp-ai-tools.js';
 import { ensureWhatsappLead, updateWhatsappMarketingConsent } from './whatsapp-ai-crm.js';
 import { enviarMensagem } from './whatsapp.js';
-import { chatbotBackendConfig, providerSummary, registerInstanceWebhook, whatsappProviderConfigured, whatsappProviderName } from './whatsapp-provider.js';
+import { chatbotBackendConfig, chatbotBackendMode, providerSummary, registerInstanceWebhook, whatsappProviderConfigured, whatsappProviderName } from './whatsapp-provider.js';
 import {
   applyWhatsappPersonalizationConsent,
   markPersonalizationPrompted,
@@ -347,18 +347,29 @@ function opportunityDeclineIntent(text) {
   return ['nao obrigado', 'nao obrigada', 'nao quero', 'sem oferta', 'sem sugestao', 'agora nao'].includes(value);
 }
 
+function quandoLegivel(item = {}) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(item.dataAgenda || '')) && /^\d{2}:\d{2}$/.test(String(item.horaLocal || ''))) {
+    return `${item.dataAgenda.split('-').reverse().join('/')} às ${item.horaLocal}`;
+  }
+  const data = new Date(item.dataHora);
+  if (Number.isNaN(data.valueOf())) return 'horário combinado';
+  const partes = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Cuiaba', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(data);
+  const v = (tipo) => partes.find((p) => p.type === tipo)?.value || '';
+  return `${v('day')}/${v('month')}/${v('year')} às ${v('hour')}:${v('minute')}`;
+}
+
 function confirmationReply(result) {
   if (result.type === 'agendamento') {
     const item = result.result;
-    return `Agendamento confirmado: ${item.servico} com ${item.profissional} em ${new Date(item.dataHora).toLocaleString('pt-BR', { timeZone: 'America/Cuiaba' })}. Código ${item.id}.`;
+    return `Agendamento confirmado: ${item.servico} com ${item.profissional} em ${quandoLegivel(item)}. Código ${item.codigo || item.id}. Se precisar remarcar ou cancelar, é só me falar por aqui.`;
   }
   if (result.type === 'remarcacao') {
     const item = result.result;
-    return `Agendamento remarcado: ${item.servico} com ${item.profissional} em ${new Date(item.dataHora).toLocaleString('pt-BR', { timeZone: 'America/Cuiaba' })}. Código ${item.id}.`;
+    return `Agendamento remarcado: ${item.servico || 'seu atendimento'} com ${item.profissional} em ${quandoLegivel(item)}.${item.codigo ? ` Código ${item.codigo}.` : ''}`;
   }
   if (result.type === 'cancelamento') {
     const item = result.result;
-    return `Agendamento cancelado: ${item.servico} com ${item.profissional}. Se quiser, posso ajudar a escolher um novo horário.`;
+    return `Agendamento cancelado${item.servico ? `: ${item.servico}${item.profissional ? ` com ${item.profissional}` : ''}` : ''}. Se quiser, posso ajudar a escolher um novo horário.`;
   }
   if (result.type === 'promocao_cliente') {
     const item = result.result;
@@ -1124,7 +1135,10 @@ export async function configureWhatsappAiChannel(context = {}, input = {}) {
   if (status === 'ativo') {
     if (input.confirmed !== true) throw new Error('confirmação humana obrigatória para ativar o atendente');
     if (process.env.FEATURE_WHATSAPP_AI !== 'true') throw new Error('feature flag da IA WhatsApp não está ativa');
-    if (!process.env[secretEnv]) throw new Error(`segredo ${secretEnv} não configurado no ambiente`);
+    // Igual à Isa, a entrada pelo backend próprio é por consulta: o segredo do webhook
+    // só é exigido quando o canal recebe webhook (Evolution ou modo de instâncias).
+    const entradaPorConsulta = chatbotBackend && chatbotBackendMode() === 'isa';
+    if (!entradaPorConsulta && !process.env[secretEnv]) throw new Error(`segredo ${secretEnv} não configurado no ambiente`);
     if (!process.env.GEMINI_API_KEY) throw new Error('Gemini não configurado no ambiente');
     if (!whatsappProviderConfigured()) throw new Error(chatbotBackend ? 'backend WhatsApp (NossaGente) não configurado no ambiente: CHATBOT_BACKEND_KEY' : 'Evolution não configurada no ambiente');
   }
@@ -1239,11 +1253,21 @@ export async function syncWhatsappAiWebhook(context = {}, { publicBaseUrl, confi
 }
 
 async function syncChatbotBackendWebhook(context, channel, { secret, publicBaseUrl }) {
+  if (chatbotBackendMode() === 'isa') {
+    return {
+      ok: true,
+      polling: true,
+      manual: false,
+      instructions: 'Igual à Isa: não há webhook para sincronizar. A Dino consulta as mensagens recebidas a cada poucos segundos; basta o número estar pareado e CHATBOT_BACKEND_EMPRESA_ID apontar para esta empresa.',
+      channel: safeChannelView(channel),
+      provider: { configured: whatsappProviderConfigured(), name: 'chatbot_backend', mode: 'isa' },
+    };
+  }
   const empresaId = channel.empresa_id;
   const lojaId = channel.loja_id;
   const instance = cleanText(channel.configuracao?.instance || chatbotBackendConfig().instance, 120);
-  const externalBase = cleanText(publicBaseUrl || process.env.SERVER_URL, 1000).replace(/\/$/, '');
-  if (!secret || !instance || !externalBase) throw new Error('configuração do webhook incompleta (segredo, instância ou URL pública)');
+  const externalBase = cleanText(publicBaseUrl || process.env.SERVER_URL, 1000).replace(/\/$/, '') || 'https://dino.kytto.com.br';
+  if (!secret || !instance) throw new Error('configuração do webhook incompleta (segredo ou instância)');
   const header = channel.cabecalho_assinatura || 'x-setpoint-webhook-token';
   const webhookUrl = `${externalBase}/api/webhooks/whatsapp/${channel.codigo_publico}`;
   const result = await registerInstanceWebhook({ instance, url: webhookUrl, headers: { [header]: secret } });
@@ -1271,7 +1295,10 @@ async function syncChatbotBackendWebhook(context, channel, { secret, publicBaseU
     ok: true,
     webhookUrl,
     manual,
-    instructions: manual ? `O backend não expõe rota de webhook. Configure no backend a instância ${instance} para enviar messages.upsert e connection.update para ${webhookUrl} com o cabeçalho ${header} (valor = segredo ${cleanText(channel.credencial_referencia, 120).replace(/^ENV:/i, '')}).` : null,
+    polling: Boolean(result.polling),
+    instructions: result.polling
+      ? 'Igual à Isa: o backend não envia webhook de mensagens. A Dino consulta as mensagens recebidas a cada poucos segundos; basta o número estar pareado e CHATBOT_BACKEND_EMPRESA_ID apontar para esta empresa.'
+      : manual ? `O backend não expõe rota de webhook. Configure no backend a instância ${instance} para enviar messages.upsert e connection.update para ${webhookUrl} com o cabeçalho ${header} (valor = segredo ${cleanText(channel.credencial_referencia, 120).replace(/^ENV:/i, '')}).` : null,
     channel: safeChannelView(updated),
     provider: { configured: true, status: result.status || null, name: 'chatbot_backend' },
   };

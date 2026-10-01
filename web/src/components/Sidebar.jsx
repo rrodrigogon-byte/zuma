@@ -165,6 +165,9 @@ const NAV_DINO_GROUPS = [
     items: [
       { to: '/admin/clientes-360', icon: '◉', label: 'Clientes 360' },
       { to: '/admin/barbearia-erp?area=relacionamento&tab=Clientes', icon: '↻', label: 'CRM e campanhas' },
+      { to: '/admin/barbearia-erp?area=relacionamento&tab=Retorno+previsto', icon: '↺', label: 'Retorno previsto' },
+      { to: '/admin/barbearia-erp?area=relacionamento&tab=Lista+de+espera', icon: '⧗', label: 'Lista de espera' },
+      { to: '/admin/barbearia-erp?area=relacionamento&tab=Indica%C3%A7%C3%B5es', icon: '⇢', label: 'Indique um amigo' },
       { to: '/admin/barbearia-erp?area=relacionamento&tab=Fidelidade', icon: '☆', label: 'Fidelidade' },
       { to: '/admin/whatsapp', icon: '✆', label: 'WhatsApp' },
       { to: '/admin/cerebro-ia', icon: '◈', label: 'Cérebro do atendente' },
@@ -178,8 +181,10 @@ const NAV_DINO_GROUPS = [
       { to: '/admin/barbearia-erp?area=catalogo&tab=Profissionais', icon: '♙', label: 'Equipe' },
       { to: '/admin/barbearia-erp?area=catalogo&tab=Servi%C3%A7os', icon: '≡', label: 'Serviços' },
       { to: '/admin/barbearia-erp?area=catalogo&tab=Planos+e+assinaturas', icon: '◆', label: 'Planos e assinaturas' },
+      { to: '/admin/barbearia-erp?area=catalogo&tab=Sa%C3%BAde+do+clube', icon: '♥', label: 'Saúde do clube' },
       { to: '/admin/barbearia-erp?area=catalogo&tab=Estoque+de+revenda', icon: '▧', label: 'Revenda e estoque' },
       { to: '/admin/barbearia-erp?area=gestao&tab=Comiss%C3%B5es', icon: '△', label: 'Comissões' },
+      { to: '/admin/barbearia-erp?area=gestao&tab=Ocupa%C3%A7%C3%A3o+e+metas', icon: '◐', label: 'Ocupação e metas' },
     ],
   },
   {

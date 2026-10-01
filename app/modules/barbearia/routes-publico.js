@@ -3,6 +3,8 @@ import express from 'express';
 import { db } from '../../db.js';
 import * as barbearia from '../../barbearia-erp-kytto.js';
 import { queueAppointmentNotifications } from '../../core/barbershop-appointment-notifications.js';
+import { avisarListaEspera } from '../../core/barbershop-agenda.js';
+import * as captacao from '../../dino-captacao-kytto.js';
 import { vincularClienteAoAtendimento } from '../../dino-clientes-vinculo.js';
 import { phoneMatchKey } from '../../core/whatsapp-phone.js';
 
@@ -98,8 +100,15 @@ router.get('/:slug', (req, res) => {
     const servicos = barbearia.listarServicos(identidade.empresaId)
       .filter((item) => item.ativo !== false && item.permiteAgendamentoOnline !== false)
       .map(servicoPublico);
+    const configuracao = barbearia.obterConfiguracao(identidade.empresaId);
     res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
-    return res.json({ ok: true, estabelecimento: identidade.estabelecimento, profissionais, servicos });
+    return res.json({
+      ok: true,
+      estabelecimento: identidade.estabelecimento,
+      profissionais,
+      servicos,
+      politicas: { cancelamentoHoras: Math.max(0, Number(configuracao.politicaCancelamentoHoras ?? 4)) },
+    });
   } catch (erro) {
     return erroHttp(res, erro);
   }
@@ -173,6 +182,16 @@ router.post('/:slug/confirmar', async (req, res) => {
       status: 'agendado',
       codigoConfirmacao: codigo,
     });
+    // Consentimento de WhatsApp para os avisos do próprio agendamento (LGPD):
+    // só quando o cliente marca a opção no formulário.
+    // Nunca reativa quem já revogou (SAIR): quem digita um telefone não prova ser o dono dele.
+    if (vinculo.clienteId && corpo.consentimento_whatsapp === true) {
+      try { captacao.registrarConsentimentoAtendimento(identidade.empresaId, vinculo.clienteId, 'agendamento_online_checkbox'); } catch (_) { /* não impede o agendamento */ }
+    }
+    try { captacao.marcarListaEsperaAgendada(identidade.empresaId, { telefone, data: agendamento.dataAgenda }); } catch (_) { /* não impede o agendamento */ }
+    if (corpo.indicacao) {
+      try { captacao.registrarIndicacao(identidade.empresaId, { codigo: texto(corpo.indicacao, 12), agendamento }); } catch (_) { /* indicação inválida não impede o agendamento */ }
+    }
     await queueAppointmentNotifications({ empresaId: identidade.empresaId, lojaId: identidade.lojaId, legacyEmpresaId: identidade.empresaId }, agendamento, 'criado').catch(() => null);
     res.setHeader('Cache-Control', 'no-store');
     return res.status(201).json({
@@ -188,5 +207,95 @@ router.post('/:slug/confirmar', async (req, res) => {
     return erroHttp(res, erro);
   }
 });
+
+function erroCaptacao(res, erro) {
+  if (erro instanceof captacao.CaptacaoError) return res.status(erro.status || 400).json({ ok: false, error: erro.message, code: erro.code });
+  return erroHttp(res, erro);
+}
+
+// Lista de espera: sem horário no dia, o cliente pede para ser avisado.
+router.post('/:slug/lista-espera', (req, res) => {
+  try {
+    const identidade = identidadePublica(req.params.slug);
+    if (!identidade) return res.status(404).json({ ok: false, error: 'Estabelecimento não encontrado.' });
+    const corpo = req.body || {};
+    const registro = captacao.entrarListaEspera(identidade.empresaId, {
+      nome: corpo.cliente_nome,
+      telefone: corpo.cliente_telefone,
+      data: corpo.data,
+      servicoId: corpo.servico_id,
+      profissionalId: corpo.profissional_id,
+      periodo: corpo.periodo,
+      lojaId: identidade.lojaId,
+      consentimentoWhatsapp: corpo.consentimento_whatsapp === true,
+    });
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(registro.repetida ? 200 : 201).json({ ok: true, listaEspera: { id: registro.id, data: registro.data, periodo: registro.periodo, repetida: Boolean(registro.repetida) } });
+  } catch (erro) {
+    return erroCaptacao(res, erro);
+  }
+});
+
+// Tentativas erradas de código + telefone por IP e estabelecimento: depois de 6
+// erros em 30 minutos, a consulta fica bloqueada (evita adivinhar códigos).
+const FALHAS_AUTOATENDIMENTO = new Map();
+function chaveFalha(req, empresaId) { return `${empresaId}:${req.ip || ''}`; }
+function bloqueadoPorFalhas(req, empresaId) {
+  const registro = FALHAS_AUTOATENDIMENTO.get(chaveFalha(req, empresaId));
+  if (!registro || registro.expira < Date.now()) return false;
+  return registro.falhas >= 6;
+}
+function registrarFalha(req, empresaId) {
+  const chave = chaveFalha(req, empresaId);
+  const atual = FALHAS_AUTOATENDIMENTO.get(chave);
+  const registro = atual && atual.expira > Date.now() ? atual : { falhas: 0, expira: Date.now() + 30 * 60 * 1000 };
+  registro.falhas += 1;
+  FALHAS_AUTOATENDIMENTO.set(chave, registro);
+  if (FALHAS_AUTOATENDIMENTO.size > 5000) FALHAS_AUTOATENDIMENTO.clear();
+}
+function autoatendimento(handler) {
+  return async (req, res) => {
+    const identidade = identidadePublica(req.params.slug);
+    if (!identidade) return res.status(404).json({ ok: false, error: 'Estabelecimento não encontrado.' });
+    if (bloqueadoPorFalhas(req, identidade.empresaId)) return res.status(429).json({ ok: false, error: 'Muitas tentativas. Fale com a barbearia pelo WhatsApp ou tente mais tarde.', code: 'AUTOATENDIMENTO_BLOQUEADO' });
+    try {
+      return await handler(req, res, identidade);
+    } catch (erro) {
+      if (erro?.code === 'AGENDAMENTO_NAO_ENCONTRADO' || erro?.code === 'DADOS_INVALIDOS') registrarFalha(req, identidade.empresaId);
+      return erroCaptacao(res, erro);
+    }
+  };
+}
+
+// Autoatendimento: código + telefone no corpo (nunca na URL).
+router.post('/:slug/meu-agendamento', autoatendimento(async (req, res, identidade) => {
+  const visao = captacao.consultarAgendamentoCliente(identidade.empresaId, { codigo: req.body?.codigo, telefone: req.body?.cliente_telefone });
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({ ok: true, agendamento: visao });
+}));
+
+router.post('/:slug/meu-agendamento/cancelar', autoatendimento(async (req, res, identidade) => {
+  const { agendamento, visao } = captacao.cancelarAgendamentoCliente(identidade.empresaId, { codigo: req.body?.codigo, telefone: req.body?.cliente_telefone, motivo: req.body?.motivo });
+  const contexto = { empresaId: identidade.empresaId, lojaId: agendamento.lojaId || identidade.lojaId, legacyEmpresaId: identidade.empresaId };
+  await queueAppointmentNotifications(contexto, agendamento, 'cancelado').catch(() => null);
+  await avisarListaEspera(contexto, agendamento, captacao.candidatosParaVaga(identidade.empresaId, agendamento)).catch(() => null);
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({ ok: true, agendamento: visao });
+}));
+
+router.post('/:slug/meu-agendamento/remarcar', autoatendimento(async (req, res, identidade) => {
+  const corpo = req.body || {};
+  const { agendamento, visao } = captacao.remarcarAgendamentoCliente(identidade.empresaId, {
+    codigo: corpo.codigo,
+    telefone: corpo.cliente_telefone,
+    data: texto(corpo.data, 10),
+    horario: texto(corpo.horario, 5),
+    lojaId: identidade.lojaId,
+  });
+  const contexto = { empresaId: identidade.empresaId, lojaId: agendamento.lojaId || identidade.lojaId, legacyEmpresaId: identidade.empresaId };
+  await queueAppointmentNotifications(contexto, agendamento, 'remarcado').catch(() => null);
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({ ok: true, agendamento: visao });
+}));
 
 export default router;

@@ -27,6 +27,12 @@ function dinheiro(value, fallback = 0) {
   return Number(Math.max(0, numero(value, fallback)).toFixed(2));
 }
 
+function rejeitarPagamentoNaAgenda(dados) {
+  if (['meioPagamento', 'meio_pagamento', 'valorRecebido', 'valor_recebido', 'financeiroLancamentoId', 'financeiro_lancamento_id'].some((campo) => Object.hasOwn(dados, campo))) {
+    throw new Error('Dados de pagamento só podem ser registrados pelo fluxo de recebimento com lançamento financeiro.');
+  }
+}
+
 function dataAtual() {
   return new Date().toISOString();
 }
@@ -264,9 +270,9 @@ function agendamentoNormalizado(dados = {}, anterior = {}) {
     observacoes: texto(dados.observacoes ?? anterior.observacoes, 600),
     origem: texto(dados.origem ?? anterior.origem, 40) || 'admin',
     codigoConfirmacao: texto(dados.codigoConfirmacao ?? dados.codigo_confirmacao ?? anterior.codigoConfirmacao, 20).toUpperCase(),
-    meioPagamento: texto(dados.meioPagamento ?? dados.meio_pagamento ?? anterior.meioPagamento, 40).toLowerCase(),
-    valorRecebido: dinheiro(dados.valorRecebido ?? dados.valor_recebido ?? anterior.valorRecebido),
-    financeiroLancamentoId: texto(dados.financeiroLancamentoId ?? dados.financeiro_lancamento_id ?? anterior.financeiroLancamentoId, 120),
+    meioPagamento: texto(anterior.meioPagamento, 40).toLowerCase(),
+    valorRecebido: dinheiro(anterior.valorRecebido),
+    financeiroLancamentoId: texto(anterior.financeiroLancamentoId, 120),
   };
 }
 
@@ -1045,12 +1051,11 @@ export function atualizarComandaBarbearia(empresaId, comandaId, dados = {}) {
   const comanda = estado.comandas[String(comandaId)];
   if (!comanda || comanda.empresaId !== String(empresaId)) return null;
   if (!['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(comanda.status)) throw new Error('A comanda não está aberta para edição.');
+  if ('financeiroLancamentoIds' in dados || 'contasReceberIds' in dados) throw new Error('Vínculos financeiros só podem ser gerados no fluxo de recebimento confirmado.');
   if (dados.desconto !== undefined) comanda.desconto = dinheiro(dados.desconto);
   if (dados.descontoMotivo !== undefined || dados.desconto_motivo !== undefined) comanda.descontoMotivo = texto(dados.descontoMotivo ?? dados.desconto_motivo, 240);
   if (dados.gorjeta !== undefined) comanda.gorjeta = dinheiro(dados.gorjeta);
   if (dados.observacoes !== undefined || dados.observacao !== undefined) comanda.observacoes = texto(dados.observacoes ?? dados.observacao, 600);
-  if (Array.isArray(dados.financeiroLancamentoIds)) comanda.financeiroLancamentoIds = [...new Set(dados.financeiroLancamentoIds.map((item) => texto(item, 120)).filter(Boolean))];
-  if (Array.isArray(dados.contasReceberIds)) comanda.contasReceberIds = [...new Set(dados.contasReceberIds.map((item) => texto(item, 120)).filter(Boolean))];
   comanda.atualizadoEm = dataAtual();
   save();
   return copiarComandaBarbearia(comanda);
@@ -1113,6 +1118,8 @@ export function alterarStatusComandaBarbearia(empresaId, comandaId, status, dado
   if (!STATUS_COMANDA_BARBEARIA.has(novoStatus)) throw new Error('Status de comanda inválido.');
   if (novoStatus !== comanda.status && !TRANSICOES_COMANDA_BARBEARIA[comanda.status]?.has(novoStatus)) throw new Error(`Transição de comanda ${comanda.status} para ${novoStatus} não permitida.`);
   if (novoStatus === 'aguardando_pagamento' && !comanda.itens.length) throw new Error('Inclua ao menos um item antes de aguardar pagamento.');
+  if (['parcialmente_paga', 'em_conta', 'paga'].includes(novoStatus)) throw new Error('Use o fluxo de recebimento confirmado para registrar pagamentos e lançar o ledger da comanda.');
+  if (novoStatus === 'cancelada' && (Number(comanda.totalPago || 0) > 0 || Number(comanda.totalFaturado || 0) > 0 || (comanda.pagamentos || []).length > 0)) throw new Error('Uma comanda com cobrança registrada só pode ser cancelada pelo fluxo financeiro apropriado.');
   comanda.status = novoStatus;
   comanda.observacoes = dados.observacoes !== undefined ? texto(dados.observacoes, 600) : comanda.observacoes;
   comanda.atualizadoEm = dataAtual();
@@ -1253,6 +1260,7 @@ export function cancelarComandaBarbearia(empresaId, comandaId, dados = {}) {
   if (!comanda || comanda.empresaId !== String(empresaId)) return null;
   if (comanda.status === 'paga' || comanda.status === 'em_conta') throw new Error('Uma comanda já faturada não pode ser cancelada neste fluxo.');
   if (comanda.status === 'cancelada') return copiarComandaBarbearia(comanda, true);
+  if (Number(comanda.totalPago || 0) > 0 || Number(comanda.totalFaturado || 0) > 0 || (comanda.pagamentos || []).length > 0) throw new Error('Uma comanda com cobrança registrada só pode ser cancelada pelo fluxo financeiro apropriado.');
   comanda.status = 'cancelada';
   comanda.observacoes = [comanda.observacoes, texto(dados.motivo, 300) ? `Cancelamento: ${texto(dados.motivo, 300)}` : 'Cancelamento manual.'].filter(Boolean).join(' · ');
   comanda.atualizadoEm = dataAtual();
@@ -1395,6 +1403,8 @@ export function resolverProfissionalDisponivel(empresaId, dados = {}) {
 }
 
 export function criarAgendamento(empresaId, dados = {}) {
+  rejeitarPagamentoNaAgenda(dados);
+  if (dados.status && dados.status !== 'agendado') throw new Error('Status inicial do agendamento deve ser agendado.');
   const estado = estadoEmpresa(empresaId);
   const agendamento = agendamentoNormalizado(dados);
   if (!agendamento.clienteNome && !agendamento.clienteId) throw new Error('Informe o cliente do atendimento.');
@@ -1403,7 +1413,10 @@ export function criarAgendamento(empresaId, dados = {}) {
   const profissional = agendamento.profissionalId ? estado.profissionais[agendamento.profissionalId] : null;
   const servico = estado.servicos[agendamento.servicoId];
   agendamento.duracaoMinutos = servico.duracaoMinutos;
-  agendamento.valor = agendamento.valor > 0 ? agendamento.valor : servico.preco;
+  if (dados.valor !== undefined && Math.round(Number(dados.valor) * 100) !== Math.round(Number(servico.preco) * 100)) {
+    throw new Error('O valor do agendamento deve corresponder ao preço cadastrado do serviço. Use a comanda para ajustes auditados.');
+  }
+  agendamento.valor = servico.preco;
   validarCalendarioAgendamento(estado, agendamento, profissional);
   if (verificarConflito(estado, agendamento)) throw new Error('Horário indisponível para o profissional selecionado.');
   const id = novoId('age', estado.agendamentos);
@@ -1414,15 +1427,22 @@ export function criarAgendamento(empresaId, dados = {}) {
 }
 
 export function atualizarAgendamento(empresaId, agendamentoId, dados = {}) {
+  rejeitarPagamentoNaAgenda(dados);
   const estado = estadoEmpresa(empresaId);
   const atual = estado.agendamentos[String(agendamentoId)];
   if (!atual || atual.empresaId !== String(empresaId)) return null;
+  if (dados.lojaId !== undefined && texto(dados.lojaId, 120) !== texto(atual.lojaId, 120)) return null;
   const antes = { dataHora: atual.dataHora, dataAgenda: atual.dataAgenda, profissionalId: atual.profissionalId, servicoId: atual.servicoId };
   const agendamento = agendamentoNormalizado(dados, atual);
   agendamento.status = atual.status;
   if (!agendamento.servicoId || !estado.servicos[agendamento.servicoId] || estado.servicos[agendamento.servicoId].ativo === false) throw new Error('Serviço ativo é obrigatório.');
-  agendamento.duracaoMinutos = estado.servicos[agendamento.servicoId].duracaoMinutos;
-  agendamento.valor = agendamento.valor > 0 ? agendamento.valor : estado.servicos[agendamento.servicoId].preco;
+  const servico = estado.servicos[agendamento.servicoId];
+  agendamento.duracaoMinutos = servico.duracaoMinutos;
+  const valorEsperado = agendamento.servicoId === atual.servicoId && Number(atual.valor) > 0 ? atual.valor : servico.preco;
+  if (dados.valor !== undefined && Math.round(Number(dados.valor) * 100) !== Math.round(Number(valorEsperado) * 100)) {
+    throw new Error('O valor do agendamento não pode ser alterado pela remarcação. Use a comanda para ajustes auditados.');
+  }
+  agendamento.valor = valorEsperado;
   validarCalendarioAgendamento(estado, agendamento, agendamento.profissionalId ? estado.profissionais[agendamento.profissionalId] : null);
   if (verificarConflito(estado, agendamento, atual.id)) throw new Error('Horário indisponível para o profissional selecionado.');
   const remarcado = ['dataHora', 'dataAgenda', 'profissionalId', 'servicoId'].some((campo) => String(antes[campo] || '') !== String(agendamento[campo] || ''));
@@ -1444,9 +1464,11 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}) {
 }
 
 export function alterarStatusAgendamento(empresaId, agendamentoId, status, dados = {}) {
+  rejeitarPagamentoNaAgenda(dados);
   const estado = estadoEmpresa(empresaId);
   const atual = estado.agendamentos[String(agendamentoId)];
   if (!atual || atual.empresaId !== String(empresaId)) return null;
+  if (dados.lojaId !== undefined && texto(dados.lojaId, 120) !== texto(atual.lojaId, 120)) return null;
   const novoStatus = String(status || '');
   if (!STATUS.has(novoStatus)) throw new Error('Status de atendimento inválido.');
   if (novoStatus !== atual.status && !TRANSICOES[atual.status]?.has(novoStatus)) {
@@ -1454,13 +1476,20 @@ export function alterarStatusAgendamento(empresaId, agendamentoId, status, dados
   }
   Object.assign(atual, {
     status: novoStatus,
-    meioPagamento: texto(dados.meioPagamento ?? dados.meio_pagamento ?? atual.meioPagamento, 40).toLowerCase(),
-    valorRecebido: dinheiro(dados.valorRecebido ?? dados.valor_recebido ?? (novoStatus === 'concluido' ? atual.valor : atual.valorRecebido)),
     observacoes: texto(dados.observacoes ?? atual.observacoes, 600),
     atualizadoEm: dataAtual(),
   });
   save();
   return { ...atual };
+}
+
+export function recebimentoAgendamentoVerificado(empresaId, agendamento) {
+  if (!agendamento?.financeiroLancamentoId || agendamento.status !== 'concluido') return null;
+  const lancamento = financeiroKytto.obterLancamento(empresaId, agendamento.financeiroLancamentoId);
+  const chave = `barbearia_atendimento:${empresaId}:${agendamento.id}`;
+  return lancamento?.tipo === 'receita' && lancamento.status === 'pago'
+    && lancamento.origem === 'barbearia_atendimento' && lancamento.chaveIdempotencia === chave
+    && Number(lancamento.valor) > 0 ? lancamento : null;
 }
 
 export function obterComissoes(empresaId, { data = '', lojaId = '' } = {}) {
@@ -1497,7 +1526,11 @@ export function obterComissoes(empresaId, { data = '', lojaId = '' } = {}) {
     .filter(filtrarLoja)
     .filter((item) => item.status === 'concluido')
     .filter((item) => !agendamentosEmComanda.has(item.id))
-    .filter((item) => !data || String(item.dataAgenda || diaOperacional(item.dataHora)).slice(0, 10) === String(data).slice(0, 10));
+    .filter((item) => !data || String(item.dataAgenda || diaOperacional(item.dataHora)).slice(0, 10) === String(data).slice(0, 10))
+    .map((item) => {
+      const lancamento = recebimentoAgendamentoVerificado(empresaId, item);
+      return lancamento ? { ...item, valorRecebido: Number(lancamento.valor), meioPagamento: lancamento.meioPagamento } : null;
+    }).filter(Boolean);
   const vendasLegadas = Object.values(estado.vendasRevenda)
     .filter(filtrarLoja)
     .filter((item) => item.status === 'pago')
@@ -1567,7 +1600,13 @@ export function vincularLancamentoFinanceiro(empresaId, agendamentoId, lancament
   const atual = estado.agendamentos[String(agendamentoId)];
   if (!atual || atual.empresaId !== String(empresaId)) return null;
   if (atual.status !== 'concluido') throw new Error('Somente atendimentos concluídos podem receber vínculo financeiro.');
-  atual.financeiroLancamentoId = texto(lancamentoId, 120);
+  const proposto = { ...atual, financeiroLancamentoId: texto(lancamentoId, 120) };
+  const lancamento = recebimentoAgendamentoVerificado(empresaId, proposto);
+  if (!lancamento) throw new Error('Lançamento de recebimento pago e vinculado ao atendimento é obrigatório.');
+  if (atual.financeiroLancamentoId && atual.financeiroLancamentoId !== lancamento.id) throw new Error('O atendimento já possui outro recebimento.');
+  atual.financeiroLancamentoId = lancamento.id;
+  atual.meioPagamento = lancamento.meioPagamento;
+  atual.valorRecebido = Number(lancamento.valor);
   atual.atualizadoEm = dataAtual();
   save();
   return { ...atual };
@@ -1582,6 +1621,10 @@ export function obterDashboard(empresaId, { data = diaOperacional(dataAtual()), 
   const assinaturasAtivas = Object.values(estado.assinaturas).filter((item) => item.status === 'ativa');
   const hoje = agendamentos.filter((item) => String(item.dataAgenda || diaOperacional(item.dataHora)).slice(0, 10) === String(data).slice(0, 10));
   const concluidosHoje = hoje.filter((item) => item.status === 'concluido');
+  const recebidoHoje = agendamentos.reduce((soma, item) => {
+    const lancamento = recebimentoAgendamentoVerificado(empresaId, item);
+    return lancamento && diaOperacional(lancamento.pagoEm) === String(data).slice(0, 10) ? soma + Number(lancamento.valor) : soma;
+  }, 0);
   const vendasRevendaHoje = Object.values(estado.vendasRevenda).filter(filtrarLoja).filter((item) => item.status === 'pago' && diaOperacional(item.criadoEm) === String(data).slice(0, 10));
   const proximos = agendamentos.filter((item) => item.status !== 'cancelado' && item.status !== 'concluido' && new Date(item.dataHora).valueOf() >= Date.now()).sort(ordenarPorData).slice(0, 8);
   return {
@@ -1591,7 +1634,7 @@ export function obterDashboard(empresaId, { data = diaOperacional(dataAtual()), 
       confirmadosHoje: hoje.filter((item) => item.status === 'confirmado').length,
       emAtendimento: agendamentos.filter((item) => item.status === 'em_atendimento').length,
       concluidosHoje: concluidosHoje.length,
-      faturamentoHoje: dinheiro(concluidosHoje.reduce((soma, item) => soma + Number(item.valorRecebido || item.valor || 0), 0)),
+      faturamentoHoje: dinheiro(recebidoHoje),
       profissionaisAtivos: Object.values(estado.profissionais).filter((item) => item.ativo !== false).length,
       servicosAtivos: Object.values(estado.servicos).filter((item) => item.ativo !== false).length,
       clientesAtivos: Number(clientesAtivos || 0),

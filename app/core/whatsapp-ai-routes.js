@@ -71,6 +71,66 @@ function validSignature(req, channel) {
   return safeEqual(String(received).replace(/^sha256=/i, '').trim(), expected);
 }
 
+/**
+ * Entrada única de mensagem recebida (webhook da Evolution OU consulta periódica
+ * do backend da Isa): grava o evento (idempotente por canal + id externo),
+ * enfileira a conversa para a IA e aplica o SAIR em todos os módulos.
+ */
+export async function ingestInboundWhatsappMessage(channel, parsed, { hash, providerPayload = {} } = {}) {
+  const aiReady = whatsappAiReady();
+  const optOutRequested = campaignOptOutRequested(parsed);
+  const externalId = String(parsed.externalId || '').slice(0, 200);
+  if (!externalId) return { ignored: true, reason: parsed.reason || 'missing_event_id' };
+  const hashCorpo = hash || crypto.createHash('sha256').update(JSON.stringify(providerPayload || {})).digest('hex');
+  const result = await db.transaction(async trx => {
+    const eventResult = await trx.query(
+      `INSERT INTO eventos_integracao_canais
+        (empresa_id, loja_id, canal_id, evento_externo_id, tipo_evento, assinatura_valida,
+         hash_corpo, payload, status_processamento, erro_processamento)
+       VALUES ($1, $2, $3, $4, $5, true, $6, $7::jsonb, $8, $9)
+       ON CONFLICT (canal_id, evento_externo_id) DO NOTHING
+       RETURNING id`,
+      [channel.empresa_id, channel.loja_id, channel.id, externalId, parsed.event || 'evento_desconhecido', hashCorpo,
+        JSON.stringify(minimalEventPayload({ ...parsed, externalId })), parsed.ignored || !aiReady ? 'ignorado' : 'recebido', parsed.ignored ? parsed.reason : (!aiReady ? (optOutRequested ? 'marketing_opt_out' : 'ai_not_ready') : null)],
+    );
+    if (!eventResult.rows[0]) return { duplicate: true };
+    // SAIR também vai para o atendente: ele confirma ao cliente e grava o bloqueio permanente.
+    if (!parsed.ignored && aiReady) {
+      await trx.query(
+        `INSERT INTO tarefas_integracao_canais
+          (empresa_id, loja_id, canal_id, evento_integracao_id, tipo, referencia_externa, payload)
+         VALUES ($1, $2, $3, $4, 'processar_conversa', $5, $6::jsonb)`,
+        [channel.empresa_id, channel.loja_id, channel.id, eventResult.rows[0].id, parsed.remoteJid, JSON.stringify({ messageId: externalId })],
+      );
+    }
+    await trx.query(
+      `UPDATE canais_integracao SET ultimo_evento_em = CURRENT_TIMESTAMP, data_atualizacao = CURRENT_TIMESTAMP WHERE id = $1`,
+      [channel.id],
+    );
+    return { duplicate: false, ignored: parsed.ignored || !aiReady, optOut: optOutRequested, reason: parsed.reason || (optOutRequested ? 'marketing_opt_out' : (!aiReady ? 'ai_not_ready' : null)) };
+  });
+  if (result.duplicate) return result;
+
+  let campaignMetrics = { updatedCampaigns: [] };
+  let marketingOptOut = { optedOut: false };
+  let cartRecoveryOptOut = { optedOut: false, carts: 0 };
+  let appointmentOptOut = { optedOut: false, customers: 0 };
+  // Cada efeito do SAIR roda separado: a falha de um não impede os outros. O bloqueio
+  // permanente vai primeiro porque é o único caminho quando o atendente está desligado.
+  const safely = async (label, fn, fallback) => {
+    try { return await fn(); } catch (sideError) {
+      console.warn(`[WhatsApp] ${label} pendente de reconciliação:`, String(sideError?.message || sideError).slice(0, 300));
+      return fallback;
+    }
+  };
+  if (optOutRequested) await safely('bloqueio permanente (SAIR)', () => recordAutomationOptOut(db.query.bind(db), channel.empresa_id, parsed.phone || parsed.remoteJid, 'sair_no_whatsapp'), false);
+  appointmentOptOut = await safely('SAIR da agenda', () => recordAppointmentNotificationOptOut(channel, parsed), appointmentOptOut);
+  cartRecoveryOptOut = await safely('SAIR do carrinho', () => recordCartRecoveryOptOut(channel, parsed), cartRecoveryOptOut);
+  marketingOptOut = await safely('SAIR de campanhas', () => recordCampaignOptOut(channel, parsed), marketingOptOut);
+  campaignMetrics = await safely('métrica de campanha', () => recordCampaignProviderEvent(channel, providerPayload, parsed), campaignMetrics);
+  return { ...result, campaignMetrics, marketingOptOut, cartRecoveryOptOut, appointmentOptOut };
+}
+
 export function createWhatsappAiWebhookRouter() {
   const router = express.Router();
 
@@ -103,57 +163,11 @@ export function createWhatsappAiWebhookRouter() {
         return res.status(202).json({ accepted: true, connection: state });
       }
       const parsed = parseEvolutionMessage(req.body || {});
-      const aiReady = whatsappAiReady();
-      const optOutRequested = campaignOptOutRequested(parsed);
       const externalId = parsed.externalId || String(req.get('x-event-id') || '').slice(0, 200);
       if (!externalId) return res.status(202).json({ accepted: true, ignored: true, reason: parsed.reason || 'missing_event_id' });
       const hash = crypto.createHash('sha256').update(rawBody(req)).digest('hex');
-      const result = await db.transaction(async trx => {
-        const eventResult = await trx.query(
-          `INSERT INTO eventos_integracao_canais
-            (empresa_id, loja_id, canal_id, evento_externo_id, tipo_evento, assinatura_valida,
-             hash_corpo, payload, status_processamento, erro_processamento)
-           VALUES ($1, $2, $3, $4, $5, true, $6, $7::jsonb, $8, $9)
-           ON CONFLICT (canal_id, evento_externo_id) DO NOTHING
-           RETURNING id`,
-          [channel.empresa_id, channel.loja_id, channel.id, externalId, parsed.event || 'evento_desconhecido', hash,
-            JSON.stringify(minimalEventPayload(parsed)), parsed.ignored || !aiReady ? 'ignorado' : 'recebido', parsed.ignored ? parsed.reason : (!aiReady ? (optOutRequested ? 'marketing_opt_out' : 'ai_not_ready') : null)],
-        );
-        if (!eventResult.rows[0]) return { duplicate: true };
-        // SAIR também vai para o atendente: ele confirma ao cliente e grava o bloqueio permanente.
-        if (!parsed.ignored && aiReady) {
-          await trx.query(
-            `INSERT INTO tarefas_integracao_canais
-              (empresa_id, loja_id, canal_id, evento_integracao_id, tipo, referencia_externa, payload)
-             VALUES ($1, $2, $3, $4, 'processar_conversa', $5, $6::jsonb)`,
-            [channel.empresa_id, channel.loja_id, channel.id, eventResult.rows[0].id, parsed.remoteJid, JSON.stringify({ messageId: externalId })],
-          );
-        }
-        await trx.query(
-          `UPDATE canais_integracao SET ultimo_evento_em = CURRENT_TIMESTAMP, data_atualizacao = CURRENT_TIMESTAMP WHERE id = $1`,
-          [channel.id],
-        );
-        return { duplicate: false, ignored: parsed.ignored || !aiReady, optOut: optOutRequested, reason: parsed.reason || (optOutRequested ? 'marketing_opt_out' : (!aiReady ? 'ai_not_ready' : null)) };
-      });
-
-      let campaignMetrics = { updatedCampaigns: [] };
-      let marketingOptOut = { optedOut: false };
-      let cartRecoveryOptOut = { optedOut: false, carts: 0 };
-      let appointmentOptOut = { optedOut: false, customers: 0 };
-      // Cada efeito do SAIR roda separado: a falha de um não impede os outros. O bloqueio
-      // permanente vai primeiro porque é o único caminho quando o atendente está desligado.
-      const safely = async (label, fn, fallback) => {
-        try { return await fn(); } catch (sideError) {
-          console.warn(`[WhatsApp] ${label} pendente de reconciliação:`, String(sideError?.message || sideError).slice(0, 300));
-          return fallback;
-        }
-      };
-      if (optOutRequested) await safely('bloqueio permanente (SAIR)', () => recordAutomationOptOut(db.query.bind(db), channel.empresa_id, parsed.phone || parsed.remoteJid, 'sair_no_whatsapp'), false);
-      appointmentOptOut = await safely('SAIR da agenda', () => recordAppointmentNotificationOptOut(channel, parsed), appointmentOptOut);
-      cartRecoveryOptOut = await safely('SAIR do carrinho', () => recordCartRecoveryOptOut(channel, parsed), cartRecoveryOptOut);
-      marketingOptOut = await safely('SAIR de campanhas', () => recordCampaignOptOut(channel, parsed), marketingOptOut);
-      campaignMetrics = await safely('métrica de campanha', () => recordCampaignProviderEvent(channel, req.body || {}, parsed), campaignMetrics);
-      return res.status(202).json({ accepted: true, ...result, campaignMetrics, marketingOptOut, cartRecoveryOptOut, appointmentOptOut });
+      const resultado = await ingestInboundWhatsappMessage(channel, { ...parsed, externalId }, { hash, providerPayload: req.body || {} });
+      return res.status(202).json({ accepted: true, ...resultado });
     } catch (error) {
       console.error('[WhatsApp AI] erro no webhook:', String(error?.message || error).slice(0, 500));
       return res.status(500).json({ error: 'falha ao receber evento' });

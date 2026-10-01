@@ -65,7 +65,7 @@ test('escopo de empresa, e-mails reservados, módulos globais e revogação', { 
   const u = (id, email, roleName) => ({ id, nome: `U${id}`, email, senhaHash: hash, role: roleName, ativo: true });
   fs.writeFileSync(dbPath, JSON.stringify({
     seq: 50,
-    usuarios: [u(1, 'admin', 'admin'), u(2, dono, 'admin'), u(3, multi, 'admin'), u(4, 'evento@setpoint.test', 'organizador')],
+    usuarios: [u(1, 'admin', 'admin'), u(2, dono, 'admin'), u(3, multi, 'admin'), u(4, 'evento@setpoint.test', 'organizador'), u(5, 'sem-vinculo@dino.test', 'staff')],
     lancamentos: [{ id: 7, tipo: 'receita', valor: 100, descricao: 'evento', status: 'pendente', vencimento: '2026-01-01' }],
     pagamentos: [{ id: 11, tipo: 'loja', valor: 10, status: 'pendente' }],
   }));
@@ -118,6 +118,11 @@ test('escopo de empresa, e-mails reservados, módulos globais e revogação', { 
     assert.equal(servicos.response.status, 409);
     assert.equal(servicos.body.code, 'EMPRESA_REQUIRED');
     assert.equal((await request(base, '/api/admin/cupons', { headers: multiSite })).response.status, 403);
+
+    const semVinculo = await siteLogin('sem-vinculo@dino.test');
+    const semEmpresa = await request(base, '/api/admin/barbearia/servicos', { headers: semVinculo });
+    assert.equal(semEmpresa.response.status, 409, 'staff sem membership não cai na empresa principal');
+    assert.equal(semEmpresa.body.code, 'EMPRESA_REQUIRED');
 
     // 6) Conta desativada perde o acesso na hora; papel rebaixado vale já.
     const evento = await painelLogin('evento@setpoint.test');

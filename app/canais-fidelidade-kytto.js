@@ -126,6 +126,40 @@ export function creditarFidelidade(empresaId, clienteId, valor, origem = 'venda'
   return { membro, pontosCreditados: pontos, repetido: false, movimento }
 }
 
+// Pontos fixos (indicação, campanhas). Diferente de creditarFidelidade, não
+// depende do valor da venda e inscreve o cliente no programa se ele ainda não
+// for membro. Idempotente pela chave.
+export function creditarPontosBonus(empresaId, clienteId, pontos, origem = 'bonus', opcoes = {}) {
+  const data = empresa(empresaId)
+  data.fidelidade ||= { regra: { pontosPorReal: 1, valorPonto: 0.01, ativa: true }, membros: {}, movimentos: {} }
+  data.fidelidade.membros ||= {}
+  data.fidelidade.movimentos ||= {}
+  if (!data.fidelidade.regra.ativa) return null
+  const quantidade = Math.max(0, Math.round(Number(pontos) || 0))
+  const id_ = texto(clienteId, 90)
+  if (!id_ || quantidade <= 0) return null
+  const chaveIdempotencia = texto(opcoes?.chaveIdempotencia, 220)
+  if (chaveIdempotencia) {
+    const repetido = Object.values(data.fidelidade.movimentos).find((movimento) => movimento.chaveIdempotencia === chaveIdempotencia)
+    if (repetido) return { membro: data.fidelidade.membros[repetido.membroId] || null, pontosCreditados: 0, repetido: true, movimento: repetido }
+  }
+  let membro = Object.values(data.fidelidade.membros).find((item) => item.clienteId === id_)
+  if (membro && membro.status === 'inativo') return null
+  if (!membro) {
+    membro = { id: id('fid'), clienteId: id_, nome: texto(opcoes?.nome, 120) || 'Cliente', telefone: texto(opcoes?.telefone, 30), status: 'ativo', pontos: 0, pontosAcumulados: 0, nivel: 'bronze', origemCadastro: texto(origem, 40), criadoEm: agora(), atualizadoEm: agora() }
+    data.fidelidade.membros[membro.id] = membro
+  }
+  const registradoEm = agora()
+  membro.pontos = Number(membro.pontos || 0) + quantidade
+  membro.pontosAcumulados = Number(membro.pontosAcumulados || 0) + quantidade
+  membro.nivel = membro.pontos >= 5000 ? 'ouro' : membro.pontos >= 1500 ? 'prata' : 'bronze'
+  membro.ultimaOrigem = texto(origem, 40); membro.atualizadoEm = registradoEm
+  const movimento = { id: id('fidmov'), empresaId, membroId: membro.id, clienteId: id_, valor: 0, pontos: quantidade, origem: membro.ultimaOrigem, chaveIdempotencia: chaveIdempotencia || null, criadoEm: registradoEm }
+  data.fidelidade.movimentos[movimento.id] = movimento
+  save()
+  return { membro, pontosCreditados: quantidade, repetido: false, movimento }
+}
+
 export function criarPedidoCanal(empresaId, payload = {}) {
   const data = empresa(empresaId)
   const canal = texto(payload.canal || 'delivery_proprio', 60)

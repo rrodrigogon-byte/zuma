@@ -82,7 +82,8 @@ test('leituras legadas puras permanecem sem guard de mutação', () => {
 test('readiness canônico é sanitizado e consulta PostgreSQL somente com Core ativo', () => {
   assert.match(source, /app\.get\('\/health', async \(req, res\) =>/);
   assert.match(source, /COMMERCE_CORE_ENABLED !== '1'/);
-  assert.match(source, /commerceDb\.queryRead\(`SELECT 1 FROM commerce_schema_migrations LIMIT 1`\)/);
+  assert.match(source, /checkCommerceSchemaReadiness\(commerceDb\)/);
+  assert.match(source, /status\(503\)\.json\(\{ status: 'not_ready', code: schema\.code \}\)/);
   assert.match(source, /status\(503\)\.json\(\{ status: 'not_ready', code: 'COMMERCE_DATABASE_UNAVAILABLE' \}\)/);
 });
 

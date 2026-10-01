@@ -4,7 +4,7 @@
  * Rota: /agendar/:slug (slug do tenant)
  */
 import { useState, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { DINO_BARBERSHOP_LOGO } from '../../lib/brand'
 
 const API = import.meta.env.VITE_API_URL || ''
@@ -147,6 +147,16 @@ export default function AgendamentoOnline() {
   const [horarioSel, setHorarioSel] = useState('')
   const [form, setForm] = useState({ nome: '', telefone: '', observacoes: '' })
   const [agendamento, setAgendamento] = useState(null)
+  const [consentimento, setConsentimento] = useState(false)
+  // Consentimento separado por finalidade: aviso de vaga ≠ confirmação/lembrete do agendamento.
+  const [consentimentoEspera, setConsentimentoEspera] = useState(false)
+  const [politicas, setPoliticas] = useState({ cancelamentoHoras: 4 })
+  const [searchParams] = useSearchParams()
+  // Código de quem indicou (vem do link de indicação). Só o código, nunca dado pessoal.
+  const indicacao = String(searchParams.get('indicacao') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12)
+  const [espera, setEspera] = useState({ aberta: false, periodo: 'qualquer', enviada: false, enviando: false, erro: '' })
+  // Autoatendimento: ver, remarcar ou cancelar com código + telefone.
+  const [gestao, setGestao] = useState({ codigo: '', telefone: '', agendamento: null, erro: '', carregando: false, data: '', horarios: [], horario: '', mensagem: '' })
 
   useEffect(() => {
     carregarDados()
@@ -162,6 +172,7 @@ export default function AgendamentoOnline() {
       setEstabelecimento(data.estabelecimento)
       setProfissionais(data.profissionais || [])
       setServicos(data.servicos || [])
+      if (data.politicas) setPoliticas(data.politicas)
     } catch (err) {
       setErro(err.message)
     } finally {
@@ -213,6 +224,8 @@ export default function AgendamentoOnline() {
           cliente_nome: nome,
           cliente_telefone: telefone,
           observacoes: form.observacoes,
+          consentimento_whatsapp: consentimento === true,
+          ...(indicacao ? { indicacao } : {}),
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -223,6 +236,74 @@ export default function AgendamentoOnline() {
       setErroFluxo(err.message || 'Não foi possível confirmar o agendamento.')
     } finally {
       setEnviando(false)
+    }
+  }
+
+  async function entrarNaListaDeEspera() {
+    const nome = form.nome.trim()
+    const telefone = form.telefone.replace(/\D/g, '')
+    if (nome.length < 2 || telefone.length < 10) {
+      setEspera(e => ({ ...e, erro: 'Informe seu nome e um telefone válido com DDD.' }))
+      return
+    }
+    setEspera(e => ({ ...e, enviando: true, erro: '' }))
+    try {
+      const res = await fetch(`${API}/api/publico/agendamento/${encodeURIComponent(slug)}/lista-espera`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          servico_id: servicoSel.id,
+          profissional_id: profissionalSel?.id || 'qualquer',
+          data: dataSel,
+          periodo: espera.periodo,
+          cliente_nome: nome,
+          cliente_telefone: telefone,
+          consentimento_whatsapp: consentimentoEspera === true,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Não foi possível entrar na lista de espera.')
+      setEspera(e => ({ ...e, enviada: true, enviando: false }))
+    } catch (err) {
+      setEspera(e => ({ ...e, enviando: false, erro: err.message || 'Não foi possível entrar na lista de espera.' }))
+    }
+  }
+
+  async function chamarGestao(rota, extra = {}) {
+    const telefone = gestao.telefone.replace(/\D/g, '')
+    const codigo = gestao.codigo.trim()
+    if (codigo.length < 6 || telefone.length < 10) {
+      setGestao(g => ({ ...g, erro: 'Informe o código do agendamento e o telefone usado na reserva.' }))
+      return null
+    }
+    setGestao(g => ({ ...g, carregando: true, erro: '', mensagem: '' }))
+    try {
+      const res = await fetch(`${API}/api/publico/agendamento/${encodeURIComponent(slug)}/meu-agendamento${rota}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codigo, cliente_telefone: telefone, ...extra }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Não foi possível concluir.')
+      setGestao(g => ({ ...g, carregando: false, agendamento: data.agendamento }))
+      return data.agendamento
+    } catch (err) {
+      setGestao(g => ({ ...g, carregando: false, erro: err.message || 'Não foi possível concluir.' }))
+      return null
+    }
+  }
+
+  async function carregarHorariosRemarcacao(data) {
+    const ag = gestao.agendamento
+    setGestao(g => ({ ...g, data, horario: '', horarios: [] }))
+    if (!ag?.servico?.id || !data) return
+    try {
+      const res = await fetch(`${API}/api/publico/agendamento/${encodeURIComponent(slug)}/horarios?profissional_id=${encodeURIComponent(ag.profissional?.id || 'qualquer')}&data=${encodeURIComponent(data)}&servico_id=${encodeURIComponent(ag.servico.id)}`)
+      const json = await res.json().catch(() => ({}))
+      // Só aplica se a data ainda for a escolhida (troca rápida de data).
+      setGestao(g => g.data !== data ? g : ({ ...g, horarios: Array.isArray(json.horarios) ? json.horarios.filter(h => h.disponivel) : [] }))
+    } catch (_) {
+      setGestao(g => g.data !== data ? g : ({ ...g, horarios: [] }))
     }
   }
 
@@ -258,7 +339,7 @@ export default function AgendamentoOnline() {
         <div style={s.subtitulo}>📍 {estabelecimento.endereco}</div>
       )}
       {/* Indicador de passos */}
-      <div role="progressbar" aria-label={`Etapa ${Math.min(passo, 4)} de 4`} aria-valuemin="1" aria-valuemax="4" aria-valuenow={Math.min(passo, 4)} style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 16 }}>
+      {typeof passo === 'number' && <div role="progressbar" aria-label={`Etapa ${Math.min(passo, 4)} de 4`} aria-valuemin="1" aria-valuemax="4" aria-valuenow={Math.min(passo, 4)} style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 16 }}>
         {[1, 2, 3, 4].map(p => (
           <div key={p} style={{
             width: 28, height: 4, borderRadius: 2,
@@ -266,7 +347,7 @@ export default function AgendamentoOnline() {
             transition: 'background .3s',
           }} />
         ))}
-      </div>
+      </div>}
     </div>
   )
 
@@ -308,9 +389,90 @@ export default function AgendamentoOnline() {
         >
           Continuar →
         </button>
+        <button type="button" style={{ ...s.btnSecondary, width: '100%', marginTop: 12 }} onClick={() => { setErroFluxo(''); setPasso('meu') }}>
+          Já agendou? Ver, remarcar ou cancelar
+        </button>
+        {indicacao && <p style={{ color: theme.muted, fontSize: 12, textAlign: 'center', marginTop: 12 }}>Você chegou por indicação de um cliente da casa.</p>}
       </div>
     </div>
   )
+
+  // ── Autoatendimento: meu agendamento ───────────────────────────────────────
+  if (passo === 'meu') {
+    const ag = gestao.agendamento
+    const quando = ag ? `${String(ag.dataAgenda || '').split('-').reverse().join('/')} às ${ag.horaLocal}` : ''
+    return (
+      <div style={s.page}>
+        <Header />
+        <div style={s.container}>
+          <div style={s.card}>
+            <div style={s.stepTitle}>🔎 Meu agendamento</div>
+            {gestao.erro && <div role="alert" aria-live="assertive" style={s.alerta}>{gestao.erro}</div>}
+            {gestao.mensagem && <div role="status" aria-live="polite" style={{ ...s.alerta, borderColor: theme.green, color: theme.green, background: 'rgba(110,124,224,.1)' }}>{gestao.mensagem}</div>}
+            {!ag ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div>
+                  <label htmlFor="gestao-codigo" style={s.label}>Código do agendamento</label>
+                  <input id="gestao-codigo" style={s.input} maxLength={12} autoComplete="off" placeholder="Ex.: 7F3A9C21" value={gestao.codigo} onChange={e => setGestao(g => ({ ...g, codigo: e.target.value.toUpperCase(), erro: '' }))} />
+                </div>
+                <div>
+                  <label htmlFor="gestao-telefone" style={s.label}>Telefone usado na reserva</label>
+                  <input id="gestao-telefone" type="tel" inputMode="tel" autoComplete="tel" maxLength={18} style={s.input} placeholder="(65) 9 9999-9999" value={gestao.telefone} onChange={e => setGestao(g => ({ ...g, telefone: e.target.value, erro: '' }))} />
+                </div>
+                <button type="button" style={{ ...s.btnPrimary, opacity: gestao.carregando ? .5 : 1 }} disabled={gestao.carregando} onClick={() => chamarGestao('')}>
+                  {gestao.carregando ? 'Buscando…' : 'Buscar agendamento'}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ background: theme.surface, borderRadius: 12, padding: 16 }}>
+                  {[
+                    ['Status', { agendado: 'Agendado', confirmado: 'Confirmado', em_atendimento: 'Em atendimento', concluido: 'Concluído', cancelado: 'Cancelado', nao_compareceu: 'Não compareceu' }[ag.status] || ag.status],
+                    ['Serviço', ag.servico?.nome],
+                    ['Profissional', ag.profissional?.nome],
+                    ['Quando', quando],
+                  ].map(([rotulo, valor]) => (
+                    <div key={rotulo} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: `1px solid ${theme.line}`, fontSize: 13 }}>
+                      <span style={{ color: theme.muted }}>{rotulo}</span>
+                      <span style={{ fontWeight: 700 }}>{valor}</span>
+                    </div>
+                  ))}
+                </div>
+                {ag.podeRemarcar ? (
+                  <>
+                    <label htmlFor="gestao-data" style={s.label}>Remarcar para</label>
+                    <input id="gestao-data" type="date" min={hoje} value={gestao.data} onChange={e => carregarHorariosRemarcacao(e.target.value)} style={s.input} />
+                    {gestao.data && (gestao.horarios.length === 0
+                      ? <p role="status" style={{ color: theme.muted, fontSize: 13 }}>Nenhum horário livre com {ag.profissional?.nome || 'a equipe'} nesta data.</p>
+                      : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                          {gestao.horarios.map(h => (
+                            <button type="button" key={h.horario} aria-pressed={gestao.horario === h.horario} style={s.horarioBtn(gestao.horario === h.horario, false)} onClick={() => setGestao(g => ({ ...g, horario: h.horario }))}>{h.horario}</button>
+                          ))}
+                        </div>)}
+                    <button type="button" style={{ ...s.btnPrimary, opacity: gestao.horario && !gestao.carregando ? 1 : .4 }} disabled={!gestao.horario || gestao.carregando} onClick={async () => { const novo = await chamarGestao('/remarcar', { data: gestao.data, horario: gestao.horario }); if (novo) setGestao(g => ({ ...g, data: '', horario: '', horarios: [], mensagem: 'Horário remarcado.' })) }}>
+                      Confirmar novo horário
+                    </button>
+                    <button type="button" style={{ ...s.btnSecondary, width: '100%', color: theme.red, borderColor: theme.red }} disabled={gestao.carregando} onClick={async () => { const cancelado = await chamarGestao('/cancelar'); if (cancelado) setGestao(g => ({ ...g, mensagem: 'Agendamento cancelado. Se quiser, marque outro horário quando puder.' })) }}>
+                      Cancelar agendamento
+                    </button>
+                    <p style={{ color: theme.muted, fontSize: 12 }}>Remarcações e cancelamentos pelo site vão até {ag.politicaCancelamentoHoras}h antes do horário.</p>
+                  </>
+                ) : ag.status === 'agendado' || ag.status === 'confirmado' ? (
+                  <p style={{ color: theme.muted, fontSize: 13 }}>Faltam menos de {ag.politicaCancelamentoHoras}h para o horário. Para mudar, fale com a barbearia pelo WhatsApp.</p>
+                ) : null}
+                {estabelecimento?.whatsapp && (
+                  <a href={linkWhatsApp(estabelecimento.whatsapp, `Olá! Sobre o meu agendamento ${ag.codigo}.`)} target="_blank" rel="noopener noreferrer" style={{ ...s.btnSecondary, display: 'block', textAlign: 'center', textDecoration: 'none' }}>💬 Falar com a barbearia</a>
+                )}
+              </div>
+            )}
+          </div>
+          <button type="button" style={{ ...s.btnSecondary, width: '100%' }} onClick={() => { setGestao({ codigo: '', telefone: '', agendamento: null, erro: '', carregando: false, data: '', horarios: [], horario: '', mensagem: '' }); setPasso(1) }}>
+            ← Fazer um novo agendamento
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   // ── Passo 2: Escolher profissional ─────────────────────────────────────────
   if (passo === 2) return (
@@ -375,7 +537,7 @@ export default function AgendamentoOnline() {
             type="date"
             min={hoje}
             value={dataSel}
-            onChange={e => { setDataSel(e.target.value); setHorarioSel('') }}
+            onChange={e => { setDataSel(e.target.value); setHorarioSel(''); setEspera(x => ({ ...x, aberta: false, enviada: false, erro: '' })) }}
             style={{ ...s.input, marginBottom: 20 }}
           />
           {dataSel && (
@@ -383,10 +545,35 @@ export default function AgendamentoOnline() {
               <label style={s.label}>Horário disponível</label>
               {carregandoHorarios ? (
                 <p role="status" aria-live="polite" style={{ color: theme.muted, fontSize: 13, textAlign: 'center', padding: '20px 0' }}>Consultando a agenda…</p>
-              ) : horariosDisponiveis.length === 0 ? (
-                <p role="status" style={{ color: theme.muted, fontSize: 13, textAlign: 'center', padding: '20px 0' }}>
-                  Nenhum horário disponível nesta data
-                </p>
+              ) : horariosDisponiveis.filter(h => h.disponivel).length === 0 ? (
+                <div role="status" style={{ textAlign: 'center', padding: '12px 0' }}>
+                  <p style={{ color: theme.muted, fontSize: 13, marginBottom: 12 }}>Nenhum horário disponível nesta data.</p>
+                  {espera.enviada ? (
+                    <p style={{ color: theme.green, fontSize: 13, fontWeight: 700 }}>Pronto! Você está na lista de espera. Se abrir um horário, avisamos{consentimentoEspera ? ' pelo WhatsApp' : ''}.</p>
+                  ) : !espera.aberta ? (
+                    <button type="button" style={s.btnSecondary} onClick={() => setEspera(e => ({ ...e, aberta: true }))}>Entrar na lista de espera deste dia</button>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'left' }}>
+                      {espera.erro && <div role="alert" style={s.alerta}>{espera.erro}</div>}
+                      <label htmlFor="espera-nome" style={s.label}>Seu nome</label>
+                      <input id="espera-nome" autoComplete="name" maxLength={160} style={s.input} value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} />
+                      <label htmlFor="espera-telefone" style={s.label}>Telefone com DDD</label>
+                      <input id="espera-telefone" type="tel" inputMode="tel" autoComplete="tel" maxLength={18} style={s.input} value={form.telefone} onChange={e => setForm(f => ({ ...f, telefone: e.target.value }))} />
+                      <label htmlFor="espera-periodo" style={s.label}>Período</label>
+                      <select id="espera-periodo" style={s.input} value={espera.periodo} onChange={e => setEspera(x => ({ ...x, periodo: e.target.value }))}>
+                        <option value="qualquer">Qualquer horário</option>
+                        <option value="manha">Manhã</option>
+                        <option value="tarde">Tarde</option>
+                        <option value="noite">Noite</option>
+                      </select>
+                      <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, color: theme.cream }}>
+                        <input type="checkbox" checked={consentimentoEspera} onChange={e => setConsentimentoEspera(e.target.checked)} style={{ marginTop: 3 }} />
+                        <span>Quero ser avisado pelo WhatsApp se abrir um horário.</span>
+                      </label>
+                      <button type="button" style={{ ...s.btnPrimary, opacity: espera.enviando ? .5 : 1 }} disabled={espera.enviando} onClick={entrarNaListaDeEspera}>{espera.enviando ? 'Enviando…' : 'Entrar na lista de espera'}</button>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                   {horariosDisponiveis.map(h => (
@@ -501,6 +688,10 @@ export default function AgendamentoOnline() {
                 onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))}
               />
             </div>
+            <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13, color: theme.cream, lineHeight: 1.45 }}>
+              <input type="checkbox" checked={consentimento} onChange={e => setConsentimento(e.target.checked)} style={{ marginTop: 3, width: 18, height: 18 }} />
+              <span>Quero receber a confirmação e o lembrete deste agendamento pelo WhatsApp. Posso parar a qualquer momento respondendo SAIR.</span>
+            </label>
           </div>
         </div>
 
@@ -529,7 +720,7 @@ export default function AgendamentoOnline() {
             Agendamento solicitado!
           </div>
           <div style={{ color: theme.muted, fontSize: 14, marginBottom: 24 }}>
-            A solicitação entrou na agenda. Guarde o código abaixo para acompanhar com o estabelecimento.
+            A solicitação entrou na agenda. Guarde o código abaixo: com ele e o seu telefone você pode remarcar ou cancelar pelo site até {politicas.cancelamentoHoras}h antes.
           </div>
 
           {/* Código de confirmação */}
@@ -580,7 +771,7 @@ export default function AgendamentoOnline() {
 
           <button
             style={{ ...s.btnSecondary, width: '100%' }}
-            onClick={() => { setPasso(1); setServicoSel(null); setProfissionalSel(null); setDataSel(''); setHorarioSel(''); setHorariosDisponiveis([]); setAgendamento(null); setErroFluxo(''); setForm({ nome: '', telefone: '', observacoes: '' }) }}
+            onClick={() => { setPasso(1); setServicoSel(null); setProfissionalSel(null); setDataSel(''); setHorarioSel(''); setHorariosDisponiveis([]); setAgendamento(null); setErroFluxo(''); setForm({ nome: '', telefone: '', observacoes: '' }); setConsentimento(false); setConsentimentoEspera(false); setEspera({ aberta: false, periodo: 'qualquer', enviada: false, enviando: false, erro: '' }) }}
           >
             + Fazer outro agendamento
           </button>

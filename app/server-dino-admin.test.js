@@ -36,7 +36,7 @@ function fakeBackend() {
     req.on('end', () => {
       calls.push({ method: req.method, url: req.url, auth: req.headers.authorization, apikey: req.headers.apikey, body: raw ? JSON.parse(raw) : null });
       const send = (status, body) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
-      if (req.headers.authorization !== 'Bearer chave-teste') return send(401, { message: 'unauthorized' });
+      if (req.headers.authorization !== 'Bearer chave-teste-com-mais-de-vinte') return send(401, { message: 'unauthorized' });
       if (req.url === '/api/v1/whats-app/instances/dino-1/status') return send(200, { instance: 'dino-1', state, phone: '5565993360000' });
       if (req.url === '/api/v1/whats-app/instances/dino-1/qr') { state = 'qr'; return send(200, { qrcode: '2@AbCdEfGhIjKlMnOpQrStUvWxYz0123456789,abc,def', pairingCode: 'ABCD-1234' }); }
       if (req.url === '/api/v1/whats-app/instances/dino-1/messages/text' && req.method === 'POST') return send(201, { id: 'msg-1', status: 'sent' });
@@ -58,11 +58,13 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
   fs.writeFileSync(dbPath, JSON.stringify({
     seq: 1,
     lancamentos: [{ id: 900, tipo: 'receita', categoria: 'Inscrição Torneio', descricao: 'Receita do evento', valor: 300, status: 'pendente', vencimento: '2026-01-01' }],
+    barbearias: { 'emp-a': { comandas: { 'cmd-sem-loja': { id: 'cmd-sem-loja', empresaId: 'emp-a', lojaId: '', status: 'aberta', itens: [], pagamentos: [], criadoEm: '2030-06-11T12:00:00.000Z' } } } },
     usuarios: [
       { id: 1, nome: 'Gestor A', email: 'a@dino.test', senhaHash: hash, role: 'admin', ativo: true, empresaId: 'emp-a', lojaId: 'loja-a' },
       { id: 2, nome: 'Barbeiro A', email: 'staff@dino.test', senhaHash: hash, role: 'staff', ativo: true, empresaId: 'emp-a', lojaId: 'loja-a' },
       { id: 3, nome: 'Gestor B', email: 'b@outra.test', senhaHash: hash, role: 'admin', ativo: true, empresaId: 'emp-b', lojaId: 'loja-b' },
       { id: 4, nome: 'Organização evento', email: 'evento@setpoint.test', senhaHash: hash, role: 'admin', ativo: true },
+      { id: 5, nome: 'Gestor A filial', email: 'filial@dino.test', senhaHash: hash, role: 'admin', ativo: true, empresaId: 'emp-a', lojaId: 'loja-a2' },
     ],
   }));
   const port = 33000 + Math.floor(Math.random() * 500);
@@ -72,7 +74,7 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     env: {
       ...process.env, NODE_ENV: 'development', PORT: String(port), DB_PATH: dbPath, JWT_SECRET: 'dino-admin-jwt', COMMERCE_CORE_ENABLED: '0', SEED_DEMO: '0',
       WPP_BASE_URL: '', WPP_APIKEY: '', PLATFORM_ADMIN_EMAILS: '',
-      WHATSAPP_PROVIDER: 'chatbot_backend', CHATBOT_BACKEND_URL: backendUrl, CHATBOT_BACKEND_KEY: 'chave-teste', CHATBOT_BACKEND_INSTANCE: 'dino-1', WHATSAPP_CONNECTION_WATCHDOG: 'false',
+      WHATSAPP_PROVIDER: 'chatbot_backend', CHATBOT_BACKEND_MODE: 'instancias', CHATBOT_BACKEND_URL: backendUrl, CHATBOT_BACKEND_KEY: 'chave-teste-com-mais-de-vinte', CHATBOT_BACKEND_INSTANCE: 'dino-1', WHATSAPP_CONNECTION_WATCHDOG: 'false',
     },
     stdio: 'ignore',
   });
@@ -88,6 +90,48 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     const staffA = await login('staff@dino.test');
     const B = await login('b@outra.test');
     const evento = await login('evento@setpoint.test');
+    const filialA = await login('filial@dino.test');
+
+    for (const headers of [A, filialA]) {
+      const listaComandas = await request(base, '/api/admin/barbearia/comandas', { headers });
+      assert.equal(listaComandas.response.status, 200);
+      assert.ok(!listaComandas.body.comandas.some((item) => item.id === 'cmd-sem-loja'), 'comanda sem unidade não aparece na listagem da loja');
+      for (const [method, rota, body] of [
+        ['GET', '/api/admin/barbearia/comandas/cmd-sem-loja'],
+        ['PATCH', '/api/admin/barbearia/comandas/cmd-sem-loja', { desconto: 1 }],
+        ['POST', '/api/admin/barbearia/comandas/cmd-sem-loja/pagamentos', { confirmado: true, meioPagamento: 'pix', valor: 1 }],
+      ]) {
+        const response = await request(base, rota, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
+        assert.equal(response.response.status, 404, `${method} ${rota} não pode acessar registro sem loja`);
+      }
+    }
+
+    const crmLoja = await request(base, '/api/admin/barbearia/crm/resumo', { headers: A });
+    assert.equal(crmLoja.response.status, 403, 'contas sem loja não podem ser agregadas para gestor de uma unidade');
+    assert.equal(crmLoja.body.code, 'CRM_CORPORATE_SCOPE_REQUIRED');
+
+    assert.equal((await request(base, '/api/admin/barbearia/servicos', { headers: staffA })).response.status, 200, 'staff mantém consulta operacional');
+    for (const [method, route, body] of [
+      ['GET', '/api/admin/barbearia/overview'],
+      ['GET', '/api/admin/barbearia/operacao/caixas'],
+      ['GET', '/api/admin/barbearia/clientes'],
+      ['GET', '/api/admin/barbearia/clientes-360'],
+      ['GET', '/api/admin/barbearia/crm/resumo'],
+      ['POST', '/api/admin/barbearia/clientes', { nome: 'Forjado' }],
+      ['PATCH', '/api/admin/barbearia/clientes/inexistente', { telefone: '000' }],
+      ['PATCH', '/api/admin/barbearia/clientes/inexistente/consentimentos', { confirmado: true, canal: 'whatsapp' }],
+      ['POST', '/api/admin/barbearia/servicos', { nome: 'Serviço indevido', preco: 1 }],
+      ['PATCH', '/api/admin/barbearia/configuracoes', { ativo: false }],
+      ['POST', '/api/admin/barbearia/comandas/inexistente/pagamentos', { confirmado: true, valor: 1 }],
+      ['PATCH', '/api/admin/barbearia/comandas/inexistente/status', { status: 'paga' }],
+      ['PATCH', '/api/admin/barbearia/comandas/inexistente', { desconto: 10, financeiroLancamentoIds: ['fake'] }],
+      ['POST', '/api/admin/barbearia/comandas/inexistente/consumo-interno', { quantidade: 1 }],
+      ['POST', '/api/admin/barbearia/fidelidade/creditar', { pontos: 100 }],
+    ]) {
+      const denied = await request(base, route, { method, headers: staffA, ...(body ? { body: JSON.stringify(body) } : {}) });
+      assert.equal(denied.response.status, 403, `${method} ${route} é reservado à gestão`);
+      assert.equal(denied.body.code, 'TENANT_MANAGER_REQUIRED');
+    }
 
     // ── Financeiro separado por empresa ──
     const criado = await request(base, '/api/admin/barbearia/financeiro/lancamentos', { method: 'POST', headers: A, body: JSON.stringify({ tipo: 'despesa', categoria: 'Aluguel', descricao: 'Aluguel setembro', valor: 1500, vencimento: '2026-09-30', obs: 'contrato 12m' }) });
@@ -155,22 +199,72 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     // ── Cadastro automático de cliente pela agenda ──
     const prof = await request(base, '/api/admin/barbearia/profissionais', { method: 'POST', headers: A, body: JSON.stringify({ nome: 'Bruno', percentualComissao: 50, ativo: true, agenda: {} }) });
     assert.equal(prof.response.status, 201);
+    const equipeStaff = await request(base, '/api/admin/barbearia/profissionais?incluirInativos=true', { headers: staffA });
+    assert.equal(equipeStaff.response.status, 200);
+    const profissionalStaff = equipeStaff.body.profissionais.find((item) => item.id === prof.body.profissional.id);
+    assert.equal(profissionalStaff?.nome, 'Bruno');
+    assert.equal(profissionalStaff?.percentualComissao, undefined);
+    assert.equal(profissionalStaff?.email, undefined);
+    assert.equal(profissionalStaff?.telefone, undefined);
     const serv = await request(base, '/api/admin/barbearia/servicos', { method: 'POST', headers: A, body: JSON.stringify({ nome: 'Corte BI', preco: 60, duracaoMinutos: 30 }) });
     assert.equal(serv.response.status, 201);
     const agendar = (hora, extra = {}) => request(base, '/api/admin/barbearia/agenda', { method: 'POST', headers: A, body: JSON.stringify({ clienteNome: 'Carlos Novo', clienteTelefone: '(65) 99811-2233', profissionalId: prof.body.profissional.id, servicoId: serv.body.servico.id, dataAgenda: '2030-06-11', dataHora: `2030-06-11T${hora}:00.000Z`, ...extra }) });
+    const precoForjado = await agendar('12:00', { valor: 1 });
+    assert.equal(precoForjado.response.status, 409);
+    assert.equal(precoForjado.body.code, 'APPOINTMENT_PRICE_MISMATCH');
+    assert.equal((await request(base, '/api/admin/barbearia/agenda', { headers: A })).body.agendamentos.length, 0, 'preço forjado não cria agenda');
     const ag1 = await agendar('13:00');
     assert.equal(ag1.response.status, 201, JSON.stringify(ag1.body));
     assert.ok(ag1.body.cliente.id);
     assert.equal(ag1.body.cliente.criado, true);
+    const agendamentoA = ag1.body.agendamento.id;
+    const statusOutraLoja = await request(base, `/api/admin/barbearia/agenda/${agendamentoA}/status`, {
+      method: 'PATCH', headers: filialA, body: JSON.stringify({ status: 'confirmado', lojaId: 'loja-a' }),
+    });
+    assert.equal(statusOutraLoja.response.status, 404, 'filial não altera status da loja A nem forjando lojaId no payload');
+    const agendaIntacta = await request(base, `/api/admin/barbearia/agenda/${agendamentoA}`, { headers: A });
+    assert.equal(agendaIntacta.body.agendamento.status, ag1.body.agendamento.status, 'cross-store não produz DML');
     const ag2 = await agendar('14:00', { clienteTelefone: '65 9 9811-2233' });
     assert.equal(ag2.body.cliente.id, ag1.body.cliente.id, 'mesmo telefone reaproveita o cadastro');
     assert.equal(ag2.body.cliente.criado, false);
     const balcao = await agendar('15:00', { clienteNome: 'Cliente Balcão' });
     assert.equal(balcao.body.cliente.id, null, 'balcão segue sem cadastro');
 
+    // ── Conclusão operacional não fatura sem lançamento no financeiro ──
+    const rotaStatus = `/api/admin/barbearia/agenda/${agendamentoA}/status`;
+    assert.equal((await request(base, rotaStatus, { method: 'PATCH', headers: A, body: JSON.stringify({ status: 'confirmado' }) })).response.status, 200);
+    assert.equal((await request(base, rotaStatus, { method: 'PATCH', headers: A, body: JSON.stringify({ status: 'em_atendimento' }) })).response.status, 200);
+    const forjado = await request(base, rotaStatus, { method: 'PATCH', headers: A, body: JSON.stringify({ status: 'concluido', meioPagamento: 'pix', valorRecebido: 60 }) });
+    assert.equal(forjado.response.status, 400);
+    assert.equal((await request(base, `/api/admin/barbearia/agenda/${agendamentoA}`, { headers: A })).body.agendamento.status, 'em_atendimento', 'rejeição antecede DML');
+    const concluir = await request(base, rotaStatus, { method: 'PATCH', headers: A, body: JSON.stringify({ status: 'concluido', registrarFinanceiro: false }) });
+    assert.equal(concluir.response.status, 200);
+    assert.equal(concluir.body.agendamento.valorRecebido, 0);
+    const dashboardSemRecebimento = await request(base, '/api/admin/barbearia/dashboard?data=2030-06-11', { headers: A });
+    assert.equal(dashboardSemRecebimento.body.indicadores.faturamentoHoje, 0);
+    const pagamento = { status: 'concluido', registrarFinanceiro: true, confirmado: true, meioPagamento: 'pix', valorRecebido: 60 };
+    assert.equal((await request(base, rotaStatus, { method: 'PATCH', headers: staffA, body: JSON.stringify(pagamento) })).response.status, 403);
+    assert.equal((await request(base, rotaStatus, { method: 'PATCH', headers: A, body: JSON.stringify({ ...pagamento, confirmado: false }) })).response.status, 400);
+    const valorForjado = await request(base, rotaStatus, { method: 'PATCH', headers: A, body: JSON.stringify({ ...pagamento, valorRecebido: 1 }) });
+    assert.equal(valorForjado.response.status, 409);
+    assert.equal(valorForjado.body.code, 'RECEIPT_AMOUNT_MISMATCH');
+    assert.equal((await request(base, `/api/admin/barbearia/agenda/${agendamentoA}`, { headers: A })).body.agendamento.financeiroLancamentoId, '', 'valor forjado não vincula ledger');
+    const recebido = await request(base, rotaStatus, { method: 'PATCH', headers: A, body: JSON.stringify(pagamento) });
+    assert.equal(recebido.response.status, 200, JSON.stringify(recebido.body));
+    assert.equal(recebido.body.agendamento.valorRecebido, 60);
+    assert.equal(recebido.body.agendamento.financeiroLancamentoId, recebido.body.financeiro.id);
+    const repetido = await request(base, rotaStatus, { method: 'PATCH', headers: A, body: JSON.stringify(pagamento) });
+    assert.equal(repetido.response.status, 200);
+    assert.equal(repetido.body.financeiro.id, recebido.body.financeiro.id);
+    const divergente = await request(base, rotaStatus, { method: 'PATCH', headers: A, body: JSON.stringify({ ...pagamento, valorRecebido: 80 }) });
+    assert.equal(divergente.response.status, 409);
+    assert.equal(divergente.body.code, 'RECEIPT_IDEMPOTENCY_CONFLICT');
+    const aposReplay = await request(base, '/api/admin/barbearia/financeiro/lancamentos', { headers: A });
+    assert.equal(aposReplay.body.filter((item) => item.id === recebido.body.financeiro.id).length, 1);
+    const hojeOperacional = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    const dashboardPago = await request(base, `/api/admin/barbearia/dashboard?data=${hojeOperacional}`, { headers: A });
+    assert.equal(dashboardPago.body.indicadores.faturamentoHoje, 60);
     // ── BI da barbearia ──
-    const concluir = await request(base, `/api/admin/barbearia/agenda/${ag1.body.agendamento.id}/status`, { method: 'PATCH', headers: A, body: JSON.stringify({ status: 'concluido' }) });
-    assert.ok([200, 400].includes(concluir.response.status));
     const bi = await request(base, '/api/admin/barbearia/bi?periodo=30', { headers: A });
     assert.equal(bi.response.status, 200);
     assert.ok(bi.body.resultado && typeof bi.body.resultado.resultado === 'number');
@@ -202,7 +296,7 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     const envio = backend.calls.find((call) => call.url.endsWith('/messages/text'));
     assert.ok(envio, 'envio pela rota de mensagens da instância');
     assert.equal(envio.body.number, '5565998112233');
-    assert.equal(envio.apikey, 'chave-teste');
+    assert.equal(envio.apikey, 'chave-teste-com-mais-de-vinte');
     // Queda + vigia: reconecta com espera crescente
     backend.setState('close');
     const verificar = await request(base, '/api/admin/barbearia/whatsapp-conexao/verificar', { method: 'POST', headers: A });

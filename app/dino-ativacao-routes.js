@@ -8,7 +8,7 @@ import { publicConfig } from './core/commerce-tenants.js';
 import { configureWhatsappAiChannel, configureWhatsappAiPolicy, whatsappAiOperationalStatus } from './core/whatsapp-ai.js';
 import { providerConfigured } from './core/ai-router.js';
 import { getBrainSettings } from './core/ai-memory.js';
-import { whatsappProviderName, chatbotBackendConfig } from './core/whatsapp-provider.js';
+import { whatsappProviderName, chatbotBackendConfig, chatbotBackendMode } from './core/whatsapp-provider.js';
 import { obterConexao } from './whatsapp-conexao-kytto.js';
 
 const BASE = '/api/admin/barbearia/ativacao';
@@ -35,7 +35,14 @@ export function buildChecklist(f) {
   out.push(item('Servidor', 'migracao', 'Tabelas do cérebro criadas (migration 052)', f.migracao, f.migracao ? 'Aplicada.' : 'Roda sozinha no deploy (preDeployCommand).'));
   out.push(item('Servidor', 'whatsapp_chave', 'WhatsApp pelo backend do NossaGente', provider === 'chatbot_backend' && f.env.CHATBOT_BACKEND_KEY,
     provider !== 'chatbot_backend' ? 'Defina WHATSAPP_PROVIDER=chatbot_backend.' : f.env.CHATBOT_BACKEND_KEY ? `Instância ${f.instance}.` : 'Falta CHATBOT_BACKEND_KEY no Secret Manager.'));
-  out.push(item('Servidor', 'webhook_segredo', 'Segredo do webhook de entrada', f.env.WHATSAPP_AI_WEBHOOK_SECRET, f.env.WHATSAPP_AI_WEBHOOK_SECRET ? 'Configurado.' : 'Falta WHATSAPP_AI_WEBHOOK_SECRET (valor aleatório forte, diferente da chave do backend).'));
+  if (provider === 'chatbot_backend' && f.modo !== 'instancias') {
+    // Igual à Isa: o backend não envia webhook; a Dino consulta as mensagens.
+    out.push(item('Servidor', 'whatsapp_url', 'Backend WhatsApp próprio da Dino (URL)', Boolean(f.env.CHATBOT_BACKEND_URL), f.env.CHATBOT_BACKEND_URL ? 'Configurada.' : 'Falta CHATBOT_BACKEND_URL: o backend da Dino (o mesmo software da Isa, com o número da barbearia).'));
+    out.push(item('Servidor', 'whatsapp_empresa', 'Número ligado a esta empresa', f.empresaDoNumero === true, f.empresaDoNumero ? 'CHATBOT_BACKEND_EMPRESA_ID aponta para esta empresa.' : 'Defina CHATBOT_BACKEND_EMPRESA_ID com o id desta empresa.'));
+    out.push(item('Servidor', 'webhook_segredo', 'Entrada de mensagens', true, 'Por consulta periódica, igual à Isa (não usa webhook).', { opcional: true }));
+  } else {
+    out.push(item('Servidor', 'webhook_segredo', 'Segredo do webhook de entrada', f.env.WHATSAPP_AI_WEBHOOK_SECRET, f.env.WHATSAPP_AI_WEBHOOK_SECRET ? 'Configurado.' : 'Falta WHATSAPP_AI_WEBHOOK_SECRET (valor aleatório forte, diferente da chave do backend).'));
+  }
   out.push(item('Servidor', 'ia_flag', 'Atendente IA habilitado', f.env.FEATURE_WHATSAPP_AI, f.env.FEATURE_WHATSAPP_AI ? 'FEATURE_WHATSAPP_AI=true' : 'Defina FEATURE_WHATSAPP_AI=true.'));
   out.push(item('Servidor', 'gemini', 'Gemini (IA principal do atendimento)', f.ia.gemini, f.ia.gemini ? 'Configurada.' : 'Falta GEMINI_API_KEY.'));
   out.push(item('Servidor', 'claude', 'Claude (reserva e aprendizado)', f.ia.anthropic, f.ia.anthropic ? 'Configurada.' : 'Opcional: ANTHROPIC_API_KEY.', { opcional: true }));
@@ -145,7 +152,9 @@ export function registerAtivacaoRoutes(app, deps) {
         agora: Date.now(), baseUrl: base,
         commerce: process.env.COMMERCE_CORE_ENABLED === '1',
         provider: whatsappProviderName(), instance: whatsappProviderName() === 'chatbot_backend' ? chatbotBackendConfig().instance : process.env.EVOLUTION_INSTANCE || '',
-        env: Object.fromEntries(['CHATBOT_BACKEND_KEY', 'WHATSAPP_AI_WEBHOOK_SECRET'].map((n) => [n, envSet(n)]).concat([['FEATURE_WHATSAPP_AI', process.env.FEATURE_WHATSAPP_AI === 'true']])),
+        env: Object.fromEntries(['CHATBOT_BACKEND_KEY', 'CHATBOT_BACKEND_URL', 'WHATSAPP_AI_WEBHOOK_SECRET'].map((n) => [n, envSet(n)]).concat([['FEATURE_WHATSAPP_AI', process.env.FEATURE_WHATSAPP_AI === 'true']])),
+        modo: chatbotBackendMode(),
+        empresaDoNumero: String(process.env.CHATBOT_BACKEND_EMPRESA_ID || '').trim() === String(s.context?.empresaId || s.legacy || '').trim(),
         ia: { gemini: providerConfigured('gemini'), anthropic: providerConfigured('anthropic'), openai: providerConfigured('openai') },
         conexao: conexao?.state || 'unknown',
         slug: config.slugPublico || '', agendamentoAtivo: config.agendamentoPublicoAtivo !== false,

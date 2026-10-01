@@ -1,4 +1,5 @@
 import { deveEnfileirarOffline, enfileirarOperacao, prepararOperacao, sincronizarFila } from './offline-queue'
+export { fmtMoney } from './currency.js'
 
 function getToken() {
   return localStorage.getItem('sp_token') || localStorage.getItem('sp_site_token') || ''
@@ -115,7 +116,7 @@ export function asArray(value, keys = []) {
 const _brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const _int = new Intl.NumberFormat('pt-BR')
 
-// Moeda: R$ 117.750,00
+// Compatibilidade dos módulos que ainda operam exclusivamente em reais.
 export function fmtR(v) {
   return _brl.format(Number(v || 0))
 }

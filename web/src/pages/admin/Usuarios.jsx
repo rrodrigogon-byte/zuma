@@ -1,401 +1,93 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
-import { api, fmtDate, fmtDateOnly } from '../../lib/api'
-import { useToast } from '../../hooks/useToast'
-import Modal from '../../components/Modal'
+import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { api } from '../../lib/api'
 
-function exportCSV(usuarios) {
-  const headers = ['ID', 'Nome', 'E-mail', 'Perfil', 'Status', 'Último Acesso']
-  const rows = usuarios.map(u => [
-    u.id, u.nome, u.email, u.role,
-    u.ativo !== false ? 'Ativo' : 'Inativo',
-    u.ultimoAcesso ? new Date(u.ultimoAcesso).toLocaleDateString('pt-BR') : '—'
-  ])
-  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a'); a.href = url; a.download = `usuarios_${new Date().toISOString().slice(0,10)}.csv`; a.click()
-  URL.revokeObjectURL(url)
-}
-
-function KpiCard({ label, value, color = 'var(--green)', icon }) {
-  return (
-    <div style={{ background: 'var(--card)', border: `1px solid var(--line)`, borderLeft: `4px solid ${color}`, borderRadius: 10, padding: '14px 18px', minWidth: 130 }}>
-      <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 4 }}>{icon} {label}</div>
-      <div style={{ fontSize: 26, fontWeight: 800, color }}>{value}</div>
-    </div>
-  )
-}
-
-const ROLES = ['admin', 'organizador', 'staff', 'atleta']
-
-const ROLE_COLORS = {
-  admin: { bg: '#e05c5c22', color: '#e05c5c', border: '#e05c5c44' },
-  organizador: { bg: '#FF6B2C22', color: '#FF6B2C', border: '#FF6B2C44' },
-  staff: { bg: '#FF6B2C22', color: '#FF6B2C', border: '#FF6B2C44' },
-  atleta: { bg: '#FF9B7222', color: '#FF9B72', border: '#FF9B7244' },
-}
-
-const AVATAR_COLORS = ['#e05c5c', '#FF6B2C', '#FF6B2C', '#FF9B72', '#4a9abe', '#9b59b6', '#e67e22']
-
-const EMPTY_FORM = { nome: '', email: '', senha: '', role: 'staff' }
-
-function getInitials(nome) {
-  if (!nome) return '?'
-  const parts = nome.trim().split(' ')
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-}
-
-function avatarColor(nome) {
-  if (!nome) return AVATAR_COLORS[0]
-  let hash = 0
-  for (const c of nome) hash = (hash * 31 + c.charCodeAt(0)) & 0xffffffff
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
-}
-
-function genSenha(len = 12) {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#!$'
-  let s = ''
-  for (let i = 0; i < len; i++) s += chars[Math.floor(Math.random() * chars.length)]
-  return s
-}
-
-function validateForm(form, isNovo) {
-  if (!form.nome || form.nome.trim().length < 2) return 'Nome deve ter pelo menos 2 caracteres'
-  if (!form.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) return 'E-mail inválido'
-  if (isNovo && !form.senha) return 'Senha obrigatória para novo usuário'
-  if (form.senha && form.senha.length < 6) return 'Senha deve ter pelo menos 6 caracteres'
-  return null
-}
+function unique(values) { return [...new Set(values.filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b), 'pt-BR')) }
 
 export default function Usuarios() {
-  const { toast } = useToast()
-  const [usuarios, setUsuarios] = useState([])
+  const [accounts, setAccounts] = useState([])
+  const [complete, setComplete] = useState(false)
+  const [sources, setSources] = useState([])
   const [loading, setLoading] = useState(true)
-  const [busca, setBusca] = useState('')
-  const [filtroRole, setFiltroRole] = useState('')
-  const [modal, setModal] = useState(null) // null | 'novo' | {id, ...fields}
-  const [form, setForm] = useState(EMPTY_FORM)
-  const [saving, setSaving] = useState(false)
-  const [showSenha, setShowSenha] = useState(false)
-  const debounceRef = useRef(null)
-  const [buscaInput, setBuscaInput] = useState('')
+  const [error, setError] = useState('')
+  const [query, setQuery] = useState('')
+  const [company, setCompany] = useState('')
+  const [role, setRole] = useState('')
+  const [status, setStatus] = useState('')
+  const [source, setSource] = useState('')
+  const [page, setPage] = useState(0)
+  const pageSize = 50
 
-  const load = () => {
+  const load = async () => {
     setLoading(true)
-    api
-      .get('/api/admin/usuarios-mestres')
-      .then(res => setUsuarios(res.usuarios || []))
-      .catch(() => toast('Erro ao carregar usuários', 'error'))
-      .finally(() => setLoading(false))
-  }
-
-  useEffect(load, [])
-
-  // Debounce search
-  const handleBuscaChange = (val) => {
-    setBuscaInput(val)
-    clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => setBusca(val), 300)
-  }
-
-  const openNovo = () => {
-    setForm(EMPTY_FORM)
-    setShowSenha(false)
-    setModal('novo')
-  }
-
-  const openEditar = (u) => {
-    setForm({ nome: u.nome, email: u.email, senha: '', role: u.role })
-    setShowSenha(false)
-    setModal(u)
-  }
-
-  const closeModal = () => setModal(null)
-
-  const handleSave = async () => {
-    const err = validateForm(form, modal === 'novo')
-    if (err) return toast(err, 'warn')
-    setSaving(true)
+    setError('')
     try {
-      if (modal === 'novo') {
-        await api.post('/api/admin/usuarios-mestres', form)
-        toast('Usuário criado', 'success')
-      } else {
-        const payload = { nome: form.nome, email: form.email, role: form.role }
-        if (form.senha) payload.senha = form.senha
-        await api.patch(`/api/admin/usuarios-mestres/${modal.id}`, payload)
-        toast('Usuário atualizado', 'success')
-      }
-      closeModal()
-      load()
-    } catch (e) {
-      toast(e?.message || 'Erro ao salvar', 'error')
-    } finally {
-      setSaving(false)
-    }
+      const response = await api.get('/api/admin/usuarios-diretorio')
+      setAccounts(Array.isArray(response.usuarios) ? response.usuarios : [])
+      setComplete(response.completo === true)
+      setSources(Array.isArray(response.fontes) ? response.fontes : [])
+    } catch (reason) {
+      setAccounts([])
+      setError(reason?.message || 'Não foi possível carregar o diretório.')
+    } finally { setLoading(false) }
   }
+  useEffect(() => { load() }, [])
 
-  const toggleAtivo = async (u) => {
-    try {
-      await api.patch(`/api/admin/usuarios-mestres/${u.id}`, { ativo: !u.ativo })
-      load()
-    } catch {
-      toast('Erro ao alterar status', 'error')
-    }
-  }
-
-  const handleDelete = async (u) => {
-    if (!confirm(`Excluir usuário "${u.nome}"?`)) return
-    try {
-      await api.delete(`/api/admin/usuarios-mestres/${u.id}`)
-      toast('Usuário excluído', 'success')
-      load()
-    } catch {
-      toast('Erro ao excluir', 'error')
-    }
-  }
-
-  const lista = useMemo(() => {
-    const q = busca.toLowerCase()
-    return usuarios.filter((u) => {
-      const matchQ = !q || u.nome?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
-      const matchR = !filtroRole || u.role === filtroRole
-      return matchQ && matchR
-    })
-  }, [usuarios, busca, filtroRole])
-
-  // KPIs calculados
-  const kpis = useMemo(() => {
-    const total = usuarios.length
-    const ativos = usuarios.filter(u => u.ativo !== false).length
-    const byRole = ROLES.reduce((acc, r) => ({ ...acc, [r]: usuarios.filter(u => u.role === r).length }), {})
-    const semAcesso = usuarios.filter(u => !u.ultimoAcesso).length
-    return { total, ativos, ...byRole, semAcesso }
-  }, [usuarios])
+  const companies = useMemo(() => unique(accounts.map(item => item.empresaNome)), [accounts])
+  const roles = useMemo(() => unique(accounts.flatMap(item => (item.vinculos || []).map(binding => binding.codigo))), [accounts])
+  const filtered = useMemo(() => accounts.filter(item => {
+    const text = `${item.nome} ${item.email}`.toLocaleLowerCase('pt-BR')
+    return (!query || text.includes(query.toLocaleLowerCase('pt-BR').trim()))
+      && (!company || item.empresaNome === company)
+      && (!role || (item.vinculos || []).some(binding => binding.codigo === role))
+      && (!status || (item.ativo ? 'ativo' : 'inativo') === status)
+      && (!source || item.origem === source)
+  }), [accounts, query, company, role, status, source])
+  const pages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const visible = filtered.slice(page * pageSize, (page + 1) * pageSize)
+  const change = setter => event => { setter(event.target.value); setPage(0) }
 
   return (
-    <div className="page">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h1 className="page-title" style={{ margin: 0 }}>Usuários</h1>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-secondary" onClick={() => exportCSV(lista)}>⬇ CSV</button>
-          <button className="btn btn-primary" onClick={openNovo}>+ Novo Usuário</button>
+    <main className="page" style={{ maxWidth: '100%', minWidth: 0 }}>
+      <header style={{ display: 'flex', gap: 12, justifyContent: 'space-between', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div>
+          <h1 className="page-title">Usuários por empresa</h1>
+          <p style={{ color: 'var(--muted)' }}>Diretório de leitura das contas do painel e do Commerce. Perfis e permissões são separados por origem; contas com o mesmo e-mail não são mescladas.</p>
         </div>
+        <button type="button" className="btn btn-secondary" onClick={load} disabled={loading}>Atualizar</button>
+      </header>
+      {error && <div role="alert" style={{ color: '#e05c5c', marginBottom: 16 }}>{error}</div>}
+      {!loading && !error && !complete && <div role="status" style={{ marginBottom: 16 }}>O Commerce Core está desativado. Apenas contas legadas foram carregadas; esta lista não é completa.</div>}
+      {!loading && !error && <p role="status" style={{ color: 'var(--muted)' }}><strong>{accounts.length}</strong> contas visíveis no seu escopo; <strong>{filtered.length}</strong> após os filtros. Fontes: {sources.join(' e ') || 'nenhuma'}.</p>}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
+        <label>Nome ou e-mail<br /><input aria-label="Buscar usuário por nome ou e-mail" value={query} onChange={change(setQuery)} placeholder="Buscar usuário" /></label>
+        <label>Empresa<br /><select value={company} onChange={change(setCompany)}><option value="">Todas as empresas autorizadas</option>{companies.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+        <label>Papel<br /><select value={role} onChange={change(setRole)}><option value="">Todos</option>{roles.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+        <label>Estado<br /><select value={status} onChange={change(setStatus)}><option value="">Todos</option><option value="ativo">Ativos</option><option value="inativo">Inativos</option></select></label>
+        <label>Origem<br /><select value={source} onChange={change(setSource)}><option value="">Todas</option><option value="legado">Painel</option><option value="commerce">Commerce</option></select></label>
       </div>
-
-      {/* KPIs */}
-      {!loading && (
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
-          <KpiCard label="Total" value={kpis.total} color="var(--green)" icon="👥" />
-          <KpiCard label="Ativos" value={kpis.ativos} color="#FF6B2C" icon="✅" />
-          <KpiCard label="Admin" value={kpis.admin || 0} color="#e05c5c" icon="🔑" />
-          <KpiCard label="Organizador" value={kpis.organizador || 0} color="#FF6B2C" icon="🗂" />
-          <KpiCard label="Staff" value={kpis.staff || 0} color="#FF9B72" icon="🎫" />
-          <KpiCard label="Atletas" value={kpis.atleta || 0} color="var(--green)" icon="🎾" />
-          <KpiCard label="Sem acesso" value={kpis.semAcesso} color="var(--muted)" icon="⚠️" />
-        </div>
-      )}
-
-      {/* Filtros */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        <input
-          className="form-group"
-          style={{ flex: '1 1 200px', margin: 0, padding: '8px 12px', background: 'var(--card)', border: '1px solid #12283F', borderRadius: 8, color: '#fff', fontSize: 14 }}
-          placeholder="Buscar por nome ou e-mail…"
-          value={buscaInput}
-          onChange={(e) => handleBuscaChange(e.target.value)}
-        />
-        <select
-          style={{ padding: '8px 12px', background: 'var(--card)', border: '1px solid #12283F', borderRadius: 8, color: filtroRole ? '#fff' : 'var(--muted)', fontSize: 14 }}
-          value={filtroRole}
-          onChange={(e) => setFiltroRole(e.target.value)}
-        >
-          <option value="">Todos os perfis</option>
-          {ROLES.map((r) => (
-            <option key={r} value={r}>{r}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Tabela */}
-      <div className="table-wrap">
-        {loading ? (
-          <p style={{ color: 'var(--muted)', padding: 16 }}>Carregando…</p>
-        ) : lista.length === 0 ? (
-          <p style={{ color: 'var(--muted)', padding: 16 }}>Nenhum usuário encontrado.</p>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid #12283F' }}>
-                {['', 'Nome', 'E-mail', 'Perfil', 'Último acesso', 'Status', 'Ações'].map((h) => (
-                  <th key={h} style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {lista.map((u) => {
-                const rc = ROLE_COLORS[u.role] || ROLE_COLORS.staff
-                const initials = getInitials(u.nome)
-                const color = avatarColor(u.nome)
-                return (
-                  <tr
-                    key={u.id}
-                    style={{ borderBottom: '1px solid #1e4a2e11' }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = '#1a3a2222')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                  >
-                    <td style={{ padding: '10px 12px' }}>
-                      <div
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: '50%',
-                          background: color,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: 12,
-                          fontWeight: 700,
-                          color: '#fff',
-                          flexShrink: 0,
-                        }}
-                      >
-                        {initials}
-                      </div>
-                    </td>
-                    <td style={{ padding: '10px 12px', color: '#fff', fontWeight: 500 }}>{u.nome}</td>
-                    <td style={{ padding: '10px 12px', color: 'var(--muted)' }}>{u.email}</td>
-                    <td style={{ padding: '10px 12px' }}>
-                      <span className="badge" style={{ background: rc.bg, color: rc.color, border: `1px solid ${rc.border}` }}>
-                        {u.role}
-                      </span>
-                    </td>
-                    <td style={{ padding: '10px 12px', color: 'var(--muted)', fontSize: 12 }}>
-                      {u.ultimoAcesso ? fmtDate(u.ultimoAcesso) : '—'}
-                    </td>
-                    <td style={{ padding: '10px 12px' }}>
-                      <button
-                        onClick={() => toggleAtivo(u)}
-                        style={{
-                          background: u.ativo !== false ? '#FF6B2C22' : '#e05c5c22',
-                          color: u.ativo !== false ? '#FF6B2C' : '#e05c5c',
-                          border: `1px solid ${u.ativo !== false ? '#FF6B2C44' : '#e05c5c44'}`,
-                          borderRadius: 12,
-                          padding: '3px 12px',
-                          fontSize: 12,
-                          cursor: 'pointer',
-                          fontWeight: 600,
-                        }}
-                      >
-                        {u.ativo !== false ? 'Ativo' : 'Inativo'}
-                      </button>
-                    </td>
-                    <td style={{ padding: '10px 12px' }}>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button className="btn btn-secondary btn-sm" onClick={() => openEditar(u)}>Editar</button>
-                        <button className="btn btn-danger btn-sm" onClick={() => handleDelete(u)}>Excluir</button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
+      <div className="table-wrap" style={{ overflowX: 'auto' }}>
+        {loading ? <p role="status">Carregando usuários…</p> : !error && filtered.length === 0 ? <p>Nenhuma conta encontrada neste escopo e filtro.</p> : !error && (
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 850 }}>
+            <thead><tr>{['Empresa', 'Nome', 'E-mail', 'Origem', 'Papel e unidade', 'Permissões Commerce', 'Estado'].map(label => <th key={label} scope="col" style={{ textAlign: 'left', padding: 10 }}>{label}</th>)}</tr></thead>
+            <tbody>{visible.map(item => <tr key={item.key} style={{ borderTop: '1px solid var(--line)' }}>
+              <td style={{ padding: 10 }}>{item.empresaNome || 'Não atribuída'}</td>
+              <td style={{ padding: 10 }}>{item.nome}</td>
+              <td style={{ padding: 10 }}>{item.email}</td>
+              <td style={{ padding: 10 }}>{item.origem === 'commerce' ? 'Commerce' : 'Painel legado'}</td>
+              <td style={{ padding: 10 }}>{item.vinculos?.length ? item.vinculos.map((binding, index) => <div key={`${binding.codigo}:${binding.lojaId || 'empresa'}:${index}`}>{binding.nome || binding.codigo} · {binding.lojaNome || (binding.lojaId ? 'Unidade selecionada' : 'Empresa inteira')}{!binding.ativo ? ' (vínculo inativo)' : ''}</div>) : 'Sem papel atribuído'}</td>
+              <td style={{ padding: 10, maxWidth: 300, overflowWrap: 'anywhere' }}>{item.origem === 'legado' ? 'Perfil legado; permissões SQL não aplicáveis' : item.permissoes?.length ? item.permissoes.join(', ') : 'Sem permissão efetiva'}</td>
+              <td style={{ padding: 10 }}>{!item.ativo ? 'Inativo' : item.acessoAtivo ? 'Ativo' : 'Ativo, sem vínculo Commerce'}</td>
+            </tr>)}</tbody>
           </table>
         )}
       </div>
-
-      {/* Modal */}
-      {modal && (
-        <Modal
-          title={modal === 'novo' ? 'Novo Usuário' : 'Editar Usuário'}
-          onClose={closeModal}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div className="form-group">
-              <label>Nome <span style={{ color: '#e05c5c' }}>*</span></label>
-              <input
-                value={form.nome}
-                onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))}
-                placeholder="Nome completo (mínimo 2 chars)"
-              />
-            </div>
-            <div className="form-group">
-              <label>E-mail <span style={{ color: '#e05c5c' }}>*</span></label>
-              <input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                placeholder="email@exemplo.com"
-              />
-            </div>
-            <div className="form-group">
-              <label>Perfil</label>
-              <select
-                value={form.role}
-                onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
-              >
-                {ROLES.map((r) => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>{modal === 'novo' ? 'Senha' : 'Nova Senha'} {modal === 'novo' && <span style={{ color: '#e05c5c' }}>*</span>}</span>
-                {modal === 'novo' && (
-                  <button
-                    type="button"
-                    onClick={() => setForm((f) => ({ ...f, senha: genSenha() }))}
-                    style={{ background: 'none', border: '1px solid #12283F', borderRadius: 6, padding: '2px 8px', color: 'var(--muted)', cursor: 'pointer', fontSize: 13 }}
-                    title="Gerar senha aleatória"
-                  >
-                    🎲 Gerar
-                  </button>
-                )}
-              </label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  type={showSenha ? 'text' : 'password'}
-                  value={form.senha}
-                  onChange={(e) => setForm((f) => ({ ...f, senha: e.target.value }))}
-                  placeholder={modal === 'novo' ? 'Mínimo 6 caracteres' : 'Deixe em branco para não alterar'}
-                  style={{ paddingRight: 40 }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowSenha((v) => !v)}
-                  style={{
-                    position: 'absolute',
-                    right: 10,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: 16,
-                    color: 'var(--muted)',
-                    padding: 0,
-                    lineHeight: 1,
-                  }}
-                  title={showSenha ? 'Ocultar senha' : 'Mostrar senha'}
-                >
-                  {showSenha ? '🙈' : '👁'}
-                </button>
-              </div>
-              {form.senha && form.senha.length < 6 && (
-                <span style={{ fontSize: 11, color: '#e05c5c', marginTop: 4 }}>Mínimo 6 caracteres</span>
-              )}
-            </div>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
-              <button className="btn btn-secondary" onClick={closeModal}>Cancelar</button>
-              <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                {saving ? 'Salvando…' : 'Salvar'}
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
-    </div>
+      {!loading && !error && filtered.length > pageSize && <nav aria-label="Páginas de usuários" style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 15 }}>
+        <button type="button" className="btn btn-secondary" disabled={page === 0} onClick={() => setPage(value => value - 1)}>Anterior</button>
+        <span>Página {page + 1} de {pages}</span>
+        <button type="button" className="btn btn-secondary" disabled={page + 1 >= pages} onClick={() => setPage(value => value + 1)}>Próxima</button>
+      </nav>}
+      <p style={{ marginTop: 20, color: 'var(--muted)' }}>Para alterar vínculos Commerce, utilize <Link to="/admin/ecommerce?tab=usuarios">Gestão de acessos Commerce</Link> conforme seu papel. O diretório não cria, exclui nem mescla contas.</p>
+    </main>
   )
 }

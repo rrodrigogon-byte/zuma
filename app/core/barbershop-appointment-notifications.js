@@ -1,6 +1,6 @@
 import { isWhatsappOptOutText, phoneMatchKey } from './whatsapp-phone.js';
 import { createHash } from 'node:crypto';
-import { db as legacyDb } from '../db.js';
+import { db as legacyDb, save as legacySave } from '../db.js';
 import * as barbearia from '../barbearia-erp-kytto.js';
 import * as clientes from '../clientes-contas-kytto.js';
 import { db } from './database.js';
@@ -8,6 +8,9 @@ import { enviarMensagem } from './whatsapp.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EVENTOS = new Set(['criado', 'remarcado', 'cancelado', 'lembrete']);
+// Aviso de vaga para a lista de espera: reaproveita a mesma fila e o mesmo tipo de
+// tarefa (notificar_agendamento), sem nova tabela nem migração.
+const EVENTO_VAGA = 'vaga';
 
 function limpo(valor, limite = 500) { return String(valor ?? '').trim().replace(/\u0000/g, '').slice(0, limite); }
 function normalizarTelefone(valor) {
@@ -118,6 +121,98 @@ export async function queueAppointmentNotifications(contexto = {}, agendamento =
   });
 }
 
+/**
+ * Enfileira o aviso "abriu um horário" para quem está na lista de espera do dia.
+ * Só para quem marcou o consentimento de WhatsApp ao entrar na lista.
+ */
+export async function queueWaitlistNotifications(contexto = {}, agendamentoLiberado = {}, candidatos = []) {
+  const empresaId = uuidOuVazio(contexto.empresaId);
+  const lojaId = uuidOuVazio(contexto.lojaId || agendamentoLiberado.lojaId);
+  const legacyEmpresaId = limpo(contexto.legacyEmpresaId || contexto.empresaId, 120);
+  const elegiveis = (candidatos || []).filter((item) => item?.consentimentoWhatsapp === true && normalizarTelefone(item.telefone));
+  if (!empresaId || !lojaId) return { queued: 0, skipped: true, reason: 'commerce_scope_unavailable' };
+  if (!agendamentoLiberado?.id || !elegiveis.length) return { queued: 0, skipped: true, reason: 'no_eligible_waitlist' };
+  return db.transaction(async (trx) => {
+    const canal = await canalAtivo(trx, empresaId, lojaId);
+    if (!canal) return { queued: 0, skipped: true, reason: 'whatsapp_channel_inactive' };
+    let queued = 0;
+    const queuedIds = [];
+    for (const candidato of elegiveis) {
+      const resultado = await trx.query(
+        `INSERT INTO tarefas_integracao_canais
+           (empresa_id,loja_id,canal_id,tipo,referencia_externa,payload,status,proxima_tentativa_em)
+         VALUES ($1,$2,$3,'notificar_agendamento',$4,$5::jsonb,'pendente',CURRENT_TIMESTAMP)
+         ON CONFLICT (empresa_id,tipo,referencia_externa) WHERE tipo='notificar_agendamento' DO NOTHING
+         RETURNING id`,
+        [empresaId, lojaId, canal.id, `${limpo(agendamentoLiberado.id, 100)}:${EVENTO_VAGA}:${limpo(candidato.id, 60)}`, JSON.stringify({
+          version: 'barbershop-appointment-v1',
+          legacyEmpresaId,
+          appointmentId: limpo(agendamentoLiberado.id, 120),
+          waitlistId: limpo(candidato.id, 80),
+          eventType: EVENTO_VAGA,
+        })],
+      );
+      if (Number(resultado.rowCount || 0) > 0) {
+        queued += 1;
+        queuedIds.push(candidato.id);
+      }
+    }
+    return { queued, queuedIds, skipped: false };
+  });
+}
+
+async function processWaitlistTask(task, payload, legacyEmpresaId) {
+  const entrada = (legacyDb().barbeariaCaptacao?.[legacyEmpresaId]?.listaEspera || {})[limpo(payload.waitlistId, 80)];
+  if (!entrada || entrada.status !== 'aguardando' || entrada.consentimentoWhatsapp !== true) return { skipped: true, reason: 'waitlist_not_eligible' };
+  const liberado = barbearia.listarAgendamentos(legacyEmpresaId, {}).find((item) => item.id === limpo(payload.appointmentId, 120));
+  if (!liberado || !['cancelado', 'nao_compareceu'].includes(String(liberado.status))) return { skipped: true, reason: 'slot_not_free' };
+  if (new Date(liberado.dataHora).valueOf() <= Date.now()) return { skipped: true, reason: 'slot_in_past' };
+  // A vaga precisa caber no serviço que a pessoa pediu (duração, jornada, outros
+  // agendamentos que entraram depois): confere na agenda real antes de avisar.
+  let livre = false;
+  try {
+    livre = barbearia.listarHorariosDisponiveis(legacyEmpresaId, {
+      data: liberado.dataAgenda,
+      servicoId: entrada.servicoId,
+      profissionalId: liberado.profissionalId || 'qualquer',
+      lojaId: liberado.lojaId,
+    }).some((item) => item.horario === liberado.horaLocal && item.disponivel);
+  } catch (_) {
+    livre = false;
+  }
+  if (!livre) return { skipped: true, reason: 'slot_taken' };
+  const telefone = normalizarTelefone(entrada.telefone);
+  if (!telefone) return { skipped: true, reason: 'phone_unavailable' };
+  const channelResult = await db.query(
+    `SELECT id,empresa_id,loja_id,nome,api_base_url,configuracao FROM canais_integracao
+      WHERE id=$1 AND empresa_id=$2 AND loja_id=$3 AND provedor='whatsapp' AND status='ativo' LIMIT 1`,
+    [task.canal_id, task.empresa_id, task.loja_id],
+  );
+  const canal = channelResult.rows[0];
+  if (!canal) return { skipped: true, reason: 'whatsapp_channel_inactive' };
+  const nome = limpo(barbearia.obterConfiguracao(legacyEmpresaId).nomePublico || 'barbearia', 120);
+  const [ano, mes, dia] = String(liberado.dataAgenda || '').split('-');
+  const texto = `Olá, ${limpo(entrada.nome, 80).split(' ')[0]}! Abriu um horário na ${nome} em ${dia}/${mes}/${ano} às ${limpo(liberado.horaLocal, 5)}, como você pediu na lista de espera. Responda por aqui para reservar. Para não receber estes avisos, responda SAIR.`;
+  await db.query(
+    `UPDATE tarefas_integracao_canais SET delivery_started_at = CURRENT_TIMESTAMP
+      WHERE id = $1 AND status = 'processando' AND lease_token = $2::uuid`,
+    [task.id, task.lease_token],
+  );
+  const resultado = await enviarMensagem({
+    whatsapp_api_url: process.env.EVOLUTION_API_URL || canal.api_base_url,
+    whatsapp_api_key: process.env.EVOLUTION_API_KEY,
+    whatsapp_instance: canal.configuracao?.instance || process.env.EVOLUTION_INSTANCE,
+  }, telefone, texto);
+  if (!resultado?.ok) {
+    const unknown = resultado?.uncertain === true;
+    if (!unknown) await db.query(`UPDATE tarefas_integracao_canais SET delivery_started_at = NULL WHERE id = $1`, [task.id]);
+    throw appointmentDeliveryError(unknown ? 'resultado do aviso incerto' : 'provedor recusou o aviso de vaga', unknown ? 'APPOINTMENT_DELIVERY_UNKNOWN' : 'APPOINTMENT_SEND_FAILED', !unknown && resultado?.retryable === true);
+  }
+  const providerMessageId = limpo(resultado?.data?.key?.id || resultado?.data?.id, 200) || null;
+  await db.query(`UPDATE tarefas_integracao_canais SET provider_message_id = $2 WHERE id = $1`, [task.id, providerMessageId]);
+  return { sent: true, appointmentId: liberado.id, eventType: EVENTO_VAGA, waitlistId: entrada.id, providerMessageId };
+}
+
 export async function enqueueDueAppointmentReminders() {
   const raiz = legacyDb();
   let queued = 0;
@@ -158,6 +253,7 @@ export async function processAppointmentNotificationTask(task = {}) {
   const legacyEmpresaId = limpo(payload.legacyEmpresaId, 120);
   const appointmentId = limpo(payload.appointmentId, 120);
   const evento = limpo(payload.eventType, 30).toLowerCase();
+  if (legacyEmpresaId && appointmentId && evento === EVENTO_VAGA) return processWaitlistTask(task, payload, legacyEmpresaId);
   if (!legacyEmpresaId || !appointmentId || !EVENTOS.has(evento)) return { skipped: true, reason: 'task_payload_invalid' };
   const snapshot = {
     configuracao: barbearia.obterConfiguracao(legacyEmpresaId),
@@ -205,6 +301,25 @@ export async function recordAppointmentNotificationOptOut(channel = {}, parsed =
   const empresaId = uuidOuVazio(channel.empresa_id);
   const lojaId = uuidOuVazio(channel.loja_id);
   if (!isWhatsappOptOutText(comando) || !telefone || !empresaId || !lojaId) return { optedOut: false };
+  // Lista de espera: o SAIR também vale para os avisos de vaga.
+  const raizCaptacao = legacyDb().barbeariaCaptacao?.[empresaId]?.listaEspera || {};
+  const esperaIds = [];
+  for (const item of Object.values(raizCaptacao)) {
+    if (phoneMatchKey(item.telefone) === phoneMatchKey(telefone) && item.consentimentoWhatsapp === true) {
+      item.consentimentoWhatsapp = false;
+      item.atualizadoEm = new Date().toISOString();
+      esperaIds.push(String(item.id));
+    }
+  }
+  if (esperaIds.length) {
+    legacySave();
+    await db.query(
+      `UPDATE tarefas_integracao_canais SET status='cancelada',proxima_tentativa_em=NULL,data_atualizacao=CURRENT_TIMESTAMP
+        WHERE empresa_id=$1 AND loja_id=$2 AND tipo='notificar_agendamento'
+          AND payload->>'eventType'='vaga' AND payload->>'waitlistId'=ANY($3::text[]) AND status IN ('pendente','falha')`,
+      [empresaId, lojaId, esperaIds],
+    );
+  }
   const clientesEmpresa = clientes.listarClientes(empresaId).filter((cliente) => phoneMatchKey(cliente.telefone) === phoneMatchKey(telefone) && cliente.consentimentos?.whatsapp?.atendimento?.concedido === true);
   for (const cliente of clientesEmpresa) clientes.atualizarConsentimentoCliente(empresaId, cliente.id, { canal: 'whatsapp', finalidade: 'atendimento', concedido: false, origem: 'whatsapp_opt_out', responsavel: 'cliente' });
   if (clientesEmpresa.length) {
@@ -215,7 +330,7 @@ export async function recordAppointmentNotificationOptOut(channel = {}, parsed =
       [empresaId, lojaId, clientesEmpresa.map((cliente) => String(cliente.id))],
     );
   }
-  return { optedOut: clientesEmpresa.length > 0, customers: clientesEmpresa.length };
+  return { optedOut: clientesEmpresa.length > 0 || esperaIds.length > 0, customers: clientesEmpresa.length, waitlist: esperaIds.length };
 }
 
 export async function appointmentNotificationMetrics(contexto = {}) {

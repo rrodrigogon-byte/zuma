@@ -2,22 +2,24 @@ import { isWhatsappOptInText, phoneMatchKeySql } from './whatsapp-phone.js';
 import crypto from 'node:crypto';
 import { db } from './database.js';
 import { createPendingOrder, listPublishedProducts } from './commerce-core.js';
+// Agenda única: quando a empresa usa a agenda da barbearia (a do admin e do link
+// público), a IA lê e grava nela; senão segue o caminho PostgreSQL antigo.
 import {
-  createScheduledAppointment,
-  listSchedulingAvailability,
-  listSchedulingProfessionals,
-  listSchedulingServices,
+  createAppointment as createScheduledAppointment,
+  availability as listSchedulingAvailability,
+  listProfessionals as listSchedulingProfessionals,
+  listServices as listSchedulingServices,
+  listCustomerAppointments as listWhatsappCustomerAppointments,
+  rescheduleAppointment as rescheduleWhatsappAppointment,
+  cancelAppointment as cancelWhatsappAppointment,
   SchedulingError,
-} from './barbershop-scheduling.js';
+} from './barbershop-agenda.js';
 import {
   ensureWhatsappLead,
   getWhatsappLeadProfile,
   updateWhatsappMarketingConsent,
-  listWhatsappCustomerAppointments,
   listActiveWhatsappPromotions,
   queueWhatsappPromotion,
-  rescheduleWhatsappAppointment,
-  cancelWhatsappAppointment,
 } from './whatsapp-ai-crm.js';
 import {
   opportunityGate,
@@ -43,6 +45,15 @@ function ensureUuid(value, field) {
   const normalized = cleanText(value, 60);
   if (!UUID_REGEX.test(normalized)) throw new WhatsappAiToolError(`${field} inválido`, 'INVALID_ID');
   return normalized;
+}
+
+// IDs da agenda: UUID (PostgreSQL) ou o formato da agenda da barbearia (ex.: srv-xxxx).
+const AGENDA_ID_REGEX = /^[a-z]{2,10}-[a-z0-9-]{3,80}$/i;
+function ensureAgendaId(value, field, { allowAny = false } = {}) {
+  const normalized = cleanText(value, 100);
+  if (allowAny && (!normalized || normalized === 'qualquer')) return 'qualquer';
+  if (UUID_REGEX.test(normalized) || AGENDA_ID_REGEX.test(normalized)) return normalized;
+  throw new WhatsappAiToolError(`${field} inválido`, 'INVALID_ID');
 }
 
 function contextScope(context = {}) {
@@ -255,8 +266,8 @@ async function savePreparedAction(context, type, request, summary) {
 
 async function toolPrepareAppointment(context, args = {}) {
   const scope = contextScope(context);
-  const serviceId = ensureUuid(args.serviceId, 'serviceId');
-  const professionalId = ensureUuid(args.professionalId, 'professionalId');
+  const serviceId = ensureAgendaId(args.serviceId, 'serviceId');
+  const professionalId = ensureAgendaId(args.professionalId, 'professionalId', { allowAny: true });
   const date = cleanText(args.date, 10);
   const time = cleanText(args.time, 5);
   const availability = await listSchedulingAvailability(scope, { serviceId, professionalId, date });
@@ -480,7 +491,7 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'atualizar_consentimento_marketing', description: 'Registra ou revoga a autorização do cliente para receber promoções no WhatsApp. Para conceder, exige evidência da solicitação expressa.', parameters: { type: 'OBJECT', properties: { granted: { type: 'BOOLEAN' }, evidence: { type: 'STRING' } }, required: ['granted'] } },
   { name: 'listar_promocoes_ativas', description: 'Lista somente promoções ativas e vigentes da unidade. Nunca invente ofertas, valores ou cupons.', parameters: { type: 'OBJECT', properties: { limit: { type: 'INTEGER' } } } },
   { name: 'preparar_promocao_cliente', description: 'Prepara o envio de uma promoção ao cliente com opt-in. O envio só ocorre após CONFIRMAR.', parameters: { type: 'OBJECT', properties: { promotionId: { type: 'STRING' }, code: { type: 'STRING' }, message: { type: 'STRING' } }, required: ['promotionId', 'message'] } },
-  { name: 'preparar_agendamento', description: 'Prepara um agendamento para confirmação. Não grava o agendamento.', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, professionalId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' }, customerName: { type: 'STRING' }, notes: { type: 'STRING' } }, required: ['serviceId', 'professionalId', 'date', 'time', 'customerName'] } },
+  { name: 'preparar_agendamento', description: 'Prepara um agendamento para confirmação. Não grava o agendamento. Use o id retornado por listar_profissionais; na agenda da barbearia também é aceito "qualquer" quando o cliente não tem preferência.', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, professionalId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' }, customerName: { type: 'STRING' }, notes: { type: 'STRING' } }, required: ['serviceId', 'professionalId', 'date', 'time', 'customerName'] } },
   { name: 'preparar_remarcacao', description: 'Prepara a remarcação de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' } }, required: ['appointmentId', 'date', 'time'] } },
   { name: 'preparar_cancelamento', description: 'Prepara o cancelamento de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' } }, required: ['appointmentId'] } },
   { name: 'preparar_pedido', description: 'Prepara um pedido de retirada para confirmação. Não cria o pedido.', parameters: { type: 'OBJECT', properties: { customerName: { type: 'STRING' }, items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { variantId: { type: 'STRING' }, quantity: { type: 'INTEGER' } }, required: ['variantId', 'quantity'] } } }, required: ['customerName', 'items'] } },
@@ -591,7 +602,7 @@ export async function confirmPendingAction(context) {
     );
     let response;
     if (action.tipo === 'agendamento') {
-      response = await createScheduledAppointment(trx, scope, action.solicitacao);
+      response = await createScheduledAppointment(trx, scope, { ...action.solicitacao, actionId: action.id });
     } else if (action.tipo === 'pedido') {
       response = await createPendingOrder(trx, { empresaId: scope.empresaId, lojaId: scope.lojaId }, {
         ...action.solicitacao,

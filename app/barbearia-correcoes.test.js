@@ -27,7 +27,7 @@ test('atendimento da agenda pago em comanda de outro dia não conta duas vezes',
   const agendamento = criarAgendamento(EMPRESA, { clienteNome: 'Cliente', profissionalId: profissional.id, servicoId: servico.id, dataHora: '2030-04-02T13:00:00.000Z', dataAgenda: '2030-04-02', horaLocal: '09:00' });
   alterarStatusAgendamento(EMPRESA, agendamento.id, 'confirmado');
   alterarStatusAgendamento(EMPRESA, agendamento.id, 'em_atendimento');
-  alterarStatusAgendamento(EMPRESA, agendamento.id, 'concluido', { meioPagamento: 'pix', valorRecebido: 50 });
+  alterarStatusAgendamento(EMPRESA, agendamento.id, 'concluido');
   const comanda = criarComandaBarbearia(EMPRESA, { agendamentoId: agendamento.id, clienteNome: 'Cliente', profissionalId: profissional.id, itens: [{ tipo: 'servico', servicoId: servico.id, profissionalId: profissional.id }] });
   registrarPagamentoComandaBarbearia(EMPRESA, comanda.id, { confirmado: true, meioPagamento: 'pix', valor: 50 });
   const diaDaAgenda = obterComissoes(EMPRESA, { data: '2030-04-02' }).porProfissional.find((item) => item.profissionalId === profissional.id);

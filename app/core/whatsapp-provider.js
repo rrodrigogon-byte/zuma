@@ -1,24 +1,32 @@
 // ============================================================================
-// PROVEDOR DE WHATSAPP — mesmo backend usado pelo NossaGente
-// (chatbot-backend NestJS multi-instância, pareamento por QR estilo WhatsApp
-// Web). Contrato: {BASE}/api/v1/whats-app/instances/{instância}/{status|qr|...}
+// PROVEDOR DE WHATSAPP — o MESMO backend e o MESMO contrato da Isa (NossaGente)
+//
+// A Isa conversa pelo chatbot-backend-nestjs (sessão WhatsApp Web pareada por
+// QR) usando exatamente estas rotas (avd-uisa-permanente,
+// server/integrations/whatsappApiClient.ts):
+//   POST {BASE}/send      { chat_id, message, simulateTyping, delaySeconds, waitForReply:false }
+//   GET  {BASE}/status    { authenticated, connecting }
+//   GET  {BASE}/messages  ?latest=false&role=user&from=ISO&limit=N   (entrada por consulta)
+// com o cabeçalho X-API-KEY. Não há webhook de mensagens: a entrada é por
+// consulta periódica (core/whatsapp-isa-poll.js), como o worker da Isa.
 //
 // Variáveis de ambiente (o segredo NUNCA vai para o banco nem para a tela):
 //   WHATSAPP_PROVIDER=chatbot_backend      liga este provedor (padrão: evolution)
-//   CHATBOT_BACKEND_URL                    URL do backend (padrão: Cloud Run us-east1)
+//   CHATBOT_BACKEND_URL                    URL do backend DA DINO (obrigatória; sem padrão
+//                                          para nunca falar com o número da Isa/UISA)
 //   CHATBOT_BACKEND_API_BASE               prefixo (padrão: /api/v1/whats-app)
-//   CHATBOT_BACKEND_KEY                    chave de API do backend
-//   CHATBOT_BACKEND_INSTANCE               instância padrão (padrão: dino-1)
-//   CHATBOT_BACKEND_SEND_PATH              rota de envio opcional, ex.: /instances/{instance}/messages/text
-//
-// A instância precisa constar em WHATSAPP_INSTANCE_NAMES do backend (lista
-// fail-closed). Rotas destrutivas (reset de sessão) não são chamadas daqui.
+//   CHATBOT_BACKEND_KEY                    chave X-API-KEY (mínimo 20 caracteres, como na Isa)
+//   CHATBOT_BACKEND_MODE                   isa (padrão) | instancias (rotas /instances/{inst}/...)
+//   CHATBOT_BACKEND_INSTANCE               instância no modo "instancias" (padrão: dino-1)
+//   WHATSAPP_SIMULATE_TYPING=true          liga o "digitando…" (a ponte da Isa envia false)
 // ============================================================================
 
-export const DEFAULT_CHATBOT_BACKEND_URL = 'https://chatbot-backend-nestjs-wre7dlumya-ue.a.run.app';
 export const DEFAULT_API_BASE = '/api/v1/whats-app';
 export const DEFAULT_INSTANCE = 'dino-1';
 const TIMEOUT_MS = 20000;
+// Limite de texto do contrato da Isa (assertMessage: 4000) e corte da ponte (3900).
+export const MAX_MESSAGE_CHARS = 4000;
+const CUT_AT = 3900;
 
 const clean = (value, max = 500) => String(value ?? '').trim().slice(0, max);
 
@@ -28,8 +36,12 @@ export function whatsappProviderName() {
   return 'evolution';
 }
 
+export function chatbotBackendMode() {
+  return clean(process.env.CHATBOT_BACKEND_MODE, 20).toLowerCase() === 'instancias' ? 'instancias' : 'isa';
+}
+
 export function chatbotBackendConfig(overrides = {}) {
-  const baseUrl = clean(overrides.baseUrl || process.env.CHATBOT_BACKEND_URL || DEFAULT_CHATBOT_BACKEND_URL, 1000).replace(/\/+$/, '');
+  const baseUrl = clean(overrides.baseUrl || process.env.CHATBOT_BACKEND_URL || '', 1000).replace(/\/+$/, '');
   const apiBase = `/${clean(overrides.apiBase || process.env.CHATBOT_BACKEND_API_BASE || DEFAULT_API_BASE, 200).replace(/^\/+|\/+$/g, '')}`;
   return {
     baseUrl,
@@ -49,7 +61,9 @@ export function validInstance(value) {
 export function whatsappProviderConfigured() {
   if (whatsappProviderName() === 'chatbot_backend') {
     const cfg = chatbotBackendConfig();
-    return Boolean(cfg.baseUrl && cfg.key && cfg.instance);
+    // Mesma regra da Isa: chave curta é recusada (evita placeholder em produção).
+    const urlSegura = /^https:\/\//i.test(cfg.baseUrl) || /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/i.test(cfg.baseUrl);
+    return Boolean(urlSegura && cfg.key.length >= 20 && (chatbotBackendMode() === 'isa' || cfg.instance));
   }
   return Boolean(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE);
 }
@@ -58,13 +72,16 @@ export function providerSummary() {
   const provider = whatsappProviderName();
   if (provider === 'chatbot_backend') {
     const cfg = chatbotBackendConfig();
-    return { provider, label: 'Backend WhatsApp NossaGente', baseUrl: cfg.baseUrl, apiBase: cfg.apiBase, instance: cfg.instance, keyConfigured: Boolean(cfg.key), configured: whatsappProviderConfigured() };
+    return { provider, label: 'Backend WhatsApp (mesmo da Isa/NossaGente)', mode: chatbotBackendMode(), entrada: chatbotBackendMode() === 'isa' ? 'consulta periódica (igual à Isa)' : 'webhook por instância', baseUrl: cfg.baseUrl, apiBase: cfg.apiBase, instance: cfg.instance, keyConfigured: Boolean(cfg.key), configured: whatsappProviderConfigured() };
   }
   return { provider, label: 'Evolution API', baseUrl: clean(process.env.EVOLUTION_API_URL, 300), instance: clean(process.env.EVOLUTION_INSTANCE, 100), keyConfigured: Boolean(process.env.EVOLUTION_API_KEY), configured: whatsappProviderConfigured() };
 }
 
 function authHeaders(key) {
-  return key ? { authorization: `Bearer ${key}`, apikey: key, 'x-api-key': key } : {};
+  // Contrato da Isa: X-API-KEY. No modo de instâncias o backend aceita também
+  // Bearer/apikey (chatbotBackendClient do NossaGente manda os três).
+  if (!key) return {};
+  return chatbotBackendMode() === 'isa' ? { 'X-API-KEY': key } : { authorization: `Bearer ${key}`, apikey: key, 'x-api-key': key };
 }
 
 export function isAuthError(status) {
@@ -95,6 +112,11 @@ export function normalizeState(data = {}) {
     data.state, data.status, data.connection, data.connectionState,
     data.instance?.state, data.instance?.status, data.data?.state, data.data?.status, data.session?.status,
   ].map((value) => clean(value, 60).toLowerCase()).filter(Boolean);
+  // Contrato da Isa: { authenticated, connecting }.
+  if (!candidates.length && typeof data.authenticated === 'boolean') {
+    if (data.authenticated === true && data.connecting !== true) return 'open';
+    return data.connecting === true ? 'connecting' : 'qr';
+  }
   const value = candidates[0] || (data.connected === true ? 'open' : data.connected === false ? 'close' : '');
   if (['open', 'connected', 'online', 'ready', 'authenticated', 'inchat', 'islogged', 'conectado'].includes(value)) return 'open';
   if (['connecting', 'starting', 'opening', 'initializing', 'pairing', 'syncing', 'conectando'].includes(value)) return 'connecting';
@@ -123,6 +145,7 @@ export async function listInstances(fetchImpl) {
 }
 
 export async function getInstanceStatus(instance, fetchImpl) {
+  if (chatbotBackendMode() === 'isa') return getSessionStatus(fetchImpl);
   const cfg = chatbotBackendConfig({ instance });
   if (!cfg.instance) return { ok: false, state: 'unknown', error: 'invalid_instance' };
   const result = await call(cfg, 'GET', `/instances/${encodeURIComponent(cfg.instance)}/status`, null, fetchImpl);
@@ -139,8 +162,36 @@ export async function getInstanceStatus(instance, fetchImpl) {
   };
 }
 
-/** Pede QR / (re)conexão da instância. Não apaga a sessão salva. */
+/** Estado da sessão única (contrato da Isa): GET {BASE}/status. */
+export async function getSessionStatus(fetchImpl) {
+  const cfg = chatbotBackendConfig();
+  if (!cfg.baseUrl) return { ok: false, state: 'unknown', error: 'backend_not_configured' };
+  const result = await call(cfg, 'GET', '/status', null, fetchImpl);
+  if (isAuthError(result.status)) return { ok: false, authError: true, status: result.status, state: 'unknown' };
+  if (!result.ok) return { ok: false, status: result.status, state: 'unknown', error: result.error || 'status_unavailable' };
+  return {
+    ok: true,
+    status: result.status,
+    state: normalizeState(result.data),
+    authenticated: result.data?.authenticated === true,
+    connecting: result.data?.connecting === true,
+    phone: clean(result.data?.phone || result.data?.number || result.data?.me?.id || '', 40).replace(/@.*$/, '').replace(/:\d+$/, ''),
+    ...extractQr(result.data),
+  };
+}
+
+/** Pede QR / (re)conexão. Não apaga a sessão salva. */
 export async function requestInstanceQr(instance, fetchImpl) {
+  if (chatbotBackendMode() === 'isa') {
+    const cfg = chatbotBackendConfig();
+    if (!cfg.baseUrl) return { ok: false, error: 'backend_not_configured' };
+    // O backend da Isa expõe o pareamento em /connect (e /qr em versões novas).
+    let result = await call(cfg, 'GET', '/qr', null, fetchImpl);
+    if (result.status === 404 || result.status === 405) result = await call(cfg, 'GET', '/connect', null, fetchImpl);
+    if (isAuthError(result.status)) return { ok: false, authError: true, status: result.status };
+    if (!result.ok) return { ok: false, status: result.status, error: result.error || 'qr_unavailable' };
+    return { ok: true, status: result.status, state: normalizeState(result.data), ...extractQr(result.data) };
+  }
   const cfg = chatbotBackendConfig({ instance });
   if (!cfg.instance) return { ok: false, error: 'invalid_instance' };
   let result = await call(cfg, 'GET', `/instances/${encodeURIComponent(cfg.instance)}/qr`, null, fetchImpl);
@@ -152,6 +203,8 @@ export async function requestInstanceQr(instance, fetchImpl) {
 
 /** Encerra o socket sem apagar credenciais (logout não destrutivo). */
 export async function disconnectInstance(instance, fetchImpl) {
+  // Na sessão única da Isa, desconectar derruba o número inteiro: não é feito daqui.
+  if (chatbotBackendMode() === 'isa') return { ok: false, error: 'not_supported_in_isa_mode' };
   const cfg = chatbotBackendConfig({ instance });
   if (!cfg.instance) return { ok: false, error: 'invalid_instance' };
   const base = `/instances/${encodeURIComponent(cfg.instance)}`;
@@ -171,7 +224,72 @@ function sendPaths(cfg) {
  * Envia texto. Só tenta a próxima rota quando a anterior NÃO existe (404/405):
  * qualquer outra resposta encerra (evita envio duplicado).
  */
-export async function sendTextViaChatbotBackend({ instance, number, text }, fetchImpl) {
+/** chat_id no formato da Isa: 55 + DDD + número; grupos e @lid são recusados. */
+export function isaChatId(value) {
+  const raw = clean(value, 80);
+  if (/@g\.us$|@lid$/i.test(raw)) return '';
+  let digits = raw.replace(/@.*$/, '').replace(/\D/g, '');
+  if (digits.length === 10 || digits.length === 11) digits = `55${digits}`;
+  return /^55\d{10,11}$/.test(digits) ? digits : '';
+}
+
+/** Texto como a ponte da Isa: até 4000 caracteres, cortando em quebra de linha. */
+export function isaMessageText(text) {
+  const value = String(text ?? '').replace(/\u0000/g, '').trim();
+  if (value.length <= MAX_MESSAGE_CHARS) return value;
+  const corte = value.slice(0, CUT_AT);
+  const quebra = corte.lastIndexOf('\n');
+  return `${(quebra > CUT_AT * 0.6 ? corte.slice(0, quebra) : corte).trim()}\n\n(resposta resumida; peça os detalhes se precisar)`;
+}
+
+async function sendTextIsa({ number, text, simulateTyping = process.env.WHATSAPP_SIMULATE_TYPING === 'true' }, fetchImpl) {
+  const cfg = chatbotBackendConfig();
+  if (!cfg.baseUrl) return { ok: false, status: null, retryable: false, uncertain: false, error: 'CHATBOT_BACKEND_URL_MISSING', data: {} };
+  if (cfg.key.length < 20) return { ok: false, status: null, retryable: false, uncertain: false, error: 'CHATBOT_BACKEND_KEY_MISSING', data: {} };
+  const chatId = isaChatId(number);
+  if (!chatId) return { ok: false, status: null, retryable: false, uncertain: false, error: 'INVALID_CHAT_ID', data: {} };
+  const message = isaMessageText(text);
+  if (!message) return { ok: false, status: null, retryable: false, uncertain: false, error: 'EMPTY_MESSAGE', data: {} };
+  const result = await call(cfg, 'POST', '/send', { chat_id: chatId, message, simulateTyping: Boolean(simulateTyping), delaySeconds: 0, waitForReply: false }, fetchImpl);
+  const uncertain = result.status === null || (!result.ok && (result.status === 408 || result.status >= 500));
+  // A Isa considera falha quando success !== true ou accepted === false.
+  const aceito = result.ok && result.data?.success !== false && result.data?.accepted !== false;
+  return {
+    ok: aceito,
+    status: result.status,
+    retryable: !aceito && !uncertain && (result.status === 425 || result.status === 429),
+    uncertain,
+    authError: isAuthError(result.status),
+    error: aceito ? undefined : (result.error || result.data?.error || `HTTP_${result.status}`),
+    data: { ...result.data, key: { id: clean(result.data?.questionId || result.data?.messageId || result.data?.id, 200) || undefined } },
+  };
+}
+
+/**
+ * Mensagens recebidas (contrato da Isa): GET {BASE}/messages?latest=false&role=user&from=ISO&limit=N.
+ * Devolve a lista achatada [{ chatId, role, content, timestamp, messageType, whatsappMessageId, questionId }].
+ */
+export async function fetchInboundMessages({ from, limit = 100 } = {}, fetchImpl) {
+  const cfg = chatbotBackendConfig();
+  if (!cfg.baseUrl || cfg.key.length < 20) return { ok: false, error: 'backend_not_configured', messages: [] };
+  const params = new URLSearchParams({ latest: 'false', role: 'user', limit: String(Math.min(200, Math.max(25, Number(limit) || 100))) });
+  if (from) params.set('from', new Date(from).toISOString());
+  const result = await call(cfg, 'GET', `/messages?${params.toString()}`, null, fetchImpl);
+  if (isAuthError(result.status)) return { ok: false, authError: true, status: result.status, messages: [] };
+  if (!result.ok) return { ok: false, status: result.status, error: result.error || 'messages_unavailable', messages: [] };
+  const data = result.data || {};
+  const lista = [];
+  const empilhar = (chatId, mensagens) => {
+    for (const item of Array.isArray(mensagens) ? mensagens : []) lista.push({ ...item, chatId: clean(item?.chatId || chatId, 80) });
+  };
+  if (Array.isArray(data.users)) for (const usuario of data.users) empilhar(usuario?.chatId, usuario?.messages);
+  if (Array.isArray(data.messages)) empilhar(data.chatId, data.messages);
+  if (Array.isArray(data)) empilhar('', data);
+  return { ok: true, status: result.status, messages: lista };
+}
+
+export async function sendTextViaChatbotBackend({ instance, number, text, simulateTyping }, fetchImpl) {
+  if (chatbotBackendMode() === 'isa') return sendTextIsa({ number, text, simulateTyping }, fetchImpl);
   const cfg = chatbotBackendConfig({ instance });
   if (!cfg.key) return { ok: false, status: null, retryable: false, uncertain: false, error: 'CHATBOT_BACKEND_KEY_MISSING', data: {} };
   if (!cfg.instance) return { ok: false, status: null, retryable: false, uncertain: false, error: 'INVALID_INSTANCE', data: {} };
@@ -197,6 +315,8 @@ export async function sendTextViaChatbotBackend({ instance, number, text }, fetc
 
 /** Tenta registrar o webhook de entrada no backend (se a rota existir). */
 export async function registerInstanceWebhook({ instance, url, headers = {} }, fetchImpl) {
+  // Como na Isa, o backend não chama webhook de mensagens: a entrada é por consulta.
+  if (chatbotBackendMode() === 'isa') return { ok: true, unsupported: true, polling: true };
   const cfg = chatbotBackendConfig({ instance });
   const base = `/instances/${encodeURIComponent(cfg.instance)}`;
   const body = { url, enabled: true, headers, events: ['messages.upsert', 'connection.update'] };

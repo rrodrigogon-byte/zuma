@@ -179,27 +179,49 @@ export function registerDinoAdminRoutes(app, deps) {
   // ── Auditoria da empresa ─────────────────────────────────────────────────
   app.get(`${BASE}/auditoria`, async (req, res) => {
     if (!gestor(req, res)) return;
+    const coreEnabled = process.env.COMMERCE_CORE_ENABLED === '1';
+    let context = null;
+    if (coreEnabled) {
+      try {
+        context = await requireCommercePermission(req, 'audit.read');
+      } catch (error) {
+        const selection = error?.code === 'STORE_SELECTION_REQUIRED';
+        const denied = error?.code === 'PERMISSION_DENIED' || error?.code === 'STORE_SCOPE_MISMATCH';
+        return res.status(selection ? 409 : denied ? 403 : 503).json({
+          error: 'Auditoria indisponível para esta sessão.',
+          code: selection ? 'STORE_SELECTION_REQUIRED' : denied ? 'PERMISSION_DENIED' : 'COMMERCE_AUDIT_UNAVAILABLE',
+        });
+      }
+    }
     const empresaId = legacyEmpresaId(req);
+    if (context && String(context.empresaId) !== String(empresaId)) {
+      return res.status(403).json({ error: 'Auditoria indisponível para esta sessão.', code: 'STORE_SCOPE_MISMATCH' });
+    }
     const limite = Math.max(20, Math.min(500, Number(req.query?.limite) || 300));
     const local = (deps.db().auditoria || [])
       .filter((item) => item.empresaId && String(item.empresaId) === String(empresaId))
+      // Logs JSON antigos não têm garantia de loja: não exibi-los a membership
+      // limitada a uma loja quando o Core está ativo.
+      .filter((item) => !context?.lojaId || String(item.lojaId || '') === String(context.lojaId))
       .slice(-limite)
       .map((item) => ({ id: `json-${item.id}`, ts: item.ts, user: item.user, acao: item.acao, detalhe: item.detalhe || '', fonte: 'sistema' }));
     let banco = [];
     let bancoDisponivel = false;
-    try {
-      const context = await requireCommercePermission(req, 'reports.read');
+    if (context) {
+      try {
+      const lojaPredicate = context.lojaId ? ' AND l.loja_id = $3' : '';
+      const values = [context.empresaId, limite, ...(context.lojaId ? [context.lojaId] : [])];
       const rows = await commerceDb.queryRead(
         `SELECT l.id, l.criado_em, l.entidade, l.acao, l.depois, COALESCE(u.nome, l.depois->>'operador', l.usuario_id::text, 'sistema') AS usuario
            FROM commerce_audit_logs l
-           LEFT JOIN usuarios u ON u.id = l.usuario_id
-          WHERE l.empresa_id = $1
+           LEFT JOIN usuarios u ON u.id = l.usuario_id AND u.empresa_id = l.empresa_id
+          WHERE l.empresa_id = $1${lojaPredicate}
           ORDER BY l.criado_em DESC LIMIT $2`,
-        [context.empresaId, limite],
+        values,
       ).catch(() => commerceDb.queryRead(
         `SELECT id, criado_em, entidade, acao, depois, COALESCE(depois->>'operador', usuario_id::text, 'sistema') AS usuario
-           FROM commerce_audit_logs WHERE empresa_id = $1 ORDER BY criado_em DESC LIMIT $2`,
-        [context.empresaId, limite],
+           FROM commerce_audit_logs l WHERE l.empresa_id = $1${lojaPredicate} ORDER BY criado_em DESC LIMIT $2`,
+        values,
       ));
       bancoDisponivel = true;
       banco = rows.rows.map((row) => {
@@ -209,9 +231,12 @@ export function registerDinoAdminRoutes(app, deps) {
           .map((key) => `${key}=${String(depois[key]).slice(0, 80)}`).join('; ');
         return { id: `db-${row.id}`, ts: new Date(row.criado_em).toISOString(), user: row.usuario, acao: `${row.entidade}.${row.acao}`, detalhe, fonte: 'banco' };
       });
-    } catch { /* Commerce indisponível ou sem permissão: segue só com a trilha local. */ }
+      } catch {
+        return res.status(503).json({ error: 'Auditoria indisponível para esta sessão.', code: 'COMMERCE_AUDIT_UNAVAILABLE' });
+      }
+    }
     const itens = [...local, ...banco].sort((a, b) => String(b.ts).localeCompare(String(a.ts))).slice(0, limite);
-    res.json({ ok: true, itens, fontes: { sistema: true, banco: bancoDisponivel } });
+    res.json({ ok: true, itens, fontes: { sistema: !context?.lojaId, banco: bancoDisponivel } });
   });
 
   // ── BI da barbearia ──────────────────────────────────────────────────────

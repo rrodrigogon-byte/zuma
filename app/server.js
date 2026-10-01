@@ -28,7 +28,9 @@ import { createCommerceAdminRouter, createCommercePublicRateLimitGuard, createCo
 import { createWhatsappAiWebhookRouter } from './core/whatsapp-ai-routes.js';
 import { whatsappAiOperationalStatus } from './core/whatsapp-ai.js';
 import { startWhatsappAiWorker } from './workers/whatsapp-ai-worker.js';
+import { startIsaPollWorker } from './core/whatsapp-isa-poll.js';
 import { db as commerceDb } from './core/database.js';
+import { checkCommerceSchemaReadiness } from './core/commerce-schema-readiness.js';
 import * as loyaltyDb from './db-pg.js';
 import {
   LoyaltyAdvancedError,
@@ -43,10 +45,13 @@ import {
   upsertLoyaltySettings,
 } from './core/loyalty-advanced.js';
 import { requireCommercePermission, resolveCommerceIdentity } from './core/commerce-identity-bridge.js';
+import { listAdminUserDirectory } from './core/admin-user-directory.js';
 import { listCommerceTenants, provisionCommerceTenant } from './core/commerce-tenants.js';
 import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
 import * as barbeariaFiscalKytto from './barbearia-fiscal-kytto.js';
 import { appointmentNotificationMetrics, queueAppointmentNotifications } from './core/barbershop-appointment-notifications.js';
+import { avisarListaEspera } from './core/barbershop-agenda.js';
+import * as captacaoKytto from './dino-captacao-kytto.js';
 import * as clientesKytto from './clientes-contas-kytto.js';
 import * as financeiroKytto from './financeiro-central-kytto.js';
 import * as caixaKytto from './caixa-diario-kytto.js';
@@ -141,7 +146,8 @@ if(PROD && (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'agro-open-dev
 app.get('/health', async (req, res) => {
   if (process.env.COMMERCE_CORE_ENABLED !== '1') return res.status(200).json({ status: 'ready' });
   try {
-    await commerceDb.queryRead(`SELECT 1 FROM commerce_schema_migrations LIMIT 1`);
+    const schema = await checkCommerceSchemaReadiness(commerceDb);
+    if (!schema.ready) return res.status(503).json({ status: 'not_ready', code: schema.code });
     return res.status(200).json({ status: 'ready' });
   } catch {
     return res.status(503).json({ status: 'not_ready', code: 'COMMERCE_DATABASE_UNAVAILABLE' });
@@ -449,7 +455,7 @@ app.use('/api/admin/commerce', (req, res, next) => {
 });
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
-const TENANT_ADMIN_MODULES = new Set(['barbearia', 'commerce', 'commerce-session', 'usuarios', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos']);
+const TENANT_ADMIN_MODULES = new Set(['barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos']);
 // Trava global: tudo em /api/admin exige login de staff (exceto o próprio login)
 app.use('/api/admin', (req,res,next)=>{
   if(req.path==='/login') return next();
@@ -877,6 +883,69 @@ const usuarioGerenciavel = (req,res) => {
   return u;
 };
 app.get('/api/admin/usuarios', auth, requireStaff, (req,res)=> res.json((db().usuarios||[]).filter(u => canManageUser(req.user, u) || u.id == req.user.id).map(publicUser)));
+// Diretório de leitura do runtime real. Contas JSON e SQL são identidades
+// distintas; nunca editar uma conta Commerce pelo editor legado.
+app.get('/api/admin/usuarios-diretorio', auth, requireRole('admin', 'organizador'), async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  const actor = (db().usuarios || []).find(user => user.id === req.user.id && user.ativo !== false);
+  if (!actor) return res.status(401).json({ error: 'sessão encerrada', code: 'SESSION_REVOKED' });
+  if (norm(actor.email) !== norm(req.user.email)) return res.status(401).json({ error: 'sessão desatualizada', code: 'SESSION_REVOKED' });
+  if (!['admin', 'organizador'].includes(actor.role)) return res.status(403).json({ error: 'Sem permissão para consultar usuários.', code: 'PERMISSION_DENIED' });
+  const platform = actor.role === 'admin' && (isPlatformAdminUser(actor) || norm(actor.email) === norm(process.env.ADMIN_USER || 'admin'));
+  try {
+    let empresaId = null;
+    let lojaId = null;
+    if (!platform) {
+      if (actor.empresaId && String(req.user.empresaId || '') !== String(actor.empresaId)) {
+        return res.status(403).json({ error: 'Sessão com empresa desatualizada.', code: 'TENANT_SCOPE_MISMATCH' });
+      }
+      if (actor.lojaId && String(req.user.lojaId || '') !== String(actor.lojaId)) {
+        return res.status(403).json({ error: 'Sessão com unidade desatualizada.', code: 'STORE_SCOPE_MISMATCH' });
+      }
+      if (process.env.COMMERCE_CORE_ENABLED === '1') {
+        const context = await requireCommercePermission(req, 'users.write');
+        empresaId = String(context.empresaId);
+        lojaId = context.lojaId || null;
+        if (!actor.empresaId) {
+          // Uma conta JSON sem empresa é só uma pista de e-mail. Não permitir
+          // que homônimos SQL de tenants distintos virem um diretório global.
+          const scoped = await commerceDb.queryRead(
+            `SELECT DISTINCT m.empresa_id FROM usuarios u
+              JOIN commerce_memberships m ON m.empresa_id = u.empresa_id AND m.usuario_id = u.id
+             WHERE lower(u.email) = $1 AND u.ativo = true AND m.ativo = true`,
+            [norm(actor.email)],
+          );
+          if (scoped.rows.length !== 1 || String(scoped.rows[0].empresa_id) !== empresaId || String(req.user.empresaId || '') !== empresaId) {
+            return res.status(403).json({ error: 'Vincule a conta a uma empresa antes de consultar usuários.', code: 'TENANT_CONTEXT_REQUIRED' });
+          }
+        }
+        if (actor.empresaId && String(actor.empresaId) !== empresaId) {
+          return res.status(403).json({ error: 'Empresa não autorizada.', code: 'TENANT_SCOPE_MISMATCH' });
+        }
+        if (actor.lojaId && String(actor.lojaId) !== String(lojaId || '')) {
+          return res.status(403).json({ error: 'Unidade não autorizada.', code: 'STORE_SCOPE_MISMATCH' });
+        }
+      } else {
+        if (!actor.empresaId || (req.headers['x-empresa-id'] && String(req.headers['x-empresa-id']) !== String(actor.empresaId))) {
+          return res.status(403).json({ error: 'Empresa não autorizada.', code: 'TENANT_SCOPE_MISMATCH' });
+        }
+        empresaId = String(actor.empresaId);
+        lojaId = actor.lojaId || null;
+      }
+    }
+    const result = await listAdminUserDirectory({
+      commerceDb, legacyUsers: db().usuarios || [], allCompanies: platform,
+      empresaId, lojaId, coreEnabled: process.env.COMMERCE_CORE_ENABLED === '1',
+    });
+    return res.json({ ok: true, ...result });
+  } catch (error) {
+    if (error?.code === 'PERMISSION_DENIED') return res.status(403).json({ error: 'Sem permissão para consultar usuários.', code: 'PERMISSION_DENIED' });
+    if (['TENANT_CONTEXT_REQUIRED', 'TENANT_SELECTION_REQUIRED', 'STORE_SELECTION_REQUIRED', 'STORE_SCOPE_MISMATCH'].includes(error?.code)) {
+      return res.status(403).json({ error: 'Selecione uma empresa ou unidade autorizada.', code: error.code });
+    }
+    return res.status(503).json({ error: 'Diretório de usuários temporariamente indisponível.', code: 'USER_DIRECTORY_UNAVAILABLE' });
+  }
+});
 app.post('/api/admin/usuarios', auth, requireRole('admin','organizador'), (req,res)=>{
   const { nome, email, senha, role, telefone } = req.body || {};
   if(!nome || !email || !senha) return res.status(400).json({error:'nome, e-mail e senha obrigatórios'});
@@ -2129,11 +2198,32 @@ async function resolverEscopoBarbearia(req, res, next) {
   }
   // Usuário preso a mais de uma empresa precisa escolher qual (cabeçalho x-empresa-id);
   // nunca cai na empresa 'principal' da plataforma.
-  if (!signedEmpresa && isTenantScopedUser(req.user)) return res.status(409).json({ error: 'Escolha a empresa antes de continuar.', code: 'EMPRESA_REQUIRED' });
+  if (!signedEmpresa && (isTenantScopedUser(req.user) || (
+    process.env.COMMERCE_CORE_ENABLED === '1'
+    && !isPlatformAdminUser(req.user) && !isMainAdminUser(req.user)
+  ))) return res.status(409).json({ error: 'Escolha a empresa antes de continuar.', code: 'EMPRESA_REQUIRED' });
   req.barbeariaContext = { empresaId: signedEmpresa || 'principal', lojaId: signedLoja };
   next();
 }
-app.use('/api/admin/barbearia', auth, requireStaff, resolverEscopoBarbearia);
+function exigirPapelOperacaoBarbearia(req, res, next) {
+  if (['admin', 'organizador'].includes(String(req.user?.role || ''))) return next();
+  const endpoint = req.path || '';
+  const leituraGerencial = /^\/(?:overview|dashboard|analytics|metas|financeiro|bi|auditoria|relatorios|comissoes|clientes|clientes-360|crm\/resumo|operacao\/resumo|operacao\/caixas|fiscal\/documentos|vendas-revenda)(?:\/|$)/.test(endpoint);
+  const mutacaoGerencial = req.method !== 'GET' && (
+    /^\/(?:configuracoes|profissionais|servicos|planos|assinaturas|estoque-revenda|fidelidade\/(?:regra|creditar)|operacao\/caixas|operacao\/fechar-dia|financeiro)(?:\/|$)/.test(endpoint)
+    || /^\/comandas\/[^/]+\/(?:pagamentos|cancelar|fiscal|consumo-interno)(?:\/|$)/.test(endpoint)
+    || (req.method === 'PATCH' && /^\/comandas\/[^/]+$/.test(endpoint)
+      && ['desconto', 'descontoMotivo', 'desconto_motivo', 'gorjeta', 'financeiroLancamentoIds', 'contasReceberIds']
+        .some((field) => req.body?.[field] !== undefined))
+    || (/^\/comandas\/[^/]+\/status$/.test(endpoint) && String(req.body?.status || '').toLowerCase() !== 'aguardando_pagamento')
+    || (/^\/agenda\/[^/]+\/status$/.test(endpoint) && req.body?.registrarFinanceiro === true)
+  );
+  if (leituraGerencial || mutacaoGerencial) {
+    return res.status(403).json({ error: 'Operação reservada à gestão da empresa.', code: 'TENANT_MANAGER_REQUIRED' });
+  }
+  next();
+}
+app.use('/api/admin/barbearia', auth, requireStaff, resolverEscopoBarbearia, exigirPapelOperacaoBarbearia);
 registerCustomer360Routes(app, { legacyEmpresaId, legacyLojaId, clientesKytto, barbeariaErpKytto, canaisFidelidadeKytto, listarAgendamentosBarbearia, requireCommercePermission, audit, save });
 registerDinoAdminRoutes(app, { db, legacyEmpresaId, legacyLojaId, financeiroKytto, barbeariaErpKytto, clientesKytto, commerceDb, requireCommercePermission, dashboardPeriod, audit, save, salesReport });
 registerAiBrainRoutes(app, { legacyEmpresaId, legacyLojaId, requireCommercePermission, audit, clientesKytto, commerceDb, listarAgendamentosBarbearia });
@@ -2245,13 +2335,18 @@ function resumoRelacionamentoBarbearia(req) {
 
 function relatorioOperacionalBarbearia(empresaId, { data, lojaId } = {}) {
   const agenda = listarAgendamentosBarbearia(empresaId, { data, lojaId });
+  const recebimentos = listarAgendamentosBarbearia(empresaId, { lojaId });
   const profissionais = barbeariaErpKytto.listarProfissionais(empresaId, { incluirInativos: true });
   const porStatus = Object.fromEntries([...new Set(agenda.map(item => item.status))].map(status => [status, agenda.filter(item => item.status === status).length]));
   const porProfissional = profissionais.map(profissional => {
     const itens = agenda.filter(item => item.profissionalId === profissional.id);
     return { profissionalId: profissional.id, profissionalNome: profissional.nome, atendimentos: itens.length,
       concluidos: itens.filter(item => item.status === 'concluido').length,
-      faturamento: Number(itens.filter(item => item.status === 'concluido').reduce((soma, item) => soma + Number(item.valorRecebido || item.valor || 0), 0).toFixed(2)) };
+      faturamento: Number(recebimentos.filter(item => item.profissionalId === profissional.id).reduce((soma, item) => {
+        const lancamento = barbeariaErpKytto.recebimentoAgendamentoVerificado(empresaId, item);
+        const diaPagamento = lancamento?.pagoEm ? new Intl.DateTimeFormat('en-CA', { timeZone: process.env.KYTTO_TIMEZONE || 'America/Cuiaba', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(lancamento.pagoEm)) : '';
+        return soma + (lancamento && (!data || diaPagamento === String(data).slice(0, 10)) ? Number(lancamento.valor) : 0);
+      }, 0).toFixed(2)) };
   });
   return { data, totalAgendamentos: agenda.length, porStatus, porProfissional };
 }
@@ -2503,11 +2598,28 @@ app.patch('/api/admin/barbearia/configuracoes', (req, res) => {
   if (!['admin', 'organizador', 'gerente'].includes(String(req.user?.role || '').toLowerCase()) && (corpo.taxasPagamento !== undefined || corpo.taxas_pagamento !== undefined)) {
     return res.status(403).json({ error: 'Só a gestão da unidade altera as taxas de pagamento.', code: 'TAXAS_RESTRITAS' });
   }
-  try { res.json({ ok: true, configuracao: barbeariaErpKytto.atualizarConfiguracao(legacyEmpresaId(req), corpo) }); }
+  // O link público precisa de uma unidade para os avisos de WhatsApp (lembrete,
+  // lista de espera). Ao publicar o slug sem unidade definida, usa a unidade da sessão.
+  const empresaId = legacyEmpresaId(req);
+  const atual = barbeariaErpKytto.obterConfiguracao(empresaId);
+  if ((corpo.slugPublico || corpo.slug_publico) && !atual.lojaPublicaId && corpo.lojaPublicaId === undefined && corpo.loja_publica_id === undefined && legacyLojaId(req)) {
+    corpo.lojaPublicaId = legacyLojaId(req);
+  }
+  try { res.json({ ok: true, configuracao: barbeariaErpKytto.atualizarConfiguracao(empresaId, corpo) }); }
   catch (error) { res.status(400).json({ error: error.message }); }
 });
 
-app.get('/api/admin/barbearia/profissionais', (req, res) => res.json({ ok: true, profissionais: barbeariaErpKytto.listarProfissionais(legacyEmpresaId(req), { incluirInativos: String(req.query?.incluirInativos) === 'true' }) }));
+app.get('/api/admin/barbearia/profissionais', (req, res) => {
+  const gestor = ['admin', 'organizador'].includes(String(req.user?.role || ''));
+  const profissionais = barbeariaErpKytto.listarProfissionais(legacyEmpresaId(req), {
+    incluirInativos: gestor && String(req.query?.incluirInativos) === 'true',
+  });
+  // A agenda precisa de nome, id e jornada; salários/contatos do time não.
+  const operacionais = profissionais.map(({ id, nome, especialidade, horarioInicio, horarioFim, diasTrabalho, ativo, fotoUrl }) => (
+    { id, nome, especialidade, horarioInicio, horarioFim, diasTrabalho, ativo, fotoUrl }
+  ));
+  res.json({ ok: true, profissionais: gestor ? profissionais : operacionais });
+});
 // Percentual de comissão e dados de repasse são definidos por quem gerencia a unidade;
 // equipe operacional (staff) pode editar o cadastro, mas não a própria remuneração.
 const CAMPOS_REMUNERACAO = ['percentualComissao', 'percentual_comissao', 'percentualComissaoProduto', 'percentual_comissao_produto', 'descontaTaxaMaquininha', 'desconta_taxa_maquininha'];
@@ -2567,6 +2679,12 @@ app.post('/api/admin/barbearia/agenda', async (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
     const lojaId = legacyLojaId(req);
+    if (req.body?.valor !== undefined) {
+      const servico = barbeariaErpKytto.listarServicos(empresaId).find((item) => item.id === String(req.body?.servicoId ?? req.body?.servico_id ?? ''));
+      if (!servico || Math.round(Number(req.body.valor) * 100) !== Math.round(Number(servico.preco) * 100)) {
+        return res.status(409).json({ error: 'O valor do agendamento deve corresponder ao preço cadastrado do serviço.', code: 'APPOINTMENT_PRICE_MISMATCH' });
+      }
+    }
     const vinculo = vincularClienteAoAtendimento(empresaId, { ...(req.body || {}), lojaId }, { origem: 'agenda', usuario: req.user?.email || '' });
     const body = vinculo.dados;
     const agendamento = enriquecerAgendamentoBarbearia(empresaId, barbeariaErpKytto.criarAgendamento(empresaId, body));
@@ -2591,15 +2709,53 @@ app.patch('/api/admin/barbearia/agenda/:id', async (req, res) => {
 app.patch('/api/admin/barbearia/agenda/:id/status', async (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId(req);
+    const atual = listarAgendamentosBarbearia(empresaId, { lojaId })
+      .find((item) => item.id === String(req.params.id));
+    if (!atual || (lojaId && atual.lojaId !== lojaId)) {
+      return res.status(404).json({ error: 'Agendamento não encontrado na empresa/unidade ativa.' });
+    }
     const status = String(req.body?.status || '');
-    let agendamento = barbeariaErpKytto.alterarStatusAgendamento(empresaId, req.params.id, status, req.body || {});
+    const registrarFinanceiro = req.body?.registrarFinanceiro === true;
+    const camposPagamento = ['meioPagamento', 'meio_pagamento', 'valorRecebido', 'valor_recebido', 'financeiroLancamentoId', 'financeiro_lancamento_id'];
+    if (req.body?.financeiroLancamentoId !== undefined || req.body?.financeiro_lancamento_id !== undefined) {
+      return res.status(400).json({ error: 'O vínculo financeiro é gerado pelo servidor.' });
+    }
+    if (camposPagamento.some((campo) => Object.hasOwn(req.body || {}, campo)) && !registrarFinanceiro) {
+      return res.status(400).json({ error: 'Dados de pagamento exigem recebimento explícito confirmado.' });
+    }
+    if (registrarFinanceiro && (status !== 'concluido' || req.body?.confirmado !== true)) {
+      return res.status(400).json({ error: 'A confirmação explícita de um atendimento concluído é obrigatória.' });
+    }
+    const meioPagamento = String(req.body?.meioPagamento || '').trim().toLowerCase();
+    const valor = Number(atual.valor);
+    const valorSolicitado = Number(req.body?.valorRecebido ?? valor);
+    if (registrarFinanceiro && (!meioPagamento || !Number.isFinite(valor) || valor <= 0 || !Number.isFinite(valorSolicitado) || valorSolicitado <= 0)) {
+      return res.status(400).json({ error: 'Informe valor recebido positivo e meio de pagamento.' });
+    }
+    if (registrarFinanceiro) {
+      const chave = `barbearia_atendimento:${empresaId}:${atual.id}`;
+      const existente = financeiroKytto.listarLancamentos(empresaId, { origem: 'barbearia_atendimento' })
+        .find((item) => item.chaveIdempotencia === chave);
+      if (existente && (existente.status !== 'pago' || Math.round(Number(existente.valor) * 100) !== Math.round(valorSolicitado * 100) || existente.meioPagamento !== meioPagamento)) {
+        return res.status(409).json({ error: 'O atendimento já possui um recebimento com dados divergentes ou pendentes de revisão.', code: 'RECEIPT_IDEMPOTENCY_CONFLICT' });
+      }
+      if (Math.round(valorSolicitado * 100) !== Math.round(valor * 100)) {
+        return res.status(409).json({ error: 'O valor recebido deve corresponder ao valor registrado do serviço. Use a comanda para ajuste auditado.', code: 'RECEIPT_AMOUNT_MISMATCH' });
+      }
+      if (existente && Math.round(Number(existente.valor) * 100) !== Math.round(valor * 100)) {
+        return res.status(409).json({ error: 'O recebimento anterior exige reconciliação manual.', code: 'RECEIPT_RECONCILIATION_REQUIRED' });
+      }
+      if (atual.financeiroLancamentoId && (!existente || existente.id !== atual.financeiroLancamentoId)) {
+        return res.status(409).json({ error: 'O vínculo financeiro do atendimento precisa de reconciliação manual.', code: 'RECEIPT_RECONCILIATION_REQUIRED' });
+      }
+    }
+    const dadosStatus = { ...(req.body || {}), lojaId };
+    for (const campo of camposPagamento) delete dadosStatus[campo];
+    let agendamento = barbeariaErpKytto.alterarStatusAgendamento(empresaId, req.params.id, status, dadosStatus);
     if (!agendamento) return res.status(404).json({ error: 'Agendamento não encontrado na empresa ativa.' });
     let financeiro = null;
-    if (status === 'concluido' && req.body?.registrarFinanceiro === true) {
-      if (req.body?.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita do recebimento é obrigatória.' });
-      const meioPagamento = String(req.body?.meioPagamento || '').trim().toLowerCase();
-      const valor = Number(req.body?.valorRecebido ?? agendamento.valor);
-      if (!meioPagamento || !Number.isFinite(valor) || valor <= 0) return res.status(400).json({ error: 'Informe valor recebido positivo e meio de pagamento.' });
+    if (registrarFinanceiro) {
       financeiro = financeiroKytto.registrarLancamento(empresaId, {
         tipo: 'receita', categoria: 'Serviços', descricao: `Atendimento de barbearia ${agendamento.id}`,
         valor, origem: 'barbearia_atendimento', status: 'pago', meioPagamento,
@@ -2610,16 +2766,127 @@ app.patch('/api/admin/barbearia/agenda/:id/status', async (req, res) => {
       agendamento = barbeariaErpKytto.vincularLancamentoFinanceiro(empresaId, agendamento.id, financeiro.id) || agendamento;
     }
     const notificacao = status === 'cancelado'
-      ? await queueAppointmentNotifications({ empresaId, lojaId: legacyLojaId(req), legacyEmpresaId: empresaId }, agendamento, 'cancelado').catch(() => ({ queued: 0, skipped: true, reason: 'queue_unavailable' }))
+      ? await queueAppointmentNotifications({ empresaId, lojaId, legacyEmpresaId: empresaId }, agendamento, 'cancelado').catch(() => ({ queued: 0, skipped: true, reason: 'queue_unavailable' }))
       : { queued: 0, skipped: true, reason: 'event_not_notifiable' };
-    res.json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(empresaId, agendamento), financeiro, notificacao });
+    // Captação e retenção: vaga liberada avisa a lista de espera; atendimento
+    // concluído recompensa a indicação e desconta a sessão do plano do cliente.
+    let listaEspera = null;
+    let indicacao = null;
+    let assinatura = null;
+    try {
+      if (status === 'cancelado') {
+        const contexto = { empresaId, lojaId: agendamento.lojaId || legacyLojaId(req), legacyEmpresaId: empresaId };
+        const fila = await avisarListaEspera(contexto, agendamento, captacaoKytto.candidatosParaVaga(empresaId, agendamento)).catch(() => ({ queued: 0, skipped: true, reason: 'queue_unavailable' }));
+        // Para a equipe chamar manualmente quem não autorizou o WhatsApp.
+        const todos = captacaoKytto.candidatosParaVaga(empresaId, agendamento, { incluirSemConsentimento: true });
+        listaEspera = { candidatos: todos.map(({ id, nome, consentimentoWhatsapp }) => ({ id, nome, consentimentoWhatsapp })), fila };
+      }
+      if (status === 'concluido') {
+        indicacao = captacaoKytto.processarConclusaoIndicacao(empresaId, agendamento);
+        // Cobrado avulso (registrarFinanceiro) não usa o plano, salvo pedido explícito.
+        const usarPlano = req.body?.usarPlano === true || (req.body?.usarPlano !== false && req.body?.registrarFinanceiro !== true);
+        if (usarPlano) assinatura = captacaoKytto.consumirAssinaturaNaConclusao(empresaId, agendamento);
+      }
+    } catch (erroCaptacao) {
+      // O status e o financeiro já foram gravados: captação nunca derruba a resposta.
+      console.error('[Captação] pós-status:', erroCaptacao?.message || erroCaptacao);
+    }
+    res.json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(empresaId, agendamento), financeiro, notificacao, listaEspera, indicacao, assinatura: assinatura ? { id: assinatura.assinatura.id, sessoesRestantes: assinatura.sessoesRestantes, usosNoCiclo: assinatura.usosNoCiclo } : null });
   } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+// ── Captação e retenção da barbearia (onda 1) ─────────────────────────────
+function gestaoDaUnidade(req, res) {
+  // Pontos, pagamentos de assinatura e metas mexem em dinheiro e remuneração:
+  // só a gestão da unidade altera (o mesmo critério das taxas de pagamento).
+  if (['admin', 'organizador', 'gerente'].includes(String(req.user?.role || '').toLowerCase())) return true;
+  res.status(403).json({ error: 'Só a gestão da unidade pode fazer esta alteração.', code: 'GESTAO_RESTRITA' });
+  return false;
+}
+function dataLocalServidor(ms = Date.now()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: process.env.KYTTO_TIMEZONE || 'America/Cuiaba', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms));
+}
+function respostaCaptacao(res, error) {
+  const status = error instanceof captacaoKytto.CaptacaoError ? (error.status || 400) : 400;
+  return res.status(status).json({ error: error.message, code: error.code || undefined });
+}
+app.get('/api/admin/barbearia/captacao/configuracao', (req, res) => {
+  res.json({ ok: true, configuracao: captacaoKytto.obterConfiguracaoCaptacao(legacyEmpresaId(req)) });
+});
+app.put('/api/admin/barbearia/captacao/configuracao', (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try { res.json({ ok: true, configuracao: captacaoKytto.salvarConfiguracaoCaptacao(legacyEmpresaId(req), req.body || {}) }); } catch (error) { respostaCaptacao(res, error); }
+});
+app.get('/api/admin/barbearia/captacao/lista-espera', (req, res) => {
+  try {
+    const itens = captacaoKytto.listarListaEspera(legacyEmpresaId(req), { data: req.query?.data, status: req.query?.status });
+    res.json({ ok: true, itens, total: itens.length });
+  } catch (error) { respostaCaptacao(res, error); }
+});
+app.post('/api/admin/barbearia/captacao/lista-espera', (req, res) => {
+  try { res.status(201).json({ ok: true, item: captacaoKytto.entrarListaEspera(legacyEmpresaId(req), { ...(req.body || {}), lojaId: legacyLojaId(req), origem: 'admin' }) }); } catch (error) { respostaCaptacao(res, error); }
+});
+app.patch('/api/admin/barbearia/captacao/lista-espera/:id/status', (req, res) => {
+  try {
+    const item = captacaoKytto.alterarStatusListaEspera(legacyEmpresaId(req), req.params.id, req.body?.status);
+    if (!item) return res.status(404).json({ error: 'Registro da lista de espera não encontrado.' });
+    res.json({ ok: true, item });
+  } catch (error) { respostaCaptacao(res, error); }
+});
+app.get('/api/admin/barbearia/captacao/indicacoes', (req, res) => {
+  try { res.json({ ok: true, ...captacaoKytto.painelIndicacoes(legacyEmpresaId(req)) }); } catch (error) { respostaCaptacao(res, error); }
+});
+app.get('/api/admin/barbearia/captacao/clientes/:id/indicacao', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const codigo = captacaoKytto.codigoIndicacaoCliente(empresaId, req.params.id);
+    const slug = barbeariaErpKytto.obterConfiguracao(empresaId).slugPublico || 'dino';
+    res.json({ ok: true, ...codigo, link: `/agendar/${slug}?indicacao=${codigo.codigo}` });
+  } catch (error) { respostaCaptacao(res, error); }
+});
+app.get('/api/admin/barbearia/captacao/clube', (req, res) => {
+  try { res.json({ ok: true, saude: captacaoKytto.saudeClube(legacyEmpresaId(req)), candidatos: captacaoKytto.candidatosAoClube(legacyEmpresaId(req), { dias: req.query?.dias }) }); } catch (error) { respostaCaptacao(res, error); }
+});
+app.get('/api/admin/barbearia/captacao/assinaturas/:id', (req, res) => {
+  try {
+    const resumo = captacaoKytto.resumoAssinatura(legacyEmpresaId(req), req.params.id);
+    if (!resumo) return res.status(404).json({ error: 'Assinatura não encontrada.' });
+    res.json({ ok: true, resumo });
+  } catch (error) { respostaCaptacao(res, error); }
+});
+app.post('/api/admin/barbearia/captacao/assinaturas/:id/pagamentos', (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try {
+    if (req.body?.confirmado !== true) return res.status(400).json({ error: 'Confirme que o pagamento do ciclo foi recebido.' });
+    res.status(201).json({ ok: true, resumo: captacaoKytto.registrarPagamentoAssinatura(legacyEmpresaId(req), req.params.id, { ...(req.body || {}), usuario: req.user?.email || '' }) });
+  } catch (error) { respostaCaptacao(res, error); }
+});
+app.post('/api/admin/barbearia/captacao/assinaturas/:id/usos', (req, res) => {
+  try { res.status(201).json({ ok: true, resumo: captacaoKytto.registrarUsoAssinatura(legacyEmpresaId(req), req.params.id, req.body || {}) }); } catch (error) { respostaCaptacao(res, error); }
+});
+app.get('/api/admin/barbearia/captacao/retornos', (req, res) => {
+  try { res.json({ ok: true, ...captacaoKytto.retornosPrevistos(legacyEmpresaId(req), { horizonteDias: Number(req.query?.dias) || 7, lojaId: legacyLojaId(req) }) }); } catch (error) { respostaCaptacao(res, error); }
+});
+app.get('/api/admin/barbearia/captacao/ocupacao', (req, res) => {
+  try {
+    const hoje = dataLocalServidor();
+    const inicio = String(req.query?.inicio || `${hoje.slice(0, 7)}-01`);
+    const fim = String(req.query?.fim || hoje);
+    res.json({ ok: true, ...captacaoKytto.ocupacaoAgenda(legacyEmpresaId(req), { inicio, fim, lojaId: legacyLojaId(req) }) });
+  } catch (error) { respostaCaptacao(res, error); }
+});
+app.get('/api/admin/barbearia/captacao/metas-profissionais', (req, res) => {
+  try { res.json({ ok: true, ...captacaoKytto.painelMetasProfissionais(legacyEmpresaId(req), { mes: req.query?.mes, lojaId: legacyLojaId(req) }) }); } catch (error) { respostaCaptacao(res, error); }
+});
+app.put('/api/admin/barbearia/captacao/metas-profissionais', (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try { res.json({ ok: true, meta: captacaoKytto.salvarMetaProfissional(legacyEmpresaId(req), req.body || {}) }); } catch (error) { respostaCaptacao(res, error); }
 });
 
 function comandaBarbeariaDaSessao(req, id) {
   const comanda = barbeariaErpKytto.obterComandaBarbearia(legacyEmpresaId(req), id);
   const lojaId = legacyLojaId(req);
-  if (!comanda || (lojaId && comanda.lojaId && comanda.lojaId !== lojaId)) return null;
+  if (!comanda || (lojaId && String(comanda.lojaId || '') !== String(lojaId))) return null;
   return comanda;
 }
 
@@ -2861,6 +3128,9 @@ app.patch('/api/admin/barbearia/clientes/:id/consentimentos', (req, res) => {
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 app.get('/api/admin/barbearia/crm/resumo', (req, res) => {
+  // Contas legadas e fidelidade não têm vínculo de loja verificável. Não exibir
+  // agregados tenant-wide quando o gestor só possui uma unidade selecionada.
+  if (legacyLojaId(req)) return res.status(403).json({ error: 'Resumo consolidado exige escopo corporativo.', code: 'CRM_CORPORATE_SCOPE_REQUIRED' });
   try { res.json({ ok: true, relacionamento: resumoRelacionamentoBarbearia(req) }); }
   catch (error) { res.status(400).json({ error: error.message }); }
 });
@@ -5813,7 +6083,16 @@ app.get('/api/me/chave', auth, (req, res) => {
 // de iniciarem. As confirmações recebem um limite mais restritivo que as leituras.
 try {
   const { default: agendamentoPublico } = await import('./modules/barbearia/routes-publico.js');
-  app.use('/api/publico/agendamento', (req, res, next) => publicLimit(req.method === 'POST' ? 8 : 80)(req, res, next), agendamentoPublico);
+  // Limite por slug normalizado + rota: "DINO", "dino-" e "%64ino" contam juntos.
+  app.use('/api/publico/agendamento', (req, res, next) => {
+    const [slugCru = '', ...resto] = String(req.path || '').split('/').filter(Boolean);
+    let slugDecodificado = slugCru;
+    try { slugDecodificado = decodeURIComponent(slugCru); } catch (_) { /* slug malformado: usa o texto cru */ }
+    const slugNormalizado = slugDecodificado.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    const chave = `pub:agendamento:${slugNormalizado}/${resto.join('/')}:${req.ip || ''}`;
+    if (!rateLimit(chave, req.method === 'POST' ? 8 : 80, 10 * 60 * 1000)) return res.status(429).json({ error: 'muitas requisições, tente novamente em alguns minutos' });
+    next();
+  }, agendamentoPublico);
   console.log('Agendamento público Dino ativo em /api/publico/agendamento/:slug');
 } catch (error) {
   console.warn('Agendamento público Dino indisponível; servidor seguirá sem o módulo:', error?.message || error);
@@ -5858,6 +6137,8 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
   }
   app.listen(PORT, ()=> console.log(`SetPoint React SPA em http://localhost:${PORT}`));
   startWhatsappAiWorker();
+  // Entrada do WhatsApp igual à da Isa: consulta periódica ao backend (sem webhook).
+  startIsaPollWorker();
   startAiBrainSchedulers();
   // Vigia da conexão WhatsApp (backend NossaGente): reconecta sozinho quando cai.
   if (whatsappProviderName() === 'chatbot_backend' && process.env.WHATSAPP_CONNECTION_WATCHDOG !== 'false') {

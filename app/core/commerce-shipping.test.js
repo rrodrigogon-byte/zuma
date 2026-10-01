@@ -80,6 +80,7 @@ test('cotação chama o provedor real fora da transação e persiste snapshot id
     async transaction(callback) {
       return callback({ query: async (sql, params) => {
         queries.push({ sql, params });
+        if (sql.includes('SELECT configuracao FROM commerce_shipping_methods')) return { rows: [{ configuracao: { provider: 'melhorenvio', shippingAccountId: '10000000-0000-4000-8000-000000000102', origemCep: '01001000' } }] };
         if (sql.includes('SELECT id FROM commerce_shipping_accounts')) return { rows: [{ id: '10000000-0000-4000-8000-000000000102' }] };
         if (sql.includes('INSERT INTO commerce_shipping_quotes')) return { rows: [{ id: 'quote-1', expires_at: '2099-01-01T00:00:00.000Z' }] };
         throw new Error(`query transacional inesperada: ${sql}`);
@@ -123,6 +124,7 @@ test('cotação manual usa cidade e persiste quote sem conta logística externa'
     async transaction(callback) {
       return callback({ query: async (sql, params) => {
         queries.push({ sql, params });
+        if (sql.includes('SELECT configuracao FROM commerce_shipping_methods')) return { rows: [{ configuracao: { provider: 'manual', deliveryType: 'regional_table', origemCep: '78300000', rules: [{ id: 'nova-olimpia', label: 'Nova Olímpia', cities: ['Nova Olímpia'], uf: 'MT', amount: 20, deliveryDays: 1 }] } }] };
         if (sql.includes('INSERT INTO commerce_shipping_quotes')) return { rows: [{ id: 'manual-quote-1', expires_at: '2099-01-01T00:00:00.000Z' }] };
         throw new Error(`query transacional inesperada: ${sql}`);
       } });
@@ -155,6 +157,7 @@ test('seleção aceita carrinho semanticamente igual com itens reordenados e cid
     },
     async transaction(callback) {
       return callback({ query: async (sql, params) => {
+        if (sql.includes('SELECT configuracao FROM commerce_shipping_methods')) return { rows: [{ configuracao: { provider: 'manual', deliveryType: 'regional_table', origemCep: '78300000', rules: [{ id: 'regional', label: 'Regional', cities: ['Nova Olímpia'], uf: 'MT', amount: 20, deliveryDays: 1 }] } }] };
         if (sql.includes('INSERT INTO commerce_shipping_quotes')) {
           persisted = { hash: params[8], snapshot: JSON.parse(params[9]), response: JSON.parse(params[10]) };
           return { rows: [{ id: '10000000-0000-4000-8000-000000000199', expires_at: '2099-01-01T00:00:00.000Z' }] };
@@ -174,7 +177,7 @@ test('seleção aceita carrinho semanticamente igual com itens reordenados e cid
   assert.equal(persisted.snapshot.destination.cidade, 'nova olimpia');
   const optionId = persisted.response.providerOptions[0].public.id;
   const trx = { query: async sql => {
-    if (sql.includes('FROM commerce_shipping_quotes q')) return { rows: [{ id: quote.quoteId, storefront_id: persisted.snapshot.storefrontId, request_hash: persisted.hash, request_snapshot: persisted.snapshot, response_snapshot: persisted.response, status: 'quoted', expires_at: '2099-01-01T00:00:00.000Z' }] };
+    if (sql.includes('FROM commerce_shipping_quotes q')) return { rows: [{ id: quote.quoteId, storefront_id: persisted.snapshot.storefrontId, shipping_method_id: persisted.snapshot.shippingMethodId, request_hash: persisted.hash, request_snapshot: persisted.snapshot, response_snapshot: persisted.response, current_method_config: { provider: 'manual', deliveryType: 'regional_table', origemCep: '78300000', rules: [{ id: 'regional', label: 'Regional', cities: ['Nova Olímpia'], uf: 'MT', amount: 20, deliveryDays: 1 }] }, status: 'quoted', expires_at: '2099-01-01T00:00:00.000Z' }] };
     if (sql.includes('UPDATE commerce_shipping_quotes')) return { rows: [] };
     throw new Error(`query inesperada: ${sql}`);
   } };
@@ -182,7 +185,7 @@ test('seleção aceita carrinho semanticamente igual com itens reordenados e cid
     shippingQuoteId: quote.quoteId,
     shippingOptionId: optionId,
     shippingAddress: { destinatario: 'Cliente', documento: '12345678909', cep: '78365000', logradouro: 'Rua A', numero: '1', bairro: 'Centro', cidade: '  NOVA   OLIMPIA ', estado: 'MT' },
-  }, { storefrontId: persisted.snapshot.storefrontId, lines: [{ variantId: variantA, quantity: 2 }, { variantId: variantB, quantity: 1 }] });
+  }, { storefrontId: persisted.snapshot.storefrontId, shippingMethodId: persisted.snapshot.shippingMethodId, lines: [{ variantId: variantA, quantity: 2 }, { variantId: variantB, quantity: 1 }] });
   assert.equal(selected.amount, 20);
   assert.equal(selected.address.cidade, 'NOVA   OLIMPIA');
 });
@@ -197,6 +200,7 @@ test('entrega própria calcula motoboy, expressa e frete grátis sem depender de
     },
     async transaction(callback) {
       return callback({ query: async sql => {
+        if (sql.includes('SELECT configuracao FROM commerce_shipping_methods')) return { rows: [{ configuracao: methodConfig }] };
         if (sql.includes('INSERT INTO commerce_shipping_quotes')) return { rows: [{ id: 'own-quote-1', expires_at: '2099-01-01T00:00:00.000Z' }] };
         throw new Error(`query transacional inesperada: ${sql}`);
       } });
@@ -217,6 +221,31 @@ test('entrega própria calcula motoboy, expressa e frete grátis sem depender de
   assert.equal(result.items[0].freeShippingApplied, true);
 });
 
+test('mudança de limiar após o cálculo bloqueia quote nova sem INSERT', async () => {
+  const original = { provider: 'manual', deliveryType: 'motoboy', baseFee: 8, freeShippingAbove: 1000, deliveryDays: 1, rules: [{ id: 'local', label: 'Local', cepFrom: '78300000', cepTo: '78309999', zone: 1 }] };
+  let inserts = 0;
+  const client = {
+    async query(sql) {
+      if (sql.includes('FROM commerce_shipping_methods')) return { rows: [{ id: '10000000-0000-4000-8000-000000000109', tipo: 'delivery', configuracao: original, storefront_id: '10000000-0000-4000-8000-000000000103', loja_id: '10000000-0000-4000-8000-000000000104' }] };
+      if (sql.includes('FROM commerce_product_variants')) return { rows: [{ id: '10000000-0000-4000-8000-000000000105', sku: 'SKU', nome: 'Teste', peso_gramas: null, largura_cm: null, altura_cm: null, comprimento_cm: null, price: 1000 }] };
+      throw new Error(`query inesperada: ${sql}`);
+    },
+    async transaction(callback) {
+      return callback({ async query(sql) {
+        if (sql.includes('SELECT configuracao FROM commerce_shipping_methods')) return { rows: [{ configuracao: { ...original, freeShippingAbove: 1200 } }] };
+        if (sql.includes('INSERT INTO commerce_shipping_quotes')) inserts += 1;
+        throw new Error(`query transacional inesperada: ${sql}`);
+      } });
+    },
+  };
+  await assert.rejects(() => quoteShipping(client, { empresaId: '10000000-0000-4000-8000-000000000106' }, {
+    storefrontId: '10000000-0000-4000-8000-000000000103', shippingMethodId: '10000000-0000-4000-8000-000000000109',
+    destinationCep: '78300055', destination: { cep: '78300055', cidade: 'Tangará da Serra', estado: 'MT' },
+    items: [{ variantId: '10000000-0000-4000-8000-000000000105', quantity: 1 }],
+  }), error => error.code === 'SHIPPING_QUOTE_EXPIRED');
+  assert.equal(inserts, 0);
+});
+
 test('normaliza faixas próprias com zonas e regiões e rejeita configurações ambíguas', () => {
   const config = normalizeOwnDeliveryConfig({ provider: 'manual', deliveryType: 'motoboy', baseFee: 5, pricePerZone: 8, rules: [{ id: 'zona-2', label: 'Zona 2', region: 'Centro-Oeste', ufs: 'MT, GO', cepFrom: '78000-000', cepTo: '78999-999', zone: 2, deliveryDays: 1 }] });
   assert.equal(config.pricePerZone, 8);
@@ -233,6 +262,7 @@ test('cotação agregada retorna somente métodos aplicáveis e preserva quoteId
   const motoboyId = '10000000-0000-4000-8000-000000000119';
   const freeId = '10000000-0000-4000-8000-000000000120';
   let inserts = 0;
+  let lastMethodConfig;
   const client = {
     async query(sql, params) {
       if (sql.includes('SELECT id, codigo, nome') && sql.includes('commerce_shipping_methods')) return { rows: [{ id: motoboyId, codigo: 'motoboy', nome: 'Motoboy' }, { id: freeId, codigo: 'gratis', nome: 'Frete grátis' }] };
@@ -240,6 +270,7 @@ test('cotação agregada retorna somente métodos aplicáveis e preserva quoteId
         const config = params[2] === motoboyId
           ? { provider: 'manual', deliveryType: 'motoboy', baseFee: 5, pricePerZone: 8, rules: [{ id: 'zona-2', label: 'Zona 2', ufs: ['MT'], zone: 2, deliveryDays: 1 }] }
           : { provider: 'manual', deliveryType: 'free_shipping', freeShippingAbove: 100, deliveryDays: 5 };
+        lastMethodConfig = config;
         return { rows: [{ id: params[2], codigo: params[2] === motoboyId ? 'motoboy' : 'gratis', nome: 'Entrega', tipo: 'delivery', configuracao: config, storefront_id: storefrontId, loja_id: '10000000-0000-4000-8000-000000000104', configuracoes: {} }] };
       }
       if (sql.includes('FROM commerce_product_variants')) return { rows: [{ id: '10000000-0000-4000-8000-000000000105', sku: 'SKU-1', nome: 'Produto', peso_gramas: 0, largura_cm: 0, altura_cm: 0, comprimento_cm: 0, price: 39.9 }] };
@@ -247,6 +278,7 @@ test('cotação agregada retorna somente métodos aplicáveis e preserva quoteId
     },
     async transaction(callback) {
       return callback({ query: async sql => {
+        if (sql.includes('SELECT configuracao FROM commerce_shipping_methods')) return { rows: [{ configuracao: lastMethodConfig }] };
         if (sql.includes('INSERT INTO commerce_shipping_quotes')) { inserts += 1; return { rows: [{ id: `10000000-0000-4000-8000-${String(inserts).padStart(12, '0')}`, expires_at: '2099-01-01T00:00:00.000Z' }] }; }
         throw new Error(`query transacional inesperada: ${sql}`);
       } });
@@ -344,4 +376,26 @@ test('reconciliação manual conclui etiqueta incerta uma vez e rejeita identifi
     error => error.code === 'SHIPPING_OPERATION_CONFLICT',
   );
   assert.equal(updates, 1);
+});
+
+test('checkout recusa quote de método desativado ou diferente antes de qualquer DML', async () => {
+  const tenantId = '10000000-0000-4000-8000-000000000106';
+  const storefrontId = '10000000-0000-4000-8000-000000000103';
+  const shippingMethodId = '10000000-0000-4000-8000-000000000109';
+  const quoteId = '10000000-0000-4000-8000-000000000110';
+  let queries = 0;
+  const trx = { async query(sql, params) {
+    queries += 1;
+    assert.match(sql, /JOIN commerce_shipping_methods sm/);
+    assert.match(sql, /sm\.ativo = true/);
+    assert.match(sql, /sm\.id = \$4/);
+    assert.match(sql, /FOR UPDATE OF q, sm/);
+    assert.deepEqual(params, [tenantId, quoteId, storefrontId, shippingMethodId]);
+    return { rows: [] };
+  } };
+  await assert.rejects(() => resolveShippingSelection(trx, { empresaId: tenantId }, {
+    shippingQuoteId: quoteId, shippingOptionId: 'regional:mt',
+    shippingAddress: { destinatario: 'Teste', documento: '12345678909', cep: '78300055', logradouro: 'Rua', numero: '1', bairro: 'Centro', cidade: 'Tangará da Serra', estado: 'MT' },
+  }, { storefrontId, shippingMethodId, lines: [{ variantId: '10000000-0000-4000-8000-000000000105', quantity: 1 }] }), error => error.code === 'SHIPPING_QUOTE_EXPIRED');
+  assert.equal(queries, 1);
 });

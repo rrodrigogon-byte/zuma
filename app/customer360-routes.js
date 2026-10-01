@@ -63,10 +63,11 @@ export function registerCustomer360Routes(app, deps) {
       return { context: await requireCommercePermission(req, permission), reason: null };
     } catch (error) {
       const code = String(error?.code || '');
-      const reason = code === 'PERMISSION_DENIED' ? 'sem_permissao'
-        : ['TENANT_CONTEXT_REQUIRED', 'TENANT_SELECTION_REQUIRED', 'STORE_SELECTION_REQUIRED', 'STORE_SCOPE_MISMATCH'].includes(code) ? 'sem_membership'
-          : 'temporariamente_indisponivel';
-      return { context: null, reason };
+      if (code === 'PERMISSION_DENIED') throw httpError('Seu perfil não tem acesso ao Customer 360.', 403, 'CUSTOMER360_FORBIDDEN');
+      if (['TENANT_CONTEXT_REQUIRED', 'TENANT_SELECTION_REQUIRED', 'STORE_SELECTION_REQUIRED', 'STORE_SCOPE_MISMATCH'].includes(code)) {
+        throw httpError('Selecione uma empresa e loja autorizadas antes de consultar clientes.', 403, 'CUSTOMER360_SCOPE_REQUIRED');
+      }
+      throw httpError('A autorização Commerce está temporariamente indisponível.', 503, 'CUSTOMER360_COMMERCE_UNAVAILABLE');
     }
   }
 
@@ -82,7 +83,13 @@ export function registerCustomer360Routes(app, deps) {
     let commerceStatus = { disponivel: Boolean(context), motivo: context ? null : reason };
     if (context) {
       try { commerceCustomers = await loadCommerceDirectory(context, { query, limit }); }
-      catch (error) { commerceStatus = { disponivel: false, motivo: 'temporariamente_indisponivel' }; console.warn('Customer 360: diretório Commerce indisponível:', error?.code || error?.message); }
+      catch (error) {
+        if (['PERMISSION_DENIED', 'TENANT_CONTEXT_REQUIRED', 'TENANT_SELECTION_REQUIRED', 'STORE_SELECTION_REQUIRED', 'STORE_SCOPE_MISMATCH'].includes(error?.code)) {
+          throw httpError('Escopo Commerce não autorizado para consulta de clientes.', 403, 'CUSTOMER360_FORBIDDEN');
+        }
+        commerceStatus = { disponivel: false, motivo: 'temporariamente_indisponivel' };
+        console.warn('Customer 360: diretório Commerce indisponível:', error?.code || error?.message);
+      }
     }
     return { context, commerceCustomers, commerceStatus, locals: localClients(req), rules: customerStore.identityRules(legacyEmpresaId(req)) };
   }
@@ -137,6 +144,7 @@ export function registerCustomer360Routes(app, deps) {
 
   function sendError(res, error, fallback) {
     if (error?.status && error.status < 500) return res.status(error.status).json({ error: error.message, code: error.code || 'CUSTOMER360_INVALID' });
+    if (error?.status === 503) return res.status(503).json({ error: 'Customer 360 temporariamente indisponível.', code: 'CUSTOMER360_UNAVAILABLE' });
     console.error(fallback, error?.code || error?.message || error);
     return res.status(500).json({ error: fallback, code: 'CUSTOMER360_UNAVAILABLE' });
   }
@@ -212,6 +220,8 @@ export function registerCustomer360Routes(app, deps) {
   app.post(`${BASE}/vinculos`, async (req, res) => {
     try {
       if (!canManage(req.user)) throw httpError('Seu perfil não pode unificar cadastros.', 403, 'CUSTOMER360_FORBIDDEN');
+      const { context } = await commerceContext(req, 'customers.write');
+      if (commerceEnabled() && !context) throw httpError('Commerce indisponível para validar a alteração.', 503, 'CUSTOMER360_COMMERCE_UNAVAILABLE');
       const pair = pairFromBody(req);
       customerStore.linkRecords(legacyEmpresaId(req), { ...pair, operador: operatorLabel(req.user) });
       registerJsonAudit(req, 'LINK CUSTOMER360', `ref=${pair.a}; com=${pair.b}${pair.motivo ? `; motivo=${pair.motivo}` : ''}`);
@@ -222,6 +232,8 @@ export function registerCustomer360Routes(app, deps) {
   app.post(`${BASE}/separacoes`, async (req, res) => {
     try {
       if (!canManage(req.user)) throw httpError('Seu perfil não pode separar cadastros.', 403, 'CUSTOMER360_FORBIDDEN');
+      const { context } = await commerceContext(req, 'customers.write');
+      if (commerceEnabled() && !context) throw httpError('Commerce indisponível para validar a alteração.', 503, 'CUSTOMER360_COMMERCE_UNAVAILABLE');
       const pair = pairFromBody(req);
       customerStore.separateRecords(legacyEmpresaId(req), { ...pair, operador: operatorLabel(req.user) });
       registerJsonAudit(req, 'SPLIT CUSTOMER360', `ref=${pair.a}; de=${pair.b}${pair.motivo ? `; motivo=${pair.motivo}` : ''}`);
@@ -351,10 +363,12 @@ export function registerCustomer360Routes(app, deps) {
       if (loaded.status) return res.status(loaded.status).json(loaded.body);
       const { identity } = loaded;
       let commerceResult = null;
-      if (identity.commerce.length || (commerceEnabled() && identity.phones.length)) {
-        const { context, reason } = await commerceContext(req, 'customers.write');
-        if (!context && identity.commerce.length) throw httpError(`Este titular tem cadastro na loja e sua sessão não pode alterá-lo (${reason}). Nada foi anonimizado.`, 409, 'CUSTOMER360_COMMERCE_REQUIRED');
-        if (context) commerceResult = await anonymizeCommerceCustomers(context, { customerIds: identity.commerce.map((item) => item.id), phones: identity.phones, emails: identity.emails, operador: operatorLabel(req.user) });
+      if (commerceEnabled()) {
+        const { context } = await commerceContext(req, 'customers.write');
+        if (!context) throw httpError('Commerce indisponível para validar a anonimização. Nada foi alterado.', 503, 'CUSTOMER360_COMMERCE_UNAVAILABLE');
+        if (identity.commerce.length || identity.phones.length || identity.emails.length) {
+          commerceResult = await anonymizeCommerceCustomers(context, { customerIds: identity.commerce.map((item) => item.id), phones: identity.phones, emails: identity.emails, operador: operatorLabel(req.user) });
+        }
       }
       await trail(req, loaded, 'anonymize', { motivo });
       const localResult = customerStore.anonymizeLocalCustomer(legacyEmpresaId(req), { clientIds: identity.local.map((item) => item.id), phones: identity.phones, refs: loaded.allRefs, operador: operatorLabel(req.user) });

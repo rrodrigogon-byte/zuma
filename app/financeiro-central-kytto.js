@@ -63,6 +63,11 @@ function serializar(lancamento) {
   };
 }
 
+export function obterLancamento(empresaId, id) {
+  const lancamento = db().financeiroKytto?.empresas?.[String(empresaId)]?.lancamentos?.[String(id)];
+  return lancamento?.empresaId === String(empresaId) ? serializar(lancamento) : null;
+}
+
 export function registrarLancamento(empresaId, dados = {}) {
   const store = storeEmpresa(empresaId);
   const tipo = String(dados.tipo || '').toLowerCase();

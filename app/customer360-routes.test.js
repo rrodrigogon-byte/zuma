@@ -70,12 +70,12 @@ test('papéis: revelar para admin/organizador, exportar só admin', () => {
 
 test('busca, ficha mascarada com auditoria e loja degradada sem derrubar', async () => {
   const audits = [];
-  await withServer({ id: 'u', nome: 'Ana', role: 'staff' }, fakeDeps({ commerce: true, audits }), async (base) => {
+  await withServer({ id: 'u', nome: 'Ana', role: 'staff' }, fakeDeps({ commerce: false, audits }), async (base) => {
     const search = await (await fetch(`${base}?q=joao`)).json();
     assert.equal(search.total, 1);
     assert.equal(search.items[0].ref, 'dino:cli-1');
     assert.equal(search.items[0].telefone, '(65) •••••-0000');
-    assert.deepEqual(search.fontes.loja, { disponivel: false, motivo: 'sem_permissao' });
+    assert.deepEqual(search.fontes.loja, { disponivel: false, motivo: 'desativado' });
 
     const response = await fetch(`${base}/dino:cli-1`);
     assert.equal(response.status, 200);
@@ -86,7 +86,7 @@ test('busca, ficha mascarada com auditoria e loja degradada sem derrubar', async
     assert.equal(profile.indicadores.receitaBarbearia, 75);
     assert.equal(profile.indicadores.aReceber, 40);
     assert.equal(profile.indicadores.pontos, 75);
-    assert.equal(profile.fontes.find((item) => item.fonte === 'pedidos').motivo, 'sem_permissao');
+    assert.equal(profile.fontes.find((item) => item.fonte === 'pedidos').motivo, 'desativado');
     assert.deepEqual(profile.permissoes, { revelar: false, exportar: false, gerenciar: false, anonimizar: false, verAcessos: false });
     assert.deepEqual(audits.map((item) => item.acao), ['VIEW CUSTOMER360']);
 
@@ -96,6 +96,62 @@ test('busca, ficha mascarada com auditoria e loja degradada sem derrubar', async
     assert.equal(forbidden.status, 403);
     assert.equal((await fetch(`${base}/dino:cli-1/exportar`)).status, 403);
   });
+});
+
+test('Commerce ativo: permissão ou escopo negados não degradam para dados legados do cliente', async () => {
+  for (const code of ['PERMISSION_DENIED', 'TENANT_CONTEXT_REQUIRED', 'STORE_SCOPE_MISMATCH']) {
+    const audits = [];
+    const deps = fakeDeps({ commerce: true, audits });
+    deps.requireCommercePermission = async () => { throw Object.assign(new Error('negado'), { code }); };
+    await withServer({ id: 'u', nome: 'Ana', role: 'staff' }, deps, async (base) => {
+      for (const path of ['', '/carteira', '/duplicados', '/dino:cli-1']) {
+        const response = await fetch(`${base}${path}`);
+        assert.equal(response.status, 403, `${code}: ${path}`);
+        const body = await response.json();
+        assert.ok(!JSON.stringify(body).includes('João Silva'), 'PII local não deve sair no fallback');
+      }
+    });
+    assert.deepEqual(audits, []);
+  }
+});
+
+test('Commerce ativo: vínculo e separação exigem customers.write antes de mutar ou auditar', async () => {
+  const audits = [];
+  const deps = fakeDeps({ commerce: true, audits });
+  deps.requireCommercePermission = async (_req, permission) => {
+    if (permission === 'customers.write') throw Object.assign(new Error('negado'), { code: 'PERMISSION_DENIED' });
+    return { empresaId: 'e1', lojaId: null, usuarioId: 'u' };
+  };
+  await withServer({ id: 'u', nome: 'Gestor', role: 'admin' }, deps, async (base) => {
+    for (const path of ['/vinculos', '/separacoes']) {
+      const response = await fetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ a: 'dino:cli-1', b: 'dino:cli-2' }) });
+      assert.equal(response.status, 403, path);
+    }
+  });
+  assert.deepEqual(deps.customerStore.state.links, []);
+  assert.deepEqual(deps.customerStore.state.separations, []);
+  assert.deepEqual(audits, []);
+});
+
+test('Commerce ativo: indisponibilidade do autorizador retorna 503 sem fallback nem escrita local', async () => {
+  const audits = [];
+  const deps = fakeDeps({ commerce: true, audits });
+  deps.requireCommercePermission = async () => { throw Object.assign(new Error('erro de conexão interno'), { code: 'DB_UNAVAILABLE' }); };
+  await withServer({ id: 'u', nome: 'Gestor', role: 'admin' }, deps, async (base) => {
+    const read = await fetch(base);
+    assert.equal(read.status, 503);
+    assert.equal(JSON.stringify(await read.json()).includes('João Silva'), false);
+    for (const path of ['/vinculos', '/separacoes']) {
+      const response = await fetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ a: 'dino:cli-1', b: 'dino:cli-2' }) });
+      assert.equal(response.status, 503, path);
+    }
+    const anon = await fetch(`${base}/dino:cli-1/anonimizar`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ confirmacao: 'ANONIMIZAR', motivo: 'pedido do titular protocolo 123' }) });
+    assert.equal(anon.status, 503);
+  });
+  assert.deepEqual(deps.customerStore.state.links, []);
+  assert.deepEqual(deps.customerStore.state.separations, []);
+  assert.equal(deps.customerStore.state.anonymized, null);
+  assert.deepEqual(audits, []);
 });
 
 test('revelar exige motivo, retorna o valor e audita; exportar entrega JSON completo', async () => {
@@ -180,7 +236,7 @@ test('staff não unifica, não vê acessos e não anonimiza', async () => {
   });
 });
 
-test('anonimização recusa quando há cadastro na loja e a sessão não pode alterá-lo', async () => {
+test('anonimização recusa com 403 quando há cadastro na loja sem customers.write', async () => {
   const deps = fakeDeps({ commerce: true });
   deps.requireCommercePermission = async (_req, permission) => {
     if (permission === 'customers.read') return { empresaId: '11111111-1111-4111-8111-111111111111', lojaId: null, usuarioId: 'u' };
@@ -193,7 +249,7 @@ test('anonimização recusa quando há cadastro na loja e a sessão não pode al
   try {
     await withServer({ id: 'u', nome: 'Rodrigo', role: 'admin' }, deps, async (base) => {
       const res = await fetch(`${base}/dino:cli-1/anonimizar`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ confirmacao: 'ANONIMIZAR', motivo: 'pedido do titular protocolo 123' }) });
-      assert.equal(res.status, 409);
+      assert.equal(res.status, 403);
       assert.equal(deps.customerStore.state.anonymized, null, 'nada foi anonimizado');
     });
   } finally { db.queryRead = original; }
