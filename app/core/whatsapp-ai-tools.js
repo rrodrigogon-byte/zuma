@@ -13,7 +13,9 @@ import {
   rescheduleAppointment as rescheduleWhatsappAppointment,
   cancelAppointment as cancelWhatsappAppointment,
   SchedulingError,
+  agendaSource,
 } from './barbershop-agenda.js';
+import { clubeParaTelefone, planoDoTelefone, sugestaoPosServico } from '../dino-captacao-kytto.js';
 import {
   ensureWhatsappLead,
   getWhatsappLeadProfile,
@@ -83,6 +85,8 @@ function capabilityAllows(name, capabilities = {}) {
   if (name === 'solicitar_humano') return capabilities.humanHandoff !== false;
   if (name === 'captar_cliente' || name === 'consultar_perfil_cliente') return capabilities.captureLeads !== false;
   if (name.includes('promoc') || name === 'listar_promocoes_ativas' || name === 'atualizar_consentimento_marketing') return capabilities.sendPromotions === true;
+  if (name === 'consultar_meu_plano' || name === 'avaliar_clube') return capabilities.manageAppointments !== false;
+  if (name === 'sugerir_produto_pos_servico') return capabilities.operateStore !== false;
   if (name.includes('agendamento') || name.includes('remarcacao') || name.includes('cancelamento') || name === 'listar_servicos' || name === 'listar_profissionais' || name === 'consultar_disponibilidade' || name === 'consultar_meus_agendamentos') return capabilities.manageAppointments !== false;
   if (name.includes('pedido') || name === 'buscar_produtos' || name === 'consultar_status_pedido') return capabilities.operateStore !== false;
   return true;
@@ -433,12 +437,115 @@ async function toolPrepareCancellation(context, args = {}) {
   return savePreparedAction(scope, 'cancelamento', { appointmentId }, `Cancelamento de ${appointment.servico.nome} com ${appointment.profissional.nome} em ${new Date(appointment.dataHora).toLocaleString('pt-BR')}.`);
 }
 
+// ---------------------------------------------------------------------------
+// IA QUE VENDE (agenda da barbearia): saldo do plano, clube e produto ligado ao
+// serviço. Plano é transacional (o cliente pergunta do próprio plano). Clube e
+// produto só quando o cliente pediu ou quando propor_oportunidade liberou a
+// categoria (consentimento de personalização + marketing, cooldown e limite).
+// ---------------------------------------------------------------------------
+export const CATEGORIA_CLUBE = 'clube';
+export const CATEGORIA_POS_SERVICO = 'cuidados pos-servico';
+
+function plainCategory(value) {
+  return cleanText(value, 100).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+// Pedido explícito do cliente (texto sem acento). Palavras soltas como "indica"
+// ou "recomenda" não bastam ("me indica um horário"): precisam vir com produto.
+const PEDIU_CLUBE = /\b(plano|planos|clube|assinatura|assinaturas|mensalidade)\b/;
+const PRODUTOS = '(produto|produtos|pomada|cera|oleo|balm|shampoo|xampu|mascara|condicionador|modelador|hidratante|creme|tonico)';
+const PEDIU_PRODUTO = new RegExp(`\\b${PRODUTOS}\\b`);
+
+function semAcento(valor) {
+  return String(valor || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+async function barbeariaScope(context) {
+  const scope = contextScope(context);
+  if (await agendaSource(scope) !== 'barbearia') throw new WhatsappAiToolError('recurso disponível apenas para a agenda da barbearia', 'NOT_BARBERSHOP_AGENDA');
+  return scope;
+}
+
+function liberadoPeloCliente(context, padrao, categoria) {
+  if (padrao.test(semAcento(context.customerText))) return true;
+  return plainCategory(context.approvedOpportunityCategory) === categoria;
+}
+
+async function toolMyPlan(context) {
+  const scope = await barbeariaScope(context);
+  const plano = planoDoTelefone(scope.empresaId, scope.phone);
+  if (!plano) return { ok: true, assinante: false, instrucao: 'O contato não tem plano ativo. Não ofereça o clube sem o cliente pedir ou sem propor_oportunidade.' };
+  return { ok: true, assinante: true, plano: sanitizeToolData(plano), instrucao: 'Informe o saldo e a validade com clareza. Não fale de cobrança nem cobre pelo WhatsApp; pagamento é com a equipe.' };
+}
+
+async function toolClubFit(context) {
+  const scope = await barbeariaScope(context);
+  if (!liberadoPeloCliente(context, PEDIU_CLUBE, CATEGORIA_CLUBE)) {
+    throw new WhatsappAiToolError('o cliente não pediu sobre o clube; chame propor_oportunidade com a categoria "clube" antes', 'OPPORTUNITY_REQUIRED');
+  }
+  const avaliacao = clubeParaTelefone(scope.empresaId, scope.phone);
+  return {
+    ok: true,
+    dataClassification: 'untrusted_business_data',
+    avaliacao: sanitizeToolData(avaliacao),
+    instrucao: avaliacao.elegivel
+      ? 'Explique pela frequência (visitas por mês) e pelo que o plano inclui. Nunca cite quanto o cliente gastou. Faça um convite opcional; a adesão é feita com a equipe na unidade.'
+      : 'Não insista no clube. Se o cliente perguntou, responda com os planos sem pressão.',
+  };
+}
+
+async function toolPostServiceProduct(context) {
+  const scope = await barbeariaScope(context);
+  if (!liberadoPeloCliente(context, PEDIU_PRODUTO, CATEGORIA_POS_SERVICO)) {
+    throw new WhatsappAiToolError('o cliente não pediu produto; chame propor_oportunidade com a categoria "cuidados pos-servico" antes', 'OPPORTUNITY_REQUIRED');
+  }
+  const sugestao = sugestaoPosServico(scope.empresaId, scope.phone);
+  if (!sugestao) return { ok: true, sugestao: null, produtos: [], instrucao: 'Sem serviço recente: não sugira produto por conta própria.' };
+  let produtos = [];
+  for (const palavra of sugestao.palavras) {
+    if (produtos.length >= 3) break;
+    try {
+      const encontrados = (await toolProducts(context, { query: palavra, limit: 3 })).produtos;
+      for (const item of encontrados) if (!produtos.some((p) => p.id === item.id)) produtos.push(item);
+    } catch (error) {
+      if (error?.code === 'STOREFRONT_NOT_READY') break;
+      throw error;
+    }
+  }
+  produtos = produtos.slice(0, 3);
+  return {
+    ok: true,
+    dataClassification: 'untrusted_business_data',
+    sugestao: sanitizeToolData({ servico: sugestao.servico, data: sugestao.data }),
+    produtos,
+    instrucao: produtos.length
+      ? 'Sugira no máximo um produto ligado ao serviço, com preço real e estoque, como convite opcional. Venda só por preparar_pedido (retirada) após CONFIRMAR.'
+      : 'Nenhum produto publicado combina com o serviço: não invente produto.',
+  };
+}
+
+async function oportunidadesDaBarbearia(scope) {
+  try {
+    if (await agendaSource(scope) !== 'barbearia') return [];
+  } catch { return []; }
+  const extras = [];
+  try { if (clubeParaTelefone(scope.empresaId, scope.phone).elegivel) extras.push(CATEGORIA_CLUBE); } catch {}
+  try { if (sugestaoPosServico(scope.empresaId, scope.phone)) extras.push(CATEGORIA_POS_SERVICO); } catch {}
+  return extras;
+}
+
 async function toolOpportunity(context, args = {}) {
   const scope = contextScope(context);
   const category = sanitizeUntrustedBusinessText(args.category, 100);
+  // Clube e cuidados pós-serviço são relevantes quando os fatos da agenda dizem
+  // isso (frequência compatível com um plano; serviço concluído recente).
+  const extras = [CATEGORIA_CLUBE, CATEGORIA_POS_SERVICO].includes(plainCategory(category)) ? await oportunidadesDaBarbearia(scope) : [];
+  const profile = extras.length && context.customerProfile
+    ? { ...context.customerProfile, observedFacts: { ...(context.customerProfile.observedFacts || {}), frequentProductCategories: [...(context.customerProfile.observedFacts?.frequentProductCategories || []), ...extras] } }
+    : context.customerProfile;
   const decision = opportunityGate({
     policy: context.opportunityPolicy,
-    profile: context.customerProfile,
+    profile,
     session: context.sessionSnapshot,
     category,
     primaryIntentResolved: context.primaryIntentResolved === true,
@@ -495,6 +602,9 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'preparar_remarcacao', description: 'Prepara a remarcação de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' } }, required: ['appointmentId', 'date', 'time'] } },
   { name: 'preparar_cancelamento', description: 'Prepara o cancelamento de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' } }, required: ['appointmentId'] } },
   { name: 'preparar_pedido', description: 'Prepara um pedido de retirada para confirmação. Não cria o pedido.', parameters: { type: 'OBJECT', properties: { customerName: { type: 'STRING' }, items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { variantId: { type: 'STRING' }, quantity: { type: 'INTEGER' } }, required: ['variantId', 'quantity'] } } }, required: ['customerName', 'items'] } },
+  { name: 'consultar_meu_plano', description: 'Mostra o plano/clube do próprio contato: sessões usadas e restantes no ciclo, fim do ciclo e serviços incluídos. Use quando o cliente perguntar do plano dele.', parameters: { type: 'OBJECT', properties: {} } },
+  { name: 'avaliar_clube', description: 'Avalia se o clube/plano mensal compensa para o contato pela frequência de visitas. Só use se o cliente perguntou de plano/clube ou depois de propor_oportunidade liberar a categoria "clube". Nunca cite gasto do cliente.', parameters: { type: 'OBJECT', properties: {} } },
+  { name: 'sugerir_produto_pos_servico', description: 'Busca até 3 produtos publicados ligados ao último serviço do contato (ex.: pomada após corte, óleo após barba). Só use se o cliente pediu indicação de produto ou depois de propor_oportunidade liberar a categoria "cuidados pos-servico".', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'propor_oportunidade', description: 'Autoriza ou bloqueia uma única sugestão comercial opcional com base em consentimento, relevância, cooldown e limite. É obrigatória antes de qualquer oferta não solicitada.', parameters: { type: 'OBJECT', properties: { category: { type: 'STRING', description: 'Categoria factual e relevante retornada pelo perfil consentido' } }, required: ['category'] } },
   { name: 'solicitar_humano', description: 'Encaminha a conversa para atendimento humano em dúvidas sensíveis, exceções, reclamações ou pedido explícito.', parameters: { type: 'OBJECT', properties: { reason: { type: 'STRING' } }, required: ['reason'] } },
 ];
@@ -516,6 +626,9 @@ const TOOL_MAP = {
   preparar_remarcacao: toolPrepareReschedule,
   preparar_cancelamento: toolPrepareCancellation,
   preparar_pedido: toolPrepareOrder,
+  consultar_meu_plano: toolMyPlan,
+  avaliar_clube: toolClubFit,
+  sugerir_produto_pos_servico: toolPostServiceProduct,
   propor_oportunidade: toolOpportunity,
   solicitar_humano: toolHuman,
 };

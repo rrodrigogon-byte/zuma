@@ -49,7 +49,7 @@ import { listAdminUserDirectory } from './core/admin-user-directory.js';
 import { listCommerceTenants, provisionCommerceTenant } from './core/commerce-tenants.js';
 import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
 import * as barbeariaFiscalKytto from './barbearia-fiscal-kytto.js';
-import { appointmentNotificationMetrics, queueAppointmentNotifications } from './core/barbershop-appointment-notifications.js';
+import { appointmentNotificationMetrics, queueAppointmentNotifications, queueReviewRequest } from './core/barbershop-appointment-notifications.js';
 import { avisarListaEspera } from './core/barbershop-agenda.js';
 import * as captacaoKytto from './dino-captacao-kytto.js';
 import * as clientesKytto from './clientes-contas-kytto.js';
@@ -2773,6 +2773,7 @@ app.patch('/api/admin/barbearia/agenda/:id/status', async (req, res) => {
     let listaEspera = null;
     let indicacao = null;
     let assinatura = null;
+    let avaliacao = null;
     try {
       if (status === 'cancelado') {
         const contexto = { empresaId, lojaId: agendamento.lojaId || legacyLojaId(req), legacyEmpresaId: empresaId };
@@ -2786,12 +2787,14 @@ app.patch('/api/admin/barbearia/agenda/:id/status', async (req, res) => {
         // Cobrado avulso (registrarFinanceiro) não usa o plano, salvo pedido explícito.
         const usarPlano = req.body?.usarPlano === true || (req.body?.usarPlano !== false && req.body?.registrarFinanceiro !== true);
         if (usarPlano) assinatura = captacaoKytto.consumirAssinaturaNaConclusao(empresaId, agendamento);
+        // NPS: pede a avaliação pelo WhatsApp algumas horas depois (só com consentimento).
+        avaliacao = await queueReviewRequest({ empresaId, lojaId: agendamento.lojaId || legacyLojaId(req), legacyEmpresaId: empresaId }, captacaoKytto.garantirCodigoConfirmacao(empresaId, agendamento.id) || agendamento).catch(() => ({ queued: 0, skipped: true, reason: 'queue_unavailable' }));
       }
     } catch (erroCaptacao) {
       // O status e o financeiro já foram gravados: captação nunca derruba a resposta.
       console.error('[Captação] pós-status:', erroCaptacao?.message || erroCaptacao);
     }
-    res.json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(empresaId, agendamento), financeiro, notificacao, listaEspera, indicacao, assinatura: assinatura ? { id: assinatura.assinatura.id, sessoesRestantes: assinatura.sessoesRestantes, usosNoCiclo: assinatura.usosNoCiclo } : null });
+    res.json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(empresaId, agendamento), financeiro, notificacao, listaEspera, indicacao, avaliacao, assinatura: assinatura ? { id: assinatura.assinatura.id, sessoesRestantes: assinatura.sessoesRestantes, usosNoCiclo: assinatura.usosNoCiclo } : null });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
@@ -2817,9 +2820,16 @@ app.put('/api/admin/barbearia/captacao/configuracao', (req, res) => {
   if (!gestaoDaUnidade(req, res)) return;
   try { res.json({ ok: true, configuracao: captacaoKytto.salvarConfiguracaoCaptacao(legacyEmpresaId(req), req.body || {}) }); } catch (error) { respostaCaptacao(res, error); }
 });
+app.get('/api/admin/barbearia/captacao/nps', (req, res) => {
+  // Comentários de todos os barbeiros: só a gestão da unidade vê o consolidado.
+  if (!gestaoDaUnidade(req, res)) return;
+  try {
+    res.json({ ok: true, ...captacaoKytto.painelNps(legacyEmpresaId(req), { inicio: req.query?.inicio, fim: req.query?.fim, lojaId: legacyLojaId(req) }) });
+  } catch (error) { respostaCaptacao(res, error); }
+});
 app.get('/api/admin/barbearia/captacao/lista-espera', (req, res) => {
   try {
-    const itens = captacaoKytto.listarListaEspera(legacyEmpresaId(req), { data: req.query?.data, status: req.query?.status });
+    const itens = captacaoKytto.listarListaEspera(legacyEmpresaId(req), { data: req.query?.data, status: req.query?.status, lojaId: legacyLojaId(req) });
     res.json({ ok: true, itens, total: itens.length });
   } catch (error) { respostaCaptacao(res, error); }
 });
@@ -2828,7 +2838,7 @@ app.post('/api/admin/barbearia/captacao/lista-espera', (req, res) => {
 });
 app.patch('/api/admin/barbearia/captacao/lista-espera/:id/status', (req, res) => {
   try {
-    const item = captacaoKytto.alterarStatusListaEspera(legacyEmpresaId(req), req.params.id, req.body?.status);
+    const item = captacaoKytto.alterarStatusListaEspera(legacyEmpresaId(req), req.params.id, req.body?.status, legacyLojaId(req));
     if (!item) return res.status(404).json({ error: 'Registro da lista de espera não encontrado.' });
     res.json({ ok: true, item });
   } catch (error) { respostaCaptacao(res, error); }
@@ -6081,8 +6091,10 @@ app.get('/api/me/chave', auth, (req, res) => {
 // Agendamento público da Barbearia: o módulo é carregado de forma não-fatal para
 // que uma indisponibilidade isolada nunca impeça o painel, o PDV ou o healthcheck
 // de iniciarem. As confirmações recebem um limite mais restritivo que as leituras.
+let metaAgendamentoPublico = null;
 try {
-  const { default: agendamentoPublico } = await import('./modules/barbearia/routes-publico.js');
+  const { default: agendamentoPublico, metaPublicaDoSlug } = await import('./modules/barbearia/routes-publico.js');
+  metaAgendamentoPublico = metaPublicaDoSlug;
   // Limite por slug normalizado + rota: "DINO", "dino-" e "%64ino" contam juntos.
   app.use('/api/publico/agendamento', (req, res, next) => {
     const [slugCru = '', ...resto] = String(req.path || '').split('/').filter(Boolean);
@@ -6100,6 +6112,73 @@ try {
 
 // ---- estático: serve React SPA (build do web/) ----
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Meta tags do link de agendamento/avaliação: quem compartilha o link no WhatsApp
+// ou Instagram vê o nome da barbearia (e o Google indexa a página certa).
+const indexHtmlCache = { mtime: 0, html: '' };
+function indexHtml() {
+  const arquivo = path.join(__dirname, 'public', 'index.html');
+  const mtime = fs.statSync(arquivo).mtimeMs;
+  if (indexHtmlCache.mtime !== mtime) { indexHtmlCache.html = fs.readFileSync(arquivo, 'utf8'); indexHtmlCache.mtime = mtime; }
+  return indexHtmlCache.html;
+}
+function escaparHtml(valor) {
+  return String(valor ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function trocarMeta(html, { titulo, descricao, url, imagem, indexar }) {
+  // Replacer em função: "$&", "$'" etc. no nome da barbearia não viram padrões do replace.
+  const trocar = (texto, regex, valor) => texto.replace(regex, (_, antes, depois) => `${antes}${valor}${depois}`);
+  const t = escaparHtml(titulo); const d = escaparHtml(descricao); const i = escaparHtml(imagem);
+  let saida = html.replace(/<title>[^<]*<\/title>/, () => `<title>${t}</title>`);
+  saida = trocar(saida, /(<meta name="description" content=")[^"]*(")/, d);
+  saida = trocar(saida, /(<meta name="robots" content=")[^"]*(")/, indexar ? 'index, follow' : 'noindex, nofollow');
+  saida = trocar(saida, /(<meta property="og:title" content=")[^"]*(")/, t);
+  saida = trocar(saida, /(<meta property="og:description" content=")[^"]*(")/, d);
+  saida = trocar(saida, /(<meta name="twitter:title" content=")[^"]*(")/, t);
+  saida = trocar(saida, /(<meta name="twitter:description" content=")[^"]*(")/, d);
+  if (url) {
+    const u = escaparHtml(url);
+    saida = trocar(saida, /(<link rel="canonical" href=")[^"]*(")/, u);
+    saida = trocar(saida, /(<meta property="og:url" content=")[^"]*(")/, u);
+  } else {
+    // Sem endereço público configurado, não inventa canonical a partir do Host da requisição.
+    saida = saida.replace(/\s*<link rel="canonical" href="[^"]*" \/>/, '').replace(/\s*<meta property="og:url" content="[^"]*" \/>/, '');
+  }
+  if (imagem) {
+    saida = trocar(saida, /(<meta property="og:image" content=")[^"]*(")/, i);
+    saida = trocar(saida, /(<meta name="twitter:image" content=")[^"]*(")/, i);
+  }
+  return saida;
+}
+function basePublicaConfigurada(slug) {
+  // Sem domínio por empresa validado, não emitir canonical de outra empresa.
+  if (slug !== 'dino') return '';
+  const base = String(process.env.PUBLIC_BASE_URL || process.env.SERVER_URL || '').trim().replace(/\/+$/, '');
+  return /^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(base) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(base) ? base : '';
+}
+app.get(['/agendar/:slug', '/avaliar/:slug'], (req, res, next) => {
+  try {
+    const meta = metaAgendamentoPublico?.(req.params.slug);
+    if (!meta) return next();
+    const base = basePublicaConfigurada(meta.slug);
+    const avaliar = req.path.startsWith('/avaliar/');
+    const url = base ? `${base}/${avaliar ? 'avaliar' : 'agendar'}/${encodeURIComponent(meta.slug)}` : '';
+    const ehDino = meta.slug === 'dino';
+    const html = trocarMeta(indexHtml(), {
+      titulo: avaliar ? `Avalie seu atendimento | ${meta.nome}` : `Agende seu horário | ${meta.nome}`,
+      descricao: avaliar
+        ? `Conte como foi seu atendimento na ${meta.nome}. Leva 10 segundos.`
+        : `Agende online na ${meta.nome}: escolha o serviço, o profissional e o horário em poucos toques.${meta.endereco ? ` ${meta.endereco}.` : ''}`,
+      url,
+      imagem: ehDino && base ? `${base}/brand/dino-barbearia-logo.png` : '',
+      indexar: !avaliar,
+    });
+    res.setHeader('Cache-Control', 'no-cache');
+    return res.type('html').send(html);
+  } catch (_) {
+    return next();
+  }
+});
 
 // SPA fallback — React Router client-side routing
 app.get('*', (req, res) => {

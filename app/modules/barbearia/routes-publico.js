@@ -269,13 +269,13 @@ function autoatendimento(handler) {
 
 // Autoatendimento: código + telefone no corpo (nunca na URL).
 router.post('/:slug/meu-agendamento', autoatendimento(async (req, res, identidade) => {
-  const visao = captacao.consultarAgendamentoCliente(identidade.empresaId, { codigo: req.body?.codigo, telefone: req.body?.cliente_telefone });
+  const visao = captacao.consultarAgendamentoCliente(identidade.empresaId, { codigo: req.body?.codigo, telefone: req.body?.cliente_telefone, lojaId: identidade.lojaId });
   res.setHeader('Cache-Control', 'no-store');
   return res.json({ ok: true, agendamento: visao });
 }));
 
 router.post('/:slug/meu-agendamento/cancelar', autoatendimento(async (req, res, identidade) => {
-  const { agendamento, visao } = captacao.cancelarAgendamentoCliente(identidade.empresaId, { codigo: req.body?.codigo, telefone: req.body?.cliente_telefone, motivo: req.body?.motivo });
+  const { agendamento, visao } = captacao.cancelarAgendamentoCliente(identidade.empresaId, { codigo: req.body?.codigo, telefone: req.body?.cliente_telefone, motivo: req.body?.motivo, lojaId: identidade.lojaId });
   const contexto = { empresaId: identidade.empresaId, lojaId: agendamento.lojaId || identidade.lojaId, legacyEmpresaId: identidade.empresaId };
   await queueAppointmentNotifications(contexto, agendamento, 'cancelado').catch(() => null);
   await avisarListaEspera(contexto, agendamento, captacao.candidatosParaVaga(identidade.empresaId, agendamento)).catch(() => null);
@@ -297,5 +297,27 @@ router.post('/:slug/meu-agendamento/remarcar', autoatendimento(async (req, res, 
   res.setHeader('Cache-Control', 'no-store');
   return res.json({ ok: true, agendamento: visao });
 }));
+
+// NPS pós-atendimento: nota 0–10 do atendimento concluído (código + telefone no corpo).
+router.post('/:slug/avaliar', autoatendimento(async (req, res, identidade) => {
+  const corpo = req.body || {};
+  const resultado = captacao.registrarAvaliacao(identidade.empresaId, {
+    codigo: corpo.codigo,
+    telefone: corpo.cliente_telefone,
+    nota: corpo.nota,
+    comentario: texto(corpo.comentario, 600),
+    lojaId: identidade.lojaId,
+  });
+  res.setHeader('Cache-Control', 'no-store');
+  return res.status(resultado.repetida ? 200 : 201).json({ ok: true, avaliacao: resultado });
+}));
+
+/** Dados públicos mínimos para as meta tags (SEO/compartilhamento) do link. */
+export function metaPublicaDoSlug(slugRecebido) {
+  const identidade = identidadePublica(slugRecebido);
+  if (!identidade) return null;
+  const { nome, slug: slugPublico, endereco } = identidade.estabelecimento;
+  return { nome, slug: slugPublico, endereco };
+}
 
 export default router;

@@ -74,6 +74,8 @@ function configuracaoPadrao() {
     pontosIndicado: 50,
     carenciaInadimplenciaDias: 3,
     avisosListaEsperaPorVaga: 3,
+    googleReviewUrl: '',
+    pedirAvaliacaoAposMinutos: 120,
   };
 }
 
@@ -88,6 +90,7 @@ function captacao(empresaId) {
   estado.codigosIndicacao ||= {};
   estado.assinaturas ||= {};
   estado.metasProfissionais ||= {};
+  estado.avaliacoes ||= {};
   estado.configuracao = { ...configuracaoPadrao(), ...(estado.configuracao || {}) };
   return estado;
 }
@@ -105,10 +108,27 @@ export function salvarConfiguracaoCaptacao(empresaId, dados = {}) {
     pontosIndicado: inteiro(dados.pontosIndicado, atual.pontosIndicado, 0, 100000),
     carenciaInadimplenciaDias: inteiro(dados.carenciaInadimplenciaDias, atual.carenciaInadimplenciaDias, 0, 60),
     avisosListaEsperaPorVaga: inteiro(dados.avisosListaEsperaPorVaga, atual.avisosListaEsperaPorVaga, 1, 20),
+    googleReviewUrl: dados.googleReviewUrl === undefined ? (atual.googleReviewUrl || '') : urlAvaliacaoGoogle(dados.googleReviewUrl),
+    pedirAvaliacaoAposMinutos: inteiro(dados.pedirAvaliacaoAposMinutos, atual.pedirAvaliacaoAposMinutos ?? 120, 0, 2880),
     atualizadoEm: new Date().toISOString(),
   };
   save();
   return { ...estado.configuracao };
+}
+
+// Só links do Google (avaliação da empresa): nunca um endereço arbitrário vindo do admin.
+function urlAvaliacaoGoogle(valor) {
+  const bruto = texto(valor, 500);
+  if (!bruto) return '';
+  let url;
+  try { url = new URL(bruto); } catch { throw new CaptacaoError('Link de avaliação do Google inválido.', 'GOOGLE_URL_INVALIDA'); }
+  const host = url.hostname.toLowerCase();
+  const permitido = url.protocol === 'https:' && !url.username && !url.password && !url.port
+    && (host === 'g.page' || host === 'maps.app.goo.gl' || host === 'goo.gl'
+      || host === 'google.com' || host.endsWith('.google.com')
+      || host === 'google.com.br' || host.endsWith('.google.com.br'));
+  if (!permitido) throw new CaptacaoError('Use o link de avaliação do Google (g.page, maps.app.goo.gl ou google.com).', 'GOOGLE_URL_INVALIDA');
+  return url.toString();
 }
 
 function mapaPorId(lista) {
@@ -148,12 +168,13 @@ function politicaCancelamentoMs(empresaId) {
   return horas * 60 * 60 * 1000;
 }
 
-function localizarPorCodigo(empresaId, codigo, telefone) {
+function localizarPorCodigo(empresaId, codigo, telefone, lojaId) {
   const codigoNormalizado = texto(codigo, 20).toUpperCase().replace(/[^A-Z0-9]/g, '');
   const chave = telefoneChave(telefone);
   if (codigoNormalizado.length < 6 || !chave) throw new CaptacaoError('Informe o código do agendamento e o telefone usado na reserva.', 'DADOS_INVALIDOS');
+  if (!lojaId) throw new CaptacaoError('Agendamento não encontrado. Confira o código e o telefone.', 'AGENDAMENTO_NAO_ENCONTRADO', 404);
   const agendamento = barbearia.listarAgendamentos(empresaId, {})
-    .find((item) => String(item.codigoConfirmacao || '').toUpperCase() === codigoNormalizado && telefoneChave(item.clienteTelefone) === chave);
+    .find((item) => String(item.lojaId || '') === String(lojaId) && String(item.codigoConfirmacao || '').toUpperCase() === codigoNormalizado && telefoneChave(item.clienteTelefone) === chave);
   // Mesma resposta para código errado e telefone errado: não confirma a existência do código.
   if (!agendamento) throw new CaptacaoError('Agendamento não encontrado. Confira o código e o telefone.', 'AGENDAMENTO_NAO_ENCONTRADO', 404);
   return agendamento;
@@ -184,12 +205,12 @@ function visaoPublicaAgendamento(empresaId, agendamento, opcoes = {}) {
   };
 }
 
-export function consultarAgendamentoCliente(empresaId, { codigo, telefone } = {}, opcoes = {}) {
-  return visaoPublicaAgendamento(empresaId, localizarPorCodigo(empresaId, codigo, telefone), opcoes);
+export function consultarAgendamentoCliente(empresaId, { codigo, telefone, lojaId } = {}, opcoes = {}) {
+  return visaoPublicaAgendamento(empresaId, localizarPorCodigo(empresaId, codigo, telefone, lojaId), opcoes);
 }
 
-export function cancelarAgendamentoCliente(empresaId, { codigo, telefone, motivo } = {}, opcoes = {}) {
-  const agendamento = localizarPorCodigo(empresaId, codigo, telefone);
+export function cancelarAgendamentoCliente(empresaId, { codigo, telefone, motivo, lojaId } = {}, opcoes = {}) {
+  const agendamento = localizarPorCodigo(empresaId, codigo, telefone, lojaId);
   const visao = visaoPublicaAgendamento(empresaId, agendamento, opcoes);
   if (!visao.podeCancelar) {
     throw new CaptacaoError(
@@ -207,7 +228,7 @@ export function cancelarAgendamentoCliente(empresaId, { codigo, telefone, motivo
 }
 
 export function remarcarAgendamentoCliente(empresaId, { codigo, telefone, data, horario, lojaId } = {}, opcoes = {}) {
-  const agendamento = localizarPorCodigo(empresaId, codigo, telefone);
+  const agendamento = localizarPorCodigo(empresaId, codigo, telefone, lojaId);
   const visao = visaoPublicaAgendamento(empresaId, agendamento, opcoes);
   if (!visao.podeRemarcar) {
     throw new CaptacaoError(
@@ -345,16 +366,17 @@ export function revogarAvisosListaEspera(empresaId, telefone) {
 export function listarListaEspera(empresaId, filtros = {}) {
   expirarListaEspera(empresaId);
   return Object.values(captacao(empresaId).listaEspera)
+    .filter((item) => !filtros.lojaId || item.lojaId === filtros.lojaId)
     .filter((item) => !filtros.data || item.data === String(filtros.data))
     .filter((item) => !filtros.status || item.status === String(filtros.status))
     .sort((a, b) => a.data.localeCompare(b.data) || a.criadoEm.localeCompare(b.criadoEm))
     .map((item) => ({ ...item, avisos: [...(item.avisos || [])] }));
 }
 
-export function alterarStatusListaEspera(empresaId, id, status) {
+export function alterarStatusListaEspera(empresaId, id, status, lojaId = '') {
   const estado = captacao(empresaId);
   const registro = estado.listaEspera[String(id)];
-  if (!registro) return null;
+  if (!registro || (lojaId && registro.lojaId !== lojaId)) return null;
   if (!['aguardando', 'agendado', 'desistiu', 'expirado'].includes(String(status))) throw new CaptacaoError('Status inválido para a lista de espera.', 'STATUS_INVALIDO');
   registro.status = String(status);
   registro.atualizadoEm = new Date().toISOString();
@@ -789,6 +811,16 @@ export function candidatosAoClube(empresaId, { dias = 60 } = {}, opcoes = {}) {
 // RETORNO PREVISTO
 // ---------------------------------------------------------------------------
 
+// Convite manual de retorno pelo WhatsApp da equipe: só para quem autorizou
+// mensagens de atendimento (e não respondeu SAIR depois).
+function whatsappAutorizadoPara(empresaId, agendamento = {}) {
+  const chave = telefoneChave(agendamento.clienteTelefone);
+  const lista = clientesKytto.listarClientes(String(empresaId));
+  const cliente = (agendamento.clienteId && lista.find((item) => item.id === agendamento.clienteId))
+    || (chave && lista.find((item) => telefoneChave(item.telefone) === chave));
+  return cliente?.consentimentos?.whatsapp?.atendimento?.concedido === true;
+}
+
 function mediana(valores) {
   const ordenados = [...valores].sort((a, b) => a - b);
   if (!ordenados.length) return null;
@@ -867,6 +899,8 @@ export function retornosPrevistos(empresaId, { horizonteDias = 7, sugerirHorario
     itens.push({
       clienteId: ultima.clienteId || '',
       nome: ultima.clienteNome,
+      // Telefone só de quem autorizou o WhatsApp (minimização): é o que o convite usa.
+      ...(whatsappAutorizadoPara(empresaId, ultima) ? { telefone: texto(ultima.clienteTelefone, 30), whatsappAutorizado: true } : { whatsappAutorizado: false, temTelefone: Boolean(telefoneChave(ultima.clienteTelefone)) }),
       visitas: ordenadas.length,
       intervaloHabitualDias: Math.round(intervalo),
       ultimaVisita: ultima.dataAgenda || String(ultima.dataHora).slice(0, 10),
@@ -1013,5 +1047,196 @@ export function painelMetasProfissionais(empresaId, { mes, lojaId = '' } = {}, o
         noRitmo: meta?.receita ? projecao >= meta.receita : null,
       };
     }),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// IA QUE VENDE (onda 2): dados que a atendente do WhatsApp pode usar, sempre
+// pelo telefone da própria conversa e sem expor valores gastos.
+// ---------------------------------------------------------------------------
+
+function agendamentosConcluidosDoTelefone(empresaId, telefone, { desde = 0 } = {}) {
+  const chave = telefoneChave(telefone);
+  if (!chave) return [];
+  return barbearia.listarAgendamentos(empresaId, {})
+    .filter((item) => item.status === 'concluido' && telefoneChave(item.clienteTelefone) === chave)
+    .filter((item) => new Date(item.dataHora).valueOf() >= desde)
+    .sort((a, b) => new Date(b.dataHora) - new Date(a.dataHora));
+}
+
+/** Plano do próprio cliente (pedido por ele): nome, saldo do ciclo e validade. */
+export function planoDoTelefone(empresaId, telefone, opcoes = {}) {
+  const chave = telefoneChave(telefone);
+  if (!chave) return null;
+  const clientes = clientesKytto.listarClientes(String(empresaId)).filter((item) => telefoneChave(item.telefone) === chave).map((item) => item.id);
+  const assinatura = barbearia.listarAssinaturas(empresaId)
+    .find((item) => clientes.includes(item.clienteId) && ['ativa', 'pausada'].includes(item.status));
+  if (!assinatura) return null;
+  const resumo = resumoAssinatura(empresaId, assinatura.id, opcoes);
+  return {
+    plano: resumo.plano?.nome || 'Plano',
+    status: assinatura.status,
+    sessoesNoCiclo: resumo.limiteNoCiclo,
+    usadasNoCiclo: resumo.usosNoCiclo,
+    restantes: resumo.sessoesRestantes,
+    cicloTermina: dataLocal(new Date(resumo.ciclo.fim).valueOf()),
+    pagamentoEmDia: resumo.situacaoPagamento === 'em_dia',
+    servicosIncluidos: (resumo.plano?.servicosIds || []).map((id) => barbearia.listarServicos(empresaId, { incluirInativos: true }).find((s) => s.id === id)?.nome).filter(Boolean),
+  };
+}
+
+/**
+ * O clube compensa para este cliente? Compara a frequência dos últimos 60 dias
+ * com o plano mais barato. Devolve só frequência e o plano: a atendente não
+ * fala de quanto o cliente gastou.
+ */
+export function clubeParaTelefone(empresaId, telefone, { dias = 60 } = {}, opcoes = {}) {
+  const ms = agoraMs(opcoes);
+  if (planoDoTelefone(empresaId, telefone, opcoes)) return { elegivel: false, motivo: 'ja_assinante' };
+  const visitas = agendamentosConcluidosDoTelefone(empresaId, telefone, { desde: ms - dias * DIA_MS });
+  const planos = barbearia.listarPlanos(empresaId).filter((plano) => plano.preco > 0);
+  if (!planos.length) return { elegivel: false, motivo: 'sem_plano' };
+  if (visitas.length < 2) return { elegivel: false, motivo: 'poucas_visitas' };
+  const meses = Math.max(1, dias / 30);
+  const gastoMensal = visitas.reduce((soma, item) => soma + Number(item.valorRecebido || item.valor || 0), 0) / meses;
+  const servicosDoCliente = new Set(visitas.map((item) => item.servicoId));
+  const opcoesPlano = planos
+    .map((plano) => ({ plano, mensal: precoMensal(plano), cobre: !(plano.servicosIds || []).length || (plano.servicosIds || []).some((id) => servicosDoCliente.has(id)) }))
+    .filter((item) => item.cobre && item.mensal < gastoMensal)
+    .sort((a, b) => a.mensal - b.mensal);
+  if (!opcoesPlano.length) return { elegivel: false, motivo: 'plano_nao_compensa' };
+  const melhor = opcoesPlano[0];
+  return {
+    elegivel: true,
+    visitasPorMes: Number((visitas.length / meses).toFixed(1)),
+    plano: {
+      nome: melhor.plano.nome,
+      precoMensal: melhor.mensal,
+      sessoesPorCiclo: melhor.plano.sessoesIncluidas,
+      servicos: (melhor.plano.servicosIds || []).map((id) => barbearia.listarServicos(empresaId, { incluirInativos: true }).find((s) => s.id === id)?.nome).filter(Boolean),
+    },
+  };
+}
+
+const PALAVRAS_POR_SERVICO = [
+  [/barba|barbo/i, ['barba', 'óleo', 'balm']],
+  [/hidrata|progressiva|selagem|luzes|nevou|platin|descolor|pigment/i, ['shampoo', 'máscara', 'condicionador']],
+  [/corte|fade|degrad|pezinho|máquina|maquina/i, ['pomada', 'cera', 'modelador']],
+  [/sobrancelha|pele|limpeza/i, ['hidratante', 'facial']],
+];
+
+/** Último serviço concluído (até 14 dias) e as palavras para buscar produtos ligados a ele. */
+export function sugestaoPosServico(empresaId, telefone, { dias = 14 } = {}, opcoes = {}) {
+  const ultimo = agendamentosConcluidosDoTelefone(empresaId, telefone, { desde: agoraMs(opcoes) - dias * DIA_MS })[0];
+  if (!ultimo) return null;
+  const servico = barbearia.listarServicos(empresaId, { incluirInativos: true }).find((item) => item.id === ultimo.servicoId);
+  if (!servico) return null;
+  const texto = `${servico.nome} ${servico.categoria || ''}`;
+  const palavras = PALAVRAS_POR_SERVICO.find(([padrao]) => padrao.test(texto))?.[1] || ['cuidado'];
+  return { servico: servico.nome, data: ultimo.dataAgenda, palavras };
+}
+
+
+// ---------------------------------------------------------------------------
+// NPS PÓS-ATENDIMENTO
+// O cliente avalia o atendimento concluído com o código + telefone da reserva
+// (nada pessoal na URL). Uma avaliação por atendimento. O convite para avaliar
+// no Google vai para TODOS (a política do Google proíbe pedir avaliação só a
+// quem ficou satisfeito); muda apenas o agradecimento conforme a nota.
+// ---------------------------------------------------------------------------
+const PRAZO_AVALIACAO_DIAS = 30;
+
+/**
+ * Agendamento criado no balcão/admin não tem código; o link de avaliação (e o
+ * autoatendimento) precisa de um. Gera um código único só quando falta.
+ */
+export function garantirCodigoConfirmacao(empresaId, agendamentoId) {
+  const estado = db().barbearias?.[String(empresaId)];
+  const atual = estado?.agendamentos?.[String(agendamentoId)];
+  if (!atual) return null;
+  if (texto(atual.codigoConfirmacao, 20)) return { ...atual };
+  const usados = new Set(Object.values(estado.agendamentos).map((item) => String(item.codigoConfirmacao || '').toUpperCase()));
+  let codigo = '';
+  do { codigo = crypto.randomBytes(4).toString('hex').toUpperCase(); } while (usados.has(codigo));
+  atual.codigoConfirmacao = codigo;
+  save();
+  return { ...atual };
+}
+
+export function registrarAvaliacao(empresaId, { codigo, telefone, nota, comentario, lojaId } = {}, opcoes = {}) {
+  const valor = Number(nota);
+  if (!Number.isInteger(valor) || valor < 0 || valor > 10) throw new CaptacaoError('Escolha uma nota de 0 a 10.', 'NOTA_INVALIDA');
+  const agendamento = localizarPorCodigo(empresaId, codigo, telefone, lojaId);
+  if (agendamento.status !== 'concluido') throw new CaptacaoError('A avaliação abre depois que o atendimento é concluído.', 'ATENDIMENTO_NAO_CONCLUIDO', 409);
+  const ms = agoraMs(opcoes);
+  if (ms - new Date(agendamento.dataHora).valueOf() > PRAZO_AVALIACAO_DIAS * DIA_MS) throw new CaptacaoError('O prazo para avaliar este atendimento terminou.', 'AVALIACAO_EXPIRADA', 409);
+  const estado = captacao(empresaId);
+  const configuracao = estado.configuracao;
+  const convite = () => configuracao.googleReviewUrl || '';
+  const existente = estado.avaliacoes[agendamento.id];
+  if (existente) return { repetida: true, nota: existente.nota, googleReviewUrl: convite(existente.nota) };
+  estado.avaliacoes[agendamento.id] = {
+    id: agendamento.id,
+    agendamentoId: agendamento.id,
+    nota: valor,
+    comentario: texto(comentario, 600),
+    profissionalId: agendamento.profissionalId || '',
+    servicoId: agendamento.servicoId || '',
+    lojaId: agendamento.lojaId || '',
+    clienteNome: nomeCurto(agendamento.clienteNome),
+    dataAtendimento: agendamento.dataAgenda || dataLocal(new Date(agendamento.dataHora).valueOf()),
+    criadoEm: iso(ms),
+  };
+  save();
+  return { repetida: false, nota: valor, googleReviewUrl: convite(valor) };
+}
+
+function categoriaNps(nota) {
+  if (nota >= 9) return 'promotor';
+  if (nota >= 7) return 'neutro';
+  return 'detrator';
+}
+
+function resumoNps(lista) {
+  const total = lista.length;
+  const promotores = lista.filter((item) => item.nota >= 9).length;
+  const detratores = lista.filter((item) => item.nota <= 6).length;
+  return {
+    respostas: total,
+    promotores,
+    neutros: total - promotores - detratores,
+    detratores,
+    nps: total ? Math.round(((promotores - detratores) / total) * 100) : null,
+    media: total ? Number((lista.reduce((soma, item) => soma + item.nota, 0) / total).toFixed(1)) : null,
+  };
+}
+
+export function painelNps(empresaId, { inicio, fim, lojaId = '' } = {}) {
+  const de = /^\d{4}-\d{2}-\d{2}$/.test(String(inicio || '')) ? inicio : '0000-01-01';
+  const ate = /^\d{4}-\d{2}-\d{2}$/.test(String(fim || '')) ? fim : '9999-12-31';
+  const lista = Object.values(captacao(empresaId).avaliacoes)
+    .filter((item) => item.dataAtendimento >= de && item.dataAtendimento <= ate)
+    .filter((item) => !lojaId || item.lojaId === lojaId)
+    .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)));
+  const profissionais = mapaPorId(barbearia.listarProfissionais(empresaId, { incluirInativos: true }));
+  const servicos = mapaPorId(barbearia.listarServicos(empresaId, { incluirInativos: true }));
+  const porProfissional = [...new Set(lista.map((item) => item.profissionalId))].map((id) => ({
+    profissionalId: id,
+    nome: profissionais.get(id)?.nome || 'Equipe',
+    ...resumoNps(lista.filter((item) => item.profissionalId === id)),
+  })).sort((a, b) => (b.nps ?? -999) - (a.nps ?? -999));
+  return {
+    ...resumoNps(lista),
+    porProfissional,
+    comentarios: lista.filter((item) => item.comentario).slice(0, 30).map((item) => ({
+      nota: item.nota,
+      categoria: categoriaNps(item.nota),
+      comentario: item.comentario,
+      clienteNome: item.clienteNome,
+      profissional: profissionais.get(item.profissionalId)?.nome || '',
+      servico: servicos.get(item.servicoId)?.nome || '',
+      dataAtendimento: item.dataAtendimento,
+    })),
+    googleReviewUrlConfigurado: Boolean(captacao(empresaId).configuracao.googleReviewUrl),
   };
 }

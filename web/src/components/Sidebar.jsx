@@ -168,6 +168,7 @@ const NAV_DINO_GROUPS = [
       { to: '/admin/barbearia-erp?area=relacionamento&tab=Retorno+previsto', icon: '↺', label: 'Retorno previsto' },
       { to: '/admin/barbearia-erp?area=relacionamento&tab=Lista+de+espera', icon: '⧗', label: 'Lista de espera' },
       { to: '/admin/barbearia-erp?area=relacionamento&tab=Indica%C3%A7%C3%B5es', icon: '⇢', label: 'Indique um amigo' },
+      { to: '/admin/barbearia-erp?area=relacionamento&tab=Avalia%C3%A7%C3%B5es+%28NPS%29', icon: '★', label: 'Avaliações (NPS)' },
       { to: '/admin/barbearia-erp?area=relacionamento&tab=Fidelidade', icon: '☆', label: 'Fidelidade' },
       { to: '/admin/whatsapp', icon: '✆', label: 'WhatsApp' },
       { to: '/admin/cerebro-ia', icon: '◈', label: 'Cérebro do atendente' },

@@ -71,8 +71,9 @@ test('autoatendimento: consulta, remarca e cancela com código + telefone dentro
   const amanha = dataLocal(Date.now() + 2 * DIA_MS);
   agendar({ profissional: bruno, servico: corte, data: amanha, hora: '10:00' });
 
-  assert.throws(() => captacao.consultarAgendamentoCliente(EMPRESA, { codigo: 'ABCD1234', telefone: '65988887777' }), { code: 'AGENDAMENTO_NAO_ENCONTRADO' });
-  const visao = captacao.consultarAgendamentoCliente(EMPRESA, { codigo: 'abcd-1234', telefone: '(65) 99999-0001' });
+  assert.throws(() => captacao.consultarAgendamentoCliente(EMPRESA, { codigo: 'ABCD1234', telefone: '65988887777', lojaId: LOJA }), { code: 'AGENDAMENTO_NAO_ENCONTRADO' });
+  assert.throws(() => captacao.consultarAgendamentoCliente(EMPRESA, { codigo: 'ABCD1234', telefone: '65999990001', lojaId: 'outra-loja' }), { code: 'AGENDAMENTO_NAO_ENCONTRADO' });
+  const visao = captacao.consultarAgendamentoCliente(EMPRESA, { codigo: 'abcd-1234', telefone: '(65) 99999-0001', lojaId: LOJA });
   assert.equal(visao.podeCancelar, true);
   assert.equal(visao.servico.nome, 'Corte');
   assert.equal(visao.profissional.nome, 'Bruno');
@@ -82,10 +83,10 @@ test('autoatendimento: consulta, remarca e cancela com código + telefone dentro
   assert.equal(remarcado.agendamento.profissionalId, bruno.id, 'mantém o barbeiro');
   assert.equal(remarcado.agendamento.historicoRemarcacoes.length, 1);
 
-  const cancelado = captacao.cancelarAgendamentoCliente(EMPRESA, { codigo: 'ABCD1234', telefone: '65999990001', motivo: 'imprevisto' });
+  const cancelado = captacao.cancelarAgendamentoCliente(EMPRESA, { codigo: 'ABCD1234', telefone: '65999990001', motivo: 'imprevisto', lojaId: LOJA });
   assert.equal(cancelado.agendamento.status, 'cancelado');
   assert.match(cancelado.agendamento.observacoes, /Cancelado pelo cliente: imprevisto/);
-  assert.throws(() => captacao.cancelarAgendamentoCliente(EMPRESA, { codigo: 'ABCD1234', telefone: '65999990001' }), { code: 'CANCELAMENTO_FORA_DA_POLITICA' });
+  assert.throws(() => captacao.cancelarAgendamentoCliente(EMPRESA, { codigo: 'ABCD1234', telefone: '65999990001', lojaId: LOJA }), { code: 'CANCELAMENTO_FORA_DA_POLITICA' });
 });
 
 test('autoatendimento: fora do prazo da política o cliente é orientado a falar com a barbearia', () => {
@@ -98,10 +99,10 @@ test('autoatendimento: fora do prazo da política o cliente é orientado a falar
   const [h, m] = hora.split(':').map(Number);
   if (h * 60 + m + 30 > 23 * 60 + 59) return; // perto da meia-noite local: cenário não se aplica
   agendar({ profissional: bruno, servico: corte, data, hora });
-  const visao = captacao.consultarAgendamentoCliente(EMPRESA, { codigo: 'ABCD1234', telefone: '65999990001' });
+  const visao = captacao.consultarAgendamentoCliente(EMPRESA, { codigo: 'ABCD1234', telefone: '65999990001', lojaId: LOJA });
   assert.equal(visao.podeCancelar, false);
   assert.equal(visao.motivoBloqueio, 'fora_do_prazo');
-  assert.throws(() => captacao.cancelarAgendamentoCliente(EMPRESA, { codigo: 'ABCD1234', telefone: '65999990001' }), /4h antes/);
+  assert.throws(() => captacao.cancelarAgendamentoCliente(EMPRESA, { codigo: 'ABCD1234', telefone: '65999990001', lojaId: LOJA }), /4h antes/);
 });
 
 test('lista de espera: vaga aberta avisa quem pediu aquele dia e período, sem repetir', () => {
@@ -131,6 +132,16 @@ test('lista de espera: vaga aberta avisa quem pediu aquele dia e período, sem r
   assert.equal(captacao.listarListaEspera(EMPRESA, { data: dia }).find((item) => item.nome === 'Beto').status, 'agendado');
   assert.deepEqual(captacao.revogarAvisosListaEspera(EMPRESA, '65911110001'), [primeiro.id]);
   assert.throws(() => captacao.entrarListaEspera(EMPRESA, { nome: 'Longe', telefone: '65911110009', data: '2099-01-01', servicoId: corte.id }), { code: 'DATA_DISTANTE' });
+});
+
+test('lista de espera: leitura e status não atravessam a unidade', () => {
+  const { corte } = montarBarbearia();
+  const dia = dataLocal(Date.now() + 3 * DIA_MS);
+  const outraLoja = 'bbbbbbbb-cccc-4ddd-8eee-ffffffffffff';
+  const item = captacao.entrarListaEspera(EMPRESA, { nome: 'Outra loja', telefone: '65911110010', data: dia, servicoId: corte.id, lojaId: outraLoja });
+  assert.equal(captacao.listarListaEspera(EMPRESA, { lojaId: LOJA }).length, 0);
+  assert.equal(captacao.alterarStatusListaEspera(EMPRESA, item.id, 'desistiu', LOJA), null);
+  assert.equal(captacao.listarListaEspera(EMPRESA, { lojaId: outraLoja })[0].status, 'aguardando');
 });
 
 test('indicação: o indicado novo gera pontos para os dois ao concluir o primeiro atendimento', () => {
@@ -344,4 +355,176 @@ test('ocupação: atendimento coberto pelo plano não conta como receita avulsa'
   const linha = captacao.ocupacaoAgenda(EMPRESA, { inicio: dia, fim: dia }).profissionais.find((item) => item.nome === 'Bruno');
   assert.equal(linha.receita, 0);
   assert.equal(linha.cobertosPeloPlano, 1);
+});
+
+// ---------------------------------------------------------------------------
+// Onda 2: IA que vende (plano do cliente, clube pela frequência, produto pós-serviço)
+// ---------------------------------------------------------------------------
+const tools = await import('./core/whatsapp-ai-tools.js');
+const { db: pg } = await import('./core/database.js');
+
+const CONTEXTO_IA = {
+  empresaId: EMPRESA,
+  lojaId: LOJA,
+  canalId: '33333333-3333-4333-8333-333333333333',
+  sessionId: '44444444-4444-4444-8444-444444444444',
+  externalEventId: 'MSG-ONDA2',
+};
+
+function visitasConcluidas({ profissional, servico, telefone, nome, quantas, clienteId, hora = '09:00' }) {
+  for (let i = 0; i < quantas; i += 1) {
+    const dia = dataLocal(Date.now() - (2 + i * 6) * DIA_MS);
+    concluir(agendar({ profissional, servico, data: dia, hora, nome, telefone, clienteId, codigo: `V${hora.replace(':', '')}${String(i).padStart(3, '0')}` }));
+  }
+}
+
+async function comFonteBarbearia(fn) {
+  const anterior = process.env.BARBEARIA_AGENDA_FONTE;
+  process.env.BARBEARIA_AGENDA_FONTE = 'barbearia';
+  const { queryRead, transaction } = pg;
+  pg.queryRead = async () => ({ rows: [] }); // sem loja virtual no teste
+  pg.transaction = async (cb) => cb({ query: async () => ({ rows: [] }) });
+  try { return await fn(); } finally {
+    pg.queryRead = queryRead; pg.transaction = transaction;
+    if (anterior === undefined) delete process.env.BARBEARIA_AGENDA_FONTE; else process.env.BARBEARIA_AGENDA_FONTE = anterior;
+  }
+}
+
+test('onda 2: plano do próprio cliente com saldo do ciclo; clube só pela frequência, sem citar gasto', () => {
+  const { bruno, corte } = montarBarbearia();
+  barbearia.criarPlano(EMPRESA, { nome: 'Clube Corte', preco: 120, sessoesIncluidas: 4, validadeDias: 30, servicosIds: [corte.id] });
+  // Avulso frequente: 6 cortes de R$ 50 em 60 dias = R$ 150/mês > R$ 120 do plano.
+  visitasConcluidas({ profissional: bruno, servico: corte, telefone: '65988880001', nome: 'Frequente', quantas: 6 });
+  const clube = captacao.clubeParaTelefone(EMPRESA, '(65) 98888-0001');
+  assert.equal(clube.elegivel, true);
+  assert.equal(clube.plano.nome, 'Clube Corte');
+  assert.equal(clube.visitasPorMes, 3);
+  assert.equal(JSON.stringify(clube).includes('gasto'), false, 'não expõe gasto');
+  // Pouca frequência: não compensa.
+  visitasConcluidas({ profissional: bruno, servico: corte, telefone: '65988880002', nome: 'Raro', quantas: 1, hora: '10:00' });
+  assert.equal(captacao.clubeParaTelefone(EMPRESA, '65988880002').motivo, 'poucas_visitas');
+
+  // Assinante: saldo do ciclo e não é candidato ao clube de novo.
+  const cliente = clientes.criarCliente(EMPRESA, { nome: 'Assinante', telefone: '65988880003' });
+  const plano = barbearia.listarPlanos(EMPRESA)[0];
+  const assinatura = barbearia.criarAssinatura(EMPRESA, { planoId: plano.id, clienteId: cliente.id, clienteNome: cliente.nome, inicio: new Date(Date.now() - DIA_MS).toISOString() });
+  barbearia.alterarStatusAssinatura(EMPRESA, assinatura.id, 'ativa', { confirmadoSemCobranca: true, pagamentoConfirmado: true });
+  const meu = captacao.planoDoTelefone(EMPRESA, '65988880003');
+  assert.equal(meu.plano, 'Clube Corte');
+  assert.equal(meu.restantes, 4);
+  assert.equal(meu.pagamentoEmDia, true);
+  assert.deepEqual(meu.servicosIncluidos, ['Corte']);
+  assert.equal(captacao.clubeParaTelefone(EMPRESA, '65988880003').motivo, 'ja_assinante');
+  assert.equal(captacao.planoDoTelefone(EMPRESA, '65900000000'), null);
+});
+
+test('onda 2: produto pós-serviço usa o último serviço recente', () => {
+  const { bruno, barba } = montarBarbearia();
+  assert.equal(captacao.sugestaoPosServico(EMPRESA, '65988880010'), null);
+  visitasConcluidas({ profissional: bruno, servico: barba, telefone: '65988880010', nome: 'Barbudo', quantas: 1 });
+  const sugestao = captacao.sugestaoPosServico(EMPRESA, '65988880010');
+  assert.equal(sugestao.servico, 'Barba');
+  assert.deepEqual(sugestao.palavras, ['barba', 'óleo', 'balm']);
+});
+
+test('onda 2: ferramentas da IA respeitam pedido do cliente ou oportunidade liberada', async () => {
+  const { bruno, corte } = montarBarbearia();
+  barbearia.criarPlano(EMPRESA, { nome: 'Clube Corte', preco: 120, sessoesIncluidas: 4, validadeDias: 30, servicosIds: [corte.id] });
+  visitasConcluidas({ profissional: bruno, servico: corte, telefone: '5565988880020', nome: 'Frequente', quantas: 6 });
+  await comFonteBarbearia(async () => {
+    const base = { ...CONTEXTO_IA, phone: '5565988880020' };
+    const plano = await tools.createWhatsappAiToolExecutor({ ...base, customerText: 'quantos cortes ainda tenho no plano?' })('consultar_meu_plano', {});
+    assert.equal(plano.assinante, false);
+
+    // Sem o cliente pedir e sem oportunidade liberada: bloqueado.
+    await assert.rejects(
+      () => tools.createWhatsappAiToolExecutor({ ...base, customerText: 'obrigado!' })('avaliar_clube', {}),
+      (error) => error.code === 'OPPORTUNITY_REQUIRED',
+    );
+    // O cliente perguntou do clube: avalia pela frequência.
+    const pedido = await tools.createWhatsappAiToolExecutor({ ...base, customerText: 'Vale a pena o clube de vocês?' })('avaliar_clube', {});
+    assert.equal(pedido.avaliacao.elegivel, true);
+
+    // Oportunidade não solicitada: o gate exige consentimento e só libera "clube" porque a frequência compensa.
+    const perfil = { consent: { personalization: true, marketing: true }, observedFacts: { frequentProductCategories: [] } };
+    const contexto = { ...base, customerText: 'Confirmado, obrigado', customerProfile: perfil, opportunityPolicy: { opportunitiesEnabled: true, maxOpportunities: 1 }, sessionSnapshot: {} };
+    const executar = tools.createWhatsappAiToolExecutor(contexto);
+    await executar('consultar_meus_agendamentos', {});
+    const liberada = await executar('propor_oportunidade', { category: 'clube' });
+    assert.equal(liberada.allowed, true);
+    const oferta = await executar('avaliar_clube', {});
+    assert.equal(oferta.avaliacao.plano.nome, 'Clube Corte');
+
+    // Sem consentimento de personalização o gate bloqueia.
+    const semConsentimento = tools.createWhatsappAiToolExecutor({ ...contexto, customerProfile: { consent: { personalization: false, marketing: true } } });
+    await semConsentimento('consultar_meus_agendamentos', {});
+    await assert.rejects(() => semConsentimento('propor_oportunidade', { category: 'clube' }), (error) => error.code === 'PERSONALIZATION_NOT_GRANTED');
+
+    // "indica"/"recomenda" sem produto não é pedido de produto.
+    await assert.rejects(
+      () => tools.createWhatsappAiToolExecutor({ ...base, customerText: 'me indica um horário amanhã' })('sugerir_produto_pos_servico', {}),
+      (error) => error.code === 'OPPORTUNITY_REQUIRED',
+    );
+    await assert.rejects(
+      () => tools.createWhatsappAiToolExecutor({ ...base, customerText: 'preciso assinar algo?' })('avaliar_clube', {}),
+      (error) => error.code === 'OPPORTUNITY_REQUIRED',
+    );
+    // Produto pós-serviço: sem loja virtual configurada, não inventa produto.
+    const produto = await tools.createWhatsappAiToolExecutor({ ...base, customerText: 'qual óleo ou pomada você recomenda?' })('sugerir_produto_pos_servico', {});
+    assert.equal(produto.sugestao.servico, 'Corte');
+    assert.deepEqual(produto.produtos, []);
+  });
+});
+
+test('NPS: só atendimento concluído, uma vez por atendimento; link do Google para todos (sem filtrar por nota)', () => {
+  const { bruno, corte } = montarBarbearia();
+  assert.throws(() => captacao.salvarConfiguracaoCaptacao(EMPRESA, { googleReviewUrl: 'https://golpe.example.com/review' }), /Google/);
+  assert.throws(() => captacao.salvarConfiguracaoCaptacao(EMPRESA, { googleReviewUrl: 'https://google.com.attacker.tld/review' }), /Google/);
+  captacao.salvarConfiguracaoCaptacao(EMPRESA, { googleReviewUrl: 'https://g.page/r/dino-teste/review' });
+  const futuro = agendar({ profissional: bruno, servico: corte, data: dataLocal(Date.now() + 2 * DIA_MS), hora: '10:00', telefone: '65977770100', codigo: 'NPSFUT01' });
+  assert.throws(() => captacao.registrarAvaliacao(EMPRESA, { codigo: futuro.codigoConfirmacao, telefone: '65977770100', nota: 10, lojaId: LOJA }), (e) => e.code === 'ATENDIMENTO_NAO_CONCLUIDO');
+  const feito = concluir(agendar({ profissional: bruno, servico: corte, data: dataLocal(Date.now() - DIA_MS), hora: '10:00', nome: 'Paulo Promotor', telefone: '65977770101', codigo: 'NPSOK001' }));
+  assert.throws(() => captacao.registrarAvaliacao(EMPRESA, { codigo: 'NPSOK001', telefone: '65900000000', nota: 10, lojaId: LOJA }), (e) => e.code === 'AGENDAMENTO_NAO_ENCONTRADO');
+  assert.throws(() => captacao.registrarAvaliacao(EMPRESA, { codigo: 'NPSOK001', telefone: '65977770101', nota: 11, lojaId: LOJA }), (e) => e.code === 'NOTA_INVALIDA');
+  assert.throws(() => captacao.registrarAvaliacao(EMPRESA, { codigo: feito.codigoConfirmacao, telefone: '65977770101', nota: 10, lojaId: 'outra-loja' }), (e) => e.code === 'AGENDAMENTO_NAO_ENCONTRADO');
+  const promotor = captacao.registrarAvaliacao(EMPRESA, { codigo: feito.codigoConfirmacao, telefone: '(65) 97777-0101', nota: 10, comentario: 'Excelente', lojaId: LOJA });
+  assert.equal(promotor.googleReviewUrl, 'https://g.page/r/dino-teste/review');
+  assert.equal(captacao.registrarAvaliacao(EMPRESA, { codigo: 'NPSOK001', telefone: '65977770101', nota: 2, lojaId: LOJA }).repetida, true, 'não troca a nota');
+  const detrator = concluir(agendar({ profissional: bruno, servico: corte, data: dataLocal(Date.now() - DIA_MS), hora: '11:00', nome: 'Dani', telefone: '65977770102', codigo: 'NPSDET01' }));
+  assert.equal(captacao.registrarAvaliacao(EMPRESA, { codigo: detrator.codigoConfirmacao, telefone: '65977770102', nota: 4, comentario: 'Atrasou', lojaId: LOJA }).googleReviewUrl, 'https://g.page/r/dino-teste/review', 'o Google não pode ser oferecido só a quem deu nota alta');
+  const painel = captacao.painelNps(EMPRESA);
+  assert.equal(painel.respostas, 2);
+  assert.equal(painel.nps, 0);
+  assert.equal(captacao.painelNps(EMPRESA, { lojaId: 'outra-loja' }).respostas, 0);
+  assert.equal(painel.porProfissional[0].nome, 'Bruno');
+  assert.equal(painel.comentarios.length, 2);
+  assert.equal(JSON.stringify(painel).includes('65977770101'), false, 'painel não expõe telefone');
+});
+
+test('NPS: pedido de avaliação só com link público, código e consentimento', async () => {
+  const notificacoes = await import('./core/barbershop-appointment-notifications.js');
+  const { bruno, corte } = montarBarbearia();
+  const cliente = clientes.criarCliente(EMPRESA, { nome: 'Sem Consentimento', telefone: '65977770200' });
+  const feito = concluir(agendar({ profissional: bruno, servico: corte, data: dataLocal(Date.now() - 3600000), hora: '08:30', nome: cliente.nome, telefone: cliente.telefone, clienteId: cliente.id, codigo: 'NPSPED01' }));
+  const anterior = process.env.PUBLIC_BASE_URL;
+  try {
+    delete process.env.PUBLIC_BASE_URL; delete process.env.SERVER_URL; delete process.env.PUBLIC_APP_URL;
+    const contexto = { empresaId: EMPRESA, lojaId: LOJA, legacyEmpresaId: EMPRESA };
+    assert.equal((await notificacoes.queueReviewRequest(contexto, feito)).reason, 'review_link_unavailable');
+    process.env.PUBLIC_BASE_URL = 'https://dino.kytto.com.br/';
+    assert.equal(notificacoes.linkAvaliacao(EMPRESA, feito), '', 'domínio Dino não serve outro slug');
+    barbearia.atualizarConfiguracao(EMPRESA, { slugPublico: 'dino' });
+    assert.equal(notificacoes.linkAvaliacao(EMPRESA, feito), 'https://dino.kytto.com.br/avaliar/dino');
+    assert.equal((await notificacoes.queueReviewRequest(contexto, feito)).reason, 'service_consent_required');
+    const semCodigo = barbearia.criarAgendamento(EMPRESA, { clienteNome: 'Balcão', clienteTelefone: '65977770201', profissionalId: bruno.id, servicoId: corte.id, dataHora: isoLocal(dataLocal(Date.now() + DIA_MS), '15:00'), dataAgenda: dataLocal(Date.now() + DIA_MS), horaLocal: '15:00', lojaId: LOJA });
+    // Na hora do envio confere de novo: sem consentimento ou já avaliado, não envia.
+    const tarefa = { loja_id: LOJA, payload: { legacyEmpresaId: EMPRESA, appointmentId: feito.id, eventType: 'avaliacao' } };
+    assert.equal((await notificacoes.processAppointmentNotificationTask(tarefa)).reason, 'service_consent_required');
+    captacao.registrarAvaliacao(EMPRESA, { codigo: 'NPSPED01', telefone: cliente.telefone, nota: 8, lojaId: LOJA });
+    assert.equal((await notificacoes.processAppointmentNotificationTask(tarefa)).reason, 'already_reviewed');
+    assert.equal(semCodigo.codigoConfirmacao, '');
+    assert.match(captacao.garantirCodigoConfirmacao(EMPRESA, semCodigo.id).codigoConfirmacao, /^[A-F0-9]{8}$/);
+  } finally {
+    if (anterior === undefined) delete process.env.PUBLIC_BASE_URL; else process.env.PUBLIC_BASE_URL = anterior;
+  }
 });

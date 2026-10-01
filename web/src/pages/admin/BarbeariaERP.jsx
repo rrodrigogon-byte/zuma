@@ -8,7 +8,7 @@ import BarbeariaAgendaBoard, { agendaBoardColumns } from './BarbeariaAgendaBoard
 import BarbeariaOperacaoPanel from './BarbeariaOperacaoPanel'
 import DinoBusinessDashboard from './DinoBusinessDashboard'
 import DinoCampaignsPanel from './DinoCampaignsPanel'
-import { ClubeSaudePanel, IndicacoesPanel, ListaEsperaPanel, OcupacaoMetasPanel, RetornosPanel } from './dino/CaptacaoPanels'
+import { ClubeSaudePanel, IndicacoesPanel, ListaEsperaPanel, NpsPanel, OcupacaoMetasPanel, RetornosPanel } from './dino/CaptacaoPanels'
 
 const TABS = [
   ['Visão geral', 'Resumo da operação'],
@@ -32,11 +32,12 @@ const TABS = [
   ['Indicações', 'Indique um amigo com recompensa'],
   ['Saúde do clube', 'Uso, margem e candidatos ao clube'],
   ['Ocupação e metas', 'Ocupação da agenda e metas por barbeiro'],
+  ['Avaliações (NPS)', 'Nota dos clientes e convite ao Google'],
 ]
 
 const AREAS = [
   { id: 'operacao', label: 'Operação', short: 'Hoje, agenda, atendimento e caixa', tabs: ['Visão geral', 'Agenda', 'Atendimento', 'Caixa e fechamento', 'Fila e bloqueios'] },
-  { id: 'relacionamento', label: 'Relacionamento', short: 'Clientes, retorno e indicação', tabs: ['Clientes', 'Retorno previsto', 'Lista de espera', 'Indicações', 'Fidelidade'] },
+  { id: 'relacionamento', label: 'Relacionamento', short: 'Clientes, retorno e indicação', tabs: ['Clientes', 'Retorno previsto', 'Lista de espera', 'Indicações', 'Avaliações (NPS)', 'Fidelidade'] },
   { id: 'catalogo', label: 'Catálogo e equipe', short: 'Serviços, planos e revenda', tabs: ['Profissionais', 'Serviços', 'Planos e assinaturas', 'Saúde do clube', 'Estoque de revenda', 'Vendas de revenda'] },
   { id: 'gestao', label: 'Gestão', short: 'Comissões, metas e regras', tabs: ['Comissões', 'Ocupação e metas', 'Relatórios', 'Configuração'] },
   { id: 'integracoes', label: 'Integrações', short: 'WhatsApp e IA controlados', tabs: ['Integrações'] },
@@ -1441,6 +1442,7 @@ export default function BarbeariaERP() {
     if (tab === 'Indicações') return <IndicacoesPanel clientes={clientes} />
     if (tab === 'Saúde do clube') return <ClubeSaudePanel />
     if (tab === 'Ocupação e metas') return <OcupacaoMetasPanel />
+    if (tab === 'Avaliações (NPS)') return <NpsPanel />
     return renderConfiguracao()
   }
 
