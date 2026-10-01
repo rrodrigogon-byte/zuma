@@ -32,7 +32,7 @@ const TABS = [
   ['Indicações', 'Indique um amigo com recompensa'],
   ['Saúde do clube', 'Uso, margem e candidatos ao clube'],
   ['Ocupação e metas', 'Ocupação da agenda e metas por barbeiro'],
-  ['Avaliações (NPS)', 'Nota dos clientes e convite ao Google'],
+  ['Avaliações (NPS)', 'Notas e indicadores no próprio sistema'],
 ]
 
 const AREAS = [
@@ -1442,7 +1442,7 @@ export default function BarbeariaERP() {
     if (tab === 'Indicações') return <IndicacoesPanel clientes={clientes} />
     if (tab === 'Saúde do clube') return <ClubeSaudePanel />
     if (tab === 'Ocupação e metas') return <OcupacaoMetasPanel />
-    if (tab === 'Avaliações (NPS)') return <NpsPanel />
+    if (tab === 'Avaliações (NPS)') return <NpsPanel key={`${empresaAtiva?.id || ''}:${lojaAtiva?.id || ''}`} />
     return renderConfiguracao()
   }
 

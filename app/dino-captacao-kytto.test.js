@@ -9,7 +9,7 @@ process.env.DB_PATH = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'captacao-
 const test = (await import('node:test')).default;
 const { beforeEach } = await import('node:test');
 const assert = (await import('node:assert/strict')).default;
-const { reset } = await import('./db.js');
+const { db, reset } = await import('./db.js');
 const barbearia = await import('./barbearia-erp-kytto.js');
 const clientes = await import('./clientes-contas-kytto.js');
 const fidelidade = await import('./canais-fidelidade-kytto.js');
@@ -476,11 +476,12 @@ test('onda 2: ferramentas da IA respeitam pedido do cliente ou oportunidade libe
   });
 });
 
-test('NPS: só atendimento concluído, uma vez por atendimento; link do Google para todos (sem filtrar por nota)', () => {
+test('NPS interno: só atendimento concluído, uma vez por atendimento e indicadores da agenda existente', () => {
   const { bruno, corte } = montarBarbearia();
-  assert.throws(() => captacao.salvarConfiguracaoCaptacao(EMPRESA, { googleReviewUrl: 'https://golpe.example.com/review' }), /Google/);
-  assert.throws(() => captacao.salvarConfiguracaoCaptacao(EMPRESA, { googleReviewUrl: 'https://google.com.attacker.tld/review' }), /Google/);
-  captacao.salvarConfiguracaoCaptacao(EMPRESA, { googleReviewUrl: 'https://g.page/r/dino-teste/review' });
+  db().barbeariaCaptacao = { [EMPRESA]: { configuracao: { googleReviewUrl: 'https://g.page/r/antigo/review' } } };
+  assert.equal(Object.hasOwn(captacao.obterConfiguracaoCaptacao(EMPRESA), 'googleReviewUrl'), false, 'link legado é ignorado');
+  assert.throws(() => captacao.salvarConfiguracaoCaptacao(EMPRESA, { googleReviewUrl: 'https://g.page/r/dino-teste/review' }), (e) => e.code === 'EXTERNAL_REVIEW_DISABLED');
+  assert.equal(Object.hasOwn(captacao.obterConfiguracaoCaptacao(EMPRESA), 'googleReviewUrl'), false);
   const futuro = agendar({ profissional: bruno, servico: corte, data: dataLocal(Date.now() + 2 * DIA_MS), hora: '10:00', telefone: '65977770100', codigo: 'NPSFUT01' });
   assert.throws(() => captacao.registrarAvaliacao(EMPRESA, { codigo: futuro.codigoConfirmacao, telefone: '65977770100', nota: 10, lojaId: LOJA }), (e) => e.code === 'ATENDIMENTO_NAO_CONCLUIDO');
   const feito = concluir(agendar({ profissional: bruno, servico: corte, data: dataLocal(Date.now() - DIA_MS), hora: '10:00', nome: 'Paulo Promotor', telefone: '65977770101', codigo: 'NPSOK001' }));
@@ -488,17 +489,25 @@ test('NPS: só atendimento concluído, uma vez por atendimento; link do Google p
   assert.throws(() => captacao.registrarAvaliacao(EMPRESA, { codigo: 'NPSOK001', telefone: '65977770101', nota: 11, lojaId: LOJA }), (e) => e.code === 'NOTA_INVALIDA');
   assert.throws(() => captacao.registrarAvaliacao(EMPRESA, { codigo: feito.codigoConfirmacao, telefone: '65977770101', nota: 10, lojaId: 'outra-loja' }), (e) => e.code === 'AGENDAMENTO_NAO_ENCONTRADO');
   const promotor = captacao.registrarAvaliacao(EMPRESA, { codigo: feito.codigoConfirmacao, telefone: '(65) 97777-0101', nota: 10, comentario: 'Excelente', lojaId: LOJA });
-  assert.equal(promotor.googleReviewUrl, 'https://g.page/r/dino-teste/review');
+  assert.deepEqual(promotor, { repetida: false, nota: 10 });
   assert.equal(captacao.registrarAvaliacao(EMPRESA, { codigo: 'NPSOK001', telefone: '65977770101', nota: 2, lojaId: LOJA }).repetida, true, 'não troca a nota');
   const detrator = concluir(agendar({ profissional: bruno, servico: corte, data: dataLocal(Date.now() - DIA_MS), hora: '11:00', nome: 'Dani', telefone: '65977770102', codigo: 'NPSDET01' }));
-  assert.equal(captacao.registrarAvaliacao(EMPRESA, { codigo: detrator.codigoConfirmacao, telefone: '65977770102', nota: 4, comentario: 'Atrasou', lojaId: LOJA }).googleReviewUrl, 'https://g.page/r/dino-teste/review', 'o Google não pode ser oferecido só a quem deu nota alta');
+  assert.deepEqual(captacao.registrarAvaliacao(EMPRESA, { codigo: detrator.codigoConfirmacao, telefone: '65977770102', nota: 4, comentario: 'Atrasou', lojaId: LOJA }), { repetida: false, nota: 4 });
   const painel = captacao.painelNps(EMPRESA);
   assert.equal(painel.respostas, 2);
   assert.equal(painel.nps, 0);
+  assert.equal(painel.atendimentosConcluidos, 2);
+  assert.equal(painel.taxaResposta, 100);
+  assert.deepEqual(painel.distribuicao.filter((item) => item.respostas), [{ nota: 4, respostas: 1 }, { nota: 10, respostas: 1 }]);
+  assert.equal(painel.evolucaoMensal.at(-1)?.respostas, 2);
   assert.equal(captacao.painelNps(EMPRESA, { lojaId: 'outra-loja' }).respostas, 0);
+  assert.equal(captacao.painelNps('outra-empresa').respostas, 0);
+  assert.equal(captacao.painelNps(EMPRESA, { inicio: '2099-01-01' }).nps, null);
   assert.equal(painel.porProfissional[0].nome, 'Bruno');
   assert.equal(painel.comentarios.length, 2);
   assert.equal(JSON.stringify(painel).includes('65977770101'), false, 'painel não expõe telefone');
+  assert.equal(JSON.stringify(painel).includes('Paulo Promotor'), false, 'comentário não expõe nome do cliente');
+  assert.equal(JSON.stringify(painel).includes('googleReviewUrl'), false, 'API não anuncia review externo');
 });
 
 test('NPS: pedido de avaliação só com link público, código e consentimento', async () => {
