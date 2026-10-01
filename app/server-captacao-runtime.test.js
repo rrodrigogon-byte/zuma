@@ -139,6 +139,7 @@ test('captação: agendamento online com consentimento e indicação, lista de e
       assert.equal(nps.body.taxaResposta, 50);
       assert.equal(nps.body.distribuicao[9].respostas, 1);
       assert.equal(nps.body.notificacoesPesquisa, null, 'fila PG indisponível não vira contador falso');
+      assert.equal(nps.body.armazenamentoDuravel, true, 'ambiente local com DB_PATH temporário pode testar NPS');
       assert.equal(JSON.stringify(nps.body).includes('65966660001'), false, 'sem telefone no painel');
       const externo = await request(base, '/api/admin/barbearia/captacao/configuracao', { method: 'PUT', headers, body: JSON.stringify({ googleReviewUrl: 'https://g.page/r/teste/review' }) });
       assert.equal(externo.response.status, 400);

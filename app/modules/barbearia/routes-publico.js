@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import express from 'express';
-import { db } from '../../db.js';
+import { armazenamentoAvaliacaoDuravel, db } from '../../db.js';
 import * as barbearia from '../../barbearia-erp-kytto.js';
 import { queueAppointmentNotifications } from '../../core/barbershop-appointment-notifications.js';
 import { avisarListaEspera } from '../../core/barbershop-agenda.js';
@@ -300,6 +300,10 @@ router.post('/:slug/meu-agendamento/remarcar', autoatendimento(async (req, res, 
 
 // NPS pós-atendimento: nota 0–10 do atendimento concluído (código + telefone no corpo).
 router.post('/:slug/avaliar', autoatendimento(async (req, res, identidade) => {
+  if (!armazenamentoAvaliacaoDuravel()) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(503).json({ ok: false, code: 'REVIEW_STORAGE_UNAVAILABLE', error: 'Avaliações temporariamente indisponíveis. Tente novamente mais tarde.' });
+  }
   const corpo = req.body || {};
   const resultado = captacao.registrarAvaliacao(identidade.empresaId, {
     codigo: corpo.codigo,

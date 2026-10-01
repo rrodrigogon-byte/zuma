@@ -348,6 +348,7 @@ export function NpsPanel() {
   const cores = { bom: '#14b87a', alerta: '#f59e0b', critico: '#e05c5c', neutro: 'var(--fg)' }
   const maiorFaixa = Math.max(1, ...(dados?.distribuicao || []).map((item) => item.respostas))
   return <div style={{ display: 'grid', gap: 16 }}>
+    {dados?.armazenamentoDuravel === false && <div role="alert" style={{ ...card, color: '#c73535', fontWeight: 700 }}>Armazenamento persistente de avaliações não confirmado. O formulário recusa novas respostas para não perdê-las no deploy; verifique o disco/DB_PATH do serviço.</div>}
     <div style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
         <div><h2 style={h2}>Avaliações da Barbearia (NPS)</h2><p style={sub}>Questionário da própria Dino. Após a conclusão, o convite é programado somente com consentimento de WhatsApp e canal ativo. Nota e comentário ficam no sistema.</p></div>

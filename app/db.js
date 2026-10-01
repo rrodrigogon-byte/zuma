@@ -19,6 +19,18 @@ const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data', 'db.json');
 const GCS_BUCKET = process.env.GCS_BUCKET || '';
 const GCS_OBJECT = process.env.GCS_OBJECT || 'db.json';
 
+// Avaliações são escritas no JSON legado. No Render, não aceitar respostas
+// em PRD se DB_PATH apontar ao filesystem efêmero (ou se o disco não estiver
+// efetivamente montado). Uma confirmação falsa perderia a resposta no deploy.
+export function armazenamentoAvaliacaoDuravel({ ambiente = process.env.NODE_ENV, arquivo = DB_PATH, montagens } = {}) {
+  if (ambiente !== 'production') return true;
+  if (!path.resolve(arquivo).startsWith('/var/data/')) return false;
+  try {
+    const info = montagens ?? fs.readFileSync('/proc/self/mountinfo', 'utf8');
+    return info.split('\n').some((linha) => linha.split(' ')[4] === '/var/data');
+  } catch { return false; }
+}
+
 const DEFAULT = { admins: [], usuarios: [], inscricoes: [], chaves: {}, ranking: { players: {}, arquivados: {} }, campeoes: {}, torneios: [], assinaturas: [], ingressos: [], comandas: [], reservas: [], patrocinadores: [], estoque: {},
   ligas: {}, professores: [], aulas: [], loja: [], vendasLoja: [], cupons: [], passwordResets: [],
   elo: { players: {} }, gruposEventos: {}, suicos: {}, duplas: {}, socios: [], campanhas: [], pagamentos: [], auditoria: [], agenda: [], cardapio: [], contatos: [], config: {}, partidas_avulsas: [], reservasLoja: [], vendasLoja: [], pedidosLoja: [], tefTransacoes: [], notasFiscais: [], nfceEventos: [], seq: 1 };

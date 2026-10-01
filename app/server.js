@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { db, save, nextId, hydrate, flush } from './db.js';
+import { db, save, nextId, hydrate, flush, armazenamentoAvaliacaoDuravel } from './db.js';
 import { CATALOGO_BAR_TTC_SKUS, RESUMO_CATALOGO_BAR_TTC } from './catalogo-bar-ttc-oficial.js';
 import { sortear } from './bracket.js';
 import { applyChaveToRanking, rankingList, applyPartidaToRanking, temporadasList, resetTemporada } from './ranking.js';
@@ -2837,7 +2837,7 @@ app.get('/api/admin/barbearia/captacao/nps', async (req, res) => {
     const empresaId = legacyEmpresaId(req);
     const lojaId = legacyLojaId(req);
     const notificacoesPesquisa = await reviewNotificationMetrics({ empresaId, lojaId }).catch(() => null);
-    res.json({ ok: true, ...captacaoKytto.painelNps(empresaId, { inicio: req.query?.inicio, fim: req.query?.fim, lojaId }), notificacoesPesquisa });
+    res.json({ ok: true, ...captacaoKytto.painelNps(empresaId, { inicio: req.query?.inicio, fim: req.query?.fim, lojaId }), notificacoesPesquisa, armazenamentoDuravel: armazenamentoAvaliacaoDuravel() });
   } catch (error) { respostaCaptacao(res, error); }
 });
 app.get('/api/admin/barbearia/captacao/lista-espera', (req, res) => {
