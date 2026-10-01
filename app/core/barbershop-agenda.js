@@ -19,7 +19,7 @@ import * as barbearia from '../barbearia-erp-kytto.js';
 import { vincularClienteAoAtendimento } from '../dino-clientes-vinculo.js';
 import * as clientesKytto from '../clientes-contas-kytto.js';
 import { phoneMatchKey } from './whatsapp-phone.js';
-import { queueAppointmentNotifications, queueWaitlistNotifications } from './barbershop-appointment-notifications.js';
+import { cancelPendingAppointmentNotifications, queueAppointmentNotifications, queueWaitlistNotifications } from './barbershop-appointment-notifications.js';
 import * as captacao from '../dino-captacao-kytto.js';
 import {
   createScheduledAppointment as pgCreate,
@@ -142,8 +142,16 @@ export async function availability(scope, input = {}) {
 
 // Notificação fora da transação da IA: não segura a conexão do PostgreSQL e
 // não depende do commit da ação.
+// A conversa do WhatsApp já confirma a ação para o cliente (com o código). Aqui
+// só fica o lembrete da véspera: sem uma segunda mensagem "agendamento
+// registrado/remarcado/cancelado" logo depois da confirmação. O lembrete antigo
+// de horário remarcado ou cancelado é cancelado na fila (e, de todo modo, seria
+// descartado no envio pela conferência da agenda).
 function notificarDepois(contexto, agendamento, evento) {
-  setImmediate(() => { queueAppointmentNotifications(contexto, agendamento, evento).catch(() => null); });
+  setImmediate(async () => {
+    if (evento === 'remarcado' || evento === 'cancelado') await cancelPendingAppointmentNotifications(contexto, agendamento.id).catch(() => null);
+    if (evento !== 'cancelado') await queueAppointmentNotifications(contexto, agendamento, 'lembrete').catch(() => null);
+  });
 }
 
 function respostaAgendamento(empresa, agendamento) {

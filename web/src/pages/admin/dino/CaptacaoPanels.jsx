@@ -1,5 +1,5 @@
 // Painéis de captação e retenção da barbearia (onda 1): retorno previsto,
-// lista de espera, indicações, saúde do clube e ocupação/metas por barbeiro.
+// lista de espera, indicações, saúde do clube, ocupação/metas por barbeiro e NPS.
 // Todos leem /api/admin/barbearia/captacao/* da empresa da sessão.
 import { useCallback, useEffect, useState } from 'react'
 import { api, fmtR } from '../../../lib/api'
@@ -48,6 +48,20 @@ function Estado({ carregando, erro, onRetry }) {
 
 const SITUACAO = { atrasado: ['Atrasado', 'critico'], esta_semana: ['Volta esta semana', 'alerta'], agendado: ['Já agendado', 'bom'], no_prazo: ['No prazo', 'neutro'] }
 
+// Convite manual: abre o WhatsApp da equipe com a mensagem pronta (nada é
+// enviado automaticamente). Só para quem autorizou mensagens de atendimento.
+function conviteWhatsApp(item) {
+  if (!item?.whatsappAutorizado) return ''
+  const digitos = String(item.telefone || '').replace(/\D/g, '')
+  if (digitos.length < 10) return ''
+  const destino = digitos.startsWith('55') ? digitos : `55${digitos}`
+  const primeiro = String(item.nome || '').split(/\s+/)[0] || ''
+  const servico = item.servicoPreferido?.nome ? ` o seu ${item.servicoPreferido.nome.toLowerCase()}` : ''
+  const horario = item.sugestao ? ` Tenho ${dataBR(item.sugestao.data)} às ${item.sugestao.horario}${item.profissionalPreferido ? ` com ${item.profissionalPreferido.nome}` : ''}. Quer que eu reserve?` : ' Quer que eu veja um horário para você?'
+  const texto = `Olá, ${primeiro}! Já está na hora de renovar${servico}.${horario}`
+  return `https://wa.me/${destino}?text=${encodeURIComponent(texto)}`
+}
+
 export function RetornosPanel() {
   const { dados, erro, carregando, carregar } = useCarregar('/api/admin/barbearia/captacao/retornos')
   const [filtro, setFiltro] = useState('acionaveis')
@@ -74,7 +88,7 @@ export function RetornosPanel() {
         </div>
       </div>
       {lista.length === 0 ? <div style={empty}>Ninguém para chamar agora. A lista aparece quando houver clientes com duas visitas concluídas ou mais.</div> : <div style={{ overflowX: 'auto' }}><table style={table}>
-        <thead><tr><th style={th}>Cliente</th><th style={th}>Hábito</th><th style={th}>Última visita</th><th style={th}>Retorno previsto</th><th style={th}>Situação</th><th style={th}>Sugestão</th></tr></thead>
+        <thead><tr><th style={th}>Cliente</th><th style={th}>Hábito</th><th style={th}>Última visita</th><th style={th}>Retorno previsto</th><th style={th}>Situação</th><th style={th}>Sugestão</th><th style={th}>Convite</th></tr></thead>
         <tbody>{lista.map((item) => {
           const [rotulo, tom] = SITUACAO[item.situacao] || ['—', 'neutro']
           return <tr key={`${item.clienteId}-${item.nome}`}>
@@ -84,6 +98,7 @@ export function RetornosPanel() {
             <td style={td}>{dataBR(item.retornoPrevisto)}{item.diasAtraso > 0 && <div style={{ color: '#e05c5c', fontSize: 12 }}>{item.diasAtraso} dias de atraso</div>}</td>
             <td style={td}><Pill tom={tom}>{rotulo}</Pill></td>
             <td style={td}>{item.sugestao ? `${dataBR(item.sugestao.data)} às ${item.sugestao.horario}${item.profissionalPreferido ? ` com ${item.profissionalPreferido.nome}` : ''}` : '—'}</td>
+            <td style={td}>{conviteWhatsApp(item) ? <a href={conviteWhatsApp(item)} target="_blank" rel="noopener noreferrer" style={{ ...btn, display: 'inline-block', textDecoration: 'none' }}>Convidar pelo WhatsApp</a> : <span style={{ color: 'var(--muted)', fontSize: 12 }}>{item.whatsappAutorizado || item.temTelefone ? 'Sem autorização de WhatsApp' : 'Sem telefone'}</span>}</td>
           </tr>
         })}</tbody>
       </table></div>}
@@ -292,6 +307,78 @@ export function OcupacaoMetasPanel() {
           </tr>
         })}</tbody>
       </table></div>}
+    </div>
+  </div>
+}
+
+const CATEGORIA_NPS = { promotor: ['Promotor', 'bom'], neutro: ['Neutro', 'alerta'], detrator: ['Detrator', 'critico'] }
+
+export function NpsPanel() {
+  const { toast } = useToast()
+  const { dados, erro, carregando, carregar } = useCarregar('/api/admin/barbearia/captacao/nps')
+  const config = useCarregar('/api/admin/barbearia/captacao/configuracao')
+  const [google, setGoogle] = useState('')
+  const [atraso, setAtraso] = useState('120')
+  useEffect(() => {
+    if (!config.dados?.configuracao) return
+    setGoogle(config.dados.configuracao.googleReviewUrl || '')
+    setAtraso(String(config.dados.configuracao.pedirAvaliacaoAposMinutos ?? 120))
+  }, [config.dados])
+  async function salvar(event) {
+    event.preventDefault()
+    try {
+      await api.put('/api/admin/barbearia/captacao/configuracao', { ...(config.dados?.configuracao || {}), googleReviewUrl: google.trim(), pedirAvaliacaoAposMinutos: Number(atraso) })
+      toast('Avaliações configuradas.', 'success')
+      config.carregar(); carregar()
+    } catch (e) { toast(e.message, 'error') }
+  }
+  if (carregando || erro) return <div style={card}><Estado carregando={carregando} erro={erro} onRetry={carregar} /></div>
+  const tomNps = dados?.nps == null ? 'neutro' : dados.nps >= 50 ? 'bom' : dados.nps >= 0 ? 'alerta' : 'critico'
+  const cores = { bom: '#14b87a', alerta: '#f59e0b', critico: '#e05c5c', neutro: 'var(--fg)' }
+  return <div style={{ display: 'grid', gap: 16 }}>
+    <div style={card}>
+      <h2 style={h2}>Avaliações (NPS)</h2>
+      <p style={sub}>Depois do atendimento concluído, o cliente que autorizou o WhatsApp recebe o link para dar uma nota de 0 a 10. Depois de responder, todos podem avaliar também no Google (a política do Google não permite convidar só quem deu nota alta).</p>
+      <div style={{ ...grid(150), marginTop: 14 }}>
+        <div style={kpi}><div style={kpiLabel}>NPS</div><div style={{ ...kpiValue, color: cores[tomNps] }}>{dados?.nps ?? '—'}</div></div>
+        <div style={kpi}><div style={kpiLabel}>Respostas</div><div style={kpiValue}>{dados?.respostas || 0}</div></div>
+        <div style={kpi}><div style={kpiLabel}>Promotores</div><div style={{ ...kpiValue, color: '#14b87a' }}>{dados?.promotores || 0}</div></div>
+        <div style={kpi}><div style={kpiLabel}>Neutros</div><div style={{ ...kpiValue, color: '#f59e0b' }}>{dados?.neutros || 0}</div></div>
+        <div style={kpi}><div style={kpiLabel}>Detratores</div><div style={{ ...kpiValue, color: '#e05c5c' }}>{dados?.detratores || 0}</div></div>
+        <div style={kpi}><div style={kpiLabel}>Nota média</div><div style={kpiValue}>{dados?.media ?? '—'}</div></div>
+      </div>
+    </div>
+    <form onSubmit={salvar} style={{ ...card, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--muted)', flex: '1 1 320px' }}>Link de avaliação no Google
+        <input type="url" style={input} placeholder="https://g.page/r/..." value={google} onChange={(e) => setGoogle(e.target.value)} />
+      </label>
+      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--muted)' }}>Pedir avaliação após (minutos)
+        <input type="number" min="0" max="2880" style={{ ...input, width: 120 }} value={atraso} onChange={(e) => setAtraso(e.target.value)} />
+      </label>
+      <button type="submit" style={btnPrimary}>Salvar</button>
+      {!dados?.googleReviewUrlConfigurado && <div style={{ width: '100%', color: 'var(--muted)', fontSize: 12 }}>Sem o link do Google, o cliente só recebe o agradecimento.</div>}
+    </form>
+    <div style={card}>
+      <strong>Por barbeiro</strong>
+      {(dados?.porProfissional || []).length === 0 ? <div style={empty}>Ainda sem avaliações.</div> : <table style={{ ...table, marginTop: 10 }}>
+        <thead><tr><th style={th}>Profissional</th><th style={th}>NPS</th><th style={th}>Respostas</th><th style={th}>Média</th></tr></thead>
+        <tbody>{dados.porProfissional.map((item) => <tr key={item.profissionalId || item.nome}><td style={td}><strong>{item.nome}</strong></td><td style={td}>{item.nps ?? '—'}</td><td style={td}>{item.respostas}</td><td style={td}>{item.media ?? '—'}</td></tr>)}</tbody>
+      </table>}
+    </div>
+    <div style={card}>
+      <strong>Comentários recentes</strong>
+      {(dados?.comentarios || []).length === 0 ? <div style={empty}>Nenhum comentário ainda.</div> : <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+        {dados.comentarios.map((item, indice) => {
+          const [rotulo, tom] = CATEGORIA_NPS[item.categoria] || ['—', 'neutro']
+          return <div key={indice} style={{ border: '1px solid var(--line)', borderRadius: 10, padding: 12 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: 12, color: 'var(--muted)' }}>
+              <strong style={{ color: 'var(--fg)', fontSize: 14 }}>{item.nota}</strong><Pill tom={tom}>{rotulo}</Pill>
+              <span>{item.clienteNome} · {item.servico || 'Atendimento'}{item.profissional ? ` com ${item.profissional}` : ''} · {dataBR(item.dataAtendimento)}</span>
+            </div>
+            <div style={{ marginTop: 6, fontSize: 13 }}>{item.comentario}</div>
+          </div>
+        })}
+      </div>}
     </div>
   </div>
 }

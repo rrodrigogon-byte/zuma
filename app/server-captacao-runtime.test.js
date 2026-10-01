@@ -42,7 +42,7 @@ test('captação: agendamento online com consentimento e indicação, lista de e
   const base = `http://127.0.0.1:${port}`;
   const processo = spawn(process.execPath, ['server.js'], {
     cwd: path.join(ROOT, 'app'),
-    env: { ...process.env, NODE_ENV: 'development', PORT: String(port), DB_PATH: dbPath, JWT_SECRET: 'captacao-jwt', COMMERCE_CORE_ENABLED: '0', SEED_DEMO: '0', WPP_BASE_URL: '', WPP_APIKEY: '', AI_API_KEY: '', OPENAI_API_KEY: '' },
+    env: { ...process.env, NODE_ENV: 'development', PORT: String(port), DB_PATH: dbPath, JWT_SECRET: 'captacao-jwt', PUBLIC_BASE_URL: `http://127.0.0.1:${port}`, SERVER_URL: '', COMMERCE_CORE_ENABLED: '0', SEED_DEMO: '0', WPP_BASE_URL: '', WPP_APIKEY: '', AI_API_KEY: '', OPENAI_API_KEY: '' },
     stdio: 'ignore',
   });
   try {
@@ -118,6 +118,42 @@ test('captação: agendamento online com consentimento e indicação, lista de e
     assert.equal(avulso.body.assinatura, null, 'cobrado avulso não gasta sessão do plano');
     const peloPlano = await concluirAtendimento('16:00', {});
     assert.equal(peloPlano.body.assinatura.usosNoCiclo, 1, 'sem cobrança avulsa, usa o plano');
+
+    // NPS: o atendimento concluído pelo plano pode ser avaliado com código + telefone.
+    const agendaAdmin = (await request(base, `/api/admin/barbearia/agenda?data=${data}`, { headers })).body;
+    const listaAdmin = agendaAdmin.agendamentos || agendaAdmin.itens || [];
+    const codigoNps = listaAdmin.find((item) => item.id === peloPlano.body.agendamento.id)?.codigoConfirmacao;
+    assert.match(String(codigoNps || ''), /^[A-F0-9]{8}$/, 'agendamento do balcão ganha código ao concluir');
+    {
+      const avaliar = await request(base, '/api/publico/agendamento/dino-captacao/avaliar', { method: 'POST', body: JSON.stringify({ codigo: codigoNps, cliente_telefone: '65966660001', nota: 9, comentario: 'Ótimo' }) });
+      assert.equal(avaliar.response.status, 201, JSON.stringify(avaliar.body));
+      const nps = await request(base, '/api/admin/barbearia/captacao/nps', { headers });
+      assert.equal(nps.body.respostas, 1);
+      assert.equal(nps.body.nps, 100);
+    }
+    const errada = await request(base, '/api/publico/agendamento/dino-captacao/avaliar', { method: 'POST', body: JSON.stringify({ codigo: 'ZZZZZZZZ', cliente_telefone: '65966660001', nota: 9 }) });
+    assert.equal(errada.response.status, 404);
+
+    // Meta tags do link compartilhado (sem dado pessoal; avaliação fora do índice).
+    const pagina = await fetch(`${base}/agendar/dino-captacao`);
+    const html = await pagina.text();
+    assert.match(html, /<title>Agende seu horário \| Dino Captação<\/title>/);
+    assert.doesNotMatch(html, /og:url" content="[^"]*\/agendar\/dino-captacao"/, 'PUBLIC_BASE_URL da Dino não canoniza outro slug');
+    const paginaAvaliar = await (await fetch(`${base}/avaliar/dino-captacao?codigo=ABC`)).text();
+    assert.match(paginaAvaliar, /noindex, nofollow/);
+    const desconhecida = await (await fetch(`${base}/agendar/nao-existe`)).text();
+    assert.doesNotMatch(desconhecida, /Agende seu horário/);
+
+    await request(base, '/api/admin/barbearia/configuracoes', { method: 'PATCH', headers, body: JSON.stringify({ slugPublico: 'dino' }) });
+    const dinoHtml = await (await fetch(`${base}/agendar/dino`)).text();
+    assert.ok(dinoHtml.includes(`og:url" content="${base}/agendar/dino"`));
+    await request(base, '/api/admin/barbearia/configuracoes', { method: 'PATCH', headers, body: JSON.stringify({ slugPublico: 'dino-captacao' }) });
+
+    // Nome com aspas, tags e "$'" não quebra o HTML nem vira padrão do replace.
+    await request(base, '/api/admin/barbearia/configuracoes', { method: 'PATCH', headers, body: JSON.stringify({ nomePublico: `Dino "Top" $' <b>` }) });
+    const estranha = await (await fetch(`${base}/agendar/dino-captacao`)).text();
+    assert.match(estranha, /<title>Agende seu horário \| Dino &quot;Top&quot; \$&#39; &lt;b&gt;<\/title>/);
+    assert.equal((estranha.match(/<\/head>/g) || []).length, 1, 'o documento não foi duplicado');
 
     const semSessao = await request(base, '/api/admin/barbearia/captacao/clube');
     assert.equal(semSessao.response.status, 401);

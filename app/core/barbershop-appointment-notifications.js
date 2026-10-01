@@ -11,6 +11,29 @@ const EVENTOS = new Set(['criado', 'remarcado', 'cancelado', 'lembrete']);
 // Aviso de vaga para a lista de espera: reaproveita a mesma fila e o mesmo tipo de
 // tarefa (notificar_agendamento), sem nova tabela nem migração.
 const EVENTO_VAGA = 'vaga';
+// Pedido de avaliação (NPS) depois do atendimento concluído: mesma fila e tipo.
+const EVENTO_AVALIACAO = 'avaliacao';
+
+function urlPublicaBase(slug) {
+  // Render hospeda vários tenants. O domínio Dino nunca pode ser usado por
+  // uma outra barbearia que possua slug próprio. Para outros tenants, só
+  // habilitar convites quando houver configuração validada de domínio por empresa.
+  if (slug !== 'dino') return '';
+  const base = limpo(process.env.PUBLIC_BASE_URL || process.env.SERVER_URL || process.env.PUBLIC_APP_URL, 300).replace(/\/+$/, '');
+  return /^https:\/\//.test(base) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(base) ? base : '';
+}
+
+export function linkAvaliacao(legacyEmpresaId, agendamento = {}) {
+  const slug = limpo(barbearia.obterConfiguracao(legacyEmpresaId)?.slugPublico, 80);
+  const base = urlPublicaBase(slug);
+  const codigo = limpo(agendamento.codigoConfirmacao, 20).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!base || !slug || codigo.length < 6) return '';
+  return `${base}/avaliar/${encodeURIComponent(slug)}`;
+}
+
+function jaAvaliado(legacyEmpresaId, agendamentoId) {
+  return Boolean(legacyDb().barbeariaCaptacao?.[legacyEmpresaId]?.avaliacoes?.[agendamentoId]);
+}
 
 function limpo(valor, limite = 500) { return String(valor ?? '').trim().replace(/\u0000/g, '').slice(0, limite); }
 function normalizarTelefone(valor) {
@@ -213,6 +236,92 @@ async function processWaitlistTask(task, payload, legacyEmpresaId) {
   return { sent: true, appointmentId: liberado.id, eventType: EVENTO_VAGA, waitlistId: entrada.id, providerMessageId };
 }
 
+/** Cancela lembretes/avisos pendentes de um agendamento (remarcado ou cancelado pela conversa). */
+export async function cancelPendingAppointmentNotifications(contexto = {}, agendamentoId = '') {
+  const empresaId = uuidOuVazio(contexto.empresaId);
+  const lojaId = uuidOuVazio(contexto.lojaId);
+  const legacyEmpresaId = limpo(contexto.legacyEmpresaId || contexto.empresaId, 120);
+  if (!empresaId || !lojaId || !agendamentoId) return { cancelled: 0, skipped: true };
+  const resultado = await db.query(
+    `UPDATE tarefas_integracao_canais
+        SET status='cancelada',proxima_tentativa_em=NULL,data_atualizacao=CURRENT_TIMESTAMP
+      WHERE empresa_id=$1 AND loja_id=$2 AND tipo='notificar_agendamento'
+        AND payload->>'legacyEmpresaId'=$3 AND payload->>'appointmentId'=$4
+        AND payload->>'eventType' IN ('criado','remarcado','lembrete') AND status IN ('pendente','falha')`,
+    [empresaId, lojaId, legacyEmpresaId, limpo(agendamentoId, 120)],
+  );
+  return { cancelled: Number(resultado.rowCount || 0), skipped: false };
+}
+
+/** Enfileira o "como foi o atendimento?" com o link de avaliação, só com consentimento. */
+export async function queueReviewRequest(contexto = {}, agendamento = {}) {
+  const empresaId = uuidOuVazio(contexto.empresaId);
+  const lojaId = uuidOuVazio(contexto.lojaId || agendamento.lojaId);
+  const legacyEmpresaId = limpo(contexto.legacyEmpresaId || contexto.empresaId, 120);
+  if (!empresaId || !lojaId) return { queued: 0, skipped: true, reason: 'commerce_scope_unavailable' };
+  if (!agendamento?.id || String(agendamento.status) !== 'concluido') return { queued: 0, skipped: true, reason: 'appointment_not_concluded' };
+  if (!linkAvaliacao(legacyEmpresaId, agendamento)) return { queued: 0, skipped: true, reason: 'review_link_unavailable' };
+  if (jaAvaliado(legacyEmpresaId, agendamento.id)) return { queued: 0, skipped: true, reason: 'already_reviewed' };
+  const elegibilidade = clienteElegivel(legacyEmpresaId, agendamento);
+  if (!elegibilidade.eligible) return { queued: 0, skipped: true, reason: elegibilidade.reason };
+  const minutos = Number(legacyDb().barbeariaCaptacao?.[legacyEmpresaId]?.configuracao?.pedirAvaliacaoAposMinutos ?? 120);
+  const executarEm = new Date(Date.now() + Math.max(0, Math.min(2880, Number.isFinite(minutos) ? minutos : 120)) * 60000);
+  return db.transaction(async (trx) => {
+    const canal = await canalAtivo(trx, empresaId, lojaId);
+    if (!canal) return { queued: 0, skipped: true, reason: 'whatsapp_channel_inactive' };
+    const resultado = await trx.query(
+      `INSERT INTO tarefas_integracao_canais
+         (empresa_id,loja_id,canal_id,tipo,referencia_externa,payload,status,proxima_tentativa_em)
+       VALUES ($1,$2,$3,'notificar_agendamento',$4,$5::jsonb,'pendente',$6)
+       ON CONFLICT (empresa_id,tipo,referencia_externa) WHERE tipo='notificar_agendamento' DO NOTHING
+       RETURNING id`,
+      [empresaId, lojaId, canal.id, `${limpo(agendamento.id, 100)}:${EVENTO_AVALIACAO}`, JSON.stringify({
+        version: 'barbershop-appointment-v1', legacyEmpresaId, appointmentId: limpo(agendamento.id, 120), customerId: limpo(agendamento.clienteId, 120), eventType: EVENTO_AVALIACAO,
+      }), executarEm],
+    );
+    return { queued: Number(resultado.rowCount || 0), skipped: false, executarEm: executarEm.toISOString() };
+  });
+}
+
+async function processReviewTask(task, payload, legacyEmpresaId) {
+  const agendamento = barbearia.listarAgendamentos(legacyEmpresaId, {}).find((item) => item.id === limpo(payload.appointmentId, 120));
+  if (!agendamento || String(agendamento.status) !== 'concluido') return { skipped: true, reason: 'appointment_not_concluded' };
+  if (String(agendamento.lojaId || '') !== String(task.loja_id || '')) return { skipped: true, reason: 'store_scope_mismatch' };
+  if (jaAvaliado(legacyEmpresaId, agendamento.id)) return { skipped: true, reason: 'already_reviewed' };
+  const link = linkAvaliacao(legacyEmpresaId, agendamento);
+  if (!link) return { skipped: true, reason: 'review_link_unavailable' };
+  const elegibilidade = clienteElegivel(legacyEmpresaId, agendamento);
+  if (!elegibilidade.eligible) return { skipped: true, reason: elegibilidade.reason };
+  const channelResult = await db.query(
+    `SELECT id,empresa_id,loja_id,nome,api_base_url,configuracao FROM canais_integracao
+      WHERE id=$1 AND empresa_id=$2 AND loja_id=$3 AND provedor='whatsapp' AND status='ativo' LIMIT 1`,
+    [task.canal_id, task.empresa_id, task.loja_id],
+  );
+  const canal = channelResult.rows[0];
+  if (!canal) return { skipped: true, reason: 'whatsapp_channel_inactive' };
+  const nome = limpo(barbearia.obterConfiguracao(legacyEmpresaId).nomePublico || 'barbearia', 120);
+  const codigo = limpo(agendamento.codigoConfirmacao, 20).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const texto = `Olá, ${limpo(elegibilidade.cliente.nome, 80).split(' ')[0]}! Obrigado pela visita à ${nome}. Como foi seu atendimento? Leva 10 segundos: ${link} — código: ${codigo} (use o telefone da reserva). Para não receber estes avisos, responda SAIR.`;
+  await db.query(
+    `UPDATE tarefas_integracao_canais SET delivery_started_at = CURRENT_TIMESTAMP
+      WHERE id = $1 AND status = 'processando' AND lease_token = $2::uuid`,
+    [task.id, task.lease_token],
+  );
+  const resultado = await enviarMensagem({
+    whatsapp_api_url: process.env.EVOLUTION_API_URL || canal.api_base_url,
+    whatsapp_api_key: process.env.EVOLUTION_API_KEY,
+    whatsapp_instance: canal.configuracao?.instance || process.env.EVOLUTION_INSTANCE,
+  }, elegibilidade.telefone, texto);
+  if (!resultado?.ok) {
+    const unknown = resultado?.uncertain === true;
+    if (!unknown) await db.query(`UPDATE tarefas_integracao_canais SET delivery_started_at = NULL WHERE id = $1`, [task.id]);
+    throw appointmentDeliveryError(unknown ? 'resultado do pedido de avaliação incerto' : 'provedor recusou o pedido de avaliação', unknown ? 'APPOINTMENT_DELIVERY_UNKNOWN' : 'APPOINTMENT_SEND_FAILED', !unknown && resultado?.retryable === true);
+  }
+  const providerMessageId = limpo(resultado?.data?.key?.id || resultado?.data?.id, 200) || null;
+  await db.query(`UPDATE tarefas_integracao_canais SET provider_message_id = $2 WHERE id = $1`, [task.id, providerMessageId]);
+  return { sent: true, appointmentId: agendamento.id, eventType: EVENTO_AVALIACAO, providerMessageId };
+}
+
 export async function enqueueDueAppointmentReminders() {
   const raiz = legacyDb();
   let queued = 0;
@@ -254,6 +363,7 @@ export async function processAppointmentNotificationTask(task = {}) {
   const appointmentId = limpo(payload.appointmentId, 120);
   const evento = limpo(payload.eventType, 30).toLowerCase();
   if (legacyEmpresaId && appointmentId && evento === EVENTO_VAGA) return processWaitlistTask(task, payload, legacyEmpresaId);
+  if (legacyEmpresaId && appointmentId && evento === EVENTO_AVALIACAO) return processReviewTask(task, payload, legacyEmpresaId);
   if (!legacyEmpresaId || !appointmentId || !EVENTOS.has(evento)) return { skipped: true, reason: 'task_payload_invalid' };
   const snapshot = {
     configuracao: barbearia.obterConfiguracao(legacyEmpresaId),
