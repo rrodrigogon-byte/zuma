@@ -74,8 +74,7 @@ function configuracaoPadrao() {
     pontosIndicado: 50,
     carenciaInadimplenciaDias: 3,
     avisosListaEsperaPorVaga: 3,
-    googleReviewUrl: '',
-    pedirAvaliacaoAposMinutos: 120,
+    pedirAvaliacaoAposMinutos: 0,
   };
 }
 
@@ -91,7 +90,10 @@ function captacao(empresaId) {
   estado.assinaturas ||= {};
   estado.metasProfissionais ||= {};
   estado.avaliacoes ||= {};
-  estado.configuracao = { ...configuracaoPadrao(), ...(estado.configuracao || {}) };
+  // Descarta a configuração externa legada em memória; nunca a serve nem a usa
+  // como destino do cliente. A próxima gravação legítima persiste a limpeza.
+  const { googleReviewUrl: _legacyExternalReviewUrl, ...configuracaoInterna } = estado.configuracao || {};
+  estado.configuracao = { ...configuracaoPadrao(), ...configuracaoInterna };
   return estado;
 }
 
@@ -100,6 +102,7 @@ export function obterConfiguracaoCaptacao(empresaId) {
 }
 
 export function salvarConfiguracaoCaptacao(empresaId, dados = {}) {
+  if (dados.googleReviewUrl) throw new CaptacaoError('Avaliações externas estão desativadas. Use o formulário interno.', 'EXTERNAL_REVIEW_DISABLED');
   const estado = captacao(empresaId);
   const atual = estado.configuracao;
   const inteiro = (valor, anterior, min, max) => Math.max(min, Math.min(max, Math.round(numero(valor, anterior))));
@@ -108,27 +111,11 @@ export function salvarConfiguracaoCaptacao(empresaId, dados = {}) {
     pontosIndicado: inteiro(dados.pontosIndicado, atual.pontosIndicado, 0, 100000),
     carenciaInadimplenciaDias: inteiro(dados.carenciaInadimplenciaDias, atual.carenciaInadimplenciaDias, 0, 60),
     avisosListaEsperaPorVaga: inteiro(dados.avisosListaEsperaPorVaga, atual.avisosListaEsperaPorVaga, 1, 20),
-    googleReviewUrl: dados.googleReviewUrl === undefined ? (atual.googleReviewUrl || '') : urlAvaliacaoGoogle(dados.googleReviewUrl),
-    pedirAvaliacaoAposMinutos: inteiro(dados.pedirAvaliacaoAposMinutos, atual.pedirAvaliacaoAposMinutos ?? 120, 0, 2880),
+    pedirAvaliacaoAposMinutos: inteiro(dados.pedirAvaliacaoAposMinutos, atual.pedirAvaliacaoAposMinutos ?? 0, 0, 2880),
     atualizadoEm: new Date().toISOString(),
   };
   save();
   return { ...estado.configuracao };
-}
-
-// Só links do Google (avaliação da empresa): nunca um endereço arbitrário vindo do admin.
-function urlAvaliacaoGoogle(valor) {
-  const bruto = texto(valor, 500);
-  if (!bruto) return '';
-  let url;
-  try { url = new URL(bruto); } catch { throw new CaptacaoError('Link de avaliação do Google inválido.', 'GOOGLE_URL_INVALIDA'); }
-  const host = url.hostname.toLowerCase();
-  const permitido = url.protocol === 'https:' && !url.username && !url.password && !url.port
-    && (host === 'g.page' || host === 'maps.app.goo.gl' || host === 'goo.gl'
-      || host === 'google.com' || host.endsWith('.google.com')
-      || host === 'google.com.br' || host.endsWith('.google.com.br'));
-  if (!permitido) throw new CaptacaoError('Use o link de avaliação do Google (g.page, maps.app.goo.gl ou google.com).', 'GOOGLE_URL_INVALIDA');
-  return url.toString();
 }
 
 function mapaPorId(lista) {
@@ -1140,9 +1127,7 @@ export function sugestaoPosServico(empresaId, telefone, { dias = 14 } = {}, opco
 // ---------------------------------------------------------------------------
 // NPS PÓS-ATENDIMENTO
 // O cliente avalia o atendimento concluído com o código + telefone da reserva
-// (nada pessoal na URL). Uma avaliação por atendimento. O convite para avaliar
-// no Google vai para TODOS (a política do Google proíbe pedir avaliação só a
-// quem ficou satisfeito); muda apenas o agradecimento conforme a nota.
+// (nada pessoal na URL). Uma avaliação por atendimento, sempre dentro do sistema.
 // ---------------------------------------------------------------------------
 const PRAZO_AVALIACAO_DIAS = 30;
 
@@ -1171,10 +1156,8 @@ export function registrarAvaliacao(empresaId, { codigo, telefone, nota, comentar
   const ms = agoraMs(opcoes);
   if (ms - new Date(agendamento.dataHora).valueOf() > PRAZO_AVALIACAO_DIAS * DIA_MS) throw new CaptacaoError('O prazo para avaliar este atendimento terminou.', 'AVALIACAO_EXPIRADA', 409);
   const estado = captacao(empresaId);
-  const configuracao = estado.configuracao;
-  const convite = () => configuracao.googleReviewUrl || '';
   const existente = estado.avaliacoes[agendamento.id];
-  if (existente) return { repetida: true, nota: existente.nota, googleReviewUrl: convite(existente.nota) };
+  if (existente) return { repetida: true, nota: existente.nota };
   estado.avaliacoes[agendamento.id] = {
     id: agendamento.id,
     agendamentoId: agendamento.id,
@@ -1188,7 +1171,7 @@ export function registrarAvaliacao(empresaId, { codigo, telefone, nota, comentar
     criadoEm: iso(ms),
   };
   save();
-  return { repetida: false, nota: valor, googleReviewUrl: convite(valor) };
+  return { repetida: false, nota: valor };
 }
 
 function categoriaNps(nota) {
@@ -1214,10 +1197,23 @@ function resumoNps(lista) {
 export function painelNps(empresaId, { inicio, fim, lojaId = '' } = {}) {
   const de = /^\d{4}-\d{2}-\d{2}$/.test(String(inicio || '')) ? inicio : '0000-01-01';
   const ate = /^\d{4}-\d{2}-\d{2}$/.test(String(fim || '')) ? fim : '9999-12-31';
+  // A agenda é a fonte do denominador; o helper legado inclui registros sem
+  // loja mesmo quando filtrado, portanto aplicamos escopo ESTRITO aqui.
+  const concluidos = barbearia.listarAgendamentos(empresaId, { status: 'concluido' })
+    .filter((item) => !lojaId || item.lojaId === lojaId)
+    .filter((item) => {
+      const dia = String(item.dataAgenda || item.dataHora || '').slice(0, 10);
+      return dia >= de && dia <= ate;
+    });
   const lista = Object.values(captacao(empresaId).avaliacoes)
     .filter((item) => item.dataAtendimento >= de && item.dataAtendimento <= ate)
     .filter((item) => !lojaId || item.lojaId === lojaId)
     .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)));
+  const idsConcluidos = new Set(concluidos.map((item) => item.id));
+  const respondidosConcluidos = lista.filter((item) => idsConcluidos.has(item.agendamentoId)).length;
+  const distribuicao = Array.from({ length: 11 }, (_, nota) => ({ nota, respostas: lista.filter((item) => item.nota === nota).length }));
+  const meses = [...new Set(lista.map((item) => item.dataAtendimento.slice(0, 7)))].sort().slice(-12);
+  const evolucaoMensal = meses.map((mes) => ({ mes, ...resumoNps(lista.filter((item) => item.dataAtendimento.startsWith(mes))) }));
   const profissionais = mapaPorId(barbearia.listarProfissionais(empresaId, { incluirInativos: true }));
   const servicos = mapaPorId(barbearia.listarServicos(empresaId, { incluirInativos: true }));
   const porProfissional = [...new Set(lista.map((item) => item.profissionalId))].map((id) => ({
@@ -1227,16 +1223,18 @@ export function painelNps(empresaId, { inicio, fim, lojaId = '' } = {}) {
   })).sort((a, b) => (b.nps ?? -999) - (a.nps ?? -999));
   return {
     ...resumoNps(lista),
+    atendimentosConcluidos: concluidos.length,
+    taxaResposta: concluidos.length ? Number((100 * respondidosConcluidos / concluidos.length).toFixed(1)) : null,
+    distribuicao,
+    evolucaoMensal,
     porProfissional,
     comentarios: lista.filter((item) => item.comentario).slice(0, 30).map((item) => ({
       nota: item.nota,
       categoria: categoriaNps(item.nota),
       comentario: item.comentario,
-      clienteNome: item.clienteNome,
       profissional: profissionais.get(item.profissionalId)?.nome || '',
       servico: servicos.get(item.servicoId)?.nome || '',
       dataAtendimento: item.dataAtendimento,
     })),
-    googleReviewUrlConfigurado: Boolean(captacao(empresaId).configuracao.googleReviewUrl),
   };
 }

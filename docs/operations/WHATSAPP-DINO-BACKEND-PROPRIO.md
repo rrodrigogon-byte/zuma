@@ -48,7 +48,7 @@ Tudo no Kytto já segue o contrato da Isa:
 | `WHATSAPP_POLL_PILOT_PHONES` | Telefones da equipe para o piloto, separados por vírgula |
 | `PUBLIC_BASE_URL` | `https://dino.kytto.com.br`. Usada no link de avaliação (NPS) e nas meta tags. |
 
-O serviço Render é **multiempresa**: este domínio se aplica apenas ao slug público `dino`. Para outros slugs, o link NPS e o canonical ficam desativados até existir um domínio validado por empresa; nunca apontar clientes de outra barbearia para a Dino. O link de avaliação não contém código de agendamento na URL: o código vai no texto da mensagem e é digitado no formulário junto ao telefone. Configure o link de avaliação do Google apenas após conferir que ele corresponde à ficha oficial da Barbearia Dino; o convite não pode depender da nota dada pelo cliente.
+O serviço Render é **multiempresa**: este domínio se aplica apenas ao slug público `dino`. Para outros slugs, o link NPS e o canonical ficam desativados até existir um domínio validado por empresa; nunca apontar clientes de outra barbearia para a Dino. O link de avaliação aponta exclusivamente para `/avaliar/dino` no próprio sistema. Ele não contém código de agendamento na URL: o código vai no texto da mensagem e é digitado no formulário junto ao telefone. **Não** configurar link Google nem qualquer formulário externo. Os indicadores ficam em **Relacionamento → Avaliações (NPS)**, com período, participação, distribuição, evolução e equipe, respeitando a loja da sessão.
 
 Opcionais:
 

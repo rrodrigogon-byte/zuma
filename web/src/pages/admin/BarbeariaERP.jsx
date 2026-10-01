@@ -32,7 +32,7 @@ const TABS = [
   ['Indicações', 'Indique um amigo com recompensa'],
   ['Saúde do clube', 'Uso, margem e candidatos ao clube'],
   ['Ocupação e metas', 'Ocupação da agenda e metas por barbeiro'],
-  ['Avaliações (NPS)', 'Nota dos clientes e convite ao Google'],
+  ['Avaliações (NPS)', 'Notas e indicadores no próprio sistema'],
 ]
 
 const AREAS = [
@@ -94,6 +94,27 @@ function hojeLocal() {
 
 function moeda(value) {
   return fmtR(Number(value || 0))
+}
+
+function avisoPesquisa(estado) {
+  if (Number(estado?.queued) > 0) return { texto: 'Pesquisa Dino programada para WhatsApp; o envio ainda não foi confirmado.', tipo: 'success' }
+  if (estado?.skipped === false) return { texto: 'Pesquisa já estava na fila; o envio ainda não foi confirmado.', tipo: 'success' }
+  const motivo = {
+    already_reviewed: 'este atendimento já foi avaliado',
+    service_consent_required: 'falta consentimento de atendimento por WhatsApp',
+    customer_not_registered: 'falta cliente cadastrado no atendimento',
+    customer_not_found: 'cliente vinculado não foi encontrado',
+    phone_unavailable: 'telefone do cliente indisponível',
+    appointment_phone_mismatch: 'o telefone do cadastro difere do telefone da reserva',
+    review_outside_window: 'data do atendimento fora do prazo da pesquisa (até 30 dias)',
+    whatsapp_channel_inactive: 'o canal WhatsApp da unidade não está ativo',
+    review_link_unavailable: 'link público de pesquisa não está configurado para esta empresa',
+    commerce_scope_unavailable: 'empresa ou unidade sem escopo válido',
+    tenant_scope_mismatch: 'empresa do atendimento não confere',
+    store_scope_mismatch: 'a unidade do agendamento não confere',
+    queue_unavailable: 'fila temporariamente indisponível',
+  }[estado?.reason] || 'confira o estado da fila e a configuração do canal'
+  return { texto: `Pesquisa não programada: ${motivo}. Não presuma que a mensagem foi enviada.`, tipo: 'error' }
 }
 
 function horario(value) {
@@ -331,11 +352,12 @@ export default function BarbeariaERP() {
     setBusca(resultado.nome)
   }
 
-  async function executar(operacao, sucesso) {
+  async function executar(operacao, sucesso, { mostrarPesquisa = false } = {}) {
     setSalvando(true)
     try {
-      await operacao()
+      const resposta = await operacao()
       toast(sucesso, 'success')
+      if (mostrarPesquisa) { const aviso = avisoPesquisa(resposta?.avaliacao); toast(aviso.texto, aviso.tipo) }
       setModal(null)
       await carregar()
     } catch (error) {
@@ -534,6 +556,7 @@ export default function BarbeariaERP() {
     await executar(
       () => api.patch(`/api/admin/barbearia/agenda/${agendamento.id}/status`, { status: novoStatus, registrarFinanceiro: false }),
       `Atendimento marcado como ${label.toLowerCase()}.`,
+      { mostrarPesquisa: novoStatus === 'concluido' },
     )
   }
 
@@ -548,6 +571,7 @@ export default function BarbeariaERP() {
     await executar(
       () => api.patch(`/api/admin/barbearia/agenda/${agendamento.id}/status`, { status: 'concluido', registrarFinanceiro: true, confirmado: true, meioPagamento: formRecebimento.meioPagamento, valorRecebido: valor }),
       'Atendimento concluído e recebimento registrado no financeiro central.',
+      { mostrarPesquisa: true },
     )
   }
 
@@ -1442,7 +1466,7 @@ export default function BarbeariaERP() {
     if (tab === 'Indicações') return <IndicacoesPanel clientes={clientes} />
     if (tab === 'Saúde do clube') return <ClubeSaudePanel />
     if (tab === 'Ocupação e metas') return <OcupacaoMetasPanel />
-    if (tab === 'Avaliações (NPS)') return <NpsPanel />
+    if (tab === 'Avaliações (NPS)') return <NpsPanel key={`${empresaAtiva?.id || ''}:${lojaAtiva?.id || ''}`} />
     return renderConfiguracao()
   }
 

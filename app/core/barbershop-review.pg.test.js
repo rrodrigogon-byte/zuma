@@ -20,11 +20,12 @@ test('PG local: NPS enfileira uma única vez por atendimento e respeita revogaç
   const clientes = await import('../clientes-contas-kytto.js');
   const captacao = await import('../dino-captacao-kytto.js');
   const { db, getPool } = await import('./database.js');
-  const { queueReviewRequest } = await import('./barbershop-appointment-notifications.js');
+  const { queueReviewRequest, reviewNotificationMetrics } = await import('./barbershop-appointment-notifications.js');
   const empresaId = '0f0e0d0c-1b2a-4c3d-8e9f-0123456789ab';
   const lojaId = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
   const canalId = 'bbbbbbbb-cccc-4ddd-8eee-ffffffffffff';
   const originalTransaction = db.transaction;
+  const originalQuery = db.query;
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
@@ -34,7 +35,7 @@ test('PG local: NPS enfileira uma única vez por atendimento e respeita revogaç
     ) ON COMMIT DROP`);
     await client.query(`CREATE TEMP TABLE tarefas_integracao_canais (
       id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY, empresa_id uuid, loja_id uuid,
-      canal_id uuid, tipo text, referencia_externa text, payload jsonb, status text,
+      canal_id uuid, tipo text, referencia_externa text, payload jsonb, status text, resposta jsonb,
       proxima_tentativa_em timestamptz
     ) ON COMMIT DROP`);
     await client.query(`CREATE UNIQUE INDEX uq_tarefas_notificar_agendamento_test
@@ -43,21 +44,43 @@ test('PG local: NPS enfileira uma única vez por atendimento e respeita revogaç
     await client.query(`INSERT INTO canais_integracao (id, empresa_id, loja_id, nome, provedor, status, data_atualizacao)
       VALUES ($1,$2,$3,'WhatsApp teste','whatsapp','ativo',now())`, [canalId, empresaId, lojaId]);
     db.transaction = async (callback) => callback({ query: (sql, params) => client.query(sql, params) });
+    db.query = (sql, params) => client.query(sql, params);
     reset();
     barbearia.atualizarConfiguracao(empresaId, { slugPublico: 'dino', nomePublico: 'Dino Teste' });
     const cliente = clientes.criarCliente(empresaId, { nome: 'Cliente Teste', telefone: '65977770200' });
     captacao.registrarConsentimentoAtendimento(empresaId, cliente.id, 'teste-local');
     const agendamento = { id: 'ag-review-local-01', status: 'concluido', lojaId,
-      clienteId: cliente.id, codigoConfirmacao: 'ABCD1234', dataHora: new Date().toISOString() };
+      clienteId: cliente.id, clienteTelefone: cliente.telefone, codigoConfirmacao: 'ABCD1234', dataHora: new Date().toISOString() };
     const contexto = { empresaId, lojaId, legacyEmpresaId: empresaId };
-    assert.equal((await queueReviewRequest(contexto, agendamento)).queued, 1);
+    assert.equal((await queueReviewRequest({ ...contexto, legacyEmpresaId: 'outra-empresa' }, agendamento)).reason, 'tenant_scope_mismatch');
+    assert.equal((await queueReviewRequest({ ...contexto, lojaId: 'cccccccc-dddd-4eee-8fff-aaaaaaaaaaaa' }, agendamento)).reason, 'store_scope_mismatch');
+    assert.equal((await queueReviewRequest(contexto, { ...agendamento, clienteTelefone: '65977779999' })).reason, 'appointment_phone_mismatch');
+    assert.equal((await queueReviewRequest(contexto, { ...agendamento, dataHora: new Date(Date.now() - 31 * 86400000).toISOString() })).reason, 'review_outside_window');
+    assert.equal((await queueReviewRequest(contexto, { ...agendamento, dataHora: new Date(Date.now() + 86400000).toISOString() })).reason, 'review_outside_window');
+    assert.equal((await client.query('SELECT count(*)::int AS total FROM tarefas_integracao_canais')).rows[0].total, 0);
+    const primeiro = await queueReviewRequest(contexto, agendamento);
+    assert.equal(primeiro.queued, 1);
+    assert.ok(Math.abs(new Date(primeiro.executarEm).valueOf() - Date.now()) < 15000, 'padrão dispara a fila ao concluir');
     assert.equal((await queueReviewRequest(contexto, agendamento)).queued, 0);
     assert.equal((await client.query('SELECT count(*)::int AS total FROM tarefas_integracao_canais')).rows[0].total, 1);
+    assert.equal((await reviewNotificationMetrics(contexto)).pendentes, 1);
+    assert.equal((await reviewNotificationMetrics(contexto)).canaisAtivos, 1);
+    assert.equal((await reviewNotificationMetrics({ ...contexto, lojaId: 'cccccccc-dddd-4eee-8fff-aaaaaaaaaaaa' })).pendentes, 0);
+    assert.equal((await reviewNotificationMetrics({ ...contexto, lojaId: 'cccccccc-dddd-4eee-8fff-aaaaaaaaaaaa' })).canaisAtivos, 0);
+    await client.query(`UPDATE tarefas_integracao_canais SET status='concluida', resposta='{"sent":true}'::jsonb`);
+    assert.equal((await reviewNotificationMetrics(contexto)).aceitas_provedor, 1);
+    assert.equal((await reviewNotificationMetrics(contexto)).pendentes, 0);
+    captacao.salvarConfiguracaoCaptacao(empresaId, { pedirAvaliacaoAposMinutos: 120 });
+    const atrasado = await queueReviewRequest(contexto, { ...agendamento, id: 'ag-review-local-03' });
+    assert.equal(atrasado.queued, 1);
+    assert.ok(new Date(atrasado.executarEm).valueOf() - Date.now() > 119 * 60000, 'atraso explícito de 120 min preservado');
+    assert.equal((await reviewNotificationMetrics(contexto)).pendentes, 1);
     clientes.atualizarConsentimentoCliente(empresaId, cliente.id, { canal: 'whatsapp', finalidade: 'atendimento', concedido: false, origem: 'SAIR' });
     assert.equal((await queueReviewRequest(contexto, { ...agendamento, id: 'ag-review-local-02' })).reason, 'service_consent_required');
-    assert.equal((await client.query('SELECT count(*)::int AS total FROM tarefas_integracao_canais')).rows[0].total, 1);
+    assert.equal((await client.query('SELECT count(*)::int AS total FROM tarefas_integracao_canais')).rows[0].total, 2);
   } finally {
     db.transaction = originalTransaction;
+    db.query = originalQuery;
     await client.query('ROLLBACK');
     client.release();
     await db.close();

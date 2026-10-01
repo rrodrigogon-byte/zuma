@@ -1,7 +1,7 @@
 // Painéis de captação e retenção da barbearia (onda 1): retorno previsto,
 // lista de espera, indicações, saúde do clube, ocupação/metas por barbeiro e NPS.
 // Todos leem /api/admin/barbearia/captacao/* da empresa da sessão.
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, fmtR } from '../../../lib/api'
 import { useToast } from '../../../hooks/useToast'
 
@@ -31,13 +31,17 @@ function useCarregar(rota) {
   const [dados, setDados] = useState(null)
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(true)
+  const requisicao = useRef(0)
   const carregar = useCallback(async () => {
+    const atual = ++requisicao.current
     setCarregando(true)
     setErro('')
-    try { setDados(await api.get(rota)) } catch (e) { setErro(e.message || 'Não foi possível carregar.') } finally { setCarregando(false) }
+    try { const resposta = await api.get(rota); if (atual === requisicao.current) setDados({ rota, resposta }) }
+    catch (e) { if (atual === requisicao.current) setErro(e.message || 'Não foi possível carregar.') }
+    finally { if (atual === requisicao.current) setCarregando(false) }
   }, [rota])
-  useEffect(() => { carregar() }, [carregar])
-  return { dados, erro, carregando, carregar }
+  useEffect(() => { carregar(); return () => { requisicao.current += 1 } }, [carregar])
+  return { dados: dados?.rota === rota ? dados.resposta : null, erro, carregando: carregando || (dados !== null && dados.rota !== rota), carregar }
 }
 
 function Estado({ carregando, erro, onRetry }) {
@@ -313,35 +317,52 @@ export function OcupacaoMetasPanel() {
 
 const CATEGORIA_NPS = { promotor: ['Promotor', 'bom'], neutro: ['Neutro', 'alerta'], detrator: ['Detrator', 'critico'] }
 
+function periodoNps(dias) {
+  if (dias === 'todos') return ''
+  const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+  const inicio = new Date(`${hoje}T12:00:00Z`)
+  inicio.setUTCDate(inicio.getUTCDate() - Number(dias) + 1)
+  return `?inicio=${inicio.toISOString().slice(0, 10)}&fim=${hoje}`
+}
+
 export function NpsPanel() {
   const { toast } = useToast()
-  const { dados, erro, carregando, carregar } = useCarregar('/api/admin/barbearia/captacao/nps')
+  const [periodo, setPeriodo] = useState('90')
+  const { dados, erro, carregando, carregar } = useCarregar(`/api/admin/barbearia/captacao/nps${periodoNps(periodo)}`)
   const config = useCarregar('/api/admin/barbearia/captacao/configuracao')
-  const [google, setGoogle] = useState('')
-  const [atraso, setAtraso] = useState('120')
+  const [atraso, setAtraso] = useState('0')
   useEffect(() => {
     if (!config.dados?.configuracao) return
-    setGoogle(config.dados.configuracao.googleReviewUrl || '')
-    setAtraso(String(config.dados.configuracao.pedirAvaliacaoAposMinutos ?? 120))
+    setAtraso(String(config.dados.configuracao.pedirAvaliacaoAposMinutos ?? 0))
   }, [config.dados])
   async function salvar(event) {
     event.preventDefault()
     try {
-      await api.put('/api/admin/barbearia/captacao/configuracao', { ...(config.dados?.configuracao || {}), googleReviewUrl: google.trim(), pedirAvaliacaoAposMinutos: Number(atraso) })
+      await api.put('/api/admin/barbearia/captacao/configuracao', { pedirAvaliacaoAposMinutos: Number(atraso) })
       toast('Avaliações configuradas.', 'success')
       config.carregar(); carregar()
     } catch (e) { toast(e.message, 'error') }
   }
-  if (carregando || erro) return <div style={card}><Estado carregando={carregando} erro={erro} onRetry={carregar} /></div>
+  if (carregando || erro || config.carregando || config.erro) return <div style={card}><Estado carregando={carregando || config.carregando} erro={erro || config.erro} onRetry={() => { carregar(); config.carregar() }} /></div>
   const tomNps = dados?.nps == null ? 'neutro' : dados.nps >= 50 ? 'bom' : dados.nps >= 0 ? 'alerta' : 'critico'
   const cores = { bom: '#14b87a', alerta: '#f59e0b', critico: '#e05c5c', neutro: 'var(--fg)' }
+  const maiorFaixa = Math.max(1, ...(dados?.distribuicao || []).map((item) => item.respostas))
   return <div style={{ display: 'grid', gap: 16 }}>
+    {dados?.armazenamentoDuravel === false && <div role="alert" style={{ ...card, color: '#c73535', fontWeight: 700 }}>Armazenamento persistente de avaliações não confirmado. O formulário recusa novas respostas para não perdê-las no deploy; verifique o disco/DB_PATH do serviço.</div>}
     <div style={card}>
-      <h2 style={h2}>Avaliações (NPS)</h2>
-      <p style={sub}>Depois do atendimento concluído, o cliente que autorizou o WhatsApp recebe o link para dar uma nota de 0 a 10. Depois de responder, todos podem avaliar também no Google (a política do Google não permite convidar só quem deu nota alta).</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
+        <div><h2 style={h2}>Avaliações da Barbearia (NPS)</h2><p style={sub}>Questionário da própria Dino. Após a conclusão, o convite é programado somente com consentimento de WhatsApp e canal ativo. Nota e comentário ficam no sistema.</p></div>
+        <label style={{ display: 'grid', gap: 4, color: 'var(--muted)', fontSize: 12 }}>Período dos atendimentos
+          <select style={input} value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
+            <option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="todos">Todo o histórico</option>
+          </select>
+        </label>
+      </div>
       <div style={{ ...grid(150), marginTop: 14 }}>
         <div style={kpi}><div style={kpiLabel}>NPS</div><div style={{ ...kpiValue, color: cores[tomNps] }}>{dados?.nps ?? '—'}</div></div>
         <div style={kpi}><div style={kpiLabel}>Respostas</div><div style={kpiValue}>{dados?.respostas || 0}</div></div>
+        <div style={kpi}><div style={kpiLabel}>Atendimentos concluídos</div><div style={kpiValue}>{dados?.atendimentosConcluidos ?? 0}</div></div>
+        <div style={kpi}><div style={kpiLabel}>Participação</div><div style={kpiValue}>{dados?.taxaResposta == null ? '—' : `${dados.taxaResposta.toLocaleString('pt-BR')}%`}</div></div>
         <div style={kpi}><div style={kpiLabel}>Promotores</div><div style={{ ...kpiValue, color: '#14b87a' }}>{dados?.promotores || 0}</div></div>
         <div style={kpi}><div style={kpiLabel}>Neutros</div><div style={{ ...kpiValue, color: '#f59e0b' }}>{dados?.neutros || 0}</div></div>
         <div style={kpi}><div style={kpiLabel}>Detratores</div><div style={{ ...kpiValue, color: '#e05c5c' }}>{dados?.detratores || 0}</div></div>
@@ -349,15 +370,40 @@ export function NpsPanel() {
       </div>
     </div>
     <form onSubmit={salvar} style={{ ...card, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-      <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--muted)', flex: '1 1 320px' }}>Link de avaliação no Google
-        <input type="url" style={input} placeholder="https://g.page/r/..." value={google} onChange={(e) => setGoogle(e.target.value)} />
-      </label>
       <label style={{ display: 'grid', gap: 4, fontSize: 12, color: 'var(--muted)' }}>Pedir avaliação após (minutos)
         <input type="number" min="0" max="2880" style={{ ...input, width: 120 }} value={atraso} onChange={(e) => setAtraso(e.target.value)} />
       </label>
-      <button type="submit" style={btnPrimary}>Salvar</button>
-      {!dados?.googleReviewUrlConfigurado && <div style={{ width: '100%', color: 'var(--muted)', fontSize: 12 }}>Sem o link do Google, o cliente só recebe o agradecimento.</div>}
+      <button type="submit" style={btnPrimary}>Salvar intervalo</button>
+      <span style={{ color: 'var(--muted)', fontSize: 12 }}>O link do convite abre exclusivamente o formulário da Dino; sem integração de avaliações externas.</span>
     </form>
+    <div style={card}>
+      <strong>Convites pelo WhatsApp</strong>
+      <p style={sub}>Fila acumulada da empresa/unidade ativa, independente do filtro de período acima. “Aceito pelo provedor” não comprova entrega ou leitura pelo cliente.</p>
+      {dados?.notificacoesPesquisa?.canaisAtivos === 0 && <p role="alert" style={{ color: '#c73535', fontWeight: 700, margin: '10px 0' }}>Nenhum canal WhatsApp ativo para esta empresa/unidade. O convite automático não pode ser programado até configurar e validar o canal.</p>}
+      {dados?.notificacoesPesquisa ? <div style={{ ...grid(150), marginTop: 12 }}>
+        <div style={kpi}><div style={kpiLabel}>Pendentes</div><div style={kpiValue}>{dados.notificacoesPesquisa.pendentes}</div></div>
+        <div style={kpi}><div style={kpiLabel}>Aceitos pelo provedor</div><div style={kpiValue}>{dados.notificacoesPesquisa.aceitas_provedor}</div></div>
+        <div style={kpi}><div style={kpiLabel}>Falhas / verificar</div><div style={{ ...kpiValue, color: '#e05c5c' }}>{dados.notificacoesPesquisa.falhas}</div></div>
+        <div style={kpi}><div style={kpiLabel}>Cancelados</div><div style={kpiValue}>{dados.notificacoesPesquisa.canceladas}</div></div>
+      </div> : <div style={empty}>Fila WhatsApp indisponível para consulta. Não assuma que convites foram enviados.</div>}
+    </div>
+    <div style={card}>
+      <strong>Distribuição das notas</strong>
+      <p style={sub}>Contagem por nota, de 0 a 10, somente nos atendimentos do período e da unidade selecionados.</p>
+      <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
+        {(dados?.distribuicao || []).map((faixa) => <div key={faixa.nota} style={{ display: 'grid', gridTemplateColumns: '28px minmax(0, 1fr) 42px', alignItems: 'center', gap: 10, fontSize: 12 }}>
+          <span>{faixa.nota}</span><div aria-hidden="true" style={{ background: 'var(--line)', height: 12, borderRadius: 6, overflow: 'hidden' }}><div style={{ height: '100%', width: `${100 * faixa.respostas / maiorFaixa}%`, borderRadius: 6, background: faixa.nota >= 9 ? '#14b87a' : faixa.nota >= 7 ? '#f59e0b' : '#e05c5c' }} /></div><strong aria-label={`${faixa.respostas} avaliações com nota ${faixa.nota}`}>{faixa.respostas}</strong>
+        </div>)}
+      </div>
+    </div>
+    <div style={card}>
+      <strong>Evolução mensal</strong>
+      <p style={sub}>Últimos 12 meses com respostas no período; meses sem respostas não recebem NPS artificial.</p>
+      {(dados?.evolucaoMensal || []).length === 0 ? <div style={empty}>Ainda não há respostas no período selecionado.</div> : <div style={{ overflowX: 'auto' }}><table style={table}>
+        <thead><tr><th style={th}>Mês do atendimento</th><th style={th}>Respostas</th><th style={th}>NPS</th><th style={th}>Média</th></tr></thead>
+        <tbody>{dados.evolucaoMensal.map((item) => <tr key={item.mes}><td style={td}>{item.mes.slice(5)}/{item.mes.slice(0, 4)}</td><td style={td}>{item.respostas}</td><td style={td}>{item.nps ?? '—'}</td><td style={td}>{item.media ?? '—'}</td></tr>)}</tbody>
+      </table></div>}
+    </div>
     <div style={card}>
       <strong>Por barbeiro</strong>
       {(dados?.porProfissional || []).length === 0 ? <div style={empty}>Ainda sem avaliações.</div> : <table style={{ ...table, marginTop: 10 }}>
@@ -373,7 +419,7 @@ export function NpsPanel() {
           return <div key={indice} style={{ border: '1px solid var(--line)', borderRadius: 10, padding: 12 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: 12, color: 'var(--muted)' }}>
               <strong style={{ color: 'var(--fg)', fontSize: 14 }}>{item.nota}</strong><Pill tom={tom}>{rotulo}</Pill>
-              <span>{item.clienteNome} · {item.servico || 'Atendimento'}{item.profissional ? ` com ${item.profissional}` : ''} · {dataBR(item.dataAtendimento)}</span>
+              <span>{item.servico || 'Atendimento'}{item.profissional ? ` com ${item.profissional}` : ''} · {dataBR(item.dataAtendimento)}</span>
             </div>
             <div style={{ marginTop: 6, fontSize: 13 }}>{item.comentario}</div>
           </div>

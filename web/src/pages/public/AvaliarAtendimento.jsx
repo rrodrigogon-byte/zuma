@@ -2,9 +2,7 @@
  * Página Pública: Avaliação do atendimento (NPS)
  * Rota: /avaliar/:slug
  * O cliente digita o código e o telefone da reserva (enviados no corpo, nunca na URL),
- * dá uma nota de 0 a 10 e um comentário opcional. Todos recebem o convite para
- * avaliar no Google (sem filtrar por nota, como exige a política do Google),
- * quando a barbearia configurou o link.
+ * dá uma nota de 0 a 10 e um comentário opcional, armazenados no próprio sistema.
  */
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
@@ -94,9 +92,7 @@ export default function AvaliarAtendimento() {
           {resultado.nota >= 9
             ? 'Ficamos muito felizes com a sua nota.'
             : 'Sua opinião vai direto para a equipe e nos ajuda a melhorar.'}
-          {resultado.googleReviewUrl ? ' Se quiser, deixe também sua avaliação no Google.' : ''}
         </div>
-        {resultado.googleReviewUrl && <a href={resultado.googleReviewUrl} target="_blank" rel="noopener noreferrer" style={{ ...s.btn, textDecoration: 'none', display: 'block' }}>Avaliar no Google</a>}
       </div> : <form onSubmit={enviar} style={s.card}>
         <div style={{ fontSize: 15, fontWeight: 700 }}>De 0 a 10, quanto você recomendaria a {nomeEstab} para um amigo?</div>
         <div style={s.notas} role="radiogroup" aria-label="Nota de 0 a 10">

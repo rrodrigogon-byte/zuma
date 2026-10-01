@@ -20,6 +20,8 @@ function urlPublicaBase(slug) {
   // habilitar convites quando houver configuração validada de domínio por empresa.
   if (slug !== 'dino') return '';
   const base = limpo(process.env.PUBLIC_BASE_URL || process.env.SERVER_URL || process.env.PUBLIC_APP_URL, 300).replace(/\/+$/, '');
+  // Em PRD a pesquisa da Dino só pode apontar para o próprio domínio oficial.
+  if (process.env.NODE_ENV === 'production' && base !== 'https://dino.kytto.com.br') return '';
   return /^https:\/\//.test(base) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(base) ? base : '';
 }
 
@@ -63,6 +65,13 @@ function clienteElegivel(legacyEmpresaId, agendamento) {
   const telefone = normalizarTelefone(cliente.telefone);
   if (!telefone) return { eligible: false, reason: 'phone_unavailable' };
   return { eligible: true, cliente, telefone };
+}
+
+function telefoneDaPesquisaConfere(agendamento, telefone) {
+  // O formulário pede o telefone da reserva: não enviar uma pesquisa a outro
+  // número se o telefone do cliente mudou depois do atendimento.
+  return Boolean(phoneMatchKey(agendamento.clienteTelefone))
+    && phoneMatchKey(telefone) === phoneMatchKey(agendamento.clienteTelefone);
 }
 
 async function canalAtivo(trx, empresaId, lojaId, canalId = '') {
@@ -259,13 +268,20 @@ export async function queueReviewRequest(contexto = {}, agendamento = {}) {
   const lojaId = uuidOuVazio(contexto.lojaId || agendamento.lojaId);
   const legacyEmpresaId = limpo(contexto.legacyEmpresaId || contexto.empresaId, 120);
   if (!empresaId || !lojaId) return { queued: 0, skipped: true, reason: 'commerce_scope_unavailable' };
+  if (legacyEmpresaId !== empresaId) return { queued: 0, skipped: true, reason: 'tenant_scope_mismatch' };
+  if (!agendamento?.lojaId || String(agendamento.lojaId) !== lojaId) return { queued: 0, skipped: true, reason: 'store_scope_mismatch' };
   if (!agendamento?.id || String(agendamento.status) !== 'concluido') return { queued: 0, skipped: true, reason: 'appointment_not_concluded' };
+  const inicio = dataValida(agendamento.dataHora);
+  if (!inicio || inicio.valueOf() > Date.now() + 5 * 60000 || Date.now() - inicio.valueOf() > 30 * 86400000) {
+    return { queued: 0, skipped: true, reason: 'review_outside_window' };
+  }
   if (!linkAvaliacao(legacyEmpresaId, agendamento)) return { queued: 0, skipped: true, reason: 'review_link_unavailable' };
   if (jaAvaliado(legacyEmpresaId, agendamento.id)) return { queued: 0, skipped: true, reason: 'already_reviewed' };
   const elegibilidade = clienteElegivel(legacyEmpresaId, agendamento);
   if (!elegibilidade.eligible) return { queued: 0, skipped: true, reason: elegibilidade.reason };
-  const minutos = Number(legacyDb().barbeariaCaptacao?.[legacyEmpresaId]?.configuracao?.pedirAvaliacaoAposMinutos ?? 120);
-  const executarEm = new Date(Date.now() + Math.max(0, Math.min(2880, Number.isFinite(minutos) ? minutos : 120)) * 60000);
+  if (!telefoneDaPesquisaConfere(agendamento, elegibilidade.telefone)) return { queued: 0, skipped: true, reason: 'appointment_phone_mismatch' };
+  const minutos = Number(legacyDb().barbeariaCaptacao?.[legacyEmpresaId]?.configuracao?.pedirAvaliacaoAposMinutos ?? 0);
+  const executarEm = new Date(Date.now() + Math.max(0, Math.min(2880, Number.isFinite(minutos) ? minutos : 0)) * 60000);
   return db.transaction(async (trx) => {
     const canal = await canalAtivo(trx, empresaId, lojaId);
     if (!canal) return { queued: 0, skipped: true, reason: 'whatsapp_channel_inactive' };
@@ -284,14 +300,19 @@ export async function queueReviewRequest(contexto = {}, agendamento = {}) {
 }
 
 async function processReviewTask(task, payload, legacyEmpresaId) {
+  if (legacyEmpresaId !== String(task.empresa_id || '')) return { skipped: true, reason: 'tenant_scope_mismatch' };
   const agendamento = barbearia.listarAgendamentos(legacyEmpresaId, {}).find((item) => item.id === limpo(payload.appointmentId, 120));
   if (!agendamento || String(agendamento.status) !== 'concluido') return { skipped: true, reason: 'appointment_not_concluded' };
   if (String(agendamento.lojaId || '') !== String(task.loja_id || '')) return { skipped: true, reason: 'store_scope_mismatch' };
+  if (String(agendamento.clienteId || '') !== String(payload.customerId || '')) return { skipped: true, reason: 'customer_changed' };
+  const inicio = dataValida(agendamento.dataHora);
+  if (!inicio || inicio.valueOf() > Date.now() + 5 * 60000 || Date.now() - inicio.valueOf() > 30 * 86400000) return { skipped: true, reason: 'review_outside_window' };
   if (jaAvaliado(legacyEmpresaId, agendamento.id)) return { skipped: true, reason: 'already_reviewed' };
   const link = linkAvaliacao(legacyEmpresaId, agendamento);
   if (!link) return { skipped: true, reason: 'review_link_unavailable' };
   const elegibilidade = clienteElegivel(legacyEmpresaId, agendamento);
   if (!elegibilidade.eligible) return { skipped: true, reason: elegibilidade.reason };
+  if (!telefoneDaPesquisaConfere(agendamento, elegibilidade.telefone)) return { skipped: true, reason: 'appointment_phone_mismatch' };
   const channelResult = await db.query(
     `SELECT id,empresa_id,loja_id,nome,api_base_url,configuracao FROM canais_integracao
       WHERE id=$1 AND empresa_id=$2 AND loja_id=$3 AND provedor='whatsapp' AND status='ativo' LIMIT 1`,
@@ -456,4 +477,29 @@ export async function appointmentNotificationMetrics(contexto = {}) {
     [empresaId, lojaId],
   );
   return resultado.rows[0] || { queued: 0, sent: 0, failed: 0, canceled: 0 };
+}
+
+/** Aceite da API do provedor não comprova entrega/leitura no aparelho do cliente. */
+export async function reviewNotificationMetrics(contexto = {}) {
+  const empresaId = uuidOuVazio(contexto.empresaId);
+  const lojaId = uuidOuVazio(contexto.lojaId);
+  if (!empresaId) return null;
+  if (contexto.lojaId && !lojaId) return null;
+  const resultado = await db.query(
+    `SELECT COUNT(*) FILTER (WHERE status IN ('pendente','processando'))::int AS pendentes,
+            COUNT(*) FILTER (WHERE status='concluida' AND COALESCE((resposta->>'sent')::boolean,false))::int AS aceitas_provedor,
+            COUNT(*) FILTER (WHERE status='falha')::int AS falhas,
+            COUNT(*) FILTER (WHERE status='cancelada')::int AS canceladas
+       FROM tarefas_integracao_canais
+      WHERE empresa_id=$1 AND ($2::uuid IS NULL OR loja_id=$2::uuid)
+        AND tipo='notificar_agendamento' AND payload->>'eventType'='avaliacao'`,
+    [empresaId, lojaId || null],
+  );
+  const canais = await db.query(
+    `SELECT COUNT(*)::int AS ativos FROM canais_integracao
+      WHERE empresa_id=$1 AND ($2::uuid IS NULL OR loja_id=$2::uuid)
+        AND provedor='whatsapp' AND status='ativo'`,
+    [empresaId, lojaId || null],
+  );
+  return { ...(resultado.rows[0] || { pendentes: 0, aceitas_provedor: 0, falhas: 0, canceladas: 0 }), canaisAtivos: Number(canais.rows[0]?.ativos || 0) };
 }

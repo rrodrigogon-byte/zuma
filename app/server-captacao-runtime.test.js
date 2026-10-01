@@ -116,8 +116,10 @@ test('captação: agendamento online com consentimento e indicação, lista de e
     const avulso = await concluirAtendimento('15:00', { registrarFinanceiro: true, confirmado: true, meioPagamento: 'pix', valorRecebido: 50 });
     assert.equal(avulso.response.status, 200, JSON.stringify(avulso.body));
     assert.equal(avulso.body.assinatura, null, 'cobrado avulso não gasta sessão do plano');
+    assert.equal(typeof avulso.body.avaliacao?.queued, 'number', 'conclusão com financeiro sempre reporta o estado da pesquisa');
     const peloPlano = await concluirAtendimento('16:00', {});
     assert.equal(peloPlano.body.assinatura.usosNoCiclo, 1, 'sem cobrança avulsa, usa o plano');
+    assert.equal(typeof peloPlano.body.avaliacao?.queued, 'number', 'conclusão por plano também reporta o estado da pesquisa');
 
     // NPS: o atendimento concluído pelo plano pode ser avaliado com código + telefone.
     const agendaAdmin = (await request(base, `/api/admin/barbearia/agenda?data=${data}`, { headers })).body;
@@ -127,9 +129,23 @@ test('captação: agendamento online com consentimento e indicação, lista de e
     {
       const avaliar = await request(base, '/api/publico/agendamento/dino-captacao/avaliar', { method: 'POST', body: JSON.stringify({ codigo: codigoNps, cliente_telefone: '65966660001', nota: 9, comentario: 'Ótimo' }) });
       assert.equal(avaliar.response.status, 201, JSON.stringify(avaliar.body));
-      const nps = await request(base, '/api/admin/barbearia/captacao/nps', { headers });
+      assert.deepEqual(avaliar.body.avaliacao, { repetida: false, nota: 9 }, 'nenhum convite externo sai na resposta');
+      const repetida = await request(base, '/api/publico/agendamento/dino-captacao/avaliar', { method: 'POST', body: JSON.stringify({ codigo: codigoNps, cliente_telefone: '65966660001', nota: 1 }) });
+      assert.deepEqual(repetida.body.avaliacao, { repetida: true, nota: 9 }, 'replay não muda avaliação');
+      const nps = await request(base, `/api/admin/barbearia/captacao/nps?inicio=${data}&fim=${data}`, { headers });
       assert.equal(nps.body.respostas, 1);
       assert.equal(nps.body.nps, 100);
+      assert.equal(nps.body.atendimentosConcluidos, 2);
+      assert.equal(nps.body.taxaResposta, 50);
+      assert.equal(nps.body.distribuicao[9].respostas, 1);
+      assert.equal(nps.body.notificacoesPesquisa, null, 'fila PG indisponível não vira contador falso');
+      assert.equal(nps.body.armazenamentoDuravel, true, 'ambiente local com DB_PATH temporário pode testar NPS');
+      assert.equal(JSON.stringify(nps.body).includes('65966660001'), false, 'sem telefone no painel');
+      const externo = await request(base, '/api/admin/barbearia/captacao/configuracao', { method: 'PUT', headers, body: JSON.stringify({ googleReviewUrl: 'https://g.page/r/teste/review' }) });
+      assert.equal(externo.response.status, 400);
+      assert.equal(externo.body.code, 'EXTERNAL_REVIEW_DISABLED');
+      const configuracaoNps = await request(base, '/api/admin/barbearia/captacao/configuracao', { headers });
+      assert.equal(Object.hasOwn(configuracaoNps.body.configuracao, 'googleReviewUrl'), false);
     }
     const errada = await request(base, '/api/publico/agendamento/dino-captacao/avaliar', { method: 'POST', body: JSON.stringify({ codigo: 'ZZZZZZZZ', cliente_telefone: '65966660001', nota: 9 }) });
     assert.equal(errada.response.status, 404);
