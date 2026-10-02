@@ -221,6 +221,12 @@ export async function disconnectInstance(instance, fetchImpl) {
     if (isAuthError(result.status)) return { ok: false, authError: true, status: result.status };
     if (result.status !== 404 && result.status !== 405) break;
   }
+  if (result?.status === 404 || result?.status === 405) {
+    // Algumas versões do backend só expõem o logout legado na raiz, sem o
+    // prefixo /api/v1/whats-app; o cliente oficial usa exatamente esta rota.
+    result = await call({ ...cfg, apiBase: '' }, 'POST', `/logout?instance=${encodeURIComponent(cfg.instance)}`, {}, fetchImpl);
+    if (isAuthError(result.status)) return { ok: false, authError: true, status: result.status };
+  }
   return { ok: result?.ok === true, status: result?.status ?? null, error: result?.ok ? null : (result?.error || 'logout_failed') };
 }
 

@@ -186,3 +186,13 @@ test('desconexão mantém fallback para o contrato legado de sessão', async () 
     ]);
   });
 });
+
+test('desconexão usa a rota global legada quando não há rota por instância', async () => {
+  await withEnv(env, async () => {
+    const fetch = fakeFetch([{ status: 404 }, { status: 405 }, { status: 404 }, { status: 200, body: { ok: true } }]);
+    const result = await provider.disconnectInstance('dino-1', fetch);
+    assert.equal(result.ok, true);
+    assert.equal(fetch.calls.at(-1).method, 'POST');
+    assert.equal(fetch.calls.at(-1).url, 'https://backend.test/logout?instance=dino-1');
+  });
+});
