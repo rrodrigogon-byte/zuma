@@ -1,6 +1,6 @@
-# WhatsApp da Dino: backend próprio, igual ao da Isa
+# WhatsApp da Dino: backend próprio, com instância isolada
 
-Este runbook coloca o WhatsApp da Barbearia Dino no ar com o **mesmo software e o mesmo contrato** da Isa (NossaGente): `chatbot-backend-nestjs`. A diferença é que o deploy, o número e a chave são **da Dino**.
+Este runbook coloca o WhatsApp da Barbearia Dino no ar com o **mesmo software-base** da Isa (NossaGente): `chatbot-backend-nestjs`. A Dino usa um deploy Cloud Run isolado e a instância WhatsApp `dino`; o número, a sessão e a chave são exclusivos da barbearia.
 
 ## Por que um deploy separado
 
@@ -16,19 +16,21 @@ Tudo no Kytto já segue o contrato da Isa:
 | Parte | Contrato |
 |---|---|
 | Envio | `POST {URL}/api/v1/whats-app/send`, corpo `{chat_id, message, simulateTyping:false, delaySeconds:0, waitForReply:false}`, cabeçalho `X-API-KEY`. |
-| Recebimento | Consulta `GET /messages?latest=false&role=user&from=…` a cada 5 s. É o mesmo modelo do `whatsappApiSyncWorker` da Isa; não há webhook de mensagens. |
+| Recebimento | Consulta global `GET /messages?latest=false&role=user&from=…&instance=dino` a cada 5 s. O backend multi-instância não expõe uma rota de webhook utilizável nem `/instances/dino/messages`; a entrada efetiva é polling filtrado por instância. |
 | Id do evento | `api:<chat>:<id>:<hash>`, gravado sem duplicar. A mesma mensagem nunca é respondida duas vezes. |
 | Idade máxima | 30 min (`WHATSAPP_MAX_REPLY_AGE_MINUTES`). |
 | Áudio | Resposta fixa pedindo texto. |
 | SAIR / PARE | Revoga o consentimento e cancela os avisos pendentes. |
 | Status e QR | `GET /status` (`authenticated`, `connecting`) e `GET /qr`, pela tela **WhatsApp da empresa** (`/admin/whatsapp`). |
 
+No backend multi-instância, a instância deve permanecer `dino` em todas as operações. Não usar `CHATBOT_BACKEND_MODE=isa` neste deploy: esse modo consulta a sessão raiz da Isa e pode misturar o contexto operacional.
+
 ## Passo a passo
 
 ### 1. Publicar o backend da Dino
 
 1. Use a mesma imagem/versão do `chatbot-backend-nestjs` da Isa.
-2. Crie um serviço **novo** no Cloud Run (ou equivalente), por exemplo `chatbot-backend-dino`, em projeto ou serviço separado do da Isa.
+2. Crie um serviço **novo** no Cloud Run (ou equivalente), por exemplo `dino-chatbot-backend`, em projeto ou serviço separado do da Isa.
 3. Gere uma chave de API nova para a Dino, com **20 ou mais caracteres**. Guarde-a só no gerenciador de segredos.
 4. Não reutilize a chave da Isa e não cole a chave em PR, chat ou log.
 5. O armazenamento da sessão do WhatsApp (pasta ou volume da sessão) deve ser **exclusivo** do serviço da Dino.
@@ -41,11 +43,13 @@ Tudo no Kytto já segue o contrato da Isa:
 | `WHATSAPP_PROVIDER` | `chatbot_backend` |
 | `CHATBOT_BACKEND_URL` | URL HTTPS do backend **da Dino** (passo 1) |
 | `CHATBOT_BACKEND_KEY` | A chave da Dino (≥ 20 caracteres). Cole pelo painel do Render, nunca no repositório. |
+| `CHATBOT_BACKEND_MODE` | `instancias` |
+| `CHATBOT_BACKEND_INSTANCE` | `dino` |
 | `CHATBOT_BACKEND_EMPRESA_ID` | `d0d0ac01-8e50-4b61-8c79-de4aaa916da6` (empresa dona do número) |
 | `FEATURE_WHATSAPP_AI` | `true` |
 | `GEMINI_API_KEY` | Chave do modelo da atendente |
-| `WHATSAPP_POLL_MODE` | Comece com `shadow` (veja a etapa 4) |
-| `WHATSAPP_POLL_PILOT_PHONES` | Telefones da equipe para o piloto, separados por vírgula |
+| `WHATSAPP_POLL_MODE` | `pilot` durante o piloto; `on` somente após aprovação explícita |
+| `WHATSAPP_POLL_PILOT_PHONES` | Somente o número de teste autorizado, normalizado; separados por vírgula se houver mais de um |
 | `PUBLIC_BASE_URL` | `https://dino.kytto.com.br`. Usada no link de avaliação (NPS) e nas meta tags. |
 
 O serviço Render é **multiempresa**: este domínio se aplica apenas ao slug público `dino`. Para outros slugs, o link NPS e o canonical ficam desativados até existir um domínio validado por empresa; nunca apontar clientes de outra barbearia para a Dino. O link de avaliação aponta exclusivamente para `/avaliar/dino` no próprio sistema. Ele não contém código de agendamento na URL: o código vai no texto da mensagem e é digitado no formulário junto ao telefone. **Não** configurar link Google nem qualquer formulário externo. Os indicadores ficam em **Relacionamento → Avaliações (NPS)**, com período, participação, distribuição, evolução e equipe, respeitando a loja da sessão.
@@ -67,21 +71,16 @@ Opcionais:
 
 ### 4. Ligar com segurança
 
-1. Coloque `WHATSAPP_POLL_MODE=shadow`. As mensagens são registradas, mas ninguém recebe resposta.
-   - Confira no admin que as conversas aparecem.
-   - Confira que não há mensagens de outra empresa.
-2. Coloque `WHATSAPP_POLL_MODE=pilot` com os telefones da equipe em `WHATSAPP_POLL_PILOT_PHONES`.
-3. Pelo celular da equipe, teste:
-   - "quero marcar um corte amanhã" → horários → `CONFIRMAR` → o agendamento aparece na agenda do admin com origem WhatsApp;
-   - "quero remarcar" e "quero cancelar";
-   - "quantos cortes ainda tenho no plano?" (com um cliente assinante de teste);
-   - um áudio: deve chegar a resposta fixa pedindo texto;
-   - `SAIR`: o consentimento é revogado e os avisos param.
-4. Coloque `WHATSAPP_POLL_MODE=on` para todos.
+1. Mantenha `WHATSAPP_POLL_MODE=pilot` e deixe `WHATSAPP_POLL_PILOT_PHONES` vazio até identificar o número de teste.
+2. Adicione somente o número de teste autorizado a `WHATSAPP_POLL_PILOT_PHONES`; o worker normaliza números brasileiros de 10/11 dígitos para `55...`.
+3. Pelo celular de teste, envie uma mensagem inofensiva, como `Olá, teste Dino`. Verifique nos logs apenas o processamento e o envio, sem registrar conteúdo ou telefone em relatórios.
+4. Opcionalmente, avance para a cotação de um agendamento e a listagem de horários. Não confirme atendimento, pedido, pagamento ou promoção sem fixture segura e autorização explícita.
+5. Só após o piloto aprovado, mude para `WHATSAPP_POLL_MODE=on` para todos.
 
 ### 5. Verificação contínua
 
-- O log do Render mostra `[WhatsApp] entrada por consulta (modelo Isa) ativa a cada 5000 ms, modo on`.
+- O log do Render mostra `[WhatsApp] entrada por consulta ativa a cada 5000 ms, modo pilot, backend instancias` durante o piloto.
+- A sincronização do canal pode retornar `manual: true` e `polling: true`: isso é esperado quando o backend não oferece webhook; não tentar registrar `/instances/dino/webhook`.
 - Se o backend perder a sessão, o status deixa de ser `authenticated`. Gere outro QR em **WhatsApp da empresa**.
 - A fila de avisos (lembrete, vaga na lista de espera, pedido de avaliação) só envia para quem autorizou o WhatsApp de atendimento.
 
