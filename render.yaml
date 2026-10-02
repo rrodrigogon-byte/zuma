@@ -5,6 +5,9 @@ services:
     name: setpoint
     runtime: node
     plan: starter            # free/starter; suba conforme a demanda
+    # O banco JSON (agenda, clientes, comandas, clube) aceita UM processo gravando:
+    # não escale horizontalmente enquanto ele existir. Suba o plano (vertical) se precisar.
+    numInstances: 1
     region: oregon
     buildCommand: cd web && npm install --include=dev && npm run build && rm -rf ../app/public/assets && cp -R dist/. ../app/public/ && cd ../app && npm install
     preDeployCommand: cd app && npm run commerce:schema:apply

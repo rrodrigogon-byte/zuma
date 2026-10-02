@@ -165,7 +165,7 @@ gcloud run deploy kytto-erp \
   --memory 512Mi \
   --cpu 1 \
   --timeout 300 \
-  --max-instances 100 \
+  --max-instances 1 \
   --set-env-vars DATABASE_URL=postgresql://kytto_user:SENHA@kytto-pg-prod:5432/kytto_erp \
   --set-env-vars REDIS_URL=redis://kytto-redis-prod:6379 \
   --set-env-vars JWT_SECRET=sua_chave_secreta_aqui \

@@ -3,7 +3,8 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { db, save, nextId, hydrate, flush, armazenamentoAvaliacaoDuravel } from './db.js';
+import { db, save, nextId, hydrate, flush, armazenamentoAvaliacaoDuravel, estadoGravacao, caminhoBanco, substituirBanco } from './db.js';
+import { criarProtecaoDados } from './protecao-dados-kytto.js';
 import { CATALOGO_BAR_TTC_SKUS, RESUMO_CATALOGO_BAR_TTC } from './catalogo-bar-ttc-oficial.js';
 import { sortear } from './bracket.js';
 import { applyChaveToRanking, rankingList, applyPartidaToRanking, temporadasList, resetTemporada } from './ranking.js';
@@ -29,7 +30,7 @@ import { createWhatsappAiWebhookRouter } from './core/whatsapp-ai-routes.js';
 import { whatsappAiOperationalStatus } from './core/whatsapp-ai.js';
 import { startWhatsappAiWorker } from './workers/whatsapp-ai-worker.js';
 import { startIsaPollWorker } from './core/whatsapp-isa-poll.js';
-import { db as commerceDb } from './core/database.js';
+import { db as commerceDb, getPool as getCommercePool } from './core/database.js';
 import { checkCommerceSchemaReadiness } from './core/commerce-schema-readiness.js';
 import * as loyaltyDb from './db-pg.js';
 import {
@@ -144,12 +145,27 @@ if(PROD && (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'agro-open-dev
   process.exit(1);
 }
 
+// Proteção do banco JSON: cópia horária conferida no PostgreSQL, retenção e
+// instância única para as rotinas que gravam no JSON (app/protecao-dados-kytto.js).
+const protecaoDados = criarProtecaoDados({ getPool: getCommercePool, caminhoBanco, estadoGravacao });
+
+// Para monitor externo (UptimeRobot, Better Stack…): 503 quando a persistência está
+// degradada. Não expõe dados de clientes, só o estado e a lista de problemas.
+app.get('/health/persistencia', (req, res) => {
+  const { status, problemas } = protecaoDados.situacao();
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(status === 'ok' ? 200 : 503).json({ status, problemas });
+});
+
 app.get('/health', async (req, res) => {
-  if (process.env.COMMERCE_CORE_ENABLED !== '1') return res.status(200).json({ status: 'ready' });
+  // O estado da persistência é informativo aqui: o health principal não reinicia o
+  // serviço por causa de uma cópia atrasada (use /health/persistencia para alertar).
+  const persistencia = protecaoDados.situacao().status;
+  if (process.env.COMMERCE_CORE_ENABLED !== '1') return res.status(200).json({ status: 'ready', persistencia });
   try {
     const schema = await checkCommerceSchemaReadiness(commerceDb);
     if (!schema.ready) return res.status(503).json({ status: 'not_ready', code: schema.code });
-    return res.status(200).json({ status: 'ready' });
+    return res.status(200).json({ status: 'ready', persistencia });
   } catch {
     return res.status(503).json({ status: 'not_ready', code: 'COMMERCE_DATABASE_UNAVAILABLE' });
   }
@@ -365,6 +381,11 @@ function rateLimit(chave, max=8, janelaMs=15*60*1000){
   return true;
 }
 const limparTentativas = chave => tentativas.delete(chave);
+// Remove janelas vencidas: sem isso o mapa só cresce (uma chave por IP e rota).
+setInterval(() => {
+  const agora = Date.now();
+  for (const [chave, e] of tentativas) if (e.until <= agora) tentativas.delete(chave);
+}, 10 * 60 * 1000).unref();
 
 // Rate-limit para endpoints públicos sem auth (inscrição, ingresso, reserva, contato,
 // mesa virtual) — evita spam/abuso. Mais permissivo que o login.
@@ -475,6 +496,36 @@ app.use('/api/admin', (req,res,next)=>{
     }
     next();
   }));
+});
+
+// Proteção dos dados: estado, cópias guardadas e cópia manual (só a administração
+// da plataforma). Sem o servidor no ar, use app/scripts/restaurar-copia-json.js.
+app.get('/api/admin/platform/protecao-dados', requirePlatformAdmin, async (req, res) => {
+  try { res.json({ ok: true, ...protecaoDados.situacao(), copias: await protecaoDados.listarCopias({ limite: req.query?.limite }) }); }
+  catch (error) { res.status(500).json({ error: 'não foi possível ler o estado da proteção de dados', code: 'PROTECAO_DADOS_INDISPONIVEL' }); }
+});
+app.post('/api/admin/platform/protecao-dados/copia', requirePlatformAdmin, async (req, res) => {
+  try {
+    const copia = await protecaoDados.criarCopia({ tipo: 'manual', forcar: true });
+    if (!copia.ok) return res.status(409).json({ error: 'cópia não realizada', code: String(copia.motivo || 'COPIA_NAO_REALIZADA').toUpperCase() });
+    res.json({ ok: true, copia });
+  } catch (error) { res.status(500).json({ error: 'falha ao gerar a cópia', code: 'COPIA_FALHOU' }); }
+});
+app.post('/api/admin/platform/protecao-dados/restaurar', requirePlatformAdmin, async (req, res) => {
+  const id = String(req.body?.id || '').replace(/\D/g, '');
+  if (!id) return res.status(400).json({ error: 'informe a cópia a restaurar', code: 'COPIA_OBRIGATORIA' });
+  if (req.body?.confirmacao !== `RESTAURAR ${id}`) return res.status(400).json({ error: `para confirmar, envie a frase "RESTAURAR ${id}"`, code: 'CONFIRMACAO_OBRIGATORIA' });
+  try {
+    const conteudo = await protecaoDados.lerCopia(id);
+    // Guarda o estado atual antes: a restauração pode ser desfeita restaurando esta cópia.
+    const antes = await protecaoDados.criarCopia({ tipo: 'manual', forcar: true });
+    if (!antes.ok) return res.status(409).json({ error: 'não foi possível guardar o estado atual antes de restaurar', code: String(antes.motivo || 'COPIA_PREVIA_FALHOU').toUpperCase() });
+    substituirBanco(JSON.parse(conteudo.toString('utf8')));
+    audit(req, 'PROTECAO DADOS RESTAURACAO', `copia=${id} anterior=${antes.id}`);
+    res.json({ ok: true, restaurada: id, copiaDoEstadoAnterior: antes.id });
+  } catch (error) {
+    res.status(500).json({ error: 'falha ao restaurar a cópia', code: 'RESTAURACAO_FALHOU' });
+  }
 });
 
 // Commerce Core PostgreSQL fica opt-in até DATABASE_URL, migrations, tenant e
@@ -729,7 +780,8 @@ function expirarInscricoesPendentes(){
   });
   if(changed) save();
 }
-setInterval(expirarInscricoesPendentes, 60*1000);
+// Grava no JSON: só a instância líder roda (ver protecaoDados).
+protecaoDados.rotinaDoLider('inscrições pendentes', 60*1000, expirarInscricoesPendentes);
 
 app.post('/api/inscricao', publicLimit(), (req,res)=>{
   const b = req.body || {};
@@ -6413,6 +6465,7 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
     startLoyaltyExpiry();
   }
   app.listen(PORT, ()=> console.log(`SetPoint React SPA em http://localhost:${PORT}`));
+  if (process.env.NODE_ENV !== 'test') protecaoDados.iniciar();
   startWhatsappAiWorker();
   // Entrada do WhatsApp igual à da Isa: consulta periódica ao backend (sem webhook).
   startIsaPollWorker();
@@ -6451,18 +6504,8 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
 // Encerramento gracioso: garante o flush do último estado para o GCS antes de morrer
 // (Cloud Run envia SIGTERM no deploy/scale-down e concede ~10s de grace period).
 for(const sig of ['SIGTERM','SIGINT']){
-  process.on(sig, async ()=>{ try { await flush(); } catch {} process.exit(0); });
+  process.on(sig, async ()=>{ try { await flush(); } catch {} try { await protecaoDados.encerrar(); } catch {} process.exit(0); });
 }
 
-// Backup diário às 03h
-;(function agendarBackupDiario() {
-  const DB_P = process.env.DB_PATH || path.join(__dirname, 'data', 'db.json');
-  const agora = new Date(), prox = new Date(agora);
-  prox.setDate(prox.getDate() + (agora.getHours() >= 3 ? 1 : 0));
-  prox.setHours(3, 0, 0, 0);
-  setTimeout(function tick() {
-    const bak = DB_P.replace(/\.json$/, '') + '-' + new Date().toISOString().slice(0,10) + '.bak.json';
-    try { if (fs.existsSync(DB_P)) fs.copyFileSync(DB_P, bak); } catch {}
-    setTimeout(tick, 24*60*60*1000);
-  }, Math.max(0, prox - agora));
-})();
+// A cópia local diária (com retenção de 7 dias) e a cópia externa ficam em
+// protecaoDados.iniciar(), chamado no boot.

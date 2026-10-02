@@ -41,7 +41,7 @@ gcloud run deploy kytto-erp \
   --memory 2Gi \
   --cpu 2 \
   --timeout 3600 \
-  --max-instances 10
+  --max-instances 1
 ```
 
 ## Variáveis de Ambiente Obrigatórias

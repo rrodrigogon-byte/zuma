@@ -239,7 +239,7 @@ gcloud run deploy setpoint-ultra \
   --memory 1Gi \
   --cpu 1 \
   --min-instances 1 \
-  --max-instances 10 \
+  --max-instances 1 \
   --add-cloudsql-instances $CONNECTION_NAME \
   --set-env-vars "NODE_ENV=production,PORT=8080,DB_HOST=/cloudsql/$CONNECTION_NAME,DB_USER=setpoint_admin,DB_NAME=setpoint_ultra,SEFAZ_AMBIENTE=producao" \
   --set-secrets "DB_PASS=setpoint-db-pass:latest,JWT_SECRET=setpoint-jwt-secret:latest,CERT_ENCRYPTION_KEY=setpoint-cert-key:latest" \

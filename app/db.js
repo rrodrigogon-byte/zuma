@@ -39,7 +39,19 @@ function ensureDir(){ fs.mkdirSync(path.dirname(DB_PATH), { recursive: true }); 
 
 export function load(){
   ensureDir();
-  if(!fs.existsSync(DB_PATH)) return structuredClone(DEFAULT);
+  if(!fs.existsSync(DB_PATH)){
+    // Sem o arquivo principal, tenta a última cópia íntegra antes de começar vazio:
+    // um processo interrompido entre gravações nunca deve virar "banco zerado".
+    const bak = DB_PATH + '.bak';
+    if(fs.existsSync(bak)){
+      try {
+        const d = { ...structuredClone(DEFAULT), ...JSON.parse(fs.readFileSync(bak,'utf8')) };
+        console.error('DB principal ausente: recuperado da cópia .bak');
+        return d;
+      } catch(e){ console.error('DB principal ausente e .bak ilegível:', e.message); }
+    }
+    return structuredClone(DEFAULT);
+  }
   try { return { ...structuredClone(DEFAULT), ...JSON.parse(fs.readFileSync(DB_PATH,'utf8')) }; }
   catch(e){
     console.error('DB corrompido:', e.message);
@@ -147,16 +159,83 @@ export async function flush(){
   await runUpload();
 }
 
+// ── Gravação local ────────────────────────────────────────────────────────────
+// Escrita atômica: grava num temporário (com fsync periódico) e troca pelo arquivo
+// principal com rename (atômico no mesmo filesystem). O JSON é
+// compacto (sem indentação): o arquivo fica menor e a serialização mais rápida.
+// A cópia .bak da última versão íntegra é renovada no máximo a cada 5 minutos, em
+// vez de duplicar o arquivo inteiro a cada gravação.
+const _bakIntervalo = Number.parseInt(process.env.DB_BAK_INTERVAL_MS ?? '', 10);
+const BAK_INTERVALO_MS = Number.isFinite(_bakIntervalo) && _bakIntervalo >= 0 ? _bakIntervalo : 5 * 60 * 1000;
+// fsync é caro com arquivo grande e várias gravações por requisição: força o disco no
+// máximo a cada 30 s (o conteúdo já está no cache do sistema; só uma queda do host
+// perderia a janela). Um processo que morre não perde nada: o rename já aconteceu.
+const FSYNC_INTERVALO_MS = 30 * 1000;
+let _ultimoFsync = 0;
+const GRAVACAO_LENTA_MS = 250;
+const _metricas = { gravacoes: 0, ultimaGravacaoEm: null, ultimaDuracaoMs: 0, maiorDuracaoMs: 0, tamanhoBytes: 0, ultimoErro: null, ultimoErroEm: null, gravacoesLentas: 0, ultimoBakEm: 0 };
+
+function escreverArquivo(arquivo, conteudo){
+  const fd = fs.openSync(arquivo, 'w');
+  try {
+    fs.writeSync(fd, conteudo);
+    const agora = Date.now();
+    if(agora - _ultimoFsync >= FSYNC_INTERVALO_MS){ fs.fsyncSync(fd); _ultimoFsync = agora; }
+  } finally { fs.closeSync(fd); }
+}
+
 export function save(){
-  ensureDir();
-  // Escrita atômica: grava em arquivo temporário e faz rename (atômico no mesmo
-  // filesystem). Evita arquivo truncado/corrompido se o processo morrer no meio da
-  // escrita (deploy/OOM). Mantém um .bak da última versão íntegra antes de sobrescrever.
-  const tmp = DB_PATH + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(_cache, null, 2));
-  try { if(fs.existsSync(DB_PATH)) fs.copyFileSync(DB_PATH, DB_PATH + '.bak'); } catch {}
-  fs.renameSync(tmp, DB_PATH);
+  const inicio = Date.now();
+  try {
+    ensureDir();
+    const conteudo = JSON.stringify(_cache);
+    const tmp = DB_PATH + '.tmp';
+    escreverArquivo(tmp, conteudo);
+    if(inicio - _metricas.ultimoBakEm >= BAK_INTERVALO_MS && fs.existsSync(DB_PATH)){
+      try { fs.copyFileSync(DB_PATH, DB_PATH + '.bak'); _metricas.ultimoBakEm = inicio; }
+      catch(e){ console.error('[DB] falha ao renovar a cópia .bak:', e.message); }
+    }
+    fs.renameSync(tmp, DB_PATH);
+    const duracao = Date.now() - inicio;
+    _metricas.gravacoes += 1;
+    _metricas.ultimaGravacaoEm = new Date().toISOString();
+    _metricas.ultimaDuracaoMs = duracao;
+    _metricas.maiorDuracaoMs = Math.max(_metricas.maiorDuracaoMs, duracao);
+    _metricas.tamanhoBytes = Buffer.byteLength(conteudo);
+    _metricas.ultimoErro = null;
+    if(duracao >= GRAVACAO_LENTA_MS){
+      _metricas.gravacoesLentas += 1;
+      if(_metricas.gravacoesLentas % 20 === 1) console.warn(`[DB] gravação lenta: ${duracao} ms para ${(_metricas.tamanhoBytes / 1048576).toFixed(1)} MB`);
+    }
+  } catch(e){
+    _metricas.ultimoErro = String(e?.code || e?.message || e).slice(0, 120);
+    _metricas.ultimoErroEm = new Date().toISOString();
+    console.error('[DB] falha ao gravar o banco local:', _metricas.ultimoErro);
+    throw e;
+  }
   scheduleUpload();
+}
+
+// Estado da gravação local para o health check e o painel (sem dados de clientes).
+export function estadoGravacao(){
+  return { arquivo: path.basename(DB_PATH), ...(_metricas.ultimoBakEm ? { ultimoBakEm: new Date(_metricas.ultimoBakEm).toISOString() } : {}),
+    gravacoes: _metricas.gravacoes, ultimaGravacaoEm: _metricas.ultimaGravacaoEm, ultimaDuracaoMs: _metricas.ultimaDuracaoMs,
+    maiorDuracaoMs: _metricas.maiorDuracaoMs, gravacoesLentas: _metricas.gravacoesLentas, tamanhoBytes: _metricas.tamanhoBytes,
+    ultimoErro: _metricas.ultimoErro, ultimoErroEm: _metricas.ultimoErroEm, replicacaoGcs: Boolean(GCS_BUCKET) };
+}
+
+export function caminhoBanco(){ return DB_PATH; }
+
+// Restauração: troca o estado em memória por uma cópia já conferida e grava.
+// Usada só pela rota de restauração da administração da plataforma, que antes
+// guarda uma cópia do estado atual (a restauração pode ser desfeita).
+export function substituirBanco(estado){
+  if(!estado || typeof estado !== 'object' || Array.isArray(estado)) throw new Error('estado inválido para restauração');
+  const anterior = _cache;
+  _cache = { ...structuredClone(DEFAULT), ...estado };
+  try { save(); }
+  catch(e){ _cache = anterior; throw e; }  // memória e disco nunca divergem
+  return _cache;
 }
 
 export function nextId(){ const id = _cache.seq++; save(); return id; }

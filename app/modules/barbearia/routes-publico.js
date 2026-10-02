@@ -277,7 +277,16 @@ function registrarFalha(req, empresaId) {
   const registro = atual && atual.expira > Date.now() ? atual : { falhas: 0, expira: Date.now() + 30 * 60 * 1000 };
   registro.falhas += 1;
   FALHAS_AUTOATENDIMENTO.set(chave, registro);
-  if (FALHAS_AUTOATENDIMENTO.size > 5000) FALHAS_AUTOATENDIMENTO.clear();
+  // Remove só registros vencidos: zerar o mapa inteiro liberaria quem está bloqueado.
+  if (FALHAS_AUTOATENDIMENTO.size > 5000) {
+    const agora = Date.now();
+    for (const [k, r] of FALHAS_AUTOATENDIMENTO) if (r.expira < agora) FALHAS_AUTOATENDIMENTO.delete(k);
+    // Ainda grande (ataque distribuído): descarta os mais antigos, mantendo os bloqueados.
+    for (const [k, r] of FALHAS_AUTOATENDIMENTO) {
+      if (FALHAS_AUTOATENDIMENTO.size <= 5000) break;
+      if (r.falhas < 6) FALHAS_AUTOATENDIMENTO.delete(k);
+    }
+  }
 }
 function autoatendimento(handler) {
   return async (req, res) => {

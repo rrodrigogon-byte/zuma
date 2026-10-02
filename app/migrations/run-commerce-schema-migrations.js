@@ -46,6 +46,7 @@ const migrationFiles = [
   '052_ai_brain_memory_learning.sql',
   '053_commerce_phone_verification.sql',
   '054_commerce_loyalty_expiry_marks.sql',
+  '060_kytto_json_snapshots.sql',
 ];
 const advisoryLockKey = 825410732;
 
