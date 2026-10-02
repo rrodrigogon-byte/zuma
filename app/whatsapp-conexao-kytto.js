@@ -142,6 +142,10 @@ export async function verificarConexao(empresaId, { fetchImpl } = {}) {
   if (semInstancia(conexao)) { conexao.lastError = 'instancia_nao_atribuida'; return visaoPublica(conexao); }
   const resultado = await getInstanceStatus(conexao.instance, fetchImpl);
   aplicarEstado(conexao, resultado);
+  // Se o backend confirma a sessão aberta, a conexão precisa continuar ativa
+  // mesmo quando uma tentativa anterior de logout falhou depois de persistir
+  // apenas o estado local.
+  if (resultado.ok && resultado.state === 'open') conexao.ativo = true;
   save();
   return visaoPublica(conexao);
 }
@@ -187,12 +191,21 @@ export async function desconectar(empresaId, { usuario = '', fetchImpl } = {}) {
   const bloqueio = semInstancia(conexao);
   if (bloqueio) return { ...bloqueio, conexao: visaoPublica(conexao) };
   const resultado = await disconnectInstance(conexao.instance, fetchImpl);
+  if (!resultado.ok) {
+    // Nunca simular uma desconexão local: o backend pode ter recusado a rota
+    // sem que o número tenha deixado o WhatsApp. Mantém o botão disponível.
+    conexao.ativo = conexao.state === 'open' ? true : conexao.ativo;
+    conexao.lastError = resultado.error || 'logout_failed';
+    save();
+    return { ok: false, error: 'Backend não confirmou a desconexão.', conexao: visaoPublica(conexao) };
+  }
   conexao.ativo = false;
-  conexao.state = resultado.ok ? 'close' : conexao.state;
+  conexao.state = 'close';
+  conexao.lastError = null;
   conexao.lastDisconnectAt = new Date().toISOString();
   registrar(conexao, 'desconectado_manual', usuario ? `por ${usuario}` : '');
   save();
-  return { ok: resultado.ok, error: resultado.ok ? null : 'Backend não confirmou a desconexão.', conexao: visaoPublica(conexao) };
+  return { ok: true, error: null, conexao: visaoPublica(conexao) };
 }
 
 export function configurar(empresaId, { instance, autoReconnect, numeroExibicao } = {}, { podeTrocarInstancia = false } = {}) {

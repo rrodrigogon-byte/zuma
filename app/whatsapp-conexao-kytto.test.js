@@ -23,3 +23,39 @@ test('com CHATBOT_BACKEND_EMPRESA_ID, só essa empresa recebe a instância padr�
   assert.equal(conexao.obterConexao('emp-outra').instance, '');
   assert.equal(conexao.obterConexao('emp-dono').instance, 'dino-1');
 });
+
+test('falha de logout não marca localmente uma sessão que continua aberta', async () => {
+  const saved = { WHATSAPP_PROVIDER: process.env.WHATSAPP_PROVIDER, CHATBOT_BACKEND_URL: process.env.CHATBOT_BACKEND_URL, CHATBOT_BACKEND_KEY: process.env.CHATBOT_BACKEND_KEY };
+  process.env.WHATSAPP_PROVIDER = 'chatbot_backend';
+  process.env.CHATBOT_BACKEND_URL = 'https://backend.test';
+  process.env.CHATBOT_BACKEND_KEY = 'k'.repeat(24);
+  try {
+    const conexao = await import('./whatsapp-conexao-kytto.js');
+    const estado = conexao.obterConexao('emp-a');
+    estado.state = 'open';
+    estado.ativo = true;
+    const result = await conexao.desconectar('emp-a', { fetchImpl: async () => ({ ok: false, status: 404, text: async () => '{}' }) });
+    assert.equal(result.ok, false);
+    assert.equal(result.conexao.ativo, true);
+    assert.equal(result.conexao.state, 'open');
+  } finally {
+    for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  }
+});
+
+test('verificação reativa a conexão local quando o backend confirma estado aberto', async () => {
+  const saved = { WHATSAPP_PROVIDER: process.env.WHATSAPP_PROVIDER, CHATBOT_BACKEND_URL: process.env.CHATBOT_BACKEND_URL, CHATBOT_BACKEND_KEY: process.env.CHATBOT_BACKEND_KEY };
+  process.env.WHATSAPP_PROVIDER = 'chatbot_backend';
+  process.env.CHATBOT_BACKEND_URL = 'https://backend.test';
+  process.env.CHATBOT_BACKEND_KEY = 'k'.repeat(24);
+  try {
+    const conexao = await import('./whatsapp-conexao-kytto.js');
+    const estado = conexao.obterConexao('emp-a');
+    estado.ativo = false;
+    const result = await conexao.verificarConexao('emp-a', { fetchImpl: async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ state: 'open' }) }) });
+    assert.equal(result.state, 'open');
+    assert.equal(result.ativo, true);
+  } finally {
+    for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  }
+});
