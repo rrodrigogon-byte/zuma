@@ -208,10 +208,20 @@ export async function disconnectInstance(instance, fetchImpl) {
   const cfg = chatbotBackendConfig({ instance });
   if (!cfg.instance) return { ok: false, error: 'invalid_instance' };
   const base = `/instances/${encodeURIComponent(cfg.instance)}`;
-  let result = await call(cfg, 'POST', `${base}/session/logout`, {}, fetchImpl);
-  if (result.status === 404 || result.status === 405) result = await call(cfg, 'DELETE', `${base}/session`, null, fetchImpl);
-  if (isAuthError(result.status)) return { ok: false, authError: true, status: result.status };
-  return { ok: result.ok, status: result.status, error: result.ok ? null : (result.error || 'logout_failed') };
+  // Contrato oficial do chatbot-backend-nestjs: POST /instances/{id}/logout.
+  // Mantemos os contratos antigos apenas como fallback para backends legados.
+  const tentativas = [
+    ['POST', `${base}/logout`, {}],
+    ['POST', `${base}/session/logout`, {}],
+    ['DELETE', `${base}/session`, null],
+  ];
+  let result = null;
+  for (const [method, path, body] of tentativas) {
+    result = await call(cfg, method, path, body, fetchImpl);
+    if (isAuthError(result.status)) return { ok: false, authError: true, status: result.status };
+    if (result.status !== 404 && result.status !== 405) break;
+  }
+  return { ok: result?.ok === true, status: result?.status ?? null, error: result?.ok ? null : (result?.error || 'logout_failed') };
 }
 
 function sendPaths(cfg) {
