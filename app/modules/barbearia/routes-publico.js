@@ -5,6 +5,7 @@ import * as barbearia from '../../barbearia-erp-kytto.js';
 import { queueAppointmentNotifications } from '../../core/barbershop-appointment-notifications.js';
 import { avisarListaEspera } from '../../core/barbershop-agenda.js';
 import * as captacao from '../../dino-captacao-kytto.js';
+import * as cobranca from '../../dino-cobranca-kytto.js';
 import { vincularClienteAoAtendimento } from '../../dino-clientes-vinculo.js';
 import { phoneMatchKey } from '../../core/whatsapp-phone.js';
 
@@ -107,7 +108,10 @@ router.get('/:slug', (req, res) => {
       estabelecimento: identidade.estabelecimento,
       profissionais,
       servicos,
-      politicas: { cancelamentoHoras: Math.max(0, Number(configuracao.politicaCancelamentoHoras ?? 4)) },
+      politicas: {
+        cancelamentoHoras: Math.max(0, Number(configuracao.politicaCancelamentoHoras ?? 4)),
+        sinal: (() => { const c = cobranca.obterConfiguracaoCobranca(identidade.empresaId); return cobranca.sinalExigido(identidade.empresaId) ? { tipo: c.sinal.tipo, valor: c.sinal.valor, prazoMinutos: c.sinal.prazoMinutos } : null; })(),
+      },
     });
   } catch (erro) {
     return erroHttp(res, erro);
@@ -192,6 +196,20 @@ router.post('/:slug/confirmar', async (req, res) => {
     if (corpo.indicacao) {
       try { captacao.registrarIndicacao(identidade.empresaId, { codigo: texto(corpo.indicacao, 12), agendamento }); } catch (_) { /* indicação inválida não impede o agendamento */ }
     }
+    // Canal de origem (link da bio, Google, campanha): só o nome do canal, nunca dado pessoal.
+    try { captacao.registrarCanalAgendamento(identidade.empresaId, agendamento.id, { canal: corpo.canal, campanha: corpo.campanha }); } catch (_) { /* não impede o agendamento */ }
+    // Sinal: com cobrança ligada, o horário fica reservado até o prazo do sinal.
+    // Se o link de pagamento não puder ser gerado, o horário não fica preso.
+    let pagamento = null;
+    if (cobranca.sinalExigido(identidade.empresaId)) {
+      try {
+        pagamento = await cobranca.criarSinalDoAgendamento(identidade.empresaId, agendamento);
+      } catch (erroSinal) {
+        try { barbearia.alterarStatusAgendamento(identidade.empresaId, agendamento.id, 'cancelado', { observacoes: 'Cancelado: não foi possível gerar o sinal' }); } catch (_) { /* segue com o erro */ }
+        console.error('[Cobrança] sinal:', erroSinal?.message || erroSinal);
+        return res.status(502).json({ ok: false, error: 'Não foi possível gerar o pagamento do sinal agora. Tente de novo em instantes ou fale com a barbearia pelo WhatsApp.', code: 'SINAL_INDISPONIVEL' });
+      }
+    }
     await queueAppointmentNotifications({ empresaId: identidade.empresaId, lojaId: identidade.lojaId, legacyEmpresaId: identidade.empresaId }, agendamento, 'criado').catch(() => null);
     res.setHeader('Cache-Control', 'no-store');
     return res.status(201).json({
@@ -202,6 +220,13 @@ router.post('/:slug/confirmar', async (req, res) => {
         status: agendamento.status,
         profissional: disponibilidade.profissional.nome,
       },
+      pagamento: pagamento ? {
+        valor: pagamento.valor,
+        url: pagamento.url,
+        pixCopiaECola: pagamento.pixCopiaECola,
+        expiraEm: pagamento.expiraEm,
+        provedor: pagamento.provedor,
+      } : null,
     });
   } catch (erro) {
     return erroHttp(res, erro);
@@ -270,12 +295,24 @@ function autoatendimento(handler) {
 // Autoatendimento: código + telefone no corpo (nunca na URL).
 router.post('/:slug/meu-agendamento', autoatendimento(async (req, res, identidade) => {
   const visao = captacao.consultarAgendamentoCliente(identidade.empresaId, { codigo: req.body?.codigo, telefone: req.body?.cliente_telefone, lojaId: identidade.lojaId });
+  // Código + telefone conferidos: mostra o sinal pendente (para pagar) e o saldo de cashback.
+  const agendamento = barbearia.listarAgendamentos(identidade.empresaId, {}).find((item) => item.codigoConfirmacao === visao.codigo && (!identidade.lojaId || item.lojaId === identidade.lojaId));
+  const sinal = agendamento ? cobranca.sinalDoAgendamento(identidade.empresaId, agendamento.id) : null;
+  const cashback = cobranca.saldoCashback(identidade.empresaId, req.body?.cliente_telefone);
   res.setHeader('Cache-Control', 'no-store');
-  return res.json({ ok: true, agendamento: visao });
+  return res.json({
+    ok: true,
+    agendamento: {
+      ...visao,
+      sinal: sinal ? { valor: sinal.valor, status: sinal.status, url: sinal.status === 'pendente' ? sinal.url : null, pixCopiaECola: sinal.status === 'pendente' ? sinal.pixCopiaECola : null, expiraEm: sinal.expiraEm } : null,
+    },
+    cashback: cashback.ativo || cashback.saldo > 0 ? { saldo: cashback.saldo, proximoVencimento: cashback.proximoVencimento } : null,
+  });
 }));
 
 router.post('/:slug/meu-agendamento/cancelar', autoatendimento(async (req, res, identidade) => {
   const { agendamento, visao } = captacao.cancelarAgendamentoCliente(identidade.empresaId, { codigo: req.body?.codigo, telefone: req.body?.cliente_telefone, motivo: req.body?.motivo, lojaId: identidade.lojaId });
+  try { cobranca.cancelarSinalPendente(identidade.empresaId, agendamento.id); } catch (_) { /* não impede o cancelamento */ }
   const contexto = { empresaId: identidade.empresaId, lojaId: agendamento.lojaId || identidade.lojaId, legacyEmpresaId: identidade.empresaId };
   await queueAppointmentNotifications(contexto, agendamento, 'cancelado').catch(() => null);
   await avisarListaEspera(contexto, agendamento, captacao.candidatosParaVaga(identidade.empresaId, agendamento)).catch(() => null);
@@ -297,6 +334,26 @@ router.post('/:slug/meu-agendamento/remarcar', autoatendimento(async (req, res, 
   res.setHeader('Cache-Control', 'no-store');
   return res.json({ ok: true, agendamento: visao });
 }));
+
+// Volta do checkout da InfinitePay: confere o pagamento na própria InfinitePay
+// (payment_check) antes de confirmar o horário. Os identificadores vêm do retorno.
+router.post('/:slug/pagamento/verificar', async (req, res) => {
+  const identidade = identidadePublica(req.params.slug);
+  if (!identidade) return res.status(404).json({ ok: false, error: 'Estabelecimento não encontrado.' });
+  try {
+    const resultado = await cobranca.confirmarPelaInfinitePay({
+      order_nsu: texto(req.body?.order_nsu, 40),
+      transaction_nsu: texto(req.body?.transaction_nsu, 80),
+      slug: texto(req.body?.slug, 80),
+    });
+    if (resultado.empresaId !== identidade.empresaId) return res.status(404).json({ ok: false, error: 'Pagamento não encontrado.' });
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ ok: true, pago: resultado.status === 'paga', tipo: resultado.tipo, horarioLiberado: resultado.revisar === 'horario_liberado' || resultado.revisar === 'cobranca_cancelada' });
+  } catch (erro) {
+    if (erro instanceof cobranca.CobrancaError) return res.status(erro.status || 400).json({ ok: false, error: erro.message, code: erro.code });
+    return res.status(400).json({ ok: false, error: 'Não foi possível confirmar o pagamento ainda. Se já pagou, aguarde alguns instantes.' });
+  }
+});
 
 // NPS pós-atendimento: nota 0–10 do atendimento concluído (código + telefone no corpo).
 router.post('/:slug/avaliar', autoatendimento(async (req, res, identidade) => {
@@ -320,8 +377,8 @@ router.post('/:slug/avaliar', autoatendimento(async (req, res, identidade) => {
 export function metaPublicaDoSlug(slugRecebido) {
   const identidade = identidadePublica(slugRecebido);
   if (!identidade) return null;
-  const { nome, slug: slugPublico, endereco } = identidade.estabelecimento;
-  return { nome, slug: slugPublico, endereco };
+  const { nome, slug: slugPublico, endereco, whatsapp } = identidade.estabelecimento;
+  return { nome, slug: slugPublico, endereco, telefone: whatsapp };
 }
 
 export default router;

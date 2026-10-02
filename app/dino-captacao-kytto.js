@@ -90,6 +90,7 @@ function captacao(empresaId) {
   estado.assinaturas ||= {};
   estado.metasProfissionais ||= {};
   estado.avaliacoes ||= {};
+  estado.canais ||= {};
   // Descarta a configuração externa legada em memória; nunca a serve nem a usa
   // como destino do cliente. A próxima gravação legítima persiste a limpeza.
   const { googleReviewUrl: _legacyExternalReviewUrl, ...configuracaoInterna } = estado.configuracao || {};
@@ -1237,4 +1238,112 @@ export function painelNps(empresaId, { inicio, fim, lojaId = '' } = {}) {
       dataAtendimento: item.dataAtendimento,
     })),
   };
+}
+
+
+// ---------------------------------------------------------------------------
+// CAPTAÇÃO POR CANAL (fase 3)
+// O link público aceita ?canal= (ou utm_source): google, instagram, whatsapp,
+// indicacao... Guardamos só o nome do canal e da campanha por agendamento, para
+// medir de onde vêm os clientes novos. Nada pessoal.
+// ---------------------------------------------------------------------------
+const CANAIS_CONHECIDOS = new Map([
+  ['google', 'Google'], ['gbp', 'Google'], ['maps', 'Google'], ['googlemaps', 'Google'],
+  ['instagram', 'Instagram'], ['ig', 'Instagram'], ['facebook', 'Facebook'], ['fb', 'Facebook'],
+  ['whatsapp', 'WhatsApp'], ['wa', 'WhatsApp'], ['tiktok', 'TikTok'], ['site', 'Site'],
+  ['indicacao', 'Indicação'], ['qrcode', 'QR code'], ['qr', 'QR code'],
+]);
+
+export function normalizarCanal(valor) {
+  const bruto = texto(valor, 40).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!bruto) return '';
+  return CANAIS_CONHECIDOS.get(bruto) || (bruto.length <= 24 ? bruto : '');
+}
+
+export function registrarCanalAgendamento(empresaId, agendamentoId, { canal, campanha } = {}) {
+  const nome = normalizarCanal(canal);
+  if (!nome || !agendamentoId) return null;
+  const estado = captacao(empresaId);
+  if (estado.canais[agendamentoId]) return estado.canais[agendamentoId];
+  estado.canais[agendamentoId] = { canal: nome, campanha: texto(campanha, 60).replace(/[^\p{L}\p{N} _-]/gu, ''), em: new Date().toISOString() };
+  save();
+  return estado.canais[agendamentoId];
+}
+
+/** Agendamentos, clientes novos, concluídos e receita por canal no período. */
+// Valor do atendimento: o maior entre o preço e o recebido no dia (o sinal e o
+// cashback, pagos em outro momento, não reduzem o valor gerado pelo canal).
+function valorDoAtendimento(item) {
+  return dinheiro(Math.max(Number(item.valor || 0), Number(item.valorRecebido || 0)));
+}
+
+export function painelCanais(empresaId, { inicio, fim, lojaId = '' } = {}) {
+  const de = /^\d{4}-\d{2}-\d{2}$/.test(String(inicio || '')) ? inicio : '0000-01-01';
+  const ate = /^\d{4}-\d{2}-\d{2}$/.test(String(fim || '')) ? fim : '9999-12-31';
+  const canais = captacao(empresaId).canais;
+  const todos = barbearia.listarAgendamentos(empresaId, {}).filter((item) => !lojaId || !item.lojaId || item.lojaId === lojaId);
+  // Primeiro agendamento de cada telefone: define quem é cliente novo.
+  const primeiro = new Map();
+  for (const item of [...todos].sort((a, b) => String(a.dataHora).localeCompare(String(b.dataHora)))) {
+    const chave = telefoneChave(item.clienteTelefone) || `id:${item.clienteId || item.id}`;
+    if (!primeiro.has(chave)) primeiro.set(chave, item.id);
+  }
+  const linhas = new Map();
+  for (const item of todos) {
+    const dia = item.dataAgenda || String(item.dataHora).slice(0, 10);
+    if (dia < de || dia > ate) continue;
+    const nome = canais[item.id]?.canal
+      || (item.origem === 'whatsapp_ia' ? 'WhatsApp (IA)' : item.origem === 'agendamento_online' ? 'Link direto' : 'Balcão / equipe');
+    const linha = linhas.get(nome) || { canal: nome, agendamentos: 0, clientesNovos: 0, concluidos: 0, cancelados: 0, receita: 0 };
+    linha.agendamentos += 1;
+    const chave = telefoneChave(item.clienteTelefone) || `id:${item.clienteId || item.id}`;
+    if (primeiro.get(chave) === item.id) linha.clientesNovos += 1;
+    if (item.status === 'concluido') { linha.concluidos += 1; linha.receita = dinheiro(linha.receita + valorDoAtendimento(item)); }
+    if (['cancelado', 'nao_compareceu'].includes(item.status)) linha.cancelados += 1;
+    linhas.set(nome, linha);
+  }
+  const lista = [...linhas.values()].sort((a, b) => b.agendamentos - a.agendamentos);
+  return {
+    canais: lista,
+    total: lista.reduce((soma, item) => soma + item.agendamentos, 0),
+    clientesNovos: lista.reduce((soma, item) => soma + item.clientesNovos, 0),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// RECEITA ATRIBUÍDA À IA E À CAPTAÇÃO (fase 4)
+// Atendimentos que nasceram de uma ação automática: marcados pela IA no
+// WhatsApp, vindos da lista de espera, de indicação ou de quem voltou depois do
+// convite de retorno. Conta só o que foi concluído.
+// ---------------------------------------------------------------------------
+export function painelReceitaIa(empresaId, { inicio, fim, lojaId = '' } = {}) {
+  const de = /^\d{4}-\d{2}-\d{2}$/.test(String(inicio || '')) ? inicio : '0000-01-01';
+  const ate = /^\d{4}-\d{2}-\d{2}$/.test(String(fim || '')) ? fim : '9999-12-31';
+  const estado = captacao(empresaId);
+  const indicados = new Set(Object.values(estado.indicacoes).map((item) => item.agendamentoId).filter(Boolean));
+  const daEspera = new Set(Object.values(estado.listaEspera).filter((item) => item.status === 'agendado').map((item) => `${telefoneChave(item.telefone)}|${item.data}`));
+  let totalUnico = 0;
+  const linhas = {
+    whatsapp_ia: { fonte: 'Atendente IA no WhatsApp', agendamentos: 0, concluidos: 0, receita: 0 },
+    lista_espera: { fonte: 'Lista de espera (vaga aproveitada)', agendamentos: 0, concluidos: 0, receita: 0 },
+    indicacao: { fonte: 'Indique um amigo', agendamentos: 0, concluidos: 0, receita: 0 },
+  };
+  for (const item of barbearia.listarAgendamentos(empresaId, {})) {
+    if (lojaId && item.lojaId && item.lojaId !== lojaId) continue;
+    const dia = item.dataAgenda || String(item.dataHora).slice(0, 10);
+    if (dia < de || dia > ate) continue;
+    const fontes = [];
+    if (item.origem === 'whatsapp_ia') fontes.push('whatsapp_ia');
+    if (daEspera.has(`${telefoneChave(item.clienteTelefone)}|${dia}`)) fontes.push('lista_espera');
+    if (indicados.has(item.id)) fontes.push('indicacao');
+    for (const fonte of fontes) {
+      const linha = linhas[fonte];
+      linha.agendamentos += 1;
+      if (item.status === 'concluido') { linha.concluidos += 1; linha.receita = dinheiro(linha.receita + valorDoAtendimento(item)); }
+    }
+    // Um atendimento com duas fontes (ex.: indicação marcada pela IA) conta uma vez no total.
+    if (fontes.length && item.status === 'concluido') totalUnico = dinheiro(totalUnico + valorDoAtendimento(item));
+  }
+  const lista = Object.values(linhas);
+  return { fontes: lista, receitaTotal: totalUnico };
 }

@@ -169,6 +169,7 @@ const NAV_DINO_GROUPS = [
       { to: '/admin/barbearia-erp?area=relacionamento&tab=Lista+de+espera', icon: '⧗', label: 'Lista de espera' },
       { to: '/admin/barbearia-erp?area=relacionamento&tab=Indica%C3%A7%C3%B5es', icon: '⇢', label: 'Indique um amigo' },
       { to: '/admin/barbearia-erp?area=relacionamento&tab=Avalia%C3%A7%C3%B5es+%28NPS%29', icon: '★', label: 'Avaliações (NPS)' },
+      { to: '/admin/barbearia-erp?area=relacionamento&tab=Origem+dos+clientes', icon: '⌖', label: 'Origem dos clientes' },
       { to: '/admin/barbearia-erp?area=relacionamento&tab=Fidelidade', icon: '☆', label: 'Fidelidade' },
       { to: '/admin/whatsapp', icon: '✆', label: 'WhatsApp' },
       { to: '/admin/cerebro-ia', icon: '◈', label: 'Cérebro do atendente' },
@@ -186,6 +187,8 @@ const NAV_DINO_GROUPS = [
       { to: '/admin/barbearia-erp?area=catalogo&tab=Estoque+de+revenda', icon: '▧', label: 'Revenda e estoque' },
       { to: '/admin/barbearia-erp?area=gestao&tab=Comiss%C3%B5es', icon: '△', label: 'Comissões' },
       { to: '/admin/barbearia-erp?area=gestao&tab=Ocupa%C3%A7%C3%A3o+e+metas', icon: '◐', label: 'Ocupação e metas' },
+      { to: '/admin/barbearia-erp?area=gestao&tab=Cobran%C3%A7as+e+cashback', icon: '$', label: 'Cobranças e cashback' },
+      { to: '/admin/barbearia-erp?area=gestao&tab=Receita+da+IA', icon: '✦', label: 'Receita da IA' },
     ],
   },
   {

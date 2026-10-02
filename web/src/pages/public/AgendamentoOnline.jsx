@@ -154,6 +154,12 @@ export default function AgendamentoOnline() {
   const [searchParams] = useSearchParams()
   // Código de quem indicou (vem do link de indicação). Só o código, nunca dado pessoal.
   const indicacao = String(searchParams.get('indicacao') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12)
+  // Canal de origem do link (Google, Instagram, WhatsApp, QR code). Só o nome do canal.
+  const canal = String(searchParams.get('canal') || searchParams.get('utm_source') || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24)
+  const campanha = String(searchParams.get('utm_campaign') || '').slice(0, 60)
+  const [pagamento, setPagamento] = useState(null)
+  const [avisoPagamento, setAvisoPagamento] = useState(null)
+  const [pixCopiado, setPixCopiado] = useState(false)
   const [espera, setEspera] = useState({ aberta: false, periodo: 'qualquer', enviada: false, enviando: false, erro: '' })
   // Autoatendimento: ver, remarcar ou cancelar com código + telefone.
   const [gestao, setGestao] = useState({ codigo: '', telefone: '', agendamento: null, erro: '', carregando: false, data: '', horarios: [], horario: '', mensagem: '' })
@@ -161,6 +167,27 @@ export default function AgendamentoOnline() {
   useEffect(() => {
     carregarDados()
   }, [slug])
+
+  // Volta do checkout: confere o pagamento do sinal na InfinitePay pelo servidor.
+  useEffect(() => {
+    if (searchParams.get('pagamento') !== 'retorno') return
+    const orderNsu = searchParams.get('order_nsu')
+    const transactionNsu = searchParams.get('transaction_nsu') || searchParams.get('transaction_id')
+    const slugPagamento = searchParams.get('slug') || searchParams.get('invoice_slug')
+    if (!orderNsu || !transactionNsu || !slugPagamento) { setAvisoPagamento({ tom: 'alerta', texto: 'Recebemos sua volta do pagamento. Se você pagou, a confirmação chega em instantes.' }); return }
+    fetch(`${API}/api/publico/agendamento/${encodeURIComponent(slug)}/pagamento/verificar`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_nsu: orderNsu, transaction_nsu: transactionNsu, slug: slugPagamento }),
+    }).then((res) => res.json().catch(() => ({}))).then((data) => {
+      setAvisoPagamento(!data?.pago
+        ? { tom: 'alerta', texto: data?.error || 'Ainda não recebemos a confirmação do pagamento. Se já pagou, aguarde alguns instantes.' }
+        : data.horarioLiberado
+          ? { tom: 'alerta', texto: 'Recebemos seu pagamento, mas o prazo tinha vencido e o horário foi liberado. A barbearia vai falar com você para remarcar ou devolver o valor.' }
+          : data.tipo === 'assinatura'
+            ? { tom: 'ok', texto: 'Mensalidade do clube paga. Obrigado!' }
+            : { tom: 'ok', texto: 'Pagamento confirmado! Seu horário está garantido.' })
+    }).catch(() => setAvisoPagamento({ tom: 'alerta', texto: 'Não foi possível conferir o pagamento agora.' }))
+  }, [slug]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function carregarDados() {
     try {
@@ -226,11 +253,13 @@ export default function AgendamentoOnline() {
           observacoes: form.observacoes,
           consentimento_whatsapp: consentimento === true,
           ...(indicacao ? { indicacao } : {}),
+          ...(canal ? { canal, campanha } : {}),
         }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data.ok) throw new Error(data.error || 'Não foi possível confirmar o agendamento.')
       setAgendamento(data.agendamento)
+      setPagamento(data.pagamento || null)
       setPasso(5)
     } catch (err) {
       setErroFluxo(err.message || 'Não foi possível confirmar o agendamento.')
@@ -285,7 +314,7 @@ export default function AgendamentoOnline() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data.ok) throw new Error(data.error || 'Não foi possível concluir.')
-      setGestao(g => ({ ...g, carregando: false, agendamento: data.agendamento }))
+      setGestao(g => ({ ...g, carregando: false, agendamento: data.agendamento, cashback: data.cashback === undefined ? g.cashback : data.cashback }))
       return data.agendamento
     } catch (err) {
       setGestao(g => ({ ...g, carregando: false, erro: err.message || 'Não foi possível concluir.' }))
@@ -338,6 +367,7 @@ export default function AgendamentoOnline() {
       {estabelecimento?.endereco && (
         <div style={s.subtitulo}>📍 {estabelecimento.endereco}</div>
       )}
+      {avisoPagamento && <div role="status" aria-live="polite" style={{ marginTop: 12, padding: '10px 12px', borderRadius: 10, fontSize: 13, fontWeight: 700, border: `1px solid ${avisoPagamento.tom === 'ok' ? theme.green : theme.yellow}`, color: avisoPagamento.tom === 'ok' ? theme.green : theme.yellow }}>{avisoPagamento.texto}</div>}
       {/* Indicador de passos */}
       {typeof passo === 'number' && <div role="progressbar" aria-label={`Etapa ${Math.min(passo, 4)} de 4`} aria-valuemin="1" aria-valuemax="4" aria-valuenow={Math.min(passo, 4)} style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 16 }}>
         {[1, 2, 3, 4].map(p => (
@@ -431,6 +461,8 @@ export default function AgendamentoOnline() {
                     ['Serviço', ag.servico?.nome],
                     ['Profissional', ag.profissional?.nome],
                     ['Quando', quando],
+                    ...(ag.sinal ? [['Sinal', `R$ ${Number(ag.sinal.valor).toFixed(2).replace('.', ',')} · ${{ pendente: 'aguardando pagamento', paga: 'pago', expirada: 'prazo vencido', cancelada: 'cancelado' }[ag.sinal.status] || ag.sinal.status}`]] : []),
+                    ...(gestao.cashback ? [['Cashback disponível', `R$ ${Number(gestao.cashback.saldo).toFixed(2).replace('.', ',')}`]] : []),
                   ].map(([rotulo, valor]) => (
                     <div key={rotulo} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: `1px solid ${theme.line}`, fontSize: 13 }}>
                       <span style={{ color: theme.muted }}>{rotulo}</span>
@@ -438,6 +470,8 @@ export default function AgendamentoOnline() {
                     </div>
                   ))}
                 </div>
+                {ag.sinal?.status === 'pendente' && ag.sinal.url && <a href={ag.sinal.url} style={{ ...s.btnPrimary, display: 'block', textAlign: 'center', textDecoration: 'none' }}>Pagar o sinal</a>}
+                {ag.sinal?.status === 'pendente' && ag.sinal.pixCopiaECola && <button type="button" style={s.btnSecondary} onClick={() => navigator.clipboard?.writeText(ag.sinal.pixCopiaECola)}>Copiar Pix do sinal</button>}
                 {ag.podeRemarcar ? (
                   <>
                     <label htmlFor="gestao-data" style={s.label}>Remarcar para</label>
@@ -692,6 +726,9 @@ export default function AgendamentoOnline() {
               <input type="checkbox" checked={consentimento} onChange={e => setConsentimento(e.target.checked)} style={{ marginTop: 3, width: 18, height: 18 }} />
               <span>Quero receber a confirmação e o lembrete deste agendamento pelo WhatsApp. Posso parar a qualquer momento respondendo SAIR.</span>
             </label>
+            {politicas.sinal && <div style={{ fontSize: 13, color: theme.yellow, lineHeight: 1.45, border: `1px solid ${theme.line}`, borderRadius: 10, padding: 10 }}>
+              Para garantir o horário, é cobrado um sinal de {politicas.sinal.tipo === 'fixo' ? `R$ ${Number(politicas.sinal.valor).toFixed(2).replace('.', ',')}` : `${politicas.sinal.valor}% do serviço`}, pago em até {politicas.sinal.prazoMinutos} minutos. O sinal é descontado no dia do atendimento.
+            </div>}
           </div>
         </div>
 
@@ -722,6 +759,22 @@ export default function AgendamentoOnline() {
           <div style={{ color: theme.muted, fontSize: 14, marginBottom: 24 }}>
             A solicitação entrou na agenda. Guarde o código abaixo: com ele e o seu telefone você pode remarcar ou cancelar pelo site até {politicas.cancelamentoHoras}h antes.
           </div>
+
+          {pagamento && (
+            <div style={{ background: theme.surface, border: `1px solid ${theme.yellow}`, borderRadius: 12, padding: 16, marginBottom: 20, textAlign: 'left' }}>
+              <div style={{ fontWeight: 800, color: theme.yellow, marginBottom: 6 }}>Pague o sinal para garantir o horário</div>
+              <div style={{ fontSize: 13, color: theme.muted, marginBottom: 12 }}>
+                Sinal de R$ {Number(pagamento.valor).toFixed(2).replace('.', ',')}{pagamento.expiraEm ? `, até as ${new Date(pagamento.expiraEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}. Sem o pagamento no prazo, o horário é liberado.
+              </div>
+              {pagamento.url && <a href={pagamento.url} style={{ ...s.btnPrimary, display: 'block', textAlign: 'center', textDecoration: 'none' }}>Pagar com Pix ou cartão</a>}
+              {pagamento.pixCopiaECola && <>
+                <div style={{ fontSize: 11, color: theme.muted, marginBottom: 4 }}>PIX COPIA E COLA</div>
+                <textarea readOnly value={pagamento.pixCopiaECola} style={{ ...s.input, fontSize: 11, minHeight: 70, resize: 'none' }} onFocus={(e) => e.target.select()} />
+                <button type="button" style={{ ...s.btnPrimary, width: '100%', marginTop: 8 }} onClick={() => { navigator.clipboard?.writeText(pagamento.pixCopiaECola); setPixCopiado(true) }}>{pixCopiado ? 'Copiado!' : 'Copiar código Pix'}</button>
+                <div style={{ fontSize: 12, color: theme.muted, marginTop: 8 }}>Depois de pagar, a barbearia confirma o recebimento e o horário fica garantido.</div>
+              </>}
+            </div>
+          )}
 
           {/* Código de confirmação */}
           {agendamento?.codigo && (

@@ -428,3 +428,195 @@ export function NpsPanel() {
     </div>
   </div>
 }
+
+// ── Onda 3: cobranças, cashback, origem dos clientes e receita da IA ───────
+
+const STATUS_COBRANCA = { pendente: ['Aguardando', 'alerta'], paga: ['Paga', 'bom'], expirada: ['Expirada', 'neutro'], cancelada: ['Cancelada', 'neutro'] }
+const label = { display: 'grid', gap: 4, fontSize: 12, color: 'var(--muted)' }
+const checkLabel = { display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-start', fontSize: 13, fontWeight: 700, color: 'var(--fg)', paddingBottom: 8, whiteSpace: 'nowrap' }
+const checkBox = { width: 18, height: 18, flex: '0 0 auto', margin: 0 }
+
+export function CobrancasPanel() {
+  const { toast } = useToast()
+  const { dados, erro, carregando, carregar } = useCarregar('/api/admin/barbearia/cobrancas')
+  const [config, setConfig] = useState(null)
+  const [ocupado, setOcupado] = useState('')
+  useEffect(() => { if (dados?.configuracao) setConfig(JSON.parse(JSON.stringify(dados.configuracao))) }, [dados])
+  const mudar = (grupo, campo, valor) => setConfig((atual) => ({ ...atual, [grupo]: { ...atual[grupo], [campo]: valor } }))
+  async function salvar(event) {
+    event.preventDefault()
+    setOcupado('config')
+    try {
+      await api.put('/api/admin/barbearia/cobrancas/configuracao', {
+        sinal: { ...config.sinal, valor: Number(config.sinal.valor), prazoMinutos: Number(config.sinal.prazoMinutos) },
+        cobrancaClube: { ...config.cobrancaClube, diasAntes: Number(config.cobrancaClube.diasAntes) },
+        pix: config.pix,
+        cashback: { percentual: Number(config.cashback.percentual), validadeDias: Number(config.cashback.validadeDias) },
+      })
+      toast('Cobranças configuradas.', 'success')
+      carregar()
+    } catch (e) { toast(e.message, 'error') } finally { setOcupado('') }
+  }
+  async function acao(cobranca, tipo) {
+    if (tipo === 'confirmar' && !window.confirm(`Confirmar que o Pix de ${fmtR(cobranca.valor)} de ${cobranca.clienteNome || 'cliente'} caiu na conta?`)) return
+    setOcupado(cobranca.id)
+    try {
+      await api.post(`/api/admin/barbearia/cobrancas/${encodeURIComponent(cobranca.id)}/${tipo}`, tipo === 'confirmar' ? { confirmado: true } : {})
+      toast(tipo === 'confirmar' ? 'Pagamento confirmado.' : 'Cobrança cancelada.', 'success')
+      carregar()
+    } catch (e) { toast(e.message, 'error') } finally { setOcupado('') }
+  }
+  async function gerarClube() {
+    setOcupado('clube')
+    try {
+      const r = await api.post('/api/admin/barbearia/cobrancas/clube/gerar', {})
+      toast(`${r.criadas} cobrança(s) do clube gerada(s); ${r.avisosEnfileirados} aviso(s) pelo WhatsApp.`, 'success')
+      carregar()
+    } catch (e) { toast(e.message, 'error') } finally { setOcupado('') }
+  }
+  if (carregando || erro) return <div style={card}><Estado carregando={carregando} erro={erro} onRetry={carregar} /></div>
+  const r = dados?.ultimos30Dias || {}
+  const provedor = dados?.configuracao?.provedor
+  return <div style={{ display: 'grid', gap: 16 }}>
+    <div style={card}>
+      <h2 style={h2}>Cobranças e cashback</h2>
+      <p style={sub}>Sinal no agendamento online (o horário só fica garantido com o pagamento), cobrança da mensalidade do clube pelo WhatsApp e cashback para o próximo atendimento. Tudo começa desligado.</p>
+      <div style={{ marginTop: 10 }}>{provedor === 'infinitepay' ? <Pill tom="bom">InfinitePay ativa: pagamento confirmado automaticamente</Pill> : provedor === 'pix_manual' ? <Pill tom="alerta">Pix da barbearia: a equipe confirma cada pagamento</Pill> : <Pill tom="critico">Sem meio de cobrança configurado</Pill>}</div>
+      <div style={{ ...grid(160), marginTop: 14 }}>
+        <div style={kpi}><div style={kpiLabel}>Sinais pagos (30d)</div><div style={kpiValue}>{fmtR(r.sinaisPagos || 0)}</div></div>
+        <div style={kpi}><div style={kpiLabel}>Sinais expirados (30d)</div><div style={kpiValue}>{r.sinaisExpirados || 0}</div></div>
+        <div style={kpi}><div style={kpiLabel}>Clube recebido (30d)</div><div style={{ ...kpiValue, color: '#14b87a' }}>{fmtR(r.clubeRecebido || 0)}</div></div>
+        <div style={kpi}><div style={kpiLabel}>Clube a receber</div><div style={{ ...kpiValue, color: '#f59e0b' }}>{fmtR(r.clubePendente || 0)}</div></div>
+        <div style={kpi}><div style={kpiLabel}>Cashback em aberto</div><div style={kpiValue}>{fmtR(dados?.cashbackEmAberto || 0)}</div></div>
+      </div>
+    </div>
+    {config && <form onSubmit={salvar} style={{ ...card, display: 'grid', gap: 16 }}>
+      <div>
+        <strong>Pix da barbearia</strong>
+        <p style={sub}>Usado quando a InfinitePay não está liberada para esta empresa no servidor. O cliente recebe o Pix copia e cola; a equipe confirma o recebimento aqui.</p>
+        <div style={{ ...grid(200), marginTop: 8 }}>
+          <label style={label}>Chave Pix<input style={input} value={config.pix.chave} onChange={(e) => mudar('pix', 'chave', e.target.value)} placeholder="CNPJ, e-mail, +55… ou chave aleatória" /></label>
+          <label style={label}>Nome do recebedor<input style={input} maxLength={25} value={config.pix.nomeRecebedor} onChange={(e) => mudar('pix', 'nomeRecebedor', e.target.value)} /></label>
+          <label style={label}>Cidade<input style={input} maxLength={15} value={config.pix.cidade} onChange={(e) => mudar('pix', 'cidade', e.target.value)} /></label>
+        </div>
+      </div>
+      <div>
+        <strong>Sinal no agendamento online</strong>
+        <div style={{ ...grid(180), marginTop: 8, alignItems: 'end' }}>
+          <label style={checkLabel}><input type="checkbox" style={checkBox} checked={config.sinal.ativo} onChange={(e) => mudar('sinal', 'ativo', e.target.checked)} />Cobrar sinal</label>
+          <label style={label}>Tipo<select style={input} value={config.sinal.tipo} onChange={(e) => mudar('sinal', 'tipo', e.target.value)}><option value="percentual">% do serviço</option><option value="fixo">Valor fixo (R$)</option></select></label>
+          <label style={label}>{config.sinal.tipo === 'fixo' ? 'Valor (R$)' : 'Percentual (%)'}<input type="number" min="0" step="0.01" style={input} value={config.sinal.valor} onChange={(e) => mudar('sinal', 'valor', e.target.value)} /></label>
+          <label style={label}>Prazo para pagar (min)<input type="number" min="10" max="1440" style={input} value={config.sinal.prazoMinutos} onChange={(e) => mudar('sinal', 'prazoMinutos', e.target.value)} /></label>
+        </div>
+        <p style={sub}>Sem pagamento no prazo, o horário é liberado e a lista de espera é avisada.</p>
+      </div>
+      <div>
+        <strong>Mensalidade do clube</strong>
+        <div style={{ ...grid(180), marginTop: 8, alignItems: 'end' }}>
+          <label style={checkLabel}><input type="checkbox" style={checkBox} checked={config.cobrancaClube.ativa} onChange={(e) => mudar('cobrancaClube', 'ativa', e.target.checked)} />Cobrar pelo WhatsApp</label>
+          <label style={label}>Enviar quantos dias antes<input type="number" min="0" max="10" style={input} value={config.cobrancaClube.diasAntes} onChange={(e) => mudar('cobrancaClube', 'diasAntes', e.target.value)} /></label>
+        </div>
+        <p style={sub}>Só para quem autorizou o WhatsApp. Pago pelo link, o ciclo é quitado sozinho; quem atrasar além da carência fica bloqueado no clube.</p>
+      </div>
+      <div>
+        <strong>Cashback</strong>
+        <div style={{ ...grid(180), marginTop: 8 }}>
+          <label style={label}>Percentual do atendimento (0 = desligado)<input type="number" min="0" max="30" step="0.5" style={input} value={config.cashback.percentual} onChange={(e) => mudar('cashback', 'percentual', e.target.value)} /></label>
+          <label style={label}>Validade (dias)<input type="number" min="7" max="365" style={input} value={config.cashback.validadeDias} onChange={(e) => mudar('cashback', 'validadeDias', e.target.value)} /></label>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button type="submit" style={btnPrimary} disabled={ocupado === 'config'}>{ocupado === 'config' ? 'Salvando…' : 'Salvar'}</button>
+        <button type="button" style={btn} disabled={ocupado === 'clube' || !config.cobrancaClube.ativa} onClick={gerarClube}>Gerar cobranças do clube agora</button>
+      </div>
+    </form>}
+    <div style={card}>
+      <strong>Cobranças recentes</strong>
+      {(dados?.cobrancas || []).length === 0 ? <div style={empty}>Nenhuma cobrança ainda.</div> : <div style={{ overflowX: 'auto' }}><table style={{ ...table, marginTop: 10 }}>
+        <thead><tr><th style={th}>Cliente</th><th style={th}>Tipo</th><th style={th}>Valor</th><th style={th}>Situação</th><th style={th}>Criada</th><th style={th}></th></tr></thead>
+        <tbody>{dados.cobrancas.map((item) => {
+          const [rotulo, tom] = STATUS_COBRANCA[item.status] || [item.status, 'neutro']
+          return <tr key={item.id}>
+            <td style={td}><strong>{item.clienteNome || '—'}</strong><div style={{ color: 'var(--muted)', fontSize: 12 }}>{item.descricao}</div></td>
+            <td style={td}>{item.tipo === 'sinal' ? 'Sinal' : 'Clube'}</td>
+            <td style={td}>{fmtR(item.valor)}</td>
+            <td style={td}><Pill tom={tom}>{rotulo}</Pill>{item.pagoEm && <div style={{ color: 'var(--muted)', fontSize: 12 }}>{dataBR(item.pagoEm)} · {item.confirmadoPor}</div>}{item.revisar && <div style={{ color: '#e05c5c', fontSize: 12, fontWeight: 700 }}>{{ horario_liberado: 'Pago depois que o horário foi liberado: remarque ou devolva.', cobranca_cancelada: 'Pago depois de cancelada: confira e devolva se for o caso.', pagamento_em_dobro: 'O período já tinha sido pago no balcão: devolva um dos pagamentos.', efeito_nao_aplicado: `Pagamento registrado, mas não aplicado (${item.efeitoErro || 'erro'}): confira a assinatura.` }[item.revisar] || 'Revisar este pagamento.'}</div>}</td>
+            <td style={td}>{dataBR(item.criadoEm)}</td>
+            <td style={td}>{item.status === 'pendente' && <div style={{ display: 'flex', gap: 6 }}>
+              {item.provedor === 'pix_manual' && <button type="button" style={btnPrimary} disabled={ocupado === item.id} onClick={() => acao(item, 'confirmar')}>Pix recebido</button>}
+              <button type="button" style={btn} disabled={ocupado === item.id} onClick={() => acao(item, 'cancelar')}>Cancelar</button>
+            </div>}</td>
+          </tr>
+        })}</tbody>
+      </table></div>}
+    </div>
+  </div>
+}
+
+function inicioDoMes() {
+  const agora = new Date()
+  return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}-01`
+}
+function hojeIso(diasAFrente = 0) {
+  const agora = new Date(Date.now() + diasAFrente * 86400000)
+  return new Date(agora.valueOf() - agora.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+}
+
+export function CanaisPanel() {
+  // Inclui os próximos 30 dias: agendamento marcado hoje para a semana que vem já conta.
+  const [periodo, setPeriodo] = useState({ inicio: inicioDoMes(), fim: hojeIso(30) })
+  const { dados, erro, carregando, carregar } = useCarregar(`/api/admin/barbearia/captacao/canais?inicio=${periodo.inicio}&fim=${periodo.fim}`)
+  const { toast } = useToast()
+  const base = `${window.location.origin}/agendar/`
+  const [slug, setSlug] = useState('')
+  useEffect(() => { api.get('/api/admin/barbearia/configuracoes').then((r) => setSlug(r?.configuracao?.slugPublico || r?.slugPublico || '')).catch(() => {}) }, [])
+  const links = slug ? [['Google (botão Agendar do perfil da empresa)', 'google'], ['Instagram (link da bio)', 'instagram'], ['WhatsApp (status e mensagens)', 'whatsapp'], ['QR code no balcão', 'qrcode']].map(([nome, canal]) => [nome, `${base}${slug}?canal=${canal}`]) : []
+  return <div style={{ display: 'grid', gap: 16 }}>
+    <div style={card}>
+      <h2 style={h2}>Origem dos clientes</h2>
+      <p style={sub}>De onde vêm os agendamentos e os clientes novos. Use um link por canal: cada um é contado separado.</p>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12, alignItems: 'end' }}>
+        <label style={label}>De<input type="date" style={input} value={periodo.inicio} onChange={(e) => setPeriodo((p) => ({ ...p, inicio: e.target.value }))} /></label>
+        <label style={label}>Até<input type="date" style={input} value={periodo.fim} onChange={(e) => setPeriodo((p) => ({ ...p, fim: e.target.value }))} /></label>
+      </div>
+      {(carregando || erro) ? <Estado carregando={carregando} erro={erro} onRetry={carregar} /> : <>
+        <div style={{ ...grid(160), marginTop: 14 }}>
+          <div style={kpi}><div style={kpiLabel}>Agendamentos</div><div style={kpiValue}>{dados?.total || 0}</div></div>
+          <div style={kpi}><div style={kpiLabel}>Clientes novos</div><div style={{ ...kpiValue, color: '#14b87a' }}>{dados?.clientesNovos || 0}</div></div>
+        </div>
+        {(dados?.canais || []).length === 0 ? <div style={empty}>Sem agendamentos no período.</div> : <table style={{ ...table, marginTop: 12 }}>
+          <thead><tr><th style={th}>Canal</th><th style={th}>Agendamentos</th><th style={th}>Clientes novos</th><th style={th}>Concluídos</th><th style={th}>Cancelados</th><th style={th}>Valor atendido</th></tr></thead>
+          <tbody>{dados.canais.map((item) => <tr key={item.canal}><td style={td}><strong>{item.canal}</strong></td><td style={td}>{item.agendamentos}</td><td style={td}>{item.clientesNovos}</td><td style={td}>{item.concluidos}</td><td style={td}>{item.cancelados}</td><td style={td}>{fmtR(item.receita)}</td></tr>)}</tbody>
+        </table>}
+      </>}
+    </div>
+    {links.length > 0 && <div style={card}>
+      <strong>Links por canal</strong>
+      <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>{links.map(([nome, url]) => <div key={url} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: 10, border: '1px dashed var(--line)', borderRadius: 10 }}>
+        <span style={{ minWidth: 260, fontSize: 13 }}>{nome}</span>
+        <code style={{ fontSize: 12, wordBreak: 'break-all', flex: 1 }}>{url}</code>
+        <button type="button" style={btn} onClick={() => { navigator.clipboard?.writeText(url); toast('Link copiado.', 'success') }}>Copiar</button>
+      </div>)}</div>
+    </div>}
+  </div>
+}
+
+export function ReceitaIaPanel() {
+  const [periodo, setPeriodo] = useState({ inicio: inicioDoMes(), fim: hojeIso() })
+  const { dados, erro, carregando, carregar } = useCarregar(`/api/admin/barbearia/captacao/receita-ia?inicio=${periodo.inicio}&fim=${periodo.fim}`)
+  return <div style={card}>
+    <h2 style={h2}>Receita da IA e da captação</h2>
+    <p style={sub}>Atendimentos concluídos que nasceram da atendente IA no WhatsApp, de uma vaga aproveitada pela lista de espera ou de uma indicação.</p>
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12, alignItems: 'end' }}>
+      <label style={label}>De<input type="date" style={input} value={periodo.inicio} onChange={(e) => setPeriodo((p) => ({ ...p, inicio: e.target.value }))} /></label>
+      <label style={label}>Até<input type="date" style={input} value={periodo.fim} onChange={(e) => setPeriodo((p) => ({ ...p, fim: e.target.value }))} /></label>
+    </div>
+    {(carregando || erro) ? <Estado carregando={carregando} erro={erro} onRetry={carregar} /> : <>
+      <div style={{ ...grid(180), marginTop: 14 }}><div style={kpi}><div style={kpiLabel}>Receita atribuída</div><div style={{ ...kpiValue, color: '#14b87a' }}>{fmtR(dados?.receitaTotal || 0)}</div></div></div>
+      <table style={{ ...table, marginTop: 12 }}>
+        <thead><tr><th style={th}>Fonte</th><th style={th}>Agendamentos</th><th style={th}>Concluídos</th><th style={th}>Receita</th></tr></thead>
+        <tbody>{(dados?.fontes || []).map((item) => <tr key={item.fonte}><td style={td}><strong>{item.fonte}</strong></td><td style={td}>{item.agendamentos}</td><td style={td}>{item.concluidos}</td><td style={td}>{fmtR(item.receita)}</td></tr>)}</tbody>
+      </table>
+    </>}
+  </div>
+}

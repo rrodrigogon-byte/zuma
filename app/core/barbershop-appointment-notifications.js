@@ -13,6 +13,8 @@ const EVENTOS = new Set(['criado', 'remarcado', 'cancelado', 'lembrete']);
 const EVENTO_VAGA = 'vaga';
 // Pedido de avaliação (NPS) depois do atendimento concluído: mesma fila e tipo.
 const EVENTO_AVALIACAO = 'avaliacao';
+// Cobrança do clube (link de pagamento ou Pix copia e cola): mesma fila.
+const EVENTO_COBRANCA = 'cobranca';
 
 function urlPublicaBase(slug) {
   // Render hospeda vários tenants. O domínio Dino nunca pode ser usado por
@@ -343,6 +345,75 @@ async function processReviewTask(task, payload, legacyEmpresaId) {
   return { sent: true, appointmentId: agendamento.id, eventType: EVENTO_AVALIACAO, providerMessageId };
 }
 
+function clienteComConsentimento(legacyEmpresaId, clienteId) {
+  if (!clienteId) return { eligible: false, reason: 'customer_not_registered' };
+  return clienteElegivel(legacyEmpresaId, { clienteId });
+}
+
+/** Enfileira o envio da cobrança do clube pelo WhatsApp (mensagem de serviço, com consentimento). */
+export async function queueChargeNotification(contexto = {}, cobranca = {}) {
+  const empresaId = uuidOuVazio(contexto.empresaId);
+  const lojaId = uuidOuVazio(contexto.lojaId);
+  const legacyEmpresaId = limpo(contexto.legacyEmpresaId || contexto.empresaId, 120);
+  if (!empresaId || !lojaId) return { queued: 0, skipped: true, reason: 'commerce_scope_unavailable' };
+  if (!cobranca?.id || cobranca.status !== 'pendente') return { queued: 0, skipped: true, reason: 'charge_not_pending' };
+  const elegibilidade = clienteComConsentimento(legacyEmpresaId, cobranca.clienteId);
+  if (!elegibilidade.eligible) return { queued: 0, skipped: true, reason: elegibilidade.reason };
+  return db.transaction(async (trx) => {
+    const canal = await canalAtivo(trx, empresaId, lojaId);
+    if (!canal) return { queued: 0, skipped: true, reason: 'whatsapp_channel_inactive' };
+    const resultado = await trx.query(
+      `INSERT INTO tarefas_integracao_canais
+         (empresa_id,loja_id,canal_id,tipo,referencia_externa,payload,status,proxima_tentativa_em)
+       VALUES ($1,$2,$3,'notificar_agendamento',$4,$5::jsonb,'pendente',CURRENT_TIMESTAMP)
+       ON CONFLICT (empresa_id,tipo,referencia_externa) WHERE tipo='notificar_agendamento' DO NOTHING
+       RETURNING id`,
+      [empresaId, lojaId, canal.id, `${limpo(cobranca.id, 100)}:${EVENTO_COBRANCA}`, JSON.stringify({
+        version: 'barbershop-appointment-v1', legacyEmpresaId, appointmentId: limpo(cobranca.id, 120), chargeId: limpo(cobranca.id, 120), customerId: limpo(cobranca.clienteId, 120), eventType: EVENTO_COBRANCA,
+      })],
+    );
+    return { queued: Number(resultado.rowCount || 0), skipped: false };
+  });
+}
+
+async function processChargeTask(task, payload, legacyEmpresaId) {
+  const cobranca = legacyDb().barbeariaCobranca?.[legacyEmpresaId]?.cobrancas?.[limpo(payload.chargeId, 120)];
+  if (!cobranca || cobranca.status !== 'pendente') return { skipped: true, reason: 'charge_not_pending' };
+  const elegibilidade = clienteComConsentimento(legacyEmpresaId, cobranca.clienteId);
+  if (!elegibilidade.eligible) return { skipped: true, reason: elegibilidade.reason };
+  const channelResult = await db.query(
+    `SELECT id,empresa_id,loja_id,nome,api_base_url,configuracao FROM canais_integracao
+      WHERE id=$1 AND empresa_id=$2 AND loja_id=$3 AND provedor='whatsapp' AND status='ativo' LIMIT 1`,
+    [task.canal_id, task.empresa_id, task.loja_id],
+  );
+  const canal = channelResult.rows[0];
+  if (!canal) return { skipped: true, reason: 'whatsapp_channel_inactive' };
+  const nome = limpo(barbearia.obterConfiguracao(legacyEmpresaId).nomePublico || 'barbearia', 120);
+  const valor = `R$ ${Number(cobranca.valor).toFixed(2).replace('.', ',')}`;
+  const comoPagar = cobranca.url
+    ? `Para pagar (Pix ou cartão): ${cobranca.url}`
+    : `Pix copia e cola:\n${cobranca.pixCopiaECola}\nDepois de pagar, é só responder esta mensagem com o comprovante.`;
+  const texto = `Olá, ${limpo(elegibilidade.cliente.nome, 80).split(' ')[0]}! A mensalidade do seu clube na ${nome} (${valor}) vence em breve. ${comoPagar}\nPara não receber estes avisos, responda SAIR.`;
+  await db.query(
+    `UPDATE tarefas_integracao_canais SET delivery_started_at = CURRENT_TIMESTAMP
+      WHERE id = $1 AND status = 'processando' AND lease_token = $2::uuid`,
+    [task.id, task.lease_token],
+  );
+  const resultado = await enviarMensagem({
+    whatsapp_api_url: process.env.EVOLUTION_API_URL || canal.api_base_url,
+    whatsapp_api_key: process.env.EVOLUTION_API_KEY,
+    whatsapp_instance: canal.configuracao?.instance || process.env.EVOLUTION_INSTANCE,
+  }, elegibilidade.telefone, texto);
+  if (!resultado?.ok) {
+    const unknown = resultado?.uncertain === true;
+    if (!unknown) await db.query(`UPDATE tarefas_integracao_canais SET delivery_started_at = NULL WHERE id = $1`, [task.id]);
+    throw appointmentDeliveryError(unknown ? 'resultado do aviso de cobrança incerto' : 'provedor recusou o aviso de cobrança', unknown ? 'APPOINTMENT_DELIVERY_UNKNOWN' : 'APPOINTMENT_SEND_FAILED', !unknown && resultado?.retryable === true);
+  }
+  const providerMessageId = limpo(resultado?.data?.key?.id || resultado?.data?.id, 200) || null;
+  await db.query(`UPDATE tarefas_integracao_canais SET provider_message_id = $2 WHERE id = $1`, [task.id, providerMessageId]);
+  return { sent: true, chargeId: cobranca.id, eventType: EVENTO_COBRANCA, providerMessageId };
+}
+
 export async function enqueueDueAppointmentReminders() {
   const raiz = legacyDb();
   let queued = 0;
@@ -385,6 +456,7 @@ export async function processAppointmentNotificationTask(task = {}) {
   const evento = limpo(payload.eventType, 30).toLowerCase();
   if (legacyEmpresaId && appointmentId && evento === EVENTO_VAGA) return processWaitlistTask(task, payload, legacyEmpresaId);
   if (legacyEmpresaId && appointmentId && evento === EVENTO_AVALIACAO) return processReviewTask(task, payload, legacyEmpresaId);
+  if (legacyEmpresaId && payload.chargeId && evento === EVENTO_COBRANCA) return processChargeTask(task, payload, legacyEmpresaId);
   if (!legacyEmpresaId || !appointmentId || !EVENTOS.has(evento)) return { skipped: true, reason: 'task_payload_invalid' };
   const snapshot = {
     configuracao: barbearia.obterConfiguracao(legacyEmpresaId),

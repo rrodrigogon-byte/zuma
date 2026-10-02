@@ -8,7 +8,7 @@ import BarbeariaAgendaBoard, { agendaBoardColumns } from './BarbeariaAgendaBoard
 import BarbeariaOperacaoPanel from './BarbeariaOperacaoPanel'
 import DinoBusinessDashboard from './DinoBusinessDashboard'
 import DinoCampaignsPanel from './DinoCampaignsPanel'
-import { ClubeSaudePanel, IndicacoesPanel, ListaEsperaPanel, NpsPanel, OcupacaoMetasPanel, RetornosPanel } from './dino/CaptacaoPanels'
+import { CanaisPanel, ClubeSaudePanel, CobrancasPanel, IndicacoesPanel, ListaEsperaPanel, NpsPanel, OcupacaoMetasPanel, ReceitaIaPanel, RetornosPanel } from './dino/CaptacaoPanels'
 
 const TABS = [
   ['Visão geral', 'Resumo da operação'],
@@ -33,13 +33,16 @@ const TABS = [
   ['Saúde do clube', 'Uso, margem e candidatos ao clube'],
   ['Ocupação e metas', 'Ocupação da agenda e metas por barbeiro'],
   ['Avaliações (NPS)', 'Notas e indicadores no próprio sistema'],
+  ['Origem dos clientes', 'Agendamentos e clientes novos por canal'],
+  ['Cobranças e cashback', 'Sinal, mensalidade do clube e cashback'],
+  ['Receita da IA', 'Receita atribuída à IA e à captação'],
 ]
 
 const AREAS = [
   { id: 'operacao', label: 'Operação', short: 'Hoje, agenda, atendimento e caixa', tabs: ['Visão geral', 'Agenda', 'Atendimento', 'Caixa e fechamento', 'Fila e bloqueios'] },
-  { id: 'relacionamento', label: 'Relacionamento', short: 'Clientes, retorno e indicação', tabs: ['Clientes', 'Retorno previsto', 'Lista de espera', 'Indicações', 'Avaliações (NPS)', 'Fidelidade'] },
+  { id: 'relacionamento', label: 'Relacionamento', short: 'Clientes, retorno e indicação', tabs: ['Clientes', 'Retorno previsto', 'Lista de espera', 'Indicações', 'Avaliações (NPS)', 'Origem dos clientes', 'Fidelidade'] },
   { id: 'catalogo', label: 'Catálogo e equipe', short: 'Serviços, planos e revenda', tabs: ['Profissionais', 'Serviços', 'Planos e assinaturas', 'Saúde do clube', 'Estoque de revenda', 'Vendas de revenda'] },
-  { id: 'gestao', label: 'Gestão', short: 'Comissões, metas e regras', tabs: ['Comissões', 'Ocupação e metas', 'Relatórios', 'Configuração'] },
+  { id: 'gestao', label: 'Gestão', short: 'Comissões, metas e regras', tabs: ['Comissões', 'Ocupação e metas', 'Cobranças e cashback', 'Receita da IA', 'Relatórios', 'Configuração'] },
   { id: 'integracoes', label: 'Integrações', short: 'WhatsApp e IA controlados', tabs: ['Integrações'] },
 ]
 
@@ -230,7 +233,9 @@ export default function BarbeariaERP() {
   const [formServico, setFormServico] = useState({ nome: '', descricao: '', categoria: 'Geral', duracaoMinutos: 30, preco: '', permiteAgendamentoOnline: true, consumoInterno: [] })
   const [formCliente, setFormCliente] = useState({ nome: '', telefone: '', email: '', limiteCreditoMensal: 0, diasVencimento: 30, observacao: '' })
   const [formAgenda, setFormAgenda] = useState({ clienteId: '', clienteNome: '', clienteTelefone: '', profissionalId: '', servicoId: '', data: hojeLocal(), hora: '10:00', observacoes: '' })
-  const [formRecebimento, setFormRecebimento] = useState({ meioPagamento: 'pix' })
+  const [formRecebimento, setFormRecebimento] = useState({ meioPagamento: 'pix', usarCashback: '' })
+  const [saldoCashbackCliente, setSaldoCashbackCliente] = useState(null)
+  const [conferindoSinal, setConferindoSinal] = useState(false)
   const [formConfig, setFormConfig] = useState({})
   const [formFila, setFormFila] = useState({ clienteId: '', clienteNome: '', clienteTelefone: '', servicoId: '', preferenciaProfissionalId: '', previsaoMinutos: 30, observacoes: '' })
   const [formFilaChamada, setFormFilaChamada] = useState({ mesaOuPosicao: '' })
@@ -428,8 +433,19 @@ export default function BarbeariaERP() {
   }, [agendarClienteParam, clientes]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function abrirRecebimento(agendamento) {
-    setFormRecebimento({ meioPagamento: 'pix' })
+    setFormRecebimento({ meioPagamento: 'pix', usarCashback: '' })
+    setSaldoCashbackCliente(null)
     setModal({ tipo: 'recebimento', agendamento })
+    // Sinal já pago entra como receita na hora do pagamento: o recebimento do dia é só o restante.
+    setConferindoSinal(true)
+    api.get(`/api/admin/barbearia/agenda/${agendamento.id}/sinal`).then((resposta) => {
+      const sinal = resposta?.sinal
+      if (sinal?.status === 'paga') {
+        setSaldoCashbackCliente((atual) => ({ ...(atual || {}), sinalPago: sinal.valor }))
+      }
+    }).catch(() => {}).finally(() => setConferindoSinal(false))
+    const telefone = agendamento.clienteTelefone || agendamento.cliente_telefone
+    if (telefone) api.post('/api/admin/barbearia/cashback/consulta', { telefone }).then((resposta) => setSaldoCashbackCliente((atual) => ({ ...(atual || {}), ...resposta.cashback }))).catch(() => {})
   }
 
   function abrirNovaComanda(agendamento = null) {
@@ -560,16 +576,28 @@ export default function BarbeariaERP() {
     )
   }
 
+  function valorDevidoRecebimento(agendamento) {
+    const total = Number(agendamento?.valor || 0)
+    const devido = total - Number(saldoCashbackCliente?.sinalPago || 0) - Number(formRecebimento.usarCashback || 0)
+    return Math.round(Math.max(0, devido) * 100) / 100
+  }
+
   async function concluirEReceber() {
     const agendamento = modal?.agendamento
     if (!agendamento) return
-    const valor = Number(agendamento.valor)
-    if (!formRecebimento.meioPagamento || !Number.isFinite(valor) || valor <= 0) {
+    // O valor do dia é calculado (e conferido no servidor): serviço − sinal pago − cashback usado.
+    const valor = valorDevidoRecebimento(agendamento)
+    if (!formRecebimento.meioPagamento || !Number.isFinite(valor) || valor < 0 || Number(agendamento.valor) <= 0) {
       toast('Verifique o preço do serviço e informe o meio de pagamento.', 'error')
       return
     }
+    const usarCashback = Number(formRecebimento.usarCashback || 0)
+    if (usarCashback < 0 || (usarCashback > 0 && usarCashback > Number(saldoCashbackCliente?.saldo || 0))) {
+      toast('O cashback usado não pode passar do saldo do cliente.', 'error')
+      return
+    }
     await executar(
-      () => api.patch(`/api/admin/barbearia/agenda/${agendamento.id}/status`, { status: 'concluido', registrarFinanceiro: true, confirmado: true, meioPagamento: formRecebimento.meioPagamento, valorRecebido: valor }),
+      () => api.patch(`/api/admin/barbearia/agenda/${agendamento.id}/status`, { status: 'concluido', registrarFinanceiro: true, confirmado: true, meioPagamento: formRecebimento.meioPagamento, valorRecebido: valor, ...(usarCashback > 0 ? { usarCashback } : {}) }),
       'Atendimento concluído e recebimento registrado no financeiro central.',
       { mostrarPesquisa: true },
     )
@@ -1243,7 +1271,7 @@ export default function BarbeariaERP() {
     if (modal?.tipo === 'creditoFidelidade') return <Modal title={`Ajuste de pontos · ${modal.membro?.nome || 'Membro'}`} onClose={() => setModal(null)}><form onSubmit={creditarFidelidade} style={{ display: 'grid', gap: 16 }}><div style={styles.notice}><strong>Ajuste manual auditável</strong><div style={styles.sub}>Use somente para corrigir ou reconhecer uma operação validada. O ajuste não cria receita, pagamento ou desconto.</div></div><Field label="Valor elegível para pontos (R$)"><input required type="number" min="0.01" step="0.01" value={formCreditoFidelidade.valor} onChange={(event) => setFormCreditoFidelidade({ valor: event.target.value })} style={inputStyle} autoFocus /></Field><div style={styles.sub}>Regra atual: {fidelidade.regra?.pontosPorReal || 0} ponto(s) por R$ 1,00. O sistema calcula os pontos no servidor.</div><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Registrando…' : 'Confirmar ajuste'}</button></div></form></Modal>
     if (modal?.tipo === 'pagamentoVendaRevenda') return <Modal title={`Confirmar recebimento · ${modal.venda?.id || 'Venda'}`} onClose={() => setModal(null)}><form onSubmit={concluirPagamentoVendaRevenda} style={{ display: 'grid', gap: 16 }}><div style={styles.notice}><strong>{modal.venda?.clienteNome || 'Venda balcão'}</strong><div style={styles.sub}>{modal.venda?.itens?.map((item) => `${item.quantidade}× ${item.nome}`).join(' · ') || 'Itens da venda'} · total {moeda(modal.venda?.total || 0)}</div></div><Field label="Meio de pagamento"><select required value={formPagamentoVendaRevenda.meioPagamento} onChange={(event) => setFormPagamentoVendaRevenda({ meioPagamento: event.target.value })} style={inputStyle}><option value="pix">PIX</option><option value="dinheiro">Dinheiro</option><option value="debito">Cartão de débito</option><option value="credito">Cartão de crédito</option><option value="transferencia">Transferência</option></select></Field><div style={styles.notice}><strong>O que será efetivado</strong><div style={styles.sub}>A confirmação baixa o estoque tenant-aware e registra a receita idempotente. Nenhum gateway externo será acionado por esta tela.</div></div><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="submit" style={styles.primary} disabled={salvando}>{salvando ? 'Confirmando…' : 'Confirmar recebimento'}</button></div></form></Modal>
     if (modal?.tipo === 'recebimento') return <Modal title="Registrar recebimento" onClose={() => setModal(null)}><div style={{ display: 'grid', gap: 16 }}>
-<div style={{ background: 'var(--card)', borderRadius: 10, padding: 14 }}><strong>{modal.agendamento.clienteNome || modal.agendamento.cliente_nome}</strong><div style={styles.sub}>{modal.agendamento.servicoNome || modal.agendamento.servico_nome} · valor previsto {moeda(modal.agendamento.valor)}</div></div><Field label="Meio de pagamento"><select value={formRecebimento.meioPagamento} onChange={(event) => setFormRecebimento((atual) => ({ ...atual, meioPagamento: event.target.value }))} style={inputStyle}><option value="pix">PIX</option><option value="dinheiro">Dinheiro</option><option value="debito">Cartão de débito</option><option value="credito">Cartão de crédito</option><option value="transferencia">Transferência</option></select></Field><Field label="Valor do serviço (R$)" hint="O recebimento usa o valor registrado no agendamento. Para desconto ou ajuste, use a comanda com aprovação e auditoria."><input type="number" min="0.01" step="0.01" value={modal.agendamento.valor || ""} readOnly aria-readonly="true" style={inputStyle} /></Field><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="button" style={styles.primary} disabled={salvando} onClick={concluirEReceber}>{salvando ? 'Registrando…' : 'Confirmar recebimento'}</button></div></div></Modal>
+<div style={{ background: 'var(--card)', borderRadius: 10, padding: 14 }}><strong>{modal.agendamento.clienteNome || modal.agendamento.cliente_nome}</strong><div style={styles.sub}>{modal.agendamento.servicoNome || modal.agendamento.servico_nome} · valor previsto {moeda(modal.agendamento.valor)}</div></div><Field label="Meio de pagamento"><select value={formRecebimento.meioPagamento} onChange={(event) => setFormRecebimento((atual) => ({ ...atual, meioPagamento: event.target.value }))} style={inputStyle}><option value="pix">PIX</option><option value="dinheiro">Dinheiro</option><option value="debito">Cartão de débito</option><option value="credito">Cartão de crédito</option><option value="transferencia">Transferência</option></select></Field>{saldoCashbackCliente?.sinalPago > 0 && <div style={{ fontSize: 13, color: 'var(--muted)' }}>Sinal de {moeda(saldoCashbackCliente.sinalPago)} já pago e lançado no financeiro: entra como desconto abaixo.</div>}{saldoCashbackCliente?.saldo > 0 && <Field label={`Usar cashback (saldo ${moeda(saldoCashbackCliente.saldo)})`} hint="O valor usado sai do saldo do cliente e fica registrado na auditoria."><input type="number" min="0" step="0.01" max={saldoCashbackCliente.saldo} value={formRecebimento.usarCashback} onChange={(event) => setFormRecebimento((atual) => ({ ...atual, usarCashback: event.target.value }))} style={inputStyle} /></Field>}<Field label="Valor a receber agora (R$)" hint="Valor do serviço menos sinal pago e cashback usado. Para desconto ou ajuste, use a comanda com aprovação e auditoria."><input type="number" value={valorDevidoRecebimento(modal.agendamento).toFixed(2)} readOnly aria-readonly="true" style={inputStyle} /></Field><div style={styles.modalActions}><button type="button" style={styles.secondary} onClick={() => setModal(null)}>Cancelar</button><button type="button" style={styles.primary} disabled={salvando || conferindoSinal} onClick={concluirEReceber}>{salvando ? 'Registrando…' : conferindoSinal ? 'Conferindo sinal…' : 'Confirmar recebimento'}</button></div></div></Modal>
     if (modal?.tipo === 'detalheAgenda') {
       const agendamento = modal.agendamento
       const proximas = TRANSICOES[agendamento.status] || []
@@ -1467,6 +1495,9 @@ export default function BarbeariaERP() {
     if (tab === 'Saúde do clube') return <ClubeSaudePanel />
     if (tab === 'Ocupação e metas') return <OcupacaoMetasPanel />
     if (tab === 'Avaliações (NPS)') return <NpsPanel key={`${empresaAtiva?.id || ''}:${lojaAtiva?.id || ''}`} />
+    if (tab === 'Origem dos clientes') return <CanaisPanel />
+    if (tab === 'Cobranças e cashback') return <CobrancasPanel />
+    if (tab === 'Receita da IA') return <ReceitaIaPanel />
     return renderConfiguracao()
   }
 

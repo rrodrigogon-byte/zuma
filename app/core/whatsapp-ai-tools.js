@@ -16,6 +16,7 @@ import {
   agendaSource,
 } from './barbershop-agenda.js';
 import { clubeParaTelefone, planoDoTelefone, sugestaoPosServico } from '../dino-captacao-kytto.js';
+import { saldoCashback } from '../dino-cobranca-kytto.js';
 import {
   ensureWhatsappLead,
   getWhatsappLeadProfile,
@@ -85,7 +86,7 @@ function capabilityAllows(name, capabilities = {}) {
   if (name === 'solicitar_humano') return capabilities.humanHandoff !== false;
   if (name === 'captar_cliente' || name === 'consultar_perfil_cliente') return capabilities.captureLeads !== false;
   if (name.includes('promoc') || name === 'listar_promocoes_ativas' || name === 'atualizar_consentimento_marketing') return capabilities.sendPromotions === true;
-  if (name === 'consultar_meu_plano' || name === 'avaliar_clube') return capabilities.manageAppointments !== false;
+  if (name === 'consultar_meu_plano' || name === 'avaliar_clube' || name === 'consultar_meu_cashback') return capabilities.manageAppointments !== false;
   if (name === 'sugerir_produto_pos_servico') return capabilities.operateStore !== false;
   if (name.includes('agendamento') || name.includes('remarcacao') || name.includes('cancelamento') || name === 'listar_servicos' || name === 'listar_profissionais' || name === 'consultar_disponibilidade' || name === 'consultar_meus_agendamentos') return capabilities.manageAppointments !== false;
   if (name.includes('pedido') || name === 'buscar_produtos' || name === 'consultar_status_pedido') return capabilities.operateStore !== false;
@@ -478,6 +479,13 @@ async function toolMyPlan(context) {
   return { ok: true, assinante: true, plano: sanitizeToolData(plano), instrucao: 'Informe o saldo e a validade com clareza. Não fale de cobrança nem cobre pelo WhatsApp; pagamento é com a equipe.' };
 }
 
+async function toolMyCashback(context) {
+  const scope = await barbeariaScope(context);
+  const cashback = saldoCashback(scope.empresaId, scope.phone);
+  if (!cashback.ativo && !cashback.saldo) return { ok: true, ativo: false, instrucao: 'A barbearia não usa cashback. Não prometa crédito.' };
+  return { ok: true, ativo: true, saldo: cashback.saldo, proximoVencimento: cashback.proximoVencimento, percentual: cashback.percentual, instrucao: 'Informe o saldo e o vencimento. O uso é feito na hora do pagamento com a equipe.' };
+}
+
 async function toolClubFit(context) {
   const scope = await barbeariaScope(context);
   if (!liberadoPeloCliente(context, PEDIU_CLUBE, CATEGORIA_CLUBE)) {
@@ -603,6 +611,7 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'preparar_cancelamento', description: 'Prepara o cancelamento de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' } }, required: ['appointmentId'] } },
   { name: 'preparar_pedido', description: 'Prepara um pedido de retirada para confirmação. Não cria o pedido.', parameters: { type: 'OBJECT', properties: { customerName: { type: 'STRING' }, items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { variantId: { type: 'STRING' }, quantity: { type: 'INTEGER' } }, required: ['variantId', 'quantity'] } } }, required: ['customerName', 'items'] } },
   { name: 'consultar_meu_plano', description: 'Mostra o plano/clube do próprio contato: sessões usadas e restantes no ciclo, fim do ciclo e serviços incluídos. Use quando o cliente perguntar do plano dele.', parameters: { type: 'OBJECT', properties: {} } },
+  { name: 'consultar_meu_cashback', description: 'Mostra o saldo de cashback do próprio contato e quando vence. Use quando o cliente perguntar do cashback ou do saldo dele.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'avaliar_clube', description: 'Avalia se o clube/plano mensal compensa para o contato pela frequência de visitas. Só use se o cliente perguntou de plano/clube ou depois de propor_oportunidade liberar a categoria "clube". Nunca cite gasto do cliente.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'sugerir_produto_pos_servico', description: 'Busca até 3 produtos publicados ligados ao último serviço do contato (ex.: pomada após corte, óleo após barba). Só use se o cliente pediu indicação de produto ou depois de propor_oportunidade liberar a categoria "cuidados pos-servico".', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'propor_oportunidade', description: 'Autoriza ou bloqueia uma única sugestão comercial opcional com base em consentimento, relevância, cooldown e limite. É obrigatória antes de qualquer oferta não solicitada.', parameters: { type: 'OBJECT', properties: { category: { type: 'STRING', description: 'Categoria factual e relevante retornada pelo perfil consentido' } }, required: ['category'] } },
@@ -627,6 +636,7 @@ const TOOL_MAP = {
   preparar_cancelamento: toolPrepareCancellation,
   preparar_pedido: toolPrepareOrder,
   consultar_meu_plano: toolMyPlan,
+  consultar_meu_cashback: toolMyCashback,
   avaliar_clube: toolClubFit,
   sugerir_produto_pos_servico: toolPostServiceProduct,
   propor_oportunidade: toolOpportunity,
