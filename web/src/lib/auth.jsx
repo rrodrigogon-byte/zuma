@@ -1,4 +1,5 @@
 import { createContext, useContext, useState } from 'react'
+import { encerrarPushDoAparelho } from './push-equipe'
 
 const AuthContext = createContext(null)
 
@@ -97,6 +98,14 @@ export function AuthProvider({ children }) {
   }
 
   const logout = () => {
+    // App do barbeiro: desliga os avisos deste aparelho e apaga a agenda guardada para
+    // uso sem internet. Lê a sessão antes de apagá-la (o cancelamento precisa dela).
+    try {
+      const empresa = JSON.parse(localStorage.getItem('sp_empresa_ativa') || 'null')
+      const loja = JSON.parse(localStorage.getItem('sp_loja_ativa') || 'null')
+      encerrarPushDoAparelho({ token: localStorage.getItem('sp_token') || '', empresaId: empresa?.id || '', lojaId: loja?.id || '' })
+    } catch { /* sessão ilegível: segue o logout */ }
+    try { navigator.serviceWorker?.controller?.postMessage({ tipo: 'limpar-dados' }) } catch { /* sem service worker */ }
     localStorage.removeItem('sp_token')
     localStorage.removeItem('sp_site_token')
     localStorage.removeItem('sp_user')

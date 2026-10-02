@@ -5,6 +5,7 @@ import * as barbearia from '../barbearia-erp-kytto.js';
 import * as clientes from '../clientes-contas-kytto.js';
 import { db } from './database.js';
 import { enviarMensagem } from './whatsapp.js';
+import { notificarEquipe } from '../dino-push-equipe.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EVENTOS = new Set(['criado', 'remarcado', 'cancelado', 'lembrete']);
@@ -123,6 +124,13 @@ export async function queueAppointmentNotifications(contexto = {}, agendamento =
   const lojaId = uuidOuVazio(contexto.lojaId);
   const legacyEmpresaId = limpo(contexto.legacyEmpresaId || contexto.empresaId, 120);
   const evento = limpo(eventoRecebido, 30).toLowerCase();
+  // Aviso no celular do profissional (push do app do barbeiro): independe do
+  // consentimento do cliente e do WhatsApp, e nunca atrasa nem derruba o fluxo.
+  if (['criado', 'remarcado', 'cancelado'].includes(evento) && agendamento?.id) {
+    const servicoNome = agendamento.servicoNome
+      || barbearia.listarServicos(legacyEmpresaId, { incluirInativos: true }).find((s) => s.id === agendamento.servicoId)?.nome || '';
+    setImmediate(() => { notificarEquipe(legacyEmpresaId, agendamento, evento, { servicoNome }).catch(() => null); });
+  }
   if (!empresaId || !lojaId) return { queued: 0, skipped: true, reason: 'commerce_scope_unavailable' };
   if (agendamento?.lojaId && String(agendamento.lojaId) !== lojaId) return { queued: 0, skipped: true, reason: 'store_scope_mismatch' };
   if (!EVENTOS.has(evento) || !agendamento?.id) return { queued: 0, skipped: true, reason: 'appointment_event_invalid' };

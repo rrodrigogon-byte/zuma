@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { DINO_BARBERSHOP_LOGO } from '../../lib/brand'
+import InstalarApp from '../../components/pwa/InstalarApp'
 
 const API = import.meta.env.VITE_API_URL || ''
 
@@ -43,7 +44,6 @@ export default function MinhaConta() {
   const { slug } = useParams()
   const [estab, setEstab] = useState(null)
   const [politicas, setPoliticas] = useState({})
-  const [instalar, setInstalar] = useState(null)
   const [acesso, setAcesso] = useState({ codigo: '', telefone: '' })
   const [conta, setConta] = useState(null)
   const [erro, setErro] = useState('')
@@ -55,9 +55,6 @@ export default function MinhaConta() {
     fetch(`${API}/api/publico/agendamento/${encodeURIComponent(slug)}`).then((r) => r.json()).then((d) => {
       if (d?.ok) { setEstab(d.estabelecimento); setPoliticas(d.politicas || {}) }
     }).catch(() => {})
-    const antes = (event) => { event.preventDefault(); setInstalar(event) }
-    window.addEventListener('beforeinstallprompt', antes)
-    return () => window.removeEventListener('beforeinstallprompt', antes)
   }, [slug])
 
   async function entrar(event) {
@@ -92,7 +89,7 @@ export default function MinhaConta() {
         <Link to={`/agendar/${encodeURIComponent(slug)}`} style={s.btn}>Agendar</Link>
         {whatsapp ? <a href={`https://wa.me/${whatsapp.startsWith('55') ? whatsapp : `55${whatsapp}`}`} target="_blank" rel="noopener noreferrer" style={s.btn2}>WhatsApp</a> : <span />}
       </div>
-      {instalar && <button type="button" style={s.btn2} onClick={async () => { instalar.prompt(); await instalar.userChoice.catch(() => null); setInstalar(null) }}>Instalar o app no celular</button>}
+      <InstalarApp nomeApp={isDino ? 'o app da Dino' : 'o app'} tema={theme} />
 
       {!conta ? <form onSubmit={entrar} style={s.card}>
         <div style={s.titulo}>Minha conta</div>

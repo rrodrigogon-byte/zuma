@@ -1492,8 +1492,18 @@ export function recebimentoAgendamentoVerificado(empresaId, agendamento) {
     && Number(lancamento.valor) > 0 ? lancamento : null;
 }
 
-export function obterComissoes(empresaId, { data = '', lojaId = '' } = {}) {
+export function obterComissoes(empresaId, { data = '', lojaId = '', inicio = '', fim = '' } = {}) {
   const estado = estadoEmpresa(empresaId, false);
+  // Filtro por dia (data) ou por período (inicio/fim, AAAA-MM-DD inclusivos).
+  const diaIni = String(inicio || '').slice(0, 10);
+  const diaFim = String(fim || '').slice(0, 10);
+  const noFiltro = (dia) => {
+    const d = String(dia || '').slice(0, 10);
+    if (data) return d === String(data).slice(0, 10);
+    if (diaIni && d < diaIni) return false;
+    if (diaFim && d > diaFim) return false;
+    return true;
+  };
   const filtrarLoja = (item) => !lojaId || !item.lojaId || item.lojaId === String(lojaId);
   const todasComandasPagas = Object.values(estado.comandas)
     .filter(filtrarLoja)
@@ -1501,7 +1511,7 @@ export function obterComissoes(empresaId, { data = '', lojaId = '' } = {}) {
     // comissão: o atendimento foi feito e cobrado; a comissão vale no fechamento.
     .filter((item) => item.status === 'paga' || item.status === 'em_conta');
   const comandasPagas = todasComandasPagas
-    .filter((item) => !data || diaOperacional(item.fechadaEm || item.atualizadoEm) === String(data).slice(0, 10));
+    .filter((item) => noFiltro(diaOperacional(item.fechadaEm || item.atualizadoEm)));
   // Atendimento que virou comanda conta só pela comanda, mesmo que ela seja paga em outro dia.
   const agendamentosEmComanda = new Set(todasComandasPagas.map((item) => item.agendamentoId).filter(Boolean));
   // Desconto da comanda reduz a base de comissão proporcionalmente em cada item.
@@ -1526,7 +1536,7 @@ export function obterComissoes(empresaId, { data = '', lojaId = '' } = {}) {
     .filter(filtrarLoja)
     .filter((item) => item.status === 'concluido')
     .filter((item) => !agendamentosEmComanda.has(item.id))
-    .filter((item) => !data || String(item.dataAgenda || diaOperacional(item.dataHora)).slice(0, 10) === String(data).slice(0, 10))
+    .filter((item) => noFiltro(item.dataAgenda || diaOperacional(item.dataHora)))
     .map((item) => {
       const lancamento = recebimentoAgendamentoVerificado(empresaId, item);
       return lancamento ? { ...item, valorRecebido: Number(lancamento.valor), meioPagamento: lancamento.meioPagamento } : null;
@@ -1534,7 +1544,7 @@ export function obterComissoes(empresaId, { data = '', lojaId = '' } = {}) {
   const vendasLegadas = Object.values(estado.vendasRevenda)
     .filter(filtrarLoja)
     .filter((item) => item.status === 'pago')
-    .filter((item) => !data || diaOperacional(item.criadoEm) === String(data).slice(0, 10));
+    .filter((item) => noFiltro(diaOperacional(item.criadoEm)));
   const servicosComanda = comandasPagas.flatMap((comanda) => (comanda.itens || [])
     .filter((item) => item.tipo === 'servico')
     .map((item) => ({ ...item, profissionalId: item.profissionalId || comanda.profissionalId, valorRecebido: dinheiro(Number(item.subtotal || 0) * fatorDesconto(comanda)), valor: dinheiro(Number(item.subtotal || 0) * fatorDesconto(comanda)), pesoNaComanda: pesoNaComanda(comanda, Number(item.subtotal || 0)), rateio: rateioPagamentos(comanda), meioPagamento: comanda.pagamentos?.find((pagamento) => pagamento.meio !== 'conta')?.meio || comanda.pagamento })));

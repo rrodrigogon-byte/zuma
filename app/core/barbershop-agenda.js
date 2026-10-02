@@ -28,6 +28,7 @@ import {
   listSchedulingServices as pgServices,
   SchedulingError,
 } from './barbershop-scheduling.js';
+import { notificarEquipe } from '../dino-push-equipe.js';
 import {
   listWhatsappCustomerAppointments as pgCustomerAppointments,
   rescheduleWhatsappAppointment as pgReschedule,
@@ -149,6 +150,10 @@ export async function availability(scope, input = {}) {
 // descartado no envio pela conferência da agenda).
 function notificarDepois(contexto, agendamento, evento) {
   setImmediate(async () => {
+    // Aviso no celular do profissional (app do barbeiro) também para ações feitas pela IA.
+    const legado = contexto.legacyEmpresaId || contexto.empresaId;
+    const servicoNome = agendamento.servicoNome || barbearia.listarServicos(legado, { incluirInativos: true }).find((s) => s.id === agendamento.servicoId)?.nome || '';
+    await notificarEquipe(legado, agendamento, evento, { servicoNome }).catch(() => null);
     if (evento === 'remarcado' || evento === 'cancelado') await cancelPendingAppointmentNotifications(contexto, agendamento.id).catch(() => null);
     if (evento !== 'cancelado') await queueAppointmentNotifications(contexto, agendamento, 'lembrete').catch(() => null);
   });

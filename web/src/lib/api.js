@@ -45,6 +45,9 @@ async function request(path, opts = {}) {
   }
   const data = await res.json().catch(() => ({}))
   if (res.status === 401) {
+    try { navigator.serviceWorker?.controller?.postMessage({ tipo: 'limpar-dados' }) } catch { /* sem service worker */ }
+    // Sessão expirada: desliga os avisos deste aparelho no navegador.
+    try { navigator.serviceWorker?.getRegistration?.().then((r) => r?.pushManager?.getSubscription()).then((s) => s?.unsubscribe()).catch(() => null) } catch { /* sem push */ }
     localStorage.removeItem('sp_token')
     localStorage.removeItem('sp_site_token')
     localStorage.removeItem('sp_user')

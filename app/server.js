@@ -52,6 +52,8 @@ import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
 import * as barbeariaFiscalKytto from './barbearia-fiscal-kytto.js';
 import { appointmentNotificationMetrics, queueAppointmentNotifications, queueChargeNotification, queueReviewRequest, reviewNotificationMetrics } from './core/barbershop-appointment-notifications.js';
 import * as cobrancaKytto from './dino-cobranca-kytto.js';
+import * as modoBarbeiro from './dino-modo-barbeiro.js';
+import * as pushEquipe from './dino-push-equipe.js';
 import { avisarListaEspera } from './core/barbershop-agenda.js';
 import * as captacaoKytto from './dino-captacao-kytto.js';
 import * as clientesKytto from './clientes-contas-kytto.js';
@@ -2282,6 +2284,49 @@ registerDinoAdminRoutes(app, { db, legacyEmpresaId, legacyLojaId, financeiroKytt
 registerAiBrainRoutes(app, { legacyEmpresaId, legacyLojaId, requireCommercePermission, audit, clientesKytto, commerceDb, listarAgendamentosBarbearia });
 registerAtivacaoRoutes(app, { legacyEmpresaId, requireCommercePermission, barbeariaErpKytto, audit });
 registerWhatsappConexaoRoutes(app, { legacyEmpresaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user) });
+// Modo barbeiro (app do profissional no celular): agenda do dia, totais e comissão
+// do próprio profissional (vínculo pelo e-mail do login). Gestão escolhe qualquer um.
+app.get('/api/admin/barbearia/modo-barbeiro', (req, res) => {
+  try {
+    const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: process.env.KYTTO_TIMEZONE || 'America/Cuiaba', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    const painel = modoBarbeiro.painelBarbeiro(barbeariaErpKytto, {
+      empresaId: legacyEmpresaId(req), lojaId: legacyLojaId(req), usuario: req.user,
+      profissionalId: req.query?.profissionalId, data: req.query?.data || hoje,
+    });
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ ok: true, hoje, fuso: process.env.KYTTO_TIMEZONE || 'America/Cuiaba', slug: pushEquipe.slugPublicoDaEmpresa(legacyEmpresaId(req)), ...painel });
+  } catch (error) {
+    const status = error instanceof modoBarbeiro.ModoBarbeiroError ? error.status : 400;
+    res.status(status).json({ error: error.message, code: error.code || undefined });
+  }
+});
+// Notificações push do app do barbeiro (VAPID no ambiente; desligado sem as chaves).
+function respostaPush(res, error) {
+  const status = error instanceof pushEquipe.PushError ? error.status : 400;
+  return res.status(status).json({ error: error.message, code: error.code || undefined });
+}
+app.post('/api/admin/barbearia/push/situacao', (req, res) => {
+  try { res.json({ ok: true, ...pushEquipe.situacao({ empresaId: legacyEmpresaId(req), usuario: req.user, endpoint: req.body?.endpoint }) }); }
+  catch (error) { respostaPush(res, error); }
+});
+app.post('/api/admin/barbearia/push/assinar', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const eu = modoBarbeiro.profissionalDoUsuario(barbeariaErpKytto.listarProfissionais(empresaId), req.user);
+    const gestao = modoBarbeiro.ehGestao(req.user);
+    if (!eu && !gestao) return res.status(409).json({ error: 'Seu login ainda não está ligado a um profissional. Peça à gestão para colocar o seu e-mail no seu cadastro.', code: 'PROFISSIONAL_NAO_VINCULADO' });
+    const resultado = pushEquipe.assinar({ empresaId, lojaId: legacyLojaId(req), usuario: req.user, profissionalId: eu?.id || '', todos: gestao && req.body?.todos === true, assinatura: req.body?.assinatura });
+    res.json({ ok: true, ...resultado });
+  } catch (error) { respostaPush(res, error); }
+});
+app.post('/api/admin/barbearia/push/cancelar', (req, res) => {
+  try { res.json({ ok: true, removida: pushEquipe.cancelar({ empresaId: legacyEmpresaId(req), usuario: req.user, endpoint: req.body?.endpoint }) }); }
+  catch (error) { respostaPush(res, error); }
+});
+app.post('/api/admin/barbearia/push/teste', async (req, res) => {
+  try { res.json({ ok: true, ...(await pushEquipe.enviarTeste({ empresaId: legacyEmpresaId(req), usuario: req.user, endpoint: req.body?.endpoint })) }); }
+  catch (error) { respostaPush(res, error); }
+});
 app.get('/api/admin/barbearia/metas', (req, res) => {
   res.json({ ok: true, metas: dinoMetas.obterMetas(legacyEmpresaId(req)), campos: dinoMetas.METAS });
 });
@@ -6379,6 +6424,48 @@ function basePublicaConfigurada(slug) {
   const base = String(process.env.PUBLIC_BASE_URL || process.env.SERVER_URL || '').trim().replace(/\/+$/, '');
   return /^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(base) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(base) ? base : '';
 }
+// PWA no iPhone e no Android: manifesto, ícone da Tela de Início, barra de status,
+// área segura (notch) e telas de abertura (splash) por tamanho de aparelho.
+const SPLASH_IOS = [
+  [1320, 2868, 440, 956, 3], [1290, 2796, 430, 932, 3], [1206, 2622, 402, 874, 3], [1179, 2556, 393, 852, 3],
+  [1284, 2778, 428, 926, 3], [1170, 2532, 390, 844, 3], [1125, 2436, 375, 812, 3], [1242, 2688, 414, 896, 3],
+  [828, 1792, 414, 896, 2], [750, 1334, 375, 667, 2], [1640, 2360, 820, 1180, 2], [1668, 2388, 834, 1194, 2], [2048, 2732, 1024, 1366, 2],
+];
+function aplicarMetaApp(html, { manifesto, tituloApple, iconeApple, splashDino }) {
+  let saida = html
+    .replace(/<link rel="manifest" href="[^"]*"\s*\/?>/, () => `<link rel="manifest" href="${escaparHtml(manifesto)}" />`)
+    .replace(/(<meta name="theme-color" content=")[^"]*(")/, (_, a, b) => `${a}#0E1014${b}`)
+    .replace(/(<meta name="apple-mobile-web-app-title" content=")[^"]*(")/, (_, a, b) => `${a}${escaparHtml(String(tituloApple).slice(0, 20))}${b}`)
+    .replace(/(<meta name="apple-mobile-web-app-status-bar-style" content=")[^"]*(")/, (_, a, b) => `${a}black-translucent${b}`)
+    .replace(/(<meta name="viewport" content=")[^"]*(")/, (_, a, b) => `${a}width=device-width, initial-scale=1.0, viewport-fit=cover${b}`);
+  if (iconeApple) saida = saida.replace(/(<link rel="apple-touch-icon" href=")[^"]*(")/, (_, a, b) => `${a}${escaparHtml(iconeApple)}${b}`);
+  const extras = ['<meta name="mobile-web-app-capable" content="yes" />'];
+  if (splashDino) {
+    for (const [w, h, dw, dh, r] of SPLASH_IOS) {
+      extras.push(`<link rel="apple-touch-startup-image" media="(device-width: ${dw}px) and (device-height: ${dh}px) and (-webkit-device-pixel-ratio: ${r}) and (orientation: portrait)" href="/brand/dino-splash-${w}x${h}.png" />`);
+    }
+  }
+  return saida.replace('</head>', () => `${extras.join('')}</head>`);
+}
+
+// App da equipe (modo barbeiro): instalável, sem indexação.
+app.get('/barbeiro/:slug', (req, res, next) => {
+  try {
+    const meta = metaAgendamentoPublico?.(req.params.slug);
+    if (!meta) return next();
+    const ehDino = meta.slug === 'dino';
+    let html = trocarMeta(indexHtml(), { titulo: `${meta.nome} · Equipe`, descricao: 'Agenda do dia, atendimentos e comissão do profissional.', url: '', imagem: '', indexar: false });
+    html = aplicarMetaApp(html, {
+      manifesto: `/api/publico/agendamento/${encodeURIComponent(meta.slug)}/app-barbeiro.webmanifest`,
+      tituloApple: ehDino ? 'Dino Equipe' : 'Equipe',
+      iconeApple: ehDino ? '/brand/dino-equipe-apple-180.png' : '',
+      splashDino: ehDino,
+    });
+    res.setHeader('Cache-Control', 'no-cache');
+    return res.type('html').send(html);
+  } catch (_) { return next(); }
+});
+
 app.get(['/agendar/:slug', '/avaliar/:slug', '/minha/:slug'], (req, res, next) => {
   try {
     const meta = metaAgendamentoPublico?.(req.params.slug);
@@ -6403,10 +6490,12 @@ app.get(['/agendar/:slug', '/avaliar/:slug', '/minha/:slug'], (req, res, next) =
     let final = html;
     if (minha) {
       // App do cliente instalável: manifesto e cor da barbearia (o link do manifesto é público e sem dado pessoal).
-      final = final
-        .replace(/<link rel="manifest" href="[^"]*"\s*\/?>/, () => `<link rel="manifest" href="/api/publico/agendamento/${encodeURIComponent(meta.slug)}/manifest.webmanifest" />`)
-        .replace(/(<meta name="theme-color" content=")[^"]*(")/, (_, a, b) => `${a}#0E1014${b}`)
-        .replace(/(<meta name="apple-mobile-web-app-title" content=")[^"]*(")/, (_, a, b) => `${a}${escaparHtml(String(meta.nome).slice(0, 20))}${b}`);
+      final = aplicarMetaApp(final, {
+        manifesto: `/api/publico/agendamento/${encodeURIComponent(meta.slug)}/manifest.webmanifest`,
+        tituloApple: meta.nome,
+        iconeApple: ehDino ? '/brand/dino-apple-touch-180.png' : '',
+        splashDino: ehDino,
+      });
     }
     if (!avaliar && !minha && url) {
       const telefone = String(meta.telefone || '').replace(/\D/g, '');

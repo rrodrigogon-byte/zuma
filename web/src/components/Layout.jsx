@@ -89,6 +89,9 @@ export default function Layout({ children, noSidebar = false, marketing = false 
       <main style={{
         marginLeft: isMobile ? 0 : (sidebarCollapsed ? 78 : 256),
         marginTop: hasTopBar && !isMobile ? topBarH : 0,
+        // No celular o botão de menu (☰) fica fixo no canto: o conteúdo começa abaixo dele
+        // e respeita a área do notch/ilha do iPhone.
+        paddingTop: isMobile ? 'calc(58px + env(safe-area-inset-top))' : 0,
         flex: 1, minWidth: 0, minHeight: '100vh',
         background: 'var(--bg)',
         color: 'var(--fg)',

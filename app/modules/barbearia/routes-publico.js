@@ -396,27 +396,77 @@ router.post('/:slug/vale/consultar', autoatendimento(async (req, res, identidade
 }));
 
 // Manifesto do app do cliente (instalável), com a marca da barbearia.
+function enviarManifesto(res, manifesto) {
+  res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=300');
+  return res.send(JSON.stringify(manifesto));
+}
+
+// App do cliente (/minha/:slug), instalável no Android e no iPhone.
 router.get('/:slug/manifest.webmanifest', (req, res) => {
   const identidade = identidadePublica(req.params.slug);
   if (!identidade) return res.status(404).json({ ok: false, error: 'Estabelecimento não encontrado.' });
   const { nome, slug: slugPublico } = identidade.estabelecimento;
   const ehDino = slugPublico === 'dino';
   const icones = ehDino
-    ? [{ src: '/brand/dino-app-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: '/brand/dino-app-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' }]
+    ? [
+      { src: '/brand/dino-app-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/brand/dino-app-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: '/brand/dino-app-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+    ]
     : [{ src: '/icon-512.png', sizes: '1024x1024', type: 'image/png', purpose: 'any' }];
-  res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
-  res.setHeader('Cache-Control', 'public, max-age=300');
-  return res.send(JSON.stringify({
+  return enviarManifesto(res, {
+    id: `/minha/${encodeURIComponent(slugPublico)}`,
     name: nome,
     short_name: texto(nome, 12) || 'Barbearia',
     description: `Agende, acompanhe seu clube e seu cashback na ${nome}.`,
+    lang: 'pt-BR',
     start_url: `/minha/${encodeURIComponent(slugPublico)}`,
     scope: '/',
     display: 'standalone',
+    orientation: 'portrait',
     background_color: '#0E1014',
     theme_color: '#0E1014',
+    categories: ['lifestyle', 'beauty'],
     icons: icones,
-  }));
+    shortcuts: [{ name: 'Agendar horário', short_name: 'Agendar', url: `/agendar/${encodeURIComponent(slugPublico)}?canal=app`, icons: icones.slice(0, 1) }],
+  });
+});
+
+// App da equipe (/barbeiro/:slug): agenda do dia do profissional no celular.
+// O manifesto é público (só nome e ícones); a agenda exige login.
+router.get('/:slug/app-barbeiro.webmanifest', (req, res) => {
+  const identidade = identidadePublica(req.params.slug);
+  if (!identidade) return res.status(404).json({ ok: false, error: 'Estabelecimento não encontrado.' });
+  const { nome, slug: slugPublico } = identidade.estabelecimento;
+  const ehDino = slugPublico === 'dino';
+  const icones = ehDino
+    ? [
+      { src: '/brand/dino-equipe-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/brand/dino-equipe-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: '/brand/dino-equipe-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+    ]
+    : [{ src: '/icon-512.png', sizes: '1024x1024', type: 'image/png', purpose: 'any' }];
+  const inicio = `/barbeiro/${encodeURIComponent(slugPublico)}`;
+  return enviarManifesto(res, {
+    id: inicio,
+    name: `${nome} · Equipe`,
+    short_name: ehDino ? 'Dino Equipe' : 'Equipe',
+    description: 'Agenda do dia, atendimentos e comissão do profissional.',
+    lang: 'pt-BR',
+    start_url: inicio,
+    scope: '/barbeiro',
+    display: 'standalone',
+    orientation: 'portrait',
+    background_color: '#0E1014',
+    theme_color: '#0E1014',
+    categories: ['business', 'productivity'],
+    icons: icones,
+    shortcuts: [
+      { name: 'Agenda de hoje', short_name: 'Hoje', url: inicio, icons: icones.slice(0, 1) },
+      { name: 'Encaixe de cliente', short_name: 'Encaixe', url: `${inicio}?acao=encaixe`, icons: icones.slice(0, 1) },
+    ],
+  });
 });
 
 // NPS pós-atendimento: nota 0–10 do atendimento concluído (código + telefone no corpo).
