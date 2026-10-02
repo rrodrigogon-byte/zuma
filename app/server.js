@@ -2718,7 +2718,7 @@ app.patch('/api/admin/barbearia/agenda/:id/status', async (req, res) => {
     }
     const status = String(req.body?.status || '');
     const registrarFinanceiro = req.body?.registrarFinanceiro === true;
-    const camposPagamento = ['meioPagamento', 'meio_pagamento', 'valorRecebido', 'valor_recebido', 'financeiroLancamentoId', 'financeiro_lancamento_id', 'usarCashback'];
+    const camposPagamento = ['meioPagamento', 'meio_pagamento', 'valorRecebido', 'valor_recebido', 'financeiroLancamentoId', 'financeiro_lancamento_id', 'usarCashback', 'usarVale'];
     if (req.body?.financeiroLancamentoId !== undefined || req.body?.financeiro_lancamento_id !== undefined) {
       return res.status(400).json({ error: 'O vínculo financeiro é gerado pelo servidor.' });
     }
@@ -2735,13 +2735,26 @@ app.patch('/api/admin/barbearia/agenda/:id/status', async (req, res) => {
     const sinalDoAtendimento = registrarFinanceiro ? cobrancaKytto.sinalDoAgendamento(empresaId, atual.id) : null;
     const sinalPago = sinalDoAtendimento?.status === 'paga' ? Number(sinalDoAtendimento.valor || 0) : 0;
     const usarCashbackValor = registrarFinanceiro ? Math.max(0, Math.round(Number(req.body?.usarCashback || 0) * 100) / 100) : 0;
-    if (usarCashbackValor > 0) {
+    if (usarCashbackValor > 0 && !cobrancaKytto.usoDeCashbackExistente(empresaId, atual.clienteTelefone, `atendimento:${atual.id}`)) {
       const saldo = cobrancaKytto.saldoCashback(empresaId, atual.clienteTelefone).saldo;
       if (usarCashbackValor > saldo + 0.001) return res.status(409).json({ error: `Saldo de cashback insuficiente (R$ ${saldo.toFixed(2).replace('.', ',')}).`, code: 'SALDO_INSUFICIENTE' });
     }
-    const valorDevido = Math.round(Math.max(0, valor - sinalPago - usarCashbackValor) * 100) / 100;
-    if (registrarFinanceiro && usarCashbackValor > 0 && sinalPago + usarCashbackValor > valor + 0.001) {
-      return res.status(400).json({ error: 'O cashback usado não pode passar do que falta pagar no serviço.', code: 'CASHBACK_ACIMA_DO_DEVIDO' });
+    // Vale-presente: código e valor conferidos no servidor (saldo, ativo, validade).
+    const usarValeCodigo = registrarFinanceiro ? String(req.body?.usarVale?.codigo || '').trim() : '';
+    const usarValeValor = usarValeCodigo ? Math.max(0, Math.round(Number(req.body?.usarVale?.valor || 0) * 100) / 100) : 0;
+    const usoValeAnterior = usarValeCodigo ? cobrancaKytto.usoDeValeExistente(empresaId, usarValeCodigo, `atendimento:${atual.id}`) : null;
+    if (usarValeCodigo && usoValeAnterior && Math.round(usoValeAnterior.valor * 100) !== Math.round(usarValeValor * 100)) {
+      return res.status(409).json({ error: 'Este atendimento já usou o vale com outro valor.', code: 'VALE_USO_DIVERGENTE' });
+    }
+    if (usarValeCodigo && !usoValeAnterior) {
+      try {
+        const { saldo } = cobrancaKytto.saldoUtilVale(empresaId, usarValeCodigo);
+        if (!(usarValeValor > 0) || usarValeValor > saldo + 0.001) return res.status(409).json({ error: `Saldo do vale insuficiente (R$ ${saldo.toFixed(2).replace('.', ',')}).`, code: 'SALDO_INSUFICIENTE' });
+      } catch (erroVale) { return res.status(erroVale.status || 400).json({ error: erroVale.message, code: erroVale.code }); }
+    }
+    const valorDevido = Math.round(Math.max(0, valor - sinalPago - usarCashbackValor - usarValeValor) * 100) / 100;
+    if (registrarFinanceiro && (usarCashbackValor > 0 || usarValeValor > 0) && sinalPago + usarCashbackValor + usarValeValor > valor + 0.001) {
+      return res.status(400).json({ error: 'Cashback e vale não podem passar do que falta pagar no serviço.', code: 'CASHBACK_ACIMA_DO_DEVIDO' });
     }
     const valorSolicitado = Number(req.body?.valorRecebido ?? valorDevido);
     // Sinal + cashback cobrindo o serviço inteiro: conclui sem recebimento no dia.
@@ -2757,7 +2770,7 @@ app.patch('/api/admin/barbearia/agenda/:id/status', async (req, res) => {
         return res.status(409).json({ error: 'O atendimento já possui um recebimento com dados divergentes ou pendentes de revisão.', code: 'RECEIPT_IDEMPOTENCY_CONFLICT' });
       }
       if (Math.round(valorSolicitado * 100) !== Math.round(valorDevido * 100)) {
-        return res.status(409).json({ error: sinalPago || usarCashbackValor ? `O valor recebido deve ser o que falta pagar (R$ ${valorDevido.toFixed(2).replace('.', ',')}), já descontados sinal e cashback.` : 'O valor recebido deve corresponder ao valor registrado do serviço. Use a comanda para ajuste auditado.', code: 'RECEIPT_AMOUNT_MISMATCH' });
+        return res.status(409).json({ error: sinalPago || usarCashbackValor || usarValeValor ? `O valor recebido deve ser o que falta pagar (R$ ${valorDevido.toFixed(2).replace('.', ',')}), já descontados sinal, cashback e vale.` : 'O valor recebido deve corresponder ao valor registrado do serviço. Use a comanda para ajuste auditado.', code: 'RECEIPT_AMOUNT_MISMATCH' });
       }
       if (existente && Math.round(Number(existente.valor) * 100) !== Math.round(valorDevido * 100)) {
         return res.status(409).json({ error: 'O recebimento anterior exige reconciliação manual.', code: 'RECEIPT_RECONCILIATION_REQUIRED' });
@@ -2768,7 +2781,31 @@ app.patch('/api/admin/barbearia/agenda/:id/status', async (req, res) => {
     }
     const dadosStatus = { ...(req.body || {}), lojaId };
     for (const campo of camposPagamento) delete dadosStatus[campo];
-    let agendamento = barbeariaErpKytto.alterarStatusAgendamento(empresaId, req.params.id, status, dadosStatus);
+    // Vale e cashback são debitados ANTES de concluir e lançar o recebimento: se o
+    // débito falhar, nada é gravado; se a conclusão falhar, o débito é desfeito.
+    const referenciaUso = `atendimento:${atual.id}`;
+    let cashback = null;
+    let vale = null;
+    try {
+      if (usarValeValor > 0) {
+        vale = cobrancaKytto.usarVale(empresaId, { codigo: usarValeCodigo, valor: usarValeValor, referencia: referenciaUso, usuario: req.user?.email || '' });
+        audit(req, 'BARBEARIA VALE USADO', `${atual.id} valor=${usarValeValor}`);
+      }
+      if (usarCashbackValor > 0) {
+        cashback = { uso: cobrancaKytto.usarCashback(empresaId, { telefone: atual.clienteTelefone, valor: usarCashbackValor, referencia: referenciaUso, usuario: req.user?.email || '' }) };
+        audit(req, 'BARBEARIA CASHBACK USADO', `${atual.id} valor=${usarCashbackValor}`);
+      }
+    } catch (erroUso) {
+      cobrancaKytto.desfazerUsos(empresaId, { codigoVale: usarValeCodigo, telefone: atual.clienteTelefone, referencia: referenciaUso });
+      return res.status(erroUso.status || 409).json({ error: erroUso.message, code: erroUso.code || 'USO_RECUSADO' });
+    }
+    let agendamento;
+    try {
+      agendamento = barbeariaErpKytto.alterarStatusAgendamento(empresaId, req.params.id, status, dadosStatus);
+    } catch (erroStatus) {
+      if (usarValeValor > 0 || usarCashbackValor > 0) cobrancaKytto.desfazerUsos(empresaId, { codigoVale: usarValeCodigo, telefone: atual.clienteTelefone, referencia: referenciaUso });
+      throw erroStatus;
+    }
     if (!agendamento) return res.status(404).json({ error: 'Agendamento não encontrado na empresa ativa.' });
     let financeiro = null;
     if (registrarFinanceiro && !cobertoSemRecebimento) {
@@ -2791,7 +2828,6 @@ app.patch('/api/admin/barbearia/agenda/:id/status', async (req, res) => {
     let indicacao = null;
     let assinatura = null;
     let avaliacao = null;
-    let cashback = null;
     try {
       if (status === 'cancelado') {
         const contexto = { empresaId, lojaId: agendamento.lojaId || legacyLojaId(req), legacyEmpresaId: empresaId };
@@ -2807,13 +2843,8 @@ app.patch('/api/admin/barbearia/agenda/:id/status', async (req, res) => {
         if (usarPlano) assinatura = captacaoKytto.consumirAssinaturaNaConclusao(empresaId, agendamento);
         // Cashback: usa o saldo informado (conferido antes) e credita o do atendimento
         // só quando o recebimento foi lançado no financeiro.
-        if (usarCashbackValor > 0) {
-          try {
-            cashback = { uso: cobrancaKytto.usarCashback(empresaId, { telefone: agendamento.clienteTelefone, valor: usarCashbackValor, referencia: `atendimento:${agendamento.id}`, usuario: req.user?.email || '' }) };
-            audit(req, 'BARBEARIA CASHBACK USADO', `${agendamento.id} valor=${usarCashbackValor}`);
-          } catch (erroCashback) { cashback = { erro: erroCashback.message }; }
-        }
-        const credito = registrarFinanceiro ? cobrancaKytto.creditarCashback(empresaId, agendamento, { base: valor - usarCashbackValor }) : null;
+        // Cashback só sobre dinheiro novo (vale e cashback não geram cashback).
+        const credito = registrarFinanceiro ? cobrancaKytto.creditarCashback(empresaId, agendamento, { base: valor - usarCashbackValor - usarValeValor }) : null;
         if (credito) cashback = { ...(cashback || {}), credito };
       }
     } catch (erroCaptacao) {
@@ -2832,7 +2863,7 @@ app.patch('/api/admin/barbearia/agenda/:id/status', async (req, res) => {
         avaliacao = { queued: 0, skipped: true, reason: 'queue_unavailable' };
       }
     }
-    res.json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(empresaId, agendamento), financeiro, notificacao, listaEspera, indicacao, avaliacao, cashback, assinatura: assinatura ? { id: assinatura.assinatura.id, sessoesRestantes: assinatura.sessoesRestantes, usosNoCiclo: assinatura.usosNoCiclo } : null });
+    res.json({ ok: true, agendamento: enriquecerAgendamentoBarbearia(empresaId, agendamento), financeiro, notificacao, listaEspera, indicacao, avaliacao, cashback, vale, assinatura: assinatura ? { id: assinatura.assinatura.id, sessoesRestantes: assinatura.sessoesRestantes, usosNoCiclo: assinatura.usosNoCiclo } : null });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
@@ -2900,6 +2931,35 @@ app.post('/api/admin/barbearia/cobrancas/clube/gerar', async (req, res) => {
 });
 app.get('/api/admin/barbearia/agenda/:id/sinal', (req, res) => {
   try { res.json({ ok: true, sinal: cobrancaKytto.sinalDoAgendamento(legacyEmpresaId(req), req.params.id) }); } catch (error) { respostaCobranca(res, error); }
+});
+app.get('/api/admin/barbearia/vales', (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try { res.json({ ok: true, vales: cobrancaKytto.listarVales(legacyEmpresaId(req)) }); } catch (error) { respostaCobranca(res, error); }
+});
+app.post('/api/admin/barbearia/vales', (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  if (req.body?.confirmado !== true) return res.status(400).json({ error: 'Confirme o recebimento do vale antes de emitir.' });
+  try {
+    const vale = cobrancaKytto.venderValeNoBalcao(legacyEmpresaId(req), { valor: Number(req.body?.valor), deNome: req.body?.deNome, deTelefone: req.body?.deTelefone, paraNome: req.body?.paraNome, mensagem: req.body?.mensagem, meioPagamento: req.body?.meioPagamento }, { usuario: req.user?.email || '' });
+    audit(req, 'BARBEARIA VALE EMITIDO', `${vale.id} valor=${vale.valor}`);
+    res.status(201).json({ ok: true, vale });
+  } catch (error) { respostaCobranca(res, error); }
+});
+app.post('/api/admin/barbearia/vales/:id/cancelar', (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try {
+    const vale = cobrancaKytto.cancelarVale(legacyEmpresaId(req), req.params.id, { usuario: req.user?.email || '', motivo: req.body?.motivo, meioEstorno: req.body?.meioEstorno });
+    audit(req, 'BARBEARIA VALE CANCELADO', `${req.params.id} ${String(req.body?.motivo || '').slice(0, 80)}`);
+    res.json({ ok: true, vale });
+  } catch (error) { respostaCobranca(res, error); }
+});
+app.post('/api/admin/barbearia/vales/consulta', (req, res) => {
+  // Código no corpo (o código é o próprio vale; nunca na URL).
+  try { res.json({ ok: true, vale: cobrancaKytto.consultarVale(legacyEmpresaId(req), req.body?.codigo) }); } catch (error) { respostaCobranca(res, error); }
+});
+app.get('/api/admin/barbearia/unidades/comparativo', (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try { res.json({ ok: true, ...captacaoKytto.comparativoUnidades(legacyEmpresaId(req), { inicio: req.query?.inicio, fim: req.query?.fim }) }); } catch (error) { respostaCaptacao(res, error); }
 });
 app.post('/api/admin/barbearia/cashback/consulta', (req, res) => {
   // Telefone no corpo (nunca na URL).
@@ -6267,27 +6327,36 @@ function basePublicaConfigurada(slug) {
   const base = String(process.env.PUBLIC_BASE_URL || process.env.SERVER_URL || '').trim().replace(/\/+$/, '');
   return /^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(base) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(base) ? base : '';
 }
-app.get(['/agendar/:slug', '/avaliar/:slug'], (req, res, next) => {
+app.get(['/agendar/:slug', '/avaliar/:slug', '/minha/:slug'], (req, res, next) => {
   try {
     const meta = metaAgendamentoPublico?.(req.params.slug);
     if (!meta) return next();
     const base = basePublicaConfigurada(meta.slug);
     const avaliar = req.path.startsWith('/avaliar/');
-    const url = base ? `${base}/${avaliar ? 'avaliar' : 'agendar'}/${encodeURIComponent(meta.slug)}` : '';
+    const minha = req.path.startsWith('/minha/');
+    const url = base ? `${base}/${avaliar ? 'avaliar' : minha ? 'minha' : 'agendar'}/${encodeURIComponent(meta.slug)}` : '';
     const ehDino = meta.slug === 'dino';
     const html = trocarMeta(indexHtml(), {
-      titulo: avaliar ? `Avalie seu atendimento | ${meta.nome}` : `Agende seu horário | ${meta.nome}`,
+      titulo: avaliar ? `Avalie seu atendimento | ${meta.nome}` : minha ? meta.nome : `Agende seu horário | ${meta.nome}`,
       descricao: avaliar
         ? `Conte como foi seu atendimento na ${meta.nome}. Leva 10 segundos.`
+        : minha ? `Seus horários, seu clube e seu cashback na ${meta.nome}.`
         : `Agende online na ${meta.nome}: escolha o serviço, o profissional e o horário em poucos toques.${meta.endereco ? ` ${meta.endereco}.` : ''}`,
       url,
       imagem: ehDino && base ? `${base}/brand/dino-barbearia-logo.png` : '',
-      indexar: !avaliar,
+      indexar: !avaliar && !minha,
     });
     // Dados estruturados (schema.org) para o Google entender que é uma barbearia
     // com agendamento online. Só dados públicos da própria barbearia.
     let final = html;
-    if (!avaliar && url) {
+    if (minha) {
+      // App do cliente instalável: manifesto e cor da barbearia (o link do manifesto é público e sem dado pessoal).
+      final = final
+        .replace(/<link rel="manifest" href="[^"]*"\s*\/?>/, () => `<link rel="manifest" href="/api/publico/agendamento/${encodeURIComponent(meta.slug)}/manifest.webmanifest" />`)
+        .replace(/(<meta name="theme-color" content=")[^"]*(")/, (_, a, b) => `${a}#0E1014${b}`)
+        .replace(/(<meta name="apple-mobile-web-app-title" content=")[^"]*(")/, (_, a, b) => `${a}${escaparHtml(String(meta.nome).slice(0, 20))}${b}`);
+    }
+    if (!avaliar && !minha && url) {
       const telefone = String(meta.telefone || '').replace(/\D/g, '');
       const dados = {
         '@context': 'https://schema.org',
@@ -6300,7 +6369,7 @@ app.get(['/agendar/:slug', '/avaliar/:slug'], (req, res, next) => {
         potentialAction: { '@type': 'ReserveAction', target: { '@type': 'EntryPoint', urlTemplate: url, actionPlatform: ['http://schema.org/DesktopWebPlatform', 'http://schema.org/MobileWebPlatform'] }, result: { '@type': 'Reservation', name: 'Agendamento' } },
       };
       const json = JSON.stringify(dados).replace(/</g, '\\u003c');
-      final = html.replace('</head>', () => `<script type="application/ld+json">${json}</script></head>`);
+      final = final.replace('</head>', () => `<script type="application/ld+json">${json}</script></head>`);
     }
     res.setHeader('Cache-Control', 'no-cache');
     return res.type('html').send(final);

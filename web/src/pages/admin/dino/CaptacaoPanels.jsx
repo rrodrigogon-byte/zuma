@@ -452,6 +452,7 @@ export function CobrancasPanel() {
         cobrancaClube: { ...config.cobrancaClube, diasAntes: Number(config.cobrancaClube.diasAntes) },
         pix: config.pix,
         cashback: { percentual: Number(config.cashback.percentual), validadeDias: Number(config.cashback.validadeDias) },
+        vale: { ativo: config.vale?.ativo === true },
       })
       toast('Cobranças configuradas.', 'success')
       carregar()
@@ -519,6 +520,11 @@ export function CobrancasPanel() {
         <p style={sub}>Só para quem autorizou o WhatsApp. Pago pelo link, o ciclo é quitado sozinho; quem atrasar além da carência fica bloqueado no clube.</p>
       </div>
       <div>
+        <strong>Vale-presente online</strong>
+        <div style={{ marginTop: 8 }}><label style={checkLabel}><input type="checkbox" style={checkBox} checked={config.vale?.ativo === true} onChange={(e) => setConfig((atual) => ({ ...atual, vale: { ativo: e.target.checked } }))} />Vender vale-presente no app do cliente</label></div>
+        <p style={sub}>O código só vale depois do pagamento confirmado; validade de 12 meses. A venda no balcão fica em Gestão → Vale-presente.</p>
+      </div>
+      <div>
         <strong>Cashback</strong>
         <div style={{ ...grid(180), marginTop: 8 }}>
           <label style={label}>Percentual do atendimento (0 = desligado)<input type="number" min="0" max="30" step="0.5" style={input} value={config.cashback.percentual} onChange={(e) => mudar('cashback', 'percentual', e.target.value)} /></label>
@@ -538,7 +544,7 @@ export function CobrancasPanel() {
           const [rotulo, tom] = STATUS_COBRANCA[item.status] || [item.status, 'neutro']
           return <tr key={item.id}>
             <td style={td}><strong>{item.clienteNome || '—'}</strong><div style={{ color: 'var(--muted)', fontSize: 12 }}>{item.descricao}</div></td>
-            <td style={td}>{item.tipo === 'sinal' ? 'Sinal' : 'Clube'}</td>
+            <td style={td}>{item.tipo === 'sinal' ? 'Sinal' : item.tipo === 'vale' ? 'Vale-presente' : 'Clube'}</td>
             <td style={td}>{fmtR(item.valor)}</td>
             <td style={td}><Pill tom={tom}>{rotulo}</Pill>{item.pagoEm && <div style={{ color: 'var(--muted)', fontSize: 12 }}>{dataBR(item.pagoEm)} · {item.confirmadoPor}</div>}{item.revisar && <div style={{ color: '#e05c5c', fontSize: 12, fontWeight: 700 }}>{{ horario_liberado: 'Pago depois que o horário foi liberado: remarque ou devolva.', cobranca_cancelada: 'Pago depois de cancelada: confira e devolva se for o caso.', pagamento_em_dobro: 'O período já tinha sido pago no balcão: devolva um dos pagamentos.', efeito_nao_aplicado: `Pagamento registrado, mas não aplicado (${item.efeitoErro || 'erro'}): confira a assinatura.` }[item.revisar] || 'Revisar este pagamento.'}</div>}</td>
             <td style={td}>{dataBR(item.criadoEm)}</td>
@@ -618,5 +624,100 @@ export function ReceitaIaPanel() {
         <tbody>{(dados?.fontes || []).map((item) => <tr key={item.fonte}><td style={td}><strong>{item.fonte}</strong></td><td style={td}>{item.agendamentos}</td><td style={td}>{item.concluidos}</td><td style={td}>{fmtR(item.receita)}</td></tr>)}</tbody>
       </table>
     </>}
+  </div>
+}
+
+
+// ── Onda 4: vale-presente e comparativo por unidade ───────────────────────
+
+const STATUS_VALE = { ativo: ['Ativo', 'bom'], aguardando_pagamento: ['Aguardando pagamento', 'alerta'], usado: ['Usado', 'neutro'], cancelado: ['Cancelado', 'neutro'], vencido: ['Vencido', 'critico'] }
+
+export function ValesPanel() {
+  const { toast } = useToast()
+  const { dados, erro, carregando, carregar } = useCarregar('/api/admin/barbearia/vales')
+  const [form, setForm] = useState({ valor: '100', paraNome: '', deNome: '', deTelefone: '', meioPagamento: 'pix' })
+  const [emitido, setEmitido] = useState(null)
+  const [consulta, setConsulta] = useState({ codigo: '', resultado: null })
+  async function emitir(event) {
+    event.preventDefault()
+    if (!window.confirm(`Confirmar que recebeu ${fmtR(Number(form.valor))} pelo vale?`)) return
+    try {
+      const r = await api.post('/api/admin/barbearia/vales', { ...form, valor: Number(form.valor), confirmado: true })
+      setEmitido(r.vale); toast('Vale emitido e receita lançada.', 'success'); carregar()
+    } catch (e) { toast(e.message, 'error') }
+  }
+  async function consultar(event) {
+    event.preventDefault()
+    try { const r = await api.post('/api/admin/barbearia/vales/consulta', { codigo: consulta.codigo }); setConsulta((c) => ({ ...c, resultado: r.vale })) } catch (e) { toast(e.message, 'error'); setConsulta((c) => ({ ...c, resultado: null })) }
+  }
+  async function cancelar(vale) {
+    let corpo = {}
+    if (vale.status === 'ativo') {
+      // Vale pago: o cancelamento lança o estorno no financeiro.
+      const motivo = window.prompt('Vale pago. Motivo do cancelamento (o estorno será lançado no financeiro):')
+      if (!motivo) return
+      const meioEstorno = window.prompt('Como o valor foi devolvido? (pix, dinheiro, debito, credito)', 'pix')
+      if (!meioEstorno) return
+      corpo = { motivo, meioEstorno }
+    } else if (!window.confirm('Cancelar este vale aguardando pagamento?')) return
+    try { await api.post(`/api/admin/barbearia/vales/${encodeURIComponent(vale.id)}/cancelar`, corpo); toast(vale.status === 'ativo' ? 'Vale cancelado e estorno lançado.' : 'Vale cancelado.', 'success'); carregar() } catch (e) { toast(e.message, 'error') }
+  }
+  if (carregando || erro) return <div style={card}><Estado carregando={carregando} erro={erro} onRetry={carregar} /></div>
+  const lista = dados?.vales || []
+  const emAberto = lista.filter((v) => v.status === 'ativo').reduce((soma, v) => soma + v.saldo, 0)
+  return <div style={{ display: 'grid', gap: 16 }}>
+    <div style={card}>
+      <h2 style={h2}>Vale-presente</h2>
+      <p style={sub}>Venda no balcão ou online (pelo app do cliente). O cliente usa o código na hora de pagar o atendimento; o desconto é conferido no servidor.</p>
+      <div style={{ ...grid(160), marginTop: 14 }}>
+        <div style={kpi}><div style={kpiLabel}>Vales ativos</div><div style={kpiValue}>{lista.filter((v) => v.status === 'ativo').length}</div></div>
+        <div style={kpi}><div style={kpiLabel}>Saldo em aberto</div><div style={kpiValue}>{fmtR(emAberto)}</div></div>
+      </div>
+    </div>
+    <form onSubmit={emitir} style={{ ...card, display: 'grid', gap: 12 }}>
+      <strong>Vender no balcão</strong>
+      <div style={grid(180)}>
+        <label style={label}>Valor (R$)<input type="number" min="20" max="2000" style={input} value={form.valor} onChange={(e) => setForm((f) => ({ ...f, valor: e.target.value }))} /></label>
+        <label style={label}>Para quem<input style={input} value={form.paraNome} onChange={(e) => setForm((f) => ({ ...f, paraNome: e.target.value }))} /></label>
+        <label style={label}>Comprador<input style={input} value={form.deNome} onChange={(e) => setForm((f) => ({ ...f, deNome: e.target.value }))} /></label>
+        <label style={label}>Meio de pagamento<select style={input} value={form.meioPagamento} onChange={(e) => setForm((f) => ({ ...f, meioPagamento: e.target.value }))}><option value="pix">Pix</option><option value="dinheiro">Dinheiro</option><option value="debito">Débito</option><option value="credito">Crédito</option></select></label>
+      </div>
+      <div><button type="submit" style={btnPrimary}>Emitir vale</button></div>
+      {emitido && <div style={{ padding: 12, border: '1px dashed var(--line)', borderRadius: 10 }}>Código do vale: <strong style={{ fontSize: 18, letterSpacing: 1 }}>{emitido.codigo}</strong> · {fmtR(emitido.valor)} · válido até {dataBR(emitido.validoAte)}</div>}
+    </form>
+    <form onSubmit={consultar} style={{ ...card, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+      <label style={label}>Consultar código<input style={input} value={consulta.codigo} onChange={(e) => setConsulta({ codigo: e.target.value.toUpperCase(), resultado: null })} placeholder="ABCDE-FGHJK" /></label>
+      <button type="submit" style={btn}>Consultar</button>
+      {consulta.resultado && <span style={{ fontSize: 13 }}><Pill tom={(STATUS_VALE[consulta.resultado.status] || [])[1] || 'neutro'}>{(STATUS_VALE[consulta.resultado.status] || [consulta.resultado.status])[0]}</Pill> saldo {fmtR(consulta.resultado.saldo)}{consulta.resultado.validoAte ? ` · até ${dataBR(consulta.resultado.validoAte)}` : ''}</span>}
+    </form>
+    <div style={card}>
+      <strong>Vales emitidos</strong>
+      {lista.length === 0 ? <div style={empty}>Nenhum vale ainda.</div> : <table style={{ ...table, marginTop: 10 }}>
+        <thead><tr><th style={th}>Final</th><th style={th}>Para</th><th style={th}>Valor</th><th style={th}>Saldo</th><th style={th}>Situação</th><th style={th}>Origem</th><th style={th}></th></tr></thead>
+        <tbody>{lista.map((v) => { const [rot, tom] = STATUS_VALE[v.status] || [v.status, 'neutro']; return <tr key={v.id}>
+          <td style={td}>…{v.codigoFinal}</td><td style={td}>{v.paraNome || '—'}<div style={{ color: 'var(--muted)', fontSize: 12 }}>{v.deNome}</div></td><td style={td}>{fmtR(v.valor)}</td><td style={td}>{fmtR(v.saldo)}</td><td style={td}><Pill tom={tom}>{rot}</Pill></td><td style={td}>{v.origem === 'online' ? 'Online' : 'Balcão'}</td>
+          <td style={td}>{['ativo', 'aguardando_pagamento'].includes(v.status) && v.saldo === v.valor && <button type="button" style={btn} onClick={() => cancelar(v)}>Cancelar</button>}</td>
+        </tr> })}</tbody>
+      </table>}
+    </div>
+  </div>
+}
+
+export function UnidadesPanel({ lojas = [] }) {
+  // Padrão: últimos 30 dias até hoje.
+  const [periodo, setPeriodo] = useState({ inicio: hojeIso(-30), fim: hojeIso() })
+  const { dados, erro, carregando, carregar } = useCarregar(`/api/admin/barbearia/unidades/comparativo?inicio=${periodo.inicio}&fim=${periodo.fim}`)
+  const nomeDa = (id) => lojas.find((l) => String(l.id) === String(id))?.nome || (id ? `Unidade ${String(id).slice(0, 8)}` : 'Sem unidade')
+  return <div style={card}>
+    <h2 style={h2}>Comparativo por unidade</h2>
+    <p style={sub}>A mesma régua para todas as unidades: volume, conclusão, faltas, valor atendido, ticket médio, ocupação da agenda e NPS.</p>
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12, alignItems: 'end' }}>
+      <label style={label}>De<input type="date" style={input} value={periodo.inicio} onChange={(e) => setPeriodo((p) => ({ ...p, inicio: e.target.value }))} /></label>
+      <label style={label}>Até<input type="date" style={input} value={periodo.fim} onChange={(e) => setPeriodo((p) => ({ ...p, fim: e.target.value }))} /></label>
+    </div>
+    {(carregando || erro) ? <Estado carregando={carregando} erro={erro} onRetry={carregar} /> : (dados?.unidades || []).length === 0 ? <div style={empty}>Sem atendimentos no período.</div> : <div style={{ overflowX: 'auto' }}><table style={{ ...table, marginTop: 12 }}>
+      <thead><tr><th style={th}>Unidade</th><th style={th}>Agendamentos</th><th style={th}>Concluídos</th><th style={th}>Faltas</th><th style={th}>Clientes</th><th style={th}>Valor atendido</th><th style={th}>Ticket médio</th><th style={th}>Ocupação</th><th style={th}>NPS</th></tr></thead>
+      <tbody>{dados.unidades.map((u) => <tr key={u.lojaId || 'sem'}><td style={td}><strong>{nomeDa(u.lojaId)}</strong></td><td style={td}>{u.agendamentos}</td><td style={td}>{pct(u.taxaConclusao)}</td><td style={td}>{pct(u.taxaFalta)}</td><td style={td}>{u.clientesUnicos}</td><td style={td}>{fmtR(u.valorAtendido)}</td><td style={td}>{fmtR(u.ticketMedio)}</td><td style={td}>{u.ocupacao == null ? '—' : pct(u.ocupacao)}</td><td style={td}>{u.nps ?? '—'}{u.respostasNps ? <span style={{ color: 'var(--muted)', fontSize: 11 }}> ({u.respostasNps})</span> : null}</td></tr>)}</tbody>
+    </table></div>}
   </div>
 }

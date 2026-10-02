@@ -1347,3 +1347,94 @@ export function painelReceitaIa(empresaId, { inicio, fim, lojaId = '' } = {}) {
   const lista = Object.values(linhas);
   return { fontes: lista, receitaTotal: totalUnico };
 }
+
+// ---------------------------------------------------------------------------
+// COMPARATIVO POR UNIDADE (fase 5 — multiunidade)
+// Mesma régua para todas as unidades da empresa no período: volume, conclusão,
+// faltas, valor atendido, ticket médio, ocupação da agenda e NPS.
+// ---------------------------------------------------------------------------
+export function comparativoUnidades(empresaId, { inicio, fim } = {}) {
+  const de = /^\d{4}-\d{2}-\d{2}$/.test(String(inicio || '')) ? inicio : '0000-01-01';
+  const ate = /^\d{4}-\d{2}-\d{2}$/.test(String(fim || '')) ? fim : '9999-12-31';
+  const avaliacoes = Object.values(captacao(empresaId).avaliacoes);
+  const porLoja = new Map();
+  for (const item of barbearia.listarAgendamentos(empresaId, {})) {
+    const dia = item.dataAgenda || String(item.dataHora).slice(0, 10);
+    if (dia < de || dia > ate) continue;
+    const lojaId = item.lojaId || '';
+    const linha = porLoja.get(lojaId) || { lojaId, agendamentos: 0, concluidos: 0, faltas: 0, cancelados: 0, valorAtendido: 0, clientes: new Set() };
+    linha.agendamentos += 1;
+    if (item.status === 'concluido') { linha.concluidos += 1; linha.valorAtendido = dinheiro(linha.valorAtendido + valorDoAtendimento(item)); }
+    if (item.status === 'nao_compareceu') linha.faltas += 1;
+    if (item.status === 'cancelado') linha.cancelados += 1;
+    linha.clientes.add(telefoneChave(item.clienteTelefone) || item.clienteId || item.id);
+    porLoja.set(lojaId, linha);
+  }
+  const unidades = [...porLoja.values()].map((linha) => {
+    const notas = avaliacoes.filter((a) => (a.lojaId || '') === linha.lojaId && a.dataAtendimento >= de && a.dataAtendimento <= ate);
+    const promotores = notas.filter((a) => a.nota >= 9).length;
+    const detratores = notas.filter((a) => a.nota <= 6).length;
+    let ocupacao = null;
+    try { ocupacao = ocupacaoAgenda(empresaId, { inicio: de === '0000-01-01' ? undefined : de, fim: ate === '9999-12-31' ? undefined : ate, lojaId: linha.lojaId }).ocupacaoGeral; } catch (_) { ocupacao = null; }
+    return {
+      lojaId: linha.lojaId,
+      agendamentos: linha.agendamentos,
+      concluidos: linha.concluidos,
+      taxaConclusao: linha.agendamentos ? Number((linha.concluidos / linha.agendamentos).toFixed(4)) : 0,
+      taxaFalta: linha.agendamentos ? Number((linha.faltas / linha.agendamentos).toFixed(4)) : 0,
+      cancelados: linha.cancelados,
+      clientesUnicos: linha.clientes.size,
+      valorAtendido: linha.valorAtendido,
+      ticketMedio: linha.concluidos ? dinheiro(linha.valorAtendido / linha.concluidos) : 0,
+      ocupacao,
+      nps: notas.length ? Math.round(((promotores - detratores) / notas.length) * 100) : null,
+      respostasNps: notas.length,
+    };
+  }).sort((a, b) => b.valorAtendido - a.valorAtendido);
+  return { unidades, total: { agendamentos: unidades.reduce((s, u) => s + u.agendamentos, 0), valorAtendido: dinheiro(unidades.reduce((s, u) => s + u.valorAtendido, 0)) } };
+}
+
+// ---------------------------------------------------------------------------
+// MINHA CONTA (app do cliente)
+// O cliente prova que é ele com o código de um agendamento + o telefone (a
+// mesma regra do autoatendimento). Devolve só os dados desse telefone.
+// ---------------------------------------------------------------------------
+export function minhaConta(empresaId, { codigo, telefone, lojaId = '' } = {}, opcoes = {}) {
+  consultarAgendamentoCliente(empresaId, { codigo, telefone, lojaId }, opcoes);
+  const chave = telefoneChave(telefone);
+  const ms = agoraMs(opcoes);
+  const servicos = mapaPorId(barbearia.listarServicos(empresaId, { incluirInativos: true }));
+  const profissionais = mapaPorId(barbearia.listarProfissionais(empresaId, { incluirInativos: true }));
+  const doTelefone = barbearia.listarAgendamentos(empresaId, {})
+    .filter((item) => telefoneChave(item.clienteTelefone) === chave)
+    // Mesma regra do autoatendimento: só a unidade do link (lojaId obrigatório).
+    .filter((item) => String(item.lojaId || '') === String(lojaId));
+  const resumo = (item) => ({
+    codigo: item.codigoConfirmacao || null,
+    status: item.status,
+    dataAgenda: item.dataAgenda,
+    horaLocal: item.horaLocal,
+    servico: servicos.get(item.servicoId)?.nome || 'Atendimento',
+    profissional: profissionais.get(item.profissionalId)?.nome || '',
+  });
+  const proximos = doTelefone
+    .filter((item) => STATUS_ATIVOS.has(item.status) && new Date(item.dataHora).valueOf() > ms)
+    .sort((a, b) => String(a.dataHora).localeCompare(String(b.dataHora)))
+    .slice(0, 5).map(resumo);
+  const avaliacoes = captacao(empresaId).avaliacoes;
+  const paraAvaliar = doTelefone
+    .filter((item) => item.status === 'concluido' && !avaliacoes[item.id] && ms - new Date(item.dataHora).valueOf() <= 30 * DIA_MS && item.codigoConfirmacao)
+    .sort((a, b) => String(b.dataHora).localeCompare(String(a.dataHora)))[0];
+  const visitas = doTelefone.filter((item) => item.status === 'concluido').length;
+  return {
+    nome: nomeCurto(doTelefone[0]?.clienteNome),
+    visitas,
+    proximos,
+    paraAvaliar: paraAvaliar ? resumo(paraAvaliar) : null,
+    plano: planoDoTelefone(empresaId, telefone, opcoes),
+    codigoIndicacao: (() => {
+      const cliente = clientesKytto.listarClientes(String(empresaId)).find((item) => telefoneChave(item.telefone) === chave);
+      try { return cliente ? codigoIndicacaoCliente(empresaId, cliente.id).codigo : null; } catch (_) { return null; }
+    })(),
+  };
+}

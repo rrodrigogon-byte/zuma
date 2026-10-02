@@ -74,3 +74,30 @@ O painel **Gestão → Receita da IA** soma os atendimentos concluídos que vier
 
 - **Cartão parcelado com juros na InfinitePay.** Se o valor confirmado vier com os juros, a conferência recusa por diferença de valor e a cobrança fica pendente. Confirme com a InfinitePay como o valor é informado antes de liberar o parcelamento com juros.
 - **Painel de cobranças.** O painel e as configurações são restritos à gestão da unidade.
+
+## App do cliente (`/minha/dino`)
+
+- É instalável no celular, com o nome e o ícone da Dino. Reúne num só lugar: agendar, WhatsApp, próximos horários, clube, cashback, avaliação do último atendimento, link de indicação e vale-presente.
+- O cliente entra com o código de qualquer agendamento + o telefone da reserva. Os dados vão no corpo da requisição, nunca na URL, e nada fica guardado no aparelho. A mesma trava contra tentativas repetidas do autoatendimento vale aqui.
+- A página não é indexada pelo Google.
+
+## Vale-presente
+
+- **Online:** fica no app do cliente quando **Vale-presente online** está ligado. É preciso ter um meio de cobrança configurado.
+- **No balcão:** em **Gestão → Vale-presente**, só para a gestão. A receita é lançada na hora.
+- **Valor e validade:** de R$ 20 a R$ 2.000, com 12 meses de validade. O código só passa a valer depois de pago.
+- **Compra online não paga em 24 h:** expira. Se o pagamento chegar depois, o vale é ativado normalmente.
+- **Uso:** na tela de registrar o recebimento do atendimento. O servidor confere o código, o saldo e a validade, e desconta do valor devido junto com o sinal e o cashback. O vale usado não gera cashback.
+
+## Comparativo por unidade
+
+- Fica em **Gestão → Unidades**, só para a gestão.
+- Por unidade e período, mostra:
+  - agendamentos, taxa de conclusão e taxa de faltas;
+  - clientes únicos, valor atendido e ticket médio;
+  - ocupação da agenda e NPS.
+
+## Fora do escopo por enquanto
+
+- **NFS-e:** depende das credenciais e do provedor da prefeitura e envolve regra fiscal. Continua como rascunho.
+- **Split de comissão no pagamento:** exige um gateway com split. A comissão continua sendo apurada no sistema.

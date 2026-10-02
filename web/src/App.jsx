@@ -142,6 +142,7 @@ const PDVUnificado    = lazy(() => import('./pages/admin/PDVUnificado'))
 const AgendaQuadras   = lazy(() => import('./pages/public/AgendaQuadras'))
 const AgendamentoOnline = lazy(() => import('./pages/public/AgendamentoOnline'))
 const AvaliarAtendimento = lazy(() => import('./pages/public/AvaliarAtendimento'))
+const MinhaConta = lazy(() => import('./pages/public/MinhaConta'))
 const NoticiasPublic  = lazy(() => import('./pages/public/Noticias'))
 const MeuPainel       = lazy(() => import('./pages/atleta/MeuPainel'))
 const Clube           = lazy(() => import('./pages/public/Clube'))
@@ -301,6 +302,7 @@ export default function App() {
         <Route path="/cardapio/mesa/:token" element={<CardapioMesaPublico />} />
         <Route path="/agendar/:slug" element={<AgendamentoOnline />} />
         <Route path="/avaliar/:slug" element={<AvaliarAtendimento />} />
+        <Route path="/minha/:slug" element={<MinhaConta />} />
         <Route path="/regulamento" element={<Layout marketing><Regulamento /></Layout>} />
         <Route path="/bracket"    element={<Layout><Bracket /></Layout>} />
         <Route path="/chaves"     element={<Layout><Bracket /></Layout>} />

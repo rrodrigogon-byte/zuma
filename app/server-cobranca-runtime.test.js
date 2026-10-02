@@ -110,6 +110,40 @@ test('cobranças: sinal no link público, confirmação da equipe, cashback, can
     const receitaIa = await request(base, `/api/admin/barbearia/captacao/receita-ia?inicio=${data}&fim=${data}`, { headers });
     assert.equal(receitaIa.response.status, 200);
 
+    // Vale-presente: venda no balcão (gestão) e uso no próximo atendimento com o devido calculado no servidor.
+    const emitido = await request(base, '/api/admin/barbearia/vales', { method: 'POST', headers, body: JSON.stringify({ valor: 40, paraNome: 'Lucas', meioPagamento: 'dinheiro', confirmado: true }) });
+    assert.equal(emitido.response.status, 201, JSON.stringify(emitido.body));
+    const codigoVale = emitido.body.vale.codigo;
+    const consultaPublica = await request(base, '/api/publico/agendamento/dino/vale/consultar', { method: 'POST', body: JSON.stringify({ codigo: codigoVale }) });
+    assert.equal(consultaPublica.body.vale.saldo, 40);
+    const data2 = dataFutura(4);
+    const novo = await request(base, '/api/publico/agendamento/dino/confirmar', { method: 'POST', body: JSON.stringify({ servico_id: servico.id, profissional_id: profissional.id, data: data2, horario: '11:00', cliente_nome: 'Lucas Sinal', cliente_telefone: '65977770010' }) });
+    const agenda2 = (await request(base, `/api/admin/barbearia/agenda?data=${data2}`, { headers })).body.agendamentos;
+    const ag2 = agenda2.find((item) => item.codigoConfirmacao === novo.body.agendamento.codigo);
+    const sinal2 = (await request(base, '/api/admin/barbearia/cobrancas', { headers })).body.cobrancas.find((c) => c.tipo === 'sinal' && c.status === 'pendente');
+    await request(base, `/api/admin/barbearia/cobrancas/${sinal2.id}/confirmar`, { method: 'POST', headers, body: JSON.stringify({ confirmado: true }) });
+    await request(base, `/api/admin/barbearia/agenda/${ag2.id}/status`, { method: 'PATCH', headers, body: JSON.stringify({ status: 'em_atendimento' }) });
+    // 60 − sinal 30 − cashback 6 − vale 24 = 0: conclui sem recebimento no dia.
+    const comVale = await request(base, `/api/admin/barbearia/agenda/${ag2.id}/status`, { method: 'PATCH', headers, body: JSON.stringify({ status: 'concluido', registrarFinanceiro: true, confirmado: true, meioPagamento: 'pix', valorRecebido: 0, usarCashback: 6, usarVale: { codigo: codigoVale, valor: 24 } }) });
+    assert.equal(comVale.response.status, 200, JSON.stringify(comVale.body));
+    assert.equal(comVale.body.financeiro, null);
+    assert.equal(comVale.body.vale.saldo, 16);
+    assert.equal(comVale.body.cashback.uso.saldo, 0);
+
+    // App do cliente: minha conta (código + telefone) e manifesto instalável.
+    const minha = await request(base, '/api/publico/agendamento/dino/minha-conta', { method: 'POST', body: JSON.stringify({ codigo: novo.body.agendamento.codigo, cliente_telefone: '65977770010' }) });
+    assert.equal(minha.response.status, 200, JSON.stringify(minha.body));
+    assert.equal(minha.body.conta.visitas, 2);
+    const errada = await request(base, '/api/publico/agendamento/dino/minha-conta', { method: 'POST', body: JSON.stringify({ codigo: novo.body.agendamento.codigo, cliente_telefone: '65900000000' }) });
+    assert.equal(errada.response.status, 404);
+    const manifesto = await request(base, '/api/publico/agendamento/dino/manifest.webmanifest');
+    assert.equal(manifesto.body.start_url, '/minha/dino');
+    const paginaApp = await (await fetch(`${base}/minha/dino`)).text();
+    assert.match(paginaApp, /rel="manifest" href="\/api\/publico\/agendamento\/dino\/manifest\.webmanifest"/);
+    assert.match(paginaApp, /noindex, nofollow/);
+    const comparativo = await request(base, `/api/admin/barbearia/unidades/comparativo?inicio=${data}&fim=${data2}`, { headers });
+    assert.equal(comparativo.body.unidades[0].concluidos, 2);
+
     const html = await (await fetch(`${base}/agendar/dino`)).text();
     const ld = JSON.parse(html.match(/<script type="application\/ld\+json">(.*?)<\/script>/)[1]);
     assert.equal(ld['@type'], 'HairSalon');

@@ -220,3 +220,74 @@ test('origem dos clientes e receita atribuída à IA', () => {
   assert.equal(receita.fontes.find((f) => f.fonte.startsWith('Atendente IA')).receita, 50);
   assert.equal(receita.receitaTotal, 50);
 });
+
+test('vale-presente: compra online só vale depois de pago; uso com saldo; balcão lança a receita; vencido não usa', async () => {
+  montar();
+  await assert.rejects(() => cobranca.comprarVale(EMPRESA, { valor: 100, deNome: 'Ana', deTelefone: '65911112222' }), (e) => e.code === 'PROVEDOR_AUSENTE');
+  cobranca.salvarConfiguracaoCobranca(EMPRESA, { pix: PIX });
+  await assert.rejects(() => cobranca.comprarVale(EMPRESA, { valor: 100, deNome: 'Ana', deTelefone: '65911112222' }), (e) => e.code === 'VALE_DESLIGADO');
+  cobranca.salvarConfiguracaoCobranca(EMPRESA, { vale: { ativo: true } });
+  assert.equal(cobranca.obterConfiguracaoCobranca(EMPRESA).vale.ativo, true, 'configuração do vale persiste');
+  await assert.rejects(() => cobranca.comprarVale(EMPRESA, { valor: 5, deNome: 'Ana', deTelefone: '65911112222' }), (e) => e.code === 'VALE_VALOR_INVALIDO');
+  const compra = await cobranca.comprarVale(EMPRESA, { valor: 100, deNome: 'Ana', deTelefone: '65911112222', paraNome: 'João' });
+  assert.match(compra.vale.codigo, /^[A-Z2-9]{5}-[A-Z2-9]{5}$/);
+  assert.match(compra.pagamento.pixCopiaECola, /^000201/);
+  assert.throws(() => cobranca.saldoUtilVale(EMPRESA, compra.vale.codigo), (e) => e.code === 'VALE_INATIVO', 'não vale antes de pagar');
+  const cob = cobranca.listarCobrancas(EMPRESA, { tipo: 'vale' })[0];
+  cobranca.confirmarCobranca(EMPRESA, cob.id, { origem: 'manual', usuario: 'gerente' });
+  assert.equal(cobranca.consultarVale(EMPRESA, compra.vale.codigo.replace('-', '').toLowerCase()).saldo, 100);
+  assert.throws(() => cobranca.usarVale(EMPRESA, { codigo: compra.vale.codigo, valor: 150, referencia: 'a1' }), (e) => e.code === 'SALDO_INSUFICIENTE');
+  assert.equal(cobranca.usarVale(EMPRESA, { codigo: compra.vale.codigo, valor: 60, referencia: 'a1' }).saldo, 40);
+  assert.equal(cobranca.usarVale(EMPRESA, { codigo: compra.vale.codigo, valor: 60, referencia: 'a1' }).repetido, true);
+  assert.throws(() => cobranca.cancelarVale(EMPRESA, compra.vale.id), (e) => e.code === 'VALE_USADO');
+  // Desfazer o uso (conclusão que não gravou) devolve o saldo.
+  cobranca.desfazerUsos(EMPRESA, { codigoVale: compra.vale.codigo, referencia: 'a1' });
+  assert.equal(cobranca.consultarVale(EMPRESA, compra.vale.codigo).saldo, 100);
+  // Balcão: nasce ativo e lança a receita uma vez.
+  const balcao = cobranca.venderValeNoBalcao(EMPRESA, { valor: 50, deNome: 'Caixa', meioPagamento: 'dinheiro' }, { usuario: 'gerente' });
+  assert.equal(balcao.status, 'ativo');
+  assert.equal(financeiro.listarLancamentos(EMPRESA, { categoria: 'Vale-presente' }).length, 2);
+  // Compra não paga expira; paga no dia seguinte, o vale passa a valer.
+  const tarde = await cobranca.comprarVale(EMPRESA, { valor: 30, deNome: 'Bia', deTelefone: '65911113333' });
+  cobranca.expirarSinais({ agora: Date.now() + 25 * 60 * 60 * 1000 });
+  assert.equal(cobranca.consultarVale(EMPRESA, tarde.vale.codigo).status, 'cancelado');
+  const cobTarde = cobranca.listarCobrancas(EMPRESA, { tipo: 'vale' }).find((c) => c.status === 'expirada');
+  const pagoTarde = cobranca.confirmarCobranca(EMPRESA, cobTarde.id, { origem: 'manual', usuario: 'gerente' });
+  assert.equal(pagoTarde.revisar, null);
+  assert.equal(cobranca.consultarVale(EMPRESA, tarde.vale.codigo).status, 'ativo');
+  // Cancelar vale pago exige motivo e lança o estorno; cancelado pela equipe não volta a valer se a cobrança chegar.
+  assert.throws(() => cobranca.cancelarVale(EMPRESA, balcao.id), (e) => e.code === 'ESTORNO_OBRIGATORIO');
+  const pend = await cobranca.comprarVale(EMPRESA, { valor: 40, deNome: 'Caio', deTelefone: '65911114444' });
+  cobranca.cancelarVale(EMPRESA, pend.vale.id, { usuario: 'gerente' });
+  const cobPend = cobranca.listarCobrancas(EMPRESA, { tipo: 'vale' }).find((c) => c.status === 'cancelada');
+  assert.ok(cobPend, 'a cobrança pendente é cancelada junto');
+  const pagoMesmoAssim = cobranca.confirmarCobranca(EMPRESA, cobPend.id, { origem: 'manual', usuario: 'gerente' });
+  assert.equal(pagoMesmoAssim.revisar, 'cobranca_cancelada');
+  assert.equal(cobranca.consultarVale(EMPRESA, pend.vale.codigo).status, 'cancelado');
+  const estornado = cobranca.cancelarVale(EMPRESA, tarde.vale.id, { usuario: 'gerente', motivo: 'cliente desistiu', meioEstorno: 'pix' });
+  assert.equal(estornado.status, 'cancelado');
+  assert.equal(financeiro.listarLancamentos(EMPRESA, { categoria: 'Estorno de vale-presente' }).length, 1);
+  // Vencido não é usado.
+  const raiz = db().barbeariaCobranca[EMPRESA].vales[balcao.id];
+  raiz.validoAte = new Date(Date.now() - DIA_MS).toISOString();
+  assert.throws(() => cobranca.usarVale(EMPRESA, { codigo: balcao.codigo, valor: 10, referencia: 'x' }), (e) => e.code === 'VALE_VENCIDO');
+});
+
+test('minha conta e comparativo por unidade', () => {
+  const base = montar();
+  const futuro = agendar({ ...base, dias: 3, hora: '10:00', telefone: '65955550001', nome: 'Lia Silva' });
+  concluir(agendar({ ...base, dias: -2, hora: '09:00', telefone: '65955550001', nome: 'Lia Silva' }));
+  assert.throws(() => captacao.minhaConta(EMPRESA, { codigo: futuro.codigoConfirmacao, telefone: '65900000000', lojaId: LOJA }), (e) => e.code === 'AGENDAMENTO_NAO_ENCONTRADO');
+  const conta = captacao.minhaConta(EMPRESA, { codigo: futuro.codigoConfirmacao, telefone: '(65) 95555-0001', lojaId: LOJA });
+  assert.equal(conta.nome, 'Lia');
+  assert.equal(conta.visitas, 1);
+  assert.equal(conta.proximos.length, 1);
+  assert.equal(conta.proximos[0].codigo, futuro.codigoConfirmacao);
+  assert.ok(conta.paraAvaliar, 'último atendimento concluído aparece para avaliar');
+  assert.equal(JSON.stringify(conta).includes('65955550001'), false, 'não devolve o telefone');
+  const comp = captacao.comparativoUnidades(EMPRESA, { inicio: dataLocal(Date.now() - 5 * DIA_MS), fim: dataLocal(Date.now() + 5 * DIA_MS) });
+  assert.equal(comp.unidades.length, 1);
+  assert.equal(comp.unidades[0].lojaId, LOJA);
+  assert.equal(comp.unidades[0].concluidos, 1);
+  assert.equal(comp.unidades[0].valorAtendido, 50);
+});

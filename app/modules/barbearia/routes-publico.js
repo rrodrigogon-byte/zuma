@@ -111,6 +111,7 @@ router.get('/:slug', (req, res) => {
       politicas: {
         cancelamentoHoras: Math.max(0, Number(configuracao.politicaCancelamentoHoras ?? 4)),
         sinal: (() => { const c = cobranca.obterConfiguracaoCobranca(identidade.empresaId); return cobranca.sinalExigido(identidade.empresaId) ? { tipo: c.sinal.tipo, valor: c.sinal.valor, prazoMinutos: c.sinal.prazoMinutos } : null; })(),
+        valePresente: (() => { const c = cobranca.obterConfiguracaoCobranca(identidade.empresaId); return Boolean(c.vale?.ativo && c.provedor); })(),
       },
     });
   } catch (erro) {
@@ -234,7 +235,7 @@ router.post('/:slug/confirmar', async (req, res) => {
 });
 
 function erroCaptacao(res, erro) {
-  if (erro instanceof captacao.CaptacaoError) return res.status(erro.status || 400).json({ ok: false, error: erro.message, code: erro.code });
+  if (erro instanceof captacao.CaptacaoError || erro instanceof cobranca.CobrancaError) return res.status(erro.status || 400).json({ ok: false, error: erro.message, code: erro.code });
   return erroHttp(res, erro);
 }
 
@@ -286,7 +287,7 @@ function autoatendimento(handler) {
     try {
       return await handler(req, res, identidade);
     } catch (erro) {
-      if (erro?.code === 'AGENDAMENTO_NAO_ENCONTRADO' || erro?.code === 'DADOS_INVALIDOS') registrarFalha(req, identidade.empresaId);
+      if (['AGENDAMENTO_NAO_ENCONTRADO', 'DADOS_INVALIDOS', 'VALE_NAO_ENCONTRADO'].includes(erro?.code)) registrarFalha(req, identidade.empresaId);
       return erroCaptacao(res, erro);
     }
   };
@@ -353,6 +354,60 @@ router.post('/:slug/pagamento/verificar', async (req, res) => {
     if (erro instanceof cobranca.CobrancaError) return res.status(erro.status || 400).json({ ok: false, error: erro.message, code: erro.code });
     return res.status(400).json({ ok: false, error: 'Não foi possível confirmar o pagamento ainda. Se já pagou, aguarde alguns instantes.' });
   }
+});
+
+// App do cliente: "minha conta" com código + telefone no corpo (nunca na URL).
+router.post('/:slug/minha-conta', autoatendimento(async (req, res, identidade) => {
+  const conta = captacao.minhaConta(identidade.empresaId, { codigo: req.body?.codigo, telefone: req.body?.cliente_telefone, lojaId: identidade.lojaId });
+  const cashback = cobranca.saldoCashback(identidade.empresaId, req.body?.cliente_telefone);
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({ ok: true, conta: { ...conta, cashback: cashback.ativo || cashback.saldo > 0 ? { saldo: cashback.saldo, proximoVencimento: cashback.proximoVencimento } : null } });
+}));
+
+// Vale-presente: compra online (o código só vale depois de pago) e consulta de saldo.
+router.post('/:slug/vale/comprar', async (req, res) => {
+  const identidade = identidadePublica(req.params.slug);
+  if (!identidade) return res.status(404).json({ ok: false, error: 'Estabelecimento não encontrado.' });
+  try {
+    const corpo = req.body || {};
+    const resultado = await cobranca.comprarVale(identidade.empresaId, {
+      valor: Number(corpo.valor), deNome: texto(corpo.de_nome, 80), deTelefone: texto(corpo.de_telefone, 30),
+      paraNome: texto(corpo.para_nome, 80), mensagem: texto(corpo.mensagem, 200),
+    });
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(201).json({ ok: true, ...resultado });
+  } catch (erro) {
+    return erroCaptacao(res, erro);
+  }
+});
+router.post('/:slug/vale/consultar', autoatendimento(async (req, res, identidade) => {
+  const vale = cobranca.consultarVale(identidade.empresaId, req.body?.codigo);
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({ ok: true, vale: { saldo: vale.saldo, status: vale.status, validoAte: vale.validoAte } });
+}));
+
+// Manifesto do app do cliente (instalável), com a marca da barbearia.
+router.get('/:slug/manifest.webmanifest', (req, res) => {
+  const identidade = identidadePublica(req.params.slug);
+  if (!identidade) return res.status(404).json({ ok: false, error: 'Estabelecimento não encontrado.' });
+  const { nome, slug: slugPublico } = identidade.estabelecimento;
+  const ehDino = slugPublico === 'dino';
+  const icones = ehDino
+    ? [{ src: '/brand/dino-app-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: '/brand/dino-app-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' }]
+    : [{ src: '/icon-512.png', sizes: '1024x1024', type: 'image/png', purpose: 'any' }];
+  res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=300');
+  return res.send(JSON.stringify({
+    name: nome,
+    short_name: texto(nome, 12) || 'Barbearia',
+    description: `Agende, acompanhe seu clube e seu cashback na ${nome}.`,
+    start_url: `/minha/${encodeURIComponent(slugPublico)}`,
+    scope: '/',
+    display: 'standalone',
+    background_color: '#0E1014',
+    theme_color: '#0E1014',
+    icons: icones,
+  }));
 });
 
 // NPS pós-atendimento: nota 0–10 do atendimento concluído (código + telefone no corpo).

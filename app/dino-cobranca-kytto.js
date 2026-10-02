@@ -59,6 +59,7 @@ function configuracaoPadrao() {
     cobrancaClube: { ativa: false, diasAntes: 3 },
     pix: { chave: '', nomeRecebedor: '', cidade: '' },
     cashback: { percentual: 0, validadeDias: 90 },
+    vale: { ativo: false },
   };
 }
 
@@ -78,6 +79,7 @@ function estado(empresaId) {
     cobrancaClube: { ...padrao.cobrancaClube, ...(salvo.cobrancaClube || {}) },
     pix: { ...padrao.pix, ...(salvo.pix || {}) },
     cashback: { ...padrao.cashback, ...(salvo.cashback || {}) },
+    vale: { ...padrao.vale, ...(salvo.vale || {}) },
   };
   return atual;
 }
@@ -156,8 +158,9 @@ export function salvarConfiguracaoCobranca(empresaId, dados = {}) {
       percentual: limitar(cashback.percentual, c.cashback.percentual, 0, 30),
       validadeDias: Math.round(limitar(cashback.validadeDias, c.cashback.validadeDias, 7, 365)),
     },
+    vale: { ativo: dados.vale?.ativo === undefined ? c.vale.ativo : dados.vale.ativo === true },
   };
-  if ((atual.configuracao.sinal.ativo || atual.configuracao.cobrancaClube.ativa) && !provedorCobranca(empresaId)) {
+  if ((atual.configuracao.sinal.ativo || atual.configuracao.cobrancaClube.ativa || atual.configuracao.vale.ativo) && !provedorCobranca(empresaId)) {
     throw new CobrancaError('Configure a InfinitePay no servidor ou a chave Pix da barbearia antes de ligar as cobranças.', 'PROVEDOR_AUSENTE', 409);
   }
   save();
@@ -185,7 +188,7 @@ function contaInfinitePay(empresaId) {
 }
 
 function novoNumeroPedido(tipo) {
-  return `DINO${tipo === 'sinal' ? 'S' : tipo === 'assinatura' ? 'C' : 'X'}${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
+  return `DINO${tipo === 'sinal' ? 'S' : tipo === 'assinatura' ? 'C' : tipo === 'vale' ? 'V' : 'X'}${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
 }
 
 function visaoCobranca(item) {
@@ -218,7 +221,7 @@ function visaoCobranca(item) {
  * tipo + referência enquanto a cobrança estiver pendente ou paga.
  */
 export async function criarCobranca(empresaId, dados = {}, opcoes = {}) {
-  const tipo = ['sinal', 'assinatura'].includes(dados.tipo) ? dados.tipo : null;
+  const tipo = ['sinal', 'assinatura', 'vale'].includes(dados.tipo) ? dados.tipo : null;
   if (!tipo) throw new CobrancaError('Tipo de cobrança inválido.');
   const referencia = texto(dados.referencia, 160);
   const valor = dinheiro(dados.valor);
@@ -237,7 +240,7 @@ export async function criarCobranca(empresaId, dados = {}, opcoes = {}) {
     tipo,
     referencia,
     valor,
-    descricao: texto(dados.descricao, 120) || (tipo === 'sinal' ? 'Sinal do agendamento' : 'Mensalidade do clube'),
+    descricao: texto(dados.descricao, 120) || (tipo === 'sinal' ? 'Sinal do agendamento' : tipo === 'vale' ? 'Vale-presente' : 'Mensalidade do clube'),
     clienteId: texto(dados.clienteId, 120),
     clienteNome: texto(dados.clienteNome, 120),
     telefone: texto(dados.telefone, 30),
@@ -280,7 +283,7 @@ function registrarReceita(empresaId, item, meio) {
   try {
     return financeiroKytto.registrarLancamento(empresaId, {
       tipo: 'receita',
-      categoria: item.tipo === 'sinal' ? 'Sinais de agendamento' : 'Clube de assinatura',
+      categoria: item.tipo === 'sinal' ? 'Sinais de agendamento' : item.tipo === 'vale' ? 'Vale-presente' : 'Clube de assinatura',
       descricao: `${item.descricao}${item.clienteNome ? ` · ${item.clienteNome}` : ''}`,
       valor: item.valor,
       origem: 'barbearia_cobranca',
@@ -299,6 +302,16 @@ function registrarReceita(empresaId, item, meio) {
 }
 
 function aplicarEfeitos(empresaId, item) {
+  if (item.tipo === 'vale') {
+    // Cancelado pela equipe: a equipe decide. Só vencido (pagou no dia seguinte): o vale vale.
+    if (item.pagoAposCancelar) { item.revisar = item.revisar || 'cobranca_cancelada'; return; }
+    const vale = estado(empresaId).vales?.[item.referencia.replace(/^vale:/, '')];
+    if (vale?.canceladoPor) { item.revisar = 'cobranca_cancelada'; return; }
+    if (vale && vale.status === 'cancelado' && item.pagoAposExpirar) vale.status = 'aguardando_pagamento';
+    ativarVale(empresaId, item.referencia.replace(/^vale:/, ''), { cobrancaId: item.id });
+    if (item.pagoAposExpirar) item.revisar = undefined;
+    return;
+  }
   if (item.tipo === 'sinal') {
     const agendamentoId = item.referencia.replace(/^sinal:/, '');
     const agendamento = barbearia.listarAgendamentos(empresaId, {}).find((ag) => ag.id === agendamentoId);
@@ -463,12 +476,17 @@ export function expirarSinais(opcoes = {}) {
     const atual = estado(empresaId);
     let mudou = false;
     for (const item of Object.values(atual.cobrancas)) {
-      if (item.tipo !== 'sinal' || item.status !== 'pendente' || !item.expiraEm) continue;
+      if (!['sinal', 'vale'].includes(item.tipo) || item.status !== 'pendente' || !item.expiraEm) continue;
       // 5 minutos de tolerância: quem está pagando no limite do prazo não perde o horário.
       if (new Date(item.expiraEm).valueOf() + 5 * 60000 > ms) continue;
       item.status = 'expirada';
       item.expirouEm = iso(ms);
       mudou = true;
+      if (item.tipo === 'vale') {
+        const vale = atual.vales?.[item.referencia.replace(/^vale:/, '')];
+        if (vale && vale.status === 'aguardando_pagamento') vale.status = 'cancelado';
+        continue;
+      }
       const agendamentoId = item.referencia.replace(/^sinal:/, '');
       const agendamento = barbearia.listarAgendamentos(empresaId, {}).find((ag) => ag.id === agendamentoId);
       if (agendamento?.status === 'agendado') {
@@ -476,6 +494,12 @@ export function expirarSinais(opcoes = {}) {
           const cancelado = barbearia.alterarStatusAgendamento(empresaId, agendamentoId, 'cancelado', { observacoes: texto(`${agendamento.observacoes || ''} · Cancelado: sinal não pago no prazo`, 600) });
           if (cancelado) liberados.push({ empresaId, agendamento: cancelado });
         } catch (_) { /* já mudou de status */ }
+      }
+    }
+    // Minimização: vale online que nunca foi pago some com nome e telefone após 30 dias.
+    for (const vale of Object.values(atual.vales || {})) {
+      if (vale.origem === 'online' && vale.status === 'cancelado' && !vale.ativadoEm && !vale.anonimizado && ms - new Date(vale.criadoEm).valueOf() > 30 * DIA_MS) {
+        vale.deNome = ''; vale.deTelefone = ''; vale.paraNome = ''; vale.mensagem = ''; vale.anonimizado = true; mudou = true;
       }
     }
     if (mudou) save();
@@ -620,4 +644,238 @@ export function painelCobrancas(empresaId, opcoes = {}) {
     cashbackEmAberto: dinheiro(carteiras.reduce((total, conta) => total + calcularSaldo(conta.movimentos, agoraMs(opcoes)).saldo, 0)),
     cobrancas: listarCobrancas(empresaId, { limite: 100 }),
   };
+}
+
+
+// ── Vale-presente ──────────────────────────────────────────────────────────
+// Compra online (cobrança tipo 'vale') ou venda no balcão. O código só passa a
+// valer depois do pagamento confirmado. Uso no atendimento com desconto
+// calculado no servidor (como o cashback), idempotente por atendimento.
+
+const ALFABETO_VALE = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function codigoVale() {
+  const bytes = crypto.randomBytes(10);
+  let codigo = '';
+  for (let i = 0; i < 10; i += 1) codigo += ALFABETO_VALE[bytes[i] % ALFABETO_VALE.length];
+  return `${codigo.slice(0, 5)}-${codigo.slice(5)}`;
+}
+
+function normalizarCodigoVale(valor) {
+  const limpo = texto(valor, 20).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return limpo.length === 10 ? `${limpo.slice(0, 5)}-${limpo.slice(5)}` : '';
+}
+
+function vales(empresaId) {
+  const atual = estado(empresaId);
+  atual.vales ||= {};
+  return atual.vales;
+}
+
+function saldoVale(vale) {
+  const usado = (vale.usos || []).reduce((soma, uso) => soma + uso.valor, 0);
+  return dinheiro(vale.valor - usado);
+}
+
+function visaoVale(vale, { comCodigo = false } = {}) {
+  if (!vale) return null;
+  const vencido = vale.validoAte && new Date(vale.validoAte).valueOf() < Date.now();
+  return {
+    id: vale.id,
+    ...(comCodigo ? { codigo: vale.codigo } : { codigoFinal: vale.codigo.slice(-4) }),
+    valor: vale.valor,
+    saldo: saldoVale(vale),
+    status: vale.status === 'ativo' && vencido ? 'vencido' : vale.status,
+    paraNome: vale.paraNome || '',
+    deNome: vale.deNome || '',
+    validoAte: vale.validoAte || null,
+    criadoEm: vale.criadoEm,
+    origem: vale.origem,
+  };
+}
+
+const VALE_MIN = 20;
+const VALE_MAX = 2000;
+
+function novoVale(empresaId, { valor, deNome, deTelefone, paraNome, mensagem, origem }) {
+  const v = dinheiro(valor);
+  if (v < VALE_MIN || v > VALE_MAX) throw new CobrancaError(`O vale-presente vai de R$ ${VALE_MIN} a R$ ${VALE_MAX}.`, 'VALE_VALOR_INVALIDO');
+  const lista = vales(empresaId);
+  const usados = new Set(Object.values(lista).map((item) => item.codigo));
+  let codigo = codigoVale();
+  while (usados.has(codigo)) codigo = codigoVale();
+  const vale = {
+    id: `vale-${crypto.randomBytes(6).toString('hex')}`,
+    codigo,
+    valor: v,
+    status: 'aguardando_pagamento',
+    deNome: texto(deNome, 80),
+    deTelefone: texto(deTelefone, 30),
+    paraNome: texto(paraNome, 80),
+    mensagem: texto(mensagem, 200),
+    origem,
+    usos: [],
+    criadoEm: new Date().toISOString(),
+  };
+  lista[vale.id] = vale;
+  return vale;
+}
+
+/** Compra online: cria o vale (inativo) e a cobrança. O código é mostrado ao comprador, mas só vale depois de pago. */
+export async function comprarVale(empresaId, dados = {}, opcoes = {}) {
+  if (!provedorCobranca(empresaId)) throw new CobrancaError('A barbearia ainda não recebe pagamentos online.', 'PROVEDOR_AUSENTE', 409);
+  if (!estado(empresaId).configuracao.vale?.ativo) throw new CobrancaError('Vale-presente indisponível nesta barbearia.', 'VALE_DESLIGADO', 409);
+  if (texto(dados.deNome, 80).length < 2 || String(dados.deTelefone || '').replace(/\D/g, '').length < 10) throw new CobrancaError('Informe seu nome e telefone.', 'DADOS_INVALIDOS');
+  const chave = telefoneChave(dados.deTelefone);
+  const pendentes = Object.values(vales(empresaId)).filter((item) => item.origem === 'online' && item.status === 'aguardando_pagamento' && telefoneChave(item.deTelefone) === chave).length;
+  if (pendentes >= 3) throw new CobrancaError('Você já tem vales aguardando pagamento. Pague ou aguarde expirarem para gerar outro.', 'VALE_LIMITE_PENDENTE', 429);
+  const vale = novoVale(empresaId, { ...dados, origem: 'online' });
+  save();
+  try {
+    const cobranca = await criarCobranca(empresaId, {
+      tipo: 'vale', referencia: `vale:${vale.id}`, valor: vale.valor,
+      descricao: `Vale-presente${vale.paraNome ? ` para ${vale.paraNome}` : ''}`,
+      clienteNome: vale.deNome, telefone: vale.deTelefone,
+      expiraEm: iso(agoraMs(opcoes) + 24 * 60 * 60 * 1000),
+    }, opcoes);
+    return { vale: visaoVale(vale, { comCodigo: true }), pagamento: { valor: cobranca.valor, url: cobranca.url, pixCopiaECola: cobranca.pixCopiaECola, provedor: cobranca.provedor } };
+  } catch (erro) {
+    vale.status = 'cancelado';
+    save();
+    throw erro;
+  }
+}
+
+/** Venda no balcão: a gestão confirma o recebimento; o vale já nasce ativo e a receita é lançada. */
+export function venderValeNoBalcao(empresaId, dados = {}, { usuario = '' } = {}) {
+  const meio = texto(dados.meioPagamento, 40).toLowerCase();
+  if (!meio) throw new CobrancaError('Informe o meio de pagamento.', 'DADOS_INVALIDOS');
+  const vale = novoVale(empresaId, { ...dados, origem: 'balcao' });
+  const pagoEm = new Date().toISOString();
+  try {
+    // Receita primeiro: sem lançamento, o vale não é emitido.
+    financeiroKytto.registrarLancamento(empresaId, {
+      tipo: 'receita', categoria: 'Vale-presente', descricao: `Vale-presente ${vale.codigo.slice(-4)}${vale.paraNome ? ` · ${vale.paraNome}` : ''}`,
+      valor: vale.valor, origem: 'barbearia_cobranca', status: 'pago', meioPagamento: meio,
+      dataOperacao: pagoEm, pagoEm, automatico: true, usuario,
+      chaveIdempotencia: `barbearia_vale:${empresaId}:${vale.id}`,
+      referencia: { valeId: vale.id },
+    });
+  } catch (erro) {
+    delete vales(empresaId)[vale.id];
+    save();
+    throw new CobrancaError(`Não foi possível lançar a receita do vale: ${texto(erro?.message || erro, 120)}`, 'FINANCEIRO_INDISPONIVEL', 500);
+  }
+  ativarVale(empresaId, vale.id, { usuario });
+  return visaoVale(vales(empresaId)[vale.id], { comCodigo: true });
+}
+
+function ativarVale(empresaId, valeId, { cobrancaId = null, usuario = '' } = {}) {
+  const vale = vales(empresaId)[String(valeId)];
+  if (!vale || vale.status === 'ativo') return vale || null;
+  // Cancelado pela equipe ou já usado nunca volta a valer sozinho.
+  if (vale.canceladoPor || vale.status === 'usado') return null;
+  vale.status = 'ativo';
+  vale.ativadoEm = new Date().toISOString();
+  vale.validoAte = new Date(Date.now() + 365 * DIA_MS).toISOString();
+  vale.cobrancaId = cobrancaId;
+  vale.ativadoPor = texto(usuario, 120) || (cobrancaId ? 'pagamento' : 'equipe');
+  save();
+  return vale;
+}
+
+export function consultarVale(empresaId, codigo) {
+  const normalizado = normalizarCodigoVale(codigo);
+  const vale = normalizado ? Object.values(vales(empresaId)).find((item) => item.codigo === normalizado) : null;
+  if (!vale) throw new CobrancaError('Vale-presente não encontrado.', 'VALE_NAO_ENCONTRADO', 404);
+  return visaoVale(vale);
+}
+
+export function listarVales(empresaId) {
+  return Object.values(vales(empresaId)).sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm))).slice(0, 300).map((vale) => visaoVale(vale));
+}
+
+export function cancelarVale(empresaId, valeId, { usuario = '', motivo = '', meioEstorno = '' } = {}) {
+  const vale = vales(empresaId)[String(valeId)];
+  if (!vale) throw new CobrancaError('Vale-presente não encontrado.', 'VALE_NAO_ENCONTRADO', 404);
+  if ((vale.usos || []).length) throw new CobrancaError('Vale já usado não pode ser cancelado.', 'VALE_USADO', 409);
+  if (vale.status === 'cancelado') return visaoVale(vale);
+  const pago = vale.status === 'ativo';
+  if (pago && (texto(motivo, 200).length < 5 || !texto(meioEstorno, 40))) {
+    throw new CobrancaError('Vale pago: informe o motivo e como o valor foi devolvido; o estorno é lançado no financeiro.', 'ESTORNO_OBRIGATORIO', 409);
+  }
+  // Cobrança online pendente deixa de valer junto.
+  for (const item of Object.values(estado(empresaId).cobrancas)) {
+    if (item.tipo === 'vale' && item.referencia === `vale:${vale.id}` && item.status === 'pendente') {
+      item.status = 'cancelada'; item.canceladoPor = texto(usuario, 120) || 'equipe'; item.canceladoEm = new Date().toISOString();
+    }
+  }
+  if (pago) {
+    const agora = new Date().toISOString();
+    financeiroKytto.registrarLancamento(empresaId, {
+      tipo: 'despesa', categoria: 'Estorno de vale-presente', descricao: `Estorno do vale ${vale.codigo.slice(-4)} · ${texto(motivo, 120)}`,
+      valor: vale.valor, origem: 'barbearia_cobranca', status: 'pago', meioPagamento: texto(meioEstorno, 40).toLowerCase(),
+      dataOperacao: agora, pagoEm: agora, automatico: true, usuario: texto(usuario, 120),
+      chaveIdempotencia: `barbearia_vale_estorno:${empresaId}:${vale.id}`,
+      referencia: { valeId: vale.id },
+    });
+  }
+  vale.status = 'cancelado';
+  vale.canceladoPor = texto(usuario, 120) || 'equipe';
+  vale.canceladoEm = new Date().toISOString();
+  vale.motivoCancelamento = texto(motivo, 200) || null;
+  save();
+  return visaoVale(vale);
+}
+
+/** Valor que o vale pode cobrir agora (sem debitar): saldo, ativo e dentro da validade. */
+export function saldoUtilVale(empresaId, codigo) {
+  const normalizado = normalizarCodigoVale(codigo);
+  const vale = normalizado ? Object.values(vales(empresaId)).find((item) => item.codigo === normalizado) : null;
+  if (!vale) throw new CobrancaError('Vale-presente não encontrado.', 'VALE_NAO_ENCONTRADO', 404);
+  if (vale.status !== 'ativo') throw new CobrancaError(vale.status === 'aguardando_pagamento' ? 'Este vale ainda não foi pago.' : 'Este vale não está ativo.', 'VALE_INATIVO', 409);
+  if (vale.validoAte && new Date(vale.validoAte).valueOf() < Date.now()) throw new CobrancaError('Este vale está vencido.', 'VALE_VENCIDO', 409);
+  return { vale, saldo: saldoVale(vale) };
+}
+
+export function usarVale(empresaId, { codigo, valor, referencia, usuario = '' } = {}) {
+  const { vale, saldo } = saldoUtilVale(empresaId, codigo);
+  const ref = texto(referencia, 160);
+  if (!ref) throw new CobrancaError('Referência obrigatória.');
+  const repetido = (vale.usos || []).find((uso) => uso.referencia === ref);
+  if (repetido) return { usado: repetido.valor, repetido: true, saldo: saldoVale(vale) };
+  const pedido = dinheiro(valor);
+  if (pedido <= 0) throw new CobrancaError('Informe o valor a usar.', 'VALE_VALOR_INVALIDO');
+  if (pedido > saldo + 0.001) throw new CobrancaError(`Saldo do vale insuficiente (R$ ${saldo.toFixed(2).replace('.', ',')}).`, 'SALDO_INSUFICIENTE', 409);
+  vale.usos.push({ valor: pedido, referencia: ref, em: new Date().toISOString(), usuario: texto(usuario, 120) || null });
+  if (saldoVale(vale) <= 0) vale.status = 'usado';
+  save();
+  return { usado: pedido, saldo: saldoVale(vale) };
+}
+
+/** Uso já registrado com esta referência (repetição da mesma conclusão). */
+export function usoDeValeExistente(empresaId, codigo, referencia) {
+  const normalizado = normalizarCodigoVale(codigo);
+  const vale = normalizado ? Object.values(vales(empresaId)).find((item) => item.codigo === normalizado) : null;
+  return vale ? (vale.usos || []).find((uso) => uso.referencia === texto(referencia, 160)) || null : null;
+}
+
+/** Desfaz um uso (vale ou cashback) quando a conclusão do atendimento não foi gravada. */
+export function desfazerUsos(empresaId, { codigoVale, telefone, referencia } = {}) {
+  const ref = texto(referencia, 160);
+  const normalizado = normalizarCodigoVale(codigoVale);
+  const vale = normalizado ? Object.values(vales(empresaId)).find((item) => item.codigo === normalizado) : null;
+  if (vale) {
+    vale.usos = (vale.usos || []).filter((uso) => uso.referencia !== ref);
+    if (vale.status === 'usado' && saldoVale(vale) > 0) vale.status = 'ativo';
+  }
+  const conta = telefone ? carteira(empresaId, telefone) : null;
+  if (conta) conta.movimentos = conta.movimentos.filter((m) => m.referencia !== `debito:${ref}`);
+  save();
+}
+
+export function usoDeCashbackExistente(empresaId, telefone, referencia) {
+  const chave = chaveCarteira(telefone);
+  const conta = chave ? estado(empresaId).carteiras[chave] : null;
+  return conta ? conta.movimentos.find((m) => m.referencia === `debito:${texto(referencia, 160)}`) || null : null;
 }
