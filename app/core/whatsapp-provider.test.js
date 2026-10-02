@@ -152,3 +152,13 @@ test('contrato da Isa: entrada por GET /messages achatando users[].messages[]', 
     assert.match(fetch.calls[0].url, /\/api\/v1\/whats-app\/messages\?latest=false&role=user&limit=50&from=2026-10-01T17%3A30%3A00.000Z$/);
   });
 });
+
+test('modo por instância preserva o contrato de mensagens e envia instance na consulta', async () => {
+  await withEnv(env, async () => {
+    const fetch = fakeFetch([{ status: 200, body: { users: [{ chatId: '5565999990000', messages: [{ role: 'user', content: 'oi', timestamp: '2026-10-01T18:00:00.000Z', whatsappMessageId: 'w1' }] }] } }]);
+    const result = await provider.fetchInboundMessages({ from: Date.parse('2026-10-01T17:30:00Z'), limit: 50 }, fetch);
+    assert.equal(result.ok, true);
+    assert.equal(result.messages.length, 1);
+    assert.match(fetch.calls[0].url, /[?&]instance=dino-1(&|$)/);
+  });
+});

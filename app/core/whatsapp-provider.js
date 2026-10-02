@@ -274,6 +274,7 @@ export async function fetchInboundMessages({ from, limit = 100 } = {}, fetchImpl
   if (!cfg.baseUrl || cfg.key.length < 20) return { ok: false, error: 'backend_not_configured', messages: [] };
   const params = new URLSearchParams({ latest: 'false', role: 'user', limit: String(Math.min(200, Math.max(25, Number(limit) || 100))) });
   if (from) params.set('from', new Date(from).toISOString());
+  if (chatbotBackendMode() === 'instancias' && cfg.instance) params.set('instance', cfg.instance);
   const result = await call(cfg, 'GET', `/messages?${params.toString()}`, null, fetchImpl);
   if (isAuthError(result.status)) return { ok: false, authError: true, status: result.status, messages: [] };
   if (!result.ok) return { ok: false, status: result.status, error: result.error || 'messages_unavailable', messages: [] };

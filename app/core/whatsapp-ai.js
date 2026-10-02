@@ -1274,6 +1274,7 @@ async function syncChatbotBackendWebhook(context, channel, { secret, publicBaseU
   if (result.authError) throw new Error('backend WhatsApp recusou a chave (HTTP 401/403)');
   const manual = Boolean(result.unsupported);
   if (!result.ok && !manual) throw new Error(`backend WhatsApp recusou o webhook: HTTP ${result.status || 'sem resposta'}`);
+  const polling = Boolean(result.polling || manual);
   const updated = await db.transaction(async trx => {
     const saved = await trx.query(
       `UPDATE canais_integracao
@@ -1295,10 +1296,10 @@ async function syncChatbotBackendWebhook(context, channel, { secret, publicBaseU
     ok: true,
     webhookUrl,
     manual,
-    polling: Boolean(result.polling),
-    instructions: result.polling
+    polling,
+    instructions: polling
       ? 'Igual à Isa: o backend não envia webhook de mensagens. A Dino consulta as mensagens recebidas a cada poucos segundos; basta o número estar pareado e CHATBOT_BACKEND_EMPRESA_ID apontar para esta empresa.'
-      : manual ? `O backend não expõe rota de webhook. Configure no backend a instância ${instance} para enviar messages.upsert e connection.update para ${webhookUrl} com o cabeçalho ${header} (valor = segredo ${cleanText(channel.credencial_referencia, 120).replace(/^ENV:/i, '')}).` : null,
+      : null,
     channel: safeChannelView(updated),
     provider: { configured: true, status: result.status || null, name: 'chatbot_backend' },
   };

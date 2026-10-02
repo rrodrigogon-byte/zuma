@@ -38,7 +38,7 @@ export function pollMode() {
 }
 
 export function pollEnabled() {
-  return whatsappProviderName() === 'chatbot_backend' && chatbotBackendMode() === 'isa' && whatsappProviderConfigured() && pollMode() !== 'off';
+  return whatsappProviderName() === 'chatbot_backend' && whatsappProviderConfigured() && pollMode() !== 'off';
 }
 
 function maxAgeMs() {
@@ -128,7 +128,7 @@ export async function runIsaPollPass({ fetchImpl, agora = Date.now(), canal: can
 
 export function startIsaPollWorker() {
   if (!pollEnabled()) {
-    if (whatsappProviderName() === 'chatbot_backend') console.log('[WhatsApp] entrada por consulta (modelo Isa) desligada: confira CHATBOT_BACKEND_URL/KEY e WHATSAPP_POLL_MODE');
+    if (whatsappProviderName() === 'chatbot_backend') console.log('[WhatsApp] entrada por consulta desligada: confira CHATBOT_BACKEND_URL/KEY e WHATSAPP_POLL_MODE');
     return null;
   }
   const intervalo = Math.max(3000, Number.parseInt(process.env.WHATSAPP_POLL_INTERVAL_MS || '5000', 10) || 5000);
@@ -147,6 +147,6 @@ export function startIsaPollWorker() {
   };
   const timer = setInterval(tick, intervalo);
   timer.unref?.();
-  console.log(`[WhatsApp] entrada por consulta (modelo Isa) ativa a cada ${intervalo} ms, modo ${pollMode()}`);
+  console.log(`[WhatsApp] entrada por consulta ativa a cada ${intervalo} ms, modo ${pollMode()}, backend ${chatbotBackendMode()}`);
   return timer;
 }

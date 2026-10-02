@@ -103,5 +103,5 @@ test('modos: shadow só registra; pilot responde só os números liberados; off 
   await comEnv({ ...ENV, WHATSAPP_POLL_MODE: 'off' }, async () => {
     assert.equal((await runIsaPollPass({ canal, comTrava: false })).reason, 'poll_disabled');
   });
-  await comEnv({ ...ENV, CHATBOT_BACKEND_MODE: 'instancias' }, async () => assert.equal(pollEnabled(), false, 'no modo de instâncias a entrada é por webhook'));
+  await comEnv({ ...ENV, CHATBOT_BACKEND_MODE: 'instancias', CHATBOT_BACKEND_INSTANCE: 'dino-1' }, async () => assert.equal(pollEnabled(), true, 'o backend por instância também usa a consulta de mensagens'));
 });
