@@ -44,9 +44,11 @@ test('normaliza estados e QR de formatos diferentes', () => {
   assert.equal(provider.normalizeState({ instance: { state: 'connecting' } }), 'connecting');
   assert.equal(provider.normalizeState({ status: 'disconnected' }), 'close');
   assert.equal(provider.normalizeState({ connected: true }), 'open');
+  assert.equal(provider.normalizeState({ connectionState: 'qr_ready' }), 'qr');
   const image = provider.extractQr({ base64: 'data:image/png;base64,AAAA', pairingCode: 'WXYZ-1234' });
   assert.equal(image.qrImage, 'data:image/png;base64,AAAA');
   assert.equal(image.pairingCode, 'WXYZ-1234');
+  assert.equal(provider.extractQr({ qrDataUrl: 'data:image/png;base64,DINO' }).qrImage, 'data:image/png;base64,DINO');
   const raw = provider.extractQr({ qrcode: '2@abc,def' });
   assert.equal(raw.qrRaw, '2@abc,def');
   assert.equal(provider.validInstance('Dino-1'), 'dino-1');

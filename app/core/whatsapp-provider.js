@@ -120,7 +120,7 @@ export function normalizeState(data = {}) {
   const value = candidates[0] || (data.connected === true ? 'open' : data.connected === false ? 'close' : '');
   if (['open', 'connected', 'online', 'ready', 'authenticated', 'inchat', 'islogged', 'conectado'].includes(value)) return 'open';
   if (['connecting', 'starting', 'opening', 'initializing', 'pairing', 'syncing', 'conectando'].includes(value)) return 'connecting';
-  if (['qr', 'qrcode', 'qr_code', 'waiting_qr', 'notlogged', 'scan_qr', 'desconectado_qr'].includes(value)) return 'qr';
+  if (['qr', 'qrcode', 'qr_code', 'qr_ready', 'waiting_qr', 'notlogged', 'scan_qr', 'desconectado_qr'].includes(value)) return 'qr';
   if (['close', 'closed', 'disconnected', 'offline', 'logout', 'logged_out', 'desconectado', 'failed'].includes(value)) return 'close';
   return value ? 'unknown' : 'unknown';
 }
@@ -128,7 +128,7 @@ export function normalizeState(data = {}) {
 /** Extrai QR (data URL base64) e código de pareamento de respostas variadas. */
 export function extractQr(data = {}) {
   const pick = (...values) => values.map((value) => (typeof value === 'string' ? value.trim() : '')).find(Boolean) || '';
-  let qr = pick(data.base64, data.qr, data.qrcode, data.qrCode, data.qr_code, data.image, data.data?.base64, data.data?.qr, data.data?.qrcode, data.data?.qrCode, data.qrcode?.base64, data.instance?.qrcode);
+  let qr = pick(data.base64, data.qrDataUrl, data.base64Data, data.qr, data.qrcode, data.qrCode, data.qr_code, data.image, data.data?.base64, data.data?.qrDataUrl, data.data?.qr, data.data?.qrcode, data.data?.qrCode, data.qrcode?.base64, data.instance?.qrcode);
   const pairingCode = pick(data.pairingCode, data.pairing_code, data.code, data.data?.pairingCode, data.data?.code);
   if (qr && !qr.startsWith('data:image') && /^[A-Za-z0-9+/=]{200,}$/.test(qr)) qr = `data:image/png;base64,${qr}`;
   // Conteúdo cru do QR (ex.: "2@abc,...") precisa ser desenhado no servidor.
