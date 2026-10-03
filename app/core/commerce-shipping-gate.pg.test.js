@@ -37,7 +37,7 @@ test('PG: seleção usa apenas quote com método ainda ativo e idêntico, sem DM
     await client.query('BEGIN');
     await client.query(`CREATE TEMP TABLE commerce_shipping_methods (
       id uuid PRIMARY KEY, empresa_id uuid NOT NULL, storefront_id uuid NOT NULL,
-      tipo text NOT NULL, ativo boolean NOT NULL, configuracao jsonb NOT NULL
+      tipo text NOT NULL, codigo text NOT NULL, ativo boolean NOT NULL, configuracao jsonb NOT NULL
     ) ON COMMIT DROP`);
     await client.query(`CREATE TEMP TABLE commerce_shipping_quotes (
       id uuid PRIMARY KEY, empresa_id uuid NOT NULL, storefront_id uuid NOT NULL,
@@ -48,12 +48,13 @@ test('PG: seleção usa apenas quote com método ainda ativo e idêntico, sem DM
     ) ON COMMIT DROP`);
     const snapshot = {
       storefrontId, shippingMethodId: methodId, destinationCep,
+      destination: { cidade: 'tangara da serra', estado: 'MT' },
       methodConfigHash: crypto.createHash('sha256').update(JSON.stringify(canonicalJson({ provider: 'manual', deliveryType: 'motoboy', freeShippingAbove: 1000 }))).digest('hex'),
       lines: [{ variantId, quantity: 1 }],
     };
     const hash = crypto.createHash('sha256').update(JSON.stringify(canonicalJson(snapshot))).digest('hex');
     const response = { providerOptions: [{ public: { id: 'motoboy:local', amount: 13 }, raw: { ruleId: 'local' } }] };
-    await client.query(`INSERT INTO commerce_shipping_methods VALUES ($1,$2,$3,'delivery',true,$5::jsonb),($4,$2,$3,'delivery',true,$5::jsonb)`, [methodId, empresaId, storefrontId, otherMethodId, JSON.stringify({ provider: 'manual', deliveryType: 'motoboy', freeShippingAbove: 1000 })]);
+    await client.query(`INSERT INTO commerce_shipping_methods VALUES ($1,$2,$3,'delivery','dino-motoboy',true,$5::jsonb),($4,$2,$3,'delivery','outro',true,$5::jsonb)`, [methodId, empresaId, storefrontId, otherMethodId, JSON.stringify({ provider: 'manual', deliveryType: 'motoboy', freeShippingAbove: 1000 })]);
     await client.query(`INSERT INTO commerce_shipping_quotes
       (id,empresa_id,storefront_id,shipping_method_id,provider,ambiente,request_hash,request_snapshot,response_snapshot,status,expires_at)
       VALUES ($1,$2,$3,$4,'manual','manual',$5,$6::jsonb,$7::jsonb,'quoted',CURRENT_TIMESTAMP + INTERVAL '1 hour')`,

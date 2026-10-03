@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { checkoutTotal, recommendedShippingOption, selectedShippingOption, shippingQuoteKey } from './checkout-shipping.js'
+import { checkoutShippingErrorMessage, checkoutShippingSupportAction, checkoutTotal, DINO_DELIVERY_UNAVAILABLE, recommendedShippingOption, selectedShippingOption, shippingQuoteKey } from './checkout-shipping.js'
+import { readFileSync } from 'node:fs'
 
 const cart = [{ variantId: 'variant-b', qtd: 1 }, { variantId: 'variant-a', qtd: 2 }]
 const address = { cep: '78300-055', cidade: 'Tangará da Serra', estado: 'MT' }
@@ -45,4 +46,30 @@ test('soma a opção selecionada ao subtotal e rejeita seleção fora da cotaç�
   assert.equal(checkoutTotal(2600, { id: 'gratis', amount: 0 }), 2600)
   assert.equal(selectedShippingOption({ deliveryMode: 'retirada', shippingQuote: quote, shippingOptionId: 'quote-1:expressa', shippingQuoteIsCurrent: true }), null)
   assert.equal(selectedShippingOption({ deliveryMode: 'entrega', shippingQuote: quote, shippingOptionId: 'quote-old:expressa', shippingQuoteIsCurrent: false }), null)
+})
+
+test('CEP fora da cobertura Dino explica indisponibilidade sem inventar tarifa, prazo ou cobrança', () => {
+  const error = { code: 'SHIPPING_DESTINATION_UNAVAILABLE', message: 'nenhuma opção', details: { cep: '01001000', buyer: 'private@example.invalid' } }
+  assert.equal(checkoutShippingErrorMessage(error, { isDino: true }), DINO_DELIVERY_UNAVAILABLE)
+  assert.match(DINO_DELIVERY_UNAVAILABLE, /carrinho foi mantido/)
+  assert.match(DINO_DELIVERY_UNAVAILABLE, /nenhum pedido ou pagamento/)
+  assert.doesNotMatch(DINO_DELIVERY_UNAVAILABLE, /01001000|private@example\.invalid|R\$\s*42|prazo de entrega/)
+  assert.equal(checkoutShippingErrorMessage(error, { isDino: false }), 'nenhuma opção')
+  assert.equal(checkoutShippingErrorMessage({ code: 'SHIPPING_CEP_PROVIDER_TIMEOUT', message: 'serviço indisponível' }, { isDino: true }), 'serviço indisponível')
+})
+
+test('suporte comercial de entrega não envia endereço, CEP, contatos pessoais ou carrinho', () => {
+  const action = checkoutShippingSupportAction({ email: 'loja@example.invalid', phone: '+5511999999999' })
+  assert.match(action.href, /^mailto:loja@example\.invalid\?/)
+  assert.doesNotMatch(decodeURIComponent(action.href), /CEP|endereço|01001000|private@example\.invalid|carrinho/i)
+  assert.equal(checkoutShippingSupportAction({ email: 'invalid\n@example.invalid', phone: 'javascript:123' }), null)
+  assert.deepEqual(checkoutShippingSupportAction({ phone: '+5511999999999' }), { href: 'tel:+5511999999999', label: 'Ligar para a loja' })
+})
+
+test('checkout não libera pedido sem opção válida de entrega e mantém canal de suporte no alerta', () => {
+  const source = readFileSync(new URL('../pages/public/CommerceCheckout.jsx', import.meta.url), 'utf8')
+  assert.match(source, /deliveryMode === 'entrega' && !selectedOption/)
+  assert.match(source, /checkoutShippingErrorMessage\(err, \{ isDino: storeAlias === 'dino' \}\)/)
+  assert.match(source, /checkoutShippingSupportAction\(publicBrand\.contact\)/)
+  assert.match(source, /role="alert"/)
 })
