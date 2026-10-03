@@ -33,6 +33,20 @@ function number(value) {
   return Number.isFinite(result) ? result : 0
 }
 
+export function validateProductCommercialInput(form = {}) {
+  const price = Number(form.preco)
+  const promotional = form.precoPromocional === '' || form.precoPromocional == null ? null : Number(form.precoPromocional)
+  if (!Number.isFinite(price) || price < 0) return 'Informe um preço de venda válido.'
+  if (promotional != null && (!Number.isFinite(promotional) || promotional < 0 || promotional >= price)) {
+    return 'O preço promocional deve ser menor que o preço de venda; se não houver desconto, deixe o campo vazio.'
+  }
+  const slug = String(form.slug || '').trim()
+  if (slug && !/^[a-z0-9][a-z0-9-]{0,119}$/.test(slug)) {
+    return 'Use no slug apenas letras minúsculas, números e hífens (ex.: creme-skin1004-75ml), sem URL completa.'
+  }
+  return ''
+}
+
 export function normalizeCoreProduct(product) {
   const variant = product.variants?.[0] || {}
   return {

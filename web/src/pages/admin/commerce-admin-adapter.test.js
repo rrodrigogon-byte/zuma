@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { api } from '../../lib/api'
-import { adminProductMediaUrl, loadCommerceAdmin, loadCoreReports } from './commerce-admin-adapter'
+import { adminProductMediaUrl, loadCommerceAdmin, loadCoreReports, validateProductCommercialInput } from './commerce-admin-adapter'
 
 const originalGet = api.get
 const storefront = { id: '33333333-3333-4333-8333-333333333333', loja_id: '22222222-2222-4222-8222-222222222222', nome: 'Dino' }
@@ -73,6 +73,16 @@ describe('admin Commerce: feedback do salvamento de produto', () => {
     expect(source).toContain('onInvalid={handleProductInvalid}')
     expect(source).toContain('Preencha o campo obrigatório')
     expect(source).toContain('role="alert"')
+  })
+
+  it('explica que o preço promocional precisa ser menor ou ficar vazio', () => {
+    expect(validateProductCommercialInput({ preco: '1087', precoPromocional: '1087' })).toMatch(/menor que o preço de venda/i)
+    expect(validateProductCommercialInput({ preco: '1087', precoPromocional: '' })).toBe('')
+  })
+
+  it('rejeita URL completa no slug e aceita o formato amigável', () => {
+    expect(validateProductCommercialInput({ preco: '1087', slug: 'https://dino.kytto.com.br/' })).toMatch(/slug/i)
+    expect(validateProductCommercialInput({ preco: '1087', slug: 'madagascar-centella-cream' })).toBe('')
   })
 })
 
