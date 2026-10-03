@@ -51,6 +51,12 @@ describe('admin Commerce: feedback do salvamento de produto', () => {
     expect(source).toContain('disabled={mediaUploading || savingProduct}')
     expect(source).toContain('Salvando produto…')
   })
+
+  it('não bloqueia a abertura de Novo item quando apenas a listagem falha', () => {
+    const source = readFileSync(resolve(process.cwd(), 'web/src/pages/admin/EcommerceAdmin.jsx'), 'utf8')
+    expect(source).toContain("disabled={mode === 'core' && !storefrontId}")
+    expect(source).not.toContain('onClick={beginCreate} disabled={catalogUnavailable}')
+  })
 })
 
 describe('admin Commerce: seleção obrigatória de vitrine', () => {
