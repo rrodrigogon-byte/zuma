@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { db } from './database.js';
 import { CommerceError } from './commerce-error.js';
 import { normalizeCustomerInput, resolveCommerceCustomer, resolveCommerceCustomerAddress } from './commerce-customer-identity.js';
-import { normalizeOwnDeliveryConfig, resolveShippingSelection } from './commerce-shipping.js';
+import { isDinoLocalManualMethod, normalizeCep, normalizeOwnDeliveryConfig, resolveShippingSelection } from './commerce-shipping.js';
 import { markCartConverted } from './commerce-abandoned-carts.js';
 import { creditPaidOrderLoyaltyPoints, reverseOrderLoyaltyPoints } from './loyalty-advanced.js';
 
@@ -1609,22 +1609,51 @@ export async function createFulfillment(trx, context, input = {}) {
   const { empresaId } = tenantContext(context);
   const orderId = assertUuid(input.orderId, 'orderId');
   const storefrontId = input.storefrontId ? assertUuid(input.storefrontId, 'storefrontId') : null;
-  const order = await trx.query(`SELECT id, storefront_id, status, endereco_entrega, shipping_method_id, shipping_quote_id FROM commerce_orders WHERE empresa_id = $1 AND id = $2 AND ($3::uuid IS NULL OR storefront_id = $3) AND ($4::uuid IS NULL OR loja_id = $4) FOR UPDATE`, [empresaId, orderId, storefrontId, context.corporateAccess === true ? null : context.lojaId || null]);
+  const order = await trx.query(`SELECT o.id, o.storefront_id, o.loja_id, o.status, o.total, o.frete, o.endereco_entrega, o.shipping_method_id, o.shipping_quote_id, s.codigo AS storefront_code, s.loja_id AS storefront_loja_id FROM commerce_orders o JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id WHERE o.empresa_id = $1 AND o.id = $2 AND ($3::uuid IS NULL OR o.storefront_id = $3) AND ($4::uuid IS NULL OR o.loja_id = $4) FOR UPDATE OF o`, [empresaId, orderId, storefrontId, context.corporateAccess === true ? null : context.lojaId || null]);
   if (!order.rows[0]) throw new CommerceError('pedido não encontrado no tenant', 'ORDER_NOT_FOUND');
   if (!['paid', 'processing', 'ready', 'shipped', 'ready_for_pickup'].includes(order.rows[0].status)) throw new CommerceError('fulfillment só pode ser criado após pagamento confirmado', 'FULFILLMENT_ORDER_NOT_PAID');
+  const dino = order.rows[0].storefront_code === 'dino-web';
+  if (dino && order.rows[0].loja_id !== order.rows[0].storefront_loja_id) throw new CommerceError('loja do pedido Dino não corresponde à vitrine', 'FULFILLMENT_DINO_ORDER_SELECTION_REQUIRED');
+  if (dino && (input.enderecoEntrega !== undefined || input.shippingAccountId !== undefined
+    || (input.shippingMethodId !== undefined && String(input.shippingMethodId).toLowerCase() !== String(order.rows[0].shipping_method_id || '').toLowerCase())
+    || (input.shippingQuoteId !== undefined && String(input.shippingQuoteId).toLowerCase() !== String(order.rows[0].shipping_quote_id || '').toLowerCase())
+    || !order.rows[0].shipping_method_id)) {
+    throw new CommerceError('fulfillment Dino deve herdar destino e seleção logística do pedido', 'FULFILLMENT_DINO_ORDER_SELECTION_REQUIRED');
+  }
+  if (dino) {
+    const existing = await trx.query(`SELECT id FROM commerce_fulfillments WHERE empresa_id = $1 AND order_id = $2 LIMIT 1`, [empresaId, orderId]);
+    if (existing.rows[0]) throw new CommerceError('pedido Dino já possui fulfillment', 'FULFILLMENT_ALREADY_EXISTS');
+    const captured = await trx.query(`SELECT id FROM commerce_payments WHERE empresa_id = $1 AND order_id = $2 AND status = 'captured' AND captured_at IS NOT NULL AND amount = $3 LIMIT 1`, [empresaId, orderId, order.rows[0].total]);
+    if (!captured.rows[0]) throw new CommerceError('pedido Dino sem pagamento capturado confirmado', 'FULFILLMENT_PAYMENT_NOT_CAPTURED');
+  }
   const shippingMethodId = input.shippingMethodId ? assertUuid(input.shippingMethodId, 'shippingMethodId') : order.rows[0].shipping_method_id || null;
   const shippingQuoteId = input.shippingQuoteId ? assertUuid(input.shippingQuoteId, 'shippingQuoteId') : order.rows[0].shipping_quote_id || null;
   let shippingAccountId = input.shippingAccountId ? assertUuid(input.shippingAccountId, 'shippingAccountId') : null;
   let shippingMethodType = null;
+  let selectedMethod = null;
   if (shippingMethodId) {
-    const method = await trx.query(`SELECT id, tipo FROM commerce_shipping_methods WHERE empresa_id = $1 AND storefront_id = $2 AND id = $3 AND ativo = true LIMIT 1`, [empresaId, order.rows[0].storefront_id, shippingMethodId]);
+    const method = await trx.query(`SELECT id, tipo, codigo, configuracao FROM commerce_shipping_methods WHERE empresa_id = $1 AND storefront_id = $2 AND id = $3 AND ativo = true LIMIT 1 FOR SHARE`, [empresaId, order.rows[0].storefront_id, shippingMethodId]);
     if (!method.rows[0]) throw new CommerceError('método de entrega não encontrado para a loja', 'SHIPPING_METHOD_NOT_FOUND');
-    shippingMethodType = method.rows[0].tipo;
+    selectedMethod = method.rows[0];
+    shippingMethodType = selectedMethod.tipo;
   }
+  if (dino && shippingMethodType !== 'pickup' && shippingMethodType !== 'delivery') throw new CommerceError('método Dino sem operação logística habilitada', 'SHIPPING_NATIONAL_FULFILLMENT_NOT_READY');
+  if (dino && shippingMethodType === 'pickup' && shippingQuoteId) throw new CommerceError('retirada Dino não aceita cotação de entrega', 'FULFILLMENT_DINO_ORDER_SELECTION_REQUIRED');
   if (['delivery', 'carrier'].includes(shippingMethodType) && !shippingQuoteId) throw new CommerceError('fulfillment de entrega exige cotação selecionada', 'SHIPPING_QUOTE_REQUIRED');
   if (shippingQuoteId) {
-    const quote = await trx.query(`SELECT id, storefront_id, order_id, shipping_method_id, shipping_account_id FROM commerce_shipping_quotes WHERE empresa_id = $1 AND id = $2 AND storefront_id = $3 AND order_id = $4 LIMIT 1`, [empresaId, shippingQuoteId, order.rows[0].storefront_id, orderId]);
+    const quote = await trx.query(`SELECT id, storefront_id, order_id, shipping_method_id, shipping_account_id, provider, destino_cep, status, selected_option_id, selected_amount FROM commerce_shipping_quotes WHERE empresa_id = $1 AND id = $2 AND storefront_id = $3 AND order_id = $4 LIMIT 1 FOR SHARE`, [empresaId, shippingQuoteId, order.rows[0].storefront_id, orderId]);
     if (!quote.rows[0] || (shippingMethodId && quote.rows[0].shipping_method_id !== shippingMethodId)) throw new CommerceError('cotação não pertence ao método ou pedido informado', 'SHIPPING_QUOTE_MISMATCH');
+    if (dino) {
+      const destinationCep = normalizeCep(order.rows[0].endereco_entrega?.cep);
+      const selectedAmount = Number(quote.rows[0].selected_amount);
+      if (quote.rows[0].provider !== 'manual' || quote.rows[0].shipping_account_id != null || quote.rows[0].destino_cep !== destinationCep
+        || quote.rows[0].status !== 'used' || !quote.rows[0].selected_option_id
+        || quote.rows[0].selected_amount == null || !Number.isFinite(selectedAmount)
+        || Math.abs(selectedAmount - Number(order.rows[0].frete)) > 0.001
+        || !isDinoLocalManualMethod({ ...selectedMethod, storefront_code: 'dino-web' }, destinationCep)) {
+        throw new CommerceError('entrega Dino fora da operação local habilitada', 'SHIPPING_NATIONAL_FULFILLMENT_NOT_READY');
+      }
+    }
     shippingAccountId = shippingAccountId || quote.rows[0].shipping_account_id;
   }
   if (shippingAccountId) {
@@ -1643,9 +1672,39 @@ export async function updateFulfillment(trx, context, fulfillmentId, input = {})
   const { empresaId, usuarioId } = tenantContext(context);
   const id = assertUuid(fulfillmentId, 'fulfillmentId');
   const storefrontId = input.storefrontId ? assertUuid(input.storefrontId, 'storefrontId') : null;
-  const locked = await trx.query(`SELECT f.id, f.order_id, f.status, f.ocorrencias FROM commerce_fulfillments f JOIN commerce_orders o ON o.empresa_id = f.empresa_id AND o.id = f.order_id WHERE f.empresa_id = $1 AND f.id = $2 AND ($3::uuid IS NULL OR o.storefront_id = $3) AND ($4::uuid IS NULL OR o.loja_id = $4) FOR UPDATE OF f`, [empresaId, id, storefrontId, context.corporateAccess === true ? null : context.lojaId || null]);
+  const locked = await trx.query(`SELECT f.id, f.order_id, f.status, f.ocorrencias, f.endereco_entrega AS fulfillment_address, f.shipping_method_id, f.shipping_quote_id, f.shipping_account_id,
+      o.status AS order_status, o.total AS order_total, o.frete AS order_shipping, o.endereco_entrega AS order_address,
+      o.shipping_method_id AS order_method_id, o.shipping_quote_id AS order_quote_id, o.storefront_id, o.loja_id,
+      s.codigo AS storefront_code, s.loja_id AS storefront_loja_id
+    FROM commerce_fulfillments f JOIN commerce_orders o ON o.empresa_id = f.empresa_id AND o.id = f.order_id
+    JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id
+    WHERE f.empresa_id = $1 AND f.id = $2 AND ($3::uuid IS NULL OR o.storefront_id = $3) AND ($4::uuid IS NULL OR o.loja_id = $4) FOR UPDATE OF f, o`, [empresaId, id, storefrontId, context.corporateAccess === true ? null : context.lojaId || null]);
   const current = locked.rows[0];
   if (!current) throw new CommerceError('fulfillment não encontrado no tenant', 'FULFILLMENT_NOT_FOUND');
+  if (current.storefront_code === 'dino-web') {
+    if (input.providerShipmentId || input.labelUrl || input.trackingUrl) throw new CommerceError('Dino não possui transportadora habilitada para este fulfillment', 'SHIPPING_NATIONAL_FULFILLMENT_NOT_READY');
+    if (current.loja_id !== current.storefront_loja_id
+      || current.shipping_method_id !== current.order_method_id || current.shipping_quote_id !== current.order_quote_id
+      || current.shipping_account_id != null || canonicalJson(current.fulfillment_address) !== canonicalJson(current.order_address)) {
+      throw new CommerceError('fulfillment Dino diverge do pedido original', 'FULFILLMENT_DINO_ORDER_SELECTION_REQUIRED');
+    }
+    if (!['paid', 'processing', 'ready', 'shipped', 'ready_for_pickup'].includes(current.order_status)) throw new CommerceError('pedido Dino não está pago', 'FULFILLMENT_ORDER_NOT_PAID');
+    const captured = await trx.query(`SELECT id FROM commerce_payments WHERE empresa_id = $1 AND order_id = $2 AND status = 'captured' AND captured_at IS NOT NULL AND amount = $3 LIMIT 1`, [empresaId, current.order_id, current.order_total]);
+    if (!captured.rows[0]) throw new CommerceError('pedido Dino sem pagamento capturado confirmado', 'FULFILLMENT_PAYMENT_NOT_CAPTURED');
+    const method = await trx.query(`SELECT tipo, codigo, configuracao FROM commerce_shipping_methods WHERE empresa_id = $1 AND storefront_id = $2 AND id = $3 AND ativo = true LIMIT 1 FOR SHARE`, [empresaId, current.storefront_id, current.shipping_method_id]);
+    if (!method.rows[0]) throw new CommerceError('método Dino não está ativo', 'SHIPPING_NATIONAL_FULFILLMENT_NOT_READY');
+    if (method.rows[0].tipo === 'pickup') {
+      if (current.shipping_quote_id) throw new CommerceError('retirada Dino com cotação divergente', 'FULFILLMENT_DINO_ORDER_SELECTION_REQUIRED');
+    } else {
+      const destinationCep = normalizeCep(current.order_address?.cep);
+      if (method.rows[0].tipo !== 'delivery' || !isDinoLocalManualMethod({ ...method.rows[0], storefront_code: 'dino-web' }, destinationCep)) throw new CommerceError('entrega Dino fora da operação local habilitada', 'SHIPPING_NATIONAL_FULFILLMENT_NOT_READY');
+      const quote = await trx.query(`SELECT provider, destino_cep, status, selected_option_id, selected_amount, shipping_account_id FROM commerce_shipping_quotes WHERE empresa_id = $1 AND id = $2 AND storefront_id = $3 AND order_id = $4 AND shipping_method_id = $5 LIMIT 1 FOR SHARE`, [empresaId, current.shipping_quote_id, current.storefront_id, current.order_id, current.shipping_method_id]);
+      const selected = quote.rows[0];
+      if (!selected || selected.provider !== 'manual' || selected.shipping_account_id != null || selected.destino_cep !== destinationCep || selected.status !== 'used'
+        || !selected.selected_option_id || selected.selected_amount == null || !Number.isFinite(Number(selected.selected_amount))
+        || Math.abs(Number(selected.selected_amount) - Number(current.order_shipping)) > 0.001) throw new CommerceError('cotação local Dino não corresponde ao pedido', 'SHIPPING_NATIONAL_FULFILLMENT_NOT_READY');
+    }
+  }
   const nextStatus = String(input.status || current.status);
   if (nextStatus !== current.status && !FULFILLMENT_TRANSITIONS[current.status]?.includes(nextStatus)) throw new CommerceError(`transição de entrega ${current.status} → ${nextStatus} não permitida`, 'INVALID_FULFILLMENT_TRANSITION');
   const occurrence = input.ocorrencia ? { at: new Date().toISOString(), status: nextStatus, description: String(input.ocorrencia).slice(0, 500) } : null;

@@ -116,7 +116,7 @@ const BRAZIL_UFS = new Set(['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO'
 const DINO_LOCAL_CEP_FROM = '78300000';
 const DINO_LOCAL_CEP_TO = '78309999';
 
-function isDinoLocalManualMethod(method, cep) {
+export function isDinoLocalManualMethod(method, cep) {
   const config = method?.configuracao || {};
   const rules = Array.isArray(config.rules) ? config.rules : [];
   return method?.storefront_code === 'dino-web' && method?.codigo === 'dino-motoboy'
@@ -124,7 +124,8 @@ function isDinoLocalManualMethod(method, cep) {
     && cep >= DINO_LOCAL_CEP_FROM && cep <= DINO_LOCAL_CEP_TO
     && rules.length > 0 && rules.every(rule => rule.cepFrom && rule.cepTo
       && rule.cepFrom >= DINO_LOCAL_CEP_FROM && rule.cepTo <= DINO_LOCAL_CEP_TO
-      && !rule.fallback && !rule.uf && !rule.ufs?.length && !rule.cities?.length && !rule.regions?.length);
+      && !rule.fallback && !rule.uf && !rule.ufs?.length && !rule.cities?.length && !rule.regions?.length)
+    && rules.some(rule => cep >= rule.cepFrom && cep <= rule.cepTo);
 }
 
 function stringList(value, max = 50) {
@@ -641,11 +642,13 @@ export async function prepareShippingLabel(trx, contextInput, fulfillmentIdInput
             COALESCE(c.email, o.customer_snapshot->>'email') AS customer_email,
             COALESCE(c.documento_mascarado, o.customer_snapshot->>'documentoMascarado') AS customer_document,
             o.endereco_entrega, o.storefront_id,
+            s.codigo AS storefront_code,
             q.provider, q.ambiente, q.selected_option_id, q.response_snapshot, q.expires_at AS quote_expires_at,
             a.id AS account_id, a.provider AS account_provider, a.ambiente AS account_environment, a.secret_ref, a.public_config, a.ativo AS account_active,
             m.tipo AS shipping_type
        FROM commerce_fulfillments f
        JOIN commerce_orders o ON o.empresa_id = f.empresa_id AND o.id = f.order_id
+       JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id
        LEFT JOIN commerce_customers c ON c.empresa_id = o.empresa_id AND c.id = o.customer_id
        LEFT JOIN commerce_shipping_quotes q ON q.empresa_id = f.empresa_id AND q.id = f.shipping_quote_id
        LEFT JOIN commerce_shipping_accounts a ON a.empresa_id = f.empresa_id AND a.id = COALESCE(f.shipping_account_id, q.shipping_account_id)
@@ -660,6 +663,9 @@ export async function prepareShippingLabel(trx, contextInput, fulfillmentIdInput
   if (!['delivery', 'carrier'].includes(fulfillment.shipping_type || '')) throw new CommerceError('etiqueta só pode ser gerada para entrega ou transportadora', 'SHIPPING_METHOD_INVALID');
   if (!['paid', 'processing', 'ready', 'shipped'].includes(fulfillment.order_status)) throw new CommerceError('a etiqueta só pode ser gerada após o pagamento confirmado', 'SHIPPING_ORDER_NOT_PAID');
   if (fulfillment.provider_shipment_id && fulfillment.shipping_operation_status === 'succeeded') return { replay: true, fulfillment };
+  // Enquanto não houver transportadora elegível, nem um fulfillment Dino legado
+  // pode contornar o gate público e criar uma etiqueta via rota administrativa.
+  if (fulfillment.storefront_code === 'dino-web') throw new CommerceError('etiqueta nacional Dino depende de operação logística habilitada', 'SHIPPING_NATIONAL_FULFILLMENT_NOT_READY');
   if (fulfillment.shipping_operation_status === 'processing' || fulfillment.shipping_operation_status === 'failed') {
     throw new CommerceError('resultado da emissão anterior é incerto; reconcilie a chave da operação antes de tentar novamente', 'SHIPPING_OPERATION_RECONCILIATION_REQUIRED', { operationKey: fulfillment.shipping_operation_key || `shipping-${fulfillment.id}-create` });
   }
@@ -884,9 +890,10 @@ export async function updateShippingTracking(trx, contextInput, fulfillmentIdInp
   const statusMap = { posted: 'shipped', delivered: 'delivered', canceled: 'cancelled', cancelled: 'cancelled', expired: 'cancelled' };
   const next = statusMap[status] || null;
   const allowedByCurrent = { pending: ['cancelled'], preparing: ['cancelled'], ready: ['shipped', 'cancelled'], shipped: ['delivered', 'cancelled'], out_for_delivery: ['delivered', 'cancelled'], failed: ['cancelled'], delivered: [], picked_up: [], cancelled: [] };
-  const result = await trx.query(`SELECT f.id, f.status, f.ocorrencias FROM commerce_fulfillments f JOIN commerce_orders o ON o.empresa_id = f.empresa_id AND o.id = f.order_id WHERE f.empresa_id = $1 AND f.id = $2 AND o.storefront_id = $3 FOR UPDATE OF f`, [context.empresaId, fulfillmentId, storefrontId]);
+  const result = await trx.query(`SELECT f.id, f.status, f.ocorrencias, s.codigo AS storefront_code FROM commerce_fulfillments f JOIN commerce_orders o ON o.empresa_id = f.empresa_id AND o.id = f.order_id JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id WHERE f.empresa_id = $1 AND f.id = $2 AND o.storefront_id = $3 FOR UPDATE OF f`, [context.empresaId, fulfillmentId, storefrontId]);
   if (!result.rows[0]) throw new CommerceError('fulfillment não encontrado no tenant', 'FULFILLMENT_NOT_FOUND');
   const current = result.rows[0];
+  if (current.storefront_code === 'dino-web') throw new CommerceError('tracking de transportadora Dino depende de operação logística habilitada', 'SHIPPING_NATIONAL_FULFILLMENT_NOT_READY');
   const occurrences = Array.isArray(current.ocorrencias) ? current.ocorrencias : [];
   occurrences.push({ at: new Date().toISOString(), status: status || 'tracking_update', description: 'Atualização recebida do provedor logístico' });
   const fields = [];

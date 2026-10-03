@@ -513,6 +513,9 @@ function jsonError(res, error) {
     SHIPPING_OPERATION_RECONCILIATION_INPUT_INVALID: 400,
     FULFILLMENT_NOT_FOUND: 404,
     FULFILLMENT_ORDER_NOT_PAID: 409,
+    FULFILLMENT_DINO_ORDER_SELECTION_REQUIRED: 409,
+    FULFILLMENT_ALREADY_EXISTS: 409,
+    FULFILLMENT_PAYMENT_NOT_CAPTURED: 409,
     INVALID_FULFILLMENT_TRANSITION: 409,
     PROMOTION_INVALID: 400,
     PROMOTION_CODE_INVALID: 400,
@@ -1696,8 +1699,9 @@ export function createCommerceAdminRouter() {
     try {
       const context = await requirePermission(req, 'fulfillment.write');
       const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
-      const owner = await db.query(`SELECT f.id, f.provider_shipment_id, a.provider, a.ambiente, a.secret_ref, a.public_config FROM commerce_fulfillments f LEFT JOIN commerce_shipping_accounts a ON a.empresa_id = f.empresa_id AND a.id = COALESCE(f.shipping_account_id, (SELECT q.shipping_account_id FROM commerce_shipping_quotes q WHERE q.empresa_id = f.empresa_id AND q.id = f.shipping_quote_id)) WHERE f.empresa_id = $1 AND f.id = $2 AND EXISTS (SELECT 1 FROM commerce_orders o WHERE o.empresa_id = f.empresa_id AND o.id = f.order_id AND ($3::uuid IS NULL OR o.storefront_id = $3) AND ($4::uuid IS NULL OR o.loja_id = $4)) LIMIT 1`, [context.empresaId, req.params.id, storefrontId, context.corporateAccess === true ? null : context.lojaId]);
+      const owner = await db.query(`SELECT f.id, f.provider_shipment_id, a.provider, a.ambiente, a.secret_ref, a.public_config, (SELECT s.codigo FROM commerce_orders o JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id WHERE o.empresa_id = f.empresa_id AND o.id = f.order_id LIMIT 1) AS storefront_code FROM commerce_fulfillments f LEFT JOIN commerce_shipping_accounts a ON a.empresa_id = f.empresa_id AND a.id = COALESCE(f.shipping_account_id, (SELECT q.shipping_account_id FROM commerce_shipping_quotes q WHERE q.empresa_id = f.empresa_id AND q.id = f.shipping_quote_id)) WHERE f.empresa_id = $1 AND f.id = $2 AND EXISTS (SELECT 1 FROM commerce_orders o WHERE o.empresa_id = f.empresa_id AND o.id = f.order_id AND ($3::uuid IS NULL OR o.storefront_id = $3) AND ($4::uuid IS NULL OR o.loja_id = $4)) LIMIT 1`, [context.empresaId, req.params.id, storefrontId, context.corporateAccess === true ? null : context.lojaId]);
       if (!owner.rows[0]) throw new CommerceError('fulfillment não encontrado', 'FULFILLMENT_NOT_FOUND');
+      if (owner.rows[0].storefront_code === 'dino-web') throw new CommerceError('tracking de transportadora Dino depende de operação logística habilitada', 'SHIPPING_NATIONAL_FULFILLMENT_NOT_READY');
       if (!owner.rows[0].provider_shipment_id || !owner.rows[0].provider) throw new CommerceError('fulfillment ainda não possui shipment no provedor', 'SHIPPING_SHIPMENT_NOT_FOUND');
       const adapter = shippingProviders.get(owner.rows[0].provider);
       if (!adapter) throw new CommerceError('adapter logístico indisponível', 'SHIPPING_PROVIDER_NOT_CONFIGURED');
