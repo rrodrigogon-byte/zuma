@@ -111,6 +111,13 @@ function scopedPath(path, storefrontId) {
   return `${path}${separator}storefrontId=${encodeURIComponent(storefrontId)}`
 }
 
+export function adminProductMediaUrl(media, storefrontId = '') {
+  const publicUrl = String(media?.public_url || media?.publicUrl || '').trim()
+  const mediaId = String(media?.id || '').trim()
+  if (!mediaId || !storefrontId || !/^\/api\/storefront\/media\/[0-9a-f-]{36}$/i.test(publicUrl)) return publicUrl
+  return scopedPath(`/api/admin/commerce/catalog/media/${mediaId}`, storefrontId)
+}
+
 async function loadLegacy() {
   const [productData, orderData, customerData] = await Promise.all([
     api.get('/api/admin/loja'),

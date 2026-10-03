@@ -57,6 +57,16 @@ function mediaUploadHandler() {
   assert.ok(handler, 'rota de upload de mídia não encontrada');
   return handler;
 }
+function mediaPreviewHandler() {
+  const router = createCommerceAdminRouter();
+  const layer = router.stack.find(item => item.route?.path === '/catalog/media/:id');
+  const handler = layer?.route?.stack?.at(-1)?.handle;
+  assert.ok(handler, 'rota de prévia administrativa de mídia não encontrada');
+  return handler;
+}
+test('prévia administrativa de mídia é protegida por rota própria', () => {
+  assert.equal(typeof mediaPreviewHandler(), 'function');
+});
 function catalogProductsHandler() {
   const router = createCommerceAdminRouter();
   const layer = router.stack.find(item => item.route?.path === '/catalog/products' && item.route.methods.get);

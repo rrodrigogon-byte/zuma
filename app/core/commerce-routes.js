@@ -47,6 +47,7 @@ import {
   updateCatalogVariant,
   deleteCatalogMedia,
   listCatalogMedia,
+  resolveCatalogResourceScope,
   createShippingMethod,
   updateShippingMethod,
   tenantContext,
@@ -1390,6 +1391,25 @@ export function createCommerceAdminRouter() {
       const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
       res.json(await listCatalogMedia(db, context, req.params.id, { storefrontId }));
     } catch (error) { jsonError(res, error); }
+  });
+  router.get('/catalog/media/:id', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'catalog.read');
+      const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
+      const scope = await resolveCatalogResourceScope(db, context, { mediaId: req.params.id, storefrontId, requireChannel: false });
+      if (!scope.media) throw new CommerceError('mídia não encontrada no tenant', 'MEDIA_NOT_FOUND');
+      await streamCommerceImage({
+        storageKey: scope.media.storage_key,
+        mimeType: scope.media.mime_type,
+        res,
+        empresaId: scope.empresaId,
+        productId: scope.media.product_id,
+        mediaId: scope.media.id,
+      });
+    } catch (error) {
+      if (!res.headersSent) jsonError(res, error);
+      else res.destroy(error);
+    }
   });
   router.post('/catalog/products/:id/media/upload', express.raw({ type: ['image/*', 'application/octet-stream'], limit: '8mb' }), async (req, res) => {
     let uploaded = null;

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { api } from '../../lib/api'
-import { loadCommerceAdmin } from './commerce-admin-adapter'
+import { adminProductMediaUrl, loadCommerceAdmin } from './commerce-admin-adapter'
 
 const originalGet = api.get
 const storefront = { id: '33333333-3333-4333-8333-333333333333', loja_id: '22222222-2222-4222-8222-222222222222', nome: 'Dino' }
@@ -22,6 +22,12 @@ describe('admin Commerce: falha parcial do catálogo', () => {
     expect(result.products).toEqual([])
     expect(result.orders).toHaveLength(1)
     expect(result.orders[0].codigo).toBe('KC-SYNTHETIC')
+  })
+
+  it('usa a prévia administrativa para mídias internas e preserva URLs externas', () => {
+    const mediaId = '44444444-4444-4444-8444-444444444444'
+    expect(adminProductMediaUrl({ id: mediaId, public_url: `/api/storefront/media/${mediaId}` }, storefront.id)).toBe(`/api/admin/commerce/catalog/media/${mediaId}?storefrontId=${storefront.id}`)
+    expect(adminProductMediaUrl({ id: mediaId, public_url: 'https://storage.googleapis.com/dino-media/item.webp' }, storefront.id)).toBe('https://storage.googleapis.com/dino-media/item.webp')
   })
 
   it('não oculta erro de autenticação como falha opcional de catálogo', async () => {
