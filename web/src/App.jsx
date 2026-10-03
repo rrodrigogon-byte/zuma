@@ -5,6 +5,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import { useAuth } from './lib/auth'
 import { applyBrand, applyThemeMode, isDinoBrandContext, resolveBrand, storedThemeMode } from './lib/brand'
 import { isTenantScope } from './lib/tenant-scope'
+import { destinoInicialDino, ehHostDino, ehHostLojaDino } from './lib/dominios-dino'
 
 // Redireciona atletas logados para o portal e não-atletas para a página pública de perfil
 function PerfilRoute() {
@@ -46,13 +47,17 @@ function PlatformOnly({ children }) {
 // catálogo em kytto.com.br antes de uma publicação explícita por canal.
 function EntradaPrincipal() {
   const host = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
-  if (host === 'loja.kytto.com.br' || host === 'dino.kytto.com.br') return <Ecommerce />
+  const destinoDino = destinoInicialDino(host)
+  if (destinoDino) return <Navigate to={destinoDino} replace />
+  if (host === 'loja.kytto.com.br' || ehHostLojaDino(host)) return <Ecommerce />
   return <Layout marketing><Home /></Layout>
 }
 
 function CheckoutEntry() {
   const host = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
-  return host === 'loja.kytto.com.br' || host === 'dino.kytto.com.br' ? <CommerceCheckout /> : <Layout noSidebar><Checkout /></Layout>
+  // Domínio próprio da loja: o checkout sem endereço usa o da loja Dino.
+  if (destinoInicialDino(host) === '/perfumaria/dino') return <Navigate to="/checkout/dino" replace />
+  return host === 'loja.kytto.com.br' || ehHostLojaDino(host) ? <CommerceCheckout /> : <Layout noSidebar><Checkout /></Layout>
 }
 
 const Login      = lazy(() => import('./pages/Login'))
@@ -166,7 +171,7 @@ function RouteBrandSync() {
   const tenantBrand = isDinoBrandContext(empresaAtiva) ? 'dino' : 'kytto'
 
   useEffect(() => {
-    const brand = hostName === 'dino.kytto.com.br' ? 'dino' : resolveBrand(location.pathname, location.search, tenantBrand)
+    const brand = ehHostDino(hostName) ? 'dino' : resolveBrand(location.pathname, location.search, tenantBrand)
     applyBrand(brand)
     applyThemeMode(brand === 'dino' ? storedThemeMode() : 'system')
   }, [hostName, location.pathname, location.search, tenantBrand])

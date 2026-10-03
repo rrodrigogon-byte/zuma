@@ -11,6 +11,7 @@ import AddToCartSuccess from '../../components/store/AddToCartSuccess'
 import CartDrawer from '../../components/store/CartDrawer'
 import './commerce.css'
 import './storefront-ux.css'
+import { ehHostLojaDino } from '../../lib/dominios-dino'
 
 function readCart(storeAlias) {
   try {
@@ -152,7 +153,7 @@ export default function Ecommerce() {
 function EcommerceStorefront({ routeAlias, hostName }) {
   const navigate = useNavigate()
   const storeAlias = normalizeStorefrontAlias(routeAlias)
-  const isDinoStorefront = storeAlias === 'dino' || (hostName === 'dino.kytto.com.br' && !storeAlias)
+  const isDinoStorefront = storeAlias === 'dino' || (ehHostLojaDino(hostName) && !storeAlias)
   const storefrontApi = storefrontApiBase(storeAlias)
   const storeRoute = storefrontRoute(storeAlias, 'store')
   const checkoutRoute = storefrontRoute(storeAlias, 'checkout')

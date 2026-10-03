@@ -530,6 +530,12 @@ test('NPS: pedido de avaliação só com link público, código e consentimento'
     assert.equal(notificacoes.linkAvaliacao(EMPRESA, feito), '', 'produção não redireciona o cliente para outro domínio');
     process.env.PUBLIC_BASE_URL = 'https://dino.kytto.com.br';
     assert.equal(notificacoes.linkAvaliacao(EMPRESA, feito), 'https://dino.kytto.com.br/avaliar/dino');
+    // Domínio próprio da barbearia (registro.br) tem prioridade quando configurado.
+    process.env.DINO_PUBLIC_URL = 'https://dinobarbearia.com.br';
+    assert.equal(notificacoes.linkAvaliacao(EMPRESA, feito), 'https://dinobarbearia.com.br/avaliar/dino');
+    process.env.DINO_PUBLIC_URL = 'https://dinobarbearia.com.br.evil.test';
+    assert.equal(notificacoes.linkAvaliacao(EMPRESA, feito), '', 'só domínios oficiais da Dino');
+    delete process.env.DINO_PUBLIC_URL;
     if (ambienteAnterior === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = ambienteAnterior;
     assert.equal((await notificacoes.queueReviewRequest(contexto, feito)).reason, 'service_consent_required');
     const semCodigo = barbearia.criarAgendamento(EMPRESA, { clienteNome: 'Balcão', clienteTelefone: '65977770201', profissionalId: bruno.id, servicoId: corte.id, dataHora: isoLocal(dataLocal(Date.now() + DIA_MS), '15:00'), dataAgenda: dataLocal(Date.now() + DIA_MS), horaLocal: '15:00', lojaId: LOJA });

@@ -17,14 +17,22 @@ const EVENTO_AVALIACAO = 'avaliacao';
 // Cobrança do clube (link de pagamento ou Pix copia e cola): mesma fila.
 const EVENTO_COBRANCA = 'cobranca';
 
+const DOMINIOS_OFICIAIS_DINO = new Set([
+  'https://dino.kytto.com.br',
+  'https://dinobarbearia.com.br',
+  'https://www.dinobarbearia.com.br',
+]);
+
 function urlPublicaBase(slug) {
   // Render hospeda vários tenants. O domínio Dino nunca pode ser usado por
   // uma outra barbearia que possua slug próprio. Para outros tenants, só
   // habilitar convites quando houver configuração validada de domínio por empresa.
   if (slug !== 'dino') return '';
-  const base = limpo(process.env.PUBLIC_BASE_URL || process.env.SERVER_URL || process.env.PUBLIC_APP_URL, 300).replace(/\/+$/, '');
-  // Em PRD a pesquisa da Dino só pode apontar para o próprio domínio oficial.
-  if (process.env.NODE_ENV === 'production' && base !== 'https://dino.kytto.com.br') return '';
+  // DINO_PUBLIC_URL escolhe o domínio próprio da barbearia (ex.: https://dinobarbearia.com.br)
+  // quando o DNS dele já estiver no ar; sem ela, segue o endereço público atual.
+  const base = limpo(process.env.DINO_PUBLIC_URL || process.env.PUBLIC_BASE_URL || process.env.SERVER_URL || process.env.PUBLIC_APP_URL, 300).replace(/\/+$/, '');
+  // Em PRD a pesquisa da Dino só pode apontar para um domínio oficial da Dino.
+  if (process.env.NODE_ENV === 'production' && !DOMINIOS_OFICIAIS_DINO.has(base)) return '';
   return /^https:\/\//.test(base) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(base) ? base : '';
 }
 
