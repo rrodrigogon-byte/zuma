@@ -865,7 +865,12 @@ export function createCommercePublicRouter() {
       res.status(201).json(result);
     } catch (error) {
       // Na vitrine pública, não diz se o e-mail ou o telefone já pertencem a outro cliente.
-      if (error?.code === 'CONTACT_CONFLICT') return res.status(409).json({ error: 'Não foi possível confirmar seus dados de contato. Confira e-mail e telefone ou fale com a loja.', code: 'CHECKOUT_CONTACT_REVIEW' });
+      if (error?.code === 'CONTACT_CONFLICT') {
+        const allowedReasons = new Set(['identifiers_resolve_to_different_customers', 'customer_email_mismatch', 'customer_phone_mismatch', 'concurrent_unique_conflict', 'cart_customer_mismatch', 'cart_order_customer_mismatch']);
+        const reason = allowedReasons.has(error?.details?.reason) ? error.details.reason : 'unknown';
+        console.warn('commerce_checkout_contact_review', JSON.stringify({ requestId: String(req.requestId || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64), reason }));
+        return res.status(409).json({ error: 'Não foi possível confirmar seus dados de contato. Confira e-mail e telefone ou fale com a loja.', code: 'CHECKOUT_CONTACT_REVIEW' });
+      }
       jsonError(res, error);
     }
   });
@@ -1192,6 +1197,10 @@ export function createCommerceAdminRouter() {
         storefrontParam = `$${values.length}`;
         predicates.push(`EXISTS (SELECT 1 FROM commerce_product_channels pc WHERE pc.empresa_id = p.empresa_id AND pc.product_id = p.id AND pc.storefront_id = ${storefrontParam})`);
       }
+      if (req.query.status) { values.push(String(req.query.status)); predicates.push(`p.status = $${values.length}`); }
+      // O filtro de local atua somente no estoque agregado da listagem. Não
+      // enviar seu parâmetro ao COUNT, que não referencia commerce_inventory_levels.
+      const countValues = [...values];
       if (req.query.locationId) {
         const locationId = assertUuid(req.query.locationId, 'locationId');
         const location = await db.query(
@@ -1205,7 +1214,6 @@ export function createCommerceAdminRouter() {
         values.push(locationId);
         locationParam = `$${values.length}`;
       }
-      if (req.query.status) { values.push(String(req.query.status)); predicates.push(`p.status = $${values.length}`); }
       const channelScope = storefrontParam
         ? `AND channel_storefront.id = ${storefrontParam}`
         : lojaParam ? `AND (channel_storefront.loja_id = ${lojaParam} OR channel_storefront.loja_id IS NULL)` : '';
@@ -1216,7 +1224,7 @@ export function createCommerceAdminRouter() {
         ? `AND il.location_id = ${locationParam}`
         : lojaParam ? `AND EXISTS (SELECT 1 FROM commerce_inventory_locations scoped_location WHERE scoped_location.empresa_id = il.empresa_id AND scoped_location.id = il.location_id AND (scoped_location.loja_id = ${lojaParam} OR scoped_location.loja_id IS NULL))` : '';
       const { limit, offset } = parsePagination(req, 100, 500);
-      const count = await db.query(`SELECT COUNT(*)::int AS total FROM commerce_products p LEFT JOIN commerce_categories c ON c.empresa_id = p.empresa_id AND c.id = p.category_id WHERE ${predicates.join(' AND ')}`, values);
+      const count = await db.query(`SELECT COUNT(*)::int AS total FROM commerce_products p LEFT JOIN commerce_categories c ON c.empresa_id = p.empresa_id AND c.id = p.category_id WHERE ${predicates.join(' AND ')}`, countValues);
       const result = await db.query(
         `SELECT p.id, p.slug, p.nome, p.tipo, p.status, p.descricao, p.descricao_curta, p.dados_fiscais, p.seo, p.category_id,
                 c.nome AS category_name, p.criado_em, p.atualizado_em,

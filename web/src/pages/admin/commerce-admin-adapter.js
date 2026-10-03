@@ -164,7 +164,15 @@ export async function loadCommerceAdmin({ storefrontId: preferredStorefrontId = 
     const scope = new URLSearchParams()
     if (selectedStorefront?.id) scope.set('storefrontId', selectedStorefront.id)
     if (selectedLocation?.id) scope.set('locationId', selectedLocation.id)
-    const productItems = await loadAllStorefrontProducts(({ limit, offset }) => api.get(`/api/admin/commerce/catalog/products?${scope.toString()}&limit=${limit}&offset=${offset}`))
+    let productItems = []
+    let catalogUnavailable = false
+    try {
+      productItems = await loadAllStorefrontProducts(({ limit, offset }) => api.get(`/api/admin/commerce/catalog/products?${scope.toString()}&limit=${limit}&offset=${offset}`))
+    } catch (error) {
+      if (![500, 502, 503].includes(Number(error.status))) throw error
+      catalogUnavailable = true
+      warnings.push({ path: '/api/admin/commerce/catalog/products', label: 'catálogo', status: error.status, code: error.code || '' })
+    }
     const [scopedOrders, scopedFulfillments, scopedPaymentAccounts, scopedPayments, scopedHealth] = await Promise.all([
       api.get(scopedPath('/api/admin/commerce/orders', selectedStorefront?.id)),
       safeCoreGet(scopedPath('/api/admin/commerce/fulfillments', selectedStorefront?.id), { items: [] }, warnings, 'fulfillments'),
@@ -184,6 +192,7 @@ export async function loadCommerceAdmin({ storefrontId: preferredStorefrontId = 
       roles: roleData?.items || [],
       memberships: membershipData?.items || [],
       products: productItems.map(normalizeCoreProduct),
+      catalogUnavailable,
       orders: (scopedOrders?.items || []).map(normalizeCoreOrder),
       customers: customerData?.items || [],
       shippingMethods: shippingData?.items || [],
