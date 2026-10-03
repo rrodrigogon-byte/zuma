@@ -66,6 +66,14 @@ describe('admin Commerce: feedback do salvamento de produto', () => {
     expect(source).toContain('await loadData(true, { storefrontId, locationId })')
     expect(source).toContain('Publicado aparece no catálogo e pode ser comprado na loja ativa.')
   })
+
+  it('não deixa a validação nativa bloquear o salvar sem explicar o campo obrigatório', () => {
+    const source = readFileSync(resolve(process.cwd(), 'web/src/pages/admin/EcommerceAdmin.jsx'), 'utf8')
+    expect(source).toContain('function handleProductInvalid(event)')
+    expect(source).toContain('onInvalid={handleProductInvalid}')
+    expect(source).toContain('Preencha o campo obrigatório')
+    expect(source).toContain('role="alert"')
+  })
 })
 
 describe('admin Commerce: seleção obrigatória de vitrine', () => {
