@@ -721,3 +721,66 @@ export function UnidadesPanel({ lojas = [] }) {
     </table></div>}
   </div>
 }
+
+
+// ── Resumo diário no WhatsApp do dono ─────────────────────────────────────
+// Prévia exata do fechamento que vai para o WhatsApp (mesma rota do envio
+// automático) e envio manual com confirmação. Números vêm da agenda e do atendente.
+
+function BolhaWhatsApp({ texto }) {
+  // Formatação nativa do WhatsApp: *negrito*. Renderiza só isso, sem HTML do servidor.
+  const linhas = String(texto || '').split('\n')
+  return <div style={{ background: 'color-mix(in srgb, #25d366 14%, var(--card))', border: '1px solid color-mix(in srgb, #25d366 35%, var(--line))', borderRadius: '14px 14px 14px 4px', padding: '12px 14px', fontSize: 14, lineHeight: 1.5, maxWidth: 460, whiteSpace: 'pre-wrap' }}>
+    {linhas.map((linha, i) => <div key={i} style={{ minHeight: linha ? undefined : 8 }}>{linha.split(/(\*[^*]+\*)/g).map((parte, j) => parte.startsWith('*') && parte.endsWith('*') && parte.length > 2 ? <strong key={j}>{parte.slice(1, -1)}</strong> : <span key={j}>{parte}</span>)}</div>)}
+  </div>
+}
+
+export function ResumoDiarioPanel() {
+  const { toast } = useToast()
+  const [dia, setDia] = useState(hojeIso())
+  const [enviando, setEnviando] = useState(false)
+  const { dados, erro, carregando, carregar } = useCarregar(`/api/admin/barbearia/resumo-diario?dia=${dia}`)
+  const cfg = dados?.configuracao
+  const agenda = dados?.agenda
+  const atendente = dados?.atendente
+  const ehHoje = dia === hojeIso()
+
+  async function enviarAgora() {
+    if (!window.confirm(`Enviar agora o resumo de hoje para ${cfg?.destinatarios?.join(', ') || 'os destinatários configurados'}?`)) return
+    setEnviando(true)
+    try {
+      const r = await api.post('/api/admin/barbearia/resumo-diario/enviar', { confirmar: true })
+      toast(`Resumo enviado para ${r.enviados} destinatário(s).${r.falhas?.length ? ` Falhou: ${r.falhas.join(', ')}.` : ''}`, r.falhas?.length ? 'warning' : 'success')
+    } catch (e) {
+      toast(e.message || 'Não foi possível enviar.', 'error')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  return <div style={card}>
+    <h2 style={h2}>Resumo diário no WhatsApp</h2>
+    <p style={sub}>O fechamento do dia que chega no WhatsApp do dono: atendimentos, valor atendido, o que a IA fechou sozinha, conversas esperando a equipe e a agenda de amanhã.</p>
+    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12, alignItems: 'end' }}>
+      <label style={label}>Dia<input type="date" style={input} value={dia} max={hojeIso()} onChange={(e) => setDia(e.target.value || hojeIso())} /></label>
+      <button type="button" style={btn} onClick={carregar}>Atualizar</button>
+      <button type="button" style={btnPrimary} disabled={enviando || !ehHoje || !cfg?.destinatarios?.length} onClick={enviarAgora} title={!cfg?.destinatarios?.length ? 'Configure DINO_RESUMO_TELEFONES no servidor' : !ehHoje ? 'O envio manual manda o resumo de hoje' : ''}>{enviando ? 'Enviando…' : 'Enviar agora'}</button>
+    </div>
+    {cfg && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10, alignItems: 'center', fontSize: 13, color: 'var(--muted)' }}>
+      <Pill tom={cfg.ativo ? 'bom' : 'neutro'}>{cfg.ativo ? `Automático às ${cfg.hora}` : 'Envio automático desligado'}</Pill>
+      <span>{cfg.destinatarios?.length ? `Para ${cfg.destinatarios.join(', ')}` : 'Nenhum destinatário configurado (DINO_RESUMO_TELEFONES)'}</span>
+    </div>}
+    {(carregando || erro) ? <Estado carregando={carregando} erro={erro} onRetry={carregar} /> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginTop: 16, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gap: 12 }}>
+        <div style={grid(140)}>
+          <div style={kpi}><div style={kpiLabel}>Concluídos</div><div style={kpiValue}>{agenda?.concluidos ?? 0}<span style={{ fontSize: 14, color: 'var(--muted)' }}> / {agenda?.atendimentos ?? 0}</span></div></div>
+          <div style={kpi}><div style={kpiLabel}>Valor atendido</div><div style={{ ...kpiValue, color: '#14b87a' }}>{fmtR(agenda?.faturamento || 0)}</div></div>
+          <div style={kpi}><div style={kpiLabel}>Marcados pela IA</div><div style={kpiValue}>{agenda?.ia?.agendamentos ?? 0}</div></div>
+          <div style={kpi}><div style={kpiLabel}>Com a equipe agora</div><div style={{ ...kpiValue, color: atendente?.filaEquipe ? '#f59e0b' : undefined }}>{atendente ? atendente.filaEquipe : '—'}</div></div>
+        </div>
+        <p style={sub}>{atendente ? `${atendente.conversas} conversa(s) no WhatsApp neste dia.` : 'Dados do atendente indisponíveis agora; o resumo sai só com a agenda.'} Amanhã: {agenda?.amanha?.agendamentos ? `${agenda.amanha.agendamentos} horário(s), o primeiro às ${agenda.amanha.primeiro}` : 'agenda livre'}.</p>
+      </div>
+      <div><div style={{ ...kpiLabel, marginBottom: 8 }}>Prévia da mensagem</div><BolhaWhatsApp texto={dados?.texto} /></div>
+    </div>}
+  </div>
+}

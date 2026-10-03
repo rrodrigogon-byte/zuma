@@ -1,7 +1,8 @@
 import { config } from '../config.js';
 
 const DEFAULT_TIMEOUT_MS = 20000;
-const DEFAULT_MAX_STEPS = 4;
+// 6 passos: listar serviço → próximos horários → preparar cabe numa resposta só.
+const DEFAULT_MAX_STEPS = Math.min(8, Math.max(3, Number.parseInt(process.env.GEMINI_MAX_TOOL_STEPS || '6', 10) || 6));
 const DEFAULT_MAX_HISTORY_CHARS = Math.min(32000, Math.max(4000, Number.parseInt(process.env.WHATSAPP_AI_HISTORY_MAX_CHARS || '16000', 10)));
 const DEFAULT_REQUEST_ATTEMPTS = Math.min(3, Math.max(1, Number.parseInt(process.env.GEMINI_REQUEST_ATTEMPTS || '2', 10)));
 

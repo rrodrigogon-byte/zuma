@@ -106,9 +106,22 @@ function dataLocalValida(valor) {
 
 export async function listServices(scope) {
   if (await agendaSource(scope) === 'postgres') return pgServices(scope);
-  return barbearia.listarServicos(chaveEmpresa(scope))
+  const empresa = chaveEmpresa(scope);
+  const nomes = new Map(barbearia.listarProfissionais(empresa).map((item) => [item.id, item.nome]));
+  return barbearia.listarServicos(empresa)
     .filter((item) => item.ativo !== false && item.permiteAgendamentoOnline !== false)
-    .map((item) => ({ id: item.id, nome: item.nome, descricao: item.descricao || '', duracaoMinutos: Number(item.duracaoMinutos || 30), preco: Number(item.preco || 0) }));
+    .map((item) => ({
+      id: item.id,
+      nome: item.nome,
+      descricao: item.descricao || '',
+      categoria: item.categoria || 'Geral',
+      duracaoMinutos: Number(item.duracaoMinutos || 30),
+      preco: Number(item.preco || 0),
+      // Quem faz: a IA só oferece estes profissionais para o serviço.
+      profissionais: Array.isArray(item.profissionaisIds) && item.profissionaisIds.length
+        ? item.profissionaisIds.map((id) => nomes.get(id)).filter(Boolean)
+        : 'qualquer profissional',
+    }));
 }
 
 export async function listProfessionals(scope) {
@@ -195,9 +208,16 @@ export async function createAppointment(trx, scope, input = {}) {
       : randomBytes(4).toString('hex').toUpperCase();
     const existente = barbearia.listarAgendamentos(empresa, {}).find((item) => item.codigoConfirmacao === codigo && phoneMatchKey(item.clienteTelefone) === phoneMatchKey(input.customerPhone));
     if (existente) return respostaAgendamento(empresa, existente);
+    // Limite por VISITA (dia + pessoa), não por serviço: no WhatsApp o mesmo número marca
+    // para a família ("eu e o Pedro") e vários serviços na mesma ida (barba + manicure).
     const futurosDoTelefone = agendamentosDoTelefone(empresa, input.customerPhone).filter((item) => ATIVOS.has(item.status));
-    const limite = Math.max(1, Number.parseInt(process.env.AGENDAMENTO_PUBLICO_MAX_POR_TELEFONE || '2', 10));
-    if (futurosDoTelefone.length >= limite) throw new SchedulingError('este telefone já tem horários marcados; remarque ou cancele um deles antes', 'PHONE_LIMIT');
+    const visitas = new Set(futurosDoTelefone.map((item) => `${item.dataAgenda}|${limpo(item.clienteNome, 160).toLowerCase()}`));
+    const estaVisita = `${dataLocalValida(input.date)}|${limpo(input.customerName, 160).toLowerCase()}`;
+    const limite = Math.max(1, Number.parseInt(process.env.WHATSAPP_AGENDAMENTO_MAX_VISITAS_POR_TELEFONE || process.env.AGENDAMENTO_PUBLICO_MAX_POR_TELEFONE || '4', 10));
+    const servicosNaVisita = futurosDoTelefone.filter((item) => `${item.dataAgenda}|${limpo(item.clienteNome, 160).toLowerCase()}` === estaVisita).length;
+    if ((!visitas.has(estaVisita) && visitas.size >= limite) || servicosNaVisita >= 4) throw new SchedulingError('este telefone já tem horários marcados; remarque ou cancele um deles antes', 'PHONE_LIMIT');
+    const mesmoServico = futurosDoTelefone.some((item) => `${item.dataAgenda}|${limpo(item.clienteNome, 160).toLowerCase()}` === estaVisita && item.servicoId === limpo(input.serviceId, 100));
+    if (mesmoServico) throw new SchedulingError('este cliente já tem este serviço marcado neste dia', 'ALREADY_BOOKED');
     const vinculo = vincularClienteAoAtendimento(empresa, { clienteNome: input.customerName, clienteTelefone: input.customerPhone }, { origem: 'whatsapp_ia' });
     // O cliente iniciou a conversa no WhatsApp para marcar: os avisos do próprio
     // agendamento fazem parte do atendimento pedido (nunca reativa quem revogou).
@@ -235,6 +255,12 @@ function agendamentosDoTelefone(empresa, phone, { includePast = false } = {}) {
     .filter((item) => includePast || new Date(item.dataHora).valueOf() >= agora);
 }
 
+function horarioLocalLegivel(dataHora) {
+  const data = new Date(dataHora || '');
+  if (Number.isNaN(data.valueOf())) return '';
+  return new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Cuiaba', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(data).replace(',', ' às');
+}
+
 export async function listCustomerAppointments(scope, { includePast = false, limit = 8 } = {}) {
   if (await agendaSource(scope) === 'postgres') return pgCustomerAppointments(scope, { includePast, limit });
   const empresa = chaveEmpresa(scope);
@@ -251,6 +277,11 @@ export async function listCustomerAppointments(scope, { includePast = false, lim
       duracaoMinutos: Number(item.duracaoMinutos || 30),
       valor: Number(item.valor || 0),
       observacoes: item.observacoes || '',
+      cliente: item.clienteNome || '',
+      // Remarcação feita pela equipe (balcão/admin): a IA explica em vez de contradizer o cliente.
+      remarcacaoAnterior: Array.isArray(item.historicoRemarcacoes) && item.historicoRemarcacoes[0]
+        ? { de: horarioLocalLegivel(item.historicoRemarcacoes[0].antes?.dataHora), origem: item.historicoRemarcacoes[0].origem || 'admin', feitaPelaEquipe: !['whatsapp_ia', 'cliente_site'].includes(item.historicoRemarcacoes[0].origem) }
+        : null,
       servico: { id: item.servicoId, nome: servicos.get(item.servicoId)?.nome || 'Serviço' },
       profissional: { id: item.profissionalId, nome: profissionais.get(item.profissionalId)?.nome || 'Profissional da equipe' },
     }));
@@ -261,6 +292,36 @@ function agendamentoDoContato(empresa, phone, appointmentId) {
   if (!agendamento) throw new SchedulingError('agendamento não encontrado para este contato', 'APPOINTMENT_NOT_FOUND');
   if (!ATIVOS.has(agendamento.status)) throw new SchedulingError('este agendamento já não está ativo', 'APPOINTMENT_NOT_ACTIVE');
   return agendamento;
+}
+
+/**
+ * Cliente confirma presença (ex.: respondendo ao lembrete da véspera).
+ * Só no horário do próprio telefone e ainda ativo; idempotente.
+ */
+export async function confirmAttendance(scope, appointmentId) {
+  if (await agendaSource(scope) === 'postgres') throw new SchedulingError('confirmação de presença disponível apenas na agenda da barbearia', 'NOT_BARBERSHOP_AGENDA');
+  const empresa = chaveEmpresa(scope);
+  const agendamento = agendamentoDoContato(empresa, scope.phone, appointmentId);
+  if (new Date(agendamento.dataHora).valueOf() < Date.now() - 30 * 60 * 1000) throw new SchedulingError('este horário já passou', 'APPOINTMENT_PAST');
+  const atualizado = agendamento.status === 'confirmado'
+    ? agendamento
+    : barbearia.alterarStatusAgendamento(empresa, agendamento.id, 'confirmado', { observacoes: limpo(`${agendamento.observacoes || ''} · Presença confirmada pelo cliente no WhatsApp`.replace(/^ · /, ''), 600) });
+  if (!atualizado) throw new SchedulingError('agendamento não encontrado para este contato', 'APPOINTMENT_NOT_FOUND');
+  return { ...respostaAgendamento(empresa, atualizado), jaEstavaConfirmado: agendamento.status === 'confirmado' };
+}
+
+/** Cliente avisa atraso: anota no horário para a equipe ver na agenda (não move o horário). */
+export async function noteDelay(scope, appointmentId, minutes) {
+  if (await agendaSource(scope) === 'postgres') throw new SchedulingError('aviso de atraso disponível apenas na agenda da barbearia', 'NOT_BARBERSHOP_AGENDA');
+  const empresa = chaveEmpresa(scope);
+  const agendamento = agendamentoDoContato(empresa, scope.phone, appointmentId);
+  const min = Math.round(Number(minutes));
+  if (!Number.isFinite(min) || min < 1 || min > 120) throw new SchedulingError('informe o atraso em minutos (1 a 120)', 'INVALID_DELAY');
+  const hora = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Cuiaba', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date());
+  const nota = `Cliente avisou atraso de ~${min} min às ${hora} (WhatsApp)`;
+  const atualizado = barbearia.alterarStatusAgendamento(empresa, agendamento.id, agendamento.status, { observacoes: limpo(`${agendamento.observacoes || ''} · ${nota}`.replace(/^ · /, ''), 600) });
+  if (!atualizado) throw new SchedulingError('agendamento não encontrado para este contato', 'APPOINTMENT_NOT_FOUND');
+  return { ...respostaAgendamento(empresa, atualizado), atrasoMinutos: min };
 }
 
 export async function rescheduleAppointment(trx, scope, input = {}) {

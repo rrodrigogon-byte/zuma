@@ -175,6 +175,10 @@ function servicoNormalizado(dados = {}, anterior = {}) {
     preco,
     ativo: dados.ativo ?? anterior.ativo ?? true,
     permiteAgendamentoOnline: dados.permiteAgendamentoOnline ?? dados.permite_agendamento_online ?? anterior.permiteAgendamentoOnline ?? true,
+    // Quem faz este serviço (ex.: manicure só com a Nathy). Vazio = qualquer profissional ativo.
+    profissionaisIds: Array.isArray(dados.profissionaisIds ?? dados.profissionais_ids ?? anterior.profissionaisIds)
+      ? [...new Set((dados.profissionaisIds ?? dados.profissionais_ids ?? anterior.profissionaisIds).map((id) => texto(id, 100)).filter(Boolean))].slice(0, 50)
+      : [],
     consumoInterno: (Array.isArray(dados.consumoInterno ?? dados.consumo_interno) ? (dados.consumoInterno ?? dados.consumo_interno) : (anterior.consumoInterno || [])).map((item) => ({ produtoId: texto(item?.produtoId ?? item?.produto_id, 120), quantidade: Math.max(1, Math.round(numero(item?.quantidade ?? item?.qtd, 1))) })).filter((item) => item.produtoId),
   };
 }
@@ -1347,10 +1351,13 @@ function contextoDisponibilidadePublica(empresaId, dados = {}) {
   limiteFinal.setUTCDate(limiteFinal.getUTCDate() + Number(calendario.janelaReservaDias || 60));
   if (dia < limiteHoje || dia > limiteFinal) return { estado, dataAgenda, servico, lojaId, calendario, profissionais: [] };
   const profissionalId = texto(dados.profissionalId ?? dados.profissional_id, 100);
+  const habilitados = Array.isArray(servico.profissionaisIds) && servico.profissionaisIds.length ? new Set(servico.profissionaisIds) : null;
   const profissionais = Object.values(estado.profissionais)
     .filter((item) => item.ativo !== false)
+    .filter((item) => !habilitados || habilitados.has(item.id))
     .filter((item) => !profissionalId || profissionalId === 'qualquer' || item.id === profissionalId)
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  if (profissionalId && profissionalId !== 'qualquer' && habilitados && !habilitados.has(profissionalId)) throw new Error('Este profissional não realiza este serviço.');
   if (profissionalId && profissionalId !== 'qualquer' && profissionais.length === 0) throw new Error('Profissional indisponível para agendamento online.');
   return { estado, dataAgenda, servico, lojaId, calendario, profissionais };
 }

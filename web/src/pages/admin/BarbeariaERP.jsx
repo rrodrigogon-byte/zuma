@@ -8,7 +8,7 @@ import BarbeariaAgendaBoard, { agendaBoardColumns } from './BarbeariaAgendaBoard
 import BarbeariaOperacaoPanel from './BarbeariaOperacaoPanel'
 import DinoBusinessDashboard from './DinoBusinessDashboard'
 import DinoCampaignsPanel from './DinoCampaignsPanel'
-import { CanaisPanel, ClubeSaudePanel, CobrancasPanel, IndicacoesPanel, ListaEsperaPanel, NpsPanel, OcupacaoMetasPanel, ReceitaIaPanel, RetornosPanel, UnidadesPanel, ValesPanel } from './dino/CaptacaoPanels'
+import { CanaisPanel, ClubeSaudePanel, CobrancasPanel, IndicacoesPanel, ListaEsperaPanel, NpsPanel, OcupacaoMetasPanel, ReceitaIaPanel, ResumoDiarioPanel, RetornosPanel, UnidadesPanel, ValesPanel } from './dino/CaptacaoPanels'
 
 const TABS = [
   ['Visão geral', 'Resumo da operação'],
@@ -36,6 +36,7 @@ const TABS = [
   ['Origem dos clientes', 'Agendamentos e clientes novos por canal'],
   ['Cobranças e cashback', 'Sinal, mensalidade do clube e cashback'],
   ['Receita da IA', 'Receita atribuída à IA e à captação'],
+  ['Resumo diário', 'Fechamento do dia no WhatsApp do dono'],
   ['Vale-presente', 'Venda, consulta e saldo dos vales'],
   ['Unidades', 'Comparativo entre unidades'],
 ]
@@ -44,7 +45,7 @@ const AREAS = [
   { id: 'operacao', label: 'Operação', short: 'Hoje, agenda, atendimento e caixa', tabs: ['Visão geral', 'Agenda', 'Atendimento', 'Caixa e fechamento', 'Fila e bloqueios'] },
   { id: 'relacionamento', label: 'Relacionamento', short: 'Clientes, retorno e indicação', tabs: ['Clientes', 'Retorno previsto', 'Lista de espera', 'Indicações', 'Avaliações (NPS)', 'Origem dos clientes', 'Fidelidade'] },
   { id: 'catalogo', label: 'Catálogo e equipe', short: 'Serviços, planos e revenda', tabs: ['Profissionais', 'Serviços', 'Planos e assinaturas', 'Saúde do clube', 'Estoque de revenda', 'Vendas de revenda'] },
-  { id: 'gestao', label: 'Gestão', short: 'Comissões, metas e regras', tabs: ['Comissões', 'Ocupação e metas', 'Cobranças e cashback', 'Vale-presente', 'Receita da IA', 'Unidades', 'Relatórios', 'Configuração'] },
+  { id: 'gestao', label: 'Gestão', short: 'Comissões, metas e regras', tabs: ['Comissões', 'Ocupação e metas', 'Cobranças e cashback', 'Vale-presente', 'Receita da IA', 'Resumo diário', 'Unidades', 'Relatórios', 'Configuração'] },
   { id: 'integracoes', label: 'Integrações', short: 'WhatsApp e IA controlados', tabs: ['Integrações'] },
 ]
 
@@ -685,6 +686,13 @@ export default function BarbeariaERP() {
     await executar(() => api.post('/api/admin/barbearia/servicos', { ...formServico, preco: Number(formServico.preco), permiteAgendamentoOnline: Boolean(formServico.permiteAgendamentoOnline), consumoInterno }), 'Serviço cadastrado.')
   }
 
+  async function alternarProfissionalDoServico(servico, profissionalId) {
+    const atuais = new Set(servico.profissionaisIds || [])
+    if (atuais.has(profissionalId)) atuais.delete(profissionalId)
+    else atuais.add(profissionalId)
+    await executar(() => api.patch(`/api/admin/barbearia/servicos/${servico.id}`, { ...servico, profissionaisIds: [...atuais] }), atuais.size ? 'Profissionais do serviço atualizados.' : 'Serviço liberado para todos os profissionais.')
+  }
+
   async function alternarServico(servico) {
     const ativo = servico.ativo === false
     await executar(() => api.patch(`/api/admin/barbearia/servicos/${servico.id}`, { ...servico, ativo }), ativo ? 'Serviço reativado.' : 'Serviço desativado.')
@@ -905,8 +913,8 @@ export default function BarbeariaERP() {
     await executar(() => api.post(`/api/admin/commerce/whatsapp-ai/sessions/${sessionId}/claim`, {}), 'Conversa atribuída ao operador.')
   }
 
-  async function liberarSessaoWhatsappAi(sessionId) {
-    if (!window.confirm('Retomar o atendimento automático desta conversa após concluir o handoff humano?')) return
+  async function liberarSessaoWhatsappAi(sessionId, pausaDaEquipe) {
+    if (!window.confirm(pausaDaEquipe ? 'A equipe terminou esta conversa no celular? A IA volta a responder este cliente agora.' : 'Retomar o atendimento automático desta conversa após concluir o handoff humano?')) return
     await executar(() => api.post(`/api/admin/commerce/whatsapp-ai/sessions/${sessionId}/release`, {}), 'Atendimento automático retomado.')
   }
 
@@ -1139,7 +1147,7 @@ export default function BarbeariaERP() {
     const categorias = [...new Set(listaBuscaServicos.map((servico) => servico.categoria || 'Geral'))]
     return <div style={{ display: 'grid', gap: 16 }}>
       <Card style={{ padding: 18, background: 'linear-gradient(135deg, color-mix(in srgb, #8b5cf6 10%, var(--card)), var(--card))' }}><div style={styles.sectionTitle}><div><div style={styles.kicker}>Catálogo comercial</div><h2 style={{ ...styles.h2, fontSize: 22, marginTop: 5 }}>Serviços da barbearia</h2><p style={styles.sub}>Veja preço, duração, categoria, descrição e disponibilidade de cada serviço. O mesmo catálogo alimenta a agenda e os planos.</p></div><button type="button" style={styles.primary} onClick={() => { setFormServico({ nome: '', descricao: '', categoria: 'Geral', duracaoMinutos: 30, preco: '', permiteAgendamentoOnline: true, consumoInterno: [] }); setModal('servico') }}>+ Novo serviço</button></div><div style={styles.serviceSummary}>{[['Serviços ativos', listaBuscaServicos.filter((servico) => servico.ativo !== false).length, '#14b87a'], ['Categorias', categorias.length, '#8b5cf6'], ['Agendamento online', listaBuscaServicos.filter((servico) => servico.permiteAgendamentoOnline !== false && servico.ativo !== false).length, '#4a9eff']].map(([label, value, color]) => <div key={label} style={styles.serviceSummaryItem}><strong style={{ color }}>{value}</strong><span>{label}</span></div>)}</div><input value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Buscar por nome, categoria ou descrição" style={{ ...inputStyle, marginTop: 16, maxWidth: 520 }} /></Card>
-      {listaBuscaServicos.length === 0 ? <Card style={styles.empty}>Nenhum serviço cadastrado na empresa ativa. Cadastre o primeiro para liberar a agenda.</Card> : <div style={styles.serviceGrid}>{listaBuscaServicos.map((servico) => <Card key={servico.id} style={{ padding: 17, opacity: servico.ativo === false ? .58 : 1 }}><div style={styles.serviceCardTop}><div><span style={styles.serviceCategory}>{servico.categoria || 'Geral'}</span><h3 style={{ margin: '8px 0 4px', fontSize: 18 }}>{servico.nome}</h3></div><strong style={{ color: 'var(--accent)', fontSize: 18 }}>{moeda(servico.preco)}</strong></div><p style={{ margin: '10px 0 14px', color: 'var(--muted)', minHeight: 38, fontSize: 13 }}>{servico.descricao || 'Descrição ainda não preenchida.'}</p><div style={styles.serviceFacts}><span><strong>{servico.duracaoMinutos}</strong> min</span><span>{servico.permiteAgendamentoOnline !== false ? 'Online ativo' : 'Online desativado'}</span><span>{servico.consumoInterno?.length ? `${servico.consumoInterno.length} insumo(s) por atendimento` : 'Sem consumo interno'}</span><Badge status={servico.ativo === false ? 'cancelado' : 'concluido'} /></div><button type="button" style={{ ...styles.secondary, width: '100%', marginTop: 15 }} onClick={() => alternarServico(servico)}>{servico.ativo === false ? 'Reativar serviço' : 'Desativar serviço'}</button></Card>)}</div>}
+      {listaBuscaServicos.length === 0 ? <Card style={styles.empty}>Nenhum serviço cadastrado na empresa ativa. Cadastre o primeiro para liberar a agenda.</Card> : <div style={styles.serviceGrid}>{listaBuscaServicos.map((servico) => <Card key={servico.id} style={{ padding: 17, opacity: servico.ativo === false ? .58 : 1 }}><div style={styles.serviceCardTop}><div><span style={styles.serviceCategory}>{servico.categoria || 'Geral'}</span><h3 style={{ margin: '8px 0 4px', fontSize: 18 }}>{servico.nome}</h3></div><strong style={{ color: 'var(--accent)', fontSize: 18 }}>{moeda(servico.preco)}</strong></div><p style={{ margin: '10px 0 14px', color: 'var(--muted)', minHeight: 38, fontSize: 13 }}>{servico.descricao || 'Descrição ainda não preenchida.'}</p><div style={styles.serviceFacts}><span><strong>{servico.duracaoMinutos}</strong> min</span><span>{servico.permiteAgendamentoOnline !== false ? 'Online ativo' : 'Online desativado'}</span><span>{servico.consumoInterno?.length ? `${servico.consumoInterno.length} insumo(s) por atendimento` : 'Sem consumo interno'}</span><Badge status={servico.ativo === false ? 'cancelado' : 'concluido'} /></div><div style={{ marginTop: 12 }}><div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>Quem faz este serviço {servico.profissionaisIds?.length ? '' : '· todos os profissionais'}</div><div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{profissionais.filter((profissional) => profissional.ativo !== false).map((profissional) => { const marcado = (servico.profissionaisIds || []).includes(profissional.id); return <button key={profissional.id} type="button" aria-pressed={marcado} onClick={() => alternarProfissionalDoServico(servico, profissional.id)} style={{ ...styles.small, borderColor: marcado ? 'var(--accent)' : undefined, color: marcado ? 'var(--accent)' : undefined, fontWeight: marcado ? 700 : 500 }}>{marcado ? '✓ ' : ''}{profissional.nome}</button> })}</div></div><button type="button" style={{ ...styles.secondary, width: '100%', marginTop: 15 }} onClick={() => alternarServico(servico)}>{servico.ativo === false ? 'Reativar serviço' : 'Desativar serviço'}</button></Card>)}</div>}
       <Card style={{ padding: 18 }}><h3 style={{ margin: 0, fontSize: 16 }}>Como o catálogo é utilizado</h3><div style={styles.readinessGrid}><div style={styles.readinessItem}><strong>Agenda</strong><small style={styles.sub}>Duração e preço são usados na reserva e no conflito de horários.</small></div><div style={styles.readinessItem}><strong>Atendimento</strong><small style={styles.sub}>O operador visualiza o serviço no cartão do cliente.</small></div><div style={styles.readinessItem}><strong>Planos</strong><small style={styles.sub}>Os serviços ativos podem ser associados a planos sem cobrança automática.</small></div></div></Card>
     </div>
   }
@@ -1408,15 +1416,15 @@ export default function BarbeariaERP() {
             {(whatsappAiDeadLetter > 0 || whatsappAiUnknown > 0) && <div style={{ ...styles.notice, borderColor: '#f59e0b', marginTop: 12 }}><strong>Revisão humana necessária</strong><div style={styles.sub}>{whatsappAiDeadLetter} tarefa(s) em dead-letter e {whatsappAiUnknown} entrega(s) com resultado incerto. O sistema não repete essas mensagens automaticamente.</div></div>}
             <p style={{ ...styles.sub, marginTop: 12 }}>O atendimento é reativo, tenant-aware e informa que usa um assistente virtual. Captação, agenda e loja usam somente os dados reais da unidade selecionada. Pedidos, agendamentos, remarcações, cancelamentos e promoções só são concluídos após o cliente responder CONFIRMAR; pagamentos externos não são ativados. Handoff interrompe respostas automáticas até a equipe retomar a sessão.</p>
             {whatsappAiSessions.filter((item) => item.status === 'humano').length > 0 && <div style={{ marginTop: 14 }}>
-              <div style={styles.sectionTitle}><div><strong>Fila de atendimento humano</strong><div style={styles.sub}>Telefones mascarados; conteúdo da conversa não é exibido neste painel.</div></div><Badge status="pendente" /></div>
+              <div style={styles.sectionTitle}><div><strong>Fila de atendimento humano</strong><div style={styles.sub}>Telefones mascarados; conteúdo da conversa não é exibido neste painel. Quando a equipe responde pelo celular, a IA pausa sozinha naquela conversa e volta no horário indicado.</div></div><Badge status="pendente" /></div>
               <div style={{ display: 'grid', gap: 10, marginTop: 8 }}>
                 {whatsappAiSessions.filter((item) => item.status === 'humano').map((item) => <div key={item.id} style={{ ...styles.notice, display: 'grid', gap: 8 }}>
                   <div style={styles.metricLine}><span><strong>{item.nome || 'Contato'}</strong> · {item.telefone || 'telefone protegido'}</span><strong>Prioridade {Number(item.priority || 0)}</strong></div>
-                  <div style={styles.sub}>Motivo: {item.handoff_reason || 'revisão humana'} · aguardando desde {item.handoff_requested_at ? fmtDate(item.handoff_requested_at) : fmtDate(item.ultima_interacao_em)}</div>
+                  <div style={styles.sub}>Motivo: {item.handoff_label || item.handoff_reason || 'revisão humana'} · {item.staff_pause_until ? `IA volta sozinha às ${new Date(item.staff_pause_until).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Cuiaba' })}` : `aguardando desde ${item.handoff_requested_at ? fmtDate(item.handoff_requested_at) : fmtDate(item.ultima_interacao_em)}`}</div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {!item.assigned && <button type="button" style={styles.secondary} disabled={salvando} onClick={() => assumirSessaoWhatsappAi(item.id)}>Assumir conversa</button>}
                     {item.assigned && <span style={{ ...styles.sub, alignSelf: 'center' }}>Atribuída {item.assigned_at ? fmtDate(item.assigned_at) : ''}</span>}
-                    <button type="button" style={styles.secondary} disabled={salvando} onClick={() => liberarSessaoWhatsappAi(item.id)}>Retomar automação</button>
+                    <button type="button" style={styles.secondary} disabled={salvando} onClick={() => liberarSessaoWhatsappAi(item.id, item.staff_pause_until)}>{item.staff_pause_until ? 'Devolver à IA agora' : 'Retomar automação'}</button>
                     <button type="button" style={styles.secondary} disabled={salvando} onClick={() => encerrarSessaoWhatsappAi(item.id)}>Encerrar</button>
                   </div>
                 </div>)}
@@ -1500,6 +1508,7 @@ export default function BarbeariaERP() {
     if (tab === 'Origem dos clientes') return <CanaisPanel />
     if (tab === 'Cobranças e cashback') return <CobrancasPanel />
     if (tab === 'Receita da IA') return <ReceitaIaPanel />
+    if (tab === 'Resumo diário') return <ResumoDiarioPanel />
     if (tab === 'Vale-presente') return <ValesPanel />
     if (tab === 'Unidades') return <UnidadesPanel lojas={lojasAcessiveis || []} />
     return renderConfiguracao()

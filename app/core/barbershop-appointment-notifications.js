@@ -57,6 +57,30 @@ function normalizarTelefone(valor) {
 function sha(valor) { return createHash('sha256').update(String(valor || '')).digest('hex').slice(0, 20); }
 function uuidOuVazio(valor) { const texto = limpo(valor, 60); return UUID.test(texto) ? texto : ''; }
 function dataValida(valor) { const data = new Date(valor); return Number.isNaN(data.valueOf()) ? null : data; }
+/**
+ * Quem acabou de marcar/remarcar (há menos de 6 h) um horário que acontece nas
+ * próximas 30 h já recebeu a confirmação com o código: o lembrete logo em seguida
+ * seria uma segunda mensagem repetida. Nesse caso não há lembrete.
+ */
+export function lembreteRedundante(agendamento = {}, dataHora = dataValida(agendamento.dataHora), agora = Date.now()) {
+  if (!dataHora) return false;
+  const mexidoEm = new Date(agendamento.atualizadoEm || agendamento.criadoEm || 0).valueOf();
+  if (!Number.isFinite(mexidoEm) || !mexidoEm) return false;
+  return agora - mexidoEm < 6 * 60 * 60 * 1000 && dataHora.valueOf() - agora < 30 * 60 * 60 * 1000;
+}
+
+/** "hoje" / "amanhã" / "no sábado" conforme o dia local de Cuiabá no momento do envio. */
+export function quandoRelativo(agendamento = {}, agora = new Date()) {
+  const dia = limpo(agendamento.dataAgenda, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) return 'em breve';
+  const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' }).format(agora);
+  const amanha = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' }).format(new Date(agora.valueOf() + 86400000));
+  if (dia === hoje) return 'hoje';
+  if (dia === amanha) return 'amanhã';
+  const semana = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'][new Date(`${dia}T12:00:00Z`).getUTCDay()];
+  return `${semana === 'sábado' || semana === 'domingo' ? 'no' : 'na'} ${semana}`;
+}
+
 function formatarQuando(agendamento) {
   const dataLocal = limpo(agendamento?.dataAgenda, 10);
   const horaLocal = limpo(agendamento?.horaLocal, 5);
@@ -65,7 +89,7 @@ function formatarQuando(agendamento) {
     return `${dia}/${mes}/${ano}, às ${horaLocal}`;
   }
   const data = dataValida(agendamento?.dataHora);
-  return data ? data.toLocaleString('pt-BR', { timeZone: 'UTC', dateStyle: 'short', timeStyle: 'short' }) : 'horário a confirmar';
+  return data ? data.toLocaleString('pt-BR', { timeZone: 'America/Cuiaba', dateStyle: 'short', timeStyle: 'short' }) : 'horário a confirmar';
 }
 
 function clienteElegivel(legacyEmpresaId, agendamento) {
@@ -163,7 +187,7 @@ export async function queueAppointmentNotifications(contexto = {}, agendamento =
     if (evento !== 'lembrete') queued += await inserirTarefa(trx, { empresaId, lojaId, canalId: canal.id, legacyEmpresaId, agendamento, evento, executarEm: new Date() });
     if (evento !== 'cancelado' && !['cancelado', 'concluido', 'nao_compareceu'].includes(String(agendamento.status))) {
       const lembreteAlvo = dataHora.valueOf() - 24 * 60 * 60 * 1000;
-      if (lembreteAlvo >= Date.now() - 60 * 60 * 1000) {
+      if (lembreteAlvo >= Date.now() - 60 * 60 * 1000 && !lembreteRedundante(agendamento, dataHora)) {
         queued += await inserirTarefa(trx, { empresaId, lojaId, canalId: canal.id, legacyEmpresaId, agendamento, evento: 'lembrete', executarEm: new Date(Math.max(Date.now(), lembreteAlvo)) });
       }
     }
@@ -453,7 +477,7 @@ function mensagem(snapshot, agendamento, cliente, evento) {
   const rodape = 'Esta é uma mensagem de atendimento. Para não receber estes avisos, responda SAIR.';
   if (evento === 'cancelado') return `${cabecalho} Seu agendamento na ${limpo(snapshot.configuracao.nomePublico || 'barbearia', 120)} foi cancelado. Se precisar, entre em contato para escolher outro horário. ${rodape}`;
   if (evento === 'remarcado') return `${cabecalho} Seu agendamento foi remarcado para ${quando}. Serviço: ${servico}. Profissional: ${profissional}. ${rodape}`;
-  if (evento === 'lembrete') return `${cabecalho} Lembrete do seu agendamento amanhã, ${quando}. Serviço: ${servico}. Profissional: ${profissional}. ${rodape}`;
+  if (evento === 'lembrete') return `${cabecalho} Lembrete do seu agendamento ${quandoRelativo(agendamento)}, ${quando}. Serviço: ${servico}. Profissional: ${profissional}. Responda CONFIRMO, REMARCAR ou CANCELO. ${rodape}`;
   return `${cabecalho} Seu agendamento foi registrado para ${quando}. Serviço: ${servico}. Profissional: ${profissional}. ${rodape}`;
 }
 

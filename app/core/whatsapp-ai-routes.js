@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import express from 'express';
 import { db } from './database.js';
 import { parseEvolutionMessage, whatsappAiReady } from './whatsapp-ai.js';
+import { inboundMediaToText, locateInboundMedia } from './whatsapp-ai-media.js';
 import { campaignOptOutRequested, recordCampaignOptOut, recordCampaignProviderEvent } from './commerce-campaigns.js';
 import { recordCartRecoveryOptOut } from './commerce-abandoned-carts.js';
 import { recordAppointmentNotificationOptOut } from './barbershop-appointment-notifications.js';
@@ -76,6 +77,31 @@ function validSignature(req, channel) {
  * do backend da Isa): grava o evento (idempotente por canal + id externo),
  * enfileira a conversa para a IA e aplica o SAIR em todos os módulos.
  */
+async function mediaFromWebhook(channel, parsed, body, externalId) {
+  let data = body.data && typeof body.data === 'object' ? body.data : body;
+  if (Array.isArray(data.messages) && data.messages.length) data = data.messages[0];
+  if (!locateInboundMedia(data)) return parsed;
+  const jaVisto = await db.queryRead(
+    'SELECT 1 FROM eventos_integracao_canais WHERE canal_id = $1 AND evento_externo_id = $2 LIMIT 1',
+    [channel.id, externalId],
+  ).then((r) => Boolean(r.rows[0])).catch(() => false);
+  if (jaVisto) return parsed;
+  const lido = await inboundMediaToText(data, { chatId: parsed.phone }).catch(() => ({ ok: false }));
+  if (!lido?.ok) return { ...parsed, reason: `media_${String(lido?.code || 'error').toLowerCase()}`.slice(0, 60) };
+  // Normaliza como o caminho de texto: remetente @lid vira o número real.
+  const ts = Number(data.messageTimestamp || body.messageTimestamp || 0) || null;
+  return {
+    ...parsed,
+    ignored: false,
+    reason: undefined,
+    remoteJid: `${parsed.phone}@s.whatsapp.net`,
+    name: String(data.pushName || body.pushName || data.notifyName || '').slice(0, 160),
+    timestamp: ts,
+    text: lido.text,
+    media: lido.kind,
+  };
+}
+
 export async function ingestInboundWhatsappMessage(channel, parsed, { hash, providerPayload = {} } = {}) {
   const aiReady = whatsappAiReady();
   const optOutRequested = campaignOptOutRequested(parsed);
@@ -162,8 +188,12 @@ export function createWhatsappAiWebhookRouter() {
         registrarEventoConexao(channel.empresa_id, state);
         return res.status(202).json({ accepted: true, connection: state });
       }
-      const parsed = parseEvolutionMessage(req.body || {});
+      let parsed = parseEvolutionMessage(req.body || {});
       const externalId = parsed.externalId || String(req.get('x-event-id') || '').slice(0, 200);
+      // Áudio/foto da Evolution (webhook com base64 ligado): transcreve/descreve e segue como texto.
+      if (parsed.reason === 'unsupported_content' && parsed.phone && externalId) {
+        parsed = await mediaFromWebhook(channel, parsed, req.body || {}, externalId);
+      }
       if (!externalId) return res.status(202).json({ accepted: true, ignored: true, reason: parsed.reason || 'missing_event_id' });
       const hash = crypto.createHash('sha256').update(rawBody(req)).digest('hex');
       const resultado = await ingestInboundWhatsappMessage(channel, { ...parsed, externalId }, { hash, providerPayload: req.body || {} });

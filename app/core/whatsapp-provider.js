@@ -276,10 +276,10 @@ async function sendTextIsa({ number, text, simulateTyping = process.env.WHATSAPP
  * Mensagens recebidas (contrato da Isa): GET {BASE}/messages?latest=false&role=user&from=ISO&limit=N.
  * Devolve a lista achatada [{ chatId, role, content, timestamp, messageType, whatsappMessageId, questionId }].
  */
-export async function fetchInboundMessages({ from, limit = 100 } = {}, fetchImpl) {
+export async function fetchInboundMessages({ from, limit = 100, role = 'user' } = {}, fetchImpl) {
   const cfg = chatbotBackendConfig();
   if (!cfg.baseUrl || cfg.key.length < 20) return { ok: false, error: 'backend_not_configured', messages: [] };
-  const params = new URLSearchParams({ latest: 'false', role: 'user', limit: String(Math.min(200, Math.max(25, Number(limit) || 100))) });
+  const params = new URLSearchParams({ latest: 'false', role: role === 'assistant' ? 'assistant' : 'user', limit: String(Math.min(200, Math.max(25, Number(limit) || 100))) });
   if (from) params.set('from', new Date(from).toISOString());
   if (chatbotBackendMode() === 'instancias' && cfg.instance) params.set('instance', cfg.instance);
   const result = await call(cfg, 'GET', `/messages?${params.toString()}`, null, fetchImpl);
@@ -294,6 +294,18 @@ export async function fetchInboundMessages({ from, limit = 100 } = {}, fetchImpl
   if (Array.isArray(data.messages)) empilhar(data.chatId, data.messages);
   if (Array.isArray(data)) empilhar('', data);
   return { ok: true, status: result.status, messages: lista };
+}
+
+/**
+ * Mensagens que SAÍRAM do número (role=assistant). O backend marca cada uma com
+ * interactionType: "bot" (enviada pela API: IA, lembrete, campanha) ou "organic"
+ * (digitada no celular/WhatsApp Web pela equipe). Usado para pausar a IA quando
+ * a equipe assume a conversa pelo aparelho.
+ */
+export async function fetchOutboundMessages({ from, limit = 100 } = {}, fetchImpl) {
+  const resposta = await fetchInboundMessages({ from, limit, role: 'assistant' }, fetchImpl);
+  // Defesa: o backend pode ignorar o filtro de role; só vale o que é de fato saída.
+  return { ...resposta, messages: resposta.messages.filter((item) => String(item?.role || '').toLowerCase() === 'assistant') };
 }
 
 export async function sendTextViaChatbotBackend({ instance, number, text, simulateTyping }, fetchImpl) {

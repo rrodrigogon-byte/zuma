@@ -30,6 +30,8 @@ import { createWhatsappAiWebhookRouter } from './core/whatsapp-ai-routes.js';
 import { whatsappAiOperationalStatus } from './core/whatsapp-ai.js';
 import { startWhatsappAiWorker } from './workers/whatsapp-ai-worker.js';
 import { startIsaPollWorker } from './core/whatsapp-isa-poll.js';
+import { configuracaoResumo, configuracaoResumoPublica, diaLocal as diaLocalResumo, enviarResumo, montarResumoDiario, startResumoDiarioWorker } from './core/dino-resumo-diario.js';
+import { startPendingFollowUpWorker } from './core/whatsapp-ai-followup.js';
 import { db as commerceDb, getPool as getCommercePool } from './core/database.js';
 import { checkCommerceSchemaReadiness } from './core/commerce-schema-readiness.js';
 import * as loyaltyDb from './db-pg.js';
@@ -3064,6 +3066,31 @@ app.post('/api/admin/barbearia/cashback/consulta', (req, res) => {
 });
 app.get('/api/admin/barbearia/captacao/canais', (req, res) => {
   try { res.json({ ok: true, ...captacaoKytto.painelCanais(legacyEmpresaId(req), { inicio: req.query?.inicio, fim: req.query?.fim, lojaId: legacyLojaId(req) }) }); } catch (error) { respostaCaptacao(res, error); }
+});
+// ── Resumo diário do Dino no WhatsApp ───────────────────────────────────────
+// Prévia do fechamento do dia (mesmos números do envio automático) e envio
+// manual para os telefones configurados em DINO_RESUMO_TELEFONES.
+app.get('/api/admin/barbearia/resumo-diario', async (req, res) => {
+  try {
+    const dia = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query?.dia || '')) ? req.query.dia : diaLocalResumo();
+    const resumo = await montarResumoDiario({ empresaId: legacyEmpresaId(req), lojaId: legacyLojaId(req), dia });
+    res.json({ ok: true, dia, configuracao: configuracaoResumoPublica(), ...resumo });
+  } catch (error) {
+    res.status(400).json({ error: String(error?.message || 'Não foi possível montar o resumo.').slice(0, 200) });
+  }
+});
+app.post('/api/admin/barbearia/resumo-diario/enviar', async (req, res) => {
+  try {
+    if (req.body?.confirmar !== true) return res.status(400).json({ error: 'Confirme o envio do resumo.' });
+    const { telefones } = configuracaoResumo();
+    if (!telefones.length) return res.status(400).json({ error: 'Configure DINO_RESUMO_TELEFONES para enviar o resumo.' });
+    const resumo = await montarResumoDiario({ empresaId: legacyEmpresaId(req), lojaId: legacyLojaId(req), dia: diaLocalResumo() });
+    const resultado = await enviarResumo({ texto: resumo.texto, telefones });
+    if (!resultado.enviados) return res.status(502).json({ error: 'O WhatsApp não aceitou o envio. Confira a conexão em WhatsApp da empresa.', ...resultado });
+    res.json({ ok: true, ...resultado });
+  } catch (error) {
+    res.status(400).json({ error: String(error?.message || 'Não foi possível enviar o resumo.').slice(0, 200) });
+  }
 });
 app.get('/api/admin/barbearia/captacao/receita-ia', (req, res) => {
   try { res.json({ ok: true, ...captacaoKytto.painelReceitaIa(legacyEmpresaId(req), { inicio: req.query?.inicio, fim: req.query?.fim, lojaId: legacyLojaId(req) }) }); } catch (error) { respostaCaptacao(res, error); }
@@ -6558,6 +6585,9 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
   startWhatsappAiWorker();
   // Entrada do WhatsApp igual à da Isa: consulta periódica ao backend (sem webhook).
   startIsaPollWorker();
+  startPendingFollowUpWorker();
+  // Fechamento do dia no WhatsApp do dono (DINO_RESUMO_DIARIO=on).
+  startResumoDiarioWorker();
   startAiBrainSchedulers();
   // Cobranças da barbearia: sinal vencido libera o horário (e avisa a lista de
   // espera); a cobrança do clube é gerada e enviada uma vez por hora.

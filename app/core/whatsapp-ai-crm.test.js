@@ -30,7 +30,7 @@ test('catálogo do agente cobre CRM, loja, agenda, vendas e marketing consentido
 test('prompt humanizado exige dados reais, confirmação e opt-in para promoções', () => {
   const prompt = buildWhatsappAiSystemPrompt({ storeName: 'Barbearia Dino' });
   assert.match(prompt, /atendente virtual humanizado/i);
-  assert.match(prompt, /CONFIRMAR ou CANCELAR/i);
+  assert.match(prompt, /SIM (\(ou CONFIRMAR\) )?para (concluir|confirmar) ou NÃO para desistir/i);
   assert.match(prompt, /marketing exige consentimento/i);
   assert.match(prompt, /nunca invente/i);
   assert.match(prompt, /remarca/i);

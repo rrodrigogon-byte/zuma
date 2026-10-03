@@ -14,8 +14,10 @@ import {
   cancelAppointment as cancelWhatsappAppointment,
   SchedulingError,
   agendaSource,
+  confirmAttendance,
+  noteDelay,
 } from './barbershop-agenda.js';
-import { clubeParaTelefone, planoDoTelefone, sugestaoPosServico } from '../dino-captacao-kytto.js';
+import { clubeParaTelefone, entrarListaEspera, planoDoTelefone, sugestaoPosServico } from '../dino-captacao-kytto.js';
 import { saldoCashback } from '../dino-cobranca-kytto.js';
 import {
   ensureWhatsappLead,
@@ -88,7 +90,7 @@ function capabilityAllows(name, capabilities = {}) {
   if (name.includes('promoc') || name === 'listar_promocoes_ativas' || name === 'atualizar_consentimento_marketing') return capabilities.sendPromotions === true;
   if (name === 'consultar_meu_plano' || name === 'avaliar_clube' || name === 'consultar_meu_cashback') return capabilities.manageAppointments !== false;
   if (name === 'sugerir_produto_pos_servico') return capabilities.operateStore !== false;
-  if (name.includes('agendamento') || name.includes('remarcacao') || name.includes('cancelamento') || name === 'listar_servicos' || name === 'listar_profissionais' || name === 'consultar_disponibilidade' || name === 'consultar_meus_agendamentos') return capabilities.manageAppointments !== false;
+  if (name.includes('agendamento') || name.includes('remarcacao') || name.includes('cancelamento') || name === 'listar_servicos' || name === 'listar_profissionais' || name === 'consultar_disponibilidade' || name === 'consultar_meus_agendamentos' || name === 'sugerir_proximos_horarios' || name === 'entrar_lista_espera' || name === 'confirmar_presenca' || name === 'avisar_atraso') return capabilities.manageAppointments !== false;
   if (name.includes('pedido') || name === 'buscar_produtos' || name === 'consultar_status_pedido') return capabilities.operateStore !== false;
   return true;
 }
@@ -194,6 +196,188 @@ async function toolAvailability(context, args = {}) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// AUTONOMIA NA AGENDA: em uma chamada, os próximos horários reais (vários dias,
+// qualquer profissional, por período) — o atendente oferece opções concretas em
+// vez de perguntar dia a dia. Sem vaga: lista de espera com aviso automático.
+// ---------------------------------------------------------------------------
+const AGENDA_TZ = 'America/Cuiaba';
+const PERIODOS_VALIDOS = new Set(['manha', 'tarde', 'noite', 'qualquer']);
+const DIAS_SEMANA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+
+export function localDateIso(now = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: AGENDA_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+}
+
+function addDaysIso(dateIso, days) {
+  const base = new Date(`${dateIso}T12:00:00Z`);
+  base.setUTCDate(base.getUTCDate() + days);
+  return base.toISOString().slice(0, 10);
+}
+
+function periodOf(time) {
+  const hour = Number(String(time || '').split(':')[0]);
+  if (!Number.isFinite(hour)) return 'qualquer';
+  if (hour < 12) return 'manha';
+  if (hour < 18) return 'tarde';
+  return 'noite';
+}
+
+function normalizePeriod(value) {
+  const plainValue = String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  return PERIODOS_VALIDOS.has(plainValue) ? plainValue : 'qualquer';
+}
+
+/**
+ * Varre os próximos dias e devolve os primeiros horários livres. Puro: recebe
+ * fetchDay(dateIso) → { slots: ['09:00', …], professional } e ignora dia fechado.
+ */
+function minutesOf(hhmm) {
+  const match = String(hhmm || '').match(/^(\d{1,2}):(\d{2})/);
+  return match ? Number(match[1]) * 60 + Number(match[2]) : NaN;
+}
+
+export async function earliestSlots({ fetchDay, fromDate, days = 7, period = 'qualquer', limit = 6, notBefore = '', aroundTime = '' } = {}) {
+  const safeDays = Math.min(14, Math.max(1, Number(days) || 7));
+  const safeLimit = Math.min(10, Math.max(1, Number(limit) || 6));
+  const wanted = normalizePeriod(period);
+  const found = [];
+  const closed = [];
+  for (let offset = 0; offset < safeDays && found.length < safeLimit; offset += 1) {
+    const date = addDaysIso(fromDate, offset);
+    let day;
+    try {
+      day = await fetchDay(date);
+    } catch (error) {
+      // Só "sem expediente/sem vaga no dia" é dia fechado; fora da janela de reserva encerra
+      // a busca. Qualquer outro erro (id inválido, banco) sobe: nunca vira "sem vaga" falso.
+      if (error?.code === 'SLOT_UNAVAILABLE') { closed.push(date); continue; }
+      if (error?.code === 'DATE_OUT_OF_RANGE') break;
+      throw error;
+    }
+    let candidates = (Array.isArray(day?.slots) ? day.slots : [])
+      .filter((time) => !(offset === 0 && notBefore && String(time) <= notBefore))
+      .filter((time) => wanted === 'qualquer' || periodOf(time) === wanted);
+    // "lá pelas 16h": os horários mais próximos do pedido, no máximo 2 por dia.
+    const target = minutesOf(aroundTime);
+    if (Number.isFinite(target)) {
+      candidates = [...candidates]
+        .sort((a, b) => Math.abs(minutesOf(a) - target) - Math.abs(minutesOf(b) - target))
+        .slice(0, 2)
+        .sort((a, b) => minutesOf(a) - minutesOf(b));
+    }
+    for (const time of candidates) {
+      const weekday = DIAS_SEMANA[new Date(`${date}T12:00:00Z`).getUTCDay()];
+      found.push({ date, weekday, time: String(time).slice(0, 5), professional: day.professionalByTime?.[time] || day.professional?.nome || null });
+      if (found.length >= safeLimit) break;
+    }
+  }
+  return { slots: found, searchedDays: safeDays, period: wanted, closedDays: closed };
+}
+
+function localTimeHHMM(now = new Date()) {
+  return new Intl.DateTimeFormat('en-GB', { timeZone: AGENDA_TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now);
+}
+
+async function toolNextSlots(context, args = {}) {
+  const scope = contextScope(context);
+  const serviceId = cleanText(args.serviceId, 100);
+  if (!serviceId) throw new WhatsappAiToolError('informe o serviço (id de listar_servicos)', 'SERVICE_REQUIRED');
+  const professionalId = cleanText(args.professionalId, 100) || 'qualquer';
+  const today = localDateIso();
+  const fromDate = /^\d{4}-\d{2}-\d{2}$/.test(String(args.fromDate || '')) && String(args.fromDate) >= today ? String(args.fromDate) : today;
+  // Agenda PostgreSQL não aceita "qualquer": junta os horários de cada profissional ativo.
+  const multiProfessional = professionalId === 'qualquer' && await agendaSource(scope) === 'postgres';
+  const professionals = multiProfessional ? (await listSchedulingProfessionals(scope) || []).filter((item) => item?.id) : [];
+  const fetchDay = multiProfessional
+    ? async (date) => {
+      const merged = new Map();
+      let unavailable = 0;
+      for (const professional of professionals) {
+        try {
+          const day = await listSchedulingAvailability(scope, { serviceId, professionalId: professional.id, date });
+          for (const time of day?.slots || []) if (!merged.has(time)) merged.set(time, professional.nome || null);
+        } catch (error) {
+          if (error?.code === 'SLOT_UNAVAILABLE') { unavailable += 1; continue; }
+          throw error;
+        }
+      }
+      if (professionals.length && unavailable === professionals.length) {
+        const closedError = new Error('sem expediente'); closedError.code = 'SLOT_UNAVAILABLE'; throw closedError;
+      }
+      const times = [...merged.keys()].sort();
+      return { slots: times, professionalByTime: Object.fromEntries(merged) };
+    }
+    : async (date) => listSchedulingAvailability(scope, { serviceId, professionalId, date });
+  const result = await earliestSlots({
+    fetchDay,
+    fromDate,
+    days: args.days,
+    period: args.period,
+    limit: args.limit,
+    notBefore: fromDate === today ? localTimeHHMM() : '',
+    aroundTime: /^\d{1,2}:\d{2}$/.test(String(args.aroundTime || '')) ? String(args.aroundTime).padStart(5, '0') : '',
+  });
+  return {
+    ok: true,
+    dataClassification: 'untrusted_business_data',
+    proximosHorarios: sanitizeToolData(result.slots),
+    periodo: result.period,
+    diasConsultados: result.searchedDays,
+    instrucao: result.slots.length
+      ? 'Ofereça 2 ou 3 opções concretas (dia da semana + data + hora). Depois que o cliente escolher, use preparar_agendamento.'
+      : 'Não há vaga no período. Ofereça ampliar o período/outro profissional ou entrar na lista de espera (entrar_lista_espera) para ser avisado se abrir horário.',
+  };
+}
+
+async function toolJoinWaitlist(context, args = {}) {
+  const scope = await barbeariaScope(context);
+  if (args.customerAgreed !== true) {
+    throw new WhatsappAiToolError('pergunte antes se o cliente quer ser avisado pelo WhatsApp quando abrir vaga', 'CUSTOMER_AGREEMENT_REQUIRED');
+  }
+  const name = sanitizeUntrustedBusinessText(args.customerName || scope.customerName, 100);
+  try {
+    const entrada = entrarListaEspera(scope.empresaId, {
+      nome: name,
+      telefone: scope.phone,
+      data: cleanText(args.date, 10),
+      periodo: normalizePeriod(args.period),
+      servicoId: cleanText(args.serviceId, 100),
+      profissionalId: cleanText(args.professionalId, 100) || 'qualquer',
+      lojaId: scope.lojaId,
+      consentimentoWhatsapp: true,
+      origem: 'whatsapp_ia',
+    });
+    return {
+      ok: true,
+      listaEspera: { data: entrada.data, periodo: entrada.periodo, servico: entrada.servicoNome, jaEstava: entrada.repetida === true },
+      instrucao: 'Confirme que o cliente entrou na lista de espera e que receberá aviso por aqui se abrir horário. Ele pode responder SAIR para não receber avisos.',
+    };
+  } catch (error) {
+    throw new WhatsappAiToolError(cleanText(error?.message || 'não foi possível entrar na lista de espera', 200), error?.code || 'WAITLIST_ERROR');
+  }
+}
+
+async function toolConfirmAttendance(context, args = {}) {
+  const scope = contextScope(context);
+  const result = await confirmAttendance(scope, cleanText(args.appointmentId, 120));
+  return {
+    ok: true,
+    presenca: sanitizeToolData({ servico: result.servico, profissional: result.profissional, dataHora: result.dataHora, jaEstavaConfirmado: result.jaEstavaConfirmado }),
+    instrucao: 'Agradeça e confirme dia, hora e profissional. Se ele precisar mudar, ofereça remarcar.',
+  };
+}
+
+async function toolDelayNotice(context, args = {}) {
+  const scope = contextScope(context);
+  const result = await noteDelay(scope, cleanText(args.appointmentId, 120), args.minutes);
+  return {
+    ok: true,
+    atraso: sanitizeToolData({ minutos: result.atrasoMinutos, servico: result.servico, profissional: result.profissional, dataHora: result.dataHora }),
+    instrucao: 'Diga que avisou a equipe na agenda. Não prometa que o horário será mantido: se o atraso for grande, ofereça remarcar. Para exceções, use solicitar_humano.',
+  };
+}
+
 async function toolOrderStatus(context, args = {}) {
   const scope = contextScope(context);
   const orderCode = cleanText(args.orderCode, 80).toUpperCase();
@@ -258,15 +442,24 @@ async function savePreparedAction(context, type, request, summary) {
           SET acao_pendente = $2::jsonb, atualizado_em = CURRENT_TIMESTAMP,
               expira_em = CURRENT_TIMESTAMP + INTERVAL '24 hours'
         WHERE id = $1 AND empresa_id = $3 AND loja_id = $4`,
-      [scope.sessionId, JSON.stringify({ actionId: action.id, type, key, summary: safeSummary }), scope.empresaId, scope.lojaId],
+      [scope.sessionId, JSON.stringify({ actionId: action.id, type, key, summary: safeSummary, preparadoEm: new Date().toISOString() }), scope.empresaId, scope.lojaId],
     );
     return {
       ok: true,
       acao: { id: action.id, tipo: type, resumo: safeSummary },
       confirmacaoNecessaria: true,
-      instrucao: 'Peça ao cliente para responder CONFIRMAR para concluir ou CANCELAR para desistir.',
+      instrucao: 'Peça ao cliente para responder SIM (ou CONFIRMAR) para concluir ou NÃO para desistir.',
     };
   });
+}
+
+// Data legível para o cliente: "amanhã, sábado 03/10 às 12:00" (fuso de Cuiabá).
+export function friendlyWhen(date, time, now = new Date()) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return `${date} às ${time}`;
+  const weekday = DIAS_SEMANA[new Date(`${date}T12:00:00Z`).getUTCDay()];
+  const today = localDateIso(now);
+  const prefix = date === today ? 'hoje, ' : date === addDaysIso(today, 1) ? 'amanhã, ' : '';
+  return `${prefix}${weekday} ${date.slice(8, 10)}/${date.slice(5, 7)} às ${String(time).slice(0, 5)}`;
 }
 
 async function toolPrepareAppointment(context, args = {}) {
@@ -277,16 +470,36 @@ async function toolPrepareAppointment(context, args = {}) {
   const time = cleanText(args.time, 5);
   const availability = await listSchedulingAvailability(scope, { serviceId, professionalId, date });
   if (!availability.slots.includes(time)) throw new SchedulingError('horário indisponível', 'SLOT_UNAVAILABLE');
+  const customerName = cleanText(args.customerName || scope.customerName, 100);
+  // Vários serviços na mesma ida (barba + manicure): encaixa um depois do outro.
+  const extras = (Array.isArray(args.extraServiceIds) ? args.extraServiceIds : []).slice(0, 3).map((id) => ensureAgendaId(id, 'extraServiceIds'));
+  const combo = [];
+  let cursor = minutesOf(time) + Number(availability.service.duracaoMinutos || 30);
+  let total = Number(availability.service.preco || 0);
+  const partes = [`${availability.service.nome} com ${availability.professional.nome} às ${time}`];
+  for (const extraId of extras) {
+    const extra = await listSchedulingAvailability(scope, { serviceId: extraId, professionalId: 'qualquer', date });
+    const slot = extra.slots.find((item) => minutesOf(item) >= cursor && minutesOf(item) <= cursor + 30);
+    if (!slot) throw new SchedulingError(`não há encaixe seguido para ${extra.service.nome} depois de ${String(Math.floor(cursor / 60)).padStart(2, '0')}:${String(cursor % 60).padStart(2, '0')}`, 'SLOT_UNAVAILABLE');
+    combo.push({ serviceId: extraId, professionalId: 'qualquer', time: slot });
+    partes.push(`${extra.service.nome} às ${slot}`);
+    cursor = minutesOf(slot) + Number(extra.service.duracaoMinutos || 30);
+    total += Number(extra.service.preco || 0);
+  }
   const request = {
     serviceId,
     professionalId,
     date,
     time,
-    customerName: cleanText(args.customerName || scope.customerName, 100),
+    customerName,
     customerPhone: scope.phone,
     notes: cleanText(args.notes, 500),
+    ...(combo.length ? { combo } : {}),
   };
-  const summary = `${availability.service.nome} com ${availability.professional.nome} em ${date} às ${time}, no valor de R$ ${availability.service.preco.toFixed(2).replace('.', ',')}`;
+  const para = customerName ? ` para ${customerName}` : '';
+  const summary = combo.length
+    ? `${friendlyWhen(date, time)}${para}: ${partes.join(' + ')}, total R$ ${total.toFixed(2).replace('.', ',')}`
+    : `${availability.service.nome} com ${availability.professional.nome}${para}, ${friendlyWhen(date, time)}, no valor de R$ ${availability.service.preco.toFixed(2).replace('.', ',')}`;
   return savePreparedAction(scope, 'agendamento', request, summary);
 }
 
@@ -426,7 +639,7 @@ async function toolPrepareReschedule(context, args = {}) {
   if (!appointment) throw new WhatsappAiToolError('agendamento não encontrado para este contato', 'APPOINTMENT_NOT_FOUND');
   const availability = await listSchedulingAvailability(scope, { serviceId: appointment.servico.id, professionalId: appointment.profissional.id, date });
   if (!availability.slots.includes(time)) throw new SchedulingError('horário indisponível', 'SLOT_UNAVAILABLE');
-  return savePreparedAction(scope, 'remarcacao', { appointmentId, date, time }, `${appointment.servico.nome} com ${appointment.profissional.nome} será remarcado para ${date} às ${time}.`);
+  return savePreparedAction(scope, 'remarcacao', { appointmentId, date, time }, `${appointment.servico.nome} com ${appointment.profissional.nome} será remarcado para ${friendlyWhen(date, time)}.`);
 }
 
 async function toolPrepareCancellation(context, args = {}) {
@@ -435,7 +648,7 @@ async function toolPrepareCancellation(context, args = {}) {
   const appointments = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 20 });
   const appointment = appointments.find(item => item.id === appointmentId);
   if (!appointment) throw new WhatsappAiToolError('agendamento não encontrado para este contato', 'APPOINTMENT_NOT_FOUND');
-  return savePreparedAction(scope, 'cancelamento', { appointmentId }, `Cancelamento de ${appointment.servico.nome} com ${appointment.profissional.nome} em ${new Date(appointment.dataHora).toLocaleString('pt-BR')}.`);
+  return savePreparedAction(scope, 'cancelamento', { appointmentId }, `Cancelamento de ${appointment.servico.nome} com ${appointment.profissional.nome}, ${appointment.dataAgenda && appointment.horaLocal ? friendlyWhen(appointment.dataAgenda, appointment.horaLocal) : new Intl.DateTimeFormat('pt-BR', { timeZone: AGENDA_TZ, dateStyle: 'short', timeStyle: 'short' }).format(new Date(appointment.dataHora))}.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -599,6 +812,10 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'listar_servicos', description: 'Lista serviços de barbearia ativos e seus valores/duração.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'listar_profissionais', description: 'Lista profissionais ativos da unidade.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'consultar_disponibilidade', description: 'Consulta horários disponíveis para serviço, profissional e data.', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, professionalId: { type: 'STRING' }, date: { type: 'STRING', description: 'Data ISO AAAA-MM-DD' } }, required: ['serviceId', 'professionalId', 'date'] } },
+  { name: 'sugerir_proximos_horarios', description: 'Em UMA chamada, busca os próximos horários livres de um serviço em vários dias (padrão 7), com profissional específico ou "qualquer", filtrando por período (manha, tarde, noite). Prefira esta ferramenta quando o cliente quer "o primeiro horário", "essa semana", "amanhã à tarde" etc.', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, professionalId: { type: 'STRING', description: 'id de listar_profissionais ou "qualquer"' }, fromDate: { type: 'STRING', description: 'Data ISO AAAA-MM-DD inicial (padrão hoje)' }, days: { type: 'INTEGER', description: '1 a 14' }, period: { type: 'STRING', description: 'manha, tarde, noite ou qualquer' }, aroundTime: { type: 'STRING', description: 'HH:MM preferido pelo cliente ("lá pelas 16h" → 16:00): devolve os horários mais próximos' }, limit: { type: 'INTEGER', description: '1 a 10' } }, required: ['serviceId'] } },
+  { name: 'entrar_lista_espera', description: 'Coloca o cliente na lista de espera de um dia quando não há horário, para ser avisado automaticamente pelo WhatsApp se abrir vaga. Só use depois que o cliente disser que quer ser avisado (customerAgreed=true).', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, date: { type: 'STRING', description: 'Data ISO AAAA-MM-DD' }, period: { type: 'STRING', description: 'manha, tarde, noite ou qualquer' }, professionalId: { type: 'STRING' }, customerName: { type: 'STRING' }, customerAgreed: { type: 'BOOLEAN' } }, required: ['serviceId', 'date', 'customerName', 'customerAgreed'] } },
+  { name: 'confirmar_presenca', description: 'Confirma a presença do cliente num agendamento dele (ex.: resposta ao lembrete da véspera: "confirmo", "estarei aí"). Use consultar_meus_agendamentos para achar o id.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' } }, required: ['appointmentId'] } },
+  { name: 'avisar_atraso', description: 'Registra na agenda que o cliente vai se atrasar X minutos para o horário dele, para a equipe ver. Não remarca.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' }, minutes: { type: 'INTEGER', description: '1 a 120' } }, required: ['appointmentId', 'minutes'] } },
   { name: 'consultar_status_pedido', description: 'Consulta um pedido somente quando pertence ao telefone desta conversa.', parameters: { type: 'OBJECT', properties: { orderCode: { type: 'STRING' } }, required: ['orderCode'] } },
   { name: 'captar_cliente', description: 'Registra ou atualiza o lead que iniciou a conversa e anota a interação no CRM da empresa.', parameters: { type: 'OBJECT', properties: { name: { type: 'STRING' }, notes: { type: 'STRING' } } } },
   { name: 'consultar_perfil_cliente', description: 'Consulta o perfil, consentimento de marketing, interações e quantidade de agendamentos do contato atual.', parameters: { type: 'OBJECT', properties: {} } },
@@ -606,7 +823,7 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'atualizar_consentimento_marketing', description: 'Registra ou revoga a autorização do cliente para receber promoções no WhatsApp. Para conceder, exige evidência da solicitação expressa.', parameters: { type: 'OBJECT', properties: { granted: { type: 'BOOLEAN' }, evidence: { type: 'STRING' } }, required: ['granted'] } },
   { name: 'listar_promocoes_ativas', description: 'Lista somente promoções ativas e vigentes da unidade. Nunca invente ofertas, valores ou cupons.', parameters: { type: 'OBJECT', properties: { limit: { type: 'INTEGER' } } } },
   { name: 'preparar_promocao_cliente', description: 'Prepara o envio de uma promoção ao cliente com opt-in. O envio só ocorre após CONFIRMAR.', parameters: { type: 'OBJECT', properties: { promotionId: { type: 'STRING' }, code: { type: 'STRING' }, message: { type: 'STRING' } }, required: ['promotionId', 'message'] } },
-  { name: 'preparar_agendamento', description: 'Prepara um agendamento para confirmação. Não grava o agendamento. Use o id retornado por listar_profissionais; na agenda da barbearia também é aceito "qualquer" quando o cliente não tem preferência.', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, professionalId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' }, customerName: { type: 'STRING' }, notes: { type: 'STRING' } }, required: ['serviceId', 'professionalId', 'date', 'time', 'customerName'] } },
+  { name: 'preparar_agendamento', description: 'Prepara um agendamento para confirmação. Não grava o agendamento. Use o id retornado por listar_profissionais; na agenda da barbearia também é aceito "qualquer" quando o cliente não tem preferência. Vários serviços na mesma ida: passe os demais em extraServiceIds e eles são encaixados em sequência. Para outra pessoa (filho, amigo), use o nome DELA em customerName.', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, professionalId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' }, customerName: { type: 'STRING' }, notes: { type: 'STRING' }, extraServiceIds: { type: 'ARRAY', items: { type: 'STRING' }, description: 'até 3 serviços seguidos na mesma visita' } }, required: ['serviceId', 'professionalId', 'date', 'time', 'customerName'] } },
   { name: 'preparar_remarcacao', description: 'Prepara a remarcação de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' } }, required: ['appointmentId', 'date', 'time'] } },
   { name: 'preparar_cancelamento', description: 'Prepara o cancelamento de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' } }, required: ['appointmentId'] } },
   { name: 'preparar_pedido', description: 'Prepara um pedido de retirada para confirmação. Não cria o pedido.', parameters: { type: 'OBJECT', properties: { customerName: { type: 'STRING' }, items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { variantId: { type: 'STRING' }, quantity: { type: 'INTEGER' } }, required: ['variantId', 'quantity'] } } }, required: ['customerName', 'items'] } },
@@ -624,6 +841,10 @@ const TOOL_MAP = {
   listar_servicos: toolServices,
   listar_profissionais: toolProfessionals,
   consultar_disponibilidade: toolAvailability,
+  sugerir_proximos_horarios: toolNextSlots,
+  entrar_lista_espera: toolJoinWaitlist,
+  confirmar_presenca: toolConfirmAttendance,
+  avisar_atraso: toolDelayNotice,
   consultar_status_pedido: toolOrderStatus,
   captar_cliente: toolCaptureLead,
   consultar_perfil_cliente: toolCustomerProfile,
@@ -715,7 +936,9 @@ export async function confirmPendingAction(context) {
         `UPDATE whatsapp_ai_sessions SET acao_pendente = NULL WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`,
         [scope.sessionId, scope.empresaId, scope.lojaId],
       );
-      throw new WhatsappAiToolError('a confirmação expirou; prepare a ação novamente', 'ACTION_EXPIRED');
+      // Devolve (sem lançar) para a transação GRAVAR a expiração: lançar aqui desfazia
+      // o cancelamento e a sessão ficava presa numa ação vencida, sem resposta ao cliente.
+      return { ok: false, type: action.tipo, code: 'ACTION_EXPIRED', summary: pending.summary || '' };
     }
 
     await trx.query(
@@ -726,6 +949,20 @@ export async function confirmPendingAction(context) {
     let response;
     if (action.tipo === 'agendamento') {
       response = await createScheduledAppointment(trx, scope, { ...action.solicitacao, actionId: action.id });
+      const combo = Array.isArray(action.solicitacao.combo) ? action.solicitacao.combo : [];
+      if (combo.length) {
+        const criados = [response];
+        try {
+          for (const [index, item] of combo.entries()) {
+            criados.push(await createScheduledAppointment(trx, scope, { ...action.solicitacao, ...item, combo: undefined, actionId: `${action.id}:${index + 1}` }));
+          }
+        } catch (error) {
+          // Tudo ou nada: se um serviço da visita não encaixa mais, desfaz os já criados.
+          for (const criado of criados) await cancelWhatsappAppointment(trx, scope, criado.id).catch(() => null);
+          throw error;
+        }
+        response = { ...response, extras: criados.slice(1) };
+      }
     } else if (action.tipo === 'pedido') {
       response = await createPendingOrder(trx, { empresaId: scope.empresaId, lojaId: scope.lojaId }, {
         ...action.solicitacao,

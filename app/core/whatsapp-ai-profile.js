@@ -452,7 +452,9 @@ export function validateWhatsappAiOutput(text, { traces = [], recommendationWasR
   if (/\b(?:\d[ -]?){13,19}\b/.test(value)) violations.push('POSSIBLE_PAYMENT_CARD');
   if (/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b|\b\d{2}\.?\d{3}\.?\d{3}\/\d{4}-?\d{2}\b/.test(value)) violations.push('POSSIBLE_DOCUMENT');
   if (/https?:\/\//i.test(value)) violations.push('UNAPPROVED_URL');
-  if (/\b(ultima chance|imperdivel|voce precisa|compre agora|nao perca|so hoje)\b/.test(normalized)) violations.push('PRESSURE_LANGUAGE');
+  // "voce precisa" sozinho bloqueava perguntas educadas ("O que você precisa?") e mandava a
+  // conversa para a equipe; só conta como pressão quando empurra compra/aproveitamento.
+  if (/\b(ultima chance|imperdivel|compre agora|nao perca|so hoje|voce precisa (comprar|garantir|aproveitar|levar|fechar))\b/.test(normalized)) violations.push('PRESSURE_LANGUAGE');
   const opportunityLanguage = /\b(oferta|promocao|aproveite|recomendo|sugiro|temos tambem|voce pode gostar|combina com|posso te mostrar uma opcao|que tal adicionar|adicionar ao pedido)\b/.test(normalized);
   const opportunityTrace = traces.some(trace => trace?.name === 'propor_oportunidade' && trace?.ok === true);
   if (opportunityLanguage && !recommendationWasRequested && !(opportunityAllowed && opportunityTrace)) violations.push('UNGOVERNED_OPPORTUNITY');

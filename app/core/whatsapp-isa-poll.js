@@ -8,7 +8,9 @@
 //   - só mensagens do cliente (role=user), recentes (idade máxima), sem grupos;
 //   - id do evento igual ao da Isa: api:<chat>:<id ou horário>:<hash do texto>,
 //     gravado com ON CONFLICT (nunca responde duas vezes a mesma mensagem);
-//   - áudio recebe resposta fixa pedindo texto (como a Isa);
+//   - áudio é TRANSCRITO e foto é DESCRITA pelo Gemini (core/whatsapp-ai-media.js)
+//     e seguem como texto para a mesma fila; se a mídia não vier ou falhar,
+//     mantém a resposta fixa pedindo texto (como a Isa);
 //   - a mensagem entra na MESMA fila da IA (processar_conversa) e passa pelo
 //     mesmo SAIR/consentimento do webhook.
 //
@@ -21,12 +23,16 @@
 
 import crypto from 'node:crypto';
 import { db } from './database.js';
-import { chatbotBackendMode, fetchInboundMessages, isaChatId, sendTextViaChatbotBackend, whatsappProviderConfigured, whatsappProviderName } from './whatsapp-provider.js';
+import { chatbotBackendMode, fetchInboundMessages, fetchOutboundMessages, isaChatId, sendTextViaChatbotBackend, whatsappProviderConfigured, whatsappProviderName } from './whatsapp-provider.js';
 import { ingestInboundWhatsappMessage } from './whatsapp-ai-routes.js';
+import { inboundMediaToText } from './whatsapp-ai-media.js';
+import { latestStaffMessages, pauseForStaff, releaseExpiredStaffPauses, staffTakeoverEnabled } from './whatsapp-staff-takeover.js';
 
 const LOCK_KEY = 'dino_whatsapp_isa_poll';
 const AUDIO_MARKERS = new Set(['[ÁUDIO RECEBIDO]', '[AUDIO RECEBIDO]']);
-export const AUDIO_REPLY = 'Recebi seu áudio, mas por aqui eu só consigo ler mensagens de texto. Pode me escrever o que precisa? 🙂';
+const IMAGE_MARKERS = new Set(['[IMAGEM RECEBIDA]', '[FOTO RECEBIDA]', '[IMAGE]', '[IMAGEM]']);
+export const AUDIO_REPLY = 'Recebi seu áudio, mas não consegui ouvir direitinho por aqui. Pode me escrever o que precisa? 🙂';
+export const IMAGE_REPLY = 'Recebi sua foto, mas não consegui abrir por aqui. Pode me contar em uma frase o que você quer? 🙂';
 
 function texto(valor, limite = 4000) {
   return String(valor ?? '').replace(/\u0000/g, '').trim().slice(0, limite);
@@ -68,7 +74,10 @@ export function parseBackendMessage(item = {}, { agora = Date.now() } = {}) {
   const externalId = `api:${chatId}:${texto(item.whatsappMessageId, 120) || texto(item.timestamp, 40)}:${sha(conteudo).slice(0, 16)}`.slice(0, 200);
   const comum = { ...base, externalId, remoteJid: `${chatId}@s.whatsapp.net`, phone: chatId, name: '', timestamp: Number.isFinite(quando) ? Math.floor(quando / 1000) : null };
   if (Number.isFinite(quando) && agora - quando > maxAgeMs()) return { ...comum, ignored: true, reason: 'too_old', skip: true };
-  if (String(item.messageType || '').toLowerCase() === 'audio' || AUDIO_MARKERS.has(conteudo)) return { ...comum, ignored: true, reason: 'audio' };
+  const tipo = String(item.messageType || '').toLowerCase();
+  if (['audio', 'ptt', 'voice'].includes(tipo) || AUDIO_MARKERS.has(conteudo)) return { ...comum, ignored: true, reason: 'audio' };
+  // Foto sem legenda (ou só com o marcador) precisa ser descrita; com legenda, a legenda já é texto.
+  if ((tipo === 'image' || IMAGE_MARKERS.has(conteudo.toUpperCase())) && (!conteudo || IMAGE_MARKERS.has(conteudo.toUpperCase()))) return { ...comum, ignored: true, reason: 'image' };
   if (!conteudo) return { ...comum, ignored: true, reason: 'unsupported_content' };
   return { ...comum, ignored: false, text: conteudo };
 }
@@ -89,16 +98,76 @@ async function canalDaEmpresa() {
  * Uma passada: busca as mensagens recentes e entrega à mesma entrada do webhook.
  * Dependências injetáveis para teste.
  */
-export async function runIsaPollPass({ fetchImpl, agora = Date.now(), canal: canalInjetado, ingest = ingestInboundWhatsappMessage, enviar = sendTextViaChatbotBackend, comTrava = true } = {}) {
+async function eventoJaRecebido(canal, externalId) {
+  const resultado = await db.queryRead(
+    'SELECT 1 FROM eventos_integracao_canais WHERE canal_id = $1 AND evento_externo_id = $2 LIMIT 1',
+    [canal.id, externalId],
+  );
+  return Boolean(resultado.rows[0]);
+}
+
+/**
+ * Áudio/foto: transcreve ou descreve antes de entregar à fila. Só roda para
+ * mensagem nova (evita pagar Gemini a cada consulta de 5 s) e fora do modo shadow.
+ */
+async function lerMidia(parsed, item, { canal, fetchImpl, jaRecebido, entenderMidia }) {
+  if (!['audio', 'image'].includes(parsed.reason)) return parsed;
+  if (await jaRecebido(canal, parsed.externalId).catch(() => false)) return { ...parsed, duplicateHint: true };
+  const lido = await entenderMidia(item, { fetchImpl, chatId: parsed.phone }).catch(() => ({ ok: false, code: 'MEDIA_ERROR' }));
+  if (!lido?.ok || !lido.text) return { ...parsed, mediaCode: lido?.code || 'MEDIA_ERROR' };
+  return { ...parsed, ignored: false, reason: undefined, text: lido.text, media: parsed.reason };
+}
+
+// Mídias em leitura neste processo: evita transcrever duas vezes enquanto o Gemini responde.
+const midiasEmLeitura = new Set();
+
+export async function runIsaPollPass({ fetchImpl, agora = Date.now(), canal: canalInjetado, ingest = ingestInboundWhatsappMessage, enviar = sendTextViaChatbotBackend, comTrava = true, jaRecebido = eventoJaRecebido, entenderMidia = inboundMediaToText, buscarSaidas = fetchOutboundMessages, equipe = { liberar: releaseExpiredStaffPauses, pausar: pauseForStaff } } = {}) {
   if (!pollEnabled()) return { skipped: true, reason: 'poll_disabled' };
+  const resumo = { equipeAssumiu: 0, iaRetomada: 0, lidas: 0, novas: 0, duplicadas: 0, ignoradas: 0, audios: 0, fotos: 0, midiasLidas: 0, foraDoPiloto: 0 };
+  let canalDaPassada = null;
+  // Áudio/foto novos e as mensagens seguintes do MESMO contato ficam para depois da
+  // trava: a chamada ao Gemini (segundos) não segura conexão nem advisory lock, e a
+  // ordem da conversa daquele contato é preservada.
+  const adiadas = [];
+
+  async function entregar(parsed, midiaLiberada) {
+    // O hash usa o texto ORIGINAL do evento: a transcrição não muda a identidade da mensagem.
+    const resultado = await ingest(canalDaPassada, parsed, { hash: sha(`${parsed.externalId}|${parsed.media ? `[${parsed.media}]` : (parsed.text || '')}`), providerPayload: {} });
+    if (resultado?.duplicate) { resumo.duplicadas += 1; return; }
+    if (parsed.ignored) resumo.ignoradas += 1; else resumo.novas += 1;
+    if (parsed.media) resumo.midiasLidas += 1;
+    if (parsed.media === 'audio' || parsed.reason === 'audio') resumo.audios += 1;
+    if (parsed.media === 'image' || parsed.reason === 'image') resumo.fotos += 1;
+    if (midiaLiberada && parsed.ignored && ['audio', 'image'].includes(parsed.reason)) {
+      await enviar({ number: parsed.phone, text: parsed.reason === 'audio' ? AUDIO_REPLY : IMAGE_REPLY }, fetchImpl).catch(() => null);
+    }
+  }
+
   const executar = async () => {
     const canal = canalInjetado || await canalDaEmpresa();
     if (!canal) return { skipped: true, reason: 'channel_not_active' };
+    canalDaPassada = canal;
     const resposta = await fetchInboundMessages({ from: agora - maxAgeMs(), limit: 100 }, fetchImpl);
     if (!resposta.ok) return { skipped: true, reason: resposta.authError ? 'backend_auth' : (resposta.error || 'backend_unavailable') };
     const modo = pollMode();
+    // Antes de entregar as mensagens do cliente: se a equipe respondeu pelo celular,
+    // a conversa já está com ela quando o worker for responder (a IA não atropela a recepção).
+    if (staffTakeoverEnabled() && modo !== 'shadow') {
+      resumo.iaRetomada += await equipe.liberar(db, { canalId: canal.id }).catch(() => 0);
+      const saidas = await buscarSaidas({ from: agora - maxAgeMs(), limit: 100 }, fetchImpl).catch(() => ({ ok: false, messages: [] }));
+      if (saidas?.ok) {
+        for (const contato of latestStaffMessages(saidas.messages)) {
+          const r = await equipe.pausar(canal, contato).catch((error) => {
+            console.warn('[WhatsApp] pausa por mensagem da equipe:', String(error?.message || error).slice(0, 200));
+            return null;
+          });
+          if (r?.paused) resumo.equipeAssumiu += 1;
+        }
+      }
+    }
     const piloto = pilotPhones();
-    const resumo = { lidas: resposta.messages.length, novas: 0, duplicadas: 0, ignoradas: 0, audios: 0, foraDoPiloto: 0 };
+    resumo.lidas = resposta.messages.length;
+    const contatosAdiados = new Set();
     const ordenadas = [...resposta.messages].sort((a, b) => String(a.timestamp || '').localeCompare(String(b.timestamp || '')));
     for (const item of ordenadas) {
       let parsed = parseBackendMessage(item, { agora });
@@ -107,23 +176,44 @@ export async function runIsaPollPass({ fetchImpl, agora = Date.now(), canal: can
         resumo.foraDoPiloto += 1;
         parsed = { ...parsed, ignored: true, reason: 'pilot_not_listed' };
       }
+      const midia = ['audio', 'image'].includes(parsed.reason);
+      const midiaLiberada = midia && (modo === 'on' || (modo === 'pilot' && piloto.has(parsed.phone)));
+      if (midiaLiberada) {
+        if (midiasEmLeitura.has(parsed.externalId) || await jaRecebido(canal, parsed.externalId).catch(() => false)) { resumo.duplicadas += 1; continue; }
+        adiadas.push({ parsed, item, midiaLiberada });
+        contatosAdiados.add(parsed.phone);
+        continue;
+      }
+      if (contatosAdiados.has(parsed.phone)) { adiadas.push({ parsed, item, midiaLiberada: false }); continue; }
       if (!parsed.ignored && modo === 'shadow') parsed = { ...parsed, ignored: true, reason: 'shadow' };
-      const resultado = await ingest(canal, parsed, { hash: sha(`${parsed.externalId}|${parsed.text || ''}`), providerPayload: {} });
-      if (resultado?.duplicate) { resumo.duplicadas += 1; continue; }
-      if (parsed.ignored) resumo.ignoradas += 1; else resumo.novas += 1;
-      if (parsed.reason === 'audio' && modo === 'on') {
-        resumo.audios += 1;
-        await enviar({ number: parsed.phone, text: AUDIO_REPLY }, fetchImpl).catch(() => null);
+      await entregar(parsed, false);
+    }
+    return { skipped: false };
+  };
+
+  const fase1 = comTrava
+    ? await db.transaction(async (trx) => {
+      const trava = await trx.query('SELECT pg_try_advisory_xact_lock(hashtext($1)) AS ok', [LOCK_KEY]);
+      if (!trava.rows[0]?.ok) return { skipped: true, reason: 'lock_held' };
+      return executar();
+    })
+    : await executar();
+  if (fase1?.skipped) return fase1;
+
+  // Fase 2, fora da trava: lê as mídias e entrega na ordem original de cada contato.
+  for (const { parsed: original, item, midiaLiberada } of adiadas) {
+    let parsed = original;
+    if (midiaLiberada) {
+      midiasEmLeitura.add(parsed.externalId);
+      try {
+        parsed = await lerMidia(parsed, item, { canal: canalDaPassada, fetchImpl, jaRecebido: async () => false, entenderMidia });
+      } finally {
+        midiasEmLeitura.delete(original.externalId);
       }
     }
-    return { skipped: false, ...resumo };
-  };
-  if (!comTrava) return executar();
-  return db.transaction(async (trx) => {
-    const trava = await trx.query('SELECT pg_try_advisory_xact_lock(hashtext($1)) AS ok', [LOCK_KEY]);
-    if (!trava.rows[0]?.ok) return { skipped: true, reason: 'lock_held' };
-    return executar();
-  });
+    await entregar(parsed, midiaLiberada);
+  }
+  return { skipped: false, ...resumo };
 }
 
 export function startIsaPollWorker() {
@@ -138,7 +228,7 @@ export function startIsaPollWorker() {
     rodando = true;
     try {
       const resumo = await runIsaPollPass();
-      if (resumo?.novas || resumo?.audios) console.log(JSON.stringify({ worker: 'whatsapp-isa-poll', ...resumo }));
+      if (resumo?.novas || resumo?.audios || resumo?.fotos || resumo?.equipeAssumiu || resumo?.iaRetomada) console.log(JSON.stringify({ worker: 'whatsapp-isa-poll', ...resumo }));
     } catch (error) {
       console.warn('[WhatsApp] consulta de mensagens:', String(error?.message || error).slice(0, 200));
     } finally {
