@@ -398,6 +398,34 @@ test('motoboy Dino conserva cotação apenas na faixa local mesmo com provedor p
   assert.equal(inserts, 1);
 });
 
+test('etiqueta Dino legada nacional é recusada antes de provedor, tracking ou DML', async () => {
+  const fulfillmentId = '10000000-0000-4000-8000-000000000107';
+  const storefrontId = '10000000-0000-4000-8000-000000000103';
+  const calls = [];
+  const transaction = async callback => callback({ query: async sql => {
+    calls.push(sql);
+    if (sql.includes('FROM commerce_fulfillments f')) return { rows: [{ id: fulfillmentId, storefront_code: 'dino-web', shipping_type: 'delivery', order_status: 'paid' }] };
+    throw new Error('nenhuma segunda consulta ou operação externa permitida');
+  } });
+  await assert.rejects(() => issueShippingLabel(transaction, { empresaId: '10000000-0000-4000-8000-000000000106' }, fulfillmentId, {}, storefrontId), error => error.code === 'SHIPPING_NATIONAL_FULFILLMENT_NOT_READY');
+  assert.equal(calls.length, 1);
+  assert.equal(calls.some(sql => /^\s*(INSERT|UPDATE|DELETE)\b/i.test(sql)), false);
+});
+
+test('sincronização de tracking Dino legado falha antes de atualizar status', async () => {
+  const calls = [];
+  const trx = { query: async sql => {
+    calls.push(sql);
+    if (sql.includes('FROM commerce_fulfillments f JOIN commerce_orders o')) return { rows: [{ id: '10000000-0000-4000-8000-000000000107', status: 'ready', ocorrencias: [], storefront_code: 'dino-web' }] };
+    throw new Error('nenhuma atualização permitida');
+  } };
+  await assert.rejects(() => updateShippingTracking(trx, { empresaId: '10000000-0000-4000-8000-000000000106' }, '10000000-0000-4000-8000-000000000107', { providerStatus: 'posted' }, '10000000-0000-4000-8000-000000000103'), error => error.code === 'SHIPPING_NATIONAL_FULFILLMENT_NOT_READY');
+  assert.equal(calls.length, 1);
+  assert.equal(calls.some(sql => /^\s*(INSERT|UPDATE|DELETE)\b/i.test(sql)), false);
+  const routes = (await import('node:fs')).readFileSync(new URL('./commerce-routes.js', import.meta.url), 'utf8');
+  assert.match(routes, /storefront_code === 'dino-web'\) throw new CommerceError\('tracking de transportadora Dino/);
+});
+
 test('falha local pós-side-effect exige reconciliação e nunca duplica emissão da etiqueta', async () => {
   const provider = 'melhorenvio';
   const originalAdapter = shippingProviders.get(provider);

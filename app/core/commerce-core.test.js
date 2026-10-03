@@ -7,6 +7,7 @@ import {
   createCatalogVariant,
   updateCategory,
   updateShippingMethod,
+  updateFulfillment,
   createPendingOrder,
   createFulfillment,
   createShippingMethod,
@@ -223,8 +224,8 @@ test('createFulfillment herda cotação e conta somente do storefront do pedido'
   const shippingQuoteId = '99999999-9999-4999-8999-999999999999';
   const shippingAccountId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
   const { trx, calls } = queryRecorder(sql => {
-    if (sql.includes('SELECT id, storefront_id, status, endereco_entrega, shipping_method_id, shipping_quote_id')) return { rows: [{ id: orderId, storefront_id: storefrontId, status: 'paid', endereco_entrega: { cep: '20040002' }, shipping_method_id: shippingMethodId, shipping_quote_id: shippingQuoteId }] };
-    if (sql.includes('SELECT id, tipo FROM commerce_shipping_methods')) return { rows: [{ id: shippingMethodId, tipo: 'delivery' }] };
+    if (sql.includes('SELECT o.id, o.storefront_id, o.loja_id')) return { rows: [{ id: orderId, storefront_id: storefrontId, storefront_code: 'outra-loja', status: 'paid', endereco_entrega: { cep: '20040002' }, shipping_method_id: shippingMethodId, shipping_quote_id: shippingQuoteId }] };
+    if (sql.includes('SELECT id, tipo, codigo, configuracao FROM commerce_shipping_methods')) return { rows: [{ id: shippingMethodId, tipo: 'delivery', codigo: 'normal' }] };
     if (sql.includes('FROM commerce_shipping_quotes')) return { rows: [{ id: shippingQuoteId, storefront_id: storefrontId, order_id: orderId, shipping_method_id: shippingMethodId, shipping_account_id: shippingAccountId }] };
     if (sql.includes('FROM commerce_shipping_accounts')) return { rows: [{ id: shippingAccountId }] };
     if (sql.includes('INSERT INTO commerce_fulfillments')) return { rows: [{ id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', status: 'pending', shipping_quote_id: shippingQuoteId, shipping_account_id: shippingAccountId }] };
@@ -239,7 +240,7 @@ test('createFulfillment herda cotação e conta somente do storefront do pedido'
 
 test('createFulfillment rejeita pedido sem pagamento confirmado', async () => {
   const { trx } = queryRecorder(sql => {
-    if (sql.includes('SELECT id, storefront_id, status, endereco_entrega, shipping_method_id, shipping_quote_id')) return { rows: [{ id: orderId, storefront_id: storefrontId, status: 'pending_payment', endereco_entrega: { cep: '20040002' }, shipping_method_id: null, shipping_quote_id: null }] };
+    if (sql.includes('SELECT o.id, o.storefront_id, o.loja_id')) return { rows: [{ id: orderId, storefront_id: storefrontId, loja_id: lojaId, storefront_loja_id: lojaId, storefront_code: 'dino-web', status: 'pending_payment', endereco_entrega: { cep: '20040002' }, shipping_method_id: null, shipping_quote_id: null }] };
     throw new Error(`query não deveria ser executada: ${sql}`);
   });
   await assert.rejects(
@@ -247,6 +248,129 @@ test('createFulfillment rejeita pedido sem pagamento confirmado', async () => {
     error => error instanceof CommerceError && error.code === 'FULFILLMENT_ORDER_NOT_PAID',
   );
 });
+
+function dinoFulfillmentFixture({ orderCep = '78300055', quoteCep = orderCep, methodCode = 'dino-motoboy', methodType = 'delivery', provider = 'manual', status = 'paid', quoteStatus = 'used', selectedOptionId = 'local', selectedAmount = '13.00', orderShipping = '13.00', ruleCepTo = '78309999', quoteId = '99999999-9999-4999-8999-999999999999', accountId = null, existing = false, captured = true, orderLojaId = lojaId } = {}) {
+  const methodId = '88888888-8888-4888-8888-888888888888';
+  const config = { provider: 'manual', deliveryType: 'motoboy', rules: [{ cepFrom: '78300000', cepTo: ruleCepTo }] };
+  return queryRecorder(sql => {
+    if (sql.includes('SELECT o.id, o.storefront_id, o.loja_id')) return { rows: [{ id: orderId, storefront_id: storefrontId, loja_id: orderLojaId, storefront_loja_id: lojaId, storefront_code: 'dino-web', status, total: '113.00', frete: orderShipping, endereco_entrega: { cep: orderCep }, shipping_method_id: methodId, shipping_quote_id: quoteId }] };
+    if (sql.includes('SELECT id FROM commerce_fulfillments')) return { rows: existing ? [{ id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' }] : [] };
+    if (sql.includes('SELECT id FROM commerce_payments')) return { rows: captured ? [{ id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' }] : [] };
+    if (sql.includes('SELECT id, tipo, codigo, configuracao FROM commerce_shipping_methods')) return { rows: [{ id: methodId, tipo: methodType, codigo: methodCode, configuracao: config }] };
+    if (sql.includes('FROM commerce_shipping_quotes')) return { rows: [{ id: quoteId, storefront_id: storefrontId, order_id: orderId, shipping_method_id: methodId, shipping_account_id: accountId, provider, destino_cep: quoteCep, status: quoteStatus, selected_option_id: selectedOptionId, selected_amount: selectedAmount }] };
+    if (sql.includes('FROM commerce_shipping_accounts')) return { rows: [{ id: accountId }] };
+    if (sql.includes('INSERT INTO commerce_fulfillments')) return { rows: [{ id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', status: 'pending' }] };
+    throw new Error(`query não prevista: ${sql}`);
+  });
+}
+
+test('Dino permite motoboy local com quote do pedido e retirada sem quote', async () => {
+  const local = dinoFulfillmentFixture();
+  assert.equal((await createFulfillment(local.trx, { empresaId, lojaId }, { orderId })).status, 'pending');
+  assert.equal(local.calls.filter(call => call.sql.includes('INSERT INTO commerce_fulfillments')).length, 1);
+  const pickup = dinoFulfillmentFixture({ methodType: 'pickup', quoteId: null });
+  assert.equal((await createFulfillment(pickup.trx, { empresaId, lojaId }, { orderId })).status, 'pending');
+  assert.equal(pickup.calls.some(call => call.sql.includes('FROM commerce_shipping_quotes')), false);
+});
+
+test('Dino bloqueia fulfillment duplicado, status paid sem captura e divergência de loja antes de DML', async () => {
+  for (const [options, expectedCode] of [
+    [{ existing: true }, 'FULFILLMENT_ALREADY_EXISTS'],
+    [{ captured: false }, 'FULFILLMENT_PAYMENT_NOT_CAPTURED'],
+    [{ orderLojaId: '22222222-2222-4222-8222-222222222223' }, 'FULFILLMENT_DINO_ORDER_SELECTION_REQUIRED'],
+  ]) {
+    const { trx, calls } = dinoFulfillmentFixture(options);
+    await assert.rejects(() => createFulfillment(trx, { empresaId, lojaId }, { orderId }), error => error instanceof CommerceError && error.code === expectedCode);
+    assert.equal(calls.some(call => /^\s*(INSERT|UPDATE|DELETE)\b/i.test(call.sql)), false);
+  }
+});
+
+test('Dino recusa alteração administrativa de destino, método, quote, conta ou seleção ausente antes de INSERT', async () => {
+  const methodId = '88888888-8888-4888-8888-888888888889';
+  const quoteId = '99999999-9999-4999-8999-999999999998';
+  const accountId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab';
+  for (const payload of [
+    { enderecoEntrega: { cep: '18715106' } },
+    { shippingMethodId: methodId },
+    { shippingQuoteId: quoteId },
+    { shippingAccountId: accountId },
+  ]) {
+    const { trx, calls } = dinoFulfillmentFixture();
+    await assert.rejects(() => createFulfillment(trx, { empresaId, lojaId }, { orderId, ...payload }), error => error instanceof CommerceError && error.code === 'FULFILLMENT_DINO_ORDER_SELECTION_REQUIRED');
+    assert.equal(calls.some(call => /^\s*(INSERT|UPDATE|DELETE)\b/i.test(call.sql)), false);
+  }
+  const missing = dinoFulfillmentFixture({ quoteId: null });
+  // Método delivery sem quote falha antes de gravar fulfillment.
+  await assert.rejects(() => createFulfillment(missing.trx, { empresaId, lojaId }, { orderId }), error => error instanceof CommerceError && error.code === 'SHIPPING_QUOTE_REQUIRED');
+  assert.equal(missing.calls.some(call => /^\s*(INSERT|UPDATE|DELETE)\b/i.test(call.sql)), false);
+});
+
+test('Dino bloqueia expedição nacional, CEP divergente, método histórico e quote de provider inesperado', async () => {
+  for (const fixture of [
+    { orderCep: '18715106', quoteCep: '18715106' },
+    { quoteCep: '18715106' },
+    { methodCode: 'regional-fixa' },
+    { provider: 'correios' },
+    { methodType: 'carrier' },
+    { quoteStatus: 'quoted' },
+    { selectedOptionId: null },
+    { selectedAmount: null },
+    { orderShipping: '14.00' },
+    { ruleCepTo: '78300010' },
+    { accountId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
+  ]) {
+    const { trx, calls } = dinoFulfillmentFixture(fixture);
+    await assert.rejects(() => createFulfillment(trx, { empresaId, lojaId }, { orderId }), error => error instanceof CommerceError && error.code === 'SHIPPING_NATIONAL_FULFILLMENT_NOT_READY');
+    assert.equal(calls.some(call => /^\s*(INSERT|UPDATE|DELETE)\b/i.test(call.sql)), false);
+  }
+});
+
+test('Dino não resolve fulfillment para pedido de outro tenant/loja', async () => {
+  const { trx, calls } = queryRecorder(sql => {
+    if (sql.includes('SELECT o.id, o.storefront_id, o.loja_id')) return { rows: [] };
+    throw new Error(`query não prevista: ${sql}`);
+  });
+  await assert.rejects(() => createFulfillment(trx, { empresaId, lojaId }, { orderId }), error => error instanceof CommerceError && error.code === 'ORDER_NOT_FOUND');
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].sql, /o\.empresa_id = \$1.*o\.loja_id = \$4/);
+});
+
+test('PATCH de fulfillment Dino só progride com destino local, quote usada, captura e conta própria', async () => {
+  const fulfillmentId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const selected = { id: fulfillmentId, order_id: orderId, status: 'pending', ocorrencias: [], storefront_code: 'dino-web', storefront_id: storefrontId,
+    loja_id: lojaId, storefront_loja_id: lojaId, shipping_method_id: '88888888-8888-4888-8888-888888888888', order_method_id: '88888888-8888-4888-8888-888888888888',
+    shipping_quote_id: '99999999-9999-4999-8999-999999999999', order_quote_id: '99999999-9999-4999-8999-999999999999', shipping_account_id: null,
+    fulfillment_address: { cep: '78300055', estado: 'MT' }, order_address: { cep: '78300055', estado: 'MT' }, order_status: 'paid', order_total: '113.00', order_shipping: '13.00' };
+  for (const [override, expected] of [
+    [{ fulfillment_address: { cep: '18715106', estado: 'SP' } }, 'FULFILLMENT_DINO_ORDER_SELECTION_REQUIRED'],
+    [{ order_address: { cep: '18715106', estado: 'SP' }, fulfillment_address: { cep: '18715106', estado: 'SP' } }, 'SHIPPING_NATIONAL_FULFILLMENT_NOT_READY'],
+    [{ shipping_account_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }, 'FULFILLMENT_DINO_ORDER_SELECTION_REQUIRED'],
+    [{ order_status: 'pending_payment' }, 'FULFILLMENT_ORDER_NOT_PAID'],
+  ]) {
+    const { trx, calls } = queryRecorder(sql => {
+      if (sql.includes('FROM commerce_fulfillments f JOIN commerce_orders o')) return { rows: [{ ...selected, ...override }] };
+      if (sql.includes('SELECT id FROM commerce_payments')) return { rows: [{ id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' }] };
+      if (sql.includes('SELECT tipo, codigo, configuracao FROM commerce_shipping_methods')) return { rows: [{ tipo: 'delivery', codigo: 'dino-motoboy', configuracao: { provider: 'manual', deliveryType: 'motoboy', rules: [{ cepFrom: '78300000', cepTo: '78309999' }] } }] };
+      if (sql.includes('FROM commerce_shipping_quotes')) return { rows: [{ provider: 'manual', destino_cep: '78300055', status: 'used', selected_option_id: 'local', selected_amount: '13.00', shipping_account_id: null }] };
+      throw new Error(`query não prevista: ${sql}`);
+    });
+    await assert.rejects(() => updateFulfillment(trx, { empresaId, lojaId, usuarioId }, fulfillmentId, { status: 'preparing' }), error => error instanceof CommerceError && error.code === expected);
+    assert.equal(calls.some(call => /^\s*(INSERT|UPDATE|DELETE)\b/i.test(call.sql)), false);
+  }
+  const { trx, calls } = queryRecorder(sql => {
+    if (sql.includes('FROM commerce_fulfillments f JOIN commerce_orders o')) return { rows: [selected] };
+    if (sql.includes('SELECT id FROM commerce_payments')) return { rows: [{ id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' }] };
+    if (sql.includes('SELECT tipo, codigo, configuracao FROM commerce_shipping_methods')) return { rows: [{ tipo: 'delivery', codigo: 'dino-motoboy', configuracao: { provider: 'manual', deliveryType: 'motoboy', rules: [{ cepFrom: '78300000', cepTo: '78309999' }] } }] };
+    if (sql.includes('FROM commerce_shipping_quotes')) return { rows: [{ provider: 'manual', destino_cep: '78300055', status: 'used', selected_option_id: 'local', selected_amount: '13.00', shipping_account_id: null }] };
+    if (sql.includes('UPDATE commerce_fulfillments')) return { rows: [{ id: fulfillmentId, status: 'preparing' }] };
+    if (sql.includes('INSERT INTO commerce_audit_logs')) return { rows: [] };
+    throw new Error(`query não prevista: ${sql}`);
+  });
+  assert.equal((await updateFulfillment(trx, { empresaId, lojaId, usuarioId }, fulfillmentId, { status: 'preparing' })).status, 'preparing');
+  assert.equal(calls.filter(call => sqlStartsWith(call.sql, 'UPDATE commerce_fulfillments')).length, 1);
+});
+
+function sqlStartsWith(sql, prefix) { return sql.trimStart().startsWith(prefix); }
 
 test('createPendingOrder reserva estoque para produto físico', async () => {
   let available = 5;
