@@ -88,7 +88,7 @@ test('produto arquivado não é alterável e arquivamento exige escrita e public
 })
 
 test('cada imagem selecionada mantém chave idempotente própria em retries parciais', () => {
-  assert.match(admin, /files\.map\(file => \(\{ file, uploadId: crypto\.randomUUID\(\) \}\)\)/)
+  assert.match(admin, /files\.map\(file => \(\{ file, uploadId: crypto\.randomUUID\(\), previewUrl: URL\.createObjectURL\(file\) \}\)\)/)
   assert.match(admin, /media:\$\{selected\.uploadId\}/)
 })
 

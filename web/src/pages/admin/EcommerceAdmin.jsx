@@ -218,6 +218,8 @@ export default function EcommerceAdmin() {
   const [mediaForm, setMediaForm] = useState({ url: '', altText: '', ordem: 0 })
   const [mode, setMode] = useState('legacy')
   const [storefrontId, setStorefrontId] = useState(null)
+  const loadRequestId = useRef(0)
+  const reportRequestId = useRef(0)
   const [locationId, setLocationId] = useState(null)
   const [inventoryLocations, setInventoryLocations] = useState([])
   const [catalogUnavailable, setCatalogUnavailable] = useState(false)
@@ -271,6 +273,10 @@ export default function EcommerceAdmin() {
 
   function selectStorefront(storefront) {
     if (!storefront?.id) return
+    if (storefront.status && storefront.status !== 'active') {
+      setError('Ative a vitrine antes de operar seus dados.')
+      return
+    }
     setStorefrontId(storefront.id)
     syncStoreContext(storefront)
     setNotice(`Loja ativa: ${storefront.nome}. As abas serão recarregadas neste escopo.`)
@@ -278,16 +284,20 @@ export default function EcommerceAdmin() {
   }
 
   async function loadData(silent = false, selection = {}) {
+    const requestId = ++loadRequestId.current
+    ++reportRequestId.current
+    setReports(null)
     if (!silent) setLoading(true)
     else setRefreshing(true)
     setError('')
     try {
       const data = await loadCommerceAdmin({ storefrontId: selection.storefrontId ?? storefrontId, locationId: selection.locationId ?? locationId })
+      if (requestId !== loadRequestId.current) return
       setMode(data.mode)
       const availableStorefronts = data.storefronts || []
       setStorefronts(availableStorefronts)
       setPromotionTemplates(data.promotionTemplates || [])
-      setStorefrontId(current => current && availableStorefronts.some(item => item.id === current) ? current : (data.storefrontId || availableStorefronts[0]?.id || null))
+      setStorefrontId(data.storefrontId || null)
       setLocationId(data.locationId)
       setInventoryLocations(data.inventoryLocations || [])
       setProducts(data.products)
@@ -313,8 +323,8 @@ export default function EcommerceAdmin() {
       if (Array.isArray(data.warnings) && data.warnings.length > 0) {
         setNotice(`Alguns módulos estão indisponíveis: ${data.warnings.map(item => item.label).join(', ')}. Os dados carregados continuam disponíveis.`)
       }
-    } catch (err) { setError(err.message || 'Não foi possível carregar a operação comercial.') }
-    finally { setLoading(false); setRefreshing(false) }
+    } catch (err) { if (requestId === loadRequestId.current) setError(err.message || 'Não foi possível carregar a operação comercial.') }
+    finally { if (requestId === loadRequestId.current) { setLoading(false); setRefreshing(false) } }
   }
 
   useEffect(() => { loadData() }, [])
@@ -326,7 +336,7 @@ export default function EcommerceAdmin() {
 
   useEffect(() => {
     if (mode !== 'core' || !storefronts.length) return
-    const active = storefronts.find(item => item.id === storefrontId) || storefronts[0]
+    const active = storefronts.find(item => item.id === storefrontId && (!item.status || item.status === 'active'))
     syncStoreContext(active)
   }, [mode, storefronts, storefrontId, commerceStores])
 
@@ -355,7 +365,7 @@ export default function EcommerceAdmin() {
   const fulfillmentAttention = Number(health.fulfillments?.pending || 0) + Number(health.fulfillments?.failed || 0)
   const readyPaymentAccounts = paymentAccounts.filter(account => account.ativo && account.ready).length
   const readyShippingAccounts = shippingAccounts.filter(account => account.ativo && account.ready).length
-  const activeStorefront = storefronts.find(item => item.id === storefrontId) || storefronts[0] || null
+  const activeStorefront = storefronts.find(item => item.id === storefrontId && (!item.status || item.status === 'active')) || null
   const activeCurrency = String(activeStorefront?.moeda || 'BRL').trim().toUpperCase()
   const money = value => fmtMoney(value, activeCurrency)
   const currencyLabel = activeCurrency === 'BRL' ? 'R$' : activeCurrency === 'USD' ? '$' : activeCurrency
@@ -947,11 +957,14 @@ export default function EcommerceAdmin() {
   }
 
   async function loadReports() {
+    const requestId = ++reportRequestId.current
+    setReports(null)
     setError('')
     try {
       if (mode !== 'core') throw new Error('Relatórios do Commerce Core exigem PostgreSQL ativo.')
-      setReports(await loadCoreReports(storefrontId))
-    } catch (err) { setError(err.message || 'Não foi possível carregar os relatórios.') }
+      const data = await loadCoreReports(storefrontId)
+      if (requestId === reportRequestId.current) setReports(data)
+    } catch (err) { if (requestId === reportRequestId.current) setError(err.message || 'Não foi possível carregar os relatórios.') }
   }
 
   function changePromotion(field, value) { setPromotionForm(current => ({ ...current, [field]: value })) }
@@ -1030,7 +1043,7 @@ export default function EcommerceAdmin() {
   }
 
   return <main className="ecommerce-admin-shell">
-    <header className="ecommerce-admin-header"><div><span className="ecommerce-admin-kicker"><ShoppingBag size={14} /> Commerce OS</span><h1>Operação comercial</h1><p>Backoffice multiempresa para catálogo, campanhas, pedidos, estoque e canais de venda.</p></div><div className="ecommerce-admin-header-actions">{mode === 'core' && storefronts.length > 0 && <label className="commerce-storefront-switcher"><Store size={15} /><span>Loja ativa</span><select value={storefrontId || ''} onChange={event => selectStorefront(storefronts.find(item => item.id === event.target.value))}>{storefronts.map(item => <option value={item.id} key={item.id}>{item.nome} · {item.codigo}</option>)}</select></label>}<span className={`commerce-source-badge ${mode}`}>{mode === 'core' ? 'Core PostgreSQL' : 'Catálogo legado'}</span><button type="button" className="ecommerce-admin-button ghost" onClick={() => loadData(true)}><RefreshCw size={15} className={refreshing ? 'ecommerce-admin-spin' : ''} /> Atualizar</button><button type="button" className="ecommerce-admin-button primary" onClick={beginCreate} disabled={catalogUnavailable}><Plus size={16} /> Novo item</button></div></header>
+    <header className="ecommerce-admin-header"><div><span className="ecommerce-admin-kicker"><ShoppingBag size={14} /> Commerce OS</span><h1>Operação comercial</h1><p>Backoffice multiempresa para catálogo, campanhas, pedidos, estoque e canais de venda.</p></div><div className="ecommerce-admin-header-actions">{mode === 'core' && storefronts.length > 0 && <label className="commerce-storefront-switcher"><Store size={15} /><span>Loja ativa</span><select value={storefrontId || ''} onChange={event => selectStorefront(storefronts.find(item => item.id === event.target.value))}><option value="" disabled>Selecione uma vitrine ativa</option>{storefronts.map(item => <option value={item.id} key={item.id} disabled={Boolean(item.status && item.status !== 'active')}>{item.nome} · {item.codigo}</option>)}</select></label>}<span className={`commerce-source-badge ${mode}`}>{mode === 'core' ? 'Core PostgreSQL' : 'Catálogo legado'}</span><button type="button" className="ecommerce-admin-button ghost" onClick={() => loadData(true)}><RefreshCw size={15} className={refreshing ? 'ecommerce-admin-spin' : ''} /> Atualizar</button><button type="button" className="ecommerce-admin-button primary" onClick={beginCreate} disabled={catalogUnavailable}><Plus size={16} /> Novo item</button></div></header>
     {error && <div className="ecommerce-admin-alert error">{error}<button type="button" onClick={() => setError('')} aria-label="Fechar aviso"><X size={15} /></button></div>}
     {catalogUnavailable && <div className="ecommerce-admin-alert error" role="alert">O catálogo está temporariamente indisponível. Produtos e estoque não devem ser interpretados como zero; os pedidos continuam acessíveis. Use Atualizar para tentar novamente.</div>}
     {notice && <div className="ecommerce-admin-alert success"><Check size={15} /> {notice}<button type="button" onClick={() => setNotice('')} aria-label="Fechar aviso"><X size={15} /></button></div>}

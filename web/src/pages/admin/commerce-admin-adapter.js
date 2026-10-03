@@ -134,35 +134,51 @@ async function loadLegacy() {
 export async function loadCommerceAdmin({ storefrontId: preferredStorefrontId = null, locationId: preferredLocationId = null } = {}) {
   const warnings = []
   try {
-    const [storefrontData, storefrontsData, categoryData, promotionData, templateData, roleData, membershipData, orderData, customerData, locations, shippingData, shippingProviderData, shippingAccountData, fulfillmentData, domainData, providerData, accountData, paymentData, creditData, auditData, healthData] = await Promise.all([
+    // A listagem já é filtrada no servidor pelo tenant/loja. Descubra a vitrine antes
+    // de iniciar GETs operacionais, que exigem storefrontId para perfis de loja.
+    const [storefrontData, storefrontsData] = await Promise.all([
       api.get('/api/admin/commerce/storefront'),
       safeCoreGet('/api/admin/commerce/storefronts', { items: [] }, warnings, 'lojas Commerce'),
-      safeCoreGet('/api/admin/commerce/catalog/categories', { items: [] }, warnings, 'categorias'),
-      safeCoreGet('/api/admin/commerce/promotions', { items: [] }, warnings, 'promoções'),
-      safeCoreGet('/api/admin/commerce/promotions/templates', { items: [] }, warnings, 'templates promocionais'),
-      safeCoreGet('/api/admin/commerce/users/roles', { items: [] }, warnings, 'papéis'),
-      safeCoreGet('/api/admin/commerce/users/memberships', { items: [] }, warnings, 'usuários'),
-      api.get('/api/admin/commerce/orders'),
-      safeCoreGet('/api/admin/commerce/customers', { items: [] }, warnings, 'clientes'),
-      safeCoreGet('/api/admin/commerce/inventory/locations', { items: [] }, warnings, 'locais de estoque'),
-      safeCoreGet('/api/admin/commerce/shipping/methods', { items: [] }, warnings, 'métodos de entrega'),
-      safeCoreGet('/api/admin/commerce/shipping/providers', { items: [] }, warnings, 'provedores logísticos'),
-      safeCoreGet('/api/admin/commerce/shipping/accounts', { items: [] }, warnings, 'contas logísticas'),
-      safeCoreGet('/api/admin/commerce/fulfillments', { items: [] }, warnings, 'fulfillments'),
-      safeCoreGet('/api/admin/commerce/storefront/domains', { items: [] }, warnings, 'domínios'),
-      safeCoreGet('/api/admin/commerce/payments/providers', { items: [] }, warnings, 'provedores de pagamento'),
-      safeCoreGet('/api/admin/commerce/payments/accounts', { items: [] }, warnings, 'contas de pagamento'),
-      safeCoreGet('/api/admin/commerce/payments', { items: [] }, warnings, 'pagamentos'),
-      safeCoreGet('/api/admin/commerce/credit/accounts', { items: [] }, warnings, 'contas de crediário'),
-      safeCoreGet('/api/admin/commerce/audit', { items: [], pagination: { total: 0, limit: 100, offset: 0, hasMore: false } }, warnings, 'auditoria'),
-      safeCoreGet('/api/admin/commerce/operations/health', {}, warnings, 'saúde operacional'),
     ])
-    const storefronts = storefrontsData?.items || []
-    const fallbackStorefrontId = storefrontData?.items?.[0]?.id || storefronts[0]?.id || null
-    const selectedStorefront = storefronts.find(item => item.id === preferredStorefrontId)
-      || storefronts.find(item => item.id === fallbackStorefrontId)
-      || storefronts[0]
+    const storefronts = storefrontsData?.items?.length ? storefrontsData.items : storefrontData?.items || []
+    const activeStorefronts = storefronts.filter(item => item.status == null || item.status === 'active')
+    const fallbackStorefrontId = storefrontData?.items?.[0]?.id || activeStorefronts[0]?.id || null
+    const selectedStorefront = activeStorefronts.find(item => item.id === preferredStorefrontId)
+      || activeStorefronts.find(item => item.id === fallbackStorefrontId)
+      || activeStorefronts[0]
       || null
+    // Sem vitrine ativa, não consultar dados operacionais sem escopo; ainda é
+    // possível criar/ativar a primeira vitrine na aba Lojas & canais.
+    if (!selectedStorefront) return {
+      mode: 'core', storefrontId: null, storefronts, locationId: null, inventoryLocations: [],
+      categories: [], promotions: [], promotionTemplates: [], roles: [], memberships: [],
+      products: [], catalogUnavailable: false, orders: [], customers: [],
+      shippingMethods: [], shippingProviders: [], shippingAccounts: [], fulfillments: [], domains: [],
+      paymentProviders: [], paymentAccounts: [], payments: [], creditAccounts: [], audit: [],
+      auditPagination: { total: 0, limit: 100, offset: 0, hasMore: false }, health: {}, warnings,
+    }
+    const scoped = path => scopedPath(path, selectedStorefront.id)
+    const [categoryData, promotionData, templateData, roleData, membershipData, orderData, customerData, locations, shippingData, shippingProviderData, shippingAccountData, fulfillmentData, domainData, providerData, accountData, paymentData, creditData, auditData, healthData] = await Promise.all([
+      safeCoreGet(scoped('/api/admin/commerce/catalog/categories'), { items: [] }, warnings, 'categorias'),
+      safeCoreGet(scoped('/api/admin/commerce/promotions'), { items: [] }, warnings, 'promoções'),
+      safeCoreGet(scoped('/api/admin/commerce/promotions/templates'), { items: [] }, warnings, 'templates promocionais'),
+      safeCoreGet(scoped('/api/admin/commerce/users/roles'), { items: [] }, warnings, 'papéis'),
+      safeCoreGet(scoped('/api/admin/commerce/users/memberships'), { items: [] }, warnings, 'usuários'),
+      api.get(scoped('/api/admin/commerce/orders')),
+      safeCoreGet(scoped('/api/admin/commerce/customers'), { items: [] }, warnings, 'clientes'),
+      safeCoreGet(scoped('/api/admin/commerce/inventory/locations'), { items: [] }, warnings, 'locais de estoque'),
+      safeCoreGet(scoped('/api/admin/commerce/shipping/methods'), { items: [] }, warnings, 'métodos de entrega'),
+      safeCoreGet(scoped('/api/admin/commerce/shipping/providers'), { items: [] }, warnings, 'provedores logísticos'),
+      safeCoreGet(scoped('/api/admin/commerce/shipping/accounts'), { items: [] }, warnings, 'contas logísticas'),
+      safeCoreGet(scoped('/api/admin/commerce/fulfillments'), { items: [] }, warnings, 'fulfillments'),
+      safeCoreGet(scoped('/api/admin/commerce/storefront/domains'), { items: [] }, warnings, 'domínios'),
+      safeCoreGet(scoped('/api/admin/commerce/payments/providers'), { items: [] }, warnings, 'provedores de pagamento'),
+      safeCoreGet(scoped('/api/admin/commerce/payments/accounts'), { items: [] }, warnings, 'contas de pagamento'),
+      safeCoreGet(scoped('/api/admin/commerce/payments'), { items: [] }, warnings, 'pagamentos'),
+      safeCoreGet(scoped('/api/admin/commerce/credit/accounts'), { items: [] }, warnings, 'contas de crediário'),
+      safeCoreGet(scoped('/api/admin/commerce/audit'), { items: [], pagination: { total: 0, limit: 100, offset: 0, hasMore: false } }, warnings, 'auditoria'),
+      safeCoreGet(scoped('/api/admin/commerce/operations/health'), {}, warnings, 'saúde operacional'),
+    ])
     const inventoryLocations = locations?.items || []
     const eligibleLocations = selectedStorefront?.loja_id
       ? inventoryLocations.filter(item => item.loja_id === selectedStorefront.loja_id || item.loja_id == null)
@@ -180,13 +196,6 @@ export async function loadCommerceAdmin({ storefrontId: preferredStorefrontId = 
       catalogUnavailable = true
       warnings.push({ path: '/api/admin/commerce/catalog/products', label: 'catálogo', status: error.status, code: error.code || '' })
     }
-    const [scopedOrders, scopedFulfillments, scopedPaymentAccounts, scopedPayments, scopedHealth] = await Promise.all([
-      api.get(scopedPath('/api/admin/commerce/orders', selectedStorefront?.id)),
-      safeCoreGet(scopedPath('/api/admin/commerce/fulfillments', selectedStorefront?.id), { items: [] }, warnings, 'fulfillments'),
-      safeCoreGet(scopedPath('/api/admin/commerce/payments/accounts', selectedStorefront?.id), { items: [] }, warnings, 'contas de pagamento'),
-      safeCoreGet(scopedPath('/api/admin/commerce/payments', selectedStorefront?.id), { items: [] }, warnings, 'pagamentos'),
-      safeCoreGet(scopedPath('/api/admin/commerce/operations/health', selectedStorefront?.id), {}, warnings, 'saúde operacional'),
-    ])
     return {
       mode: 'core',
       storefrontId: selectedStorefront?.id || null,
@@ -200,20 +209,20 @@ export async function loadCommerceAdmin({ storefrontId: preferredStorefrontId = 
       memberships: membershipData?.items || [],
       products: productItems.map(normalizeCoreProduct),
       catalogUnavailable,
-      orders: (scopedOrders?.items || []).map(normalizeCoreOrder),
+      orders: (orderData?.items || []).map(normalizeCoreOrder),
       customers: customerData?.items || [],
       shippingMethods: shippingData?.items || [],
       shippingProviders: shippingProviderData?.items || [],
       shippingAccounts: shippingAccountData?.items || [],
-      fulfillments: scopedFulfillments?.items || [],
+      fulfillments: fulfillmentData?.items || [],
       domains: domainData?.items || [],
       paymentProviders: providerData?.items || [],
-      paymentAccounts: scopedPaymentAccounts?.items || [],
-      payments: (scopedPayments?.items || []).map(normalizePayment),
+      paymentAccounts: accountData?.items || [],
+      payments: (paymentData?.items || []).map(normalizePayment),
       creditAccounts: creditData?.items || [],
       audit: auditData?.items || [],
       auditPagination: auditData?.pagination || { total: auditData?.items?.length || 0, limit: 100, offset: 0, hasMore: false },
-      health: scopedHealth || {},
+      health: healthData || {},
       warnings,
     }
   } catch (error) {
@@ -460,11 +469,12 @@ export async function reconcileCorePayment(paymentId, payload, storefrontId) {
 }
 
 export async function loadCoreReports(storefrontId) {
+  if (!storefrontId) throw new Error('Selecione uma vitrine ativa antes de carregar os relatórios.')
   const [sales, fulfillment, inventory, customers] = await Promise.all([
     api.get(scopedPath('/api/admin/commerce/reports/sales', storefrontId)),
     api.get(scopedPath('/api/admin/commerce/reports/fulfillment', storefrontId)),
-    api.get('/api/admin/commerce/reports/inventory'),
-    api.get('/api/admin/commerce/reports/customers'),
+    api.get(scopedPath('/api/admin/commerce/reports/inventory', storefrontId)),
+    api.get(scopedPath('/api/admin/commerce/reports/customers', storefrontId)),
   ])
   return { sales, fulfillment, inventory, customers }
 }
