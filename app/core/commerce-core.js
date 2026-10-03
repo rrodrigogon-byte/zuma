@@ -704,37 +704,18 @@ export async function createPendingOrder(trx, context, input = {}) {
   if (priced.size !== uniqueVariantIds.length) throw new CommerceError('um ou mais itens não estão disponíveis no catálogo', 'ITEM_UNAVAILABLE');
 
   const identityContext = { ...context, empresaId, identitySource: 'checkout', correlationId: input.correlationId };
-  let customerId = null;
-  let customerSnapshot = null;
-  let customerAddressResolution = null;
-  try {
-    const customerResolution = await resolveCommerceCustomer(trx, identityContext, normalizedCustomer);
-    customerId = customerResolution.customer.id;
-    customerAddressResolution = await resolveCommerceCustomerAddress(
-      trx,
-      identityContext,
-      customerId,
-      shippingSelection?.address || input.shippingAddress,
-      customerResolution.customer.nome,
-    );
-  } catch (error) {
-    // O checkout público não possui identidade autenticada. Se os contatos apontarem
-    // para clientes distintos, não escolher um deles nem fazer merge: cria-se um pedido
-    // convidado com snapshot operacional, sem crédito, fidelidade ou recuperação por cliente.
-    const guestFallbackReasons = new Set(['identifiers_resolve_to_different_customers', 'customer_email_mismatch', 'customer_phone_mismatch']);
-    if (input.allowUnverifiedGuest !== true || error?.code !== 'CONTACT_CONFLICT' || !guestFallbackReasons.has(error?.details?.reason)) throw error;
-    customerSnapshot = {
-      nome: normalizedCustomer.nome,
-      email: normalizedCustomer.email,
-      telefone: normalizedCustomer.telefone,
-      documentoMascarado: normalizedCustomer.documentoMascarado,
-    };
-    console.info('commerce_checkout_guest_fallback', JSON.stringify({
-      requestId: requestId(input.correlationId),
-      reason: error?.details?.reason || 'contact_conflict',
-      customerLinked: false,
-    }));
-  }
+  // Contatos que resolvem para customers diferentes exigem revisão humana.
+  // Nem chamadas internas nem flags no payload podem transformar esse conflito
+  // em pedido convidado/pagável ou persistir um snapshot de dados não verificados.
+  const customerResolution = await resolveCommerceCustomer(trx, identityContext, normalizedCustomer);
+  const customerId = customerResolution.customer.id;
+  const customerAddressResolution = await resolveCommerceCustomerAddress(
+    trx,
+    identityContext,
+    customerId,
+    shippingSelection?.address || input.shippingAddress,
+    customerResolution.customer.nome,
+  );
 
   const orderId = crypto.randomUUID();
   const publicCode = `KC-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
@@ -758,7 +739,7 @@ export async function createPendingOrder(trx, context, input = {}) {
       (id, empresa_id, storefront_id, loja_id, customer_id, customer_snapshot, public_code, status, origem, moeda,
        subtotal, desconto, frete, impostos, total, endereco_entrega, endereco_cobranca, observacao, shipping_method_id, shipping_quote_id)
      VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, 'web', $9, $10, $11, $12, $13, $14, $15::jsonb, $16::jsonb, $17, $18, $19)`,
-    [orderId, empresaId, storefront.id, storefront.loja_id || null, customerId, JSON.stringify(customerSnapshot || {}), publicCode, status, storefront.moeda || 'BRL', subtotal, discount, shipping, taxes, total,
+    [orderId, empresaId, storefront.id, storefront.loja_id || null, customerId, '{}', publicCode, status, storefront.moeda || 'BRL', subtotal, discount, shipping, taxes, total,
       JSON.stringify(shippingSelection?.address || input.shippingAddress || null), JSON.stringify(input.billingAddress || null), String(input.note || '').slice(0, 1000) || null, shippingMethodId, shippingSelection?.quote.id || null],
   );
   for (const line of normalizedLines) {
@@ -800,7 +781,7 @@ export async function createPendingOrder(trx, context, input = {}) {
     `INSERT INTO commerce_order_events
       (empresa_id, order_id, de_status, para_status, origem, usuario_id, correlation_id, payload_resumido)
      VALUES ($1, $2, NULL, $3, 'checkout', $4, $5, $6::jsonb)`,
-    [empresaId, orderId, status, context.usuarioId || null, requestId(input.correlationId), JSON.stringify({ lineCount: normalizedLines.length, shipping: shippingSelection ? { quoteId: shippingSelection.quote.id, optionId: shippingSelection.optionId, amount: shippingSelection.amount } : null, identity: { linked: Boolean(customerId), resolution: customerSnapshot ? 'guest_conflict' : 'customer' } })],
+    [empresaId, orderId, status, context.usuarioId || null, requestId(input.correlationId), JSON.stringify({ lineCount: normalizedLines.length, shipping: shippingSelection ? { quoteId: shippingSelection.quote.id, optionId: shippingSelection.optionId, amount: shippingSelection.amount } : null, identity: { linked: true, resolution: 'customer' } })],
   );
   const result = { id: orderId, publicCode, status, currency: storefront.moeda || 'BRL', subtotal, discount, shipping, taxes, total, customerId, customerAddressId: customerAddressResolution?.address?.id || null, shippingMethodId, shippingQuoteId: shippingSelection?.quote.id || null, shippingOptionId: shippingSelection?.optionId || null, shippingOption: shippingSelection?.option || null };
   await markCartConverted(trx, { ...context, empresaId, lojaId: storefront.loja_id }, { cartSessionKey: input.cartSessionKey, storefrontId: storefront.id, orderId, customerId });

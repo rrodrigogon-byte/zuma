@@ -192,6 +192,8 @@ function publicResponse() {
   return {
     statusCode: 200,
     body: null,
+    headers: {},
+    set(name, value) { this.headers[name.toLowerCase()] = value; return this; },
     status(code) { this.statusCode = code; return this; },
     json(body) { this.body = body; return this; },
   };
@@ -450,10 +452,11 @@ test('rota pública de carrinho possui rate limit antes do handler de sync', () 
 
 test('checkout público ignora customerId do navegador e não libera crediário sem verificação', () => {
   const source = readFileSync(new URL('./commerce-routes.js', import.meta.url), 'utf8');
-  const sanitized = sanitizePublicOrderInput({ customerId: 'top-level', customer: { customerId: 'nested', nome: 'Comprador' }, note: 'preservar' });
+  const sanitized = sanitizePublicOrderInput({ customerId: 'top-level', allowUnverifiedGuest: true, customer: { customerId: 'nested', nome: 'Comprador' }, note: 'preservar' });
   assert.deepEqual(sanitized, { customer: { nome: 'Comprador' }, note: 'preservar' });
   assert.match(source, /delete sanitized\.customerId/);
   assert.match(source, /delete sanitized\.customer\.customerId/);
+  assert.match(source, /delete sanitized\.allowUnverifiedGuest/);
   assert.doesNotMatch(source, /req\.query\.customerId/);
   assert.doesNotMatch(source, /req\.query\.customerEmail/);
   assert.match(source, /PAYMENT_CUSTOMER_VERIFICATION_REQUIRED/);
@@ -555,6 +558,7 @@ test('checkout com contato conflitante retorna 409 sem PII, pedido ou pagamento'
     });
     assert.equal(response.statusCode, 409);
     assert.equal(response.body.code, 'CHECKOUT_CONTACT_REVIEW');
+    assert.equal(response.headers['cache-control'], 'no-store, private');
     assert.equal(attempts, 1);
     assert.ok(logs.some(args => args[0] === 'commerce_checkout_contact_review' && JSON.parse(args[1]).reason === 'customer_phone_mismatch'));
     assert.doesNotMatch(JSON.stringify({ response: response.body, logs }), /private@example\.invalid|11999999999/);
@@ -562,29 +566,27 @@ test('checkout com contato conflitante retorna 409 sem PII, pedido ou pagamento'
   } finally { console.warn = originalWarn; }
 });
 
-test('conflito após INSERT da chave idempotente cria pedido convidado sem gravar ou mesclar cliente', async () => {
+test('conflito após INSERT da chave idempotente bloqueia flag guest forjada e faz rollback', async () => {
   const originalWarn = console.warn;
   let attemptedKeyInsert = 0;
   let rollbacks = 0;
   let committed = 0;
   const dml = [];
-  let orderInsertValues = null;
   console.warn = () => {};
   try {
     const response = await invokePublicOrderCreate({
-      body: { items: [{ variantId: '77777777-7777-4777-8777-777777777777', quantity: 1 }], customer: { nome: 'Teste', email: 'test@example.invalid', telefone: '11999999999' }, shippingAddress: { modo: 'retirada' } },
+      body: { allowUnverifiedGuest: true, items: [{ variantId: '77777777-7777-4777-8777-777777777777', quantity: 1 }], customer: { nome: 'Teste', email: 'test@example.invalid', telefone: '11999999999' }, shippingAddress: { modo: 'retirada' } },
       headers: { 'idempotency-key': 'contact-conflict-after-insert' },
       transaction: async callback => {
         let pendingDml = [];
         try {
-          const result = await callback({ query: async (sql, values = []) => {
+          const result = await callback({ query: async sql => {
             if (/\b(INSERT|UPDATE|DELETE)\b/i.test(sql)) pendingDml.push(sql);
             if (sql.includes('FROM commerce_storefronts')) return { rows: [{ id: storefrontId, empresa_id: empresaId, loja_id: lojaId, status: 'active', moeda: 'BRL' }] };
             if (sql.includes("scope = 'order.create'") && sql.includes('FROM commerce_idempotency_keys')) return { rows: [] };
             if (sql.includes('INSERT INTO commerce_idempotency_keys')) { attemptedKeyInsert += 1; return { rows: [] }; }
             if (sql.includes('FROM commerce_product_variants')) return { rows: [{ id: '77777777-7777-4777-8777-777777777777', sku: 'TEST', variant_name: 'Padrão', product_name: 'Produto', product_type: 'service', price: '10.00' }] };
             if (sql.includes('FROM commerce_customers')) throw { code: 'CONTACT_CONFLICT', details: { reason: 'identifiers_resolve_to_different_customers' } };
-            if (sql.includes('INSERT INTO commerce_orders')) { orderInsertValues = values; return { rows: [] }; }
             return { rows: [] };
           } });
           dml.push(...pendingDml);
@@ -597,16 +599,59 @@ test('conflito após INSERT da chave idempotente cria pedido convidado sem grava
         }
       },
     });
-    assert.equal(response.statusCode, 201);
-    assert.equal(response.body.status, 'pending_payment');
-    assert.equal('customerId' in response.body, false);
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.body.code, 'CHECKOUT_CONTACT_REVIEW');
     assert.equal(attemptedKeyInsert, 1);
-    assert.equal(rollbacks, 0);
-    assert.equal(committed, 1);
-    assert.ok(dml.some(sql => sql.includes('INSERT INTO commerce_orders')));
-    assert.ok(orderInsertValues);
-    assert.equal(orderInsertValues[4], null);
-    assert.match(orderInsertValues[5], /"email":"test@example\.invalid"/);
+    assert.equal(rollbacks, 1);
+    assert.equal(committed, 0);
+    assert.deepEqual(dml, []);
+  } finally { console.warn = originalWarn; }
+});
+
+test('checkout com e-mail de A e telefone de B bloqueia antes de pedido, reserva, loyalty ou pagamento', async () => {
+  const originalWarn = console.warn;
+  const logged = [];
+  const writes = [];
+  let rollbacks = 0;
+  console.warn = (...args) => logged.push(args);
+  try {
+    const response = await invokePublicOrderCreate({
+      body: { allowUnverifiedGuest: true, items: [{ variantId: '77777777-7777-4777-8777-777777777777', quantity: 1 }], customer: { nome: 'Fixture', email: 'a@example.invalid', telefone: '(11) 99999-9999' }, shippingAddress: { modo: 'retirada' } },
+      headers: { 'idempotency-key': 'conflict-real-resolver-test' },
+      transaction: async callback => {
+        try {
+          return await callback({ query: async (sql, values = []) => {
+            if (/^\s*(INSERT|UPDATE|DELETE)\b/i.test(sql)) writes.push(sql);
+            if (sql.includes('FROM commerce_storefronts')) return { rows: [{ id: storefrontId, empresa_id: empresaId, loja_id: lojaId, status: 'active', moeda: 'BRL' }] };
+            if (sql.includes('FROM commerce_shipping_methods')) return { rows: [] };
+            if (sql.includes('pg_advisory_xact_lock')) return { rows: [] };
+            if (sql.includes("scope = 'order.create'") && sql.includes('FROM commerce_idempotency_keys')) return { rows: [] };
+            if (sql.includes('FROM commerce_product_variants')) return { rows: [{ id: '77777777-7777-4777-8777-777777777777', sku: 'FIXTURE', product_type: 'physical', price: '10.00' }] };
+            if (sql.includes('FROM commerce_customers')) {
+              assert.equal(values[0], empresaId);
+              assert.equal(values[2], 'a@example.invalid');
+              assert.equal(values[3], '5511999999999');
+              return { rows: [
+                { id: '88888888-8888-4888-8888-888888888888', email_normalizado: 'a@example.invalid', telefone_normalizado: null, bloqueado: false },
+                { id: '99999999-9999-4999-8999-999999999999', email_normalizado: null, telefone_normalizado: '5511999999999', bloqueado: false },
+              ] };
+            }
+            if (sql.includes('INSERT INTO commerce_idempotency_keys')) return { rows: [] };
+            throw new Error('consulta inesperada antes do bloqueio de identidade');
+          } });
+        } catch (error) { rollbacks += 1; throw error; }
+      },
+    });
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.body.code, 'CHECKOUT_CONTACT_REVIEW');
+    assert.equal(response.headers['cache-control'], 'no-store, private');
+    assert.equal(rollbacks, 1);
+    assert.equal(writes.length, 1); // apenas INSERT idempotente, revertido na transação
+    assert.match(writes[0], /INSERT INTO commerce_idempotency_keys/);
+    assert.doesNotMatch(writes.join(' '), /commerce_orders|commerce_payments|commerce_inventory|commerce_loyalty|commerce_customers|commerce_cart/);
+    assert.equal(logged.length, 1);
+    assert.deepEqual(JSON.parse(logged[0][1]), { requestId: 'route-test', reason: 'identifiers_resolve_to_different_customers' });
+    assert.doesNotMatch(JSON.stringify({ body: response.body, logged }), /a@example\.invalid|5511999999999|88888888-8888/);
   } finally { console.warn = originalWarn; }
 });
 
