@@ -30,7 +30,7 @@ import { createWhatsappAiWebhookRouter } from './core/whatsapp-ai-routes.js';
 import { whatsappAiOperationalStatus } from './core/whatsapp-ai.js';
 import { startWhatsappAiWorker } from './workers/whatsapp-ai-worker.js';
 import { startIsaPollWorker } from './core/whatsapp-isa-poll.js';
-import { configuracaoResumo, configuracaoResumoPublica, diaLocal as diaLocalResumo, enviarResumo, montarResumoDiario, startResumoDiarioWorker } from './core/dino-resumo-diario.js';
+import { configuracaoResumo, configuracaoResumoPublica, diaLocal as diaLocalResumo, enviarResumo, lojaDoCanal as lojaDoCanalResumo, montarResumoDiario, startResumoDiarioWorker } from './core/dino-resumo-diario.js';
 import { startPendingFollowUpWorker } from './core/whatsapp-ai-followup.js';
 import { db as commerceDb, getPool as getCommercePool } from './core/database.js';
 import { checkCommerceSchemaReadiness } from './core/commerce-schema-readiness.js';
@@ -3073,7 +3073,10 @@ app.get('/api/admin/barbearia/captacao/canais', (req, res) => {
 app.get('/api/admin/barbearia/resumo-diario', async (req, res) => {
   try {
     const dia = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query?.dia || '')) ? req.query.dia : diaLocalResumo();
-    const resumo = await montarResumoDiario({ empresaId: legacyEmpresaId(req), lojaId: legacyLojaId(req), dia });
+    // "Todas as lojas" na sessão: usa a loja do canal WhatsApp (mesma regra do envio automático).
+    const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId(req) || await lojaDoCanalResumo(empresaId);
+    const resumo = await montarResumoDiario({ empresaId, lojaId, dia });
     res.json({ ok: true, dia, configuracao: configuracaoResumoPublica(), ...resumo });
   } catch (error) {
     res.status(400).json({ error: String(error?.message || 'Não foi possível montar o resumo.').slice(0, 200) });
@@ -3084,7 +3087,8 @@ app.post('/api/admin/barbearia/resumo-diario/enviar', async (req, res) => {
     if (req.body?.confirmar !== true) return res.status(400).json({ error: 'Confirme o envio do resumo.' });
     const { telefones } = configuracaoResumo();
     if (!telefones.length) return res.status(400).json({ error: 'Configure DINO_RESUMO_TELEFONES para enviar o resumo.' });
-    const resumo = await montarResumoDiario({ empresaId: legacyEmpresaId(req), lojaId: legacyLojaId(req), dia: diaLocalResumo() });
+    const empresaId = legacyEmpresaId(req);
+    const resumo = await montarResumoDiario({ empresaId, lojaId: legacyLojaId(req) || await lojaDoCanalResumo(empresaId), dia: diaLocalResumo() });
     const resultado = await enviarResumo({ texto: resumo.texto, telefones });
     if (!resultado.enviados) return res.status(502).json({ error: 'O WhatsApp não aceitou o envio. Confira a conexão em WhatsApp da empresa.', ...resultado });
     res.json({ ok: true, ...resultado });

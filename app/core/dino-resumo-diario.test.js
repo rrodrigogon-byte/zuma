@@ -91,3 +91,15 @@ test('envio: conta sucessos, mascara falhas e nunca expõe o número no painel',
     process.env = antes;
   }
 });
+
+test('loja do canal: sessão em "todas as lojas" usa a loja do WhatsApp ativo', async () => {
+  const { lojaDoCanal } = await import('./dino-resumo-diario.js');
+  const consultas = [];
+  const executor = { queryRead: async (sql, params) => { consultas.push(params); return { rows: [{ loja_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' }] }; } };
+  assert.equal(await lojaDoCanal(EMPRESA, executor), 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
+  assert.deepEqual(consultas[0], [EMPRESA]);
+  assert.equal(await lojaDoCanal('principal', executor), '', 'empresa legada sem UUID não consulta o banco');
+  assert.equal(consultas.length, 1);
+  const falha = { queryRead: async () => { throw new Error('fora do ar'); } };
+  assert.equal(await lojaDoCanal(EMPRESA, falha), '', 'banco fora do ar não quebra o resumo');
+});

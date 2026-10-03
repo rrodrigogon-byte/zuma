@@ -210,7 +210,9 @@ export function configuracaoResumoPublica() {
   return { ativo: cfg.ativo, hora: cfg.hora, destinatarios: cfg.telefones.map((t) => `***${t.slice(-4)}`) };
 }
 
-async function lojaDoCanal(empresaId, executor = db) {
+/** Loja do canal WhatsApp ativo da empresa (usada quando a sessão está em "todas as lojas"). */
+export async function lojaDoCanal(empresaId, executor = db) {
+  if (!/^[0-9a-f-]{36}$/i.test(String(empresaId || ''))) return '';
   try {
     const r = await executor.queryRead(
       `SELECT loja_id FROM canais_integracao
