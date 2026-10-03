@@ -14,6 +14,8 @@ import {
 
 const HISTORY_LIMIT = 40;
 const BACKOFF_MINUTES = [1, 2, 5, 10, 15, 30];
+const disconnecting = new Set();
+const disconnectEpoch = new Map();
 
 function store() {
   const state = db();
@@ -84,11 +86,12 @@ function aplicarEstado(conexao, resultado) {
   }
   if (!resultado.ok) {
     conexao.lastError = resultado.error || `http_${resultado.status || 'sem_resposta'}`;
+    conexao.phone = ''; // sem status atual não há número verificável
     return;
   }
   conexao.lastError = null;
   conexao.state = resultado.state || 'unknown';
-  if (resultado.phone) conexao.phone = resultado.phone;
+  conexao.phone = conexao.state === 'open' ? (resultado.phone || '') : '';
   if (conexao.state === 'open') {
     if (anterior !== 'open') {
       conexao.lastConnectedAt = agora;
@@ -119,9 +122,8 @@ export function visaoPublica(conexao) {
     instance: conexao.instance,
     ativo: Boolean(conexao.ativo),
     autoReconnect: conexao.autoReconnect !== false,
-    numeroExibicao: conexao.numeroExibicao || '',
     state: conexao.state,
-    phoneMasked: mascararNumero(conexao.phone),
+    phoneMasked: conexao.state === 'open' ? mascararNumero(conexao.phone) : '',
     lastCheckAt: conexao.lastCheckAt,
     lastConnectedAt: conexao.lastConnectedAt,
     lastDisconnectAt: conexao.lastDisconnectAt,
@@ -140,12 +142,15 @@ export async function verificarConexao(empresaId, { fetchImpl } = {}) {
     return visaoPublica(conexao);
   }
   if (semInstancia(conexao)) { conexao.lastError = 'instancia_nao_atribuida'; return visaoPublica(conexao); }
+  const key = String(empresaId);
+  const epoch = disconnectEpoch.get(key) || 0;
   const resultado = await getInstanceStatus(conexao.instance, fetchImpl);
+  if (disconnecting.has(key) || epoch !== (disconnectEpoch.get(key) || 0)) return visaoPublica(conexao);
   aplicarEstado(conexao, resultado);
   // Se o backend confirma a sessão aberta, a conexão precisa continuar ativa
   // mesmo quando uma tentativa anterior de logout falhou depois de persistir
   // apenas o estado local.
-  if (resultado.ok && resultado.state === 'open') conexao.ativo = true;
+  if (resultado.ok && resultado.state === 'open' && conexao.autoReconnect !== false) conexao.ativo = true;
   save();
   return visaoPublica(conexao);
 }
@@ -163,8 +168,12 @@ export async function gerarQr(empresaId, { usuario = '', fetchImpl, registrarHis
   const conexao = obterConexao(empresaId);
   const bloqueio = semInstancia(conexao);
   if (bloqueio) return { ...bloqueio, conexao: visaoPublica(conexao) };
+  if (disconnecting.has(String(empresaId))) return { ok: false, code: 'WHATSAPP_DISCONNECT_IN_PROGRESS', error: 'Desconexão em andamento.', conexao: visaoPublica(conexao) };
+  const key = String(empresaId);
+  const epoch = disconnectEpoch.get(key) || 0;
   conexao.ativo = true;
   const resultado = await requestInstanceQr(conexao.instance, fetchImpl);
+  if (disconnecting.has(key) || epoch !== (disconnectEpoch.get(key) || 0)) return { ok: false, code: 'WHATSAPP_DISCONNECT_IN_PROGRESS', error: 'A conexão mudou durante a solicitação.', conexao: visaoPublica(conexao) };
   if (resultado.authError) {
     aplicarEstado(conexao, resultado);
     save();
@@ -190,22 +199,36 @@ export async function desconectar(empresaId, { usuario = '', fetchImpl } = {}) {
   const conexao = obterConexao(empresaId);
   const bloqueio = semInstancia(conexao);
   if (bloqueio) return { ...bloqueio, conexao: visaoPublica(conexao) };
-  const resultado = await disconnectInstance(conexao.instance, fetchImpl);
-  if (!resultado.ok) {
-    // Nunca simular uma desconexão local: o backend pode ter recusado a rota
-    // sem que o número tenha deixado o WhatsApp. Mantém o botão disponível.
-    conexao.ativo = conexao.state === 'open' ? true : conexao.ativo;
-    conexao.lastError = resultado.error || 'logout_failed';
+  const key = String(empresaId);
+  if (disconnecting.has(key)) return { ok: false, code: 'WHATSAPP_DISCONNECT_IN_PROGRESS', error: 'Desconexão em andamento.', conexao: visaoPublica(conexao) };
+  disconnecting.add(key);
+  disconnectEpoch.set(key, (disconnectEpoch.get(key) || 0) + 1);
+  try {
+    const resultado = await disconnectInstance(conexao.instance, fetchImpl);
+    // Um timeout pode acontecer DEPOIS do reset; GET é seguro, DELETE não deve ser repetido.
+    const status = resultado.ok || resultado.uncertain ? await getInstanceStatus(conexao.instance, fetchImpl) : null;
+    if ((!resultado.ok && !resultado.uncertain) || !status?.ok || !['close', 'qr'].includes(status.state)) {
+      // Nunca simular logout local ou reiniciar outro número quando o backend
+      // falhou ou ainda responde open/unknown. A instância continua visível.
+      conexao.ativo = conexao.state === 'open' ? true : conexao.ativo;
+      conexao.phone = ''; // nem DELETE nem GET final confirmaram a identidade atual
+      conexao.lastError = resultado.ok ? 'LOGOUT_STATUS_UNCONFIRMED' : (resultado.error || 'logout_failed');
+      save();
+      return { ok: false, error: 'Backend não confirmou a desconexão.', conexao: visaoPublica(conexao) };
+    }
+    conexao.ativo = false;
+    conexao.autoReconnect = false;
+    conexao.state = 'close';
+    conexao.phone = '';
+    conexao.lastError = null;
+    conexao.lastCheckAt = new Date().toISOString();
+    conexao.lastDisconnectAt = conexao.lastCheckAt;
+    registrar(conexao, 'desconectado_manual', usuario ? `por ${usuario}` : '');
     save();
-    return { ok: false, error: 'Backend não confirmou a desconexão.', conexao: visaoPublica(conexao) };
+    return { ok: true, error: null, conexao: visaoPublica(conexao) };
+  } finally {
+    disconnecting.delete(key);
   }
-  conexao.ativo = false;
-  conexao.state = 'close';
-  conexao.lastError = null;
-  conexao.lastDisconnectAt = new Date().toISOString();
-  registrar(conexao, 'desconectado_manual', usuario ? `por ${usuario}` : '');
-  save();
-  return { ok: true, error: null, conexao: visaoPublica(conexao) };
 }
 
 export function configurar(empresaId, { instance, autoReconnect, numeroExibicao } = {}, { podeTrocarInstancia = false } = {}) {
@@ -237,14 +260,21 @@ export function configurar(empresaId, { instance, autoReconnect, numeroExibicao 
  */
 export async function vigiarConexao(empresaId, { now = Date.now(), fetchImpl } = {}) {
   const conexao = obterConexao(empresaId);
+  const key = String(empresaId);
+  if (disconnecting.has(key)) return { action: 'skip', reason: 'disconnect_in_progress' };
   if (!conexao.ativo || conexao.autoReconnect === false || !conexao.instance) return { action: 'skip', reason: 'inactive' };
+  const epoch = disconnectEpoch.get(key) || 0;
   const status = await getInstanceStatus(conexao.instance, fetchImpl);
+  // O GET pode ter começado ANTES do logout; não aplicar estado nem pedir QR
+  // depois que a ação de desconexão adquiriu o lock em memória.
+  if (disconnecting.has(key) || epoch !== (disconnectEpoch.get(key) || 0)) return { action: 'skip', reason: 'disconnect_in_progress' };
   aplicarEstado(conexao, status);
   if (!status.ok || status.authError) { save(); return { action: 'status_unavailable' }; }
   if (conexao.state === 'open' || conexao.state === 'connecting') { save(); return { action: 'none', state: conexao.state }; }
   if (conexao.nextReconnectAt && new Date(conexao.nextReconnectAt).getTime() > now) { save(); return { action: 'waiting', until: conexao.nextReconnectAt }; }
   const attempt = (conexao.reconnectAttempts || 0) + 1;
   const result = await requestInstanceQr(conexao.instance, fetchImpl);
+  if (disconnecting.has(key) || epoch !== (disconnectEpoch.get(key) || 0)) return { action: 'skip', reason: 'disconnect_in_progress' };
   conexao.reconnectAttempts = attempt;
   const minutes = BACKOFF_MINUTES[Math.min(attempt - 1, BACKOFF_MINUTES.length - 1)];
   conexao.nextReconnectAt = new Date(now + minutes * 60_000).toISOString();
@@ -266,6 +296,7 @@ export async function vigiarTodas(options = {}) {
 /** Evento connection.update recebido pelo webhook do canal. */
 export function registrarEventoConexao(empresaId, state) {
   const conexao = obterConexao(empresaId);
+  if (disconnecting.has(String(empresaId)) || (!conexao.ativo && conexao.autoReconnect === false)) return visaoPublica(conexao);
   aplicarEstado(conexao, { ok: true, state });
   if (conexao.state !== 'open') conexao.nextReconnectAt = null; // reconecta no próximo ciclo do vigia
   save();

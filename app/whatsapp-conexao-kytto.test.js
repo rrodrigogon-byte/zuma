@@ -2,8 +2,19 @@ import test, { afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { reset } from './db.js';
 
-beforeEach(() => { reset(); process.env.CHATBOT_BACKEND_INSTANCE = 'dino-1'; delete process.env.CHATBOT_BACKEND_EMPRESA_ID; });
-afterEach(() => { reset(); delete process.env.CHATBOT_BACKEND_INSTANCE; delete process.env.CHATBOT_BACKEND_EMPRESA_ID; });
+beforeEach(() => {
+  reset();
+  process.env.CHATBOT_BACKEND_INSTANCE = 'dino-1';
+  process.env.CHATBOT_BACKEND_MODE = 'instancias';
+  process.env.WHATSAPP_PROVIDER = 'chatbot_backend';
+  process.env.CHATBOT_BACKEND_URL = 'https://backend.test';
+  process.env.CHATBOT_BACKEND_KEY = 'k'.repeat(24);
+  delete process.env.CHATBOT_BACKEND_EMPRESA_ID;
+});
+afterEach(() => {
+  reset();
+  for (const key of ['CHATBOT_BACKEND_INSTANCE', 'CHATBOT_BACKEND_MODE', 'CHATBOT_BACKEND_EMPRESA_ID', 'WHATSAPP_PROVIDER', 'CHATBOT_BACKEND_URL', 'CHATBOT_BACKEND_KEY']) delete process.env[key];
+});
 
 test('a instância padrão fica com uma só empresa e nunca com a principal da plataforma', async () => {
   const conexao = await import('./whatsapp-conexao-kytto.js');
@@ -58,4 +69,143 @@ test('verificação reativa a conexão local quando o backend confirma estado ab
   } finally {
     for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
   }
+});
+
+test('logout por instância exige GET final close/qr, pausa reconexão e apaga identidade anterior', async () => {
+  const conexao = await import('./whatsapp-conexao-kytto.js');
+  const estado = conexao.obterConexao('emp-a');
+  estado.state = 'open'; estado.ativo = true; estado.phone = '5565999991234'; estado.numeroExibicao = '5565999991234'; estado.autoReconnect = true;
+  const calls = [];
+  const result = await conexao.desconectar('emp-a', { fetchImpl: async (url, opts) => {
+    calls.push([opts.method, url]);
+    return { ok: true, status: 200, text: async () => JSON.stringify(opts.method === 'DELETE' ? { success: true } : { state: 'qr' }) };
+  } });
+  assert.equal(result.ok, true);
+  assert.deepEqual(calls.map(([method, url]) => [method, new URL(url).pathname + new URL(url).search]), [
+    ['DELETE', '/api/v1/whats-app/instances/dino-1/session?confirm=true'],
+    ['GET', '/api/v1/whats-app/instances/dino-1/status'],
+  ]);
+  assert.equal(result.conexao.state, 'close');
+  assert.equal(result.conexao.ativo, false);
+  assert.equal(result.conexao.autoReconnect, false);
+  assert.equal(result.conexao.phoneMasked, '');
+  assert.equal(Object.hasOwn(result.conexao, 'numeroExibicao'), false);
+  assert.deepEqual(await conexao.vigiarConexao('emp-a', { fetchImpl: () => { throw new Error('não chamar'); } }), { action: 'skip', reason: 'inactive' });
+});
+
+test('HTTP 200 sem mudança de estado não declara desconexão e telefone velho nunca passa por número verificado', async () => {
+  const conexao = await import('./whatsapp-conexao-kytto.js');
+  const estado = conexao.obterConexao('emp-a');
+  estado.state = 'open'; estado.ativo = true; estado.phone = '5565999991234';
+  const result = await conexao.desconectar('emp-a', { fetchImpl: async (_url, opts) => ({ ok: true, status: 200, text: async () => JSON.stringify(opts.method === 'DELETE' ? {} : { state: 'open' }) }) });
+  assert.equal(result.ok, false);
+  assert.equal(result.conexao.state, 'open');
+  assert.equal(result.conexao.ativo, true);
+  assert.equal(result.conexao.lastError, 'LOGOUT_STATUS_UNCONFIRMED');
+  assert.equal(result.conexao.phoneMasked, '', 'GET final sem telefone não preserva identidade antiga');
+  const refreshed = await conexao.verificarConexao('emp-a', { fetchImpl: async () => ({ ok: true, status: 200, text: async () => '{"state":"open"}' }) });
+  assert.equal(refreshed.phoneMasked, '', 'status open sem telefone não herda titular anterior');
+});
+
+test('timeout de DELETE é reconciliado apenas por GET de status; não há segundo DELETE', async () => {
+  const conexao = await import('./whatsapp-conexao-kytto.js');
+  const estado = conexao.obterConexao('emp-a'); estado.state = 'open'; estado.ativo = true;
+  const methods = [];
+  const result = await conexao.desconectar('emp-a', { fetchImpl: async (_url, opts) => {
+    methods.push(opts.method);
+    if (opts.method === 'DELETE') throw new Error('timeout sintético');
+    return { ok: true, status: 200, text: async () => '{"state":"close"}' };
+  } });
+  assert.equal(result.ok, true);
+  assert.deepEqual(methods, ['DELETE', 'GET']);
+});
+
+test('timeout sem confirmação mantém a sessão em aberto e nunca repete DELETE', async () => {
+  const conexao = await import('./whatsapp-conexao-kytto.js');
+  const estado = conexao.obterConexao('emp-a'); estado.state = 'open'; estado.ativo = true;
+  const methods = [];
+  const result = await conexao.desconectar('emp-a', { fetchImpl: async (_url, opts) => {
+    methods.push(opts.method);
+    if (opts.method === 'DELETE') throw new Error('timeout sintético');
+    return { ok: true, status: 200, text: async () => '{"state":"open"}' };
+  } });
+  assert.equal(result.ok, false);
+  assert.equal(result.conexao.state, 'open');
+  assert.equal(result.conexao.ativo, true);
+  assert.equal(result.conexao.lastError, 'LOGOUT_NETWORK_UNCERTAIN');
+  assert.deepEqual(methods, ['DELETE', 'GET']);
+});
+
+test('dois logouts concorrentes fazem um DELETE e não acionam vigia no meio da troca', async () => {
+  const conexao = await import('./whatsapp-conexao-kytto.js');
+  const estado = conexao.obterConexao('emp-a'); estado.state = 'open'; estado.ativo = true;
+  let release;
+  const pending = new Promise((resolve) => { release = resolve; });
+  let calls = 0;
+  const fetchImpl = async (_url, opts) => {
+    if (opts.method === 'DELETE') { calls++; await pending; return { ok: true, status: 200, text: async () => '{}' }; }
+    return { ok: true, status: 200, text: async () => '{"state":"close"}' };
+  };
+  const first = conexao.desconectar('emp-a', { fetchImpl });
+  const second = await conexao.desconectar('emp-a', { fetchImpl });
+  assert.equal(second.code, 'WHATSAPP_DISCONNECT_IN_PROGRESS');
+  assert.deepEqual(await conexao.vigiarConexao('emp-a', { fetchImpl }), { action: 'skip', reason: 'disconnect_in_progress' });
+  release();
+  assert.equal((await first).ok, true);
+  assert.equal(calls, 1);
+});
+
+test('GET atrasado não reativa o canal após logout e pausa automática', async () => {
+  const conexao = await import('./whatsapp-conexao-kytto.js');
+  const estado = conexao.obterConexao('emp-a');
+  estado.state = 'close'; estado.ativo = false; estado.autoReconnect = false;
+  const result = await conexao.verificarConexao('emp-a', { fetchImpl: async () => ({ ok: true, status: 200, text: async () => '{"state":"open"}' }) });
+  assert.equal(result.state, 'open');
+  assert.equal(result.ativo, false);
+  assert.equal(result.autoReconnect, false);
+});
+
+test('vigia iniciado antes do logout não solicita QR ao receber status atrasado', async () => {
+  const conexao = await import('./whatsapp-conexao-kytto.js');
+  const estado = conexao.obterConexao('emp-a'); estado.state = 'open'; estado.ativo = true;
+  let liberarVigia; let liberarLogout;
+  const vigiaEmVoo = new Promise((resolve) => { liberarVigia = resolve; });
+  const logoutEmVoo = new Promise((resolve) => { liberarLogout = resolve; });
+  let qrCalls = 0;
+  const vigilante = conexao.vigiarConexao('emp-a', { fetchImpl: async () => {
+    await vigiaEmVoo;
+    return { ok: true, status: 200, text: async () => '{"state":"close"}' };
+  } });
+  const sair = conexao.desconectar('emp-a', { fetchImpl: async (_url, opts) => {
+    if (opts.method === 'DELETE') { await logoutEmVoo; return { ok: true, status: 200, text: async () => '{}' }; }
+    if (_url.includes('/qr')) qrCalls++;
+    return { ok: true, status: 200, text: async () => '{"state":"close"}' };
+  } });
+  liberarVigia();
+  assert.deepEqual(await vigilante, { action: 'skip', reason: 'disconnect_in_progress' });
+  liberarLogout();
+  assert.equal((await sair).ok, true);
+  assert.equal(qrCalls, 0);
+});
+
+test('GET antigo com open após logout confirmado não ressuscita a conexão local', async () => {
+  const conexao = await import('./whatsapp-conexao-kytto.js');
+  const estado = conexao.obterConexao('emp-a'); estado.state = 'open'; estado.ativo = true; estado.phone = '5565999991234';
+  let liberar;
+  const pending = new Promise((resolve) => { liberar = resolve; });
+  const antigo = conexao.verificarConexao('emp-a', { fetchImpl: async () => {
+    await pending;
+    return { ok: true, status: 200, text: async () => '{"state":"open","phone":"5565999991234"}' };
+  } });
+  const saiu = await conexao.desconectar('emp-a', { fetchImpl: async (_url, opts) => ({
+    ok: true, status: 200, text: async () => JSON.stringify(opts.method === 'DELETE' ? { success: true } : { state: 'close' }),
+  }) });
+  assert.equal(saiu.ok, true);
+  liberar();
+  const depois = await antigo;
+  assert.equal(depois.state, 'close');
+  assert.equal(depois.ativo, false);
+  assert.equal(depois.phoneMasked, '');
+  const eventoAtrasado = conexao.registrarEventoConexao('emp-a', 'open');
+  assert.equal(eventoAtrasado.state, 'close', 'webhook tardio não reabre a sessão local pausada');
 });

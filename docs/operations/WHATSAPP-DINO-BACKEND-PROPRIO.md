@@ -21,7 +21,8 @@ Tudo no Kytto já segue o contrato da Isa:
 | Idade máxima | 30 min (`WHATSAPP_MAX_REPLY_AGE_MINUTES`). |
 | Áudio | Resposta fixa pedindo texto. |
 | SAIR / PARE | Revoga o consentimento e cancela os avisos pendentes. |
-| Status e QR | `GET /status` (`authenticated`, `connecting`) e `GET /qr`, pela tela **WhatsApp da empresa** (`/admin/whatsapp`). |
+| Status e QR | No modo `instancias`, `GET /instances/dino/status` e `GET /instances/dino/qr`, pela tela **WhatsApp da empresa** (`/admin/whatsapp`). O estado `open` não comprova o número se o backend omitir o telefone. |
+| Troca de aparelho | Somente `DELETE /instances/dino/session?confirm=true`, conforme `/docs-json` do backend Dino. Depois, `GET /instances/dino/status` deve confirmar `close` ou `qr`. Não chamar `/session` ou `/logout` global. |
 
 No backend multi-instância, a instância deve permanecer `dino` em todas as operações. Não usar `CHATBOT_BACKEND_MODE=isa` neste deploy: esse modo consulta a sessão raiz da Isa e pode misturar o contexto operacional.
 
@@ -66,8 +67,10 @@ Opcionais:
    - a URL do backend da Dino;
    - a empresa do número;
    - a chave.
-3. Abra **WhatsApp da empresa** (`/admin/whatsapp`) e clique em **Gerar QR**. No celular da Dino, abra **WhatsApp → Aparelhos conectados → Conectar aparelho** e leia o QR.
-4. Confirme que o status mostra **autenticado**.
+3. Se a instância já está conectada sem número verificado, não atribua um número por texto. Com autorização do titular e o aparelho presente, clique **Desconectar** uma vez e confirme que o backend respondeu `close`/`qr`; se falhar, não repita sem diagnóstico.
+4. Clique em **Gerar QR** apenas para `dino`. No celular da Dino, abra **WhatsApp → Aparelhos conectados → Conectar aparelho** e leia o QR. Não grave nem compartilhe o QR/código.
+5. Confirme a sessão ativa e o número **mascarado proveniente do backend**. Se o backend não informar o número, a tela avisa que a titularidade ainda não está comprovada: o titular deve conferir o aparelho conectado no próprio WhatsApp. Não usar um campo manual como prova.
+6. A desconexão pausa a reconexão automática. Somente após confirmar a nova linha, o gestor pode reativar **Reconectar sozinho** no painel; gerar o QR não reativa essa opção implicitamente.
 
 ### 4. Ligar com segurança
 
@@ -83,9 +86,11 @@ Opcionais:
 - A sincronização do canal pode retornar `manual: true` e `polling: true`: isso é esperado quando o backend não oferece webhook; não tentar registrar `/instances/dino/webhook`.
 - Se o backend perder a sessão, o status deixa de ser `authenticated`. Gere outro QR em **WhatsApp da empresa**.
 - A fila de avisos (lembrete, vaga na lista de espera, pedido de avaliação) só envia para quem autorizou o WhatsApp de atendimento.
+- Em 03/10/2026 o `setpoint` Render tinha **1 instância**; o lock do logout no Kytto é apenas em memória. Antes de escalar horizontalmente ou executar mais de um processo, implementar lock compartilhado por empresa/instância para impedir dois resets concorrentes.
 
 ## Desligar em caso de problema
 
 - `WHATSAPP_POLL_MODE=off`: para de ler e de responder na hora. Agenda, link público e admin continuam normais.
-- Para desligar também os envios (lembretes e avisos), remova `WHATSAPP_PROVIDER`.
+- **Não** remova `WHATSAPP_PROVIDER` como kill switch: o código atual pode selecionar Evolution automaticamente se esse valor estiver ausente. O gate de saída fail-closed por empresa é tratado no [issue #201](https://github.com/rrodrigogon-byte/agro-open/issues/201).
+- Quando explicitamente autorizada, **Desconectar** encerra somente a sessão `dino` e pausa sua reconexão após confirmação do backend. Se o backend não confirmar, trate o estado como incerto e não anuncie desligamento total de mensagens; siga o plano de contingência de #201.
 - Nada disso apaga conversas, agendamentos ou consentimentos.

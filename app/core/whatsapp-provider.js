@@ -201,33 +201,24 @@ export async function requestInstanceQr(instance, fetchImpl) {
   return { ok: true, status: result.status, state: normalizeState(result.data), ...extractQr(result.data) };
 }
 
-/** Encerra o socket sem apagar credenciais (logout não destrutivo). */
+/** Remove a sessão SOMENTE da instância indicada; a confirmação é exigida pelo backend Dino. */
 export async function disconnectInstance(instance, fetchImpl) {
   // Na sessão única da Isa, desconectar derruba o número inteiro: não é feito daqui.
   if (chatbotBackendMode() === 'isa') return { ok: false, error: 'not_supported_in_isa_mode' };
   const cfg = chatbotBackendConfig({ instance });
   if (!cfg.instance) return { ok: false, error: 'invalid_instance' };
   const base = `/instances/${encodeURIComponent(cfg.instance)}`;
-  // Contrato oficial do chatbot-backend-nestjs: POST /instances/{id}/logout.
-  // Mantemos os contratos antigos apenas como fallback para backends legados.
-  const tentativas = [
-    ['POST', `${base}/logout`, {}],
-    ['POST', `${base}/session/logout`, {}],
-    ['DELETE', `${base}/session`, null],
-  ];
-  let result = null;
-  for (const [method, path, body] of tentativas) {
-    result = await call(cfg, method, path, body, fetchImpl);
-    if (isAuthError(result.status)) return { ok: false, authError: true, status: result.status };
-    if (result.status !== 404 && result.status !== 405) break;
-  }
-  if (result?.status === 404 || result?.status === 405) {
-    // Algumas versões do backend só expõem o logout legado na raiz, sem o
-    // prefixo /api/v1/whats-app; o cliente oficial usa exatamente esta rota.
-    result = await call({ ...cfg, apiBase: '' }, 'POST', `/logout?instance=${encodeURIComponent(cfg.instance)}`, {}, fetchImpl);
-    if (isAuthError(result.status)) return { ok: false, authError: true, status: result.status };
-  }
-  return { ok: result?.ok === true, status: result?.status ?? null, error: result?.ok ? null : (result?.error || 'logout_failed') };
+  // Swagger live do backend Dino: DELETE /instances/{instanceName}/session?confirm=true.
+  // Nunca usar a rota global /session ou /logout: ela pode encerrar outra empresa.
+  const result = await call(cfg, 'DELETE', `${base}/session?confirm=true`, null, fetchImpl);
+  const ok = result.ok && result.data?.ok !== false && result.data?.success !== false;
+  return {
+    ok,
+    status: result.status,
+    authError: isAuthError(result.status),
+    uncertain: result.status === null || result.status === 408 || result.status >= 500,
+    error: ok ? null : (result.status === null ? 'LOGOUT_NETWORK_UNCERTAIN' : `LOGOUT_HTTP_${result.status}`),
+  };
 }
 
 function sendPaths(cfg) {

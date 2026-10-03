@@ -38,6 +38,8 @@ function fakeBackend() {
       const send = (status, body) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
       if (req.headers.authorization !== 'Bearer chave-teste-com-mais-de-vinte') return send(401, { message: 'unauthorized' });
       if (req.url === '/api/v1/whats-app/instances/dino-1/status') return send(200, { instance: 'dino-1', state, phone: '5565993360000' });
+      if (req.url === '/api/v1/whats-app/instances/dino-1/session?confirm=true' && req.method === 'DELETE') { state = 'close'; return send(200, { success: true }); }
+      if (req.url?.includes('/instances/dino-1/session') && req.method === 'DELETE') return send(400, { message: 'confirm=true required' });
       if (req.url === '/api/v1/whats-app/instances/dino-1/qr') { state = 'qr'; return send(200, { qrcode: '2@AbCdEfGhIjKlMnOpQrStUvWxYz0123456789,abc,def', pairingCode: 'ABCD-1234' }); }
       if (req.url === '/api/v1/whats-app/instances/dino-1/messages/text' && req.method === 'POST') return send(201, { id: 'msg-1', status: 'sent' });
       if (req.url === '/api/v1/whats-app/instances/fora-da-lista/status') return send(404, { message: 'instance not enabled' });
@@ -318,6 +320,19 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     assert.notEqual(qrB.response.status, 200, 'B não pareia a instância da A');
     const semConfirmar = await request(base, '/api/admin/barbearia/whatsapp-conexao/desconectar', { method: 'POST', headers: A, body: JSON.stringify({}) });
     assert.equal(semConfirmar.response.status, 400);
+    backend.setState('open');
+    assert.equal((await request(base, '/api/admin/barbearia/whatsapp-conexao?atualizar=1', { headers: A })).body.conexao.state, 'open');
+    const confirmarLogout = JSON.stringify({ confirmado: true });
+    const deniedStaff = await request(base, '/api/admin/barbearia/whatsapp-conexao/desconectar', { method: 'POST', headers: staffA, body: confirmarLogout });
+    assert.equal(deniedStaff.response.status, 403);
+    const deniedTenant = await request(base, '/api/admin/barbearia/whatsapp-conexao/desconectar', { method: 'POST', headers: B, body: confirmarLogout });
+    assert.equal(deniedTenant.response.status, 409);
+    const logout = await request(base, '/api/admin/barbearia/whatsapp-conexao/desconectar', { method: 'POST', headers: A, body: confirmarLogout });
+    assert.equal(logout.response.status, 200, JSON.stringify(logout.body));
+    assert.equal(logout.body.conexao.state, 'close');
+    assert.equal(logout.body.conexao.autoReconnect, false);
+    assert.equal(logout.body.conexao.phoneMasked, '');
+    assert.deepEqual(backend.calls.filter((call) => call.method === 'DELETE').map((call) => call.url), ['/api/v1/whats-app/instances/dino-1/session?confirm=true']);
   } finally {
     processo.kill('SIGTERM');
     backend.server.close();

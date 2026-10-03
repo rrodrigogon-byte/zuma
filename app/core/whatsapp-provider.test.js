@@ -163,36 +163,43 @@ test('modo por instância preserva o contrato de mensagens e envia instance na c
   });
 });
 
-test('desconexão usa primeiro a rota oficial POST /instances/{instancia}/logout', async () => {
+test('desconexão usa somente DELETE /instances/{instancia}/session?confirm=true documentado pelo backend', async () => {
   await withEnv(env, async () => {
     const fetch = fakeFetch([{ status: 200, body: { ok: true } }]);
     const result = await provider.disconnectInstance('dino-1', fetch);
     assert.equal(result.ok, true);
     assert.equal(fetch.calls.length, 1);
-    assert.equal(fetch.calls[0].method, 'POST');
-    assert.equal(fetch.calls[0].url, 'https://backend.test/api/v1/whats-app/instances/dino-1/logout');
+    assert.equal(fetch.calls[0].method, 'DELETE');
+    assert.equal(fetch.calls[0].url, 'https://backend.test/api/v1/whats-app/instances/dino-1/session?confirm=true');
+    assert.equal(fetch.calls[0].body, null);
   });
 });
 
-test('desconexão mantém fallback para o contrato legado de sessão', async () => {
+test('404/405/500/401 e resposta contraditória não fazem fallback global nem retry de logout', async () => {
   await withEnv(env, async () => {
-    const fetch = fakeFetch([{ status: 404 }, { status: 405 }, { status: 200, body: { ok: true } }]);
-    const result = await provider.disconnectInstance('dino-1', fetch);
-    assert.equal(result.ok, true);
-    assert.deepEqual(fetch.calls.map((call) => [call.method, call.url]), [
-      ['POST', 'https://backend.test/api/v1/whats-app/instances/dino-1/logout'],
-      ['POST', 'https://backend.test/api/v1/whats-app/instances/dino-1/session/logout'],
-      ['DELETE', 'https://backend.test/api/v1/whats-app/instances/dino-1/session'],
-    ]);
+    for (const status of [404, 405, 500, 401]) {
+      const fetch = fakeFetch([{ status }]);
+      const result = await provider.disconnectInstance('dino-1', fetch);
+      assert.equal(result.ok, false);
+      assert.equal(result.status, status);
+      assert.equal(result.authError, status === 401);
+      assert.equal(result.uncertain, status === 500);
+      assert.deepEqual(fetch.calls.map((call) => call.url), ['https://backend.test/api/v1/whats-app/instances/dino-1/session?confirm=true']);
+    }
+    const contraditorio = await provider.disconnectInstance('dino-1', fakeFetch([{ status: 200, body: { success: false } }]));
+    assert.equal(contraditorio.ok, false);
   });
 });
 
-test('desconexão usa a rota global legada quando não há rota por instância', async () => {
+test('modo Isa e instância inválida não tentam qualquer reset', async () => {
   await withEnv(env, async () => {
-    const fetch = fakeFetch([{ status: 404 }, { status: 405 }, { status: 404 }, { status: 200, body: { ok: true } }]);
-    const result = await provider.disconnectInstance('dino-1', fetch);
-    assert.equal(result.ok, true);
-    assert.equal(fetch.calls.at(-1).method, 'POST');
-    assert.equal(fetch.calls.at(-1).url, 'https://backend.test/logout?instance=dino-1');
+    const fetch = fakeFetch([]);
+    assert.equal((await provider.disconnectInstance('../isa', fetch)).error, 'invalid_instance');
+    assert.equal(fetch.calls.length, 0);
+  });
+  await withEnv(envIsa, async () => {
+    const fetch = fakeFetch([]);
+    assert.equal((await provider.disconnectInstance('dino', fetch)).error, 'not_supported_in_isa_mode');
+    assert.equal(fetch.calls.length, 0);
   });
 });

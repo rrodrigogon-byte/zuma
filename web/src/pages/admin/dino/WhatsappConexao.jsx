@@ -64,7 +64,7 @@ export default function WhatsappConexao() {
       const data = await api.post(`${BASE}/qr`, { auto })
       setConexao(data.conexao)
       if (data.qr || data.pairingCode) setQr({ image: data.qr || '', code: data.pairingCode || '', at: Date.now() })
-      else if (!auto && data.conexao.state === 'open') toast('Sessão reaberta: o número já está conectado.')
+      else if (!auto && data.conexao.state === 'open') toast('Sessão reaberta. Confira no aparelho qual número foi pareado.')
     } catch (error) { if (!auto) toast(error.message, true) }
     finally { if (!auto) setBusy('') }
   }
@@ -141,8 +141,9 @@ export default function WhatsappConexao() {
         <div className="c360-card-head"><h2 id="wa-conn">Conexão</h2><span className={`dadm-state ${state}`} role="status">{STATES[state] || state}</span></div>
         {!conexao.providerConfigured && <p className="dadm-note warn">{conexao.provider !== 'chatbot_backend' ? ERRORS.provedor_nao_e_nossagente : 'Falta a chave CHATBOT_BACKEND_KEY no servidor.'}</p>}
         {erroConexao && conexao.providerConfigured && <p className="dadm-note danger">{erroConexao}</p>}
+        {state === 'open' && !conexao.phoneMasked && <p className="dadm-note warn" role="status">A sessão está conectada, mas o backend não informa o número. Confirme a conta pareada no WhatsApp do aparelho antes de usar este canal.</p>}
         <dl className="dadm-result">
-          <div><dt>Número conectado</dt><dd>{conexao.phoneMasked || conexao.numeroExibicao || '—'}</dd></div>
+          <div><dt>Número confirmado pelo backend</dt><dd>{state === 'open' ? (conexao.phoneMasked || 'Não informado') : '—'}</dd></div>
           <div><dt>Instância no backend</dt><dd>{conexao.instance}</dd></div>
           <div><dt>Backend</dt><dd style={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{conexao.providerLabel}</dd></div>
           <div><dt>Conectado desde</dt><dd>{conexao.state === 'open' ? dateTime(conexao.lastConnectedAt) : '—'}</dd></div>
@@ -188,7 +189,7 @@ export default function WhatsappConexao() {
           <h2 id="wa-ia">Atendente IA no WhatsApp</h2>
           {ia ? <ul className="dadm-check">
             <Check ok={conexao.providerConfigured}>Backend do WhatsApp configurado</Check>
-            <Check ok={state === 'open'}>Número conectado</Check>
+            <Check ok={state === 'open' && Boolean(conexao.phoneMasked)} hint={state === 'open' && !conexao.phoneMasked ? 'sessão ativa, número não confirmado' : undefined}>Número verificado</Check>
             <Check ok={Boolean(ia.gemini?.configured)} hint={ia.gemini?.model}>Gemini configurado</Check>
             <Check ok={Boolean(ia.featureEnabled)} hint="FEATURE_WHATSAPP_AI=true">IA liberada no servidor</Check>
             <Check ok={ia.channel?.status === 'ativo'}>Canal do atendente ativo</Check>
