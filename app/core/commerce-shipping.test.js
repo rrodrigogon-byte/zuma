@@ -8,6 +8,13 @@ const originalToken = process.env.ME_ACCESS_TOKEN;
 const originalWebhook = process.env.ME_WEBHOOK_SECRET;
 const originalCorreiosToken = process.env.CORREIOS_API_TOKEN;
 
+function fakePostal(cep, cidade, estado) {
+  global.fetch = async url => {
+    assert.equal(url, `https://viacep.com.br/ws/${cep}/json/`);
+    return new Response(JSON.stringify({ cep, localidade: cidade, uf: estado }), { status: 200 });
+  };
+}
+
 test.afterEach(() => {
   global.fetch = originalFetch;
   if (originalToken === undefined) delete process.env.ME_ACCESS_TOKEN;
@@ -113,6 +120,7 @@ test('método manual habilita cotação sem conta externa e mantém regras inter
 });
 
 test('cotação manual usa cidade e persiste quote sem conta logística externa', async () => {
+  fakePostal('78365000', 'Nova Olímpia', 'MT');
   const queries = [];
   const client = {
     async query(sql, params) {
@@ -143,6 +151,7 @@ test('cotação manual usa cidade e persiste quote sem conta logística externa'
 });
 
 test('seleção aceita carrinho semanticamente igual com itens reordenados e cidade normalizada', async () => {
+  fakePostal('78365000', 'Nova Olímpia', 'MT');
   const variantA = '10000000-0000-4000-8000-000000000105';
   const variantB = '10000000-0000-4000-8000-000000000106';
   let persisted;
@@ -191,6 +200,7 @@ test('seleção aceita carrinho semanticamente igual com itens reordenados e cid
 });
 
 test('entrega própria calcula motoboy, expressa e frete grátis sem depender de Correios', async () => {
+  fakePostal('01001000', 'São Paulo', 'SP');
   let methodConfig = { provider: 'manual', deliveryType: 'motoboy', baseFee: 5, pricePerKm: 2, distanceKm: 3, deliveryDays: 1, rules: [{ id: 'local', label: 'Local', fallback: true, deliveryDays: 1 }] };
   const client = {
     async query(sql) {
@@ -258,6 +268,7 @@ test('normaliza faixas próprias com zonas e regiões e rejeita configurações 
 });
 
 test('cotação agregada retorna somente métodos aplicáveis e preserva quoteId por opção', async () => {
+  fakePostal('78300055', 'Tangará da Serra', 'MT');
   const storefrontId = '10000000-0000-4000-8000-000000000103';
   const motoboyId = '10000000-0000-4000-8000-000000000119';
   const freeId = '10000000-0000-4000-8000-000000000120';
@@ -290,6 +301,100 @@ test('cotação agregada retorna somente métodos aplicáveis e preserva quoteId
   assert.equal(result.items[0].shippingMethodId, motoboyId);
   assert.match(result.items[0].selectionId, new RegExp(`:${result.items[0].id}$`));
   assert.deepEqual(result.unavailable, [{ shippingMethodId: freeId, code: 'SHIPPING_FREE_SHIPPING_THRESHOLD_NOT_MET' }]);
+  assert.equal(inserts, 1);
+});
+
+test('tabela sintética de R$42 fora de MT exige UF real do CEP e não anuncia MT', async () => {
+  const otherUfs = ['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'];
+  assert.equal(otherUfs.length, 26);
+  const config = normalizeOwnDeliveryConfig({ deliveryType: 'regional_table', rules: [{ id: 'outside-mt', label: 'Fora de MT (simulação sem transportadora)', ufs: otherUfs, amount: 42, deliveryDays: 10 }] });
+  const methodId = '10000000-0000-4000-8000-000000000109';
+  const storefrontId = '10000000-0000-4000-8000-000000000103';
+  const variantId = '10000000-0000-4000-8000-000000000105';
+  let inserts = 0;
+  const client = {
+    async query(sql) {
+      if (sql.includes('FROM commerce_shipping_methods')) return { rows: [{ id: methodId, tipo: 'delivery', configuracao: config, storefront_id: storefrontId, loja_id: null, configuracoes: {} }] };
+      if (sql.includes('FROM commerce_product_variants')) return { rows: [{ id: variantId, sku: 'SKU-SINTETICO', nome: 'Teste', peso_gramas: null, largura_cm: null, altura_cm: null, comprimento_cm: null, price: 10 }] };
+      throw new Error(`consulta inesperada: ${sql}`);
+    },
+    async transaction(callback) {
+      return callback({ async query(sql) {
+        if (sql.includes('SELECT configuracao FROM commerce_shipping_methods')) return { rows: [{ configuracao: config }] };
+        if (sql.includes('INSERT INTO commerce_shipping_quotes')) { inserts += 1; return { rows: [{ id: '10000000-0000-4000-8000-000000000198', expires_at: '2099-01-01T00:00:00Z' }] }; }
+        throw new Error(`consulta transacional inesperada: ${sql}`);
+      } });
+    },
+  };
+  const quote = (cep, cidade, estado) => quoteShipping(client, { empresaId: '10000000-0000-4000-8000-000000000106' }, {
+    storefrontId, shippingMethodId: methodId, destinationCep: cep, destination: { cep, cidade, estado }, items: [{ variantId, quantity: 1 }],
+  });
+  fakePostal('18715106', 'Arandu', 'SP');
+  await assert.rejects(() => quote('18715106', 'Arandu', 'MT'), error => error.code === 'SHIPPING_CEP_MISMATCH');
+  assert.equal(inserts, 0);
+  const allowed = await quote('18715106', 'Arandu', 'SP');
+  assert.equal(allowed.items[0].amount, 42);
+  assert.equal(inserts, 1);
+  fakePostal('78300055', 'Tangará da Serra', 'MT');
+  await assert.rejects(() => quote('78300055', 'Tangará da Serra', 'MT'), error => error.code === 'SHIPPING_DESTINATION_UNAVAILABLE');
+  assert.equal(inserts, 1);
+});
+
+test('Dino bloqueia tarifa manual nacional mesmo com regra R$42 ativa por engano, sem DML', async () => {
+  fakePostal('18715106', 'Arandu', 'SP');
+  let config = normalizeOwnDeliveryConfig({ deliveryType: 'regional_table', rules: [{ id: 'outside-mt', label: 'Fora de MT', ufs: ['SP'], amount: 42, deliveryDays: 10 }] });
+  let variantsRead = 0;
+  let transactions = 0;
+  const client = {
+    async query(sql) {
+      if (sql.includes('FROM commerce_shipping_methods')) return { rows: [{ id: '10000000-0000-4000-8000-000000000109', tipo: 'delivery', configuracao: config, storefront_id: '10000000-0000-4000-8000-000000000103', storefront_code: 'dino-web', loja_id: null, configuracoes: {} }] };
+      if (sql.includes('FROM commerce_product_variants')) variantsRead += 1;
+      throw new Error(`consulta inesperada: ${sql}`);
+    },
+    async transaction() { transactions += 1; throw new Error('nenhuma cotação pode ser persistida'); },
+  };
+  await assert.rejects(() => quoteShipping(client, { empresaId: '10000000-0000-4000-8000-000000000106' }, {
+    storefrontId: '10000000-0000-4000-8000-000000000103', shippingMethodId: '10000000-0000-4000-8000-000000000109', destinationCep: '18715106',
+    destination: { cep: '18715106', cidade: 'Arandu', estado: 'SP' }, items: [{ variantId: '10000000-0000-4000-8000-000000000105', quantity: 1 }],
+  }), error => error.code === 'SHIPPING_NATIONAL_FULFILLMENT_NOT_READY');
+  assert.equal(variantsRead, 0);
+  assert.equal(transactions, 0);
+  config = normalizeOwnDeliveryConfig({ deliveryType: 'regional_table', rules: [{ id: 'cep-only', label: 'CEP simulado fora MT', cepFrom: '01001000', cepTo: '01001000', amount: 42, deliveryDays: 10 }] });
+  await assert.rejects(() => quoteShipping(client, { empresaId: '10000000-0000-4000-8000-000000000106' }, {
+    storefrontId: '10000000-0000-4000-8000-000000000103', shippingMethodId: '10000000-0000-4000-8000-000000000109', destinationCep: '01001000',
+    destination: { cep: '01001000', cidade: 'Tangará da Serra', estado: 'MT' }, destinationCity: 'Tangará da Serra', destinationState: 'MT',
+    items: [{ variantId: '10000000-0000-4000-8000-000000000105', quantity: 1 }],
+  }), error => error.code === 'SHIPPING_NATIONAL_FULFILLMENT_NOT_READY');
+  assert.equal(variantsRead, 0);
+  assert.equal(transactions, 0);
+});
+
+test('motoboy Dino conserva cotação apenas na faixa local mesmo com provedor postal indisponível', async () => {
+  global.fetch = async () => { throw new Error('consulta postal indisponível'); };
+  const config = normalizeOwnDeliveryConfig({ deliveryType: 'motoboy', baseFee: 8, pricePerZone: 5, freeShippingAbove: 1000, rules: [{ id: 'local', label: 'Motoboy local', cepFrom: '78300000', cepTo: '78309999', zone: 1, deliveryDays: 1 }] });
+  const storefrontId = '10000000-0000-4000-8000-000000000103';
+  const methodId = '10000000-0000-4000-8000-000000000109';
+  const variantId = '10000000-0000-4000-8000-000000000105';
+  let inserts = 0;
+  let methodCode = 'dino-motoboy';
+  const client = {
+    async query(sql) {
+      if (sql.includes('FROM commerce_shipping_methods')) return { rows: [{ id: methodId, codigo: methodCode, tipo: 'delivery', configuracao: config, storefront_id: storefrontId, storefront_code: 'dino-web', loja_id: null, configuracoes: {} }] };
+      if (sql.includes('FROM commerce_product_variants')) return { rows: [{ id: variantId, sku: 'SKU-TESTE', nome: 'Teste', peso_gramas: null, largura_cm: null, altura_cm: null, comprimento_cm: null, price: 30 }] };
+      throw new Error(`consulta inesperada: ${sql}`);
+    },
+    async transaction(callback) { return callback({ async query(sql) {
+      if (sql.includes('SELECT configuracao FROM commerce_shipping_methods')) return { rows: [{ configuracao: config }] };
+      if (sql.includes('INSERT INTO commerce_shipping_quotes')) { inserts += 1; return { rows: [{ id: '10000000-0000-4000-8000-000000000199', expires_at: '2099-01-01T00:00:00Z' }] }; }
+      throw new Error(`consulta transacional inesperada: ${sql}`);
+    } }); },
+  };
+  const quoteInput = { storefrontId, shippingMethodId: methodId, destinationCep: '78300055', destination: { cidade: 'Tangará da Serra', estado: 'MT' }, items: [{ variantId, quantity: 1 }] };
+  const local = await quoteShipping(client, { empresaId: '10000000-0000-4000-8000-000000000106' }, quoteInput);
+  assert.equal(local.items[0].amount, 13);
+  assert.equal(inserts, 1);
+  methodCode = 'dino-regional';
+  await assert.rejects(() => quoteShipping(client, { empresaId: '10000000-0000-4000-8000-000000000106' }, quoteInput), error => error.code === 'SHIPPING_NATIONAL_FULFILLMENT_NOT_READY');
   assert.equal(inserts, 1);
 });
 
@@ -398,4 +503,18 @@ test('checkout recusa quote de método desativado ou diferente antes de qualquer
     shippingAddress: { destinatario: 'Teste', documento: '12345678909', cep: '78300055', logradouro: 'Rua', numero: '1', bairro: 'Centro', cidade: 'Tangará da Serra', estado: 'MT' },
   }, { storefrontId, shippingMethodId, lines: [{ variantId: '10000000-0000-4000-8000-000000000105', quantity: 1 }] }), error => error.code === 'SHIPPING_QUOTE_EXPIRED');
   assert.equal(queries, 1);
+});
+
+test('Dino rejeita quote manual pré-existente para SP sem selecionar opção nem fazer DML', async () => {
+  let calls = 0;
+  const trx = { async query(sql) {
+    calls += 1;
+    assert.match(sql, /FROM commerce_shipping_quotes q/);
+    return { rows: [{ id: '10000000-0000-4000-8000-000000000110', storefront_code: 'dino-web', provider: 'manual' }] };
+  } };
+  await assert.rejects(() => resolveShippingSelection(trx, { empresaId: '10000000-0000-4000-8000-000000000106' }, {
+    shippingQuoteId: '10000000-0000-4000-8000-000000000110', shippingOptionId: 'regional:outside-mt',
+    shippingAddress: { destinatario: 'Fixture', documento: '12345678909', cep: '18715106', logradouro: 'Rua fictícia', numero: '1', bairro: 'Centro', cidade: 'Arandu', estado: 'SP' },
+  }, { storefrontId: '10000000-0000-4000-8000-000000000103', shippingMethodId: '10000000-0000-4000-8000-000000000109', lines: [{ variantId: '10000000-0000-4000-8000-000000000105', quantity: 1 }] }), error => error.code === 'SHIPPING_NATIONAL_FULFILLMENT_NOT_READY');
+  assert.equal(calls, 1);
 });

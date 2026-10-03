@@ -39,3 +39,24 @@ export function checkoutTotal(subtotal, shippingOption) {
   const amount = Number(shippingOption?.amount)
   return (Number.isFinite(base) ? base : 0) + (Number.isFinite(amount) && amount > 0 ? amount : 0)
 }
+
+const PUBLIC_EMAIL = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i
+
+export const DINO_DELIVERY_UNAVAILABLE = 'Não há entrega disponível para este CEP e carrinho no momento. A Dino atende somente a área local já habilitada. Seu carrinho foi mantido; nenhum pedido ou pagamento foi iniciado por este cálculo. Para outra localidade, consulte a loja antes de tentar novamente.'
+
+export function checkoutShippingErrorMessage(error, { isDino = false } = {}) {
+  if (isDino && error?.code === 'SHIPPING_DESTINATION_UNAVAILABLE') return DINO_DELIVERY_UNAVAILABLE
+  return error?.message || 'Não foi possível calcular o frete.'
+}
+
+// Somente o canal comercial publicado pela vitrine. Nunca coloque CEP, endereço,
+// dados do comprador ou conteúdo do carrinho na URL de suporte.
+export function checkoutShippingSupportAction(contact) {
+  const email = String(contact?.email || '').trim()
+  if (email.length <= 254 && PUBLIC_EMAIL.test(email)) {
+    return { href: `mailto:${email}?subject=${encodeURIComponent('Consulta sobre entrega da loja')}&body=${encodeURIComponent('Olá, preciso de orientação sobre disponibilidade de entrega antes de concluir uma compra.')}`, label: 'Consultar a loja' }
+  }
+  const phone = String(contact?.phone || '').trim()
+  if (/^\+?[0-9]{10,15}$/.test(phone)) return { href: `tel:${phone}`, label: 'Ligar para a loja' }
+  return null
+}

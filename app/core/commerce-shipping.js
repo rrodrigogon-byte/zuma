@@ -113,6 +113,19 @@ const OWN_DELIVERY_TYPES = new Set(['motoboy', 'regional_table', 'express', 'fre
 const OWN_DELIVERY_NUMBERS = ['baseFee', 'pricePerKm', 'pricePerZone', 'fixedFee', 'additionalFee', 'freeShippingAbove', 'maxRadiusKm', 'distanceKm'];
 const BRAZIL_REGIONS = new Set(['norte', 'nordeste', 'centro-oeste', 'sudeste', 'sul']);
 const BRAZIL_UFS = new Set(['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO']);
+const DINO_LOCAL_CEP_FROM = '78300000';
+const DINO_LOCAL_CEP_TO = '78309999';
+
+function isDinoLocalManualMethod(method, cep) {
+  const config = method?.configuracao || {};
+  const rules = Array.isArray(config.rules) ? config.rules : [];
+  return method?.storefront_code === 'dino-web' && method?.codigo === 'dino-motoboy'
+    && config.provider === 'manual' && config.deliveryType === 'motoboy'
+    && cep >= DINO_LOCAL_CEP_FROM && cep <= DINO_LOCAL_CEP_TO
+    && rules.length > 0 && rules.every(rule => rule.cepFrom && rule.cepTo
+      && rule.cepFrom >= DINO_LOCAL_CEP_FROM && rule.cepTo <= DINO_LOCAL_CEP_TO
+      && !rule.fallback && !rule.uf && !rule.ufs?.length && !rule.cities?.length && !rule.regions?.length);
+}
 
 function stringList(value, max = 50) {
   const values = Array.isArray(value) ? value : String(value || '').split(',');
@@ -412,7 +425,7 @@ async function loadQuoteContext(client, contextInput, input = {}) {
   const shippingMethodId = assertUuid(input.shippingMethodId, 'shippingMethodId');
   const destinationCep = normalizeCep(input.destinationCep || input.destination?.cep);
   const methodResult = await client.query(
-    `SELECT sm.id, sm.codigo, sm.nome, sm.tipo, sm.configuracao, s.id AS storefront_id, s.loja_id, s.configuracoes
+    `SELECT sm.id, sm.codigo, sm.nome, sm.tipo, sm.configuracao, s.id AS storefront_id, s.codigo AS storefront_code, s.loja_id, s.configuracoes
        FROM commerce_shipping_methods sm
        JOIN commerce_storefronts s ON s.empresa_id = sm.empresa_id AND s.id = sm.storefront_id AND s.status = 'active'
       WHERE sm.empresa_id = $1 AND sm.storefront_id = $2 AND sm.id = $3 AND sm.ativo = true
@@ -438,11 +451,28 @@ async function loadQuoteContext(client, contextInput, input = {}) {
   const destinationAddressInput = input.destinationAddress || input.destination || input.shippingAddress || { cep: destinationCep };
   let destinationCity = text(input.destinationCity || input.destination?.cidade || input.destination?.city || destinationAddressInput.cidade || destinationAddressInput.city, 120);
   let destinationState = text(input.destinationState || input.destination?.estado || input.destination?.state || destinationAddressInput.estado || destinationAddressInput.state, 2).toUpperCase();
-  if (isManual && (!destinationCity || !/^[A-Z]{2}$/.test(destinationState))) {
-    const lookup = await lookupPostalCode(destinationCep);
-    destinationCity = destinationCity || text(lookup.cidade, 120);
-    destinationState = destinationState || text(lookup.estado, 2).toUpperCase();
+  const dinoManual = isManual && method.storefront_code === 'dino-web';
+  if (dinoManual && !isDinoLocalManualMethod(method, destinationCep)) {
+    throw new CommerceError('entrega fora da área local requer operação logística habilitada', 'SHIPPING_NATIONAL_FULFILLMENT_NOT_READY');
   }
+  const locationRules = Array.isArray(methodConfig.rules) ? methodConfig.rules : [];
+  // Tabela por UF/cidade/região não pode confiar em destino declarado no navegador.
+  // Motoboy com faixa de CEP puro continua operando mesmo se o serviço postal cair.
+  const requiresVerifiedLocation = isManual && !dinoManual && (!locationRules.length || locationRules.some(rule => rule.uf || rule.ufs?.length || rule.cities?.length || rule.regions?.length || rule.fallback));
+  if (requiresVerifiedLocation || (isManual && (!destinationCity || !/^[A-Z]{2}$/.test(destinationState)))) {
+    const lookup = await lookupPostalCode(destinationCep);
+    const verifiedCity = text(lookup.cidade, 120);
+    const verifiedState = text(lookup.estado, 2).toUpperCase();
+    if (!verifiedCity || !BRAZIL_UFS.has(verifiedState)) throw new CommerceError('CEP sem município e UF verificáveis; tente novamente', 'SHIPPING_CEP_PROVIDER_ERROR');
+    if ((destinationCity && canonicalDestination(destinationCity) !== canonicalDestination(verifiedCity)) || (destinationState && destinationState !== verifiedState)) {
+      throw new CommerceError('CEP não corresponde à cidade ou UF informada; consulte o CEP novamente', 'SHIPPING_CEP_MISMATCH');
+    }
+    destinationCity = verifiedCity;
+    destinationState = verifiedState;
+  }
+  // A tabela manual não comprova coleta, transporte, etiqueta nem rastreio nacional.
+  // Mesmo se uma regra histórica for reativada, a Dino exige conta/quote real.
+  if (dinoManual && destinationState !== 'MT') throw new CommerceError('CEP e UF não correspondem à área local', 'SHIPPING_CEP_MISMATCH');
   const destinationAddress = { ...destinationAddressInput, cep: destinationCep, cidade: destinationCity || null, estado: destinationState || null };
   const lines = canonicalShippingLines(input.items);
   const variantIds = [...new Set(lines.map(line => line.variantId))];
@@ -506,6 +536,7 @@ const OPTIONAL_QUOTE_ERRORS = new Set([
   'SHIPPING_PACKAGE_DATA_REQUIRED',
   'SHIPPING_ORIGIN_CEP_REQUIRED',
   'SHIPPING_METHOD_CONFIG_INVALID',
+  'SHIPPING_NATIONAL_FULFILLMENT_NOT_READY',
   'SHIPPING_PROVIDER_UNSUPPORTED',
   'SHIPPING_PROVIDER_NOT_CONFIGURED',
   'SHIPPING_PROVIDER_ERROR',
@@ -555,7 +586,8 @@ export async function resolveShippingSelection(trx, contextInput, input = {}, { 
   const destination = normalizeShippingAddress(input.shippingAddress);
   const result = await trx.query(
     `SELECT q.id, q.storefront_id, q.shipping_method_id, q.shipping_account_id, q.provider, q.ambiente, q.request_hash, q.request_snapshot,
-            q.response_snapshot, q.status, q.expires_at, sm.configuracao AS current_method_config
+            (SELECT s.codigo FROM commerce_storefronts s WHERE s.empresa_id = q.empresa_id AND s.id = q.storefront_id) AS storefront_code,
+            q.response_snapshot, q.status, q.expires_at, sm.codigo AS shipping_method_code, sm.configuracao AS current_method_config
        FROM commerce_shipping_quotes q
        JOIN commerce_shipping_methods sm ON sm.empresa_id = q.empresa_id AND sm.storefront_id = q.storefront_id
             AND sm.id = q.shipping_method_id AND sm.ativo = true AND sm.tipo IN ('delivery', 'carrier')
@@ -566,6 +598,11 @@ export async function resolveShippingSelection(trx, contextInput, input = {}, { 
   );
   const quote = result.rows[0];
   if (!quote) throw new CommerceError('cotação indisponível, expirada ou com método desativado; recalcule o frete', 'SHIPPING_QUOTE_EXPIRED');
+  if (quote.storefront_code === 'dino-web' && quote.provider === 'manual'
+    && !isDinoLocalManualMethod({ storefront_code: quote.storefront_code, codigo: quote.shipping_method_code, configuracao: quote.current_method_config }, destination.cep)) {
+    throw new CommerceError('entrega fora da área local requer operação logística habilitada', 'SHIPPING_NATIONAL_FULFILLMENT_NOT_READY');
+  }
+  if (quote.storefront_code === 'dino-web' && quote.provider === 'manual' && destination.estado !== 'MT') throw new CommerceError('CEP e UF não correspondem à área local', 'SHIPPING_CEP_MISMATCH');
   if (!quote.request_snapshot?.methodConfigHash || requestHash(quote.current_method_config) !== quote.request_snapshot.methodConfigHash) {
     throw new CommerceError('regra de frete alterada desde a cotação; recalcule o frete', 'SHIPPING_QUOTE_EXPIRED');
   }
