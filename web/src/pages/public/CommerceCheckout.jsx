@@ -6,7 +6,7 @@ import { commerceDisplayName, DINO_COMMERCE_LOGO } from '../../lib/brand'
 import { checkoutPaymentChoices, clearStorefrontCheckoutIdempotencyKey, nextStorefrontCartSyncVersion, normalizeStorefrontAlias, removeStorefrontCartItem, storefrontApiBase, storefrontCartSessionKey, storefrontCheckoutIdempotencyKey, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
 import { createLatestRequest } from '../../lib/latest-request'
 import { createCheckoutOrderPoller } from '../../lib/checkout-order-polling'
-import { checkoutShippingErrorMessage, checkoutShippingSupportAction, checkoutTotal, DINO_DELIVERY_UNAVAILABLE, recommendedShippingOption, selectedShippingOption, shippingQuoteKey } from '../../lib/checkout-shipping'
+import { checkoutShippingErrorMessage, checkoutShippingSupportAction, checkoutTotal, DINO_DELIVERY_UNAVAILABLE, isDinoCommerceStorefront, recommendedShippingOption, selectedShippingOption, shippingQuoteKey } from '../../lib/checkout-shipping'
 import { checkoutContactReference, checkoutContactReviewMessage, checkoutContactSupportAction } from '../../lib/checkout-contact'
 
 const EMPTY_ADDRESS = { cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '', referencia: '' }
@@ -89,6 +89,12 @@ function Stepper({ paymentReady }) {
 }
 
 export default function CommerceCheckout() {
+  const { storeAlias: routeAlias = '' } = useParams()
+  const storeIdentity = normalizeStorefrontAlias(routeAlias) || 'host'
+  return <CommerceCheckoutSession key={storeIdentity} />
+}
+
+function CommerceCheckoutSession() {
   const navigate = useNavigate()
   const { storeAlias: routeAlias = '' } = useParams()
   const storeAlias = normalizeStorefrontAlias(routeAlias)
@@ -105,6 +111,7 @@ export default function CommerceCheckout() {
   const returnSlug = searchParams.get('slug') || searchParams.get('invoice_slug') || ''
   const [cart, setCart] = useState(() => readCart(storeAlias))
   const [storeContext, setStoreContext] = useState(null)
+  const isDinoCommerce = isDinoCommerceStorefront(storeContext)
   const [products, setProducts] = useState([])
   const [shippingMethods, setShippingMethods] = useState([])
   const [paymentMethods, setPaymentMethods] = useState([])
@@ -315,7 +322,7 @@ export default function CommerceCheckout() {
       const quote = await api.post(`${storefrontApi}/shipping/quotes/available`, { destinationCep: address.cep, destination: { cep: address.cep, cidade: address.cidade, estado: address.estado }, items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })) })
       if (requestId !== shippingQuoteRequestRef.current) return
       const first = recommendedShippingOption(quote)
-      if (!first) throw new Error('Nenhuma opção de frete está disponível para este CEP e carrinho.')
+      if (!first) throw Object.assign(new Error('Nenhuma opção de frete está disponível para este CEP e carrinho.'), { code: 'SHIPPING_DESTINATION_UNAVAILABLE' })
       setShippingQuote(quote)
       setShippingOptionId(first.selectionId || first.id)
       setShippingMethodId(first.shippingMethodId || '')
@@ -323,7 +330,7 @@ export default function CommerceCheckout() {
     } catch (err) {
       if (requestId !== shippingQuoteRequestRef.current) return
       lastShippingQuoteKeyRef.current = effectiveQuoteKey
-      setError(checkoutShippingErrorMessage(err, { isDino: storeAlias === 'dino' }))
+      setError(checkoutShippingErrorMessage(err, { isDino: isDinoCommerce }))
     } finally {
       if (requestId === shippingQuoteRequestRef.current) setShippingQuoteLoading(false)
     }
@@ -554,7 +561,6 @@ export default function CommerceCheckout() {
   }
 
   const publicBrand = storeContext?.public || {}
-  const isDinoCommerce = storeAlias === 'dino'
   const brandName = commerceDisplayName(storeAlias, publicBrand.displayName, storeContext?.nome)
   const brandMark = 'K'
   const contactSupport = contactReview ? checkoutContactSupportAction(publicBrand.contact, contactReview) : null
