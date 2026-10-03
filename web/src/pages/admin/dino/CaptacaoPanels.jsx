@@ -764,7 +764,7 @@ export function ResumoDiarioPanel() {
     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12, alignItems: 'end' }}>
       <label style={label}>Dia<input type="date" style={input} value={dia} max={hojeIso()} onChange={(e) => setDia(e.target.value || hojeIso())} /></label>
       <button type="button" style={btn} onClick={carregar}>Atualizar</button>
-      <button type="button" style={btnPrimary} disabled={enviando || !ehHoje || !cfg?.destinatarios?.length} onClick={enviarAgora} title={!cfg?.destinatarios?.length ? 'Configure DINO_RESUMO_TELEFONES no servidor' : !ehHoje ? 'O envio manual manda o resumo de hoje' : ''}>{enviando ? 'Enviando…' : 'Enviar agora'}</button>
+      <button type="button" style={{ ...btnPrimary, ...((enviando || !ehHoje || !cfg?.destinatarios?.length) ? { opacity: 0.45, cursor: 'not-allowed' } : {}) }} disabled={enviando || !ehHoje || !cfg?.destinatarios?.length} onClick={enviarAgora} title={!cfg?.destinatarios?.length ? 'Configure DINO_RESUMO_TELEFONES no servidor' : !ehHoje ? 'O envio manual manda o resumo de hoje' : ''}>{enviando ? 'Enviando…' : 'Enviar agora'}</button>
     </div>
     {cfg && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10, alignItems: 'center', fontSize: 13, color: 'var(--muted)' }}>
       <Pill tom={cfg.ativo ? 'bom' : 'neutro'}>{cfg.ativo ? `Automático às ${cfg.hora}` : 'Envio automático desligado'}</Pill>

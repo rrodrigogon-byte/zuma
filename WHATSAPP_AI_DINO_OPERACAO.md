@@ -210,3 +210,11 @@ O envio é idempotente (migration **062**, uma linha por empresa e dia): reiníc
 ### Áudio do cliente
 
 A especificação da rota que falta no backend do WhatsApp, com código de referência, está em `docs/operations/WHATSAPP-BACKEND-MIDIA.md`.
+
+## Antes de ler o QR: checklist validado em produção (03/10/2026)
+
+Estado conferido no ar após o deploy do `4f5e2c0` (#209): migrations 061 e 062 aplicadas; feature flag, Gemini, provedor WhatsApp e canal do atendente prontos; **número ainda não pareado** (aguardando leitura do QR), então nada entra nem sai.
+
+1. **A agenda real precisa estar no Kytto.** A IA oferece horários a partir da agenda do Kytto. Em 03/10 ela estava vazia para hoje e para segunda, enquanto a Dino ainda operava a agenda no sistema anterior. Com a IA ligada nesse estado, ela ofereceria como livres horários que já estão ocupados lá. Antes do QR: importar os agendamentos futuros ou passar a recepção a usar só o Kytto, e conferir bloqueios e folgas de cada barbeiro.
+2. **Começar em piloto.** Hoje `WHATSAPP_POLL_MODE=on` no Render: assim que o QR for lido, a IA responde **todos** os clientes. Para o piloto, use `WHATSAPP_POLL_MODE=pilot` com `WHATSAPP_POLL_PILOT_PHONES=<números de teste>` e passe para `on` depois de aprovado.
+3. **Resumo diário:** `DINO_RESUMO_DIARIO=on` e `DINO_RESUMO_TELEFONES=<número do dono>`. A tela em Gestão → Resumo diário mostra a prévia exata. Com a sessão em "todas as lojas", a tela usa a loja do canal WhatsApp, a mesma do envio automático.
