@@ -57,6 +57,15 @@ describe('admin Commerce: feedback do salvamento de produto', () => {
     expect(source).toContain("disabled={mode === 'core' && !storefrontId}")
     expect(source).not.toContain('onClick={beginCreate} disabled={catalogUnavailable}')
   })
+
+  it('abre novo item publicado por padrão e recarrega mesmo se o upload de imagem falhar', () => {
+    const source = readFileSync(resolve(process.cwd(), 'web/src/pages/admin/EcommerceAdmin.jsx'), 'utf8')
+    expect(source).toContain("status: 'active', publicado: true, ativo: true")
+    expect(source).toContain('publicado na vitrine')
+    expect(source).toContain('O produto já foi persistido pelo workspace')
+    expect(source).toContain('await loadData(true, { storefrontId, locationId })')
+    expect(source).toContain('Publicado aparece no catálogo e pode ser comprado na loja ativa.')
+  })
 })
 
 describe('admin Commerce: seleção obrigatória de vitrine', () => {
