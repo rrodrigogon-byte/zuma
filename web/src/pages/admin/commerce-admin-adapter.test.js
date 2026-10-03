@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { api } from '../../lib/api'
 import { adminProductMediaUrl, loadCommerceAdmin, loadCoreReports } from './commerce-admin-adapter'
 
@@ -37,6 +39,17 @@ describe('admin Commerce: falha parcial do catálogo', () => {
       return { items: [] }
     }
     await expect(loadCommerceAdmin({ storefrontId: storefront.id })).rejects.toMatchObject({ status: 401 })
+  })
+})
+
+describe('admin Commerce: feedback do salvamento de produto', () => {
+  it('bloqueia concorrência e sinaliza salvamento/upload no botão', () => {
+    const source = readFileSync(resolve(process.cwd(), 'web/src/pages/admin/EcommerceAdmin.jsx'), 'utf8')
+    expect(source).toContain('if (savingProduct) return')
+    expect(source).toContain('setSavingProduct(true)')
+    expect(source).toContain('setSavingProduct(false)')
+    expect(source).toContain('disabled={mediaUploading || savingProduct}')
+    expect(source).toContain('Salvando produto…')
   })
 })
 
