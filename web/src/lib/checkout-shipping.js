@@ -42,6 +42,12 @@ export function checkoutTotal(subtotal, shippingOption) {
 
 const PUBLIC_EMAIL = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i
 
+// /checkout no domínio próprio não tem :storeAlias. A identidade da vitrine
+// vem do GET /context do servidor, não da forma da URL ou do carrinho.
+export function isDinoCommerceStorefront(storeContext) {
+  return storeContext?.codigo === 'dino-web'
+}
+
 export const DINO_DELIVERY_UNAVAILABLE = 'Não há entrega disponível para este CEP e carrinho no momento. A Dino atende somente a área local já habilitada. Seu carrinho foi mantido; nenhum pedido ou pagamento foi iniciado por este cálculo. Para outra localidade, consulte a loja antes de tentar novamente.'
 
 export function checkoutShippingErrorMessage(error, { isDino = false } = {}) {
