@@ -218,3 +218,23 @@ Estado conferido no ar após o deploy do `4f5e2c0` (#209): migrations 061 e 062 
 1. **A agenda real precisa estar no Kytto.** A IA oferece horários a partir da agenda do Kytto. Em 03/10 ela estava vazia para hoje e para segunda, enquanto a Dino ainda operava a agenda no sistema anterior. Com a IA ligada nesse estado, ela ofereceria como livres horários que já estão ocupados lá. Antes do QR: importar os agendamentos futuros ou passar a recepção a usar só o Kytto, e conferir bloqueios e folgas de cada barbeiro.
 2. **Começar em piloto.** Hoje `WHATSAPP_POLL_MODE=on` no Render: assim que o QR for lido, a IA responde **todos** os clientes. Para o piloto, use `WHATSAPP_POLL_MODE=pilot` com `WHATSAPP_POLL_PILOT_PHONES=<números de teste>` e passe para `on` depois de aprovado.
 3. **Resumo diário:** `DINO_RESUMO_DIARIO=on` e `DINO_RESUMO_TELEFONES=<número do dono>`. A tela em Gestão → Resumo diário mostra a prévia exata. Com a sessão em "todas as lojas", a tela usa a loja do canal WhatsApp, a mesma do envio automático.
+
+## Antes de liberar para os clientes
+
+A aba **Cérebro IA → Colocar tudo no ar** tem o grupo "Antes de liberar para os clientes". Só troque `WHATSAPP_POLL_MODE` de `pilot` para `on` com todos os itens verdes:
+
+| Item | Por que importa |
+| --- | --- |
+| Quem fala com a IA | Em `on` com pendências, ao ler o QR todos os clientes já falam com a IA. Use `pilot` com `WHATSAPP_POLL_PILOT_PHONES` até o ensaio passar. |
+| Agenda do Kytto em uso | Sem horários futuros no Kytto, a IA oferece horários que estão ocupados no sistema antigo. |
+| Profissionais com dias e horário | A IA só oferece horário dentro da jornada de cada um. |
+| Quem faz cada serviço especializado | Manicure, pedicure, massagem, química e estética sem "quem faz" aceitam qualquer barbeiro. |
+| Fila da equipe em dia | Conversas esperando a equipe há mais de 2 horas (fora a pausa automática de quando a equipe responde pelo celular). |
+| Resumo diário (opcional) | `DINO_RESUMO_DIARIO=on` e `DINO_RESUMO_TELEFONES`. |
+
+O ensaio geral com o catálogo, a equipe e o horário reais (`app/core/fixtures/dino-producao.json`) roda com:
+
+```
+WHATSAPP_SIM_PG_URL=postgres://postgres@127.0.0.1:5433/ensaio DB_SSL=false \
+  node --test app/core/whatsapp-ai-ensaio-dino.pg.test.js
+```
