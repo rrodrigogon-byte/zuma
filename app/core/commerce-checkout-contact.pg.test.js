@@ -53,12 +53,18 @@ test('PG local: CONTACT_CONFLICT revoga chave e mantém zero pedido/pagamento/re
   const key = `contact-conflict-pg-${Date.now()}`;
   const counts = async () => (await db.query(`
     SELECT (SELECT count(*) FROM commerce_orders WHERE empresa_id=$1) AS orders,
+           (SELECT count(*) FROM commerce_order_items WHERE empresa_id=$1) AS order_items,
+           (SELECT count(*) FROM commerce_order_events WHERE empresa_id=$1) AS order_events,
            (SELECT count(*) FROM commerce_payments WHERE empresa_id=$1) AS payments,
+           (SELECT count(*) FROM commerce_fulfillments WHERE empresa_id=$1) AS fulfillments,
            (SELECT count(*) FROM commerce_inventory_reservations WHERE empresa_id=$1) AS reservations,
            (SELECT count(*) FROM commerce_inventory_movements WHERE empresa_id=$1) AS movements,
            (SELECT COALESCE(sum(disponivel),0)::text || ':' || COALESCE(sum(reservado),0)::text || ':' || COALESCE(sum(comprometido),0)::text FROM commerce_inventory_levels WHERE empresa_id=$1) AS stock,
            (SELECT count(*) FROM commerce_loyalty_ledger WHERE empresa_id=$1) AS loyalty,
            (SELECT count(*) FROM commerce_customer_addresses WHERE empresa_id=$1) AS addresses,
+           (SELECT count(*) FROM commerce_carts WHERE empresa_id=$1) AS carts,
+           (SELECT count(*) FROM commerce_cart_items WHERE empresa_id=$1) AS cart_items,
+           (SELECT count(*) FROM commerce_cart_recovery_events WHERE empresa_id=$1) AS cart_events,
            (SELECT count(*) FROM commerce_audit_logs WHERE empresa_id=$1) AS audit,
            (SELECT count(*) FROM commerce_idempotency_keys WHERE empresa_id=$1 AND scope='order.create' AND key=$2) AS key_count`,
     [f.empresa_id, key])).rows[0];
@@ -67,6 +73,7 @@ test('PG local: CONTACT_CONFLICT revoga chave e mantém zero pedido/pagamento/re
     storefrontId: f.storefront_id, shippingMethodId: method.id, shippingAddress: { modo: 'retirada' },
     items: [{ variantId: f.variant_id, quantity: 1 }],
     customer: { nome: 'Fixture', email, telefone: phone }, idempotencyKey: key,
+    allowUnverifiedGuest: true,
   }));
   for (let i = 0; i < 2; i += 1) {
     await assert.rejects(attempt, error => error?.code === 'CONTACT_CONFLICT' && error?.details?.reason === 'identifiers_resolve_to_different_customers');

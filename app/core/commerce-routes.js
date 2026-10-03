@@ -848,7 +848,6 @@ export function createCommercePublicRouter() {
         { empresaId: storefront.empresa_id, lojaId: storefront.loja_id },
         {
           ...publicInput,
-          allowUnverifiedGuest: true,
           storefrontId: storefront.id,
           correlationId: req.requestId || '',
           finalizeResponse: async order => {
