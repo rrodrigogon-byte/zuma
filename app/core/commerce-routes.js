@@ -630,6 +630,7 @@ async function requireAdminStorefront(req, context, { optionalForCorporate = tru
 export function sanitizePublicOrderInput(input = {}) {
   const sanitized = input && typeof input === 'object' && !Array.isArray(input) ? { ...input } : {};
   delete sanitized.customerId;
+  delete sanitized.allowUnverifiedGuest;
   // Prazo de reserva é política do servidor; o cliente não escolhe por quanto tempo segura o estoque.
   delete sanitized.reservationExpiresAt;
   sanitized.customer = sanitized.customer && typeof sanitized.customer === 'object' && !Array.isArray(sanitized.customer)
@@ -847,6 +848,7 @@ export function createCommercePublicRouter() {
         { empresaId: storefront.empresa_id, lojaId: storefront.loja_id },
         {
           ...publicInput,
+          allowUnverifiedGuest: true,
           storefrontId: storefront.id,
           correlationId: req.requestId || '',
           finalizeResponse: async order => {
@@ -2177,12 +2179,13 @@ export function createCommerceAdminRouter() {
       if (storefrontId) { values.push(storefrontId); predicates.push(`o.storefront_id = $${values.length}`); }
       if (req.query.status) { values.push(String(req.query.status)); predicates.push(`o.status = $${values.length}`); }
       const query = String(req.query.q || '').trim().slice(0, 160);
-      if (query) { values.push(`%${query}%`); predicates.push(`(o.public_code ILIKE $${values.length} OR c.nome ILIKE $${values.length} OR c.email ILIKE $${values.length})`); }
+      if (query) { values.push(`%${query}%`); predicates.push(`(o.public_code ILIKE $${values.length} OR COALESCE(c.nome, o.customer_snapshot->>'nome') ILIKE $${values.length} OR COALESCE(c.email, o.customer_snapshot->>'email') ILIKE $${values.length})`); }
       const where = predicates.join(' AND ');
       const count = await db.query(`SELECT COUNT(*)::int AS total FROM commerce_orders o JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id LEFT JOIN commerce_customers c ON c.empresa_id = o.empresa_id AND c.id = o.customer_id WHERE ${where}`, values);
       const result = await db.query(
         `SELECT o.id, o.public_code, o.status, o.origem, o.subtotal, o.desconto, o.frete, o.impostos, o.total, o.shipping_method_id, o.shipping_quote_id, o.criado_em, o.atualizado_em,
-                o.customer_id, c.nome AS customer_name, c.email AS customer_email,
+                o.customer_id, COALESCE(c.nome, o.customer_snapshot->>'nome') AS customer_name,
+                COALESCE(c.email, o.customer_snapshot->>'email') AS customer_email,
                 (SELECT p.status FROM commerce_payments p WHERE p.empresa_id = o.empresa_id AND p.order_id = o.id ORDER BY p.criado_em DESC LIMIT 1) AS payment_status,
                 (SELECT jsonb_build_object('status', f.status, 'carrier', f.carrier, 'trackingCode', f.tracking_code, 'trackingUrl', f.tracking_url, 'ocorrencias', f.ocorrencias)
                    FROM commerce_fulfillments f WHERE f.empresa_id = o.empresa_id AND f.order_id = o.id ORDER BY f.atualizado_em DESC NULLS LAST LIMIT 1) AS fulfillment,

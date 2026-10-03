@@ -600,7 +600,10 @@ export async function prepareShippingLabel(trx, contextInput, fulfillmentIdInput
   const fulfillmentId = assertUuid(fulfillmentIdInput, 'fulfillmentId');
   const storefrontId = assertUuid(storefrontIdInput, 'storefrontId');
   const result = await trx.query(
-    `SELECT f.*, o.public_code, o.customer_id, o.status AS order_status, c.email AS customer_email, c.documento_mascarado AS customer_document, o.endereco_entrega, o.storefront_id,
+    `SELECT f.*, o.public_code, o.customer_id, o.status AS order_status,
+            COALESCE(c.email, o.customer_snapshot->>'email') AS customer_email,
+            COALESCE(c.documento_mascarado, o.customer_snapshot->>'documentoMascarado') AS customer_document,
+            o.endereco_entrega, o.storefront_id,
             q.provider, q.ambiente, q.selected_option_id, q.response_snapshot, q.expires_at AS quote_expires_at,
             a.id AS account_id, a.provider AS account_provider, a.ambiente AS account_environment, a.secret_ref, a.public_config, a.ativo AS account_active,
             m.tipo AS shipping_type

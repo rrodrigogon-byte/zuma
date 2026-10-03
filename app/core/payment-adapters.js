@@ -163,7 +163,8 @@ async function preparePayment(trx, context, input, provider, method, idem, reque
   const accountId = assertUuid(input.accountId, 'accountId');
   const environment = environmentName(input.environment);
   const orderResult = await trx.query(
-    `SELECT o.id, o.public_code, o.loja_id, o.storefront_id, o.status, o.total, o.moeda, c.email AS customer_email
+    `SELECT o.id, o.public_code, o.loja_id, o.storefront_id, o.status, o.total, o.moeda,
+            COALESCE(c.email, o.customer_snapshot->>'email') AS customer_email
        FROM commerce_orders o
        LEFT JOIN commerce_customers c ON c.empresa_id = o.empresa_id AND c.id = o.customer_id
       WHERE o.empresa_id = $1 AND o.id = $2

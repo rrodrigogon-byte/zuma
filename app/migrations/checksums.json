@@ -60,5 +60,6 @@
  "052_ai_brain_memory_learning.sql": "eeaaf2ffcbd5548c64fc8bc05ff311e7cecdc03a8c10099f23ef2e0e67a894d2",
  "053_commerce_phone_verification.sql": "a4a385c59c4b6d4406895be04c60e62010b505a29d2e42a27953641d5c42c97c",
  "054_commerce_loyalty_expiry_marks.sql": "8efc6e98b131c7236080bf0af6416bcf8e78a897ac36a716d0480cb051bd6e7c",
+ "055_commerce_order_contact_snapshot.sql": "8aca1be1991947fb4dd7639ec650f6cba585d698bfb263964a19ad0ac3157f87",
  "060_kytto_json_snapshots.sql": "66a8e3c137a4026f81ecb630a77be136301e42230587f2841fcce4c51e7375b3"
 }

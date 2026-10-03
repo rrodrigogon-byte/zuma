@@ -562,12 +562,13 @@ test('checkout com contato conflitante retorna 409 sem PII, pedido ou pagamento'
   } finally { console.warn = originalWarn; }
 });
 
-test('conflito após INSERT da chave idempotente faz rollback sem gravar pedido ou pagamento', async () => {
+test('conflito após INSERT da chave idempotente cria pedido convidado sem gravar ou mesclar cliente', async () => {
   const originalWarn = console.warn;
   let attemptedKeyInsert = 0;
   let rollbacks = 0;
   let committed = 0;
   const dml = [];
+  let orderInsertValues = null;
   console.warn = () => {};
   try {
     const response = await invokePublicOrderCreate({
@@ -576,13 +577,14 @@ test('conflito após INSERT da chave idempotente faz rollback sem gravar pedido 
       transaction: async callback => {
         let pendingDml = [];
         try {
-          const result = await callback({ query: async sql => {
+          const result = await callback({ query: async (sql, values = []) => {
             if (/\b(INSERT|UPDATE|DELETE)\b/i.test(sql)) pendingDml.push(sql);
             if (sql.includes('FROM commerce_storefronts')) return { rows: [{ id: storefrontId, empresa_id: empresaId, loja_id: lojaId, status: 'active', moeda: 'BRL' }] };
             if (sql.includes("scope = 'order.create'") && sql.includes('FROM commerce_idempotency_keys')) return { rows: [] };
             if (sql.includes('INSERT INTO commerce_idempotency_keys')) { attemptedKeyInsert += 1; return { rows: [] }; }
-            if (sql.includes('FROM commerce_product_variants')) return { rows: [{ id: '77777777-7777-4777-8777-777777777777', sku: 'TEST', variant_name: 'Padrão', product_name: 'Produto', product_type: 'physical', price: '10.00' }] };
+            if (sql.includes('FROM commerce_product_variants')) return { rows: [{ id: '77777777-7777-4777-8777-777777777777', sku: 'TEST', variant_name: 'Padrão', product_name: 'Produto', product_type: 'service', price: '10.00' }] };
             if (sql.includes('FROM commerce_customers')) throw { code: 'CONTACT_CONFLICT', details: { reason: 'identifiers_resolve_to_different_customers' } };
+            if (sql.includes('INSERT INTO commerce_orders')) { orderInsertValues = values; return { rows: [] }; }
             return { rows: [] };
           } });
           dml.push(...pendingDml);
@@ -595,12 +597,16 @@ test('conflito após INSERT da chave idempotente faz rollback sem gravar pedido 
         }
       },
     });
-    assert.equal(response.statusCode, 409);
-    assert.equal(response.body.code, 'CHECKOUT_CONTACT_REVIEW');
+    assert.equal(response.statusCode, 201);
+    assert.equal(response.body.status, 'pending_payment');
+    assert.equal('customerId' in response.body, false);
     assert.equal(attemptedKeyInsert, 1);
-    assert.equal(rollbacks, 1);
-    assert.equal(committed, 0);
-    assert.deepEqual(dml, []);
+    assert.equal(rollbacks, 0);
+    assert.equal(committed, 1);
+    assert.ok(dml.some(sql => sql.includes('INSERT INTO commerce_orders')));
+    assert.ok(orderInsertValues);
+    assert.equal(orderInsertValues[4], null);
+    assert.match(orderInsertValues[5], /"email":"test@example\.invalid"/);
   } finally { console.warn = originalWarn; }
 });
 
