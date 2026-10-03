@@ -872,6 +872,7 @@ export function createCommercePublicRouter() {
         const allowedReasons = new Set(['identifiers_resolve_to_different_customers', 'customer_email_mismatch', 'customer_phone_mismatch', 'concurrent_unique_conflict', 'cart_customer_mismatch', 'cart_order_customer_mismatch']);
         const reason = allowedReasons.has(error?.details?.reason) ? error.details.reason : 'unknown';
         console.warn('commerce_checkout_contact_review', JSON.stringify({ requestId: String(req.requestId || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64), reason }));
+        res.set('Cache-Control', 'no-store, private');
         return res.status(409).json({ error: 'Não foi possível confirmar seus dados de contato. Confira e-mail e telefone ou fale com a loja.', code: 'CHECKOUT_CONTACT_REVIEW' });
       }
       jsonError(res, error);

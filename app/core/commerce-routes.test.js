@@ -192,6 +192,8 @@ function publicResponse() {
   return {
     statusCode: 200,
     body: null,
+    headers: {},
+    set(name, value) { this.headers[name.toLowerCase()] = value; return this; },
     status(code) { this.statusCode = code; return this; },
     json(body) { this.body = body; return this; },
   };
@@ -555,6 +557,7 @@ test('checkout com contato conflitante retorna 409 sem PII, pedido ou pagamento'
     });
     assert.equal(response.statusCode, 409);
     assert.equal(response.body.code, 'CHECKOUT_CONTACT_REVIEW');
+    assert.equal(response.headers['cache-control'], 'no-store, private');
     assert.equal(attempts, 1);
     assert.ok(logs.some(args => args[0] === 'commerce_checkout_contact_review' && JSON.parse(args[1]).reason === 'customer_phone_mismatch'));
     assert.doesNotMatch(JSON.stringify({ response: response.body, logs }), /private@example\.invalid|11999999999/);
@@ -607,6 +610,53 @@ test('conflito após INSERT da chave idempotente cria pedido convidado sem grava
     assert.ok(orderInsertValues);
     assert.equal(orderInsertValues[4], null);
     assert.match(orderInsertValues[5], /"email":"test@example\.invalid"/);
+  } finally { console.warn = originalWarn; }
+});
+
+test('checkout com e-mail de A e telefone de B bloqueia antes de pedido, reserva, loyalty ou pagamento', async () => {
+  const originalWarn = console.warn;
+  const logged = [];
+  const writes = [];
+  let rollbacks = 0;
+  console.warn = (...args) => logged.push(args);
+  try {
+    const response = await invokePublicOrderCreate({
+      body: { items: [{ variantId: '77777777-7777-4777-8777-777777777777', quantity: 1 }], customer: { nome: 'Fixture', email: 'a@example.invalid', telefone: '(11) 99999-9999' }, shippingAddress: { modo: 'retirada' } },
+      headers: { 'idempotency-key': 'conflict-real-resolver-test' },
+      transaction: async callback => {
+        try {
+          return await callback({ query: async (sql, values = []) => {
+            if (/^\s*(INSERT|UPDATE|DELETE)\b/i.test(sql)) writes.push(sql);
+            if (sql.includes('FROM commerce_storefronts')) return { rows: [{ id: storefrontId, empresa_id: empresaId, loja_id: lojaId, status: 'active', moeda: 'BRL' }] };
+            if (sql.includes('FROM commerce_shipping_methods')) return { rows: [] };
+            if (sql.includes('pg_advisory_xact_lock')) return { rows: [] };
+            if (sql.includes("scope = 'order.create'") && sql.includes('FROM commerce_idempotency_keys')) return { rows: [] };
+            if (sql.includes('FROM commerce_product_variants')) return { rows: [{ id: '77777777-7777-4777-8777-777777777777', sku: 'FIXTURE', product_type: 'physical', price: '10.00' }] };
+            if (sql.includes('FROM commerce_customers')) {
+              assert.equal(values[0], empresaId);
+              assert.equal(values[2], 'a@example.invalid');
+              assert.equal(values[3], '5511999999999');
+              return { rows: [
+                { id: '88888888-8888-4888-8888-888888888888', email_normalizado: 'a@example.invalid', telefone_normalizado: null, bloqueado: false },
+                { id: '99999999-9999-4999-8999-999999999999', email_normalizado: null, telefone_normalizado: '5511999999999', bloqueado: false },
+              ] };
+            }
+            if (sql.includes('INSERT INTO commerce_idempotency_keys')) return { rows: [] };
+            throw new Error('consulta inesperada antes do bloqueio de identidade');
+          } });
+        } catch (error) { rollbacks += 1; throw error; }
+      },
+    });
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.body.code, 'CHECKOUT_CONTACT_REVIEW');
+    assert.equal(response.headers['cache-control'], 'no-store, private');
+    assert.equal(rollbacks, 1);
+    assert.equal(writes.length, 1); // apenas INSERT idempotente, revertido na transação
+    assert.match(writes[0], /INSERT INTO commerce_idempotency_keys/);
+    assert.doesNotMatch(writes.join(' '), /commerce_orders|commerce_payments|commerce_inventory|commerce_loyalty|commerce_customers|commerce_cart/);
+    assert.equal(logged.length, 1);
+    assert.deepEqual(JSON.parse(logged[0][1]), { requestId: 'route-test', reason: 'identifiers_resolve_to_different_customers' });
+    assert.doesNotMatch(JSON.stringify({ body: response.body, logged }), /a@example\.invalid|5511999999999|88888888-8888/);
   } finally { console.warn = originalWarn; }
 });
 
