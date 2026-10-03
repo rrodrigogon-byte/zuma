@@ -7,6 +7,7 @@ import { checkoutPaymentChoices, clearStorefrontCheckoutIdempotencyKey, nextStor
 import { createLatestRequest } from '../../lib/latest-request'
 import { createCheckoutOrderPoller } from '../../lib/checkout-order-polling'
 import { checkoutTotal, recommendedShippingOption, selectedShippingOption, shippingQuoteKey } from '../../lib/checkout-shipping'
+import { checkoutContactReviewMessage } from '../../lib/checkout-contact'
 
 const EMPTY_ADDRESS = { cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '', referencia: '' }
 
@@ -140,6 +141,7 @@ export default function CommerceCheckout() {
   const removedCartIndexRef = useRef(null)
   const emptyCartLinkRef = useRef(null)
   const addressNumberRef = useRef(null)
+  const emailRef = useRef(null)
   const lastLookupCepRef = useRef('')
   const lastShippingQuoteKeyRef = useRef('')
   const shippingQuoteRequestRef = useRef(0)
@@ -441,6 +443,11 @@ export default function CommerceCheckout() {
       if (['SHIPPING_QUOTE_EXPIRED', 'SHIPPING_QUOTE_MISMATCH', 'SHIPPING_OPTION_INVALID'].includes(err.code)) {
         invalidateShippingQuote()
       }
+      if (err.code === 'CHECKOUT_CONTACT_REVIEW') {
+        setError(checkoutContactReviewMessage(err))
+        emailRef.current?.focus()
+        return
+      }
       const shippingError = err.code === 'SHIPPING_QUOTE_MISMATCH'
         ? 'A cotação mudou porque o CEP, endereço ou carrinho foi atualizado. Recalcule o frete para continuar.'
         : err.code === 'SHIPPING_QUOTE_EXPIRED'
@@ -552,7 +559,7 @@ export default function CommerceCheckout() {
     <header className="checkout-header"><div className="checkout-header-inner"><Link className={`checkout-brand${isDinoCommerce ? ' checkout-brand-dino-commerce' : ''}`} to={storeRoute} aria-label={`Voltar para ${brandName}`}>{isDinoCommerce ? <img className="checkout-brand-logo" src={DINO_COMMERCE_LOGO} alt="Dino Perfumaria" /> : <><span className="checkout-brand-mark">{brandMark}</span><span>{brandName}</span></>}</Link><div className="checkout-header-security"><ShieldCheck size={16} /> Checkout protegido</div></div></header>
     <div className="checkout-content"><div className="checkout-main-column"><Link className="checkout-back" to={storeRoute}> <ArrowLeft size={14} /> Voltar para a loja</Link><Stepper paymentReady={false} /><section className="checkout-card"><div className="checkout-card-title"><div><span className="eyebrow">Checkout Commerce</span><h1>Finalize sua compra</h1><p>Seu pedido será criado primeiro; o pagamento acontece depois no provedor escolhido.</p></div><span className="checkout-card-icon"><Store size={20} /></span></div>
       <form onSubmit={createOrder}>
-        <div className="checkout-form-grid"><label className="checkout-field"><span>Nome completo *</span><input value={form.nome} onChange={e => setForm(current => ({ ...current, nome: e.target.value }))} autoComplete="name" required /></label><label className="checkout-field"><span>E-mail *</span><input type="email" value={form.email} onChange={e => setForm(current => ({ ...current, email: e.target.value }))} autoComplete="email" required /></label><label className="checkout-field"><span>WhatsApp ou telefone</span><input value={form.telefone} onChange={e => setForm(current => ({ ...current, telefone: e.target.value }))} autoComplete="tel" /></label><label className="checkout-field"><span>Cupom de desconto</span><input value={promotionCode} onChange={e => setPromotionCode(e.target.value.toUpperCase())} autoComplete="off" placeholder="Opcional" /></label></div>
+        <div className="checkout-form-grid"><label className="checkout-field"><span>Nome completo *</span><input value={form.nome} onChange={e => setForm(current => ({ ...current, nome: e.target.value }))} autoComplete="name" required /></label><label className="checkout-field"><span>E-mail *</span><input ref={emailRef} type="email" value={form.email} onChange={e => setForm(current => ({ ...current, email: e.target.value }))} autoComplete="email" required /></label><label className="checkout-field"><span>WhatsApp ou telefone</span><input value={form.telefone} onChange={e => setForm(current => ({ ...current, telefone: e.target.value }))} autoComplete="tel" /></label><label className="checkout-field"><span>Cupom de desconto</span><input value={promotionCode} onChange={e => setPromotionCode(e.target.value.toUpperCase())} autoComplete="off" placeholder="Opcional" /></label></div>
         <label className="checkout-recovery-consent"><input type="checkbox" checked={recoveryPreference === true} onChange={event => setRecoveryPreference(event.target.checked)} /><span><strong>Lembrar meu carrinho por WhatsApp</strong><small>Opcional. Autorizo um único lembrete sobre este carrinho. Posso revogar desmarcando ou respondendo SAIR.</small></span></label>
         <div className="checkout-info-banner"><ShieldCheck size={18} /><div><strong>Pagamento fora do formulário.</strong><br />A Kytto não coleta dados de cartão. Você será levado ao checkout seguro do provedor habilitado.</div></div>
         <div className="checkout-address"><div className="checkout-address-heading"><h2>Como receber</h2><span>Escolha uma opção publicada</span></div><div className="shipping-options">{pickupAvailable && <button type="button" className={`shipping-option ${deliveryMode === 'retirada' ? 'is-selected' : ''}`} onClick={() => chooseDelivery('retirada')}><span className="shipping-option-radio">{deliveryMode === 'retirada' ? '✓' : ''}</span><span className="shipping-option-copy"><strong>Retirada no local</strong><small>Confirme com a operação da loja.</small></span><b>Grátis</b></button>}{deliveryAvailable && <button type="button" className={`shipping-option ${deliveryMode === 'entrega' ? 'is-selected' : ''}`} onClick={() => chooseDelivery('entrega')}><span className="shipping-option-radio">{deliveryMode === 'entrega' ? '✓' : ''}</span><span className="shipping-option-copy"><strong>Entrega</strong><small>O valor e o prazo são calculados automaticamente pelo CEP.</small></span><b>{selectedOption ? money(selectedOption.amount) : 'Consultar'}</b></button>}</div></div>

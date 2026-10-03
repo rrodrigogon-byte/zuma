@@ -57,7 +57,12 @@ function mediaUploadHandler() {
   assert.ok(handler, 'rota de upload de mídia não encontrada');
   return handler;
 }
-
+function catalogProductsHandler() {
+  const router = createCommerceAdminRouter();
+  const layer = router.stack.find(item => item.route?.path === '/catalog/products' && item.route.methods.get);
+  assert.ok(layer?.route?.stack?.[0]?.handle, 'rota de listagem de produtos não encontrada');
+  return layer.route.stack[0].handle;
+}
 function publicOrderHandler() {
   const router = createCommercePublicRouter();
   const layer = router.stack.find(item => item.route?.path === '/orders/:publicCode');
@@ -198,6 +203,49 @@ async function invokePublicOrderCreate({ body = {}, headers = {}, transaction } 
     db.transaction = original;
   }
 }
+
+test('catálogo com empresa, loja, storefront e local não envia parâmetro solto ao COUNT', async () => {
+  const locationId = '44444444-4444-4444-8444-444444444444';
+  const calls = [];
+  const response = await invoke(catalogProductsHandler(), async (sql, params = []) => {
+    calls.push({ sql, params });
+    if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
+    if (sql.includes('COUNT(*)::int AS grants')) return { rows: [{ grants: 1, corporate_access: false }] };
+    if (sql.includes('SELECT id, loja_id FROM commerce_storefronts')) return { rows: [{ id: storefrontId, loja_id: lojaId }] };
+    if (sql.includes('SELECT id FROM commerce_storefronts')) return { rows: [{ id: storefrontId }] };
+    if (sql.includes('FROM commerce_inventory_locations')) return { rows: [{ id: locationId }] };
+    if (sql.includes('COUNT(*)::int AS total FROM commerce_products')) return { rows: [{ total: 0 }] };
+    if (sql.includes('FROM commerce_products p')) return { rows: [] };
+    throw new Error('consulta inesperada no GET de catálogo');
+  }, { locationId, limit: '20', offset: '10' });
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.body.pagination, { limit: 20, offset: 10, total: 0, hasMore: false });
+  const count = calls.find(call => call.sql.includes('COUNT(*)::int AS total FROM commerce_products'));
+  const list = calls.find(call => call.sql.includes('SELECT p.id, p.slug'));
+  assert.ok(count && list);
+  assert.deepEqual(count.params, [empresaId, lojaId, storefrontId]);
+  assert.match(list.sql, /il.location_id = \$4/);
+  assert.match(list.sql, /LIMIT \$5 OFFSET \$6/);
+  assert.deepEqual(list.params, [empresaId, lojaId, storefrontId, locationId, 20, 10]);
+  assert.equal(calls.some(call => /\b(INSERT|UPDATE|DELETE)\b/i.test(call.sql)), false);
+});
+
+test('catálogo rejeita local de outra loja antes de consultar produtos', async () => {
+  const calls = [];
+  const response = await invoke(catalogProductsHandler(), async (sql, params = []) => {
+    calls.push({ sql, params });
+    if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
+    if (sql.includes('COUNT(*)::int AS grants')) return { rows: [{ grants: 1, corporate_access: false }] };
+    if (sql.includes('SELECT id, loja_id FROM commerce_storefronts')) return { rows: [{ id: storefrontId, loja_id: lojaId }] };
+    if (sql.includes('SELECT id FROM commerce_storefronts')) return { rows: [{ id: storefrontId }] };
+    if (sql.includes('FROM commerce_inventory_locations')) return { rows: [] };
+    throw new Error('consulta indevida após rejeição de local');
+  }, { locationId: '44444444-4444-4444-8444-444444444444' });
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.body.code, 'INVENTORY_LOCATION_SCOPE_MISMATCH');
+  assert.equal(calls.some(call => call.sql.includes('FROM commerce_products p')), false);
+  assert.equal(calls.some(call => /\b(INSERT|UPDATE|DELETE)\b/i.test(call.sql)), false);
+});
 
 test('upload de mídia retorna replay idempotente tenant-scoped sem acessar o bucket', async () => {
   const original = db.query;
@@ -479,6 +527,71 @@ test('rota pública exige chave de idempotência antes de abrir transação', as
   assert.equal(response.statusCode, 400);
   assert.equal(response.body.code, 'ORDER_IDEMPOTENCY_REQUIRED');
   assert.equal(transactions, 0);
+});
+
+test('checkout com contato conflitante retorna 409 sem PII, pedido ou pagamento', async () => {
+  const originalWarn = console.warn;
+  const logs = [];
+  let attempts = 0;
+  console.warn = (...args) => logs.push(args);
+  try {
+    const response = await invokePublicOrderCreate({
+      body: { items: [{ variantId: '77777777-7777-4777-8777-777777777777', quantity: 1 }], customer: { nome: 'Teste', email: 'private@example.invalid', telefone: '11999999999' }, shippingAddress: { modo: 'retirada' } },
+      headers: { 'idempotency-key': 'contact-conflict-test' },
+      transaction: async () => {
+        attempts += 1;
+        throw { code: 'CONTACT_CONFLICT', details: { reason: 'customer_phone_mismatch', email: 'private@example.invalid', telefone: '11999999999' } };
+      },
+    });
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.body.code, 'CHECKOUT_CONTACT_REVIEW');
+    assert.equal(attempts, 1);
+    assert.ok(logs.some(args => args[0] === 'commerce_checkout_contact_review' && JSON.parse(args[1]).reason === 'customer_phone_mismatch'));
+    assert.doesNotMatch(JSON.stringify({ response: response.body, logs }), /private@example\.invalid|11999999999/);
+    assert.equal('details' in response.body, false);
+  } finally { console.warn = originalWarn; }
+});
+
+test('conflito após INSERT da chave idempotente faz rollback sem gravar pedido ou pagamento', async () => {
+  const originalWarn = console.warn;
+  let attemptedKeyInsert = 0;
+  let rollbacks = 0;
+  let committed = 0;
+  const dml = [];
+  console.warn = () => {};
+  try {
+    const response = await invokePublicOrderCreate({
+      body: { items: [{ variantId: '77777777-7777-4777-8777-777777777777', quantity: 1 }], customer: { nome: 'Teste', email: 'test@example.invalid', telefone: '11999999999' }, shippingAddress: { modo: 'retirada' } },
+      headers: { 'idempotency-key': 'contact-conflict-after-insert' },
+      transaction: async callback => {
+        let pendingDml = [];
+        try {
+          const result = await callback({ query: async sql => {
+            if (/\b(INSERT|UPDATE|DELETE)\b/i.test(sql)) pendingDml.push(sql);
+            if (sql.includes('FROM commerce_storefronts')) return { rows: [{ id: storefrontId, empresa_id: empresaId, loja_id: lojaId, status: 'active', moeda: 'BRL' }] };
+            if (sql.includes("scope = 'order.create'") && sql.includes('FROM commerce_idempotency_keys')) return { rows: [] };
+            if (sql.includes('INSERT INTO commerce_idempotency_keys')) { attemptedKeyInsert += 1; return { rows: [] }; }
+            if (sql.includes('FROM commerce_product_variants')) return { rows: [{ id: '77777777-7777-4777-8777-777777777777', sku: 'TEST', variant_name: 'Padrão', product_name: 'Produto', product_type: 'physical', price: '10.00' }] };
+            if (sql.includes('FROM commerce_customers')) throw { code: 'CONTACT_CONFLICT', details: { reason: 'identifiers_resolve_to_different_customers' } };
+            return { rows: [] };
+          } });
+          dml.push(...pendingDml);
+          committed += 1;
+          return result;
+        } catch (error) {
+          pendingDml = [];
+          rollbacks += 1;
+          throw error;
+        }
+      },
+    });
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.body.code, 'CHECKOUT_CONTACT_REVIEW');
+    assert.equal(attemptedKeyInsert, 1);
+    assert.equal(rollbacks, 1);
+    assert.equal(committed, 0);
+    assert.deepEqual(dml, []);
+  } finally { console.warn = originalWarn; }
 });
 
 test('rota pública devolve exatamente a resposta persistida no replay e rejeita payload diferente', async () => {
