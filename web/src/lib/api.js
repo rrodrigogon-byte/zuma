@@ -23,18 +23,22 @@ function getLojaAtivaId() {
   }
 }
 
-async function request(path, opts = {}) {
-  const preparado = prepararOperacao(path, opts)
+function authHeaders(extra = {}) {
   const token = getToken()
   const empresaId = getEmpresaAtivaId()
   const lojaId = getLojaAtivaId()
-  const headers = {
+  return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: 'Bearer ' + token } : {}),
     ...(empresaId ? { 'X-Empresa-Id': empresaId } : {}),
     ...(lojaId ? { 'X-Loja-Id': lojaId } : {}),
-    ...(preparado.headers || {}),
+    ...extra,
   }
+}
+
+async function request(path, opts = {}) {
+  const preparado = prepararOperacao(path, opts)
+  const headers = authHeaders(preparado.headers || {})
   let res
   try {
     if (!navigator.onLine && deveEnfileirarOffline(path, preparado)) return enfileirarOperacao(path, { ...preparado, headers })
@@ -94,6 +98,17 @@ apiFn.upload = (path, file, extraHeaders = {}) => request(path, {
     ...extraHeaders,
   },
 })
+apiFn.blob = async (path) => {
+  const res = await fetch(path, { headers: authHeaders() })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    const error = new Error(data.error || data.erro || `Erro ${res.status}`)
+    error.status = res.status
+    error.code = data.code || ''
+    throw error
+  }
+  return res.blob()
+}
 apiFn.sincronizarFilaOffline = () => sincronizarFila((path, opts) => {
   const token = getToken(); const empresaId = getEmpresaAtivaId(); const lojaId = getLojaAtivaId()
   return fetch(path, { ...opts, headers: { 'Content-Type':'application/json', ...(token ? { Authorization:`Bearer ${token}` } : {}), ...(empresaId ? { 'X-Empresa-Id':empresaId } : {}), ...(lojaId ? { 'X-Loja-Id':lojaId } : {}), ...(opts.headers || {}), 'X-Offline-Replay':'1' } })

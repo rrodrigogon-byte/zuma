@@ -132,9 +132,33 @@ function useAdminDialogFocusTrap() {
 }
 
 function ProductMediaImage({ media, storefrontId, alt = 'Imagem do produto', className = '' }) {
+  const previewUrl = adminProductMediaUrl(media, storefrontId)
+  const [src, setSrc] = useState('')
   const [failed, setFailed] = useState(false)
-  const src = adminProductMediaUrl(media, storefrontId)
-  if (!src || failed) {
+  useEffect(() => {
+    let active = true
+    let objectUrl = ''
+    setSrc('')
+    setFailed(false)
+    if (!previewUrl) return () => {}
+    if (!previewUrl.startsWith('/api/admin/commerce/catalog/media/')) {
+      setSrc(previewUrl)
+      return () => {}
+    }
+    api.blob(previewUrl).then(blob => {
+      objectUrl = URL.createObjectURL(blob)
+      if (active) setSrc(objectUrl)
+      else URL.revokeObjectURL(objectUrl)
+    }).catch(() => { if (active) setFailed(true) })
+    return () => {
+      active = false
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [previewUrl])
+  if (!src && !failed) {
+    return <div className={`commerce-product-media-fallback ${className}`.trim()} role="status"><PackagePlus size={24} aria-hidden="true" /><span>Carregando imagem…</span></div>
+  }
+  if (failed) {
     return <div className={`commerce-product-media-fallback ${className}`.trim()} role="img" aria-label={`${alt} — imagem indisponível`}><PackagePlus size={24} aria-hidden="true" /><span>Imagem indisponível</span></div>
   }
   return <img src={src} alt={alt} className={className} loading="lazy" onError={() => setFailed(true)} />
