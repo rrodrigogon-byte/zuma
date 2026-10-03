@@ -209,3 +209,29 @@ test('GET antigo com open após logout confirmado não ressuscita a conexão loc
   const eventoAtrasado = conexao.registrarEventoConexao('emp-a', 'open');
   assert.equal(eventoAtrasado.state, 'close', 'webhook tardio não reabre a sessão local pausada');
 });
+
+test('desconectar sem sessão: DELETE recusado, mas o backend confirma QR → encerra sem erro', async () => {
+  const saved = { WHATSAPP_PROVIDER: process.env.WHATSAPP_PROVIDER, CHATBOT_BACKEND_URL: process.env.CHATBOT_BACKEND_URL, CHATBOT_BACKEND_KEY: process.env.CHATBOT_BACKEND_KEY };
+  process.env.WHATSAPP_PROVIDER = 'chatbot_backend';
+  process.env.CHATBOT_BACKEND_URL = 'https://backend.test';
+  process.env.CHATBOT_BACKEND_KEY = 'k'.repeat(24);
+  try {
+    const conexao = await import('./whatsapp-conexao-kytto.js');
+    const estado = conexao.obterConexao('emp-sem-sessao');
+    estado.state = 'qr';
+    estado.ativo = true;
+    const metodos = [];
+    const result = await conexao.desconectar('emp-sem-sessao', { fetchImpl: async (_url, opts) => {
+      metodos.push(opts.method);
+      return opts.method === 'DELETE'
+        ? { ok: false, status: 400, text: async () => JSON.stringify({ message: 'no session' }) }
+        : { ok: true, status: 200, text: async () => JSON.stringify({ state: 'qr' }) };
+    } });
+    assert.deepEqual(metodos, ['DELETE', 'GET'], 'DELETE uma vez só; depois só leitura');
+    assert.equal(result.ok, true);
+    assert.equal(result.conexao.state, 'close');
+    assert.equal(result.conexao.ativo, false);
+  } finally {
+    for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  }
+});
