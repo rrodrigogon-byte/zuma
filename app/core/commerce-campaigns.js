@@ -331,6 +331,7 @@ export async function processCampaignDeliveryTask(task) {
       whatsapp_api_url: process.env.EVOLUTION_API_URL || delivery.api_base_url,
       whatsapp_api_key: process.env.EVOLUTION_API_KEY,
       whatsapp_instance: delivery.configuracao?.instance || process.env.EVOLUTION_INSTANCE,
+      empresa_id: delivery.empresa_id, loja_id: delivery.loja_id, canal_id: delivery.canal_id,
     }, delivery.telefone, renderMessage(delivery.mensagem, delivery.cliente_nome));
   } catch (error) {
     await db.query(`UPDATE envios_campanha SET status = 'falha', erro = $2, atualizado_em = CURRENT_TIMESTAMP WHERE id = $1`, [delivery.id, clean(error?.message || 'falha Evolution', 1000)]);

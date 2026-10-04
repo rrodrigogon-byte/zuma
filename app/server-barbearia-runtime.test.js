@@ -73,9 +73,17 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     const clienteSemConsentimento = await request(base, '/api/admin/barbearia/clientes', { method: 'POST', headers, body: JSON.stringify({ nome: 'Cliente consentimento runtime', telefone: '65999999999' }) });
     assert.equal(clienteSemConsentimento.response.status, 201);
     const whatsappSemConsentimento = await request(base, '/api/admin/barbearia/whatsapp/enviar', { method: 'POST', headers, body: JSON.stringify({ confirmado: true, clienteId: clienteSemConsentimento.body.cliente.id, finalidade: 'atendimento', mensagem: 'teste' }) });
-    assert.equal(whatsappSemConsentimento.response.status, 409);
+    assert.equal(whatsappSemConsentimento.response.status, 403);
+    assert.equal(whatsappSemConsentimento.body.code, 'TENANT_USE_SCOPED_MODULE');
     const whatsappSemConfirmacao = await request(base, '/api/admin/barbearia/whatsapp/enviar', { method: 'POST', headers, body: JSON.stringify({ telefone: '65999999999', mensagem: 'teste' }) });
-    assert.equal(whatsappSemConfirmacao.response.status, 400);
+    assert.equal(whatsappSemConfirmacao.response.status, 403);
+    const statusWppGlobal = await request(base, '/api/admin/whatsapp/status', { headers });
+    assert.equal(statusWppGlobal.response.status, 403);
+    for (const rota of ['/api/admin/whatsapp/testar', '/api/admin/whatsapp/cobrar']) {
+      const negado = await request(base, rota, { method: 'POST', headers, body: JSON.stringify({ telefone: '65999999999' }) });
+      assert.equal(negado.response.status, 403, `${rota} não pode operar via tenant`);
+      assert.equal(negado.body.code, 'TENANT_USE_SCOPED_MODULE');
+    }
     const assistenteSemConfig = await request(base, '/api/admin/barbearia/ia/assistente', { method: 'POST', headers, body: JSON.stringify({ pergunta: 'Quais são os horários livres?' }) });
     assert.equal(assistenteSemConfig.response.status, 200);
     assert.equal(assistenteSemConfig.body.modo, 'local');

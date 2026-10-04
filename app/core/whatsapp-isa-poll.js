@@ -16,14 +16,16 @@
 //
 // Variáveis: WHATSAPP_PROVIDER=chatbot_backend, CHATBOT_BACKEND_URL,
 // CHATBOT_BACKEND_KEY, CHATBOT_BACKEND_EMPRESA_ID (empresa dona do número),
-// WHATSAPP_POLL_MODE=off|shadow|pilot|on (padrão on), WHATSAPP_POLL_PILOT_PHONES
+// WHATSAPP_POLL_MODE=off|shadow|pilot|on (multi-instância exige piloto e linha comprovada), WHATSAPP_POLL_PILOT_PHONES
 // (lista no modo pilot), WHATSAPP_POLL_INTERVAL_MS (padrão 5000, mínimo 3000),
 // WHATSAPP_MAX_REPLY_AGE_MINUTES (padrão 30).
 // ============================================================================
 
 import crypto from 'node:crypto';
 import { db } from './database.js';
-import { chatbotBackendConfig, chatbotBackendMode, fetchInboundMessages, fetchOutboundMessages, isaChatId, sendTextViaChatbotBackend, validInstance, whatsappProviderConfigured, whatsappProviderName } from './whatsapp-provider.js';
+import { chatbotBackendConfig, chatbotBackendMode, fetchInboundMessages, fetchOutboundMessages, isaChatId, validInstance, whatsappProviderConfigured, whatsappProviderName } from './whatsapp-provider.js';
+import { authorizeWhatsappEgress } from './whatsapp-egress.js';
+import { enviarMensagem } from './whatsapp.js';
 import { ingestInboundWhatsappMessage } from './whatsapp-ai-routes.js';
 import { inboundMediaToText } from './whatsapp-ai-media.js';
 import { latestStaffMessages, pauseForStaff, releaseExpiredStaffPauses, staffTakeoverEnabled } from './whatsapp-staff-takeover.js';
@@ -40,6 +42,12 @@ function texto(valor, limite = 4000) {
 
 export function pollMode() {
   const modo = texto(process.env.WHATSAPP_POLL_MODE, 10).toLowerCase();
+  if (chatbotBackendMode() === 'instancias') {
+    if (process.env.WHATSAPP_LINE_VERIFIED !== '1') return 'off';
+    if (modo === 'on' && process.env.WHATSAPP_FULL_ROLLOUT_APPROVED !== '1') return 'off';
+    return ['shadow', 'pilot', 'on'].includes(modo) ? modo : 'off';
+  }
+  if (process.env.CHATBOT_BACKEND_EMPRESA_ID) return 'off';
   return ['off', 'shadow', 'pilot', 'on'].includes(modo) ? modo : 'on';
 }
 
@@ -89,12 +97,13 @@ async function canalDaEmpresa() {
   if (chatbotBackendMode() === 'instancias' && !instance) return null;
   const resultado = await db.queryRead(
     `SELECT c.* FROM canais_integracao c
+      JOIN lojas l ON l.id = c.loja_id AND l.empresa_id = c.empresa_id
       WHERE c.empresa_id = $1 AND c.provedor = 'whatsapp' AND c.status = 'ativo'
         AND ($2::text IS NULL OR (
-          c.configuracao->>'instance' = $2
+          LOWER(BTRIM(c.configuracao->>'instance')) = $2
           AND NOT EXISTS (SELECT 1 FROM canais_integracao outra
-            WHERE outra.status = 'ativo' AND outra.provedor = 'whatsapp'
-              AND outra.empresa_id <> $1 AND outra.configuracao->>'instance' = $2)
+            WHERE outra.id <> c.id AND outra.status = 'ativo' AND outra.provedor = 'whatsapp'
+              AND LOWER(BTRIM(outra.configuracao->>'instance')) = $2)
         ))
       ORDER BY c.data_atualizacao DESC NULLS LAST LIMIT 1`,
     [empresaId, instance],
@@ -129,7 +138,7 @@ async function lerMidia(parsed, item, { canal, fetchImpl, jaRecebido, entenderMi
 // Mídias em leitura neste processo: evita transcrever duas vezes enquanto o Gemini responde.
 const midiasEmLeitura = new Set();
 
-export async function runIsaPollPass({ fetchImpl, agora = Date.now(), canal: canalInjetado, ingest = ingestInboundWhatsappMessage, enviar = sendTextViaChatbotBackend, comTrava = true, jaRecebido = eventoJaRecebido, entenderMidia = inboundMediaToText, buscarSaidas = fetchOutboundMessages, equipe = { liberar: releaseExpiredStaffPauses, pausar: pauseForStaff } } = {}) {
+export async function runIsaPollPass({ fetchImpl, agora = Date.now(), canal: canalInjetado, carregarCanal = canalDaEmpresa, ingest = ingestInboundWhatsappMessage, enviar = null, autorizarSaida = authorizeWhatsappEgress, comTrava = true, jaRecebido = eventoJaRecebido, entenderMidia = inboundMediaToText, buscarSaidas = fetchOutboundMessages, equipe = { liberar: releaseExpiredStaffPauses, pausar: pauseForStaff } } = {}) {
   if (!pollEnabled()) return { skipped: true, reason: 'poll_disabled' };
   const resumo = { equipeAssumiu: 0, iaRetomada: 0, lidas: 0, novas: 0, duplicadas: 0, ignoradas: 0, audios: 0, fotos: 0, midiasLidas: 0, foraDoPiloto: 0 };
   let canalDaPassada = null;
@@ -147,16 +156,30 @@ export async function runIsaPollPass({ fetchImpl, agora = Date.now(), canal: can
     if (parsed.media === 'audio' || parsed.reason === 'audio') resumo.audios += 1;
     if (parsed.media === 'image' || parsed.reason === 'image') resumo.fotos += 1;
     if (midiaLiberada && parsed.ignored && ['audio', 'image'].includes(parsed.reason)) {
-      await enviar({ ...(canalDaPassada.configuracao?.instance ? { instance: canalDaPassada.configuracao.instance } : {}), number: parsed.phone, text: parsed.reason === 'audio' ? AUDIO_REPLY : IMAGE_REPLY }, fetchImpl).catch(() => null);
+      const access = chatbotBackendMode() === 'instancias'
+        ? await autorizarSaida({ empresaId: canalDaPassada.empresa_id, lojaId: canalDaPassada.loja_id, canalId: canalDaPassada.id, instance: canalDaPassada.configuracao?.instance, number: parsed.phone })
+        : { ok: !process.env.CHATBOT_BACKEND_EMPRESA_ID };
+      if (access.ok) {
+        const text = parsed.reason === 'audio' ? AUDIO_REPLY : IMAGE_REPLY;
+        if (enviar) await enviar({ ...(canalDaPassada.configuracao?.instance ? { instance: canalDaPassada.configuracao.instance } : {}), number: parsed.phone, text }, fetchImpl).catch(() => null);
+        else await enviarMensagem({ empresa_id: canalDaPassada.empresa_id, loja_id: canalDaPassada.loja_id, canal_id: canalDaPassada.id, whatsapp_instance: canalDaPassada.configuracao?.instance }, parsed.phone, text).catch(() => null);
+      }
     }
   }
 
   const executar = async () => {
-    const canal = canalInjetado || await canalDaEmpresa();
+    let canal = canalInjetado || await carregarCanal();
     if (!canal) return { skipped: true, reason: 'channel_not_active' };
     const instance = chatbotBackendMode() === 'instancias' ? validInstance(canal.configuracao?.instance || '') : '';
     if (chatbotBackendMode() === 'instancias' && (!instance || instance !== chatbotBackendConfig().instance)) return { skipped: true, reason: 'instance_scope_mismatch' };
-    canalDaPassada = canal;
+    if (canalInjetado) {
+      const canonic = await carregarCanal();
+      if (!canonic || String(canonic.id) !== String(canal.id)
+        || String(canonic.empresa_id) !== String(canal.empresa_id)
+        || String(canonic.loja_id) !== String(canal.loja_id)) return { skipped: true, reason: 'channel_scope_mismatch' };
+      canal = canonic;
+      canalDaPassada = canonic;
+    } else canalDaPassada = canal;
     const resposta = await fetchInboundMessages({ instance, from: agora - maxAgeMs(), limit: 100 }, fetchImpl);
     if (!resposta.ok) return { skipped: true, reason: resposta.authError ? 'backend_auth' : (resposta.error || 'backend_unavailable') };
     const modo = pollMode();

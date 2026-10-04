@@ -60,13 +60,14 @@ export async function startPhoneVerification({ empresaId, lojaId, phone, storeNa
   if (send) sent = await send(s.canonical, text);
   else {
     const channel = lojaId ? (await database.query(
-      `SELECT api_base_url, configuracao FROM canais_integracao WHERE empresa_id = $1 AND loja_id = $2 AND provedor = 'whatsapp' AND status = 'ativo' LIMIT 1`,
+      `SELECT id, api_base_url, configuracao FROM canais_integracao WHERE empresa_id = $1 AND loja_id = $2 AND provedor = 'whatsapp' AND status = 'ativo' LIMIT 1`,
       [s.empresaId, lojaId],
     )).rows[0] : null;
     sent = await enviarMensagem({
       whatsapp_api_url: process.env.EVOLUTION_API_URL || channel?.api_base_url,
       whatsapp_api_key: process.env.EVOLUTION_API_KEY,
       whatsapp_instance: channel?.configuracao?.instance || process.env.EVOLUTION_INSTANCE,
+      empresa_id: s.empresaId, loja_id: lojaId, canal_id: channel?.id,
     }, s.canonical, text);
   }
   if (!sent?.ok) {

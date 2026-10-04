@@ -90,7 +90,7 @@ test('remarcação cancela lembrete pendente anterior antes de criar nova tarefa
   } finally { mock.restore(); }
 });
 
-test('processa aviso com revalidação de consentimento e canal e não expõe telefone na resposta', async () => {
+test('revalida consentimento/canal e não envia agenda por credenciais Evolution globais', async () => {
   const { cliente, agendamento } = fixture();
   atualizarConsentimentoCliente(EMPRESA, cliente.id, { canal: 'whatsapp', finalidade: 'atendimento', concedido: true, origem: 'teste' });
   const mock = mockQueueDatabase();
@@ -117,13 +117,8 @@ test('processa aviso com revalidação de consentimento e canal e não expõe te
     ? { rows: [{ id: CANAL, empresa_id: EMPRESA, loja_id: LOJA, api_base_url: `http://127.0.0.1:${server.address().port}`, configuracao: { instance: 'teste' } }], rowCount: 1 }
     : { rows: [], rowCount: 0 };
   try {
-    const resultado = await processAppointmentNotificationTask({ id: crypto.randomUUID(), empresa_id: EMPRESA, loja_id: LOJA, canal_id: CANAL, payload: taskPayload });
-    assert.equal(resultado.sent, true);
-    assert.equal(resultado.providerMessageId, 'provider-test-1');
-    assert.equal('phone' in resultado, false);
-    assert.match(body.text, /mensagem de atendimento/);
-    assert.match(body.text, /responda SAIR/);
-    assert.equal(body.number, '5565999990000');
+    await assert.rejects(() => processAppointmentNotificationTask({ id: crypto.randomUUID(), empresa_id: EMPRESA, loja_id: LOJA, canal_id: CANAL, payload: taskPayload }), { code: 'APPOINTMENT_SEND_FAILED' });
+    assert.equal(body, undefined, 'nenhum POST para provider global sem configuração escopada');
   } finally {
     db.query = originalQuery;
     await new Promise((resolve) => server.close(resolve));

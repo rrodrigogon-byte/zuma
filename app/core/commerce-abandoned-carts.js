@@ -324,6 +324,7 @@ export async function processCartRecoveryTask(task = {}) {
     whatsapp_api_url: process.env.EVOLUTION_API_URL || snapshot.api_base_url,
     whatsapp_api_key: process.env.EVOLUTION_API_KEY,
     whatsapp_instance: snapshot.configuracao?.instance || process.env.EVOLUTION_INSTANCE,
+    empresa_id: snapshot.empresa_id, loja_id: snapshot.loja_id, canal_id: task.canal_id,
   }, snapshot.telefone, message);
   if (!sent?.ok) {
     const unknown = sent?.uncertain === true;

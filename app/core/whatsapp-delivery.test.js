@@ -29,6 +29,8 @@ test('enviarMensagem usa o payload Evolution atual e normaliza telefone sem expo
     assert.equal(result.uncertain, false);
     assert.deepEqual(requestBody, { number: '5565999990000', text: 'Mensagem privada', delay: 1200 });
     assert.equal(JSON.stringify(result).includes('Mensagem privada'), false);
+    const scoped = await enviarMensagem({ empresa_id: '44444444-4444-4444-8444-444444444444', loja_id: '22222222-2222-4222-8222-222222222222', whatsapp_api_url: baseUrl, whatsapp_instance: 'outro-canal', whatsapp_api_key: 'synthetic-tenant-key' }, '65999990000', 'Teste sintético escopado');
+    assert.equal(scoped.ok, true);
   });
 });
 

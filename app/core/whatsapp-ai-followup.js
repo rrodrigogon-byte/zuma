@@ -137,6 +137,7 @@ export async function runPendingFollowUpRound({ now = new Date(), loadSessions =
       nome: session.configuracao?.display_name || session.canal_nome || 'Atendimento da unidade',
       whatsapp_api_url: session.api_base_url || undefined,
       whatsapp_instance: session.configuracao?.instance || undefined,
+      empresa_id: session.empresa_id, loja_id: session.loja_id, canal_id: session.canal_id,
     }, session.telefone, text).catch(() => ({ ok: false }));
     await record(session, text, Boolean(result?.ok), result);
     if (result?.ok) summary.enviadas += 1; else summary.falhas += 1;

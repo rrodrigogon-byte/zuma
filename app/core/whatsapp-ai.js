@@ -319,6 +319,9 @@ async function sendOutput(channel, session, output) {
     nome: channel.configuracao?.display_name || channel.nome || 'Atendimento da unidade',
     whatsapp_api_url: channel.api_base_url || undefined,
     whatsapp_instance: channel.configuracao?.instance || undefined,
+    empresa_id: session.empresa_id,
+    loja_id: session.loja_id,
+    canal_id: session.canal_id,
   }, session.telefone, claimed.conteudo);
   if (result?.uncertain) {
     throw await deliveryError(session, claimed, 'unknown', 'WHATSAPP_DELIVERY_UNKNOWN', 'Evolution não confirmou se a mensagem foi aceita');

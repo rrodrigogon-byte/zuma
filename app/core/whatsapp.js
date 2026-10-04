@@ -4,7 +4,9 @@
  * Suporte a: Oficina, Barbearia, Crediário, Agendamentos, Cobranças, Alertas
  */
 import fetch from 'node-fetch';
-import { sendTextViaChatbotBackend, whatsappProviderName } from './whatsapp-provider.js';
+import { chatbotBackendConfig, chatbotBackendMode, sendTextViaChatbotBackend, whatsappProviderName } from './whatsapp-provider.js';
+import { db } from './database.js';
+import { authorizeWhatsappEgress, evaluateWhatsappEgress } from './whatsapp-egress.js';
 
 // ─── Configuração ─────────────────────────────────────────────────────────────
 function getConfig(tenant) {
@@ -32,7 +34,42 @@ export async function enviarMensagem(tenant, telefone, mensagem) {
   // lembretes de agenda) passam por aqui e seguem pela instância da empresa.
   if (whatsappProviderName() === 'chatbot_backend') {
     const instance = tenant?.whatsapp_instance || tenant?.instance || undefined;
+    if (chatbotBackendMode() === 'instancias') {
+      const context = {
+        empresaId: tenant?.empresa_id, lojaId: tenant?.loja_id, canalId: tenant?.canal_id,
+        instance, number: numero,
+      };
+      const preliminary = evaluateWhatsappEgress(context);
+      if (!preliminary.ok) return { ok: false, retryable: false, uncertain: false, error: `WHATSAPP_EGRESS_${preliminary.reason.toUpperCase()}` };
+      let attempted = false;
+      try {
+        return await db.transaction(async trx => {
+          // FOR SHARE mantém ownership até concluir a única tentativa HTTP. O índice
+          // único parcial impede outro canal ativo de reivindicar esta instância.
+          const decision = await authorizeWhatsappEgress(context, { database: { queryRead: trx.query }, lock: true });
+          if (!decision.ok) return { ok: false, retryable: false, uncertain: false, error: `WHATSAPP_EGRESS_${decision.reason.toUpperCase()}` };
+          attempted = true;
+          return sendTextViaChatbotBackend({ instance, number: numero, text });
+        });
+      } catch {
+        return { ok: false, retryable: false, uncertain: attempted, error: attempted ? 'WHATSAPP_SEND_COMMIT_UNCERTAIN' : 'WHATSAPP_EGRESS_CHANNEL_LOOKUP_FAILED' };
+      }
+    } else if (process.env.CHATBOT_BACKEND_EMPRESA_ID) {
+      return { ok: false, retryable: false, uncertain: false, error: 'WHATSAPP_OWNER_REQUIRES_INSTANCE_MODE' };
+    }
     return sendTextViaChatbotBackend({ instance, number: numero, text });
+  }
+  // Um backend Dino configurado não pode silenciosamente cair na conta global Evolution.
+  if (process.env.CHATBOT_BACKEND_URL && (!process.env.WHATSAPP_PROVIDER
+    || !tenant?.empresa_id || tenant.empresa_id === process.env.CHATBOT_BACKEND_EMPRESA_ID
+    || tenant?.whatsapp_instance === chatbotBackendConfig().instance)) {
+    return { ok: false, retryable: false, uncertain: false, error: 'WHATSAPP_PROVIDER_SCOPE' };
+  }
+  // Um job de empresa nunca herda URL, chave ou instância Evolution globais.
+  // O legado da plataforma sem escopo conserva seu contrato separado.
+  if ((tenant?.empresa_id || tenant?.loja_id || tenant?.canal_id)
+    && !(tenant?.whatsapp_api_url && tenant?.whatsapp_api_key && tenant?.whatsapp_instance)) {
+    return { ok: false, retryable: false, uncertain: false, error: 'WHATSAPP_EVOLUTION_TENANT_CONFIG_REQUIRED' };
   }
   const cfg = getConfig(tenant);
   const body = cfg.payloadVersion === 'legacy'
