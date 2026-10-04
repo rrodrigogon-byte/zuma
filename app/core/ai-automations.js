@@ -257,6 +257,7 @@ export async function processAutomationTask(task = {}) {
     whatsapp_api_url: process.env.EVOLUTION_API_URL || canal.api_base_url,
     whatsapp_api_key: process.env.EVOLUTION_API_KEY,
     whatsapp_instance: canal.configuracao?.instance || process.env.EVOLUTION_INSTANCE,
+    empresa_id: task.empresa_id, loja_id: task.loja_id, canal_id: task.canal_id,
   }, phone, String(payload.mensagem).slice(0, 1200));
   if (!result?.ok) {
     const unknown = result?.uncertain === true;

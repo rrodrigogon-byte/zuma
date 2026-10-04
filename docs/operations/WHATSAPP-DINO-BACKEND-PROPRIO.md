@@ -15,8 +15,8 @@ Tudo no Kytto já segue o contrato da Isa:
 
 | Parte | Contrato |
 |---|---|
-| Envio | `POST {URL}/api/v1/whats-app/send`, corpo `{chat_id, message, simulateTyping:false, delaySeconds:0, waitForReply:false}`, cabeçalho `X-API-KEY`. |
-| Recebimento | Consulta global `GET /messages?latest=false&role=user&from=…&instance=dino` a cada 5 s. O backend multi-instância não expõe uma rota de webhook utilizável nem `/instances/dino/messages`; a entrada efetiva é polling filtrado por instância. |
+| Envio | `POST {URL}/api/v1/whats-app/send`, corpo `{instanceName:"dino", chat_id, message, simulateTyping:false, delaySeconds:0, waitForReply:false}`, cabeçalho `X-API-KEY`. Sem instância explícita e igual à configurada, o Kytto não envia; o HTTP 200 com `accepted:true` comprova somente enfileiramento, não entrega no aparelho. |
+| Recebimento | `GET /messages?latest=false&role=user&from=…&instanceName=dino` a cada 5 s. O parâmetro `instance` (sem `Name`) **não consta no Swagger** e podia devolver o dataset padrão; não usá-lo. O backend multi-instância não expõe uma rota de webhook utilizável nem `/instances/dino/messages`; a entrada efetiva é polling filtrado por instância. |
 | Id do evento | `api:<chat>:<id>:<hash>`, gravado sem duplicar. A mesma mensagem nunca é respondida duas vezes. |
 | Idade máxima | 30 min (`WHATSAPP_MAX_REPLY_AGE_MINUTES`). |
 | Áudio | Resposta fixa pedindo texto. |
@@ -51,6 +51,9 @@ No backend multi-instância, a instância deve permanecer `dino` em todas as ope
 | `GEMINI_API_KEY` | Chave do modelo da atendente |
 | `WHATSAPP_POLL_MODE` | `pilot` durante o piloto; `on` somente após aprovação explícita |
 | `WHATSAPP_POLL_PILOT_PHONES` | Somente o número de teste autorizado, normalizado; separados por vírgula se houver mais de um |
+| `WHATSAPP_LINE_VERIFIED` | Padrão ausente/desligado. Definir `1` **somente após** o titular reconhecer a sessão no aparelho ou o backend informar linha mascarada verificável. Nunca inferir apenas de `state=open`. |
+| `WHATSAPP_EGRESS_MODE` | Padrão `off`, independente do polling. `pilot` exige lista de teste; `on` exige aprovação explícita de rollout amplo. Não há fallback Evolution para a empresa Dino. |
+| `WHATSAPP_FULL_ROLLOUT_APPROVED` | Padrão ausente. Definir `1` **após** piloto, opt-out, limites, consentimento e canal exclusivos serem validados. Exigido para `on` tanto de entrada quanto de saída. |
 | `PUBLIC_BASE_URL` | `https://dino.kytto.com.br`. Usada no link de avaliação (NPS) e nas meta tags. |
 
 O serviço Render é **multiempresa**: este domínio se aplica apenas ao slug público `dino`. Para outros slugs, o link NPS e o canonical ficam desativados até existir um domínio validado por empresa; nunca apontar clientes de outra barbearia para a Dino. O link de avaliação aponta exclusivamente para `/avaliar/dino` no próprio sistema. Ele não contém código de agendamento na URL: o código vai no texto da mensagem e é digitado no formulário junto ao telefone. **Não** configurar link Google nem qualquer formulário externo. Os indicadores ficam em **Relacionamento → Avaliações (NPS)**, com período, participação, distribuição, evolução e equipe, respeitando a loja da sessão.
@@ -74,11 +77,11 @@ Opcionais:
 
 ### 4. Ligar com segurança
 
-1. Mantenha `WHATSAPP_POLL_MODE=pilot` e deixe `WHATSAPP_POLL_PILOT_PHONES` vazio até identificar o número de teste.
-2. Adicione somente o número de teste autorizado a `WHATSAPP_POLL_PILOT_PHONES`; o worker normaliza números brasileiros de 10/11 dígitos para `55...`.
-3. Pelo celular de teste, envie uma mensagem inofensiva, como `Olá, teste Dino`. Verifique nos logs apenas o processamento e o envio, sem registrar conteúdo ou telefone em relatórios.
+1. Com a sessão ainda sem titularidade confirmada, mantenha `WHATSAPP_LINE_VERIFIED` ausente, `WHATSAPP_EGRESS_MODE=off` e o polling da Dino efetivamente desligado, mesmo se uma configuração antiga disser `on`.
+2. Após verificação no aparelho do titular, use `WHATSAPP_POLL_MODE=pilot`, `WHATSAPP_EGRESS_MODE=pilot` e adicione somente o número de teste autorizado a `WHATSAPP_POLL_PILOT_PHONES`; a lista é única para entrada e saída.
+3. Pelo celular de teste autorizado, envie uma mensagem inofensiva. Verifique apenas contadores/status, sem registrar conteúdo ou telefone em relatórios. Um HTTP 200 do backend prova aceitação/enfileiramento, **não** entrega no aparelho.
 4. Opcionalmente, avance para a cotação de um agendamento e a listagem de horários. Não confirme atendimento, pedido, pagamento ou promoção sem fixture segura e autorização explícita.
-5. Só após o piloto aprovado, mude para `WHATSAPP_POLL_MODE=on` para todos.
+5. Só após o piloto aprovado e com consentimento/opt-out, quotas e handoff revisados, autorize `WHATSAPP_FULL_ROLLOUT_APPROVED=1` e mude entrada/saída para `on`. Não faça isso nesta etapa.
 
 ### 5. Verificação contínua
 
@@ -90,7 +93,7 @@ Opcionais:
 
 ## Desligar em caso de problema
 
-- `WHATSAPP_POLL_MODE=off`: para de ler e de responder na hora. Agenda, link público e admin continuam normais.
-- **Não** remova `WHATSAPP_PROVIDER` como kill switch: o código atual pode selecionar Evolution automaticamente se esse valor estiver ausente. O gate de saída fail-closed por empresa é tratado no [issue #201](https://github.com/rrodrigogon-byte/agro-open/issues/201).
+- `WHATSAPP_POLL_MODE=off` **e** `WHATSAPP_EGRESS_MODE=off`: param entrada e novas tentativas de saída da Dino independentemente. Agenda, link público e admin continuam normais. Para modo multi-instância Dino, ausência de `WHATSAPP_LINE_VERIFIED=1` também desliga a entrada.
+- Não remova `WHATSAPP_PROVIDER` como kill switch: outras empresas podem usar Evolution. Com backend Dino configurado, o envio não retorna silenciosamente à Evolution ao omitir provider ou escopo da empresa.
 - Quando explicitamente autorizada, **Desconectar** encerra somente a sessão `dino` e pausa sua reconexão após confirmação do backend. Se o backend não confirmar, trate o estado como incerto e não anuncie desligamento total de mensagens; siga o plano de contingência de #201.
 - Nada disso apaga conversas, agendamentos ou consentimentos.

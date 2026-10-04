@@ -2,7 +2,10 @@
 // idade máxima, áudio com resposta fixa, modos shadow/pilot e sem duplicar.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseBackendMessage, runIsaPollPass, AUDIO_REPLY, pollEnabled } from './whatsapp-isa-poll.js';
+import { parseBackendMessage, runIsaPollPass as runPoll, AUDIO_REPLY, pollEnabled } from './whatsapp-isa-poll.js';
+
+// Apenas fixtures: produção usa canalDaEmpresa() com empresa, loja e unicidade.
+const runIsaPollPass = options => runPoll({ ...options, carregarCanal: options?.carregarCanal || (async () => options?.canal || null) });
 
 // Etapa "equipe assumiu pelo celular" sem banco nestes testes (coberta em whatsapp-staff-takeover.test.js e no simulador).
 const SEM_EQUIPE = { liberar: async () => 0, pausar: async () => ({ paused: false }) };
@@ -70,7 +73,7 @@ test('passada: só a mensagem nova e recente vai para a IA; áudio recebe respos
     const enviados = [];
     const enviar = async (msg) => { enviados.push(msg); return { ok: true }; };
     const canal = { id: 'canal-1', empresa_id: 'e', loja_id: 'l' };
-    const primeira = await runIsaPollPass({ fetchImpl: fetch, agora: AGORA, canal, ingest, enviar, comTrava: false, equipe: SEM_EQUIPE });
+    const primeira = await runIsaPollPass({ fetchImpl: fetch, agora: AGORA, canal, ingest, enviar, autorizarSaida: async () => ({ ok: true }), comTrava: false, equipe: SEM_EQUIPE });
     assert.equal(primeira.novas, 1, 'a mensagem de texto recente');
     assert.equal(primeira.audios, 1);
     assert.equal(primeira.ignoradas, 3, 'mensagem velha, resposta da própria atendente e o áudio');
@@ -79,10 +82,25 @@ test('passada: só a mensagem nova e recente vai para a IA; áudio recebe respos
     assert.equal(fetch.chamadas[0].headers['X-API-KEY'], 'chave-de-teste-com-24-car');
     assert.equal(ingest.recebidos.find((item) => !item.ignored).text, 'Quero marcar um corte amanhã');
 
-    const segunda = await runIsaPollPass({ fetchImpl: fetch, agora: AGORA, canal, ingest, enviar, comTrava: false, equipe: SEM_EQUIPE });
+    const segunda = await runIsaPollPass({ fetchImpl: fetch, agora: AGORA, canal, ingest, enviar, autorizarSaida: async () => ({ ok: true }), comTrava: false, equipe: SEM_EQUIPE });
     assert.equal(segunda.novas, 0);
     assert.equal(segunda.duplicadas, 2);
     assert.equal(enviados.length, 1, 'áudio não é respondido duas vezes');
+  });
+});
+
+test('polling pode registrar entrada sem enviar resposta de mídia com egress desligado', async () => {
+  await comEnv({ ...ENV, CHATBOT_BACKEND_MODE: 'instancias', CHATBOT_BACKEND_INSTANCE: 'dino-1', CHATBOT_BACKEND_EMPRESA_ID: '11111111-1111-4111-8111-111111111111', WHATSAPP_LINE_VERIFIED: '1', WHATSAPP_POLL_MODE: 'pilot', WHATSAPP_POLL_PILOT_PHONES: '5565999990001,5565999990002', WHATSAPP_EGRESS_MODE: undefined }, async () => {
+    let outbound = 0;
+    const canal = { id: '33333333-3333-4333-8333-333333333333', empresa_id: '11111111-1111-4111-8111-111111111111', loja_id: '22222222-2222-4222-8222-222222222222', configuracao: { instance: 'dino-1' } };
+    const summary = await runIsaPollPass({
+      fetchImpl: fetchHistorico(), agora: AGORA,
+      canal, carregarCanal: async () => canal,
+      ingest: ingestFalso(), enviar: async () => { outbound += 1; return { ok: true }; },
+      comTrava: false, equipe: SEM_EQUIPE,
+    });
+    assert.equal(summary.audios, 1);
+    assert.equal(outbound, 0);
   });
 });
 
@@ -106,7 +124,39 @@ test('modos: shadow só registra; pilot responde só os números liberados; off 
   await comEnv({ ...ENV, WHATSAPP_POLL_MODE: 'off' }, async () => {
     assert.equal((await runIsaPollPass({ canal, comTrava: false, equipe: SEM_EQUIPE })).reason, 'poll_disabled');
   });
-  await comEnv({ ...ENV, CHATBOT_BACKEND_MODE: 'instancias', CHATBOT_BACKEND_INSTANCE: 'dino-1' }, async () => assert.equal(pollEnabled(), true, 'o backend por instância também usa a consulta de mensagens'));
+  await comEnv({ ...ENV, CHATBOT_BACKEND_MODE: 'instancias', CHATBOT_BACKEND_INSTANCE: 'dino-1' }, async () => assert.equal(pollEnabled(), false, 'sem linha comprovada não se consulta mensagens'));
+  await comEnv({ ...ENV, CHATBOT_BACKEND_MODE: 'instancias', CHATBOT_BACKEND_INSTANCE: 'dino-1', WHATSAPP_LINE_VERIFIED: '1', WHATSAPP_POLL_MODE: 'pilot' }, async () => assert.equal(pollEnabled(), true, 'piloto explícito pode consultar'));
+  await comEnv({ ...ENV, CHATBOT_BACKEND_MODE: 'instancias', CHATBOT_BACKEND_INSTANCE: 'dino-1', WHATSAPP_LINE_VERIFIED: '1', WHATSAPP_POLL_MODE: 'on' }, async () => assert.equal(pollEnabled(), false, 'on requer rollout amplo aprovado'));
+});
+
+test('polling multi-instância exige vínculo canal↔instância antes de qualquer GET ou envio', async () => {
+  await comEnv({ ...ENV, CHATBOT_BACKEND_MODE: 'instancias', CHATBOT_BACKEND_INSTANCE: 'dino-1', WHATSAPP_LINE_VERIFIED: '1', WHATSAPP_POLL_MODE: 'pilot' }, async () => {
+    const fetch = fetchHistorico();
+    const mismatch = await runIsaPollPass({ fetchImpl: fetch, agora: AGORA, canal: { id: 'canal-1', configuracao: { instance: 'isa' } }, ingest: ingestFalso(), comTrava: false, equipe: SEM_EQUIPE });
+    assert.equal(mismatch.reason, 'instance_scope_mismatch');
+    assert.equal(fetch.chamadas.length, 0);
+    const canal = { id: 'canal-1', empresa_id: 'empresa-1', loja_id: 'loja-1', configuracao: { instance: 'dino-1' } };
+    const duplicate = await runIsaPollPass({ fetchImpl: fetch, agora: AGORA, canal, carregarCanal: async () => null, comTrava: false, equipe: SEM_EQUIPE });
+    assert.equal(duplicate.reason, 'channel_scope_mismatch', 'canal injetado e duplicado não consulta histórico');
+    assert.equal(fetch.chamadas.length, 0);
+    const matched = await runIsaPollPass({ fetchImpl: fetch, agora: AGORA, canal, carregarCanal: async () => canal, ingest: ingestFalso(), enviar: async () => ({ ok: true }), comTrava: false, equipe: SEM_EQUIPE });
+    assert.equal(matched.skipped, false);
+    assert.match(fetch.chamadas[0].url, /[?&]instanceName=dino-1/);
+  });
+});
+
+test('canal injetado no modo Isa confirma ownership canônico antes do GET global', async () => {
+  await comEnv({ ...ENV, CHATBOT_BACKEND_EMPRESA_ID: undefined }, async () => {
+    const fetch = fetchHistorico();
+    const result = await runPoll({
+      fetchImpl: fetch, agora: AGORA,
+      canal: { id: 'canal-incorreto', empresa_id: 'empresa-incorreta', loja_id: 'loja-incorreta' },
+      carregarCanal: async () => ({ id: 'canal-oficial', empresa_id: 'empresa-oficial', loja_id: 'loja-oficial' }),
+      comTrava: false, equipe: SEM_EQUIPE,
+    });
+    assert.equal(result.reason, 'channel_scope_mismatch');
+    assert.equal(fetch.chamadas.length, 0);
+  });
 });
 
 test('equipe respondeu pelo celular: a pausa é aplicada ANTES de entregar a mensagem do cliente', async () => {

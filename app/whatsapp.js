@@ -8,6 +8,14 @@ const INST  = process.env.WPP_INSTANCE  || 'setpoint'
 function ativo() { return !!(BASE && KEY) }
 
 async function enviar(telefone, mensagem) {
+  // Este módulo legado atende a Agro Open; nunca pode falar como a instância da Dino.
+  if (process.env.CHATBOT_BACKEND_MODE === 'instancias' && process.env.CHATBOT_BACKEND_EMPRESA_ID
+      && (INST.toLowerCase() === String(process.env.CHATBOT_BACKEND_INSTANCE || 'dino-1').trim().toLowerCase()
+        || (BASE && BASE.replace(/\/+$/, '') === String(process.env.CHATBOT_BACKEND_URL || '').replace(/\/+$/, '')))) {
+    const error = new Error('instância exclusiva da Dino indisponível no canal legado')
+    error.code = 'WHATSAPP_INSTANCE_SCOPE_DENIED'
+    throw error
+  }
   if (!ativo()) {
     const error = new Error('WhatsApp não configurado: informe WPP_BASE_URL e WPP_APIKEY no servidor')
     error.code = 'WHATSAPP_NOT_CONFIGURED'

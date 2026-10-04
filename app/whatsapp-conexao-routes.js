@@ -4,6 +4,7 @@
 
 import * as conexaoKytto from './whatsapp-conexao-kytto.js';
 import { whatsappProviderName } from './core/whatsapp-provider.js';
+import { db } from './core/database.js';
 
 const BASE = '/api/admin/barbearia/whatsapp-conexao';
 const GESTORES = new Set(['admin', 'organizador']);
@@ -24,7 +25,7 @@ function allowTest(empresaId, now = Date.now()) {
   return true;
 }
 
-export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, audit, save, enviarMensagem, fetchImpl, isPlatformAdmin = () => false } = {}) {
+export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLojaId, audit, save, enviarMensagem, fetchImpl, isPlatformAdmin = () => false } = {}) {
   const who = (req) => req.user?.email || req.user?.nome || '';
 
   app.get(BASE, async (req, res) => {
@@ -80,12 +81,16 @@ export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, audit, sav
     const telefone = String(req.body?.telefone || '').replace(/\D/g, '');
     if (telefone.length < 10 || telefone.length > 13) return res.status(400).json({ error: 'Informe um telefone com DDD.' });
     const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId?.(req) || '';
+    if (!lojaId) return res.status(409).json({ error: 'Selecione a unidade da empresa para o teste.', code: 'STORE_SELECTION_REQUIRED' });
     if (!allowTest(empresaId)) return res.status(429).json({ error: `Limite de ${TEST_LIMIT_PER_HOUR} testes por hora atingido.` });
     const conexao = conexaoKytto.obterConexao(empresaId);
     if (!conexao.instance) return res.status(409).json({ error: 'Esta empresa ainda não tem uma instância de WhatsApp atribuída.', code: 'WHATSAPP_INSTANCE_UNASSIGNED' });
+    const canal = await db.queryRead(`SELECT id FROM canais_integracao WHERE empresa_id=$1 AND loja_id=$2 AND provedor='whatsapp' AND status='ativo' AND configuracao->>'instance'=$3 LIMIT 1`, [empresaId, lojaId, conexao.instance]).catch(() => ({ rows: [] }));
+    if (!canal.rows[0]) return res.status(409).json({ error: 'Canal da unidade indisponível para o teste.', code: 'WHATSAPP_CHANNEL_UNAVAILABLE' });
     const texto = String(req.body?.mensagem || '').trim().slice(0, 300) || 'Teste de conexão do WhatsApp da Dino. Se você recebeu esta mensagem, o canal está funcionando.';
-    const result = await enviarMensagem({ whatsapp_instance: conexao.instance }, telefone, texto);
-    audit(req, 'WHATSAPP CONEXAO TESTE', `instancia=${conexao.instance}; destino=${telefone.slice(0, 4)}****${telefone.slice(-2)}; ok=${result.ok}; status=${result.status ?? '-'}`);
+    const result = await enviarMensagem({ whatsapp_instance: conexao.instance, empresa_id: empresaId, loja_id: lojaId, canal_id: canal.rows[0].id }, telefone, texto);
+    audit(req, 'WHATSAPP CONEXAO TESTE', `ok=${result.ok === true}; status=${Number(result.status) || '-'}`);
     save();
     res.status(result.ok ? 200 : 502).json({ ok: result.ok, status: result.status ?? null, error: result.ok ? null : (result.authError ? 'Backend recusou a chave de API.' : (result.error || 'Envio não confirmado pelo backend.')) });
   });

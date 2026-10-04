@@ -157,7 +157,7 @@ export async function getInstanceStatus(instance, fetchImpl) {
     ok: true,
     status: result.status,
     state: normalizeState(result.data),
-    phone: clean(result.data?.phone || result.data?.number || result.data?.me?.id || result.data?.user?.id || '', 40).replace(/@.*$/, '').replace(/:\d+$/, ''),
+    phone: clean(result.data?.connectedNumber || result.data?.phoneNumber || result.data?.phone || result.data?.number || result.data?.instance?.connectedNumber || result.data?.instance?.phone || result.data?.me?.id || result.data?.user?.id || '', 40).replace(/@.*$/, '').replace(/:\d+$/, ''),
     ...qr,
   };
 }
@@ -221,16 +221,6 @@ export async function disconnectInstance(instance, fetchImpl) {
   };
 }
 
-function sendPaths(cfg) {
-  const instance = encodeURIComponent(cfg.instance);
-  const custom = cfg.sendPath ? [cfg.sendPath.replace('{instance}', instance)] : [];
-  return [...custom, `/instances/${instance}/messages/text`, `/instances/${instance}/send-text`, `/instances/${instance}/send`];
-}
-
-/**
- * Envia texto. Só tenta a próxima rota quando a anterior NÃO existe (404/405):
- * qualquer outra resposta encerra (evita envio duplicado).
- */
 /** chat_id no formato da Isa: 55 + DDD + número; grupos e @lid são recusados. */
 export function isaChatId(value) {
   const raw = clean(value, 80);
@@ -249,18 +239,24 @@ export function isaMessageText(text) {
   return `${(quebra > CUT_AT * 0.6 ? corte.slice(0, quebra) : corte).trim()}\n\n(resposta resumida; peça os detalhes se precisar)`;
 }
 
-async function sendTextIsa({ number, text, simulateTyping = process.env.WHATSAPP_SIMULATE_TYPING === 'true' }, fetchImpl) {
+async function sendTextIsa({ instance, number, text, simulateTyping = process.env.WHATSAPP_SIMULATE_TYPING === 'true' }, fetchImpl) {
   const cfg = chatbotBackendConfig();
   if (!cfg.baseUrl) return { ok: false, status: null, retryable: false, uncertain: false, error: 'CHATBOT_BACKEND_URL_MISSING', data: {} };
   if (cfg.key.length < 20) return { ok: false, status: null, retryable: false, uncertain: false, error: 'CHATBOT_BACKEND_KEY_MISSING', data: {} };
+  const instanceName = chatbotBackendMode() === 'instancias' ? validInstance(instance || '') : '';
+  if (chatbotBackendMode() === 'instancias' && (!instanceName || instanceName !== cfg.instance)) return { ok: false, status: null, retryable: false, uncertain: false, error: 'INSTANCE_SCOPE_MISMATCH', data: {} };
   const chatId = isaChatId(number);
   if (!chatId) return { ok: false, status: null, retryable: false, uncertain: false, error: 'INVALID_CHAT_ID', data: {} };
   const message = isaMessageText(text);
   if (!message) return { ok: false, status: null, retryable: false, uncertain: false, error: 'EMPTY_MESSAGE', data: {} };
-  const result = await call(cfg, 'POST', '/send', { chat_id: chatId, message, simulateTyping: Boolean(simulateTyping), delaySeconds: 0, waitForReply: false }, fetchImpl);
-  const uncertain = result.status === null || (!result.ok && (result.status === 408 || result.status >= 500));
-  // A Isa considera falha quando success !== true ou accepted === false.
-  const aceito = result.ok && result.data?.success !== false && result.data?.accepted !== false;
+  // O backend multi-instância documenta APENAS /send com instanceName; nunca
+  // tentar rotas sem escopo como fallback após resposta incerta ou 404.
+  const result = await call(cfg, 'POST', '/send', { ...(instanceName ? { instanceName } : {}), chat_id: chatId, message, simulateTyping: Boolean(simulateTyping), delaySeconds: 0, waitForReply: false }, fetchImpl);
+  // accepted é opcional no Swagger. Não reenviar 2xx sem success conclusivo:
+  // a API pode ter colocado a mensagem em fila antes de perder a resposta.
+  const aceito = result.ok && result.data?.success === true && result.data?.accepted !== false;
+  const uncertain = result.status === null || (!result.ok && (result.status === 408 || result.status >= 500))
+    || (result.ok && result.data?.success !== false && !aceito);
   return {
     ok: aceito,
     status: result.status,
@@ -276,12 +272,14 @@ async function sendTextIsa({ number, text, simulateTyping = process.env.WHATSAPP
  * Mensagens recebidas (contrato da Isa): GET {BASE}/messages?latest=false&role=user&from=ISO&limit=N.
  * Devolve a lista achatada [{ chatId, role, content, timestamp, messageType, whatsappMessageId, questionId }].
  */
-export async function fetchInboundMessages({ from, limit = 100, role = 'user' } = {}, fetchImpl) {
+export async function fetchInboundMessages({ instance, from, limit = 100, role = 'user' } = {}, fetchImpl) {
   const cfg = chatbotBackendConfig();
   if (!cfg.baseUrl || cfg.key.length < 20) return { ok: false, error: 'backend_not_configured', messages: [] };
+  const instanceName = chatbotBackendMode() === 'instancias' ? validInstance(instance || '') : '';
+  if (chatbotBackendMode() === 'instancias' && (!instanceName || instanceName !== cfg.instance)) return { ok: false, error: 'INSTANCE_SCOPE_MISMATCH', messages: [] };
   const params = new URLSearchParams({ latest: 'false', role: role === 'assistant' ? 'assistant' : 'user', limit: String(Math.min(200, Math.max(25, Number(limit) || 100))) });
   if (from) params.set('from', new Date(from).toISOString());
-  if (chatbotBackendMode() === 'instancias' && cfg.instance) params.set('instance', cfg.instance);
+  if (instanceName) params.set('instanceName', instanceName);
   const result = await call(cfg, 'GET', `/messages?${params.toString()}`, null, fetchImpl);
   if (isAuthError(result.status)) return { ok: false, authError: true, status: result.status, messages: [] };
   if (!result.ok) return { ok: false, status: result.status, error: result.error || 'messages_unavailable', messages: [] };
@@ -302,35 +300,14 @@ export async function fetchInboundMessages({ from, limit = 100, role = 'user' } 
  * (digitada no celular/WhatsApp Web pela equipe). Usado para pausar a IA quando
  * a equipe assume a conversa pelo aparelho.
  */
-export async function fetchOutboundMessages({ from, limit = 100 } = {}, fetchImpl) {
-  const resposta = await fetchInboundMessages({ from, limit, role: 'assistant' }, fetchImpl);
+export async function fetchOutboundMessages({ instance, from, limit = 100 } = {}, fetchImpl) {
+  const resposta = await fetchInboundMessages({ instance, from, limit, role: 'assistant' }, fetchImpl);
   // Defesa: o backend pode ignorar o filtro de role; só vale o que é de fato saída.
   return { ...resposta, messages: resposta.messages.filter((item) => String(item?.role || '').toLowerCase() === 'assistant') };
 }
 
 export async function sendTextViaChatbotBackend({ instance, number, text, simulateTyping }, fetchImpl) {
-  if (chatbotBackendMode() === 'isa') return sendTextIsa({ number, text, simulateTyping }, fetchImpl);
-  const cfg = chatbotBackendConfig({ instance });
-  if (!cfg.key) return { ok: false, status: null, retryable: false, uncertain: false, error: 'CHATBOT_BACKEND_KEY_MISSING', data: {} };
-  if (!cfg.instance) return { ok: false, status: null, retryable: false, uncertain: false, error: 'INVALID_INSTANCE', data: {} };
-  const body = { number, to: number, phone: number, text, message: text };
-  let last = null;
-  for (const path of sendPaths(cfg)) {
-    const result = await call({ ...cfg, apiBase: path.startsWith('/api/') ? '' : cfg.apiBase }, 'POST', path, body, fetchImpl);
-    last = result;
-    if (result.status === 404 || result.status === 405) continue;
-    const uncertain = result.status === null || (!result.ok && (result.status === 408 || result.status >= 500));
-    return {
-      ok: result.ok,
-      status: result.status,
-      retryable: !result.ok && !uncertain && (result.status === 425 || result.status === 429),
-      uncertain,
-      authError: isAuthError(result.status),
-      error: result.ok ? undefined : (result.error || `HTTP_${result.status}`),
-      data: result.data,
-    };
-  }
-  return { ok: false, status: last?.status ?? 404, retryable: false, uncertain: false, error: 'SEND_ROUTE_NOT_FOUND', data: {} };
+  return sendTextIsa({ instance, number, text, simulateTyping }, fetchImpl);
 }
 
 /** Tenta registrar o webhook de entrada no backend (se a rota existir). */

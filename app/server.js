@@ -2285,7 +2285,7 @@ registerCustomer360Routes(app, { legacyEmpresaId, legacyLojaId, clientesKytto, b
 registerDinoAdminRoutes(app, { db, legacyEmpresaId, legacyLojaId, financeiroKytto, barbeariaErpKytto, clientesKytto, commerceDb, requireCommercePermission, dashboardPeriod, audit, save, salesReport });
 registerAiBrainRoutes(app, { legacyEmpresaId, legacyLojaId, requireCommercePermission, audit, clientesKytto, commerceDb, listarAgendamentosBarbearia });
 registerAtivacaoRoutes(app, { legacyEmpresaId, requireCommercePermission, barbeariaErpKytto, audit });
-registerWhatsappConexaoRoutes(app, { legacyEmpresaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user) });
+registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLojaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user) });
 // Modo barbeiro (app do profissional no celular): agenda do dia, totais e comissão
 // do próprio profissional (vínculo pelo e-mail do login). Gestão escolhe qualquer um.
 app.get('/api/admin/barbearia/modo-barbeiro', (req, res) => {
@@ -3524,11 +3524,12 @@ app.get('/api/admin/barbearia/integracoes', async (req, res) => {
     const aiConfigured = Boolean(process.env.GEMINI_API_KEY || process.env.AI_API_KEY || process.env.OPENAI_API_KEY);
     const commerce = await commerceIntegrationForBarbearia(req);
     const whatsappAi = await whatsappAiIntegrationForBarbearia(req);
-    res.json({ ok: true, whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: wpp.ativo(), ai: whatsappAi }, ia: { configurada: aiConfigured, modelo: process.env.GEMINI_API_KEY ? (process.env.GEMINI_MODEL || 'gemini-2.5-flash') : (process.env.AI_MODEL || process.env.OPENAI_MODEL || 'regras-dino-local'), analiseOperacionalDisponivel: true, fallbackLocal: true, whatsapp: whatsappAi }, commerce });
+    const wppGlobalPermitido = !isTenantScopedUser(req.user);
+    res.json({ ok: true, whatsapp: { id: whatsapp.id, nome: whatsapp.nome, ativo: Boolean(whatsapp.ativo), credencialConfigurada: Boolean(wppGlobalPermitido && wpp.ativo() && whatsapp.credencialConfigurada !== false), envioManualDisponivel: Boolean(wppGlobalPermitido && wpp.ativo()), ai: whatsappAi }, ia: { configurada: aiConfigured, modelo: process.env.GEMINI_API_KEY ? (process.env.GEMINI_MODEL || 'gemini-2.5-flash') : (process.env.AI_MODEL || process.env.OPENAI_MODEL || 'regras-dino-local'), analiseOperacionalDisponivel: true, fallbackLocal: true, whatsapp: whatsappAi }, commerce });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
-app.post('/api/admin/barbearia/whatsapp/enviar', requireRole('admin', 'organizador'), async (req, res) => {
+app.post('/api/admin/barbearia/whatsapp/enviar', requireRole('admin', 'organizador'), requireLegacyGlobalScope, async (req, res) => {
   if (req.body?.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita do envio de WhatsApp é obrigatória.' });
   const empresaId = legacyEmpresaId(req);
   const finalidade = String(req.body?.finalidade || 'atendimento').trim().toLowerCase();
@@ -5760,10 +5761,10 @@ app.get('/api/admin/financeiro/categorias', auth, requireLegacyGlobalScope, requ
 
 // =================== FASE 3A — WHATSAPP ===================
 
-app.get('/api/admin/whatsapp/status', auth, requireStaff, (req,res)=>{
+app.get('/api/admin/whatsapp/status', auth, requireLegacyGlobalScope, requireStaff, (req,res)=>{
   res.json({ ativo: wpp.ativo(), baseUrl: process.env.WPP_BASE_URL||'', instance: process.env.WPP_INSTANCE||'setpoint' });
 });
-app.post('/api/admin/whatsapp/testar', auth, requireRole('admin','organizador'), async (req,res)=>{
+app.post('/api/admin/whatsapp/testar', auth, requireLegacyGlobalScope, requireRole('admin','organizador'), async (req,res)=>{
   const { telefone, mensagem } = req.body||{};
   if(!telefone) return res.status(400).json({error:'telefone obrigatório'});
   if(!wpp.ativo()) return res.status(503).json({ ok:false, error:'WhatsApp não configurado', code:'WHATSAPP_NOT_CONFIGURED' });
@@ -5776,7 +5777,7 @@ app.post('/api/admin/whatsapp/testar', auth, requireRole('admin','organizador'),
   }
 });
 // Disparar notificação manual de mensalidade vencendo
-app.post('/api/admin/whatsapp/cobrar', auth, requireRole('admin','organizador'), async (req,res)=>{
+app.post('/api/admin/whatsapp/cobrar', auth, requireLegacyGlobalScope, requireRole('admin','organizador'), async (req,res)=>{
   const { ids } = req.body||{};
   const d=db();
   const lista = ids?.length ? (d.mensalidades||[]).filter(m=>ids.includes(m.id))
@@ -5824,7 +5825,7 @@ app.post('/api/admin/pontos', auth, requireStaff, async (req,res)=>{
     tipo:tipo||'manual', descricao, criadoEm:new Date().toISOString() };
   d.pontos.push(t); save();
   const saldo=saldoPontos(socioId);
-  if(pontos>0 && s?.telefone) {
+  if(pontos>0 && s?.telefone && !isTenantScopedUser(req.user)) {
     wpp.pontosCreditados(s.telefone, s.nome, pontos, saldo).catch(()=>{});
   }
   res.json({ ...t, saldo });
@@ -5912,7 +5913,7 @@ app.post('/api/reservas', auth, async (req,res)=>{
   d.reservas=d.reservas||[]; d.reservas.push(r); save();
   // notificação WhatsApp
   const tel=socio?.telefone||socio?.celular||'';
-  if(tel){ wpp.reservaConfirmada(tel, r.socioNome, q.nome, data, `${horaInicio}–${horaFim}`).catch(()=>{}); }
+  if(tel && !isTenantScopedUser(req.user)){ wpp.reservaConfirmada(tel, r.socioNome, q.nome, data, `${horaInicio}–${horaFim}`).catch(()=>{}); }
   // crédito de pontos por reserva
   if(socio){ const t={id:nextId(),socioId:socio.id,socioNome:socio.nome,pontos:5,tipo:'reserva',descricao:`Reserva ${q.nome} ${data}`,criadoEm:new Date().toISOString()}; d.pontos=d.pontos||[]; d.pontos.push(t); }
   save();
@@ -5926,7 +5927,7 @@ app.patch('/api/reservas/:id/cancelar', auth, async (req,res)=>{
   r.status='cancelada'; r.canceladoEm=new Date().toISOString(); save();
   const socio=(d.socios||[]).find(s=>s.id==r.socioId);
   const tel=socio?.telefone||socio?.celular||'';
-  if(tel){ wpp.reservaCancelada(tel, r.socioNome, r.quadraNome, r.data, `${r.horaInicio}–${r.horaFim}`).catch(()=>{}); }
+  if(tel && !isTenantScopedUser(req.user)){ wpp.reservaCancelada(tel, r.socioNome, r.quadraNome, r.data, `${r.horaInicio}–${r.horaFim}`).catch(()=>{}); }
   res.json(r);
 });
 app.patch('/api/admin/reservas/:id', auth, requireStaff, (req,res)=>{

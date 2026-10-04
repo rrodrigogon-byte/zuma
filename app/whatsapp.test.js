@@ -35,3 +35,25 @@ test('WhatsApp rejeita telefone inválido antes da chamada externa', async () =>
     return true
   })
 })
+
+test('módulo legado nunca envia pela URL nem instância exclusiva Dino', async () => {
+  const names = ['CHATBOT_BACKEND_MODE', 'CHATBOT_BACKEND_EMPRESA_ID', 'CHATBOT_BACKEND_URL', 'CHATBOT_BACKEND_INSTANCE']
+  const old = Object.fromEntries(names.map(name => [name, process.env[name]]))
+  try {
+    process.env.CHATBOT_BACKEND_MODE = 'instancias'
+    process.env.CHATBOT_BACKEND_EMPRESA_ID = '11111111-1111-4111-8111-111111111111'
+    process.env.CHATBOT_BACKEND_URL = 'https://dino.example.invalid'
+    process.env.CHATBOT_BACKEND_INSTANCE = 'dino'
+    for (const env of [
+      { base: 'https://outra.example.invalid', key: 'teste', instance: 'dino' },
+      { base: 'https://dino.example.invalid/', key: 'teste', instance: 'agro' },
+    ]) {
+      const { wpp } = await loadWhatsApp(env)
+      await assert.rejects(() => wpp.enviar('65999999999', 'teste'), { code: 'WHATSAPP_INSTANCE_SCOPE_DENIED' })
+    }
+    const { wpp: other } = await loadWhatsApp({ base: 'https://outra.example.invalid', key: 'teste', instance: 'agro' })
+    await assert.rejects(() => other.enviar('123', 'teste'), { code: 'WHATSAPP_INVALID_PHONE' })
+  } finally {
+    for (const name of names) { if (old[name] === undefined) delete process.env[name]; else process.env[name] = old[name] }
+  }
+})

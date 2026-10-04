@@ -77,6 +77,11 @@ test('envio: conta sucessos, mascara falhas e nunca expõe o número no painel',
     return tel.endsWith('2') ? { ok: false } : { ok: true };
   });
   assert.deepEqual(r, { enviados: 1, falhas: ['***0002'] });
+  const scoped = await enviarResumo({ texto: 'oi', telefones: ['5565999990001'], instance: 'dino' }, async (tenant) => {
+    assert.equal(tenant.whatsapp_instance, 'dino');
+    return { ok: true };
+  });
+  assert.equal(scoped.enviados, 1);
   const antes = { ...process.env };
   try {
     process.env.DINO_RESUMO_TELEFONES = '(65) 99999-0001, 5565999990002';
@@ -90,6 +95,22 @@ test('envio: conta sucessos, mascara falhas e nunca expõe o número no painel',
   } finally {
     process.env = antes;
   }
+});
+
+test('resumo diário multi-instância não reserva nem envia se empresa/canal divergirem', async () => {
+  const antes = { ...process.env };
+  let writes = 0;
+  let sends = 0;
+  const executor = { queryRead: async () => ({ rows: [{ instance: 'isa' }] }), query: async () => { writes += 1; return { rows: [] }; } };
+  try {
+    Object.assign(process.env, { DINO_RESUMO_DIARIO: 'on', DINO_RESUMO_EMPRESA_ID: EMPRESA, DINO_RESUMO_TELEFONES: '65999990001', WHATSAPP_PROVIDER: 'chatbot_backend', CHATBOT_BACKEND_MODE: 'instancias', CHATBOT_BACKEND_INSTANCE: 'dino', CHATBOT_BACKEND_EMPRESA_ID: '00000000-0000-4000-8000-000000000002' });
+    const opts = { forcar: true, executor, enviar: async () => { sends += 1; return { ok: true }; } };
+    assert.deepEqual(await tickResumoDiario(opts), { skipped: 'instance_scope_mismatch' });
+    process.env.CHATBOT_BACKEND_EMPRESA_ID = EMPRESA;
+    assert.deepEqual(await tickResumoDiario(opts), { skipped: 'instance_scope_mismatch' });
+    assert.equal(writes, 0);
+    assert.equal(sends, 0);
+  } finally { process.env = antes; }
 });
 
 test('loja do canal: sessão em "todas as lojas" usa a loja do WhatsApp ativo', async () => {

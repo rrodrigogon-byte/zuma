@@ -6,7 +6,9 @@ import {
   locateInboundMedia, loadMediaBase64, understandMedia, inboundMediaToText, mediaAsCustomerText,
   mediaEnabled, MEDIA_PREFIX, MEDIA_SYSTEM_GUIDANCE,
 } from './whatsapp-ai-media.js';
-import { parseBackendMessage, runIsaPollPass, AUDIO_REPLY } from './whatsapp-isa-poll.js';
+import { parseBackendMessage, runIsaPollPass as runPoll, AUDIO_REPLY } from './whatsapp-isa-poll.js';
+
+const runIsaPollPass = options => runPoll({ ...options, carregarCanal: async () => options?.canal || null });
 
 async function comEnv(valores, fn) {
   const salvos = {};
@@ -122,7 +124,7 @@ test('polling: áudio novo vira texto transcrito na fila; repetido não paga Gem
     const enviar = async (msg) => { enviados.push(msg); return { ok: true }; };
     const canal = { id: 'canal-dino', empresa_id: 'e', loja_id: 'l' };
 
-    const primeira = await runIsaPollPass({ fetchImpl, agora: AGORA, canal, ingest, enviar, comTrava: false, jaRecebido, entenderMidia });
+    const primeira = await runIsaPollPass({ fetchImpl, agora: AGORA, canal, ingest, enviar, autorizarSaida: async () => ({ ok: true }), comTrava: false, jaRecebido, entenderMidia });
     assert.equal(primeira.novas, 2);
     assert.equal(primeira.midiasLidas, 2);
     assert.equal(primeira.audios, 2);
@@ -135,7 +137,7 @@ test('polling: áudio novo vira texto transcrito na fila; repetido não paga Gem
     assert.equal(recebidos.find((r) => r.phone === '5565999990011').text, `${MEDIA_PREFIX.image} Degradê alto com topete.`);
     assert.deepEqual(enviados, [{ number: '5565999990012', text: AUDIO_REPLY }], 'só o áudio ilegível recebe a resposta fixa');
 
-    const segunda = await runIsaPollPass({ fetchImpl, agora: AGORA + 5000, canal, ingest, enviar, comTrava: false, jaRecebido, entenderMidia });
+    const segunda = await runIsaPollPass({ fetchImpl, agora: AGORA + 5000, canal, ingest, enviar, autorizarSaida: async () => ({ ok: true }), comTrava: false, jaRecebido, entenderMidia });
     assert.equal(segunda.novas, 0);
     assert.equal(segunda.duplicadas, 3);
     assert.equal(chamadasMidia, 3, 'nenhuma nova chamada ao Gemini para mensagens já recebidas');

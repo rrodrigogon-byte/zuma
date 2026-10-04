@@ -50,6 +50,7 @@ const migrationFiles = [
   '060_kytto_json_snapshots.sql',
   '061_whatsapp_crm_interactions.sql',
   '062_dino_resumo_diario.sql',
+  '063_whatsapp_channel_instance_owner.sql',
 ];
 const advisoryLockKey = 825410732;
 

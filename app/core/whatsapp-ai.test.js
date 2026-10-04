@@ -273,17 +273,13 @@ function mockConversationDatabase({ baseUrl, priorOutput = null } = {}) {
   };
 }
 
-test('processamento local informa privacidade, envia uma vez e mantém handoff humano', async () => {
+test('processamento local não usa Evolution global sem credenciais escopadas ao canal', async () => {
   await withEvolutionServer(async (baseUrl, requestBody) => {
     const mock = mockConversationDatabase({ baseUrl });
     try {
-      const result = await processWhatsappConversationTask(mock.record);
-      assert.equal(result.delivered, true);
-      assert.equal(result.kind, 'handoff');
-      assert.match(requestBody().text, /assistente virtual/i);
-      assert.match(requestBody().text, /equipe humana/i);
-      assert.equal(mock.calls.some(sql => /handoff_requested_at/.test(sql)), true);
-      assert.equal(mock.calls.some(sql => /delivery_status = 'sent'/.test(sql)), true);
+      await assert.rejects(() => processWhatsappConversationTask(mock.record), { code: 'WHATSAPP_PROVIDER_REJECTED' });
+      assert.equal(requestBody(), undefined, 'nenhum POST ao provider global sem escopo');
+      assert.equal(mock.calls.some(sql => /delivery_status = 'sent'/.test(sql)), false);
     } finally { mock.restore(); }
   });
 });

@@ -41,7 +41,9 @@ function fakeBackend() {
       if (req.url === '/api/v1/whats-app/instances/dino-1/session?confirm=true' && req.method === 'DELETE') { state = 'close'; return send(200, { success: true }); }
       if (req.url?.includes('/instances/dino-1/session') && req.method === 'DELETE') return send(400, { message: 'confirm=true required' });
       if (req.url === '/api/v1/whats-app/instances/dino-1/qr') { state = 'qr'; return send(200, { qrcode: '2@AbCdEfGhIjKlMnOpQrStUvWxYz0123456789,abc,def', pairingCode: 'ABCD-1234' }); }
-      if (req.url === '/api/v1/whats-app/instances/dino-1/messages/text' && req.method === 'POST') return send(201, { id: 'msg-1', status: 'sent' });
+      if (req.url === '/api/v1/whats-app/send' && req.method === 'POST') return raw && JSON.parse(raw).instanceName === 'dino-1'
+        ? send(200, { success: true, accepted: true, questionId: 'synthetic-1' })
+        : send(400, { success: false });
       if (req.url === '/api/v1/whats-app/instances/fora-da-lista/status') return send(404, { message: 'instance not enabled' });
       return send(404, { message: 'not found' });
     });
@@ -294,11 +296,9 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     assert.equal(aberto.body.conexao.phoneMasked, '5565•••••0000');
     assert.ok(aberto.body.conexao.history.some((item) => item.tipo === 'conectado'));
     const teste = await request(base, '/api/admin/barbearia/whatsapp-conexao/teste', { method: 'POST', headers: A, body: JSON.stringify({ confirmado: true, telefone: '65 99811-2233' }) });
-    assert.equal(teste.response.status, 200, JSON.stringify(teste.body));
-    const envio = backend.calls.find((call) => call.url.endsWith('/messages/text'));
-    assert.ok(envio, 'envio pela rota de mensagens da instância');
-    assert.equal(envio.body.number, '5565998112233');
-    assert.equal(envio.apikey, 'chave-teste-com-mais-de-vinte');
+    assert.equal(teste.response.status, 409, 'sem canal Commerce escopado o teste não pode enviar');
+    assert.equal(teste.body.code, 'WHATSAPP_CHANNEL_UNAVAILABLE');
+    assert.equal(backend.calls.some((call) => call.url.endsWith('/whats-app/send')), false);
     // Queda + vigia: reconecta com espera crescente
     backend.setState('close');
     const verificar = await request(base, '/api/admin/barbearia/whatsapp-conexao/verificar', { method: 'POST', headers: A });
