@@ -4,6 +4,7 @@
 
 import * as conexaoKytto from './whatsapp-conexao-kytto.js';
 import { whatsappProviderName } from './core/whatsapp-provider.js';
+import { diagnosticarWhatsapp } from './core/whatsapp-diagnostico.js';
 import { db } from './core/database.js';
 
 const BASE = '/api/admin/barbearia/whatsapp-conexao';
@@ -66,6 +67,14 @@ export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLoja
       save();
       res.json({ ok: true, conexao });
     } catch (error) { res.status(400).json({ error: error.message }); }
+  });
+
+  // Diagnóstico de ponta a ponta (só leitura): contagens, horários e travas; nunca conteúdo, número completo ou segredo.
+  app.get(`${BASE}/diagnostico`, async (req, res) => {
+    if (!gestor(req, res)) return;
+    try {
+      res.json({ ok: true, ...(await diagnosticarWhatsapp({ fetchImpl })) });
+    } catch (error) { res.status(502).json({ error: 'Não foi possível diagnosticar o WhatsApp agora.', detail: String(error?.message || '').slice(0, 160) }); }
   });
 
   app.post(`${BASE}/verificar`, async (req, res) => {

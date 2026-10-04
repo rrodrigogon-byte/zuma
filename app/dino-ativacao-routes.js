@@ -11,6 +11,7 @@ import { getBrainSettings } from './core/ai-memory.js';
 import { whatsappProviderName, chatbotBackendConfig, chatbotBackendMode } from './core/whatsapp-provider.js';
 import { obterConexao } from './whatsapp-conexao-kytto.js';
 import { pollMode } from './core/whatsapp-isa-poll.js';
+import { egressMode } from './core/whatsapp-egress.js';
 import { configuracaoResumoPublica } from './core/dino-resumo-diario.js';
 
 const BASE = '/api/admin/barbearia/ativacao';
@@ -67,12 +68,19 @@ function itensGoLive(f, out) {
   const pilotos = Number(f.poll?.pilotos || 0);
   const modoOk = modo === 'pilot' ? pilotos > 0 : modo === 'on' ? pronto : false;
   const modoDetalhe = {
-    off: 'WHATSAPP_POLL_MODE=off: a IA não lê nenhuma mensagem.',
+    off: f.poll?.linhaVerificada === false ? 'Entrada fechada: falta WHATSAPP_LINE_VERIFIED=1 (depois de confirmar no celular que a sessão é do número da Dino). Use o Diagnóstico em /admin/whatsapp.' : 'Entrada fechada (WHATSAPP_POLL_MODE off, ou on sem WHATSAPP_FULL_ROLLOUT_APPROVED=1): a IA não lê nenhuma mensagem.',
     shadow: 'WHATSAPP_POLL_MODE=shadow: a IA só observa, não responde.',
     pilot: pilotos > 0 ? `Piloto: só ${pilotos} telefone(s) de teste falam com a IA. Quando o ensaio passar, troque para on.` : 'Modo pilot sem telefones: defina WHATSAPP_POLL_PILOT_PHONES com os celulares de teste.',
     on: pronto ? 'Liberado para todos os clientes.' : 'WHATSAPP_POLL_MODE=on com itens abaixo pendentes: ao ler o QR, todos os clientes falam com a IA. Use pilot (com WHATSAPP_POLL_PILOT_PHONES) até tudo ficar verde.',
   }[modo];
-  out.push(item(g, 'modo_entrada', 'Quem fala com a IA', modoOk, modoDetalhe));
+  out.push(item(g, 'modo_entrada', 'Quem fala com a IA', modoOk, modoDetalhe, { link: '/admin/whatsapp' }));
+  if (f.poll?.saida !== undefined) {
+    const saida = f.poll.saida;
+    out.push(item(g, 'modo_saida', 'Respostas saindo pelo WhatsApp', saida === 'on' ? pronto : saida === 'pilot' && pilotos > 0,
+      saida === 'off' ? 'WHATSAPP_EGRESS_MODE desligado: a IA decide a resposta, mas nada é enviado. Use pilot no piloto.'
+        : saida === 'pilot' ? (pilotos > 0 ? 'Piloto: respostas só para os telefones de teste.' : 'pilot sem WHATSAPP_POLL_PILOT_PHONES: nenhuma resposta sai.')
+          : pronto ? 'Liberado para todos os clientes.' : 'Saída liberada para todos com itens pendentes abaixo.', { link: '/admin/whatsapp' }));
+  }
   if (!a) {
     out.push(item(g, 'agenda', 'Agenda do Kytto em uso', false, 'Não foi possível ler a agenda desta empresa.'));
   } else {
@@ -228,7 +236,7 @@ export function registerAtivacaoRoutes(app, deps) {
         slug: config.slugPublico || '', agendamentoAtivo: config.agendamentoPublicoAtivo !== false,
         migracao: false, canal: null, politica: null, cerebro: { ativo: false, autonomia: 1 }, execucoes: 0,
         vitrine: null, semFoto: [], esgotados: [], reservados: [],
-        poll: { modo: pollMode(), pilotos: String(process.env.WHATSAPP_POLL_PILOT_PHONES || '').split(',').filter((t) => t.replace(/\D/g, '').length >= 10).length },
+        poll: { modo: pollMode(), linhaVerificada: process.env.WHATSAPP_LINE_VERIFIED === '1', saida: egressMode(), pilotos: String(process.env.WHATSAPP_POLL_PILOT_PHONES || '').split(',').filter((t) => t.replace(/\D/g, '').length >= 10).length },
         resumo: configuracaoResumoPublica(),
         agendaIa: null, filaAntiga: 0,
       };

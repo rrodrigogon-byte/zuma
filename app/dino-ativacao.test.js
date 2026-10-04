@@ -116,3 +116,14 @@ test('agenda ilegível não derruba a lista', () => {
   const r = buildChecklist({ ...base(), agendaIa: null });
   assert.equal(r.itens.find((i) => i.id === 'agenda').ok, false);
 });
+
+test('travas do multi-instância: linha não verificada e saída desligada aparecem com a correção', () => {
+  const r = buildChecklist({ ...base(), poll: { modo: 'off', linhaVerificada: false, saida: 'off', pilotos: 1 } });
+  const by = Object.fromEntries(r.itens.map((i) => [i.id, i]));
+  assert.match(by.modo_entrada.detalhe, /WHATSAPP_LINE_VERIFIED=1/);
+  assert.equal(by.modo_saida.ok, false);
+  assert.match(by.modo_saida.detalhe, /WHATSAPP_EGRESS_MODE/);
+  const ok = Object.fromEntries(buildChecklist({ ...base(), poll: { modo: 'pilot', linhaVerificada: true, saida: 'pilot', pilotos: 1 } }).itens.map((i) => [i.id, i]));
+  assert.equal(ok.modo_entrada.ok, true);
+  assert.equal(ok.modo_saida.ok, true);
+});

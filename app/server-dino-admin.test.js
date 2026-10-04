@@ -299,6 +299,14 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     assert.equal(teste.response.status, 409, 'sem canal Commerce escopado o teste não pode enviar');
     assert.equal(teste.body.code, 'WHATSAPP_CHANNEL_UNAVAILABLE');
     assert.equal(backend.calls.some((call) => call.url.endsWith('/whats-app/send')), false);
+    const diagStaff = await request(base, '/api/admin/barbearia/whatsapp-conexao/diagnostico', { headers: staffA });
+    assert.equal(diagStaff.response.status, 403, 'diagnóstico só para gestor');
+    const diag = await request(base, '/api/admin/barbearia/whatsapp-conexao/diagnostico', { headers: A });
+    assert.equal(diag.response.status, 200, JSON.stringify(diag.body));
+    assert.equal(diag.body.estado, 'open');
+    assert.ok(diag.body.conclusoes.some((c) => c.titulo === 'Número conectado' && c.ok));
+    assert.ok(diag.body.conclusoes.some((c) => c.titulo === 'Linha verificada' && !c.ok), 'sem WHATSAPP_LINE_VERIFIED a trava aparece');
+    assert.doesNotMatch(JSON.stringify(diag.body), /chave-teste-com-mais-de-vinte/, 'nunca expõe a chave');
     // Queda + vigia: reconecta com espera crescente
     backend.setState('close');
     const verificar = await request(base, '/api/admin/barbearia/whatsapp-conexao/verificar', { method: 'POST', headers: A });

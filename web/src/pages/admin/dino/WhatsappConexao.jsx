@@ -34,6 +34,7 @@ export default function WhatsappConexao() {
   const [teste, setTeste] = useState({ telefone: '', open: false })
   const [confirmarSaida, setConfirmarSaida] = useState(false)
   const [webhookInfo, setWebhookInfo] = useState('')
+  const [diag, setDiag] = useState(null)
   const telefoneRef = useRef(null)
 
   const carregar = useCallback(async (atualizar = true) => {
@@ -115,6 +116,13 @@ export default function WhatsappConexao() {
       toast(data.manual ? 'O backend não registra webhook sozinho: veja as instruções.' : 'Webhook registrado no backend.')
       await recarregarIa()
     } catch (error) { toast(error.message, true) }
+    finally { setBusy('') }
+  }
+
+  async function diagnosticar() {
+    setBusy('diag'); setErro('')
+    try { setDiag(await api.get(`${BASE}/diagnostico`)) }
+    catch (error) { setErro(error?.message || 'Não foi possível diagnosticar agora.') }
     finally { setBusy('') }
   }
 
@@ -201,6 +209,13 @@ export default function WhatsappConexao() {
           {webhookInfo && <p className="dadm-note warn" style={{ overflowWrap: 'anywhere' }}>{webhookInfo}</p>}
           <Link to="/admin/barbearia-erp?area=integracoes&tab=Integra%C3%A7%C3%B5es">Revisar capacidades e ativar o atendente →</Link>
         </section>
+
+        {podeGerenciar && <section className="dadm-card" aria-labelledby="wa-diag">
+          <div className="c360-card-head"><h2 id="wa-diag">Diagnóstico de ponta a ponta</h2>
+            <button type="button" className="c360-btn ghost" disabled={busy === 'diag'} onClick={diagnosticar}>{busy === 'diag' ? 'Conferindo…' : (diag ? 'Conferir de novo' : 'Conferir agora')}</button></div>
+          <p className="dadm-muted">Confere a chave, a instância, o número, se o backend guardou as mensagens recebidas e se elas estão entrando no Kytto. Mostra só contagens e horários.</p>
+          {diag && <ul className="dadm-check">{(diag.conclusoes || []).map((c) => <Check key={c.titulo} ok={c.ok} hint={c.detalhe}>{c.titulo}</Check>)}</ul>}
+        </section>}
 
         <section className="dadm-card" aria-labelledby="wa-hist">
           <h2 id="wa-hist">Histórico da conexão</h2>
