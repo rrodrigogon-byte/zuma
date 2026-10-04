@@ -1,0 +1,35 @@
+{
+  "_origem": "Conferido no admin de produção (dino.kytto.com.br) em 03/10/2026. Atualize quando o catálogo, a equipe ou o horário mudarem.",
+  "nomePublico": "Dino Barbearia & Perfumaria",
+  "configuracao": { "horarioAbertura": "06:00", "horarioFechamento": "21:00", "intervaloMinutos": 30, "antecedenciaMinutos": 60, "janelaReservaDias": 60, "politicaCancelamentoHoras": 4, "diasFuncionamento": [1, 2, 3, 4, 5, 6] },
+  "profissionais": [
+    { "chave": "bruno", "dados": { "nome": "Bruno", "especialidade": "Barbeiro Sênior", "horarioInicio": "06:00", "horarioFim": "21:00", "diasTrabalho": [1, 2, 3, 4, 5, 6] } },
+    { "chave": "carlos", "dados": { "nome": "Carlos", "especialidade": "Barbeiro", "horarioInicio": "06:00", "horarioFim": "21:00", "diasTrabalho": [1, 2, 3, 4, 5, 6] } },
+    { "chave": "dino", "dados": { "nome": "Dino", "especialidade": "Master Barber", "horarioInicio": "06:00", "horarioFim": "21:00", "diasTrabalho": [1, 2, 3, 4, 5, 6] } },
+    { "chave": "leo", "dados": { "nome": "Léo", "especialidade": "Barbeiro Júnior", "horarioInicio": "06:00", "horarioFim": "21:00", "diasTrabalho": [1, 2, 3, 4, 5, 6] } },
+    { "chave": "nathy", "dados": { "nome": "Nathy", "especialidade": "Cabeleireira / Barbeira", "horarioInicio": "06:00", "horarioFim": "21:00", "diasTrabalho": [1, 2, 3, 4, 5, 6] } },
+    { "chave": "rafael", "dados": { "nome": "Rafael", "especialidade": "Barbeiro", "horarioInicio": "06:00", "horarioFim": "21:00", "diasTrabalho": [1, 2, 3, 4, 5, 6] } }
+  ],
+  "servicos": [
+    { "nome": "Barba Completa (toalha quente)", "categoria": "Barba", "preco": 40, "duracaoMinutos": 30 },
+    { "nome": "Barba Tradicional", "categoria": "Barba", "preco": 30, "duracaoMinutos": 20 },
+    { "nome": "Barboterapia Premium", "categoria": "Barba", "preco": 55, "duracaoMinutos": 40 },
+    { "nome": "Corte + Barba", "categoria": "Combos", "preco": 75, "duracaoMinutos": 50 },
+    { "nome": "Corte + Barba + Sobrancelha (Dino Premium)", "categoria": "Combos", "preco": 95, "duracaoMinutos": 60 },
+    { "nome": "Corte + Máquina (Fade/Degradê)", "categoria": "Cortes", "preco": 50, "duracaoMinutos": 40 },
+    { "nome": "Corte Infantil", "categoria": "Cortes", "preco": 40, "duracaoMinutos": 30 },
+    { "nome": "Corte Masculino", "categoria": "Cortes", "preco": 45, "duracaoMinutos": 30 },
+    { "nome": "Corte Premium com o Dino (Master)", "categoria": "Especial", "preco": 1000, "duracaoMinutos": 60, "quemFaz": ["dino"] },
+    { "nome": "Hidratação capilar", "categoria": "Química", "preco": 40, "duracaoMinutos": 30 },
+    { "nome": "Limpeza de pele express", "categoria": "Estética", "preco": 50, "duracaoMinutos": 30 },
+    { "nome": "Luzes / Nevou", "categoria": "Química", "preco": 130, "duracaoMinutos": 90 },
+    { "nome": "Manicure", "categoria": "Bem-estar", "preco": 50, "duracaoMinutos": 40 },
+    { "nome": "Massagem", "categoria": "Bem-estar", "preco": 100, "duracaoMinutos": 20 },
+    { "nome": "Pedicure", "categoria": "Bem-estar", "preco": 50, "duracaoMinutos": 45 },
+    { "nome": "Pezinho / Acabamento", "categoria": "Cortes", "preco": 20, "duracaoMinutos": 15 },
+    { "nome": "Pigmentação de barba", "categoria": "Química", "preco": 45, "duracaoMinutos": 30 },
+    { "nome": "Platinado / Descoloração global", "categoria": "Química", "preco": 160, "duracaoMinutos": 120 },
+    { "nome": "Progressiva / Selagem", "categoria": "Química", "preco": 110, "duracaoMinutos": 90 },
+    { "nome": "Sobrancelha (navalha)", "categoria": "Estética", "preco": 20, "duracaoMinutos": 15 }
+  ]
+}

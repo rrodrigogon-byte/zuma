@@ -90,7 +90,7 @@ export function parseBackendMessage(item = {}, { agora = Date.now() } = {}) {
   return { ...comum, ignored: false, text: conteudo };
 }
 
-async function canalDaEmpresa() {
+export async function canalDaEmpresa() {
   const empresaId = texto(process.env.CHATBOT_BACKEND_EMPRESA_ID, 60);
   if (!/^[0-9a-f-]{36}$/i.test(empresaId)) return null;
   const instance = chatbotBackendMode() === 'instancias' ? chatbotBackendConfig().instance : null;
@@ -249,6 +249,25 @@ export async function runIsaPollPass({ fetchImpl, agora = Date.now(), canal: can
   return { skipped: false, ...resumo };
 }
 
+// Última passada do worker neste processo (para o diagnóstico; sem conteúdo de mensagem).
+const ultimaPassada = { em: null, resultado: null, erro: null, ultimaNovaEm: null, passadas: 0 };
+let workerIniciado = false;
+
+export function estadoDaEntrada() {
+  return {
+    ativa: pollEnabled(),
+    workerIniciado,
+    modo: pollMode(),
+    modoPedido: texto(process.env.WHATSAPP_POLL_MODE, 10).toLowerCase() || '',
+    linhaVerificada: process.env.WHATSAPP_LINE_VERIFIED === '1',
+    rolloutAprovado: process.env.WHATSAPP_FULL_ROLLOUT_APPROVED === '1',
+    pilotos: pilotPhones().size,
+    intervaloMs: Math.max(3000, Number.parseInt(process.env.WHATSAPP_POLL_INTERVAL_MS || '5000', 10) || 5000),
+    empresaPorVariavel: /^[0-9a-f-]{36}$/i.test(texto(process.env.CHATBOT_BACKEND_EMPRESA_ID, 60)),
+    ultimaPassada: { ...ultimaPassada },
+  };
+}
+
 export function startIsaPollWorker() {
   if (!pollEnabled()) {
     if (whatsappProviderName() === 'chatbot_backend') console.log('[WhatsApp] entrada por consulta desligada: confira CHATBOT_BACKEND_URL/KEY e WHATSAPP_POLL_MODE');
@@ -261,15 +280,24 @@ export function startIsaPollWorker() {
     rodando = true;
     try {
       const resumo = await runIsaPollPass();
+      ultimaPassada.em = new Date().toISOString();
+      ultimaPassada.passadas += 1;
+      ultimaPassada.erro = null;
+      ultimaPassada.resultado = resumo?.skipped ? { pulou: resumo.reason } : { lidas: resumo?.lidas || 0, novas: resumo?.novas || 0, ignoradas: resumo?.ignoradas || 0, foraDoPiloto: resumo?.foraDoPiloto || 0, duplicadas: resumo?.duplicadas || 0 };
+      if (resumo?.novas) ultimaPassada.ultimaNovaEm = ultimaPassada.em;
+      if (resumo?.skipped && ultimaPassada.passadas % 120 === 1) console.warn(`[WhatsApp] consulta de mensagens pulada: ${resumo.reason}`);
       if (resumo?.novas || resumo?.audios || resumo?.fotos || resumo?.equipeAssumiu || resumo?.iaRetomada) console.log(JSON.stringify({ worker: 'whatsapp-isa-poll', ...resumo }));
     } catch (error) {
-      console.warn('[WhatsApp] consulta de mensagens:', String(error?.message || error).slice(0, 200));
+      ultimaPassada.em = new Date().toISOString();
+      ultimaPassada.erro = String(error?.message || error).slice(0, 200);
+      console.warn('[WhatsApp] consulta de mensagens:', ultimaPassada.erro);
     } finally {
       rodando = false;
     }
   };
   const timer = setInterval(tick, intervalo);
   timer.unref?.();
+  workerIniciado = true;
   console.log(`[WhatsApp] entrada por consulta ativa a cada ${intervalo} ms, modo ${pollMode()}, backend ${chatbotBackendMode()}`);
   return timer;
 }

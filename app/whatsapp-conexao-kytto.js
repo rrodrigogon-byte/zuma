@@ -206,8 +206,11 @@ export async function desconectar(empresaId, { usuario = '', fetchImpl } = {}) {
   try {
     const resultado = await disconnectInstance(conexao.instance, fetchImpl);
     // Um timeout pode acontecer DEPOIS do reset; GET é seguro, DELETE não deve ser repetido.
-    const status = resultado.ok || resultado.uncertain ? await getInstanceStatus(conexao.instance, fetchImpl) : null;
-    if ((!resultado.ok && !resultado.uncertain) || !status?.ok || !['close', 'qr'].includes(status.state)) {
+    // Recusa do DELETE (ex.: 4xx porque não há sessão) também é conferida pelo GET: se o
+    // backend confirma que o número não está conectado, não há o que desconectar.
+    const status = resultado.authError ? null : await getInstanceStatus(conexao.instance, fetchImpl);
+    const semSessao = status?.ok === true && ['close', 'qr'].includes(status.state);
+    if (!semSessao) {
       // Nunca simular logout local ou reiniciar outro número quando o backend
       // falhou ou ainda responde open/unknown. A instância continua visível.
       conexao.ativo = conexao.state === 'open' ? true : conexao.ativo;

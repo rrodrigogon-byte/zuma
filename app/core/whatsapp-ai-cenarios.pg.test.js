@@ -37,6 +37,12 @@ if (URL_PG) {
     CHATBOT_BACKEND_URL: BACKEND,
     CHATBOT_BACKEND_KEY: 'chave-simulador-dino-000001',
     CHATBOT_BACKEND_EMPRESA_ID: IDS.empresa,
+    // Igual à produção (multi-instância com todas as travas abertas para o teste).
+    CHATBOT_BACKEND_MODE: 'instancias',
+    CHATBOT_BACKEND_INSTANCE: 'dino',
+    WHATSAPP_LINE_VERIFIED: '1',
+    WHATSAPP_FULL_ROLLOUT_APPROVED: '1',
+    WHATSAPP_EGRESS_MODE: 'on',
     CHATBOT_BACKEND_MEDIA_PATH: '/messages/{id}/media',
     BARBEARIA_AGENDA_FONTE: 'barbearia',
     WHATSAPP_POLL_MODE: 'on',
@@ -85,9 +91,13 @@ globalThis.fetch = async (url, opcoes = {}) => {
   const u = String(url);
   if (u.startsWith(BACKEND)) {
     const caminho = u.slice(BACKEND.length).replace('/api/v1/whats-app', '');
-    if (opcoes.headers?.['X-API-KEY'] !== process.env.CHATBOT_BACKEND_KEY) return resposta(401, { error: 'unauthorized' });
+    const chave = opcoes.headers?.['X-API-KEY'] || opcoes.headers?.['x-api-key'];
+    if (chave !== process.env.CHATBOT_BACKEND_KEY) return resposta(401, { error: 'unauthorized' });
     if (caminho.startsWith('/messages?')) {
-      const role = new URLSearchParams(caminho.split('?')[1]).get('role');
+      const query = new URLSearchParams(caminho.split('?')[1]);
+      // Contrato do Swagger: sem instanceName o backend devolveria a instância padrão (outro número).
+      if (query.get('instanceName') !== 'dino') return resposta(400, { error: 'instanceName obrigatório no simulador' });
+      const role = query.get('role');
       const porChat = new Map();
       for (const m of [...mundo.inbox, ...mundo.saidasCelular]) {
         if (role && (m.role || 'user') !== role) continue;
@@ -103,10 +113,11 @@ globalThis.fetch = async (url, opcoes = {}) => {
     }
     if (caminho === '/send' && opcoes.method === 'POST') {
       const corpo = JSON.parse(opcoes.body);
+      if (corpo.instanceName !== 'dino') return resposta(400, { success: false, error: 'instanceName obrigatório no simulador' });
       mundo.enviados.push({ para: corpo.chat_id, texto: corpo.message });
       return resposta(200, { success: true, messageId: `out-${++seq}` });
     }
-    if (caminho === '/status') return resposta(200, { authenticated: true });
+    if (caminho === '/status' || caminho === '/instances/dino/status') return resposta(200, { authenticated: true, state: 'open' });
     return resposta(404, { error: `rota simulada ausente: ${caminho}` });
   }
   if (u.includes('generativelanguage.googleapis.com')) {

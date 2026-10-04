@@ -477,12 +477,27 @@ async function toolPrepareAppointment(context, args = {}) {
   let cursor = minutesOf(time) + Number(availability.service.duracaoMinutos || 30);
   let total = Number(availability.service.preco || 0);
   const partes = [`${availability.service.nome} com ${availability.professional.nome} às ${time}`];
+  // O cliente escolheu um profissional: os serviços seguintes ficam com ELE quando ele
+  // faz o serviço e está livre (corte + barba + sobrancelha com o mesmo barbeiro). Só
+  // cai para "qualquer" quando ele não faz o serviço ou não tem encaixe (ex.: manicure).
+  const mesmoProfissional = professionalId !== 'qualquer' ? professionalId : '';
+  const encaixe = (lista) => lista.find((item) => minutesOf(item) >= cursor && minutesOf(item) <= cursor + 30);
   for (const extraId of extras) {
-    const extra = await listSchedulingAvailability(scope, { serviceId: extraId, professionalId: 'qualquer', date });
-    const slot = extra.slots.find((item) => minutesOf(item) >= cursor && minutesOf(item) <= cursor + 30);
+    let extra = null;
+    let slot = null;
+    let extraProfessionalId = 'qualquer';
+    if (mesmoProfissional) {
+      extra = await listSchedulingAvailability(scope, { serviceId: extraId, professionalId: mesmoProfissional, date }).catch(() => null);
+      slot = extra ? encaixe(extra.slots || []) : null;
+      if (slot) extraProfessionalId = mesmoProfissional;
+    }
+    if (!slot) {
+      extra = await listSchedulingAvailability(scope, { serviceId: extraId, professionalId: 'qualquer', date });
+      slot = encaixe(extra.slots);
+    }
     if (!slot) throw new SchedulingError(`não há encaixe seguido para ${extra.service.nome} depois de ${String(Math.floor(cursor / 60)).padStart(2, '0')}:${String(cursor % 60).padStart(2, '0')}`, 'SLOT_UNAVAILABLE');
-    combo.push({ serviceId: extraId, professionalId: 'qualquer', time: slot });
-    partes.push(`${extra.service.nome} às ${slot}`);
+    combo.push({ serviceId: extraId, professionalId: extraProfessionalId, time: slot });
+    partes.push(extraProfessionalId === mesmoProfissional && mesmoProfissional ? `${extra.service.nome} às ${slot}` : `${extra.service.nome} às ${slot} (com quem estiver livre)`);
     cursor = minutesOf(slot) + Number(extra.service.duracaoMinutos || 30);
     total += Number(extra.service.preco || 0);
   }

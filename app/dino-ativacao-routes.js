@@ -10,6 +10,9 @@ import { providerConfigured } from './core/ai-router.js';
 import { getBrainSettings } from './core/ai-memory.js';
 import { whatsappProviderName, chatbotBackendConfig, chatbotBackendMode } from './core/whatsapp-provider.js';
 import { obterConexao } from './whatsapp-conexao-kytto.js';
+import { pollMode } from './core/whatsapp-isa-poll.js';
+import { egressMode } from './core/whatsapp-egress.js';
+import { configuracaoResumoPublica } from './core/dino-resumo-diario.js';
 
 const BASE = '/api/admin/barbearia/ativacao';
 const GESTORES = new Set(['admin', 'organizador']);
@@ -25,6 +28,78 @@ const envSet = (name) => Boolean(String(process.env[name] || '').trim());
 function item(grupo, id, titulo, ok, detalhe, extra = {}) {
   // Botão de ação só aparece enquanto o item não está pronto.
   return { grupo, id, titulo, ok: ok === true, opcional: extra.opcional === true, detalhe, acao: ok === true ? null : (extra.acao || null), link: extra.link || null, dados: extra.dados || null };
+}
+
+// Serviços que normalmente não são feitos por todos os barbeiros. Sem "quem faz", a IA
+// oferece o horário de qualquer profissional livre (ex.: manicure com o barbeiro).
+const SERVICO_ESPECIALIZADO = /manicure|pedicure|unha|massag|qu[ií]mic|est[eé]tic|sobrancelh|depila|limpeza de pele|podolog/i;
+const STATUS_INATIVOS = new Set(['cancelado', 'nao_compareceu', 'concluido']);
+
+/** Fatos da agenda e da equipe que decidem se a IA pode atender clientes reais (puro, testável). */
+export function fatosAgendaParaIa({ profissionais = [], servicos = [], agendamentos = [], agora = Date.now() } = {}) {
+  const ativos = profissionais.filter((p) => p.ativo !== false);
+  const semJornada = ativos.filter((p) => !(Array.isArray(p.diasTrabalho) && p.diasTrabalho.length) || !p.horarioInicio || !p.horarioFim);
+  const especializados = servicos.filter((s) => s.ativo !== false && SERVICO_ESPECIALIZADO.test(String(s.nome || '')));
+  const semQuemFaz = especializados.filter((s) => !(Array.isArray(s.profissionaisIds) && s.profissionaisIds.length));
+  const futuros = agendamentos.filter((a) => !STATUS_INATIVOS.has(String(a.status || '')) && Date.parse(a.dataHora) >= agora);
+  return {
+    profissionais: ativos.length,
+    semJornada: semJornada.map((p) => ({ id: p.id, nome: p.nome })),
+    semQuemFaz: semQuemFaz.map((s) => ({ id: s.id, nome: s.nome })),
+    agendamentosFuturos: futuros.length,
+  };
+}
+
+const TELA = Object.freeze({
+  agenda: '/admin/barbearia-erp?area=operacao&tab=Agenda',
+  equipe: '/admin/barbearia-erp?area=catalogo&tab=Profissionais',
+  servicos: '/admin/barbearia-erp?area=catalogo&tab=Servi%C3%A7os',
+  fila: '/admin/barbearia-erp?area=integracoes&tab=Integra%C3%A7%C3%B5es',
+  resumo: '/admin/barbearia-erp?area=gestao&tab=Resumo+di%C3%A1rio',
+});
+const lista = (itens, n = 5) => `${itens.slice(0, n).map((i) => i.nome).join(', ')}${itens.length > n ? '…' : ''}`;
+
+/** Grupo "Antes de liberar para os clientes": o que evita a IA errar no primeiro dia. */
+function itensGoLive(f, out) {
+  const g = 'Antes de liberar para os clientes';
+  const a = f.agendaIa;
+  const pronto = f.conexao === 'open' && a && a.agendamentosFuturos > 0 && a.semJornada.length === 0 && a.semQuemFaz.length === 0;
+  const modo = f.poll?.modo || 'on';
+  const pilotos = Number(f.poll?.pilotos || 0);
+  const modoOk = modo === 'pilot' ? pilotos > 0 : modo === 'on' ? pronto : false;
+  const modoDetalhe = {
+    off: f.poll?.linhaVerificada === false ? 'Entrada fechada: falta WHATSAPP_LINE_VERIFIED=1 (depois de confirmar no celular que a sessão é do número da Dino). Use o Diagnóstico em /admin/whatsapp.' : 'Entrada fechada (WHATSAPP_POLL_MODE off, ou on sem WHATSAPP_FULL_ROLLOUT_APPROVED=1): a IA não lê nenhuma mensagem.',
+    shadow: 'WHATSAPP_POLL_MODE=shadow: a IA só observa, não responde.',
+    pilot: pilotos > 0 ? `Piloto: só ${pilotos} telefone(s) de teste falam com a IA. Quando o ensaio passar, troque para on.` : 'Modo pilot sem telefones: defina WHATSAPP_POLL_PILOT_PHONES com os celulares de teste.',
+    on: pronto ? 'Liberado para todos os clientes.' : 'WHATSAPP_POLL_MODE=on com itens abaixo pendentes: ao ler o QR, todos os clientes falam com a IA. Use pilot (com WHATSAPP_POLL_PILOT_PHONES) até tudo ficar verde.',
+  }[modo];
+  out.push(item(g, 'modo_entrada', 'Quem fala com a IA', modoOk, modoDetalhe, { link: '/admin/whatsapp' }));
+  if (f.poll?.saida !== undefined) {
+    const saida = f.poll.saida;
+    out.push(item(g, 'modo_saida', 'Respostas saindo pelo WhatsApp', saida === 'on' ? pronto : saida === 'pilot' && pilotos > 0,
+      saida === 'off' ? 'WHATSAPP_EGRESS_MODE desligado: a IA decide a resposta, mas nada é enviado. Use pilot no piloto.'
+        : saida === 'pilot' ? (pilotos > 0 ? 'Piloto: respostas só para os telefones de teste.' : 'pilot sem WHATSAPP_POLL_PILOT_PHONES: nenhuma resposta sai.')
+          : pronto ? 'Liberado para todos os clientes.' : 'Saída liberada para todos com itens pendentes abaixo.', { link: '/admin/whatsapp' }));
+  }
+  if (!a) {
+    out.push(item(g, 'agenda', 'Agenda do Kytto em uso', false, 'Não foi possível ler a agenda desta empresa.'));
+  } else {
+    out.push(item(g, 'agenda', 'Agenda do Kytto em uso', a.agendamentosFuturos > 0,
+      a.agendamentosFuturos > 0 ? `${a.agendamentosFuturos} horário(s) futuro(s) marcados.` : 'Nenhum horário futuro na agenda do Kytto: se a barbearia marca em outro sistema, a IA vai oferecer horários que já estão ocupados lá. Importe a agenda ou passe a marcar só no Kytto antes de liberar.',
+      { link: TELA.agenda }));
+    out.push(item(g, 'jornada', 'Profissionais com dias e horário', a.profissionais > 0 && a.semJornada.length === 0,
+      a.profissionais === 0 ? 'Nenhum profissional ativo.' : a.semJornada.length ? `Sem dias ou horário: ${lista(a.semJornada)}.` : `${a.profissionais} profissional(is) com jornada definida.`,
+      { link: TELA.equipe, dados: a.semJornada.length ? { itens: a.semJornada } : null }));
+    out.push(item(g, 'quem_faz', 'Quem faz cada serviço especializado', a.semQuemFaz.length === 0,
+      a.semQuemFaz.length ? `${a.semQuemFaz.length} serviço(s) aceitam qualquer profissional: ${lista(a.semQuemFaz)}. Marque quem faz em Serviços para a IA não oferecer, por exemplo, manicure com um barbeiro.` : 'Todos definidos.',
+      { link: TELA.servicos, dados: a.semQuemFaz.length ? { itens: a.semQuemFaz } : null }));
+  }
+  const fila = Number(f.filaAntiga || 0);
+  out.push(item(g, 'fila', 'Fila da equipe em dia', fila === 0,
+    fila ? `${fila} conversa(s) esperando a equipe há mais de 2 horas.` : 'Sem conversas esquecidas.', { link: TELA.fila }));
+  const r = f.resumo;
+  out.push(item(g, 'resumo', 'Resumo diário no WhatsApp do dono', Boolean(r?.ativo && r.destinatarios?.length),
+    r?.ativo && r.destinatarios?.length ? `Às ${r.hora} para ${r.destinatarios.join(', ')}.` : 'Defina DINO_RESUMO_DIARIO=on e DINO_RESUMO_TELEFONES no Render.', { opcional: true, link: TELA.resumo }));
 }
 
 /** Monta a lista de prontidão a partir de fatos já carregados (puro, testável). */
@@ -71,6 +146,7 @@ export function buildChecklist(f) {
   out.push(item('Loja e agenda', 'fotos', 'Perfumes com foto', f.semFoto.length === 0, f.semFoto.length ? `${f.semFoto.length} sem foto: ${f.semFoto.slice(0, 5).map((p) => p.nome).join(', ')}${f.semFoto.length > 5 ? '…' : ''}` : 'Todos com foto.', { link: '/admin/ecommerce', dados: { itens: f.semFoto } }));
   if (f.reservados?.length) out.push(item('Loja e agenda', 'reservados', 'Itens presos em reserva de pagamento pendente', true, `${f.reservados.length} aparecem esgotados na vitrine porque o saldo está reservado: ${f.reservados.slice(0, 4).map((p) => p.nome).join(', ')}. Confira os pagamentos pendentes antes de liberar.`, { opcional: true }));
   out.push(item('Loja e agenda', 'esgotados', 'Esgotados fora da vitrine', f.esgotados.length === 0, f.esgotados.length ? `${f.esgotados.length} à venda sem estoque: ${f.esgotados.slice(0, 5).map((p) => p.nome).join(', ')}${f.esgotados.length > 5 ? '…' : ''}` : 'Nenhum.', { acao: f.esgotados.length ? 'esgotados' : null, dados: { itens: f.esgotados } }));
+  itensGoLive(f, out);
   const obrigatorios = out.filter((i) => !i.opcional);
   return { itens: out, prontos: obrigatorios.filter((i) => i.ok).length, total: obrigatorios.length };
 }
@@ -160,18 +236,35 @@ export function registerAtivacaoRoutes(app, deps) {
         slug: config.slugPublico || '', agendamentoAtivo: config.agendamentoPublicoAtivo !== false,
         migracao: false, canal: null, politica: null, cerebro: { ativo: false, autonomia: 1 }, execucoes: 0,
         vitrine: null, semFoto: [], esgotados: [], reservados: [],
+        poll: { modo: pollMode(), linhaVerificada: process.env.WHATSAPP_LINE_VERIFIED === '1', saida: egressMode(), pilotos: String(process.env.WHATSAPP_POLL_PILOT_PHONES || '').split(',').filter((t) => t.replace(/\D/g, '').length >= 10).length },
+        resumo: configuracaoResumoPublica(),
+        agendaIa: null, filaAntiga: 0,
       };
+      try {
+        facts.agendaIa = fatosAgendaParaIa({
+          profissionais: barbeariaErpKytto.listarProfissionais(s.legacy),
+          servicos: barbeariaErpKytto.listarServicos(s.legacy),
+          agendamentos: barbeariaErpKytto.listarAgendamentos(s.legacy),
+          agora: facts.agora,
+        });
+      } catch { facts.agendaIa = null; }
       if (!s.semCommerce) {
         const empresaId = s.context.empresaId;
-        const [migracao, status, cerebro, runs, vitrine, catalogo] = await Promise.all([
+        const [migracao, status, cerebro, runs, vitrine, catalogo, filaAntiga] = await Promise.all([
           tableExists('ai_brain_settings'),
           whatsappAiOperationalStatus(s.context).catch(() => null),
           getBrainSettings(empresaId),
           db.queryRead('SELECT COUNT(*)::int AS n FROM ai_learning_runs WHERE empresa_id = $1', [empresaId]).then((r) => r.rows[0].n).catch(() => 0),
           storefrontIdentity(empresaId).catch(() => null),
           catalogIssues(empresaId).catch(() => ({ semFoto: [], esgotados: [], reservados: [] })),
+          // Conversa na fila há mais de 2 h que não é só a pausa automática (equipe no celular).
+          db.queryRead(
+            `SELECT COUNT(*)::int AS n FROM whatsapp_ai_sessions
+              WHERE empresa_id = $1 AND status = 'humano' AND (estado->>'staffPauseUntil') IS NULL
+                AND ultima_interacao_em < CURRENT_TIMESTAMP - INTERVAL '2 hours'`, [empresaId],
+          ).then((r) => r.rows[0].n).catch(() => 0),
         ]);
-        Object.assign(facts, { migracao, canal: status?.channel || null, politica: status?.policy || null, cerebro, execucoes: runs, vitrine, ...catalogo });
+        Object.assign(facts, { migracao, canal: status?.channel || null, politica: status?.policy || null, cerebro, execucoes: runs, vitrine, ...catalogo, filaAntiga });
       }
       res.json({ ...buildChecklist(facts), vitrine: facts.vitrine ? { displayName: facts.vitrine.displayName, phone: facts.vitrine.phone, accent: facts.vitrine.accent } : null, identidadeDino: DINO_IDENTITY, avisoRecomendado: RECOMMENDED_NOTICE });
     } catch (error) { fail(res, error); }
