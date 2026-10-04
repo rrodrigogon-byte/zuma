@@ -13,7 +13,7 @@ function withEnv(values, fn) {
   return result;
 }
 
-// Modo legado de instâncias (rotas /instances/{inst}/...).
+// Modo de instâncias Dino: status/QR por instância e /send com instanceName.
 const env = { WHATSAPP_PROVIDER: 'chatbot_backend', CHATBOT_BACKEND_MODE: 'instancias', CHATBOT_BACKEND_URL: 'https://backend.test', CHATBOT_BACKEND_KEY: 'k'.repeat(24), CHATBOT_BACKEND_INSTANCE: 'dino-1', CHATBOT_BACKEND_SEND_PATH: undefined };
 // Contrato da Isa (padrão).
 const envIsa = { WHATSAPP_PROVIDER: 'chatbot_backend', CHATBOT_BACKEND_MODE: undefined, CHATBOT_BACKEND_URL: 'https://dino-backend.test', CHATBOT_BACKEND_KEY: 'chave-de-teste-com-24-car', CHATBOT_BACKEND_INSTANCE: undefined };
@@ -55,23 +55,52 @@ test('normaliza estados e QR de formatos diferentes', () => {
   assert.equal(provider.validInstance('../x'), '');
 });
 
-test('envio tenta a próxima rota só quando a anterior não existe (404)', async () => {
+test('envio multi-instância usa uma única rota documentada com instanceName', async () => {
   await withEnv(env, async () => {
-    const fetch = fakeFetch([{ status: 404 }, { status: 201, body: { id: 'm1' } }]);
-    const result = await provider.sendTextViaChatbotBackend({ number: '5565999990000', text: 'oi' }, fetch);
+    const fetch = fakeFetch([{ status: 200, body: { success: true, accepted: true, questionId: 'synthetic-1' } }]);
+    const result = await provider.sendTextViaChatbotBackend({ instance: 'dino-1', number: '5565999990000', text: 'oi' }, fetch);
     assert.equal(result.ok, true);
-    assert.equal(fetch.calls.length, 2);
-    assert.equal(fetch.calls[0].url, 'https://backend.test/api/v1/whats-app/instances/dino-1/messages/text');
-    assert.equal(fetch.calls[1].url, 'https://backend.test/api/v1/whats-app/instances/dino-1/send-text');
+    assert.equal(fetch.calls.length, 1);
+    assert.equal(fetch.calls[0].url, 'https://backend.test/api/v1/whats-app/send');
     assert.equal(fetch.calls[0].headers.authorization, `Bearer ${'k'.repeat(24)}`);
-    assert.equal(fetch.calls[0].body.number, '5565999990000');
+    assert.deepEqual(fetch.calls[0].body, { instanceName: 'dino-1', chat_id: '5565999990000', message: 'oi', simulateTyping: false, delaySeconds: 0, waitForReply: false });
+  });
+});
+
+test('instância divergente não envia e 404 não tenta segunda rota', async () => {
+  await withEnv(env, async () => {
+    const noSend = fakeFetch([]);
+    const mismatch = await provider.sendTextViaChatbotBackend({ instance: 'isa', number: '5565999990000', text: 'oi' }, noSend);
+    assert.equal(mismatch.error, 'INSTANCE_SCOPE_MISMATCH');
+    const missing = await provider.sendTextViaChatbotBackend({ number: '5565999990000', text: 'oi' }, noSend);
+    assert.equal(missing.error, 'INSTANCE_SCOPE_MISMATCH');
+    assert.equal(noSend.calls.length, 0);
+    const fetch = fakeFetch([{ status: 404 }]);
+    const result = await provider.sendTextViaChatbotBackend({ instance: 'dino-1', number: '5565999990000', text: 'oi' }, fetch);
+    assert.equal(result.ok, false);
+    assert.deepEqual(fetch.calls.map(call => call.url), ['https://backend.test/api/v1/whats-app/send']);
+  });
+});
+
+test('200 success=true sem accepted é aceito; 200 sem success fica incerto sem retry', async () => {
+  await withEnv(env, async () => {
+    const legacy = fakeFetch([{ status: 200, body: { success: true, questionId: 'synthetic-2' } }]);
+    const accepted = await provider.sendTextViaChatbotBackend({ instance: 'dino-1', number: '5565999990000', text: 'oi' }, legacy);
+    assert.equal(accepted.ok, true);
+    assert.equal(accepted.uncertain, false);
+    const ambiguous = fakeFetch([{ status: 200, body: { id: 'synthetic-3', status: 'queued' } }]);
+    const result = await provider.sendTextViaChatbotBackend({ instance: 'dino-1', number: '5565999990000', text: 'oi' }, ambiguous);
+    assert.equal(result.ok, false);
+    assert.equal(result.uncertain, true);
+    assert.equal(result.retryable, false);
+    assert.equal(ambiguous.calls.length, 1);
   });
 });
 
 test('erro 500 não é repetido em outra rota (evita mensagem duplicada)', async () => {
   await withEnv(env, async () => {
     const fetch = fakeFetch([{ status: 500 }]);
-    const result = await provider.sendTextViaChatbotBackend({ number: '5565999990000', text: 'oi' }, fetch);
+    const result = await provider.sendTextViaChatbotBackend({ instance: 'dino-1', number: '5565999990000', text: 'oi' }, fetch);
     assert.equal(result.ok, false);
     assert.equal(result.uncertain, true);
     assert.equal(fetch.calls.length, 1);
@@ -82,8 +111,18 @@ test('chave recusada é sinalizada como authError', async () => {
   await withEnv(env, async () => {
     const status = await provider.getInstanceStatus('dino-1', fakeFetch([{ status: 401 }]));
     assert.equal(status.authError, true);
-    const send = await provider.sendTextViaChatbotBackend({ number: '5565999990000', text: 'oi' }, fakeFetch([{ status: 403 }]));
+    const send = await provider.sendTextViaChatbotBackend({ instance: 'dino-1', number: '5565999990000', text: 'oi' }, fakeFetch([{ status: 403 }]));
     assert.equal(send.authError, true);
+  });
+});
+
+test('status extrai número somente do backend, jamais inventa titularidade', async () => {
+  await withEnv(env, async () => {
+    const verified = await provider.getInstanceStatus('dino-1', fakeFetch([{ status: 200, body: { authenticated: true, connectedNumber: '+55 65 99999-0000' } }]));
+    assert.equal(verified.state, 'open');
+    assert.ok(verified.phone.includes('0000'));
+    const unknown = await provider.getInstanceStatus('dino-1', fakeFetch([{ status: 200, body: { authenticated: true } }]));
+    assert.equal(unknown.phone, '');
   });
 });
 
@@ -153,13 +192,20 @@ test('contrato da Isa: entrada por GET /messages achatando users[].messages[]', 
   });
 });
 
-test('modo por instância preserva o contrato de mensagens e envia instance na consulta', async () => {
+test('modo por instância usa instanceName na consulta, não parâmetro ignorado', async () => {
   await withEnv(env, async () => {
     const fetch = fakeFetch([{ status: 200, body: { users: [{ chatId: '5565999990000', messages: [{ role: 'user', content: 'oi', timestamp: '2026-10-01T18:00:00.000Z', whatsappMessageId: 'w1' }] }] } }]);
-    const result = await provider.fetchInboundMessages({ from: Date.parse('2026-10-01T17:30:00Z'), limit: 50 }, fetch);
+    const result = await provider.fetchInboundMessages({ instance: 'dino-1', from: Date.parse('2026-10-01T17:30:00Z'), limit: 50 }, fetch);
     assert.equal(result.ok, true);
     assert.equal(result.messages.length, 1);
-    assert.match(fetch.calls[0].url, /[?&]instance=dino-1(&|$)/);
+    assert.match(fetch.calls[0].url, /[?&]instanceName=dino-1(&|$)/);
+    assert.doesNotMatch(fetch.calls[0].url, /[?&]instance=/);
+    for (const invalid of [undefined, 'isa', '../dino']) {
+      const rejected = await provider.fetchInboundMessages({ instance: invalid }, fetch);
+      assert.equal(rejected.error, 'INSTANCE_SCOPE_MISMATCH');
+      assert.equal(rejected.messages.length, 0);
+    }
+    assert.equal(fetch.calls.length, 1);
   });
 });
 

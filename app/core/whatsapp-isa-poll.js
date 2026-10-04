@@ -23,7 +23,7 @@
 
 import crypto from 'node:crypto';
 import { db } from './database.js';
-import { chatbotBackendMode, fetchInboundMessages, fetchOutboundMessages, isaChatId, sendTextViaChatbotBackend, whatsappProviderConfigured, whatsappProviderName } from './whatsapp-provider.js';
+import { chatbotBackendConfig, chatbotBackendMode, fetchInboundMessages, fetchOutboundMessages, isaChatId, sendTextViaChatbotBackend, validInstance, whatsappProviderConfigured, whatsappProviderName } from './whatsapp-provider.js';
 import { ingestInboundWhatsappMessage } from './whatsapp-ai-routes.js';
 import { inboundMediaToText } from './whatsapp-ai-media.js';
 import { latestStaffMessages, pauseForStaff, releaseExpiredStaffPauses, staffTakeoverEnabled } from './whatsapp-staff-takeover.js';
@@ -85,11 +85,19 @@ export function parseBackendMessage(item = {}, { agora = Date.now() } = {}) {
 async function canalDaEmpresa() {
   const empresaId = texto(process.env.CHATBOT_BACKEND_EMPRESA_ID, 60);
   if (!/^[0-9a-f-]{36}$/i.test(empresaId)) return null;
+  const instance = chatbotBackendMode() === 'instancias' ? chatbotBackendConfig().instance : null;
+  if (chatbotBackendMode() === 'instancias' && !instance) return null;
   const resultado = await db.queryRead(
-    `SELECT * FROM canais_integracao
-      WHERE empresa_id = $1 AND provedor = 'whatsapp' AND status = 'ativo'
-      ORDER BY data_atualizacao DESC NULLS LAST LIMIT 1`,
-    [empresaId],
+    `SELECT c.* FROM canais_integracao c
+      WHERE c.empresa_id = $1 AND c.provedor = 'whatsapp' AND c.status = 'ativo'
+        AND ($2::text IS NULL OR (
+          c.configuracao->>'instance' = $2
+          AND NOT EXISTS (SELECT 1 FROM canais_integracao outra
+            WHERE outra.status = 'ativo' AND outra.provedor = 'whatsapp'
+              AND outra.empresa_id <> $1 AND outra.configuracao->>'instance' = $2)
+        ))
+      ORDER BY c.data_atualizacao DESC NULLS LAST LIMIT 1`,
+    [empresaId, instance],
   );
   return resultado.rows[0] || null;
 }
@@ -139,22 +147,24 @@ export async function runIsaPollPass({ fetchImpl, agora = Date.now(), canal: can
     if (parsed.media === 'audio' || parsed.reason === 'audio') resumo.audios += 1;
     if (parsed.media === 'image' || parsed.reason === 'image') resumo.fotos += 1;
     if (midiaLiberada && parsed.ignored && ['audio', 'image'].includes(parsed.reason)) {
-      await enviar({ number: parsed.phone, text: parsed.reason === 'audio' ? AUDIO_REPLY : IMAGE_REPLY }, fetchImpl).catch(() => null);
+      await enviar({ ...(canalDaPassada.configuracao?.instance ? { instance: canalDaPassada.configuracao.instance } : {}), number: parsed.phone, text: parsed.reason === 'audio' ? AUDIO_REPLY : IMAGE_REPLY }, fetchImpl).catch(() => null);
     }
   }
 
   const executar = async () => {
     const canal = canalInjetado || await canalDaEmpresa();
     if (!canal) return { skipped: true, reason: 'channel_not_active' };
+    const instance = chatbotBackendMode() === 'instancias' ? validInstance(canal.configuracao?.instance || '') : '';
+    if (chatbotBackendMode() === 'instancias' && (!instance || instance !== chatbotBackendConfig().instance)) return { skipped: true, reason: 'instance_scope_mismatch' };
     canalDaPassada = canal;
-    const resposta = await fetchInboundMessages({ from: agora - maxAgeMs(), limit: 100 }, fetchImpl);
+    const resposta = await fetchInboundMessages({ instance, from: agora - maxAgeMs(), limit: 100 }, fetchImpl);
     if (!resposta.ok) return { skipped: true, reason: resposta.authError ? 'backend_auth' : (resposta.error || 'backend_unavailable') };
     const modo = pollMode();
     // Antes de entregar as mensagens do cliente: se a equipe respondeu pelo celular,
     // a conversa já está com ela quando o worker for responder (a IA não atropela a recepção).
     if (staffTakeoverEnabled() && modo !== 'shadow') {
       resumo.iaRetomada += await equipe.liberar(db, { canalId: canal.id }).catch(() => 0);
-      const saidas = await buscarSaidas({ from: agora - maxAgeMs(), limit: 100 }, fetchImpl).catch(() => ({ ok: false, messages: [] }));
+      const saidas = await buscarSaidas({ instance, from: agora - maxAgeMs(), limit: 100 }, fetchImpl).catch(() => ({ ok: false, messages: [] }));
       if (saidas?.ok) {
         for (const contato of latestStaffMessages(saidas.messages)) {
           const r = await equipe.pausar(canal, contato).catch((error) => {

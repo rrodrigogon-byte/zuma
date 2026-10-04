@@ -61,10 +61,10 @@ test('fetchOutboundMessages pede role=assistant e descarta o que não é saída'
       ] }] });
       return { ok: true, status: 200, headers: new Map([['content-type', 'application/json']]), text: async () => corpo, json: async () => JSON.parse(corpo) };
     };
-    const r = await fetchOutboundMessages({ from: Date.parse('2026-10-02T12:30:00Z') }, fetchImpl);
+    const r = await fetchOutboundMessages({ instance: 'dino', from: Date.parse('2026-10-02T12:30:00Z') }, fetchImpl);
     assert.equal(r.ok, true);
     assert.match(urlPedida, /role=assistant/);
-    assert.match(urlPedida, /instance=dino/);
+    assert.match(urlPedida, /instanceName=dino/);
     assert.equal(r.messages.length, 1);
     assert.equal(r.messages[0].chatId, '5565999990001');
   } finally {

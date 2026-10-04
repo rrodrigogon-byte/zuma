@@ -15,8 +15,8 @@ Tudo no Kytto já segue o contrato da Isa:
 
 | Parte | Contrato |
 |---|---|
-| Envio | `POST {URL}/api/v1/whats-app/send`, corpo `{chat_id, message, simulateTyping:false, delaySeconds:0, waitForReply:false}`, cabeçalho `X-API-KEY`. |
-| Recebimento | Consulta global `GET /messages?latest=false&role=user&from=…&instance=dino` a cada 5 s. O backend multi-instância não expõe uma rota de webhook utilizável nem `/instances/dino/messages`; a entrada efetiva é polling filtrado por instância. |
+| Envio | `POST {URL}/api/v1/whats-app/send`, corpo `{instanceName:"dino", chat_id, message, simulateTyping:false, delaySeconds:0, waitForReply:false}`, cabeçalho `X-API-KEY`. Sem instância explícita e igual à configurada, o Kytto não envia; o HTTP 200 com `accepted:true` comprova somente enfileiramento, não entrega no aparelho. |
+| Recebimento | `GET /messages?latest=false&role=user&from=…&instanceName=dino` a cada 5 s. O parâmetro `instance` (sem `Name`) **não consta no Swagger** e podia devolver o dataset padrão; não usá-lo. O backend multi-instância não expõe uma rota de webhook utilizável nem `/instances/dino/messages`; a entrada efetiva é polling filtrado por instância. |
 | Id do evento | `api:<chat>:<id>:<hash>`, gravado sem duplicar. A mesma mensagem nunca é respondida duas vezes. |
 | Idade máxima | 30 min (`WHATSAPP_MAX_REPLY_AGE_MINUTES`). |
 | Áudio | Resposta fixa pedindo texto. |

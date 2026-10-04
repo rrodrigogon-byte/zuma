@@ -109,6 +109,18 @@ test('modos: shadow só registra; pilot responde só os números liberados; off 
   await comEnv({ ...ENV, CHATBOT_BACKEND_MODE: 'instancias', CHATBOT_BACKEND_INSTANCE: 'dino-1' }, async () => assert.equal(pollEnabled(), true, 'o backend por instância também usa a consulta de mensagens'));
 });
 
+test('polling multi-instância exige vínculo canal↔instância antes de qualquer GET ou envio', async () => {
+  await comEnv({ ...ENV, CHATBOT_BACKEND_MODE: 'instancias', CHATBOT_BACKEND_INSTANCE: 'dino-1' }, async () => {
+    const fetch = fetchHistorico();
+    const mismatch = await runIsaPollPass({ fetchImpl: fetch, agora: AGORA, canal: { id: 'canal-1', configuracao: { instance: 'isa' } }, ingest: ingestFalso(), comTrava: false, equipe: SEM_EQUIPE });
+    assert.equal(mismatch.reason, 'instance_scope_mismatch');
+    assert.equal(fetch.chamadas.length, 0);
+    const matched = await runIsaPollPass({ fetchImpl: fetch, agora: AGORA, canal: { id: 'canal-1', configuracao: { instance: 'dino-1' } }, ingest: ingestFalso(), enviar: async () => ({ ok: true }), comTrava: false, equipe: SEM_EQUIPE });
+    assert.equal(matched.skipped, false);
+    assert.match(fetch.chamadas[0].url, /[?&]instanceName=dino-1/);
+  });
+});
+
 test('equipe respondeu pelo celular: a pausa é aplicada ANTES de entregar a mensagem do cliente', async () => {
   await comEnv(ENV, async () => {
     const ordem = [];

@@ -225,11 +225,11 @@ export async function lojaDoCanal(empresaId, executor = db) {
 }
 
 /** Envia o resumo para os telefones. Devolve { enviados, falhas }. */
-export async function enviarResumo({ texto, telefones }, enviar = enviarMensagem) {
+export async function enviarResumo({ texto, telefones, instance }, enviar = enviarMensagem) {
   let enviados = 0;
   const falhas = [];
   for (const telefone of telefones) {
-    const r = await enviar({}, telefone, texto).catch((error) => ({ ok: false, error: String(error?.message || error) }));
+    const r = await enviar(instance ? { whatsapp_instance: instance } : {}, telefone, texto).catch((error) => ({ ok: false, error: String(error?.message || error) }));
     if (r?.ok) enviados += 1; else falhas.push(`***${telefone.slice(-4)}`);
   }
   return { enviados, falhas };
@@ -244,6 +244,14 @@ export async function tickResumoDiario({ agora = Date.now(), enviar = enviarMens
   if (!forcar && !cfg.ativo) return { skipped: 'desligado' };
   if (!cfg.telefones.length) return { skipped: 'sem_destinatario' };
   if (!/^[0-9a-f-]{36}$/i.test(cfg.empresaId)) return { skipped: 'sem_empresa' };
+  let instance = '';
+  if (String(process.env.WHATSAPP_PROVIDER || '').toLowerCase() === 'chatbot_backend' && String(process.env.CHATBOT_BACKEND_MODE || '').toLowerCase() === 'instancias') {
+    if (cfg.empresaId !== String(process.env.CHATBOT_BACKEND_EMPRESA_ID || '').trim()) return { skipped: 'instance_scope_mismatch' };
+    const expected = String(process.env.CHATBOT_BACKEND_INSTANCE || '').trim().toLowerCase();
+    const canal = await executor.queryRead(`SELECT configuracao->>'instance' AS instance FROM canais_integracao WHERE empresa_id=$1 AND provedor='whatsapp' AND status='ativo' ORDER BY data_atualizacao DESC LIMIT 1`, [cfg.empresaId]);
+    instance = String(canal.rows[0]?.instance || '').toLowerCase();
+    if (!instance || instance !== expected) return { skipped: 'instance_scope_mismatch' };
+  }
   if (!forcar && horaLocal(agora) < cfg.hora) return { skipped: 'antes_da_hora' };
   const dia = diaLocal(agora);
   const reserva = await executor.query(
@@ -259,7 +267,7 @@ export async function tickResumoDiario({ agora = Date.now(), enviar = enviarMens
   try {
     const lojaId = cfg.lojaId || await lojaDoCanal(cfg.empresaId, executor);
     const resumo = await montarResumoDiario({ empresaId: cfg.empresaId, lojaId, dia }, executor);
-    const resultado = await enviarResumo({ texto: resumo.texto, telefones: cfg.telefones }, enviar);
+    const resultado = await enviarResumo({ texto: resumo.texto, telefones: cfg.telefones, instance }, enviar);
     const status = resultado.enviados > 0 ? 'enviado' : 'falha';
     await executor.query(
       `UPDATE dino_resumo_diario_envios
