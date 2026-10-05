@@ -328,3 +328,16 @@ test('segredo do webhook só pode vir de variável própria de webhook (nunca JW
     );
   }
 });
+
+
+test('pergunta de personalização no primeiro contato: uma vez e nunca com ação pendente', async () => {
+  const { shouldAskPersonalization } = await import('./whatsapp-ai.js');
+  const policy = { personalizationEnabled: true };
+  const consent = { personalization: false };
+  assert.equal(shouldAskPersonalization({ policy, consent, session: {} }), true);
+  assert.equal(shouldAskPersonalization({ policy: {}, consent, session: {} }), false, 'unidade sem personalização não pergunta');
+  assert.equal(shouldAskPersonalization({ policy, consent: { personalization: true }, session: {} }), false);
+  assert.equal(shouldAskPersonalization({ policy, consent, session: { personalization_prompted_at: new Date() } }), false);
+  assert.equal(shouldAskPersonalization({ policy, consent, session: { estado: { personalizacaoRespondida: true } } }), false, 'quem respondeu NÃO não é perguntado de novo');
+  assert.equal(shouldAskPersonalization({ policy, consent, session: {}, pendingAction: true }), false);
+});

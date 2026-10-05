@@ -72,12 +72,18 @@ export function whatsappAiPolicy(channel = {}) {
   };
 }
 
+// Pergunta de autorização feita no primeiro contato. O texto serve também de marcador:
+// "sim"/"não" curtos só valem como resposta quando a ÚLTIMA mensagem do atendente foi esta.
+export const PERSONALIZATION_QUESTION = 'Para te atender cada vez melhor, posso guardar suas preferências (serviços, profissional e horários de costume) e usar nosso histórico nas próximas conversas? Responda SIM para autorizar ou NÃO. Você pode mudar quando quiser.';
+
 export function personalizationConsentIntent(text, { prompted = false } = {}) {
   const value = plain(text).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
   const grant = new Set(['sim personalizar', 'pode personalizar', 'autorizo personalizacao', 'sim pode usar meu historico']);
   const revoke = new Set(['nao personalizar', 'nao personalize', 'revogar personalizacao', 'esqueca minhas preferencias', 'esquecer minhas preferencias']);
-  if (grant.has(value)) return 'grant';
-  if (revoke.has(value) || (prompted && ['nao', 'não'].includes(value))) return 'revoke';
+  const shortGrant = new Set(['sim', 's', 'pode', 'pode sim', 'sim pode', 'autorizo', 'sim autorizo', 'aceito', 'sim aceito', 'claro', 'claro que sim', 'pode guardar', 'sim pode guardar']);
+  const shortRevoke = new Set(['nao', 'n', 'nao autorizo', 'nao obrigado', 'nao obrigada', 'prefiro nao', 'nao quero']);
+  if (grant.has(value) || (prompted && shortGrant.has(value))) return 'grant';
+  if (revoke.has(value) || (prompted && shortRevoke.has(value))) return 'revoke';
   return null;
 }
 

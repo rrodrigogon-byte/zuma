@@ -19,6 +19,7 @@ import {
 } from './barbershop-agenda.js';
 import { clubeParaTelefone, entrarListaEspera, planoDoTelefone, sugestaoPosServico } from '../dino-captacao-kytto.js';
 import { saldoCashback } from '../dino-cobranca-kytto.js';
+import * as barbeariaErp from '../barbearia-erp-kytto.js';
 import {
   ensureWhatsappLead,
   getWhatsappLeadProfile,
@@ -88,7 +89,7 @@ function capabilityAllows(name, capabilities = {}) {
   if (name === 'solicitar_humano') return capabilities.humanHandoff !== false;
   if (name === 'captar_cliente' || name === 'consultar_perfil_cliente') return capabilities.captureLeads !== false;
   if (name.includes('promoc') || name === 'listar_promocoes_ativas' || name === 'atualizar_consentimento_marketing') return capabilities.sendPromotions === true;
-  if (name === 'consultar_meu_plano' || name === 'avaliar_clube' || name === 'consultar_meu_cashback') return capabilities.manageAppointments !== false;
+  if (name === 'consultar_meu_plano' || name === 'avaliar_clube' || name === 'consultar_meu_cashback' || name === 'listar_planos') return capabilities.manageAppointments !== false;
   if (name === 'sugerir_produto_pos_servico') return capabilities.operateStore !== false;
   if (name.includes('agendamento') || name.includes('remarcacao') || name.includes('cancelamento') || name === 'listar_servicos' || name === 'listar_profissionais' || name === 'consultar_disponibilidade' || name === 'consultar_meus_agendamentos' || name === 'sugerir_proximos_horarios' || name === 'entrar_lista_espera' || name === 'confirmar_presenca' || name === 'avisar_atraso') return capabilities.manageAppointments !== false;
   if (name.includes('pedido') || name === 'buscar_produtos' || name === 'consultar_status_pedido') return capabilities.operateStore !== false;
@@ -707,6 +708,28 @@ async function toolMyPlan(context) {
   return { ok: true, assinante: true, plano: sanitizeToolData(plano), instrucao: 'Informe o saldo e a validade com clareza. Não fale de cobrança nem cobre pelo WhatsApp; pagamento é com a equipe.' };
 }
 
+/** Catálogo público dos planos/clubes ativos (nome, preço, ciclo, sessões e serviços incluídos). */
+async function toolPlans(context) {
+  const scope = await barbeariaScope(context);
+  const servicos = new Map(barbeariaErp.listarServicos(scope.empresaId, { incluirInativos: true }).map((item) => [item.id, item.nome]));
+  const planos = barbeariaErp.listarPlanos(scope.empresaId).slice(0, 12).map((plano) => ({
+    nome: plano.nome,
+    descricao: plano.descricao || '',
+    preco: Number(plano.preco || 0),
+    ciclo: plano.ciclo,
+    sessoesIncluidas: plano.sessoesIncluidas,
+    validadeDias: plano.validadeDias,
+    servicosIncluidos: (plano.servicosIds || []).map((id) => servicos.get(id)).filter(Boolean),
+  }));
+  if (!planos.length) return { ok: true, planos: [], instrucao: 'A unidade não tem planos ativos. Não invente planos nem valores.' };
+  return {
+    ok: true,
+    dataClassification: 'untrusted_business_data',
+    planos: sanitizeToolData(planos),
+    instrucao: 'Responda com os planos reais (nome, valor, ciclo e o que incluem), no máximo 4 por mensagem, priorizando o que o cliente pediu (ex.: "VIP" → os mais completos/premium). A adesão e o pagamento são feitos com a equipe na unidade; ofereça encaminhar se ele quiser assinar.',
+  };
+}
+
 async function toolMyCashback(context) {
   const scope = await barbeariaScope(context);
   const cashback = saldoCashback(scope.empresaId, scope.phone);
@@ -843,6 +866,7 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'preparar_cancelamento', description: 'Prepara o cancelamento de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' } }, required: ['appointmentId'] } },
   { name: 'preparar_pedido', description: 'Prepara um pedido de retirada para confirmação. Não cria o pedido.', parameters: { type: 'OBJECT', properties: { customerName: { type: 'STRING' }, items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { variantId: { type: 'STRING' }, quantity: { type: 'INTEGER' } }, required: ['variantId', 'quantity'] } } }, required: ['customerName', 'items'] } },
   { name: 'consultar_meu_plano', description: 'Mostra o plano/clube do próprio contato: sessões usadas e restantes no ciclo, fim do ciclo e serviços incluídos. Use quando o cliente perguntar do plano dele.', parameters: { type: 'OBJECT', properties: {} } },
+  { name: 'listar_planos', description: 'Lista os planos/clubes de assinatura ATIVOS da unidade com valor, ciclo, sessões e serviços incluídos. Use sempre que o cliente perguntar quais planos existem, valores, "plano VIP", clube ou mensalidade.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'consultar_meu_cashback', description: 'Mostra o saldo de cashback do próprio contato e quando vence. Use quando o cliente perguntar do cashback ou do saldo dele.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'avaliar_clube', description: 'Avalia se o clube/plano mensal compensa para o contato pela frequência de visitas. Só use se o cliente perguntou de plano/clube ou depois de propor_oportunidade liberar a categoria "clube". Nunca cite gasto do cliente.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'sugerir_produto_pos_servico', description: 'Busca até 3 produtos publicados ligados ao último serviço do contato (ex.: pomada após corte, óleo após barba). Só use se o cliente pediu indicação de produto ou depois de propor_oportunidade liberar a categoria "cuidados pos-servico".', parameters: { type: 'OBJECT', properties: {} } },
@@ -872,6 +896,7 @@ const TOOL_MAP = {
   preparar_cancelamento: toolPrepareCancellation,
   preparar_pedido: toolPrepareOrder,
   consultar_meu_plano: toolMyPlan,
+  listar_planos: toolPlans,
   consultar_meu_cashback: toolMyCashback,
   avaliar_clube: toolClubFit,
   sugerir_produto_pos_servico: toolPostServiceProduct,

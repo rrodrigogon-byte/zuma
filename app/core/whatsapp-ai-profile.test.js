@@ -46,6 +46,10 @@ test('consentimento de personalização exige frase explícita e permite revoga�
   assert.equal(personalizationConsentIntent('não personalize'), 'revoke');
   assert.equal(personalizationConsentIntent('sim'), null);
   assert.equal(personalizationConsentIntent('não', { prompted: true }), 'revoke');
+  assert.equal(personalizationConsentIntent('Sim!', { prompted: true }), 'grant', 'sim curto vale logo após a pergunta');
+  assert.equal(personalizationConsentIntent('pode sim', { prompted: true }), 'grant');
+  assert.equal(personalizationConsentIntent('pode sim'), null, 'sem a pergunta, sim curto não autoriza nada');
+  assert.equal(personalizationConsentIntent('prefiro não', { prompted: true }), 'revoke');
 });
 
 test('opportunityGate exige consentimentos, relevância, limite e cooldown', () => {
