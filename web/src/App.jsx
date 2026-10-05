@@ -62,6 +62,7 @@ function CheckoutEntry() {
 
 const Login      = lazy(() => import('./pages/Login'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
+const AcceptOperationalInvite = lazy(() => import('./pages/AcceptOperationalInvite'))
 const PDV        = lazy(() => import('./pages/PDV'))
 const KDS        = lazy(() => import('./pages/KDS'))
 const Portaria   = lazy(() => import('./pages/Portaria'))
@@ -207,6 +208,7 @@ export default function App() {
         {/* Auth */}
         <Route path="/login" element={<Layout noSidebar><Login /></Layout>} />
         <Route path="/redefinir-senha" element={<ResetPassword />} />
+        <Route path="/aceitar-convite-dino" element={<AcceptOperationalInvite />} />
 
         {/* Operacional (staff) — com aliases /admin/* para URLs amigáveis */}
         <Route path="/pdv"            element={<Protected need="staff"><Layout><PDV /></Layout></Protected>} />

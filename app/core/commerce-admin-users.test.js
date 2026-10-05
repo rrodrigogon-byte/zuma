@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createMembership, updateMembership } from './commerce-admin-users.js';
+import { createMembership, listMembershipCandidates, updateMembership } from './commerce-admin-users.js';
 
 const empresaId = '11111111-1111-4111-8111-111111111111';
 const actorId = '22222222-2222-4222-8222-222222222222';
@@ -50,9 +50,9 @@ test('papel de outro tenant é rejeitado antes de DML', async () => {
   await assert.rejects(() => createMembership(trx, context, { usuarioId: targetId, roleId }), error => error.code === 'PERMISSION_DENIED');
 });
 
-test('último tenant_owner ativo não pode ser desativado', async () => {
+test('último tenant_owner ativo não pode ser desativado quando nenhum outro permanece', async () => {
   const current = { id: membershipId, role_id: roleId, role_codigo: 'tenant_owner', ativo: true, loja_id: null };
-  const trx = trxFor({ actor: 'tenant_owner', role: 'tenant_owner', current, owners: 1 });
+  const trx = trxFor({ actor: 'tenant_owner', role: 'tenant_owner', current, owners: 0 });
   await assert.rejects(() => updateMembership(trx, context, membershipId, { ativo: false }), error => error.code === 'LAST_TENANT_OWNER_REQUIRED');
   assert.equal(trx.calls.some(sql => sql.startsWith('UPDATE commerce_memberships')), false);
 });
@@ -66,9 +66,9 @@ test('tenant_owner não altera ou desativa outro tenant_owner do mesmo nível', 
   }
 });
 
-test('platform_owner continua autorizado a alterar tenant_owner sem remover o último owner', async () => {
+test('platform_owner pode desativar tenant_owner quando um outro permanece', async () => {
   const current = { id: membershipId, usuario_id: targetId, role_id: roleId, role_codigo: 'tenant_owner', ativo: true, loja_id: null, mfa_obrigatorio: false };
-  const trx = trxFor({ actor: 'platform_owner', role: 'tenant_owner', current, owners: 2 });
+  const trx = trxFor({ actor: 'platform_owner', role: 'tenant_owner', current, owners: 1 });
   const result = await updateMembership(trx, context, membershipId, { ativo: false });
   assert.equal(result.id, membershipId);
   assert.equal(trx.calls.some(sql => sql.startsWith('UPDATE commerce_memberships')), true);
@@ -117,4 +117,18 @@ test('store_admin não altera membership de outra loja', async () => {
     error => error.code === 'PERMISSION_DENIED',
   );
   assert.equal(trx.calls.some(sql => sql.startsWith('UPDATE commerce_memberships')), false);
+});
+
+test('busca de candidatos permite vincular usuário existente também a outra unidade sem sair do tenant', async () => {
+  let sqlExecuted = '';
+  const result = await listMembershipCandidates({
+    async query(sql, values) {
+      sqlExecuted = sql;
+      assert.deepEqual(values, [empresaId, '%Pessoa%']);
+      return { rows: [{ id: targetId, nome: 'Pessoa Sintética', email: 'synthetic@example.invalid' }] };
+    },
+  }, context, 'Pessoa');
+  assert.deepEqual(result.items.map(item => item.id), [targetId]);
+  assert.match(sqlExecuted, /u\.empresa_id = \$1 AND u\.ativo = true/);
+  assert.doesNotMatch(sqlExecuted, /NOT EXISTS.*commerce_memberships/s);
 });

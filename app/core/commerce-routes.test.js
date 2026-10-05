@@ -75,7 +75,8 @@ test('prévia administrativa rejeita mídia de outra vitrine antes do stream, in
     const queries = [];
     db.query = async (sql, params = []) => {
       queries.push({ sql, params });
-      if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
+      if (sql.includes('FROM commerce_operational_invites')) return { rows: [] };
+    if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
       if (sql.includes('COUNT(*)::int AS grants')) return { rows: [{ grants: 1, corporate_access: corporate }] };
       if (sql.includes('FROM commerce_storefronts')) return { rows: [{ id: storefrontId, empresa_id: empresaId, loja_id: lojaId, status: 'active' }] };
       if (sql.includes('FROM commerce_product_media')) return { rows: [{ id: mediaId, product_id: productId, storage_key: 'commerce-local/fake', mime_type: 'image/jpeg' }] };
@@ -255,6 +256,7 @@ test('catálogo com empresa, loja, storefront e local não envia parâmetro solt
   const calls = [];
   const response = await invoke(catalogProductsHandler(), async (sql, params = []) => {
     calls.push({ sql, params });
+    if (sql.includes('FROM commerce_operational_invites')) return { rows: [] };
     if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
     if (sql.includes('COUNT(*)::int AS grants')) return { rows: [{ grants: 1, corporate_access: false }] };
     if (sql.includes('SELECT id, loja_id FROM commerce_storefronts')) return { rows: [{ id: storefrontId, loja_id: lojaId }] };
@@ -280,6 +282,7 @@ test('catálogo rejeita local de outra loja antes de consultar produtos', async 
   const calls = [];
   const response = await invoke(catalogProductsHandler(), async (sql, params = []) => {
     calls.push({ sql, params });
+    if (sql.includes('FROM commerce_operational_invites')) return { rows: [] };
     if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
     if (sql.includes('COUNT(*)::int AS grants')) return { rows: [{ grants: 1, corporate_access: false }] };
     if (sql.includes('SELECT id, loja_id FROM commerce_storefronts')) return { rows: [{ id: storefrontId, loja_id: lojaId }] };
@@ -300,6 +303,7 @@ test('upload de mídia retorna replay idempotente tenant-scoped sem acessar o bu
   const calls = [];
   db.query = async (sql, params) => {
     calls.push({ sql, params });
+    if (sql.includes('FROM commerce_operational_invites')) return { rows: [] };
     if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
     if (sql.includes('COUNT(*)::int AS grants')) return { rows: [{ grants: 1, corporate_access: false }] };
     if (sql.includes('SELECT id, loja_id FROM commerce_storefronts')) return { rows: [{ id: storefrontId, loja_id: lojaId }] };
@@ -337,6 +341,7 @@ test('dois uploads concorrentes com a mesma chave produzem uma mídia e preserva
   let queue = Promise.resolve();
   process.env.COMMERCE_MEDIA_DIR = mediaRoot;
   db.query = async sql => {
+    if (sql.includes('FROM commerce_operational_invites')) return { rows: [] };
     if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
     if (sql.includes('COUNT(*)::int AS grants')) return { rows: [{ grants: 1, corporate_access: false }] };
     if (sql.includes('SELECT id, loja_id FROM commerce_storefronts')) return { rows: [{ id: storefrontId, loja_id: lojaId }] };
@@ -401,6 +406,7 @@ test('cleanup de upload falho aguarda o concorrente e não apaga blob que ganhou
   let queue = Promise.resolve();
   process.env.COMMERCE_MEDIA_DIR = mediaRoot;
   db.query = async sql => {
+    if (sql.includes('FROM commerce_operational_invites')) return { rows: [] };
     if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
     if (sql.includes('COUNT(*)::int AS grants')) return { rows: [{ grants: 1, corporate_access: false }] };
     if (sql.includes('SELECT id, loja_id FROM commerce_storefronts')) return { rows: [{ id: storefrontId, loja_id: lojaId }] };
@@ -461,6 +467,7 @@ test('upload de mídia rejeita produto arquivado antes de acessar mídia ou buck
   const calls = [];
   db.query = async (sql, params) => {
     calls.push({ sql, params });
+    if (sql.includes('FROM commerce_operational_invites')) return { rows: [] };
     if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
     if (sql.includes('COUNT(*)::int AS grants')) return { rows: [{ grants: 1, corporate_access: false }] };
     if (sql.includes('SELECT id, loja_id FROM commerce_storefronts')) return { rows: [{ id: storefrontId, loja_id: lojaId }] };
@@ -818,6 +825,7 @@ test('endpoint autorizado retorna apenas contrato público do provedor', async (
   let count = 0;
   const response = await invoke(providerHandler(), async sql => {
     count += 1;
+    if (sql.includes('FROM commerce_operational_invites')) return { rows: [] };
     if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
     if (sql.includes('COUNT(*)::int AS grants')) return { rows: [{ grants: 1, corporate_access: false }] };
     return { rows: [] };
@@ -833,6 +841,7 @@ test('auditoria aplica escopo de loja e paginação sem vazar payload sensível'
   const response = await invoke(auditHandler(), async (sql, params) => {
     count += 1;
     calls.push({ sql, params });
+    if (sql.includes('FROM commerce_operational_invites')) return { rows: [] };
     if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
     if (sql.includes('COUNT(*)::int AS grants')) return { rows: [{ grants: 1, corporate_access: false }] };
     if (sql.includes('COUNT(*)')) return { rows: [{ total: 1 }] };
@@ -857,6 +866,7 @@ test('painel de saúde retorna contagens tenant-aware sem payloads externos', as
   let count = 0;
   const response = await invoke(healthHandler(), async sql => {
     count += 1;
+    if (sql.includes('FROM commerce_operational_invites')) return { rows: [] };
     if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
     if (sql.includes('COUNT(*)::int AS grants')) return { rows: [{ grants: 1, corporate_access: false }] };
     if (sql.includes('SELECT id, loja_id FROM commerce_storefronts')) return { rows: [{ id: storefrontId, loja_id: lojaId }] };

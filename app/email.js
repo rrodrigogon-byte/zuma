@@ -53,6 +53,27 @@ export const mail = {
   ativo,
   enviar,
 
+  // Convites de acesso administrativo nunca usam o modo de simulação legado.
+  // Um 2xx ambíguo não confirma entrega e exige revisão humana (sem reenviar).
+  async conviteOperacional({ to, nome, url }) {
+    if (!KEY || !process.env.EMAIL_FROM || !to || !url) return { ok: false, code: 'MAIL_NOT_CONFIGURED' }
+    const subject = 'Kytto · Convite para administração operacional da Dino'
+    const html = `<p>Olá, ${escapeHtml(nome)}.</p><p>Você recebeu um convite para administrar as operações somente da Dino, sem gestão de usuários no Kytto.</p><p><a href="${escapeHtml(url)}">Definir minha senha e aceitar o convite</a></p><p>O link é pessoal, de uso único e expira em 24 horas. Se você não esperava este convite, ignore esta mensagem.</p>`
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KEY}` },
+        body: JSON.stringify({ from: process.env.EMAIL_FROM, to: [to], subject, html }),
+        signal: AbortSignal.timeout(10000),
+      })
+      if (!response.ok) return { ok: false, code: 'MAIL_REJECTED' }
+      const data = await response.json().catch(() => ({}))
+      return data?.id ? { ok: true } : { ok: false, code: 'MAIL_UNCERTAIN' }
+    } catch {
+      return { ok: false, code: 'MAIL_UNCERTAIN' }
+    }
+  },
+
   // Inscrição recebida (aguardando pagamento) — nominal ao inscrito
   async inscricaoRecebida(to, nome, categorias, total, prazoISO) {
     const cats = (Array.isArray(categorias) ? categorias : [categorias]).filter(Boolean)

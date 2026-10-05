@@ -24,6 +24,7 @@ import QRCode from 'qrcode';
 import { wpp } from './whatsapp.js';
 import * as modificadoresCombosKytto from './modificadores-combos-kytto.js';
 import { mail } from './email.js';
+import { acceptOperationalInvite, findOperationalByEmail, resolveOperationalById, issueOperationalInvite, isOperationalEmailReserved } from './core/commerce-operational-invites.js';
 import { emitir as nfceEmitir, cancelar as nfceCancelar, nfceConfigurado } from './nfce.js';
 import { createCommerceAdminRouter, createCommercePublicRateLimitGuard, createCommercePublicRouter, createCommerceWebhookRouter } from './core/commerce-routes.js';
 import { createWhatsappAiWebhookRouter } from './core/whatsapp-ai-routes.js';
@@ -190,7 +191,7 @@ const ROLES = ['admin','organizador','staff','atleta'];
 const STAFF = ['admin','organizador','staff']; // acesso ao sistema/painel
 const norm = s => String(s||'').trim().toLowerCase();
 const PLATFORM_ADMIN_EMAILS = new Set((process.env.PLATFORM_ADMIN_EMAILS || '').split(',').map(norm).filter(Boolean));
-const isPlatformAdminUser = user => Boolean(user?.platformAdmin === true || PLATFORM_ADMIN_EMAILS.has(norm(user?.email)));
+const isPlatformAdminUser = user => Boolean(user?.pgOperational !== true && (user?.platformAdmin === true || PLATFORM_ADMIN_EMAILS.has(norm(user?.email))));
 // E-mails de administração (plataforma e admin principal) não podem ser cadastrados por
 // registro público nem por administrador de empresa: o e-mail sozinho daria acesso global.
 const isReservedEmail = email => PLATFORM_ADMIN_EMAILS.has(norm(email)) || norm(email) === norm(process.env.ADMIN_USER || 'admin');
@@ -225,6 +226,11 @@ const publicUser = u => ({ id:u.id, nome:u.nome, email:u.email, role:u.role, tel
 async function commerceSessionFor(user) {
   if (process.env.COMMERCE_CORE_ENABLED !== '1' || !user?.email) return {};
   try {
+    const identities = await commerceDb.queryRead(
+      `SELECT id FROM usuarios WHERE lower(btrim(email)) = $1 AND ativo = true LIMIT 2`,
+      [norm(user.email)],
+    );
+    if (identities.rows.length > 1 && !isMainAdminUser(user) && !isPlatformAdminUser(user)) return {};
     const result = await commerceDb.query(
       `SELECT DISTINCT m.empresa_id, l.id AS loja_id, e.nome AS empresa_nome,
                        l.codigo AS loja_codigo, l.nome AS loja_nome, l.ativa AS loja_ativa,
@@ -238,6 +244,7 @@ async function commerceSessionFor(user) {
           AND (l.id = m.loja_id OR m.loja_id IS NULL)
           AND l.ativa = true
         WHERE lower(u.email) = $1 AND u.ativo = true AND m.ativo = true
+          AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)
         ORDER BY m.empresa_id, l.id NULLS FIRST`,
       [norm(user.email)],
     );
@@ -304,23 +311,59 @@ function auth(req,res,next){
   if(!token) return res.status(401).json({error:'sem token'});
   try { req.user = jwt.verify(token, JWT_SECRET); }
   catch(e){ return res.status(401).json({error:'token inválido'}); }
+  if (req.user.pgOperational === true) {
+    if (process.env.COMMERCE_CORE_ENABLED !== '1' || !req.user.id || !req.user.empresaId || req.user.lojaId || req.user.role !== 'organizador') {
+      return res.status(401).json({ error: 'sessão encerrada', code: 'SESSION_REVOKED' });
+    }
+    return resolveOperationalById({ userId: req.user.id, empresaId: req.user.empresaId }).then(owner => {
+      if (!owner || owner.email !== req.user.email) return res.status(401).json({ error: 'sessão encerrada', code: 'SESSION_REVOKED' });
+      req.user = { id: owner.id, nome: owner.nome, email: owner.email, role: 'organizador', empresaId: owner.empresaId, pgOperational: true, tenantBound: true, platformAdmin: false };
+      return next();
+    }).catch(() => res.status(503).json({ error: 'não foi possível confirmar a sessão', code: 'SCOPE_UNAVAILABLE' }));
+  }
   // Conta desativada ou excluída perde o acesso na hora, e mudança de papel vale já
   // (antes o token de 12 h continuava valendo com o papel antigo).
   const conta = (db().usuarios || []).find(x => x.id === req.user.id);
   if (!conta || conta.ativo === false) return res.status(401).json({ error:'sessão encerrada; entre novamente', code:'SESSION_REVOKED' });
   req.user.role = conta.role;
   req.user.platformAdmin = isPlatformAdminUser(conta);
+  req.user.mainAdmin = isMainAdminUser(conta);
   // O escopo de empresa é decidido no servidor, não só pelo token: um token sem
   // empresaId só é global para o admin principal e para administradores da plataforma.
   // Quem tem vínculo ativo com alguma empresa fica preso a ela mesmo que tenha entrado
   // por /api/auth/login ou tenha vínculo com mais de uma empresa.
   // Só equipe (quem entra no painel) precisa disso; atleta e cliente do site não dependem do banco.
-  if (req.user.empresaId || !STAFF.includes(req.user.role) || isPlatformAdminUser(req.user) || isMainAdminUser(req.user) || process.env.COMMERCE_CORE_ENABLED !== '1') return next();
-  tenantBindingFor(req.user.email).then(binding => {
-    if (binding) {
+  if (!STAFF.includes(req.user.role) || isPlatformAdminUser(req.user) || isMainAdminUser(req.user) || process.env.COMMERCE_CORE_ENABLED !== '1') return next();
+  tenantBindingFor(req.user.email).then(async binding => {
+    if (binding?.identityAmbiguous) {
+      res.status(401).json({ error: 'sessão encerrada', code: 'SESSION_REVOKED' });
+      return false;
+    }
+    if (binding?.hasMembership) {
+      const chosenCompany = req.user.empresaId ? String(req.user.empresaId) : null;
+      const chosenStore = req.user.lojaId ? String(req.user.lojaId) : null;
+      if (!binding.active.length || (chosenCompany && !binding.active.some(row => row.empresaId === chosenCompany && (!chosenStore || !row.lojaId || row.lojaId === chosenStore)))) {
+        res.status(401).json({ error: 'sessão encerrada', code: 'SESSION_REVOKED' });
+        return false;
+      }
+      if (chosenStore) {
+        if (!chosenCompany || !/^[0-9a-f-]{36}$/i.test(chosenStore)) {
+          res.status(401).json({ error: 'sessão encerrada', code: 'SESSION_REVOKED' });
+          return false;
+        }
+        const store = await commerceDb.queryRead(`SELECT 1 FROM lojas WHERE empresa_id = $1 AND id = $2 AND ativa = true LIMIT 1`, [chosenCompany, chosenStore]);
+        if (!store.rows[0]) {
+          res.status(401).json({ error: 'sessão encerrada', code: 'SESSION_REVOKED' });
+          return false;
+        }
+      }
       req.user.tenantBound = true;
       if (binding.empresaId) req.user.empresaId = binding.empresaId;
       if (binding.lojaId && !req.user.lojaId) req.user.lojaId = binding.lojaId;
+    }
+    if (conta.empresaId && req.user.empresaId && String(conta.empresaId) !== String(req.user.empresaId)) {
+      res.status(401).json({ error: 'sessão encerrada', code: 'SESSION_REVOKED' });
+      return false;
     }
     return true;
   }, () => {
@@ -328,29 +371,32 @@ function auth(req,res,next){
     return false;
   }).then(ok => { if (ok) next(); }).catch(next);
 }
-const isMainAdminUser = user => norm(user?.email) === norm(process.env.ADMIN_USER || 'admin');
-// Cache curto (60 s) do vínculo de empresa por e-mail. Erro de banco não vira acesso global.
-const tenantBindingCache = new Map();
+const isMainAdminUser = user => user?.pgOperational !== true && norm(user?.email) === norm(process.env.ADMIN_USER || 'admin');
+// Não manter cache: revogação ou vencimento de membership deve derrubar também
+// JWTs legados na próxima requisição, inclusive nas APIs da barbearia.
 async function tenantBindingFor(email) {
   const key = norm(email);
   if (!key) return null;
-  const hit = tenantBindingCache.get(key);
-  if (hit && hit.until > Date.now()) return hit.value;
   const result = await commerceDb.query(
-    `SELECT DISTINCT m.empresa_id, m.loja_id
+    `SELECT DISTINCT u.id AS usuario_id, m.empresa_id, m.loja_id, m.ativo, u.ativo AS usuario_ativo, e.ativa AS empresa_ativa, l.ativa AS loja_ativa,
+            (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP) AS not_expired
        FROM commerce_memberships m
        JOIN usuarios u ON u.empresa_id = m.empresa_id AND u.id = m.usuario_id
-       JOIN empresas e ON e.id = m.empresa_id AND e.ativa = true
-      WHERE lower(u.email) = $1 AND u.ativo = true AND m.ativo = true`,
+       JOIN empresas e ON e.id = m.empresa_id
+       LEFT JOIN lojas l ON l.empresa_id = m.empresa_id AND l.id = m.loja_id
+      WHERE lower(u.email) = $1`,
     [key],
   );
   const rows = result.rows || [];
-  const empresas = [...new Set(rows.map(r => r.empresa_id).filter(Boolean))];
-  const lojas = [...new Set(rows.map(r => r.loja_id).filter(Boolean))];
-  const value = empresas.length ? { empresaId: empresas.length === 1 ? String(empresas[0]) : null, lojaId: empresas.length === 1 && lojas.length === 1 ? String(lojas[0]) : null } : null;
-  if (tenantBindingCache.size > 5000) tenantBindingCache.clear();
-  tenantBindingCache.set(key, { value, until: Date.now() + 60_000 });
-  return value;
+  const active = rows.filter(row => row.ativo === true && row.not_expired === true && row.usuario_ativo === true && row.empresa_ativa === true && (row.loja_id == null || row.loja_ativa === true))
+    .map(row => ({ empresaId: String(row.empresa_id), lojaId: row.loja_id ? String(row.loja_id) : null }));
+  const empresas = [...new Set(active.map(row => row.empresaId))];
+  const lojas = [...new Set(active.map(row => row.lojaId).filter(Boolean))];
+  return { hasMembership: rows.length > 0,
+    identityAmbiguous: new Set(rows.filter(row => row.usuario_ativo === true).map(row => String(row.usuario_id))).size > 1,
+    active,
+    empresaId: empresas.length === 1 ? empresas[0] : null,
+    lojaId: empresas.length === 1 && lojas.length === 1 ? lojas[0] : null };
 }
 const requireRole = (...roles)=> (req,res,next)=> (req.user && roles.includes(req.user.role)) ? next() : res.status(403).json({error:'sem permissão'});
 const requireStaff = (req,res,next)=> (req.user && STAFF.includes(req.user.role)) ? next() : res.status(403).json({error:'acesso restrito à organização'});
@@ -482,6 +528,52 @@ app.use('/api/admin/commerce', (req, res, next) => {
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
 const TENANT_ADMIN_MODULES = new Set(['barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos']);
+// Convites operacionais são uma transição de identidade, não cadastro JSON.
+// O token segue apenas no e-mail individual; nenhuma resposta HTTP ou auditoria o contém.
+app.post('/api/admin/operational-invites', auth, requireRole('admin'), async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (!isPlatformAdminUser(req.user) && !isMainAdminUser(req.user)) return res.status(403).json({ error: 'permissão insuficiente', code: 'PERMISSION_DENIED' });
+  if (process.env.COMMERCE_CORE_ENABLED !== '1' || process.env.OPERATIONAL_INVITES_ENABLED !== '1') return res.status(503).json({ error: 'convites indisponíveis', code: 'INVITES_DISABLED' });
+  if (!mail.ativo() || !process.env.EMAIL_FROM) return res.status(503).json({ error: 'canal de convite indisponível', code: 'MAIL_NOT_CONFIGURED' });
+  try {
+    const empresaId = String(req.body?.empresaId || '').trim();
+    const email = norm(req.body?.email);
+    const nome = String(req.body?.nome || '').trim();
+    if (!/^[0-9a-f-]{36}$/i.test(empresaId) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !nome || nome.length > 180 || req.body?.role !== 'store_admin') {
+      return res.status(400).json({ error: 'dados de convite inválidos', code: 'INVALID_INVITE' });
+    }
+    const dino = await commerceDb.queryRead(
+      `SELECT 1 FROM commerce_storefronts WHERE empresa_id = $1 AND codigo = 'dino-web' AND status = 'active' LIMIT 1`,
+      [empresaId],
+    );
+    if (!dino.rows[0]) return res.status(404).json({ error: 'empresa não encontrada', code: 'TENANT_NOT_FOUND' });
+    if (findUser(email) || isReservedEmail(email)) return res.status(409).json({ error: 'identidade já cadastrada', code: 'IDENTITY_ALREADY_EXISTS' });
+    const result = await issueOperationalInvite({ empresaId, email, nome, legacyEmailAvailable: true,
+      sendInvite: async ({ token }) => mail.conviteOperacional({ to: email, nome,
+        url: `https://kytto.com.br/aceitar-convite-dino#token=${encodeURIComponent(token)}` }),
+    });
+    if (!result?.ok) return res.status(503).json({ error: 'convite não confirmado; não tente reenviar automaticamente', code: 'INVITE_DELIVERY_UNCERTAIN' });
+    return res.status(202).json({ ok: true, status: 'sent' });
+  } catch (error) {
+    const conflict = ['23505', 'OPERATIONAL_EXISTS', 'INVITE_ALREADY_EXISTS'].includes(error?.code);
+    return res.status(conflict ? 409 : 503).json({ error: conflict ? 'identidade já cadastrada' : 'convite não confirmado', code: conflict ? 'IDENTITY_ALREADY_EXISTS' : 'INVITE_UNAVAILABLE' });
+  }
+});
+app.post('/api/auth/operational-invite/accept', publicLimit(6), async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (process.env.COMMERCE_CORE_ENABLED !== '1') return res.status(503).json({ error: 'convite indisponível' });
+  try {
+    const token = String(req.body?.token || '');
+    const password = req.body?.password;
+    if (!/^[a-zA-Z0-9_-]{32,128}$/.test(token) || typeof password !== 'string' || password.length < 12 || password.length > 128) {
+      return res.status(400).json({ error: 'convite inválido ou expirado', code: 'INVITE_INVALID' });
+    }
+    await acceptOperationalInvite({ token, password, legacyEmailAvailable: email => !findUser(email) && !isReservedEmail(email) });
+    return res.status(204).end();
+  } catch {
+    return res.status(409).json({ error: 'convite inválido, expirado ou já usado', code: 'INVITE_INVALID' });
+  }
+});
 // Trava global: tudo em /api/admin exige login de staff (exceto o próprio login)
 app.use('/api/admin', (req,res,next)=>{
   if(req.path==='/login') return next();
@@ -885,6 +977,23 @@ app.post('/api/admin/login', async (req,res)=>{
   const chave = 'adm:'+(req.ip||'')+':'+norm(user);
   if(!rateLimit(chave)) return res.status(429).json({error:'muitas tentativas. Tente novamente em alguns minutos.'});
   const u = findUser(user);
+  if (!u && process.env.COMMERCE_CORE_ENABLED === '1') {
+    try {
+      const owner = await findOperationalByEmail(user);
+      if (owner?.ativo && senhaConfere(String(senhaInformada || ''), owner.senhaHash)) {
+        if (isReservedEmail(owner.email)) return res.status(403).json({ error: 'acesso não autorizado' });
+        limparTentativas(chave);
+        const sessao = await commerceSessionFor(owner);
+        if (sessao.empresaId !== owner.empresaId || sessao.empresas_acessiveis?.length !== 1) {
+          return res.status(503).json({ error: 'escopo indisponível', code: 'SCOPE_UNAVAILABLE' });
+        }
+        const scoped = { id: owner.id, nome: owner.nome, email: owner.email, role: 'organizador', empresaId: owner.empresaId, pgOperational: true, platformAdmin: false };
+        return res.json({ token: jwt.sign(scoped, JWT_SECRET, { expiresIn: '12h' }), user: publicUser(scoped), role: 'organizador', sessao });
+      }
+    } catch {
+      return res.status(503).json({ error: 'acesso temporariamente indisponível', code: 'SCOPE_UNAVAILABLE' });
+    }
+  }
   if(!u || !u.ativo || !senhaConfere(String(senhaInformada || ''), u.senhaHash)) return res.status(401).json({error:'usuário ou senha inválidos', code:'INVALID_CREDENTIALS'});
   if(!STAFF.includes(u.role)) return res.status(403).json({error:'esta conta não tem acesso ao painel'});
   limparTentativas(chave);
@@ -896,10 +1005,14 @@ app.post('/api/admin/login', async (req,res)=>{
 });
 
 // ---- AUTH unificada (site + sistema) ----
-app.post('/api/auth/register', publicLimit(10), (req,res)=>{
+app.post('/api/auth/register', publicLimit(10), async (req,res)=>{
   const { nome, email, senha, telefone } = req.body || {};
   if(!nome || !email || !senha) return res.status(400).json({error:'nome, e-mail e senha são obrigatórios'});
   if(isReservedEmail(email)) return res.status(409).json({error:'já existe uma conta com este e-mail'});
+  if (process.env.COMMERCE_CORE_ENABLED === '1') {
+    try { if (await isOperationalEmailReserved(email)) return res.status(409).json({ error: 'já existe uma conta com este e-mail' }); }
+    catch { return res.status(503).json({ error: 'cadastro temporariamente indisponível' }); }
+  }
   if((senha||'').length < 6) return res.status(400).json({error:'a senha deve ter ao menos 6 caracteres'});
   if(findUser(email)) return res.status(409).json({error:'já existe uma conta com este e-mail'});
   const u = { id: nextId(), nome, email: norm(email), senhaHash: bcrypt.hashSync(senha,10),
@@ -918,6 +1031,7 @@ app.post('/api/auth/login', (req,res)=>{
   res.json({ token: tokenFor(u), user: publicUser(u) });
 });
 app.get('/api/auth/me', auth, (req,res)=>{
+  if (req.user.pgOperational === true) return res.json(publicUser(req.user));
   const u = db().usuarios.find(x=>x.id===req.user.id);
   if(!u) return res.status(404).json({error:'usuário não encontrado'});
   res.json(publicUser(u));
@@ -944,6 +1058,9 @@ app.get('/api/admin/usuarios', auth, requireStaff, (req,res)=> res.json((db().us
 // distintas; nunca editar uma conta Commerce pelo editor legado.
 app.get('/api/admin/usuarios-diretorio', auth, requireRole('admin', 'organizador'), async (req, res) => {
   res.set('Cache-Control', 'private, no-store');
+  if (req.user.pgOperational === true) {
+    return res.status(403).json({ error: 'Sem permissão para administrar usuários.', code: 'PERMISSION_DENIED' });
+  }
   const actor = (db().usuarios || []).find(user => user.id === req.user.id && user.ativo !== false);
   if (!actor) return res.status(401).json({ error: 'sessão encerrada', code: 'SESSION_REVOKED' });
   if (norm(actor.email) !== norm(req.user.email)) return res.status(401).json({ error: 'sessão desatualizada', code: 'SESSION_REVOKED' });
@@ -1003,11 +1120,16 @@ app.get('/api/admin/usuarios-diretorio', auth, requireRole('admin', 'organizador
     return res.status(503).json({ error: 'Diretório de usuários temporariamente indisponível.', code: 'USER_DIRECTORY_UNAVAILABLE' });
   }
 });
-app.post('/api/admin/usuarios', auth, requireRole('admin','organizador'), (req,res)=>{
+app.post('/api/admin/usuarios', auth, requireRole('admin','organizador'), async (req,res)=>{
+  if (req.user.pgOperational === true) return res.status(410).json({ error: 'Use gestão Commerce escopada.', code: 'LEGACY_USER_WRITES_DISABLED' });
   const { nome, email, senha, role, telefone } = req.body || {};
   if(!nome || !email || !senha) return res.status(400).json({error:'nome, e-mail e senha obrigatórios'});
   if(!ROLES.includes(role)) return res.status(400).json({error:'papel inválido'});
   if(findUser(email)) return res.status(409).json({error:'e-mail já cadastrado'});
+  if (process.env.COMMERCE_CORE_ENABLED === '1') {
+    try { if (await isOperationalEmailReserved(email)) return res.status(409).json({ error: 'e-mail já cadastrado' }); }
+    catch { return res.status(503).json({ error: 'cadastro temporariamente indisponível' }); }
+  }
   if(isReservedEmail(email) && !isPlatformAdminUser(req.user)) return res.status(409).json({error:'e-mail reservado à administração da plataforma'});
   if(role === 'admin' && req.user.role !== 'admin') return res.status(403).json({error:'só um administrador cria outro administrador'});
   if(!isGlobalActor(req.user) && !req.user.empresaId) return res.status(409).json({error:'escolha a empresa antes de criar usuários', code:'EMPRESA_REQUIRED'});
@@ -1017,6 +1139,7 @@ app.post('/api/admin/usuarios', auth, requireRole('admin','organizador'), (req,r
   db().usuarios.push(u); save(); res.json(publicUser(u));
 });
 app.patch('/api/admin/usuarios/:id', auth, requireRole('admin','organizador'), (req,res)=>{
+  if (req.user.pgOperational === true) return res.status(410).json({ error: 'Use gestão Commerce escopada.', code: 'LEGACY_USER_WRITES_DISABLED' });
   const u = usuarioGerenciavel(req,res); if(!u) return;
   const b = req.body||{};
   if(b.nome) u.nome=b.nome;
@@ -1031,6 +1154,7 @@ app.patch('/api/admin/usuarios/:id', auth, requireRole('admin','organizador'), (
   save(); res.json(publicUser(u));
 });
 app.post('/api/admin/usuarios/:id/reset-senha', auth, requireRole('admin','organizador'), (req,res)=>{
+  if (req.user.pgOperational === true) return res.status(410).json({ error: 'Reset legado indisponível.', code: 'LEGACY_USER_WRITES_DISABLED' });
   const u = usuarioGerenciavel(req,res); if(!u) return;
   const nova=crypto.randomBytes(6).toString('base64url'); // 8 chars, RNG criptográfico
   u.senhaHash=bcrypt.hashSync(nova,10); save();
@@ -1038,6 +1162,7 @@ app.post('/api/admin/usuarios/:id/reset-senha', auth, requireRole('admin','organ
   res.json({ ok:true, senha:nova, aviso:'Compartilhe esta senha temporária com o usuário — ela não será exibida novamente.' });
 });
 app.delete('/api/admin/usuarios/:id', auth, requireRole('admin'), (req,res)=>{
+  if (req.user.pgOperational === true) return res.status(410).json({ error: 'Use gestão Commerce escopada.', code: 'LEGACY_USER_WRITES_DISABLED' });
   const d=db(); const u = usuarioGerenciavel(req,res); if(!u) return;
   if(u.id == req.user.id) return res.status(400).json({error:'não é possível excluir a própria conta'});
   if(u && u.email===norm(process.env.ADMIN_USER||'admin')) return res.status(400).json({error:'não é possível excluir o admin principal'});

@@ -12,7 +12,7 @@ import { applyPromotionToOrder, createPromotion, createPromotionCode, createProm
 import { createStorefront, listStorefronts, updateStorefront } from './commerce-storefronts.js';
 import { resolveStorefrontAlias } from './commerce-tenants.js';
 import { executeCatalogImport, previewCatalogImport } from './commerce-catalog-import.js';
-import { createMembership, listMemberships, listRoles, updateMembership } from './commerce-admin-users.js';
+import { createMembership, listMembershipCandidates, listMemberships, listRoles, updateMembership } from './commerce-admin-users.js';
 import { createCustomer, createCustomerAddress, deleteCustomerAddress, getCustomer, listCustomerAddresses, updateCustomer, updateCustomerAddress } from './commerce-customers.js';
 import { createCreditAccount, listCreditAccounts, listCreditEntries, updateCreditAccount } from './commerce-credit.js';
 import { createStorefrontDomain, listStorefrontDomains, setPrimaryStorefrontDomain, verifyStorefrontDomain } from './commerce-domains.js';
@@ -378,6 +378,7 @@ function jsonError(res, error) {
     INVALID_ORDER_TRANSITION: 409,
     TENANT_CONTEXT_REQUIRED: 401,
     TENANT_SELECTION_REQUIRED: 400,
+    IDENTITY_AMBIGUOUS: 403,
     STORE_SELECTION_REQUIRED: 400,
     PERMISSION_DENIED: 403,
     CATEGORY_REQUIRED: 400,
@@ -526,6 +527,7 @@ function jsonError(res, error) {
     USER_NOT_FOUND: 404,
     ROLE_NOT_FOUND: 404,
     MEMBERSHIP_NOT_FOUND: 404,
+    MEMBERSHIP_EXPIRATION_INVALID: 400,
     STORE_SCOPE_MISMATCH: 409,
     ORDER_IDEMPOTENCY_REQUIRED: 400,
     ORDER_IDEMPOTENCY_IN_PROGRESS: 409,
@@ -602,6 +604,7 @@ async function requirePermission(req, permission) {
        JOIN commerce_role_permissions rp ON rp.role_id = r.id
        JOIN commerce_permissions p ON p.id = rp.permission_id AND p.codigo = $2
       WHERE m.empresa_id = $1 AND m.usuario_id = $3 AND m.ativo = true
+        AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)
         AND (m.loja_id IS NULL OR m.loja_id = $4)
       `,
     [context.empresaId, permission, context.usuarioId, context.lojaId],
@@ -1093,6 +1096,12 @@ export function createCommerceAdminRouter() {
     try {
       const context = await requirePermission(req, 'users.write');
       res.json(await listMemberships(db, context));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.get('/users/candidates', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'users.write');
+      res.json(await listMembershipCandidates(db, context, req.query.query || req.query.q || ''));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/users/memberships', async (req, res) => {

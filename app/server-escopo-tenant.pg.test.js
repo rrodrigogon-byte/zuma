@@ -12,6 +12,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import pg from 'pg';
 
 const DSN = process.env.SERVER_SCOPE_TEST_DATABASE_URL;
@@ -58,9 +59,19 @@ test('escopo de empresa, e-mails reservados, módulos globais e revogação', { 
   await vincular(empA, multi);
   await vincular(empB, multi);
   await vincular(empA, 'admin');
+  await vincular(empB, 'admin');
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'escopo-'));
   const dbPath = path.join(dir, 'db.json');
+  const mailStub = path.join(dir, 'mail-stub.mjs');
+  fs.writeFileSync(mailStub, `const originalFetch = globalThis.fetch;
+globalThis.fetch = (url, options) => {
+  if (String(url) === 'https://api.resend.com/emails') {
+    const payload = JSON.parse(options.body);
+    return Promise.resolve({ ok: true, json: async () => payload.to[0].startsWith('ambiguous-') ? {} : { id: 'local-mock-id' } });
+  }
+  return originalFetch(url, options);
+};\n`);
   const hash = bcrypt.hashSync(SENHA, 4);
   const u = (id, email, roleName) => ({ id, nome: `U${id}`, email, senhaHash: hash, role: roleName, ativo: true });
   fs.writeFileSync(dbPath, JSON.stringify({
@@ -73,7 +84,7 @@ test('escopo de empresa, e-mails reservados, módulos globais e revogação', { 
   const base = `http://127.0.0.1:${port}`;
   const processo = spawn(process.execPath, ['server.js'], {
     cwd: APP,
-    env: { ...process.env, NODE_ENV: 'development', PORT: String(port), DB_PATH: dbPath, JWT_SECRET: 'escopo-jwt', COMMERCE_CORE_ENABLED: '1', DATABASE_URL: DSN, DB_SSL: 'false', ADMIN_USER: 'admin', PLATFORM_ADMIN_EMAILS: 'boss@plat.test', SEED_DEMO: '0', WHATSAPP_CONNECTION_WATCHDOG: 'false', AI_AUTOMATION_SCHEDULER: 'false', AI_LEARNING_SCHEDULER: 'false' },
+    env: { ...process.env, NODE_ENV: 'development', PORT: String(port), DB_PATH: dbPath, JWT_SECRET: 'escopo-jwt', COMMERCE_CORE_ENABLED: '1', OPERATIONAL_INVITES_ENABLED: '1', RESEND_API_KEY: 'local-test-not-real', EMAIL_FROM: 'Local Test <test@example.invalid>', NODE_OPTIONS: `--import=${mailStub}`, DATABASE_URL: DSN, DB_SSL: 'false', ADMIN_USER: 'admin', PLATFORM_ADMIN_EMAILS: 'boss@plat.test', SEED_DEMO: '0', WHATSAPP_CONNECTION_WATCHDOG: 'false', AI_AUTOMATION_SCHEDULER: 'false', AI_LEARNING_SCHEDULER: 'false' },
     stdio: 'ignore',
   });
   try {
@@ -100,6 +111,25 @@ test('escopo de empresa, e-mails reservados, módulos globais e revogação', { 
     const notif = await request(base, '/api/admin/notificacoes', { headers: donoPainel });
     assert.deepEqual(notif.body, { notificacoes: [], total: 0 });
     assert.equal((await request(base, '/api/admin/barbearia/servicos', { headers: donoPainel })).response.status, 200, 'módulo da empresa continua liberado');
+    const claims = jwt.verify(donoPainel.Authorization.slice(7), 'escopo-jwt');
+    for (const modified of [{ empresaId: empB }, { empresaId: empA, lojaId: crypto.randomUUID() }]) {
+      const forged = { Authorization: `Bearer ${jwt.sign({ ...claims, ...modified }, 'escopo-jwt')}` };
+      const denied = await request(base, '/api/admin/barbearia/servicos', { headers: forged });
+      assert.equal(denied.response.status, 401, 'empresa ou unidade do token não pode furar a membership');
+      assert.equal(denied.body.code, 'SESSION_REVOKED');
+    }
+    await client.query(`UPDATE commerce_memberships SET expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second'
+      WHERE empresa_id = $1 AND usuario_id = (SELECT id FROM usuarios WHERE empresa_id = $1 AND email = $2)`, [empA, dono]);
+    const vencido = await request(base, '/api/admin/barbearia/servicos', { headers: donoPainel });
+    assert.equal(vencido.response.status, 401);
+    assert.equal(vencido.body.code, 'SESSION_REVOKED');
+    assert.equal((await request(base, '/api/admin/barbearia/servicos', { headers: donoSite })).response.status, 401);
+    await client.query(`UPDATE commerce_memberships SET expires_at = NULL, ativo = false
+      WHERE empresa_id = $1 AND usuario_id = (SELECT id FROM usuarios WHERE empresa_id = $1 AND email = $2)`, [empA, dono]);
+    assert.equal((await request(base, '/api/admin/barbearia/servicos', { headers: donoPainel })).response.status, 401);
+    await client.query(`UPDATE commerce_memberships SET ativo = true
+      WHERE empresa_id = $1 AND usuario_id = (SELECT id FROM usuarios WHERE empresa_id = $1 AND email = $2)`, [empA, dono]);
+    assert.equal((await request(base, '/api/admin/barbearia/servicos', { headers: donoPainel })).response.status, 200);
 
     // 3) E-mail de administração da plataforma não pode ser cadastrado.
     assert.equal((await request(base, '/api/auth/register', { method: 'POST', body: JSON.stringify({ nome: 'X', email: 'Boss@Plat.test', senha: 'abcdef1' }) })).response.status, 409);
@@ -111,13 +141,55 @@ test('escopo de empresa, e-mails reservados, módulos globais e revogação', { 
     const admin = await painelLogin('admin');
     const config = await request(base, '/api/admin/inscricoes', { headers: admin });
     assert.equal(config.response.status, 200, 'admin principal não perde inscrições');
+    for (const selectedEmpresa of [empA, empB]) {
+      const allowed = await request(base, '/api/admin/barbearia/servicos', {
+        headers: { ...admin, 'X-Empresa-Id': selectedEmpresa },
+      });
+      assert.equal(allowed.response.status, 200, 'admin principal global mantém escopo tenant autorizado mesmo com SQL homônimo');
+    }
 
-    // 5) Vínculo com duas empresas: precisa escolher a empresa; nunca cai na principal.
+    // O endpoint real deve aceitar status='active', negar tenant/draft e só confirmar
+    // e-mail se o emissor local retornar um ID explícito; nada chega ao Resend.
+    await client.query(`INSERT INTO commerce_storefronts (empresa_id, codigo, nome, status)
+      VALUES ($1, 'dino-web', 'Dino teste', 'active')`, [empA]);
+    const convite = (empresaId, email) => request(base, '/api/admin/operational-invites', {
+      method: 'POST', headers: admin,
+      body: JSON.stringify({ empresaId, nome: 'Operador Sintético', email, role: 'store_admin' }),
+    });
+    assert.equal((await request(base, '/api/admin/operational-invites', {
+      method: 'POST', headers: donoPainel,
+      body: JSON.stringify({ empresaId: empA, nome: 'Operador Sintético', email: 'denied@example.invalid', role: 'store_admin' }),
+    })).response.status, 403);
+    assert.equal((await convite(empB, 'outro@example.invalid')).response.status, 404);
+    await client.query(`UPDATE commerce_storefronts SET status = 'draft' WHERE empresa_id = $1`, [empA]);
+    assert.equal((await convite(empA, 'draft@example.invalid')).response.status, 404);
+    await client.query(`UPDATE commerce_storefronts SET status = 'active' WHERE empresa_id = $1`, [empA]);
+    const enviado = await convite(empA, 'invite-ok@example.invalid');
+    assert.equal(enviado.response.status, 202, JSON.stringify(enviado.body));
+    assert.deepEqual(enviado.body, { ok: true, status: 'sent' });
+    const ambiguo = await convite(empA, 'ambiguous-invite@example.invalid');
+    assert.equal(ambiguo.response.status, 503);
+    assert.ok(!JSON.stringify(ambiguo.body).includes('ambiguous-invite@example.invalid'));
+    const invites = await client.query(`SELECT email_norm, status FROM commerce_operational_invites WHERE empresa_id = $1 ORDER BY email_norm`, [empA]);
+    assert.deepEqual(invites.rows, [
+      { email_norm: 'ambiguous-invite@example.invalid', status: 'revoked' },
+      { email_norm: 'invite-ok@example.invalid', status: 'sent' },
+    ]);
+
+    // 5) Mesmo e-mail em dois usuarios SQL diferentes: JWT legado não prova
+    // nenhuma das identidades; nem um header de seleção pode decidir por ele.
     const multiSite = await siteLogin(multi);
     const servicos = await request(base, '/api/admin/barbearia/servicos', { headers: multiSite });
-    assert.equal(servicos.response.status, 409);
-    assert.equal(servicos.body.code, 'EMPRESA_REQUIRED');
-    assert.equal((await request(base, '/api/admin/cupons', { headers: multiSite })).response.status, 403);
+    assert.equal(servicos.response.status, 401);
+    assert.equal(servicos.body.code, 'SESSION_REVOKED');
+    for (const selectedEmpresa of [empA, empB]) {
+      const ambiguous = await request(base, '/api/admin/barbearia/servicos', {
+        headers: { ...multiSite, 'X-Empresa-Id': selectedEmpresa },
+      });
+      assert.equal(ambiguous.response.status, 401, 'e-mail homônimo não seleciona identidade de outro tenant');
+      assert.equal(ambiguous.body.code, 'SESSION_REVOKED');
+    }
+    assert.equal((await request(base, '/api/admin/cupons', { headers: multiSite })).response.status, 401);
 
     const semVinculo = await siteLogin('sem-vinculo@dino.test');
     const semEmpresa = await request(base, '/api/admin/barbearia/servicos', { headers: semVinculo });
@@ -134,6 +206,8 @@ test('escopo de empresa, e-mails reservados, módulos globais e revogação', { 
     assert.equal(depois.body.code, 'SESSION_REVOKED');
   } finally {
     processo.kill('SIGTERM');
+    await client.query(`DELETE FROM commerce_operational_invites WHERE empresa_id = ANY($1::uuid[])`, [[empA, empB]]).catch(() => {});
+    await client.query(`DELETE FROM commerce_storefronts WHERE empresa_id = ANY($1::uuid[])`, [[empA, empB]]).catch(() => {});
     await client.query(`DELETE FROM commerce_memberships WHERE empresa_id = ANY($1::uuid[])`, [[empA, empB]]).catch(() => {});
     await client.query(`DELETE FROM usuarios WHERE empresa_id = ANY($1::uuid[])`, [[empA, empB]]).catch(() => {});
     await client.query(`DELETE FROM empresas WHERE id = ANY($1::uuid[])`, [[empA, empB]]).catch(() => {});

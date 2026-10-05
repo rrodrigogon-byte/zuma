@@ -27,6 +27,8 @@ test('autoriza reports.read somente depois de validar membership da empresa e lo
   const calls = [];
   const context = await withQueryReadStub(async (sql, values) => {
     calls.push({ sql, values });
+    if (sql.includes('FROM commerce_operational_invites')) return { rows: [] };
+    if (sql.includes('SELECT u.id FROM usuarios u')) return { rows: [{ id: USUARIO }] };
     if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: USUARIO, empresa_id: EMPRESA, loja_id: LOJA, role_id: ROLE }] };
     if (sql.includes('commerce_role_permissions')) return { rows: [{ ok: 1 }] };
     throw new Error('consulta inesperada');
@@ -34,12 +36,14 @@ test('autoriza reports.read somente depois de validar membership da empresa e lo
   assert.equal(context.empresaId, EMPRESA);
   assert.equal(context.lojaId, LOJA);
   assert.equal(context.usuarioId, USUARIO);
-  assert.equal(calls.length, 2);
-  assert.deepEqual(calls[1].values, [EMPRESA, 'reports.read', USUARIO, LOJA]);
+  assert.equal(calls.length, 4);
+  assert.deepEqual(calls[3].values, [EMPRESA, 'reports.read', USUARIO, LOJA]);
 });
 
 test('nega métricas quando a role não possui reports.read', async () => {
   await withQueryReadStub(async sql => {
+    if (sql.includes('FROM commerce_operational_invites')) return { rows: [] };
+    if (sql.includes('SELECT u.id FROM usuarios u')) return { rows: [{ id: USUARIO }] };
     if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: USUARIO, empresa_id: EMPRESA, loja_id: LOJA, role_id: ROLE }] };
     if (sql.includes('commerce_role_permissions')) return { rows: [] };
     throw new Error('consulta inesperada');
@@ -54,6 +58,8 @@ test('nega métricas quando a role não possui reports.read', async () => {
 test('não aceita empresa enviada no cabeçalho sem membership correspondente', async () => {
   let permissionQueryExecuted = false;
   await withQueryReadStub(async sql => {
+    if (sql.includes('FROM commerce_operational_invites')) return { rows: [] };
+    if (sql.includes('SELECT u.id FROM usuarios u')) return { rows: [{ id: USUARIO }] };
     if (sql.includes('FROM usuarios u')) return { rows: [] };
     if (sql.includes('commerce_role_permissions')) permissionQueryExecuted = true;
     return { rows: [] };
@@ -64,4 +70,43 @@ test('não aceita empresa enviada no cabeçalho sem membership correspondente', 
     );
   });
   assert.equal(permissionQueryExecuted, false);
+});
+
+test('mesmo e-mail de dois IDs SQL não pode escolher tenant por header legado', async () => {
+  let membershipQueried = false;
+  await withQueryReadStub(async sql => {
+    if (sql.includes('FROM commerce_operational_invites')) return { rows: [] };
+    if (sql.includes('SELECT u.id FROM usuarios u')) return { rows: [{ id: USUARIO }, { id: 'another-sql-id' }] };
+    membershipQueried = true;
+    throw new Error('membership não deve ser consultada para identidade ambígua');
+  }, async () => {
+    for (const tenant of [EMPRESA, 'another-tenant']) {
+      await assert.rejects(
+        () => requireCommercePermission(request({ headers: { 'x-empresa-id': tenant } }), 'reports.read'),
+        error => error?.code === 'IDENTITY_AMBIGUOUS',
+      );
+    }
+  });
+  assert.equal(membershipQueried, false);
+});
+
+test('admin principal validado pelo servidor conserva membership própria diante de e-mail SQL homônimo', async () => {
+  const context = await withQueryReadStub(async sql => {
+    if (sql.includes('FROM commerce_operational_invites')) return { rows: [] };
+    if (sql.includes('SELECT u.id FROM usuarios u')) return { rows: [{ id: USUARIO }, { id: 'other-tenant-user-id' }] };
+    if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: USUARIO, empresa_id: EMPRESA, loja_id: LOJA, role_id: ROLE }] };
+    if (sql.includes('commerce_role_permissions')) return { rows: [{ ok: 1 }] };
+    throw new Error('consulta inesperada');
+  }, () => requireCommercePermission(request({ user: { email: 'gestor.dino@example.local', mainAdmin: true } }), 'reports.read'));
+  assert.equal(context.usuarioId, USUARIO);
+  assert.equal(context.empresaId, EMPRESA);
+});
+
+test('sessão operacional SQL nunca pode administrar usuários nem consultar banco para users.write', async () => {
+  await withQueryReadStub(async () => { throw new Error('consulta proibida'); }, async () => {
+    await assert.rejects(
+      () => requireCommercePermission(request({ user: { pgOperational: true, id: USUARIO, empresaId: EMPRESA } }), 'users.write'),
+      error => error?.code === 'PERMISSION_DENIED',
+    );
+  });
 });
