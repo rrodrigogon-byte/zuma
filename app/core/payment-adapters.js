@@ -62,6 +62,24 @@ export function paymentAccountReady(account) {
   return Boolean(account?.id && account?.ativo === true && paymentProviders.get(provider) && accountCredentialsConfigured(account, provider));
 }
 
+// Projeção pública compartilhada pelo checkout e pelo atendente. Nunca devolve
+// credenciais, referências de segredos nem configurações livres ao modelo.
+export function publicPaymentMethods(accounts = []) {
+  const items = [];
+  for (const account of accounts) {
+    if (account.ambiente !== 'production' || !paymentAccountReady(account)) continue;
+    const methods = Array.isArray(account.public_config?.methods) && account.public_config.methods.length
+      ? account.public_config.methods : ['pix'];
+    for (const method of methods) {
+      try {
+        const item = { provider: account.provider, method: validatePaymentMethod(method), ambiente: account.ambiente };
+        if (!items.some(existing => existing.provider === item.provider && existing.method === item.method)) items.push(item);
+      } catch { /* configuração inválida não é publicada */ }
+    }
+  }
+  return items;
+}
+
 const PAYMENT_STATUS_TRANSITIONS = {
   pending: ['authorized', 'captured', 'failed', 'cancelled', 'refunded'],
   authorized: ['captured', 'failed', 'cancelled', 'refunded'],
