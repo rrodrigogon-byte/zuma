@@ -78,7 +78,7 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     env: {
       ...process.env, NODE_ENV: 'development', PORT: String(port), DB_PATH: dbPath, JWT_SECRET: 'dino-admin-jwt', COMMERCE_CORE_ENABLED: '0', SEED_DEMO: '0',
       WPP_BASE_URL: '', WPP_APIKEY: '', PLATFORM_ADMIN_EMAILS: '',
-      WHATSAPP_PROVIDER: 'chatbot_backend', CHATBOT_BACKEND_MODE: 'instancias', CHATBOT_BACKEND_URL: backendUrl, CHATBOT_BACKEND_KEY: 'chave-teste-com-mais-de-vinte', CHATBOT_BACKEND_INSTANCE: 'dino-1', WHATSAPP_CONNECTION_WATCHDOG: 'false',
+      WHATSAPP_PROVIDER: 'chatbot_backend', CHATBOT_BACKEND_MODE: 'instancias', CHATBOT_BACKEND_URL: backendUrl, CHATBOT_BACKEND_KEY: 'chave-teste-com-mais-de-vinte', CHATBOT_BACKEND_INSTANCE: 'dino-1', CHATBOT_BACKEND_EMPRESA_ID: 'emp-a', WHATSAPP_CONNECTION_WATCHDOG: 'false',
     },
     stdio: 'ignore',
   });
@@ -301,6 +301,11 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     assert.equal(backend.calls.some((call) => call.url.endsWith('/whats-app/send')), false);
     const diagStaff = await request(base, '/api/admin/barbearia/whatsapp-conexao/diagnostico', { headers: staffA });
     assert.equal(diagStaff.response.status, 403, 'diagnóstico só para gestor');
+    const callsBeforeOtherTenant = backend.calls.length;
+    const diagOtherTenant = await request(base, '/api/admin/barbearia/whatsapp-conexao/diagnostico', { headers: B });
+    assert.equal(diagOtherTenant.response.status, 403, 'gestor de outra empresa não pode diagnosticar a instância da Dino');
+    assert.equal(diagOtherTenant.body.code, 'PERMISSION_DENIED');
+    assert.equal(backend.calls.length, callsBeforeOtherTenant, 'sem HTTP para o backend antes de negar outro tenant');
     const diag = await request(base, '/api/admin/barbearia/whatsapp-conexao/diagnostico', { headers: A });
     assert.equal(diag.response.status, 200, JSON.stringify(diag.body));
     assert.equal(diag.body.estado, 'open');

@@ -514,7 +514,7 @@ test('NPS: pedido de avaliação só com link público, código e consentimento'
   const notificacoes = await import('./core/barbershop-appointment-notifications.js');
   const { bruno, corte } = montarBarbearia();
   const cliente = clientes.criarCliente(EMPRESA, { nome: 'Sem Consentimento', telefone: '65977770200' });
-  const feito = concluir(agendar({ profissional: bruno, servico: corte, data: dataLocal(Date.now() - 3600000), hora: '08:30', nome: cliente.nome, telefone: cliente.telefone, clienteId: cliente.id, codigo: 'NPSPED01' }));
+  const feito = concluir(agendar({ profissional: bruno, servico: corte, data: dataLocal(Date.now() - DIA_MS), hora: '08:30', nome: cliente.nome, telefone: cliente.telefone, clienteId: cliente.id, codigo: 'NPSPED01' }));
   const anterior = process.env.PUBLIC_BASE_URL;
   const ambienteAnterior = process.env.NODE_ENV;
   try {

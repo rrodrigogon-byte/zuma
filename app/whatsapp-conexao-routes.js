@@ -72,6 +72,12 @@ export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLoja
   // Diagnóstico de ponta a ponta (só leitura): contagens, horários e travas; nunca conteúdo, número completo ou segredo.
   app.get(`${BASE}/diagnostico`, async (req, res) => {
     if (!gestor(req, res)) return;
+    // O diagnóstico consulta a instância global definida no runtime. Nunca mostrar
+    // o estado da Dino quando o operador selecionou outra empresa ou não há dono.
+    const owner = String(process.env.CHATBOT_BACKEND_EMPRESA_ID || '').trim();
+    if (!owner || String(legacyEmpresaId(req)) !== owner) {
+      return res.status(403).json({ error: 'Diagnóstico indisponível para esta empresa.', code: 'PERMISSION_DENIED' });
+    }
     try {
       res.json({ ok: true, ...(await diagnosticarWhatsapp({ fetchImpl })) });
     } catch (error) { res.status(502).json({ error: 'Não foi possível diagnosticar o WhatsApp agora.', detail: String(error?.message || '').slice(0, 160) }); }
