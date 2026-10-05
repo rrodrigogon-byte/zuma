@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { db } from './database.js';
-import { buildWhatsappAiSystemPrompt, configureWhatsappAiPersona } from './whatsapp-ai.js';
+import { buildWhatsappAiSystemPrompt, configureWhatsappAiPersona, whatsappAiOperationalStatus } from './whatsapp-ai.js';
 import { resolvePersona } from './whatsapp-ai-persona.js';
 import { followUpText } from './whatsapp-ai-followup.js';
 import { mensagem } from './barbershop-appointment-notifications.js';
@@ -148,3 +148,26 @@ test('figurinhas: contrato do backend (rota configurada)', async () => {
   }
 });
 
+
+
+test('status operacional devolve a persona persistida para recarregar o painel', async () => {
+  const original = db.queryRead;
+  const channel = { id: 'canal-1', nome: 'Barbearia Dino', status: 'ativo', configuracao: { instance: 'dino', persona: { id: 'trex', ativo: true, nome: 'T-Rex', figurinhas: false } } };
+  db.queryRead = async (sql, params) => {
+    if (/FROM canais_integracao/.test(sql)) {
+      assert.deepEqual(params, [EMPRESA, LOJA]);
+      return { rows: [channel] };
+    }
+    return { rows: [] };
+  };
+  try {
+    const result = await whatsappAiOperationalStatus({ empresaId: EMPRESA, lojaId: LOJA });
+    assert.equal(result.channel.persona.ativa, true);
+    assert.equal(result.channel.persona.origem, 'canal');
+    assert.equal(result.channel.persona.nome, 'T-Rex');
+    assert.equal(result.channel.persona.figurinhas, false);
+    channel.configuracao.persona.ativo = false;
+    const disabled = await whatsappAiOperationalStatus({ empresaId: EMPRESA, lojaId: LOJA });
+    assert.equal(disabled.channel.persona.ativa, false);
+  } finally { db.queryRead = original; }
+});
