@@ -213,6 +213,11 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     assert.equal(comanda.response.status, 201);
     assert.equal(comanda.body.comanda.status, 'aberta');
     assert.equal(comanda.body.comanda.itens.length, 2);
+    const pendentesCaixa = await request(base, '/api/admin/barbearia/comandas?pendentes=1&data=2000-01-01', { headers });
+    assert.equal(pendentesCaixa.response.status, 200);
+    assert.ok(pendentesCaixa.body.comandas.some(c => c.id === comanda.body.comanda.id), 'pendências independem da data selecionada');
+    const porAtendimento = await request(base, `/api/admin/barbearia/comandas?agendamentoId=${agenda.body.agendamento.id}`, { headers });
+    assert.ok(porAtendimento.body.comandas.every(c => c.agendamentoId === agenda.body.agendamento.id));
     const comandaAjustada = await request(base, `/api/admin/barbearia/comandas/${comanda.body.comanda.id}`, { method: 'PATCH', headers, body: JSON.stringify({ gorjeta: 5, desconto: 2, descontoMotivo: 'Cortesia de teste', observacoes: 'Comanda de integração HTTP.' }) });
     assert.equal(comandaAjustada.response.status, 200);
     assert.equal(comandaAjustada.body.comanda.gorjeta, 5);
@@ -224,6 +229,8 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     assert.equal(comandaPaga.response.status, 200);
     assert.equal(comandaPaga.body.comanda.status, 'paga');
     assert.equal(comandaPaga.body.comanda.totalPago, 83);
+    const pendentesDepois = await request(base, '/api/admin/barbearia/comandas?pendentes=1', { headers });
+    assert.ok(!pendentesDepois.body.comandas.some(c => c.id === comanda.body.comanda.id), 'paga sai da fila do caixa');
     const comandaPagaRepetida = await request(base, `/api/admin/barbearia/comandas/${comanda.body.comanda.id}/pagamentos`, { method: 'POST', headers, body: JSON.stringify(pagamentoComandaPayload) });
     assert.equal(comandaPagaRepetida.response.status, 200);
     assert.equal(comandaPagaRepetida.body.comanda.pagamentos.length, 1);
@@ -280,3 +287,4 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     fs.rmSync(diretorio, { recursive: true, force: true });
   }
 });
+

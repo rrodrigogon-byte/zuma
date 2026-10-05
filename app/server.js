@@ -3424,10 +3424,12 @@ app.get('/api/admin/barbearia/comandas', (req, res) => {
     const empresaId = legacyEmpresaId(req);
     const lojaId = legacyLojaId(req);
     const comandas = barbeariaErpKytto.listarComandasBarbearia(empresaId, {
-      data: req.query?.data || req.query?.date,
+      data: req.query?.pendentes === '1' ? undefined : req.query?.data || req.query?.date,
+      pendentes: req.query?.pendentes === '1',
       status: req.query?.status,
       clienteId: req.query?.clienteId || req.query?.cliente_id,
       lojaId,
+      agendamentoId: req.query?.agendamentoId,
     });
     res.json({ ok: true, comandas, total: comandas.length });
   } catch (error) { res.status(400).json({ error: error.message }); }
@@ -6866,3 +6868,4 @@ for(const sig of ['SIGTERM','SIGINT']){
 
 // A cópia local diária (com retenção de 7 dias) e a cópia externa ficam em
 // protecaoDados.iniciar(), chamado no boot.
+
