@@ -24,8 +24,9 @@ function statusLabel(product) {
   return 'Rascunho'
 }
 
-function stockLabel(value) {
+function stockLabel(value, allowBackorder = false) {
   const stock = Number(value || 0)
+  if (stock <= 0 && allowBackorder) return { label: 'Sob encomenda · +10 dias', tone: 'warning' }
   if (stock <= 0) return { label: 'Sem estoque', tone: 'danger' }
   if (stock <= 5) return { label: `${stock} un. · baixo`, tone: 'warning' }
   return { label: `${stock} un.`, tone: 'success' }
@@ -175,7 +176,7 @@ export default function CommerceProductManagement({
       </div>
 
       {layout === 'table' ? <div className="ecommerce-admin-table-wrap commerce-product-table-wrap"><table className="ecommerce-admin-table commerce-product-table"><thead><tr><th>Produto</th><th>Preço</th><th>Estoque</th><th>Variantes</th><th>Qualidade</th><th>Status</th><th>Ações</th></tr></thead><tbody>{paged.items.map(product => {
-        const stockState = stockLabel(product.estoque)
+        const stockState = stockLabel(product.estoque, product.permiteCompraSemEstoque === true)
         const variants = product.variantes || product.variants || []
         return <tr key={product.id}>
           <td><ProductIdentity product={product} /></td>
@@ -187,7 +188,7 @@ export default function CommerceProductManagement({
           <td><ProductActions product={product} mode={mode} onEdit={onEditProduct} onDuplicate={onDuplicateProduct} onManageVariants={onManageVariants} onToggle={onToggleProduct} onArchive={onArchiveProduct} /></td>
         </tr>
       })}</tbody></table></div> : <div className="commerce-admin-product-grid">{paged.items.map(product => {
-        const stockState = stockLabel(product.estoque)
+        const stockState = stockLabel(product.estoque, product.permiteCompraSemEstoque === true)
         const variants = product.variantes || product.variants || []
         return <article className="commerce-admin-product-card" key={product.id}>
           <div className="commerce-admin-product-card-image">{product.imagem ? <img src={product.imagem} alt={product.nome || 'Produto'} loading="lazy" /> : <ImageOff size={28} aria-hidden="true" />}</div>

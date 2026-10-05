@@ -420,6 +420,21 @@ function canonicalShippingLines(items) {
 
 function requestHash(snapshot) { return crypto.createHash('sha256').update(JSON.stringify(canonicalJson(snapshot))).digest('hex'); }
 
+const BACKORDER_LEAD_DAYS = 10;
+
+function addBackorderLeadTime(option, extraDays) {
+  if (!extraDays || !option || typeof option !== 'object') return option;
+  const add = value => value == null || !Number.isFinite(Number(value)) ? value : Number(value) + extraDays;
+  const next = { ...option, backorderLeadDays: extraDays };
+  if (option.deliveryDays != null) next.deliveryDays = add(option.deliveryDays);
+  if (option.preparationDays != null) next.preparationDays = add(option.preparationDays);
+  if (option.deliveryRange && typeof option.deliveryRange === 'object') {
+    next.deliveryRange = { ...option.deliveryRange, min: add(option.deliveryRange.min), max: add(option.deliveryRange.max) };
+  }
+  next.deliveryNote = `${String(option.deliveryNote || '').trim()} + ${extraDays} dias úteis por item sob encomenda`.trim();
+  return next;
+}
+
 async function loadQuoteContext(client, contextInput, input = {}) {
   const context = tenantContext(contextInput);
   const storefrontId = assertUuid(input.storefrontId, 'storefrontId');
@@ -479,6 +494,7 @@ async function loadQuoteContext(client, contextInput, input = {}) {
   const variantIds = [...new Set(lines.map(line => line.variantId))];
   const variants = await client.query(
     `SELECT v.id, v.sku, COALESCE(v.nome, p.nome) AS nome, v.peso_gramas, v.largura_cm, v.altura_cm, v.comprimento_cm,
+            v.permite_compra_sem_estoque,
             COALESCE(vp.preco_promocional, vp.preco) AS price
        FROM commerce_product_variants v
        JOIN commerce_products p ON p.empresa_id = v.empresa_id AND p.id = v.product_id AND p.status = 'active'
@@ -490,6 +506,7 @@ async function loadQuoteContext(client, contextInput, input = {}) {
   );
   const variantMap = new Map(variants.rows.map(row => [row.id, row]));
   if (variantMap.size !== variantIds.length) throw new CommerceError('um ou mais itens não estão disponíveis para cotação', 'ITEM_UNAVAILABLE');
+  const backorderLeadDays = lines.some(line => variantMap.get(line.variantId)?.permite_compra_sem_estoque === true) ? BACKORDER_LEAD_DAYS : 0;
   const products = lines.map(line => {
     const variant = variantMap.get(line.variantId);
     const dimensions = [variant.largura_cm, variant.altura_cm, variant.comprimento_cm].map(value => number(value));
@@ -497,7 +514,7 @@ async function loadQuoteContext(client, contextInput, input = {}) {
     return { id: variant.sku || variant.id, width: dimensions[0], height: dimensions[1], length: dimensions[2], weight: number(variant.peso_gramas) / 1000, insuranceValue: round(number(variant.price, 0)), quantity: line.quantity };
   });
   const subtotal = round(products.reduce((sum, product) => sum + product.insuranceValue * product.quantity, 0));
-  const snapshot = { storefrontId, shippingMethodId, shippingAccountId: account?.id || null, provider, ambiente: account?.ambiente || 'manual', originCep, destinationCep, destination: { cidade: canonicalDestination(destinationCity) || null, estado: destinationState || null }, subtotal, lines, methodConfigHash: requestHash(storedMethodConfig) };
+  const snapshot = { storefrontId, shippingMethodId, shippingAccountId: account?.id || null, provider, ambiente: account?.ambiente || 'manual', originCep, destinationCep, destination: { cidade: canonicalDestination(destinationCity) || null, estado: destinationState || null }, subtotal, lines, backorderLeadDays, methodConfigHash: requestHash(storedMethodConfig) };
   return { context, storefront: { id: storefrontId, loja_id: method.loja_id, empresa_id: context.empresaId }, method, methodConfig, account, provider: definition.code, originCep, destinationCep, destinationCity, destinationState, destinationAddress, products, subtotal, snapshot, hash: requestHash(snapshot), services: methodConfig.services || [], options: methodConfig.options || {} };
 }
 
@@ -518,14 +535,16 @@ export async function quoteShipping(client, contextInput, input = {}) {
       const accountCheck = await trx.query(`SELECT id FROM commerce_shipping_accounts WHERE empresa_id = $1 AND id = $2 AND storefront_id = $3 AND ativo = true FOR UPDATE`, [prepared.context.empresaId, prepared.account.id, prepared.storefront.id]);
       if (!accountCheck.rows[0]) throw new CommerceError('conta logística foi alterada durante a cotação', 'SHIPPING_ACCOUNT_NOT_CONFIGURED');
     }
+    const items = (quoted.options || []).map(option => addBackorderLeadTime(option, prepared.snapshot.backorderLeadDays));
+    const providerOptions = (quoted.providerOptions || []).map(option => ({ ...option, public: addBackorderLeadTime(option.public, prepared.snapshot.backorderLeadDays) }));
     const result = await trx.query(
       `INSERT INTO commerce_shipping_quotes
         (empresa_id, storefront_id, shipping_method_id, shipping_account_id, provider, ambiente, origem_cep, destino_cep, request_hash, request_snapshot, response_snapshot, expires_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, CURRENT_TIMESTAMP + INTERVAL '15 minutes')
        RETURNING id, expires_at`,
-      [prepared.context.empresaId, prepared.storefront.id, prepared.method.id, prepared.account?.id || null, prepared.provider, prepared.account?.ambiente || 'manual', prepared.originCep, prepared.destinationCep, prepared.hash, JSON.stringify(prepared.snapshot), JSON.stringify({ options: quoted.options, providerOptions: quoted.providerOptions })],
+      [prepared.context.empresaId, prepared.storefront.id, prepared.method.id, prepared.account?.id || null, prepared.provider, prepared.account?.ambiente || 'manual', prepared.originCep, prepared.destinationCep, prepared.hash, JSON.stringify(prepared.snapshot), JSON.stringify({ options: items, providerOptions })],
     );
-    return { quoteId: result.rows[0].id, expiresAt: result.rows[0].expires_at, provider: prepared.provider, shippingMethodId: prepared.method.id, items: quoted.options };
+    return { quoteId: result.rows[0].id, expiresAt: result.rows[0].expires_at, provider: prepared.provider, shippingMethodId: prepared.method.id, items };
   });
 }
 

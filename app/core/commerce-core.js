@@ -231,6 +231,7 @@ export async function listPublishedProducts(context, options = {}) {
             COALESCE(jsonb_agg(DISTINCT jsonb_build_object(
               'id', v.id, 'sku', v.sku, 'nome', v.nome, 'atributos', v.atributos,
               'estoque', COALESCE(stock.disponivel, 0),
+              'permiteCompraSemEstoque', v.permite_compra_sem_estoque,
               'prices', COALESCE(prices.items, '[]'::jsonb)
             )) FILTER (WHERE v.id IS NOT NULL), '[]'::jsonb) AS variants,
             COALESCE(jsonb_agg(DISTINCT jsonb_build_object(
@@ -326,9 +327,11 @@ async function selectInventoryLocation(trx, { empresaId, storefront, lines, requ
   const locationIds = locations.rows.map(row => row.id);
   const variantIds = lines.map(line => line.variantId);
   const levels = await trx.query(
-    `SELECT location_id, variant_id, disponivel
-       FROM commerce_inventory_levels
-      WHERE empresa_id = $1
+    `SELECT location_id, variant_id, disponivel, v.permite_compra_sem_estoque
+       FROM commerce_inventory_levels il
+       JOIN commerce_product_variants v
+         ON v.empresa_id = il.empresa_id AND v.id = il.variant_id
+      WHERE il.empresa_id = $1
         AND location_id = ANY($2::uuid[])
         AND variant_id = ANY($3::uuid[])
       ORDER BY location_id, variant_id
@@ -336,12 +339,21 @@ async function selectInventoryLocation(trx, { empresaId, storefront, lines, requ
     [empresaId, locationIds, variantIds],
   );
   const available = new Map(levels.rows.map(row => [`${row.location_id}:${row.variant_id}`, Number(row.disponivel)]));
+  const allowsBackorder = new Map(lines.map(line => [line.variantId, line.variant?.permite_compra_sem_estoque === true]));
+  for (const row of levels.rows) {
+    if (row.permite_compra_sem_estoque === true) allowsBackorder.set(row.variant_id, true);
+  }
   const candidates = locations.rows
     .map(location => {
-      const capacities = lines.map(line => Math.floor((available.get(`${location.id}:${line.variantId}`) || 0) / line.quantity));
+      const capacities = lines.map(line => {
+        const balance = available.get(`${location.id}:${line.variantId}`) || 0;
+        return allowsBackorder.get(line.variantId) === true && balance < line.quantity
+          ? Number.POSITIVE_INFINITY
+          : Math.floor(balance / line.quantity);
+      });
       return { location, capacity: Math.min(...capacities) };
     })
-    .filter(candidate => candidate.capacity > 0);
+    .filter(candidate => candidate.capacity > 0 || candidate.capacity === Number.POSITIVE_INFINITY);
   if (!candidates.length) {
     throw new CommerceError('estoque insuficiente em um único local para todos os itens', 'INSUFFICIENT_STOCK', {
       availableLocations: locations.rows.map(row => row.id),
@@ -355,7 +367,13 @@ async function selectInventoryLocation(trx, { empresaId, storefront, lines, requ
     const createdDifference = new Date(left.location.criado_em).getTime() - new Date(right.location.criado_em).getTime();
     return createdDifference || left.location.id.localeCompare(right.location.id);
   });
-  return candidates[0].location.id;
+  const selected = candidates[0].location;
+  return {
+    locationId: selected.id,
+    backorderVariantIds: lines
+      .filter(line => (available.get(`${selected.id}:${line.variantId}`) || 0) < line.quantity && allowsBackorder.get(line.variantId) === true)
+      .map(line => line.variantId),
+  };
 }
 
 export async function reserveInventory(trx, context, input) {
@@ -678,6 +696,7 @@ export async function createPendingOrder(trx, context, input = {}) {
 
   const variants = await trx.query(
     `SELECT v.id, v.sku, v.nome AS variant_name, p.nome AS product_name, p.tipo AS product_type,
+            v.permite_compra_sem_estoque,
             COALESCE(vp.preco_promocional, vp.preco) AS price,
             COALESCE(vp.preco_promocional IS NOT NULL, false) AS promotional
        FROM commerce_product_variants v
@@ -756,16 +775,18 @@ export async function createPendingOrder(trx, context, input = {}) {
   }
 
   const physical = normalizedLines.filter(line => line.variant.product_type === 'physical' || line.variant.product_type === 'ticket');
+  let inventorySelection = null;
   if (physical.length) {
-    const locationId = await selectInventoryLocation(trx, {
+    inventorySelection = await selectInventoryLocation(trx, {
       empresaId,
       storefront,
       lines: physical,
       requestedLocationId: input.locationId ? assertUuid(input.locationId, 'locationId') : null,
     });
     for (const line of physical) {
+      if (inventorySelection.backorderVariantIds.includes(line.variantId)) continue;
       await reserveInventory(trx, { empresaId }, {
-        locationId,
+        locationId: inventorySelection.locationId,
         variantId: line.variantId,
         orderId,
         quantity: line.quantity,
@@ -781,7 +802,7 @@ export async function createPendingOrder(trx, context, input = {}) {
     `INSERT INTO commerce_order_events
       (empresa_id, order_id, de_status, para_status, origem, usuario_id, correlation_id, payload_resumido)
      VALUES ($1, $2, NULL, $3, 'checkout', $4, $5, $6::jsonb)`,
-    [empresaId, orderId, status, context.usuarioId || null, requestId(input.correlationId), JSON.stringify({ lineCount: normalizedLines.length, shipping: shippingSelection ? { quoteId: shippingSelection.quote.id, optionId: shippingSelection.optionId, amount: shippingSelection.amount } : null, identity: { linked: true, resolution: 'customer' } })],
+    [empresaId, orderId, status, context.usuarioId || null, requestId(input.correlationId), JSON.stringify({ lineCount: normalizedLines.length, backorder: physical.some(line => inventorySelection?.backorderVariantIds?.includes(line.variantId)), shipping: shippingSelection ? { quoteId: shippingSelection.quote.id, optionId: shippingSelection.optionId, amount: shippingSelection.amount } : null, identity: { linked: true, resolution: 'customer' } })],
   );
   const result = { id: orderId, publicCode, status, currency: storefront.moeda || 'BRL', subtotal, discount, shipping, taxes, total, customerId, customerAddressId: customerAddressResolution?.address?.id || null, shippingMethodId, shippingQuoteId: shippingSelection?.quote.id || null, shippingOptionId: shippingSelection?.optionId || null, shippingOption: shippingSelection?.option || null };
   await markCartConverted(trx, { ...context, empresaId, lojaId: storefront.loja_id }, { cartSessionKey: input.cartSessionKey, storefrontId: storefront.id, orderId, customerId });
@@ -894,10 +915,10 @@ export async function createCatalogProduct(trx, context, input = {}) {
   const sku = String(variant.sku || input.sku || `${slug}-${crypto.randomBytes(3).toString('hex')}`).slice(0, 100);
   const variantResult = await trx.query(
     `INSERT INTO commerce_product_variants
-      (empresa_id, product_id, sku, barcode, nome, atributos, peso_gramas, largura_cm, altura_cm, comprimento_cm, ativo)
-     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11)
+      (empresa_id, product_id, sku, barcode, nome, atributos, peso_gramas, largura_cm, altura_cm, comprimento_cm, ativo, permite_compra_sem_estoque)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12)
      RETURNING *`,
-    [empresaId, product.id, sku, String(variant.barcode || '').trim() || null, String(variant.nome || '').trim() || null, JSON.stringify(variant.atributos || {}), variant.pesoGramas == null ? null : Math.max(0, Number(variant.pesoGramas) || 0), variant.larguraCm == null ? null : Math.max(0, Number(variant.larguraCm) || 0), variant.alturaCm == null ? null : Math.max(0, Number(variant.alturaCm) || 0), variant.comprimentoCm == null ? null : Math.max(0, Number(variant.comprimentoCm) || 0), variant.ativo !== false],
+    [empresaId, product.id, sku, String(variant.barcode || '').trim() || null, String(variant.nome || '').trim() || null, JSON.stringify(variant.atributos || {}), variant.pesoGramas == null ? null : Math.max(0, Number(variant.pesoGramas) || 0), variant.larguraCm == null ? null : Math.max(0, Number(variant.larguraCm) || 0), variant.alturaCm == null ? null : Math.max(0, Number(variant.alturaCm) || 0), variant.comprimentoCm == null ? null : Math.max(0, Number(variant.comprimentoCm) || 0), variant.ativo !== false, variant.permiteCompraSemEstoque === true],
   );
   const price = input.preco == null ? null : Math.max(0, Number(input.preco) || 0);
   if (price != null) {
@@ -1183,6 +1204,7 @@ export async function saveCatalogProductWorkspace(trx, context, input = {}) {
       alturaCm: variantInput.alturaCm,
       comprimentoCm: variantInput.comprimentoCm,
       ativo: variantInput.ativo,
+      permiteCompraSemEstoque: variantInput.permiteCompraSemEstoque,
       storefrontId,
       preco: price,
       precoPromocional: promotionalPrice,
@@ -1380,7 +1402,7 @@ export async function createCatalogVariant(trx, context, productId, input = {}) 
   if (product.rows[0].status === 'archived') throw new CommerceError('produto arquivado não pode ser alterado; duplique-o como rascunho', 'PRODUCT_ARCHIVED');
   const sku = String(input.sku || '').trim().slice(0, 100);
   if (!sku) throw new CommerceError('SKU da variante é obrigatório', 'VARIANT_REQUIRED');
-  const result = await trx.query(`INSERT INTO commerce_product_variants (empresa_id, product_id, sku, barcode, nome, atributos, peso_gramas, largura_cm, altura_cm, comprimento_cm, ativo) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11) RETURNING *`, [empresaId, id, sku, String(input.barcode || '').trim() || null, String(input.nome || '').trim() || null, JSON.stringify(input.atributos && typeof input.atributos === 'object' ? input.atributos : {}), input.pesoGramas == null ? null : Math.max(0, Number(input.pesoGramas) || 0), input.larguraCm == null ? null : Math.max(0, Number(input.larguraCm) || 0), input.alturaCm == null ? null : Math.max(0, Number(input.alturaCm) || 0), input.comprimentoCm == null ? null : Math.max(0, Number(input.comprimentoCm) || 0), input.ativo !== false]);
+  const result = await trx.query(`INSERT INTO commerce_product_variants (empresa_id, product_id, sku, barcode, nome, atributos, peso_gramas, largura_cm, altura_cm, comprimento_cm, ativo, permite_compra_sem_estoque) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12) RETURNING *`, [empresaId, id, sku, String(input.barcode || '').trim() || null, String(input.nome || '').trim() || null, JSON.stringify(input.atributos && typeof input.atributos === 'object' ? input.atributos : {}), input.pesoGramas == null ? null : Math.max(0, Number(input.pesoGramas) || 0), input.larguraCm == null ? null : Math.max(0, Number(input.larguraCm) || 0), input.alturaCm == null ? null : Math.max(0, Number(input.alturaCm) || 0), input.comprimentoCm == null ? null : Math.max(0, Number(input.comprimentoCm) || 0), input.ativo !== false, input.permiteCompraSemEstoque === true]);
   const variant = result.rows[0];
   if (input.preco !== undefined) {
     const priceListId = input.storefrontId
@@ -1412,7 +1434,7 @@ export async function updateCatalogVariant(trx, context, variantId, input = {}) 
   if (!currentResult.rows[0]) throw new CommerceError('variante não encontrada no tenant', 'VARIANT_NOT_FOUND');
   const current = currentResult.rows[0];
   if (current.product_status === 'archived') throw new CommerceError('produto arquivado não pode ser alterado; duplique-o como rascunho', 'PRODUCT_ARCHIVED');
-  const allowed = { sku: 'sku', barcode: 'barcode', nome: 'nome', pesoGramas: 'peso_gramas', larguraCm: 'largura_cm', alturaCm: 'altura_cm', comprimentoCm: 'comprimento_cm', ativo: 'ativo' };
+  const allowed = { sku: 'sku', barcode: 'barcode', nome: 'nome', pesoGramas: 'peso_gramas', larguraCm: 'largura_cm', alturaCm: 'altura_cm', comprimentoCm: 'comprimento_cm', ativo: 'ativo', permiteCompraSemEstoque: 'permite_compra_sem_estoque' };
   const sets = [];
   const values = [empresaId, id];
   for (const [key, column] of Object.entries(allowed)) {
@@ -1420,7 +1442,7 @@ export async function updateCatalogVariant(trx, context, variantId, input = {}) 
     let value = input[key];
     if (['sku', 'barcode', 'nome'].includes(key)) value = String(value || '').trim().slice(0, key === 'sku' ? 100 : key === 'barcode' ? 80 : 200) || null;
     if (['pesoGramas', 'larguraCm', 'alturaCm', 'comprimentoCm'].includes(key)) value = value == null || value === '' ? null : Math.max(0, Number(value) || 0);
-    if (key === 'ativo' && typeof value !== 'boolean') throw new CommerceError('ativo da variante deve ser booleano', 'VARIANT_INVALID');
+    if (['ativo', 'permiteCompraSemEstoque'].includes(key) && typeof value !== 'boolean') throw new CommerceError(`${key === 'ativo' ? 'ativo' : 'permiteCompraSemEstoque'} da variante deve ser booleano`, 'VARIANT_INVALID');
     if (key === 'sku' && !value) throw new CommerceError('SKU da variante é obrigatório', 'VARIANT_REQUIRED');
     values.push(value);
     sets.push(`${column} = $${values.length}`);

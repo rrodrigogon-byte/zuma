@@ -36,6 +36,7 @@ export function filterCatalog(products = [], { query = '', category = 'Todos', i
 
 export function stockState(product = {}, threshold = LOW_STOCK_THRESHOLD) {
   const stock = Math.max(0, Number(product.estoque || 0))
+  if ((product.permiteCompraSemEstoque || product.permite_compra_sem_estoque) && (product.esgotado || stock <= 0)) return { kind: 'backorder', stock: 0, label: 'Sob encomenda' }
   if (product.esgotado || stock <= 0) return { kind: 'out', stock: 0, label: 'Esgotado' }
   if (stock <= threshold) return { kind: 'low', stock, label: stock === 1 ? 'Última unidade' : `Últimas ${stock} unidades` }
   return { kind: 'ok', stock, label: 'Em estoque' }
@@ -60,10 +61,12 @@ export function cartSubtotal(cart = []) {
 export function addProductToCart(cart = [], product = {}, qtd = 1, available = Number(product.estoque || 0)) {
   const stock = Math.max(0, Number(available || 0))
   const key = product.variantId || product.id
-  if (!key || stock <= 0 || product.esgotado) return { ok: false, cart, added: 0, quantity: 0, reason: 'out_of_stock' }
+  const backorder = product.permiteCompraSemEstoque === true || product.permite_compra_sem_estoque === true
+  if (!key || (stock <= 0 && !backorder) || (product.esgotado && !backorder)) return { ok: false, cart, added: 0, quantity: 0, reason: 'out_of_stock' }
+  const effectiveStock = stock > 0 ? stock : 999
   const current = cart.find(item => cartItemKey(item) === key)
   const currentQty = Number(current?.qtd || 0)
-  const nextQty = Math.min(stock, currentQty + Math.max(1, Number(qtd || 1)))
+  const nextQty = Math.min(effectiveStock, currentQty + Math.max(1, Number(qtd || 1)))
   const added = nextQty - currentQty
   if (added <= 0) return { ok: false, cart, added: 0, quantity: currentQty, reason: 'stock_limit', stock }
   const nextCart = current
@@ -79,7 +82,7 @@ export function addProductToCart(cart = [], product = {}, qtd = 1, available = N
         variantLabel: Array.isArray(product.variants) && product.variants.length > 1 ? (product.label || '') : '',
         qtd: nextQty,
       }]
-  return { ok: true, cart: nextCart, added, quantity: nextQty, stock }
+  return { ok: true, cart: nextCart, added, quantity: nextQty, stock: effectiveStock }
 }
 
 

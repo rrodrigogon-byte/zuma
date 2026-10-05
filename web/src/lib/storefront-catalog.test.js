@@ -6,6 +6,7 @@ const catalog = [
   { id: 'p1', variantId: 'v1', nome: 'Xerjoff Decas 100ml', cat: 'Perfumes', cod: 'XJ-DECAS-100', descricao: 'Oriental sofisticado', preco: 2600, estoque: 5, esgotado: false, variants: [{ variantId: 'v1', cod: 'XJ-DECAS-100', label: '100ml' }] },
   { id: 'p2', variantId: 'v2', nome: 'Pomada Modeladora', cat: 'Cuidados pessoais', cod: 'POM-01', descricao: 'Fixação média, efeito matte', preco: 59.9, estoque: 2, esgotado: false, variants: [] },
   { id: 'p3', variantId: 'v3', nome: 'Érba Pura', cat: 'Perfumes', cod: 'XJ-ERBA', descricao: 'Cítrico', preco: 2600, estoque: 0, esgotado: true, variants: [] },
+  { id: 'p4', variantId: 'v4', nome: 'Madagascar Centella', cat: 'Cuidados pessoais', cod: 'SKIN-1004', descricao: 'Sob encomenda', preco: 1087, estoque: 0, esgotado: false, permiteCompraSemEstoque: true, variants: [] },
 ]
 
 test('normaliza caixa e acentos', () => {
@@ -25,9 +26,9 @@ test('busca por nome, SKU, categoria e descrição, ignorando caixa/acento', () 
 })
 
 test('filtro por categoria combina com busca', () => {
-  assert.deepEqual(filterCatalog(catalog, { category: 'Cuidados pessoais' }).map(p => p.id), ['p2'])
+  assert.deepEqual(filterCatalog(catalog, { category: 'Cuidados pessoais' }).map(p => p.id), ['p2', 'p4'])
   assert.deepEqual(filterCatalog(catalog, { category: 'Perfumes', query: 'decas' }).map(p => p.id), ['p1'])
-  assert.equal(filterCatalog(catalog, { category: 'Todos' }).length, 3)
+  assert.equal(filterCatalog(catalog, { category: 'Todos' }).length, 4)
 })
 
 test('estado de estoque: disponível, baixo e esgotado', () => {
@@ -35,6 +36,7 @@ test('estado de estoque: disponível, baixo e esgotado', () => {
   assert.deepEqual(stockState(catalog[1]), { kind: 'low', stock: 2, label: 'Últimas 2 unidades' })
   assert.equal(stockState({ estoque: 1 }).label, 'Última unidade')
   assert.equal(stockState(catalog[2]).kind, 'out')
+  assert.deepEqual(stockState(catalog[3]), { kind: 'backorder', stock: 0, label: 'Sob encomenda' })
 })
 
 test('adicionar incrementa a contagem do carrinho', () => {
@@ -56,6 +58,13 @@ test('produto esgotado não entra no carrinho', () => {
   assert.equal(result.ok, false)
   assert.equal(result.reason, 'out_of_stock')
   assert.deepEqual(result.cart, [])
+})
+
+test('produto sob encomenda entra no carrinho mesmo com estoque zero', () => {
+  const result = addProductToCart([], catalog[3])
+  assert.equal(result.ok, true)
+  assert.equal(result.quantity, 1)
+  assert.equal(result.stock, 999)
 })
 
 test('limite de estoque é respeitado', () => {

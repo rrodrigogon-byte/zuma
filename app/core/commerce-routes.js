@@ -1258,6 +1258,7 @@ export function createCommerceAdminRouter() {
                     'alturaCm', v.altura_cm,
                     'comprimentoCm', v.comprimento_cm,
                     'ativo', v.ativo,
+                    'permiteCompraSemEstoque', v.permite_compra_sem_estoque,
                     'preco', vp.preco,
                     'precoPromocional', vp.preco_promocional,
                     'estoque', COALESCE((SELECT SUM(il.disponivel) FROM commerce_inventory_levels il WHERE il.empresa_id = v.empresa_id AND il.variant_id = v.id ${inventoryScope}), 0)

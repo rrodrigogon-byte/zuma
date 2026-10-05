@@ -36,11 +36,12 @@ function paymentDescription(item) {
 }
 function shippingPromise(option) {
   const total = option?.deliveryRange?.max ?? option?.deliveryDays
+  const backorderNote = option?.backorderLeadDays ? ` · +${option.backorderLeadDays} dias úteis por encomenda` : ''
   if (option?.preparationDays !== null && option?.preparationDays !== undefined && option?.providerDeliveryDays !== null && option?.providerDeliveryDays !== undefined && total !== null && total !== undefined) {
-    return `${option.carrier || 'Transportadora'} · ${option.preparationDays} dias úteis de preparação e postagem + ${option.providerDeliveryDays} dias úteis de transporte · total estimado: ${total} dias úteis`;
+    return `${option.carrier || 'Transportadora'} · ${option.preparationDays} dias úteis de preparação e postagem + ${option.providerDeliveryDays} dias úteis de transporte · total estimado: ${total} dias úteis${backorderNote}`;
   }
-  if (option?.provider === 'manual' || option?.carrier === 'Kytto Entrega' || option?.carrier === 'Motoboy local' || option?.carrier === 'Kytto Express') return `${option?.carrier || 'Entrega própria'} · ${option.priceNote || (total === 1 ? 'até 24 horas úteis' : `até ${total || 10} dias úteis`)}`
-  return `${option?.carrier || 'Transportadora'}${option?.deliveryRange?.max ? ` · até ${option.deliveryRange.max} dias úteis` : ''}`;
+  if (option?.provider === 'manual' || option?.carrier === 'Kytto Entrega' || option?.carrier === 'Motoboy local' || option?.carrier === 'Kytto Express') return `${option?.carrier || 'Entrega própria'} · ${option.priceNote || (total === 1 ? 'até 24 horas úteis' : `até ${total || 10} dias úteis`)}${backorderNote}`
+  return `${option?.carrier || 'Transportadora'}${option?.deliveryRange?.max ? ` · até ${option.deliveryRange.max} dias úteis` : ''}${backorderNote}`;
 }
 function shippingPriceSummary(option) {
   const base = Number(option?.providerAmount);

@@ -47,6 +47,7 @@ const migrationFiles = [
   '053_commerce_phone_verification.sql',
   '054_commerce_loyalty_expiry_marks.sql',
   '055_commerce_order_contact_snapshot.sql',
+  '056_commerce_variant_backorder.sql',
   '060_kytto_json_snapshots.sql',
   '061_whatsapp_crm_interactions.sql',
   '062_dino_resumo_diario.sql',
