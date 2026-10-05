@@ -216,6 +216,7 @@ export default function BarbeariaERP() {
   const [relatorio, setRelatorio] = useState(null)
   const [comissoes, setComissoes] = useState(null)
   const [integracoes, setIntegracoes] = useState(null)
+  const whatsappAi = integracoes?.whatsapp?.ai || integracoes?.ia?.whatsapp || {}
   const [notificacoesAgenda, setNotificacoesAgenda] = useState({ queued: 0, sent: 0, failed: 0, canceled: 0 })
   const [assistenteResposta, setAssistenteResposta] = useState(null)
   const [assistentePergunta, setAssistentePergunta] = useState('')
@@ -1341,7 +1342,6 @@ export default function BarbeariaERP() {
     const whatsapp = integracoes?.whatsapp
     const ia = integracoes?.ia
     const commerce = integracoes?.commerce || {}
-    const whatsappAi = whatsapp?.ai || ia?.whatsapp || {}
     const whatsappMessagingOk = Boolean(whatsappAi.messagingConfigured ?? whatsappAi.evolutionConfigured)
     const whatsappAiReady = Boolean(whatsappAi.featureEnabled && whatsappAi.gemini?.configured && whatsappMessagingOk)
     const whatsappAiActive = whatsappAi.channel?.status === 'ativo'
