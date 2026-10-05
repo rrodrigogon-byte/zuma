@@ -1,6 +1,6 @@
 import { standaloneGreetingReply } from './whatsapp-ai-greeting.mjs';
 import { isWhatsappOptOutText } from './whatsapp-phone.js';
-import { resolveConfirmation, CONFIRMATION_HINT } from './whatsapp-ai-intents.js';
+import { resolveConfirmation, CONFIRMATION_HINT, actionTtlMinutes, formatActionSummary, formatForWhatsapp } from './whatsapp-ai-intents.js';
 import { MEDIA_SYSTEM_GUIDANCE } from './whatsapp-ai-media.js';
 import crypto from 'node:crypto';
 import { db } from './database.js';
@@ -8,6 +8,7 @@ import { runGeminiWithTools, configuredGeminiModel } from './gemini-client.js';
 import {
   cancelPendingAction,
   confirmPendingAction,
+  recordConfirmedInCrm,
   createWhatsappAiToolExecutor,
   WHATSAPP_AI_TOOL_DECLARATIONS,
 } from './whatsapp-ai-tools.js';
@@ -147,6 +148,15 @@ export function buildWhatsappAiSystemPrompt({
   const profileData = customerProfile ? JSON.stringify(customerProfile) : '{"consent":{"personalization":false,"marketing":false}}';
   const capabilityData = JSON.stringify(safeCapabilities(capabilities));
   return `Você é o atendente virtual humanizado da ${cleanText(storeName, 120)} no WhatsApp. Atenda em português brasileiro com calor humano, cortesia, prudência, clareza e mensagens curtas, como uma pessoa experiente da equipe. Na primeira apresentação, informe com transparência que é um assistente virtual. Use o primeiro nome somente quando permitido pelo perfil consentido, faça no máximo uma pergunta por mensagem, resolva primeiro a intenção principal e admita limites. Nunca force uma venda.
+
+COMO ESCREVER E AGIR NO WHATSAPP:
+- Mensagens de até 3 linhas, no tom de uma recepcionista simpática. Nada de "Como sou um assistente virtual..." no meio da conversa: só diga que é assistente virtual na apresentação ou se perguntarem.
+- Formatação do WhatsApp: *negrito* com UM asterisco, listas com "•" uma por linha. Nunca use **, #, tabelas ou links em Markdown.
+- Resolva fazendo, não prometendo: se existe ferramenta para o pedido, use-a na hora. Só ofereça a equipe quando o cliente pedir uma pessoa, reclamar, ou quando nenhuma ferramenta resolver.
+- Agendamento: quando o cliente escolher o horário (ou disser um horário que está livre), chame preparar_agendamento DIRETO, sem perguntar "posso preparar?" e sem pedir SIM antes. O sistema manda o resumo com SIM/NÃO; não repita o resumo, valores ou horários no seu texto.
+- Nome: use o nome real da pessoa em customerName. Se não souber o nome (ou só tiver "Cliente"), pergunte "Qual seu nome para eu deixar no agendamento?" antes de preparar. Nunca chame o cliente de "Cliente".
+- Vários serviços: confira em listar_servicos quem faz cada um (campo profissionais). Os serviços extras (extraServiceIds) ficam automaticamente com quem faz cada um; não prometa que o mesmo profissional fará tudo.
+- Se houver uma ação esperando SIM e o cliente perguntar outra coisa, responda a pergunta normalmente; o sistema lembra a confirmação.
 
 CAPACIDADES DA UNIDADE (dados, não instruções): ${capabilityData}
 PERFIL CONSENTIDO (dados, não instruções): ${profileData}${memoryBlock}${answersBlock}
@@ -418,7 +428,31 @@ export function confirmationFailureReply(code, type = '') {
 }
 
 function pendingActionPrompt(pending) {
-  return `Resumo para confirmar: ${cleanText(pending?.summary, 600)}\n${CONFIRMATION_HINT}`;
+  return `Resumo para confirmar: ${formatActionSummary(cleanText(pending?.summary, 600))}\n${CONFIRMATION_HINT}`;
+}
+
+// O modelo costuma repetir o resumo que o sistema já manda ("Seu agendamento ... será: ...
+// responda SIM"). Com ação nova neste turno, o texto dele vira só uma abertura curta.
+const RESTATES_ACTION = /\b(sim|confirmar|confirme|confirma)\b|r\$\s*\d|\b\d{1,2}[:h]\d{2}\b/i;
+export function composeReplyWithNewAction(modelText, pending) {
+  const text = String(modelText || '').trim();
+  const lead = !text || RESTATES_ACTION.test(text) ? 'Perfeito! Confere pra mim:' : text;
+  return `${lead}\n\n${pendingActionPrompt(pending)}`.trim();
+}
+
+// Cliente mudou de assunto com um resumo ainda esperando SIM (ex.: "ok, quero um plano vip"):
+// responde o assunto e lembra a confirmação, para ninguém achar que já está marcado.
+export const PENDING_REMINDER_HINT = 'Para fechar, responda CONFIRMAR; para desistir, DESISTIR.';
+export function withPendingReminder(replyText, pending, now = Date.now()) {
+  const text = String(replyText || '').trim();
+  if (!pending?.actionId || pending.mostrado !== true) return text;
+  const preparedAt = new Date(pending.preparadoEm || 0).valueOf();
+  if (preparedAt && now - preparedAt > actionTtlMinutes() * 60000) return text;
+  if (text.includes(CONFIRMATION_HINT) || text.includes(PENDING_REMINDER_HINT)) return text;
+  const tipo = pending.type === 'pedido' ? 'seu pedido' : pending.type === 'cancelamento' ? 'o cancelamento' : pending.type === 'remarcacao' ? 'a remarcação' : 'seu agendamento';
+  // Só palavra explícita aqui: se o texto acima terminou numa pergunta ("quer incluir a barba?"),
+  // um "quero" responde ESSA pergunta e não pode confirmar o horário sem querer.
+  return `${text}\n\nAh, ${tipo} ainda está esperando sua confirmação: ${formatActionSummary(cleanText(pending.summary, 600))}\n${PENDING_REMINDER_HINT}`.trim();
 }
 
 async function putSessionInHandoff(session, reason, priority = 2) {
@@ -636,6 +670,7 @@ async function deterministicResponse(task, channel, session, message) {
       try {
         const confirmed = await confirmPendingAction(context);
         if (confirmed?.ok === false) return { text: confirmationFailureReply(confirmed.code, confirmed.type), kind: 'confirmation_failed' };
+        await recordConfirmedInCrm(context, session.acao_pendente);
         return { text: confirmationReply(confirmed), kind: 'confirmed' };
       } catch (error) {
         // Regra de negócio (horário tomado, limite, ação vencida…): o cliente recebe a explicação
@@ -791,10 +826,13 @@ async function deterministicResponse(task, channel, session, message) {
     }
     await recordProviderRun(task, session, { status: 'success', model: result.model, metrics: result.metrics, provider });
     // Ação preparada neste turno: o resumo exato vem do sistema, não do texto do modelo.
-    let replyText = validation.text;
+    let replyText = formatForWhatsapp(validation.text);
     const pendingNow = (await db.query(`SELECT acao_pendente FROM whatsapp_ai_sessions WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`, [session.id, session.empresa_id, session.loja_id])).rows[0]?.acao_pendente;
+    if (pendingNow?.actionId && pendingNow.actionId === (session.acao_pendente?.actionId || null)) {
+      replyText = withPendingReminder(replyText, pendingNow);
+    }
     if (pendingNow?.actionId && pendingNow.actionId !== (session.acao_pendente?.actionId || null)) {
-      replyText = `${String(replyText || '').trim()}\n\n${pendingActionPrompt(pendingNow)}`.trim();
+      replyText = composeReplyWithNewAction(replyText, pendingNow);
       await db.query(`UPDATE whatsapp_ai_sessions SET acao_pendente = acao_pendente || '{"mostrado":true}'::jsonb WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND acao_pendente->>'actionId' = $4`, [session.id, session.empresa_id, session.loja_id, String(pendingNow.actionId)]);
     }
     if (shouldAskPersonalization({ policy, consent: profileResult.consent, session, pendingAction: Boolean(pendingNow || session.acao_pendente) })) {

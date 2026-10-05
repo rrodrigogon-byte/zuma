@@ -2,7 +2,7 @@
 // RETOMADA AUTÔNOMA DE CONVERSA PARADA
 //
 // O atendente prepara o agendamento/pedido, mostra o resumo e o cliente some
-// (foi atender alguém, esqueceu). Antes, a ação expirava em 30 min e o horário
+// (foi atender alguém, esqueceu). Antes, a ação expirava em 30 min (hoje WHATSAPP_AI_ACTION_TTL_MIN, padrão 120) e o horário
 // se perdia. Agora o atendente dá UM toque educado, dentro da própria conversa
 // (atendimento, não marketing), ainda dentro da validade da ação:
 //
@@ -19,9 +19,8 @@
 import { db } from './database.js';
 import { enviarMensagem } from './whatsapp.js';
 import { quietHours } from './ai-automations.js';
-import { CONFIRMATION_HINT } from './whatsapp-ai-intents.js';
+import { CONFIRMATION_HINT, actionTtlMinutes, formatActionSummary, isGenericCustomerName } from './whatsapp-ai-intents.js';
 
-const ACTION_TTL_MIN = 30;
 const clean = (value, max = 600) => String(value ?? '').replace(/\u0000/g, '').trim().slice(0, max);
 
 export function followUpEnabled() {
@@ -30,18 +29,19 @@ export function followUpEnabled() {
 
 export function followUpAfterMinutes() {
   const value = Number.parseInt(process.env.WHATSAPP_AI_FOLLOWUP_AFTER_MIN || '12', 10);
-  return Math.min(ACTION_TTL_MIN - 5, Math.max(5, Number.isFinite(value) ? value : 12));
+  return Math.min(actionTtlMinutes() - 5, Math.max(5, Number.isFinite(value) ? value : 12));
 }
 
 function firstName(value) {
   const name = clean(value, 80).split(/\s+/)[0] || '';
+  if (isGenericCustomerName(name)) return '';
   return /^[\p{L}'-]{2,30}$/u.test(name) ? name : '';
 }
 
 export function followUpText(session = {}) {
   // Nome do perfil do WhatsApp ou, sem ele, o nome que o cliente deu ao marcar.
   const nome = firstName(session.nome) || firstName(session.nome_na_acao);
-  const resumo = clean(session.acao_pendente?.summary, 400).replace(/\.$/, '');
+  const resumo = formatActionSummary(clean(session.acao_pendente?.summary, 400));
   return `${nome ? `Oi, ${nome}!` : 'Oi!'} Ficou faltando só sua confirmação: ${resumo}.\n${CONFIRMATION_HINT} Se preferir outro horário ou produto, é só me dizer.`;
 }
 
@@ -60,7 +60,7 @@ export function planPendingFollowUp(session = {}, { now = new Date(), afterMin =
   const lastCustomer = new Date(session.ultima_interacao_em || 0).valueOf();
   if (!Number.isFinite(preparedAt) || !preparedAt) return { send: false, reason: 'unknown_age' };
   const nowMs = now.valueOf();
-  if (nowMs - preparedAt >= (ACTION_TTL_MIN - 3) * 60000) return { send: false, reason: 'action_expiring' };
+  if (nowMs - preparedAt >= (actionTtlMinutes() - 3) * 60000) return { send: false, reason: 'action_expiring' };
   const idleSince = Math.max(preparedAt, Number.isFinite(lastCustomer) ? lastCustomer : 0);
   if (nowMs - idleSince < afterMin * 60000) return { send: false, reason: 'too_soon' };
   if (!clean(pending.summary)) return { send: false, reason: 'empty_summary' };
@@ -77,10 +77,10 @@ async function candidateSessions(now) {
       WHERE s.acao_pendente IS NOT NULL
         AND s.status = 'ativo'
         AND s.acao_pendente->>'mostrado' = 'true'
-        AND s.atualizado_em > $1::timestamptz - INTERVAL '40 minutes'
+        AND s.atualizado_em > $1::timestamptz - make_interval(mins => $2::int)
       ORDER BY s.atualizado_em ASC
       LIMIT 50`,
-    [now.toISOString()],
+    [now.toISOString(), actionTtlMinutes() + 10],
   );
   return result.rows;
 }
