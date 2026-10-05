@@ -6,11 +6,15 @@ import { canonicalWhatsappPhone } from './core/whatsapp-phone.js';
 // fatos da memória do atendente) e pontua a próxima oferta de cada cliente:
 //   score = 0,40·afinidade + 0,25·interesse + 0,20·momento + 0,15·margem
 // Sem I/O: quem chama carrega os dados. Clientes são identificados pelo telefone
-// (55 + DDD + número) quando existe, senão pelo id do cadastro local.
+// canônico apenas quando não há cadastros conflitantes; colisões mantêm IDs separados.
 // ============================================================================
 
 export const WEIGHTS = Object.freeze({ afinidade: 0.4, interesse: 0.25, momento: 0.2, margem: 0.15 });
 export const SEND_THRESHOLD = 0.6;
+export const PURCHASE_STATUSES = Object.freeze(['paid', 'processing', 'ready', 'shipped', 'ready_for_pickup', 'delivered', 'picked_up', 'completed']);
+export const isAnonymized = (record) => Boolean(record?.anonimizado || record?.anonimizadoEm || record?.metadados?.anonimizadoEm || record?.metadados?.anonimizado);
+export const productKey = (item) => item?.id ? String(item.id).startsWith('local:') ? String(item.id) : `commerce:${item.id}` : `name:${plainText(item?.nome)}`;
+const isTestItem = (item) => item?.metadados?.teste === true || item?.metadados?.homologacao === true || /^homologacao(?: |$)/.test(plainText(item?.nome));
 const DAY = 86400000;
 const list = (value) => (Array.isArray(value) ? value : []);
 const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
@@ -119,6 +123,25 @@ function emptyCustomer(key) {
  */
 export function buildCustomerGraph(input = {}, { now = new Date() } = {}) {
   const customers = new Map();
+  const quality = { fontes: input.quality?.fontes || {}, memoriaEscopo: input.quality?.memoriaEscopo || 'empresa', estoqueLocalEscopo: input.quality?.estoqueLocalEscopo || 'empresa', excluidos: { anonimizados: 0, pedidosNaoConfirmados: 0, itensTeste: 0 }, telefonesAmbiguos: 0 };
+  const owners = new Map();
+  const blockedPhones = new Set();
+  const register = (phone, id, record) => {
+    if (!phone) return;
+    if (isAnonymized(record)) { blockedPhones.add(phone); return; }
+    if (!owners.has(phone)) owners.set(phone, new Set());
+    owners.get(phone).add(id);
+  };
+  for (const c of list(input.identityClients || input.clients)) if (c) register(graphPhone(c.telefone), `id:${c.id}`, c);
+  for (const o of list(input.orders)) if (o?.customerId) register(graphPhone(o.telefone), `commerce:${o.customerId}`, o);
+  const ambiguous = new Set([...owners].filter(([, ids]) => ids.size > 1).map(([phone]) => phone));
+  quality.telefonesAmbiguos = ambiguous.size;
+  const productNames = new Map(list(input.catalog).map(p => [productKey(p), p.nome]));
+  const byName = new Map();
+  for (const p of list(input.catalog)) {
+    const name = plainText(p.nome);
+    byName.set(name, byName.has(name) ? null : productKey(p));
+  }
   const idToKey = new Map();
   const serviceNames = new Map(list(input.services).map((s) => [String(s.id), s.nome]));
   const professionalNames = new Map(list(input.professionals).map((p) => [String(p.id), p.nome]));
@@ -127,9 +150,13 @@ export function buildCustomerGraph(input = {}, { now = new Date() } = {}) {
 
   const ensure = (key) => { if (!customers.has(key)) customers.set(key, emptyCustomer(key)); return customers.get(key); };
   for (const client of list(input.clients)) {
+    if (isAnonymized(client)) { quality.excluidos.anonimizados += 1; continue; }
     if (!client || client.padrao || /padrao|balcao/i.test(String(client.id))) continue;
-    const key = graphPhone(client.telefone) || `id:${client.id}`;
+    const phone = graphPhone(client.telefone);
+    const key = phone && !ambiguous.has(phone) && !blockedPhones.has(phone) ? phone : `id:${client.id}`;
     const c = ensure(key);
+    c.phone = phone;
+    c.identityUnresolved = ambiguous.has(phone) || blockedPhones.has(phone);
     c.clientIds.add(String(client.id));
     c.nome ||= String(client.nome || '').trim();
     c.aniversario ||= client.dataNascimento || client.aniversario || null;
@@ -143,14 +170,16 @@ export function buildCustomerGraph(input = {}, { now = new Date() } = {}) {
     if (from && to && from !== to) { ensure(to).indicou.add(from); edge(`c:${to}`, 'INDICOU', `c:${from}`); }
   }
   const keyOf = (item) => {
-    if (item?.clienteId && idToKey.has(String(item.clienteId))) return idToKey.get(String(item.clienteId));
+    if (item?.clienteId) return idToKey.get(String(item.clienteId)) || null;
     const phone = graphPhone(item?.clienteTelefone || item?.telefone);
-    if (phone) return phone;
+    if (phone && !ambiguous.has(phone) && !blockedPhones.has(phone)) return phone;
     return null;
   };
-  const addProduct = (c, name, category, at, amount) => {
-    const p = plainText(name);
-    if (!p) return;
+  const addProduct = (c, name, category, at, amount, id = null, metadata = null) => {
+    if (isTestItem({ nome: name, metadados: metadata })) { quality.excluidos.itensTeste += 1; return; }
+    const p = id || byName.get(plainText(name)) || `name:${plainText(name)}`;
+    productNames.set(p, name);
+    if (!plainText(name)) return;
     c.products.set(p, (c.products.get(p) || 0) + 1);
     const brand = brandOf(name);
     if (brand) c.brands.add(brand);
@@ -174,7 +203,7 @@ export function buildCustomerGraph(input = {}, { now = new Date() } = {}) {
         c.services.set(s, (c.services.get(s) || 0) + 1);
         c.totalGasto += num(item.subtotal);
         edge(`c:${key}`, 'AGENDOU', `s:${s}`, at);
-      } else if (item.tipo === 'produto') addProduct(c, item.nome, null, at, item.subtotal);
+      } else if (item.tipo === 'produto') addProduct(c, item.nome, null, at, item.subtotal, item.produtoId ? `local:${item.produtoId}` : null);
       const prof = item.profissionalId || command.profissionalId;
       if (prof) { c.professionals.set(String(prof), (c.professionals.get(String(prof)) || 0) + 1); }
     }
@@ -201,17 +230,27 @@ export function buildCustomerGraph(input = {}, { now = new Date() } = {}) {
   for (const sale of list(input.retailSales)) {
     if (sale?.status !== 'pago' || sale.comandaId) continue;
     const key = keyOf(sale); if (!key) continue;
-    for (const item of list(sale.itens)) addProduct(ensure(key), item.nome || item.produtoNome, null, sale.pagoEm || sale.criadoEm, item.subtotal);
+    for (const item of list(sale.itens)) addProduct(ensure(key), item.nome || item.produtoNome, null, sale.pagoEm || sale.criadoEm, item.subtotal, item.produtoId ? `local:${item.produtoId}` : null);
   }
+  const seenOrders = new Set();
   for (const order of list(input.orders)) {
-    const key = graphPhone(order?.telefone); if (!key) continue;
+    if (isAnonymized(order)) { quality.excluidos.anonimizados += 1; continue; }
+    if (!PURCHASE_STATUSES.includes(order?.status)) { quality.excluidos.pedidosNaoConfirmados += 1; continue; }
+    if (order.id && seenOrders.has(String(order.id))) continue;
+    if (order.id) seenOrders.add(String(order.id));
+    const phone = graphPhone(order?.telefone);
+    if (!phone || blockedPhones.has(phone)) continue;
+    const key = ambiguous.has(phone) ? (order.customerId ? `commerce:${order.customerId}` : null) : phone;
+    if (!key) continue;
     const c = ensure(key);
+    c.phone = phone;
+    c.identityUnresolved = ambiguous.has(phone);
     c.nome ||= String(order.nome || '').trim();
-    for (const item of list(order.itens)) addProduct(c, item.nome, item.categoria, order.criadoEm, item.subtotal);
+    for (const item of list(order.itens)) addProduct(c, item.nome, item.categoria, order.criadoEm, item.subtotal, item.produtoId ? `commerce:${item.produtoId}` : null, item.metadados);
   }
   for (const fact of list(input.facts)) {
     if (fact?.status !== 'ativo') continue;
-    const key = graphPhone(fact.telefone); if (!key) continue;
+    const key = graphPhone(fact.telefone); if (!key || ambiguous.has(key) || blockedPhones.has(key)) continue;
     const c = ensure(key);
     c.interests.push({ categoria: fact.categoria, valor: String(fact.valor || ''), texto: plainText(fact.valor) });
     if (['produto_interesse', 'servico_interesse', 'familia_olfativa'].includes(fact.categoria)) edge(`c:${key}`, fact.categoria === 'servico_interesse' ? 'INTERESSE' : 'PERGUNTOU', `i:${plainText(fact.valor)}`);
@@ -232,7 +271,8 @@ export function buildCustomerGraph(input = {}, { now = new Date() } = {}) {
   }
   const nowMs = now.valueOf();
   for (const c of customers.values()) {
-    c.visits = c.visits.filter(Boolean).sort((a, b) => dateMs(a) - dateMs(b));
+    c.automationBlocked = Boolean(c.identityUnresolved || Object.values(quality.fontes).some(s => s.status !== 'ok'));
+    c.visits = c.visits.filter(v => dateMs(v) > 0 && dateMs(v) <= nowMs).sort((a, b) => dateMs(a) - dateMs(b));
     c.lastVisitMs = c.visits.length ? dateMs(c.visits[c.visits.length - 1]) : 0;
     c.daysSince = c.lastVisitMs ? Math.floor((nowMs - c.lastVisitMs) / DAY) : null;
     c.interval = habitualInterval(c.visits);
@@ -240,7 +280,7 @@ export function buildCustomerGraph(input = {}, { now = new Date() } = {}) {
     c.favoriteProfessional = [...c.professionals.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
   }
   const byToken = new Map([...customers.keys()].map((key) => [customerToken(key), key]));
-  return { customers, edges, serviceNames, professionalNames, byToken };
+  return { customers, edges, serviceNames, professionalNames, productNames, byToken, quality };
 }
 
 function marginScore(item, maxPrice) {
@@ -248,7 +288,7 @@ function marginScore(item, maxPrice) {
   if (price <= 0) return 0;
   const cost = num(item.custo);
   if (cost > 0 && cost < price) return round(Math.min(1, ((price - cost) / price) / 0.6));
-  return round(0.3 + 0.5 * Math.min(1, price / (maxPrice || price)));
+  return 0; // custo desconhecido ou margem não positiva não é evidência de margem
 }
 
 function interestScore(c, candidate) {
@@ -306,8 +346,8 @@ export function scoreCustomer(c, { catalog = [], services = [], index, maxPrice 
   const offers = [];
   const moment = momentScore({ daysSince: c.daysSince, interval: c.interval, birthdayIn: c.birthdayIn });
   for (const item of catalog) {
-    if (!item || item.publicado === false || num(item.estoque) <= 0 || num(item.preco) <= 0) continue;
-    const key = plainText(item.nome);
+    if (!item || isTestItem(item) || item.publicado === false || num(item.estoque) <= 0 || num(item.preco) <= 0) continue;
+    const key = productKey(item);
     if (!key || c.products.has(key)) continue;
     const brand = brandOf(item.nome);
     const aff = affinityScore(c, key, brand, index);
@@ -331,7 +371,7 @@ export function scoreCustomer(c, { catalog = [], services = [], index, maxPrice 
       if (!key || done.has(key) || !UPGRADE_HINT.test(key) || num(service.preco) >= 500) continue;
       const aff = affinityScore(c, `s:${key}`, '', index);
       const interesse = interestScore(c, { nome: service.nome, categoria: service.categoria });
-      const margem = round(Math.min(1, 0.5 + num(service.preco) / 300));
+      const margem = marginScore(service);
       const score = WEIGHTS.afinidade * aff.score + WEIGHTS.interesse * interesse + WEIGHTS.momento * moment + WEIGHTS.margem * margem;
       const reasons = [];
       if (aff.similar) reasons.push(`${aff.similar} cliente(s) do mesmo profissional fazem`);
@@ -350,7 +390,7 @@ export function nextBestOffers(graph, { catalog = [], services = [], limit = 50,
   const maxPrice = Math.max(1, ...catalog.map((item) => num(item.preco)));
   const rows = [];
   for (const c of graph.customers.values()) {
-    if (onlyConsented && !c.consent.marketing) continue;
+    if (onlyConsented && (!c.consent.marketing || c.automationBlocked)) continue;
     if (!c.visits.length && !c.products.size && !c.interests.length) continue;
     const offers = scoreCustomer(c, { catalog, services, index, maxPrice });
     if (!offers.length || offers[0].score < minScore) continue;
@@ -358,7 +398,7 @@ export function nextBestOffers(graph, { catalog = [], services = [], limit = 50,
       cliente: customerView(c, graph),
       melhor: offers[0],
       alternativas: offers.slice(1, 3),
-      enviar: offers[0].score >= SEND_THRESHOLD && c.consent.marketing,
+      enviar: offers[0].score >= SEND_THRESHOLD && c.consent.marketing && !c.consent.optOut && !c.automationBlocked,
     });
   }
   return rows.sort((a, b) => b.melhor.score - a.melhor.score).slice(0, Math.max(1, Math.min(500, limit)));
@@ -375,7 +415,9 @@ export function customerView(c, graph) {
     aniversarioEmDias: c.birthdayIn,
     profissionalPreferido: c.favoriteProfessional ? (graph.professionalNames.get(c.favoriteProfessional) || null) : null,
     consentimento: { ...c.consent },
-    produtos: [...c.products.keys()].slice(0, 8),
+    produtos: [...c.products.keys()].slice(0, 8).map(k => graph.productNames?.get(k) || k),
+    identidadePendente: Boolean(c.identityUnresolved),
+    automacaoBloqueada: Boolean(c.automationBlocked),
     servicos: [...c.services.keys()].slice(0, 8),
     interesses: c.interests.slice(0, 8).map((i) => i.valor),
     indicou: c.indicou.size,
@@ -403,15 +445,19 @@ export function customerEgo(graph, keyOrToken) {
       const raw = rest.join(':');
       const tipo = { c: 'cliente', s: 'servico', p: 'produto', f: 'profissional', i: 'interesse' }[prefix] || 'outro';
       const rotulo = tipo === 'profissional' ? (graph.professionalNames.get(raw) || 'Profissional')
-        : tipo === 'cliente' ? (graph.customers.get(raw)?.nome || 'Cliente') : raw;
+        : tipo === 'cliente' ? (graph.customers.get(raw)?.nome || 'Cliente') : tipo === 'produto' ? (graph.productNames?.get(raw) || raw) : raw;
       nodes.set(other, { id: other, tipo, rotulo });
     }
     links.push({ from: e.from, rel: e.rel, to: e.to, peso: 1 });
   }
   const pub = (id) => (id.startsWith('c:') ? `c:${customerToken(id.slice(2))}` : id);
+  const visible = [...nodes.values()].slice(0, 40);
+  const visibleIds = new Set(visible.map(n => n.id));
+  const visibleLinks = links.filter(l => visibleIds.has(l.from) && visibleIds.has(l.to)).slice(0, 60);
   return {
-    nodes: [...nodes.values()].slice(0, 40).map((n) => ({ ...n, id: pub(n.id) })),
-    links: links.slice(0, 60).map((l) => ({ ...l, from: pub(l.from), to: pub(l.to) })),
+    truncado: visible.length < nodes.size || visibleLinks.length < links.length,
+    nodes: visible.map((n) => ({ ...n, id: pub(n.id) })),
+    links: visibleLinks.map((l) => ({ ...l, from: pub(l.from), to: pub(l.to) })),
   };
 }
 
@@ -429,13 +475,15 @@ export function graphSummary(graph) {
   }
   const customers = [...graph.customers.values()];
   return {
+    qualidade: graph.quality,
     clientes: customers.length,
     comMemoria: customers.filter((c) => c.interests.length).length,
     comIntervalo: customers.filter((c) => c.interval).length,
     relacoes: byRel,
     arestas: graph.edges.length,
-    produtosMaisCompartilhados: [...productBuyers.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([nome, clientes]) => ({ nome, clientes })),
-    compradosJuntos: [...pairs.entries()].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, n]) => ({ itens: k.split('|'), clientes: n })),
+    produtosMaisCompartilhados: [...productBuyers.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([nome, clientes]) => ({ nome: graph.productNames?.get(nome) || nome, clientes })),
+    compradosJuntos: [...pairs.entries()].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, n]) => ({ itens: k.split('|').map(id => graph.productNames?.get(id) || id), clientes: n })),
     emRisco: customers.filter((c) => c.interval && c.daysSince !== null && c.daysSince > 1.5 * c.interval).length,
   };
 }
+

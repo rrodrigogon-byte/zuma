@@ -25,7 +25,7 @@ export async function runAutomationTick({ now = new Date() } = {}) {
         empresaId: row.empresa_id,
         lojaId: row.loja_id,
         // No store JSON da barbearia a empresa do Commerce usa o mesmo id (padrão já usado pelos lembretes de agenda).
-        loadGraph: () => loadBrainGraph({ legacyEmpresaId: row.empresa_id, empresaId: row.empresa_id }),
+        loadGraph: () => loadBrainGraph({ legacyEmpresaId: row.empresa_id, empresaId: row.empresa_id, commerceLojaId: row.loja_id, legacyLojaId: row.loja_id }),
         now,
       });
       results.push({ empresa: String(row.empresa_id).slice(0, 8), ...result });
@@ -54,3 +54,4 @@ export function startAiBrainSchedulers() {
   }
   return { learning, automations };
 }
+
