@@ -1,3 +1,4 @@
+import { identificarCliente } from './barbearia-identidade.js';
 import { db, save } from './db.js';
 import * as financeiroKytto from './financeiro-central-kytto.js';
 import * as clientesKytto from './clientes-contas-kytto.js';
@@ -409,6 +410,11 @@ export function atualizarServico(empresaId, servicoId, dados = {}) {
   return { ...atual };
 }
 
+function identidadeCliente(registro) {
+  const clientes = Object.values(db().clientesKytto?.empresas?.[String(registro.empresaId)]?.clientes || {});
+  return identificarCliente(registro, clientes, registro.empresaId);
+}
+
 export function listarAgendamentos(empresaId, filtros = {}) {
   const itens = Object.values(estadoEmpresa(empresaId, false).agendamentos)
     .filter((item) => !filtros.data || String(item.dataAgenda || chaveDia(item.dataHora)).slice(0, 10) === String(filtros.data).slice(0, 10))
@@ -418,7 +424,7 @@ export function listarAgendamentos(empresaId, filtros = {}) {
     .filter((item) => !filtros.profissionalId || String(filtros.profissionalId).split(',').map(id => id.trim()).includes(item.profissionalId))
     .filter((item) => !filtros.lojaId || !item.lojaId || item.lojaId === String(filtros.lojaId))
     .sort(ordenarPorData);
-  return itens.map((item) => ({ ...item }));
+  return itens.map((item) => identidadeCliente(item));
 }
 
 const STATUS_FILA = new Set(['aguardando', 'chamado', 'atendido', 'ausente', 'cancelado']);
@@ -871,7 +877,7 @@ function copiarComandaBarbearia(comanda, idempotente = false) {
   const gorjeta = Number(Math.max(0, Number(comanda.gorjeta || 0)).toFixed(2));
   const total = Number(Math.max(0, subtotal - desconto + gorjeta).toFixed(2));
   return {
-    ...comanda,
+    ...identidadeCliente(comanda),
     subtotal,
     desconto,
     gorjeta,
@@ -985,6 +991,8 @@ export function registrarConsumoInternoComandaBarbearia(empresaId, comandaId, da
 
 export function listarComandasBarbearia(empresaId, filtros = {}) {
   return Object.values(estadoEmpresa(empresaId, false).comandas)
+    .filter((item) => !filtros.agendamentoId || item.agendamentoId === String(filtros.agendamentoId))
+    .filter((item) => !filtros.pendentes || ['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(item.status))
     .filter((item) => !filtros.status || item.status === String(filtros.status))
     .filter((item) => !filtros.lojaId || item.lojaId === String(filtros.lojaId))
     .filter((item) => !filtros.clienteId || item.clienteId === String(filtros.clienteId))
@@ -1697,3 +1705,4 @@ export function exportarEstado(empresaId) {
     vendasRevenda: listarVendasRevenda(empresaId),
   };
 }
+
