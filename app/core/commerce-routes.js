@@ -1397,7 +1397,9 @@ export function createCommerceAdminRouter() {
       const context = await requirePermission(req, 'catalog.read');
       const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
       const scope = await resolveCatalogResourceScope(db, context, { mediaId: req.params.id, storefrontId, requireChannel: false });
-      if (!scope.media) throw new CommerceError('mídia não encontrada no tenant', 'MEDIA_NOT_FOUND');
+      // Uma vitrine selecionada nunca permite prévia de um produto exclusivo de outra,
+      // mesmo para administradores corporativos: não revelar mídia fora do contexto.
+      if (!scope.media || !scope.product.authorized_channel) throw new CommerceError('mídia não encontrada nesta vitrine', 'MEDIA_NOT_FOUND');
       await streamCommerceImage({
         storageKey: scope.media.storage_key,
         mimeType: scope.media.mime_type,
@@ -1405,6 +1407,7 @@ export function createCommerceAdminRouter() {
         empresaId: scope.empresaId,
         productId: scope.media.product_id,
         mediaId: scope.media.id,
+        privateCache: true,
       });
     } catch (error) {
       if (!res.headersSent) jsonError(res, error);

@@ -98,8 +98,8 @@ apiFn.upload = (path, file, extraHeaders = {}) => request(path, {
     ...extraHeaders,
   },
 })
-apiFn.blob = async (path) => {
-  const res = await fetch(path, { headers: authHeaders() })
+apiFn.blob = async (path, { signal } = {}) => {
+  const res = await fetch(path, { headers: authHeaders(), signal })
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
     const error = new Error(data.error || data.erro || `Erro ${res.status}`)
