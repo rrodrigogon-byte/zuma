@@ -31,7 +31,10 @@ export function conclusoesDoDiagnostico(f = {}) {
   const lista = f.instancias || [];
   const conhecida = lista.some((i) => i.name === f.instancia);
   add(conhecida || !lista.length, 'Instância no backend', conhecida || !lista.length ? `"${f.instancia}" configurada.` : `"${f.instancia}" não aparece no backend (${lista.map((i) => i.name).join(', ')}). Inclua em WHATSAPP_INSTANCE_NAMES do backend.`);
-  add(f.estado === 'open', 'Número conectado', f.estado === 'open' ? 'Sessão aberta no backend.' : `Estado "${f.estado || 'desconhecido'}": leia o QR em /admin/whatsapp.`);
+  add(f.estado === 'open', 'Sessão conectada', f.estado === 'open' ? 'Sessão aberta no backend.' : `Estado "${f.estado || 'desconhecido'}": leia o QR em /admin/whatsapp.`);
+  add(f.numeroIdentificado === true, 'Número identificado pelo backend', f.numeroIdentificado
+    ? 'A própria sessão informou o telefone da linha.'
+    : 'Sessão aberta não prova qual é a linha. Confira Aparelhos conectados no celular da empresa e solicite ao backend que exponha o número da própria sessão; uma referência manual não confirma titularidade.');
 
   const e = f.entrada || {};
   add(Boolean(e.empresaPorVariavel && f.canal), 'Empresa dona do número',
@@ -110,6 +113,7 @@ export async function diagnosticarWhatsapp({ fetchImpl, agora = Date.now() } = {
     fatos.chaveRecusada = Boolean(instancias.authError || status.authError || entradas.authError);
     fatos.instancias = (instancias.items || []).map((i) => ({ name: i.name, state: i.state || '' }));
     fatos.estado = status.state || 'unknown';
+    fatos.numeroIdentificado = Boolean(status.ok && status.state === 'open' && status.phone);
     fatos.mensagens24h = entradas.ok ? resumoMensagens(entradas.messages) : null;
     fatos.erroLeitura = entradas.ok ? null : (entradas.error || `HTTP_${entradas.status ?? '-'}`);
   }

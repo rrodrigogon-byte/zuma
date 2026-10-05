@@ -2,6 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as provider from './whatsapp-provider.js';
 
+test('diagnóstico de formato mostra só nomes e tipos, jamais valores sensíveis', () => {
+  const paths = provider.safeResponseFieldPaths({
+    state: 'open', owner: { jid: '5565999991234@s.whatsapp.net' },
+    token: 'segredo-privado', data: { phoneNumber: '5565999991234', password: 'outro-segredo' },
+    '5565999991234': { id: 'cliente' },
+  });
+  assert.ok(paths.includes('owner.jid:string'));
+  assert.ok(paths.includes('data.phoneNumber:string'));
+  assert.ok(!paths.some((path) => /5565999991234|segredo|token|password|cliente/i.test(path)));
+});
+
 test('listInstances aceita os formatos do backend sem nomes vazios', async () => {
   await withEnv(env, async () => {
     const fetch = fakeFetch([{ status: 200, body: { instances: [
@@ -27,6 +38,28 @@ test('listInstances rejeita envelope inválido e preserva falha de autenticaçã
     const denied = await provider.listInstances(fakeFetch([{ status: 401, body: {} }]));
     assert.equal(denied.authError, true);
     assert.deepEqual(denied.items, []);
+  });
+});
+
+test('falha temporária da lista não consome o diagnóstico único, que jamais mostra valores', async () => {
+  await withEnv(env, async () => {
+    const isolated = await import('./whatsapp-provider.js?diagnostico-seguro=1');
+    const lines = [];
+    const original = console.info;
+    console.info = (...args) => lines.push(args.join(' '));
+    try {
+      await isolated.getInstanceStatus('dino-1', fakeFetch([
+        { status: 200, body: { state: 'open' } }, { status: 503, body: {} },
+      ]));
+      assert.equal(lines.length, 0);
+      await isolated.getInstanceStatus('dino-1', fakeFetch([
+        { status: 200, body: { state: 'open' } },
+        { status: 200, body: { instances: [{ name: 'dino-1', state: 'open', self: { jid: '5565999991234@s.whatsapp.net' } }] } },
+      ]));
+      assert.equal(lines.length, 1);
+      assert.match(lines[0], /self\.jid:string/);
+      assert.doesNotMatch(lines[0], /5565999991234|whatsapp\.net/);
+    } finally { console.info = original; }
   });
 });
 

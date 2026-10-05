@@ -150,6 +150,7 @@
 .dadm-wa-source { font-size: 12px; color: var(--muted); line-height: 1.4; }
 .dadm-wa-source.verified { color: #24765d; font-weight: 700; }
 .dadm-wa-copy { border: 1px solid var(--accent); border-radius: 9px; background: var(--accent); color: #fff; padding: 7px 12px; font: 700 12px var(--font-body, inherit); cursor: pointer; }
+.dadm-wa-reference-link { background: transparent; color: var(--accent); text-decoration: none; }
 .dadm-wa-copy:hover { filter: brightness(1.08); }
 .dadm-wa-copy:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 .dadm-wa-live { min-width: 235px; max-width: 300px; display: grid; align-content: center; justify-items: start; gap: 8px; border-left: 1px solid var(--line); padding-left: 24px; }

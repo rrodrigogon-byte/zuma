@@ -317,7 +317,8 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     const diag = await request(base, '/api/admin/barbearia/whatsapp-conexao/diagnostico', { headers: A });
     assert.equal(diag.response.status, 200, JSON.stringify(diag.body));
     assert.equal(diag.body.estado, 'open');
-    assert.ok(diag.body.conclusoes.some((c) => c.titulo === 'Número conectado' && c.ok));
+    assert.ok(diag.body.conclusoes.some((c) => c.titulo === 'Sessão conectada' && c.ok));
+    assert.ok(diag.body.conclusoes.some((c) => c.titulo === 'Número identificado pelo backend' && c.ok));
     assert.ok(diag.body.conclusoes.some((c) => c.titulo === 'Linha verificada' && !c.ok), 'sem WHATSAPP_LINE_VERIFIED a trava aparece');
     assert.doesNotMatch(JSON.stringify(diag.body), /chave-teste-com-mais-de-vinte/, 'nunca expõe a chave');
     // Queda + vigia: reconecta com espera crescente

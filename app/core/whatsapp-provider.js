@@ -29,6 +29,27 @@ export const MAX_MESSAGE_CHARS = 4000;
 const CUT_AT = 3900;
 
 const clean = (value, max = 500) => String(value ?? '').trim().slice(0, max);
+let missingPhoneShapeLogged = false;
+
+// Diagnóstico de contrato: nomes de campos e tipos, jamais valores, números ou
+// segredos. Ajuda a localizar um possível campo "self" em versões do backend.
+export function safeResponseFieldPaths(value) {
+  const out = [];
+  const walk = (node, prefix = '', depth = 0) => {
+    if (!node || typeof node !== 'object' || Array.isArray(node) || depth > 3) return;
+    for (const key of Object.keys(node).slice(0, 25)) {
+      if (!/^[a-zA-Z_]{1,32}$/.test(key) || /token|secret|password|auth|key/i.test(key)) continue;
+      const path = prefix ? `${prefix}.${key}` : key;
+      const child = node[key];
+      const type = Array.isArray(child) ? 'array' : typeof child;
+      out.push(`${path}:${type}`);
+      if (out.length >= 80) return;
+      if (type === 'object') walk(child, path, depth + 1);
+    }
+  };
+  walk(value);
+  return out.slice(0, 80);
+}
 
 export function whatsappProviderName() {
   const value = clean(process.env.WHATSAPP_PROVIDER, 40).toLowerCase().replace(/[-\s]/g, '_');
@@ -156,20 +177,20 @@ export function confirmedPhone(data = {}) {
   return '';
 }
 
-export async function listInstances(fetchImpl) {
+export async function listInstances(fetchImpl, { includeFieldPaths = false } = {}) {
   const cfg = chatbotBackendConfig();
   const result = await call(cfg, 'GET', '/instances', null, fetchImpl);
   if (isAuthError(result.status)) return { ok: false, authError: true, status: result.status, items: [] };
   const list = Array.isArray(result.data) ? result.data : (result.data?.instances || result.data?.items || []);
-  if (!Array.isArray(list)) return { ok: false, status: result.status, error: 'invalid_instances_response', items: [] };
+  if (!Array.isArray(list)) return { ok: false, status: result.status, error: 'invalid_instances_response', items: [], ...(includeFieldPaths ? { responseFields: safeResponseFieldPaths(result.data) } : {}) };
   const items = list.map((item) => {
     if (typeof item === 'string') return { name: clean(item, 100) };
     if (!item || typeof item !== 'object') return null;
     const name = [item.name, item.instanceName, item.instance_name, item.instance?.instanceName, item.instance?.name, item.instance, item.id]
       .find((value) => typeof value === 'string' && value.trim());
-    return name ? { name: clean(name, 100), state: normalizeState(item), phone: confirmedPhone(item) } : null;
+    return name ? { name: clean(name, 100), state: normalizeState(item), phone: confirmedPhone(item), ...(includeFieldPaths ? { fields: safeResponseFieldPaths(item) } : {}) } : null;
   }).filter((item) => item?.name);
-  return { ok: result.ok, status: result.status, items };
+  return { ok: result.ok, status: result.status, items, ...(includeFieldPaths ? { responseFields: safeResponseFieldPaths(result.data) } : {}) };
 }
 
 export async function getInstanceStatus(instance, fetchImpl, { resolvePhone = true } = {}) {
@@ -187,8 +208,21 @@ export async function getInstanceStatus(instance, fetchImpl, { resolvePhone = tr
     // Alguns backends só devolvem o titular em GET /instances. Exigir nome
     // EXATO e estado aberto na lista para não mostrar a linha de outra empresa
     // ou uma identidade antiga depois de uma troca de sessão.
-    const listed = await listInstances(fetchImpl);
-    phone = listed.ok ? (listed.items.find((item) => item.name === cfg.instance && item.state === 'open')?.phone || '') : '';
+    const listed = await listInstances(fetchImpl, { includeFieldPaths: !missingPhoneShapeLogged });
+    const candidate = listed.items.find((item) => item.name === cfg.instance);
+    const exact = candidate?.state === 'open' ? candidate : null;
+    phone = listed.ok ? (exact?.phone || '') : '';
+    // Timeout, 401 e 5xx não consomem a única amostra: tentar novamente quando
+    // a lista responder. Um 2xx com envelope inesperado já é sinal útil.
+    const usableShape = listed.ok || (listed.status >= 200 && listed.status < 300 && listed.error === 'invalid_instances_response');
+    if (!phone && !missingPhoneShapeLogged && usableShape) {
+      missingPhoneShapeLogged = true;
+      console.info('[WhatsApp] sessão aberta sem identidade; somente campos/tipos:', JSON.stringify({
+        status: safeResponseFieldPaths(result.data),
+        list: listed.responseFields || [],
+        exact: candidate?.fields || [],
+      }));
+    }
   }
   return {
     ok: true,
@@ -397,4 +431,3 @@ export function chatbotBackendStickerPath(env = process.env) {
   const value = clean(env.CHATBOT_BACKEND_STICKER_PATH || '', 120);
   return /^\/[a-z0-9/_{}.-]+$/i.test(value) ? value : '';
 }
-

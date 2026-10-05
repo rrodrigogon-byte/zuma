@@ -5,7 +5,7 @@ import { conclusoesDoDiagnostico } from './whatsapp-diagnostico.js';
 const AGORA = '2026-10-04T18:00:00.000Z';
 const base = () => ({
   agora: AGORA, provedor: 'chatbot_backend', configurado: true, modo: 'instancias', instancia: 'dino',
-  instancias: [{ name: 'dino', state: 'open' }], estado: 'open', chaveRecusada: false, saida: 'pilot',
+  instancias: [{ name: 'dino', state: 'open' }], estado: 'open', numeroIdentificado: true, chaveRecusada: false, saida: 'pilot',
   canal: { id: 'c1', ultimo_evento_em: '2026-10-04T17:59:30.000Z' },
   entrada: { ativa: true, workerIniciado: true, modo: 'pilot', modoPedido: 'pilot', linhaVerificada: true, rolloutAprovado: false, pilotos: 1, intervaloMs: 5000, empresaPorVariavel: true, ultimaPassada: { em: '2026-10-04T17:59:55.000Z', resultado: { lidas: 3, novas: 1 } } },
   mensagens24h: { total: 3, contatos: 1, ultimaEm: '2026-10-04T17:59:20.000Z' },
@@ -28,6 +28,15 @@ test('piloto pronto: todas as conclusões verdes', () => {
   const c = conclusoesDoDiagnostico(base());
   assert.ok(c.length >= 9);
   assert.deepEqual(c.filter((i) => !i.ok).map((i) => i.titulo), []);
+});
+
+test('sessão aberta sem telefone não aparece como saúde totalmente verde', () => {
+  const f = { ...base(), numeroIdentificado: false };
+  const c = por(f);
+  assert.equal(c['Sessão conectada'].ok, true);
+  assert.equal(c['Linha verificada'].ok, true, 'gate administrativo é separado da identidade reportada pelo backend');
+  assert.equal(c['Número identificado pelo backend'].ok, false);
+  assert.match(c['Número identificado pelo backend'].detalhe, /referência manual não confirma/);
 });
 
 test('situação de 04/10: sem empresa dona, sem linha verificada, entrada on sem rollout e saída desligada', () => {

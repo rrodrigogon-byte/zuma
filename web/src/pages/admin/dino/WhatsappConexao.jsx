@@ -286,6 +286,7 @@ function WhatsappConexaoEmpresa() {
           <strong className="dadm-wa-number">{line.value}</strong>
           <span className={`dadm-wa-source ${line.verified ? 'verified' : ''}`}>{line.verified ? '✓ ' : '• '}{line.source}</span>
           {line.copy && <button type="button" className="dadm-wa-copy" onClick={() => copiarNumero(line.copy)} aria-label="Copiar número completo do WhatsApp">Copiar número</button>}
+          {podeGerenciar && !conexao.phoneNumber && <a className="dadm-wa-copy dadm-wa-reference-link" href="#wa-reference">{conexao.phoneReference ? 'Editar referência não verificada' : 'Informar número de referência'}</a>}
         </div>
         <div className="dadm-wa-live">
           <span className={`dadm-state ${state}`} role="status">{STATES[state] || state}</span>
@@ -319,7 +320,7 @@ function WhatsappConexaoEmpresa() {
             {podeGerenciar && !conexao.phoneNumber && <form className="dadm-wa-reference" onSubmit={(event) => { event.preventDefault(); salvarConfig({ numeroExibicao: referencia }) }}>
               <label className="c360-field" htmlFor="wa-reference">Número de referência (opcional; não verificado)</label>
               <div className="dadm-filters"><input id="wa-reference" className="c360-input" type="tel" inputMode="tel" autoComplete="off" maxLength={25} value={referencia} onChange={(event) => { referenceDirtyRef.current = true; setReferencia(event.target.value) }} placeholder="(65) 99999-0000" /><button type="submit" className="c360-btn ghost" disabled={Boolean(busy) || referencia.replace(/\D/g, '') === (conexao.phoneReference || '')}>Salvar referência</button></div>
-              <small className="dadm-muted">Apenas para consulta; não substitui a confirmação da linha no backend nem libera envio.</small>
+              <small className="dadm-muted">Aparece no topo como referência não verificada. Não substitui a confirmação da linha no backend nem libera envio.</small>
             </form>}
             {state !== 'open' && (qr.image || qr.code) && <div className="dadm-qr" aria-live="polite">
               {qr.image && <img src={qr.image} alt="QR code para conectar o WhatsApp" />}
