@@ -58,6 +58,14 @@ test('grava imagem validada no diretório persistente tenant-scoped quando não 
     assert.deepEqual(Buffer.concat(chunks), PNG_1X1);
     assert.equal(headers['Content-Type'], 'image/png');
     assert.equal(headers['Cache-Control'], 'public, max-age=3600');
+    const privateHeaders = {};
+    const privateChunks = [];
+    const privateResponse = new Writable({ write(chunk, encoding, callback) { privateChunks.push(Buffer.from(chunk)); callback(); } });
+    privateResponse.setHeader = (name, value) => { privateHeaders[name] = value; };
+    await streamCommerceImage({ storageKey: result.storageKey, mimeType: result.mimeType, res: privateResponse, privateCache: true });
+    await finished(privateResponse);
+    assert.deepEqual(Buffer.concat(privateChunks), PNG_1X1);
+    assert.equal(privateHeaders['Cache-Control'], 'private, no-store');
   } finally {
     await rm(root, { recursive: true, force: true });
     if (previousBucket === undefined) delete process.env.GCS_BUCKET;

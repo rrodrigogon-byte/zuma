@@ -67,6 +67,40 @@ function mediaPreviewHandler() {
 test('prévia administrativa de mídia é protegida por rota própria', () => {
   assert.equal(typeof mediaPreviewHandler(), 'function');
 });
+test('prévia administrativa rejeita mídia de outra vitrine antes do stream, inclusive no acesso corporativo', async () => {
+  const previousQuery = db.query;
+  const mediaId = '55555555-5555-4555-8555-555555555555';
+  const productId = '88888888-8888-4888-8888-888888888888';
+  for (const corporate of [false, true]) {
+    const queries = [];
+    db.query = async (sql, params = []) => {
+      queries.push({ sql, params });
+      if (sql.includes('FROM usuarios u')) return { rows: [{ usuario_id: usuarioId, empresa_id: empresaId, loja_id: lojaId }] };
+      if (sql.includes('COUNT(*)::int AS grants')) return { rows: [{ grants: 1, corporate_access: corporate }] };
+      if (sql.includes('FROM commerce_storefronts')) return { rows: [{ id: storefrontId, empresa_id: empresaId, loja_id: lojaId, status: 'active' }] };
+      if (sql.includes('FROM commerce_product_media')) return { rows: [{ id: mediaId, product_id: productId, storage_key: 'commerce-local/fake', mime_type: 'image/jpeg' }] };
+      if (sql.includes('FROM commerce_products p')) return { rows: [{ id: productId, status: 'active', authorized_channel: false }] };
+      throw new Error('consulta não prevista para GET de prévia');
+    };
+    const response = {
+      statusCode: 200, body: null, headersSent: false, streamCalls: 0,
+      status(code) { this.statusCode = code; return this; },
+      json(body) { this.body = body; return this; },
+      setHeader() { this.streamCalls += 1; },
+    };
+    try {
+      await mediaPreviewHandler()({
+        user: { email: 'synthetic@example.invalid' },
+        headers: { 'x-empresa-id': empresaId, 'x-loja-id': lojaId, 'x-storefront-id': storefrontId },
+        query: { storefrontId }, params: { id: mediaId },
+      }, response);
+    } finally { db.query = previousQuery; }
+    assert.equal(response.statusCode, 404);
+    assert.equal(response.body.code, 'MEDIA_NOT_FOUND');
+    assert.equal(response.streamCalls, 0);
+    assert.equal(queries.some(call => /\b(INSERT|UPDATE|DELETE)\b/i.test(call.sql)), false);
+  }
+});
 function catalogProductsHandler() {
   const router = createCommerceAdminRouter();
   const layer = router.stack.find(item => item.route?.path === '/catalog/products' && item.route.methods.get);

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, Archive, Boxes, CheckCircle2, ChevronLeft, ChevronRight, Copy, FileImage, FileSpreadsheet, ImageOff, Layers3, LayoutGrid, List, Package, PackageCheck, PackagePlus, Plus, RotateCcw, Search, Sparkles, Tag, Trash2 } from 'lucide-react'
+import { AlertTriangle, Archive, Boxes, CheckCircle2, ChevronLeft, ChevronRight, Copy, FileImage, FileSpreadsheet, Layers3, LayoutGrid, List, Package, PackageCheck, PackagePlus, Plus, RotateCcw, Search, Sparkles, Tag, Trash2 } from 'lucide-react'
 import { fmtR } from '../../lib/api'
 import { catalogSummary, filterProducts, pagination, productQuality, productStatus } from '../../lib/product-management'
 import CommerceCatalogEnrichment from './CommerceCatalogEnrichment'
 import CommerceCatalogImport from './CommerceCatalogImport'
+import CommerceProductMedia from './CommerceProductMedia'
+import useCatalogActionTooltip from './useCatalogActionTooltip'
 
 const WORKSPACES = [
   { id: 'products', label: 'Produtos', icon: Package },
@@ -32,10 +34,10 @@ function stockLabel(value, allowBackorder = false) {
   return { label: `${stock} un.`, tone: 'success' }
 }
 
-function ProductIdentity({ product }) {
+function ProductIdentity({ product, storefrontId }) {
   return <div className="commerce-product-identity">
     <div className="commerce-product-thumbnail">
-      {product.imagem ? <img src={product.imagem} alt={product.nome || 'Produto'} loading="lazy" /> : <ImageOff size={20} aria-hidden="true" />}
+      <CommerceProductMedia media={product.media?.[0] || { public_url: product.imagem }} storefrontId={storefrontId} alt={product.nome || 'Produto'} compact />
     </div>
     <div>
       <strong>{product.nome || 'Produto sem nome'}</strong>
@@ -96,6 +98,8 @@ export default function CommerceProductManagement({
   const [category, setCategory] = useState('all')
   const [sort, setSort] = useState('updated_desc')
   const [layout, setLayout] = useState('table')
+  const rootRef = useRef(null)
+  const tooltip = useCatalogActionTooltip(rootRef)
   const workspaceTabs = useRef([])
   const [page, setPage] = useState(1)
 
@@ -127,7 +131,8 @@ export default function CommerceProductManagement({
     workspaceTabs.current[next]?.focus()
   }
 
-  return <section className="ecommerce-admin-panel commerce-product-workspace">
+  return <section ref={rootRef} className="ecommerce-admin-panel commerce-product-workspace">
+    {tooltip}
     <header className="commerce-product-hero">
       <div>
         <span className="ecommerce-admin-kicker"><Boxes size={14} /> Gestão de produtos</span>
@@ -179,20 +184,20 @@ export default function CommerceProductManagement({
         const stockState = stockLabel(product.estoque, product.permiteCompraSemEstoque === true)
         const variants = product.variantes || product.variants || []
         return <tr key={product.id}>
-          <td><ProductIdentity product={product} /></td>
+          <td><ProductIdentity product={product} storefrontId={storefrontId} /></td>
           <td>{product.precoPromocional && Number(product.precoPromocional) < Number(product.preco) ? <div className="ecommerce-admin-price"><s>{money(product.preco)}</s><b>{money(product.precoPromocional)}</b></div> : <strong>{Number(product.preco || 0) > 0 ? money(product.preco) : 'Sem preço'}</strong>}</td>
           <td><span className={`commerce-stock-pill ${stockState.tone}`}>{stockState.label}</span></td>
           <td><strong>{variants.length}</strong><small className="commerce-product-cell-help">{variants.length === 1 ? 'variante' : 'variantes'}</small></td>
           <td><QualityBadge product={product} /></td>
-          <td>{productStatus(product) === 'archived' ? <span className="commerce-product-status archived">{statusLabel(product)}</span> : <button type="button" className={`commerce-product-status ${productStatus(product)}`} onClick={() => onToggleProduct(product)}>{statusLabel(product)}</button>}</td>
+          <td>{productStatus(product) === 'archived' ? <span className="commerce-product-status archived">{statusLabel(product)}</span> : <button type="button" className={`commerce-product-status ${productStatus(product)}`} data-catalog-help={productStatus(product) === 'published' ? 'Retira o produto da vitrine, preservando seu cadastro.' : 'Publica este produto na vitrine selecionada.'} onClick={() => onToggleProduct(product)}>{statusLabel(product)}</button>}</td>
           <td><ProductActions product={product} mode={mode} onEdit={onEditProduct} onDuplicate={onDuplicateProduct} onManageVariants={onManageVariants} onToggle={onToggleProduct} onArchive={onArchiveProduct} /></td>
         </tr>
       })}</tbody></table></div> : <div className="commerce-admin-product-grid">{paged.items.map(product => {
         const stockState = stockLabel(product.estoque, product.permiteCompraSemEstoque === true)
         const variants = product.variantes || product.variants || []
         return <article className="commerce-admin-product-card" key={product.id}>
-          <div className="commerce-admin-product-card-image">{product.imagem ? <img src={product.imagem} alt={product.nome || 'Produto'} loading="lazy" /> : <ImageOff size={28} aria-hidden="true" />}</div>
-          <div className="commerce-admin-product-card-body"><div className="commerce-admin-product-card-heading"><div><span>{product.cat || 'Sem categoria'}</span><h3>{product.nome || 'Produto sem nome'}</h3><small>{product.cod || 'Sem SKU'}</small></div>{productStatus(product) === 'archived' ? <span className="commerce-product-status archived">{statusLabel(product)}</span> : <button type="button" className={`commerce-product-status ${productStatus(product)}`} onClick={() => onToggleProduct(product)}>{statusLabel(product)}</button>}</div>
+          <div className="commerce-admin-product-card-image"><CommerceProductMedia media={product.media?.[0] || { public_url: product.imagem }} storefrontId={storefrontId} alt={product.nome || 'Produto'} compact /></div>
+          <div className="commerce-admin-product-card-body"><div className="commerce-admin-product-card-heading"><div><span>{product.cat || 'Sem categoria'}</span><h3>{product.nome || 'Produto sem nome'}</h3><small>{product.cod || 'Sem SKU'}</small></div>{productStatus(product) === 'archived' ? <span className="commerce-product-status archived">{statusLabel(product)}</span> : <button type="button" className={`commerce-product-status ${productStatus(product)}`} data-catalog-help={productStatus(product) === 'published' ? 'Retira o produto da vitrine, preservando seu cadastro.' : 'Publica este produto na vitrine selecionada.'} onClick={() => onToggleProduct(product)}>{statusLabel(product)}</button>}</div>
           <div className="commerce-admin-product-card-metrics"><span><b>{Number(product.preco || 0) > 0 ? money(product.precoPromocional || product.preco) : 'Sem preço'}</b> preço</span><span><b className={stockState.tone}>{stockState.label}</b> estoque</span><span><b>{variants.length}</b> variantes</span></div><QualityBadge product={product} /><ProductActions product={product} mode={mode} onEdit={onEditProduct} onDuplicate={onDuplicateProduct} onManageVariants={onManageVariants} onToggle={onToggleProduct} onArchive={onArchiveProduct} /></div>
         </article>
       })}</div>}
