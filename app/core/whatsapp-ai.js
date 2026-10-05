@@ -13,7 +13,8 @@ import {
   WHATSAPP_AI_TOOL_DECLARATIONS,
 } from './whatsapp-ai-tools.js';
 import { ensureWhatsappLead, updateWhatsappMarketingConsent } from './whatsapp-ai-crm.js';
-import { enviarMensagem } from './whatsapp.js';
+import { enviarFigurinha, enviarMensagem } from './whatsapp.js';
+import { enviarFigurinhaDoMomento } from './whatsapp-stickers.js';
 import { chatbotBackendConfig, chatbotBackendMode, providerSummary, registerInstanceWebhook, whatsappProviderConfigured, whatsappProviderName } from './whatsapp-provider.js';
 import {
   applyWhatsappPersonalizationConsent,
@@ -671,7 +672,7 @@ async function deterministicResponse(task, channel, session, message) {
         const confirmed = await confirmPendingAction(context);
         if (confirmed?.ok === false) return { text: confirmationFailureReply(confirmed.code, confirmed.type), kind: 'confirmation_failed' };
         await recordConfirmedInCrm(context, session.acao_pendente);
-        return { text: confirmationReply(confirmed), kind: 'confirmed' };
+        return { text: confirmationReply(confirmed), kind: 'confirmed', actionType: confirmed?.type || '' };
       } catch (error) {
         // Regra de negócio (horário tomado, limite, ação vencida…): o cliente recebe a explicação
         // e a ação sai do caminho. Antes a tarefa falhava e o cliente ficava sem resposta.
@@ -1006,7 +1007,21 @@ export async function processWhatsappConversationTask(task) {
       WHERE id = $1`,
     [record.canal_id],
   );
-  return { delivered: true, sessionId: session.id, kind: response.kind };
+  // Figurinha do T-Rex depois do texto, só nos momentos marcados (whatsapp-stickers.js).
+  const figurinha = priorOutput ? { sent: false, reason: 'replay' } : await enviarFigurinhaDoMomento({
+    session,
+    response,
+    primeiroContato: !session.privacy_notice_at,
+    enviar: enviarFigurinha,
+    tenant: {
+      whatsapp_api_url: channel.api_base_url || undefined,
+      whatsapp_instance: channel.configuracao?.instance || undefined,
+      empresa_id: session.empresa_id,
+      loja_id: session.loja_id,
+      canal_id: session.canal_id,
+    },
+  });
+  return { delivered: true, sessionId: session.id, kind: response.kind, sticker: figurinha.sent ? figurinha.mood : null };
 }
 
 export async function whatsappAiOperationalStatus(context = {}) {

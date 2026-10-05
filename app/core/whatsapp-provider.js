@@ -318,6 +318,27 @@ export async function sendTextViaChatbotBackend({ instance, number, text, simula
   return sendTextIsa({ instance, number, text, simulateTyping }, fetchImpl);
 }
 
+/**
+ * Figurinha (WebP 512x512) pelo backend. A rota é configurável porque o contrato da
+ * Isa só documenta /send (texto): CHATBOT_BACKEND_STICKER_PATH (ex.: /send-sticker).
+ * Sem a rota configurada, nada é enviado (unsupported). Ver
+ * docs/operations/WHATSAPP-BACKEND-FIGURINHA.md para a implementação no backend.
+ */
+export async function sendStickerViaChatbotBackend({ instance, number, url = '', base64 = '', mimetype = 'image/webp' } = {}, fetchImpl) {
+  const cfg = chatbotBackendConfig();
+  const stickerPath = clean(process.env.CHATBOT_BACKEND_STICKER_PATH, 200);
+  if (!stickerPath || !stickerPath.startsWith('/')) return { ok: false, unsupported: true, status: null, retryable: false, uncertain: false, error: 'STICKER_ROUTE_NOT_CONFIGURED' };
+  if (!cfg.baseUrl || cfg.key.length < 20) return { ok: false, status: null, retryable: false, uncertain: false, error: 'CHATBOT_BACKEND_NOT_CONFIGURED' };
+  const instanceName = chatbotBackendMode() === 'instancias' ? validInstance(instance || '') : '';
+  if (chatbotBackendMode() === 'instancias' && (!instanceName || instanceName !== cfg.instance)) return { ok: false, status: null, retryable: false, uncertain: false, error: 'INSTANCE_SCOPE_MISMATCH' };
+  const chatId = isaChatId(number);
+  if (!chatId) return { ok: false, status: null, retryable: false, uncertain: false, error: 'INVALID_CHAT_ID' };
+  if (!url && !base64) return { ok: false, status: null, retryable: false, uncertain: false, error: 'STICKER_EMPTY' };
+  const result = await call(cfg, 'POST', stickerPath, { ...(instanceName ? { instanceName } : {}), chat_id: chatId, sticker: { ...(url ? { url } : {}), ...(base64 ? { base64 } : {}), mimetype } }, fetchImpl);
+  const aceito = result.ok && result.data?.success !== false && result.data?.accepted !== false;
+  return { ok: aceito, status: result.status, retryable: false, uncertain: result.status === null, error: aceito ? undefined : (result.error || result.data?.error || `HTTP_${result.status}`) };
+}
+
 /** Tenta registrar o webhook de entrada no backend (se a rota existir). */
 export async function registerInstanceWebhook({ instance, url, headers = {} }, fetchImpl) {
   // Como na Isa, o backend não chama webhook de mensagens: a entrada é por consulta.
