@@ -123,6 +123,12 @@ export async function runGeminiWithTools({
   const startedAt = Date.now();
   let outputChars = 0;
   let repairedIncompleteReply = false;
+  let repairedEmptyReply = false;
+  // O limite de saída também inclui raciocínio. Reservar espaço para texto no
+  // modelo usado pelo WhatsApp evita consumir os 900 tokens só em pensamento.
+  const generationConfig = requireCompletedReply && model === 'gemini-2.5-flash'
+    ? { temperature: 0.35, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 512 } }
+    : { temperature: 0.35, maxOutputTokens: 900 };
 
   for (let step = 0; step < maxSteps; step += 1) {
     const payload = await geminiRequest(endpoint, {
@@ -136,7 +142,7 @@ export async function runGeminiWithTools({
         contents,
         tools: tools.length ? [{ functionDeclarations: tools }] : undefined,
         toolConfig: tools.length ? { functionCallingConfig: { mode: 'AUTO' } } : undefined,
-        generationConfig: { temperature: 0.35, maxOutputTokens: 900 },
+        generationConfig,
       }),
     }, { fetchImpl, timeoutMs, attempts: requestAttempts });
 
@@ -151,7 +157,15 @@ export async function runGeminiWithTools({
     const calls = parts.filter(part => part.functionCall?.name);
     if (!calls.length) {
       const text = responseText(parts);
-      if (!text) throw new GeminiError('Gemini não retornou resposta utilizável', 'GEMINI_EMPTY_RESPONSE', { retryable: false });
+      if (!text) {
+        // Uma recuperação no mesmo histórico, dentro do teto de passos. As
+        // ferramentas anteriores já estão em contents e não são reexecutadas.
+        if (requireCompletedReply && !repairedEmptyReply && step + 1 < maxSteps) {
+          repairedEmptyReply = true;
+          continue;
+        }
+        throw new GeminiError('Gemini não retornou resposta utilizável', 'GEMINI_EMPTY_RESPONSE', { retryable: false });
+      }
       outputChars += text.length;
       if (requireCompletedReply && tools.length && unfinishedToolReply(text)
           && !traces.some(trace => trace.name === 'solicitar_humano' && trace.ok)) {

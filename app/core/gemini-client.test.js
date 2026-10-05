@@ -204,3 +204,46 @@ test('runGeminiWithTools bloqueia resposta marcada por política sem executar fe
     else process.env.GEMINI_API_KEY = previous;
   }
 });
+
+test('WhatsApp recupera resposta vazia uma vez preservando resultados de ferramentas', async () => {
+  const previous = process.env.GEMINI_API_KEY, oldModel = process.env.GEMINI_MODEL;
+  process.env.GEMINI_API_KEY = 'test-key'; process.env.GEMINI_MODEL = 'gemini-2.5-flash';
+  const requests = []; let executions = 0;
+  try {
+    const result = await runGeminiWithTools({ requireCompletedReply: true, maxSteps: 3,
+      tools: [{ name: 'consultar_disponibilidade' }],
+      executeTool: async () => { executions++; return { slots: ['19:00'] }; },
+      fetchImpl: async (_, options) => {
+        requests.push(JSON.parse(options.body));
+        if (requests.length === 1) return response({ candidates: [{ content: { parts: [{ functionCall: { name: 'consultar_disponibilidade', args: {} } }] } }] });
+        if (requests.length === 2) return response({ candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [] } }] });
+        return response({ candidates: [{ content: { parts: [{ text: 'Tenho 19h disponível. Quer esse horário?' }] } }] });
+      },
+    });
+    assert.match(result.text, /19h/); assert.equal(executions, 1);
+    assert.deepEqual(requests[2].contents, requests[1].contents);
+    assert.equal(requests[0].generationConfig.thinkingConfig.thinkingBudget, 512);
+    assert.equal(requests[0].generationConfig.maxOutputTokens, 2048);
+    assert.deepEqual(result.traces, [{ name: 'consultar_disponibilidade', ok: true }]);
+  } finally {
+    if (previous === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = previous;
+    if (oldModel === undefined) delete process.env.GEMINI_MODEL; else process.env.GEMINI_MODEL = oldModel;
+  }
+});
+test('recuperação de resposta vazia respeita limite, bloqueio de segurança e demais consumidores', async () => {
+  const previous = process.env.GEMINI_API_KEY; process.env.GEMINI_API_KEY = 'test-key';
+  try {
+    for (const [requireCompletedReply, maxSteps, expected] of [[true, 6, 2], [true, 1, 1], [false, 6, 1]]) {
+      let count = 0;
+      await assert.rejects(() => runGeminiWithTools({ requireCompletedReply, maxSteps, executeTool: async () => ({}),
+        fetchImpl: async () => { count++; return response({ candidates: [{ content: { parts: [] } }] }); },
+      }), e => e.code === 'GEMINI_EMPTY_RESPONSE');
+      assert.equal(count, expected);
+    }
+    let count = 0;
+    await assert.rejects(() => runGeminiWithTools({ requireCompletedReply: true, executeTool: async () => assert.fail(),
+      fetchImpl: async () => { count++; return response({ candidates: [{ finishReason: 'SAFETY' }] }); },
+    }), e => e.code === 'GEMINI_BLOCKED');
+    assert.equal(count, 1);
+  } finally { if (previous === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = previous; }
+});
