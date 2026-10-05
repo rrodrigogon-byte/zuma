@@ -56,6 +56,7 @@ import * as barbeariaFiscalKytto from './barbearia-fiscal-kytto.js';
 import { appointmentNotificationMetrics, queueAppointmentNotifications, queueChargeNotification, queueReviewRequest, reviewNotificationMetrics } from './core/barbershop-appointment-notifications.js';
 import * as cobrancaKytto from './dino-cobranca-kytto.js';
 import * as modoBarbeiro from './dino-modo-barbeiro.js';
+import { catalogoEquipe, agendaPeriodoEquipe, lancarComandaEquipe } from './dino-equipe-operacao.js';
 import * as pushEquipe from './dino-push-equipe.js';
 import { avisarListaEspera } from './core/barbershop-agenda.js';
 import * as captacaoKytto from './dino-captacao-kytto.js';
@@ -2426,6 +2427,26 @@ app.get('/api/admin/barbearia/modo-barbeiro', (req, res) => {
     const status = error instanceof modoBarbeiro.ModoBarbeiroError ? error.status : 400;
     res.status(status).json({ error: error.message, code: error.code || undefined });
   }
+});
+// Operações móveis: profissional resolvido pelo login, sem confiar no vendedor do cliente.
+function contextoEquipe(req) {
+  return { empresaId: legacyEmpresaId(req), lojaId: legacyLojaId(req), usuario: req.user, profissionalId: String(req.query?.profissionalId || req.body?.profissionalId || '') };
+}
+function erroEquipe(res, error) { return res.status(error instanceof modoBarbeiro.ModoBarbeiroError ? error.status : 400).json({ error: error.message, code: error.code }); }
+app.get('/api/admin/barbearia/modo-barbeiro/catalogo', (req, res) => {
+  try { res.setHeader('Cache-Control', 'no-store'); res.json({ ok: true, ...catalogoEquipe(barbeariaErpKytto, contextoEquipe(req), String(req.query?.agendamentoId || '')) }); }
+  catch (error) { erroEquipe(res, error); }
+});
+app.get('/api/admin/barbearia/modo-barbeiro/periodo', (req, res) => {
+  try { res.setHeader('Cache-Control', 'no-store'); res.json({ ok: true, ...agendaPeriodoEquipe(barbeariaErpKytto, contextoEquipe(req), req.query.de, req.query.ate) }); }
+  catch (error) { erroEquipe(res, error); }
+});
+app.post('/api/admin/barbearia/modo-barbeiro/comandas', (req, res) => {
+  try {
+    const ctx = contextoEquipe(req);
+    const comanda = lancarComandaEquipe(barbeariaErpKytto, ctx, req.body || {}, req.get('Idempotency-Key'), dados => vincularClienteAoAtendimento(ctx.empresaId, dados, { origem: 'comanda', usuario: req.user?.email || '' }).dados);
+    res.status(comanda.idempotente ? 200 : 201).json({ ok: true, comanda: { id: comanda.id, status: comanda.status, total: comanda.total, saldoPendente: comanda.saldoPendente, idempotente: comanda.idempotente, itens: comanda.itens.map(i => ({ nome: i.nome, quantidade: i.quantidade, subtotal: i.subtotal })) } });
+  } catch (error) { erroEquipe(res, error); }
 });
 // Notificações push do app do barbeiro (VAPID no ambiente; desligado sem as chaves).
 function respostaPush(res, error) {

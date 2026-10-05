@@ -115,6 +115,6 @@ export function painelBarbeiro(erp, { empresaId, lojaId = '', usuario = {}, prof
       souEu: Boolean(eu && eu.id === escolhido.id),
     },
     agendamentos, bloqueios, resumo, comissao,
-    servicos: servicos.map((s) => ({ id: s.id, nome: s.nome, preco: dinheiro(s.preco), duracaoMinutos: s.duracaoMinutos })),
+    servicos: servicos.filter(s => s.ativo !== false && (!s.profissionaisIds?.length || s.profissionaisIds.includes(escolhido.id))).map((s) => ({ id: s.id, nome: s.nome, preco: dinheiro(s.preco), duracaoMinutos: s.duracaoMinutos })),
   };
 }

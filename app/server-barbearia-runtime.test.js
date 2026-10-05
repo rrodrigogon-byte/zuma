@@ -258,6 +258,22 @@ test('server.js efetivo expõe Barbearia no contrato administrativo', async () =
     assert.equal(overview.body.documentosFiscais.length, 1);
     assert.equal(overview.body.integracoes.whatsapp.envioManualDisponivel, false);
     assert.equal(overview.body.integracoes.commerce.sincronizacaoAutomatica, false);
+    // PWA: endpoints reais reutilizam preços do ERP e idempotência sem receber pagamento.
+    const catalogoEquipe = await request(base, `/api/admin/barbearia/modo-barbeiro/catalogo?profissionalId=${profissional.body.profissional.id}`, { headers });
+    assert.equal(catalogoEquipe.response.status, 200);
+    assert.equal(catalogoEquipe.body.servicos[0].id, servico.body.servico.id);
+    const semLoginEquipe = await request(base, '/api/admin/barbearia/modo-barbeiro/comandas', { method: 'POST', body: '{}' });
+    assert.equal(semLoginEquipe.response.status, 401);
+    const equipePayload = { profissionalId: profissional.body.profissional.id, clienteNome: 'Cliente PWA', itens: [{ tipo: 'servico', servicoId: servico.body.servico.id, quantidade: 1, precoUnitario: 0.01 }] };
+    const equipeHeaders = { ...headers, 'Idempotency-Key': 'runtime-equipe-123456' };
+    const equipeVenda = await request(base, '/api/admin/barbearia/modo-barbeiro/comandas', { method: 'POST', headers: equipeHeaders, body: JSON.stringify(equipePayload) });
+    assert.equal(equipeVenda.response.status, 201);
+    assert.equal(equipeVenda.body.comanda.total, 50);
+    assert.equal(equipeVenda.body.comanda.saldoPendente, 50);
+    const equipeRetry = await request(base, '/api/admin/barbearia/modo-barbeiro/comandas', { method: 'POST', headers: equipeHeaders, body: JSON.stringify(equipePayload) });
+    assert.equal(equipeRetry.response.status, 200);
+    assert.equal(equipeRetry.body.comanda.id, equipeVenda.body.comanda.id);
+    assert.equal(equipeRetry.body.comanda.idempotente, true);
   } finally {
     processo.kill('SIGTERM');
     await Promise.race([once(processo, 'exit'), new Promise((resolve) => setTimeout(resolve, 3000))]);

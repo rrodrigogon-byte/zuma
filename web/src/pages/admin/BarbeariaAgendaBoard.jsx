@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { hojeAgenda } from '../../lib/barbearia-calendar'
 
 const PADRAO_GRADE = { inicio: 8 * 60, fim: 20 * 60, intervalo: 30 }
 const ALTURA_SLOT = 48
@@ -14,11 +15,11 @@ const STATUS = {
 
 function minutosDoDia(value) {
   const data = new Date(value)
-  if (Number.isNaN(data.valueOf())) return INICIO_MINUTOS
+  if (Number.isNaN(data.valueOf())) return PADRAO_GRADE.inicio
   const partes = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Cuiaba', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(data)
   const hora = Number(partes.find((parte) => parte.type === 'hour')?.value)
   const minuto = Number(partes.find((parte) => parte.type === 'minute')?.value)
-  return Number.isFinite(hora) && Number.isFinite(minuto) ? hora * 60 + minuto : INICIO_MINUTOS
+  return Number.isFinite(hora) && Number.isFinite(minuto) ? hora * 60 + minuto : PADRAO_GRADE.inicio
 }
 
 function dataComDeslocamento(data, deslocamento) {
@@ -88,14 +89,14 @@ export default function BarbeariaAgendaBoard({ data, configuracao = {}, agendame
       <div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button type="button" onClick={() => onDateChange(dataComDeslocamento(data, -1))} style={styles.navButton} aria-label="Dia anterior">‹</button>
-          <button type="button" onClick={() => onDateChange(dataComDeslocamento(data, 0))} style={styles.todayButton}>Hoje</button>
+          <button type="button" onClick={() => onDateChange(hojeAgenda())} style={styles.todayButton}>Hoje</button>
           <button type="button" onClick={() => onDateChange(dataComDeslocamento(data, 1))} style={styles.navButton} aria-label="Próximo dia">›</button>
           <strong style={{ fontSize: 18, textTransform: 'capitalize' }}>{dataLonga(data)}</strong>
         </div>
         <p style={styles.sub}>Agenda diária da unidade ativa, organizada por atendente e intervalo de serviço.</p>
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <label style={styles.dateLabel}>Escolher data<input type="date" value={data} onChange={(event) => onDateChange(event.target.value)} style={styles.dateInput} /></label>
+        <label style={styles.dateLabel}>Escolher data<input type="date" value={data} onChange={(event) => event.target.value && onDateChange(event.target.value)} style={styles.dateInput} /></label>
         <button type="button" onClick={onNew} style={styles.primary}>+ Novo atendimento</button>
       </div>
     </div>
