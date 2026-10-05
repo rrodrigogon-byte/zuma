@@ -37,7 +37,12 @@ function fakeBackend() {
       calls.push({ method: req.method, url: req.url, auth: req.headers.authorization, apikey: req.headers.apikey, body: raw ? JSON.parse(raw) : null });
       const send = (status, body) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
       if (req.headers.authorization !== 'Bearer chave-teste-com-mais-de-vinte') return send(401, { message: 'unauthorized' });
-      if (req.url === '/api/v1/whats-app/instances/dino-1/status') return send(200, { instance: 'dino-1', state, phone: '5565993360000' });
+      if (req.url === '/api/v1/whats-app/instances/dino-1/status') return send(200, { instanceName: 'dino-1', connectionState: state, readyToSend: state === 'open' });
+      if (req.url === '/api/v1/whats-app/instances') return send(200, { instances: [{
+        instanceName: 'dino-1',
+        status: { instanceName: 'dino-1', connectionState: state, readyToSend: state === 'open' },
+        pairing: { instanceName: 'dino-1', connectionState: state, needsQr: state !== 'open', connectedNumber: '5565993360000' },
+      }] });
       if (req.url === '/api/v1/whats-app/instances/dino-1/session?confirm=true' && req.method === 'DELETE') { state = 'close'; return send(200, { success: true }); }
       if (req.url?.includes('/instances/dino-1/session') && req.method === 'DELETE') return send(400, { message: 'confirm=true required' });
       if (req.url === '/api/v1/whats-app/instances/dino-1/qr') { state = 'qr'; return send(200, { qrcode: '2@AbCdEfGhIjKlMnOpQrStUvWxYz0123456789,abc,def', pairingCode: 'ABCD-1234' }); }

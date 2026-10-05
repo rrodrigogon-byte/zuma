@@ -21,7 +21,7 @@ Tudo no Kytto já segue o contrato da Isa:
 | Idade máxima | 30 min (`WHATSAPP_MAX_REPLY_AGE_MINUTES`). |
 | Áudio | Resposta fixa pedindo texto. |
 | SAIR / PARE | Revoga o consentimento e cancela os avisos pendentes. |
-| Status e QR | No modo `instancias`, `GET /instances/dino/status` e `GET /instances/dino/qr`, pela tela **WhatsApp da empresa** (`/admin/whatsapp`). O estado `open` não comprova o número se o backend omitir o telefone. |
+| Status e QR | No modo `instancias`, `GET /instances/dino/status` e `GET /instances/dino/qr`, pela tela **WhatsApp da empresa** (`/admin/whatsapp`). O estado `open` não comprova o número sozinho. Em 05/10/2026 a lista `GET /instances` passou a fornecer `status.connectionState` e `pairing.connectedNumber`: o Kytto só usa a linha da instância exata quando status e pareamento estão abertos, `needsQr=false`, sem divergência de nome e com telefone brasileiro válido. |
 | Troca de aparelho | Somente `DELETE /instances/dino/session?confirm=true`, conforme `/docs-json` do backend Dino. Depois, `GET /instances/dino/status` deve confirmar `close` ou `qr`. Não chamar `/session` ou `/logout` global. |
 
 No backend multi-instância, a instância deve permanecer `dino` em todas as operações. Não usar `CHATBOT_BACKEND_MODE=isa` neste deploy: esse modo consulta a sessão raiz da Isa e pode misturar o contexto operacional.

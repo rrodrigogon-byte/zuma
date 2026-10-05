@@ -103,6 +103,7 @@ test('provedor NossaGente é escolhido por WHATSAPP_PROVIDER e exige chave', () 
 test('normaliza estados e QR de formatos diferentes', () => {
   assert.equal(provider.normalizeState({ state: 'CONNECTED' }), 'open');
   assert.equal(provider.normalizeState({ instance: { state: 'connecting' } }), 'connecting');
+  assert.equal(provider.normalizeState({ status: { connectionState: 'open' } }), 'open');
   assert.equal(provider.normalizeState({ status: 'disconnected' }), 'close');
   assert.equal(provider.normalizeState({ connected: true }), 'open');
   assert.equal(provider.normalizeState({ connectionState: 'qr_ready' }), 'qr');
@@ -177,11 +178,11 @@ test('chave recusada é sinalizada como authError', async () => {
   });
 });
 
-test('status extrai número somente do backend, jamais inventa titularidade', async () => {
+test('status isolado com phone genérico não comprova a linha no modo multi-instância', async () => {
   await withEnv(env, async () => {
-    const verified = await provider.getInstanceStatus('dino-1', fakeFetch([{ status: 200, body: { authenticated: true, connectedNumber: '+55 65 99999-0000' } }]));
-    assert.equal(verified.state, 'open');
-    assert.ok(verified.phone.includes('0000'));
+    const isolated = await provider.getInstanceStatus('dino-1', fakeFetch([{ status: 200, body: { authenticated: true, connectedNumber: '+55 65 99999-0000' } }]));
+    assert.equal(isolated.state, 'open');
+    assert.equal(isolated.phone, '', 'a identidade precisa vir do pareamento da instância exata');
     const unknown = await provider.getInstanceStatus('dino-1', fakeFetch([{ status: 200, body: { authenticated: true } }]));
     assert.equal(unknown.phone, '');
   });
@@ -190,6 +191,7 @@ test('status extrai número somente do backend, jamais inventa titularidade', as
 test('normaliza JID da própria sessão e ignora chatId e telefones inválidos', () => {
   assert.equal(provider.confirmedPhone({ me: { id: '5565999991234:7@s.whatsapp.net' } }), '5565999991234');
   assert.equal(provider.confirmedPhone({ data: { instance: { connectedNumber: '+55 (65) 3333-1234' } } }), '556533331234');
+  assert.equal(provider.confirmedPhone({ me: { id: '(65) 99999-1234' } }), '5565999991234');
   assert.equal(provider.confirmedPhone({ chatId: '5565999991234', number: 'dino' }), '');
   assert.equal(provider.confirmedPhone({ phone: '551234' }), '');
   assert.equal(provider.confirmedPhone({ me: { id: '5565999991234@lid' } }), '');
@@ -204,7 +206,8 @@ test('quando falta telefone no status, consulta apenas a instância exata e aber
       { status: 200, body: { instances: [
         { name: 'isa', state: 'open', phone: '5565999991111' },
         { name: 'dino-1-extra', state: 'open', phone: '5565999992222' },
-        { name: 'dino-1', state: 'open', me: { id: '5565999993333@s.whatsapp.net' } },
+        { name: 'dino-1', state: 'open', status: { instanceName: 'dino-1', connectionState: 'open' },
+          pairing: { instanceName: 'dino-1', connectionState: 'open', needsQr: false, connectedNumber: '5565999993333@s.whatsapp.net' } },
       ] } },
     ]);
     const result = await provider.getInstanceStatus('dino-1', fetch);
@@ -226,6 +229,51 @@ test('quando falta telefone no status, consulta apenas a instância exata e aber
       { status: 200, body: { instances: [{ name: 'isa', state: 'open', phone: '5565999991111' }] } },
     ]));
     assert.equal(anotherCompany.phone, '');
+  });
+});
+
+test('contrato real da Dino: pairing.connectedNumber só identifica sessão e pareamento atuais', async () => {
+  await withEnv(env, async () => {
+    const instance = (connectionState, pairingState, needsQr, phone = '+55 (65) 99999-2222', name = 'dino-1') => ({
+      instanceName: name,
+      status: { instanceName: name, connectionState, readyToSend: connectionState === 'open' },
+      pairing: { instanceName: name, connectionState: pairingState, needsQr, connectedNumber: phone },
+    });
+    const fetchStatus = (item) => fakeFetch([
+      { status: 200, body: { instanceName: 'dino-1', connectionState: 'open' } },
+      { status: 200, body: { instances: [item] } },
+    ]);
+    const valid = await provider.getInstanceStatus('dino-1', fetchStatus(instance('open', 'open', false)));
+    assert.equal(valid.phone, '5565999992222');
+    assert.equal((await provider.getInstanceStatus('dino-1', fetchStatus(instance('open', 'open', false, '(65) 99999-2222')))).phone, '5565999992222');
+    assert.equal((await provider.getInstanceStatus('dino-1', fetchStatus(instance('open', 'open', false, '65999992222')))).phone, '5565999992222');
+    const wrongStatus = fakeFetch([{ status: 200, body: { instanceName: 'isa', connectionState: 'open', connectedNumber: '5565999992222' } }]);
+    assert.equal((await provider.getInstanceStatus('dino-1', wrongStatus)).error, 'instance_mismatch');
+    assert.equal(wrongStatus.calls.length, 1, 'não consulta a lista após status de outra instância');
+    for (const alias of [{ name: 'isa' }, { instance: { name: 'isa' } }, { status: { instanceName: 'isa' } }]) {
+      assert.equal((await provider.getInstanceStatus('dino-1', fakeFetch([{ status: 200, body: { ...alias, connectionState: 'open', phone: '5565999992222' } }]))).error, 'instance_mismatch');
+    }
+    for (const conflict of [
+      { state: 'open', status: { connectionState: 'close', readyToSend: false } },
+      { connectionState: 'open', status: { connectionState: 'close' } },
+      { state: 'open', readyToSend: false },
+    ]) {
+      assert.equal((await provider.getInstanceStatus('dino-1', fakeFetch([{ status: 200, body: { instanceName: 'dino-1', ...conflict, phone: '5565999992222' } }]))).error, 'status_conflict');
+    }
+    const matching = instance('open', 'open', false);
+    for (const item of [
+      instance('close', 'open', false),
+      instance('open', 'close', false),
+      instance('open', 'open', true),
+      instance('open', 'open', false, '5565999992222', 'outro-cliente'),
+      instance('open', 'open', false, '5565999992222@lid'),
+      { ...matching, status: { ...matching.status, readyToSend: false } },
+      { ...matching, state: 'open', status: { ...matching.status, connectionState: 'close' } },
+      { ...matching, pairing: { ...matching.pairing, instanceName: 'isa' } },
+      { ...matching, status: { ...matching.status, instanceName: 'isa' } },
+    ]) {
+      assert.equal((await provider.getInstanceStatus('dino-1', fetchStatus(item))).phone, '', 'não usar identidade de estado divergente, outro tenant ou LID');
+    }
   });
 });
 

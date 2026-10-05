@@ -30,6 +30,7 @@ const CUT_AT = 3900;
 
 const clean = (value, max = 500) => String(value ?? '').trim().slice(0, max);
 let missingPhoneShapeLogged = false;
+let resolvedPhoneLogged = false;
 
 // Diagnóstico de contrato: nomes de campos e tipos, jamais valores, números ou
 // segredos. Ajuda a localizar um possível campo "self" em versões do backend.
@@ -131,8 +132,10 @@ async function call(cfg, method, path, body, fetchImpl = globalThis.fetch) {
 export function normalizeState(data = {}) {
   const candidates = [
     data.state, data.status, data.connection, data.connectionState,
-    data.instance?.state, data.instance?.status, data.data?.state, data.data?.status, data.session?.status,
-  ].map((value) => clean(value, 60).toLowerCase()).filter(Boolean);
+    data.status?.state, data.status?.connectionState,
+    data.instance?.state, data.instance?.status, data.instance?.status?.connectionState,
+    data.data?.state, data.data?.status, data.session?.status,
+  ].filter((value) => typeof value === 'string').map((value) => clean(value, 60).toLowerCase()).filter(Boolean);
   // Contrato da Isa: { authenticated, connecting }.
   if (!candidates.length && typeof data.authenticated === 'boolean') {
     if (data.authenticated === true && data.connecting !== true) return 'open';
@@ -157,8 +160,18 @@ export function extractQr(data = {}) {
   return { qrImage: qr.startsWith('data:image') ? qr : '', qrRaw: raw, pairingCode: /^[A-Z0-9-]{4,16}$/i.test(pairingCode) ? pairingCode : '' };
 }
 
-// Somente campos de identidade da própria sessão. IDs de chats/mensagens são
-// telefones de clientes e nunca podem identificar o número da empresa.
+function normalizedPhone(candidate) {
+  if (typeof candidate !== 'string') return '';
+  const raw = candidate.trim();
+  // @lid e @g.us identificam outros destinatários, não a linha.
+  if (raw.includes('@') && !/@(?:s\.whatsapp\.net|c\.us)$/i.test(raw)) return '';
+  let digits = raw.split('@')[0].split(':')[0].replace(/\D/g, '');
+  if (/^\d{10,11}$/.test(digits)) digits = `55${digits}`;
+  return /^55\d{10,11}$/.test(digits) ? digits : '';
+}
+
+// Contrato da Isa e validação de valores já persistidos. No modo instancias,
+// getInstanceStatus NÃO usa estes campos genéricos: exige o pareamento exato.
 export function confirmedPhone(data = {}) {
   const candidates = [
     data.connectedNumber, data.phoneNumber, data.phone, data.me?.id,
@@ -167,14 +180,22 @@ export function confirmedPhone(data = {}) {
     data.data?.phone, data.data?.me?.id, data.data?.instance?.connectedNumber,
   ];
   for (const candidate of candidates) {
-    if (typeof candidate !== 'string') continue;
-    const raw = candidate.trim();
-    // @lid e @g.us identificam outros tipos de destinatário, não a linha.
-    if (raw.includes('@') && !/@(?:s\.whatsapp\.net|c\.us)$/i.test(raw)) continue;
-    const digits = raw.split('@')[0].split(':')[0].replace(/\D/g, '');
-    if (/^55\d{10,11}$/.test(digits)) return digits;
+    const phone = normalizedPhone(candidate);
+    if (phone) return phone;
   }
   return '';
+}
+
+/** Identidade da própria sessão no contrato multi-instância, nunca de um chat. */
+export function confirmedPairingPhone(item = {}, expectedInstance = '') {
+  const name = [item.instanceName, item.name, item.instance?.instanceName, item.instance?.name, item.instance]
+    .find((value) => typeof value === 'string' && value.trim());
+  if (!name || name !== expectedInstance) return '';
+  if (item.pairing?.needsQr !== false || item.pairing?.instanceName !== name || item.status?.instanceName !== name) return '';
+  if (item.status?.readyToSend === false || item.readyToSend === false) return '';
+  if (normalizeState(item) !== 'open' || normalizeState(item.status) !== 'open') return '';
+  if (normalizeState({ connectionState: item.pairing.connectionState }) !== 'open') return '';
+  return normalizedPhone(item.pairing.connectedNumber);
 }
 
 export async function listInstances(fetchImpl, { includeFieldPaths = false } = {}) {
@@ -188,7 +209,7 @@ export async function listInstances(fetchImpl, { includeFieldPaths = false } = {
     if (!item || typeof item !== 'object') return null;
     const name = [item.name, item.instanceName, item.instance_name, item.instance?.instanceName, item.instance?.name, item.instance, item.id]
       .find((value) => typeof value === 'string' && value.trim());
-    return name ? { name: clean(name, 100), state: normalizeState(item), phone: confirmedPhone(item), ...(includeFieldPaths ? { fields: safeResponseFieldPaths(item) } : {}) } : null;
+    return name ? { name: clean(name, 100), state: normalizeState(item), phone: confirmedPairingPhone(item, name), ...(includeFieldPaths ? { fields: safeResponseFieldPaths(item) } : {}) } : null;
   }).filter((item) => item?.name);
   return { ok: result.ok, status: result.status, items, ...(includeFieldPaths ? { responseFields: safeResponseFieldPaths(result.data) } : {}) };
 }
@@ -201,13 +222,28 @@ export async function getInstanceStatus(instance, fetchImpl, { resolvePhone = tr
   if (isAuthError(result.status)) return { ok: false, authError: true, status: result.status, state: 'unknown' };
   if (result.status === 404) return { ok: false, status: 404, state: 'unknown', error: 'instance_not_enabled' };
   if (!result.ok) return { ok: false, status: result.status, state: 'unknown', error: result.error || 'status_unavailable' };
+  const reportedNames = [result.data?.instanceName, result.data?.name, result.data?.instance?.instanceName,
+    result.data?.instance?.name, result.data?.instance, result.data?.status?.instanceName]
+    .filter((value) => typeof value === 'string' && value.trim());
+  if (reportedNames.some((value) => clean(value, 100).toLowerCase() !== cfg.instance)) {
+    return { ok: false, status: result.status, state: 'unknown', error: 'instance_mismatch' };
+  }
+  const reportedStates = [result.data?.state, typeof result.data?.status === 'string' ? result.data.status : '',
+    result.data?.connection, result.data?.connectionState, result.data?.status?.state, result.data?.status?.connectionState,
+    result.data?.instance?.state, result.data?.instance?.status?.connectionState]
+    .filter((value) => typeof value === 'string' && value.trim())
+    .map((value) => normalizeState({ state: value })).filter((value) => value !== 'unknown');
   const qr = extractQr(result.data);
   const state = normalizeState(result.data);
-  let phone = state === 'open' ? confirmedPhone(result.data) : '';
-  if (state === 'open' && !phone && resolvePhone) {
-    // Alguns backends só devolvem o titular em GET /instances. Exigir nome
-    // EXATO e estado aberto na lista para não mostrar a linha de outra empresa
-    // ou uma identidade antiga depois de uma troca de sessão.
+  if (new Set(reportedStates).size > 1 || (state === 'open' && (result.data?.readyToSend === false
+    || result.data?.status?.readyToSend === false || result.data?.connecting === true))) {
+    return { ok: false, status: result.status, state: 'unknown', error: 'status_conflict' };
+  }
+  let phone = '';
+  if (state === 'open' && resolvePhone) {
+    // Mesmo que o status contenha phone/me.id, no modo multi-instância ele não
+    // prova titularidade. Só a lista com nome EXATO, estado atual e pareamento
+    // válido autoriza exibir pairing.connectedNumber.
     const listed = await listInstances(fetchImpl, { includeFieldPaths: !missingPhoneShapeLogged });
     const candidate = listed.items.find((item) => item.name === cfg.instance);
     const exact = candidate?.state === 'open' ? candidate : null;
@@ -223,6 +259,10 @@ export async function getInstanceStatus(instance, fetchImpl, { resolvePhone = tr
         exact: candidate?.fields || [],
       }));
     }
+  }
+  if (phone && !resolvedPhoneLogged) {
+    resolvedPhoneLogged = true;
+    console.info('[WhatsApp] telefone da própria instância confirmado; valor omitido do log.');
   }
   return {
     ok: true,
