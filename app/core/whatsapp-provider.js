@@ -331,3 +331,41 @@ export async function registerInstanceWebhook({ instance, url, headers = {} }, f
   if (result.status === 404 || result.status === 405) return { ok: false, unsupported: true, status: result.status };
   return { ok: result.ok, status: result.status };
 }
+
+/**
+ * Figurinha (sticker WebP) pelo backend próprio. O backend da Isa/NossaGente
+ * ainda não documenta envio de mídia: a rota é ligada por ambiente, sem deploy,
+ * quando existir. Contrato esperado (CHATBOT_BACKEND_STICKER_PATH=/send-media):
+ *   POST {BASE}{path} { instanceName, chat_id, mediaType: 'sticker',
+ *                       mimetype: 'image/webp', fileName, base64 }
+ *   → 2xx { success: true, messageId }
+ * Sem a variável, devolve { ok:false, unsupported:true } e nada é enviado.
+ */
+export function chatbotBackendStickerPath(env = process.env) {
+  const value = clean(env.CHATBOT_BACKEND_STICKER_PATH || '', 120);
+  return /^\/[a-z0-9/_{}.-]+$/i.test(value) ? value : '';
+}
+
+export async function sendStickerViaChatbotBackend({ instance, number, base64, mimetype = 'image/webp', fileName = 'figurinha.webp' }, fetchImpl) {
+  const path = chatbotBackendStickerPath();
+  if (!path) return { ok: false, unsupported: true, retryable: false, uncertain: false, error: 'STICKER_ROUTE_NOT_CONFIGURED' };
+  const cfg = chatbotBackendConfig();
+  if (!cfg.baseUrl || cfg.key.length < 20) return { ok: false, retryable: false, uncertain: false, error: 'CHATBOT_BACKEND_NOT_CONFIGURED' };
+  const instanceName = chatbotBackendMode() === 'instancias' ? validInstance(instance || '') : '';
+  if (chatbotBackendMode() === 'instancias' && (!instanceName || instanceName !== cfg.instance)) return { ok: false, retryable: false, uncertain: false, error: 'INSTANCE_SCOPE_MISMATCH' };
+  const chatId = isaChatId(number);
+  if (!chatId) return { ok: false, retryable: false, uncertain: false, error: 'INVALID_CHAT_ID' };
+  if (!base64 || base64.length > 700000) return { ok: false, retryable: false, uncertain: false, error: 'STICKER_INVALID' };
+  const result = await call(cfg, 'POST', path.replace('{instance}', encodeURIComponent(instanceName || cfg.instance)), {
+    ...(instanceName ? { instanceName } : {}), chat_id: chatId, mediaType: 'sticker', mimetype, fileName, base64,
+  }, fetchImpl);
+  const aceito = result.ok && result.data?.success !== false;
+  return {
+    ok: aceito,
+    status: result.status,
+    unsupported: result.status === 404 || result.status === 405,
+    retryable: false,
+    uncertain: result.status === null || result.status >= 500,
+    error: aceito ? undefined : (result.error || result.data?.error || `HTTP_${result.status}`),
+  };
+}

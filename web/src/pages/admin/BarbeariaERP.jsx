@@ -252,6 +252,7 @@ export default function BarbeariaERP() {
   const [formWhatsApp, setFormWhatsApp] = useState({ clienteId: '', finalidade: 'atendimento', telefone: '', mensagem: '', consentimentoConfirmado: false })
   const [formWhatsappAi, setFormWhatsappAi] = useState({ instance: 'dino', displayName: 'Atendimento WhatsApp', humanized: true, captureLeads: true, operateStore: true, manageAppointments: true, sendPromotions: false, reminders: true, humanHandoff: true })
   const [formWhatsappAiPolicy, setFormWhatsappAiPolicy] = useState({ personalizationEnabled: false, opportunitiesEnabled: false, cooldownDays: 30, privacyNotice: '' })
+  const [formPersona, setFormPersona] = useState({ ativo: true, nome: 'T-Rex', mensagensCurtas: true, figurinhas: true, revelarIa: 'quando_perguntado' })
   const [whatsappAiSessions, setWhatsappAiSessions] = useState([])
   const [itensVendaRevenda, setItensVendaRevenda] = useState([])
 
@@ -292,6 +293,13 @@ export default function BarbeariaERP() {
       setNotificacoesAgenda(payload?.notificacoesAgenda || { queued: 0, sent: 0, failed: 0, canceled: 0 })
       const whatsappAi = payload?.integracoes?.whatsapp?.ai
       if (whatsappAi?.channel) setFormWhatsappAi((atual) => ({ ...atual, instance: whatsappAi.channel.instance || atual.instance, displayName: whatsappAi.channel.nome || atual.displayName, ...(whatsappAi.channel.capabilities || {}) }))
+      if (whatsappAi?.channel?.persona) setFormPersona({
+        ativo: whatsappAi.channel.persona.ativa === true || whatsappAi.channel.persona.origem === 'nenhuma',
+        nome: whatsappAi.channel.persona.nome || 'T-Rex',
+        mensagensCurtas: whatsappAi.channel.persona.mensagensCurtas !== false,
+        figurinhas: whatsappAi.channel.persona.figurinhas !== false,
+        revelarIa: whatsappAi.channel.persona.revelarIa || 'quando_perguntado',
+      })
       if (whatsappAi?.policy) setFormWhatsappAiPolicy({
         personalizationEnabled: whatsappAi.policy.personalizationEnabled === true,
         opportunitiesEnabled: whatsappAi.policy.opportunitiesEnabled === true,
@@ -894,6 +902,35 @@ export default function BarbeariaERP() {
     }), 'Política do atendente atualizada e auditada.')
   }
 
+  async function salvarPersonaWhatsappAi() {
+    if (!whatsappAi?.channel) {
+      toast('Salve primeiro o canal WhatsApp em rascunho.', 'error')
+      return
+    }
+    const nome = formPersona.nome.trim()
+    if (!nome) {
+      toast('Informe o nome do atendente.', 'error')
+      return
+    }
+    if (/^dino$/i.test(nome)) {
+      toast('O atendente não pode se chamar Dino: é o nome do barbeiro master.', 'error')
+      return
+    }
+    const resumo = formPersona.ativo
+      ? `Confirmar o atendente "${nome}"? Muda só o jeito de falar (mensagens curtas, figurinhas). Agenda, confirmações e travas continuam iguais.`
+      : 'Desligar a persona e voltar ao texto padrão do atendente?'
+    if (!window.confirm(resumo)) return
+    await executar(() => api.patch('/api/admin/commerce/whatsapp-ai/persona', {
+      id: 'trex',
+      ativo: formPersona.ativo,
+      nome,
+      mensagensCurtas: formPersona.mensagensCurtas,
+      figurinhas: formPersona.figurinhas,
+      revelarIa: formPersona.revelarIa,
+      confirmed: true,
+    }), formPersona.ativo ? `Atendente ${nome} salvo e auditado.` : 'Persona desligada.')
+  }
+
   async function sincronizarWhatsappAi() {
     if (!window.confirm('Confirmar a sincronização do webhook no provedor de WhatsApp? Essa ação altera a configuração externa da instância informada.')) return
     await executar(async () => {
@@ -1404,6 +1441,32 @@ export default function BarbeariaERP() {
                 <div style={styles.readinessItem}><strong>Segurança 24h</strong><span style={{ fontWeight: 800 }}>{Number(whatsappAi.policy24h?.output_blocked || 0)}</span><small style={styles.sub}>{Number(whatsappAi.policy24h?.injection_suspected || 0)} injeção(ões) suspeita(s)</small></div>
               </div>
               <button type="button" style={styles.secondary} disabled={salvando || !whatsappAi.channel} onClick={salvarPoliticaWhatsappAi}>Salvar política sem ativar o canal</button>
+            </div>
+            <div style={{ ...styles.notice, marginTop: 12, display: 'grid', gap: 12 }}>
+              <div style={styles.sectionTitle}>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <img src="/trex/avatar-256.webp" alt="Avatar do atendente T-Rex" width="56" height="56" style={{ borderRadius: '50%', border: '2px solid var(--line)', flexShrink: 0 }} />
+                  <div><strong>Persona do atendente</strong><div style={styles.sub}>Nome, jeito de falar e figurinhas no WhatsApp. Não muda o que a IA pode fazer: agenda, confirmação por SIM, consentimentos e handoff seguem iguais.</div></div>
+                </div>
+                <Badge status={whatsappAi.channel?.persona?.ativa ? 'configurado' : 'rascunho'} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: 10 }}>
+                <Field label="Nome do atendente"><input value={formPersona.nome} maxLength={40} onChange={(event) => setFormPersona((atual) => ({ ...atual, nome: event.target.value }))} style={inputStyle} /></Field>
+                <Field label="Quando diz que é assistente">
+                  <select value={formPersona.revelarIa} onChange={(event) => setFormPersona((atual) => ({ ...atual, revelarIa: event.target.value }))} style={inputStyle}>
+                    <option value="quando_perguntado">Só se o cliente perguntar (nunca nega)</option>
+                    <option value="na_apresentacao">Já na apresentação</option>
+                  </select>
+                </Field>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: 'var(--muted)', fontSize: 13 }}><input type="checkbox" checked={formPersona.ativo} onChange={(event) => setFormPersona((atual) => ({ ...atual, ativo: event.target.checked }))} /> Usar a persona neste canal</label>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: 'var(--muted)', fontSize: 13 }}><input type="checkbox" checked={formPersona.mensagensCurtas} onChange={(event) => setFormPersona((atual) => ({ ...atual, mensagensCurtas: event.target.checked }))} /> Mensagens curtas em bolhas (até 120 caracteres, sem listas)</label>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: 'var(--muted)', fontSize: 13 }}><input type="checkbox" checked={formPersona.figurinhas} onChange={(event) => setFormPersona((atual) => ({ ...atual, figurinhas: event.target.checked }))} /> Figurinhas do mascote (no máximo 1 por dia por cliente)</label>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                {(whatsappAi.channel?.persona?.figurinhasDisponiveis || ['oi', 'agendado', 'um-instante', 'corte-na-regua', 'perfume-novo', 'valeu', 'promocao', 'foi-mal', 'ate-amanha']).map((nome) => <img key={nome} src={`/trex/figurinhas/${nome}.webp`} alt={`Figurinha ${nome}`} title={nome} width="56" height="56" loading="lazy" style={{ opacity: formPersona.figurinhas ? 1 : 0.35 }} />)}
+              </div>
+              <small style={styles.sub}>{whatsappAi.channel?.persona?.figurinhasNoProvedor ? 'O provedor de WhatsApp aceita figurinhas.' : 'O provedor de WhatsApp ainda não aceita figurinhas (falta CHATBOT_BACKEND_STICKER_PATH): o texto sai normal e a figurinha é pulada.'}{whatsappAi.channel?.persona?.origem === 'ambiente' ? ' A persona está ligada pela variável WHATSAPP_AI_PERSONA; salve aqui para fixar no canal.' : ''}</small>
+              <button type="button" style={styles.secondary} disabled={salvando || !whatsappAi.channel} onClick={salvarPersonaWhatsappAi}>Salvar persona</button>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
               <button type="button" style={styles.secondary} disabled={salvando || !whatsappAi.gemini?.configured} onClick={testarGeminiWhatsappAi}>Testar Gemini</button>

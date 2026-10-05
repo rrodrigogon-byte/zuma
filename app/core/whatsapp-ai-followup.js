@@ -20,6 +20,7 @@ import { db } from './database.js';
 import { enviarMensagem } from './whatsapp.js';
 import { quietHours } from './ai-automations.js';
 import { CONFIRMATION_HINT } from './whatsapp-ai-intents.js';
+import { resolvePersona } from './whatsapp-ai-persona.js';
 
 const ACTION_TTL_MIN = 30;
 const clean = (value, max = 600) => String(value ?? '').replace(/\u0000/g, '').trim().slice(0, max);
@@ -42,6 +43,10 @@ export function followUpText(session = {}) {
   // Nome do perfil do WhatsApp ou, sem ele, o nome que o cliente deu ao marcar.
   const nome = firstName(session.nome) || firstName(session.nome_na_acao);
   const resumo = clean(session.acao_pendente?.summary, 400).replace(/\.$/, '');
+  // Persona (ex.: T-Rex): mesmo resumo e a mesma dica de confirmação, em tom curto.
+  if (resolvePersona(session.configuracao)) {
+    return `${nome ? `Opa, ${nome}!` : 'Opa!'} Só falta você confirmar: ${resumo}.\n${CONFIRMATION_HINT}`;
+  }
   return `${nome ? `Oi, ${nome}!` : 'Oi!'} Ficou faltando só sua confirmação: ${resumo}.\n${CONFIRMATION_HINT} Se preferir outro horário ou produto, é só me dizer.`;
 }
 

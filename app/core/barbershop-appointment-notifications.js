@@ -6,6 +6,7 @@ import * as clientes from '../clientes-contas-kytto.js';
 import { db } from './database.js';
 import { enviarMensagem } from './whatsapp.js';
 import { notificarEquipe } from '../dino-push-equipe.js';
+import { personaAppointmentMessage, quandoCurto, resolvePersona } from './whatsapp-ai-persona.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EVENTOS = new Set(['criado', 'remarcado', 'cancelado', 'lembrete']);
@@ -472,9 +473,17 @@ export async function enqueueDueAppointmentReminders() {
   return queued;
 }
 
-function mensagem(snapshot, agendamento, cliente, evento) {
+export function mensagem(snapshot, agendamento, cliente, evento, persona = null) {
   const servico = snapshot.servicos.find((item) => item.id === agendamento.servicoId)?.nome || 'atendimento';
   const profissional = snapshot.profissionais.find((item) => item.id === agendamento.profissionalId)?.nome || 'profissional da equipe';
+  if (persona) {
+    // Mesma informação e os mesmos comandos (CONFIRMO, REMARCAR, CANCELO, SAIR), na voz curta da persona.
+    return personaAppointmentMessage(persona, {
+      evento, nome: cliente.nome, servico, profissional,
+      quando: quandoCurto(agendamento), quandoRelativo: quandoRelativo(agendamento),
+      loja: snapshot.configuracao?.nomePublico,
+    });
+  }
   const quando = formatarQuando(agendamento);
   const cabecalho = `Olá, ${limpo(cliente.nome, 80)}.`;
   const rodape = 'Esta é uma mensagem de atendimento. Para não receber estes avisos, responda SAIR.';
@@ -531,7 +540,7 @@ export async function processAppointmentNotificationTask(task = {}) {
     whatsapp_api_key: process.env.EVOLUTION_API_KEY,
     whatsapp_instance: canal.configuracao?.instance || process.env.EVOLUTION_INSTANCE,
     empresa_id: task.empresa_id, loja_id: task.loja_id, canal_id: task.canal_id,
-  }, elegibilidade.telefone, mensagem(snapshot, agendamento, elegibilidade.cliente, evento));
+  }, elegibilidade.telefone, mensagem(snapshot, agendamento, elegibilidade.cliente, evento, resolvePersona(canal.configuracao)));
   if (!resultado?.ok) {
     const unknown = resultado?.uncertain === true;
     if (!unknown) await db.query(`UPDATE tarefas_integracao_canais SET delivery_started_at = NULL WHERE id = $1`, [task.id]);
