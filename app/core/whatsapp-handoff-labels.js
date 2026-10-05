@@ -17,7 +17,8 @@ export function motivoLegivel(reason) {
   if (MOTIVOS_EQUIPE[codigo]) return MOTIVOS_EQUIPE[codigo];
   if (codigo.startsWith('security:sensitive')) return 'dado sensível enviado';
   if (codigo.startsWith('security:')) return 'segurança';
-  if (codigo.startsWith('gemini:')) return 'IA indisponível';
+  if (codigo.startsWith('gemini:')) return `IA indisponível${/^gemini:GEMINI_[A-Z_]+$/.test(codigo) ? ` (${codigo.slice(7)})` : ''}`;
   if (codigo.startsWith('delivery:')) return 'falha de envio';
   return codigo.replace(/_/g, ' ').slice(0, 60);
 }
+

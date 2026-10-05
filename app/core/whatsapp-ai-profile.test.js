@@ -204,3 +204,10 @@ test('resolvedor não consulta CRM nem histórico quando a política da unidade 
     assert.equal(result.profile.identity.relationship, 'não personalizado');
   } finally { db.queryRead = originalRead; }
 });
+
+
+test('intenção de compra não pode vir de negação nem liberar publicidade não solicitada', () => {
+  for (const value of ['não quero comprar', 'não adicionar ao pedido', 'cancele a compra']) assert.equal(purchaseIntentExpressed(value), false);
+  const result = validateWhatsappAiOutput('Temos também uma promoção imperdível para você!', { customerRequestedPurchase: true });
+  assert.equal(result.ok, false);
+});

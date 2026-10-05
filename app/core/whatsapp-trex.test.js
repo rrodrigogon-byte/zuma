@@ -153,6 +153,7 @@ test('figurinhas: contrato do backend (rota configurada)', async () => {
 test('status operacional devolve a persona persistida para recarregar o painel', async () => {
   const original = db.queryRead;
   const channel = { id: 'canal-1', nome: 'Barbearia Dino', status: 'ativo', configuracao: { instance: 'dino', persona: { id: 'trex', ativo: true, nome: 'T-Rex', figurinhas: false } } };
+  channel.configuracao.handoff = { notify_email: 'recepcao@example.com', attendant_phone: '5565999990002' };
   db.queryRead = async (sql, params) => {
     if (/FROM canais_integracao/.test(sql)) {
       assert.deepEqual(params, [EMPRESA, LOJA]);
@@ -162,6 +163,8 @@ test('status operacional devolve a persona persistida para recarregar o painel',
   };
   try {
     const result = await whatsappAiOperationalStatus({ empresaId: EMPRESA, lojaId: LOJA });
+    assert.equal(result.channel.handoff.notifyEmail, 'recepcao@example.com');
+    assert.equal(result.channel.handoff.attendantPhone, '5565999990002');
     assert.equal(result.channel.persona.ativa, true);
     assert.equal(result.channel.persona.origem, 'canal');
     assert.equal(result.channel.persona.nome, 'T-Rex');
@@ -171,3 +174,4 @@ test('status operacional devolve a persona persistida para recarregar o painel',
     assert.equal(disabled.channel.persona.ativa, false);
   } finally { db.queryRead = original; }
 });
+

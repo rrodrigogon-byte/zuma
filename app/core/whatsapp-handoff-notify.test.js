@@ -121,3 +121,25 @@ test('notifyHumanHandoff isola falha do e-mail e segue (best-effort)', async () 
   assert.equal(res.emailed.ok, false);
   assert.equal(res.messaged.ok, true);
 });
+
+
+test('configuração salva pelo painel envia ambos os canais e email desativado não simula sucesso', async () => {
+  const calls = [];
+  const input = { customerPhone: '5565999990001', config: { notify_email: 'recepcao@example.com', attendant_phone: '5565999990002' } };
+  const deps = { mail: { ativo: () => true, enviar: async () => { calls.push('email'); return { ok: true }; } }, enviarMensagem: async () => { calls.push('wa'); return { ok: true }; } };
+  await notifyHumanHandoff(input, deps);
+  assert.deepEqual(calls, ['email', 'wa']);
+  const off = await notifyHumanHandoff(input, { ...deps, mail: { ativo: () => false } });
+  assert.equal(off.emailed.code, 'MAIL_NOT_CONFIGURED');
+  assert.equal(off.messaged.ok, true);
+});
+test('mesmo cliente com e sem nono dígito não recebe alerta de atendente', async () => {
+  let sent = false;
+  await notifyHumanHandoff({ customerPhone: '5565999990001', config: { attendant_phone: '556599990001' } }, { enviarMensagem: async () => { sent = true; } });
+  assert.equal(sent, false);
+});
+test('histórico de notificação omite cartão e credenciais', () => {
+  const email = buildHandoffEmail({ transcript: [{ role: 'user', text: 'meu cartão é 4111 1111 1111 1111' }] });
+  assert.doesNotMatch(email.text, /4111/);
+  assert.match(email.text, /sensível omitido/);
+});

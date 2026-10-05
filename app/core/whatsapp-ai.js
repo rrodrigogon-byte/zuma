@@ -1,5 +1,6 @@
+import { prefersSelfService, canResumeSelfService, RECOVERABLE_HANDOFF_REASONS, recoverableModelFailure } from './whatsapp-self-service.js';
 import { standaloneGreetingReply } from './whatsapp-ai-greeting.mjs';
-import { isWhatsappOptOutText } from './whatsapp-phone.js';
+import { isWhatsappOptOutText, canonicalWhatsappPhone } from './whatsapp-phone.js';
 import { resolveConfirmation, CONFIRMATION_HINT, PENDING_REMINDER_HINT, actionTtlMinutes, formatActionSummary, formatForWhatsapp } from './whatsapp-ai-intents.js';
 export { PENDING_REMINDER_HINT };
 import { MEDIA_SYSTEM_GUIDANCE } from './whatsapp-ai-media.js';
@@ -453,6 +454,7 @@ async function sendStickerAfterText(channel, session, output, tenant, persona) {
 
 function handoffIntent(text) {
   const value = plain(text);
+  if (prefersSelfService(text)) return false;
   return /\b(atendente|humano|pessoa|falar com alguem|reclamacao|reclamar)\b/.test(value);
 }
 
@@ -579,24 +581,20 @@ async function putSessionInHandoff(session, reason, priority = 2) {
   ).catch(() => null);
   const prioridade = Math.min(5, Math.max(0, Number(priority) || 0));
   const updated = await db.query(
-    `WITH antes AS (
-        SELECT status FROM whatsapp_ai_sessions WHERE id = $1 AND empresa_id = $2 AND loja_id = $3
-      )
-      UPDATE whatsapp_ai_sessions
+    `UPDATE whatsapp_ai_sessions
         SET status = 'humano', handoff_requested_at = COALESCE(handoff_requested_at, CURRENT_TIMESTAMP),
             handoff_reason = $4::text, priority = GREATEST(priority, $5::smallint),
             assigned_to = NULL, assigned_at = NULL,
             estado = jsonb_set(estado, '{handoffReason}', to_jsonb($4::text), true),
             acao_pendente = NULL,
             atualizado_em = CURRENT_TIMESTAMP
-      WHERE id = $1 AND empresa_id = $2 AND loja_id = $3
-      RETURNING (SELECT status FROM antes) AS status_antes`,
+      WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status IS DISTINCT FROM 'humano'
+      RETURNING id`,
     [session.id, session.empresa_id, session.loja_id, cleanText(reason, 500), prioridade],
   );
   // Só notifica a equipe na PRIMEIRA transição para humano: evita reenvio a cada
   // nova mensagem do cliente numa conversa que já está em atendimento humano.
-  const jaEstavaEmHumano = updated.rows[0]?.status_antes === 'humano';
-  if (!jaEstavaEmHumano) {
+  if (updated.rows.length) {
     void notificarHandoffParaEquipe(session, reason, prioridade).catch(() => null);
   }
 }
@@ -608,8 +606,8 @@ async function notificarHandoffParaEquipe(session, reason, priority) {
   try {
     const channel = (await db.queryRead(
       `SELECT nome, configuracao FROM canais_integracao
-         WHERE empresa_id = $1 AND loja_id = $2 AND provedor = 'whatsapp' LIMIT 1`,
-      [session.empresa_id, session.loja_id],
+         WHERE empresa_id = $1 AND loja_id = $2 AND id = $3 AND provedor = 'whatsapp' LIMIT 1`,
+      [session.empresa_id, session.loja_id, session.canal_id],
     )).rows[0];
     const handoff = channel?.configuracao?.handoff || {};
     if (!handoff.notify_email && !handoff.attendant_phone) return; // canal sem destino configurado
@@ -620,7 +618,7 @@ async function notificarHandoffParaEquipe(session, reason, priority) {
       reason,
       priority,
       storeName,
-      customerName: cleanText(session.cliente_nome, 120),
+      customerName: cleanText(session.nome, 120),
       customerPhone: session.telefone || '',
       transcript,
       config: handoff,
@@ -841,13 +839,33 @@ async function deterministicResponseCore(task, channel, session, message) {
     if (session.status === 'humano') return { text: null, kind: 'human_queue' };
     return { text: 'Preferência registrada. Você não receberá mensagens de marketing por este atendimento. Ainda posso responder solicitações que você iniciar.', kind: 'opt_out' };
   }
+  if (prefersSelfService(message.text) && !suspiciousPromptInjection(message.text) && !sensitiveCustomerData(message.text)) {
+    if (session.status === 'humano') {
+      if (!canResumeSelfService(session)) return { text: 'Entendi que prefere seguir pelo WhatsApp. Esta conversa precisa de revisão da equipe antes de eu retomar.', kind: 'self_service_blocked' };
+      const resumed = await db.query(
+        `UPDATE whatsapp_ai_sessions SET status = 'ativo',
+            estado = (estado - 'handoffReason') || '{"preferSelfService":true}'::jsonb,
+            handoff_requested_at = NULL, handoff_reason = NULL, priority = 0,
+            acao_pendente = NULL, atualizado_em = CURRENT_TIMESTAMP
+          WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'humano'
+            AND assigned_to IS NULL AND COALESCE(handoff_reason, estado->>'handoffReason') = ANY($4::text[])
+          RETURNING id`,
+        [session.id, session.empresa_id, session.loja_id, RECOVERABLE_HANDOFF_REASONS],
+      );
+      if (!resumed.rows.length) return { text: 'A equipe assumiu esta conversa. Pediu para seguir com a IA? A equipe precisa liberar a retomada.', kind: 'self_service_blocked' };
+      await auditHandoff(db, context, session.id, 'customer_resumed_automation');
+      return { text: 'Seguimos por aqui com a IA. O pedido anterior ainda não foi concluído. Qual serviço e horário você quer?', kind: 'self_service_resumed' };
+    }
+    await db.query(`UPDATE whatsapp_ai_sessions SET estado = estado || '{"preferSelfService":true}'::jsonb WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`, [session.id, session.empresa_id, session.loja_id]);
+    session.estado = { ...session.estado, preferSelfService: true };
+  }
   if (session.status === 'humano') return { text: null, kind: 'human_queue' };
   const greeting = standaloneGreetingReply(message.text, { pendingAction: Boolean(session.acao_pendente) });
   const consentQuestionOpen = Boolean(session.personalization_prompted_at) && session.estado?.personalizacaoRespondida !== true;
   if (greeting || (persona && !session.acao_pendente && !consentQuestionOpen && isPersonaGreeting(message.text))) {
     return { text: persona ? personaGreeting(persona, { text: message.text, seed: message.externalId }) : greeting, kind: 'greeting' };
   }
-  if (resumeIntent(message.text)) return { text: 'A automação só pode ser retomada pela equipe após concluir o atendimento humano.', kind: 'resume_blocked' };
+  if (resumeIntent(message.text) && !prefersSelfService(message.text)) return { text: 'A automação só pode ser retomada pela equipe após concluir o atendimento humano.', kind: 'resume_blocked' };
   if (session.opportunity_offered_at && opportunityDeclineIntent(message.text)) {
     await db.query(
       `UPDATE whatsapp_ai_sessions
@@ -863,7 +881,7 @@ async function deterministicResponseCore(task, channel, session, message) {
     return { text: 'Claro. Seguimos sem sugestões. Posso ajudar em mais alguma coisa?', kind: 'opportunity_declined' };
   }
   if (handoffIntent(message.text)) {
-    await putSessionInHandoff(session, 'pedido_do_cliente', 3);
+    await putSessionInHandoff(session, /\breclama(?:cao|r)\b/.test(plain(message.text)) ? 'reclamacao' : 'pedido_do_cliente', 3);
     const storeName = cleanText(channel.configuracao?.display_name || channel.nome || 'esta unidade', 120);
     return { text: `Certo. Encaminhei sua conversa para a equipe humana da ${storeName}.`, kind: 'handoff' };
   }
@@ -995,7 +1013,7 @@ async function deterministicResponseCore(task, channel, session, message) {
   if (confusionPing(message.text)) {
     const anterior = [...history.slice(0, -1)].reverse().find((item) => item.role === 'user');
     const recente = anterior && (Date.now() - new Date(anterior.at || 0).valueOf()) < 15 * 60 * 1000;
-    if (anterior && recente && confusionPing(anterior.text)) {
+    if (!session.estado?.preferSelfService && anterior && recente && confusionPing(anterior.text)) {
       await putSessionInHandoff(session, 'cliente_confuso', 3);
       const storeName = cleanText(channel.configuracao?.display_name || channel.nome || 'esta unidade', 120);
       return { text: `Desculpe a confusão! Já chamei alguém da equipe da ${storeName} para continuar com você por aqui.`, kind: 'confusion_handoff' };
@@ -1010,6 +1028,7 @@ async function deterministicResponseCore(task, channel, session, message) {
     customerProfile: profileResult.profile,
     opportunityPolicy: profileResult.policy,
     sessionSnapshot: session,
+    requestHumanHandoff: (reason) => putSessionInHandoff(session, reason, 2),
   };
   const runArgs = {
     requireCompletedReply: true,
@@ -1021,7 +1040,7 @@ async function deterministicResponseCore(task, channel, session, message) {
       capabilities: channel.configuracao?.capabilities || {},
       customerMemory,
       teamAnswers,
-      extraGuidance,
+      extraGuidance: `${extraGuidance} ${session.estado?.preferSelfService ? 'O cliente prefere atendimento pela IA no WhatsApp. Resolva com as ferramentas; não encaminhe dúvidas comuns à equipe. Nunca invente conclusão ou disponibilidade.' : ''}`,
       persona,
     }),
     history: priorHistory,
@@ -1122,8 +1141,8 @@ async function deterministicResponseCore(task, channel, session, message) {
     await recordProviderRun(task, session, { status: 'skipped', model: configuredGeminiModel().model, errorCode: 'GEMINI_CIRCUIT_OPEN' });
     const reserve = await tryReserve('GEMINI_CIRCUIT_OPEN');
     if (reserve) return reserve;
-    await putSessionInHandoff(session, 'gemini_circuit_open', 4);
-    return { text: 'Nosso assistente virtual está temporariamente indisponível. Encaminhei sua conversa para a equipe humana.', kind: 'gemini_fallback' };
+    if (!hadPendingAction) await cancelPendingAction(context);
+    return { text: 'A consulta está temporariamente indisponível. Nada foi confirmado. Pode tentar novamente em alguns minutos por aqui.', kind: 'technical_retry' };
   }
 
   try {
@@ -1141,6 +1160,10 @@ async function deterministicResponseCore(task, channel, session, message) {
     if (safeErrorCode(error) !== 'GEMINI_BLOCKED') {
       const reserve = await tryReserve(safeErrorCode(error));
       if (reserve) return reserve;
+    }
+    if (recoverableModelFailure(safeErrorCode(error))) {
+      if (!hadPendingAction) await cancelPendingAction(context);
+      return { text: 'Não consegui concluir a consulta. Nada foi confirmado. Podemos tentar por aqui de novo: qual serviço e horário você quer?', kind: 'technical_retry' };
     }
     await putSessionInHandoff(session, `gemini:${safeErrorCode(error)}`, 4);
     return { text: 'Não consegui concluir com segurança pelo assistente virtual. Encaminhei sua conversa para a equipe humana.', kind: 'gemini_fallback' };
@@ -1211,7 +1234,7 @@ export async function processWhatsappConversationTask(task) {
   // Rajada: se já chegou outra mensagem deste contato, esta é respondida junto com a
   // próxima. Nunca agrupa SAIR, pedido de humano, nem resposta a ação pendente.
   if (!priorOutput && session.status !== 'humano' && !session.acao_pendente
-      && !optOutIntent(message.text) && !handoffIntent(message.text)
+      && !optOutIntent(message.text) && !handoffIntent(message.text) && !prefersSelfService(message.text)
       && !suspiciousPromptInjection(message.text) && !sensitiveCustomerData(message.text)
       && await newerPendingMessage(record)) {
     await db.query(
@@ -1351,6 +1374,7 @@ export async function whatsappAiOperationalStatus(context = {}) {
       lastSyncAt: channelRow.ultima_sincronizacao_em,
       lastError: channelRow.ultimo_erro,
       capabilities: safeCapabilities(channelRow.configuracao?.capabilities),
+      handoff: safeHandoffView(channelRow.configuracao?.handoff),
       persona: { ...personaView(channelRow.configuracao, process.env, empresaId), figurinhasNoProvedor: figurinhaSuportada() },
       aiCircuitOpenUntil: channelRow.ai_circuit_open_until,
       aiCircuitOpen: Boolean(channelRow.ai_circuit_open_until && new Date(channelRow.ai_circuit_open_until).getTime() > Date.now()),
@@ -1557,11 +1581,9 @@ function safeHandoffView(value = {}) {
 function safeHandoffInput(input = {}) {
   const email = cleanText(input.notifyEmail ?? input.notify_email, 320).toLowerCase();
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('e-mail de notificação inválido');
-  let attendantPhone = String(input.attendantPhone ?? input.attendant_phone ?? '').replace(/\D/g, '');
-  if (attendantPhone && attendantPhone.length >= 10 && attendantPhone.length <= 11 && !attendantPhone.startsWith('55')) {
-    attendantPhone = `55${attendantPhone}`;
-  }
-  if (attendantPhone && (attendantPhone.length < 12 || attendantPhone.length > 15)) throw new Error('telefone do atendente inválido');
+  const rawPhone = String(input.attendantPhone ?? input.attendant_phone ?? '').trim();
+  const attendantPhone = canonicalWhatsappPhone(rawPhone);
+  if (rawPhone && !attendantPhone) throw new Error('telefone do atendente inválido');
   return { notify_email: email, attendant_phone: attendantPhone };
 }
 
@@ -1913,4 +1935,5 @@ export async function testWhatsappAiGemini(context = {}, { confirmed = false } =
     throw error;
   }
 }
+
 
