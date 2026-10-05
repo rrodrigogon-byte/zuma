@@ -29,7 +29,7 @@ function fixture() {
   const catalog = [
     { id: 'p1', nome: 'Armaf Club de Nuit Intense', preco: 449, custo: 250, estoque: 10 },
     { id: 'p2', nome: 'Dior Sauvage EDT', preco: 800, estoque: 2 },
-    { id: 'p3', nome: 'Lattafa Asad', preco: 350, estoque: 3 },
+    { id: 'p3', nome: 'Lattafa Asad', preco: 350, custo: 200, estoque: 3 },
     { id: 'p4', nome: 'Xerjoff Erba Pura', preco: 2600, estoque: 0 },
   ];
   const services = [{ id: 's1', nome: 'Corte Masculino', preco: 45 }, { id: 's2', nome: 'Corte + Barba', preco: 75 }, { id: 's3', nome: 'Corte Premium com o Dino', preco: 1000 }];
@@ -125,4 +125,81 @@ test('telefone do grafo usa a forma canônica do opt-out (12 e 13 dígitos são 
   assert.equal(graphPhone('556599990000'), '5565999990000');
   assert.equal(graphPhone('(65) 99999-0000'), '5565999990000');
   assert.equal(graphPhone('65 3322-1100'), '556533221100', 'fixo não ganha o 9');
+});
+
+
+test('telefone compartilhado não mistura pessoas nem libera mensagens', () => {
+  const a = fixture().clients[0];
+  const graph = buildCustomerGraph({ clients: [a, { ...a, id: 'other', nome: 'Outra pessoa' }],
+    commands: [{ clienteId: a.id, status: 'paga', fechadaEm: d(1), itens: [{ tipo: 'produto', nome: 'Perfume', subtotal: 80 }] }],
+    facts: [{ telefone: a.telefone, categoria: 'produto_interesse', valor: 'Perfume', status: 'ativo' }],
+    consents: new Map([['5565999990001', { marketing: true }]]) });
+  assert.equal(graph.customers.size, 2);
+  assert.equal(graph.customers.get('id:c1').totalGasto, 80);
+  assert.equal(graph.customers.get('id:other').totalGasto, 0);
+  assert.ok([...graph.customers.values()].every(c => c.automationBlocked && !c.interests.length));
+  assert.equal(graphSummary(graph).qualidade.telefonesAmbiguos, 1);
+});
+
+test('anonimização não é revertida por comandas, telefone ou memória', () => {
+  const a = { ...fixture().clients[0], anonimizadoEm: d(1) };
+  const graph = buildCustomerGraph({ clients: [a], commands: [
+    { clienteId: a.id, clienteTelefone: a.telefone, status: 'paga', itens: [{ tipo: 'produto', nome: 'P', subtotal: 10 }] },
+    { clienteTelefone: a.telefone, status: 'paga', itens: [{ tipo: 'produto', nome: 'P', subtotal: 10 }] }],
+    facts: [{ telefone: a.telefone, status: 'ativo', valor: 'P' }],
+    orders: [{ status: 'paid', telefone: a.telefone, itens: [{ nome: 'P', subtotal: 10 }] }] });
+  assert.equal(graph.customers.size, 0);
+  assert.equal(graph.edges.length, 0);
+});
+
+test('somente pedidos confirmados contam; duplicatas, homologação e reembolsos não', () => {
+  const order = { id: 'o1', customerId: 'customer1', telefone: '65999990001', status: 'paid', itens: [
+    { produtoId: 'p1', nome: 'Produto', subtotal: 100 }, { produtoId: 'test', nome: 'Homologação InfinitePay', subtotal: 3 }] };
+  const graph = buildCustomerGraph({ orders: [order, order, ...['pending_payment', 'payment_failed', 'draft', 'cancelled', 'refunded', 'partially_refunded', 'fraud_review', undefined].map((status, i) => ({ ...order, id: `bad${i}`, status }))] });
+  assert.equal(graph.edges.length, 1);
+  assert.equal([...graph.customers.values()][0].totalGasto, 100);
+  assert.equal(graph.quality.excluidos.pedidosNaoConfirmados, 8);
+  assert.equal(graph.quality.excluidos.itensTeste, 1);
+});
+
+test('IDs de produto preservam itens homônimos e origem local/Commerce', () => {
+  const graph = buildCustomerGraph({ orders: [{ telefone: '65999990001', status: 'paid', itens: [
+    { produtoId: 'p1', nome: 'Mesmo nome', subtotal: 10 }, { produtoId: 'p2', nome: 'Mesmo nome', subtotal: 20 }] }],
+    commands: [{ clienteTelefone: '65999990001', status: 'paga', fechadaEm: d(1), itens: [{ tipo: 'produto', produtoId: 'p1', nome: 'Mesmo nome', subtotal: 5 }] }] });
+  const c = [...graph.customers.values()][0];
+  assert.equal(c.products.size, 3);
+  assert.equal(c.totalGasto, 35);
+  assert.ok(customerEgo(graph, c.key).nodes.filter(n => n.tipo === 'produto').every(n => n.rotulo === 'Mesmo nome'));
+});
+
+test('ego truncado nunca devolve relações com nós ausentes', () => {
+  const graph = buildCustomerGraph({ orders: [{ telefone: '65999990001', status: 'paid', itens: Array.from({ length: 75 }, (_, i) => ({ produtoId: `p${i}`, nome: `Produto ${i}`, subtotal: 1 })) }] });
+  const ego = customerEgo(graph, '5565999990001');
+  const ids = new Set(ego.nodes.map(n => n.id));
+  assert.equal(ego.nodes.length, 40);
+  assert.equal(ego.truncado, true);
+  assert.ok(ego.links.every(l => ids.has(l.from) && ids.has(l.to)));
+});
+
+test('falha ou limite em uma fonte bloqueia envios sem mascarar a qualidade', () => {
+  for (const status of ['indisponivel', 'limitado']) {
+    const graph = buildCustomerGraph({ ...fixture(), quality: { fontes: { pedidos: { status } } } });
+    assert.ok([...graph.customers.values()].every(c => c.automationBlocked));
+    assert.equal(graphSummary(graph).qualidade.fontes.pedidos.status, status);
+  }
+});
+
+test('Commerce e cadastro local sem vínculo comprovado mantêm históricos distintos', () => {
+  const graph = buildCustomerGraph({ clients: [fixture().clients[0]], orders: [{ customerId: 'remote', telefone: '65999990001', status: 'paid', itens: [{ nome: 'P', subtotal: 10 }] }] });
+  assert.equal(graph.customers.size, 2);
+  assert.equal(graph.customers.get('id:c1').totalGasto, 0);
+  assert.equal(graph.customers.get('commerce:remote').totalGasto, 10);
+  assert.ok([...graph.customers.values()].every(c => c.identityUnresolved));
+});
+
+test('sem custo conhecido margem é zero; preço alto não inventa lucro', () => {
+  const data = fixture();
+  const rows = nextBestOffers(buildCustomerGraph(data, { now: NOW }), { catalog: [{ id: 'expensive', nome: 'Perfume caro', preco: 5000, estoque: 1 }], services: [] });
+  assert.ok(rows.length);
+  assert.ok(rows.every(row => row.melhor.partes.margem === 0));
 });

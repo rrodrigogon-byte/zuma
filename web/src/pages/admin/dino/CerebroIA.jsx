@@ -9,7 +9,7 @@ import '../customer360.css'
 import './dino-admin.css'
 
 const BASE = '/api/admin/barbearia/cerebro-ia'
-const TABS = [['ativacao', 'Ativação'], ['geral', 'Visão geral'], ['aprendizado', 'Aprendizados'], ['ofertas', 'Próximas ofertas'], ['automacoes', 'Automações']]
+const TABS = [['ativacao', 'Ativação'], ['geral', 'Visão geral'], ['aprendizado', 'Aprendizados'], ['ofertas', 'Grafo e ofertas'], ['automacoes', 'Automações']]
 const TASK_LABEL = { classificar: 'Classificar intenção', resumir_extrair: 'Resumir e extrair fatos', propor_resposta: 'Redigir respostas', avaliar: 'IA avaliadora', venda_consultiva: 'Venda consultiva', responder_reserva: 'Reserva do atendimento' }
 const PROVIDER = { gemini: 'Gemini', anthropic: 'Claude', openai: 'GPT' }
 const KEY_ENV = { gemini: 'GEMINI_API_KEY', anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY' }
@@ -214,8 +214,8 @@ export default function CerebroIA() {
     {tab === 'geral' && <>
       <section className="dadm-kpis" aria-label="Indicadores dos últimos 30 dias">
         <Kpi label="Conversas (30 dias)" value={int(q.conversas || 0)} hint="resumidas pelo ciclo diário" />
-        <Kpi label="Resolvidas sem humano" value={pct(q.resolvidoSemHumano)} />
-        <Kpi label="Viraram agenda ou compra" value={pct(q.conversao)} />
+        <Kpi label="Resolvidas sem humano" value={q.conversas ? pct(q.resolvidoSemHumano) : '—'} hint={`${int(q.conversas || 0)} conversas na amostra`} />
+        <Kpi label="Viraram agenda ou compra" value={q.conversas ? pct(q.conversao) : '—'} hint="Indicador descritivo; não mede precisão da IA" />
         <Kpi label="Nota da IA avaliadora" value={q.notaMedia ? `${String(q.notaMedia).replace('.', ',')}/5` : '—'} hint={`${int(q.avaliadas || 0)} conversas avaliadas`} />
         <Kpi label="Clientes com memória" value={int(q.clientesComMemoria || 0)} hint={`${int(q.fatosAtivos || 0)} fatos em uso · ${int(q.fatosPropostos || 0)} para revisar`} />
         <Kpi label="Gasto com IA hoje" value={money(gastoHoje)} hint={`teto ${money(teto)}`} alert={teto > 0 && gastoHoje >= teto * 0.8} />
@@ -290,6 +290,26 @@ export default function CerebroIA() {
 
     {tab === 'ofertas' && <>
       {grafo ? <>
+        <section className="dadm-card" aria-label="Qualidade dos dados do grafo">
+          <h2>Qualidade e cobertura dos dados</h2>
+          <p>Compras incluem apenas pedidos confirmados. Produtos com nome iniciado por “Homologação” são excluídos. Margem sem custo conhecido não soma pontos.</p>
+          {grafo.resumo.qualidade && <>
+            <p>{grafo.resumo.qualidade.telefonesAmbiguos} telefone(s) com cadastros distintos. Identidades pendentes ficam fora dos envios automáticos.</p>
+            <p>{grafo.resumo.qualidade.excluidos.anonimizados} registro(s) anonimizado(s) e {grafo.resumo.qualidade.excluidos.itensTeste} item(ns) de teste excluído(s) do cálculo.</p>
+            <ul>{Object.entries(grafo.resumo.qualidade.fontes).map(([fonte, estado]) => <li key={fonte}>{fonte}: {estado.status === 'ok' ? `${estado.registros ?? '—'} registros carregados` : estado.status === 'limitado' ? 'limite de leitura atingido; cobertura parcial' : 'indisponível; dados incompletos'}</li>)}</ul>
+            {Object.values(grafo.resumo.qualidade.fontes).some(s => s.status !== 'ok') && <p role="status">Automações bloqueadas nesta leitura por cobertura incompleta.</p>}
+            {grafo.resumo.qualidade.estoqueLocalEscopo === 'omitido_sem_vinculo_loja' && <p>Estoque de balcão sem vínculo de loja não participa das ofertas desta loja.</p>}
+            {grafo.resumo.qualidade.memoriaEscopo !== 'empresa' && <p>A memória desta loja inclui apenas fatos com conversa de origem vinculada à loja.</p>}
+          </>}
+        </section>
+        {!!grafo.clientes?.length && <section className="dadm-card">
+          <label htmlFor="cb-cliente-grafo">Explorar cliente, mesmo sem oferta disponível</label>
+          <select id="cb-cliente-grafo" className="c360-input" value={ego?.cliente?.chave || ''} onChange={e => e.target.value && abrirEgo(e.target.value)}>
+            <option value="">Selecione um cliente</option>
+            {grafo.clientes.map(c => <option key={c.chave} value={c.chave}>{c.nome}{c.telefoneFinal ? ` · final ${c.telefoneFinal}` : ''}{c.identidadePendente ? ' · identidade pendente' : ''}</option>)}
+          </select>
+          {grafo.clientesLimitados && <p>Exibindo os primeiros 200 clientes desta leitura.</p>}
+        </section>}
         <section className="dadm-kpis" aria-label="Resumo do grafo">
           <Kpi label="Clientes no grafo" value={int(grafo.resumo.clientes)} />
           <Kpi label="Relações" value={int(grafo.resumo.arestas)} hint={Object.entries(grafo.resumo.relacoes).map(([k, v]) => `${REL[k] || k} ${v}`).join(' · ')} />
@@ -307,7 +327,7 @@ export default function CerebroIA() {
                 <td><button type="button" className="c360-link" onClick={() => abrirEgo(row.cliente.chave)}>{row.cliente.nome}</button><br /><small className="dadm-muted">{row.cliente.visitas} {row.cliente.visitas === 1 ? 'visita' : 'visitas'}{row.cliente.diasDesdeUltima !== null ? ` · há ${row.cliente.diasDesdeUltima} dias` : ''}{row.cliente.intervaloHabitual ? ` · volta a cada ${row.cliente.intervaloHabitual}` : ''}</small></td>
                 <td>{row.melhor.nome}<br /><small className="dadm-muted">{row.melhor.tipo === 'servico' ? 'serviço' : 'produto'} · {money(row.melhor.preco)}</small></td>
                 <td className="num"><span className={`dadm-score${row.enviar ? ' hot' : ''}`}>{score(row.melhor.score)}</span></td>
-                <td>{row.melhor.motivos.join('; ') || '—'}{!row.cliente.consentimento.marketing && <><br /><small className="dadm-muted">sem consentimento de marketing</small></>}</td>
+                <td>{row.melhor.motivos.join('; ') || '—'}{row.cliente.automacaoBloqueada && <><br /><small className="dadm-muted">envio bloqueado: verificar identidade e cobertura</small></>}{!row.cliente.consentimento.marketing && <><br /><small className="dadm-muted">sem consentimento de marketing</small></>}</td>
               </tr>)}</tbody>
             </table></div> : <p className="c360-empty">Ainda não há dados suficientes (agenda, comandas ou pedidos) para sugerir ofertas.</p>}
           </section>
@@ -315,9 +335,10 @@ export default function CerebroIA() {
             <h2 id="cb-ego">{ego?.cliente ? `Ligações de ${ego.cliente.nome}` : 'Ligações do cliente'}</h2>
             {ego ? <>
               <EgoGraph ego={ego.ego} />
+              {ego.ego?.truncado && <p className="dadm-muted">Visualização limitada a 40 nós e 60 relações.</p>}
               {ego.ofertas && <ul className="dadm-memlist">{[ego.ofertas.melhor, ...ego.ofertas.alternativas].map((o) => <li key={o.nome}><strong>{o.nome} · {score(o.score)}</strong><span className="dadm-muted">afinidade {score(o.partes.afinidade)} · interesse {score(o.partes.interesse)} · momento {score(o.partes.momento)} · margem {score(o.partes.margem)}</span></li>)}</ul>}
             </> : <p className="c360-empty">Escolha um cliente na lista.</p>}
-            {grafo.resumo.compradosJuntos.length > 0 && <><h2>Comprados juntos</h2><ul className="dadm-memlist">{grafo.resumo.compradosJuntos.map((p) => <li key={p.itens.join('|')}>{p.itens.join(' + ')} <small className="dadm-muted">{p.clientes} clientes</small></li>)}</ul></>}
+            {grafo.resumo.compradosJuntos.length > 0 && <><h2>Comprados pelos mesmos clientes</h2><p className="dadm-muted">Coocorrência no histórico; não significa compra no mesmo pedido.</p><ul className="dadm-memlist">{grafo.resumo.compradosJuntos.map((p) => <li key={p.itens.join('|')}>{p.itens.join(' + ')} <small className="dadm-muted">{p.clientes} clientes</small></li>)}</ul></>}
           </section>
         </div>
       </> : <p className="dadm-muted">Montando o grafo…</p>}
@@ -356,3 +377,4 @@ export default function CerebroIA() {
     </Dialog>
   </div>
 }
+

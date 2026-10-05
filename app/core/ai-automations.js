@@ -10,7 +10,7 @@ import { db } from './database.js';
 import { enviarMensagem } from './whatsapp.js';
 import { AUTOMATIONS, getBrainSettings, whatsappConsentMap } from './ai-memory.js';
 import * as clientesLocais from '../clientes-contas-kytto.js';
-import { graphPhone, nextBestOffers, plainText, SEND_THRESHOLD } from '../dino-grafo.js';
+import { graphPhone, nextBestOffers, plainText, productKey, isAnonymized, SEND_THRESHOLD } from '../dino-grafo.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TZ = 'America/Cuiaba';
@@ -89,7 +89,7 @@ export function planAutomations({ graph, sources, settings, recentMarketing = ne
     : new Map();
   for (const c of graph.customers.values()) {
     const phone = graphPhone(c.phone);
-    if (!phone) continue;
+    if (!phone || c.identityUnresolved || c.automationBlocked) continue;
     const variante = variantFor(phone, settings.autonomia);
     const profissional = c.favoriteProfessional ? graph.professionalNames.get(c.favoriteProfessional) : null;
     const base = { telefone: phone, cliente: c.nome || 'Cliente', variante };
@@ -125,7 +125,7 @@ export function planAutomations({ graph, sources, settings, recentMarketing = ne
     // Aviso de estoque: interesse ativo em produto que está disponível
     for (const interest of c.interests.filter((i) => i.categoria === 'produto_interesse' && i.texto)) {
       const product = catalogInStock.find((item) => { const n = plainText(item.nome); return n.includes(interest.texto) || interest.texto.includes(n); });
-      if (product && !c.products.has(plainText(product.nome))) {
+      if (product && !c.products.has(productKey(product))) {
         push('aviso_estoque', `produto:${product.id}:${monthKey(now)}`, `interesse em ${product.nome}`, { produto: product.nome });
         break;
       }
@@ -223,7 +223,9 @@ export async function sendTimeConsent(empresaId, phone, finalidade, { consentMap
   try {
     const list = localClients || clientesLocais.listarClientes(String(empresaId)).map((c) => clientesLocais.obterCliente(String(empresaId), c.id) || c);
     local = list.filter((c) => graphPhone(c.telefone) === phone);
-  } catch { local = []; }
+  } catch { return { ok: false, reason: 'cadastro_indisponivel' }; }
+  if (local.some(isAnonymized)) return { ok: false, reason: 'cliente_anonimizado' };
+  if (new Set(local.map(c => c.id)).size > 1) return { ok: false, reason: 'identidade_ambigua' };
   const localFlag = (field) => local.some((c) => c.consentimentos?.whatsapp?.[field]?.concedido === true);
   if (finalidade === 'marketing') {
     if (pg?.marketing === false) return { ok: false, reason: 'sem_consentimento_marketing' };
@@ -299,3 +301,4 @@ export function automationResults(logRows = [], graph) {
 }
 
 export { nextBestOffers };
+
