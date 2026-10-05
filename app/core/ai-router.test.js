@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  anthropicToolsFromDeclarations, estimateCostCents, parseJsonLoose, routeFor, routerStatus,
+  anthropicToolsFromDeclarations, estimateCostCents, geminiThinking, parseJsonLoose, routeFor, routerStatus,
   runAiTask, runAnthropicWithTools,
 } from './ai-router.js';
 
@@ -111,5 +111,32 @@ test('Claude executa ferramenta e responde (reserva do atendimento)', async () =
     assert.deepEqual(executed, ['listar_servicos']);
     assert.equal(out.text, 'Temos corte às 10h.');
     assert.equal(out.traces[0].ok, true);
+  });
+});
+
+test('Gemini 2.5 Pro reserva orçamento de raciocínio e Flash desliga o raciocínio', async () => {
+  assert.deepEqual(geminiThinking('gemini-2.5-pro'), { config: { thinkingBudget: 256 }, extraTokens: 256 });
+  assert.deepEqual(geminiThinking('gemini-2.5-flash'), { config: { thinkingBudget: 0 }, extraTokens: 0 });
+  assert.deepEqual(geminiThinking('outro-modelo'), { config: null, extraTokens: 0 });
+  await withEnv({ GEMINI_API_KEY: 'g', AI_ROUTE_RESUMIR_EXTRAIR: 'gemini:smart' }, async () => {
+    let body = null;
+    const out = await runAiTask('resumir_extrair', {
+      user: 'conversa', json: true, maxTokens: 900, recorder: noRecord,
+      fetchImpl: async (url, init) => { body = JSON.parse(init.body); return response(200, { candidates: [{ finishReason: 'STOP', content: { parts: [{ text: 'pensando', thought: true }, { text: '{"resumo":"ok"}' }] } }] }); },
+    });
+    assert.equal(body.generationConfig.maxOutputTokens, 1156);
+    assert.deepEqual(body.generationConfig.thinkingConfig, { thinkingBudget: 256 });
+    assert.deepEqual(out.data, { resumo: 'ok' });
+  });
+});
+
+test('Gemini cortado por limite de saída em JSON registra GEMINI_MAX_TOKENS', async () => {
+  await withEnv({ GEMINI_API_KEY: 'g', AI_ROUTE_RESUMIR_EXTRAIR: 'gemini:smart' }, async () => {
+    const runs = [];
+    await assert.rejects(runAiTask('resumir_extrair', {
+      user: 'conversa', json: true, recorder: async (r) => { runs.push(r); },
+      fetchImpl: async () => response(200, { candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [{ text: '{"resumo":"cort' }] } }] }),
+    }));
+    assert.equal(runs[0].errorCode, 'GEMINI_MAX_TOKENS');
   });
 });

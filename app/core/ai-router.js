@@ -141,15 +141,38 @@ async function postJson(fetchImpl, url, headers, body, timeoutMs, provider) {
   return payload;
 }
 
+/**
+ * Orçamento de raciocínio ("thinking") da família Gemini 2.5. Os tokens de raciocínio
+ * contam dentro de maxOutputTokens: no 2.5 Pro (raciocínio obrigatório, mínimo 128) um
+ * teto de 900 era consumido inteiro pelo raciocínio e a resposta voltava vazia, o que
+ * derrubava o resumo noturno do cérebro para a heurística. Pro: orçamento fixo e somado
+ * ao teto; Flash/Flash-Lite: raciocínio desligado. Outros modelos seguem o padrão da API.
+ */
+export function geminiThinking(model) {
+  const name = String(model || '').toLowerCase();
+  if (!name.startsWith('gemini-2.5')) return { config: null, extraTokens: 0 };
+  if (name.includes('pro')) return { config: { thinkingBudget: 256 }, extraTokens: 256 };
+  return { config: { thinkingBudget: 0 }, extraTokens: 0 };
+}
+
 async function callGemini({ key, model, system, user, json, maxTokens, fetchImpl, timeoutMs }) {
+  const thinking = geminiThinking(model);
   const payload = await postJson(fetchImpl, `${baseUrl('gemini')}/v1beta/models/${encodeURIComponent(model)}:generateContent`, { 'x-goog-api-key': key }, {
     systemInstruction: system ? { parts: [{ text: system }] } : undefined,
     contents: [{ role: 'user', parts: [{ text: user }] }],
-    generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens, ...(json ? { responseMimeType: 'application/json' } : {}) },
+    generationConfig: {
+      temperature: 0.2,
+      maxOutputTokens: maxTokens + thinking.extraTokens,
+      ...(thinking.config ? { thinkingConfig: thinking.config } : {}),
+      ...(json ? { responseMimeType: 'application/json' } : {}),
+    },
   }, timeoutMs, 'gemini');
   if (payload?.promptFeedback?.blockReason) throw new AiRouterError('Gemini bloqueou por política', 'GEMINI_BLOCKED', { retryable: false });
-  const parts = payload?.candidates?.[0]?.content?.parts || [];
-  return parts.map((part) => part.text || '').join('').trim();
+  const candidate = payload?.candidates?.[0] || {};
+  const text = (candidate.content?.parts || []).filter((part) => !part.thought).map((part) => part.text || '').join('').trim();
+  // Resposta cortada pelo teto não vira JSON válido: registra o motivo real em vez de "JSON inválido".
+  if (candidate.finishReason === 'MAX_TOKENS' && json) throw new AiRouterError('Gemini atingiu o limite de saída', 'GEMINI_MAX_TOKENS', { retryable: true });
+  return text;
 }
 
 async function callAnthropic({ key, model, system, user, maxTokens, fetchImpl, timeoutMs }) {
