@@ -751,15 +751,15 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
     assert.equal(mundo.chamadasGemini, geminiAntes, 'nada foi para o modelo');
   });
 
-  await cena(t, '22 · Gemini fora do ar: cliente não fica sem resposta (handoff)', async () => {
+  await cena(t, '22 · Gemini fora do ar: resposta clara e nova tentativa sem handoff', async () => {
     const tel = telefoneNovo();
     mundo.geminiFora = true;
     try {
       cliente(tel, 'Quero cortar amanhã');
       const out = await ciclo();
       assert.equal(out.length, 1);
-      assert.match(out[0].texto, T.equipe);
-      assert.equal((await sessao(tel)).status, 'humano');
+      assert.match(out[0].texto, /Nada foi confirmado/);
+      assert.equal((await sessao(tel)).status, 'ativo');
     } finally {
       mundo.geminiFora = false;
       await db.query(`UPDATE canais_integracao SET ai_circuit_open_until = NULL, ai_consecutive_failures = 0 WHERE id = $1`, [IDS.canal]).catch(() => null);
@@ -1119,6 +1119,42 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
     } finally {
       for (const k of ['DINO_RESUMO_DIARIO', 'DINO_RESUMO_TELEFONES', 'DINO_RESUMO_HORA', 'DINO_RESUMO_EMPRESA_ID', 'DINO_RESUMO_LOJA_ID']) delete process.env[k];
     }
+  });
+
+  await cena(t, '50 · Pedido explícito retoma falha técnica sem confirmar agendamento', async () => {
+    const tel = telefoneNovo();
+    cliente(tel, 'oi'); await ciclo();
+    const row = await sessao(tel);
+    await db.query(`UPDATE whatsapp_ai_sessions SET status='humano', handoff_reason='gemini:GEMINI_TOOL_LIMIT' WHERE id=$1`, [row.id]);
+    cliente(tel, 'ok, mas nao quero falar com ninguem, resolca!');
+    const out = await ciclo();
+    assert.match(ultima(out), /Seguimos por aqui com a IA/);
+    const resumed = await sessao(tel);
+    assert.equal(resumed.status, 'ativo');
+    assert.equal(resumed.estado.preferSelfService, true);
+    assert.equal(resumed.acao_pendente, null);
+    assert.equal(agendamentosDe(tel).length, 0);
+    cliente(tel, 'quanto custa o corte?');
+    assert.match(ultima(await ciclo()), T.preco('Corte Masculino', 45));
+    cliente(tel, 'quero falar com um atendente'); await ciclo();
+    assert.equal((await sessao(tel)).status, 'humano');
+  });
+  await cena(t, '51 · Preferência pela IA não remove bloqueio de segurança', async () => {
+    const tel = telefoneNovo(); cliente(tel, 'oi'); await ciclo();
+    const row = await sessao(tel);
+    await db.query(`UPDATE whatsapp_ai_sessions SET status='humano', handoff_reason='security:output_policy' WHERE id=$1`, [row.id]);
+    cliente(tel, 'não quero falar com ninguém');
+    const out = await ciclo();
+    assert.match(ultima(out), /revisão da equipe/);
+    assert.equal((await sessao(tel)).status, 'humano');
+  });
+  await cena(t, '52 · Preferência pela IA persiste e confusão não encaminha automaticamente', async () => {
+    const tel = telefoneNovo(); cliente(tel, 'não quero falar com atendente, somente pelo whats'); await ciclo();
+    assert.equal((await sessao(tel)).estado.preferSelfService, true);
+    cliente(tel, '???'); await ciclo(); cliente(tel, '???');
+    const out = await ciclo();
+    assert.ok(out.length > 0);
+    assert.equal((await sessao(tel)).status, 'ativo');
   });
 
   // ---- T-Rex (persona): só rodam com WHATSAPP_AI_PERSONA=trex ----

@@ -16,6 +16,8 @@
 
 import { mail as defaultMail } from '../email.js';
 import { motivoLegivel } from './whatsapp-handoff-labels.js';
+import { sensitiveCustomerData } from './whatsapp-ai-profile.js';
+import { canonicalWhatsappPhone } from './whatsapp-phone.js';
 
 // whatsapp.js é importado de forma preguiçosa só na hora de enviar: evita puxar a
 // cadeia de envio (e suas deps) ao carregar este módulo, e deixa os testes injetarem
@@ -66,7 +68,7 @@ function normalizarTranscript(transcript, limite = 30) {
     .slice(-limite)
     .map((linha) => ({
       role: linha.role === 'assistant' ? 'assistant' : 'user',
-      text: limpar(linha.text, 1500),
+      text: sensitiveCustomerData(linha.text) ? '[Conteúdo sensível omitido; consulte a sessão autorizada no painel.]' : limpar(linha.text, 1500),
       at: linha.at || null,
     }));
 }
@@ -191,13 +193,16 @@ export async function notifyHumanHandoff(
   const mail = deps.mail || defaultMail;
   const enviarMensagem = deps.enviarMensagem || defaultEnviarMensagem;
 
-  const notifyEmail = limpar(config.handoff_notify_email || config.notifyEmail, 320);
-  const humanPhoneDigits = digitsOnly(config.handoff_human_phone || config.humanPhone).slice(0, 15);
-  const customerDigits = digitsOnly(customerPhone).slice(0, 15);
+  const notifyEmail = limpar(config.notify_email || config.handoff_notify_email || config.notifyEmail, 320);
+  const humanPhoneDigits = canonicalWhatsappPhone(config.attendant_phone || config.handoff_human_phone || config.humanPhone);
+  const customerDigits = canonicalWhatsappPhone(customerPhone);
 
   const resultado = { emailed: null, messaged: null };
 
   if (notifyEmail && /.+@.+\..+/.test(notifyEmail)) {
+    if (typeof mail.ativo === 'function' && !mail.ativo()) {
+      resultado.emailed = { ok: false, skipped: true, code: 'MAIL_NOT_CONFIGURED' };
+    } else {
     try {
       const { subject, html, text } = buildHandoffEmail({
         storeName,
@@ -210,6 +215,7 @@ export async function notifyHumanHandoff(
       resultado.emailed = await mail.enviar({ to: notifyEmail, subject, html, text });
     } catch (error) {
       resultado.emailed = { ok: false, erro: String(error?.message || error).slice(0, 200) };
+    }
     }
   }
 

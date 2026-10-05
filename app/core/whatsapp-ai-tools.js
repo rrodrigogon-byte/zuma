@@ -960,6 +960,13 @@ function handoffReasonCode(value) {
 async function toolHuman(context, args = {}) {
   const scope = contextScope(context);
   const reason = handoffReasonCode(args.reason);
+  if (context.sessionSnapshot?.estado?.preferSelfService && ['pedido_do_cliente', 'duvida_sem_resposta'].includes(reason)) {
+    return { ok: false, code: 'CUSTOMER_PREFERS_SELF_SERVICE', mensagem: 'O cliente prefere a IA. Continue pelas ferramentas ou explique a limitação sem afirmar encaminhamento.' };
+  }
+  if (context.requestHumanHandoff) {
+    await context.requestHumanHandoff(reason);
+    return { ok: true, handoff: true, mensagem: 'Atendimento encaminhado para a equipe humana.', motivo: reason };
+  }
   await db.query(
     `UPDATE whatsapp_ai_sessions
         SET status = 'humano', estado = jsonb_set(estado, '{handoffReason}', to_jsonb($2::text), true),
@@ -1189,3 +1196,4 @@ export async function confirmPendingAction(context) {
     return { ok: true, type: action.tipo, result: response };
   });
 }
+
