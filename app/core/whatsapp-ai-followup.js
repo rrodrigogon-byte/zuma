@@ -44,7 +44,7 @@ export function followUpText(session = {}) {
   const nome = firstName(session.nome) || firstName(session.nome_na_acao);
   const resumo = clean(session.acao_pendente?.summary, 400).replace(/\.$/, '');
   // Persona (ex.: T-Rex): mesmo resumo e a mesma dica de confirmação, em tom curto.
-  if (resolvePersona(session.configuracao)) {
+  if (resolvePersona(session.configuracao, process.env, session.empresa_id)) {
     return `${nome ? `Opa, ${nome}!` : 'Opa!'} Só falta você confirmar: ${resumo}.\n${CONFIRMATION_HINT}`;
   }
   return `${nome ? `Oi, ${nome}!` : 'Oi!'} Ficou faltando só sua confirmação: ${resumo}.\n${CONFIRMATION_HINT} Se preferir outro horário ou produto, é só me dizer.`;

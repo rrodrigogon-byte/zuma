@@ -20,6 +20,11 @@ export const PERSONA_IDS = ['trex'];
 export const REVELAR_IA = ['quando_perguntado', 'na_apresentacao'];
 
 // Figurinhas do pacote do T-Rex (arquivos em app/assets/trex/figurinhas/<nome>.webp).
+// Figurinhas que o modelo NÃO escolhe sozinho: promoção é conteúdo comercial
+// (só campanha com consentimento) e "perfume novo" só vale com indicação pedida
+// ou oportunidade liberada pelo gate.
+export const STICKERS_RESTRITAS = { promocao: 'nunca', 'perfume-novo': 'indicacao' };
+
 export const STICKERS = {
   oi: 'primeiro contato do dia ou cliente que voltou depois de muito tempo',
   agendado: 'logo depois de um agendamento confirmado',
@@ -75,9 +80,16 @@ export function sanitizePersonaInput(input = {}) {
  * Persona ativa do canal, ou null. O canal manda; o ambiente só dá o padrão.
  * `configuracao.persona.ativo === false` desliga mesmo com a variável de ambiente.
  */
-export function resolvePersona(configuracao = {}, env = process.env) {
+export function resolvePersona(configuracao = {}, env = process.env, empresaId = '') {
   const salvo = configuracao && typeof configuracao.persona === 'object' ? configuracao.persona : null;
   if (salvo?.ativo === false) return null;
+  // A variável de ambiente vale só para a empresa dona (padrão: a do backend da Dino),
+  // para não ligar o T-Rex em outro tenant que use WhatsApp na mesma plataforma.
+  if (!salvo && env.WHATSAPP_AI_PERSONA && empresaId) {
+    const dona = clean(env.WHATSAPP_AI_PERSONA_EMPRESA_ID || env.CHATBOT_BACKEND_EMPRESA_ID || '', 60);
+    // Sem empresa dona definida, a variável não liga persona nenhuma (só o canal liga).
+    if (!dona || dona !== String(empresaId)) return null;
+  }
   const id = clean(salvo?.id || env.WHATSAPP_AI_PERSONA || '', 20).toLowerCase();
   if (!id || id === 'off' || !DEFAULTS[id]) return null;
   let escolhido;
@@ -90,8 +102,8 @@ export function resolvePersona(configuracao = {}, env = process.env) {
 }
 
 /** Visão segura para o painel. */
-export function personaView(configuracao = {}, env = process.env) {
-  const ativa = resolvePersona(configuracao, env);
+export function personaView(configuracao = {}, env = process.env, empresaId = '') {
+  const ativa = resolvePersona(configuracao, env, empresaId);
   const salvo = configuracao?.persona && typeof configuracao.persona === 'object' ? configuracao.persona : null;
   return {
     ativa: Boolean(ativa),
@@ -154,8 +166,10 @@ export function personaGreeting(persona, { text = '', seed = '' } = {}) {
 /** Apresentação curta do primeiro contato do dia (substitui o aviso padrão). */
 export function personaIntroduction(persona, storeName) {
   const loja = clean(storeName, 120) || 'unidade';
-  if (persona.revelarIa === 'na_apresentacao') return `Aqui é o ${persona.nome}, assistente digital da ${loja}.`;
-  return `Aqui é o ${persona.nome}, da ${loja}.`;
+  // Finalidade e caminho para a equipe ficam no aviso (transparência LGPD), na voz da persona.
+  const finalidade = 'Uso esta conversa só pra te atender e chamo a equipe quando você quiser.';
+  if (persona.revelarIa === 'na_apresentacao') return `Aqui é o ${persona.nome}, assistente digital da ${loja}. ${finalidade}`;
+  return `Aqui é o ${persona.nome}, da ${loja}. ${finalidade}`;
 }
 
 /**
@@ -165,31 +179,44 @@ export function personaIntroduction(persona, storeName) {
 export function mergeIntroduction(intro, text) {
   const value = String(text || '').trim();
   if (!value) return intro;
-  const match = value.match(/^((?:opa|oi|ola|olá|e a[ií]|fala|bom dia|boa tarde|boa noite)[^.!?\n]{0,40}[.!?])\s+/i);
+  const match = value.match(/^((?:opa|oi|ola|olá|e a[ií]|fala|bom dia|boa tarde|boa noite)\b[^.!?\n]{0,40}[.!?])\s+/i);
   if (match) return `${match[1]} ${intro} ${value.slice(match[0].length)}`.trim();
   // Sem saudação: "Opa! Aqui é o T-Rex…" na mesma mensagem, se couber; senão, antes.
   const [primeiro, ...resto] = value.split(/\n{2,}/);
   const junto = `Opa! ${intro} ${primeiro}`;
-  if (junto.length <= 170) return [junto, ...resto].join('\n\n');
+  if (junto.length <= 230) return [junto, ...resto].join('\n\n');
   return `Opa! ${intro}\n\n${value}`;
 }
 
 /** O cliente está perguntando/falando de robô, IA ou pessoa? (então nunca esconda) */
 export function mentionsBotIdentity(text) {
-  return /\b(robo|robozinho|bot|chatbot|ia|inteligencia artificial|maquina|automatic\w*|humano|pessoa|gente de verdade|de verdade)\b/.test(plain(text));
+  const value = plain(text);
+  return personaRobotQuestion(text)
+    || /\b(robo|robozinho|bot|chatbot|inteligencia artificial|automatiz\w*|automatic\w*|humano|humana|pessoa de verdade|pessoa real|gente de verdade)\b/.test(value);
 }
 
 // --------------------------------------------------------------------------
 // "Você é robô?" — resposta determinística e verdadeira.
 // --------------------------------------------------------------------------
+const IDENTIDADE = '(?:robo|robozinho|bot|chatbot|ia|inteligencia artificial|maquina|humano|humana|pessoa(?: de verdade| real)?|gente(?: de verdade)?|real|atendente(?: de verdade| humano| humana| real)?|automatic[oa]|automatizad[oa]|programa)';
+const SUJEITO = '(?:vc|voce|ce|tu|isso|aqui|e|eh|sou|falando com|conversando com)';
+const PERGUNTA_IDENTIDADE = new RegExp(`\\b${SUJEITO}\\s+(?:(?:um|uma|o|a|com)\\s+)?${IDENTIDADE}\\b`);
+const SO_IDENTIDADE = new RegExp(`^(?:e\\s+)?(?:um\\s+|uma\\s+)?(?:robo|bot|ia|humano|humana)\\s*\\??$`);
+
+/**
+ * Pergunta direta sobre identidade ("vc é robô?", "é humana?", "to falando com
+ * um atendente?"). Exige o padrão "sujeito + o que é": "faz corte na máquina?",
+ * "eu ia passar aí" e "é original de verdade?" NÃO contam.
+ */
 export function personaRobotQuestion(text) {
   const value = plain(text).replace(/[^a-z0-9? ]/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!value || value.length > 90) return false;
-  const alvo = /\b(robo|robozinho|bot|chatbot|ia|inteligencia artificial|maquina|automatico|humano|pessoa de verdade|pessoa real|gente de verdade|de verdade)\b/;
-  const pergunta = /\b(e|eh|vc|voce|tu|ce|sou|isso|aqui|falando com|conversando com|to falando|estou falando)\b/;
-  if (!alvo.test(value)) return false;
-  if (/\b(quero|preciso|pode|me passa|chama|chamar|falar com)\b/.test(value) && !/\b(e|eh) (um |uma )?(robo|bot|humano|ia)\b/.test(value)) return false;
-  return pergunta.test(value) || /\?$/.test(value);
+  if (!value || value.length > 120) return false;
+  return PERGUNTA_IDENTIDADE.test(value) || SO_IDENTIDADE.test(value);
+}
+
+/** Com ação pendente: só a verdade, sem perguntar "chamo alguém?" (o "sim" seguinte é do resumo). */
+export function personaRobotAnswerShort(storeName) {
+  return `Sou o assistente digital da ${clean(storeName, 120) || 'unidade'}. Se quiser falar com a equipe, é só pedir.`;
 }
 
 export function personaRobotAnswer(persona, storeName, seed = '') {
@@ -239,8 +266,9 @@ export function personaConfirmationReply(persona, result = {}, seed = '') {
   const abre = pick(['Fechado!', 'Tá marcado!', 'Prontinho!', 'Feito!'], seed);
   const codigo = item.codigo || item.id;
   if (result.type === 'agendamento') {
+    const quandoExtra = (extra) => (/^\d{2}:\d{2}$/.test(String(extra.horaLocal || '')) ? ` às ${hora(extra.horaLocal)}` : (extra.dataHora || extra.dataAgenda ? `, ${quandoCurto(extra)}` : ''));
     const extras = Array.isArray(item.extras) && item.extras.length
-      ? ` Depois: ${item.extras.map((extra) => `${extra.servico} com ${extra.profissional} às ${hora(extra.horaLocal) || quandoCurto(extra)}`).join('; ')}.`
+      ? ` Depois: ${item.extras.map((extra) => `${extra.servico} com ${extra.profissional}${quandoExtra(extra)}`).join('; ')}.`
       : '';
     return `${abre} ${item.servico} com ${item.profissional}, ${quandoCurto(item)}.${extras}${codigo ? ` Código ${codigo}.` : ''}`;
   }
@@ -253,7 +281,8 @@ export function personaConfirmationReply(persona, result = {}, seed = '') {
   if (result.type === 'promocao_cliente') {
     return 'Feito! A oferta vai chegar por aqui.';
   }
-  return `${abre} Pedido ${item.publicCode} separado pra retirada, total ${reais(item.total)}. A equipe te chama pro pagamento.`;
+  const pedido = item.publicCode || item.codigo || item.id;
+  return `${abre} Pedido${pedido ? ` ${pedido}` : ''} separado pra retirada${Number.isFinite(Number(item.total)) && item.total !== undefined ? `, total ${reais(item.total)}` : ''}. A equipe te chama pro pagamento.`;
 }
 
 export function personaConfirmationFailure(code, type = '') {
@@ -309,7 +338,7 @@ export function personaFixedText(persona, kind, fallback, { storeName = '', seed
 export function personaSystemBlock(persona, storeName = 'esta unidade') {
   const loja = clean(storeName, 120) || 'esta unidade';
   const figurinhas = persona.figurinhas
-    ? `\n\nFIGURINHAS: você pode chamar enviar_figurinha no máximo 1 vez por conversa, só em momento leve: ${Object.entries(STICKERS).map(([nome, uso]) => `${nome} (${uso})`).join('; ')}. Nunca em reclamação, problema, cobrança ou conversa com a equipe. Não escreva o nome da figurinha no texto.`
+    ? `\n\nFIGURINHAS: você pode chamar enviar_figurinha no máximo 1 vez por conversa, só em momento leve: ${Object.entries(STICKERS).filter(([nome]) => STICKERS_RESTRITAS[nome] !== 'nunca').map(([nome, uso]) => `${nome} (${uso})`).join('; ')}. Nunca em reclamação, problema, cobrança ou conversa com a equipe. Não escreva o nome da figurinha no texto.`
     : '';
   const revelar = persona.revelarIa === 'na_apresentacao'
     ? 'Na primeira apresentação, diga que é o assistente digital da unidade.'

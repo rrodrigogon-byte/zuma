@@ -36,7 +36,8 @@ export function lerFigurinha(nome) {
 /** O provedor configurado sabe mandar figurinha? */
 export function figurinhaSuportada(env = process.env) {
   if (whatsappProviderName() === 'chatbot_backend') return Boolean(chatbotBackendStickerPath(env));
-  return Boolean(env.EVOLUTION_API_URL) && env.WHATSAPP_AI_STICKERS_EVOLUTION !== 'off';
+  // Evolution: só quando ligado de propósito (o canal precisa da chave da empresa).
+  return Boolean(env.EVOLUTION_API_URL) && env.WHATSAPP_AI_STICKERS_EVOLUTION === 'on';
 }
 
 export function figurinhaDisponivel(nome) {
@@ -59,7 +60,7 @@ async function viaEvolution(tenant, telefone, base64) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', apikey: tenant.whatsapp_api_key },
       body: JSON.stringify({ number: numero(telefone), sticker: base64, delay: 800 }),
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(8000),
     });
     return { ok: res.ok, status: res.status, unsupported: res.status === 404, uncertain: !res.ok && res.status >= 500 };
   } catch (error) {
@@ -92,7 +93,11 @@ export async function enviarFigurinha(tenant, telefone, nome) {
         return { ok: false, error: String(error?.code || 'STICKER_SEND_FAILED').slice(0, 80) };
       }
     }
+    // Mesmas travas do texto (enviarMensagem): dono definido exige modo de instâncias.
+    if (process.env.CHATBOT_BACKEND_EMPRESA_ID) return { ok: false, skipped: true, error: 'WHATSAPP_OWNER_REQUIRES_INSTANCE_MODE' };
     return sendStickerViaChatbotBackend({ instance, number: destino, base64, fileName: `${nome}.webp` });
   }
+  // Backend próprio configurado nunca cai na Evolution global.
+  if (process.env.CHATBOT_BACKEND_URL) return { ok: false, skipped: true, error: 'WHATSAPP_PROVIDER_SCOPE' };
   return viaEvolution(tenant, destino, base64);
 }

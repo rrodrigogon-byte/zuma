@@ -6,12 +6,12 @@ O atendente de IA da Barbearia Dino passa a falar como o **T-Rex**, o mascote da
 
 | Situação | Antes | Com o T-Rex |
 | --- | --- | --- |
-| Primeiro contato | Aviso de privacidade longo + "Oi! Sou a assistente virtual da Barbearia Dino…" | "E aí, boa tarde! Aqui é o T-Rex, da Barbearia Dino. Quer marcar um horário ou ver algum perfume?" |
+| Primeiro contato | Aviso de privacidade longo + "Oi! Sou a assistente virtual da Barbearia Dino…" | "E aí, boa tarde! Aqui é o T-Rex, da Barbearia Dino. Uso esta conversa só pra te atender e chamo a equipe quando você quiser. Quer marcar um horário ou ver algum perfume?" |
 | Horários | "1) terça 06/10 às 12:00; 2) terça 06/10 às 12:30; 3) …" | "terça 06/10 às 12h, 12h30 ou 13h. Qual prefere?" |
 | Preços | Lista colada numa linha só, com R$ 40,00 | "Barba Completa R$ 40, Corte Masculino R$ 45 e Pedicure R$ 50." |
 | Resumo para confirmar | "Resumo para confirmar: …" | "Confere aí: …" (mesmo resumo exato e a mesma dica de SIM/NÃO) |
 | Agendamento feito | "Agendamento confirmado: Corte Masculino com Bruno em 06/10/2026 às 12:00. Código …. Se precisar…" | "Tá marcado! Corte Masculino com Bruno, ter 6/10 às 12h. Código …" + figurinha "agendado" |
-| "vc é robô?" | Ia para o modelo ou para a equipe ("humano" disparava handoff) | Resposta fixa e verdadeira: "Sou o assistente da Barbearia Dino, mas a equipe tá aqui do lado. Quer que eu chame alguém ou sigo com você?" A conversa continua |
+| "vc é robô?", "é humana?", "to falando com um atendente?" | Ia para o modelo ou para a equipe ("humano" disparava handoff) | Resposta fixa e verdadeira: "Sou o assistente da Barbearia Dino, mas a equipe tá aqui do lado. Quer que eu chame alguém ou sigo com você?" A conversa continua. Pedido de pessoa, dado sensível e injeção continuam sendo tratados antes |
 | Lembrete de 24 h | "Olá, João Silva. Lembrete do seu agendamento amanhã, 10/10/2026, às 09:00. Serviço: … Profissional: …" | "Opa, João! Passando pra lembrar: amanhã, sáb 10/10 às 9h, Corte Masculino com Bruno. Responda CONFIRMO, REMARCAR ou CANCELO." |
 | Toque de retomada | "Oi, Paulo! Ficou faltando só sua confirmação: … Se preferir outro horário ou produto, é só me dizer." | "Opa, Paulo! Só falta você confirmar: …" |
 | Handoff, opt-out, erros | "Encaminhei sua conversa para a equipe humana da …" | "Beleza, passei pra equipe da Barbearia Dino. Já te respondem aqui." |
@@ -36,7 +36,11 @@ Conversas inteiras, antes e depois, saem do simulador (seção Testes).
 - O resumo de ação continua vindo do sistema, não do modelo; só o prefixo mudou ("Confere aí:").
 - Ofertas e combos continuam passando por `propor_oportunidade`.
 - Reenvio da mesma tarefa gera o mesmo texto (as variações são escolhidas pelo id da mensagem) e não repete bolhas já aceitas.
-- Pergunta direta sobre robô, IA ou pessoa recebe sempre a verdade; o estilo só remove "sou a assistente virtual" quando o cliente **não** perguntou isso.
+- Pergunta direta sobre robô, IA ou pessoa recebe sempre a verdade; o estilo só remove a oração "sou a assistente virtual" (nunca o resto da frase) quando ninguém na rajada perguntou isso.
+- A apresentação mantém a finalidade do tratamento e o caminho para a equipe ("Uso esta conversa só pra te atender e chamo a equipe quando você quiser."). A pergunta de autorização de personalização continua separada e revogável.
+- A figurinha "promocao" nunca é escolhida pelo modelo; "perfume-novo" só com indicação pedida pelo cliente ou oportunidade liberada pelo gate; nada comercial para quem respondeu SAIR.
+- Valores e códigos nunca são partidos ("R$ 1.234,50", "AG-12.345"); o estilo é linear (sem regex com retrocesso) e, se falhar, devolve o texto validado.
+- As bolhas da primeira tentativa ficam salvas (`metadados.bolhasTexto`); a retomada após falha usa exatamente as mesmas.
 
 ## Ligar em produção
 
@@ -46,9 +50,10 @@ Conversas inteiras, antes e depois, saem do simulador (seção Testes).
 
 | Variável | Valor | Efeito |
 | --- | --- | --- |
-| `WHATSAPP_AI_PERSONA` | `trex` (opcional) | Liga a persona onde o canal não tem configuração própria |
+| `WHATSAPP_AI_PERSONA` | `trex` (opcional) | Liga a persona onde o canal não tem configuração própria, só para a empresa dona |
+| `WHATSAPP_AI_PERSONA_EMPRESA_ID` | id da empresa (opcional) | Empresa dona da variável acima; padrão `CHATBOT_BACKEND_EMPRESA_ID`. Sem nenhuma das duas, a variável não liga nada |
 | `WHATSAPP_SIMULATE_TYPING` | `true` | Backend mostra "digitando…" antes de cada bolha |
-| `WHATSAPP_AI_BUBBLE_DELAY_MS` | `1200` (padrão) | Pausa entre bolhas, proporcional ao tamanho (máx. 3,5 s); `0` desliga |
+| `WHATSAPP_AI_BUBBLE_DELAY_MS` | `900` (padrão) | Pausa entre bolhas, proporcional ao tamanho (máx. 2,5 s); `0` desliga |
 | `CHATBOT_BACKEND_STICKER_PATH` | `/send-media` (quando o backend tiver) | Liga o envio de figurinhas pelo backend próprio |
 
 4. Piloto com `WHATSAPP_POLL_MODE=pilot` e os números de teste, como no checklist do atendente; depois `on`.
@@ -65,7 +70,7 @@ X-API-KEY: …
 → 200 { "success": true, "messageId": "…" }
 ```
 
-Na Evolution a figurinha já sai por `/message/sendSticker/{instance}` (desligável com `WHATSAPP_AI_STICKERS_EVOLUTION=off`).
+Na Evolution a figurinha sai por `/message/sendSticker/{instance}` só com `WHATSAPP_AI_STICKERS_EVOLUTION=on` (e o canal com a chave da própria empresa).
 
 ## Testes
 
@@ -85,9 +90,13 @@ No modo T-Rex o simulador roda os mesmos 43 cenários (as travas têm de dar o m
 - **44** "quero falar com uma pessoa" continua indo para a equipe;
 - **45** primeira resposta curta, sem "assistente virtual", até 4 bolhas;
 - **46** figurinha "agendado" depois do horário confirmado, no máximo 1 por dia;
-- **47** reclamação vai para a equipe e não leva figurinha.
+- **47** reclamação vai para a equipe e não leva figurinha;
+- **48** "é robô? quero falar com uma pessoa", "é robô? + cartão" e "vc é IA? + injeção": as travas vêm antes da resposta de robô;
+- **49** "isso é automatizado?" com resumo pendente devolve o resumo e o "sim" seguinte confirma; "quanto custa o corte na máquina?" não vira pergunta de robô.
 
-Resultado nesta branch: suíte node 944 testes (891 ok, 0 falhas, demais pulados por exigirem PostgreSQL), simulador 43/43 na voz padrão e 48/48 com o T-Rex, ensaio geral com dados reais da Dino 9/9 nos dois modos.
+A mudança passou por revisão adversarial independente (14 achados, todos corrigidos e reverificados; os casos viraram testes em `whatsapp-ai-style.test.js` e `whatsapp-ai-persona.test.js`).
+
+Resultado nesta branch: suíte node 953 testes (900 ok, 0 falhas, demais pulados por exigirem PostgreSQL), simulador 43/43 na voz padrão e 50/50 com o T-Rex, ensaio geral com dados reais da Dino 9/9 nos dois modos.
 
 ## Do manual para o código
 

@@ -106,6 +106,26 @@ test('figurinhas: sem rota no backend, nada é enviado e nada quebra', async () 
   }
 });
 
+test('figurinhas: Evolution só quando ligado de propósito; backend com dono exige instâncias', async () => {
+  const anterior = { ...process.env };
+  try {
+    Object.assign(process.env, { WHATSAPP_PROVIDER: 'evolution', EVOLUTION_API_URL: 'https://evo.sim' });
+    delete process.env.CHATBOT_BACKEND_URL;
+    delete process.env.WHATSAPP_AI_STICKERS_EVOLUTION;
+    assert.equal(figurinhaSuportada(), false);
+    process.env.WHATSAPP_AI_STICKERS_EVOLUTION = 'on';
+    assert.equal(figurinhaSuportada(), true);
+    process.env.CHATBOT_BACKEND_URL = 'https://backend.sim';
+    const escopo = await enviarFigurinha({ whatsapp_api_url: 'https://evo.sim', whatsapp_api_key: 'k', whatsapp_instance: 'i' }, '65999990000', 'agendado');
+    assert.equal(escopo.error, 'WHATSAPP_PROVIDER_SCOPE');
+    Object.assign(process.env, { WHATSAPP_PROVIDER: 'chatbot_backend', CHATBOT_BACKEND_KEY: 'x'.repeat(24), CHATBOT_BACKEND_MODE: 'isa', CHATBOT_BACKEND_STICKER_PATH: '/send-media', CHATBOT_BACKEND_EMPRESA_ID: EMPRESA });
+    const dono = await enviarFigurinha({}, '65999990000', 'agendado');
+    assert.equal(dono.error, 'WHATSAPP_OWNER_REQUIRES_INSTANCE_MODE');
+  } finally {
+    process.env = anterior;
+  }
+});
+
 test('figurinhas: contrato do backend (rota configurada)', async () => {
   const anterior = { ...process.env };
   try {

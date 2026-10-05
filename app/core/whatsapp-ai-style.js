@@ -11,13 +11,14 @@
 // então o reenvio da mesma tarefa produz as mesmas bolhas.
 // ============================================================================
 
+// Locuções de robô. Só a locução sai; a frase inteira só sai quando, sem ela,
+// não sobra informação (número, valor ou texto de verdade).
 export const BANNED_PHRASES = [
-  /\bcomo posso (te |lhe )?ajud[aá]-?(lo|la)\b[^.!?]*[.!?]?/gi,
-  /\bfico (a|à) (sua )?disposi[cç][aã]o\b[^.!?]*[.!?]?/gi,
-  /\bestou (a|à) (sua )?disposi[cç][aã]o\b[^.!?]*[.!?]?/gi,
-  /\bagradecemos (o|seu) contato\b[^.!?]*[.!?]?/gi,
-  /\bprezad[oa]\s*(\(a\))?\s*(cliente)?\s*,?/gi,
-  /\bqualquer d[uú]vida,? (estou|fico) (a|à) disposi[cç][aã]o\b[^.!?]*[.!?]?/gi,
+  /\bqualquer d[uú]vida,? (?:estou|fico) (?:a|à) (?:sua )?disposi[cç][aã]o\b(?: para (?:qualquer|outras?) (?:d[uú]vidas?|coisa))?/gi,
+  /\bcomo posso (?:te |lhe )?ajud[aá]-?(?:lo|la)\b(?: hoje)?/gi,
+  /\b(?:fico|estou) (?:a|à) (?:sua )?disposi[cç][aã]o\b(?: para (?:qualquer|outras?) (?:d[uú]vidas?|coisa))?/gi,
+  /\bagradecemos (?:o|seu) contato\b/gi,
+  /\bprezad[oa]\s*(?:\(a\))?\s*(?:cliente)?\s*,?/gi,
 ];
 
 function collapse(text) {
@@ -25,7 +26,8 @@ function collapse(text) {
 }
 
 function capitalize(text) {
-  return text.replace(/^(\s*[^\p{L}]*)(\p{Ll})/u, (_, pre, letter) => `${pre}${letter.toUpperCase()}`);
+  // Só quando a linha COMEÇA por letra (após espaço/aspas/parêntese): "10h", "3x", "iPhone" ficam como estão.
+  return text.replace(/^(\s*[«"'(¿¡]*)(\p{Ll})(?!\p{Lu})/u, (_, pre, letter) => `${pre}${letter.toUpperCase()}`);
 }
 
 function joinOptions(items, conj = 'ou') {
@@ -48,16 +50,33 @@ export function spokenMoney(text) {
  * vira frase, com o prefixo comum dito uma vez só ("terça 06/10 às 12h ou 12h30").
  */
 export function inlineEnumeration(text) {
-  return String(text ?? '').replace(/(?:^|\s)1\)\s*([^;]+?)(?:;\s*\d\)\s*[^;]+?)+(?=[.?!]|$)/g, (match) => {
-    const items = match.trim().split(/;\s*/).map((part) => part.replace(/^\d\)\s*/, '').trim()).filter(Boolean);
-    if (items.length < 2) return match;
+  // Parser linear (sem regex com retrocesso): cada linha é examinada uma vez.
+  return String(text ?? '').split('\n').map((line) => {
+    const inicio = line.search(/(?:^|\s)1\)\s/);
+    if (inicio < 0 || line.length > 1200) return line;
+    const antes = line.slice(0, inicio);
+    let corpo = line.slice(inicio).trim();
+    let depois = '';
+    const partes = corpo.split(';');
+    if (partes.length < 2 || partes.length > 12) return line;
+    // O último item termina no primeiro ponto final/interrogação/exclamação seguido de espaço ou fim.
+    const ultimo = partes[partes.length - 1];
+    const fim = ultimo.search(/[.!?](?:\s|$)/);
+    if (fim >= 0) { depois = ultimo.slice(fim); partes[partes.length - 1] = ultimo.slice(0, fim); }
+    const items = [];
+    for (let i = 0; i < partes.length; i += 1) {
+      const m = partes[i].trim().match(/^(\d{1,2})\)\s*(.+)$/);
+      if (!m || Number(m[1]) !== i + 1) return line;
+      items.push(m[2].trim());
+    }
+    corpo = '';
     const sep = items[0].lastIndexOf(' às ');
     const prefix = sep > 0 ? items[0].slice(0, sep + 4) : '';
-    if (prefix && items.every((item) => item.startsWith(prefix))) {
-      return ` ${prefix}${joinOptions(items.map((item) => item.slice(prefix.length)))}`;
-    }
-    return ` ${joinOptions(items)}`;
-  });
+    const frase = prefix && items.every((item) => item.startsWith(prefix))
+      ? `${prefix}${joinOptions(items.map((item) => item.slice(prefix.length)))}`
+      : joinOptions(items);
+    return `${antes}${antes && !/\s$/.test(antes) ? ' ' : ''}${frase}${depois}`;
+  }).join('\n');
 }
 
 /** Linhas curtas sem pontuação final, uma embaixo da outra, viram uma frase. */
@@ -65,8 +84,10 @@ function bareLinesToSentence(lines) {
   const out = [];
   let bloco = [];
   const flush = () => {
-    if (bloco.length >= 2) out.push(`${joinOptions(bloco.map((l) => l.replace(/:\s+/, ' ')), 'e')}.`);
-    else out.push(...bloco);
+    // Lista de verdade = toda linha "Rótulo: valor" com número/valor (preços, horários).
+    const lista = bloco.length >= 2 && bloco.every((l) => /^[^:]{2,50}:\s*\S/.test(l) && /\d|R\$/.test(l));
+    if (lista) out.push(`${joinOptions(bloco.map((l) => l.replace(/:\s+/, ' ')), 'e')}.`);
+    else out.push(...bloco.map((l) => (bloco.length >= 2 ? `${l}.` : l)));
     bloco = [];
   };
   for (const line of lines) {
@@ -107,18 +128,31 @@ export function stripMarkdown(text) {
 }
 
 /** Tira frases de robô. Se sobrar nada, devolve o original. */
+function temConteudo(text) {
+  const resto = String(text || '').replace(/[\s.,;:!?…-]+/g, ' ').trim();
+  return /\d|R\$/.test(resto) || resto.split(' ').filter(Boolean).length >= 4;
+}
+
 export function removeBannedPhrases(text) {
-  let value = String(text ?? '');
-  for (const pattern of BANNED_PHRASES) value = value.replace(pattern, ' ');
-  value = value.replace(/\binfelizmente,?\s*/gi, '');
-  value = collapse(value.split('\n').map((line) => capitalize(line.trim())).join('\n'));
-  return value || collapse(text);
+  const original = String(text ?? '');
+  const linhas = original.replace(/\binfelizmente,?\s*/gi, '').split('\n').map((linha) => sentences(linha).map((frase) => {
+    let semLocucao = frase;
+    for (const pattern of BANNED_PHRASES) semLocucao = semLocucao.replace(pattern, ' ');
+    if (semLocucao === frase) return frase;
+    const limpa = semLocucao.replace(/^[\s,;:-]+/, '').replace(/\s+([,.!?])/g, '$1').replace(/\s{2,}/g, ' ').trim();
+    if (!temConteudo(limpa)) return '';
+    return capitalize(/[.!?…]$/.test(limpa) ? limpa : `${limpa}.`);
+  }).filter(Boolean).join(' '));
+  const value = collapse(linhas.map((line) => capitalize(line.trim())).join('\n'));
+  return value || collapse(original);
 }
 
 export function sentences(text) {
   const value = collapse(text).replace(/\n+/g, ' ');
   if (!value) return [];
-  return value.match(/[^.!?…]+(?:[.!?…]+["')\]]*|$)/g).map((part) => part.trim()).filter(Boolean);
+  // Só quebra em pontuação final seguida de espaço: "R$ 1.234,50", "AG-12.345" e
+  // "1.5x" ficam inteiros.
+  return value.split(/(?<=[.!?…]["')\]]*)\s+/).map((part) => part.trim()).filter(Boolean);
 }
 
 /** Quebra uma frase longa em pedaços de até `max`, em vírgula, "ou", "e" ou espaço. */
@@ -133,8 +167,10 @@ function splitLongSentence(sentence, max) {
     if (cut < max * 0.4) cut = slice.lastIndexOf(' ');
     while (cut > 0 && /R\$$/.test(rest.slice(0, cut))) cut = rest.slice(0, cut - 2).lastIndexOf(' ');
     if (cut <= 0) cut = max;
-    parts.push(rest.slice(0, cut + (rest[cut] === ',' || rest[cut] === ';' ? 1 : 0)).trim());
-    rest = rest.slice(cut + 1).trim();
+    const pontuacao = rest[cut] === ',' || rest[cut] === ';';
+    const espaco = rest[cut] === ' ';
+    parts.push(rest.slice(0, cut + (pontuacao ? 1 : 0)).trim());
+    rest = rest.slice(cut + (pontuacao || espaco ? 1 : 0)).trim();
   }
   if (rest) parts.push(rest);
   return parts;
@@ -165,9 +201,16 @@ export function packBubbles(text, { max = 120, maxBubbles = 2 } = {}) {
  * `maxBubbles` mensagens curtas separadas por linha em branco.
  */
 export function styleModelText(text, { max = 120, maxBubbles = 2, dropSelfIntro = false } = {}) {
-  let limpo = removeBannedPhrases(spokenMoney(spokenTimes(inlineEnumeration(stripMarkdown(text)))));
-  if (dropSelfIntro) limpo = removeSelfIntro(limpo);
-  return packBubbles(limpo, { max, maxBubbles }).join('\n\n');
+  const entrada = String(text ?? '').slice(0, 4000);
+  try {
+    let limpo = removeBannedPhrases(spokenMoney(spokenTimes(inlineEnumeration(stripMarkdown(entrada)))));
+    if (dropSelfIntro) limpo = removeSelfIntro(limpo);
+    const resultado = packBubbles(limpo, { max, maxBubbles }).join('\n\n');
+    return resultado || collapse(entrada);
+  } catch {
+    // Estilo nunca derruba uma resposta válida.
+    return collapse(entrada.replace(/\n+/g, ' '));
+  }
 }
 
 /**
@@ -175,9 +218,16 @@ export function styleModelText(text, { max = 120, maxBubbles = 2, dropSelfIntro 
  * feita pelo sistema. Só é usado quando o cliente NÃO perguntou se é robô:
  * pergunta direta sempre recebe a verdade.
  */
+const SELF_INTRO = /^(?:oi[,!]?\s+)?(?:eu\s+)?sou\s+(?:a|o|uma|um)\s+(?:sua\s+)?(?:assistente|atendente)\s+(?:virtual|digital)(?:\s+d[aoe]\s+[^,.!?:;]{1,40}?)?(?:\s*[,:;]\s*|\s+e\s+|\s*[.!?]\s*$)/i;
+
 export function removeSelfIntro(text) {
-  const value = String(text ?? '').replace(/(^|[.!?]\s+)(?:eu\s+)?sou\s+(?:a|o|uma|um)\s+(?:sua\s+)?(?:assistente|atendente)\s+(?:virtual|digital)\b[^.!?]*[.!?]\s*/gi, '$1');
-  return collapse(value) || collapse(text);
+  const frases = sentences(text).map((frase) => {
+    const m = frase.match(SELF_INTRO);
+    if (!m) return frase;
+    const resto = frase.slice(m[0].length).trim();
+    return resto ? capitalize(resto) : '';
+  }).filter(Boolean);
+  return collapse(frases.join(' ')) || collapse(text);
 }
 
 /**
@@ -202,9 +252,9 @@ export function splitBubbles(content, { max = 120, hardMax = 4 } = {}) {
 
 /** Pausa entre bolhas, proporcional ao tamanho (simula digitação). */
 export function bubbleDelayMs(text, env = process.env) {
-  const base = Number.parseInt(env.WHATSAPP_AI_BUBBLE_DELAY_MS ?? '1200', 10);
+  const base = Number.parseInt(env.WHATSAPP_AI_BUBBLE_DELAY_MS ?? '900', 10);
   if (!Number.isFinite(base) || base <= 0) return 0;
-  return Math.min(3500, Math.max(base, Math.round(String(text || '').length * 18)));
+  return Math.min(2500, Math.max(base, Math.round(String(text || '').length * 15)));
 }
 
 /** Indicadores de estilo de uma resposta (painel e testes). */

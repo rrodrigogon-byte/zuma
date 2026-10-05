@@ -243,6 +243,6 @@ WHATSAPP_SIM_PG_URL=postgres://postgres@127.0.0.1:5433/ensaio DB_SSL=false \
 
 O atendente passa a falar como o **T-Rex**, mascote da Dino: mensagens de até 120 caracteres em bolhas (no máximo 2 do modelo), sem listas nem frases de robô, apresentação curta depois da saudação ("Opa, boa tarde! Aqui é o T-Rex, da Barbearia Dino."), confirmação curta ("Tá marcado! Corte Masculino com Bruno, ter 6/10 às 12h. Código …"), lembrete de 24 h e toque de retomada na mesma voz, e figurinhas do mascote (no máximo 1 por dia por cliente). Pergunta direta "vc é robô?" recebe sempre a verdade, de forma determinística, e a conversa continua.
 
-Nada muda nas travas: ferramentas, confirmação por SIM, consentimentos, oportunidades governadas, egress e handoff seguem iguais. Configuração em Integrações → **Persona do atendente** (ou `WHATSAPP_AI_PERSONA=trex`). Variáveis novas: `WHATSAPP_AI_PERSONA`, `WHATSAPP_AI_BUBBLE_DELAY_MS`, `CHATBOT_BACKEND_STICKER_PATH`, `WHATSAPP_AI_STICKERS_EVOLUTION`.
+Nada muda nas travas: ferramentas, confirmação por SIM, consentimentos, oportunidades governadas, egress e handoff seguem iguais. Configuração em Integrações → **Persona do atendente** (ou `WHATSAPP_AI_PERSONA=trex`). Variáveis novas: `WHATSAPP_AI_PERSONA`, `WHATSAPP_AI_PERSONA_EMPRESA_ID`, `WHATSAPP_AI_BUBBLE_DELAY_MS`, `CHATBOT_BACKEND_STICKER_PATH`, `WHATSAPP_AI_STICKERS_EVOLUTION`.
 
-Detalhes, contrato da rota de figurinha do backend e testes: `docs/operations/T-REX-PERSONA-DINO.md`. Simulador: 43/43 na voz padrão e 48/48 com `WHATSAPP_AI_PERSONA=trex`.
+Detalhes, contrato da rota de figurinha do backend e testes: `docs/operations/T-REX-PERSONA-DINO.md`. Simulador: 43/43 na voz padrão e 50/50 com `WHATSAPP_AI_PERSONA=trex`.

@@ -46,12 +46,14 @@ import {
   personaIntroduction,
   personaPendingPrompt,
   personaRobotAnswer,
+  personaRobotAnswerShort,
   personaRobotQuestion,
   personaSystemBlock,
   personaView,
   resolvePersona,
   sanitizePersonaInput,
   STICKERS,
+  STICKERS_RESTRITAS,
 } from './whatsapp-ai-persona.js';
 import { bubbleDelayMs, splitBubbles, styleModelText } from './whatsapp-ai-style.js';
 import { enviarFigurinha, figurinhaDisponivel, figurinhaSuportada } from './whatsapp-figurinhas.js';
@@ -350,11 +352,29 @@ async function sendOutput(channel, session, output) {
     loja_id: session.loja_id,
     canal_id: session.canal_id,
   };
-  const persona = resolvePersona(channel.configuracao);
+  const persona = resolvePersona(channel.configuracao, process.env, session.empresa_id);
   // Persona: o conteúdo salvo vira bolhas curtas. Bolhas já aceitas numa tentativa
   // anterior não são reenviadas (o progresso fica em metadados.bolhasEnviadas).
-  const bubbles = persona?.mensagensCurtas ? splitBubbles(claimed.conteudo, { max: persona.maxBolha }) : [claimed.conteudo];
+  // As bolhas da 1ª tentativa ficam salvas: a retomada usa exatamente as mesmas,
+  // mesmo que a persona ou o limite mudem no meio do caminho.
+  const salvas = Array.isArray(claimed.metadados?.bolhasTexto) && claimed.metadados.bolhasTexto.every((b) => typeof b === 'string' && b) ? claimed.metadados.bolhasTexto : null;
+  const bubbles = salvas || (persona?.mensagensCurtas ? splitBubbles(claimed.conteudo, { max: persona.maxBolha }) : [claimed.conteudo]).filter((b) => String(b || '').trim());
+  if (!bubbles.length) {
+    throw await deliveryError(session, claimed, 'skipped', 'WHATSAPP_EMPTY_OUTPUT', 'resposta vazia; nada enviado');
+  }
+  if (!salvas && bubbles.length > 1) {
+    await db.query(
+      `UPDATE whatsapp_ai_messages SET metadados = metadados || $5::jsonb
+        WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND canal_id = $4`,
+      [claimed.id, session.empresa_id, session.loja_id, session.canal_id, JSON.stringify({ bolhasTexto: bubbles, bolhas: bubbles.length })],
+    );
+  }
   let sent = Math.min(Number(claimed.metadados?.bolhasEnviadas || 0), bubbles.length);
+  if (sent >= bubbles.length) {
+    // Todas já tinham sido aceitas numa tentativa anterior: só falta registrar.
+    await markOutputDelivered(session, claimed, {});
+    return { ok: true, resumed: true };
+  }
   let result = null;
   for (let index = sent; index < bubbles.length; index += 1) {
     if (index > 0) await sleep(bubbleDelayMs(bubbles[index]));
@@ -586,7 +606,7 @@ async function withPrivacyNotice(session, channel, text) {
   if (!text || session.privacy_notice_at) return text;
   const policy = whatsappAiPolicy(channel);
   const storeName = cleanText(channel.configuracao?.display_name || channel.nome || 'esta unidade', 120);
-  const persona = resolvePersona(channel.configuracao);
+  const persona = resolvePersona(channel.configuracao, process.env, session.empresa_id);
   const notice = policy.privacyNotice
     || (persona ? personaIntroduction(persona, storeName) : `Sou o assistente virtual da ${storeName}. Uso esta conversa para atender sua solicitação; só uso histórico para personalizar quando você autoriza e posso encaminhar você para uma pessoa.`);
   const result = await db.query(
@@ -670,6 +690,13 @@ function withStickerTool(executeTool, toolContext, session) {
     if (name !== 'enviar_figurinha') return executeTool(name, args);
     const nome = cleanText(args?.nome, 40).toLowerCase();
     if (!Object.hasOwn(STICKERS, nome)) return { ok: false, error: 'figurinha desconhecida' };
+    // Comercial nunca sai por escolha do modelo; "perfume novo" só com indicação
+    // pedida pelo cliente ou oportunidade liberada pelo gate neste turno.
+    if (STICKERS_RESTRITAS[nome] === 'nunca') return { ok: false, error: 'figurinha reservada para campanhas' };
+    if (STICKERS_RESTRITAS[nome] === 'indicacao' && !recommendationRequested(toolContext.customerText) && !toolContext.approvedOpportunityCategory) {
+      return { ok: false, error: 'só depois de indicação pedida ou oportunidade liberada' };
+    }
+    if (session?.estado?.marketingOptOut === true && STICKERS_RESTRITAS[nome]) return { ok: false, error: 'cliente pediu para não receber ofertas' };
     if (toolContext.sticker || stickerAlreadySentToday(session)) return { ok: false, error: 'já houve figurinha nesta conversa' };
     if (!figurinhaDisponivel(nome)) return { ok: false, error: 'figurinha indisponível' };
     toolContext.sticker = nome;
@@ -681,14 +708,14 @@ function withStickerTool(executeTool, toolContext, session) {
 // opt-out) já aconteceu. Sem persona, nada muda.
 async function deterministicResponse(task, channel, session, message) {
   const response = await deterministicResponseCore(task, channel, session, message);
-  const persona = resolvePersona(channel.configuracao);
+  const persona = resolvePersona(channel.configuracao, process.env, task.empresa_id);
   if (!persona || !response?.text) return response;
   const storeName = cleanText(channel.configuracao?.display_name || channel.nome || 'esta unidade', 120);
   return { ...response, text: personaFixedText(persona, response.kind, response.text, { storeName, seed: message.externalId }) };
 }
 
 async function deterministicResponseCore(task, channel, session, message) {
-  const persona = resolvePersona(channel.configuracao);
+  const persona = resolvePersona(channel.configuracao, process.env, task.empresa_id);
   const personaStore = cleanText(channel.configuracao?.display_name || channel.nome || 'esta unidade', 120);
   const context = {
     empresaId: task.empresa_id,
@@ -718,12 +745,9 @@ async function deterministicResponseCore(task, channel, session, message) {
   }
   if (session.status === 'humano') return { text: null, kind: 'human_queue' };
   const greeting = standaloneGreetingReply(message.text, { pendingAction: Boolean(session.acao_pendente) });
-  if (greeting || (persona && !session.acao_pendente && isPersonaGreeting(message.text))) {
+  const consentQuestionOpen = Boolean(session.personalization_prompted_at) && session.estado?.personalizacaoRespondida !== true;
+  if (greeting || (persona && !session.acao_pendente && !consentQuestionOpen && isPersonaGreeting(message.text))) {
     return { text: persona ? personaGreeting(persona, { text: message.text, seed: message.externalId }) : greeting, kind: 'greeting' };
-  }
-  // "Vc é robô?": resposta verdadeira e determinística (não depende do modelo).
-  if (persona && personaRobotQuestion(message.text)) {
-    return { text: personaRobotAnswer(persona, personaStore, message.externalId), kind: 'robot_question' };
   }
   if (resumeIntent(message.text)) return { text: 'A automação só pode ser retomada pela equipe após concluir o atendimento humano.', kind: 'resume_blocked' };
   if (session.opportunity_offered_at && opportunityDeclineIntent(message.text)) {
@@ -796,6 +820,18 @@ async function deterministicResponseCore(task, channel, session, message) {
     });
     await putSessionInHandoff(session, 'security:prompt_injection', 5);
     return { text: 'Não posso atender a esse pedido com segurança. Encaminhei a conversa para a equipe humana.', kind: 'security_handoff' };
+  }
+
+  // "Vc é robô?": resposta verdadeira e determinística (não depende do modelo). Vem
+  // depois de handoff, dado sensível e injeção, que continuam valendo primeiro.
+  // Com ação pendente, o resumo e a dica de SIM/NÃO voltam junto.
+  if (persona && personaRobotQuestion(message.text)) {
+    return {
+      text: session.acao_pendente
+        ? `${personaRobotAnswerShort(personaStore)}\n\n${pendingActionPrompt(session.acao_pendente, persona)}`
+        : personaRobotAnswer(persona, personaStore, message.externalId),
+      kind: 'robot_question',
+    };
   }
 
   const policy = whatsappAiPolicy(channel);
@@ -929,7 +965,7 @@ async function deterministicResponseCore(task, channel, session, message) {
         max: persona.maxBolha,
         maxBubbles: persona.maxBolhasModelo,
         // Apresentação é do sistema; se o cliente perguntou de robô/IA/pessoa, nada é escondido.
-        dropSelfIntro: persona.revelarIa === 'quando_perguntado' && !mentionsBotIdentity(message.text),
+        dropSelfIntro: persona.revelarIa === 'quando_perguntado' && !mentionsBotIdentity(`${userText}\n${message.text}`),
       })
       : validation.text;
     const pendingNow = (await db.query(`SELECT acao_pendente FROM whatsapp_ai_sessions WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`, [session.id, session.empresa_id, session.loja_id])).rows[0]?.acao_pendente;
@@ -1380,7 +1416,7 @@ function safeChannelView(row) {
     aiConsecutiveFailures: Number(row.ai_consecutive_failures || 0),
     aiLastErrorCode: row.ai_last_error_code || null,
     policy: whatsappAiPolicy(row),
-    persona: { ...personaView(row.configuracao), figurinhasNoProvedor: figurinhaSuportada() },
+    persona: { ...personaView(row.configuracao, process.env, row.empresa_id), figurinhasNoProvedor: figurinhaSuportada() },
   };
 }
 

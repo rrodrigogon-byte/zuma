@@ -540,7 +540,7 @@ export async function processAppointmentNotificationTask(task = {}) {
     whatsapp_api_key: process.env.EVOLUTION_API_KEY,
     whatsapp_instance: canal.configuracao?.instance || process.env.EVOLUTION_INSTANCE,
     empresa_id: task.empresa_id, loja_id: task.loja_id, canal_id: task.canal_id,
-  }, elegibilidade.telefone, mensagem(snapshot, agendamento, elegibilidade.cliente, evento, resolvePersona(canal.configuracao)));
+  }, elegibilidade.telefone, mensagem(snapshot, agendamento, elegibilidade.cliente, evento, resolvePersona(canal.configuracao, process.env, task.empresa_id)));
   if (!resultado?.ok) {
     const unknown = resultado?.uncertain === true;
     if (!unknown) await db.query(`UPDATE tarefas_integracao_canais SET delivery_started_at = NULL WHERE id = $1`, [task.id]);
