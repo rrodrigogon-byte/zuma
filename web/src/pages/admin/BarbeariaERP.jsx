@@ -5,6 +5,7 @@ import { useToast } from '../../hooks/useToast'
 import { useAuth } from '../../lib/auth'
 import { isDinoBrandContext } from '../../lib/brand'
 import BarbeariaAgendaBoard, { agendaBoardColumns } from './BarbeariaAgendaBoard'
+import BarbeariaAgendaPeriodo from './BarbeariaAgendaPeriodo'
 import BarbeariaOperacaoPanel from './BarbeariaOperacaoPanel'
 import DinoBusinessDashboard from './DinoBusinessDashboard'
 import DinoCampaignsPanel from './DinoCampaignsPanel'
@@ -394,6 +395,12 @@ export default function BarbeariaERP() {
 
   function abrirNovoAgendamento() {
     setFormAgenda({ clienteId: '', clienteNome: '', clienteTelefone: '', profissionalId: profissionalFiltro || '', servicoId: servicos[0]?.id || '', data: dataSelecionada, hora: '10:00', observacoes: '' })
+    setModal('agenda')
+  }
+
+  // Clique num horário livre (Agenda por período): abre o agendamento já preenchido.
+  function abrirAgendamentoNoHorario({ data, hora, profissionalId, servicoId }) {
+    setFormAgenda({ clienteId: '', clienteNome: '', clienteTelefone: '', profissionalId: profissionalId || '', servicoId: servicoId || servicos[0]?.id || '', data, hora, observacoes: '' })
     setModal('agenda')
   }
 
@@ -1071,7 +1078,8 @@ export default function BarbeariaERP() {
       <Card style={styles.agendaSummary}>
         {[['Atendimentos', agendamentos.length, 'Agenda do dia', 'var(--accent)'], ['Confirmados', agendamentos.filter((item) => item.status === 'confirmado').length, 'Prontos para receber', '#8b5cf6'], ['Em atendimento', agendamentos.filter((item) => item.status === 'em_atendimento').length, 'Em execução agora', '#f59e0b'], ['Avisos na fila', Number(notificacoesAgenda.queued || 0), `${Number(notificacoesAgenda.sent || 0)} enviados · opt-in obrigatório`, '#2563eb'], ['Bloqueios', bloqueios.length, 'Horários indisponíveis', '#e05c5c'], ['Equipe', atendentesAtivos.length, 'Atendentes ativos', '#14b87a']].map(([label, value, note, color]) => <div key={label} style={styles.agendaSummaryItem}><strong style={{ color }}>{value}</strong><span>{label}</span><small>{note}</small></div>)}
       </Card>
-      {agendaModo === 'timeline' ? <BarbeariaAgendaBoard data={dataSelecionada} configuracao={unidade || configuracao || {}} agendamentos={agendamentos} profissionais={atendentesAtivos} bloqueios={bloqueios} onDateChange={(novaData) => { setStatusFiltro(''); setDataSelecionada(novaData) }} onNew={abrirNovoAgendamento} onOpenAppointment={(item) => setModal({ tipo: 'detalheAgenda', agendamento: item })} /> : <div><div style={{ ...styles.sectionTitle, marginBottom: 10 }}><div><h2 style={styles.h2}>Lista detalhada do dia</h2><p style={styles.sub}>Use a lista para visualizar dados completos e executar transições permitidas.</p></div></div>{renderAgendaTabela()}</div>}
+      <BarbeariaAgendaPeriodo profissionais={profissionais} servicos={servicos} profissionalId={profissionalFiltro} onProfissionalChange={setProfissionalFiltro} onOpenAppointment={(item) => setModal({ tipo: 'detalheAgenda', agendamento: item })} onPickSlot={abrirAgendamentoNoHorario} refreshKey={agendamentos.length} />
+      {agendaModo === 'timeline' ? <BarbeariaAgendaBoard data={dataSelecionada} configuracao={unidade || configuracao || {}} agendamentos={agendamentos} profissionais={profissionalFiltro ? atendentesAtivos.filter((item) => item.id === profissionalFiltro) : atendentesAtivos} bloqueios={bloqueios} onDateChange={(novaData) => { setStatusFiltro(''); setDataSelecionada(novaData) }} onNew={abrirNovoAgendamento} onOpenAppointment={(item) => setModal({ tipo: 'detalheAgenda', agendamento: item })} /> : <div><div style={{ ...styles.sectionTitle, marginBottom: 10 }}><div><h2 style={styles.h2}>Lista detalhada do dia</h2><p style={styles.sub}>Use a lista para visualizar dados completos e executar transições permitidas.</p></div></div>{renderAgendaTabela()}</div>}
     </div>
   }
 

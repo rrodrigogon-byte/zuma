@@ -48,7 +48,10 @@ test('cliente mudou de assunto com resumo pendente: responde e lembra a confirma
   assert.ok(texto.endsWith(PENDING_REMINDER_HINT));
   // um "quero"/"sim" depois do lembrete NÃO confirma (pode estar respondendo outra pergunta); CONFIRMAR confirma
   assert.equal(resolveConfirmation('quero', { lastAssistantText: texto }), null);
-  assert.equal(resolveConfirmation('sim', { lastAssistantText: texto }), null);
+  // "sim" curto logo após o lembrete confirma, se a parte de cima não fez outra pergunta (caso real de 05/10)
+  assert.equal(resolveConfirmation('sim', { lastAssistantText: texto }), 'confirm');
+  const comPergunta = withPendingReminder('Quer incluir a barba?', pending);
+  assert.equal(resolveConfirmation('sim', { lastAssistantText: comPergunta }), null);
   assert.equal(resolveConfirmation('CONFIRMAR', { lastAssistantText: texto }), 'confirm');
   assert.equal(resolveConfirmation('desistir', { lastAssistantText: texto }), 'cancel');
   // não duplica quando já pediu SIM, nem lembra ação vencida ou ainda não mostrada
@@ -72,4 +75,10 @@ test('toque de confirmação nunca diz "Oi, Cliente!"', () => {
   const texto = followUpText({ nome: 'Cliente', nome_na_acao: 'Cliente', acao_pendente: { summary: 'Corte com Dino às 17:00' } });
   assert.match(texto, /^Oi! Ficou faltando/);
   assert.match(followUpText({ nome: 'Cliente', nome_na_acao: 'Rodrigo', acao_pendente: { summary: 'Corte' } }), /^Oi, Rodrigo!/);
+});
+
+test('com resumo pendente, o modelo não pode dizer que já confirmou', async () => {
+  const { claimsCompletion } = await import('./whatsapp-ai.js');
+  for (const t of ['Que ótimo! Seu pedido do Dior está confirmado para retirada.', 'Pronto, horário agendado!', 'Seu agendamento foi marcado.', 'Pedido confirmado!']) assert.equal(claimsCompletion(t), true, t);
+  for (const t of ['Temos 3 horários amanhã.', 'Quer confirmar?', 'O Dior custa R$ 1.800,00.']) assert.equal(claimsCompletion(t), false, t);
 });

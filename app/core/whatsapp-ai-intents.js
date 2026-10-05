@@ -110,8 +110,22 @@ export function naturalConfirmationAllowed(lastAssistantText) {
 export function resolveConfirmation(text, { actionType = '', lastAssistantText = '' } = {}) {
   const strict = strictConfirmIntent(text, { actionType });
   if (strict) return strict;
+  if (afterPendingReminder(lastAssistantText) && REMINDER_YES.has(normalize(text).replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim())) return 'confirm';
   if (!naturalConfirmationAllowed(lastAssistantText)) return null;
   return confirmIntent(text, { actionType });
+}
+
+// Lembrete de confirmação anexado a outra resposta (ver withPendingReminder). Um "sim"
+// curto logo depois confirma, desde que a parte de cima NÃO tenha feito outra pergunta;
+// "quero" fica de fora (costuma responder a oferta, não ao resumo).
+export const PENDING_REMINDER_HINT = 'Para fechar, responda CONFIRMAR; para desistir, DESISTIR.';
+const REMINDER_YES = new Set(['sim', 's', 'ss', 'pode', 'pode sim', 'sim pode', 'ok', 'okay', 'beleza', 'blz', 'fechado', 'fechou', 'confirma', 'pode confirmar', 'sim confirma', 'sim pode confirmar', 'pode fechar', 'sim pode fechar']);
+export function afterPendingReminder(lastAssistantText) {
+  const text = String(lastAssistantText || '');
+  const at = text.indexOf(PENDING_REMINDER_HINT);
+  if (at < 0) return false;
+  const top = text.slice(0, text.lastIndexOf('\n\nAh,', at) >= 0 ? text.lastIndexOf('\n\nAh,', at) : at);
+  return !top.includes('?');
 }
 
 // ============================================================================
@@ -165,7 +179,6 @@ export function formatForWhatsapp(text) {
   out = out.replace(/[ \t]{2,}/g, ' ').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
   return out.trim();
 }
-
 // Nome genérico ("Cliente", "Contato", só números) não é nome de pessoa.
 const GENERIC_NAMES = new Set(['cliente', 'clientes', 'contato', 'contact', 'customer', 'client', 'usuario', 'usuário', 'user', 'whatsapp', 'sem nome', 'desconhecido', 'nome', 'teste', 'eu', 'mim']);
 export function isGenericCustomerName(value) {
@@ -174,4 +187,3 @@ export function isGenericCustomerName(value) {
   if (!/\p{L}/u.test(name)) return true;
   return GENERIC_NAMES.has(name) || /^cliente\s*\d*$/.test(name);
 }
-

@@ -2622,6 +2622,64 @@ app.get('/api/admin/barbearia/analytics', async (req, res) => {
   }
 });
 
+// Agenda por período (vários dias) e por profissional: a recepção enxerga tudo o que foi
+// marcado (inclusive pelo WhatsApp) sem procurar dia a dia.
+const DIA_ISO = /^\d{4}-\d{2}-\d{2}$/;
+function intervaloDias(de, ate, maxDias) {
+  const inicio = DIA_ISO.test(String(de || '')) ? String(de) : new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10);
+  let fim = DIA_ISO.test(String(ate || '')) ? String(ate) : inicio;
+  if (fim < inicio) fim = inicio;
+  const limite = new Date(`${inicio}T12:00:00Z`); limite.setUTCDate(limite.getUTCDate() + maxDias - 1);
+  const limiteIso = limite.toISOString().slice(0, 10);
+  if (fim > limiteIso) fim = limiteIso;
+  const dias = [];
+  for (const d = new Date(`${inicio}T12:00:00Z`); d.toISOString().slice(0, 10) <= fim; d.setUTCDate(d.getUTCDate() + 1)) dias.push(d.toISOString().slice(0, 10));
+  return { de: inicio, ate: fim, dias };
+}
+
+app.get('/api/admin/barbearia/agenda-periodo', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const { de, ate } = intervaloDias(req.query?.de, req.query?.ate, 62);
+    const itens = listarAgendamentosBarbearia(empresaId, {
+      de, ate, lojaId: legacyLojaId(req),
+      profissionalId: req.query?.profissionalId || undefined,
+      status: req.query?.status || undefined,
+    });
+    res.json({ ok: true, de, ate, total: itens.length, itens });
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Não foi possível carregar a agenda do período.' });
+  }
+});
+
+// Horários livres por dia e profissional (mesma regra do link público e do WhatsApp).
+app.get('/api/admin/barbearia/horarios-livres', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId(req);
+    const servicoId = String(req.query?.servicoId || '');
+    if (!servicoId) return res.status(400).json({ error: 'Escolha o serviço.' });
+    const { de, ate, dias } = intervaloDias(req.query?.de, req.query?.ate, 14);
+    const ativos = barbeariaErpKytto.listarProfissionais(empresaId).filter((item) => item.ativo !== false);
+    const pedidos = String(req.query?.profissionalId || '').split(',').map((item) => item.trim()).filter(Boolean);
+    const alvo = pedidos.length ? ativos.filter((item) => pedidos.includes(item.id)) : ativos;
+    const resultado = [];
+    for (const data of dias) {
+      for (const profissional of alvo) {
+        let horarios = [];
+        try {
+          horarios = barbeariaErpKytto.listarHorariosDisponiveis(empresaId, { data, servicoId, profissionalId: profissional.id, lojaId })
+            .filter((item) => item.disponivel).map((item) => item.horario);
+        } catch (_) { horarios = []; }
+        resultado.push({ data, profissionalId: profissional.id, profissionalNome: profissional.nome, horarios });
+      }
+    }
+    res.json({ ok: true, de, ate, servicoId, itens: resultado });
+  } catch (error) {
+    res.status(400).json({ error: error.message || 'Não foi possível consultar os horários livres.' });
+  }
+});
+
 app.get('/api/admin/barbearia/overview', async (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);

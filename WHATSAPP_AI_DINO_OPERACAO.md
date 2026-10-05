@@ -254,3 +254,24 @@ Problemas vistos na conversa real e o que mudou:
 | Resumo das 08:57 venceu às 09:27 e o "ok, quero um plano vip" das 09:36 ignorou o horário | Prazo padrão de 120 min; se o cliente muda de assunto com resumo pendente, a resposta lembra a confirmação pedindo CONFIRMAR/DESISTIR (palavra explícita, para um "quero" de outra pergunta não confirmar sem querer). |
 | Cadastro sem a conversa | Toda ação confirmada grava/atualiza o cliente no CRM com nome e a interação. |
 | Preparar falhou (horário ocupado, falta nome) e travava a mensagem | A trava "uma ação por mensagem" só conta ações preparadas com sucesso. |
+
+## Produtos, fotos e pedido (teste real de 05/10, 11:44–12:08)
+
+| Visto no WhatsApp | Correção |
+|---|---|
+| "Temos o Silver Scent" e depois só 6 de 50+ | `buscar_produtos` devolve o total, páginas de até 20 (`offset`), categorias e o link da vitrine; produtos sob encomenda entram. |
+| "Não consigo enviar imagens" | Cada produto traz links das fotos (`/api/public/storefront/<alias>/media/<id>`); o atendente manda o link numa linha e o WhatsApp mostra a imagem. |
+| "sim" respondido e "pedido confirmado" sem pedido criado | Com resumo pendente, frase do modelo dizendo "confirmado/agendado" é trocada por "Ainda não concluí"; "sim" curto logo após o lembrete (sem outra pergunta) confirma de verdade. |
+| Pediu Pix/link de pagamento | Pedido confirmado volta com o link `/pedido/<alias>/<código>` para pagar e acompanhar; o atendente não inventa chave Pix. |
+
+Variável opcional: `WHATSAPP_AI_PUBLIC_URL` (padrão `PUBLIC_BASE_URL`) — domínio HTTPS usado nos links de foto, vitrine e pedido.
+
+## Agenda por período e horários livres (admin)
+
+Na aba **Operação → Agenda** há o bloco "Agenda por período":
+
+- De/Até (atalhos Hoje, Hoje e amanhã, 7 dias, 30 dias) e Profissional (ou toda a equipe): lista tudo o que está marcado, agrupado por dia, com a origem (WhatsApp IA, link público, recepção). Clique abre o atendimento.
+- "Horários livres": escolha o serviço e veja, por dia e profissional, os horários vagos (mesma regra do WhatsApp e do link público). Clique num horário abre o agendamento já preenchido.
+- O filtro de profissional também reduz a linha do tempo do dia à coluna daquele profissional.
+
+APIs: `GET /api/admin/barbearia/agenda-periodo?de&ate&profissionalId` (até 62 dias) e `GET /api/admin/barbearia/horarios-livres?servicoId&de&ate&profissionalId` (até 14 dias; `profissionalId` aceita lista separada por vírgula).
