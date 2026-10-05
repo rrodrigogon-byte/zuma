@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, fmtDate, fmtDateOnly, fmtR } from '../../lib/api'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useToast } from '../../hooks/useToast'
@@ -6,6 +6,7 @@ import { useAuth } from '../../lib/auth'
 import { isDinoBrandContext } from '../../lib/brand'
 import BarbeariaAgendaBoard, { agendaBoardColumns } from './BarbeariaAgendaBoard'
 import BarbeariaAgendaPeriodo from './BarbeariaAgendaPeriodo'
+import { hojeAgenda } from '../../lib/barbearia-calendar'
 import BarbeariaOperacaoPanel from './BarbeariaOperacaoPanel'
 import DinoBusinessDashboard from './DinoBusinessDashboard'
 import DinoCampaignsPanel from './DinoCampaignsPanel'
@@ -93,11 +94,7 @@ const TRANSICOES = {
 
 const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
-function hojeLocal() {
-  const agora = new Date()
-  const offset = agora.getTimezoneOffset() * 60000
-  return new Date(agora.valueOf() - offset).toISOString().slice(0, 10)
-}
+function hojeLocal() { return hojeAgenda() }
 
 function moeda(value) {
   return fmtR(Number(value || 0))
@@ -200,6 +197,9 @@ export default function BarbeariaERP() {
   const [filtroClientes, setFiltroClientes] = useState('todos')
   const [dashboard, setDashboard] = useState(null)
   const [agendamentos, setAgendamentos] = useState([])
+  const [agendaRevisao, setAgendaRevisao] = useState(0)
+  const [dadosCarregados, setDadosCarregados] = useState(false)
+  const pedidoOverview = useRef(0)
   const [profissionais, setProfissionais] = useState([])
   const [servicos, setServicos] = useState([])
   const [clientes, setClientes] = useState([])
@@ -257,6 +257,7 @@ export default function BarbeariaERP() {
   const [itensVendaRevenda, setItensVendaRevenda] = useState([])
 
   const carregar = useCallback(async () => {
+    const pedido = ++pedidoOverview.current
     setLoading(true)
     setErro('')
     try {
@@ -265,6 +266,9 @@ export default function BarbeariaERP() {
       if (profissionalFiltro) query.set('profissionalId', profissionalFiltro)
       const payload = await api.get(`/api/admin/barbearia/overview?${query.toString()}`)
       const aiSessions = await api.get('/api/admin/commerce/whatsapp-ai/sessions?limit=20').catch(() => ({ items: [] }))
+      if (pedido !== pedidoOverview.current) return
+      setDadosCarregados(true)
+      setAgendaRevisao(n => n + 1)
       setWhatsappAiSessions(Array.isArray(aiSessions?.items) ? aiSessions.items : [])
       setDashboard(payload?.dashboard || {})
       setAgendamentos(Array.isArray(payload?.agendamentos) ? payload.agendamentos : [])
@@ -300,10 +304,13 @@ export default function BarbeariaERP() {
         privacyNotice: whatsappAi.policy.privacyNotice || '',
       })
     } catch (error) {
+      if (pedido !== pedidoOverview.current) return
       setDashboard(null)
+      setAgendamentos([])
+      setBloqueios([])
       setErro(error.message || 'Não foi possível carregar o módulo de Barbearia.')
     } finally {
-      setLoading(false)
+      if (pedido === pedidoOverview.current) setLoading(false)
     }
   }, [dataSelecionada, profissionalFiltro, statusFiltro])
 
@@ -400,6 +407,7 @@ export default function BarbeariaERP() {
 
   // Clique num horário livre (Agenda por período): abre o agendamento já preenchido.
   function abrirAgendamentoNoHorario({ data, hora, profissionalId, servicoId }) {
+    setDataSelecionada(data)
     setFormAgenda({ clienteId: '', clienteNome: '', clienteTelefone: '', profissionalId: profissionalId || '', servicoId: servicoId || servicos[0]?.id || '', data, hora, observacoes: '' })
     setModal('agenda')
   }
@@ -1073,12 +1081,12 @@ export default function BarbeariaERP() {
     return <div style={{ display: 'grid', gap: 18 }}>
       <Card style={{ padding: 18, background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, var(--card)), var(--card))' }}>
         <div style={styles.sectionTitle}><div><div style={styles.kicker}>Agenda operacional</div><h2 style={{ ...styles.h2, fontSize: 22, marginTop: 5 }}>Dia da barbearia e dos atendentes</h2><p style={styles.sub}>Acompanhe horários, duração, serviço, cliente e status em uma única visão. A unidade da sessão é aplicada automaticamente.</p></div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button type="button" style={styles.secondary} onClick={carregar}>Atualizar agenda</button><button type="button" style={styles.primary} onClick={abrirNovoAgendamento}>+ Agendar atendimento</button></div></div>
-        <div style={styles.agendaToolbar}><Field label="Data"><input type="date" value={dataSelecionada} onChange={(event) => setDataSelecionada(event.target.value)} style={inputStyle} /></Field><Field label="Status"><select value={statusFiltro} onChange={(event) => setStatusFiltro(event.target.value)} style={inputStyle}><option value="">Todos os status</option>{Object.entries(STATUS).map(([valor, item]) => <option key={valor} value={valor}>{item.label}</option>)}</select></Field><Field label="Atendente"><select value={profissionalFiltro} onChange={(event) => setProfissionalFiltro(event.target.value)} style={inputStyle}><option value="">Toda a equipe</option>{profissionais.filter((item) => item.ativo !== false).map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</select></Field><div style={styles.agendaMeta}><strong>{atendentesAtivos.length}</strong><span>atendentes ativos</span><small>{unidade ? `${unidade.horarioAbertura}–${unidade.horarioFechamento}` : 'Horário corporativo'} · {agendamentos.length} registros no dia</small></div><div style={styles.viewToggle} role="group" aria-label="Modo de agenda"><span>Visualização</span><div><button type="button" onClick={() => setAgendaModo('timeline')} aria-pressed={agendaModo === 'timeline'} style={{ ...styles.viewToggleButton, ...(agendaModo === 'timeline' ? styles.viewToggleButtonActive : {}) }}>Linha do tempo</button><button type="button" onClick={() => setAgendaModo('lista')} aria-pressed={agendaModo === 'lista'} style={{ ...styles.viewToggleButton, ...(agendaModo === 'lista' ? styles.viewToggleButtonActive : {}) }}>Lista</button></div></div></div>
+        <div style={styles.agendaToolbar}><Field label="Data"><input type="date" value={dataSelecionada} onChange={(event) => setDataSelecionada(event.target.value)} style={inputStyle} /></Field><Field label="Status"><select value={statusFiltro} onChange={(event) => setStatusFiltro(event.target.value)} style={inputStyle}><option value="">Todos os status</option>{['agendado', 'confirmado', 'em_atendimento', 'concluido', 'cancelado', 'nao_compareceu'].map(valor => <option key={valor} value={valor}>{STATUS[valor].label}</option>)}</select></Field><Field label="Atendente"><select value={profissionalFiltro} onChange={(event) => setProfissionalFiltro(event.target.value)} style={inputStyle}><option value="">Toda a equipe</option>{profissionais.filter((item) => item.ativo !== false).map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</select></Field><div style={styles.agendaMeta}><strong>{atendentesAtivos.length}</strong><span>atendentes ativos</span><small>{unidade ? `${unidade.horarioAbertura}–${unidade.horarioFechamento}` : 'Horário corporativo'} · {agendamentos.length} registros no dia</small></div><div style={styles.viewToggle} role="group" aria-label="Modo de agenda"><span>Visualização</span><div><button type="button" onClick={() => setAgendaModo('timeline')} aria-pressed={agendaModo === 'timeline'} style={{ ...styles.viewToggleButton, ...(agendaModo === 'timeline' ? styles.viewToggleButtonActive : {}) }}>Linha do tempo</button><button type="button" onClick={() => setAgendaModo('lista')} aria-pressed={agendaModo === 'lista'} style={{ ...styles.viewToggleButton, ...(agendaModo === 'lista' ? styles.viewToggleButtonActive : {}) }}>Lista</button></div></div></div>
       </Card>
       <Card style={styles.agendaSummary}>
         {[['Atendimentos', agendamentos.length, 'Agenda do dia', 'var(--accent)'], ['Confirmados', agendamentos.filter((item) => item.status === 'confirmado').length, 'Prontos para receber', '#8b5cf6'], ['Em atendimento', agendamentos.filter((item) => item.status === 'em_atendimento').length, 'Em execução agora', '#f59e0b'], ['Avisos na fila', Number(notificacoesAgenda.queued || 0), `${Number(notificacoesAgenda.sent || 0)} enviados · opt-in obrigatório`, '#2563eb'], ['Bloqueios', bloqueios.length, 'Horários indisponíveis', '#e05c5c'], ['Equipe', atendentesAtivos.length, 'Atendentes ativos', '#14b87a']].map(([label, value, note, color]) => <div key={label} style={styles.agendaSummaryItem}><strong style={{ color }}>{value}</strong><span>{label}</span><small>{note}</small></div>)}
       </Card>
-      <BarbeariaAgendaPeriodo profissionais={profissionais} servicos={servicos} profissionalId={profissionalFiltro} onProfissionalChange={setProfissionalFiltro} onOpenAppointment={(item) => setModal({ tipo: 'detalheAgenda', agendamento: item })} onPickSlot={abrirAgendamentoNoHorario} refreshKey={agendamentos.length} />
+      <BarbeariaAgendaPeriodo profissionais={profissionais} servicos={servicos} profissionalId={profissionalFiltro} onProfissionalChange={setProfissionalFiltro} onOpenAppointment={(item) => setModal({ tipo: 'detalheAgenda', agendamento: item })} onPickSlot={abrirAgendamentoNoHorario} refreshKey={agendaRevisao} dataSelecionada={dataSelecionada} onDateChange={setDataSelecionada} statusFiltro={statusFiltro} />
       {agendaModo === 'timeline' ? <BarbeariaAgendaBoard data={dataSelecionada} configuracao={unidade || configuracao || {}} agendamentos={agendamentos} profissionais={profissionalFiltro ? atendentesAtivos.filter((item) => item.id === profissionalFiltro) : atendentesAtivos} bloqueios={bloqueios} onDateChange={(novaData) => { setStatusFiltro(''); setDataSelecionada(novaData) }} onNew={abrirNovoAgendamento} onOpenAppointment={(item) => setModal({ tipo: 'detalheAgenda', agendamento: item })} /> : <div><div style={{ ...styles.sectionTitle, marginBottom: 10 }}><div><h2 style={styles.h2}>Lista detalhada do dia</h2><p style={styles.sub}>Use a lista para visualizar dados completos e executar transições permitidas.</p></div></div>{renderAgendaTabela()}</div>}
     </div>
   }
@@ -1534,7 +1542,7 @@ export default function BarbeariaERP() {
       {areaAtual.tabs.map((nome) => <button key={nome} type="button" title={TAB_DESCRICAO[nome]} aria-current={tab === nome ? 'page' : undefined} onClick={() => navegarParaTab(nome)} style={{ ...styles.tabNavItem, ...(tab === nome ? styles.tabNavItemActive : {}) }}>{nome}</button>)}
     </nav>
     {erro && <Card style={{ padding: 16, marginBottom: 18, borderColor: '#e05c5c' }}><strong role="status" aria-live="polite">Atenção no carregamento</strong><div style={{ color: 'var(--muted)', marginTop: 5 }}>{erro}</div></Card>}
-    {loading ? <Card style={{ padding: 60, textAlign: 'center', color: 'var(--muted)' }} role="status" aria-live="polite" aria-busy="true">Carregando dados da empresa ativa…</Card> : renderConteudo()}
+    {loading && !dadosCarregados ? <Card style={{ padding: 60, textAlign: 'center', color: 'var(--muted)' }} role="status" aria-live="polite" aria-busy="true">Carregando dados da empresa ativa…</Card> : <div aria-busy={loading} inert={loading ? "" : undefined}>{renderConteudo()}</div>}
     {renderModal()}
   </div>
 }

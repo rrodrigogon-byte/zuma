@@ -7,7 +7,8 @@
     "dev": "vite --port 5173",
     "build": "vite build",
     "preview": "vite preview",
-    "test:commerce": "node --test src/lib/*.test.js tests/checkout-races.test.mjs"
+    "test:commerce": "node --test src/lib/*.test.js tests/checkout-races.test.mjs",
+    "test:agenda": "node --test src/lib/barbearia-calendar.test.js tests/barbearia-calendar.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.34.0",
