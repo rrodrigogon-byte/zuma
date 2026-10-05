@@ -146,6 +146,8 @@ test('persona: prompt traz as regras duras e a honestidade', () => {
   assert.match(bloco, /Nunca negue ser assistente/);
   assert.match(bloco, /Nunca se chame de "Dino"/);
   assert.match(bloco, /enviar_figurinha/);
+  assert.match(bloco, /até 1 emoji.*resposta leve/);
+  assert.match(bloco, /Não use emoji em confirmação de pedido\/agendamento, link, valor, reclamação, cobrança, erro, segurança, privacidade, handoff/);
   const semFig = personaSystemBlock({ ...p, figurinhas: false }, 'Barbearia Dino');
   assert.doesNotMatch(semFig, /enviar_figurinha/);
 });
@@ -156,4 +158,3 @@ test('persona: lembrete de 24 h curto, com os mesmos comandos', () => {
   assert.equal(msg, 'Opa, João! Passando pra lembrar: amanhã, sáb 10/10 às 9h, Corte Masculino com Bruno. Responda CONFIRMO, REMARCAR ou CANCELO. Pra não receber avisos, responda SAIR.');
   for (const evento of ['remarcado', 'cancelado', 'criado']) assert.match(personaAppointmentMessage(p, { evento, nome: 'Ana', servico: 'S', profissional: 'P', quando: 'q', quandoRelativo: 'amanhã', loja: 'Barbearia Dino' }), /SAIR/);
 });
-

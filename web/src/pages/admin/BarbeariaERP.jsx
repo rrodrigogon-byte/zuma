@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { api, fmtDate, fmtDateOnly, fmtR } from '../../lib/api'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useToast } from '../../hooks/useToast'
 import { useAuth } from '../../lib/auth'
 import { isDinoBrandContext } from '../../lib/brand'
+import { whatsappIntegrationStatus } from '../../lib/whatsapp-integration-status'
 import BarbeariaAgendaBoard, { agendaBoardColumns } from './BarbeariaAgendaBoard'
 import BarbeariaAgendaPeriodo from './BarbeariaAgendaPeriodo'
 import AgendaProfissionais, { profissionaisSelecionados } from './AgendaProfissionais'
@@ -69,6 +70,7 @@ const STATUS = {
   ausente: { label: 'Ausente', color: '#888' },
   configurado: { label: 'Configurado', color: '#14b87a' },
   pendente_configuracao: { label: 'Configuração pendente', color: '#f59e0b' },
+  nao_verificado: { label: 'Conexão não verificada', color: '#f59e0b' },
   pendente_ativacao: { label: 'Pendente de ativação', color: '#f59e0b' },
   pausada: { label: 'Pausada', color: '#888' },
   expirada: { label: 'Expirada', color: '#e05c5c' },
@@ -219,6 +221,11 @@ export default function BarbeariaERP() {
   const [comissoes, setComissoes] = useState(null)
   const [integracoes, setIntegracoes] = useState(null)
   const whatsappAi = integracoes?.whatsapp?.ai || integracoes?.ia?.whatsapp || {}
+  const scopeKey = `${empresaAtiva?.id || ''}:${lojaAtiva?.id || ''}`
+  const activeScopeRef = useRef(scopeKey)
+  activeScopeRef.current = scopeKey
+  const activeTabRef = useRef(tab)
+  activeTabRef.current = tab
   const [notificacoesAgenda, setNotificacoesAgenda] = useState({ queued: 0, sent: 0, failed: 0, canceled: 0 })
   const [assistenteResposta, setAssistenteResposta] = useState(null)
   const [assistentePergunta, setAssistentePergunta] = useState('')
@@ -263,16 +270,17 @@ export default function BarbeariaERP() {
 
   const carregar = useCallback(async () => {
     const pedido = ++pedidoOverview.current
+    const isCurrent = () => pedido === pedidoOverview.current && activeScopeRef.current === scopeKey
     setLoading(true)
     setErro('')
     try {
       const query = new URLSearchParams({ data: dataSelecionada })
       if (statusFiltro) query.set('status', statusFiltro)
       if (profissionalFiltro) query.set('profissionalId', profissionalFiltro)
-      const payload = await lerAgenda(() => api.get(`/api/admin/barbearia/overview?${query.toString()}`), { ativo: () => pedido === pedidoOverview.current })
-      if (!payload || pedido !== pedidoOverview.current) return
+      const payload = await lerAgenda(() => api.get(`/api/admin/barbearia/overview?${query.toString()}`), { ativo: isCurrent })
+      if (!payload || !isCurrent()) return
       const aiSessions = await api.get('/api/admin/commerce/whatsapp-ai/sessions?limit=20').catch(() => ({ items: [] }))
-      if (pedido !== pedidoOverview.current) return
+      if (!isCurrent()) return
       setDadosCarregados(true)
       setAgendaRevisao(n => n + 1)
       setWhatsappAiSessions(Array.isArray(aiSessions?.items) ? aiSessions.items : [])
@@ -299,7 +307,7 @@ export default function BarbeariaERP() {
       setResumoComandas(payload?.resumoComandas || null)
       setOperacao(payload?.operacao || null)
       setRelacionamento(payload?.relacionamento || null)
-      setIntegracoes(payload?.integracoes || null)
+      if (activeTabRef.current !== 'Integrações') setIntegracoes(payload?.integracoes || null)
       setNotificacoesAgenda(payload?.notificacoesAgenda || { queued: 0, sent: 0, failed: 0, canceled: 0 })
       const whatsappAi = payload?.integracoes?.whatsapp?.ai
       if (whatsappAi?.channel) setFormWhatsappAi((atual) => ({ ...atual, instance: whatsappAi.channel.instance || atual.instance, displayName: whatsappAi.channel.nome || atual.displayName, ...(whatsappAi.channel.capabilities || {}) }))
@@ -321,17 +329,51 @@ export default function BarbeariaERP() {
         attendantPhone: whatsappAi.channel.handoff.attendantPhone || '',
       })
     } catch (error) {
-      if (pedido !== pedidoOverview.current) return
+      if (!isCurrent()) return
       setDashboard(null)
       setAgendamentos([])
       setBloqueios([])
       setErro(erroAgenda(error))
     } finally {
-      if (pedido === pedidoOverview.current) setLoading(false)
+      if (isCurrent()) setLoading(false)
     }
-  }, [dataSelecionada, profissionalFiltro, statusFiltro])
+  }, [dataSelecionada, profissionalFiltro, statusFiltro, scopeKey])
+
+  useLayoutEffect(() => {
+    pedidoOverview.current += 1
+    setDadosCarregados(false)
+    setDashboard(null)
+    setAgendamentos([])
+    setClientes([])
+    setFila([])
+    setIntegracoes(null)
+    setWhatsappAiSessions([])
+    setRelacionamento(null)
+    setRelatorio(null)
+  }, [scopeKey])
 
   useEffect(() => { carregar() }, [carregar])
+
+  useEffect(() => {
+    if (tab !== 'Integrações') return undefined
+    let active = true
+    setIntegracoes(null)
+    const refresh = async () => {
+      if (document.visibilityState === 'hidden') return
+      try {
+        const status = await api.get('/api/admin/barbearia/integracoes')
+        if (active && activeScopeRef.current === scopeKey) setIntegracoes(status)
+      } catch {
+        if (active && activeScopeRef.current === scopeKey) setIntegracoes((previous) => ({
+          ...previous,
+          whatsapp: { ...previous?.whatsapp, ai: { unavailable: true, error: 'Status da unidade temporariamente indisponível.' } },
+        }))
+      }
+    }
+    refresh()
+    const timer = window.setInterval(refresh, 30000)
+    return () => { active = false; window.clearInterval(timer) }
+  }, [tab, scopeKey])
 
   const indicadores = dashboard?.indicadores || {}
   const areaAtual = AREAS.find((area) => area.id === TAB_AREA[tab]) || AREAS[0]
@@ -1375,6 +1417,8 @@ export default function BarbeariaERP() {
 
   function renderIntegracoes() {
     const whatsapp = integracoes?.whatsapp
+    const whatsappView = integracoes ? whatsappIntegrationStatus(whatsapp)
+      : { badge: 'aguardando', label: 'Atualizando status da unidade…', automatic: 'Aguardando diagnóstico' }
     const ia = integracoes?.ia
     const commerce = integracoes?.commerce || {}
     const whatsappMessagingOk = Boolean(whatsappAi.messagingConfigured ?? whatsappAi.evolutionConfigured)
@@ -1402,12 +1446,12 @@ export default function BarbeariaERP() {
           <div style={styles.integrationCard}>
             <div style={styles.integrationHeading}>
               <div style={{ ...styles.integrationIcon, background: '#25d366' }}>W</div>
-              <div><strong>WhatsApp</strong><span style={styles.sub}>{whatsapp?.envioManualDisponivel ? 'Canal configurado no servidor' : 'Canal ainda não configurado'}</span></div>
-              <Badge status={whatsapp?.envioManualDisponivel ? 'configurado' : 'pendente_configuracao'} />
+              <div><strong>WhatsApp da unidade</strong><span style={styles.sub}>{whatsappView.label}</span></div>
+              <Badge status={whatsappView.badge} />
             </div>
-            <div style={styles.metricLine}><span>Credencial do provedor</span><strong>{whatsapp?.credencialConfigurada ? 'Configurada' : 'Pendente'}</strong></div>
-            <div style={styles.metricLine}><span>Disparo automático</span><strong>Desativado</strong></div>
-            <p style={styles.sub}>O envio manual exige telefone, mensagem e confirmação adicional do operador. A credencial nunca é exibida na tela.</p>
+            <div style={styles.metricLine}><span>Atendimento de mensagens recebidas</span><strong>{whatsappView.automatic}</strong></div>
+            <div style={styles.metricLine}><span>Adaptador de envio manual legado</span><strong>{whatsapp?.envioManualDisponivel ? 'Disponível' : 'Indisponível'}</strong></div>
+            <p style={styles.sub}>A IA atende por padrão quando o canal está ativo. A conversa passa à equipe se alguém pedir atendimento humano ou se houver exceção de segurança; a equipe pode retomá-la. O formulário abaixo é um envio manual legado independente do canal IA e exige consentimento e confirmação.</p>
             <form onSubmit={enviarWhatsApp} style={{ display: 'grid', gap: 10, marginTop: 14 }}>
               <Field label="Cliente com consentimento"><select value={formWhatsApp.clienteId} onChange={(event) => { const cliente = clientes.find((item) => item.id === event.target.value); setFormWhatsApp((atual) => ({ ...atual, clienteId: event.target.value, telefone: cliente?.telefone || atual.telefone, consentimentoConfirmado: false })) }} style={inputStyle} disabled={!whatsapp?.envioManualDisponivel}><option value="">Contato avulso (exige autorização abaixo)</option>{clientes.filter((cliente) => cliente.padrao !== true).map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}{cliente.telefone ? ` · ${cliente.telefone}` : ''}</option>)}</select></Field>
               <Field label="Finalidade"><select value={formWhatsApp.finalidade} onChange={(event) => setFormWhatsApp((atual) => ({ ...atual, finalidade: event.target.value }))} style={inputStyle} disabled={!whatsapp?.envioManualDisponivel}><option value="atendimento">Atendimento</option><option value="marketing">Marketing</option></select></Field>
@@ -1437,7 +1481,7 @@ export default function BarbeariaERP() {
             <div style={styles.integrationHeading}>
               <div style={{ ...styles.integrationIcon, background: '#111827' }}>AI</div>
               <div style={{ flex: 1 }}><strong>{formWhatsappAi.displayName || 'Atendente humanizado da unidade'}</strong><span style={styles.sub}>WhatsApp conectado à loja, agenda, clientes, vendas e operação da unidade</span></div>
-              <Badge status={whatsappAiActive ? 'configurado' : 'pendente_configuracao'} />
+              <Badge status={whatsappView.badge} />
             </div>
             <div style={styles.readinessGrid}>
               <div style={styles.readinessItem}><strong>Feature flag</strong><span style={{ fontWeight: 800, color: whatsappAi.featureEnabled ? '#14b87a' : '#f59e0b' }}>{whatsappAi.featureEnabled ? 'Ativa' : 'Desativada'}</span><small style={styles.sub}>Ativação separada do deploy</small></div>
@@ -1591,10 +1635,10 @@ export default function BarbeariaERP() {
       </Card>
       <Card style={{ padding: 18 }}>
         <h2 style={styles.h2}>Ativações governadas</h2>
-        <p style={styles.sub}>O WhatsApp depende de provedor e credenciais reais no ambiente do servidor. O assistente já opera em modo local somente leitura; um modelo externo é opcional. O Commerce informa os bloqueadores reais de catálogo, estoque, entrega e pagamento sem criar dados ou credenciais.</p>
+        <p style={styles.sub}>O atendimento automático usa o canal da unidade e provedores reais; o adaptador manual legado é separado. O assistente operacional prepara ações, mas pedidos e agendamentos exigem confirmação explícita. O Commerce informa os bloqueadores reais sem criar dados ou credenciais.</p>
         <div style={styles.readinessGrid}>
-          <div style={styles.readinessItem}><strong>WhatsApp</strong><span style={{ color: whatsapp?.envioManualDisponivel ? '#14b87a' : '#f59e0b', fontWeight: 800 }}>{whatsapp?.envioManualDisponivel ? 'Envio manual ativo' : 'Provedor pendente'}</span><small style={styles.sub}>Toda comunicação externa depende de consentimento e confirmação.</small></div>
-          <div style={styles.readinessItem}><strong>Assistente</strong><span style={{ color: iaDisponivel ? '#14b87a' : '#f59e0b', fontWeight: 800 }}>{ia?.configurada ? 'Provedor externo ativo' : iaDisponivel ? 'Modo local ativo' : 'Indisponível'}</span><small style={styles.sub}>Somente leitura; nenhuma reserva, cobrança ou alteração automática.</small></div>
+          <div style={styles.readinessItem}><strong>WhatsApp</strong><span style={{ color: whatsappView.badge === 'configurado' ? '#14b87a' : '#f59e0b', fontWeight: 800 }}>{whatsappView.automatic}</span><small style={styles.sub}>Atendimento reativo; campanhas exigem consentimento e gates próprios.</small></div>
+          <div style={styles.readinessItem}><strong>Assistente</strong><span style={{ color: iaDisponivel ? '#14b87a' : '#f59e0b', fontWeight: 800 }}>{ia?.configurada ? 'Provedor externo ativo' : iaDisponivel ? 'Análise local disponível' : 'Indisponível'}</span><small style={styles.sub}>Ações críticas só após confirmação; handoff em exceções.</small></div>
           <div style={styles.readinessItem}><strong>Commerce</strong><span style={{ color: commerce?.prontidao?.pronto ? '#14b87a' : '#f59e0b', fontWeight: 800 }}>{commerce?.prontidao?.pronto ? 'Pronto para operar' : `${prontidaoCommerce}% configurado`}</span><small style={styles.sub}>{commerce?.prontidao?.bloqueadores?.length || 0} bloqueador(es) obrigatório(s).</small></div>
           <div style={styles.readinessItem}><strong>Auditoria e privacidade</strong><span style={{ color: '#14b87a', fontWeight: 800 }}>Ativas</span><small style={styles.sub}>Segredos não são exibidos e as ações críticas permanecem confirmadas.</small></div>
         </div>
@@ -1735,4 +1779,3 @@ const styles = {
   quickActions: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 18, paddingTop: 16, borderTop: '1px solid color-mix(in srgb, var(--accent) 22%, var(--line))' },
   contextPill: { display: 'inline-flex', alignItems: 'center', padding: '6px 10px', borderRadius: 999, background: 'color-mix(in srgb, var(--accent) 12%, var(--card))', color: 'var(--accent)', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' },
 }
-

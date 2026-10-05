@@ -7,6 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -82,9 +83,19 @@ globalThis.fetch = (url, options) => {
   }));
   const port = 34000 + Math.floor(Math.random() * 500);
   const base = `http://127.0.0.1:${port}`;
+  let providerState = 'open';
+  const provider = http.createServer((req, res) => {
+    res.setHeader('content-type', 'application/json');
+    if (req.method !== 'GET' || req.url !== '/api/v1/whats-app/instances/local-mock/status') {
+      res.writeHead(404).end('{}'); return;
+    }
+    res.writeHead(200).end(JSON.stringify({ state: providerState }));
+  });
+  await new Promise(resolve => provider.listen(0, '127.0.0.1', resolve));
+  const providerUrl = `http://127.0.0.1:${provider.address().port}`;
   const processo = spawn(process.execPath, ['server.js'], {
     cwd: APP,
-    env: { ...process.env, NODE_ENV: 'development', PORT: String(port), DB_PATH: dbPath, JWT_SECRET: 'escopo-jwt', COMMERCE_CORE_ENABLED: '1', OPERATIONAL_INVITES_ENABLED: '1', RESEND_API_KEY: 'local-test-not-real', EMAIL_FROM: 'Local Test <test@example.invalid>', NODE_OPTIONS: `--import=${mailStub}`, DATABASE_URL: DSN, DB_SSL: 'false', ADMIN_USER: 'admin', PLATFORM_ADMIN_EMAILS: 'boss@plat.test', SEED_DEMO: '0', WHATSAPP_CONNECTION_WATCHDOG: 'false', AI_AUTOMATION_SCHEDULER: 'false', AI_LEARNING_SCHEDULER: 'false' },
+    env: { ...process.env, NODE_ENV: 'development', PORT: String(port), DB_PATH: dbPath, JWT_SECRET: 'escopo-jwt', COMMERCE_CORE_ENABLED: '1', OPERATIONAL_INVITES_ENABLED: '1', RESEND_API_KEY: 'local-test-not-real', EMAIL_FROM: 'Local Test <test@example.invalid>', NODE_OPTIONS: `--import=${mailStub}`, DATABASE_URL: DSN, DB_SSL: 'false', ADMIN_USER: 'admin', PLATFORM_ADMIN_EMAILS: 'boss@plat.test', SEED_DEMO: '0', WHATSAPP_CONNECTION_WATCHDOG: 'false', WPP_BASE_URL: 'http://127.0.0.1:1', WPP_APIKEY: 'local-only-no-network', WHATSAPP_PROVIDER: 'chatbot_backend', CHATBOT_BACKEND_MODE: 'instancias', CHATBOT_BACKEND_URL: providerUrl, CHATBOT_BACKEND_INSTANCE: 'local-mock', CHATBOT_BACKEND_KEY: 'local-status-check-only-key', AI_AUTOMATION_SCHEDULER: 'false', AI_LEARNING_SCHEDULER: 'false' },
     stdio: 'ignore',
   });
   try {
@@ -141,12 +152,45 @@ globalThis.fetch = (url, options) => {
     const admin = await painelLogin('admin');
     const config = await request(base, '/api/admin/inscricoes', { headers: admin });
     assert.equal(config.response.status, 200, 'admin principal não perde inscrições');
+    const globalLegacy = await request(base, '/api/admin/barbearia/integracoes', { headers: admin });
+    assert.equal(globalLegacy.response.status, 200);
+    assert.equal(globalLegacy.body.whatsapp.envioManualDisponivel, true, 'admin global sem unidade preserva WPP legado');
     for (const selectedEmpresa of [empA, empB]) {
       const allowed = await request(base, '/api/admin/barbearia/servicos', {
         headers: { ...admin, 'X-Empresa-Id': selectedEmpresa },
       });
       assert.equal(allowed.response.status, 200, 'admin principal global mantém escopo tenant autorizado mesmo com SQL homônimo');
     }
+
+    const lojaComCanal = (await client.query(`INSERT INTO lojas (empresa_id, codigo, nome) VALUES ($1, $2, $3) RETURNING id`,
+      [empA, `teste-${suffix}`, `Barbearia sintética ${suffix}`])).rows[0].id;
+    await client.query(`INSERT INTO canais_integracao
+      (empresa_id, loja_id, provedor, nome, status, configuracao)
+      VALUES ($1, $2, 'whatsapp', 'Canal sintético', 'ativo', '{"instance":"local-mock"}'::jsonb)`,
+    [empA, lojaComCanal]);
+    const adminDaUnidade = { ...admin, 'X-Empresa-Id': empA, 'X-Loja-Id': lojaComCanal };
+    const estado = await request(base, '/api/admin/barbearia/integracoes', { headers: adminDaUnidade });
+    assert.equal(estado.response.status, 200);
+    assert.equal(estado.body.whatsapp.ai.channel.status, 'ativo');
+    assert.equal(estado.body.whatsapp.ai.connection.state, 'open', 'instância local corresponde ao canal autorizado');
+    assert.deepEqual(Object.keys(estado.body.whatsapp.ai.connection).sort(), ['checkedAt', 'state']);
+    providerState = 'close';
+    const desconectado = await request(base, '/api/admin/barbearia/integracoes', { headers: adminDaUnidade });
+    assert.equal(desconectado.body.whatsapp.ai.connection.state, 'close', 'desconexão live não fica verde por cache de configuração');
+    await client.query(`UPDATE canais_integracao SET configuracao = '{"instance":"other-instance"}'::jsonb
+      WHERE empresa_id = $1 AND loja_id = $2 AND provedor = 'whatsapp'`, [empA, lojaComCanal]);
+    const outraInstancia = await request(base, '/api/admin/barbearia/integracoes', { headers: adminDaUnidade });
+    assert.equal(outraInstancia.body.whatsapp.ai.connection.state, 'unknown', 'instância diferente não herda estado de outra linha');
+    assert.equal(estado.body.whatsapp.envioManualDisponivel, false, 'WPP legado não substitui canal Commerce da unidade');
+    const overview = await request(base, '/api/admin/barbearia/overview', { headers: adminDaUnidade });
+    assert.equal(overview.response.status, 200);
+    assert.equal(overview.body.integracoes.whatsapp.ai.channel.status, 'ativo');
+    assert.equal(overview.body.integracoes.whatsapp.envioManualDisponivel, false);
+    const tentativaLegada = await request(base, '/api/admin/barbearia/whatsapp/enviar', {
+      method: 'POST', headers: adminDaUnidade, body: JSON.stringify({ confirmado: true }),
+    });
+    assert.equal(tentativaLegada.response.status, 409, 'bloqueado antes de qualquer egress');
+    assert.equal(tentativaLegada.body.code, 'WHATSAPP_LEGACY_SCOPE_DENIED');
 
     // O endpoint real deve aceitar status='active', negar tenant/draft e só confirmar
     // e-mail se o emissor local retornar um ID explícito; nada chega ao Resend.
@@ -206,6 +250,8 @@ globalThis.fetch = (url, options) => {
     assert.equal(depois.body.code, 'SESSION_REVOKED');
   } finally {
     processo.kill('SIGTERM');
+    provider.closeAllConnections();
+    await new Promise(resolve => provider.close(resolve));
     await client.query(`DELETE FROM commerce_operational_invites WHERE empresa_id = ANY($1::uuid[])`, [[empA, empB]]).catch(() => {});
     await client.query(`DELETE FROM commerce_storefronts WHERE empresa_id = ANY($1::uuid[])`, [[empA, empB]]).catch(() => {});
     await client.query(`DELETE FROM commerce_memberships WHERE empresa_id = ANY($1::uuid[])`, [[empA, empB]]).catch(() => {});
