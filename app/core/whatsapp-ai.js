@@ -38,6 +38,7 @@ import { approvedAnswers, getBrainSettings, memoryForPrompt, recordAutomationOpt
 import { estimateCostCents, providerConfigured, recordRouterRun, runAnthropicWithTools, spentTodayCents } from './ai-router.js';
 import { releaseExpiredStaffPauses, STAFF_REASON } from './whatsapp-staff-takeover.js';
 import { motivoLegivel } from './whatsapp-handoff-labels.js';
+import { notifyHumanHandoff } from './whatsapp-handoff-notify.js';
 import {
   isPersonaGreeting,
   mentionsBotIdentity,
@@ -575,17 +576,64 @@ async function putSessionInHandoff(session, reason, priority = 2) {
         AND status = 'preparada'`,
     [session.id, session.empresa_id],
   ).catch(() => null);
-  await db.query(
-    `UPDATE whatsapp_ai_sessions
+  const prioridade = Math.min(5, Math.max(0, Number(priority) || 0));
+  const updated = await db.query(
+    `WITH antes AS (
+        SELECT status FROM whatsapp_ai_sessions WHERE id = $1 AND empresa_id = $2 AND loja_id = $3
+      )
+      UPDATE whatsapp_ai_sessions
         SET status = 'humano', handoff_requested_at = COALESCE(handoff_requested_at, CURRENT_TIMESTAMP),
             handoff_reason = $4::text, priority = GREATEST(priority, $5::smallint),
             assigned_to = NULL, assigned_at = NULL,
             estado = jsonb_set(estado, '{handoffReason}', to_jsonb($4::text), true),
             acao_pendente = NULL,
             atualizado_em = CURRENT_TIMESTAMP
-      WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`,
-    [session.id, session.empresa_id, session.loja_id, cleanText(reason, 500), Math.min(5, Math.max(0, Number(priority) || 0))],
+      WHERE id = $1 AND empresa_id = $2 AND loja_id = $3
+      RETURNING (SELECT status FROM antes) AS status_antes`,
+    [session.id, session.empresa_id, session.loja_id, cleanText(reason, 500), prioridade],
   );
+  // Só notifica a equipe na PRIMEIRA transição para humano: evita reenvio a cada
+  // nova mensagem do cliente numa conversa que já está em atendimento humano.
+  const jaEstavaEmHumano = updated.rows[0]?.status_antes === 'humano';
+  if (!jaEstavaEmHumano) {
+    void notificarHandoffParaEquipe(session, reason, prioridade).catch(() => null);
+  }
+}
+
+// Avisa a equipe quando a conversa entra em atendimento humano: e-mail com o
+// histórico e WhatsApp para o atendente (número diferente do cliente). Best-effort:
+// nunca interrompe nem atrasa o fluxo de atendimento — se falhar, só loga.
+async function notificarHandoffParaEquipe(session, reason, priority) {
+  try {
+    const channel = (await db.queryRead(
+      `SELECT nome, configuracao FROM canais_integracao
+         WHERE empresa_id = $1 AND loja_id = $2 AND provedor = 'whatsapp' LIMIT 1`,
+      [session.empresa_id, session.loja_id],
+    )).rows[0];
+    const handoff = channel?.configuracao?.handoff || {};
+    if (!handoff.notify_email && !handoff.attendant_phone) return; // canal sem destino configurado
+    const transcript = await historyForSession(session).catch(() => []);
+    const storeName = cleanText(channel?.configuracao?.display_name || channel?.nome, 120);
+    await notifyHumanHandoff({
+      session,
+      reason,
+      priority,
+      storeName,
+      customerName: cleanText(session.cliente_nome, 120),
+      customerPhone: session.telefone || '',
+      transcript,
+      config: handoff,
+      tenant: {
+        empresa_id: session.empresa_id,
+        loja_id: session.loja_id,
+        canal_id: session.canal_id,
+        whatsapp_instance: channel?.configuracao?.instance || undefined,
+        nome: storeName,
+      },
+    });
+  } catch (error) {
+    console.warn('[WhatsApp AI] notificação de handoff falhou:', cleanText(error?.message || error, 200));
+  }
 }
 
 async function recordProviderRun(record, session, { status, model = null, metrics = {}, errorCode = null, provider = 'gemini' } = {}) {
@@ -1491,7 +1539,27 @@ function safeChannelView(row) {
     aiLastErrorCode: row.ai_last_error_code || null,
     policy: whatsappAiPolicy(row),
     persona: { ...personaView(row.configuracao, process.env, row.empresa_id), figurinhasNoProvedor: figurinhaSuportada() },
+    handoff: safeHandoffView(row.configuracao?.handoff),
   };
+}
+
+// Config de notificação de handoff (e-mail de histórico + WhatsApp do atendente).
+function safeHandoffView(value = {}) {
+  return {
+    notifyEmail: cleanText(value?.notify_email, 320),
+    attendantPhone: String(value?.attendant_phone || '').replace(/\D/g, '').slice(0, 15),
+  };
+}
+
+function safeHandoffInput(input = {}) {
+  const email = cleanText(input.notifyEmail ?? input.notify_email, 320).toLowerCase();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('e-mail de notificação inválido');
+  let attendantPhone = String(input.attendantPhone ?? input.attendant_phone ?? '').replace(/\D/g, '');
+  if (attendantPhone && attendantPhone.length >= 10 && attendantPhone.length <= 11 && !attendantPhone.startsWith('55')) {
+    attendantPhone = `55${attendantPhone}`;
+  }
+  if (attendantPhone && (attendantPhone.length < 12 || attendantPhone.length > 15)) throw new Error('telefone do atendente inválido');
+  return { notify_email: email, attendant_phone: attendantPhone };
 }
 
 function safeWhatsappAiPolicyInput(input = {}) {
@@ -1567,6 +1635,41 @@ export async function configureWhatsappAiPersona(context = {}, input = {}) {
       [empresaId, lojaId, context.usuarioId || null, result.rows[0].id, JSON.stringify(persona)],
     );
     return { ok: true, persona: personaView(result.rows[0].configuracao), channel: safeChannelView(result.rows[0]) };
+  });
+}
+
+/**
+ * Notificação de handoff: quando o atendimento vai para humano, para onde avisar.
+ * - notifyEmail: recebe o histórico da conversa por e-mail.
+ * - attendantPhone: WhatsApp do atendente humano (número diferente do cliente),
+ *   onde a conversa é iniciada para a pessoa assumir pelo telefone.
+ * Só muda para onde notificar; não ativa o canal nem altera travas.
+ */
+export async function configureWhatsappAiHandoff(context = {}, input = {}) {
+  if (input.confirmed !== true) throw new Error('confirmação humana obrigatória para alterar a notificação de handoff');
+  const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
+  const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
+  const handoff = safeHandoffInput(input);
+  return db.transaction(async trx => {
+    const result = await trx.query(
+      `UPDATE canais_integracao
+          SET configuracao = jsonb_set(COALESCE(configuracao, '{}'::jsonb), '{handoff}', $3::jsonb, true),
+              data_atualizacao = CURRENT_TIMESTAMP
+        WHERE empresa_id = $1 AND loja_id = $2 AND provedor = 'whatsapp'
+        RETURNING *`,
+      [empresaId, lojaId, JSON.stringify(handoff)],
+    );
+    if (!result.rows[0]) throw new Error('salve primeiro o canal WhatsApp em rascunho');
+    await trx.query(
+      `INSERT INTO commerce_audit_logs
+        (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, depois)
+       VALUES ($1, $2, $3, 'whatsapp_ai_channel', $4, 'handoff_configured', $5::jsonb)`,
+      [empresaId, lojaId, context.usuarioId || null, result.rows[0].id, JSON.stringify({
+        notifyEmailSet: Boolean(handoff.notify_email),
+        attendantPhoneSet: Boolean(handoff.attendant_phone),
+      })],
+    );
+    return { ok: true, handoff: safeHandoffView(result.rows[0].configuracao?.handoff), channel: safeChannelView(result.rows[0]) };
   });
 }
 
