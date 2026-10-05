@@ -53,6 +53,9 @@ export function conclusoesDoDiagnostico(f = {}) {
   else if (efetivo === 'pilot') entradaTexto = e.pilotos > 0 ? `Piloto: só ${e.pilotos} telefone(s) de WHATSAPP_POLL_PILOT_PHONES.` : 'pilot sem WHATSAPP_POLL_PILOT_PHONES: ninguém é atendido.';
   else entradaTexto = 'Liberada para todos os clientes.';
   add(entradaOk, 'Entrada das mensagens', entradaTexto);
+  if (efetivo === 'pilot' && Number(e.ultimaPassada?.resultado?.foraDoPiloto) > 0) {
+    add(false, 'Mensagens fora do piloto', `${Number(e.ultimaPassada.resultado.foraDoPiloto)} mensagem(ns) da última consulta são de contatos fora da lista e não recebem resposta automática. Confira WHATSAPP_POLL_PILOT_PHONES; após ajustar, envie uma mensagem nova. Mensagens já ignoradas não são reenviadas.`);
+  }
 
   const saida = f.saida || 'off';
   add(saida === 'on' || (saida === 'pilot' && e.pilotos > 0), 'Saída das respostas',
@@ -79,7 +82,7 @@ export function conclusoesDoDiagnostico(f = {}) {
     if (m.total > 0 && f.canal) {
       const ultimaNoKytto = Date.parse(f.canal.ultimo_evento_em || 0) || 0;
       const atrasada = Date.parse(m.ultimaEm) - ultimaNoKytto > 2 * 60 * 1000;
-      add(!atrasada, 'Mensagens chegando no Kytto', atrasada ? 'Há mensagem no backend que não entrou no Kytto: resolva os itens pendentes acima.' : 'A última mensagem do backend já está no Kytto.');
+      add(!atrasada, 'Mensagens chegando no Kytto', atrasada ? 'Há mensagem no backend que não entrou no Kytto: resolva os itens pendentes acima.' : 'O horário de entrada está atualizado. Isso não comprova resposta: confira o piloto e a fila humana em Atendente IA.');
     }
   } else if (f.erroLeitura) {
     add(false, 'Leitura no backend', `GET /messages falhou (${f.erroLeitura}).`);

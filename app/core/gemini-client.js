@@ -92,6 +92,14 @@ async function geminiRequest(endpoint, request, { fetchImpl, timeoutMs, attempts
   throw lastError || new GeminiError('Gemini indisponível', 'GEMINI_ERROR');
 }
 
+// Uma promessa de consulta não é resposta final: não existe trabalho em segundo
+// plano depois que esta função retorna. Perguntas de esclarecimento continuam válidas.
+export function unfinishedToolReply(text) {
+  const value = String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return value.length <= 500 && !value.includes('?')
+    && /\b(?:vou|estou|estamos|vamos)\s+(?:verificar|verificando|consultar|consultando|buscar|buscando|checar|checando)\b/.test(value);
+}
+
 export async function runGeminiWithTools({
   systemInstruction,
   history = [],
@@ -102,6 +110,7 @@ export async function runGeminiWithTools({
   timeoutMs = DEFAULT_TIMEOUT_MS,
   maxSteps = DEFAULT_MAX_STEPS,
   requestAttempts = DEFAULT_REQUEST_ATTEMPTS,
+  requireCompletedReply = false,
 } = {}) {
   const key = apiKey();
   if (!key) throw new GeminiError('Gemini não configurado no ambiente', 'GEMINI_NOT_CONFIGURED', { retryable: false });
@@ -113,6 +122,7 @@ export async function runGeminiWithTools({
   const traces = [];
   const startedAt = Date.now();
   let outputChars = 0;
+  let repairedIncompleteReply = false;
 
   for (let step = 0; step < maxSteps; step += 1) {
     const payload = await geminiRequest(endpoint, {
@@ -143,6 +153,16 @@ export async function runGeminiWithTools({
       const text = responseText(parts);
       if (!text) throw new GeminiError('Gemini não retornou resposta utilizável', 'GEMINI_EMPTY_RESPONSE', { retryable: false });
       outputChars += text.length;
+      if (requireCompletedReply && tools.length && unfinishedToolReply(text)
+          && !traces.some(trace => trace.name === 'solicitar_humano' && trace.ok)) {
+        if (repairedIncompleteReply || step + 1 >= maxSteps) {
+          throw new GeminiError('Consulta não concluída pelo modelo', 'GEMINI_INCOMPLETE_RESPONSE', { retryable: false });
+        }
+        repairedIncompleteReply = true;
+        contents.push({ role: 'model', parts: [{ text }] });
+        contents.push({ role: 'user', parts: [{ text: 'Conclua a consulta agora usando as ferramentas disponíveis e responda com o resultado real. Não existe consulta em segundo plano. Se faltar um dado, faça uma pergunta objetiva. Não repita ações já preparadas nem confirme compras ou agendamentos.' }] });
+        continue;
+      }
       return {
         text: text.slice(0, 4000),
         model,

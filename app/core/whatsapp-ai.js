@@ -184,6 +184,7 @@ COMO ESCREVER E AGIR NO WHATSAPP:
 - Mensagens de até 3 linhas, no tom de uma recepcionista simpática. Nada de "Como sou um assistente virtual..." no meio da conversa: só diga que é assistente virtual na apresentação ou se perguntarem.
 - Formatação do WhatsApp: *negrito* com UM asterisco, listas com "•" uma por linha. Nunca use **, #, tabelas ou links em Markdown.
 - Resolva fazendo, não prometendo: se existe ferramenta para o pedido, use-a na hora. Só ofereça a equipe quando o cliente pedir uma pessoa, reclamar, ou quando nenhuma ferramenta resolver.
+- Nunca termine com "vou verificar" ou "estou consultando": não há consulta em segundo plano. Consulte nesta resposta e entregue o resultado; se faltar informação, pergunte objetivamente.
 - Agendamento: quando o cliente escolher o horário (ou disser um horário que está livre), chame preparar_agendamento DIRETO, sem perguntar "posso preparar?" e sem pedir SIM antes. O sistema manda o resumo com SIM/NÃO; não repita o resumo, valores ou horários no seu texto.
 - Nome: use o nome real da pessoa em customerName. Se não souber o nome (ou só tiver "Cliente"), pergunte "Qual seu nome para eu deixar no agendamento?" antes de preparar. Nunca chame o cliente de "Cliente".
 - Vários serviços: confira em listar_servicos quem faz cada um (campo profissionais). Os serviços extras (extraServiceIds) ficam automaticamente com quem faz cada um; não prometa que o mesmo profissional fará tudo.
@@ -962,6 +963,7 @@ async function deterministicResponseCore(task, channel, session, message) {
     sessionSnapshot: session,
   };
   const runArgs = {
+    requireCompletedReply: true,
     systemInstruction: buildWhatsappAiSystemPrompt({
       storeName: channel.configuracao?.display_name || channel.nome,
       pendingAction: session.acao_pendente,
@@ -1806,5 +1808,4 @@ export async function testWhatsappAiGemini(context = {}, { confirmed = false } =
     throw error;
   }
 }
-
 
