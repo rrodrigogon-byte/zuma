@@ -9,7 +9,7 @@ import QRCode from 'qrcode';
 import { db, save } from './db.js';
 import {
   disconnectInstance, getInstanceStatus, providerSummary, requestInstanceQr,
-  validInstance, whatsappProviderName, chatbotBackendConfig,
+  validInstance, whatsappProviderName, chatbotBackendConfig, confirmedPhone,
 } from './core/whatsapp-provider.js';
 
 const HISTORY_LIMIT = 40;
@@ -71,7 +71,7 @@ export function conexoesAtivas() {
 }
 
 function registrar(conexao, tipo, detalhe = '') {
-  conexao.history = [{ at: new Date().toISOString(), tipo, detalhe: String(detalhe || '').slice(0, 200) }, ...(conexao.history || [])].slice(0, HISTORY_LIMIT);
+  conexao.history = [{ at: new Date().toISOString(), tipo, instance: conexao.instance, detalhe: String(detalhe || '').slice(0, 200) }, ...(conexao.history || [])].slice(0, HISTORY_LIMIT);
 }
 
 function aplicarEstado(conexao, resultado) {
@@ -111,8 +111,21 @@ export function mascararNumero(valor) {
   return `${digits.slice(0, 4)}•••••${digits.slice(-4)}`;
 }
 
-export function visaoPublica(conexao) {
+function numeroReferencia(valor) {
+  const raw = String(valor || '').trim();
+  if (!raw) return '';
+  let digits = raw.replace(/\D/g, '');
+  if (/^\d{10,11}$/.test(digits)) digits = `55${digits}`;
+  if (!/^55\d{10,11}$/.test(digits)) throw new Error('Informe um número brasileiro com DDD.');
+  return digits;
+}
+
+export function visaoPublica(conexao, { numeroCompleto = false } = {}) {
   const provider = providerSummary();
+  const checkAt = Date.parse(conexao.lastCheckAt || '');
+  const recente = Number.isFinite(checkAt) && Date.now() - checkAt >= 0 && Date.now() - checkAt < 2 * 60_000;
+  const phone = conexao.state === 'open' && !conexao.lastError && recente ? confirmedPhone({ phone: conexao.phone }) : '';
+  const reference = numeroCompleto ? confirmedPhone({ phone: conexao.numeroExibicao }) : '';
   return {
     provider: provider.provider,
     providerLabel: provider.label,
@@ -123,7 +136,8 @@ export function visaoPublica(conexao) {
     ativo: Boolean(conexao.ativo),
     autoReconnect: conexao.autoReconnect !== false,
     state: conexao.state,
-    phoneMasked: conexao.state === 'open' ? mascararNumero(conexao.phone) : '',
+    phoneMasked: phone ? mascararNumero(phone) : '',
+    ...(numeroCompleto ? { phoneNumber: phone, phoneReference: reference } : {}),
     lastCheckAt: conexao.lastCheckAt,
     lastConnectedAt: conexao.lastConnectedAt,
     lastDisconnectAt: conexao.lastDisconnectAt,
@@ -144,8 +158,9 @@ export async function verificarConexao(empresaId, { fetchImpl } = {}) {
   if (semInstancia(conexao)) { conexao.lastError = 'instancia_nao_atribuida'; return visaoPublica(conexao); }
   const key = String(empresaId);
   const epoch = disconnectEpoch.get(key) || 0;
-  const resultado = await getInstanceStatus(conexao.instance, fetchImpl);
-  if (disconnecting.has(key) || epoch !== (disconnectEpoch.get(key) || 0)) return visaoPublica(conexao);
+  const instance = conexao.instance;
+  const resultado = await getInstanceStatus(instance, fetchImpl);
+  if (disconnecting.has(key) || epoch !== (disconnectEpoch.get(key) || 0) || conexao.instance !== instance) return visaoPublica(conexao);
   aplicarEstado(conexao, resultado);
   // Se o backend confirma a sessão aberta, a conexão precisa continuar ativa
   // mesmo quando uma tentativa anterior de logout falhou depois de persistir
@@ -171,9 +186,10 @@ export async function gerarQr(empresaId, { usuario = '', fetchImpl, registrarHis
   if (disconnecting.has(String(empresaId))) return { ok: false, code: 'WHATSAPP_DISCONNECT_IN_PROGRESS', error: 'Desconexão em andamento.', conexao: visaoPublica(conexao) };
   const key = String(empresaId);
   const epoch = disconnectEpoch.get(key) || 0;
+  const instance = conexao.instance;
   conexao.ativo = true;
-  const resultado = await requestInstanceQr(conexao.instance, fetchImpl);
-  if (disconnecting.has(key) || epoch !== (disconnectEpoch.get(key) || 0)) return { ok: false, code: 'WHATSAPP_DISCONNECT_IN_PROGRESS', error: 'A conexão mudou durante a solicitação.', conexao: visaoPublica(conexao) };
+  const resultado = await requestInstanceQr(instance, fetchImpl);
+  if (disconnecting.has(key) || epoch !== (disconnectEpoch.get(key) || 0) || conexao.instance !== instance) return { ok: false, code: 'WHATSAPP_DISCONNECT_IN_PROGRESS', error: 'A conexão mudou durante a solicitação.', conexao: visaoPublica(conexao) };
   if (resultado.authError) {
     aplicarEstado(conexao, resultado);
     save();
@@ -188,9 +204,14 @@ export async function gerarQr(empresaId, { usuario = '', fetchImpl, registrarHis
     return { ok: false, error: msg, conexao: visaoPublica(conexao) };
   }
   const qr = await desenharQr(resultado);
-  conexao.state = resultado.state === 'open' ? 'open' : (qr ? 'qr' : (resultado.state || 'connecting'));
-  conexao.lastQrAt = qr ? new Date().toISOString() : conexao.lastQrAt;
-  if (registrarHistorico) registrar(conexao, qr ? 'qr_gerado' : 'reconexao_solicitada', usuario ? `por ${usuario}` : '');
+  if (disconnecting.has(key) || epoch !== (disconnectEpoch.get(key) || 0) || conexao.instance !== instance) return { ok: false, code: 'WHATSAPP_DISCONNECT_IN_PROGRESS', error: 'A conexão mudou durante a solicitação.', conexao: visaoPublica(conexao) };
+  const temPareamento = Boolean(qr || resultado.pairingCode);
+  conexao.state = resultado.state === 'open' ? 'open' : (temPareamento ? 'qr' : (resultado.state || 'connecting'));
+  // O QR ou uma reconexão nunca confirmam que o novo pareamento usa a linha antiga.
+  conexao.phone = '';
+  conexao.lastCheckAt = null;
+  conexao.lastQrAt = temPareamento ? new Date().toISOString() : conexao.lastQrAt;
+  if (registrarHistorico) registrar(conexao, temPareamento ? 'qr_gerado' : 'reconexao_solicitada', usuario ? `por ${usuario}` : '');
   save();
   return { ok: true, qr, pairingCode: resultado.pairingCode || '', conexao: visaoPublica(conexao) };
 }
@@ -208,7 +229,7 @@ export async function desconectar(empresaId, { usuario = '', fetchImpl } = {}) {
     // Um timeout pode acontecer DEPOIS do reset; GET é seguro, DELETE não deve ser repetido.
     // Recusa do DELETE (ex.: 4xx porque não há sessão) também é conferida pelo GET: se o
     // backend confirma que o número não está conectado, não há o que desconectar.
-    const status = resultado.authError ? null : await getInstanceStatus(conexao.instance, fetchImpl);
+    const status = resultado.authError ? null : await getInstanceStatus(conexao.instance, fetchImpl, { resolvePhone: false });
     const semSessao = status?.ok === true && ['close', 'qr'].includes(status.state);
     if (!semSessao) {
       // Nunca simular logout local ou reiniciar outro número quando o backend
@@ -223,6 +244,7 @@ export async function desconectar(empresaId, { usuario = '', fetchImpl } = {}) {
     conexao.autoReconnect = false;
     conexao.state = 'close';
     conexao.phone = '';
+    conexao.numeroExibicao = '';
     conexao.lastError = null;
     conexao.lastCheckAt = new Date().toISOString();
     conexao.lastDisconnectAt = conexao.lastCheckAt;
@@ -236,6 +258,7 @@ export async function desconectar(empresaId, { usuario = '', fetchImpl } = {}) {
 
 export function configurar(empresaId, { instance, autoReconnect, numeroExibicao } = {}, { podeTrocarInstancia = false } = {}) {
   const conexao = obterConexao(empresaId);
+  const reference = numeroExibicao !== undefined ? numeroReferencia(numeroExibicao) : undefined;
   if (instance !== undefined && instance !== conexao.instance) {
     // Trocar a instância muda qual número do backend a empresa controla: só a
     // administração da plataforma faz isso, e nunca para uma instância de outra empresa.
@@ -244,13 +267,28 @@ export function configurar(empresaId, { instance, autoReconnect, numeroExibicao 
     if (!valida) throw new Error('Instância inválida: use letras minúsculas, números, - ou _.');
     if (instanciaEmUso(valida, empresaId)) throw new Error('Esta instância já pertence a outra empresa.');
     if (valida !== conexao.instance) {
+      const key = String(empresaId);
+      if (disconnecting.has(key)) throw new Error('Aguarde o fim da desconexão antes de trocar a instância.');
+      disconnectEpoch.set(key, (disconnectEpoch.get(key) || 0) + 1);
+      conexao.history = (conexao.history || []).map((item) => ({ ...item, instance: item.instance || conexao.instance }));
       registrar(conexao, 'instancia_alterada', `${conexao.instance} → ${valida}`);
       conexao.instance = valida;
       conexao.state = 'unknown';
+      conexao.phone = '';
+      conexao.numeroExibicao = '';
+      conexao.lastCheckAt = null;
+      conexao.lastConnectedAt = null;
+      conexao.lastDisconnectAt = null;
+      conexao.lastQrAt = null;
+      conexao.reconnectAttempts = 0;
+      conexao.nextReconnectAt = null;
+      conexao.lastError = null;
+      conexao.ativo = false;
+      conexao.autoReconnect = false;
     }
   }
   if (autoReconnect !== undefined) conexao.autoReconnect = autoReconnect === true;
-  if (numeroExibicao !== undefined) conexao.numeroExibicao = String(numeroExibicao || '').replace(/[^\d+()\s-]/g, '').slice(0, 25);
+  if (reference !== undefined) conexao.numeroExibicao = reference;
   save();
   return visaoPublica(conexao);
 }
@@ -267,17 +305,20 @@ export async function vigiarConexao(empresaId, { now = Date.now(), fetchImpl } =
   if (disconnecting.has(key)) return { action: 'skip', reason: 'disconnect_in_progress' };
   if (!conexao.ativo || conexao.autoReconnect === false || !conexao.instance) return { action: 'skip', reason: 'inactive' };
   const epoch = disconnectEpoch.get(key) || 0;
-  const status = await getInstanceStatus(conexao.instance, fetchImpl);
+  const instance = conexao.instance;
+  const status = await getInstanceStatus(instance, fetchImpl);
   // O GET pode ter começado ANTES do logout; não aplicar estado nem pedir QR
   // depois que a ação de desconexão adquiriu o lock em memória.
-  if (disconnecting.has(key) || epoch !== (disconnectEpoch.get(key) || 0)) return { action: 'skip', reason: 'disconnect_in_progress' };
+  if (disconnecting.has(key)) return { action: 'skip', reason: 'disconnect_in_progress' };
+  if (epoch !== (disconnectEpoch.get(key) || 0) || conexao.instance !== instance) return { action: 'skip', reason: 'connection_changed' };
   aplicarEstado(conexao, status);
   if (!status.ok || status.authError) { save(); return { action: 'status_unavailable' }; }
   if (conexao.state === 'open' || conexao.state === 'connecting') { save(); return { action: 'none', state: conexao.state }; }
   if (conexao.nextReconnectAt && new Date(conexao.nextReconnectAt).getTime() > now) { save(); return { action: 'waiting', until: conexao.nextReconnectAt }; }
   const attempt = (conexao.reconnectAttempts || 0) + 1;
-  const result = await requestInstanceQr(conexao.instance, fetchImpl);
-  if (disconnecting.has(key) || epoch !== (disconnectEpoch.get(key) || 0)) return { action: 'skip', reason: 'disconnect_in_progress' };
+  const result = await requestInstanceQr(instance, fetchImpl);
+  if (disconnecting.has(key)) return { action: 'skip', reason: 'disconnect_in_progress' };
+  if (epoch !== (disconnectEpoch.get(key) || 0) || conexao.instance !== instance) return { action: 'skip', reason: 'connection_changed' };
   conexao.reconnectAttempts = attempt;
   const minutes = BACKOFF_MINUTES[Math.min(attempt - 1, BACKOFF_MINUTES.length - 1)];
   conexao.nextReconnectAt = new Date(now + minutes * 60_000).toISOString();

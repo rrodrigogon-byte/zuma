@@ -35,6 +35,78 @@ test('com CHATBOT_BACKEND_EMPRESA_ID, só essa empresa recebe a instância padr�
   assert.equal(conexao.obterConexao('emp-dono').instance, 'dino-1');
 });
 
+test('gestor vê telefone do backend recente; equipe vê apenas máscara e campo manual nunca comprova sessão', async () => {
+  const conexao = await import('./whatsapp-conexao-kytto.js');
+  const estado = conexao.obterConexao('emp-a');
+  estado.state = 'open'; estado.phone = '5565999991234'; estado.lastCheckAt = new Date().toISOString();
+  let manager = conexao.visaoPublica(estado, { numeroCompleto: true });
+  const staff = conexao.visaoPublica(estado);
+  assert.equal(manager.phoneNumber, '5565999991234');
+  assert.equal(staff.phoneMasked, '5565•••••1234');
+  assert.equal(Object.hasOwn(staff, 'phoneNumber'), false);
+  assert.equal(Object.hasOwn(staff, 'phoneReference'), false);
+
+  manager = conexao.configurar('emp-a', { numeroExibicao: '(65) 99888-0000' });
+  assert.equal(manager.phoneMasked, '5565•••••1234');
+  assert.equal(conexao.visaoPublica(estado, { numeroCompleto: true }).phoneReference, '5565998880000');
+  assert.throws(() => conexao.configurar('emp-a', { numeroExibicao: '123' }), /DDD/);
+  estado.lastCheckAt = new Date(Date.now() - 3 * 60_000).toISOString();
+  manager = conexao.visaoPublica(estado, { numeroCompleto: true });
+  assert.equal(manager.phoneNumber, '');
+  assert.equal(manager.phoneMasked, '');
+  assert.equal(manager.phoneReference, '5565998880000', 'referência permanece rotulada como manual');
+  conexao.configurar('emp-a', { instance: 'dino-novo' }, { podeTrocarInstancia: true });
+  assert.equal(conexao.visaoPublica(estado, { numeroCompleto: true }).phoneReference, '');
+});
+
+test('troca de instância descarta status antigo e reinicia dados transitórios sem herdar titularidade', async () => {
+  const conexao = await import('./whatsapp-conexao-kytto.js');
+  const estado = conexao.obterConexao('emp-a');
+  estado.ativo = true; estado.autoReconnect = true; estado.reconnectAttempts = 4;
+  estado.nextReconnectAt = new Date(Date.now() + 600_000).toISOString();
+  let release;
+  const pending = new Promise((resolve) => { release = resolve; });
+  const antigo = conexao.verificarConexao('emp-a', { fetchImpl: async () => {
+    await pending;
+    return { ok: true, status: 200, text: async () => '{"state":"open","phone":"5565999991234"}' };
+  } });
+  conexao.configurar('emp-a', { instance: 'dino-novo' }, { podeTrocarInstancia: true });
+  release();
+  const view = await antigo;
+  assert.equal(view.instance, 'dino-novo');
+  assert.equal(view.state, 'unknown');
+  assert.equal(view.phoneMasked, '');
+  assert.equal(estado.ativo, false);
+  assert.equal(estado.autoReconnect, false);
+  assert.equal(estado.reconnectAttempts, 0);
+  assert.equal(estado.nextReconnectAt, null);
+  assert.equal(estado.history[0].instance, 'dino-1');
+});
+
+test('vigia antigo não aplica reconexão após troca e código sem imagem entra no estado QR', async () => {
+  const conexao = await import('./whatsapp-conexao-kytto.js');
+  const estado = conexao.obterConexao('emp-a'); estado.ativo = true;
+  let release;
+  const pending = new Promise((resolve) => { release = resolve; });
+  let calls = 0;
+  const antigo = conexao.vigiarConexao('emp-a', { fetchImpl: async () => {
+    calls++;
+    await pending;
+    return { ok: true, status: 200, text: async () => '{"state":"close"}' };
+  } });
+  conexao.configurar('emp-a', { instance: 'dino-novo' }, { podeTrocarInstancia: true });
+  release();
+  assert.deepEqual(await antigo, { action: 'skip', reason: 'connection_changed' });
+  assert.equal(calls, 1, 'sem pedido de QR para a instância antiga');
+  const paired = await conexao.gerarQr('emp-a', { fetchImpl: async () => ({
+    ok: true, status: 200, text: async () => '{"pairingCode":"ABCD-1234"}',
+  }) });
+  assert.equal(paired.ok, true);
+  assert.equal(paired.pairingCode, 'ABCD-1234');
+  assert.equal(paired.conexao.state, 'qr');
+  assert.ok(paired.conexao.lastQrAt);
+});
+
 test('falha de logout não marca localmente uma sessão que continua aberta', async () => {
   const saved = { WHATSAPP_PROVIDER: process.env.WHATSAPP_PROVIDER, CHATBOT_BACKEND_URL: process.env.CHATBOT_BACKEND_URL, CHATBOT_BACKEND_KEY: process.env.CHATBOT_BACKEND_KEY };
   process.env.WHATSAPP_PROVIDER = 'chatbot_backend';

@@ -294,6 +294,14 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     const aberto = await request(base, '/api/admin/barbearia/whatsapp-conexao?atualizar=1', { headers: A });
     assert.equal(aberto.body.conexao.state, 'open');
     assert.equal(aberto.body.conexao.phoneMasked, '5565•••••0000');
+    assert.equal(aberto.body.conexao.phoneNumber, '5565993360000');
+    assert.equal(aberto.response.headers.get('cache-control'), 'private, no-store');
+    const telefoneStaff = await request(base, '/api/admin/barbearia/whatsapp-conexao', { headers: staffA });
+    assert.equal(telefoneStaff.body.conexao.phoneMasked, '5565•••••0000');
+    assert.equal(Object.hasOwn(telefoneStaff.body.conexao, 'phoneNumber'), false);
+    const referencia = await request(base, '/api/admin/barbearia/whatsapp-conexao/config', { method: 'PUT', headers: A, body: JSON.stringify({ numeroExibicao: '(65) 99999-1234' }) });
+    assert.equal(referencia.body.conexao.phoneReference, '5565999991234');
+    assert.equal(Object.hasOwn((await request(base, '/api/admin/barbearia/whatsapp-conexao', { headers: staffA })).body.conexao, 'phoneReference'), false);
     assert.ok(aberto.body.conexao.history.some((item) => item.tipo === 'conectado'));
     const teste = await request(base, '/api/admin/barbearia/whatsapp-conexao/teste', { method: 'POST', headers: A, body: JSON.stringify({ confirmado: true, telefone: '65 99811-2233' }) });
     assert.equal(teste.response.status, 409, 'sem canal Commerce escopado o teste não pode enviar');
@@ -327,6 +335,8 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     assert.match(trocaPelaEmpresa.body.error, /administração da plataforma/);
     const conexaoB = await request(base, '/api/admin/barbearia/whatsapp-conexao', { headers: B });
     assert.equal(conexaoB.body.conexao.instance, '', 'empresa B não herda a instância da A');
+    assert.equal(conexaoB.body.conexao.phoneNumber, '');
+    assert.equal(conexaoB.body.conexao.phoneReference, '');
     const testeB = await request(base, '/api/admin/barbearia/whatsapp-conexao/teste', { method: 'POST', headers: B, body: JSON.stringify({ confirmado: true, telefone: '65 99811-2233' }) });
     assert.equal(testeB.response.status, 409, 'sem instância, não envia pelo número de outra empresa');
     const qrB = await request(base, '/api/admin/barbearia/whatsapp-conexao/qr', { method: 'POST', headers: B, body: JSON.stringify({}) });
@@ -345,6 +355,8 @@ test('admin da empresa: isolamento, guardas legados, BI, cliente automático e W
     assert.equal(logout.body.conexao.state, 'close');
     assert.equal(logout.body.conexao.autoReconnect, false);
     assert.equal(logout.body.conexao.phoneMasked, '');
+    assert.equal(logout.body.conexao.phoneNumber, '');
+    assert.equal(logout.body.conexao.phoneReference, '');
     assert.deepEqual(backend.calls.filter((call) => call.method === 'DELETE').map((call) => call.url), ['/api/v1/whats-app/instances/dino-1/session?confirm=true']);
   } finally {
     processo.kill('SIGTERM');

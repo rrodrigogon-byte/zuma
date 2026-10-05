@@ -136,6 +136,26 @@ export function extractQr(data = {}) {
   return { qrImage: qr.startsWith('data:image') ? qr : '', qrRaw: raw, pairingCode: /^[A-Z0-9-]{4,16}$/i.test(pairingCode) ? pairingCode : '' };
 }
 
+// Somente campos de identidade da própria sessão. IDs de chats/mensagens são
+// telefones de clientes e nunca podem identificar o número da empresa.
+export function confirmedPhone(data = {}) {
+  const candidates = [
+    data.connectedNumber, data.phoneNumber, data.phone, data.me?.id,
+    data.instance?.connectedNumber, data.instance?.phoneNumber, data.instance?.phone,
+    data.instance?.me?.id, data.data?.connectedNumber, data.data?.phoneNumber,
+    data.data?.phone, data.data?.me?.id, data.data?.instance?.connectedNumber,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'string') continue;
+    const raw = candidate.trim();
+    // @lid e @g.us identificam outros tipos de destinatário, não a linha.
+    if (raw.includes('@') && !/@(?:s\.whatsapp\.net|c\.us)$/i.test(raw)) continue;
+    const digits = raw.split('@')[0].split(':')[0].replace(/\D/g, '');
+    if (/^55\d{10,11}$/.test(digits)) return digits;
+  }
+  return '';
+}
+
 export async function listInstances(fetchImpl) {
   const cfg = chatbotBackendConfig();
   const result = await call(cfg, 'GET', '/instances', null, fetchImpl);
@@ -147,12 +167,12 @@ export async function listInstances(fetchImpl) {
     if (!item || typeof item !== 'object') return null;
     const name = [item.name, item.instanceName, item.instance_name, item.instance?.instanceName, item.instance?.name, item.instance, item.id]
       .find((value) => typeof value === 'string' && value.trim());
-    return name ? { name: clean(name, 100), state: normalizeState(item) } : null;
+    return name ? { name: clean(name, 100), state: normalizeState(item), phone: confirmedPhone(item) } : null;
   }).filter((item) => item?.name);
   return { ok: result.ok, status: result.status, items };
 }
 
-export async function getInstanceStatus(instance, fetchImpl) {
+export async function getInstanceStatus(instance, fetchImpl, { resolvePhone = true } = {}) {
   if (chatbotBackendMode() === 'isa') return getSessionStatus(fetchImpl);
   const cfg = chatbotBackendConfig({ instance });
   if (!cfg.instance) return { ok: false, state: 'unknown', error: 'invalid_instance' };
@@ -161,11 +181,20 @@ export async function getInstanceStatus(instance, fetchImpl) {
   if (result.status === 404) return { ok: false, status: 404, state: 'unknown', error: 'instance_not_enabled' };
   if (!result.ok) return { ok: false, status: result.status, state: 'unknown', error: result.error || 'status_unavailable' };
   const qr = extractQr(result.data);
+  const state = normalizeState(result.data);
+  let phone = state === 'open' ? confirmedPhone(result.data) : '';
+  if (state === 'open' && !phone && resolvePhone) {
+    // Alguns backends só devolvem o titular em GET /instances. Exigir nome
+    // EXATO e estado aberto na lista para não mostrar a linha de outra empresa
+    // ou uma identidade antiga depois de uma troca de sessão.
+    const listed = await listInstances(fetchImpl);
+    phone = listed.ok ? (listed.items.find((item) => item.name === cfg.instance && item.state === 'open')?.phone || '') : '';
+  }
   return {
     ok: true,
     status: result.status,
-    state: normalizeState(result.data),
-    phone: clean(result.data?.connectedNumber || result.data?.phoneNumber || result.data?.phone || result.data?.number || result.data?.instance?.connectedNumber || result.data?.instance?.phone || result.data?.me?.id || result.data?.user?.id || '', 40).replace(/@.*$/, '').replace(/:\d+$/, ''),
+    state,
+    phone,
     ...qr,
   };
 }
@@ -177,13 +206,14 @@ export async function getSessionStatus(fetchImpl) {
   const result = await call(cfg, 'GET', '/status', null, fetchImpl);
   if (isAuthError(result.status)) return { ok: false, authError: true, status: result.status, state: 'unknown' };
   if (!result.ok) return { ok: false, status: result.status, state: 'unknown', error: result.error || 'status_unavailable' };
+  const state = normalizeState(result.data);
   return {
     ok: true,
     status: result.status,
-    state: normalizeState(result.data),
+    state,
     authenticated: result.data?.authenticated === true,
     connecting: result.data?.connecting === true,
-    phone: clean(result.data?.phone || result.data?.number || result.data?.me?.id || '', 40).replace(/@.*$/, '').replace(/:\d+$/, ''),
+    phone: state === 'open' ? confirmedPhone(result.data) : '',
     ...extractQr(result.data),
   };
 }
