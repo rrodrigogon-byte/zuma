@@ -1467,7 +1467,7 @@ export default function BarbeariaERP() {
                   </select>
                 </Field>
                 <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: 'var(--muted)', fontSize: 13 }}><input type="checkbox" checked={formPersona.ativo} onChange={(event) => setFormPersona((atual) => ({ ...atual, ativo: event.target.checked }))} /> Usar a persona neste canal</label>
-                <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: 'var(--muted)', fontSize: 13 }}><input type="checkbox" checked={formPersona.mensagensCurtas} onChange={(event) => setFormPersona((atual) => ({ ...atual, mensagensCurtas: event.target.checked }))} /> Mensagens curtas em bolhas (até 120 caracteres, sem listas)</label>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: 'var(--muted)', fontSize: 13 }}><input type="checkbox" checked={formPersona.mensagensCurtas} onChange={(event) => setFormPersona((atual) => ({ ...atual, mensagensCurtas: event.target.checked }))} /> Mensagens curtas em bolhas (alvo de 120 caracteres; resumos e links preservados)</label>
                 <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: 'var(--muted)', fontSize: 13 }}><input type="checkbox" checked={formPersona.figurinhas} onChange={(event) => setFormPersona((atual) => ({ ...atual, figurinhas: event.target.checked }))} /> Figurinhas do mascote (no máximo 1 por dia por cliente)</label>
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1480,6 +1480,7 @@ export default function BarbeariaERP() {
               <button type="button" style={styles.secondary} disabled={salvando || !whatsappAi.gemini?.configured} onClick={testarGeminiWhatsappAi}>Testar Gemini</button>
               {!whatsappAi.channel && <button type="button" style={styles.secondary} disabled={salvando || !formWhatsappAi.instance.trim()} onClick={() => configurarWhatsappAi('rascunho')}>Salvar canal em rascunho</button>}
               {!whatsappAiActive && <button type="button" style={styles.primary} disabled={salvando || !whatsappAiReady || whatsappAiCircuitOpen || !formWhatsappAi.instance.trim()} onClick={() => configurarWhatsappAi('ativo')}>Ativar atendente IA</button>}
+              {whatsappAiActive && <button type="button" style={styles.secondary} disabled={salvando || !formWhatsappAi.instance.trim()} onClick={() => configurarWhatsappAi('ativo')}>Salvar configuração do canal</button>}
               {whatsappAiActive && <button type="button" style={styles.secondary} disabled={salvando} onClick={() => configurarWhatsappAi('pausado')}>Pausar atendente</button>}
               <button type="button" style={styles.secondary} disabled={salvando || !whatsappAiActive || !whatsappAiReady} onClick={sincronizarWhatsappAi}>Sincronizar webhook</button>
             </div>

@@ -920,7 +920,9 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
     await ciclo();
     cliente(tel, 'o primeiro');
     let out = await ciclo();
-    assert.match(ultima(out), /• Barba Completa.*\n• Manicure às .*\n• Pedicure às .*\nTotal: R\$ 140,00/);
+    assert.match(ultima(out), PERSONA
+      ? /Barba Completa.*Manicure às .*Pedicure às .*R\$ 140,00/
+      : /• Barba Completa.*\n• Manicure às .*\n• Pedicure às .*\nTotal: R\$ 140,00/);
     cliente(tel, 'fechado');
     out = await ciclo();
     assert.match(ultima(out), T.emSeguida, 'manicure e pedicure só com quem faz');

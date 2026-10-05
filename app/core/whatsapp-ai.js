@@ -534,7 +534,7 @@ export function confirmationFailureReply(code, type = '') {
 }
 
 function pendingActionPrompt(pending, persona = null) {
-  if (persona) return personaPendingPrompt(formatActionSummary(cleanText(pending?.summary, 600)), CONFIRMATION_HINT);
+  if (persona) return personaPendingPrompt(cleanText(pending?.summary, 600), CONFIRMATION_HINT);
   return `Resumo para confirmar: ${formatActionSummary(cleanText(pending?.summary, 600))}\n${CONFIRMATION_HINT}`;
 }
 
