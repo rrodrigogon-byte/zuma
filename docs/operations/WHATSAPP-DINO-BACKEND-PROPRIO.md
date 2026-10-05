@@ -72,7 +72,7 @@ Opcionais:
    - a chave.
 3. Se a instância já está conectada sem número verificado, não atribua um número por texto. Com autorização do titular e o aparelho presente, clique **Desconectar** uma vez e confirme que o backend respondeu `close`/`qr`; se falhar, não repita sem diagnóstico.
 4. Clique em **Gerar QR** apenas para `dino`. No celular da Dino, abra **WhatsApp → Aparelhos conectados → Conectar aparelho** e leia o QR. Não grave nem compartilhe o QR/código.
-5. Confirme a sessão ativa e o número **mascarado proveniente do backend**. Se o backend não informar o número, a tela avisa que a titularidade ainda não está comprovada: o titular deve conferir o aparelho conectado no próprio WhatsApp. Não usar um campo manual como prova.
+5. Confirme a sessão ativa e o número proveniente do backend: gestores da empresa veem o número completo e podem copiá-lo; a equipe vê apenas a versão mascarada. A identificação expira após dois minutos sem consulta válida e nunca é reaproveitada depois de QR, troca de instância ou logout. Se o backend não informar o número, a tela avisa que a titularidade ainda não está comprovada: o titular deve conferir o aparelho conectado no próprio WhatsApp. O gestor pode cadastrar um **número de referência manual, explicitamente não verificado**, apenas para consulta; ele não libera entrada/saída e não é prova de titularidade.
 6. A desconexão pausa a reconexão automática. Somente após confirmar a nova linha, o gestor pode reativar **Reconectar sozinho** no painel; gerar o QR não reativa essa opção implicitamente.
 
 ### 4. Ligar com segurança
@@ -88,6 +88,7 @@ Opcionais:
 - O log do Render mostra `[WhatsApp] entrada por consulta ativa a cada 5000 ms, modo pilot, backend instancias` durante o piloto.
 - A sincronização do canal pode retornar `manual: true` e `polling: true`: isso é esperado quando o backend não oferece webhook; não tentar registrar `/instances/dino/webhook`.
 - Se o backend perder a sessão, o status deixa de ser `authenticated`. Gere outro QR em **WhatsApp da empresa**.
+- A tela consulta o status a cada 30 s (5 s durante pareamento) e o diagnóstico a cada 2 min enquanto está visível. Os contatos e mensagens de 24 h refletem uma amostra limitada a **até 200 mensagens**, não o total do histórico.
 - A fila de avisos (lembrete, vaga na lista de espera, pedido de avaliação) só envia para quem autorizou o WhatsApp de atendimento.
 - Em 03/10/2026 o `setpoint` Render tinha **1 instância**; o lock do logout no Kytto é apenas em memória. Antes de escalar horizontalmente ou executar mais de um processo, implementar lock compartilhado por empresa/instância para impedir dois resets concorrentes.
 

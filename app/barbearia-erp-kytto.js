@@ -415,7 +415,7 @@ export function listarAgendamentos(empresaId, filtros = {}) {
     .filter((item) => !filtros.de || String(item.dataAgenda || chaveDia(item.dataHora)).slice(0, 10) >= String(filtros.de).slice(0, 10))
     .filter((item) => !filtros.ate || String(item.dataAgenda || chaveDia(item.dataHora)).slice(0, 10) <= String(filtros.ate).slice(0, 10))
     .filter((item) => !filtros.status || item.status === String(filtros.status))
-    .filter((item) => !filtros.profissionalId || item.profissionalId === String(filtros.profissionalId))
+    .filter((item) => !filtros.profissionalId || String(filtros.profissionalId).split(',').map(id => id.trim()).includes(item.profissionalId))
     .filter((item) => !filtros.lojaId || !item.lojaId || item.lojaId === String(filtros.lojaId))
     .sort(ordenarPorData);
   return itens.map((item) => ({ ...item }));
@@ -470,7 +470,7 @@ export function listarBloqueios(empresaId, filtros = {}) {
   return Object.values(estadoEmpresa(empresaId, false).bloqueios)
     .filter((item) => filtros.incluirInativos || item.ativo !== false)
     .filter((item) => !filtros.data || chaveDia(item.inicio) <= String(filtros.data).slice(0, 10) && chaveDia(item.fim) >= String(filtros.data).slice(0, 10))
-    .filter((item) => !filtros.profissionalId || !item.profissionalId || item.profissionalId === String(filtros.profissionalId))
+    .filter((item) => !filtros.profissionalId || !item.profissionalId || String(filtros.profissionalId).split(',').map(id => id.trim()).includes(item.profissionalId))
     .filter((item) => !filtros.lojaId || !item.lojaId || item.lojaId === String(filtros.lojaId))
     .sort((a, b) => new Date(a.inicio).valueOf() - new Date(b.inicio).valueOf())
     .map((item) => ({ ...item }));
@@ -1036,18 +1036,19 @@ export function criarComandaBarbearia(empresaId, dados = {}) {
     financeiroLancamentoIds: [],
     contasReceberIds: [],
     chaveIdempotencia: chaveIdempotencia || null,
+    lancamentosEquipe: Array.isArray(dados.lancamentosEquipe) ? dados.lancamentosEquipe.slice(0, 1).map(o => ({ chave: String(o.chave), hash: String(o.hash) })) : [],
     observacoes: texto(dados.observacoes ?? dados.observacao, 600),
     criadoPor: texto(dados.usuario, 120),
     criadoEm: agora,
     atualizadoEm: agora,
     fechadaEm: null,
   };
-  estado.comandas[id] = comanda;
   const itensIniciais = Array.isArray(dados.itens) ? dados.itens : (agendamento?.servicoId ? [{ tipo: 'servico', servicoId: agendamento.servicoId, profissionalId }] : []);
   if (itensIniciais.length) {
     const itens = itensIniciais.map((item) => itemComandaBarbeariaNormalizado(estado, comanda, item));
     comanda.itens.push(...itens);
   }
+  estado.comandas[id] = comanda;
   save();
   return copiarComandaBarbearia(comanda);
 }
@@ -1067,15 +1068,24 @@ export function atualizarComandaBarbearia(empresaId, comandaId, dados = {}) {
   return copiarComandaBarbearia(comanda);
 }
 
-export function adicionarItensComandaBarbearia(empresaId, comandaId, itens = []) {
+export function adicionarItensComandaBarbearia(empresaId, comandaId, itens = [], operacaoEquipe = null) {
   const estado = estadoEmpresa(empresaId);
   const comanda = estado.comandas[String(comandaId)];
   if (!comanda || comanda.empresaId !== String(empresaId)) return null;
   if (!['aberta', 'aguardando_pagamento'].includes(comanda.status)) throw new Error('A comanda não está disponível para novos itens.');
+  if (operacaoEquipe) {
+    const anterior = (comanda.lancamentosEquipe || []).find(o => o.chave === operacaoEquipe.chave);
+    if (anterior) {
+      if (anterior.hash !== operacaoEquipe.hash) throw new Error('Operação reutilizada com outros itens.');
+      return copiarComandaBarbearia(comanda, true);
+    }
+    if ((comanda.lancamentosEquipe || []).length >= 500) throw new Error('Limite de lançamentos alcançado. Consulte o caixa.');
+  }
   const entradas = Array.isArray(itens) ? itens : [itens];
   if (!entradas.length) throw new Error('Inclua ao menos um item na comanda.');
   const novos = entradas.map((item) => itemComandaBarbeariaNormalizado(estado, comanda, item));
   comanda.itens.push(...novos);
+  if (operacaoEquipe) comanda.lancamentosEquipe = [...(comanda.lancamentosEquipe || []), { ...operacaoEquipe }];
   comanda.status = 'aberta';
   comanda.atualizadoEm = dataAtual();
   save();

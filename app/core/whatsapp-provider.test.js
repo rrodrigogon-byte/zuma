@@ -154,6 +154,48 @@ test('status extrai número somente do backend, jamais inventa titularidade', as
   });
 });
 
+test('normaliza JID da própria sessão e ignora chatId e telefones inválidos', () => {
+  assert.equal(provider.confirmedPhone({ me: { id: '5565999991234:7@s.whatsapp.net' } }), '5565999991234');
+  assert.equal(provider.confirmedPhone({ data: { instance: { connectedNumber: '+55 (65) 3333-1234' } } }), '556533331234');
+  assert.equal(provider.confirmedPhone({ chatId: '5565999991234', number: 'dino' }), '');
+  assert.equal(provider.confirmedPhone({ phone: '551234' }), '');
+  assert.equal(provider.confirmedPhone({ me: { id: '5565999991234@lid' } }), '');
+  assert.equal(provider.confirmedPhone({ connectedNumber: '5565999991234@g.us' }), '');
+  assert.equal(provider.confirmedPhone({ ownerJid: '5565999991234@s.whatsapp.net', user: { id: '5565999991234' }, number: '5565999991234' }), '');
+});
+
+test('quando falta telefone no status, consulta apenas a instância exata e aberta da lista', async () => {
+  await withEnv(env, async () => {
+    const fetch = fakeFetch([
+      { status: 200, body: { state: 'open' } },
+      { status: 200, body: { instances: [
+        { name: 'isa', state: 'open', phone: '5565999991111' },
+        { name: 'dino-1-extra', state: 'open', phone: '5565999992222' },
+        { name: 'dino-1', state: 'open', me: { id: '5565999993333@s.whatsapp.net' } },
+      ] } },
+    ]);
+    const result = await provider.getInstanceStatus('dino-1', fetch);
+    assert.equal(result.phone, '5565999993333');
+    assert.deepEqual(fetch.calls.map((call) => new URL(call.url).pathname), [
+      '/api/v1/whats-app/instances/dino-1/status', '/api/v1/whats-app/instances',
+    ]);
+    const closed = await provider.getInstanceStatus('dino-1', fakeFetch([
+      { status: 200, body: { state: 'close', phone: '5565999993333' } },
+    ]));
+    assert.equal(closed.phone, '');
+    const stale = await provider.getInstanceStatus('dino-1', fakeFetch([
+      { status: 200, body: { state: 'open' } },
+      { status: 200, body: { instances: [{ name: 'dino-1', state: 'close', phone: '5565999993333' }] } },
+    ]));
+    assert.equal(stale.phone, '');
+    const anotherCompany = await provider.getInstanceStatus('dino-1', fakeFetch([
+      { status: 200, body: { state: 'open' } },
+      { status: 200, body: { instances: [{ name: 'isa', state: 'open', phone: '5565999991111' }] } },
+    ]));
+    assert.equal(anotherCompany.phone, '');
+  });
+});
+
 test('QR usa GET e cai para POST quando o método não existe', async () => {
   await withEnv(env, async () => {
     const fetch = fakeFetch([{ status: 405 }, { status: 200, body: { qrcode: 'data:image/png;base64,QQ==', state: 'qr' } }]);

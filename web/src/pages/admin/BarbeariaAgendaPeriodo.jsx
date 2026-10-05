@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../lib/api'
+import { lerAgenda, erroAgenda } from '../../lib/agenda-read'
+import AgendaProfissionais from './AgendaProfissionais'
 import { hojeAgenda, somarDias, diasEntre, periodoMes, diaDoItem, horaDoItem, diaLegivel, filtrarAgenda } from '../../lib/barbearia-calendar'
 import './BarbeariaAgendaPeriodo.css'
 
@@ -50,9 +52,9 @@ export default function BarbeariaAgendaPeriodo({ profissionais = [], servicos = 
     if (!dias.length) { setErro('Escolha um período válido de até 62 dias.'); return }
     const q = new URLSearchParams({ de, ate })
     if (profissionalId) q.set('profissionalId', profissionalId)
-    api.get(`/api/admin/barbearia/agenda-periodo?${q}`).then(r => {
-      if (ativo) setConsulta({ chave, itens: r.itens || [], horario: new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Cuiaba' }) })
-    }).catch(e => { if (ativo) setErro(e.message || 'Não foi possível carregar a agenda. Tente atualizar.') })
+    lerAgenda(() => api.get(`/api/admin/barbearia/agenda-periodo?${q}`), { ativo: () => ativo }).then(r => {
+      if (ativo && r) setConsulta({ chave, itens: r.itens || [], horario: new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Cuiaba' }) })
+    }).catch(e => { if (ativo) setErro(erroAgenda(e)) })
     return () => { ativo = false }
   }, [chave])
 
@@ -65,6 +67,7 @@ export default function BarbeariaAgendaPeriodo({ profissionais = [], servicos = 
   }
   function mudarModo(novo) {
     if (novo === 'mes') { const p = periodoMes(foco); escolherPeriodo(p.de, p.ate, novo) }
+    else if (novo === 'dia') escolherPeriodo(foco, foco, novo)
     else if (novo === 'semana') escolherPeriodo(foco, somarDias(foco, 6), novo)
     else setModo(novo)
   }
@@ -80,9 +83,9 @@ export default function BarbeariaAgendaPeriodo({ profissionais = [], servicos = 
     const q = new URLSearchParams({ servicoId, de, ate })
     if (profissionalId) q.set('profissionalId', profissionalId)
     try {
-      const r = await api.get(`/api/admin/barbearia/horarios-livres?${q}`)
-      if (pedido === pedidoLivres.current && contexto === contextoAtual.current) setLivres({ ...r, contexto, servicoId })
-    } catch (e) { if (pedido === pedidoLivres.current) setErroLivres(e.message || 'Não foi possível consultar as vagas.') }
+      const r = await lerAgenda(() => api.get(`/api/admin/barbearia/horarios-livres?${q}`), { ativo: () => pedido === pedidoLivres.current && contexto === contextoAtual.current })
+      if (r && pedido === pedidoLivres.current && contexto === contextoAtual.current) setLivres({ ...r, contexto, servicoId })
+    } catch (e) { if (pedido === pedidoLivres.current) setErroLivres(erroAgenda(e)) }
     finally { if (pedido === pedidoLivres.current) setBuscando(false) }
   }
   const vagas = livres?.contexto === chaveLivres ? livres : null
@@ -97,7 +100,7 @@ export default function BarbeariaAgendaPeriodo({ profissionais = [], servicos = 
 
   return <section className="dino-cal" aria-label="Agenda por período e horários livres">
     <header className="dino-cal-header"><div><p className="dino-cal-eyebrow">AGENDA DA EQUIPE · CUIABÁ</p><h2>Seu calendário, em um só lugar</h2><p>Veja os próximos dias, abra um atendimento ou encontre uma vaga real.</p></div>
-      <div className="dino-cal-segment" role="group" aria-label="Visualização do calendário">{[['semana', 'Semana'], ['mes', 'Mês'], ['lista', 'Lista por período']].map(([id, nome]) => <button type="button" key={id} aria-pressed={modo === id} onClick={() => mudarModo(id)}>{nome}</button>)}</div>
+      <div className="dino-cal-segment" role="group" aria-label="Visualização do calendário">{[['dia', 'Dia'], ['semana', 'Semana'], ['mes', 'Mês'], ['lista', 'Lista por período']].map(([id, nome]) => <button type="button" key={id} aria-pressed={modo === id} onClick={() => mudarModo(id)}>{nome}</button>)}</div>
     </header>
     <div className="dino-cal-toolbar"><button type="button" aria-label="Período anterior" onClick={() => navegar(-1)} disabled={!dias.length}>‹</button><button type="button" onClick={() => escolherPeriodo(hoje, somarDias(hoje, 6), 'semana')}>Hoje</button><button type="button" aria-label="Próximo período" onClick={() => navegar(1)} disabled={!dias.length}>›</button><strong>{diaLegivel(de)} — {diaLegivel(ate)}</strong>
       <button type="button" onClick={() => escolherPeriodo(hoje, somarDias(hoje, 1), 'lista')}>Hoje e amanhã</button><button type="button" onClick={() => escolherPeriodo(hoje, somarDias(hoje, 6), 'semana')}>7 dias</button><button type="button" onClick={() => escolherPeriodo(hoje, somarDias(hoje, 29), 'lista')}>30 dias</button>
@@ -105,19 +108,20 @@ export default function BarbeariaAgendaPeriodo({ profissionais = [], servicos = 
     <div className="dino-cal-toolbar">
       <label>De<input type="date" value={de} onChange={e => { setDe(e.target.value); if (e.target.value > ate) setAte(e.target.value); setModo('lista') }} /></label>
       <label>Até<input type="date" value={ate} min={de} onChange={e => { setAte(e.target.value); setModo('lista') }} /></label>
-      <label>Profissional<select value={profissionalId} onChange={e => onProfissionalChange?.(e.target.value)}><option value="">Toda a equipe</option>{profissionais.map(p => <option key={p.id} value={p.id}>{p.nome}{p.ativo === false ? ' (inativo)' : ''}</option>)}</select></label>
+
       <label className="dino-cal-search">Buscar atendimento<input type="search" placeholder="Cliente, serviço ou profissional" value={busca} onChange={e => setBusca(e.target.value)} /></label>
       <button type="button" onClick={() => { setErro(''); setAtualizacao(n => n + 1) }}>Atualizar calendário</button>
     </div>
+    <AgendaProfissionais profissionais={profissionais} value={profissionalId} onChange={onProfissionalChange} />
     <div className="dino-cal-meta" aria-live="polite">{carregando ? 'Consultando a agenda…' : erro ? <span role="alert">{erro}</span> : <><strong>{visiveis.length} atendimento(s)</strong><span>{visiveis.filter(i => i.status === 'confirmado').length} confirmado(s)</span><span>{visiveis.filter(i => i.origem === 'whatsapp_ia').length} pelo WhatsApp</span><small>Consultado às {consulta?.horario} · {statusFiltro ? STATUS[statusFiltro] || statusFiltro : 'Todos os status'}</small></>}</div>
     {!carregando && !erro && <>
-      {modo !== 'lista' ? <div className="dino-cal-scroll"><div className={`dino-cal-grid ${modo === 'mes' ? 'dino-cal-month' : ''}`}>
+      {modo !== 'lista' ? <div className="dino-cal-scroll"><div className={`dino-cal-grid ${modo === 'mes' ? 'dino-cal-month' : modo === 'dia' ? 'dino-cal-single' : ''}`}>
         {modo === 'mes' && WEEK.map(d => <strong className="dino-cal-weekday" key={d}>{d}</strong>)}
         {modo === 'mes' && Array.from({ length: recuo }, (_, i) => <div className="dino-cal-pad" key={`pad-${i}`} />)}
         {dias.map(dia => <div className="dino-cal-day" data-selected={foco === dia} data-today={hoje === dia} key={dia}>
           <button type="button" className="dino-cal-date" aria-pressed={foco === dia} aria-label={`Ver ${diaLegivel(dia)} na linha do tempo`} onClick={() => abrirDia(dia)}><span>{diaLegivel(dia)}</span><b>{porDia.get(dia)?.length || 0}</b></button>
-          {(porDia.get(dia) || []).slice(0, modo === 'mes' ? 2 : 4).map(renderItem)}
-          {(porDia.get(dia)?.length || 0) > (modo === 'mes' ? 2 : 4) && <button type="button" onClick={() => escolherPeriodo(dia, dia, 'lista')}>Ver todos ({porDia.get(dia).length})</button>}
+          {(porDia.get(dia) || []).slice(0, modo === 'mes' ? 2 : modo === 'dia' ? Infinity : 4).map(renderItem)}
+          {(porDia.get(dia)?.length || 0) > (modo === 'mes' ? 2 : modo === 'dia' ? Infinity : 4) && <button type="button" onClick={() => escolherPeriodo(dia, dia, 'lista')}>Ver todos ({porDia.get(dia).length})</button>}
           {!porDia.get(dia)?.length && <small className="dino-cal-empty">Sem atendimento{busca || statusFiltro ? ' neste filtro' : ''}</small>}
         </div>)}
       </div></div> : <div className="dino-cal-list">{dias.map(dia => <div key={dia}><button type="button" className="dino-cal-list-date" onClick={() => abrirDia(dia)}>{diaLegivel(dia)} · {porDia.get(dia)?.length || 0}</button>{porDia.get(dia)?.length ? porDia.get(dia).map(renderItem) : <p className="dino-cal-empty">Sem atendimento neste filtro.</p>}</div>)}</div>}

@@ -138,3 +138,48 @@
 .dadm-swatches { display: flex; gap: 6px; } .dadm-swatches i { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line); }
 /* No celular o botão de menu é fixo no canto: o conteúdo começa abaixo dele. */
 @media (max-width: 768px) { .dadm-page { padding-top: 56px; } }
+
+/* Painel WhatsApp: identidade da linha primeiro, atividade e ações abaixo. */
+.dadm-wa-page { max-width: 1360px; gap: 16px; }
+.dadm-wa-head { align-items: center; }
+.dadm-wa-head .dadm-actions { flex: none; }
+.dadm-wa-hero { display: flex; align-items: stretch; justify-content: space-between; gap: 24px; min-width: 0; padding: 22px 24px; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); border-left: 4px solid var(--accent); border-radius: 16px; background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 11%, var(--card)), var(--card) 72%); }
+.dadm-wa-identity { display: grid; align-content: center; justify-items: start; gap: 8px; min-width: 0; }
+.dadm-wa-overline { font-size: 11px; color: var(--accent); font-weight: 800; letter-spacing: .09em; text-transform: uppercase; overflow-wrap: anywhere; }
+.dadm-wa-number { color: var(--fg); font: 800 clamp(23px, 3vw, 34px)/1.12 var(--font-display); letter-spacing: -.025em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.dadm-wa-source { font-size: 12px; color: var(--muted); line-height: 1.4; }
+.dadm-wa-source.verified { color: #24765d; font-weight: 700; }
+.dadm-wa-copy { border: 1px solid var(--accent); border-radius: 9px; background: var(--accent); color: #fff; padding: 7px 12px; font: 700 12px var(--font-body, inherit); cursor: pointer; }
+.dadm-wa-copy:hover { filter: brightness(1.08); }
+.dadm-wa-copy:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.dadm-wa-live { min-width: 235px; max-width: 300px; display: grid; align-content: center; justify-items: start; gap: 8px; border-left: 1px solid var(--line); padding-left: 24px; }
+.dadm-wa-live small { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.dadm-wa-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.dadm-wa-summary article { display: grid; align-content: start; gap: 7px; min-width: 0; padding: 17px 19px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+.dadm-wa-summary article span { color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-size: 10px; font-weight: 800; }
+.dadm-wa-summary article strong { color: var(--fg); font: 800 23px/1.15 var(--font-display); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.dadm-wa-summary article small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.dadm-wa-column { display: grid; align-content: start; gap: 14px; min-width: 0; }
+.dadm-wa-page .dadm-result dd { max-width: 55%; text-align: right; overflow-wrap: anywhere; }
+.dadm-wa-reference { display: grid; gap: 7px; padding: 14px; border-radius: 12px; border: 1px dashed var(--line); background: color-mix(in srgb, var(--accent) 4%, var(--card)); }
+.dadm-wa-reference .dadm-filters { align-items: stretch; }
+.dadm-wa-reference .c360-input { flex: 1 1 190px; min-width: 0; max-width: none; }
+.dadm-wa-reference .c360-btn { flex: none; }
+.dadm-wa-webhook { overflow-wrap: anywhere; }
+.dadm-wa-page .dadm-history li { min-width: 0; overflow-wrap: anywhere; }
+.dadm-wa-page .dadm-history li span:last-child { flex: none; }
+.dadm-wa-page .dadm-state.connecting::before { animation: dadm-wa-pulse 1.6s ease-in-out infinite; }
+@keyframes dadm-wa-pulse { 50% { opacity: .35; transform: scale(.8); } }
+@media (max-width: 1120px) { .dadm-wa-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) {
+  .dadm-wa-hero { flex-direction: column; gap: 15px; padding: 18px; }
+  .dadm-wa-live { max-width: none; min-width: 0; border-left: 0; border-top: 1px solid var(--line); padding: 14px 0 0; }
+  .dadm-wa-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .dadm-wa-summary { grid-template-columns: minmax(0, 1fr); }
+  .dadm-wa-page .dadm-result div { flex-wrap: wrap; }
+  .dadm-wa-page .dadm-result dd { max-width: 100%; }
+  .dadm-wa-page .dadm-history li { flex-direction: column; gap: 3px; }
+}
+@media (prefers-reduced-motion: reduce) { .dadm-wa-page .dadm-state.connecting::before { animation: none; } }

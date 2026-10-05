@@ -42,8 +42,8 @@ test('resposta antiga nunca substitui a agenda do profissional selecionado', asy
 })
 test('troca de serviço invalida vaga antiga e a seleção preserva o serviço consultado', async () => {
   const f=await fixture(); try {
-    await f.finish(0,{itens:[]}); await f.change('select',1,'s1'); await f.click('Ver horários livres')
-    await f.change('select',1,'s2')
+    await f.finish(0,{itens:[]}); await f.change('select',0,'s1'); await f.click('Ver horários livres')
+    await f.change('select',0,'s2')
     await f.finish(1,{itens:[{data:'2026-10-09',profissionalId:'b',profissionalNome:'Bruno',horarios:['18:00']}]})
     assert.equal(f.button('18:00'),undefined)
     await f.click('Ver horários livres')
@@ -62,7 +62,7 @@ test('calendário mantém filtro ao atualizar, mostra dias vazios e sincroniza o
     assert.equal(f.render.root.findAll(n=>n.props.className==='dino-cal-day').length,31)
     await f.update({refreshKey:1}); await f.finish(2,{itens:[]})
     assert.equal(f.button('Mês').props['aria-pressed'],true)
-    await f.change('select',1,'s1'); assert.equal(f.button('Ver horários livres').props.disabled,true)
+    await f.change('select',0,'s1'); assert.equal(f.button('Ver horários livres').props.disabled,true)
     assert.match(text(f.render.toJSON()),/até 14 dias/)
   } finally {f.close()}
 })
@@ -79,4 +79,16 @@ test('Hoje da linha do tempo volta à data de Cuiabá e data inválida não derr
   const dates=[]; let render
   await act(async()=>{render=Renderer.create(React.createElement(Board,{data:'2020-01-01',onDateChange:d=>dates.push(d),agendamentos:[{id:'a',dataHora:'invalida'}]}))})
   try {await act(async()=>render.root.findAllByType('button').find(n=>text(n)==='Hoje').props.onClick()); assert.notEqual(dates[0],'2020-01-01'); assert.match(dates[0],/^\d{4}-\d{2}-\d{2}$/)} finally {act(()=>render.unmount())}
+})
+test('seleção de vários profissionais acompanha a consulta e o modo diário', async () => {
+  const f=await fixture();try{
+    await f.finish(0,{itens:[]})
+    await f.update({profissionalId:'b,d'})
+    assert.match(f.calls[1].path,/profissionalId=b%2Cd/)
+    await f.finish(1,{itens:[]})
+    assert.equal(f.button('Bruno').props['aria-pressed'],true)
+    assert.equal(f.button('Dino').props['aria-pressed'],true)
+    await f.click('Dia');await f.finish(2,{itens:[]})
+    assert.equal(f.render.root.findAll(n=>n.props.className==='dino-cal-day').length,1)
+  }finally{f.close()}
 })

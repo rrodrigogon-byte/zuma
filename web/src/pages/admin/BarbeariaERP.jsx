@@ -6,6 +6,8 @@ import { useAuth } from '../../lib/auth'
 import { isDinoBrandContext } from '../../lib/brand'
 import BarbeariaAgendaBoard, { agendaBoardColumns } from './BarbeariaAgendaBoard'
 import BarbeariaAgendaPeriodo from './BarbeariaAgendaPeriodo'
+import AgendaProfissionais, { profissionaisSelecionados } from './AgendaProfissionais'
+import { lerAgenda, erroAgenda } from '../../lib/agenda-read'
 import { hojeAgenda } from '../../lib/barbearia-calendar'
 import BarbeariaOperacaoPanel from './BarbeariaOperacaoPanel'
 import DinoBusinessDashboard from './DinoBusinessDashboard'
@@ -216,6 +218,7 @@ export default function BarbeariaERP() {
   const [relatorio, setRelatorio] = useState(null)
   const [comissoes, setComissoes] = useState(null)
   const [integracoes, setIntegracoes] = useState(null)
+  const whatsappAi = integracoes?.whatsapp?.ai || integracoes?.ia?.whatsapp || {}
   const [notificacoesAgenda, setNotificacoesAgenda] = useState({ queued: 0, sent: 0, failed: 0, canceled: 0 })
   const [assistenteResposta, setAssistenteResposta] = useState(null)
   const [assistentePergunta, setAssistentePergunta] = useState('')
@@ -253,6 +256,7 @@ export default function BarbeariaERP() {
   const [formWhatsApp, setFormWhatsApp] = useState({ clienteId: '', finalidade: 'atendimento', telefone: '', mensagem: '', consentimentoConfirmado: false })
   const [formWhatsappAi, setFormWhatsappAi] = useState({ instance: 'dino', displayName: 'Atendimento WhatsApp', humanized: true, captureLeads: true, operateStore: true, manageAppointments: true, sendPromotions: false, reminders: true, humanHandoff: true })
   const [formWhatsappAiPolicy, setFormWhatsappAiPolicy] = useState({ personalizationEnabled: false, opportunitiesEnabled: false, cooldownDays: 30, privacyNotice: '' })
+  const [formPersona, setFormPersona] = useState({ ativo: true, nome: 'T-Rex', mensagensCurtas: true, figurinhas: true, revelarIa: 'quando_perguntado' })
   const [whatsappAiSessions, setWhatsappAiSessions] = useState([])
   const [itensVendaRevenda, setItensVendaRevenda] = useState([])
 
@@ -264,7 +268,8 @@ export default function BarbeariaERP() {
       const query = new URLSearchParams({ data: dataSelecionada })
       if (statusFiltro) query.set('status', statusFiltro)
       if (profissionalFiltro) query.set('profissionalId', profissionalFiltro)
-      const payload = await api.get(`/api/admin/barbearia/overview?${query.toString()}`)
+      const payload = await lerAgenda(() => api.get(`/api/admin/barbearia/overview?${query.toString()}`), { ativo: () => pedido === pedidoOverview.current })
+      if (!payload || pedido !== pedidoOverview.current) return
       const aiSessions = await api.get('/api/admin/commerce/whatsapp-ai/sessions?limit=20').catch(() => ({ items: [] }))
       if (pedido !== pedidoOverview.current) return
       setDadosCarregados(true)
@@ -297,6 +302,13 @@ export default function BarbeariaERP() {
       setNotificacoesAgenda(payload?.notificacoesAgenda || { queued: 0, sent: 0, failed: 0, canceled: 0 })
       const whatsappAi = payload?.integracoes?.whatsapp?.ai
       if (whatsappAi?.channel) setFormWhatsappAi((atual) => ({ ...atual, instance: whatsappAi.channel.instance || atual.instance, displayName: whatsappAi.channel.nome || atual.displayName, ...(whatsappAi.channel.capabilities || {}) }))
+      if (whatsappAi?.channel?.persona) setFormPersona({
+        ativo: whatsappAi.channel.persona.ativa === true || whatsappAi.channel.persona.origem === 'nenhuma',
+        nome: whatsappAi.channel.persona.nome || 'T-Rex',
+        mensagensCurtas: whatsappAi.channel.persona.mensagensCurtas !== false,
+        figurinhas: whatsappAi.channel.persona.figurinhas !== false,
+        revelarIa: whatsappAi.channel.persona.revelarIa || 'quando_perguntado',
+      })
       if (whatsappAi?.policy) setFormWhatsappAiPolicy({
         personalizationEnabled: whatsappAi.policy.personalizationEnabled === true,
         opportunitiesEnabled: whatsappAi.policy.opportunitiesEnabled === true,
@@ -308,7 +320,7 @@ export default function BarbeariaERP() {
       setDashboard(null)
       setAgendamentos([])
       setBloqueios([])
-      setErro(error.message || 'Não foi possível carregar o módulo de Barbearia.')
+      setErro(erroAgenda(error))
     } finally {
       if (pedido === pedidoOverview.current) setLoading(false)
     }
@@ -401,7 +413,7 @@ export default function BarbeariaERP() {
   }
 
   function abrirNovoAgendamento() {
-    setFormAgenda({ clienteId: '', clienteNome: '', clienteTelefone: '', profissionalId: profissionalFiltro || '', servicoId: servicos[0]?.id || '', data: dataSelecionada, hora: '10:00', observacoes: '' })
+    setFormAgenda({ clienteId: '', clienteNome: '', clienteTelefone: '', profissionalId: (profissionaisSelecionados(profissionalFiltro).length === 1 ? profissionalFiltro : ''), servicoId: servicos[0]?.id || '', data: dataSelecionada, hora: '10:00', observacoes: '' })
     setModal('agenda')
   }
 
@@ -436,7 +448,7 @@ export default function BarbeariaERP() {
   }
 
   function agendarParaCliente(cliente) {
-    setFormAgenda({ clienteId: cliente.id, clienteNome: '', clienteTelefone: cliente.telefone || '', profissionalId: profissionalFiltro || '', servicoId: servicos.find((item) => item.ativo !== false)?.id || '', data: dataSelecionada, hora: '10:00', observacoes: '' })
+    setFormAgenda({ clienteId: cliente.id, clienteNome: '', clienteTelefone: cliente.telefone || '', profissionalId: (profissionaisSelecionados(profissionalFiltro).length === 1 ? profissionalFiltro : ''), servicoId: servicos.find((item) => item.ativo !== false)?.id || '', data: dataSelecionada, hora: '10:00', observacoes: '' })
     navegarParaTab('Agenda')
     setModal('agenda')
   }
@@ -472,7 +484,7 @@ export default function BarbeariaERP() {
       clienteId: agendamento?.clienteId || '',
       clienteNome: cliente ? '' : (agendamento?.clienteNome || ''),
       clienteTelefone: cliente?.telefone || agendamento?.clienteTelefone || '',
-      profissionalId: agendamento?.profissionalId || profissionalFiltro || '',
+      profissionalId: agendamento?.profissionalId || (profissionaisSelecionados(profissionalFiltro).length === 1 ? profissionalFiltro : ''),
       agendamentoId: agendamento?.id || '',
       itemTipo: 'servico',
       itemId: agendamento?.servicoId || servicos.find((item) => item.ativo !== false)?.id || '',
@@ -909,6 +921,35 @@ export default function BarbeariaERP() {
     }), 'Política do atendente atualizada e auditada.')
   }
 
+  async function salvarPersonaWhatsappAi() {
+    if (!whatsappAi?.channel) {
+      toast('Salve primeiro o canal WhatsApp em rascunho.', 'error')
+      return
+    }
+    const nome = formPersona.nome.trim()
+    if (!nome) {
+      toast('Informe o nome do atendente.', 'error')
+      return
+    }
+    if (/^dino$/i.test(nome)) {
+      toast('O atendente não pode se chamar Dino: é o nome do barbeiro master.', 'error')
+      return
+    }
+    const resumo = formPersona.ativo
+      ? `Confirmar o atendente "${nome}"? Muda só o jeito de falar (mensagens curtas, figurinhas). Agenda, confirmações e travas continuam iguais.`
+      : 'Desligar a persona e voltar ao texto padrão do atendente?'
+    if (!window.confirm(resumo)) return
+    await executar(() => api.patch('/api/admin/commerce/whatsapp-ai/persona', {
+      id: 'trex',
+      ativo: formPersona.ativo,
+      nome,
+      mensagensCurtas: formPersona.mensagensCurtas,
+      figurinhas: formPersona.figurinhas,
+      revelarIa: formPersona.revelarIa,
+      confirmed: true,
+    }), formPersona.ativo ? `Atendente ${nome} salvo e auditado.` : 'Persona desligada.')
+  }
+
   async function sincronizarWhatsappAi() {
     if (!window.confirm('Confirmar a sincronização do webhook no provedor de WhatsApp? Essa ação altera a configuração externa da instância informada.')) return
     await executar(async () => {
@@ -1026,7 +1067,7 @@ export default function BarbeariaERP() {
       <Card style={styles.todayHero}>
         <div style={styles.todayHeroTop}>
           <div><div style={styles.kicker}>Ritual de abertura</div><h2 style={{ ...styles.h2, fontSize: 23, marginTop: 5 }}>Hoje na unidade</h2><p style={{ ...styles.sub, maxWidth: 700 }}>Comece pela agenda, acompanhe quem está aguardando e resolva as pendências antes do primeiro atendimento.</p></div>
-          <div style={styles.todayStatus}><span>Data operacional</span><strong>{fmtDateOnly(dataSelecionada)}</strong><input aria-label="Escolher data operacional" type="date" value={dataSelecionada} onChange={(event) => setDataSelecionada(event.target.value)} style={styles.compactDate} /><small>{dashboard?.caixa?.aberto ? 'Caixa aberto' : 'Caixa ainda não aberto'}</small></div>
+          <div style={styles.todayStatus}><span>Data operacional</span><strong>{fmtDateOnly(dataSelecionada)}</strong><input aria-label="Escolher data operacional" type="date" value={dataSelecionada} onChange={(event) => event.target.value && setDataSelecionada(event.target.value)} style={styles.compactDate} /><small>{dashboard?.caixa?.aberto ? 'Caixa aberto' : 'Caixa ainda não aberto'}</small></div>
         </div>
         <div style={styles.quickActions} aria-label="Atalhos da operação"><button type="button" style={styles.primary} onClick={() => navegarParaTab('Agenda')}>Abrir agenda</button><button type="button" style={styles.secondary} onClick={() => navegarParaTab('Atendimento')}>Abrir atendimento</button><button type="button" style={styles.secondary} onClick={() => navegarParaTab('Caixa e fechamento')}>Abrir caixa</button><button type="button" style={styles.secondary} onClick={() => navegarParaTab('Fila e bloqueios')}>Ver fila e bloqueios</button><button type="button" style={styles.secondary} onClick={() => { setFormCliente({ nome: '', telefone: '', email: '', observacao: '' }); setModal('cliente') }}>Cadastrar cliente</button></div>
       </Card>
@@ -1081,13 +1122,13 @@ export default function BarbeariaERP() {
     return <div style={{ display: 'grid', gap: 18 }}>
       <Card style={{ padding: 18, background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, var(--card)), var(--card))' }}>
         <div style={styles.sectionTitle}><div><div style={styles.kicker}>Agenda operacional</div><h2 style={{ ...styles.h2, fontSize: 22, marginTop: 5 }}>Dia da barbearia e dos atendentes</h2><p style={styles.sub}>Acompanhe horários, duração, serviço, cliente e status em uma única visão. A unidade da sessão é aplicada automaticamente.</p></div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button type="button" style={styles.secondary} onClick={carregar}>Atualizar agenda</button><button type="button" style={styles.primary} onClick={abrirNovoAgendamento}>+ Agendar atendimento</button></div></div>
-        <div style={styles.agendaToolbar}><Field label="Data"><input type="date" value={dataSelecionada} onChange={(event) => setDataSelecionada(event.target.value)} style={inputStyle} /></Field><Field label="Status"><select value={statusFiltro} onChange={(event) => setStatusFiltro(event.target.value)} style={inputStyle}><option value="">Todos os status</option>{['agendado', 'confirmado', 'em_atendimento', 'concluido', 'cancelado', 'nao_compareceu'].map(valor => <option key={valor} value={valor}>{STATUS[valor].label}</option>)}</select></Field><Field label="Atendente"><select value={profissionalFiltro} onChange={(event) => setProfissionalFiltro(event.target.value)} style={inputStyle}><option value="">Toda a equipe</option>{profissionais.filter((item) => item.ativo !== false).map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</select></Field><div style={styles.agendaMeta}><strong>{atendentesAtivos.length}</strong><span>atendentes ativos</span><small>{unidade ? `${unidade.horarioAbertura}–${unidade.horarioFechamento}` : 'Horário corporativo'} · {agendamentos.length} registros no dia</small></div><div style={styles.viewToggle} role="group" aria-label="Modo de agenda"><span>Visualização</span><div><button type="button" onClick={() => setAgendaModo('timeline')} aria-pressed={agendaModo === 'timeline'} style={{ ...styles.viewToggleButton, ...(agendaModo === 'timeline' ? styles.viewToggleButtonActive : {}) }}>Linha do tempo</button><button type="button" onClick={() => setAgendaModo('lista')} aria-pressed={agendaModo === 'lista'} style={{ ...styles.viewToggleButton, ...(agendaModo === 'lista' ? styles.viewToggleButtonActive : {}) }}>Lista</button></div></div></div>
+        <div style={styles.agendaToolbar}><Field label="Data"><input type="date" value={dataSelecionada} onChange={(event) => event.target.value && setDataSelecionada(event.target.value)} style={inputStyle} /></Field><Field label="Status"><select value={statusFiltro} onChange={(event) => setStatusFiltro(event.target.value)} style={inputStyle}><option value="">Todos os status</option>{['agendado', 'confirmado', 'em_atendimento', 'concluido', 'cancelado', 'nao_compareceu'].map(valor => <option key={valor} value={valor}>{STATUS[valor].label}</option>)}</select></Field><AgendaProfissionais profissionais={profissionais.filter(p => p.ativo !== false)} value={profissionalFiltro} onChange={setProfissionalFiltro} label="Atendentes na linha do tempo" /><div style={styles.agendaMeta}><strong>{atendentesAtivos.length}</strong><span>atendentes ativos</span><small>{unidade ? `${unidade.horarioAbertura}–${unidade.horarioFechamento}` : 'Horário corporativo'} · {agendamentos.length} registros no dia</small></div><div style={styles.viewToggle} role="group" aria-label="Modo de agenda"><span>Visualização</span><div><button type="button" onClick={() => setAgendaModo('timeline')} aria-pressed={agendaModo === 'timeline'} style={{ ...styles.viewToggleButton, ...(agendaModo === 'timeline' ? styles.viewToggleButtonActive : {}) }}>Linha do tempo</button><button type="button" onClick={() => setAgendaModo('lista')} aria-pressed={agendaModo === 'lista'} style={{ ...styles.viewToggleButton, ...(agendaModo === 'lista' ? styles.viewToggleButtonActive : {}) }}>Lista</button></div></div></div>
       </Card>
       <Card style={styles.agendaSummary}>
         {[['Atendimentos', agendamentos.length, 'Agenda do dia', 'var(--accent)'], ['Confirmados', agendamentos.filter((item) => item.status === 'confirmado').length, 'Prontos para receber', '#8b5cf6'], ['Em atendimento', agendamentos.filter((item) => item.status === 'em_atendimento').length, 'Em execução agora', '#f59e0b'], ['Avisos na fila', Number(notificacoesAgenda.queued || 0), `${Number(notificacoesAgenda.sent || 0)} enviados · opt-in obrigatório`, '#2563eb'], ['Bloqueios', bloqueios.length, 'Horários indisponíveis', '#e05c5c'], ['Equipe', atendentesAtivos.length, 'Atendentes ativos', '#14b87a']].map(([label, value, note, color]) => <div key={label} style={styles.agendaSummaryItem}><strong style={{ color }}>{value}</strong><span>{label}</span><small>{note}</small></div>)}
       </Card>
       <BarbeariaAgendaPeriodo profissionais={profissionais} servicos={servicos} profissionalId={profissionalFiltro} onProfissionalChange={setProfissionalFiltro} onOpenAppointment={(item) => setModal({ tipo: 'detalheAgenda', agendamento: item })} onPickSlot={abrirAgendamentoNoHorario} refreshKey={agendaRevisao} dataSelecionada={dataSelecionada} onDateChange={setDataSelecionada} statusFiltro={statusFiltro} />
-      {agendaModo === 'timeline' ? <BarbeariaAgendaBoard data={dataSelecionada} configuracao={unidade || configuracao || {}} agendamentos={agendamentos} profissionais={profissionalFiltro ? atendentesAtivos.filter((item) => item.id === profissionalFiltro) : atendentesAtivos} bloqueios={bloqueios} onDateChange={(novaData) => { setStatusFiltro(''); setDataSelecionada(novaData) }} onNew={abrirNovoAgendamento} onOpenAppointment={(item) => setModal({ tipo: 'detalheAgenda', agendamento: item })} /> : <div><div style={{ ...styles.sectionTitle, marginBottom: 10 }}><div><h2 style={styles.h2}>Lista detalhada do dia</h2><p style={styles.sub}>Use a lista para visualizar dados completos e executar transições permitidas.</p></div></div>{renderAgendaTabela()}</div>}
+      {agendaModo === 'timeline' ? <BarbeariaAgendaBoard data={dataSelecionada} configuracao={unidade || configuracao || {}} agendamentos={agendamentos} profissionais={profissionalFiltro ? atendentesAtivos.filter((item) => profissionaisSelecionados(profissionalFiltro).includes(item.id)) : atendentesAtivos} bloqueios={bloqueios} onDateChange={(novaData) => { setStatusFiltro(''); setDataSelecionada(novaData) }} onNew={abrirNovoAgendamento} onOpenAppointment={(item) => setModal({ tipo: 'detalheAgenda', agendamento: item })} /> : <div><div style={{ ...styles.sectionTitle, marginBottom: 10 }}><div><h2 style={styles.h2}>Lista detalhada do dia</h2><p style={styles.sub}>Use a lista para visualizar dados completos e executar transições permitidas.</p></div></div>{renderAgendaTabela()}</div>}
     </div>
   }
 
@@ -1098,7 +1139,7 @@ export default function BarbeariaERP() {
       <Card style={{ padding: 16 }}>
         <div style={styles.toolbar}>
           <div><h2 style={styles.h2}>Quadro de atendimento</h2><p style={styles.sub}>Atualize o status, abra a comanda e conclua o recebimento no mesmo fluxo operacional.</p></div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}><Field label="Data"><input type="date" value={dataSelecionada} onChange={(event) => setDataSelecionada(event.target.value)} style={inputStyle} /></Field><button type="button" style={styles.secondary} onClick={() => abrirNovaComanda()}>Abrir comanda avulsa</button><button type="button" style={styles.primary} onClick={abrirNovoAgendamento}>Novo atendimento</button></div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}><Field label="Data"><input type="date" value={dataSelecionada} onChange={(event) => event.target.value && setDataSelecionada(event.target.value)} style={inputStyle} /></Field><button type="button" style={styles.secondary} onClick={() => abrirNovaComanda()}>Abrir comanda avulsa</button><button type="button" style={styles.primary} onClick={abrirNovoAgendamento}>Novo atendimento</button></div>
         </div>
       </Card>
       <Card style={{ padding: 16 }}>
@@ -1312,7 +1353,6 @@ export default function BarbeariaERP() {
     const whatsapp = integracoes?.whatsapp
     const ia = integracoes?.ia
     const commerce = integracoes?.commerce || {}
-    const whatsappAi = whatsapp?.ai || ia?.whatsapp || {}
     const whatsappMessagingOk = Boolean(whatsappAi.messagingConfigured ?? whatsappAi.evolutionConfigured)
     const whatsappAiReady = Boolean(whatsappAi.featureEnabled && whatsappAi.gemini?.configured && whatsappMessagingOk)
     const whatsappAiActive = whatsappAi.channel?.status === 'ativo'
@@ -1421,10 +1461,37 @@ export default function BarbeariaERP() {
               </div>
               <button type="button" style={styles.secondary} disabled={salvando || !whatsappAi.channel} onClick={salvarPoliticaWhatsappAi}>Salvar política sem ativar o canal</button>
             </div>
+            <div style={{ ...styles.notice, marginTop: 12, display: 'grid', gap: 12 }}>
+              <div style={styles.sectionTitle}>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <img src="/trex/avatar-256.webp" alt="Avatar do atendente T-Rex" width="56" height="56" style={{ borderRadius: '50%', border: '2px solid var(--line)', flexShrink: 0 }} />
+                  <div><strong>Persona do atendente</strong><div style={styles.sub}>Nome, jeito de falar e figurinhas no WhatsApp. Não muda o que a IA pode fazer: agenda, confirmação por SIM, consentimentos e handoff seguem iguais.</div></div>
+                </div>
+                <Badge status={whatsappAi.channel?.persona?.ativa ? 'configurado' : 'rascunho'} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: 10 }}>
+                <Field label="Nome do atendente"><input value={formPersona.nome} maxLength={40} onChange={(event) => setFormPersona((atual) => ({ ...atual, nome: event.target.value }))} style={inputStyle} /></Field>
+                <Field label="Quando diz que é assistente">
+                  <select value={formPersona.revelarIa} onChange={(event) => setFormPersona((atual) => ({ ...atual, revelarIa: event.target.value }))} style={inputStyle}>
+                    <option value="quando_perguntado">Só se o cliente perguntar (nunca nega)</option>
+                    <option value="na_apresentacao">Já na apresentação</option>
+                  </select>
+                </Field>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: 'var(--muted)', fontSize: 13 }}><input type="checkbox" checked={formPersona.ativo} onChange={(event) => setFormPersona((atual) => ({ ...atual, ativo: event.target.checked }))} /> Usar a persona neste canal</label>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: 'var(--muted)', fontSize: 13 }}><input type="checkbox" checked={formPersona.mensagensCurtas} onChange={(event) => setFormPersona((atual) => ({ ...atual, mensagensCurtas: event.target.checked }))} /> Mensagens curtas em bolhas (alvo de 120 caracteres; resumos e links preservados)</label>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', color: 'var(--muted)', fontSize: 13 }}><input type="checkbox" checked={formPersona.figurinhas} onChange={(event) => setFormPersona((atual) => ({ ...atual, figurinhas: event.target.checked }))} /> Figurinhas do mascote (no máximo 1 por dia por cliente)</label>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                {(whatsappAi.channel?.persona?.figurinhasDisponiveis || ['oi', 'agendado', 'um-instante', 'corte-na-regua', 'perfume-novo', 'valeu', 'promocao', 'foi-mal', 'ate-amanha']).map((nome) => <img key={nome} src={`/trex/figurinhas/${nome}.webp`} alt={`Figurinha ${nome}`} title={nome} width="56" height="56" loading="lazy" style={{ opacity: formPersona.figurinhas ? 1 : 0.35 }} />)}
+              </div>
+              <small style={styles.sub}>{whatsappAi.channel?.persona?.figurinhasNoProvedor ? 'O provedor de WhatsApp aceita figurinhas.' : 'O provedor de WhatsApp ainda não aceita figurinhas (falta CHATBOT_BACKEND_STICKER_PATH): o texto sai normal e a figurinha é pulada.'}{whatsappAi.channel?.persona?.origem === 'ambiente' ? ' A persona está ligada pela variável WHATSAPP_AI_PERSONA; salve aqui para fixar no canal.' : ''}</small>
+              <button type="button" style={styles.secondary} disabled={salvando || !whatsappAi.channel} onClick={salvarPersonaWhatsappAi}>Salvar persona</button>
+            </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
               <button type="button" style={styles.secondary} disabled={salvando || !whatsappAi.gemini?.configured} onClick={testarGeminiWhatsappAi}>Testar Gemini</button>
               {!whatsappAi.channel && <button type="button" style={styles.secondary} disabled={salvando || !formWhatsappAi.instance.trim()} onClick={() => configurarWhatsappAi('rascunho')}>Salvar canal em rascunho</button>}
               {!whatsappAiActive && <button type="button" style={styles.primary} disabled={salvando || !whatsappAiReady || whatsappAiCircuitOpen || !formWhatsappAi.instance.trim()} onClick={() => configurarWhatsappAi('ativo')}>Ativar atendente IA</button>}
+              {whatsappAiActive && <button type="button" style={styles.secondary} disabled={salvando || !formWhatsappAi.instance.trim()} onClick={() => configurarWhatsappAi('ativo')}>Salvar configuração do canal</button>}
               {whatsappAiActive && <button type="button" style={styles.secondary} disabled={salvando} onClick={() => configurarWhatsappAi('pausado')}>Pausar atendente</button>}
               <button type="button" style={styles.secondary} disabled={salvando || !whatsappAiActive || !whatsappAiReady} onClick={sincronizarWhatsappAi}>Sincronizar webhook</button>
             </div>
@@ -1632,3 +1699,4 @@ const styles = {
   quickActions: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 18, paddingTop: 16, borderTop: '1px solid color-mix(in srgb, var(--accent) 22%, var(--line))' },
   contextPill: { display: 'inline-flex', alignItems: 'center', padding: '6px 10px', borderRadius: 999, background: 'color-mix(in srgb, var(--accent) 12%, var(--card))', color: 'var(--accent)', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' },
 }
+

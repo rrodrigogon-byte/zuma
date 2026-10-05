@@ -28,14 +28,18 @@ function allowTest(empresaId, now = Date.now()) {
 
 export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLojaId, audit, save, enviarMensagem, fetchImpl, isPlatformAdmin = () => false } = {}) {
   const who = (req) => req.user?.email || req.user?.nome || '';
+  const view = (req, empresaId) => conexaoKytto.visaoPublica(conexaoKytto.obterConexao(empresaId), {
+    numeroCompleto: GESTORES.has(String(req.user?.role || '')),
+  });
 
   app.get(BASE, async (req, res) => {
     const empresaId = legacyEmpresaId(req);
     try {
-      const conexao = req.query?.atualizar === '1' && whatsappProviderName() === 'chatbot_backend'
-        ? await conexaoKytto.verificarConexao(empresaId, { fetchImpl })
-        : conexaoKytto.visaoPublica(conexaoKytto.obterConexao(empresaId));
-      res.json({ ok: true, conexao, podeGerenciar: GESTORES.has(String(req.user?.role || '')) });
+      if (req.query?.atualizar === '1' && whatsappProviderName() === 'chatbot_backend') {
+        await conexaoKytto.verificarConexao(empresaId, { fetchImpl });
+      }
+      res.set('Cache-Control', 'private, no-store');
+      res.json({ ok: true, conexao: view(req, empresaId), podeGerenciar: GESTORES.has(String(req.user?.role || '')) });
     } catch (error) { res.status(502).json({ error: 'Não foi possível consultar o backend do WhatsApp.', detail: String(error?.message || '').slice(0, 120) }); }
   });
 
@@ -46,7 +50,7 @@ export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLoja
     const auto = req.body?.auto === true;
     const result = await conexaoKytto.gerarQr(empresaId, { usuario: who(req), fetchImpl, registrarHistorico: !auto });
     if (!auto) { audit(req, 'WHATSAPP CONEXAO QR', `instancia=${result.conexao.instance}; ok=${result.ok}`); save(); }
-    res.status(result.ok ? 200 : result.code === 'WHATSAPP_INSTANCE_UNASSIGNED' ? 409 : 502).json(result);
+    res.status(result.ok ? 200 : result.code === 'WHATSAPP_INSTANCE_UNASSIGNED' ? 409 : 502).json({ ...result, conexao: view(req, empresaId) });
   });
 
   app.post(`${BASE}/desconectar`, async (req, res) => {
@@ -56,16 +60,17 @@ export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLoja
     const result = await conexaoKytto.desconectar(empresaId, { usuario: who(req), fetchImpl });
     audit(req, 'WHATSAPP CONEXAO DESCONECTAR', `instancia=${result.conexao.instance}; ok=${result.ok}`);
     save();
-    res.status(result.ok ? 200 : result.code === 'WHATSAPP_INSTANCE_UNASSIGNED' ? 409 : 502).json(result);
+    res.status(result.ok ? 200 : result.code === 'WHATSAPP_INSTANCE_UNASSIGNED' ? 409 : 502).json({ ...result, conexao: view(req, empresaId) });
   });
 
   app.put(`${BASE}/config`, (req, res) => {
     if (!gestor(req, res)) return;
     try {
-      const conexao = conexaoKytto.configurar(legacyEmpresaId(req), req.body || {}, { podeTrocarInstancia: isPlatformAdmin(req.user) });
+      const empresaId = legacyEmpresaId(req);
+      const conexao = conexaoKytto.configurar(empresaId, req.body || {}, { podeTrocarInstancia: isPlatformAdmin(req.user) });
       audit(req, 'WHATSAPP CONEXAO CONFIG', `instancia=${conexao.instance}; autoReconnect=${conexao.autoReconnect}`);
       save();
-      res.json({ ok: true, conexao });
+      res.json({ ok: true, conexao: view(req, empresaId) });
     } catch (error) { res.status(400).json({ error: error.message }); }
   });
 
@@ -87,7 +92,7 @@ export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLoja
     if (!gestor(req, res)) return;
     const empresaId = legacyEmpresaId(req);
     const resultado = await conexaoKytto.vigiarConexao(empresaId, { fetchImpl });
-    res.json({ ok: true, resultado, conexao: conexaoKytto.visaoPublica(conexaoKytto.obterConexao(empresaId)) });
+    res.json({ ok: true, resultado, conexao: view(req, empresaId) });
   });
 
   app.post(`${BASE}/teste`, async (req, res) => {

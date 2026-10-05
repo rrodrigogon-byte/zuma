@@ -7,6 +7,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../../lib/api'
+import { lerAgenda, erroAgenda } from '../../lib/agenda-read'
+import BarbeiroVendaRapida from './BarbeiroVendaRapida'
+import BarbeiroPeriodo from './BarbeiroPeriodo'
 import { useAuth } from '../../lib/auth'
 import { DINO_BARBERSHOP_LOGO } from '../../lib/brand'
 import InstalarApp from '../../components/pwa/InstalarApp'
@@ -51,13 +54,13 @@ const primeiroNome = (nome) => String(nome || '').trim().split(/\s+/)[0] || ''
 const soDigitos = (v) => String(v || '').replace(/\D/g, '')
 function linkWhatsapp(telefone) { const d = soDigitos(telefone); if (d.length < 10) return ''; return `https://wa.me/${d.startsWith('55') ? d : `55${d}`}` }
 
-function Folha({ titulo, onFechar, children }) {
-  useEffect(() => { const esc = (e) => e.key === 'Escape' && onFechar(); window.addEventListener('keydown', esc); return () => window.removeEventListener('keydown', esc) }, [onFechar])
-  return <div role="dialog" aria-modal="true" aria-label={titulo} onClick={onFechar} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 50 }}>
+function Folha({ titulo, onFechar, children, podeFechar = true }) {
+  useEffect(() => { const esc = (e) => e.key === 'Escape' && podeFechar && onFechar(); window.addEventListener('keydown', esc); return () => window.removeEventListener('keydown', esc) }, [onFechar, podeFechar])
+  return <div role="dialog" aria-modal="true" aria-label={titulo} onClick={() => podeFechar && onFechar()} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 50 }}>
     <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 560, maxHeight: '92vh', overflowY: 'auto', background: t.surface, borderRadius: '20px 20px 0 0', padding: '16px 16px calc(16px + env(safe-area-inset-bottom))', boxSizing: 'border-box', display: 'grid', gap: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <strong style={{ fontSize: 17 }}>{titulo}</strong>
-        <button type="button" onClick={onFechar} aria-label="Fechar" style={{ ...btn2, minHeight: 40, padding: '6px 12px' }}>Fechar</button>
+        <button type="button" onClick={onFechar} disabled={!podeFechar} aria-label="Fechar" style={{ ...btn2, minHeight: 40, padding: '6px 12px' }}>Fechar</button>
       </div>
       {children}
     </div>
@@ -126,16 +129,20 @@ export default function ModoBarbeiro() {
   const { slug = '' } = useParams()
   const [params, setParams] = useSearchParams()
   const { user, logout } = useAuth()
-  const [painel, setPainel] = useState(null)
+  const [painelRecebido, setPainel] = useState(null)
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(false)
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine)
   const [acaoEmCurso, setAcaoEmCurso] = useState('')
   const [folha, setFolha] = useState(params.get('acao') === 'encaixe' ? 'encaixe' : '')
   const [profissionalId, setProfissionalId] = useState('')
+  const [vendaAtendimento, setVendaAtendimento] = useState(null)
+  const [vendaPendente, setVendaPendente] = useState(false)
   const [atualizadoEm, setAtualizadoEm] = useState(null)
   const data = /^\d{4}-\d{2}-\d{2}$/.test(params.get('data') || '') ? params.get('data') : ''
   const pedido = useRef(0)
+  const contextoPainel = JSON.stringify([data, profissionalId, user?.id, user?.email])
+  const painel = painelRecebido?._contexto === contextoPainel ? painelRecebido : null
 
   const carregar = useCallback(async () => {
     if (!user) return
@@ -145,14 +152,14 @@ export default function ModoBarbeiro() {
       const qs = new URLSearchParams()
       if (data) qs.set('data', data)
       if (profissionalId) qs.set('profissionalId', profissionalId)
-      const resposta = await api(`/api/admin/barbearia/modo-barbeiro${qs.toString() ? `?${qs}` : ''}`, { headers: { 'X-Kytto-Usuario': String(user.id ?? user.email ?? '') } })
-      if (id !== pedido.current) return
+      const resposta = await lerAgenda(() => api(`/api/admin/barbearia/modo-barbeiro${qs.toString() ? `?${qs}` : ''}`, { headers: { 'X-Kytto-Usuario': String(user.id ?? user.email ?? '') } }), { ativo: () => id === pedido.current })
+      if (!resposta || id !== pedido.current) return
       if (resposta?.fuso) FUSO = resposta.fuso
-      setPainel(resposta); setErro(''); setAtualizadoEm(resposta._offline?.salvoEm ? new Date(resposta._offline.salvoEm) : new Date())
+      setPainel({ ...resposta, _contexto: contextoPainel }); setErro(''); setAtualizadoEm(resposta._offline?.salvoEm ? new Date(resposta._offline.salvoEm) : new Date())
     } catch (error) {
-      if (id === pedido.current) setErro(error.code === 'EMPRESA_REQUIRED' ? 'Escolha a empresa no painel administrativo e volte para cá.' : (error.message || 'Não foi possível carregar a agenda.'))
+      if (id === pedido.current) setErro(error.code === 'EMPRESA_REQUIRED' ? 'Escolha a empresa no painel administrativo e volte para cá.' : erroAgenda(error))
     } finally { if (id === pedido.current) setCarregando(false) }
-  }, [user, data, profissionalId])
+  }, [user, data, profissionalId, contextoPainel])
 
   useEffect(() => { carregar() }, [carregar])
   useEffect(() => {
@@ -166,10 +173,11 @@ export default function ModoBarbeiro() {
   useEffect(() => { document.documentElement.style.background = t.bg; return () => { document.documentElement.style.background = '' } }, [])
 
   const isDino = String(slug || painel?.slug || '').toLowerCase() === 'dino'
-  const dia = data || painel?.data || painel?.hoje || ''
+  const dia = data || painel?.data || painel?.hoje || painelRecebido?.hoje || ''
   const hoje = painel?.hoje || ''
   const irPara = (novo) => { const p = new URLSearchParams(params); if (!novo || novo === hoje) p.delete('data'); else p.set('data', novo); p.delete('acao'); setParams(p, { replace: true }) }
   const offline = !online || Boolean(painel?._offline)
+  const podeOperar = !offline && !carregando && !erro
 
   async function mudarStatus(agendamento, status, pergunta) {
     if (pergunta && !window.confirm(pergunta)) return
@@ -190,7 +198,7 @@ export default function ModoBarbeiro() {
       {isDino && <img src={DINO_BARBERSHOP_LOGO} alt="" width="36" height="36" style={{ width: 36, height: 36, objectFit: 'contain', background: '#fff', borderRadius: 10, padding: 3 }} />}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 800, fontSize: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{painel?.profissional ? `Olá, ${primeiroNome(painel.profissional.nome)}` : (isDino ? 'Dino Equipe' : 'Equipe')}</div>
-        <div style={{ fontSize: 12, color: offline ? t.yellow : t.muted }}>{offline ? `Sem internet · agenda de ${atualizadoEm ? atualizadoEm.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'}` : carregando ? 'Atualizando…' : atualizadoEm ? `Atualizado às ${atualizadoEm.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}</div>
+        <div style={{ fontSize: 12, color: offline ? t.yellow : t.muted }}>{offline ? `${painel?._offline?.motivo === 'servidor' ? 'Servidor indisponível · cópia de' : 'Sem internet · agenda de'} ${atualizadoEm ? atualizadoEm.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'}` : carregando ? 'Atualizando…' : atualizadoEm ? `Atualizado às ${atualizadoEm.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}</div>
       </div>
       {user && <button type="button" onClick={carregar} aria-label="Atualizar agenda" style={{ ...btn2, minHeight: 40, padding: '6px 12px' }}>↻</button>}
       {user && <button type="button" onClick={() => { if (window.confirm('Sair do app neste aparelho?')) logout() }} style={{ ...btn2, minHeight: 40, padding: '6px 12px' }}>Sair</button>}
@@ -220,6 +228,7 @@ export default function ModoBarbeiro() {
         {erro && <div role="alert" style={{ ...card, borderColor: t.red, color: t.red, fontWeight: 600 }}>{erro}</div>}
         {painel && !painel.profissional && <div style={card}>{painel.mensagem}</div>}
 
+        {painelRecebido?.profissional && dia && <BarbeiroPeriodo dia={dia} profissionalId={profissionalId || painelRecebido.profissional.id} onDateChange={irPara} refreshKey={atualizadoEm?.valueOf()} />}
         {painel?.profissional && <>
           <section aria-label="Resumo do dia" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 8 }}>
             {[
@@ -256,12 +265,13 @@ export default function ModoBarbeiro() {
                     </div>
                     <span style={{ flex: '0 0 auto', fontSize: 12, fontWeight: 800, color: st.cor, border: `1px solid ${st.cor}`, borderRadius: 999, padding: '3px 9px' }}>{st.rotulo}</span>
                   </div>
-                  {!offline && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {podeOperar && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {a.status === 'agendado' && <button type="button" disabled={ocupado} style={btn2} onClick={() => mudarStatus(a, 'confirmado')}>Confirmar</button>}
                     {['agendado', 'confirmado'].includes(a.status) && <button type="button" disabled={ocupado} style={btn} onClick={() => mudarStatus(a, 'em_atendimento')}>Iniciar</button>}
                     {a.status === 'em_atendimento' && <button type="button" disabled={ocupado} style={{ ...btn, background: t.green, color: '#0E1014' }} onClick={() => mudarStatus(a, 'concluido', `Concluir o atendimento de ${primeiroNome(a.clienteNome) || 'cliente'}? O pagamento é recebido no caixa.`)}>Concluir</button>}
                     {['agendado', 'confirmado', 'em_atendimento'].includes(a.status) && <button type="button" disabled={ocupado} style={btn2} onClick={() => mudarStatus(a, 'nao_compareceu', 'Marcar que o cliente não veio?')}>Não veio</button>}
                     {['agendado', 'confirmado'].includes(a.status) && <button type="button" disabled={ocupado} style={{ ...btn2, color: t.red }} onClick={() => mudarStatus(a, 'cancelado', 'Cancelar este agendamento? O cliente será avisado se autorizou o WhatsApp.')}>Cancelar</button>}
+                    {!['cancelado', 'nao_compareceu'].includes(a.status) && <button type="button" disabled={ocupado} style={btn} onClick={() => { setVendaAtendimento(a); setFolha('venda') }}>+ Serviços / produtos</button>}
                     {a.status === 'concluido' && <span style={{ fontSize: 13, color: t.muted, alignSelf: 'center' }}>Pagamento no caixa.</span>}
                   </div>}
                   {(a.clienteTelefone && !['cancelado'].includes(a.status)) && <div style={{ display: 'flex', gap: 8 }}>
@@ -273,6 +283,7 @@ export default function ModoBarbeiro() {
           </section>
         </>}
 
+        {painel?.profissional && podeOperar && <button type="button" style={btn2} onClick={() => setFolha('bloqueio')}>Bloquear horário</button>}
         {painel?.profissional && <Avisos gestao={painel.gestao} />}
         <InstalarApp nomeApp={isDino ? 'o app Dino Equipe' : 'o app da equipe'} tema={t} />
       </>
@@ -282,12 +293,13 @@ export default function ModoBarbeiro() {
     <main style={{ maxWidth: 560, margin: '0 auto', padding: `14px 16px calc(${painel?.profissional && !offline ? 96 : 24}px + env(safe-area-inset-bottom))`, display: 'grid', gap: 12, boxSizing: 'border-box' }}>
       {corpo}
     </main>
-    {user && painel?.profissional && !offline && <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: t.surface, borderTop: `1px solid ${t.line}`, padding: '10px 16px calc(10px + env(safe-area-inset-bottom))', zIndex: 20 }}>
+    {user && painel?.profissional && podeOperar && <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: t.surface, borderTop: `1px solid ${t.line}`, padding: '10px 16px calc(10px + env(safe-area-inset-bottom))', zIndex: 20 }}>
       <div style={{ maxWidth: 560, margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <button type="button" style={btn} onClick={() => setFolha('encaixe')}>+ Encaixe</button>
-        <button type="button" style={btn2} onClick={() => setFolha('bloqueio')}>Bloquear horário</button>
+        <button type="button" style={btn2} onClick={() => { setVendaAtendimento(null); setFolha('venda') }}>+ Venda / serviços</button>
       </div>
     </div>}
+    {folha === 'venda' && painel?.profissional && <Folha titulo="Serviços e produtos" podeFechar={!vendaPendente} onFechar={() => setFolha('')}><BarbeiroVendaRapida key={`${painel.profissional.id}-${vendaAtendimento?.id || 'avulsa'}`} profissional={painel.profissional} atendimento={vendaAtendimento} onEstadoChange={setVendaPendente} onPronto={carregar} /></Folha>}
     {folha === 'encaixe' && painel?.profissional && <FolhaEncaixe painel={painel} dia={dia} onFechar={() => { setFolha(''); const p = new URLSearchParams(params); p.delete('acao'); setParams(p, { replace: true }) }} onPronto={carregar} />}
     {folha === 'bloqueio' && painel?.profissional && <FolhaBloqueio painel={painel} dia={dia} onFechar={() => setFolha('')} onPronto={carregar} />}
   </div>

@@ -1,7 +1,8 @@
 /* Kytto PWA — rede prioritária para nunca servir interface antiga após deploy.
+ * v6: recuperação de 502/503/504 somente em leituras e shell já guardado.
  * v5: notificações push da equipe, agenda do barbeiro disponível sem internet
  * (última versão, por usuário, apagada ao sair) e página de cada app guardada. */
-const VERSAO = 'kytto-pwa-v5'
+const VERSAO = 'kytto-pwa-v6'
 const CACHE_SHELL = `${VERSAO}-shell`
 const CACHE_RUNTIME = `${VERSAO}-runtime`
 const CACHE_DADOS = `${VERSAO}-dados`
@@ -42,18 +43,19 @@ async function redeComCopia(request) {
   const chave = chaveDados(request)
   try {
     const resposta = await fetch(request)
+    if ([502, 503, 504].includes(resposta.status)) throw Object.assign(new Error('Servidor temporariamente indisponível'), { servidor: true })
     if (resposta.ok && request.headers.get('X-Kytto-Usuario')) {
       const copia = resposta.clone()
       const cache = await caches.open(CACHE_DADOS)
       await cache.put(chave, new Response(await copia.blob(), { headers: { 'Content-Type': 'application/json', 'X-Kytto-Salvo-Em': new Date().toISOString() } }))
     }
     return resposta
-  } catch {
+  } catch (error) {
     const cache = await caches.open(CACHE_DADOS)
     const salvo = await cache.match(chave)
     if (salvo) {
       const dados = await salvo.json().catch(() => null)
-      if (dados) return new Response(JSON.stringify({ ...dados, _offline: { salvoEm: salvo.headers.get('X-Kytto-Salvo-Em') } }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (dados) return new Response(JSON.stringify({ ...dados, _offline: { salvoEm: salvo.headers.get('X-Kytto-Salvo-Em'), motivo: error.servidor ? 'servidor' : 'conexao' } }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     }
     return new Response(JSON.stringify({ ok: false, offline: true, error: 'Sem conexão.' }), { status: 503, headers: { 'Content-Type': 'application/json' } })
   }
@@ -65,7 +67,8 @@ self.addEventListener('fetch', event => {
   const caminho = new URL(request.url).pathname
   if (request.mode === 'navigate') {
     const chave = PAGINA_APP.test(caminho) ? caminho : '/'
-    event.respondWith(fetch(request).then(response => {
+    event.respondWith(fetch(request).then(async response => {
+      if ([502, 503, 504].includes(response.status)) return (await caches.match(chave)) || response
       if (response.ok) { const copia = response.clone(); caches.open(CACHE_SHELL).then(cache => cache.put(chave, copia)) }
       return response
     }).catch(async () => (await caches.match(chave)) || (await caches.match('/')) || Response.error()))
@@ -109,3 +112,4 @@ self.addEventListener('notificationclick', event => {
     await self.clients.openWindow(destino)
   })())
 })
+
