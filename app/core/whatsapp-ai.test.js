@@ -64,7 +64,8 @@ test('prompt exige ferramentas, confirmação, transparência e handoff sem paga
   assert.match(prompt, /SIM \(ou CONFIRMAR\) para concluir ou NÃO para desistir/);
   assert.match(prompt, /responder SIM para confirmar ou NÃO para desistir/);
   assert.match(prompt, /áudio do cliente transcrito/);
-  assert.match(prompt, /Pagamento externo não está habilitado/);
+  assert.match(prompt, /consulte consultar_pagamentos/);
+  assert.match(prompt, /Não faça cobrança nem pagamento pelo WhatsApp/);
   assert.match(prompt, /solicitar_humano/);
   assert.match(prompt, /Há uma ação pendente/);
 });

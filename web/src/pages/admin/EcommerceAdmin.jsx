@@ -278,6 +278,11 @@ export default function EcommerceAdmin() {
       setError('Ative a vitrine antes de operar seus dados.')
       return
     }
+    // O GET da nova vitrine é assíncrono; nunca renderizar produtos/mídias antigos
+    // enquanto o storefrontId já aponta para outra loja.
+    setProducts([])
+    setCategories([])
+    setCatalogUnavailable(false)
     setStorefrontId(storefront.id)
     syncStoreContext(storefront)
     setNotice(`Loja ativa: ${storefront.nome}. As abas serão recarregadas neste escopo.`)

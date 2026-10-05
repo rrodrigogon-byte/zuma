@@ -89,6 +89,13 @@ if (URL_PG) {
     CHATBOT_BACKEND_MEDIA_PATH: '/messages/{id}/media',
     CHATBOT_BACKEND_STICKER_PATH: '/send-media',
     BARBEARIA_AGENDA_FONTE: 'barbearia',
+    // Contrato de produção (PR #230): backend multi-instância "dino", linha verificada e
+    // saída liberada para todos; sem isso o gate de saída bloqueia todas as respostas.
+    CHATBOT_BACKEND_MODE: 'instancias',
+    CHATBOT_BACKEND_INSTANCE: 'dino',
+    WHATSAPP_LINE_VERIFIED: '1',
+    WHATSAPP_EGRESS_MODE: 'on',
+    WHATSAPP_FULL_ROLLOUT_APPROVED: '1',
     WHATSAPP_POLL_MODE: 'on',
     WHATSAPP_MAX_REPLY_AGE_MINUTES: '30',
     GEMINI_REQUEST_ATTEMPTS: '1',
@@ -136,7 +143,7 @@ globalThis.fetch = async (url, opcoes = {}) => {
   const u = String(url);
   if (u.startsWith(BACKEND)) {
     const caminho = u.slice(BACKEND.length).replace('/api/v1/whats-app', '');
-    const chave = opcoes.headers?.['X-API-KEY'] || opcoes.headers?.['x-api-key'];
+    const chave = opcoes.headers?.['X-API-KEY'] || opcoes.headers?.['x-api-key'] || opcoes.headers?.apikey;
     if (chave !== process.env.CHATBOT_BACKEND_KEY) return resposta(401, { error: 'unauthorized' });
     if (caminho.startsWith('/messages?')) {
       const query = new URLSearchParams(caminho.split('?')[1]);
@@ -158,9 +165,9 @@ globalThis.fetch = async (url, opcoes = {}) => {
     }
     if (caminho === '/send-media' && opcoes.method === 'POST') {
       const corpo = JSON.parse(opcoes.body);
-      if (corpo.instanceName !== 'dino' || corpo.mediaType !== 'sticker' || !corpo.base64) return resposta(400, { success: false, error: 'figurinha inválida no simulador' });
-      mundo.figurinhas.push({ para: corpo.chat_id, nome: corpo.fileName });
-      mundo.enviados.push({ para: corpo.chat_id, texto: `[figurinha ${corpo.fileName}]` });
+      if (corpo.instanceName !== 'dino' || corpo.sticker?.mimetype !== 'image/webp' || !corpo.sticker?.base64) return resposta(400, { success: false, error: 'figurinha inválida no simulador' });
+      mundo.figurinhas.push({ para: corpo.chat_id, nome: corpo.sticker.fileName });
+      mundo.enviados.push({ para: corpo.chat_id, texto: `[figurinha ${corpo.sticker.fileName}]` });
       return resposta(200, { success: true, messageId: `fig-${++seq}` });
     }
     if (caminho === '/send' && opcoes.method === 'POST') {
@@ -453,7 +460,7 @@ function ultima(lista) { return lista[lista.length - 1]?.texto || ''; }
 // ---------------------------------------------------------------------------
 // CENÁRIOS
 // ---------------------------------------------------------------------------
-test('simulação ponta a ponta do atendente da Dino', { skip, timeout: 240000 }, async (t) => {
+test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(process.env.WHATSAPP_SIM_TIMEOUT_MS) || 240000 }, async (t) => {
   await seed();
   t.after(async () => {
     if (process.env.SIM_REPORT_PATH) fs.writeFileSync(process.env.SIM_REPORT_PATH, JSON.stringify(mundo.transcricoes, null, 2));
@@ -604,13 +611,13 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: 240000 }
     assert.match(ultima(out), T.confirmado);
   });
 
-  await cena(t, '12 · Ação expirada (>30 min) não é confirmada e o cliente é avisado', async () => {
+  await cena(t, '12 · Ação expirada (>prazo de 120 min) não é confirmada e o cliente é avisado', async () => {
     const tel = telefoneNovo();
     cliente(tel, 'Quero cortar amanhã à tarde');
     await ciclo();
     cliente(tel, 'o primeiro');
     await ciclo();
-    await db.query(`UPDATE whatsapp_ai_actions SET criado_em = CURRENT_TIMESTAMP - INTERVAL '40 minutes' WHERE sessao_id = (SELECT id FROM whatsapp_ai_sessions WHERE canal_id = $1 AND telefone = $2)`, [IDS.canal, tel]);
+    await db.query(`UPDATE whatsapp_ai_actions SET criado_em = CURRENT_TIMESTAMP - INTERVAL '130 minutes' WHERE sessao_id = (SELECT id FROM whatsapp_ai_sessions WHERE canal_id = $1 AND telefone = $2)`, [IDS.canal, tel]);
     cliente(tel, 'CONFIRMAR');
     const out = await ciclo();
     assert.equal(agendamentosDe(tel).length, 0);
@@ -913,7 +920,7 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: 240000 }
     await ciclo();
     cliente(tel, 'o primeiro');
     let out = await ciclo();
-    assert.match(ultima(out), /Barba Completa com .* \+ Manicure às .* \+ Pedicure às .*total R\$ 140,00/);
+    assert.match(ultima(out), /• Barba Completa.*\n• Manicure às .*\n• Pedicure às .*\nTotal: R\$ 140,00/);
     cliente(tel, 'fechado');
     out = await ciclo();
     assert.match(ultima(out), T.emSeguida, 'manicure e pedicure só com quem faz');
@@ -1245,3 +1252,4 @@ function noturno() {
   const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' }).format(d);
   return new Date(`${hoje}T23:30:00-04:00`);
 }
+

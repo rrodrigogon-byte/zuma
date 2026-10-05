@@ -202,6 +202,8 @@ export function packBubbles(text, { max = 120, maxBubbles = 2 } = {}) {
  */
 export function styleModelText(text, { max = 120, maxBubbles = 2, dropSelfIntro = false } = {}) {
   const entrada = String(text ?? '').slice(0, 4000);
+  // Links são dados operacionais: estilo não pode reescrever nem dividir a URL.
+  if (/https?:\/\//i.test(entrada)) return entrada.trim();
   try {
     let limpo = removeBannedPhrases(spokenMoney(spokenTimes(inlineEnumeration(stripMarkdown(entrada)))));
     if (dropSelfIntro) limpo = removeSelfIntro(limpo);
@@ -239,7 +241,7 @@ export function splitBubbles(content, { max = 120, hardMax = 4 } = {}) {
   const paragraphs = String(content ?? '').split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
   const bubbles = [];
   for (const paragraph of paragraphs) {
-    if (paragraph.length <= max * 1.6 || paragraph.includes('\n')) { bubbles.push(paragraph); continue; }
+    if (paragraph.length <= max * 1.6 || paragraph.includes('\n') || /https?:\/\//i.test(paragraph)) { bubbles.push(paragraph); continue; }
     bubbles.push(...packBubbles(paragraph, { max: Math.round(max * 1.6), maxBubbles: 3 }));
   }
   if (bubbles.length > hardMax) {
@@ -268,3 +270,4 @@ export function styleReport(content, { max = 120 } = {}) {
     banned,
   };
 }
+

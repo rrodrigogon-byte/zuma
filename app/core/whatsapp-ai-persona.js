@@ -85,10 +85,10 @@ export function resolvePersona(configuracao = {}, env = process.env, empresaId =
   if (salvo?.ativo === false) return null;
   // A variável de ambiente vale só para a empresa dona (padrão: a do backend da Dino),
   // para não ligar o T-Rex em outro tenant que use WhatsApp na mesma plataforma.
-  if (!salvo && env.WHATSAPP_AI_PERSONA && empresaId) {
+  if (!salvo && env.WHATSAPP_AI_PERSONA) {
     const dona = clean(env.WHATSAPP_AI_PERSONA_EMPRESA_ID || env.CHATBOT_BACKEND_EMPRESA_ID || '', 60);
     // Sem empresa dona definida, a variável não liga persona nenhuma (só o canal liga).
-    if (!dona || dona !== String(empresaId)) return null;
+    if (!empresaId || !dona || dona !== String(empresaId)) return null;
   }
   const id = clean(salvo?.id || env.WHATSAPP_AI_PERSONA || '', 20).toLowerCase();
   if (!id || id === 'off' || !DEFAULTS[id]) return null;
@@ -222,7 +222,7 @@ export function personaRobotAnswerShort(storeName) {
 export function personaRobotAnswer(persona, storeName, seed = '') {
   const loja = clean(storeName, 120) || 'unidade';
   return pick([
-    `Sou o assistente da ${loja}, mas a equipe tá aqui do lado. Quer que eu chame alguém ou sigo com você?`,
+    `Sou o assistente digital da ${loja}. Quer que eu chame a equipe ou sigo com você?`,
     `Sou o assistente digital da ${loja}. Se preferir uma pessoa, eu chamo a equipe. Sigo com você?`,
   ], seed);
 }
@@ -364,3 +364,4 @@ export function personaAppointmentMessage(persona, { evento, nome, servico, prof
   if (evento === 'cancelado') return `${oi} Seu horário na ${clean(loja, 120) || 'barbearia'} foi cancelado. Quer marcar outro? ${rodape}`;
   return `${oi} Tá marcado: ${quando}, ${servico} com ${profissional}. ${rodape}`;
 }
+

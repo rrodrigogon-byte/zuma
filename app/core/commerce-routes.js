@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import express from 'express';
 import { db } from './database.js';
 import { customerReport, fulfillmentReport, inventoryReport, salesReport } from './commerce-reports.js';
-import { canTransitionPaymentStatus, captureNeedsRefund, otherCapturedPayment, createPaymentAttempt, paymentAccountReady, paymentProviders, reconcilePaymentByIdentifiers, recordLatePaymentCapture, resolvedPaymentMethod, syncPaymentAttempt, validatePaymentMethod, verifyPaymentWebhook } from './payment-adapters.js';
+import { canTransitionPaymentStatus, captureNeedsRefund, otherCapturedPayment, createPaymentAttempt, publicPaymentMethods, paymentAccountReady, paymentProviders, reconcilePaymentByIdentifiers, recordLatePaymentCapture, resolvedPaymentMethod, syncPaymentAttempt, validatePaymentMethod, verifyPaymentWebhook } from './payment-adapters.js';
 import { createPaymentAccount, listPaymentAccounts, listPaymentProviders, listPayments, updatePaymentAccount } from './commerce-payment-admin.js';
 import { resolveCommerceIdentity } from './commerce-identity-bridge.js';
 import { applyPromotionToOrder, createPromotion, createPromotionCode, createPromotionTemplate, listPromotionTemplates, listPromotions } from './commerce-promotions.js';
@@ -760,14 +760,7 @@ export function createCommercePublicRouter() {
     try {
       const storefront = await resolvePublicStorefront(req);
       const result = await db.query(`SELECT id, provider, ambiente, secret_ref, public_config, ativo FROM commerce_payment_accounts WHERE empresa_id = $1 AND storefront_id = $2 AND ambiente = 'production' AND ativo = true ORDER BY provider`, [storefront.empresa_id, storefront.id]);
-      const items = [];
-      for (const account of result.rows) {
-        if (!paymentAccountReady(account)) continue;
-        const methods = Array.isArray(account.public_config?.methods) && account.public_config.methods.length ? account.public_config.methods : ['pix'];
-        for (const method of methods) {
-          try { items.push({ provider: account.provider, method: validatePaymentMethod(method), ambiente: account.ambiente }); } catch { /* configuração inválida não é publicada */ }
-        }
-      }
+      const items = publicPaymentMethods(result.rows);
       // "Marcar na conta" aparece só para o pedido informado, quando o cliente dele tem
       // crediário ativo nesta loja com limite para o total.
       const orderCode = String(req.query?.order || '').trim();
@@ -1258,7 +1251,6 @@ export function createCommerceAdminRouter() {
                     'alturaCm', v.altura_cm,
                     'comprimentoCm', v.comprimento_cm,
                     'ativo', v.ativo,
-                    'permiteCompraSemEstoque', v.permite_compra_sem_estoque,
                     'preco', vp.preco,
                     'precoPromocional', vp.preco_promocional,
                     'estoque', COALESCE((SELECT SUM(il.disponivel) FROM commerce_inventory_levels il WHERE il.empresa_id = v.empresa_id AND il.variant_id = v.id ${inventoryScope}), 0)
@@ -1405,7 +1397,9 @@ export function createCommerceAdminRouter() {
       const context = await requirePermission(req, 'catalog.read');
       const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
       const scope = await resolveCatalogResourceScope(db, context, { mediaId: req.params.id, storefrontId, requireChannel: false });
-      if (!scope.media) throw new CommerceError('mídia não encontrada no tenant', 'MEDIA_NOT_FOUND');
+      // Uma vitrine selecionada nunca permite prévia de um produto exclusivo de outra,
+      // mesmo para administradores corporativos: não revelar mídia fora do contexto.
+      if (!scope.media || !scope.product.authorized_channel) throw new CommerceError('mídia não encontrada nesta vitrine', 'MEDIA_NOT_FOUND');
       await streamCommerceImage({
         storageKey: scope.media.storage_key,
         mimeType: scope.media.mime_type,
@@ -1413,6 +1407,7 @@ export function createCommerceAdminRouter() {
         empresaId: scope.empresaId,
         productId: scope.media.product_id,
         mediaId: scope.media.id,
+        privateCache: true,
       });
     } catch (error) {
       if (!res.headersSent) jsonError(res, error);
@@ -2217,3 +2212,4 @@ export function createCommerceAdminRouter() {
   });
   return router;
 }
+

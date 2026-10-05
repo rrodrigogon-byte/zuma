@@ -14,7 +14,7 @@ import { chatbotBackendStickerPath, sendStickerViaChatbotBackend } from './whats
 
 const EMPRESA = '11111111-1111-4111-8111-111111111111';
 const LOJA = '22222222-2222-4222-8222-222222222222';
-const trex = resolvePersona({}, { WHATSAPP_AI_PERSONA: 'trex' });
+const trex = resolvePersona({ persona: { id: 'trex' } }, {});
 
 test('prompt: com persona abre como T-Rex e mantém todas as regras do atendente', () => {
   const padrao = buildWhatsappAiSystemPrompt({ storeName: 'Barbearia Dino' });
@@ -138,8 +138,8 @@ test('figurinhas: contrato do backend (rota configurada)', async () => {
     const r = await sendStickerViaChatbotBackend({ number: '65999990000', base64: lerFigurinha('agendado'), fileName: 'agendado.webp' }, fake);
     assert.equal(r.ok, true);
     assert.match(chamadas[0].url, /\/send-media$/);
-    assert.equal(chamadas[0].corpo.mediaType, 'sticker');
-    assert.equal(chamadas[0].corpo.mimetype, 'image/webp');
+    assert.ok(chamadas[0].corpo.sticker.base64);
+    assert.equal(chamadas[0].corpo.sticker.mimetype, 'image/webp');
     assert.ok(chamadas[0].corpo.chat_id);
     const naoExiste = await sendStickerViaChatbotBackend({ number: '65999990000', base64: 'abc' }, async () => ({ ok: false, status: 404, text: async () => '{}' }));
     assert.equal(naoExiste.unsupported, true);
@@ -147,3 +147,4 @@ test('figurinhas: contrato do backend (rota configurada)', async () => {
     process.env = anterior;
   }
 });
+

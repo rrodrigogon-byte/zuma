@@ -130,3 +130,11 @@ test('revisão 2: maiúscula só no começo de frase com letra', () => {
   assert.doesNotMatch(styleModelText('Horários disponíveis amanhã\n10:00\n14:30\n17:00'), /\d+H/);
   assert.equal(styleModelText('corte sai R$ 45.'), 'Corte sai R$ 45.');
 });
+
+
+test('links de pagamento e foto permanecem integrais no estilo e no envio em bolhas', () => {
+  const url = 'https://dino.kytto.com.br/pedido/' + 'a'.repeat(200) + '?hora=12:00&valor=1200,00';
+  const text = `Veja seu pedido: ${url}`;
+  assert.equal(styleModelText(text), text);
+  assert.deepEqual(splitBubbles(text), [text]);
+});

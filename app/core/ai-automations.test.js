@@ -121,3 +121,15 @@ test('consentimento no envio fecha em segurança', async () => {
   assert.equal((await sendTimeConsent(E, phone, 'atendimento', { consentMap: async () => new Map([[phone, { optOut: true }]]), localClients: local })).reason, 'opt_out')
   assert.equal((await sendTimeConsent(E, phone, 'marketing', { consentMap: async () => new Map(), localClients: [] })).ok, false)
 })
+
+
+test('revalidação no envio recusa telefones duplicados e titulares anonimizados', async () => {
+  const { sendTimeConsent } = await import('./ai-automations.js');
+  const phone = '5565999990001';
+  const consentMap = async () => new Map([[phone, { marketing: true }]]);
+  const client = { id: 'a', telefone: phone, consentimentos: consent(true) };
+  const duplicate = await sendTimeConsent('empresa', phone, 'marketing', { consentMap, localClients: [client, { ...client, id: 'b' }] });
+  assert.deepEqual(duplicate, { ok: false, reason: 'identidade_ambigua' });
+  const anonymous = await sendTimeConsent('empresa', phone, 'marketing', { consentMap, localClients: [{ ...client, anonimizadoEm: d(1) }] });
+  assert.deepEqual(anonymous, { ok: false, reason: 'cliente_anonimizado' });
+});

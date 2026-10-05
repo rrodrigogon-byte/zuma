@@ -11,7 +11,7 @@ O atendente de IA da Barbearia Dino passa a falar como o **T-Rex**, o mascote da
 | Preços | Lista colada numa linha só, com R$ 40,00 | "Barba Completa R$ 40, Corte Masculino R$ 45 e Pedicure R$ 50." |
 | Resumo para confirmar | "Resumo para confirmar: …" | "Confere aí: …" (mesmo resumo exato e a mesma dica de SIM/NÃO) |
 | Agendamento feito | "Agendamento confirmado: Corte Masculino com Bruno em 06/10/2026 às 12:00. Código …. Se precisar…" | "Tá marcado! Corte Masculino com Bruno, ter 6/10 às 12h. Código …" + figurinha "agendado" |
-| "vc é robô?", "é humana?", "to falando com um atendente?" | Ia para o modelo ou para a equipe ("humano" disparava handoff) | Resposta fixa e verdadeira: "Sou o assistente da Barbearia Dino, mas a equipe tá aqui do lado. Quer que eu chame alguém ou sigo com você?" A conversa continua. Pedido de pessoa, dado sensível e injeção continuam sendo tratados antes |
+| "vc é robô?", "é humana?", "to falando com um atendente?" | Ia para o modelo ou para a equipe ("humano" disparava handoff) | Resposta fixa e verdadeira: "Sou o assistente digital da Barbearia Dino. Quer que eu chame a equipe ou sigo com você?" A conversa continua. Pedido de pessoa, dado sensível e injeção continuam sendo tratados antes |
 | Lembrete de 24 h | "Olá, João Silva. Lembrete do seu agendamento amanhã, 10/10/2026, às 09:00. Serviço: … Profissional: …" | "Opa, João! Passando pra lembrar: amanhã, sáb 10/10 às 9h, Corte Masculino com Bruno. Responda CONFIRMO, REMARCAR ou CANCELO." |
 | Toque de retomada | "Oi, Paulo! Ficou faltando só sua confirmação: … Se preferir outro horário ou produto, é só me dizer." | "Opa, Paulo! Só falta você confirmar: …" |
 | Handoff, opt-out, erros | "Encaminhei sua conversa para a equipe humana da …" | "Beleza, passei pra equipe da Barbearia Dino. Já te respondem aqui." |
@@ -23,7 +23,7 @@ Conversas inteiras, antes e depois, saem do simulador (seção Testes).
 | Peça | Arquivo | O que faz |
 | --- | --- | --- |
 | Persona | `app/core/whatsapp-ai-persona.js` | Configuração por canal, bloco do prompt (identidade, regras de escrita, personalidade, situações difíceis, figurinhas), saudação, apresentação, "vc é robô?", textos fixos, confirmação curta, lembrete e toque na voz do T-Rex |
-| Estilo | `app/core/whatsapp-ai-style.js` | Aplicado em código depois do modelo: tira markdown e listas, transforma enumeração em frase, "12:00" → "12h", "R$ 45,00" → "R$ 45", remove frases de robô ("Fico à disposição", "Prezado", "Infelizmente"), quebra em no máximo 2 mensagens de até 120 caracteres; no envio, divide o conteúdo salvo em bolhas (até 4) |
+| Estilo | `app/core/whatsapp-ai-style.js` | Aplicado em código depois do modelo: tira markdown e listas, transforma enumeração em frase, "12:00" → "12h", "R$ 45,00" → "R$ 45", remove frases de robô ("Fico à disposição", "Prezado", "Infelizmente"), prioriza até 2 mensagens com alvo de 120 caracteres, preservando conteúdo operacional mais longo; no envio, divide o conteúdo salvo em bolhas (até 4) |
 | Figurinhas | `app/core/whatsapp-figurinhas.js` + `app/assets/trex/figurinhas/*.webp` | 9 figurinhas WebP 512×512 (< 100 KB). Envio depois do texto, no máximo 1 por dia e por cliente, nunca com a conversa na equipe. Passa pelas mesmas travas de egress do texto |
 | Atendente | `app/core/whatsapp-ai.js` | Liga tudo: prompt com persona, textos fixos, ferramenta `enviar_figurinha`, estilo, envio em bolhas com progresso salvo (`metadados.bolhasEnviadas`), configuração `PATCH /api/admin/commerce/whatsapp-ai/persona` com auditoria |
 | Lembretes | `app/core/barbershop-appointment-notifications.js` | Lembrete de 24 h, remarcação e cancelamento na voz do T-Rex quando o canal tem persona |
@@ -65,8 +65,8 @@ O `/send` do `chatbot-backend-nestjs` só aceita texto. Sem `CHATBOT_BACKEND_STI
 ```
 POST {CHATBOT_BACKEND_URL}/api/v1/whats-app/send-media
 X-API-KEY: …
-{ "instanceName": "dino", "chat_id": "5565…@c.us", "mediaType": "sticker",
-  "mimetype": "image/webp", "fileName": "agendado.webp", "base64": "<webp>" }
+{ "instanceName": "dino", "chat_id": "5565…@c.us",
+  "sticker": { "mimetype": "image/webp", "base64": "<webp>" } }
 → 200 { "success": true, "messageId": "…" }
 ```
 
@@ -120,3 +120,8 @@ O manual do T-Rex descreve 24 ferramentas conceituais. A plataforma já tinha a 
 | abrir_chamado / transferir_humano | `solicitar_humano` (fila da recepção) |
 | enviar_figurinha | `enviar_figurinha` (nova, só com persona) |
 | calcular_frete / gerar_link_pagamento | fora do WhatsApp por decisão de segurança: pagamento segue o checkout da loja (InfinitePay) |
+
+
+## Integração com produção (05/10/2026)
+
+A persona preserva links de pagamento, cartões de produtos e registro no CRM. Links não passam por reescrita de estilo nem são quebrados em bolhas. Resumos, códigos e URLs podem exceder o alvo de 120 caracteres: dados operacionais não são truncados. A persona usa um único fluxo de figurinhas por resposta; o fluxo anterior permanece para canais sem persona. O ambiente só ativa a persona quando a empresa é explicitamente conhecida e coincide com a dona configurada.

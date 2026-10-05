@@ -101,3 +101,4 @@ export async function enviarFigurinha(tenant, telefone, nome) {
   if (process.env.CHATBOT_BACKEND_URL) return { ok: false, skipped: true, error: 'WHATSAPP_PROVIDER_SCOPE' };
   return viaEvolution(tenant, destino, base64);
 }
+

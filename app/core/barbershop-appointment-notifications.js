@@ -628,3 +628,4 @@ export async function reviewNotificationMetrics(contexto = {}) {
   );
   return { ...(resultado.rows[0] || { pendentes: 0, aceitas_provedor: 0, falhas: 0, canceladas: 0 }), canaisAtivos: Number(canais.rows[0]?.ativos || 0) };
 }
+

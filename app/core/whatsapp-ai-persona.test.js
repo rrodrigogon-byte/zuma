@@ -32,12 +32,12 @@ test('persona: variável de ambiente vale só para a empresa dona', () => {
 
 test('persona: canal manda, ambiente só dá o padrão', () => {
   assert.equal(resolvePersona({}, {}), null);
-  assert.equal(resolvePersona({}, { WHATSAPP_AI_PERSONA: 'trex' }).nome, 'T-Rex', 'sem empresa informada (unidade/teste)');
+  assert.equal(resolvePersona({}, { WHATSAPP_AI_PERSONA: 'trex' }), null, 'sem empresa informada, ambiente não ativa persona');
   assert.equal(resolvePersona({ persona: { id: 'trex', ativo: false } }, { WHATSAPP_AI_PERSONA: 'trex' }), null, 'desligada no canal vence o ambiente');
   assert.equal(resolvePersona({ persona: { id: 'trex', nome: 'Rex' } }, {}).nome, 'Rex');
   assert.equal(resolvePersona({}, { WHATSAPP_AI_PERSONA: 'off' }), null);
   assert.equal(resolvePersona({}, { WHATSAPP_AI_PERSONA: 'desconhecida' }), null);
-  const padrao = resolvePersona({}, { WHATSAPP_AI_PERSONA: 'trex' });
+  const padrao = resolvePersona({ persona: { id: 'trex' } }, {});
   assert.equal(padrao.maxBolha, 120);
   assert.equal(padrao.revelarIa, 'quando_perguntado');
 });
@@ -63,7 +63,7 @@ test('persona: escolha determinística (reenvio gera o mesmo texto)', () => {
 });
 
 test('persona: saudação curta, com o período quando o cliente diz', () => {
-  const p = resolvePersona({}, { WHATSAPP_AI_PERSONA: 'trex' });
+  const p = resolvePersona({ persona: { id: 'trex' } }, {});
   const tarde = personaGreeting(p, { text: 'Oi, boa tarde', seed: 'x' });
   assert.match(tarde, /boa tarde/i);
   assert.ok(tarde.length <= 120);
@@ -77,7 +77,7 @@ test('persona: saudação ampla sem pedido', () => {
 });
 
 test('persona: apresentação entra depois da saudação', () => {
-  const p = resolvePersona({}, { WHATSAPP_AI_PERSONA: 'trex' });
+  const p = resolvePersona({ persona: { id: 'trex' } }, {});
   const intro = personaIntroduction(p, 'Barbearia Dino');
   assert.equal(intro, 'Aqui é o T-Rex, da Barbearia Dino. Uso esta conversa só pra te atender e chamo a equipe quando você quiser.');
   assert.equal(mergeIntroduction(intro, 'Opa, boa tarde! Quer marcar um horário?'), `Opa, boa tarde! ${intro} Quer marcar um horário?`);
@@ -102,7 +102,7 @@ test('persona: "vc é robô?" é detectado e respondido com a verdade', () => {
   }
   assert.equal(mentionsBotIdentity('isso é automatizado?'), true);
   assert.equal(mentionsBotIdentity('quero marcar amanhã'), false);
-  const p = resolvePersona({}, { WHATSAPP_AI_PERSONA: 'trex' });
+  const p = resolvePersona({ persona: { id: 'trex' } }, {});
   for (let i = 0; i < 6; i += 1) {
     const r = personaRobotAnswer(p, 'Barbearia Dino', `s${i}`);
     assert.match(r, /assistente/);
@@ -112,7 +112,7 @@ test('persona: "vc é robô?" é detectado e respondido com a verdade', () => {
 });
 
 test('persona: confirmação curta com os 4 dados e o código', () => {
-  const p = resolvePersona({}, { WHATSAPP_AI_PERSONA: 'trex' });
+  const p = resolvePersona({ persona: { id: 'trex' } }, {});
   const r = personaConfirmationReply(p, { type: 'agendamento', result: { servico: 'Corte Masculino', profissional: 'Bruno', dataAgenda: '2026-10-10', horaLocal: '09:00', codigo: 'AG12' } }, 'e1');
   assert.match(r, /Corte Masculino com Bruno, sáb 10\/10 às 9h\. Código AG12\./);
   assert.ok(r.length <= 120, r);
@@ -127,7 +127,7 @@ test('persona: confirmação curta com os 4 dados e o código', () => {
 });
 
 test('persona: textos fixos trocam o tom, não a ação', () => {
-  const p = resolvePersona({}, { WHATSAPP_AI_PERSONA: 'trex' });
+  const p = resolvePersona({ persona: { id: 'trex' } }, {});
   assert.equal(personaFixedText(null, 'handoff', 'original'), 'original');
   assert.equal(personaFixedText(p, 'tipo_desconhecido', 'original'), 'original');
   assert.match(personaFixedText(p, 'handoff', 'x', { storeName: 'Barbearia Dino', seed: 'a' }), /equipe da Barbearia Dino/);
@@ -139,7 +139,7 @@ test('persona: textos fixos trocam o tom, não a ação', () => {
 });
 
 test('persona: prompt traz as regras duras e a honestidade', () => {
-  const p = resolvePersona({}, { WHATSAPP_AI_PERSONA: 'trex' });
+  const p = resolvePersona({ persona: { id: 'trex' } }, {});
   const bloco = personaSystemBlock(p, 'Barbearia Dino');
   assert.match(bloco, /Você é o T-Rex/);
   assert.match(bloco, /até 120 caracteres/);
@@ -151,8 +151,9 @@ test('persona: prompt traz as regras duras e a honestidade', () => {
 });
 
 test('persona: lembrete de 24 h curto, com os mesmos comandos', () => {
-  const p = resolvePersona({}, { WHATSAPP_AI_PERSONA: 'trex' });
+  const p = resolvePersona({ persona: { id: 'trex' } }, {});
   const msg = personaAppointmentMessage(p, { evento: 'lembrete', nome: 'João Silva', servico: 'Corte Masculino', profissional: 'Bruno', quando: 'sáb 10/10 às 9h', quandoRelativo: 'amanhã' });
   assert.equal(msg, 'Opa, João! Passando pra lembrar: amanhã, sáb 10/10 às 9h, Corte Masculino com Bruno. Responda CONFIRMO, REMARCAR ou CANCELO. Pra não receber avisos, responda SAIR.');
   for (const evento of ['remarcado', 'cancelado', 'criado']) assert.match(personaAppointmentMessage(p, { evento, nome: 'Ana', servico: 'S', profissional: 'P', quando: 'q', quandoRelativo: 'amanhã', loja: 'Barbearia Dino' }), /SAIR/);
 });
+

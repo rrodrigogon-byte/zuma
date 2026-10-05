@@ -129,8 +129,10 @@ function scopedPath(path, storefrontId) {
 export function adminProductMediaUrl(media, storefrontId = '') {
   const publicUrl = String(media?.public_url || media?.publicUrl || '').trim()
   const mediaId = String(media?.id || '').trim()
-  if (!mediaId || !storefrontId || !/^\/api\/storefront\/media\/[0-9a-f-]{36}$/i.test(publicUrl)) return publicUrl
-  return scopedPath(`/api/admin/commerce/catalog/media/${mediaId}`, storefrontId)
+  const internal = /^\/api\/(?:storefront|commerce)\/media\/([0-9a-f-]{36})$/i.exec(publicUrl)
+  if (!internal) return publicUrl
+  if (!storefrontId || (mediaId && mediaId.toLowerCase() !== internal[1].toLowerCase())) return ''
+  return scopedPath(`/api/admin/commerce/catalog/media/${internal[1]}`, storefrontId)
 }
 
 async function loadLegacy() {

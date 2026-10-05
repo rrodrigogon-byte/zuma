@@ -1,8 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { api } from '../../lib/api'
 import { adminProductMediaUrl, loadCommerceAdmin, loadCoreReports, validateProductCommercialInput } from './commerce-admin-adapter'
+import CommerceProductMedia, { allowedProductImageSource } from './CommerceProductMedia'
+import { catalogHelpFor } from './useCatalogActionTooltip'
 
 const originalGet = api.get
 const storefront = { id: '33333333-3333-4333-8333-333333333333', loja_id: '22222222-2222-4222-8222-222222222222', nome: 'Dino' }
@@ -30,6 +34,10 @@ describe('admin Commerce: falha parcial do catálogo', () => {
     const mediaId = '44444444-4444-4444-8444-444444444444'
     expect(adminProductMediaUrl({ id: mediaId, public_url: `/api/storefront/media/${mediaId}` }, storefront.id)).toBe(`/api/admin/commerce/catalog/media/${mediaId}?storefrontId=${storefront.id}`)
     expect(adminProductMediaUrl({ id: mediaId, public_url: 'https://storage.googleapis.com/dino-media/item.webp' }, storefront.id)).toBe('https://storage.googleapis.com/dino-media/item.webp')
+    expect(adminProductMediaUrl({ public_url: `/api/storefront/media/${mediaId}` }, storefront.id)).toBe(`/api/admin/commerce/catalog/media/${mediaId}?storefrontId=${storefront.id}`)
+    expect(adminProductMediaUrl({ id: '99999999-9999-4999-8999-999999999999', public_url: `/api/storefront/media/${mediaId}` }, storefront.id)).toBe('')
+    expect(adminProductMediaUrl({ public_url: `/api/storefront/media/${mediaId}` }, '')).toBe('')
+    expect(adminProductMediaUrl({ public_url: `/api/commerce/media/${mediaId}` }, storefront.id)).toBe(`/api/admin/commerce/catalog/media/${mediaId}?storefrontId=${storefront.id}`)
   })
 
   it('não oculta erro de autenticação como falha opcional de catálogo', async () => {
@@ -151,5 +159,66 @@ describe('admin Commerce: seleção obrigatória de vitrine', () => {
       return { items: [] }
     }
     await expect(loadCommerceAdmin()).rejects.toMatchObject({ status: 403 })
+  })
+})
+
+
+describe('Catálogo Commerce: mídia protegida e ajuda de ações', () => {
+  const mediaId = '44444444-4444-4444-8444-444444444444'
+  const media = { id: mediaId, public_url: `/api/storefront/media/${mediaId}` }
+
+  it('não aponta miniaturas para a URL pública indisponível; usa media e storefront atuais nos dois layouts', () => {
+    const workspace = readFileSync(resolve(process.cwd(), 'web/src/pages/admin/CommerceProductManagement.jsx'), 'utf8')
+    expect(workspace).toContain('media={product.media?.[0] || { public_url: product.imagem }} storefrontId={storefrontId}')
+    expect(workspace).not.toContain('src={product.imagem}')
+    expect(adminProductMediaUrl(media, storefront.id)).toBe(`/api/admin/commerce/catalog/media/${mediaId}?storefrontId=${storefront.id}`)
+    expect(adminProductMediaUrl(media, '')).toBe('')
+    const editor = readFileSync(resolve(process.cwd(), 'web/src/pages/admin/EcommerceAdmin.jsx'), 'utf8')
+    expect(editor).toMatch(/function selectStorefront\(storefront\)[\s\S]*?setProducts\(\[\]\)[\s\S]*?setStorefrontId\(storefront\.id\)/)
+  })
+
+  it('não mostra URL pública quebrada nem nome textual no lugar de miniatura antes do carregamento', () => {
+    const html = renderToStaticMarkup(createElement(CommerceProductMedia, { media, storefrontId: storefront.id, alt: 'Produto sintético', compact: true }))
+    expect(html).toContain('commerce-product-image-placeholder')
+    expect(html).not.toContain('<img')
+    expect(html).not.toContain('/api/storefront/media/')
+    expect(html).not.toContain('/api/admin/commerce/catalog/media/')
+    const noStorefront = renderToStaticMarkup(createElement(CommerceProductMedia, { media, storefrontId: '', alt: 'Produto sintético', compact: true }))
+    expect(noStorefront).toContain('imagem indisponível')
+    expect(noStorefront).not.toContain('<img')
+    const missing = renderToStaticMarkup(createElement(CommerceProductMedia, { storefrontId: storefront.id, alt: 'Produto sintético', compact: true }))
+    expect(missing).toContain('imagem indisponível')
+  })
+
+  it('bloqueia tracking externo arbitrário e aceita só armazenamento HTTPS autorizado', () => {
+    expect(allowedProductImageSource('https://storage.googleapis.com/dino/item.jpg')).toBe(true)
+    expect(allowedProductImageSource('https://bucket.storage.googleapis.com/image.webp')).toBe(true)
+    for (const url of ['https://evil.example/track.png', '//storage.googleapis.com/image.png', 'http://storage.googleapis.com/item.jpg', 'https://storage.googleapis.com.evil.example/a.png', 'https://user:pass@storage.googleapis.com/a.png', 'data:image/svg+xml,abc', '/api/storefront/media/44444444-4444-4444-8444-444444444444']) {
+      expect(allowedProductImageSource(url)).toBe(false)
+    }
+  })
+
+  it('busca blob com escopo, cancela ao trocar vitrine e recusa payload não imagem', () => {
+    const source = readFileSync(resolve(process.cwd(), 'web/src/pages/admin/CommerceProductMedia.jsx'), 'utf8')
+    expect(source).toContain('api.blob(previewUrl, { signal: controller.signal })')
+    expect(source).toContain('URL.revokeObjectURL(objectUrl)')
+    expect(source).toContain('RASTER_IMAGE.test(blob.type)')
+    expect(source).toContain('image.source === sourceKey')
+    const backend = readFileSync(resolve(process.cwd(), 'app/core/commerce-routes.js'), 'utf8')
+    expect(backend).toMatch(/router\.get\('\/catalog\/media\/:id'[\s\S]*?privateCache: true/)
+  })
+
+  it('explica ações destrutivas e modos de visualização sem tornar o tooltip o único nome acessível', () => {
+    expect(catalogHelpFor({ dataset: {}, tagName: 'BUTTON', textContent: 'Arquivar' })).toMatch(/preserva o histórico/i)
+    expect(catalogHelpFor({ dataset: {}, tagName: 'BUTTON', textContent: '', getAttribute: name => name === 'aria-label' ? 'Exibir em cartões' : '' })).toMatch(/cartões/i)
+    expect(catalogHelpFor({ dataset: { catalogHelp: 'Publica apenas na vitrine ativa.' } })).toBe('Publica apenas na vitrine ativa.')
+    const workspace = readFileSync(resolve(process.cwd(), 'web/src/pages/admin/CommerceProductManagement.jsx'), 'utf8')
+    expect(workspace).toContain('aria-label="Exibir em tabela"')
+    expect(workspace).toContain('aria-pressed={layout ===')
+    expect(workspace).toContain('data-catalog-help={productStatus(product)')
+    const tooltip = readFileSync(resolve(process.cwd(), 'web/src/pages/admin/useCatalogActionTooltip.jsx'), 'utf8')
+    expect(tooltip).toContain("shell.addEventListener('focusin', show)")
+    expect(tooltip).toContain("shell.addEventListener('pointerover', show)")
+    expect(tooltip).toContain('role="tooltip"')
   })
 })

@@ -174,11 +174,11 @@ export function commerceMediaIdForIdempotencyKey({ empresaId, productId, idempot
   return `${hex.slice(0, 8).join('')}-${hex.slice(8, 12).join('')}-${hex.slice(12, 16).join('')}-${hex.slice(16, 20).join('')}-${hex.slice(20, 32).join('')}`;
 }
 
-export async function streamCommerceImage({ storageKey, mimeType, res, empresaId = null, productId = null, mediaId = null }) {
+export async function streamCommerceImage({ storageKey, mimeType, res, empresaId = null, productId = null, mediaId = null, privateCache = false }) {
   // Com o escopo informado, só serve o arquivo da própria empresa/produto/mídia.
   const key = empresaId ? scopedCommerceStorageKey({ empresaId, productId, mediaId, storageKey }) : String(storageKey || '').trim();
   res.setHeader('Content-Type', MIME_EXTENSIONS[String(mimeType || '').toLowerCase()] ? String(mimeType).toLowerCase() : 'application/octet-stream');
-  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.setHeader('Cache-Control', privateCache ? 'private, no-store' : 'public, max-age=3600');
 
   if (key.startsWith(LOCAL_STORAGE_PREFIX)) {
     const target = localPathForStorageKey(key);

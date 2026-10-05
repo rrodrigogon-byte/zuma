@@ -412,6 +412,8 @@ export function atualizarServico(empresaId, servicoId, dados = {}) {
 export function listarAgendamentos(empresaId, filtros = {}) {
   const itens = Object.values(estadoEmpresa(empresaId, false).agendamentos)
     .filter((item) => !filtros.data || String(item.dataAgenda || chaveDia(item.dataHora)).slice(0, 10) === String(filtros.data).slice(0, 10))
+    .filter((item) => !filtros.de || String(item.dataAgenda || chaveDia(item.dataHora)).slice(0, 10) >= String(filtros.de).slice(0, 10))
+    .filter((item) => !filtros.ate || String(item.dataAgenda || chaveDia(item.dataHora)).slice(0, 10) <= String(filtros.ate).slice(0, 10))
     .filter((item) => !filtros.status || item.status === String(filtros.status))
     .filter((item) => !filtros.profissionalId || item.profissionalId === String(filtros.profissionalId))
     .filter((item) => !filtros.lojaId || !item.lojaId || item.lojaId === String(filtros.lojaId))

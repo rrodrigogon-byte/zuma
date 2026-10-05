@@ -12,7 +12,7 @@ import {
 import { routerStatus, spentTodayCents } from './core/ai-router.js';
 import { decideProposal, learningQuality, listLearningRuns, listProposals, runLearningCycle } from './core/ai-learning.js';
 import { automationResults, DAILY_CAP, runAutomationRound } from './core/ai-automations.js';
-import { customerEgo, graphSummary, nextBestOffers } from './dino-grafo.js';
+import { customerEgo, customerView, graphSummary, nextBestOffers } from './dino-grafo.js';
 import { loadBrainGraph } from './ai-brain-data.js';
 
 const BASE = '/api/admin/barbearia/cerebro-ia';
@@ -55,7 +55,7 @@ export function registerAiBrainRoutes(app, deps) {
 
   const graphFor = (s) => (loadGraph
     ? loadGraph(s)
-    : loadBrainGraph({ legacyEmpresaId: s.legacy, empresaId: s.empresaId, lojaId: s.legacyLoja }, listarAgendamentosBarbearia ? { listarAgendamentos: listarAgendamentosBarbearia } : {}));
+    : loadBrainGraph({ legacyEmpresaId: s.legacy, empresaId: s.empresaId, legacyLojaId: s.legacyLoja, commerceLojaId: s.lojaId }, listarAgendamentosBarbearia ? { listarAgendamentos: listarAgendamentosBarbearia } : {}));
 
   async function whatsappLoja(empresaId, fallback) {
     if (fallback) return fallback;
@@ -181,7 +181,9 @@ export function registerAiBrainRoutes(app, deps) {
     try {
       const { graph, sources } = await graphFor(s);
       const ofertas = nextBestOffers(graph, { catalog: sources.catalog, services: sources.services, limit: Math.min(100, Number(req.query.limit) || 40) });
-      res.json({ resumo: graphSummary(graph), ofertas });
+      res.set('Cache-Control', 'no-store');
+      const clientes = [...graph.customers.values()].slice(0, 200).map(c => customerView(c, graph));
+      res.json({ resumo: graphSummary(graph), ofertas, clientes, clientesLimitados: graph.customers.size > clientes.length });
     } catch (error) { send(res, error); }
   });
 
@@ -196,7 +198,8 @@ export function registerAiBrainRoutes(app, deps) {
       const key = graph.byToken.get(req.params.token);
       const ofertas = nextBestOffers(graph, { catalog: sources.catalog, services: sources.services, limit: 500 })
         .find((row) => graph.byToken.get(row.cliente.chave) === key) || null;
-      res.json({ ego, ofertas, cliente: ofertas?.cliente || null });
+      res.set('Cache-Control', 'no-store');
+      res.json({ ego, ofertas, cliente: customerView(graph.customers.get(key), graph) });
     } catch (error) { send(res, error); }
   });
 
@@ -227,4 +230,5 @@ export function registerAiBrainRoutes(app, deps) {
     } catch (error) { send(res, error); }
   });
 }
+
 

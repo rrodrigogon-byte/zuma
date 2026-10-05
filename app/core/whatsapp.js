@@ -4,7 +4,7 @@
  * Suporte a: Oficina, Barbearia, Crediário, Agendamentos, Cobranças, Alertas
  */
 import fetch from 'node-fetch';
-import { chatbotBackendConfig, chatbotBackendMode, sendTextViaChatbotBackend, whatsappProviderName } from './whatsapp-provider.js';
+import { chatbotBackendConfig, chatbotBackendMode, sendStickerViaChatbotBackend, sendTextViaChatbotBackend, whatsappProviderName } from './whatsapp-provider.js';
 import { db } from './database.js';
 import { authorizeWhatsappEgress, evaluateWhatsappEgress } from './whatsapp-egress.js';
 
@@ -105,6 +105,47 @@ export async function enviarMensagem(tenant, telefone, mensagem) {
       uncertain: true,
       error: String(err?.name || 'NETWORK_ERROR').slice(0, 80),
     };
+  }
+}
+
+/**
+ * Figurinha do atendimento. Passa pela MESMA trava de saída do texto (empresa, canal,
+ * instância, modo piloto/on). Evolution: /message/sendSticker; backend NossaGente:
+ * rota configurável (CHATBOT_BACKEND_STICKER_PATH).
+ */
+export async function enviarFigurinha(tenant, telefone, figurinha = {}) {
+  const numero = formatarTelefone(String(telefone || ''));
+  const { url = '', base64 = '', mimetype = 'image/webp' } = figurinha;
+  if (whatsappProviderName() === 'chatbot_backend') {
+    const instance = tenant?.whatsapp_instance || tenant?.instance || undefined;
+    if (chatbotBackendMode() !== 'instancias') return sendStickerViaChatbotBackend({ instance, number: numero, url, base64, mimetype });
+    const context = { empresaId: tenant?.empresa_id, lojaId: tenant?.loja_id, canalId: tenant?.canal_id, instance, number: numero };
+    const preliminary = evaluateWhatsappEgress(context);
+    if (!preliminary.ok) return { ok: false, retryable: false, uncertain: false, error: `WHATSAPP_EGRESS_${preliminary.reason.toUpperCase()}` };
+    try {
+      return await db.transaction(async trx => {
+        const decision = await authorizeWhatsappEgress(context, { database: { queryRead: trx.query }, lock: true });
+        if (!decision.ok) return { ok: false, retryable: false, uncertain: false, error: `WHATSAPP_EGRESS_${decision.reason.toUpperCase()}` };
+        return sendStickerViaChatbotBackend({ instance, number: numero, url, base64, mimetype });
+      });
+    } catch {
+      return { ok: false, retryable: false, uncertain: true, error: 'WHATSAPP_STICKER_UNCERTAIN' };
+    }
+  }
+  if (!(tenant?.whatsapp_api_url && tenant?.whatsapp_api_key && tenant?.whatsapp_instance) || !url) {
+    return { ok: false, retryable: false, uncertain: false, error: 'WHATSAPP_STICKER_UNSUPPORTED' };
+  }
+  const cfg = getConfig(tenant);
+  try {
+    const res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/message/sendSticker/${encodeURIComponent(cfg.instance)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: cfg.apiKey },
+      body: JSON.stringify({ number: numero, sticker: url, delay: 800 }),
+      signal: AbortSignal.timeout(20000),
+    });
+    return { ok: res.ok, status: res.status, retryable: false, uncertain: res.status >= 500 };
+  } catch (err) {
+    return { ok: false, status: null, retryable: false, uncertain: true, error: String(err?.name || 'NETWORK_ERROR').slice(0, 80) };
   }
 }
 
