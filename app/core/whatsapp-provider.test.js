@@ -2,6 +2,34 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as provider from './whatsapp-provider.js';
 
+test('listInstances aceita os formatos do backend sem nomes vazios', async () => {
+  await withEnv(env, async () => {
+    const fetch = fakeFetch([{ status: 200, body: { instances: [
+      'dino', { instanceName: 'dino-2' }, { instance: { instanceName: 'dino-3', state: 'open' } },
+      { instance_name: 'dino-4' }, { name: 'dino-5' }, { instance: 'dino-6' }, { id: 'dino-7' },
+      null, {}, { instance: {} }, { name: '   ', instanceName: 'dino-8' },
+    ] } }]);
+    const result = await provider.listInstances(fetch);
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.items.map((item) => item.name), ['dino', 'dino-2', 'dino-3', 'dino-4', 'dino-5', 'dino-6', 'dino-7', 'dino-8']);
+    assert.equal(result.items[2].state, 'open');
+    assert.equal(fetch.calls.length, 1);
+    assert.equal(fetch.calls[0].method, 'GET');
+    assert.equal(new URL(fetch.calls[0].url).pathname, '/api/v1/whats-app/instances');
+  });
+});
+
+test('listInstances rejeita envelope inválido e preserva falha de autenticação', async () => {
+  await withEnv(env, async () => {
+    const invalid = await provider.listInstances(fakeFetch([{ status: 200, body: { instances: {} } }]));
+    assert.equal(invalid.ok, false);
+    assert.equal(invalid.error, 'invalid_instances_response');
+    const denied = await provider.listInstances(fakeFetch([{ status: 401, body: {} }]));
+    assert.equal(denied.authError, true);
+    assert.deepEqual(denied.items, []);
+  });
+});
+
 function withEnv(values, fn) {
   const saved = {};
   for (const key of Object.keys(values)) { saved[key] = process.env[key]; if (values[key] === undefined) delete process.env[key]; else process.env[key] = values[key]; }

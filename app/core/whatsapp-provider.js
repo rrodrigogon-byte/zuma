@@ -141,7 +141,15 @@ export async function listInstances(fetchImpl) {
   const result = await call(cfg, 'GET', '/instances', null, fetchImpl);
   if (isAuthError(result.status)) return { ok: false, authError: true, status: result.status, items: [] };
   const list = Array.isArray(result.data) ? result.data : (result.data?.instances || result.data?.items || []);
-  return { ok: result.ok, status: result.status, items: list.map((item) => (typeof item === 'string' ? { name: item } : { name: clean(item.name || item.instance || item.id, 100), state: normalizeState(item) })) };
+  if (!Array.isArray(list)) return { ok: false, status: result.status, error: 'invalid_instances_response', items: [] };
+  const items = list.map((item) => {
+    if (typeof item === 'string') return { name: clean(item, 100) };
+    if (!item || typeof item !== 'object') return null;
+    const name = [item.name, item.instanceName, item.instance_name, item.instance?.instanceName, item.instance?.name, item.instance, item.id]
+      .find((value) => typeof value === 'string' && value.trim());
+    return name ? { name: clean(name, 100), state: normalizeState(item) } : null;
+  }).filter((item) => item?.name);
+  return { ok: result.ok, status: result.status, items };
 }
 
 export async function getInstanceStatus(instance, fetchImpl) {
