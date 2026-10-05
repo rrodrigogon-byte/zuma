@@ -1,10 +1,67 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { GeminiError, normalizedGeminiHistory, runGeminiWithTools } from './gemini-client.js';
+import { GeminiError, normalizedGeminiHistory, runGeminiWithTools, unfinishedToolReply } from './gemini-client.js';
 
 function response(payload, ok = true, status = 200) {
   return { ok, status, async text() { return JSON.stringify(payload); } };
 }
+
+test('detecta promessas de consulta do incidente sem bloquear perguntas ou resultados', () => {
+  for (const text of ['Antes de fecharmos o pedido, vou verificar se temos Madagascar. Só um momento, por favor.', 'Obrigado! Estou verificando a disponibilidade para você.']) assert.equal(unfinishedToolReply(text), true);
+  for (const text of ['Qual tamanho você procura?', 'Consultei o catálogo e não encontrei o produto.', 'Você quer que eu vá verificar?', 'Encontrei o produto por R$ 369,00.']) assert.equal(unfinishedToolReply(text), false);
+});
+
+test('consulta prometida é executada antes de devolver resposta; não envia o texto de espera', async () => {
+  const previous = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  let requests = 0; let executions = 0;
+  const tools = [{ name: 'buscar_produtos', parameters: { type: 'OBJECT', properties: {} } }];
+  try {
+    const result = await runGeminiWithTools({ requireCompletedReply: true, tools, userText: 'Tem Madagascar?',
+      executeTool: async () => { executions++; return { total: 0, produtos: [] }; },
+      fetchImpl: async () => {
+        requests++;
+        const parts = requests === 1 ? [{ text: 'Estou verificando a disponibilidade.' }]
+          : requests === 2 ? [{ functionCall: { name: 'buscar_produtos', args: { query: 'Madagascar' } } }]
+            : [{ text: 'Não encontrei Madagascar no catálogo. Qual a marca?' }];
+        return response({ candidates: [{ content: { parts } }] });
+      },
+    });
+    assert.equal(requests, 3); assert.equal(executions, 1);
+    assert.equal(result.text, 'Não encontrei Madagascar no catálogo. Qual a marca?');
+    assert.deepEqual(result.traces, [{ name: 'buscar_produtos', ok: true }]);
+  } finally { if (previous === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = previous; }
+});
+
+test('promessa repetida tem uma única correção e falha identificável, sem loop ou execução duplicada', async () => {
+  const previous = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  let requests = 0;
+  try {
+    await assert.rejects(() => runGeminiWithTools({ requireCompletedReply: true,
+      tools: [{ name: 'buscar_produtos' }], executeTool: async () => assert.fail('não houve function call'),
+      fetchImpl: async () => { requests++; return response({ candidates: [{ content: { parts: [{ text: 'Vou consultar o catálogo.' }] } }] }); },
+    }), error => error.code === 'GEMINI_INCOMPLETE_RESPONSE' && error.retryable === false);
+    assert.equal(requests, 2);
+  } finally { if (previous === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = previous; }
+});
+
+test('correção de consulta não ultrapassa o limite de passos nem contorna bloqueio de segurança', async () => {
+  const previous = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  let requests = 0;
+  try {
+    await assert.rejects(() => runGeminiWithTools({ requireCompletedReply: true, maxSteps: 1,
+      tools: [{ name: 'buscar_produtos' }], executeTool: async () => ({}),
+      fetchImpl: async () => { requests++; return response({ candidates: [{ content: { parts: [{ text: 'Estou verificando.' }] } }] }); },
+    }), error => error.code === 'GEMINI_INCOMPLETE_RESPONSE');
+    assert.equal(requests, 1);
+    await assert.rejects(() => runGeminiWithTools({ requireCompletedReply: true,
+      tools: [{ name: 'buscar_produtos' }], executeTool: async () => assert.fail('segurança bloqueou'),
+      fetchImpl: async () => response({ promptFeedback: { blockReason: 'SAFETY' } }),
+    }), error => error.code === 'GEMINI_BLOCKED');
+  } finally { if (previous === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = previous; }
+});
 
 test('runGeminiWithTools retorna texto sem executar ferramenta quando não há function call', async () => {
   const previous = process.env.GEMINI_API_KEY;

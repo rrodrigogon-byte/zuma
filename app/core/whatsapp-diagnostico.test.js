@@ -12,6 +12,18 @@ const base = () => ({
 });
 const por = (f) => Object.fromEntries(conclusoesDoDiagnostico(f).map((c) => [c.titulo, c]));
 
+test('mensagem gravada mas fora do piloto não deixa diagnóstico todo verde', () => {
+  const f = base();
+  f.entrada.ultimaPassada.resultado.foraDoPiloto = 4;
+  const c = por(f);
+  assert.equal(c['Mensagens fora do piloto'].ok, false);
+  assert.match(c['Mensagens fora do piloto'].detalhe, /4 mensagem/);
+  assert.match(c['Mensagens fora do piloto'].detalhe, /mensagem nova/);
+  assert.match(c['Mensagens chegando no Kytto'].detalhe, /não comprova resposta/);
+  f.entrada.modo = 'on';
+  assert.equal(por(f)['Mensagens fora do piloto'], undefined, 'contagem de uma passada anterior não bloqueia modo on');
+});
+
 test('piloto pronto: todas as conclusões verdes', () => {
   const c = conclusoesDoDiagnostico(base());
   assert.ok(c.length >= 9);
