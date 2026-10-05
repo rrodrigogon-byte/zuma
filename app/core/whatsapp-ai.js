@@ -1299,6 +1299,7 @@ export async function whatsappAiOperationalStatus(context = {}) {
       lastSyncAt: channelRow.ultima_sincronizacao_em,
       lastError: channelRow.ultimo_erro,
       capabilities: safeCapabilities(channelRow.configuracao?.capabilities),
+      persona: { ...personaView(channelRow.configuracao, process.env, empresaId), figurinhasNoProvedor: figurinhaSuportada() },
       aiCircuitOpenUntil: channelRow.ai_circuit_open_until,
       aiCircuitOpen: Boolean(channelRow.ai_circuit_open_until && new Date(channelRow.ai_circuit_open_until).getTime() > Date.now()),
       aiConsecutiveFailures: Number(channelRow.ai_consecutive_failures || 0),
