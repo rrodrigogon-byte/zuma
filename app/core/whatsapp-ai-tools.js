@@ -2,6 +2,7 @@ import { isWhatsappOptInText, phoneMatchKeySql } from './whatsapp-phone.js';
 import crypto from 'node:crypto';
 import { db } from './database.js';
 import { createPendingOrder, listPublishedProducts } from './commerce-core.js';
+import { publicPaymentMethods } from './payment-adapters.js';
 // Agenda única: quando a empresa usa a agenda da barbearia (a do admin e do link
 // público), a IA lê e grava nela; senão segue o caminho PostgreSQL antigo.
 import {
@@ -87,6 +88,7 @@ function contextScope(context = {}) {
 }
 
 function capabilityAllows(name, capabilities = {}) {
+  if (name === 'consultar_pagamentos') return capabilities.operateStore !== false;
   if (name === 'solicitar_humano') return capabilities.humanHandoff !== false;
   if (name === 'captar_cliente' || name === 'consultar_perfil_cliente') return capabilities.captureLeads !== false;
   if (name.includes('promoc') || name === 'listar_promocoes_ativas' || name === 'atualizar_consentimento_marketing') return capabilities.sendPromotions === true;
@@ -147,6 +149,39 @@ function productPrice(variant = {}) {
 
 async function toolStore(context) {
   return { ok: true, dataClassification: 'untrusted_business_data', loja: sanitizeToolData(publicStoreData(await activeStorefront(contextScope(context)))) };
+}
+
+async function toolPayments(context) {
+  const scope = contextScope(context);
+  const storefront = await activeStorefront(scope);
+  const accounts = await db.queryRead(
+    `SELECT id, provider, ambiente, secret_ref, public_config, ativo
+       FROM commerce_payment_accounts
+      WHERE empresa_id = $1 AND storefront_id = $2 AND ambiente = 'production' AND ativo = true
+      ORDER BY provider`, [scope.empresaId, storefront.id],
+  );
+  const domains = await db.queryRead(
+    `SELECT dominio FROM commerce_store_domains
+      WHERE empresa_id = $1 AND storefront_id = $2 AND verificado_em IS NOT NULL
+      ORDER BY principal DESC, dominio ASC LIMIT 1`, [scope.empresaId, storefront.id],
+  );
+  const domain = String(domains.rows[0]?.dominio || '').trim().toLowerCase();
+  const validDomain = domain.length <= 253 && domain.split('.').length > 1
+    && domain.split('.').every(label => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label));
+  const labels = { pix: 'Pix', credit_card: 'Cartão de crédito', debit_card: 'Cartão de débito', boleto: 'Boleto', external: 'Checkout do provedor' };
+  const methods = publicPaymentMethods(accounts.rows)
+    // Crediário requer elegibilidade do pedido e verificação no checkout.
+    .filter(item => item.method !== 'account')
+    .map(item => ({ ...item, nome: labels[item.method] }));
+  return {
+    ok: true,
+    dataClassification: 'untrusted_business_data',
+    loja: sanitizeUntrustedBusinessText(storefront.nome, 120),
+    urlLoja: validDomain ? `https://${domain}/` : null,
+    pagamentosDisponiveis: methods.length > 0,
+    meios: methods,
+    instrucao: 'Dados exclusivos do e-commerce desta unidade. Informe somente estes meios. Finalização e condições no checkout; não prometa parcelamento, juros, desconto ou aprovação. Não peça dados de cartão, CPF nem códigos no WhatsApp. Lista vazia significa que não foi possível confirmar um meio online disponível. Não crie cobrança nem pedido por esta consulta.',
+  };
 }
 
 async function toolProducts(context, args = {}) {
@@ -861,6 +896,7 @@ async function toolHuman(context, args = {}) {
 
 export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'consultar_loja', description: 'Consulta endereço, contato, horário e retirada da unidade selecionada.', parameters: { type: 'OBJECT', properties: {} } },
+  { name: 'consultar_pagamentos', description: 'Consulta os meios de pagamento online validados pelo checkout e o domínio verificado da loja desta unidade. Use para dúvidas de pagamento, como comprar e link do e-commerce. Somente leitura: não cria pedido nem cobrança.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'buscar_produtos', description: 'Busca produtos realmente publicados e com preço/estoque no catálogo da unidade selecionada.', parameters: { type: 'OBJECT', properties: { query: { type: 'STRING', description: 'Nome, marca ou característica do produto' }, limit: { type: 'INTEGER', description: 'Máximo de resultados, entre 1 e 8' } } } },
   { name: 'listar_servicos', description: 'Lista serviços de barbearia ativos e seus valores/duração.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'listar_profissionais', description: 'Lista profissionais ativos da unidade.', parameters: { type: 'OBJECT', properties: {} } },
@@ -890,6 +926,7 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
 ];
 
 const TOOL_MAP = {
+  consultar_pagamentos: toolPayments,
   consultar_loja: toolStore,
   buscar_produtos: toolProducts,
   listar_servicos: toolServices,
