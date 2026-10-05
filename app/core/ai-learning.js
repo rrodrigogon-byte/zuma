@@ -210,6 +210,7 @@ export async function runLearningCycle(options = {}) {
       } catch {
         analysis = heuristicAnalysis(conversation.rows, { handoff: conversation.handoff });
         summary.resumosSemIa += 1;
+        summary.erros += 1;
       }
       if (conversation.handoff && analysis.resultado === 'duvida') analysis.resultado = 'humano';
       const resumoId = await saveConversationSummary(query, {
