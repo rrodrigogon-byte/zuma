@@ -1,3 +1,4 @@
+import { standaloneGreetingReply } from './whatsapp-ai-greeting.mjs';
 import { isWhatsappOptOutText } from './whatsapp-phone.js';
 import { resolveConfirmation, CONFIRMATION_HINT } from './whatsapp-ai-intents.js';
 import { MEDIA_SYSTEM_GUIDANCE } from './whatsapp-ai-media.js';
@@ -577,6 +578,8 @@ async function deterministicResponse(task, channel, session, message) {
     return { text: 'Preferência registrada. Você não receberá mensagens de marketing por este atendimento. Ainda posso responder solicitações que você iniciar.', kind: 'opt_out' };
   }
   if (session.status === 'humano') return { text: null, kind: 'human_queue' };
+  const greeting = standaloneGreetingReply(message.text, { pendingAction: Boolean(session.acao_pendente) });
+  if (greeting) return { text: greeting, kind: 'greeting' };
   if (resumeIntent(message.text)) return { text: 'A automação só pode ser retomada pela equipe após concluir o atendimento humano.', kind: 'resume_blocked' };
   if (session.opportunity_offered_at && opportunityDeclineIntent(message.text)) {
     await db.query(
@@ -1487,3 +1490,4 @@ export async function testWhatsappAiGemini(context = {}, { confirmed = false } =
     throw error;
   }
 }
+
