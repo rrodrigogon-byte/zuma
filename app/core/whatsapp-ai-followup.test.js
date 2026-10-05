@@ -24,7 +24,7 @@ test('toque só quando o cliente sumiu depois de ver o resumo e a ação ainda v
   assert.equal(planPendingFollowUp(sessao({ acao_pendente: { ...sessao().acao_pendente, mostrado: false } }), { now: AGORA }).reason, 'summary_not_shown');
   assert.equal(planPendingFollowUp(sessao({ status: 'humano' }), { now: AGORA }).reason, 'not_automated');
   assert.equal(planPendingFollowUp(sessao({ estado: { followup: { actionId: 'a1' } } }), { now: AGORA }).reason, 'already_followed_up');
-  assert.equal(planPendingFollowUp(sessao({ acao_pendente: { ...sessao().acao_pendente, preparadoEm: min(28) } }), { now: AGORA }).reason, 'action_expiring');
+  assert.equal(planPendingFollowUp(sessao({ acao_pendente: { ...sessao().acao_pendente, preparadoEm: min(118) } }), { now: AGORA }).reason, 'action_expiring');
   assert.equal(planPendingFollowUp(sessao({ acao_pendente: null }), { now: AGORA }).reason, 'no_pending_action');
   // 22:30 em Cuiabá
   assert.equal(planPendingFollowUp(sessao({ ultima_interacao_em: '2026-10-03T02:15:00.000Z', acao_pendente: { ...sessao().acao_pendente, preparadoEm: '2026-10-03T02:15:00.000Z' } }), { now: new Date('2026-10-03T02:30:00.000Z') }).reason, 'quiet_hours');

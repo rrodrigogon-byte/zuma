@@ -20,6 +20,7 @@ import {
 import { clubeParaTelefone, entrarListaEspera, planoDoTelefone, sugestaoPosServico } from '../dino-captacao-kytto.js';
 import { saldoCashback } from '../dino-cobranca-kytto.js';
 import * as barbeariaErp from '../barbearia-erp-kytto.js';
+import { actionTtlMinutes, isGenericCustomerName } from './whatsapp-ai-intents.js';
 import {
   ensureWhatsappLead,
   getWhatsappLeadProfile,
@@ -331,12 +332,24 @@ async function toolNextSlots(context, args = {}) {
   };
 }
 
+// Nome genérico ("Cliente", "Contato", só números) não serve para agenda nem pedido:
+// o atendente pergunta o nome antes de preparar (o teste real de 05/10 saiu "Oi, Cliente!").
+export { isGenericCustomerName };
+
+function requireCustomerName(...candidates) {
+  for (const candidate of candidates) {
+    const name = cleanText(candidate, 100);
+    if (!isGenericCustomerName(name)) return name;
+  }
+  throw new WhatsappAiToolError('falta o nome do cliente: pergunte "Qual seu nome para eu deixar no agendamento?" e depois chame de novo com customerName', 'CUSTOMER_NAME_REQUIRED');
+}
+
 async function toolJoinWaitlist(context, args = {}) {
   const scope = await barbeariaScope(context);
   if (args.customerAgreed !== true) {
     throw new WhatsappAiToolError('pergunte antes se o cliente quer ser avisado pelo WhatsApp quando abrir vaga', 'CUSTOMER_AGREEMENT_REQUIRED');
   }
-  const name = sanitizeUntrustedBusinessText(args.customerName || scope.customerName, 100);
+  const name = sanitizeUntrustedBusinessText(requireCustomerName(args.customerName, scope.customerName), 100);
   try {
     const entrada = entrarListaEspera(scope.empresaId, {
       nome: name,
@@ -471,13 +484,15 @@ async function toolPrepareAppointment(context, args = {}) {
   const time = cleanText(args.time, 5);
   const availability = await listSchedulingAvailability(scope, { serviceId, professionalId, date });
   if (!availability.slots.includes(time)) throw new SchedulingError('horário indisponível', 'SLOT_UNAVAILABLE');
-  const customerName = cleanText(args.customerName || scope.customerName, 100);
+  const customerName = requireCustomerName(args.customerName, scope.customerName);
   // Vários serviços na mesma ida (barba + manicure): encaixa um depois do outro.
   const extras = (Array.isArray(args.extraServiceIds) ? args.extraServiceIds : []).slice(0, 3).map((id) => ensureAgendaId(id, 'extraServiceIds'));
   const combo = [];
   let cursor = minutesOf(time) + Number(availability.service.duracaoMinutos || 30);
   let total = Number(availability.service.preco || 0);
-  const partes = [`${availability.service.nome} com ${availability.professional.nome} às ${time}`];
+  // "qualquer profissional disponível" não informa nada ao cliente: a equipe sai na confirmação.
+  const comQuem = availability.professional?.id === 'qualquer' ? '' : ` com ${availability.professional.nome}`;
+  const partes = [`${availability.service.nome}${comQuem} às ${time}`];
   // O cliente escolheu um profissional: os serviços seguintes ficam com ELE quando ele
   // faz o serviço e está livre (corte + barba + sobrancelha com o mesmo barbeiro). Só
   // cai para "qualquer" quando ele não faz o serviço ou não tem encaixe (ex.: manicure).
@@ -515,7 +530,7 @@ async function toolPrepareAppointment(context, args = {}) {
   const para = customerName ? ` para ${customerName}` : '';
   const summary = combo.length
     ? `${friendlyWhen(date, time)}${para}: ${partes.join(' + ')}, total R$ ${total.toFixed(2).replace('.', ',')}`
-    : `${availability.service.nome} com ${availability.professional.nome}${para}, ${friendlyWhen(date, time)}, no valor de R$ ${availability.service.preco.toFixed(2).replace('.', ',')}`;
+    : `${availability.service.nome}${comQuem}${para}, ${friendlyWhen(date, time)}, no valor de R$ ${availability.service.preco.toFixed(2).replace('.', ',')}`;
   return savePreparedAction(scope, 'agendamento', request, summary);
 }
 
@@ -553,7 +568,7 @@ async function toolPrepareOrder(context, args = {}) {
     storefrontId: storefront.id,
     shippingMethodId: method.rows[0].id,
     items,
-    customer: { nome: cleanText(args.customerName || scope.customerName, 100), telefone: scope.phone },
+    customer: { nome: requireCustomerName(args.customerName, scope.customerName), telefone: scope.phone },
     note: 'Pedido preparado pelo atendimento WhatsApp para retirada.',
   };
   const summary = `${summarized.map(item => `${item.quantity}x ${item.nome}`).join(', ')}. Total R$ ${total.toFixed(2).replace('.', ',')}; retirada na unidade.`;
@@ -861,7 +876,7 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'atualizar_consentimento_marketing', description: 'Registra ou revoga a autorização do cliente para receber promoções no WhatsApp. Para conceder, exige evidência da solicitação expressa.', parameters: { type: 'OBJECT', properties: { granted: { type: 'BOOLEAN' }, evidence: { type: 'STRING' } }, required: ['granted'] } },
   { name: 'listar_promocoes_ativas', description: 'Lista somente promoções ativas e vigentes da unidade. Nunca invente ofertas, valores ou cupons.', parameters: { type: 'OBJECT', properties: { limit: { type: 'INTEGER' } } } },
   { name: 'preparar_promocao_cliente', description: 'Prepara o envio de uma promoção ao cliente com opt-in. O envio só ocorre após CONFIRMAR.', parameters: { type: 'OBJECT', properties: { promotionId: { type: 'STRING' }, code: { type: 'STRING' }, message: { type: 'STRING' } }, required: ['promotionId', 'message'] } },
-  { name: 'preparar_agendamento', description: 'Prepara um agendamento para confirmação. Não grava o agendamento. Use o id retornado por listar_profissionais; na agenda da barbearia também é aceito "qualquer" quando o cliente não tem preferência. Vários serviços na mesma ida: passe os demais em extraServiceIds e eles são encaixados em sequência. Para outra pessoa (filho, amigo), use o nome DELA em customerName.', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, professionalId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' }, customerName: { type: 'STRING' }, notes: { type: 'STRING' }, extraServiceIds: { type: 'ARRAY', items: { type: 'STRING' }, description: 'até 3 serviços seguidos na mesma visita' } }, required: ['serviceId', 'professionalId', 'date', 'time', 'customerName'] } },
+  { name: 'preparar_agendamento', description: 'Prepara um agendamento para confirmação. Não grava o agendamento. Use o id retornado por listar_profissionais; na agenda da barbearia também é aceito "qualquer" quando o cliente não tem preferência. Vários serviços na mesma ida: passe os demais em extraServiceIds e eles são encaixados em sequência. Para outra pessoa (filho, amigo), use o nome DELA em customerName. customerName é o nome real (nunca "Cliente"): se não souber, pergunte antes.', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, professionalId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' }, customerName: { type: 'STRING', description: 'Nome real da pessoa atendida' }, notes: { type: 'STRING' }, extraServiceIds: { type: 'ARRAY', items: { type: 'STRING' }, description: 'até 3 serviços seguidos na mesma visita' } }, required: ['serviceId', 'professionalId', 'date', 'time', 'customerName'] } },
   { name: 'preparar_remarcacao', description: 'Prepara a remarcação de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' } }, required: ['appointmentId', 'date', 'time'] } },
   { name: 'preparar_cancelamento', description: 'Prepara o cancelamento de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' } }, required: ['appointmentId'] } },
   { name: 'preparar_pedido', description: 'Prepara um pedido de retirada para confirmação. Não cria o pedido.', parameters: { type: 'OBJECT', properties: { customerName: { type: 'STRING' }, items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { variantId: { type: 'STRING' }, quantity: { type: 'INTEGER' } }, required: ['variantId', 'quantity'] } } }, required: ['customerName', 'items'] } },
@@ -914,13 +929,34 @@ export function createWhatsappAiToolExecutor(context) {
     if (!capabilityAllows(name, scoped.capabilities)) throw new WhatsappAiToolError('esta capacidade está desativada para a unidade', 'CAPABILITY_DISABLED');
     if (name.startsWith('preparar_')) {
       if (preparedAction) throw new WhatsappAiToolError('apenas uma ação pode ser preparada por mensagem', 'MULTIPLE_ACTIONS_NOT_ALLOWED');
-      preparedAction = true;
     }
     context.primaryIntentResolved = primaryIntentResolved;
     const result = await tool(context, args || {});
+    // Só conta como preparada se deu certo: depois de "horário indisponível" ou "falta o nome",
+    // o atendente pode corrigir e preparar de novo na mesma mensagem.
+    if (name.startsWith('preparar_') && result?.ok !== false) preparedAction = true;
     if (!['propor_oportunidade', 'solicitar_humano'].includes(name)) primaryIntentResolved = true;
     return result;
   };
+}
+
+/**
+ * Depois de uma ação confirmada (agendamento, remarcação, pedido…), o contato fica no CRM
+ * com nome e a interação registrada, como faria a recepção. Falha aqui nunca derruba a confirmação.
+ */
+export async function recordConfirmedInCrm(context, pending = {}) {
+  const scope = contextScope(context);
+  const tipo = cleanText(pending.type, 40) || 'acao';
+  const summary = cleanText(pending.summary, 600);
+  // Só usa o nome do resumo quando é o próprio cliente (agendar para o filho não renomeia o contato).
+  const sessionName = isGenericCustomerName(scope.customerName) ? '' : cleanText(scope.customerName, 100);
+  const forName = (summary.match(/ para ([^:]{2,60}):/) || [])[1] || '';
+  const name = sessionName || (isGenericCustomerName(forName) ? '' : forName);
+  try {
+    await ensureWhatsappLead(scope, { phone: scope.phone, name, text: `WhatsApp IA: ${tipo} confirmado — ${summary}` });
+  } catch {
+    // CRM é complementar: a ação já foi concluída.
+  }
 }
 
 export async function cancelPendingAction(context) {
@@ -967,7 +1003,7 @@ export async function confirmPendingAction(context) {
     if (!action) throw new WhatsappAiToolError('ação pendente não encontrada', 'ACTION_NOT_FOUND');
     if (action.status === 'concluida') return action.resposta;
     if (action.status !== 'preparada') throw new WhatsappAiToolError('ação não pode mais ser confirmada', 'ACTION_NOT_CONFIRMABLE');
-    if (Date.now() - new Date(action.criado_em).getTime() > 30 * 60 * 1000) {
+    if (Date.now() - new Date(action.criado_em).getTime() > actionTtlMinutes() * 60 * 1000) {
       await trx.query(
         `UPDATE whatsapp_ai_actions SET status = 'cancelada' WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`,
         [action.id, scope.empresaId, scope.lojaId],

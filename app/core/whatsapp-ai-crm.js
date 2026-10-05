@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { db } from './database.js';
 import { canonicalWhatsappPhone, phoneMatchKeySql } from './whatsapp-phone.js';
+import { isGenericCustomerName } from './whatsapp-ai-intents.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -48,7 +49,9 @@ export async function ensureWhatsappLead(context = {}, input = {}) {
   const scope = tenant(context);
   const phone = normalizeWhatsappPhone(input.phone || context.phone);
   if (!phone) return null;
-  const name = clean(input.name || context.customerName, 160);
+  // "Cliente"/"Contato" não é nome: cria como "Lead WhatsApp 1234" e completa quando souber.
+  const rawName = clean(input.name || context.customerName, 160);
+  const name = isGenericCustomerName(rawName) ? '' : rawName;
   const text = clean(input.text, 2000);
   return db.transaction(async trx => {
     const query = trx.query.bind(trx);
@@ -68,7 +71,7 @@ export async function ensureWhatsappLead(context = {}, input = {}) {
         [scope.empresaId, name || `Lead WhatsApp ${phone.slice(-4)}`, phone, JSON.stringify(['whatsapp-lead', 'dino'])],
       );
       customer = inserted.rows[0];
-    } else if (name && (!customer.nome || /^lead whatsapp/i.test(customer.nome) || /^cliente balc[aã]o/i.test(customer.nome))) {
+    } else if (name && (!customer.nome || /^lead whatsapp/i.test(customer.nome) || /^cliente balc[aã]o/i.test(customer.nome) || isGenericCustomerName(customer.nome))) {
       const updated = await query(
         `UPDATE clientes SET nome = $3, telefone = COALESCE(NULLIF(telefone, ''), $4)
           WHERE id = $1 AND empresa_id = $2 RETURNING id, empresa_id, nome, telefone, email, cidade, uf, tags, ativo`,

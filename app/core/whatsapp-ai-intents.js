@@ -113,3 +113,65 @@ export function resolveConfirmation(text, { actionType = '', lastAssistantText =
   if (!naturalConfirmationAllowed(lastAssistantText)) return null;
   return confirmIntent(text, { actionType });
 }
+
+// ============================================================================
+// Prazo da ação pendente e formatação para o WhatsApp
+// ============================================================================
+
+/** Minutos que um resumo preparado continua confirmável (antes eram 30 fixos). */
+export function actionTtlMinutes() {
+  const value = Number.parseInt(process.env.WHATSAPP_AI_ACTION_TTL_MIN || '120', 10);
+  return Math.min(24 * 60, Math.max(15, Number.isFinite(value) ? value : 120));
+}
+
+/**
+ * Resumo de vários serviços em linhas, fácil de ler no celular:
+ * "hoje, segunda 05/10 às 17:00 para Rafael: Corte com Dino às 17:00 + Barba às 17:30, total R$ 85,00"
+ * → "hoje, segunda 05/10 às 17:00 para Rafael:\n• Corte com Dino às 17:00\n• Barba às 17:30\nTotal: R$ 85,00"
+ */
+export function formatActionSummary(summary) {
+  const text = String(summary ?? '').trim().replace(/\.$/, '');
+  if (!text.includes(' + ')) return text;
+  const colon = text.indexOf(': ');
+  if (colon < 0) return text;
+  const head = text.slice(0, colon + 1);
+  let body = text.slice(colon + 2);
+  let total = '';
+  const totalMatch = body.match(/,\s*total\s+(R\$\s*[\d.,]+)\s*$/i);
+  if (totalMatch) {
+    total = `\nTotal: ${totalMatch[1]}`;
+    body = body.slice(0, totalMatch.index);
+  }
+  return `${head}\n${body.split(' + ').map((item) => `• ${item.trim()}`).join('\n')}${total}`;
+}
+
+/**
+ * O modelo escreve Markdown (**negrito**, listas com "*", títulos "#"); no WhatsApp isso
+ * aparece cru ("**SIM*"). Converte para a formatação do WhatsApp e tira o que sobra.
+ */
+export function formatForWhatsapp(text) {
+  let out = String(text ?? '').replace(/\r\n/g, '\n');
+  out = out.replace(/^\s{0,3}#{1,6}\s+(.+)$/gm, '*$1*');                 // títulos → negrito
+  out = out.replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g, '$1: $2');  // [texto](link)
+  out = out.replace(/__([^_\n]+?)__/g, '_$1_');                            // __x__ → _x_
+  out = out.replace(/\*{2,}/g, '*');                                        // ** → *
+  out = out.replace(/(^|\n)\s*[*\-•]\s+/g, '$1• ');                       // marcador no início da linha
+  out = out.replace(/[ \t]\*[ \t]{2,}/g, '\n• ');                          // marcador no meio ("  *   10:00")
+  // Negrito válido = *texto* colado; qualquer outro asterisco é sobra do Markdown.
+  const kept = [];
+  out = out.replace(/\*(\S(?:[^*\n]*?\S)?)\*/g, (_, inner) => { kept.push(inner); return `\u0001${kept.length - 1}\u0002`; });
+  out = out.replace(/\*/g, '');
+  out = out.replace(/\u0001(\d+)\u0002/g, (_, i) => `*${kept[Number(i)]}*`);
+  out = out.replace(/[ \t]{2,}/g, ' ').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
+  return out.trim();
+}
+
+// Nome genérico ("Cliente", "Contato", só números) não é nome de pessoa.
+const GENERIC_NAMES = new Set(['cliente', 'clientes', 'contato', 'contact', 'customer', 'client', 'usuario', 'usuário', 'user', 'whatsapp', 'sem nome', 'desconhecido', 'nome', 'teste', 'eu', 'mim']);
+export function isGenericCustomerName(value) {
+  const name = String(value ?? '').normalize('NFC').trim().toLowerCase().replace(/[.\-_~*]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!name || name.length < 2) return true;
+  if (!/\p{L}/u.test(name)) return true;
+  return GENERIC_NAMES.has(name) || /^cliente\s*\d*$/.test(name);
+}
+

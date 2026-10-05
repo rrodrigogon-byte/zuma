@@ -78,7 +78,8 @@ Comparado ao atendimento manual de hoje no WhatsApp Business da Dino (+55 65 990
 | `GEMINI_MEDIA_MODEL` | `GEMINI_MODEL` | Modelo usado para transcrever/descrever |
 | `CHATBOT_BACKEND_MEDIA_PATH` | vazio | Rota de mídia do backend, ex. `/messages/{id}/media` (`{id}`, `{chatId}`, `{instance}`) |
 | `WHATSAPP_AI_FOLLOWUP` | `on` | `off` desliga a retomada de conversa parada |
-| `WHATSAPP_AI_FOLLOWUP_AFTER_MIN` | `12` | Minutos parado antes do toque (5–25) |
+| `WHATSAPP_AI_FOLLOWUP_AFTER_MIN` | `12` | Minutos parado antes do toque (5 até o prazo − 5) |
+| `WHATSAPP_AI_ACTION_TTL_MIN` | `120` | Minutos em que um resumo preparado continua confirmável (15–1440; antes 30 fixos) |
 
 ### Contrato de mídia com o backend (pendência do backend NossaGente)
 
@@ -238,3 +239,18 @@ O ensaio geral com o catálogo, a equipe e o horário reais (`app/core/fixtures/
 WHATSAPP_SIM_PG_URL=postgres://postgres@127.0.0.1:5433/ensaio DB_SSL=false \
   node --test app/core/whatsapp-ai-ensaio-dino.pg.test.js
 ```
+
+## Atendimento natural (teste real de 05/10)
+
+Problemas vistos na conversa real e o que mudou:
+
+| Visto no WhatsApp | Correção |
+|---|---|
+| "Oi, Cliente!" e "para Cliente" no resumo | Nome genérico (Cliente, Contato, só números) é recusado em agenda, lista de espera e pedido: o atendente pergunta o nome. O CRM não cria mais cliente chamado "Cliente". |
+| `**SIM*`, `* **10:00* *` | Markdown do modelo vira formatação do WhatsApp (`*negrito*`, `•` por linha); asterisco solto some. |
+| Resumo repetido (texto do modelo + "Resumo para confirmar") | Com ação nova, o texto do modelo que repete horário/valor/SIM vira só "Perfeito! Confere pra mim:". |
+| "Posso preparar? diga SIM" e depois outro SIM | O prompt manda preparar direto quando o cliente escolhe o horário. |
+| Vários serviços numa linha só | Resumo em linhas (`• serviço às HH:MM`) e `Total:`; sem "qualquer profissional disponível". |
+| Resumo das 08:57 venceu às 09:27 e o "ok, quero um plano vip" das 09:36 ignorou o horário | Prazo padrão de 120 min; se o cliente muda de assunto com resumo pendente, a resposta lembra a confirmação pedindo CONFIRMAR/DESISTIR (palavra explícita, para um "quero" de outra pergunta não confirmar sem querer). |
+| Cadastro sem a conversa | Toda ação confirmada grava/atualiza o cliente no CRM com nome e a interação. |
+| Preparar falhou (horário ocupado, falta nome) e travava a mensagem | A trava "uma ação por mensagem" só conta ações preparadas com sucesso. |
