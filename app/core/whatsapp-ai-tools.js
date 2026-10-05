@@ -2,6 +2,7 @@ import { isWhatsappOptInText, phoneMatchKeySql } from './whatsapp-phone.js';
 import crypto from 'node:crypto';
 import { db } from './database.js';
 import { createPendingOrder, listPublishedProducts } from './commerce-core.js';
+import { productDetails, productCard } from './whatsapp-product-card.js';
 import { publicPaymentMethods } from './payment-adapters.js';
 // Agenda única: quando a empresa usa a agenda da barbearia (a do admin e do link
 // público), a IA lê e grava nela; senão segue o caminho PostgreSQL antigo.
@@ -88,7 +89,7 @@ function contextScope(context = {}) {
 }
 
 function capabilityAllows(name, capabilities = {}) {
-  if (name === 'consultar_pagamentos') return capabilities.operateStore !== false;
+  if (name === 'apresentar_produto' || name === 'consultar_pagamentos') return capabilities.operateStore !== false;
   if (name === 'solicitar_humano') return capabilities.humanHandoff !== false;
   if (name === 'captar_cliente' || name === 'consultar_perfil_cliente') return capabilities.captureLeads !== false;
   if (name.includes('promoc') || name === 'listar_promocoes_ativas' || name === 'atualizar_consentimento_marketing') return capabilities.sendPromotions === true;
@@ -187,7 +188,7 @@ async function toolPayments(context) {
   };
 }
 
-// Links públicos da loja: a foto vai como link (o WhatsApp mostra a prévia da imagem) e a
+// Links públicos da loja: a foto vai como link (prévia depende do WhatsApp) e a
 // vitrine/pedido como página. Base: WHATSAPP_AI_PUBLIC_URL ou PUBLIC_BASE_URL.
 function publicBaseUrl() {
   const base = cleanText(process.env.WHATSAPP_AI_PUBLIC_URL || process.env.PUBLIC_BASE_URL || '', 200).replace(/\/+$/, '');
@@ -226,6 +227,7 @@ async function toolProducts(context, args = {}) {
         nome: sanitizeUntrustedBusinessText(variant.nome || product.nome, 160),
         preco: productPrice(variant),
         estoque,
+        detalhes: productDetails(product, variant),
         sobEncomenda: estoque <= 0 && variant.permiteCompraSemEstoque === true,
       };
     }).filter(variant => variant.preco > 0 && (variant.estoque > 0 || variant.sobEncomenda));
@@ -244,6 +246,13 @@ async function toolProducts(context, args = {}) {
   const limit = Math.min(20, Math.max(1, Number(args.limit) || 10));
   const offset = Math.max(0, Number.parseInt(String(args.offset || 0), 10) || 0);
   const pagina = vendaveis.slice(offset, offset + limit);
+  for (const product of pagina) context.productCatalog?.set(product.id, product);
+  if (query && vendaveis.length === 1 && pagina[0]?.variantes.length === 1) {
+    const product = pagina[0];
+    const variant = product.variantes[0];
+    const card = productCard(product, variant);
+    if (context.productCards && context.productCards.size < 3 && [...context.productCards.values(), card].join('\n\n').length <= 2400) context.productCards.set(`${product.id}:${variant.id}`, card);
+  }
   const categorias = [...new Set(vendaveis.map(item => item.categoria).filter(Boolean))].slice(0, 12);
   return {
     ok: true,
@@ -255,8 +264,28 @@ async function toolProducts(context, args = {}) {
     categorias,
     linkVitrine: links.vitrine,
     produtos: pagina,
-    orientacao: 'Diga quantos produtos existem (total). Liste no máximo 10 por mensagem, um por linha com nome e preço; se haMais, ofereça os próximos (offset) ou filtrar por categoria/marca, e mande o linkVitrine para ver todos com fotos. Para foto, mande o link de fotos[0] numa linha sozinha (o WhatsApp mostra a imagem). Nunca diga que não consegue mostrar fotos quando houver link. Produto sobEncomenda: avise que é sob encomenda.',
+    fichaAutomaticaIncluida: Boolean(query && pagina[0] && context.productCards?.has(`${pagina[0].id}:${pagina[0].variantes[0]?.id}`)),
+    orientacao: 'Se fichaAutomaticaIncluida, o sistema já incluirá a ficha: não repita seus campos no texto. Diga quantos produtos existem (total). Liste no máximo 10 por mensagem, um por linha com nome e preço; se haMais, ofereça os próximos (offset) ou filtrar por categoria/marca, e mande o linkVitrine para ver todos com fotos. Para detalhes de um produto, chame apresentar_produto com o id e a variante desejada: o sistema inclui a ficha e o link da foto. Link não garante prévia nem envio como anexo. Não invente volume ou atributos ausentes. Produto sobEncomenda: avise que é sob encomenda.',
   };
+}
+
+async function toolPresentProduct(context, args = {}) {
+  contextScope(context);
+  const product = context.productCatalog?.get(cleanText(args.productId, 60));
+  if (!product) throw new WhatsappAiToolError('consulte buscar_produtos antes de apresentar o produto', 'PRODUCT_NOT_CONSULTED');
+  const variant = args.variantId ? product.variantes.find(item => item.id === args.variantId)
+    : product.variantes.length === 1 ? product.variantes[0] : null;
+  if (!variant) throw new WhatsappAiToolError('escolha uma variante retornada pelo catálogo', 'VARIANT_REQUIRED');
+  const key = `${product.id}:${variant.id}`;
+  if (!context.productCards.has(key)) {
+    if (context.productCards.size >= 3) throw new WhatsappAiToolError('apresente no máximo três produtos por resposta', 'PRODUCT_CARD_LIMIT');
+    const card = productCard(product, variant);
+    if ([...context.productCards.values(), card].join('\n\n').length > 2400) throw new WhatsappAiToolError('fichas longas: apresente menos produtos nesta resposta', 'PRODUCT_CARD_LIMIT');
+    context.productCards.set(key, card);
+  }
+  return { ok: true, fichaIncluidaPeloSistema: true, fotoDisponivel: Boolean(product.fotos?.length),
+    formatoFoto: product.fotos?.length ? 'link_publico' : 'ausente',
+    instruction: 'O sistema incluirá a ficha completa ao final da resposta. Não repita ficha, preço, descrição nem foto; responda apenas outras dúvidas do cliente. Não diga que enviou anexo.' };
 }
 
 async function toolServices(context) {
@@ -945,6 +974,7 @@ async function toolHuman(context, args = {}) {
 export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'consultar_loja', description: 'Consulta endereço, contato, horário e retirada da unidade selecionada.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'consultar_pagamentos', description: 'Consulta os meios de pagamento online validados pelo checkout e o domínio verificado da loja desta unidade. Use para dúvidas de pagamento, como comprar e link do e-commerce. Somente leitura: não cria pedido nem cobrança.', parameters: { type: 'OBJECT', properties: {} } },
+  { name: 'apresentar_produto', description: 'Inclui ficha com foto por link, descrição, volume/ml e atributos cadastrados, preço e disponibilidade. Use sempre ao responder detalhes de produto, após buscar_produtos. Não envia cobrança nem mensagem separada. Até 3 fichas por resposta.', parameters: { type: 'OBJECT', properties: { productId: { type: 'STRING' }, variantId: { type: 'STRING' } }, required: ['productId'] } },
   { name: 'buscar_produtos', description: 'Busca produtos publicados (com preço e estoque ou sob encomenda) no catálogo da unidade. Devolve o total, uma página de produtos com fotos (links) e o link da vitrine. Sem query lista o catálogo todo, página a página.', parameters: { type: 'OBJECT', properties: { query: { type: 'STRING', description: 'Nome, marca ou característica do produto (vazio = todos)' }, limit: { type: 'INTEGER', description: 'Itens por página, 1 a 20 (padrão 10)' }, offset: { type: 'INTEGER', description: 'A partir de qual item (para ver os próximos)' } } } },
   { name: 'listar_servicos', description: 'Lista serviços de barbearia ativos e seus valores/duração.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'listar_profissionais', description: 'Lista profissionais ativos da unidade.', parameters: { type: 'OBJECT', properties: {} } },
@@ -974,6 +1004,7 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
 ];
 
 const TOOL_MAP = {
+  apresentar_produto: toolPresentProduct,
   consultar_pagamentos: toolPayments,
   consultar_loja: toolStore,
   buscar_produtos: toolProducts,
@@ -1005,6 +1036,8 @@ const TOOL_MAP = {
 };
 
 export function createWhatsappAiToolExecutor(context) {
+  context.productCatalog = new Map();
+  context.productCards = new Map();
   let preparedAction = false;
   let primaryIntentResolved = false;
   return async (name, args) => {
