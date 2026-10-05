@@ -22,6 +22,7 @@ import {
   markPersonalizationPrompted,
   personalizationConsentIntent,
   PERSONALIZATION_QUESTION,
+  purchaseIntentExpressed,
   recommendationRequested,
   recordWhatsappAiPolicyEvent,
   registerOpportunityDecision,
@@ -985,6 +986,7 @@ async function deterministicResponseCore(task, channel, session, message) {
       traces: result.traces,
       recommendationWasRequested: recommendationRequested(message.text),
       opportunityAllowed: opportunityTrace,
+      customerRequestedPurchase: purchaseIntentExpressed(userText),
     });
     if (!validation.ok) {
       await recordWhatsappAiPolicyEvent(context, 'output_blocked', {
