@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   anthropicToolsFromDeclarations, estimateCostCents, geminiThinking, parseJsonLoose, routeFor, routerStatus,
-  runAiTask, runAnthropicWithTools,
+  runAiTask, runAnthropicWithTools, providerConfigured, modelFor, anthropicVertexUrl,
 } from './ai-router.js';
 
-const KEYS = ['GEMINI_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'AI_ROUTE_RESUMIR_EXTRAIR'];
+const KEYS = ['GEMINI_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'AI_ROUTE_RESUMIR_EXTRAIR', 'ANTHROPIC_VERTEX_PROJECT_ID', 'ANTHROPIC_VERTEX_REGION', 'AI_MODEL_ANTHROPIC_SMART'];
 async function withEnv(values, fn) {
   const saved = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]));
   for (const k of KEYS) delete process.env[k];
@@ -138,5 +138,27 @@ test('Gemini cortado por limite de saída em JSON registra GEMINI_MAX_TOKENS', a
       fetchImpl: async () => response(200, { candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [{ text: '{"resumo":"cort' }] } }] }),
     }));
     assert.equal(runs[0].errorCode, 'GEMINI_MAX_TOKENS');
+  });
+});
+
+test('Claude pelo Vertex AI: configura sem chave da Anthropic e chama rawPredict com token do GCP', async () => {
+  await withEnv({ ANTHROPIC_VERTEX_PROJECT_ID: 'projeto-dino' }, async () => {
+    assert.equal(providerConfigured('anthropic'), true);
+    assert.equal(modelFor('anthropic', 'smart'), 'claude-sonnet-4-5@20250929');
+    assert.equal(anthropicVertexUrl('claude-sonnet-4-5@20250929'), 'https://aiplatform.googleapis.com/v1/projects/projeto-dino/locations/global/publishers/anthropic/models/claude-sonnet-4-5%4020250929:rawPredict');
+    let seen = null;
+    const out = await runAnthropicWithTools({
+      systemInstruction: 'sys', userText: 'oi', tools: [], executeTool: async () => ({}), accessToken: async () => 'tok-123',
+      fetchImpl: async (url, init) => { seen = { url, headers: init.headers, body: JSON.parse(init.body) }; return response(200, { content: [{ type: 'text', text: 'Olá!' }] }); },
+    });
+    assert.equal(out.text, 'Olá!');
+    assert.match(seen.url, /aiplatform\.googleapis\.com\/v1\/projects\/projeto-dino\/locations\/global\/publishers\/anthropic/);
+    assert.equal(seen.headers.authorization, 'Bearer tok-123');
+    assert.equal(seen.body.anthropic_version, 'vertex-2023-10-16');
+    assert.equal(seen.body.model, undefined, 'no Vertex o modelo vai na URL');
+  });
+  await withEnv({ ANTHROPIC_VERTEX_PROJECT_ID: 'p', ANTHROPIC_VERTEX_REGION: 'us-east5', AI_MODEL_ANTHROPIC_SMART: 'claude-x@1' }, async () => {
+    assert.equal(modelFor('anthropic', 'smart'), 'claude-x@1');
+    assert.match(anthropicVertexUrl('claude-x@1'), /^https:\/\/us-east5-aiplatform\.googleapis\.com\/v1\/projects\/p\/locations\/us-east5\//);
   });
 });

@@ -436,6 +436,11 @@ test('onda 2: ferramentas da IA respeitam pedido do cliente ou oportunidade libe
     const plano = await tools.createWhatsappAiToolExecutor({ ...base, customerText: 'quantos cortes ainda tenho no plano?' })('consultar_meu_plano', {});
     assert.equal(plano.assinante, false);
 
+    // "Quero um plano VIP, quais os valores?": a IA lista o catálogo real em vez de dizer que não tem acesso.
+    const catalogo = await tools.createWhatsappAiToolExecutor({ ...base, customerText: 'quero um plano vip, quais são os valores?' })('listar_planos', {});
+    assert.equal(catalogo.ok, true);
+    assert.deepEqual(catalogo.planos.map((item) => [item.nome, item.preco, item.servicosIncluidos]), [['Clube Corte', 120, ['Corte']]]);
+
     // Sem o cliente pedir e sem oportunidade liberada: bloqueado.
     await assert.rejects(
       () => tools.createWhatsappAiToolExecutor({ ...base, customerText: 'obrigado!' })('avaliar_clube', {}),
@@ -552,4 +557,28 @@ test('NPS: pedido de avaliação só com link público, código e consentimento'
     if (ambienteAnterior === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = ambienteAnterior;
     if (anterior === undefined) delete process.env.PUBLIC_BASE_URL; else process.env.PUBLIC_BASE_URL = anterior;
   }
+});
+
+test('agendamento da IA preso no PostgreSQL migra para a agenda do admin (idempotente)', async () => {
+  const { bruno, corte } = montarBarbearia();
+  const dia = dataLocal(Date.now() + 2 * DIA_MS);
+  const linhas = [
+    { id: 'pg-1', loja_id: LOJA, cliente_nome: 'Rodrigo', cliente_telefone: '5514997462929', observacoes: null, dia, hora: '17:00', servico_nome: 'Corte', profissional_nome: 'Bruno Silva' },
+    { id: 'pg-2', loja_id: LOJA, cliente_nome: 'Outro', cliente_telefone: '5565900000002', observacoes: null, dia, hora: '18:00', servico_nome: 'Serviço que não existe', profissional_nome: 'Bruno' },
+  ];
+  const updates = [];
+  const deps = { queryRead: async () => ({ rows: linhas }), query: async (sql, params) => { updates.push(params[0]); return { rowCount: 1 }; } };
+  const scope = { empresaId: EMPRESA, lojaId: LOJA };
+  const primeira = await agenda.migrarAgendaPostgresParaBarbearia(scope, deps);
+  assert.equal(primeira.migrados, 1);
+  assert.equal(primeira.pendentes, 1, 'sem equivalente único não migra');
+  assert.deepEqual(updates, ['pg-1'], 'só a linha migrada sai do PostgreSQL');
+  const naAgenda = barbearia.listarAgendamentos(EMPRESA, {}).filter((item) => item.clienteTelefone === '5514997462929');
+  assert.equal(naAgenda.length, 1);
+  assert.equal(naAgenda[0].profissionalId, bruno.id);
+  assert.equal(naAgenda[0].servicoId, corte.id);
+  assert.equal(naAgenda[0].horaLocal, '17:00');
+  const segunda = await agenda.migrarAgendaPostgresParaBarbearia(scope, deps);
+  assert.equal(segunda.migrados, 1);
+  assert.equal(barbearia.listarAgendamentos(EMPRESA, {}).filter((item) => item.clienteTelefone === '5514997462929').length, 1, 'repetir não duplica');
 });

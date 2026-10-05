@@ -79,12 +79,87 @@ export async function agendaSource(scope = {}) {
         LIMIT 1`,
       [chave],
     );
-    if (futuros.rows?.[0]) fonte = 'postgres';
+    // Agendamentos futuros no PostgreSQL (feitos pela IA antes da unificação) não
+    // aparecem no admin nem no app do barbeiro: migra para a agenda da barbearia.
+    // Só continua no PostgreSQL se algum não puder ser migrado com segurança.
+    if (futuros.rows?.[0]) {
+      const migracao = await migrarAgendaPostgresParaBarbearia(scope).catch((erro) => ({ pendentes: 1, erro: limpo(erro?.code || erro?.message, 120) }));
+      if (migracao.pendentes > 0) fonte = 'postgres';
+      if (migracao.migrados || migracao.pendentes) console.log(JSON.stringify({ worker: 'agenda-unificacao', empresa: chave.slice(0, 8), ...migracao }));
+    }
   } catch (_) {
     // Sem PostgreSQL (ou empresa fora do Commerce): só existe a agenda da barbearia.
   }
   fonteCache.set(chave, { fonte, expira: Date.now() + 60 * 1000 });
   return fonte;
+}
+
+function chaveNome(valor) {
+  return limpo(valor, 160).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** Acha o equivalente na agenda da barbearia pelo nome (exato, depois primeiro nome). */
+function porNome(itens, nome) {
+  const alvo = chaveNome(nome);
+  if (!alvo) return null;
+  const exato = itens.filter((item) => chaveNome(item.nome) === alvo);
+  if (exato.length === 1) return exato[0];
+  const primeiro = alvo.split(' ')[0];
+  const parcial = itens.filter((item) => chaveNome(item.nome).split(' ')[0] === primeiro);
+  return parcial.length === 1 ? parcial[0] : null;
+}
+
+/**
+ * Move para a agenda da barbearia os agendamentos futuros que a IA gravou no
+ * PostgreSQL. Idempotente: cada linha vira um agendamento com código derivado do
+ * id original e a linha antiga sai da agenda PostgreSQL (status cancelado, com nota).
+ * Linha cujo serviço/profissional não tem equivalente único fica pendente.
+ */
+export async function migrarAgendaPostgresParaBarbearia(scope = {}, { query = pgDb.query.bind(pgDb), queryRead = pgDb.queryRead.bind(pgDb) } = {}) {
+  const empresa = chaveEmpresa(scope);
+  const linhas = await queryRead(
+    `SELECT a.id, a.loja_id, a.cliente_nome, a.cliente_telefone, a.observacoes,
+            to_char(a.data_agendamento, 'YYYY-MM-DD') AS dia, to_char(a.data_agendamento, 'HH24:MI') AS hora,
+            s.nome AS servico_nome, u.nome_completo AS profissional_nome
+       FROM agendamentos a
+       LEFT JOIN servicos s ON s.id = a.servico_id
+       LEFT JOIN usuarios u ON u.id = a.usuario_profissional_id
+      WHERE a.empresa_id = $1 AND a.data_agendamento >= CURRENT_TIMESTAMP
+        AND a.status NOT IN ('cancelado', 'nao_compareceu', 'concluido')
+      ORDER BY a.data_agendamento ASC LIMIT 200`,
+    [empresa],
+  );
+  const servicos = barbearia.listarServicos(empresa);
+  const profissionais = barbearia.listarProfissionais(empresa).filter((item) => item.ativo !== false);
+  const resultado = { migrados: 0, pendentes: 0, motivos: [] };
+  for (const linha of linhas.rows || []) {
+    const servico = porNome(servicos, linha.servico_nome);
+    const profissional = porNome(profissionais, linha.profissional_nome);
+    if (!servico || !profissional) { resultado.pendentes += 1; resultado.motivos.push(!servico ? 'servico_sem_equivalente' : 'profissional_sem_equivalente'); continue; }
+    try {
+      const actionId = `migracao-pg:${linha.id}`;
+      const codigo = createHash('sha256').update(`whatsapp-ia:${empresa}:${actionId}`).digest('hex').slice(0, 8).toUpperCase();
+      // Repetição (ex.: o UPDATE no PostgreSQL falhou da outra vez): reaproveita o já migrado.
+      const jaMigrado = barbearia.listarAgendamentos(empresa, {}).find((item) => item.codigoConfirmacao === codigo);
+      const criado = jaMigrado ? respostaAgendamento(empresa, jaMigrado) : criarNaAgendaDaBarbearia({ ...scope, lojaId: scope.lojaId || linha.loja_id }, {
+        date: linha.dia, time: linha.hora, serviceId: servico.id, professionalId: profissional.id,
+        customerName: linha.cliente_nome, customerPhone: linha.cliente_telefone,
+        notes: limpo(linha.observacoes, 500), actionId,
+      });
+      await query(
+        `UPDATE agendamentos SET status = 'cancelado',
+                observacoes = LEFT(CONCAT_WS(' ', observacoes, $2::text), 1000)
+          WHERE id = $1 AND empresa_id = $3`,
+        [linha.id, `[migrado para a agenda da barbearia: ${criado.codigo || criado.id}]`, empresa],
+      );
+      resultado.migrados += 1;
+    } catch (erro) {
+      resultado.pendentes += 1;
+      resultado.motivos.push(limpo(erro?.code || 'falha_migracao', 60));
+    }
+  }
+  if (resultado.migrados) fonteCache.delete(empresa);
+  return resultado;
 }
 
 export function limparCacheFonteAgenda() {
@@ -192,6 +267,10 @@ function respostaAgendamento(empresa, agendamento) {
 
 export async function createAppointment(trx, scope, input = {}) {
   if (await agendaSource(scope) === 'postgres') return pgCreate(trx, scope, input);
+  return criarNaAgendaDaBarbearia(scope, input);
+}
+
+function criarNaAgendaDaBarbearia(scope, input = {}) {
   const empresa = chaveEmpresa(scope);
   try {
     const livre = barbearia.resolverProfissionalDisponivel(empresa, {

@@ -73,10 +73,61 @@ function baseUrl(provider) {
   return (/^https?:\/\//.test(custom) ? custom : defaults[provider]).replace(/\/+$/, '');
 }
 
+// Claude pelo Vertex AI (Google Cloud): sem chave da Anthropic, autentica com a conta de
+// serviço do GCP. Ativa com ANTHROPIC_VERTEX_PROJECT_ID; região em ANTHROPIC_VERTEX_REGION
+// (padrão "global"); credencial em GOOGLE_APPLICATION_CREDENTIALS_JSON (JSON da conta de
+// serviço) ou nas credenciais padrão do ambiente (GOOGLE_APPLICATION_CREDENTIALS).
+export const VERTEX_KEY = 'vertex';
+const VERTEX_DEFAULT_MODELS = { fast: 'claude-haiku-4-5@20251001', smart: 'claude-sonnet-4-5@20250929' };
+
+export function anthropicVertexConfig() {
+  const projectId = env('ANTHROPIC_VERTEX_PROJECT_ID');
+  if (!projectId || env('ANTHROPIC_API_KEY')) return null;
+  const region = env('ANTHROPIC_VERTEX_REGION') || env('CLOUD_ML_REGION') || 'global';
+  return { projectId, region };
+}
+
+export function anthropicVertexUrl(model, config = anthropicVertexConfig()) {
+  const host = config.region === 'global' ? 'aiplatform.googleapis.com' : `${config.region}-aiplatform.googleapis.com`;
+  return `https://${host}/v1/projects/${encodeURIComponent(config.projectId)}/locations/${encodeURIComponent(config.region)}/publishers/anthropic/models/${encodeURIComponent(model)}:rawPredict`;
+}
+
+let vertexAuthClient = null;
+async function vertexAccessToken() {
+  if (!vertexAuthClient) {
+    const { GoogleAuth } = await import('google-auth-library');
+    const inline = env('GOOGLE_APPLICATION_CREDENTIALS_JSON');
+    let credentials;
+    if (inline) {
+      try { credentials = JSON.parse(inline); } catch { throw new AiRouterError('Credencial do Vertex inválida', 'VERTEX_CREDENTIALS_INVALID', { retryable: false }); }
+    }
+    vertexAuthClient = new GoogleAuth({ credentials, scopes: ['https://www.googleapis.com/auth/cloud-platform'] });
+  }
+  try {
+    const token = await vertexAuthClient.getAccessToken();
+    const value = typeof token === 'string' ? token : token?.token;
+    if (!value) throw new Error('sem token');
+    return value;
+  } catch (error) {
+    if (error instanceof AiRouterError) throw error;
+    throw new AiRouterError('Não foi possível autenticar no Vertex AI', 'VERTEX_AUTH_FAILED', { retryable: true });
+  }
+}
+
+/** Mesma chamada Messages API da Anthropic, pela API direta ou pelo Vertex AI. */
+async function anthropicMessages({ key, model, body, fetchImpl, timeoutMs, accessToken = vertexAccessToken }) {
+  if (key === VERTEX_KEY) {
+    const token = await accessToken();
+    return postJson(fetchImpl, anthropicVertexUrl(model), { authorization: `Bearer ${token}` }, { anthropic_version: 'vertex-2023-10-16', ...body }, timeoutMs, 'anthropic');
+  }
+  return postJson(fetchImpl, `${baseUrl('anthropic')}/v1/messages`, { 'x-api-key': key, 'anthropic-version': '2023-06-01' }, { model, ...body }, timeoutMs, 'anthropic');
+}
+
 export function providerKey(provider) {
   const spec = PROVIDERS[provider];
   if (!spec) return '';
   for (const name of spec.keyEnv) { const value = env(name); if (value) return value; }
+  if (provider === 'anthropic' && anthropicVertexConfig()) return VERTEX_KEY;
   return '';
 }
 
@@ -85,6 +136,8 @@ export function providerConfigured(provider) { return Boolean(providerKey(provid
 export function modelFor(provider, tier = 'fast') {
   const spec = PROVIDERS[provider]?.models?.[tier] || PROVIDERS[provider]?.models?.fast;
   if (!spec) return '';
+  // No Vertex os IDs de modelo têm outro formato (ex.: claude-sonnet-4-5@20250929).
+  if (provider === 'anthropic' && anthropicVertexConfig()) return env(spec[0]) || VERTEX_DEFAULT_MODELS[tier] || VERTEX_DEFAULT_MODELS.fast;
   return env(spec[0]) || spec[1];
 }
 
@@ -107,7 +160,8 @@ export function estimateCostCents(provider, tier, inputChars = 0, outputChars = 
 export function routerStatus() {
   return {
     providers: Object.entries(PROVIDERS).map(([id, spec]) => ({
-      id, label: spec.label, configured: providerConfigured(id), models: { fast: modelFor(id, 'fast'), smart: modelFor(id, 'smart') },
+      id, label: id === 'anthropic' && providerKey(id) === VERTEX_KEY ? 'Claude (Vertex AI)' : spec.label,
+      configured: providerConfigured(id), models: { fast: modelFor(id, 'fast'), smart: modelFor(id, 'smart') },
     })),
     routes: Object.keys(AI_ROUTES).map((task) => ({ task, label: AI_TASK_LABELS[task] || task, chain: routeFor(task).map((s) => `${s.provider}:${s.tier}`) })),
   };
@@ -176,10 +230,10 @@ async function callGemini({ key, model, system, user, json, maxTokens, fetchImpl
 }
 
 async function callAnthropic({ key, model, system, user, maxTokens, fetchImpl, timeoutMs }) {
-  const payload = await postJson(fetchImpl, `${baseUrl('anthropic')}/v1/messages`, { 'x-api-key': key, 'anthropic-version': '2023-06-01' }, {
-    model, max_tokens: maxTokens, system: system || undefined, temperature: 0.2,
+  const payload = await anthropicMessages({ key, model, fetchImpl, timeoutMs, body: {
+    max_tokens: maxTokens, system: system || undefined, temperature: 0.2,
     messages: [{ role: 'user', content: user }],
-  }, timeoutMs, 'anthropic');
+  } });
   return (payload?.content || []).filter((part) => part.type === 'text').map((part) => part.text).join('').trim();
 }
 
@@ -294,7 +348,7 @@ export function anthropicToolsFromDeclarations(declarations = []) {
 /** Mesmo contrato de runGeminiWithTools: { text, model, traces, metrics }. */
 export async function runAnthropicWithTools({
   systemInstruction = '', history = [], userText = '', tools = [], executeTool,
-  fetchImpl = fetch, timeoutMs = DEFAULT_TIMEOUT_MS, maxSteps = 4, tier = 'smart',
+  fetchImpl = fetch, timeoutMs = DEFAULT_TIMEOUT_MS, maxSteps = 4, tier = 'smart', accessToken = vertexAccessToken,
 } = {}) {
   const key = providerKey('anthropic');
   if (!key) throw new AiRouterError('Claude não configurado', 'ANTHROPIC_NOT_CONFIGURED', { retryable: false });
@@ -316,10 +370,10 @@ export async function runAnthropicWithTools({
   const started = Date.now();
   const inputChars = String(systemInstruction).length + messages.reduce((sum, m) => sum + String(m.content).length, 0);
   for (let step = 0; step < maxSteps; step += 1) {
-    const payload = await postJson(fetchImpl, `${baseUrl('anthropic')}/v1/messages`, { 'x-api-key': key, 'anthropic-version': '2023-06-01' }, {
-      model, max_tokens: 900, temperature: 0.35, system: String(systemInstruction).slice(0, 12000),
+    const payload = await anthropicMessages({ key, model, fetchImpl, timeoutMs, accessToken, body: {
+      max_tokens: 900, temperature: 0.35, system: String(systemInstruction).slice(0, 12000),
       tools: anthropicTools.length ? anthropicTools : undefined, messages,
-    }, timeoutMs, 'anthropic');
+    } });
     const content = Array.isArray(payload?.content) ? payload.content : [];
     const calls = content.filter((part) => part.type === 'tool_use');
     if (!calls.length) {
