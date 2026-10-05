@@ -4,6 +4,7 @@ import { db } from './database.js';
 import {
   opportunityGate,
   personalizationConsentIntent,
+  purchaseIntentExpressed,
   resolveWhatsappCustomerProfile,
   sanitizeUntrustedBusinessText,
   sensitiveCustomerData,
@@ -88,6 +89,40 @@ test('validador bloqueia pressão, documentos, segredos e oportunidade sem gate'
   assert.equal(validateWhatsappAiOutput('CPF 123.456.789-00').ok, false);
   assert.equal(validateWhatsappAiOutput('Aproveite esta oferta.', { recommendationWasRequested: false, opportunityAllowed: false }).ok, false);
   assert.equal(validateWhatsappAiOutput('Posso ajudar a comparar duas opções?', { recommendationWasRequested: true }).ok, true);
+});
+
+test('purchaseIntentExpressed reconhece o cliente pedindo para comprar/adicionar e ignora dúvida comum', () => {
+  assert.equal(purchaseIntentExpressed('vamos fechar a compra de todos'), true);
+  assert.equal(purchaseIntentExpressed('tb queria adicionar o Madagascar'), true);
+  assert.equal(purchaseIntentExpressed('preciso deste produto tb'), true);
+  assert.equal(purchaseIntentExpressed('quero comprar o perfume'), true);
+  assert.equal(purchaseIntentExpressed('adiciona isso no meu pedido'), true);
+  // Não confunde dúvida/intenção genérica com pedido de compra.
+  assert.equal(purchaseIntentExpressed('quero saber o horário'), false);
+  assert.equal(purchaseIntentExpressed('preciso de ajuda'), false);
+  assert.equal(purchaseIntentExpressed(''), false);
+});
+
+test('validador não bloqueia "adicionar ao pedido" quando o próprio cliente pediu a compra (falso positivo do handoff)', () => {
+  // Cenário real: cliente pediu "adicionar o Madagascar"; a IA respondeu com "adicionar
+  // ao pedido" e o guard mandava para humano. Com customerRequestedPurchase, passa.
+  assert.equal(
+    validateWhatsappAiOutput('Perfeito, Lucas! Vou adicionar ao pedido o Madagascar.', {
+      recommendationWasRequested: false,
+      opportunityAllowed: false,
+      customerRequestedPurchase: true,
+    }).ok,
+    true,
+  );
+  // Sem pedido do cliente, oportunidade espontânea segue bloqueada (guard preservado).
+  assert.deepEqual(
+    validateWhatsappAiOutput('Que tal adicionar um brinde ao pedido?', {
+      recommendationWasRequested: false,
+      opportunityAllowed: false,
+      customerRequestedPurchase: false,
+    }).violations,
+    ['UNGOVERNED_OPPORTUNITY'],
+  );
 });
 
 test('resolvedor usa somente agregados permitidos quando os consentimentos estão ativos', async () => {

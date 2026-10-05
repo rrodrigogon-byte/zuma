@@ -20,7 +20,7 @@ import { createShippingAccount, failShippingLabel, finalizeShippingCancellation,
 import { shippingProviders } from './shipping-adapters.js';
 import { recordStorefrontEvent } from '../storefront-funnel.js';
 import { commerceMediaIdForIdempotencyKey, deleteCommerceImage, newCommerceMediaId, streamCommerceImage, uploadCommerceImage } from './commerce-media.js';
-import { claimWhatsappAiHandoff, closeWhatsappAiHandoff, configureWhatsappAiChannel, configureWhatsappAiPersona, configureWhatsappAiPolicy, listWhatsappAiSessions, releaseWhatsappAiHandoff, syncWhatsappAiWebhook, testWhatsappAiGemini, whatsappAiOperationalStatus } from './whatsapp-ai.js';
+import { claimWhatsappAiHandoff, closeWhatsappAiHandoff, configureWhatsappAiChannel, configureWhatsappAiHandoff, configureWhatsappAiPersona, configureWhatsappAiPolicy, listWhatsappAiSessions, releaseWhatsappAiHandoff, syncWhatsappAiWebhook, testWhatsappAiGemini, whatsappAiOperationalStatus } from './whatsapp-ai.js';
 import { campaignMetrics, cancelCampaign, confirmCampaign, createCampaign, listCampaignAudience, listCampaigns, previewCampaign, updateCampaignConsent } from './commerce-campaigns.js';
 import { cartRecoveryMetrics, listAbandonedCarts, syncPublicCart } from './commerce-abandoned-carts.js';
 import { consumePublicRateLimit, publicRequestFingerprint } from './commerce-public-rate-limit.js';
@@ -2002,6 +2002,12 @@ export function createCommerceAdminRouter() {
     try {
       const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
       res.json(await configureWhatsappAiPersona(context, req.body || {}));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.patch('/whatsapp-ai/handoff', async (req, res) => {
+    try {
+      const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
+      res.json(await configureWhatsappAiHandoff(context, req.body || {}));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/whatsapp-ai/diagnostics/gemini', async (req, res) => {

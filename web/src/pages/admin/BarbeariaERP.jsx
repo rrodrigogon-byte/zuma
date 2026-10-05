@@ -254,6 +254,7 @@ export default function BarbeariaERP() {
   const [formWhatsApp, setFormWhatsApp] = useState({ clienteId: '', finalidade: 'atendimento', telefone: '', mensagem: '', consentimentoConfirmado: false })
   const [formWhatsappAi, setFormWhatsappAi] = useState({ instance: 'dino', displayName: 'Atendimento WhatsApp', humanized: true, captureLeads: true, operateStore: true, manageAppointments: true, sendPromotions: false, reminders: true, humanHandoff: true })
   const [formWhatsappAiPolicy, setFormWhatsappAiPolicy] = useState({ personalizationEnabled: false, opportunitiesEnabled: false, cooldownDays: 30, privacyNotice: '' })
+  const [formWhatsappAiHandoff, setFormWhatsappAiHandoff] = useState({ notifyEmail: '', attendantPhone: '' })
   const [formPersona, setFormPersona] = useState({ ativo: true, nome: 'T-Rex', mensagensCurtas: true, figurinhas: true, revelarIa: 'quando_perguntado' })
   const [whatsappAiSessions, setWhatsappAiSessions] = useState([])
   const [itensVendaRevenda, setItensVendaRevenda] = useState([])
@@ -307,6 +308,10 @@ export default function BarbeariaERP() {
         opportunitiesEnabled: whatsappAi.policy.opportunitiesEnabled === true,
         cooldownDays: Number(whatsappAi.policy.cooldownDays || 30),
         privacyNotice: whatsappAi.policy.privacyNotice || '',
+      })
+      if (whatsappAi?.channel?.handoff) setFormWhatsappAiHandoff({
+        notifyEmail: whatsappAi.channel.handoff.notifyEmail || '',
+        attendantPhone: whatsappAi.channel.handoff.attendantPhone || '',
       })
     } catch (error) {
       setDashboard(null)
@@ -939,6 +944,25 @@ export default function BarbeariaERP() {
     }), formPersona.ativo ? `Atendente ${nome} salvo e auditado.` : 'Persona desligada.')
   }
 
+  async function salvarHandoffWhatsappAi() {
+    if (!whatsappAi?.channel) {
+      toast('Salve primeiro o canal WhatsApp em rascunho.', 'error')
+      return
+    }
+    const email = formWhatsappAiHandoff.notifyEmail.trim()
+    const telefone = formWhatsappAiHandoff.attendantPhone.trim()
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast('E-mail de notificação inválido.', 'error')
+      return
+    }
+    if (!window.confirm('Confirmar a notificação de handoff? Quando o atendimento for para uma pessoa, o histórico da conversa será enviado por e-mail e o atendente receberá a conversa no WhatsApp informado. Isso não ativa o canal.')) return
+    await executar(() => api.patch('/api/admin/commerce/whatsapp-ai/handoff', {
+      notifyEmail: email,
+      attendantPhone: telefone,
+      confirmed: true,
+    }), 'Notificação de handoff salva e auditada.')
+  }
+
   async function sincronizarWhatsappAi() {
     if (!window.confirm('Confirmar a sincronização do webhook no provedor de WhatsApp? Essa ação altera a configuração externa da instância informada.')) return
     await executar(async () => {
@@ -1475,6 +1499,18 @@ export default function BarbeariaERP() {
               </div>
               <small style={styles.sub}>{whatsappAi.channel?.persona?.figurinhasNoProvedor ? 'O provedor de WhatsApp aceita figurinhas.' : 'O provedor de WhatsApp ainda não aceita figurinhas (falta CHATBOT_BACKEND_STICKER_PATH): o texto sai normal e a figurinha é pulada.'}{whatsappAi.channel?.persona?.origem === 'ambiente' ? ' A persona está ligada pela variável WHATSAPP_AI_PERSONA; salve aqui para fixar no canal.' : ''}</small>
               <button type="button" style={styles.secondary} disabled={salvando || !whatsappAi.channel} onClick={salvarPersonaWhatsappAi}>Salvar persona</button>
+            </div>
+            <div style={{ ...styles.notice, marginTop: 12, display: 'grid', gap: 10 }}>
+              <div style={styles.sectionTitle}>
+                <div><strong>Notificação de handoff</strong><div style={styles.sub}>Quando o atendimento vai para uma pessoa, enviamos o histórico por e-mail e iniciamos a conversa no WhatsApp do atendente (número diferente do cliente). Deixe em branco para não notificar por aquela via.</div></div>
+                <Badge status={(whatsappAi.channel?.handoff?.notifyEmail || whatsappAi.channel?.handoff?.attendantPhone) ? 'configurado' : 'rascunho'} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))', gap: 10 }}>
+                <Field label="E-mail para o histórico"><input type="email" value={formWhatsappAiHandoff.notifyEmail} onChange={(event) => setFormWhatsappAiHandoff((atual) => ({ ...atual, notifyEmail: event.target.value }))} placeholder="recepcao@suaempresa.com" style={inputStyle} /></Field>
+                <Field label="WhatsApp do atendente humano"><input type="tel" value={formWhatsappAiHandoff.attendantPhone} onChange={(event) => setFormWhatsappAiHandoff((atual) => ({ ...atual, attendantPhone: event.target.value }))} placeholder="Ex.: 65 99999-0000 (número diferente do cliente)" style={inputStyle} /></Field>
+              </div>
+              <small style={styles.sub}>O e-mail depende de RESEND_API_KEY/EMAIL_FROM no ambiente; sem a chave, fica em modo simulado (só log). O WhatsApp para o atendente respeita a mesma trava de envio do canal.</small>
+              <button type="button" style={styles.secondary} disabled={salvando || !whatsappAi.channel} onClick={salvarHandoffWhatsappAi}>Salvar notificação de handoff</button>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
               <button type="button" style={styles.secondary} disabled={salvando || !whatsappAi.gemini?.configured} onClick={testarGeminiWhatsappAi}>Testar Gemini</button>

@@ -96,6 +96,21 @@ export function recommendationRequested(text) {
   return shouldPromptPersonalization(text);
 }
 
+// O cliente pediu explicitamente para comprar/adicionar um item ("queria adicionar
+// o Madagascar", "vamos fechar a compra", "preciso deste produto"). Nesse caso, a IA
+// responder com "adicionar ao pedido" NÃO é oportunidade espontânea: é cumprir o
+// pedido. Sem isto, o validador de saída marcava UNGOVERNED_OPPORTUNITY e mandava a
+// conversa para a equipe humana (falso positivo que travava o atendimento).
+export function purchaseIntentExpressed(text) {
+  const value = plain(text);
+  return (
+    /\b(quero|queria|vou|vamos|bora|pode|poderia|gostaria de|preciso)\s+(comprar|levar|adicionar|incluir|acrescentar|fechar|finalizar|pedir)\b/.test(value) ||
+    /\b(fechar|finalizar|concluir)\s+(a\s+|o\s+)?(compra|pedido|carrinho)\b/.test(value) ||
+    /\b(adiciona|adicionar|inclui|incluir|acrescenta|acrescentar|poe|coloca)\b.{0,40}\b(pedido|carrinho|compra|lista)\b/.test(value) ||
+    /\b(preciso|quero|queria|vou levar|me ve|me da)\s+(desse|deste|desses|destes|esse|este|esses|estes)\b/.test(value)
+  );
+}
+
 function luhnValid(value) {
   const digits = String(value || '').replace(/\D/g, '');
   if (digits.length < 13 || digits.length > 19 || /^(\d)\1+$/.test(digits)) return false;
@@ -449,7 +464,7 @@ export function sanitizeUntrustedBusinessText(value, limit = 320) {
   return source.replace(/<\/?(?:system|assistant|user|tool)[^>]*>/gi, '').slice(0, limit);
 }
 
-export function validateWhatsappAiOutput(text, { traces = [], recommendationWasRequested = false, opportunityAllowed = false } = {}) {
+export function validateWhatsappAiOutput(text, { traces = [], recommendationWasRequested = false, opportunityAllowed = false, customerRequestedPurchase = false } = {}) {
   const value = clean(text, 4000);
   const normalized = plain(value);
   const violations = [];
@@ -463,7 +478,7 @@ export function validateWhatsappAiOutput(text, { traces = [], recommendationWasR
   if (/\b(ultima chance|imperdivel|compre agora|nao perca|so hoje|voce precisa (comprar|garantir|aproveitar|levar|fechar))\b/.test(normalized)) violations.push('PRESSURE_LANGUAGE');
   const opportunityLanguage = /\b(oferta|promocao|aproveite|recomendo|sugiro|temos tambem|voce pode gostar|combina com|posso te mostrar uma opcao|que tal adicionar|adicionar ao pedido)\b/.test(normalized);
   const opportunityTrace = traces.some(trace => trace?.name === 'propor_oportunidade' && trace?.ok === true);
-  if (opportunityLanguage && !recommendationWasRequested && !(opportunityAllowed && opportunityTrace)) violations.push('UNGOVERNED_OPPORTUNITY');
+  if (opportunityLanguage && !recommendationWasRequested && !customerRequestedPurchase && !(opportunityAllowed && opportunityTrace)) violations.push('UNGOVERNED_OPPORTUNITY');
   return { ok: violations.length === 0, text: value, violations };
 }
 
