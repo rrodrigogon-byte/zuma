@@ -82,7 +82,9 @@ export function assinar({ empresaId, lojaId = '', usuario = {}, profissionalId =
   };
   // Limita aparelhos por usuário: remove os mais antigos.
   const doUsuario = Object.values(lista).filter((a) => a.empresaId === String(empresaId) && a.usuarioId === String(usuario.id ?? ''))
-    .sort((a, b) => String(b.atualizadoEm).localeCompare(String(a.atualizadoEm)));
+    // O aparelho que acabou de assinar fica sempre: com carimbos iguais (mesmo milissegundo)
+    // a ordenação podia descartá-lo e a função quebrava ao ler lista[id].
+    .sort((a, b) => (b.id === id) - (a.id === id) || String(b.atualizadoEm).localeCompare(String(a.atualizadoEm)));
   for (const antiga of doUsuario.slice(LIMITE_POR_USUARIO)) delete lista[antiga.id];
   save();
   return { id, profissionalId: lista[id].profissionalId, todos: lista[id].todos };

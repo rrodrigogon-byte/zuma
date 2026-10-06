@@ -61,6 +61,17 @@ test('limite de aparelhos por usuário', () => {
   assert.equal(Object.values(db().pushEquipe).filter((a) => a.usuarioId === '7').length, 6);
 });
 
+test('limite de aparelhos nunca descarta o aparelho que acabou de assinar', () => {
+  for (let rodada = 0; rodada < 20; rodada += 1) {
+    db().pushEquipe = {};
+    for (let i = 0; i < 12; i += 1) {
+      const r = push.assinar({ empresaId: 'e1', usuario: { id: 8 }, profissionalId: 'p1', assinatura: sub(`r${rodada}-${i}`) });
+      assert.ok(db().pushEquipe[r.id], 'aparelho recém-assinado deve permanecer');
+    }
+    assert.equal(Object.values(db().pushEquipe).filter((a) => a.usuarioId === '8').length, 6);
+  }
+});
+
 test('teste de notificação vai só para o aparelho que pediu', async () => {
   db().pushEquipe = {};
   push.assinar({ empresaId: 'e1', usuario: { id: 1 }, profissionalId: 'p1', assinatura: sub('t1') });
