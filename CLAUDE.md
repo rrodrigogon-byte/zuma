@@ -1,5 +1,9 @@
 # SetPoint — contexto do projeto (para o Claude Code)
 
+> ⚠️ **PRODUÇÃO = branch `fix/kytto-comandas-pdv-20260808`** (Render `setpoint`, auto-deploy sempre ligado: merge = produção; Blueprint pausado). A `main` NÃO é produção.
+> Antes de commit, push, PR ou qualquer mudança no Render, leia **[AGENTS.md](AGENTS.md)**. Nunca troque branch/build do Render nem force redeploy.
+
+
 **SetPoint** é uma plataforma de gestão esportiva e de arenas. O evento **4ª Agro Open de Tênis** (UISA / Tangará Tênis Clube) roda sobre ela. Stack: **Node.js + Express (ESM)**, banco em **arquivo JSON** (`app/db.js`, com interface trocável por Postgres), frontend em **React 18 + Vite 5 + React Router 6** (`web/`), compilado para `app/public` (`vite build`, `outDir`) e servido pelo próprio Express. A pasta `site/` é legado (versão HTML antiga) — não é o app servido.
 
 ## Como rodar (local)

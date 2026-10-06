@@ -1,8 +1,11 @@
+# ⚠️ PRODUÇÃO: o serviço setpoint publica SOMENTE a branch fix/kytto-comandas-pdv-20260808.
+# Não remova `branch:`, `preDeployCommand`, `numInstances: 1` nem o `--include=dev` do build. Leia AGENTS.md.
 # Deploy do SetPoint no Render (https://render.com) — 1 clique via Blueprint.
 # Sobe a API + site como um único Web Service Node, com disco persistente para o banco.
 services:
   - type: web
     name: setpoint
+    branch: fix/kytto-comandas-pdv-20260808   # NÃO trocar para main
     runtime: node
     plan: starter            # free/starter; suba conforme a demanda
     # O banco JSON (agenda, clientes, comandas, clube) aceita UM processo gravando:
@@ -13,7 +16,7 @@ services:
     preDeployCommand: cd app && npm run commerce:schema:apply
     startCommand: cd app && node server.js
     healthCheckPath: /health
-    autoDeploy: true
+    autoDeploy: true    # SEMPRE ligado (decisão 06/10/2026); merge na produção = deploy
     envVars:
       - key: NODE_VERSION
         value: "20"
