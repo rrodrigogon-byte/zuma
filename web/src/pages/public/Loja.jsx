@@ -1,8 +1,10 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { slugify } from './ProdutoDetalhe'
 import { api, fmtR } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
+import { useSEO, buildItemListJsonLd } from '../../hooks/useSEO'
 
 const TAMANHOS = ['PP', 'P', 'M', 'G', 'GG', 'XGG']
 
@@ -132,7 +134,9 @@ function ProdutoCard({ produto, onAddCart, qtdNoCarrinho }) {
 
       {/* Conteúdo */}
       <div style={{ padding: '18px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <h3 style={{ margin: '0 0 6px', fontSize: '1.05rem', fontWeight: 800, color: '#12283F' }}>{p.nome}</h3>
+        <Link to={`/loja/${slugify(p.nome)}`} style={{ textDecoration: 'none' }}>
+          <h3 style={{ margin: '0 0 6px', fontSize: '1.05rem', fontWeight: 800, color: '#12283F', cursor: 'pointer' }}>{p.nome}</h3>
+        </Link>
         {(p.desc || p.descricao) && (
           <p style={{ margin: '0 0 10px', fontSize: '0.83rem', color: '#5A6570', lineHeight: 1.5, flex: 1 }}>
             {(() => { const d = p.desc || p.descricao; return d.length > 90 ? d.slice(0, 90) + '…' : d })()}
@@ -485,6 +489,33 @@ function CheckoutModal({ itens, produtos, onClose, onSuccess }) {
   )
 }
 
+// ── Skeleton de produto ─────────────────────────────────────────────────────
+function ProdutoCardSkeleton() {
+  return (
+    <div style={{
+      background: '#fff', borderRadius: 20, overflow: 'hidden',
+      boxShadow: '0 4px 20px rgba(0,0,0,0.07)', border: '1.5px solid #eee',
+      display: 'flex', flexDirection: 'column',
+    }}>
+      <div style={{
+        height: 200,
+        background: 'linear-gradient(90deg, #e8f0dc 25%, #d4e6c0 50%, #e8f0dc 75%)',
+        backgroundSize: '200% 100%',
+        animation: 'loja-shimmer 1.5s infinite',
+      }} />
+      <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ height: 16, borderRadius: 6, width: '70%', background: 'linear-gradient(90deg,#e8f0dc 25%,#d4e6c0 50%,#e8f0dc 75%)', backgroundSize: '200% 100%', animation: 'loja-shimmer 1.5s infinite' }} />
+        <div style={{ height: 12, borderRadius: 6, width: '90%', background: 'linear-gradient(90deg,#e8f0dc 25%,#d4e6c0 50%,#e8f0dc 75%)', backgroundSize: '200% 100%', animation: 'loja-shimmer 1.5s infinite' }} />
+        <div style={{ height: 12, borderRadius: 6, width: '60%', background: 'linear-gradient(90deg,#e8f0dc 25%,#d4e6c0 50%,#e8f0dc 75%)', backgroundSize: '200% 100%', animation: 'loja-shimmer 1.5s infinite' }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+          <div style={{ height: 24, borderRadius: 6, width: '35%', background: 'linear-gradient(90deg,#e8f0dc 25%,#d4e6c0 50%,#e8f0dc 75%)', backgroundSize: '200% 100%', animation: 'loja-shimmer 1.5s infinite' }} />
+          <div style={{ height: 36, borderRadius: 10, width: '40%', background: 'linear-gradient(90deg,#e8f0dc 25%,#d4e6c0 50%,#e8f0dc 75%)', backgroundSize: '200% 100%', animation: 'loja-shimmer 1.5s infinite' }} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Loja ───────────────────────────────────────────────────────────────
 
 export default function Loja() {
@@ -504,6 +535,22 @@ export default function Loja() {
   const [showCarrinho, setShowCarrinho] = useState(false)
   const [showCheckout, setShowCheckout] = useState(false)
   const [filtroCat, setFiltroCat] = useState('todos')
+  const [busca, setBusca] = useState('')
+  // Filtros avançados (Onda 2)
+  const [ordenacao, setOrdenacao] = useState('relevancia') // 'relevancia' | 'preco_asc' | 'preco_desc' | 'nome_az'
+  const [soPDisponiveis, setSoPDisponiveis] = useState(false)
+  const [faixaPreco, setFaixaPreco] = useState([0, 9999])
+  const [showFiltrosAvancados, setShowFiltrosAvancados] = useState(false)
+
+  // ── SEO dinâmico ─────────────────────────────────────────────────────────
+  const jsonLd = useMemo(() => buildItemListJsonLd(produtos, window.location.href), [produtos])
+  useSEO({
+    title: 'Loja do Torneio | Agro Open TTC · Kit Atleta e produtos exclusivos',
+    description: 'Compre online o Kit Atleta e produtos exclusivos da 4ª Agro Open de Tênis 2026 em Tangará da Serra – MT. Retire na hora, Pix e pagamento garantido.',
+    canonical: window.location.origin + '/loja',
+    jsonLd,
+    jsonLdId: 'ld-loja',
+  })
 
   useEffect(() => {
     api.get('/api/loja')
@@ -521,10 +568,54 @@ export default function Loja() {
     return uniq
   }, [produtos])
 
+  // Faixa de preço real dos produtos carregados
+  const [precoMin, precoMax] = useMemo(() => {
+    if (!produtos.length) return [0, 9999]
+    const precos = produtos.map(p => p.preco || 0)
+    return [Math.floor(Math.min(...precos)), Math.ceil(Math.max(...precos))]
+  }, [produtos])
+
+  // Inicializar faixaPreco quando produtos carregam
+  useEffect(() => {
+    if (produtos.length) setFaixaPreco([0, Math.ceil(Math.max(...produtos.map(p => p.preco || 0)))])
+  }, [precoMax])
+
+  // Busca normalizada
+  const normBusca = busca.trim().toLowerCase()
+
   const produtosFiltrados = useMemo(() => {
-    if (filtroCat === 'todos') return produtos
-    return produtos.filter(p => p.cat === filtroCat)
-  }, [produtos, filtroCat])
+    let lista = filtroCat === 'todos' ? produtos : produtos.filter(p => p.cat === filtroCat)
+    // Filtro de busca
+    if (normBusca) {
+      lista = lista.filter(p =>
+        (p.nome || '').toLowerCase().includes(normBusca) ||
+        (p.desc || p.descricao || '').toLowerCase().includes(normBusca) ||
+        (p.cat || '').toLowerCase().includes(normBusca) ||
+        (p.cod || '').toLowerCase().includes(normBusca)
+      )
+    }
+    // Filtro disponíveis
+    if (soPDisponiveis) lista = lista.filter(p => p.estoque == null || p.estoque > 0)
+    // Filtro faixa de preço
+    lista = lista.filter(p => (p.preco || 0) >= faixaPreco[0] && (p.preco || 0) <= faixaPreco[1])
+    // Ordenação
+    if (ordenacao === 'preco_asc') lista = [...lista].sort((a, b) => (a.preco || 0) - (b.preco || 0))
+    else if (ordenacao === 'preco_desc') lista = [...lista].sort((a, b) => (b.preco || 0) - (a.preco || 0))
+    else if (ordenacao === 'nome_az') lista = [...lista].sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'))
+    return lista
+  }, [produtos, filtroCat, normBusca, soPDisponiveis, faixaPreco, ordenacao])
+
+  // Verificar se algum filtro avançado está ativo
+  const filtrosAtivos = ordenacao !== 'relevancia' || soPDisponiveis || faixaPreco[0] > precoMin || faixaPreco[1] < precoMax
+
+  // Limpar todos os filtros
+  const limparFiltros = useCallback(() => {
+    setOrdenacao('relevancia')
+    setSoPDisponiveis(false)
+    setFaixaPreco([precoMin, precoMax])
+    setBusca('')
+    setFiltroCat('todos')
+  }, [precoMin, precoMax])
 
   // Adicionar item ao carrinho
   const addCart = (produto, qtd, tamanho) => {
@@ -573,6 +664,15 @@ export default function Loja() {
   const qtdNoCarrinhoPor = (prodId) => carrinho.filter(i => i.produtoId === prodId).reduce((s, i) => s + i.qtd, 0)
 
   return (
+    <>
+      {/* Keyframe shimmer para skeleton */}
+      <style>{`
+        @keyframes loja-shimmer {
+          0%   { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+      `}</style>
+
     <div style={{ minHeight: '100vh', background: '#FFF4EC', fontFamily: "'Segoe UI', sans-serif" }}>
 
       {/* Header */}
@@ -608,32 +708,180 @@ export default function Loja() {
 
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '8px 24px 80px' }}>
 
-        {/* Filtro por categoria */}
-        {!loading && cats.length > 1 && (
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '20px 0 8px' }}>
-            {['todos', ...cats].map(c => (
-              <button key={c} onClick={() => setFiltroCat(c)} style={{
-                padding: '6px 16px', borderRadius: 999, fontSize: '0.82rem', fontWeight: 700,
-                border: filtroCat === c ? 'none' : '1.5px solid #EAF1F7',
-                background: filtroCat === c ? 'linear-gradient(135deg,#FF6B2C,#2D6F9E)' : '#fff',
-                color: filtroCat === c ? '#12283F' : '#5A6570',
-                cursor: 'pointer', transition: 'all .15s',
-              }}>
-                {c === 'todos' ? '🛍️ Todos' : c}
-              </button>
-            ))}
-            <span style={{ fontSize: '0.78rem', color: '#9a9a9a', alignSelf: 'center', marginLeft: 4 }}>
-              {produtosFiltrados.length} produto{produtosFiltrados.length !== 1 ? 's' : ''}
-            </span>
-          </div>
-        )}
+        {/* ── Barra de busca + filtros ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, margin: '20px 0 4px' }}>
 
+          {/* Campo de busca */}
+          <div style={{ position: 'relative', maxWidth: 480 }}>
+            <span style={{
+              position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)',
+              fontSize: '1rem', pointerEvents: 'none', color: '#7BC142',
+            }}>🔍</span>
+            <input
+              type="search"
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              placeholder="Buscar produto, marca ou categoria…"
+              aria-label="Buscar produto"
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                padding: '10px 14px 10px 38px',
+                borderRadius: 12, border: '1.5px solid #d0dcc8',
+                fontSize: '0.9rem', outline: 'none', background: '#fff',
+                color: '#1a2e1a', transition: 'border-color .15s',
+              }}
+              onFocus={e => { e.target.style.borderColor = '#5FB335' }}
+              onBlur={e => { e.target.style.borderColor = '#d0dcc8' }}
+            />
+            {busca && (
+              <button
+                onClick={() => setBusca('')}
+                aria-label="Limpar busca"
+                style={{
+                  position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: '#aaa', fontSize: '1rem', lineHeight: 1,
+                }}
+              >✕</button>
+            )}
+          </div>
+
+          {/* Filtros por categoria + controles avançados */}
+          {!loading && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {/* Linha 1: chips de categoria + botão filtros avançados */}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                {cats.length > 1 && ['todos', ...cats].map(c => (
+                  <button key={c} onClick={() => setFiltroCat(c)} style={{
+                    padding: '6px 16px', borderRadius: 999, fontSize: '0.82rem', fontWeight: 700,
+                    border: filtroCat === c ? 'none' : '1.5px solid #d0dcc8',
+                    background: filtroCat === c ? 'linear-gradient(135deg,#5FB335,#7BC142)' : '#fff',
+                    color: filtroCat === c ? '#1B4D2E' : '#5a7a5a',
+                    cursor: 'pointer', transition: 'all .15s',
+                  }}>
+                    {c === 'todos' ? '🛍️ Todos' : c}
+                  </button>
+                ))}
+                {/* Botão filtros avançados */}
+                <button
+                  onClick={() => setShowFiltrosAvancados(v => !v)}
+                  style={{
+                    marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '6px 14px', borderRadius: 999, fontSize: '0.82rem', fontWeight: 700,
+                    border: filtrosAtivos ? 'none' : '1.5px solid #d0dcc8',
+                    background: filtrosAtivos ? 'linear-gradient(135deg,#C9A656,#d4b96a)' : '#fff',
+                    color: filtrosAtivos ? '#1B4D2E' : '#5a7a5a',
+                    cursor: 'pointer', transition: 'all .15s',
+                  }}
+                >
+                  {filtrosAtivos ? '⚙️' : '☰'} Filtros{filtrosAtivos ? ' ●' : ''}
+                </button>
+                <span style={{ fontSize: '0.78rem', color: '#9a9a9a' }}>
+                  {produtosFiltrados.length} produto{produtosFiltrados.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+
+              {/* Painel de filtros avançados */}
+              {showFiltrosAvancados && (
+                <div style={{
+                  background: '#fff', border: '1.5px solid #d0dcc8', borderRadius: 16,
+                  padding: '18px 20px', display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'flex-start',
+                }}>
+                  {/* Ordenação */}
+                  <div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1B4D2E', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Ordenar por</div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {[['relevancia','Relevância'],['preco_asc','Menor preço'],['preco_desc','Maior preço'],['nome_az','A → Z']].map(([v, label]) => (
+                        <button key={v} onClick={() => setOrdenacao(v)} style={{
+                          padding: '5px 12px', borderRadius: 8, fontSize: '0.8rem', fontWeight: 700,
+                          border: ordenacao === v ? 'none' : '1.5px solid #d0dcc8',
+                          background: ordenacao === v ? 'linear-gradient(135deg,#5FB335,#7BC142)' : '#f8faf5',
+                          color: ordenacao === v ? '#1B4D2E' : '#5a7a5a',
+                          cursor: 'pointer',
+                        }}>{label}</button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Faixa de preço */}
+                  <div style={{ minWidth: 200 }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1B4D2E', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      Preço: {fmtR(faixaPreco[0])} — {faixaPreco[1] >= precoMax ? 'sem limite' : fmtR(faixaPreco[1])}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.75rem', color: '#9a9a9a' }}>{fmtR(precoMin)}</span>
+                      <input type="range" min={precoMin} max={precoMax} value={faixaPreco[0]}
+                        onChange={e => setFaixaPreco(prev => [Math.min(Number(e.target.value), prev[1] - 5), prev[1]])}
+                        style={{ flex: 1, accentColor: '#5FB335', cursor: 'pointer' }}
+                      />
+                      <input type="range" min={precoMin} max={precoMax} value={faixaPreco[1]}
+                        onChange={e => setFaixaPreco(prev => [prev[0], Math.max(Number(e.target.value), prev[0] + 5)])}
+                        style={{ flex: 1, accentColor: '#5FB335', cursor: 'pointer' }}
+                      />
+                      <span style={{ fontSize: '0.75rem', color: '#9a9a9a' }}>{fmtR(precoMax)}</span>
+                    </div>
+                  </div>
+
+                  {/* Toggle disponíveis */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1B4D2E', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Disponibilidade</div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.85rem', color: '#5a7a5a', fontWeight: 600 }}>
+                      <div
+                        onClick={() => setSoPDisponiveis(v => !v)}
+                        style={{
+                          width: 40, height: 22, borderRadius: 999,
+                          background: soPDisponiveis ? '#5FB335' : '#d0dcc8',
+                          position: 'relative', transition: 'background .2s', cursor: 'pointer',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <div style={{
+                          position: 'absolute', top: 3, left: soPDisponiveis ? 20 : 3,
+                          width: 16, height: 16, borderRadius: '50%', background: '#fff',
+                          transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.2)',
+                        }} />
+                      </div>
+                      Apenas disponíveis
+                    </label>
+                  </div>
+
+                  {/* Limpar filtros */}
+                  {filtrosAtivos && (
+                    <button onClick={limparFiltros} style={{
+                      alignSelf: 'flex-end', padding: '6px 14px', borderRadius: 8,
+                      background: 'none', border: '1.5px solid #e05555', color: '#e05555',
+                      fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer',
+                    }}>✕ Limpar filtros</button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Grid de produtos ── */}
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '64px', color: '#FF6B2C', fontSize: '2rem' }}>🎾</div>
-        ) : produtos.length === 0 ? (
+          /* Skeleton Loading — 8 cards enquanto carrega */
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+            gap: 24, marginTop: 16,
+          }}>
+            {Array.from({ length: 8 }).map((_, i) => <ProdutoCardSkeleton key={i} />)}
+          </div>
+        ) : produtosFiltrados.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '64px', color: '#999' }}>
-            <div style={{ fontSize: '3rem', marginBottom: 12 }}>🛍️</div>
-            <div>Nenhum produto disponível no momento</div>
+            <div style={{ fontSize: '3rem', marginBottom: 12 }}>{busca ? '🔎' : '🛍️'}</div>
+            <div style={{ fontWeight: 700, color: '#5a7a5a', marginBottom: 6 }}>
+              {busca ? `Nenhum produto encontrado para "${busca}"` : 'Nenhum produto disponível no momento'}
+            </div>
+            {busca && (
+              <button onClick={() => setBusca('')} style={{
+                marginTop: 12, padding: '8px 20px', borderRadius: 10,
+                background: 'linear-gradient(135deg,#5FB335,#7BC142)',
+                color: '#1B4D2E', border: 'none', fontWeight: 700, cursor: 'pointer',
+              }}>Limpar busca</button>
+            )}
           </div>
         ) : (
           <div style={{
@@ -678,5 +926,6 @@ export default function Loja() {
         />
       )}
     </div>
+    </>
   )
 }

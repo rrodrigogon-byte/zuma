@@ -5,6 +5,7 @@ import { AuthProvider } from './lib/auth'
 import { ToastProvider } from './hooks/useToast'
 import App from './App'
 import { api } from './lib/api'
+import CookieConsent from './components/CookieConsent'
 import './theme.css'
 
 // Quando uma nova revisão substitui os arquivos com hash, uma aba já aberta pode
@@ -31,6 +32,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <AuthProvider>
         <ToastProvider>
           <App />
+          {/* Banner LGPD — exibido globalmente, fora da árvore de rotas */}
+          <CookieConsent />
         </ToastProvider>
       </AuthProvider>
     </BrowserRouter>

@@ -76,6 +76,7 @@ const Ranking    = lazy(() => import('./pages/public/Ranking'))
 const Loja       = lazy(() => import('./pages/public/Loja'))
 const Checkout   = lazy(() => import('./pages/public/Checkout'))
 const CommerceCheckout = lazy(() => import('./pages/public/CommerceCheckout'))
+const ProdutoDetalhe = lazy(() => import('./pages/public/ProdutoDetalhe'))
 const Regulamento = lazy(() => import('./pages/public/Regulamento'))
 const Bracket     = lazy(() => import('./pages/public/Bracket'))
 const AcompanharPedido = lazy(() => import('./pages/public/AcompanharPedido'))
@@ -302,6 +303,7 @@ export default function App() {
         <Route path="/inscricao"  element={<Layout><Inscricao /></Layout>} />
         <Route path="/ranking"    element={<Layout><Ranking /></Layout>} />
         <Route path="/loja"       element={<Layout><Loja /></Layout>} />
+        <Route path="/loja/:slug" element={<Layout><ProdutoDetalhe /></Layout>} />
         <Route path="/checkout"   element={<CheckoutEntry />} />
         <Route path="/checkout/:storeAlias" element={<CommerceCheckout />} />
         <Route path="/ecommerce/checkout" element={<CheckoutEntry />} />
