@@ -132,3 +132,21 @@ test('piloto envia apenas uma vez sob lock da linha; aceitação não significa 
     globalThis.fetch = oldFetch;
   }
 }));
+
+test('mensagens do gate em português, aceitando código do core sem duplicar prefixo', async () => {
+  const { egressMensagem, egressMotivo } = await import('./whatsapp-egress.js');
+  assert.equal(egressMotivo('WHATSAPP_EGRESS_EGRESS_OFF'), 'egress_off');
+  assert.match(egressMensagem('WHATSAPP_EGRESS_EGRESS_OFF'), /WHATSAPP_EGRESS_MODE=off/);
+  assert.match(egressMensagem('pilot_not_listed'), /WHATSAPP_POLL_PILOT_PHONES/);
+  assert.equal(egressMensagem('WHATSAPP_SEND_COMMIT_UNCERTAIN'), '');
+});
+
+test('resumo da saída não expõe telefones', async () => withEnv(async () => {
+  const { egressResumo } = await import('./whatsapp-egress.js');
+  assert.deepEqual(egressResumo(), { modo: 'off', linhaVerificada: false, pilotoConfigurado: true });
+  process.env.WHATSAPP_EGRESS_MODE = 'pilot';
+  process.env.WHATSAPP_LINE_VERIFIED = '1';
+  const resumo = egressResumo();
+  assert.equal(resumo.modo, 'pilot');
+  assert.equal(JSON.stringify(resumo).includes('5565999990001'), false);
+}));

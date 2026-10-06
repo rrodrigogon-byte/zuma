@@ -6,6 +6,7 @@ import * as conexaoKytto from './whatsapp-conexao-kytto.js';
 import { whatsappProviderName } from './core/whatsapp-provider.js';
 import { diagnosticarWhatsapp } from './core/whatsapp-diagnostico.js';
 import { db } from './core/database.js';
+import { egressMensagem, egressResumo, evaluateWhatsappEgress } from './core/whatsapp-egress.js';
 
 const BASE = '/api/admin/barbearia/whatsapp-conexao';
 const GESTORES = new Set(['admin', 'organizador']);
@@ -28,8 +29,12 @@ function allowTest(empresaId, now = Date.now()) {
 
 export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLojaId, audit, save, enviarMensagem, fetchImpl, isPlatformAdmin = () => false } = {}) {
   const who = (req) => req.user?.email || req.user?.nome || '';
-  const view = (req, empresaId) => conexaoKytto.visaoPublica(conexaoKytto.obterConexao(empresaId), {
-    numeroCompleto: GESTORES.has(String(req.user?.role || '')),
+  // `saida` acompanha toda resposta da conexão para a tela saber se o envio está liberado.
+  const view = (req, empresaId) => ({
+    ...conexaoKytto.visaoPublica(conexaoKytto.obterConexao(empresaId), {
+      numeroCompleto: GESTORES.has(String(req.user?.role || '')),
+    }),
+    saida: egressResumo(),
   });
 
   app.get(BASE, async (req, res) => {
@@ -103,15 +108,25 @@ export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLoja
     const empresaId = legacyEmpresaId(req);
     const lojaId = legacyLojaId?.(req) || '';
     if (!lojaId) return res.status(409).json({ error: 'Selecione a unidade da empresa para o teste.', code: 'STORE_SELECTION_REQUIRED' });
-    if (!allowTest(empresaId)) return res.status(429).json({ error: `Limite de ${TEST_LIMIT_PER_HOUR} testes por hora atingido.` });
     const conexao = conexaoKytto.obterConexao(empresaId);
     if (!conexao.instance) return res.status(409).json({ error: 'Esta empresa ainda não tem uma instância de WhatsApp atribuída.', code: 'WHATSAPP_INSTANCE_UNASSIGNED' });
     const canal = await db.queryRead(`SELECT id FROM canais_integracao WHERE empresa_id=$1 AND loja_id=$2 AND provedor='whatsapp' AND status='ativo' AND configuracao->>'instance'=$3 LIMIT 1`, [empresaId, lojaId, conexao.instance]).catch(() => ({ rows: [] }));
     if (!canal.rows[0]) return res.status(409).json({ error: 'Canal da unidade indisponível para o teste.', code: 'WHATSAPP_CHANNEL_UNAVAILABLE' });
+    // Trava de saída conferida antes do envio: se o servidor bloqueia (ex.: WHATSAPP_EGRESS_MODE=off),
+    // responde 409 com orientação em português e não consome a cota de testes.
+    if (whatsappProviderName() === 'chatbot_backend') {
+      const gate = evaluateWhatsappEgress({ empresaId, lojaId, canalId: canal.rows[0].id, instance: conexao.instance, number: telefone.length <= 11 ? `55${telefone}` : telefone });
+      if (!gate.ok && gate.reason !== 'provider_scope') {
+        audit(req, 'WHATSAPP CONEXAO TESTE', `ok=false; bloqueio=${gate.reason}`);
+        save();
+        return res.status(409).json({ ok: false, code: `WHATSAPP_EGRESS_${gate.reason.toUpperCase()}`, error: egressMensagem(gate.reason) || 'Envio bloqueado pela política de saída do servidor.' });
+      }
+    }
+    if (!allowTest(empresaId)) return res.status(429).json({ error: `Limite de ${TEST_LIMIT_PER_HOUR} testes por hora atingido.` });
     const texto = String(req.body?.mensagem || '').trim().slice(0, 300) || 'Teste de conexão do WhatsApp da Dino. Se você recebeu esta mensagem, o canal está funcionando.';
     const result = await enviarMensagem({ whatsapp_instance: conexao.instance, empresa_id: empresaId, loja_id: lojaId, canal_id: canal.rows[0].id }, telefone, texto);
     audit(req, 'WHATSAPP CONEXAO TESTE', `ok=${result.ok === true}; status=${Number(result.status) || '-'}`);
     save();
-    res.status(result.ok ? 200 : 502).json({ ok: result.ok, status: result.status ?? null, error: result.ok ? null : (result.authError ? 'Backend recusou a chave de API.' : (result.error || 'Envio não confirmado pelo backend.')) });
+    res.status(result.ok ? 200 : 502).json({ ok: result.ok, status: result.status ?? null, code: result.ok ? null : (result.error || null), error: result.ok ? null : (result.authError ? 'Backend recusou a chave de API.' : (egressMensagem(result.error) || result.error || 'Envio não confirmado pelo backend.')) });
   });
 }

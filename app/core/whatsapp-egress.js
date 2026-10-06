@@ -53,3 +53,37 @@ export async function authorizeWhatsappEgress(context, { database = db, lock = f
     return deny('channel_unavailable');
   }
 }
+
+// Motivos do gate traduzidos para a tela do gestor. Nunca expõem telefones nem
+// valores de segredo — só o nome da variável que o operador precisa ajustar.
+const MOTIVOS_EGRESS = {
+  provider_scope: 'O servidor não está no modo multi-instância do backend NossaGente (WHATSAPP_PROVIDER=chatbot_backend e CHATBOT_BACKEND_MODE=instancias).',
+  company_scope: 'Esta empresa não é a dona da instância configurada no servidor (CHATBOT_BACKEND_EMPRESA_ID).',
+  channel_scope: 'Canal da unidade inválido para envio. Selecione a unidade e confira o canal do WhatsApp.',
+  instance_scope: 'A instância desta empresa não é a instância liberada no servidor (CHATBOT_BACKEND_INSTANCE).',
+  line_unverified: 'A linha ainda não foi confirmada pelo titular no aparelho (WHATSAPP_LINE_VERIFIED=1 no servidor).',
+  egress_off: 'O envio de mensagens está desligado no servidor (WHATSAPP_EGRESS_MODE=off). Para testar, defina WHATSAPP_EGRESS_MODE=pilot e inclua este número em WHATSAPP_POLL_PILOT_PHONES.',
+  recipient_invalid: 'Número inválido. Informe DDD + número, por exemplo 65 99999-0000.',
+  pilot_not_listed: 'Modo piloto: este número não está na lista autorizada (WHATSAPP_POLL_PILOT_PHONES). Inclua o número no servidor ou use um número já autorizado.',
+  channel_inactive_or_shared: 'O canal do WhatsApp não está ativo ou a instância está ligada a mais de um canal ativo.',
+  channel_unavailable: 'Não foi possível confirmar o canal do WhatsApp agora. Tente de novo em instantes.',
+  channel_lookup_failed: 'Não foi possível confirmar o canal do WhatsApp agora. Tente de novo em instantes.',
+};
+
+/** Aceita o motivo cru (`egress_off`) ou o código do core (`WHATSAPP_EGRESS_EGRESS_OFF`). */
+export function egressMotivo(code) {
+  const raw = String(code || '').trim();
+  const reason = raw.toUpperCase().startsWith('WHATSAPP_EGRESS_') ? raw.slice('WHATSAPP_EGRESS_'.length) : raw;
+  return reason.toLowerCase();
+}
+
+export function egressMensagem(code) {
+  return MOTIVOS_EGRESS[egressMotivo(code)] || '';
+}
+
+/** Resumo sem dados pessoais para a tela de conexão: modo de saída e se há lista piloto. */
+export function egressResumo() {
+  const modo = egressMode();
+  const pilotoConfigurado = String(process.env.WHATSAPP_POLL_PILOT_PHONES || '').split(',').map(isaChatId).filter(Boolean).length > 0;
+  return { modo, linhaVerificada: process.env.WHATSAPP_LINE_VERIFIED === '1', pilotoConfigurado };
+}
