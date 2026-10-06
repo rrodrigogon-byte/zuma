@@ -125,3 +125,13 @@ O manual do T-Rex descreve 24 ferramentas conceituais. A plataforma já tinha a 
 ## Integração com produção (05/10/2026)
 
 A persona preserva links de pagamento, cartões de produtos e registro no CRM. Links não passam por reescrita de estilo nem são quebrados em bolhas. Resumos, códigos e URLs podem exceder o alvo de 120 caracteres: dados operacionais não são truncados. A persona usa um único fluxo de figurinhas por resposta; o fluxo anterior permanece para canais sem persona. O ambiente só ativa a persona quando a empresa é explicitamente conhecida e coincide com a dona configurada.
+
+## Foto de perfil do WhatsApp (o T-Rex para os clientes)
+
+A foto que o cliente vê no contato da Dino é a do **perfil da conta do WhatsApp**, não algo que o SetPoint envia.
+
+- Arquivo oficial: `web/public/brand/dino-whatsapp-perfil-640.png` (640×640, fundo azul-marinho com aro dourado, T-Rex acenando, já centrado para o recorte redondo). Alternativa clara: `dino-whatsapp-perfil-640-claro.png`.
+- Publicado também em `https://dino.kytto.com.br/brand/dino-whatsapp-perfil-640.png`.
+- **Como trocar:** no celular da Dino, WhatsApp Business → Configurações → toque na foto → Editar → escolher o arquivo. Vale para todos os clientes na hora.
+- Pelo backend (opcional, para trocar sem o celular): a rota ainda não existe no `chatbot-backend-nestjs`. Com `whatsapp-web.js` é `client.setProfilePicture(await MessageMedia.fromUrl(url))`; com Baileys, `sock.updateProfilePicture(sock.user.id, { url })`. Mesma chave `X-API-KEY` das outras rotas.
+- Para gerar de novo (outra expressão do T-Rex), use o mesmo `tools/figurinhas/trex-template.svg` e as expressões de `gerar-figurinhas.mjs`.
