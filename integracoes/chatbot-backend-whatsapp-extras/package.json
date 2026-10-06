@@ -1,0 +1,11 @@
+{
+  "name": "chatbot-backend-whatsapp-extras",
+  "private": true,
+  "description": "Rotas extras do chatbot-backend-nestjs: figurinha, mídia recebida e foto de perfil (Dino/T-Rex). Copiar src/whatsapp-extras para o backend.",
+  "scripts": { "test": "jest", "typecheck": "tsc --noEmit -p ." },
+  "devDependencies": {
+    "@nestjs/common": "^10", "@nestjs/core": "^10", "@nestjs/platform-express": "^10", "@nestjs/testing": "^10",
+    "@types/express": "*", "@types/jest": "^29", "@types/node": "^20", "@types/supertest": "*",
+    "jest": "^29", "reflect-metadata": "*", "rxjs": "^7", "supertest": "*", "ts-jest": "^29", "typescript": "^5"
+  }
+}

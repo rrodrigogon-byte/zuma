@@ -4,6 +4,8 @@
 **Por quê:** a Dino já transcreve áudio e descreve foto com o Gemini, mas hoje o backend entrega só o marcador `content: "[ÁUDIO RECEBIDO]"`, sem o arquivo. Enquanto a rota não existir, o cliente que manda áudio recebe "pode me escrever?".
 **Esforço:** uma rota GET, sem banco novo. A mídia não precisa ser armazenada: é baixada do WhatsApp sob demanda.
 
+> **Código pronto e testado:** `integracoes/chatbot-backend-whatsapp-extras/`. No Render use `CHATBOT_BACKEND_MEDIA_PATH=/messages/{id}/media?instance={instance}&chatId={chatId}`. Passo a passo: `integracoes/chatbot-backend-whatsapp-extras/PROMPT-SUBIR-BACKEND-WHATSAPP-DINO.md`.
+
 ## Contrato
 
 ```

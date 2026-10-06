@@ -4,6 +4,8 @@
 **Por quê:** o atendente da Dino manda uma figurinha do T-Rex em momentos marcados (agendou, confirmou presença, primeiro contato…). O contrato atual do backend só tem `/send` (texto). Sem esta rota, o SetPoint simplesmente não envia figurinha: nada quebra.
 **Esforço:** uma rota POST, sem banco novo.
 
+> **Código pronto e testado:** `integracoes/chatbot-backend-whatsapp-extras/` (figurinha, mídia e foto de perfil). Passo a passo para subir: `integracoes/chatbot-backend-whatsapp-extras/PROMPT-SUBIR-BACKEND-WHATSAPP-DINO.md`.
+
 ## Contrato
 
 ```
