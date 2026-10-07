@@ -568,3 +568,46 @@ test('tentativa que caiu por tempo esgotado é retomada em vez de travar o pedid
     delete process.env.TEST_PAYMENT_ACCESS;
   }
 });
+
+// A consulta ao provedor ocorre fora da transação. Simula outra captura B
+// entrando após a leitura inicial de A e antes do FOR UPDATE final.
+test('reconciliação concorrente não sobrescreve captura B com NSU A já verificado', async () => {
+  const { db } = await import('./database.js');
+  const original = db.transaction;
+  const priorAdapter = paymentProviders.get('infinitepay');
+  const priorEnv = process.env.TEST_PAYMENT_ACCESS;
+  process.env.TEST_PAYMENT_ACCESS = 'synthetic-handle';
+  paymentProviders.register('infinitepay', {
+    createCheckout: async () => { throw new Error('checkout não pode ser criado'); },
+    verifyWebhook: async () => { throw new Error('webhook não pode ser enviado'); },
+    getStatus: async () => ({ providerPaymentId: 'tx-A', status: 'captured', amount: 30, summary: { paid: true, orderNsu: 'KC-CORRIDA', transactionNsu: 'tx-A', slug: 'slug-A', captureMethod: 'pix' } }),
+  });
+  const all = [];
+  let auditInserts = 0;
+  let webhookInserts = 0;
+  db.transaction = async callback => callback({ query: async (sql, values) => {
+    all.push({ sql, values });
+    if (sql.includes('a.id AS account_id')) return { rows: [{ id: '55555555-5555-4555-8555-555555555558', order_id: orderId, provider: 'infinitepay', method: 'external', status: 'pending', amount: '30.00', provider_payment_id: null, metadata: { checkout: { orderNsu: 'KC-CORRIDA', slug: null } }, payment_account_id: accountId, account_id: accountId, ambiente: 'production', secret_ref: 'env:TEST_PAYMENT_ACCESS', public_config: {}, order_code: 'KC-CORRIDA', storefront_id: storefrontId, order_status: 'pending_payment' }] };
+    if (sql.includes('FOR UPDATE OF p')) return { rows: [{ id: '55555555-5555-4555-8555-555555555558', order_id: orderId, provider: 'infinitepay', status: 'captured', method: 'pix', amount: '30.00', provider_payment_id: 'tx-B', metadata: { checkout: { transactionNsu: 'tx-B' } }, payment_account_id: accountId, order_code: 'KC-CORRIDA', storefront_id: storefrontId, order_status: 'paid' }] };
+    if (sql.includes('INSERT INTO commerce_payment_webhooks')) { webhookInserts++; return { rows: webhookInserts === 1 ? [{ id: 'synthetic-webhook' }] : [] }; }
+    if (sql.includes('INSERT INTO commerce_audit_logs')) { auditInserts++; return { rows: [] }; }
+    throw new Error('SQL inesperado em conflito: ' + sql.slice(0, 65));
+  } });
+  try {
+    for (const pass of [1, 2]) {
+      const result = await reconcilePaymentByIdentifiers({ empresaId, lojaId, storefrontId }, '55555555-5555-4555-8555-555555555558', { transactionNsu: 'tx-A', slug: 'slug-A', source: 'public_return' });
+      assert.equal(result.conflict, true);
+      assert.equal(result.refundRequired, true);
+      assert.equal(result.changed, false);
+      assert.equal(auditInserts, 1, `auditoria idempotente em replay ${pass}`);
+    }
+    assert.equal(webhookInserts, 2);
+    assert.equal(all.filter(item => /^\s*UPDATE commerce_payments/i.test(item.sql)).length, 0);
+  } finally {
+    db.transaction = original;
+    if (priorAdapter) paymentProviders.register('infinitepay', priorAdapter);
+    else paymentProviders.adapters.delete('infinitepay');
+    if (priorEnv === undefined) delete process.env.TEST_PAYMENT_ACCESS;
+    else process.env.TEST_PAYMENT_ACCESS = priorEnv;
+  }
+});

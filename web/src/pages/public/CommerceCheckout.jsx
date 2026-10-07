@@ -8,6 +8,7 @@ import { createLatestRequest } from '../../lib/latest-request'
 import { createCheckoutOrderPoller } from '../../lib/checkout-order-polling'
 import { checkoutShippingErrorMessage, checkoutShippingSupportAction, checkoutTotal, DINO_DELIVERY_UNAVAILABLE, isDinoCommerceStorefront, recommendedShippingOption, selectedShippingOption, shippingQuoteKey } from '../../lib/checkout-shipping'
 import { checkoutContactReference, checkoutContactReviewMessage, checkoutContactSupportAction } from '../../lib/checkout-contact'
+import { checkoutReturnSafety } from '../../lib/checkout-return-safety'
 
 const EMPTY_ADDRESS = { cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '', referencia: '' }
 
@@ -110,6 +111,14 @@ function CommerceCheckoutSession() {
   const orderCode = searchParams.get('order') || searchParams.get('order_nsu') || ''
   const returnTransactionNsu = searchParams.get('transaction_nsu') || searchParams.get('transactionNsu') || ''
   const returnSlug = searchParams.get('slug') || searchParams.get('invoice_slug') || ''
+  const hasProviderReturn = Boolean(orderCode && returnTransactionNsu && returnSlug)
+  useEffect(() => {
+    if (!searchParams.has('receipt_url') && !searchParams.has('receiptUrl')) return
+    const sanitized = new URLSearchParams(searchParams)
+    sanitized.delete('receipt_url')
+    sanitized.delete('receiptUrl')
+    navigate({ search: sanitized.toString() }, { replace: true })
+  }, [navigate, searchParams])
   const [cart, setCart] = useState(() => readCart(storeAlias))
   const [storeContext, setStoreContext] = useState(null)
   const isDinoCommerce = isDinoCommerceStorefront(storeContext)
@@ -128,6 +137,7 @@ function CommerceCheckoutSession() {
   const [recoveryPreference, setRecoveryPreference] = useState(null)
   const [order, setOrder] = useState(null)
   const [payment, setPayment] = useState(null)
+  const [returnStatus, setReturnStatus] = useState(hasProviderReturn ? 'checking' : null)
   const [selectedPayment, setSelectedPayment] = useState('')
   // Crediário: o número do pedido é confirmado por código no WhatsApp antes de marcar na conta.
   const [phoneCode, setPhoneCode] = useState('')
@@ -288,19 +298,32 @@ function CommerceCheckoutSession() {
   }, [cart])
 
   useEffect(() => {
-    if (!order?.public_code || payment || !returnTransactionNsu || !returnSlug) return undefined
+    if (!order?.public_code || payment || !returnTransactionNsu || !returnSlug || !['draft', 'pending_payment'].includes(order.status)) return undefined
     let active = true
     const reconcileReturn = async () => {
-      setWorking(true); setError('')
+      setWorking(true); setError(''); setReturnStatus('checking')
       try {
         const result = await api.post(`${storefrontApi}/orders/${encodeURIComponent(order.public_code)}/payments/return`, { transactionNsu: returnTransactionNsu, slug: returnSlug })
-        if (active) setPayment({ provider: 'infinitepay', status: result.status, returnConfirmed: true })
-      } catch (err) { if (active) setError(err.message || 'Não foi possível confirmar o retorno do provedor.') }
+        if (!active) return
+        setReturnStatus(result.refundRequired ? 'needs_review' : result.status === 'captured' ? 'confirmed' : 'pending')
+        if (result.refundRequired) setError('O provedor informou uma captura que precisa de conferência pela loja. Não pague novamente; a equipe verificará possível duplicidade ou estorno.')
+        if (result.status === 'captured') {
+          const latest = await api.get(`${storefrontApi}/orders/${encodeURIComponent(order.public_code)}`)
+          if (active) setOrder(current => current ? { ...current, ...latest } : latest)
+        }
+      } catch (_err) { if (active) { setReturnStatus('needs_review'); setError('Não foi possível confirmar o pagamento agora. Não pague novamente; acompanhe este pedido ou fale com a loja para conferência.') } }
       finally { if (active) setWorking(false) }
     }
     reconcileReturn()
     return () => { active = false }
   }, [order?.public_code, payment, returnTransactionNsu, returnSlug, storefrontApi])
+
+  useEffect(() => {
+    if (hasProviderReturn && returnStatus !== 'needs_review' && order?.status && !['draft', 'pending_payment'].includes(order.status)) {
+      setError('')
+      setReturnStatus('confirmed')
+    }
+  }, [hasProviderReturn, order?.status, returnStatus])
 
   useEffect(() => {
     if (!order?.public_code) return undefined
@@ -542,19 +565,20 @@ function CommerceCheckoutSession() {
     // O status do pedido manda: pagamento que chegou depois de cancelado/expirado não
     // reabre o pedido e vai para estorno, então não mostramos "Pagamento confirmado".
     const orderStatus = String(order.status || '').toLowerCase()
-    const closed = ['cancelled', 'payment_failed', 'refunded', 'returned'].includes(orderStatus)
     // Qualquer status depois de "aguardando pagamento" (pago, em preparação, pronto para
     // retirada, retirado, em análise…) já tem pagamento: não oferece pagar de novo.
-    const awaitingPayment = ['draft', 'pending_payment'].includes(orderStatus)
-    const paid = !closed && (orderStatus ? !awaitingPayment : ['captured', 'paid', 'approved', 'authorized'].includes(String(order.payment_status || payment?.status || '').toLowerCase()))
+    const { closed, paid, verifyingProviderReturn, showNewPayment, showExistingPayment } = checkoutReturnSafety({
+      orderStatus, paymentStatus: order.payment_status || payment?.status, hasPayment: Boolean(payment), hasProviderReturn,
+    })
     return <main className="checkout-result-shell"><div className="checkout-result-card">
       <div className="checkout-result-icon"><CheckCircle2 size={30} /></div>
       <span className="eyebrow">Pedido {code}</span>
-      <h1>{closed ? (orderStatus === 'payment_failed' ? 'Pagamento não aprovado' : 'Pedido cancelado') : paid ? 'Pagamento confirmado' : payment ? 'Pagamento iniciado' : 'Pedido criado'}</h1>
-      <p className="checkout-result-lead">{closed ? 'Este pedido não aceita mais pagamento. Se algum valor foi cobrado, a loja fará o estorno. Para comprar, monte um novo carrinho.' : paid ? 'O pagamento foi confirmado pelo provedor e o pedido seguirá para preparação.' : payment ? 'Conclua o pagamento no provedor. O status será atualizado automaticamente.' : 'Escolha um método para concluir o pagamento com segurança.'}</p>
+      <h1>{closed ? (orderStatus === 'payment_failed' ? 'Pagamento não aprovado' : 'Pedido cancelado') : paid ? 'Pagamento confirmado' : verifyingProviderReturn ? 'Verificando pagamento' : payment ? 'Pagamento iniciado' : 'Pedido criado'}</h1>
+      <p className="checkout-result-lead">{closed ? 'Este pedido não aceita mais pagamento. Se algum valor foi cobrado, a loja fará o estorno. Para comprar, monte um novo carrinho.' : paid ? 'O pagamento foi confirmado pelo provedor e o pedido seguirá para preparação.' : verifyingProviderReturn ? 'A confirmação pela InfinitePay ainda está em verificação. Não faça outro pagamento. Acompanhe as atualizações do pedido abaixo.' : payment ? 'Conclua o pagamento no provedor. O status será atualizado automaticamente.' : 'Escolha um método para concluir o pagamento com segurança.'}</p>
       {error && <div className="checkout-form-error" role="alert">{error}</div>}
-      {!payment && !paid && !closed && <div className="checkout-payment-box"><strong>Como deseja continuar?</strong>{paymentChoices.length ? paymentChoices.map(item => { const value = `${item.provider}:${item.method}`; const copy = <span className="payment-option-copy"><strong>{paymentLabel(item)}</strong><small>{paymentDescription(item)}</small>{item.provider === 'infinitepay' && <span className="payment-provider-badges">{item.captureMethods.map(method => <span key={method}>{method === 'credit_card' ? 'Cartão' : 'Pix'}</span>)}</span>}</span>; return paymentChoices.length === 1 ? <div key={value} className="payment-option payment-provider-option is-selected"><span className="payment-option-radio" aria-hidden="true">✓</span>{copy}</div> : <label key={value} className={`payment-option ${selectedPayment === value ? 'is-selected' : ''}`}><input type="radio" name="payment" value={value} checked={selectedPayment === value} onChange={() => setSelectedPayment(value)} />{copy}</label> }) : <small>Nenhum provedor de pagamento está publicado para esta loja.</small>}{selectedPaymentChoice?.provider === 'crediario' && <div className="checkout-phone-verify">{phoneToken ? <small>WhatsApp confirmado.</small> : <><small>Para marcar na conta, confirme o WhatsApp do pedido{phoneEnding ? ` (final ${phoneEnding})` : form.telefone ? ` (final ${form.telefone.replace(/\D/g, '').slice(-4)})` : ''} com o código que vamos enviar.</small>{!phoneCodeSent ? <button type="button" className="checkout-secondary" onClick={sendPhoneCode} disabled={phoneBusy}>{phoneBusy ? 'Enviando…' : 'Enviar código pelo WhatsApp'}</button> : <div className="checkout-inline-field"><input value={phoneCode} onChange={e => setPhoneCode(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" placeholder="Código de 6 números" aria-label="Código recebido no WhatsApp" /><button type="button" className="checkout-secondary" onClick={confirmPhoneCode} disabled={phoneBusy || phoneCode.length !== 6}>{phoneBusy ? 'Conferindo…' : 'Confirmar'}</button></div>}</>}</div>}<button type="button" className="checkout-primary" onClick={startPayment} disabled={working || redirecting || !paymentChoices.length || (selectedPaymentChoice?.provider === 'crediario' && !phoneToken)}>{redirecting ? 'Abrindo checkout seguro…' : working ? 'Preparando pagamento…' : selectedPaymentChoice?.provider === 'infinitepay' ? 'Continuar na InfinitePay' : selectedPaymentChoice?.provider === 'crediario' ? 'Marcar na conta' : 'Iniciar pagamento'}</button><small className="checkout-payment-helper">{selectedPaymentChoice?.provider === 'infinitepay' ? 'Na próxima tela, escolha Pix ou cartão uma única vez. Nenhum dado de cartão passa pela Kytto.' : selectedPaymentChoice?.provider === 'crediario' ? 'O valor entra no seu crediário com a loja, com o prazo combinado.' : 'O pagamento será processado pelo provedor publicado para esta loja.'}</small></div>}
-      {payment && !paid && <div className="checkout-payment-box"><strong>Pagamento pendente</strong>{qr && <img className="checkout-qr" src={qr.startsWith('data:') ? qr : `data:image/png;base64,${qr}`} alt="QR Code do pagamento" />}{pixCode && <div className="checkout-pix-box"><label>Código Pix</label><textarea readOnly rows={4} value={pixCode} aria-label="Código Pix" /><button type="button" className="checkout-primary" onClick={() => copyCode(pixCode)}><Copy size={15} />{copied ? 'Código copiado' : 'Copiar código'}</button></div>}{hostedUrl && <a className="checkout-primary" href={hostedUrl} target="_blank" rel="noreferrer">Abrir checkout do provedor <ArrowRight size={16} /></a>}{!qr && !pixCode && !hostedUrl && <small>O provedor recebeu a solicitação, mas ainda não retornou uma instrução pública de pagamento. Aguarde o webhook ou consulte o pedido.</small>}<small>Status: {payment.status || order.payment_status || 'pending'}.</small></div>}
+      {verifyingProviderReturn && <div className="checkout-payment-box" role="status"><strong>{returnStatus === 'needs_review' ? 'Conferência necessária' : 'Aguardando confirmação do provedor'}</strong><small>Este pedido continua em acompanhamento. O comprovante apresentado não altera o status automaticamente; a loja confirmará o pagamento com a InfinitePay. Não abra um novo checkout nem pague novamente.</small></div>}
+      {showNewPayment && <div className="checkout-payment-box"><strong>Como deseja continuar?</strong>{paymentChoices.length ? paymentChoices.map(item => { const value = `${item.provider}:${item.method}`; const copy = <span className="payment-option-copy"><strong>{paymentLabel(item)}</strong><small>{paymentDescription(item)}</small>{item.provider === 'infinitepay' && <span className="payment-provider-badges">{item.captureMethods.map(method => <span key={method}>{method === 'credit_card' ? 'Cartão' : 'Pix'}</span>)}</span>}</span>; return paymentChoices.length === 1 ? <div key={value} className="payment-option payment-provider-option is-selected"><span className="payment-option-radio" aria-hidden="true">✓</span>{copy}</div> : <label key={value} className={`payment-option ${selectedPayment === value ? 'is-selected' : ''}`}><input type="radio" name="payment" value={value} checked={selectedPayment === value} onChange={() => setSelectedPayment(value)} />{copy}</label> }) : <small>Nenhum provedor de pagamento está publicado para esta loja.</small>}{selectedPaymentChoice?.provider === 'crediario' && <div className="checkout-phone-verify">{phoneToken ? <small>WhatsApp confirmado.</small> : <><small>Para marcar na conta, confirme o WhatsApp do pedido{phoneEnding ? ` (final ${phoneEnding})` : form.telefone ? ` (final ${form.telefone.replace(/\D/g, '').slice(-4)})` : ''} com o código que vamos enviar.</small>{!phoneCodeSent ? <button type="button" className="checkout-secondary" onClick={sendPhoneCode} disabled={phoneBusy}>{phoneBusy ? 'Enviando…' : 'Enviar código pelo WhatsApp'}</button> : <div className="checkout-inline-field"><input value={phoneCode} onChange={e => setPhoneCode(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" placeholder="Código de 6 números" aria-label="Código recebido no WhatsApp" /><button type="button" className="checkout-secondary" onClick={confirmPhoneCode} disabled={phoneBusy || phoneCode.length !== 6}>{phoneBusy ? 'Conferindo…' : 'Confirmar'}</button></div>}</>}</div>}<button type="button" className="checkout-primary" onClick={startPayment} disabled={working || redirecting || !paymentChoices.length || (selectedPaymentChoice?.provider === 'crediario' && !phoneToken)}>{redirecting ? 'Abrindo checkout seguro…' : working ? 'Preparando pagamento…' : selectedPaymentChoice?.provider === 'infinitepay' ? 'Continuar na InfinitePay' : selectedPaymentChoice?.provider === 'crediario' ? 'Marcar na conta' : 'Iniciar pagamento'}</button><small className="checkout-payment-helper">{selectedPaymentChoice?.provider === 'infinitepay' ? 'Na próxima tela, escolha Pix ou cartão uma única vez. Nenhum dado de cartão passa pela Kytto.' : selectedPaymentChoice?.provider === 'crediario' ? 'O valor entra no seu crediário com a loja, com o prazo combinado.' : 'O pagamento será processado pelo provedor publicado para esta loja.'}</small></div>}
+      {showExistingPayment && <div className="checkout-payment-box"><strong>Pagamento pendente</strong>{qr && <img className="checkout-qr" src={qr.startsWith('data:') ? qr : `data:image/png;base64,${qr}`} alt="QR Code do pagamento" />}{pixCode && <div className="checkout-pix-box"><label>Código Pix</label><textarea readOnly rows={4} value={pixCode} aria-label="Código Pix" /><button type="button" className="checkout-primary" onClick={() => copyCode(pixCode)}><Copy size={15} />{copied ? 'Código copiado' : 'Copiar código'}</button></div>}{hostedUrl && <a className="checkout-primary" href={hostedUrl} target="_blank" rel="noreferrer">Abrir checkout do provedor <ArrowRight size={16} /></a>}{!qr && !pixCode && !hostedUrl && <small>O provedor recebeu a solicitação, mas ainda não retornou uma instrução pública de pagamento. Aguarde o webhook ou consulte o pedido.</small>}<small>Status: {payment.status || order.payment_status || 'pending'}.</small></div>}
       <section className="checkout-tracking-panel" aria-label="Acompanhamento da entrega"><div className="checkout-tracking-heading"><div><span className="eyebrow"><PackageCheck size={14} /> Pós-venda</span><h2>Acompanhe seu pedido</h2></div><span className="checkout-status-pill">{orderStatusLabels[order.status] || order.status || 'Em atualização'}</span></div>{latestFulfillment ? <><div className="checkout-tracking-summary"><div><Truck size={17} /><span><strong>{fulfillmentLabels[latestFulfillment.status] || latestFulfillment.status}</strong><small>{latestFulfillment.carrier || 'Logística da loja'}</small></span></div>{latestFulfillment.trackingCode && <div><MapPin size={17} /><span><strong>{latestFulfillment.trackingCode}</strong><small>Código de rastreio</small></span></div>}{shippingOption?.deliveryDays !== null && shippingOption?.deliveryDays !== undefined && <div><PackageCheck size={17} /><span><strong>Prazo total estimado</strong><small>{shippingPromise(shippingOption)}</small>{shippingPriceSummary(shippingOption) && <small className="checkout-shipping-price-note">{shippingPriceSummary(shippingOption)}</small>}</span></div>}</div>{latestFulfillment.trackingUrl && <a className="checkout-tracking-link" href={latestFulfillment.trackingUrl} target="_blank" rel="noreferrer">Acompanhar no site da transportadora <ArrowRight size={15} /></a>}{Array.isArray(latestFulfillment.ocorrencias) && latestFulfillment.ocorrencias.length > 0 && <div className="checkout-tracking-events">{latestFulfillment.ocorrencias.slice(0, 5).map((event, index) => <div key={`${event.at || event.data || index}-${index}`}><span>{event.at || event.data || 'Atualização'}</span><strong>{event.description || event.descricao || event.status || event.mensagem || 'Movimentação registrada'}</strong></div>)}</div>}</> : <div className="checkout-tracking-empty"><PackageCheck size={18} /><span>Após a confirmação do pagamento, a loja separará o pedido e disponibilizará o rastreio nesta área.</span></div>}{!latestFulfillment && shippingOption?.deliveryDays !== null && shippingOption?.deliveryDays !== undefined && <div className="checkout-tracking-eta"><PackageCheck size={17} /><span><strong>Prazo total estimado</strong><small>{shippingPromise(shippingOption)}</small>{shippingPriceSummary(shippingOption) && <small className="checkout-shipping-price-note">{shippingPriceSummary(shippingOption)}</small>}</span></div>}{timeline.length > 0 && <div className="checkout-order-timeline">{timeline.slice(-6).map((event, index) => <div key={`${event.at || index}-${index}`}><span>{event.at ? new Date(event.at).toLocaleString('pt-BR') : 'Atualização'}</span><strong>{orderStatusLabels[event.toStatus] || event.toStatus || 'Atualização do pedido'}</strong><small>{event.source === 'system' ? 'Sistema' : event.source || 'Operação'}</small></div>)}</div>}</section>
       <div className="checkout-result-meta"><div><span>Total</span><strong>{money(order.total || total)}</strong></div><div><span>Pedido</span><strong>{code}</strong></div></div>
       <div className="checkout-result-actions"><Link className="checkout-primary" to={`${orderRoute}/${encodeURIComponent(code)}`}>Acompanhar pedido <ArrowRight size={16} /></Link><Link className="checkout-secondary" to={storeRoute}>Voltar para a loja</Link></div>

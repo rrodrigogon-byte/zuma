@@ -161,6 +161,32 @@ export async function recordLatePaymentCapture(trx, contextInput, input = {}) {
   return { recorded: true, refundRequired: true };
 }
 
+export async function recordConflictingCapturedTransaction(trx, contextInput, input = {}) {
+  const context = tenantContext(contextInput);
+  const paymentId = assertUuid(input.paymentId, 'paymentId');
+  const transactionNsu = String(input.transactionNsu || '').trim();
+  if (!transactionNsu || transactionNsu.length > 160) throw new CommerceError('identificador de captura conflitante inválido', 'PAYMENT_RECONCILIATION_INPUT_INVALID');
+  const provider = 'infinitepay';
+  const eventId = `capture-conflict:${crypto.createHash('sha256').update(`${context.empresaId}:${provider}:${transactionNsu}`).digest('hex')}`;
+  const marker = { reviewCode: 'PROVIDER_CAPTURE_CONFLICT', refundRequired: true, reviewRequired: true, source: input.source === 'payment_webhook' ? 'payment_webhook' : 'public_return' };
+  const inserted = await trx.query(
+    `INSERT INTO commerce_payment_webhooks
+       (empresa_id, provider, provider_event_id, event_type, signature_valid, status, payload_hash, payload_resumido, processado_em)
+     VALUES ($1, $2, $3, 'payment.updated', false, 'failed', $4, $5::jsonb, CURRENT_TIMESTAMP)
+     ON CONFLICT (provider, provider_event_id) DO NOTHING RETURNING id`,
+    [context.empresaId, provider, eventId, crypto.createHash('sha256').update(`${context.empresaId}:${provider}:${eventId}`).digest('hex'), JSON.stringify(marker)],
+  );
+  if (inserted.rows[0]) {
+    await trx.query(
+      `INSERT INTO commerce_audit_logs
+         (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, depois, correlation_id)
+       VALUES ($1,$2,$3,'payment',$4,'provider_capture_conflict',$5::jsonb,$6)`,
+      [context.empresaId, context.lojaId || null, context.usuarioId || null, paymentId, JSON.stringify({ provider, refundRequired: true, reviewRequired: true, originalPaymentPreserved: true }), eventId],
+    );
+  }
+  return { conflict: true, refundRequired: true, reviewRequired: true, recorded: Boolean(inserted.rows[0]) };
+}
+
 async function preparePayment(trx, context, input, provider, method, idem, requestHash) {
   const existing = await trx.query(
     `SELECT request_hash, response_body FROM commerce_idempotency_keys
@@ -506,7 +532,7 @@ export async function reconcilePaymentByIdentifiers(contextInput, paymentIdInput
     throw new CommerceError('InfinitePay retornou identificadores diferentes do retorno recebido', 'PAYMENT_PROVIDER_STATUS_INVALID');
   }
   if (verified.amount == null || Math.abs(Number(verified.amount) - Number(prepared.amount)) > 0.01) throw new CommerceError('valor consultado na InfinitePay diverge do pedido', 'PAYMENT_AMOUNT_MISMATCH');
-  await withCommerceTransaction(async trx => {
+  const binding = await withCommerceTransaction(async trx => {
     const result = await trx.query(
       `SELECT p.id, p.order_id, p.provider, p.status, p.amount, p.provider_payment_id, p.metadata, p.payment_account_id,
               o.public_code AS order_code, o.storefront_id, o.status AS order_status
@@ -521,7 +547,9 @@ export async function reconcilePaymentByIdentifiers(contextInput, paymentIdInput
     const payment = result.rows[0];
     if (!payment) throw new CommerceError('pagamento não encontrado no tenant ou na loja ativa', 'PAYMENT_NOT_FOUND');
     if (payment.provider !== 'infinitepay') throw new CommerceError('a reconciliação manual por NSU está disponível somente para InfinitePay', 'PAYMENT_RECONCILIATION_PROVIDER_UNSUPPORTED');
-    if (payment.provider_payment_id && payment.provider_payment_id !== transactionNsu) throw new CommerceError('o pagamento já possui outro identificador InfinitePay', 'PAYMENT_RECONCILIATION_CONFLICT');
+    if (payment.provider_payment_id && payment.provider_payment_id !== transactionNsu) {
+      return recordConflictingCapturedTransaction(trx, context, { paymentId, transactionNsu, source });
+    }
     const duplicate = await trx.query(
       `SELECT id FROM commerce_payments
         WHERE empresa_id = $1 AND provider = 'infinitepay' AND provider_payment_id = $2 AND id <> $3
@@ -538,7 +566,9 @@ export async function reconcilePaymentByIdentifiers(contextInput, paymentIdInput
         WHERE empresa_id = $1 AND id = $2`,
       [context.empresaId, paymentId, transactionNsu, JSON.stringify({ checkout, reconciliationBinding: { at: new Date().toISOString(), source, verifiedStatus: String(verified.status).slice(0, 40) } })],
     );
+    return { bound: true };
   });
+  if (binding?.conflict) return { paymentId, orderId: prepared.order_id, status: 'captured', provider: 'infinitepay', changed: false, conflict: true, refundRequired: true };
   return syncPaymentAttempt({ ...context, storefrontId }, paymentId);
 }
 

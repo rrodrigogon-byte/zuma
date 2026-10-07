@@ -128,7 +128,7 @@ const verifiedSale = {
 };
 
 for (const field of ['order_nsu', 'transaction_nsu', 'slug']) {
-  for (const variant of ['ausente', 'divergente']) {
+  for (const variant of ['divergente']) {
     test(`getStatus rejeita ${field} ${variant} antes de capturar`, async () => {
       const originalFetch = globalThis.fetch;
       const response = { ...verifiedSale };
@@ -158,6 +158,39 @@ for (const field of ['order_nsu', 'transaction_nsu', 'slug']) {
     });
   }
 }
+
+test('payment_check documentado sem eco dos IDs confirma somente a tupla consultada com valor e método exatos', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, body: JSON.parse(options.body) });
+    return new Response(JSON.stringify({ success: true, paid: true, amount: 8500, capture_method: 'pix' }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const payment = { amount: '85.00', method: 'external', provider_payment_id: 'tx-9001', metadata: { checkout: { orderNsu: 'KC-TESTE-INFINITEPAY', slug: 'slug-test' } } };
+    const checked = await adapter.getStatus({ payment, account: account() });
+    assert.equal(checked.status, 'captured');
+    assert.equal(checked.providerPaymentId, 'tx-9001');
+    assert.deepEqual(checked.summary, { paid: true, orderNsu: 'KC-TESTE-INFINITEPAY', transactionNsu: 'tx-9001', captureMethod: 'pix', slug: 'slug-test', verifiedBy: 'payment_check' });
+    const webhook = await adapter.verifyWebhook({ payload: { invoice_slug: 'slug-test', order_nsu: 'KC-TESTE-INFINITEPAY', transaction_nsu: 'tx-9001' }, context: { account: account(), expectedOrderNsu: 'KC-TESTE-INFINITEPAY', expectedAmount: 85, expectedMethod: 'external' } });
+    assert.equal(webhook.providerPaymentId, 'tx-9001');
+    assert.deepEqual(calls.map(call => call.body), Array(2).fill({ handle: 'handle-teste', order_nsu: 'KC-TESTE-INFINITEPAY', transaction_nsu: 'tx-9001', slug: 'slug-test' }));
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('payment_check sem sucesso explícito ou com valor/método inválido não captura', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    for (const checked of [
+      { paid: true, amount: 8500, capture_method: 'pix' },
+      { success: true, paid: true, amount: 8400, capture_method: 'pix' },
+      { success: true, paid: true, amount: 8500 },
+    ]) {
+      globalThis.fetch = async () => new Response(JSON.stringify(checked), { status: 200, headers: { 'content-type': 'application/json' } });
+      await assert.rejects(() => adapter.getStatus({ payment: { amount: 85, method: 'external', provider_payment_id: 'tx-9001', metadata: { checkout: { orderNsu: 'KC-TESTE-INFINITEPAY', slug: 'slug-test' } } }, account: account() }), error => error instanceof CommerceError && ['PAYMENT_PROVIDER_STATUS_INVALID', 'PAYMENT_AMOUNT_MISMATCH'].includes(error.code));
+    }
+  } finally { globalThis.fetch = originalFetch; }
+});
 
 for (const [name, change, code] of [
   ['valor divergente', { amount: 8400 }, 'PAYMENT_AMOUNT_MISMATCH'],

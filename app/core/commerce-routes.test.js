@@ -7,6 +7,7 @@ import test from 'node:test';
 import { createCommerceAdminRouter, createCommercePublicRouter, createCommerceWebhookRouter, parsePagination, publicCommercePolicy, sanitizePublicOrderInput } from './commerce-routes.js';
 import { fulfillmentReport } from './commerce-reports.js';
 import { paymentProviders } from './payment-adapters.js';
+import { infinitepayWebhookDuplicateOwnerSql, infinitepayWebhookUnboundOwnerSql, publicInfinitepayPaymentLookupSql } from './commerce-payment-return.js';
 import { db } from './database.js';
 
 const empresaId = '11111111-1111-4111-8111-111111111111';
@@ -559,9 +560,11 @@ test('retorno público InfinitePay não persiste identificadores antes da verifi
   const handler = source.split("router.post('/orders/:publicCode/payments/return'")[1].split("router.post('/orders'")[0];
   assert.match(handler, /reconcilePaymentByIdentifiers/);
   assert.match(handler, /source: 'public_return'/);
-  assert.match(handler, /p\.provider_payment_id = \$3/);
-  assert.match(handler, /p\.provider_payment_id IS NULL AND p\.metadata->'checkout'->>'slug' = \$4/);
-  assert.doesNotMatch(handler, /ORDER BY p\.criado_em DESC LIMIT 1/);
+  assert.match(handler, /publicInfinitepayPaymentLookupSql/);
+  assert.match(publicInfinitepayPaymentLookupSql, /p\.provider_payment_id = \$3/);
+  assert.match(publicInfinitepayPaymentLookupSql, /p\.provider_payment_id IS NULL AND p\.status = 'pending'/);
+  assert.match(publicInfinitepayPaymentLookupSql, /p\.metadata->'checkout'->>'slug' IS NULL/);
+  assert.doesNotMatch(publicInfinitepayPaymentLookupSql, /ORDER BY p\.criado_em DESC LIMIT 1/);
   assert.doesNotMatch(handler, /UPDATE commerce_payments/);
 });
 
@@ -575,9 +578,13 @@ test('webhook InfinitePay prioriza provider_payment_id e só usa pedido+slug par
   const source = readFileSync(new URL('./commerce-routes.js', import.meta.url), 'utf8');
   const handler = source.split("router.post('/:provider/payments'")[1].split('return router;')[0];
   assert.match(handler, /p\.provider_payment_id = \$2/);
-  assert.match(handler, /p\.provider_payment_id IS NULL/);
-  assert.match(handler, /\(o\.public_code = \$1 OR o\.id::text = \$1\)/);
-  assert.match(handler, /p\.metadata->'checkout'->>'slug' = \$2/);
+  assert.match(handler, /infinitepayWebhookUnboundOwnerSql/);
+  assert.match(handler, /infinitepayWebhookDuplicateOwnerSql/);
+  assert.match(infinitepayWebhookUnboundOwnerSql, /p\.provider_payment_id IS NULL/);
+  assert.match(infinitepayWebhookDuplicateOwnerSql, /p\.provider_payment_id <> \$2/);
+  assert.match(infinitepayWebhookUnboundOwnerSql, /\(o\.public_code = \$1 OR o\.id::text = \$1\)/);
+  assert.match(infinitepayWebhookUnboundOwnerSql, /p\.metadata->'checkout'->>'slug' = \$2/);
+  assert.match(handler, /current\.provider_payment_id !== dataId/);
   assert.match(handler, /p\.id = \$3/);
   assert.doesNotMatch(handler, /o\.public_code = \$3\s+OR/);
 });

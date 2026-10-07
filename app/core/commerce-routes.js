@@ -6,6 +6,7 @@ import express from 'express';
 import { db } from './database.js';
 import { customerReport, fulfillmentReport, inventoryReport, salesReport } from './commerce-reports.js';
 import { canTransitionPaymentStatus, captureNeedsRefund, otherCapturedPayment, createPaymentAttempt, publicPaymentMethods, paymentAccountReady, paymentProviders, reconcilePaymentByIdentifiers, recordLatePaymentCapture, resolvedPaymentMethod, syncPaymentAttempt, validatePaymentMethod, verifyPaymentWebhook } from './payment-adapters.js';
+import { infinitepayWebhookDuplicateOwnerSql, infinitepayWebhookUnboundOwnerSql, publicInfinitepayPaymentLookupSql } from './commerce-payment-return.js';
 import { createPaymentAccount, listPaymentAccounts, listPaymentProviders, listPayments, updatePaymentAccount } from './commerce-payment-admin.js';
 import { resolveCommerceIdentity } from './commerce-identity-bridge.js';
 import { applyPromotionToOrder, createPromotion, createPromotionCode, createPromotionTemplate, listPromotionTemplates, listPromotions } from './commerce-promotions.js';
@@ -128,6 +129,7 @@ export function publicCommercePolicy(req) {
   if (req.method === 'GET' && route.startsWith('/shipping/address/')) return { scope: 'public-shipping-address', limit: 80, windowSeconds: 600 };
   if (req.method === 'POST' && route.startsWith('/shipping/quotes')) return { scope: 'public-shipping-quote', limit: 30, windowSeconds: 600 };
   if (req.method === 'POST' && route.startsWith('/phone-verification/')) return { scope: 'public-phone-verification', limit: 10, windowSeconds: 600 };
+  if (req.method === 'POST' && /^\/orders\/[^/]+\/payments\/return$/.test(route)) return { scope: 'public-payment-return', limit: 8, windowSeconds: 600 };
   if (req.method === 'POST' && (route === '/orders' || /^\/orders\/[^/]+\/payments$/.test(route))) return { scope: 'public-order-write', limit: 12, windowSeconds: 600 };
   if (req.method === 'GET' && /^\/orders\/[^/]+$/.test(route)) return { scope: 'public-order-read', limit: 120, windowSeconds: 600 };
   if (req.method === 'GET' && /^\/media\/[^/]+$/.test(route)) return { scope: 'public-media-read', limit: 600, windowSeconds: 600 };
@@ -824,14 +826,8 @@ export function createCommercePublicRouter() {
       if (!transactionNsu || !slug) throw new CommerceError('retorno InfinitePay sem identificadores suficientes', 'PAYMENT_WEBHOOK_INVALID')
       const order = await db.query(`SELECT id FROM commerce_orders WHERE empresa_id = $1 AND storefront_id = $2 AND public_code = $3 LIMIT 1`, [storefront.empresa_id, storefront.id, String(req.params.publicCode || '').toUpperCase()])
       if (!order.rows[0]) throw new CommerceError('pedido não encontrado', 'ORDER_NOT_FOUND')
-      const payment = await db.query(
-        `SELECT p.id
-           FROM commerce_payments p
-          WHERE p.empresa_id = $1 AND p.order_id = $2 AND p.provider = 'infinitepay'
-            AND (p.provider_payment_id = $3 OR (p.provider_payment_id IS NULL AND p.metadata->'checkout'->>'slug' = $4))
-          LIMIT 2`,
-        [storefront.empresa_id, order.rows[0].id, transactionNsu, slug],
-      )
+      const payment = await db.query(publicInfinitepayPaymentLookupSql,
+        [storefront.empresa_id, order.rows[0].id, transactionNsu, slug, String(req.params.publicCode || '').toUpperCase()])
       if (!payment.rows[0]) throw new CommerceError('tentativa InfinitePay não encontrada', 'PAYMENT_NOT_FOUND')
       if (payment.rows.length > 1) throw new CommerceError('retorno InfinitePay associado a mais de uma tentativa', 'PAYMENT_RECONCILIATION_CONFLICT')
       const result = await reconcilePaymentByIdentifiers(
@@ -839,7 +835,7 @@ export function createCommercePublicRouter() {
         payment.rows[0].id,
         { transactionNsu, slug, source: 'public_return' },
       )
-      res.json(result)
+      res.json({ status: result.status, changed: Boolean(result.changed), pending: Boolean(result.pending), refundRequired: Boolean(result.refundRequired) })
     } catch (error) { jsonError(res, error) }
   })
   router.post('/orders', async (req, res) => {
@@ -988,24 +984,12 @@ export function createCommerceWebhookRouter() {
           LIMIT 2`,
         [provider, dataId],
       );
-      if (!owner.rows[0] && provider === 'infinitepay' && orderNsu && invoiceSlug) owner = await db.query(
-        `SELECT p.id AS payment_id, p.empresa_id, p.payment_account_id, p.amount, p.method, p.provider_payment_id, o.public_code AS order_code, a.secret_ref, a.public_config
-           FROM commerce_payments p
-           JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id
-           LEFT JOIN commerce_payment_accounts a
-             ON a.empresa_id = p.empresa_id AND a.id = p.payment_account_id
-          WHERE p.provider = 'infinitepay'
-            AND p.provider_payment_id IS NULL
-            AND (o.public_code = $1 OR o.id::text = $1)
-            AND p.metadata->'checkout'->>'slug' = $2
-          LIMIT 2`,
-        [orderNsu, invoiceSlug],
-      );
+      if (!owner.rows[0] && provider === 'infinitepay' && orderNsu && invoiceSlug) owner = await db.query(infinitepayWebhookUnboundOwnerSql, [orderNsu, invoiceSlug]);
+      if (!owner.rows[0] && provider === 'infinitepay' && orderNsu && invoiceSlug && dataId) owner = await db.query(infinitepayWebhookDuplicateOwnerSql, [orderNsu, dataId]);
       if (!owner.rows[0]) return res.status(200).json({ ok: true, ignored: true });
-      // Mesmo pedido com várias tentativas: vale a que casa pelo identificador do gateway,
-      // depois pelo slug, depois a mais recente. Só é ambíguo se o identificador exato
-      // aparecer em duas tentativas diferentes.
-      if (owner.rows.length > 1 && dataId && owner.rows[0].provider_payment_id === dataId && owner.rows[1].provider_payment_id === dataId) throw new CommerceError('webhook associado a mais de uma tentativa persistida', 'PAYMENT_WEBHOOK_AMBIGUOUS');
+      // Sem slug na resposta de /links, múltiplas tentativas pendentes não têm
+      // vínculo inequívoco: não selecionar a mais recente nem capturar às cegas.
+      if (owner.rows.length > 1) throw new CommerceError('webhook associado a mais de uma tentativa persistida', 'PAYMENT_WEBHOOK_AMBIGUOUS');
       const ownerRow = owner.rows[0];
       if (!ownerRow.payment_account_id || !ownerRow.secret_ref) throw new CommerceError('conta de pagamento do webhook não está vinculada', 'PAYMENT_WEBHOOK_INVALID');
       const verified = await verifyPaymentWebhook(provider, req.body || {}, req.headers['x-signature'] || req.headers['x-webhook-signature'] || '', {
@@ -1016,10 +1000,12 @@ export function createCommerceWebhookRouter() {
         account: { secret_ref: ownerRow.secret_ref, public_config: ownerRow.public_config },
         empresaId: ownerRow.empresa_id,
         expectedOrderNsu: ownerRow.order_code,
-        expectedTransactionNsu: ownerRow.provider_payment_id || null,
+        expectedTransactionNsu: ownerRow.possible_duplicate ? null : ownerRow.provider_payment_id || null,
         expectedAmount: ownerRow.amount,
-        expectedMethod: ownerRow.method,
+        expectedMethod: ownerRow.possible_duplicate ? 'external' : ownerRow.method,
       });
+      if (provider === 'infinitepay' && verified.status === 'captured' && (!dataId || verified.providerPaymentId !== dataId)) throw new CommerceError('payment_check confirmou outro identificador', 'PAYMENT_WEBHOOK_INVALID');
+      if (ownerRow.possible_duplicate && verified.status !== 'captured') return res.json({ ok: true, ignored: true });
       const empresaId = tenantContext({ empresaId: ownerRow.empresa_id }).empresaId;
       const eventId = String(verified.eventId || '').trim().slice(0, 180);
       if (!eventId) throw new CommerceError('webhook sem identificador do provedor', 'PAYMENT_WEBHOOK_INVALID');
@@ -1029,11 +1015,14 @@ export function createCommerceWebhookRouter() {
           `INSERT INTO commerce_payment_webhooks
             (empresa_id, provider, provider_event_id, event_type, signature_valid, status, payload_hash, payload_resumido)
            VALUES ($1, $2, $3, $4, $5, 'received', $6, $7::jsonb)
-           ON CONFLICT (provider, provider_event_id) DO NOTHING
+          ON CONFLICT (provider, provider_event_id) DO NOTHING
            RETURNING id`,
           [empresaId, provider, eventId, String(verified.eventType || verified.type || 'payment.updated').slice(0, 100), verified.signatureValid === true, payloadHash, JSON.stringify({ ...(verified.summary || {}), verification: verified.verification || null })],
         );
-        if (!inserted.rows[0]) return { duplicate: true };
+        if (!inserted.rows[0]) {
+          const previous = await trx.query(`SELECT status, payload_resumido->>'reviewCode' AS review_code FROM commerce_payment_webhooks WHERE provider = $1 AND provider_event_id = $2 LIMIT 1`, [provider, eventId]);
+          return previous.rows[0]?.review_code === 'PROVIDER_CAPTURE_CONFLICT' ? { conflict: true, reviewRequired: true, refundRequired: true } : { duplicate: true };
+        }
         const payment = await trx.query(
           `SELECT p.id, p.order_id, p.method, p.amount, p.status, p.provider_payment_id, o.status AS order_status
              FROM commerce_payments p
@@ -1047,6 +1036,18 @@ export function createCommerceWebhookRouter() {
           return { ignored: true };
         }
         const current = payment.rows[0];
+        // A leitura inicial de owner ocorreu ANTES do payment_check. Outro retorno
+        // pode ter capturado uma transação diferente nesse intervalo. O lock em p
+        // é o ponto final de decisão: nunca trocar o ID da captura anterior.
+        if (provider === 'infinitepay' && current.provider_payment_id && dataId && current.provider_payment_id !== dataId) {
+          if (verified.status === 'captured' && verified.providerPaymentId === dataId) {
+            await trx.query(`UPDATE commerce_payment_webhooks SET status = 'failed', processado_em = CURRENT_TIMESTAMP, payload_resumido = payload_resumido || '{"reviewCode":"PROVIDER_CAPTURE_CONFLICT","refundRequired":true}'::jsonb WHERE id = $1`, [inserted.rows[0].id]);
+            await auditLog(trx, { empresaId }, { entidade: 'payment', entidadeId: current.id, acao: 'provider_capture_conflict', correlationId: eventId, depois: { provider, refundRequired: true, reviewRequired: true, originalPaymentPreserved: true } });
+            return { conflict: true, reviewRequired: true, refundRequired: true };
+          }
+          await trx.query(`UPDATE commerce_payment_webhooks SET status = 'ignored', processado_em = CURRENT_TIMESTAMP WHERE id = $1`, [inserted.rows[0].id]);
+          return { ignored: true };
+        }
         if (provider === 'infinitepay' && verified.status === 'captured' && verified.providerPaymentId && !current.provider_payment_id) {
           await trx.query(`UPDATE commerce_payments SET provider_payment_id = $3, metadata = metadata || $4::jsonb, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2`, [empresaId, current.id, String(verified.providerPaymentId).slice(0, 180), JSON.stringify({ checkout: { orderNsu: verified.summary?.orderNsu || null, transactionNsu: String(verified.providerPaymentId).slice(0, 180), slug: verified.summary?.slug || null, captureMethod: verified.summary?.captureMethod || null, verifiedBy: verified.verification || null } })]);
         }
@@ -1082,6 +1083,7 @@ export function createCommerceWebhookRouter() {
         await trx.query(`UPDATE commerce_payment_webhooks SET status = 'processed', processado_em = CURRENT_TIMESTAMP WHERE id = $1`, [inserted.rows[0].id]);
         return { paymentId: current.id, orderId: current.order_id, status: nextPaymentStatus, refundRequired: Boolean(lateCapture?.refundRequired) };
       });
+      if (result.conflict) return res.status(400).json({ success: false, code: 'PROVIDER_CAPTURE_CONFLICT', reviewRequired: true });
       res.json({ ok: true, ...result });
     } catch (error) { jsonError(res, error); }
   });

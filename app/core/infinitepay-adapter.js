@@ -84,13 +84,16 @@ function supportedCaptureMethods(account) {
 
 function assertCapturedPaymentCheck(checked, expected, errorCode) {
   if (checked?.paid !== true) return;
+  if (checked?.success !== true) throw new CommerceError('payment_check não confirmou a consulta', errorCode);
   const checkedOrderNsu = normalizeOrderNsu(checked);
   const checkedTransactionNsu = normalizeTransactionNsu(checked);
   const checkedSlug = normalizeSlug(checked);
-  if (!checkedOrderNsu || !checkedTransactionNsu || !checkedSlug
-    || checkedOrderNsu !== expected.orderNsu
-    || checkedTransactionNsu !== expected.transactionNsu
-    || checkedSlug !== expected.slug) {
+  // O contrato documentado de payment_check não garante eco dos IDs enviados.
+  // A API confirma a tupla handle/pedido/transação/slug consultada; quando um
+  // ID for ecoado, ainda deve coincidir exatamente com a tupla da requisição.
+  if ((checkedOrderNsu && checkedOrderNsu !== expected.orderNsu)
+    || (checkedTransactionNsu && checkedTransactionNsu !== expected.transactionNsu)
+    || (checkedSlug && checkedSlug !== expected.slug)) {
     throw new CommerceError('payment_check não confirmou os identificadores da venda', errorCode);
   }
   const amountCents = Number(checked?.amount ?? checked?.paid_amount);
@@ -161,10 +164,10 @@ export function createInfinitePayAdapter() {
         allowedMethods: supportedCaptureMethods(account),
       }, 'PAYMENT_PROVIDER_STATUS_INVALID')
       return {
-        providerPaymentId: checked?.paid === true ? normalizeTransactionNsu(checked) : null,
+        providerPaymentId: checked?.paid === true ? transactionNsu : null,
         status: checked?.paid === true ? 'captured' : 'pending',
         amount: Number.isFinite(amountCents) && amountCents > 0 ? amountCents / 100 : null,
-        summary: { paid: checked?.paid === true, orderNsu: normalizeOrderNsu(checked) || null, transactionNsu: normalizeTransactionNsu(checked) || null, captureMethod: captureMethod || null, slug: normalizeSlug(checked) || null, verifiedBy: 'payment_check' },
+        summary: { paid: checked?.paid === true, orderNsu: checked?.paid === true ? orderNsu : normalizeOrderNsu(checked) || null, transactionNsu: checked?.paid === true ? transactionNsu : normalizeTransactionNsu(checked) || null, captureMethod: captureMethod || null, slug: checked?.paid === true ? slug : normalizeSlug(checked) || null, verifiedBy: 'payment_check' },
       }
     },
 
@@ -191,7 +194,7 @@ export function createInfinitePayAdapter() {
         method: context?.expectedMethod,
         allowedMethods: supportedCaptureMethods(context?.account),
       }, 'PAYMENT_WEBHOOK_INVALID');
-      const verifiedTransactionNsu = paid ? checkedTransactionNsu : null;
+      const verifiedTransactionNsu = paid ? transactionNsu : null;
       return {
         // O mesmo NSU chega como pendente e depois como pago: o estado faz parte da chave,
         // senão o aviso de pagamento seria descartado como duplicado.

@@ -1,0 +1,62 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { Client } from 'pg';
+import { infinitepayWebhookDuplicateOwnerSql, infinitepayWebhookUnboundOwnerSql, publicInfinitepayPaymentLookupSql } from './commerce-payment-return.js';
+import { recordConflictingCapturedTransaction } from './payment-adapters.js';
+
+const dbName = process.env.COMMERCE_RETURN_TEST_DB || '';
+const enabled = dbName === 'dino_return_local_test' && process.env.PGHOST === '/var/run/postgresql' && process.env.PGUSER === 'postgres';
+const empresa = '11111111-1111-4111-8111-111111111111';
+const outraEmpresa = '22222222-2222-4222-8222-222222222222';
+const order = '33333333-3333-4333-8333-333333333333';
+const payment = '44444444-4444-4444-8444-444444444444';
+const account = '55555555-5555-4555-8555-555555555555';
+const code = 'KC-RETURN-SYNTHETIC';
+
+test('SQL real: só candidato único pendente do mesmo pedido; não adota outro tenant nem URL forjada', { skip: !enabled }, async () => {
+  const client = new Client({ host: '/var/run/postgresql', user: 'postgres', database: dbName, ssl: false });
+  await client.connect();
+  try {
+    await client.query(`CREATE TEMP TABLE commerce_payments (id uuid, empresa_id uuid, order_id uuid, provider text, provider_payment_id text, status text, payment_account_id uuid, amount numeric, method text, metadata jsonb)`);
+    await client.query(`CREATE TEMP TABLE commerce_orders (id uuid, empresa_id uuid, public_code text)`);
+    await client.query(`CREATE TEMP TABLE commerce_payment_accounts (id uuid, empresa_id uuid, secret_ref text, public_config jsonb)`);
+    await client.query(`INSERT INTO commerce_orders VALUES ($1,$2,$3)`,[order,empresa,code]);
+    await client.query(`INSERT INTO commerce_payment_accounts VALUES ($1,$2,$3,$4::jsonb)`,[account,empresa,'env:TEST_ONLY','{}']);
+    const add = (id, tenant, orderId, data = {}) => client.query(`INSERT INTO commerce_payments(id,empresa_id,order_id,provider,provider_payment_id,status,payment_account_id,amount,method,metadata) VALUES ($1,$2,$3,$4,$5,$6,$7,85,'external',$8::jsonb)`, [id,tenant,orderId,data.provider || 'infinitepay',data.providerPaymentId || null,data.status || 'pending',data.account === false ? null : account,JSON.stringify({ checkout: { orderNsu: data.orderNsu || code, slug: data.slug ?? null, url: data.url || 'https://checkout.infinitepay.io/synthetic' } })]);
+    const lookup = (tenant = empresa, orderId = order, nsu = 'tx-synthetic', slug = 'slug-synthetic', codeArg = code) => client.query(publicInfinitepayPaymentLookupSql,[tenant,orderId,nsu,slug,codeArg]);
+    const webhookLookup = (codeArg = code, slug = 'slug-synthetic') => client.query(infinitepayWebhookUnboundOwnerSql,[codeArg,slug]);
+    await add(payment,empresa,order);
+    assert.equal((await lookup()).rowCount, 1);
+    assert.equal((await webhookLookup()).rowCount, 1);
+    assert.equal((await lookup(outraEmpresa)).rowCount, 0);
+    assert.equal((await lookup(empresa,outraEmpresa)).rowCount, 0);
+    assert.equal((await lookup(empresa,order,'tx-synthetic','slug-synthetic','KC-OUTRO')).rowCount, 0);
+    await add('66666666-6666-4666-8666-666666666666',empresa,order,{url:'https://malicioso.example.invalid/synthetic'});
+    assert.equal((await lookup()).rowCount, 1);
+    await add('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',empresa,order,{url:'https://checkout.infinitepay.evil/synthetic'});
+    assert.equal((await lookup()).rowCount, 1);
+    await add('77777777-7777-4777-8777-777777777777',empresa,order,{slug:'slug-divergente'});
+    assert.equal((await lookup()).rowCount, 1);
+    await add('88888888-8888-4888-8888-888888888888',empresa,order,{status:'failed'});
+    assert.equal((await lookup()).rowCount, 1);
+    await add('99999999-9999-4999-8999-999999999999',empresa,order,{account:false});
+    assert.equal((await lookup()).rowCount, 1);
+    await add('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',empresa,order);
+    assert.equal((await lookup()).rowCount, 2, 'duas tentativas pendentes exigem revisão, sem escolha automática');
+    assert.equal((await webhookLookup()).rowCount, 2, 'webhook ambíguo também falha fechado');
+    assert.equal((await webhookLookup('KC-OUTRO')).rowCount, 0);
+    assert.equal((await lookup(outraEmpresa)).rowCount, 0);
+    await add('cccccccc-cccc-4ccc-8ccc-cccccccccccc',empresa,order,{status:'captured', providerPaymentId:'tx-anterior'});
+    const capturedDuplicate = await client.query(infinitepayWebhookDuplicateOwnerSql,[code,'tx-synthetic']);
+    assert.equal(capturedDuplicate.rowCount, 1);
+    assert.equal(capturedDuplicate.rows[0].possible_duplicate,true);
+    assert.equal((await client.query(infinitepayWebhookDuplicateOwnerSql,[code,'tx-anterior'])).rowCount,0);
+    await client.query(`CREATE TEMP TABLE commerce_payment_webhooks (id uuid DEFAULT gen_random_uuid(), empresa_id uuid, provider text, provider_event_id text, event_type text, signature_valid boolean, status text, payload_hash text, payload_resumido jsonb, processado_em timestamptz, UNIQUE(provider,provider_event_id))`);
+    await client.query(`CREATE TEMP TABLE commerce_audit_logs (empresa_id uuid, loja_id uuid, usuario_id uuid, entidade text, entidade_id uuid, acao text, depois jsonb, correlation_id text)`);
+    const context = { empresaId: empresa };
+    assert.equal((await recordConflictingCapturedTransaction(client,context,{paymentId:payment,transactionNsu:'tx-conflitante'})).recorded,true);
+    assert.equal((await recordConflictingCapturedTransaction(client,context,{paymentId:payment,transactionNsu:'tx-conflitante'})).recorded,false);
+    assert.equal((await client.query('SELECT count(*)::int AS total FROM commerce_payment_webhooks')).rows[0].total,1);
+    assert.equal((await client.query('SELECT count(*)::int AS total FROM commerce_audit_logs')).rows[0].total,1);
+  } finally { await client.end(); }
+});
