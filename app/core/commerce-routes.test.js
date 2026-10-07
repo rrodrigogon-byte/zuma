@@ -64,6 +64,55 @@ function mediaPreviewHandler() {
   assert.ok(handler, 'rota de prévia administrativa de mídia não encontrada');
   return handler;
 }
+function publicMediaHandler() {
+  const router = createCommercePublicRouter();
+  const layer = router.stack.find(item => item.route?.path === '/media/:id');
+  const handler = layer?.route?.stack?.at(-1)?.handle;
+  assert.ok(handler, 'rota pública de mídia não encontrada');
+  return handler;
+}
+test('mídia pública sem storage retorna 503 JSON sem cache e mantém parâmetros tenant-scoped', async () => {
+  const previousQuery = db.query;
+  const previousDir = process.env.COMMERCE_MEDIA_DIR;
+  const previousDbPath = process.env.DB_PATH;
+  const previousBucket = process.env.GCS_BUCKET;
+  const mediaId = '55555555-5555-4555-8555-555555555555';
+  const productId = '88888888-8888-4888-8888-888888888888';
+  const queries = [];
+  const response = {
+    statusCode: 200, body: null, headersSent: false, headers: {},
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
+    setHeader(name, value) { this.headers[name] = value; },
+    removeHeader(name) { delete this.headers[name]; },
+  };
+  delete process.env.COMMERCE_MEDIA_DIR;
+  delete process.env.DB_PATH;
+  delete process.env.GCS_BUCKET;
+  db.query = async (sql, values) => {
+    queries.push({ sql, values });
+    if (sql.includes('FROM commerce_product_media m')) return { rows: [{ id: mediaId, product_id: productId, storage_key: `commerce-local/${empresaId}/${productId}/${mediaId}.webp`, mime_type: 'image/webp' }] };
+    throw new Error('consulta não prevista no teste de mídia');
+  };
+  try {
+    await publicMediaHandler()({ publicResolvedStorefront: { id: storefrontId, empresa_id: empresaId, loja_id: lojaId }, params: { id: mediaId } }, response);
+  } finally {
+    db.query = previousQuery;
+    if (previousDir === undefined) delete process.env.COMMERCE_MEDIA_DIR;
+    else process.env.COMMERCE_MEDIA_DIR = previousDir;
+    if (previousDbPath === undefined) delete process.env.DB_PATH;
+    else process.env.DB_PATH = previousDbPath;
+    if (previousBucket === undefined) delete process.env.GCS_BUCKET;
+    else process.env.GCS_BUCKET = previousBucket;
+  }
+  assert.equal(response.statusCode, 503);
+  assert.equal(response.body.code, 'MEDIA_STORAGE_NOT_CONFIGURED');
+  assert.equal(response.headers['Cache-Control'], 'no-store');
+  assert.equal(response.headers['Content-Type'], undefined);
+  assert.equal(queries.length, 1);
+  assert.deepEqual(queries[0].values, [empresaId, storefrontId, mediaId]);
+  assert.equal(queries.some(query => /\b(INSERT|UPDATE|DELETE)\b/i.test(query.sql)), false);
+});
 test('prévia administrativa de mídia é protegida por rota própria', () => {
   assert.equal(typeof mediaPreviewHandler(), 'function');
 });
@@ -84,10 +133,11 @@ test('prévia administrativa rejeita mídia de outra vitrine antes do stream, in
       throw new Error('consulta não prevista para GET de prévia');
     };
     const response = {
-      statusCode: 200, body: null, headersSent: false, streamCalls: 0,
+      statusCode: 200, body: null, headersSent: false, streamCalls: 0, headers: {},
       status(code) { this.statusCode = code; return this; },
       json(body) { this.body = body; return this; },
-      setHeader() { this.streamCalls += 1; },
+      setHeader(name, value) { this.headers[name] = value; if (name === 'Content-Type') this.streamCalls += 1; },
+      removeHeader(name) { delete this.headers[name]; },
     };
     try {
       await mediaPreviewHandler()({
@@ -98,6 +148,7 @@ test('prévia administrativa rejeita mídia de outra vitrine antes do stream, in
     } finally { db.query = previousQuery; }
     assert.equal(response.statusCode, 404);
     assert.equal(response.body.code, 'MEDIA_NOT_FOUND');
+    assert.equal(response.headers['Cache-Control'], 'private, no-store');
     assert.equal(response.streamCalls, 0);
     assert.equal(queries.some(call => /\b(INSERT|UPDATE|DELETE)\b/i.test(call.sql)), false);
   }

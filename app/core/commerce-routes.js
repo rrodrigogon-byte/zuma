@@ -708,7 +708,11 @@ export function createCommercePublicRouter() {
       if (!result.rows[0]) throw new CommerceError('mídia não encontrada neste storefront', 'MEDIA_NOT_FOUND');
       await streamCommerceImage({ storageKey: result.rows[0].storage_key, mimeType: result.rows[0].mime_type, res, empresaId: storefront.empresa_id, productId: result.rows[0].product_id, mediaId: result.rows[0].id });
     } catch (error) {
-      if (!res.headersSent) jsonError(res, error);
+      if (!res.headersSent) {
+        res.setHeader('Cache-Control', 'no-store');
+        res.removeHeader?.('Content-Type');
+        jsonError(res, error);
+      }
       else res.destroy(error);
     }
   });
@@ -1419,7 +1423,11 @@ export function createCommerceAdminRouter() {
         privateCache: true,
       });
     } catch (error) {
-      if (!res.headersSent) jsonError(res, error);
+      if (!res.headersSent) {
+        res.setHeader('Cache-Control', 'private, no-store');
+        res.removeHeader?.('Content-Type');
+        jsonError(res, error);
+      }
       else res.destroy(error);
     }
   });
@@ -2227,4 +2235,3 @@ export function createCommerceAdminRouter() {
   });
   return router;
 }
-

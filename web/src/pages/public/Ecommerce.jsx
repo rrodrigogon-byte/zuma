@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, ArrowRight, Check, CheckCircle2, Eye, Loader2, Minus, Monitor, Moon, Plus, Search, ShoppingBag, Store, Sun, Trash2, X } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, fmtR } from '../../lib/api'
-import { decrementCartQuantity, loadAllStorefrontProducts, nextStorefrontCartSyncVersion, normalizeStorefrontAlias, storefrontApiBase, storefrontCartSessionKey, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
+import { decrementCartQuantity, loadAllStorefrontProducts, nextStorefrontCartSyncVersion, normalizeStorefrontAlias, storefrontApiBase, storefrontCartSessionKey, storefrontMediaRecoveryUrl, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
 import { recommendedShippingOption, shippingQuoteKey } from '../../lib/checkout-shipping'
 import { createLatestRequest } from '../../lib/latest-request'
 import { applyThemeMode, commerceDisplayName, DINO_COMMERCE_LOGO, storedThemeMode } from '../../lib/brand'
@@ -114,14 +114,34 @@ function availableStock(product, variantId) {
   return stock > 0 ? stock : variant?.permiteCompraSemEstoque === true ? 999 : 0
 }
 
+function useRecoverableCatalogImage(image) {
+  const [brokenImage, setBrokenImage] = useState('')
+  const [recovery, setRecovery] = useState(null)
+  const source = recovery?.original === image ? recovery.url : image
+  return {
+    source,
+    broken: Boolean(image && brokenImage === image),
+    onError() {
+      const retry = source === image ? storefrontMediaRecoveryUrl(image) : ''
+      if (retry) setRecovery({ original: image, url: retry })
+      else setBrokenImage(image)
+    },
+  }
+}
+
 function ProductImage({ product, large = false, mediaUrl = '' }) {
   const image = mediaUrl || product?.imagem || productMedia(product)[0]?.url || ''
   const alt = productMedia(product).find(item => item.url === image)?.altText || product?.nome || 'Produto'
-  const [brokenImage, setBrokenImage] = useState('')
-  if (image && brokenImage === image) return <div className={`commerce-product-placeholder sf-image-fallback ${large ? 'is-large' : ''}`} role="img" aria-label={`${product?.nome || 'Produto'} — imagem indisponível`}><Store size={large ? 40 : 28} aria-hidden="true" /><span>Imagem indisponível</span></div>
+  const { source, broken, onError } = useRecoverableCatalogImage(image)
+  if (broken) return <div className={`commerce-product-placeholder sf-image-fallback ${large ? 'is-large' : ''}`} role="img" aria-label={`${product?.nome || 'Produto'} — imagem indisponível`}><Store size={large ? 40 : 28} aria-hidden="true" /><span>Imagem indisponível</span></div>
   return image
-    ? <img onError={() => setBrokenImage(image)} src={image} alt={alt} loading={large ? 'eager' : 'lazy'} decoding="async" className={`commerce-product-image ${large ? 'is-large' : ''}`} />
+    ? <img onError={onError} src={source} alt={alt} loading={large ? 'eager' : 'lazy'} decoding="async" className={`commerce-product-image ${large ? 'is-large' : ''}`} />
     : <div className={`commerce-product-placeholder ${large ? 'is-large' : ''}`} aria-hidden="true">{product?.emoji || '▦'}</div>
+}
+
+function GalleryThumbnailImage({ item }) {
+  const { source, broken, onError } = useRecoverableCatalogImage(item.url)
+  return broken ? <Store size={18} aria-hidden="true" /> : <img src={source} onError={onError} alt="" loading="lazy" decoding="async" />
 }
 
 function ProductGallery({ product }) {
@@ -132,7 +152,7 @@ function ProductGallery({ product }) {
   const active = items.find(item => item.id === activeId) || items[0]
   return <div className="commerce-product-gallery">
     <div className="commerce-product-gallery-main"><ProductImage product={product} large mediaUrl={active?.url || ''} /></div>
-    {items.length > 1 && <div className="commerce-product-gallery-thumbs" role="list" aria-label="Imagens do produto">{items.map(item => <button type="button" key={item.id} className={`commerce-product-gallery-thumb ${active?.id === item.id ? 'is-active' : ''}`} onClick={() => setActiveId(item.id)} aria-label={`Ver imagem ${items.indexOf(item) + 1} de ${items.length}`} aria-pressed={active?.id === item.id}><img src={item.url} alt="" loading="lazy" decoding="async" /></button>)}</div>}
+    {items.length > 1 && <div className="commerce-product-gallery-thumbs" role="list" aria-label="Imagens do produto">{items.map(item => <button type="button" key={item.id} className={`commerce-product-gallery-thumb ${active?.id === item.id ? 'is-active' : ''}`} onClick={() => setActiveId(item.id)} aria-label={`Ver imagem ${items.indexOf(item) + 1} de ${items.length}`} aria-pressed={active?.id === item.id}><GalleryThumbnailImage item={item} /></button>)}</div>}
     {items.length > 1 && <small className="commerce-product-gallery-count">{items.indexOf(active) + 1} de {items.length} imagens</small>}
   </div>
 }

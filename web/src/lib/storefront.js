@@ -17,6 +17,15 @@ export function storefrontMediaUrl(value, storeAlias) {
   return `${storefrontApiBase(storeAlias)}/media/${match[1]}`
 }
 
+// Uma falha antiga da mídia pode estar em cache no navegador. Tentar uma única
+// URL nova, somente no proxy Commerce, sem fazer egress para hosts arbitrários.
+export function storefrontMediaRecoveryUrl(value, nonce = Date.now()) {
+  const url = String(value || '').trim()
+  const validPath = /^\/api\/(?:storefront|public\/storefront\/[a-z0-9][a-z0-9_-]{1,79})\/media\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  if (!validPath.test(url) || !Number.isSafeInteger(nonce) || nonce < 0) return ''
+  return `${url}?recovery=${nonce}`
+}
+
 export function storefrontRoute(value, destination = 'store') {
   const alias = normalizeStorefrontAlias(value)
   if (destination === 'checkout') return alias ? `/checkout/${encodeURIComponent(alias)}` : '/checkout'

@@ -177,8 +177,17 @@ export function commerceMediaIdForIdempotencyKey({ empresaId, productId, idempot
 export async function streamCommerceImage({ storageKey, mimeType, res, empresaId = null, productId = null, mediaId = null, privateCache = false }) {
   // Com o escopo informado, só serve o arquivo da própria empresa/produto/mídia.
   const key = empresaId ? scopedCommerceStorageKey({ empresaId, productId, mediaId, storageKey }) : String(storageKey || '').trim();
-  res.setHeader('Content-Type', MIME_EXTENSIONS[String(mimeType || '').toLowerCase()] ? String(mimeType).toLowerCase() : 'application/octet-stream');
-  res.setHeader('Cache-Control', privateCache ? 'private, no-store' : 'public, max-age=3600');
+  const setSuccessHeaders = () => {
+    res.setHeader('Content-Type', MIME_EXTENSIONS[String(mimeType || '').toLowerCase()] ? String(mimeType).toLowerCase() : 'application/octet-stream');
+    res.setHeader('Cache-Control', privateCache ? 'private, no-store' : 'public, max-age=3600');
+  };
+  const streamError = error => {
+    if (!res.headersSent) {
+      res.setHeader('Cache-Control', 'no-store');
+      res.removeHeader?.('Content-Type');
+      res.status(404).json({ error: 'arquivo de mídia não encontrado', code: 'MEDIA_NOT_FOUND' });
+    } else res.destroy(error);
+  };
 
   if (key.startsWith(LOCAL_STORAGE_PREFIX)) {
     const target = localPathForStorageKey(key);
@@ -189,10 +198,8 @@ export async function streamCommerceImage({ storageKey, mimeType, res, empresaId
       error.code = 'MEDIA_NOT_FOUND';
       throw error;
     }
-    createReadStream(target).on('error', error => {
-      if (!res.headersSent) res.status(404).json({ error: 'arquivo de mídia não encontrado', code: 'MEDIA_NOT_FOUND' });
-      else res.destroy(error);
-    }).pipe(res);
+    setSuccessHeaders();
+    createReadStream(target).on('error', streamError).pipe(res);
     return;
   }
 
@@ -208,10 +215,8 @@ export async function streamCommerceImage({ storageKey, mimeType, res, empresaId
     error.code = 'MEDIA_NOT_FOUND';
     throw error;
   }
-  file.createReadStream().on('error', error => {
-    if (!res.headersSent) res.status(404).json({ error: 'arquivo de mídia não encontrado', code: 'MEDIA_NOT_FOUND' });
-    else res.destroy(error);
-  }).pipe(res);
+  setSuccessHeaders();
+  file.createReadStream().on('error', streamError).pipe(res);
 }
 
 export { MAX_IMAGE_BYTES };

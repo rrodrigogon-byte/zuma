@@ -97,6 +97,36 @@ test('não tenta upload sem armazenamento seguro configurado', async () => {
   }
 });
 
+test('não publica cabeçalhos cacheáveis quando imagem local falta ou armazenamento não está configurado', async () => {
+  const previousBucket = process.env.GCS_BUCKET;
+  const previousDir = process.env.COMMERCE_MEDIA_DIR;
+  const previousDbPath = process.env.DB_PATH;
+  const root = await mkdtemp(path.join(os.tmpdir(), 'commerce-media-absent-'));
+  const headers = {};
+  const response = new Writable({ write(chunk, encoding, callback) { callback(); } });
+  response.setHeader = (name, value) => { headers[name] = value; };
+  delete process.env.GCS_BUCKET;
+  delete process.env.DB_PATH;
+  try {
+    delete process.env.COMMERCE_MEDIA_DIR;
+    await assert.rejects(() => streamCommerceImage({ storageKey: 'commerce-local/tenant-a/product-b/media-c.png', mimeType: 'image/png', res: response }), { code: 'MEDIA_STORAGE_NOT_CONFIGURED' });
+    assert.equal(headers['Cache-Control'], undefined);
+    assert.equal(headers['Content-Type'], undefined);
+    process.env.COMMERCE_MEDIA_DIR = root;
+    await assert.rejects(() => streamCommerceImage({ storageKey: 'commerce-local/tenant-a/product-b/media-c.png', mimeType: 'image/png', res: response }), { code: 'MEDIA_NOT_FOUND' });
+    assert.equal(headers['Cache-Control'], undefined);
+    assert.equal(headers['Content-Type'], undefined);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    if (previousBucket === undefined) delete process.env.GCS_BUCKET;
+    else process.env.GCS_BUCKET = previousBucket;
+    if (previousDir === undefined) delete process.env.COMMERCE_MEDIA_DIR;
+    else process.env.COMMERCE_MEDIA_DIR = previousDir;
+    if (previousDbPath === undefined) delete process.env.DB_PATH;
+    else process.env.DB_PATH = previousDbPath;
+  }
+});
+
 test('vitrine só serve o arquivo da própria empresa, produto e mídia', async () => {
   const response = new Writable({ write(chunk, encoding, callback) { callback(); } });
   response.setHeader = () => {};

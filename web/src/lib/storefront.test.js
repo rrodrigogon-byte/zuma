@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { checkoutPaymentChoices, clearStorefrontCheckoutIdempotencyKey, decrementCartQuantity, loadAllStorefrontProducts, nextStorefrontCartSyncVersion, normalizeStorefrontAlias, removeStorefrontCartItem, storefrontAliasFromPath, storefrontApiBase, storefrontCartItemKey, storefrontCartSessionKey, storefrontCheckoutIdempotencyKey, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from './storefront.js';
+import { checkoutPaymentChoices, clearStorefrontCheckoutIdempotencyKey, decrementCartQuantity, loadAllStorefrontProducts, nextStorefrontCartSyncVersion, normalizeStorefrontAlias, removeStorefrontCartItem, storefrontAliasFromPath, storefrontApiBase, storefrontCartItemKey, storefrontCartSessionKey, storefrontCheckoutIdempotencyKey, storefrontMediaRecoveryUrl, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from './storefront.js';
 
 test('normaliza apenas aliases públicos seguros', () => {
   assert.equal(normalizeStorefrontAlias(' DINO '), 'dino');
@@ -22,6 +22,16 @@ test('mantém a mídia pública no mesmo alias do catálogo', () => {
   assert.equal(storefrontMediaUrl(`/api/public/storefront/agro-open/media/${mediaId}`, 'dino'), `/api/public/storefront/agro-open/media/${mediaId}`);
   assert.equal(storefrontMediaUrl('https://cdn.example.com/produto.webp', 'dino'), 'https://cdn.example.com/produto.webp');
   assert.equal(storefrontMediaUrl('/api/storefront/media/../segredo', 'dino'), '/api/storefront/media/../segredo');
+});
+
+test('renova cache somente da mídia Commerce interna validada, nunca URL externa ou cruzada', () => {
+  const mediaId = '37b91a0c-78f0-56b2-b074-33ca5063100d';
+  assert.equal(storefrontMediaRecoveryUrl(`/api/storefront/media/${mediaId}`, 123), `/api/storefront/media/${mediaId}?recovery=123`);
+  assert.equal(storefrontMediaRecoveryUrl(`/api/public/storefront/dino/media/${mediaId}`, 123), `/api/public/storefront/dino/media/${mediaId}?recovery=123`);
+  for (const value of [`https://cdn.example.com/${mediaId}`, `//evil.example/${mediaId}`, `/api/storefront/media/${mediaId}?token=x`, '/api/storefront/media/../segredo', `/api/public/storefront/../media/${mediaId}`]) {
+    assert.equal(storefrontMediaRecoveryUrl(value, 123), '');
+  }
+  assert.equal(storefrontMediaRecoveryUrl(`/api/storefront/media/${mediaId}`, NaN), '');
 });
 
 test('mantém vitrine, checkout e pedido no mesmo alias', () => {
