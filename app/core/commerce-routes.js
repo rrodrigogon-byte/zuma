@@ -286,6 +286,7 @@ function sanitizePublicOrderTracking(row = {}) {
     total: asNumber(row.total),
     payment_status: String(row.payment_status || 'pending').slice(0, 30),
     payment_review_status: row.payment_review_status === 'refund_required' ? 'refund_required' : null,
+    shippingMethodType: row.shipping_method_type === 'pickup' ? 'pickup' : row.shipping_method_type ? 'delivery' : null,
     endereco_entrega: address ? {
       cidade: String(address.cidade || '').slice(0, 100) || null,
       estado: String(address.estado || '').slice(0, 2).toUpperCase() || null,
@@ -894,6 +895,7 @@ export function createCommercePublicRouter() {
                 CASE WHEN ${lateCaptureReviewExistsSql} THEN 'captured'
                      ELSE (SELECT p.status FROM commerce_payments p WHERE p.empresa_id = o.empresa_id AND p.order_id = o.id ORDER BY p.criado_em DESC LIMIT 1)
                 END AS payment_status,
+                sm.tipo AS shipping_method_type,
                 CASE WHEN ${lateCaptureReviewExistsSql} THEN 'refund_required' ELSE NULL END AS payment_review_status,
                 COALESCE((SELECT jsonb_build_object('submitted', true, 'submittedAt', s.criado_em) FROM commerce_order_satisfaction s WHERE s.empresa_id = o.empresa_id AND s.order_id = o.id AND s.retencao_ate > CURRENT_TIMESTAMP LIMIT 1), jsonb_build_object('submitted', false)) AS satisfaction,
                 CASE WHEN o.endereco_entrega IS NULL THEN NULL ELSE jsonb_build_object('cidade', o.endereco_entrega->>'cidade', 'estado', o.endereco_entrega->>'estado', 'cep', CASE WHEN length(o.endereco_entrega->>'cep') = 8 THEN left(o.endereco_entrega->>'cep', 5) || '***' ELSE NULL END) END AS endereco_entrega, o.criado_em, o.atualizado_em,
@@ -906,8 +908,9 @@ export function createCommercePublicRouter() {
                             FROM commerce_order_events e WHERE e.empresa_id = o.empresa_id AND e.order_id = o.id), '[]'::jsonb) AS timeline
            FROM commerce_orders o
            LEFT JOIN commerce_order_items i ON i.empresa_id = o.empresa_id AND i.order_id = o.id
+           LEFT JOIN commerce_shipping_methods sm ON sm.empresa_id = o.empresa_id AND sm.id = o.shipping_method_id
           WHERE o.empresa_id = $1 AND o.storefront_id = $2 AND o.public_code = $3
-          GROUP BY o.id
+          GROUP BY o.id, sm.tipo
           LIMIT 1`,
         [storefront.empresa_id, storefront.id, String(req.params.publicCode || '').toUpperCase()],
       );
@@ -1744,7 +1747,11 @@ export function createCommerceAdminRouter() {
     try {
       const context = await requirePermission(req, 'fulfillment.write');
       const storefrontId = await requireAdminStorefront(req, context);
-      const result = await withCommerceTransaction(trx => createFulfillment(trx, context, { ...req.body, storefrontId }));
+      const result = await withCommerceTransaction(async trx => {
+        const created = await createFulfillment(trx, context, { ...req.body, storefrontId });
+        await auditLog(trx, context, { entidade: 'fulfillment', entidadeId: created.id, acao: 'created', depois: { orderId: created.order_id, storefrontId, status: created.status } });
+        return created;
+      });
       res.status(201).json(result);
     } catch (error) { jsonError(res, error); }
   });

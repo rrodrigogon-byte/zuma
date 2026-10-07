@@ -32,7 +32,7 @@ test('GET público do pedido expõe somente revisão de captura tardia do tenant
   const response = { body: null, json(body) { this.body = body; return this; } };
   db.query = async (sql, params) => {
     seen.push({ sql, params });
-    return { rows: [{ public_code: 'KC-TEST', status: 'cancelled', payment_status: 'captured', payment_review_status: 'refund_required', items: [], fulfillments: [], timeline: [], metadata: { secret: 'never-expose' } }] };
+    return { rows: [{ public_code: 'KC-TEST', status: 'cancelled', payment_status: 'captured', payment_review_status: 'refund_required', shipping_method_type: 'pickup', items: [], fulfillments: [], timeline: [], metadata: { secret: 'never-expose' } }] };
   };
   try {
     await handler({ publicResolvedStorefront: { id: storefrontId, empresa_id: empresaId, loja_id: lojaId }, params: { publicCode: 'KC-TEST' } }, response);
@@ -40,6 +40,7 @@ test('GET público do pedido expõe somente revisão de captura tardia do tenant
   assert.equal(response.body.status, 'cancelled');
   assert.equal(response.body.payment_status, 'captured');
   assert.equal(response.body.payment_review_status, 'refund_required');
+  assert.equal(response.body.shippingMethodType, 'pickup');
   assert.equal(JSON.stringify(response.body).includes('never-expose'), false);
   assert.deepEqual(seen[0].params, [empresaId, storefrontId, 'KC-TEST']);
   assert.equal((seen[0].sql.match(/EXISTS \(\s*SELECT 1 FROM commerce_payments p/g) || []).length, 2);

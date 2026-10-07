@@ -1884,9 +1884,9 @@ export async function updateFulfillment(trx, context, fulfillmentId, input = {})
   const occurrence = input.ocorrencia ? { at: new Date().toISOString(), status: nextStatus, description: String(input.ocorrencia).slice(0, 500) } : null;
   const occurrences = occurrence ? [...(Array.isArray(current.ocorrencias) ? current.ocorrencias : []), occurrence].slice(-100) : current.ocorrencias || [];
   const result = await trx.query(
-    `UPDATE commerce_fulfillments SET status = $3, tracking_code = COALESCE($4, tracking_code), carrier = COALESCE($5, carrier), provider_shipment_id = COALESCE($7, provider_shipment_id), tracking_url = COALESCE($8, tracking_url), label_url = COALESCE($9, label_url), ocorrencias = $6::jsonb,
-       enviado_em = CASE WHEN $3 = 'shipped' AND enviado_em IS NULL THEN CURRENT_TIMESTAMP ELSE enviado_em END,
-       entregue_em = CASE WHEN $3 IN ('delivered','picked_up') AND entregue_em IS NULL THEN CURRENT_TIMESTAMP ELSE entregue_em END,
+    `UPDATE commerce_fulfillments SET status = $3::varchar(30), tracking_code = COALESCE($4, tracking_code), carrier = COALESCE($5, carrier), provider_shipment_id = COALESCE($7, provider_shipment_id), tracking_url = COALESCE($8, tracking_url), label_url = COALESCE($9, label_url), ocorrencias = $6::jsonb,
+       enviado_em = CASE WHEN $3::varchar(30) = 'shipped' AND enviado_em IS NULL THEN CURRENT_TIMESTAMP ELSE enviado_em END,
+       entregue_em = CASE WHEN $3::varchar(30) IN ('delivered','picked_up') AND entregue_em IS NULL THEN CURRENT_TIMESTAMP ELSE entregue_em END,
        atualizado_em = CURRENT_TIMESTAMP
       WHERE empresa_id = $1 AND id = $2 RETURNING *`,
     [empresaId, id, nextStatus, input.trackingCode ? String(input.trackingCode).slice(0, 160) : null, input.carrier ? String(input.carrier).slice(0, 120) : null, JSON.stringify(occurrences), input.providerShipmentId ? String(input.providerShipmentId).slice(0, 180) : null, input.trackingUrl ? String(input.trackingUrl).slice(0, 600) : null, input.labelUrl ? String(input.labelUrl).slice(0, 600) : null],
