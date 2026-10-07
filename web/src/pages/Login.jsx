@@ -120,7 +120,7 @@ export default function Login() {
             <button type="button" onClick={voltarLogin} style={{ ...linkStyle, marginBottom: 22 }}>← Voltar para o login</button>
             <div style={{ marginBottom: 24 }}>
               <h1 style={{ color: '#12283F', fontSize: '1.35rem', margin: '0 0 8px', fontWeight: 800 }}>Recuperar senha</h1>
-              <p style={{ color: '#5A6570', fontSize: '0.9rem', lineHeight: 1.55, margin: 0 }}>Enviaremos um link seguro para você criar uma nova senha individual.</p>
+              <p style={{ color: '#5A6570', fontSize: '0.9rem', lineHeight: 1.55, margin: 0 }}>Registraremos seu pedido de redefinição. Esta tela não envia link nem altera a senha automaticamente.</p>
             </div>
             {recuperacaoEnviada ? (
               <div role="status" style={{ background: '#FFF4EC', border: '1px solid #FFB48F', color: '#7B3517', borderRadius: 12, padding: 16, lineHeight: 1.55, fontSize: '0.9rem' }}>
@@ -133,7 +133,7 @@ export default function Login() {
                   <label style={labelStyle}>E-mail cadastrado</label>
                   <input type="email" value={emailRecuperacao} onChange={e => setEmailRecuperacao(e.target.value)} placeholder="voce@empresa.com" required autoComplete="email" style={inputStyle} onFocus={focusInput} onBlur={blurInput} />
                 </div>
-                <button type="submit" disabled={loading} style={{ background: '#FF6B2C', color: '#fff', padding: '16px', borderRadius: 12, border: 'none', fontWeight: 800, fontSize: '1.05rem', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1, boxShadow: '0 8px 24px rgba(255,107,44,0.25)' }}>{loading ? 'Enviando...' : 'Enviar link'}</button>
+                <button type="submit" disabled={loading} style={{ background: '#FF6B2C', color: '#fff', padding: '16px', borderRadius: 12, border: 'none', fontWeight: 800, fontSize: '1.05rem', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1, boxShadow: '0 8px 24px rgba(255,107,44,0.25)' }}>{loading ? 'Registrando...' : 'Registrar pedido de redefinição'}</button>
               </form>
             )}
           </>
@@ -141,7 +141,7 @@ export default function Login() {
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             {erro && <div role="alert" style={{ background: '#FEE2E2', color: '#B91C1C', padding: '12px 16px', borderRadius: 10, fontSize: '0.9rem', fontWeight: 600, border: '1px solid #FCA5A5' }}>{erro}</div>}
             <div>
-              <label style={labelStyle}>{aba === 'painel' ? 'Usuário ou E-mail' : 'E-mail'}</label>
+                  <label style={labelStyle}>{aba === 'painel' ? 'E-mail ou identificador cadastrado' : 'E-mail'}</label>
               <input type={aba === 'painel' ? 'text' : 'email'} value={user} onChange={e => setUser(e.target.value)} placeholder={aba === 'painel' ? 'admin' : 'atleta@email.com'} required autoComplete="username" style={inputStyle} onFocus={focusInput} onBlur={blurInput} />
             </div>
             <div>

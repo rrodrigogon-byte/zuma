@@ -12,8 +12,10 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { assertDurableLegacyJson } from './core/legacy-json-boot-guard.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+assertDurableLegacyJson();
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data', 'db.json');
 
 const GCS_BUCKET = process.env.GCS_BUCKET || '';
