@@ -61,6 +61,49 @@ function paymentSyncHandler() {
   return layer.route.stack[0].handle;
 }
 
+test('recuperação de captura tardia: operador comum negado antes de qualquer leitura ou DML', async () => {
+  const router = createCommerceAdminRouter();
+  const handler = router.stack.find(item => item.route?.path === '/orders/:id/recover-late-capture')?.route?.stack?.at(-1)?.handle;
+  assert.ok(handler);
+  const previousRead = db.queryRead;
+  const previousQuery = db.query;
+  let calls = 0;
+  db.queryRead = db.query = async () => { calls++; throw new Error('nenhum acesso permitido'); };
+  const res = { statusCode: 200, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
+  try {
+    await handler({ user: { id: usuarioId, mainAdmin: false, platformAdmin: false }, params: { id: empresaId }, body: {}, query: {}, headers: {} }, res);
+    assert.equal(res.statusCode, 403);
+    assert.equal(res.body.code, 'PERMISSION_DENIED');
+    assert.equal(calls, 0);
+  } finally { db.queryRead = previousRead; db.query = previousQuery; }
+});
+
+test('recuperação de captura tardia: admin global sem captura única falha antes de gateway e mutação', async () => {
+  const router = createCommerceAdminRouter();
+  const handler = router.stack.find(item => item.route?.path === '/orders/:id/recover-late-capture')?.route?.stack?.at(-1)?.handle;
+  assert.ok(handler);
+  const previousRead = db.queryRead;
+  const previousQuery = db.query;
+  const seen = [];
+  db.queryRead = async (sql, values) => {
+    seen.push(sql);
+    if (sql.includes('COUNT(*)::int AS grants')) return { rows: [{ grants: 1, corporate_access: true }] };
+    if (sql.includes('SELECT p.id FROM commerce_payments')) return { rows: [] };
+    throw new Error('leitura inesperada');
+  };
+  db.query = async (sql) => {
+    seen.push(sql);
+    if (sql.includes('FROM commerce_storefronts')) return { rows: [{ id: storefrontId, loja_id: lojaId }] };
+    throw new Error('DML ou acesso inesperado');
+  };
+  const res = { statusCode: 200, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
+  try {
+    await handler({ user: { id: usuarioId, mainAdmin: true }, commerceAdminContext: { empresaId, lojaId, usuarioId }, params: { id: empresaId }, body: { storefrontId, confirmPickup: true, reasonCode: 'HONOR_CAPTURED_PICKUP_ORDER', reason: 'Retirada autorizada com captura verificada' }, query: {}, headers: {} }, res);
+    assert.equal(res.statusCode, 409);
+    assert.equal(res.body.code, 'ORDER_RECOVERY_PAYMENT_CONFLICT');
+    assert.equal(seen.some(sql => /\b(INSERT|UPDATE|DELETE)\b/i.test(sql)), false);
+  } finally { db.queryRead = previousRead; db.query = previousQuery; }
+});
 function auditHandler() {
   const router = createCommerceAdminRouter();
   const layer = router.stack.find(item => item.route?.path === '/audit');

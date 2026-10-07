@@ -599,6 +599,158 @@ export async function transitionOrder(trx, context, input) {
   return { ...order, status: nextStatus, ...(loyalty ? { loyalty } : {}) };
 }
 
+// Recuperação excepcional de captura comprovada depois que a reserva expirou.
+// Não alterar ORDER_TRANSITIONS: toda outra tentativa de sair de cancelled falha fechada.
+export async function recoverExpiredPaidOrder(trx, contextInput, input = {}) {
+  const { empresaId, usuarioId } = tenantContext(contextInput);
+  const orderId = assertUuid(input.orderId, 'orderId');
+  const storefrontId = assertUuid(input.storefrontId, 'storefrontId');
+  const key = String(input.idempotencyKey || '').trim();
+  const reason = String(input.reason || '').trim();
+  if (!/^[a-zA-Z0-9:_-]{16,120}$/.test(key)) throw new CommerceError('chave idempotente inválida', 'ORDER_IDEMPOTENCY_REQUIRED');
+  if (reason.length < 20 || reason.length > 180 || !/^[\p{L}\p{M} .,;:!?()_-]+$/u.test(reason)) {
+    throw new CommerceError('motivo operacional sem dados pessoais ou identificadores obrigatório', 'ORDER_RECOVERY_REASON_REQUIRED');
+  }
+  const requestHash = crypto.createHash('sha256').update(JSON.stringify({ orderId, storefrontId, reason })).digest('hex');
+  const orderResult = await trx.query(
+    `SELECT o.id, o.status, o.loja_id, o.total, o.public_code, o.shipping_method_id, o.shipping_quote_id
+       FROM commerce_orders o WHERE o.empresa_id = $1 AND o.id = $2 AND o.storefront_id = $3
+         AND ($4::uuid IS NULL OR o.loja_id = $4) FOR UPDATE`,
+    [empresaId, orderId, storefrontId, contextInput.corporateAccess === true ? null : contextInput.lojaId || null],
+  );
+  const order = orderResult.rows[0];
+  if (!order) throw new CommerceError('pedido fora da vitrine autorizada', 'ORDER_NOT_FOUND');
+  const previous = await trx.query(
+    `SELECT request_hash, response_body FROM commerce_idempotency_keys
+      WHERE empresa_id = $1 AND scope = 'order.late_capture_recovery' AND key = $2 FOR UPDATE`,
+    [empresaId, key],
+  );
+  if (previous.rows[0]) {
+    if (previous.rows[0].request_hash !== requestHash) throw new CommerceError('chave idempotente reutilizada', 'IDEMPOTENCY_CONFLICT');
+    if (previous.rows[0].response_body && order.status === 'paid') {
+      const currentPayment = await trx.query(
+        `SELECT 1 FROM commerce_payments WHERE empresa_id = $1 AND order_id = $2
+            AND status = 'captured' AND refunded_at IS NULL
+            AND metadata #>> '{lateCapture,state}' = 'accepted_for_fulfillment' LIMIT 2`,
+        [empresaId, orderId],
+      );
+      if (currentPayment.rows.length === 1) return previous.rows[0].response_body;
+    }
+    throw new CommerceError('revisão de recuperação inconsistente', 'ORDER_RECOVERY_CONFLICT');
+  }
+  if (order.status !== 'cancelled') throw new CommerceError('pedido não está em revisão de captura tardia', 'ORDER_RECOVERY_CONFLICT');
+  const original = await trx.query(
+    `SELECT 1 FROM commerce_order_events e WHERE e.empresa_id = $1 AND e.order_id = $2
+       AND e.de_status = 'pending_payment' AND e.para_status = 'cancelled' AND e.origem = 'reservation_expiry'
+       AND NOT EXISTS (SELECT 1 FROM commerce_order_events x WHERE x.empresa_id = e.empresa_id AND x.order_id = e.order_id AND x.para_status IN ('paid','processing','delivered','completed','refunded')) LIMIT 1`,
+    [empresaId, orderId],
+  );
+  if (!original.rows[0]) throw new CommerceError('somente expiração de reserva antes da venda pode ser recuperada', 'ORDER_RECOVERY_CONFLICT');
+  const logistics = await trx.query(
+    `SELECT m.tipo, m.ativo, l.ativa AS location_active
+       FROM commerce_shipping_methods m JOIN commerce_storefronts s ON s.empresa_id = m.empresa_id AND s.id = m.storefront_id
+       JOIN lojas l ON l.empresa_id = s.empresa_id AND l.id = s.loja_id
+      WHERE m.empresa_id = $1 AND m.id = $2 AND m.storefront_id = $3
+        AND s.loja_id = $4 AND s.status = 'active' LIMIT 1`,
+    [empresaId, order.shipping_method_id, storefrontId, order.loja_id],
+  );
+  if (logistics.rows[0]?.tipo !== 'pickup' || logistics.rows[0]?.ativo !== true || logistics.rows[0]?.location_active !== true || order.shipping_quote_id) {
+    throw new CommerceError('retirada operacional não está confirmada', 'ORDER_RECOVERY_SHIPPING_UNAVAILABLE');
+  }
+  const payments = await trx.query(
+    `SELECT p.id, p.status, p.provider, p.provider_payment_id, p.amount, p.method, p.metadata, p.refunded_at,
+            a.id AS account_id, a.ambiente, a.secret_ref, a.public_config
+       FROM commerce_payments p
+       LEFT JOIN commerce_payment_accounts a ON a.empresa_id = p.empresa_id AND a.id = p.payment_account_id
+      WHERE p.empresa_id = $1 AND p.order_id = $2 FOR UPDATE OF p`,
+    [empresaId, orderId],
+  );
+  if (payments.rows.length !== 1 || payments.rows[0].status !== 'captured'
+      || payments.rows[0].provider !== 'infinitepay' || !payments.rows[0].provider_payment_id
+      || payments.rows[0].refunded_at || !payments.rows[0].account_id || !payments.rows[0].secret_ref
+      || payments.rows[0].metadata?.lateCapture?.state !== 'refund_required'
+      || Math.abs(Number(payments.rows[0].amount) - Number(order.total)) > 0.01) {
+    throw new CommerceError('captura única e integral não comprovada', 'ORDER_RECOVERY_PAYMENT_CONFLICT');
+  }
+  if (typeof input.verifyCaptured !== 'function') throw new CommerceError('verificação oficial obrigatória', 'ORDER_RECOVERY_PAYMENT_CONFLICT');
+  const payment = payments.rows[0];
+  const official = await input.verifyCaptured({ ...payment, public_code: order.public_code, order_id: orderId });
+  if (official?.status !== 'captured' || official?.summary?.verifiedBy !== 'payment_check'
+      || String(official?.providerPaymentId || '') !== String(payment.provider_payment_id)
+      || !Number.isFinite(Number(official?.amount))
+      || Math.abs(Number(official.amount) - Number(order.total)) > 0.01) {
+    throw new CommerceError('captura não confirmada no provedor sob lock', 'ORDER_RECOVERY_PAYMENT_CONFLICT');
+  }
+  const conflicting = await trx.query(
+    `SELECT 1 WHERE EXISTS (SELECT 1 FROM commerce_fulfillments f WHERE f.empresa_id = $1 AND f.order_id = $2)
+        OR EXISTS (SELECT 1 FROM commerce_audit_logs a WHERE a.empresa_id = $1 AND a.entidade = 'payment'
+                     AND a.entidade_id = $3 AND a.acao = 'provider_capture_conflict')
+        OR EXISTS (SELECT 1 FROM commerce_loyalty_ledger l WHERE l.empresa_id = $1 AND l.referencia_tipo = 'commerce_order' AND l.referencia_id = $2)`,
+    [empresaId, orderId, payments.rows[0].id],
+  );
+  if (conflicting.rows[0]) throw new CommerceError('pedido possui operação prévia que exige revisão', 'ORDER_RECOVERY_CONFLICT');
+  const lines = await trx.query(
+    `SELECT i.variant_id, i.quantidade, r.location_id, r.status AS reservation_status,
+            v.ativo AS variant_active, p.status AS product_status, loc.ativo AS location_active,
+            loc.loja_id AS location_store
+       FROM commerce_order_items i
+       JOIN commerce_inventory_reservations r ON r.empresa_id = i.empresa_id AND r.order_id = i.order_id AND r.variant_id = i.variant_id
+       JOIN commerce_inventory_locations loc ON loc.empresa_id = r.empresa_id AND loc.id = r.location_id
+       JOIN commerce_product_variants v ON v.empresa_id = i.empresa_id AND v.id = i.variant_id
+       JOIN commerce_products p ON p.empresa_id = v.empresa_id AND p.id = v.product_id
+      WHERE i.empresa_id = $1 AND i.order_id = $2 ORDER BY i.variant_id, r.location_id FOR UPDATE OF r`,
+    [empresaId, orderId],
+  );
+  if (!lines.rows.length || lines.rows.some(row => row.reservation_status !== 'released' || !row.location_id || row.variant_active !== true || row.product_status !== 'active' || row.location_active !== true || (row.location_store && row.location_store !== order.loja_id))) {
+    throw new CommerceError('itens/reservas não estão aptos à recuperação', 'ORDER_RECOVERY_INVENTORY_CONFLICT');
+  }
+  const uniqueVariants = new Set(lines.rows.map(row => row.variant_id));
+  if (uniqueVariants.size !== lines.rows.length) throw new CommerceError('reserva duplicada exige revisão de estoque', 'ORDER_RECOVERY_INVENTORY_CONFLICT');
+  const expected = await trx.query('SELECT count(*)::int AS total FROM commerce_order_items WHERE empresa_id = $1 AND order_id = $2', [empresaId, orderId]);
+  if (Number(expected.rows[0]?.total) !== lines.rows.length) throw new CommerceError('itens sem reserva exigem revisão de estoque', 'ORDER_RECOVERY_INVENTORY_CONFLICT');
+  await trx.query(
+    `INSERT INTO commerce_idempotency_keys (empresa_id, scope, key, request_hash, expires_at)
+     VALUES ($1, 'order.late_capture_recovery', $2, $3, CURRENT_TIMESTAMP + INTERVAL '365 days')`,
+    [empresaId, key, requestHash],
+  );
+  for (const line of lines.rows) {
+    await reserveInventory(trx, { empresaId, usuarioId }, {
+      orderId, locationId: line.location_id, variantId: line.variant_id, quantity: line.quantidade,
+    });
+  }
+  await settleOrderReservations(trx, { empresaId, usuarioId }, orderId, 'pending_payment', 'paid');
+  const changed = await trx.query(
+    `UPDATE commerce_orders SET status = 'paid', atualizado_em = CURRENT_TIMESTAMP
+      WHERE empresa_id = $1 AND id = $2 AND storefront_id = $3 AND status = 'cancelled' RETURNING id`,
+    [empresaId, orderId, storefrontId],
+  );
+  if (!changed.rows[0]) throw new CommerceError('pedido mudou durante recuperação', 'ORDER_RECOVERY_CONFLICT');
+  await trx.query(
+    `UPDATE commerce_payments SET metadata = jsonb_set(metadata, '{lateCapture,state}', '"accepted_for_fulfillment"'::jsonb, true), atualizado_em = CURRENT_TIMESTAMP
+      WHERE empresa_id = $1 AND id = $2 AND order_id = $3 AND status = 'captured'`,
+    [empresaId, payments.rows[0].id, orderId],
+  );
+  const correlationId = `late-capture-recovery:${key}`.slice(0, 160);
+  await trx.query(
+    `INSERT INTO commerce_order_events (empresa_id, order_id, de_status, para_status, origem, usuario_id, correlation_id, payload_resumido)
+     VALUES ($1, $2, 'cancelled', 'paid', 'late_capture_recovery', $3, $4, $5::jsonb)`,
+    [empresaId, orderId, usuarioId, correlationId, JSON.stringify({ reason, method: 'pickup' })],
+  );
+  await auditLog(trx, { empresaId, lojaId: order.loja_id, usuarioId }, {
+    entidade: 'order', entidadeId: orderId, acao: 'late_capture_recovered', correlationId,
+    antes: { status: 'cancelled', paymentReview: 'refund_required' },
+    depois: { status: 'paid', paymentReview: 'accepted_for_fulfillment', reason, units: lines.rows.length },
+  });
+  await creditPaidOrderLoyaltyPoints(trx, { empresaId, orderId, usuarioId });
+  const response = { status: 'paid', paymentStatus: 'captured', pickupReady: false, alreadyRecovered: false };
+  await trx.query(
+    `UPDATE commerce_idempotency_keys SET response_status = 200, response_body = $3::jsonb
+      WHERE empresa_id = $1 AND scope = 'order.late_capture_recovery' AND key = $2`,
+    [empresaId, key, JSON.stringify(response)],
+  );
+  return response;
+}
+
 export async function createPendingOrder(trx, context, input = {}) {
   const { empresaId } = tenantContext(context);
   const idem = String(input.idempotencyKey || '').trim().slice(0, 180);

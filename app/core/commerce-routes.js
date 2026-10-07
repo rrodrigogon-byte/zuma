@@ -41,6 +41,7 @@ import {
   createFulfillment,
   createInventoryLocation,
   createPendingOrder,
+  recoverExpiredPaidOrder,
   listPublishedProducts,
   publishCatalogProduct,
   saveCatalogProductWorkspace,
@@ -535,6 +536,11 @@ function jsonError(res, error) {
     STORE_SCOPE_MISMATCH: 409,
     ORDER_IDEMPOTENCY_REQUIRED: 400,
     ORDER_IDEMPOTENCY_IN_PROGRESS: 409,
+    ORDER_RECOVERY_REASON_REQUIRED: 400,
+    ORDER_RECOVERY_CONFLICT: 409,
+    ORDER_RECOVERY_PAYMENT_CONFLICT: 409,
+    ORDER_RECOVERY_SHIPPING_UNAVAILABLE: 409,
+    ORDER_RECOVERY_INVENTORY_CONFLICT: 409,
     IDEMPOTENCY_CONFLICT: 409,
     STOREFRONT_OPERATIONAL_STORE_REQUIRED: 409,
     STOREFRONT_CODE_INVALID: 400,
@@ -2148,6 +2154,54 @@ export function createCommerceAdminRouter() {
       const context = await requirePermission(req, permission);
       const storefrontId = await requireAdminStorefront(req, context);
       const result = await withCommerceTransaction(trx => transitionOrder(trx, context, { status: req.body?.status, correlationId: req.body?.correlationId, payload: { motivo: String(req.body?.motivo || req.body?.reason || '').slice(0, 300) || undefined }, origin: 'admin', orderId: req.params.id, storefrontId }));
+      res.json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  // Operação excepcional autorizada: aceitar uma captura comprovada depois da
+  // expiração da reserva somente para retirada, sem flexibilizar PATCH /orders.
+  router.post('/orders/:id/recover-late-capture', async (req, res) => {
+    try {
+      if (req.user?.mainAdmin !== true && req.user?.platformAdmin !== true) {
+        throw new CommerceError('recuperação financeira requer administrador global', 'PERMISSION_DENIED');
+      }
+      const context = await requirePermission(req, 'orders.write');
+      await requirePermission(req, 'payments.write');
+      await requirePermission(req, 'inventory.write');
+      const storefrontId = await requireAdminStorefront(req, context, { optionalForCorporate: false });
+      if (req.body?.confirmPickup !== true || req.body?.reasonCode !== 'HONOR_CAPTURED_PICKUP_ORDER') {
+        throw new CommerceError('confirme a recuperação por retirada, sem estorno automático', 'ORDER_RECOVERY_REASON_REQUIRED');
+      }
+      const reason = String(req.body?.reason || '').trim();
+      if (reason.length < 20 || reason.length > 180 || !/^[\p{L}\p{M} .,;:!?()_-]+$/u.test(reason)) {
+        throw new CommerceError('motivo operacional sem identificadores é obrigatório', 'ORDER_RECOVERY_REASON_REQUIRED');
+      }
+      const orderId = assertUuid(req.params.id, 'orderId');
+      const candidate = await db.queryRead(
+        `SELECT p.id FROM commerce_payments p
+           JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id
+          WHERE o.empresa_id = $1 AND o.id = $2 AND o.storefront_id = $3
+            AND ($4::uuid IS NULL OR o.loja_id = $4)
+            AND p.provider = 'infinitepay' AND p.status = 'captured'
+            AND p.metadata #>> '{lateCapture,state}' IN ('refund_required','accepted_for_fulfillment')
+          LIMIT 2`,
+        [context.empresaId, orderId, storefrontId, context.corporateAccess === true ? null : context.lojaId || null],
+      );
+      if (candidate.rows.length !== 1) throw new CommerceError('captura única não encontrada para esta vitrine', 'ORDER_RECOVERY_PAYMENT_CONFLICT');
+      // payment_check oficial é consultado de novo; o snapshot no banco e o
+      // comprovante do cliente sozinhos não autorizam reativação da venda.
+      const verified = await syncPaymentAttempt({ ...context, storefrontId }, candidate.rows[0].id);
+      if (verified.status !== 'captured' || verified.stale === true || verified.unconfirmed === true) {
+        throw new CommerceError('o provedor não confirma captura vigente', 'ORDER_RECOVERY_PAYMENT_CONFLICT');
+      }
+      const result = await withCommerceTransaction(trx => recoverExpiredPaidOrder(trx, context, {
+        orderId, storefrontId, idempotencyKey: req.get('Idempotency-Key'),
+        reason,
+        verifyCaptured: payment => paymentProviders.get('infinitepay').getStatus({
+          payment,
+          account: { id: payment.account_id, ambiente: payment.ambiente,
+            secret_ref: payment.secret_ref, public_config: payment.public_config },
+        }),
+      }));
       res.json(result);
     } catch (error) { jsonError(res, error); }
   });
