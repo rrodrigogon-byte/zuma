@@ -157,21 +157,24 @@ export default function AcompanharPedido() {
   const cancelled = ['cancelled', 'refunded', 'partially_refunded', 'returned'].includes(presentation.status)
   const lateCaptureReview = hasLateCaptureReview(pedido)
   const latestFulfillment = pedido?.fulfillments?.[0] || null
+  const isPickup = pedido?.shippingMethodType === 'pickup'
   const fulfillmentTitle = cancelled ? 'Pedido encerrado' : latestFulfillment
-    ? (FULFILLMENT_LABELS[latestFulfillment.status] || latestFulfillment.status)
+    ? (isPickup && latestFulfillment.status === 'pending' ? 'Aguardando separação para retirada' : FULFILLMENT_LABELS[latestFulfillment.status] || latestFulfillment.status)
     : FINAL_STATUSES.has(presentation.status) ? 'Concluída' : 'Ainda não iniciada'
-  const fulfillmentDetail = cancelled ? (latestFulfillment ? 'Pedido cancelado: a etapa logística precisa de conferência da loja.' : 'Este pedido não seguirá para preparação ou entrega.') : latestFulfillment?.carrier || (pedido?.shippingOption?.carrier
+  const fulfillmentDetail = cancelled ? (latestFulfillment ? 'Pedido cancelado: a etapa logística precisa de conferência da loja.' : 'Este pedido não seguirá para preparação ou entrega.') : isPickup
+    ? (latestFulfillment?.status === 'pending' ? 'Pedido registrado para separação. Ainda não está pronto; aguarde o aviso da loja.' : latestFulfillment?.status === 'picked_up' ? 'Retirada concluída.' : presentation.status === 'ready_for_pickup' ? 'O pedido está pronto; apresente o código na loja.' : 'A loja avisará quando o pedido estiver pronto para retirada.')
+    : latestFulfillment?.carrier || (pedido?.shippingOption?.carrier
     || (FINAL_STATUSES.has(presentation.status) ? 'Pedido entregue ou retirado conforme a modalidade escolhida.' : 'A logística será definida após o pagamento.'))
   const submitted = surveySent || pedido?.satisfaction?.submitted === true
   const eligible = pedido?.isCore === true && (pedido?.satisfactionEligible === true || FINAL_STATUSES.has(presentation.status))
   const events = useMemo(() => [...(pedido?.timeline || [])].slice(-8).reverse(), [pedido?.timeline])
 
   useEffect(() => {
-    const announcementKey = `${presentation.status}:${lateCaptureReview ? 'refund_required' : ''}`
+    const announcementKey = `${presentation.status}:${latestFulfillment?.status || ''}:${lateCaptureReview ? 'refund_required' : ''}`
     if (!pedido || !presentation.status || announcementKey === lastAnnouncedStatus.current) return
     lastAnnouncedStatus.current = announcementKey
-    setStatusAnnouncement(`Status do pedido: ${presentation.title}. ${presentation.detail}`)
-  }, [pedido, presentation.status, presentation.title, presentation.detail, lateCaptureReview])
+    setStatusAnnouncement(`Status do pedido: ${presentation.title}. ${presentation.detail}${isPickup ? ` Retirada: ${fulfillmentTitle}. ${fulfillmentDetail}` : ''}`)
+  }, [pedido, presentation.status, presentation.title, presentation.detail, lateCaptureReview, latestFulfillment?.status, isPickup, fulfillmentTitle, fulfillmentDetail])
 
   async function submitSurvey(event) {
     event.preventDefault()
@@ -223,7 +226,7 @@ export default function AcompanharPedido() {
 
           <div className="order-detail-grid">
             <section className="order-detail-card"><CreditCard size={19} /><div><span>Pagamento</span><strong>{lateCaptureReview ? LATE_CAPTURE_COPY.payment : pedido.pagamento === 'pago' ? 'Confirmado' : pedido.pagamento === 'falhou' ? 'Não confirmado' : 'Aguardando confirmação'}</strong><small>{lateCaptureReview ? 'A captura foi confirmada. O estorno ainda não foi concluído.' : 'Processado fora da Kytto pelo provedor seguro.'}</small></div></section>
-            <section className="order-detail-card"><Truck size={19} /><div><span>Entrega</span><strong>{fulfillmentTitle}</strong><small>{fulfillmentDetail}</small></div></section>
+            <section className="order-detail-card">{isPickup ? <MapPin size={19} /> : <Truck size={19} />}<div><span>{isPickup ? 'Retirada' : 'Entrega'}</span><strong>{fulfillmentTitle}</strong><small>{fulfillmentDetail}</small></div></section>
             {pedido.endereco_entrega && <section className="order-detail-card"><MapPin size={19} /><div><span>Destino</span><strong>{[pedido.endereco_entrega.cidade, pedido.endereco_entrega.estado].filter(Boolean).join(' / ') || 'Endereço protegido'}</strong><small>CEP {pedido.endereco_entrega.cep || 'protegido'}</small></div></section>}
           </div>
 
@@ -231,7 +234,7 @@ export default function AcompanharPedido() {
 
           {pedido.isCore && presentation.status === 'pending_payment' && <Link className="order-primary-action" to={`${checkoutRoute}?order=${encodeURIComponent(codigo)}`}>Concluir pagamento <ArrowRight size={17} /></Link>}
 
-          {!cancelled && latestFulfillment && <section className="order-fulfillment"><header><div><span>Logística</span><h2>{FULFILLMENT_LABELS[latestFulfillment.status] || latestFulfillment.status}</h2></div>{latestFulfillment.carrier && <strong>{latestFulfillment.carrier}</strong>}</header>{latestFulfillment.trackingCode && <div className="order-tracking-code"><span>Código de rastreio</span><strong>{latestFulfillment.trackingCode}</strong></div>}{latestFulfillment.trackingUrl && <a href={latestFulfillment.trackingUrl} target="_blank" rel="noreferrer">Acompanhar na transportadora <ArrowRight size={15} /></a>}{Array.isArray(latestFulfillment.ocorrencias) && latestFulfillment.ocorrencias.length > 0 && <div className="order-events">{latestFulfillment.ocorrencias.slice(-5).reverse().map((item, index) => <article key={`${item.at || item.data || index}-${index}`}><time>{fmtDate(item.at || item.data)}</time><strong>{item.description || item.descricao || item.status || item.mensagem || 'Movimentação registrada'}</strong></article>)}</div>}</section>}
+          {!cancelled && latestFulfillment && <section className="order-fulfillment"><header><div><span>{isPickup ? 'Retirada' : 'Logística'}</span><h2>{fulfillmentTitle}</h2></div>{latestFulfillment.carrier && <strong>{latestFulfillment.carrier}</strong>}</header>{latestFulfillment.trackingCode && <div className="order-tracking-code"><span>Código de rastreio</span><strong>{latestFulfillment.trackingCode}</strong></div>}{latestFulfillment.trackingUrl && <a href={latestFulfillment.trackingUrl} target="_blank" rel="noreferrer">Acompanhar na transportadora <ArrowRight size={15} /></a>}{Array.isArray(latestFulfillment.ocorrencias) && latestFulfillment.ocorrencias.length > 0 && <div className="order-events">{latestFulfillment.ocorrencias.slice(-5).reverse().map((item, index) => <article key={`${item.at || item.data || index}-${index}`}><time>{fmtDate(item.at || item.data)}</time><strong>{item.description || item.descricao || item.status || item.mensagem || 'Movimentação registrada'}</strong></article>)}</div>}</section>}
 
           <section className="order-items"><header><span>Itens do pedido</span><strong>{(pedido.itens || []).reduce((sum, item) => sum + Number(item.qtd || 0), 0)} unidade(s)</strong></header>{(pedido.itens || []).map((item, index) => <div key={`${item.sku || item.nome}-${index}`}><span><b>{item.qtd}×</b> {item.nome}</span><strong>{fmtR(item.subtotal ?? Number(item.preco || 0) * Number(item.qtd || 1))}</strong></div>)}<footer><span>Total</span><strong>{fmtR(pedido.total || 0)}</strong></footer></section>
 

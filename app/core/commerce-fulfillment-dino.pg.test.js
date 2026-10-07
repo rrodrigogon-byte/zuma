@@ -47,8 +47,11 @@ test('PG: fulfillment Dino rejeita destino nacional/override sem INSERT e preser
     await client.query(`CREATE TEMP TABLE commerce_payments (empresa_id uuid, id uuid, order_id uuid, status text, captured_at timestamptz, amount numeric) ON COMMIT DROP`);
     await client.query(`CREATE TEMP TABLE commerce_fulfillments (
       id uuid DEFAULT gen_random_uuid(), empresa_id uuid, order_id uuid, shipping_method_id uuid, shipping_quote_id uuid,
-      shipping_account_id uuid, status text, endereco_entrega jsonb, ocorrencias jsonb DEFAULT '[]'::jsonb
+      shipping_account_id uuid, status varchar(30), endereco_entrega jsonb, ocorrencias jsonb DEFAULT '[]'::jsonb,
+      tracking_code varchar(160), carrier varchar(120), provider_shipment_id varchar(180), tracking_url text, label_url text,
+      enviado_em timestamptz, entregue_em timestamptz, atualizado_em timestamptz
     ) ON COMMIT DROP`);
+    await client.query(`CREATE TEMP TABLE commerce_audit_logs (empresa_id uuid, usuario_id uuid, entidade text, entidade_id uuid, acao text, depois jsonb) ON COMMIT DROP`);
     await client.query('INSERT INTO commerce_storefronts VALUES ($1,$2,$3,$4)', [empresaId, storefrontId, lojaId, 'dino-web']);
     await client.query(`INSERT INTO commerce_orders VALUES ($1,$2,$3,$4,'paid',113,13,$5::jsonb,$6,$7)`,
       [empresaId, orderId, storefrontId, lojaId, JSON.stringify({ cep: '78300055', estado: 'MT' }), methodId, quoteId]);
@@ -82,9 +85,32 @@ test('PG: fulfillment Dino rejeita destino nacional/override sem INSERT e preser
     await assert.rejects(() => createFulfillment(client, context, { orderId }), error => error.code === 'FULFILLMENT_ALREADY_EXISTS');
     assert.equal((await client.query('SELECT count(*)::int AS n FROM commerce_fulfillments')).rows[0].n, 1);
     const fulfillmentId = (await client.query('SELECT id FROM commerce_fulfillments WHERE order_id = $1', [orderId])).rows[0].id;
+    const notice = 'Pagamento confirmado; aguardando separação para retirada.';
+    const pending = await updateFulfillment(client, context, fulfillmentId, { status: 'pending', ocorrencia: notice });
+    assert.equal(pending.status, 'pending');
+    assert.equal(pending.ocorrencias.length, 1);
+    assert.equal(pending.ocorrencias[0].description, notice);
+    assert.equal((await client.query('SELECT count(*)::int AS n FROM commerce_audit_logs')).rows[0].n, 1);
     await client.query(`UPDATE commerce_orders SET endereco_entrega = '{"cep":"18715106","estado":"SP"}'::jsonb WHERE id = $1`, [orderId]);
     await assert.rejects(() => updateFulfillment(client, context, fulfillmentId, { status: 'preparing' }), error => error.code === 'FULFILLMENT_DINO_ORDER_SELECTION_REQUIRED');
     assert.equal((await client.query('SELECT status FROM commerce_fulfillments WHERE id = $1', [fulfillmentId])).rows[0].status, 'pending');
+    await client.query(`UPDATE commerce_orders SET endereco_entrega = '{"cep":"78300055","estado":"MT"}'::jsonb WHERE id = $1`, [orderId]);
+    assert.equal((await updateFulfillment(client, context, fulfillmentId, { status: 'preparing' })).status, 'preparing');
+    assert.equal((await client.query('SELECT count(*)::int AS n FROM commerce_audit_logs')).rows[0].n, 2);
+
+    const pickupOrderId = '10000000-0000-4000-8000-000000000114';
+    const pickupMethodId = '10000000-0000-4000-8000-000000000115';
+    await client.query(`INSERT INTO commerce_shipping_methods VALUES ($1,$2,$3,'pickup','retirada','{}'::jsonb,true)`, [empresaId, pickupMethodId, storefrontId]);
+    await client.query(`INSERT INTO commerce_orders VALUES ($1,$2,$3,$4,'paid',100,0,NULL,$5,NULL)`, [empresaId, pickupOrderId, storefrontId, lojaId, pickupMethodId]);
+    await client.query(`INSERT INTO commerce_payments VALUES ($1,$2,$3,'captured',CURRENT_TIMESTAMP,100)`, [empresaId, '10000000-0000-4000-8000-000000000116', pickupOrderId]);
+    const pickup = await createFulfillment(client, context, { orderId: pickupOrderId });
+    assert.equal(pickup.status, 'pending');
+    const updatedPickup = await updateFulfillment(client, context, pickup.id, { status: 'pending', ocorrencia: notice });
+    assert.equal(updatedPickup.status, 'pending');
+    assert.equal(updatedPickup.ocorrencias.length, 1);
+    assert.equal(updatedPickup.ocorrencias[0].description, notice);
+    assert.equal(updatedPickup.entregue_em, null);
+    assert.equal((await client.query('SELECT count(*)::int AS n FROM commerce_audit_logs')).rows[0].n, 3);
   } finally {
     await client.query('ROLLBACK');
     await client.end();
