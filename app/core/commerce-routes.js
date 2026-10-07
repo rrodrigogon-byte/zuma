@@ -7,6 +7,7 @@ import { db } from './database.js';
 import { customerReport, fulfillmentReport, inventoryReport, salesReport } from './commerce-reports.js';
 import { canTransitionPaymentStatus, captureNeedsRefund, otherCapturedPayment, createPaymentAttempt, publicPaymentMethods, paymentAccountReady, paymentProviders, reconcilePaymentByIdentifiers, recordLatePaymentCapture, resolvedPaymentMethod, syncPaymentAttempt, validatePaymentMethod, verifyPaymentWebhook } from './payment-adapters.js';
 import { infinitepayWebhookDuplicateOwnerSql, infinitepayWebhookUnboundOwnerSql, publicInfinitepayPaymentLookupSql } from './commerce-payment-return.js';
+import { lateCaptureReviewExistsSql } from './commerce-order-payment-status.js';
 import { createPaymentAccount, listPaymentAccounts, listPaymentProviders, listPayments, updatePaymentAccount } from './commerce-payment-admin.js';
 import { resolveCommerceIdentity } from './commerce-identity-bridge.js';
 import { applyPromotionToOrder, createPromotion, createPromotionCode, createPromotionTemplate, listPromotionTemplates, listPromotions } from './commerce-promotions.js';
@@ -283,6 +284,7 @@ function sanitizePublicOrderTracking(row = {}) {
     impostos: asNumber(row.impostos),
     total: asNumber(row.total),
     payment_status: String(row.payment_status || 'pending').slice(0, 30),
+    payment_review_status: row.payment_review_status === 'refund_required' ? 'refund_required' : null,
     endereco_entrega: address ? {
       cidade: String(address.cidade || '').slice(0, 100) || null,
       estado: String(address.estado || '').slice(0, 2).toUpperCase() || null,
@@ -883,7 +885,10 @@ export function createCommercePublicRouter() {
       const storefront = await resolvePublicStorefront(req);
       const result = await db.query(
         `SELECT o.public_code, o.status, o.moeda, o.subtotal, o.desconto, o.frete, o.impostos, o.total,
-                (SELECT p.status FROM commerce_payments p WHERE p.empresa_id = o.empresa_id AND p.order_id = o.id ORDER BY p.criado_em DESC LIMIT 1) AS payment_status,
+                CASE WHEN ${lateCaptureReviewExistsSql} THEN 'captured'
+                     ELSE (SELECT p.status FROM commerce_payments p WHERE p.empresa_id = o.empresa_id AND p.order_id = o.id ORDER BY p.criado_em DESC LIMIT 1)
+                END AS payment_status,
+                CASE WHEN ${lateCaptureReviewExistsSql} THEN 'refund_required' ELSE NULL END AS payment_review_status,
                 COALESCE((SELECT jsonb_build_object('submitted', true, 'submittedAt', s.criado_em) FROM commerce_order_satisfaction s WHERE s.empresa_id = o.empresa_id AND s.order_id = o.id AND s.retencao_ate > CURRENT_TIMESTAMP LIMIT 1), jsonb_build_object('submitted', false)) AS satisfaction,
                 CASE WHEN o.endereco_entrega IS NULL THEN NULL ELSE jsonb_build_object('cidade', o.endereco_entrega->>'cidade', 'estado', o.endereco_entrega->>'estado', 'cep', CASE WHEN length(o.endereco_entrega->>'cep') = 8 THEN left(o.endereco_entrega->>'cep', 5) || '***' ELSE NULL END) END AS endereco_entrega, o.criado_em, o.atualizado_em,
                 (SELECT (SELECT option->'public' FROM jsonb_array_elements(COALESCE(q.response_snapshot->'providerOptions', '[]'::jsonb)) AS option WHERE option->'public'->>'id' = q.selected_option_id LIMIT 1)

@@ -3,6 +3,7 @@ import { ArrowRight, Check, CheckCircle2, Clock3, CreditCard, MapPin, PackageChe
 import { Link, useParams } from 'react-router-dom'
 import { api, fmtR } from '../../lib/api'
 import { normalizeStorefrontAlias, storefrontApiBase, storefrontRoute } from '../../lib/storefront'
+import { hasLateCaptureReview, LATE_CAPTURE_COPY } from '../../lib/late-capture-status'
 import './order-tracking.css'
 
 const FINAL_STATUSES = new Set(['delivered', 'picked_up', 'completed'])
@@ -104,8 +105,8 @@ function statusPresentation(order) {
   const fulfillment = order?.fulfillments?.[0]
   const fulfillmentStatus = String(fulfillment?.status || '').toLowerCase()
   const rawStatus = String(order?.coreStatus || order?.status || 'pending_payment').toLowerCase()
-  const status = fulfillmentStatus === 'out_for_delivery' ? fulfillmentStatus : (LEGACY_STATUS[rawStatus] || rawStatus)
-  const copy = STATUS_COPY[status] || [EVENT_LABELS[order?.coreStatus] || 'Pedido em atualização', 'Acompanhe as próximas movimentações nesta página.']
+  const status = rawStatus === 'cancelled' ? 'cancelled' : fulfillmentStatus === 'out_for_delivery' ? fulfillmentStatus : (LEGACY_STATUS[rawStatus] || rawStatus)
+  const copy = hasLateCaptureReview(order) ? ['Pedido cancelado; pagamento capturado', LATE_CAPTURE_COPY.detail] : STATUS_COPY[status] || [EVENT_LABELS[order?.coreStatus] || 'Pedido em atualização', 'Acompanhe as próximas movimentações nesta página.']
   return { status, title: copy[0], detail: copy[1], stage: STATUS_STAGE[status] ?? STATUS_STAGE[order?.coreStatus] ?? 0 }
 }
 
@@ -154,21 +155,23 @@ export default function AcompanharPedido() {
 
   const presentation = statusPresentation(pedido)
   const cancelled = ['cancelled', 'refunded', 'partially_refunded', 'returned'].includes(presentation.status)
+  const lateCaptureReview = hasLateCaptureReview(pedido)
   const latestFulfillment = pedido?.fulfillments?.[0] || null
-  const fulfillmentTitle = latestFulfillment
+  const fulfillmentTitle = cancelled ? 'Pedido encerrado' : latestFulfillment
     ? (FULFILLMENT_LABELS[latestFulfillment.status] || latestFulfillment.status)
     : FINAL_STATUSES.has(presentation.status) ? 'Concluída' : 'Ainda não iniciada'
-  const fulfillmentDetail = latestFulfillment?.carrier || pedido?.shippingOption?.carrier
-    || (FINAL_STATUSES.has(presentation.status) ? 'Pedido entregue ou retirado conforme a modalidade escolhida.' : 'A logística será definida após o pagamento.')
+  const fulfillmentDetail = cancelled ? (latestFulfillment ? 'Pedido cancelado: a etapa logística precisa de conferência da loja.' : 'Este pedido não seguirá para preparação ou entrega.') : latestFulfillment?.carrier || (pedido?.shippingOption?.carrier
+    || (FINAL_STATUSES.has(presentation.status) ? 'Pedido entregue ou retirado conforme a modalidade escolhida.' : 'A logística será definida após o pagamento.'))
   const submitted = surveySent || pedido?.satisfaction?.submitted === true
   const eligible = pedido?.isCore === true && (pedido?.satisfactionEligible === true || FINAL_STATUSES.has(presentation.status))
   const events = useMemo(() => [...(pedido?.timeline || [])].slice(-8).reverse(), [pedido?.timeline])
 
   useEffect(() => {
-    if (!pedido || !presentation.status || presentation.status === lastAnnouncedStatus.current) return
-    lastAnnouncedStatus.current = presentation.status
+    const announcementKey = `${presentation.status}:${lateCaptureReview ? 'refund_required' : ''}`
+    if (!pedido || !presentation.status || announcementKey === lastAnnouncedStatus.current) return
+    lastAnnouncedStatus.current = announcementKey
     setStatusAnnouncement(`Status do pedido: ${presentation.title}. ${presentation.detail}`)
-  }, [pedido, presentation.status, presentation.title, presentation.detail])
+  }, [pedido, presentation.status, presentation.title, presentation.detail, lateCaptureReview])
 
   async function submitSurvey(event) {
     event.preventDefault()
@@ -219,16 +222,16 @@ export default function AcompanharPedido() {
           </ol>}
 
           <div className="order-detail-grid">
-            <section className="order-detail-card"><CreditCard size={19} /><div><span>Pagamento</span><strong>{pedido.pagamento === 'pago' ? 'Confirmado' : pedido.pagamento === 'falhou' ? 'Não confirmado' : 'Aguardando confirmação'}</strong><small>Processado fora da Kytto pelo provedor seguro.</small></div></section>
+            <section className="order-detail-card"><CreditCard size={19} /><div><span>Pagamento</span><strong>{lateCaptureReview ? LATE_CAPTURE_COPY.payment : pedido.pagamento === 'pago' ? 'Confirmado' : pedido.pagamento === 'falhou' ? 'Não confirmado' : 'Aguardando confirmação'}</strong><small>{lateCaptureReview ? 'A captura foi confirmada. O estorno ainda não foi concluído.' : 'Processado fora da Kytto pelo provedor seguro.'}</small></div></section>
             <section className="order-detail-card"><Truck size={19} /><div><span>Entrega</span><strong>{fulfillmentTitle}</strong><small>{fulfillmentDetail}</small></div></section>
             {pedido.endereco_entrega && <section className="order-detail-card"><MapPin size={19} /><div><span>Destino</span><strong>{[pedido.endereco_entrega.cidade, pedido.endereco_entrega.estado].filter(Boolean).join(' / ') || 'Endereço protegido'}</strong><small>CEP {pedido.endereco_entrega.cep || 'protegido'}</small></div></section>}
           </div>
 
-          {pedido.shippingOption?.deliveryDays !== null && pedido.shippingOption?.deliveryDays !== undefined && <section className="order-shipping-promise"><Clock3 size={18} /><div><span>Prazo total estimado</span><strong>{shippingPromise(pedido.shippingOption)}</strong></div></section>}
+          {!cancelled && pedido.shippingOption?.deliveryDays !== null && pedido.shippingOption?.deliveryDays !== undefined && <section className="order-shipping-promise"><Clock3 size={18} /><div><span>Prazo total estimado</span><strong>{shippingPromise(pedido.shippingOption)}</strong></div></section>}
 
           {pedido.isCore && presentation.status === 'pending_payment' && <Link className="order-primary-action" to={`${checkoutRoute}?order=${encodeURIComponent(codigo)}`}>Concluir pagamento <ArrowRight size={17} /></Link>}
 
-          {latestFulfillment && <section className="order-fulfillment"><header><div><span>Logística</span><h2>{FULFILLMENT_LABELS[latestFulfillment.status] || latestFulfillment.status}</h2></div>{latestFulfillment.carrier && <strong>{latestFulfillment.carrier}</strong>}</header>{latestFulfillment.trackingCode && <div className="order-tracking-code"><span>Código de rastreio</span><strong>{latestFulfillment.trackingCode}</strong></div>}{latestFulfillment.trackingUrl && <a href={latestFulfillment.trackingUrl} target="_blank" rel="noreferrer">Acompanhar na transportadora <ArrowRight size={15} /></a>}{Array.isArray(latestFulfillment.ocorrencias) && latestFulfillment.ocorrencias.length > 0 && <div className="order-events">{latestFulfillment.ocorrencias.slice(-5).reverse().map((item, index) => <article key={`${item.at || item.data || index}-${index}`}><time>{fmtDate(item.at || item.data)}</time><strong>{item.description || item.descricao || item.status || item.mensagem || 'Movimentação registrada'}</strong></article>)}</div>}</section>}
+          {!cancelled && latestFulfillment && <section className="order-fulfillment"><header><div><span>Logística</span><h2>{FULFILLMENT_LABELS[latestFulfillment.status] || latestFulfillment.status}</h2></div>{latestFulfillment.carrier && <strong>{latestFulfillment.carrier}</strong>}</header>{latestFulfillment.trackingCode && <div className="order-tracking-code"><span>Código de rastreio</span><strong>{latestFulfillment.trackingCode}</strong></div>}{latestFulfillment.trackingUrl && <a href={latestFulfillment.trackingUrl} target="_blank" rel="noreferrer">Acompanhar na transportadora <ArrowRight size={15} /></a>}{Array.isArray(latestFulfillment.ocorrencias) && latestFulfillment.ocorrencias.length > 0 && <div className="order-events">{latestFulfillment.ocorrencias.slice(-5).reverse().map((item, index) => <article key={`${item.at || item.data || index}-${index}`}><time>{fmtDate(item.at || item.data)}</time><strong>{item.description || item.descricao || item.status || item.mensagem || 'Movimentação registrada'}</strong></article>)}</div>}</section>}
 
           <section className="order-items"><header><span>Itens do pedido</span><strong>{(pedido.itens || []).reduce((sum, item) => sum + Number(item.qtd || 0), 0)} unidade(s)</strong></header>{(pedido.itens || []).map((item, index) => <div key={`${item.sku || item.nome}-${index}`}><span><b>{item.qtd}×</b> {item.nome}</span><strong>{fmtR(item.subtotal ?? Number(item.preco || 0) * Number(item.qtd || 1))}</strong></div>)}<footer><span>Total</span><strong>{fmtR(pedido.total || 0)}</strong></footer></section>
 
