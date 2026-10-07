@@ -25,6 +25,16 @@ test('pedido cancelado não é reaberto por callback nem por status de pagamento
   const state = checkoutReturnSafety({ orderStatus: 'cancelled', paymentStatus: 'captured', hasPayment: true, hasProviderReturn: true })
   assert.equal(state.closed, true)
   assert.equal(state.paid, false)
+  assert.equal(state.reconcileProviderReturn, false)
+  assert.equal(state.showNewPayment, false)
+  assert.equal(state.showExistingPayment, false)
+})
+
+test('reserva expirada com retorno original ainda deve consultar provedor, mas sem segundo checkout', () => {
+  const state = checkoutReturnSafety({ orderStatus: 'cancelled', paymentStatus: 'pending', hasPayment: false, hasProviderReturn: true })
+  assert.equal(state.closed, true)
+  assert.equal(state.paid, false)
+  assert.equal(state.reconcileProviderReturn, true)
   assert.equal(state.showNewPayment, false)
   assert.equal(state.showExistingPayment, false)
 })
