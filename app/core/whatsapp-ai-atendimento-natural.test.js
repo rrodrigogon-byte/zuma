@@ -82,3 +82,42 @@ test('com resumo pendente, o modelo não pode dizer que já confirmou', async ()
   for (const t of ['Que ótimo! Seu pedido do Dior está confirmado para retirada.', 'Pronto, horário agendado!', 'Seu agendamento foi marcado.', 'Pedido confirmado!']) assert.equal(claimsCompletion(t), true, t);
   for (const t of ['Temos 3 horários amanhã.', 'Quer confirmar?', 'O Dior custa R$ 1.800,00.']) assert.equal(claimsCompletion(t), false, t);
 });
+
+// ── Links da loja na resposta (incidente 07/10: IA calada após lista de produtos com fotos) ──
+import { validateWhatsappAiOutput as validarSaida, isApprovedStoreUrl as linkAprovado, stripUnapprovedUrls as tirarLinks } from './whatsapp-ai-profile.js';
+
+test('links da loja (foto, vitrine, pedido) não bloqueiam a resposta', () => {
+  const env = { PUBLIC_BASE_URL: 'https://setpoint.kytto.com.br' };
+  const texto = [
+    'Temos estes perfumes:',
+    '• Madagascar — R$ 120,00',
+    'Foto do produto: https://dino.kytto.com.br/api/public/storefront/dino/media/4a1b2c3d-1234-4123-8123-123456789012',
+    'Veja tudo em https://dino.kytto.com.br/ecommerce/dino.',
+    'Seu pedido: https://setpoint.kytto.com.br/pedido/dino/DINO-0042',
+  ].join('\n');
+  const r = validarSaida(texto, { env });
+  assert.equal(r.ok, true, JSON.stringify(r.violations));
+});
+
+test('UUID da foto não é confundido com cartão', () => {
+  const r = validarSaida('Foto: https://dino.kytto.com.br/api/public/storefront/dino/media/11111111-1111-4111-8111-111111111111', { env: {} });
+  assert.deepEqual(r.violations, []);
+});
+
+test('link de fora continua bloqueado e é removido sem calar a conversa', () => {
+  const texto = 'Pague aqui: https://pix-falso.example/pagar e me avise.';
+  const r = validarSaida(texto, { env: {} });
+  assert.deepEqual(r.violations, ['UNAPPROVED_URL']);
+  const limpo = tirarLinks(texto, {});
+  assert.equal(/https?:/.test(limpo), false);
+  assert.equal(validarSaida(limpo, { env: {} }).ok, true);
+});
+
+test('hosts aprovados: kytto, env e storage de mídia; http e credenciais não', () => {
+  assert.equal(linkAprovado('https://dino.kytto.com.br/ecommerce/dino', {}), true);
+  assert.equal(linkAprovado('https://minhaloja.com/x', { WHATSAPP_AI_PUBLIC_URL: 'https://minhaloja.com' }), true);
+  assert.equal(linkAprovado('https://storage.googleapis.com/b/x.webp', {}), true);
+  assert.equal(linkAprovado('http://dino.kytto.com.br/x', {}), false);
+  assert.equal(linkAprovado('https://user:pw@dino.kytto.com.br/x', {}), false);
+  assert.equal(linkAprovado('https://kytto.com.br.evil.example/x', {}), false);
+});

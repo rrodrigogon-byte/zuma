@@ -284,3 +284,15 @@ Nada muda nas travas: ferramentas, confirmação por SIM, consentimentos, oportu
 
 Detalhes, contrato da rota de figurinha do backend e testes: `docs/operations/T-REX-PERSONA-DINO.md`. Simulador: 43/43 na voz padrão e 50/50 com `WHATSAPP_AI_PERSONA=trex`.
 
+
+## Links da loja na resposta da IA (incidente 07/10/2026)
+
+**Sintoma:** depois de listar produtos com foto, a IA respondeu "Não consegui concluir essa resposta com segurança. Encaminhei sua conversa para a equipe humana." e parou de responder o cliente (conversa ficou na fila humana).
+
+**Causa:** a trava de saída (`validateWhatsappAiOutput`) bloqueava **qualquer** `https://`, inclusive os links que o próprio sistema passou a gerar (foto do produto, vitrine, pedido). O id da foto (UUID) também podia parecer número de cartão.
+
+**Correção:**
+- Links `https` de `*.kytto.com.br`, do host de `WHATSAPP_AI_PUBLIC_URL`/`PUBLIC_BASE_URL`, de `WHATSAPP_AI_ALLOWED_URL_HOSTS` e do storage de mídia (`COMMERCE_MEDIA_ALLOWED_HOSTS`, padrão `storage.googleapis.com`) são aprovados. `http`, credenciais na URL e outros domínios continuam bloqueados.
+- As checagens de cartão/CPF/segredo rodam no texto **sem** os links.
+- Se o único problema for um link de fora, o link é removido e a resposta segue (evento `output_blocked` com motivo `UNAPPROVED_URL_REMOVED`), sem mandar a conversa para a fila.
+- Conversas presas na fila por `security:UNAPPROVED_URL` ou `security:POSSIBLE_PAYMENT_CARD` voltam sozinhas para a IA na próxima mensagem do cliente, se ninguém da equipe assumiu nem está respondendo pelo celular (auditoria `auto_resumed_after_url_block`).

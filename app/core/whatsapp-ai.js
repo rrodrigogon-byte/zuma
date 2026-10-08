@@ -32,6 +32,7 @@ import {
   shouldPromptPersonalization,
   suspiciousPromptInjection,
   validateWhatsappAiOutput,
+  stripUnapprovedUrls,
   whatsappAiPolicy,
   whatsappAiPolicyMetrics,
 } from './whatsapp-ai-profile.js';
@@ -68,6 +69,8 @@ function cleanText(value, limit = 4000) {
   return String(value || '').trim().replace(/\u0000/g, '').slice(0, limit);
 }
 
+// Bloqueios que eram falso positivo (link da loja / id de foto): retomam a IA sozinhos.
+const AUTO_RESUME_HANDOFF_REASONS = ['security:UNAPPROVED_URL', 'security:POSSIBLE_PAYMENT_CARD'];
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const AI_CIRCUIT_FAILURES = Math.min(10, Math.max(2, Number.parseInt(process.env.WHATSAPP_AI_CIRCUIT_FAILURES || '3', 10)));
 const AI_CIRCUIT_MINUTES = Math.min(60, Math.max(1, Number.parseInt(process.env.WHATSAPP_AI_CIRCUIT_MINUTES || '10', 10)));
@@ -839,6 +842,30 @@ async function deterministicResponseCore(task, channel, session, message) {
     if (session.status === 'humano') return { text: null, kind: 'human_queue' };
     return { text: 'Preferência registrada. Você não receberá mensagens de marketing por este atendimento. Ainda posso responder solicitações que você iniciar.', kind: 'opt_out' };
   }
+  // Conversas que foram para a fila só porque a resposta tinha um link da própria loja
+  // (bloqueio antigo de URL): voltam sozinhas para a IA quando o cliente escreve de novo,
+  // desde que ninguém da equipe tenha assumido nem esteja respondendo pelo celular.
+  if (session.status === 'humano' && !session.assigned_to && !session.estado?.staffPauseUntil
+      && AUTO_RESUME_HANDOFF_REASONS.includes(session.handoff_reason || session.estado?.handoffReason)) {
+    const resumed = await db.query(
+      `UPDATE whatsapp_ai_sessions SET status = 'ativo',
+          estado = estado - 'handoffReason',
+          handoff_requested_at = NULL, handoff_reason = NULL, priority = 0,
+          atualizado_em = CURRENT_TIMESTAMP
+        WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'humano'
+          AND assigned_to IS NULL AND (estado->>'staffPauseUntil') IS NULL
+          AND COALESCE(handoff_reason, estado->>'handoffReason') = ANY($4::text[])
+        RETURNING id`,
+      [session.id, session.empresa_id, session.loja_id, AUTO_RESUME_HANDOFF_REASONS],
+    ).catch(() => ({ rows: [] }));
+    if (resumed.rows.length) {
+      await auditHandoff(db, context, session.id, 'auto_resumed_after_url_block').catch(() => null);
+      session.status = 'ativo';
+      session.handoff_reason = null;
+      session.estado = { ...(session.estado || {}) };
+      delete session.estado.handoffReason;
+    }
+  }
   if (prefersSelfService(message.text) && !suspiciousPromptInjection(message.text) && !sensitiveCustomerData(message.text)) {
     if (session.status === 'humano') {
       if (!canResumeSelfService(session)) return { text: 'Entendi que prefere seguir pelo WhatsApp. Esta conversa precisa de revisão da equipe antes de eu retomar.', kind: 'self_service_blocked' };
@@ -1051,12 +1078,28 @@ async function deterministicResponseCore(task, channel, session, message) {
 
   async function finish(result, provider, presentationContext = toolContext) {
     const opportunityTrace = result.traces.some(trace => trace?.name === 'propor_oportunidade' && trace?.ok === true);
-    const validation = validateWhatsappAiOutput(result.text, {
+    const validationInput = {
       traces: result.traces,
       recommendationWasRequested: recommendationRequested(message.text),
       opportunityAllowed: opportunityTrace,
       customerRequestedPurchase: purchaseIntentExpressed(userText),
-    });
+    };
+    let validation = validateWhatsappAiOutput(result.text, validationInput);
+    // Link de fora da loja é o único problema: tira o link e responde. Não vale
+    // mandar a conversa para a fila (e calar a IA) por causa de um endereço.
+    if (!validation.ok && validation.violations.every(code => code === 'UNAPPROVED_URL')) {
+      const semLink = stripUnapprovedUrls(result.text);
+      const revalidated = validateWhatsappAiOutput(semLink, validationInput);
+      await recordWhatsappAiPolicyEvent(context, 'output_blocked', {
+        reasonCode: 'UNAPPROVED_URL_REMOVED',
+        metadata: { detector: 'deterministic_v1', policyVersion: 1, provider },
+        eventKey: `output-url-removed:${session.id}:${message.externalId}`,
+      }).catch(() => null);
+      if (revalidated.ok) {
+        result = { ...result, text: semLink };
+        validation = revalidated;
+      }
+    }
     if (!validation.ok) {
       await recordWhatsappAiPolicyEvent(context, 'output_blocked', {
         reasonCode: validation.violations[0] || 'OUTPUT_POLICY',
