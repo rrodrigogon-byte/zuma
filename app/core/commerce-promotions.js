@@ -358,16 +358,20 @@ export async function updatePromotionCode(trx, context, codeId, input = {}) {
 }
 
 export async function applyPromotionToOrder(trx, context, input = {}) {
-  const { empresaId, usuarioId } = tenantContext(context);
+  const { empresaId, usuarioId, lojaId } = tenantContext(context);
   const orderId = assertUuid(input.orderId, 'orderId');
+  const storefrontId = input.storefrontId || context.storefrontId
+    ? assertUuid(input.storefrontId || context.storefrontId, 'storefrontId') : null;
   const codigo = text(input.codigo, 80).toUpperCase();
   if (!codigo) throw new CommerceError('cupom é obrigatório', 'PROMOTION_CODE_INVALID');
   const orderResult = await trx.query(
     `SELECT id, storefront_id, customer_id, status, subtotal, desconto, frete, impostos, total
        FROM commerce_orders
       WHERE empresa_id = $1 AND id = $2
+        AND ($3::uuid IS NULL OR storefront_id = $3::uuid)
+        AND ($4::uuid IS NULL OR loja_id = $4::uuid)
       FOR UPDATE`,
-    [empresaId, orderId],
+    [empresaId, orderId, storefrontId, lojaId || null],
   );
   const order = orderResult.rows[0];
   if (!order) throw new CommerceError('pedido não encontrado no tenant', 'ORDER_NOT_FOUND');

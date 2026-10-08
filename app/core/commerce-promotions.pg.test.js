@@ -391,3 +391,23 @@ pgTest('dois clientes concorrentes respeitam limite de uso 1 e somente uma aplic
 test('guard do teste PG não infere DATABASE_URL de produção', { skip: Boolean(pool) }, () => {
   assert.equal(databaseName, null);
 });
+
+pgTest('aplicação não alcança pedido de outra vitrine ou unidade do mesmo tenant e deixa zero mutation', async () => {
+  await withRollback(async client => {
+    const f = await createFixture(client);
+    const coupon = await insertPromotion(client, f, { code: 'STORE_SCOPED' });
+    const orderId = await insertOrder(client, f, { storefrontId: f.unpublishedStorefront });
+    const before = await tenantSnapshot(client, f.empresa);
+    await assert.rejects(
+      applyPromotionToOrder(client, { empresaId: f.empresa, lojaId: f.loja, storefrontId: f.storefront }, { orderId, codigo: coupon.promotionCode, storefrontId: f.storefront }),
+      error => error.code === 'ORDER_NOT_FOUND',
+    );
+    await assert.rejects(
+      applyPromotionToOrder(client, { empresaId: f.empresa, lojaId: randomUUID() }, { orderId, codigo: coupon.promotionCode }),
+      error => error.code === 'ORDER_NOT_FOUND',
+    );
+    assert.deepEqual(await tenantSnapshot(client, f.empresa), before);
+    const counters = (await client.query('SELECT p.usos, o.desconto FROM commerce_promotions p JOIN commerce_orders o ON o.empresa_id = p.empresa_id WHERE p.id=$1 AND o.id=$2', [coupon.promotionId, orderId])).rows[0];
+    assert.deepEqual(counters, { usos: 0, desconto: '0.00' });
+  });
+});

@@ -879,7 +879,7 @@ export function createCommercePublicRouter() {
             const promotionCode = String(req.body?.promotionCode || '').trim();
             let finalOrder = order;
             if (promotionCode) {
-              const promotion = await applyPromotionToOrder(trx, { empresaId: storefront.empresa_id, lojaId: storefront.loja_id }, { orderId: order.id, codigo: promotionCode });
+              const promotion = await applyPromotionToOrder(trx, { empresaId: storefront.empresa_id, lojaId: storefront.loja_id, storefrontId: storefront.id }, { orderId: order.id, codigo: promotionCode, storefrontId: storefront.id });
               finalOrder = { ...order, discount: promotion.desconto, total: promotion.total, promotionCode: promotion.codigo };
             }
             const publicResult = { ...finalOrder };
