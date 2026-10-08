@@ -31,6 +31,7 @@ import {
   queueWhatsappPromotion,
 } from './whatsapp-ai-crm.js';
 import {
+  isApprovedStoreUrl,
   opportunityGate,
   registerOpportunityDecision,
   sanitizeUntrustedBusinessText,
@@ -206,7 +207,7 @@ export function storeLinks(storefront = {}) {
       const value = String(url || '').trim();
       const media = value.match(/^\/api\/storefront\/media\/([0-9a-f-]{36})$/i);
       if (media) return `${base}/api/public/storefront/${alias}/media/${media[1]}`;
-      return /^https:\/\//i.test(value) ? value : '';
+      return isApprovedStoreUrl(value) ? value : '';
     },
   };
 }

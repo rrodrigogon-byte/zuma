@@ -465,15 +465,65 @@ export function sanitizeUntrustedBusinessText(value, limit = 320) {
   return source.replace(/<\/?(?:system|assistant|user|tool)[^>]*>/gi, '').slice(0, limit);
 }
 
-export function validateWhatsappAiOutput(text, { traces = [], recommendationWasRequested = false, opportunityAllowed = false, customerRequestedPurchase = false } = {}) {
+// Links da própria loja (vitrine, pedido, foto do produto) são gerados pelo sistema e
+// podem ir ao cliente. Qualquer outro domínio continua bloqueado. Hosts aprovados:
+// *.kytto.com.br, o host de WHATSAPP_AI_PUBLIC_URL / PUBLIC_BASE_URL e a lista
+// WHATSAPP_AI_ALLOWED_URL_HOSTS (separada por vírgula).
+const URL_PATTERN = /https?:\/\/[^\s<>()"']+/gi;
+
+function hostOf(value) {
+  try { return new URL(String(value || '').trim()).hostname.toLowerCase(); } catch { return ''; }
+}
+
+export function approvedUrlHosts(env = process.env) {
+  const hosts = new Set();
+  for (const raw of [env.WHATSAPP_AI_PUBLIC_URL, env.PUBLIC_BASE_URL]) {
+    const host = hostOf(raw);
+    if (host) hosts.add(host);
+  }
+  for (const item of String(env.WHATSAPP_AI_ALLOWED_URL_HOSTS || '').split(',')) {
+    const host = item.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    if (host) hosts.add(host);
+  }
+  return hosts;
+}
+
+export function isApprovedStoreUrl(url, env = process.env) {
+  let parsed;
+  try { parsed = new URL(String(url || '').trim()); } catch { return false; }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password) return false;
+  const host = parsed.hostname.toLowerCase();
+  if (host === 'kytto.com.br' || host.endsWith('.kytto.com.br')) return true;
+  if (approvedUrlHosts(env).has(host)) return true;
+  // Fotos do catálogo hospedadas no storage autorizado da loja (mesma lista do upload).
+  const mediaHosts = String(env.COMMERCE_MEDIA_ALLOWED_HOSTS || 'storage.googleapis.com').split(',').map(item => item.trim().toLowerCase()).filter(Boolean);
+  return mediaHosts.some(item => host === item || host.endsWith(`.${item}`));
+}
+
+// Remove do texto os links não aprovados (mantém os da loja). Usado quando o único
+// problema da resposta é um link: o cliente recebe o resto em vez de ir para a fila.
+export function stripUnapprovedUrls(text, env = process.env) {
+  return String(text || '')
+    .replace(URL_PATTERN, url => (isApprovedStoreUrl(url.replace(/[.,;:!?]+$/, ''), env) ? url : ''))
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
+export function validateWhatsappAiOutput(text, { traces = [], recommendationWasRequested = false, opportunityAllowed = false, customerRequestedPurchase = false, env = process.env } = {}) {
   const value = clean(text, 4000);
-  const normalized = plain(value);
+  const urls = value.match(URL_PATTERN) || [];
+  // As demais verificações olham o texto sem os links: o id de uma foto
+  // (UUID) não pode parecer número de cartão ou documento.
+  const semLinks = value.replace(URL_PATTERN, ' ');
+  const normalized = plain(semLinks);
   const violations = [];
   if (!value) violations.push('EMPTY_OUTPUT');
-  if (/\b(GEMINI_API_KEY|EVOLUTION_API_KEY|WHATSAPP_AI_WEBHOOK_SECRET|system prompt|developer message)\b/i.test(value)) violations.push('SECRET_OR_PROMPT_REFERENCE');
-  if (/\b(?:\d[ -]?){13,19}\b/.test(value)) violations.push('POSSIBLE_PAYMENT_CARD');
-  if (/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b|\b\d{2}\.?\d{3}\.?\d{3}\/\d{4}-?\d{2}\b/.test(value)) violations.push('POSSIBLE_DOCUMENT');
-  if (/https?:\/\//i.test(value)) violations.push('UNAPPROVED_URL');
+  if (/\b(GEMINI_API_KEY|EVOLUTION_API_KEY|WHATSAPP_AI_WEBHOOK_SECRET|system prompt|developer message)\b/i.test(semLinks)) violations.push('SECRET_OR_PROMPT_REFERENCE');
+  if (/\b(?:\d[ -]?){13,19}\b/.test(semLinks)) violations.push('POSSIBLE_PAYMENT_CARD');
+  if (/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b|\b\d{2}\.?\d{3}\.?\d{3}\/\d{4}-?\d{2}\b/.test(semLinks)) violations.push('POSSIBLE_DOCUMENT');
+  if (urls.some(url => !isApprovedStoreUrl(url.replace(/[.,;:!?]+$/, ''), env))) violations.push('UNAPPROVED_URL');
   // "voce precisa" sozinho bloqueava perguntas educadas ("O que você precisa?") e mandava a
   // conversa para a equipe; só conta como pressão quando empurra compra/aproveitamento.
   if (/\b(ultima chance|imperdivel|compre agora|nao perca|so hoje|voce precisa (comprar|garantir|aproveitar|levar|fechar))\b/.test(normalized)) violations.push('PRESSURE_LANGUAGE');
