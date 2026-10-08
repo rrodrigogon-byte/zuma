@@ -163,6 +163,7 @@ export async function sendOperationalInvite({ inviteId, token, sendInvite }, opt
   }, options.trx);
 
   let sent = false;
+  let failureCode = 'OPERATIONAL_INVITE_SEND_FAILED';
   try {
     // No logs, return values, or error details contain the token or e-mail.
     const senderResult = await sendInvite({
@@ -174,12 +175,15 @@ export async function sendOperationalInvite({ inviteId, token, sendInvite }, opt
       expiresAt: row.expira_em,
     });
     sent = isSuccessfulSend(senderResult);
+    if (['MAIL_REJECTED', 'MAIL_UNCERTAIN', 'MAIL_NOT_CONFIGURED'].includes(senderResult?.code)) {
+      failureCode = senderResult.code;
+    }
   } catch {
     sent = false;
   }
   if (!sent) {
     await revokeInviteById(database, id, options.trx);
-    throw new OperationalInviteError('não foi possível enviar o convite', 'OPERATIONAL_INVITE_SEND_FAILED');
+    throw new OperationalInviteError('não foi possível enviar o convite', failureCode);
   }
   const marked = await markInviteSent(database, id, options.trx);
   return { ok: true, ...inviteResult(marked) };

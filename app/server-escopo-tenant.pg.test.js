@@ -69,6 +69,7 @@ test('escopo de empresa, e-mails reservados, módulos globais e revogação', { 
 globalThis.fetch = (url, options) => {
   if (String(url) === 'https://api.resend.com/emails') {
     const payload = JSON.parse(options.body);
+    if (payload.to[0].startsWith('rejected-')) return Promise.resolve({ ok: false });
     return Promise.resolve({ ok: true, json: async () => payload.to[0].startsWith('ambiguous-') ? {} : { id: 'local-mock-id' } });
   }
   return originalFetch(url, options);
@@ -208,16 +209,35 @@ globalThis.fetch = (url, options) => {
     await client.query(`UPDATE commerce_storefronts SET status = 'draft' WHERE empresa_id = $1`, [empA]);
     assert.equal((await convite(empA, 'draft@example.invalid')).response.status, 404);
     await client.query(`UPDATE commerce_storefronts SET status = 'active' WHERE empresa_id = $1`, [empA]);
+    const statusPath = `/api/admin/operational-invites?empresaId=${empA}`;
+    assert.equal((await request(base, statusPath)).response.status, 401);
+    assert.equal((await request(base, statusPath, { headers: donoPainel })).response.status, 403);
+    assert.equal((await request(base, `/api/admin/operational-invites?empresaId=${empB}`, { headers: admin })).response.status, 404);
+    const readiness = await request(base, statusPath, { headers: admin });
+    assert.equal(readiness.body.ready, true);
+    assert.equal(readiness.body.mailConfigured, true);
+    assert.deepEqual(readiness.body.items, []);
     const enviado = await convite(empA, 'invite-ok@example.invalid');
     assert.equal(enviado.response.status, 202, JSON.stringify(enviado.body));
     assert.deepEqual(enviado.body, { ok: true, status: 'sent' });
+    const duplicate = await convite(empA, 'invite-ok@example.invalid');
+    assert.equal(duplicate.response.status, 409);
+    assert.equal(duplicate.body.code, 'IDENTITY_ALREADY_EXISTS');
+    const rejected = await convite(empA, 'rejected-invite@example.invalid');
+    assert.equal(rejected.response.status, 503);
+    assert.equal(rejected.body.code, 'MAIL_REJECTED');
     const ambiguo = await convite(empA, 'ambiguous-invite@example.invalid');
     assert.equal(ambiguo.response.status, 503);
+    assert.equal(ambiguo.body.code, 'INVITE_DELIVERY_UNCERTAIN');
     assert.ok(!JSON.stringify(ambiguo.body).includes('ambiguous-invite@example.invalid'));
+    const history = await request(base, statusPath, { headers: admin });
+    assert.equal(history.body.items.length, 3);
+    assert.doesNotMatch(JSON.stringify(history.body), /token_hash|senha_hash|local-test-not-real/);
     const invites = await client.query(`SELECT email_norm, status FROM commerce_operational_invites WHERE empresa_id = $1 ORDER BY email_norm`, [empA]);
     assert.deepEqual(invites.rows, [
       { email_norm: 'ambiguous-invite@example.invalid', status: 'revoked' },
       { email_norm: 'invite-ok@example.invalid', status: 'sent' },
+      { email_norm: 'rejected-invite@example.invalid', status: 'revoked' },
     ]);
 
     // 5) Mesmo e-mail em dois usuarios SQL diferentes: JWT legado não prova
