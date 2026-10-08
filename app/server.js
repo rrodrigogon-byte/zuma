@@ -25,6 +25,7 @@ import { wpp } from './whatsapp.js';
 import * as modificadoresCombosKytto from './modificadores-combos-kytto.js';
 import { mail } from './email.js';
 import { acceptOperationalInvite, findOperationalByEmail, resolveOperationalById, issueOperationalInvite, isOperationalEmailReserved } from './core/commerce-operational-invites.js';
+import { listOperationalInvites, operationalInviteHttpError, operationalInviteReadiness } from './core/commerce-invite-status.js';
 import { emitir as nfceEmitir, cancelar as nfceCancelar, nfceConfigurado } from './nfce.js';
 import { createCommerceAdminRouter, createCommercePublicRateLimitGuard, createCommercePublicRouter, createCommerceWebhookRouter } from './core/commerce-routes.js';
 import { createWhatsappAiWebhookRouter } from './core/whatsapp-ai-routes.js';
@@ -534,11 +535,31 @@ app.use('/api/admin/commerce', (req, res, next) => {
 const TENANT_ADMIN_MODULES = new Set(['barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos']);
 // Convites operacionais são uma transição de identidade, não cadastro JSON.
 // O token segue apenas no e-mail individual; nenhuma resposta HTTP ou auditoria o contém.
+app.get('/api/admin/operational-invites', auth, requireRole('admin'), async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  if (!isPlatformAdminUser(req.user) && !isMainAdminUser(req.user)) return res.status(403).json({ error: 'permissão insuficiente', code: 'PERMISSION_DENIED' });
+  const readiness = operationalInviteReadiness(process.env, mail.ativo());
+  if (!readiness.coreEnabled) return res.json({ ...readiness, items: [] });
+  const empresaId = String(req.query.empresaId || '').trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(empresaId)) {
+    return res.status(400).json({ error: 'selecione uma empresa válida', code: 'INVALID_INVITE' });
+  }
+  try {
+    const dino = await commerceDb.queryRead(
+      `SELECT 1 FROM commerce_storefronts WHERE empresa_id = $1 AND codigo = 'dino-web' AND status = 'active' LIMIT 1`,
+      [empresaId],
+    );
+    if (!dino.rows[0]) return res.status(404).json({ error: 'empresa não encontrada', code: 'TENANT_NOT_FOUND' });
+    return res.json({ ...readiness, ...await listOperationalInvites(commerceDb, empresaId) });
+  } catch {
+    return res.status(503).json({ error: 'não foi possível consultar o estado dos convites', code: 'INVITE_UNAVAILABLE' });
+  }
+});
 app.post('/api/admin/operational-invites', auth, requireRole('admin'), async (req, res) => {
   res.set('Cache-Control', 'private, no-store');
   if (!isPlatformAdminUser(req.user) && !isMainAdminUser(req.user)) return res.status(403).json({ error: 'permissão insuficiente', code: 'PERMISSION_DENIED' });
-  if (process.env.COMMERCE_CORE_ENABLED !== '1' || process.env.OPERATIONAL_INVITES_ENABLED !== '1') return res.status(503).json({ error: 'convites indisponíveis', code: 'INVITES_DISABLED' });
-  if (!mail.ativo() || !process.env.EMAIL_FROM) return res.status(503).json({ error: 'canal de convite indisponível', code: 'MAIL_NOT_CONFIGURED' });
+  const readiness = operationalInviteReadiness(process.env, mail.ativo());
+  if (!readiness.ready) return res.status(503).json({ error: 'canal de convite indisponível', code: readiness.code });
   try {
     const empresaId = String(req.body?.empresaId || '').trim();
     const email = norm(req.body?.email);
@@ -557,10 +578,19 @@ app.post('/api/admin/operational-invites', auth, requireRole('admin'), async (re
         url: `https://kytto.com.br/aceitar-convite-dino#token=${encodeURIComponent(token)}` }),
     });
     if (!result?.ok) return res.status(503).json({ error: 'convite não confirmado; não tente reenviar automaticamente', code: 'INVITE_DELIVERY_UNCERTAIN' });
+    try {
+      req.auditEmpresaId = empresaId;
+      audit(req, 'OPERATIONAL_INVITE_SENT', { inviteId: result.inviteId, empresaId });
+      save();
+    } catch {
+      // O convite já foi confirmado e está sent no PostgreSQL; não induzir reenvio.
+      console.warn('[OPERATIONAL-INVITE] INVITE_AUDIT_UNAVAILABLE');
+    }
     return res.status(202).json({ ok: true, status: 'sent' });
   } catch (error) {
-    const conflict = ['23505', 'OPERATIONAL_EXISTS', 'INVITE_ALREADY_EXISTS'].includes(error?.code);
-    return res.status(conflict ? 409 : 503).json({ error: conflict ? 'identidade já cadastrada' : 'convite não confirmado', code: conflict ? 'IDENTITY_ALREADY_EXISTS' : 'INVITE_UNAVAILABLE' });
+    const failure = operationalInviteHttpError(error);
+    console.warn('[OPERATIONAL-INVITE]', failure.body.code);
+    return res.status(failure.status).json(failure.body);
   }
 });
 app.post('/api/auth/operational-invite/accept', publicLimit(6), async (req, res) => {
@@ -6868,4 +6898,3 @@ for(const sig of ['SIGTERM','SIGINT']){
 
 // A cópia local diária (com retenção de 7 dias) e a cópia externa ficam em
 // protecaoDados.iniciar(), chamado no boot.
-

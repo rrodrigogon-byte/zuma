@@ -430,3 +430,22 @@
 .commerce-catalog-action-tooltip { position:fixed;z-index:150000;max-width:min(260px,calc(100vw - 24px));padding:9px 12px;border:1px solid #304d43;border-radius:9px;background:#17362c;color:#fff;font-size:11px;font-weight:650;line-height:1.4;text-align:center;box-shadow:0 9px 22px rgba(12,40,29,.26);pointer-events:none;transform:translate(-50%,-100%); }
 .commerce-catalog-action-tooltip.below { transform:translate(-50%,0); }
 @media (prefers-reduced-motion:no-preference) { .commerce-catalog-action-tooltip { animation:catalog-tooltip-in .16s cubic-bezier(.23,1,.32,1) both; } @keyframes catalog-tooltip-in { from { opacity:0; } to { opacity:1; } } }
+
+/* Usuários: avisos precisam estar dentro do diálogo, não sob o overlay. */
+.commerce-users-editor { max-height: calc(100vh - 36px); overflow-y: auto; }
+.commerce-users-editor > label { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; font-size: 12px; color: #50635e; }
+.commerce-users-editor input:not([type="checkbox"]),
+.commerce-users-editor select { border: 1px solid #dce7e2; border-radius: 9px; padding: 10px; font: inherit; color: #17312c; background: #fff; }
+.commerce-users-editor input:focus-visible,
+.commerce-users-editor select:focus-visible { outline: 3px solid rgba(143,207,65,.35); outline-offset: 2px; }
+.commerce-users-error,
+.commerce-invite-history [role="alert"] { background: #fff0ed; color: #993e2e; border: 1px solid #f1c5ba; padding: 12px 14px; border-radius: 10px; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.commerce-users-editor .commerce-admin-modal-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 9px; margin-top: 22px; }
+.commerce-users-editor .commerce-admin-modal-actions button:not(.primary),
+.commerce-invite-history > button { padding: 9px 13px; border: 1px solid #dce7e2; border-radius: 999px; background: #fff; color: #376a5a; font: inherit; font-size: 12px; cursor: pointer; }
+.commerce-users-panel button:disabled { opacity: .55; cursor: not-allowed; }
+.commerce-invite-history { border: 1px solid #dce7e2; border-radius: 13px; padding: 16px; margin-bottom: 20px; background: #fbfdfc; }
+.commerce-invite-history h3 { margin: 0 0 8px; }
+.commerce-invite-history > p { font-size: 12px; line-height: 1.5; }
+.commerce-users-panel td > strong,
+.commerce-users-panel td > small { display: block; }
