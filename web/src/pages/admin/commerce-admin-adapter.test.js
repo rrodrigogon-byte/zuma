@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { api } from '../../lib/api'
-import { adminProductMediaUrl, loadCommerceAdmin, loadCoreReports, validateProductCommercialInput } from './commerce-admin-adapter'
+import { activePromotionCode, adminProductMediaUrl, escapePromotionExportText, formatPromotionValidity, loadCommerceAdmin, loadCoreReports, localDateTimeToUtcIso, promotionCopyText, promotionPayload, promotionStatus, utcIsoToLocalDateTime, validateProductCommercialInput } from './commerce-admin-adapter'
 import CommerceProductMedia, { allowedProductImageSource } from './CommerceProductMedia'
 import { catalogHelpFor } from './useCatalogActionTooltip'
 
@@ -220,5 +220,59 @@ describe('Catálogo Commerce: mídia protegida e ajuda de ações', () => {
     expect(tooltip).toContain("shell.addEventListener('focusin', show)")
     expect(tooltip).toContain("shell.addEventListener('pointerover', show)")
     expect(tooltip).toContain('role="tooltip"')
+  })
+})
+
+describe('Promoções Commerce: datas, resgate e material', () => {
+  const start = '2026-10-08T09:30'
+  const startIso = new Date(start).toISOString()
+  const endIso = new Date('2026-10-09T09:30').toISOString()
+  const activeCode = { id: 'code-1', codigo: 'ATIVO80', ativo: true, usos: 2, usoMaximo: 80 }
+  const promotion = { nome: 'Semana <especial>', tipo: 'percentage', valor: 15, inicio: startIso, fim: endIso, ativo: true, codigos: [activeCode] }
+
+  it('faz round trip de datetime-local no fuso local sem deslocar minutos', () => {
+    const iso = localDateTimeToUtcIso(start)
+    expect(iso).toBe(startIso)
+    expect(utcIsoToLocalDateTime(iso)).toBe(start)
+  })
+
+  it('preserva ausência de término em atualização parcial e envia null apenas quando o campo foi limpo', () => {
+    const partialWithoutExpiry = promotionPayload({ nome: 'Sem prazo', inicio: start }, { partial: true })
+    expect(partialWithoutExpiry).toEqual({ nome: 'Sem prazo', inicio: startIso })
+    expect(promotionPayload({ fim: '' }, { partial: true })).toEqual({ fim: null })
+    expect(promotionPayload({ nome: 'Sem prazo', inicio: start, fim: '' })).toMatchObject({ fim: null })
+  })
+
+  it('respeita os limites de início e fim e invalida datas impossíveis', () => {
+    const before = new Date(startIso).getTime() - 1
+    const atStart = new Date(startIso).getTime()
+    const beforeEnd = new Date(endIso).getTime() - 1
+    const atEnd = new Date(endIso).getTime()
+    expect(promotionStatus(promotion, before)).toBe('scheduled')
+    expect(promotionStatus(promotion, atStart)).toBe('active')
+    expect(promotionStatus(promotion, beforeEnd)).toBe('active')
+    expect(promotionStatus(promotion, atEnd)).toBe('expired')
+    expect(promotionStatus({ ...promotion, inicio: 'não-é-data' }, atStart)).toBe('inactive')
+    expect(promotionStatus({ ...promotion, fim: new Date(new Date(startIso).getTime() - 1).toISOString() }, atStart)).toBe('inactive')
+  })
+
+  it('seleciona somente código explicitamente ativo e não esgotado', () => {
+    expect(activePromotionCode({ codigos: [{ codigo: 'ESGOTADO', ativo: true, usos: 4, usoMaximo: 4 }, activeCode] })).toBe('ATIVO80')
+    expect(activePromotionCode({ codigos: [{ codigo: 'INATIVO', ativo: false, usos: 0, usoMaximo: 80 }] })).toBe('')
+    expect(promotionStatus({ ...promotion, codigos: [{ codigo: 'INATIVO', ativo: false }] }, Date.parse(startIso))).toBe('exhausted')
+  })
+
+  it('copia código e validade exatos, sem inventar benefício nem divulgar URL inválida', () => {
+    const text = promotionCopyText(promotion, { link: 'https://loja.example/promo' })
+    expect(text).toContain('Semana <especial>: 15% de desconto.')
+    expect(text).toContain('Use o código ATIVO80.')
+    expect(text).toContain(`Validade: ${formatPromotionValidity(promotion)}.`)
+    expect(text).not.toContain('R$')
+    expect(promotionCopyText(promotion, { link: 'javascript:alert(1)' })).not.toContain('javascript:alert')
+    expect(promotionCopyText(promotion, { link: 'https://user:pass@loja.example/promo' })).toContain('Consulte as condições na loja.')
+  })
+
+  it('escapa texto para exportações HTML sem permitir injeção de marcação', () => {
+    expect(escapePromotionExportText(`<img src=x onerror="alert(1)"> & 'x'`)).toBe('&lt;img src=x onerror=&quot;alert(1)&quot;&gt; &amp; &#39;x&#39;')
   })
 })

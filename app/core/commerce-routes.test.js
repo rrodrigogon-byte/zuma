@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { createCommerceAdminRouter, createCommercePublicRouter, createCommerceWebhookRouter, parsePagination, publicCommercePolicy, sanitizePublicOrderInput } from './commerce-routes.js';
+import { calculatePromotionDiscount, previewPromotion, updatePromotion } from './commerce-promotions.js';
 import { fulfillmentReport } from './commerce-reports.js';
 import { paymentProviders } from './payment-adapters.js';
 import { infinitepayWebhookDuplicateOwnerSql, infinitepayWebhookUnboundOwnerSql, publicInfinitepayPaymentLookupSql } from './commerce-payment-return.js';
@@ -247,6 +248,13 @@ function publicContextHandler() {
   const layer = router.stack.find(item => item.route?.path === '/context');
   assert.ok(layer?.route?.stack?.[0]?.handle, 'rota pública de contexto não encontrada');
   return layer.route.stack[0].handle;
+}
+
+function publicPromotionPreviewHandler() {
+  const router = createCommercePublicRouter();
+  const layer = router.stack.find(item => item.route?.path === '/promotions/preview' && item.route.methods.post);
+  assert.ok(layer?.route?.stack?.at(-1)?.handle, 'rota pública de prévia promocional não encontrada');
+  return layer.route.stack.at(-1).handle;
 }
 
 function publicPaymentHandler() {

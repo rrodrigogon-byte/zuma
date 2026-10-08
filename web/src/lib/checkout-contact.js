@@ -8,7 +8,7 @@ export function checkoutContactReference(error) {
 
 export function checkoutContactReviewMessage(error) {
   const reference = checkoutContactReference(error)
-  return `Não foi possível confirmar os dados de contato. Confira e-mail e telefone; se estiverem corretos, fale com a loja antes de tentar novamente. Seu carrinho foi mantido. Nenhum pedido ou pagamento foi iniciado nesta tentativa.${reference ? ` Referência: ${reference}.` : ''}`
+  return `Precisamos conferir seus contatos com segurança antes de concluir a compra. Revise e-mail e telefone. Se os campos já estiverem corretos, solicite à loja a revisão do cadastro; repetir a tentativa com os mesmos dados não resolve essa conferência. Seu carrinho foi mantido. Nenhum pedido ou pagamento foi iniciado nesta tentativa.${reference ? ` Referência: ${reference}.` : ''}`
 }
 
 // Apenas o contato comercial publicado pela própria vitrine. Nunca inclua os dados

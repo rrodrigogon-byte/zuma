@@ -53,3 +53,17 @@ test('cupom que zera o pedido é recusado (pedido de R$ 0 não tem como ser pago
   );
   assert.ok(!calls.some(sql => sql.includes('UPDATE commerce_orders SET desconto')), 'não grava desconto');
 });
+
+test('aplicação filtra pedido pela vitrine e unidade antes de qualquer DML', async () => {
+  const calls = [];
+  const storefrontId = '88888888-8888-4888-8888-888888888888';
+  const trx = { async query(sql, values) { calls.push({ sql, values }); return { rows: [] }; } };
+  await assert.rejects(
+    applyPromotionToOrder(trx, { empresaId, lojaId }, { orderId, storefrontId, codigo: 'DINO10' }),
+    error => error.code === 'ORDER_NOT_FOUND',
+  );
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].sql, /storefront_id = \$3::uuid/);
+  assert.match(calls[0].sql, /loja_id = \$4::uuid/);
+  assert.deepEqual(calls[0].values, [empresaId, orderId, storefrontId, lojaId]);
+});
