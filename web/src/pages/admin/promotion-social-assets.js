@@ -1,0 +1,103 @@
+const HEX_COLOR = /^#[0-9a-f]{6}$/i
+
+export const DEFAULT_PROMOTION_PALETTE = Object.freeze({
+  background: '#F5EDE0',
+  surface: '#102D29',
+  surfaceAlt: '#1C493C',
+  accent: '#C8F169',
+  text: '#FFF8ED',
+  muted: '#C9D9CE',
+})
+
+function validColor(value, fallback) {
+  return HEX_COLOR.test(String(value || '')) ? String(value).toUpperCase() : fallback
+}
+
+function contrastColor(hex) {
+  const raw = String(hex).replace('#', '')
+  const channels = [0, 2, 4].map(index => Number.parseInt(raw.slice(index, index + 2), 16) / 255)
+  const linear = channels.map(channel => (channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4))
+  const luminance = (0.2126 * linear[0]) + (0.7152 * linear[1]) + (0.0722 * linear[2])
+  return luminance > 0.48 ? '#17312C' : '#FFF8ED'
+}
+
+export function normalizeBrandPalette(colors = {}) {
+  const source = colors && typeof colors === 'object' ? colors : {}
+  const palette = {
+    background: validColor(source.background || source.bg || source.canvas, DEFAULT_PROMOTION_PALETTE.background),
+    surface: validColor(source.surface || source.primary || source.brand, DEFAULT_PROMOTION_PALETTE.surface),
+    surfaceAlt: validColor(source.surfaceAlt || source.secondary || source.brandSecondary, DEFAULT_PROMOTION_PALETTE.surfaceAlt),
+    accent: validColor(source.accent || source.highlight || source.brandAccent, DEFAULT_PROMOTION_PALETTE.accent),
+    text: validColor(source.text || source.foreground, DEFAULT_PROMOTION_PALETTE.text),
+    muted: validColor(source.muted || source.textMuted, DEFAULT_PROMOTION_PALETTE.muted),
+  }
+  return { ...palette, accentText: validColor(source.accentText, contrastColor(palette.accent)) }
+}
+
+export function socialFilename(value, fallback = 'oferta') {
+  return String(value || fallback).toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || fallback
+}
+
+export function buildViralGramPayload({ promotion = {}, brandName = '', brandKey = '', palette = {}, link = '', caption = '', assets = [] } = {}) {
+  const normalizedAssets = Array.isArray(assets)
+    ? assets.filter(asset => asset && typeof asset === 'object').map(asset => ({
+      format: String(asset.format || 'image').slice(0, 30),
+      width: Number(asset.width) || 0,
+      height: Number(asset.height) || 0,
+      filename: socialFilename(asset.filename || `${promotion.nome || 'oferta'}-${asset.format || 'asset'}`),
+      mimeType: String(asset.mimeType || 'image/png').slice(0, 80),
+    }))
+    : []
+  return {
+    schema: 'kytto.viralgram.promotion.v1',
+    generatedAt: new Date().toISOString(),
+    source: 'dino-commerce',
+    brand: {
+      key: String(brandKey || '').slice(0, 80),
+      name: String(brandName || 'Sua loja').slice(0, 120),
+      palette: normalizeBrandPalette(palette),
+    },
+    promotion: {
+      id: promotion.id || null,
+      name: String(promotion.nome || 'Oferta').slice(0, 200),
+      discount: String(promotionDiscount(promotion)).slice(0, 100),
+      code: String(activeCode(promotion)).slice(0, 100),
+      validity: String(promotionValidity(promotion)).slice(0, 240),
+    },
+    caption: String(caption || '').slice(0, 4000),
+    link: String(link || '').slice(0, 600),
+    assets: normalizedAssets,
+    workflow: {
+      target: 'instagram',
+      formats: normalizedAssets.map(asset => asset.format),
+      publication: 'manual_approval_required',
+      integration: 'viralgram_import_package',
+    },
+  }
+}
+
+function activeCode(promotion) {
+  if (!Array.isArray(promotion?.codigos)) return promotion?.codigo || ''
+  return promotion.codigos.find(code => code?.ativo === true && (code.usoMaximo == null || Number(code.usos || 0) < Number(code.usoMaximo)))?.codigo || ''
+}
+
+function promotionDiscount(promotion) {
+  if (promotion?.tipo === 'percentage') return `${Number(promotion.valor || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% de desconto`
+  return `${Number(promotion?.valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} de desconto`
+}
+
+function promotionValidity(promotion) {
+  const format = value => {
+    if (!value) return ''
+    const date = new Date(value)
+    return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(date) : 'data inválida'
+  }
+  const start = format(promotion?.inicio)
+  return promotion?.fim ? `${start || 'Início não informado'} até ${format(promotion.fim)}` : `${start ? `A partir de ${start} · ` : ''}sem prazo`
+}
+
+export function preferredVideoMimeType(mediaRecorder = typeof window !== 'undefined' ? window.MediaRecorder : null) {
+  if (!mediaRecorder?.isTypeSupported) return ''
+  return ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+    .find(type => mediaRecorder.isTypeSupported(type)) || ''
+}

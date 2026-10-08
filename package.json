@@ -13,7 +13,7 @@
     "check:omnichannel-worker": "node --check app/workers/omnichannel-worker.js",
     "test": "npm run test:node && npm run test:vitest",
     "test:node": "node --test --test-concurrency=1 app/*.test.js app/core/*.test.js app/migrations/*.test.js app/tests/pdv-barbearia.test.js web/src/lib/*.test.js",
-    "test:vitest": "vitest run app/tests/crediario.test.js app/tests/fiscal.test.js web/src/pages/admin/commerce-admin-adapter.test.js",
+    "test:vitest": "vitest run app/tests/crediario.test.js app/tests/fiscal.test.js web/src/pages/admin/commerce-admin-adapter.test.js web/src/pages/admin/promotion-social-assets.test.js",
     "test:watch": "vitest",
     "lint": "eslint app/",
     "format": "prettier --write app/",

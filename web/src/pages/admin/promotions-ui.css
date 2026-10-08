@@ -18,7 +18,10 @@
 .promotions-material-actions .ecommerce-admin-button:disabled{cursor:wait;opacity:.65}
 .promotions-material-error{margin:12px 0 0;padding:11px 12px;border:1px solid #f0c9bd;border-radius:11px;background:#fff3ef;color:#873e32;font-size:11px;line-height:1.45}
 .promotions-material-footnote{padding-top:12px;border-top:1px solid #e5eee9}
+.promotions-material-brand{display:flex;align-items:center;gap:10px;margin:12px 0;padding:10px 12px;border:1px solid #dce9e2;border-radius:12px;background:#f8fbf9;color:#17312c}.promotions-material-brand strong{display:block;font-size:12px}.promotions-material-brand small{display:block;margin-top:3px;color:#70837b;font-size:10px}.promotions-material-brand-swatch{width:28px;height:28px;border-radius:9px;border:1px solid rgba(0,0,0,.12);box-shadow:inset 0 0 0 3px rgba(255,255,255,.2)}
+.promotions-material-format-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}.promotions-material-format-grid .ecommerce-admin-button{min-width:0;padding:0 10px;font-size:10px}
 @media(max-width:520px){.promotions-material-modal{max-height:calc(100dvh - 16px);padding:22px 16px}.promotions-material-switcher{grid-template-columns:1fr}.promotions-material-actions{flex-direction:column}.promotions-material-actions .ecommerce-admin-button{width:100%;min-width:0}}
+@media(max-width:620px){.promotions-material-format-grid{grid-template-columns:1fr}.promotions-material-format-grid .ecommerce-admin-button{width:100%}}
 
 /* Editor largo o suficiente para campos datetime, sem invadir a lista. */
 .commerce-promotions-panel .commerce-promotion-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); align-items: start; }
