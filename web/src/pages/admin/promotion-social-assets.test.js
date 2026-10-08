@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildViralGramPayload, DEFAULT_PROMOTION_PALETTE, normalizeBrandPalette, preferredVideoMimeType, socialFilename } from './promotion-social-assets'
+import { buildViralGramPayload, buildViralGramZip, DEFAULT_PROMOTION_PALETTE, normalizeBrandPalette, preferredVideoMimeType, socialFilename } from './promotion-social-assets'
 
 describe('promotion social assets', () => {
   it('normaliza a identidade da vitrine e mantém fallback seguro', () => {
@@ -37,5 +37,18 @@ describe('promotion social assets', () => {
   it('escolhe somente mime types que o navegador declara suportar', () => {
     expect(preferredVideoMimeType({ isTypeSupported: type => type === 'video/webm' })).toBe('video/webm')
     expect(preferredVideoMimeType({ isTypeSupported: () => false })).toBe('')
+  })
+
+  it('empacota o manifesto e os ativos reais em um ZIP compatível', async () => {
+    const payload = { schema: 'kytto.viralgram.promotion.v1', assets: [{ filename: 'oferta-feed.png' }] }
+    const blob = await buildViralGramZip({ payload, assets: [{ filename: 'oferta-feed.png', blob: new Blob(['png-bytes'], { type: 'image/png' }) }] })
+    const bytes = new Uint8Array(await blob.arrayBuffer())
+    const text = new TextDecoder().decode(bytes)
+    expect(blob.type).toBe('application/zip')
+    expect(bytes[0]).toBe(0x50)
+    expect(bytes[1]).toBe(0x4B)
+    expect(text).toContain('viralgram-manifest.json')
+    expect(text).toContain('oferta-feed.png')
+    expect(text).toContain('png-bytes')
   })
 })

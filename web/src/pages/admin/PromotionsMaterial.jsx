@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Clipboard, Download, Image, Package, Video, X } from 'lucide-react'
 import { activePromotionCode, formatPromotionValidity, promotionCopyText, promotionDiscountLabel, promotionStatus, promotionStatusLabel } from './commerce-admin-adapter'
-import { buildViralGramPayload, normalizeBrandPalette, preferredVideoMimeType, socialFilename } from './promotion-social-assets'
+import { buildViralGramPayload, buildViralGramZip, normalizeBrandPalette, preferredVideoMimeType, socialFilename } from './promotion-social-assets'
 
 const SIZES = {
   feed: { width: 1080, height: 1350, label: 'Instagram feed', format: 'feed' },
@@ -438,32 +438,49 @@ export default function PromotionsMaterial({ promotion, link, brandName, brandKe
     }
   }
 
-  function downloadViralGramPackage() {
+  async function downloadViralGramPackage() {
     const liveStatus = currentStatus()
     if (liveStatus !== 'active') {
       setExportError(`A promoção está ${promotionStatusLabel(promotion, Date.now()).toLowerCase()} e não pode ser divulgada.`)
       return
     }
-    const payload = buildViralGramPayload({
-      promotion,
-      brandName,
-      brandKey,
-      palette: normalizedPalette,
-      link: safeLink,
-      caption: copy,
-      assets: [
-        { format: 'feed', width: SIZES.feed.width, height: SIZES.feed.height, filename: `promocao-feed-${socialFilename(promotion.nome)}.png` },
-        { format: 'story', width: SIZES.story.width, height: SIZES.story.height, filename: `promocao-story-${socialFilename(promotion.nome)}.png` },
-        { format: 'carousel', width: SIZES.square.width, height: SIZES.square.height, filename: `promocao-carrossel-${socialFilename(promotion.nome)}.png` },
-        { format: 'video', width: SIZES.story.width, height: SIZES.story.height, mimeType: 'video/webm', filename: `promocao-story-${socialFilename(promotion.nome)}.webm` },
-      ],
-    })
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' })
-    const anchor = document.createElement('a')
-    anchor.download = `viralgram-${socialFilename(promotion.nome)}.json`
-    anchor.href = URL.createObjectURL(blob)
-    anchor.click()
-    window.setTimeout(() => URL.revokeObjectURL(anchor.href), 1000)
+    setExporting(true)
+    try {
+      const filename = socialFilename(promotion.nome)
+      const specs = [
+        { format: 'feed', size: SIZES.feed, filename: `promocao-feed-${filename}.png` },
+        { format: 'story', size: SIZES.story, filename: `promocao-story-${filename}.png` },
+        { format: 'carousel', size: SIZES.square, filename: `promocao-carrossel-1-${filename}.png`, slide: 1 },
+        { format: 'carousel', size: SIZES.square, filename: `promocao-carrossel-2-${filename}.png`, slide: 2 },
+        { format: 'carousel', size: SIZES.square, filename: `promocao-carrossel-3-${filename}.png`, slide: 3 },
+      ]
+      const generatedAssets = []
+      for (const spec of specs) {
+        const canvas = await drawPromotionCanvas(promotion, spec.size, { brandName, link: safeLink, logoSrc, copyText: copy, palette: normalizedPalette, slide: spec.slide || 1 })
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
+        if (!blob) throw new Error('PNG indisponível')
+        generatedAssets.push({ ...spec, blob })
+      }
+      const payload = buildViralGramPayload({
+        promotion,
+        brandName,
+        brandKey,
+        palette: normalizedPalette,
+        link: safeLink,
+        caption: copy,
+        assets: generatedAssets.map(asset => ({ format: asset.format, width: asset.size.width, height: asset.size.height, filename: asset.filename, mimeType: asset.blob.type })),
+      })
+      const blob = await buildViralGramZip({ payload, assets: generatedAssets })
+      const anchor = document.createElement('a')
+      anchor.download = `viralgram-${filename}.zip`
+      anchor.href = URL.createObjectURL(blob)
+      anchor.click()
+      window.setTimeout(() => URL.revokeObjectURL(anchor.href), 1000)
+    } catch {
+      setExportError('Não foi possível montar o ZIP ViralGram. Tente novamente; nenhum conteúdo foi enviado ou publicado.')
+    } finally {
+      setExporting(false)
+    }
   }
 
   return <div className="ecommerce-admin-overlay promotions-material-overlay" role="dialog" aria-modal="true" aria-labelledby="promotions-material-title" onMouseDown={event => { if (event.target === event.currentTarget) onClose?.() }}>
