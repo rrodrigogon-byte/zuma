@@ -1,0 +1,22 @@
+.checkout-promotion-field { min-width: 0; }
+.checkout-promotion-control { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.checkout-promotion-control .checkout-secondary { min-height: 43px; white-space: nowrap; }
+.checkout-promotion-feedback { display: block; margin-top: 6px; font-size: 12px; line-height: 1.4; }
+.checkout-promotion-feedback.is-applied { color: #226342; font-weight: 800; }
+.checkout-promotion-feedback.is-error { color: #b43a30; font-weight: 700; }
+.checkout-promotion-feedback.is-applying { color: #66554a; }
+.checkout-promotion-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 7px; }
+.checkout-promotion-remove { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; }
+.checkout-totals .checkout-discount,
+.checkout-totals .checkout-discount b { color: #226342; }
+html[data-brand='dino'] .checkout-promotion-feedback.is-applied,
+html[data-brand='dino'] .checkout-totals .checkout-discount,
+html[data-brand='dino'] .checkout-totals .checkout-discount b { color: #9ce4bb; }
+html[data-brand='dino'] .checkout-promotion-feedback.is-error { color: #ffb4ac; }
+html[data-brand='dino'] .checkout-promotion-feedback.is-applying { color: #c8c7de; }
+html[data-brand='dino'] .checkout-totals .checkout-total strong { color: #c0bcff; }
+.checkout-promotion-remove:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
+@media(max-width:700px){
+  .checkout-promotion-control { grid-template-columns: 1fr; }
+  .checkout-promotion-control .checkout-secondary { width: 100%; }
+}

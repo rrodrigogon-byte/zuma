@@ -10,7 +10,7 @@ import { infinitepayWebhookDuplicateOwnerSql, infinitepayWebhookUnboundOwnerSql,
 import { lateCaptureReviewExistsSql } from './commerce-order-payment-status.js';
 import { createPaymentAccount, listPaymentAccounts, listPaymentProviders, listPayments, updatePaymentAccount } from './commerce-payment-admin.js';
 import { resolveCommerceIdentity } from './commerce-identity-bridge.js';
-import { applyPromotionToOrder, createPromotion, createPromotionCode, createPromotionTemplate, listPromotionTemplates, listPromotions } from './commerce-promotions.js';
+import { applyPromotionToOrder, createPromotion, createPromotionCode, createPromotionTemplate, listPromotionTemplates, listPromotions, previewPromotion, updatePromotion, updatePromotionCode } from './commerce-promotions.js';
 import { createStorefront, listStorefronts, updateStorefront } from './commerce-storefronts.js';
 import { resolveStorefrontAlias } from './commerce-tenants.js';
 import { executeCatalogImport, previewCatalogImport } from './commerce-catalog-import.js';
@@ -553,6 +553,9 @@ function jsonError(res, error) {
     STOREFRONT_NOT_FOUND: 404,
     PROMOTION_TEMPLATE_NOT_FOUND: 404,
     PROMOTION_TEMPLATE_INVALID: 400,
+    PROMOTION_DATE_INVALID: 400,
+    PROMOTION_USAGE_LIMIT_CONFLICT: 409,
+    PROMOTION_CODE_CONFLICT: 409,
     STORE_SELECTION_REQUIRED: 400,
     CATALOG_IMPORT_SIZE_INVALID: 400,
     CATALOG_IMPORT_SKU_INVALID: 400,
@@ -693,6 +696,18 @@ export function createCommercePublicRouter() {
       const manualShippingReady = shippingMethods.rows.some(row => String(row.configuracao?.provider || '').toLowerCase() === 'manual');
       const shippingReady = shippingAccounts.rows.some(shippingAccountReady) || manualShippingReady;
       res.json({ storefront: { id: storefront.id, codigo: storefront.codigo, nome: storefront.nome, moeda: storefront.moeda, timezone: storefront.timezone, public: sanitizePublicStorefrontConfig(storefront) }, capabilities: { catalog: true, cart: true, checkout: true, payments: paymentsReady, shipping: shippingReady } });
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/promotions/preview', async (req, res) => {
+    try {
+      const storefront = await resolvePublicStorefront(req);
+      const result = await previewPromotion(db, {
+        empresaId: storefront.empresa_id,
+        lojaId: storefront.loja_id,
+        storefrontId: storefront.id,
+      }, { ...(req.body || {}), storefrontId: storefront.id });
+      res.set('Cache-Control', 'no-store');
+      res.json(result);
     } catch (error) { jsonError(res, error); }
   });
   router.get('/products', async (req, res) => {
@@ -1591,11 +1606,25 @@ export function createCommerceAdminRouter() {
       res.status(201).json(result);
     } catch (error) { jsonError(res, error); }
   });
+  router.patch('/promotions/:id', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'promotions.write');
+      const result = await withCommerceTransaction(trx => updatePromotion(trx, context, req.params.id, req.body || {}));
+      res.json(result);
+    } catch (error) { jsonError(res, error); }
+  });
   router.post('/promotions/codes', async (req, res) => {
     try {
       const context = await requirePermission(req, 'promotions.write');
       const result = await withCommerceTransaction(trx => createPromotionCode(trx, context, req.body));
       res.status(201).json(result);
+    } catch (error) { jsonError(res, error); }
+  });
+  router.patch('/promotions/codes/:id', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'promotions.write');
+      const result = await withCommerceTransaction(trx => updatePromotionCode(trx, context, req.params.id, req.body || {}));
+      res.json(result);
     } catch (error) { jsonError(res, error); }
   });
   router.post('/orders/:id/promotion', async (req, res) => {

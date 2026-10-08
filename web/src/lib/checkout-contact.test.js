@@ -11,6 +11,9 @@ test('conflito conserva carrinho, explica bloqueio da tentativa e não revela qu
   assert.match(message, /Nenhum pedido ou pagamento foi iniciado nesta tentativa/)
   assert.match(message, new RegExp(requestId))
   assert.doesNotMatch(message, /private@example\.invalid|customer_phone_mismatch/)
+  assert.match(message, /Se os campos já estiverem corretos, solicite à loja a revisão do cadastro/)
+  assert.match(message, /repetir a tentativa com os mesmos dados não resolve/)
+  assert.doesNotMatch(message, /dados.*(?:vazios|faltando)|cadastros diferentes|cliente existente/)
 })
 
 test('referência inválida ou contaminada nunca é concatenada nem enviada à loja', () => {

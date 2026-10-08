@@ -33,6 +33,8 @@ test('PG local: CONTACT_CONFLICT revoga chave e mantém zero pedido/pagamento/re
       JOIN commerce_variant_prices vp ON vp.empresa_id = v.empresa_id AND vp.variant_id = v.id
       JOIN commerce_price_lists pl ON pl.empresa_id = vp.empresa_id AND pl.id = vp.price_list_id
        AND pl.ativo = true AND pl.canal = 'web'
+      JOIN commerce_product_channels pc ON pc.empresa_id = s.empresa_id AND pc.storefront_id = s.id
+       AND pc.product_id = p.id AND pc.price_list_id = vp.price_list_id AND pc.publicado = true
      WHERE s.status = 'active' AND s.loja_id IS NOT NULL
        AND vp.vigencia_inicio <= CURRENT_TIMESTAMP AND (vp.vigencia_fim IS NULL OR vp.vigencia_fim > CURRENT_TIMESTAMP)
      ORDER BY s.id, p.id LIMIT 1`)).rows[0];

@@ -40,13 +40,14 @@ test('checkout dedicado mantém idempotência entre reloads e preserva os campos
   assert.doesNotMatch(checkoutSource, /payment-methods\?customerId=/);
   assert.doesNotMatch(checkoutSource, /payment-methods\?orderCode=/);
   assert.match(checkoutSource, /note: note\.trim\(\)/);
-  assert.match(checkoutSource, /promotionCode: promotionCode\.trim\(\)/);
+  assert.match(checkoutSource, /promotionConfirmed \? \{ promotionCode: promotionPreview\.codigo \}/);
+  assert.match(checkoutSource, /promotionPreview\.confirmedFingerprint === promotionFingerprint/);
   assert.match(checkoutSource, /CPF ou CNPJ do destinatário/);
   assert.match(checkoutSource, /Continuar para pagamento/);
 });
 
 test('seleção de frete atualiza o total e bloqueia avanço apenas durante a cotação', () => {
-  assert.match(checkoutSource, /checkoutTotal\(cartTotal, selectedOption\)/);
+  assert.match(checkoutSource, /checkoutTotal\(promotionTotals\.subtotalComDesconto, selectedOption\)/);
   assert.match(checkoutSource, /selectedShippingOption\(/);
   assert.match(checkoutSource, /shippingQuoteLoading/);
   assert.match(checkoutSource, /shippingOptionId: selectedOption\.id/);

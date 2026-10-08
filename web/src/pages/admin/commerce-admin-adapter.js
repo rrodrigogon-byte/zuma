@@ -362,23 +362,127 @@ export async function updateCoreOrder(order, status, storefrontId) {
 }
 
 export async function createCorePromotion(form) {
+  const payload = promotionPayload(form)
   const promotion = await api.post('/api/admin/commerce/promotions', {
-    nome: form.nome,
-    tipo: form.tipo,
-    valor: Number(form.valor),
-    limiteUso: form.limiteUso ? Number(form.limiteUso) : null,
+    ...payload,
     templateId: form.templateId || null,
-    ativo: true,
+    ativo: payload.ativo,
+    codigo: String(form.codigo || '').trim().toUpperCase() || null,
+    usoMaximo: form.usoMaximo ? Number(form.usoMaximo) : null,
   })
-  if (form.codigo?.trim()) {
-    await api.post('/api/admin/commerce/promotions/codes', {
-      promotionId: promotion.id,
-      codigo: form.codigo.trim().toUpperCase(),
-      usoMaximo: form.usoMaximo ? Number(form.usoMaximo) : null,
-      ativo: true,
-    })
-  }
   return promotion
+}
+
+export async function updateCorePromotion(id, form) {
+  if (!id) throw new Error('Promoção inválida para edição.')
+  return api.patch(`/api/admin/commerce/promotions/${id}`, promotionPayload(form, { partial: true }))
+}
+
+/**
+ * datetime-local intentionally represents the operator's local wall-clock time.
+ * Date parses a date-time without an offset in the browser's local timezone; the
+ * API receives the resulting UTC ISO string, so DST/offset are not guessed by UI.
+ */
+export function localDateTimeToUtcIso(value, { nullable = false } = {}) {
+  const raw = String(value ?? '').trim()
+  if (!raw && nullable) return null
+  if (!raw) throw new Error('Informe uma data e hora válidas.')
+  const date = new Date(raw)
+  if (!Number.isFinite(date.getTime())) throw new Error('Informe uma data e hora válidas.')
+  return date.toISOString()
+}
+
+export function utcIsoToLocalDateTime(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return ''
+  const pad = numberValue => String(numberValue).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+export function promotionPayload(form = {}, { partial = false } = {}) {
+  const payload = {}
+  if (!partial || form.nome !== undefined) payload.nome = String(form.nome || '').trim()
+  if (!partial || form.tipo !== undefined) payload.tipo = form.tipo
+  if (!partial || form.valor !== undefined) payload.valor = Number(form.valor)
+  if (!partial || form.inicio !== undefined) payload.inicio = localDateTimeToUtcIso(form.inicio)
+  if (!partial || form.fim !== undefined) payload.fim = localDateTimeToUtcIso(form.fim, { nullable: true })
+  if (!partial || form.limiteUso !== undefined) payload.limiteUso = form.limiteUso === '' || form.limiteUso == null ? null : Number(form.limiteUso)
+  if (!partial || form.ativo !== undefined) payload.ativo = form.ativo !== false
+  return payload
+}
+
+export function promotionStatus(promotion = {}, now = Date.now()) {
+  if (promotion.ativo === false) return 'inactive'
+  const limit = promotion.limite_uso ?? promotion.limiteUso
+  const uses = Number(promotion.usos || 0)
+  if (limit != null && Number.isFinite(Number(limit)) && uses >= Number(limit)) return 'exhausted'
+  const start = new Date(promotion.inicio).getTime()
+  const end = promotion.fim ? new Date(promotion.fim).getTime() : null
+  const current = Number(now)
+  if (!Number.isFinite(start) || !Number.isFinite(current) || (end !== null && (!Number.isFinite(end) || end <= start))) return 'inactive'
+  if (Number.isFinite(end) && current >= end) return 'expired'
+  if (Number.isFinite(start) && current < start) return 'scheduled'
+  if (Array.isArray(promotion.codigos) && !activePromotionCode(promotion)) return 'exhausted'
+  return 'active'
+}
+
+export const PROMOTION_STATUS_LABELS = {
+  scheduled: 'Programada',
+  active: 'Ativa',
+  expired: 'Expirada',
+  exhausted: 'Esgotada',
+  inactive: 'Inativa',
+}
+
+export function promotionStatusLabel(promotion, now = Date.now()) {
+  return PROMOTION_STATUS_LABELS[promotionStatus(promotion, now)] || 'Indisponível'
+}
+
+export function promotionHasNoDeadline(promotion = {}) {
+  return promotion.fim == null || String(promotion.fim).trim() === ''
+}
+
+export function formatPromotionValidity(promotion = {}, locale = 'pt-BR') {
+  const format = value => {
+    if (!value) return ''
+    const date = new Date(value)
+    return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' }).format(date) : 'data inválida'
+  }
+  const start = format(promotion.inicio)
+  if (promotionHasNoDeadline(promotion)) return start ? `A partir de ${start} · sem prazo` : 'Sem prazo definido'
+  return `${start || 'Início não informado'} até ${format(promotion.fim)}`
+}
+
+export function promotionDiscountLabel(promotion = {}, currency = 'BRL', locale = 'pt-BR') {
+  if (promotion.tipo === 'percentage') return `${Number(promotion.valor || 0).toLocaleString(locale, { maximumFractionDigits: 2 })}% de desconto`
+  return `${Number(promotion.valor || 0).toLocaleString(locale, { style: 'currency', currency })} de desconto`
+}
+
+export function activePromotionCode(promotion = {}) {
+  if (!Array.isArray(promotion.codigos)) return String(promotion.codigo || '')
+  return promotion.codigos.find(code => code.ativo === true && (code.usoMaximo == null || Number(code.usos || 0) < Number(code.usoMaximo)))?.codigo || ''
+}
+
+export function promotionCopyText(promotion = {}, { link = '', currency = 'BRL', locale = 'pt-BR' } = {}) {
+  const code = activePromotionCode(promotion)
+  const lines = [`${promotion.nome || 'Oferta'}: ${promotionDiscountLabel(promotion, currency, locale)}.`]
+  if (code) lines.push(`Use o código ${code}.`)
+  lines.push(`Validade: ${formatPromotionValidity(promotion, locale)}.`)
+  let safeLink = ''
+  try { const url = new URL(link); if (['http:', 'https:'].includes(url.protocol) && !url.username && !url.password) safeLink = url.href } catch { /* contato ou URL inválidos não são divulgados */ }
+  lines.push(safeLink ? `Confira na loja: ${safeLink}` : 'Consulte as condições na loja.')
+  lines.push('Oferta sujeita às condições e à disponibilidade da loja.')
+  return lines.join('\n')
+}
+
+export function escapePromotionExportText(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
 
 export async function updateCoreMembership(id, payload) {

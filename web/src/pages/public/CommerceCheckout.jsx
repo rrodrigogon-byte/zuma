@@ -10,6 +10,8 @@ import { checkoutShippingErrorMessage, checkoutShippingSupportAction, checkoutTo
 import { checkoutContactReference, checkoutContactReviewMessage, checkoutContactSupportAction } from '../../lib/checkout-contact'
 import { checkoutReturnSafety } from '../../lib/checkout-return-safety'
 import { hasLateCaptureReview, LATE_CAPTURE_COPY } from '../../lib/late-capture-status'
+import { isPromotionOrderRevalidationError, normalizePromotionCode, promotionPreviewErrorMessage, promotionPreviewFingerprint, promotionPreviewTotals, requestPromotionPreview } from '../../lib/checkout-promotion'
+import './checkout-promotion.css'
 
 const EMPTY_ADDRESS = { cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '', referencia: '' }
 
@@ -135,6 +137,9 @@ function CommerceCheckoutSession() {
   const [form, setForm] = useState({ nome: '', email: '', telefone: '', documento: '' })
   const [note, setNote] = useState('')
   const [promotionCode, setPromotionCode] = useState('')
+  const [promotionPreview, setPromotionPreview] = useState(null)
+  const [promotionState, setPromotionState] = useState('idle')
+  const [promotionError, setPromotionError] = useState('')
   const [recoveryPreference, setRecoveryPreference] = useState(null)
   const [order, setOrder] = useState(null)
   const [payment, setPayment] = useState(null)
@@ -162,11 +167,13 @@ function CommerceCheckoutSession() {
   const emptyCartLinkRef = useRef(null)
   const addressNumberRef = useRef(null)
   const emailRef = useRef(null)
+  const promotionButtonRef = useRef(null)
   const contactReviewRef = useRef(null)
   const lastLookupCepRef = useRef('')
   const lastShippingQuoteKeyRef = useRef('')
   const shippingQuoteRequestRef = useRef(0)
   const postalRequestRef = useRef(createLatestRequest())
+  const promotionRequestRef = useRef({ id: 0, controller: null })
 
   function invalidateShippingQuote() {
     shippingQuoteRequestRef.current += 1
@@ -179,13 +186,25 @@ function CommerceCheckoutSession() {
   useEffect(() => () => {
     postalRequestRef.current.invalidate()
     shippingQuoteRequestRef.current += 1
+    promotionRequestRef.current.controller?.abort()
+    promotionRequestRef.current.id += 1
   }, [])
 
   const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + Number(item.preco || 0) * Number(item.qtd || 0), 0), [cart])
+  const promotionFingerprint = useMemo(() => promotionPreviewFingerprint(promotionCode, cart), [promotionCode, cart])
+  const promotionConfirmed = Boolean(
+    promotionPreview
+    && promotionState !== 'applying'
+    && promotionPreview.codigo === normalizePromotionCode(promotionCode)
+    && promotionPreview.confirmedFingerprint === promotionFingerprint,
+  )
+  const promotionTotals = promotionConfirmed
+    ? promotionPreviewTotals(promotionPreview)
+    : { subtotal: cartTotal, desconto: 0, subtotalComDesconto: cartTotal }
   const automaticShippingQuoteKey = shippingQuoteKey({ deliveryMode, address, cart })
   const shippingQuoteIsCurrent = Boolean(shippingQuote && automaticShippingQuoteKey && lastShippingQuoteKeyRef.current === automaticShippingQuoteKey)
   const selectedOption = selectedShippingOption({ deliveryMode, shippingQuote, shippingOptionId, shippingQuoteIsCurrent })
-  const total = checkoutTotal(cartTotal, selectedOption)
+  const total = checkoutTotal(promotionTotals.subtotalComDesconto, selectedOption)
   const deliveryAvailable = shippingMethods.some(item => ['delivery', 'carrier'].includes(item.tipo) && item.quoteEnabled)
   const pickupAvailable = shippingMethods.some(item => item.tipo === 'pickup')
   const paymentReady = Boolean(order && payment)
@@ -208,6 +227,14 @@ function CommerceCheckoutSession() {
     if (!paymentChoices.some(item => `${item.provider}:${item.method}` === selectedPayment)) setSelectedPayment(`${paymentChoices[0].provider}:${paymentChoices[0].method}`)
   }, [paymentChoices, selectedPayment])
   const selectedPaymentChoice = paymentChoices.find(item => `${item.provider}:${item.method}` === selectedPayment) || null
+
+  useEffect(() => {
+    promotionRequestRef.current.controller?.abort()
+    promotionRequestRef.current = { id: promotionRequestRef.current.id + 1, controller: null }
+    setPromotionPreview(null)
+    setPromotionError('')
+    setPromotionState(current => current === 'applying' ? 'idle' : current)
+  }, [promotionFingerprint])
 
   useEffect(() => {
     let active = true
@@ -429,6 +456,50 @@ function CommerceCheckoutSession() {
     return () => window.clearTimeout(timer)
   }, [automaticShippingQuoteKey, shippingQuoteLoading])
 
+  async function applyPromotion() {
+    const code = normalizePromotionCode(promotionCode)
+    if (promotionState === 'applying') return
+    promotionRequestRef.current.controller?.abort()
+    const requestId = promotionRequestRef.current.id + 1
+    const controller = new AbortController()
+    const cartSnapshot = cart
+    const requestFingerprint = promotionPreviewFingerprint(code, cartSnapshot)
+    promotionRequestRef.current = { id: requestId, controller }
+    setPromotionPreview(null)
+    setPromotionError('')
+    setPromotionState('applying')
+    try {
+      const result = await requestPromotionPreview({ api, storefrontApi, code, cart: cartSnapshot, signal: controller.signal })
+      if (requestId !== promotionRequestRef.current.id || controller.signal.aborted) return
+      if (promotionPreviewFingerprint(result.codigo, cartSnapshot) !== requestFingerprint) {
+        const staleError = new Error('A prévia do cupom ficou desatualizada. Revalide o cupom para continuar.')
+        staleError.code = 'PROMOTION_PREVIEW_STALE'
+        throw staleError
+      }
+      setPromotionPreview({ ...result, confirmedFingerprint: requestFingerprint })
+      setPromotionState('applied')
+    } catch (err) {
+      if (requestId !== promotionRequestRef.current.id || err?.name === 'AbortError') return
+      setPromotionPreview(null)
+      setPromotionState('error')
+      setPromotionError(promotionPreviewErrorMessage(err))
+    } finally {
+      if (requestId === promotionRequestRef.current.id) {
+        promotionRequestRef.current.controller = null
+        setPromotionState(current => current === 'applying' ? 'idle' : current)
+      }
+    }
+  }
+
+  function removePromotion() {
+    promotionRequestRef.current.controller?.abort()
+    promotionRequestRef.current = { id: promotionRequestRef.current.id + 1, controller: null }
+    setPromotionCode('')
+    setPromotionPreview(null)
+    setPromotionError('')
+    setPromotionState('idle')
+  }
+
   function removeCartItem(item) {
     if (working || order) return
     setError('')
@@ -450,21 +521,29 @@ function CommerceCheckoutSession() {
     if (orderRequestRef.current || submitting || addressLookupLoading || shippingQuoteLoading) return
     setContactReview(null)
     setError('')
-    if (!form.nome.trim() || !/^\S+@\S+\.\S+$/.test(form.email)) return setError('Informe nome e e-mail válidos.')
+    const email = form.email.trim()
+    const phone = form.telefone.trim()
+    if (!form.nome.trim() || !/^\S+@\S+\.\S+$/.test(email)) return setError('Informe nome e e-mail válidos.')
+    if (phone && phone.replace(/\D/g, '').length < 10) return setError('Informe um telefone válido ou deixe este campo em branco.')
+    if (normalizePromotionCode(promotionCode) && !promotionConfirmed) {
+      setError('Confirme o cupom antes de continuar. A validação precisa ser feita pelo servidor.')
+      window.requestAnimationFrame(() => promotionButtonRef.current?.focus())
+      return
+    }
     if (!shippingMethodId) return setError('A loja ainda não publicou uma forma de entrega.')
     if (deliveryMode === 'entrega' && (!shippingQuoteIsCurrent || !shippingOptionId || !selectedOption)) return setError('Consulte o CEP e recalcule o frete antes de continuar.')
     orderRequestRef.current = true
     setSubmitting(true)
     try {
       const created = await api.post(`${storefrontApi}/orders`, {
-        customer: { nome: form.nome.trim(), email: form.email.trim(), telefone: form.telefone.trim() },
+        customer: { nome: form.nome.trim(), email, telefone: phone },
         items: cart.map(item => ({ variantId: item.variantId, quantity: item.qtd })),
         idempotencyKey: orderIdempotencyKey,
         cartSessionKey,
-        shippingAddress: deliveryMode === 'entrega' ? { ...address, destinatario: form.nome, email: form.email, telefone: form.telefone, documento: form.documento } : { modo: 'retirada' },
+        shippingAddress: deliveryMode === 'entrega' ? { ...address, destinatario: form.nome.trim(), email, telefone: phone, documento: form.documento } : { modo: 'retirada' },
         shippingMethodId,
         note: note.trim(),
-        ...(promotionCode.trim() ? { promotionCode: promotionCode.trim() } : {}),
+        ...(promotionConfirmed ? { promotionCode: promotionPreview.codigo } : {}),
         ...(deliveryMode === 'entrega' ? { shippingQuoteId: selectedOption.quoteId || shippingQuote?.quoteId, shippingOptionId: selectedOption.id } : {}),
       })
       const code = created.codigo || created.publicCode || created.public_code
@@ -482,6 +561,14 @@ function CommerceCheckoutSession() {
         setContactReview({ requestId: checkoutContactReference(err) })
         setError(checkoutContactReviewMessage(err))
         window.requestAnimationFrame(() => contactReviewRef.current?.focus())
+        return
+      }
+      if (isPromotionOrderRevalidationError(err)) {
+        setPromotionPreview(null)
+        setPromotionState('error')
+        setPromotionError(promotionPreviewErrorMessage(err))
+        setError(promotionPreviewErrorMessage(err))
+        window.requestAnimationFrame(() => promotionButtonRef.current?.focus())
         return
       }
       const shippingError = err.code === 'SHIPPING_QUOTE_MISMATCH'
@@ -599,13 +686,13 @@ function CommerceCheckoutSession() {
     <header className="checkout-header"><div className="checkout-header-inner"><Link className={`checkout-brand${isDinoCommerce ? ' checkout-brand-dino-commerce' : ''}`} to={storeRoute} aria-label={`Voltar para ${brandName}`}>{isDinoCommerce ? <img className="checkout-brand-logo" src={DINO_COMMERCE_LOGO} alt="Dino Perfumaria" /> : <><span className="checkout-brand-mark">{brandMark}</span><span>{brandName}</span></>}</Link><div className="checkout-header-security"><ShieldCheck size={16} /> Checkout protegido</div></div></header>
     <div className="checkout-content"><div className="checkout-main-column"><Link className="checkout-back" to={storeRoute}> <ArrowLeft size={14} /> Voltar para a loja</Link><Stepper paymentReady={false} /><section className="checkout-card"><div className="checkout-card-title"><div><span className="eyebrow">Checkout Commerce</span><h1>Finalize sua compra</h1><p>Seu pedido será criado primeiro; o pagamento acontece depois no provedor escolhido.</p></div><span className="checkout-card-icon"><Store size={20} /></span></div>
       <form onSubmit={createOrder}>
-        <div className="checkout-form-grid"><label className="checkout-field"><span>Nome completo *</span><input value={form.nome} onChange={e => setForm(current => ({ ...current, nome: e.target.value }))} autoComplete="name" required /></label><label className="checkout-field"><span>E-mail *</span><input ref={emailRef} type="email" value={form.email} onChange={e => { setForm(current => ({ ...current, email: e.target.value })); if (contactReview) { setContactReview(null); setError('') } }} autoComplete="email" required /></label><label className="checkout-field"><span>WhatsApp ou telefone</span><input value={form.telefone} onChange={e => { setForm(current => ({ ...current, telefone: e.target.value })); if (contactReview) { setContactReview(null); setError('') } }} autoComplete="tel" /></label><label className="checkout-field"><span>Cupom de desconto</span><input value={promotionCode} onChange={e => setPromotionCode(e.target.value.toUpperCase())} autoComplete="off" placeholder="Opcional" /></label></div>
+        <div className="checkout-form-grid"><label className="checkout-field"><span>Nome completo *</span><input value={form.nome} onChange={e => setForm(current => ({ ...current, nome: e.target.value }))} autoComplete="name" required /></label><label className="checkout-field"><span>E-mail *</span><input ref={emailRef} type="email" value={form.email} onChange={e => { setForm(current => ({ ...current, email: e.target.value })); if (contactReview) { setContactReview(null); setError('') } }} autoComplete="email" required /></label><label className="checkout-field"><span>WhatsApp ou telefone</span><input type="tel" value={form.telefone} onChange={e => { setForm(current => ({ ...current, telefone: e.target.value })); if (contactReview) { setContactReview(null); setError('') } }} autoComplete="tel" inputMode="tel" aria-describedby="checkout-phone-help" /><small id="checkout-phone-help" className={form.telefone.trim() && form.telefone.replace(/\D/g, '').length < 10 ? 'checkout-error' : ''}>{form.telefone.trim() && form.telefone.replace(/\D/g, '').length < 10 ? 'Informe ao menos 10 dígitos ou deixe o campo em branco.' : 'Opcional.'}</small></label><div className="checkout-field checkout-promotion-field"><span>Cupom de desconto</span><div className="checkout-promotion-control"><input aria-label="Cupom de desconto" value={promotionCode} onChange={e => { setPromotionCode(e.target.value.toUpperCase()); setError('') }} autoComplete="off" placeholder="Opcional" /><button type="button" className="checkout-secondary" onClick={applyPromotion} ref={promotionButtonRef} disabled={promotionState === 'applying' || !promotionCode.trim() || !cart.length}>{promotionState === 'applying' ? 'Validando…' : promotionConfirmed ? 'Cupom aplicado' : promotionState === 'error' ? 'Revalidar cupom' : 'Confirmar cupom'}</button></div>{promotionState === 'applying' && <small className="checkout-promotion-feedback is-applying" role="status" aria-live="polite">Validando cupom no servidor…</small>}{promotionConfirmed && <div className="checkout-promotion-actions"><small className="checkout-promotion-feedback is-applied" role="status" aria-live="polite">Cupom aplicado</small><button type="button" className="checkout-promotion-remove" onClick={removePromotion}>Remover cupom</button></div>}{promotionError && <small className="checkout-promotion-feedback is-error" role="alert">{promotionError}</small>}</div></div>
         <label className="checkout-recovery-consent"><input type="checkbox" checked={recoveryPreference === true} onChange={event => setRecoveryPreference(event.target.checked)} /><span><strong>Lembrar meu carrinho por WhatsApp</strong><small>Opcional. Autorizo um único lembrete sobre este carrinho. Posso revogar desmarcando ou respondendo SAIR.</small></span></label>
         <div className="checkout-info-banner"><ShieldCheck size={18} /><div><strong>Pagamento fora do formulário.</strong><br />A Kytto não coleta dados de cartão. Você será levado ao checkout seguro do provedor habilitado.</div></div>
         <div className="checkout-address"><div className="checkout-address-heading"><h2>Como receber</h2><span>Escolha uma opção publicada</span></div><div className="shipping-options">{pickupAvailable && <button type="button" className={`shipping-option ${deliveryMode === 'retirada' ? 'is-selected' : ''}`} onClick={() => chooseDelivery('retirada')}><span className="shipping-option-radio">{deliveryMode === 'retirada' ? '✓' : ''}</span><span className="shipping-option-copy"><strong>Retirada no local</strong><small>Confirme com a operação da loja.</small></span><b>Grátis</b></button>}{deliveryAvailable && <button type="button" className={`shipping-option ${deliveryMode === 'entrega' ? 'is-selected' : ''}`} onClick={() => chooseDelivery('entrega')}><span className="shipping-option-radio">{deliveryMode === 'entrega' ? '✓' : ''}</span><span className="shipping-option-copy"><strong>Entrega</strong><small>Disponibilidade, valor e prazo dependem da cobertura publicada para o CEP.</small></span><b>{selectedOption ? money(selectedOption.amount) : 'Consultar'}</b></button>}</div></div>
         {deliveryMode === 'entrega' && <div className="checkout-address"><div className="checkout-form-grid"><label className="checkout-field"><span>CPF ou CNPJ do destinatário *</span><input value={form.documento} onChange={e => setForm(current => ({ ...current, documento: e.target.value }))} inputMode="numeric" autoComplete="off" required /></label><label className="checkout-field"><span>CEP *</span><div className="checkout-inline-field"><input value={address.cep} onChange={e => updateAddress('cep', e.target.value)} onBlur={() => address.cep.replace(/\D/g, '').length === 8 && lookupCep()} inputMode="numeric" autoComplete="postal-code" placeholder="00000-000" required /><button type="button" className="checkout-secondary" onClick={() => lookupCep(address.cep, { force: true })} disabled={addressLookupLoading}>{addressLookupLoading ? 'Consultando…' : 'Consultar CEP'}</button></div></label><label className="checkout-field"><span>Número *</span><input ref={addressNumberRef} value={address.numero} onChange={e => updateAddress('numero', e.target.value)} required /></label><label className="checkout-field"><span>Logradouro *</span><input value={address.logradouro} onChange={e => updateAddress('logradouro', e.target.value)} required /></label><label className="checkout-field"><span>Bairro *</span><input value={address.bairro} onChange={e => updateAddress('bairro', e.target.value)} required /></label><label className="checkout-field"><span>Cidade *</span><input value={address.cidade} onChange={e => updateAddress('cidade', e.target.value)} required /></label><label className="checkout-field"><span>UF *</span><input value={address.estado} onChange={e => updateAddress('estado', e.target.value.toUpperCase())} maxLength={2} required /></label></div><button type="button" className="checkout-secondary" onClick={quoteShipping} disabled={shippingQuoteLoading}>{shippingQuoteLoading ? 'Calculando…' : 'Calcular frete'}</button>{shippingQuote?.items?.map(option => { const selectionId = option.selectionId || option.id; return <label className="commerce-shipping-option" key={selectionId}><input type="radio" name="shippingOption" checked={shippingOptionId === selectionId} onChange={() => { setShippingOptionId(selectionId); setShippingMethodId(option.shippingMethodId || shippingMethodId) }} /><span><strong>{option.name}</strong><small>{shippingPromise(option)}</small>{shippingPriceSummary(option) && <small className="checkout-shipping-price-note">{shippingPriceSummary(option)}</small>}</span><b>{money(option.amount)}</b></label> })}</div>}
         <label className="checkout-field"><span>Observação</span><textarea rows={2} value={note} onChange={e => setNote(e.target.value)} maxLength={1000} placeholder="Preferências ou instruções para a loja" /></label>
         {error && <div ref={contactReview ? contactReviewRef : null} tabIndex={contactReview ? -1 : undefined} className="checkout-form-error" role="alert">{error}{contactReview && <div className="checkout-contact-actions"><button type="button" className="checkout-contact-action" onClick={() => emailRef.current?.focus()}>Revisar e-mail e telefone</button>{contactSupport && <a className="checkout-contact-action" href={contactSupport.href}>{contactSupport.label}</a>}</div>}{shippingSupport && <div className="checkout-contact-actions"><a className="checkout-contact-action" href={shippingSupport.href}>{shippingSupport.label}</a></div>}</div>}<div className="checkout-actions"><span>{deliveryMode === 'entrega' && selectedOption ? `Frete de ${money(selectedOption.amount)} incluído. Estoque e total serão revalidados no servidor.` : 'Estoque e valor serão revalidados no servidor.'}</span><button type="submit" className="checkout-primary checkout-primary-large" disabled={submitting || addressLookupLoading || shippingQuoteLoading || !cart.length || (deliveryMode === 'entrega' && !selectedOption)}>{submitting ? <><Loader2 className="commerce-spin" size={16} /> Criando pedido…</> : shippingQuoteLoading ? 'Aguardando cálculo do frete…' : <>Continuar para pagamento <ArrowRight size={16} /></>}</button></div>
-      </form></section></div><aside className="checkout-summary"><div className="checkout-summary-heading"><div><span className="eyebrow">Seu pedido</span><h2>Resumo da compra</h2></div><span className="checkout-secure">Seguro</span></div><div className="checkout-summary-items">{cart.map(item => <div className="checkout-summary-item" key={`${item.produtoId}-${item.variantId || 'base'}`}><ProductThumb item={item} /><div className="checkout-summary-item-copy"><strong>{item.nome}</strong><span>{item.qtd} unidade(s)</span></div><div className="checkout-summary-item-actions"><b>{money(item.qtd * item.preco)}</b><button type="button" className="checkout-remove-item" onClick={() => removeCartItem(item)} disabled={working || submitting || addressLookupLoading || shippingQuoteLoading} aria-label={`Excluir ${item.nome} do carrinho`} title="Excluir item do carrinho"><Trash2 size={14} aria-hidden="true" /><span>Excluir</span></button></div></div>)}</div><div className="checkout-totals"><div><span>Subtotal</span><b>{money(cartTotal)}</b></div>{selectedOption && <div><span>Entrega</span><b>{money(selectedOption.amount)}</b></div>}<div className="checkout-total"><span>Total</span><strong>{money(total)}</strong></div></div><div className="checkout-trust-list"><span>✓ Estoque revalidado no servidor</span><span>✓ Pagamento no provedor escolhido</span><span>✓ Acompanhamento por código do pedido</span></div></aside></div>
+      </form></section></div><aside className="checkout-summary"><div className="checkout-summary-heading"><div><span className="eyebrow">Seu pedido</span><h2>Resumo da compra</h2></div><span className="checkout-secure">Seguro</span></div><div className="checkout-summary-items">{cart.map(item => <div className="checkout-summary-item" key={`${item.produtoId}-${item.variantId || 'base'}`}><ProductThumb item={item} /><div className="checkout-summary-item-copy"><strong>{item.nome}</strong><span>{item.qtd} unidade(s)</span></div><div className="checkout-summary-item-actions"><b>{money(item.qtd * item.preco)}</b><button type="button" className="checkout-remove-item" onClick={() => removeCartItem(item)} disabled={working || submitting || addressLookupLoading || shippingQuoteLoading} aria-label={`Excluir ${item.nome} do carrinho`} title="Excluir item do carrinho"><Trash2 size={14} aria-hidden="true" /><span>Excluir</span></button></div></div>)}</div><div className="checkout-totals"><div><span>Subtotal</span><b>{money(promotionTotals.subtotal)}</b></div>{promotionConfirmed && <div className="checkout-discount"><span>Desconto</span><b>{money(-promotionTotals.desconto)}</b></div>}{selectedOption && <div><span>Entrega</span><b>{money(selectedOption.amount)}</b></div>}<div className="checkout-total"><span>Total</span><strong>{money(total)}</strong></div></div><div className="checkout-trust-list"><span>✓ Estoque revalidado no servidor</span><span>✓ Pagamento no provedor escolhido</span><span>✓ Acompanhamento por código do pedido</span></div></aside></div>
   </main>
 }
