@@ -49,6 +49,8 @@ function EntradaPrincipal() {
   const host = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
   const destinoDino = destinoInicialDino(host)
   if (destinoDino) return <Navigate to={destinoDino} replace />
+  // Domínio próprio da Stallone (stallone.kytto.com.br): abre direto a loja.
+  if (brandFromHost(host) === 'stallone') return <Navigate to="/ecommerce/stallone" replace />
   if (host === 'loja.kytto.com.br' || ehHostLojaDino(host)) return <Ecommerce />
   return <Layout marketing><Home /></Layout>
 }
@@ -57,6 +59,7 @@ function CheckoutEntry() {
   const host = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
   // Domínio próprio da loja: o checkout sem endereço usa o da loja Dino.
   if (destinoInicialDino(host) === '/perfumaria/dino') return <Navigate to="/checkout/dino" replace />
+  if (brandFromHost(host) === 'stallone') return <Navigate to="/checkout/stallone" replace />
   return host === 'loja.kytto.com.br' || ehHostLojaDino(host) ? <CommerceCheckout /> : <Layout noSidebar><Checkout /></Layout>
 }
 
