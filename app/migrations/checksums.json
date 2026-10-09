@@ -67,5 +67,6 @@
  "062_dino_resumo_diario.sql": "41639fb2e4b0ed8db81cc64806e6b621455aea02cd2e07437c958b5971ee1407",
  "063_whatsapp_channel_instance_owner.sql": "a317bc671f956e481726ba6ae7ce5286878a233a2207530081e01a7461e22096",
  "064_commerce_operational_invites.sql": "11dcb9e730259472c9608607b2b2df510401aa5701708eccb2e5088a5094186f",
- "065_commerce_membership_expiration.sql": "c6021ec3b50640beef84fb953f7a40c2c5c3518dfc9a559f41628f6de1400ea5"
+ "065_commerce_membership_expiration.sql": "c6021ec3b50640beef84fb953f7a40c2c5c3518dfc9a559f41628f6de1400ea5",
+ "066_grupos_empresariais.sql": "711b921749260cbd669985aaa90c5f99cd51d5d712c2c77bff891485983f6653"
 }
