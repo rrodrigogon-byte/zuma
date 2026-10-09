@@ -94,7 +94,7 @@ function assertActorStoreScope(actor, lojaId) {
   }
 }
 
-async function assertTenantOwnerSurvives(trx, empresaId, membership, desired = {}) {
+export async function assertTenantOwnerSurvives(trx, empresaId, membership, desired = {}) {
   if (!membership || String(membership.role_codigo) !== 'tenant_owner' || !effectiveMembership(membership)) return;
   const desiredActive = desired.ativo === undefined ? membership.ativo === true : desired.ativo === true;
   const desiredRole = desired.roleCodigo || membership.role_codigo;
@@ -109,6 +109,10 @@ async function assertTenantOwnerSurvives(trx, empresaId, membership, desired = {
        JOIN commerce_roles r ON r.id = m.role_id AND (r.empresa_id IS NULL OR r.empresa_id = m.empresa_id)
       WHERE m.empresa_id = $1 AND m.id <> $2 AND m.loja_id IS NULL AND m.ativo = true
         AND (m.expires_at IS NULL OR m.expires_at > CURRENT_TIMESTAMP)
+        AND NOT EXISTS (
+          SELECT 1 FROM commerce_account_users au JOIN commerce_accounts a ON a.id = au.account_id
+          WHERE au.usuario_id = u.id AND a.ativo = false
+        )
         AND r.codigo = 'tenant_owner'`,
     [empresaId, membership.id],
   );

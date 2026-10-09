@@ -40,12 +40,13 @@ function assertPassword(password) {
   const value = String(password ?? '');
   if (
     value.length < 12
+    || Buffer.byteLength(value, 'utf8') > 72
     || !/[a-z]/u.test(value)
     || !/[A-Z]/u.test(value)
     || !/[0-9]/u.test(value)
     || !/[^A-Za-z0-9\s]/u.test(value)
   ) {
-    throw new OperationalInviteError('senha deve ter ao menos 12 caracteres, maiúscula, minúscula, número e símbolo', 'WEAK_PASSWORD');
+    throw new OperationalInviteError('senha deve ter ao menos 12 caracteres e no máximo 72 bytes, com maiúscula, minúscula, número e símbolo', 'WEAK_PASSWORD');
   }
   return value;
 }
@@ -236,7 +237,8 @@ export async function issueOperationalInvite({ empresaId, email, nome, legacyEma
       [emailNorm],
     );
     const user = await trx.query(
-      `SELECT 1 FROM usuarios WHERE lower(btrim(email)) = $1 LIMIT 1`,
+      `SELECT 1 FROM usuarios WHERE lower(btrim(email)) = $1
+       UNION ALL SELECT 1 FROM commerce_accounts WHERE email = $1 LIMIT 1`,
       [emailNorm],
     );
     if (user.rows[0]) throw new OperationalInviteError('e-mail já está associado a um usuário', 'OPERATIONAL_EMAIL_RESERVED');
@@ -428,6 +430,8 @@ export async function isOperationalEmailReserved(email, options = {}) {
     `SELECT 1 AS reserved
        FROM usuarios
       WHERE lower(btrim(email)) = $1
+      UNION ALL
+     SELECT 1 AS reserved FROM commerce_accounts WHERE email = $1
       UNION ALL
      SELECT 1 AS reserved
        FROM commerce_operational_invites

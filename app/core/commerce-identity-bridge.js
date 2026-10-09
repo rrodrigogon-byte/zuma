@@ -1,5 +1,6 @@
 import { CommerceError, tenantContext } from './commerce-core.js';
 import { db } from './database.js';
+import { accountRequestIdentity } from './commerce-accounts.js';
 
 function clean(value, max = 180) {
   return String(value || '').trim().slice(0, max);
@@ -19,6 +20,14 @@ function requestedScope(req) {
  */
 export async function resolveCommerceIdentity(req) {
   const user = req.user;
+  if (user?.pgAccount === true) {
+    const context = accountRequestIdentity(user, requestedScope(req));
+    if (context.lojaId) {
+      const store = await db.queryRead('SELECT 1 FROM lojas WHERE id=$1 AND empresa_id=$2 AND ativa=true', [context.lojaId, context.empresaId]);
+      if (!store.rows[0]) throw new CommerceError('Unidade fora do escopo da empresa.', 'STORE_SCOPE_MISMATCH');
+    }
+    return tenantContext(context);
+  }
   if (user?.pgOperational === true) {
     const empresaId = clean(user.empresaId);
     const lojaId = clean(req.headers['x-loja-id']);

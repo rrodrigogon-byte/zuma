@@ -26,6 +26,8 @@ import * as modificadoresCombosKytto from './modificadores-combos-kytto.js';
 import { mail } from './email.js';
 import { acceptOperationalInvite, findOperationalByEmail, resolveOperationalById, issueOperationalInvite, isOperationalEmailReserved } from './core/commerce-operational-invites.js';
 import { listOperationalInvites, operationalInviteHttpError, operationalInviteReadiness } from './core/commerce-invite-status.js';
+import { accountByLegacyId, accountCredential, accountRequestIdentity, accountSession, findAccountByEmail, linkedAccountForLocalUser, resolveAccountUser } from './core/commerce-accounts.js';
+import { createAccountManagementRouter } from './core/commerce-account-routes.js';
 import { emitir as nfceEmitir, cancelar as nfceCancelar, nfceConfigurado } from './nfce.js';
 import { createCommerceAdminRouter, createCommercePublicRateLimitGuard, createCommercePublicRouter, createCommerceWebhookRouter } from './core/commerce-routes.js';
 import { createWhatsappAiWebhookRouter } from './core/whatsapp-ai-routes.js';
@@ -197,7 +199,7 @@ const ROLES = ['admin','organizador','staff','atleta'];
 const STAFF = ['admin','organizador','staff']; // acesso ao sistema/painel
 const norm = s => String(s||'').trim().toLowerCase();
 const PLATFORM_ADMIN_EMAILS = new Set((process.env.PLATFORM_ADMIN_EMAILS || '').split(',').map(norm).filter(Boolean));
-const isPlatformAdminUser = user => Boolean(user?.pgOperational !== true && (user?.platformAdmin === true || PLATFORM_ADMIN_EMAILS.has(norm(user?.email))));
+const isPlatformAdminUser = user => Boolean(user?.pgAccount !== true && user?.pgOperational !== true && (user?.platformAdmin === true || PLATFORM_ADMIN_EMAILS.has(norm(user?.email))));
 // E-mails de administração (plataforma e admin principal) não podem ser cadastrados por
 // registro público nem por administrador de empresa: o e-mail sozinho daria acesso global.
 const isReservedEmail = email => PLATFORM_ADMIN_EMAILS.has(norm(email)) || norm(email) === norm(process.env.ADMIN_USER || 'admin');
@@ -223,7 +225,7 @@ function senhaConfere(senha, hash){
   if(typeof senha !== 'string' || typeof hash !== 'string' || !hash) return false;
   try { return bcrypt.compareSync(senha, hash); } catch { return false; }
 }
-const publicUser = u => ({ id:u.id, nome:u.nome, email:u.email, role:u.role, telefone:u.telefone, ativo:u.ativo, platformAdmin:isPlatformAdminUser(u) });
+const publicUser = u => ({ id:u.id, nome:u.nome, email:u.email, role:u.role, telefone:u.telefone, ativo:u.ativo, platformAdmin:isPlatformAdminUser(u), ...(u.pgAccount ? { pgAccount:true, tenantBound:true, commerceUserId:u.commerceUserId || null } : {}) });
 
 // O login legado continua sendo a porta de entrada, mas o Commerce Core precisa
 // receber o contexto multiempresa/multiloja da membership PostgreSQL. A consulta
@@ -231,6 +233,7 @@ const publicUser = u => ({ id:u.id, nome:u.nome, email:u.email, role:u.role, tel
 // não possui uma membership para este usuário.
 async function commerceSessionFor(user) {
   if (process.env.COMMERCE_CORE_ENABLED !== '1' || !user?.email) return {};
+  if (user.pgAccount === true) return accountSession(user);
   try {
     const identities = await commerceDb.queryRead(
       `SELECT id FROM usuarios WHERE lower(btrim(email)) = $1 AND ativo = true LIMIT 2`,
@@ -311,18 +314,47 @@ function seedDemoUsers(){
 seedDemoUsers();
 
 // ---- auth ----
+async function authenticateAccountRequest(req, res, next, accountId) {
+  try {
+    if (process.env.COMMERCE_CORE_ENABLED !== '1') return res.status(401).json({ error:'sessão encerrada', code:'SESSION_REVOKED' });
+    const account = await resolveAccountUser(accountId, { legacyUsers:db().usuarios || [] });
+    if (!account || account.email !== norm(req.user.email)) return res.status(401).json({ error:'sessão encerrada', code:'SESSION_REVOKED' });
+    req.user = account;
+    const empresaId = String(req.headers['x-empresa-id'] || '').trim();
+    const lojaId = String(req.headers['x-loja-id'] || '').trim();
+    if (empresaId || new Set(account.accountAccess.map(row => row.empresa_id)).size === 1) {
+      const context = accountRequestIdentity(account, { empresaId, lojaId });
+      if (context.lojaId) {
+        const store = await commerceDb.queryRead('SELECT 1 FROM lojas WHERE empresa_id=$1 AND id=$2 AND ativa=true', [context.empresaId,context.lojaId]);
+        if (!store.rows[0]) return res.status(403).json({ error:'unidade não autorizada', code:'STORE_SCOPE_MISMATCH' });
+      }
+      req.user.empresaId = context.empresaId;
+      req.user.lojaId = context.lojaId;
+      req.user.commerceUserId = context.usuarioId;
+      req.user.commerceRoleCode = context.roleCode;
+      req.user.role = context.roleCode === 'customer' ? 'cliente' : ['tenant_owner','store_admin'].includes(context.roleCode) ? 'admin' : 'organizador';
+    }
+    return next();
+  } catch (error) {
+    const scope = ['PERMISSION_DENIED','TENANT_SELECTION_REQUIRED','STORE_SELECTION_REQUIRED','STORE_SCOPE_MISMATCH','INVALID_ID'].includes(error?.code);
+    return res.status(scope ? 403 : 503).json({ error:scope ? 'selecione uma empresa e unidade autorizadas' : 'não foi possível confirmar a sessão', code:scope ? error.code : 'SCOPE_UNAVAILABLE' });
+  }
+}
 function auth(req,res,next){
   const h = req.headers.authorization || '';
   const token = h.startsWith('Bearer ') ? h.slice(7) : null;
   if(!token) return res.status(401).json({error:'sem token'});
   try { req.user = jwt.verify(token, JWT_SECRET); }
   catch(e){ return res.status(401).json({error:'token inválido'}); }
+  if (req.user.pgAccount === true) return authenticateAccountRequest(req, res, next, req.user.id);
   if (req.user.pgOperational === true) {
     if (process.env.COMMERCE_CORE_ENABLED !== '1' || !req.user.id || !req.user.empresaId || req.user.lojaId || req.user.role !== 'organizador') {
       return res.status(401).json({ error: 'sessão encerrada', code: 'SESSION_REVOKED' });
     }
-    return resolveOperationalById({ userId: req.user.id, empresaId: req.user.empresaId }).then(owner => {
+    return resolveOperationalById({ userId: req.user.id, empresaId: req.user.empresaId }).then(async owner => {
       if (!owner || owner.email !== req.user.email) return res.status(401).json({ error: 'sessão encerrada', code: 'SESSION_REVOKED' });
+      const linked = await linkedAccountForLocalUser(owner.id);
+      if (linked?.ativo === false) return res.status(401).json({ error:'sessão encerrada', code:'SESSION_REVOKED' });
       req.user = { id: owner.id, nome: owner.nome, email: owner.email, role: 'organizador', empresaId: owner.empresaId, pgOperational: true, tenantBound: true, platformAdmin: false };
       return next();
     }).catch(() => res.status(503).json({ error: 'não foi possível confirmar a sessão', code: 'SCOPE_UNAVAILABLE' }));
@@ -334,6 +366,15 @@ function auth(req,res,next){
   req.user.role = conta.role;
   req.user.platformAdmin = isPlatformAdminUser(conta);
   req.user.mainAdmin = isMainAdminUser(conta);
+  if (process.env.COMMERCE_CORE_ENABLED === '1' && !isPlatformAdminUser(conta) && !isMainAdminUser(conta)) {
+    return accountByLegacyId(conta.id).then(account => account
+      ? authenticateAccountRequest(req,res,next,account.id)
+      : authenticateLegacyBinding(req,res,next,conta)
+    ).catch(() => res.status(503).json({ error:'não foi possível confirmar a sessão', code:'SCOPE_UNAVAILABLE' }));
+  }
+  return authenticateLegacyBinding(req,res,next,conta);
+}
+function authenticateLegacyBinding(req,res,next,conta) {
   // O escopo de empresa é decidido no servidor, não só pelo token: um token sem
   // empresaId só é global para o admin principal e para administradores da plataforma.
   // Quem tem vínculo ativo com alguma empresa fica preso a ela mesmo que tenha entrado
@@ -377,7 +418,7 @@ function auth(req,res,next){
     return false;
   }).then(ok => { if (ok) next(); }).catch(next);
 }
-const isMainAdminUser = user => user?.pgOperational !== true && norm(user?.email) === norm(process.env.ADMIN_USER || 'admin');
+const isMainAdminUser = user => user?.pgAccount !== true && user?.pgOperational !== true && norm(user?.email) === norm(process.env.ADMIN_USER || 'admin');
 // Não manter cache: revogação ou vencimento de membership deve derrubar também
 // JWTs legados na próxima requisição, inclusive nas APIs da barbearia.
 async function tenantBindingFor(email) {
@@ -692,6 +733,7 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
     try { res.json(await commerceSessionFor(req.user)); }
     catch(error){ res.status(500).json({ error:'não foi possível atualizar o contexto multiempresa', code:'COMMERCE_SESSION_ERROR' }); }
   });
+  app.use('/api/admin/platform/accounts', createAccountManagementRouter({ getLegacyUsers:() => db().usuarios || [], reservedEmail:isReservedEmail }));
   app.get('/api/admin/platform/commerce-tenants', requirePlatformAdmin, async (req,res)=>{
     try { res.json(await listCommerceTenants()); }
     catch(error){ res.status(500).json({ error:'não foi possível listar os tenants do Commerce', code:error?.code || 'TENANT_LIST_ERROR' }); }
@@ -1061,11 +1103,38 @@ app.get('/api/inscricoes-count', (req,res)=>{
 
 // =================== API ADMIN ===================
 // Login do SISTEMA (admin/organizador/staff) — compatível com o painel atual
+async function tryAccountLogin(email, password, res, panelOnly, rateKey) {
+  if (process.env.COMMERCE_CORE_ENABLED !== '1') return false;
+  const account = await findAccountByEmail(email);
+  if (!account) return false;
+  const credential = accountCredential(account, db().usuarios || []);
+  if (!account.ativo || !senhaConfere(String(password || ''), credential)) {
+    res.status(401).json({ error:'usuário ou senha inválidos', code:'INVALID_CREDENTIALS' });
+    return true;
+  }
+  const user = await resolveAccountUser(account.id, { legacyUsers:db().usuarios || [] });
+  if (!user || (panelOnly && user.role === 'cliente')) {
+    res.status(403).json({ error:'esta conta não possui acesso ativo ao painel', code:'PERMISSION_DENIED' });
+    return true;
+  }
+  const sessao = await commerceSessionFor(user);
+  if (sessao.empresaId) {
+    const local = accountRequestIdentity(user, { empresaId:sessao.empresaId, lojaId:sessao.lojaId });
+    user.commerceUserId = local.usuarioId;
+    user.role = local.roleCode === 'customer' ? 'cliente' : ['tenant_owner','store_admin'].includes(local.roleCode) ? 'admin' : 'organizador';
+  }
+  limparTentativas(rateKey);
+  const token = jwt.sign({ id:user.id, email:user.email, pgAccount:true }, JWT_SECRET, { expiresIn:'12h' });
+  res.json({ token, user:publicUser(user), role:user.role, sessao });
+  return true;
+}
 app.post('/api/admin/login', async (req,res)=>{
   const { user, pass, senha } = req.body || {};
   const senhaInformada = pass ?? senha;
   const chave = 'adm:'+(req.ip||'')+':'+norm(user);
   if(!rateLimit(chave)) return res.status(429).json({error:'muitas tentativas. Tente novamente em alguns minutos.'});
+  try { if (await tryAccountLogin(user, senhaInformada, res, true, chave)) return; }
+  catch { return res.status(503).json({ error:'acesso temporariamente indisponível', code:'SCOPE_UNAVAILABLE' }); }
   const u = findUser(user);
   if (!u && process.env.COMMERCE_CORE_ENABLED === '1') {
     try {
@@ -1111,17 +1180,19 @@ app.post('/api/auth/register', publicLimit(10), async (req,res)=>{
   db().usuarios.push(u); save();
   res.json({ token: tokenFor(u), user: publicUser(u) });
 });
-app.post('/api/auth/login', (req,res)=>{
+app.post('/api/auth/login', async (req,res)=>{
   const { email, senha } = req.body || {};
   const chave = 'site:'+(req.ip||'')+':'+norm(email);
   if(!rateLimit(chave)) return res.status(429).json({error:'muitas tentativas. Tente novamente em alguns minutos.'});
+  try { if (await tryAccountLogin(email, senha, res, false, chave)) return; }
+  catch { return res.status(503).json({ error:'acesso temporariamente indisponível', code:'SCOPE_UNAVAILABLE' }); }
   const u = findUser(email);
   if(!u || !u.ativo || !senhaConfere(String(senha || ''), u.senhaHash)) return res.status(401).json({error:'e-mail ou senha inválidos'});
   limparTentativas(chave);
   res.json({ token: tokenFor(u), user: publicUser(u) });
 });
 app.get('/api/auth/me', auth, (req,res)=>{
-  if (req.user.pgOperational === true) return res.json(publicUser(req.user));
+  if (req.user.pgOperational === true || req.user.pgAccount === true) return res.json(publicUser(req.user));
   const u = db().usuarios.find(x=>x.id===req.user.id);
   if(!u) return res.status(404).json({error:'usuário não encontrado'});
   res.json(publicUser(u));
@@ -1148,6 +1219,12 @@ app.get('/api/admin/usuarios', auth, requireStaff, (req,res)=> res.json((db().us
 // distintas; nunca editar uma conta Commerce pelo editor legado.
 app.get('/api/admin/usuarios-diretorio', auth, requireRole('admin', 'organizador'), async (req, res) => {
   res.set('Cache-Control', 'private, no-store');
+  if (req.user.pgAccount === true) {
+    try {
+      const context = await requireCommercePermission(req, 'users.write');
+      return res.json({ ok:true, ...await listAdminUserDirectory({ commerceDb, legacyUsers:[], allCompanies:false, empresaId:context.empresaId, lojaId:context.lojaId, coreEnabled:true }) });
+    } catch { return res.status(403).json({ error:'Sem permissão para consultar usuários desta empresa.', code:'PERMISSION_DENIED' }); }
+  }
   if (req.user.pgOperational === true) {
     return res.status(403).json({ error: 'Sem permissão para administrar usuários.', code: 'PERMISSION_DENIED' });
   }
@@ -2478,6 +2555,9 @@ async function resolverEscopoBarbearia(req, res, next) {
   next();
 }
 function exigirPapelOperacaoBarbearia(req, res, next) {
+  if (req.user?.pgAccount === true && !['tenant_owner','store_admin'].includes(req.user.commerceRoleCode)) {
+    return res.status(403).json({ error:'Este perfil especializado opera somente os módulos Commerce permitidos pelo seu papel.', code:'COMMERCE_ROLE_USE_SCOPED_MODULE' });
+  }
   if (['admin', 'organizador'].includes(String(req.user?.role || ''))) return next();
   const endpoint = req.path || '';
   const leituraGerencial = /^\/(?:overview|dashboard|analytics|metas|financeiro|bi|auditoria|relatorios|comissoes|clientes|clientes-360|crm\/resumo|operacao\/resumo|operacao\/caixas|fiscal\/documentos|vendas-revenda)(?:\/|$)/.test(endpoint);
@@ -5855,6 +5935,10 @@ app.post('/api/auth/registro', publicLimit(10), async (req, res) => {
   if (d.usuarios.find(u => u.email === norm(email))) {
     return res.status(409).json({ error: 'e-mail já cadastrado' });
   }
+  if (process.env.COMMERCE_CORE_ENABLED === '1') {
+    try { if (await isOperationalEmailReserved(email)) return res.status(409).json({ error:'e-mail já cadastrado ou reservado', code:'IDENTITY_ALREADY_EXISTS' }); }
+    catch { return res.status(503).json({ error:'cadastro temporariamente indisponível' }); }
+  }
   const hash = await bcrypt.hash(senha, 10);
   const u = { id: nextId(), nome, email: norm(email), senhaHash: hash, role: 'atleta',
     telefone: telefone || '', ativo: true, criadoEm: new Date().toISOString() };
@@ -5865,6 +5949,7 @@ app.post('/api/auth/registro', publicLimit(10), async (req, res) => {
 
 // GET /api/me — perfil do usuário autenticado
 app.get('/api/me', auth, (req, res) => {
+  if (req.user.pgAccount === true) return res.json(publicUser(req.user));
   const u = (db().usuarios || []).find(u => u.id == req.user.id);
   if (!u) return res.status(404).json({ error: 'não encontrado' });
   res.json(publicUser(u));
@@ -5872,17 +5957,19 @@ app.get('/api/me', auth, (req, res) => {
 
 // PATCH /api/auth/perfil — atualizar dados e/ou senha
 app.patch('/api/auth/perfil', auth, async (req, res) => {
+  if (req.user.pgAccount === true) return res.status(403).json({ error:'Conta multiempresa: alterações de identidade são gerenciadas pela administração da plataforma.', code:'CANONICAL_PROFILE_MANAGED' });
   const { nome, email, telefone, senhaNova, senhaAtual } = req.body || {};
   const d = db();
   const u = (d.usuarios || []).find(x => x.id == req.user.id);
   if (!u) return res.status(404).json({ error: 'não encontrado' });
+  const updates = {};
   if (senhaNova) {
     if (!senhaAtual) return res.status(400).json({ error: 'senha atual obrigatória' });
     const ok = await bcrypt.compare(senhaAtual, u.senhaHash);
     if (!ok) return res.status(401).json({ error: 'senha atual incorreta' });
-    u.senhaHash = await bcrypt.hash(senhaNova, 10);
+    updates.senhaHash = await bcrypt.hash(senhaNova, 10);
   }
-  if (nome) u.nome = nome;
+  if (nome) updates.nome = nome;
   if (email && norm(email) !== u.email) {
     // O e-mail identifica a conta (login e acesso à loja). Trocar exige a senha atual,
     // e-mail livre e que não seja de administrador da plataforma.
@@ -5891,9 +5978,14 @@ app.patch('/api/auth/perfil', auth, async (req, res) => {
     if (!senhaAtual || !(await bcrypt.compare(String(senhaAtual), u.senhaHash))) return res.status(401).json({ error: 'confirme a senha atual para trocar o e-mail' });
     if (findUser(novo)) return res.status(409).json({ error: 'e-mail já cadastrado' });
     if (PLATFORM_ADMIN_EMAILS.has(novo) || novo === norm(process.env.ADMIN_USER || 'admin')) return res.status(409).json({ error: 'e-mail reservado' });
-    u.email = novo;
+    if (process.env.COMMERCE_CORE_ENABLED === '1') {
+      try { if (await isOperationalEmailReserved(novo)) return res.status(409).json({ error:'e-mail já cadastrado ou reservado', code:'IDENTITY_ALREADY_EXISTS' }); }
+      catch { return res.status(503).json({ error:'alteração de identidade temporariamente indisponível' }); }
+    }
+    updates.email = novo;
   }
-  if (telefone !== undefined) u.telefone = telefone;
+  if (telefone !== undefined) updates.telefone = telefone;
+  Object.assign(u, updates);
   save();
   res.json(publicUser(u));
 });
