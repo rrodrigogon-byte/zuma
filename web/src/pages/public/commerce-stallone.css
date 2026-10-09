@@ -1,0 +1,142 @@
+/* ============================================================================
+   Loja Stallone Nutre Sport — vitrine escura, vermelho de energia e amarelo de
+   destaque. Tokens vêm de html[data-brand='stallone'] (theme.css).
+   ============================================================================ */
+html[data-brand='stallone'] .commerce-shell {
+  --commerce-ink: var(--fg);
+  --commerce-muted: var(--muted);
+  --commerce-line: var(--line);
+  --commerce-paper: var(--surface);
+  --commerce-orange: var(--accent);
+  --commerce-lime: #F4E24A;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body, var(--font));
+}
+
+html[data-brand='stallone'] .commerce-shell h1,
+html[data-brand='stallone'] .commerce-shell h2,
+html[data-brand='stallone'] .commerce-shell h3 {
+  font-family: var(--font-display);
+}
+
+/* Hero: preto profundo com a lâmina vermelha do logotipo. */
+html[data-brand='stallone'] .commerce-hero {
+  background:
+    linear-gradient(100deg, transparent 52%, rgba(232, 70, 60, .92) 52.2%, rgba(232, 70, 60, .92) 54%, transparent 54.2%) no-repeat right -120px bottom -40px / 70% 60%,
+    radial-gradient(120% 90% at 100% 0%, #1D1D23 0%, #0B0B0D 60%);
+  color: #F6F5F0;
+  border: 1px solid #24242A;
+}
+html[data-brand='stallone'] .commerce-hero::after {
+  border-color: rgba(244, 226, 74, .18);
+  box-shadow: 0 0 0 48px rgba(232, 70, 60, .05), 0 0 0 96px rgba(232, 70, 60, .03);
+}
+html[data-brand='stallone'] .commerce-hero .commerce-eyebrow { color: #F4E24A; }
+html[data-brand='stallone'] .commerce-hero h1 { font-weight: 800; letter-spacing: -.045em; font-style: italic; }
+html[data-brand='stallone'] .commerce-hero h1 em { color: #E8463C; }
+html[data-brand='stallone'] .commerce-hero p { color: #C9C8C2; }
+html[data-brand='stallone'] .commerce-button-primary {
+  background: #E8463C;
+  color: #FFFFFF;
+  box-shadow: 0 10px 26px rgba(232, 70, 60, .28);
+}
+html[data-brand='stallone'] .commerce-button-primary:hover { background: #FF5A4F; }
+
+.commerce-stallone-brandbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 14px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(246, 245, 240, .12);
+  position: relative;
+  z-index: 2;
+}
+.commerce-stallone-brandbar > img {
+  width: min(260px, 56vw);
+  height: auto;
+  display: block;
+  background: #0B0B0D;
+  border-radius: 14px;
+}
+.commerce-stallone-theme {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(246, 245, 240, .14);
+  border-radius: 12px;
+  background: rgba(246, 245, 240, .04);
+}
+.commerce-stallone-theme button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #C9C8C2;
+  font: 800 11px var(--font-body, var(--font));
+  cursor: pointer;
+}
+.commerce-stallone-theme button.active { background: #E8463C; color: #FFFFFF; }
+
+/* Pilares no lugar da órbita genérica. */
+html[data-brand='stallone'] .commerce-stallone-pillars::before { border-color: rgba(232, 70, 60, .45); }
+html[data-brand='stallone'] .commerce-stallone-pillars::after { border-color: rgba(244, 226, 74, .25); }
+html[data-brand='stallone'] .commerce-stallone-pillars strong {
+  color: #FFFFFF;
+  font-weight: 900;
+  font-style: italic;
+  font-family: var(--font-display);
+}
+html[data-brand='stallone'] .commerce-stallone-pillars span { color: #F4E24A; }
+
+/* Vitrine e cards. */
+html[data-brand='stallone'] .commerce-search,
+html[data-brand='stallone'] .commerce-product-card,
+html[data-brand='stallone'] .commerce-modal,
+html[data-brand='stallone'] .commerce-form input,
+html[data-brand='stallone'] .commerce-form textarea,
+html[data-brand='stallone'] .commerce-close {
+  background: var(--card);
+  color: var(--fg);
+  border-color: var(--line);
+}
+html[data-brand='stallone'] .commerce-product-open,
+html[data-brand='stallone'] .commerce-product-image,
+html[data-brand='stallone'] .commerce-product-placeholder {
+  background: linear-gradient(135deg, var(--surface-2), var(--card2));
+}
+html[data-brand='stallone'] .commerce-product-content > span { color: #E8463C; }
+html[data-brand='stallone'] .commerce-product-details-button { color: var(--fg); }
+html[data-brand='stallone'] .commerce-categories button { color: var(--muted); }
+html[data-brand='stallone'] .commerce-categories button.is-active,
+html[data-brand='stallone'] .commerce-cart-button {
+  background: #E8463C;
+  border-color: #E8463C;
+  color: #FFFFFF;
+}
+html[data-brand='stallone'] .commerce-cart-button b { background: #F4E24A; color: #0B0B0D; }
+html[data-brand='stallone'] .commerce-product-buy button {
+  background: transparent;
+  border-color: var(--fg);
+  color: var(--fg);
+}
+html[data-brand='stallone'] .commerce-product-buy button:hover {
+  background: #E8463C;
+  border-color: #E8463C;
+  color: #FFFFFF;
+}
+
+/* Tema claro (escolhido pelo cliente): mantém o hero escuro como assinatura. */
+html[data-brand='stallone'][data-theme='light'] .commerce-product-content > span { color: #C7342B; }
+
+@media (max-width: 620px) {
+  .commerce-stallone-brandbar { flex-direction: column; align-items: flex-start; }
+  .commerce-stallone-theme { width: 100%; }
+  .commerce-stallone-theme button { flex: 1; justify-content: center; }
+}

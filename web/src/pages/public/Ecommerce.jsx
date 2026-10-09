@@ -5,7 +5,8 @@ import { api, fmtR } from '../../lib/api'
 import { decrementCartQuantity, loadAllStorefrontProducts, nextStorefrontCartSyncVersion, normalizeStorefrontAlias, storefrontApiBase, storefrontCartSessionKey, storefrontMediaRecoveryUrl, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
 import { recommendedShippingOption, shippingQuoteKey } from '../../lib/checkout-shipping'
 import { createLatestRequest } from '../../lib/latest-request'
-import { applyThemeMode, commerceDisplayName, DINO_COMMERCE_LOGO, storedThemeMode } from '../../lib/brand'
+import { applyThemeMode, brandFromHost, commerceDisplayName, DINO_COMMERCE_LOGO, STALLONE_LOGO, storedThemeMode } from '../../lib/brand'
+import './commerce-stallone.css'
 import { addProductToCart, filterCatalog, sortCatalog, stockState } from '../../lib/storefront-catalog'
 import AddToCartSuccess from '../../components/store/AddToCartSuccess'
 import CartDrawer from '../../components/store/CartDrawer'
@@ -178,6 +179,7 @@ function EcommerceStorefront({ routeAlias, hostName }) {
   const navigate = useNavigate()
   const storeAlias = normalizeStorefrontAlias(routeAlias)
   const isDinoStorefront = storeAlias === 'dino' || (ehHostLojaDino(hostName) && !storeAlias)
+  const isStalloneStorefront = storeAlias === 'stallone' || (brandFromHost(hostName) === 'stallone' && !storeAlias)
   const storefrontApi = storefrontApiBase(storeAlias)
   const storeRoute = storefrontRoute(storeAlias, 'store')
   const checkoutRoute = storefrontRoute(storeAlias, 'checkout')
@@ -627,9 +629,9 @@ function EcommerceStorefront({ routeAlias, hostName }) {
   const brandName = commerceDisplayName(storeAlias, publicBrand.displayName, storeContext?.nome)
   useEffect(() => {
     const previous = document.title
-    document.title = `${isDinoStorefront ? 'Dino Perfumaria' : brandName} | Loja online`
+    document.title = `${isDinoStorefront ? 'Dino Perfumaria' : isStalloneStorefront ? 'Stallone Nutre Sport' : brandName} | Loja online`
     return () => { document.title = previous }
-  }, [brandName, isDinoStorefront])
+  }, [brandName, isDinoStorefront, isStalloneStorefront])
   const brandTagline = publicBrand.tagline || 'Uma experiência de compra completa para produtos, serviços e operações locais — com catálogo, atendimento e gestão conectados.'
   const publicAddress = formatPublicAddress(publicBrand.address)
   const publicPhone = String(publicBrand.contact?.phone || '')
@@ -644,16 +646,19 @@ function EcommerceStorefront({ routeAlias, hostName }) {
   return <main className="commerce-shell sf-ux" data-storefront-alias={storeAlias || undefined}>
     <section className="commerce-hero">
       {isDinoStorefront && <div className="commerce-dino-brandbar"><div className="commerce-dino-identity"><div className="commerce-dino-logo-frame"><img src={DINO_COMMERCE_LOGO} alt="Dino — Barbearia e Perfumaria" /></div><div className="commerce-dino-brand-copy"><span>Dino</span><strong>Barbearia &amp; Perfumaria</strong><small>Estilo, cuidado e presença.</small></div></div><div className="commerce-dino-theme" role="group" aria-label="Tema da loja">{[["system", Monitor, "Sistema"], ["light", Sun, "Claro"], ["dark", Moon, "Escuro"]].map(([mode, Icon, label]) => <button type="button" key={mode} onClick={() => changeThemeMode(mode)} className={themeMode === mode ? 'active' : ''} aria-pressed={themeMode === mode} title={`Tema ${label.toLowerCase()}`}><Icon size={14} /><span>{label}</span></button>)}</div></div>}
+      {isStalloneStorefront && <div className="commerce-stallone-brandbar"><img src={STALLONE_LOGO} alt="Stallone Nutre Sport" width="240" height="88" /><div className="commerce-stallone-theme" role="group" aria-label="Tema da loja">{[["dark", Moon, "Escuro"], ["light", Sun, "Claro"]].map(([mode, Icon, label]) => <button type="button" key={mode} onClick={() => changeThemeMode(mode)} className={(themeMode === mode || (mode === 'dark' && themeMode === 'system')) ? 'active' : ''} aria-pressed={themeMode === mode || (mode === 'dark' && themeMode === 'system')} title={`Tema ${label.toLowerCase()}`}><Icon size={14} /><span>{label}</span></button>)}</div></div>}
       <div>
         <span className="commerce-eyebrow"><Store size={14} /> {brandName}</span>
-        <h1>{isDinoStorefront ? <>Autocuidado, estilo e bem-estar. <em>Compre com confiança.</em></> : <>Venda melhor. <em>Opere com inteligência.</em></>}</h1>
+        <h1>{isDinoStorefront ? <>Autocuidado, estilo e bem-estar. <em>Compre com confiança.</em></> : isStalloneStorefront ? <>Do treino à mesa. <em>Nutrição que performa.</em></> : <>Venda melhor. <em>Opere com inteligência.</em></>}</h1>
         <p>{brandTagline}</p>
         <div className="commerce-hero-actions">
           <a className="commerce-button commerce-button-primary" href="#catalogo">Explorar catálogo <ArrowRight size={16} /></a>
           <button type="button" className="commerce-button commerce-button-quiet" onClick={openTracking}>Acompanhar pedido</button>
         </div>
       </div>
-      <div className="commerce-hero-orbit" aria-hidden="true"><span>CATÁLOGO</span><span>ESTOQUE</span><span>PEDIDOS</span><strong>∞</strong></div>
+      {isStalloneStorefront
+        ? <div className="commerce-hero-orbit commerce-stallone-pillars" aria-hidden="true"><span>WHEY</span><span>CREATINA</span><span>GRANEL</span><strong>S</strong></div>
+        : <div className="commerce-hero-orbit" aria-hidden="true"><span>CATÁLOGO</span><span>ESTOQUE</span><span>PEDIDOS</span><strong>∞</strong></div>}
       <div className="commerce-channel-status" role="status"><span className={catalogSource === 'core' ? 'is-live' : ''}>{catalogSource === 'core' ? 'Estoque atualizado' : catalogSource === 'legacy' ? 'Catálogo da loja' : 'Conectando catálogo'}</span><small>{catalogSource === 'core' ? 'Disponibilidade confirmada ao finalizar a compra.' : 'Disponibilidade sujeita à confirmação da loja.'}</small></div>
     </section>
 

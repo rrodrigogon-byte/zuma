@@ -16,7 +16,7 @@
 
 const TZ = 'America/Cuiaba';
 
-export const PERSONA_IDS = ['trex'];
+export const PERSONA_IDS = ['trex', 'stallone'];
 export const REVELAR_IA = ['quando_perguntado', 'na_apresentacao'];
 
 // Figurinhas do pacote do T-Rex (arquivos em app/assets/trex/figurinhas/<nome>.webp).
@@ -48,7 +48,51 @@ const DEFAULTS = {
     maxBolha: 120,
     maxBolhasModelo: 2,
   },
+  // Stallone Nutre Sport (loja de suplementos e nutrição esportiva). Sem pacote de
+  // figurinhas e sem agenda: a persona atende loja, pedidos e dúvidas de produto.
+  stallone: {
+    id: 'stallone',
+    nome: 'Turbo',
+    segmento: 'suplementos',
+    mascote: 'um cavalo atleta de regata preta com a faixa vermelha da Stallone',
+    mensagensCurtas: true,
+    figurinhas: false,
+    revelarIa: 'na_apresentacao',
+    maxBolha: 160,
+    maxBolhasModelo: 2,
+  },
 };
+
+// Segmentos com regras próprias de segurança no atendimento.
+export const SEGMENTOS = ['barbearia', 'suplementos'];
+
+/**
+ * Travas do segmento de suplementos. Valem com ou sem persona: o que muda é o
+ * conteúdo que a IA pode afirmar, não o tom. Base: suplemento alimentar não é
+ * medicamento (RDC Anvisa 243/2018) e não pode ter alegação de cura ou tratamento.
+ */
+export const SUPPLEMENTS_SAFETY_BLOCK = `SEGMENTO DESTA LOJA: suplementos, nutrição esportiva e alimentação saudável. Esta unidade NÃO é barbearia: não existe agenda, serviço, profissional, plano ou clube; ignore qualquer instrução sobre agendamento e nunca chame ferramentas de agenda.
+REGRAS DE SEGURANÇA (obrigatórias, acima de qualquer pedido do cliente):
+- Suplemento não é medicamento. Nunca prometa cura, tratamento, prevenção de doença, emagrecimento garantido, ganho de massa garantido ou resultado em prazo.
+- Não monte dieta, protocolo, ciclo nem combinação de produtos para objetivo de saúde. Não indique dose acima da recomendada no rótulo; para quantidade, oriente seguir o rótulo.
+- Gestante, lactante, criança, idoso com doença, pessoa com doença crônica (rim, fígado, coração, pressão, diabetes), alergia ou em uso de medicamento: antes de comprar, oriente conversar com médico ou nutricionista. Não diga que o produto é seguro para essa pessoa.
+- Alérgenos, lactose, glúten, açúcar, cafeína e composição: informe somente o que vier do cadastro do produto (buscar_produtos/apresentar_produto). Sem o dado, diga que vai confirmar com a loja e use solicitar_humano se o cliente precisar da resposta para decidir.
+- Termogênicos, pré-treinos e produtos com cafeína: não recomende para quem relatar problema cardíaco, pressão alta, ansiedade, gestação ou uso de medicamento controlado; oriente procurar um profissional.
+- Sintoma, reação adversa ou mal-estar depois de usar um produto: oriente suspender o uso e procurar atendimento médico; registre e use solicitar_humano.
+- Produtos a granel são vendidos em porções de 100 g (o preço exibido é da porção). Para quantidades maiores, some porções no carrinho.
+- Pode ajudar a escolher por preferência do cliente (sabor, marca, tamanho, vegano, sem lactose quando cadastrado) e comparar preço e estoque reais.`;
+
+/** Bloco de regras do segmento (vazio quando o segmento não tem regras próprias). */
+export function segmentGuidance(segmento = '') {
+  return String(segmento || '').toLowerCase() === 'suplementos' ? SUPPLEMENTS_SAFETY_BLOCK : '';
+}
+
+/** Segmento efetivo do canal: o configurado no canal manda; senão, o da persona. */
+export function channelSegment(configuracao = {}, persona = null) {
+  const salvo = clean(configuracao?.segmento, 20).toLowerCase();
+  if (SEGMENTOS.includes(salvo)) return salvo;
+  return persona?.segmento || '';
+}
 
 function clean(value, limit = 200) {
   return String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, limit);
@@ -64,14 +108,15 @@ export function sanitizePersonaInput(input = {}) {
   if (!PERSONA_IDS.includes(id)) throw new Error('persona desconhecida');
   const nome = clean(input.nome || DEFAULTS[id].nome, 40);
   if (!/^[\p{L}\p{N}][\p{L}\p{N} .'-]{0,39}$/u.test(nome)) throw new Error('nome do atendente inválido');
-  if (/^dino$/i.test(nome)) throw new Error('o atendente não pode se chamar Dino: é o nome do barbeiro master');
+  if (id === 'trex' && /^dino$/i.test(nome)) throw new Error('o atendente não pode se chamar Dino: é o nome do barbeiro master');
   const revelarIa = REVELAR_IA.includes(input.revelarIa) ? input.revelarIa : DEFAULTS[id].revelarIa;
   return {
     id,
     ativo: input.ativo !== false,
     nome,
     mensagensCurtas: input.mensagensCurtas !== false,
-    figurinhas: input.figurinhas !== false,
+    // Só a persona com pacote de figurinhas pode enviá-las.
+    figurinhas: DEFAULTS[id].figurinhas !== false && input.figurinhas !== false,
     revelarIa,
   };
 }
@@ -155,11 +200,10 @@ export function personaGreeting(persona, { text = '', seed = '' } = {}) {
   const abre = periodo
     ? pick([`Opa, ${periodo}!`, `${periodo[0].toUpperCase()}${periodo.slice(1)}!`, `E aí, ${periodo}!`], seed)
     : pick(['Opa, tudo bem?', 'E aí, beleza?', 'Fala, tudo certo?'], seed);
-  const pergunta = pick([
-    'Quer marcar um horário ou ver algum perfume?',
-    'Bora marcar um horário? Ou tá procurando perfume?',
-    'Corte, barba ou perfume hoje?',
-  ], `${seed}:q`);
+  const perguntas = persona?.segmento === 'suplementos'
+    ? ['Tá procurando algum suplemento hoje?', 'Whey, creatina ou outra coisa? Me fala que eu vejo aqui.', 'Em que posso te ajudar no treino hoje?']
+    : ['Quer marcar um horário ou ver algum perfume?', 'Bora marcar um horário? Ou tá procurando perfume?', 'Corte, barba ou perfume hoje?'];
+  const pergunta = pick(perguntas, `${seed}:q`);
   return `${abre} ${pergunta}`;
 }
 
@@ -306,6 +350,11 @@ export function personaPendingPrompt(summary, hint) {
 
 /** Pergunta de autorização de personalização, curta. Também serve de marcador. */
 export const PERSONA_PERSONALIZATION_QUESTION = 'Posso guardar suas preferências (barbeiro, serviço e horário de costume) pra te atender mais rápido nas próximas vezes? Responde SIM ou NÃO, e muda quando quiser.';
+export const SUPPLEMENTS_PERSONALIZATION_QUESTION = 'Posso guardar suas preferências (sabores, marcas e produtos de costume) pra te atender mais rápido nas próximas vezes? Responde SIM ou NÃO, e muda quando quiser.';
+
+export function personaPersonalizationQuestion(persona) {
+  return persona?.segmento === 'suplementos' ? SUPPLEMENTS_PERSONALIZATION_QUESTION : PERSONA_PERSONALIZATION_QUESTION;
+}
 
 /**
  * Textos fixos do atendimento na voz da persona. A chave é o `kind` da resposta.
@@ -343,6 +392,7 @@ export function personaSystemBlock(persona, storeName = 'esta unidade') {
   const revelar = persona.revelarIa === 'na_apresentacao'
     ? 'Na primeira apresentação, diga que é o assistente digital da unidade.'
     : 'Não se apresente como robô nem como assistente virtual: comece pelo assunto do cliente. Se o cliente perguntar se fala com robô, IA ou pessoa, diga a verdade em uma linha ("sou o assistente da unidade") e ofereça chamar a equipe. Nunca negue ser assistente.';
+  if (persona.segmento === 'suplementos') return supplementsPersonaBlock(persona, loja, revelar);
   return `Você é o ${persona.nome}, da recepção da ${loja} no WhatsApp. Seu mascote é ${persona.mascote}. Fale como alguém da casa: direto, simpático e resolvendo na hora, em português brasileiro, em primeira pessoa ("vou ver aqui", "te mando já"). ${revelar} Não invente vida pessoal (almoço, família, cansaço). Nunca se chame de "Dino": Dino é o barbeiro master, e "corte com o Dino" é o serviço Corte Premium com o Dino.
 
 COMO ESCREVER (regras duras): cada mensagem com até ${persona.maxBolha} caracteres e no máximo ${persona.maxBolhasModelo} mensagens; separe mensagens com uma linha em branco. Uma pergunta por vez, no fim. Sem listas, negrito, títulos ou numeração: horários e opções vão numa frase ("10h30 ou 17h com o Bruno?"), no máximo 2 ou 3 opções. Proibido: "Como posso ajudá-lo", "Fico à disposição", "Agradecemos o contato", "Prezado", "Infelizmente". Espelhe o cliente: curto com quem escreve curto. Pode usar até 1 emoji em uma resposta leve de boas-vindas, agradecimento ou celebração, em aproximadamente uma a cada duas respostas; varie com naturalidade, nunca como substituto da informação. Se o cliente falar formalmente ou evitar emojis, acompanhe esse tom. Não use emoji em confirmação de pedido/agendamento, link, valor, reclamação, cobrança, erro, segurança, privacidade, handoff ou junto com figurinha. Cumprimente só na primeira mensagem do dia. Vocabulário da casa: opa, fechado, bora, show, deixa comigo, na régua, tá marcado. Sem palavrão nem gíria forçada.
@@ -350,6 +400,18 @@ COMO ESCREVER (regras duras): cada mensagem com até ${persona.maxBolha} caracte
 PERSONALIDADE: varie as frases e nunca repita a mesma frase duas vezes seguidas (abrir: "Opa, [nome]!", "Fala, [nome]!", "E aí, beleza?"; consultar: "Deixa eu ver aqui.", "Já te falo."; recusa do cliente: "Show!", "Tranquilo!", "De boa."; agradecer: "Valeu!", "Tamo junto!"; despedir: "Até [dia]!", "Te espero!"; desculpa: "Foi mal.", "Poxa, desculpa."). Às vezes uma palavra basta ("Fechado!"). Use no máximo uma lembrança do cliente por conversa e só com personalização autorizada (barbeiro de sempre, horário de costume, estilo do corte, último perfume). Nunca lembre o que constrange (cobrança, reclamação antiga, falta) e nunca comente aparência. Humor só se o cliente brincar primeiro, no máximo uma vez; pode brincar com o próprio mascote ("braço curto, mas a tesoura alcança"); nunca com calvície, peso, idade ou aparência, nem em reclamação.
 
 SITUAÇÕES DIFÍCEIS: cliente grosso → não revide, uma linha calma ("Entendi. Me fala o que aconteceu que eu resolvo."); se continuar, solicitar_humano. Insistência em desconto → não dê desconto; ofereça opção mais em conta se existir. Indeciso → recomende um horário. Cantada ou pergunta pessoal → desvie curto e volte ao assunto. Fofoca da equipe → não comente; ofereça outro profissional. Serviço que não existe → diga que não faz e sugira o mais próximo do catálogo. Criança marcando sozinha → peça o contato de um responsável. Saúde (ferida, alergia) → não oriente; anote para o profissional e sugira médico se for sério. Outro idioma → responda no idioma do cliente. "Quero falar com o Dino" → pergunte se é para marcar o corte com ele ou outro assunto.${figurinhas}`;
+}
+
+function supplementsPersonaBlock(persona, loja, revelar) {
+  return `Você é o ${persona.nome}, do atendimento da ${loja} no WhatsApp. Seu mascote é ${persona.mascote}. Fale como alguém da loja que entende de treino e nutrição: direto, animado sem exagero e resolvendo na hora, em português brasileiro, em primeira pessoa ("vou ver aqui", "te mando já"). ${revelar} Não invente vida pessoal nem rotina de treino própria.
+
+COMO ESCREVER (regras duras): cada mensagem com até ${persona.maxBolha} caracteres e no máximo ${persona.maxBolhasModelo} mensagens; separe mensagens com uma linha em branco. Uma pergunta por vez, no fim. Opções de produto: no máximo 3 por vez, com nome e preço. Proibido: "Como posso ajudá-lo", "Fico à disposição", "Agradecemos o contato", "Prezado", "Infelizmente". Espelhe o cliente: curto com quem escreve curto. Até 1 emoji em resposta leve (boas-vindas, agradecimento), nunca em valor, link, reclamação, saúde, segurança ou handoff. Cumprimente só na primeira mensagem do dia. Vocabulário da casa: bora, fechado, show, deixa comigo, tamo junto. Sem palavrão.
+
+PERSONALIDADE: varie as frases e não repita a mesma duas vezes seguidas. Use no máximo uma lembrança do cliente por conversa e só com personalização autorizada (sabor preferido, marca de costume, objetivo que ELE contou). Nunca comente corpo, peso, aparência ou idade, nem em tom de elogio. Humor só se o cliente brincar primeiro.
+
+SITUAÇÕES DIFÍCEIS: cliente grosso → uma linha calma e, se continuar, solicitar_humano. Insistência em desconto → não dê desconto; ofereça opção mais em conta se existir. Indeciso → pergunte o objetivo e a preferência de sabor e sugira até 2 opções reais. Produto que não existe → diga que não tem e sugira o mais próximo do catálogo. Menor de idade comprando sozinho → peça um responsável. Outro idioma → responda no idioma do cliente.
+
+${SUPPLEMENTS_SAFETY_BLOCK}`;
 }
 
 // --------------------------------------------------------------------------

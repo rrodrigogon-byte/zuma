@@ -342,3 +342,12 @@ test('pergunta de personalização no primeiro contato: uma vez e nunca com aç�
   assert.equal(shouldAskPersonalization({ policy, consent, session: { estado: { personalizacaoRespondida: true } } }), false, 'quem respondeu NÃO não é perguntado de novo');
   assert.equal(shouldAskPersonalization({ policy, consent, session: {}, pendingAction: true }), false);
 });
+
+test('prompt: segmento suplementos acrescenta as travas mesmo sem persona; Dino não muda', async () => {
+  const { buildWhatsappAiSystemPrompt: build } = await import('./whatsapp-ai.js');
+  const stallone = build({ storeName: 'Stallone Nutre Sport', segment: 'suplementos' });
+  assert.match(stallone, /Suplemento não é medicamento/);
+  assert.match(stallone, /NÃO é barbearia/);
+  const dino = build({ storeName: 'Barbearia Dino' });
+  assert.doesNotMatch(dino, /Suplemento não é medicamento/);
+});

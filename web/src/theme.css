@@ -177,6 +177,112 @@ html[data-brand='dino'] ::-webkit-scrollbar-thumb { background: #3A4152; }
 html[data-brand='dino'] ::-webkit-scrollbar-thumb:hover { background: #4A5368; }
 
 
+/* ============================================================================
+   STALLONE NUTRE SPORT — preto, branco, vermelho de energia e amarelo de destaque.
+   Escuro por padrão (identidade da marca); claro só quando o usuário escolhe.
+   ============================================================================ */
+html[data-brand='stallone'] {
+  color-scheme: dark;
+  --orange: #E8463C;
+  --orange-dark: #FF6A5F;
+  --navy: #F6F5F0;
+  --sand: #0B0B0D;
+  --graphite: #A3A3AB;
+  --line: #2A2A31;
+  --success: #3FB27F;
+  --danger: #FF6A5F;
+  --deep: #0B0B0D;
+  --green: #E8463C;
+  --lime: #F4E24A;
+  --gold: #F4E24A;
+  --cream: #F6F5F0;
+  --bg: #0B0B0D;
+  --surface: #131317;
+  --surface-2: #1A1A20;
+  --card: #17171B;
+  --card2: #121216;
+  --muted: #A3A3AB;
+  --text: #F6F5F0;
+  --fg: #F6F5F0;
+  --accent: #E8463C;
+  --accent-strong: #FF6A5F;
+  --accent-soft: rgba(232,70,60,.16);
+  --focus-ring: rgba(244,226,74,.55);
+  --brand-header: #0B0B0D;
+  --brand-header-accent: #E8463C;
+  --brand-header-text: #F6F5F0;
+  --shadow: 0 1px 2px rgba(0,0,0,.35), 0 10px 30px rgba(0,0,0,.45);
+  --shadow-lg: 0 16px 50px rgba(0,0,0,.6);
+  --chart-1: #E8463C;
+  --chart-2: #F4E24A;
+  --chart-3: #3FB27F;
+  --chart-4: #6E8BFF;
+  --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: 'Outfit', 'Plus Jakarta Sans', sans-serif;
+}
+
+html[data-brand='stallone'][data-theme='light'] {
+  color-scheme: light;
+  --orange: #C7342B;
+  --orange-dark: #A92A22;
+  --navy: #0B0B0D;
+  --sand: #F6F5F0;
+  --graphite: #5E5E66;
+  --line: #E3E1DA;
+  --success: #23855A;
+  --danger: #C7342B;
+  --deep: #0B0B0D;
+  --green: #C7342B;
+  --lime: #8A7A00;
+  --gold: #8A7A00;
+  --cream: #0B0B0D;
+  --bg: #F6F5F0;
+  --surface: #FFFFFF;
+  --surface-2: #EFEDE6;
+  --card: #FFFFFF;
+  --card2: #F9F8F4;
+  --muted: #5E5E66;
+  --text: #0B0B0D;
+  --fg: #0B0B0D;
+  --accent: #C7342B;
+  --accent-strong: #A92A22;
+  --accent-soft: rgba(199,52,43,.10);
+  --focus-ring: rgba(199,52,43,.42);
+  --brand-header: #0B0B0D;
+  --brand-header-accent: #E8463C;
+  --brand-header-text: #F6F5F0;
+  --shadow: 0 1px 2px rgba(11,11,13,.05), 0 8px 24px rgba(11,11,13,.08);
+  --shadow-lg: 0 12px 48px rgba(11,11,13,.2);
+}
+
+html[data-brand='stallone'],
+html[data-brand='stallone'] body,
+html[data-brand='stallone'] #root {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+html[data-brand='stallone'] input,
+html[data-brand='stallone'] textarea,
+html[data-brand='stallone'] select {
+  background: var(--card);
+  color: var(--fg);
+  border-color: var(--line);
+}
+
+html[data-brand='stallone'] select option { background: var(--card); color: var(--fg); }
+html[data-brand='stallone'] input::placeholder,
+html[data-brand='stallone'] textarea::placeholder { color: #7C7C85; }
+html[data-brand='stallone'] th { background: var(--card2); }
+html[data-brand='stallone'] tr:hover td { background: var(--accent-soft); }
+html[data-brand='stallone'] .table-wrap { background: var(--card); }
+html[data-brand='stallone'] .modal-body,
+html[data-brand='stallone'] .sheet-body { background: var(--surface); }
+html[data-brand='stallone'] ::-webkit-scrollbar-thumb { background: #3A3A42; }
+html[data-brand='stallone'] ::-webkit-scrollbar-thumb:hover { background: #4A4A54; }
+
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { min-height: 100%; background: var(--sand); }
 body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; -webkit-font-smoothing: antialiased; }
