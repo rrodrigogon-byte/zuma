@@ -3,7 +3,7 @@ import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
 import { useAuth } from './lib/auth'
-import { applyBrand, applyThemeMode, isDinoBrandContext, resolveBrand, storedThemeMode } from './lib/brand'
+import { applyBrand, applyThemeMode, brandFromContext, brandFromHost, brandHasThemeChoice, resolveBrand, storedThemeMode } from './lib/brand'
 import { isTenantScope } from './lib/tenant-scope'
 import { destinoInicialDino, ehHostDino, ehHostLojaDino } from './lib/dominios-dino'
 
@@ -170,12 +170,12 @@ function RouteBrandSync() {
   const location = useLocation()
   const { empresaAtiva } = useAuth()
   const hostName = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
-  const tenantBrand = isDinoBrandContext(empresaAtiva) ? 'dino' : 'kytto'
+  const tenantBrand = brandFromContext(empresaAtiva)
 
   useEffect(() => {
-    const brand = ehHostDino(hostName) ? 'dino' : resolveBrand(location.pathname, location.search, tenantBrand)
+    const brand = ehHostDino(hostName) ? 'dino' : (brandFromHost(hostName) || resolveBrand(location.pathname, location.search, tenantBrand))
     applyBrand(brand)
-    applyThemeMode(brand === 'dino' ? storedThemeMode() : 'system')
+    applyThemeMode(brandHasThemeChoice(brand) ? storedThemeMode() : 'system')
   }, [hostName, location.pathname, location.search, tenantBrand])
 
   return null
