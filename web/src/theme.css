@@ -178,43 +178,43 @@ html[data-brand='dino'] ::-webkit-scrollbar-thumb:hover { background: #4A5368; }
 
 
 /* ============================================================================
-   STALLONE NUTRE SPORT — preto, branco, vermelho de energia e amarelo de destaque.
-   Escuro por padrão (identidade da marca); claro só quando o usuário escolhe.
+   STALLONE NUTRE SPORT — carvão, branco e vermelho de energia.
+   Vitrine escura e administração clara por padrão; escolha do usuário preservada.
    ============================================================================ */
 html[data-brand='stallone'] {
   color-scheme: dark;
-  --orange: #E8463C;
+  --orange: #E32935;
   --orange-dark: #FF6A5F;
-  --navy: #F6F5F0;
-  --sand: #0B0B0D;
+  --navy: #F7F7F5;
+  --sand: #141416;
   --graphite: #A3A3AB;
   --line: #2A2A31;
   --success: #3FB27F;
   --danger: #FF6A5F;
-  --deep: #0B0B0D;
-  --green: #E8463C;
-  --lime: #F4E24A;
-  --gold: #F4E24A;
-  --cream: #F6F5F0;
-  --bg: #0B0B0D;
+  --deep: #141416;
+  --green: #E32935;
+  --lime: #B7B7BF;
+  --gold: #B7B7BF;
+  --cream: #F7F7F5;
+  --bg: #141416;
   --surface: #131317;
   --surface-2: #1A1A20;
   --card: #17171B;
   --card2: #121216;
   --muted: #A3A3AB;
-  --text: #F6F5F0;
-  --fg: #F6F5F0;
-  --accent: #E8463C;
+  --text: #F7F7F5;
+  --fg: #F7F7F5;
+  --accent: #E32935;
   --accent-strong: #FF6A5F;
-  --accent-soft: rgba(232,70,60,.16);
-  --focus-ring: rgba(244,226,74,.55);
-  --brand-header: #0B0B0D;
-  --brand-header-accent: #E8463C;
-  --brand-header-text: #F6F5F0;
+  --accent-soft: rgba(227,41,53,.16);
+  --focus-ring: rgba(227,41,53,.55);
+  --brand-header: #141416;
+  --brand-header-accent: #E32935;
+  --brand-header-text: #F7F7F5;
   --shadow: 0 1px 2px rgba(0,0,0,.35), 0 10px 30px rgba(0,0,0,.45);
   --shadow-lg: 0 16px 50px rgba(0,0,0,.6);
-  --chart-1: #E8463C;
-  --chart-2: #F4E24A;
+  --chart-1: #E32935;
+  --chart-2: #B7B7BF;
   --chart-3: #3FB27F;
   --chart-4: #6E8BFF;
   --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -224,34 +224,34 @@ html[data-brand='stallone'] {
 
 html[data-brand='stallone'][data-theme='light'] {
   color-scheme: light;
-  --orange: #C7342B;
+  --orange: #CF202C;
   --orange-dark: #A92A22;
-  --navy: #0B0B0D;
-  --sand: #F6F5F0;
-  --graphite: #5E5E66;
-  --line: #E3E1DA;
+  --navy: #141416;
+  --sand: #F7F7F5;
+  --graphite: #62626B;
+  --line: #E3E3E7;
   --success: #23855A;
-  --danger: #C7342B;
-  --deep: #0B0B0D;
-  --green: #C7342B;
-  --lime: #8A7A00;
-  --gold: #8A7A00;
-  --cream: #0B0B0D;
-  --bg: #F6F5F0;
+  --danger: #CF202C;
+  --deep: #141416;
+  --green: #CF202C;
+  --lime: #72727A;
+  --gold: #72727A;
+  --cream: #141416;
+  --bg: #F7F7F5;
   --surface: #FFFFFF;
-  --surface-2: #EFEDE6;
+  --surface-2: #EFEFF2;
   --card: #FFFFFF;
-  --card2: #F9F8F4;
-  --muted: #5E5E66;
-  --text: #0B0B0D;
-  --fg: #0B0B0D;
-  --accent: #C7342B;
+  --card2: #FAFAFA;
+  --muted: #62626B;
+  --text: #141416;
+  --fg: #141416;
+  --accent: #CF202C;
   --accent-strong: #A92A22;
   --accent-soft: rgba(199,52,43,.10);
   --focus-ring: rgba(199,52,43,.42);
-  --brand-header: #0B0B0D;
-  --brand-header-accent: #E8463C;
-  --brand-header-text: #F6F5F0;
+  --brand-header: #141416;
+  --brand-header-accent: #E32935;
+  --brand-header-text: #F7F7F5;
   --shadow: 0 1px 2px rgba(11,11,13,.05), 0 8px 24px rgba(11,11,13,.08);
   --shadow-lg: 0 12px 48px rgba(11,11,13,.2);
 }

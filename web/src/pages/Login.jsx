@@ -21,7 +21,7 @@ export default function Login() {
 
   useEffect(() => {
     if (!usuarioAtual) return
-    const destinoAdmin = empresaAtiva?.brandKey === 'dino' ? '/admin/ecommerce' : '/admin'
+    const destinoAdmin = ['dino', 'stallone'].includes(empresaAtiva?.brandKey) ? '/admin/ecommerce' : '/admin'
     if (isOrg) navigate(proximoSeguro || destinoAdmin, { replace: true })
     else if (isStaff) navigate(proximoSeguro || '/pdv', { replace: true })
   }, [usuarioAtual, empresaAtiva?.brandKey, isOrg, isStaff, navigate, proximoSeguro])
@@ -66,7 +66,7 @@ export default function Login() {
         const data = validarRespostaLogin(await api.post('/api/admin/login', { user, senha }))
         login(data.token, data.user, false, data.sessao || {})
         if (['org', 'admin', 'organizador', 'gerente'].includes(String(data.user.role || '').toLowerCase())) {
-          const destinoAdmin = data.sessao?.empresa?.brandKey === 'dino' ? '/admin/ecommerce' : '/admin'
+          const destinoAdmin = ['dino', 'stallone'].includes(data.sessao?.empresa?.brandKey) ? '/admin/ecommerce' : '/admin'
           navigate(proximoSeguro || destinoAdmin, { replace: true })
         }
         else navigate(proximoSeguro || '/pdv', { replace: true })

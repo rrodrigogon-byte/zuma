@@ -6,12 +6,12 @@ import { decrementCartQuantity, loadAllStorefrontProducts, nextStorefrontCartSyn
 import { recommendedShippingOption, shippingQuoteKey } from '../../lib/checkout-shipping'
 import { createLatestRequest } from '../../lib/latest-request'
 import { applyThemeMode, brandFromHost, commerceDisplayName, DINO_COMMERCE_LOGO, STALLONE_LOGO, storedThemeMode } from '../../lib/brand'
-import './commerce-stallone.css'
 import { addProductToCart, filterCatalog, sortCatalog, stockState } from '../../lib/storefront-catalog'
 import AddToCartSuccess from '../../components/store/AddToCartSuccess'
 import CartDrawer from '../../components/store/CartDrawer'
 import './commerce.css'
 import './storefront-ux.css'
+import './commerce-stallone.css'
 import { ehHostLojaDino } from '../../lib/dominios-dino'
 
 function readCart(storeAlias) {
@@ -649,7 +649,7 @@ function EcommerceStorefront({ routeAlias, hostName }) {
       {isStalloneStorefront && <div className="commerce-stallone-brandbar"><img src={STALLONE_LOGO} alt="Stallone Nutre Sport" width="240" height="88" /><div className="commerce-stallone-theme" role="group" aria-label="Tema da loja">{[["dark", Moon, "Escuro"], ["light", Sun, "Claro"]].map(([mode, Icon, label]) => <button type="button" key={mode} onClick={() => changeThemeMode(mode)} className={(themeMode === mode || (mode === 'dark' && themeMode === 'system')) ? 'active' : ''} aria-pressed={themeMode === mode || (mode === 'dark' && themeMode === 'system')} title={`Tema ${label.toLowerCase()}`}><Icon size={14} /><span>{label}</span></button>)}</div></div>}
       <div>
         <span className="commerce-eyebrow"><Store size={14} /> {brandName}</span>
-        <h1>{isDinoStorefront ? <>Autocuidado, estilo e bem-estar. <em>Compre com confiança.</em></> : isStalloneStorefront ? <>Do treino à mesa. <em>Nutrição que performa.</em></> : <>Venda melhor. <em>Opere com inteligência.</em></>}</h1>
+        <h1>{isDinoStorefront ? <>Autocuidado, estilo e bem-estar. <em>Compre com confiança.</em></> : isStalloneStorefront ? <>Força para evoluir. <em>Nutrição para ir além.</em></> : <>Venda melhor. <em>Opere com inteligência.</em></>}</h1>
         <p>{brandTagline}</p>
         <div className="commerce-hero-actions">
           <a className="commerce-button commerce-button-primary" href="#catalogo">Explorar catálogo <ArrowRight size={16} /></a>

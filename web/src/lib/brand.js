@@ -95,3 +95,18 @@ export const isDinoBrand = (brand) => brand === 'dino'
 export const isStalloneBrand = (brand) => brand === 'stallone'
 /** Marcas com loja de tema escolhível (sistema/claro/escuro) guardado no navegador. */
 export const brandHasThemeChoice = (brand) => BRAND_KEYS.includes(brand)
+
+/** Entradas públicas da Stallone; hosts de outras lojas mantêm suas rotas. */
+export function stalloneEntryFromHost(host, checkout = false) {
+  return brandFromHost(host) === 'stallone'
+    ? (checkout ? '/checkout/stallone' : '/ecommerce/stallone')
+    : null
+}
+
+/** Administração clara por padrão, preservando a escolha explícita do usuário. */
+export function brandThemeMode(brand, pathname, preference = 'system') {
+  if (!brandHasThemeChoice(brand)) return 'system'
+  const mode = normalizeThemeMode(preference)
+  if (mode !== 'system' || brand !== 'stallone') return mode
+  return pathname === '/admin' || pathname.startsWith('/admin/') ? 'light' : 'dark'
+}
