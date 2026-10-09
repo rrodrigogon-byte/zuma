@@ -11,7 +11,7 @@ import { createRequire } from 'node:module'
 const web = dirname(dirname(fileURLToPath(import.meta.url)))
 const temp = mkdtempSync(join(web, '.commerce-users-test-'))
 after(() => rmSync(temp, { recursive: true, force: true }))
-await build({ entryPoints: [join(web, 'src/pages/admin/CommerceUsersPanel.jsx')], outfile: join(temp, 'users.cjs'), bundle: true, format: 'cjs', platform: 'node', jsx: 'automatic', packages: 'external', plugins: [{ name: 'api-fixture', setup(builder) {
+await build({ entryPoints: [join(web, 'src/pages/admin/CommerceUsersPanel.jsx')], outfile: join(temp, 'users.cjs'), bundle: true, format: 'cjs', platform: 'node', jsx: 'automatic', packages: 'external', loader: { '.css': 'empty' }, plugins: [{ name: 'api-fixture', setup(builder) {
   builder.onResolve({ filter: /\/lib\/api$/ }, () => ({ path: 'api', namespace: 'fixture' }))
   builder.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: 'export const api={get:(...a)=>globalThis.usersApi.get(...a),post:(...a)=>globalThis.usersApi.post(...a),patch:(...a)=>globalThis.usersApi.patch(...a)}' }))
 } }] })

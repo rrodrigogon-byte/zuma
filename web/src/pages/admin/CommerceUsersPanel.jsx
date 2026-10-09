@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../lib/api'
+import CommerceAccountManager from './CommerceAccountManager'
 
 const formatDate = value => value ? new Date(value).toLocaleString('pt-BR') : 'Sem vencimento'
 export function localDateTimeInputValue(value) {
@@ -171,6 +172,7 @@ export default function CommerceUsersPanel({ memberships = [], roles = [], store
   }
 
   return <section className="ecommerce-admin-panel commerce-users-panel" aria-label="Usuários e acessos da empresa">
+    <CommerceAccountManager empresaId={empresaId} onRefresh={onRefresh} />
     <div className="ecommerce-admin-panel-heading"><div><span className="ecommerce-admin-kicker">Governança</span><h2>Usuários e permissões</h2><p className="commerce-admin-help">Atribua papéis somente à empresa selecionada. Excluir acesso desativa a membership; não apaga identidade ou auditoria.</p></div><div className="ecommerce-row-actions">{canInvite && <button type="button" disabled={!empresaId || busy} onClick={beginInvite}>Convidar usuário</button>}<button type="button" className="ecommerce-admin-button primary" disabled={!storefrontId || busy} onClick={beginCreate}>Adicionar acesso existente</button></div></div>
     {notice && <p role="status">{notice}</p>}{error && !modalOpen && <p role="alert">{error}</p>}
     {canInvite && <div className="commerce-invite-history">
