@@ -1,5 +1,5 @@
 // E-mail transacional (nominal) via Resend HTTP API — sem dependências nativas.
-// Variáveis de ambiente: RESEND_API_KEY, EMAIL_FROM.
+// Variáveis de ambiente gerais: RESEND_API_KEY, EMAIL_FROM.
 // Sem chave configurada → modo simulado (log), igual ao whatsapp.js.
 //
 // POLÍTICA: somente e-mail NOMINAL a quem tem uma ação (inscrição, ingresso,
@@ -7,6 +7,24 @@
 
 const KEY  = process.env.RESEND_API_KEY || ''
 const FROM = process.env.EMAIL_FROM || 'SetPoint <no-reply@setpoint.app>'
+
+// Convites operacionais têm um remetente próprio, com fallback explícito para
+// EMAIL_FROM. A configuração é lida no momento do envio para que readiness e
+// testes possam refletir a configuração atual sem mudar o canal legado.
+function operationalInviteConfig(env = process.env) {
+  const key = String(env.RESEND_API_KEY || '').trim()
+  const from = String(env.OPERATIONAL_INVITE_EMAIL_FROM || env.EMAIL_FROM || '').trim()
+  return { key, from }
+}
+
+function operationalInviteAtivo() {
+  const { key, from } = operationalInviteConfig()
+  return Boolean(key && from)
+}
+
+function operationalInviteFrom() {
+  return operationalInviteConfig().from
+}
 
 function ativo() { return !!KEY }
 
@@ -51,19 +69,35 @@ async function enviar({ to, subject, html, text }) {
 
 export const mail = {
   ativo,
+  conviteOperacionalAtivo: operationalInviteAtivo,
+  conviteOperacionalFrom: operationalInviteFrom,
   enviar,
 
   // Convites de acesso administrativo nunca usam o modo de simulação legado.
   // Um 2xx ambíguo não confirma entrega e exige revisão humana (sem reenviar).
-  async conviteOperacional({ to, nome, url }) {
-    if (!KEY || !process.env.EMAIL_FROM || !to || !url) return { ok: false, code: 'MAIL_NOT_CONFIGURED' }
-    const subject = 'Kytto · Convite para administração operacional da Dino'
-    const html = `<p>Olá, ${escapeHtml(nome)}.</p><p>Você recebeu um convite para administrar as operações somente da Dino, sem gestão de usuários no Kytto.</p><p><a href="${escapeHtml(url)}">Definir minha senha e aceitar o convite</a></p><p>O link é pessoal, de uso único e expira em 24 horas. Se você não esperava este convite, ignore esta mensagem.</p>`
+  async conviteOperacional({ to, nome, url, empresaNome, from, inviteId }) {
+    const configured = operationalInviteConfig()
+    if (!configured.key || !configured.from || !to || !url) return { ok: false, code: 'MAIL_NOT_CONFIGURED' }
+    const sender = String(from || configured.from).trim()
+    if (sender !== configured.from) return { ok: false, code: 'MAIL_NOT_CONFIGURED' }
+    const company = String(empresaNome || 'empresa selecionada').replace(/[\r\n]+/g, ' ').trim().slice(0, 180) || 'empresa selecionada'
+    const subject = `Kytto · Convite para administração operacional da ${company}`
+    const safeName = escapeHtml(nome || 'pessoa convidada')
+    const safeCompany = escapeHtml(company)
+    const safeUrl = escapeHtml(url)
+    const html = `<p>Olá, ${safeName}.</p><p>Você recebeu um convite para administrar as operações da empresa <b>${safeCompany}</b>, sem gestão de usuários no Kytto.</p><p><a href="${safeUrl}">Definir minha senha e aceitar o convite</a></p><p>O link é pessoal, de uso único e expira em 24 horas. Se você não esperava este convite, ignore esta mensagem.</p>`
+    const text = `Olá, ${nome || 'pessoa convidada'}. Você recebeu um convite para administrar as operações da empresa ${company}, sem gestão de usuários no Kytto. Acesse ${url} para definir sua senha e aceitar o convite. O link é pessoal, de uso único e expira em 24 horas.`
+    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${configured.key}` }
+    // Somente o ID interno do convite pode ser usado para idempotência. Token e
+    // e-mail nunca são colocados em headers nem em logs.
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(inviteId || ''))) {
+      headers['Idempotency-Key'] = String(inviteId)
+    }
     try {
       const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KEY}` },
-        body: JSON.stringify({ from: process.env.EMAIL_FROM, to: [to], subject, html }),
+        headers,
+        body: JSON.stringify({ from: sender, to: [to], subject, html, text }),
         signal: AbortSignal.timeout(10000),
       })
       if (!response.ok) return { ok: false, code: 'MAIL_REJECTED' }

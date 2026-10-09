@@ -39,8 +39,12 @@ describe('usuários Commerce', () => {
       expect(new Date(local).toISOString()).toBe(original)
     } finally { process.env.TZ = timezone }
   })
-  it('oferece convite nominal somente na vitrine Dino, sem senha no formulário', () => {
-    expect(render({ isDino: false })).not.toContain('Convidar novo operador Dino')
-    expect(render({ isDino: true, storefrontId: 'vitrine-teste', empresaId: 'empresa-teste' })).toContain('Convidar novo operador Dino')
+  it('não inventa autoridade de convite sem o status server-authoritative', () => {
+    expect(render({ empresaId: 'empresa-teste', empresaNome: 'Empresa B', platformAdmin: false })).not.toContain('Convidar usuário')
+    const html = render({ empresaId: 'empresa-b', empresaNome: 'Empresa B', platformAdmin: true })
+    expect(html).not.toContain('Convidar usuário')
+    expect(html).not.toContain('users.write')
+    expect(html).not.toContain('Dino')
+    expect(html).not.toContain('senha temporária')
   })
 })

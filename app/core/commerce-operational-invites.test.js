@@ -127,7 +127,9 @@ test('accept aceita somente sent, escreve administrador operacional e membership
     async transaction(callback) {
       return callback(trxFor(async (sql, values) => {
         queries.push({ sql, values });
+        if (sql.includes('SELECT email_norm FROM commerce_operational_invites')) return { rows: [{ email_norm: row().email_norm }] };
         if (sql.includes('FROM commerce_operational_invites i') && sql.includes('FOR UPDATE')) return { rows: [row({ status: 'sent' })] };
+        if (sql.includes('FROM empresas')) return { rows: [{ id: TENANT }] };
         if (sql.includes('FROM usuarios') && sql.includes('FOR UPDATE')) return { rows: [] };
         if (sql.includes('FROM commerce_roles')) return { rows: [{ id: ROLE }] };
         if (sql.includes('INSERT INTO usuarios')) { userCreated = true; return { rows: [{ id: USER, empresa_id: TENANT, email: 'operator@example.invalid', nome_completo: 'Pessoa Sintética', senha_hash: '$2b$12$synthetic', ativo: true }] }; }
@@ -145,7 +147,7 @@ test('accept aceita somente sent, escreve administrador operacional e membership
 
 test('lookups retornam operador somente com convite usado e membership store_admin ativa', async () => {
   const rowUser = { id: USER, empresa_id: TENANT, email: 'operator@example.invalid', nome_completo: 'Pessoa Sintética', senha_hash: '$2b$12$synthetic', ativo: true };
-  const database = { async queryRead(sql) { assert.match(sql, /store_admin/u); assert.match(sql, /i\.status = 'used'/u); return { rows: [rowUser] }; } };
+  const database = { async queryRead(sql) { assert.match(sql, /store_admin/u); assert.match(sql, /i\.status = 'used'/u); assert.match(sql, /JOIN empresas e.*COALESCE\(e\.ativa, true\) = true/u); return { rows: [rowUser] }; } };
   assert.deepEqual(await findOperationalByEmail('OPERATOR@EXAMPLE.INVALID', { database }), { id: USER, empresaId: TENANT, email: rowUser.email, nome: rowUser.nome_completo, senhaHash: rowUser.senha_hash, role: 'organizador', ativo: true });
   assert.deepEqual(await resolveOperationalById({ userId: USER, empresaId: TENANT, database }), { id: USER, empresaId: TENANT, email: rowUser.email, nome: rowUser.nome_completo, senhaHash: rowUser.senha_hash, role: 'organizador', ativo: true });
 });

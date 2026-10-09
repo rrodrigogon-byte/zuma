@@ -9,7 +9,16 @@ test('diagnóstico diferencia opt-in e canal de e-mail, sem devolver segredos', 
   assert.equal(operationalInviteReadiness({ ...readyEnv, OPERATIONAL_INVITES_ENABLED: '0' }, true).code, 'INVITES_DISABLED');
   assert.equal(operationalInviteReadiness(readyEnv, false).code, 'MAIL_NOT_CONFIGURED');
   assert.equal(operationalInviteReadiness({ ...readyEnv, EMAIL_FROM: '  ' }, true).code, 'MAIL_NOT_CONFIGURED');
-  assert.deepEqual(operationalInviteReadiness(readyEnv, true), { ready: true, coreEnabled: true, enabled: true, mailConfigured: true, code: null });
+  assert.deepEqual(operationalInviteReadiness(readyEnv, true), {
+    ready: true,
+    coreEnabled: true,
+    enabled: true,
+    mailConfigured: true,
+    mailKeyConfigured: true,
+    mailFromConfigured: true,
+    operationalFromConfigured: false,
+    code: null,
+  });
   assert.doesNotMatch(JSON.stringify(operationalInviteReadiness(readyEnv, true)), /synthetic-secret|test@example/);
 });
 
