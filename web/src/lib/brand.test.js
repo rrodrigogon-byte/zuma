@@ -115,3 +115,12 @@ test('Stallone oferece administração clara, loja escura e mantém preferência
   assert.equal(brandThemeMode('dino', '/admin'), 'system')
   assert.equal(brandThemeMode('kytto', '/admin', 'dark'), 'system')
 })
+
+test('Stallone usa o símbolo S como ícone da aba e da instalação', async () => {
+  const { brandIcons } = await import('./brand.js')
+  assert.equal(brandIcons('stallone').icon, '/brand/stallone-mark.svg')
+  assert.equal(brandIcons('stallone').touchIcon, '/brand/stallone-icon-192.png')
+  assert.equal(brandIcons('stallone').themeColor, '#141416')
+  assert.equal(brandIcons('dino'), null)
+  assert.equal(brandIcons('kytto'), null)
+})
