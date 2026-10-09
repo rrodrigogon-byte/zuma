@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Building2, CheckCircle2, ExternalLink, Loader2, MapPin, Phone, Plus, RefreshCw, ShieldCheck, Store } from 'lucide-react'
+import { AlertTriangle, Building2, CheckCircle2, ExternalLink, Landmark, Loader2, MapPin, Phone, Plus, RefreshCw, ShieldCheck, Store } from 'lucide-react'
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { useToast } from '../../hooks/useToast'
@@ -52,7 +52,7 @@ function addressLine(address = {}) {
   ].filter(Boolean).join(' · ')
 }
 
-function TenantCard({ tenant }) {
+function TenantCard({ tenant, groups = [], onChangeGroup, changingGroup = false }) {
   const storefronts = Array.isArray(tenant.storefronts) ? tenant.storefronts : []
   return (
     <article className="card" style={{ display: 'grid', gap: 14 }}>
@@ -61,11 +61,21 @@ function TenantCard({ tenant }) {
           <div className="badge" style={{ marginBottom: 8 }}>{tenant.tipo_negocio || 'empresa'}</div>
           <h2 style={{ margin: 0, fontSize: 20 }}>{tenant.nome}</h2>
           <p style={{ margin: '5px 0 0', color: 'var(--muted)', fontSize: 12 }}>{tenant.razao_social || 'Razão social não informada'} · CNPJ {formatCnpj(tenant.cnpj) || '—'}</p>
+          {tenant.grupo_nome && <p style={{ margin: '6px 0 0', fontSize: 12, fontWeight: 800, display: 'inline-flex', gap: 6, alignItems: 'center' }}><Landmark size={13} /> {tenant.grupo_nome}</p>}
         </div>
         <span className="badge" style={{ color: tenant.ativa === false ? 'var(--bad)' : 'var(--good)', background: tenant.ativa === false ? 'var(--bad-wash)' : 'var(--good-wash)' }}>
           {tenant.ativa === false ? 'Inativa' : 'Ativa'}
         </span>
       </div>
+      {onChangeGroup && (
+        <label style={{ display: 'grid', gap: 6, fontSize: 12, fontWeight: 700 }}>
+          Grupo empresarial
+          <select value={tenant.grupo_id || ''} disabled={changingGroup} onChange={(event) => onChangeGroup(tenant, event.target.value || null)}>
+            <option value="">Independente (sem grupo)</option>
+            {groups.map((group) => <option key={group.id} value={group.id}>{group.nome}</option>)}
+          </select>
+        </label>
+      )}
       <div style={{ display: 'grid', gap: 10 }}>
         {storefronts.length === 0 ? <div style={{ color: 'var(--muted)', fontSize: 13 }}>Nenhum storefront Commerce associado.</div> : storefronts.map((storefront) => {
           const aliases = Array.isArray(storefront.aliases) ? storefront.aliases : []
@@ -102,12 +112,20 @@ export default function AdminPlataforma() {
   const [showPreview, setShowPreview] = useState(false)
   const [form, setForm] = useState(EMPTY_TENANT)
   const [result, setResult] = useState(null)
+  const [groups, setGroups] = useState([])
+  const [groupForm, setGroupForm] = useState({ nome: '', cnpj: '', razaoSocial: '' })
+  const [savingGroup, setSavingGroup] = useState(false)
+  const [changingGroupFor, setChangingGroupFor] = useState('')
 
   const carregar = useCallback(async () => {
     setLoading(true)
     try {
-      const response = await api.get('/api/admin/platform/commerce-tenants')
+      const [response, groupResponse] = await Promise.all([
+        api.get('/api/admin/platform/commerce-tenants'),
+        api.get('/api/admin/platform/business-groups').catch(() => ({ items: [] })),
+      ])
       setTenants(Array.isArray(response?.items) ? response.items : [])
+      setGroups(Array.isArray(groupResponse?.items) ? groupResponse.items : [])
     } catch (error) {
       toast(error.message || 'Não foi possível carregar os tenants do Commerce.', true)
     } finally {
@@ -128,6 +146,35 @@ export default function AdminPlataforma() {
       form.confirmAdminAccess && form.confirmAddress
     )
   ), [form, aliasValido, telefoneValido, enderecoCompleto])
+
+  async function criarGrupo(event) {
+    event.preventDefault()
+    if (groupForm.nome.trim().length < 2 || savingGroup) return
+    setSavingGroup(true)
+    try {
+      await api.post('/api/admin/platform/business-groups', { nome: groupForm.nome.trim(), cnpj: onlyDigits(groupForm.cnpj), razaoSocial: groupForm.razaoSocial.trim() })
+      toast(`Grupo ${groupForm.nome.trim()} criado.`)
+      setGroupForm({ nome: '', cnpj: '', razaoSocial: '' })
+      await carregar()
+    } catch (error) {
+      toast(error.message || 'Não foi possível criar o grupo.', true)
+    } finally {
+      setSavingGroup(false)
+    }
+  }
+
+  async function mudarGrupo(tenant, grupoId) {
+    setChangingGroupFor(tenant.id)
+    try {
+      await api.patch(`/api/admin/platform/commerce-tenants/${tenant.id}/group`, { grupoId })
+      toast(grupoId ? `${tenant.nome} vinculada ao grupo.` : `${tenant.nome} agora é independente.`)
+      await carregar()
+    } catch (error) {
+      toast(error.message || 'Não foi possível alterar o grupo.', true)
+    } finally {
+      setChangingGroupFor('')
+    }
+  }
 
   function change(field, value) {
     setForm((current) => ({ ...current, [field]: value }))
@@ -257,9 +304,29 @@ export default function AdminPlataforma() {
         </form>
       )}
 
+      <section style={{ marginBottom: 28 }} aria-labelledby="grupos-title">
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12 }}><div><h2 id="grupos-title" style={{ margin: 0, fontSize: 20 }}>Grupos empresariais</h2><small style={{ color: 'var(--muted)' }}>Holdings donas de várias empresas. Cada empresa segue isolada; o grupo só organiza e consolida.</small></div><span className="badge">{groups.length} grupo(s)</span></div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+          {groups.map((group) => (
+            <article key={group.id} className="card" style={{ display: 'grid', gap: 8 }}>
+              <strong style={{ display: 'inline-flex', gap: 8, alignItems: 'center', fontSize: 17 }}><Landmark size={17} /> {group.nome}</strong>
+              <small style={{ color: 'var(--muted)' }}>{group.cnpj ? `CNPJ ${formatCnpj(group.cnpj)}` : 'CNPJ da holding ainda não informado'}</small>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{(group.empresas || []).length ? group.empresas.map((empresa) => <span key={empresa.id} className="badge">{empresa.nome}</span>) : <small style={{ color: 'var(--muted)' }}>Nenhuma empresa vinculada.</small>}</div>
+            </article>
+          ))}
+          <form className="card" onSubmit={criarGrupo} style={{ display: 'grid', gap: 8 }}>
+            <strong>Novo grupo</strong>
+            <input aria-label="Nome do grupo" placeholder="Nome do grupo (ex.: Silvester Holding)" value={groupForm.nome} onChange={(event) => setGroupForm((current) => ({ ...current, nome: event.target.value }))} />
+            <input aria-label="CNPJ da holding (opcional)" placeholder="CNPJ da holding (opcional)" value={groupForm.cnpj} onChange={(event) => setGroupForm((current) => ({ ...current, cnpj: formatCnpj(event.target.value) }))} />
+            <input aria-label="Razão social (opcional)" placeholder="Razão social (opcional)" value={groupForm.razaoSocial} onChange={(event) => setGroupForm((current) => ({ ...current, razaoSocial: event.target.value }))} />
+            <button type="submit" className="btn btn-primary" disabled={savingGroup || groupForm.nome.trim().length < 2}>{savingGroup ? 'Criando…' : 'Criar grupo'}</button>
+          </form>
+        </div>
+      </section>
+
       <section>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 12 }}><div><h2 style={{ margin: 0, fontSize: 20 }}>Empresas do Commerce</h2><small style={{ color: 'var(--muted)' }}>Visão global exclusiva do administrador da plataforma.</small></div><span className="badge">{tenants.length} empresa(s)</span></div>
-        {loading ? <div className="card" role="status" style={{ color: 'var(--muted)' }}><Loader2 className="spin" size={16} /> Carregando empresas…</div> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 }}>{tenants.map((tenant) => <TenantCard key={tenant.id} tenant={tenant} />)}{!tenants.length && <div className="card" style={{ color: 'var(--muted)' }}>Nenhuma empresa Commerce disponível.</div>}</div>}
+        {loading ? <div className="card" role="status" style={{ color: 'var(--muted)' }}><Loader2 className="spin" size={16} /> Carregando empresas…</div> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 }}>{tenants.map((tenant) => <TenantCard key={tenant.id} tenant={tenant} groups={groups} onChangeGroup={mudarGrupo} changingGroup={changingGroupFor === tenant.id} />)}{!tenants.length && <div className="card" style={{ color: 'var(--muted)' }}>Nenhuma empresa Commerce disponível.</div>}</div>}
       </section>
     </main>
   )
