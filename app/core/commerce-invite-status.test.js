@@ -3,12 +3,16 @@ import test from 'node:test';
 import { listOperationalInvites, operationalInviteHttpError, operationalInviteReadiness } from './commerce-invite-status.js';
 
 const readyEnv = { COMMERCE_CORE_ENABLED: '1', OPERATIONAL_INVITES_ENABLED: '1', EMAIL_FROM: 'Test <test@example.invalid>', RESEND_API_KEY: 'synthetic-secret' };
+const dedicatedOnlyEnv = { COMMERCE_CORE_ENABLED: '1', OPERATIONAL_INVITES_ENABLED: '1', EMAIL_FROM: 'Test <test@example.invalid>', OPERATIONAL_INVITE_RESEND_API_KEY: 'synthetic-dedicated-secret' };
 
 test('diagnóstico diferencia opt-in e canal de e-mail, sem devolver segredos', () => {
   assert.equal(operationalInviteReadiness({}, false).code, 'INVITES_DISABLED');
   assert.equal(operationalInviteReadiness({ ...readyEnv, OPERATIONAL_INVITES_ENABLED: '0' }, true).code, 'INVITES_DISABLED');
   assert.equal(operationalInviteReadiness(readyEnv, false).code, 'MAIL_NOT_CONFIGURED');
   assert.equal(operationalInviteReadiness({ ...readyEnv, EMAIL_FROM: '  ' }, true).code, 'MAIL_NOT_CONFIGURED');
+  assert.equal(operationalInviteReadiness(dedicatedOnlyEnv, false).code, 'MAIL_NOT_CONFIGURED');
+  assert.equal(operationalInviteReadiness(dedicatedOnlyEnv, true).mailKeyConfigured, true);
+  assert.equal(operationalInviteReadiness(dedicatedOnlyEnv, true).ready, true);
   assert.deepEqual(operationalInviteReadiness(readyEnv, true), {
     ready: true,
     coreEnabled: true,

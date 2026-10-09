@@ -3,7 +3,7 @@ import test from 'node:test';
 import { mail } from './email.js';
 
 async function isolated(config, callback) {
-  const names = ['RESEND_API_KEY', 'EMAIL_FROM', 'OPERATIONAL_INVITE_EMAIL_FROM'];
+  const names = ['RESEND_API_KEY', 'OPERATIONAL_INVITE_RESEND_API_KEY', 'EMAIL_FROM', 'OPERATIONAL_INVITE_EMAIL_FROM'];
   const original = Object.fromEntries(names.map(name => [name, process.env[name]]));
   const originalFetch = globalThis.fetch;
   try {
@@ -16,6 +16,33 @@ async function isolated(config, callback) {
 }
 const config = { RESEND_API_KEY: 'synthetic-local-only', EMAIL_FROM: 'Legacy <legacy@example.invalid>', OPERATIONAL_INVITE_EMAIL_FROM: 'Kytto <contact@example.invalid>' };
 const payload = { to: 'operator@example.invalid', nome: '<Pessoa>', empresaNome: 'Empresa <B>\nSintética', url: 'https://kytto.example.invalid/aceitar-convite#token=SYNTHETIC_TOKEN', inviteId: '11111111-1111-4111-8111-111111111111' };
+
+test('chave dedicada envia com Authorization própria sem ativar o canal geral', async () => {
+  await isolated({ OPERATIONAL_INVITE_RESEND_API_KEY: 'synthetic-dedicated-only', OPERATIONAL_INVITE_EMAIL_FROM: config.OPERATIONAL_INVITE_EMAIL_FROM }, async () => {
+    let calls = 0;
+    globalThis.fetch = async (url, options) => {
+      calls++;
+      assert.equal(url, 'https://api.resend.com/emails');
+      assert.equal(options.headers.Authorization, 'Bearer synthetic-dedicated-only');
+      return { ok: true, json: async () => ({ id: 'dedicated-provider-id' }) };
+    };
+    assert.equal(mail.ativo(), false);
+    assert.deepEqual(await mail.enviar({ to: payload.to, subject: 'legacy', html: '<p>legacy</p>' }), { ok: true, simulado: true });
+    assert.equal(mail.conviteOperacionalAtivo(), true);
+    assert.deepEqual(await mail.conviteOperacional(payload), { ok: true });
+    assert.equal(calls, 1);
+  });
+});
+
+test('chave dedicada tem precedência sobre RESEND_API_KEY no convite', async () => {
+  await isolated({ ...config, OPERATIONAL_INVITE_RESEND_API_KEY: 'synthetic-dedicated-preferred' }, async () => {
+    globalThis.fetch = async (_, options) => {
+      assert.equal(options.headers.Authorization, 'Bearer synthetic-dedicated-preferred');
+      return { ok: true, json: async () => ({ id: 'preferred-provider-id' }) };
+    };
+    assert.deepEqual(await mail.conviteOperacional(payload), { ok: true });
+  });
+});
 
 test('convites sem chave ou remetente não simulam envio nem chamam o provedor', async () => {
   for (const env of [{}, { RESEND_API_KEY: config.RESEND_API_KEY }]) await isolated(env, async () => {
@@ -49,6 +76,7 @@ test('remetente dedicado, empresa escapada e idempotência sem token nos headers
 test('fallback explícito do remetente não altera o canal legado', async () => {
   await isolated({ RESEND_API_KEY: config.RESEND_API_KEY, EMAIL_FROM: config.EMAIL_FROM }, async () => {
     globalThis.fetch = async (_, options) => {
+      assert.equal(options.headers.Authorization, `Bearer ${config.RESEND_API_KEY}`);
       assert.equal(JSON.parse(options.body).from, config.EMAIL_FROM);
       return { ok: true, json: async () => ({ id: 'synthetic' }) };
     };

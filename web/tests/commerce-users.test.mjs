@@ -59,7 +59,7 @@ test('canal não configurado desabilita o envio e explica variáveis no modal', 
   const f = await fixture({ state: { ready: false, canInvite: true, code: 'MAIL_NOT_CONFIGURED', items: [] } })
   try {
     await f.click('Convidar usuário')
-    assert.match(text(f.dialog().findByProps({ role: 'alert' })), /RESEND_API_KEY e OPERATIONAL_INVITE_EMAIL_FROM/)
+    assert.match(text(f.dialog().findByProps({ role: 'alert' })), /OPERATIONAL_INVITE_RESEND_API_KEY \(ou RESEND_API_KEY\).*OPERATIONAL_INVITE_EMAIL_FROM \(ou EMAIL_FROM\)/)
     assert.equal(f.button('Enviar convite pessoal').props.disabled, true)
     await act(async () => f.dialog().findByType('form').props.onSubmit({ preventDefault() {} }))
     assert.equal(f.posts.length, 0)
