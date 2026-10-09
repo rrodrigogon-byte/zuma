@@ -84,10 +84,12 @@ globalThis.fetch = (url, options) => {
   }));
   const port = 34000 + Math.floor(Math.random() * 500);
   const base = `http://127.0.0.1:${port}`;
+  const instance = `local-mock-${suffix}`;
+  const otherInstance = `other-instance-${suffix}`;
   let providerState = 'open';
   const provider = http.createServer((req, res) => {
     res.setHeader('content-type', 'application/json');
-    if (req.method !== 'GET' || req.url !== '/api/v1/whats-app/instances/local-mock/status') {
+    if (req.method !== 'GET' || req.url !== `/api/v1/whats-app/instances/${instance}/status`) {
       res.writeHead(404).end('{}'); return;
     }
     res.writeHead(200).end(JSON.stringify({ state: providerState }));
@@ -96,7 +98,7 @@ globalThis.fetch = (url, options) => {
   const providerUrl = `http://127.0.0.1:${provider.address().port}`;
   const processo = spawn(process.execPath, ['server.js'], {
     cwd: APP,
-    env: { ...process.env, NODE_ENV: 'development', PORT: String(port), DB_PATH: dbPath, JWT_SECRET: 'escopo-jwt', COMMERCE_CORE_ENABLED: '1', OPERATIONAL_INVITES_ENABLED: '1', RESEND_API_KEY: 'local-test-not-real', EMAIL_FROM: 'Local Test <test@example.invalid>', NODE_OPTIONS: `--import=${mailStub}`, DATABASE_URL: DSN, DB_SSL: 'false', ADMIN_USER: 'admin', PLATFORM_ADMIN_EMAILS: 'boss@plat.test', SEED_DEMO: '0', WHATSAPP_CONNECTION_WATCHDOG: 'false', WPP_BASE_URL: 'http://127.0.0.1:1', WPP_APIKEY: 'local-only-no-network', WHATSAPP_PROVIDER: 'chatbot_backend', CHATBOT_BACKEND_MODE: 'instancias', CHATBOT_BACKEND_URL: providerUrl, CHATBOT_BACKEND_INSTANCE: 'local-mock', CHATBOT_BACKEND_KEY: 'local-status-check-only-key', AI_AUTOMATION_SCHEDULER: 'false', AI_LEARNING_SCHEDULER: 'false' },
+    env: { ...process.env, NODE_ENV: 'development', PORT: String(port), DB_PATH: dbPath, JWT_SECRET: 'escopo-jwt', COMMERCE_CORE_ENABLED: '1', OPERATIONAL_INVITES_ENABLED: '1', RESEND_API_KEY: 'local-test-not-real', EMAIL_FROM: 'Local Test <test@example.invalid>', NODE_OPTIONS: `--import=${mailStub}`, DATABASE_URL: DSN, DB_SSL: 'false', ADMIN_USER: 'admin', PLATFORM_ADMIN_EMAILS: 'boss@plat.test', SEED_DEMO: '0', WHATSAPP_CONNECTION_WATCHDOG: 'false', WPP_BASE_URL: 'http://127.0.0.1:1', WPP_APIKEY: 'local-only-no-network', WHATSAPP_PROVIDER: 'chatbot_backend', CHATBOT_BACKEND_MODE: 'instancias', CHATBOT_BACKEND_URL: providerUrl, CHATBOT_BACKEND_INSTANCE: instance, CHATBOT_BACKEND_KEY: 'local-status-check-only-key', AI_AUTOMATION_SCHEDULER: 'false', AI_LEARNING_SCHEDULER: 'false' },
     stdio: 'ignore',
   });
   try {
@@ -167,7 +169,7 @@ globalThis.fetch = (url, options) => {
       [empA, `teste-${suffix}`, `Barbearia sintética ${suffix}`])).rows[0].id;
     await client.query(`INSERT INTO canais_integracao
       (empresa_id, loja_id, provedor, nome, status, configuracao)
-      VALUES ($1, $2, 'whatsapp', 'Canal sintético', 'ativo', '{"instance":"local-mock"}'::jsonb)`,
+      VALUES ($1, $2, 'whatsapp', 'Canal sintético', 'ativo', '{"instance":"${instance}"}'::jsonb)`,
     [empA, lojaComCanal]);
     const adminDaUnidade = { ...admin, 'X-Empresa-Id': empA, 'X-Loja-Id': lojaComCanal };
     const estado = await request(base, '/api/admin/barbearia/integracoes', { headers: adminDaUnidade });
@@ -178,7 +180,7 @@ globalThis.fetch = (url, options) => {
     providerState = 'close';
     const desconectado = await request(base, '/api/admin/barbearia/integracoes', { headers: adminDaUnidade });
     assert.equal(desconectado.body.whatsapp.ai.connection.state, 'close', 'desconexão live não fica verde por cache de configuração');
-    await client.query(`UPDATE canais_integracao SET configuracao = '{"instance":"other-instance"}'::jsonb
+    await client.query(`UPDATE canais_integracao SET configuracao = '{"instance":"${otherInstance}"}'::jsonb
       WHERE empresa_id = $1 AND loja_id = $2 AND provedor = 'whatsapp'`, [empA, lojaComCanal]);
     const outraInstancia = await request(base, '/api/admin/barbearia/integracoes', { headers: adminDaUnidade });
     assert.equal(outraInstancia.body.whatsapp.ai.connection.state, 'unknown', 'instância diferente não herda estado de outra linha');
@@ -193,7 +195,7 @@ globalThis.fetch = (url, options) => {
     assert.equal(tentativaLegada.response.status, 409, 'bloqueado antes de qualquer egress');
     assert.equal(tentativaLegada.body.code, 'WHATSAPP_LEGACY_SCOPE_DENIED');
 
-    // O endpoint real deve aceitar status='active', negar tenant/draft e só confirmar
+    // O endpoint real aceita empresas ativas, não somente a vitrine Dino, e só confirma
     // e-mail se o emissor local retornar um ID explícito; nada chega ao Resend.
     await client.query(`INSERT INTO commerce_storefronts (empresa_id, codigo, nome, status)
       VALUES ($1, 'dino-web', 'Dino teste', 'active')`, [empA]);
@@ -205,17 +207,35 @@ globalThis.fetch = (url, options) => {
       method: 'POST', headers: donoPainel,
       body: JSON.stringify({ empresaId: empA, nome: 'Operador Sintético', email: 'denied@example.invalid', role: 'store_admin' }),
     })).response.status, 403);
-    assert.equal((await convite(empB, 'outro@example.invalid')).response.status, 404);
-    await client.query(`UPDATE commerce_storefronts SET status = 'draft' WHERE empresa_id = $1`, [empA]);
-    assert.equal((await convite(empA, 'draft@example.invalid')).response.status, 404);
-    await client.query(`UPDATE commerce_storefronts SET status = 'active' WHERE empresa_id = $1`, [empA]);
+    assert.equal((await convite(empB, `other-company-${suffix}@example.invalid`)).response.status, 202);
+    await client.query(`UPDATE empresas SET ativa = false WHERE id = $1`, [empA]);
+    assert.equal((await convite(empA, 'inactive@example.invalid')).response.status, 404);
+    await client.query(`UPDATE empresas SET ativa = true WHERE id = $1`, [empA]);
     const statusPath = `/api/admin/operational-invites?empresaId=${empA}`;
     assert.equal((await request(base, statusPath)).response.status, 401);
     assert.equal((await request(base, statusPath, { headers: donoPainel })).response.status, 403);
-    assert.equal((await request(base, `/api/admin/operational-invites?empresaId=${empB}`, { headers: admin })).response.status, 404);
+    const otherCompany = await request(base, `/api/admin/operational-invites?empresaId=${empB}`, { headers: admin });
+    assert.equal(otherCompany.response.status, 200);
+    assert.equal(otherCompany.body.items.length, 1);
+    for (const method of ['GET', 'POST']) {
+      const mismatch = await request(base, method === 'GET' ? statusPath : '/api/admin/operational-invites', {
+        method, headers: { ...admin, 'X-Empresa-Id': empB },
+        ...(method === 'POST' ? { body: JSON.stringify({ empresaId: empA, nome: 'Operador Sintético', email: `mismatch-${suffix}@example.invalid`, role: 'store_admin' }) } : {}),
+      });
+      assert.equal(mismatch.response.status, 403);
+      assert.equal(mismatch.body.code, 'TENANT_SCOPE_MISMATCH');
+    }
+    for (const forbiddenRole of ['tenant_owner', 'platform_owner']) {
+      const escalation = await request(base, '/api/admin/operational-invites', {
+        method: 'POST', headers: { ...admin, 'X-Empresa-Id': empA },
+        body: JSON.stringify({ empresaId: empA, nome: 'Operador Sintético', email: `escalation-${suffix}@example.invalid`, role: forbiddenRole }),
+      });
+      assert.equal(escalation.response.status, 400);
+    }
     const readiness = await request(base, statusPath, { headers: admin });
     assert.equal(readiness.body.ready, true);
     assert.equal(readiness.body.mailConfigured, true);
+    assert.equal(readiness.body.canInvite, true);
     assert.deepEqual(readiness.body.items, []);
     const enviado = await convite(empA, 'invite-ok@example.invalid');
     assert.equal(enviado.response.status, 202, JSON.stringify(enviado.body));

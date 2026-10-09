@@ -2,17 +2,21 @@
 export function operationalInviteReadiness(env = process.env, mailActive = false) {
   const coreEnabled = env.COMMERCE_CORE_ENABLED === '1';
   const enabled = env.OPERATIONAL_INVITES_ENABLED === '1';
-  const mailConfigured = mailActive === true && Boolean(String(env.EMAIL_FROM || '').trim());
+  const mailKeyConfigured = Boolean(String(env.RESEND_API_KEY || '').trim());
+  const operationalFromConfigured = Boolean(String(env.OPERATIONAL_INVITE_EMAIL_FROM || '').trim());
+  const fallbackFromConfigured = Boolean(String(env.EMAIL_FROM || '').trim());
+  const mailFromConfigured = operationalFromConfigured || fallbackFromConfigured;
+  const mailConfigured = mailActive === true && mailKeyConfigured && mailFromConfigured;
   const code = !coreEnabled || !enabled ? 'INVITES_DISABLED' : !mailConfigured ? 'MAIL_NOT_CONFIGURED' : null;
-  return { ready: code === null, coreEnabled, enabled, mailConfigured, code };
+  return { ready: code === null, coreEnabled, enabled, mailConfigured, mailKeyConfigured, mailFromConfigured, operationalFromConfigured, code };
 }
 
 const ERRORS = Object.freeze({
   OPERATIONAL_EMAIL_RESERVED: [409, 'IDENTITY_ALREADY_EXISTS', 'E-mail já cadastrado ou com convite pendente. Consulte os acessos e convites antes de reenviar.'],
   OPERATIONAL_INVITE_SEND_FAILED: [503, 'INVITE_DELIVERY_UNCERTAIN', 'Envio não confirmado. Confira o provedor antes de enviar outro convite.'],
-  MAIL_REJECTED: [503, 'MAIL_REJECTED', 'O provedor recusou o e-mail. Verifique a chave Resend e o remetente verificado em EMAIL_FROM.'],
+  MAIL_REJECTED: [503, 'MAIL_REJECTED', 'O provedor recusou o e-mail. Verifique a chave Resend e o remetente verificado do canal de convites.'],
   MAIL_UNCERTAIN: [503, 'INVITE_DELIVERY_UNCERTAIN', 'O provedor não confirmou o envio. Confira o Resend antes de enviar outro convite.'],
-  MAIL_NOT_CONFIGURED: [503, 'MAIL_NOT_CONFIGURED', 'Configure RESEND_API_KEY e EMAIL_FROM com um remetente verificado no Render. Nenhuma conta foi criada.'],
+  MAIL_NOT_CONFIGURED: [503, 'MAIL_NOT_CONFIGURED', 'Configure RESEND_API_KEY e OPERATIONAL_INVITE_EMAIL_FROM (ou EMAIL_FROM) com um remetente verificado no Render. Nenhuma conta foi criada.'],
   TENANT_NOT_ACTIVE: [404, 'TENANT_NOT_FOUND', 'Empresa não encontrada ou inativa.'],
   OPERATIONAL_ROLE_NOT_CONFIGURED: [503, 'OPERATIONAL_ROLE_NOT_CONFIGURED', 'O papel operacional não está configurado. Verifique as migrações Commerce.'],
   INVALID_EMAIL: [400, 'INVALID_INVITE', 'Informe um e-mail válido.'],

@@ -535,47 +535,67 @@ app.use('/api/admin/commerce', (req, res, next) => {
 const TENANT_ADMIN_MODULES = new Set(['barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos']);
 // Convites operacionais são uma transição de identidade, não cadastro JSON.
 // O token segue apenas no e-mail individual; nenhuma resposta HTTP ou auditoria o contém.
+const OPERATIONAL_INVITE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const operationalInviteActor = user => user?.pgOperational !== true && (isPlatformAdminUser(user) || isMainAdminUser(user));
+const operationalInviteScopeMismatch = (req, empresaId) => {
+  const headerEmpresaId = String(req.get('X-Empresa-Id') || '').trim();
+  return Boolean(headerEmpresaId && headerEmpresaId !== empresaId);
+};
 app.get('/api/admin/operational-invites', auth, requireRole('admin'), async (req, res) => {
   res.set('Cache-Control', 'private, no-store');
-  if (!isPlatformAdminUser(req.user) && !isMainAdminUser(req.user)) return res.status(403).json({ error: 'permissão insuficiente', code: 'PERMISSION_DENIED' });
-  const readiness = operationalInviteReadiness(process.env, mail.ativo());
-  if (!readiness.coreEnabled) return res.json({ ...readiness, items: [] });
+  if (!operationalInviteActor(req.user)) return res.status(403).json({ error: 'permissão insuficiente', code: 'PERMISSION_DENIED' });
+  const readiness = operationalInviteReadiness(process.env, mail.conviteOperacionalAtivo());
+  const canInvite = operationalInviteActor(req.user);
+  if (!readiness.coreEnabled) return res.json({ ...readiness, canInvite, items: [] });
   const empresaId = String(req.query.empresaId || '').trim();
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(empresaId)) {
+  if (!OPERATIONAL_INVITE_UUID.test(empresaId)) {
     return res.status(400).json({ error: 'selecione uma empresa válida', code: 'INVALID_INVITE' });
   }
+  if (operationalInviteScopeMismatch(req, empresaId)) {
+    return res.status(403).json({ error: 'A empresa selecionada não corresponde ao escopo informado.', code: 'TENANT_SCOPE_MISMATCH' });
+  }
   try {
-    const dino = await commerceDb.queryRead(
-      `SELECT 1 FROM commerce_storefronts WHERE empresa_id = $1 AND codigo = 'dino-web' AND status = 'active' LIMIT 1`,
+    const company = await commerceDb.queryRead(
+      `SELECT id, nome FROM empresas WHERE id = $1 AND COALESCE(ativa, true) = true LIMIT 1`,
       [empresaId],
     );
-    if (!dino.rows[0]) return res.status(404).json({ error: 'empresa não encontrada', code: 'TENANT_NOT_FOUND' });
-    return res.json({ ...readiness, ...await listOperationalInvites(commerceDb, empresaId) });
+    if (!company.rows[0]) return res.status(404).json({ error: 'empresa não encontrada', code: 'TENANT_NOT_FOUND' });
+    return res.json({ ...readiness, canInvite, ...await listOperationalInvites(commerceDb, empresaId) });
   } catch {
     return res.status(503).json({ error: 'não foi possível consultar o estado dos convites', code: 'INVITE_UNAVAILABLE' });
   }
 });
 app.post('/api/admin/operational-invites', auth, requireRole('admin'), async (req, res) => {
   res.set('Cache-Control', 'private, no-store');
-  if (!isPlatformAdminUser(req.user) && !isMainAdminUser(req.user)) return res.status(403).json({ error: 'permissão insuficiente', code: 'PERMISSION_DENIED' });
-  const readiness = operationalInviteReadiness(process.env, mail.ativo());
-  if (!readiness.ready) return res.status(503).json({ error: 'canal de convite indisponível', code: readiness.code });
+  if (!operationalInviteActor(req.user)) return res.status(403).json({ error: 'permissão insuficiente', code: 'PERMISSION_DENIED' });
   try {
     const empresaId = String(req.body?.empresaId || '').trim();
     const email = norm(req.body?.email);
     const nome = String(req.body?.nome || '').trim();
-    if (!/^[0-9a-f-]{36}$/i.test(empresaId) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !nome || nome.length > 180 || req.body?.role !== 'store_admin') {
+    if (operationalInviteScopeMismatch(req, empresaId)) {
+      return res.status(403).json({ error: 'A empresa selecionada não corresponde ao escopo informado.', code: 'TENANT_SCOPE_MISMATCH' });
+    }
+    if (!OPERATIONAL_INVITE_UUID.test(empresaId) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !nome || nome.length > 180 || req.body?.role !== 'store_admin') {
       return res.status(400).json({ error: 'dados de convite inválidos', code: 'INVALID_INVITE' });
     }
-    const dino = await commerceDb.queryRead(
-      `SELECT 1 FROM commerce_storefronts WHERE empresa_id = $1 AND codigo = 'dino-web' AND status = 'active' LIMIT 1`,
+    const readiness = operationalInviteReadiness(process.env, mail.conviteOperacionalAtivo());
+    if (!readiness.ready) return res.status(503).json({ error: 'canal de convite indisponível', code: readiness.code });
+    const companyResult = await commerceDb.queryRead(
+      `SELECT id, nome FROM empresas WHERE id = $1 AND COALESCE(ativa, true) = true LIMIT 1`,
       [empresaId],
     );
-    if (!dino.rows[0]) return res.status(404).json({ error: 'empresa não encontrada', code: 'TENANT_NOT_FOUND' });
+    const company = companyResult.rows[0];
+    if (!company) return res.status(404).json({ error: 'empresa não encontrada', code: 'TENANT_NOT_FOUND' });
     if (findUser(email) || isReservedEmail(email)) return res.status(409).json({ error: 'identidade já cadastrada', code: 'IDENTITY_ALREADY_EXISTS' });
     const result = await issueOperationalInvite({ empresaId, email, nome, legacyEmailAvailable: true,
-      sendInvite: async ({ token }) => mail.conviteOperacional({ to: email, nome,
-        url: `https://kytto.com.br/aceitar-convite-dino#token=${encodeURIComponent(token)}` }),
+      sendInvite: async ({ token, inviteId, email: callbackEmail, nome: callbackNome }) => mail.conviteOperacional({
+        to: callbackEmail,
+        nome: callbackNome,
+        empresaNome: company.nome,
+        from: mail.conviteOperacionalFrom(),
+        inviteId,
+        url: `https://kytto.com.br/aceitar-convite#token=${encodeURIComponent(token)}`,
+      }),
     });
     if (!result?.ok) return res.status(503).json({ error: 'convite não confirmado; não tente reenviar automaticamente', code: 'INVITE_DELIVERY_UNCERTAIN' });
     try {
@@ -595,7 +615,7 @@ app.post('/api/admin/operational-invites', auth, requireRole('admin'), async (re
 });
 app.post('/api/auth/operational-invite/accept', publicLimit(6), async (req, res) => {
   res.set('Cache-Control', 'private, no-store');
-  if (process.env.COMMERCE_CORE_ENABLED !== '1') return res.status(503).json({ error: 'convite indisponível' });
+  if (process.env.COMMERCE_CORE_ENABLED !== '1' || process.env.OPERATIONAL_INVITES_ENABLED !== '1') return res.status(503).json({ error: 'convite indisponível' });
   try {
     const token = String(req.body?.token || '');
     const password = req.body?.password;
@@ -604,7 +624,8 @@ app.post('/api/auth/operational-invite/accept', publicLimit(6), async (req, res)
     }
     await acceptOperationalInvite({ token, password, legacyEmailAvailable: email => !findUser(email) && !isReservedEmail(email) });
     return res.status(204).end();
-  } catch {
+  } catch (error) {
+    if (error?.code === 'WEAK_PASSWORD') return res.status(400).json({ error: 'Use ao menos 12 caracteres com maiúscula, minúscula, número e símbolo.', code: 'INVALID_PASSWORD' });
     return res.status(409).json({ error: 'convite inválido, expirado ou já usado', code: 'INVITE_INVALID' });
   }
 });

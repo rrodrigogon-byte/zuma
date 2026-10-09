@@ -155,3 +155,72 @@ pgTest('lookups exigem membership store_admin ativa e retornam null para duplici
   await pool.query(`UPDATE commerce_memberships SET expires_at = NULL, ativo = false WHERE empresa_id = $1 AND usuario_id = $2`, [empresaId, owner.id]);
   assert.equal(await resolveOperationalById({ userId: owner.id, empresaId, database }), null);
 });
+
+pgTest('empresa desativada após envio impede aceite com zero usuário e zero membership', async () => {
+  const empresaId = await fixture('inactive-accept');
+  const email = `inactive-${randomUUID()}@example.invalid`;
+  let token = '';
+  const database = { transaction, queryRead: (sql, values = []) => pool.query(sql, values) };
+  const invite = await issueOperationalInvite({ empresaId, email, nome: 'Pessoa Sintética',
+    sendInvite: async payload => { token = payload.token; return { ok: true }; } }, { database });
+  await pool.query('UPDATE empresas SET ativa = false WHERE id = $1', [empresaId]);
+  await assert.rejects(() => acceptOperationalInvite({ token, password: 'Senha-Sintetica-123!' }, { database }), error => error.code === 'TENANT_NOT_ACTIVE');
+  const counts = await pool.query(`SELECT
+    (SELECT count(*)::int FROM usuarios WHERE empresa_id=$1) AS users,
+    (SELECT count(*)::int FROM commerce_memberships WHERE empresa_id=$1) AS memberships,
+    (SELECT status FROM commerce_operational_invites WHERE id=$2) AS status`, [empresaId, invite.inviteId]);
+  assert.deepEqual(counts.rows[0], { users: 0, memberships: 0, status: 'sent' });
+});
+
+pgTest('desativar empresa bloqueia login e sessão operacional anteriormente válidos', async () => {
+  const empresaId = await fixture('inactive-login');
+  const email = `inactive-login-${randomUUID()}@example.invalid`;
+  let token = '';
+  const database = { transaction, queryRead: (sql, values = []) => pool.query(sql, values) };
+  await issueOperationalInvite({ empresaId, email, nome: 'Pessoa Sintética',
+    sendInvite: async payload => { token = payload.token; return { ok: true }; } }, { database });
+  const user = await acceptOperationalInvite({ token, password: 'Senha-Sintetica-123!' }, { database });
+  assert.equal((await findOperationalByEmail(email, { database })).id, user.id);
+  await pool.query('UPDATE empresas SET ativa = false WHERE id = $1', [empresaId]);
+  assert.equal(await findOperationalByEmail(email, { database }), null);
+  assert.equal(await resolveOperationalById({ userId: user.id, empresaId, database }), null);
+});
+
+pgTest('falha de auditoria no aceite reverte usuário, membership e consumo do convite', async () => {
+  const empresaId = await fixture('audit-rollback');
+  const email = `audit-rollback-${randomUUID()}@example.invalid`;
+  let token = '';
+  const database = { transaction, queryRead: (sql, values = []) => pool.query(sql, values) };
+  const invite = await issueOperationalInvite({ empresaId, email, nome: 'Pessoa Sintética',
+    sendInvite: async payload => { token = payload.token; return { ok: true }; } }, { database });
+  const failingDatabase = { transaction: callback => transaction(trx => callback({ query: (sql, values) => {
+    if (sql.includes('INSERT INTO commerce_audit_logs')) throw new Error('synthetic audit failure');
+    return trx.query(sql, values);
+  } })) };
+  await assert.rejects(() => acceptOperationalInvite({ token, password: 'Senha-Sintetica-123!' }, { database: failingDatabase }));
+  const result = await pool.query(`SELECT
+    (SELECT count(*)::int FROM usuarios WHERE empresa_id=$1) AS users,
+    (SELECT count(*)::int FROM commerce_memberships WHERE empresa_id=$1) AS memberships,
+    (SELECT status FROM commerce_operational_invites WHERE id=$2) AS status`, [empresaId, invite.inviteId]);
+  assert.deepEqual(result.rows[0], { users: 0, memberships: 0, status: 'sent' });
+});
+
+pgTest('dois aceites simultâneos resultam em um usuário, um acesso e uma auditoria', async () => {
+  const empresaId = await fixture('concurrent-accept');
+  const email = `concurrent-accept-${randomUUID()}@example.invalid`;
+  let token = '';
+  const database = { transaction, queryRead: (sql, values = []) => pool.query(sql, values) };
+  const invite = await issueOperationalInvite({ empresaId, email, nome: 'Pessoa Sintética',
+    sendInvite: async payload => { token = payload.token; return { ok: true }; } }, { database });
+  const results = await Promise.allSettled([
+    acceptOperationalInvite({ token, password: 'Senha-Sintetica-123!' }, { database }),
+    acceptOperationalInvite({ token, password: 'Senha-Sintetica-123!' }, { database }),
+  ]);
+  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+  assert.equal(results.filter(result => result.status === 'rejected' && result.reason?.code === 'OPERATIONAL_INVITE_INVALID').length, 1);
+  const counts = await pool.query(`SELECT
+    (SELECT count(*)::int FROM usuarios WHERE empresa_id=$1) AS users,
+    (SELECT count(*)::int FROM commerce_memberships WHERE empresa_id=$1) AS memberships,
+    (SELECT count(*)::int FROM commerce_audit_logs WHERE empresa_id=$1 AND entidade_id=$2 AND entidade='operational_invite' AND acao='accepted') AS audits`, [empresaId, invite.inviteId]);
+  assert.deepEqual(counts.rows[0], { users: 1, memberships: 1, audits: 1 });
+});

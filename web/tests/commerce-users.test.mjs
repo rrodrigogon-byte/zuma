@@ -19,14 +19,14 @@ const { default: Users, inviteErrorMessage, inviteStatusLabel } = createRequire(
 const text = node => typeof node === 'string' ? node : (node?.children || []).map(text).join(' ')
 const roles = [{ id: 'role-store', codigo: 'store_admin', nome: 'Operação da loja' }]
 
-async function fixture({ state = { ready: true, items: [] }, candidates = [], onRefresh = async () => {} } = {}) {
+async function fixture({ state = { ready: true, canInvite: true, items: [] }, candidates = [], onRefresh = async () => {}, empresaId = 'tenant', storefrontId = 'store', platformAdmin = true, empresaNome = 'Empresa selecionada' } = {}) {
   const posts = []
   globalThis.usersApi = {
     get: async path => path.includes('/candidates') ? { items: candidates } : state,
     post: (path, body) => new Promise((resolve, reject) => posts.push({ path, body, resolve, reject })),
   }
   let render
-  await act(async () => { render = Renderer.create(React.createElement(Users, { roles, isDino: true, platformAdmin: true, empresaId: 'tenant', storefrontId: 'store', onRefresh })) })
+  await act(async () => { render = Renderer.create(React.createElement(Users, { roles, platformAdmin, empresaId, storefrontId, empresaNome, onRefresh })) })
   const button = label => render.root.findAllByType('button').find(node => text(node).includes(label))
   const click = async label => { await act(async () => button(label).props.onClick()) }
   const dialog = () => render.root.findByProps({ role: 'dialog' })
@@ -44,7 +44,7 @@ async function fillInvite(fixture) {
 test('erro de envio permanece visível DENTRO do diálogo e duplo submit não reenvia', async () => {
   const f = await fixture()
   try {
-    await f.click('Convidar novo operador Dino'); await fillInvite(f)
+    await f.click('Convidar usuário'); await fillInvite(f)
     const submit = f.dialog().findByType('form').props.onSubmit
     await act(async () => { submit({ preventDefault() {} }); submit({ preventDefault() {} }) })
     assert.equal(f.posts.length, 1)
@@ -56,13 +56,21 @@ test('erro de envio permanece visível DENTRO do diálogo e duplo submit não re
 })
 
 test('canal não configurado desabilita o envio e explica variáveis no modal', async () => {
-  const f = await fixture({ state: { ready: false, code: 'MAIL_NOT_CONFIGURED', items: [] } })
+  const f = await fixture({ state: { ready: false, canInvite: true, code: 'MAIL_NOT_CONFIGURED', items: [] } })
   try {
-    await f.click('Convidar novo operador Dino')
-    assert.match(text(f.dialog().findByProps({ role: 'alert' })), /RESEND_API_KEY e EMAIL_FROM/)
+    await f.click('Convidar usuário')
+    assert.match(text(f.dialog().findByProps({ role: 'alert' })), /RESEND_API_KEY e OPERATIONAL_INVITE_EMAIL_FROM/)
     assert.equal(f.button('Enviar convite pessoal').props.disabled, true)
     await act(async () => f.dialog().findByType('form').props.onSubmit({ preventDefault() {} }))
     assert.equal(f.posts.length, 0)
+  } finally { f.close() }
+})
+
+test('autoridade de convite vem do status do servidor, não da prop ou de papel local', async () => {
+  const f = await fixture({ state: { ready: true, canInvite: false, items: [] }, platformAdmin: true })
+  try {
+    assert.equal(f.button('Convidar usuário'), undefined)
+    assert.equal(f.button('Adicionar acesso existente').props.disabled, false)
   } finally { f.close() }
 })
 
@@ -87,7 +95,7 @@ test('busca usa o nome fornecido pelo contrato Commerce e erro de salvar fica no
 test('sucesso não vira falha de envio quando atualizar a lista falha', async () => {
   const f = await fixture({ onRefresh: async () => { throw new Error('refresh failed') } })
   try {
-    await f.click('Convidar novo operador Dino'); await fillInvite(f)
+    await f.click('Convidar usuário'); await fillInvite(f)
     await act(async () => { f.dialog().findByType('form').props.onSubmit({ preventDefault() {} }) })
     await act(async () => f.posts[0].resolve({ ok: true, status: 'sent' }))
     assert.equal(f.render.root.findAllByProps({ role: 'dialog' }).length, 0)
@@ -116,8 +124,8 @@ test('refresh antigo não sobrescreve histórico mais recente', async () => {
     let count = 0
     globalThis.usersApi.get = () => (++count === 1 ? old.promise : recent.promise)
     await act(async () => { f.button('Atualizar convites').props.onClick(); f.button('Atualizar convites').props.onClick() })
-    await act(async () => recent.resolve({ ready: true, items: [{ id: 'new', nome: 'Convite recente', email: 'new@example.invalid', status: 'sent' }] }))
-    await act(async () => old.resolve({ ready: true, items: [] }))
+    await act(async () => recent.resolve({ ready: true, canInvite: true, items: [{ id: 'new', nome: 'Convite recente', email: 'new@example.invalid', status: 'sent' }] }))
+    await act(async () => old.resolve({ ready: true, canInvite: true, items: [] }))
     assert.match(text(f.render.toJSON()), /Convite recente/)
   } finally { f.close() }
 })
@@ -126,10 +134,10 @@ test('resposta tardia da empresa anterior não aparece na empresa selecionada', 
   const f = await fixture()
   try {
     const old = deferred()
-    globalThis.usersApi.get = path => path.includes('empresaId=tenant') ? old.promise : Promise.resolve({ ready: true, items: [{ id: 'b', nome: 'Titular Empresa B', status: 'sent' }] })
+    globalThis.usersApi.get = path => path.includes('empresaId=tenant') ? old.promise : Promise.resolve({ ready: true, canInvite: true, items: [{ id: 'b', nome: 'Titular Empresa B', status: 'sent' }] })
     await act(async () => { f.button('Atualizar convites').props.onClick() })
-    await act(async () => f.render.update(React.createElement(Users, { roles, isDino: true, empresaId: 'company-b', storefrontId: 'store-b' })))
-    await act(async () => old.resolve({ ready: true, items: [{ id: 'a', nome: 'Titular Empresa A', status: 'sent' }] }))
+    await act(async () => f.render.update(React.createElement(Users, { roles, platformAdmin: true, empresaId: 'company-b', storefrontId: 'store-b', empresaNome: 'Empresa B' })))
+    await act(async () => old.resolve({ ready: true, canInvite: true, items: [{ id: 'a', nome: 'Titular Empresa A', status: 'sent' }] }))
     assert.match(text(f.render.toJSON()), /Titular Empresa B/)
     assert.doesNotMatch(text(f.render.toJSON()), /Titular Empresa A/)
   } finally { f.close() }

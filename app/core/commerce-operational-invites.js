@@ -118,6 +118,11 @@ async function markInviteSent(database, inviteId, suppliedTrx = null) {
       [inviteId],
     );
     if (!result.rows[0]) throw new OperationalInviteError('convite não está pendente ou expirou', 'OPERATIONAL_INVITE_NOT_PENDING');
+    await trx.query(
+      `INSERT INTO commerce_audit_logs (empresa_id, entidade, entidade_id, acao, depois)
+       VALUES ($1, 'operational_invite', $2, 'sent', $3::jsonb)`,
+      [result.rows[0].empresa_id, inviteId, JSON.stringify({ status: 'sent', role: 'store_admin', scope: 'tenant' })],
+    );
     return result.rows[0];
   }, suppliedTrx);
 }
@@ -249,6 +254,11 @@ export async function issueOperationalInvite({ empresaId, email, nome, legacyEma
          RETURNING id, empresa_id, email_norm, nome, status, expira_em`,
         [tenantId, emailNorm, name, hash],
       );
+      await trx.query(
+        `INSERT INTO commerce_audit_logs (empresa_id, entidade, entidade_id, acao, depois)
+         VALUES ($1, 'operational_invite', $2, 'issued', $3::jsonb)`,
+        [tenantId, inserted.rows[0].id, JSON.stringify({ status: 'pending_email', role: 'store_admin', scope: 'tenant' })],
+      );
       return inserted.rows[0];
     } catch (error) {
       if (error?.code === '23505') throw new OperationalInviteError('e-mail já está reservado', 'OPERATIONAL_EMAIL_RESERVED');
@@ -281,6 +291,17 @@ export async function acceptOperationalInvite({ token, password, legacyEmailAvai
   const hash = tokenHash(clearToken);
 
   return inTransaction(database, async trx => {
+    // Emissão e aceite usam a mesma ordem de locks: caixa postal, convite,
+    // empresa. Não prender a linha antes de esperar a reserva da identidade.
+    const candidate = await trx.query(
+      `SELECT email_norm FROM commerce_operational_invites WHERE token_hash = $1`,
+      [hash],
+    );
+    if (!candidate.rows[0]) throw new OperationalInviteError('convite inválido', 'OPERATIONAL_INVITE_INVALID');
+    await trx.query(
+      `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
+      [`commerce-operational-email:${candidate.rows[0].email_norm}`],
+    );
     const inviteResultQuery = await trx.query(
       `SELECT i.id, i.empresa_id, i.email_norm, i.nome, i.status, i.expira_em
          FROM commerce_operational_invites i
@@ -300,10 +321,11 @@ export async function acceptOperationalInvite({ token, password, legacyEmailAvai
       try { available = await legacyEmailAvailable(invite.email_norm); } catch { available = false; }
       if (!available) throw new OperationalInviteError('e-mail já possui cadastro legado', 'OPERATIONAL_EMAIL_RESERVED');
     }
-    await trx.query(
-      `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`,
-      [`commerce-operational-email:${invite.email_norm}`],
+    const company = await trx.query(
+      `SELECT id FROM empresas WHERE id = $1 AND COALESCE(ativa, true) = true FOR UPDATE`,
+      [invite.empresa_id],
     );
+    if (!company.rows[0]) throw new OperationalInviteError('empresa inexistente ou inativa', 'TENANT_NOT_ACTIVE');
     const userRows = await trx.query(
       `SELECT id FROM usuarios WHERE lower(btrim(email)) = $1 FOR UPDATE`,
       [invite.email_norm],
@@ -335,6 +357,11 @@ export async function acceptOperationalInvite({ token, password, legacyEmailAvai
           RETURNING id`,
         [invite.id, user.id],
       );
+      await trx.query(
+        `INSERT INTO commerce_audit_logs (empresa_id, usuario_id, entidade, entidade_id, acao, depois)
+         VALUES ($1, $2, 'operational_invite', $3, 'accepted', $4::jsonb)`,
+        [invite.empresa_id, user.id, invite.id, JSON.stringify({ role: 'store_admin', scope: 'tenant', status: 'used' })],
+      );
     } catch (error) {
       if (error?.code === '23505') throw new OperationalInviteError('e-mail já está associado a um usuário', 'OPERATIONAL_EMAIL_RESERVED');
       throw error;
@@ -350,6 +377,7 @@ export async function findOperationalByEmail(email, options = {}) {
   const result = await query(
     `SELECT u.id, u.empresa_id, u.email, u.nome_completo, u.senha_hash, u.ativo
        FROM usuarios u
+       JOIN empresas e ON e.id = u.empresa_id AND COALESCE(e.ativa, true) = true
        JOIN commerce_operational_invites i ON i.usuario_id = u.id AND i.empresa_id = u.empresa_id
          AND i.email_norm = lower(btrim(u.email)) AND i.status = 'used'
        JOIN commerce_memberships m ON m.empresa_id = u.empresa_id AND m.usuario_id = u.id
@@ -377,6 +405,7 @@ export async function resolveOperationalById(input, maybeEmpresaId, options = {}
   const result = await query(
     `SELECT u.id, u.empresa_id, u.email, u.nome_completo, u.senha_hash, u.ativo
        FROM usuarios u
+       JOIN empresas e ON e.id = u.empresa_id AND COALESCE(e.ativa, true) = true
        JOIN commerce_operational_invites i ON i.usuario_id = u.id AND i.empresa_id = u.empresa_id
          AND i.email_norm = lower(btrim(u.email)) AND i.status = 'used'
        JOIN commerce_memberships m ON m.empresa_id = u.empresa_id AND m.usuario_id = u.id
