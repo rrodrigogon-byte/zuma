@@ -602,7 +602,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
 
         {isStallone && !collapsed && (
           <div className="sidebar-brand-logo" style={{ padding: '10px 14px 4px' }}>
-            <img src={STALLONE_LOGO} alt="Stallone Nutre Sport" style={{ width: '100%', maxWidth: 200, display: 'block', background: '#0B0B0D', borderRadius: 10 }} />
+            <img src={STALLONE_LOGO} alt="Stallone Nutre Sport" style={{ width: '100%', maxWidth: 200, display: 'block', background: '#141416', borderRadius: 10 }} />
           </div>
         )}
         {(isDino || isStallone) && !collapsed && (
