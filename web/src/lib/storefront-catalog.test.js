@@ -78,3 +78,17 @@ test('limite de estoque é respeitado', () => {
   assert.equal(clamped.quantity, 2)
   assert.equal(clamped.added, 2)
 })
+
+test('paginateCatalog mostra o catálogo em páginas e informa o restante', async () => {
+  const { paginateCatalog, CATALOG_PAGE_SIZE } = await import('./storefront-catalog.js')
+  const list = Array.from({ length: 130 }, (_, index) => ({ id: index }))
+  const first = paginateCatalog(list)
+  assert.equal(first.items.length, CATALOG_PAGE_SIZE)
+  assert.equal(first.remaining, 130 - CATALOG_PAGE_SIZE)
+  assert.equal(first.hasMore, true)
+  const all = paginateCatalog(list, 500)
+  assert.equal(all.items.length, 130)
+  assert.equal(all.hasMore, false)
+  assert.equal(paginateCatalog([], 48).total, 0)
+  assert.equal(paginateCatalog(list, 0).items.length, CATALOG_PAGE_SIZE)
+})
