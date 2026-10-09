@@ -53,11 +53,32 @@ export function resolveBrand(pathname = '/', search = '', tenantBrand = '') {
   return 'kytto'
 }
 
+// Ícones da aba e da instalação por marca; as demais marcas mantêm os do index.html.
+export const BRAND_ICONS = {
+  stallone: { icon: STALLONE_MARK, iconType: 'image/svg+xml', touchIcon: '/brand/stallone-icon-192.png', themeColor: '#141416' },
+}
+
+export function brandIcons(brand) {
+  return BRAND_ICONS[brand] || null
+}
+
+function swapHeadValue(selector, attribute, value) {
+  const element = document.head?.querySelector(selector)
+  if (!element) return
+  if (element.dataset.brandDefault === undefined) element.dataset.brandDefault = element.getAttribute(attribute) || ''
+  element.setAttribute(attribute, value ?? element.dataset.brandDefault)
+}
+
 export function applyBrand(brand) {
   if (typeof document === 'undefined') return
   const html = document.documentElement
   if (BRAND_KEYS.includes(brand)) html.dataset.brand = brand
   else delete html.dataset.brand
+  const icons = brandIcons(brand)
+  swapHeadValue('link[rel="icon"]', 'href', icons?.icon)
+  swapHeadValue('link[rel="icon"]', 'type', icons?.iconType)
+  swapHeadValue('link[rel="apple-touch-icon"]', 'href', icons?.touchIcon)
+  swapHeadValue('meta[name="theme-color"]', 'content', icons?.themeColor)
 }
 
 export function normalizeThemeMode(value) {
