@@ -54,6 +54,7 @@ const migrationFiles = [
   '063_whatsapp_channel_instance_owner.sql',
   '064_commerce_operational_invites.sql',
   '065_commerce_membership_expiration.sql',
+  '066_grupos_empresariais.sql',
 ];
 const advisoryLockKey = 825410732;
 
