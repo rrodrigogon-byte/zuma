@@ -357,6 +357,7 @@ export async function provisionCommerceTenant(input = {}) {
 export async function listCommerceTenants() {
   const result = await db.queryRead(
     `SELECT e.id, e.nome, e.cnpj, e.razao_social, e.ativa, e.tipo_negocio,
+            e.grupo_id, g.nome AS grupo_nome,
             COALESCE(jsonb_agg(DISTINCT jsonb_build_object(
               'id', s.id, 'codigo', s.codigo, 'nome', s.nome, 'status', s.status,
               'lojaId', s.loja_id, 'aliases', COALESCE((SELECT jsonb_agg(jsonb_build_object(
@@ -366,8 +367,9 @@ export async function listCommerceTenants() {
                 WHERE a.empresa_id = s.empresa_id AND a.storefront_id = s.id), '[]'::jsonb)
             )) FILTER (WHERE s.id IS NOT NULL), '[]'::jsonb) AS storefronts
        FROM empresas e
+       LEFT JOIN grupos_empresariais g ON g.id = e.grupo_id
        LEFT JOIN commerce_storefronts s ON s.empresa_id = e.id AND s.status <> 'archived'
-      GROUP BY e.id
+      GROUP BY e.id, g.nome
       ORDER BY e.nome ASC`,
   );
   return { items: result.rows };
