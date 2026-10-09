@@ -2,7 +2,9 @@
 export function operationalInviteReadiness(env = process.env, mailActive = false) {
   const coreEnabled = env.COMMERCE_CORE_ENABLED === '1';
   const enabled = env.OPERATIONAL_INVITES_ENABLED === '1';
-  const mailKeyConfigured = Boolean(String(env.RESEND_API_KEY || '').trim());
+  const dedicatedKeyConfigured = Boolean(String(env.OPERATIONAL_INVITE_RESEND_API_KEY || '').trim());
+  const fallbackKeyConfigured = Boolean(String(env.RESEND_API_KEY || '').trim());
+  const mailKeyConfigured = dedicatedKeyConfigured || fallbackKeyConfigured;
   const operationalFromConfigured = Boolean(String(env.OPERATIONAL_INVITE_EMAIL_FROM || '').trim());
   const fallbackFromConfigured = Boolean(String(env.EMAIL_FROM || '').trim());
   const mailFromConfigured = operationalFromConfigured || fallbackFromConfigured;
@@ -16,7 +18,7 @@ const ERRORS = Object.freeze({
   OPERATIONAL_INVITE_SEND_FAILED: [503, 'INVITE_DELIVERY_UNCERTAIN', 'Envio não confirmado. Confira o provedor antes de enviar outro convite.'],
   MAIL_REJECTED: [503, 'MAIL_REJECTED', 'O provedor recusou o e-mail. Verifique a chave Resend e o remetente verificado do canal de convites.'],
   MAIL_UNCERTAIN: [503, 'INVITE_DELIVERY_UNCERTAIN', 'O provedor não confirmou o envio. Confira o Resend antes de enviar outro convite.'],
-  MAIL_NOT_CONFIGURED: [503, 'MAIL_NOT_CONFIGURED', 'Configure RESEND_API_KEY e OPERATIONAL_INVITE_EMAIL_FROM (ou EMAIL_FROM) com um remetente verificado no Render. Nenhuma conta foi criada.'],
+  MAIL_NOT_CONFIGURED: [503, 'MAIL_NOT_CONFIGURED', 'Configure OPERATIONAL_INVITE_RESEND_API_KEY (ou RESEND_API_KEY) e OPERATIONAL_INVITE_EMAIL_FROM (ou EMAIL_FROM) com um remetente verificado no Render. Nenhuma conta foi criada.'],
   TENANT_NOT_ACTIVE: [404, 'TENANT_NOT_FOUND', 'Empresa não encontrada ou inativa.'],
   OPERATIONAL_ROLE_NOT_CONFIGURED: [503, 'OPERATIONAL_ROLE_NOT_CONFIGURED', 'O papel operacional não está configurado. Verifique as migrações Commerce.'],
   INVALID_EMAIL: [400, 'INVALID_INVITE', 'Informe um e-mail válido.'],

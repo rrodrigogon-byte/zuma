@@ -12,7 +12,9 @@ const FROM = process.env.EMAIL_FROM || 'SetPoint <no-reply@setpoint.app>'
 // EMAIL_FROM. A configuração é lida no momento do envio para que readiness e
 // testes possam refletir a configuração atual sem mudar o canal legado.
 function operationalInviteConfig(env = process.env) {
-  const key = String(env.RESEND_API_KEY || '').trim()
+  const dedicatedKey = String(env.OPERATIONAL_INVITE_RESEND_API_KEY || '').trim()
+  const fallbackKey = String(env.RESEND_API_KEY || '').trim()
+  const key = dedicatedKey || fallbackKey
   const from = String(env.OPERATIONAL_INVITE_EMAIL_FROM || env.EMAIL_FROM || '').trim()
   return { key, from }
 }

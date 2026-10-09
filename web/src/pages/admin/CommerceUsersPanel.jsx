@@ -15,7 +15,7 @@ const permittedRoles = (roles, platformAdmin) => (roles || []).filter(role =>
 export function inviteErrorMessage(cause) {
   const messages = {
     INVITES_DISABLED: 'Convites desativados no servidor. Configure OPERATIONAL_INVITES_ENABLED=1 no Render. Nenhuma conta foi criada.',
-    MAIL_NOT_CONFIGURED: 'O envio de e-mail não está configurado. Configure RESEND_API_KEY e OPERATIONAL_INVITE_EMAIL_FROM com o remetente de convites verificado no Render (EMAIL_FROM é apenas fallback legado). Nenhuma conta foi criada.',
+    MAIL_NOT_CONFIGURED: 'O envio de e-mail não está configurado. Configure OPERATIONAL_INVITE_RESEND_API_KEY (ou RESEND_API_KEY) e OPERATIONAL_INVITE_EMAIL_FROM (ou EMAIL_FROM) com o remetente de convites verificado no Render. Nenhuma conta foi criada.',
     MAIL_REJECTED: 'O Resend recusou o e-mail. Verifique a chave e o domínio do remetente do canal de convites antes de tentar novamente.',
     INVITE_DELIVERY_UNCERTAIN: 'O envio não foi confirmado. Confira os registros no Resend antes de enviar outro convite; não há acesso ativo.',
     IDENTITY_ALREADY_EXISTS: 'E-mail já cadastrado ou com convite pendente. Consulte o histórico de convites e o diretório de usuários. Adicionar acesso existente só aceita usuários Commerce desta empresa; não vincula contas do painel legado.',
