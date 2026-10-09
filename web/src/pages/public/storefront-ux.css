@@ -421,3 +421,7 @@ html[data-theme='dark'] .commerce-shell.sf-ux .sf-cart-limit { color: var(--kytt
 .commerce-shell.sf-ux .sf-catalog-options { grid-area: options; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; color: var(--kytto-text); font-size: 14px; }
 .commerce-shell.sf-ux .sf-catalog-options label { display: flex; align-items: center; gap: 8px; min-height: 44px; }
 .commerce-shell.sf-ux .sf-catalog-options select { max-width: 100%; min-height: 44px; padding: 8px; border-radius: 8px; border: 1px solid var(--kytto-border); color: var(--kytto-text); background: var(--kytto-surface); }
+
+/* Paginação da vitrine: "Mostrar mais" ocupa a linha inteira da grade. */
+.commerce-shell.sf-ux .sf-load-more { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 0 6px; }
+.commerce-shell.sf-ux .sf-load-more small { color: var(--kytto-muted, var(--commerce-muted)); font-size: 12px; }
