@@ -2,7 +2,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
-import { applyThemeMode, DINO_BARBERSHOP_LOGO, isDinoBrandContext, storedThemeMode } from '../lib/brand'
+import { applyThemeMode, DINO_BARBERSHOP_LOGO, isDinoBrandContext, isStalloneBrandContext, STALLONE_LOGO, storedThemeMode } from '../lib/brand'
 
 // ── Badge de pedidos pendentes ─────────────────────────────────────────────────
 function usePendingOrders(isStaff) {
@@ -216,6 +216,56 @@ const NAV_DINO_GROUPS = [
   },
 ]
 
+// Menu de varejo da Stallone Nutre Sport (loja de suplementos: loja física +
+// e-commerce + WhatsApp). Sem torneio, mesas, garçom, portaria nem barbearia.
+const NAV_STALLONE_GROUPS = [
+  {
+    label: 'Hoje',
+    items: [
+      { to: '/admin/ecommerce?tab=overview', icon: '◔', label: 'Painel da loja' },
+      { to: '/loja-atendimento', icon: '⌂', label: 'Pedidos para separar' },
+      { to: '/admin/ecommerce?tab=orders', icon: '◧', label: 'Pedidos e entregas' },
+    ],
+  },
+  {
+    label: 'Produtos',
+    items: [
+      { to: '/admin/ecommerce?tab=catalog', icon: '□', label: 'Produtos e estoque' },
+      { to: '/admin/ecommerce?tab=promotions', icon: '%', label: 'Promoções' },
+    ],
+  },
+  {
+    label: 'Clientes & WhatsApp',
+    items: [
+      { to: '/admin/ecommerce?tab=customers', icon: '◉', label: 'Clientes' },
+      { to: '/admin/whatsapp', icon: '✆', label: 'WhatsApp' },
+      { to: '/admin/cerebro-ia', icon: '◈', label: 'Cérebro do atendente' },
+      { to: '/admin/omnichannel', icon: '☆', label: 'Fidelidade e canais' },
+    ],
+  },
+  {
+    label: 'Loja online',
+    items: [
+      { to: '/admin/ecommerce?tab=shipping', icon: '↝', label: 'Frete e retirada' },
+      { to: '/admin/ecommerce?tab=payments', icon: '▰', label: 'Pagamentos' },
+      { to: '/admin/ecommerce?tab=domains', icon: '◎', label: 'Domínios' },
+    ],
+  },
+  {
+    label: 'Gestão',
+    items: [
+      { to: '/admin/ecommerce?tab=reports', icon: '▤', label: 'Relatórios' },
+      { to: '/admin/financeiro', icon: '◇', label: 'Financeiro' },
+      { to: '/admin/ecommerce?tab=users', icon: '♧', label: 'Usuários e acessos' },
+      { to: '/admin/ecommerce?tab=audit', icon: '◌', label: 'Auditoria' },
+    ],
+  },
+]
+
+const NAV_STALLONE_PUBLIC = [
+  { to: '/ecommerce/stallone', icon: '↗', label: 'Abrir loja Stallone' },
+]
+
 const NAV_DINO_PUBLIC = [
   { to: '/perfumaria/dino', icon: '↗', label: 'Abrir loja Dino' },
   { to: '/agendar/dino', icon: '▣', label: 'Agendamento público' },
@@ -383,6 +433,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const pendentes = usePendingOrders(isStaff)
   const isDino = isDinoBrandContext(empresaAtiva)
+  const isStallone = !isDino && isStalloneBrandContext(empresaAtiva)
   const [themeMode, setThemeMode] = useState(() => storedThemeMode())
 
   // 🔒 SEGURANÇA: Ocultar sidebar completamente se não autenticado
@@ -549,8 +600,13 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
           </div>
         )}
 
-        {isDino && !collapsed && (
-          <div className="sidebar-theme-switch" aria-label="Tema do painel Dino">
+        {isStallone && !collapsed && (
+          <div className="sidebar-brand-logo" style={{ padding: '10px 14px 4px' }}>
+            <img src={STALLONE_LOGO} alt="Stallone Nutre Sport" style={{ width: '100%', maxWidth: 200, display: 'block', background: '#0B0B0D', borderRadius: 10 }} />
+          </div>
+        )}
+        {(isDino || isStallone) && !collapsed && (
+          <div className="sidebar-theme-switch" aria-label={isDino ? 'Tema do painel Dino' : 'Tema do painel Stallone'}>
             <span>Tema</span>
             {[
               ['system', 'Sistema'],
@@ -561,11 +617,11 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
             ))}
           </div>
         )}
-        {isStaff && !isDino && <Section label="Operações" items={NAV_OP} onNavClick={handleNavClick} badgesMap={badgesMap} sidebarCollapsed={collapsed && !isMobile} />}
-        {isOrg && <AdminGroups groups={isDino ? NAV_DINO_GROUPS : NAV_ADMIN_GROUPS} onNavClick={handleNavClick} isPlatformAdmin={isPlatformAdmin} empresa={empresaDoMenu} sidebarCollapsed={collapsed && !isMobile} />}
+        {isStaff && !isDino && !isStallone && <Section label="Operações" items={NAV_OP} onNavClick={handleNavClick} badgesMap={badgesMap} sidebarCollapsed={collapsed && !isMobile} />}
+        {isOrg && <AdminGroups groups={isDino ? NAV_DINO_GROUPS : isStallone ? NAV_STALLONE_GROUPS : NAV_ADMIN_GROUPS} onNavClick={handleNavClick} isPlatformAdmin={isPlatformAdmin} empresa={empresaDoMenu} sidebarCollapsed={collapsed && !isMobile} />}
         {isPlatformAdmin && <Section label="Administração da Plataforma" items={NAV_PLATFORM} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />}
         {isAtleta && <Section label="Portal do Atleta" items={NAV_ATLETA} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />}
-        <Section label={isDino ? 'Dino público' : 'Site Público'} items={isDino ? NAV_DINO_PUBLIC : NAV_PUBLIC} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />
+        <Section label={isDino ? 'Dino público' : isStallone ? 'Stallone público' : 'Site Público'} items={isDino ? NAV_DINO_PUBLIC : isStallone ? NAV_STALLONE_PUBLIC : NAV_PUBLIC} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />
 
         {/* Bottom user area */}
         <div style={{ marginTop: 'auto', padding: collapsed && !isMobile ? '10px 8px' : '12px 16px', borderTop: '1px solid var(--line)' }}>
