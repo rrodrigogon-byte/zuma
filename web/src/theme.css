@@ -1105,3 +1105,7 @@ body,
   .commerce-cart-row .commerce-quantity { min-width: 0; }
 }
 .checkout-phone-verify{display:grid;gap:8px;margin:10px 0;padding:12px;border:1px dashed currentColor;border-radius:10px}
+
+/* Logotipo Stallone: versão para fundo escuro ou claro conforme o tema ativo. */
+html[data-theme='light'] .stallone-logo-on-dark { display: none !important; }
+html:not([data-theme='light']) .stallone-logo-on-light { display: none !important; }
