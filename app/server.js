@@ -55,6 +55,7 @@ import {
 import { requireCommercePermission, resolveCommerceIdentity } from './core/commerce-identity-bridge.js';
 import { listAdminUserDirectory } from './core/admin-user-directory.js';
 import { listCommerceTenants, provisionCommerceTenant } from './core/commerce-tenants.js';
+import { assignCompanyToGroup, createBusinessGroup, listBusinessGroups, updateBusinessGroup } from './core/business-groups.js';
 import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
 import * as barbeariaFiscalKytto from './barbearia-fiscal-kytto.js';
 import { appointmentNotificationMetrics, queueAppointmentNotifications, queueChargeNotification, queueReviewRequest, reviewNotificationMetrics } from './core/barbershop-appointment-notifications.js';
@@ -673,6 +674,40 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
   app.get('/api/admin/platform/commerce-tenants', requirePlatformAdmin, async (req,res)=>{
     try { res.json(await listCommerceTenants()); }
     catch(error){ res.status(500).json({ error:'não foi possível listar os tenants do Commerce', code:error?.code || 'TENANT_LIST_ERROR' }); }
+  });
+  // Grupos empresariais (holdings): organização e visão consolidada, sem herança de acesso.
+  const businessGroupStatus = (error) => ['BUSINESS_GROUP_NAME_INVALID','BUSINESS_GROUP_CNPJ_INVALID','BUSINESS_GROUP_INVALID','BUSINESS_GROUP_COMPANY_INVALID'].includes(error?.code) ? 400
+    : error?.code === 'BUSINESS_GROUP_CONFLICT' ? 409
+      : ['BUSINESS_GROUP_NOT_FOUND','BUSINESS_GROUP_COMPANY_NOT_FOUND'].includes(error?.code) ? 404 : 500;
+  const businessGroupError = (res, error, fallback) => {
+    const status = businessGroupStatus(error);
+    res.status(status).json({ error: status >= 500 ? fallback : error.message, code: error?.code || 'BUSINESS_GROUP_ERROR' });
+  };
+  app.get('/api/admin/platform/business-groups', requirePlatformAdmin, async (req,res)=>{
+    try { res.json(await listBusinessGroups()); }
+    catch(error){ businessGroupError(res, error, 'não foi possível listar os grupos empresariais'); }
+  });
+  app.post('/api/admin/platform/business-groups', requirePlatformAdmin, async (req,res)=>{
+    try {
+      const group = await createBusinessGroup(req.body || {});
+      audit(req, 'CREATE BUSINESS GROUP', `grupo=${group.id}; nome=${group.nome}`); save();
+      res.status(201).json({ ok:true, group });
+    } catch(error){ businessGroupError(res, error, 'não foi possível criar o grupo empresarial'); }
+  });
+  app.patch('/api/admin/platform/business-groups/:id', requirePlatformAdmin, async (req,res)=>{
+    try {
+      const group = await updateBusinessGroup(req.params.id, req.body || {});
+      audit(req, 'UPDATE BUSINESS GROUP', `grupo=${group.id}`); save();
+      res.json({ ok:true, group });
+    } catch(error){ businessGroupError(res, error, 'não foi possível atualizar o grupo empresarial'); }
+  });
+  app.patch('/api/admin/platform/commerce-tenants/:empresaId/group', requirePlatformAdmin, async (req,res)=>{
+    try {
+      const grupoId = req.body?.grupoId ? String(req.body.grupoId) : null;
+      const empresa = await assignCompanyToGroup(req.params.empresaId, grupoId);
+      audit(req, 'ASSIGN BUSINESS GROUP', `empresa=${empresa.id}; grupo=${empresa.grupo_id || 'nenhum'}`); save();
+      res.json({ ok:true, empresa });
+    } catch(error){ businessGroupError(res, error, 'não foi possível vincular a empresa ao grupo'); }
   });
   app.post('/api/admin/platform/commerce-tenants', requirePlatformAdmin, async (req,res)=>{
     try {
