@@ -158,3 +158,30 @@ test('persona: lembrete de 24 h curto, com os mesmos comandos', () => {
   assert.equal(msg, 'Opa, João! Passando pra lembrar: amanhã, sáb 10/10 às 9h, Corte Masculino com Bruno. Responda CONFIRMO, REMARCAR ou CANCELO. Pra não receber avisos, responda SAIR.');
   for (const evento of ['remarcado', 'cancelado', 'criado']) assert.match(personaAppointmentMessage(p, { evento, nome: 'Ana', servico: 'S', profissional: 'P', quando: 'q', quandoRelativo: 'amanhã', loja: 'Barbearia Dino' }), /SAIR/);
 });
+
+test('persona Stallone: loja de suplementos, sem figurinhas e com travas de segurança', async () => {
+  const { channelSegment, personaPersonalizationQuestion, segmentGuidance, SUPPLEMENTS_PERSONALIZATION_QUESTION } = await import('./whatsapp-ai-persona.js');
+  const p = resolvePersona({ persona: { id: 'stallone' } }, {});
+  assert.equal(p.nome, 'Turbo');
+  assert.equal(p.segmento, 'suplementos');
+  assert.equal(p.figurinhas, false, 'sem pacote de figurinhas');
+  assert.equal(resolvePersona({ persona: { id: 'stallone', figurinhas: true } }, {}).figurinhas, false, 'painel não liga figurinha sem pacote');
+  assert.equal(resolvePersona({ persona: { id: 'stallone', nome: 'Dino' } }, {}).nome, 'Dino', 'regra do barbeiro master vale só para o T-Rex');
+  const bloco = personaSystemBlock(p, 'Stallone Nutre Sport');
+  assert.match(bloco, /Stallone Nutre Sport/);
+  assert.match(bloco, /não é medicamento/i);
+  assert.match(bloco, /gestante/i);
+  assert.match(bloco, /rótulo/i);
+  assert.doesNotMatch(bloco, /barbeiro master|corte com o Dino|tesoura/i);
+  for (let i = 0; i < 20; i += 1) {
+    const saudacao = personaGreeting(p, { text: 'oi', seed: `s${i}` });
+    assert.doesNotMatch(saudacao, /corte|barba|perfume|horário/i);
+    assert.ok(saudacao.length <= 160);
+  }
+  assert.equal(personaPersonalizationQuestion(p), SUPPLEMENTS_PERSONALIZATION_QUESTION);
+  assert.equal(channelSegment({}, p), 'suplementos');
+  assert.equal(channelSegment({ segmento: 'suplementos' }, null), 'suplementos', 'segmento do canal vale sem persona');
+  assert.equal(channelSegment({ segmento: 'inventado' }, null), '');
+  assert.equal(segmentGuidance('barbearia'), '');
+  assert.match(segmentGuidance('suplementos'), /NÃO é barbearia/);
+});
