@@ -1,4 +1,4 @@
-import { CommerceError } from './commerce-core.js';
+import { CommerceError, assertUuid } from './commerce-core.js';
 import { db } from './database.js';
 
 const ALIAS_PATTERN = /^[a-z0-9][a-z0-9_-]{1,79}$/;
@@ -149,6 +149,8 @@ function validateProvisioningInput(input = {}) {
   if (!nome || !razaoSocial) throw new CommerceError('nome fantasia e razão social são obrigatórios', 'TENANT_IDENTITY_REQUIRED');
   const tipoNegocio = BUSINESS_TYPES.has(String(input.tipoNegocio || 'outro')) ? String(input.tipoNegocio || 'outro') : 'outro';
   const adminEmail = email(input.adminEmail);
+  const adminSourceUserId = input.adminSourceUserId ? assertUuid(input.adminSourceUserId, 'adminSourceUserId') : null;
+  const adminAccountId = input.adminAccountId ? assertUuid(input.adminAccountId, 'adminAccountId') : null;
   const storeAlias = alias(input.alias);
   const brand = brandKey(input.brandKey || storeAlias);
   const unitCode = storeCode(input.lojaCodigo || `${storeAlias}-matriz`);
@@ -170,6 +172,8 @@ function validateProvisioningInput(input = {}) {
     razaoSocial,
     tipoNegocio,
     adminEmail,
+    adminSourceUserId,
+    adminAccountId,
     adminName: text(input.adminName, 255),
     storeAlias,
     brand,
@@ -195,20 +199,114 @@ async function assertAliasAvailable(trx, storeAlias, empresaId = null) {
   return result.rows[0] || null;
 }
 
-async function resolveSourceUser(trx, adminEmail) {
-  const result = await trx.query(
-    `SELECT id, email, senha_hash, nome_completo
-       FROM usuarios
-      WHERE lower(email) = $1 AND ativo = true
-      ORDER BY data_atualizacao DESC NULLS LAST, data_criacao ASC
-      LIMIT 1
-      FOR SHARE`,
-    [adminEmail],
-  );
+async function resolveSourceUser(trx, adminEmail, { adminSourceUserId = null, adminAccountId = null } = {}) {
+  let result;
+  if (adminSourceUserId) {
+    result = await trx.query(
+      `SELECT id, empresa_id, email, senha_hash, nome_completo
+         FROM usuarios
+        WHERE id = $1 AND ativo = true
+        FOR SHARE`,
+      [adminSourceUserId],
+    );
+  } else if (adminAccountId) {
+    const account = await trx.query(
+      `SELECT id, email, ativo, origem, origem_id
+         FROM commerce_accounts
+        WHERE id = $1
+        FOR SHARE`,
+      [adminAccountId],
+    );
+    if (!account.rows[0]) throw new CommerceError('a conta Commerce informada não foi encontrada', 'ACCOUNT_NOT_FOUND');
+    if (account.rows[0].ativo !== true) throw new CommerceError('a conta Commerce informada está inativa', 'ACCOUNT_INACTIVE');
+    if (String(account.rows[0].email).toLowerCase() !== adminEmail) {
+      throw new CommerceError('a conta Commerce não corresponde ao e-mail informado', 'IDENTITY_AMBIGUOUS');
+    }
+    if (account.rows[0].origem === 'commerce' && account.rows[0].origem_id) {
+      result = await trx.query(
+        `SELECT id, empresa_id, email, senha_hash, nome_completo
+           FROM usuarios
+          WHERE id::text = $1 AND ativo = true
+          FOR SHARE`,
+        [String(account.rows[0].origem_id)],
+      );
+    } else {
+      result = await trx.query(
+        `SELECT u.id, u.empresa_id, u.email, u.senha_hash, u.nome_completo
+           FROM commerce_account_users au
+           JOIN usuarios u ON u.id = au.usuario_id AND u.empresa_id = au.empresa_id
+          WHERE au.account_id = $1 AND u.ativo = true
+            AND lower(btrim(u.email)) = $2
+          ORDER BY u.id
+          FOR SHARE OF u`,
+        [adminAccountId, adminEmail],
+      );
+    }
+  } else {
+    result = await trx.query(
+      `SELECT id, empresa_id, email, senha_hash, nome_completo
+         FROM usuarios
+        WHERE lower(btrim(email)) = $1 AND ativo = true
+        ORDER BY id
+        FOR SHARE`,
+      [adminEmail],
+    );
+  }
   if (!result.rows[0]) {
     throw new CommerceError('o administrador informado ainda não possui uma identidade autenticada no SetPoint', 'TENANT_ADMIN_USER_NOT_FOUND');
   }
-  return result.rows[0];
+  if (result.rows.length > 1) {
+    throw new CommerceError('o e-mail corresponde a mais de uma identidade; informe adminSourceUserId estável', 'IDENTITY_AMBIGUOUS');
+  }
+  const sourceUser = result.rows[0];
+  if (String(sourceUser.email).trim().toLowerCase() !== adminEmail) {
+    throw new CommerceError('a identidade estável não corresponde ao e-mail informado', 'IDENTITY_AMBIGUOUS');
+  }
+  return sourceUser;
+}
+
+async function resolveCanonicalAccount(trx, sourceUser, adminAccountId = null) {
+  const result = adminAccountId
+    ? await trx.query(
+      `SELECT * FROM commerce_accounts
+        WHERE id = $1
+        FOR UPDATE`,
+      [adminAccountId],
+    )
+    : await trx.query(
+      `SELECT * FROM commerce_accounts a
+        WHERE EXISTS (
+                SELECT 1 FROM commerce_account_users au
+                 WHERE au.account_id = a.id AND au.usuario_id = $1
+              )
+           OR (a.origem = 'commerce' AND a.origem_id = $1::text)
+        ORDER BY a.id
+        FOR UPDATE OF a`,
+      [sourceUser.id],
+    );
+  if (result.rows.length > 1) {
+    throw new CommerceError('a identidade está ligada a mais de uma conta Commerce', 'IDENTITY_AMBIGUOUS');
+  }
+  const account = result.rows[0] || null;
+  if (!account) {
+    if (adminAccountId) throw new CommerceError('a conta Commerce informada não foi encontrada', 'ACCOUNT_NOT_FOUND');
+    return null;
+  }
+  if (account.ativo !== true) throw new CommerceError('a conta Commerce ligada está inativa', 'ACCOUNT_INACTIVE');
+  if (String(account.email).toLowerCase() !== String(sourceUser.email).trim().toLowerCase()) {
+    throw new CommerceError('a conta Commerce ligada possui e-mail divergente', 'IDENTITY_AMBIGUOUS');
+  }
+  if (adminAccountId) {
+    const link = await trx.query(
+      `SELECT 1 FROM commerce_account_users WHERE account_id = $1 AND usuario_id = $2
+       UNION ALL
+       SELECT 1 FROM commerce_accounts WHERE id = $1 AND origem = 'commerce' AND origem_id = $2::text
+       LIMIT 1`,
+      [account.id, sourceUser.id],
+    );
+    if (!link.rows[0]) throw new CommerceError('a conta Commerce não está ligada à identidade estável informada', 'IDENTITY_AMBIGUOUS');
+  }
+  return account;
 }
 
 async function upsertTenantUser(trx, empresaId, sourceUser, input) {
@@ -223,6 +321,60 @@ async function upsertTenantUser(trx, empresaId, sourceUser, input) {
     [empresaId, sourceUser.email, sourceUser.senha_hash, input.adminName || sourceUser.nome_completo || sourceUser.email, JSON.stringify({ tenantOwner: true })],
   );
   return result.rows[0];
+}
+
+async function mappedTenantUser(trx, account, empresaId) {
+  const result = await trx.query(
+    `SELECT au.account_id, au.empresa_id, au.usuario_id,
+            u.id, u.email, u.nome_completo, u.senha_hash, u.ativo, u.role
+       FROM commerce_account_users au
+       JOIN usuarios u ON u.id = au.usuario_id AND u.empresa_id = au.empresa_id
+      WHERE au.account_id = $1 AND au.empresa_id = $2
+      FOR UPDATE OF au, u`,
+    [account.id, empresaId],
+  );
+  return result.rows[0] || null;
+}
+
+async function ensureCanonicalAccountMapping(trx, account, empresaId, usuarioId) {
+  const mapped = await mappedTenantUser(trx, account, empresaId);
+  if (mapped && String(mapped.usuario_id) !== String(usuarioId)) {
+    throw new CommerceError('a conta Commerce já possui outra identidade neste tenant', 'IDENTITY_AMBIGUOUS');
+  }
+  if (mapped) return;
+  const occupied = await trx.query(
+    `SELECT account_id
+       FROM commerce_account_users
+      WHERE empresa_id = $1 AND usuario_id = $2
+      FOR UPDATE`,
+    [empresaId, usuarioId],
+  );
+  if (occupied.rows[0] && String(occupied.rows[0].account_id) !== String(account.id)) {
+    throw new CommerceError('a identidade local já está ligada a outra conta Commerce', 'IDENTITY_ALREADY_EXISTS');
+  }
+  try {
+    await trx.query(
+      `INSERT INTO commerce_account_users (account_id, empresa_id, usuario_id)
+       VALUES ($1, $2, $3)`,
+      [account.id, empresaId, usuarioId],
+    );
+  } catch (error) {
+    if (error?.code === '23505') throw new CommerceError('a identidade local já foi ligada durante o provisionamento', 'IDENTITY_ALREADY_EXISTS');
+    throw error;
+  }
+}
+
+async function resolveProvisioningUser(trx, empresaId, sourceUser, account, input) {
+  if (account) {
+    const mapped = await mappedTenantUser(trx, account, empresaId);
+    if (mapped) {
+      if (mapped.ativo !== true) throw new CommerceError('a identidade local ligada está inativa', 'ACCOUNT_INACTIVE');
+      return mapped;
+    }
+  }
+  const usuario = await upsertTenantUser(trx, empresaId, sourceUser, input);
+  if (account) await ensureCanonicalAccountMapping(trx, account, empresaId, usuario.id);
+  return usuario;
 }
 
 async function ensureTenantMembership(trx, empresaId, usuarioId, lojaId) {
@@ -251,7 +403,11 @@ async function ensureTenantMembership(trx, empresaId, usuarioId, lojaId) {
 export async function provisionCommerceTenant(input = {}) {
   const payload = validateProvisioningInput(input);
   return db.transaction(async trx => {
-    const sourceUser = await resolveSourceUser(trx, payload.adminEmail);
+    // Serializa novas empresas com concessões/revogações globais. Leituras de
+    // sessão nunca criam usuários nem memberships por conta própria.
+    await trx.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', ['commerce-platform-grants']);
+    const sourceUser = await resolveSourceUser(trx, payload.adminEmail, payload);
+    const canonicalAccount = await resolveCanonicalAccount(trx, sourceUser, payload.adminAccountId);
     const existingCompany = await trx.query(
       `SELECT id, nome, cnpj, razao_social, ativa, tipo_negocio
          FROM empresas
@@ -277,7 +433,7 @@ export async function provisionCommerceTenant(input = {}) {
     }
 
     const existingAlias = await assertAliasAvailable(trx, payload.storeAlias, empresa.id);
-    const usuario = await upsertTenantUser(trx, empresa.id, sourceUser, payload);
+    const usuario = await resolveProvisioningUser(trx, empresa.id, sourceUser, canonicalAccount, payload);
     const lojaResult = await trx.query(
       `INSERT INTO lojas (empresa_id, codigo, nome, nome_fantasia, timezone, ativa, configuracoes)
        VALUES ($1, $2, $3, $3, $4, true, $5::jsonb)
@@ -342,6 +498,8 @@ export async function provisionCommerceTenant(input = {}) {
         brandKey: payload.brand,
       })],
     );
+    const { syncActivePlatformGrantsForTenant } = await import('./commerce-platform-grants.js');
+    await syncActivePlatformGrantsForTenant(trx, empresa.id);
     return {
       empresa,
       usuario: { id: usuario.id, email: usuario.email, nome: usuario.nome_completo },
