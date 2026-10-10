@@ -8,7 +8,7 @@ import { createCustomer } from './commerce-customers.js';
 export const ACCOUNT_ROLE_CODES = Object.freeze(['tenant_owner', 'store_admin', 'catalog_manager', 'inventory_manager', 'order_operator', 'finance', 'support', 'customer']);
 
 export function assertAccountManager(actor) {
-  if (actor?.pgAccount || actor?.pgOperational || actor?.role !== 'admin' || !(actor.platformAdmin === true || actor.mainAdmin === true)) {
+  if ((actor?.pgAccount && actor?.pgPlatformAdmin !== true) || actor?.pgOperational || actor?.role !== 'admin' || !(actor.platformAdmin === true || actor.mainAdmin === true)) {
     throw new CommerceError('Somente a administração da plataforma pode gerenciar contas multiempresa.', 'PERMISSION_DENIED');
   }
 }
@@ -178,6 +178,7 @@ export async function saveAccountAccess(actor, accountId, input, database = db) 
   return database.transaction(async trx => {
     const account = (await trx.query('SELECT * FROM commerce_accounts WHERE id=$1 FOR UPDATE', [id])).rows[0];
     if (!account || !account.ativo) throw new CommerceError('Conta não encontrada ou inativa.', 'ACCOUNT_NOT_FOUND');
+    if ((await trx.query('SELECT 1 FROM commerce_platform_grants WHERE account_id=$1 AND ativo=true',[id])).rows.length) throw new CommerceError('Use a gestão de administradores globais para alterar este acesso.', 'PERMISSION_DENIED');
     await lockCompanies(trx, desired);
     for (const item of desired) await putGrant(trx, actor, account, item);
     return { ok:true };
@@ -190,6 +191,7 @@ export async function setAccountActive(actor, accountId, ativo, database = db) {
   return database.transaction(async trx => {
     const account = (await trx.query('SELECT id FROM commerce_accounts WHERE id=$1 FOR UPDATE', [id])).rows[0];
     if (!account) throw new CommerceError('Conta não encontrada.', 'ACCOUNT_NOT_FOUND');
+    if ((await trx.query('SELECT 1 FROM commerce_platform_grants WHERE account_id=$1 AND ativo=true',[id])).rows.length) throw new CommerceError('Revogue a concessão global pelo fluxo específico antes de alterar a conta.', 'PERMISSION_DENIED');
     if (!ativo) {
       const owners = await trx.query(`SELECT m.*,r.codigo AS role_codigo FROM commerce_account_users au JOIN commerce_memberships m ON m.usuario_id=au.usuario_id AND m.empresa_id=au.empresa_id JOIN commerce_roles r ON r.id=m.role_id WHERE au.account_id=$1 AND r.codigo='tenant_owner'`, [id]);
       await lockCompanies(trx, owners.rows.map(row => ({ empresaId:row.empresa_id })));
@@ -238,11 +240,14 @@ export async function resolveAccountUser(accountId, { legacyUsers = [], database
   const id = assertUuid(accountId, 'accountId');
   const account = (await database.queryRead('SELECT * FROM commerce_accounts WHERE id=$1 AND ativo=true', [id])).rows[0];
   if (!account || !accountCredential(account, legacyUsers)) return null;
+  const globalGrant = (await database.queryRead(`SELECT ativo, (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP) AS valid FROM commerce_platform_grants WHERE account_id=$1`, [id])).rows[0];
+  if (globalGrant?.ativo === true && globalGrant.valid !== true) return null;
+  const global = globalGrant?.ativo === true && globalGrant.valid === true;
   const access = await activeAccountAccess(id, database);
   if (!access.length) return null;
   const panel = access.some(row => row.role_codigo !== 'customer');
-  const admin = access.some(row => ['tenant_owner','store_admin'].includes(row.role_codigo));
-  return { id:account.id, nome:account.nome, email:account.email, telefone:account.telefone, ativo:true, role:admin ? 'admin' : panel ? 'organizador' : 'cliente', pgAccount:true, tenantBound:true, platformAdmin:false, accountAccess:access };
+  const admin = global || access.some(row => ['tenant_owner','store_admin'].includes(row.role_codigo));
+  return { id:account.id, nome:account.nome, email:account.email, telefone:account.telefone, ativo:true, role:admin ? 'admin' : panel ? 'organizador' : 'cliente', pgAccount:true, tenantBound:!global, platformAdmin:global, pgPlatformAdmin:global, accountAccess:access };
 }
 async function activeAccountAccess(accountId, database = db) {
   return (await database.queryRead(`SELECT au.usuario_id, m.empresa_id, m.loja_id, m.expires_at, r.codigo AS role_codigo, e.nome AS empresa_nome
@@ -252,7 +257,7 @@ async function activeAccountAccess(accountId, database = db) {
     JOIN commerce_memberships m ON m.usuario_id=au.usuario_id AND m.empresa_id=au.empresa_id AND m.ativo=true AND (m.expires_at IS NULL OR m.expires_at>CURRENT_TIMESTAMP)
     JOIN commerce_roles r ON r.id=m.role_id AND (r.empresa_id IS NULL OR r.empresa_id=m.empresa_id)
     LEFT JOIN lojas l ON l.id=m.loja_id AND l.empresa_id=m.empresa_id
-    WHERE au.account_id=$1 AND (m.loja_id IS NULL OR l.ativa=true) AND r.codigo<>'platform_owner' ORDER BY m.empresa_id,m.loja_id NULLS FIRST`, [accountId])).rows;
+    WHERE au.account_id=$1 AND (m.loja_id IS NULL OR l.ativa=true) AND (r.codigo<>'platform_owner' OR EXISTS (SELECT 1 FROM commerce_platform_grants gp WHERE gp.account_id=au.account_id AND gp.ativo=true AND (gp.expires_at IS NULL OR gp.expires_at>CURRENT_TIMESTAMP))) ORDER BY m.empresa_id,m.loja_id NULLS FIRST`, [accountId])).rows;
 }
 export async function accountSession(user, database = db) {
   const rows = await activeAccountAccess(user.id, database);
@@ -278,7 +283,7 @@ export function accountRequestIdentity(user, requested = {}) {
   if (lojaId) assertUuid(lojaId, 'lojaId');
   const chosen = lojaId ? candidates.find(row => row.loja_id===lojaId) || candidates.find(row => !row.loja_id) : candidates.find(row => !row.loja_id) || (new Set(candidates.map(row => row.loja_id)).size===1 ? candidates[0] : null);
   if (!chosen) throw new CommerceError('Selecione uma unidade autorizada.', 'STORE_SELECTION_REQUIRED');
-  const rank = code => ({ tenant_owner:90, store_admin:70, customer:10 }[code] || 50);
+  const rank = code => ({ platform_owner:100, tenant_owner:90, store_admin:70, customer:10 }[code] || 50);
   const effective = candidates.filter(row => !row.loja_id || row.loja_id === (lojaId || chosen.loja_id)).sort((a,b) => rank(b.role_codigo)-rank(a.role_codigo))[0];
   return { empresaId, lojaId:lojaId || chosen.loja_id || null, usuarioId:chosen.usuario_id, membershipExpiresAt:chosen.expires_at, roleCode:effective.role_codigo };
 }

@@ -56,6 +56,7 @@ import {
 } from './core/loyalty-advanced.js';
 import { requireCommercePermission, resolveCommerceIdentity } from './core/commerce-identity-bridge.js';
 import { listAdminUserDirectory } from './core/admin-user-directory.js';
+import { createPlatformAdministratorRouter } from './core/commerce-platform-grant-routes.js';
 import { listCommerceTenants, provisionCommerceTenant } from './core/commerce-tenants.js';
 import { assignCompanyToGroup, createBusinessGroup, listBusinessGroups, updateBusinessGroup } from './core/business-groups.js';
 import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
@@ -199,7 +200,7 @@ const ROLES = ['admin','organizador','staff','atleta'];
 const STAFF = ['admin','organizador','staff']; // acesso ao sistema/painel
 const norm = s => String(s||'').trim().toLowerCase();
 const PLATFORM_ADMIN_EMAILS = new Set((process.env.PLATFORM_ADMIN_EMAILS || '').split(',').map(norm).filter(Boolean));
-const isPlatformAdminUser = user => Boolean(user?.pgAccount !== true && user?.pgOperational !== true && (user?.platformAdmin === true || PLATFORM_ADMIN_EMAILS.has(norm(user?.email))));
+const isPlatformAdminUser = user => Boolean(user?.pgOperational !== true && (user?.pgAccount === true ? user?.pgPlatformAdmin === true && user?.platformAdmin === true : user?.platformAdmin === true || PLATFORM_ADMIN_EMAILS.has(norm(user?.email))));
 // E-mails de administração (plataforma e admin principal) não podem ser cadastrados por
 // registro público nem por administrador de empresa: o e-mail sozinho daria acesso global.
 const isReservedEmail = email => PLATFORM_ADMIN_EMAILS.has(norm(email)) || norm(email) === norm(process.env.ADMIN_USER || 'admin');
@@ -225,7 +226,7 @@ function senhaConfere(senha, hash){
   if(typeof senha !== 'string' || typeof hash !== 'string' || !hash) return false;
   try { return bcrypt.compareSync(senha, hash); } catch { return false; }
 }
-const publicUser = u => ({ id:u.id, nome:u.nome, email:u.email, role:u.role, telefone:u.telefone, ativo:u.ativo, platformAdmin:isPlatformAdminUser(u), ...(u.pgAccount ? { pgAccount:true, tenantBound:true, commerceUserId:u.commerceUserId || null } : {}) });
+const publicUser = u => ({ id:u.id, nome:u.nome, email:u.email, role:u.role, telefone:u.telefone, ativo:u.ativo, platformAdmin:isPlatformAdminUser(u), ...(u.pgAccount ? { pgAccount:true, tenantBound:u.tenantBound !== false, commerceUserId:u.commerceUserId || null } : {}) });
 
 // O login legado continua sendo a porta de entrada, mas o Commerce Core precisa
 // receber o contexto multiempresa/multiloja da membership PostgreSQL. A consulta
@@ -332,7 +333,7 @@ async function authenticateAccountRequest(req, res, next, accountId) {
       req.user.lojaId = context.lojaId;
       req.user.commerceUserId = context.usuarioId;
       req.user.commerceRoleCode = context.roleCode;
-      req.user.role = context.roleCode === 'customer' ? 'cliente' : ['tenant_owner','store_admin'].includes(context.roleCode) ? 'admin' : 'organizador';
+      req.user.role = context.roleCode === 'customer' ? 'cliente' : ['platform_owner','tenant_owner','store_admin'].includes(context.roleCode) ? 'admin' : 'organizador';
     }
     return next();
   } catch (error) {
@@ -733,6 +734,7 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
     try { res.json(await commerceSessionFor(req.user)); }
     catch(error){ res.status(500).json({ error:'não foi possível atualizar o contexto multiempresa', code:'COMMERCE_SESSION_ERROR' }); }
   });
+  app.use('/api/admin/platform/administrators', createPlatformAdministratorRouter({ getLegacyUsers:() => db().usuarios || [], reservedEmail:isReservedEmail }));
   app.use('/api/admin/platform/accounts', createAccountManagementRouter({ getLegacyUsers:() => db().usuarios || [], reservedEmail:isReservedEmail }));
   app.get('/api/admin/platform/commerce-tenants', requirePlatformAdmin, async (req,res)=>{
     try { res.json(await listCommerceTenants()); }
@@ -774,13 +776,17 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
   });
   app.post('/api/admin/platform/commerce-tenants', requirePlatformAdmin, async (req,res)=>{
     try {
-      const result = await provisionCommerceTenant(req.body || {});
+      const input = { ...(req.body || {}) };
+      if (req.user.pgAccount === true && norm(input.adminEmail) === norm(req.user.email)) {
+        input.adminAccountId = req.user.id;
+      }
+      const result = await provisionCommerceTenant(input);
       audit(req, 'PROVISION COMMERCE TENANT', `empresa=${result.empresa.id}; alias=${result.alias}`); save();
       res.status(result.created ? 201 : 200).json({ ok:true, ...result });
     } catch(error){
       const status = ['TENANT_ADMIN_EMAIL_INVALID','TENANT_ADMIN_ACCESS_CONFIRMATION_REQUIRED','TENANT_CNPJ_INVALID','TENANT_IDENTITY_REQUIRED','STOREFRONT_ALIAS_INVALID','STOREFRONT_BRAND_INVALID','STORE_CODE_INVALID','STOREFRONT_CODE_INVALID'].includes(error?.code) ? 400
-        : ['TENANT_CNPJ_CONFLICT','STOREFRONT_ALIAS_CONFLICT'].includes(error?.code) ? 409
-          : ['TENANT_ADMIN_USER_NOT_FOUND','TENANT_ROLE_NOT_FOUND','TENANT_INACTIVE'].includes(error?.code) ? 422 : 500;
+        : ['TENANT_CNPJ_CONFLICT','STOREFRONT_ALIAS_CONFLICT','IDENTITY_AMBIGUOUS','IDENTITY_ALREADY_EXISTS'].includes(error?.code) ? 409
+          : ['TENANT_ADMIN_USER_NOT_FOUND','TENANT_ROLE_NOT_FOUND','TENANT_INACTIVE','ACCOUNT_INACTIVE','ACCOUNT_NOT_FOUND'].includes(error?.code) ? 422 : 500;
       res.status(status).json({ error:status >= 500 ? 'não foi possível provisionar o tenant do Commerce' : error.message, code:error?.code || 'TENANT_PROVISION_ERROR' });
     }
   });
@@ -1121,7 +1127,7 @@ async function tryAccountLogin(email, password, res, panelOnly, rateKey) {
   if (sessao.empresaId) {
     const local = accountRequestIdentity(user, { empresaId:sessao.empresaId, lojaId:sessao.lojaId });
     user.commerceUserId = local.usuarioId;
-    user.role = local.roleCode === 'customer' ? 'cliente' : ['tenant_owner','store_admin'].includes(local.roleCode) ? 'admin' : 'organizador';
+    user.role = local.roleCode === 'customer' ? 'cliente' : ['platform_owner','tenant_owner','store_admin'].includes(local.roleCode) ? 'admin' : 'organizador';
   }
   limparTentativas(rateKey);
   const token = jwt.sign({ id:user.id, email:user.email, pgAccount:true }, JWT_SECRET, { expiresIn:'12h' });
@@ -1221,6 +1227,9 @@ app.get('/api/admin/usuarios-diretorio', auth, requireRole('admin', 'organizador
   res.set('Cache-Control', 'private, no-store');
   if (req.user.pgAccount === true) {
     try {
+      if (isPlatformAdminUser(req.user)) {
+        return res.json({ ok:true, ...await listAdminUserDirectory({ commerceDb, legacyUsers:db().usuarios || [], allCompanies:true, empresaId:null, lojaId:null, coreEnabled:true }) });
+      }
       const context = await requireCommercePermission(req, 'users.write');
       return res.json({ ok:true, ...await listAdminUserDirectory({ commerceDb, legacyUsers:[], allCompanies:false, empresaId:context.empresaId, lojaId:context.lojaId, coreEnabled:true }) });
     } catch { return res.status(403).json({ error:'Sem permissão para consultar usuários desta empresa.', code:'PERMISSION_DENIED' }); }
@@ -2555,7 +2564,7 @@ async function resolverEscopoBarbearia(req, res, next) {
   next();
 }
 function exigirPapelOperacaoBarbearia(req, res, next) {
-  if (req.user?.pgAccount === true && !['tenant_owner','store_admin'].includes(req.user.commerceRoleCode)) {
+  if (req.user?.pgAccount === true && !isPlatformAdminUser(req.user) && !['tenant_owner','store_admin'].includes(req.user.commerceRoleCode)) {
     return res.status(403).json({ error:'Este perfil especializado opera somente os módulos Commerce permitidos pelo seu papel.', code:'COMMERCE_ROLE_USE_SCOPED_MODULE' });
   }
   if (['admin', 'organizador'].includes(String(req.user?.role || ''))) return next();

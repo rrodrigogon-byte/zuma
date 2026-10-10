@@ -31,11 +31,14 @@ const validInput = {
   publicConfig: { displayName: 'Dino', tagline: 'Barbearia e perfumaria.' },
 };
 
-function fakeTransaction({ aliasInsertAllowed = true, existingCompany = false } = {}) {
+function fakeTransaction({ aliasInsertAllowed = true, existingCompany = false, sourceUsers = null } = {}) {
   const calls = [];
   const query = async (sql, params = []) => {
     calls.push({ sql, params });
-    if (sql.includes('FROM usuarios') && sql.includes('lower(email)')) return { rows: [{ id: ids.sourceUser, email: 'admin@example.com', senha_hash: 'hash-reutilizado', nome_completo: 'Admin Existente' }] };
+    if (sql.includes('pg_advisory_xact_lock')) return { rows: [] };
+    if (sql.includes('FROM commerce_platform_grants')) return { rows: [] };
+    if (sql.includes('FROM usuarios') && (sql.includes('lower(email)') || sql.includes('lower(btrim(email))'))) return { rows: sourceUsers || [{ id: ids.sourceUser, empresa_id: ids.empresa, email: 'admin@example.com', senha_hash: 'hash-reutilizado', nome_completo: 'Admin Existente' }] };
+    if (sql.includes('FROM commerce_accounts a')) return { rows: [] };
     if (sql.includes('FROM empresas') && sql.includes('WHERE cnpj')) return { rows: existingCompany ? [{ id: ids.empresa, nome: 'Dino', cnpj: validInput.cnpj, razao_social: validInput.razaoSocial, ativa: true, tipo_negocio: 'barbearia' }] : [] };
     if (sql.includes('INSERT INTO empresas')) return { rows: [{ id: ids.empresa, nome: 'Dino', cnpj: validInput.cnpj, razao_social: validInput.razaoSocial, ativa: true, tipo_negocio: 'barbearia' }] };
     if (sql.includes('FROM commerce_storefront_aliases a') && sql.includes('FOR UPDATE')) return { rows: [] };
@@ -74,6 +77,16 @@ test('normaliza tenant sem aceitar logo inseguro ou cor arbitrária', () => {
   assert.equal(payload.public.colors.accent, '#6E7CE0');
 });
 
+test('aceita IDs estáveis opcionais sem resolver identidade por e-mail', () => {
+  const payload = validateProvisioningInput({
+    ...validInput,
+    adminSourceUserId: ids.sourceUser,
+    adminAccountId: ids.empresa,
+  });
+  assert.equal(payload.adminSourceUserId, ids.sourceUser);
+  assert.equal(payload.adminAccountId, ids.empresa);
+});
+
 test('publicConfig aceita somente URL HTTPS e cores hexadecimais completas', () => {
   const value = publicConfig({ logoUrl: 'https://cdn.example/logo.svg', colors: { accent: '#123abc' } }, 'Dino');
   assert.equal(value.logoUrl, 'https://cdn.example/logo.svg');
@@ -108,4 +121,16 @@ test('conflito concorrente de alias não pode transferir o canal para outro tena
     withTransaction(fake, () => provisionCommerceTenant(validInput)),
     error => error.code === 'STOREFRONT_ALIAS_CONFLICT',
   );
+});
+
+test('e-mail ambíguo exige identidade estável e falha antes de qualquer DML', async () => {
+  const fake = fakeTransaction({ sourceUsers: [
+    { id: ids.sourceUser, empresa_id: ids.empresa, email: 'admin@example.com', senha_hash: 'hash-a', nome_completo: 'Admin A' },
+    { id: ids.tenantUser, empresa_id: ids.empresa, email: 'admin@example.com', senha_hash: 'hash-b', nome_completo: 'Admin B' },
+  ] });
+  await assert.rejects(
+    withTransaction(fake, () => provisionCommerceTenant({ ...validInput, cnpj: '11444777000161' })),
+    error => error.code === 'IDENTITY_AMBIGUOUS',
+  );
+  assert.equal(fake.calls.some(call => /\b(?:INSERT|UPDATE|DELETE)\b/i.test(call.sql)), false);
 });

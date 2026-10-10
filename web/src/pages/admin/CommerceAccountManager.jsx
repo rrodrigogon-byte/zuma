@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../../lib/api'
 import './commerce-account-manager.css'
+import PlatformAdministratorManager from './PlatformAdministratorManager'
 
 const ROOT = '/api/admin/platform/accounts'
 const roleName = role => role.codigo === 'tenant_owner' ? 'Administrador da empresa' : role.nome
@@ -122,7 +123,7 @@ export default function CommerceAccountManager({ empresaId, onRefresh }) {
   }
 
   if (!options) return error ? <p role="alert" className="commerce-users-error">{error}</p> : null
-  const panelRoles = (options.roles || []).filter(role => role.codigo !== 'customer')
+  const panelRoles = (options.roles || []).filter(role => !['customer', 'platform_owner'].includes(role.codigo))
   const source = sources.find(item => `${item.source}:${item.sourceId}` === sourceKey)
   return <div className="commerce-account-manager">
     <header><div><span className="ecommerce-admin-kicker">Administração da plataforma</span><h3>Contas e acessos multiempresa</h3><p>Uma conta de login. Perfis diferentes em cada empresa. Clientes não recebem acesso administrativo automaticamente.</p></div><div className="commerce-account-actions">
@@ -131,6 +132,7 @@ export default function CommerceAccountManager({ empresaId, onRefresh }) {
       <button type="button" className="ecommerce-admin-button ghost" disabled={busy} onClick={() => begin('import')}>Associar conta existente</button>
     </div></header>
     {notice && <p role="status" className="commerce-account-notice">{notice}</p>}{error && !mode && <p role="alert" className="commerce-users-error">{error}</p>}
+    <PlatformAdministratorManager />
     <details><summary>Contas multiempresa cadastradas ({accounts.length})</summary><p className="commerce-admin-help">Contas anteriores só aparecem aqui depois de uma associação explícita. A lista abaixo não combina cadastros por e-mail.</p>
       <div className="ecommerce-admin-table-wrap"><table className="ecommerce-admin-table"><thead><tr><th>Nome</th><th>E-mail</th><th>Estado</th><th>Ações</th></tr></thead><tbody>{accounts.map(account => <tr key={account.id}><td>{account.nome}</td><td>{account.email}</td><td>{account.ativo ? 'Ativa' : 'Desativada'}</td><td><div className="ecommerce-row-actions"><button type="button" disabled={busy || !account.ativo} onClick={() => manageAccount(account)}>Gerenciar empresas</button><button type="button" disabled={busy} onClick={() => toggleAccount(account)}>{account.ativo ? 'Desativar conta' : 'Reativar conta'}</button></div></td></tr>)}</tbody></table></div>
       {!accounts.length && <p className="commerce-admin-help">Nenhuma conta multiempresa cadastrada.</p>}
