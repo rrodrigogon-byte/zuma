@@ -1,4 +1,5 @@
 import express from 'express';
+import { stallonePageMeta } from './core/stallone-page-meta.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import path from 'path';
@@ -6833,6 +6834,16 @@ app.post('/api/webhooks/infinitepay/barbearia', async (req, res) => {
 });
 
 // ---- estático: serve React SPA (build do web/) ----
+app.use((req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  const meta = stallonePageMeta(req.hostname, req.path);
+  if (!meta) return next();
+  try {
+    const html = trocarMeta(indexHtml(), meta).replace(/(<meta property="og:site_name" content=")[^"]*(")/, '$1Stallone Nutre Sport$2');
+    res.setHeader('Cache-Control', 'no-cache');
+    return res.type('html').send(html);
+  } catch (_) { return next(); }
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Meta tags do link de agendamento/avaliação: quem compartilha o link no WhatsApp

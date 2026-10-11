@@ -428,3 +428,5 @@ html[data-theme='dark'] .commerce-shell.sf-ux .sf-cart-limit { color: var(--kytt
 
 /* Selo de produto que só sai por retirada (congelados e refrigerados). */
 .commerce-shell.sf-ux .sf-pickup-only { display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; font-size: 12px; font-weight: 700; color: var(--kytto-indigo, var(--accent)); }
+
+.commerce-skip-link{position:absolute;left:16px;top:-100px;z-index:1000;padding:12px 18px;background:#fff;color:#141416;border-radius:8px}.commerce-skip-link:focus{top:16px;outline:3px solid #e32935}

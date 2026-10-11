@@ -136,7 +136,7 @@ function ProductImage({ product, large = false, mediaUrl = '' }) {
   const { source, broken, onError } = useRecoverableCatalogImage(image)
   if (broken) return <div className={`commerce-product-placeholder sf-image-fallback ${large ? 'is-large' : ''}`} role="img" aria-label={`${product?.nome || 'Produto'} — imagem indisponível`}><Store size={large ? 40 : 28} aria-hidden="true" /><span>Imagem indisponível</span></div>
   return image
-    ? <img onError={onError} src={source} alt={alt} loading={large ? 'eager' : 'lazy'} decoding="async" className={`commerce-product-image ${large ? 'is-large' : ''}`} />
+    ? <img width="600" height="600" onError={onError} src={source} alt={alt} loading={large ? 'eager' : 'lazy'} decoding="async" className={`commerce-product-image ${large ? 'is-large' : ''}`} />
     : <div className={`commerce-product-placeholder ${large ? 'is-large' : ''}`} aria-hidden="true">{product?.emoji || '▦'}</div>
 }
 
@@ -653,6 +653,7 @@ function EcommerceStorefront({ routeAlias, hostName }) {
   ].filter(([, url]) => url)
 
   return <main className="commerce-shell sf-ux" data-storefront-alias={storeAlias || undefined}>
+    <a href="#catalogo" className="commerce-skip-link">Pular para o catálogo</a>
     <section className="commerce-hero">
       {isDinoStorefront && <div className="commerce-dino-brandbar"><div className="commerce-dino-identity"><div className="commerce-dino-logo-frame"><img src={DINO_COMMERCE_LOGO} alt="Dino — Barbearia e Perfumaria" /></div><div className="commerce-dino-brand-copy"><span>Dino</span><strong>Barbearia &amp; Perfumaria</strong><small>Estilo, cuidado e presença.</small></div></div><div className="commerce-dino-theme" role="group" aria-label="Tema da loja">{[["system", Monitor, "Sistema"], ["light", Sun, "Claro"], ["dark", Moon, "Escuro"]].map(([mode, Icon, label]) => <button type="button" key={mode} onClick={() => changeThemeMode(mode)} className={themeMode === mode ? 'active' : ''} aria-pressed={themeMode === mode} title={`Tema ${label.toLowerCase()}`}><Icon size={14} /><span>{label}</span></button>)}</div></div>}
       {isStalloneStorefront && <div className="commerce-stallone-brandbar"><img src={STALLONE_LOGO} alt="Stallone Nutre Sport" width="240" height="88" /><div className="commerce-stallone-theme" role="group" aria-label="Tema da loja">{[["dark", Moon, "Escuro"], ["light", Sun, "Claro"]].map(([mode, Icon, label]) => <button type="button" key={mode} onClick={() => changeThemeMode(mode)} className={(themeMode === mode || (mode === 'dark' && themeMode === 'system')) ? 'active' : ''} aria-pressed={themeMode === mode || (mode === 'dark' && themeMode === 'system')} title={`Tema ${label.toLowerCase()}`}><Icon size={14} /><span>{label}</span></button>)}</div></div>}

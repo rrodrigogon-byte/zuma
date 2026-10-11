@@ -316,6 +316,7 @@ function sanitizePublicOrderTracking(row = {}) {
 
 function jsonError(res, error) {
   const statusByCode = {
+    PUBLIC_POLICIES_INVALID: 400, PUBLIC_POLICIES_URL_INVALID: 400, PUBLIC_POLICIES_CONFLICT: 400,
     QUANTITY_LIMIT_EXCEEDED: 422,
     SHIPPING_METHOD_REQUIRED: 400,
     CART_ALREADY_CONVERTED: 409,

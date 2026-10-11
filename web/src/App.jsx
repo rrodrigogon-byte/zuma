@@ -202,8 +202,9 @@ function Loading() {
 
 // Telas cujos módulos antigos eram globais da plataforma: com uma empresa
 // ativa, mostram a versão da empresa (ou levam ao módulo equivalente dela).
-function TenantAware({ tenant, legacy }) {
+function TenantAware({ tenant, legacy, stallone }) {
   const { user, empresaAtiva } = useAuth()
+  if (stallone && brandFromContext(empresaAtiva) === 'stallone') return stallone
   return isTenantScope(user, empresaAtiva) ? tenant : legacy
 }
 
@@ -252,12 +253,12 @@ export default function App() {
           <Route path="/admin/ecommerce"   element={<Layout><EcommerceAdmin /></Layout>} />
           <Route path="/admin/aulas"        element={<Layout><Aulas /></Layout>} />
           <Route path="/admin/crm"          element={<Layout><CRM /></Layout>} />
-          <Route path="/admin/bi"           element={<Layout><TenantAware tenant={<BIBarbearia />} legacy={<BI />} /></Layout>} />
+          <Route path="/admin/bi"           element={<Layout><TenantAware stallone={<Navigate to="/admin/ecommerce?tab=reports" replace />} tenant={<BIBarbearia />} legacy={<BI />} /></Layout>} />
           <Route path="/admin/auditoria"       element={<Layout><TenantAware tenant={<AuditoriaEmpresa />} legacy={<Auditoria />} /></Layout>} />
-          <Route path="/admin/configuracoes"  element={<TenantAware tenant={<Navigate to="/admin/barbearia-erp?area=gestao&tab=Configura%C3%A7%C3%A3o" replace />} legacy={<Layout><Configuracoes /></Layout>} />} />
+          <Route path="/admin/configuracoes"  element={<TenantAware stallone={<Navigate to="/admin/ecommerce?tab=stores" replace />} tenant={<Navigate to="/admin/barbearia-erp?area=gestao&tab=Configura%C3%A7%C3%A3o" replace />} legacy={<Layout><Configuracoes /></Layout>} />} />
           <Route path="/admin/cupons"         element={<Layout><Cupons /></Layout>} />
           <Route path="/admin/relatorios"     element={<Layout><Relatorios /></Layout>} />
-          <Route path="/admin/relatorios-operacionais" element={<TenantAware tenant={<Navigate to="/admin/barbearia-erp?area=gestao&tab=Relat%C3%B3rios" replace />} legacy={<Layout><RelatoriosOperacionais /></Layout>} />} />
+          <Route path="/admin/relatorios-operacionais" element={<TenantAware stallone={<Navigate to="/admin/ecommerce?tab=reports" replace />} tenant={<Navigate to="/admin/barbearia-erp?area=gestao&tab=Relat%C3%B3rios" replace />} legacy={<Layout><RelatoriosOperacionais /></Layout>} />} />
           <Route path="/admin/noticias"       element={<Layout><Noticias /></Layout>} />
           <Route path="/admin/sumula"         element={<Layout><Sumula /></Layout>} />
           <Route path="/admin/mensalidades"   element={<Layout><Mensalidades /></Layout>} />

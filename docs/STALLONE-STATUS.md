@@ -142,3 +142,15 @@ A auditoria pública verificou busca por SKU, detalhe de produto, carrinho e nav
 O endpoint público de pagamentos respondeu `available: false`, sem métodos. A PR #300 bloqueia envio nessa condição, apresenta aviso e conserva o carrinho. Também integra a identificação da Stallone com os logos e as alterações da PR #298.
 
 Não foram criados pedidos ou pagamentos reais. Administração autenticada, emissão fiscal, lotes/validade, compra completa e integrações externas ainda precisam de validação específica. Os preços de produtos vendidos por caixa ou unidade precisam de conferência comercial; a auditoria não altera preços sem fonte confirmada.
+
+## 8. Evolução do painel — 11/10/2026 (PR #300, ainda não publicada)
+
+A entrega acrescenta uma Central de operação exclusiva da empresa Stallone, usando o catálogo, estoque e configurações do escopo carregado. Pendências de conta de pagamento de produção, imagem, descrição, saldo baixo, políticas, domínio e entrega manual recebem acesso direto à aba responsável. Falhas de consulta aparecem como dados indisponíveis. A central não substitui homologação de pagamento, fiscal ou logística.
+
+A aba Lojas permite editar os quatro links de políticas com a permissão `settings.write`. O servidor trava o canal, preserva as demais configurações e sincroniza somente as políticas dos aliases da mesma empresa/vitrine em transação. Links precisam usar HTTPS e não podem conter credenciais. O conteúdo das páginas deve ser aprovado pela loja.
+
+Configurações, relatórios operacionais e BI da empresa Stallone passam a abrir as abas correspondentes de Commerce. Compras, PDV, lotes/validade e emissão fiscal ainda precisam de integração/homologação própria; não foram declarados concluídos.
+
+Metadados HTML da vitrine e do domínio próprio passam a usar título, descrição, canonical e imagem da marca. Login, admin e checkout no domínio dedicado recebem `noindex`; APIs, arquivos e outras marcas não são interceptados. A imagem de compartilhamento utiliza o ícone PNG existente da Stallone.
+
+O portal `https://kytto.com.br/admin/ecommerce` redirecionou ao login durante a verificação. A prévia foi conferida com catálogo público; a operação autenticada continua pendente da sessão do usuário. Nenhum preço, estoque, pedido, pagamento ou segredo foi alterado em produção.
