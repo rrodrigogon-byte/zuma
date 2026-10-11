@@ -1109,3 +1109,4 @@ body,
 /* Logotipo Stallone: versão para fundo escuro ou claro conforme o tema ativo. */
 html[data-theme='light'] .stallone-logo-on-dark { display: none !important; }
 html:not([data-theme='light']) .stallone-logo-on-light { display: none !important; }
+.checkout-pickup-only{margin:10px 0 0;padding:10px 12px;border-radius:10px;border:1px solid var(--accent, #E32935);background:var(--accent-soft, rgba(227,41,53,.08));font-size:.88rem;font-weight:600}

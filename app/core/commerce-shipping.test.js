@@ -546,3 +546,12 @@ test('Dino rejeita quote manual pré-existente para SP sem selecionar opção ne
   }, { storefrontId: '10000000-0000-4000-8000-000000000103', shippingMethodId: '10000000-0000-4000-8000-000000000109', lines: [{ variantId: '10000000-0000-4000-8000-000000000105', quantity: 1 }] }), error => error.code === 'SHIPPING_NATIONAL_FULFILLMENT_NOT_READY');
   assert.equal(calls, 1);
 });
+
+test('CEP inexistente no ViaCEP vira SHIPPING_CEP_NOT_FOUND, não erro interno', async () => {
+  const { postalCodeNotFound } = await import('./commerce-shipping.js');
+  assert.equal(postalCodeNotFound({ erro: true }), true);
+  assert.equal(postalCodeNotFound({ erro: 'true' }), true);
+  assert.equal(postalCodeNotFound({ cep: '78300-000', localidade: '', uf: '' }), true);
+  assert.equal(postalCodeNotFound(null), true);
+  assert.equal(postalCodeNotFound({ cep: '78306-028', localidade: 'Tangará da Serra', uf: 'MT' }), false);
+});
