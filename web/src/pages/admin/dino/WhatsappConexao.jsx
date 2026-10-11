@@ -15,7 +15,8 @@ const STATES = { open: 'Conectado', qr: 'Aguardando leitura do QR', connecting: 
 const HISTORY = { conectado: 'Conectou', desconectado: 'Caiu', desconectado_manual: 'Desconectado manualmente', qr_gerado: 'QR gerado', reconexao_solicitada: 'Reconexão solicitada', reconexao_automatica: 'Reconexão automática', instancia_alterada: 'Instância alterada', erro: 'Erro' }
 const ERRORS = {
   chave_invalida: 'O backend recusou a chave de API. Confira CHATBOT_BACKEND_KEY no servidor.',
-  instance_not_enabled: 'A instância não está liberada no backend. Confira WHATSAPP_INSTANCE_NAMES no backend do NossaGente.',
+  instance_not_enabled: 'Esta linha ainda não existe no servidor de WhatsApp. Peça para incluir a instância em WHATSAPP_INSTANCE_NAMES do backend (Cloud Run) e publicar; depois toque em Gerar QR.',
+  status_unavailable: 'O servidor de WhatsApp não informou o status desta linha agora. Toque em Verificar agora; se continuar, veja o Diagnóstico de ponta a ponta abaixo.',
   provedor_nao_e_nossagente: 'O servidor ainda usa outro provedor. Defina WHATSAPP_PROVIDER=chatbot_backend.',
 }
 
@@ -107,7 +108,7 @@ function WhatsappConexaoEmpresa() {
     } catch (error) {
       if (scope !== scopeRef.current) return
       setDiag(null)
-      setErroDiag(error?.status === 403 ? 'Diagnóstico disponível somente para a empresa dona desta instância.' : (error.message || 'Diagnóstico indisponível agora.'))
+      setErroDiag(error?.status === 403 ? (error?.data?.motivo === 'WHATSAPP_INSTANCE_UNASSIGNED' || /instância de WhatsApp atribuída/.test(String(error?.message || '')) ? 'Esta empresa ainda não tem uma linha de WhatsApp atribuída. Peça à administração da plataforma.' : 'Diagnóstico disponível somente para a empresa dona desta linha.') : (error.message || 'Diagnóstico indisponível agora.'))
       if (error?.status === 403) setDiagBloqueado(true)
     } finally {
       if (diagFlightRef.current === flight) diagFlightRef.current = null
