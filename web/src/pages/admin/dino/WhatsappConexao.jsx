@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../../lib/api'
 import { useAuth } from '../../../lib/auth'
+import { brandFromContext } from '../../../lib/brand'
 import { useToast } from '../../../hooks/useToast'
 import { Dialog } from '../customer360/shared'
 import { dateTime } from './format'
@@ -366,7 +367,7 @@ function WhatsappConexaoEmpresa() {
             {podeGerenciar && ia && !ia.channel && <button type="button" className="c360-btn primary" disabled={Boolean(busy)} onClick={prepararAtendente}>Preparar atendente (rascunho)</button>}
             {podeGerenciar && ia?.channel?.status === 'ativo' && <button type="button" className="c360-btn ghost" disabled={Boolean(busy)} onClick={sincronizarWebhook}>Sincronizar webhook</button>}
             {webhookInfo && <p className="dadm-note warn dadm-wa-webhook">{webhookInfo}</p>}
-            <Link to="/admin/barbearia-erp?area=integracoes&tab=Integra%C3%A7%C3%B5es">Revisar capacidades e ativar o atendente →</Link>
+            <Link to={brandFromContext(empresaAtiva) === 'stallone' ? '/admin/cerebro-ia' : '/admin/barbearia-erp?area=integracoes&tab=Integra%C3%A7%C3%B5es'}>Revisar capacidades e ativar o atendente →</Link>
           </section>
 
           <section className="dadm-card" aria-labelledby="wa-auto">

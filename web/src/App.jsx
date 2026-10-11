@@ -228,12 +228,12 @@ export default function App() {
         <Route path="/portaria"       element={<Protected need="staff"><Layout noSidebar><Portaria /></Layout></Protected>} />
         <Route path="/admin/portaria" element={<Protected need="staff"><Layout noSidebar><Portaria /></Layout></Protected>} />
         <Route path="/garcom"         element={<Protected need="staff"><Layout noSidebar><GarcomView /></Layout></Protected>} />
-        <Route path="/loja-atendimento"       element={<Protected need="staff"><Layout><LojaAtendimento /></Layout></Protected>} />
-        <Route path="/admin/loja-atendimento" element={<Protected need="staff"><Layout><LojaAtendimento /></Layout></Protected>} />
+        <Route path="/loja-atendimento"       element={<Protected need="staff"><Layout><TenantAware stallone={<EcommerceAdmin defaultTab="orders" />} tenant={<LojaAtendimento />} legacy={<LojaAtendimento />} /></Layout></Protected>} />
+        <Route path="/admin/loja-atendimento" element={<Protected need="staff"><Layout><TenantAware stallone={<EcommerceAdmin defaultTab="orders" />} tenant={<LojaAtendimento />} legacy={<LojaAtendimento />} /></Layout></Protected>} />
 
         {/* Admin (admin/organizador) — guarda única via Outlet */}
         <Route element={<ProtectedOutlet need="org" />}>
-          <Route path="/admin"              element={<Layout><Dashboard /></Layout>} />
+          <Route path="/admin"              element={<Layout><TenantAware stallone={<Navigate to="/admin/ecommerce?tab=overview" replace />} tenant={<Dashboard />} legacy={<Dashboard />} /></Layout>} />
           <Route path="/admin/plataforma"  element={<PlatformOnly><Layout><AdminPlataforma /></Layout></PlatformOnly>} />
           <Route path="/admin/usuarios"     element={<TenantAware tenant={<Navigate to="/admin/ecommerce?tab=users" replace />} legacy={<Layout><Usuarios /></Layout>} />} />
           <Route path="/admin/torneios"     element={<Layout><Torneios /></Layout>} />

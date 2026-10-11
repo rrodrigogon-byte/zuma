@@ -1,6 +1,7 @@
+import { db } from './core/database.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildChecklist, fatosAgendaParaIa } from './dino-ativacao-routes.js';
+import { registerAtivacaoRoutes, buildChecklist, fatosAgendaParaIa } from './dino-ativacao-routes.js';
 
 const base = () => ({
   agora: Date.parse('2026-09-28T20:00:00Z'), baseUrl: 'https://dino.kytto.com.br', commerce: true, migracao: true,
@@ -126,4 +127,39 @@ test('travas do multi-instância: linha não verificada e saída desligada apare
   const ok = Object.fromEntries(buildChecklist({ ...base(), poll: { modo: 'pilot', linhaVerificada: true, saida: 'pilot', pilotos: 1 } }).itens.map((i) => [i.id, i]));
   assert.equal(ok.modo_entrada.ok, true);
   assert.equal(ok.modo_saida.ok, true);
+});
+
+
+test('ações de ativação da Dino não alteram canal, política, agenda ou vitrine Stallone', async () => {
+  const previousEnv = process.env.COMMERCE_CORE_ENABLED;
+  const previousRead = db.queryRead;
+  const previousTransaction = db.transaction;
+  const routes = new Map();
+  const empresaId = 'empresa-stallone-autorizada';
+  try {
+    process.env.COMMERCE_CORE_ENABLED = '1';
+    db.queryRead = async (sql, params) => {
+      assert.match(sql, /commerce_storefront_aliases/);
+      assert.deepEqual(params, [empresaId]);
+      return { rows: [{ exists: 1 }] };
+    };
+    db.transaction = async () => { assert.fail('não deve alterar a vitrine'); };
+    const app = Object.fromEntries(['get', 'post', 'put'].map(method => [method, (path, handler) => routes.set(`${method} ${path}`, handler)]));
+    registerAtivacaoRoutes(app, {
+      legacyEmpresaId: () => empresaId,
+      requireCommercePermission: async () => ({ empresaId, lojaId: 'loja-stallone' }),
+      barbeariaErpKytto: { atualizarConfiguracao: () => { assert.fail('não deve alterar agenda'); } },
+    });
+    for (const [method, action] of [['post', 'canal'], ['post', 'politica'], ['post', 'slug'], ['put', 'vitrine']]) {
+      const response = { statusCode: 200, body: null, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
+      await routes.get(`${method} /api/admin/barbearia/ativacao/${action}`)({ user: { role: 'admin' }, body: { confirmado: true, ativar: true, usarIdentidadeDino: true } }, response);
+      assert.equal(response.statusCode, 409, action);
+      assert.equal(response.body.code, 'ACTIVATION_SEGMENT_MISMATCH');
+    }
+  } finally {
+    db.queryRead = previousRead;
+    db.transaction = previousTransaction;
+    if (previousEnv === undefined) delete process.env.COMMERCE_CORE_ENABLED;
+    else process.env.COMMERCE_CORE_ENABLED = previousEnv;
+  }
 });
