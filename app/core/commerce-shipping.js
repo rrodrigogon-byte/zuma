@@ -2,6 +2,8 @@ import crypto from 'node:crypto';
 import { CommerceError, assertUuid, tenantContext } from './commerce-core.js';
 import { shippingProviders, shippingSecretConfigured } from './shipping-adapters.js';
 import { pickupOnlyItems, PICKUP_ONLY_ERROR_CODE, PICKUP_ONLY_MESSAGE } from './commerce-pickup-rules.js';
+import { createPostalCodeLookup, createPostgresPostalStore } from './postal-codes.js';
+import { db } from './database.js';
 
 const SECRET_REF = /^env:[A-Z][A-Z0-9_]{2,}$/;
 const CEP = /^\d{8}$/;
@@ -262,25 +264,21 @@ export function postalCodeNotFound(body) {
   return !text(body.localidade, 120) || !text(body.uf, 2);
 }
 
+// Cache permanente só com banco configurado (em testes sem banco, consulta direta).
+let postalLookup = null;
+function getPostalLookup() {
+  if (!postalLookup) {
+    const store = process.env.DATABASE_URL || process.env.POSTGRES_URL ? createPostgresPostalStore(db) : null;
+    postalLookup = createPostalCodeLookup({ store });
+  }
+  return postalLookup;
+}
+
 export async function lookupPostalCode(value) {
   const cep = normalizeCep(value);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
-  try {
-    const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`, { headers: { Accept: 'application/json' }, signal: controller.signal });
-    if (!response.ok) throw new CommerceError('serviço de CEP indisponível', 'SHIPPING_CEP_PROVIDER_ERROR');
-    const body = await response.json();
-    // O ViaCEP responde `erro: true` ou `erro: "true"` (texto) para CEP inexistente;
-    // sem município o CEP também não serve para entrega.
-    if (postalCodeNotFound(body)) throw new CommerceError('CEP não encontrado; confira os números', 'SHIPPING_CEP_NOT_FOUND');
-    return { cep, logradouro: text(body.logradouro, 240) || null, complemento: text(body.complemento, 120) || null, bairro: text(body.bairro, 120) || null, cidade: text(body.localidade, 120) || null, estado: text(body.uf, 2).toUpperCase() || null, ibge: text(body.ibge, 20) || null };
-  } catch (error) {
-    if (error instanceof CommerceError) throw error;
-    if (error.name === 'AbortError') throw new CommerceError('serviço de CEP não respondeu no prazo', 'SHIPPING_CEP_PROVIDER_TIMEOUT');
-    throw new CommerceError('não foi possível consultar o CEP', 'SHIPPING_CEP_PROVIDER_ERROR');
-  } finally {
-    clearTimeout(timer);
-  }
+  const address = await getPostalLookup()(cep);
+  const { fonte, ...publicAddress } = address;
+  return publicAddress;
 }
 
 function accountRow(row) {

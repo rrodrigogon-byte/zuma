@@ -57,6 +57,7 @@ const migrationFiles = [
   '066_grupos_empresariais.sql',
   '067_commerce_accounts.sql',
   '068_commerce_platform_grants.sql',
+  '069_commerce_postal_codes.sql',
 ];
 const advisoryLockKey = 825410732;
 

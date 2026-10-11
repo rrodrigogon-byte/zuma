@@ -70,5 +70,6 @@
  "065_commerce_membership_expiration.sql": "c6021ec3b50640beef84fb953f7a40c2c5c3518dfc9a559f41628f6de1400ea5",
  "066_grupos_empresariais.sql": "711b921749260cbd669985aaa90c5f99cd51d5d712c2c77bff891485983f6653",
  "067_commerce_accounts.sql": "d8fd5c8b773cd468ee7165cb943f5444a595c43cb791dac87ccbc19aa1c6a62a",
-  "068_commerce_platform_grants.sql": "72b263aad53fe7fe526b244feaa59ac9d066e09bba581b420627d313d8fe5bbe"
+ "068_commerce_platform_grants.sql": "72b263aad53fe7fe526b244feaa59ac9d066e09bba581b420627d313d8fe5bbe",
+ "069_commerce_postal_codes.sql": "80c383732cf42c2ff0c1383f6d665ebe85552928b8326f0fe4b1ef206963b181"
 }
