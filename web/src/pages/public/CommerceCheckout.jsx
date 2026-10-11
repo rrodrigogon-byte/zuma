@@ -13,6 +13,7 @@ import { checkoutReturnSafety } from '../../lib/checkout-return-safety'
 import { hasLateCaptureReview, LATE_CAPTURE_COPY } from '../../lib/late-capture-status'
 import { isPromotionOrderRevalidationError, normalizePromotionCode, promotionPreviewErrorMessage, promotionPreviewFingerprint, promotionPreviewTotals, requestPromotionPreview } from '../../lib/checkout-promotion'
 import './checkout-promotion.css'
+import './stallone-checkout.css'
 
 const EMPTY_ADDRESS = { cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '', referencia: '' }
 
