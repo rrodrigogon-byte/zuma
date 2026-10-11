@@ -1895,7 +1895,7 @@ async function syncChatbotBackendWebhook(context, channel, { secret, publicBaseU
       ok: true,
       polling: true,
       manual: false,
-      instructions: 'Igual à Isa: não há webhook para sincronizar. A Dino consulta as mensagens recebidas a cada poucos segundos; basta o número estar pareado e CHATBOT_BACKEND_EMPRESA_ID apontar para esta empresa.',
+      instructions: 'Igual à Isa: não há webhook para sincronizar. O sistema consulta as mensagens recebidas a cada poucos segundos; basta o número estar pareado e a instância estar registrada para esta empresa no servidor (CHATBOT_BACKEND_INSTANCES, ou CHATBOT_BACKEND_EMPRESA_ID para uma única linha).',
       channel: safeChannelView(channel),
       provider: { configured: whatsappProviderConfigured(), name: 'chatbot_backend', mode: 'isa' },
     };
@@ -1935,7 +1935,7 @@ async function syncChatbotBackendWebhook(context, channel, { secret, publicBaseU
     manual,
     polling,
     instructions: polling
-      ? 'Igual à Isa: o backend não envia webhook de mensagens. A Dino consulta as mensagens recebidas a cada poucos segundos; basta o número estar pareado e CHATBOT_BACKEND_EMPRESA_ID apontar para esta empresa.'
+      ? 'Igual à Isa: o backend não envia webhook de mensagens. O sistema consulta as mensagens recebidas a cada poucos segundos; basta o número estar pareado e a instância estar registrada para esta empresa no servidor (CHATBOT_BACKEND_INSTANCES, ou CHATBOT_BACKEND_EMPRESA_ID para uma única linha).'
       : null,
     channel: safeChannelView(updated),
     provider: { configured: true, status: result.status || null, name: 'chatbot_backend' },

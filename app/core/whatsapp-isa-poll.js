@@ -23,7 +23,7 @@
 
 import crypto from 'node:crypto';
 import { db } from './database.js';
-import { chatbotBackendConfig, chatbotBackendMode, fetchInboundMessages, fetchOutboundMessages, isaChatId, validInstance, whatsappProviderConfigured, whatsappProviderName } from './whatsapp-provider.js';
+import { chatbotBackendConfig, chatbotBackendMode, fetchInboundMessages, fetchOutboundMessages, instanceLineVerified, instanceOwner, instanceRegistry, isaChatId, validInstance, whatsappProviderConfigured, whatsappProviderName } from './whatsapp-provider.js';
 import { authorizeWhatsappEgress } from './whatsapp-egress.js';
 import { enviarMensagem } from './whatsapp.js';
 import { ingestInboundWhatsappMessage } from './whatsapp-ai-routes.js';
@@ -40,10 +40,27 @@ function texto(valor, limite = 4000) {
   return String(valor ?? '').replace(/\u0000/g, '').trim().slice(0, limite);
 }
 
-export function pollMode() {
+// Instância padrão do ambiente (a da Dino quando só o par antigo está configurado).
+function instanciaPadrao() {
+  return validInstance(chatbotBackendConfig().instance || '');
+}
+
+/** Instâncias lidas pelo worker no modo multi-instância: as registradas com empresa dona. */
+export function instanciasDaEntrada() {
+  if (chatbotBackendMode() !== 'instancias') return [];
+  // Registradas + a padrão do ambiente (compatível com o par antigo de variáveis).
+  return [...new Set([...instanceRegistry().keys(), instanciaPadrao()].filter(Boolean))];
+}
+
+/**
+ * Modo de entrada. Com `instance`, vale para aquela linha (fechada até a linha ser
+ * conferida no aparelho). Sem `instance`, informa se ALGUMA linha registrada está aberta.
+ */
+export function pollMode(instance) {
   const modo = texto(process.env.WHATSAPP_POLL_MODE, 10).toLowerCase();
   if (chatbotBackendMode() === 'instancias') {
-    if (process.env.WHATSAPP_LINE_VERIFIED !== '1') return 'off';
+    const linhas = instance === undefined ? instanciasDaEntrada() : [validInstance(instance)];
+    if (!linhas.some((linha) => linha && instanceLineVerified(linha))) return 'off';
     if (modo === 'on' && process.env.WHATSAPP_FULL_ROLLOUT_APPROVED !== '1') return 'off';
     return ['shadow', 'pilot', 'on'].includes(modo) ? modo : 'off';
   }
@@ -90,11 +107,16 @@ export function parseBackendMessage(item = {}, { agora = Date.now() } = {}) {
   return { ...comum, ignored: false, text: conteudo };
 }
 
-export async function canalDaEmpresa() {
-  const empresaId = texto(process.env.CHATBOT_BACKEND_EMPRESA_ID, 60);
+/**
+ * Canal ativo da linha. No modo multi-instância, a empresa vem do registro da instância
+ * (CHATBOT_BACKEND_INSTANCES); sem `instance`, usa a instância padrão do ambiente.
+ */
+export async function canalDaEmpresa({ instance: pedida } = {}) {
+  const multi = chatbotBackendMode() === 'instancias';
+  const instance = multi ? validInstance(pedida || instanciaPadrao()) : null;
+  if (multi && !instance) return null;
+  const empresaId = multi ? instanceOwner(instance) : texto(process.env.CHATBOT_BACKEND_EMPRESA_ID, 60);
   if (!/^[0-9a-f-]{36}$/i.test(empresaId)) return null;
-  const instance = chatbotBackendMode() === 'instancias' ? chatbotBackendConfig().instance : null;
-  if (chatbotBackendMode() === 'instancias' && !instance) return null;
   const resultado = await db.queryRead(
     `SELECT c.* FROM canais_integracao c
       JOIN lojas l ON l.id = c.loja_id AND l.empresa_id = c.empresa_id
@@ -138,8 +160,12 @@ async function lerMidia(parsed, item, { canal, fetchImpl, jaRecebido, entenderMi
 // Mídias em leitura neste processo: evita transcrever duas vezes enquanto o Gemini responde.
 const midiasEmLeitura = new Set();
 
-export async function runIsaPollPass({ fetchImpl, agora = Date.now(), canal: canalInjetado, carregarCanal = canalDaEmpresa, ingest = ingestInboundWhatsappMessage, enviar = null, autorizarSaida = authorizeWhatsappEgress, comTrava = true, jaRecebido = eventoJaRecebido, entenderMidia = inboundMediaToText, buscarSaidas = fetchOutboundMessages, equipe = { liberar: releaseExpiredStaffPauses, pausar: pauseForStaff } } = {}) {
+export async function runIsaPollPass({ fetchImpl, agora = Date.now(), instance: instanciaPedida, canal: canalInjetado, carregarCanal = () => canalDaEmpresa({ instance: instanciaPedida }), ingest = ingestInboundWhatsappMessage, enviar = null, autorizarSaida = authorizeWhatsappEgress, comTrava = true, jaRecebido = eventoJaRecebido, entenderMidia = inboundMediaToText, buscarSaidas = fetchOutboundMessages, equipe = { liberar: releaseExpiredStaffPauses, pausar: pauseForStaff } } = {}) {
   if (!pollEnabled()) return { skipped: true, reason: 'poll_disabled' };
+  // Linha desta passada: a pedida ou a padrão do ambiente. Cada linha tem a própria trava.
+  const linhaDaPassada = chatbotBackendMode() === 'instancias' ? validInstance(instanciaPedida || instanciaPadrao()) : '';
+  if (chatbotBackendMode() === 'instancias' && pollMode(linhaDaPassada) === 'off') return { skipped: true, reason: 'line_closed' };
+  const lockKey = !linhaDaPassada || linhaDaPassada === instanciaPadrao() ? LOCK_KEY : `${LOCK_KEY}:${linhaDaPassada}`;
   const resumo = { equipeAssumiu: 0, iaRetomada: 0, lidas: 0, novas: 0, duplicadas: 0, ignoradas: 0, audios: 0, fotos: 0, midiasLidas: 0, foraDoPiloto: 0 };
   let canalDaPassada = null;
   // Áudio/foto novos e as mensagens seguintes do MESMO contato ficam para depois da
@@ -171,7 +197,10 @@ export async function runIsaPollPass({ fetchImpl, agora = Date.now(), canal: can
     let canal = canalInjetado || await carregarCanal();
     if (!canal) return { skipped: true, reason: 'channel_not_active' };
     const instance = chatbotBackendMode() === 'instancias' ? validInstance(canal.configuracao?.instance || '') : '';
-    if (chatbotBackendMode() === 'instancias' && (!instance || instance !== chatbotBackendConfig().instance)) return { skipped: true, reason: 'instance_scope_mismatch' };
+    // Instância com empresa dona registrada: o canal precisa ser dessa empresa.
+    const donaDaLinha = instance ? instanceOwner(instance) : '';
+    if (chatbotBackendMode() === 'instancias' && (!instance || instance !== linhaDaPassada
+      || (donaDaLinha && donaDaLinha !== String(canal.empresa_id || '').toLowerCase()))) return { skipped: true, reason: 'instance_scope_mismatch' };
     if (canalInjetado) {
       const canonic = await carregarCanal();
       if (!canonic || String(canonic.id) !== String(canal.id)
@@ -182,7 +211,7 @@ export async function runIsaPollPass({ fetchImpl, agora = Date.now(), canal: can
     } else canalDaPassada = canal;
     const resposta = await fetchInboundMessages({ instance, from: agora - maxAgeMs(), limit: 100 }, fetchImpl);
     if (!resposta.ok) return { skipped: true, reason: resposta.authError ? 'backend_auth' : (resposta.error || 'backend_unavailable') };
-    const modo = pollMode();
+    const modo = pollMode(chatbotBackendMode() === 'instancias' ? instance : undefined);
     // Antes de entregar as mensagens do cliente: se a equipe respondeu pelo celular,
     // a conversa já está com ela quando o worker for responder (a IA não atropela a recepção).
     if (staffTakeoverEnabled() && modo !== 'shadow') {
@@ -226,7 +255,7 @@ export async function runIsaPollPass({ fetchImpl, agora = Date.now(), canal: can
 
   const fase1 = comTrava
     ? await db.transaction(async (trx) => {
-      const trava = await trx.query('SELECT pg_try_advisory_xact_lock(hashtext($1)) AS ok', [LOCK_KEY]);
+      const trava = await trx.query('SELECT pg_try_advisory_xact_lock(hashtext($1)) AS ok', [lockKey]);
       if (!trava.rows[0]?.ok) return { skipped: true, reason: 'lock_held' };
       return executar();
     })
@@ -249,22 +278,33 @@ export async function runIsaPollPass({ fetchImpl, agora = Date.now(), canal: can
   return { skipped: false, ...resumo };
 }
 
-// Última passada do worker neste processo (para o diagnóstico; sem conteúdo de mensagem).
-const ultimaPassada = { em: null, resultado: null, erro: null, ultimaNovaEm: null, passadas: 0 };
+// Última passada do worker neste processo, por linha (para o diagnóstico; sem conteúdo de mensagem).
+const novaPassada = () => ({ em: null, resultado: null, erro: null, ultimaNovaEm: null, passadas: 0 });
+const passadasPorLinha = new Map();
+function passadaDa(linha = '') {
+  const chave = linha || '_';
+  if (!passadasPorLinha.has(chave)) passadasPorLinha.set(chave, novaPassada());
+  return passadasPorLinha.get(chave);
+}
 let workerIniciado = false;
 
-export function estadoDaEntrada() {
+/** Estado da entrada. Com `instance`, os dados daquela linha (multi-instância). */
+export function estadoDaEntrada({ instance } = {}) {
+  const multi = chatbotBackendMode() === 'instancias';
+  const linha = multi ? validInstance(instance || instanciaPadrao()) : '';
+  const dona = multi ? instanceOwner(linha) : texto(process.env.CHATBOT_BACKEND_EMPRESA_ID, 60);
   return {
-    ativa: pollEnabled(),
+    ativa: pollEnabled() && (!multi || pollMode(linha) !== 'off'),
     workerIniciado,
-    modo: pollMode(),
+    modo: multi ? pollMode(linha) : pollMode(),
     modoPedido: texto(process.env.WHATSAPP_POLL_MODE, 10).toLowerCase() || '',
-    linhaVerificada: process.env.WHATSAPP_LINE_VERIFIED === '1',
+    instancia: linha || null,
+    linhaVerificada: multi ? instanceLineVerified(linha) : process.env.WHATSAPP_LINE_VERIFIED === '1',
     rolloutAprovado: process.env.WHATSAPP_FULL_ROLLOUT_APPROVED === '1',
     pilotos: pilotPhones().size,
     intervaloMs: Math.max(3000, Number.parseInt(process.env.WHATSAPP_POLL_INTERVAL_MS || '5000', 10) || 5000),
-    empresaPorVariavel: /^[0-9a-f-]{36}$/i.test(texto(process.env.CHATBOT_BACKEND_EMPRESA_ID, 60)),
-    ultimaPassada: { ...ultimaPassada },
+    empresaPorVariavel: /^[0-9a-f-]{36}$/i.test(dona || ''),
+    ultimaPassada: { ...passadaDa(linha) },
   };
 }
 
@@ -279,18 +319,25 @@ export function startIsaPollWorker() {
     if (rodando) return;
     rodando = true;
     try {
-      const resumo = await runIsaPollPass();
-      ultimaPassada.em = new Date().toISOString();
-      ultimaPassada.passadas += 1;
-      ultimaPassada.erro = null;
-      ultimaPassada.resultado = resumo?.skipped ? { pulou: resumo.reason } : { lidas: resumo?.lidas || 0, novas: resumo?.novas || 0, ignoradas: resumo?.ignoradas || 0, foraDoPiloto: resumo?.foraDoPiloto || 0, duplicadas: resumo?.duplicadas || 0 };
-      if (resumo?.novas) ultimaPassada.ultimaNovaEm = ultimaPassada.em;
-      if (resumo?.skipped && ultimaPassada.passadas % 120 === 1) console.warn(`[WhatsApp] consulta de mensagens pulada: ${resumo.reason}`);
-      if (resumo?.novas || resumo?.audios || resumo?.fotos || resumo?.equipeAssumiu || resumo?.iaRetomada) console.log(JSON.stringify({ worker: 'whatsapp-isa-poll', ...resumo }));
-    } catch (error) {
-      ultimaPassada.em = new Date().toISOString();
-      ultimaPassada.erro = String(error?.message || error).slice(0, 200);
-      console.warn('[WhatsApp] consulta de mensagens:', ultimaPassada.erro);
+    // Uma passada por linha registrada (multi-instância); no modo Isa, uma só.
+    const linhas = chatbotBackendMode() === 'instancias' ? instanciasDaEntrada().filter((linha) => pollMode(linha) !== 'off') : [''];
+    for (const linha of linhas) {
+      const ultimaPassada = passadaDa(linha);
+      try {
+        const resumo = await runIsaPollPass(linha ? { instance: linha } : {});
+        ultimaPassada.em = new Date().toISOString();
+        ultimaPassada.passadas += 1;
+        ultimaPassada.erro = null;
+        ultimaPassada.resultado = resumo?.skipped ? { pulou: resumo.reason } : { lidas: resumo?.lidas || 0, novas: resumo?.novas || 0, ignoradas: resumo?.ignoradas || 0, foraDoPiloto: resumo?.foraDoPiloto || 0, duplicadas: resumo?.duplicadas || 0 };
+        if (resumo?.novas) ultimaPassada.ultimaNovaEm = ultimaPassada.em;
+        if (resumo?.skipped && ultimaPassada.passadas % 120 === 1) console.warn(`[WhatsApp] consulta de mensagens pulada${linha ? ` (${linha})` : ''}: ${resumo.reason}`);
+        if (resumo?.novas || resumo?.audios || resumo?.fotos || resumo?.equipeAssumiu || resumo?.iaRetomada) console.log(JSON.stringify({ worker: 'whatsapp-isa-poll', instancia: linha || undefined, ...resumo }));
+      } catch (error) {
+        ultimaPassada.em = new Date().toISOString();
+        ultimaPassada.erro = String(error?.message || error).slice(0, 200);
+        console.warn(`[WhatsApp] consulta de mensagens${linha ? ` (${linha})` : ''}:`, ultimaPassada.erro);
+      }
+    }
     } finally {
       rodando = false;
     }

@@ -1,7 +1,7 @@
 // Gate de saída exclusivo do chatbot_backend multi-instância.
 // Não consulta conteúdo de mensagens nem expõe telefones/logs; negar antes de qualquer HTTP.
 import { db } from './database.js';
-import { chatbotBackendConfig, chatbotBackendMode, isaChatId, validInstance, whatsappProviderName } from './whatsapp-provider.js';
+import { chatbotBackendMode, instanceLineVerified, instanceOwner, isaChatId, validInstance, whatsappProviderName } from './whatsapp-provider.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const deny = (reason) => ({ ok: false, reason });
@@ -14,12 +14,14 @@ export function egressMode() {
 
 export function evaluateWhatsappEgress({ empresaId, lojaId, canalId, instance, number } = {}) {
   if (whatsappProviderName() !== 'chatbot_backend' || chatbotBackendMode() !== 'instancias') return deny('provider_scope');
-  const owner = String(process.env.CHATBOT_BACKEND_EMPRESA_ID || '').trim();
-  if (!UUID.test(owner) || !UUID.test(String(empresaId || '')) || owner !== String(empresaId)) return deny('company_scope');
-  if (!UUID.test(String(lojaId || '')) || !UUID.test(String(canalId || ''))) return deny('channel_scope');
+  // Cada instância tem uma empresa dona (CHATBOT_BACKEND_INSTANCES, ou o par antigo
+  // CHATBOT_BACKEND_INSTANCE + CHATBOT_BACKEND_EMPRESA_ID). Só a dona envia por ela.
   const resolved = validInstance(instance);
-  if (!resolved || resolved !== chatbotBackendConfig().instance) return deny('instance_scope');
-  if (process.env.WHATSAPP_LINE_VERIFIED !== '1') return deny('line_unverified');
+  if (!resolved || !instanceOwner(resolved)) return deny('instance_scope');
+  const owner = instanceOwner(resolved);
+  if (!UUID.test(owner) || !UUID.test(String(empresaId || '')) || owner !== String(empresaId).toLowerCase()) return deny('company_scope');
+  if (!UUID.test(String(lojaId || '')) || !UUID.test(String(canalId || ''))) return deny('channel_scope');
+  if (!instanceLineVerified(resolved)) return deny('line_unverified');
   const mode = egressMode();
   if (mode === 'off') return deny('egress_off');
   const recipient = isaChatId(number);
@@ -58,10 +60,10 @@ export async function authorizeWhatsappEgress(context, { database = db, lock = f
 // valores de segredo — só o nome da variável que o operador precisa ajustar.
 const MOTIVOS_EGRESS = {
   provider_scope: 'O servidor não está no modo multi-instância do backend NossaGente (WHATSAPP_PROVIDER=chatbot_backend e CHATBOT_BACKEND_MODE=instancias).',
-  company_scope: 'Esta empresa não é a dona da instância configurada no servidor (CHATBOT_BACKEND_EMPRESA_ID).',
+  company_scope: 'Esta empresa não é a dona da instância no servidor (CHATBOT_BACKEND_INSTANCES ou CHATBOT_BACKEND_EMPRESA_ID).',
   channel_scope: 'Canal da unidade inválido para envio. Selecione a unidade e confira o canal do WhatsApp.',
-  instance_scope: 'A instância desta empresa não é a instância liberada no servidor (CHATBOT_BACKEND_INSTANCE).',
-  line_unverified: 'A linha ainda não foi confirmada pelo titular no aparelho (WHATSAPP_LINE_VERIFIED=1 no servidor).',
+  instance_scope: 'A instância desta empresa não está liberada no servidor (inclua em CHATBOT_BACKEND_INSTANCES como instancia=id-da-empresa).',
+  line_unverified: 'A linha ainda não foi confirmada pelo titular no aparelho (inclua a instância em WHATSAPP_LINE_VERIFIED_INSTANCES, ou WHATSAPP_LINE_VERIFIED=1 para a instância padrão).',
   egress_off: 'O envio de mensagens está desligado no servidor (WHATSAPP_EGRESS_MODE=off). Para testar, defina WHATSAPP_EGRESS_MODE=pilot e inclua este número em WHATSAPP_POLL_PILOT_PHONES.',
   recipient_invalid: 'Número inválido. Informe DDD + número, por exemplo 65 99999-0000.',
   pilot_not_listed: 'Modo piloto: este número não está na lista autorizada (WHATSAPP_POLL_PILOT_PHONES). Inclua o número no servidor ou use um número já autorizado.',
