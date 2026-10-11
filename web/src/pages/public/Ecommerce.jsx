@@ -6,12 +6,12 @@ import { decrementCartQuantity, loadAllStorefrontProducts, nextStorefrontCartSyn
 import { recommendedShippingOption, shippingQuoteKey } from '../../lib/checkout-shipping'
 import { createLatestRequest } from '../../lib/latest-request'
 import { applyThemeMode, brandFromHost, commerceDisplayName, DINO_COMMERCE_LOGO, STALLONE_LOGO, storedThemeMode } from '../../lib/brand'
-import './commerce-stallone.css'
-import { addProductToCart, filterCatalog, sortCatalog, stockState } from '../../lib/storefront-catalog'
+import { addProductToCart, CATALOG_PAGE_SIZE, filterCatalog, paginateCatalog, sortCatalog, stockState } from '../../lib/storefront-catalog'
 import AddToCartSuccess from '../../components/store/AddToCartSuccess'
 import CartDrawer from '../../components/store/CartDrawer'
 import './commerce.css'
 import './storefront-ux.css'
+import './commerce-stallone.css'
 import { ehHostLojaDino } from '../../lib/dominios-dino'
 
 function readCart(storeAlias) {
@@ -301,6 +301,9 @@ function EcommerceStorefront({ routeAlias, hostName }) {
 
   const categories = useMemo(() => ['Todos', ...new Set(products.map(item => item.cat).filter(Boolean))], [products])
   const filtered = useMemo(() => sortCatalog(filterCatalog(products, { query, category, inStockOnly }), sort), [products, query, category, inStockOnly, sort])
+  const [visibleCount, setVisibleCount] = useState(CATALOG_PAGE_SIZE)
+  useEffect(() => setVisibleCount(CATALOG_PAGE_SIZE), [query, category, inStockOnly, sort])
+  const catalogPage = useMemo(() => paginateCatalog(filtered, visibleCount), [filtered, visibleCount])
   useEffect(() => {
     const timer = window.setTimeout(() => setQuery(searchInput), 220)
     return () => window.clearTimeout(timer)
@@ -649,7 +652,7 @@ function EcommerceStorefront({ routeAlias, hostName }) {
       {isStalloneStorefront && <div className="commerce-stallone-brandbar"><img src={STALLONE_LOGO} alt="Stallone Nutre Sport" width="240" height="88" /><div className="commerce-stallone-theme" role="group" aria-label="Tema da loja">{[["dark", Moon, "Escuro"], ["light", Sun, "Claro"]].map(([mode, Icon, label]) => <button type="button" key={mode} onClick={() => changeThemeMode(mode)} className={(themeMode === mode || (mode === 'dark' && themeMode === 'system')) ? 'active' : ''} aria-pressed={themeMode === mode || (mode === 'dark' && themeMode === 'system')} title={`Tema ${label.toLowerCase()}`}><Icon size={14} /><span>{label}</span></button>)}</div></div>}
       <div>
         <span className="commerce-eyebrow"><Store size={14} /> {brandName}</span>
-        <h1>{isDinoStorefront ? <>Autocuidado, estilo e bem-estar. <em>Compre com confiança.</em></> : isStalloneStorefront ? <>Do treino à mesa. <em>Nutrição que performa.</em></> : <>Venda melhor. <em>Opere com inteligência.</em></>}</h1>
+        <h1>{isDinoStorefront ? <>Autocuidado, estilo e bem-estar. <em>Compre com confiança.</em></> : isStalloneStorefront ? <>Força para evoluir. <em>Nutrição para ir além.</em></> : <>Venda melhor. <em>Opere com inteligência.</em></>}</h1>
         <p>{brandTagline}</p>
         <div className="commerce-hero-actions">
           <a className="commerce-button commerce-button-primary" href="#catalogo">Explorar catálogo <ArrowRight size={16} /></a>
@@ -675,7 +678,7 @@ function EcommerceStorefront({ routeAlias, hostName }) {
     {!loading && error && <div className="commerce-state commerce-state-error">{error}</div>}
     {!loading && !error && (query || category !== 'Todos' || inStockOnly) && <p className="sf-results-meta" aria-live="polite">{filtered.length === 1 ? '1 produto encontrado' : `${filtered.length} produtos encontrados`}</p>}
     {!loading && !error && <section className="commerce-product-grid" aria-label="Produtos">
-      {filtered.map(product => {
+      {catalogPage.items.map(product => {
         const stock = stockState(product)
         const cartKey = product.variantId || product.id
         const added = Boolean(justAdded[cartKey])
@@ -684,6 +687,7 @@ function EcommerceStorefront({ routeAlias, hostName }) {
           <div className="commerce-product-content"><span>{product.cat || 'Produto'}</span><h2 title={product.nome}>{product.nome}</h2><p>{product.descricao || `Produto disponível no catálogo ${brandName}.`}</p><button type="button" className="commerce-product-details-button" onClick={() => openProduct(product)}><Eye size={15} aria-hidden="true" /> Ver detalhes</button><div className="commerce-product-buy"><div className="commerce-price"><strong>{money(product.preco)}</strong>{product.promocaoAtiva && <s>{money(product.precoOriginal)}</s>}</div>{stock.kind === 'ok' && <span className="sf-stock-line">Em estoque</span>}{stock.kind === 'backorder' && <span className="sf-stock-line">Sob encomenda · +10 dias úteis</span>}<button type="button" className={`sf-add ${added ? 'is-added' : ''}`} onClick={() => addToCart(product)} disabled={stock.kind === 'out' || added} aria-label={stock.kind === 'out' ? `${product.nome} — esgotado` : `Adicionar ${product.nome} ao carrinho`}>{stock.kind === 'out' ? 'Esgotado' : added ? <><Check size={17} aria-hidden="true" /> Adicionado</> : <><ShoppingBag size={17} aria-hidden="true" /> Adicionar</>}</button></div></div>
         </article>
       })}
+      {catalogPage.hasMore && <div className="sf-load-more"><button type="button" className="sf-btn sf-btn-secondary" onClick={() => setVisibleCount(count => count + CATALOG_PAGE_SIZE)}>Mostrar mais produtos</button><small aria-live="polite">Exibindo {catalogPage.items.length} de {catalogPage.total}</small></div>}
       {!filtered.length && <div className="sf-empty" role="status"><strong>Nenhum produto encontrado</strong><p>Tente outro nome, SKU ou categoria.</p><button type="button" className="sf-btn sf-btn-secondary" onClick={clearFilters}>Limpar filtros</button></div>}
     </section>}
 

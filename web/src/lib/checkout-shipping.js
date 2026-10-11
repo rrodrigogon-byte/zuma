@@ -50,8 +50,11 @@ export function isDinoCommerceStorefront(storeContext) {
 
 export const DINO_DELIVERY_UNAVAILABLE = 'Não há entrega disponível para este CEP e carrinho no momento. A Dino atende somente a área local já habilitada. Seu carrinho foi mantido; nenhum pedido ou pagamento foi iniciado por este cálculo. Para outra localidade, consulte a loja antes de tentar novamente.'
 
+export const PICKUP_ONLY_ITEMS_MESSAGE = 'Seu carrinho tem itens congelados ou refrigerados, que só podem ser retirados na loja. Escolha retirada ou remova esses itens para receber em casa.'
+
 export function checkoutShippingErrorMessage(error, { isDino = false } = {}) {
   if (isDino && error?.code === 'SHIPPING_DESTINATION_UNAVAILABLE') return DINO_DELIVERY_UNAVAILABLE
+  if (error?.code === 'SHIPPING_PICKUP_ONLY_ITEMS') return PICKUP_ONLY_ITEMS_MESSAGE
   return error?.message || 'Não foi possível calcular o frete.'
 }
 

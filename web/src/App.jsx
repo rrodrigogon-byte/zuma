@@ -3,7 +3,7 @@ import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
 import { useAuth } from './lib/auth'
-import { applyBrand, applyThemeMode, brandFromContext, brandFromHost, brandHasThemeChoice, resolveBrand, storedThemeMode } from './lib/brand'
+import { applyBrand, applyThemeMode, brandFromContext, brandFromHost, brandThemeMode, stalloneEntryFromHost, resolveBrand, storedThemeMode } from './lib/brand'
 import { isTenantScope } from './lib/tenant-scope'
 import { destinoInicialDino, ehHostDino, ehHostLojaDino } from './lib/dominios-dino'
 
@@ -47,6 +47,8 @@ function PlatformOnly({ children }) {
 // catálogo em kytto.com.br antes de uma publicação explícita por canal.
 function EntradaPrincipal() {
   const host = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
+  const destinoStallone = stalloneEntryFromHost(host)
+  if (destinoStallone) return <Navigate to={destinoStallone} replace />
   const destinoDino = destinoInicialDino(host)
   if (destinoDino) return <Navigate to={destinoDino} replace />
   // Domínio próprio da Stallone (stallone.kytto.com.br): abre direto a loja.
@@ -57,6 +59,8 @@ function EntradaPrincipal() {
 
 function CheckoutEntry() {
   const host = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
+  const destinoStallone = stalloneEntryFromHost(host, true)
+  if (destinoStallone) return <Navigate to={destinoStallone} replace />
   // Domínio próprio da loja: o checkout sem endereço usa o da loja Dino.
   if (destinoInicialDino(host) === '/perfumaria/dino') return <Navigate to="/checkout/dino" replace />
   if (brandFromHost(host) === 'stallone') return <Navigate to="/checkout/stallone" replace />
@@ -178,7 +182,7 @@ function RouteBrandSync() {
   useEffect(() => {
     const brand = ehHostDino(hostName) ? 'dino' : (brandFromHost(hostName) || resolveBrand(location.pathname, location.search, tenantBrand))
     applyBrand(brand)
-    applyThemeMode(brandHasThemeChoice(brand) ? storedThemeMode() : 'system')
+    applyThemeMode(brandThemeMode(brand, location.pathname, storedThemeMode()))
   }, [hostName, location.pathname, location.search, tenantBrand])
 
   return null

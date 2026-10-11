@@ -95,3 +95,13 @@ export function sortCatalog(products = [], sort = 'available') {
     return Number(stockState(a).kind === 'out') - Number(stockState(b).kind === 'out')
   })
 }
+
+// Renderização em páginas: catálogos grandes (ex.: 768 itens) não montam todos os cards de uma vez.
+export const CATALOG_PAGE_SIZE = 48
+
+export function paginateCatalog(products = [], visibleCount = CATALOG_PAGE_SIZE) {
+  const list = Array.isArray(products) ? products : []
+  const limit = Math.max(1, Math.floor(Number(visibleCount) || CATALOG_PAGE_SIZE))
+  const items = list.slice(0, limit)
+  return { items, total: list.length, remaining: Math.max(0, list.length - items.length), hasMore: list.length > items.length }
+}
