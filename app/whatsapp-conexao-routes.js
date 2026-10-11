@@ -3,7 +3,7 @@
 // já aplicados em server.js. Ações que mudam a conexão exigem gestor.
 
 import * as conexaoKytto from './whatsapp-conexao-kytto.js';
-import { whatsappProviderName } from './core/whatsapp-provider.js';
+import { instanceOwner, whatsappProviderName } from './core/whatsapp-provider.js';
 import { diagnosticarWhatsapp } from './core/whatsapp-diagnostico.js';
 import { db } from './core/database.js';
 import { egressMensagem, egressResumo, evaluateWhatsappEgress } from './core/whatsapp-egress.js';
@@ -82,14 +82,21 @@ export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLoja
   // Diagnóstico de ponta a ponta (só leitura): contagens, horários e travas; nunca conteúdo, número completo ou segredo.
   app.get(`${BASE}/diagnostico`, async (req, res) => {
     if (!gestor(req, res)) return;
-    // O diagnóstico consulta a instância global definida no runtime. Nunca mostrar
-    // o estado da Dino quando o operador selecionou outra empresa ou não há dono.
-    const owner = String(process.env.CHATBOT_BACKEND_EMPRESA_ID || '').trim();
-    if (!owner || String(legacyEmpresaId(req)) !== owner) {
+    // O diagnóstico consulta a instância DESTA empresa. Só a empresa dona da instância
+    // (CHATBOT_BACKEND_INSTANCES ou o par antigo) vê o estado dela; nunca o da Dino.
+    const empresaId = String(legacyEmpresaId(req) || '');
+    const instance = conexaoKytto.obterConexao(empresaId).instance || '';
+    if (!instance) {
+      return res.status(403).json({ error: 'Esta empresa ainda não tem uma instância de WhatsApp atribuída.', code: 'PERMISSION_DENIED', motivo: 'WHATSAPP_INSTANCE_UNASSIGNED' });
+    }
+    const owner = instanceOwner(instance);
+    if (owner && owner !== empresaId.toLowerCase()) {
       return res.status(403).json({ error: 'Diagnóstico indisponível para esta empresa.', code: 'PERMISSION_DENIED' });
     }
     try {
-      res.json({ ok: true, ...(await diagnosticarWhatsapp({ fetchImpl })) });
+      // Sem dono registrado o diagnóstico ainda roda: ele mostra exatamente o que falta
+      // (instância no backend, empresa dona, linha verificada) sem ler mensagens de outra empresa.
+      res.json({ ok: true, ...(await diagnosticarWhatsapp({ fetchImpl, instance, semDono: !owner })) });
     } catch (error) { res.status(502).json({ error: 'Não foi possível diagnosticar o WhatsApp agora.', detail: String(error?.message || '').slice(0, 160) }); }
   });
 

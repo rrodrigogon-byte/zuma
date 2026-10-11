@@ -11,6 +11,7 @@ async function enviar(telefone, mensagem) {
   // Este módulo legado atende a Agro Open; nunca pode falar como a instância da Dino.
   if (process.env.CHATBOT_BACKEND_MODE === 'instancias' && process.env.CHATBOT_BACKEND_EMPRESA_ID
       && (INST.toLowerCase() === String(process.env.CHATBOT_BACKEND_INSTANCE || 'dino-1').trim().toLowerCase()
+        || String(process.env.CHATBOT_BACKEND_INSTANCES || '').toLowerCase().split(/[,;\s]+/).some((par) => par.split(/[=:]/)[0].trim() === INST.toLowerCase())
         || (BASE && BASE.replace(/\/+$/, '') === String(process.env.CHATBOT_BACKEND_URL || '').replace(/\/+$/, '')))) {
     const error = new Error('instância exclusiva da Dino indisponível no canal legado')
     error.code = 'WHATSAPP_INSTANCE_SCOPE_DENIED'
