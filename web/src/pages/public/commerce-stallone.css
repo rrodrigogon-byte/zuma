@@ -162,3 +162,103 @@ html[data-brand='stallone'] .commerce-cart-button b { background: #FFFFFF; color
 html[data-brand='stallone'] .commerce-hero::after { display: none; }
 html[data-brand='stallone'] .commerce-stallone-pillars::before,
 html[data-brand='stallone'] .commerce-stallone-pillars::after { border-color: rgba(227, 41, 53, .3); }
+
+/* ----------------------------------------------------------------------------
+   Contraste em todas as telas da loja (vitrine, produto, sacola, checkout).
+   O storefront-ux.css aplica tokens CLAROS (--kytto-*) sempre que o html não tem
+   data-theme='dark'. Na Stallone o escuro é o padrão sem esse atributo, então os
+   quadros ficavam brancos com texto quase branco (ex.: SKU e Disponibilidade no
+   detalhe do produto). Aqui os tokens da vitrine passam a vir da marca.
+   Especificidade maior (body) para vencer html:not([data-theme='dark']).
+   ---------------------------------------------------------------------------- */
+html[data-brand='stallone'] body .commerce-shell.sf-ux,
+html[data-brand='stallone'] body .sf-drawer {
+  --kytto-bg: var(--bg);
+  --kytto-surface: var(--card);
+  --kytto-text: var(--fg);
+  --kytto-muted: var(--muted);
+  --kytto-border: var(--line);
+  --kytto-indigo: var(--accent);
+  --kytto-indigo-hover: var(--accent-strong);
+  --kytto-indigo-soft: var(--accent-soft);
+  --kytto-focus: 0 0 0 3px var(--bg), 0 0 0 5px var(--accent);
+  --commerce-ink: var(--fg);
+  --commerce-muted: var(--muted);
+  --commerce-line: var(--line);
+  --commerce-paper: var(--surface);
+  --commerce-accent: var(--accent);
+}
+html[data-brand='stallone']:not([data-theme='light']) body .commerce-shell.sf-ux,
+html[data-brand='stallone']:not([data-theme='light']) body .sf-drawer {
+  --kytto-green: #6FD3A4;
+  --kytto-green-soft: #16302A;
+  --kytto-amber: #F5C26B;
+  --kytto-amber-soft: #3A2A10;
+  --kytto-danger: #FF8A8A;
+  --kytto-danger-soft: #3A1717;
+  --kytto-disabled: #3A3A42;
+  --kytto-disabled-text: #C9C8C2;
+}
+html[data-brand='stallone'] body .commerce-shell.sf-ux { background: var(--bg); color: var(--fg); }
+
+/* Detalhe do produto. */
+html[data-brand='stallone'] .commerce-product-meta span {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--fg);
+}
+html[data-brand='stallone'] .commerce-product-meta small { color: var(--muted); }
+html[data-brand='stallone'] .commerce-product-meta strong { color: var(--fg); }
+/* Foto do produto: fundo branco, como as fotos dos fabricantes. */
+html[data-brand='stallone'] .commerce-product-gallery-main { background: #FFFFFF; border-color: var(--line); }
+html[data-brand='stallone'] .commerce-product-gallery-thumb { background: #FFFFFF; border-color: var(--line); }
+html[data-brand='stallone'] .commerce-product-gallery-thumb.is-active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+html[data-brand='stallone'] .commerce-product-modal p,
+html[data-brand='stallone'] .commerce-product-long-description,
+html[data-brand='stallone'] .commerce-modal-actions small,
+html[data-brand='stallone'] .commerce-product-gallery-count { color: var(--muted); }
+html[data-brand='stallone'] .commerce-product-modal .commerce-eyebrow { color: var(--accent); }
+html[data-brand='stallone'] .commerce-variant-select select { background: var(--card); color: var(--fg); border-color: var(--line); }
+html[data-brand='stallone'] .commerce-overlay { background: rgba(5, 5, 7, .78); }
+
+/* Cards da vitrine: foto em fundo branco (as fotos vêm com fundo branco). */
+html[data-brand='stallone'] .commerce-product-open,
+html[data-brand='stallone'] .commerce-product-card .commerce-product-image { background: #FFFFFF; object-fit: contain; }
+
+/* Barra de filtros: "Somente em estoque" numa linha só. */
+html[data-brand='stallone'] .sf-catalog-options label { white-space: nowrap; }
+html[data-brand='stallone'] .sf-catalog-options select { background: var(--card); color: var(--fg); border-color: var(--line); }
+
+/* Sacola, checkout, rastreio e endereço da loja. */
+html[data-brand='stallone'] .commerce-toolbar,
+html[data-brand='stallone'] .commerce-store-details,
+html[data-brand='stallone'] .commerce-tracking-result,
+html[data-brand='stallone'] .commerce-payment-box,
+html[data-brand='stallone'] .commerce-cart-list,
+html[data-brand='stallone'] .sf-drawer {
+  background: var(--card);
+  border-color: var(--line);
+  color: var(--fg);
+}
+html[data-brand='stallone'] .commerce-form input,
+html[data-brand='stallone'] .commerce-form select,
+html[data-brand='stallone'] .commerce-form textarea,
+html[data-brand='stallone'] .commerce-search input,
+html[data-brand='stallone'] .commerce-shipping-option,
+html[data-brand='stallone'] .commerce-payment-method,
+html[data-brand='stallone'] .commerce-quantity button {
+  background: var(--surface-2);
+  border-color: var(--line);
+  color: var(--fg);
+}
+html[data-brand='stallone'] .commerce-shipping-option:has(input:checked),
+html[data-brand='stallone'] .commerce-payment-method:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+html[data-brand='stallone'] .commerce-shipping-option input,
+html[data-brand='stallone'] .commerce-payment-method input { accent-color: var(--accent); }
+html[data-brand='stallone'] .commerce-state { background: var(--card); border-color: var(--line); color: var(--muted); }
+html[data-brand='stallone'] .commerce-form-error,
+html[data-brand='stallone'] .commerce-state-error { background: #3A1717; border-color: #6B2A2A; color: #FFB4AC; }
+html[data-brand='stallone'] .commerce-recovery-consent,
+html[data-brand='stallone'] .checkout-recovery-consent { background: var(--surface-2); border-color: var(--line); color: var(--fg); }
+html[data-brand='stallone'][data-theme='light'] .commerce-form-error,
+html[data-brand='stallone'][data-theme='light'] .commerce-state-error { background: #FFF1EC; border-color: #F2C3B6; color: #A3442F; }
