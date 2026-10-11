@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../../lib/api'
 import { useToast } from '../../../hooks/useToast'
 import { useAuth } from '../../../lib/auth'
+import { brandFromContext } from '../../../lib/brand'
 import { Badge, Dialog, Table } from '../customer360/shared'
 import { downloadCsv, localDay, money, shortDate } from './format'
 import '../customer360.css'
@@ -32,6 +33,7 @@ function FlowChart({ fluxo }) {
 export default function FinanceiroEmpresa() {
   const { toast } = useToast()
   const { empresaAtiva } = useAuth()
+  const stallone = brandFromContext(empresaAtiva) === 'stallone'
   const [lancamentos, setLancamentos] = useState([])
   const [resumo, setResumo] = useState(null)
   const [fluxo, setFluxo] = useState([])
@@ -108,7 +110,7 @@ export default function FinanceiroEmpresa() {
 
   return <div className="dadm-page">
     <header className="dadm-head">
-      <div><div className="dadm-eyebrow">Gestão · {empresaAtiva?.nome || 'Empresa'}</div><h1>Financeiro</h1><p>Contas a pagar e a receber só desta empresa. Atendimentos pagos, comandas e contas a receber entram sozinhos; aqui você lança aluguel, insumos, contas e outras despesas.</p></div>
+      <div><div className="dadm-eyebrow">Gestão · {empresaAtiva?.nome || 'Empresa'}</div><h1>Financeiro</h1><p>{stallone ? 'Contas a pagar e a receber desta empresa. Registre despesas e acompanhe os lançamentos. Pedidos e pagamentos da loja online são consultados no painel da loja; a conciliação financeira precisa ser validada.' : 'Contas a pagar e a receber só desta empresa. Atendimentos pagos, comandas e contas a receber entram sozinhos; aqui você lança aluguel, insumos, contas e outras despesas.'}</p></div>
       <div className="dadm-actions">
         <button type="button" className="c360-btn ghost" onClick={exportar} disabled={!lista.length}>Exportar CSV</button>
         <button type="button" className="c360-btn ghost" onClick={() => abrirNovo('receita')}>+ Receita</button>
@@ -141,7 +143,7 @@ export default function FinanceiroEmpresa() {
         <label className="dadm-muted">De <input className="c360-input" type="date" value={filtros.de} onChange={(event) => setFiltros({ ...filtros, de: event.target.value })} /></label>
         <label className="dadm-muted">Até <input className="c360-input" type="date" value={filtros.ate} onChange={(event) => setFiltros({ ...filtros, ate: event.target.value })} /></label>
       </div>
-      <Table caption="Lançamentos financeiros" columns={columns} rows={lista} empty={lancamentos.length ? 'Nenhum lançamento com estes filtros.' : 'Nenhum lançamento ainda. Atendimentos pagos e comandas aparecem aqui automaticamente.'} />
+      <Table caption="Lançamentos financeiros" columns={columns} rows={lista} empty={lancamentos.length ? 'Nenhum lançamento com estes filtros.' : stallone ? 'Nenhum lançamento financeiro registrado nesta empresa.' : 'Nenhum lançamento ainda. Atendimentos pagos e comandas aparecem aqui automaticamente.'} />
     </section>
 
     <Dialog open={Boolean(form)} title={form?.id ? 'Editar lançamento' : (form?.tipo === 'receita' ? 'Nova receita' : 'Nova despesa')} labelId="fin-form" onClose={() => setForm(null)} onSubmit={salvar} initialFocusRef={firstField}

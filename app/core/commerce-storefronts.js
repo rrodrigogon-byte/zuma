@@ -1,3 +1,4 @@
+import { mergePublicPolicies } from './commerce-public-policies.js';
 import { CommerceError, assertUuid, auditLog, tenantContext } from './commerce-core.js';
 
 const CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{1,79}$/;
@@ -173,12 +174,23 @@ export async function updateStorefront(trx, context, storefrontId, input = {}) {
   if (input.status !== undefined) { values.push(nextStatus); allowed.push(`status = $${values.length}`); }
   if (input.moeda !== undefined) { const value = text(input.moeda, 3).toUpperCase(); if (!/^[A-Z]{3}$/.test(value)) throw new CommerceError('moeda deve usar código ISO de três letras', 'STOREFRONT_CURRENCY_INVALID'); values.push(value); allowed.push(`moeda = $${values.length}`); }
   if (input.timezone !== undefined) { values.push(text(input.timezone, 64)); allowed.push(`timezone = $${values.length}`); }
-  if (input.configuracoes !== undefined) { values.push(JSON.stringify(input.configuracoes || {})); allowed.push(`configuracoes = $${values.length}::jsonb`); }
+  if (input.publicPolicies !== undefined) {
+    if (input.configuracoes !== undefined) throw new CommerceError('edite políticas separadamente das demais configurações', 'PUBLIC_POLICIES_CONFLICT');
+    values.push(JSON.stringify(mergePublicPolicies(current.configuracoes || {}, input.publicPolicies))); allowed.push(`configuracoes = $${values.length}::jsonb`);
+  } else if (input.configuracoes !== undefined) { values.push(JSON.stringify(input.configuracoes || {})); allowed.push(`configuracoes = $${values.length}::jsonb`); }
   if (input.lojaId !== undefined && input.lojaId !== current.loja_id) {
     values.push(requestedStore?.id || null); allowed.push(`loja_id = $${values.length}`);
   }
   if (!allowed.length) throw new CommerceError('nenhum campo editável informado', 'NO_CHANGES');
   const result = await trx.query(`UPDATE commerce_storefronts SET ${allowed.join(', ')}, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2 RETURNING *`, values);
+  if (input.publicPolicies !== undefined) {
+    // O alias é a fonte pública prioritária. Atualizar só policies no mesmo
+    // tenant/canal mantém domínio e alias coerentes, sem substituir a marca.
+    const policies = mergePublicPolicies({}, input.publicPolicies).public.policies;
+    await trx.query(`UPDATE commerce_storefront_aliases
+      SET public_config = jsonb_set(COALESCE(public_config, '{}'::jsonb), '{policies}', (CASE WHEN jsonb_typeof(public_config->'policies') = 'object' THEN public_config->'policies' ELSE '{}'::jsonb END) || $3::jsonb, true), atualizado_em = CURRENT_TIMESTAMP
+      WHERE empresa_id = $1 AND storefront_id = $2`, [empresaId, current.id, JSON.stringify(policies)]);
+  }
   await auditLog(trx, context, { entidade: 'storefront', entidadeId: current.id, acao: 'updated', lojaId: current.loja_id || null, antes: { nome: current.nome, codigo: current.codigo, status: current.status, lojaId: current.loja_id }, depois: { fields: Object.keys(input).slice(0, 20) } });
   return result.rows[0];
 }

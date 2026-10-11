@@ -131,3 +131,20 @@ test('templates promocionais retornam modelos globais e do tenant', async () => 
   assert.match(queries[0].sql, /empresa_id IS NULL OR empresa_id = \$1/);
   assert.deepEqual(queries[0].values, [empresaId]);
 });
+
+ test('políticas são gravadas sob trava e sincronizadas apenas nos aliases do mesmo tenant/canal', async () => {
+  const storefrontId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const lojaId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const current = {id:storefrontId,empresa_id:empresaId,loja_id:lojaId,status:'active',configuracoes:{public:{contact:{phone:'123'}}}};
+  const responses = [{rows:[current]},{rows:[{id:lojaId,ativa:true}]},{rows:[current]},{rows:[]},{rows:[]}];
+  const queries = [];
+  const client = {query:async (sql,values) => {queries.push({sql,values});return responses.shift() || {rows:[]};}};
+  await updateStorefront(client, context, storefrontId, {publicPolicies:{privacyUrl:'https://example.test/privacy'}});
+  assert.match(queries[0].sql,/FOR UPDATE/);
+  const config = JSON.parse(queries.find(q=>q.sql.startsWith('UPDATE commerce_storefronts')).values[2]);
+  assert.equal(config.public.contact.phone,'123');
+  const alias = queries.find(q=>q.sql.startsWith('UPDATE commerce_storefront_aliases'));
+  assert.match(alias.sql,/empresa_id = \$1 AND storefront_id = \$2/);
+  assert.deepEqual(alias.values.slice(0,2),[empresaId,storefrontId]);
+  assert.deepEqual(JSON.parse(alias.values[2]),{privacyUrl:'https://example.test/privacy'});
+});

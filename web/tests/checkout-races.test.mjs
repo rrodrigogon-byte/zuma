@@ -28,7 +28,7 @@ const deferred = () => { let resolve, reject; const promise = new Promise((a,b) 
 const text = node => typeof node === 'string' ? node : (node.children || []).map(text).join(' ')
 const storage = () => { const items = new Map(); return { getItem: k => items.get(k) || null, setItem: (k,v) => { items.set(k,String(v)) }, removeItem: k => { items.delete(k) } } }
 
-async function fixture({Component = Checkout, pickup = true} = {}) {
+async function fixture({Component = Checkout, pickup = true, paymentMethods = [{provider:'infinitepay',method:'pix'}], storefront = {nome:'Loja teste'}} = {}) {
   globalThis.localStorage = storage(); globalThis.sessionStorage = storage()
   localStorage.setItem('kytto_commerce_cart:host', JSON.stringify([{produtoId:'p1',variantId:'v1',nome:'Produto teste',qtd:1,preco:100}]))
   let timerId=0; const timers = new Map(), listeners = new Map(), postal = [], quotes = [], posts = []
@@ -38,10 +38,10 @@ async function fixture({Component = Checkout, pickup = true} = {}) {
   globalThis.document = { title:'Teste', documentElement:{dataset:{}}, body:{style:{}}, querySelectorAll: () => [] }
   globalThis.testApi = {
     get: async path => {
-      if(path.endsWith('/context')) return { capabilities:{checkout:true},storefront:{nome:'Loja teste'} }
+      if(path.endsWith('/context')) return { capabilities:{checkout:true},storefront }
       if(path.includes('/products')) return {items:[{id:'p1',nome:'Produto teste',variants:[{id:'v1',estoque:2,prices:[{preco:100}]}]}]}
       if(path.endsWith('/shipping-methods')) return {items:[...(pickup ? [{id:'pickup',tipo:'pickup'}] : []),{id:'delivery',tipo:'delivery',quoteEnabled:true}]}
-      if(path.endsWith('/payment-methods')) return {items:[{provider:'infinitepay',method:'pix'}]}
+      if(path.endsWith('/payment-methods')) return {items:paymentMethods}
       if(path.includes('/shipping/address/')) { const d=deferred(); postal.push({path,...d}); return d.promise }
       throw new Error(`GET inesperado: ${path}`)
     },
@@ -116,4 +116,24 @@ test('vitrine envia syncVersion crescente após versão existente do checkout', 
     assert.ok(sync.body.syncVersion>previous)
     assert.deepEqual(sync.body.items,[{variantId:'v1',quantity:1}])
   } finally {f.close()}
+})
+
+
+test('checkout sem pagamento publicado bloqueia criação e preserva o carrinho', async () => {
+  const f = await fixture({paymentMethods: []})
+  try {
+    assert.equal(f.render.root.findByProps({type:'submit'}).props.disabled, true)
+    assert.match(text(f.render.toJSON()), /Pagamento online indisponível/)
+    await act(async () => { await f.render.root.findByType('form').props.onSubmit({preventDefault(){}}) })
+    assert.equal(f.posts.some(p => p.path.endsWith('/orders')), false)
+    assert.equal(JSON.parse(localStorage.getItem('kytto_commerce_cart:host')).length, 1)
+  } finally { f.close() }
+})
+
+test('checkout identifica Stallone pelo contexto sem usar o símbolo Kytto', async () => {
+  const f = await fixture({storefront:{nome:'Stallone Nutre Sport',codigo:'stallone-web'}})
+  try {
+    assert.equal(f.render.root.findByProps({alt:'Stallone Nutre Sport'}).props.src, '/brand/stallone-logo-transparent.svg')
+    assert.equal(f.render.root.findAllByProps({className:'checkout-brand-mark'}).length, 0)
+  } finally { f.close() }
 })

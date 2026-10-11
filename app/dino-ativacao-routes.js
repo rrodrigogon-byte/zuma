@@ -203,6 +203,18 @@ export function registerAtivacaoRoutes(app, deps) {
     if (process.env.COMMERCE_CORE_ENABLED !== '1') return { semCommerce: true, legacy: legacyEmpresaId(req) };
     try {
       const context = await requireCommercePermission(req, permission);
+      // Estas ações aplicam capacidades, política, agenda e identidade específicas da Dino.
+      // A marca vem dos aliases persistidos da empresa autorizada, nunca do navegador.
+      if (permission === 'settings.write') {
+        const identity = await db.queryRead(
+          `SELECT 1 FROM commerce_storefront_aliases WHERE empresa_id = $1 AND ativo = true
+           AND (brand_key = 'stallone' OR alias = 'stallone') LIMIT 1`, [context.empresaId],
+        );
+        if (identity.rows.length) {
+          res.status(409).json({ error: 'Use a configuração da linha e da loja Stallone. A ativação da Dino não se aplica a esta empresa.', code: 'ACTIVATION_SEGMENT_MISMATCH' });
+          return null;
+        }
+      }
       if (!context.lojaId) {
         const loja = await db.queryRead(
           `SELECT loja_id FROM canais_integracao WHERE empresa_id = $1 AND provedor = 'whatsapp' ORDER BY data_atualizacao DESC NULLS LAST LIMIT 1`, [context.empresaId],

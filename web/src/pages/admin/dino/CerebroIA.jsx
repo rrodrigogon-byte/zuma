@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../../lib/api'
 import { useAuth } from '../../../lib/auth'
+import { brandFromContext } from '../../../lib/brand'
 import { useToast } from '../../../hooks/useToast'
 import { Badge, Dialog } from '../customer360/shared'
 import { dateTime, int, money } from './format'
@@ -51,6 +52,7 @@ function EgoGraph({ ego }) {
 
 export default function CerebroIA() {
   const { empresaAtiva } = useAuth()
+  const stallone = brandFromContext(empresaAtiva) === 'stallone'
   const { toast } = useToast()
   const [tab, setTab] = useState('ativacao')
   const [ativ, setAtiv] = useState(null)
@@ -85,11 +87,11 @@ export default function CerebroIA() {
 
   useEffect(() => {
     if (!info) return
-    if (tab === 'ativacao') carregarAtivacao()
+    if (tab === 'ativacao' && !stallone) carregarAtivacao()
     if (tab === 'aprendizado') carregarPropostas()
     if (tab === 'ofertas' && !grafo) carregarGrafo()
     if (tab === 'automacoes') carregarPrevia()
-  }, [tab, info]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tab, info, stallone]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function salvar(patch = {}) {
     const next = { ...form, ...patch }
@@ -166,7 +168,9 @@ export default function CerebroIA() {
       {TABS.map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)}>{label}{key === 'aprendizado' && q.propostasPendentes ? ` (${q.propostasPendentes})` : ''}</button>)}
     </div>
 
-    {tab === 'ativacao' && (ativ ? <>
+    {tab === 'ativacao' && stallone && <section className="dadm-card" aria-labelledby="stallone-ai-activation"><h2 id="stallone-ai-activation">Preparar o atendente Stallone</h2><p>Confira a linha da Stallone e a operação da loja antes de ativar o atendimento. A ativação do canal e a validação de mensagens recebidas e enviadas ainda precisam ser concluídas para esta empresa.</p><div className="dadm-actions"><Link className="c360-btn ghost" to="/admin/whatsapp">Conferir linha Stallone</Link><Link className="c360-btn ghost" to="/admin/ecommerce?tab=overview">Conferir operação da loja</Link></div><p>O estado do cérebro aparece nas demais abas. Ele não confirma que o WhatsApp está conectado ou que o atendimento foi homologado.</p></section>}
+
+    {tab === 'ativacao' && !stallone && (ativ ? <>
       <section className="dadm-card" aria-labelledby="at-head">
         <h2 id="at-head">Colocar tudo no ar</h2>
         <p>Lista viva do que falta para o atendente, o cérebro, a agenda online e a vitrine funcionarem. Os passos marcados com botão são feitos aqui; segredos (chaves) só entram no servidor e aqui aparece apenas se existem.</p>
