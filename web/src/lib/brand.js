@@ -53,11 +53,32 @@ export function resolveBrand(pathname = '/', search = '', tenantBrand = '') {
   return 'kytto'
 }
 
+// Ícones da aba e da instalação por marca; as demais marcas mantêm os do index.html.
+export const BRAND_ICONS = {
+  stallone: { icon: STALLONE_MARK, iconType: 'image/svg+xml', touchIcon: '/brand/stallone-icon-192.png', themeColor: '#141416' },
+}
+
+export function brandIcons(brand) {
+  return BRAND_ICONS[brand] || null
+}
+
+function swapHeadValue(selector, attribute, value) {
+  const element = document.head?.querySelector(selector)
+  if (!element) return
+  if (element.dataset.brandDefault === undefined) element.dataset.brandDefault = element.getAttribute(attribute) || ''
+  element.setAttribute(attribute, value ?? element.dataset.brandDefault)
+}
+
 export function applyBrand(brand) {
   if (typeof document === 'undefined') return
   const html = document.documentElement
   if (BRAND_KEYS.includes(brand)) html.dataset.brand = brand
   else delete html.dataset.brand
+  const icons = brandIcons(brand)
+  swapHeadValue('link[rel="icon"]', 'href', icons?.icon)
+  swapHeadValue('link[rel="icon"]', 'type', icons?.iconType)
+  swapHeadValue('link[rel="apple-touch-icon"]', 'href', icons?.touchIcon)
+  swapHeadValue('meta[name="theme-color"]', 'content', icons?.themeColor)
 }
 
 export function normalizeThemeMode(value) {
@@ -95,3 +116,18 @@ export const isDinoBrand = (brand) => brand === 'dino'
 export const isStalloneBrand = (brand) => brand === 'stallone'
 /** Marcas com loja de tema escolhível (sistema/claro/escuro) guardado no navegador. */
 export const brandHasThemeChoice = (brand) => BRAND_KEYS.includes(brand)
+
+/** Entradas públicas da Stallone; hosts de outras lojas mantêm suas rotas. */
+export function stalloneEntryFromHost(host, checkout = false) {
+  return brandFromHost(host) === 'stallone'
+    ? (checkout ? '/checkout/stallone' : '/ecommerce/stallone')
+    : null
+}
+
+/** Administração clara por padrão, preservando a escolha explícita do usuário. */
+export function brandThemeMode(brand, pathname, preference = 'system') {
+  if (!brandHasThemeChoice(brand)) return 'system'
+  const mode = normalizeThemeMode(preference)
+  if (mode !== 'system' || brand !== 'stallone') return mode
+  return pathname === '/admin' || pathname.startsWith('/admin/') ? 'light' : 'dark'
+}

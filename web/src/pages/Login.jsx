@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
+import { brandFromHost, STALLONE_LOGO_LIGHT } from '../lib/brand'
 
 export default function Login() {
+  const hostStallone = typeof window !== 'undefined' && brandFromHost(window.location.hostname) === 'stallone'
   const [user, setUser] = useState('')
   const [senha, setSenha] = useState('')
   const [erro, setErro] = useState('')
@@ -21,7 +23,7 @@ export default function Login() {
 
   useEffect(() => {
     if (!usuarioAtual) return
-    const destinoAdmin = empresaAtiva?.brandKey === 'dino' ? '/admin/ecommerce' : '/admin'
+    const destinoAdmin = ['dino', 'stallone'].includes(empresaAtiva?.brandKey) ? '/admin/ecommerce' : '/admin'
     if (isOrg) navigate(proximoSeguro || destinoAdmin, { replace: true })
     else if (isStaff) navigate(proximoSeguro || '/pdv', { replace: true })
   }, [usuarioAtual, empresaAtiva?.brandKey, isOrg, isStaff, navigate, proximoSeguro])
@@ -66,7 +68,7 @@ export default function Login() {
         const data = validarRespostaLogin(await api.post('/api/admin/login', { user, senha }))
         login(data.token, data.user, false, data.sessao || {})
         if (['org', 'admin', 'organizador', 'gerente'].includes(String(data.user.role || '').toLowerCase())) {
-          const destinoAdmin = data.sessao?.empresa?.brandKey === 'dino' ? '/admin/ecommerce' : '/admin'
+          const destinoAdmin = ['dino', 'stallone'].includes(data.sessao?.empresa?.brandKey) ? '/admin/ecommerce' : '/admin'
           navigate(proximoSeguro || destinoAdmin, { replace: true })
         }
         else navigate(proximoSeguro || '/pdv', { replace: true })
@@ -103,8 +105,10 @@ export default function Login() {
       <div style={{ position: 'absolute', bottom: -200, right: -200, width: 800, height: 800, background: 'radial-gradient(circle, rgba(18,40,63,0.03) 0%, transparent 70%)', borderRadius: '50%', pointerEvents: 'none' }} />
 
       <div style={{ textAlign: 'center', marginBottom: 40, position: 'relative', zIndex: 10 }}>
-        <img src="/brand/kytto-horizontal.svg" alt="Kytto" style={{ height: 56, marginBottom: 16 }} />
-        <div style={{ fontSize: '0.9rem', color: '#5A6570', fontWeight: 600, letterSpacing: '0.02em' }}>Sistemas inteligentes para negócios.</div>
+        {hostStallone
+          ? <img src={STALLONE_LOGO_LIGHT} alt="Stallone Nutre Sport" style={{ height: 72, marginBottom: 12 }} />
+          : <img src="/brand/kytto-horizontal.svg" alt="Kytto" style={{ height: 56, marginBottom: 16 }} />}
+        <div style={{ fontSize: '0.9rem', color: '#5A6570', fontWeight: 600, letterSpacing: '0.02em' }}>{hostStallone ? 'Força para evoluir. Nutrição para ir além.' : 'Sistemas inteligentes para negócios.'}</div>
       </div>
 
       <div style={{ background: '#fff', padding: '40px', borderRadius: 24, boxShadow: '0 24px 48px rgba(18,40,63,0.08), 0 0 0 1px rgba(18,40,63,0.03)', width: '100%', maxWidth: 420, position: 'relative', zIndex: 10, boxSizing: 'border-box' }}>

@@ -133,6 +133,7 @@ test('checkout sem pagamento publicado bloqueia criação e preserva o carrinho'
 test('checkout identifica Stallone pelo contexto sem usar o símbolo Kytto', async () => {
   const f = await fixture({storefront:{nome:'Stallone Nutre Sport',codigo:'stallone-web'}})
   try {
-    assert.equal(text(f.render.root.findByProps({className:'checkout-brand-mark'})), 'S')
+    assert.equal(f.render.root.findByProps({alt:'Stallone Nutre Sport'}).props.src, '/brand/stallone-logo-transparent.svg')
+    assert.equal(f.render.root.findAllByProps({className:'checkout-brand-mark'}).length, 0)
   } finally { f.close() }
 })

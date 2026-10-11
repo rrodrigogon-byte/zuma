@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { CommerceError, assertUuid, tenantContext } from './commerce-core.js';
 import { shippingProviders, shippingSecretConfigured } from './shipping-adapters.js';
+import { pickupOnlyItems, PICKUP_ONLY_ERROR_CODE, PICKUP_ONLY_MESSAGE } from './commerce-pickup-rules.js';
 
 const SECRET_REF = /^env:[A-Z][A-Z0-9_]{2,}$/;
 const CEP = /^\d{8}$/;
@@ -494,10 +495,11 @@ async function loadQuoteContext(client, contextInput, input = {}) {
   const variantIds = [...new Set(lines.map(line => line.variantId))];
   const variants = await client.query(
     `SELECT v.id, v.sku, COALESCE(v.nome, p.nome) AS nome, v.peso_gramas, v.largura_cm, v.altura_cm, v.comprimento_cm,
-            v.permite_compra_sem_estoque,
+            v.permite_compra_sem_estoque, p.nome AS product_name, cat.nome AS category_name,
             COALESCE(vp.preco_promocional, vp.preco) AS price
        FROM commerce_product_variants v
        JOIN commerce_products p ON p.empresa_id = v.empresa_id AND p.id = v.product_id AND p.status = 'active'
+       LEFT JOIN commerce_categories cat ON cat.empresa_id = p.empresa_id AND cat.id = p.category_id
        JOIN commerce_product_channels pc ON pc.empresa_id = p.empresa_id AND pc.product_id = p.id AND pc.storefront_id = $3 AND pc.publicado = true
        JOIN commerce_variant_prices vp ON vp.empresa_id = v.empresa_id AND vp.variant_id = v.id AND vp.price_list_id = pc.price_list_id
       WHERE v.empresa_id = $1 AND v.id = ANY($2::uuid[]) AND v.ativo = true
@@ -506,6 +508,9 @@ async function loadQuoteContext(client, contextInput, input = {}) {
   );
   const variantMap = new Map(variants.rows.map(row => [row.id, row]));
   if (variantMap.size !== variantIds.length) throw new CommerceError('um ou mais itens não estão disponíveis para cotação', 'ITEM_UNAVAILABLE');
+  // Congelados/refrigerados não seguem por entrega comum: só retirada na loja.
+  const coldItems = pickupOnlyItems(variants.rows.map(row => ({ categoryName: row.category_name, productName: row.product_name || row.nome })));
+  if (coldItems.length) throw new CommerceError(PICKUP_ONLY_MESSAGE, PICKUP_ONLY_ERROR_CODE);
   const backorderLeadDays = lines.some(line => variantMap.get(line.variantId)?.permite_compra_sem_estoque === true) ? BACKORDER_LEAD_DAYS : 0;
   const products = lines.map(line => {
     const variant = variantMap.get(line.variantId);
@@ -563,6 +568,7 @@ const OPTIONAL_QUOTE_ERRORS = new Set([
   'SHIPPING_PROVIDER_TIMEOUT',
   'SHIPPING_NO_OPTIONS',
   'SHIPPING_ADAPTER_INVALID_RESPONSE',
+  PICKUP_ONLY_ERROR_CODE,
 ]);
 
 export async function quoteAvailableShipping(client, contextInput, input = {}) {
@@ -592,6 +598,7 @@ export async function quoteAvailableShipping(client, contextInput, input = {}) {
       unavailable.push({ shippingMethodId: method.id, code: error.code });
     }
   }
+  if (!items.length && unavailable.length && unavailable.every(item => item.code === PICKUP_ONLY_ERROR_CODE)) throw new CommerceError(PICKUP_ONLY_MESSAGE, PICKUP_ONLY_ERROR_CODE);
   if (!items.length) throw new CommerceError('nenhuma opção de entrega está disponível para este CEP e carrinho', 'SHIPPING_DESTINATION_UNAVAILABLE');
   const expiresAt = items.map(item => item.expiresAt).filter(Boolean).sort()[0] || null;
   return { storefrontId, destination: { cep: destinationCep, cidade: destination.cidade || null, estado: destination.estado || null }, expiresAt, items, unavailable };

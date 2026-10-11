@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { applyBrand, applyThemeMode, commerceDisplayName, DINO_BARBERSHOP_LOGO, DINO_COMMERCE_LOGO, isDinoBrandContext, normalizeThemeMode, resolveBrand, storedThemeMode } from './brand.js'
+import { applyBrand, applyThemeMode, brandThemeMode, stalloneEntryFromHost, commerceDisplayName, DINO_BARBERSHOP_LOGO, DINO_COMMERCE_LOGO, isDinoBrandContext, normalizeThemeMode, resolveBrand, storedThemeMode } from './brand.js'
 
 test('Barbearia Dino e Dino Perfumaria usam assets de marca distintos', () => {
   assert.equal(DINO_BARBERSHOP_LOGO, '/brand/dino-barbearia-logo.png')
@@ -93,4 +93,34 @@ test('Stallone Nutre Sport tem marca própria no backoffice, na loja e no domín
   assert.equal(brandFromHost('dino.kytto.com.br'), null)
   assert.equal(commerceDisplayName('stallone', 'Stallone Nutre Sport', 'STALLONE-MATRIZ'), 'Stallone Nutre Sport')
   assert.doesNotThrow(() => applyBrand('stallone'))
+})
+
+
+test('domínio Stallone abre sua vitrine e seu checkout sem afetar outras lojas', () => {
+  for (const host of ['stallone.kytto.com.br', 'WWW.STALLONE.KYTTO.COM.BR.']) {
+    assert.equal(stalloneEntryFromHost(host), '/ecommerce/stallone')
+    assert.equal(stalloneEntryFromHost(host, true), '/checkout/stallone')
+  }
+  for (const host of ['dino.kytto.com.br', 'kytto.com.br', 'stallone.kytto.com.br.exemplo.com', '']) {
+    assert.equal(stalloneEntryFromHost(host), null)
+  }
+})
+
+test('Stallone oferece administração clara, loja escura e mantém preferência explícita', () => {
+  assert.equal(brandThemeMode('stallone', '/admin'), 'light')
+  assert.equal(brandThemeMode('stallone', '/admin/ecommerce'), 'light')
+  assert.equal(brandThemeMode('stallone', '/ecommerce/stallone'), 'dark')
+  assert.equal(brandThemeMode('stallone', '/admin', 'dark'), 'dark')
+  assert.equal(brandThemeMode('stallone', '/checkout/stallone', 'light'), 'light')
+  assert.equal(brandThemeMode('dino', '/admin'), 'system')
+  assert.equal(brandThemeMode('kytto', '/admin', 'dark'), 'system')
+})
+
+test('Stallone usa o símbolo S como ícone da aba e da instalação', async () => {
+  const { brandIcons } = await import('./brand.js')
+  assert.equal(brandIcons('stallone').icon, '/brand/stallone-mark.svg')
+  assert.equal(brandIcons('stallone').touchIcon, '/brand/stallone-icon-192.png')
+  assert.equal(brandIcons('stallone').themeColor, '#141416')
+  assert.equal(brandIcons('dino'), null)
+  assert.equal(brandIcons('kytto'), null)
 })
