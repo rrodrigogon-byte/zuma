@@ -256,6 +256,12 @@ export function publicShippingMethod(method) {
   };
 }
 
+export function postalCodeNotFound(body) {
+  if (!body || typeof body !== 'object') return true;
+  if (body.erro === true || String(body.erro).toLowerCase() === 'true') return true;
+  return !text(body.localidade, 120) || !text(body.uf, 2);
+}
+
 export async function lookupPostalCode(value) {
   const cep = normalizeCep(value);
   const controller = new AbortController();
@@ -264,7 +270,9 @@ export async function lookupPostalCode(value) {
     const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`, { headers: { Accept: 'application/json' }, signal: controller.signal });
     if (!response.ok) throw new CommerceError('serviço de CEP indisponível', 'SHIPPING_CEP_PROVIDER_ERROR');
     const body = await response.json();
-    if (body?.erro === true) throw new CommerceError('CEP não encontrado', 'SHIPPING_CEP_NOT_FOUND');
+    // O ViaCEP responde `erro: true` ou `erro: "true"` (texto) para CEP inexistente;
+    // sem município o CEP também não serve para entrega.
+    if (postalCodeNotFound(body)) throw new CommerceError('CEP não encontrado; confira os números', 'SHIPPING_CEP_NOT_FOUND');
     return { cep, logradouro: text(body.logradouro, 240) || null, complemento: text(body.complemento, 120) || null, bairro: text(body.bairro, 120) || null, cidade: text(body.localidade, 120) || null, estado: text(body.uf, 2).toUpperCase() || null, ibge: text(body.ibge, 20) || null };
   } catch (error) {
     if (error instanceof CommerceError) throw error;
