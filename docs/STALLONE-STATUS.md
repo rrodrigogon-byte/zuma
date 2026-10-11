@@ -120,7 +120,7 @@ Não validado nesta entrega:
 | Granel em gramas | Rodrigo | Aprovar a migração do §3.1 |
 | Entrega nacional | Loja | Manter a tabela manual ou desativar até contratar transportadora |
 | Fiscal | Contador da loja | Certificado A1, CSC da NFC-e, regime tributário |
-| WhatsApp | Rodrigo | Publicar a revisão do chatbot com `stallone-1` (Cloud Run `dino-chatbot-backend`, projeto `uisagcp`); criar `WHATSAPP_AI_WEBHOOK_SECRET_STALLONE` no Render; parear o QR com (65) 99676-5768 |
+| WhatsApp | Rodrigo | Backend: `stallone-1` em `WHATSAPP_INSTANCE_NAMES` (Cloud Run `dino-chatbot-backend`, projeto `uisagcp`). Render: `CHATBOT_BACKEND_INSTANCES` (dino e stallone-1) e `WHATSAPP_AI_WEBHOOK_SECRET_STALLONE`. Parear o QR com (65) 99676-5768 e incluir `stallone-1` em `WHATSAPP_LINE_VERIFIED_INSTANCES`. Passo a passo: docs/operations/WHATSAPP-DINO-BACKEND-PROPRIO.md |
 | Preço do NOW Omega 3 | Loja | Confirmar (planilha: R$ 12.190,00) |
 
 ## 6. Publicação e recuperação

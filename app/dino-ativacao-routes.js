@@ -8,7 +8,7 @@ import { publicConfig } from './core/commerce-tenants.js';
 import { configureWhatsappAiChannel, configureWhatsappAiPolicy, whatsappAiOperationalStatus } from './core/whatsapp-ai.js';
 import { providerConfigured } from './core/ai-router.js';
 import { getBrainSettings } from './core/ai-memory.js';
-import { whatsappProviderName, chatbotBackendConfig, chatbotBackendMode } from './core/whatsapp-provider.js';
+import { whatsappProviderName, chatbotBackendConfig, chatbotBackendMode, instanceLineVerified, instanceOwner } from './core/whatsapp-provider.js';
 import { obterConexao } from './whatsapp-conexao-kytto.js';
 import { pollMode } from './core/whatsapp-isa-poll.js';
 import { egressMode } from './core/whatsapp-egress.js';
@@ -242,13 +242,13 @@ export function registerAtivacaoRoutes(app, deps) {
         provider: whatsappProviderName(), instance: whatsappProviderName() === 'chatbot_backend' ? chatbotBackendConfig().instance : process.env.EVOLUTION_INSTANCE || '',
         env: Object.fromEntries(['CHATBOT_BACKEND_KEY', 'CHATBOT_BACKEND_URL', 'WHATSAPP_AI_WEBHOOK_SECRET'].map((n) => [n, envSet(n)]).concat([['FEATURE_WHATSAPP_AI', process.env.FEATURE_WHATSAPP_AI === 'true']])),
         modo: chatbotBackendMode(),
-        empresaDoNumero: String(process.env.CHATBOT_BACKEND_EMPRESA_ID || '').trim() === String(s.context?.empresaId || s.legacy || '').trim(),
+        empresaDoNumero: Boolean(conexao?.instance && instanceOwner(conexao.instance) === String(s.context?.empresaId || s.legacy || '').trim().toLowerCase()),
         ia: { gemini: providerConfigured('gemini'), anthropic: providerConfigured('anthropic'), openai: providerConfigured('openai') },
         conexao: conexao?.state || 'unknown',
         slug: config.slugPublico || '', agendamentoAtivo: config.agendamentoPublicoAtivo !== false,
         migracao: false, canal: null, politica: null, cerebro: { ativo: false, autonomia: 1 }, execucoes: 0,
         vitrine: null, semFoto: [], esgotados: [], reservados: [],
-        poll: { modo: pollMode(), linhaVerificada: process.env.WHATSAPP_LINE_VERIFIED === '1', saida: egressMode(), pilotos: String(process.env.WHATSAPP_POLL_PILOT_PHONES || '').split(',').filter((t) => t.replace(/\D/g, '').length >= 10).length },
+        poll: { modo: conexao?.instance ? pollMode(conexao.instance) : pollMode(), linhaVerificada: conexao?.instance ? instanceLineVerified(conexao.instance) : process.env.WHATSAPP_LINE_VERIFIED === '1', saida: egressMode(), pilotos: String(process.env.WHATSAPP_POLL_PILOT_PHONES || '').split(',').filter((t) => t.replace(/\D/g, '').length >= 10).length },
         resumo: configuracaoResumoPublica(),
         agendaIa: null, filaAntiga: 0,
       };

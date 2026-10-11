@@ -30,7 +30,7 @@ export function conclusoesDoDiagnostico(f = {}) {
   add(true, 'Chave do backend', 'Aceita.');
   const lista = f.instancias || [];
   const conhecida = lista.some((i) => i.name === f.instancia);
-  add(conhecida || !lista.length, 'Instância no backend', conhecida || !lista.length ? `"${f.instancia}" configurada.` : `"${f.instancia}" não aparece no backend (${lista.map((i) => i.name).join(', ')}). Inclua em WHATSAPP_INSTANCE_NAMES do backend.`);
+  add(conhecida || !lista.length, 'Instância no backend', conhecida || !lista.length ? `"${f.instancia}" configurada.` : `"${f.instancia}" ainda não existe no servidor de WhatsApp (hoje: ${lista.map((i) => i.name).join(', ')}). Inclua "${f.instancia}" em WHATSAPP_INSTANCE_NAMES do backend (Cloud Run) e publique; depois gere o QR aqui.`);
   add(f.estado === 'open', 'Sessão conectada', f.estado === 'open' ? 'Sessão aberta no backend.' : `Estado "${f.estado || 'desconhecido'}": leia o QR em /admin/whatsapp.`);
   add(f.numeroIdentificado === true, 'Número identificado pelo backend', f.numeroIdentificado
     ? 'A própria sessão informou o telefone da linha.'
@@ -38,10 +38,10 @@ export function conclusoesDoDiagnostico(f = {}) {
 
   const e = f.entrada || {};
   add(Boolean(e.empresaPorVariavel && f.canal), 'Empresa dona do número',
-    !e.empresaPorVariavel ? 'Defina CHATBOT_BACKEND_EMPRESA_ID no Render com o id da empresa da Dino (d0d0ac01-8e50-4b61-8c79-de4aaa916da6). Sem isso nada entra nem sai.'
+    !e.empresaPorVariavel ? `A instância "${f.instancia}" não tem empresa dona no servidor. No Render, inclua "${f.instancia}=<id da empresa>" em CHATBOT_BACKEND_INSTANCES (separado por vírgula), ou use o par CHATBOT_BACKEND_INSTANCE + CHATBOT_BACKEND_EMPRESA_ID para uma única linha. Sem isso nada entra nem sai.`
       : f.canal ? 'Canal ativo da instância encontrado nesta empresa.'
-        : 'CHATBOT_BACKEND_EMPRESA_ID definido, mas não há canal ativo com esta instância nessa empresa (ou há dois). Confira o canal em Integrações.');
-  add(e.linhaVerificada === true, 'Linha verificada', e.linhaVerificada ? 'WHATSAPP_LINE_VERIFIED=1.' : 'Depois de confirmar no celular da Dino (Aparelhos conectados) que a sessão é deste número, defina WHATSAPP_LINE_VERIFIED=1 no Render. Até lá entrada e saída ficam fechadas.');
+        : 'A instância tem empresa dona, mas não há canal ativo com ela nessa empresa (ou há dois). Ative o atendente em Integrações.');
+  add(e.linhaVerificada === true, 'Linha verificada', e.linhaVerificada ? 'Linha conferida no aparelho.' : `Depois de confirmar no celular da empresa (Aparelhos conectados) que a sessão é deste número, inclua "${f.instancia}" em WHATSAPP_LINE_VERIFIED_INSTANCES no Render (para a linha padrão também vale WHATSAPP_LINE_VERIFIED=1). Até lá entrada e saída desta linha ficam fechadas.`);
 
   const pedido = e.modoPedido || '';
   const efetivo = e.modo || 'off';
@@ -93,31 +93,33 @@ export function conclusoesDoDiagnostico(f = {}) {
   return out;
 }
 
-export async function diagnosticarWhatsapp({ fetchImpl, agora = Date.now() } = {}) {
-  const cfg = chatbotBackendConfig();
+export async function diagnosticarWhatsapp({ fetchImpl, agora = Date.now(), instance, semDono = false } = {}) {
+  // Diagnóstico da linha da empresa (multi-instância); sem `instance`, a padrão do ambiente.
+  const cfg = chatbotBackendConfig(instance ? { instance } : {});
   const fatos = {
     agora: new Date(agora).toISOString(),
     provedor: whatsappProviderName(),
     configurado: whatsappProviderConfigured(),
     modo: chatbotBackendMode(),
     instancia: cfg.instance,
-    entrada: estadoDaEntrada(),
+    entrada: estadoDaEntrada({ instance: cfg.instance }),
     saida: egressMode(),
   };
   if (fatos.provedor === 'chatbot_backend' && fatos.configurado && fatos.modo === 'instancias') {
     const [instancias, status, entradas] = await Promise.all([
       listInstances(fetchImpl).catch(() => ({ ok: false, items: [] })),
       getInstanceStatus(cfg.instance, fetchImpl).catch(() => ({ ok: false, state: 'unknown' })),
-      fetchInboundMessages({ instance: cfg.instance, from: agora - DIA_MS, limit: 200 }, fetchImpl).catch(() => ({ ok: false, messages: [] })),
+      // Linha sem empresa dona registrada: não lê mensagens (só estado e lista de instâncias).
+      semDono ? Promise.resolve(null) : fetchInboundMessages({ instance: cfg.instance, from: agora - DIA_MS, limit: 200 }, fetchImpl).catch(() => ({ ok: false, messages: [] })),
     ]);
-    fatos.chaveRecusada = Boolean(instancias.authError || status.authError || entradas.authError);
+    fatos.chaveRecusada = Boolean(instancias.authError || status.authError || entradas?.authError);
     fatos.instancias = (instancias.items || []).map((i) => ({ name: i.name, state: i.state || '' }));
     fatos.estado = status.state || 'unknown';
     fatos.numeroIdentificado = Boolean(status.ok && status.state === 'open' && status.phone);
-    fatos.mensagens24h = entradas.ok ? resumoMensagens(entradas.messages) : null;
-    fatos.erroLeitura = entradas.ok ? null : (entradas.error || `HTTP_${entradas.status ?? '-'}`);
+    fatos.mensagens24h = entradas?.ok ? resumoMensagens(entradas.messages) : null;
+    fatos.erroLeitura = !entradas || entradas.ok ? null : (entradas.error || `HTTP_${entradas.status ?? '-'}`);
   }
-  const canal = await canalDaEmpresa().catch(() => null);
+  const canal = await canalDaEmpresa({ instance: cfg.instance }).catch(() => null);
   fatos.canal = canal ? { id: canal.id, ultimo_evento_em: canal.ultimo_evento_em } : null;
   return { ...fatos, conclusoes: conclusoesDoDiagnostico(fatos) };
 }

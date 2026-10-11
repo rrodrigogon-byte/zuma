@@ -9,7 +9,7 @@ import QRCode from 'qrcode';
 import { db, save } from './db.js';
 import {
   disconnectInstance, getInstanceStatus, providerSummary, requestInstanceQr,
-  validInstance, whatsappProviderName, chatbotBackendConfig, confirmedPhone,
+  validInstance, whatsappProviderName, chatbotBackendConfig, confirmedPhone, instancesOfCompany,
 } from './core/whatsapp-provider.js';
 
 const HISTORY_LIMIT = 40;
@@ -33,6 +33,9 @@ export function instanciaEmUso(instance, exceto = '') {
   return Object.values(store()).some(c => String(c.empresaId) !== String(exceto) && c.instance === instance);
 }
 function instanciaPadrao(key) {
+  // Instância registrada para esta empresa no servidor (CHATBOT_BACKEND_INSTANCES) vem primeiro.
+  const registrada = instancesOfCompany(key).find((nome) => !instanciaEmUso(nome, key));
+  if (registrada) return registrada;
   const inst = validInstance(chatbotBackendConfig().instance || '');
   if (!inst) return '';
   const dono = String(process.env.CHATBOT_BACKEND_EMPRESA_ID || '').trim();

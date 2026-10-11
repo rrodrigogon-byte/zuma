@@ -4,7 +4,7 @@
  * Suporte a: Oficina, Barbearia, Crediário, Agendamentos, Cobranças, Alertas
  */
 import fetch from 'node-fetch';
-import { chatbotBackendConfig, chatbotBackendMode, sendStickerViaChatbotBackend, sendTextViaChatbotBackend, whatsappProviderName } from './whatsapp-provider.js';
+import { chatbotBackendConfig, chatbotBackendMode, instanceRegistry, isRegisteredInstance, sendStickerViaChatbotBackend, sendTextViaChatbotBackend, whatsappProviderName } from './whatsapp-provider.js';
 import { db } from './database.js';
 import { authorizeWhatsappEgress, evaluateWhatsappEgress } from './whatsapp-egress.js';
 
@@ -62,7 +62,9 @@ export async function enviarMensagem(tenant, telefone, mensagem) {
   // Um backend Dino configurado não pode silenciosamente cair na conta global Evolution.
   if (process.env.CHATBOT_BACKEND_URL && (!process.env.WHATSAPP_PROVIDER
     || !tenant?.empresa_id || tenant.empresa_id === process.env.CHATBOT_BACKEND_EMPRESA_ID
-    || tenant?.whatsapp_instance === chatbotBackendConfig().instance)) {
+    || [...instanceRegistry().values()].includes(String(tenant.empresa_id).toLowerCase())
+    || tenant?.whatsapp_instance === chatbotBackendConfig().instance
+    || isRegisteredInstance(tenant?.whatsapp_instance))) {
     return { ok: false, retryable: false, uncertain: false, error: 'WHATSAPP_PROVIDER_SCOPE' };
   }
   // Um job de empresa nunca herda URL, chave ou instância Evolution globais.

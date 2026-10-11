@@ -74,6 +74,70 @@ export function chatbotBackendConfig(overrides = {}) {
   };
 }
 
+// ----------------------------------------------------------------------------
+// Instâncias liberadas no servidor e a empresa dona de cada uma.
+//   CHATBOT_BACKEND_INSTANCES="dino=<uuid-da-empresa>,stallone-1=<uuid-da-empresa>"
+//   WHATSAPP_LINE_VERIFIED_INSTANCES="dino,stallone-1"   (linhas já conferidas no aparelho)
+// Sem CHATBOT_BACKEND_INSTANCES, vale o par antigo CHATBOT_BACKEND_INSTANCE +
+// CHATBOT_BACKEND_EMPRESA_ID (e WHATSAPP_LINE_VERIFIED=1 para essa instância), então a
+// Dino continua igual sem mudar nenhuma variável. Uma instância pertence a UMA empresa:
+// entrada, saída e diagnóstico de uma empresa nunca usam a instância de outra.
+// ----------------------------------------------------------------------------
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function instanceRegistry(env = process.env) {
+  const registry = new Map();
+  const raw = clean(env.CHATBOT_BACKEND_INSTANCES, 4000);
+  if (raw) {
+    for (const part of raw.split(/[,;\s]+/)) {
+      const [name, owner] = part.split(/[=:]/).map((item) => clean(item, 100));
+      const instance = validInstance(name);
+      if (!instance || !UUID_RE.test(owner || '')) continue;
+      // Instância repetida com donos diferentes: ninguém fica com ela.
+      if (registry.has(instance) && registry.get(instance) !== owner.toLowerCase()) { registry.set(instance, ''); continue; }
+      registry.set(instance, owner.toLowerCase());
+    }
+    for (const [instance, owner] of [...registry]) if (!owner) registry.delete(instance);
+    return registry;
+  }
+  const legacyOwner = clean(env.CHATBOT_BACKEND_EMPRESA_ID, 60).toLowerCase();
+  const legacyInstance = validInstance(env.CHATBOT_BACKEND_INSTANCE || DEFAULT_INSTANCE);
+  if (legacyInstance && UUID_RE.test(legacyOwner)) registry.set(legacyInstance, legacyOwner);
+  return registry;
+}
+
+export function instanceOwner(instance, env = process.env) {
+  return instanceRegistry(env).get(validInstance(instance)) || '';
+}
+
+/** Instâncias da empresa (normalmente uma). */
+export function instancesOfCompany(empresaId, env = process.env) {
+  const id = clean(empresaId, 60).toLowerCase();
+  if (!id) return [];
+  return [...instanceRegistry(env)].filter(([, owner]) => owner === id).map(([instance]) => instance);
+}
+
+export function instanceLineVerified(instance, env = process.env) {
+  const resolved = validInstance(instance);
+  if (!resolved) return false;
+  const list = clean(env.WHATSAPP_LINE_VERIFIED_INSTANCES, 2000);
+  if (list) return list.split(/[,;\s]+/).map((item) => validInstance(item)).includes(resolved);
+  // Compatível: WHATSAPP_LINE_VERIFIED=1 vale só para a instância padrão do ambiente.
+  return env.WHATSAPP_LINE_VERIFIED === '1' && resolved === validInstance(env.CHATBOT_BACKEND_INSTANCE || DEFAULT_INSTANCE);
+}
+
+/** A instância é de alguma empresa registrada (não pode ser usada por canal legado/global). */
+// Guarda de último nível: a instância padrão do ambiente ou uma instância com empresa
+// dona registrada. A verificação de QUAL empresa pode usar a linha fica no gate de saída
+// (whatsapp-egress) e no vínculo canal↔instância da entrada.
+function instanciaPermitida(instanceName, cfg) {
+  return Boolean(instanceName && (instanceName === cfg.instance || isRegisteredInstance(instanceName)));
+}
+
+export function isRegisteredInstance(instance, env = process.env) {
+  return Boolean(instanceOwner(instance, env));
+}
+
 export function validInstance(value) {
   const instance = clean(value, 100).toLowerCase();
   return /^[a-z0-9][a-z0-9_-]{1,63}$/.test(instance) ? instance : '';
@@ -221,7 +285,15 @@ export async function getInstanceStatus(instance, fetchImpl, { resolvePhone = tr
   const result = await call(cfg, 'GET', `/instances/${encodeURIComponent(cfg.instance)}/status`, null, fetchImpl);
   if (isAuthError(result.status)) return { ok: false, authError: true, status: result.status, state: 'unknown' };
   if (result.status === 404) return { ok: false, status: 404, state: 'unknown', error: 'instance_not_enabled' };
-  if (!result.ok) return { ok: false, status: result.status, state: 'unknown', error: result.error || 'status_unavailable' };
+  if (!result.ok) {
+    // Algumas versões do backend respondem 400/500 (e não 404) para instância que não
+    // está em WHATSAPP_INSTANCE_NAMES. A lista diz com certeza se ela existe.
+    const listed = await listInstances(fetchImpl).catch(() => null);
+    if (listed?.ok && Array.isArray(listed.items) && listed.items.length && !listed.items.some((item) => clean(item.name, 100).toLowerCase() === cfg.instance)) {
+      return { ok: false, status: result.status, state: 'unknown', error: 'instance_not_enabled' };
+    }
+    return { ok: false, status: result.status, state: 'unknown', error: result.error || 'status_unavailable' };
+  }
   const reportedNames = [result.data?.instanceName, result.data?.name, result.data?.instance?.instanceName,
     result.data?.instance?.name, result.data?.instance, result.data?.status?.instanceName]
     .filter((value) => typeof value === 'string' && value.trim());
@@ -356,7 +428,7 @@ async function sendTextIsa({ instance, number, text, simulateTyping = process.en
   if (!cfg.baseUrl) return { ok: false, status: null, retryable: false, uncertain: false, error: 'CHATBOT_BACKEND_URL_MISSING', data: {} };
   if (cfg.key.length < 20) return { ok: false, status: null, retryable: false, uncertain: false, error: 'CHATBOT_BACKEND_KEY_MISSING', data: {} };
   const instanceName = chatbotBackendMode() === 'instancias' ? validInstance(instance || '') : '';
-  if (chatbotBackendMode() === 'instancias' && (!instanceName || instanceName !== cfg.instance)) return { ok: false, status: null, retryable: false, uncertain: false, error: 'INSTANCE_SCOPE_MISMATCH', data: {} };
+  if (chatbotBackendMode() === 'instancias' && !instanciaPermitida(instanceName, cfg)) return { ok: false, status: null, retryable: false, uncertain: false, error: 'INSTANCE_SCOPE_MISMATCH', data: {} };
   const chatId = isaChatId(number);
   if (!chatId) return { ok: false, status: null, retryable: false, uncertain: false, error: 'INVALID_CHAT_ID', data: {} };
   const message = isaMessageText(text);
@@ -388,7 +460,7 @@ export async function fetchInboundMessages({ instance, from, limit = 100, role =
   const cfg = chatbotBackendConfig();
   if (!cfg.baseUrl || cfg.key.length < 20) return { ok: false, error: 'backend_not_configured', messages: [] };
   const instanceName = chatbotBackendMode() === 'instancias' ? validInstance(instance || '') : '';
-  if (chatbotBackendMode() === 'instancias' && (!instanceName || instanceName !== cfg.instance)) return { ok: false, error: 'INSTANCE_SCOPE_MISMATCH', messages: [] };
+  if (chatbotBackendMode() === 'instancias' && !instanciaPermitida(instanceName, cfg)) return { ok: false, error: 'INSTANCE_SCOPE_MISMATCH', messages: [] };
   const params = new URLSearchParams({ latest: 'false', role: role === 'assistant' ? 'assistant' : 'user', limit: String(Math.min(200, Math.max(25, Number(limit) || 100))) });
   if (from) params.set('from', new Date(from).toISOString());
   if (instanceName) params.set('instanceName', instanceName);
@@ -434,7 +506,7 @@ export async function sendStickerViaChatbotBackend({ instance, number, url = '',
   if (!stickerPath || !stickerPath.startsWith('/')) return { ok: false, unsupported: true, status: null, retryable: false, uncertain: false, error: 'STICKER_ROUTE_NOT_CONFIGURED' };
   if (!cfg.baseUrl || cfg.key.length < 20) return { ok: false, status: null, retryable: false, uncertain: false, error: 'CHATBOT_BACKEND_NOT_CONFIGURED' };
   const instanceName = chatbotBackendMode() === 'instancias' ? validInstance(instance || '') : '';
-  if (chatbotBackendMode() === 'instancias' && (!instanceName || instanceName !== cfg.instance)) return { ok: false, status: null, retryable: false, uncertain: false, error: 'INSTANCE_SCOPE_MISMATCH' };
+  if (chatbotBackendMode() === 'instancias' && !instanciaPermitida(instanceName, cfg)) return { ok: false, status: null, retryable: false, uncertain: false, error: 'INSTANCE_SCOPE_MISMATCH' };
   const chatId = isaChatId(number);
   if (!chatId) return { ok: false, status: null, retryable: false, uncertain: false, error: 'INVALID_CHAT_ID' };
   if (base64.length > 700000) return { ok: false, retryable: false, uncertain: false, error: 'STICKER_INVALID' };
