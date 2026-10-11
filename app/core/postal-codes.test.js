@@ -82,3 +82,13 @@ test('falha do cache não impede a consulta', async () => {
   const address = await createPostalCodeLookup({ fetchImpl: async url => tangaraFetch(url), store: brokenStore })('78300000');
   assert.equal(address.estado, 'MT');
 });
+
+test('duas fontes dizendo que o CEP não existe bastam, mesmo com outra fora do ar', async () => {
+  const mixed = async url => {
+    if (url.includes('viacep')) return json({ erro: 'true' });
+    if (url.includes('awesomeapi')) return json({ code: 'not_found' }, 404);
+    if (url.includes('brasilapi')) return json({ message: 'rate limit' }, 429);
+    throw new Error('fora do ar');
+  };
+  await assert.rejects(createPostalCodeLookup({ fetchImpl: mixed })('69900000'), error => error.code === 'SHIPPING_CEP_NOT_FOUND');
+});
