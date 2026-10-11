@@ -425,3 +425,6 @@ html[data-theme='dark'] .commerce-shell.sf-ux .sf-cart-limit { color: var(--kytt
 /* Paginação da vitrine: "Mostrar mais" ocupa a linha inteira da grade. */
 .commerce-shell.sf-ux .sf-load-more { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 0 6px; }
 .commerce-shell.sf-ux .sf-load-more small { color: var(--kytto-muted, var(--commerce-muted)); font-size: 12px; }
+
+/* Selo de produto que só sai por retirada (congelados e refrigerados). */
+.commerce-shell.sf-ux .sf-pickup-only { display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; font-size: 12px; font-weight: 700; color: var(--kytto-indigo, var(--accent)); }
