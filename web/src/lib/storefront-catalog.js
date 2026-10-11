@@ -105,3 +105,18 @@ export function paginateCatalog(products = [], visibleCount = CATALOG_PAGE_SIZE)
   const items = list.slice(0, limit)
   return { items, total: list.length, remaining: Math.max(0, list.length - items.length), hasMore: list.length > items.length }
 }
+
+// Congelados e refrigerados só saem por retirada (a regra final é do servidor, na cotação de frete).
+const PICKUP_ONLY_PATTERN = /\b(congelad[oa]s?|refrigerad[oa]s?|resfriad[oa]s?|perec[ií]ve(?:l|is))\b/i
+
+export function isPickupOnlyProduct(product = {}) {
+  const fold = value => String(value ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+  return PICKUP_ONLY_PATTERN.test(fold(product.cat || product.category_name || '')) || PICKUP_ONLY_PATTERN.test(fold(product.nome || ''))
+}
+
+export function cartHasPickupOnlyItems(cart = [], products = []) {
+  const byId = new Map((Array.isArray(products) ? products : []).map(product => [product.id, product]))
+  return (Array.isArray(cart) ? cart : []).some(item => isPickupOnlyProduct(byId.get(item.produtoId) || item))
+}
+
+export const PICKUP_ONLY_NOTE = 'Seu carrinho tem itens congelados ou refrigerados: este pedido é só para retirada na loja.'

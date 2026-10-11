@@ -8,10 +8,25 @@
  * Valores possíveis: 'all' | 'essential' | null (não respondido)
  */
 import { useState, useEffect } from 'react'
+import { brandFromHost } from '../lib/brand'
 
 const LS_KEY = 'sp_cookie_consent'
 
+// Paleta do aviso: verde Agro Open/Kytto por padrão; marcas com identidade própria usam a sua.
+export const COOKIE_PALETTES = {
+  default: { bg: '#0e2216', panel: '#132b1b', title: '#F4F6EF', body: '#7a9e85', strong: '#a0c8a0', highlight: '#C9A656', accent: '#5FB335', primary: 'linear-gradient(135deg,#5FB335,#7BC142)', primaryText: '#1B4D2E', primaryShadow: '0 3px 12px rgba(95,179,53,0.35)', secondaryText: '#7BC142', secondaryBorder: '1.5px solid #2a4a35', secondaryBorderColor: '#2a4a35', topBorder: '2px solid #1e3d28', panelBorder: '1px solid #1e3d28' },
+  stallone: { bg: '#141416', panel: '#1C1C21', title: '#F7F7F5', body: '#B7B7BF', strong: '#F7F7F5', highlight: '#E32935', accent: '#E32935', primary: '#E32935', primaryText: '#FFFFFF', primaryShadow: '0 3px 12px rgba(227,41,53,0.35)', secondaryText: '#F7F7F5', secondaryBorder: '1.5px solid #3A3A42', secondaryBorderColor: '#3A3A42', topBorder: '2px solid #E32935', panelBorder: '1px solid #2A2A31' },
+}
+
+export function cookiePalette(brand) {
+  return COOKIE_PALETTES[brand] || COOKIE_PALETTES.default
+}
+
 export default function CookieConsent() {
+  const brand = typeof document !== 'undefined' && document.documentElement.dataset.brand === 'stallone'
+    ? 'stallone'
+    : (typeof window !== 'undefined' ? brandFromHost(window.location.hostname) : null)
+  const pal = cookiePalette(brand)
   const [visible, setVisible] = useState(false)
   const [detail, setDetail] = useState(false)
 
@@ -49,8 +64,8 @@ export default function CookieConsent() {
         aria-label="Aviso de cookies e privacidade"
         style={{
           position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9999,
-          background: '#0e2216',
-          borderTop: '2px solid #1e3d28',
+          background: pal.bg,
+          borderTop: pal.topBorder,
           padding: '20px 24px',
           boxShadow: '0 -8px 40px rgba(0,0,0,0.35)',
           fontFamily: "'Segoe UI', sans-serif",
@@ -69,15 +84,15 @@ export default function CookieConsent() {
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: detail ? 14 : 0 }}>
             <span style={{ fontSize: '1.6rem', flexShrink: 0 }}>🍪</span>
             <div style={{ flex: 1 }}>
-              <p style={{ margin: '0 0 6px', color: '#F4F6EF', fontWeight: 700, fontSize: '0.95rem' }}>
+              <p style={{ margin: '0 0 6px', color: pal.title, fontWeight: 700, fontSize: '0.95rem' }}>
                 Usamos cookies e dados de navegação
               </p>
-              <p style={{ margin: 0, color: '#7a9e85', fontSize: '0.82rem', lineHeight: 1.6 }}>
+              <p style={{ margin: 0, color: pal.body, fontSize: '0.82rem', lineHeight: 1.6 }}>
                 Este site utiliza cookies essenciais para funcionamento e, opcionalmente, cookies analíticos
                 para melhorar a experiência. Ao continuar, você concorda com nossa{' '}
                 <button
                   onClick={() => setDetail(d => !d)}
-                  style={{ background: 'none', border: 'none', color: '#5FB335', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', padding: 0, textDecoration: 'underline' }}
+                  style={{ background: 'none', border: 'none', color: pal.accent, cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', padding: 0, textDecoration: 'underline' }}
                 >
                   Política de Privacidade
                 </button>
@@ -89,18 +104,18 @@ export default function CookieConsent() {
           {/* Detalhe expandível */}
           {detail && (
             <div style={{
-              background: '#132b1b', borderRadius: 10, padding: '14px 16px',
-              marginBottom: 14, border: '1px solid #1e3d28',
+              background: pal.panel, borderRadius: 10, padding: '14px 16px',
+              marginBottom: 14, border: pal.panelBorder,
             }}>
-              <p style={{ margin: '0 0 8px', color: '#C9A656', fontWeight: 700, fontSize: '0.82rem' }}>
+              <p style={{ margin: '0 0 8px', color: pal.highlight, fontWeight: 700, fontSize: '0.82rem' }}>
                 📋 O que coletamos?
               </p>
-              <ul style={{ margin: 0, paddingLeft: 18, color: '#7a9e85', fontSize: '0.8rem', lineHeight: 1.8 }}>
-                <li><strong style={{ color: '#a0c8a0' }}>Cookies essenciais:</strong> Token de autenticação (sessão), preferências de idioma. Obrigatórios para o funcionamento.</li>
-                <li><strong style={{ color: '#a0c8a0' }}>Cookies analíticos (opcional):</strong> Métricas de uso anônimas para melhorar o sistema. Sem identificação pessoal.</li>
-                <li><strong style={{ color: '#a0c8a0' }}>Dados de pedido:</strong> Nome, e-mail e telefone informados no checkout. Usados exclusivamente para processamento do pedido.</li>
+              <ul style={{ margin: 0, paddingLeft: 18, color: pal.body, fontSize: '0.8rem', lineHeight: 1.8 }}>
+                <li><strong style={{ color: pal.strong }}>Cookies essenciais:</strong> Token de autenticação (sessão), preferências de idioma. Obrigatórios para o funcionamento.</li>
+                <li><strong style={{ color: pal.strong }}>Cookies analíticos (opcional):</strong> Métricas de uso anônimas para melhorar o sistema. Sem identificação pessoal.</li>
+                <li><strong style={{ color: pal.strong }}>Dados de pedido:</strong> Nome, e-mail e telefone informados no checkout. Usados exclusivamente para processamento do pedido.</li>
               </ul>
-              <p style={{ margin: '10px 0 0', color: '#7a9e85', fontSize: '0.78rem', lineHeight: 1.6 }}>
+              <p style={{ margin: '10px 0 0', color: pal.body, fontSize: '0.78rem', lineHeight: 1.6 }}>
                 Você pode revogar o consentimento a qualquer momento limpando os dados do navegador.
                 Dúvidas: contate o responsável pelo sistema via WhatsApp indicado na plataforma.
               </p>
@@ -113,10 +128,10 @@ export default function CookieConsent() {
               onClick={() => accept('all')}
               style={{
                 flex: 1, minWidth: 160,
-                background: 'linear-gradient(135deg,#5FB335,#7BC142)',
-                color: '#1B4D2E', border: 'none', borderRadius: 10,
+                background: pal.primary,
+                color: pal.primaryText, border: 'none', borderRadius: 10,
                 padding: '11px 20px', fontWeight: 800, fontSize: '0.88rem',
-                cursor: 'pointer', boxShadow: '0 3px 12px rgba(95,179,53,0.35)',
+                cursor: 'pointer', boxShadow: pal.primaryShadow,
                 transition: 'transform .1s',
               }}
               onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
@@ -128,13 +143,13 @@ export default function CookieConsent() {
               onClick={() => accept('essential')}
               style={{
                 flex: 1, minWidth: 160,
-                background: 'transparent', color: '#7BC142',
-                border: '1.5px solid #2a4a35', borderRadius: 10,
+                background: 'transparent', color: pal.secondaryText,
+                border: pal.secondaryBorder, borderRadius: 10,
                 padding: '11px 20px', fontWeight: 700, fontSize: '0.88rem',
                 cursor: 'pointer', transition: 'border-color .15s, transform .1s',
               }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = '#5FB335'; e.currentTarget.style.transform = 'translateY(-1px)' }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = '#2a4a35'; e.currentTarget.style.transform = '' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = pal.accent; e.currentTarget.style.transform = 'translateY(-1px)' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = pal.secondaryBorderColor; e.currentTarget.style.transform = '' }}
             >
               🔒 Apenas essenciais
             </button>

@@ -92,3 +92,18 @@ test('paginateCatalog mostra o catálogo em páginas e informa o restante', asyn
   assert.equal(paginateCatalog([], 48).total, 0)
   assert.equal(paginateCatalog(list, 0).items.length, CATALOG_PAGE_SIZE)
 })
+
+test('congelados e refrigerados deixam o carrinho só para retirada', async () => {
+  const { cartHasPickupOnlyItems, isPickupOnlyProduct } = await import('./storefront-catalog.js')
+  const products = [
+    { id: 'p1', nome: 'Creatina 300g', cat: 'Creatina' },
+    { id: 'p2', nome: 'Pão de queijo 1kg', cat: 'Sem glúten & Congelados' },
+    { id: 'p3', nome: 'Iogurte proteico refrigerado', cat: 'Despensa saudável' },
+  ]
+  assert.equal(isPickupOnlyProduct(products[0]), false)
+  assert.equal(isPickupOnlyProduct(products[1]), true)
+  assert.equal(isPickupOnlyProduct(products[2]), true)
+  assert.equal(cartHasPickupOnlyItems([{ produtoId: 'p1', qtd: 1 }], products), false)
+  assert.equal(cartHasPickupOnlyItems([{ produtoId: 'p1', qtd: 1 }, { produtoId: 'p2', qtd: 1 }], products), true)
+  assert.equal(cartHasPickupOnlyItems([], products), false)
+})
