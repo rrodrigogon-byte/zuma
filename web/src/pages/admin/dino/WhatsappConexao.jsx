@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../../../lib/api'
 import { useAuth } from '../../../lib/auth'
 import { brandFromContext } from '../../../lib/brand'
+import { channelStatusPayload, webhookSecretEnvFor } from '../../../lib/whatsapp-webhook-secret'
 import { useToast } from '../../../hooks/useToast'
 import { Dialog } from '../customer360/shared'
 import { dateTime } from './format'
@@ -230,10 +231,23 @@ function WhatsappConexaoEmpresa() {
     try {
       await api.post('/api/admin/commerce/whatsapp-ai/channel', {
         instance: conexao.instance, displayName: `Atendimento ${empresaAtiva?.nome || 'da empresa'}`.slice(0, 120), status: 'rascunho',
-        webhookSecretEnv: 'WHATSAPP_AI_WEBHOOK_SECRET', webhookHeader: 'x-setpoint-webhook-token',
+        webhookSecretEnv: webhookSecretEnvFor(empresaAtiva), webhookHeader: 'x-setpoint-webhook-token',
         capabilities: { humanized: true, captureLeads: true, operateStore: true, manageAppointments: true, sendPromotions: false, reminders: true, humanHandoff: true },
       })
       if (scope === scopeRef.current) { toast('Canal criado em rascunho.'); await recarregarIa() }
+    } catch (error) { if (scope === scopeRef.current) toast(error.message, true) }
+    finally { if (scope === scopeRef.current) setBusy('') }
+  }
+
+  // Liga ou pausa o atendente direto nesta tela, mantendo capacidades e instância salvas.
+  async function alterarAtendente(status) {
+    if (!ia?.channel) return
+    if (status === 'ativo' && !window.confirm('Ativar o atendente IA neste WhatsApp? As mensagens recebidas passam a ser respondidas pela IA, com as capacidades salvas no canal.')) return
+    const scope = scopeRef.current
+    setBusy('canal')
+    try {
+      await api.post('/api/admin/commerce/whatsapp-ai/channel', channelStatusPayload(ia.channel, { status, instance: conexao?.instance, empresa: empresaAtiva }))
+      if (scope === scopeRef.current) { toast(status === 'ativo' ? 'Atendente ativado.' : 'Atendente pausado.'); await recarregarIa() }
     } catch (error) { if (scope === scopeRef.current) toast(error.message, true) }
     finally { if (scope === scopeRef.current) setBusy('') }
   }
@@ -366,9 +380,11 @@ function WhatsappConexaoEmpresa() {
             </ul> : <p className="c360-empty">Status do atendente indisponível para o seu perfil.</p>}
             {webhookUrl && <p className="dadm-note dadm-wa-webhook">Webhook de entrada: <strong>{webhookUrl}</strong> · cabeçalho <code>{ia.channel?.webhookHeader || 'x-setpoint-webhook-token'}</code></p>}
             {podeGerenciar && ia && !ia.channel && <button type="button" className="c360-btn primary" disabled={Boolean(busy)} onClick={prepararAtendente}>Preparar atendente (rascunho)</button>}
+            {podeGerenciar && ia?.channel && ia.channel.status !== 'ativo' && <button type="button" className="c360-btn primary" disabled={Boolean(busy)} onClick={() => alterarAtendente('ativo')}>Ativar atendente</button>}
+            {podeGerenciar && ia?.channel?.status === 'ativo' && <button type="button" className="c360-btn ghost" disabled={Boolean(busy)} onClick={() => alterarAtendente('rascunho')}>Pausar atendente</button>}
             {podeGerenciar && ia?.channel?.status === 'ativo' && <button type="button" className="c360-btn ghost" disabled={Boolean(busy)} onClick={sincronizarWebhook}>Sincronizar webhook</button>}
             {webhookInfo && <p className="dadm-note warn dadm-wa-webhook">{webhookInfo}</p>}
-            <Link to={brandFromContext(empresaAtiva) === 'stallone' ? '/admin/cerebro-ia' : '/admin/barbearia-erp?area=integracoes&tab=Integra%C3%A7%C3%B5es'}>Revisar capacidades e ativar o atendente →</Link>
+            <Link to={brandFromContext(empresaAtiva) === 'stallone' ? '/admin/cerebro-ia' : '/admin/barbearia-erp?area=integracoes&tab=Integra%C3%A7%C3%B5es'}>{brandFromContext(empresaAtiva) === 'stallone' ? 'Ver o cérebro do atendente →' : 'Revisar capacidades e ativar o atendente →'}</Link>
           </section>
 
           <section className="dadm-card" aria-labelledby="wa-auto">
