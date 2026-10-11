@@ -98,3 +98,26 @@ Opcionais:
 - Não remova `WHATSAPP_PROVIDER` como kill switch: outras empresas podem usar Evolution. Com backend Dino configurado, o envio não retorna silenciosamente à Evolution ao omitir provider ou escopo da empresa.
 - Quando explicitamente autorizada, **Desconectar** encerra somente a sessão `dino` e pausa sua reconexão após confirmação do backend. Se o backend não confirmar, trate o estado como incerto e não anuncie desligamento total de mensagens; siga o plano de contingência de #201.
 - Nada disso apaga conversas, agendamentos ou consentimentos.
+
+## Várias empresas no mesmo backend (Dino + Stallone)
+
+O backend é multi-instância: cada empresa tem a própria linha (instância) e a própria empresa dona. O Kytto lê, responde e diagnostica cada linha separadamente, e uma empresa nunca usa a linha de outra.
+
+**Variáveis no Render (`setpoint`):**
+
+| Variável | Exemplo | Para quê |
+|---|---|---|
+| `CHATBOT_BACKEND_INSTANCES` | `dino=d0d0ac01-8e50-4b61-8c79-de4aaa916da6,stallone-1=31f70c83-9172-40c2-945f-9e793b5048be` | Instância → empresa dona. Sem ela, vale o par antigo `CHATBOT_BACKEND_INSTANCE` + `CHATBOT_BACKEND_EMPRESA_ID` (a Dino continua igual). |
+| `WHATSAPP_LINE_VERIFIED_INSTANCES` | `dino,stallone-1` | Linhas já conferidas no aparelho (Aparelhos conectados). Linha fora da lista fica com entrada e saída fechadas. Sem ela, `WHATSAPP_LINE_VERIFIED=1` vale só para a instância padrão. |
+| `WHATSAPP_AI_WEBHOOK_SECRET_STALLONE` | segredo próprio | Exigido para ativar o canal do atendente da Stallone. |
+
+**No backend (Cloud Run `dino-chatbot-backend`, projeto `uisagcp`):** incluir `stallone-1` em `WHATSAPP_INSTANCE_NAMES` e publicar a revisão. Enquanto não estiver lá, a tela da Stallone mostra "Esta linha ainda não existe no servidor de WhatsApp".
+
+**Ordem para ligar a Stallone:**
+1. Backend: `WHATSAPP_INSTANCE_NAMES` com `dino,stallone-1` e publicar.
+2. Render: `CHATBOT_BACKEND_INSTANCES` (as duas linhas) e `WHATSAPP_AI_WEBHOOK_SECRET_STALLONE`.
+3. Em `/admin/whatsapp` na Stallone: **Gerar QR** e ler com o celular da Stallone (65 99676-5768). Não afeta a linha da Dino.
+4. Conferir no celular (Aparelhos conectados) e incluir `stallone-1` em `WHATSAPP_LINE_VERIFIED_INSTANCES` (mantendo `dino`).
+5. Ativar o atendente da Stallone em Integrações e rodar o Diagnóstico de ponta a ponta.
+
+`WHATSAPP_POLL_MODE`, `WHATSAPP_EGRESS_MODE`, piloto e rollout continuam globais (valem para todas as linhas abertas).
