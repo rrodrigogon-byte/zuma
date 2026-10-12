@@ -5,7 +5,7 @@ import { countPublishedProducts, createPendingOrder, listPublishedProducts } fro
 import { quoteAvailableShipping } from './commerce-shipping.js';
 import { requiresPickupOnly, PICKUP_ONLY_ERROR_CODE } from './commerce-pickup-rules.js';
 import { productDetails, productCard } from './whatsapp-product-card.js';
-import { publicPaymentMethods } from './payment-adapters.js';
+import { createPaymentAttempt, publicPaymentMethods } from './payment-adapters.js';
 // Agenda única: quando a empresa usa a agenda da barbearia (a do admin e do link
 // público), a IA lê e grava nela; senão segue o caminho PostgreSQL antigo.
 import {
@@ -771,6 +771,66 @@ async function toolCartLink(context, args = {}) {
   };
 }
 
+const PAYMENT_METHOD_ALIASES = { pix: 'pix', cartao: 'credit_card', credito: 'credit_card', credit_card: 'credit_card', cartao_de_credito: 'credit_card' };
+const PAYMENT_LABELS = { pix: 'Pix', credit_card: 'Cartão de crédito' };
+
+/**
+ * Link de pagamento do gateway (InfinitePay) para um pedido do PRÓPRIO contato que
+ * ainda aguarda pagamento. O cliente paga na página segura do gateway (Pix com QR Code
+ * e copia e cola, ou cartão); a confirmação chega pelo webhook. Nada é cobrado aqui e
+ * nenhum dado de cartão passa pelo WhatsApp. Pedir o mesmo método de novo devolve o
+ * mesmo link (idempotente).
+ */
+async function toolOrderPaymentLink(context, args = {}) {
+  const scope = contextScope(context);
+  const storefront = await activeStorefront(scope);
+  const orderCode = cleanText(args.orderCode, 80).toUpperCase();
+  if (!orderCode) throw new WhatsappAiToolError('código do pedido é obrigatório', 'ORDER_CODE_REQUIRED');
+  const rawMethod = cleanText(args.metodo || args.method, 40).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_');
+  const method = PAYMENT_METHOD_ALIASES[rawMethod];
+  if (!method) throw new WhatsappAiToolError('escolha Pix ou cartão de crédito', 'PAYMENT_METHOD_INVALID');
+  const found = await db.queryRead(
+    `SELECT o.id, o.public_code, o.status, o.total
+       FROM commerce_orders o
+       JOIN commerce_customers c ON c.id = o.customer_id AND c.empresa_id = o.empresa_id
+      WHERE o.empresa_id = $1 AND o.loja_id = $2 AND o.storefront_id = $5 AND upper(o.public_code) = $3
+        AND ${phoneMatchKeySql('c.telefone')} = ${phoneMatchKeySql('$4')}
+      LIMIT 1`,
+    [scope.empresaId, scope.lojaId, orderCode, scope.phone, storefront.id],
+  );
+  const order = found.rows[0];
+  if (!order) throw new WhatsappAiToolError('pedido não encontrado para este contato', 'ORDER_NOT_FOUND');
+  if (order.status !== 'pending_payment') {
+    return { ok: false, code: 'ORDER_NOT_AWAITING_PAYMENT', status: order.status, orientacao: 'Este pedido não está aguardando pagamento. Use consultar_status_pedido para informar a situação; não gere outra cobrança.' };
+  }
+  const accounts = await db.queryRead(
+    `SELECT id, provider, ambiente, secret_ref, public_config, ativo
+       FROM commerce_payment_accounts
+      WHERE empresa_id = $1 AND storefront_id = $2 AND ambiente = 'production' AND ativo = true
+      ORDER BY provider`, [scope.empresaId, storefront.id],
+  );
+  const available = publicPaymentMethods(accounts.rows).filter(item => item.method !== 'account');
+  const chosen = available.find(item => item.method === method);
+  if (!chosen) {
+    return { ok: false, code: 'PAYMENT_METHOD_UNAVAILABLE', meiosDisponiveis: available.map(item => PAYMENT_LABELS[item.method] || item.method), orientacao: 'Ofereça somente os meios disponíveis ou o pagamento na retirada.' };
+  }
+  const account = accounts.rows.find(row => row.provider === chosen.provider);
+  const payment = await createPaymentAttempt(
+    { empresaId: scope.empresaId, lojaId: scope.lojaId, storefrontId: storefront.id },
+    { orderId: order.id, provider: chosen.provider, method, environment: account.ambiente, accountId: account.id, idempotencyKey: `whatsapp-pay:${order.id}:${method}` },
+  );
+  const url = String(payment?.checkout?.url || '').trim();
+  if (!/^https:\/\/[^\s]+$/i.test(url)) throw new WhatsappAiToolError('o gateway não devolveu o link de pagamento', 'PAYMENT_LINK_UNAVAILABLE');
+  return {
+    ok: true,
+    pedido: order.public_code,
+    metodo: PAYMENT_LABELS[method],
+    total: brl(order.total),
+    linkPagamento: url,
+    orientacao: `Envie o linkPagamento como está, com o total e o código do pedido. ${method === 'pix' ? 'Ao abrir, aparece o QR Code e o código Pix copia e cola.' : 'O cartão é digitado só na página segura da InfinitePay.'} A confirmação do pagamento chega automaticamente: não peça comprovante, CPF nem dados de cartão no WhatsApp.`,
+  };
+}
+
 async function toolPrepareOrder(context, args = {}) {
   const scope = contextScope(context);
   const storefront = await activeStorefront(scope);
@@ -1112,6 +1172,7 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'preparar_remarcacao', description: 'Prepara a remarcação de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' } }, required: ['appointmentId', 'date', 'time'] } },
   { name: 'preparar_cancelamento', description: 'Prepara o cancelamento de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' } }, required: ['appointmentId'] } },
   { name: 'cotar_frete', description: 'Calcula o frete (valor e prazo) para o CEP do cliente com os produtos escolhidos. Somente consulta: não pede endereço completo nem documento e não cria pedido. Use quando o cliente quiser entrega ou perguntar quanto fica o frete.', parameters: { type: 'OBJECT', properties: { cep: { type: 'STRING', description: 'CEP de entrega, 8 dígitos' }, items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { variantId: { type: 'STRING' }, quantity: { type: 'INTEGER' } }, required: ['variantId', 'quantity'] } } }, required: ['cep', 'items'] } },
+  { name: 'link_pagamento_pedido', description: 'Gera o link de pagamento seguro (InfinitePay) de um pedido DO PRÓPRIO contato que aguarda pagamento, no método escolhido: pix (abre QR Code e copia e cola) ou cartao. Use quando o cliente pedir para pagar pelo WhatsApp. Não cobra nada sozinho e não recebe dados de cartão.', parameters: { type: 'OBJECT', properties: { orderCode: { type: 'STRING', description: 'Código do pedido (ex.: o informado na confirmação)' }, metodo: { type: 'STRING', description: 'pix ou cartao' } }, required: ['orderCode', 'metodo'] } },
   { name: 'link_carrinho', description: 'Gera o link da loja com o carrinho já montado com os produtos escolhidos. Use para compra com ENTREGA (o cliente informa endereço e CPF e paga no checkout seguro) ou quando o cliente preferir finalizar e pagar no site. Não cria pedido nem cobrança.', parameters: { type: 'OBJECT', properties: { items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { variantId: { type: 'STRING' }, quantity: { type: 'INTEGER' } }, required: ['variantId', 'quantity'] } } }, required: ['items'] } },
   { name: 'preparar_pedido', description: 'Prepara um pedido para RETIRADA na loja, para confirmação. Não cria o pedido. Depois do SIM, o cliente recebe o link para pagar com Pix ou cartão (ou paga na retirada). Para entrega, use cotar_frete e link_carrinho.', parameters: { type: 'OBJECT', properties: { customerName: { type: 'STRING' }, items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { variantId: { type: 'STRING' }, quantity: { type: 'INTEGER' } }, required: ['variantId', 'quantity'] } } }, required: ['customerName', 'items'] } },
   { name: 'consultar_meu_plano', description: 'Mostra o plano/clube do próprio contato: sessões usadas e restantes no ciclo, fim do ciclo e serviços incluídos. Use quando o cliente perguntar do plano dele.', parameters: { type: 'OBJECT', properties: {} } },
@@ -1147,6 +1208,7 @@ const TOOL_MAP = {
   preparar_cancelamento: toolPrepareCancellation,
   preparar_pedido: toolPrepareOrder,
   cotar_frete: toolQuoteShipping,
+  link_pagamento_pedido: toolOrderPaymentLink,
   link_carrinho: toolCartLink,
   consultar_meu_plano: toolMyPlan,
   listar_planos: toolPlans,
@@ -1286,8 +1348,20 @@ export async function confirmPendingAction(context) {
         correlationId: `whatsapp:${action.id}`,
       });
       // Link do pedido (acompanhar e concluir o pagamento pela loja segura).
-      const linkPedido = storeLinks(await activeStorefront(scope).catch(() => ({}))).pedido(response?.publicCode);
+      const storefront = await activeStorefront(scope).catch(() => ({}));
+      const linkPedido = storeLinks(storefront).pedido(response?.publicCode);
       if (linkPedido) response = { ...response, linkPedido };
+      // Só oferece pagar pelo WhatsApp (link_pagamento_pedido) se a loja tem meio online pronto.
+      if (storefront?.id) {
+        // Leitura fora da transação: uma falha aqui não pode abortar a criação do pedido.
+        const accounts = await db.queryRead(
+          `SELECT id, provider, ambiente, secret_ref, public_config, ativo FROM commerce_payment_accounts
+            WHERE empresa_id = $1 AND storefront_id = $2 AND ambiente = 'production' AND ativo = true`,
+          [scope.empresaId, storefront.id],
+        ).catch(() => ({ rows: [] }));
+        const online = publicPaymentMethods(accounts.rows || []).some(item => item.method === 'pix' || item.method === 'credit_card');
+        if (online) response = { ...response, pagamentoOnline: true };
+      }
     } else if (action.tipo === 'remarcacao') {
       response = await rescheduleWhatsappAppointment(trx, scope, action.solicitacao);
     } else if (action.tipo === 'cancelamento') {
