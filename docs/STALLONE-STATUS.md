@@ -198,3 +198,23 @@ Empresa selecionada: Stallone Nutre Sport. Inspeção de leitura com acesso admi
 6. Ativar campanhas, recompensas e pós-venda com consentimento e indicadores reais.
 
 Os totais são uma fotografia da sessão de 11/10/2026. Telas vazias confirmam ausência de histórico visível, não sucesso de ponta a ponta. O dashboard global inadequado não constitui, por si só, prova de vazamento de dados: a sessão utilizada possui administração da plataforma.
+
+
+## 10. Revisão de checkout e entregas — 12/10/2026
+
+Problema do print: cartões brancos usavam textos do tema escuro. A PR #303 já acrescentou estilos próprios; esta revisão complementa a base atual de produção com cartões grafite (#202126/#25262D), alternativa cinza no tema claro, rótulos legíveis, campo de cupom em largura completa, nomes de produto sem corte, foco visível e respeito a movimento reduzido. No celular, o formulário aparece antes do resumo extenso. Texto da compra usa linguagem do cliente.
+
+Conferências atuais:
+- PR #300 incorporada em 11/10: central de pendências, políticas, bloqueio sem pagamento, rotas por empresa e proteções de ativação.
+- PR #303 incorporada: contraste do checkout, modal e aviso de privacidade.
+- PRs #302 e #304 incorporadas: integração WhatsApp por empresa e ativação na tela da linha. Pareamento e envio/recebimento reais não foram testados nesta revisão.
+- PR #305 incorporada: consulta de CEP com quatro fontes/cache. PR #306 continua aberta para tratar CEP inexistente (404 em lugar de 502); não declarar esse ajuste publicado.
+- API pública agora informa available=true com InfinitePay Pix e cartão de crédito, ambiente production. A pendência antiga de ausência de métodos foi superada na configuração publicada. Isso não prova liquidação, webhook, estorno ou conciliação.
+- API de entrega publica retirada, motoboy e entrega nacional manual. Integração com transportadora/etiqueta e cobertura final continuam dependentes de validação operacional.
+
+Limites e pendências:
+- Nenhum pedido, pagamento ou mensagem foi criado; a prévia bloqueia requisições de escrita.
+- Conteúdo/fotos/descrições, políticas, preços e mínimos de estoque precisam de conferência comercial; os números do relatório de 11/10 são históricos.
+- Fiscal, lotes/validade/FEFO, compras, PDV, conciliação e teste com usuário restrito ainda precisam de homologação.
+- Incorporação no GitHub não substitui confirmação de deploy Live no Render.
+- Validação visual em computador e 390 px; sem rolagem horizontal, cupom com 279 px no celular. Testes automatizados: 1215 total, 1136 aprovados, 79 pulados por dependências externas, zero falhas; sete testes adicionais de checkout aprovados; build web aprovado.
