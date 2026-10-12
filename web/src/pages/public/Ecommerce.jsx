@@ -6,7 +6,7 @@ import { decrementCartQuantity, loadAllStorefrontProducts, nextStorefrontCartSyn
 import { recommendedShippingOption, shippingQuoteKey } from '../../lib/checkout-shipping'
 import { createLatestRequest } from '../../lib/latest-request'
 import { applyThemeMode, brandFromHost, commerceDisplayName, DINO_COMMERCE_LOGO, STALLONE_LOGO, storedThemeMode } from '../../lib/brand'
-import { addProductToCart, CATALOG_PAGE_SIZE, cartHasPickupOnlyItems, filterCatalog, isPickupOnlyProduct, paginateCatalog, PICKUP_ONLY_NOTE, sortCatalog, stockState } from '../../lib/storefront-catalog'
+import { addProductToCart, applyCartLink, CART_LINK_PARAM, CATALOG_PAGE_SIZE, cartHasPickupOnlyItems, filterCatalog, isPickupOnlyProduct, paginateCatalog, parseCartLink, PICKUP_ONLY_NOTE, sortCatalog, stockState } from '../../lib/storefront-catalog'
 import AddToCartSuccess from '../../components/store/AddToCartSuccess'
 import CartDrawer from '../../components/store/CartDrawer'
 import './commerce.css'
@@ -502,6 +502,27 @@ function EcommerceStorefront({ routeAlias, hostName }) {
     } finally { setTrackingLoading(false) }
   }
 
+  // Link enviado pelo atendimento no WhatsApp (?carrinho=...): monta o carrinho com o
+  // catálogo e o estoque atuais, limpa o parâmetro da URL e abre o carrinho.
+  const cartLinkAppliedRef = useRef(false)
+  useEffect(() => {
+    if (cartLinkAppliedRef.current || catalogSource !== 'core' || !products.length) return
+    const params = new URLSearchParams(window.location.search)
+    const raw = params.get(CART_LINK_PARAM)
+    if (!raw) return
+    cartLinkAppliedRef.current = true
+    const resolve = (variantId) => {
+      const product = products.find(item => (item.variants || []).some(variant => variant.variantId === variantId))
+      return product ? { product: selectedProductVariant(product, variantId), available: availableStock(product, variantId) } : null
+    }
+    const result = applyCartLink(cart, parseCartLink(raw), resolve)
+    setCart(result.cart)
+    setAddError(result.missing.length === 1 ? 'Um item do link não está mais disponível no momento. Confira o carrinho.' : result.missing.length > 1 ? `${result.missing.length} itens do link não estão mais disponíveis no momento. Confira o carrinho.` : '')
+    params.delete(CART_LINK_PARAM)
+    const search = params.toString()
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${search ? `?${search}` : ''}${window.location.hash}`)
+    if (result.added.length) setCartOpen(true)
+  }, [catalogSource, products]) // eslint-disable-line react-hooks/exhaustive-deps
   function openTracking() {
     setTrackingOpen(true)
     setTrackingError('')
