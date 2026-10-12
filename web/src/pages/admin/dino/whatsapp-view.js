@@ -26,3 +26,17 @@ export function linePresentation(connection) {
 export function statusRefreshInterval(state) {
   return state === 'qr' || state === 'connecting' ? 5_000 : 30_000
 }
+
+
+export function outboundPresentation(connection, diagnostic) {
+  const mode = connection?.saida?.modo
+  if (mode === 'off') return { ready: false, label: 'Desligado no servidor' }
+  if (connection?.state !== 'open') return { ready: false, label: 'Aguardando conexão da linha' }
+  const required = ['Empresa dona do número', 'Linha verificada', 'Saída das respostas']
+  const checks = diagnostic?.conclusoes || []
+  if (required.some(title => !checks.some(check => check.titulo === title && check.ok === true))) {
+    return { ready: false, label: 'Aguardando validação das travas da linha' }
+  }
+  if (mode !== 'on' && mode !== 'pilot') return { ready: false, label: 'Configuração de envio indisponível' }
+  return { ready: true, label: mode === 'pilot' ? 'Piloto habilitado · valide com telefone autorizado' : 'Habilitado · envio precisa de teste' }
+}

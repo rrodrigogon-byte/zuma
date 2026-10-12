@@ -7,12 +7,11 @@ import { channelStatusPayload, webhookSecretEnvFor } from '../../../lib/whatsapp
 import { useToast } from '../../../hooks/useToast'
 import { Dialog } from '../customer360/shared'
 import { dateTime } from './format'
-import { linePresentation, statusRefreshInterval } from './whatsapp-view'
+import { linePresentation, statusRefreshInterval, outboundPresentation } from './whatsapp-view'
 import '../customer360.css'
 import './dino-admin.css'
 
 const BASE = '/api/admin/barbearia/whatsapp-conexao'
-const SAIDA = { off: 'Desligado', pilot: 'Piloto (só números autorizados)', on: 'Liberado para todos' }
 const STATES = { open: 'Conectado', qr: 'Aguardando leitura do QR', connecting: 'Conectando…', close: 'Desconectado', unknown: 'Sem informação' }
 const HISTORY = { conectado: 'Conectou', desconectado: 'Caiu', desconectado_manual: 'Desconectado manualmente', qr_gerado: 'QR gerado', reconexao_solicitada: 'Reconexão solicitada', reconexao_automatica: 'Reconexão automática', instancia_alterada: 'Instância alterada', erro: 'Erro' }
 const ERRORS = {
@@ -287,7 +286,8 @@ function WhatsappConexaoEmpresa() {
   const erroConexao = conexao?.lastError ? (ERRORS[conexao.lastError] || `Última falha: ${conexao.lastError}`) : ''
   const pending = diag?.conclusoes?.filter((item) => !item.ok).length
   const saida = conexao?.saida
-  const saidaBloqueada = saida?.modo === 'off'
+  const outbound = outboundPresentation(conexao ? { ...conexao, state } : null, diag)
+  const saidaBloqueada = !outbound.ready
   const messages = diag?.mensagens24h
 
   return <div className="dadm-page dadm-wa-page">
@@ -328,12 +328,12 @@ function WhatsappConexaoEmpresa() {
             {!conexao.providerConfigured && <p className="dadm-note warn">{conexao.provider !== 'chatbot_backend' ? ERRORS.provedor_nao_e_nossagente : 'Falta a chave CHATBOT_BACKEND_KEY no servidor.'}</p>}
             {erroConexao && conexao.providerConfigured && <p className="dadm-note danger">{erroConexao}</p>}
             {state === 'open' && !conexao.phoneMasked && <p className="dadm-note warn" role="status">Sessão aberta, mas o backend não informou o número. Confirme a conta pareada em Aparelhos conectados no WhatsApp antes de usar este canal; uma referência manual não comprova titularidade.</p>}
-            {saidaBloqueada && <p className="dadm-note warn" role="status">O envio de mensagens está desligado no servidor (WHATSAPP_EGRESS_MODE=off). Nada sai por este número: nem teste, nem IA, nem campanhas. Para testar, o responsável pelo servidor define WHATSAPP_EGRESS_MODE=pilot e inclui o número de teste em WHATSAPP_POLL_PILOT_PHONES.</p>}
+            {saidaBloqueada && <p className="dadm-note warn" role="status">{outbound.label}. Confira o diagnóstico da instância antes de testar mensagens. O modo de envio do servidor não substitui conexão, empresa dona e verificação da linha.</p>}
             {saida?.modo === 'pilot' && !saida.pilotoConfigurado && <p className="dadm-note warn" role="status">Envio em modo piloto, mas sem nenhum número autorizado em WHATSAPP_POLL_PILOT_PHONES.</p>}
             <dl className="dadm-result">
               <div><dt>Identificação da linha</dt><dd>{line.verified ? line.value : 'Não confirmada'}</dd></div>
               <div><dt>Instância no backend</dt><dd>{conexao.instance || 'Não atribuída'}</dd></div>
-              {saida && <div><dt>Envio de mensagens</dt><dd>{SAIDA[saida.modo] || saida.modo}</dd></div>}
+              {saida && <div><dt>Envio de mensagens</dt><dd>{outbound.label}</dd></div>}
               <div><dt>Backend</dt><dd>{conexao.providerLabel}</dd></div>
               <div><dt>Conectado desde</dt><dd>{state === 'open' ? dateTime(conexao.lastConnectedAt) : '—'}</dd></div>
               <div><dt>Última verificação</dt><dd>{dateTime(conexao.lastCheckAt)}</dd></div>
@@ -353,7 +353,7 @@ function WhatsappConexaoEmpresa() {
             {podeGerenciar ? <div className="dadm-actions">
               {state !== 'open' && <button type="button" className="c360-btn primary" disabled={Boolean(busy) || !conexao.providerConfigured || !conexao.instance} onClick={() => gerarQr()}>{busy === 'qr' ? 'Gerando…' : qr.image ? 'Gerar novo QR' : 'Gerar QR'}</button>}
               <button type="button" className="c360-btn ghost" disabled={Boolean(busy) || !conexao.providerConfigured} onClick={verificar}>{busy === 'verificar' ? 'Verificando…' : 'Verificar agora'}</button>
-              {state === 'open' && <button type="button" className="c360-btn ghost" disabled={Boolean(busy) || saidaBloqueada} title={saidaBloqueada ? 'Envio desligado no servidor (WHATSAPP_EGRESS_MODE=off)' : undefined} onClick={() => setTeste({ telefone: '', open: true })}>Enviar teste</button>}
+              {state === 'open' && <button type="button" className="c360-btn ghost" disabled={Boolean(busy) || saidaBloqueada} title={saidaBloqueada ? outbound.label : undefined} onClick={() => setTeste({ telefone: '', open: true })}>Enviar teste</button>}
               {conexao.ativo && <button type="button" className="c360-btn ghost" disabled={Boolean(busy)} onClick={() => setConfirmarSaida(true)}>Desconectar</button>}
             </div> : <p className="dadm-muted">Só administradores e gestores alteram a conexão.</p>}
           </section>
@@ -375,7 +375,7 @@ function WhatsappConexaoEmpresa() {
               <Check ok={Boolean(ia.gemini?.configured)} hint={ia.gemini?.model}>Gemini configurado</Check>
               <Check ok={Boolean(ia.featureEnabled)} hint="FEATURE_WHATSAPP_AI=true">IA liberada no servidor</Check>
               <Check ok={ia.channel?.status === 'ativo'}>Canal do atendente ativo</Check>
-              {saida && <Check ok={saida.modo !== 'off'} hint={saida.modo === 'off' ? 'WHATSAPP_EGRESS_MODE=off' : SAIDA[saida.modo]}>Envio de mensagens liberado</Check>}
+              {saida && <Check ok={outbound.ready} hint={outbound.label}>Prontidão do envio</Check>}
               <Check ok={Boolean(ia.channel?.lastEventAt)} hint={ia.channel?.lastEventAt ? `último em ${dateTime(ia.channel.lastEventAt)}` : 'nenhuma mensagem recebida ainda'}>Mensagens chegando</Check>
             </ul> : <p className="c360-empty">Status do atendente indisponível para o seu perfil.</p>}
             {webhookUrl && <p className="dadm-note dadm-wa-webhook">Webhook de entrada: <strong>{webhookUrl}</strong> · cabeçalho <code>{ia.channel?.webhookHeader || 'x-setpoint-webhook-token'}</code></p>}
