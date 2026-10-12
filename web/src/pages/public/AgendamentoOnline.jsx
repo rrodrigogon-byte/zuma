@@ -404,7 +404,7 @@ export default function AgendamentoOnline() {
                 </span>
                 <span style={{ textAlign: 'right' }}>
                   <span style={{ display: 'block', fontWeight: 800, color: theme.green, fontSize: 15 }}>
-                    R$ {parseFloat(sv.preco).toFixed(2).replace('.', ',')}
+                    {sv.preco_rotulo || `R$ ${parseFloat(sv.preco).toFixed(2).replace('.', ',')}`}
                   </span>
                   {servicoSel?.id === sv.id && <span aria-hidden="true" style={{ display: 'block', fontSize: 16, marginTop: 2 }}>✓</span>}
                 </span>
@@ -671,7 +671,7 @@ export default function AgendamentoOnline() {
             <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid ${theme.line}`, paddingTop: 8, marginTop: 4 }}>
               <span style={{ color: theme.muted }}>Valor</span>
               <span style={{ fontWeight: 800, color: theme.green, fontSize: 15 }}>
-                R$ {parseFloat(servicoSel?.preco || 0).toFixed(2).replace('.', ',')}
+                {servicoSel?.preco_rotulo || `R$ ${parseFloat(servicoSel?.preco || 0).toFixed(2).replace('.', ',')}`}
               </span>
             </div>
           </div>
@@ -796,7 +796,7 @@ export default function AgendamentoOnline() {
               ['Profissional', agendamento?.profissional || profissionalSel?.nome],
               ['Data', new Date(dataSel + 'T12:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })],
               ['Horário', horarioSel],
-              ['Valor', `R$ ${parseFloat(servicoSel?.preco || 0).toFixed(2).replace('.', ',')}`],
+              ['Valor', servicoSel?.preco_rotulo || `R$ ${parseFloat(servicoSel?.preco || 0).toFixed(2).replace('.', ',')}`],
             ].map(([label, valor]) => (
               <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: `1px solid ${theme.line}`, fontSize: 13 }}>
                 <span style={{ color: theme.muted }}>{label}</span>

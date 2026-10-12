@@ -32,8 +32,33 @@ function garantirConsentimentos(cliente) {
   return cliente;
 }
 
+// Data de nascimento: aceita AAAA-MM-DD, DD/MM/AAAA ou DD/MM (sem ano).
+// Guarda `dataNascimento` (AAAA-MM-DD, vazio se o ano não for informado) e
+// `aniversario` (MM-DD), que é o que as campanhas de aniversário usam.
+export function normalizarNascimento(valor) {
+  const bruto = String(valor ?? '').trim();
+  if (!bruto) return { dataNascimento: '', aniversario: '' };
+  let ano = ''; let mes = ''; let dia = '';
+  let m = bruto.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) [, ano, mes, dia] = m;
+  else if ((m = bruto.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?$/))) { dia = m[1].padStart(2, '0'); mes = m[2].padStart(2, '0'); ano = m[3] || ''; }
+  else throw new Error('Data de nascimento inválida. Use DD/MM/AAAA ou DD/MM.');
+  const anoTeste = ano ? Number(ano) : 2000; // 2000 é bissexto: aceita 29/02 sem ano
+  const data = new Date(Date.UTC(anoTeste, Number(mes) - 1, Number(dia)));
+  if (data.getUTCMonth() !== Number(mes) - 1 || data.getUTCDate() !== Number(dia)) throw new Error('Data de nascimento inválida.');
+  if (ano && (Number(ano) < 1900 || data > new Date())) throw new Error('Data de nascimento fora do intervalo aceito.');
+  return { dataNascimento: ano ? `${ano}-${mes}-${dia}` : '', aniversario: `${mes}-${dia}` };
+}
+
+function camposNascimento(payload = {}, atual = {}) {
+  const informado = ['dataNascimento', 'data_nascimento', 'aniversario'].find((chave) => Object.prototype.hasOwnProperty.call(payload, chave));
+  if (!informado) return { dataNascimento: atual.dataNascimento || '', aniversario: atual.aniversario || '' };
+  return normalizarNascimento(payload[informado]);
+}
+
 function normalizarCliente(payload = {}) {
   return {
+    ...camposNascimento(payload),
     nome: texto(payload.nome, 120),
     tipo: ['pf', 'pj'].includes(String(payload.tipo || '').toLowerCase()) ? String(payload.tipo).toLowerCase() : 'pf',
     cpfCnpj: texto(payload.cpfCnpj ?? payload.cpf_cnpj, 20),
@@ -157,7 +182,8 @@ export function criarCliente(empresaId, dados) {
 export function atualizarCliente(empresaId, clienteId, dados) {
   const cliente = clientesPersistidos(empresaId).clientes[clienteId];
   if (!cliente || cliente.empresaId !== empresaId) return null;
-  Object.assign(cliente, normalizarCliente({ ...cliente, ...dados }), { atualizadoEm: agora() });
+  // Nascimento só muda quando vier no corpo; senão preserva o que já existe.
+  Object.assign(cliente, normalizarCliente({ ...cliente, ...dados }), camposNascimento(dados, cliente), { atualizadoEm: agora() });
   garantirConsentimentos(cliente);
   return cliente;
 }

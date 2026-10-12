@@ -69,6 +69,8 @@ function servicoPublico(item) {
     nome: item.nome,
     descricao: item.descricao || '',
     preco: Number(item.preco || 0),
+    tipo_preco: item.tipoPreco || 'fixo',
+    preco_rotulo: barbearia.rotuloPrecoServico(item),
     duracao_min: Number(item.duracaoMinutos || 30),
   };
 }

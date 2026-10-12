@@ -2671,6 +2671,7 @@ function sanitizarClienteBarbearia(cliente) {
   return {
     id: cliente.id, empresaId: cliente.empresaId, nome: cliente.nome, tipo: cliente.tipo,
     telefone: cliente.telefone, email: cliente.email, endereco: cliente.endereco,
+    dataNascimento: cliente.dataNascimento || '', aniversario: cliente.aniversario || '',
     limiteCreditoMensal: cliente.limiteCreditoMensal, diasVencimento: cliente.diasVencimento,
     observacao: cliente.observacao, saldoDevedor: cliente.saldoDevedor,
          scoreCredito: cliente.scoreCredito, risco: cliente.risco,
@@ -2680,18 +2681,35 @@ function sanitizarClienteBarbearia(cliente) {
   };
 }
 
+// Collator único: localeCompare com locale cria um comparador a cada chamada e,
+// com a base real da Dino (3,3 mil clientes), deixava a ordenação lenta.
+const COLLATOR_PT_BR = new Intl.Collator('pt-BR');
+
 function clientesBarbeariaSomenteLeitura(empresaId) {
   const clientes = db().clientesKytto?.empresas?.[String(empresaId)]?.clientes || {};
   return Object.values(clientes)
     .filter(cliente => cliente.empresaId === String(empresaId) && cliente.status !== 'deletado')
-    .sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR'))
+    .sort((a, b) => COLLATOR_PT_BR.compare(String(a.nome || ''), String(b.nome || '')))
     .map(sanitizarClienteBarbearia);
 }
 
-function enriquecerAgendamentoBarbearia(empresaId, agendamento) {
-  const profissional = barbeariaErpKytto.listarProfissionais(empresaId, { incluirInativos: true }).find(item => item.id === agendamento.profissionalId);
-  const servico = barbeariaErpKytto.listarServicos(empresaId, { incluirInativos: true }).find(item => item.id === agendamento.servicoId);
-  const cliente = clientesBarbeariaSomenteLeitura(empresaId).find(item => item.id === agendamento.clienteId);
+// Índices de profissionais, serviços e clientes montados uma vez por requisição.
+// Antes cada agendamento listava (e ordenava) todos os clientes de novo: com ~1 mil
+// agendamentos e 3,3 mil clientes a visão geral passava de 20 s.
+function indicesAgendaBarbearia(empresaId) {
+  const porId = (lista) => new Map(lista.map(item => [item.id, item]));
+  return {
+    profissionais: porId(barbeariaErpKytto.listarProfissionais(empresaId, { incluirInativos: true })),
+    servicos: porId(barbeariaErpKytto.listarServicos(empresaId, { incluirInativos: true })),
+    clientes: porId(clientesBarbeariaSomenteLeitura(empresaId)),
+  };
+}
+
+function enriquecerAgendamentoBarbearia(empresaId, agendamento, indices = null) {
+  const idx = indices || indicesAgendaBarbearia(empresaId);
+  const profissional = idx.profissionais.get(agendamento.profissionalId);
+  const servico = idx.servicos.get(agendamento.servicoId);
+  const cliente = idx.clientes.get(agendamento.clienteId);
   return {
     ...agendamento,
     clienteNome: agendamento.clienteNome || cliente?.nome || '',
@@ -2707,32 +2725,57 @@ function enriquecerAgendamentoBarbearia(empresaId, agendamento) {
   };
 }
 
-function listarAgendamentosBarbearia(empresaId, filtros = {}) {
-  return barbeariaErpKytto.listarAgendamentos(empresaId, filtros).map(item => enriquecerAgendamentoBarbearia(empresaId, item));
+function listarAgendamentosBarbearia(empresaId, filtros = {}, indices = null) {
+  const agendamentos = barbeariaErpKytto.listarAgendamentos(empresaId, filtros);
+  if (!agendamentos.length) return [];
+  const idx = indices || indicesAgendaBarbearia(empresaId);
+  return agendamentos.map(item => enriquecerAgendamentoBarbearia(empresaId, item, idx));
+}
+
+function agruparPorCliente(lista) {
+  const mapa = new Map();
+  for (const item of lista) {
+    const chave = item?.clienteId;
+    if (!chave) continue;
+    if (!mapa.has(chave)) mapa.set(chave, []);
+    mapa.get(chave).push(item);
+  }
+  return mapa;
 }
 
 function resumoRelacionamentoBarbearia(req) {
   const empresaId = legacyEmpresaId(req);
   const lojaId = legacyLojaId(req);
   const clientes = clientesBarbeariaSomenteLeitura(empresaId);
-  const agenda = listarAgendamentosBarbearia(empresaId, { lojaId });
+  // Só os campos de cliente/status/data são usados aqui: dispensa o enriquecimento.
+  const agenda = barbeariaErpKytto.listarAgendamentos(empresaId, { lojaId });
   const comandas = barbeariaErpKytto.listarComandasBarbearia(empresaId, { lojaId });
   const vendas = barbeariaErpKytto.listarVendasRevenda(empresaId, { lojaId });
   const contas = clientesKytto.listarContasReceber(empresaId);
   const fidelidade = canaisFidelidadeKytto.obterFidelidade(empresaId);
+  const agendaPorCliente = agruparPorCliente(agenda);
+  const comandasPorCliente = agruparPorCliente(comandas);
+  const vendasPorCliente = agruparPorCliente(vendas);
+  const contasPorCliente = agruparPorCliente(contas);
+  const historicoPorCliente = agruparPorCliente(barbeariaErpKytto.listarHistoricoAtendimentos(empresaId));
+  const membroPorCliente = new Map();
+  for (const membro of fidelidade.membros || []) if (membro?.clienteId && !membroPorCliente.has(membro.clienteId)) membroPorCliente.set(membro.clienteId, membro);
   const porCliente = clientes.map((cliente) => {
     const clienteId = cliente.id;
-    const agendaCliente = agenda.filter((item) => item.clienteId === clienteId);
-    const comandasCliente = comandas.filter((item) => item.clienteId === clienteId);
-    const vendasCliente = vendas.filter((item) => item.clienteId === clienteId);
-    const contasCliente = contas.filter((item) => item.clienteId === clienteId);
-    const membro = fidelidade.membros.find((item) => item.clienteId === clienteId) || null;
-    const datas = [...agendaCliente.map((item) => item.dataHora || item.criadoEm), ...comandasCliente.map((item) => item.atualizadoEm || item.criadoEm), ...vendasCliente.map((item) => item.atualizadoEm || item.criadoEm)].filter(Boolean).map((item) => new Date(item).valueOf()).filter(Number.isFinite);
+    const agendaCliente = agendaPorCliente.get(clienteId) || [];
+    const comandasCliente = comandasPorCliente.get(clienteId) || [];
+    const vendasCliente = vendasPorCliente.get(clienteId) || [];
+    const contasCliente = contasPorCliente.get(clienteId) || [];
+    const membro = membroPorCliente.get(clienteId) || null;
+    const historicoCliente = historicoPorCliente.get(clienteId) || [];
+    const datas = [...historicoCliente.map((item) => `${item.dataAgenda}T${item.hora || '12:00'}:00`),
+      ...agendaCliente.map((item) => item.dataHora || item.criadoEm), ...comandasCliente.map((item) => item.atualizadoEm || item.criadoEm), ...vendasCliente.map((item) => item.atualizadoEm || item.criadoEm)].filter(Boolean).map((item) => new Date(item).valueOf()).filter(Number.isFinite);
     const receitaComandas = comandasCliente.filter((item) => item.status === 'paga').reduce((soma, item) => soma + Number(item.totalPago || item.total || 0), 0);
     const receitaRevenda = vendasCliente.filter((item) => item.status === 'pago').reduce((soma, item) => soma + Number(item.total || 0), 0);
     const aReceber = contasCliente.filter((item) => item.status !== 'paga').reduce((soma, item) => soma + Number(item.valor || 0), 0);
     return {
-      clienteId, visitas: agendaCliente.filter((item) => item.status === 'concluido').length,
+      clienteId, visitas: agendaCliente.filter((item) => item.status === 'concluido').length + historicoCliente.length,
+      visitasHistoricas: historicoCliente.length,
       agendamentos: agendaCliente.length, comandas: comandasCliente.length,
       receitaRecebida: Number((receitaComandas + receitaRevenda).toFixed(2)),
       aReceber: Number(aReceber.toFixed(2)),
@@ -2759,8 +2802,9 @@ function resumoRelacionamentoBarbearia(req) {
 }
 
 function relatorioOperacionalBarbearia(empresaId, { data, lojaId } = {}) {
-  const agenda = listarAgendamentosBarbearia(empresaId, { data, lojaId });
-  const recebimentos = listarAgendamentosBarbearia(empresaId, { lojaId });
+  // O relatório usa só ids, status e valores: lê a agenda sem enriquecer.
+  const agenda = barbeariaErpKytto.listarAgendamentos(empresaId, { data, lojaId });
+  const recebimentos = barbeariaErpKytto.listarAgendamentos(empresaId, { lojaId });
   const profissionais = barbeariaErpKytto.listarProfissionais(empresaId, { incluirInativos: true });
   const porStatus = Object.fromEntries([...new Set(agenda.map(item => item.status))].map(status => [status, agenda.filter(item => item.status === status).length]));
   const porProfissional = profissionais.map(profissional => {
@@ -2787,7 +2831,7 @@ app.get('/api/admin/barbearia/dashboard', (req, res) => {
       financeiro: financeiroKytto.resumoFinanceiro(empresaId, { hoje: data }),
       caixa: { data, caixas, aberto: caixas.find(item => item.status === 'aberto') || null },
     });
-    dashboard.proximosAgendamentos = dashboard.proximosAgendamentos.map(item => enriquecerAgendamentoBarbearia(empresaId, item));
+    { const idx = indicesAgendaBarbearia(empresaId); dashboard.proximosAgendamentos = dashboard.proximosAgendamentos.map(item => enriquecerAgendamentoBarbearia(empresaId, item, idx)); }
     res.json({ ok: true, ...dashboard });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
@@ -3038,7 +3082,7 @@ app.get('/api/admin/barbearia/overview', async (req, res) => {
       financeiro: financeiroKytto.resumoFinanceiro(empresaId, { hoje: data }),
       caixa: { data, caixas, aberto: caixas.find(item => item.status === 'aberto') || null },
     });
-    dashboard.proximosAgendamentos = dashboard.proximosAgendamentos.map(item => enriquecerAgendamentoBarbearia(empresaId, item));
+    { const idx = indicesAgendaBarbearia(empresaId); dashboard.proximosAgendamentos = dashboard.proximosAgendamentos.map(item => enriquecerAgendamentoBarbearia(empresaId, item, idx)); }
     let configuracaoUnidade = null;
     try { configuracaoUnidade = barbeariaErpKytto.obterConfiguracaoLoja(empresaId, lojaId); } catch (_) { configuracaoUnidade = null; }
     const comandas = barbeariaErpKytto.listarComandasBarbearia(empresaId, { data, lojaId });
@@ -3127,7 +3171,7 @@ app.get('/api/admin/barbearia/profissionais', (req, res) => {
 });
 // Percentual de comissão e dados de repasse são definidos por quem gerencia a unidade;
 // equipe operacional (staff) pode editar o cadastro, mas não a própria remuneração.
-const CAMPOS_REMUNERACAO = ['percentualComissao', 'percentual_comissao', 'percentualComissaoProduto', 'percentual_comissao_produto', 'descontaTaxaMaquininha', 'desconta_taxa_maquininha'];
+const CAMPOS_REMUNERACAO = ['percentualComissao', 'percentual_comissao', 'percentualComissaoProduto', 'percentual_comissao_produto', 'comissoesPorServico', 'comissoes_por_servico', 'descontaTaxaMaquininha', 'desconta_taxa_maquininha'];
 function semCamposDeRemuneracao(req) {
   const corpo = { ...(req.body || {}) };
   if (['admin', 'organizador', 'gerente'].includes(String(req.user?.role || '').toLowerCase())) return corpo;
@@ -3180,6 +3224,10 @@ app.get('/api/admin/barbearia/agenda/:id', (req, res) => {
   if (!agendamento) return res.status(404).json({ error: 'Agendamento não encontrado na empresa ativa.' });
   res.json({ ok: true, agendamento });
 });
+// Importação/migração de agenda: gestão pode registrar sem disparar aviso ao cliente.
+function podeSilenciarAvisoAgenda(usuario) {
+  return ['admin', 'organizador', 'gerente'].includes(String(usuario?.role || '').toLowerCase());
+}
 app.post('/api/admin/barbearia/agenda', async (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
@@ -3192,8 +3240,21 @@ app.post('/api/admin/barbearia/agenda', async (req, res) => {
     }
     const vinculo = vincularClienteAoAtendimento(empresaId, { ...(req.body || {}), lojaId }, { origem: 'agenda', usuario: req.user?.email || '' });
     const body = vinculo.dados;
-    const agendamento = enriquecerAgendamentoBarbearia(empresaId, barbeariaErpKytto.criarAgendamento(empresaId, body));
-    const notificacao = await queueAppointmentNotifications({ empresaId, lojaId, legacyEmpresaId: empresaId }, agendamento, 'criado').catch(() => ({ queued: 0, skipped: true, reason: 'queue_unavailable' }));
+    // Encaixe e "não avisar o cliente" são decisões explícitas da equipe neste painel.
+    const encaixe = req.body?.encaixe === true;
+    const naoAvisarCliente = req.body?.notificarCliente === false;
+    if (naoAvisarCliente && !podeSilenciarAvisoAgenda(req.user)) {
+      return res.status(403).json({ error: 'Só a gestão pode registrar agendamento sem avisar o cliente.', code: 'AVISO_CLIENTE_OBRIGATORIO' });
+    }
+    const agendamento = enriquecerAgendamentoBarbearia(empresaId, barbeariaErpKytto.criarAgendamento(empresaId, body, { permitirEncaixe: encaixe }));
+    if (agendamento.encaixe) audit(req, 'AGENDA ENCAIXE', `${agendamento.id} profissional=${agendamento.profissionalId} ${agendamento.dataHora}`);
+    let notificacao;
+    if (naoAvisarCliente) {
+      audit(req, 'AGENDA SEM AVISO AO CLIENTE', `${agendamento.id} ${agendamento.dataHora}`);
+      notificacao = { queued: 0, skipped: true, reason: 'customer_notification_disabled_by_staff' };
+    } else {
+      notificacao = await queueAppointmentNotifications({ empresaId, lojaId, legacyEmpresaId: empresaId }, agendamento, 'criado').catch(() => ({ queued: 0, skipped: true, reason: 'queue_unavailable' }));
+    }
     res.status(201).json({ ok: true, agendamento, notificacao, cliente: { id: vinculo.clienteId || null, criado: vinculo.criado } });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
@@ -3202,7 +3263,7 @@ app.patch('/api/admin/barbearia/agenda/:id', async (req, res) => {
     const empresaId = legacyEmpresaId(req);
     const lojaId = legacyLojaId(req);
     const anterior = listarAgendamentosBarbearia(empresaId, { lojaId }).find((item) => item.id === String(req.params.id));
-    const agendamento = barbeariaErpKytto.atualizarAgendamento(empresaId, req.params.id, { ...(req.body || {}), lojaId, usuario: req.user?.email || req.user?.nome || '', origem: 'admin' });
+    const agendamento = barbeariaErpKytto.atualizarAgendamento(empresaId, req.params.id, { ...(req.body || {}), lojaId, usuario: req.user?.email || req.user?.nome || '', origem: 'admin' }, { permitirEncaixe: req.body?.encaixe === true });
     if (!agendamento) return res.status(404).json({ error: 'Agendamento não encontrado na empresa ativa.' });
     const remarcado = anterior && ['dataHora', 'dataAgenda', 'profissionalId', 'servicoId'].some((campo) => String(anterior[campo] || '') !== String(agendamento[campo] || ''));
     const notificacao = remarcado
@@ -3808,6 +3869,44 @@ app.post('/api/admin/barbearia/operacao/fechar-dia', (req, res) => {
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
 
+// Aniversariantes dos próximos dias (padrão: hoje + 7). Só leitura; qualquer
+// mensagem de parabéns continua dependendo do consentimento de marketing.
+// Histórico de atendimentos de outro sistema: só registro, sem financeiro,
+// comissão, pontos ou aviso. Importação restrita à gestão.
+app.post('/api/admin/barbearia/historico/importar', (req, res) => {
+  if (!podeSilenciarAvisoAgenda(req.user)) return res.status(403).json({ error: 'Só a gestão importa histórico de atendimentos.' });
+  try {
+    const resultado = barbeariaErpKytto.importarHistoricoAtendimentos(legacyEmpresaId(req), req.body?.itens, { origem: req.body?.origem || 'importacao', usuario: req.user?.email || req.user?.nome || '' });
+    audit(req, 'HISTORICO IMPORTADO', `origem=${req.body?.origem || 'importacao'} criados=${resultado.criados} existentes=${resultado.existentes} invalidos=${resultado.invalidos.length}`);
+    res.json({ ok: true, ...resultado });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.get('/api/admin/barbearia/historico', (req, res) => {
+  try {
+    const itens = barbeariaErpKytto.listarHistoricoAtendimentos(legacyEmpresaId(req), { clienteId: req.query?.clienteId, de: req.query?.de, ate: req.query?.ate, limite: req.query?.limite || 200 });
+    res.json({ ok: true, itens, total: itens.length });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.get('/api/admin/barbearia/clientes/aniversariantes', (req, res) => {
+  const dias = Math.max(0, Math.min(60, Math.floor(Number(req.query?.dias ?? 7)) || 0));
+  const base = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query?.data || '')) ? new Date(`${req.query.data}T12:00:00Z`) : new Date();
+  const janela = new Map();
+  for (let i = 0; i <= dias; i += 1) {
+    const d = new Date(base.valueOf() + i * 86400000);
+    janela.set(`${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`, i);
+  }
+  const anoBase = base.getUTCFullYear();
+  const aniversariantes = clientesBarbeariaSomenteLeitura(legacyEmpresaId(req))
+    .filter((cliente) => cliente.aniversario && janela.has(cliente.aniversario))
+    .map((cliente) => ({
+      id: cliente.id, nome: cliente.nome, telefone: cliente.telefone, aniversario: cliente.aniversario,
+      emDias: janela.get(cliente.aniversario),
+      idade: cliente.dataNascimento ? anoBase - Number(cliente.dataNascimento.slice(0, 4)) : null,
+      marketingWhatsapp: cliente.consentimentos?.whatsapp?.marketing?.concedido === true,
+    }))
+    .sort((a, b) => a.emDias - b.emDias || COLLATOR_PT_BR.compare(a.nome, b.nome));
+  res.json({ ok: true, dias, aniversariantes });
+});
 app.get('/api/admin/barbearia/clientes', (req, res) => res.json({ ok: true, clientes: clientesBarbeariaSomenteLeitura(legacyEmpresaId(req)) }));
 app.post('/api/admin/barbearia/clientes', (req, res) => {
   try { res.status(201).json({ ok: true, cliente: sanitizarClienteBarbearia(clientesKytto.criarCliente(legacyEmpresaId(req), req.body || {})) }); }
