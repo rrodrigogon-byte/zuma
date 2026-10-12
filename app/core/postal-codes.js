@@ -152,7 +152,9 @@ export function createPostalCodeLookup({ fetchImpl = (...args) => globalThis.fet
     }
     // Fontes fora do ar: um CEP já confirmado continua valendo, mesmo antigo.
     if (cached?.address) return { ...cached.address, fonte: 'cache' };
-    if (outcomes.some(outcome => outcome.status === 'not_found') && !outcomes.some(outcome => outcome.status === 'error')) {
+    // Duas fontes independentes dizendo que o CEP não existe bastam, mesmo com outra fora do ar.
+    const notFoundCount = outcomes.filter(outcome => outcome.status === 'not_found').length;
+    if (notFoundCount >= 2 || (notFoundCount > 0 && !outcomes.some(outcome => outcome.status === 'error' || outcome.status === 'timeout'))) {
       throw new CommerceError('CEP não encontrado; confira os números', 'SHIPPING_CEP_NOT_FOUND');
     }
     if (outcomes.some(outcome => outcome.status === 'not_found')) {
