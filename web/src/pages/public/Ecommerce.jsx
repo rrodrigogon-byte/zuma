@@ -736,17 +736,24 @@ function EcommerceStorefront({ routeAlias, hostName }) {
     </section>}
 
     <section className="commerce-toolbar" id="catalogo">
-      <div className="sf-search" role="search"><Search size={18} aria-hidden="true" /><input type="search" value={searchInput} onChange={event => setSearchInput(event.target.value)} onKeyDown={event => { if (event.key === 'Escape' && searchInput) { event.preventDefault(); clearSearch() } }} placeholder="Buscar produto, SKU ou categoria" aria-label="Buscar produto, SKU ou categoria" autoComplete="off" enterKeyHint="search" />{searchInput && <button type="button" className="sf-search-clear" onClick={clearSearch} aria-label="Limpar busca"><X size={17} /></button>}</div>
+      <div className="sf-search" role="search"><Search size={18} aria-hidden="true" /><input type="search" value={searchInput} onChange={event => setSearchInput(event.target.value)} onKeyDown={event => { if (event.key === 'Escape' && searchInput) { event.preventDefault(); clearSearch() } }} placeholder={isStalloneStorefront ? 'Buscar whey, creatina…' : 'Buscar produto, SKU ou categoria'} aria-label="Buscar produto, SKU ou categoria" autoComplete="off" enterKeyHint="search" />{searchInput && <button type="button" className="sf-search-clear" onClick={clearSearch} aria-label="Limpar busca"><X size={17} /></button>}</div>
       <div className="commerce-categories" role="group" aria-label="Filtrar por categoria">
         {categories.map(item => <button key={item} type="button" aria-pressed={category === item} className={category === item ? 'is-active' : ''} onClick={() => setCategory(item)}>{item}</button>)}
       </div>
       <button type="button" className={`commerce-cart-button ${cartBump ? 'is-bumped' : ''}`} onClick={() => setCartOpen(true)} aria-label={`Abrir carrinho, ${cartCount} ${cartCount === 1 ? 'item' : 'itens'}`}><ShoppingBag size={19} aria-hidden="true" /><span>Carrinho</span><b className={cartCount ? '' : 'is-empty'} aria-hidden="true">{cartCount}</b></button>
-      <div className="sf-catalog-options"><label><input type="checkbox" checked={inStockOnly} onChange={event => setInStockOnly(event.target.checked)} /> Somente em estoque</label><label>Ordenar por <select value={sort} onChange={event => setSort(event.target.value)}><option value="available">Disponibilidade</option><option value="price-asc">Menor preço</option><option value="price-desc">Maior preço</option><option value="name">Nome A–Z</option></select></label></div>
+      {!isStalloneStorefront && <div className="sf-catalog-options"><label><input type="checkbox" checked={inStockOnly} onChange={event => setInStockOnly(event.target.checked)} /> Somente em estoque</label><label>Ordenar por <select value={sort} onChange={event => setSort(event.target.value)}><option value="available">Disponibilidade</option><option value="price-asc">Menor preço</option><option value="price-desc">Maior preço</option><option value="name">Nome A–Z</option></select></label></div>}
     </section>
+    {isStalloneStorefront && <div className="stl-catalog-bar">
+      <p aria-live="polite">{loading ? 'Carregando produtos…' : <><strong>{filtered.length} {filtered.length === 1 ? 'produto' : 'produtos'}</strong>{category !== 'Todos' ? ` em ${category}` : ''}{query ? ` para “${query}”` : ''}</>}</p>
+      <div className="stl-catalog-controls">
+        <label className="stl-switch"><input type="checkbox" role="switch" checked={inStockOnly} onChange={event => setInStockOnly(event.target.checked)} /><span aria-hidden="true" />Só em estoque</label>
+        <label className="stl-sort"><span>Ordenar</span><select value={sort} onChange={event => setSort(event.target.value)}><option value="available">Disponibilidade</option><option value="price-asc">Menor preço</option><option value="price-desc">Maior preço</option><option value="name">Nome A–Z</option></select></label>
+      </div>
+    </div>}
 
     {loading && <div className="commerce-state"><Loader2 className="commerce-spin" /> Carregando catálogo…</div>}
     {!loading && error && <div className="commerce-state commerce-state-error">{error}</div>}
-    {!loading && !error && (query || category !== 'Todos' || inStockOnly) && <p className="sf-results-meta" aria-live="polite">{filtered.length === 1 ? '1 produto encontrado' : `${filtered.length} produtos encontrados`}</p>}
+    {!isStalloneStorefront && !loading && !error && (query || category !== 'Todos' || inStockOnly) && <p className="sf-results-meta" aria-live="polite">{filtered.length === 1 ? '1 produto encontrado' : `${filtered.length} produtos encontrados`}</p>}
     {!loading && !error && <section className="commerce-product-grid" aria-label="Produtos">
       {catalogPage.items.map(product => {
         const stock = stockState(product)

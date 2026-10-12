@@ -403,3 +403,155 @@ html[data-brand='stallone']:not([data-theme='dark']) .commerce-shell.sf-ux .comm
   html[data-brand='stallone'] .commerce-shell.sf-ux .commerce-cart-button { padding: 0 12px; }
   html[data-brand='stallone'] .commerce-shell.sf-ux .commerce-cart-button > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
+
+/* ----------------------------------------------------------------------------
+   Barra de busca da Stallone: só busca, carrinho e categorias. Filtros de
+   estoque e ordenação ficam numa linha leve acima dos produtos (stl-catalog-bar)
+   para a barra presa no topo do celular não cobrir a vitrine.
+   ---------------------------------------------------------------------------- */
+html[data-brand='stallone'] .commerce-shell.sf-ux .commerce-toolbar {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'search cart' 'chips chips';
+  gap: 14px 12px;
+  padding: 14px;
+  margin-bottom: 14px;
+  border-radius: 22px;
+  border-color: var(--line);
+  box-shadow: 0 1px 2px rgba(23, 23, 28, .04);
+  scroll-margin-top: 12px;
+}
+html[data-brand='stallone'] .commerce-shell.sf-ux .sf-search input {
+  min-height: 52px;
+  padding-left: 48px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: #F2F3F5;
+  color: var(--fg);
+  font-size: 16px; /* 16px evita o zoom automático do iPhone ao focar */
+}
+html[data-brand='stallone'] .commerce-shell.sf-ux .sf-search > svg { left: 18px; color: #5F626B; }
+html[data-brand='stallone'] .commerce-shell.sf-ux .sf-search input::placeholder { color: #6E717A; }
+html[data-brand='stallone'] .commerce-shell.sf-ux .sf-search input:hover { border-color: #D5D7DC; }
+html[data-brand='stallone'] .commerce-shell.sf-ux .sf-search input:focus-visible {
+  background: #FFFFFF;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(211, 34, 46, .14);
+}
+html[data-brand='stallone'] .commerce-shell.sf-ux .commerce-cart-button { min-height: 52px; border-radius: 999px; padding: 0 18px; }
+
+/* Categorias: chips menores; no computador cabem em ~2 linhas. */
+html[data-brand='stallone'] .commerce-shell.sf-ux .commerce-categories { gap: 8px; }
+html[data-brand='stallone'] .commerce-shell.sf-ux .commerce-categories button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #FFFFFF;
+  color: #3A3C43;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+html[data-brand='stallone'] .commerce-shell.sf-ux .commerce-categories button:hover { border-color: #17171C; color: #17171C; }
+html[data-brand='stallone']:not([data-theme='dark']) .commerce-shell.sf-ux .commerce-categories button.is-active { font-weight: 700; }
+
+/* Linha de resultado + filtros, fora da barra presa. */
+.stl-catalog-bar {
+  max-width: 1240px;
+  margin: 0 auto 18px;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  flex-wrap: wrap;
+  color: #5F626B;
+  font-size: 14px;
+}
+.stl-catalog-bar p { margin: 0; }
+.stl-catalog-bar strong { color: #17171C; font-weight: 800; }
+.stl-catalog-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.stl-switch,
+.stl-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #FFFFFF;
+  color: #17171C;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.stl-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.stl-switch span {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: #D5D7DC;
+  transition: background .16s ease;
+  flex: none;
+}
+.stl-switch span::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(23, 23, 28, .25);
+  transition: transform .16s ease;
+}
+.stl-switch input:checked + span { background: var(--accent); }
+.stl-switch input:checked + span::after { transform: translateX(14px); }
+.stl-switch:has(input:focus-visible),
+.stl-sort:has(select:focus-visible) { outline: 3px solid var(--accent); outline-offset: 2px; }
+.stl-sort span { color: #5F626B; font-weight: 600; }
+.stl-sort select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%2317171C' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right center;
+  padding: 0 20px 0 0;
+  color: #17171C;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  outline: none;
+}
+
+/* Celular: presa no topo só a busca, o carrinho e a linha de categorias. */
+@media (max-width: 700px) {
+  html[data-brand='stallone'] .commerce-shell.sf-ux .commerce-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    margin: 0 -12px 12px;
+    padding: 10px 12px 10px;
+    gap: 10px 8px;
+    border-radius: 0 0 18px 18px;
+    border-width: 0 0 1px;
+    background: rgba(255, 255, 255, .96);
+    -webkit-backdrop-filter: saturate(1.4) blur(10px);
+    backdrop-filter: saturate(1.4) blur(10px);
+    box-shadow: 0 10px 24px -18px rgba(23, 23, 28, .35);
+  }
+  html[data-brand='stallone'] .commerce-shell.sf-ux .sf-search input { min-height: 46px; }
+  html[data-brand='stallone'] .commerce-shell.sf-ux .commerce-cart-button { min-height: 46px; }
+  html[data-brand='stallone'] .commerce-shell.sf-ux .commerce-categories { margin: 0; padding-inline: 0; scroll-padding-inline: 0; }
+  html[data-brand='stallone'] .commerce-shell.sf-ux .commerce-categories button { min-height: 36px; padding: 0 12px; font-size: 13px; }
+  .stl-catalog-bar { padding: 0; margin-bottom: 14px; }
+  .stl-catalog-bar p { width: 100%; }
+  .stl-catalog-controls { width: 100%; display: grid; grid-template-columns: auto 1fr; }
+  .stl-sort { justify-content: space-between; min-width: 0; }
+  .stl-sort span { display: none; }
+  .stl-sort select { width: 100%; min-width: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stl-switch span, .stl-switch span::after { transition: none; }
+}
