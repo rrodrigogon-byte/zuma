@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { addProductToCart, cartItemCount, cartSubtotal, filterCatalog, normalizeSearchText, stockState } from './storefront-catalog.js'
+import { addProductToCart, applyCartLink, cartItemCount, cartSubtotal, filterCatalog, normalizeSearchText, parseCartLink, stockState } from './storefront-catalog.js'
 
 const catalog = [
   { id: 'p1', variantId: 'v1', nome: 'Xerjoff Decas 100ml', cat: 'Perfumes', cod: 'XJ-DECAS-100', descricao: 'Oriental sofisticado', preco: 2600, estoque: 5, esgotado: false, variants: [{ variantId: 'v1', cod: 'XJ-DECAS-100', label: '100ml' }] },
@@ -106,4 +106,24 @@ test('congelados e refrigerados deixam o carrinho só para retirada', async () =
   assert.equal(cartHasPickupOnlyItems([{ produtoId: 'p1', qtd: 1 }], products), false)
   assert.equal(cartHasPickupOnlyItems([{ produtoId: 'p1', qtd: 1 }, { produtoId: 'p2', qtd: 1 }], products), true)
   assert.equal(cartHasPickupOnlyItems([], products), false)
+})
+
+test('link de carrinho do WhatsApp: lê só itens válidos e soma repetidos', () => {
+  const id = '11111111-1111-4111-8111-111111111111'
+  assert.deepEqual(parseCartLink(`${id}:2,${id.toUpperCase()}:1,lixo,22222222-2222-4222-8222-222222222222:0`), [{ variantId: id, quantity: 3 }])
+  assert.deepEqual(parseCartLink(`${id}:500`), [{ variantId: id, quantity: 99 }])
+  assert.deepEqual(parseCartLink(''), [])
+})
+
+test('link de carrinho do WhatsApp: monta o carrinho respeitando estoque e catálogo atuais', () => {
+  const a = '11111111-1111-4111-8111-111111111111'
+  const b = '22222222-2222-4222-8222-222222222222'
+  const catalog = { [a]: { product: { id: 'p1', variantId: a, nome: 'Creatina', preco: 89.9, estoque: 1 }, available: 1 } }
+  const result = applyCartLink([], [{ variantId: a, quantity: 2 }, { variantId: b, quantity: 1 }], id => catalog[id] || null)
+  assert.equal(result.cart.length, 1)
+  assert.equal(result.cart[0].qtd, 1, 'não passa do estoque disponível')
+  assert.deepEqual(result.added, [a])
+  assert.deepEqual(result.missing, [b])
+  const again = applyCartLink(result.cart, [{ variantId: a, quantity: 1 }], id => catalog[id] || null)
+  assert.equal(again.cart[0].qtd, 1, 'abrir o mesmo link de novo não duplica')
 })

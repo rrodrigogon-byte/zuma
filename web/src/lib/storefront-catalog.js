@@ -120,3 +120,40 @@ export function cartHasPickupOnlyItems(cart = [], products = []) {
 }
 
 export const PICKUP_ONLY_NOTE = 'Seu carrinho tem itens congelados ou refrigerados: este pedido é só para retirada na loja.'
+
+// Link de carrinho montado pelo atendimento (WhatsApp): ?carrinho=<variantId>:<qtd>,...
+const CART_LINK_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+export const CART_LINK_PARAM = 'carrinho'
+
+/** Itens válidos do parâmetro do link (até 20 itens, quantidade de 1 a 99). */
+export function parseCartLink(value = '') {
+  const lines = new Map()
+  for (const part of String(value || '').split(',').slice(0, 20)) {
+    const [rawId = '', rawQty = '1'] = part.trim().split(':')
+    const variantId = rawId.trim().toLowerCase()
+    const quantity = Number.parseInt(rawQty, 10)
+    if (!CART_LINK_UUID.test(variantId) || !Number.isInteger(quantity) || quantity < 1) continue
+    lines.set(variantId, Math.min(99, (lines.get(variantId) || 0) + quantity))
+  }
+  return [...lines.entries()].map(([variantId, quantity]) => ({ variantId, quantity }))
+}
+
+/**
+ * Coloca no carrinho os itens do link, conferindo catálogo e estoque atuais.
+ * `resolve(variantId)` devolve { product, available } (produto já na variante) ou null.
+ */
+export function applyCartLink(cart = [], lines = [], resolve = () => null) {
+  let next = cart
+  const added = []
+  const missing = []
+  for (const line of lines) {
+    const found = resolve(line.variantId)
+    if (!found?.product) { missing.push(line.variantId); continue }
+    const current = next.find(item => cartItemKey(item) === line.variantId)
+    const wanted = Math.max(0, line.quantity - Number(current?.qtd || 0))
+    if (!wanted) { added.push(line.variantId); continue }
+    const result = addProductToCart(next, found.product, wanted, found.available)
+    if (result.ok) { next = result.cart; added.push(line.variantId) } else missing.push(line.variantId)
+  }
+  return { cart: next, added, missing }
+}
