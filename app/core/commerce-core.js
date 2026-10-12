@@ -203,9 +203,17 @@ export async function resolveCatalogResourceScope(trx, context, input = {}) {
   return { empresaId, lojaId, corporateAccess, storefrontId, storefront, product, variant, media };
 }
 
-export async function listPublishedProducts(context, options = {}) {
-  const { empresaId } = tenantContext(context);
-  const storefrontId = assertUuid(options.storefrontId, 'storefrontId');
+// Acentos comuns do português: a busca encontra "proteína" digitando "proteina".
+const SEARCH_ACCENTS_FROM = 'áàâãäéèêëíìîïóòôõöúùûüçñ';
+const SEARCH_ACCENTS_TO = 'aaaaaeeeeiiiiooooouuuucn';
+
+/** Palavras da busca do catálogo: minúsculas, sem acento, até 6 termos de 2+ letras. */
+export function catalogSearchTerms(query) {
+  const plain = String(query || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return [...new Set(plain.split(/[^a-z0-9]+/).filter(word => word.length >= 2))].slice(0, 6);
+}
+
+function publishedProductFilter(empresaId, storefrontId, options = {}) {
   const values = [empresaId, storefrontId];
   const predicates = [
     'p.empresa_id = $1',
@@ -221,7 +229,37 @@ export async function listPublishedProducts(context, options = {}) {
     )`,
   ];
   if (options.categoryId) { values.push(assertUuid(options.categoryId, 'categoryId')); predicates.push(`p.category_id = $${values.length}`); }
-  if (options.query) { values.push(`%${String(options.query).trim()}%`); predicates.push(`(p.nome ILIKE $${values.length} OR p.descricao ILIKE $${values.length})`); }
+  if (options.query) {
+    // Cada palavra precisa aparecer no nome ou na descrição, em qualquer ordem:
+    // "whey chocolate" encontra "Whey Protein Isolado 450g - Chocolate Branco".
+    const terms = catalogSearchTerms(options.query);
+    const searchable = `translate(lower(coalesce(p.nome, '') || ' ' || coalesce(p.descricao, '')), '${SEARCH_ACCENTS_FROM}', '${SEARCH_ACCENTS_TO}')`;
+    if (!terms.length) { values.push(`%${String(options.query).trim()}%`); predicates.push(`(p.nome ILIKE $${values.length} OR p.descricao ILIKE $${values.length})`); }
+    for (const term of terms) { values.push(`%${term}%`); predicates.push(`${searchable} LIKE $${values.length}`); }
+  }
+  if (Array.isArray(options.variantIds)) {
+    values.push(options.variantIds.slice(0, 100).map(id => assertUuid(id, 'variantId')));
+    predicates.push(`EXISTS (
+      SELECT 1 FROM commerce_product_variants fv
+       WHERE fv.empresa_id = p.empresa_id AND fv.product_id = p.id AND fv.ativo = true AND fv.id = ANY($${values.length}::uuid[])
+    )`);
+  }
+  return { values, predicates };
+}
+
+/** Quantidade de produtos publicados na vitrine (mesmos filtros da listagem). */
+export async function countPublishedProducts(context, options = {}) {
+  const { empresaId } = tenantContext(context);
+  const storefrontId = assertUuid(options.storefrontId, 'storefrontId');
+  const { values, predicates } = publishedProductFilter(empresaId, storefrontId, options);
+  const result = await db.queryRead(`SELECT COUNT(*)::int AS total FROM commerce_products p WHERE ${predicates.join(' AND ')}`, values);
+  return Number(result.rows[0]?.total || 0);
+}
+
+export async function listPublishedProducts(context, options = {}) {
+  const { empresaId } = tenantContext(context);
+  const storefrontId = assertUuid(options.storefrontId, 'storefrontId');
+  const { values, predicates } = publishedProductFilter(empresaId, storefrontId, options);
   const limit = Math.min(Math.max(Number(options.limit) || 24, 1), 100);
   const offset = Math.max(Number(options.offset) || 0, 0);
   values.push(limit, offset);
