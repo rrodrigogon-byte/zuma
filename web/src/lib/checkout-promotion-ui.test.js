@@ -7,7 +7,7 @@ const source = readFileSync(new URL('../pages/public/CommerceCheckout.jsx', impo
 test('checkout só envia cupom depois de prévia confirmada e invalida respostas antigas', () => {
   assert.match(source, /requestPromotionPreview\(/)
   assert.match(source, /promotionConfirmed/)
-  assert.match(source, /Confirmar cupom/)
+  assert.match(source, /Aplicar cupom/)
   assert.match(source, /Cupom aplicado/)
   assert.match(source, /type="button" className="checkout-secondary" onClick=\{applyPromotion\}/)
   assert.match(source, /promotionRequestRef\.current/)

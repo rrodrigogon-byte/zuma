@@ -130,3 +130,46 @@ html[data-brand='stallone'] .checkout-brand-logo { width: 190px; height: 48px; }
 /* Os campos são <label class="checkout-field"><span>Rótulo</span><input>: dá peso e respiro ao rótulo */
 html[data-brand='stallone'] label.checkout-field { display: block; }
 html[data-brand='stallone'] label.checkout-field > span:first-child { display: block; margin-bottom: 7px; font-size: 13px; font-weight: 700; color: var(--fg); }
+
+/* Form hierarchy and fluid layouts shared by both Stallone themes. */
+html[data-brand='stallone'] .checkout-content { gap: 24px; }
+html[data-brand='stallone'] .checkout-card,
+html[data-brand='stallone'] .checkout-summary { border-radius: 18px; box-shadow: 0 12px 36px #00000018; }
+html[data-brand='stallone'] .checkout-promotion-field { grid-column: 1 / -1; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+html[data-brand='stallone'] .checkout-promotion-field > span { display: block; margin-bottom: 8px; font-size: 13px; font-weight: 700; color: var(--fg); }
+html[data-brand='stallone'] .checkout-field > span { line-height: 1.5; }
+html[data-brand='stallone'] .checkout-field input,
+html[data-brand='stallone'] .checkout-field textarea { min-height: 46px; font-size: 16px; }
+html[data-brand='stallone'] .checkout-summary-item-copy strong { white-space: normal; overflow-wrap: anywhere; line-height: 1.45; }
+html[data-brand='stallone'] .checkout-summary-items { max-height: 360px; }
+html[data-brand='stallone'] .checkout-step-dot { transition: background-color .18s, border-color .18s; }
+html[data-brand='stallone'] .checkout-page button:disabled { cursor: not-allowed; }
+html[data-brand='stallone'] .checkout-page :is(button,a,input,textarea):focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+html[data-brand='stallone']:not([data-theme='light']) .checkout-card { background: #202126; border-color: #393B43; }
+html[data-brand='stallone']:not([data-theme='light']) .checkout-summary { background: #25262D; border-color: #40424B; }
+html[data-brand='stallone']:not([data-theme='light']) .checkout-back { color: #CBCDD5; }
+html[data-brand='stallone']:not([data-theme='light']) .checkout-back:hover { color: #FF9299; }
+html[data-brand='stallone']:not([data-theme='light']) .checkout-card-title p,
+html[data-brand='stallone']:not([data-theme='light']) .checkout-field small,
+html[data-brand='stallone']:not([data-theme='light']) .checkout-trust-list { color: #C3C5CE; }
+html[data-brand='stallone']:not([data-theme='light']) .checkout-totals .checkout-total strong { color: #FF9299; font-variant-numeric: tabular-nums; }
+html[data-brand='stallone'][data-theme='light'] .checkout-card,
+html[data-brand='stallone'][data-theme='light'] .checkout-summary { background: #EAECEF; border-color: #CDD1D8; }
+@media(max-width:700px) {
+  html[data-brand='stallone'] .checkout-content { padding: 20px 16px 36px; gap: 20px; }
+  html[data-brand='stallone'] .checkout-main-column { order: 0; }
+  html[data-brand='stallone'] .checkout-summary { order: 1; position: static; }
+  html[data-brand='stallone'] .checkout-card,
+  html[data-brand='stallone'] .checkout-summary { padding: 20px; }
+  html[data-brand='stallone'] .checkout-step-line { margin: 0 8px; width: 20px; }
+  html[data-brand='stallone'] .checkout-actions { flex-direction: column; align-items: stretch; }
+  html[data-brand='stallone'] .checkout-actions button { width: 100%; min-width: 0; }
+}
+@media(prefers-reduced-motion:reduce) {
+  html[data-brand='stallone'] .checkout-page * { transition: none; animation: none; }
+}
+
+html[data-brand='stallone'][data-theme='light'] .checkout-header { background: #EAECEF; border-bottom-color: #CDD1D8; }
+html[data-brand='stallone'][data-theme='light'] .checkout-header-security,
+html[data-brand='stallone'][data-theme='light'] .checkout-trust-list,
+html[data-brand='stallone'][data-theme='light'] .checkout-field small { color: #525863; }
