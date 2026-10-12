@@ -192,6 +192,9 @@ export async function listServices(scope) {
       categoria: item.categoria || 'Geral',
       duracaoMinutos: Number(item.duracaoMinutos || 30),
       preco: Number(item.preco || 0),
+      // A IA deve dizer "a partir de" ou "sob consulta" em vez de prometer valor fechado.
+      tipoPreco: item.tipoPreco || 'fixo',
+      precoTexto: barbearia.rotuloPrecoServico(item),
       // Quem faz: a IA só oferece estes profissionais para o serviço.
       profissionais: Array.isArray(item.profissionaisIds) && item.profissionaisIds.length
         ? item.profissionaisIds.map((id) => nomes.get(id)).filter(Boolean)

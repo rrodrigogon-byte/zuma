@@ -42,6 +42,9 @@ import {
   finalizarVendaRevenda,
   listarVendasRevenda,
   obterComissoes,
+  percentualComissaoServico,
+  importarHistoricoAtendimentos,
+  listarHistoricoAtendimentos,
   criarComandaBarbearia,
   obterComandaBarbearia,
   listarComandasBarbearia,
@@ -536,4 +539,51 @@ test('valida e persiste configurações de funcionamento', () => {
   assert.equal(atualizada.intervaloMinutos, 20);
   assert.deepEqual(atualizada.diasFuncionamento, [1, 3]);
   assert.equal(obterConfiguracao(EMPRESA_A).politicaCancelamentoHoras, 12);
+});
+
+test('comissão por serviço: exceção do profissional prevalece sobre o percentual padrão', () => {
+  const profissional = baseProfissional();
+  const corte = baseServico();
+  const visagismo = criarServico(EMPRESA_A, { nome: 'Corte Visagista', duracaoMinutos: 60, preco: 500, tipoPreco: 'a_partir_de' });
+  assert.equal(visagismo.tipoPreco, 'a_partir_de');
+  assert.throws(() => atualizarProfissional(EMPRESA_A, profissional.id, { comissoesPorServico: { [visagismo.id]: 140 } }), /entre 0 e 100/);
+  const atualizado = atualizarProfissional(EMPRESA_A, profissional.id, { comissoesPorServico: { [visagismo.id]: 47, [corte.id]: '' } });
+  assert.deepEqual(atualizado.comissoesPorServico, { [visagismo.id]: 47 });
+  assert.equal(percentualComissaoServico(atualizado, visagismo.id), 47);
+  assert.equal(percentualComissaoServico(atualizado, corte.id), 50);
+  // Atualizar outro campo preserva as exceções.
+  assert.deepEqual(atualizarProfissional(EMPRESA_A, profissional.id, { especialidade: 'Visagista' }).comissoesPorServico, { [visagismo.id]: 47 });
+  for (const [servico, hora, valor] of [[corte, '10:00', 50], [visagismo, '11:00', 500]]) {
+    const agendamento = criarAgendamento(EMPRESA_A, { clienteNome: `Cliente ${servico.nome}`, profissionalId: profissional.id, servicoId: servico.id, dataHora: `2030-04-05T${hora}:00.000Z`, dataAgenda: '2030-04-05', horaLocal: hora });
+    alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'confirmado');
+    alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'em_atendimento');
+    receberAgenda(EMPRESA_A, alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'concluido'), 'dinheiro', valor);
+  }
+  const linha = obterComissoes(EMPRESA_A).porProfissional.find((item) => item.profissionalId === profissional.id);
+  assert.equal(linha.brutoServicos, 550);
+  // 50 × 50% + 500 × 47% = 25 + 235
+  assert.equal(linha.comissaoServicos, 260);
+});
+
+test('histórico importado: idempotente, sem financeiro e sem agenda', () => {
+  const antesLanc = listarLancamentos(EMPRESA_A).length;
+  const itens = [
+    { dataAgenda: '2025-03-10', hora: '10:00', clienteId: 'cli-1', clienteNome: 'Ana', clienteTelefone: '65999990000', profissionalNome: 'Dino', servicoNome: 'Corte com Dino', status: 'pago', valor: 300 },
+    { dataAgenda: '2025-04-10', hora: '11:00', clienteId: 'cli-1', clienteNome: 'Ana', servicoNome: 'Barba Club', status: 'finalizado' },
+    { dataAgenda: '2099-01-01', hora: '10:00', clienteNome: 'Futuro', servicoNome: 'Corte' },
+    { dataAgenda: '2025-04-11', hora: '10:00', clienteNome: 'Cancelado', servicoNome: 'Corte', status: 'cancelado' },
+    { dataAgenda: '10/04/2025', clienteNome: 'Data ruim', servicoNome: 'Corte' },
+  ];
+  const primeiro = importarHistoricoAtendimentos(EMPRESA_A, itens, { origem: 'importacao_avec' });
+  assert.equal(primeiro.criados, 2);
+  assert.deepEqual(primeiro.invalidos.map((item) => item.motivo), ['data_futura', 'status_nao_concluido', 'data_ou_hora_invalida']);
+  const segundo = importarHistoricoAtendimentos(EMPRESA_A, itens, { origem: 'importacao_avec' });
+  assert.equal(segundo.criados, 0);
+  assert.equal(segundo.existentes, 2);
+  assert.equal(listarHistoricoAtendimentos(EMPRESA_A, { clienteId: 'cli-1' }).length, 2);
+  assert.equal(listarHistoricoAtendimentos(EMPRESA_A, { clienteId: 'cli-1' })[0].dataAgenda, '2025-04-10');
+  assert.equal(listarHistoricoAtendimentos(EMPRESA_B).length, 0);
+  assert.equal(listarAgendamentos(EMPRESA_A).length, 0);
+  assert.equal(listarLancamentos(EMPRESA_A).length, antesLanc);
+  assert.throws(() => importarHistoricoAtendimentos(EMPRESA_A, new Array(1001).fill(itens[0])), /1000/);
 });

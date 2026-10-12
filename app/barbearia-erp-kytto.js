@@ -1,4 +1,5 @@
-import { identificarCliente } from './barbearia-identidade.js';
+import crypto from 'node:crypto';
+import { identificarCliente, indiceIdentidadeClientes } from './barbearia-identidade.js';
 import { db, save } from './db.js';
 import * as financeiroKytto from './financeiro-central-kytto.js';
 import * as clientesKytto from './clientes-contas-kytto.js';
@@ -84,6 +85,7 @@ function estadoVazio() {
     movimentosEstoque: {},
     vendasRevenda: {},
     comandas: {},
+    historicoAtendimentos: {},
     configuracao: {
       horarioAbertura: '08:00',
       horarioFechamento: '20:00',
@@ -124,6 +126,7 @@ function estadoEmpresa(empresaId, criar = true) {
       movimentosEstoque: estado.movimentosEstoque || {},
       vendasRevenda: estado.vendasRevenda || {},
       comandas: estado.comandas || {},
+      historicoAtendimentos: estado.historicoAtendimentos || {},
       configuracao: { ...vazio.configuracao, ...(estado.configuracao || {}), lojas: { ...(vazio.configuracao.lojas || {}), ...(estado.configuracao?.lojas || {}) } },
     };
   }
@@ -139,9 +142,29 @@ function estadoEmpresa(empresaId, criar = true) {
   estado.movimentosEstoque ||= {};
   estado.vendasRevenda ||= {};
   estado.comandas ||= {};
+  estado.historicoAtendimentos ||= {};
   estado.configuracao ||= {};
   estado.configuracao.lojas ||= {};
   return estado;
+}
+
+function comissoesPorServicoNormalizadas(valor) {
+  if (!valor || typeof valor !== 'object' || Array.isArray(valor)) return {};
+  const saida = {};
+  for (const [servicoId, percentual] of Object.entries(valor).slice(0, 200)) {
+    const id = texto(servicoId, 100);
+    if (!id || percentual === null || percentual === '' || percentual === undefined) continue;
+    const n = Number(percentual);
+    if (!Number.isFinite(n) || n < 0 || n > 100) throw new Error('Comissão por serviço deve ficar entre 0 e 100%.');
+    saida[id] = Math.round(n * 100) / 100;
+  }
+  return saida;
+}
+
+// Percentual de comissão de um serviço para o profissional (exceção ou padrão).
+export function percentualComissaoServico(profissional = {}, servicoId = '') {
+  const excecao = profissional.comissoesPorServico?.[String(servicoId || '')];
+  return Number.isFinite(Number(excecao)) ? Number(excecao) : Number(profissional.percentualComissao || 0);
 }
 
 function profissionalNormalizado(dados = {}, anterior = {}) {
@@ -156,6 +179,8 @@ function profissionalNormalizado(dados = {}, anterior = {}) {
     tipo: ['funcionario', 'parceiro', 'autonomo'].includes(String(dados.tipo ?? anterior.tipo)) ? String(dados.tipo ?? anterior.tipo) : 'parceiro',
     percentualComissao: Math.min(100, Math.max(0, numero(dados.percentualComissao ?? dados.percentual_comissao ?? anterior.percentualComissao, 50))),
     percentualComissaoProduto: Math.min(100, Math.max(0, numero(dados.percentualComissaoProduto ?? dados.percentual_comissao_produto ?? anterior.percentualComissaoProduto, 30))),
+    // Exceções por serviço ({ servicoId: percentual }). Sem exceção vale percentualComissao.
+    comissoesPorServico: comissoesPorServicoNormalizadas(dados.comissoesPorServico ?? dados.comissoes_por_servico ?? anterior.comissoesPorServico),
     descontaTaxaMaquininha: dados.descontaTaxaMaquininha ?? dados.desconta_taxa_maquininha ?? anterior.descontaTaxaMaquininha ?? true,
     horarioInicio: texto(dados.horarioInicio ?? dados.horario_inicio ?? anterior.horarioInicio, 5) || '08:00',
     horarioFim: texto(dados.horarioFim ?? dados.horario_fim ?? anterior.horarioFim, 5) || '18:00',
@@ -165,7 +190,34 @@ function profissionalNormalizado(dados = {}, anterior = {}) {
   };
 }
 
+// Como o preço é apresentado: fixo, "a partir de" (valor mínimo) ou sob consulta
+// (sem valor de tabela; o valor final é definido no atendimento).
+export const TIPOS_PRECO_SERVICO = Object.freeze(['fixo', 'a_partir_de', 'sob_consulta']);
+function tipoPrecoNormalizado(valor, anterior) {
+  const bruto = String(valor ?? anterior ?? 'fixo').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const alias = { a_partir: 'a_partir_de', apartir: 'a_partir_de', minimo: 'a_partir_de', consulta: 'sob_consulta', sob: 'sob_consulta' }[bruto] || bruto;
+  if (!TIPOS_PRECO_SERVICO.includes(alias)) throw new Error('Tipo de preço inválido. Use fixo, a partir de ou sob consulta.');
+  return alias;
+}
+
+// Texto do preço para cliente, IA e agendamento online.
+export function rotuloPrecoServico(servico = {}) {
+  const valor = Number(servico.preco || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  if (servico.tipoPreco === 'sob_consulta') return 'Sob consulta';
+  if (servico.tipoPreco === 'a_partir_de') return `A partir de ${valor}`;
+  return valor;
+}
+
+function validarPrecoServico(servico) {
+  if (servico.tipoPreco === 'sob_consulta') {
+    if (servico.preco < 0) throw new Error('Preço do serviço não pode ser negativo.');
+    return;
+  }
+  if (servico.preco <= 0) throw new Error('Preço do serviço deve ser positivo.');
+}
+
 function servicoNormalizado(dados = {}, anterior = {}) {
+  const tipoPreco = tipoPrecoNormalizado(dados.tipoPreco ?? dados.tipo_preco, anterior.tipoPreco);
   const preco = dinheiro(dados.preco ?? anterior.preco);
   const duracao = Math.max(5, Math.min(480, Math.round(numero(dados.duracaoMinutos ?? dados.duracao_minutos ?? anterior.duracaoMinutos, 30))));
   return {
@@ -174,6 +226,7 @@ function servicoNormalizado(dados = {}, anterior = {}) {
     categoria: texto(dados.categoria ?? anterior.categoria, 80) || 'Geral',
     duracaoMinutos: duracao,
     preco,
+    tipoPreco,
     ativo: dados.ativo ?? anterior.ativo ?? true,
     permiteAgendamentoOnline: dados.permiteAgendamentoOnline ?? dados.permite_agendamento_online ?? anterior.permiteAgendamentoOnline ?? true,
     // Quem faz este serviço (ex.: manicure só com a Nathy). Vazio = qualquer profissional ativo.
@@ -385,7 +438,7 @@ export function criarServico(empresaId, dados = {}) {
   const estado = estadoEmpresa(empresaId);
   const servico = servicoNormalizado(dados);
   if (!servico.nome) throw new Error('Nome do serviço é obrigatório.');
-  if (servico.preco <= 0) throw new Error('Preço do serviço deve ser positivo.');
+  validarPrecoServico(servico);
   validarConsumoInternoServico(estado, empresaId, servico);
   if (Object.values(estado.servicos).some((item) => item.ativo !== false && item.nome.toLowerCase() === servico.nome.toLowerCase())) {
     throw new Error('Já existe um serviço ativo com este nome.');
@@ -403,7 +456,7 @@ export function atualizarServico(empresaId, servicoId, dados = {}) {
   if (!atual || atual.empresaId !== String(empresaId)) return null;
   const servico = servicoNormalizado(dados, atual);
   if (!servico.nome) throw new Error('Nome do serviço é obrigatório.');
-  if (servico.preco <= 0) throw new Error('Preço do serviço deve ser positivo.');
+  validarPrecoServico(servico);
   validarConsumoInternoServico(estado, empresaId, servico);
   Object.assign(atual, servico, { atualizadoEm: dataAtual() });
   save();
@@ -424,7 +477,14 @@ export function listarAgendamentos(empresaId, filtros = {}) {
     .filter((item) => !filtros.profissionalId || String(filtros.profissionalId).split(',').map(id => id.trim()).includes(item.profissionalId))
     .filter((item) => !filtros.lojaId || !item.lojaId || item.lojaId === String(filtros.lojaId))
     .sort(ordenarPorData);
-  return itens.map((item) => identidadeCliente(item));
+  if (!itens.length) return [];
+  // Um índice por empresa para a lista inteira (antes: uma varredura da base por agendamento).
+  const indices = new Map();
+  return itens.map((item) => {
+    const chave = String(item.empresaId);
+    if (!indices.has(chave)) indices.set(chave, indiceIdentidadeClientes(Object.values(db().clientesKytto?.empresas?.[chave]?.clientes || {}), item.empresaId));
+    return identificarCliente(item, null, item.empresaId, indices.get(chave));
+  });
 }
 
 const STATUS_FILA = new Set(['aguardando', 'chamado', 'atendido', 'ausente', 'cancelado']);
@@ -1429,7 +1489,9 @@ export function resolverProfissionalDisponivel(empresaId, dados = {}) {
   return { profissional: { ...livre.profissional }, dataHora: livre.dataHora, dataAgenda: contexto.dataAgenda, horaLocal };
 }
 
-export function criarAgendamento(empresaId, dados = {}) {
+// `opcoes.permitirEncaixe`: só o painel da equipe passa (nunca o link público nem a IA).
+// O encaixe aceita sobreposição com outro atendimento do mesmo profissional e fica marcado.
+export function criarAgendamento(empresaId, dados = {}, opcoes = {}) {
   rejeitarPagamentoNaAgenda(dados);
   if (dados.status && dados.status !== 'agendado') throw new Error('Status inicial do agendamento deve ser agendado.');
   const estado = estadoEmpresa(empresaId);
@@ -1445,7 +1507,10 @@ export function criarAgendamento(empresaId, dados = {}) {
   }
   agendamento.valor = servico.preco;
   validarCalendarioAgendamento(estado, agendamento, profissional);
-  if (verificarConflito(estado, agendamento)) throw new Error('Horário indisponível para o profissional selecionado.');
+  if (verificarConflito(estado, agendamento)) {
+    if (opcoes.permitirEncaixe !== true) throw new Error('Horário indisponível para o profissional selecionado.');
+    agendamento.encaixe = true;
+  }
   const id = novoId('age', estado.agendamentos);
   const agora = dataAtual();
   estado.agendamentos[id] = { id, empresaId: String(empresaId), ...agendamento, criadoEm: agora, atualizadoEm: agora };
@@ -1453,7 +1518,7 @@ export function criarAgendamento(empresaId, dados = {}) {
   return { ...estado.agendamentos[id] };
 }
 
-export function atualizarAgendamento(empresaId, agendamentoId, dados = {}) {
+export function atualizarAgendamento(empresaId, agendamentoId, dados = {}, opcoes = {}) {
   rejeitarPagamentoNaAgenda(dados);
   const estado = estadoEmpresa(empresaId);
   const atual = estado.agendamentos[String(agendamentoId)];
@@ -1471,7 +1536,12 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}) {
   }
   agendamento.valor = valorEsperado;
   validarCalendarioAgendamento(estado, agendamento, agendamento.profissionalId ? estado.profissionais[agendamento.profissionalId] : null);
-  if (verificarConflito(estado, agendamento, atual.id)) throw new Error('Horário indisponível para o profissional selecionado.');
+  if (verificarConflito(estado, agendamento, atual.id)) {
+    if (opcoes.permitirEncaixe !== true) throw new Error('Horário indisponível para o profissional selecionado.');
+    agendamento.encaixe = true;
+  } else {
+    agendamento.encaixe = false;
+  }
   const remarcado = ['dataHora', 'dataAgenda', 'profissionalId', 'servicoId'].some((campo) => String(antes[campo] || '') !== String(agendamento[campo] || ''));
   if (remarcado) {
     atual.historicoRemarcacoes ||= [];
@@ -1621,7 +1691,12 @@ export function obterComissoes(empresaId, { data = '', lojaId = '', inicio = '',
       const meio = String(item.pagamento?.meioPagamento || '').toLowerCase();
       return soma + taxaDoItem(Number(item.total || 0), item, meio, profissional);
     }, 0);
-    const comissaoServicos = (brutoServicos - taxaServicos) * Number(profissional.percentualComissao || 0) / 100;
+    // Cada serviço usa a sua exceção de comissão, quando houver, sobre o líquido de taxas.
+    const comissaoServicos = servicos.reduce((soma, item) => {
+      const valor = Number(item.valorRecebido || item.valor || 0);
+      const taxa = taxaDoItem(valor, item, String(item.meioPagamento || '').toLowerCase(), profissional);
+      return soma + (valor - taxa) * percentualComissaoServico(profissional, item.servicoId) / 100;
+    }, 0);
     const comissaoProdutos = (brutoProdutos - taxaProdutos) * Number(profissional.percentualComissaoProduto || 0) / 100;
     const bruto = brutoServicos + brutoProdutos;
     const taxasTotal = taxaServicos + taxaProdutos;
@@ -1706,3 +1781,60 @@ export function exportarEstado(empresaId) {
   };
 }
 
+
+
+// ---------------------------------------------------------------------------
+// Histórico de atendimentos importado de outro sistema (ex.: AVEC).
+// Só registro: não cria agendamento, comanda, lançamento financeiro, comissão,
+// pontos, cashback nem aviso ao cliente. Idempotente pela chave de origem.
+const STATUS_HISTORICO = new Set(['concluido', 'pago', 'finalizado']);
+
+function chaveHistorico(origem, item) {
+  const base = [origem, item.dataAgenda, item.hora, String(item.clienteTelefone || '').replace(/\D/g, ''), texto(item.clienteNome, 160).toLowerCase(), texto(item.servicoNome, 160).toLowerCase(), texto(item.profissionalNome, 120).toLowerCase()].join('|');
+  return `hist-${crypto.createHash('sha1').update(base).digest('hex').slice(0, 20)}`;
+}
+
+export function importarHistoricoAtendimentos(empresaId, itens = [], opcoes = {}) {
+  if (!Array.isArray(itens)) throw new Error('Envie a lista de atendimentos em "itens".');
+  if (itens.length > 1000) throw new Error('Envie no máximo 1000 atendimentos por lote.');
+  const estado = estadoEmpresa(empresaId);
+  const origem = texto(opcoes.origem || 'importacao', 40) || 'importacao';
+  const resultado = { criados: 0, existentes: 0, invalidos: [] };
+  const agora = dataAtual();
+  itens.forEach((bruto, indice) => {
+    const dataAgenda = texto(bruto?.dataAgenda ?? bruto?.data, 10);
+    const hora = texto(bruto?.hora, 5);
+    const status = texto(bruto?.status || 'concluido', 20).toLowerCase();
+    const item = {
+      dataAgenda, hora,
+      clienteId: texto(bruto?.clienteId, 100),
+      clienteNome: texto(bruto?.clienteNome, 160),
+      clienteTelefone: texto(bruto?.clienteTelefone, 30),
+      profissionalId: texto(bruto?.profissionalId, 100),
+      profissionalNome: texto(bruto?.profissionalNome, 120),
+      servicoId: texto(bruto?.servicoId, 100),
+      servicoNome: texto(bruto?.servicoNome, 160),
+      valor: bruto?.valor === undefined || bruto?.valor === null || bruto?.valor === '' ? null : dinheiro(bruto.valor),
+    };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dataAgenda) || (hora && !/^\d{2}:\d{2}$/.test(hora))) { resultado.invalidos.push({ indice, motivo: 'data_ou_hora_invalida' }); return; }
+    if (dataAgenda > diaOperacional(agora)) { resultado.invalidos.push({ indice, motivo: 'data_futura' }); return; }
+    if (!item.clienteId && !item.clienteNome) { resultado.invalidos.push({ indice, motivo: 'sem_cliente' }); return; }
+    if (!item.servicoNome && !item.servicoId) { resultado.invalidos.push({ indice, motivo: 'sem_servico' }); return; }
+    if (!STATUS_HISTORICO.has(status)) { resultado.invalidos.push({ indice, motivo: 'status_nao_concluido' }); return; }
+    const id = chaveHistorico(origem, item);
+    if (estado.historicoAtendimentos[id]) { resultado.existentes += 1; return; }
+    estado.historicoAtendimentos[id] = { id, empresaId: String(empresaId), ...item, status: 'concluido', origem, importadoEm: agora, importadoPor: texto(opcoes.usuario, 160) };
+    resultado.criados += 1;
+  });
+  if (resultado.criados) save();
+  return resultado;
+}
+
+export function listarHistoricoAtendimentos(empresaId, filtros = {}) {
+  const itens = Object.values(estadoEmpresa(empresaId, false).historicoAtendimentos || {})
+    .filter((item) => !filtros.clienteId || item.clienteId === String(filtros.clienteId))
+    .filter((item) => !filtros.de || item.dataAgenda >= String(filtros.de).slice(0, 10))
+    .filter((item) => !filtros.ate || item.dataAgenda <= String(filtros.ate).slice(0, 10))
+    .sort((a, b) => `${b.dataAgenda} ${b.hora}`.localeCompare(`${a.dataAgenda} ${a.hora}`));
+  return filtros.limite ? itens.slice(0, Math.max(1, Math.min(5000, Number(filtros.limite) || 50))) : itens;
+}
