@@ -218,3 +218,14 @@ Limites e pendências:
 - Fiscal, lotes/validade/FEFO, compras, PDV, conciliação e teste com usuário restrito ainda precisam de homologação.
 - Incorporação no GitHub não substitui confirmação de deploy Live no Render.
 - Validação visual em computador e 390 px; sem rolagem horizontal, cupom com 279 px no celular. Testes automatizados: 1215 total, 1136 aprovados, 79 pulados por dependências externas, zero falhas; sete testes adicionais de checkout aprovados; build web aprovado.
+
+
+## 11. Conferência autenticada após publicação — 12/10/2026
+
+A sessão disponibilizada pelo titular confirmou a central, a fila Commerce de separação, os campos de políticas, a conta InfinitePay de produção ativa e o financeiro da empresa. A central aponta 54 produtos sem foto, 7 sem descrição, 462 com até cinco unidades, quatro links de políticas ausentes e entrega manual. Não há pedidos ou transações registrados. Fidelidade continua sem créditos e resgates; cérebro Stallone desligado e sem checklist Dino.
+
+WhatsApp: instância stallone-1 aguardando QR, número não identificado, empresa dona ainda não configurada no servidor, linha não verificada, canal IA em preparação e nenhuma mensagem recebida. Não foram alteradas variáveis, gerado QR ou enviado teste nesta conferência. O pareamento exige o celular do titular e as configurações externas exigem pedido específico, conforme AGENTS.md.
+
+Correção complementar: o diagnóstico não considera saída pronta somente porque o modo global está on. Exige sessão aberta, empresa dona, canal ativo e linha verificada. A tela distingue ausência de conexão, diagnóstico pendente e envio habilitado que ainda exige teste; o botão de teste acompanha as travas. Isso altera a apresentação/diagnóstico, sem liberar envio ou mudar credenciais. Testes cobrem cada trava ausente e os modos off/on. Suíte: 1216 testes, 1137 aprovados, 79 pulados, zero falhas; cinco testes de apresentação e build web aprovados.
+
+Pendências externas permanecem: conteúdo autorizado, URLs de políticas aprovadas, configuração/pareamento da linha, regras logísticas e homologação transacional/fiscal/estoque. Não declarar a operação inteiramente homologada pela presença de telas ou adaptadores.

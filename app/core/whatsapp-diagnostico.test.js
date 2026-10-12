@@ -78,3 +78,13 @@ test('chave recusada e modo isa param na primeira trava', () => {
   assert.equal(isa.length, 1);
   assert.match(isa[0].detalhe, /CHATBOT_BACKEND_MODE=instancias/);
 });
+
+
+test('modo on não declara saída pronta sem sessão, dono, canal e verificação da linha', () => {
+  for (const change of [f => { f.estado = 'qr'; }, f => { f.entrada.empresaPorVariavel = false; }, f => { f.canal = null; }, f => { f.entrada.linhaVerificada = false; }]) {
+    const facts = base(); facts.saida = 'on'; change(facts);
+    const result = por(facts)['Saída das respostas'];
+    assert.equal(result.ok, false);
+    assert.match(result.detalhe, /Envio bloqueado/);
+  }
+});

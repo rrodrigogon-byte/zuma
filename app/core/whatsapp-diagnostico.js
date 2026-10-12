@@ -61,8 +61,10 @@ export function conclusoesDoDiagnostico(f = {}) {
   }
 
   const saida = f.saida || 'off';
-  add(saida === 'on' || (saida === 'pilot' && e.pilotos > 0), 'Saída das respostas',
+  const linhaPronta = f.estado === 'open' && Boolean(e.empresaPorVariavel && f.canal) && e.linhaVerificada === true;
+  add(linhaPronta && (saida === 'on' || (saida === 'pilot' && e.pilotos > 0)), 'Saída das respostas',
     saida === 'off' ? 'WHATSAPP_EGRESS_MODE está desligado: a IA lê e decide, mas nenhuma resposta sai. Defina WHATSAPP_EGRESS_MODE=pilot (ou on com WHATSAPP_FULL_ROLLOUT_APPROVED=1).'
+      : !linhaPronta ? 'Envio bloqueado: confirme sessão conectada, empresa dona, canal ativo e linha verificada. O modo global de saída não libera esta instância.'
       : saida === 'pilot' ? (e.pilotos > 0 ? 'Piloto: respostas só para os telefones de teste.' : 'pilot sem WHATSAPP_POLL_PILOT_PHONES: nenhuma resposta sai.')
         : 'Liberada para todos os clientes.');
 
