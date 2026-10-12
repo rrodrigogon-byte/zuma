@@ -117,3 +117,56 @@ test('prompt orienta retirada, entrega com link de carrinho e não pede CPF', ()
   assert.match(prompt, /congelado ou refrigerado só sai por retirada/);
   assert.match(prompt, /Nunca peça CPF/);
 });
+
+function orderMock(t, { order = null, accounts = [], seen = [] } = {}) {
+  t.mock.method(db, 'queryRead', async (sql, params) => {
+    seen.push({ sql, params });
+    assert.equal(params[0], context.empresaId);
+    if (sql.includes('FROM commerce_storefronts s') && sql.includes('JOIN lojas')) return { rows: [{ id: storefrontId, nome: 'Stallone', alias: 'stallone' }] };
+    if (sql.includes('FROM commerce_orders o')) return { rows: order ? [order] : [] };
+    if (sql.includes('FROM commerce_payment_accounts')) return { rows: accounts };
+    throw new Error(`consulta inesperada: ${sql.slice(0, 80)}`);
+  });
+  t.mock.method(db, 'query', () => { throw new Error('sem pedido válido não pode escrever'); });
+  t.mock.method(db, 'transaction', () => { throw new Error('sem pedido válido não pode criar cobrança'); });
+}
+
+test('link_pagamento_pedido só vale para pedido do próprio telefone, na loja da conversa', async t => {
+  const seen = [];
+  orderMock(t, { seen });
+  await assert.rejects(
+    () => createWhatsappAiToolExecutor(context)('link_pagamento_pedido', { orderCode: 'kc-123', metodo: 'pix' }),
+    error => error.code === 'ORDER_NOT_FOUND',
+  );
+  const consulta = seen.find(item => item.sql.includes('FROM commerce_orders o'));
+  assert.deepEqual(consulta.params, [context.empresaId, context.lojaId, 'KC-123', context.phone, storefrontId]);
+  assert.match(consulta.sql, /o\.storefront_id = \$5/);
+});
+
+test('link_pagamento_pedido não cobra pedido que já não aguarda pagamento', async t => {
+  orderMock(t, { order: { id: '88888888-8888-4888-8888-888888888888', public_code: 'KC-1', status: 'paid', total: 50 } });
+  const result = await createWhatsappAiToolExecutor(context)('link_pagamento_pedido', { orderCode: 'KC-1', metodo: 'cartão' });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'ORDER_NOT_AWAITING_PAYMENT');
+});
+
+test('link_pagamento_pedido sem meio online pronto não inventa cobrança', async t => {
+  orderMock(t, { order: { id: '88888888-8888-4888-8888-888888888888', public_code: 'KC-1', status: 'pending_payment', total: 50 }, accounts: [] });
+  const result = await createWhatsappAiToolExecutor(context)('link_pagamento_pedido', { orderCode: 'KC-1', metodo: 'pix' });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'PAYMENT_METHOD_UNAVAILABLE');
+});
+
+test('link_pagamento_pedido aceita só Pix ou cartão', async t => {
+  orderMock(t);
+  await assert.rejects(
+    () => createWhatsappAiToolExecutor(context)('link_pagamento_pedido', { orderCode: 'KC-1', metodo: 'boleto' }),
+    error => error.code === 'PAYMENT_METHOD_INVALID',
+  );
+});
+
+test('prompt permite pagar pelo WhatsApp só com o link do próprio pedido', () => {
+  const prompt = buildWhatsappAiSystemPrompt({ storeName: 'Stallone Nutre Sport' });
+  assert.match(prompt, /pergunte Pix ou cartão e use link_pagamento_pedido/);
+  assert.match(prompt, /o pagamento acontece na página segura do gateway/);
+});
