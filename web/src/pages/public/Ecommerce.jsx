@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertCircle, ArrowRight, Check, CheckCircle2, Eye, Loader2, Minus, Monitor, Moon, Plus, Search, ShoppingBag, Store, Sun, Trash2, X } from 'lucide-react'
+import { AlertCircle, ArrowRight, Check, CheckCircle2, ChevronRight, Eye, Loader2, Minus, Monitor, Moon, PackageSearch, Plus, QrCode, Search, ShoppingBag, Store, Sun, Trash2, Truck, X } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, fmtR } from '../../lib/api'
 import { decrementCartQuantity, loadAllStorefrontProducts, nextStorefrontCartSyncVersion, normalizeStorefrontAlias, storefrontApiBase, storefrontCartSessionKey, storefrontMediaRecoveryUrl, storefrontMediaUrl, storefrontRoute, storefrontStorageKey } from '../../lib/storefront'
 import { recommendedShippingOption, shippingQuoteKey } from '../../lib/checkout-shipping'
 import { createLatestRequest } from '../../lib/latest-request'
-import { applyThemeMode, brandFromHost, commerceDisplayName, DINO_COMMERCE_LOGO, STALLONE_LOGO, storedThemeMode } from '../../lib/brand'
+import { applyThemeMode, brandFromHost, commerceDisplayName, DINO_COMMERCE_LOGO, STALLONE_LOGO_LIGHT, storedThemeMode } from '../../lib/brand'
 import { addProductToCart, applyCartLink, CART_LINK_PARAM, CATALOG_PAGE_SIZE, cartHasPickupOnlyItems, filterCatalog, isPickupOnlyProduct, paginateCatalog, parseCartLink, PICKUP_ONLY_NOTE, sortCatalog, stockState } from '../../lib/storefront-catalog'
 import AddToCartSuccess from '../../components/store/AddToCartSuccess'
 import CartDrawer from '../../components/store/CartDrawer'
@@ -167,6 +167,40 @@ function QuantityControl({ value, onChange, max }) {
   </div>
 }
 
+/**
+ * Topo da loja Stallone (claro): logotipo, slogan, fatos reais da compra e atalhos
+ * para as categorias com mais produtos, que filtram o catálogo em um clique.
+ */
+function StalloneHero({ tagline, productCount, topCategories, onCategory, onTrack, catalogSource }) {
+  return <section className="commerce-hero stallone-hero" aria-labelledby="stallone-hero-title">
+    <div className="stallone-hero-bar">
+      <img src={STALLONE_LOGO_LIGHT} alt="Stallone Nutre Sport" width="230" height="84" />
+      <button type="button" className="stallone-link-button" onClick={onTrack} aria-label="Acompanhar pedido"><PackageSearch size={18} aria-hidden="true" /><span>Acompanhar pedido</span></button>
+    </div>
+    <div className="stallone-hero-copy">
+      <h1 id="stallone-hero-title"><span>Força para evoluir.</span> <span>Nutrição para ir além.</span></h1>
+      <span className="stallone-hero-stripe" aria-hidden="true" />
+      <p>{tagline}</p>
+      <div className="stallone-hero-actions">
+        <a className="stallone-cta" href="#catalogo">{productCount ? `Ver os ${productCount} produtos` : 'Ver o catálogo'} <ArrowRight size={18} aria-hidden="true" /></a>
+      </div>
+      <ul className="stallone-hero-facts">
+        <li><Store size={18} aria-hidden="true" />Retirada grátis na loja</li>
+        <li><Truck size={18} aria-hidden="true" />Entrega com frete pelo CEP</li>
+        <li><QrCode size={18} aria-hidden="true" />Pix ou cartão de crédito</li>
+      </ul>
+    </div>
+    {topCategories.length > 0 && <nav className="stallone-hero-shelf" aria-label="Categorias com mais produtos">
+      <h2>Comece por uma categoria</h2>
+      <ul>
+        {topCategories.map(([name, count]) => <li key={name}><button type="button" onClick={() => onCategory(name)}><span>{name}</span><small>{count} {count === 1 ? 'item' : 'itens'}</small><ChevronRight size={18} aria-hidden="true" /></button></li>)}
+        <li><button type="button" className="stallone-shelf-all" onClick={() => onCategory('Todos')}><span>Todas as categorias</span><small>{productCount}</small><ChevronRight size={18} aria-hidden="true" /></button></li>
+      </ul>
+    </nav>}
+    <div className="stallone-hero-status" role="status"><i aria-hidden="true" />{catalogSource === 'core' ? 'Estoque atualizado. A disponibilidade é confirmada ao finalizar a compra.' : 'Carregando o catálogo da loja.'}</div>
+  </section>
+}
+
 export default function Ecommerce() {
   const { storeAlias: routeAlias = '' } = useParams()
   const storeAlias = normalizeStorefrontAlias(routeAlias)
@@ -300,6 +334,17 @@ function EcommerceStorefront({ routeAlias, hostName }) {
   }, [products])
 
   const categories = useMemo(() => ['Todos', ...new Set(products.map(item => item.cat).filter(Boolean))], [products])
+  // Atalhos do topo da Stallone: as 6 categorias com mais produtos publicados.
+  const topCategories = useMemo(() => {
+    const counts = new Map()
+    for (const item of products) if (item.cat) counts.set(item.cat, (counts.get(item.cat) || 0) + 1)
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'pt-BR')).slice(0, 6)
+  }, [products])
+  function goToCategory(name) {
+    setCategory(name)
+    const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    window.requestAnimationFrame(() => document.getElementById('catalogo')?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' }))
+  }
   const filtered = useMemo(() => sortCatalog(filterCatalog(products, { query, category, inStockOnly }), sort), [products, query, category, inStockOnly, sort])
   const [visibleCount, setVisibleCount] = useState(CATALOG_PAGE_SIZE)
   useEffect(() => setVisibleCount(CATALOG_PAGE_SIZE), [query, category, inStockOnly, sort])
@@ -675,23 +720,20 @@ function EcommerceStorefront({ routeAlias, hostName }) {
 
   return <main className="commerce-shell sf-ux" data-storefront-alias={storeAlias || undefined}>
     <a href="#catalogo" className="commerce-skip-link">Pular para o catálogo</a>
-    <section className="commerce-hero">
+    {isStalloneStorefront ? <StalloneHero tagline={brandTagline} productCount={products.length} topCategories={topCategories} onCategory={goToCategory} onTrack={openTracking} catalogSource={catalogSource} /> : <section className="commerce-hero">
       {isDinoStorefront && <div className="commerce-dino-brandbar"><div className="commerce-dino-identity"><div className="commerce-dino-logo-frame"><img src={DINO_COMMERCE_LOGO} alt="Dino — Barbearia e Perfumaria" /></div><div className="commerce-dino-brand-copy"><span>Dino</span><strong>Barbearia &amp; Perfumaria</strong><small>Estilo, cuidado e presença.</small></div></div><div className="commerce-dino-theme" role="group" aria-label="Tema da loja">{[["system", Monitor, "Sistema"], ["light", Sun, "Claro"], ["dark", Moon, "Escuro"]].map(([mode, Icon, label]) => <button type="button" key={mode} onClick={() => changeThemeMode(mode)} className={themeMode === mode ? 'active' : ''} aria-pressed={themeMode === mode} title={`Tema ${label.toLowerCase()}`}><Icon size={14} /><span>{label}</span></button>)}</div></div>}
-      {isStalloneStorefront && <div className="commerce-stallone-brandbar"><img src={STALLONE_LOGO} alt="Stallone Nutre Sport" width="240" height="88" /><div className="commerce-stallone-theme" role="group" aria-label="Tema da loja">{[["dark", Moon, "Escuro"], ["light", Sun, "Claro"]].map(([mode, Icon, label]) => <button type="button" key={mode} onClick={() => changeThemeMode(mode)} className={(themeMode === mode || (mode === 'dark' && themeMode === 'system')) ? 'active' : ''} aria-pressed={themeMode === mode || (mode === 'dark' && themeMode === 'system')} title={`Tema ${label.toLowerCase()}`}><Icon size={14} /><span>{label}</span></button>)}</div></div>}
       <div>
         <span className="commerce-eyebrow"><Store size={14} /> {brandName}</span>
-        <h1>{isDinoStorefront ? <>Autocuidado, estilo e bem-estar. <em>Compre com confiança.</em></> : isStalloneStorefront ? <>Força para evoluir. <em>Nutrição para ir além.</em></> : <>Venda melhor. <em>Opere com inteligência.</em></>}</h1>
+        <h1>{isDinoStorefront ? <>Autocuidado, estilo e bem-estar. <em>Compre com confiança.</em></> : <>Venda melhor. <em>Opere com inteligência.</em></>}</h1>
         <p>{brandTagline}</p>
         <div className="commerce-hero-actions">
           <a className="commerce-button commerce-button-primary" href="#catalogo">Explorar catálogo <ArrowRight size={16} /></a>
           <button type="button" className="commerce-button commerce-button-quiet" onClick={openTracking}>Acompanhar pedido</button>
         </div>
       </div>
-      {isStalloneStorefront
-        ? <div className="commerce-hero-orbit commerce-stallone-pillars" aria-hidden="true"><span>WHEY</span><span>CREATINA</span><span>GRANEL</span><strong>S</strong></div>
-        : <div className="commerce-hero-orbit" aria-hidden="true"><span>CATÁLOGO</span><span>ESTOQUE</span><span>PEDIDOS</span><strong>∞</strong></div>}
+      <div className="commerce-hero-orbit" aria-hidden="true"><span>CATÁLOGO</span><span>ESTOQUE</span><span>PEDIDOS</span><strong>∞</strong></div>
       <div className="commerce-channel-status" role="status"><span className={catalogSource === 'core' ? 'is-live' : ''}>{catalogSource === 'core' ? 'Estoque atualizado' : catalogSource === 'legacy' ? 'Catálogo da loja' : 'Conectando catálogo'}</span><small>{catalogSource === 'core' ? 'Disponibilidade confirmada ao finalizar a compra.' : 'Disponibilidade sujeita à confirmação da loja.'}</small></div>
-    </section>
+    </section>}
 
     <section className="commerce-toolbar" id="catalogo">
       <div className="sf-search" role="search"><Search size={18} aria-hidden="true" /><input type="search" value={searchInput} onChange={event => setSearchInput(event.target.value)} onKeyDown={event => { if (event.key === 'Escape' && searchInput) { event.preventDefault(); clearSearch() } }} placeholder="Buscar produto, SKU ou categoria" aria-label="Buscar produto, SKU ou categoria" autoComplete="off" enterKeyHint="search" />{searchInput && <button type="button" className="sf-search-clear" onClick={clearSearch} aria-label="Limpar busca"><X size={17} /></button>}</div>
