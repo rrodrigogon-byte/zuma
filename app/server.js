@@ -62,6 +62,7 @@ import { listCommerceTenants, provisionCommerceTenant } from './core/commerce-te
 import { assignCompanyToGroup, createBusinessGroup, listBusinessGroups, updateBusinessGroup } from './core/business-groups.js';
 import * as barbeariaErpKytto from './barbearia-erp-kytto.js';
 import * as barbeariaFiscalKytto from './barbearia-fiscal-kytto.js';
+import * as barbeariaNfseKytto from './barbearia-nfse-kytto.js';
 import { appointmentNotificationMetrics, queueAppointmentNotifications, queueChargeNotification, queueReviewRequest, reviewNotificationMetrics } from './core/barbershop-appointment-notifications.js';
 import * as cobrancaKytto from './dino-cobranca-kytto.js';
 import * as modoBarbeiro from './dino-modo-barbeiro.js';
@@ -3120,7 +3121,7 @@ app.get('/api/admin/barbearia/overview', async (req, res) => {
       produtos: barbeariaErpKytto.listarProdutosRevenda(empresaId, { incluirInativos: false }),
       vendas: barbeariaErpKytto.listarVendasRevenda(empresaId, { lojaId }),
       comandas,
-      documentosFiscais: barbeariaFiscalKytto.listarDocumentosFiscais(empresaId, { lojaId }).slice(0, 50),
+      documentosFiscais: barbeariaFiscalKytto.listarDocumentosFiscais(empresaId, { lojaId }).slice(0, 50).map(barbeariaNfseKytto.documentoParaPainel),
              resumoComandas,
        relacionamento: resumoRelacionamentoBarbearia(req),
        operacao: resumoOperacaoBarbearia(req),
@@ -3744,7 +3745,7 @@ app.post('/api/admin/barbearia/comandas/:id/pagamentos', (req, res) => {
 });
 app.get('/api/admin/barbearia/fiscal/documentos', (req, res) => {
   try {
-    const documentos = barbeariaFiscalKytto.listarDocumentosFiscais(legacyEmpresaId(req), { lojaId: legacyLojaId(req), origemTipo: req.query?.origemTipo, origemId: req.query?.origemId });
+    const documentos = barbeariaFiscalKytto.listarDocumentosFiscais(legacyEmpresaId(req), { lojaId: legacyLojaId(req), origemTipo: req.query?.origemTipo, origemId: req.query?.origemId }).map(barbeariaNfseKytto.documentoParaPainel);
     res.json({ ok: true, documentos, total: documentos.length });
   } catch (error) { res.status(400).json({ error: error.message }); }
 });
@@ -3771,6 +3772,75 @@ app.post('/api/admin/barbearia/comandas/:id/fiscal/rascunho', (req, res) => {
     });
     res.status(resultado.idempotente ? 200 : 201).json({ ok: true, ...resultado });
   } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+// ---------------------------------------------------------------------------
+// NFS-e Padrão Nacional (integração própria com a Sefin Nacional). Só a gestão.
+function respostaNfse(res, error) {
+  const status = /CONFIG|SEGREDO|INVALID|SEM_|MISTOS|HOMOLOGACAO|DESATIVADA|CANCELADA|NAO_AUTORIZADA|VENCIDO/.test(String(error?.code || '')) ? 422 : (error?.code === 'NFSE_DOCUMENTO_INEXISTENTE' ? 404 : (error?.code === 'NFSE_FALHA_COMUNICACAO' ? 502 : 400));
+  res.status(status).json({ error: error.message, code: error.code || 'NFSE_ERROR', detalhes: error.detalhes || undefined });
+}
+function exigeGestaoFiscal(req, res) {
+  if (podeSilenciarAvisoAgenda(req.user)) return true;
+  res.status(403).json({ error: 'Só a gestão opera a NFS-e.', code: 'NFSE_SO_GESTAO' });
+  return false;
+}
+app.get('/api/admin/barbearia/fiscal/nfse/configuracao', (req, res) => {
+  if (!exigeGestaoFiscal(req, res)) return;
+  try { res.json({ ok: true, ...barbeariaNfseKytto.configuracaoPublica(legacyEmpresaId(req)) }); } catch (error) { respostaNfse(res, error); }
+});
+app.put('/api/admin/barbearia/fiscal/nfse/configuracao', (req, res) => {
+  if (!exigeGestaoFiscal(req, res)) return;
+  try {
+    const resultado = barbeariaNfseKytto.atualizarConfiguracao(legacyEmpresaId(req), req.body || {});
+    audit(req, 'NFSE CONFIGURACAO', `ambiente=${resultado.configuracao.ambiente} ativo=${resultado.configuracao.ativo}`);
+    res.json({ ok: true, ...resultado });
+  } catch (error) { respostaNfse(res, error); }
+});
+app.get('/api/admin/barbearia/fiscal/nfse/convenio', async (req, res) => {
+  if (!exigeGestaoFiscal(req, res)) return;
+  try { res.json({ ok: true, ...(await barbeariaNfseKytto.consultarConvenio(legacyEmpresaId(req))) }); } catch (error) { respostaNfse(res, error); }
+});
+app.post('/api/admin/barbearia/fiscal/documentos/:id/nfse', async (req, res) => {
+  if (!exigeGestaoFiscal(req, res)) return;
+  if (req.body?.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita da emissão é obrigatória.', code: 'NFSE_CONFIRMACAO' });
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const tomador = req.body?.tomador && (req.body.tomador.cpf || req.body.tomador.cnpj) ? { cpf: req.body.tomador.cpf, cnpj: req.body.tomador.cnpj, nome: req.body.tomador.nome } : null;
+    const resultado = await barbeariaNfseKytto.emitirNfse(empresaId, req.params.id, { tomador, usuario: req.user?.email || req.user?.nome || '', servicos: barbeariaErpKytto.listarServicos(empresaId, { incluirInativos: true }) });
+    audit(req, resultado.rejeitada ? 'NFSE REJEITADA' : 'NFSE EMITIDA', `${req.params.id} ${resultado.documento?.nfse?.chaveAcesso || (resultado.erros || []).map((e) => e.codigo).join(',')}`);
+    res.status(resultado.rejeitada ? 422 : 200).json({ ok: !resultado.rejeitada, ...resultado, documento: barbeariaNfseKytto.documentoParaPainel(resultado.documento) });
+  } catch (error) { respostaNfse(res, error); }
+});
+app.post('/api/admin/barbearia/fiscal/documentos/:id/nfse/cancelamento', async (req, res) => {
+  if (!exigeGestaoFiscal(req, res)) return;
+  if (req.body?.confirmado !== true) return res.status(400).json({ error: 'A confirmação explícita do cancelamento é obrigatória.', code: 'NFSE_CONFIRMACAO' });
+  try {
+    const resultado = await barbeariaNfseKytto.cancelarNfse(legacyEmpresaId(req), req.params.id, { cMotivo: req.body?.cMotivo, xMotivo: req.body?.xMotivo, usuario: req.user?.email || req.user?.nome || '' });
+    audit(req, resultado.cancelada ? 'NFSE CANCELADA' : 'NFSE CANCELAMENTO REJEITADO', req.params.id);
+    res.status(resultado.cancelada ? 200 : 422).json({ ok: resultado.cancelada, ...resultado, documento: barbeariaNfseKytto.documentoParaPainel(resultado.documento) });
+  } catch (error) { respostaNfse(res, error); }
+});
+app.post('/api/admin/barbearia/fiscal/documentos/:id/nfse/sincronizar', async (req, res) => {
+  if (!exigeGestaoFiscal(req, res)) return;
+  try {
+    const resultado = await barbeariaNfseKytto.sincronizarNfse(legacyEmpresaId(req), req.params.id);
+    res.status(resultado.sincronizada ? 200 : 422).json({ ok: resultado.sincronizada, ...resultado, documento: barbeariaNfseKytto.documentoParaPainel(resultado.documento) });
+  } catch (error) { respostaNfse(res, error); }
+});
+app.get('/api/admin/barbearia/fiscal/documentos/:id/nfse/danfse', async (req, res) => {
+  if (!exigeGestaoFiscal(req, res)) return;
+  try {
+    const html = await barbeariaNfseKytto.danfseHtml(legacyEmpresaId(req), req.params.id);
+    res.set('Content-Type', 'text/html; charset=utf-8').set('Cache-Control', 'no-store').send(html);
+  } catch (error) { respostaNfse(res, error); }
+});
+app.get('/api/admin/barbearia/fiscal/documentos/:id/nfse/xml', (req, res) => {
+  if (!exigeGestaoFiscal(req, res)) return;
+  try {
+    const xml = barbeariaNfseKytto.xmlNfse(legacyEmpresaId(req), req.params.id);
+    res.set('Content-Type', 'application/xml; charset=utf-8').set('Content-Disposition', `attachment; filename="nfse-${req.params.id}.xml"`).send(xml);
+  } catch (error) { respostaNfse(res, error); }
 });
 
 app.post('/api/admin/barbearia/comandas/:id/consumo-interno', (req, res) => {
