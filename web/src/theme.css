@@ -178,10 +178,48 @@ html[data-brand='dino'] ::-webkit-scrollbar-thumb:hover { background: #4A5368; }
 
 
 /* ============================================================================
-   STALLONE NUTRE SPORT — carvão, branco e vermelho de energia.
-   Vitrine escura e administração clara por padrão; escolha do usuário preservada.
+   STALLONE NUTRE SPORT — branco, aço e vermelho de energia.
+   Claro é o padrão em toda a marca (vitrine sempre clara); o escuro só existe
+   quando o usuário escolhe no painel administrativo.
    ============================================================================ */
 html[data-brand='stallone'] {
+  color-scheme: light;
+  --orange: #CF202C;
+  --orange-dark: #A92A22;
+  --navy: #141416;
+  --sand: #FFFFFF;
+  --graphite: #62626B;
+  --line: #E2E4E8;
+  --success: #23855A;
+  --danger: #CF202C;
+  --deep: #141416;
+  --green: #CF202C;
+  --lime: #72727A;
+  --gold: #72727A;
+  --cream: #141416;
+  --bg: #FFFFFF;
+  --surface: #FFFFFF;
+  --surface-2: #F2F3F5;
+  --card: #FFFFFF;
+  --card2: #F7F8FA;
+  --muted: #5F626B;
+  --text: #17171C;
+  --fg: #17171C;
+  --accent: #D3222E;
+  --accent-strong: #A92A22;
+  --accent-soft: #FDECEE;
+  --focus-ring: rgba(199,52,43,.42);
+  --brand-header: #141416;
+  --brand-header-accent: #E32935;
+  --brand-header-text: #F7F7F5;
+  --shadow: 0 1px 2px rgba(11,11,13,.05), 0 8px 24px rgba(11,11,13,.08);
+  --shadow-lg: 0 12px 48px rgba(11,11,13,.2);
+  --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: 'Outfit', 'Plus Jakarta Sans', sans-serif;
+}
+
+html[data-brand='stallone'][data-theme='dark'] {
   color-scheme: dark;
   --orange: #E32935;
   --orange-dark: #FF6A5F;
@@ -217,44 +255,8 @@ html[data-brand='stallone'] {
   --chart-2: #B7B7BF;
   --chart-3: #3FB27F;
   --chart-4: #6E8BFF;
-  --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-display: 'Outfit', 'Plus Jakarta Sans', sans-serif;
 }
 
-html[data-brand='stallone'][data-theme='light'] {
-  color-scheme: light;
-  --orange: #CF202C;
-  --orange-dark: #A92A22;
-  --navy: #141416;
-  --sand: #F7F7F5;
-  --graphite: #62626B;
-  --line: #E3E3E7;
-  --success: #23855A;
-  --danger: #CF202C;
-  --deep: #141416;
-  --green: #CF202C;
-  --lime: #72727A;
-  --gold: #72727A;
-  --cream: #141416;
-  --bg: #F7F7F5;
-  --surface: #FFFFFF;
-  --surface-2: #EFEFF2;
-  --card: #FFFFFF;
-  --card2: #FAFAFA;
-  --muted: #62626B;
-  --text: #141416;
-  --fg: #141416;
-  --accent: #CF202C;
-  --accent-strong: #A92A22;
-  --accent-soft: rgba(199,52,43,.10);
-  --focus-ring: rgba(199,52,43,.42);
-  --brand-header: #141416;
-  --brand-header-accent: #E32935;
-  --brand-header-text: #F7F7F5;
-  --shadow: 0 1px 2px rgba(11,11,13,.05), 0 8px 24px rgba(11,11,13,.08);
-  --shadow-lg: 0 12px 48px rgba(11,11,13,.2);
-}
 
 html[data-brand='stallone'],
 html[data-brand='stallone'] body,
@@ -279,8 +281,10 @@ html[data-brand='stallone'] tr:hover td { background: var(--accent-soft); }
 html[data-brand='stallone'] .table-wrap { background: var(--card); }
 html[data-brand='stallone'] .modal-body,
 html[data-brand='stallone'] .sheet-body { background: var(--surface); }
-html[data-brand='stallone'] ::-webkit-scrollbar-thumb { background: #3A3A42; }
-html[data-brand='stallone'] ::-webkit-scrollbar-thumb:hover { background: #4A4A54; }
+html[data-brand='stallone'] ::-webkit-scrollbar-thumb { background: #C9CBD1; }
+html[data-brand='stallone'] ::-webkit-scrollbar-thumb:hover { background: #A9ACB4; }
+html[data-brand='stallone'][data-theme='dark'] ::-webkit-scrollbar-thumb { background: #3A3A42; }
+html[data-brand='stallone'][data-theme='dark'] ::-webkit-scrollbar-thumb:hover { background: #4A4A54; }
 
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1107,6 +1111,6 @@ body,
 .checkout-phone-verify{display:grid;gap:8px;margin:10px 0;padding:12px;border:1px dashed currentColor;border-radius:10px}
 
 /* Logotipo Stallone: versão para fundo escuro ou claro conforme o tema ativo. */
-html[data-theme='light'] .stallone-logo-on-dark { display: none !important; }
-html:not([data-theme='light']) .stallone-logo-on-light { display: none !important; }
+html:not([data-theme='dark']) .stallone-logo-on-dark { display: none !important; }
+html[data-theme='dark'] .stallone-logo-on-light { display: none !important; }
 .checkout-pickup-only{margin:10px 0 0;padding:10px 12px;border-radius:10px;border:1px solid var(--accent, #E32935);background:var(--accent-soft, rgba(227,41,53,.08));font-size:.88rem;font-weight:600}
