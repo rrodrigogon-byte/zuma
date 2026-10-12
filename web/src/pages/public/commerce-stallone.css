@@ -1,6 +1,6 @@
 /* ============================================================================
-   Loja Stallone Nutre Sport — vitrine escura, vermelho de energia e contraste de
-   leitura. Tokens vêm de html[data-brand='stallone'] (theme.css).
+   Loja Stallone Nutre Sport — vitrine clara: branco, aço frio e o vermelho do
+   logotipo só onde há ação. Tokens vêm de html[data-brand='stallone'] (theme.css).
    ============================================================================ */
 html[data-brand='stallone'] .commerce-shell {
   --commerce-ink: var(--fg);
@@ -20,78 +20,207 @@ html[data-brand='stallone'] .commerce-shell h3 {
   font-family: var(--font-display);
 }
 
-/* Hero: preto profundo com a lâmina vermelha do logotipo. */
-html[data-brand='stallone'] .commerce-hero {
-  background: #141416;
-  color: #F7F7F5;
-  border: 1px solid #24242A;
+/* ----------------------------------------------------------------------------
+   Topo da loja (claro). Branco, aço frio e um único elemento vermelho forte:
+   a faixa diagonal do logotipo sob o título. À direita, atalhos para as
+   categorias mais procuradas com a quantidade real de produtos.
+   ---------------------------------------------------------------------------- */
+html[data-brand='stallone'] .commerce-hero.stallone-hero {
+  --stl-ink: #17171C;
+  --stl-steel: #5F626B;
+  --stl-line: #E2E4E8;
+  --stl-frost: #F2F3F5;
+  --stl-red: #D3222E;
+  --stl-red-deep: #A91B25;
+  background: #FFFFFF;
+  color: var(--stl-ink);
+  border: 1px solid var(--stl-line);
+  border-radius: 28px;
+  padding: clamp(22px, 4vw, 52px);
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr);
+  grid-template-areas: 'bar bar' 'copy shelf';
+  gap: clamp(22px, 4vw, 56px);
+  align-items: start;
+  box-shadow: 0 1px 2px rgba(23, 23, 28, .04), 0 24px 60px -32px rgba(23, 23, 28, .18);
+  overflow: hidden;
 }
-html[data-brand='stallone'] .commerce-hero::after {
-  border-color: rgba(183, 183, 191, .18);
-  box-shadow: 0 0 0 48px rgba(227, 41, 53, .05), 0 0 0 96px rgba(227, 41, 53, .03);
-}
-html[data-brand='stallone'] .commerce-hero .commerce-eyebrow { color: #B7B7BF; }
-html[data-brand='stallone'] .commerce-hero h1 { font-weight: 800; letter-spacing: -.045em; font-style: italic; }
-html[data-brand='stallone'] .commerce-hero h1 em { color: #E32935; }
-html[data-brand='stallone'] .commerce-hero p { color: #C9C8C2; }
-html[data-brand='stallone'] .commerce-button-primary {
-  background: #E32935;
-  color: #FFFFFF;
-  box-shadow: 0 10px 26px rgba(227, 41, 53, .28);
-}
-html[data-brand='stallone'] .commerce-button-primary:hover { background: #FF5A4F; }
+html[data-brand='stallone'] .commerce-hero.stallone-hero::after { display: none; }
 
-.commerce-stallone-brandbar {
-  grid-column: 1 / -1;
+.stallone-hero-bar {
+  grid-area: bar;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  padding-bottom: 14px;
-  margin-bottom: 4px;
-  border-bottom: 1px solid rgba(246, 245, 240, .12);
-  position: relative;
-  z-index: 2;
+  gap: 16px;
+  padding-bottom: clamp(16px, 2.4vw, 24px);
+  border-bottom: 1px solid var(--stl-line);
 }
-.commerce-stallone-brandbar > img {
-  width: min(260px, 56vw);
-  height: auto;
-  display: block;
-  background: #141416;
-  border-radius: 14px;
-}
-.commerce-stallone-theme {
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  border: 1px solid rgba(246, 245, 240, .14);
-  border-radius: 12px;
-  background: rgba(246, 245, 240, .04);
-}
-.commerce-stallone-theme button {
+.stallone-hero-bar img { width: min(230px, 52vw); height: auto; display: block; }
+.stallone-link-button {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 10px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: #C9C8C2;
-  font: 800 11px var(--font-body, var(--font));
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--stl-line);
+  border-radius: 999px;
+  background: #FFFFFF;
+  color: var(--stl-ink);
+  font: 700 14px var(--font-body, var(--font));
   cursor: pointer;
+  transition: border-color .16s ease, background .16s ease;
 }
-.commerce-stallone-theme button.active { background: #E32935; color: #FFFFFF; }
+.stallone-link-button:hover { border-color: var(--stl-ink); }
 
-/* Pilares no lugar da órbita genérica. */
-html[data-brand='stallone'] .commerce-stallone-pillars::before { border-color: rgba(227, 41, 53, .45); }
-html[data-brand='stallone'] .commerce-stallone-pillars::after { border-color: rgba(183, 183, 191, .25); }
-html[data-brand='stallone'] .commerce-stallone-pillars strong {
-  color: #FFFFFF;
-  font-weight: 900;
-  font-style: italic;
+.stallone-hero-copy { grid-area: copy; min-width: 0; }
+html[data-brand='stallone'] .stallone-hero h1 {
   font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 800;
+  font-size: clamp(34px, 4.3vw, 64px);
+  line-height: .94;
+  letter-spacing: -.045em;
+  color: var(--stl-ink);
+  margin: clamp(6px, 1.4vw, 14px) 0 0;
 }
-html[data-brand='stallone'] .commerce-stallone-pillars span { color: #B7B7BF; }
+/* Uma frase por linha (quebra só dentro da frase em telas estreitas). */
+html[data-brand='stallone'] .stallone-hero h1 span { display: block; }
+/* A faixa do logotipo: a única peça vermelha grande da página. */
+.stallone-hero-stripe {
+  display: block;
+  width: min(340px, 72%);
+  height: 14px;
+  margin: clamp(18px, 2.4vw, 26px) 0 clamp(18px, 2.4vw, 24px);
+  background: var(--stl-red);
+  transform: skewX(-24deg);
+  transform-origin: left center;
+  border-radius: 2px;
+}
+html[data-brand='stallone'] .stallone-hero p {
+  color: var(--stl-steel);
+  font-size: clamp(16px, 1.6vw, 18px);
+  line-height: 1.6;
+  max-width: 46ch;
+  margin: 0;
+}
+.stallone-hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 26px; }
+.stallone-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 26px;
+  border-radius: 999px;
+  background: var(--stl-red);
+  color: #FFFFFF;
+  font: 800 15px var(--font-body, var(--font));
+  text-decoration: none;
+  box-shadow: 0 12px 28px -12px rgba(211, 34, 46, .6);
+  transition: background .16s ease, transform .16s ease;
+}
+.stallone-cta:hover { background: var(--stl-red-deep); transform: translateY(-1px); }
+.stallone-hero-facts {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  margin: 28px 0 0;
+  padding: 0;
+  color: var(--stl-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+.stallone-hero-facts li { display: inline-flex; align-items: center; gap: 8px; }
+.stallone-hero-facts svg { color: var(--stl-red); flex: none; }
+
+/* Atalhos de categoria: lista útil no lugar da ilustração. */
+.stallone-hero-shelf {
+  grid-area: shelf;
+  background: var(--stl-frost);
+  border-radius: 20px;
+  padding: clamp(16px, 2vw, 22px);
+}
+html[data-brand='stallone'] .stallone-hero-shelf h2 {
+  font-family: var(--font-body, var(--font));
+  font-style: normal;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--stl-ink);
+  margin: 2px 4px 12px;
+  letter-spacing: 0;
+}
+.stallone-hero-shelf ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.stallone-hero-shelf button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 14px 0 16px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: #FFFFFF;
+  color: var(--stl-ink);
+  font: 700 15px var(--font-body, var(--font));
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+.stallone-hero-shelf button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stallone-hero-shelf button small { color: var(--stl-steel); font-size: 13px; font-weight: 600; }
+.stallone-hero-shelf button svg { color: var(--stl-steel); transition: transform .16s ease, color .16s ease; }
+.stallone-hero-shelf button:hover { border-color: var(--stl-ink); }
+.stallone-hero-shelf button:hover svg { color: var(--stl-red); transform: translateX(2px); }
+.stallone-hero-shelf .stallone-shelf-all { background: transparent; border-color: var(--stl-line); }
+.stallone-link-button:focus-visible,
+.stallone-cta:focus-visible,
+.stallone-hero-shelf button:focus-visible { outline: 3px solid var(--stl-red); outline-offset: 3px; }
+
+.stallone-hero-status {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--stl-steel);
+  font-size: 13px;
+  margin-top: -6px;
+}
+.stallone-hero-status i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #23855A;
+  box-shadow: 0 0 0 4px rgba(35, 133, 90, .14);
+}
+
+@media (max-width: 900px) {
+  html[data-brand='stallone'] .commerce-hero.stallone-hero {
+    grid-template-columns: 1fr;
+    grid-template-areas: 'bar' 'copy' 'shelf';
+    border-radius: 22px;
+  }
+}
+@media (max-width: 560px) {
+  html[data-brand='stallone'] .commerce-hero.stallone-hero { padding: 18px 16px 20px; }
+  .stallone-link-button span { display: none; }
+  .stallone-link-button { width: 44px; padding: 0; justify-content: center; }
+  .stallone-cta { width: 100%; }
+  .stallone-hero-facts { flex-direction: column; gap: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stallone-cta, .stallone-hero-shelf button svg { transition: none; }
+  .stallone-cta:hover { transform: none; }
+}
+
+html[data-brand='stallone'] .commerce-button-primary {
+  background: var(--accent);
+  color: #FFFFFF;
+  box-shadow: 0 10px 26px -12px rgba(211, 34, 46, .55);
+}
+html[data-brand='stallone'] .commerce-button-primary:hover { background: var(--accent-strong); }
 
 /* Vitrine e cards. */
 html[data-brand='stallone'] .commerce-search,
@@ -109,40 +238,39 @@ html[data-brand='stallone'] .commerce-product-image,
 html[data-brand='stallone'] .commerce-product-placeholder {
   background: linear-gradient(135deg, var(--surface-2), var(--card2));
 }
-html[data-brand='stallone'] .commerce-product-content > span { color: #E32935; }
+html[data-brand='stallone'] .commerce-product-content > span { color: var(--accent); }
 html[data-brand='stallone'] .commerce-product-details-button { color: var(--fg); }
 html[data-brand='stallone'] .commerce-categories button { color: var(--muted); }
 html[data-brand='stallone'] .commerce-categories button.is-active,
 html[data-brand='stallone'] .commerce-cart-button {
-  background: #E32935;
-  border-color: #E32935;
+  background: var(--accent);
+  border-color: var(--accent);
   color: #FFFFFF;
 }
-html[data-brand='stallone'] .commerce-cart-button b { background: #B7B7BF; color: #141416; }
 html[data-brand='stallone'] .commerce-product-buy button {
   background: transparent;
   border-color: var(--fg);
   color: var(--fg);
 }
 html[data-brand='stallone'] .commerce-product-buy button:hover {
-  background: #E32935;
-  border-color: #E32935;
+  background: var(--accent);
+  border-color: var(--accent);
   color: #FFFFFF;
 }
-
-/* Tema claro (escolhido pelo cliente): mantém o hero escuro como assinatura. */
-html[data-brand='stallone'][data-theme='light'] .commerce-product-content > span { color: #C7342B; }
-
-@media (max-width: 620px) {
-  .commerce-stallone-brandbar { flex-direction: column; align-items: flex-start; }
-  .commerce-stallone-theme { width: 100%; }
-  .commerce-stallone-theme button { flex: 1; justify-content: center; }
+/* Cards claros: borda fina e sombra só ao passar o mouse, sem caixa cinza pesada. */
+html[data-brand='stallone']:not([data-theme='dark']) .commerce-product-card {
+  border-color: var(--line);
+  box-shadow: none;
+  transition: border-color .16s ease, box-shadow .16s ease;
 }
-
+html[data-brand='stallone']:not([data-theme='dark']) .commerce-product-card:hover {
+  border-color: #C9CBD1;
+  box-shadow: 0 18px 40px -28px rgba(23, 23, 28, .35);
+}
 
 /* Estes tokens prevalecem sobre o tema compartilhado, somente na Stallone. */
 html[data-brand='stallone'] .commerce-shell.sf-ux {
-  --kytto-navy: #141416;
+  --kytto-navy: #17171C;
   --kytto-navy-2: #242429;
   --kytto-indigo: #CF202C;
   --kytto-indigo-hover: #B51C27;
@@ -152,16 +280,13 @@ html[data-brand='stallone'] .commerce-shell.sf-ux {
   --kytto-text: var(--fg);
   --kytto-muted: var(--muted);
   --kytto-border: var(--line);
-  --kytto-focus: 0 0 0 3px var(--bg), 0 0 0 5px #E32935;
+  --kytto-focus: 0 0 0 3px var(--bg), 0 0 0 5px var(--accent);
 }
 html[data-brand='stallone'] .commerce-shell.sf-ux .commerce-product-buy button.sf-add,
 html[data-brand='stallone'][data-theme='dark'] .commerce-shell.sf-ux .commerce-product-buy button.sf-add {
   color: #FFFFFF;
 }
-html[data-brand='stallone'] .commerce-cart-button b { background: #FFFFFF; color: #141416; }
-html[data-brand='stallone'] .commerce-hero::after { display: none; }
-html[data-brand='stallone'] .commerce-stallone-pillars::before,
-html[data-brand='stallone'] .commerce-stallone-pillars::after { border-color: rgba(227, 41, 53, .3); }
+html[data-brand='stallone'] .commerce-cart-button b { background: #FFFFFF; color: #17171C; }
 
 /* ----------------------------------------------------------------------------
    Contraste em todas as telas da loja (vitrine, produto, sacola, checkout).
@@ -188,8 +313,8 @@ html[data-brand='stallone'] body .sf-drawer {
   --commerce-paper: var(--surface);
   --commerce-accent: var(--accent);
 }
-html[data-brand='stallone']:not([data-theme='light']) body .commerce-shell.sf-ux,
-html[data-brand='stallone']:not([data-theme='light']) body .sf-drawer {
+html[data-brand='stallone'][data-theme='dark'] body .commerce-shell.sf-ux,
+html[data-brand='stallone'][data-theme='dark'] body .sf-drawer {
   --kytto-green: #6FD3A4;
   --kytto-green-soft: #16302A;
   --kytto-amber: #F5C26B;
@@ -219,7 +344,7 @@ html[data-brand='stallone'] .commerce-modal-actions small,
 html[data-brand='stallone'] .commerce-product-gallery-count { color: var(--muted); }
 html[data-brand='stallone'] .commerce-product-modal .commerce-eyebrow { color: var(--accent); }
 html[data-brand='stallone'] .commerce-variant-select select { background: var(--card); color: var(--fg); border-color: var(--line); }
-html[data-brand='stallone'] .commerce-overlay { background: rgba(5, 5, 7, .78); }
+html[data-brand='stallone'] .commerce-overlay { background: rgba(23, 23, 28, .48); }
 
 /* Cards da vitrine: foto em fundo branco (as fotos vêm com fundo branco). */
 html[data-brand='stallone'] .commerce-product-open,
@@ -257,8 +382,24 @@ html[data-brand='stallone'] .commerce-shipping-option input,
 html[data-brand='stallone'] .commerce-payment-method input { accent-color: var(--accent); }
 html[data-brand='stallone'] .commerce-state { background: var(--card); border-color: var(--line); color: var(--muted); }
 html[data-brand='stallone'] .commerce-form-error,
-html[data-brand='stallone'] .commerce-state-error { background: #3A1717; border-color: #6B2A2A; color: #FFB4AC; }
+html[data-brand='stallone'] .commerce-state-error { background: #FFF1EC; border-color: #F2C3B6; color: #A3442F; }
 html[data-brand='stallone'] .commerce-recovery-consent,
 html[data-brand='stallone'] .checkout-recovery-consent { background: var(--surface-2); border-color: var(--line); color: var(--fg); }
-html[data-brand='stallone'][data-theme='light'] .commerce-form-error,
-html[data-brand='stallone'][data-theme='light'] .commerce-state-error { background: #FFF1EC; border-color: #F2C3B6; color: #A3442F; }
+html[data-brand='stallone'][data-theme='dark'] .commerce-form-error,
+html[data-brand='stallone'][data-theme='dark'] .commerce-state-error { background: #3A1717; border-color: #6B2A2A; color: #FFB4AC; }
+
+/* Vitrine clara: filtro ativo e carrinho no vermelho da marca (sem blocos pretos). */
+html[data-brand='stallone']:not([data-theme='dark']) .commerce-shell.sf-ux .commerce-categories button.is-active,
+html[data-brand='stallone']:not([data-theme='dark']) .commerce-shell.sf-ux .commerce-cart-button {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #FFFFFF;
+}
+html[data-brand='stallone']:not([data-theme='dark']) .commerce-shell.sf-ux .commerce-cart-button:hover { background: var(--accent-strong); }
+html[data-brand='stallone']:not([data-theme='dark']) .commerce-shell.sf-ux .commerce-cart-button b { background: #FFFFFF; color: var(--accent); }
+html[data-brand='stallone']:not([data-theme='dark']) .commerce-shell.sf-ux .commerce-cart-button b.is-empty { background: rgba(255, 255, 255, .24); color: #FFFFFF; }
+/* Celular: o carrinho vira só ícone + contador para a busca ganhar espaço. */
+@media (max-width: 560px) {
+  html[data-brand='stallone'] .commerce-shell.sf-ux .commerce-cart-button { padding: 0 12px; }
+  html[data-brand='stallone'] .commerce-shell.sf-ux .commerce-cart-button > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}

@@ -151,6 +151,9 @@ html[data-theme='dark'] .commerce-shell.sf-ux .commerce-product-open { backgroun
 .commerce-shell.sf-ux .commerce-product-grid .commerce-product-image,
 .commerce-shell.sf-ux .commerce-product-grid .commerce-product-placeholder {
   aspect-ratio: 1 / 1; object-fit: contain; padding: 14px; box-sizing: border-box; background: #FFFFFF;
+  /* O <img> tem height="600" (reserva de espaço): sem height:auto a foto ficava com
+     600 px de altura em qualquer largura e o card abria um vazio enorme. */
+  width: 100%; height: auto;
 }
 .commerce-shell.sf-ux .commerce-product-grid .commerce-product-placeholder {
   color: #94A3B8; font-size: 0; background: linear-gradient(135deg, #F8FAFC, #EEF1FF);

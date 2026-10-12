@@ -2,129 +2,129 @@
    theme.css desenha o checkout para fundo claro usando --navy como texto;
    na Stallone escura --navy é claro, então cartões brancos ficavam com texto
    branco. Este arquivo espelha o bloco escuro do Dino com os tokens Stallone. */
-html[data-brand='stallone']:not([data-theme='light']) .checkout-page,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-result-shell { background: var(--bg); color: var(--fg); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-header { background: #0F0F12; color: var(--fg); border-bottom-color: var(--line); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-brand { color: var(--fg); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-brand-mark,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-primary,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-step.is-active .checkout-step-dot,
-html[data-brand='stallone']:not([data-theme='light']) .is-selected .shipping-option-radio { background: var(--accent); color: var(--fg); border-color: var(--accent); box-shadow: 0 6px 18px rgba(227,41,53,.24); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-card,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-summary,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-result-card,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-payment-box,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-tracking-panel,
-html[data-brand='stallone']:not([data-theme='light']) .shipping-option,
-html[data-brand='stallone']:not([data-theme='light']) .payment-option,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-step-dot { background: var(--card); border-color: var(--line); color: var(--fg); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-card-title h1,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-summary h2,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-summary-item-copy strong,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-totals b,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-address-heading h2,
-html[data-brand='stallone']:not([data-theme='light']) .shipping-option-copy strong,
-html[data-brand='stallone']:not([data-theme='light']) .payment-option-copy strong,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-result-card h1,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-result-meta strong { color: var(--fg); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-card-title p,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-summary-item-copy span,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-totals > div,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-trust-list,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-address-heading span,
-html[data-brand='stallone']:not([data-theme='light']) .shipping-option-copy small,
-html[data-brand='stallone']:not([data-theme='light']) .payment-option-copy small,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-result-lead { color: var(--muted); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-field input,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-field textarea,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-field select,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-pix-box textarea { background: #0F0F12; border-color: #34343C; color: var(--fg); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-remove-item { background: rgba(235,98,98,.08); border-color: rgba(235,98,98,.34); color: #FFAAAA; }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-remove-item:hover:not(:disabled) { background: rgba(235,98,98,.16); border-color: rgba(255,170,170,.5); color: #FFD1D1; }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-info-banner,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-security-panel,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-final-note { background: rgba(227,41,53,.12); color: var(--muted); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-page .checkout-recovery-consent { border-color: var(--line); background: var(--surface-2); color: var(--fg); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-page .checkout-recovery-consent strong { color: var(--fg); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-page .checkout-recovery-consent small { color: var(--muted); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-page .checkout-info-banner { border-color: var(--line); background: var(--surface-2); color: var(--muted); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-page .checkout-info-banner strong { color: var(--fg); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-page .checkout-info-banner > svg { color: var(--accent-strong); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-payment-box > strong,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-tracking-heading h2,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-tracking-summary strong,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-tracking-events strong,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-order-timeline strong { color: var(--fg); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-payment-box > small,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-payment-helper,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-tracking-empty,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-tracking-summary small,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-tracking-events span,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-order-timeline span,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-order-timeline small { color: var(--muted); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-status-pill { border: 1px solid var(--line); background: var(--surface-2); color: var(--fg); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-tracking-summary > div,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-result-meta > div { border-color: #34343C; background: #0F0F12; }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-result-meta span { color: var(--muted); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-result-meta strong { color: var(--fg); }
-html[data-brand='stallone']:not([data-theme='light']) .shipping-option.is-selected,
-html[data-brand='stallone']:not([data-theme='light']) .payment-option.is-selected { background: rgba(227,41,53,.12); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(227,41,53,.1); }
-html[data-brand='stallone']:not([data-theme='light']) .payment-provider-badges > span { background: rgba(227,41,53,.18); color: var(--accent-strong); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-secondary { background: var(--card); border-color: #34343C; color: var(--fg); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-secondary:hover { background: var(--surface-2); border-color: var(--accent); color: var(--fg); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-page,
+html[data-brand='stallone'][data-theme='dark'] .checkout-result-shell { background: var(--bg); color: var(--fg); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-header { background: #0F0F12; color: var(--fg); border-bottom-color: var(--line); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-brand { color: var(--fg); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-brand-mark,
+html[data-brand='stallone'][data-theme='dark'] .checkout-primary,
+html[data-brand='stallone'][data-theme='dark'] .checkout-step.is-active .checkout-step-dot,
+html[data-brand='stallone'][data-theme='dark'] .is-selected .shipping-option-radio { background: var(--accent); color: var(--fg); border-color: var(--accent); box-shadow: 0 6px 18px rgba(227,41,53,.24); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-card,
+html[data-brand='stallone'][data-theme='dark'] .checkout-summary,
+html[data-brand='stallone'][data-theme='dark'] .checkout-result-card,
+html[data-brand='stallone'][data-theme='dark'] .checkout-payment-box,
+html[data-brand='stallone'][data-theme='dark'] .checkout-tracking-panel,
+html[data-brand='stallone'][data-theme='dark'] .shipping-option,
+html[data-brand='stallone'][data-theme='dark'] .payment-option,
+html[data-brand='stallone'][data-theme='dark'] .checkout-step-dot { background: var(--card); border-color: var(--line); color: var(--fg); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-card-title h1,
+html[data-brand='stallone'][data-theme='dark'] .checkout-summary h2,
+html[data-brand='stallone'][data-theme='dark'] .checkout-summary-item-copy strong,
+html[data-brand='stallone'][data-theme='dark'] .checkout-totals b,
+html[data-brand='stallone'][data-theme='dark'] .checkout-address-heading h2,
+html[data-brand='stallone'][data-theme='dark'] .shipping-option-copy strong,
+html[data-brand='stallone'][data-theme='dark'] .payment-option-copy strong,
+html[data-brand='stallone'][data-theme='dark'] .checkout-result-card h1,
+html[data-brand='stallone'][data-theme='dark'] .checkout-result-meta strong { color: var(--fg); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-card-title p,
+html[data-brand='stallone'][data-theme='dark'] .checkout-summary-item-copy span,
+html[data-brand='stallone'][data-theme='dark'] .checkout-totals > div,
+html[data-brand='stallone'][data-theme='dark'] .checkout-trust-list,
+html[data-brand='stallone'][data-theme='dark'] .checkout-address-heading span,
+html[data-brand='stallone'][data-theme='dark'] .shipping-option-copy small,
+html[data-brand='stallone'][data-theme='dark'] .payment-option-copy small,
+html[data-brand='stallone'][data-theme='dark'] .checkout-result-lead { color: var(--muted); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-field input,
+html[data-brand='stallone'][data-theme='dark'] .checkout-field textarea,
+html[data-brand='stallone'][data-theme='dark'] .checkout-field select,
+html[data-brand='stallone'][data-theme='dark'] .checkout-pix-box textarea { background: #0F0F12; border-color: #34343C; color: var(--fg); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-remove-item { background: rgba(235,98,98,.08); border-color: rgba(235,98,98,.34); color: #FFAAAA; }
+html[data-brand='stallone'][data-theme='dark'] .checkout-remove-item:hover:not(:disabled) { background: rgba(235,98,98,.16); border-color: rgba(255,170,170,.5); color: #FFD1D1; }
+html[data-brand='stallone'][data-theme='dark'] .checkout-info-banner,
+html[data-brand='stallone'][data-theme='dark'] .checkout-security-panel,
+html[data-brand='stallone'][data-theme='dark'] .checkout-final-note { background: rgba(227,41,53,.12); color: var(--muted); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-page .checkout-recovery-consent { border-color: var(--line); background: var(--surface-2); color: var(--fg); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-page .checkout-recovery-consent strong { color: var(--fg); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-page .checkout-recovery-consent small { color: var(--muted); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-page .checkout-info-banner { border-color: var(--line); background: var(--surface-2); color: var(--muted); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-page .checkout-info-banner strong { color: var(--fg); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-page .checkout-info-banner > svg { color: var(--accent-strong); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-payment-box > strong,
+html[data-brand='stallone'][data-theme='dark'] .checkout-tracking-heading h2,
+html[data-brand='stallone'][data-theme='dark'] .checkout-tracking-summary strong,
+html[data-brand='stallone'][data-theme='dark'] .checkout-tracking-events strong,
+html[data-brand='stallone'][data-theme='dark'] .checkout-order-timeline strong { color: var(--fg); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-payment-box > small,
+html[data-brand='stallone'][data-theme='dark'] .checkout-payment-helper,
+html[data-brand='stallone'][data-theme='dark'] .checkout-tracking-empty,
+html[data-brand='stallone'][data-theme='dark'] .checkout-tracking-summary small,
+html[data-brand='stallone'][data-theme='dark'] .checkout-tracking-events span,
+html[data-brand='stallone'][data-theme='dark'] .checkout-order-timeline span,
+html[data-brand='stallone'][data-theme='dark'] .checkout-order-timeline small { color: var(--muted); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-status-pill { border: 1px solid var(--line); background: var(--surface-2); color: var(--fg); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-tracking-summary > div,
+html[data-brand='stallone'][data-theme='dark'] .checkout-result-meta > div { border-color: #34343C; background: #0F0F12; }
+html[data-brand='stallone'][data-theme='dark'] .checkout-result-meta span { color: var(--muted); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-result-meta strong { color: var(--fg); }
+html[data-brand='stallone'][data-theme='dark'] .shipping-option.is-selected,
+html[data-brand='stallone'][data-theme='dark'] .payment-option.is-selected { background: rgba(227,41,53,.12); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(227,41,53,.1); }
+html[data-brand='stallone'][data-theme='dark'] .payment-provider-badges > span { background: rgba(227,41,53,.18); color: var(--accent-strong); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-secondary { background: var(--card); border-color: #34343C; color: var(--fg); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-secondary:hover { background: var(--surface-2); border-color: var(--accent); color: var(--fg); }
 
 /* Itens que o bloco do Dino não cobre */
-html[data-brand='stallone']:not([data-theme='light']) .checkout-header-security { color: var(--muted); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-brand-logo { background: transparent; padding-left: 0; }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-back { color: var(--fg); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-back:hover { color: var(--accent-strong); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-step { color: var(--muted); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-step.is-active { color: var(--fg); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-step.is-active .checkout-step-dot { color: #fff; }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-step-line { background: var(--line); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-card,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-summary,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-result-card { box-shadow: var(--shadow); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-card-icon,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-result-icon { background: var(--accent-soft); color: var(--accent-strong); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-page .eyebrow { color: var(--accent-strong); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-field label { color: var(--fg); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-field label span { color: var(--accent-strong); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-field small,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-actions { color: var(--muted); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-field small.checkout-error { color: #FF8A80; }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-field input::placeholder,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-field textarea::placeholder { color: #7A7A82; }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-field input:focus,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-field textarea:focus,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-field select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-secure { background: rgba(63,178,127,.14); color: #7FD9AE; }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-summary-heading,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-totals .checkout-total,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-coupon { border-color: var(--line); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-summary-thumb { background: #fff; }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-summary-thumb img { object-fit: contain; }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-summary-item-actions > b,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-totals .checkout-total strong { color: var(--fg); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-totals .checkout-total { color: var(--fg); }
-html[data-brand='stallone']:not([data-theme='light']) .shipping-option-radio { background: transparent; border-color: #4A4A52; }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-coupon-row input,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-promotion-control input { background: #0F0F12; border-color: #34343C; color: var(--fg); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-coupon-row button { background: var(--accent-soft); border-color: var(--accent); color: var(--fg); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-page .commerce-shipping-option,
-html[data-brand='stallone']:not([data-theme='light']) .review-section,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-pix-box { background: var(--surface-2); border-color: var(--line); color: var(--fg); }
-html[data-brand='stallone']:not([data-theme='light']) .review-section strong,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-pix-box label,
-html[data-brand='stallone']:not([data-theme='light']) .payment-coming-soon strong,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-empty h1 { color: var(--fg); }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-form-error { background: rgba(255,106,95,.12); border-color: rgba(255,106,95,.4); color: #FFB4AC; }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-contact-action { background: transparent; border-color: rgba(255,106,95,.5); color: #FFB4AC; }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-promotion-feedback.is-applied,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-totals .checkout-discount,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-totals .checkout-discount b { color: #7FD9AE; }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-promotion-feedback.is-error { color: #FFB4AC; }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-promotion-feedback.is-applying { color: var(--muted); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-header-security { color: var(--muted); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-brand-logo { background: transparent; padding-left: 0; }
+html[data-brand='stallone'][data-theme='dark'] .checkout-back { color: var(--fg); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-back:hover { color: var(--accent-strong); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-step { color: var(--muted); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-step.is-active { color: var(--fg); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-step.is-active .checkout-step-dot { color: #fff; }
+html[data-brand='stallone'][data-theme='dark'] .checkout-step-line { background: var(--line); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-card,
+html[data-brand='stallone'][data-theme='dark'] .checkout-summary,
+html[data-brand='stallone'][data-theme='dark'] .checkout-result-card { box-shadow: var(--shadow); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-card-icon,
+html[data-brand='stallone'][data-theme='dark'] .checkout-result-icon { background: var(--accent-soft); color: var(--accent-strong); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-page .eyebrow { color: var(--accent-strong); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-field label { color: var(--fg); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-field label span { color: var(--accent-strong); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-field small,
+html[data-brand='stallone'][data-theme='dark'] .checkout-actions { color: var(--muted); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-field small.checkout-error { color: #FF8A80; }
+html[data-brand='stallone'][data-theme='dark'] .checkout-field input::placeholder,
+html[data-brand='stallone'][data-theme='dark'] .checkout-field textarea::placeholder { color: #7A7A82; }
+html[data-brand='stallone'][data-theme='dark'] .checkout-field input:focus,
+html[data-brand='stallone'][data-theme='dark'] .checkout-field textarea:focus,
+html[data-brand='stallone'][data-theme='dark'] .checkout-field select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-secure { background: rgba(63,178,127,.14); color: #7FD9AE; }
+html[data-brand='stallone'][data-theme='dark'] .checkout-summary-heading,
+html[data-brand='stallone'][data-theme='dark'] .checkout-totals .checkout-total,
+html[data-brand='stallone'][data-theme='dark'] .checkout-coupon { border-color: var(--line); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-summary-thumb { background: #fff; }
+html[data-brand='stallone'][data-theme='dark'] .checkout-summary-thumb img { object-fit: contain; }
+html[data-brand='stallone'][data-theme='dark'] .checkout-summary-item-actions > b,
+html[data-brand='stallone'][data-theme='dark'] .checkout-totals .checkout-total strong { color: var(--fg); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-totals .checkout-total { color: var(--fg); }
+html[data-brand='stallone'][data-theme='dark'] .shipping-option-radio { background: transparent; border-color: #4A4A52; }
+html[data-brand='stallone'][data-theme='dark'] .checkout-coupon-row input,
+html[data-brand='stallone'][data-theme='dark'] .checkout-promotion-control input { background: #0F0F12; border-color: #34343C; color: var(--fg); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-coupon-row button { background: var(--accent-soft); border-color: var(--accent); color: var(--fg); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-page .commerce-shipping-option,
+html[data-brand='stallone'][data-theme='dark'] .review-section,
+html[data-brand='stallone'][data-theme='dark'] .checkout-pix-box { background: var(--surface-2); border-color: var(--line); color: var(--fg); }
+html[data-brand='stallone'][data-theme='dark'] .review-section strong,
+html[data-brand='stallone'][data-theme='dark'] .checkout-pix-box label,
+html[data-brand='stallone'][data-theme='dark'] .payment-coming-soon strong,
+html[data-brand='stallone'][data-theme='dark'] .checkout-empty h1 { color: var(--fg); }
+html[data-brand='stallone'][data-theme='dark'] .checkout-form-error { background: rgba(255,106,95,.12); border-color: rgba(255,106,95,.4); color: #FFB4AC; }
+html[data-brand='stallone'][data-theme='dark'] .checkout-contact-action { background: transparent; border-color: rgba(255,106,95,.5); color: #FFB4AC; }
+html[data-brand='stallone'][data-theme='dark'] .checkout-promotion-feedback.is-applied,
+html[data-brand='stallone'][data-theme='dark'] .checkout-totals .checkout-discount,
+html[data-brand='stallone'][data-theme='dark'] .checkout-totals .checkout-discount b { color: #7FD9AE; }
+html[data-brand='stallone'][data-theme='dark'] .checkout-promotion-feedback.is-error { color: #FFB4AC; }
+html[data-brand='stallone'][data-theme='dark'] .checkout-promotion-feedback.is-applying { color: var(--muted); }
 html[data-brand='stallone'] .checkout-qr { background: #fff; }
 html[data-brand='stallone'] .checkout-brand-logo { width: 190px; height: 48px; }
 /* Os campos são <label class="checkout-field"><span>Rótulo</span><input>: dá peso e respiro ao rótulo */
@@ -145,14 +145,14 @@ html[data-brand='stallone'] .checkout-summary-items { max-height: 360px; }
 html[data-brand='stallone'] .checkout-step-dot { transition: background-color .18s, border-color .18s; }
 html[data-brand='stallone'] .checkout-page button:disabled { cursor: not-allowed; }
 html[data-brand='stallone'] .checkout-page :is(button,a,input,textarea):focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-card { background: #202126; border-color: #393B43; }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-summary { background: #25262D; border-color: #40424B; }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-back { color: #CBCDD5; }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-back:hover { color: #FF9299; }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-card-title p,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-field small,
-html[data-brand='stallone']:not([data-theme='light']) .checkout-trust-list { color: #C3C5CE; }
-html[data-brand='stallone']:not([data-theme='light']) .checkout-totals .checkout-total strong { color: #FF9299; font-variant-numeric: tabular-nums; }
+html[data-brand='stallone'][data-theme='dark'] .checkout-card { background: #202126; border-color: #393B43; }
+html[data-brand='stallone'][data-theme='dark'] .checkout-summary { background: #25262D; border-color: #40424B; }
+html[data-brand='stallone'][data-theme='dark'] .checkout-back { color: #CBCDD5; }
+html[data-brand='stallone'][data-theme='dark'] .checkout-back:hover { color: #FF9299; }
+html[data-brand='stallone'][data-theme='dark'] .checkout-card-title p,
+html[data-brand='stallone'][data-theme='dark'] .checkout-field small,
+html[data-brand='stallone'][data-theme='dark'] .checkout-trust-list { color: #C3C5CE; }
+html[data-brand='stallone'][data-theme='dark'] .checkout-totals .checkout-total strong { color: #FF9299; font-variant-numeric: tabular-nums; }
 html[data-brand='stallone'][data-theme='light'] .checkout-card,
 html[data-brand='stallone'][data-theme='light'] .checkout-summary { background: #EAECEF; border-color: #CDD1D8; }
 @media(max-width:700px) {

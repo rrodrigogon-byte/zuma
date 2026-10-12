@@ -55,7 +55,7 @@ export function resolveBrand(pathname = '/', search = '', tenantBrand = '') {
 
 // Ícones da aba e da instalação por marca; as demais marcas mantêm os do index.html.
 export const BRAND_ICONS = {
-  stallone: { icon: STALLONE_MARK, iconType: 'image/svg+xml', touchIcon: '/brand/stallone-icon-192.png', themeColor: '#141416' },
+  stallone: { icon: STALLONE_MARK, iconType: 'image/svg+xml', touchIcon: '/brand/stallone-icon-192.png', themeColor: '#FFFFFF' },
 }
 
 export function brandIcons(brand) {
@@ -124,10 +124,15 @@ export function stalloneEntryFromHost(host, checkout = false) {
     : null
 }
 
-/** Administração clara por padrão, preservando a escolha explícita do usuário. */
+/**
+ * Stallone: loja, checkout e acompanhamento sempre claros (pedido do cliente: sem
+ * fundo preto). No painel, claro por padrão e a escolha explícita do usuário vale.
+ */
 export function brandThemeMode(brand, pathname, preference = 'system') {
   if (!brandHasThemeChoice(brand)) return 'system'
   const mode = normalizeThemeMode(preference)
-  if (mode !== 'system' || brand !== 'stallone') return mode
-  return pathname === '/admin' || pathname.startsWith('/admin/') ? 'light' : 'dark'
+  if (brand !== 'stallone') return mode
+  const admin = pathname === '/admin' || pathname.startsWith('/admin/')
+  if (!admin) return 'light'
+  return mode === 'system' ? 'light' : mode
 }
