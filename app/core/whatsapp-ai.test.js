@@ -153,12 +153,14 @@ test('lista de sessões expõe somente DTO operacional mascarado', async () => {
 
 test('status operacional retorna apenas readiness e métricas agregadas, sem URL de API ou segredo', async () => {
   const original = db.queryRead;
+  const queries = [];
   db.queryRead = async (sql) => {
+    queries.push(sql);
     if (/FROM canais_integracao/.test(sql)) return { rows: [{ id: SESSAO, codigo_publico: SESSAO, nome: 'Dino', status: 'pausado', api_base_url: 'https://secret.invalid', configuracao: { instance: 'dino', segredo_env: 'SECRET' }, ai_consecutive_failures: 2 }] };
     if (/FROM whatsapp_ai_sessions/.test(sql)) return { rows: [{ status: 'humano', total: 2, unassigned: 1 }] };
     if (/FROM tarefas_integracao_canais/.test(sql)) return { rows: [{ status: 'falha', total: 3, dead_letter: 1 }] };
     if (/FROM whatsapp_ai_messages/.test(sql)) return { rows: [{ status: 'unknown', total: 1 }, { status: 'sent', total: 4 }] };
-    if (/FROM whatsapp_ai_provider_runs/.test(sql)) return { rows: [{ total: 5, success: 4, failed: 1, avg_latency_ms: 800, tool_calls: 2 }] };
+    if (/FROM whatsapp_ai_provider_runs/.test(sql)) return { rows: [{ total: 5, success: 4, failed: 1, avg_latency_ms: 800, tool_calls: 2, latency_sample_size: 4, p50_latency_ms: 812.5, p95_latency_ms: 1400.25 }] };
     if (/FROM whatsapp_ai_worker_leases/.test(sql)) return { rows: [{ titular: 'host-private', active: false, expira_em: null, atualizado_em: '2026-09-02T20:00:00Z' }] };
     return { rows: [] };
   };
@@ -171,6 +173,15 @@ test('status operacional retorna apenas readiness e métricas agregadas, sem URL
     assert.equal(status.tasks.deadLetter, 1);
     assert.equal(status.deliveries.unknown, 1);
     assert.equal(status.provider24h.avgLatencyMs, 800);
+    assert.deepEqual(status.provider24h.latency24h, { window: '24h', scope: 'unit', sampleSize: 4, p50Ms: 812.5, p95Ms: 1400.25 });
+    const providerQuery = queries.find(sql => /FROM whatsapp_ai_provider_runs/.test(sql));
+    assert.match(providerQuery, /^\s*SELECT\b/i);
+    assert.match(providerQuery, /empresa_id = \$1 AND loja_id = \$2/);
+    assert.match(providerQuery, /criado_em >= CURRENT_TIMESTAMP - INTERVAL '24 hours'/);
+    assert.match(providerQuery, /percentile_cont\(0\.5\)/);
+    assert.match(providerQuery, /percentile_cont\(0\.95\)/);
+    assert.match(providerQuery, /latency_ms IS NOT NULL AND latency_ms > 0/);
+    assert.doesNotMatch(providerQuery, /\b(INSERT|UPDATE|DELETE|ALTER|DROP)\b/i);
     assert.equal(status.worker.titular, undefined);
     assert.doesNotMatch(JSON.stringify(status), /secret\.invalid|SECRET|host-private/);
   } finally { db.queryRead = original; }

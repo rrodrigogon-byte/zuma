@@ -35,6 +35,61 @@ test('normaliza payload válido ativo e preserva somente allowlist agregada', ()
   assert.doesNotMatch(JSON.stringify(result), /CANARY_NAME|CANARY_ERROR|CANARY_ID|CANARY_HOST|do-not-render/)
 })
 
+test('normaliza percentis reais com decimais, denominador, janela e escopo de unidade', () => {
+  const result = normalizeWhatsappAiOperationalStatus(valid({
+    provider24h: { ...valid().provider24h, latency24h: { window: '24h', scope: 'unit', sampleSize: 3, p50Ms: 12.5, p95Ms: 80.75 } },
+  }), { now: NOW })
+  assert.equal(result.kind, 'valid')
+  assert.deepEqual(result.provider24h.latency24h, { known: true, window: '24h', scope: 'unit', sampleSize: 3, p50Ms: 12.5, p95Ms: 80.75 })
+})
+
+test('payload legacy e zero amostras continuam válidos sem transformar indisponibilidade em zero', () => {
+  const legacy = normalizeWhatsappAiOperationalStatus(valid(), { now: NOW })
+  assert.equal(legacy.kind, 'valid')
+  assert.equal(legacy.provider24h.latency24h.sampleSize, null)
+  assert.equal(legacy.provider24h.latency24h.p50Ms, null)
+  const zeroSamples = normalizeWhatsappAiOperationalStatus(valid({
+    provider24h: { ...valid().provider24h, total: 4, latency24h: { window: '24h', scope: 'unit', sampleSize: 0, p50Ms: null, p95Ms: null } },
+  }), { now: NOW })
+  assert.equal(zeroSamples.kind, 'valid')
+  assert.equal(zeroSamples.provider24h.latency24h.sampleSize, 0)
+  assert.equal(zeroSamples.provider24h.latency24h.p50Ms, null)
+  assert.equal(zeroSamples.provider24h.latency24h.p95Ms, null)
+})
+
+test('percentis malformed, fora da unidade/janela ou inconsistentes ficam indisponíveis sem expor valor cru', () => {
+  for (const latency24h of [
+    { window: '24h', scope: 'unit', sampleSize: 2, p50Ms: '12.5', p95Ms: 80 },
+    { window: '7d', scope: 'unit', sampleSize: 2, p50Ms: 12, p95Ms: 80 },
+    { window: '24h', scope: 'global', sampleSize: 2, p50Ms: 12, p95Ms: 80 },
+    { window: '24h', scope: 'unit', sampleSize: 9, p50Ms: 12, p95Ms: 80 },
+    { window: '24h', scope: 'unit', sampleSize: 2, p50Ms: 80, p95Ms: 12 },
+    { window: '24h', scope: 'unit', sampleSize: 2, p50Ms: NaN, p95Ms: Infinity },
+    { window: '24h', scope: 'unit', sampleSize: 2, p50Ms: 0, p95Ms: 80 },
+  ]) {
+    const result = normalizeWhatsappAiOperationalStatus(valid({
+      provider24h: { ...valid().provider24h, latency24h },
+    }), { now: NOW })
+    assert.equal(result.kind, 'valid')
+    assert.equal(result.provider24h.latency24h.sampleSize, null)
+    assert.equal(result.provider24h.latency24h.p50Ms, null)
+    assert.equal(result.provider24h.latency24h.p95Ms, null)
+    assert.equal(result.provider24h.latency24h.window, null)
+    assert.equal(result.provider24h.latency24h.scope, null)
+  }
+})
+
+test('total positivo com latências ausentes mantém zero amostras explícito, não latência zero', () => {
+  const result = normalizeWhatsappAiOperationalStatus(valid({
+    provider24h: { ...valid().provider24h, total: 5, avgLatencyMs: 0, latency24h: { window: '24h', scope: 'unit', sampleSize: 0, p50Ms: null, p95Ms: null } },
+  }), { now: NOW })
+  assert.equal(result.kind, 'valid')
+  assert.equal(result.provider24h.total, 5)
+  assert.equal(result.provider24h.latency24h.sampleSize, 0)
+  assert.equal(result.provider24h.latency24h.p50Ms, null)
+  assert.equal(result.provider24h.latency24h.p95Ms, null)
+})
+
 test('feature false, canal rascunho, pausado e null continuam válidos sem inferir saúde', () => {
   for (const channel of [
     { status: 'rascunho', lastEventAt: null, lastSyncAt: null },

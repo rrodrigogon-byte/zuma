@@ -55,3 +55,71 @@ test('números negativos, fracionados e acima do inteiro seguro são não verifi
     assert.equal(normalizeCatalogDiagnostic(report({ sourceItems: value })).kind, 'unavailable')
   }
 })
+
+const commonScope = { empresaId: 'empresa-1', lojaId: 'unidade-1', storefrontId: 'storefront-1' }
+function commonPayload() {
+  const value = report({ sourceItems: 2, mapped: 1, aligned: 1, divergent: 0, ambiguous: 0, notVerified: 0, unmapped: 1 }, { scope: commonScope })
+  value.catalogDiagnostic.commonRead = {
+    mode: 'read-only-common-catalog', scope: commonScope,
+    summary: { sourceItems: 2, available: 1, blocked: 0, unavailable: 1, outOfScope: 0, reasonCounts: { NO_EXACT_MAPPING: 1 } },
+    items: [
+      { status: 'available', source: 'legacy', sku: 'PRIVATE-SKU-CANARY', variantId: 'PRIVATE-VARIANT-CANARY', priceCents: 9999, stockAvailable: 2, sourceStockAvailable: 2, matchedBy: 'id', reasons: [], scope: commonScope, token: 'PRIVATE-TOKEN-CANARY' },
+      { status: 'unavailable', sku: null, variantId: null, priceCents: null, stockAvailable: null, sourceStockAvailable: null, reasons: ['NO_EXACT_MAPPING'] },
+    ],
+  }
+  return value
+}
+test('leitura comum normaliza somente contagens e motivos, sem SKU/preço/token ou valores brutos', () => {
+  const normalized = normalizeCatalogDiagnostic(commonPayload(), commonScope)
+  assert.equal(normalized.kind, 'ready')
+  assert.equal(normalized.common.summary.available, 1)
+  assert.equal(normalized.common.reasons[0].count, 1)
+  assert.doesNotMatch(JSON.stringify(normalized), /PRIVATE-|9999|priceCents|stockAvailable/)
+})
+test('payload antigo sem leitura comum continua utilizável, sem consenso inventado', () => {
+  const normalized = normalizeCatalogDiagnostic(report())
+  assert.equal(normalized.kind, 'ready')
+  assert.equal(normalized.common, null)
+  assert.equal(normalized.commonUnavailable, false)
+})
+test('DTO comum incompleto ou agregado divergente não invalida resumo antigo nem vira zero', () => {
+  for (const change of [value => { value.catalogDiagnostic.commonRead.items.pop() }, value => { value.catalogDiagnostic.commonRead.summary.available = 2 }]) {
+    const value = commonPayload(); change(value)
+    const normalized = normalizeCatalogDiagnostic(value, commonScope)
+    assert.equal(normalized.kind, 'ready')
+    assert.equal(normalized.summary.sourceItems, 2)
+    assert.equal(normalized.common, null)
+    assert.equal(normalized.commonUnavailable, true)
+  }
+})
+test('escopo comum divergente é indisponível e escopo raiz divergente é rejeitado contra o pedido', () => {
+  const value = commonPayload()
+  value.catalogDiagnostic.commonRead.scope = { ...commonScope, lojaId: 'other-unit' }
+  assert.equal(normalizeCatalogDiagnostic(value, commonScope).commonUnavailable, true)
+  assert.deepEqual(normalizeCatalogDiagnostic(commonPayload(), { ...commonScope, empresaId: 'other-company' }), { kind: 'unavailable', reason: 'context' })
+})
+test('item bloqueado com dados individuais indevidos invalida somente a leitura comum', () => {
+  const value = commonPayload()
+  value.catalogDiagnostic.commonRead.items[1].sku = 'PRIVATE-BLOCKED-CANARY'
+  const normalized = normalizeCatalogDiagnostic(value, commonScope)
+  assert.equal(normalized.kind, 'ready')
+  assert.equal(normalized.commonUnavailable, true)
+  assert.doesNotMatch(JSON.stringify(normalized), /PRIVATE-/)
+})
+test('motivos agregados devem corresponder aos itens e ordem das chaves não muda o resultado', () => {
+  const value = commonPayload()
+  const common = value.catalogDiagnostic.commonRead
+  common.summary.available = 0; common.summary.blocked = 1
+  common.items[0] = { status: 'blocked', reasons: ['CORE_UNIT_MISSING', 'UNIT_NOT_COMPARABLE'], sku: null, variantId: null, priceCents: null, stockAvailable: null, sourceStockAvailable: null }
+  common.summary.reasonCounts = { UNIT_NOT_COMPARABLE: 1, NO_EXACT_MAPPING: 1, CORE_UNIT_MISSING: 1 }
+  assert.equal(normalizeCatalogDiagnostic(value, commonScope).common.summary.blocked, 1)
+  common.summary.reasonCounts.CORE_UNIT_MISSING = 2
+  assert.equal(normalizeCatalogDiagnostic(value, commonScope).commonUnavailable, true)
+})
+test('zero registros reais permanece vazio explícito na leitura comum', () => {
+  const value = report({ sourceItems: 0, mapped: 0, aligned: 0, divergent: 0, ambiguous: 0, notVerified: 0, unmapped: 0 }, { scope: commonScope })
+  value.catalogDiagnostic.commonRead = { mode: 'read-only-common-catalog', scope: commonScope, summary: { sourceItems: 0, available: 0, blocked: 0, unavailable: 0, outOfScope: 0, reasonCounts: {} }, items: [] }
+  const normalized = normalizeCatalogDiagnostic(value, commonScope)
+  assert.equal(normalized.common.summary.sourceItems, 0)
+  assert.equal(normalized.mappedRate, null)
+})

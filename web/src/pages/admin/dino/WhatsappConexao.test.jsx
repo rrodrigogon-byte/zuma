@@ -112,6 +112,43 @@ describe('WhatsappConexao · saúde operacional IA', () => {
     await unmount(renderer)
   })
 
+  it('mostra p50/p95 válidos com denominador, janela e limitação ao provedor', async () => {
+    apiMock.get.mockImplementation(path => path.startsWith('/api/admin/barbearia/whatsapp-conexao')
+      ? Promise.resolve({ conexao: connection, podeGerenciar: false })
+      : Promise.resolve(operational(null, { provider24h: { total: 5, success: 5, failed: 0, avgLatencyMs: 700, toolCalls: 1, latency24h: { window: '24h', scope: 'unit', sampleSize: 4, p50Ms: 512.5, p95Ms: 1400.25 } } })))
+    let renderer
+    await act(async () => { renderer = create(<WhatsappConexao />) })
+    await tick()
+    const html = textOf(renderer)
+    expect(html).toContain('p50 512,5 ms · p95 1.400,25 ms')
+    expect(html).toContain('4 durações positivas · janela 24 h · unidade atual')
+    expect(html).toContain('não é latência ponta a ponta da conversa')
+    await unmount(renderer)
+  })
+
+  it('não transforma zero amostras em latência zero nem expõe percentil malformado', async () => {
+    apiMock.get.mockImplementation(path => path.startsWith('/api/admin/barbearia/whatsapp-conexao')
+      ? Promise.resolve({ conexao: connection, podeGerenciar: false })
+      : Promise.resolve(operational(null, { provider24h: { total: 3, success: 3, failed: 0, avgLatencyMs: 0, toolCalls: 0, latency24h: { window: '24h', scope: 'unit', sampleSize: 0, p50Ms: null, p95Ms: null } } })))
+    let renderer
+    await act(async () => { renderer = create(<WhatsappConexao />) })
+    await tick()
+    expect(textOf(renderer)).toContain('sem amostras válidas')
+    expect(textOf(renderer)).toContain('0 durações positivas registradas; zero também pode ser ausência de medição')
+    await unmount(renderer)
+
+    apiMock.get.mockImplementation(path => path.startsWith('/api/admin/barbearia/whatsapp-conexao')
+      ? Promise.resolve({ conexao: connection, podeGerenciar: false })
+      : Promise.resolve(operational(null, { provider24h: { total: 3, success: 3, failed: 0, avgLatencyMs: 500, toolCalls: 0, latency24h: { window: '24h', scope: 'unit', sampleSize: 2, p50Ms: 'not-a-number', p95Ms: 900 } } })))
+    let malformedRenderer
+    await act(async () => { malformedRenderer = create(<WhatsappConexao />) })
+    await tick()
+    const malformedText = textOf(malformedRenderer)
+    expect(malformedText).toContain('Percentis indisponíveis nesta leitura')
+    expect(malformedText).not.toContain('not-a-number')
+    await unmount(malformedRenderer)
+  })
+
   it('resume dead-letter como próximo passo e mantém detalhes recolhidos sem mutação', async () => {
     apiMock.get.mockImplementation(path => path.startsWith('/api/admin/barbearia/whatsapp-conexao')
       ? Promise.resolve({ conexao: connection, podeGerenciar: false })

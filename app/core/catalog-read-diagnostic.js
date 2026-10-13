@@ -12,6 +12,17 @@ function firstOwnValue(row, fields) {
   return null;
 }
 
+function ownField(row, fields) {
+  for (const field of fields) {
+    if (Object.prototype.hasOwnProperty.call(row || {}, field)) return { present: true, value: row[field] };
+  }
+  return { present: false, value: null };
+}
+
+function meaningfulRawValue(value) {
+  return value !== null && value !== undefined && (typeof value !== 'string' || value.trim() !== '');
+}
+
 /**
  * Converts a contract money value to integer cents without using binary float
  * arithmetic. Ambiguous locale/thousand separators and more than two decimal
@@ -86,11 +97,16 @@ function coreRowsInScope(rows, scope) {
 function priceSnapshot(legacy, core) {
   const legacyValue = firstOwnValue(legacy, ['precoVenda', 'preco_venda', 'preco', 'price']);
   const coreValue = firstOwnValue(core, ['core_price', 'corePrice', 'preco', 'price']);
-  const corePromo = firstOwnValue(core, ['core_promotional_price', 'corePromotionalPrice', 'preco_promocional']);
+  const corePromoField = ownField(core, ['core_promotional_price', 'corePromotionalPrice', 'preco_promocional']);
+  const promoPresent = corePromoField.present && corePromoField.value !== null && corePromoField.value !== undefined;
+  const corePromo = promoPresent ? corePromoField.value : null;
+  const corePromotionalCents = moneyToCents(corePromo);
   return {
     legacyCents: moneyToCents(legacyValue),
     coreCents: moneyToCents(coreValue),
-    corePromotionalCents: moneyToCents(corePromo),
+    corePromotionalCents,
+    promotionalPresent: promoPresent,
+    promotionalInvalid: promoPresent && corePromotionalCents === null,
     compared: 'base',
   };
 }
@@ -281,6 +297,275 @@ export function compareScopedCatalog({ sources = [], coreRows = [], scope = {} }
   };
 }
 
+function commonIdentifierCandidates(item = {}) {
+  const candidates = [];
+  const itemId = text(item.id);
+  const itemSku = text(firstOwnValue(item, ['sku', 'cod', 'codigo']));
+  if (itemId) candidates.push({ kind: 'id', value: itemId });
+  if (itemSku && itemSku !== itemId) candidates.push({ kind: 'sku', value: itemSku });
+  return candidates;
+}
+
+function commonRowKey(row = {}) {
+  return text(row.variant_id ?? row.variantId)
+    || [text(row.legacy_key ?? row.legacyKey), text(row.sku)].join('|');
+}
+
+function commonRowsConflict(rows) {
+  if (rows.length < 2) return false;
+  const fields = [
+    ['variant_id', 'variantId'],
+    ['sku'],
+    ['core_price', 'corePrice', 'preco', 'price'],
+    ['core_promotional_price', 'corePromotionalPrice', 'preco_promocional'],
+    ['core_available', 'coreAvailable', 'disponivel'],
+    ['core_unit', 'coreUnit'],
+    ['loja_id', 'lojaId'],
+    ['core_storefront_id', 'storefront_id', 'storefrontId'],
+    ['core_product_status', 'coreProductStatus', 'product_status', 'productStatus'],
+    ['core_variant_active', 'coreVariantActive', 'variant_active', 'variantActive'],
+    ['core_published', 'corePublished', 'publicado'],
+  ];
+  const fingerprints = rows.map(row => fields.map(fieldSet => {
+    const field = ownField(row, fieldSet);
+    return [field.present, field.value === undefined ? null : field.value];
+  }));
+  return fingerprints.some(fingerprint => JSON.stringify(fingerprint) !== JSON.stringify(fingerprints[0]));
+}
+
+function commonReadItem({ source, status, reasons = [], matchedBy = null, mappingKey = null, row = null, priceCents = null, corePriceCents = null, promotionalPriceCents = null, stockAvailable = null, sourceStockAvailable = null, scope }) {
+  const available = status === 'available' && row;
+  return {
+    source,
+    status,
+    reasons,
+    matchedBy: available ? matchedBy : null,
+    mappingKey: available ? mappingKey : null,
+    variantId: available ? text(row.variant_id ?? row.variantId) : null,
+    sku: available ? text(row.sku) : null,
+    priceCents: available ? priceCents : null,
+    stockAvailable: available ? stockAvailable : null,
+    sourceStockAvailable: available ? sourceStockAvailable : null,
+    price: available ? {
+      cents: priceCents,
+      baseCents: corePriceCents,
+      promotionalCents: promotionalPriceCents,
+    } : { cents: null, baseCents: null, promotionalCents: null },
+    stock: available ? { available: stockAvailable, sourceAvailable: sourceStockAvailable } : { available: null, sourceAvailable: null },
+    scope: available ? {
+      empresaId: scope.empresaId,
+      lojaId: scope.lojaId,
+      storefrontId: scope.storefrontId,
+    } : null,
+  };
+}
+
+/**
+ * Builds the small common read model used by existing read-only surfaces.
+ *
+ * This is intentionally stricter than the diagnostic comparison: it only
+ * emits a variant/SKU/price/stock when an explicit, case-sensitive ID or SKU
+ * match is unique and both sources agree. Missing, ambiguous, duplicated,
+ * out-of-scope or divergent data remains blocked/unavailable; no name match,
+ * source preference or silent fallback is allowed. The helper is pure and
+ * accepts rows already authorized by the tenant/unit/storefront reader.
+ */
+export function buildCommonCatalogRead({ sources = [], coreRows = [], scope = {} } = {}) {
+  requireDiagnosticScope(scope);
+  if (!Array.isArray(sources)) throw scopeError('fontes do leitor indisponíveis', 'SOURCE_READ_FAILED');
+  for (const source of sources) {
+    if (!source || source.error || !Array.isArray(source.items)) throw scopeError('fonte legada indisponível', 'SOURCE_READ_FAILED');
+  }
+  if (!Array.isArray(coreRows)) throw scopeError('fonte Commerce indisponível', 'SOURCE_READ_FAILED');
+
+  const selectedScope = { empresaId: text(scope.empresaId), lojaId: text(scope.lojaId), storefrontId: text(scope.storefrontId) };
+  const scopedCoreRows = coreRowsInScope(coreRows, selectedScope);
+  const byLegacyKey = new Map();
+  const bySku = new Map();
+  const coreSkuCounts = new Map();
+  for (const row of scopedCoreRows) {
+    const legacyKey = text(row.legacy_key ?? row.legacyKey);
+    if (legacyKey) byLegacyKey.set(legacyKey, [...(byLegacyKey.get(legacyKey) || []), row]);
+    const sku = text(row.sku);
+    if (sku) {
+      bySku.set(sku, [...(bySku.get(sku) || []), row]);
+      coreSkuCounts.set(sku, (coreSkuCounts.get(sku) || 0) + 1);
+    }
+  }
+
+  const sourceRows = [];
+  for (const source of sources) {
+    const sourceName = text(source.name) || 'unknown';
+    for (const item of source.items) {
+      const candidates = commonIdentifierCandidates(item);
+      const explicitRows = candidates.some(candidate => byLegacyKey.has(candidate.value));
+      const firstMapping = candidates.map(candidate => byLegacyKey.get(candidate.value)?.[0]).find(Boolean) || null;
+      if (!scopeMatches(item, selectedScope, { mapping: firstMapping, authorizedByExactMap: explicitRows })) {
+        sourceRows.push({ source: sourceName, item, outOfScope: true, candidates });
+        continue;
+      }
+      sourceRows.push({ source: sourceName, item, outOfScope: false, candidates });
+    }
+  }
+
+  const inScopeRows = sourceRows.filter(row => !row.outOfScope);
+  const sourceIdentifierCounts = new Map();
+  for (const sourceRow of inScopeRows) {
+    for (const candidate of sourceRow.candidates) {
+      const key = `${candidate.kind}:${candidate.value}`;
+      sourceIdentifierCounts.set(key, (sourceIdentifierCounts.get(key) || 0) + 1);
+    }
+  }
+
+  const preliminary = inScopeRows.map(sourceRow => {
+    const found = [];
+    for (const candidate of sourceRow.candidates) {
+      const mapped = byLegacyKey.get(candidate.value) || [];
+      for (const row of mapped) found.push({ row, matchedBy: candidate.kind, mappingKey: candidate.value });
+      // A SKU match is valid even when no legacy import row exists. It is
+      // still exact/case-sensitive and is never used if it conflicts with an
+      // explicit ID mapping.
+      if (candidate.kind === 'sku') {
+        for (const row of bySku.get(candidate.value) || []) found.push({ row, matchedBy: 'sku', mappingKey: candidate.value });
+      }
+    }
+    const grouped = new Map();
+    for (const match of found) {
+      const key = commonRowKey(match.row);
+      grouped.set(key, [...(grouped.get(key) || []), match.row]);
+    }
+    const duplicateConflictKeys = new Set([...grouped.entries()]
+      .filter(([, rows]) => commonRowsConflict(rows))
+      .map(([key]) => key));
+    const unique = new Map();
+    for (const match of found) {
+      const key = commonRowKey(match.row);
+      const previous = unique.get(key);
+      if (!previous || (previous.matchedBy === 'sku' && match.matchedBy === 'id')) unique.set(key, match);
+    }
+    return { ...sourceRow, matches: [...unique.values()], duplicateConflictKeys };
+  });
+  const claimedVariants = new Map();
+  for (const entry of preliminary) {
+    if (entry.matches.length !== 1) continue;
+    const variantId = text(entry.matches[0].row.variant_id ?? entry.matches[0].row.variantId);
+    if (variantId) claimedVariants.set(variantId, [...(claimedVariants.get(variantId) || []), entry]);
+  }
+
+  const items = [];
+  let available = 0;
+  let blocked = 0;
+  let unavailable = 0;
+  const reasonCounts = new Map();
+  const addReasons = reasons => reasons.forEach(reason => reasonCounts.set(reason, (reasonCounts.get(reason) || 0) + 1));
+  for (const entry of preliminary) {
+    if (!entry.matches.length) {
+      unavailable += 1;
+      const reasons = ['NO_EXACT_MAPPING'];
+      addReasons(reasons);
+      items.push(commonReadItem({ source: entry.source, status: 'unavailable', reasons, scope: selectedScope }));
+      continue;
+    }
+    if (entry.matches.length !== 1) {
+      blocked += 1;
+      const duplicateReasons = entry.candidates
+        .filter(candidate => candidate.kind === 'sku' && coreSkuCounts.get(candidate.value) > 1)
+        .map(() => 'DUPLICATE_CORE_SKU');
+      const reasons = ['AMBIGUOUS_MAPPING', ...new Set(duplicateReasons)];
+      addReasons(reasons);
+      items.push(commonReadItem({ source: entry.source, status: 'blocked', reasons, scope: selectedScope }));
+      continue;
+    }
+
+    const match = entry.matches[0];
+    const row = match.row;
+    const rowKey = commonRowKey(row);
+    const sourceDuplicate = entry.candidates.some(candidate => sourceIdentifierCounts.get(`${candidate.kind}:${candidate.value}`) > 1);
+    const variantId = text(row.variant_id ?? row.variantId);
+    const coreSku = text(row.sku);
+    const sourceSku = text(firstOwnValue(entry.item, ['sku', 'cod', 'codigo']));
+    const sourceUnitId = text(entry.item.lojaId ?? entry.item.loja_id);
+    const coreUnitId = text(row.loja_id ?? row.lojaId);
+    const coreStorefrontId = text(row.core_storefront_id ?? row.storefront_id ?? row.storefrontId);
+    const sourceMeasure = text(firstOwnValue(entry.item, ['unidade', 'unit']));
+    const coreMeasure = text(firstOwnValue(row, ['core_unit', 'coreUnit']));
+    const productStatus = ownField(row, ['core_product_status', 'coreProductStatus', 'product_status', 'productStatus']);
+    const variantActive = ownField(row, ['core_variant_active', 'coreVariantActive', 'variant_active', 'variantActive']);
+    const published = ownField(row, ['core_published', 'corePublished', 'publicado']);
+    const price = priceSnapshot(entry.item, row);
+    const stock = stockSnapshot(entry.item, row);
+    const effectiveCorePrice = price.promotionalInvalid ? null : price.corePromotionalCents ?? price.coreCents;
+    const reasons = [];
+    if (sourceDuplicate) reasons.push('DUPLICATE_SOURCE_IDENTIFIER');
+    if (variantId && claimedVariants.get(variantId)?.length > 1) reasons.push('DUPLICATE_VARIANT_MAPPING');
+    if (entry.duplicateConflictKeys.has(rowKey)) reasons.push('DUPLICATE_VARIANT_CONFLICT');
+    if (!variantId) reasons.push('VARIANT_ID_MISSING');
+    if (!coreSku) reasons.push('CORE_SKU_MISSING');
+    if (!sourceUnitId) reasons.push('SOURCE_SCOPE_MISSING');
+    if (!coreUnitId) reasons.push('CORE_SCOPE_MISSING');
+    if (!coreStorefrontId) reasons.push('STOREFRONT_MISSING');
+    else if (coreStorefrontId !== selectedScope.storefrontId) reasons.push('STOREFRONT_MISMATCH');
+    if (sourceSku && coreSku && sourceSku !== coreSku) reasons.push('SKU_MISMATCH');
+    if (coreSku && coreSkuCounts.get(coreSku) > 1) reasons.push('DUPLICATE_CORE_SKU');
+    if (sourceUnitId && sourceUnitId !== selectedScope.lojaId) reasons.push('SOURCE_UNIT_MISMATCH');
+    if (coreUnitId && coreUnitId !== selectedScope.lojaId) reasons.push('CORE_UNIT_MISMATCH');
+    if (!sourceMeasure) reasons.push('SOURCE_UNIT_MISSING');
+    if (!coreMeasure) reasons.push('CORE_UNIT_MISSING');
+    if (!sourceMeasure || !coreMeasure) reasons.push('UNIT_NOT_COMPARABLE');
+    else if (sourceMeasure !== coreMeasure) reasons.push('UNIT_MISMATCH');
+    if (!productStatus.present) reasons.push('CORE_PRODUCT_STATUS_MISSING');
+    else if (productStatus.value !== 'active') reasons.push('CORE_PRODUCT_NOT_ACTIVE');
+    if (!variantActive.present) reasons.push('CORE_VARIANT_ACTIVE_MISSING');
+    else if (variantActive.value !== true) reasons.push('CORE_VARIANT_NOT_ACTIVE');
+    if (!published.present) reasons.push('CORE_PUBLISHED_MISSING');
+    else if (published.value !== true) reasons.push('CORE_NOT_PUBLISHED');
+    if (row.core_stock_scope && String(row.core_stock_scope).toLowerCase() === 'global') reasons.push('GLOBAL_STOCK');
+    if (price.legacyCents === null) reasons.push('SOURCE_PRICE_MISSING');
+    if (price.promotionalInvalid) reasons.push('PROMOTIONAL_PRICE_INVALID');
+    if (effectiveCorePrice === null) reasons.push('STOREFRONT_PRICE_MISSING');
+    if (price.legacyCents !== null && effectiveCorePrice !== null && price.legacyCents !== effectiveCorePrice) reasons.push('PRICE_DIVERGENCE');
+    if (stock.legacyAvailable === null) reasons.push('SOURCE_STOCK_MISSING');
+    if (stock.coreAvailable === null) reasons.push('STOREFRONT_STOCK_MISSING');
+    if (stock.legacyAvailable !== null && stock.coreAvailable !== null && stock.legacyAvailable !== stock.coreAvailable) reasons.push('STOCK_DIVERGENCE');
+    if (reasons.length) {
+      blocked += 1;
+      addReasons(reasons);
+      items.push(commonReadItem({ source: entry.source, status: 'blocked', reasons, scope: selectedScope }));
+      continue;
+    }
+    available += 1;
+    items.push(commonReadItem({
+      source: entry.source,
+      status: 'available',
+      reasons: [],
+      matchedBy: match.matchedBy,
+      mappingKey: match.mappingKey,
+      row,
+      priceCents: effectiveCorePrice,
+      corePriceCents: price.coreCents,
+      promotionalPriceCents: price.corePromotionalCents,
+      stockAvailable: stock.coreAvailable,
+      sourceStockAvailable: stock.legacyAvailable,
+      scope: selectedScope,
+    }));
+  }
+
+  return {
+    mode: 'read-only-common-catalog',
+    scope: selectedScope,
+    sourceLabels: [...new Set(sources.map(source => text(source.name)).filter(Boolean))],
+    summary: {
+      sourceItems: inScopeRows.length,
+      available,
+      blocked,
+      unavailable,
+      outOfScope: sourceRows.length - inScopeRows.length,
+      reasonCounts: Object.fromEntries(reasonCounts),
+    },
+    items,
+  };
+}
+
 function scopeError(message, code) {
   const error = new Error(message);
   error.code = code;
@@ -309,20 +594,28 @@ export async function readScopedCatalogDiagnostic({ queryRead, legacyProducts = 
   );
   if (!storefront?.rows?.[0]) throw scopeError('storefront fora do escopo da unidade selecionada', 'STORE_SCOPE_MISMATCH');
   const core = await queryRead(
-    `SELECT li.legacy_key, li.empresa_id, li.loja_id,
-            v.id AS variant_id, v.sku,
+    `SELECT li.legacy_key, p.id AS product_id, p.empresa_id, selected_storefront.loja_id,
+            p.status AS core_product_status, v.id AS variant_id, v.sku,
+            v.ativo AS core_variant_active, pc.publicado AS core_published,
+            pc.storefront_id AS core_storefront_id,
             NULL::text AS core_unit,
             price.preco AS core_price, price.preco_promocional AS core_promotional_price,
             stock.core_available,
             stock.core_reserved,
             stock.core_committed,
             stock.core_stock_scope
-       FROM commerce_legacy_imports li
-       JOIN commerce_products p ON p.empresa_id = li.empresa_id AND p.id = li.target_id
+       FROM commerce_storefronts selected_storefront
+       JOIN commerce_product_channels pc
+         ON pc.empresa_id = selected_storefront.empresa_id
+        AND pc.storefront_id = selected_storefront.id
+       JOIN commerce_products p
+         ON p.empresa_id = pc.empresa_id AND p.id = pc.product_id
        JOIN commerce_product_variants v ON v.empresa_id = p.empresa_id AND v.product_id = p.id
-       JOIN commerce_product_channels pc ON pc.empresa_id = p.empresa_id
-                                        AND pc.product_id = p.id
-                                        AND pc.storefront_id = $3
+       LEFT JOIN commerce_legacy_imports li
+         ON li.empresa_id = p.empresa_id
+        AND li.entity = 'product'
+        AND li.target_id = p.id
+        AND li.loja_id = $2
        LEFT JOIN LATERAL (
          SELECT vp.preco, vp.preco_promocional
            FROM commerce_variant_prices vp
@@ -344,14 +637,20 @@ export async function readScopedCatalogDiagnostic({ queryRead, legacyProducts = 
           WHERE il.empresa_id = v.empresa_id AND il.variant_id = v.id
             AND (loc.loja_id = $2 OR loc.loja_id IS NULL) AND loc.ativo = true
        ) stock ON true
-      WHERE li.empresa_id = $1 AND li.entity = 'product' AND li.loja_id = $2
-      ORDER BY li.legacy_key, v.sku, v.id`,
+      WHERE selected_storefront.empresa_id = $1
+        AND selected_storefront.id = $3
+        AND selected_storefront.status = 'active'
+        AND selected_storefront.loja_id = $2
+      ORDER BY li.legacy_key NULLS LAST, v.sku, v.id`,
     [selectedScope.empresaId, selectedScope.lojaId, selectedScope.storefrontId],
   );
   if (!Array.isArray(core?.rows)) throw scopeError('leitura Commerce incompleta', 'SOURCE_READ_FAILED');
-  return compareScopedCatalog({
-    sources: Array.isArray(sources) ? sources : [{ name: 'legacy-revenda', items: Array.isArray(legacyProducts) ? legacyProducts : [] }],
+  const readSources = Array.isArray(sources) ? sources : [{ name: 'legacy-revenda', items: Array.isArray(legacyProducts) ? legacyProducts : [] }];
+  const report = compareScopedCatalog({
+    sources: readSources,
     coreRows: core?.rows || [],
     scope: selectedScope,
   });
+  report.commonRead = buildCommonCatalogRead({ sources: readSources, coreRows: core.rows, scope: selectedScope });
+  return report;
 }

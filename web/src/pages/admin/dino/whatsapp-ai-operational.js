@@ -22,6 +22,11 @@ function safeCount(value) {
   return value
 }
 
+function safeLatency(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return null
+  return value
+}
+
 function normalizeCountMap(value, allowedKeys) {
   if (!isRecord(value)) return { known: false, counts: {}, unclassified: 0 }
   const counts = Object.fromEntries([...allowedKeys].map((key) => [key, 0]))
@@ -56,16 +61,32 @@ function normalizeTimestamp(value, now, kind = 'event') {
   return { state: 'current', value: date.toISOString() }
 }
 
+function normalizeProviderLatency(value, total) {
+  const unavailable = { known: false, window: null, scope: null, sampleSize: null, p50Ms: null, p95Ms: null }
+  if (value == null) return unavailable
+  if (!isRecord(value)) return unavailable
+  const window = value.window === '24h' ? value.window : null
+  const scope = value.scope === 'unit' ? value.scope : null
+  const sampleSize = safeCount(value.sampleSize)
+  const p50Ms = safeLatency(value.p50Ms)
+  const p95Ms = safeLatency(value.p95Ms)
+  if (window === null || scope === null || sampleSize === null || sampleSize > total) return unavailable
+  if (sampleSize === 0) return { known: true, window, scope, sampleSize, p50Ms: null, p95Ms: null }
+  if (p50Ms === null || p95Ms === null || p95Ms < p50Ms) return unavailable
+  return { known: true, window, scope, sampleSize, p50Ms, p95Ms }
+}
+
 function normalizeProvider(value) {
-  if (!isRecord(value)) return { known: false, total: null, success: null, failed: null, avgLatencyMs: null, toolCalls: null }
+  if (!isRecord(value)) return { known: false, total: null, success: null, failed: null, avgLatencyMs: null, toolCalls: null, latency24h: null }
   const fields = ['total', 'success', 'failed', 'avgLatencyMs', 'toolCalls']
   const output = {}
   for (const field of fields) {
-    if (!Object.prototype.hasOwnProperty.call(value, field)) return { known: false, total: null, success: null, failed: null, avgLatencyMs: null, toolCalls: null }
+    if (!Object.prototype.hasOwnProperty.call(value, field)) return { known: false, total: null, success: null, failed: null, avgLatencyMs: null, toolCalls: null, latency24h: null }
     output[field] = safeCount(value[field])
-    if (output[field] == null) return { known: false, total: null, success: null, failed: null, avgLatencyMs: null, toolCalls: null }
+    if (output[field] == null) return { known: false, total: null, success: null, failed: null, avgLatencyMs: null, toolCalls: null, latency24h: null }
   }
-  return { known: true, ...output, latencyLabel: output.total === 0 ? 'sem execuções' : null }
+  const latency24h = normalizeProviderLatency(value.latency24h, output.total)
+  return { known: true, ...output, latency24h, latencyLabel: output.total === 0 ? 'sem execuções' : null }
 }
 
 function normalizeChannel(value, now) {

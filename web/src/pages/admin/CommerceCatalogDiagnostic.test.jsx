@@ -8,7 +8,7 @@ vi.mock('../../lib/api', () => ({ api: apiMock }))
 import CommerceCatalogDiagnostic from './CommerceCatalogDiagnostic'
 
 const scope = { mode: 'core', empresaId: 'empresa-1', unitId: 'unidade-1', storefrontId: 'storefront-1', canReadReports: true }
-const payload = (summary = {}) => ({ catalogDiagnostic: { mode: 'read-only-diagnostic', summary: { sourceItems: 2, mapped: 2, aligned: 1, divergent: 1, ambiguous: 0, unmapped: 0, notVerified: 0, coreOnly: 0, outOfScope: 0, ...summary }, items: [] } })
+const payload = (summary = {}, selected = scope) => ({ catalogDiagnostic: { mode: 'read-only-diagnostic', scope: { empresaId: selected.empresaId, lojaId: selected.unitId, storefrontId: selected.storefrontId }, summary: { sourceItems: 2, mapped: 2, aligned: 1, divergent: 1, ambiguous: 0, unmapped: 0, notVerified: 0, coreOnly: 0, outOfScope: 0, ...summary }, items: [] } })
 const tick = () => new Promise(resolve => setTimeout(resolve, 0))
 const text = node => typeof node === 'string' ? node : (node?.children || []).map(text).join(' ')
 const button = renderer => renderer.root.findAllByType('button')[0]
@@ -103,7 +103,7 @@ describe('CommerceCatalogDiagnostic', () => {
     await act(async () => { flights[0].resolve(payload({ divergent: 9 })) })
     await tick()
     expect(text(renderer.root)).not.toContain('9')
-    await act(async () => { flights[1].resolve(payload({ aligned: 2, divergent: 0 })) })
+    await act(async () => { flights[1].resolve(payload({ aligned: 2, divergent: 0 }, { ...scope, storefrontId: 'storefront-2' })) })
     await tick()
     expect(text(renderer.root)).toContain('Alinhados')
   })
@@ -125,3 +125,49 @@ for (const [key, next] of [['empresaId', 'empresa-2'], ['unitId', 'unidade-2']])
     await act(async () => { renderer.unmount() })
   })
 }
+
+it('renderiza leitura comum apenas agregada e sem oferta, SKU/preço/token', async () => {
+  const value = payload({ aligned: 1, divergent: 0, mapped: 1, unmapped: 1 })
+  const selected = value.catalogDiagnostic.scope
+  value.catalogDiagnostic.commonRead = {
+    mode: 'read-only-common-catalog', scope: selected,
+    summary: { sourceItems: 2, available: 1, blocked: 0, unavailable: 1, outOfScope: 0, reasonCounts: { NO_EXACT_MAPPING: 1 } },
+    items: [
+      { status: 'available', reasons: [], scope: selected, matchedBy: 'id', sku: 'PRIVATE-COMMON-SKU', variantId: 'PRIVATE-COMMON-VARIANT', priceCents: 9999, stockAvailable: 2, sourceStockAvailable: 2, token: 'PRIVATE-COMMON-TOKEN' },
+      { status: 'unavailable', reasons: ['NO_EXACT_MAPPING'], sku: null, variantId: null, priceCents: null, stockAvailable: null, sourceStockAvailable: null },
+    ],
+  }
+  apiMock.get.mockResolvedValue(value)
+  let renderer
+  await act(async () => { renderer = create(<CommerceCatalogDiagnostic {...scope} />) })
+  await act(async () => { button(renderer).props.onClick() })
+  const rendered = text(renderer.root)
+  expect(rendered).toContain('Correspondência verificável para comparação')
+  expect(rendered).toContain('não é oferta nem autorização de venda')
+  expect(rendered).not.toContain('PRIVATE-')
+  expect(rendered).not.toContain('R$')
+  expect(rendered).not.toContain('9999')
+  expect(apiMock.get).toHaveBeenCalledTimes(1)
+  await act(async () => { renderer.unmount() })
+})
+it('resposta fora da empresa/unidade/vitrine pedida não apresenta contagens', async () => {
+  apiMock.get.mockResolvedValue(payload({}, { ...scope, empresaId: 'empresa-externa' }))
+  let renderer
+  await act(async () => { renderer = create(<CommerceCatalogDiagnostic {...scope} />) })
+  await act(async () => { button(renderer).props.onClick() })
+  expect(text(renderer.root)).not.toContain('Itens de origem')
+  expect(text(renderer.root)).toContain('Diagnóstico não verificável')
+  await act(async () => { renderer.unmount() })
+})
+it('leitura comum malformada preserva diagnóstico anterior sem zero confiável', async () => {
+  const value = payload()
+  value.catalogDiagnostic.commonRead = { mode: 'read-only-common-catalog', scope: value.catalogDiagnostic.scope, summary: {}, items: [] }
+  apiMock.get.mockResolvedValue(value)
+  let renderer
+  await act(async () => { renderer = create(<CommerceCatalogDiagnostic {...scope} />) })
+  await act(async () => { button(renderer).props.onClick() })
+  expect(text(renderer.root)).toContain('Itens de origem')
+  expect(text(renderer.root)).toContain('não pôde ser verificada')
+  expect(text(renderer.root)).not.toContain('Disponíveis para comparação')
+  await act(async () => { renderer.unmount() })
+})
