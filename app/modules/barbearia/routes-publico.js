@@ -464,6 +464,8 @@ router.get('/:slug/app-barbeiro.webmanifest', (req, res) => {
     theme_color: '#0E1014',
     categories: ['business', 'productivity'],
     icons: icones,
+    // App da loja (Android) quando publicado; o PWA continua valendo para quem já instalou.
+    ...(ehDino && process.env.ANDROID_TWA_PACKAGE ? { related_applications: [{ platform: 'play', id: String(process.env.ANDROID_TWA_PACKAGE), url: `https://play.google.com/store/apps/details?id=${encodeURIComponent(String(process.env.ANDROID_TWA_PACKAGE))}` }], prefer_related_applications: false } : {}),
     shortcuts: [
       { name: 'Agenda de hoje', short_name: 'Hoje', url: inicio, icons: icones.slice(0, 1) },
       { name: 'Encaixe de cliente', short_name: 'Encaixe', url: `${inicio}?acao=encaixe`, icons: icones.slice(0, 1) },

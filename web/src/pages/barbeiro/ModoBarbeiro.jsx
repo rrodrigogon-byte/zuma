@@ -10,6 +10,7 @@ import { api } from '../../lib/api'
 import { lerAgenda, erroAgenda } from '../../lib/agenda-read'
 import BarbeiroVendaRapida from './BarbeiroVendaRapida'
 import BarbeiroPeriodo from './BarbeiroPeriodo'
+import BarbeiroExtrato from './BarbeiroExtrato'
 import { useAuth } from '../../lib/auth'
 import { DINO_BARBERSHOP_LOGO } from '../../lib/brand'
 import InstalarApp from '../../components/pwa/InstalarApp'
@@ -242,6 +243,7 @@ export default function ModoBarbeiro() {
               <div style={{ fontSize: 12, color: t.muted }}>{sub}</div>
             </div>)}
           </section>
+          <button type="button" style={btn2} onClick={() => setFolha('extrato')}>Meu extrato e repasses</button>
 
           <section aria-label="Agenda" style={{ display: 'grid', gap: 10 }}>
             {agenda.length === 0 && <div style={{ ...card, textAlign: 'center', color: t.muted }}>Nenhum atendimento neste dia.</div>}
@@ -301,6 +303,7 @@ export default function ModoBarbeiro() {
     </div>}
     {folha === 'venda' && painel?.profissional && <Folha titulo="Serviços e produtos" podeFechar={!vendaPendente} onFechar={() => setFolha('')}><BarbeiroVendaRapida key={`${painel.profissional.id}-${vendaAtendimento?.id || 'avulsa'}`} profissional={painel.profissional} atendimento={vendaAtendimento} onEstadoChange={setVendaPendente} onPronto={carregar} /></Folha>}
     {folha === 'encaixe' && painel?.profissional && <FolhaEncaixe painel={painel} dia={dia} onFechar={() => { setFolha(''); const p = new URLSearchParams(params); p.delete('acao'); setParams(p, { replace: true }) }} onPronto={carregar} />}
+    {folha === 'extrato' && painel?.profissional && <Folha titulo="Meu extrato" onFechar={() => setFolha('')}><BarbeiroExtrato profissionalId={painel.gestao ? painel.profissional.id : ''} /></Folha>}
     {folha === 'bloqueio' && painel?.profissional && <FolhaBloqueio painel={painel} dia={dia} onFechar={() => setFolha('')} onPronto={carregar} />}
   </div>
 }

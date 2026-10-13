@@ -586,6 +586,12 @@ function situacaoPagamento(empresaId, assinatura, plano, controle, ms) {
   return ms <= pagoAte + carencia ? 'em_dia' : 'inadimplente';
 }
 
+/** Usos e pagamentos completos de uma assinatura (base da comissão sobre plano). */
+export function movimentosAssinatura(empresaId, assinaturaId) {
+  const controle = controleAssinatura(empresaId, String(assinaturaId));
+  return { usos: controle.usos.map((uso) => ({ ...uso })), pagamentos: controle.pagamentos.map((pag) => ({ ...pag })) };
+}
+
 export function resumoAssinatura(empresaId, assinaturaId, opcoes = {}) {
   const assinatura = barbearia.listarAssinaturas(empresaId).find((item) => item.id === String(assinaturaId));
   if (!assinatura) return null;
