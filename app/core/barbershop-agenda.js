@@ -48,12 +48,30 @@ function chaveEmpresa(scope = {}) {
   return limpo(scope.legacyEmpresaId || scope.empresaId, 120);
 }
 
+function chaveUnidade(scope = {}) {
+  return limpo(scope.lojaId, 120);
+}
+
 function temEquipeNaAgendaDaBarbearia(scope) {
   const estado = legacyDb().barbearias?.[chaveEmpresa(scope)];
   return Object.values(estado?.profissionais || {}).some((item) => item && item.ativo !== false);
 }
 
 const fonteCache = new Map();
+
+function haReservaJsonNaUnidade(scope) {
+  const unidade = chaveUnidade(scope);
+  return barbearia.listarAgendamentos(chaveEmpresa(scope), {}).some(item => {
+    if (String(item.lojaId || '') !== unidade || ['cancelado', 'nao_compareceu', 'concluido'].includes(item.status)) return false;
+    const inicio = new Date(item.dataHora).valueOf();
+    const duracao = Math.max(1, Number(item.duracaoMinutos) || 30) * 60000;
+    return !Number.isFinite(inicio) || inicio + duracao >= Date.now();
+  });
+}
+
+function conferirFontePgSemConflito(scope) {
+  if (haReservaJsonNaUnidade(scope)) throw new SchedulingError('as fontes da agenda exigem conciliação nesta unidade; nenhum horário foi criado', 'AGENDA_SOURCE_CONFLICT');
+}
 
 /**
  * Fonte da agenda da IA para a empresa:
@@ -66,29 +84,35 @@ const fonteCache = new Map();
 export async function agendaSource(scope = {}) {
   const forcada = String(process.env.BARBEARIA_AGENDA_FONTE || '').trim().toLowerCase();
   if (forcada === 'barbearia' || forcada === 'postgres') return forcada;
-  if (!temEquipeNaAgendaDaBarbearia(scope)) return 'postgres';
-  const chave = chaveEmpresa(scope);
+  const empresa = chaveEmpresa(scope);
+  const unidade = chaveUnidade(scope);
+  if (!empresa || !unidade || !temEquipeNaAgendaDaBarbearia(scope)) return 'postgres';
+  const chave = `${empresa}:${unidade}`;
   const emCache = fonteCache.get(chave);
-  if (emCache && emCache.expira > Date.now()) return emCache.fonte;
+  if (emCache && emCache.expira > Date.now()) {
+    if (emCache.fonte === 'postgres') conferirFontePgSemConflito(scope);
+    return emCache.fonte;
+  }
   let fonte = 'barbearia';
   try {
     const futuros = await pgDb.queryRead(
       `SELECT 1 FROM agendamentos
-        WHERE empresa_id = $1 AND data_agendamento >= CURRENT_TIMESTAMP
+        WHERE empresa_id = $1 AND loja_id = $2 AND data_agendamento >= CURRENT_TIMESTAMP
           AND status NOT IN ('cancelado', 'nao_compareceu', 'concluido')
         LIMIT 1`,
-      [chave],
+      [empresa, unidade],
     );
-    // Agendamentos futuros no PostgreSQL (feitos pela IA antes da unificação) não
-    // aparecem no admin nem no app do barbeiro: migra para a agenda da barbearia.
-    // Só continua no PostgreSQL se algum não puder ser migrado com segurança.
-    if (futuros.rows?.[0]) {
-      const migracao = await migrarAgendaPostgresParaBarbearia(scope).catch((erro) => ({ pendentes: 1, erro: limpo(erro?.code || erro?.message, 120) }));
-      if (migracao.pendentes > 0) fonte = 'postgres';
-      if (migracao.migrados || migracao.pendentes) console.log(JSON.stringify({ worker: 'agenda-unificacao', empresa: chave.slice(0, 8), ...migracao }));
+    if (!Array.isArray(futuros?.rows)) throw new SchedulingError('leitura da fonte incompleta', 'AGENDA_SOURCE_UNVERIFIABLE');
+    // Uma leitura não pode mover/cancelar reservas entre motores. Enquanto houver
+    // reserva futura PG nesta unidade, preserve o PG. Conciliação é uma operação
+    // explícita separada; não há migração automática por este resolver.
+    if (futuros.rows[0]) {
+      conferirFontePgSemConflito(scope);
+      fonte = 'postgres';
     }
-  } catch (_) {
-    // Sem PostgreSQL (ou empresa fora do Commerce): só existe a agenda da barbearia.
+  } catch (erro) {
+    if (erro instanceof SchedulingError) throw erro;
+    throw new SchedulingError('não foi possível verificar a fonte da agenda', 'AGENDA_SOURCE_UNVERIFIABLE');
   }
   fonteCache.set(chave, { fonte, expira: Date.now() + 60 * 1000 });
   return fonte;
@@ -117,48 +141,100 @@ function porNome(itens, nome) {
  */
 export async function migrarAgendaPostgresParaBarbearia(scope = {}, { query = pgDb.query.bind(pgDb), queryRead = pgDb.queryRead.bind(pgDb) } = {}) {
   const empresa = chaveEmpresa(scope);
+  const unidade = chaveUnidade(scope);
+  if (!empresa || !unidade) throw new SchedulingError('empresa e unidade são obrigatórias para migrar a agenda', 'AGENDA_SCOPE_REQUIRED');
   const linhas = await queryRead(
-    `SELECT a.id, a.loja_id, a.cliente_nome, a.cliente_telefone, a.observacoes,
+    `SELECT a.id, a.empresa_id, a.loja_id, a.cliente_nome, a.cliente_telefone, a.observacoes,
+            l.id AS loja_meta_id, l.empresa_id AS loja_empresa_id,
             to_char(a.data_agendamento, 'YYYY-MM-DD') AS dia, to_char(a.data_agendamento, 'HH24:MI') AS hora,
-            s.nome AS servico_nome, u.nome_completo AS profissional_nome
+            s.nome AS servico_nome, s.empresa_id AS servico_empresa_id, s.loja_id AS servico_loja_id,
+            u.nome_completo AS profissional_nome, u.empresa_id AS profissional_empresa_id,
+            ul.loja_id AS profissional_loja_id
        FROM agendamentos a
-       LEFT JOIN servicos s ON s.id = a.servico_id
-       LEFT JOIN usuarios u ON u.id = a.usuario_profissional_id
-      WHERE a.empresa_id = $1 AND a.data_agendamento >= CURRENT_TIMESTAMP
+       LEFT JOIN lojas l ON l.id = a.loja_id AND l.empresa_id = a.empresa_id
+       LEFT JOIN servicos s ON s.id = a.servico_id AND s.empresa_id = a.empresa_id AND s.loja_id = a.loja_id
+       LEFT JOIN usuarios u ON u.id = a.usuario_profissional_id AND u.empresa_id = a.empresa_id
+       LEFT JOIN usuarios_lojas ul ON ul.usuario_id = u.id AND ul.loja_id = a.loja_id AND ul.ativo = true
+      WHERE a.empresa_id = $1 AND a.loja_id = $2 AND a.data_agendamento >= CURRENT_TIMESTAMP
         AND a.status NOT IN ('cancelado', 'nao_compareceu', 'concluido')
       ORDER BY a.data_agendamento ASC LIMIT 200`,
-    [empresa],
+    [empresa, unidade],
   );
+  if (!Array.isArray(linhas?.rows)) throw new SchedulingError('leitura da agenda incompleta', 'AGENDA_SOURCE_UNVERIFIABLE');
   const servicos = barbearia.listarServicos(empresa);
   const profissionais = barbearia.listarProfissionais(empresa).filter((item) => item.ativo !== false);
   const resultado = { migrados: 0, pendentes: 0, motivos: [] };
   for (const linha of linhas.rows || []) {
+    if (String(linha.empresa_id || '') !== empresa || String(linha.loja_id || '') !== unidade) {
+      resultado.pendentes += 1;
+      resultado.motivos.push('linha_fora_do_escopo');
+      continue;
+    }
+    if (String(linha.loja_meta_id || '') !== unidade || String(linha.loja_empresa_id || '') !== empresa) {
+      resultado.pendentes += 1;
+      resultado.motivos.push('metadado_unidade_invalido');
+      continue;
+    }
+    if (linha.servico_nome && (String(linha.servico_empresa_id || '') !== empresa || String(linha.servico_loja_id || '') !== unidade)) {
+      resultado.pendentes += 1;
+      resultado.motivos.push('metadado_servico_invalido');
+      continue;
+    }
+    if (linha.profissional_nome && (String(linha.profissional_empresa_id || '') !== empresa || String(linha.profissional_loja_id || '') !== unidade)) {
+      resultado.pendentes += 1;
+      resultado.motivos.push('metadado_profissional_invalido');
+      continue;
+    }
     const servico = porNome(servicos, linha.servico_nome);
     const profissional = porNome(profissionais, linha.profissional_nome);
     if (!servico || !profissional) { resultado.pendentes += 1; resultado.motivos.push(!servico ? 'servico_sem_equivalente' : 'profissional_sem_equivalente'); continue; }
     try {
       const actionId = `migracao-pg:${linha.id}`;
       const codigo = createHash('sha256').update(`whatsapp-ia:${empresa}:${actionId}`).digest('hex').slice(0, 8).toUpperCase();
-      // Repetição (ex.: o UPDATE no PostgreSQL falhou da outra vez): reaproveita o já migrado.
+      // Repetição só é segura se a reserva JSON for da mesma unidade e tiver o
+      // mesmo payload. Um código existente em outra unidade é conflito.
       const jaMigrado = barbearia.listarAgendamentos(empresa, {}).find((item) => item.codigoConfirmacao === codigo);
-      const criado = jaMigrado ? respostaAgendamento(empresa, jaMigrado) : criarNaAgendaDaBarbearia({ ...scope, lojaId: scope.lojaId || linha.loja_id }, {
+      const notas = limpo(linha.observacoes, 500);
+      const replayValido = jaMigrado
+        && String(jaMigrado.lojaId || '') === unidade
+        && phoneMatchKey(jaMigrado.clienteTelefone) === phoneMatchKey(linha.cliente_telefone)
+        && jaMigrado.dataAgenda === linha.dia
+        && jaMigrado.horaLocal === linha.hora
+        && jaMigrado.servicoId === servico.id
+        && jaMigrado.profissionalId === profissional.id
+        && limpo(jaMigrado.clienteNome, 160) === limpo(linha.cliente_nome, 160)
+        && limpo(jaMigrado.observacoes, 600) === limpo(notas, 600);
+      if (jaMigrado && !replayValido) {
+        resultado.pendentes += 1;
+        resultado.motivos.push('replay_divergente');
+        continue;
+      }
+      const criado = replayValido ? respostaAgendamento(empresa, jaMigrado) : criarNaAgendaDaBarbearia({ ...scope }, {
         date: linha.dia, time: linha.hora, serviceId: servico.id, professionalId: profissional.id,
         customerName: linha.cliente_nome, customerPhone: linha.cliente_telefone,
-        notes: limpo(linha.observacoes, 500), actionId,
+        notes: notas, actionId,
       });
-      await query(
+      const atualizado = await query(
         `UPDATE agendamentos SET status = 'cancelado',
                 observacoes = LEFT(CONCAT_WS(' ', observacoes, $2::text), 1000)
-          WHERE id = $1 AND empresa_id = $3`,
-        [linha.id, `[migrado para a agenda da barbearia: ${criado.codigo || criado.id}]`, empresa],
+          WHERE id = $1 AND empresa_id = $3 AND loja_id = $4
+            AND data_agendamento >= CURRENT_TIMESTAMP
+            AND status NOT IN ('cancelado', 'nao_compareceu', 'concluido')
+          RETURNING id`,
+        [linha.id, `[migrado para a agenda da barbearia: ${criado.codigo || criado.id}]`, empresa, unidade],
       );
+      if (atualizado?.rowCount !== 1 || String(atualizado.rows?.[0]?.id || '') !== String(linha.id)) {
+        resultado.pendentes += 1;
+        resultado.motivos.push('atualizacao_pg_sem_correspondencia');
+        continue;
+      }
       resultado.migrados += 1;
     } catch (erro) {
       resultado.pendentes += 1;
       resultado.motivos.push(limpo(erro?.code || 'falha_migracao', 60));
     }
   }
-  if (resultado.migrados) fonteCache.delete(empresa);
+  if (resultado.migrados) fonteCache.delete(`${empresa}:${unidade}`);
   return resultado;
 }
 
@@ -275,6 +351,28 @@ export async function createAppointment(trx, scope, input = {}) {
 
 function criarNaAgendaDaBarbearia(scope, input = {}) {
   const empresa = chaveEmpresa(scope);
+  // Idempotência precisa preceder a resolução do slot: numa repetição depois de
+  // uma resposta perdida, o próprio atendimento já ocupa o horário e não pode
+  // ser confundido com um novo conflito.
+  const codigo = input.actionId
+    ? createHash('sha256').update(`whatsapp-ia:${empresa}:${input.actionId}`).digest('hex').slice(0, 8).toUpperCase()
+    : randomBytes(4).toString('hex').toUpperCase();
+  const existente = input.actionId
+    ? barbearia.listarAgendamentos(empresa, {}).find((item) => item.codigoConfirmacao === codigo)
+    : null;
+  if (existente) {
+    const profissionalSolicitado = limpo(input.professionalId, 100) || 'qualquer';
+    const mesmoPedido = String(existente.lojaId || '') === String(scope.lojaId || '')
+      && phoneMatchKey(existente.clienteTelefone) === phoneMatchKey(input.customerPhone)
+      && existente.dataAgenda === dataLocalValida(input.date)
+      && existente.horaLocal === limpo(input.time, 5)
+      && existente.servicoId === limpo(input.serviceId, 100)
+      && (profissionalSolicitado === 'qualquer' || existente.profissionalId === profissionalSolicitado)
+      && limpo(existente.clienteNome, 160) === limpo(input.customerName, 160)
+      && limpo(existente.observacoes, 600) === limpo(input.notes, 600);
+    if (!mesmoPedido) throw new SchedulingError('a confirmação já foi usada em outro contexto; revise a ação antes de confirmar novamente', 'IDEMPOTENCY_CONFLICT');
+    return respostaAgendamento(empresa, existente);
+  }
   try {
     const livre = barbearia.resolverProfissionalDisponivel(empresa, {
       data: dataLocalValida(input.date),
@@ -283,16 +381,9 @@ function criarNaAgendaDaBarbearia(scope, input = {}) {
       profissionalId: limpo(input.professionalId, 100) || 'qualquer',
       lojaId: scope.lojaId,
     });
-    // Idempotência: a mesma ação confirmada (actionId) gera sempre o mesmo
-    // código; se a confirmação for repetida após uma falha, devolve o existente.
-    const codigo = input.actionId
-      ? createHash('sha256').update(`whatsapp-ia:${empresa}:${input.actionId}`).digest('hex').slice(0, 8).toUpperCase()
-      : randomBytes(4).toString('hex').toUpperCase();
-    const existente = barbearia.listarAgendamentos(empresa, {}).find((item) => item.codigoConfirmacao === codigo && phoneMatchKey(item.clienteTelefone) === phoneMatchKey(input.customerPhone));
-    if (existente) return respostaAgendamento(empresa, existente);
     // Limite por VISITA (dia + pessoa), não por serviço: no WhatsApp o mesmo número marca
     // para a família ("eu e o Pedro") e vários serviços na mesma ida (barba + manicure).
-    const futurosDoTelefone = agendamentosDoTelefone(empresa, input.customerPhone).filter((item) => ATIVOS.has(item.status));
+    const futurosDoTelefone = agendamentosDoTelefone(empresa, input.customerPhone, { lojaId: scope.lojaId }).filter((item) => ATIVOS.has(item.status));
     const visitas = new Set(futurosDoTelefone.map((item) => `${item.dataAgenda}|${limpo(item.clienteNome, 160).toLowerCase()}`));
     const estaVisita = `${dataLocalValida(input.date)}|${limpo(input.customerName, 160).toLowerCase()}`;
     const limite = Math.max(1, Number.parseInt(process.env.WHATSAPP_AGENDAMENTO_MAX_VISITAS_POR_TELEFONE || process.env.AGENDAMENTO_PUBLICO_MAX_POR_TELEFONE || '4', 10));
@@ -327,11 +418,13 @@ function criarNaAgendaDaBarbearia(scope, input = {}) {
   }
 }
 
-function agendamentosDoTelefone(empresa, phone, { includePast = false } = {}) {
+function agendamentosDoTelefone(empresa, phone, { includePast = false, lojaId } = {}) {
   const chave = phoneMatchKey(phone);
-  if (!chave) return [];
+  const unidade = limpo(lojaId, 120);
+  if (!chave || !unidade) return [];
   const agora = Date.now();
   return barbearia.listarAgendamentos(empresa, {})
+    .filter((item) => String(item.lojaId || '') === unidade)
     .filter((item) => phoneMatchKey(item.clienteTelefone) === chave)
     .filter((item) => !['cancelado', 'nao_compareceu'].includes(item.status))
     .filter((item) => includePast || new Date(item.dataHora).valueOf() >= agora);
@@ -348,7 +441,7 @@ export async function listCustomerAppointments(scope, { includePast = false, lim
   const empresa = chaveEmpresa(scope);
   const servicos = new Map(barbearia.listarServicos(empresa, { incluirInativos: true }).map((item) => [item.id, item]));
   const profissionais = new Map(barbearia.listarProfissionais(empresa, { incluirInativos: true }).map((item) => [item.id, item]));
-  return agendamentosDoTelefone(empresa, scope.phone, { includePast })
+  return agendamentosDoTelefone(empresa, scope.phone, { includePast, lojaId: scope.lojaId })
     .slice(0, Math.min(20, Math.max(1, Number(limit) || 8)))
     .map((item) => ({
       id: item.id,
@@ -369,8 +462,8 @@ export async function listCustomerAppointments(scope, { includePast = false, lim
     }));
 }
 
-function agendamentoDoContato(empresa, phone, appointmentId) {
-  const agendamento = agendamentosDoTelefone(empresa, phone, { includePast: true }).find((item) => item.id === limpo(appointmentId, 120));
+function agendamentoDoContato(empresa, phone, appointmentId, lojaId) {
+  const agendamento = agendamentosDoTelefone(empresa, phone, { includePast: true, lojaId }).find((item) => item.id === limpo(appointmentId, 120));
   if (!agendamento) throw new SchedulingError('agendamento não encontrado para este contato', 'APPOINTMENT_NOT_FOUND');
   if (!ATIVOS.has(agendamento.status)) throw new SchedulingError('este agendamento já não está ativo', 'APPOINTMENT_NOT_ACTIVE');
   return agendamento;
@@ -383,11 +476,11 @@ function agendamentoDoContato(empresa, phone, appointmentId) {
 export async function confirmAttendance(scope, appointmentId) {
   if (await agendaSource(scope) === 'postgres') throw new SchedulingError('confirmação de presença disponível apenas na agenda da barbearia', 'NOT_BARBERSHOP_AGENDA');
   const empresa = chaveEmpresa(scope);
-  const agendamento = agendamentoDoContato(empresa, scope.phone, appointmentId);
+  const agendamento = agendamentoDoContato(empresa, scope.phone, appointmentId, scope.lojaId);
   if (new Date(agendamento.dataHora).valueOf() < Date.now() - 30 * 60 * 1000) throw new SchedulingError('este horário já passou', 'APPOINTMENT_PAST');
   const atualizado = agendamento.status === 'confirmado'
     ? agendamento
-    : barbearia.alterarStatusAgendamento(empresa, agendamento.id, 'confirmado', { observacoes: limpo(`${agendamento.observacoes || ''} · Presença confirmada pelo cliente no WhatsApp`.replace(/^ · /, ''), 600) });
+    : barbearia.alterarStatusAgendamento(empresa, agendamento.id, 'confirmado', { lojaId: scope.lojaId, observacoes: limpo(`${agendamento.observacoes || ''} · Presença confirmada pelo cliente no WhatsApp`.replace(/^ · /, ''), 600) });
   if (!atualizado) throw new SchedulingError('agendamento não encontrado para este contato', 'APPOINTMENT_NOT_FOUND');
   return { ...respostaAgendamento(empresa, atualizado), jaEstavaConfirmado: agendamento.status === 'confirmado' };
 }
@@ -396,12 +489,12 @@ export async function confirmAttendance(scope, appointmentId) {
 export async function noteDelay(scope, appointmentId, minutes) {
   if (await agendaSource(scope) === 'postgres') throw new SchedulingError('aviso de atraso disponível apenas na agenda da barbearia', 'NOT_BARBERSHOP_AGENDA');
   const empresa = chaveEmpresa(scope);
-  const agendamento = agendamentoDoContato(empresa, scope.phone, appointmentId);
+  const agendamento = agendamentoDoContato(empresa, scope.phone, appointmentId, scope.lojaId);
   const min = Math.round(Number(minutes));
   if (!Number.isFinite(min) || min < 1 || min > 120) throw new SchedulingError('informe o atraso em minutos (1 a 120)', 'INVALID_DELAY');
   const hora = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Cuiaba', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date());
   const nota = `Cliente avisou atraso de ~${min} min às ${hora} (WhatsApp)`;
-  const atualizado = barbearia.alterarStatusAgendamento(empresa, agendamento.id, agendamento.status, { observacoes: limpo(`${agendamento.observacoes || ''} · ${nota}`.replace(/^ · /, ''), 600) });
+  const atualizado = barbearia.alterarStatusAgendamento(empresa, agendamento.id, agendamento.status, { lojaId: scope.lojaId, observacoes: limpo(`${agendamento.observacoes || ''} · ${nota}`.replace(/^ · /, ''), 600) });
   if (!atualizado) throw new SchedulingError('agendamento não encontrado para este contato', 'APPOINTMENT_NOT_FOUND');
   return { ...respostaAgendamento(empresa, atualizado), atrasoMinutos: min };
 }
@@ -410,15 +503,16 @@ export async function rescheduleAppointment(trx, scope, input = {}) {
   if (await agendaSource(scope) === 'postgres') return pgReschedule(trx, scope, input);
   const empresa = chaveEmpresa(scope);
   try {
-    const atual = agendamentoDoContato(empresa, scope.phone, input.appointmentId);
+    const atual = agendamentoDoContato(empresa, scope.phone, input.appointmentId, scope.lojaId);
     const livre = barbearia.resolverProfissionalDisponivel(empresa, {
       data: dataLocalValida(input.date),
       horario: limpo(input.time, 5),
       servicoId: atual.servicoId,
       profissionalId: atual.profissionalId || 'qualquer',
-      lojaId: atual.lojaId || scope.lojaId,
+      lojaId: scope.lojaId,
     });
     const atualizado = barbearia.atualizarAgendamento(empresa, atual.id, {
+      lojaId: scope.lojaId,
       dataHora: livre.dataHora,
       dataAgenda: livre.dataAgenda,
       horaLocal: livre.horaLocal,
@@ -436,8 +530,8 @@ export async function cancelAppointment(trx, scope, appointmentId) {
   if (await agendaSource(scope) === 'postgres') return pgCancel(trx, scope, appointmentId);
   const empresa = chaveEmpresa(scope);
   try {
-    const atual = agendamentoDoContato(empresa, scope.phone, appointmentId);
-    const cancelado = barbearia.alterarStatusAgendamento(empresa, atual.id, 'cancelado', { observacoes: `${atual.observacoes ? `${atual.observacoes} · ` : ''}Cancelado pelo cliente no WhatsApp` });
+    const atual = agendamentoDoContato(empresa, scope.phone, appointmentId, scope.lojaId);
+    const cancelado = barbearia.alterarStatusAgendamento(empresa, atual.id, 'cancelado', { lojaId: scope.lojaId, observacoes: `${atual.observacoes ? `${atual.observacoes} · ` : ''}Cancelado pelo cliente no WhatsApp` });
     const contexto = { empresaId: scope.empresaId, lojaId: scope.lojaId, legacyEmpresaId: empresa };
     notificarDepois(contexto, cancelado, 'cancelado');
     const candidatos = captacao.candidatosParaVaga(empresa, atual);

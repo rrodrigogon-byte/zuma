@@ -18,7 +18,10 @@ const captacao = await import('./dino-captacao-kytto.js');
 const agenda = await import('./core/barbershop-agenda.js');
 
 const EMPRESA = '0f0e0d0c-1b2a-4c3d-8e9f-0123456789ab';
+const EMPRESA_B = '1f1e1d1c-2b3a-4c4d-8e9f-1123456789ab';
 const LOJA = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+const LOJA_A2 = 'bbbbbbbb-cccc-4ddd-8eee-ffffffffffff';
+const LOJA_B = 'cccccccc-dddd-4eee-8fff-000000000001';
 const DIA_MS = 86400000;
 const TODOS_OS_DIAS = [0, 1, 2, 3, 4, 5, 6];
 
@@ -285,10 +288,13 @@ test('ocupação da agenda e metas por profissional', () => {
 });
 
 test('agenda única: com equipe na agenda da barbearia, a IA lê e grava nela', async () => {
-  assert.equal(await agenda.agendaSource({ empresaId: EMPRESA }), 'postgres', 'sem equipe continua no caminho antigo');
+  const fonteAnterior = process.env.BARBEARIA_AGENDA_FONTE;
+  process.env.BARBEARIA_AGENDA_FONTE = 'barbearia';
+  try {
+  assert.equal(await agenda.agendaSource({ empresaId: EMPRESA }), 'barbearia', 'fonte forçada preserva escolha explícita');
   const { bruno, corte } = montarBarbearia();
   agenda.limparCacheFonteAgenda();
-  assert.equal(await agenda.agendaSource({ empresaId: EMPRESA }), 'barbearia');
+  assert.equal(await agenda.agendaSource({ empresaId: EMPRESA, lojaId: LOJA }), 'barbearia');
   const scope = { empresaId: EMPRESA, lojaId: LOJA, phone: '5565922220001' };
   const servicos = await agenda.listServices(scope);
   assert.deepEqual(servicos.map((item) => item.nome).sort(), ['Barba', 'Corte']);
@@ -318,6 +324,57 @@ test('agenda única: com equipe na agenda da barbearia, a IA lê e grava nela', 
   assert.equal(cancelado.status, 'cancelado');
   assert.equal(cancelado.listaEsperaCandidatos, 1);
   await assert.rejects(agenda.cancelAppointment(null, { ...scope, phone: '5565900000000' }, criado.id), { code: 'APPOINTMENT_NOT_FOUND' });
+  } finally {
+    if (fonteAnterior === undefined) delete process.env.BARBEARIA_AGENDA_FONTE;
+    else process.env.BARBEARIA_AGENDA_FONTE = fonteAnterior;
+  }
+});
+
+test('ações de contato exigem empresa e unidade: mesmo telefone não atravessa A1/A2/B', async () => {
+  const fonteAnterior = process.env.BARBEARIA_AGENDA_FONTE;
+  process.env.BARBEARIA_AGENDA_FONTE = 'barbearia';
+  try {
+    const { bruno, corte } = montarBarbearia();
+    barbearia.atualizarConfiguracao(EMPRESA_B, {
+      horarioAbertura: '08:00', horarioFechamento: '20:00', intervaloMinutos: 30,
+      diasFuncionamento: TODOS_OS_DIAS, antecedenciaMinutos: 0, janelaReservaDias: 60,
+    });
+    const profissionalB = barbearia.criarProfissional(EMPRESA_B, { nome: 'Bruno B', horarioInicio: '08:00', horarioFim: '20:00', diasTrabalho: TODOS_OS_DIAS });
+    const servicoB = barbearia.criarServico(EMPRESA_B, { nome: 'Corte B', preco: 50, duracaoMinutos: 30 });
+    const dia = dataLocal(Date.now() + 3 * DIA_MS);
+    const telefone = '65955550000';
+    const criar = (empresa, lojaId, profissional, servico, hora, nome) => barbearia.criarAgendamento(empresa, {
+      clienteNome: nome, clienteTelefone: telefone, profissionalId: profissional.id, servicoId: servico.id,
+      dataHora: isoLocal(dia, hora), dataAgenda: dia, horaLocal: hora, lojaId, origem: 'fixture',
+    });
+    const a1 = criar(EMPRESA, LOJA, bruno, corte, '10:00', 'Cliente A1');
+    const a2 = criar(EMPRESA, LOJA_A2, bruno, corte, '11:00', 'Cliente A2');
+    const b1 = criar(EMPRESA_B, LOJA_B, profissionalB, servicoB, '12:00', 'Cliente B');
+    const scopeA1 = { empresaId: EMPRESA, lojaId: LOJA, phone: telefone };
+    const scopeA2 = { empresaId: EMPRESA, lojaId: LOJA_A2, phone: telefone };
+    const scopeB = { empresaId: EMPRESA_B, lojaId: LOJA_B, phone: telefone };
+    assert.deepEqual((await agenda.listCustomerAppointments(scopeA1)).map((item) => item.id), [a1.id]);
+    assert.deepEqual((await agenda.listCustomerAppointments(scopeA2)).map((item) => item.id), [a2.id]);
+    assert.deepEqual((await agenda.listCustomerAppointments(scopeB)).map((item) => item.id), [b1.id]);
+    // Os IDs legados são locais à empresa: A1 e B podem ter o mesmo ID.
+    // O negativo cross-tenant precisa de um ID que não pertença ao tenant B.
+    assert.notEqual(a2.id, b1.id);
+    for (const acao of [
+      () => agenda.confirmAttendance(scopeA2, a1.id),
+      () => agenda.noteDelay(scopeA2, a1.id, 10),
+      () => agenda.rescheduleAppointment(null, scopeA2, { appointmentId: a1.id, date: dia, time: '15:00' }),
+      () => agenda.cancelAppointment(null, scopeA2, a1.id),
+      () => agenda.cancelAppointment(null, scopeB, a2.id),
+    ]) await assert.rejects(acao, (error) => error.code === 'APPOINTMENT_NOT_FOUND');
+    const intact = barbearia.listarAgendamentos(EMPRESA, {}).find((item) => item.id === a1.id);
+    assert.equal(intact.status, 'agendado');
+    assert.equal(intact.lojaId, LOJA);
+    assert.equal(intact.horaLocal, '10:00');
+    assert.equal(barbearia.listarAgendamentos(EMPRESA_B, {}).find((item) => item.id === b1.id).status, 'agendado');
+  } finally {
+    if (fonteAnterior === undefined) delete process.env.BARBEARIA_AGENDA_FONTE;
+    else process.env.BARBEARIA_AGENDA_FONTE = fonteAnterior;
+  }
 });
 
 test('consentimento: o link público e a IA nunca religam o WhatsApp de quem respondeu SAIR', () => {
@@ -563,11 +620,11 @@ test('agendamento da IA preso no PostgreSQL migra para a agenda do admin (idempo
   const { bruno, corte } = montarBarbearia();
   const dia = dataLocal(Date.now() + 2 * DIA_MS);
   const linhas = [
-    { id: 'pg-1', loja_id: LOJA, cliente_nome: 'Rodrigo', cliente_telefone: '5514997462929', observacoes: null, dia, hora: '17:00', servico_nome: 'Corte', profissional_nome: 'Bruno Silva' },
-    { id: 'pg-2', loja_id: LOJA, cliente_nome: 'Outro', cliente_telefone: '5565900000002', observacoes: null, dia, hora: '18:00', servico_nome: 'Serviço que não existe', profissional_nome: 'Bruno' },
+    { id: 'pg-1', empresa_id: EMPRESA, loja_id: LOJA, loja_meta_id: LOJA, loja_empresa_id: EMPRESA, servico_empresa_id: EMPRESA, servico_loja_id: LOJA, profissional_empresa_id: EMPRESA, profissional_loja_id: LOJA, cliente_nome: 'Rodrigo', cliente_telefone: '5514997462929', observacoes: null, dia, hora: '17:00', servico_nome: 'Corte', profissional_nome: 'Bruno Silva' },
+    { id: 'pg-2', empresa_id: EMPRESA, loja_id: LOJA, loja_meta_id: LOJA, loja_empresa_id: EMPRESA, servico_empresa_id: EMPRESA, servico_loja_id: LOJA, profissional_empresa_id: EMPRESA, profissional_loja_id: LOJA, cliente_nome: 'Outro', cliente_telefone: '5565900000002', observacoes: null, dia, hora: '18:00', servico_nome: 'Serviço que não existe', profissional_nome: 'Bruno' },
   ];
   const updates = [];
-  const deps = { queryRead: async () => ({ rows: linhas }), query: async (sql, params) => { updates.push(params[0]); return { rowCount: 1 }; } };
+  const deps = { queryRead: async () => ({ rows: linhas }), query: async (sql, params) => { updates.push(params[0]); return { rowCount: 1, rows: [{ id: params[0] }] }; } };
   const scope = { empresaId: EMPRESA, lojaId: LOJA };
   const primeira = await agenda.migrarAgendaPostgresParaBarbearia(scope, deps);
   assert.equal(primeira.migrados, 1);

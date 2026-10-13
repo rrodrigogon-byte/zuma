@@ -199,3 +199,12 @@
   .dadm-operational-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (prefers-reduced-motion: reduce) { .dadm-wa-page .dadm-state.connecting::before { animation: none; } }
+
+.dadm-operational-guidance { display: grid; gap: 6px; padding: 14px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 10px; background: color-mix(in srgb, var(--accent) 5%, var(--card)); }
+.dadm-operational-guidance > span { color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; }
+.dadm-operational-guidance > strong { font-size: 16px; color: var(--fg); }
+.dadm-operational-guidance p { margin: 0; color: var(--fg); font-size: 13px; line-height: 1.5; }
+.dadm-operational-guidance small { color: var(--muted); font-size: 11.5px; line-height: 1.4; }
+.dadm-operational-details > summary { cursor: pointer; color: var(--fg); font-size: 13px; font-weight: 700; padding: 10px 0; }
+.dadm-operational-details > summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+.dadm-operational-details[open] > summary { margin-bottom: 6px; }

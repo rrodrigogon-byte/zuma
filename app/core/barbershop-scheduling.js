@@ -56,13 +56,13 @@ function slotTimestamp(date, time) {
 }
 
 export async function listSchedulingServices(context) {
-  const { empresaId } = tenantScope(context);
+  const { empresaId, lojaId } = tenantScope(context);
   const result = await db.queryRead(
     `SELECT id, nome, descricao, duracao_minutos, preco
        FROM servicos
-      WHERE empresa_id = $1 AND ativo = true
+      WHERE empresa_id = $1 AND loja_id = $2 AND ativo = true
       ORDER BY nome`,
-    [empresaId],
+    [empresaId, lojaId],
   );
   return result.rows.map(row => ({
     id: row.id,
@@ -105,8 +105,8 @@ export async function listSchedulingAvailability(context, input = {}) {
   const [service, professional, occupied] = await Promise.all([
     db.queryRead(
       `SELECT id, nome, duracao_minutos, preco FROM servicos
-        WHERE id = $1 AND empresa_id = $2 AND ativo = true LIMIT 1`,
-      [serviceId, empresaId],
+        WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND ativo = true LIMIT 1`,
+      [serviceId, empresaId, lojaId],
     ),
     db.queryRead(
       `SELECT u.id, u.nome_completo
@@ -182,6 +182,7 @@ export async function createScheduledAppointment(trx, context, input = {}) {
        JOIN usuarios u ON u.id = $2 AND u.empresa_id = $3 AND u.ativo = true
        JOIN usuarios_lojas ul ON ul.usuario_id = u.id AND ul.loja_id = $4 AND ul.ativo = true
       WHERE s.id = $1 AND s.empresa_id = $3 AND s.ativo = true
+        AND s.loja_id = $4
         AND COALESCE(NULLIF(ul.role_loja, ''), u.role) = 'barbeiro'
       LIMIT 1`,
     [serviceId, professionalId, empresaId, lojaId],

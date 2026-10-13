@@ -118,3 +118,80 @@ test('circuito, fila sem responsável e estados de entrega são allowlistados co
   assert.equal(result.deliveries.unclassified, 0)
   assert.equal(normalizeWhatsappAiOperationalStatus(valid({ humanQueue: { unassigned: '3' } }), { now: NOW }).kind, 'unverifiable')
 })
+
+import { whatsappOperationalSummary } from './whatsapp-ai-operational.js'
+
+function clean(overrides = {}) {
+  return normalizeWhatsappAiOperationalStatus(valid({
+    sessions: {}, humanQueue: { unassigned: 0 }, tasks: {}, deliveries: {},
+    provider24h: { total: 2, success: 2, failed: 0, avgLatencyMs: 100, toolCalls: 1 },
+    ...overrides,
+  }), { now: NOW })
+}
+
+test('resumo indisponível não inventa contagens ou saúde para estado incompleto', () => {
+  for (const payload of [null, { kind: 'loading' }, { kind: 'unverifiable' }, { kind: 'valid' }]) {
+    const result = whatsappOperationalSummary(payload)
+    assert.equal(result.state, 'unverifiable')
+    assert.equal(result.conditionCount, null)
+    assert.match(result.nextStep, /Não conclua/)
+  }
+})
+
+test('resumo prioriza circuito aberto antes de fila humana e dead-letter', () => {
+  const result = whatsappOperationalSummary(clean({
+    channel: { ...valid().channel, aiCircuitOpen: true }, humanQueue: { unassigned: 2 }, tasks: { deadLetter: 1 },
+  }))
+  assert.equal(result.conditions[0].code, 'CIRCUIT_OPEN')
+  assert.equal(result.conditions[1].code, 'HUMAN_UNASSIGNED')
+  assert.equal(result.conditions[2].code, 'DEAD_LETTER')
+  assert.equal(result.conditionCount, 3)
+  assert.match(result.nextStep, /Não ativar nem reenviar/)
+})
+
+test('resumo distingue sessão humana atendida de sessão sem responsável', () => {
+  const assigned = whatsappOperationalSummary(clean({ sessions: { humano: 3 } }))
+  assert.equal(assigned.conditions.some(x => x.code === 'HUMAN_UNASSIGNED'), false)
+  const unassigned = whatsappOperationalSummary(clean({ sessions: { humano: 3 }, humanQueue: { unassigned: 1 } }))
+  assert.equal(unassigned.conditions[0].code, 'HUMAN_UNASSIGNED')
+})
+
+test('resumo preserva escopo global e não atribui lease do worker à Dino', () => {
+  const result = whatsappOperationalSummary(clean({ worker: { active: false, leaseExpiresAt: '2026-10-13T14:59:00Z', lastHeartbeatAt: '2026-10-13T14:59:30Z' } }))
+  assert.equal(result.conditions[0].code, 'GLOBAL_WORKER')
+  assert.equal(result.conditions[0].scope, 'global')
+  assert.match(result.nextStep, /não é exclusivo da Dino/)
+})
+
+test('resumo com zero execução continua neutro sem diagnóstico de sucesso ou falha', () => {
+  const result = whatsappOperationalSummary(clean({ provider24h: { total: 0, success: 0, failed: 0, avgLatencyMs: 0, toolCalls: 0 } }))
+  assert.equal(result.conditions[0].code, 'NO_PROVIDER_RUNS')
+  assert.match(result.nextStep, /não equivale a atendimento saudável nem falha comprovada/)
+})
+
+test('resumo sem alerta nunca garante atendimento ponta a ponta', () => {
+  const result = whatsappOperationalSummary(clean())
+  assert.equal(result.state, 'observed')
+  assert.equal(result.conditionCount, 0)
+  assert.match(result.title, /Nenhum alerta classificado/)
+  assert.match(result.nextStep, /não comprova atendimento ponta a ponta/)
+})
+
+test('resumo impede linguagem de fila limpa quando há dead-letter ou falha de entrega', () => {
+  const result = whatsappOperationalSummary(clean({ tasks: { deadLetter: 1 }, deliveries: { failed: 1, unknown: 1 } }))
+  assert.equal(result.conditions.length, 3)
+  assert.equal(result.conditions[0].code, 'DEAD_LETTER')
+  assert.doesNotMatch(JSON.stringify(result), /Tudo certo|fila limpa|saudável/)
+})
+
+test('resumo sinaliza estados novos sem renderizar canários ou dados brutos', () => {
+  const result = whatsappOperationalSummary(clean({ tasks: { CANARY_TASK: 2 }, sessions: { CANARY_SESSION: 2 }, deliveries: { CANARY_DELIVERY: 1 } }))
+  assert.equal(result.conditions[0].code, 'UNCLASSIFIED')
+  assert.doesNotMatch(JSON.stringify(result), /CANARY|do-not-render/)
+})
+
+test('resumo informa evento antigo e canal não ativo sem propor mudança automática', () => {
+  const result = whatsappOperationalSummary(clean({ featureEnabled: false, channel: { status: 'pausado', lastEventAt: null, lastSyncAt: null, aiCircuitOpen: false, aiConsecutiveFailures: 0 } }))
+  assert.deepEqual(result.conditions.map(x => x.code), ['FEATURE_DISABLED', 'CHANNEL_NOT_ACTIVE', 'EVENT_NOT_RECENT'])
+  assert.match(result.nextStep, /Confirmar a decisão/)
+})
