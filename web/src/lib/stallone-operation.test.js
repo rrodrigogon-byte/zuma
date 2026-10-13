@@ -38,3 +38,26 @@ test('conta sandbox pronta não é apresentada como pronta para venda real', () 
  const result=stalloneOperation({storefront,paymentAccounts:[{ativo:true,ready:true,ambiente:'sandbox'}]});
  assert.equal(result.tasks.find(task=>task.id==='payments').kind,'critical');
 });
+
+test('atalhos do catálogo mostram exatamente os itens contados pela central', async () => {
+  const { filterProducts } = await import('./product-management.js')
+  const products = [
+    { id: 'missing', ativo: true, publicado: true, estoque: 0, descricao: '   ' },
+    { id: 'complete', ativo: true, publicado: true, estoque: 20, imagem: 'foto.webp', descricaoCurta: 'Completo' },
+    { id: 'backorder', ativo: true, publicado: true, estoque: 0, permiteCompraSemEstoque: true, media: [{ url: 'foto.webp' }], descricao_curta: 'Encomenda' },
+    { id: 'inactive', ativo: false, publicado: true, estoque: 1 },
+    { id: 'unpublished', ativo: true, publicado: false, estoque: 1 },
+    { id: 'low', ativo: true, publicado: true, estoque: 5, imagem: 'foto.webp', descricao: 'Completo' },
+    { id: 'unknownStock', ativo: true, publicado: true, estoque: 'indisponível', imagem: 'foto.webp', descricao: 'Completo' },
+  ]
+  const result = stalloneOperation({ products, storefront })
+  assert.deepEqual(filterProducts(products, { attention: 'images' }).map(p => p.id), ['missing'])
+  assert.deepEqual(filterProducts(products, { attention: 'descriptions' }).map(p => p.id), ['missing'])
+  assert.deepEqual(filterProducts(products, { attention: 'stock', sort: 'stock_asc' }).map(p => p.id), ['missing', 'low'])
+  for (const id of ['images', 'descriptions', 'stock']) {
+    assert.equal(Number(result.tasks.find(task => task.id === id).title.split(' ')[0]), filterProducts(products, { attention: id }).length)
+  }
+  assert.equal(filterProducts(products, { attention: 'images', query: 'não existe' }).length, 0)
+  assert.equal(filterProducts(products, { attention: 'images', category: 'outra' }).length, 0)
+  assert.equal(filterProducts(products, { attention: 'desconhecido' }).length, products.length)
+})

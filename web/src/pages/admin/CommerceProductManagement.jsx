@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Archive, Boxes, CheckCircle2, ChevronLeft, ChevronRight, Copy, FileImage, FileSpreadsheet, Layers3, LayoutGrid, List, Package, PackageCheck, PackagePlus, Plus, RotateCcw, Search, Sparkles, Tag, Trash2 } from 'lucide-react'
 import { fmtR } from '../../lib/api'
-import { catalogSummary, filterProducts, pagination, productQuality, productStatus } from '../../lib/product-management'
+import { CATALOG_ATTENTION, catalogAttention, catalogSummary, filterProducts, pagination, productQuality, productStatus } from '../../lib/product-management'
 import CommerceCatalogEnrichment from './CommerceCatalogEnrichment'
 import CommerceCatalogImport from './CommerceCatalogImport'
 import CommerceProductMedia from './CommerceProductMedia'
@@ -89,7 +89,10 @@ export default function CommerceProductManagement({
   onToggleProduct,
   onArchiveProduct,
   onRefresh,
+  attention: requestedAttention = 'all',
+  onAttentionChange,
 }) {
+  const attention = catalogAttention(requestedAttention)
   const [workspace, setWorkspace] = useState('products')
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('all')
@@ -104,14 +107,19 @@ export default function CommerceProductManagement({
   const [page, setPage] = useState(1)
 
   const summary = useMemo(() => catalogSummary(products), [products])
-  const filtered = useMemo(() => filterProducts(products, { query, status, stock, quality, category, sort }), [products, query, status, stock, quality, category, sort])
+  const filtered = useMemo(() => filterProducts(products, { query, status, stock, quality, category, sort, attention }), [products, query, status, stock, quality, category, sort, attention])
   const paged = useMemo(() => pagination(filtered, page, 24), [filtered, page])
-  const hasFilters = Boolean(query || status !== 'all' || stock !== 'all' || quality !== 'all' || category !== 'all' || sort !== 'updated_desc')
+  const hasFilters = Boolean(attention !== 'all' || query || status !== 'all' || stock !== 'all' || quality !== 'all' || category !== 'all' || sort !== 'updated_desc')
 
   useEffect(() => { setPage(1) }, [query, status, stock, quality, category, sort])
   useEffect(() => { if (page > paged.totalPages) setPage(paged.totalPages) }, [page, paged.totalPages])
 
+  useEffect(() => {
+    setQuery(''); setStatus('all'); setStock('all'); setQuality('all'); setCategory('all'); setPage(1)
+  }, [attention])
+
   function clearFilters() {
+    onAttentionChange?.('all')
     setQuery('')
     setStatus('all')
     setStock('all')
@@ -163,6 +171,7 @@ export default function CommerceProductManagement({
 
     {workspace === 'products' && <section role="tabpanel" id="commerce-product-panel-products" aria-labelledby="commerce-product-tab-products">
       <div className="commerce-product-toolbar">
+        {onAttentionChange && <label><span>Pendência da operação</span><select value={attention} onChange={event => onAttentionChange(event.target.value)}>{Object.entries(CATALOG_ATTENTION).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>}
         <label className="commerce-product-search"><Search size={17} /><span className="sr-only">Buscar produtos</span><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar por produto, SKU, código de barras ou categoria" /></label>
         <label><span>Status</span><select value={status} onChange={event => setStatus(event.target.value)}><option value="all">Todos</option><option value="published">Publicados</option><option value="unpublished">Ativos fora da vitrine</option><option value="draft">Rascunhos</option><option value="archived">Arquivados</option></select></label>
         <label><span>Estoque</span><select value={stock} onChange={event => setStock(event.target.value)}><option value="all">Todos</option><option value="available">Disponível</option><option value="low">Baixo</option><option value="out">Sem estoque</option></select></label>
@@ -176,7 +185,7 @@ export default function CommerceProductManagement({
       </div>
 
       <div className="commerce-product-result-bar">
-        <span><strong>{filtered.length}</strong> de {products.length} produto(s)</span>
+        <span><strong>{filtered.length}</strong> de {products.length} produto(s){attention !== 'all' && <span role="status"> · {CATALOG_ATTENTION[attention]}</span>}</span>
         {hasFilters && <button type="button" onClick={clearFilters}><RotateCcw size={13} /> Limpar filtros</button>}
       </div>
 

@@ -231,3 +231,12 @@ Correção complementar: o diagnóstico não considera saída pronta somente por
 Pendências externas permanecem: conteúdo autorizado, URLs de políticas aprovadas, configuração/pareamento da linha, regras logísticas e homologação transacional/fiscal/estoque. Não declarar a operação inteiramente homologada pela presença de telas ou adaptadores.
 
 A conferência também reproduziu carregamento permanente dos relatórios via menu lateral: a aba recebia tab=reports, mas apenas o botão interno iniciava a consulta. A correção inicia relatórios automaticamente após carregar o escopo Core, repete ao trocar storefront/atualizar e mantém a proteção contra respostas antigas. A validação pós-publicação deve abrir a rota diretamente, sem clicar Atualizar dados.
+
+
+## 12. Atalhos da central para o catálogo — 12/10/2026
+
+Pendências de imagem, descrição e saldo de até cinco unidades passam a abrir a aba Catálogo com `attention=images|descriptions|stock`. O parâmetro pode ser compartilhado e acompanha voltar/avançar do navegador. A tela informa o filtro ativo, permite trocar a pendência ou limpar os filtros e combina busca/categoria com a seleção. Dados de catálogo, preço e estoque não são alterados.
+
+A central e a lista reutilizam o mesmo predicado: somente itens publicados no escopo carregado, descrição vazia/composta por espaços, ausência de mídia e saldo finito até cinco unidades. Reposição exclui encomenda sem estoque e saldo indisponível; inclui saldo zero. Valores desconhecidos do parâmetro são tratados como catálogo completo. O filtro da operação fica disponível somente na experiência Stallone; catálogo de outras marcas permanece sem esse controle.
+
+Teste de regressão comprova que as contagens da central coincidem com os itens retornados, incluindo publicação/inatividade, zero, cinco unidades, encomenda, mídia, descrição e combinações com busca/categoria.
