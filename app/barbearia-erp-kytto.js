@@ -59,6 +59,22 @@ function novoId(prefixo, bucket) {
   return `${prefixo}-${Date.now().toString(36)}-${String(Object.keys(bucket).length + 1).padStart(3, '0')}`;
 }
 
+function fingerprintPagamentoComanda({ clienteId, lojaId, dataVencimento, pagamentos }) {
+  const payload = {
+    clienteId: texto(clienteId, 120) || null,
+    lojaId: texto(lojaId, 120) || null,
+    dataVencimento: texto(dataVencimento, 40) || null,
+    pagamentos: (Array.isArray(pagamentos) ? pagamentos : []).map((item) => ({
+      meio: texto(item?.meio ?? item?.meioPagamento, 40).toLowerCase(),
+      valor: dinheiro(item?.valor),
+      caixaId: texto(item?.caixaId ?? item?.caixa_id, 120) || null,
+      id: texto(item?.id, 120) || null,
+      chaveIdempotencia: texto(item?.chaveIdempotencia ?? item?.chave_idempotencia, 220) || null,
+    })),
+  };
+  return crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+}
+
 const STATUS_COMANDA_BARBEARIA = new Set(['aberta', 'aguardando_pagamento', 'parcialmente_paga', 'em_conta', 'paga', 'cancelada']);
 const TRANSICOES_COMANDA_BARBEARIA = {
   aberta: new Set(['aguardando_pagamento', 'parcialmente_paga', 'em_conta', 'paga', 'cancelada']),
@@ -1030,7 +1046,7 @@ function copiarComandaBarbearia(comanda, idempotente = false) {
     totalPago: Number((comanda.totalPago ?? (comanda.pagamentos || []).filter((item) => item.meio !== 'conta').reduce((soma, item) => soma + Number(item.valor || 0), 0)).toFixed(2)),
     saldoPendente: Number(Math.max(0, total - Number(comanda.totalFaturado ?? 0)).toFixed(2)),
     itens: (comanda.itens || []).map((item) => ({ ...item })),
-    pagamentos: (comanda.pagamentos || []).map((item) => ({ ...item })),
+    pagamentos: (comanda.pagamentos || []).map(({ idempotenciaFingerprint: _idempotenciaFingerprint, ...item }) => ({ ...item })),
     financeiroLancamentoIds: [...(comanda.financeiroLancamentoIds || [])],
     contasReceberIds: [...(comanda.contasReceberIds || [])],
     idempotente,
@@ -1299,19 +1315,61 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
   const estado = estadoEmpresa(empresaId);
   const comanda = estado.comandas[String(comandaId)];
   if (!comanda || comanda.empresaId !== String(empresaId)) return null;
-  if (comanda.status === 'paga' || comanda.status === 'em_conta') return copiarComandaBarbearia(comanda, true);
   if (comanda.status === 'cancelada') throw new Error('Não é possível receber uma comanda cancelada.');
   if (dados.confirmado !== true) throw new Error('A confirmação explícita do pagamento é obrigatória.');
   const chaveIdempotencia = texto(dados.chaveIdempotencia ?? dados.chave_idempotencia, 220);
-  if (chaveIdempotencia && (comanda.pagamentos || []).some((item) => item.chaveIdempotencia === chaveIdempotencia)) return copiarComandaBarbearia(comanda, true);
   if (!comanda.itens.length) throw new Error('Não é possível receber uma comanda sem itens.');
   const subtotal = Number((comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0).toFixed(2));
   const desconto = Number(Math.min(subtotal, Math.max(0, Number(comanda.desconto || 0))).toFixed(2));
   const total = Number(Math.max(0, subtotal - desconto + Math.max(0, Number(comanda.gorjeta || 0))).toFixed(2));
   const pagamentosEntrada = Array.isArray(dados.pagamentos) && dados.pagamentos.length ? dados.pagamentos : [{ meio: dados.meioPagamento ?? dados.meio_pagamento, valor: dados.valor }];
   const lojaIdOperacao = texto(dados.lojaId ?? comanda.lojaId, 120) || null;
+  const clienteId = texto(dados.clienteId ?? dados.cliente_id ?? comanda.clienteId, 120) || null;
   // Saldo considera o que já foi faturado (inclusive lançado em conta), não só o recebido.
   const saldoAnterior = Number(Math.max(0, total - Number(comanda.totalFaturado ?? comanda.totalPago ?? 0)).toFixed(2));
+  // Fingerprint do pedido, não do caixa inferido nem de IDs/horários gerados.
+  // Replay deve continuar sem efeito após o fechamento ou troca do caixa.
+  const pagamentosPedido = pagamentosEntrada.map(item => ({
+    ...item,
+    caixaId: texto(item?.caixaId ?? item?.caixa_id ?? dados.caixaId ?? dados.caixa_id, 120) || null,
+  }));
+  const fingerprint = chaveIdempotencia ? fingerprintPagamentoComanda({ clienteId, lojaId: lojaIdOperacao, dataVencimento: dados.dataVencimento, pagamentos: pagamentosPedido }) : null;
+  const pagamentosExistentes = chaveIdempotencia ? (comanda.pagamentos || []).filter(item => (item.idempotenciaBatchKey || item.chaveIdempotencia) === chaveIdempotencia) : [];
+  if (pagamentosExistentes.length) {
+    const persistedHashes = [...new Set(pagamentosExistentes.map(item => item.idempotenciaFingerprint).filter(Boolean))];
+    // Registros antigos não possuem fingerprint. Compare o lote inteiro,
+    // sem inventar o caixa automático ou ID que não vieram no novo pedido.
+    const legacyFingerprint = persistedHashes.length ? null : fingerprintPagamentoComanda({
+      clienteId: comanda.clienteId, lojaId: comanda.lojaId,
+      pagamentos: pagamentosExistentes.map((item, index) => ({
+        meio: item.meio, valor: item.valor,
+        caixaId: pagamentosPedido[index]?.caixaId ? item.caixaId : null,
+        id: pagamentosPedido[index]?.id ? item.id : null,
+        chaveIdempotencia: pagamentosPedido[index]?.chaveIdempotencia || pagamentosPedido[index]?.chave_idempotencia ? item.chaveIdempotencia : null,
+      })),
+    });
+    const batchMatches = pagamentosExistentes.length === pagamentosPedido.length && pagamentosExistentes.every((item, index) => {
+      const pedido = pagamentosPedido[index];
+      return item.meio === texto(pedido?.meio ?? pedido?.meioPagamento, 40).toLowerCase()
+        && item.valor === dinheiro(pedido?.valor)
+        && (!pedido?.caixaId || item.caixaId === pedido.caixaId)
+        && (!pedido?.id || item.id === texto(pedido.id, 120))
+        && (!(pedido?.chaveIdempotencia || pedido?.chave_idempotencia) || item.chaveIdempotencia === texto(pedido.chaveIdempotencia ?? pedido.chave_idempotencia, 220));
+    });
+    const compatible = batchMatches && (persistedHashes.length === 1
+      ? pagamentosExistentes.every(item => item.idempotenciaFingerprint === fingerprint)
+      : persistedHashes.length === 0 && legacyFingerprint === fingerprint);
+    if (!compatible) throw Object.assign(new Error('A chave de idempotência foi reutilizada com payload diferente.'), { code: 'IDEMPOTENCY_CONFLICT' });
+    return copiarComandaBarbearia(comanda, true);
+  }
+  if (comanda.status === 'paga' || comanda.status === 'em_conta') return copiarComandaBarbearia(comanda, true);
+  const explicitIds = pagamentosPedido.map(item => texto(item?.id, 120)).filter(Boolean);
+  const explicitKeys = pagamentosPedido.map(item => texto(item?.chaveIdempotencia ?? item?.chave_idempotencia, 220)).filter(Boolean);
+  const existing = comanda.pagamentos || [];
+  if (new Set(explicitIds).size !== explicitIds.length || new Set(explicitKeys).size !== explicitKeys.length
+    || existing.some(item => explicitIds.includes(item.id) || explicitKeys.includes(item.chaveIdempotencia))) {
+    throw Object.assign(new Error('Um identificador de pagamento já pertence a outro recebimento.'), { code: 'IDEMPOTENCY_CONFLICT' });
+  }
   const pagamentos = pagamentosEntrada.map((item, indice) => {
     const meio = texto(item?.meio ?? item?.meioPagamento, 40).toLowerCase();
     const valor = dinheiro(item?.valor);
@@ -1333,7 +1391,6 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
   const faturamentoCompleto = saldoAnterior - valorNovo <= 0.02;
   const consumoPlanejado = faturamentoCompleto ? planejarConsumoInternoComanda(estado, comanda) : [];
   validarEstoqueComandaBarbearia(estado, comanda, consumoPlanejado);
-  const clienteId = texto(dados.clienteId ?? dados.cliente_id ?? comanda.clienteId, 120) || null;
   const valorEmConta = Number(pagamentos.filter((item) => item.meio === 'conta').reduce((soma, item) => soma + item.valor, 0).toFixed(2));
   if (valorEmConta > 0) {
     const credito = clienteId ? clientesKytto.obterSituacaoCredito(empresaId, clienteId, valorEmConta) : null;
@@ -1381,7 +1438,7 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
     }
     lancamentosFinanceiros.push(lancamento);
   }
-  comanda.pagamentos = [...(comanda.pagamentos || []), ...pagamentos];
+  comanda.pagamentos = [...(comanda.pagamentos || []), ...pagamentos.map((item) => ({ ...item, ...(fingerprint ? { idempotenciaFingerprint: fingerprint, idempotenciaBatchKey: chaveIdempotencia } : {}) }))];
   const valorRecebido = Number(pagamentos.filter((item) => item.meio !== 'conta').reduce((soma, item) => soma + item.valor, 0).toFixed(2));
   comanda.totalPago = Number((Number(comanda.totalPago || 0) + valorRecebido).toFixed(2));
   comanda.totalFaturado = Number((Number(comanda.totalFaturado || 0) + valorNovo).toFixed(2));
