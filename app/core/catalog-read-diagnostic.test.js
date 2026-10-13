@@ -237,3 +237,18 @@ test('contrato da rota continua GET/reports.read; diagnóstico novo é opt-in e 
   assert.doesNotMatch(route, /queryWrite|\bINSERT\b|\bUPDATE\b|\bDELETE\b/);
   assert.ok(route.indexOf('SELECT id, loja_id FROM commerce_storefronts') < route.indexOf('const mapped'));
 })
+
+test('guard de UUID da rota rejeita seletores malformados antes da leitura PostgreSQL', () => {
+  const server = readFileSync(new URL('../server.js', import.meta.url), 'utf8');
+  const start = server.indexOf("app.get('/api/admin/commerce/operations/inventory-divergence'");
+  const route = server.slice(start, server.indexOf("app.use('/api/admin/commerce'", start));
+  const literal = route.match(/if \(!\/(.+)\/i\.test\(storefrontId\)\)/);
+  assert.ok(literal, 'o guard explícito precede a consulta');
+  const valid = new RegExp(literal[1], 'i');
+  assert.ok(valid.test(STOREFRONT));
+  assert.ok(valid.test(STOREFRONT.toUpperCase()));
+  for (const invalid of ['a'.repeat(36), '-'.repeat(36), STOREFRONT.replace(/-/g, ''), STOREFRONT + 'a', 'not-a-uuid']) {
+    assert.equal(valid.test(invalid), false);
+  }
+  assert.ok(route.indexOf(literal[0]) < route.indexOf('SELECT id, loja_id FROM commerce_storefronts'));
+});

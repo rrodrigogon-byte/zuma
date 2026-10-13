@@ -816,7 +816,7 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
           error.code = 'STORE_SCOPE_REQUIRED';
           throw error;
         }
-        if (!/^[0-9a-f-]{36}$/i.test(storefrontId)) {
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(storefrontId)) {
           const error = new Error('storefront fora do escopo da unidade selecionada');
           error.code = 'STORE_SCOPE_MISMATCH';
           throw error;

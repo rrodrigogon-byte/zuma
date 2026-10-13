@@ -105,5 +105,117 @@ test('Agenda PostgreSQL real — concorrência, bloqueio, ações e isolamento',
       const count = await db.queryRead('SELECT count(*)::int AS total FROM agendamentos WHERE empresa_id=$1 AND loja_id=$2 AND data_agendamento=$3::timestamp', [A, U1, `${date}T14:00:00`]);
       assert.equal(count.rows[0].total, 1);
     });
+    const agenda = await import('./barbershop-agenda.js');
+    const barbearia = await import('../barbearia-erp-kytto.js');
+    const M1 = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    const M2 = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    const M3 = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+    let legacyProfessional;
+    let legacyService;
+    const dependencies = { query: db.query.bind(db), queryRead: db.queryRead.bind(db) };
+    const pgStatus = async id => (await db.queryRead('SELECT status,loja_id,observacoes FROM agendamentos WHERE id=$1', [id])).rows[0];
+    const seedPg = async (id, company, unit, service, professional, time) => db.query(
+      `INSERT INTO agendamentos(id,empresa_id,loja_id,servico_id,usuario_profissional_id,cliente_nome,cliente_telefone,data_agendamento,status)
+       VALUES($1,$2,$3,$4,$5,'Cliente fixture migração','65999990077',$6::timestamp,'agendado')`,
+      [id, company, unit, service, professional, `${date}T${time}:00`],
+    );
+    await t.test('decisão automática é GET interno sem migração e cache de A1 não determina A2', async () => {
+      await db.query('DELETE FROM agendamentos'); // Somente fixture efêmera já identificada.
+      barbearia.atualizarConfiguracao(A, { horarioAbertura: '08:00', horarioFechamento: '20:00', intervaloMinutos: 30, diasFuncionamento: [0,1,2,3,4,5,6], antecedenciaMinutos: 0, janelaReservaDias: 90 });
+      legacyProfessional = barbearia.criarProfissional(A, { nome: 'prof-a', horarioInicio: '08:00', horarioFim: '20:00', diasTrabalho: [0,1,2,3,4,5,6] });
+      legacyService = barbearia.criarServico(A, { nome: 'Serviço fixture A1', preco: 60, duracaoMinutos: 45 });
+      barbearia.criarServico(A, { nome: 'Serviço fixture A2', preco: 60, duracaoMinutos: 45 });
+      await seedPg(M2, A, U2, S3, P1, '17:00');
+      await seedPg(M3, B, U3, S2, P2, '18:00');
+      delete process.env.BARBEARIA_AGENDA_FONTE;
+      agenda.limparCacheFonteAgenda();
+      assert.equal(await agenda.agendaSource(scope), 'barbearia');
+      assert.equal(await agenda.agendaSource({ empresaId: A, lojaId: U2 }), 'postgres');
+      assert.equal(await agenda.agendaSource(scope), 'barbearia');
+      assert.equal((await pgStatus(M2)).status, 'agendado');
+      assert.equal((await pgStatus(M3)).status, 'agendado');
+      assert.equal(barbearia.listarAgendamentos(A, {}).length, 0, 'uma leitura não cria reserva JSON');
+    });
+    await t.test('sem unidade, erro PG ou resposta incompleta não migram e não escolhem JSON silenciosamente', async () => {
+      const read = db.queryRead;
+      let calls = 0;
+      try {
+        agenda.limparCacheFonteAgenda();
+        db.queryRead = async () => { calls += 1; throw new Error('Fixture: leitura indisponível'); };
+        assert.equal(await agenda.agendaSource({ empresaId: A }), 'postgres');
+        await assert.rejects(() => agenda.migrarAgendaPostgresParaBarbearia({ empresaId: A }, dependencies), e => e.code === 'AGENDA_SCOPE_REQUIRED');
+        assert.equal(calls, 0);
+        await assert.rejects(() => agenda.agendaSource(scope), e => e.code === 'AGENDA_SOURCE_UNVERIFIABLE');
+        db.queryRead = async () => ({});
+        await assert.rejects(() => agenda.agendaSource(scope), e => e.code === 'AGENDA_SOURCE_UNVERIFIABLE');
+      } finally { db.queryRead = read; agenda.limparCacheFonteAgenda(); }
+      assert.equal((await pgStatus(M2)).status, 'agendado');
+      assert.equal(barbearia.listarAgendamentos(A, {}).length, 0);
+    });
+    await t.test('duas fontes com reservas na mesma unidade falham fechado, também após cache PG', async () => {
+      assert.equal(await agenda.agendaSource({ empresaId: A, lojaId: U2 }), 'postgres');
+      const mixed = barbearia.criarAgendamento(A, {
+        clienteNome: 'Cliente fixture JSON', clienteTelefone: '65999990088',
+        profissionalId: legacyProfessional.id, servicoId: legacyService.id,
+        dataHora: new Date(`${date}T19:00:00-04:00`).toISOString(), dataAgenda: date,
+        horaLocal: '19:00', lojaId: U2, origem: 'fixture',
+      });
+      try {
+        await assert.rejects(() => agenda.agendaSource({ empresaId: A, lojaId: U2 }), e => e.code === 'AGENDA_SOURCE_CONFLICT');
+        agenda.limparCacheFonteAgenda();
+        await assert.rejects(() => agenda.agendaSource({ empresaId: A, lojaId: U2 }), e => e.code === 'AGENDA_SOURCE_CONFLICT');
+        assert.equal(await agenda.agendaSource(scope), 'barbearia', 'A2 não bloqueia A1');
+        assert.equal((await pgStatus(M2)).status, 'agendado');
+        assert.equal(barbearia.listarAgendamentos(A, {}).find(x => x.id === mixed.id).status, 'agendado');
+      } finally {
+        const { db: legacyDb } = await import('../db.js');
+        delete legacyDb().barbearias[A].agendamentos[mixed.id];
+        agenda.limparCacheFonteAgenda();
+      }
+    });
+    await t.test('migração explícita A1 só lê/cancela A1; A2 e outro tenant permanecem intactos', async () => {
+      await seedPg(M1, A, U1, S1, P1, '16:00');
+      const beforeA2 = await pgStatus(M2);
+      const beforeB = await pgStatus(M3);
+      const result = await agenda.migrarAgendaPostgresParaBarbearia(scope, dependencies);
+      assert.equal(result.migrados, 1);
+      assert.equal(result.pendentes, 0);
+      assert.equal((await pgStatus(M1)).status, 'cancelado');
+      assert.deepEqual(await pgStatus(M2), beforeA2);
+      assert.deepEqual(await pgStatus(M3), beforeB);
+      const json = barbearia.listarAgendamentos(A, {});
+      assert.equal(json.length, 1);
+      assert.equal(json[0].lojaId, U1);
+      const retry = await agenda.migrarAgendaPostgresParaBarbearia(scope, dependencies);
+      assert.equal(retry.migrados, 0);
+      assert.equal(barbearia.listarAgendamentos(A, {}).length, 1);
+    });
+    await t.test('UPDATE sem correspondência não conta sucesso; replay divergente ou cross-unit nunca cancela PG', async () => {
+      await db.query('DELETE FROM agendamentos WHERE id=$1', [M1]);
+      await seedPg(M1, A, U1, S1, P1, '16:00');
+      const noUpdate = await agenda.migrarAgendaPostgresParaBarbearia(scope, {
+        queryRead: dependencies.queryRead,
+        query: async (sql, params) => { assert.match(sql, /empresa_id = \$3 AND loja_id = \$4/); assert.deepEqual(params.slice(2), [A,U1]); return { rowCount: 0, rows: [] }; },
+      });
+      assert.equal(noUpdate.migrados, 0);
+      assert.equal(noUpdate.pendentes, 1);
+      assert.equal((await pgStatus(M1)).status, 'agendado');
+      const legacy = barbearia.listarAgendamentos(A, {})[0];
+      const { db: legacyDb } = await import('../db.js');
+      const mutable = legacyDb().barbearias[A].agendamentos[legacy.id];
+      mutable.lojaId = U2;
+      let writes = 0;
+      const blocked = await agenda.migrarAgendaPostgresParaBarbearia(scope, { queryRead: dependencies.queryRead, query: async () => { writes += 1; throw new Error('Não deve executar UPDATE'); } });
+      assert.equal(blocked.migrados, 0);
+      assert.ok(blocked.motivos.includes('replay_divergente'));
+      assert.equal(writes, 0);
+      mutable.lojaId = U1;
+      mutable.observacoes = 'payload divergente';
+      const mismatch = await agenda.migrarAgendaPostgresParaBarbearia(scope, { queryRead: dependencies.queryRead, query: async () => { writes += 1; throw new Error('Não deve executar UPDATE'); } });
+      assert.ok(mismatch.motivos.includes('replay_divergente'));
+      assert.equal(writes, 0);
+      assert.equal((await pgStatus(M1)).status, 'agendado');
+      assert.equal((await pgStatus(M2)).status, 'agendado');
+    });
   } finally { await db.close(); }
 });
