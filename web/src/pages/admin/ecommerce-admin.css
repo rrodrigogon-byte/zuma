@@ -455,3 +455,32 @@
 .commerce-product-table-wrap { min-width: 0; max-width: 100%; overflow-x: auto; }
 .commerce-product-hero { flex-wrap: wrap; }
 .commerce-product-hero-actions { flex-wrap: wrap; }
+.commerce-catalog-diagnostic-details { margin: 0 0 16px; border: 1px solid #dce9e2; border-radius: 14px; background: #fbfdfc; overflow: hidden; }
+.commerce-catalog-diagnostic-details > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; color: #17312c; cursor: pointer; list-style: none; font-size: 12px; font-weight: 900; }
+.commerce-catalog-diagnostic-details > summary::-webkit-details-marker { display: none; }
+.commerce-catalog-diagnostic-details > summary span { display: inline-flex; align-items: center; gap: 7px; }
+.commerce-catalog-diagnostic-details > summary small { color: #788a84; font-size: 10px; font-weight: 700; }
+.commerce-catalog-diagnostic-details > summary:not(.is-disabled):hover { background: #f3f8f5; }
+.commerce-catalog-diagnostic-details > summary.is-disabled { color: #788a84; cursor: not-allowed; opacity: .72; }
+.commerce-catalog-diagnostic { display: grid; gap: 12px; padding: 0 16px 16px; border-top: 1px solid #e7efeb; }
+.commerce-catalog-diagnostic-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-top: 15px; }
+.commerce-catalog-diagnostic-heading h3 { margin: 5px 0 0; color: #17312c; font-size: 17px; letter-spacing: -.03em; }
+.commerce-catalog-diagnostic-heading .commerce-admin-help { max-width: 620px; }
+.commerce-catalog-diagnostic-hint,.commerce-catalog-diagnostic-guidance { margin: 0; color: #60736c; font-size: 11px; line-height: 1.5; }
+.commerce-catalog-diagnostic-guidance { padding: 10px 12px; border-radius: 9px; background: #f0f5f2; }
+.commerce-catalog-diagnostic-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
+.commerce-catalog-diagnostic-summary article { display: grid; gap: 4px; padding: 12px; border: 1px solid #e1ebe6; border-radius: 11px; background: #fff; }
+.commerce-catalog-diagnostic-summary article.attention { border-color: #f1c5ba; background: #fff7f5; }
+.commerce-catalog-diagnostic-summary article.attention.soft { border-color: #efd59e; background: #fffaf0; }
+.commerce-catalog-diagnostic-summary span,.commerce-catalog-diagnostic-summary small { color: #788a84; font-size: 10px; }
+.commerce-catalog-diagnostic-summary strong { color: #17312c; font-size: 23px; letter-spacing: -.04em; }
+.commerce-catalog-diagnostic-state { display: flex; align-items: center; gap: 9px; padding: 13px 0; color: #60736c; font-size: 12px; }
+.commerce-catalog-diagnostic-state > div { display: grid; gap: 3px; }
+.commerce-catalog-diagnostic-state strong { color: #17312c; }
+.commerce-catalog-diagnostic-state button { margin-left: auto; }
+.commerce-catalog-diagnostic-table-wrap { border: 1px solid #e1ebe6; border-radius: 11px; }
+.commerce-catalog-diagnostic-status { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; }
+.commerce-catalog-diagnostic-status.aligned { color: #4e7a33; }
+.commerce-catalog-diagnostic-status.divergent { color: #993e2e; }
+.commerce-catalog-diagnostic-status.ambiguous,.commerce-catalog-diagnostic-status.unmapped,.commerce-catalog-diagnostic-status.notVerified,.commerce-catalog-diagnostic-status.coreOnly,.commerce-catalog-diagnostic-status.outOfScope { color: #936718; }
+@media (max-width: 700px) { .commerce-catalog-diagnostic-heading { flex-direction: column; } .commerce-catalog-diagnostic-heading .ecommerce-admin-button { width: 100%; } .commerce-catalog-diagnostic-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
