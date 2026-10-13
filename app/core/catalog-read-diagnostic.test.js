@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { compareScopedCatalog, moneyToCents, readScopedCatalogDiagnostic } from './catalog-read-diagnostic.js';
+import { buildCommonCatalogRead, compareScopedCatalog, moneyToCents, readScopedCatalogDiagnostic } from './catalog-read-diagnostic.js';
 
 const TENANT = 'tenant-a';
 const STORE = 'store-a';
 const STOREFRONT = '10000000-0000-4000-8000-000000000001';
 const scope = { empresaId: TENANT, lojaId: STORE, storefrontId: STOREFRONT };
 const source = (item) => [{ name: 'legacy', items: [{ empresaId: TENANT, lojaId: STORE, ...item }] }];
-const core = (row = {}) => [{ empresa_id: TENANT, loja_id: STORE, legacy_key: row.legacy_key || 'legacy-1', variant_id: row.variant_id || 'variant-1', sku: row.sku || 'SKU-1', core_unit: row.core_unit ?? 'un', core_price: row.core_price ?? '10.50', core_available: row.core_available ?? 2, ...row }];
+const core = (row = {}) => [{ empresa_id: TENANT, loja_id: STORE, legacy_key: row.legacy_key || 'legacy-1', variant_id: row.variant_id || 'variant-1', sku: row.sku || 'SKU-1', core_unit: row.core_unit ?? 'un', core_product_status: row.core_product_status ?? 'active', core_variant_active: row.core_variant_active ?? true, core_published: row.core_published ?? true, core_price: row.core_price ?? '10.50', core_available: row.core_available ?? 2, ...row }];
 const compare = (item, rows = core()) => compareScopedCatalog({ sources: source(item), coreRows: rows, scope });
+const commonCore = (row = {}) => core({ core_storefront_id: STOREFRONT, ...row });
 
 function first(result) {
   const item = result.items.find(item => item.source !== 'commerce-core');
@@ -155,7 +156,7 @@ test('readScopedCatalogDiagnostic usa shape real com price_list_id e joins de va
     queryRead: async (sql, values) => {
       calls.push({ sql, values });
       assert.doesNotMatch(sql, /\b(INSERT|UPDATE|DELETE|MERGE)\b/i);
-      if (sql.includes('FROM commerce_storefronts')) return { rows: [{ id: STOREFRONT, loja_id: STORE }] };
+      if (sql.trimStart().startsWith('SELECT id, loja_id FROM commerce_storefronts')) return { rows: [{ id: STOREFRONT, loja_id: STORE }] };
       assert.match(sql, /commerce_product_variants/);
       assert.match(sql, /commerce_product_channels/);
       assert.match(sql, /pc\.price_list_id/);
@@ -209,7 +210,7 @@ test('SKU case-sensitive não cria vínculo automático nem busca por nome', () 
 
 test('fonte Commerce ausente ou resposta incompleta falha sem retornar vazio', async () => {
   assert.throws(() => compareScopedCatalog({ sources: [], coreRows: null, scope }), error => error.code === 'SOURCE_READ_FAILED');
-  await assert.rejects(() => readScopedCatalogDiagnostic({ queryRead: async sql => sql.includes('commerce_storefronts') ? { rows: [{ id: STOREFRONT, loja_id: STORE }] } : {}, scope }), error => error.code === 'SOURCE_READ_FAILED');
+  await assert.rejects(() => readScopedCatalogDiagnostic({ queryRead: async sql => sql.trimStart().startsWith('SELECT id, loja_id FROM commerce_storefronts') ? { rows: [{ id: STOREFRONT, loja_id: STORE }] } : {}, scope }), error => error.code === 'SOURCE_READ_FAILED');
 })
 
 test('tipos booleanos e strings brancas de estoque não são zero e reservas não são disponíveis', () => {
@@ -251,4 +252,155 @@ test('guard de UUID da rota rejeita seletores malformados antes da leitura Postg
     assert.equal(valid.test(invalid), false);
   }
   assert.ok(route.indexOf(literal[0]) < route.indexOf('SELECT id, loja_id FROM commerce_storefronts'));
+});
+
+test('leitor comum expõe variante, SKU, preço e estoque somente por ID/SKU exato unívoco', () => {
+  const result = buildCommonCatalogRead({
+    sources: source({ id: 'legacy-1', sku: 'SKU-1', unidade: 'un', precoVenda: '10,50', estoqueAtual: 2 }),
+    coreRows: commonCore({ core_price: '10.50', core_promotional_price: null, core_available: 2 }),
+    scope,
+  });
+  assert.deepEqual(result.summary, { sourceItems: 1, available: 1, blocked: 0, unavailable: 0, outOfScope: 0, reasonCounts: {} });
+  assert.deepEqual(result.items[0], {
+    source: 'legacy', status: 'available', reasons: [], matchedBy: 'id', mappingKey: 'legacy-1',
+    variantId: 'variant-1', sku: 'SKU-1', priceCents: 1050, stockAvailable: 2, sourceStockAvailable: 2,
+    price: { cents: 1050, baseCents: 1050, promotionalCents: null },
+    stock: { available: 2, sourceAvailable: 2 },
+    scope,
+  });
+});
+
+test('leitor comum permite SKU exato sem ID, mas não usa nome nem diferença de caixa', () => {
+  const matched = buildCommonCatalogRead({
+    sources: source({ id: 'legacy-unknown', sku: 'SKU-1', nome: 'Nome diferente', unidade: 'un', precoVenda: 10.5, estoqueAtual: 2 }),
+    coreRows: commonCore({ legacy_key: 'legacy-other' }),
+    scope,
+  });
+  assert.equal(matched.items[0].status, 'available');
+  assert.equal(matched.items[0].matchedBy, 'sku');
+  const caseChanged = buildCommonCatalogRead({
+    sources: source({ id: 'legacy-unknown', sku: 'sku-1', nome: 'SKU-1', unidade: 'un', precoVenda: 10.5, estoqueAtual: 2 }),
+    coreRows: commonCore({ legacy_key: 'legacy-other' }),
+    scope,
+  });
+  assert.equal(caseChanged.items[0].status, 'unavailable');
+  assert.deepEqual(caseChanged.items[0].reasons, ['NO_EXACT_MAPPING']);
+});
+
+test('leitor comum bloqueia duplicado, preço/estoque divergente e escopo incompleto sem fallback silencioso', () => {
+  const duplicate = buildCommonCatalogRead({
+    sources: source({ id: 'legacy-1', sku: 'SKU-1', unidade: 'un', precoVenda: 10, estoqueAtual: 2 }),
+    coreRows: [...commonCore(), ...commonCore({ variant_id: 'variant-2', sku: 'SKU-1' })],
+    scope,
+  });
+  assert.equal(duplicate.items[0].status, 'blocked');
+  assert.ok(duplicate.items[0].reasons.includes('DUPLICATE_CORE_SKU'));
+  assert.equal(duplicate.items[0].variantId, null);
+  const divergent = buildCommonCatalogRead({
+    sources: source({ id: 'legacy-1', sku: 'SKU-1', unidade: 'un', precoVenda: 11, estoqueAtual: 3 }),
+    coreRows: commonCore({ core_available: 2 }),
+    scope,
+  });
+  assert.equal(divergent.items[0].status, 'blocked');
+  assert.ok(divergent.items[0].reasons.includes('PRICE_DIVERGENCE'));
+  assert.ok(divergent.items[0].reasons.includes('STOCK_DIVERGENCE'));
+  assert.equal(divergent.items[0].priceCents, null);
+  const noStorefront = buildCommonCatalogRead({
+    sources: source({ id: 'legacy-1', sku: 'SKU-1', unidade: 'un', precoVenda: 10, estoqueAtual: 2 }),
+    coreRows: core(),
+    scope,
+  });
+  assert.equal(noStorefront.items[0].status, 'blocked');
+  assert.ok(noStorefront.items[0].reasons.includes('STOREFRONT_MISSING'));
+});
+
+test('leitor comum exige unidade explícita igual e preserva o escopo selecionado', () => {
+  const missing = buildCommonCatalogRead({
+    sources: source({ id: 'legacy-1', sku: 'SKU-1', precoVenda: 10, estoqueAtual: 2 }),
+    coreRows: commonCore({ core_unit: null }),
+    scope,
+  });
+  assert.equal(missing.items[0].status, 'blocked');
+  assert.ok(missing.items[0].reasons.includes('CORE_UNIT_MISSING'));
+  assert.ok(missing.items[0].reasons.includes('UNIT_NOT_COMPARABLE'));
+  assert.equal(missing.items[0].sku, null);
+  const different = buildCommonCatalogRead({
+    sources: source({ id: 'legacy-1', sku: 'SKU-1', unidade: 'kg', precoVenda: 10, estoqueAtual: 2 }),
+    coreRows: commonCore({ core_unit: 'un' }),
+    scope,
+  });
+  assert.equal(different.items[0].status, 'blocked');
+  assert.ok(different.items[0].reasons.includes('UNIT_MISMATCH'));
+  const available = buildCommonCatalogRead({
+    sources: source({ id: 'legacy-1', sku: 'SKU-1', unidade: 'un', precoVenda: 10.5, estoqueAtual: 2 }),
+    coreRows: commonCore(),
+    scope,
+  });
+  assert.deepEqual(available.items[0].scope, scope);
+  assert.equal(available.items[0].variantId, 'variant-1');
+});
+
+test('promoção raw inválida bloqueia e não faz fallback ao preço base', () => {
+  const result = buildCommonCatalogRead({
+    sources: source({ id: 'legacy-1', sku: 'SKU-1', unidade: 'un', precoVenda: 10, estoqueAtual: 2 }),
+    coreRows: commonCore({ core_promotional_price: 'PROMO-INVALIDA' }),
+    scope,
+  });
+  assert.equal(result.items[0].status, 'blocked');
+  assert.ok(result.items[0].reasons.includes('PROMOTIONAL_PRICE_INVALID'));
+  assert.ok(result.items[0].reasons.includes('STOREFRONT_PRICE_MISSING'));
+  assert.equal(result.items[0].priceCents, null);
+  assert.equal(result.items[0].price.cents, null);
+});
+
+test('zero real é comparável e catálogo sem registros permanece explicitamente vazio', () => {
+  const zero = buildCommonCatalogRead({
+    sources: source({ id: 'legacy-1', sku: 'SKU-1', unidade: 'un', precoVenda: 0, estoqueAtual: 0 }),
+    coreRows: commonCore({ core_price: 0, core_available: 0 }),
+    scope,
+  });
+  assert.deepEqual(zero.summary, { sourceItems: 1, available: 1, blocked: 0, unavailable: 0, outOfScope: 0, reasonCounts: {} });
+  assert.equal(zero.items[0].priceCents, 0);
+  assert.equal(zero.items[0].stockAvailable, 0);
+  const empty = buildCommonCatalogRead({ sources: [{ name: 'legacy', items: [] }], coreRows: [], scope });
+  assert.deepEqual(empty.summary, { sourceItems: 0, available: 0, blocked: 0, unavailable: 0, outOfScope: 0, reasonCounts: {} });
+  assert.deepEqual(empty.items, []);
+});
+
+test('produto/variante/publicado ausentes ou inativos não declaram disponibilidade comercial', () => {
+  const absentRow = commonCore();
+  delete absentRow[0].core_product_status;
+  delete absentRow[0].core_variant_active;
+  delete absentRow[0].core_published;
+  const absent = buildCommonCatalogRead({
+    sources: source({ id: 'legacy-1', sku: 'SKU-1', unidade: 'un', precoVenda: 10, estoqueAtual: 2 }),
+    coreRows: absentRow,
+    scope,
+  });
+  assert.equal(absent.items[0].status, 'blocked');
+  assert.ok(absent.items[0].reasons.includes('CORE_PRODUCT_STATUS_MISSING'));
+  assert.ok(absent.items[0].reasons.includes('CORE_VARIANT_ACTIVE_MISSING'));
+  assert.ok(absent.items[0].reasons.includes('CORE_PUBLISHED_MISSING'));
+  assert.equal(absent.items[0].sku, null);
+  const inactive = buildCommonCatalogRead({
+    sources: source({ id: 'legacy-1', sku: 'SKU-1', unidade: 'un', precoVenda: 10, estoqueAtual: 2 }),
+    coreRows: commonCore({ core_product_status: 'draft', core_variant_active: false, core_published: false }),
+    scope,
+  });
+  assert.equal(inactive.items[0].status, 'blocked');
+  assert.ok(inactive.items[0].reasons.includes('CORE_PRODUCT_NOT_ACTIVE'));
+  assert.ok(inactive.items[0].reasons.includes('CORE_VARIANT_NOT_ACTIVE'));
+  assert.ok(inactive.items[0].reasons.includes('CORE_NOT_PUBLISHED'));
+});
+
+test('linhas duplicadas da mesma variante com valores conflitantes são bloqueadas sem escolha silenciosa', () => {
+  const result = buildCommonCatalogRead({
+    sources: source({ id: 'legacy-1', sku: 'SKU-1', unidade: 'un', precoVenda: 10, estoqueAtual: 2 }),
+    coreRows: [...commonCore({ core_price: 10 }), ...commonCore({ core_price: 12 })],
+    scope,
+  });
+  assert.equal(result.items[0].status, 'blocked');
+  assert.ok(result.items[0].reasons.includes('DUPLICATE_VARIANT_CONFLICT'));
+  assert.equal(result.items[0].priceCents, null);
+  assert.equal(result.summary.reasonCounts.DUPLICATE_VARIANT_CONFLICT, 1);
 });
