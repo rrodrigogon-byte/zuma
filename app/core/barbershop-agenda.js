@@ -275,6 +275,28 @@ export async function createAppointment(trx, scope, input = {}) {
 
 function criarNaAgendaDaBarbearia(scope, input = {}) {
   const empresa = chaveEmpresa(scope);
+  // Idempotência precisa preceder a resolução do slot: numa repetição depois de
+  // uma resposta perdida, o próprio atendimento já ocupa o horário e não pode
+  // ser confundido com um novo conflito.
+  const codigo = input.actionId
+    ? createHash('sha256').update(`whatsapp-ia:${empresa}:${input.actionId}`).digest('hex').slice(0, 8).toUpperCase()
+    : randomBytes(4).toString('hex').toUpperCase();
+  const existente = input.actionId
+    ? barbearia.listarAgendamentos(empresa, {}).find((item) => item.codigoConfirmacao === codigo)
+    : null;
+  if (existente) {
+    const profissionalSolicitado = limpo(input.professionalId, 100) || 'qualquer';
+    const mesmoPedido = String(existente.lojaId || '') === String(scope.lojaId || '')
+      && phoneMatchKey(existente.clienteTelefone) === phoneMatchKey(input.customerPhone)
+      && existente.dataAgenda === dataLocalValida(input.date)
+      && existente.horaLocal === limpo(input.time, 5)
+      && existente.servicoId === limpo(input.serviceId, 100)
+      && (profissionalSolicitado === 'qualquer' || existente.profissionalId === profissionalSolicitado)
+      && limpo(existente.clienteNome, 160) === limpo(input.customerName, 160)
+      && limpo(existente.observacoes, 600) === limpo(input.notes, 600);
+    if (!mesmoPedido) throw new SchedulingError('a confirmação já foi usada em outro contexto; revise a ação antes de confirmar novamente', 'IDEMPOTENCY_CONFLICT');
+    return respostaAgendamento(empresa, existente);
+  }
   try {
     const livre = barbearia.resolverProfissionalDisponivel(empresa, {
       data: dataLocalValida(input.date),
@@ -283,13 +305,6 @@ function criarNaAgendaDaBarbearia(scope, input = {}) {
       profissionalId: limpo(input.professionalId, 100) || 'qualquer',
       lojaId: scope.lojaId,
     });
-    // Idempotência: a mesma ação confirmada (actionId) gera sempre o mesmo
-    // código; se a confirmação for repetida após uma falha, devolve o existente.
-    const codigo = input.actionId
-      ? createHash('sha256').update(`whatsapp-ia:${empresa}:${input.actionId}`).digest('hex').slice(0, 8).toUpperCase()
-      : randomBytes(4).toString('hex').toUpperCase();
-    const existente = barbearia.listarAgendamentos(empresa, {}).find((item) => item.codigoConfirmacao === codigo && phoneMatchKey(item.clienteTelefone) === phoneMatchKey(input.customerPhone));
-    if (existente) return respostaAgendamento(empresa, existente);
     // Limite por VISITA (dia + pessoa), não por serviço: no WhatsApp o mesmo número marca
     // para a família ("eu e o Pedro") e vários serviços na mesma ida (barba + manicure).
     const futurosDoTelefone = agendamentosDoTelefone(empresa, input.customerPhone).filter((item) => ATIVOS.has(item.status));
