@@ -11,6 +11,7 @@
     "migrate:sql": "node app/migrations/run-sql-migrations.js",
     "worker:omnichannel": "node app/workers/omnichannel-worker.js --once",
     "check:omnichannel-worker": "node --check app/workers/omnichannel-worker.js",
+    "test:catalog-pg-real": "node scripts/test-dino-catalog-pg.mjs",
     "test": "npm run test:node && npm run test:vitest && npm run test:whatsapp-health",
     "test:whatsapp-health": "node --test web/src/pages/admin/dino/whatsapp-ai-operational.test.js web/src/lib/api.test.js && (cd web && ../node_modules/.bin/vitest --config vite.config.js run src/pages/admin/dino/WhatsappConexao.test.jsx)",
     "test:node": "node --test --test-concurrency=1 app/*.test.js app/core/*.test.js app/migrations/*.test.js app/tests/pdv-barbearia.test.js web/src/lib/*.test.js web/tests/commerce-users.test.mjs web/tests/commerce-accounts.test.mjs web/tests/accept-invite.test.mjs",
