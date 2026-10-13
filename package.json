@@ -22,7 +22,8 @@
     "docker:build": "docker build -t erp-modular:latest .",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
-    "docker:logs": "docker-compose logs -f"
+    "docker:logs": "docker-compose logs -f",
+    "test:agenda-pg-real": "node scripts/test-dino-agenda-pg.mjs"
   },
   "keywords": [
     "erp",
