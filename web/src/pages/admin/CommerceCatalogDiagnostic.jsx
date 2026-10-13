@@ -10,6 +10,7 @@ import {
   diagnosticPath,
   mappedRateLabel,
   normalizeCatalogDiagnostic,
+  commonCatalogGuidance,
 } from '../../lib/catalog-diagnostic.js'
 
 const EMPTY = { kind: 'idle' }
@@ -79,7 +80,7 @@ export default function CommerceCatalogDiagnostic({ mode, empresaId, unitId, sto
         signal: controller.signal,
       })
       if (!mountedRef.current || sequence !== requestSequence.current || diagnosticContextKey(snapshot) !== diagnosticContextKey(context)) return
-      const normalized = normalizeCatalogDiagnostic(payload)
+      const normalized = normalizeCatalogDiagnostic(payload, { empresaId: snapshot.empresaId, lojaId: snapshot.unitId, storefrontId: snapshot.storefrontId })
       setState(normalized)
     } catch (error) {
       if (error?.name === 'AbortError' || !mountedRef.current || sequence !== requestSequence.current) return
@@ -114,6 +115,18 @@ export default function CommerceCatalogDiagnostic({ mode, empresaId, unitId, sto
       </div>
       <p className="commerce-catalog-diagnostic-guidance">{diagnosticGuidance(normalized.summary)}</p>
       <div className="ecommerce-admin-table-wrap commerce-catalog-diagnostic-table-wrap"><table className="ecommerce-admin-table"><thead><tr><th>Resultado</th><th>Itens</th><th>Leitura</th></tr></thead><tbody>{normalized.rows.map(row => <tr key={row.key}><td><span className={`commerce-catalog-diagnostic-status ${row.key}`}>{statusIcon(row.key)} {row.label}</span></td><td><strong>{row.count}</strong></td><td><small>{row.detail}</small></td></tr>)}</tbody></table></div>
+      {normalized.common && <div className="commerce-catalog-diagnostic-common" aria-label="Resumo da leitura comum">
+        <h4>Correspondência verificável para comparação</h4>
+        <p className="commerce-catalog-diagnostic-guidance">{commonCatalogGuidance(normalized.common)}</p>
+        <div className="commerce-catalog-diagnostic-summary">
+          <article><span>Disponíveis para comparação</span><strong>{normalized.common.summary.available}</strong><small>não é oferta nem autorização de venda</small></article>
+          <article className={normalized.common.summary.blocked ? 'attention' : ''}><span>Bloqueados</span><strong>{normalized.common.summary.blocked}</strong><small>dados conflitantes ou não verificáveis</small></article>
+          <article className={normalized.common.summary.unavailable ? 'attention soft' : ''}><span>Sem correspondência</span><strong>{normalized.common.summary.unavailable}</strong><small>não é estoque zero</small></article>
+          <article><span>Fora do escopo</span><strong>{normalized.common.summary.outOfScope}</strong><small>excluídos antes da comparação</small></article>
+        </div>
+        {normalized.common.reasons.length > 0 && <div className="ecommerce-admin-table-wrap commerce-catalog-diagnostic-table-wrap"><table className="ecommerce-admin-table"><thead><tr><th>Motivo agregado</th><th>Itens</th></tr></thead><tbody>{normalized.common.reasons.map(reason => <tr key={reason.label}><td><small>{reason.label}</small></td><td><strong>{reason.count}</strong></td></tr>)}</tbody></table></div>}
+      </div>}
+      {normalized.commonUnavailable && <p className="commerce-catalog-diagnostic-guidance">A leitura comum não pôde ser verificada neste retorno. O diagnóstico anterior permanece disponível; não foi convertido em zero.</p>}
     </>}
   </section>
 }

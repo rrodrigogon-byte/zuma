@@ -198,6 +198,13 @@ test('PostgreSQL real: diagnóstico de catálogo é read-only, tenant/store scop
   assert.equal(result.summary.unmapped, 0);
   assert.equal(result.items.some(item => item.identifier === 'legacy-secret-a2' || item.identifier === 'legacy-secret-b'), false);
   assert.doesNotMatch(JSON.stringify(result), /SKU-SECRET|secret-a2|secret-b|produto-secret/);
+  assert.equal(result.commonRead.mode, 'read-only-common-catalog');
+  assert.equal(result.commonRead.summary.sourceItems, 4);
+  assert.equal(result.commonRead.summary.available, 0, 'core_unit NULL não é convertido em un');
+  assert.equal(result.commonRead.summary.blocked, 4);
+  assert.equal(result.commonRead.summary.outOfScope, 2);
+  assert.ok(result.commonRead.summary.reasonCounts.UNIT_NOT_COMPARABLE >= 3);
+  assert.ok(result.commonRead.items.every(item => item.status === 'blocked' && item.sku === null && item.variantId === null && item.priceCents === null && item.stockAvailable === null));
 
   const alignedWithMissingMeasure = itemFor(result, 'legacy-aligned');
   assert.equal(alignedWithMissingMeasure.status, 'not_verified');
