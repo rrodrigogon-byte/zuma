@@ -182,6 +182,8 @@ function profissionalNormalizado(dados = {}, anterior = {}) {
     // Exceções por serviço ({ servicoId: percentual }). Sem exceção vale percentualComissao.
     comissoesPorServico: comissoesPorServicoNormalizadas(dados.comissoesPorServico ?? dados.comissoes_por_servico ?? anterior.comissoesPorServico),
     descontaTaxaMaquininha: dados.descontaTaxaMaquininha ?? dados.desconta_taxa_maquininha ?? anterior.descontaTaxaMaquininha ?? true,
+    // Desconta da base da comissão o custo do material usado no serviço (padrão: não).
+    descontaMaterial: Boolean(dados.descontaMaterial ?? dados.desconta_material ?? anterior.descontaMaterial ?? false),
     horarioInicio: texto(dados.horarioInicio ?? dados.horario_inicio ?? anterior.horarioInicio, 5) || '08:00',
     horarioFim: texto(dados.horarioFim ?? dados.horario_fim ?? anterior.horarioFim, 5) || '18:00',
     diasTrabalho: dias,
@@ -216,6 +218,14 @@ function validarPrecoServico(servico) {
   if (servico.preco <= 0) throw new Error('Preço do serviço deve ser positivo.');
 }
 
+function custoMaterialNormalizado(valor, anterior) {
+  if (valor === undefined) return anterior ?? null;
+  if (valor === null || valor === '') return null;
+  const custo = dinheiro(valor);
+  if (custo < 0) throw new Error('Custo de material não pode ser negativo.');
+  return custo;
+}
+
 function servicoNormalizado(dados = {}, anterior = {}) {
   const tipoPreco = tipoPrecoNormalizado(dados.tipoPreco ?? dados.tipo_preco, anterior.tipoPreco);
   const preco = dinheiro(dados.preco ?? anterior.preco);
@@ -229,6 +239,8 @@ function servicoNormalizado(dados = {}, anterior = {}) {
     tipoPreco,
     ativo: dados.ativo ?? anterior.ativo ?? true,
     permiteAgendamentoOnline: dados.permiteAgendamentoOnline ?? dados.permite_agendamento_online ?? anterior.permiteAgendamentoOnline ?? true,
+    // Custo de material por atendimento (R$). Vazio = soma do custo dos insumos da ficha técnica.
+    custoMaterial: custoMaterialNormalizado(dados.custoMaterial ?? dados.custo_material, anterior.custoMaterial),
     // Quem faz este serviço (ex.: manicure só com a Nathy). Vazio = qualquer profissional ativo.
     profissionaisIds: Array.isArray(dados.profissionaisIds ?? dados.profissionais_ids ?? anterior.profissionaisIds)
       ? [...new Set((dados.profissionaisIds ?? dados.profissionais_ids ?? anterior.profissionaisIds).map((id) => texto(id, 100)).filter(Boolean))].slice(0, 50)
@@ -640,6 +652,8 @@ function planoNormalizado(dados = {}, anterior = {}) {
     sessoesIncluidas: Math.max(1, Math.min(100, Math.round(numero(dados.sessoesIncluidas ?? dados.sessoes_incluidas ?? anterior.sessoesIncluidas, 1)))),
     validadeDias: Math.max(1, Math.min(730, Math.round(numero(dados.validadeDias ?? dados.validade_dias ?? anterior.validadeDias, ciclo === 'anual' ? 365 : ciclo === 'trimestral' ? 90 : 30)))),
     servicosIds,
+    // Parte da mensalidade (%) que vai para o pote de comissão dos profissionais.
+    percentualPote: Math.min(100, Math.max(0, numero(dados.percentualPote ?? dados.percentual_pote ?? anterior.percentualPote, 0))),
     ativo: dados.ativo ?? anterior.ativo ?? true,
   };
 }
@@ -737,7 +751,10 @@ function produtoRevendaNormalizado(dados = {}, anterior = {}) {
   return {
     nome: texto(dados.nome ?? anterior.nome, 140),
     sku: texto(dados.sku ?? anterior.sku, 80),
+    // Código de barras (GTIN/EAN): casa o item da nota fiscal de entrada com o produto.
+    ean: texto(dados.ean ?? dados.gtin ?? anterior.ean, 20).replace(/\D/g, ''),
     categoria: texto(dados.categoria ?? anterior.categoria, 80) || 'Revenda',
+    fornecedorPadraoId: texto(dados.fornecedorPadraoId ?? dados.fornecedor_padrao_id ?? anterior.fornecedorPadraoId, 120),
     unidade: texto(dados.unidade ?? anterior.unidade, 20) || 'un',
     precoVenda: dinheiro(dados.precoVenda ?? dados.preco_venda ?? anterior.precoVenda),
     custoUnitario: dinheiro(dados.custoUnitario ?? dados.custo_unitario ?? anterior.custoUnitario),
@@ -808,6 +825,73 @@ export function ajustarEstoqueRevenda(empresaId, produtoId, dados = {}) {
   produto.ultimoMovimentoEm = agora;
   save();
   return { produto: { ...produto, statusEstoque: statusEstoque(produto) }, movimento: { ...estado.movimentosEstoque[movimentoId] } };
+}
+
+// Entrada de mercadoria (recebimento de compra ou nota fiscal de entrada): soma ao
+// saldo, recalcula o custo médio ponderado e registra o movimento com a origem.
+// Idempotente pela chave: reprocessar a mesma nota não duplica o estoque.
+export function entradaEstoqueRevenda(empresaId, produtoId, dados = {}) {
+  const estado = estadoEmpresa(empresaId);
+  const produto = estado.produtosRevenda[String(produtoId)];
+  if (!produto || produto.empresaId !== String(empresaId)) throw new Error('Produto de revenda não encontrado.');
+  const quantidade = Math.round(numero(dados.quantidade, NaN));
+  if (!Number.isFinite(quantidade) || quantidade <= 0) throw new Error('Quantidade de entrada deve ser positiva.');
+  const chave = texto(dados.chaveIdempotencia, 220);
+  if (chave) {
+    const repetido = Object.values(estado.movimentosEstoque).find((item) => item.chaveIdempotencia === chave);
+    if (repetido) return { produto: { ...produto, statusEstoque: statusEstoque(produto) }, movimento: { ...repetido }, repetido: true };
+  }
+  const custoEntrada = dados.custoUnitario === undefined || dados.custoUnitario === null || dados.custoUnitario === '' ? null : dinheiro(dados.custoUnitario);
+  if (custoEntrada !== null && custoEntrada < 0) throw new Error('Custo unitário não pode ser negativo.');
+  const anterior = Math.max(0, Number(produto.estoqueAtual || 0));
+  const custoAnterior = Number(produto.custoUnitario || 0);
+  const posterior = anterior + quantidade;
+  if (custoEntrada !== null) {
+    produto.custoUltimaCompra = custoEntrada;
+    produto.custoUnitario = anterior > 0 && custoAnterior > 0
+      ? Number(((anterior * custoAnterior + quantidade * custoEntrada) / posterior).toFixed(4))
+      : custoEntrada;
+  }
+  const agora = dataAtual();
+  const movimentoId = novoId('mov', estado.movimentosEstoque);
+  estado.movimentosEstoque[movimentoId] = {
+    id: movimentoId,
+    empresaId: String(empresaId),
+    produtoId: produto.id,
+    tipo: 'entrada_compra',
+    quantidade,
+    estoqueAnterior: anterior,
+    estoquePosterior: posterior,
+    custoUnitario: custoEntrada,
+    custoMedioAnterior: custoAnterior,
+    custoMedioPosterior: Number(produto.custoUnitario || 0),
+    origem: texto(dados.origem, 40) || 'compra',
+    referencia: texto(dados.referencia, 160) || null,
+    fornecedorId: texto(dados.fornecedorId, 120) || null,
+    chaveIdempotencia: chave || null,
+    observacao: texto(dados.observacao, 300),
+    usuario: texto(dados.usuario, 160) || null,
+    criadoEm: agora,
+  };
+  produto.estoqueAtual = posterior;
+  if (dados.fornecedorId) produto.fornecedorPadraoId = texto(dados.fornecedorId, 120);
+  produto.atualizadoEm = agora;
+  produto.ultimoMovimentoEm = agora;
+  save();
+  return { produto: { ...produto, statusEstoque: statusEstoque(produto) }, movimento: { ...estado.movimentosEstoque[movimentoId] } };
+}
+
+// Custo do material de um atendimento: valor fixo do serviço, ou a soma do custo
+// dos insumos da ficha técnica (quantidade × custo médio do produto).
+export function custoMaterialServico(empresaId, servicoId) {
+  const estado = estadoEmpresa(empresaId, false);
+  const servico = estado.servicos[String(servicoId || '')];
+  if (!servico) return 0;
+  if (servico.custoMaterial !== null && servico.custoMaterial !== undefined) return dinheiro(servico.custoMaterial);
+  return dinheiro((servico.consumoInterno || []).reduce((soma, insumo) => {
+    const produto = estado.produtosRevenda[insumo.produtoId];
+    return soma + Number(insumo.quantidade || 0) * Number(produto?.custoUnitario || 0);
+  }, 0));
 }
 
 export function listarMovimentosEstoque(empresaId, filtros = {}) {
@@ -1589,7 +1673,7 @@ export function recebimentoAgendamentoVerificado(empresaId, agendamento) {
     && Number(lancamento.valor) > 0 ? lancamento : null;
 }
 
-export function obterComissoes(empresaId, { data = '', lojaId = '', inicio = '', fim = '' } = {}) {
+export function obterComissoes(empresaId, { data = '', lojaId = '', inicio = '', fim = '', detalhar = false, profissionalId: somenteProfissional = '' } = {}) {
   const estado = estadoEmpresa(empresaId, false);
   // Filtro por dia (data) ou por período (inicio/fim, AAAA-MM-DD inclusivos).
   const diaIni = String(inicio || '').slice(0, 10);
@@ -1636,7 +1720,7 @@ export function obterComissoes(empresaId, { data = '', lojaId = '', inicio = '',
     .filter((item) => noFiltro(item.dataAgenda || diaOperacional(item.dataHora)))
     .map((item) => {
       const lancamento = recebimentoAgendamentoVerificado(empresaId, item);
-      return lancamento ? { ...item, valorRecebido: Number(lancamento.valor), meioPagamento: lancamento.meioPagamento } : null;
+      return lancamento ? { ...item, valorRecebido: Number(lancamento.valor), meioPagamento: lancamento.meioPagamento, origemTipo: 'agendamento', origemId: item.id, dataRef: item.dataAgenda || diaOperacional(item.dataHora), nomeItem: item.servicoNome || '', quantidade: 1 } : null;
     }).filter(Boolean);
   const vendasLegadas = Object.values(estado.vendasRevenda)
     .filter(filtrarLoja)
@@ -1644,9 +1728,10 @@ export function obterComissoes(empresaId, { data = '', lojaId = '', inicio = '',
     .filter((item) => noFiltro(diaOperacional(item.criadoEm)));
   const servicosComanda = comandasPagas.flatMap((comanda) => (comanda.itens || [])
     .filter((item) => item.tipo === 'servico')
-    .map((item) => ({ ...item, profissionalId: item.profissionalId || comanda.profissionalId, valorRecebido: dinheiro(Number(item.subtotal || 0) * fatorDesconto(comanda)), valor: dinheiro(Number(item.subtotal || 0) * fatorDesconto(comanda)), pesoNaComanda: pesoNaComanda(comanda, Number(item.subtotal || 0)), rateio: rateioPagamentos(comanda), meioPagamento: comanda.pagamentos?.find((pagamento) => pagamento.meio !== 'conta')?.meio || comanda.pagamento })));
+    .map((item) => ({ ...item, origemTipo: 'comanda', origemId: comanda.id, clienteNome: comanda.clienteNome || '', dataRef: diaOperacional(comanda.fechadaEm || comanda.atualizadoEm), nomeItem: item.nome, profissionalId: item.profissionalId || comanda.profissionalId, valorRecebido: dinheiro(Number(item.subtotal || 0) * fatorDesconto(comanda)), valor: dinheiro(Number(item.subtotal || 0) * fatorDesconto(comanda)), pesoNaComanda: pesoNaComanda(comanda, Number(item.subtotal || 0)), rateio: rateioPagamentos(comanda), meioPagamento: comanda.pagamentos?.find((pagamento) => pagamento.meio !== 'conta')?.meio || comanda.pagamento })));
   const produtosComanda = comandasPagas.map((comanda) => ({
     id: comanda.id,
+    clienteNome: comanda.clienteNome || '',
     empresaId: comanda.empresaId,
     lojaId: comanda.lojaId,
     profissionalId: comanda.profissionalId || null,
@@ -1678,30 +1763,42 @@ export function obterComissoes(empresaId, { data = '', lojaId = '', inicio = '',
       ? item.rateio.reduce((soma, parte) => soma + calcularTaxa(Number(valor || 0) * parte.fracao, parte.meio, profissional, peso), 0)
       : calcularTaxa(valor, meioUnico, profissional, peso);
   };
-  const porProfissional = Object.values(estado.profissionais).map((profissional) => {
+  const materialCache = new Map();
+  const materialDoServico = (servicoId) => {
+    if (!materialCache.has(servicoId)) materialCache.set(servicoId, custoMaterialServico(empresaId, servicoId));
+    return materialCache.get(servicoId);
+  };
+  const porProfissional = Object.values(estado.profissionais)
+    .filter((profissional) => !somenteProfissional || profissional.id === String(somenteProfissional))
+    .map((profissional) => {
     const servicos = atendimentosConsolidados.filter((item) => item.profissionalId === profissional.id);
     const produtos = vendas.filter((item) => item.profissionalId === profissional.id);
-    const brutoServicos = servicos.reduce((soma, item) => soma + Number(item.valorRecebido || item.valor || 0), 0);
-    const brutoProdutos = produtos.reduce((soma, item) => soma + Number(item.total || 0), 0);
-    const taxaServicos = servicos.reduce((soma, item) => {
-      const meio = String(item.meioPagamento || '').toLowerCase();
-      return soma + taxaDoItem(Number(item.valorRecebido || item.valor || 0), item, meio, profissional);
-    }, 0);
-    const taxaProdutos = produtos.reduce((soma, item) => {
-      const meio = String(item.pagamento?.meioPagamento || '').toLowerCase();
-      return soma + taxaDoItem(Number(item.total || 0), item, meio, profissional);
-    }, 0);
-    // Cada serviço usa a sua exceção de comissão, quando houver, sobre o líquido de taxas.
-    const comissaoServicos = servicos.reduce((soma, item) => {
+    const linhas = [];
+    let brutoServicos = 0; let taxaServicos = 0; let materiaisTotal = 0; let comissaoServicos = 0;
+    for (const item of servicos) {
       const valor = Number(item.valorRecebido || item.valor || 0);
       const taxa = taxaDoItem(valor, item, String(item.meioPagamento || '').toLowerCase(), profissional);
-      return soma + (valor - taxa) * percentualComissaoServico(profissional, item.servicoId) / 100;
-    }, 0);
+      // Material só entra na base quando o profissional desconta material; nunca deixa a base negativa.
+      const material = profissional.descontaMaterial ? Math.min(Math.max(0, valor - taxa), materialDoServico(item.servicoId) * Math.max(1, Number(item.quantidade || 1))) : 0;
+      const percentual = percentualComissaoServico(profissional, item.servicoId);
+      const comissao = Math.max(0, valor - taxa - material) * percentual / 100;
+      brutoServicos += valor; taxaServicos += taxa; materiaisTotal += material; comissaoServicos += comissao;
+      if (detalhar) linhas.push({ tipo: 'servico', data: item.dataRef || '', origemTipo: item.origemTipo || '', origemId: item.origemId || item.id || '', cliente: item.clienteNome || '', descricao: item.nomeItem || item.servicoNome || 'Serviço', bruto: dinheiro(valor), taxa: dinheiro(taxa), material: dinheiro(material), base: dinheiro(Math.max(0, valor - taxa - material)), percentual, comissao: dinheiro(comissao) });
+    }
+    let brutoProdutos = 0; let taxaProdutos = 0;
+    for (const item of produtos) {
+      const valor = Number(item.total || 0);
+      const taxa = taxaDoItem(valor, item, String(item.pagamento?.meioPagamento || '').toLowerCase(), profissional);
+      brutoProdutos += valor; taxaProdutos += taxa;
+      if (detalhar) linhas.push({ tipo: 'produto', data: diaOperacional(item.criadoEm), origemTipo: item.itens ? 'venda' : 'comanda', origemId: item.id, cliente: item.clienteNome || '', descricao: item.itens ? item.itens.map((linha) => `${linha.quantidade}× ${linha.nome}`).join(', ') : 'Produtos da comanda', bruto: dinheiro(valor), taxa: dinheiro(taxa), material: 0, base: dinheiro(valor - taxa), percentual: Number(profissional.percentualComissaoProduto || 0), comissao: dinheiro((valor - taxa) * Number(profissional.percentualComissaoProduto || 0) / 100) });
+    }
     const comissaoProdutos = (brutoProdutos - taxaProdutos) * Number(profissional.percentualComissaoProduto || 0) / 100;
     const bruto = brutoServicos + brutoProdutos;
     const taxasTotal = taxaServicos + taxaProdutos;
     const repasse = Math.max(0, comissaoServicos + comissaoProdutos);
-    return { profissionalId: profissional.id, profissionalNome: profissional.nome, percentualComissao: Number(profissional.percentualComissao || 0), percentualComissaoProduto: Number(profissional.percentualComissaoProduto || 0), atendimentos: servicos.length, vendasProdutos: produtos.length, brutoServicos: dinheiro(brutoServicos), brutoProdutos: dinheiro(brutoProdutos), bruto: dinheiro(bruto), taxas: dinheiro(taxasTotal), comissaoServicos: dinheiro(comissaoServicos), comissaoProdutos: dinheiro(comissaoProdutos), repasse: dinheiro(repasse), parcelaSalao: dinheiro(Math.max(0, bruto - taxasTotal - repasse)) };
+    const resultado = { profissionalId: profissional.id, profissionalNome: profissional.nome, percentualComissao: Number(profissional.percentualComissao || 0), percentualComissaoProduto: Number(profissional.percentualComissaoProduto || 0), descontaMaterial: Boolean(profissional.descontaMaterial), atendimentos: servicos.length, vendasProdutos: produtos.length, brutoServicos: dinheiro(brutoServicos), brutoProdutos: dinheiro(brutoProdutos), bruto: dinheiro(bruto), taxas: dinheiro(taxasTotal), materiais: dinheiro(materiaisTotal), comissaoServicos: dinheiro(comissaoServicos), comissaoProdutos: dinheiro(comissaoProdutos), repasse: dinheiro(repasse), parcelaSalao: dinheiro(Math.max(0, bruto - taxasTotal - repasse)) };
+    if (detalhar) resultado.linhas = linhas.sort((a, b) => String(a.data).localeCompare(String(b.data)));
+    return resultado;
   }).filter((item) => item.atendimentos > 0 || item.vendasProdutos > 0 || estado.profissionais[item.profissionalId].ativo !== false);
   const vendasSemProfissional = vendas.filter((item) => !item.profissionalId);
   return { data: String(data || '').slice(0, 10), porProfissional, vendasSemProfissional: vendasSemProfissional.length, brutoSemProfissional: dinheiro(vendasSemProfissional.reduce((soma, item) => soma + Number(item.total || 0), 0)), taxasConfiguradas: Object.keys(taxas).length > 0, taxasPagamento: { ...taxas }, meiosSemTaxaConfigurada: [...meiosSemTaxaConfigurada].sort() };

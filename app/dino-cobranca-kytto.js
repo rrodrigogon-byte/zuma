@@ -56,7 +56,9 @@ function iso(ms) {
 function configuracaoPadrao() {
   return {
     sinal: { ativo: false, tipo: 'percentual', valor: 30, prazoMinutos: 30 },
-    cobrancaClube: { ativa: false, diasAntes: 3 },
+    // Régua do clube: 1º aviso N dias antes; tentativas no vencimento e a cada
+    // intervalo; sem pagamento após bloquearAposDias do vencimento, o plano é pausado.
+    cobrancaClube: { ativa: false, diasAntes: 3, tentativas: 3, intervaloDias: 2, bloquearAposDias: 5, bloquearAutomatico: true },
     pix: { chave: '', nomeRecebedor: '', cidade: '' },
     cashback: { percentual: 0, validadeDias: 90 },
     vale: { ativo: false },
@@ -148,6 +150,10 @@ export function salvarConfiguracaoCobranca(empresaId, dados = {}) {
     cobrancaClube: {
       ativa: clube.ativa === undefined ? c.cobrancaClube.ativa : clube.ativa === true,
       diasAntes: Math.round(limitar(clube.diasAntes, c.cobrancaClube.diasAntes, 0, 10)),
+      tentativas: Math.round(limitar(clube.tentativas, c.cobrancaClube.tentativas, 1, 5)),
+      intervaloDias: Math.round(limitar(clube.intervaloDias, c.cobrancaClube.intervaloDias, 1, 10)),
+      bloquearAposDias: Math.round(limitar(clube.bloquearAposDias, c.cobrancaClube.bloquearAposDias, 1, 30)),
+      bloquearAutomatico: clube.bloquearAutomatico === undefined ? c.cobrancaClube.bloquearAutomatico !== false : clube.bloquearAutomatico === true,
     },
     pix: {
       chave: pix.chave === undefined ? c.pix.chave : chavePixValida(pix.chave),
@@ -325,6 +331,7 @@ function aplicarEfeitos(empresaId, item) {
     if (item.pagoAposCancelar) { item.revisar = 'cobranca_cancelada'; return; }
     const assinaturaId = item.referencia.split(':ate:')[0];
     const resultado = captacao.registrarPagamentoAssinatura(empresaId, assinaturaId, { valor: item.valor, meio: item.provedor === 'infinitepay' ? 'infinitepay' : 'pix', referencia: item.referencia, usuario: item.confirmadoPor || 'cobranca_automatica' });
+    reativarSeBloqueadaPorAtraso(empresaId, assinaturaId);
     // O período já tinha sido pago no balcão: o cliente pagou duas vezes.
     if (resultado?.repetido) { item.duplicada = true; item.revisar = 'pagamento_em_dobro'; }
   }
@@ -544,6 +551,91 @@ export async function gerarCobrancasDoClube(empresaId, opcoes = {}) {
     }
   }
   return criadas;
+}
+
+// ── Régua do clube: tentativas, bloqueio e reativação ──────────────────────
+
+function bloqueiosClube(empresaId) {
+  const atual = estado(empresaId);
+  atual.bloqueiosClube ||= {};
+  return atual.bloqueiosClube;
+}
+
+/** Plano pausado pela régua volta a ficar ativo quando o atraso é pago. */
+export function reativarSeBloqueadaPorAtraso(empresaId, assinaturaId, opcoes = {}) {
+  const bloqueios = bloqueiosClube(empresaId);
+  const bloqueio = bloqueios[String(assinaturaId)];
+  if (!bloqueio || bloqueio.reativadoEm) return null;
+  const assinatura = barbearia.listarAssinaturas(empresaId).find((item) => item.id === String(assinaturaId));
+  if (!assinatura || assinatura.status !== 'pausada') return null;
+  const resumo = captacao.resumoAssinatura(empresaId, assinaturaId, opcoes);
+  const pagoAte = resumo?.pagoAte ? new Date(resumo.pagoAte).valueOf() : 0;
+  if (pagoAte <= agoraMs(opcoes)) return null; // ainda há período em aberto
+  const reativada = barbearia.alterarStatusAssinatura(empresaId, assinaturaId, 'ativa', { confirmadoSemCobranca: true, pagamentoConfirmado: true });
+  bloqueio.reativadoEm = iso(agoraMs(opcoes));
+  save();
+  return reativada;
+}
+
+/**
+ * Roda de hora em hora. Para cada mensalidade pendente do clube:
+ *  - tentativa 2 no vencimento, 3 depois de intervaloDias (até o limite);
+ *  - passados bloquearAposDias do vencimento sem pagamento, pausa o plano
+ *    (o uso já é recusado para inadimplente; a pausa deixa isso explícito).
+ * Devolve o que deve ser reenviado e o que foi bloqueado. Não cobra nada:
+ * só reenvia o mesmo link/Pix da cobrança.
+ */
+export function processarReguaClube(empresaId, opcoes = {}) {
+  const atual = estado(empresaId);
+  const regra = atual.configuracao.cobrancaClube;
+  const ms = agoraMs(opcoes);
+  const reenviar = [];
+  const bloqueadas = [];
+  if (!regra.ativa) return { reenviar, bloqueadas };
+  const bloqueios = bloqueiosClube(empresaId);
+  let mudou = false;
+  for (const item of Object.values(atual.cobrancas)) {
+    if (item.tipo !== 'assinatura' || item.status !== 'pendente') continue;
+    const [assinaturaId, vencimentoTxt] = item.referencia.split(':ate:');
+    const vencimento = Date.parse(`${vencimentoTxt}T12:00:00Z`);
+    if (!Number.isFinite(vencimento)) continue;
+    item.tentativas = Math.max(1, Number(item.tentativas || 1));
+    item.tentativasEm ||= [item.criadoEm];
+    if (item.tentativas < regra.tentativas) {
+      const proxima = vencimento + (item.tentativas - 1) * regra.intervaloDias * DIA_MS;
+      if (ms >= proxima) {
+        item.tentativas += 1;
+        item.tentativasEm.push(iso(ms));
+        reenviar.push({ cobranca: visaoCobranca(item), tentativa: item.tentativas });
+        mudou = true;
+      }
+    }
+    if (regra.bloquearAutomatico && ms >= vencimento + regra.bloquearAposDias * DIA_MS && !bloqueios[assinaturaId]?.cobrancaId?.includes(item.id)) {
+      const assinatura = barbearia.listarAssinaturas(empresaId).find((a) => a.id === assinaturaId);
+      if (assinatura?.status === 'ativa') {
+        try {
+          barbearia.alterarStatusAssinatura(empresaId, assinaturaId, 'pausada', {});
+          bloqueios[assinaturaId] = { em: iso(ms), cobrancaId: item.id, motivo: 'inadimplencia', tentativas: item.tentativas };
+          bloqueadas.push({ assinaturaId, clienteNome: assinatura.clienteNome || item.clienteNome || '', cobrancaId: item.id });
+          mudou = true;
+        } catch (erro) { console.error('[Cobrança] bloqueio do clube:', erro?.message || erro); }
+      }
+    }
+  }
+  if (mudou) save();
+  return { reenviar, bloqueadas };
+}
+
+export function painelReguaClube(empresaId) {
+  const atual = estado(empresaId);
+  const pendentes = Object.values(atual.cobrancas).filter((item) => item.tipo === 'assinatura' && item.status === 'pendente');
+  const bloqueios = Object.entries(bloqueiosClube(empresaId)).map(([assinaturaId, b]) => ({ assinaturaId, ...b }));
+  return {
+    regra: { ...atual.configuracao.cobrancaClube },
+    pendentes: pendentes.map((item) => ({ ...visaoCobranca(item), tentativas: Number(item.tentativas || 1), vencimento: item.referencia.split(':ate:')[1] || null })),
+    bloqueadas: bloqueios.filter((b) => !b.reativadoEm),
+    reativadas: bloqueios.filter((b) => b.reativadoEm),
+  };
 }
 
 // ── Cashback ───────────────────────────────────────────────────────────────

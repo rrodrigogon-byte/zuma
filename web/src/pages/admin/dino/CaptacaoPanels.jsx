@@ -449,7 +449,7 @@ export function CobrancasPanel() {
     try {
       await api.put('/api/admin/barbearia/cobrancas/configuracao', {
         sinal: { ...config.sinal, valor: Number(config.sinal.valor), prazoMinutos: Number(config.sinal.prazoMinutos) },
-        cobrancaClube: { ...config.cobrancaClube, diasAntes: Number(config.cobrancaClube.diasAntes) },
+        cobrancaClube: { ...config.cobrancaClube, diasAntes: Number(config.cobrancaClube.diasAntes), tentativas: Number(config.cobrancaClube.tentativas ?? 3), intervaloDias: Number(config.cobrancaClube.intervaloDias ?? 2), bloquearAposDias: Number(config.cobrancaClube.bloquearAposDias ?? 5), bloquearAutomatico: config.cobrancaClube.bloquearAutomatico !== false },
         pix: config.pix,
         cashback: { percentual: Number(config.cashback.percentual), validadeDias: Number(config.cashback.validadeDias) },
         vale: { ativo: config.vale?.ativo === true },
@@ -516,6 +516,10 @@ export function CobrancasPanel() {
         <div style={{ ...grid(180), marginTop: 8, alignItems: 'end' }}>
           <label style={checkLabel}><input type="checkbox" style={checkBox} checked={config.cobrancaClube.ativa} onChange={(e) => mudar('cobrancaClube', 'ativa', e.target.checked)} />Cobrar pelo WhatsApp</label>
           <label style={label}>Enviar quantos dias antes<input type="number" min="0" max="10" style={input} value={config.cobrancaClube.diasAntes} onChange={(e) => mudar('cobrancaClube', 'diasAntes', e.target.value)} /></label>
+          <label style={label}>Tentativas de cobrança<input type="number" min="1" max="5" style={input} value={config.cobrancaClube.tentativas ?? 3} onChange={(e) => mudar('cobrancaClube', 'tentativas', e.target.value)} /></label>
+          <label style={label}>Dias entre tentativas<input type="number" min="1" max="10" style={input} value={config.cobrancaClube.intervaloDias ?? 2} onChange={(e) => mudar('cobrancaClube', 'intervaloDias', e.target.value)} /></label>
+          <label style={label}>Pausar o plano após (dias de atraso)<input type="number" min="1" max="30" style={input} value={config.cobrancaClube.bloquearAposDias ?? 5} onChange={(e) => mudar('cobrancaClube', 'bloquearAposDias', e.target.value)} /></label>
+          <label style={checkLabel}><input type="checkbox" style={checkBox} checked={config.cobrancaClube.bloquearAutomatico !== false} onChange={(e) => mudar('cobrancaClube', 'bloquearAutomatico', e.target.checked)} />Pausar sozinho e reativar ao pagar</label>
         </div>
         <p style={sub}>Só para quem autorizou o WhatsApp. Pago pelo link, o ciclo é quitado sozinho; quem atrasar além da carência fica bloqueado no clube.</p>
       </div>

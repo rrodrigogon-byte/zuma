@@ -291,3 +291,37 @@ test('minha conta e comparativo por unidade', () => {
   assert.equal(comp.unidades[0].concluidos, 1);
   assert.equal(comp.unidades[0].valorAtendido, 50);
 });
+
+test('régua do clube: 3 tentativas, pausa o plano por atraso e reativa ao pagar', async () => {
+  const { corte } = montar();
+  cobranca.salvarConfiguracaoCobranca(EMPRESA, { pix: PIX, cobrancaClube: { ativa: true, diasAntes: 3, tentativas: 3, intervaloDias: 2, bloquearAposDias: 5 } });
+  const cliente = clientes.criarCliente(EMPRESA, { nome: 'Atrasado', telefone: '65988880009' });
+  const plano = barbearia.criarPlano(EMPRESA, { nome: 'Clube', preco: 99, sessoesIncluidas: 4, validadeDias: 30, servicosIds: [corte.id] });
+  const ass = barbearia.criarAssinatura(EMPRESA, { planoId: plano.id, clienteId: cliente.id, clienteNome: cliente.nome, inicio: new Date(Date.now() - 28 * DIA_MS).toISOString() });
+  barbearia.alterarStatusAssinatura(EMPRESA, ass.id, 'ativa', { confirmadoSemCobranca: true, pagamentoConfirmado: true });
+  const [cob] = await cobranca.gerarCobrancasDoClube(EMPRESA);
+  const vencimento = Date.parse(`${cob.referencia.split(':ate:')[1]}T12:00:00Z`);
+  // Antes do vencimento: nada a reenviar.
+  assert.equal(cobranca.processarReguaClube(EMPRESA, { agora: vencimento - DIA_MS }).reenviar.length, 0);
+  const t2 = cobranca.processarReguaClube(EMPRESA, { agora: vencimento + 60000 });
+  assert.equal(t2.reenviar[0].tentativa, 2);
+  assert.equal(cobranca.processarReguaClube(EMPRESA, { agora: vencimento + 3600000 }).reenviar.length, 0, 'não repete a mesma tentativa');
+  const t3 = cobranca.processarReguaClube(EMPRESA, { agora: vencimento + 2 * DIA_MS + 60000 });
+  assert.equal(t3.reenviar[0].tentativa, 3);
+  assert.equal(cobranca.processarReguaClube(EMPRESA, { agora: vencimento + 4 * DIA_MS }).reenviar.length, 0, 'no máximo 3 tentativas');
+  const bloqueio = cobranca.processarReguaClube(EMPRESA, { agora: vencimento + 5 * DIA_MS + 60000 });
+  assert.equal(bloqueio.bloqueadas[0].assinaturaId, ass.id);
+  assert.equal(barbearia.listarAssinaturas(EMPRESA).find((a) => a.id === ass.id).status, 'pausada');
+  assert.throws(() => captacao.registrarUsoAssinatura(EMPRESA, ass.id, { servicoId: corte.id }), /não está ativa/);
+  assert.equal(cobranca.painelReguaClube(EMPRESA).bloqueadas.length, 1);
+  // Pagou o link: o ciclo é quitado e o plano volta a ficar ativo sozinho.
+  cobranca.confirmarCobranca(EMPRESA, cob.id, { origem: 'manual', usuario: 'equipe' });
+  assert.equal(barbearia.listarAssinaturas(EMPRESA).find((a) => a.id === ass.id).status, 'ativa');
+  assert.equal(cobranca.painelReguaClube(EMPRESA).reativadas.length, 1);
+});
+
+test('régua do clube desligada não reenvia nem bloqueia', async () => {
+  montar();
+  cobranca.salvarConfiguracaoCobranca(EMPRESA, { pix: PIX, cobrancaClube: { ativa: false } });
+  assert.deepEqual(cobranca.processarReguaClube(EMPRESA, { agora: Date.now() + 60 * DIA_MS }), { reenviar: [], bloqueadas: [] });
+});

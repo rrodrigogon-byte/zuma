@@ -394,7 +394,7 @@ function clienteComConsentimento(legacyEmpresaId, clienteId) {
 }
 
 /** Enfileira o envio da cobrança do clube pelo WhatsApp (mensagem de serviço, com consentimento). */
-export async function queueChargeNotification(contexto = {}, cobranca = {}) {
+export async function queueChargeNotification(contexto = {}, cobranca = {}, { tentativa = 1 } = {}) {
   const empresaId = uuidOuVazio(contexto.empresaId);
   const lojaId = uuidOuVazio(contexto.lojaId);
   const legacyEmpresaId = limpo(contexto.legacyEmpresaId || contexto.empresaId, 120);
@@ -411,8 +411,9 @@ export async function queueChargeNotification(contexto = {}, cobranca = {}) {
        VALUES ($1,$2,$3,'notificar_agendamento',$4,$5::jsonb,'pendente',CURRENT_TIMESTAMP)
        ON CONFLICT (empresa_id,tipo,referencia_externa) WHERE tipo='notificar_agendamento' DO NOTHING
        RETURNING id`,
-      [empresaId, lojaId, canal.id, `${limpo(cobranca.id, 100)}:${EVENTO_COBRANCA}`, JSON.stringify({
-        version: 'barbershop-appointment-v1', legacyEmpresaId, appointmentId: limpo(cobranca.id, 120), chargeId: limpo(cobranca.id, 120), customerId: limpo(cobranca.clienteId, 120), eventType: EVENTO_COBRANCA,
+      // Cada tentativa da régua do clube é um aviso próprio (a 1ª mantém a chave antiga).
+      [empresaId, lojaId, canal.id, `${limpo(cobranca.id, 100)}:${EVENTO_COBRANCA}${Number(tentativa) > 1 ? `:t${Number(tentativa)}` : ''}`, JSON.stringify({
+        version: 'barbershop-appointment-v1', legacyEmpresaId, appointmentId: limpo(cobranca.id, 120), chargeId: limpo(cobranca.id, 120), customerId: limpo(cobranca.clienteId, 120), eventType: EVENTO_COBRANCA, attempt: Math.max(1, Number(tentativa) || 1),
       })],
     );
     return { queued: Number(resultado.rowCount || 0), skipped: false };
@@ -436,7 +437,14 @@ async function processChargeTask(task, payload, legacyEmpresaId) {
   const comoPagar = cobranca.url
     ? `Para pagar (Pix ou cartão): ${cobranca.url}`
     : `Pix copia e cola:\n${cobranca.pixCopiaECola}\nDepois de pagar, é só responder esta mensagem com o comprovante.`;
-  const texto = `Olá, ${limpo(elegibilidade.cliente.nome, 80).split(' ')[0]}! A mensalidade do seu clube na ${nome} (${valor}) vence em breve. ${comoPagar}\nPara não receber estes avisos, responda SAIR.`;
+  const tentativa = Math.max(1, Number(payload.attempt) || 1);
+  const primeiroNome = limpo(elegibilidade.cliente.nome, 80).split(' ')[0];
+  const abertura = tentativa >= 3
+    ? `Olá, ${primeiroNome}! Ainda não identificamos a mensalidade do seu clube na ${nome} (${valor}). Este é o último aviso antes de o plano ser pausado.`
+    : tentativa === 2
+      ? `Olá, ${primeiroNome}! A mensalidade do seu clube na ${nome} (${valor}) venceu e ainda está em aberto.`
+      : `Olá, ${primeiroNome}! A mensalidade do seu clube na ${nome} (${valor}) vence em breve.`;
+  const texto = `${abertura} ${comoPagar}\nPara não receber estes avisos, responda SAIR.`;
   await db.query(
     `UPDATE tarefas_integracao_canais SET delivery_started_at = CURRENT_TIMESTAMP
       WHERE id = $1 AND status = 'processando' AND lease_token = $2::uuid`,

@@ -1,0 +1,58 @@
+# Gera o app Android "Dino Equipe" (Trusted Web Activity do app da equipe).
+# Só roda manualmente; não publica nada na loja.
+name: Dino Equipe Android
+
+on:
+  workflow_dispatch:
+    inputs:
+      versionName:
+        description: Versão (ex.: 1.0.1)
+        required: true
+        default: 1.0.0
+      versionCode:
+        description: Número da versão (inteiro crescente)
+        required: true
+        default: '1'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/dino-equipe-android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Bubblewrap
+        run: |
+          npm install -g @bubblewrap/cli@1.24.1
+          mkdir -p ~/.bubblewrap
+          echo "{\"jdkPath\":\"$JAVA_HOME\",\"androidSdkPath\":\"$ANDROID_SDK_ROOT\"}" > ~/.bubblewrap/config.json
+      - name: Chave de assinatura
+        env:
+          KEYSTORE_B64: ${{ secrets.DINO_EQUIPE_KEYSTORE_B64 }}
+        run: echo "$KEYSTORE_B64" | base64 -d > dino-equipe.keystore
+      - name: Versão
+        run: |
+          node -e "const f='twa-manifest.json';const m=require('./'+f);m.appVersionName='${{ inputs.versionName }}';m.appVersionCode=Number('${{ inputs.versionCode }}');require('fs').writeFileSync(f,JSON.stringify(m,null,2))"
+      - name: Gerar projeto e compilar
+        env:
+          BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.DINO_EQUIPE_KEYSTORE_PASSWORD }}
+          BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.DINO_EQUIPE_KEY_PASSWORD }}
+        run: |
+          yes | bubblewrap update --skipVersionUpgrade --manifest=./twa-manifest.json
+          bubblewrap build --skipPwaValidation --manifest=./twa-manifest.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dino-equipe-${{ inputs.versionName }}
+          path: |
+            apps/dino-equipe-android/*.aab
+            apps/dino-equipe-android/*.apk
+          if-no-files-found: error
