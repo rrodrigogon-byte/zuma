@@ -112,6 +112,37 @@ describe('WhatsappConexao · saúde operacional IA', () => {
     await unmount(renderer)
   })
 
+  it('resume dead-letter como próximo passo e mantém detalhes recolhidos sem mutação', async () => {
+    apiMock.get.mockImplementation(path => path.startsWith('/api/admin/barbearia/whatsapp-conexao')
+      ? Promise.resolve({ conexao: connection, podeGerenciar: false })
+      : Promise.resolve(operational({ status: 'ativo', lastEventAt: new Date().toISOString(), lastSyncAt: null, aiCircuitOpen: false, aiConsecutiveFailures: 0 }, { tasks: { deadLetter: 1 } })))
+    let renderer
+    await act(async () => { renderer = create(<WhatsappConexao />) })
+    await tick()
+    const guidance = renderer.root.findByProps({ 'aria-label': 'Próximo passo operacional' })
+    expect(JSON.stringify(guidance.findByType('strong').children)).toContain('dead-letter')
+    const details = renderer.root.findByType('details')
+    expect(details.props.open).toBeUndefined()
+    expect(details.findByType('summary').children.join('')).toContain('Ver orientações e limites')
+    expect(apiMock.post).not.toHaveBeenCalled()
+    expect(apiMock.put).not.toHaveBeenCalled()
+    await unmount(renderer)
+  })
+
+  it('mantém atendimento humano sem responsável como prioridade sem atribuir automaticamente', async () => {
+    apiMock.get.mockImplementation(path => path.startsWith('/api/admin/barbearia/whatsapp-conexao')
+      ? Promise.resolve({ conexao: connection, podeGerenciar: false })
+      : Promise.resolve(operational(null, { humanQueue: { unassigned: 1 }, tasks: { deadLetter: 2 } })))
+    let renderer
+    await act(async () => { renderer = create(<WhatsappConexao />) })
+    await tick()
+    const guidance = renderer.root.findByProps({ 'aria-label': 'Próximo passo operacional' })
+    expect(JSON.stringify(guidance.findByType('strong').children)).toContain('sem responsável')
+    expect(textOf(renderer)).toContain('Sem ação automática')
+    expect(apiMock.post).not.toHaveBeenCalled()
+    await unmount(renderer)
+  })
+
   it('mantém single-flight quando atualização manual coincide com polling/leitura em andamento', async () => {
     const pending = deferred()
     apiMock.get.mockImplementation((path) => path.startsWith('/api/admin/barbearia/whatsapp-conexao')

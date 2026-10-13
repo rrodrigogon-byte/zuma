@@ -82,6 +82,7 @@ import { loadBarbeariaCommerceStatus, unavailableBarbeariaCommerceStatus } from 
 import { customerReport, inventoryReport, salesReport } from './core/commerce-reports.js';
 import { purgeExpiredCommercePublicData, startCommerceReservationExpiryCleanup, startCommerceRetentionCleanup, startLoyaltyExpiry } from './core/commerce-retention.js';
 import { compareLegacyAndCoreInventory, createDestructiveAdminGuard, createLegacyCommerceMutationGuard, createLegacyPaymentMutationGuard } from './core/commerce-legacy-guards.js';
+import { readScopedCatalogDiagnostic } from './core/catalog-read-diagnostic.js';
 import { buildDinoDashboardAnalytics, dashboardPeriod } from './dino-dashboard.js';
 import { registerCustomer360Routes } from './customer360-routes.js';
 import { registerAiBrainRoutes } from './ai-brain-routes.js';
@@ -807,14 +808,57 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
   app.get('/api/admin/commerce/operations/inventory-divergence', async (req, res) => {
     try {
       const context = await requireCommercePermission(req, 'reports.read');
+      const storefrontId = String(req.query?.storefrontId || req.headers['x-storefront-id'] || '').trim();
+      let authorizedStorefront = null;
+      if (storefrontId) {
+        if (!context.lojaId) {
+          const error = new Error('selecione a unidade antes do diagnóstico de catálogo');
+          error.code = 'STORE_SCOPE_REQUIRED';
+          throw error;
+        }
+        if (!/^[0-9a-f-]{36}$/i.test(storefrontId)) {
+          const error = new Error('storefront fora do escopo da unidade selecionada');
+          error.code = 'STORE_SCOPE_MISMATCH';
+          throw error;
+        }
+        const storefront = await commerceDb.queryRead(
+          `SELECT id, loja_id FROM commerce_storefronts
+            WHERE empresa_id = $1 AND id = $2 AND status = 'active'
+              AND loja_id = $3
+            LIMIT 1`,
+          [context.empresaId, storefrontId, context.lojaId],
+        );
+        const diagnosticLojaId = storefront?.rows?.[0]?.loja_id || context.lojaId || null;
+        if (!storefront?.rows?.[0] || !diagnosticLojaId) {
+          const error = new Error('storefront fora do escopo da unidade selecionada');
+          error.code = !storefront?.rows?.[0] ? 'STORE_SCOPE_MISMATCH' : 'STORE_SCOPE_REQUIRED';
+          throw error;
+        }
+        authorizedStorefront = { id: storefront.rows[0].id, lojaId: diagnosticLojaId };
+      }
       const mapped = await commerceDb.queryRead(`SELECT li.legacy_key, p.nome AS product_name, COALESCE(SUM(il.disponivel), 0)::integer AS core_available FROM commerce_legacy_imports li JOIN commerce_products p ON p.empresa_id=li.empresa_id AND p.id=li.target_id LEFT JOIN commerce_product_variants v ON v.empresa_id=p.empresa_id AND v.product_id=p.id LEFT JOIN commerce_inventory_levels il ON il.empresa_id=v.empresa_id AND il.variant_id=v.id WHERE li.empresa_id=$1 AND li.entity='product' AND ($2::uuid IS NULL OR li.loja_id=$2) GROUP BY li.legacy_key,p.nome ORDER BY li.legacy_key`, [context.empresaId, context.lojaId]);
       // O cadastro legado da loja é global: usuário de empresa só vê itens mapeados para a própria empresa.
       const chavesDaEmpresa = new Set(mapped.rows.map(row => String(row.legacy_key || '').trim().toLowerCase()).filter(Boolean));
       const doTenant = item => [item.id, item.cod, item.codigo, item.nome].some(chave => chavesDaEmpresa.has(String(chave || '').trim().toLowerCase()));
       const legado = (db().loja || []).filter(item => item.ativo !== false).filter(item => !isTenantScopedUser(req.user) || doTenant(item));
-      res.json(compareLegacyAndCoreInventory({ legacyProducts: legado, coreMappings: mapped.rows }));
+      const report = compareLegacyAndCoreInventory({ legacyProducts: legado, coreMappings: mapped.rows });
+      // The richer read-only adapter is deliberately opt-in. Existing callers
+      // keep the exact legacy body unless they explicitly select a storefront.
+      if (storefrontId) {
+        const legacyProducts = [
+          { name: 'legacy-store', items: legado },
+          { name: 'legacy-revenda', items: barbeariaErpKytto.listarProdutosRevenda(context.empresaId, { incluirInativos: false }) },
+        ];
+        report.catalogDiagnostic = await readScopedCatalogDiagnostic({
+          queryRead: commerceDb.queryRead,
+          sources: legacyProducts,
+          scope: { empresaId: context.empresaId, lojaId: authorizedStorefront.lojaId, storefrontId: authorizedStorefront.id },
+        });
+      }
+      res.set('Cache-Control', 'private, no-store');
+      res.json(report);
     } catch (error) {
-      const status = ['PERMISSION_DENIED','TENANT_CONTEXT_REQUIRED'].includes(error?.code) ? 403 : 500;
+      const status = ['PERMISSION_DENIED', 'TENANT_CONTEXT_REQUIRED', 'TENANT_SELECTION_REQUIRED', 'STORE_SELECTION_REQUIRED', 'STORE_SCOPE_MISMATCH', 'STOREFRONT_REQUIRED', 'STORE_SCOPE_REQUIRED'].includes(error?.code) ? 403 : 500;
       res.status(status).json({ error: status === 500 ? 'não foi possível comparar o inventário' : error.message, code: error?.code || 'INVENTORY_DIVERGENCE_ERROR' });
     }
   });

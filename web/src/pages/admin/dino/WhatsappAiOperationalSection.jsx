@@ -1,5 +1,5 @@
 import { dateTime } from './format'
-import { operationalStatusKeys, sumCounts, timestampStateLabel } from './whatsapp-ai-operational'
+import { operationalStatusKeys, sumCounts, timestampStateLabel, whatsappOperationalSummary } from './whatsapp-ai-operational'
 
 const numberFormat = new Intl.NumberFormat('pt-BR')
 
@@ -30,6 +30,7 @@ function channelLabel(channel) {
 }
 
 export function WhatsappAiOperationalSection({ status, readAt }) {
+  const guidance = whatsappOperationalSummary(status)
   const humanSessions = status?.kind === 'valid' ? sumCounts(status.sessions, operationalStatusKeys.sessionHuman) : null
   const unassignedHuman = status?.kind === 'valid' ? status.humanQueue.unassigned : null
   const deliveryOther = status?.kind === 'valid'
@@ -46,6 +47,12 @@ export function WhatsappAiOperationalSection({ status, readAt }) {
     </>}
     {status?.kind === 'valid' && <>
       <p className="dadm-operational-intro">Leitura agregada da empresa e unidade selecionadas. O worker é compartilhado globalmente: estar ativo não prova atendimento saudável nesta unidade.</p>
+      <div className="dadm-operational-guidance" role="status" aria-label="Próximo passo operacional">
+        <span>Próximo passo · orientação baseada nesta leitura</span>
+        <strong>{guidance.title}</strong>
+        <p>{guidance.nextStep}</p>
+        <small>{guidance.conditionCount === 0 ? 'Nenhum alerta classificado; não é garantia de saúde.' : `${guidance.conditionCount} condições observadas, não total de atendimentos ou taxa de falha.`} Sem ação automática.</small>
+      </div>
       <dl className="dadm-result dadm-operational-result">
         <StatusRow label="Estado da IA no servidor" value={status.featureEnabled ? 'Liberada' : 'Desativada'} hint={status.featureEnabled ? undefined : 'A funcionalidade está desligada no servidor.'} />
         <StatusRow label="Canal desta unidade" value={channelLabel(status.channel)} hint={status.channel?.configured && status.channel.status === 'rascunho' ? 'Revisar configuração antes de ativar.' : status.channel?.configured && status.channel.status === 'pausado' ? 'Retomar somente após revisão da operação.' : undefined} />
@@ -67,27 +74,16 @@ export function WhatsappAiOperationalSection({ status, readAt }) {
         <div><span>Envio registrado</span><strong>{count(status.deliveries.counts?.sent ?? null)}</strong></div>
         <div><span>Falha de entrega</span><strong>{count(status.deliveries.counts?.failed ?? null)}</strong></div>
       </div>
-      <ul className="dadm-operational-actions">
-        {!status.featureEnabled && <Item>IA desativada no servidor: confirmar a decisão com a administração antes de qualquer ativação.</Item>}
-        {!status.channel.configured && <Item>Canal não configurado nesta unidade: revisar o vínculo e a configuração autorizada; não há ação mutável nesta seção.</Item>}
-        {status.channel.status === 'rascunho' && <Item>Canal em rascunho: revisar configuração e permissões antes de ativar.</Item>}
-        {status.channel.status === 'pausado' && <Item>Canal pausado: confirmar com a equipe se a operação deve permanecer interrompida.</Item>}
-        {status.channel.aiCircuitOpen === true && <Item tone="danger">Circuito da IA aberto: o canal não é uma automação saudável agora. Confirmar falhas consecutivas e manter a revisão humana antes de ativar ou retomar.</Item>}
-        {status.worker.verifiable && status.worker.active === true && <Item>Worker compartilhado com heartbeat recente e lease ativo: acompanhar os registros desta unidade separadamente; isso não comprova atendimento saudável.</Item>}
-        {status.worker.verifiable && status.worker.active !== true && <Item tone="danger">Worker compartilhado observável, mas sem lease ativo: confirmar a operação global com a equipe responsável.</Item>}
-        {!status.worker.verifiable && <Item tone="danger">Worker compartilhado não verificável: heartbeat ausente, antigo, futuro ou inválido; confirmar a operação global sem atribuir a causa a esta unidade.</Item>}
-        {sumCounts(status.tasks, operationalStatusKeys.taskPending) > 0 && <Item>Há tarefas pendentes ou em processamento: acompanhar a fila da unidade; esta tela não reprocessa tarefas.</Item>}
-        {sumCounts(status.tasks, operationalStatusKeys.taskFailed) > 0 && <Item tone="danger">Há tarefas com falha: revisar o diagnóstico protegido e a causa operacional; não reprocessar por este painel.</Item>}
-        {(status.tasks.counts?.deadLetter || 0) > 0 && <Item tone="danger">Há registros em dead-letter: encaminhar para análise manual e preservar a evidência antes de qualquer correção.</Item>}
-        {unassignedHuman > 0 && <Item>Há sessões humano sem responsável: encaminhar à equipe responsável pela unidade.</Item>}
-        {humanSessions > 0 && unassignedHuman === 0 && <Item>Sessões humano estão registradas nesta unidade; a contagem não prova que estejam aguardando atendimento.</Item>}
-        {deliveryOther > 0 && <Item>Há outros registros de entrega não classificados: conferir no provedor. “Enviado” significa envio registrado, não entrega nem leitura.</Item>}
-        {status.deliveries.counts?.failed > 0 && <Item tone="danger">Há falhas de entrega registradas: conferir no provedor antes de qualquer reenvio.</Item>}
-        {status.deliveries.unclassified > 0 && <Item>Há registros com códigos de entrega não classificados; eles foram preservados como “outros registros”, sem inferir sucesso ou falha.</Item>}
-        {status.provider24h.total === 0 && <Item>Sem execuções do provedor nas últimas 24 horas: ausência de registros não equivale a operação saudável.</Item>}
-        {status.provider24h.total > 0 && status.provider24h.failed > 0 && <Item tone="danger">Há falhas de provedor nas últimas 24 horas: revisar a causa com a equipe responsável.</Item>}
-        {status.featureEnabled && status.channel.configured && status.channel.status === 'ativo' && sumCounts(status.tasks, operationalStatusKeys.taskPending) === 0 && sumCounts(status.tasks, operationalStatusKeys.taskFailed) === 0 && status.provider24h.total === 0 && <Item>Os contadores atuais não apontam registros de fila, mas zeros e HTTP 200 não permitem concluir que está tudo certo.</Item>}
-      </ul>
+      <details className="dadm-operational-details">
+        <summary>Ver orientações e limites ({guidance.conditionCount})</summary>
+        <ul className="dadm-operational-actions">
+          {guidance.conditions.map(item => <Item key={item.code} tone={item.severity === 'critical' ? 'danger' : ''}>
+            <strong>{item.title}{item.scope === 'global' ? ' · escopo global' : ''}.</strong> {item.nextStep}
+          </Item>)}
+          <Item>Envio registrado não comprova entrega nem leitura. Worker global não comprova atendimento saudável nesta unidade.</Item>
+          {humanSessions > 0 && unassignedHuman === 0 && <Item>Sessões humanas estão registradas; a contagem não prova espera por atendimento.</Item>}
+        </ul>
+      </details>
       <p className="dadm-operational-reading">Última leitura do painel: {readAt ? dateTime(readAt) : 'sem leitura válida'}. Horários acima identificam eventos ou lease, não substituem esta leitura.</p>
     </>}
   </section>
