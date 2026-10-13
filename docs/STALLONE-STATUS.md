@@ -240,3 +240,12 @@ Pendências de imagem, descrição e saldo de até cinco unidades passam a abrir
 A central e a lista reutilizam o mesmo predicado: somente itens publicados no escopo carregado, descrição vazia/composta por espaços, ausência de mídia e saldo finito até cinco unidades. Reposição exclui encomenda sem estoque e saldo indisponível; inclui saldo zero. Valores desconhecidos do parâmetro são tratados como catálogo completo. O filtro da operação fica disponível somente na experiência Stallone; catálogo de outras marcas permanece sem esse controle.
 
 Teste de regressão comprova que as contagens da central coincidem com os itens retornados, incluindo publicação/inatividade, zero, cinco unidades, encomenda, mídia, descrição e combinações com busca/categoria.
+
+
+## 13. Auditoria pública e do código — 13/10/2026
+
+A sessão do portal expirou; verificação administrativa atual depende de novo login. Confirmados publicamente 768 produtos/variantes, 54 sem mídia, 7 sem descrição, zero SKUs ausentes/duplicados, quatro políticas sem URL, Pix/cartão InfinitePay e três métodos de entrega. Oito imagens amostradas responderam 200; não prova todas as mídias. Endpoints administrativos sem login retornaram 401 nos dois casos consultados.
+
+Correções: recursos de descoberta/ícone próprios no host Stallone (sitemap/robots antes apontavam para SetPoint/Kytto); complemento/referência no endereço; contenção de tabela e quebra de cabeçalho no catálogo; link de vitrine da fila; abas internas sincronizadas com URL; mensagem de pagamento pendente coerente com conta InfinitePay; rótulo Valor dos pedidos para não confundir com receita capturada. Sem migration, sem mudança de hospedagem/WhatsApp ou dados comerciais.
+
+Testes Node 1239: 1160 aprovados, 79 pulados, zero falhas; build aprovado; 14 testes direcionados de descoberta/meta/checkout e dois de navegação. Layout validado em prévia de leitura com componente real; administração exige sessão para revalidação. Políticas, conteúdo, regras comerciais, fiscal, WhatsApp, logística e homologação continuam dependentes dos respectivos responsáveis.

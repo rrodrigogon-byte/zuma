@@ -1,5 +1,6 @@
 import express from 'express';
 import { stallonePageMeta } from './core/stallone-page-meta.js';
+import { stalloneDiscovery } from './core/stallone-discovery.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import path from 'path';
@@ -6935,6 +6936,12 @@ app.post('/api/webhooks/infinitepay/barbearia', async (req, res) => {
 // ---- estático: serve React SPA (build do web/) ----
 app.use((req, res, next) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  const discovery = stalloneDiscovery(req.hostname, req.path);
+  if (discovery) {
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    if (discovery.redirect) return res.redirect(302, discovery.redirect);
+    return res.type(discovery.type).send(discovery.body);
+  }
   const meta = stallonePageMeta(req.hostname, req.path);
   if (!meta) return next();
   try {
