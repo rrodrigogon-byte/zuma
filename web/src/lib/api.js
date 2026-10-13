@@ -85,7 +85,13 @@ function apiFn(path, opts = {}) {
   return request(path, finalOpts)
 }
 
-apiFn.get    = (path)       => request(path)
+apiFn.get    = (path, opts = {}) => {
+  const allowed = {}
+  if (opts && typeof opts === 'object') {
+    for (const key of ['headers', 'signal', 'cache']) if (Object.prototype.hasOwnProperty.call(opts, key)) allowed[key] = opts[key]
+  }
+  return request(path, { method: 'GET', ...allowed })
+}
 apiFn.post   = (path, body, opts = {}) => request(path, { ...opts, method: 'POST',   body: JSON.stringify(body) })
 apiFn.patch  = (path, body) => request(path, { method: 'PATCH',  body: JSON.stringify(body) })
 apiFn.put    = (path, body, opts = {}) => request(path, { ...opts, method: 'PUT', body: JSON.stringify(body) })
