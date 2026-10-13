@@ -8,6 +8,8 @@ import { useToast } from '../../../hooks/useToast'
 import { Dialog } from '../customer360/shared'
 import { dateTime } from './format'
 import { linePresentation, statusRefreshInterval, outboundPresentation } from './whatsapp-view'
+import { normalizeWhatsappAiOperationalStatus } from './whatsapp-ai-operational'
+import { WhatsappAiOperationalSection } from './WhatsappAiOperationalSection'
 import '../customer360.css'
 import './dino-admin.css'
 
@@ -26,17 +28,21 @@ function Check({ ok, children, hint }) {
 }
 
 export default function WhatsappConexao() {
-  const { empresaAtiva } = useAuth()
-  return <WhatsappConexaoEmpresa key={empresaAtiva?.id || 'sem-empresa'} />
+  const { empresaAtiva, lojaAtiva } = useAuth()
+  const scopeKey = `${empresaAtiva?.id || ''}:${lojaAtiva?.id || ''}`
+  return <WhatsappConexaoEmpresa key={scopeKey || 'sem-contexto'} />
 }
 
 function WhatsappConexaoEmpresa() {
-  const { empresaAtiva, user } = useAuth()
+  const { empresaAtiva, lojaAtiva, user } = useAuth()
   const { toast } = useToast()
   const tenantId = String(empresaAtiva?.id || '')
+  const lojaId = String(lojaAtiva?.id || '')
   const [conexao, setConexao] = useState(null)
   const [podeGerenciar, setPodeGerenciar] = useState(false)
   const [ia, setIa] = useState(null)
+  const [iaOperational, setIaOperational] = useState({ kind: 'loading' })
+  const [iaReadAt, setIaReadAt] = useState(null)
   const [qr, setQr] = useState({ image: '', code: '' })
   const [busy, setBusy] = useState('')
   const [atualizando, setAtualizando] = useState(false)
@@ -53,6 +59,8 @@ function WhatsappConexaoEmpresa() {
   const scopeRef = useRef(0)
   const statusSeqRef = useRef(0)
   const statusFlightRef = useRef(null)
+  const iaSeqRef = useRef(0)
+  const iaFlightRef = useRef(null)
   const diagFlightRef = useRef(null)
   const qrFlightRef = useRef(null)
   const referenceDirtyRef = useRef(false)
@@ -85,14 +93,40 @@ function WhatsappConexaoEmpresa() {
   }, [tenantId])
 
   const recarregarIa = useCallback(async () => {
-    const scope = scopeRef.current
-    try {
-      const data = await api.get('/api/admin/commerce/whatsapp-ai/status')
-      if (scope === scopeRef.current) setIa(data)
-    } catch {
-      if (scope === scopeRef.current) setIa(null)
+    if (!tenantId || !lojaId) {
+      setIa(null)
+      setIaOperational({ kind: 'unverifiable', reason: 'context' })
+      setIaReadAt(null)
+      return
     }
-  }, [tenantId])
+    if (iaFlightRef.current) return iaFlightRef.current
+    const flight = Symbol('whatsapp-ai-status')
+    const scope = scopeRef.current
+    const sequence = ++iaSeqRef.current
+    iaFlightRef.current = flight
+    try {
+      const data = await api.get('/api/admin/commerce/whatsapp-ai/status', { headers: { 'X-Empresa-Id': tenantId, 'X-Loja-Id': lojaId } })
+      if (scope === scopeRef.current && sequence === iaSeqRef.current) {
+        const normalized = normalizeWhatsappAiOperationalStatus(data)
+        setIaOperational(normalized)
+        if (normalized.kind === 'valid') {
+          setIa(data)
+          setIaReadAt(new Date().toISOString())
+        } else {
+          setIa(null)
+          setIaReadAt(null)
+        }
+      }
+    } catch (error) {
+      if (scope === scopeRef.current && sequence === iaSeqRef.current) {
+        setIa(null)
+        setIaOperational({ kind: 'unverifiable', reason: [401, 403].includes(error?.status) ? 'permission' : error?.status === 503 ? 'unavailable' : 'read' })
+        setIaReadAt(null)
+      }
+    } finally {
+      if (iaFlightRef.current === flight) iaFlightRef.current = null
+    }
+  }, [tenantId, lojaId])
 
   const diagnosticar = useCallback(async () => {
     if (diagFlightRef.current) return
@@ -121,15 +155,17 @@ function WhatsappConexaoEmpresa() {
     scopeRef.current += 1
     statusSeqRef.current += 1
     statusFlightRef.current = null
+    iaSeqRef.current += 1
+    iaFlightRef.current = null
     diagFlightRef.current = null
     qrFlightRef.current = null
     referenceDirtyRef.current = false
-    setConexao(null); setPodeGerenciar(false); setIa(null); setDiag(null)
+    setConexao(null); setPodeGerenciar(false); setIa(null); setIaOperational({ kind: 'loading' }); setIaReadAt(null); setDiag(null)
     setErro(''); setErroDiag(''); setDiagBloqueado(false); setBusy('')
     setQr({ image: '', code: '' }); setInstancia(''); setReferencia(''); setWebhookInfo('')
     carregar(true)
     recarregarIa()
-    return () => { scopeRef.current += 1; statusSeqRef.current += 1; statusFlightRef.current = null; diagFlightRef.current = null; qrFlightRef.current = null }
+    return () => { scopeRef.current += 1; statusSeqRef.current += 1; iaSeqRef.current += 1; statusFlightRef.current = null; iaFlightRef.current = null; diagFlightRef.current = null; qrFlightRef.current = null }
   }, [carregar, recarregarIa])
 
   useEffect(() => {
@@ -283,12 +319,13 @@ function WhatsappConexaoEmpresa() {
   const state = conexao?.lastError ? 'unknown' : (conexao?.state || 'unknown')
   const line = linePresentation(conexao ? { ...conexao, state } : null)
   const webhookUrl = ia?.channel?.publicCode ? `${window.location.origin}/api/webhooks/whatsapp/${ia.channel.publicCode}` : ''
-  const erroConexao = conexao?.lastError ? (ERRORS[conexao.lastError] || `Última falha: ${conexao.lastError}`) : ''
+  const erroConexao = conexao?.lastError ? (ERRORS[conexao.lastError] || 'O backend informou uma falha na conexão. Confira o diagnóstico para obter orientação segura.') : ''
   const pending = diag?.conclusoes?.filter((item) => !item.ok).length
   const saida = conexao?.saida
   const outbound = outboundPresentation(conexao ? { ...conexao, state } : null, diag)
   const saidaBloqueada = !outbound.ready
   const messages = diag?.mensagens24h
+  const iaSummary = iaOperational.kind === 'loading' ? 'Aguardando' : iaOperational.kind !== 'valid' ? 'Não verificável' : iaOperational.channel.configured ? (iaOperational.channel.status === 'ativo' ? 'Ativo' : 'Em preparação') : 'Não configurado'
 
   return <div className="dadm-page dadm-wa-page">
     <header className="dadm-head dadm-wa-head">
@@ -297,6 +334,7 @@ function WhatsappConexaoEmpresa() {
     </header>
     {erro && <p className="dadm-note danger" role="alert">{erro}</p>}
     {!conexao && !erro && <section className="dadm-card" role="status">Consultando o estado do WhatsApp…</section>}
+    <WhatsappAiOperationalSection status={iaOperational} readAt={iaReadAt} />
 
     {conexao && <>
       <section className="dadm-wa-hero" aria-label="Linha e status do WhatsApp">
@@ -315,10 +353,10 @@ function WhatsappConexaoEmpresa() {
       </section>
 
       <div className="dadm-wa-summary" aria-label="Resumo da operação">
-        <article><span>Atendente IA</span><strong>{ia?.channel?.status === 'ativo' ? 'Ativo' : ia?.channel ? 'Em preparação' : 'Não configurado'}</strong><small>{ia?.channel?.lastEventAt ? `Último evento: ${dateTime(ia.channel.lastEventAt)}` : 'Sem evento recente informado'}</small></article>
+        <article><span>Atendente IA</span><strong>{iaSummary}</strong><small>{iaOperational.kind === 'valid' && iaOperational.channel.lastEventAt?.state === 'current' ? `Último evento: ${dateTime(iaOperational.channel.lastEventAt.value)}` : iaOperational.kind === 'valid' ? 'Evento não verificável ou não informado' : 'Leitura operacional não verificável'}</small></article>
         <article><span>Contatos distintos · 24 h</span><strong>{messages ? Number(messages.contatos || 0).toLocaleString('pt-BR') : '—'}</strong><small>{messages ? 'Entre até 200 mensagens consultadas' : 'Disponível para a empresa dona'}</small></article>
         <article><span>Mensagens consultadas · 24 h</span><strong>{messages ? Number(messages.total || 0).toLocaleString('pt-BR') : '—'}</strong><small>{messages ? `Amostra de até 200 · última ${dateTime(messages.ultimaEm)}` : 'Sem leitura disponível'}</small></article>
-        <article><span>Saúde do canal</span><strong>{pending == null ? 'Aguardando' : pending === 0 ? 'Tudo certo' : `${pending} pendência${pending === 1 ? '' : 's'}`}</strong><small>{diag ? `Conferido em ${dateTime(diag.agora)}` : 'Confira a integração abaixo'}</small></article>
+        <article><span>Saúde do canal</span><strong>{pending == null ? 'Aguardando' : `${pending} pendência${pending === 1 ? '' : 's'} no diagnóstico`}</strong><small>{diag ? `Conferido em ${dateTime(diag.agora)} · não substitui a leitura operacional` : 'Confira a integração abaixo'}</small></article>
       </div>
 
       <div className="dadm-wa">
