@@ -77,6 +77,12 @@ function publicAvailabilityHandler() {
   return layer.route.stack.at(-1).handle;
 }
 
+function publicActionHandler(path) {
+  const layer = publicRouter.stack.find((entry) => entry.route?.path === path && entry.route.methods.post);
+  assert.ok(layer, `binding público ${path} não encontrado`);
+  return layer.route.stack.at(-1).handle;
+}
+
 function readAdminSlots(empresaId, lojaId, serviceId, professionalId, date) {
   return barbearia.listarHorariosDisponiveis(empresaId, {
     data: date,
@@ -95,6 +101,12 @@ async function readPublicSlots(slug, serviceId, professionalId, date) {
   assert.equal(response.statusCode, 200);
   assert.equal(response.body?.ok, true);
   return response.body.horarios.filter((item) => item.disponivel).map((item) => item.horario);
+}
+
+async function invokePublicAction(path, { slug, body }) {
+  const response = responseCapture();
+  await publicActionHandler(path)({ params: { slug }, body }, response);
+  return response;
 }
 
 function aiContext(empresaId, lojaId) {
@@ -195,6 +207,98 @@ test('contrato JSON: retry com actionId é idempotente e conflito/bloqueio não 
     (error) => error.code === 'SLOT_UNAVAILABLE',
   );
   assert.equal(barbearia.listarAgendamentos(EMPRESA_A, { lojaId: LOJA_A }).length, 1);
+});
+
+test('jornada sintética real: admin, link público e IA simulada compartilham bloqueio, confirmação, retry e ações seguras', async () => {
+  const date = nextBusinessDate();
+  const { professional, service } = seedEnterprise(EMPRESA_A, 'agenda-journey', LOJA_A, {
+    serviceName: 'Serviço jornada',
+    professionalName: 'Profissional jornada',
+  });
+  const scope = aiContext(EMPRESA_A, LOJA_A);
+
+  barbearia.criarBloqueio(EMPRESA_A, {
+    titulo: 'Bloqueio jornada',
+    inicio: `${date}T10:00:00-04:00`,
+    fim: `${date}T10:45:00-04:00`,
+    profissionalId: professional.id,
+    lojaId: LOJA_A,
+  });
+
+  // Admin é o contrato montado por /api/admin/barbearia/horarios-livres; link e
+  // IA passam pelos próprios bindings, sem reimplementar o algoritmo de slots.
+  const adminSlots = readAdminSlots(EMPRESA_A, LOJA_A, service.id, professional.id, date);
+  const publicSlots = await readPublicSlots('agenda-journey', service.id, professional.id, date);
+  const ai = await createWhatsappAiToolExecutor(scope)('consultar_disponibilidade', {
+    serviceId: service.id, professionalId: professional.id, date,
+  });
+  assert.deepEqual(publicSlots, adminSlots);
+  assert.deepEqual(ai.disponibilidade.slots, adminSlots);
+  assert.equal(ai.disponibilidade.service.duracaoMinutos, 45);
+  assert.equal(adminSlots.includes('10:00'), false);
+  assert.equal(adminSlots.includes('10:30'), false, 'bloqueio e duração impedem a sobreposição seguinte');
+
+  const publicTime = adminSlots.find((time) => time !== '10:00');
+  assert.ok(publicTime, 'fixture deve manter uma vaga pública');
+  const publicPayload = {
+    servico_id: service.id,
+    profissional_id: professional.id,
+    data: date,
+    horario: publicTime,
+    cliente_nome: 'Cliente jornada',
+    cliente_telefone: '65999990101',
+  };
+  const confirmed = await invokePublicAction('/:slug/confirmar', { slug: 'agenda-journey', body: publicPayload });
+  assert.equal(confirmed.statusCode, 201, JSON.stringify(confirmed.body));
+  assert.equal(confirmed.body.agendamento.status, 'agendado');
+  const publicCode = confirmed.body.agendamento.codigo;
+  const publicRecord = barbearia.listarAgendamentos(EMPRESA_A, { lojaId: LOJA_A }).find(item => item.codigoConfirmacao === publicCode);
+  assert.ok(publicRecord);
+  assert.equal(publicRecord.duracaoMinutos, 45);
+
+  const afterPublic = await createWhatsappAiToolExecutor(scope)('consultar_disponibilidade', {
+    serviceId: service.id, professionalId: professional.id, date,
+  });
+  assert.equal(afterPublic.disponibilidade.slots.includes(publicTime), false);
+
+  // Ação IA simulada usa o mesmo motor de confirmação, com retry pelo mesmo ID.
+  const aiTime = afterPublic.disponibilidade.slots.find(time => time !== publicTime && time !== '10:00');
+  assert.ok(aiTime, 'fixture deve manter uma segunda vaga para o retry');
+  const aiInput = {
+    date, time: aiTime, serviceId: service.id, professionalId: professional.id,
+    customerName: 'Cliente IA jornada', customerPhone: '65999990102', actionId: 'journey-confirm-001',
+  };
+  const aiFirst = await createAppointment({}, scope, aiInput);
+  const aiRetry = await createAppointment({}, scope, aiInput);
+  assert.equal(aiRetry.id, aiFirst.id);
+  assert.equal(barbearia.listarAgendamentos(EMPRESA_A, { lojaId: LOJA_A }).filter(item => item.id === aiFirst.id).length, 1);
+  await assert.rejects(
+    () => createAppointment({}, scope, { ...aiInput, time: '19:00' }),
+    error => error.code === 'IDEMPOTENCY_CONFLICT',
+  );
+
+  // O link público reutiliza o contrato de autoatendimento para remarcação e
+  // cancelamento; a fixture está além da janela de 4h, sem pagamento/provider.
+  const afterAi = await createWhatsappAiToolExecutor(scope)('consultar_disponibilidade', {
+    serviceId: service.id, professionalId: professional.id, date,
+  });
+  const replacementTime = afterAi.disponibilidade.slots.find(time => time !== publicTime && time !== aiTime && time !== '10:00');
+  assert.ok(replacementTime, 'fixture deve manter vaga segura para remarcação');
+  const moved = await invokePublicAction('/:slug/meu-agendamento/remarcar', {
+    slug: 'agenda-journey',
+    body: { codigo: publicCode, cliente_telefone: publicPayload.cliente_telefone, data: date, horario: replacementTime },
+  });
+  assert.equal(moved.statusCode, 200, JSON.stringify(moved.body));
+  assert.equal(moved.body.agendamento.status, 'agendado');
+  assert.equal(moved.body.agendamento.dataAgenda, date);
+  assert.equal(moved.body.agendamento.horaLocal, replacementTime);
+  const canceled = await invokePublicAction('/:slug/meu-agendamento/cancelar', {
+    slug: 'agenda-journey',
+    body: { codigo: publicCode, cliente_telefone: publicPayload.cliente_telefone, motivo: 'fixture de homologação' },
+  });
+  assert.equal(canceled.statusCode, 200, JSON.stringify(canceled.body));
+  assert.equal(canceled.body.agendamento.status, 'cancelado');
+  assert.equal(barbearia.listarAgendamentos(EMPRESA_A, { lojaId: LOJA_A }).filter(item => item.status === 'agendado').length, 1);
 });
 
 test('replay divergente ou em outra unidade é bloqueado sem devolver reserva nem gravar novo atendimento', async () => {
