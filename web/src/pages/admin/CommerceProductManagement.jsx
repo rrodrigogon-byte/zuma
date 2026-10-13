@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, Archive, Boxes, CheckCircle2, ChevronLeft, ChevronRight, Copy, FileImage, FileSpreadsheet, Layers3, LayoutGrid, List, Package, PackageCheck, PackagePlus, Plus, RotateCcw, Search, Sparkles, Tag, Trash2 } from 'lucide-react'
+import { AlertTriangle, Archive, Boxes, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, Copy, FileImage, FileSpreadsheet, Layers3, LayoutGrid, List, Package, PackageCheck, PackagePlus, Plus, RotateCcw, Search, Sparkles, Tag, Trash2 } from 'lucide-react'
 import { fmtR } from '../../lib/api'
 import { CATALOG_ATTENTION, catalogAttention, catalogSummary, filterProducts, pagination, productQuality, productStatus } from '../../lib/product-management'
 import CommerceCatalogEnrichment from './CommerceCatalogEnrichment'
 import CommerceCatalogImport from './CommerceCatalogImport'
+import CommerceCatalogDiagnostic from './CommerceCatalogDiagnostic'
 import CommerceProductMedia from './CommerceProductMedia'
 import useCatalogActionTooltip from './useCatalogActionTooltip'
 
@@ -72,6 +73,9 @@ export default function CommerceProductManagement({
   products = [],
   categories = [],
   storefrontId,
+  empresaId,
+  unitId,
+  canReadReports = true,
   locationId,
   inventoryLocations = [],
   onLocationChange,
@@ -105,6 +109,7 @@ export default function CommerceProductManagement({
   const tooltip = useCatalogActionTooltip(rootRef)
   const workspaceTabs = useRef([])
   const [page, setPage] = useState(1)
+  const [diagnosticOpen, setDiagnosticOpen] = useState(false)
 
   const summary = useMemo(() => catalogSummary(products), [products])
   const filtered = useMemo(() => filterProducts(products, { query, status, stock, quality, category, sort, attention }), [products, query, status, stock, quality, category, sort, attention])
@@ -117,6 +122,8 @@ export default function CommerceProductManagement({
   useEffect(() => {
     setQuery(''); setStatus('all'); setStock('all'); setQuality('all'); setCategory('all'); setPage(1)
   }, [attention])
+
+  useEffect(() => { setDiagnosticOpen(false) }, [mode, empresaId, unitId, storefrontId, canReadReports])
 
   function clearFilters() {
     onAttentionChange?.('all')
@@ -170,6 +177,13 @@ export default function CommerceProductManagement({
     </nav>
 
     {workspace === 'products' && <section role="tabpanel" id="commerce-product-panel-products" aria-labelledby="commerce-product-tab-products">
+      {mode === 'core' && <details className="commerce-catalog-diagnostic-details" open={diagnosticOpen} onToggle={event => setDiagnosticOpen(event.currentTarget.open)}>
+        <summary className={!canReadReports || !empresaId || !unitId || !storefrontId ? 'is-disabled' : ''} aria-disabled={!canReadReports || !empresaId || !unitId || !storefrontId} onClick={event => { if (!canReadReports || !empresaId || !unitId || !storefrontId) event.preventDefault() }}>
+          <span><ClipboardCheck size={15} /> Diagnóstico do catálogo</span>
+          <small>{!canReadReports ? 'Sem permissão reports.read' : !empresaId || !unitId || !storefrontId ? 'Contexto incompleto' : 'Somente leitura · abre sob demanda'}</small>
+        </summary>
+        <CommerceCatalogDiagnostic mode={mode} empresaId={empresaId} unitId={unitId} storefrontId={storefrontId} canReadReports={canReadReports} open={diagnosticOpen} />
+      </details>}
       <div className="commerce-product-toolbar">
         {onAttentionChange && <label><span>Pendência da operação</span><select value={attention} onChange={event => onAttentionChange(event.target.value)}>{Object.entries(CATALOG_ATTENTION).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>}
         <label className="commerce-product-search"><Search size={17} /><span className="sr-only">Buscar produtos</span><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Buscar por produto, SKU, código de barras ou categoria" /></label>
