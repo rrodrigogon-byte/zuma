@@ -1,3 +1,18 @@
+export const CATALOG_ATTENTION = Object.freeze({ all: 'Todo o catálogo', images: 'Publicados sem imagem', descriptions: 'Publicados sem descrição', stock: 'Publicados com até 5 unidades' })
+
+export function catalogAttention(value) {
+  return Object.hasOwn(CATALOG_ATTENTION, value) ? value : 'all'
+}
+
+export function matchesCatalogAttention(product, value) {
+  const attention = catalogAttention(value)
+  if (attention === 'all') return true
+  if (product.ativo === false || product.publicado === false) return false
+  if (attention === 'images') return !product.imagem && !product.media?.length
+  if (attention === 'descriptions') return !String(product.descricaoCurta || product.descricao_curta || product.descricao || '').trim()
+  return Number.isFinite(Number(product.estoque)) && Number(product.estoque) <= 5 && product.permiteCompraSemEstoque !== true
+}
+
 function text(value) {
   return String(value ?? '').trim()
 }
@@ -97,6 +112,7 @@ export function filterProducts(products = [], filters = {}) {
   const sort = text(filters.sort || 'updated_desc')
 
   const filtered = products.filter(product => {
+    if (!matchesCatalogAttention(product, filters.attention)) return false
     if (query && !productSearchText(product).includes(query)) return false
     if (category && category !== 'all' && text(product.categoryId || product.category_id || product.cat) !== category) return false
     if (status !== 'all' && productStatus(product) !== status) return false

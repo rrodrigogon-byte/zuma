@@ -1,11 +1,13 @@
+import { matchesCatalogAttention } from './product-management.js'
+
 // Indicadores do escopo carregado: configuração não significa homologação.
 export function stalloneOperation({ products = [], paymentAccounts = [], domains = [], shippingMethods = [], storefront, warnings = [], catalogUnavailable = false } = {}) {
   const scoped = items => items.filter(item => !item.storefront_id || item.storefront_id === storefront?.id)
   const unavailable = part => warnings.some(item => String(item.path || '').includes(part))
   const published = products.filter(item => item.ativo !== false && item.publicado !== false)
-  const missingImages = published.filter(item => !item.imagem && !item.media?.length).length
-  const missingDescriptions = published.filter(item => !String(item.descricaoCurta || item.descricao_curta || item.descricao || '').trim()).length
-  const lowStock = published.filter(item => Number.isFinite(Number(item.estoque)) && Number(item.estoque) <= 5 && item.permiteCompraSemEstoque !== true).length
+  const missingImages = published.filter(item => matchesCatalogAttention(item, 'images')).length
+  const missingDescriptions = published.filter(item => matchesCatalogAttention(item, 'descriptions')).length
+  const lowStock = published.filter(item => matchesCatalogAttention(item, 'stock')).length
   const policies = storefront?.configuracoes?.public?.policies || storefront?.configuracoes?.publicConfig?.policies || {}
   const policyCount = ['privacyUrl', 'returnsUrl', 'shippingUrl', 'termsUrl'].filter(key => /^https:\/\//i.test(String(policies[key] || ''))).length
   const tasks = []
