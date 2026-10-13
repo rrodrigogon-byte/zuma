@@ -94,4 +94,44 @@ export function listarDocumentosFiscais(empresaId, filtros = {}) {
     .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)));
 }
 
-export default { prepararDocumentoFiscal, listarDocumentosFiscais };
+// ---------------------------------------------------------------------------
+// Apoio à NFS-e Nacional (configuração sem segredos, numeração e estado do envio)
+export function obterDocumentoFiscal(empresaId, documentoId) {
+  const doc = storeFiscal(empresaId).documentos[String(documentoId || '')];
+  return doc && doc.empresaId === String(empresaId) ? doc : null;
+}
+
+export function atualizarNfseDocumento(empresaId, documentoId, nfse) {
+  const doc = obterDocumentoFiscal(empresaId, documentoId);
+  if (!doc) throw new Error('Documento fiscal não encontrado na empresa ativa.');
+  doc.nfse = { ...(doc.nfse || {}), ...nfse, atualizadoEm: agora() };
+  if (nfse.status === 'autorizada') { doc.status = 'nfse_autorizada'; doc.transmitido = true; doc.numeroFiscal = nfse.chaveAcesso || doc.numeroFiscal; doc.provedor = 'nfse_nacional'; }
+  if (nfse.status === 'cancelada') doc.status = 'nfse_cancelada';
+  if (nfse.status === 'rejeitada') doc.status = 'nfse_rejeitada';
+  doc.atualizadoEm = agora();
+  saveFn();
+  return { ...doc };
+}
+
+export function obterConfigNfse(empresaId) {
+  return { ...(storeFiscal(empresaId).nfseConfig || {}) };
+}
+
+export function salvarConfigNfse(empresaId, config) {
+  const store = storeFiscal(empresaId);
+  store.nfseConfig = { ...config, atualizadoEm: agora() };
+  saveFn();
+  return { ...store.nfseConfig };
+}
+
+// Reserva o próximo número de DPS da série (nunca reaproveita número autorizado).
+export function reservarNumeroDps(empresaId) {
+  const store = storeFiscal(empresaId);
+  store.nfseConfig ||= {};
+  const numero = Math.max(1, Math.floor(Number(store.nfseConfig.proximoNumero) || 1));
+  store.nfseConfig.proximoNumero = numero + 1;
+  saveFn();
+  return numero;
+}
+
+export default { prepararDocumentoFiscal, listarDocumentosFiscais, obterDocumentoFiscal, atualizarNfseDocumento, obterConfigNfse, salvarConfigNfse, reservarNumeroDps };
