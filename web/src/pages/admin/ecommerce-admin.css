@@ -449,3 +449,9 @@
 .commerce-invite-history > p { font-size: 12px; line-height: 1.5; }
 .commerce-users-panel td > strong,
 .commerce-users-panel td > small { display: block; }
+
+/* Keep catalog grid tracks bounded; scroll wide tables inside their own panel. */
+.commerce-product-workspace > [role="tabpanel"] { min-width: 0; max-width: 100%; }
+.commerce-product-table-wrap { min-width: 0; max-width: 100%; overflow-x: auto; }
+.commerce-product-hero { flex-wrap: wrap; }
+.commerce-product-hero-actions { flex-wrap: wrap; }

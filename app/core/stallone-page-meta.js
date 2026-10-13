@@ -1,6 +1,8 @@
-const BASE = 'https://stallone.kytto.com.br';
+export const STALLONE_ORIGIN = 'https://stallone.kytto.com.br';
+const BASE = STALLONE_ORIGIN;
+export function isStalloneHost(host) { return /^(www\.)?stallone\.kytto\.com\.br$/i.test(String(host || '').replace(/\.$/, '')); }
 export function stallonePageMeta(host, pathname) {
-  const dedicated = /^(www\.)?stallone\.kytto\.com\.br$/i.test(String(host || '').replace(/\.$/, ''));
+  const dedicated = isStalloneHost(host);
   const store = pathname === '/ecommerce/stallone' || pathname === '/ecommerce/stallone/' || dedicated && ['/', '/index.html'].includes(pathname);
   if (!store && !(dedicated && (pathname === '/login' || /^\/(admin|checkout|pedido)(\/|$)/.test(pathname)))) return null;
   return {
