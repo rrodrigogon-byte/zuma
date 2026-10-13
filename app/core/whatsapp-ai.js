@@ -69,6 +69,7 @@ import {
 } from './whatsapp-ai-persona.js';
 import { bubbleDelayMs, splitBubbles, styleModelText } from './whatsapp-ai-style.js';
 import { enviarFigurinha as enviarFigurinhaPersona, figurinhaDisponivel, figurinhaSuportada } from './whatsapp-figurinhas.js';
+import { mapWhatsappAiProviderLatency24h, WHATSAPP_AI_PROVIDER_RUNS_24H_SQL } from './whatsapp-ai-provider-metrics.js';
 
 function cleanText(value, limit = 4000) {
   return String(value || '').trim().replace(/\u0000/g, '').slice(0, limit);
@@ -1388,17 +1389,7 @@ export async function whatsappAiOperationalStatus(context = {}) {
         GROUP BY delivery_status`,
       [empresaId, lojaId],
     ),
-    db.queryRead(
-      `SELECT COUNT(*)::int AS total,
-              COUNT(*) FILTER (WHERE status = 'success')::int AS success,
-              COUNT(*) FILTER (WHERE status IN ('failed','blocked'))::int AS failed,
-              COALESCE(ROUND(AVG(latency_ms)), 0)::int AS avg_latency_ms,
-              COALESCE(SUM(tool_calls), 0)::int AS tool_calls
-         FROM whatsapp_ai_provider_runs
-        WHERE empresa_id = $1 AND loja_id = $2
-          AND criado_em >= CURRENT_TIMESTAMP - INTERVAL '24 hours'`,
-      [empresaId, lojaId],
-    ),
+    db.queryRead(WHATSAPP_AI_PROVIDER_RUNS_24H_SQL, [empresaId, lojaId]),
     db.queryRead(
       `SELECT titular, expira_em, atualizado_em,
               (expira_em > CURRENT_TIMESTAMP) AS active
@@ -1447,6 +1438,7 @@ export async function whatsappAiOperationalStatus(context = {}) {
       failed: Number(provider.failed || 0),
       avgLatencyMs: Number(provider.avg_latency_ms || 0),
       toolCalls: Number(provider.tool_calls || 0),
+      latency24h: mapWhatsappAiProviderLatency24h(provider, provider.total),
     },
     worker: workerLease.rows[0] ? {
       active: workerLease.rows[0].active === true,
@@ -1990,5 +1982,3 @@ export async function testWhatsappAiGemini(context = {}, { confirmed = false } =
     throw error;
   }
 }
-
-

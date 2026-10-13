@@ -29,8 +29,20 @@ function channelLabel(channel) {
   return 'Não verificável'
 }
 
+function providerLatencyLabel(provider) {
+  const latency = provider?.latency24h
+  if (!latency || latency.sampleSize == null) return { value: 'não verificável', hint: 'Percentis indisponíveis nesta leitura.' }
+  if (latency.sampleSize === 0) return { value: 'sem amostras válidas', hint: '0 durações positivas registradas; zero também pode ser ausência de medição.' }
+  if (latency.p50Ms == null || latency.p95Ms == null) return { value: 'não verificável', hint: 'Percentis indisponíveis nesta leitura.' }
+  return {
+    value: `p50 ${numberFormat.format(latency.p50Ms)} ms · p95 ${numberFormat.format(latency.p95Ms)} ms`,
+    hint: `${count(latency.sampleSize)} durações positivas · janela 24 h · unidade atual. Zero/default não participa dos percentis. Mede somente execuções do provedor, não é latência ponta a ponta da conversa; não comprova SLA, especialmente com amostra pequena.`,
+  }
+}
+
 export function WhatsappAiOperationalSection({ status, readAt }) {
   const guidance = whatsappOperationalSummary(status)
+  const providerLatency = providerLatencyLabel(status?.kind === 'valid' ? status.provider24h : null)
   const humanSessions = status?.kind === 'valid' ? sumCounts(status.sessions, operationalStatusKeys.sessionHuman) : null
   const unassignedHuman = status?.kind === 'valid' ? status.humanQueue.unassigned : null
   const deliveryOther = status?.kind === 'valid'
@@ -62,7 +74,8 @@ export function WhatsappAiOperationalSection({ status, readAt }) {
         <StatusRow label="Expiração do lease global" value={timestamp(status.worker.leaseExpiresAt, 'sem registro')} />
         <StatusRow label="Último heartbeat global" value={timestamp(status.worker.lastHeartbeatAt, 'sem registro')} />
         <StatusRow label="Execuções do provedor · 24 h" value={count(status.provider24h.total)} hint={status.provider24h.total === 0 ? 'Sem execuções; isso não comprova sucesso nem falha.' : undefined} />
-        <StatusRow label="Latência média · 24 h" value={status.provider24h.total === 0 ? 'sem execuções' : status.provider24h.avgLatencyMs == null ? 'não verificável' : `${count(status.provider24h.avgLatencyMs)} ms`} hint={status.provider24h.total > 0 ? 'Média registrada; não é p95.' : undefined} />
+        <StatusRow label="Latência média · 24 h" value={status.provider24h.total === 0 ? 'sem execuções' : status.provider24h.latency24h?.sampleSize === 0 ? 'não verificável' : status.provider24h.avgLatencyMs == null ? 'não verificável' : `${count(status.provider24h.avgLatencyMs)} ms`} hint={status.provider24h.total > 0 ? status.provider24h.latency24h?.sampleSize === 0 ? 'Nenhuma latência válida nesta janela; não exibir zero como fallback.' : 'Média legada inclui registros zero/default; percentis usam apenas durações positivas. Não são amostras idênticas.' : undefined} />
+        <StatusRow label="Percentis da latência · 24 h" value={providerLatency.value} hint={providerLatency.hint} />
       </dl>
       <div className="dadm-operational-metrics" aria-label="Contagens agregadas">
         <div><span>Sessões humano</span><strong>{count(humanSessions)}</strong></div>
