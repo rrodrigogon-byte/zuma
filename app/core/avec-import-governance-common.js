@@ -1,11 +1,11 @@
 import crypto from 'node:crypto';
+import { sensitiveGovernanceKey, knownGovernanceSchema } from '../../shared/avec-import-policy.js';
 
 export const AVEC_IMPORT_VERSION = 'avec-dino-governance-v1';
 export const AVEC_AGENDA_WINDOW_DAYS = 60;
 export const AVEC_IMPORT_MAX_ROWS = 500;
 export const AVEC_CATEGORIES = Object.freeze(['products', 'fees', 'materials', 'fiscal', 'agenda']);
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const FORBIDDEN_KEYS = /^(passwords?|senhas?|tokens?|secrets?|certificados?|certificates?|credentials?|credencial|credenciais|privateKey|chavePrivada|csc|cookies?|authorization|cpf|nomeCliente|clienteNome|clientName|customerName|telefone|phone|celular|email|observacoes|observations|jwt|jwtSecret|dbPass|accessToken|refreshToken|cardNumber|cvv|cvc|pan|contaBancaria|bankAccount|__proto__|constructor|prototype)$/i;
 
 export class AvecGovernanceError extends Error {
   constructor(code) { super(code); this.name = 'AvecGovernanceError'; this.code = code; }
@@ -33,7 +33,7 @@ export function assertMinimizedPayload(value, depth = 0) {
   if (Array.isArray(value)) { for (const v of value) assertMinimizedPayload(v, depth + 1); return; }
   if (!isRecord(value)) return;
   for (const [key, v] of Object.entries(value)) {
-    if (FORBIDDEN_KEYS.test(key) || FORBIDDEN_KEYS.test(key.replace(/[\s_-]/g, ''))) throw new AvecGovernanceError('AVEC_SENSITIVE_FIELD_REJECTED');
+    if (sensitiveGovernanceKey(key)) throw new AvecGovernanceError('AVEC_SENSITIVE_FIELD_REJECTED');
     assertMinimizedPayload(v, depth + 1);
   }
 }
@@ -49,6 +49,7 @@ export function validateGovernanceInput(input, scope) {
   if (!isoInstant(input.extractedAt) || !isoInstant(input.cutoff)) throw new AvecGovernanceError('AVEC_INSTANT_REQUIRED');
   if (input.writerEnabled === true || input.apply === true || input.execute === true) throw new AvecGovernanceError('AVEC_APPLY_DISABLED');
   assertMinimizedPayload(input);
+  if (!knownGovernanceSchema(input)) throw new AvecGovernanceError('AVEC_FIELD_NOT_ALLOWED');
   return { empresaId, lojaId };
 }
 export function rowResult(line, reasons = [], ignored = false) {

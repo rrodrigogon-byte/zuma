@@ -33,6 +33,7 @@ import { createAccountManagementRouter } from './core/commerce-account-routes.js
 import { emitir as nfceEmitir, cancelar as nfceCancelar, nfceConfigurado } from './nfce.js';
 import { createCommerceAdminRouter, createCommercePublicRateLimitGuard, createCommercePublicRouter, createCommerceWebhookRouter } from './core/commerce-routes.js';
 import { createWhatsappAiWebhookRouter } from './core/whatsapp-ai-routes.js';
+import { avecGovernanceNoStore } from './core/avec-import-http-policy.js';
 import { whatsappAiOperationalStatus } from './core/whatsapp-ai.js';
 import { legacyWppAvailable } from './core/whatsapp-legacy-scope.js';
 import { canCheckWhatsappConnection, safeWhatsappConnection } from './core/whatsapp-connection-readiness.js';
@@ -122,6 +123,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Request-Id', req.requestId);
   next();
 });
+app.use(avecGovernanceNoStore);
 app.use(express.json({ limit: '1mb', verify: (req, res, buf) => { if (req.originalUrl?.startsWith('/api/webhooks/')) req.rawBody = Buffer.from(buf); } }));
 
 // SSE — realtime para KDS, Mesas, Portaria

@@ -1,19 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, FileSpreadsheet, Loader2, Upload } from 'lucide-react'
 import { api } from '../../lib/api'
+import { minimizedGovernanceTree, knownGovernanceSchema, AVEC_GOVERNANCE_FILE_LIMIT } from '../../../../shared/avec-import-policy.js'
 
 const VERSION = 'avec-dino-governance-v1'
 const CATEGORIES = { products: 'Produtos', fees: 'Taxas', materials: 'Materiais dos serviços', fiscal: 'Cadastro fiscal', agenda: 'Agenda — 60 dias' }
 const STATUS = { blocked: 'Bloqueado', ignored: 'Ignorado', ready_for_mapping: 'Estrutura válida — falta mapear' }
 const BLOCKERS = ['SOURCE_ESTABLISHMENT_BINDING_REQUIRED', 'DESTINATION_BASELINE_AND_MAPPING_REQUIRED', 'FINAL_LOT_APPROVAL_REQUIRED', 'OFFICIAL_WRITER_NOT_ENABLED']
-
-function minimizedInput(value, depth = 0) {
-  if (depth > 12) return false
-  if (Array.isArray(value)) return value.every(child => minimizedInput(child, depth + 1))
-  if (!value || typeof value !== 'object') return true
-  const sensitive = /^(passwords?|senhas?|tokens?|secrets?|certificados?|certificates?|credentials?|credencial|credenciais|privateKey|chavePrivada|csc|cookies?|authorization|cpf|nomeCliente|clienteNome|clientName|customerName|telefone|phone|celular|email|observacoes|observations|jwt|jwtSecret|dbPass|accessToken|refreshToken|cardNumber|cvv|cvc|pan|contaBancaria|bankAccount|__proto__|constructor|prototype)$/i
-  return Object.entries(value).every(([key, child]) => !sensitive.test(key) && !sensitive.test(key.replace(/[\s_-]/g, '')) && minimizedInput(child, depth + 1))
-}
 
 export function validGovernanceResponse(value, scope, category, size) {
   if (value?.mode !== 'read-only-avec-import-governance' || value.contractVersion !== VERSION || value.category !== category || value.write?.performed !== false || value.write?.enabled !== false || value.write?.endpoint !== null) return false
@@ -27,14 +20,13 @@ export function validGovernanceResponse(value, scope, category, size) {
 export function governanceTemplate(category, scope) {
   const shared = { sourceId: '', lojaId: scope.lojaId }
   const rows = {
-    products: { sourceId: '', sku: '', ean: '', ncm: '', custo: '', custoNature: 'declared_registration', unidade: '' },
+    products: { sourceId: '', sku: '', ean: '', ncm: '', custo: '', custoNature: '', unidade: '' },
     fees: { ...shared, acquirer: '', method: '', brand: '', installments: null, percent: null, fixedCents: null, anticipationMode: 'unknown', settlementDays: null, validFrom: '', validTo: '', contractRef: '' },
     materials: { ...shared, sourceServiceId: '', sourceProductId: '', quantity: null, consumptionUnit: '', referenceUnit: '', referenceQuantity: null, costCents: null, costEvidence: '', serviceUnitConfirmed: false },
-    fiscal: { lojaId: scope.lojaId, cnpj: '', razaoSocial: '', nomeFantasia: '', inscricaoEstadual: { state: 'provided', value: '' }, inscricaoMunicipal: { state: 'provided', value: '' }, regime: '', address: { cep: '', logradouro: '', numero: '', bairro: '', cidade: '', uf: '' }, fiscalReviewConfirmed: false, reviewScope: { empresaId: scope.empresaId, lojaId: scope.lojaId }, dataFormat: 'avec-fiscal-v1', sourceRef: '' },
+    fiscal: { lojaId: scope.lojaId, cnpj: '', razaoSocial: '', nomeFantasia: '', inscricaoEstadual: { state: '', value: '' }, inscricaoMunicipal: { state: '', value: '' }, regime: '', address: { cep: '', logradouro: '', numero: '', bairro: '', cidade: '', uf: '' }, fiscalReviewConfirmed: false, reviewScope: { empresaId: scope.empresaId, lojaId: scope.lojaId }, dataFormat: '', sourceRef: '' },
     agenda: { sourceAppointmentId: '', sourceClientId: '', sourceProfessionalId: '', sourceServiceId: '', lojaId: scope.lojaId, startAt: '', endAt: '', durationMinutes: null, timezone: 'America/Cuiaba', status: '', individualEventVerified: false, originalIdsVerified: false },
   }
-  const now = new Date().toISOString()
-  return { source: 'avec', contractVersion: VERSION, category, sourceEstablishmentId: '', ...scope, extractedAt: now, cutoff: now, rows: [rows[category]] }
+  return { source: 'avec', contractVersion: VERSION, category, sourceEstablishmentId: '', ...scope, extractedAt: '', cutoff: '', rows: [rows[category]] }
 }
 
 export default function AvecImportGovernancePreview({ empresaId, unitId, storefrontId, locationId }) {
@@ -62,15 +54,15 @@ export default function AvecImportGovernancePreview({ empresaId, unitId, storefr
     abort.current?.abort(); setBusy(false); setPayload(null); setLoaded(false); setResult(null); setError(''); setPage(1)
     if (!file) return
     try {
-      if (file.size > 2 * 1024 * 1024) throw new Error('limit')
+      if (file.size > AVEC_GOVERNANCE_FILE_LIMIT) throw new Error('limit')
       const data = JSON.parse(await file.text())
       if (generation !== request.current || current.current !== selection) return
       if (data.source !== 'avec' || data.contractVersion !== VERSION || data.category !== category || !Array.isArray(data.rows) || !data.rows.length || data.rows.length > 500) throw new Error('contract')
-      if (!minimizedInput(data)) throw new Error('sensitive')
+      if (!minimizedGovernanceTree(data) || !knownGovernanceSchema(data)) throw new Error('sensitive')
       if (!['empresaId', 'lojaId', 'storefrontId', 'locationId'].every(field => data[field] === scope[field])) throw new Error('scope')
       setPayload(data); setLoaded(true)
     } catch (_) {
-      if (generation === request.current && current.current === selection) setError('Arquivo JSON inválido, acima de 2 MB, com campos sensíveis proibidos ou fora do contrato/escopo selecionado. Nenhum dado foi enviado.')
+      if (generation === request.current && current.current === selection) setError('Arquivo JSON inválido, acima de 512 KiB, com campos sensíveis proibidos/desconhecidos ou fora do contrato/escopo selecionado. Nenhum dado foi enviado.')
     } finally { target.value = '' }
   }
   async function validate() {
@@ -93,6 +85,7 @@ export default function AvecImportGovernancePreview({ empresaId, unitId, storefr
       <h3 id="avec-governance-title">Conferir os dados mínimos antes do mapeamento</h3>
       <p className="commerce-admin-help">60 dias de agenda. Preserve preço, saldo, reservas e publicação. Campos ausentes permanecem pendentes; cancelados/faltas são ignorados e conflitos bloqueiam. Estrutura válida não significa lote apto.</p>
       <p className="commerce-admin-help">Este JSON é um contrato de preparação, não exportação nativa AVEC. Não inclua nomes/contatos de clientes, observações livres, certificados, senhas ou tokens. Dados empresariais fiscais exigem revisão restrita.</p>
+      <p className="commerce-admin-help">Máximo 512 KiB. Preencha extração, corte e demais fatos com evidência da origem: o modelo não gera datas, custos ou inscrições.</p>
     </div></div>
     <div className="ecommerce-admin-header-actions">
       <label>Categoria <select aria-label="Categoria de preparação AVEC" value={category} onChange={event => setCategory(event.target.value)}>{Object.entries(CATEGORIES).map(([value, title]) => <option key={value} value={value}>{title}</option>)}</select></label>

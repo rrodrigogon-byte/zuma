@@ -71,7 +71,23 @@ it('rejeita aliases sensíveis antes do envio, sem repetir conteúdo', async () 
 it('modelos incluem campos mínimos fiscais e deixam verificação de agenda pendente', async () => {
   const { governanceTemplate } = await import('./AvecImportGovernancePreview')
   const fiscal = governanceTemplate('fiscal', scope).rows[0]
-  expect(fiscal.reviewScope).toEqual({ empresaId: scope.empresaId, lojaId: scope.lojaId }); expect(fiscal.dataFormat).toBe('avec-fiscal-v1'); expect(fiscal.fiscalReviewConfirmed).toBe(false); expect(fiscal.cnpj).toBe('')
+  expect(fiscal.reviewScope).toEqual({ empresaId: scope.empresaId, lojaId: scope.lojaId }); expect(fiscal.dataFormat).toBe(''); expect(fiscal.fiscalReviewConfirmed).toBe(false); expect(fiscal.cnpj).toBe('')
   const agenda = governanceTemplate('agenda', scope).rows[0]
   expect(agenda.originalIdsVerified).toBe(false); expect(agenda.individualEventVerified).toBe(false); expect(agenda.durationMinutes).toBeNull()
+})
+it('datas e fatos de origem ficam vazios nos cinco modelos', async () => {
+  const { governanceTemplate } = await import('./AvecImportGovernancePreview')
+  for (const category of ['products', 'fees', 'materials', 'fiscal', 'agenda']) {
+    const model = governanceTemplate(category, scope); expect(model.extractedAt).toBe(''); expect(model.cutoff).toBe(''); expect(model.sourceEstablishmentId).toBe('')
+  }
+  expect(governanceTemplate('products', scope).rows[0].custoNature).toBe(''); expect(governanceTemplate('fiscal', scope).rows[0].inscricaoEstadual.state).toBe('')
+})
+it('bloqueia aliases de credenciais e tamanho acima de 512 KiB antes de ler/enviar', async () => {
+  await mount()
+  for (const key of ['apiKey', 'client_secret', 'secretValue', 'unfamiliar']) {
+    const content = input(1); content.rows[0][key] = 'PRIVATE-NOT-SENT'; await select(JSON.stringify(content)); await run(); expect(mock.post).not.toHaveBeenCalled()
+  }
+  const read = vi.fn()
+  await act(async () => { await ui.root.findByType('input').props.onChange({ target: { files: [{ size: 512 * 1024 + 1, text: read }], value: '' } }); await tick() })
+  expect(read).not.toHaveBeenCalled(); expect(mock.post).not.toHaveBeenCalled(); expect(text(ui.toJSON())).toContain('512 KiB')
 })

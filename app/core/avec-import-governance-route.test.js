@@ -4,7 +4,7 @@ import express from 'express';
 import { createCommerceAdminRouter } from './commerce-routes.js';
 import { db } from './database.js';
 const scope = { empresaId: '11111111-1111-4111-8111-111111111111', lojaId: '22222222-2222-4222-8222-222222222222', storefrontId: '33333333-3333-4333-8333-333333333333', locationId: '44444444-4444-4444-8444-444444444444', usuarioId: '66666666-6666-4666-8666-666666666666' };
-const fixture = () => ({ source: 'avec', contractVersion: 'avec-dino-governance-v1', category: 'products', ...scope, sourceEstablishmentId: 'SYNTHETIC-ESTABLISHMENT-PRIVATE', extractedAt: '2026-10-14T12:00:00-04:00', cutoff: '2026-10-14T12:00:00-04:00', rows: [{ sourceId: 'SYNTHETIC-PRODUCT-PRIVATE', sku: 'SYNTHETIC-SKU', unidade: 'UN' }] });
+const fixture = () => ({ source: 'avec', contractVersion: 'avec-dino-governance-v1', category: 'products', empresaId: scope.empresaId, lojaId: scope.lojaId, storefrontId: scope.storefrontId, locationId: scope.locationId, sourceEstablishmentId: 'SYNTHETIC-ESTABLISHMENT-PRIVATE', extractedAt: '2026-10-14T12:00:00-04:00', cutoff: '2026-10-14T12:00:00-04:00', rows: [{ sourceId: 'SYNTHETIC-PRODUCT-PRIVATE', sku: 'SYNTHETIC-SKU', unidade: 'UN' }] });
 test('governança HTTP real: auth/RBAC, fronteira explícita, no-store, sem writer, saída minimizada', async () => {
   const previous = { query: db.query, queryRead: db.queryRead, transaction: db.transaction };
   const calls = []; let denied = '', validStore = true, selectedUnit = scope.lojaId, authenticated = true;
