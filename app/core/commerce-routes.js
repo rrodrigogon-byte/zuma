@@ -14,6 +14,7 @@ import { applyPromotionToOrder, createPromotion, createPromotionCode, createProm
 import { createStorefront, listStorefronts, updateStorefront } from './commerce-storefronts.js';
 import { resolveStorefrontAlias } from './commerce-tenants.js';
 import { executeCatalogImport, previewCatalogImport } from './commerce-catalog-import.js';
+import { previewAvecCatalog } from './avec-catalog-preview.js';
 import { createMembership, listMembershipCandidates, listMemberships, listRoles, updateMembership } from './commerce-admin-users.js';
 import { createCustomer, createCustomerAddress, deleteCustomerAddress, getCustomer, listCustomerAddresses, updateCustomer, updateCustomerAddress } from './commerce-customers.js';
 import { createCreditAccount, listCreditAccounts, listCreditEntries, updateCreditAccount } from './commerce-credit.js';
@@ -592,6 +593,12 @@ function jsonError(res, error) {
     CATALOG_IMPORT_IDEMPOTENCY_REQUIRED: 400,
     CATALOG_IMPORT_PREVIEW_REQUIRED: 400,
     CATALOG_IMPORT_PREVIEW_STALE: 409,
+    AVEC_FIELD_TOO_LONG: 400,
+    AVEC_SCOPE_REQUIRED: 400,
+    AVEC_SIZE_INVALID: 400,
+    AVEC_SOURCE_INVALID: 400,
+    AVEC_FORMULA_CELL: 400,
+    AVEC_SCOPE_MISMATCH: 403,
     SATISFACTION_RATING_INVALID: 400,
     SATISFACTION_RECOMMENDATION_REQUIRED: 400,
     SATISFACTION_IDEMPOTENCY_REQUIRED: 400,
@@ -1417,6 +1424,14 @@ export function createCommerceAdminRouter() {
       const context = await requirePermission(req, 'catalog.read');
       await requirePermission(req, 'inventory.read');
       res.json(await previewCatalogImport(context, req.body || {}));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/catalog/avec/preview', async (req, res) => {
+    try {
+      const context = await requirePermission(req, 'catalog.read');
+      await requirePermission(req, 'inventory.read');
+      res.set('Cache-Control', 'no-store');
+      res.json(await previewAvecCatalog(context, req.body || {}));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/catalog/import/execute', async (req, res) => {

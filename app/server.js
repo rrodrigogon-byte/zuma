@@ -97,6 +97,7 @@ import { enviarMensagem as enviarWhatsappCore } from './core/whatsapp.js';
 import { registerWhatsappConexaoRoutes } from './whatsapp-conexao-routes.js';
 import { vigiarTodas as vigiarConexoesWhatsapp } from './whatsapp-conexao-kytto.js';
 import { registerDinoAdminRoutes, loadCommerceSalesDetail } from './dino-admin-routes.js';
+import { buildCurrentMaterials, previewTaxMaterialPlan, PreviewConflictError, PreviewValidationError } from './comandas-caixa-previa.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -2629,7 +2630,7 @@ function exigirPapelOperacaoBarbearia(req, res, next) {
   }
   if (['admin', 'organizador'].includes(String(req.user?.role || ''))) return next();
   const endpoint = req.path || '';
-  const leituraGerencial = /^\/(?:overview|dashboard|analytics|metas|financeiro|bi|auditoria|relatorios|comissoes|clientes|clientes-360|crm\/resumo|operacao\/resumo|operacao\/caixas|fiscal\/documentos|vendas-revenda)(?:\/|$)/.test(endpoint);
+  const leituraGerencial = /^\/(?:overview|dashboard|analytics|metas|financeiro|bi|auditoria|relatorios|comissoes|clientes|clientes-360|crm\/resumo|operacao\/resumo|operacao\/caixas|fiscal\/documentos|vendas-revenda|caixa\/previa-taxas-materiais)(?:\/|$)/.test(endpoint);
   const mutacaoGerencial = req.method !== 'GET' && (
     /^\/(?:configuracoes|profissionais|servicos|planos|assinaturas|estoque-revenda|fidelidade\/(?:regra|creditar)|operacao\/caixas|operacao\/fechar-dia|financeiro)(?:\/|$)/.test(endpoint)
     || /^\/comandas\/[^/]+\/(?:pagamentos|cancelar|fiscal|consumo-interno)(?:\/|$)/.test(endpoint)
@@ -2650,6 +2651,102 @@ registerDinoAdminRoutes(app, { db, legacyEmpresaId, legacyLojaId, financeiroKytt
 registerAiBrainRoutes(app, { legacyEmpresaId, legacyLojaId, requireCommercePermission, audit, clientesKytto, commerceDb, listarAgendamentosBarbearia });
 registerAtivacaoRoutes(app, { legacyEmpresaId, requireCommercePermission, barbeariaErpKytto, audit });
 registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLojaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user) });
+// Prévia integrada de taxas/materiais: POST por ser um cálculo de payload, nunca uma mutação.
+// Não há rota de aplicar neste recorte; o plano só devolve hash, divergências e pendências.
+function temPropriedade(valor, chave) {
+  return Boolean(valor && typeof valor === 'object' && Object.prototype.hasOwnProperty.call(valor, chave));
+}
+
+function lojaExplicitaDoRegistro(registro) {
+  if (!temPropriedade(registro, 'lojaId')) return '';
+  return String(registro.lojaId || '').trim();
+}
+
+function registrosDaUnidadeOuBloqueados(registros, lojaId, rotulo) {
+  const itens = Array.isArray(registros) ? registros : [];
+  const vinculados = itens.filter((item) => lojaExplicitaDoRegistro(item) === String(lojaId));
+  const possuiLegadoSemUnidade = itens.some((item) => !lojaExplicitaDoRegistro(item));
+  return {
+    registros: vinculados,
+    status: possuiLegadoSemUnidade ? 'bloqueado' : 'disponivel',
+    code: possuiLegadoSemUnidade ? 'BASELINE_UNIT_SCOPE_UNVERIFIED' : null,
+    message: possuiLegadoSemUnidade
+      ? `Comparativo de ${rotulo} indisponível: há registros legados sem vínculo explícito com uma unidade; nenhum dado tenant-wide foi usado.`
+      : null,
+  };
+}
+
+function baselineCaixaPorUnidade({ servicos, produtos, lojaId }) {
+  // No modelo real, taxasPagamento pertence à configuração da empresa; lojas
+  // carregam apenas calendário. Sem vínculo oficial de taxa por unidade, não
+  // transformamos a configuração tenant-wide em baseline unitário.
+  const taxas = {
+    status: 'bloqueado',
+    code: 'BASELINE_UNIT_SCOPE_UNVERIFIED',
+    message: 'Comparativo de taxas indisponível: o modelo legado só comprova taxas da empresa; não há vínculo explícito de taxas com esta unidade.',
+    value: {},
+  };
+  const servicosDaUnidade = registrosDaUnidadeOuBloqueados(servicos, lojaId, 'serviços');
+  const produtosDaUnidade = registrosDaUnidadeOuBloqueados(produtos, lojaId, 'produtos');
+  let materiais = {
+    status: servicosDaUnidade.status === 'disponivel' && produtosDaUnidade.status === 'disponivel' ? 'disponivel' : 'bloqueado',
+    code: null,
+    message: null,
+    value: [],
+  };
+  if (materiais.status === 'disponivel') {
+    const produtosPorId = new Map(produtosDaUnidade.registros.map((item) => [String(item.id), item]));
+    const consumoSemVinculo = servicosDaUnidade.registros.some((servico) => !servico.custoMaterial && (servico.consumoInterno || []).some((consumo) => !produtosPorId.has(String(consumo.produtoId))));
+    if (consumoSemVinculo) {
+      materiais = {
+        status: 'bloqueado',
+        code: 'BASELINE_UNIT_SCOPE_UNVERIFIED',
+        message: 'Comparativo de materiais indisponível: a ficha técnica referencia produto sem vínculo explícito com a unidade selecionada.',
+        value: [],
+      };
+    } else {
+      materiais.value = buildCurrentMaterials({ servicos: servicosDaUnidade.registros, produtos: produtosDaUnidade.registros });
+    }
+  } else {
+    materiais.code = 'BASELINE_UNIT_SCOPE_UNVERIFIED';
+    materiais.message = servicosDaUnidade.message || produtosDaUnidade.message || 'Comparativo de materiais indisponível: o vínculo explícito com a unidade não foi comprovado.';
+  }
+  return {
+    taxas,
+    materiais,
+    validServiceIds: servicosDaUnidade.registros.map((item) => item.id),
+    validProductIds: produtosDaUnidade.registros.map((item) => item.id),
+    unverifiedServiceIds: servicos.filter((item) => !lojaExplicitaDoRegistro(item)).map((item) => item.id),
+    unverifiedProductIds: produtos.filter((item) => !lojaExplicitaDoRegistro(item)).map((item) => item.id),
+  };
+}
+
+app.post('/api/admin/barbearia/caixa/previa-taxas-materiais', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId(req);
+    const servicos = barbeariaErpKytto.listarServicos(empresaId, { incluirInativos: true });
+    const produtos = barbeariaErpKytto.listarProdutosRevenda(empresaId, { incluirInativos: true });
+    const baseline = baselineCaixaPorUnidade({ servicos, produtos, lojaId });
+    const resultado = previewTaxMaterialPlan(req.body || {}, {
+      empresaId,
+      lojaId,
+      currentTaxas: baseline.taxas.value,
+      currentMaterials: baseline.materiais.value,
+      baseline,
+      validServiceIds: baseline.validServiceIds,
+      validProductIds: baseline.validProductIds,
+      unverifiedServiceIds: baseline.unverifiedServiceIds,
+      unverifiedProductIds: baseline.unverifiedProductIds,
+    });
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ ok: true, ...resultado });
+  } catch (error) {
+    const status = error instanceof PreviewConflictError ? 409 : error instanceof PreviewValidationError ? 400 : 500;
+    if (status === 500) console.error('Falha na prévia de taxas e materiais:', error?.message || error);
+    res.status(status).json({ error: status === 500 ? 'Prévia indisponível. Nenhuma configuração foi gravada.' : error.message, code: status === 500 ? 'PREVIEW_UNAVAILABLE' : error.code });
+  }
+});
 // Modo barbeiro (app do profissional no celular): agenda do dia, totais e comissão
 // do próprio profissional (vínculo pelo e-mail do login). Gestão escolhe qualquer um.
 app.get('/api/admin/barbearia/modo-barbeiro', (req, res) => {
@@ -2703,11 +2800,16 @@ function respostaPush(res, error) {
   const status = error instanceof pushEquipe.PushError ? error.status : 400;
   return res.status(status).json({ error: error.message, code: error.code || undefined });
 }
+function limitePush(req, res, next) {
+  const chave = `push:${String(req.user?.id ?? req.user?.email ?? 'anon').slice(0, 160)}:${req.ip || ''}`;
+  if (!rateLimit(chave, 40, 10 * 60 * 1000)) return res.status(429).json({ error: 'muitas alterações de notificação; tente novamente em alguns minutos', code: 'PUSH_RATE_LIMITED' });
+  next();
+}
 app.post('/api/admin/barbearia/push/situacao', (req, res) => {
-  try { res.json({ ok: true, ...pushEquipe.situacao({ empresaId: legacyEmpresaId(req), usuario: req.user, endpoint: req.body?.endpoint }) }); }
+  try { res.setHeader('Cache-Control', 'no-store'); res.json({ ok: true, ...pushEquipe.situacao({ empresaId: legacyEmpresaId(req), lojaId: legacyLojaId(req), usuario: req.user, endpoint: req.body?.endpoint }) }); }
   catch (error) { respostaPush(res, error); }
 });
-app.post('/api/admin/barbearia/push/assinar', (req, res) => {
+app.post('/api/admin/barbearia/push/assinar', limitePush, (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
     const eu = modoBarbeiro.profissionalDoUsuario(barbeariaErpKytto.listarProfissionais(empresaId), req.user);
@@ -2717,12 +2819,12 @@ app.post('/api/admin/barbearia/push/assinar', (req, res) => {
     res.json({ ok: true, ...resultado });
   } catch (error) { respostaPush(res, error); }
 });
-app.post('/api/admin/barbearia/push/cancelar', (req, res) => {
-  try { res.json({ ok: true, removida: pushEquipe.cancelar({ empresaId: legacyEmpresaId(req), usuario: req.user, endpoint: req.body?.endpoint }) }); }
+app.post('/api/admin/barbearia/push/cancelar', limitePush, (req, res) => {
+  try { res.json({ ok: true, removida: pushEquipe.cancelar({ empresaId: legacyEmpresaId(req), lojaId: legacyLojaId(req), usuario: req.user, endpoint: req.body?.endpoint }) }); }
   catch (error) { respostaPush(res, error); }
 });
-app.post('/api/admin/barbearia/push/teste', async (req, res) => {
-  try { res.json({ ok: true, ...(await pushEquipe.enviarTeste({ empresaId: legacyEmpresaId(req), usuario: req.user, endpoint: req.body?.endpoint })) }); }
+app.post('/api/admin/barbearia/push/teste', limitePush, async (req, res) => {
+  try { res.json({ ok: true, ...(await pushEquipe.enviarTeste({ empresaId: legacyEmpresaId(req), lojaId: legacyLojaId(req), usuario: req.user, endpoint: req.body?.endpoint })) }); }
   catch (error) { respostaPush(res, error); }
 });
 app.get('/api/admin/barbearia/metas', (req, res) => {

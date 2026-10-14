@@ -13,6 +13,7 @@ import AgendaProfissionais, { profissionaisSelecionados } from './AgendaProfissi
 import { lerAgenda, erroAgenda } from '../../lib/agenda-read'
 import { hojeAgenda } from '../../lib/barbearia-calendar'
 import BarbeariaOperacaoPanel from './BarbeariaOperacaoPanel'
+import BarbeariaCaixaPrevia from './BarbeariaCaixaPrevia'
 import { NfseComandaAcoes, NfseConfigCard } from './BarbeariaNfsePanel'
 import { ComprasPanel, CurvaAbcPanel } from './dino/ComprasPanels'
 import { RepassesPanel, ReguaClubePanel } from './dino/RepassesPanel'
@@ -25,6 +26,7 @@ const TABS = [
   ['Agenda', 'Reservas e horários'],
   ['Atendimento', 'Fila e status'],
   ['Caixa e fechamento', 'Abertura, movimentos e encerramento'],
+  ['Prévia taxas e materiais', 'Simulação somente leitura antes de gravar'],
   ['Clientes', 'CRM da unidade'],
   ['Profissionais', 'Equipe e repasse'],
   ['Serviços', 'Catálogo de serviços'],
@@ -55,7 +57,7 @@ const TABS = [
 ]
 
 const AREAS = [
-  { id: 'operacao', label: 'Operação', short: 'Hoje, agenda, atendimento e caixa', tabs: ['Visão geral', 'Agenda', 'Atendimento', 'Caixa e fechamento', 'Fila e bloqueios'] },
+  { id: 'operacao', label: 'Operação', short: 'Hoje, agenda, atendimento e caixa', tabs: ['Visão geral', 'Agenda', 'Atendimento', 'Caixa e fechamento', 'Prévia taxas e materiais', 'Fila e bloqueios'] },
   { id: 'relacionamento', label: 'Relacionamento', short: 'Clientes, retorno e indicação', tabs: ['Clientes', 'Retorno previsto', 'Lista de espera', 'Indicações', 'Avaliações (NPS)', 'Origem dos clientes', 'Fidelidade'] },
   { id: 'catalogo', label: 'Catálogo e equipe', short: 'Serviços, planos e revenda', tabs: ['Profissionais', 'Serviços', 'Planos e assinaturas', 'Saúde do clube', 'Estoque de revenda', 'Compras e fornecedores', 'Curva ABC', 'Vendas de revenda'] },
   { id: 'gestao', label: 'Gestão', short: 'Comissões, metas e regras', tabs: ['Comissões', 'Extrato e repasses', 'Ocupação e metas', 'Cobranças e cashback', 'Vale-presente', 'Receita da IA', 'Resumo diário', 'Unidades', 'Relatórios', 'Configuração'] },
@@ -1254,6 +1256,10 @@ export default function BarbeariaERP() {
     return <div style={{ display: 'grid', gap: 20 }}><BarbeariaComandasAbertas key={scopeKey} profissionais={profissionais} onOpen={abrirComanda} refreshKey={agendaRevisao} /><BarbeariaOperacaoPanel data={dataSelecionada} operacao={operacao || {}} onOpenCaixa={abrirCaixaOperacao} onMove={movimentarCaixaOperacao} onClose={fecharCaixaOperacao} onCloseDay={fecharDiaOperacao} salvando={salvando} /></div>
   }
 
+  function renderPreviaTaxasMateriais() {
+    return <BarbeariaCaixaPrevia key={scopeKey} servicos={servicos} empresaId={empresaAtiva?.id || user?.empresaId || ''} lojaId={lojaAtiva?.id || user?.lojaId || ''} />
+  }
+
   function renderClientes() {
     const indicadoresRelacionamento = relacionamento?.indicadores || {}
     return <div style={{ display: 'grid', gap: 16 }}>
@@ -1693,6 +1699,7 @@ export default function BarbeariaERP() {
     if (tab === 'Agenda') return renderAgenda()
     if (tab === 'Atendimento') return renderAtendimento()
     if (tab === 'Caixa e fechamento') return renderOperacao()
+    if (tab === 'Prévia taxas e materiais') return renderPreviaTaxasMateriais()
     if (tab === 'Clientes') return renderClientes()
     if (tab === 'Profissionais') return renderProfissionais()
     if (tab === 'Serviços') return renderServicos()
@@ -1824,4 +1831,3 @@ const styles = {
   quickActions: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 18, paddingTop: 16, borderTop: '1px solid color-mix(in srgb, var(--accent) 22%, var(--line))' },
   contextPill: { display: 'inline-flex', alignItems: 'center', padding: '6px 10px', borderRadius: 999, background: 'color-mix(in srgb, var(--accent) 12%, var(--card))', color: 'var(--accent)', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' },
 }
-

@@ -38,6 +38,7 @@ function queryRead(fixture, sql, values = []) {
     if (index < 0 || index >= values.length) throw new Error(`parâmetro ausente para $${n}`);
     const value = values[index];
     if (value === null || value === undefined) return 'NULL';
+    if (Array.isArray(value)) return `'${JSON.stringify(value).replace(/^\[/, '{').replace(/\]$/, '}').replaceAll("'", "''")}'`;
     return `'${String(value).replaceAll("'", "''")}'`;
   });
   const wrapped = `SELECT COALESCE(json_agg(q), '[]'::json) FROM (${substituted}) AS q;`;
@@ -258,4 +259,27 @@ test('PostgreSQL real: diagnóstico de catálogo é read-only, tenant/store scop
     'levels', (SELECT count(*) FROM commerce_inventory_levels)
   );`));
   assert.deepEqual(fixtureCounts, { legacy: 6, products: 6, levels: 3 });
+
+  // Nova prévia AVEC executa sua SQL real com o mesmo papel SELECT-only.
+  const { normalizeAvecInput, validateAvecScope, readCandidates, buildAvecPreview } = await import('./avec-catalog-preview.js');
+  psql(fixture, fixture.owner, `
+    UPDATE commerce_product_variants SET atributos = '{"unidade_medida":"UN"}', barcode = '0012345678905' WHERE id = '${VAR_ALIGNED}';
+    UPDATE commerce_variant_prices SET custo = 1.25 WHERE variant_id = '${VAR_ALIGNED}' AND price_list_id = '${PRICE_A}';
+    INSERT INTO commerce_legacy_imports (empresa_id,loja_id,source,entity,legacy_key,target_id,payload_hash) VALUES ('${A}','${A1}','avec','product','AVEC-LOCAL-1','${PRODUCT_ALIGNED}','fixture-hash');
+  `);
+  const readOnlyClient = { query: async (sql, values) => queryRead(fixture, sql, values) };
+  const avecScope = await validateAvecScope(readOnlyClient, scope, { storefrontId: SF_A1, locationId: LOC_A1 });
+  const avecInput = normalizeAvecInput({ items: [{ sourceId: 'AVEC-LOCAL-1', sku: 'SKU-ALIGNED', ean: '0012345678905', unidade: 'UN', custo: '2.00', ncm: '22030000' }, { sku: 'SKU-SECRET-A2', unidade: 'UN' }, { sku: 'SKU-SECRET-B', unidade: 'UN' }] });
+  const levelsBefore = psql(fixture, fixture.owner, 'SELECT md5(json_agg(t ORDER BY variant_id)::text) FROM commerce_inventory_levels t');
+  const rows = await readCandidates(readOnlyClient, avecScope, avecInput);
+  const avecPreview = buildAvecPreview(avecInput, rows, avecScope);
+  assert.equal(avecPreview.items[0].proposal.current.costCents, 125);
+  assert.equal(avecPreview.items[0].status, 'proposable');
+  assert.ok(avecPreview.items[0].proposal.matchedBy.includes('source_id'));
+  assert.equal(avecPreview.items[1].status, 'absent');
+  assert.equal(avecPreview.items[2].status, 'absent');
+  assert.equal(avecPreview.write.performed, false);
+  assert.equal(psql(fixture, fixture.owner, 'SELECT md5(json_agg(t ORDER BY variant_id)::text) FROM commerce_inventory_levels t'), levelsBefore);
+  await assert.rejects(() => validateAvecScope(readOnlyClient, scope, { storefrontId: SF_A2, locationId: LOC_A2 }), error => error.code === 'AVEC_SCOPE_MISMATCH');
+
 });
