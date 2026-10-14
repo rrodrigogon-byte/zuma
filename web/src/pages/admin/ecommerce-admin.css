@@ -491,3 +491,131 @@
 
 /* Importação: flex-basis horizontal não pode virar altura de botão no celular. */
 @media(max-width:820px){.commerce-catalog-import .ecommerce-admin-header-actions > .ecommerce-admin-button{flex:0 0 auto;width:100%;min-height:44px}}
+
+/* Dino Commerce admin — azul do monograma + dourado, sem recolorir outros tenants.
+   Tokens locais: checkout, storefront, Sidebar e estados de negócio não mudam. */
+html[data-brand='dino'] .ecommerce-admin-shell {
+  --dino-admin-blue: #183B59;
+  --dino-admin-blue-hover: #245377;
+  --dino-admin-blue-soft: #EAF0F6;
+  --dino-admin-gold: #E8C58E;
+  --dino-admin-gold-ink: #76531B;
+  --dino-admin-hero-start: #102B43;
+  --dino-admin-hero-end: #204968;
+  --dino-admin-hero-copy: #E1EAF2;
+  --ux-ink: var(--fg);
+  --ux-muted: var(--muted);
+  --ux-line: var(--line);
+  --ux-soft: var(--surface-2);
+  --focus-ring: #B0832E;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-brand='dino']:not([data-theme='light']) .ecommerce-admin-shell {
+    --dino-admin-blue: #B3D0EA;
+    --dino-admin-blue-hover: #D2E4F4;
+    --dino-admin-blue-soft: #202F43;
+    --dino-admin-gold-ink: #E8C58E;
+    --focus-ring: #E8C58E;
+  }
+}
+html[data-brand='dino'][data-theme='dark'] .ecommerce-admin-shell {
+  --dino-admin-blue: #B3D0EA;
+  --dino-admin-blue-hover: #D2E4F4;
+  --dino-admin-blue-soft: #202F43;
+  --dino-admin-gold-ink: #E8C58E;
+  --focus-ring: #E8C58E;
+}
+html[data-brand='dino'] .ecommerce-admin-shell .ecommerce-admin-header {
+  border-color: var(--line);
+  border-top: 3px solid var(--gold);
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+html[data-brand='dino'] .ecommerce-admin-shell .ecommerce-admin-header h1 { color: var(--fg); }
+html[data-brand='dino'] .ecommerce-admin-shell :is(.ecommerce-admin-kicker,.ecommerce-admin-header p,.commerce-admin-help) { color: var(--muted); }
+html[data-brand='dino'] .ecommerce-admin-shell .commerce-source-badge.core {
+  background: var(--dino-admin-blue-soft);
+  color: var(--dino-admin-blue);
+  border-color: var(--line);
+}
+html[data-brand='dino'] .ecommerce-admin-shell :is(.ecommerce-admin-tabs,.commerce-product-nav) {
+  background: var(--surface-2);
+  border-color: var(--line);
+  box-shadow: none;
+}
+html[data-brand='dino'] .ecommerce-admin-shell :is(.ecommerce-admin-tabs button.active,.ecommerce-admin-button.primary,.commerce-product-nav button.active,.commerce-product-layout-toggle button.active) {
+  background: var(--dino-admin-blue);
+  border-color: var(--dino-admin-blue);
+  color: var(--card);
+  box-shadow: 0 4px 12px rgba(16,43,67,.12);
+}
+html[data-brand='dino'] .ecommerce-admin-shell .ecommerce-admin-button.primary:hover:not(:disabled) { background: var(--dino-admin-blue-hover); }
+html[data-brand='dino'] .ecommerce-admin-shell .ecommerce-admin-tabs b { background: var(--dino-admin-blue); color: var(--card); }
+html[data-brand='dino'] .ecommerce-admin-shell :is(.ecommerce-admin-button.ghost,.commerce-product-nav button,.commerce-product-actions button:not(.danger),.commerce-product-pagination button) {
+  background: var(--card);
+  border-color: var(--line);
+  color: var(--fg);
+}
+html[data-brand='dino'] .ecommerce-admin-shell :is(.ecommerce-admin-button.ghost,.commerce-product-nav button,.commerce-product-actions button:not(.danger),.commerce-product-pagination button):hover:not(:disabled) {
+  background: var(--dino-admin-blue-soft);
+  color: var(--dino-admin-blue);
+  border-color: var(--dino-admin-blue);
+}
+html[data-brand='dino'] .ecommerce-admin-shell .commerce-product-hero {
+  background: linear-gradient(125deg,var(--dino-admin-hero-start),var(--dino-admin-hero-end));
+  border: 1px solid #365A78;
+  border-top: 3px solid var(--dino-admin-gold);
+  color: #FFFFFF;
+  box-shadow: 0 12px 28px rgba(16,43,67,.16);
+}
+html[data-brand='dino'] .ecommerce-admin-shell .commerce-product-hero h2 { color: #FFFFFF; }
+html[data-brand='dino'] .ecommerce-admin-shell .commerce-product-hero :is(p,.commerce-product-location) { color: var(--dino-admin-hero-copy); }
+html[data-brand='dino'] .ecommerce-admin-shell .commerce-product-hero .ecommerce-admin-kicker { color: var(--dino-admin-gold); }
+html[data-brand='dino'] .ecommerce-admin-shell .commerce-product-hero .ecommerce-admin-button.primary {
+  background: var(--dino-admin-gold);
+  border-color: var(--dino-admin-gold);
+  color: var(--dino-admin-hero-start);
+  box-shadow: 0 4px 12px rgba(0,0,0,.15);
+}
+html[data-brand='dino'] .ecommerce-admin-shell .commerce-product-hero .ecommerce-admin-button.primary:hover:not(:disabled) { background: #F3D8AA; }
+html[data-brand='dino'] .ecommerce-admin-shell .commerce-product-hero .ecommerce-admin-button.ghost {
+  background: transparent;
+  border-color: #AAC1D5;
+  color: #FFFFFF;
+}
+html[data-brand='dino'] .ecommerce-admin-shell .commerce-product-hero .ecommerce-admin-button.ghost:hover:not(:disabled) { background: #244C6B; }
+html[data-brand='dino'] .ecommerce-admin-shell :is(.commerce-product-toolbar,.commerce-product-tool-intro,.commerce-catalog-diagnostic-details,.commerce-catalog-import,.commerce-avec-preview,.commerce-catalog-enrichment,.commerce-category-form,.commerce-category-list,.commerce-product-thumbnail,.commerce-admin-product-card-image,.commerce-product-image-frame,.commerce-product-media-fallback,.commerce-product-image-placeholder,.commerce-selected-media) {
+  background: var(--surface-2);
+  border-color: var(--line);
+  color: var(--fg);
+}
+html[data-brand='dino'] .ecommerce-admin-shell :is(.commerce-product-summary article:not(.attention),.commerce-admin-product-card,.commerce-product-layout-toggle,.commerce-product-table-wrap,.commerce-category-list article,.commerce-catalog-diagnostic-summary article:not(.attention),.commerce-product-media-card) {
+  background: var(--card);
+  border-color: var(--line);
+  color: var(--fg);
+  box-shadow: var(--shadow);
+}
+html[data-brand='dino'] .ecommerce-admin-shell :is(.commerce-product-summary article:not(.attention)>svg,.commerce-product-tool-intro>svg) { color: var(--dino-admin-blue); }
+html[data-brand='dino'] .ecommerce-admin-shell :is(.commerce-product-summary article:not(.attention) strong,.commerce-product-identity strong,.commerce-product-result-bar strong,.commerce-product-tool-intro h3,.commerce-catalog-diagnostic-details>summary,.commerce-avec-preview h3,.commerce-category-list article strong,.commerce-admin-product-card-heading h3,.commerce-admin-product-card-metrics b:not(.warning):not(.danger)) { color: var(--fg); }
+html[data-brand='dino'] .ecommerce-admin-shell :is(.commerce-product-summary span,.commerce-product-summary small,.commerce-product-toolbar label,.commerce-product-identity span,.commerce-product-cell-help,.commerce-product-quality small,.commerce-product-result-bar,.commerce-product-tool-intro p,.commerce-catalog-diagnostic-details>summary small,.commerce-product-pagination,.commerce-admin-product-card-heading span,.commerce-admin-product-card-heading small,.commerce-product-search svg) { color: var(--muted); }
+html[data-brand='dino'] .ecommerce-admin-shell :is(.commerce-product-toolbar input,.commerce-product-toolbar select,.commerce-product-location select) { background: var(--card); border-color: var(--line); color: var(--fg); }
+html[data-brand='dino'] .ecommerce-admin-shell :is(.commerce-product-toolbar input,.commerce-product-toolbar select):focus { border-color: var(--dino-admin-blue); box-shadow: 0 0 0 3px var(--dino-admin-blue-soft); }
+html[data-brand='dino'] .ecommerce-admin-shell :is(.ecommerce-admin-tabs button,.ecommerce-admin-tabs a,.ecommerce-admin-button,.commerce-product-nav button,.commerce-product-location select,.commerce-product-layout-toggle button,.commerce-product-actions button,.commerce-product-status,.commerce-product-pagination button):focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 3px; }
+html[data-brand='dino'] .ecommerce-admin-shell .commerce-product-hero :focus-visible { outline-color: var(--dino-admin-gold); }
+html[data-brand='dino'] .ecommerce-admin-shell .commerce-product-quality>span { background: var(--dino-admin-blue-soft); }
+html[data-brand='dino'] .ecommerce-admin-shell .commerce-product-quality>span i { background: var(--dino-admin-blue); }
+html[data-brand='dino'] .ecommerce-admin-shell .commerce-product-quality.complete>span { background: var(--surface-2); }
+html[data-brand='dino'] .ecommerce-admin-shell .commerce-product-quality.complete>span i { background: var(--gold); }
+html[data-brand='dino'] .ecommerce-admin-shell :is(.commerce-product-result-bar button,.commerce-category-list article button) { color: var(--dino-admin-blue); }
+html[data-brand='dino'] .ecommerce-admin-shell .commerce-catalog-diagnostic-details>summary:not(.is-disabled):hover { background: var(--dino-admin-blue-soft); }
+html[data-brand='dino'] .ecommerce-admin-shell .commerce-admin-product-card-metrics span { background: var(--surface-2); color: var(--muted); }
+html[data-brand='dino'] .ecommerce-admin-shell .commerce-upload-dropzone { background: var(--dino-admin-blue-soft); border-color: var(--dino-admin-blue); color: var(--dino-admin-blue); }
+html[data-brand='dino'] .ecommerce-admin-shell .commerce-upload-dropzone:hover { background: var(--surface-2); border-color: var(--dino-admin-blue-hover); }
+html[data-brand='dino'] .ecommerce-admin-shell .commerce-catalog-action-tooltip { background: var(--dino-admin-hero-start); border-color: #365A78; color: #FFFFFF; }
+html[data-brand='dino'] .ecommerce-admin-shell .ecommerce-admin-table :is(th,td) { border-color: var(--line); }
+html[data-brand='dino'] .ecommerce-admin-shell .ecommerce-admin-table tbody tr:hover { background: var(--dino-admin-blue-soft); }
+/* Verde é reservado a estados semânticos (publicado/sucesso), não à decoração. */
+html[data-brand='dino'] .ecommerce-admin-shell :is(.commerce-product-nav button.active,.commerce-product-layout-toggle button.active):hover:not(:disabled) { background: var(--dino-admin-blue-hover); color: var(--card); }
+html[data-brand='dino'] .ecommerce-admin-shell .commerce-product-summary article.attention { background: var(--card); border-color: var(--gold); }
+html[data-brand='dino'] .ecommerce-admin-shell .commerce-product-summary article.attention.soft { background: var(--surface-2); border-color: var(--gold); }
+html[data-brand='dino'] .ecommerce-admin-shell .commerce-product-summary article.attention :is(svg,strong) { color: var(--dino-admin-gold-ink); }
