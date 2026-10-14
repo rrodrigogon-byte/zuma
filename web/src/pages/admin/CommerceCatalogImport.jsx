@@ -47,6 +47,7 @@ export default function CommerceCatalogImport({ mode, empresaId, unitId, storefr
   const [avecPreview, setAvecPreview] = useState(null)
   const [avecError, setAvecError] = useState('')
   const [avecLoading, setAvecLoading] = useState(false)
+  const [avecPage, setAvecPage] = useState(1)
   const avecAbortRef = useRef(null)
   const avecRequestIdRef = useRef(0)
   const scopeKey = JSON.stringify([mode, empresaId, unitId, storefrontId, locationId])
@@ -58,6 +59,7 @@ export default function CommerceCatalogImport({ mode, empresaId, unitId, storefr
     avecAbortRef.current?.abort()
     avecRequestIdRef.current += 1
     setAvecPreview(null)
+    setAvecPage(1)
     setAvecError('')
     setAvecLoading(false)
     setAvecItems([])
@@ -128,6 +130,7 @@ export default function CommerceCatalogImport({ mode, empresaId, unitId, storefr
     setAvecFileName('')
     setAvecItems([])
     setAvecPreview(null)
+    setAvecPage(1)
     setAvecError('')
     if (!file) return
     try {
@@ -165,7 +168,7 @@ export default function CommerceCatalogImport({ mode, empresaId, unitId, storefr
       if (!avecScopeMatches(response, requestedScope)) {
         throw new Error('A resposta da prévia AVEC saiu do escopo solicitado; descarte aplicado.')
       }
-      if (!validAvecPreview(response)) throw new Error('Resposta AVEC incompleta ou inválida; nenhuma prévia foi aceita.')
+      if (!validAvecPreview(response) || response.summary.total !== avecItems.length) throw new Error('Resposta AVEC incompleta ou inválida; nenhuma prévia foi aceita.')
       setAvecPreview(response)
     } catch (err) {
       if (isAbortError(err) || requestId !== avecRequestIdRef.current) return
@@ -221,8 +224,8 @@ export default function CommerceCatalogImport({ mode, empresaId, unitId, storefr
       {avecPreview && <div className="commerce-import-preview">
         <div className="commerce-import-summary"><span><b>{avecPreview.summary.total}</b> total</span><span><b>{avecPreview.summary.proposable}</b> proponíveis</span><span><b>{avecPreview.summary.conflict}</b> conflitos</span><span><b>{avecPreview.summary.ambiguous}</b> ambíguos</span><span><b>{avecPreview.summary.absent}</b> ausentes</span><span><b>{avecPreview.summary.costMissing}</b> sem custo</span><span><b>{avecPreview.summary.costZero}</b> custo zero</span></div>
         <p className="commerce-admin-help">Fingerprint <code>{avecPreview.datasetHash}</code> · <strong>prévia somente</strong>: nenhum INSERT, UPDATE ou movimento de estoque.</p>
-        <div className="ecommerce-admin-table-wrap"><table className="ecommerce-admin-table"><thead><tr><th>Origem / SKU</th><th>EAN</th><th>NCM</th><th>Custo</th><th>Unidade</th><th>Status</th><th>Motivos</th></tr></thead><tbody>{avecPreview.items.slice(0, 25).map(item => <tr key={`${item.line}-${item.sourceId || item.sku || item.ean || 'item'}`}><td><strong>{item.sourceId || '—'}</strong><small>{item.sku || 'SKU não informado'}</small></td><td><code>{item.ean || '—'}</code></td><td><code>{item.ncm || '—'}</code></td><td>{avecCostLabel(item)}</td><td>{item.unidade || '—'}</td><td><span className={`commerce-source-badge ${item.status === 'proposable' ? 'core' : ''}`}>{avecStatusLabel(item.status)}</span></td><td>{item.reasons.join(', ') || '—'}</td></tr>)}</tbody></table></div>
-        {avecPreview.items.length > 25 && <small className="commerce-admin-help">Mostrando 25 de {avecPreview.items.length} itens. O resumo considera o lote completo.</small>}
+        <div className="ecommerce-admin-table-wrap"><table className="ecommerce-admin-table"><thead><tr><th>Origem / SKU</th><th>EAN atual → proposto</th><th>NCM atual → proposto</th><th>Custo atual → proposto</th><th>Unidade</th><th>Status</th><th>Motivos</th></tr></thead><tbody>{avecPreview.items.slice((avecPage - 1) * 25, avecPage * 25).map(item => <tr key={`${item.line}-${item.sourceId || item.sku || item.ean || 'item'}`}><td><strong>{item.sourceId || '—'}</strong><small>{item.sku || 'SKU não informado'}</small></td><td><code>{typeof item.proposal?.current?.barcode === 'string' ? item.proposal.current.barcode : 'Não verificado'} → {item.ean || '—'}</code></td><td><code>{typeof item.proposal?.current?.ncm === 'string' ? item.proposal.current.ncm : 'Não verificado'} → {item.ncm || '—'}</code></td><td>{Number.isSafeInteger(item.proposal?.current?.costCents) && item.proposal.current.costCents >= 0 ? fmtR(item.proposal.current.costCents / 100) : 'Não verificado'} → {avecCostLabel(item)}</td><td>{item.unidade || '—'}</td><td><span className={`commerce-source-badge ${item.status === 'proposable' ? 'core' : ''}`}>{avecStatusLabel(item.status)}</span></td><td>{item.reasons.join(', ') || '—'}</td></tr>)}</tbody></table></div>
+        {avecPreview.items.length > 25 && <nav aria-label="Paginação da prévia AVEC" className="ecommerce-admin-header-actions"><button type="button" onClick={() => setAvecPage(page => page - 1)} disabled={avecPage <= 1}>Anterior</button><span>Página {avecPage} de {Math.ceil(avecPreview.items.length / 25)} · {avecPreview.items.length} itens no lote completo</span><button type="button" onClick={() => setAvecPage(page => page + 1)} disabled={avecPage >= Math.ceil(avecPreview.items.length / 25)}>Próxima</button></nav>}
       </div>}
     </section>
   </section>

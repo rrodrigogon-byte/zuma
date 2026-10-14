@@ -71,3 +71,25 @@ describe('prévia AVEC no catálogo existente', () => {
     expect(mock.post).not.toHaveBeenCalled()
   })
 })
+
+it('revisa o lote inteiro por paginação sem executar writer', async () => {
+  const rows = Array.from({ length: 26 }, (_, index) => `AV-${index + 1},SKU-${index + 1},UN`).join('\n')
+  await mount(); await select(`id_origem,sku,unidade\n${rows}\n`)
+  const data = response()
+  data.items = Array.from({ length: 26 }, (_, index) => ({ ...data.items[0], line: index + 1, sourceId: `AV-${index + 1}`, sku: `SKU-${index + 1}`, ean: null }))
+  data.summary = { ...data.summary, total: 26, proposable: 26, costMissing: 26 }
+  mock.post.mockResolvedValue(data); await preview()
+  expect(text(ui.toJSON()).replace(/\s+/g, ' ')).toContain('Página 1 de 2')
+  const next = ui.root.findAllByType('button').find(x => text(x.props.children) === 'Próxima')
+  await act(async () => { next.props.onClick(); await tick() })
+  expect(text(ui.toJSON()).replace(/\s+/g, ' ')).toContain('Página 2 de 2')
+  expect(text(ui.toJSON())).toContain('SKU-26')
+  expect(mock.post).toHaveBeenCalledTimes(1)
+})
+
+it('não aceita um lote de resposta com tamanho diferente do CSV enviado', async () => {
+  await mount(); await select()
+  const data = response(); data.items.push({ ...data.items[0], line: 2 }); data.summary = { ...data.summary, total: 2, proposable: 2, costMissing: 2 }
+  mock.post.mockResolvedValue(data); await preview()
+  expect(text(ui.toJSON())).toContain('incompleta ou inválida')
+})
