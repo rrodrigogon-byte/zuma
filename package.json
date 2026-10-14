@@ -28,7 +28,8 @@
     "docker:logs": "docker-compose logs -f",
     "test:agenda-pg-real": "node scripts/test-dino-agenda-pg.mjs",
     "test:human-queue-pg": "node scripts/test-dino-human-queue-pg.mjs",
-    "test:human-queue": "node --test app/core/whatsapp-human-queue.test.js web/src/pages/admin/dino/whatsapp-human-queue.test.js && (cd web && ../node_modules/.bin/vitest --config vite.config.js run src/pages/admin/dino/WhatsappHumanQueue.test.jsx)"
+    "test:human-queue": "node --test app/core/whatsapp-human-queue.test.js web/src/pages/admin/dino/whatsapp-human-queue.test.js && (cd web && ../node_modules/.bin/vitest --config vite.config.js run src/pages/admin/dino/WhatsappHumanQueue.test.jsx)",
+    "test:caixa-preview": "node --test --test-concurrency=1 app/comandas-caixa-previa.test.js app/server-caixa-previa.test.js && (cd web && ../node_modules/.bin/vitest --config vite.config.js run src/pages/admin/BarbeariaCaixaPrevia.test.jsx)"
   },
   "keywords": [
     "erp",

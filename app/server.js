@@ -97,6 +97,7 @@ import { enviarMensagem as enviarWhatsappCore } from './core/whatsapp.js';
 import { registerWhatsappConexaoRoutes } from './whatsapp-conexao-routes.js';
 import { vigiarTodas as vigiarConexoesWhatsapp } from './whatsapp-conexao-kytto.js';
 import { registerDinoAdminRoutes, loadCommerceSalesDetail } from './dino-admin-routes.js';
+import { buildCurrentMaterials, previewTaxMaterialPlan, PreviewConflictError, PreviewValidationError } from './comandas-caixa-previa.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -2627,7 +2628,7 @@ function exigirPapelOperacaoBarbearia(req, res, next) {
   }
   if (['admin', 'organizador'].includes(String(req.user?.role || ''))) return next();
   const endpoint = req.path || '';
-  const leituraGerencial = /^\/(?:overview|dashboard|analytics|metas|financeiro|bi|auditoria|relatorios|comissoes|clientes|clientes-360|crm\/resumo|operacao\/resumo|operacao\/caixas|fiscal\/documentos|vendas-revenda)(?:\/|$)/.test(endpoint);
+  const leituraGerencial = /^\/(?:overview|dashboard|analytics|metas|financeiro|bi|auditoria|relatorios|comissoes|clientes|clientes-360|crm\/resumo|operacao\/resumo|operacao\/caixas|fiscal\/documentos|vendas-revenda|caixa\/previa-taxas-materiais)(?:\/|$)/.test(endpoint);
   const mutacaoGerencial = req.method !== 'GET' && (
     /^\/(?:configuracoes|profissionais|servicos|planos|assinaturas|estoque-revenda|fidelidade\/(?:regra|creditar)|operacao\/caixas|operacao\/fechar-dia|financeiro)(?:\/|$)/.test(endpoint)
     || /^\/comandas\/[^/]+\/(?:pagamentos|cancelar|fiscal|consumo-interno)(?:\/|$)/.test(endpoint)
@@ -2648,6 +2649,31 @@ registerDinoAdminRoutes(app, { db, legacyEmpresaId, legacyLojaId, financeiroKytt
 registerAiBrainRoutes(app, { legacyEmpresaId, legacyLojaId, requireCommercePermission, audit, clientesKytto, commerceDb, listarAgendamentosBarbearia });
 registerAtivacaoRoutes(app, { legacyEmpresaId, requireCommercePermission, barbeariaErpKytto, audit });
 registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLojaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user) });
+// Prévia integrada de taxas/materiais: POST por ser um cálculo de payload, nunca uma mutação.
+// Não há rota de aplicar neste recorte; o plano só devolve hash, divergências e pendências.
+app.post('/api/admin/barbearia/caixa/previa-taxas-materiais', (req, res) => {
+  try {
+    const empresaId = legacyEmpresaId(req);
+    const lojaId = legacyLojaId(req);
+    const configuracao = barbeariaErpKytto.obterConfiguracao(empresaId);
+    const servicos = barbeariaErpKytto.listarServicos(empresaId, { incluirInativos: true });
+    const produtos = barbeariaErpKytto.listarProdutosRevenda(empresaId, { incluirInativos: true });
+    const resultado = previewTaxMaterialPlan(req.body || {}, {
+      empresaId,
+      lojaId,
+      currentTaxas: configuracao.taxasPagamento || {},
+      currentMaterials: buildCurrentMaterials({ servicos, produtos }),
+      validServiceIds: servicos.map(item => item.id),
+      validProductIds: produtos.map(item => item.id),
+    });
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ ok: true, ...resultado });
+  } catch (error) {
+    const status = error instanceof PreviewConflictError ? 409 : error instanceof PreviewValidationError ? 400 : 500;
+    if (status === 500) console.error('Falha na prévia de taxas e materiais:', error?.message || error);
+    res.status(status).json({ error: status === 500 ? 'Prévia indisponível. Nenhuma configuração foi gravada.' : error.message, code: status === 500 ? 'PREVIEW_UNAVAILABLE' : error.code });
+  }
+});
 // Modo barbeiro (app do profissional no celular): agenda do dia, totais e comissão
 // do próprio profissional (vínculo pelo e-mail do login). Gestão escolhe qualquer um.
 app.get('/api/admin/barbearia/modo-barbeiro', (req, res) => {
