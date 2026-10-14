@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocked = vi.hoisted(() => ({ post: vi.fn() }))
 vi.mock('../../lib/api', () => ({ api: { post: mocked.post }, fmtR: value => `VALOR ${value}` }))
 import BarbeariaCaixaPrevia from './BarbeariaCaixaPrevia'
-const props = { empresaId: 'tenant-a', lojaId: 'unit-a', servicos: [{ id: 'service-a', nome: 'Serviço fixture' }] }
+const props = { empresaId: 'tenant-a', lojaId: 'unit-a', servicos: [{ id: 'service-a', lojaId: 'unit-a', nome: 'Serviço fixture' }] }
 const output = (escopo = { empresaId: 'tenant-a', lojaId: 'unit-a' }) => ({ somenteLeitura: true, gravacaoAplicada: false, escopo, status: 'pendente_revisao', planHash: 'fixture-hash', totais: { bruto: 100, taxa: null, material: null, liquido: null }, linhas: [], divergencias: [] })
 let renderer
 const tick = () => new Promise(r => setTimeout(r, 0))
@@ -69,6 +69,22 @@ describe('prévia taxas e materiais', () => {
     expect(allText(renderer.toJSON())).toContain('Fixture indisponível')
     expect(allText(renderer.toJSON())).not.toContain('fixture-hash')
     expect(renderer.root.findAllByType('button').find(x => x.props.type === 'submit').props.disabled).toBe(false)
+  })
+  it('explica quando o baseline unitário está bloqueado sem transformar ausência em divergência', async () => {
+    await mount()
+    mocked.post.mockResolvedValue({ ...output(), comparativo: { status: 'parcial_bloqueado' } })
+    await submit()
+    expect(allText(renderer.toJSON())).toContain('Comparativo unitário indisponível')
+    expect(allText(renderer.toJSON())).toContain('Nenhum dado de outra unidade foi usado')
+  })
+  it('não exibe serviço de outra unidade ou legado sem vínculo; sem serviço confirmado não envia', async () => {
+    await mount({ ...props, servicos: [...props.servicos, { id: 'foreign', lojaId: 'unit-b', nome: 'OTHER-UNIT-CANARY' }, { id: 'legacy', nome: 'LEGACY-CANARY' }] })
+    expect(allText(renderer.toJSON())).not.toMatch(/OTHER-UNIT-CANARY|LEGACY-CANARY/)
+    await act(async () => { renderer.update(<BarbeariaCaixaPrevia {...props} servicos={[{ id: 'legacy', nome: 'LEGACY-CANARY' }]} lojaId="unit-b" />); await tick() })
+    await submit()
+    expect(mocked.post).not.toHaveBeenCalled()
+    expect(allText(renderer.toJSON())).toContain('nenhum dado foi enviado')
+    expect(renderer.root.findAllByType('button').find(x => x.props.type === 'submit').props.disabled).toBe(true)
   })
 })
 

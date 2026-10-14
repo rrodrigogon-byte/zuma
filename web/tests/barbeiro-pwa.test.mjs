@@ -12,11 +12,11 @@ function setup(){
  return{context,handlers,dados,cache,fetches,setReply:f=>{reply=f},dispatch:async request=>{let result;handlers.fetch({request,respondWith:r=>{result=r}});return result&&await result}}
 }
 test('PWA usa cópia identificada da agenda durante 502, sem misturar usuário ou unidade',async()=>{
- const f=setup();const req=new Request('https://test.invalid/api/admin/barbearia/modo-barbeiro?data=2026-10-09',{headers:{'X-Kytto-Usuario':'u1','X-Empresa-Id':'a','X-Loja-Id':'matriz'}})
+ const f=setup();const req=new Request('https://test.invalid/api/admin/barbearia/modo-barbeiro?data=2026-10-09',{headers:{Authorization:'Bearer fixture-session','X-Kytto-Usuario':'u1','X-Empresa-Id':'a','X-Loja-Id':'matriz'}})
  f.setReply(()=>Response.json({agendamentos:[{id:'a1'}]}));assert.equal((await f.dispatch(req)).status,200)
  f.setReply(()=>new Response('',{status:502}));const offline=await(await f.dispatch(req)).json();assert.equal(offline._offline.motivo,'servidor');assert.equal(offline.agendamentos[0].id,'a1')
- const outro=new Request(req.url,{headers:{'X-Kytto-Usuario':'u2','X-Empresa-Id':'a','X-Loja-Id':'matriz'}});assert.equal((await f.dispatch(outro)).status,503)
- const loja=new Request(req.url,{headers:{'X-Kytto-Usuario':'u1','X-Empresa-Id':'a','X-Loja-Id':'outra'}});assert.equal((await f.dispatch(loja)).status,503)
+ const outro=new Request(req.url,{headers:{Authorization:'Bearer fixture-session-2','X-Kytto-Usuario':'u2','X-Empresa-Id':'a','X-Loja-Id':'matriz'}});assert.equal((await f.dispatch(outro)).status,503)
+ const loja=new Request(req.url,{headers:{Authorization:'Bearer fixture-session','X-Kytto-Usuario':'u1','X-Empresa-Id':'a','X-Loja-Id':'outra'}});assert.equal((await f.dispatch(loja)).status,503)
  f.setReply(()=>new Response('',{status:401}));assert.equal((await f.dispatch(req)).status,401)
 })
 test('shell já visitado abre em 502; venda nunca é interceptada nem repetida',async()=>{
@@ -36,5 +36,17 @@ test('clique de notificação malformado só abre rota same-origin permitida', a
   const f=setup();const opened=[];f.context.self.clients.matchAll=async()=>[];f.context.self.clients.openWindow=async url=>opened.push(url);let pending;
   f.handlers.notificationclick({notification:{data:{url:target},close(){}},waitUntil:p=>{pending=p}});await pending;
   assert.equal(new URL(opened[0]).origin,'https://test.invalid');assert.match(new URL(opened[0]).pathname,/^\/barbeiro(?:\/dino)?$/);assert.doesNotMatch(opened[0],/CANARY|outside|admin|javascript/);
+ }
+});
+
+test('contexto incompleto nunca popula nem recupera cache de dados da agenda', async () => {
+ const headers={Authorization:'Bearer fixture-session','X-Kytto-Usuario':'u1','X-Empresa-Id':'a','X-Loja-Id':'matriz'};
+ for(const ausente of Object.keys(headers)){
+  const f=setup(), incomplete={...headers};delete incomplete[ausente];
+  const request=new Request('https://test.invalid/api/admin/barbearia/modo-barbeiro',{headers:incomplete});
+  f.setReply(()=>Response.json({agendamentos:[{id:'no-cache-canary'}]}));
+  assert.equal((await f.dispatch(request)).status,200);assert.equal(f.dados.size,0);
+  f.setReply(()=>{throw new Error('offline fixture')});
+  const offline=await f.dispatch(request);assert.equal(offline.status,503);assert.doesNotMatch(await offline.text(),/no-cache-canary/);
  }
 });

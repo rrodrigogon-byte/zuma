@@ -2,7 +2,7 @@
  * v6: recuperação de 502/503/504 somente em leituras e shell já guardado.
  * v5: notificações push da equipe, agenda do barbeiro disponível sem internet
  * (última versão, por usuário, apagada ao sair) e página de cada app guardada. */
-const VERSAO = 'kytto-pwa-v7'
+const VERSAO = 'kytto-pwa-v8'
 const CACHE_SHELL = `${VERSAO}-shell`
 const CACHE_RUNTIME = `${VERSAO}-runtime`
 const CACHE_DADOS = `${VERSAO}-dados`
@@ -29,6 +29,11 @@ self.addEventListener('message', event => {
   if (event.data?.tipo === 'limpar-dados') event.waitUntil(caches.delete(CACHE_DADOS))
 })
 
+function contextoDadosCompleto(request) {
+  return /^Bearer\s+\S+/i.test(request.headers.get('Authorization') || '')
+    && ['X-Kytto-Usuario', 'X-Empresa-Id', 'X-Loja-Id'].every(nome => Boolean((request.headers.get(nome) || '').trim()))
+}
+
 function chaveDados(request) {
   const url = new URL(request.url)
   // Separada por login, empresa e unidade: num aparelho compartilhado ou com várias
@@ -40,11 +45,13 @@ function chaveDados(request) {
 }
 
 async function redeComCopia(request) {
+  // Contexto ausente não é agenda vazia e nunca usa cópia de outro login/unidade.
+  if (!contextoDadosCompleto(request)) return fetch(request).catch(() => new Response(JSON.stringify({ ok: false, offline: true, error: 'Selecione a empresa e unidade e entre no app para acessar a agenda.' }), { status: 503, headers: { 'Content-Type': 'application/json' } }))
   const chave = chaveDados(request)
   try {
     const resposta = await fetch(request)
     if ([502, 503, 504].includes(resposta.status)) throw Object.assign(new Error('Servidor temporariamente indisponível'), { servidor: true })
-    if (resposta.ok && request.headers.get('X-Kytto-Usuario')) {
+    if (resposta.ok) {
       const copia = resposta.clone()
       const cache = await caches.open(CACHE_DADOS)
       await cache.put(chave, new Response(await copia.blob(), { headers: { 'Content-Type': 'application/json', 'X-Kytto-Salvo-Em': new Date().toISOString() } }))

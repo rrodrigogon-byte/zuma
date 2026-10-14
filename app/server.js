@@ -2651,20 +2651,91 @@ registerAtivacaoRoutes(app, { legacyEmpresaId, requireCommercePermission, barbea
 registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLojaId, audit, save, enviarMensagem: enviarWhatsappCore, isPlatformAdmin: user => isPlatformAdminUser(user) || isMainAdminUser(user) });
 // Prévia integrada de taxas/materiais: POST por ser um cálculo de payload, nunca uma mutação.
 // Não há rota de aplicar neste recorte; o plano só devolve hash, divergências e pendências.
+function temPropriedade(valor, chave) {
+  return Boolean(valor && typeof valor === 'object' && Object.prototype.hasOwnProperty.call(valor, chave));
+}
+
+function lojaExplicitaDoRegistro(registro) {
+  if (!temPropriedade(registro, 'lojaId')) return '';
+  return String(registro.lojaId || '').trim();
+}
+
+function registrosDaUnidadeOuBloqueados(registros, lojaId, rotulo) {
+  const itens = Array.isArray(registros) ? registros : [];
+  const vinculados = itens.filter((item) => lojaExplicitaDoRegistro(item) === String(lojaId));
+  const possuiLegadoSemUnidade = itens.some((item) => !lojaExplicitaDoRegistro(item));
+  return {
+    registros: vinculados,
+    status: possuiLegadoSemUnidade ? 'bloqueado' : 'disponivel',
+    code: possuiLegadoSemUnidade ? 'BASELINE_UNIT_SCOPE_UNVERIFIED' : null,
+    message: possuiLegadoSemUnidade
+      ? `Comparativo de ${rotulo} indisponível: há registros legados sem vínculo explícito com uma unidade; nenhum dado tenant-wide foi usado.`
+      : null,
+  };
+}
+
+function baselineCaixaPorUnidade({ servicos, produtos, lojaId }) {
+  // No modelo real, taxasPagamento pertence à configuração da empresa; lojas
+  // carregam apenas calendário. Sem vínculo oficial de taxa por unidade, não
+  // transformamos a configuração tenant-wide em baseline unitário.
+  const taxas = {
+    status: 'bloqueado',
+    code: 'BASELINE_UNIT_SCOPE_UNVERIFIED',
+    message: 'Comparativo de taxas indisponível: o modelo legado só comprova taxas da empresa; não há vínculo explícito de taxas com esta unidade.',
+    value: {},
+  };
+  const servicosDaUnidade = registrosDaUnidadeOuBloqueados(servicos, lojaId, 'serviços');
+  const produtosDaUnidade = registrosDaUnidadeOuBloqueados(produtos, lojaId, 'produtos');
+  let materiais = {
+    status: servicosDaUnidade.status === 'disponivel' && produtosDaUnidade.status === 'disponivel' ? 'disponivel' : 'bloqueado',
+    code: null,
+    message: null,
+    value: [],
+  };
+  if (materiais.status === 'disponivel') {
+    const produtosPorId = new Map(produtosDaUnidade.registros.map((item) => [String(item.id), item]));
+    const consumoSemVinculo = servicosDaUnidade.registros.some((servico) => !servico.custoMaterial && (servico.consumoInterno || []).some((consumo) => !produtosPorId.has(String(consumo.produtoId))));
+    if (consumoSemVinculo) {
+      materiais = {
+        status: 'bloqueado',
+        code: 'BASELINE_UNIT_SCOPE_UNVERIFIED',
+        message: 'Comparativo de materiais indisponível: a ficha técnica referencia produto sem vínculo explícito com a unidade selecionada.',
+        value: [],
+      };
+    } else {
+      materiais.value = buildCurrentMaterials({ servicos: servicosDaUnidade.registros, produtos: produtosDaUnidade.registros });
+    }
+  } else {
+    materiais.code = 'BASELINE_UNIT_SCOPE_UNVERIFIED';
+    materiais.message = servicosDaUnidade.message || produtosDaUnidade.message || 'Comparativo de materiais indisponível: o vínculo explícito com a unidade não foi comprovado.';
+  }
+  return {
+    taxas,
+    materiais,
+    validServiceIds: servicosDaUnidade.registros.map((item) => item.id),
+    validProductIds: produtosDaUnidade.registros.map((item) => item.id),
+    unverifiedServiceIds: servicos.filter((item) => !lojaExplicitaDoRegistro(item)).map((item) => item.id),
+    unverifiedProductIds: produtos.filter((item) => !lojaExplicitaDoRegistro(item)).map((item) => item.id),
+  };
+}
+
 app.post('/api/admin/barbearia/caixa/previa-taxas-materiais', (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
     const lojaId = legacyLojaId(req);
-    const configuracao = barbeariaErpKytto.obterConfiguracao(empresaId);
     const servicos = barbeariaErpKytto.listarServicos(empresaId, { incluirInativos: true });
     const produtos = barbeariaErpKytto.listarProdutosRevenda(empresaId, { incluirInativos: true });
+    const baseline = baselineCaixaPorUnidade({ servicos, produtos, lojaId });
     const resultado = previewTaxMaterialPlan(req.body || {}, {
       empresaId,
       lojaId,
-      currentTaxas: configuracao.taxasPagamento || {},
-      currentMaterials: buildCurrentMaterials({ servicos, produtos }),
-      validServiceIds: servicos.map(item => item.id),
-      validProductIds: produtos.map(item => item.id),
+      currentTaxas: baseline.taxas.value,
+      currentMaterials: baseline.materiais.value,
+      baseline,
+      validServiceIds: baseline.validServiceIds,
+      validProductIds: baseline.validProductIds,
+      unverifiedServiceIds: baseline.unverifiedServiceIds,
+      unverifiedProductIds: baseline.unverifiedProductIds,
     });
     res.setHeader('Cache-Control', 'no-store');
     res.json({ ok: true, ...resultado });

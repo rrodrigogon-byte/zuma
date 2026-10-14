@@ -182,6 +182,20 @@ function normalizeCurrentMaterials(currentMaterials = []) {
   return Array.isArray(currentMaterials) ? currentMaterials.map((item, index) => normalizeMaterial(item, index)) : [];
 }
 
+function baselinePart(context, key, fallback) {
+  const part = context?.baseline?.[key];
+  if (part?.status === 'bloqueado') {
+    return {
+      bloqueado: true,
+      status: 'bloqueado',
+      code: text(part.code, 120) || 'BASELINE_UNIT_SCOPE_UNVERIFIED',
+      message: text(part.message, 300) || 'Comparativo unitário indisponível: o vínculo explícito com a unidade não foi comprovado.',
+      value: null,
+    };
+  }
+  return { bloqueado: false, status: 'disponivel', code: null, message: null, value: fallback };
+}
+
 function matchingRate(rates, line) {
   const candidates = rates.filter((rate) => rate.meio === line.meio && (!rate.bandeira || rate.bandeira === line.bandeira) && (rate.parcelas === null || rate.parcelas === line.parcelas));
   const specificity = rate => Number(Boolean(rate.bandeira)) + Number(rate.parcelas !== null);
@@ -304,18 +318,30 @@ export function previewTaxMaterialPlan(input = {}, context = {}) {
     const permitted = new Set(context.validProductIds.map(String));
     if (materiais.some(item => item.produtoId && !permitted.has(item.produtoId))) throw new PreviewConflictError('Material sem vínculo confirmado na empresa selecionada.', 'PRODUCT_SCOPE_MISMATCH');
   }
+  const taxasBaseline = baselinePart(context, 'taxas', context.currentTaxas || {});
+  const materiaisBaseline = baselinePart(context, 'materiais', context.currentMaterials || []);
   const normalized = { scope, taxas, materiais, simulacoes, fiscal: sanitizeFiscal(input.credenciaisFiscais ?? input.fiscal), descricao: text(input.descricao, 300) || null };
-  const planHash = hash({ ...normalized, baseline: { taxas: context.currentTaxas || {}, materiais: context.currentMaterials || [] } });
+  const planHash = hash({
+    ...normalized,
+    baseline: {
+      taxas: taxasBaseline.bloqueado ? { status: taxasBaseline.status, code: taxasBaseline.code } : taxasBaseline.value,
+      materiais: materiaisBaseline.bloqueado ? { status: materiaisBaseline.status, code: materiaisBaseline.code } : materiaisBaseline.value,
+    },
+  });
   const registryKey = `${scope.empresaId}|${scope.lojaId}|${idempotencyKey}`;
   if (previewRegistry.size >= 500 && !previewRegistry.has(registryKey)) previewRegistry.delete(previewRegistry.keys().next().value);
   const previous = previewRegistry.get(registryKey);
   if (previous && previous !== planHash) throw new PreviewConflictError('A chave de idempotência já foi usada para outra prévia neste escopo.', 'PLAN_CONFLICT');
 
-  const currentRates = normalizeCurrentRates(context.currentTaxas);
-  const currentMaterials = normalizeCurrentMaterials(context.currentMaterials);
+  const currentRates = taxasBaseline.bloqueado ? [] : normalizeCurrentRates(taxasBaseline.value);
+  const currentMaterials = materiaisBaseline.bloqueado ? [] : normalizeCurrentMaterials(materiaisBaseline.value);
   const divergencias = [
-    ...compareRates(taxas, currentRates),
-    ...compareMaterials(materiais, currentMaterials),
+    ...(taxasBaseline.bloqueado
+      ? [{ tipo: 'BASELINE_UNIT_SCOPE_UNVERIFIED', chave: 'taxas', mensagem: taxasBaseline.message }]
+      : compareRates(taxas, currentRates)),
+    ...(materiaisBaseline.bloqueado
+      ? [{ tipo: 'BASELINE_UNIT_SCOPE_UNVERIFIED', chave: 'materiais', mensagem: materiaisBaseline.message }]
+      : compareMaterials(materiais, currentMaterials)),
   ];
   if (normalized.fiscal.credenciaisRecebidas) divergencias.push({ tipo: 'CREDENCIAL_FISCAL_IGNORADA', chave: 'fiscal', mensagem: 'Certificado, senha e chave privada não são importáveis nesta prévia.' });
   const linhas = simulacoes.map((line) => {
@@ -356,7 +382,7 @@ export function previewTaxMaterialPlan(input = {}, context = {}) {
   return {
     somenteLeitura: true,
     gravacaoAplicada: false,
-    status: linhas.every((item) => item.status === 'calculado') && divergencias.length === 0 ? 'calculado' : 'pendente_revisao',
+    status: linhas.every((item) => item.status === 'calculado') && divergencias.length === 0 && !taxasBaseline.bloqueado && !materiaisBaseline.bloqueado ? 'calculado' : 'pendente_revisao',
     escopo: scope,
     idempotencyKey,
     planHash,
@@ -364,7 +390,15 @@ export function previewTaxMaterialPlan(input = {}, context = {}) {
     linhas,
     totais,
     divergencias,
-    comparativo: { taxasAtuais: currentRates, materiaisAtuais: currentMaterials },
+    comparativo: {
+      status: taxasBaseline.bloqueado || materiaisBaseline.bloqueado ? 'parcial_bloqueado' : 'disponivel',
+      taxasAtuais: taxasBaseline.bloqueado ? null : currentRates,
+      materiaisAtuais: materiaisBaseline.bloqueado ? null : currentMaterials,
+      baseline: {
+        taxas: { status: taxasBaseline.status, code: taxasBaseline.code, message: taxasBaseline.message },
+        materiais: { status: materiaisBaseline.status, code: materiaisBaseline.code, message: materiaisBaseline.message },
+      },
+    },
     fiscal: normalized.fiscal,
     avisos: ['Estimativa assistida; não representa liquidação, conciliação, cobrança, ledger, comanda, pagamento ou documento fiscal.', 'Comissões permanecem indicativas e não substituem a configuração ou apuração existente.'],
   };

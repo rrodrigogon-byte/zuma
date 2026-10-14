@@ -76,6 +76,9 @@ function mesmoContexto(item, { empresaId, lojaId = '', usuarioId } = {}) {
 function registrosDoEndpoint(endpoint, contexto) {
   return Object.values(estado()).filter((item) => item?.assinatura?.endpoint === String(endpoint) && mesmoContexto(item, contexto));
 }
+function contextoCompleto({ empresaId, lojaId, usuario = {} } = {}) {
+  return Boolean(String(empresaId ?? '').trim() && String(lojaId ?? '').trim() && String(usuario.id ?? '').trim());
+}
 function auditarPush(acao, { empresaId, lojaId = '', usuario = {}, id = '', evento = '' } = {}) {
   const d = db(); d.auditoria ||= [];
   d.auditoria.push({ id: `push-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, ts: new Date().toISOString(),
@@ -95,6 +98,7 @@ export function validarAssinatura(sub) {
 
 export function assinar({ empresaId, lojaId = '', usuario = {}, profissionalId = '', todos = false, assinatura }) {
   if (!pushConfigurado()) throw new PushError('Notificações não configuradas no servidor.', 'PUSH_DESLIGADO', 409);
+  if (!contextoCompleto({ empresaId, lojaId, usuario })) throw new PushError('Selecione uma empresa e unidade autorizadas antes de ativar os avisos.', 'PUSH_ESCOPO_INCOMPLETO', 403);
   const sub = validarAssinatura(assinatura);
   const id = idAssinatura(sub.endpoint, { empresaId, lojaId, usuarioId: usuario.id });
   const lista = estado();
@@ -122,6 +126,7 @@ export function assinar({ empresaId, lojaId = '', usuario = {}, profissionalId =
 }
 
 export function cancelar({ empresaId, lojaId = '', usuario = {}, endpoint }) {
+  if (!contextoCompleto({ empresaId, lojaId, usuario })) return false;
   const id = idAssinatura(endpoint, { empresaId, lojaId, usuarioId: usuario.id });
   const lista = estado();
   const registros = [lista[id], ...registrosDoEndpoint(endpoint, { empresaId, lojaId, usuarioId: usuario.id })].filter(Boolean);
@@ -135,10 +140,11 @@ export function cancelar({ empresaId, lojaId = '', usuario = {}, endpoint }) {
 }
 
 export function situacao({ empresaId, lojaId = '', usuario = {}, endpoint = '' }) {
-  const atual = endpoint ? estado()[idAssinatura(endpoint, { empresaId, lojaId, usuarioId: usuario.id })] : null;
+  const completo = contextoCompleto({ empresaId, lojaId, usuario });
+  const atual = completo && endpoint ? estado()[idAssinatura(endpoint, { empresaId, lojaId, usuarioId: usuario.id })] : null;
   const minha = atual && mesmoContexto(atual, { empresaId, lojaId, usuarioId: usuario.id })
     ? atual
-    : (endpoint ? registrosDoEndpoint(endpoint, { empresaId, lojaId, usuarioId: usuario.id })[0] : null);
+    : (completo && endpoint ? registrosDoEndpoint(endpoint, { empresaId, lojaId, usuarioId: usuario.id })[0] : null);
   return { configurado: pushConfigurado(), chavePublica: chavePublica(), assinado: Boolean(minha), todos: Boolean(minha?.todos) };
 }
 
@@ -172,6 +178,10 @@ export async function notificarEquipe(empresaId, agendamento = {}, evento, { ser
   let eventoId = '';
   try {
     if (!EVENTOS.has(evento) || !agendamento?.id || !pushConfigurado()) return { enviados: 0 };
+    // Eventos/assinaturas legados sem unidade ficam inelegíveis, sem apagar ou
+    // inferir seus vínculos. O usuário deve optar por uma nova assinatura contextual.
+    if (!String(empresaId ?? '').trim() || !String(agendamento.lojaId ?? '').trim()
+      || (agendamento.empresaId && String(agendamento.empresaId) !== String(empresaId))) return { enviados: 0, motivo: 'PUSH_ESCOPO_INCOMPLETO' };
     const lista = estado();
     eventoId = createHash('sha256').update(JSON.stringify({ empresaId: String(empresaId), id: String(agendamento.id), evento, lojaId: String(agendamento.lojaId || ''), dataHora: String(agendamento.dataHora || ''), status: String(agendamento.status || ''), profissionalId: String(agendamento.profissionalId || ''), servicoId: String(agendamento.servicoId || '') })).digest('hex');
     if (eventosEmAndamento.has(eventoId)) return { enviados: 0, removidos: 0, duplicado: true };
@@ -181,7 +191,7 @@ export async function notificarEquipe(empresaId, agendamento = {}, evento, { ser
     const profissionalAtual = new Map(barbearia.listarProfissionais(empresaId)
       .filter((p) => p.email).map((p) => [String(p.email).trim().toLowerCase(), p.id]));
     const alvos = Object.values(lista).filter((a) => a.empresaId === String(empresaId)
-      && (!a.lojaId || !agendamento.lojaId || a.lojaId === String(agendamento.lojaId))
+      && String(a.lojaId ?? '').trim() && a.lojaId === String(agendamento.lojaId)
       && (a.todos || (agendamento.profissionalId && profissionalAtual.get(a.usuarioEmail) === String(agendamento.profissionalId))));
     if (!alvos.length) { eventosEmAndamento.delete(eventoId); return { enviados: 0 }; }
     const payload = JSON.stringify(montarMensagem(agendamento, evento, servicoNome, slugPublicoDaEmpresa(empresaId)));
@@ -217,6 +227,7 @@ export async function notificarEquipe(empresaId, agendamento = {}, evento, { ser
 // Notificação de teste só para o aparelho que pediu.
 export async function enviarTeste({ empresaId, lojaId = '', usuario = {}, endpoint }, { enviar = (sub, payload, opcoes) => webpush.sendNotification(sub, payload, opcoes) } = {}) {
   if (!pushConfigurado()) throw new PushError('Notificações não configuradas no servidor.', 'PUSH_DESLIGADO', 409);
+  if (!contextoCompleto({ empresaId, lojaId, usuario })) throw new PushError('Selecione a empresa e unidade autorizadas antes do teste.', 'PUSH_ESCOPO_INCOMPLETO', 403);
   const atual = estado()[idAssinatura(endpoint, { empresaId, lojaId, usuarioId: usuario.id })];
   if (!atual || !mesmoContexto(atual, { empresaId, lojaId, usuarioId: usuario.id })) throw new PushError('Ative as notificações neste aparelho primeiro.', 'PUSH_NAO_ASSINADO', 409);
   const payload = JSON.stringify({ title: 'Notificações ligadas', body: 'Abra o app Dino Equipe para conferir a agenda.' });
