@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Upload } from 'l
 import { api, fmtR } from '../../lib/api'
 import { avecPreviewPayload, avecRowToItem, avecScopeMatches, isAbortError, parseAvecCsv, validAvecPreview } from '../../lib/avec-catalog-preview'
 import { parseCsv, rowToItem } from '../../lib/catalog-import'
+import AvecImportGovernancePreview from './AvecImportGovernancePreview'
 
 function downloadTemplate() {
   const content = 'sku,produto,categoria,preco_brl,quantidade_total,acao_proposta,pendencia\nEXEMPLO-001,Produto exemplo,Perfumes,199.90,3,publicar,\n'
@@ -228,5 +229,6 @@ export default function CommerceCatalogImport({ mode, empresaId, unitId, storefr
         {avecPreview.items.length > 25 && <nav aria-label="Paginação da prévia AVEC" className="ecommerce-admin-header-actions"><button type="button" onClick={() => setAvecPage(page => page - 1)} disabled={avecPage <= 1}>Anterior</button><span>Página {avecPage} de {Math.ceil(avecPreview.items.length / 25)} · {avecPreview.items.length} itens no lote completo</span><button type="button" onClick={() => setAvecPage(page => page + 1)} disabled={avecPage >= Math.ceil(avecPreview.items.length / 25)}>Próxima</button></nav>}
       </div>}
     </section>
+    <AvecImportGovernancePreview empresaId={empresaId} unitId={unitId} storefrontId={storefrontId} locationId={locationId} />
   </section>
 }

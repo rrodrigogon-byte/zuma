@@ -15,6 +15,7 @@ import { createStorefront, listStorefronts, updateStorefront } from './commerce-
 import { resolveStorefrontAlias } from './commerce-tenants.js';
 import { executeCatalogImport, previewCatalogImport } from './commerce-catalog-import.js';
 import { previewAvecCatalog } from './avec-catalog-preview.js';
+import { previewAvecGovernance } from './avec-import-governance.js';
 import { createMembership, listMembershipCandidates, listMemberships, listRoles, updateMembership } from './commerce-admin-users.js';
 import { createCustomer, createCustomerAddress, deleteCustomerAddress, getCustomer, listCustomerAddresses, updateCustomer, updateCustomerAddress } from './commerce-customers.js';
 import { createCreditAccount, listCreditAccounts, listCreditEntries, updateCreditAccount } from './commerce-credit.js';
@@ -593,6 +594,15 @@ function jsonError(res, error) {
     CATALOG_IMPORT_IDEMPOTENCY_REQUIRED: 400,
     CATALOG_IMPORT_PREVIEW_REQUIRED: 400,
     CATALOG_IMPORT_PREVIEW_STALE: 409,
+    AVEC_PAYLOAD_INVALID: 400,
+    AVEC_PAYLOAD_TOO_DEEP: 400,
+    AVEC_SOURCE_VERSION_INVALID: 400,
+    AVEC_CATEGORY_INVALID: 400,
+    AVEC_SOURCE_ESTABLISHMENT_REQUIRED: 400,
+    AVEC_ROWS_INVALID: 400,
+    AVEC_INSTANT_REQUIRED: 400,
+    AVEC_APPLY_DISABLED: 400,
+    AVEC_SENSITIVE_FIELD_REJECTED: 400,
     AVEC_FIELD_TOO_LONG: 400,
     AVEC_SCOPE_REQUIRED: 400,
     AVEC_SIZE_INVALID: 400,
@@ -1432,6 +1442,14 @@ export function createCommerceAdminRouter() {
       await requirePermission(req, 'inventory.read');
       res.set('Cache-Control', 'no-store');
       res.json(await previewAvecCatalog(context, req.body || {}));
+    } catch (error) { jsonError(res, error); }
+  });
+  router.post('/catalog/avec/governance/preview', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try {
+      const context = await requirePermission(req, 'catalog.read');
+      await requirePermission(req, 'inventory.read');
+      res.json(await previewAvecGovernance(context, req.body || {}));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/catalog/import/execute', async (req, res) => {
