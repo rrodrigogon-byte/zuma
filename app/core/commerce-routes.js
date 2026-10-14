@@ -598,6 +598,13 @@ function jsonError(res, error) {
     SATISFACTION_IDEMPOTENCY_CONFLICT: 409,
     SATISFACTION_NOT_AVAILABLE: 409,
     SATISFACTION_ALREADY_SUBMITTED: 409,
+    STORE_SCOPE_MISMATCH: 403,
+    WHATSAPP_AI_STORE_SELECTOR_INVALID: 400,
+    WHATSAPP_AI_SESSION_FILTER_INVALID: 400,
+    WHATSAPP_AI_SESSION_INVALID: 400,
+    AUTHENTICATED_USER_REQUIRED: 400,
+    WHATSAPP_AI_SESSION_NOT_FOUND: 404,
+    WHATSAPP_AI_SESSION_CONFLICT: 409,
   };
   const status = statusByCode[error?.code] || 500;
   const publicMessages = {
@@ -627,6 +634,34 @@ async function withWhatsappLoja(context) {
     lojaId = loja.rows[0]?.id || null;
   }
   return lojaId ? { ...context, lojaId, lojaInferida: true } : context;
+}
+
+async function normalizeWhatsappQueueStoreSelector(req) {
+  const requestedLojaId = String(req.headers['x-loja-id'] || '').trim();
+  if (!requestedLojaId || isUuid(requestedLojaId)) return requestedLojaId;
+  if (!req.user && !req.commerceAdminContext) throw new CommerceError('sessão autenticada é obrigatória', 'TENANT_CONTEXT_REQUIRED');
+  const requestedEmpresaId = String(req.headers['x-empresa-id'] || '').trim();
+  if (!isUuid(requestedEmpresaId)) {
+    const error = new Error('seletor de unidade inválido');
+    error.code = 'WHATSAPP_AI_STORE_SELECTOR_INVALID';
+    throw error;
+  }
+  const result = await db.queryRead(
+    `SELECT id FROM lojas WHERE empresa_id = $1 AND codigo = $2 AND COALESCE(ativa, true) = true LIMIT 1`,
+    [requestedEmpresaId, requestedLojaId],
+  );
+  if (!result.rows[0]) {
+    const error = new Error('unidade selecionada não encontrada nesta empresa');
+    error.code = 'WHATSAPP_AI_STORE_SELECTOR_INVALID';
+    throw error;
+  }
+  req.headers['x-loja-id'] = result.rows[0].id;
+  delete req.commerceAdminContext; // Revalidar a identidade no seletor canônico, não no código legado.
+  return requestedLojaId;
+}
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
 }
 
 async function adminContext(req) {
@@ -2064,8 +2099,42 @@ export function createCommerceAdminRouter() {
   });
   router.get('/whatsapp-ai/sessions', async (req, res) => {
     try {
-      const context = await withWhatsappLoja(await requirePermission(req, 'reports.read'));
-      res.json({ items: await listWhatsappAiSessions(context, { limit: req.query.limit }) });
+      const hasQueueFilter = req.query.status != null || req.query.assignment != null;
+      const requestedLojaId = hasQueueFilter
+        ? await normalizeWhatsappQueueStoreSelector(req)
+        : String(req.headers['x-loja-id'] || '').trim();
+      if (hasQueueFilter && !requestedLojaId) {
+        const error = new Error('selecione uma unidade autorizada para abrir a fila humana');
+        error.code = 'STORE_SELECTION_REQUIRED';
+        throw error;
+      }
+      const context = hasQueueFilter
+        ? await requirePermission(req, 'reports.read')
+        : await withWhatsappLoja(await requirePermission(req, 'reports.read'));
+      if (hasQueueFilter && (String(context.empresaId).toLowerCase() !== String(req.headers['x-empresa-id'] || '').toLowerCase() || String(context.lojaId).toLowerCase() !== String(req.headers['x-loja-id'] || '').toLowerCase())) {
+        throw new CommerceError('unidade fora do escopo selecionado', 'STORE_SCOPE_MISMATCH');
+      }
+      if (!hasQueueFilter) {
+        return res.json({ items: await listWhatsappAiSessions(context, { limit: req.query.limit }) });
+      }
+      let canClaim = false;
+      try {
+        await requirePermission(req, 'settings.write');
+        canClaim = true;
+      } catch (error) {
+        if (error?.code !== 'PERMISSION_DENIED') throw error;
+      }
+      const items = await listWhatsappAiSessions(context, { limit: req.query.limit, status: req.query.status, assignment: req.query.assignment });
+      res.json({
+        items,
+        canClaim,
+        selection: {
+          requestedLojaId: requestedLojaId || null,
+          canonicalLojaId: context.lojaId || null,
+          empresaId: context.empresaId || null,
+          inferred: context.lojaInferida === true,
+        },
+      });
     } catch (error) { jsonError(res, error); }
   });
   router.post('/whatsapp-ai/channel', async (req, res) => {

@@ -2892,7 +2892,7 @@ function relatorioOperacionalBarbearia(empresaId, { data, lojaId } = {}) {
 app.get('/api/admin/barbearia/dashboard', (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
-    const data = String(req.query?.data || new Date().toISOString().slice(0, 10)).slice(0, 10);
+    const data = caixaKytto.dataDia(req.query?.data);
     const clientes = clientesBarbeariaSomenteLeitura(empresaId);
     const caixas = caixaKytto.listarCaixas(empresaId, { data, lojaId: legacyLojaId(req) });
     const dashboard = barbeariaErpKytto.obterDashboard(empresaId, {
@@ -3937,7 +3937,7 @@ function caixaBarbeariaDaSessao(req, caixaId) {
 
 function resumoOperacaoBarbearia(req) {
   const empresaId = legacyEmpresaId(req);
-  const data = String(req.query?.data || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const data = caixaKytto.dataDia(req.query?.data);
   const lojaId = legacyLojaId(req);
   const caixas = caixaKytto.listarCaixas(empresaId, { data, lojaId });
   const caixaAberto = caixas.find((item) => item.status === 'aberto') || null;

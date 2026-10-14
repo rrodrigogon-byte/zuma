@@ -10,6 +10,7 @@ import { dateTime } from './format'
 import { linePresentation, statusRefreshInterval, outboundPresentation } from './whatsapp-view'
 import { normalizeWhatsappAiOperationalStatus } from './whatsapp-ai-operational'
 import { WhatsappAiOperationalSection } from './WhatsappAiOperationalSection'
+import WhatsappHumanQueue from './WhatsappHumanQueue'
 import '../customer360.css'
 import './dino-admin.css'
 
@@ -335,6 +336,14 @@ function WhatsappConexaoEmpresa() {
     {erro && <p className="dadm-note danger" role="alert">{erro}</p>}
     {!conexao && !erro && <section className="dadm-card" role="status">Consultando o estado do WhatsApp…</section>}
     <WhatsappAiOperationalSection status={iaOperational} readAt={iaReadAt} />
+    <WhatsappHumanQueue
+      empresaId={tenantId}
+      lojaId={lojaId}
+      empresaNome={empresaAtiva?.nome}
+      lojaNome={lojaAtiva?.nome}
+      operatorLabel={user?.nome || user?.name || user?.email}
+      onChanged={recarregarIa}
+    />
 
     {conexao && <>
       <section className="dadm-wa-hero" aria-label="Linha e status do WhatsApp">

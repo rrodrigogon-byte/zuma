@@ -1448,7 +1448,31 @@ export async function whatsappAiOperationalStatus(context = {}) {
   };
 }
 
-export async function listWhatsappAiSessions(context = {}, { limit = 50 } = {}) {
+function sessionFilter(value, field, allowed) {
+  if (value == null || value === '') return null;
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  if (typeof value !== 'string' || !allowed.includes(normalized)) {
+    const error = new Error(`filtro ${field} inválido`);
+    error.code = 'WHATSAPP_AI_SESSION_FILTER_INVALID';
+    throw error;
+  }
+  return normalized;
+}
+
+export async function listWhatsappAiSessions(context = {}, { limit = 50, status, assignment } = {}) {
+  const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
+  const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
+  const statusFilter = sessionFilter(status, 'status', ['humano']);
+  const assignmentFilter = sessionFilter(assignment, 'assignment', ['unassigned', 'all']);
+  const values = [empresaId, lojaId];
+  const predicates = ['empresa_id = $1', 'loja_id = $2'];
+  if (statusFilter) {
+    values.push(statusFilter);
+    predicates.push(`status = $${values.length}`);
+  }
+  if (assignmentFilter === 'unassigned') predicates.push('assigned_to IS NULL');
+  const safeLimit = Math.min(100, Math.max(1, Math.trunc(Number(limit)) || 50));
+  values.push(safeLimit);
   const result = await db.queryRead(
     `SELECT id, telefone, nome, status, (acao_pendente IS NOT NULL) AS has_pending_action,
             (estado->>'marketingOptOut' = 'true') AS marketing_opt_out,
@@ -1458,11 +1482,11 @@ export async function listWhatsappAiSessions(context = {}, { limit = 50 } = {}) 
             opportunity_declined_at, opportunity_count,
             estado->>'staffPauseUntil' AS staff_pause_until
        FROM whatsapp_ai_sessions
-      WHERE empresa_id = $1 AND loja_id = $2
+      WHERE ${predicates.join(' AND ')}
       ORDER BY CASE WHEN status = 'humano' THEN 0 ELSE 1 END,
                priority DESC, handoff_requested_at ASC NULLS LAST, ultima_interacao_em DESC
-      LIMIT $3`,
-    [requiredTenantUuid(context.empresaId, 'empresaId'), requiredTenantUuid(context.lojaId, 'lojaId'), Math.min(100, Math.max(1, Number(limit) || 50))],
+      LIMIT $${values.length}`,
+    values,
   );
   return result.rows.map(row => ({
     id: row.id,
@@ -1479,6 +1503,7 @@ export async function listWhatsappAiSessions(context = {}, { limit = 50 } = {}) 
     // Equipe respondendo pelo celular: até quando a IA fica pausada nesta conversa.
     staff_pause_until: row.handoff_reason === STAFF_REASON && row.staff_pause_until ? row.staff_pause_until : null,
     assigned: Boolean(row.assigned_to),
+    isMine: Boolean(row.assigned_to && context.usuarioId && String(row.assigned_to) === String(context.usuarioId)),
     assigned_at: row.assigned_at,
     closed_at: row.closed_at,
     priority: Number(row.priority || 0),
@@ -1502,17 +1527,49 @@ async function auditHandoff(trx, context, sessionId, action, after = {}) {
 export async function claimWhatsappAiHandoff(context = {}, sessionId) {
   const empresaId = requiredTenantUuid(context.empresaId, 'empresaId');
   const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
-  if (!UUID_PATTERN.test(String(context.usuarioId || ''))) throw new Error('usuário autenticado é obrigatório');
+  if (!UUID_PATTERN.test(String(context.usuarioId || ''))) {
+    const error = new Error('usuário autenticado é obrigatório');
+    error.code = 'AUTHENTICATED_USER_REQUIRED';
+    throw error;
+  }
+  const normalizedSessionId = cleanText(sessionId, 60);
+  if (!UUID_PATTERN.test(normalizedSessionId)) {
+    const error = new Error('sessão inválida');
+    error.code = 'WHATSAPP_AI_SESSION_INVALID';
+    throw error;
+  }
   return db.transaction(async trx => {
+    const selected = await trx.query(
+      `SELECT id, status, assigned_to, assigned_at, priority, handoff_reason
+         FROM whatsapp_ai_sessions
+        WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'humano'
+        FOR UPDATE`,
+      [normalizedSessionId, empresaId, lojaId],
+    );
+    const current = selected.rows[0];
+    if (!current) {
+      const error = new Error('sessão humana não encontrada neste contexto');
+      error.code = 'WHATSAPP_AI_SESSION_NOT_FOUND';
+      throw error;
+    }
+    if (current.assigned_to && String(current.assigned_to) !== String(context.usuarioId)) {
+      const error = new Error('sessão já foi assumida por outro atendente');
+      error.code = 'WHATSAPP_AI_SESSION_CONFLICT';
+      throw error;
+    }
+    if (current.assigned_to && String(current.assigned_to) === String(context.usuarioId)) return current;
     const result = await trx.query(
       `UPDATE whatsapp_ai_sessions
           SET assigned_to = $4, assigned_at = CURRENT_TIMESTAMP, atualizado_em = CURRENT_TIMESTAMP
-        WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'humano'
-          AND (assigned_to IS NULL OR assigned_to = $4)
+        WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'humano' AND assigned_to IS NULL
         RETURNING id, status, assigned_to, assigned_at, priority, handoff_reason`,
-      [cleanText(sessionId, 60), empresaId, lojaId, context.usuarioId],
+      [normalizedSessionId, empresaId, lojaId, context.usuarioId],
     );
-    if (!result.rows[0]) throw new Error('sessão indisponível para atribuição');
+    if (!result.rows[0]) {
+      const error = new Error('sessão já foi assumida por outro atendente');
+      error.code = 'WHATSAPP_AI_SESSION_CONFLICT';
+      throw error;
+    }
     await auditHandoff(trx, context, result.rows[0].id, 'claimed', { priority: result.rows[0].priority });
     return result.rows[0];
   });
