@@ -7,7 +7,11 @@ import * as repasses from './barbearia-repasses-kytto.js';
 import { listarLancamentos } from './financeiro-central-kytto.js';
 
 const EMP = 'emp-repasse';
-beforeEach(() => reset());
+beforeEach((t) => {
+  reset();
+  // Fixture determinística ao meio-dia: a janela do ensaio não depende da virada UTC.
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-10-13T16:00:00Z') });
+});
 afterEach(() => reset());
 
 function cenario({ descontaMaterial = true } = {}) {

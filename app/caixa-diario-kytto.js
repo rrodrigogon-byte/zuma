@@ -10,7 +10,7 @@ const texto = (valor, limite = 300) => String(valor ?? '').trim().slice(0, limit
 const dinheiro = (valor) => Number(Number(valor || 0).toFixed(2));
 
 // Data do caixa no fuso da unidade: um caixa aberto às 21h de Cuiabá é do mesmo dia.
-function dataDia(valor = agora()) {
+export function dataDia(valor = agora()) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(String(valor || ''))) return String(valor);
   const data = new Date(valor || agora());
   if (Number.isNaN(data.valueOf())) throw new Error('Data operacional inválida.');

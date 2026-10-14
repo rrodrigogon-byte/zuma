@@ -1156,7 +1156,7 @@ export function listarComandasBarbearia(empresaId, filtros = {}) {
     .filter((item) => !filtros.status || item.status === String(filtros.status))
     .filter((item) => !filtros.lojaId || item.lojaId === String(filtros.lojaId))
     .filter((item) => !filtros.clienteId || item.clienteId === String(filtros.clienteId))
-    .filter((item) => !filtros.data || String(item.dataAtendimento || item.criadoEm).slice(0, 10) === String(filtros.data).slice(0, 10))
+    .filter((item) => !filtros.data || diaOperacional(item.dataAtendimento || item.criadoEm) === String(filtros.data).slice(0, 10))
     .sort((a, b) => String(b.atualizadoEm || b.criadoEm).localeCompare(String(a.atualizadoEm || a.criadoEm)))
     .map((item) => copiarComandaBarbearia(item));
 }

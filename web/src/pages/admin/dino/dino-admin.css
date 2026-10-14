@@ -208,3 +208,51 @@
 .dadm-operational-details > summary { cursor: pointer; color: var(--fg); font-size: 13px; font-weight: 700; padding: 10px 0; }
 .dadm-operational-details > summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 .dadm-operational-details[open] > summary { margin-bottom: 6px; }
+
+/* Fila humana do WhatsApp: escopo isolado para não alterar a saúde/status legados. */
+.wa-human-queue { gap: 14px; }
+.wa-human-queue__head { align-items: flex-start; }
+.wa-human-queue__head h2 { margin: 0; }
+.wa-human-queue__intro { margin: 5px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.45; max-width: 720px; }
+.wa-human-queue__toolbar { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; }
+.wa-human-queue__toolbar .c360-field { min-width: min(280px, 100%); }
+.wa-human-queue__toolbar .c360-input { min-width: 210px; }
+.wa-human-queue__scope { margin: 0; color: var(--muted); font-size: 12px; }
+.wa-human-queue__table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.wa-human-queue__table { min-width: 760px; }
+.wa-human-queue__table td:first-child { display: grid; gap: 3px; }
+.wa-human-queue__table td:first-child strong { font-variant-numeric: tabular-nums; }
+.wa-human-queue__table td:first-child small { color: var(--muted); font-size: 11.5px; }
+.wa-human-queue__table td:nth-child(2) { max-width: 190px; }
+.wa-human-queue__table td:nth-child(3) { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.wa-human-queue__table td:nth-child(4) { white-space: nowrap; }
+.wa-human-queue__claim { min-height: 36px; padding: 0 11px; font-size: 12px; }
+.wa-human-queue .c360-btn:focus-visible,
+.wa-human-queue .c360-input:focus-visible,
+.wa-human-queue .c360-dialog:focus-visible { outline: 3px solid var(--focus-ring, var(--accent)); outline-offset: 2px; }
+.wa-human-queue .c360-dialog p strong { color: var(--fg); }
+@media (max-width: 620px) {
+  .wa-human-queue__toolbar { align-items: stretch; }
+  .wa-human-queue__toolbar .c360-field { width: 100%; min-width: 0; }
+  .wa-human-queue__toolbar .c360-input,
+  .wa-human-queue__toolbar .c360-btn { width: 100%; }
+  .wa-human-queue__table-wrap { margin-inline: -2px; }
+  .wa-human-queue .c360-dialog { padding: 18px; }
+  .wa-human-queue .c360-dialog-actions { flex-wrap: wrap; }
+  .wa-human-queue .c360-dialog-actions .c360-btn { flex: 1 1 140px; }
+}
+
+/* Contenção da fila: a tabela não expande o grid nem esconde a ação no celular. */
+.wa-human-queue { grid-template-columns: minmax(0, 1fr); max-width: 100%; width: 100%; }
+.wa-human-queue__table-wrap { min-width: 0; max-width: 100%; }
+.wa-human-queue .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+@media (max-width: 620px) {
+  .wa-human-queue__table { min-width: 0; width: 100%; }
+  .wa-human-queue__table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+  .wa-human-queue__table tbody { display: block; }
+  .wa-human-queue__table tr { display: grid; grid-template-columns: minmax(0, 1fr); padding: 8px; border-bottom: 1px solid var(--line); }
+  .wa-human-queue__table td,
+  .wa-human-queue__table td:first-child { display: grid; gap: 5px; min-width: 0; max-width: none; padding: 8px; border: 0; white-space: normal; overflow-wrap: anywhere; }
+  .wa-human-queue__table td::before { content: attr(data-label); color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+  .wa-human-queue__claim { width: 100%; }
+}

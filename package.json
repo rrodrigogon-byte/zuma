@@ -1,7 +1,7 @@
 {
   "name": "erp-modular-brasil",
   "version": "2.0.0",
-  "description": "ERP Modular para Bares, Restaurantes, Clubes, Lojas e Com\u00e9rcio em Geral",
+  "description": "ERP Modular para Bares, Restaurantes, Clubes, Lojas e Comércio em Geral",
   "type": "module",
   "main": "app/server-v2.js",
   "scripts": {
@@ -26,7 +26,9 @@
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f",
-    "test:agenda-pg-real": "node scripts/test-dino-agenda-pg.mjs"
+    "test:agenda-pg-real": "node scripts/test-dino-agenda-pg.mjs",
+    "test:human-queue-pg": "node scripts/test-dino-human-queue-pg.mjs",
+    "test:human-queue": "node --test app/core/whatsapp-human-queue.test.js web/src/pages/admin/dino/whatsapp-human-queue.test.js && (cd web && ../node_modules/.bin/vitest --config vite.config.js run src/pages/admin/dino/WhatsappHumanQueue.test.jsx)"
   },
   "keywords": [
     "erp",

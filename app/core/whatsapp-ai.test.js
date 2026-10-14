@@ -193,6 +193,7 @@ function mockHandoffTransaction(returning) {
   db.transaction = async callback => callback({
     async query(sql, params) {
       calls.push({ sql, params });
+      if (/SELECT id, status, assigned_to/.test(sql)) return { rows: [{ ...returning, assigned_to: null }], rowCount: 1 };
       if (/UPDATE whatsapp_ai_sessions/.test(sql)) return { rows: [returning], rowCount: 1 };
       return { rows: [], rowCount: 1 };
     },
@@ -206,10 +207,12 @@ test('claim de handoff é tenant-scoped, atribui o operador autenticado e audita
     const result = await claimWhatsappAiHandoff({ empresaId: EMPRESA, lojaId: LOJA, usuarioId: USUARIO }, SESSAO);
     assert.equal(result.assigned_to, USUARIO);
     assert.match(mock.calls[0].sql, /empresa_id = \$2 AND loja_id = \$3/);
-    assert.match(mock.calls[0].sql, /assigned_to IS NULL OR assigned_to = \$4/);
-    assert.deepEqual(mock.calls[0].params, [SESSAO, EMPRESA, LOJA, USUARIO]);
-    assert.match(mock.calls[1].sql, /commerce_audit_logs/);
-    assert.doesNotMatch(JSON.stringify(mock.calls[1].params), /telefone|conteudo|remote_jid/);
+    assert.match(mock.calls[0].sql, /FOR UPDATE/);
+    assert.deepEqual(mock.calls[0].params, [SESSAO, EMPRESA, LOJA]);
+    assert.match(mock.calls[1].sql, /assigned_to IS NULL/);
+    assert.deepEqual(mock.calls[1].params, [SESSAO, EMPRESA, LOJA, USUARIO]);
+    assert.match(mock.calls[2].sql, /commerce_audit_logs/);
+    assert.doesNotMatch(JSON.stringify(mock.calls[2].params), /telefone|conteudo|remote_jid/);
   } finally { mock.restore(); }
 });
 
