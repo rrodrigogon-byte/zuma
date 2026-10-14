@@ -2,7 +2,7 @@
  * v6: recuperação de 502/503/504 somente em leituras e shell já guardado.
  * v5: notificações push da equipe, agenda do barbeiro disponível sem internet
  * (última versão, por usuário, apagada ao sair) e página de cada app guardada. */
-const VERSAO = 'kytto-pwa-v6'
+const VERSAO = 'kytto-pwa-v7'
 const CACHE_SHELL = `${VERSAO}-shell`
 const CACHE_RUNTIME = `${VERSAO}-runtime`
 const CACHE_DADOS = `${VERSAO}-dados`
@@ -88,28 +88,42 @@ self.addEventListener('fetch', event => {
 })
 
 // ── Notificações push (app da equipe) ─────────────────────────────────────
+const TITULOS_PUSH = new Set(['Novo agendamento', 'Agendamento remarcado', 'Agendamento cancelado', 'Agenda atualizada', 'Notificações ligadas'])
+const ROTA_PUSH = /^\/barbeiro(?:\/[A-Za-z0-9._~-]+)?\/?$/
+function rotaPushPermitida(valor) {
+  try {
+    const url = new URL(typeof valor === 'string' ? valor : '/barbeiro', self.location.origin)
+    if (url.origin !== self.location.origin || !ROTA_PUSH.test(url.pathname)) return '/barbeiro'
+    // A rota de clique não leva query/hash do payload para a navegação.
+    return url.pathname.replace(/\/$/, '') || '/barbeiro'
+  } catch { return '/barbeiro' }
+}
+
 self.addEventListener('push', event => {
   let dados = {}
-  try { dados = event.data ? event.data.json() : {} } catch { dados = { corpo: event.data?.text?.() || '' } }
-  const titulo = dados.titulo || 'Agenda atualizada'
+  try { dados = event.data ? event.data.json() : {} } catch { dados = {} }
+  // O servidor envia somente title/body genéricos. Campos legados (url, evento,
+  // nome, telefone etc.) são deliberadamente ignorados pelo worker.
+  const titulo = TITULOS_PUSH.has(dados?.title) ? dados.title : 'Agenda atualizada'
+  const corpo = 'Abra o app Dino Equipe para conferir a agenda.'
   event.waitUntil(self.registration.showNotification(titulo, {
-    body: dados.corpo || '',
+    body: corpo,
     icon: '/brand/dino-equipe-192.png',
     badge: '/brand/dino-equipe-192.png',
-    tag: dados.tag || undefined,
-    renotify: Boolean(dados.tag),
-    data: { url: typeof dados.url === 'string' && dados.url.startsWith('/') ? dados.url : '/barbeiro' },
+    data: { url: rotaPushPermitida('/barbeiro') },
   }))
 })
 
 self.addEventListener('notificationclick', event => {
   event.notification.close()
-  const destino = new URL(event.notification.data?.url || '/barbeiro', self.location.origin).href
+  const rota = rotaPushPermitida(event.notification.data?.url)
+  const destino = new URL(rota, self.location.origin).href
   event.waitUntil((async () => {
     const abertas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
-    const doApp = abertas.find(cliente => new URL(cliente.url).pathname.startsWith('/barbeiro'))
+    const doApp = abertas.find(cliente => {
+      try { return new URL(cliente.url).origin === self.location.origin && ROTA_PUSH.test(new URL(cliente.url).pathname) } catch { return false }
+    })
     if (doApp) { await doApp.focus(); if ('navigate' in doApp) await doApp.navigate(destino).catch(() => null); return }
     await self.clients.openWindow(destino)
   })())
 })
-

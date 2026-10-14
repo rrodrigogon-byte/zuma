@@ -92,34 +92,36 @@ function LoginEquipe({ isDino }) {
   </form>
 }
 
-function Avisos({ gestao }) {
+export function Avisos({ gestao }) {
   const [estado, setEstado] = useState({ carregando: true })
   const [erro, setErro] = useState('')
+  const [processando, setProcessando] = useState(false)
   const carregar = useCallback(() => { situacaoPush().then(setEstado).catch(() => setEstado({ ok: false, motivo: 'erro' })) }, [])
   useEffect(() => { carregar() }, [carregar])
   if (estado.carregando) return null
   const textos = {
     instalar_ios: 'No iPhone, os avisos funcionam com o app instalado na Tela de Início. Instale e abra pelo ícone.',
     bloqueado: 'As notificações estão bloqueadas para este app. Libere nas configurações do aparelho.',
-    navegador: 'Este navegador não recebe notificações.',
+    indisponivel: 'Este navegador não oferece Web Push compatível. No Android, tente Chrome ou Edge atualizado; no iPhone/iPad, use o app instalado na Tela de Início com iOS/iPadOS 16.4 ou posterior.',
     servidor: 'Os avisos no celular ainda não foram ligados pela administração.',
     erro: 'Não foi possível verificar os avisos agora.',
   }
   async function alternar(todos = false) {
-    setErro('')
-    try { if (estado.ativo) await desativarPush(); else await ativarPush({ chavePublica: estado.chavePublica, todos }) ; carregar() }
+    setErro(''); setProcessando(true)
+    try { if (estado.ativo) await desativarPush(); else await ativarPush({ chavePublica: estado.chavePublica, todos }); await carregar() }
     catch (error) { setErro(error.message || 'Não foi possível alterar os avisos.') }
+    finally { setProcessando(false) }
   }
   return <div style={{ ...card, display: 'grid', gap: 10 }}>
     <div style={{ fontWeight: 800 }}>Avisos no celular</div>
     {!estado.ok
       ? <div style={{ fontSize: 14, color: t.muted }}>{textos[estado.motivo] || textos.erro}</div>
       : <>
-        <div style={{ fontSize: 14, color: t.muted }}>{estado.ativo ? `Ligados${estado.todos ? ' para toda a equipe' : ''}: você recebe aviso de agendamento novo, remarcado ou cancelado.` : 'Receba um aviso quando entrar, mudar ou cair um agendamento seu.'}</div>
+        <div style={{ fontSize: 14, color: t.muted }}>{estado.ativo ? `Ligados${estado.todos ? ' para toda a equipe' : ''}: você recebe aviso de agendamento novo, remarcado ou cancelado.` : estado.motivo === 'permissao_pendente' ? 'Toque em “Ligar avisos” para autorizar. O pedido de permissão só acontece neste gesto.' : 'Receba um aviso quando entrar, mudar ou cair um agendamento seu.'}</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button type="button" style={estado.ativo ? btn2 : btn} onClick={() => alternar(false)}>{estado.ativo ? 'Desligar avisos' : 'Ligar avisos'}</button>
-          {!estado.ativo && gestao && <button type="button" style={btn2} onClick={() => alternar(true)}>Ligar para toda a equipe</button>}
-          {estado.ativo && <button type="button" style={btn2} onClick={() => testarPush().catch((e) => setErro(e.message))}>Enviar teste</button>}
+          <button type="button" style={{ ...(estado.ativo ? btn2 : btn), opacity: processando ? 0.7 : 1 }} disabled={processando} onClick={() => alternar(false)}>{processando ? 'Atualizando…' : estado.ativo ? 'Desligar avisos' : 'Ligar avisos'}</button>
+          {!estado.ativo && gestao && <button type="button" style={{ ...btn2, opacity: processando ? 0.7 : 1 }} disabled={processando} onClick={() => alternar(true)}>Ligar para toda a equipe</button>}
+          {estado.ativo && <button type="button" style={btn2} disabled={processando} onClick={() => testarPush().catch((e) => setErro(e.message))}>Enviar teste</button>}
         </div>
       </>}
     {erro && <div role="alert" style={{ color: t.red, fontSize: 14, fontWeight: 600 }}>{erro}</div>}

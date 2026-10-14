@@ -36,7 +36,7 @@ test('assina, envia só ao profissional do agendamento e à gestão "todos", e r
   assert.equal(r.enviados, 1);
   assert.equal(r.removidos, 1);
   assert.equal(Object.keys(db().pushEquipe).length, 3, 'assinatura expirada removida');
-  assert.equal(enviados[0][1].titulo, 'Novo agendamento');
+  assert.equal(enviados[0][1].title, 'Novo agendamento');
 });
 
 test('evento "lembrete" ou sem push configurado não envia nada', async () => {
@@ -95,8 +95,7 @@ test('vínculo conferido no envio: e-mail trocado no cadastro deixa de receber',
   assert.equal(enviados, 1, 'login antigo não recebe mais');
 });
 
-test('link do aviso leva o endereço público da barbearia', () => {
+test('link do aviso usa payload genérico sem URL externa', () => {
   db().barbearias.e2.configuracao = { ...(db().barbearias.e2.configuracao || {}), slugPublico: 'navalha' };
-  assert.equal(push.slugPublicoDaEmpresa('e2'), 'navalha');
-  assert.equal(push.montarMensagem({ id: 'a', dataAgenda: '2026-10-02' }, 'criado', '', 'navalha').url, '/barbeiro/navalha?data=2026-10-02');
+  assert.deepEqual(push.montarMensagem({ id: 'a', dataAgenda: '2026-10-02' }, 'criado', '', 'navalha'), { title: 'Novo agendamento', body: 'Abra o app Dino Equipe para conferir a agenda.' });
 });

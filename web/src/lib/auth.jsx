@@ -18,14 +18,29 @@ export function AuthProvider({ children }) {
   const [lojaAtiva, setLojaAtiva] = useState(() => readStorage('sp_loja_ativa'))
   const [lojasAcessiveis, setLojasAcessiveis] = useState(() => readStorage('sp_lojas_acessiveis', []))
 
+  const desligarPushContextoAtual = () => {
+    try {
+      const token = localStorage.getItem('sp_token') || ''
+      // Não espera a rede para trocar a tela; a função cancela o registro
+      // contextual no servidor e sempre remove a assinatura local.
+      encerrarPushDoAparelho({ token, empresaId: empresaAtiva?.id || '', lojaId: lojaAtiva?.id || '' })
+      navigator.serviceWorker?.controller?.postMessage({ tipo: 'limpar-dados' })
+    } catch { /* troca de contexto não pode bloquear a navegação */ }
+  }
+
   const login = (token, userData, site = false, sessao = {}) => {
+    const identidadeAnterior = String(user?.id || user?.email || '')
+    const identidadeNova = String(userData?.id || userData?.email || '')
+    const empresaNova = sessao.empresa || sessao.empresa_ativa || null
+    const lojaNova = sessao.loja || sessao.loja_ativa || null
+    if (identidadeAnterior && (identidadeAnterior !== identidadeNova || empresaAtiva?.id !== empresaNova?.id || lojaAtiva?.id !== lojaNova?.id)) desligarPushContextoAtual()
     localStorage.setItem(site ? 'sp_site_token' : 'sp_token', token)
     localStorage.setItem('sp_user', JSON.stringify(userData))
 
     const empresas = Array.isArray(sessao.empresas_acessiveis) ? sessao.empresas_acessiveis : []
-    const empresa = sessao.empresa || sessao.empresa_ativa || null
+    const empresa = empresaNova
     const lojas = Array.isArray(sessao.lojas_acessiveis) ? sessao.lojas_acessiveis : []
-    const loja = sessao.loja || sessao.loja_ativa || null
+    const loja = lojaNova
     if (empresas.length > 0) {
       localStorage.setItem('sp_empresas_acessiveis', JSON.stringify(empresas))
       setEmpresasAcessiveis(empresas)
@@ -58,6 +73,7 @@ export function AuthProvider({ children }) {
   const trocarEmpresa = (empresaId) => {
     const proxima = empresasAcessiveis.find((empresa) => empresa.id === empresaId)
     if (!proxima) return false
+    if (empresaAtiva?.id !== proxima.id || lojaAtiva?.id) desligarPushContextoAtual()
     localStorage.setItem('sp_empresa_ativa', JSON.stringify(proxima))
     localStorage.removeItem('sp_loja_ativa')
     setEmpresaAtiva(proxima)
@@ -67,12 +83,14 @@ export function AuthProvider({ children }) {
 
   const trocarLoja = (lojaId) => {
     if (!lojaId) {
+      if (lojaAtiva?.id) desligarPushContextoAtual()
       localStorage.removeItem('sp_loja_ativa')
       setLojaAtiva(null)
       return true
     }
     const proxima = lojasAcessiveis.find((loja) => loja.id === lojaId && loja.ativa !== false && (!empresaAtiva?.id || loja.empresaId === empresaAtiva.id))
     if (!proxima) return false
+    if (lojaAtiva?.id !== proxima.id) desligarPushContextoAtual()
     localStorage.setItem('sp_loja_ativa', JSON.stringify(proxima))
     setLojaAtiva(proxima)
     return true

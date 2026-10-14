@@ -26,7 +26,10 @@ const HOSTS_PUSH = [
   /^push\.api\.chrome\.google\.com$/,
 ];
 const LIMITE_POR_USUARIO = 6;
+const LIMITE_ENDPOINT = 600;
+const LIMITE_ENVIO_CACHE = 4096;
 const EVENTOS = new Set(['criado', 'remarcado', 'cancelado']);
+const eventosEmAndamento = new Set();
 
 export class PushError extends Error {
   constructor(message, code, status = 400) { super(message); this.code = code; this.status = status; }
@@ -52,28 +55,56 @@ export function chavePublica(env = process.env) {
 export function endpointPermitido(endpoint) {
   try {
     const url = new URL(String(endpoint || ''));
-    return url.protocol === 'https:' && !url.port && HOSTS_PUSH.some((re) => re.test(url.hostname));
+    // A lista de hosts evita SSRF para IPs/rede local; credenciais, fragmentos,
+    // portas e endpoints sem caminho são rejeitados antes do web-push.
+    return url.protocol === 'https:' && !url.port && !url.username && !url.password && !url.hash
+      && url.pathname.length > 1 && HOSTS_PUSH.some((re) => re.test(url.hostname));
   } catch { return false; }
 }
 
-function idAssinatura(endpoint) { return createHash('sha256').update(String(endpoint)).digest('hex').slice(0, 32); }
+function idAssinatura(endpoint, { empresaId = '', lojaId = '', usuarioId = '' } = {}) {
+  // O mesmo aparelho pode trocar de empresa/unidade/conta. O registro é
+  // contextual para que cancelar A nunca apague B.
+  return createHash('sha256').update(JSON.stringify({ endpoint: String(endpoint), empresaId: String(empresaId), lojaId: String(lojaId || ''), usuarioId: String(usuarioId ?? '') })).digest('hex').slice(0, 32);
+}
 function estado() { db().pushEquipe ||= {}; return db().pushEquipe; }
+function envios() { db().pushEquipeEnvios ||= {}; return db().pushEquipeEnvios; }
+function mesmoContexto(item, { empresaId, lojaId = '', usuarioId } = {}) {
+  return item?.empresaId === String(empresaId)
+    && item?.lojaId === String(lojaId || '')
+    && item?.usuarioId === String(usuarioId ?? '');
+}
+function registrosDoEndpoint(endpoint, contexto) {
+  return Object.values(estado()).filter((item) => item?.assinatura?.endpoint === String(endpoint) && mesmoContexto(item, contexto));
+}
+function auditarPush(acao, { empresaId, lojaId = '', usuario = {}, id = '', evento = '' } = {}) {
+  const d = db(); d.auditoria ||= [];
+  d.auditoria.push({ id: `push-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, ts: new Date().toISOString(),
+    user: usuario?.email ? `${String(usuario.email).slice(0, 160)} (${String(usuario.id ?? '').slice(0, 80)})` : 'sistema',
+    acao, detalhe: JSON.stringify({ assinaturaId: String(id).slice(0, 64), evento: String(evento).slice(0, 30), lojaId: String(lojaId || '').slice(0, 120) }), empresaId: String(empresaId || '').slice(0, 120) });
+  if (d.auditoria.length > 1000) d.auditoria = d.auditoria.slice(-1000);
+}
 
 export function validarAssinatura(sub) {
   const endpoint = String(sub?.endpoint || '');
   const p256dh = String(sub?.keys?.p256dh || '');
   const auth = String(sub?.keys?.auth || '');
-  if (!endpointPermitido(endpoint)) throw new PushError('Endereço de notificação não aceito.', 'PUSH_ENDPOINT_INVALIDO');
+  if (endpoint.length > LIMITE_ENDPOINT || !endpointPermitido(endpoint)) throw new PushError('Endereço de notificação não aceito.', 'PUSH_ENDPOINT_INVALIDO');
   if (!/^[A-Za-z0-9_-]{80,100}$/.test(p256dh) || !/^[A-Za-z0-9_-]{16,32}$/.test(auth)) throw new PushError('Chaves de notificação inválidas.', 'PUSH_CHAVES_INVALIDAS');
-  return { endpoint: endpoint.slice(0, 600), keys: { p256dh, auth } };
+  return { endpoint: endpoint.slice(0, LIMITE_ENDPOINT), keys: { p256dh: p256dh.slice(0, 100), auth: auth.slice(0, 32) } };
 }
 
 export function assinar({ empresaId, lojaId = '', usuario = {}, profissionalId = '', todos = false, assinatura }) {
   if (!pushConfigurado()) throw new PushError('Notificações não configuradas no servidor.', 'PUSH_DESLIGADO', 409);
   const sub = validarAssinatura(assinatura);
-  const id = idAssinatura(sub.endpoint);
+  const id = idAssinatura(sub.endpoint, { empresaId, lojaId, usuarioId: usuario.id });
   const lista = estado();
   const agora = new Date().toISOString();
+  // Limpa duplicatas criadas por versões anteriores, mas somente no mesmo
+  // endpoint + empresa + unidade + ator. Outra conta/contexto fica intacta.
+  for (const antiga of registrosDoEndpoint(sub.endpoint, { empresaId, lojaId, usuarioId: usuario.id })) {
+    if (antiga.id !== id) delete lista[antiga.id];
+  }
   lista[id] = {
     id, empresaId: String(empresaId), lojaId: String(lojaId || ''),
     usuarioId: String(usuario.id ?? ''), usuarioEmail: String(usuario.email || '').toLowerCase().slice(0, 160),
@@ -86,24 +117,29 @@ export function assinar({ empresaId, lojaId = '', usuario = {}, profissionalId =
     // a ordenação podia descartá-lo e a função quebrava ao ler lista[id].
     .sort((a, b) => (b.id === id) - (a.id === id) || String(b.atualizadoEm).localeCompare(String(a.atualizadoEm)));
   for (const antiga of doUsuario.slice(LIMITE_POR_USUARIO)) delete lista[antiga.id];
+  auditarPush('PUSH_ASSINATURA_ATIVADA', { empresaId, lojaId, usuario, id });
   save();
   return { id, profissionalId: lista[id].profissionalId, todos: lista[id].todos };
 }
 
-export function cancelar({ empresaId, usuario = {}, endpoint }) {
-  const id = idAssinatura(endpoint);
-  const atual = estado()[id];
-  if (atual && atual.empresaId === String(empresaId) && atual.usuarioId === String(usuario.id ?? '')) {
-    delete estado()[id];
+export function cancelar({ empresaId, lojaId = '', usuario = {}, endpoint }) {
+  const id = idAssinatura(endpoint, { empresaId, lojaId, usuarioId: usuario.id });
+  const lista = estado();
+  const registros = [lista[id], ...registrosDoEndpoint(endpoint, { empresaId, lojaId, usuarioId: usuario.id })].filter(Boolean);
+  if (registros.length) {
+    for (const registro of registros) delete lista[registro.id];
+    auditarPush('PUSH_ASSINATURA_DESATIVADA', { empresaId, lojaId, usuario, id });
     save();
     return true;
   }
   return false;
 }
 
-export function situacao({ empresaId, usuario = {}, endpoint = '' }) {
-  const atual = endpoint ? estado()[idAssinatura(endpoint)] : null;
-  const minha = atual && atual.empresaId === String(empresaId) && atual.usuarioId === String(usuario.id ?? '') ? atual : null;
+export function situacao({ empresaId, lojaId = '', usuario = {}, endpoint = '' }) {
+  const atual = endpoint ? estado()[idAssinatura(endpoint, { empresaId, lojaId, usuarioId: usuario.id })] : null;
+  const minha = atual && mesmoContexto(atual, { empresaId, lojaId, usuarioId: usuario.id })
+    ? atual
+    : (endpoint ? registrosDoEndpoint(endpoint, { empresaId, lojaId, usuarioId: usuario.id })[0] : null);
   return { configurado: pushConfigurado(), chavePublica: chavePublica(), assinado: Boolean(minha), todos: Boolean(minha?.todos) };
 }
 
@@ -122,24 +158,25 @@ function horaLocal(dataHora) {
 }
 
 export function montarMensagem(agendamento = {}, evento, servicoNome = '', slug = '') {
-  const primeiroNome = String(agendamento.clienteNome || 'Cliente').trim().split(/\s+/)[0].slice(0, 30);
-  const quando = horaLocal(agendamento.dataHora);
   const titulos = { criado: 'Novo agendamento', remarcado: 'Agendamento remarcado', cancelado: 'Agendamento cancelado' };
-  const dia = String(agendamento.dataAgenda || '').slice(0, 10);
   return {
-    titulo: titulos[evento] || 'Agenda atualizada',
-    corpo: `${primeiroNome}${quando ? ` · ${quando}` : ''}${servicoNome ? ` · ${servicoNome}` : ''}`,
-    url: `/barbeiro${slug ? `/${encodeURIComponent(slug)}` : ''}${dia ? `?data=${dia}` : ''}`,
-    tag: `agenda-${agendamento.id}`,
+    // O payload não transporta cliente, telefone, serviço, data, URL ou evento.
+    // O SW recebe somente texto genérico e abre a rota fixa do app.
+    title: titulos[evento] || 'Agenda atualizada',
+    body: 'Abra o app Dino Equipe para conferir a agenda.',
   };
 }
 
 // Envia para o profissional do agendamento e para a gestão que pediu "todos".
 // Nunca lança: falha de push não pode atrapalhar o agendamento.
 export async function notificarEquipe(empresaId, agendamento = {}, evento, { servicoNome = '', enviar = (sub, payload, opcoes) => webpush.sendNotification(sub, payload, opcoes) } = {}) {
+  let eventoId = '';
   try {
     if (!EVENTOS.has(evento) || !agendamento?.id || !pushConfigurado()) return { enviados: 0 };
     const lista = estado();
+    eventoId = createHash('sha256').update(JSON.stringify({ empresaId: String(empresaId), id: String(agendamento.id), evento, lojaId: String(agendamento.lojaId || ''), dataHora: String(agendamento.dataHora || ''), status: String(agendamento.status || ''), profissionalId: String(agendamento.profissionalId || ''), servicoId: String(agendamento.servicoId || '') })).digest('hex');
+    if (eventosEmAndamento.has(eventoId)) return { enviados: 0, removidos: 0, duplicado: true };
+    eventosEmAndamento.add(eventoId);
     // O vínculo é conferido no envio: e-mail trocado ou profissional desativado
     // deixa de receber os avisos daquele profissional.
     const profissionalAtual = new Map(barbearia.listarProfissionais(empresaId)
@@ -147,33 +184,43 @@ export async function notificarEquipe(empresaId, agendamento = {}, evento, { ser
     const alvos = Object.values(lista).filter((a) => a.empresaId === String(empresaId)
       && (!a.lojaId || !agendamento.lojaId || a.lojaId === String(agendamento.lojaId))
       && (a.todos || (agendamento.profissionalId && profissionalAtual.get(a.usuarioEmail) === String(agendamento.profissionalId))));
-    if (!alvos.length) return { enviados: 0 };
+    if (!alvos.length) { eventosEmAndamento.delete(eventoId); return { enviados: 0 }; }
     const payload = JSON.stringify(montarMensagem(agendamento, evento, servicoNome, slugPublicoDaEmpresa(empresaId)));
+    const registroEnvios = envios();
     let enviados = 0; let removidos = 0;
     await Promise.all(alvos.map(async (alvo) => {
       try {
+        const entregaId = createHash('sha256').update(`${eventoId}:${alvo.id}`).digest('hex');
+        if (registroEnvios[entregaId]) return;
         await enviar(alvo.assinatura, payload, { TTL: 6 * 3600, urgency: evento === 'cancelado' || evento === 'criado' ? 'high' : 'normal' });
+        registroEnvios[entregaId] = new Date().toISOString();
         enviados += 1;
       } catch (error) {
         if ([404, 410].includes(Number(error?.statusCode))) { delete lista[alvo.id]; removidos += 1; }
         else console.warn('[Push equipe] falha no envio:', Number(error?.statusCode) || error?.code || 'erro');
       }
     }));
-    if (removidos) save();
+    const chavesEnvio = Object.keys(registroEnvios);
+    if (chavesEnvio.length > LIMITE_ENVIO_CACHE) {
+      chavesEnvio.sort((a, b) => String(registroEnvios[a]).localeCompare(String(registroEnvios[b])));
+      for (const chave of chavesEnvio.slice(0, chavesEnvio.length - LIMITE_ENVIO_CACHE)) delete registroEnvios[chave];
+    }
+    if (removidos || enviados) save();
+    eventosEmAndamento.delete(eventoId);
     return { enviados, removidos };
   } catch (error) {
+    eventosEmAndamento.delete(eventoId);
     console.warn('[Push equipe] indisponível:', error?.code || error?.message || 'erro');
     return { enviados: 0 };
   }
 }
 
 // Notificação de teste só para o aparelho que pediu.
-export async function enviarTeste({ empresaId, usuario = {}, endpoint }, { enviar = (sub, payload, opcoes) => webpush.sendNotification(sub, payload, opcoes) } = {}) {
+export async function enviarTeste({ empresaId, lojaId = '', usuario = {}, endpoint }, { enviar = (sub, payload, opcoes) => webpush.sendNotification(sub, payload, opcoes) } = {}) {
   if (!pushConfigurado()) throw new PushError('Notificações não configuradas no servidor.', 'PUSH_DESLIGADO', 409);
-  const atual = estado()[idAssinatura(endpoint)];
-  if (!atual || atual.empresaId !== String(empresaId) || atual.usuarioId !== String(usuario.id ?? '')) throw new PushError('Ative as notificações neste aparelho primeiro.', 'PUSH_NAO_ASSINADO', 409);
-  const slug = slugPublicoDaEmpresa(empresaId);
-  const payload = JSON.stringify({ titulo: 'Notificações ligadas', corpo: 'Você vai receber aqui os avisos da sua agenda.', url: slug ? `/barbeiro/${encodeURIComponent(slug)}` : '/barbeiro', tag: 'teste' });
+  const atual = estado()[idAssinatura(endpoint, { empresaId, lojaId, usuarioId: usuario.id })];
+  if (!atual || !mesmoContexto(atual, { empresaId, lojaId, usuarioId: usuario.id })) throw new PushError('Ative as notificações neste aparelho primeiro.', 'PUSH_NAO_ASSINADO', 409);
+  const payload = JSON.stringify({ title: 'Notificações ligadas', body: 'Abra o app Dino Equipe para conferir a agenda.' });
   try { await enviar(atual.assinatura, payload, { TTL: 600, urgency: 'normal' }); return { enviados: 1 }; }
   catch (error) {
     if ([404, 410].includes(Number(error?.statusCode))) { delete estado()[atual.id]; save(); }

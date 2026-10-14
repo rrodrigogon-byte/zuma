@@ -6,10 +6,10 @@ export function suportePush() {
   if (typeof window === 'undefined') return { ok: false, motivo: 'indisponivel' }
   if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
     // No iPhone, notificações só funcionam com o app instalado na Tela de Início (iOS 16.4+).
-    return { ok: false, motivo: ehIos() && !rodandoComoApp() ? 'instalar_ios' : 'navegador' }
+    return { ok: false, motivo: ehIos() && !rodandoComoApp() ? 'instalar_ios' : 'indisponivel' }
   }
   if (Notification.permission === 'denied') return { ok: false, motivo: 'bloqueado' }
-  return { ok: true }
+  return { ok: true, motivo: Notification.permission === 'default' ? 'permissao_pendente' : 'pronto' }
 }
 
 function chaveParaBytes(base64) {
@@ -28,14 +28,19 @@ export async function situacaoPush() {
   if (!suporte.ok) return { ...suporte, ativo: false }
   const atual = await assinaturaAtual().catch(() => null)
   const servidor = await api.post('/api/admin/barbearia/push/situacao', { endpoint: atual?.endpoint || '' })
-  if (!servidor.configurado) return { ok: false, motivo: 'servidor', ativo: false }
-  return { ok: true, ativo: Boolean(atual && servidor.assinado), todos: Boolean(servidor.todos), chavePublica: servidor.chavePublica }
+  if (!servidor.configurado || !servidor.chavePublica) return { ok: false, motivo: 'servidor', ativo: false, permission: Notification.permission }
+  return { ok: true, ativo: Boolean(atual && servidor.assinado), todos: Boolean(servidor.todos), chavePublica: servidor.chavePublica, permission: Notification.permission, motivo: suporte.motivo }
 }
 
 // Precisa ser chamada a partir de um toque do usuário (exigência do iOS).
 export async function ativarPush({ chavePublica, todos = false }) {
+  if (!chavePublica) throw Object.assign(new Error('Notificações ainda não estão configuradas no servidor.'), { code: 'PUSH_DESLIGADO' })
+  const suporte = suportePush()
+  if (!suporte.ok) throw Object.assign(new Error(suporte.motivo === 'instalar_ios' ? 'No iPhone, instale o app na Tela de Início e abra pelo ícone antes de ativar os avisos.' : 'Este aparelho ou navegador não oferece Web Push compatível.'), { code: 'PUSH_INDISPONIVEL' })
+  // Não mover esta chamada para useEffect, carregamento da tela ou login:
+  // navegadores exigem gesto explícito, especialmente iOS/iPadOS.
   const permissao = await Notification.requestPermission()
-  if (permissao !== 'granted') throw new Error('Permissão de notificação não concedida. Libere nas configurações do aparelho.')
+  if (permissao !== 'granted') throw Object.assign(new Error(permissao === 'denied' ? 'Permissão recusada. Libere as notificações nas configurações do aparelho.' : 'Permissão de notificação não concedida.'), { code: permissao === 'denied' ? 'PUSH_BLOQUEADO' : 'PUSH_PERMISSAO_PENDENTE' })
   const registro = await navigator.serviceWorker.ready
   let assinatura = await registro.pushManager.getSubscription()
   if (!assinatura) assinatura = await registro.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: chaveParaBytes(chavePublica) })

@@ -2727,11 +2727,16 @@ function respostaPush(res, error) {
   const status = error instanceof pushEquipe.PushError ? error.status : 400;
   return res.status(status).json({ error: error.message, code: error.code || undefined });
 }
+function limitePush(req, res, next) {
+  const chave = `push:${String(req.user?.id ?? req.user?.email ?? 'anon').slice(0, 160)}:${req.ip || ''}`;
+  if (!rateLimit(chave, 40, 10 * 60 * 1000)) return res.status(429).json({ error: 'muitas alterações de notificação; tente novamente em alguns minutos', code: 'PUSH_RATE_LIMITED' });
+  next();
+}
 app.post('/api/admin/barbearia/push/situacao', (req, res) => {
-  try { res.json({ ok: true, ...pushEquipe.situacao({ empresaId: legacyEmpresaId(req), usuario: req.user, endpoint: req.body?.endpoint }) }); }
+  try { res.setHeader('Cache-Control', 'no-store'); res.json({ ok: true, ...pushEquipe.situacao({ empresaId: legacyEmpresaId(req), lojaId: legacyLojaId(req), usuario: req.user, endpoint: req.body?.endpoint }) }); }
   catch (error) { respostaPush(res, error); }
 });
-app.post('/api/admin/barbearia/push/assinar', (req, res) => {
+app.post('/api/admin/barbearia/push/assinar', limitePush, (req, res) => {
   try {
     const empresaId = legacyEmpresaId(req);
     const eu = modoBarbeiro.profissionalDoUsuario(barbeariaErpKytto.listarProfissionais(empresaId), req.user);
@@ -2741,12 +2746,12 @@ app.post('/api/admin/barbearia/push/assinar', (req, res) => {
     res.json({ ok: true, ...resultado });
   } catch (error) { respostaPush(res, error); }
 });
-app.post('/api/admin/barbearia/push/cancelar', (req, res) => {
-  try { res.json({ ok: true, removida: pushEquipe.cancelar({ empresaId: legacyEmpresaId(req), usuario: req.user, endpoint: req.body?.endpoint }) }); }
+app.post('/api/admin/barbearia/push/cancelar', limitePush, (req, res) => {
+  try { res.json({ ok: true, removida: pushEquipe.cancelar({ empresaId: legacyEmpresaId(req), lojaId: legacyLojaId(req), usuario: req.user, endpoint: req.body?.endpoint }) }); }
   catch (error) { respostaPush(res, error); }
 });
-app.post('/api/admin/barbearia/push/teste', async (req, res) => {
-  try { res.json({ ok: true, ...(await pushEquipe.enviarTeste({ empresaId: legacyEmpresaId(req), usuario: req.user, endpoint: req.body?.endpoint })) }); }
+app.post('/api/admin/barbearia/push/teste', limitePush, async (req, res) => {
+  try { res.json({ ok: true, ...(await pushEquipe.enviarTeste({ empresaId: legacyEmpresaId(req), lojaId: legacyLojaId(req), usuario: req.user, endpoint: req.body?.endpoint })) }); }
   catch (error) { respostaPush(res, error); }
 });
 app.get('/api/admin/barbearia/metas', (req, res) => {

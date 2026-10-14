@@ -106,15 +106,10 @@ test('push: desligado sem as chaves VAPID', () => {
   assert.equal(push.chavePublica({}), '');
 });
 
-test('push: mensagem com primeiro nome, horário e serviço, sem telefone', () => {
+test('push: payload genérico sem PII', () => {
   const m = push.montarMensagem({ id: 'a1', clienteNome: 'João da Silva', clienteTelefone: '65999990001', dataHora: '2026-10-02T13:00:00.000Z', dataAgenda: '2026-10-02' }, 'criado', 'Corte');
-  assert.equal(m.titulo, 'Novo agendamento');
-  assert.match(m.corpo, /^João · .*09:00.* · Corte$/);
-  assert.ok(!m.corpo.includes('6599'));
-  assert.equal(m.url, '/barbeiro?data=2026-10-02', 'sem endereço público, abre o app genérico');
-  assert.equal(m.tag, 'agenda-a1');
+  assert.deepEqual(m, { title: 'Novo agendamento', body: 'Abra o app Dino Equipe para conferir a agenda.' });
 });
-
 test('push: validação das chaves da assinatura', () => {
   const ok = { endpoint: 'https://fcm.googleapis.com/fcm/send/abc', keys: { p256dh: 'B'.repeat(87), auth: 'a'.repeat(22) } };
   assert.equal(push.validarAssinatura(ok).endpoint, ok.endpoint);
