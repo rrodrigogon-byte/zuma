@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { api, fmtR, fmtDate, fmtDateOnly } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
+import { Navigate } from 'react-router-dom'
 
 const EMPTY_FORM = {
   codigo: '', tipo: 'pct', valor: '', maxUsos: '', validade: '',
@@ -21,6 +22,42 @@ function isExpired(validade) {
 }
 
 export default function Cupons() {
+  const [commerceState, setCommerceState] = useState({ status: 'checking', message: '' })
+
+  useEffect(() => {
+    let active = true
+    api.get('/api/admin/commerce/storefront')
+      .then(data => {
+        if (!active) return
+        const storefronts = Array.isArray(data?.items) ? data.items : []
+        setCommerceState({ status: storefronts.length ? 'core' : 'legacy', message: '' })
+      })
+      .catch(error => {
+        if (!active) return
+        const status = Number(error?.status)
+        if (status === 404) {
+          setCommerceState({ status: 'legacy', message: '' })
+          return
+        }
+        setCommerceState({
+          status: 'error',
+          message: status === 403 || error?.code === 'TENANT_SELECTION_REQUIRED'
+            ? 'Selecione uma empresa válida no menu lateral antes de consultar os cupons.'
+            : error?.message || 'Não foi possível identificar o módulo de cupons desta empresa.',
+        })
+      })
+    return () => { active = false }
+  }, [])
+
+  if (commerceState.status === 'checking') return <div style={{ padding: 48, textAlign: 'center' }}><div className="spinner" /></div>
+  if (commerceState.status === 'core') return <Navigate to="/admin/ecommerce?tab=promotions" replace />
+  if (commerceState.status === 'error') {
+    return <div style={{ padding: 24, maxWidth: 760, margin: '0 auto' }}><div className="ecommerce-admin-alert error" role="alert">{commerceState.message}</div></div>
+  }
+  return <LegacyCoupons />
+}
+
+function LegacyCoupons() {
   const { toast } = useToast()
   const [cupons, setCupons]     = useState([])
   const [loading, setLoading]   = useState(true)
@@ -137,7 +174,12 @@ export default function Cupons() {
   return (
     <div style={{ padding: '24px 16px', maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
-        <h2 style={{ margin: 0, fontSize: 22, fontWeight: 900, color: 'var(--cream)' }}>🎟️ Cupons</h2>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 900, color: 'var(--cream)' }}>🎟️ Cupons legados</h2>
+          <p style={{ margin: '6px 0 0', color: 'var(--muted)', fontSize: 12 }}>
+            Registros preservados para auditoria. Para lojas Commerce, a gestão fica em Promoções e cupons do Ecommerce Core.
+          </p>
+        </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             onClick={exportCSV}
