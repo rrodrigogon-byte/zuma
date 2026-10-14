@@ -190,6 +190,8 @@ app.get('/health', async (req, res) => {
   // O estado da persistência é informativo aqui: o health principal não reinicia o
   // serviço por causa de uma cópia atrasada (use /health/persistencia para alertar).
   const persistencia = protecaoDados.situacao().status;
+  const assets = staticAssetReadiness();
+  if (!assets.ready) return res.status(503).json({ status: 'not_ready', code: 'STATIC_ASSETS_INCOMPLETE', missingAssets: assets.missing });
   if (process.env.COMMERCE_CORE_ENABLED !== '1') return res.status(200).json({ status: 'ready', persistencia });
   try {
     const schema = await checkCommerceSchemaReadiness(commerceDb);
@@ -7188,6 +7190,25 @@ app.post('/api/webhooks/infinitepay/barbearia', async (req, res) => {
 });
 
 // ---- estático: serve React SPA (build do web/) ----
+const publicDir = path.join(__dirname, 'public');
+function staticAssetReadiness() {
+  try {
+    const html = fs.readFileSync(path.join(publicDir, 'index.html'), 'utf8');
+    const references = [...html.matchAll(/(?:src|href)="(\/assets\/[^"?#]+)(?:[?#][^"']*)?"/g)].map(match => match[1]);
+    const missing = [...new Set(references.filter(reference => !fs.existsSync(path.join(publicDir, reference.replace(/^\/+/, '')))))];
+    return { ready: missing.length === 0, missing };
+  } catch {
+    return { ready: false, missing: ['/index.html'] };
+  }
+}
+function setStaticCacheHeaders(res, filePath) {
+  const normalized = String(filePath || '').replace(/\\/g, '/');
+  if (normalized.endsWith('/index.html') || normalized.endsWith('/sw.js') || normalized.endsWith('/manifest.json')) {
+    res.setHeader('Cache-Control', 'no-store');
+    return;
+  }
+  if (normalized.includes('/assets/')) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+}
 app.use((req, res, next) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') return next();
   const discovery = stalloneDiscovery(req.hostname, req.path);
@@ -7204,7 +7225,16 @@ app.use((req, res, next) => {
     return res.type('html').send(html);
   } catch (_) { return next(); }
 });
-app.use(express.static(path.join(__dirname, 'public')));
+// Assets versionados nunca devem cair no index.html: um chunk inexistente precisa
+// responder 404, não 200 text/html, para revelar imediatamente um deploy parcial.
+app.use('/assets', express.static(path.join(publicDir, 'assets'), {
+  fallthrough: true,
+  immutable: true,
+  maxAge: '1y',
+  setHeaders: setStaticCacheHeaders,
+}));
+app.use('/assets', (req, res) => res.status(404).json({ error: 'asset not found', code: 'STATIC_ASSET_NOT_FOUND' }));
+app.use(express.static(publicDir, { setHeaders: setStaticCacheHeaders }));
 
 // Meta tags do link de agendamento/avaliação: quem compartilha o link no WhatsApp
 // ou Instagram vê o nome da barbearia (e o Google indexa a página certa).
@@ -7347,6 +7377,7 @@ app.get(['/agendar/:slug', '/avaliar/:slug', '/minha/:slug'], (req, res, next) =
 // SPA fallback — React Router client-side routing
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'not found' });
+  res.setHeader('Cache-Control', 'no-store');
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 

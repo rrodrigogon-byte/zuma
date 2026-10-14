@@ -276,3 +276,13 @@ describe('Promoções Commerce: datas, resgate e material', () => {
     expect(escapePromotionExportText(`<img src=x onerror="alert(1)"> & 'x'`)).toBe('&lt;img src=x onerror=&quot;alert(1)&quot;&gt; &amp; &#39;x&#39;')
   })
 })
+
+describe('Entrada legada de cupons', () => {
+  it('encaminha tenants com storefront para a fonte de verdade do Ecommerce Core', () => {
+    const source = readFileSync(resolve(process.cwd(), 'web/src/pages/admin/Cupons.jsx'), 'utf8')
+    expect(source).toContain("api.get('/api/admin/commerce/storefront')")
+    expect(source).toContain('to="/admin/ecommerce?tab=promotions"')
+    expect(source).toContain('Cupons legados')
+    expect(source).toContain("status === 404")
+  })
+})
