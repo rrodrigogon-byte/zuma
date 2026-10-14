@@ -343,8 +343,9 @@ export function buildAvecPreview(payload, candidateRows, scope) {
 
 export async function previewAvecCatalog(context, input = {}) {
   const payload = normalizeAvecInput(input);
-  const scope = await validateAvecScope(db.queryRead, context, input);
-  const rows = await readCandidates(db.queryRead, scope, payload);
+  const client = { query: (text, values) => db.queryRead(text, values) };
+  const scope = await validateAvecScope(client, context, input);
+  const rows = await readCandidates(client, scope, payload);
   return buildAvecPreview(payload, rows, scope);
 }
 

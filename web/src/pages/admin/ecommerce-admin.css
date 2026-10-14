@@ -488,3 +488,6 @@
 .commerce-catalog-diagnostic-status.divergent { color: #993e2e; }
 .commerce-catalog-diagnostic-status.ambiguous,.commerce-catalog-diagnostic-status.unmapped,.commerce-catalog-diagnostic-status.notVerified,.commerce-catalog-diagnostic-status.coreOnly,.commerce-catalog-diagnostic-status.outOfScope { color: #936718; }
 @media (max-width: 700px) { .commerce-catalog-diagnostic-heading { flex-direction: column; } .commerce-catalog-diagnostic-heading .ecommerce-admin-button { width: 100%; } .commerce-catalog-diagnostic-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Importação: flex-basis horizontal não pode virar altura de botão no celular. */
+@media(max-width:820px){.commerce-catalog-import .ecommerce-admin-header-actions > .ecommerce-admin-button{flex:0 0 auto;width:100%;min-height:44px}}
