@@ -71,3 +71,14 @@ describe('prévia taxas e materiais', () => {
     expect(renderer.root.findAllByType('button').find(x => x.props.type === 'submit').props.disabled).toBe(false)
   })
 })
+
+it('editar a chave invalida resposta pendente', async () => {
+  let resolve
+  mocked.post.mockReturnValue(new Promise(r => { resolve = r }))
+  await mount()
+  await submit()
+  const input = renderer.root.findAllByType('input').find(x => x.props.required)
+  await act(async () => { input.props.onChange({ target: { value: 'nova-chave-fixture' } }); await tick() })
+  await act(async () => { resolve(output()); await tick() })
+  expect(allText(renderer.toJSON())).not.toContain('fixture-hash')
+})
