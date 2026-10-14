@@ -8,8 +8,7 @@
 //   VAPID_SUBJECT); a chave privada fica só no ambiente do servidor.
 // - O servidor faz POST no endpoint da assinatura: só aceita endpoints HTTPS dos
 //   serviços de push conhecidos (evita usar o servidor para chamar endereços internos).
-// - O conteúdo vai cifrado de ponta a ponta (padrão Web Push): primeiro nome do
-//   cliente, horário e serviço. Nada de telefone.
+// - O conteúdo cifrado usa somente título e corpo genéricos, sem dados do cliente.
 // - Assinatura expirada (404/410) é apagada.
 import { createHash } from 'crypto';
 import webpush from 'web-push';

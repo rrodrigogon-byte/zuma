@@ -92,12 +92,22 @@ function LoginEquipe({ isDino }) {
   </form>
 }
 
-export function Avisos({ gestao }) {
+export function Avisos({ gestao, contexto = '' }) {
   const [estado, setEstado] = useState({ carregando: true })
   const [erro, setErro] = useState('')
   const [processando, setProcessando] = useState(false)
-  const carregar = useCallback(() => { situacaoPush().then(setEstado).catch(() => setEstado({ ok: false, motivo: 'erro' })) }, [])
-  useEffect(() => { carregar() }, [carregar])
+  const vivo = useRef(true)
+  const pedido = useRef(0)
+  const ocupado = useRef(false)
+  const contextoRef = useRef(contexto)
+  contextoRef.current = contexto
+  const ativo = useCallback(() => vivo.current && contextoRef.current === contexto, [contexto])
+  const carregar = useCallback(async () => {
+    const id = ++pedido.current
+    try { const resposta = await situacaoPush({ ativo }); if (ativo() && id === pedido.current) setEstado(resposta) }
+    catch { if (ativo() && id === pedido.current) setEstado({ ok: false, motivo: 'erro' }) }
+  }, [ativo])
+  useEffect(() => { vivo.current = true; ocupado.current = false; setProcessando(false); setErro(''); setEstado({ carregando: true }); carregar(); return () => { vivo.current = false; pedido.current += 1 } }, [carregar])
   if (estado.carregando) return null
   const textos = {
     instalar_ios: 'No iPhone, os avisos funcionam com o app instalado na Tela de Início. Instale e abra pelo ícone.',
@@ -107,10 +117,11 @@ export function Avisos({ gestao }) {
     erro: 'Não foi possível verificar os avisos agora.',
   }
   async function alternar(todos = false) {
-    setErro(''); setProcessando(true)
-    try { if (estado.ativo) await desativarPush(); else await ativarPush({ chavePublica: estado.chavePublica, todos }); await carregar() }
-    catch (error) { setErro(error.message || 'Não foi possível alterar os avisos.') }
-    finally { setProcessando(false) }
+    if (ocupado.current || !ativo()) return
+    ocupado.current = true; setErro(''); setProcessando(true)
+    try { if (estado.ativo) await desativarPush({ ativo }); else await ativarPush({ chavePublica: estado.chavePublica, todos, ativo }); if (ativo()) await carregar() }
+    catch (error) { if (ativo()) setErro(error.message || 'Não foi possível alterar os avisos.') }
+    finally { if (ativo()) { ocupado.current = false; setProcessando(false) } }
   }
   return <div style={{ ...card, display: 'grid', gap: 10 }}>
     <div style={{ fontWeight: 800 }}>Avisos no celular</div>
@@ -121,7 +132,7 @@ export function Avisos({ gestao }) {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button type="button" style={{ ...(estado.ativo ? btn2 : btn), opacity: processando ? 0.7 : 1 }} disabled={processando} onClick={() => alternar(false)}>{processando ? 'Atualizando…' : estado.ativo ? 'Desligar avisos' : 'Ligar avisos'}</button>
           {!estado.ativo && gestao && <button type="button" style={{ ...btn2, opacity: processando ? 0.7 : 1 }} disabled={processando} onClick={() => alternar(true)}>Ligar para toda a equipe</button>}
-          {estado.ativo && <button type="button" style={btn2} disabled={processando} onClick={() => testarPush().catch((e) => setErro(e.message))}>Enviar teste</button>}
+          {estado.ativo && <button type="button" style={btn2} disabled={processando} onClick={() => testarPush({ ativo }).catch((e) => { if (ativo()) setErro(e.message) })}>Enviar teste</button>}
         </div>
       </>}
     {erro && <div role="alert" style={{ color: t.red, fontSize: 14, fontWeight: 600 }}>{erro}</div>}
@@ -131,7 +142,7 @@ export function Avisos({ gestao }) {
 export default function ModoBarbeiro() {
   const { slug = '' } = useParams()
   const [params, setParams] = useSearchParams()
-  const { user, logout } = useAuth()
+  const { user, logout, empresaAtiva, lojaAtiva } = useAuth()
   const [painelRecebido, setPainel] = useState(null)
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(false)
@@ -144,7 +155,7 @@ export default function ModoBarbeiro() {
   const [atualizadoEm, setAtualizadoEm] = useState(null)
   const data = /^\d{4}-\d{2}-\d{2}$/.test(params.get('data') || '') ? params.get('data') : ''
   const pedido = useRef(0)
-  const contextoPainel = JSON.stringify([data, profissionalId, user?.id, user?.email])
+  const contextoPainel = JSON.stringify([data, profissionalId, user?.id, user?.email, empresaAtiva?.id, lojaAtiva?.id])
   const painel = painelRecebido?._contexto === contextoPainel ? painelRecebido : null
 
   const carregar = useCallback(async () => {
@@ -231,7 +242,7 @@ export default function ModoBarbeiro() {
         {erro && <div role="alert" style={{ ...card, borderColor: t.red, color: t.red, fontWeight: 600 }}>{erro}</div>}
         {painel && !painel.profissional && <div style={card}>{painel.mensagem}</div>}
 
-        {painelRecebido?.profissional && dia && <BarbeiroPeriodo dia={dia} profissionalId={profissionalId || painelRecebido.profissional.id} onDateChange={irPara} refreshKey={atualizadoEm?.valueOf()} />}
+        {painel?.profissional && dia && <BarbeiroPeriodo dia={dia} profissionalId={profissionalId || painel.profissional.id} onDateChange={irPara} refreshKey={atualizadoEm?.valueOf()} />}
         {painel?.profissional && <>
           <section aria-label="Resumo do dia" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 8 }}>
             {[
@@ -288,7 +299,7 @@ export default function ModoBarbeiro() {
         </>}
 
         {painel?.profissional && podeOperar && <button type="button" style={btn2} onClick={() => setFolha('bloqueio')}>Bloquear horário</button>}
-        {painel?.profissional && <Avisos gestao={painel.gestao} />}
+        {painel?.profissional && <Avisos key={JSON.stringify([user?.id, empresaAtiva?.id, lojaAtiva?.id])} contexto={JSON.stringify([user?.id, empresaAtiva?.id, lojaAtiva?.id])} gestao={painel.gestao} />}
         <InstalarApp nomeApp={isDino ? 'o app Dino Equipe' : 'o app da equipe'} tema={t} />
       </>
 
