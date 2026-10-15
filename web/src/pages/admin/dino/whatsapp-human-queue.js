@@ -112,8 +112,8 @@ export function validateClaimResponse(payload, sessionId) {
 
 export function queueUrl(assignment, tipoCanal = 'cliente') {
   const value = assignment === 'all' ? 'all' : 'unassigned'
-  const canal = tipoCanal === 'gestao' ? 'gestao' : 'cliente'
-  const canalQuery = canal === 'gestao' ? '&canal=gestao' : ''
+  const canal = ['gestao', 'lancamentos'].includes(tipoCanal) ? tipoCanal : 'cliente'
+  const canalQuery = canal === 'cliente' ? '' : `&canal=${canal}`
   return `${HUMAN_QUEUE_PATH}?status=humano&assignment=${value}&limit=${HUMAN_QUEUE_LIMIT}${canalQuery}`
 }
 

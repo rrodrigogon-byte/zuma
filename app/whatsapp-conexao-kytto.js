@@ -18,7 +18,8 @@ const disconnecting = new Set();
 const disconnectEpoch = new Map();
 
 function normalizarTipoCanal(value = 'cliente') {
-  return String(value || 'cliente').toLowerCase() === 'gestao' ? 'gestao' : 'cliente';
+  const normalized = String(value || 'cliente').toLowerCase();
+  return ['cliente', 'gestao', 'lancamentos'].includes(normalized) ? normalized : 'cliente';
 }
 
 function chaveConexao(empresaId, tipoCanal = 'cliente') {
@@ -181,7 +182,7 @@ export async function verificarConexao(empresaId, { fetchImpl, tipoCanal = 'clie
     return visaoPublica(conexao);
   }
   if (semInstancia(conexao)) { conexao.lastError = 'instancia_nao_atribuida'; return visaoPublica(conexao); }
-  const key = String(empresaId);
+  const key = chaveConexao(empresaId, tipoCanal);
   const epoch = disconnectEpoch.get(key) || 0;
   const instance = conexao.instance;
   const resultado = await getInstanceStatus(instance, fetchImpl);
@@ -208,8 +209,8 @@ export async function gerarQr(empresaId, { usuario = '', fetchImpl, registrarHis
   const conexao = obterConexao(empresaId, tipoCanal);
   const bloqueio = semInstancia(conexao);
   if (bloqueio) return { ...bloqueio, conexao: visaoPublica(conexao) };
-  if (disconnecting.has(String(empresaId))) return { ok: false, code: 'WHATSAPP_DISCONNECT_IN_PROGRESS', error: 'Desconexão em andamento.', conexao: visaoPublica(conexao) };
-  const key = String(empresaId);
+  const key = chaveConexao(empresaId, tipoCanal);
+  if (disconnecting.has(key)) return { ok: false, code: 'WHATSAPP_DISCONNECT_IN_PROGRESS', error: 'Desconexão em andamento.', conexao: visaoPublica(conexao) };
   const epoch = disconnectEpoch.get(key) || 0;
   const instance = conexao.instance;
   conexao.ativo = true;
@@ -245,7 +246,7 @@ export async function desconectar(empresaId, { usuario = '', fetchImpl, tipoCana
   const conexao = obterConexao(empresaId, tipoCanal);
   const bloqueio = semInstancia(conexao);
   if (bloqueio) return { ...bloqueio, conexao: visaoPublica(conexao) };
-  const key = String(empresaId);
+  const key = chaveConexao(empresaId, tipoCanal);
   if (disconnecting.has(key)) return { ok: false, code: 'WHATSAPP_DISCONNECT_IN_PROGRESS', error: 'Desconexão em andamento.', conexao: visaoPublica(conexao) };
   disconnecting.add(key);
   disconnectEpoch.set(key, (disconnectEpoch.get(key) || 0) + 1);
@@ -293,7 +294,7 @@ export function configurar(empresaId, { instance, autoReconnect, numeroExibicao 
     if (!valida) throw new Error('Instância inválida: use letras minúsculas, números, - ou _.');
     if (instanciaEmUso(valida, empresaId, perfil)) throw new Error('Esta instância já pertence a outra empresa ou canal.');
     if (valida !== conexao.instance) {
-      const key = String(empresaId);
+      const key = chaveConexao(empresaId, perfil);
       if (disconnecting.has(key)) throw new Error('Aguarde o fim da desconexão antes de trocar a instância.');
       disconnectEpoch.set(key, (disconnectEpoch.get(key) || 0) + 1);
       conexao.history = (conexao.history || []).map((item) => ({ ...item, instance: item.instance || conexao.instance }));
@@ -327,7 +328,7 @@ export function configurar(empresaId, { instance, autoReconnect, numeroExibicao 
  */
 export async function vigiarConexao(empresaId, { now = Date.now(), fetchImpl, tipoCanal = 'cliente' } = {}) {
   const conexao = obterConexao(empresaId, tipoCanal);
-  const key = String(empresaId);
+  const key = chaveConexao(empresaId, tipoCanal);
   if (disconnecting.has(key)) return { action: 'skip', reason: 'disconnect_in_progress' };
   if (!conexao.ativo || conexao.autoReconnect === false || !conexao.instance) return { action: 'skip', reason: 'inactive' };
   const epoch = disconnectEpoch.get(key) || 0;
@@ -366,7 +367,7 @@ export async function vigiarTodas(options = {}) {
 /** Evento connection.update recebido pelo webhook do canal. */
 export function registrarEventoConexao(empresaId, state, tipoCanal = 'cliente') {
   const conexao = obterConexao(empresaId, tipoCanal);
-  if (disconnecting.has(String(empresaId)) || (!conexao.ativo && conexao.autoReconnect === false)) return visaoPublica(conexao);
+  if (disconnecting.has(chaveConexao(empresaId, tipoCanal)) || (!conexao.ativo && conexao.autoReconnect === false)) return visaoPublica(conexao);
   aplicarEstado(conexao, { ok: true, state });
   if (conexao.state !== 'open') conexao.nextReconnectAt = null; // reconecta no próximo ciclo do vigia
   save();

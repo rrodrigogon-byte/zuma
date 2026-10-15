@@ -70,6 +70,7 @@ const NAV_ADMIN_GROUPS = [
       { to: '/admin/financeiro',icon: '💰', label: 'Financeiro' },
       { to: '/admin/whatsapp', icon: '💬', label: 'WhatsApp da empresa' },
       { to: '/admin/whatsapp-gestao', icon: '▣', label: 'WhatsApp Gestão' },
+      { to: '/admin/whatsapp-lancamentos', icon: '🧾', label: 'WhatsApp Lançamentos' },
     ],
   },
   {
@@ -175,6 +176,7 @@ const NAV_DINO_GROUPS = [
       { to: '/admin/barbearia-erp?area=relacionamento&tab=Fidelidade', icon: '☆', label: 'Fidelidade' },
       { to: '/admin/whatsapp', icon: '✆', label: 'WhatsApp' },
       { to: '/admin/whatsapp-gestao', icon: '▣', label: 'WhatsApp Gestão' },
+      { to: '/admin/whatsapp-lancamentos', icon: '🧾', label: 'WhatsApp Lançamentos' },
       { to: '/admin/cerebro-ia', icon: '◈', label: 'Cérebro do atendente' },
       { to: '/admin/barbearia-erp?area=integracoes&tab=Integra%C3%A7%C3%B5es', icon: '✦', label: 'Atendente IA' },
       { to: '/admin/omnichannel', icon: '⇄', label: 'Canais e resgates' },

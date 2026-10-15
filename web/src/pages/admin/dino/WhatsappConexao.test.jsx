@@ -307,3 +307,16 @@ describe('WhatsappConexao · saúde operacional IA', () => {
     await unmount(renderer)
   })
 })
+
+it('usa rota e link exclusivos no canal Lançamentos', async () => {
+  globalThis.window.location.pathname = '/admin/whatsapp-lancamentos'
+  let renderer
+  await act(async () => { renderer = create(<WhatsappConexao />) })
+  await tick()
+  const html = textOf(renderer)
+  expect(html).toContain('Lançamentos')
+  expect(html).toContain('https://painel.test/admin/whatsapp-lancamentos')
+  expect(apiMock.get.mock.calls.some(([path]) => path === '/api/admin/barbearia/whatsapp-conexao-lancamentos?atualizar=1')).toBe(true)
+  expect(apiMock.get.mock.calls.some(([path]) => path === '/api/admin/commerce/whatsapp-ai/status?canal=lancamentos')).toBe(true)
+  await unmount(renderer)
+})

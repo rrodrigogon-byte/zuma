@@ -13,13 +13,14 @@ export function webhookSecretEnvFor(empresa) {
 
 // Corpo para mudar o estado do atendente sem perder o que já está salvo no canal
 // (instância, nome, cabeçalho, capacidades e segmento).
-export function channelStatusPayload(channel = {}, { status, instance, empresa } = {}) {
+export function channelStatusPayload(channel = {}, { status, instance, empresa, tipoCanal } = {}) {
   const ativo = status === 'ativo'
   return {
     instance: channel.instance || instance || '',
     displayName: channel.nome || `Atendimento ${empresa?.nome || 'da empresa'}`.slice(0, 120),
     status: ativo ? 'ativo' : 'rascunho',
     confirmed: ativo,
+    ...(tipoCanal ? { tipoCanal } : {}),
     webhookSecretEnv: webhookSecretEnvFor(empresa),
     webhookHeader: channel.webhookHeader || 'x-setpoint-webhook-token',
     capabilities: channel.capabilities || {},

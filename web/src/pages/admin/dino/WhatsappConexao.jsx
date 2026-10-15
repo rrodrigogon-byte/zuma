@@ -36,10 +36,14 @@ export default function WhatsappConexao() {
 
 function WhatsappConexaoEmpresa() {
   const { empresaAtiva, lojaAtiva, user } = useAuth()
-  const tipoCanal = typeof window !== 'undefined' && String(window.location?.pathname || '').includes('/admin/whatsapp-gestao') ? 'gestao' : 'cliente'
-  const canalLabel = tipoCanal === 'gestao' ? 'Gestão' : 'Clientes'
-  const basePath = tipoCanal === 'gestao' ? `${BASE}-gestao` : BASE
-  const aiStatusPath = tipoCanal === 'gestao' ? '/api/admin/commerce/whatsapp-ai/status?canal=gestao' : '/api/admin/commerce/whatsapp-ai/status'
+  const pathname = typeof window !== 'undefined' ? String(window.location?.pathname || '') : ''
+  const tipoCanal = pathname.includes('/admin/whatsapp-lancamentos') ? 'lancamentos' : pathname.includes('/admin/whatsapp-gestao') ? 'gestao' : 'cliente'
+  const canalLabel = tipoCanal === 'lancamentos' ? 'Lançamentos' : tipoCanal === 'gestao' ? 'Gestão' : 'Clientes'
+  const basePath = tipoCanal === 'lancamentos' ? `${BASE}-lancamentos` : tipoCanal === 'gestao' ? `${BASE}-gestao` : BASE
+  const channelQuery = tipoCanal === 'cliente' ? '' : `?canal=${tipoCanal}`
+  const aiStatusPath = `/api/admin/commerce/whatsapp-ai/status${channelQuery}`
+  const aiChannelPath = `/api/admin/commerce/whatsapp-ai/channel${channelQuery}`
+  const aiWebhookPath = `/api/admin/commerce/whatsapp-ai/channel/sync-webhook${channelQuery}`
   const { toast } = useToast()
   const tenantId = String(empresaAtiva?.id || '')
   const lojaId = String(lojaAtiva?.id || '')
@@ -269,10 +273,12 @@ function WhatsappConexaoEmpresa() {
     const scope = scopeRef.current
     setBusy('canal')
     try {
-      await api.post('/api/admin/commerce/whatsapp-ai/channel', {
-        instance: conexao.instance, displayName: `Atendimento ${empresaAtiva?.nome || 'da empresa'}`.slice(0, 120), status: 'rascunho',
+      await api.post(aiChannelPath, {
+        instance: conexao.instance, displayName: `${canalLabel} · ${empresaAtiva?.nome || 'da empresa'}`.slice(0, 120), status: 'rascunho', tipoCanal,
         webhookSecretEnv: webhookSecretEnvFor(empresaAtiva), webhookHeader: 'x-setpoint-webhook-token',
-        capabilities: { humanized: true, captureLeads: true, operateStore: true, manageAppointments: true, sendPromotions: false, reminders: true, humanHandoff: true },
+        capabilities: tipoCanal === 'cliente'
+          ? { humanized: true, captureLeads: true, operateStore: true, manageAppointments: true, sendPromotions: false, reminders: true, humanHandoff: true, financialOperations: false }
+          : { humanized: true, captureLeads: false, operateStore: false, manageAppointments: false, sendPromotions: false, reminders: false, humanHandoff: true, financialOperations: tipoCanal === 'lancamentos' },
       })
       if (scope === scopeRef.current) { toast('Canal criado em rascunho.'); await recarregarIa() }
     } catch (error) { if (scope === scopeRef.current) toast(error.message, true) }
@@ -286,7 +292,7 @@ function WhatsappConexaoEmpresa() {
     const scope = scopeRef.current
     setBusy('canal')
     try {
-      await api.post('/api/admin/commerce/whatsapp-ai/channel', channelStatusPayload(ia.channel, { status, instance: conexao?.instance, empresa: empresaAtiva }))
+      await api.post(aiChannelPath, channelStatusPayload(ia.channel, { status, instance: conexao?.instance, empresa: empresaAtiva, tipoCanal }))
       if (scope === scopeRef.current) { toast(status === 'ativo' ? 'Atendente ativado.' : 'Atendente pausado.'); await recarregarIa() }
     } catch (error) { if (scope === scopeRef.current) toast(error.message, true) }
     finally { if (scope === scopeRef.current) setBusy('') }
@@ -296,7 +302,7 @@ function WhatsappConexaoEmpresa() {
     const scope = scopeRef.current
     setBusy('webhook')
     try {
-      const data = await api.post('/api/admin/commerce/whatsapp-ai/channel/sync-webhook', { confirmed: true })
+      const data = await api.post(aiWebhookPath, { confirmed: true })
       if (scope === scopeRef.current) {
         setWebhookInfo(data.manual ? data.instructions : '')
         toast(data.manual ? 'O backend não registra webhook sozinho: veja as instruções.' : 'Webhook registrado no backend.')
@@ -326,7 +332,7 @@ function WhatsappConexaoEmpresa() {
   }
 
   async function copiarLinkCadastro() {
-    const url = `${window.location.origin}/admin/whatsapp${tipoCanal === 'gestao' ? '-gestao' : ''}`
+    const url = `${window.location.origin}/admin/whatsapp${tipoCanal === 'lancamentos' ? '-lancamentos' : tipoCanal === 'gestao' ? '-gestao' : ''}`
     await copiarTexto(url, 'Link de cadastro copiado.', 'Não foi possível copiar o link de cadastro.')
   }
 
@@ -350,12 +356,12 @@ function WhatsappConexaoEmpresa() {
       <div className="c360-card-head"><h2 id="wa-registration">Cadastrar o número WhatsApp · {canalLabel}</h2><span className="dadm-operational-scope">Disponível para todas as empresas</span></div>
       <p>Use este link depois de selecionar a empresa no menu lateral. O cadastro, o QR e o status sempre ficam isolados na empresa ativa; uma empresa nunca reutiliza a linha de outra.</p>
       <div className="dadm-wa-registration-link">
-        <input className="c360-input" aria-label="Link de cadastro do número WhatsApp" readOnly value={`${window.location.origin}/admin/whatsapp${tipoCanal === 'gestao' ? '-gestao' : ''}`} onFocus={(event) => event.currentTarget.select()} />
+        <input className="c360-input" aria-label="Link de cadastro do número WhatsApp" readOnly value={`${window.location.origin}/admin/whatsapp${tipoCanal === 'lancamentos' ? '-lancamentos' : tipoCanal === 'gestao' ? '-gestao' : ''}`} onFocus={(event) => event.currentTarget.select()} />
         <button type="button" className="c360-btn ghost" onClick={copiarLinkCadastro}>Copiar link</button>
-        <Link className="c360-btn primary" to={tipoCanal === 'gestao' ? '/admin/whatsapp-gestao' : '/admin/whatsapp'}>Abrir cadastro</Link>
+        <Link className="c360-btn primary" to={tipoCanal === 'lancamentos' ? '/admin/whatsapp-lancamentos' : tipoCanal === 'gestao' ? '/admin/whatsapp-gestao' : '/admin/whatsapp'}>Abrir cadastro</Link>
       </div>
       <small className="dadm-muted">O administrador ou gestor da empresa deve abrir o link, conferir a empresa ativa e então gerar o QR para parear o aparelho.</small>
-      <p className="dadm-muted">{tipoCanal === 'gestao' ? 'Este é o canal interno para perguntas do sistema e despesas pendentes.' : 'Para configurar o número interno de gestão sem remover o atendimento a clientes, use'}{' '}<Link to={tipoCanal === 'gestao' ? '/admin/whatsapp' : '/admin/whatsapp-gestao'}>{tipoCanal === 'gestao' ? 'voltar ao WhatsApp de clientes' : 'abrir o WhatsApp Gestão'}</Link>.</p>
+      <p className="dadm-muted">{tipoCanal === 'lancamentos' ? 'Este é o canal interno exclusivo para receber notas e preparar despesas pendentes. Para perguntas gerais, use' : tipoCanal === 'gestao' ? 'Este é o canal interno somente leitura para perguntas gerais do sistema. Para lançar notas, use' : 'Para configurar os canais internos sem remover o atendimento a clientes, use'}{' '}<Link to={tipoCanal === 'lancamentos' ? '/admin/whatsapp-gestao' : tipoCanal === 'gestao' ? '/admin/whatsapp-lancamentos' : '/admin/whatsapp-gestao'}>{tipoCanal === 'lancamentos' ? 'abrir o WhatsApp Gestão' : tipoCanal === 'gestao' ? 'abrir o WhatsApp Lançamentos' : 'abrir o WhatsApp Gestão'}</Link>.</p>
     </section>
     {erro && <p className="dadm-note danger" role="alert">{erro}</p>}
     {!conexao && !erro && <section className="dadm-card" role="status">Consultando o estado do WhatsApp…</section>}
