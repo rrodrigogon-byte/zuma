@@ -17,6 +17,14 @@ const BACKOFF_MINUTES = [1, 2, 5, 10, 15, 30];
 const disconnecting = new Set();
 const disconnectEpoch = new Map();
 
+function normalizarTipoCanal(value = 'cliente') {
+  return String(value || 'cliente').toLowerCase() === 'gestao' ? 'gestao' : 'cliente';
+}
+
+function chaveConexao(empresaId, tipoCanal = 'cliente') {
+  return `${String(empresaId)}:${normalizarTipoCanal(tipoCanal)}`;
+}
+
 function store() {
   const state = db();
   state.whatsappConexaoKytto ||= { empresas: {} };
@@ -28,30 +36,44 @@ function store() {
 // ambiente (CHATBOT_BACKEND_INSTANCE) vai para a empresa de CHATBOT_BACKEND_EMPRESA_ID
 // quando definida; sem ela, para a primeira empresa que abrir a conexão, nunca para a
 // empresa 'principal' da plataforma. Empresa sem instância não conecta nem envia.
-export function instanciaEmUso(instance, exceto = '') {
+export function instanciaEmUso(instance, exceto = '', tipoCanal = '') {
   if (!instance) return false;
-  return Object.values(store()).some(c => String(c.empresaId) !== String(exceto) && c.instance === instance);
+  const tipo = tipoCanal ? normalizarTipoCanal(tipoCanal) : '';
+  return Object.values(store()).some(c => {
+    if (c.instance !== instance) return false;
+    if (String(c.empresaId) !== String(exceto)) return true;
+    return tipo ? normalizarTipoCanal(c.tipoCanal) !== tipo : true;
+  });
 }
-function instanciaPadrao(key) {
+function instanciaPadrao(key, tipoCanal = 'cliente') {
+  const perfil = normalizarTipoCanal(tipoCanal);
+
   // Instância registrada para esta empresa no servidor (CHATBOT_BACKEND_INSTANCES) vem primeiro.
-  const registrada = instancesOfCompany(key).find((nome) => !instanciaEmUso(nome, key));
+  const registrada = instancesOfCompany(key).find((nome) => !instanciaEmUso(nome, key, perfil));
   if (registrada) return registrada;
   const inst = validInstance(chatbotBackendConfig().instance || '');
   if (!inst) return '';
   const dono = String(process.env.CHATBOT_BACKEND_EMPRESA_ID || '').trim();
   if (dono) return dono === key ? inst : '';
   if (key === 'principal') return '';
-  return instanciaEmUso(inst, key) ? '' : inst;
+  return instanciaEmUso(inst, key, perfil) ? '' : inst;
 }
 function semInstancia(conexao) {
   return conexao.instance ? null : { ok: false, error: 'Esta empresa ainda não tem uma instância de WhatsApp atribuída. Peça à administração da plataforma.', code: 'WHATSAPP_INSTANCE_UNASSIGNED' };
 }
-export function obterConexao(empresaId) {
+export function obterConexao(empresaId, tipoCanal = 'cliente') {
   const empresas = store();
   const key = String(empresaId);
-  empresas[key] ||= {
+  const perfil = normalizarTipoCanal(tipoCanal);
+  const storageKey = chaveConexao(key, perfil);
+  if (!empresas[storageKey] && perfil === 'cliente' && empresas[key]?.empresaId) {
+    empresas[storageKey] = { ...empresas[key], tipoCanal: 'cliente' };
+    delete empresas[key];
+  }
+  empresas[storageKey] ||= {
     empresaId: key,
-    instance: instanciaPadrao(key),
+    tipoCanal: perfil,
+    instance: instanciaPadrao(key, perfil),
     autoReconnect: true,
     numeroExibicao: '',
     state: 'unknown',
@@ -66,7 +88,7 @@ export function obterConexao(empresaId) {
     history: [],
     ativo: false,
   };
-  return empresas[key];
+  return empresas[storageKey];
 }
 
 export function conexoesAtivas() {
@@ -152,8 +174,8 @@ export function visaoPublica(conexao, { numeroCompleto = false } = {}) {
   };
 }
 
-export async function verificarConexao(empresaId, { fetchImpl } = {}) {
-  const conexao = obterConexao(empresaId);
+export async function verificarConexao(empresaId, { fetchImpl, tipoCanal = 'cliente' } = {}) {
+  const conexao = obterConexao(empresaId, tipoCanal);
   if (whatsappProviderName() !== 'chatbot_backend') {
     conexao.lastError = 'provedor_nao_e_nossagente';
     return visaoPublica(conexao);
@@ -182,8 +204,8 @@ async function desenharQr(resultado) {
 }
 
 /** Gera QR (ou reabre a sessão salva). O QR não é persistido. */
-export async function gerarQr(empresaId, { usuario = '', fetchImpl, registrarHistorico = true } = {}) {
-  const conexao = obterConexao(empresaId);
+export async function gerarQr(empresaId, { usuario = '', fetchImpl, registrarHistorico = true, tipoCanal = 'cliente' } = {}) {
+  const conexao = obterConexao(empresaId, tipoCanal);
   const bloqueio = semInstancia(conexao);
   if (bloqueio) return { ...bloqueio, conexao: visaoPublica(conexao) };
   if (disconnecting.has(String(empresaId))) return { ok: false, code: 'WHATSAPP_DISCONNECT_IN_PROGRESS', error: 'Desconexão em andamento.', conexao: visaoPublica(conexao) };
@@ -219,8 +241,8 @@ export async function gerarQr(empresaId, { usuario = '', fetchImpl, registrarHis
   return { ok: true, qr, pairingCode: resultado.pairingCode || '', conexao: visaoPublica(conexao) };
 }
 
-export async function desconectar(empresaId, { usuario = '', fetchImpl } = {}) {
-  const conexao = obterConexao(empresaId);
+export async function desconectar(empresaId, { usuario = '', fetchImpl, tipoCanal = 'cliente' } = {}) {
+  const conexao = obterConexao(empresaId, tipoCanal);
   const bloqueio = semInstancia(conexao);
   if (bloqueio) return { ...bloqueio, conexao: visaoPublica(conexao) };
   const key = String(empresaId);
@@ -259,8 +281,9 @@ export async function desconectar(empresaId, { usuario = '', fetchImpl } = {}) {
   }
 }
 
-export function configurar(empresaId, { instance, autoReconnect, numeroExibicao } = {}, { podeTrocarInstancia = false } = {}) {
-  const conexao = obterConexao(empresaId);
+export function configurar(empresaId, { instance, autoReconnect, numeroExibicao } = {}, { podeTrocarInstancia = false, tipoCanal = 'cliente' } = {}) {
+  const perfil = normalizarTipoCanal(tipoCanal);
+  const conexao = obterConexao(empresaId, perfil);
   const reference = numeroExibicao !== undefined ? numeroReferencia(numeroExibicao) : undefined;
   if (instance !== undefined && instance !== conexao.instance) {
     // Trocar a instância muda qual número do backend a empresa controla: só a
@@ -268,7 +291,7 @@ export function configurar(empresaId, { instance, autoReconnect, numeroExibicao 
     if (!podeTrocarInstancia) throw new Error('A instância é atribuída pela administração da plataforma.');
     const valida = validInstance(instance);
     if (!valida) throw new Error('Instância inválida: use letras minúsculas, números, - ou _.');
-    if (instanciaEmUso(valida, empresaId)) throw new Error('Esta instância já pertence a outra empresa.');
+    if (instanciaEmUso(valida, empresaId, perfil)) throw new Error('Esta instância já pertence a outra empresa ou canal.');
     if (valida !== conexao.instance) {
       const key = String(empresaId);
       if (disconnecting.has(key)) throw new Error('Aguarde o fim da desconexão antes de trocar a instância.');
@@ -302,8 +325,8 @@ export function configurar(empresaId, { instance, autoReconnect, numeroExibicao 
  * válida o backend reabre sozinho; se o WhatsApp exigir, um novo QR fica
  * disponível na tela.
  */
-export async function vigiarConexao(empresaId, { now = Date.now(), fetchImpl } = {}) {
-  const conexao = obterConexao(empresaId);
+export async function vigiarConexao(empresaId, { now = Date.now(), fetchImpl, tipoCanal = 'cliente' } = {}) {
+  const conexao = obterConexao(empresaId, tipoCanal);
   const key = String(empresaId);
   if (disconnecting.has(key)) return { action: 'skip', reason: 'disconnect_in_progress' };
   if (!conexao.ativo || conexao.autoReconnect === false || !conexao.instance) return { action: 'skip', reason: 'inactive' };
@@ -334,15 +357,15 @@ export async function vigiarConexao(empresaId, { now = Date.now(), fetchImpl } =
 export async function vigiarTodas(options = {}) {
   const resultados = [];
   for (const conexao of conexoesAtivas()) {
-    try { resultados.push({ empresaId: conexao.empresaId, ...(await vigiarConexao(conexao.empresaId, options)) }); }
+    try { resultados.push({ empresaId: conexao.empresaId, tipoCanal: conexao.tipoCanal || 'cliente', ...(await vigiarConexao(conexao.empresaId, { ...options, tipoCanal: conexao.tipoCanal || 'cliente' })) }); }
     catch (error) { resultados.push({ empresaId: conexao.empresaId, action: 'error', error: String(error?.message || error).slice(0, 120) }); }
   }
   return resultados;
 }
 
 /** Evento connection.update recebido pelo webhook do canal. */
-export function registrarEventoConexao(empresaId, state) {
-  const conexao = obterConexao(empresaId);
+export function registrarEventoConexao(empresaId, state, tipoCanal = 'cliente') {
+  const conexao = obterConexao(empresaId, tipoCanal);
   if (disconnecting.has(String(empresaId)) || (!conexao.ativo && conexao.autoReconnect === false)) return visaoPublica(conexao);
   aplicarEstado(conexao, { ok: true, state });
   if (conexao.state !== 'open') conexao.nextReconnectAt = null; // reconecta no próximo ciclo do vigia

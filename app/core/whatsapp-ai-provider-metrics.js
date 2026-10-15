@@ -17,6 +17,11 @@ export const WHATSAPP_AI_PROVIDER_RUNS_24H_SQL = `SELECT COUNT(*)::int AS total,
           AND criado_em >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
           AND criado_em <= CURRENT_TIMESTAMP`
 
+export const WHATSAPP_AI_PROVIDER_RUNS_24H_CHANNEL_SQL = `${WHATSAPP_AI_PROVIDER_RUNS_24H_SQL}
+          AND canal_id IN (SELECT id FROM canais_integracao
+                             WHERE empresa_id = $1 AND loja_id = $2
+                               AND provedor = 'whatsapp' AND tipo_canal = $3)`
+
 function safeInteger(value) {
   return Number.isSafeInteger(value) && value >= 0 ? value : null
 }

@@ -1271,6 +1271,9 @@ export function createWhatsappAiToolExecutor(context) {
   return async (name, args) => {
     const tool = TOOL_MAP[name];
     if (!tool) throw new WhatsappAiToolError('ferramenta não permitida', 'TOOL_NOT_ALLOWED');
+    if (context.channelType === 'gestao' && !['preparar_despesa', 'solicitar_humano'].includes(name)) {
+      throw new WhatsappAiToolError('esta ferramenta não está disponível no canal interno de gestão', 'MANAGEMENT_TOOL_DISABLED');
+    }
     const scoped = contextScope(context);
     if (!capabilityAllows(name, scoped.capabilities)) throw new WhatsappAiToolError('esta capacidade está desativada para a unidade', 'CAPABILITY_DISABLED');
     if (name.startsWith('preparar_')) {

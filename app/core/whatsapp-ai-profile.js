@@ -535,13 +535,19 @@ export function validateWhatsappAiOutput(text, { traces = [], recommendationWasR
 }
 
 export async function whatsappAiPolicyMetrics(context = {}) {
+  const tipoCanal = String(context.tipoCanal || 'cliente').toLowerCase() === 'gestao' ? 'gestao' : 'cliente';
   const result = await db.queryRead(
     `SELECT tipo, COUNT(*)::int AS total
        FROM whatsapp_ai_policy_events
       WHERE empresa_id = $1 AND loja_id = $2
+        AND sessao_id IN (SELECT id FROM whatsapp_ai_sessions
+                           WHERE empresa_id = $1 AND loja_id = $2
+                             AND canal_id IN (SELECT id FROM canais_integracao
+                                               WHERE empresa_id = $1 AND loja_id = $2
+                                                 AND provedor = 'whatsapp' AND tipo_canal = $3))
         AND criado_em >= CURRENT_TIMESTAMP - INTERVAL '24 hours'
       GROUP BY tipo`,
-    [uuid(context.empresaId, 'empresaId'), uuid(context.lojaId, 'lojaId')],
+    [uuid(context.empresaId, 'empresaId'), uuid(context.lojaId, 'lojaId'), tipoCanal],
   );
   return Object.fromEntries(result.rows.map(row => [row.tipo, Number(row.total || 0)]));
 }

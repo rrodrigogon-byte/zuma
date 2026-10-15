@@ -36,6 +36,10 @@ export default function WhatsappConexao() {
 
 function WhatsappConexaoEmpresa() {
   const { empresaAtiva, lojaAtiva, user } = useAuth()
+  const tipoCanal = typeof window !== 'undefined' && String(window.location?.pathname || '').includes('/admin/whatsapp-gestao') ? 'gestao' : 'cliente'
+  const canalLabel = tipoCanal === 'gestao' ? 'Gestão' : 'Clientes'
+  const basePath = tipoCanal === 'gestao' ? `${BASE}-gestao` : BASE
+  const aiStatusPath = tipoCanal === 'gestao' ? '/api/admin/commerce/whatsapp-ai/status?canal=gestao' : '/api/admin/commerce/whatsapp-ai/status'
   const { toast } = useToast()
   const tenantId = String(empresaAtiva?.id || '')
   const lojaId = String(lojaAtiva?.id || '')
@@ -74,7 +78,7 @@ function WhatsappConexaoEmpresa() {
     statusFlightRef.current = flight
     if (foreground) setAtualizando(true)
     try {
-      const data = await api.get(`${BASE}?atualizar=1`)
+      const data = await api.get(`${basePath}?atualizar=1`)
       if (scope !== scopeRef.current || sequence !== statusSeqRef.current) return
       setConexao(data.conexao)
       setPodeGerenciar(Boolean(data.podeGerenciar))
@@ -91,7 +95,7 @@ function WhatsappConexaoEmpresa() {
       if (statusFlightRef.current === flight) statusFlightRef.current = null
       if (scope === scopeRef.current && sequence === statusSeqRef.current) setAtualizando(false)
     }
-  }, [tenantId])
+  }, [tenantId, tipoCanal])
 
   const recarregarIa = useCallback(async () => {
     if (!tenantId || !lojaId) {
@@ -106,7 +110,7 @@ function WhatsappConexaoEmpresa() {
     const sequence = ++iaSeqRef.current
     iaFlightRef.current = flight
     try {
-      const data = await api.get('/api/admin/commerce/whatsapp-ai/status', { headers: { 'X-Empresa-Id': tenantId, 'X-Loja-Id': lojaId } })
+      const data = await api.get(aiStatusPath, { headers: { 'X-Empresa-Id': tenantId, 'X-Loja-Id': lojaId } })
       if (scope === scopeRef.current && sequence === iaSeqRef.current) {
         const normalized = normalizeWhatsappAiOperationalStatus(data)
         setIaOperational(normalized)
@@ -127,7 +131,7 @@ function WhatsappConexaoEmpresa() {
     } finally {
       if (iaFlightRef.current === flight) iaFlightRef.current = null
     }
-  }, [tenantId, lojaId])
+  }, [tenantId, lojaId, tipoCanal])
 
   const diagnosticar = useCallback(async () => {
     if (diagFlightRef.current) return
@@ -136,7 +140,7 @@ function WhatsappConexaoEmpresa() {
     diagFlightRef.current = flight
     setBusy((value) => value || 'diag')
     try {
-      const data = await api.get(`${BASE}/diagnostico`)
+      const data = await api.get(`${basePath}/diagnostico`)
       if (scope !== scopeRef.current) return
       setDiag(data)
       setErroDiag('')
@@ -201,7 +205,7 @@ function WhatsappConexaoEmpresa() {
     const scope = scopeRef.current
     if (!auto) setBusy('qr')
     try {
-      const data = await api.post(`${BASE}/qr`, { auto })
+      const data = await api.post(`${basePath}/qr`, { auto })
       if (scope !== scopeRef.current) return
       statusSeqRef.current += 1
       statusFlightRef.current = null
@@ -219,7 +223,7 @@ function WhatsappConexaoEmpresa() {
     const scope = scopeRef.current
     setBusy('config')
     try {
-      const data = await api.put(`${BASE}/config`, patch)
+      const data = await api.put(`${basePath}/config`, patch)
       if (scope !== scopeRef.current) return
       statusSeqRef.current += 1
       statusFlightRef.current = null
@@ -234,7 +238,7 @@ function WhatsappConexaoEmpresa() {
     const scope = scopeRef.current
     setBusy('verificar')
     try {
-      const data = await api.post(`${BASE}/verificar`, {})
+      const data = await api.post(`${basePath}/verificar`, {})
       if (scope !== scopeRef.current) return
       statusSeqRef.current += 1
       statusFlightRef.current = null
@@ -249,7 +253,7 @@ function WhatsappConexaoEmpresa() {
     const scope = scopeRef.current
     setBusy('sair')
     try {
-      const data = await api.post(`${BASE}/desconectar`, { confirmado: true })
+      const data = await api.post(`${basePath}/desconectar`, { confirmado: true })
       if (scope !== scopeRef.current) return
       statusSeqRef.current += 1
       statusFlightRef.current = null
@@ -306,7 +310,7 @@ function WhatsappConexaoEmpresa() {
     const scope = scopeRef.current
     setBusy('teste')
     try {
-      await api.post(`${BASE}/teste`, { confirmado: true, telefone: teste.telefone })
+      await api.post(`${basePath}/teste`, { confirmado: true, telefone: teste.telefone })
       if (scope === scopeRef.current) { toast('Teste aceito pelo backend; confira a entrega no aparelho.'); setTeste({ telefone: '', open: false }) }
     } catch (error) { if (scope === scopeRef.current) toast(error.message, true) }
     finally { if (scope === scopeRef.current) setBusy('') }
@@ -322,7 +326,7 @@ function WhatsappConexaoEmpresa() {
   }
 
   async function copiarLinkCadastro() {
-    const url = `${window.location.origin}/admin/whatsapp`
+    const url = `${window.location.origin}/admin/whatsapp${tipoCanal === 'gestao' ? '-gestao' : ''}`
     await copiarTexto(url, 'Link de cadastro copiado.', 'Não foi possível copiar o link de cadastro.')
   }
 
@@ -339,18 +343,19 @@ function WhatsappConexaoEmpresa() {
 
   return <div className="dadm-page dadm-wa-page">
     <header className="dadm-head dadm-wa-head">
-      <div><div className="dadm-eyebrow">Relacionamento & IA · {empresaAtiva?.nome || 'Empresa'}</div><h1>WhatsApp da empresa</h1><p>Acompanhe a linha em uso, a conexão do atendente e a atividade com atualização automática — sem expor a chave de API.</p></div>
+      <div><div className="dadm-eyebrow">Relacionamento & IA · {empresaAtiva?.nome || 'Empresa'}</div><h1>WhatsApp · {canalLabel}</h1><p>Acompanhe a linha em uso, a conexão do atendente e a atividade com atualização automática — sem expor a chave de API.</p></div>
       <div className="dadm-actions"><button type="button" className="c360-btn ghost" disabled={atualizando} onClick={() => { carregar(true); recarregarIa(); if (podeGerenciar && !diagBloqueado) diagnosticar() }}>{atualizando ? 'Atualizando…' : 'Atualizar agora'}</button></div>
     </header>
     <section className="dadm-card dadm-wa-registration" aria-labelledby="wa-registration">
-      <div className="c360-card-head"><h2 id="wa-registration">Cadastrar o número WhatsApp</h2><span className="dadm-operational-scope">Disponível para todas as empresas</span></div>
+      <div className="c360-card-head"><h2 id="wa-registration">Cadastrar o número WhatsApp · {canalLabel}</h2><span className="dadm-operational-scope">Disponível para todas as empresas</span></div>
       <p>Use este link depois de selecionar a empresa no menu lateral. O cadastro, o QR e o status sempre ficam isolados na empresa ativa; uma empresa nunca reutiliza a linha de outra.</p>
       <div className="dadm-wa-registration-link">
-        <input className="c360-input" aria-label="Link de cadastro do número WhatsApp" readOnly value={`${window.location.origin}/admin/whatsapp`} onFocus={(event) => event.currentTarget.select()} />
+        <input className="c360-input" aria-label="Link de cadastro do número WhatsApp" readOnly value={`${window.location.origin}/admin/whatsapp${tipoCanal === 'gestao' ? '-gestao' : ''}`} onFocus={(event) => event.currentTarget.select()} />
         <button type="button" className="c360-btn ghost" onClick={copiarLinkCadastro}>Copiar link</button>
-        <Link className="c360-btn primary" to="/admin/whatsapp">Abrir cadastro</Link>
+        <Link className="c360-btn primary" to={tipoCanal === 'gestao' ? '/admin/whatsapp-gestao' : '/admin/whatsapp'}>Abrir cadastro</Link>
       </div>
       <small className="dadm-muted">O administrador ou gestor da empresa deve abrir o link, conferir a empresa ativa e então gerar o QR para parear o aparelho.</small>
+      <p className="dadm-muted">{tipoCanal === 'gestao' ? 'Este é o canal interno para perguntas do sistema e despesas pendentes.' : 'Para configurar o número interno de gestão sem remover o atendimento a clientes, use'}{' '}<Link to={tipoCanal === 'gestao' ? '/admin/whatsapp' : '/admin/whatsapp-gestao'}>{tipoCanal === 'gestao' ? 'voltar ao WhatsApp de clientes' : 'abrir o WhatsApp Gestão'}</Link>.</p>
     </section>
     {erro && <p className="dadm-note danger" role="alert">{erro}</p>}
     {!conexao && !erro && <section className="dadm-card" role="status">Consultando o estado do WhatsApp…</section>}
@@ -358,6 +363,7 @@ function WhatsappConexaoEmpresa() {
     <WhatsappHumanQueue
       empresaId={tenantId}
       lojaId={lojaId}
+      tipoCanal={tipoCanal}
       empresaNome={empresaAtiva?.nome}
       lojaNome={lojaAtiva?.nome}
       operatorLabel={user?.nome || user?.name || user?.email}

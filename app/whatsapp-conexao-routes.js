@@ -27,11 +27,13 @@ function allowTest(empresaId, now = Date.now()) {
   return true;
 }
 
-export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLojaId, audit, save, enviarMensagem, fetchImpl, isPlatformAdmin = () => false } = {}) {
+export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLojaId, audit, save, enviarMensagem, fetchImpl, isPlatformAdmin = () => false, basePath = BASE, tipoCanal = 'cliente' } = {}) {
+  const perfil = String(tipoCanal || 'cliente').toLowerCase() === 'gestao' ? 'gestao' : 'cliente';
+  const routeBase = basePath;
   const who = (req) => req.user?.email || req.user?.nome || '';
   // `saida` acompanha toda resposta da conexão para a tela saber se o envio está liberado.
   const view = (req, empresaId) => ({
-    ...conexaoKytto.visaoPublica(conexaoKytto.obterConexao(empresaId), {
+    ...conexaoKytto.visaoPublica(conexaoKytto.obterConexao(empresaId, perfil), {
       numeroCompleto: GESTORES.has(String(req.user?.role || '')),
     }),
     saida: egressResumo(),
@@ -41,38 +43,38 @@ export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLoja
     const empresaId = legacyEmpresaId(req);
     try {
       if (req.query?.atualizar === '1' && whatsappProviderName() === 'chatbot_backend') {
-        await conexaoKytto.verificarConexao(empresaId, { fetchImpl });
+        await conexaoKytto.verificarConexao(empresaId, { fetchImpl, tipoCanal: perfil });
       }
       res.set('Cache-Control', 'private, no-store');
       res.json({ ok: true, conexao: view(req, empresaId), podeGerenciar: GESTORES.has(String(req.user?.role || '')) });
     } catch (error) { res.status(502).json({ error: 'Não foi possível consultar o backend do WhatsApp.', detail: String(error?.message || '').slice(0, 120) }); }
   });
 
-  app.post(`${BASE}/qr`, async (req, res) => {
+  app.post(`${routeBase}/qr`, async (req, res) => {
     if (!gestor(req, res)) return;
     if (whatsappProviderName() !== 'chatbot_backend') return res.status(409).json({ error: 'Defina WHATSAPP_PROVIDER=chatbot_backend no servidor para usar o backend do NossaGente.' });
     const empresaId = legacyEmpresaId(req);
     const auto = req.body?.auto === true;
-    const result = await conexaoKytto.gerarQr(empresaId, { usuario: who(req), fetchImpl, registrarHistorico: !auto });
+    const result = await conexaoKytto.gerarQr(empresaId, { usuario: who(req), fetchImpl, registrarHistorico: !auto, tipoCanal: perfil });
     if (!auto) { audit(req, 'WHATSAPP CONEXAO QR', `instancia=${result.conexao.instance}; ok=${result.ok}`); save(); }
     res.status(result.ok ? 200 : result.code === 'WHATSAPP_INSTANCE_UNASSIGNED' ? 409 : 502).json({ ...result, conexao: view(req, empresaId) });
   });
 
-  app.post(`${BASE}/desconectar`, async (req, res) => {
+  app.post(`${routeBase}/desconectar`, async (req, res) => {
     if (!gestor(req, res)) return;
     if (req.body?.confirmado !== true) return res.status(400).json({ error: 'Confirme a desconexão.' });
     const empresaId = legacyEmpresaId(req);
-    const result = await conexaoKytto.desconectar(empresaId, { usuario: who(req), fetchImpl });
+    const result = await conexaoKytto.desconectar(empresaId, { usuario: who(req), fetchImpl, tipoCanal: perfil });
     audit(req, 'WHATSAPP CONEXAO DESCONECTAR', `instancia=${result.conexao.instance}; ok=${result.ok}`);
     save();
     res.status(result.ok ? 200 : result.code === 'WHATSAPP_INSTANCE_UNASSIGNED' ? 409 : 502).json({ ...result, conexao: view(req, empresaId) });
   });
 
-  app.put(`${BASE}/config`, (req, res) => {
+  app.put(`${routeBase}/config`, (req, res) => {
     if (!gestor(req, res)) return;
     try {
       const empresaId = legacyEmpresaId(req);
-      const conexao = conexaoKytto.configurar(empresaId, req.body || {}, { podeTrocarInstancia: isPlatformAdmin(req.user) });
+      const conexao = conexaoKytto.configurar(empresaId, req.body || {}, { podeTrocarInstancia: isPlatformAdmin(req.user), tipoCanal: perfil });
       audit(req, 'WHATSAPP CONEXAO CONFIG', `instancia=${conexao.instance}; autoReconnect=${conexao.autoReconnect}`);
       save();
       res.json({ ok: true, conexao: view(req, empresaId) });
@@ -80,12 +82,12 @@ export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLoja
   });
 
   // Diagnóstico de ponta a ponta (só leitura): contagens, horários e travas; nunca conteúdo, número completo ou segredo.
-  app.get(`${BASE}/diagnostico`, async (req, res) => {
+  app.get(`${routeBase}/diagnostico`, async (req, res) => {
     if (!gestor(req, res)) return;
     // O diagnóstico consulta a instância DESTA empresa. Só a empresa dona da instância
     // (CHATBOT_BACKEND_INSTANCES ou o par antigo) vê o estado dela; nunca o da Dino.
     const empresaId = String(legacyEmpresaId(req) || '');
-    const instance = conexaoKytto.obterConexao(empresaId).instance || '';
+    const instance = conexaoKytto.obterConexao(empresaId, perfil).instance || '';
     if (!instance) {
       return res.status(403).json({ error: 'Esta empresa ainda não tem uma instância de WhatsApp atribuída.', code: 'PERMISSION_DENIED', motivo: 'WHATSAPP_INSTANCE_UNASSIGNED' });
     }
@@ -100,14 +102,14 @@ export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLoja
     } catch (error) { res.status(502).json({ error: 'Não foi possível diagnosticar o WhatsApp agora.', detail: String(error?.message || '').slice(0, 160) }); }
   });
 
-  app.post(`${BASE}/verificar`, async (req, res) => {
+  app.post(`${routeBase}/verificar`, async (req, res) => {
     if (!gestor(req, res)) return;
     const empresaId = legacyEmpresaId(req);
-    const resultado = await conexaoKytto.vigiarConexao(empresaId, { fetchImpl });
+    const resultado = await conexaoKytto.vigiarConexao(empresaId, { fetchImpl, tipoCanal: perfil });
     res.json({ ok: true, resultado, conexao: view(req, empresaId) });
   });
 
-  app.post(`${BASE}/teste`, async (req, res) => {
+  app.post(`${routeBase}/teste`, async (req, res) => {
     if (!gestor(req, res)) return;
     if (req.body?.confirmado !== true) return res.status(400).json({ error: 'Confirme o envio do teste.' });
     const telefone = String(req.body?.telefone || '').replace(/\D/g, '');
@@ -115,9 +117,9 @@ export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLoja
     const empresaId = legacyEmpresaId(req);
     const lojaId = legacyLojaId?.(req) || '';
     if (!lojaId) return res.status(409).json({ error: 'Selecione a unidade da empresa para o teste.', code: 'STORE_SELECTION_REQUIRED' });
-    const conexao = conexaoKytto.obterConexao(empresaId);
+    const conexao = conexaoKytto.obterConexao(empresaId, perfil);
     if (!conexao.instance) return res.status(409).json({ error: 'Esta empresa ainda não tem uma instância de WhatsApp atribuída.', code: 'WHATSAPP_INSTANCE_UNASSIGNED' });
-    const canal = await db.queryRead(`SELECT id FROM canais_integracao WHERE empresa_id=$1 AND loja_id=$2 AND provedor='whatsapp' AND status='ativo' AND configuracao->>'instance'=$3 LIMIT 1`, [empresaId, lojaId, conexao.instance]).catch(() => ({ rows: [] }));
+    const canal = await db.queryRead(`SELECT id FROM canais_integracao WHERE empresa_id=$1 AND loja_id=$2 AND provedor='whatsapp' AND tipo_canal=$4 AND status='ativo' AND configuracao->>'instance'=$3 LIMIT 1`, [empresaId, lojaId, conexao.instance, perfil]).catch(() => ({ rows: [] }));
     if (!canal.rows[0]) return res.status(409).json({ error: 'Canal da unidade indisponível para o teste.', code: 'WHATSAPP_CHANNEL_UNAVAILABLE' });
     // Trava de saída conferida antes do envio: se o servidor bloqueia (ex.: WHATSAPP_EGRESS_MODE=off),
     // responde 409 com orientação em português e não consome a cota de testes.
@@ -129,7 +131,7 @@ export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLoja
         return res.status(409).json({ ok: false, code: `WHATSAPP_EGRESS_${gate.reason.toUpperCase()}`, error: egressMensagem(gate.reason) || 'Envio bloqueado pela política de saída do servidor.' });
       }
     }
-    if (!allowTest(empresaId)) return res.status(429).json({ error: `Limite de ${TEST_LIMIT_PER_HOUR} testes por hora atingido.` });
+    if (!allowTest(`${empresaId}:${perfil}`)) return res.status(429).json({ error: `Limite de ${TEST_LIMIT_PER_HOUR} testes por hora atingido.` });
     const texto = String(req.body?.mensagem || '').trim().slice(0, 300) || 'Teste de conexão do WhatsApp da Dino. Se você recebeu esta mensagem, o canal está funcionando.';
     const result = await enviarMensagem({ whatsapp_instance: conexao.instance, empresa_id: empresaId, loja_id: lojaId, canal_id: canal.rows[0].id }, telefone, texto);
     audit(req, 'WHATSAPP CONEXAO TESTE', `ok=${result.ok === true}; status=${Number(result.status) || '-'}`);

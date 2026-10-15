@@ -156,7 +156,7 @@ test('status operacional devolve a persona persistida para recarregar o painel',
   channel.configuracao.handoff = { notify_email: 'recepcao@example.com', attendant_phone: '5565999990002' };
   db.queryRead = async (sql, params) => {
     if (/FROM canais_integracao/.test(sql)) {
-      assert.deepEqual(params, [EMPRESA, LOJA]);
+      assert.deepEqual(params, [EMPRESA, LOJA, 'cliente']);
       return { rows: [channel] };
     }
     return { rows: [] };
