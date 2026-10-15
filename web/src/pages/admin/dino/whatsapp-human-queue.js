@@ -110,9 +110,11 @@ export function validateClaimResponse(payload, sessionId) {
   return Object.freeze({ id: sessionId, status: 'humano' })
 }
 
-export function queueUrl(assignment) {
+export function queueUrl(assignment, tipoCanal = 'cliente') {
   const value = assignment === 'all' ? 'all' : 'unassigned'
-  return `${HUMAN_QUEUE_PATH}?status=humano&assignment=${value}&limit=${HUMAN_QUEUE_LIMIT}`
+  const canal = tipoCanal === 'gestao' ? 'gestao' : 'cliente'
+  const canalQuery = canal === 'gestao' ? '&canal=gestao' : ''
+  return `${HUMAN_QUEUE_PATH}?status=humano&assignment=${value}&limit=${HUMAN_QUEUE_LIMIT}${canalQuery}`
 }
 
 export function queueWaitLabel(value, now = Date.now()) {

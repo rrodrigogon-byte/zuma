@@ -24,7 +24,7 @@ import { createShippingAccount, failShippingLabel, finalizeShippingCancellation,
 import { shippingProviders } from './shipping-adapters.js';
 import { recordStorefrontEvent } from '../storefront-funnel.js';
 import { commerceMediaIdForIdempotencyKey, deleteCommerceImage, newCommerceMediaId, streamCommerceImage, uploadCommerceImage } from './commerce-media.js';
-import { claimWhatsappAiHandoff, closeWhatsappAiHandoff, configureWhatsappAiChannel, configureWhatsappAiHandoff, configureWhatsappAiPersona, configureWhatsappAiPolicy, listWhatsappAiSessions, releaseWhatsappAiHandoff, syncWhatsappAiWebhook, testWhatsappAiGemini, whatsappAiOperationalStatus } from './whatsapp-ai.js';
+import { claimWhatsappAiHandoff, closeWhatsappAiHandoff, configureWhatsappAiChannel, configureWhatsappAiHandoff, configureWhatsappAiPersona, configureWhatsappAiPolicy, listWhatsappAiSessions, releaseWhatsappAiHandoff, syncWhatsappAiWebhook, testWhatsappAiGemini, whatsappAiOperationalStatus, whatsappChannelType } from './whatsapp-ai.js';
 import { campaignMetrics, cancelCampaign, confirmCampaign, createCampaign, listCampaignAudience, listCampaigns, previewCampaign, updateCampaignConsent } from './commerce-campaigns.js';
 import { cartRecoveryMetrics, listAbandonedCarts, syncPublicCart } from './commerce-abandoned-carts.js';
 import { consumePublicRateLimit, publicRequestFingerprint } from './commerce-public-rate-limit.js';
@@ -63,6 +63,10 @@ import {
   withCommerceTransaction,
   allowedMediaUrl,
 } from './commerce-core.js';
+
+function whatsappTipoCanal(req) {
+  return whatsappChannelType(req.query?.canal || req.body?.tipoCanal || req.body?.channelType || 'cliente');
+}
 
 function publicHost(req) {
   const forwarded = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim();
@@ -2128,11 +2132,13 @@ export function createCommerceAdminRouter() {
   router.get('/whatsapp-ai/status', async (req, res) => {
     try {
       const context = await withWhatsappLoja(await requirePermission(req, 'reports.read'));
-      res.json(await whatsappAiOperationalStatus(context));
+      const tipoCanal = whatsappTipoCanal(req);
+      res.json(await whatsappAiOperationalStatus({ ...context, tipoCanal }, { tipoCanal }));
     } catch (error) { jsonError(res, error); }
   });
   router.get('/whatsapp-ai/sessions', async (req, res) => {
     try {
+      const tipoCanal = whatsappTipoCanal(req);
       const hasQueueFilter = req.query.status != null || req.query.assignment != null;
       const requestedLojaId = hasQueueFilter
         ? await normalizeWhatsappQueueStoreSelector(req)
@@ -2149,7 +2155,7 @@ export function createCommerceAdminRouter() {
         throw new CommerceError('unidade fora do escopo selecionado', 'STORE_SCOPE_MISMATCH');
       }
       if (!hasQueueFilter) {
-        return res.json({ items: await listWhatsappAiSessions(context, { limit: req.query.limit }) });
+        return res.json({ items: await listWhatsappAiSessions({ ...context, tipoCanal }, { limit: req.query.limit, tipoCanal }) });
       }
       let canClaim = false;
       try {
@@ -2158,7 +2164,7 @@ export function createCommerceAdminRouter() {
       } catch (error) {
         if (error?.code !== 'PERMISSION_DENIED') throw error;
       }
-      const items = await listWhatsappAiSessions(context, { limit: req.query.limit, status: req.query.status, assignment: req.query.assignment });
+      const items = await listWhatsappAiSessions({ ...context, tipoCanal }, { limit: req.query.limit, status: req.query.status, assignment: req.query.assignment, tipoCanal });
       res.json({
         items,
         canClaim,
@@ -2174,55 +2180,64 @@ export function createCommerceAdminRouter() {
   router.post('/whatsapp-ai/channel', async (req, res) => {
     try {
       const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
-      res.json(await configureWhatsappAiChannel(context, req.body || {}));
+      const tipoCanal = whatsappTipoCanal(req);
+      res.json(await configureWhatsappAiChannel({ ...context, tipoCanal }, { ...(req.body || {}), tipoCanal }));
     } catch (error) { jsonError(res, error); }
   });
   router.patch('/whatsapp-ai/policy', async (req, res) => {
     try {
       const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
-      res.json(await configureWhatsappAiPolicy(context, req.body || {}));
+      const tipoCanal = whatsappTipoCanal(req);
+      res.json(await configureWhatsappAiPolicy({ ...context, tipoCanal }, req.body || {}));
     } catch (error) { jsonError(res, error); }
   });
   router.patch('/whatsapp-ai/persona', async (req, res) => {
     try {
       const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
-      res.json(await configureWhatsappAiPersona(context, req.body || {}));
+      const tipoCanal = whatsappTipoCanal(req);
+      res.json(await configureWhatsappAiPersona({ ...context, tipoCanal }, req.body || {}));
     } catch (error) { jsonError(res, error); }
   });
   router.patch('/whatsapp-ai/handoff', async (req, res) => {
     try {
       const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
-      res.json(await configureWhatsappAiHandoff(context, req.body || {}));
+      const tipoCanal = whatsappTipoCanal(req);
+      res.json(await configureWhatsappAiHandoff({ ...context, tipoCanal }, req.body || {}));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/whatsapp-ai/diagnostics/gemini', async (req, res) => {
     try {
       const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
-      res.json(await testWhatsappAiGemini(context, { confirmed: req.body?.confirmed === true }));
+      const tipoCanal = whatsappTipoCanal(req);
+      res.json(await testWhatsappAiGemini({ ...context, tipoCanal }, { confirmed: req.body?.confirmed === true }));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/whatsapp-ai/channel/sync-webhook', async (req, res) => {
     try {
       const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
-      res.json(await syncWhatsappAiWebhook(context, { confirmed: req.body?.confirmed === true }));
+      const tipoCanal = whatsappTipoCanal(req);
+      res.json(await syncWhatsappAiWebhook({ ...context, tipoCanal }, { confirmed: req.body?.confirmed === true }));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/whatsapp-ai/sessions/:id/claim', async (req, res) => {
     try {
       const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
-      res.json(await claimWhatsappAiHandoff(context, req.params.id));
+      const tipoCanal = whatsappTipoCanal(req);
+      res.json(await claimWhatsappAiHandoff({ ...context, tipoCanal }, req.params.id));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/whatsapp-ai/sessions/:id/release', async (req, res) => {
     try {
       const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
-      res.json(await releaseWhatsappAiHandoff(context, req.params.id));
+      const tipoCanal = whatsappTipoCanal(req);
+      res.json(await releaseWhatsappAiHandoff({ ...context, tipoCanal }, req.params.id));
     } catch (error) { jsonError(res, error); }
   });
   router.post('/whatsapp-ai/sessions/:id/close', async (req, res) => {
     try {
       const context = await withWhatsappLoja(await requirePermission(req, 'settings.write'));
-      res.json(await closeWhatsappAiHandoff(context, req.params.id));
+      const tipoCanal = whatsappTipoCanal(req);
+      res.json(await closeWhatsappAiHandoff({ ...context, tipoCanal }, req.params.id));
     } catch (error) { jsonError(res, error); }
   });
   router.get('/cart-recovery', async (req, res) => {

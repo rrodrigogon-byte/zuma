@@ -39,6 +39,13 @@ test('confirmPendingAction devolve ação concluída sem executar nova mutação
   } finally { db.transaction = original; }
 });
 
+test('canal Gestão permite somente despesa pendente ou handoff', async () => {
+  await assert.rejects(
+    () => createWhatsappAiToolExecutor({ ...CONTEXT, channelType: 'gestao' })('listar_servicos', {}),
+    error => error instanceof WhatsappAiToolError && error.code === 'MANAGEMENT_TOOL_DISABLED',
+  );
+});
+
 test('executor bloqueia promoções quando a capacidade não está habilitada no canal', async () => {
   await assert.rejects(
     () => createWhatsappAiToolExecutor({ ...CONTEXT, capabilities: { sendPromotions: false } })('listar_promocoes_ativas', {}),

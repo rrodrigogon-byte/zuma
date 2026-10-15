@@ -21,8 +21,8 @@ test('filtros estritos rejeitam enum, arrays e objetos antes de consultar banco'
 test('lista mantém contrato antigo e adiciona filtros parametrizados com limite inteiro',async()=>{
  const o=originals(),calls=[];db.queryRead=async(sql,params)=>{calls.push({sql,params});return {rows:[{id:S,status:'humano',telefone:'CANARY-UNMASKED-1234',assigned_to:U,estado:{secret:'PRIVATE-CANARY'}}]}};
  try{
-  const legacy=await listWhatsappAiSessions(context(),{limit:2.8});assert.deepEqual(calls[0].params,[E,L,2]);assert.match(calls[0].sql,/empresa_id = \$1 AND loja_id = \$2/);assert.equal(legacy[0].isMine,true);assert.equal(legacy[0].assigned_to,undefined);assert.equal(legacy[0].estado,undefined);assert.equal(legacy[0].telefone,'***1234');assert.doesNotMatch(JSON.stringify(legacy),/PRIVATE-CANARY|CANARY-UNMASKED/);
-  await listWhatsappAiSessions(context(),{limit:10000,status:'humano',assignment:'unassigned'});assert.deepEqual(calls[1].params,[E,L,'humano',100]);assert.match(calls[1].sql,/status = \$3/);assert.match(calls[1].sql,/assigned_to IS NULL/);assert.doesNotMatch(calls[1].sql,/\b(INSERT|UPDATE|DELETE|ALTER)\b/i);
+  const legacy=await listWhatsappAiSessions(context(),{limit:2.8});assert.deepEqual(calls[0].params,[E,L,'cliente',2]);assert.match(calls[0].sql,/empresa_id = \$1 AND loja_id = \$2/);assert.equal(legacy[0].isMine,true);assert.equal(legacy[0].assigned_to,undefined);assert.equal(legacy[0].estado,undefined);assert.equal(legacy[0].telefone,'***1234');assert.doesNotMatch(JSON.stringify(legacy),/PRIVATE-CANARY|CANARY-UNMASKED/);
+  await listWhatsappAiSessions(context(),{limit:10000,status:'humano',assignment:'unassigned'});assert.deepEqual(calls[1].params,[E,L,'cliente','humano',100]);assert.match(calls[1].sql,/status = \$4/);assert.match(calls[1].sql,/assigned_to IS NULL/);assert.doesNotMatch(calls[1].sql,/\b(INSERT|UPDATE|DELETE|ALTER)\b/i);
  }finally{restore(o)}
 });
 test('claim rejeita sessão e operador inválidos antes de abrir transação',async()=>{
@@ -31,7 +31,7 @@ test('claim rejeita sessão e operador inválidos antes de abrir transação',as
 });
 test('replay próprio faz só SELECT FOR UPDATE, sem alterar timestamp ou auditar',async()=>{
  const o=originals(),calls=[];const row={id:S,status:'humano',assigned_to:U,assigned_at:'2026-01-01T00:00:00Z'};db.transaction=async(fn)=>fn({query:async(sql,params)=>{calls.push({sql,params});return {rows:[row]}}});
- try{assert.deepEqual(await claimWhatsappAiHandoff(context(),S),row);assert.equal(calls.length,1);assert.match(calls[0].sql,/FOR UPDATE/);assert.deepEqual(calls[0].params,[S,E,L]);assert.doesNotMatch(calls[0].sql,/^\s*(UPDATE|INSERT)/i)}finally{restore(o)}
+ try{assert.deepEqual(await claimWhatsappAiHandoff(context(),S),row);assert.equal(calls.length,1);assert.match(calls[0].sql,/FOR UPDATE/);assert.deepEqual(calls[0].params,[S,E,L,'cliente']);assert.doesNotMatch(calls[0].sql,/^\s*(UPDATE|INSERT)/i)}finally{restore(o)}
 });
 test('outro dono e sessão ausente não produzem UPDATE/auditoria',async()=>{
  const o=originals();const calls=[];
@@ -63,7 +63,7 @@ test('claim sem settings.write é 403 e não inicia transação; body não conce
 });
 test('claim autorizado ignora usuário/empresa/unidade injetados no body e não envia mensagem',async()=>{
  const o=originals(),calls=[];const fetchOriginal=globalThis.fetch;globalThis.fetch=()=>{throw new Error('ENVIO PROIBIDO')};db.queryRead=async()=>({rows:[{grants:1}]});db.transaction=async(fn)=>fn({query:async(sql,p)=>{calls.push({sql,p});if(/^\s*SELECT/i.test(sql))return {rows:[{id:S,status:'humano',assigned_to:null}]};if(/^\s*UPDATE/i.test(sql))return {rows:[{id:S,status:'humano',assigned_to:U}]};return {rows:[],rowCount:1}}});
- try{const r=response();await handler('/whatsapp-ai/sessions/:id/claim','post')({headers:{'x-empresa-id':E,'x-loja-id':L},commerceAdminContext:context(),params:{id:S},body:{usuarioId:O,empresaId:O,lojaId:O}},r);assert.equal(r.statusCode,200);assert.equal(r.body.assigned_to,U);assert.deepEqual(calls.find(x=>/^\s*UPDATE/i.test(x.sql)).p,[S,E,L,U]);assert.equal(calls.filter(x=>/commerce_audit_logs/.test(x.sql)).length,1);assert.equal(calls.some(x=>/whatsapp_ai_messages|provider_runs/.test(x.sql)),false)}finally{restore(o);globalThis.fetch=fetchOriginal}
+ try{const r=response();await handler('/whatsapp-ai/sessions/:id/claim','post')({headers:{'x-empresa-id':E,'x-loja-id':L},commerceAdminContext:context(),params:{id:S},body:{usuarioId:O,empresaId:O,lojaId:O}},r);assert.equal(r.statusCode,200);assert.equal(r.body.assigned_to,U);assert.deepEqual(calls.find(x=>/^\s*UPDATE/i.test(x.sql)).p,[S,E,L,U,'cliente']);assert.equal(calls.filter(x=>/commerce_audit_logs/.test(x.sql)).length,1);assert.equal(calls.some(x=>/whatsapp_ai_messages|provider_runs/.test(x.sql)),false)}finally{restore(o);globalThis.fetch=fetchOriginal}
 });
 
 test('GET legado sem filtros preserva envelope items e não depende de settings.write',async()=>{

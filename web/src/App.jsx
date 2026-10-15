@@ -264,6 +264,7 @@ export default function App() {
           <Route path="/admin/mensalidades"   element={<Layout><Mensalidades /></Layout>} />
           <Route path="/admin/financeiro"     element={<Layout><TenantAware tenant={<FinanceiroEmpresa />} legacy={<Financeiro />} /></Layout>} />
           <Route path="/admin/whatsapp"       element={<Layout><WhatsappConexao /></Layout>} />
+          <Route path="/admin/whatsapp-gestao" element={<Layout><WhatsappConexao /></Layout>} />
           <Route path="/admin/cerebro-ia"     element={<Layout><CerebroIA /></Layout>} />
           <Route path="/admin/quadras"        element={<Layout><Quadras /></Layout>} />
           <Route path="/admin/pontos"         element={<Layout><Pontos /></Layout>} />

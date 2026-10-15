@@ -27,12 +27,13 @@ function EmptyQueue({ loading, error }) {
 export default function WhatsappHumanQueue({
   empresaId = '',
   lojaId = '',
+  tipoCanal = 'cliente',
   empresaNome = 'empresa atual',
   lojaNome = 'unidade atual',
   operatorLabel = 'operador logado',
   onChanged,
 }) {
-  const contextKey = `${String(empresaId || '')}\u0000${String(lojaId || '')}`
+  const contextKey = `${String(empresaId || '')}\u0000${String(lojaId || '')}\u0000${tipoCanal === 'gestao' ? 'gestao' : 'cliente'}`
   const [open, setOpen] = useState(false)
   const [assignment, setAssignment] = useState('unassigned')
   const [rows, setRows] = useState([])
@@ -112,7 +113,7 @@ export default function WhatsappHumanQueue({
     setCanClaim(false)
     setClaimDialog(null)
     try {
-      const payload = await api.get(queueUrl(assignmentRef.current), {
+      const payload = await api.get(queueUrl(assignmentRef.current, tipoCanal), {
         headers: { 'X-Empresa-Id': snapshot.empresaId, 'X-Loja-Id': snapshot.lojaId },
         signal: controller.signal,
       })
@@ -136,7 +137,7 @@ export default function WhatsappHumanQueue({
       if (flightRef.current === controller) flightRef.current = null
       if (mountedRef.current && sequence === sequenceRef.current && contextKeyRef.current === snapshot.contextKey) setLoading(false)
     }
-  }, [assignment, contextKey, empresaId, lojaId])
+  }, [assignment, contextKey, empresaId, lojaId, tipoCanal])
 
   useEffect(() => {
     mountedRef.current = true
@@ -204,7 +205,8 @@ export default function WhatsappHumanQueue({
     setNotice('')
     setNoticeContextKey('')
     try {
-      const response = await api.post(`${HUMAN_QUEUE_PATH}/${encodeURIComponent(sessionId)}/claim`, {}, {
+      const canalQuery = tipoCanal === 'gestao' ? '?canal=gestao' : ''
+      const response = await api.post(`${HUMAN_QUEUE_PATH}/${encodeURIComponent(sessionId)}/claim${canalQuery}`, {}, {
         headers: { 'X-Empresa-Id': snapshot.empresaId, 'X-Loja-Id': snapshot.canonicalLojaId },
         signal: controller.signal,
       })

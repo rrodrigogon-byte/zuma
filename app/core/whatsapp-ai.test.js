@@ -156,8 +156,8 @@ test('status operacional retorna apenas readiness e métricas agregadas, sem URL
   const queries = [];
   db.queryRead = async (sql) => {
     queries.push(sql);
-    if (/FROM canais_integracao/.test(sql)) return { rows: [{ id: SESSAO, codigo_publico: SESSAO, nome: 'Dino', status: 'pausado', api_base_url: 'https://secret.invalid', configuracao: { instance: 'dino', segredo_env: 'SECRET' }, ai_consecutive_failures: 2 }] };
     if (/FROM whatsapp_ai_sessions/.test(sql)) return { rows: [{ status: 'humano', total: 2, unassigned: 1 }] };
+    if (/SELECT id, codigo_publico/.test(sql)) return { rows: [{ id: SESSAO, codigo_publico: SESSAO, nome: 'Dino', status: 'pausado', api_base_url: 'https://secret.invalid', configuracao: { instance: 'dino', segredo_env: 'SECRET' }, ai_consecutive_failures: 2 }] };
     if (/FROM tarefas_integracao_canais/.test(sql)) return { rows: [{ status: 'falha', total: 3, dead_letter: 1 }] };
     if (/FROM whatsapp_ai_messages/.test(sql)) return { rows: [{ status: 'unknown', total: 1 }, { status: 'sent', total: 4 }] };
     if (/FROM whatsapp_ai_provider_runs/.test(sql)) return { rows: [{ total: 5, success: 4, failed: 1, avg_latency_ms: 800, tool_calls: 2, latency_sample_size: 4, p50_latency_ms: 812.5, p95_latency_ms: 1400.25 }] };
@@ -208,9 +208,9 @@ test('claim de handoff é tenant-scoped, atribui o operador autenticado e audita
     assert.equal(result.assigned_to, USUARIO);
     assert.match(mock.calls[0].sql, /empresa_id = \$2 AND loja_id = \$3/);
     assert.match(mock.calls[0].sql, /FOR UPDATE/);
-    assert.deepEqual(mock.calls[0].params, [SESSAO, EMPRESA, LOJA]);
+    assert.deepEqual(mock.calls[0].params, [SESSAO, EMPRESA, LOJA, 'cliente']);
     assert.match(mock.calls[1].sql, /assigned_to IS NULL/);
-    assert.deepEqual(mock.calls[1].params, [SESSAO, EMPRESA, LOJA, USUARIO]);
+    assert.deepEqual(mock.calls[1].params, [SESSAO, EMPRESA, LOJA, USUARIO, 'cliente']);
     assert.match(mock.calls[2].sql, /commerce_audit_logs/);
     assert.doesNotMatch(JSON.stringify(mock.calls[2].params), /telefone|conteudo|remote_jid/);
   } finally { mock.restore(); }

@@ -307,3 +307,15 @@ test('desconectar sem sessão: DELETE recusado, mas o backend confirma QR → en
     for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
   }
 });
+
+test('mantém conexão Cliente e Gestão independentes na mesma empresa', async () => {
+  const conexao = await import('./whatsapp-conexao-kytto.js');
+  const cliente = conexao.obterConexao('emp-a', 'cliente');
+  const gestao = conexao.obterConexao('emp-a', 'gestao');
+  assert.notEqual(cliente, gestao);
+  assert.equal(cliente.tipoCanal, 'cliente');
+  assert.equal(gestao.tipoCanal, 'gestao');
+  conexao.configurar('emp-a', { instance: 'dino-gestao-1' }, { podeTrocarInstancia: true, tipoCanal: 'gestao' });
+  assert.equal(conexao.obterConexao('emp-a', 'cliente').instance, 'dino-1');
+  assert.equal(conexao.obterConexao('emp-a', 'gestao').instance, 'dino-gestao-1');
+});
