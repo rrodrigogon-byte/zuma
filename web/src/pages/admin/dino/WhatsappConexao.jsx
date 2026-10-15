@@ -312,9 +312,18 @@ function WhatsappConexaoEmpresa() {
     finally { if (scope === scopeRef.current) setBusy('') }
   }
 
+  async function copiarTexto(value, successMessage, errorMessage) {
+    try { await navigator.clipboard.writeText(value); toast(successMessage) }
+    catch { toast(errorMessage, true) }
+  }
+
   async function copiarNumero(value) {
-    try { await navigator.clipboard.writeText(value); toast('Número copiado.') }
-    catch { toast('Não foi possível copiar o número.', true) }
+    await copiarTexto(value, 'Número copiado.', 'Não foi possível copiar o número.')
+  }
+
+  async function copiarLinkCadastro() {
+    const url = `${window.location.origin}/admin/whatsapp`
+    await copiarTexto(url, 'Link de cadastro copiado.', 'Não foi possível copiar o link de cadastro.')
   }
 
   const state = conexao?.lastError ? 'unknown' : (conexao?.state || 'unknown')
@@ -333,6 +342,16 @@ function WhatsappConexaoEmpresa() {
       <div><div className="dadm-eyebrow">Relacionamento & IA · {empresaAtiva?.nome || 'Empresa'}</div><h1>WhatsApp da empresa</h1><p>Acompanhe a linha em uso, a conexão do atendente e a atividade com atualização automática — sem expor a chave de API.</p></div>
       <div className="dadm-actions"><button type="button" className="c360-btn ghost" disabled={atualizando} onClick={() => { carregar(true); recarregarIa(); if (podeGerenciar && !diagBloqueado) diagnosticar() }}>{atualizando ? 'Atualizando…' : 'Atualizar agora'}</button></div>
     </header>
+    <section className="dadm-card dadm-wa-registration" aria-labelledby="wa-registration">
+      <div className="c360-card-head"><h2 id="wa-registration">Cadastrar o número WhatsApp</h2><span className="dadm-operational-scope">Disponível para todas as empresas</span></div>
+      <p>Use este link depois de selecionar a empresa no menu lateral. O cadastro, o QR e o status sempre ficam isolados na empresa ativa; uma empresa nunca reutiliza a linha de outra.</p>
+      <div className="dadm-wa-registration-link">
+        <input className="c360-input" aria-label="Link de cadastro do número WhatsApp" readOnly value={`${window.location.origin}/admin/whatsapp`} onFocus={(event) => event.currentTarget.select()} />
+        <button type="button" className="c360-btn ghost" onClick={copiarLinkCadastro}>Copiar link</button>
+        <Link className="c360-btn primary" to="/admin/whatsapp">Abrir cadastro</Link>
+      </div>
+      <small className="dadm-muted">O administrador ou gestor da empresa deve abrir o link, conferir a empresa ativa e então gerar o QR para parear o aparelho.</small>
+    </section>
     {erro && <p className="dadm-note danger" role="alert">{erro}</p>}
     {!conexao && !erro && <section className="dadm-card" role="status">Consultando o estado do WhatsApp…</section>}
     <WhatsappAiOperationalSection status={iaOperational} readAt={iaReadAt} />

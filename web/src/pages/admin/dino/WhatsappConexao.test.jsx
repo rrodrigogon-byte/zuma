@@ -112,6 +112,20 @@ describe('WhatsappConexao · saúde operacional IA', () => {
     await unmount(renderer)
   })
 
+  it('exibe o link copiável de cadastro para a empresa ativa sem alterar a conexão', async () => {
+    let renderer
+    await act(async () => { renderer = create(<WhatsappConexao />) })
+    await tick()
+    const html = textOf(renderer)
+    expect(html).toContain('Cadastrar o número WhatsApp')
+    expect(html).toContain('Disponível para todas as empresas')
+    expect(html).toContain('https://painel.test/admin/whatsapp')
+    expect(html).toContain('Abrir cadastro')
+    expect(apiMock.post).not.toHaveBeenCalled()
+    expect(apiMock.put).not.toHaveBeenCalled()
+    await unmount(renderer)
+  })
+
   it('mostra p50/p95 válidos com denominador, janela e limitação ao provedor', async () => {
     apiMock.get.mockImplementation(path => path.startsWith('/api/admin/barbearia/whatsapp-conexao')
       ? Promise.resolve({ conexao: connection, podeGerenciar: false })
