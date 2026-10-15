@@ -33,7 +33,7 @@ export default function WhatsappHumanQueue({
   operatorLabel = 'operador logado',
   onChanged,
 }) {
-  const contextKey = `${String(empresaId || '')}\u0000${String(lojaId || '')}\u0000${tipoCanal === 'gestao' ? 'gestao' : 'cliente'}`
+  const contextKey = `${String(empresaId || '')}\u0000${String(lojaId || '')}\u0000${['gestao', 'lancamentos'].includes(tipoCanal) ? tipoCanal : 'cliente'}`
   const [open, setOpen] = useState(false)
   const [assignment, setAssignment] = useState('unassigned')
   const [rows, setRows] = useState([])
@@ -205,7 +205,7 @@ export default function WhatsappHumanQueue({
     setNotice('')
     setNoticeContextKey('')
     try {
-      const canalQuery = tipoCanal === 'gestao' ? '?canal=gestao' : ''
+      const canalQuery = tipoCanal === 'cliente' ? '' : `?canal=${tipoCanal}`
       const response = await api.post(`${HUMAN_QUEUE_PATH}/${encodeURIComponent(sessionId)}/claim${canalQuery}`, {}, {
         headers: { 'X-Empresa-Id': snapshot.empresaId, 'X-Loja-Id': snapshot.canonicalLojaId },
         signal: controller.signal,

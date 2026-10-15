@@ -535,7 +535,8 @@ export function validateWhatsappAiOutput(text, { traces = [], recommendationWasR
 }
 
 export async function whatsappAiPolicyMetrics(context = {}) {
-  const tipoCanal = String(context.tipoCanal || 'cliente').toLowerCase() === 'gestao' ? 'gestao' : 'cliente';
+  const tipoBruto = String(context.tipoCanal || 'cliente').toLowerCase();
+  const tipoCanal = ['cliente', 'gestao', 'lancamentos'].includes(tipoBruto) ? tipoBruto : 'cliente';
   const result = await db.queryRead(
     `SELECT tipo, COUNT(*)::int AS total
        FROM whatsapp_ai_policy_events

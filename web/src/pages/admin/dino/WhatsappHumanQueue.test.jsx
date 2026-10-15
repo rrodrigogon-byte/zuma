@@ -342,3 +342,11 @@ it('POST antigo concluído depois de fechar/reabrir não atualiza a nova leitura
   expect(textOf(renderer)).not.toContain('Atendimento assumido')
   await act(async () => { renderer.unmount() })
 })
+
+it('envia o perfil Lançamentos na URL da fila humana', async () => {
+  let renderer
+  await act(async () => { renderer = create(<WhatsappHumanQueue {...props({ tipoCanal: 'lancamentos' })} />) })
+  await openQueue(renderer)
+  expect(apiMock.get.mock.calls[0][0]).toContain('&canal=lancamentos')
+  renderer.unmount()
+})

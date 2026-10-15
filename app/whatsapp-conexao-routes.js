@@ -28,7 +28,8 @@ function allowTest(empresaId, now = Date.now()) {
 }
 
 export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLojaId, audit, save, enviarMensagem, fetchImpl, isPlatformAdmin = () => false, basePath = BASE, tipoCanal = 'cliente' } = {}) {
-  const perfil = String(tipoCanal || 'cliente').toLowerCase() === 'gestao' ? 'gestao' : 'cliente';
+  const perfilBruto = String(tipoCanal || 'cliente').toLowerCase();
+  const perfil = ['cliente', 'gestao', 'lancamentos'].includes(perfilBruto) ? perfilBruto : 'cliente';
   const routeBase = basePath;
   const who = (req) => req.user?.email || req.user?.nome || '';
   // `saida` acompanha toda resposta da conexão para a tela saber se o envio está liberado.
@@ -39,7 +40,7 @@ export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLoja
     saida: egressResumo(),
   });
 
-  app.get(BASE, async (req, res) => {
+  app.get(routeBase, async (req, res) => {
     const empresaId = legacyEmpresaId(req);
     try {
       if (req.query?.atualizar === '1' && whatsappProviderName() === 'chatbot_backend') {

@@ -319,3 +319,19 @@ test('mantém conexão Cliente e Gestão independentes na mesma empresa', async 
   assert.equal(conexao.obterConexao('emp-a', 'cliente').instance, 'dino-1');
   assert.equal(conexao.obterConexao('emp-a', 'gestao').instance, 'dino-gestao-1');
 });
+
+test('mantém Cliente, Gestão e Lançamentos independentes na mesma empresa', async () => {
+  const conexao = await import('./whatsapp-conexao-kytto.js');
+  const cliente = conexao.obterConexao('emp-a', 'cliente');
+  const gestao = conexao.obterConexao('emp-a', 'gestao');
+  const lancamentos = conexao.obterConexao('emp-a', 'lancamentos');
+  cliente.state = 'open';
+  gestao.state = 'qr';
+  lancamentos.state = 'connecting';
+  assert.notEqual(cliente, gestao);
+  assert.notEqual(cliente, lancamentos);
+  assert.notEqual(gestao, lancamentos);
+  assert.equal(conexao.obterConexao('emp-a', 'cliente').state, 'open');
+  assert.equal(conexao.obterConexao('emp-a', 'gestao').state, 'qr');
+  assert.equal(conexao.obterConexao('emp-a', 'lancamentos').state, 'connecting');
+});
