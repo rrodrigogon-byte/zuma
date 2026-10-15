@@ -2,7 +2,7 @@ import { buildEquipeDesempenho } from './dino-equipe-desempenho.js';
 
 export const EQUIPE_PERFORMANCE_PATH = '/api/admin/barbearia/equipe/desempenho';
 export function equipePerformanceNoStore(req, res, next) {
-  if (req.path === EQUIPE_PERFORMANCE_PATH) {
+  if (req.path?.replace(/\/$/, '') === EQUIPE_PERFORMANCE_PATH) {
     res.set('Cache-Control', 'no-store');
     res.set('Pragma', 'no-cache');
   }

@@ -20,13 +20,12 @@ try{
  run('initdb',['-D',data,'-U',owner,'--auth-local=trust','--auth-host=reject','--no-locale','-E','UTF8']);
  run('pg_ctl',['-D',data,'-l',join(dir,'postgres.log'),'-o',`-k ${socket} -p ${port} -c listen_addresses='' -c fsync=off`,'-w','start']);started=true;
  run('createdb',['-h',socket,'-p',String(port),'-U',owner,database]);
- for(const file of ['001_erp_foundation.sql','003_multiloja_auditoria_imutavel.sql','038_whatsapp_ai_conversations.sql','048_whatsapp_ai_consent_profile_guardrails.sql']){
-  run('psql',['-h',socket,'-p',String(port),'-U',owner,'-d',database,'-v','ON_ERROR_STOP=1','-f',join(root,'app/migrations',file)]);console.log('DDL histórico na fixture:',file);
- }
- const hardening=ddl('047_whatsapp_ai_operational_hardening.sql');const sessionDDL=hardening.slice(hardening.indexOf('ALTER TABLE whatsapp_ai_sessions'),hardening.indexOf('ALTER TABLE canais_integracao'));
- const commerce=ddl('019_commerce_core.sql');const auditStart=commerce.indexOf('CREATE TABLE IF NOT EXISTS commerce_audit_logs');const auditDDL=commerce.slice(auditStart,commerce.indexOf('\n);',auditStart)+4);
- if(!sessionDDL.includes('assigned_to UUID')||!auditDDL.includes('fk_commerce_audit_usuario'))throw new Error('DDL histórico esperado não encontrado');
- const extra=join(dir,'handoff-ddl.sql');writeFileSync(extra,`ALTER TABLE lojas ADD UNIQUE(empresa_id,id);\nALTER TABLE usuarios ADD UNIQUE(empresa_id,id);\n${sessionDDL}\n${auditDDL}\n`,{mode:0o600});
+	 for(const file of ['001_erp_foundation.sql','003_multiloja_auditoria_imutavel.sql','019_commerce_core.sql','034_commerce_multistore_access.sql','038_whatsapp_ai_conversations.sql','048_whatsapp_ai_consent_profile_guardrails.sql','065_commerce_membership_expiration.sql','070_whatsapp_channel_profiles.sql','071_whatsapp_launch_channel.sql']){
+	  run('psql',['-h',socket,'-p',String(port),'-U',owner,'-d',database,'-v','ON_ERROR_STOP=1','-f',join(root,'app/migrations',file)]);console.log('DDL histórico na fixture:',file);
+	 }
+	 const hardening=ddl('047_whatsapp_ai_operational_hardening.sql');const sessionDDL=hardening.slice(hardening.indexOf('ALTER TABLE whatsapp_ai_sessions'),hardening.indexOf('ALTER TABLE canais_integracao'));
+	 if(!sessionDDL.includes('assigned_to UUID'))throw new Error('DDL histórico esperado não encontrado');
+	 const extra=join(dir,'handoff-ddl.sql');writeFileSync(extra,`${sessionDDL}\n`,{mode:0o600});
  run('psql',['-h',socket,'-p',String(port),'-U',owner,'-d',database,'-v','ON_ERROR_STOP=1','-f',extra]);
  const marker=crypto.randomUUID(),manifest=join(dir,'fixture.json');writeFileSync(manifest,JSON.stringify({marker,socket,port,database,owner}),{mode:0o600});
  const testEnv={...env,NODE_ENV:'test',DB_PATH:join(dir,'legacy.json'),DINO_HUMAN_QUEUE_FIXTURE:manifest,DINO_HUMAN_QUEUE_FIXTURE_MARKER:marker};

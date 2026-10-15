@@ -120,7 +120,7 @@ test('contrato, escopo estrito, catálogo company-wide, dedup, em_conta e congel
   assert.equal(result.quality.unscopedExcluded, 3, 'legacy sem unidade é excluído, sem contar outra unidade');
   assert.equal(result.quality.unattributedEvents, 1, 'venda atribuída a conta sem profissional é apenas qualidade');
   assert.equal(result.quality.transfersAvailable, false);
-  assert.match(result.quality.commissionWarnings[0], /Taxa.*não configurada|Configuração.*ausente/);
+  assert.ok(result.quality.commissionWarnings.some(warning => /Taxa.*não configurada|Configuração.*ausente/.test(warning)));
   assert.equal(ana.heatmap.length, 168);
   assert.equal(ana.daily.length, 2);
   assert.ok(ana.topServices[0].quantity >= 2);
@@ -179,6 +179,7 @@ test('heatmap exclui agenda já consolidada, produtos e usa início local mesmo 
   const root = snapshot();
   delete root.financeiroKytto.empresas[EMP].lancamentos['fin-a1'];
   delete root.barbearias[EMP].agendamentos.a1;
+  delete root.barbearias[EMP].agendamentos.aOldCovered;
   delete root.barbearias[EMP].comandas.cEmConta;
   root.barbearias[EMP].agendamentos.aCross = {
     id: 'a-cross-date', empresaId: EMP, lojaId: STORE, profissionalId: 'p1', servicoId: 's1', status: 'concluido',
@@ -279,4 +280,52 @@ test('período futuro vazio mantém catálogo profissional e não fabrica movime
   assert.equal(result.summary.services, 0);
   assert.equal(result.summary.products, 0);
   assert.equal(result.employees.every((item) => item.hasActivity === false), true);
+});
+
+test('horário operacional permanece quando a comanda fecha fora do período financeiro', () => {
+  const root = snapshot();
+  root.barbearias[EMP].agendamentos = { a1: root.barbearias[EMP].agendamentos.a1 };
+  root.barbearias[EMP].comandas = { c1: { ...root.barbearias[EMP].comandas.c1, agendamentoId: 'a1', fechadaEm: '2026-03-05T17:00:00Z' } };
+  root.barbearias[EMP].vendasRevenda = {};
+  const result = buildEquipeDesempenho(root, PERIOD);
+  const employee = result.employees.find(item => item.id === 'p1');
+  assert.equal(result.summary.revenue, 0);
+  assert.equal(result.summary.completed, 1);
+  assert.equal(employee.heatmap.reduce((sum, cell) => sum + cell.quantity, 0), 1);
+  assert.equal(employee.heatmap.find(cell => cell.quantity)?.hour, 9);
+  assert.equal(employee.heatmap.reduce((sum, cell) => sum + cell.revenue, 0), 0);
+  assert.equal(employee.daily.reduce((sum, row) => sum + row.revenue, 0), 0);
+});
+
+test('repasses exatos coexistindo com legado sem unidade ficam indisponíveis, nunca um total aparentemente completo', () => {
+  const root = snapshot();
+  root.barbeariaRepasses[EMP].repasses.exact = { id: 'exact', empresaId: EMP, lojaId: STORE, profissionalId: 'p1', status: 'pago', valorPago: 10, pagoEm: '2026-03-01T12:00:00Z' };
+  root.barbeariaRepasses[EMP].repasses.other = { id: 'other', empresaId: EMP, lojaId: 'loja-b', profissionalId: 'p1', status: 'pago', valorPago: 30, pagoEm: '2026-03-01T12:00:00Z' };
+  const result = buildEquipeDesempenho(root, PERIOD);
+  assert.equal(result.summary.paidTransfers, null);
+  assert.equal(result.quality.transfersAvailable, false);
+  assert.equal(result.employees.find(item => item.id === 'p1').paidTransfers, null);
+  assert.ok(result.quality.commissionWarnings.some(item => item.includes('repasses pagos sem unidade comprovada')));
+  delete root.barbeariaRepasses[EMP].repasses.repLegacy;
+  assert.equal(buildEquipeDesempenho(root, PERIOD).summary.paidTransfers, 10);
+});
+
+test('comandas com mesmo atendimento são ambíguas e excluídas sem escolha financeira ou mutação', () => {
+  const root = snapshot();
+  root.barbearias[EMP].agendamentos = { a1: root.barbearias[EMP].agendamentos.a1 };
+  root.barbearias[EMP].comandas = {
+    c1: { ...root.barbearias[EMP].comandas.c1, agendamentoId: 'a1' },
+    c2: { ...root.barbearias[EMP].comandas.c1, id: 'c2', agendamentoId: 'a1' },
+  };
+  root.barbearias[EMP].vendasRevenda = { linked: { id: 'linked', empresaId: EMP, lojaId: STORE, profissionalId: 'p1', comandaId: 'c1', status: 'pago', criadoEm: '2026-03-01T12:00:00Z', total: 999, itens: [{ tipo: 'produto', quantidade: 1, subtotal: 999 }] } };
+  const before = clone(root); freeze(root);
+  const result = buildEquipeDesempenho(root, PERIOD);
+  assert.equal(result.summary.revenue, 0);
+  assert.equal(result.summary.commission, 0);
+  assert.equal(result.summary.services, 0);
+  assert.equal(result.quality.ambiguousCommandsExcluded, 2);
+  assert.ok(result.quality.commissionWarnings.some(item => item.includes('Receita e comissão são parciais')));
+  assert.equal(result.summary.completed, 1);
+  assert.equal(result.employees.find(item => item.id === 'p1').heatmap.reduce((sum, cell) => sum + cell.quantity, 0), 1);
+  assert.deepEqual(root, before);
 });

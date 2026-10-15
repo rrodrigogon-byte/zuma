@@ -214,22 +214,34 @@ function sanitizeTransactionItems(strict, warnings) {
 
 function deduplicatedCommissionState(strict, warnings) {
   const sanitized = sanitizeTransactionItems(strict, warnings);
-  const commands = Object.values(sanitized.comandas || {});
+  const eligible = Object.values(sanitized.comandas || {}).filter(item => COMMISSION_STATUSES.has(item.status));
+  const appointmentCounts = new Map();
+  for (const command of eligible) {
+    const appointmentId = text(command.agendamentoId);
+    if (appointmentId) appointmentCounts.set(appointmentId, (appointmentCounts.get(appointmentId) || 0) + 1);
+  }
+  const ambiguousAppointments = new Set([...appointmentCounts].filter(([, count]) => count > 1).map(([id]) => id));
+  const ambiguousCommands = new Set(eligible.filter(item => ambiguousAppointments.has(text(item.agendamentoId))).map(idOf));
+  if (ambiguousCommands.size) warnOnce(warnings, `${ambiguousCommands.size} comandas ligadas a atendimentos com vínculo financeiro ambíguo foram excluídas da apuração. Receita e comissão são parciais até revisão; nenhuma comanda foi escolhida, mesclada ou alterada automaticamente.`);
+  const commands = Object.values(sanitized.comandas || {}).filter(item => !ambiguousCommands.has(idOf(item)));
   const byId = new Map(commands.map((item) => [idOf(item), item]));
   const linkedSales = new Set();
   for (const sale of Object.values(sanitized.vendasRevenda || {})) {
     const commandId = saleCommandReference(sale);
     const command = byId.get(commandId);
-    if (command && COMMISSION_STATUSES.has(command.status)) linkedSales.add(idOf(sale));
+    if (ambiguousCommands.has(commandId) || command && COMMISSION_STATUSES.has(command.status)) linkedSales.add(idOf(sale));
   }
-  for (const command of commands) {
+  for (const command of eligible) {
     if (!COMMISSION_STATUSES.has(command.status)) continue;
     for (const saleId of commandSaleReferences(command)) {
       if (sanitized.vendasRevenda?.[saleId]) linkedSales.add(saleId);
     }
   }
   const vendasRevenda = Object.fromEntries(Object.entries(sanitized.vendasRevenda || {}).filter(([id]) => !linkedSales.has(id)));
-  return { ...sanitized, vendasRevenda };
+  const comandas = Object.fromEntries(commands.map(item => [idOf(item), item]));
+  // Ambiguous appointments still appear in operational counts, but not as a fallback financial receipt.
+  const agendamentos = Object.fromEntries(Object.entries(sanitized.agendamentos || {}).map(([id, item]) => [id, ambiguousAppointments.has(idOf(item)) ? { ...item, financeiroLancamentoId: null } : item]));
+  return { ...sanitized, comandas, agendamentos, vendasRevenda, ambiguousCommandsExcluded: ambiguousCommands.size };
 }
 
 function validProductItem(item, warnings) {
@@ -364,15 +376,16 @@ function recommendations(metrics) {
 function transferData(repasses, period, lojaId, professionalIds) {
   const relevant = repasses.filter((item) => item.status === 'pago' && dateInPeriod(item.pagoEm, period));
   const relevantExact = relevant.filter((item) => exactUnit(item, lojaId));
+  const unscoped = relevant.filter(item => !unitOf(item)).length;
   // Other-unit and legacy rows without lojaId never prove availability for this unit.
-  if (!relevantExact.length) return { available: false, total: null, byProfessional: new Map() };
+  if (!relevantExact.length || unscoped) return { available: false, total: null, byProfessional: new Map(), unscoped };
   const byProfessional = new Map();
   for (const item of relevantExact) {
     const professionalId = text(item.profissionalId);
     if (!professionalIds.has(professionalId)) continue;
     byProfessional.set(professionalId, money((byProfessional.get(professionalId) || 0) + num(item.valorPago ?? item.valor)));
   }
-  return { available: true, total: money(relevantExact.reduce((sum, item) => sum + num(item.valorPago ?? item.valor), 0)), byProfessional };
+  return { available: true, total: money(relevantExact.reduce((sum, item) => sum + num(item.valorPago ?? item.valor), 0)), byProfessional, unscoped };
 }
 
 function buildUnscopedExcluded(raw, period, empresaId) {
@@ -444,12 +457,14 @@ function buildPeriodData(snapshot, period, previousPeriod) {
   const productRows = canonicalProductRows(commissionState, commissions, period, materialWarnings);
   const previousRevenue = new Map(previousCommissions.porProfissional.map((row) => [row.profissionalId, money(row.bruto)]));
   const transfers = transferData(repasses, { ...period, lojaId: snapshot.lojaId }, snapshot.lojaId, professionalIds);
-  // Cover appointments by any in-scope faturada comanda, even when that comanda is outside this period.
-  const coveredAppointmentIds = new Set(Object.values(strict.comandas)
-    .filter((item) => COMMISSION_STATUSES.has(item.status))
-    .map((item) => text(item.agendamentoId)).filter(Boolean));
+  if (transfers.unscoped) warnOnce(materialWarnings, 'Há repasses pagos sem unidade comprovada no recorte; valores de repasse estão indisponíveis até revisão, sem inferir o total desta unidade.');
+  // Only starts represented in this heatmap cover the operational appointment.
+  // A later financial closing must not erase a service that took place in this period.
+  const coveredAppointmentIds = new Set();
   for (const row of serviceRows) {
-    if (row.kind === 'agendamento' && row.id) coveredAppointmentIds.add(row.id);
+    if (!row.timestamp || !dateInPeriod(row.timestamp, period)) continue;
+    const appointmentId = row.kind === 'agendamento' ? row.id : text(commandsById.get(row.id)?.agendamentoId);
+    if (appointmentId) coveredAppointmentIds.add(appointmentId);
   }
   return {
     commissions,
@@ -462,6 +477,7 @@ function buildPeriodData(snapshot, period, previousPeriod) {
     servicesById,
     coveredAppointmentIds,
     appointmentHeatmapRows: appointmentRows(strict, period, professionalIds, coveredAppointmentIds),
+    ambiguousCommandsExcluded: commissionState.ambiguousCommandsExcluded,
     warnings: commissionWarnings(commissions, [], materialWarnings),
   };
 }
@@ -554,6 +570,7 @@ export function buildEquipeDesempenho(root, options = {}) {
   const quality = {
     unscopedExcluded: buildUnscopedExcluded(snapshot.raw, period, empresaId),
     unattributedEvents: buildAttributionCount(current, snapshot.professionalIds),
+    ambiguousCommandsExcluded: current.ambiguousCommandsExcluded,
     transfersAvailable: current.transfers.available,
     commissionEstimated: true,
     commissionWarnings: current.warnings,
@@ -586,6 +603,7 @@ export function buildEquipeDesempenho(root, options = {}) {
       'O período é calendárico inclusivo em America/Cuiaba, com no máximo 93 dias; comparação usa o mesmo número de dias imediatamente anterior e não calcula percentual sobre base anterior zero.',
       'O mapa usa início confirmado de serviço; a série diária usa a data canônica de apuração (fechamento de comanda, criação de revenda paga, ou dia do atendimento com recebimento verificado). Produtos não entram no mapa de serviços. Não há NPS ou ocupação inferidos.',
       'Custos de materiais só são usados com cadastro de serviço e insumo da unidade exata. Sem essa prova, a comissão fica indicativa e o custo real não é afirmado como zero.',
+      'Múltiplas comandas faturadas com o mesmo agendamento são ambíguas: ficam fora da receita/comissão deste relatório até revisão, sem alterar os registros. O atendimento concluído permanece na agenda e no mapa operacional.',
     ],
   };
 }

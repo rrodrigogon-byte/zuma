@@ -27,4 +27,14 @@ describe('desempenho da equipe', () => {
   it('busca e ordenação preservam funcionários sem movimento e abrem os módulos existentes', async () => { await mount(); const search = renderer.root.findAllByType('input').find(item => item.props.type === 'search'); await act(async () => search.props.onChange({ target: { value: 'sintético B' } })); expect(text(renderer.toJSON())).toContain('Profissional sintético B'); expect(text(renderer.toJSON())).not.toContain('Profissional sintético A'); await act(async () => button('Conferir extratos e repasses').props.onClick()); expect(props.onOpenTab).toHaveBeenCalledWith('Extrato e repasses'); })
   it('preset de 7 dias invalida e busca um novo período de mesma janela', async () => { await mount(); const old = mocks.get.mock.calls[0][0]; await act(async () => { button('7 dias').props.onClick(); await tick() }); expect(mocks.get).toHaveBeenCalledTimes(2); expect(mocks.get.mock.calls[1][0]).not.toBe(old); })
   it('deslocamento de dia respeita viradas e ano bissexto', () => { expect(shiftEquipeDate('2024-03-01', -1)).toBe('2024-02-29'); expect(shiftEquipeDate('2026-01-01', -1)).toBe('2025-12-31'); })
+  it('comandas ambíguas mostram apuração parcial e ressalva financeira nos cartões', async () => {
+    mocks.get.mockImplementation(url => { const data = fixture(url); data.quality.ambiguousCommandsExcluded = 2; data.quality.commissionWarnings = ['Vínculo financeiro ambíguo: revisão requerida.']; return Promise.resolve(data) });
+    await mount(); const content = text(renderer.toJSON());
+    expect(content).toContain('APURAÇÃO PARCIAL'); expect(content).toContain('comandas ambíguas excluídas'); expect(content).toContain('Vínculo financeiro ambíguo');
+  })
+  it('evidência não textual inesperada é ignorada, sem quebrar ou ecoar o objeto', async () => {
+    mocks.get.mockImplementation(url => { const data = fixture(url); data.employees[0].suggestions[0].evidence = { email: 'PRIVATE-CANARY' }; return Promise.resolve(data) });
+    await mount(); const analyze = renderer.root.findAllByType('button').find(item => item.props['aria-label'] === 'Ver desempenho de Profissional sintético A');
+    await act(async () => analyze.props.onClick()); expect(text(renderer.toJSON())).toContain('Revisar o fluxo'); expect(text(renderer.toJSON())).not.toContain('PRIVATE-CANARY');
+  })
 })
