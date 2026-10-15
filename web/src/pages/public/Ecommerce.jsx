@@ -233,6 +233,11 @@ function EcommerceStorefront({ routeAlias, hostName }) {
   const [addError, setAddError] = useState('')
   const [cartBump, setCartBump] = useState(false)
   const addLockRef = useRef(new Set())
+  // Stallone: sem barra presa no topo. Depois que a busca sai da tela, uma pílula
+  // pequena no rodapé oferece Buscar e Carrinho sem cobrir os produtos.
+  const toolbarRef = useRef(null)
+  const searchInputRef = useRef(null)
+  const [quickbarVisible, setQuickbarVisible] = useState(false)
   const cartSyncControllerRef = useRef(null)
   const [category, setCategory] = useState('Todos')
   const [sort, setSort] = useState('available')
@@ -568,6 +573,31 @@ function EcommerceStorefront({ routeAlias, hostName }) {
     window.history.replaceState(window.history.state, '', `${window.location.pathname}${search ? `?${search}` : ''}${window.location.hash}`)
     if (result.added.length) setCartOpen(true)
   }, [catalogSource, products]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!isStalloneStorefront) return undefined
+    // Aparece só quando a busca já passou para cima (rolando a vitrine), não antes dela.
+    // Leitura de layout no máximo uma vez por quadro (rolagem passiva, sem travar a tela).
+    let frame = 0
+    const update = () => {
+      frame = 0
+      const element = toolbarRef.current
+      setQuickbarVisible(Boolean(element) && element.getBoundingClientRect().bottom < 0)
+    }
+    const onScroll = () => { if (!frame) frame = window.requestAnimationFrame(update) }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll, { passive: true })
+    update()
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onScroll)
+      if (frame) window.cancelAnimationFrame(frame)
+    }
+  }, [isStalloneStorefront])
+  function focusSearch() {
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    toolbarRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
+    window.setTimeout(() => searchInputRef.current?.focus({ preventScroll: true }), reduce ? 0 : 350)
+  }
   function openTracking() {
     setTrackingOpen(true)
     setTrackingError('')
@@ -735,14 +765,18 @@ function EcommerceStorefront({ routeAlias, hostName }) {
       <div className="commerce-channel-status" role="status"><span className={catalogSource === 'core' ? 'is-live' : ''}>{catalogSource === 'core' ? 'Estoque atualizado' : catalogSource === 'legacy' ? 'Catálogo da loja' : 'Conectando catálogo'}</span><small>{catalogSource === 'core' ? 'Disponibilidade confirmada ao finalizar a compra.' : 'Disponibilidade sujeita à confirmação da loja.'}</small></div>
     </section>}
 
-    <section className="commerce-toolbar" id="catalogo">
-      <div className="sf-search" role="search"><Search size={18} aria-hidden="true" /><input type="search" value={searchInput} onChange={event => setSearchInput(event.target.value)} onKeyDown={event => { if (event.key === 'Escape' && searchInput) { event.preventDefault(); clearSearch() } }} placeholder={isStalloneStorefront ? 'Buscar whey, creatina…' : 'Buscar produto, SKU ou categoria'} aria-label="Buscar produto, SKU ou categoria" autoComplete="off" enterKeyHint="search" />{searchInput && <button type="button" className="sf-search-clear" onClick={clearSearch} aria-label="Limpar busca"><X size={17} /></button>}</div>
+    <section className="commerce-toolbar" id="catalogo" ref={toolbarRef}>
+      <div className="sf-search" role="search"><Search size={18} aria-hidden="true" /><input ref={searchInputRef} type="search" value={searchInput} onChange={event => setSearchInput(event.target.value)} onKeyDown={event => { if (event.key === 'Escape' && searchInput) { event.preventDefault(); clearSearch() } }} placeholder={isStalloneStorefront ? 'Buscar whey, creatina…' : 'Buscar produto, SKU ou categoria'} aria-label="Buscar produto, SKU ou categoria" autoComplete="off" enterKeyHint="search" />{searchInput && <button type="button" className="sf-search-clear" onClick={clearSearch} aria-label="Limpar busca"><X size={17} /></button>}</div>
       <div className="commerce-categories" role="group" aria-label="Filtrar por categoria">
         {categories.map(item => <button key={item} type="button" aria-pressed={category === item} className={category === item ? 'is-active' : ''} onClick={() => setCategory(item)}>{item}</button>)}
       </div>
       <button type="button" className={`commerce-cart-button ${cartBump ? 'is-bumped' : ''}`} onClick={() => setCartOpen(true)} aria-label={`Abrir carrinho, ${cartCount} ${cartCount === 1 ? 'item' : 'itens'}`}><ShoppingBag size={19} aria-hidden="true" /><span>Carrinho</span><b className={cartCount ? '' : 'is-empty'} aria-hidden="true">{cartCount}</b></button>
       {!isStalloneStorefront && <div className="sf-catalog-options"><label><input type="checkbox" checked={inStockOnly} onChange={event => setInStockOnly(event.target.checked)} /> Somente em estoque</label><label>Ordenar por <select value={sort} onChange={event => setSort(event.target.value)}><option value="available">Disponibilidade</option><option value="price-asc">Menor preço</option><option value="price-desc">Maior preço</option><option value="name">Nome A–Z</option></select></label></div>}
     </section>
+    {isStalloneStorefront && <nav className={`stl-quickbar${quickbarVisible && !cartOpen && !addedItem ? ' is-visible' : ''}`} aria-label="Atalhos da loja" aria-hidden={!(quickbarVisible && !cartOpen && !addedItem)}>
+      <button type="button" onClick={focusSearch} tabIndex={quickbarVisible ? 0 : -1}><Search size={18} aria-hidden="true" /><span>Buscar</span></button>
+      <button type="button" className="is-cart" onClick={() => setCartOpen(true)} tabIndex={quickbarVisible ? 0 : -1} aria-label={`Abrir carrinho, ${cartCount} ${cartCount === 1 ? 'item' : 'itens'}`}><ShoppingBag size={18} aria-hidden="true" /><span>Carrinho</span><b aria-hidden="true">{cartCount}</b></button>
+    </nav>}
     {isStalloneStorefront && <div className="stl-catalog-bar">
       <p aria-live="polite">{loading ? 'Carregando produtos…' : <><strong>{filtered.length} {filtered.length === 1 ? 'produto' : 'produtos'}</strong>{category !== 'Todos' ? ` em ${category}` : ''}{query ? ` para “${query}”` : ''}</>}</p>
       <div className="stl-catalog-controls">

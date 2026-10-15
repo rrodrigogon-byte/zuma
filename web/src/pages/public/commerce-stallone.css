@@ -525,21 +525,19 @@ html[data-brand='stallone']:not([data-theme='dark']) .commerce-shell.sf-ux .comm
   outline: none;
 }
 
-/* Celular: presa no topo só a busca, o carrinho e a linha de categorias. */
+/* Celular e tablet: a barra NÃO fica presa no topo (a vitrine inteira fica para os
+   produtos ao rolar). Os atalhos Buscar/Carrinho aparecem na pílula do rodapé. */
+@media (max-width: 1024px) {
+  html[data-brand='stallone'] .commerce-shell.sf-ux .commerce-toolbar { position: relative; top: auto; }
+}
 @media (max-width: 700px) {
   html[data-brand='stallone'] .commerce-shell.sf-ux .commerce-toolbar {
-    position: sticky;
-    top: 0;
-    z-index: 5;
-    margin: 0 -12px 12px;
-    padding: 10px 12px 10px;
+    position: relative;
+    top: auto;
+    margin: 0 0 12px;
+    padding: 10px;
     gap: 10px 8px;
-    border-radius: 0 0 18px 18px;
-    border-width: 0 0 1px;
-    background: rgba(255, 255, 255, .96);
-    -webkit-backdrop-filter: saturate(1.4) blur(10px);
-    backdrop-filter: saturate(1.4) blur(10px);
-    box-shadow: 0 10px 24px -18px rgba(23, 23, 28, .35);
+    border-radius: 18px;
   }
   html[data-brand='stallone'] .commerce-shell.sf-ux .sf-search input { min-height: 46px; }
   html[data-brand='stallone'] .commerce-shell.sf-ux .commerce-cart-button { min-height: 46px; }
@@ -554,4 +552,59 @@ html[data-brand='stallone']:not([data-theme='dark']) .commerce-shell.sf-ux .comm
 }
 @media (prefers-reduced-motion: reduce) {
   .stl-switch span, .stl-switch span::after { transition: none; }
+}
+
+/* ----------------------------------------------------------------------------
+   Pílula de atalhos (Buscar + Carrinho) no rodapé, só depois que a busca saiu da
+   tela. Na altura do polegar, respeita a área segura do iPhone e some quando o
+   carrinho ou o aviso de "adicionado" estão abertos.
+   ---------------------------------------------------------------------------- */
+.stl-quickbar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  z-index: 50;
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .97);
+  box-shadow: 0 14px 34px -14px rgba(23, 23, 28, .45);
+  transform: translate(-50%, calc(100% + 28px));
+  opacity: 0;
+  pointer-events: none;
+  transition: transform .22s ease, opacity .22s ease;
+}
+.stl-quickbar.is-visible { transform: translate(-50%, 0); opacity: 1; pointer-events: auto; }
+.stl-quickbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: #F2F3F5;
+  color: #17171C;
+  font: 700 15px var(--font-body, var(--font));
+  cursor: pointer;
+}
+.stl-quickbar button.is-cart { background: var(--accent); color: #FFFFFF; }
+.stl-quickbar button b {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: #FFFFFF;
+  color: var(--accent);
+  font-size: 12px;
+}
+.stl-quickbar button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+/* Espaço no fim da vitrine para a pílula não cobrir o último card. */
+html[data-brand='stallone'] .commerce-shell.sf-ux { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+@media (prefers-reduced-motion: reduce) {
+  .stl-quickbar { transition: opacity .01s; }
 }
