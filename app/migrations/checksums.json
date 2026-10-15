@@ -73,5 +73,6 @@
  "068_commerce_platform_grants.sql": "72b263aad53fe7fe526b244feaa59ac9d066e09bba581b420627d313d8fe5bbe",
  "069_commerce_postal_codes.sql": "80c383732cf42c2ff0c1383f6d665ebe85552928b8326f0fe4b1ef206963b181",
  "070_whatsapp_channel_profiles.sql": "c565cde93b65f01af537407467bb699f2dd05fd96a005cdf2f823911c289e5f4",
- "071_whatsapp_launch_channel.sql": "6928847b9458d27c3166160a9bc116e7fc02028945c60f616b117fc466763043"
+ "071_whatsapp_launch_channel.sql": "6928847b9458d27c3166160a9bc116e7fc02028945c60f616b117fc466763043",
+ "072_whatsapp_waha_internal_channels.sql": "128394c6de4bdcc5e611dfbf8bea5c618979049c8220253f2539a098d5b4fafd"
 }

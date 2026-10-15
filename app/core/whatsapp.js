@@ -7,6 +7,7 @@ import fetch from 'node-fetch';
 import { chatbotBackendConfig, chatbotBackendMode, instanceRegistry, isRegisteredInstance, sendStickerViaChatbotBackend, sendTextViaChatbotBackend, whatsappProviderName } from './whatsapp-provider.js';
 import { db } from './database.js';
 import { authorizeWhatsappEgress, evaluateWhatsappEgress } from './whatsapp-egress.js';
+import { sendWahaText, validWahaGroupId, validWahaSession } from './whatsapp-waha.js';
 
 // ─── Configuração ─────────────────────────────────────────────────────────────
 function getConfig(tenant) {
@@ -28,6 +29,19 @@ function formatarTelefone(tel) {
 }
 
 export async function enviarMensagem(tenant, telefone, mensagem) {
+  if (tenant?.transport === 'waha') {
+    const session = validWahaSession(tenant?.waha_session || tenant?.whatsapp_instance);
+    const groupId = validWahaGroupId(tenant?.waha_group_id || telefone);
+    const text = String(mensagem || '').slice(0, 4000);
+    if (!session || !groupId || !text) return { ok: false, retryable: false, uncertain: false, error: 'WAHA_GROUP_DESTINATION_REQUIRED' };
+    try {
+      const data = await sendWahaText(session, groupId, text);
+      return { ok: true, status: 202, retryable: false, uncertain: false, data };
+    } catch (error) {
+      const status = Number(error?.status || 0) || null;
+      return { ok: false, status, retryable: status === 429, uncertain: !status || status >= 500, error: String(error?.message || 'WAHA_SEND_FAILED').slice(0, 200) };
+    }
+  }
   const numero = formatarTelefone(String(telefone || ''));
   const text = String(mensagem || '').slice(0, 4000);
   // Mesmo backend do NossaGente: todas as saídas (IA, campanhas, carrinho,

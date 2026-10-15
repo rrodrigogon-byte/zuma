@@ -1,0 +1,21 @@
+[Unit]
+Description=Kytto private WAHA control bridge
+Requires=kytto-waha.service
+After=kytto-waha.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/kytto-waha
+EnvironmentFile=/opt/kytto-waha/bridge.env
+ExecStart=/usr/bin/python3 /opt/kytto-waha/control-bridge.py
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/kytto-waha
+
+[Install]
+WantedBy=multi-user.target
