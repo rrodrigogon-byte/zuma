@@ -86,6 +86,7 @@ import { compareLegacyAndCoreInventory, createDestructiveAdminGuard, createLegac
 import { readScopedCatalogDiagnostic } from './core/catalog-read-diagnostic.js';
 import { buildDinoDashboardAnalytics, dashboardPeriod } from './dino-dashboard.js';
 import { registerCustomer360Routes } from './customer360-routes.js';
+import { registerEquipePerformanceRoutes, equipePerformanceNoStore } from './dino-equipe-desempenho-routes.js';
 import { registerAiBrainRoutes } from './ai-brain-routes.js';
 import { startAiBrainSchedulers } from './ai-brain-scheduler.js';
 import { registerAtivacaoRoutes } from './dino-ativacao-routes.js';
@@ -124,6 +125,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use(avecGovernanceNoStore);
+app.use(equipePerformanceNoStore);
 app.use(express.json({ limit: '1mb', verify: (req, res, buf) => { if (req.originalUrl?.startsWith('/api/webhooks/')) req.rawBody = Buffer.from(buf); } }));
 
 // SSE — realtime para KDS, Mesas, Portaria
@@ -2632,7 +2634,7 @@ function exigirPapelOperacaoBarbearia(req, res, next) {
   }
   if (['admin', 'organizador'].includes(String(req.user?.role || ''))) return next();
   const endpoint = req.path || '';
-  const leituraGerencial = /^\/(?:overview|dashboard|analytics|metas|financeiro|bi|auditoria|relatorios|comissoes|clientes|clientes-360|crm\/resumo|operacao\/resumo|operacao\/caixas|fiscal\/documentos|vendas-revenda|caixa\/previa-taxas-materiais)(?:\/|$)/.test(endpoint);
+  const leituraGerencial = /^\/(?:overview|dashboard|analytics|metas|financeiro|bi|auditoria|relatorios|comissoes|equipe\/desempenho|clientes|clientes-360|crm\/resumo|operacao\/resumo|operacao\/caixas|fiscal\/documentos|vendas-revenda|caixa\/previa-taxas-materiais)(?:\/|$)/.test(endpoint);
   const mutacaoGerencial = req.method !== 'GET' && (
     /^\/(?:configuracoes|profissionais|servicos|planos|assinaturas|estoque-revenda|fidelidade\/(?:regra|creditar)|operacao\/caixas|operacao\/fechar-dia|financeiro)(?:\/|$)/.test(endpoint)
     || /^\/comandas\/[^/]+\/(?:pagamentos|cancelar|fiscal|consumo-interno)(?:\/|$)/.test(endpoint)
@@ -2648,6 +2650,7 @@ function exigirPapelOperacaoBarbearia(req, res, next) {
   next();
 }
 app.use('/api/admin/barbearia', auth, requireStaff, resolverEscopoBarbearia, exigirPapelOperacaoBarbearia);
+registerEquipePerformanceRoutes(app, { db, legacyEmpresaId, legacyLojaId, requireCommercePermission });
 registerCustomer360Routes(app, { legacyEmpresaId, legacyLojaId, clientesKytto, barbeariaErpKytto, canaisFidelidadeKytto, listarAgendamentosBarbearia, requireCommercePermission, audit, save });
 registerDinoAdminRoutes(app, { db, legacyEmpresaId, legacyLojaId, financeiroKytto, barbeariaErpKytto, clientesKytto, commerceDb, requireCommercePermission, dashboardPeriod, audit, save, salesReport });
 registerAiBrainRoutes(app, { legacyEmpresaId, legacyLojaId, requireCommercePermission, audit, clientesKytto, commerceDb, listarAgendamentosBarbearia });

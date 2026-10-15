@@ -212,6 +212,7 @@ const NAV_DINO_GROUPS = [
     label: 'Gestão',
     items: [
       { to: '/admin/bi', icon: '↗', label: 'BI & Analytics' },
+      { to: '/admin/barbearia-erp?area=gestao&tab=Desempenho+da+equipe', icon: '↗', label: 'Desempenho da equipe' },
       { to: '/admin/financeiro', icon: '◇', label: 'Financeiro' },
       { to: '/admin/barbearia-erp?area=gestao&tab=Relat%C3%B3rios', icon: '▤', label: 'Relatórios' },
       { to: '/admin/ecommerce?tab=users', icon: '♧', label: 'Usuários e acessos' },
