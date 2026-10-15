@@ -24,6 +24,7 @@
 
 import { config } from '../config.js';
 import { chatbotBackendConfig } from './whatsapp-provider.js';
+import crypto from 'node:crypto';
 
 const DEFAULT_MAX_MB = 12;
 const TIMEOUT_MS = 25000;
@@ -31,6 +32,7 @@ const AUDIO_TYPES = /^audio\/(ogg|opus|mpeg|mp3|mp4|m4a|aac|wav|x-wav|webm|amr|3
 const IMAGE_TYPES = /^image\/(jpeg|jpg|png|webp|heic|heif|gif)/i;
 
 export const MEDIA_PREFIX = { audio: '[áudio transcrito]', image: '[foto enviada pelo cliente]' };
+export const EXPENSE_PREFIX = '[despesa extraída da foto]';
 
 const clean = (value, max = 500) => String(value ?? '').replace(/\u0000/g, '').trim().slice(0, max);
 
@@ -185,13 +187,13 @@ Não responda ao cliente, não resuma e não invente nada. Mantenha nomes, horá
 Se trechos estiverem inaudíveis, escreva [inaudível] no lugar. Se não houver fala, responda apenas: [sem fala].
 Devolva somente a transcrição.`;
 
-const IMAGE_PROMPT = `Você ajuda o atendente de uma barbearia e perfumaria no Brasil a entender a foto que o cliente enviou.
-Descreva em até 3 frases objetivas, em português do Brasil, o que importa para o atendimento:
-- se for corte/barba/cabelo: estilo (ex.: degradê baixo/médio/alto, social, navalhado, risca, topete, barba desenhada/cheia), comprimento e detalhes;
-- se for produto/perfume: marca, nome e tipo legíveis;
-- se for comprovante, documento ou dado pessoal: diga apenas "documento ou comprovante" sem transcrever números;
-- caso contrário, descreva o essencial.
-Não identifique a pessoa, não comente aparência física, idade, etnia ou atributos sensíveis. Não invente preço nem serviço.`;
+const IMAGE_PROMPT = `Você ajuda o atendente de uma empresa brasileira a entender uma foto enviada no WhatsApp.
+Retorne SOMENTE um JSON válido com estas chaves, sem markdown: tipo_imagem, descricao, fornecedor, valor_total, data_documento, categoria, confianca.
+tipo_imagem deve ser exatamente "despesa" quando a foto for uma nota fiscal, cupom, recibo ou comprovante de compra; caso contrário use "referencia" ou "outro".
+Para uma despesa, extraia somente dados legíveis e necessários: fornecedor, valor total, data no formato AAAA-MM-DD e uma categoria curta. Use valor_total 0, data_documento "" ou campos vazios quando não estiverem legíveis. Não leia nem retorne CPF, CNPJ, chave Pix, código de barras, número de cartão ou outros dados pessoais/sensíveis.
+As categorias possíveis são: Pessoal/RH, Manutenção, Utilities (Água/Luz), Material Esportivo, Alimentação/Bebidas, Marketing, Equipamentos, Impostos/Taxas, Serviços Terceiros ou Outros. Se não tiver segurança, use Outros e reduza confianca.
+Para uma foto de corte, barba ou cabelo, descreva em até 3 frases objetivas estilo e detalhes úteis ao atendimento. Para produto/perfume, informe somente marca, nome e tipo legíveis. Não identifique pessoas, não comente aparência física, idade, etnia ou atributos sensíveis. Não invente preço nem serviço.
+confianca é um número entre 0 e 1 e deve refletir apenas a legibilidade dos dados extraídos.`;
 
 function inferredMime(kind, mimeType) {
   const m = clean(mimeType, 100).toLowerCase().split(';')[0];
@@ -220,7 +222,23 @@ export async function understandMedia({ kind, base64, mimeType, caption }, { fet
     response = await fetchImpl(endpoint, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: { temperature: 0, maxOutputTokens: 1200 } }),
+      body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: {
+        temperature: 0,
+        maxOutputTokens: 1200,
+        ...(kind === 'image' ? { responseMimeType: 'application/json', responseSchema: {
+          type: 'OBJECT',
+          properties: {
+            tipo_imagem: { type: 'STRING', enum: ['despesa', 'referencia', 'outro'] },
+            descricao: { type: 'STRING' },
+            fornecedor: { type: 'STRING' },
+            valor_total: { type: 'NUMBER' },
+            data_documento: { type: 'STRING' },
+            categoria: { type: 'STRING' },
+            confianca: { type: 'NUMBER' },
+          },
+          required: ['tipo_imagem', 'descricao', 'fornecedor', 'valor_total', 'data_documento', 'categoria', 'confianca'],
+        } } : {}),
+      } }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch {
@@ -231,18 +249,66 @@ export async function understandMedia({ kind, base64, mimeType, caption }, { fet
   if (payload?.promptFeedback?.blockReason) throw new MediaError('Gemini bloqueou a mídia', 'GEMINI_BLOCKED');
   const text = (payload?.candidates?.[0]?.content?.parts || []).map((p) => (typeof p.text === 'string' ? p.text : '')).join('\n').trim();
   if (!text) throw new MediaError('Gemini não devolveu texto', 'GEMINI_EMPTY_RESPONSE');
-  return { text: clean(text, 3500), model };
+  if (kind !== 'image') return { text: clean(text, 3500), model };
+  const structured = parseImageUnderstanding(text, crypto.createHash('sha256').update(base64).digest('hex'));
+  return { text: structured.text, expense: structured.expense, model };
+}
+
+function parseImageUnderstanding(raw, mediaHash = '') {
+  let parsed = null;
+  try { parsed = JSON.parse(String(raw || '').replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()); } catch { parsed = null; }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { text: clean(raw, 3500), expense: null };
+  const tipo = clean(parsed.tipo_imagem, 20).toLowerCase();
+  const descricao = clean(parsed.descricao, 1200);
+  const fornecedor = clean(parsed.fornecedor, 160);
+  const dataDocumento = /^\d{4}-\d{2}-\d{2}$/.test(clean(parsed.data_documento, 10)) ? clean(parsed.data_documento, 10) : '';
+  const valor = Number(parsed.valor_total);
+  const confianca = Math.min(1, Math.max(0, Number(parsed.confianca) || 0));
+  const categoria = clean(parsed.categoria, 100) || 'Outros';
+  const expense = tipo === 'despesa' ? {
+    fornecedor,
+    valor: Number.isFinite(valor) && valor > 0 ? Number(valor.toFixed(2)) : 0,
+    dataDocumento,
+    categoria,
+    descricao,
+    confianca: Number(confianca.toFixed(3)),
+    mediaHash,
+  } : null;
+  return { text: descricao || (tipo === 'despesa' ? 'documento ou comprovante de compra' : 'imagem recebida'), expense };
+}
+
+export function extractExpenseEvidence(text) {
+  const line = String(text || '').split('\n').find((item) => item.trim().toLowerCase().startsWith(EXPENSE_PREFIX));
+  if (!line) return null;
+  try {
+    const value = JSON.parse(line.slice(line.indexOf(EXPENSE_PREFIX) + EXPENSE_PREFIX.length).trim());
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const valor = Number(value.valor);
+    const dataDocumento = /^\d{4}-\d{2}-\d{2}$/.test(String(value.dataDocumento || '')) ? String(value.dataDocumento) : '';
+    const confianca = Math.min(1, Math.max(0, Number(value.confianca) || 0));
+    return {
+      fornecedor: clean(value.fornecedor, 160),
+      valor: Number.isFinite(valor) && valor > 0 ? Number(valor.toFixed(2)) : 0,
+      dataDocumento,
+      categoria: clean(value.categoria, 100) || 'Outros',
+      descricao: clean(value.descricao, 500),
+      confianca: Number(confianca.toFixed(3)),
+      mediaHash: /^[a-f0-9]{64}$/i.test(String(value.mediaHash || '')) ? String(value.mediaHash).toLowerCase() : '',
+    };
+  } catch { return null; }
 }
 
 /** Converte a leitura da mídia no texto que o atendente recebe. */
 export function mediaAsCustomerText(kind, understood, caption) {
-  const body = clean(understood, 3500);
+  const body = clean(typeof understood === 'object' ? understood.text : understood, 3500);
   if (kind === 'audio') {
     if (!body || /^\[sem fala\]$/i.test(body)) return '';
     return `${MEDIA_PREFIX.audio} ${body}`;
   }
   const legenda = clean(caption, 1000);
-  return `${MEDIA_PREFIX.image} ${body}${legenda ? `\nLegenda do cliente: ${legenda}` : ''}`;
+  const expense = typeof understood === 'object' ? understood.expense : null;
+  const evidence = expense ? `\n${EXPENSE_PREFIX} ${JSON.stringify(expense)}` : '';
+  return `${MEDIA_PREFIX.image} ${body}${legenda ? `\nLegenda do cliente: ${legenda}` : ''}${evidence}`;
 }
 
 /**
@@ -256,12 +322,12 @@ export async function inboundMediaToText(item, { fetchImpl = fetch, chatId } = {
   try {
     const loaded = await loadMediaBase64(media, { fetchImpl, chatId });
     const understood = await understandMedia({ kind: media.kind, base64: loaded.base64, mimeType: loaded.mimeType || media.mimeType, caption: media.caption }, { fetchImpl });
-    const text = mediaAsCustomerText(media.kind, understood.text, media.caption);
+    const text = mediaAsCustomerText(media.kind, understood, media.caption);
     if (!text) return { ok: false, kind: media.kind, code: 'MEDIA_NO_SPEECH' };
-    return { ok: true, kind: media.kind, text, model: understood.model };
+    return { ok: true, kind: media.kind, text, model: understood.model, expense: understood.expense || null };
   } catch (error) {
     return { ok: false, kind: media.kind, code: error?.code || 'MEDIA_ERROR' };
   }
 }
 
-export const MEDIA_SYSTEM_GUIDANCE = `Mensagens que começam com "${MEDIA_PREFIX.audio}" vieram de um áudio do cliente transcrito automaticamente: podem ter pequenos erros de transcrição, então confirme nomes, dias e horários antes de preparar qualquer ação. Mensagens que começam com "${MEDIA_PREFIX.image}" descrevem a foto enviada: use para sugerir o serviço adequado do catálogo real (ex.: foto de degradê → serviço de corte com máquina/fade), sem prometer resultado idêntico e sem comentar a aparência da pessoa.`;
+export const MEDIA_SYSTEM_GUIDANCE = `Mensagens que começam com "${MEDIA_PREFIX.audio}" vieram de um áudio do cliente transcrito automaticamente: podem ter pequenos erros de transcrição, então confirme nomes, dias e horários antes de preparar qualquer ação. Mensagens que começam com "${MEDIA_PREFIX.image}" descrevem a foto enviada: use para sugerir o serviço adequado do catálogo real (ex.: foto de degradê → serviço de corte com máquina/fade), sem prometer resultado idêntico e sem comentar a aparência da pessoa. Quando houver a linha "${EXPENSE_PREFIX}", os dados são uma extração estruturada da imagem e podem alimentar preparar_despesa somente se valor, data e confiança forem suficientes; a ação sempre pede SIM e cria apenas despesa pendente, nunca pagamento.`;

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { db } from './database.js';
-import { confirmPendingAction, createWhatsappAiToolExecutor, WhatsappAiToolError } from './whatsapp-ai-tools.js';
+import { confirmPendingAction, createWhatsappAiToolExecutor, WhatsappAiToolError, WHATSAPP_AI_TOOL_DECLARATIONS } from './whatsapp-ai-tools.js';
 
 const CONTEXT = {
   empresaId: '11111111-1111-4111-8111-111111111111',
@@ -44,4 +44,26 @@ test('executor bloqueia promoções quando a capacidade não está habilitada no
     () => createWhatsappAiToolExecutor({ ...CONTEXT, capabilities: { sendPromotions: false } })('listar_promocoes_ativas', {}),
     error => error instanceof WhatsappAiToolError && error.code === 'CAPABILITY_DISABLED',
   );
+});
+
+test('despesa está na allowlist e pode ser desabilitada por canal', async () => {
+  assert.equal(WHATSAPP_AI_TOOL_DECLARATIONS.some((tool) => tool.name === 'preparar_despesa'), true);
+  await assert.rejects(
+    () => createWhatsappAiToolExecutor({ ...CONTEXT, capabilities: { financialOperations: false } })('preparar_despesa', {}),
+    error => error instanceof WhatsappAiToolError && error.code === 'CAPABILITY_DISABLED',
+  );
+});
+
+test('mesma mídia de despesa não cria segunda ação', async () => {
+  const original = db.queryRead;
+  const mediaHash = 'a'.repeat(64);
+  db.queryRead = async () => ({ rows: [{ id: 'acao-existente', status: 'preparada', solicitacao: {}, resposta: null }] });
+  try {
+    const result = await createWhatsappAiToolExecutor({
+      ...CONTEXT,
+      customerText: `[foto enviada pelo cliente]\n[despesa extraída da foto] ${JSON.stringify({ fornecedor: 'Fornecedor Teste', valor: 47, dataDocumento: '2026-10-14', categoria: 'Outros', descricao: 'Recibo', confianca: 0.99, mediaHash })}`,
+    })('preparar_despesa', {});
+    assert.equal(result.duplicada, true);
+    assert.equal(result.acao.id, 'acao-existente');
+  } finally { db.queryRead = original; }
 });

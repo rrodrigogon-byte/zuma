@@ -1,6 +1,9 @@
 import { isWhatsappOptInText, phoneMatchKeySql } from './whatsapp-phone.js';
 import crypto from 'node:crypto';
 import { db } from './database.js';
+import { save as saveLegacyDb } from '../db.js';
+import { registrarLancamento } from '../financeiro-central-kytto.js';
+import { extractExpenseEvidence } from './whatsapp-ai-media.js';
 import { countPublishedProducts, createPendingOrder, listPublishedProducts } from './commerce-core.js';
 import { quoteAvailableShipping } from './commerce-shipping.js';
 import { requiresPickupOnly, PICKUP_ONLY_ERROR_CODE } from './commerce-pickup-rules.js';
@@ -87,6 +90,7 @@ function contextScope(context = {}) {
       sendPromotions: context.capabilities?.sendPromotions === true,
       reminders: context.capabilities?.reminders !== false,
       humanHandoff: context.capabilities?.humanHandoff !== false,
+      financialOperations: context.capabilities?.financialOperations !== false,
     },
   };
 }
@@ -98,6 +102,7 @@ function capabilityAllows(name, capabilities = {}) {
   if (name.includes('promoc') || name === 'listar_promocoes_ativas' || name === 'atualizar_consentimento_marketing') return capabilities.sendPromotions === true;
   if (name === 'consultar_meu_plano' || name === 'avaliar_clube' || name === 'consultar_meu_cashback' || name === 'listar_planos') return capabilities.manageAppointments !== false;
   if (name === 'sugerir_produto_pos_servico') return capabilities.operateStore !== false;
+  if (name === 'preparar_despesa') return capabilities.financialOperations !== false;
   if (name.includes('agendamento') || name.includes('remarcacao') || name.includes('cancelamento') || name === 'listar_servicos' || name === 'listar_profissionais' || name === 'consultar_disponibilidade' || name === 'consultar_meus_agendamentos' || name === 'sugerir_proximos_horarios' || name === 'entrar_lista_espera' || name === 'confirmar_presenca' || name === 'avisar_atraso') return capabilities.manageAppointments !== false;
   if (name.includes('pedido') || name === 'buscar_produtos' || name === 'consultar_status_pedido' || name === 'cotar_frete' || name === 'link_carrinho') return capabilities.operateStore !== false;
   return true;
@@ -612,7 +617,44 @@ export function friendlyWhen(date, time, now = new Date()) {
   const prefix = date === today ? 'hoje, ' : date === addDaysIso(today, 1) ? 'amanhã, ' : '';
   return `${prefix}${weekday} ${date.slice(8, 10)}/${date.slice(5, 7)} às ${String(time).slice(0, 5)}`;
 }
-
+const EXPENSE_CATEGORIES = new Set(['Pessoal/RH', 'Manutenção', 'Utilities (Água/Luz)', 'Material Esportivo', 'Alimentação/Bebidas', 'Marketing', 'Equipamentos', 'Impostos/Taxas', 'Serviços Terceiros', 'Outros']);
+async function toolPrepareExpense(context) {
+  const scope = contextScope(context);
+  const extracted = extractExpenseEvidence(context.customerText) || extractExpenseEvidence(context.recentConversationText);
+  if (!extracted) throw new WhatsappAiToolError('não encontrei uma extração estruturada de despesa nesta mensagem; envie novamente a nota ou recibo legível', 'EXPENSE_DOCUMENT_REQUIRED');
+  if (extracted.valor <= 0 || !extracted.dataDocumento || extracted.confianca < 0.78) {
+    throw new WhatsappAiToolError('a nota não está legível o bastante para preparar uma despesa; preciso confirmar valor e data', 'EXPENSE_REVIEW_REQUIRED');
+  }
+  const categoria = EXPENSE_CATEGORIES.has(extracted.categoria) ? extracted.categoria : 'Outros';
+  const descricao = extracted.descricao || `Despesa — ${extracted.fornecedor || 'documento recebido'}`;
+  const request = {
+    fornecedor: extracted.fornecedor || 'Fornecedor não identificado',
+    descricao,
+    valor: extracted.valor,
+    dataOperacao: extracted.dataDocumento,
+    categoria,
+    documentoId: scope.externalEventId,
+    mediaHash: extracted.mediaHash || '',
+  };
+  if (request.mediaHash) {
+    const duplicate = await db.queryRead(
+      `SELECT id, status, solicitacao, resposta
+         FROM whatsapp_ai_actions
+        WHERE empresa_id = $1 AND loja_id = $2 AND tipo = 'despesa_financeira'
+          AND solicitacao->>'mediaHash' = $3
+        ORDER BY criado_em DESC LIMIT 1`,
+      [scope.empresaId, scope.lojaId, request.mediaHash],
+    );
+    if (duplicate.rows[0]) {
+      const action = duplicate.rows[0];
+      if (action.status === 'concluida') return { ok: true, duplicada: true, resultadoAnterior: action.resposta, instrucao: 'Informe que esta mesma imagem já originou uma despesa, sem criar outra.' };
+      return { ok: true, duplicada: true, acao: { id: action.id, tipo: 'despesa_financeira', resumo: 'Esta imagem já está aguardando confirmação como despesa pendente.' }, confirmacaoNecessaria: action.status === 'preparada', instrucao: action.status === 'preparada' ? 'Peça SIM/CONFIRMAR para concluir a pendência já preparada; não crie outra.' : 'Informe que a imagem já está em processamento ou revisão.' };
+    }
+  }
+  const fornecedor = request.fornecedor === 'Fornecedor não identificado' ? '' : ` para ${request.fornecedor}`;
+  const summary = `Despesa${fornecedor}: ${brl(request.valor)}, categoria ${request.categoria}, documento de ${request.dataOperacao.split('-').reverse().join('/')}. Será criada como *pendente*; nenhum pagamento será feito.`;
+  return savePreparedAction(context, 'despesa_financeira', request, summary);
+}
 async function toolPrepareAppointment(context, args = {}) {
   const scope = contextScope(context);
   const serviceId = ensureAgendaId(args.serviceId, 'serviceId');
@@ -1171,6 +1213,7 @@ export const WHATSAPP_AI_TOOL_DECLARATIONS = [
   { name: 'preparar_agendamento', description: 'Prepara um agendamento para confirmação. Não grava o agendamento. Use o id retornado por listar_profissionais; na agenda da barbearia também é aceito "qualquer" quando o cliente não tem preferência. Vários serviços na mesma ida: passe os demais em extraServiceIds e eles são encaixados em sequência. Para outra pessoa (filho, amigo), use o nome DELA em customerName. customerName é o nome real (nunca "Cliente"): se não souber, pergunte antes.', parameters: { type: 'OBJECT', properties: { serviceId: { type: 'STRING' }, professionalId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' }, customerName: { type: 'STRING', description: 'Nome real da pessoa atendida' }, notes: { type: 'STRING' }, extraServiceIds: { type: 'ARRAY', items: { type: 'STRING' }, description: 'até 3 serviços seguidos na mesma visita' } }, required: ['serviceId', 'professionalId', 'date', 'time', 'customerName'] } },
   { name: 'preparar_remarcacao', description: 'Prepara a remarcação de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' }, date: { type: 'STRING' }, time: { type: 'STRING' } }, required: ['appointmentId', 'date', 'time'] } },
   { name: 'preparar_cancelamento', description: 'Prepara o cancelamento de um agendamento do cliente para confirmação.', parameters: { type: 'OBJECT', properties: { appointmentId: { type: 'STRING' } }, required: ['appointmentId'] } },
+  { name: 'preparar_despesa', description: 'Prepara um lançamento de despesa PENDENTE a partir da nota ou recibo extraído da imagem desta conversa. Só use quando houver valor, data e confiança suficientes. Não paga, não confirma pagamento e exige SIM do responsável.', parameters: { type: 'OBJECT', properties: {} } },
   { name: 'cotar_frete', description: 'Calcula o frete (valor e prazo) para o CEP do cliente com os produtos escolhidos. Somente consulta: não pede endereço completo nem documento e não cria pedido. Use quando o cliente quiser entrega ou perguntar quanto fica o frete.', parameters: { type: 'OBJECT', properties: { cep: { type: 'STRING', description: 'CEP de entrega, 8 dígitos' }, items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { variantId: { type: 'STRING' }, quantity: { type: 'INTEGER' } }, required: ['variantId', 'quantity'] } } }, required: ['cep', 'items'] } },
   { name: 'link_pagamento_pedido', description: 'Gera o link de pagamento seguro (InfinitePay) de um pedido DO PRÓPRIO contato que aguarda pagamento, no método escolhido: pix (abre QR Code e copia e cola) ou cartao. Use quando o cliente pedir para pagar pelo WhatsApp. Não cobra nada sozinho e não recebe dados de cartão.', parameters: { type: 'OBJECT', properties: { orderCode: { type: 'STRING', description: 'Código do pedido (ex.: o informado na confirmação)' }, metodo: { type: 'STRING', description: 'pix ou cartao' } }, required: ['orderCode', 'metodo'] } },
   { name: 'link_carrinho', description: 'Gera o link da loja com o carrinho já montado com os produtos escolhidos. Use para compra com ENTREGA (o cliente informa endereço e CPF e paga no checkout seguro) ou quando o cliente preferir finalizar e pagar no site. Não cria pedido nem cobrança.', parameters: { type: 'OBJECT', properties: { items: { type: 'ARRAY', items: { type: 'OBJECT', properties: { variantId: { type: 'STRING' }, quantity: { type: 'INTEGER' } }, required: ['variantId', 'quantity'] } } }, required: ['items'] } },
@@ -1206,6 +1249,7 @@ const TOOL_MAP = {
   preparar_agendamento: toolPrepareAppointment,
   preparar_remarcacao: toolPrepareReschedule,
   preparar_cancelamento: toolPrepareCancellation,
+  preparar_despesa: toolPrepareExpense,
   preparar_pedido: toolPrepareOrder,
   cotar_frete: toolQuoteShipping,
   link_pagamento_pedido: toolOrderPaymentLink,
@@ -1286,6 +1330,34 @@ export async function cancelPendingAction(context) {
   });
 }
 
+function registerConfirmedExpense(scope, action) {
+  const request = action.solicitacao || {};
+  const lancamento = registrarLancamento(scope.empresaId, {
+    tipo: 'despesa',
+    categoria: request.categoria || 'Outros',
+    descricao: request.descricao || `Despesa — ${request.fornecedor || 'documento WhatsApp'}`,
+    valor: request.valor,
+    origem: 'whatsapp_nota',
+    status: 'pendente',
+    vencimento: request.dataOperacao,
+    dataOperacao: `${request.dataOperacao}T12:00:00.000Z`,
+    observacao: 'Documento recebido via WhatsApp. Lançamento criado como pendente; pagamento deve ser confirmado pela interface autorizada.',
+    referencia: { documentoId: request.documentoId },
+    usuario: `whatsapp:${scope.canalId}`,
+    automatico: false,
+    chaveIdempotencia: `whatsapp:despesa:${scope.empresaId}:${action.id}`,
+  });
+  saveLegacyDb();
+  return {
+    id: lancamento.id,
+    fornecedor: request.fornecedor,
+    valor: lancamento.valor,
+    categoria: lancamento.categoria,
+    dataOperacao: lancamento.dataOperacao,
+    status: lancamento.status,
+    pagamentoEfetuado: false,
+  };
+}
 export async function confirmPendingAction(context) {
   const scope = contextScope(context);
   return db.transaction(async trx => {
@@ -1304,6 +1376,20 @@ export async function confirmPendingAction(context) {
     const action = actionResult.rows[0];
     if (!action) throw new WhatsappAiToolError('ação pendente não encontrada', 'ACTION_NOT_FOUND');
     if (action.status === 'concluida') return action.resposta;
+    if (action.status === 'confirmada' && action.tipo === 'despesa_financeira') {
+      const response = registerConfirmedExpense(scope, action);
+      await trx.query(
+        `UPDATE whatsapp_ai_actions SET status = 'concluida', resposta = $2::jsonb, concluido_em = CURRENT_TIMESTAMP
+          WHERE id = $1 AND empresa_id = $3 AND loja_id = $4`,
+        [action.id, JSON.stringify(response), scope.empresaId, scope.lojaId],
+      );
+      await trx.query(
+        `UPDATE whatsapp_ai_sessions SET acao_pendente = NULL, atualizado_em = CURRENT_TIMESTAMP
+          WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`,
+        [scope.sessionId, scope.empresaId, scope.lojaId],
+      );
+      return { ok: true, type: action.tipo, result: response };
+    }
     if (action.status !== 'preparada') throw new WhatsappAiToolError('ação não pode mais ser confirmada', 'ACTION_NOT_CONFIRMABLE');
     if (Date.now() - new Date(action.criado_em).getTime() > actionTtlMinutes() * 60 * 1000) {
       await trx.query(
@@ -1368,6 +1454,8 @@ export async function confirmPendingAction(context) {
       response = await cancelWhatsappAppointment(trx, scope, action.solicitacao.appointmentId);
     } else if (action.tipo === 'promocao_cliente') {
       response = await queueWhatsappPromotion(trx, scope, action.solicitacao);
+    } else if (action.tipo === 'despesa_financeira') {
+      response = registerConfirmedExpense(scope, action);
     } else {
       throw new WhatsappAiToolError('tipo de ação não permitido', 'ACTION_TYPE_NOT_ALLOWED');
     }
@@ -1385,4 +1473,3 @@ export async function confirmPendingAction(context) {
     return { ok: true, type: action.tipo, result: response };
   });
 }
-
