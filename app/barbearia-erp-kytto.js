@@ -899,8 +899,7 @@ export function entradaEstoqueRevenda(empresaId, produtoId, dados = {}) {
 
 // Custo do material de um atendimento: valor fixo do serviço, ou a soma do custo
 // dos insumos da ficha técnica (quantidade × custo médio do produto).
-export function custoMaterialServico(empresaId, servicoId) {
-  const estado = estadoEmpresa(empresaId, false);
+export function custoMaterialServicoEstado(estado, servicoId) {
   const servico = estado.servicos[String(servicoId || '')];
   if (!servico) return 0;
   if (servico.custoMaterial !== null && servico.custoMaterial !== undefined) return dinheiro(servico.custoMaterial);
@@ -908,6 +907,10 @@ export function custoMaterialServico(empresaId, servicoId) {
     const produto = estado.produtosRevenda[insumo.produtoId];
     return soma + Number(insumo.quantidade || 0) * Number(produto?.custoUnitario || 0);
   }, 0));
+}
+
+export function custoMaterialServico(empresaId, servicoId) {
+  return custoMaterialServicoEstado(estadoEmpresa(empresaId, false), servicoId);
 }
 
 export function listarMovimentosEstoque(empresaId, filtros = {}) {
@@ -1730,8 +1733,8 @@ export function recebimentoAgendamentoVerificado(empresaId, agendamento) {
     && Number(lancamento.valor) > 0 ? lancamento : null;
 }
 
-export function obterComissoes(empresaId, { data = '', lojaId = '', inicio = '', fim = '', detalhar = false, profissionalId: somenteProfissional = '' } = {}) {
-  const estado = estadoEmpresa(empresaId, false);
+export function calcularComissoesEstado(estado, empresaId, { data = '', lojaId = '', inicio = '', fim = '', detalhar = false, profissionalId: somenteProfissional = '', strictUnit = false, capturedOnly = false, recebimentoAgendamento = null, custoMaterialServicoFn = null } = {}) {
+  // Função pura: `estado` é somente lido; callbacks permitem usar um snapshot sem tocar no db global.
   // Filtro por dia (data) ou por período (inicio/fim, AAAA-MM-DD inclusivos).
   const diaIni = String(inicio || '').slice(0, 10);
   const diaFim = String(fim || '').slice(0, 10);
@@ -1742,16 +1745,16 @@ export function obterComissoes(empresaId, { data = '', lojaId = '', inicio = '',
     if (diaFim && d > diaFim) return false;
     return true;
   };
-  const filtrarLoja = (item) => !lojaId || !item.lojaId || item.lojaId === String(lojaId);
-  const todasComandasPagas = Object.values(estado.comandas)
+  const filtrarLoja = (item) => strictUnit
+    ? Boolean(lojaId) && item?.lojaId === String(lojaId)
+    : (!lojaId || !item?.lojaId || item.lojaId === String(lojaId));
+  const comandasTodas = Object.values(estado.comandas || {})
     .filter(filtrarLoja)
-    // Comanda fechada "em conta" (tudo ou parte marcado na conta do cliente) também gera
-    // comissão: o atendimento foi feito e cobrado; a comissão vale no fechamento.
-    .filter((item) => item.status === 'paga' || item.status === 'em_conta');
-  const comandasPagas = todasComandasPagas
+    .filter((item) => capturedOnly ? item.status === 'paga' : (item.status === 'paga' || item.status === 'em_conta'));
+  const comandasPagas = comandasTodas
     .filter((item) => noFiltro(diaOperacional(item.fechadaEm || item.atualizadoEm)));
   // Atendimento que virou comanda conta só pela comanda, mesmo que ela seja paga em outro dia.
-  const agendamentosEmComanda = new Set(todasComandasPagas.map((item) => item.agendamentoId).filter(Boolean));
+  const agendamentosEmComanda = new Set(comandasTodas.map((item) => item.agendamentoId).filter(Boolean));
   // Desconto da comanda reduz a base de comissão proporcionalmente em cada item.
   const fatorDesconto = (comanda) => {
     const subtotal = (comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0);
@@ -1770,16 +1773,19 @@ export function obterComissoes(empresaId, { data = '', lojaId = '', inicio = '',
     const subtotal = (comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0);
     return subtotal > 0 ? Math.max(0, Math.min(1, Number(subtotalItem || 0) / subtotal)) : 1;
   };
-  const atendimentos = Object.values(estado.agendamentos)
+  // O cálculo exportado é puro: o wrapper legado injeta a leitura do ledger.
+  const recebido = recebimentoAgendamento || (() => null);
+  const agendamentos = Object.values(estado.agendamentos || {});
+  const atendimentos = agendamentos
     .filter(filtrarLoja)
     .filter((item) => item.status === 'concluido')
     .filter((item) => !agendamentosEmComanda.has(item.id))
     .filter((item) => noFiltro(item.dataAgenda || diaOperacional(item.dataHora)))
     .map((item) => {
-      const lancamento = recebimentoAgendamentoVerificado(empresaId, item);
+      const lancamento = recebido(item);
       return lancamento ? { ...item, valorRecebido: Number(lancamento.valor), meioPagamento: lancamento.meioPagamento, origemTipo: 'agendamento', origemId: item.id, dataRef: item.dataAgenda || diaOperacional(item.dataHora), nomeItem: item.servicoNome || '', quantidade: 1 } : null;
     }).filter(Boolean);
-  const vendasLegadas = Object.values(estado.vendasRevenda)
+  const vendasLegadas = Object.values(estado.vendasRevenda || {})
     .filter(filtrarLoja)
     .filter((item) => item.status === 'pago')
     .filter((item) => noFiltro(diaOperacional(item.criadoEm)));
@@ -1800,7 +1806,7 @@ export function obterComissoes(empresaId, { data = '', lojaId = '', inicio = '',
   }));
   const vendas = [...vendasLegadas, ...produtosComanda.filter((item) => item.total > 0)];
   const atendimentosConsolidados = [...atendimentos, ...servicosComanda];
-  const taxas = estado.configuracao.taxasPagamento || {};
+  const taxas = estado.configuracao?.taxasPagamento || {};
   const meiosSemTaxaConfigurada = new Set();
   const calcularTaxa = (valor, meio, profissional, parteDaTarifaFixa = 1) => {
     const normalizado = String(meio || '').toLowerCase();
@@ -1812,8 +1818,6 @@ export function obterComissoes(empresaId, { data = '', lojaId = '', inicio = '',
     }
     return Number(valor || 0) * Number(regra.percentual || 0) / 100 + Number(regra.fixa || 0) * parteDaTarifaFixa;
   };
-  // Cada pagamento da comanda é uma transação com uma tarifa fixa; o item paga a tarifa
-  // percentual sobre a sua parte e só a sua fração (pesoNaComanda) da tarifa fixa.
   const taxaDoItem = (valor, item, meioUnico, profissional) => {
     const peso = Number.isFinite(Number(item.pesoNaComanda)) ? Number(item.pesoNaComanda) : 1;
     return Array.isArray(item.rateio) && item.rateio.length
@@ -1822,43 +1826,51 @@ export function obterComissoes(empresaId, { data = '', lojaId = '', inicio = '',
   };
   const materialCache = new Map();
   const materialDoServico = (servicoId) => {
-    if (!materialCache.has(servicoId)) materialCache.set(servicoId, custoMaterialServico(empresaId, servicoId));
+    if (!materialCache.has(servicoId)) materialCache.set(servicoId, custoMaterialServicoFn ? custoMaterialServicoFn(servicoId) : custoMaterialServicoEstado(estado, servicoId));
     return materialCache.get(servicoId);
   };
-  const porProfissional = Object.values(estado.profissionais)
+  const porProfissional = Object.values(estado.profissionais || {})
     .filter((profissional) => !somenteProfissional || profissional.id === String(somenteProfissional))
     .map((profissional) => {
-    const servicos = atendimentosConsolidados.filter((item) => item.profissionalId === profissional.id);
-    const produtos = vendas.filter((item) => item.profissionalId === profissional.id);
-    const linhas = [];
-    let brutoServicos = 0; let taxaServicos = 0; let materiaisTotal = 0; let comissaoServicos = 0;
-    for (const item of servicos) {
-      const valor = Number(item.valorRecebido || item.valor || 0);
-      const taxa = taxaDoItem(valor, item, String(item.meioPagamento || '').toLowerCase(), profissional);
-      // Material só entra na base quando o profissional desconta material; nunca deixa a base negativa.
-      const material = profissional.descontaMaterial ? Math.min(Math.max(0, valor - taxa), materialDoServico(item.servicoId) * Math.max(1, Number(item.quantidade || 1))) : 0;
-      const percentual = percentualComissaoServico(profissional, item.servicoId);
-      const comissao = Math.max(0, valor - taxa - material) * percentual / 100;
-      brutoServicos += valor; taxaServicos += taxa; materiaisTotal += material; comissaoServicos += comissao;
-      if (detalhar) linhas.push({ tipo: 'servico', data: item.dataRef || '', origemTipo: item.origemTipo || '', origemId: item.origemId || item.id || '', cliente: item.clienteNome || '', descricao: item.nomeItem || item.servicoNome || 'Serviço', bruto: dinheiro(valor), taxa: dinheiro(taxa), material: dinheiro(material), base: dinheiro(Math.max(0, valor - taxa - material)), percentual, comissao: dinheiro(comissao) });
-    }
-    let brutoProdutos = 0; let taxaProdutos = 0;
-    for (const item of produtos) {
-      const valor = Number(item.total || 0);
-      const taxa = taxaDoItem(valor, item, String(item.pagamento?.meioPagamento || '').toLowerCase(), profissional);
-      brutoProdutos += valor; taxaProdutos += taxa;
-      if (detalhar) linhas.push({ tipo: 'produto', data: diaOperacional(item.criadoEm), origemTipo: item.itens ? 'venda' : 'comanda', origemId: item.id, cliente: item.clienteNome || '', descricao: item.itens ? item.itens.map((linha) => `${linha.quantidade}× ${linha.nome}`).join(', ') : 'Produtos da comanda', bruto: dinheiro(valor), taxa: dinheiro(taxa), material: 0, base: dinheiro(valor - taxa), percentual: Number(profissional.percentualComissaoProduto || 0), comissao: dinheiro((valor - taxa) * Number(profissional.percentualComissaoProduto || 0) / 100) });
-    }
-    const comissaoProdutos = (brutoProdutos - taxaProdutos) * Number(profissional.percentualComissaoProduto || 0) / 100;
-    const bruto = brutoServicos + brutoProdutos;
-    const taxasTotal = taxaServicos + taxaProdutos;
-    const repasse = Math.max(0, comissaoServicos + comissaoProdutos);
-    const resultado = { profissionalId: profissional.id, profissionalNome: profissional.nome, percentualComissao: Number(profissional.percentualComissao || 0), percentualComissaoProduto: Number(profissional.percentualComissaoProduto || 0), descontaMaterial: Boolean(profissional.descontaMaterial), atendimentos: servicos.length, vendasProdutos: produtos.length, brutoServicos: dinheiro(brutoServicos), brutoProdutos: dinheiro(brutoProdutos), bruto: dinheiro(bruto), taxas: dinheiro(taxasTotal), materiais: dinheiro(materiaisTotal), comissaoServicos: dinheiro(comissaoServicos), comissaoProdutos: dinheiro(comissaoProdutos), repasse: dinheiro(repasse), parcelaSalao: dinheiro(Math.max(0, bruto - taxasTotal - repasse)) };
-    if (detalhar) resultado.linhas = linhas.sort((a, b) => String(a.data).localeCompare(String(b.data)));
-    return resultado;
-  }).filter((item) => item.atendimentos > 0 || item.vendasProdutos > 0 || estado.profissionais[item.profissionalId].ativo !== false);
+      const servicos = atendimentosConsolidados.filter((item) => item.profissionalId === profissional.id);
+      const produtos = vendas.filter((item) => item.profissionalId === profissional.id);
+      const linhas = [];
+      let brutoServicos = 0; let taxaServicos = 0; let materiaisTotal = 0; let comissaoServicos = 0;
+      for (const item of servicos) {
+        const valor = Number(item.valorRecebido || item.valor || 0);
+        const taxa = taxaDoItem(valor, item, String(item.meioPagamento || '').toLowerCase(), profissional);
+        const material = profissional.descontaMaterial ? Math.min(Math.max(0, valor - taxa), materialDoServico(item.servicoId) * Math.max(1, Number(item.quantidade || 1))) : 0;
+        const percentual = percentualComissaoServico(profissional, item.servicoId);
+        const comissao = Math.max(0, valor - taxa - material) * percentual / 100;
+        brutoServicos += valor; taxaServicos += taxa; materiaisTotal += material; comissaoServicos += comissao;
+        if (detalhar) linhas.push({ tipo: 'servico', data: item.dataRef || '', origemTipo: item.origemTipo || '', origemId: item.origemId || item.id || '', cliente: item.clienteNome || '', descricao: item.nomeItem || item.servicoNome || 'Serviço', servicoId: item.servicoId || null, quantidade: Number(item.quantidade || 1), bruto: dinheiro(valor), taxa: dinheiro(taxa), material: dinheiro(material), base: dinheiro(Math.max(0, valor - taxa - material)), percentual, comissao: dinheiro(comissao) });
+      }
+      let brutoProdutos = 0; let taxaProdutos = 0;
+      for (const item of produtos) {
+        const valor = Number(item.total || 0);
+        const taxa = taxaDoItem(valor, item, String(item.pagamento?.meioPagamento || '').toLowerCase(), profissional);
+        brutoProdutos += valor; taxaProdutos += taxa;
+        if (detalhar) linhas.push({ tipo: 'produto', data: diaOperacional(item.criadoEm), origemTipo: item.itens ? 'venda' : 'comanda', origemId: item.id, cliente: item.clienteNome || '', descricao: item.itens ? item.itens.map((linha) => `${linha.quantidade}× ${linha.nome}`).join(', ') : 'Produtos da comanda', bruto: dinheiro(valor), taxa: dinheiro(taxa), material: 0, base: dinheiro(valor - taxa), percentual: Number(profissional.percentualComissaoProduto || 0), comissao: dinheiro((valor - taxa) * Number(profissional.percentualComissaoProduto || 0) / 100) });
+      }
+      const comissaoProdutos = (brutoProdutos - taxaProdutos) * Number(profissional.percentualComissaoProduto || 0) / 100;
+      const bruto = brutoServicos + brutoProdutos;
+      const taxasTotal = taxaServicos + taxaProdutos;
+      const repasse = Math.max(0, comissaoServicos + comissaoProdutos);
+      const resultado = { profissionalId: profissional.id, profissionalNome: profissional.nome, percentualComissao: Number(profissional.percentualComissao || 0), percentualComissaoProduto: Number(profissional.percentualComissaoProduto || 0), descontaMaterial: Boolean(profissional.descontaMaterial), atendimentos: servicos.length, vendasProdutos: produtos.length, brutoServicos: dinheiro(brutoServicos), brutoProdutos: dinheiro(brutoProdutos), bruto: dinheiro(bruto), taxas: dinheiro(taxasTotal), materiais: dinheiro(materiaisTotal), comissaoServicos: dinheiro(comissaoServicos), comissaoProdutos: dinheiro(comissaoProdutos), repasse: dinheiro(repasse), parcelaSalao: dinheiro(Math.max(0, bruto - taxasTotal - repasse)) };
+      if (detalhar) resultado.linhas = linhas.sort((a, b) => String(a.data).localeCompare(String(b.data)));
+      return resultado;
+    }).filter((item) => item.atendimentos > 0 || item.vendasProdutos > 0 || estado.profissionais[item.profissionalId].ativo !== false);
   const vendasSemProfissional = vendas.filter((item) => !item.profissionalId);
-  return { data: String(data || '').slice(0, 10), porProfissional, vendasSemProfissional: vendasSemProfissional.length, brutoSemProfissional: dinheiro(vendasSemProfissional.reduce((soma, item) => soma + Number(item.total || 0), 0)), taxasConfiguradas: Object.keys(taxas).length > 0, taxasPagamento: { ...taxas }, meiosSemTaxaConfigurada: [...meiosSemTaxaConfigurada].sort() };
+  return { data: String(data || '').slice(0, 10), porProfissional, vendasSemProfissional: vendasSemProfissional.length, brutoSemProfissional: dinheiro(vendasSemProfissional.reduce((soma, item) => soma + Number(item.total || 0), 0)), taxasConfiguradas: Object.keys(taxas).length > 0, taxasPagamento: { ...taxas }, meiosSemTaxaConfigurada: [...meiosSemTaxaConfigurada].sort(), atendimentosConsolidados, vendas, comandasPagas };
+}
+
+export function obterComissoes(empresaId, opcoes = {}) {
+  const estado = estadoEmpresa(empresaId, false);
+  const { atendimentosConsolidados, vendas, comandasPagas, ...resultado } = calcularComissoesEstado(estado, empresaId, {
+    ...opcoes,
+    recebimentoAgendamento: opcoes.recebimentoAgendamento || ((item) => recebimentoAgendamentoVerificado(empresaId, item)),
+  });
+  return resultado;
 }
 
 export function vincularLancamentoFinanceiro(empresaId, agendamentoId, lancamentoId) {
