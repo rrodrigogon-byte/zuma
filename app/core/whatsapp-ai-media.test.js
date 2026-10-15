@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   locateInboundMedia, loadMediaBase64, understandMedia, inboundMediaToText, mediaAsCustomerText,
-  mediaEnabled, MEDIA_PREFIX, MEDIA_SYSTEM_GUIDANCE,
+  extractExpenseEvidence, mediaEnabled, MEDIA_PREFIX, EXPENSE_PREFIX, MEDIA_SYSTEM_GUIDANCE,
 } from './whatsapp-ai-media.js';
 import { parseBackendMessage, runIsaPollPass as runPoll, AUDIO_REPLY } from './whatsapp-isa-poll.js';
 
@@ -82,6 +82,22 @@ test('Gemini transcreve áudio e descreve foto; texto chega marcado para o atend
   });
   await comEnv({ GEMINI_API_KEY: 'chave-gemini-teste', WHATSAPP_AI_MEDIA: 'off' }, async () => {
     assert.equal((await inboundMediaToText({ messageType: 'audio', media: { base64: AUDIO_B64 } })).code, 'MEDIA_DISABLED');
+  });
+});
+
+test('imagem de nota vira evidência financeira estruturada sem dados sensíveis', async () => {
+  await comEnv({ GEMINI_API_KEY: 'chave-gemini-teste', WHATSAPP_AI_MEDIA: undefined }, async () => {
+    const imagem = await understandMedia(
+      { kind: 'image', base64: AUDIO_B64, mimeType: 'image/jpeg' },
+      { fetchImpl: GEMINI_OK(JSON.stringify({ tipo_imagem: 'despesa', descricao: 'Compra de bebidas', fornecedor: 'Fornecedor Teste', valor_total: 47, data_documento: '2026-10-14', categoria: 'Alimentação/Bebidas', confianca: 0.98 })) },
+    );
+    assert.deepEqual(imagem.expense, { fornecedor: 'Fornecedor Teste', valor: 47, dataDocumento: '2026-10-14', categoria: 'Alimentação/Bebidas', descricao: 'Compra de bebidas', confianca: 0.98, mediaHash: imagem.expense.mediaHash });
+    assert.match(imagem.expense.mediaHash, /^[a-f0-9]{64}$/);
+    const text = mediaAsCustomerText('image', imagem, 'lançar despesa');
+    assert.match(text, /^\[foto enviada pelo cliente\]/);
+    assert.equal(text.includes(EXPENSE_PREFIX), true);
+    assert.deepEqual(extractExpenseEvidence(text), imagem.expense);
+    assert.doesNotMatch(text, /CPF|CNPJ|Pix|cartão/i);
   });
 });
 
