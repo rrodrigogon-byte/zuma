@@ -53,7 +53,7 @@ export default function DinoEquipeDesempenho({ empresaId = '', lojaId = '', onOp
     let alive = true
     setLoading(true); setError(''); setData(null)
     const query = new URLSearchParams({ inicio: period.inicio, fim: period.fim })
-    const headers = { 'x-empresa-id': empresaId, 'x-loja-id': lojaId }
+    const headers = { 'X-Empresa-Id': empresaId, 'X-Loja-Id': lojaId }
     api.get(`/api/admin/barbearia/equipe/desempenho?${query}`, { headers }).then(payload => {
       if (!alive || request.current !== current || activeScope.current !== scopeKey) return
       if (payload?.scope?.empresaId !== empresaId || payload?.scope?.lojaId !== lojaId || payload?.period?.inicio !== period.inicio || payload?.period?.fim !== period.fim || payload?.readOnly !== true || payload?.writePerformed !== false || !Array.isArray(payload?.employees)) throw new Error('INVALID_PERFORMANCE_SCOPE')
