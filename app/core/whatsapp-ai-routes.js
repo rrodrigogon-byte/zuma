@@ -2,13 +2,14 @@ import { recordAutomationOptOut } from './ai-memory.js';
 import crypto from 'node:crypto';
 import express from 'express';
 import { db } from './database.js';
-import { parseEvolutionMessage, whatsappAiReady } from './whatsapp-ai.js';
+import { parseEvolutionMessage, parseWahaMessage, whatsappAiReady } from './whatsapp-ai.js';
 import { inboundMediaToText, locateInboundMedia } from './whatsapp-ai-media.js';
 import { campaignOptOutRequested, recordCampaignOptOut, recordCampaignProviderEvent } from './commerce-campaigns.js';
 import { recordCartRecoveryOptOut } from './commerce-abandoned-carts.js';
 import { recordAppointmentNotificationOptOut } from './barbershop-appointment-notifications.js';
 import { normalizeState } from './whatsapp-provider.js';
 import { registrarEventoConexao } from '../whatsapp-conexao-kytto.js';
+import { downloadWahaMedia, validWahaGroupId, validWahaSession, verifyWahaHmac } from './whatsapp-waha.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const WEBHOOK_MAX_BYTES = Math.min(524288, Math.max(16384, Number.parseInt(process.env.WHATSAPP_AI_WEBHOOK_MAX_BYTES || '262144', 10)));
@@ -72,13 +73,31 @@ function validSignature(req, channel) {
   return safeEqual(String(received).replace(/^sha256=/i, '').trim(), expected);
 }
 
+function referencedEnv(channel, key) {
+  const reference = String(channel?.configuracao?.[key] || '').replace(/^ENV:/i, '').trim();
+  return /^[A-Z][A-Z0-9_]{2,149}$/.test(reference) ? process.env[reference] || '' : '';
+}
+
+function validWahaSignature(req, channel) {
+  const secret = referencedEnv(channel, 'segredo_env') || referencedSecret(channel) || '';
+  const hmacKey = referencedEnv(channel, 'waha_hmac_env');
+  const expectedSession = validWahaSession(channel?.configuracao?.waha_session || channel?.configuracao?.instance);
+  const receivedSession = validWahaSession(req.body?.session);
+  if (!secret || !hmacKey || !expectedSession || !receivedSession || expectedSession !== receivedSession) return false;
+  const token = req.get(channel.cabecalho_assinatura || 'x-waha-webhook-secret');
+  const hmacHeader = req.get('x-webhook-hmac');
+  return safeEqual(token, secret) && verifyWahaHmac(rawBody(req), hmacHeader, hmacKey);
+}
+
 /**
  * Entrada única de mensagem recebida (webhook da Evolution OU consulta periódica
  * do backend da Isa): grava o evento (idempotente por canal + id externo),
  * enfileira a conversa para a IA e aplica o SAIR em todos os módulos.
  */
-async function mediaFromWebhook(channel, parsed, body, externalId) {
-  let data = body.data && typeof body.data === 'object' ? body.data : body;
+async function mediaFromWebhook(channel, parsed, body, externalId, { waha = false } = {}) {
+  let data = body.payload && typeof body.payload === 'object'
+    ? body.payload
+    : (body.data && typeof body.data === 'object' ? body.data : body);
   if (Array.isArray(data.messages) && data.messages.length) data = data.messages[0];
   if (!locateInboundMedia(data)) return parsed;
   const jaVisto = await db.queryRead(
@@ -86,7 +105,10 @@ async function mediaFromWebhook(channel, parsed, body, externalId) {
     [channel.id, externalId],
   ).then((r) => Boolean(r.rows[0])).catch(() => false);
   if (jaVisto) return parsed;
-  const lido = await inboundMediaToText(data, { chatId: parsed.phone }).catch(() => ({ ok: false }));
+  const lido = await inboundMediaToText(data, {
+    chatId: parsed.phone,
+    mediaLoader: waha ? (media) => downloadWahaMedia(channel.configuracao?.waha_session || channel.configuracao?.instance, media.url).then(({ buffer, contentType }) => ({ base64: buffer.toString('base64'), mimeType: contentType })) : undefined,
+  }).catch(() => ({ ok: false }));
   if (!lido?.ok) return { ...parsed, reason: `media_${String(lido?.code || 'error').toLowerCase()}`.slice(0, 60) };
   // Normaliza como o caminho de texto: remetente @lid vira o número real.
   const ts = Number(data.messageTimestamp || body.messageTimestamp || 0) || null;
@@ -94,7 +116,7 @@ async function mediaFromWebhook(channel, parsed, body, externalId) {
     ...parsed,
     ignored: false,
     reason: undefined,
-    remoteJid: `${parsed.phone}@s.whatsapp.net`,
+    remoteJid: waha ? parsed.remoteJid : `${parsed.phone}@s.whatsapp.net`,
     name: String(data.pushName || body.pushName || data.notifyName || '').slice(0, 160),
     timestamp: ts,
     text: lido.text,
@@ -103,7 +125,7 @@ async function mediaFromWebhook(channel, parsed, body, externalId) {
 }
 
 export async function ingestInboundWhatsappMessage(channel, parsed, { hash, providerPayload = {} } = {}) {
-  const aiReady = whatsappAiReady();
+  const aiReady = whatsappAiReady(channel);
   const optOutRequested = campaignOptOutRequested(parsed);
   const externalId = String(parsed.externalId || '').slice(0, 200);
   if (!externalId) return { ignored: true, reason: parsed.reason || 'missing_event_id' };
@@ -160,6 +182,51 @@ export async function ingestInboundWhatsappMessage(channel, parsed, { hash, prov
 export function createWhatsappAiWebhookRouter() {
   const router = express.Router();
 
+  router.post('/waha', async (req, res) => {
+    try {
+      if (rawBody(req).byteLength > WEBHOOK_MAX_BYTES) return res.status(413).json({ error: 'evento excede o limite permitido' });
+      const sessionName = validWahaSession(req.body?.session);
+      if (!sessionName) return res.status(404).json({ error: 'sessão WAHA não encontrada' });
+      const channelResult = await db.queryRead(
+        `SELECT * FROM canais_integracao
+          WHERE provedor = 'whatsapp' AND status = 'ativo'
+            AND tipo_canal IN ('gestao', 'lancamentos')
+            AND lower(COALESCE(configuracao->>'waha_session', configuracao->>'instance', '')) = lower($1)
+          LIMIT 1`,
+        [sessionName],
+      );
+      const channel = channelResult.rows[0];
+      if (!channel || !validWahaGroupId(channel.configuracao?.waha_group_id) || !validWahaSignature(req, channel)) {
+        return res.status(401).json({ error: 'webhook WAHA não autorizado' });
+      }
+      const rawEvent = String(req.body?.event || req.body?.type || '').toLowerCase().replaceAll('.', '_');
+      if (rawEvent === 'session_status' || rawEvent === 'status_instance') {
+        const state = normalizeState(req.body?.payload || req.body?.data || req.body);
+        registrarEventoConexao(channel.empresa_id, state, channel.tipo_canal);
+        return res.status(202).json({ accepted: true, connection: state });
+      }
+      if (rawEvent !== 'message' && rawEvent !== 'message_received' && rawEvent !== 'messages_upsert') {
+        return res.status(202).json({ accepted: true, ignored: true, reason: 'unsupported_event' });
+      }
+      if (await webhookRateLimited(channel.id)) return res.status(429).json({ error: 'limite temporário de eventos atingido' });
+      const parsedBase = parseWahaMessage(req.body || {}, { groupId: channel.configuracao?.waha_group_id, sessionName });
+      const externalId = parsedBase.externalId || String(req.get('x-webhook-request-id') || '').slice(0, 200);
+      let parsed = parsedBase;
+      const mediaAllowed = parsed.remoteJid === channel.configuracao?.waha_group_id
+        && !['from_me', 'not_group', 'waha_group_not_allowlisted', 'session_mismatch'].includes(parsed.reason);
+      if (externalId && mediaAllowed && locateInboundMedia(req.body?.payload || req.body || {})) {
+        parsed = await mediaFromWebhook(channel, parsed, req.body || {}, externalId, { waha: true });
+      }
+      if (!externalId) return res.status(202).json({ accepted: true, ignored: true, reason: parsed.reason || 'missing_event_id' });
+      const hash = crypto.createHash('sha256').update(rawBody(req)).digest('hex');
+      const resultado = await ingestInboundWhatsappMessage(channel, { ...parsed, externalId }, { hash, providerPayload: req.body || {} });
+      return res.status(202).json({ accepted: true, ...resultado });
+    } catch (error) {
+      console.error('[WhatsApp WAHA] erro no webhook:', String(error?.message || error).slice(0, 500));
+      return res.status(500).json({ error: 'falha ao receber evento WAHA' });
+    }
+  });
+
   router.post('/whatsapp/:publicCode', async (req, res) => {
     try {
       if (!UUID_REGEX.test(String(req.params.publicCode || ''))) return res.status(404).json({ error: 'canal não encontrado' });
@@ -185,7 +252,7 @@ export function createWhatsappAiWebhookRouter() {
       if (rawEvent === 'CONNECTION_UPDATE' || rawEvent === 'ONSTATECHANGE' || rawEvent === 'STATUS_INSTANCE') {
         const payloadData = req.body?.data && typeof req.body.data === 'object' ? req.body.data : req.body;
         const state = normalizeState(payloadData);
-        registrarEventoConexao(channel.empresa_id, state);
+        registrarEventoConexao(channel.empresa_id, state, channel.tipo_canal);
         return res.status(202).json({ accepted: true, connection: state });
       }
       let parsed = parseEvolutionMessage(req.body || {});

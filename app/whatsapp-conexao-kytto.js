@@ -11,6 +11,10 @@ import {
   disconnectInstance, getInstanceStatus, providerSummary, requestInstanceQr,
   validInstance, whatsappProviderName, chatbotBackendConfig, confirmedPhone, instancesOfCompany,
 } from './core/whatsapp-provider.js';
+import {
+  getWahaSessionQr, getWahaSessionStatus, logoutWahaSession, provisionWahaSession,
+  validWahaSession, wahaControlConfigured, wahaProviderSummary,
+} from './core/whatsapp-waha.js';
 
 const HISTORY_LIMIT = 40;
 const BACKOFF_MINUTES = [1, 2, 5, 10, 15, 30];
@@ -20,6 +24,19 @@ const disconnectEpoch = new Map();
 function normalizarTipoCanal(value = 'cliente') {
   const normalized = String(value || 'cliente').toLowerCase();
   return ['cliente', 'gestao', 'lancamentos'].includes(normalized) ? normalized : 'cliente';
+}
+
+function canalInterno(tipoCanal = 'cliente') {
+  return normalizarTipoCanal(tipoCanal) !== 'cliente';
+}
+
+function normalizarEstadoWaha(value) {
+  const state = String(value || '').trim().toUpperCase();
+  if (state === 'WORKING') return 'open';
+  if (state === 'SCAN_QR_CODE') return 'qr';
+  if (['STARTING', 'AUTHENTICATING', 'RESTARTING'].includes(state)) return 'connecting';
+  if (['STOPPED', 'FAILED', 'LOGGED_OUT'].includes(state)) return 'close';
+  return 'unknown';
 }
 
 function chaveConexao(empresaId, tipoCanal = 'cliente') {
@@ -48,6 +65,10 @@ export function instanciaEmUso(instance, exceto = '', tipoCanal = '') {
 }
 function instanciaPadrao(key, tipoCanal = 'cliente') {
   const perfil = normalizarTipoCanal(tipoCanal);
+
+  // Canais internos nunca herdam uma instância Evolution/Cliente. A sessão WAHA
+  // precisa ser atribuída explicitamente pela administração da plataforma.
+  if (perfil !== 'cliente') return '';
 
   // Instância registrada para esta empresa no servidor (CHATBOT_BACKEND_INSTANCES) vem primeiro.
   const registrada = instancesOfCompany(key).find((nome) => !instanciaEmUso(nome, key, perfil));
@@ -88,7 +109,16 @@ export function obterConexao(empresaId, tipoCanal = 'cliente') {
     lastError: null,
     history: [],
     ativo: false,
+    transport: perfil === 'cliente' ? 'legado' : 'waha',
   };
+  if (perfil !== 'cliente' && empresas[storageKey].transport !== 'waha') {
+    empresas[storageKey].instance = '';
+    empresas[storageKey].state = 'unknown';
+    empresas[storageKey].phone = '';
+    empresas[storageKey].ativo = false;
+    empresas[storageKey].autoReconnect = false;
+    empresas[storageKey].transport = 'waha';
+  }
   return empresas[storageKey];
 }
 
@@ -147,7 +177,7 @@ function numeroReferencia(valor) {
 }
 
 export function visaoPublica(conexao, { numeroCompleto = false } = {}) {
-  const provider = providerSummary();
+  const provider = canalInterno(conexao.tipoCanal) ? wahaProviderSummary() : providerSummary();
   const checkAt = Date.parse(conexao.lastCheckAt || '');
   const recente = Number.isFinite(checkAt) && Date.now() - checkAt >= 0 && Date.now() - checkAt < 2 * 60_000;
   const phone = conexao.state === 'open' && !conexao.lastError && recente ? confirmedPhone({ phone: conexao.phone }) : '';
@@ -177,6 +207,15 @@ export function visaoPublica(conexao, { numeroCompleto = false } = {}) {
 
 export async function verificarConexao(empresaId, { fetchImpl, tipoCanal = 'cliente' } = {}) {
   const conexao = obterConexao(empresaId, tipoCanal);
+  if (canalInterno(tipoCanal)) {
+    if (!wahaControlConfigured()) { conexao.lastError = 'waha_nao_configurado'; return visaoPublica(conexao); }
+    if (!validWahaSession(conexao.instance)) { conexao.lastError = 'instancia_nao_atribuida'; return visaoPublica(conexao); }
+    const status = await getWahaSessionStatus(conexao.instance);
+    aplicarEstado(conexao, { ok: true, state: normalizarEstadoWaha(status?.status), phone: '' });
+    if (conexao.state === 'open' && conexao.autoReconnect !== false) conexao.ativo = true;
+    save();
+    return visaoPublica(conexao);
+  }
   if (whatsappProviderName() !== 'chatbot_backend') {
     conexao.lastError = 'provedor_nao_e_nossagente';
     return visaoPublica(conexao);
@@ -207,6 +246,22 @@ async function desenharQr(resultado) {
 /** Gera QR (ou reabre a sessão salva). O QR não é persistido. */
 export async function gerarQr(empresaId, { usuario = '', fetchImpl, registrarHistorico = true, tipoCanal = 'cliente' } = {}) {
   const conexao = obterConexao(empresaId, tipoCanal);
+  if (canalInterno(tipoCanal)) {
+    if (!wahaControlConfigured()) return { ok: false, error: 'Controle privado WAHA não configurado no servidor.', code: 'WAHA_NOT_CONFIGURED', conexao: visaoPublica(conexao) };
+    if (!validWahaSession(conexao.instance)) return { ok: false, error: 'Esta empresa ainda não tem uma sessão WAHA atribuída.', code: 'WHATSAPP_INSTANCE_UNASSIGNED', conexao: visaoPublica(conexao) };
+    const provisioned = await provisionWahaSession(conexao.instance);
+    const state = normalizarEstadoWaha(provisioned?.status);
+    const qr = state === 'open' ? '' : (await getWahaSessionQr(conexao.instance)).dataUrl;
+    conexao.ativo = true;
+    conexao.state = state === 'open' ? 'open' : (qr ? 'qr' : 'connecting');
+    conexao.phone = '';
+    conexao.lastCheckAt = new Date().toISOString();
+    conexao.lastQrAt = qr ? conexao.lastCheckAt : conexao.lastQrAt;
+    conexao.lastError = null;
+    if (registrarHistorico) registrar(conexao, qr ? 'qr_gerado' : 'reconexao_solicitada', usuario ? `por ${usuario}` : '');
+    save();
+    return { ok: true, qr, pairingCode: '', conexao: visaoPublica(conexao) };
+  }
   const bloqueio = semInstancia(conexao);
   if (bloqueio) return { ...bloqueio, conexao: visaoPublica(conexao) };
   const key = chaveConexao(empresaId, tipoCanal);
@@ -244,6 +299,21 @@ export async function gerarQr(empresaId, { usuario = '', fetchImpl, registrarHis
 
 export async function desconectar(empresaId, { usuario = '', fetchImpl, tipoCanal = 'cliente' } = {}) {
   const conexao = obterConexao(empresaId, tipoCanal);
+  if (canalInterno(tipoCanal)) {
+    if (!wahaControlConfigured()) return { ok: false, error: 'Controle privado WAHA não configurado no servidor.', code: 'WAHA_NOT_CONFIGURED', conexao: visaoPublica(conexao) };
+    if (!validWahaSession(conexao.instance)) return { ok: false, error: 'Esta empresa ainda não tem uma sessão WAHA atribuída.', code: 'WHATSAPP_INSTANCE_UNASSIGNED', conexao: visaoPublica(conexao) };
+    await logoutWahaSession(conexao.instance);
+    conexao.ativo = false;
+    conexao.autoReconnect = false;
+    conexao.state = 'close';
+    conexao.phone = '';
+    conexao.lastError = null;
+    conexao.lastCheckAt = new Date().toISOString();
+    conexao.lastDisconnectAt = conexao.lastCheckAt;
+    registrar(conexao, 'desconectado_manual', usuario ? `por ${usuario}` : '');
+    save();
+    return { ok: true, error: null, conexao: visaoPublica(conexao) };
+  }
   const bloqueio = semInstancia(conexao);
   if (bloqueio) return { ...bloqueio, conexao: visaoPublica(conexao) };
   const key = chaveConexao(empresaId, tipoCanal);
@@ -285,12 +355,13 @@ export async function desconectar(empresaId, { usuario = '', fetchImpl, tipoCana
 export function configurar(empresaId, { instance, autoReconnect, numeroExibicao } = {}, { podeTrocarInstancia = false, tipoCanal = 'cliente' } = {}) {
   const perfil = normalizarTipoCanal(tipoCanal);
   const conexao = obterConexao(empresaId, perfil);
+  conexao.transport = perfil === 'cliente' ? 'legado' : 'waha';
   const reference = numeroExibicao !== undefined ? numeroReferencia(numeroExibicao) : undefined;
   if (instance !== undefined && instance !== conexao.instance) {
     // Trocar a instância muda qual número do backend a empresa controla: só a
     // administração da plataforma faz isso, e nunca para uma instância de outra empresa.
     if (!podeTrocarInstancia) throw new Error('A instância é atribuída pela administração da plataforma.');
-    const valida = validInstance(instance);
+    const valida = canalInterno(perfil) ? validWahaSession(instance) : validInstance(instance);
     if (!valida) throw new Error('Instância inválida: use letras minúsculas, números, - ou _.');
     if (instanciaEmUso(valida, empresaId, perfil)) throw new Error('Esta instância já pertence a outra empresa ou canal.');
     if (valida !== conexao.instance) {
@@ -331,6 +402,13 @@ export async function vigiarConexao(empresaId, { now = Date.now(), fetchImpl, ti
   const key = chaveConexao(empresaId, tipoCanal);
   if (disconnecting.has(key)) return { action: 'skip', reason: 'disconnect_in_progress' };
   if (!conexao.ativo || conexao.autoReconnect === false || !conexao.instance) return { action: 'skip', reason: 'inactive' };
+  if (canalInterno(tipoCanal)) {
+    if (!wahaControlConfigured()) { conexao.lastError = 'waha_nao_configurado'; save(); return { action: 'status_unavailable' }; }
+    const status = await getWahaSessionStatus(conexao.instance);
+    aplicarEstado(conexao, { ok: true, state: normalizarEstadoWaha(status?.status) });
+    save();
+    return { action: 'none', state: conexao.state };
+  }
   const epoch = disconnectEpoch.get(key) || 0;
   const instance = conexao.instance;
   const status = await getInstanceStatus(instance, fetchImpl);

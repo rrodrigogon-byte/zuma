@@ -10,6 +10,7 @@ import {
   configureWhatsappAiPolicy,
   listWhatsappAiSessions,
   parseEvolutionMessage,
+  parseWahaMessage,
   processWhatsappConversationTask,
   releaseWhatsappAiHandoff,
   syncWhatsappAiWebhook,
@@ -55,6 +56,18 @@ test('parseEvolutionMessage ignora grupos e conteúdo sem texto', () => {
   assert.equal(group.reason, 'group');
   const media = parseEvolutionMessage({ event: 'MESSAGES_UPSERT', data: { key: { id: 'MSG-4', remoteJid: '5565999999999@s.whatsapp.net', fromMe: false }, message: { audioMessage: {} } } });
   assert.equal(media.reason, 'unsupported_content');
+});
+
+test('parseWahaMessage aceita somente o grupo Admin allowlisted', () => {
+  const base = { event: 'message', session: 'kytto-gestao-rm', payload: { id: { _serialized: 'WAHA-1' }, from: '120363012345678901@g.us', fromMe: false, body: 'quais são os ativos?' } };
+  const parsed = parseWahaMessage(base, { sessionName: 'kytto-gestao-rm', groupId: '120363012345678901@g.us' });
+  assert.equal(parsed.ignored, false);
+  assert.equal(parsed.remoteJid, '120363012345678901@g.us');
+  assert.equal(parsed.phone, '');
+  assert.equal(parsed.text, 'quais são os ativos?');
+  assert.equal(parseWahaMessage({ ...base, payload: { ...base.payload, from: '120363099999999999@g.us' } }, { sessionName: 'kytto-gestao-rm', groupId: '120363012345678901@g.us' }).reason, 'waha_group_not_allowlisted');
+  assert.equal(parseWahaMessage({ ...base, payload: { ...base.payload, fromMe: true } }, { sessionName: 'kytto-gestao-rm', groupId: '120363012345678901@g.us' }).reason, 'from_me');
+  assert.equal(parseWahaMessage({ ...base, payload: { ...base.payload, from: '5511999999999@s.whatsapp.net' } }, { sessionName: 'kytto-gestao-rm', groupId: '120363012345678901@g.us' }).reason, 'not_group');
 });
 
 test('prompt exige ferramentas, confirmação, transparência e handoff sem pagamento externo', () => {

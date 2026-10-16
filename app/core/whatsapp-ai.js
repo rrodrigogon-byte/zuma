@@ -19,6 +19,7 @@ import { ensureWhatsappLead, updateWhatsappMarketingConsent } from './whatsapp-a
 import { enviarFigurinha, enviarMensagem } from './whatsapp.js';
 import { enviarFigurinhaDoMomento } from './whatsapp-stickers.js';
 import { chatbotBackendConfig, chatbotBackendMode, providerSummary, registerInstanceWebhook, whatsappProviderConfigured, whatsappProviderName } from './whatsapp-provider.js';
+import { provisionWahaSession, validWahaGroupId, validWahaSession, wahaControlConfigured, wahaProviderSummary } from './whatsapp-waha.js';
 import {
   applyWhatsappPersonalizationConsent,
   markPersonalizationPrompted,
@@ -177,6 +178,36 @@ export function parseEvolutionMessage(payload = {}) {
   };
 }
 
+export function parseWahaMessage(payload = {}, { groupId = '', sessionName = '' } = {}) {
+  const event = cleanText(payload.event || payload.type || '', 100).toLowerCase();
+  const data = payload.payload && typeof payload.payload === 'object' ? payload.payload : (payload.data && typeof payload.data === 'object' ? payload.data : payload);
+  const remoteJid = cleanText(data.chatId || data.from || data.to || data.remoteJid || data.key?.remoteJid, 200);
+  const rawId = typeof data.id === 'object' ? (data.id?._serialized || data.id?.id) : data.id;
+  const externalId = cleanText(rawId || data.key?.id || payload.id || payload.eventId, 200);
+  const allowedGroup = validWahaGroupId(groupId);
+  const expectedSession = validWahaSession(sessionName);
+  const receivedSession = validWahaSession(payload.session || data.session || '');
+  const text = messageText(data) || cleanText(data.body || data.text || '', 4000);
+  if (event && !['message', 'messages_upsert', 'message_received'].includes(event.replaceAll('.', '_'))) return { ignored: true, reason: 'unsupported_event', event, externalId };
+  if (!externalId) return { ignored: true, reason: 'missing_message_id', event: 'message' };
+  if (data.fromMe === true || data.key?.fromMe === true) return { ignored: true, reason: 'from_me', event: 'message', externalId };
+  if (receivedSession && expectedSession && receivedSession !== expectedSession) return { ignored: true, reason: 'session_mismatch', event: 'message', externalId, remoteJid };
+  if (!remoteJid.endsWith('@g.us')) return { ignored: true, reason: 'not_group', event: 'message', externalId, remoteJid };
+  if (!allowedGroup) return { ignored: true, reason: 'waha_group_not_configured', event: 'message', externalId, remoteJid };
+  if (remoteJid !== allowedGroup) return { ignored: true, reason: 'waha_group_not_allowlisted', event: 'message', externalId, remoteJid };
+  if (!text) return { ignored: true, reason: 'unsupported_content', event: 'message', externalId, remoteJid };
+  return {
+    ignored: false,
+    event: 'MESSAGE',
+    externalId,
+    remoteJid,
+    phone: '',
+    name: cleanText(data.participant || data.pushName || data.notifyName || '', 160),
+    text,
+    timestamp: Number(data.timestamp || data.messageTimestamp || 0) || null,
+  };
+}
+
 export function buildWhatsappAiSystemPrompt({
   storeName = 'esta unidade',
   pendingAction = null,
@@ -246,7 +277,7 @@ async function ensureSession(task, message) {
         (empresa_id, loja_id, canal_id, remote_jid, telefone, nome, ultimo_evento_externo_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        ON CONFLICT (canal_id, remote_jid) DO UPDATE SET
-         telefone = EXCLUDED.telefone,
+         telefone = COALESCE(NULLIF(EXCLUDED.telefone, 'grupo'), whatsapp_ai_sessions.telefone),
          nome = COALESCE(NULLIF(EXCLUDED.nome, ''), whatsapp_ai_sessions.nome),
          ultimo_evento_externo_id = EXCLUDED.ultimo_evento_externo_id,
          ultima_interacao_em = CURRENT_TIMESTAMP,
@@ -261,7 +292,7 @@ async function ensureSession(task, message) {
          opportunity_offered_at = CASE WHEN whatsapp_ai_sessions.expira_em < CURRENT_TIMESTAMP AND whatsapp_ai_sessions.status <> 'humano' THEN NULL ELSE whatsapp_ai_sessions.opportunity_offered_at END,
          opportunity_count = CASE WHEN whatsapp_ai_sessions.expira_em < CURRENT_TIMESTAMP AND whatsapp_ai_sessions.status <> 'humano' THEN 0 ELSE whatsapp_ai_sessions.opportunity_count END
        RETURNING *`,
-      [task.empresa_id, task.loja_id, task.canal_id, message.remoteJid, message.phone, message.name || null, message.externalId],
+      [task.empresa_id, task.loja_id, task.canal_id, message.remoteJid, message.phone || 'grupo', message.name || null, message.externalId],
     );
     const session = result.rows[0];
     await trx.query(
@@ -394,6 +425,9 @@ async function sendOutput(channel, session, output) {
     nome: channel.configuracao?.display_name || channel.nome || 'Atendimento da unidade',
     whatsapp_api_url: channel.api_base_url || undefined,
     whatsapp_instance: channel.configuracao?.instance || undefined,
+    transport: channel.configuracao?.transporte === 'waha' || channel.configuracao?.provider === 'waha' ? 'waha' : undefined,
+    waha_session: channel.configuracao?.waha_session || channel.configuracao?.instance || undefined,
+    waha_group_id: channel.configuracao?.waha_group_id || undefined,
     empresa_id: session.empresa_id,
     loja_id: session.loja_id,
     canal_id: session.canal_id,
@@ -426,10 +460,10 @@ async function sendOutput(channel, session, output) {
     if (index > 0) await sleep(bubbleDelayMs(bubbles[index]));
     result = await enviarMensagem(tenant, session.telefone, bubbles[index]);
     if (result?.uncertain) {
-      throw await deliveryError(session, claimed, 'unknown', 'WHATSAPP_DELIVERY_UNKNOWN', 'Evolution não confirmou se a mensagem foi aceita', { bolhasEnviadas: index });
+      throw await deliveryError(session, claimed, 'unknown', 'WHATSAPP_DELIVERY_UNKNOWN', `${tenant.transport === 'waha' ? 'WAHA' : 'Evolution'} não confirmou se a mensagem foi aceita`, { bolhasEnviadas: index });
     }
     if (!result?.ok) {
-      throw await deliveryError(session, claimed, 'failed', 'WHATSAPP_PROVIDER_REJECTED', `Evolution recusou o envio${result?.status ? ` (HTTP ${result.status})` : ''}`, { retryable: result?.retryable === true, status: result?.status || null, bolhasEnviadas: index });
+      throw await deliveryError(session, claimed, 'failed', 'WHATSAPP_PROVIDER_REJECTED', `${tenant.transport === 'waha' ? 'WAHA' : 'Evolution'} recusou o envio${result?.status ? ` (HTTP ${result.status})` : ''}`, { retryable: result?.retryable === true, status: result?.status || null, bolhasEnviadas: index });
     }
     sent = index + 1;
     if (bubbles.length > 1) {
@@ -450,6 +484,7 @@ const sleep = (ms) => (ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)
 // Figurinha: depois do texto, no máximo 1 por dia e por contato, nunca com a
 // conversa na equipe. Falha ou provedor sem suporte só ficam registrados.
 async function sendStickerAfterText(channel, session, output, tenant, persona) {
+  if (['gestao', 'lancamentos'].includes(channel?.tipo_canal)) return;
   const nome = output.metadados?.sticker;
   if (!nome || !persona?.figurinhas || output.metadados?.figurinhaResultado) return;
   const atual = await db.queryRead(
@@ -1443,7 +1478,10 @@ export async function processWhatsappConversationTask(task) {
   );
   const record = loaded.rows[0];
   if (!record || record.provedor !== 'whatsapp' || record.canal_status !== 'ativo') throw new Error('canal WhatsApp indisponível');
-  const message = parseEvolutionMessage(record.event_payload || {});
+  const isWaha = record.configuracao?.transporte === 'waha' || record.configuracao?.provider === 'waha';
+  const message = isWaha
+    ? parseWahaMessage(record.event_payload || {}, { groupId: record.configuracao?.waha_group_id, sessionName: record.configuracao?.waha_session || record.configuracao?.instance })
+    : parseEvolutionMessage(record.event_payload || {});
   if (message.ignored) {
     await db.query(
       `UPDATE eventos_integracao_canais SET status_processamento = 'ignorado', processado_em = CURRENT_TIMESTAMP,
@@ -1565,7 +1603,7 @@ export async function whatsappAiOperationalStatus(context = {}, { tipoCanal = co
   const lojaId = requiredTenantUuid(context.lojaId, 'lojaId');
   const [channel, sessions, tasks, deliveries, providerRuns, workerLease, policyMetrics] = await Promise.all([
     db.queryRead(
-      `SELECT id, codigo_publico, nome, status, api_base_url, configuracao, ultimo_evento_em,
+    `SELECT id, codigo_publico, nome, status, tipo_canal, api_base_url, configuracao, ultimo_evento_em,
               ultima_sincronizacao_em, ultimo_erro, ai_circuit_open_until,
               ai_consecutive_failures, ai_last_error_code
          FROM canais_integracao
@@ -1610,14 +1648,17 @@ export async function whatsappAiOperationalStatus(context = {}, { tipoCanal = co
     whatsappAiPolicyMetrics({ empresaId, lojaId, tipoCanal: perfil }),
   ]);
   const channelRow = channel.rows[0];
+  const channelProvider = channelRow?.configuracao?.transporte === 'waha' || channelRow?.configuracao?.provider === 'waha'
+    ? wahaProviderSummary()
+    : providerSummary();
   const provider = providerRuns.rows[0] || {};
   const taskMap = Object.fromEntries(tasks.rows.map(row => [row.status, Number(row.total)]));
   return {
     featureEnabled: process.env.FEATURE_WHATSAPP_AI === 'true',
     gemini: configuredGeminiModel(),
     evolutionConfigured: Boolean(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY && process.env.EVOLUTION_INSTANCE),
-    messagingProvider: providerSummary(),
-    messagingConfigured: whatsappProviderConfigured(),
+    messagingProvider: channelProvider,
+    messagingConfigured: channelRow?.configuracao?.transporte === 'waha' || channelRow?.configuracao?.provider === 'waha' ? wahaControlConfigured() : whatsappProviderConfigured(),
     policy: whatsappAiPolicy(channelRow || {}),
     policy24h: policyMetrics,
     channel: channelRow ? {
@@ -1625,7 +1666,10 @@ export async function whatsappAiOperationalStatus(context = {}, { tipoCanal = co
       publicCode: channelRow.codigo_publico,
       nome: channelRow.nome,
       status: channelRow.status,
+      transporte: channelRow.configuracao?.transporte || 'legado',
       instance: channelRow.configuracao?.instance || '',
+      wahaGroupId: channelRow.configuracao?.waha_group_id || '',
+      wahaGroupSubject: channelRow.configuracao?.waha_group_subject || '',
       lastEventAt: channelRow.ultimo_evento_em,
       lastSyncAt: channelRow.ultima_sincronizacao_em,
       lastError: channelRow.ultimo_erro,
@@ -1839,11 +1883,12 @@ export function whatsappMessagingReady() {
   return whatsappProviderConfigured();
 }
 
-export function whatsappAiReady() {
+export function whatsappAiReady(channel = null) {
   const gemini = configuredGeminiModel();
+  const waha = channel?.configuracao?.transporte === 'waha' || channel?.configuracao?.provider === 'waha';
   return process.env.FEATURE_WHATSAPP_AI === 'true'
     && gemini.configured
-    && whatsappMessagingReady();
+    && (waha ? wahaControlConfigured() : whatsappMessagingReady());
 }
 
 function envReference(value) {
@@ -1878,9 +1923,12 @@ function safeChannelView(row) {
     nome: row.nome,
     status: row.status,
     tipoCanal: ['gestao', 'lancamentos'].includes(row.tipo_canal) ? row.tipo_canal : 'cliente',
+    transporte: row.configuracao?.transporte || 'legado',
     instance: row.configuracao?.instance || '',
+    wahaGroupId: row.configuracao?.waha_group_id || '',
+    wahaGroupSubject: row.configuracao?.waha_group_subject || '',
     webhookHeader: row.cabecalho_assinatura || 'x-setpoint-webhook-token',
-    webhookUrl: `/api/webhooks/whatsapp/${row.codigo_publico}`,
+    webhookUrl: row.configuracao?.transporte === 'waha' || row.configuracao?.provider === 'waha' ? '/api/webhooks/waha' : `/api/webhooks/whatsapp/${row.codigo_publico}`,
     capabilities: safeCapabilities(row.configuracao?.capabilities),
     segmento: SEGMENTOS.includes(row.configuracao?.segmento) ? row.configuracao.segmento : '',
     lastEventAt: row.ultimo_evento_em,
@@ -2029,15 +2077,22 @@ export async function configureWhatsappAiChannel(context = {}, input = {}) {
   const usuarioId = context.usuarioId || null;
   const status = safeChannelStatus(input.status);
   const tipoCanal = whatsappChannelType(input.tipoCanal || input.channelType || 'cliente');
-  const secretEnv = envReference(input.webhookSecretEnv || 'WHATSAPP_AI_WEBHOOK_SECRET');
+  const canalInterno = tipoCanal !== 'cliente';
+  const transporte = cleanText(input.transporte || input.transport || input.provider || (canalInterno ? 'waha' : 'legado'), 30).toLowerCase();
+  if (canalInterno && transporte !== 'waha') throw new Error('Gestão e Lançamentos usam exclusivamente o transporte WAHA.');
+  if (!canalInterno && transporte === 'waha') throw new Error('O transporte WAHA é reservado aos canais internos.');
+  const secretEnv = envReference(canalInterno ? (input.wahaWebhookSecretEnv || 'WAHA_WEBHOOK_SECRET') : (input.webhookSecretEnv || 'WHATSAPP_AI_WEBHOOK_SECRET'));
   // Só variáveis próprias de segredo de webhook: outra variável (JWT_SECRET, DATABASE_URL…)
   // seria enviada ao provedor como cabeçalho do webhook.
-  if (!/^WHATSAPP_AI_WEBHOOK_SECRET(_[A-Z0-9]+)?$/.test(secretEnv)) throw new Error('use uma variável WHATSAPP_AI_WEBHOOK_SECRET ou WHATSAPP_AI_WEBHOOK_SECRET_<SUFIXO> para o segredo do webhook');
-  const chatbotBackend = whatsappProviderName() === 'chatbot_backend';
+  const secretPattern = canalInterno ? /^(?:WAHA_WEBHOOK_SECRET|WHATSAPP_AI_WEBHOOK_SECRET)(?:_[A-Z0-9]+)?$/ : /^WHATSAPP_AI_WEBHOOK_SECRET(_[A-Z0-9]+)?$/;
+  if (!secretPattern.test(secretEnv)) throw new Error(canalInterno ? 'use uma variável WAHA_WEBHOOK_SECRET_<SUFIXO> própria do canal' : 'use uma variável WHATSAPP_AI_WEBHOOK_SECRET ou WHATSAPP_AI_WEBHOOK_SECRET_<SUFIXO> para o segredo do webhook');
+  const hmacEnv = canalInterno ? envReference(input.wahaHmacSecretEnv || 'WAHA_WEBHOOK_HMAC_KEY') : '';
+  if (canalInterno && !/^WAHA_WEBHOOK_HMAC_KEY(_[A-Z0-9]+)?$/.test(hmacEnv)) throw new Error('use uma variável WAHA_WEBHOOK_HMAC_KEY ou WAHA_WEBHOOK_HMAC_KEY_<SUFIXO> para HMAC');
+  const chatbotBackend = !canalInterno && whatsappProviderName() === 'chatbot_backend';
   const instance = cleanText(input.instance || (chatbotBackend ? chatbotBackendConfig().instance : process.env.EVOLUTION_INSTANCE), 120);
   const displayName = cleanText(input.displayName || 'Atendimento WhatsApp', 120);
   const capabilities = safeCapabilities(input.capabilities);
-  const header = cleanText(input.webhookHeader || 'x-setpoint-webhook-token', 100).toLowerCase();
+  const header = cleanText(input.webhookHeader || (canalInterno ? 'x-waha-webhook-secret' : 'x-setpoint-webhook-token'), 100).toLowerCase();
   if (!instance) throw new Error('instância do WhatsApp é obrigatória');
   if (!/^[a-z0-9][a-z0-9_-]{1,99}$/i.test(instance)) throw new Error('instância do WhatsApp inválida');
   if (!/^[a-z0-9-]{3,100}$/i.test(header)) throw new Error('cabeçalho de webhook inválido');
@@ -2046,21 +2101,36 @@ export async function configureWhatsappAiChannel(context = {}, input = {}) {
     if (process.env.FEATURE_WHATSAPP_AI !== 'true') throw new Error('feature flag da IA WhatsApp não está ativa');
     // Igual à Isa, a entrada pelo backend próprio é por consulta: o segredo do webhook
     // só é exigido quando o canal recebe webhook (Evolution ou modo de instâncias).
+    if (canalInterno) {
+      if (!wahaControlConfigured()) throw new Error('Controle privado WAHA não configurado no ambiente.');
+      if (!process.env[secretEnv] || !process.env[hmacEnv]) throw new Error(`segredos ${secretEnv} e ${hmacEnv} não configurados no ambiente`);
+    }
     const entradaPorConsulta = chatbotBackend && chatbotBackendMode() === 'isa';
     if (!entradaPorConsulta && !process.env[secretEnv]) throw new Error(`segredo ${secretEnv} não configurado no ambiente`);
     if (!process.env.GEMINI_API_KEY) throw new Error('Gemini não configurado no ambiente');
-    if (!whatsappProviderConfigured()) throw new Error(chatbotBackend ? 'backend WhatsApp (NossaGente) não configurado no ambiente: CHATBOT_BACKEND_KEY' : 'Evolution não configurada no ambiente');
+    if (!canalInterno && !whatsappProviderConfigured()) throw new Error(chatbotBackend ? 'backend WhatsApp (NossaGente) não configurado no ambiente: CHATBOT_BACKEND_KEY' : 'Evolution não configurada no ambiente');
   }
 
   return db.transaction(async trx => {
+    const current = await trx.query(
+      `SELECT configuracao FROM canais_integracao
+        WHERE empresa_id = $1 AND loja_id = $2 AND provedor = 'whatsapp' AND tipo_canal = $3
+        LIMIT 1`,
+      [empresaId, lojaId, tipoCanal],
+    );
+    const currentConfig = current.rows[0]?.configuracao || {};
+    const configuredGroup = validWahaGroupId(input.wahaGroupId || input.groupId || currentConfig.waha_group_id);
+    if (canalInterno && status === 'ativo' && !configuredGroup) throw new Error('selecione e salve exatamente um grupo Admin WAHA antes de ativar o canal');
     // Cada empresa usa um segredo de webhook próprio: se outra empresa já usa esta variável,
     // quem tiver um segredo conseguiria mandar eventos falsos para a outra.
-    const shared = await trx.query(
-      `SELECT 1 FROM canais_integracao
-        WHERE provedor = 'whatsapp' AND empresa_id <> $1 AND credencial_referencia = $2 AND status <> 'desativado' LIMIT 1`,
-      [empresaId, `ENV:${secretEnv}`],
-    );
-    if (shared.rows[0]) throw new Error(`o segredo ${secretEnv} já é usado por outra empresa; crie uma variável própria (ex.: ${secretEnv}_${empresaId.slice(0, 8).toUpperCase()}) e informe-a aqui`);
+    if (!canalInterno) {
+      const shared = await trx.query(
+        `SELECT 1 FROM canais_integracao
+          WHERE provedor = 'whatsapp' AND empresa_id <> $1 AND credencial_referencia = $2 AND status <> 'desativado' LIMIT 1`,
+        [empresaId, `ENV:${secretEnv}`],
+      );
+      if (shared.rows[0]) throw new Error(`o segredo ${secretEnv} já é usado por outra empresa; crie uma variável própria (ex.: ${secretEnv}_${empresaId.slice(0, 8).toUpperCase()}) e informe-a aqui`);
+    }
     // A instância (número de WhatsApp no backend) pertence a uma só empresa.
     const sameInstance = await trx.query(
       `SELECT 1 FROM canais_integracao
@@ -2085,8 +2155,8 @@ export async function configureWhatsappAiChannel(context = {}, input = {}) {
          configuracao = canais_integracao.configuracao || EXCLUDED.configuracao,
          data_atualizacao = CURRENT_TIMESTAMP
        RETURNING *`,
-      [empresaId, lojaId, tipoCanal, displayName, status, header, `ENV:${secretEnv}`, chatbotBackend ? chatbotBackendConfig().baseUrl : (process.env.EVOLUTION_API_URL || null),
-        JSON.stringify({ instance, display_name: displayName, segredo_env: secretEnv, capabilities, provider: whatsappProviderName(), tipo_canal: tipoCanal, segmento: SEGMENTOS.includes(String(input.segmento || '').toLowerCase()) ? String(input.segmento).toLowerCase() : undefined }), usuarioId],
+      [empresaId, lojaId, tipoCanal, displayName, status, header, `ENV:${secretEnv}`, canalInterno ? (process.env.WAHA_CONTROL_URL || null) : (chatbotBackend ? chatbotBackendConfig().baseUrl : (process.env.EVOLUTION_API_URL || null)),
+        JSON.stringify({ instance, waha_session: canalInterno ? instance : undefined, display_name: displayName, segredo_env: secretEnv, waha_hmac_env: canalInterno ? hmacEnv : undefined, capabilities, provider: canalInterno ? 'waha' : whatsappProviderName(), transporte: canalInterno ? 'waha' : 'legado', tipo_canal: tipoCanal, waha_group_id: canalInterno ? (validWahaGroupId(input.wahaGroupId || input.groupId) || undefined) : undefined, segmento: SEGMENTOS.includes(String(input.segmento || '').toLowerCase()) ? String(input.segmento).toLowerCase() : undefined }), usuarioId],
     );
     const channel = result.rows[0];
     await trx.query(
@@ -2110,7 +2180,32 @@ export async function syncWhatsappAiWebhook(context = {}, { publicBaseUrl, confi
   );
   const channel = result.rows[0];
   if (!channel) throw new Error('canal WhatsApp ativo não encontrado');
-  if (!whatsappAiReady()) throw new Error('IA WhatsApp ainda não está pronta no ambiente');
+  if (!whatsappAiReady(channel)) throw new Error('IA WhatsApp ainda não está pronta no ambiente');
+  if (channel.configuracao?.transporte === 'waha' || channel.configuracao?.provider === 'waha') {
+    if (!wahaControlConfigured()) throw new Error('Controle privado WAHA não configurado no ambiente');
+    const instance = validWahaSession(channel.configuracao?.waha_session || channel.configuracao?.instance);
+    if (!instance) throw new Error('sessão WAHA inválida no canal');
+    const status = await provisionWahaSession(instance);
+    const webhookUrl = `${cleanText(publicBaseUrl || process.env.SERVER_URL || 'https://dino.kytto.com.br', 1000).replace(/\/$/, '')}/api/webhooks/waha`;
+    const updated = await db.transaction(async trx => {
+      const saved = await trx.query(
+        `UPDATE canais_integracao
+            SET configuracao = configuracao || $2::jsonb, ultimo_erro = NULL,
+                ultima_sincronizacao_em = CURRENT_TIMESTAMP, data_atualizacao = CURRENT_TIMESTAMP
+          WHERE id = $1 AND empresa_id = $3 AND loja_id = $4
+          RETURNING *`,
+        [channel.id, JSON.stringify({ webhook_url: webhookUrl, webhook_synced_at: new Date().toISOString(), waha_status: String(status?.status || '').toUpperCase() }), empresaId, lojaId],
+      );
+      await trx.query(
+        `INSERT INTO commerce_audit_logs
+          (empresa_id, loja_id, usuario_id, entidade, entidade_id, acao, depois)
+         VALUES ($1, $2, $3, 'whatsapp_ai_channel', $4, 'webhook_synced', $5::jsonb)`,
+        [empresaId, lojaId, context.usuarioId || null, channel.id, JSON.stringify({ instance, webhookUrl, provider: 'waha' })],
+      );
+      return saved.rows[0];
+    });
+    return { ok: true, webhookUrl, manual: false, polling: false, channel: safeChannelView(updated), provider: { configured: true, name: 'waha', status: status?.status || null } };
+  }
   const secret = referencedChannelSecret(channel);
   if (whatsappProviderName() === 'chatbot_backend') return syncChatbotBackendWebhook(context, channel, { secret, publicBaseUrl });
   const apiKey = cleanText(process.env.EVOLUTION_API_KEY, 500);

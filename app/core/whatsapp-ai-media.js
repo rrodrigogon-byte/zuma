@@ -30,8 +30,9 @@ const DEFAULT_MAX_MB = 12;
 const TIMEOUT_MS = 25000;
 const AUDIO_TYPES = /^audio\/(ogg|opus|mpeg|mp3|mp4|m4a|aac|wav|x-wav|webm|amr|3gpp|flac)/i;
 const IMAGE_TYPES = /^image\/(jpeg|jpg|png|webp|heic|heif|gif)/i;
+const DOCUMENT_TYPES = /^(application\/pdf|text\/(plain|csv)|application\/vnd\.)/i;
 
-export const MEDIA_PREFIX = { audio: '[áudio transcrito]', image: '[foto enviada pelo cliente]' };
+export const MEDIA_PREFIX = { audio: '[áudio transcrito]', image: '[foto enviada pelo cliente]', document: '[documento enviado pelo cliente]' };
 export const EXPENSE_PREFIX = '[despesa extraída da foto]';
 
 const clean = (value, max = 500) => String(value ?? '').replace(/\u0000/g, '').trim().slice(0, max);
@@ -69,6 +70,7 @@ function kindFrom(type = '', mime = '') {
   if (['sticker', 'stickermessage'].includes(t)) return '';
   if (['audio', 'ptt', 'voice', 'audiomessage'].includes(t) || m.startsWith('audio/')) return 'audio';
   if (['image', 'imagemessage', 'photo'].includes(t) || m.startsWith('image/')) return 'image';
+  if (t === 'document' || t === 'documentmessage' || DOCUMENT_TYPES.test(m)) return 'document';
   return '';
 }
 
@@ -94,8 +96,9 @@ export function locateInboundMedia(item = {}) {
   const media = item.media && typeof item.media === 'object' ? item.media : {};
   const audioMsg = message.audioMessage || message.pttMessage || null;
   const imageMsg = message.imageMessage || null;
-  const declaredMime = clean(media.mimetype || media.mimeType || item.mimetype || item.mimeType || audioMsg?.mimetype || imageMsg?.mimetype, 100);
-  const kind = kindFrom(item.messageType || item.type || media.type || (audioMsg ? 'audio' : imageMsg ? 'image' : ''), declaredMime);
+  const documentMsg = message.documentMessage || message.document || null;
+  const declaredMime = clean(media.mimetype || media.mimeType || item.mimetype || item.mimeType || audioMsg?.mimetype || imageMsg?.mimetype || documentMsg?.mimetype, 100);
+  const kind = kindFrom(item.messageType || item.type || media.type || (audioMsg ? 'audio' : imageMsg ? 'image' : documentMsg ? 'document' : ''), declaredMime);
   if (!kind) return null;
 
   const inlineCandidates = [media.base64, media.data, item.mediaBase64, item.base64, message.base64, item.mediaData];
@@ -109,7 +112,7 @@ export function locateInboundMedia(item = {}) {
     base64: parsed?.base64 ? parsed.base64.replace(/\s+/g, '') : undefined,
     // URL criptografada do WhatsApp (.enc em mmg.whatsapp.net) não serve sem a chave de mídia.
     url: /^https?:\/\//i.test(url) && !/\.enc(\?|$)|mmg\.whatsapp\.net/i.test(url) ? url : undefined,
-    caption: clean(item.caption || media.caption || imageMsg?.caption || '', 1000) || undefined,
+    caption: clean(item.caption || media.caption || imageMsg?.caption || documentMsg?.caption || documentMsg?.fileName || '', 1000) || undefined,
     id: clean(item.whatsappMessageId || item.id || item.key?.id || '', 200) || undefined,
     seconds: Number(audioMsg?.seconds || media.seconds || item.seconds || 0) || undefined,
   };
@@ -198,6 +201,7 @@ confianca é um número entre 0 e 1 e deve refletir apenas a legibilidade dos da
 function inferredMime(kind, mimeType) {
   const m = clean(mimeType, 100).toLowerCase().split(';')[0];
   if (kind === 'audio') return AUDIO_TYPES.test(m) ? (m === 'audio/opus' ? 'audio/ogg' : m) : 'audio/ogg';
+  if (kind === 'document') return DOCUMENT_TYPES.test(m) ? m : 'application/pdf';
   return IMAGE_TYPES.test(m) ? m.replace('image/jpg', 'image/jpeg') : 'image/jpeg';
 }
 
@@ -208,7 +212,7 @@ function inferredMime(kind, mimeType) {
 export async function understandMedia({ kind, base64, mimeType, caption }, { fetchImpl = fetch } = {}) {
   const key = geminiKey();
   if (!key) throw new MediaError('Gemini não configurado', 'GEMINI_NOT_CONFIGURED');
-  if (!['audio', 'image'].includes(kind)) throw new MediaError('Tipo de mídia não suportado', 'MEDIA_UNSUPPORTED');
+  if (!['audio', 'image', 'document'].includes(kind)) throw new MediaError('Tipo de mídia não suportado', 'MEDIA_UNSUPPORTED');
   if (!base64) throw new MediaError('Mídia vazia', 'MEDIA_UNAVAILABLE');
   const model = mediaModel();
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
@@ -249,7 +253,7 @@ export async function understandMedia({ kind, base64, mimeType, caption }, { fet
   if (payload?.promptFeedback?.blockReason) throw new MediaError('Gemini bloqueou a mídia', 'GEMINI_BLOCKED');
   const text = (payload?.candidates?.[0]?.content?.parts || []).map((p) => (typeof p.text === 'string' ? p.text : '')).join('\n').trim();
   if (!text) throw new MediaError('Gemini não devolveu texto', 'GEMINI_EMPTY_RESPONSE');
-  if (kind !== 'image') return { text: clean(text, 3500), model };
+  if (kind === 'audio') return { text: clean(text, 3500), model };
   const structured = parseImageUnderstanding(text, crypto.createHash('sha256').update(base64).digest('hex'));
   return { text: structured.text, expense: structured.expense, model };
 }
@@ -308,19 +312,22 @@ export function mediaAsCustomerText(kind, understood, caption) {
   const legenda = clean(caption, 1000);
   const expense = typeof understood === 'object' ? understood.expense : null;
   const evidence = expense ? `\n${EXPENSE_PREFIX} ${JSON.stringify(expense)}` : '';
-  return `${MEDIA_PREFIX.image} ${body}${legenda ? `\nLegenda do cliente: ${legenda}` : ''}${evidence}`;
+  const prefix = kind === 'document' ? MEDIA_PREFIX.document : MEDIA_PREFIX.image;
+  return `${prefix} ${body}${legenda ? `\nLegenda do cliente: ${legenda}` : ''}${evidence}`;
 }
 
 /**
  * Pipeline completo: localiza → baixa → entende → texto para o atendente.
  * Nunca lança: devolve { ok:false, code } para quem chamou manter o fallback.
  */
-export async function inboundMediaToText(item, { fetchImpl = fetch, chatId } = {}) {
+export async function inboundMediaToText(item, { fetchImpl = fetch, chatId, mediaLoader } = {}) {
   if (!mediaEnabled()) return { ok: false, code: 'MEDIA_DISABLED' };
   const media = locateInboundMedia(item);
   if (!media) return { ok: false, code: 'MEDIA_MISSING' };
   try {
-    const loaded = await loadMediaBase64(media, { fetchImpl, chatId });
+    const loaded = typeof mediaLoader === 'function'
+      ? await mediaLoader(media)
+      : await loadMediaBase64(media, { fetchImpl, chatId });
     const understood = await understandMedia({ kind: media.kind, base64: loaded.base64, mimeType: loaded.mimeType || media.mimeType, caption: media.caption }, { fetchImpl });
     const text = mediaAsCustomerText(media.kind, understood, media.caption);
     if (!text) return { ok: false, kind: media.kind, code: 'MEDIA_NO_SPEECH' };

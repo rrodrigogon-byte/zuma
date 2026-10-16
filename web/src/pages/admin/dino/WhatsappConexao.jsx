@@ -64,6 +64,8 @@ function WhatsappConexaoEmpresa() {
   const [diag, setDiag] = useState(null)
   const [erroDiag, setErroDiag] = useState('')
   const [diagBloqueado, setDiagBloqueado] = useState(false)
+  const [grupos, setGrupos] = useState([])
+  const [grupoSelecionado, setGrupoSelecionado] = useState('')
   const telefoneRef = useRef(null)
   const scopeRef = useRef(0)
   const statusSeqRef = useRef(0)
@@ -129,7 +131,7 @@ function WhatsappConexaoEmpresa() {
     } catch (error) {
       if (scope === scopeRef.current && sequence === iaSeqRef.current) {
         setIa(null)
-        setIaOperational({ kind: 'unverifiable', reason: [401, 403].includes(error?.status) ? 'permission' : error?.status === 503 ? 'unavailable' : 'read' })
+        setIaOperational({ kind: 'unverifiable', reason: [401, 403].includes(error?.status) ? 'permission' : [404, 409].includes(error?.status) ? 'context' : error?.status === 503 ? 'unavailable' : 'read' })
         setIaReadAt(null)
       }
     } finally {
@@ -169,7 +171,7 @@ function WhatsappConexaoEmpresa() {
     diagFlightRef.current = null
     qrFlightRef.current = null
     referenceDirtyRef.current = false
-    setConexao(null); setPodeGerenciar(false); setIa(null); setIaOperational({ kind: 'loading' }); setIaReadAt(null); setDiag(null)
+    setConexao(null); setPodeGerenciar(false); setIa(null); setIaOperational({ kind: 'loading' }); setIaReadAt(null); setDiag(null); setGrupos([]); setGrupoSelecionado('')
     setErro(''); setErroDiag(''); setDiagBloqueado(false); setBusy('')
     setQr({ image: '', code: '' }); setInstancia(''); setReferencia(''); setWebhookInfo('')
     carregar(true)
@@ -275,7 +277,8 @@ function WhatsappConexaoEmpresa() {
     try {
       await api.post(aiChannelPath, {
         instance: conexao.instance, displayName: `${canalLabel} · ${empresaAtiva?.nome || 'da empresa'}`.slice(0, 120), status: 'rascunho', tipoCanal,
-        webhookSecretEnv: webhookSecretEnvFor(empresaAtiva), webhookHeader: 'x-setpoint-webhook-token',
+        transporte: tipoCanal === 'cliente' ? 'legado' : 'waha',
+        ...(tipoCanal === 'cliente' ? { webhookSecretEnv: webhookSecretEnvFor(empresaAtiva), webhookHeader: 'x-setpoint-webhook-token' } : { wahaWebhookSecretEnv: 'WAHA_WEBHOOK_SECRET', wahaHmacSecretEnv: 'WAHA_WEBHOOK_HMAC_KEY', webhookHeader: 'x-waha-webhook-secret' }),
         capabilities: tipoCanal === 'cliente'
           ? { humanized: true, captureLeads: true, operateStore: true, manageAppointments: true, sendPromotions: false, reminders: true, humanHandoff: true, financialOperations: false }
           : { humanized: true, captureLeads: false, operateStore: false, manageAppointments: false, sendPromotions: false, reminders: false, humanHandoff: true, financialOperations: tipoCanal === 'lancamentos' },
@@ -298,6 +301,28 @@ function WhatsappConexaoEmpresa() {
     finally { if (scope === scopeRef.current) setBusy('') }
   }
 
+  async function listarGrupos() {
+    if (tipoCanal === 'cliente') return
+    const scope = scopeRef.current
+    setBusy('grupos')
+    try {
+      const data = await api.get(`${basePath}/grupos`)
+      if (scope === scopeRef.current) { setGrupos(Array.isArray(data.groups) ? data.groups : []); toast('Grupos carregados sem participantes.') }
+    } catch (error) { if (scope === scopeRef.current) toast(error.message, true) }
+    finally { if (scope === scopeRef.current) setBusy('') }
+  }
+
+  async function salvarGrupo() {
+    if (!grupoSelecionado) return
+    const scope = scopeRef.current
+    setBusy('grupo')
+    try {
+      await api.put(`${basePath}/grupo`, { groupId: grupoSelecionado })
+      if (scope === scopeRef.current) { toast('Grupo Admin allowlisted para este canal.'); await recarregarIa() }
+    } catch (error) { if (scope === scopeRef.current) toast(error.message, true) }
+    finally { if (scope === scopeRef.current) setBusy('') }
+  }
+
   async function sincronizarWebhook() {
     const scope = scopeRef.current
     setBusy('webhook')
@@ -316,7 +341,7 @@ function WhatsappConexaoEmpresa() {
     const scope = scopeRef.current
     setBusy('teste')
     try {
-      await api.post(`${basePath}/teste`, { confirmado: true, telefone: teste.telefone })
+      await api.post(`${basePath}/teste`, { confirmado: true, telefone: tipoCanal === 'cliente' ? teste.telefone : undefined })
       if (scope === scopeRef.current) { toast('Teste aceito pelo backend; confira a entrega no aparelho.'); setTeste({ telefone: '', open: false }) }
     } catch (error) { if (scope === scopeRef.current) toast(error.message, true) }
     finally { if (scope === scopeRef.current) setBusy('') }
@@ -338,12 +363,13 @@ function WhatsappConexaoEmpresa() {
 
   const state = conexao?.lastError ? 'unknown' : (conexao?.state || 'unknown')
   const line = linePresentation(conexao ? { ...conexao, state } : null)
-  const webhookUrl = ia?.channel?.publicCode ? `${window.location.origin}/api/webhooks/whatsapp/${ia.channel.publicCode}` : ''
+  const webhookUrl = ia?.channel?.publicCode ? (tipoCanal === 'cliente' ? `${window.location.origin}/api/webhooks/whatsapp/${ia.channel.publicCode}` : `${window.location.origin}/api/webhooks/waha`) : ''
   const erroConexao = conexao?.lastError ? (ERRORS[conexao.lastError] || 'O backend informou uma falha na conexão. Confira o diagnóstico para obter orientação segura.') : ''
   const pending = diag?.conclusoes?.filter((item) => !item.ok).length
   const saida = conexao?.saida
   const outbound = outboundPresentation(conexao ? { ...conexao, state } : null, diag)
-  const saidaBloqueada = !outbound.ready
+  const grupoOperacional = tipoCanal !== 'cliente' && Boolean(ia?.channel?.wahaGroupId)
+  const saidaBloqueada = tipoCanal === 'cliente' ? !outbound.ready : state !== 'open' || !grupoOperacional
   const messages = diag?.mensagens24h
   const iaSummary = iaOperational.kind === 'loading' ? 'Aguardando' : iaOperational.kind !== 'valid' ? 'Não verificável' : iaOperational.channel.configured ? (iaOperational.channel.status === 'ativo' ? 'Ativo' : 'Em preparação') : 'Não configurado'
 
@@ -403,7 +429,7 @@ function WhatsappConexaoEmpresa() {
         <div className="dadm-wa-column">
           <section className="dadm-card" aria-labelledby="wa-conn">
             <div className="c360-card-head"><h2 id="wa-conn">Conexão e identificação</h2><span className={`dadm-state ${state}`}>{STATES[state] || state}</span></div>
-            {!conexao.providerConfigured && <p className="dadm-note warn">{conexao.provider !== 'chatbot_backend' ? ERRORS.provedor_nao_e_nossagente : 'Falta a chave CHATBOT_BACKEND_KEY no servidor.'}</p>}
+            {!conexao.providerConfigured && <p className="dadm-note warn">{tipoCanal === 'cliente' ? (conexao.provider !== 'chatbot_backend' ? ERRORS.provedor_nao_e_nossagente : 'Falta a chave CHATBOT_BACKEND_KEY no servidor.') : 'O controle privado WAHA do Kytto ainda não está configurado.'}</p>}
             {erroConexao && conexao.providerConfigured && <p className="dadm-note danger">{erroConexao}</p>}
             {state === 'open' && !conexao.phoneMasked && <p className="dadm-note warn" role="status">Sessão aberta, mas o backend não informou o número. Confirme a conta pareada em Aparelhos conectados no WhatsApp antes de usar este canal; uma referência manual não comprova titularidade.</p>}
             {saidaBloqueada && <p className="dadm-note warn" role="status">{outbound.label}. Confira o diagnóstico da instância antes de testar mensagens. O modo de envio do servidor não substitui conexão, empresa dona e verificação da linha.</p>}
@@ -411,6 +437,7 @@ function WhatsappConexaoEmpresa() {
             <dl className="dadm-result">
               <div><dt>Identificação da linha</dt><dd>{line.verified ? line.value : 'Não confirmada'}</dd></div>
               <div><dt>Instância no backend</dt><dd>{conexao.instance || 'Não atribuída'}</dd></div>
+              {tipoCanal !== 'cliente' && <div><dt>Transporte</dt><dd>WAHA privado</dd></div>}
               {saida && <div><dt>Envio de mensagens</dt><dd>{outbound.label}</dd></div>}
               <div><dt>Backend</dt><dd>{conexao.providerLabel}</dd></div>
               <div><dt>Conectado desde</dt><dd>{state === 'open' ? dateTime(conexao.lastConnectedAt) : '—'}</dd></div>
@@ -434,6 +461,12 @@ function WhatsappConexaoEmpresa() {
               {state === 'open' && <button type="button" className="c360-btn ghost" disabled={Boolean(busy) || saidaBloqueada} title={saidaBloqueada ? outbound.label : undefined} onClick={() => setTeste({ telefone: '', open: true })}>Enviar teste</button>}
               {conexao.ativo && <button type="button" className="c360-btn ghost" disabled={Boolean(busy)} onClick={() => setConfirmarSaida(true)}>Desconectar</button>}
             </div> : <p className="dadm-muted">Só administradores e gestores alteram a conexão.</p>}
+            {tipoCanal !== 'cliente' && <div className="dadm-wa-reference" aria-labelledby="wa-group">
+              <h3 id="wa-group">Grupo Admin deste canal</h3>
+              <p className="dadm-muted">Gestão e Lançamentos aceitam mensagens somente de um grupo <code>@g.us</code> allowlisted para esta empresa, sessão e perfil. Conversas individuais e outros grupos são descartados.</p>
+              {ia?.channel?.wahaGroupSubject && <p className="dadm-note">Grupo salvo: <strong>{ia.channel.wahaGroupSubject}</strong> · <code>{ia.channel.wahaGroupId}</code></p>}
+              {podeGerenciar && <div className="dadm-actions"><button type="button" className="c360-btn ghost" disabled={Boolean(busy) || state !== 'open'} onClick={listarGrupos}>{busy === 'grupos' ? 'Listando…' : 'Listar grupos'}</button><select className="c360-input" aria-label="Grupo Admin WAHA" value={grupoSelecionado || ia?.channel?.wahaGroupId || ''} onChange={(event) => setGrupoSelecionado(event.target.value)}><option value="">Selecione um grupo Admin</option>{grupos.map((group) => <option key={group.id} value={group.id}>{group.subject}</option>)}</select><button type="button" className="c360-btn primary" disabled={Boolean(busy) || !grupoSelecionado} onClick={salvarGrupo}>{busy === 'grupo' ? 'Salvando…' : 'Salvar grupo'}</button></div>}
+            </div>}
           </section>
 
           {podeGerenciar && <section className="dadm-card" aria-labelledby="wa-diag">
@@ -448,15 +481,15 @@ function WhatsappConexaoEmpresa() {
           <section className="dadm-card" aria-labelledby="wa-ia">
             <h2 id="wa-ia">Atendente IA no WhatsApp</h2>
             {ia ? <ul className="dadm-check">
-              <Check ok={conexao.providerConfigured}>Backend configurado</Check>
-              <Check ok={state === 'open' && Boolean(conexao.phoneMasked)} hint={state === 'open' && !conexao.phoneMasked ? 'sessão aberta, número não informado' : undefined}>Número identificado pelo backend</Check>
+              <Check ok={conexao.providerConfigured}>{tipoCanal === 'cliente' ? 'Backend configurado' : 'Controle WAHA configurado'}</Check>
+              <Check ok={tipoCanal !== 'cliente' ? state === 'open' && grupoOperacional : state === 'open' && Boolean(conexao.phoneMasked)} hint={tipoCanal !== 'cliente' ? (grupoOperacional ? 'sessão e grupo allowlisted' : 'salve um grupo Admin') : (state === 'open' && !conexao.phoneMasked ? 'sessão aberta, número não informado' : undefined)}>{tipoCanal !== 'cliente' ? 'Sessão e grupo Admin identificados' : 'Número identificado pelo backend'}</Check>
               <Check ok={Boolean(ia.gemini?.configured)} hint={ia.gemini?.model}>Gemini configurado</Check>
               <Check ok={Boolean(ia.featureEnabled)} hint="FEATURE_WHATSAPP_AI=true">IA liberada no servidor</Check>
               <Check ok={ia.channel?.status === 'ativo'}>Canal do atendente ativo</Check>
               {saida && <Check ok={outbound.ready} hint={outbound.label}>Prontidão do envio</Check>}
               <Check ok={Boolean(ia.channel?.lastEventAt)} hint={ia.channel?.lastEventAt ? `último em ${dateTime(ia.channel.lastEventAt)}` : 'nenhuma mensagem recebida ainda'}>Mensagens chegando</Check>
             </ul> : <p className="c360-empty">Status do atendente indisponível para o seu perfil.</p>}
-            {webhookUrl && <p className="dadm-note dadm-wa-webhook">Webhook de entrada: <strong>{webhookUrl}</strong> · cabeçalho <code>{ia.channel?.webhookHeader || 'x-setpoint-webhook-token'}</code></p>}
+            {webhookUrl && <p className="dadm-note dadm-wa-webhook">Webhook de entrada: <strong>{webhookUrl}</strong> · {tipoCanal === 'cliente' ? <>cabeçalho <code>{ia.channel?.webhookHeader || 'x-setpoint-webhook-token'}</code></> : <>segredo + HMAC protegidos no servidor</>}</p>}
             {podeGerenciar && ia && !ia.channel && <button type="button" className="c360-btn primary" disabled={Boolean(busy)} onClick={prepararAtendente}>Preparar atendente (rascunho)</button>}
             {podeGerenciar && ia?.channel && ia.channel.status !== 'ativo' && <button type="button" className="c360-btn primary" disabled={Boolean(busy)} onClick={() => alterarAtendente('ativo')}>Ativar atendente</button>}
             {podeGerenciar && ia?.channel?.status === 'ativo' && <button type="button" className="c360-btn ghost" disabled={Boolean(busy)} onClick={() => alterarAtendente('rascunho')}>Pausar atendente</button>}
@@ -477,9 +510,9 @@ function WhatsappConexaoEmpresa() {
       </div>
     </>}
 
-    <Dialog open={teste.open} title="Enviar mensagem de teste" labelId="wa-teste" onClose={() => setTeste({ telefone: '', open: false })} onSubmit={enviarTeste} initialFocusRef={telefoneRef}
+    <Dialog open={teste.open} title={tipoCanal === 'cliente' ? 'Enviar mensagem de teste' : 'Testar grupo Admin WAHA'} labelId="wa-teste" onClose={() => setTeste({ telefone: '', open: false })} onSubmit={enviarTeste} initialFocusRef={telefoneRef}
       actions={<><button type="button" className="c360-btn ghost" onClick={() => setTeste({ telefone: '', open: false })}>Voltar</button><button type="submit" className="c360-btn primary" disabled={busy === 'teste'}>Enviar</button></>}>
-      <label className="c360-field">Telefone com DDD<input ref={telefoneRef} className="c360-input" inputMode="tel" required value={teste.telefone} onChange={(event) => setTeste({ ...teste, telefone: event.target.value })} placeholder="(65) 99999-0000" /></label>
+      {tipoCanal === 'cliente' ? <label className="c360-field">Telefone com DDD<input ref={telefoneRef} className="c360-input" inputMode="tel" required value={teste.telefone} onChange={(event) => setTeste({ ...teste, telefone: event.target.value })} placeholder="(65) 99999-0000" /></label> : <p className="dadm-muted">O teste será enviado somente ao grupo Admin salvo para esta empresa e este perfil. Não é possível informar um número individual.</p>}
       <p className="dadm-muted">O backend aceita o envio, mas a entrega no aparelho deve ser conferida. Limite de 5 testes por hora.</p>
     </Dialog>
     <Dialog open={confirmarSaida} title="Desconectar o WhatsApp?" labelId="wa-sair" danger onClose={() => setConfirmarSaida(false)}
