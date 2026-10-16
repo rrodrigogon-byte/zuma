@@ -7,7 +7,9 @@ import { instanceOwner, whatsappProviderName } from './core/whatsapp-provider.js
 import { diagnosticarWhatsapp } from './core/whatsapp-diagnostico.js';
 import { db } from './core/database.js';
 import { egressMensagem, egressResumo, evaluateWhatsappEgress } from './core/whatsapp-egress.js';
-import { listWahaGroups, validWahaGroupId, wahaControlConfigured } from './core/whatsapp-waha.js';
+import { getWahaSessionStatus, listWahaGroups, validWahaGroupId, wahaControlConfigured } from './core/whatsapp-waha.js';
+import { diagnosticarWahaReadiness } from './core/whatsapp-waha-diagnostico.js';
+import { readWahaAssignedSession } from './core/whatsapp-waha-assignment.js';
 
 const BASE = '/api/admin/barbearia/whatsapp-conexao';
 const GESTORES = new Set(['admin', 'organizador']);
@@ -28,7 +30,7 @@ function allowTest(empresaId, now = Date.now()) {
   return true;
 }
 
-export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLojaId, audit, save, enviarMensagem, fetchImpl, isPlatformAdmin = () => false, basePath = BASE, tipoCanal = 'cliente' } = {}) {
+export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLojaId, audit, save, enviarMensagem, fetchImpl, isPlatformAdmin = () => false, basePath = BASE, tipoCanal = 'cliente', database = db, diagnoseWaha = diagnosticarWahaReadiness, wahaConfigured = wahaControlConfigured, wahaStatus = getWahaSessionStatus, wahaAssignedSession = readWahaAssignedSession, env = process.env, now = () => new Date() } = {}) {
   const perfilBruto = String(tipoCanal || 'cliente').toLowerCase();
   const perfil = ['cliente', 'gestao', 'lancamentos'].includes(perfilBruto) ? perfilBruto : 'cliente';
   const routeBase = basePath;
@@ -128,7 +130,34 @@ export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLoja
 
   // Diagnóstico de ponta a ponta (só leitura): contagens, horários e travas; nunca conteúdo, número completo ou segredo.
   app.get(`${routeBase}/diagnostico`, async (req, res) => {
+    res.set('Cache-Control', 'private, no-store');
     if (!gestor(req, res)) return;
+    // Os canais internos são exclusivamente WAHA. Não consultam a conexão
+    // legada, não usam instanceOwner e não fazem qualquer escrita/rede fora da
+    // leitura explícita da sessão WAHA, já escopada por empresa/unidade/perfil.
+    if (perfil !== 'cliente') {
+      const empresaId = String(legacyEmpresaId(req) || '');
+      const lojaId = String(legacyLojaId(req) || '');
+      if (!lojaId) return res.status(409).json({ error: 'Selecione a unidade da empresa para o diagnóstico.', code: 'STORE_SELECTION_REQUIRED' });
+      try {
+        const diagnostico = await diagnoseWaha({
+          empresaId,
+          lojaId,
+          tipoCanal: perfil,
+          assignedSession: wahaAssignedSession(empresaId, perfil),
+          database,
+          wahaControlConfigured: wahaConfigured,
+          getWahaSessionStatus: wahaStatus,
+          env,
+          now,
+        });
+        return res.json({ ok: true, ...diagnostico });
+      } catch {
+        // O diagnóstico é observacional: uma falha inesperada não pode vazar
+        // SQL, URL, sessão, segredo ou conteúdo de mensagem.
+        return res.status(502).json({ error: 'Não foi possível consultar o diagnóstico WAHA agora.' });
+      }
+    }
     // O diagnóstico consulta a instância DESTA empresa. Só a empresa dona da instância
     // (CHATBOT_BACKEND_INSTANCES ou o par antigo) vê o estado dela; nunca o da Dino.
     const empresaId = String(legacyEmpresaId(req) || '');

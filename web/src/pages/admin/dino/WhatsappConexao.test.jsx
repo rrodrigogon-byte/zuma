@@ -16,7 +16,7 @@ vi.mock('../../../lib/whatsapp-webhook-secret', () => ({
   webhookSecretEnvFor: () => 'WHATSAPP_AI_WEBHOOK_SECRET',
 }))
 vi.mock('../customer360/shared', () => ({ Dialog: ({ children }) => createElement('div', null, children) }))
-vi.mock('react-router-dom', () => ({ Link: ({ children, ...props }) => createElement('a', props, children) }))
+vi.mock('react-router-dom', () => ({ Link: ({ children, ...props }) => createElement('a', props, children), useLocation: () => ({ pathname: globalThis.window?.location?.pathname || '/admin/whatsapp' }) }))
 
 const connection = {
   state: 'open', providerConfigured: true, provider: 'chatbot_backend', providerLabel: 'Backend', instance: 'dino',
@@ -319,4 +319,66 @@ it('usa rota e link exclusivos no canal Lançamentos', async () => {
   expect(apiMock.get.mock.calls.some(([path]) => path === '/api/admin/barbearia/whatsapp-conexao-lancamentos?atualizar=1')).toBe(true)
   expect(apiMock.get.mock.calls.some(([path]) => path === '/api/admin/commerce/whatsapp-ai/status?canal=lancamentos')).toBe(true)
   await unmount(renderer)
+})
+
+function setupInternal(profile, options = {}) {
+ globalThis.window.location.pathname = `/admin/whatsapp-${profile}`
+ const internal = { ...connection, provider: 'waha', providerLabel: 'WAHA privado', providerConfigured: true, state: 'open', instance: `private-${profile}`, phoneMasked: '', saida: { modo: 'on' }, ...options.connection }
+ const diag = { tipoCanal: profile, transporte: 'waha', agora: new Date().toISOString(), readiness: { controlConfigured: true, sessionAssigned: true, sessionConnected: true, channelConfigured: true, groupConfigured: true, webhookSecretConfigured: true, hmacSecretConfigured: true, ...options.readiness }, conclusoes: [] }
+ apiMock.get.mockImplementation(path => path.endsWith('/diagnostico') ? Promise.resolve(diag)
+   : path.startsWith('/api/admin/barbearia/whatsapp-conexao') ? Promise.resolve({ conexao: internal, podeGerenciar: true })
+   : Promise.resolve(operational({ status: options.status || 'rascunho', lastEventAt: null, lastSyncAt: null, wahaGroupId: '555555@g.us' }, { gemini: { configured: true } })))
+ return diag
+}
+
+it('envio Clientes liberado não libera teste nem ativação quando WAHA não está pronto', async () => {
+ setupInternal('gestao', { connection: { providerConfigured: false } })
+ let renderer
+ await act(async () => { renderer = create(<WhatsappConexao />) }); await tick()
+ expect(textOf(renderer)).toContain('Controle privado WAHA não configurado')
+ expect(textOf(renderer)).not.toContain('Piloto ligado')
+ const activate = renderer.root.findAllByType('button').find(b => b.props.children === 'Ativar atendente')
+ expect(activate.props.disabled).toBe(true)
+ await act(async () => { activate.props.onClick() })
+ expect(apiMock.post).not.toHaveBeenCalled()
+ expect(apiMock.put).not.toHaveBeenCalled()
+ await unmount(renderer)
+})
+
+it('grupo desconhecido bloqueia ativação e texto não pede número pessoal no canal interno', async () => {
+ setupInternal('lancamentos', { readiness: { groupConfigured: null } })
+ let renderer
+ await act(async () => { renderer = create(<WhatsappConexao />) }); await tick()
+ expect(textOf(renderer)).toContain('Grupo Admin exclusivo não confirmado')
+ expect(textOf(renderer)).not.toContain('Número de referência (opcional; não verificado)')
+ expect(textOf(renderer)).toContain('sem pagar, transferir ou dar baixa')
+ expect(renderer.root.findAllByType('button').find(b => b.props.children === 'Ativar atendente').props.disabled).toBe(true)
+ await unmount(renderer)
+})
+
+it('pré-requisitos completos liberam somente confirmação explícita do perfil correto, sem envio automático', async () => {
+ setupInternal('gestao')
+ let renderer
+ await act(async () => { renderer = create(<WhatsappConexao />) }); await tick()
+ expect(renderer.root.findAllByType('button').find(b => b.props.children === 'Ativar atendente').props.disabled).toBe(false)
+ expect(textOf(renderer)).toContain('Pronto para ativar o atendente deste perfil')
+ expect(apiMock.post).not.toHaveBeenCalled(); expect(apiMock.put).not.toHaveBeenCalled()
+ for (const [, opts] of apiMock.get.mock.calls) expect(opts).toEqual({ headers: { 'X-Empresa-Id': 'empresa-a', 'X-Loja-Id': 'loja-a' } })
+ await unmount(renderer)
+})
+
+it('troca entre perfis limpa diagnósticos e não aceita a resposta antiga de Gestão em Lançamentos', async () => {
+ const oldDiagnostic = deferred()
+ setupInternal('gestao')
+ const previous = apiMock.get.getMockImplementation()
+ apiMock.get.mockImplementation(path => path.endsWith('-gestao/diagnostico') ? oldDiagnostic.promise : previous(path))
+ let renderer
+ await act(async () => { renderer = create(<WhatsappConexao />) }); await tick()
+ setupInternal('lancamentos', { connection: { providerConfigured: false } })
+ await act(async () => { renderer.update(<WhatsappConexao />) }); await tick()
+ oldDiagnostic.resolve({ tipoCanal: 'gestao', transporte: 'waha', agora: new Date().toISOString(), conclusoes: [{ titulo: 'DIAGNOSTIC_OLD_CANARY', ok: true }] }); await tick()
+ expect(textOf(renderer)).not.toContain('DIAGNOSTIC_OLD_CANARY')
+ expect(textOf(renderer)).toContain('Lançamentos')
+ expect(apiMock.get.mock.calls.some(([path]) => path.endsWith('-lancamentos/diagnostico'))).toBe(true)
+ await unmount(renderer)
 })
