@@ -21,6 +21,7 @@
 // WHATSAPP_MAX_REPLY_AGE_MINUTES (padrão 30).
 // ============================================================================
 
+import { wakeWhatsappAiWorker } from './whatsapp-ai-wake.js';
 import crypto from 'node:crypto';
 import { db } from './database.js';
 import { chatbotBackendConfig, chatbotBackendMode, fetchInboundMessages, fetchOutboundMessages, instanceLineVerified, instanceOwner, instanceRegistry, isaChatId, validInstance, whatsappProviderConfigured, whatsappProviderName } from './whatsapp-provider.js';
@@ -325,6 +326,7 @@ export function startIsaPollWorker() {
       const ultimaPassada = passadaDa(linha);
       try {
         const resumo = await runIsaPollPass(linha ? { instance: linha } : {});
+        if (resumo?.novas || resumo?.audios || resumo?.fotos) wakeWhatsappAiWorker();
         ultimaPassada.em = new Date().toISOString();
         ultimaPassada.passadas += 1;
         ultimaPassada.erro = null;

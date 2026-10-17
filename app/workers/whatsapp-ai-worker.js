@@ -1,3 +1,4 @@
+import { onWhatsappAiWake } from '../core/whatsapp-ai-wake.js';
 import crypto from 'node:crypto';
 import { db } from '../core/database.js';
 import { processWhatsappConversationTask, whatsappAiReady, whatsappMessagingReady } from '../core/whatsapp-ai.js';
@@ -316,8 +317,10 @@ export function startWhatsappAiWorker({ intervalMs = INTERVAL_MS } = {}) {
     : MAINTENANCE_INTERVAL_MS;
   if (!providersReady) console.log('[WhatsApp] provedores inativos; apenas retenção LGPD periódica será executada');
   let running = false;
+  let again = false;
   const tick = async () => {
-    if (running) return;
+    // Pedido de acordar no meio de um ciclo: roda de novo logo que este terminar.
+    if (running) { again = true; return; }
     running = true;
     try {
       const summary = await runWhatsappAiBatch();
@@ -326,13 +329,16 @@ export function startWhatsappAiWorker({ intervalMs = INTERVAL_MS } = {}) {
       console.error('[WhatsApp AI] falha no ciclo:', safeError(error));
     } finally {
       running = false;
+      if (again) { again = false; setTimeout(tick, 0).unref?.(); }
     }
   };
   const timer = setInterval(tick, effectiveInterval);
   timer.unref?.();
+  // Mensagem nova chegou: responde já, sem esperar o próximo ciclo.
+  const stopWake = providersReady ? onWhatsappAiWake(() => { setTimeout(tick, 0).unref?.(); }) : () => {};
   setTimeout(tick, 1000).unref?.();
   console.log(`[WhatsApp] worker ${providersReady ? 'ativo' : 'em modo manutenção'} a cada ${effectiveInterval}ms`);
-  return { started: true, stop() { clearInterval(timer); } };
+  return { started: true, stop() { clearInterval(timer); stopWake(); } };
 }
 
 async function main() {

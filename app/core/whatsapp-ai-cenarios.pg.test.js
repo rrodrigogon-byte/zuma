@@ -1266,6 +1266,64 @@ test('simulação ponta a ponta do atendente da Dino', { skip, timeout: Number(p
     });
   }
 
+
+  // ── Correções de 17/10, a partir do histórico real de conversas da Dino ─────────
+  await cena(t, '47 · Horário falado ("11h") casa com a agenda e o nome é pedido sem perder a vaga', async () => {
+    const tel = telefoneNovo();
+    cliente(tel, 'oi');
+    await ciclo();
+    const s = await sessao(tel);
+    const { createWhatsappAiToolExecutor } = await import('./whatsapp-ai-tools.js');
+    const ctx = { empresaId: IDS.empresa, lojaId: IDS.loja, canalId: IDS.canal, sessionId: s.id, phone: tel, customerName: '' };
+    const run = createWhatsappAiToolExecutor({ ...ctx });
+    const servicos = (await run('listar_servicos', {})).servicos;
+    const servico = servicos.find((x) => /corte/i.test(x.nome)) || servicos[0];
+    const prox = await run('sugerir_proximos_horarios', { serviceId: servico.id, professionalId: 'qualquer', limit: 3 });
+    const slot = prox.proximosHorarios[0];
+    assert.ok(slot?.date && slot?.time, 'a agenda simulada oferece horário');
+    const [hh, mm] = slot.time.split(':');
+    const falado = `${Number(hh)}h${mm === '00' ? '' : mm}`;
+    // Sem nome: pede o nome e devolve exatamente os dados para repetir (com o horário já no formato da agenda).
+    await assert.rejects(
+      () => createWhatsappAiToolExecutor({ ...ctx })('preparar_agendamento', { serviceId: servico.id, professionalId: 'qualquer', date: slot.date, time: falado }),
+      (error) => error.code === 'CUSTOMER_NAME_REQUIRED' && error.message.includes(`"time":"${slot.time}"`) && error.message.includes('Qual seu nome para eu deixar no agendamento?'),
+    );
+    const preparado = await createWhatsappAiToolExecutor({ ...ctx })('preparar_agendamento', { serviceId: servico.id, professionalId: 'qualquer', date: slot.date, time: falado, customerName: 'Rodrigo Gonçalves' });
+    assert.notEqual(preparado.ok, false);
+    assert.doesNotMatch(JSON.stringify(preparado), /com (\p{L}+) com \1/u);
+    // Horário que não existe: devolve os horários livres de verdade para oferecer.
+    await assert.rejects(
+      () => createWhatsappAiToolExecutor({ ...ctx })('preparar_agendamento', { serviceId: servico.id, professionalId: 'qualquer', date: slot.date, time: '03:00', customerName: 'Rodrigo' }),
+      (error) => error.code === 'SLOT_UNAVAILABLE' && new RegExp(`Horários livres neste dia: ${slot.time}`).test(error.message),
+    );
+  });
+
+  await cena(t, '48 · Fila humana parada há mais de 20 min volta a responder o cliente', async () => {
+    const tel = telefoneNovo();
+    cliente(tel, 'oi');
+    await ciclo();
+    const s = await sessao(tel);
+    await db.query(`UPDATE whatsapp_ai_sessions SET status = 'humano', handoff_reason = 'pedido_do_cliente', handoff_requested_at = CURRENT_TIMESTAMP - interval '2 hours', assigned_to = NULL WHERE id = $1`, [s.id]);
+    cliente(tel, 'boa noite');
+    const saida = await ciclo();
+    assert.ok(saida.length >= 1, 'o cliente não pode ficar sem resposta');
+    assert.equal((await sessao(tel)).status, 'ativo');
+  });
+
+  await cena(t, '49 · Fila humana recente ou assumida pela equipe continua com a equipe', async () => {
+    const tel = telefoneNovo();
+    cliente(tel, 'oi');
+    await ciclo();
+    const s = await sessao(tel);
+    await db.query(`UPDATE whatsapp_ai_sessions SET status = 'humano', handoff_reason = 'pedido_do_cliente', handoff_requested_at = CURRENT_TIMESTAMP - interval '5 minutes', assigned_to = NULL WHERE id = $1`, [s.id]);
+    cliente(tel, 'oi?');
+    assert.equal((await ciclo()).length, 0, 'recém-encaminhada: a equipe ainda tem tempo de responder');
+    await db.query(`UPDATE whatsapp_ai_sessions SET status = 'humano', handoff_requested_at = CURRENT_TIMESTAMP - interval '3 hours', handoff_reason = 'security:POSSIBLE_DOCUMENT' WHERE id = $1`, [s.id]);
+    cliente(tel, 'alguém?');
+    assert.equal((await ciclo()).length, 0, 'encaminhamento de segurança não volta sozinho');
+    assert.equal((await sessao(tel)).status, 'humano');
+  });
+
 });
 
 // Datas auxiliares (fuso de Cuiabá)
