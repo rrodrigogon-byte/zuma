@@ -1,3 +1,4 @@
+import { serviceWithProfessional } from './whatsapp-ai-normalize.js';
 // ============================================================================
 // PERSONA DO ATENDENTE (ex.: T-Rex, da Barbearia Dino)
 //
@@ -421,8 +422,10 @@ export function personaAppointmentMessage(persona, { evento, nome, servico, prof
   const primeiro = clean(nome, 80).split(' ')[0] || '';
   const oi = primeiro ? `Opa, ${primeiro}!` : 'Opa!';
   const rodape = 'Pra não receber avisos, responda SAIR.';
-  if (evento === 'lembrete') return `${oi} Passando pra lembrar: ${quandoRelativo}, ${quando}, ${servico} com ${profissional}. Responda CONFIRMO, REMARCAR ou CANCELO. ${rodape}`;
-  if (evento === 'remarcado') return `${oi} Seu horário mudou: ${quando}, ${servico} com ${profissional}. ${rodape}`;
+  // "Corte com Dino" + "Dino" saía "Corte com Dino com Dino" (lembrete de 15/10).
+  const servicoComQuem = serviceWithProfessional(servico, profissional);
+  if (evento === 'lembrete') return `${oi} Passando pra lembrar: ${quandoRelativo}, ${quando}, ${servicoComQuem}. Responda CONFIRMO, REMARCAR ou CANCELO. ${rodape}`;
+  if (evento === 'remarcado') return `${oi} Seu horário mudou: ${quando}, ${servicoComQuem}. ${rodape}`;
   if (evento === 'cancelado') return `${oi} Seu horário na ${clean(loja, 120) || 'barbearia'} foi cancelado. Quer marcar outro? ${rodape}`;
-  return `${oi} Tá marcado: ${quando}, ${servico} com ${profissional}. ${rodape}`;
+  return `${oi} Tá marcado: ${quando}, ${servicoComQuem}. ${rodape}`;
 }

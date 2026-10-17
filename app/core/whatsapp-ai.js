@@ -70,6 +70,7 @@ import {
   STICKERS_RESTRITAS,
 } from './whatsapp-ai-persona.js';
 import { bubbleDelayMs, splitBubbles, styleModelText } from './whatsapp-ai-style.js';
+import { ensureToolLinks, toolMoneyValues, unbackedPrices } from './whatsapp-ai-normalize.js';
 import { enviarFigurinha as enviarFigurinhaPersona, figurinhaDisponivel, figurinhaSuportada } from './whatsapp-figurinhas.js';
 import { mapWhatsappAiProviderLatency24h, WHATSAPP_AI_PROVIDER_RUNS_24H_CHANNEL_SQL } from './whatsapp-ai-provider-metrics.js';
 
@@ -636,6 +637,85 @@ export function withPendingReminder(replyText, pending, now = Date.now()) {
   return `${text}\n\nAh, ${tipo} ainda está esperando sua confirmação: ${formatActionSummary(cleanText(pending.summary, 600))}\n${PENDING_REMINDER_HINT}`.trim();
 }
 
+// Só refaz a resposta por preço sem fonte quando a primeira volta não mexeu em nada
+// (nenhuma ação preparada, nenhum encaminhamento): repetir é seguro.
+const PRICE_RETRY_SAFE_TOOLS = new Set(['buscar_produtos', 'apresentar_produto', 'listar_servicos', 'listar_profissionais', 'consultar_disponibilidade', 'sugerir_proximos_horarios', 'consultar_loja', 'consultar_pagamentos', 'listar_promocoes_ativas', 'listar_planos', 'consultar_meu_plano', 'consultar_meu_cashback', 'consultar_perfil_cliente', 'consultar_meus_agendamentos', 'consultar_status_pedido', 'cotar_frete', 'link_carrinho', 'sugerir_produto_pos_servico', 'avaliar_clube']);
+function retryablePriceCheck(traces = []) {
+  return (Array.isArray(traces) ? traces : []).every((trace) => PRICE_RETRY_SAFE_TOOLS.has(String(trace?.name || '')));
+}
+
+// Preços já consultados nesta conversa continuam valendo nas próximas mensagens.
+async function rememberQuotedPrices(session, toolResults = []) {
+  const novos = [...toolMoneyValues(toolResults)];
+  if (!novos.length) return;
+  const atuais = Array.isArray(session.estado?.precosConsultados) ? session.estado.precosConsultados : [];
+  const todos = [...new Set([...atuais, ...novos])].filter((value) => Number.isInteger(value) && value > 0).slice(-400);
+  session.estado = { ...(session.estado || {}), precosConsultados: todos };
+  await db.query(
+    `UPDATE whatsapp_ai_sessions SET estado = jsonb_set(estado, '{precosConsultados}', $4::jsonb, true)
+      WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`,
+    [session.id, session.empresa_id, session.loja_id, JSON.stringify(todos)],
+  );
+}
+
+// Serviços e profissionais com os ids reais vão prontos no contexto: o modelo agenda direto,
+// sem gastar 2 das 6 etapas listando (resposta mais rápida e sem estourar o limite de etapas).
+const agendaContextCache = new Map();
+const AGENDA_CONTEXT_TTL_MS = 5 * 60 * 1000;
+export async function agendaContextFor(toolContext, { now = Date.now() } = {}) {
+  const key = `${toolContext?.empresaId}:${toolContext?.lojaId}`;
+  const cached = agendaContextCache.get(key);
+  if (cached && cached.expires > now) return cached.value;
+  let value = { text: '', results: [] };
+  try {
+    const run = createWhatsappAiToolExecutor({ ...toolContext, toolResults: undefined, toolLinks: undefined });
+    const [servicos, profissionais] = await Promise.all([run('listar_servicos', {}), run('listar_profissionais', {})]);
+    const listaServicos = (Array.isArray(servicos?.servicos) ? servicos.servicos : []).slice(0, 40).map((item) => {
+      const preco = Number(item?.preco);
+      const extras = [Number.isFinite(preco) && preco > 0 ? `R$ ${preco.toFixed(2).replace('.', ',')}` : '', item?.duracaoMinutos ? `${item.duracaoMinutos} min` : ''].filter(Boolean).join(', ');
+      return `${cleanText(item?.nome, 60)} (id ${cleanText(item?.id, 60)}${extras ? `, ${extras}` : ''})`;
+    });
+    const listaProfissionais = (Array.isArray(profissionais?.profissionais) ? profissionais.profissionais : []).slice(0, 30)
+      .map((item) => `${cleanText(item?.nome, 40)} (id ${cleanText(item?.id, 60)})`);
+    if (listaServicos.length) {
+      value = {
+        text: `Agenda desta unidade, já consultada (use os ids direto em sugerir_proximos_horarios, consultar_disponibilidade e preparar_agendamento; não chame listar_servicos nem listar_profissionais de novo): Serviços: ${listaServicos.join('; ')}.${listaProfissionais.length ? ` Profissionais: ${listaProfissionais.join('; ')}.` : ''} Quando o cliente escolher o horário, chame preparar_agendamento na hora; se já souber o nome dele, mande em customerName.`.slice(0, 4000),
+        results: [servicos, profissionais],
+      };
+    }
+  } catch {
+    value = { text: '', results: [] };
+  }
+  agendaContextCache.set(key, { value, expires: now + AGENDA_CONTEXT_TTL_MS });
+  return value;
+}
+
+const HANDOFF_IDLE_MINUTES = Math.max(5, Number.parseInt(process.env.WHATSAPP_AI_HANDOFF_IDLE_MINUTES || '20', 10) || 20);
+async function resumeIdleHumanQueue(session, context) {
+  if (session.assigned_to) return false;
+  const pause = session.estado?.staffPauseUntil ? new Date(session.estado.staffPauseUntil).valueOf() : 0;
+  if (pause && pause > Date.now()) return false;
+  const reason = String(session.handoff_reason || session.estado?.handoffReason || '');
+  // Encaminhamentos de segurança continuam com a equipe.
+  if (reason.startsWith('security:') && !AUTO_RESUME_HANDOFF_REASONS.includes(reason)) return false;
+  const resumed = await db.query(
+    `UPDATE whatsapp_ai_sessions SET status = 'ativo',
+        estado = estado - 'handoffReason',
+        handoff_requested_at = NULL, handoff_reason = NULL, priority = 0,
+        atualizado_em = CURRENT_TIMESTAMP
+      WHERE id = $1 AND empresa_id = $2 AND loja_id = $3 AND status = 'humano'
+        AND assigned_to IS NULL
+        AND handoff_requested_at IS NOT NULL
+        AND handoff_requested_at < CURRENT_TIMESTAMP - make_interval(mins => $4::int)
+        AND (estado->>'staffPauseUntil' IS NULL OR (estado->>'staffPauseUntil')::timestamptz < CURRENT_TIMESTAMP)
+      RETURNING id`,
+    [session.id, session.empresa_id, session.loja_id, HANDOFF_IDLE_MINUTES],
+  ).catch(() => ({ rows: [] }));
+  if (!resumed.rows.length) return false;
+  await auditHandoff(db, context, session.id, 'auto_resumed_idle_queue').catch(() => null);
+  return true;
+}
+
 async function putSessionInHandoff(session, reason, priority = 2) {
   // Ação preparada e não confirmada não sobrevive ao handoff: a equipe decide do zero.
   await db.query(
@@ -1133,6 +1213,13 @@ async function deterministicResponseCore(task, channel, session, message) {
     await db.query(`UPDATE whatsapp_ai_sessions SET estado = estado || '{"preferSelfService":true}'::jsonb WHERE id = $1 AND empresa_id = $2 AND loja_id = $3`, [session.id, session.empresa_id, session.loja_id]);
     session.estado = { ...session.estado, preferSelfService: true };
   }
+  // Fila humana sem ninguém da equipe assumir: o cliente não fica falando sozinho.
+  // Em 14–16/10 "Confirmo", "ola" e "boa noite" ficaram quase um dia sem resposta.
+  if (session.status === 'humano' && await resumeIdleHumanQueue(session, context)) {
+    session.status = 'ativo';
+    session.handoff_reason = null;
+    session.estado = { ...(session.estado || {}), retomadaPorInatividade: true };
+  }
   if (session.status === 'humano') return { text: null, kind: 'human_queue' };
   const greeting = standaloneGreetingReply(message.text, { pendingAction: Boolean(session.acao_pendente) });
   const consentQuestionOpen = Boolean(session.personalization_prompted_at) && session.estado?.personalizacaoRespondida !== true;
@@ -1294,6 +1381,9 @@ async function deterministicResponseCore(task, channel, session, message) {
     }
     extraGuidance = 'A última mensagem do cliente mostra que ele não entendeu ou está esperando resposta. Responda em no máximo 2 frases, retome o ponto pendente e faça UMA pergunta simples.';
   }
+  if (session.estado?.retomadaPorInatividade) {
+    extraGuidance = `${extraGuidance} A equipe ainda não respondeu esta conversa: diga numa frase curta que segue ajudando por aqui e resolva o que o cliente pediu.`.trim();
+  }
   const { prior: priorHistory, burst } = splitBurst(history);
   const userText = burstUserText(burst, message.text);
   const recentConversationText = [...history]
@@ -1307,7 +1397,14 @@ async function deterministicResponseCore(task, channel, session, message) {
     opportunityPolicy: profileResult.policy,
     sessionSnapshot: session,
     requestHumanHandoff: (reason) => putSessionInHandoff(session, reason, 2),
+    toolResults: [],
+    toolLinks: [],
   };
+  const agenda = await agendaContextFor(toolContext);
+  if (agenda.text) {
+    extraGuidance = `${extraGuidance} ${agenda.text}`.trim();
+    toolContext.toolResults.push(...agenda.results);
+  }
   const runArgs = {
     requireCompletedReply: true,
     systemInstruction: buildWhatsappAiSystemPrompt({
@@ -1328,9 +1425,17 @@ async function deterministicResponseCore(task, channel, session, message) {
     executeTool: persona?.figurinhas ? withStickerTool(createWhatsappAiToolExecutor(toolContext), toolContext, session) : createWhatsappAiToolExecutor(toolContext),
   };
 
-  async function finish(result, provider, presentationContext = toolContext) {
+  async function finish(result, provider, presentationContext = toolContext, { checkPrices = false } = {}) {
+    // Preço que nenhuma ferramenta devolveu (16/10: "Dior por R$ 1.150" e o pedido saiu por R$ 1.800).
+    if (checkPrices && retryablePriceCheck(result.traces)) {
+      const semFonte = unbackedPrices(result.text, [...(presentationContext.toolResults || []), session.estado?.precosConsultados || []]);
+      if (semFonte.length) return { retryPrices: semFonte };
+    }
+    // Link de pagamento/carrinho gerado nesta resposta sempre chega ao cliente.
+    if (presentationContext.toolLinks?.length) result = { ...result, text: ensureToolLinks(result.text, presentationContext.toolLinks) };
     const opportunityTrace = result.traces.some(trace => trace?.name === 'propor_oportunidade' && trace?.ok === true);
     const validationInput = {
+      toolUrls: presentationContext.toolLinks || [],
       traces: result.traces,
       recommendationWasRequested: recommendationRequested(message.text),
       opportunityAllowed: opportunityTrace,
@@ -1340,7 +1445,7 @@ async function deterministicResponseCore(task, channel, session, message) {
     // Link de fora da loja é o único problema: tira o link e responde. Não vale
     // mandar a conversa para a fila (e calar a IA) por causa de um endereço.
     if (!validation.ok && validation.violations.every(code => code === 'UNAPPROVED_URL')) {
-      const semLink = stripUnapprovedUrls(result.text);
+      const semLink = stripUnapprovedUrls(result.text, process.env, presentationContext.toolLinks || []);
       const revalidated = validateWhatsappAiOutput(semLink, validationInput);
       await recordWhatsappAiPolicyEvent(context, 'output_blocked', {
         reasonCode: 'UNAPPROVED_URL_REMOVED',
@@ -1400,6 +1505,7 @@ async function deterministicResponseCore(task, channel, session, message) {
       await markPersonalizationPrompted(context, session, message.externalId).catch(() => null);
       replyText = `${String(replyText || '').trim()}\n\n${persona ? personaPersonalizationQuestion(persona) : PERSONALIZATION_QUESTION}`.trim();
     }
+    await rememberQuotedPrices(session, presentationContext.toolResults).catch(() => null);
     const sticker = presentationContext.sticker && !pendingNow ? presentationContext.sticker : null;
     return { text: replyText, kind: provider === 'gemini' ? 'gemini' : 'reserve_ai', model: result.model, provider, traces: result.traces, memoryUsed: Boolean(customerMemory), ...(sticker ? { sticker } : {}) };
   }
@@ -1419,6 +1525,8 @@ async function deterministicResponseCore(task, channel, session, message) {
       if (!hadPendingAction) await cancelPendingAction(context).catch(() => null);
       const reserveContext = { ...toolContext };
       delete reserveContext.sticker;
+      reserveContext.toolResults = [...(toolContext.toolResults || [])];
+      reserveContext.toolLinks = [];
       const reserveExecutor = createWhatsappAiToolExecutor(reserveContext);
       const result = await runAnthropicWithTools({ ...runArgs, executeTool: persona?.figurinhas ? withStickerTool(reserveExecutor, reserveContext, session) : reserveExecutor });
       const out = await finish(result, 'anthropic', reserveContext);
@@ -1442,7 +1550,15 @@ async function deterministicResponseCore(task, channel, session, message) {
 
   try {
     const gemini = await runGeminiWithTools(runArgs);
-    const out = await finish(gemini, 'gemini');
+    let out = await finish(gemini, 'gemini', toolContext, { checkPrices: true });
+    if (out?.retryPrices) {
+      // Uma segunda volta, com o aviso: o modelo consulta o catálogo e cita só o valor real.
+      const lista = out.retryPrices.slice(0, 4).map((cents) => `R$ ${(cents / 100).toFixed(2).replace('.', ',')}`).join(', ');
+      const retryContext = { ...toolContext, toolResults: [...toolContext.toolResults], toolLinks: [] };
+      const nota = `Atenção: a resposta anterior citou valores que não vieram das ferramentas (${lista}). Antes de responder, consulte buscar_produtos, apresentar_produto, listar_servicos ou listar_planos e cite somente valores devolvidos por elas; se não achar, não cite valor.`;
+      const again = await runGeminiWithTools({ ...runArgs, systemInstruction: `${runArgs.systemInstruction}\n\n${nota}`, executeTool: createWhatsappAiToolExecutor(retryContext) });
+      out = await finish(again, 'gemini', retryContext);
+    }
     if (out.kind === 'gemini') await markGeminiSuccess(task);
     return out;
   } catch (error) {

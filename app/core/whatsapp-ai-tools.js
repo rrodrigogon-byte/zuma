@@ -9,6 +9,7 @@ import { quoteAvailableShipping } from './commerce-shipping.js';
 import { requiresPickupOnly, PICKUP_ONLY_ERROR_CODE } from './commerce-pickup-rules.js';
 import { productDetails, productCard } from './whatsapp-product-card.js';
 import { createPaymentAttempt, publicPaymentMethods } from './payment-adapters.js';
+import { matchAgendaSlot, normalizeAgendaDate, serviceWithProfessional } from './whatsapp-ai-normalize.js';
 // Agenda única: quando a empresa usa a agenda da barbearia (a do admin e do link
 // público), a IA lê e grava nela; senão segue o caminho PostgreSQL antigo.
 import {
@@ -335,7 +336,7 @@ async function toolAvailability(context, args = {}) {
     disponibilidade: sanitizeToolData(await listSchedulingAvailability(scope, {
       serviceId: args.serviceId,
       professionalId: args.professionalId,
-      date: args.date,
+      date: normalizeAgendaDate(args.date, localDateIso()) || args.date,
     })),
   };
 }
@@ -429,7 +430,8 @@ async function toolNextSlots(context, args = {}) {
   if (!serviceId) throw new WhatsappAiToolError('informe o serviço (id de listar_servicos)', 'SERVICE_REQUIRED');
   const professionalId = cleanText(args.professionalId, 100) || 'qualquer';
   const today = localDateIso();
-  const fromDate = /^\d{4}-\d{2}-\d{2}$/.test(String(args.fromDate || '')) && String(args.fromDate) >= today ? String(args.fromDate) : today;
+  const askedFrom = normalizeAgendaDate(args.fromDate, today);
+  const fromDate = askedFrom && askedFrom >= today ? askedFrom : today;
   // Agenda PostgreSQL não aceita "qualquer": junta os horários de cada profissional ativo.
   const multiProfessional = professionalId === 'qualquer' && await agendaSource(scope) === 'postgres';
   const professionals = multiProfessional ? (await listSchedulingProfessionals(scope) || []).filter((item) => item?.id) : [];
@@ -479,11 +481,27 @@ async function toolNextSlots(context, args = {}) {
 export { isGenericCustomerName };
 
 function requireCustomerName(...candidates) {
+  // Último argumento opcional: { purpose: 'agendamento' | 'pedido', repeat: {...} }.
+  const last = candidates[candidates.length - 1];
+  const options = last && typeof last === 'object' ? candidates.pop() : {};
   for (const candidate of candidates) {
     const name = cleanText(candidate, 100);
     if (!isGenericCustomerName(name)) return name;
   }
-  throw new WhatsappAiToolError('falta o nome do cliente: pergunte "Qual seu nome para eu deixar no agendamento?" e depois chame de novo com customerName', 'CUSTOMER_NAME_REQUIRED');
+  const question = options.purpose === 'pedido' ? 'Qual seu nome para eu deixar no pedido?' : 'Qual seu nome para eu deixar no agendamento?';
+  // Em 14, 16 e 17/10 o modelo pedia o nome e, na volta, mudava data/horário e "perdia" a vaga.
+  const repeat = options.repeat ? ` Quando ele responder, chame de novo com EXATAMENTE estes dados e customerName: ${JSON.stringify(options.repeat)}. Não pergunte o horário de novo.` : ' Depois chame de novo com customerName.';
+  throw new WhatsappAiToolError(`falta o nome do cliente: pergunte só "${question}".${repeat}`, 'CUSTOMER_NAME_REQUIRED');
+}
+
+// Horário fora da agenda: devolve os horários livres de verdade para o atendente
+// oferecer na hora, em vez de dizer que "alguém acabou de marcar".
+function slotUnavailable(availability, date) {
+  const livres = (availability?.slots || []).slice(0, 6);
+  const texto = livres.length
+    ? `horário indisponível em ${date}. Horários livres neste dia: ${livres.join(', ')}. Ofereça estes ao cliente (não diga que alguém acabou de marcar).`
+    : `não há horário livre em ${date} para este serviço e profissional. Use sugerir_proximos_horarios para oferecer os próximos dias.`;
+  return new SchedulingError(texto, 'SLOT_UNAVAILABLE');
 }
 
 async function toolJoinWaitlist(context, args = {}) {
@@ -659,11 +677,15 @@ async function toolPrepareAppointment(context, args = {}) {
   const scope = contextScope(context);
   const serviceId = ensureAgendaId(args.serviceId, 'serviceId');
   const professionalId = ensureAgendaId(args.professionalId, 'professionalId', { allowAny: true });
-  const date = cleanText(args.date, 10);
-  const time = cleanText(args.time, 5);
+  // O modelo repete o que o cliente falou ("11h", "sexta", "14/10"); a agenda usa 11:00 e AAAA-MM-DD.
+  const date = normalizeAgendaDate(args.date, localDateIso()) || cleanText(args.date, 10);
   const availability = await listSchedulingAvailability(scope, { serviceId, professionalId, date });
-  if (!availability.slots.includes(time)) throw new SchedulingError('horário indisponível', 'SLOT_UNAVAILABLE');
-  const customerName = requireCustomerName(args.customerName, scope.customerName);
+  const time = matchAgendaSlot(args.time, availability.slots);
+  if (!time) throw slotUnavailable(availability, date);
+  const customerName = requireCustomerName(args.customerName, scope.customerName, {
+    purpose: 'agendamento',
+    repeat: { serviceId, professionalId, date, time, ...(Array.isArray(args.extraServiceIds) && args.extraServiceIds.length ? { extraServiceIds: args.extraServiceIds.slice(0, 3) } : {}) },
+  });
   // Vários serviços na mesma ida (barba + manicure): encaixa um depois do outro.
   const extras = (Array.isArray(args.extraServiceIds) ? args.extraServiceIds : []).slice(0, 3).map((id) => ensureAgendaId(id, 'extraServiceIds'));
   const combo = [];
@@ -671,7 +693,9 @@ async function toolPrepareAppointment(context, args = {}) {
   let total = Number(availability.service.preco || 0);
   // "qualquer profissional disponível" não informa nada ao cliente: a equipe sai na confirmação.
   const comQuem = availability.professional?.id === 'qualquer' ? '' : ` com ${availability.professional.nome}`;
-  const partes = [`${availability.service.nome}${comQuem} às ${time}`];
+  // "Corte e barba com Dino" + "com Dino" saía "com Dino com Dino".
+  const servicoComQuem = comQuem ? serviceWithProfessional(availability.service.nome, availability.professional.nome) : availability.service.nome;
+  const partes = [`${servicoComQuem} às ${time}`];
   // O cliente escolheu um profissional: os serviços seguintes ficam com ELE quando ele
   // faz o serviço e está livre (corte + barba + sobrancelha com o mesmo barbeiro). Só
   // cai para "qualquer" quando ele não faz o serviço ou não tem encaixe (ex.: manicure).
@@ -709,7 +733,7 @@ async function toolPrepareAppointment(context, args = {}) {
   const para = customerName ? ` para ${customerName}` : '';
   const summary = combo.length
     ? `${friendlyWhen(date, time)}${para}: ${partes.join(' + ')}, total R$ ${total.toFixed(2).replace('.', ',')}`
-    : `${availability.service.nome}${comQuem}${para}, ${friendlyWhen(date, time)}, no valor de R$ ${availability.service.preco.toFixed(2).replace('.', ',')}`;
+    : `${servicoComQuem}${para}, ${friendlyWhen(date, time)}, no valor de R$ ${availability.service.preco.toFixed(2).replace('.', ',')}`;
   return savePreparedAction(scope, 'agendamento', request, summary);
 }
 
@@ -721,10 +745,35 @@ function cartItemsFromArgs(rawItems) {
 }
 
 /**
+ * O modelo às vezes manda o id do PRODUTO no lugar do id da variante (16/10: "deu um erro
+ * aqui com o ID do produto"). Produto com uma única variante ativa: troca pelo id dela.
+ * Altera os itens recebidos (o pedido grava o id certo).
+ */
+async function resolveProductIdsToVariants(scope, items) {
+  const ids = [...new Set(items.map(item => item.variantId))];
+  if (!ids.length) return items;
+  const found = await db.queryRead(
+    `SELECT id, product_id FROM commerce_product_variants
+      WHERE empresa_id = $1 AND (id = ANY($2::uuid[]) OR product_id = ANY($2::uuid[])) AND ativo = true`,
+    [scope.empresaId, ids],
+  ).catch(() => ({ rows: [] }));
+  const variantIds = new Set(found.rows.map(row => row.id));
+  const byProduct = new Map();
+  for (const row of found.rows) byProduct.set(row.product_id, [...(byProduct.get(row.product_id) || []), row.id]);
+  for (const item of items) {
+    if (variantIds.has(item.variantId)) continue;
+    const variants = byProduct.get(item.variantId) || [];
+    if (variants.length === 1) item.variantId = variants[0];
+  }
+  return items;
+}
+
+/**
  * Preço e estoque reais dos itens pedidos, buscando exatamente as variantes do
  * carrinho (o catálogo pode ter centenas de produtos; não depende da 1ª página).
  */
 async function priceCartItems(scope, storefront, items) {
+  await resolveProductIdsToVariants(scope, items);
   const variantIds = [...new Set(items.map(item => item.variantId))];
   const products = await listPublishedProducts({ empresaId: scope.empresaId }, { storefrontId: storefront.id, variantIds, limit: 100 });
   const variants = new Map();
@@ -842,6 +891,10 @@ async function toolOrderPaymentLink(context, args = {}) {
   );
   const order = found.rows[0];
   if (!order) throw new WhatsappAiToolError('pedido não encontrado para este contato', 'ORDER_NOT_FOUND');
+  if (order.status === 'cancelled') {
+    // Pedido de retirada não pago expira (a reserva do estoque vence): 16/10 o cliente pediu o Pix 39 min depois.
+    return { ok: false, code: 'ORDER_EXPIRED', status: order.status, orientacao: 'Este pedido expirou sem pagamento (a reserva do estoque venceu). Diga isso em uma frase e ofereça refazer agora: chame preparar_pedido com os mesmos itens e, depois do SIM, gere o link na hora.' };
+  }
   if (order.status !== 'pending_payment') {
     return { ok: false, code: 'ORDER_NOT_AWAITING_PAYMENT', status: order.status, orientacao: 'Este pedido não está aguardando pagamento. Use consultar_status_pedido para informar a situação; não gere outra cobrança.' };
   }
@@ -893,7 +946,7 @@ async function toolPrepareOrder(context, args = {}) {
     storefrontId: storefront.id,
     shippingMethodId: method.rows[0].id,
     items,
-    customer: { nome: requireCustomerName(args.customerName, scope.customerName), telefone: scope.phone },
+    customer: { nome: requireCustomerName(args.customerName, scope.customerName, { purpose: 'pedido' }), telefone: scope.phone },
     note: 'Pedido preparado pelo atendimento WhatsApp para retirada.',
   };
   const summary = `${summarized.map(item => `${item.quantity}x ${item.nome}`).join(', ')}. Total R$ ${total.toFixed(2).replace('.', ',')}; retirada na unidade.`;
@@ -988,14 +1041,14 @@ async function toolPreparePromotion(context, args = {}) {
 async function toolPrepareReschedule(context, args = {}) {
   const scope = contextScope(context);
   const appointmentId = cleanText(args.appointmentId, 80);
-  const date = cleanText(args.date, 10);
-  const time = cleanText(args.time, 5);
+  const date = normalizeAgendaDate(args.date, localDateIso()) || cleanText(args.date, 10);
   const appointments = await listWhatsappCustomerAppointments(scope, { includePast: false, limit: 20 });
   const appointment = appointments.find(item => item.id === appointmentId);
   if (!appointment) throw new WhatsappAiToolError('agendamento não encontrado para este contato', 'APPOINTMENT_NOT_FOUND');
   const availability = await listSchedulingAvailability(scope, { serviceId: appointment.servico.id, professionalId: appointment.profissional.id, date });
-  if (!availability.slots.includes(time)) throw new SchedulingError('horário indisponível', 'SLOT_UNAVAILABLE');
-  return savePreparedAction(scope, 'remarcacao', { appointmentId, date, time }, `${appointment.servico.nome} com ${appointment.profissional.nome} será remarcado para ${friendlyWhen(date, time)}.`);
+  const time = matchAgendaSlot(args.time, availability.slots);
+  if (!time) throw slotUnavailable(availability, date);
+  return savePreparedAction(scope, 'remarcacao', { appointmentId, date, time }, `${serviceWithProfessional(appointment.servico.nome, appointment.profissional.nome)} será remarcado para ${friendlyWhen(date, time)}.`);
 }
 
 async function toolPrepareCancellation(context, args = {}) {
@@ -1263,6 +1316,18 @@ const TOOL_MAP = {
   solicitar_humano: toolHuman,
 };
 
+// Guarda o que as ferramentas devolveram nesta resposta: a resposta final só pode citar
+// preços que vieram daqui e os links de pagamento/carrinho gerados sempre chegam ao cliente.
+function collectToolOutput(context, result) {
+  if (!result || typeof result !== 'object') return;
+  if (Array.isArray(context.toolResults)) context.toolResults.push(result);
+  if (!Array.isArray(context.toolLinks)) return;
+  for (const key of ['linkPagamento', 'linkCarrinho']) {
+    const url = String(result[key] || '').trim();
+    if (/^https:\/\/\S+$/i.test(url) && !context.toolLinks.includes(url)) context.toolLinks.push(url);
+  }
+}
+
 export function createWhatsappAiToolExecutor(context) {
   context.productCatalog = new Map();
   context.productCards = new Map();
@@ -1284,6 +1349,7 @@ export function createWhatsappAiToolExecutor(context) {
     }
     context.primaryIntentResolved = primaryIntentResolved;
     const result = await tool(context, args || {});
+    collectToolOutput(context, result);
     // Só conta como preparada se deu certo: depois de "horário indisponível" ou "falta o nome",
     // o atendente pode corrigir e preparar de novo na mesma mensagem.
     if (name.startsWith('preparar_') && result?.ok !== false) preparedAction = true;

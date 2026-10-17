@@ -488,12 +488,19 @@ export function approvedUrlHosts(env = process.env) {
   return hosts;
 }
 
-export function isApprovedStoreUrl(url, env = process.env) {
+// Checkouts dos gateways homologados (link_pagamento_pedido). Em 16/10 o link do Pix
+// da InfinitePay era removido da resposta e o cliente recebia "aqui está o link:" vazio.
+const PAYMENT_CHECKOUT_HOSTS = ['infinitepay.io', 'mercadopago.com.br', 'mercadopago.com', 'mpago.la'];
+
+export function isApprovedStoreUrl(url, env = process.env, toolUrls = []) {
   let parsed;
   try { parsed = new URL(String(url || '').trim()); } catch { return false; }
   if (parsed.protocol !== 'https:' || parsed.username || parsed.password) return false;
+  // Link devolvido por uma ferramenta nesta resposta (pagamento, carrinho): exatamente igual.
+  if ((Array.isArray(toolUrls) ? toolUrls : []).some(item => String(item || '').trim() === parsed.href || String(item || '').trim() === String(url || '').trim())) return true;
   const host = parsed.hostname.toLowerCase();
   if (host === 'kytto.com.br' || host.endsWith('.kytto.com.br')) return true;
+  if (PAYMENT_CHECKOUT_HOSTS.some(item => host === item || host.endsWith(`.${item}`))) return true;
   if (approvedUrlHosts(env).has(host)) return true;
   // Fotos do catálogo hospedadas no storage autorizado da loja (mesma lista do upload).
   const mediaHosts = String(env.COMMERCE_MEDIA_ALLOWED_HOSTS || 'storage.googleapis.com').split(',').map(item => item.trim().toLowerCase()).filter(Boolean);
@@ -502,16 +509,16 @@ export function isApprovedStoreUrl(url, env = process.env) {
 
 // Remove do texto os links não aprovados (mantém os da loja). Usado quando o único
 // problema da resposta é um link: o cliente recebe o resto em vez de ir para a fila.
-export function stripUnapprovedUrls(text, env = process.env) {
+export function stripUnapprovedUrls(text, env = process.env, toolUrls = []) {
   return String(text || '')
-    .replace(URL_PATTERN, url => (isApprovedStoreUrl(url.replace(/[.,;:!?]+$/, ''), env) ? url : ''))
+    .replace(URL_PATTERN, url => (isApprovedStoreUrl(url.replace(/[.,;:!?]+$/, ''), env, toolUrls) ? url : ''))
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .replace(/[ \t]{2,}/g, ' ')
     .trim();
 }
 
-export function validateWhatsappAiOutput(text, { traces = [], recommendationWasRequested = false, opportunityAllowed = false, customerRequestedPurchase = false, env = process.env } = {}) {
+export function validateWhatsappAiOutput(text, { traces = [], recommendationWasRequested = false, opportunityAllowed = false, customerRequestedPurchase = false, env = process.env, toolUrls = [] } = {}) {
   const value = clean(text, 4000);
   const urls = value.match(URL_PATTERN) || [];
   // As demais verificações olham o texto sem os links: o id de uma foto
@@ -523,7 +530,7 @@ export function validateWhatsappAiOutput(text, { traces = [], recommendationWasR
   if (/\b(GEMINI_API_KEY|EVOLUTION_API_KEY|WHATSAPP_AI_WEBHOOK_SECRET|system prompt|developer message)\b/i.test(semLinks)) violations.push('SECRET_OR_PROMPT_REFERENCE');
   if (/\b(?:\d[ -]?){13,19}\b/.test(semLinks)) violations.push('POSSIBLE_PAYMENT_CARD');
   if (/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b|\b\d{2}\.?\d{3}\.?\d{3}\/\d{4}-?\d{2}\b/.test(semLinks)) violations.push('POSSIBLE_DOCUMENT');
-  if (urls.some(url => !isApprovedStoreUrl(url.replace(/[.,;:!?]+$/, ''), env))) violations.push('UNAPPROVED_URL');
+  if (urls.some(url => !isApprovedStoreUrl(url.replace(/[.,;:!?]+$/, ''), env, toolUrls))) violations.push('UNAPPROVED_URL');
   // "voce precisa" sozinho bloqueava perguntas educadas ("O que você precisa?") e mandava a
   // conversa para a equipe; só conta como pressão quando empurra compra/aproveitamento.
   if (/\b(ultima chance|imperdivel|compre agora|nao perca|so hoje|voce precisa (comprar|garantir|aproveitar|levar|fechar))\b/.test(normalized)) violations.push('PRESSURE_LANGUAGE');
