@@ -32,6 +32,7 @@ import { accountByLegacyId, accountCredential, accountRequestIdentity, accountSe
 import { createAccountManagementRouter } from './core/commerce-account-routes.js';
 import { emitir as nfceEmitir, cancelar as nfceCancelar, nfceConfigurado } from './nfce.js';
 import { createCommerceAdminRouter, createCommercePublicRateLimitGuard, createCommercePublicRouter, createCommerceWebhookRouter } from './core/commerce-routes.js';
+import { lookupPostalCode } from './core/commerce-shipping.js';
 import { createWhatsappAiWebhookRouter } from './core/whatsapp-ai-routes.js';
 import { avecGovernanceNoStore } from './core/avec-import-http-policy.js';
 import { whatsappAiOperationalStatus } from './core/whatsapp-ai.js';
@@ -741,6 +742,19 @@ app.post('/api/admin/platform/protecao-dados/restaurar', requirePlatformAdmin, a
     res.json({ ok: true, restaurada: id, copiaDoEstadoAnterior: antes.id });
   } catch (error) {
     res.status(500).json({ error: 'falha ao restaurar a cópia', code: 'RESTAURACAO_FALHOU' });
+  }
+});
+
+// Consulta de CEP para qualquer tela (cadastro de empresa, configuração fiscal, cliente,
+// checkout), em qualquer domínio. A rota da vitrine exige loja ligada ao domínio e no
+// domínio principal respondia STOREFRONT_NOT_FOUND. Mesmo resolvedor: 4 fontes + cache.
+app.get('/api/cep/:cep', publicLimit(80, 10 * 60 * 1000), async (req, res) => {
+  try {
+    res.json(await lookupPostalCode(req.params.cep));
+  } catch (error) {
+    const code = String(error?.code || 'CEP_LOOKUP_FAILED');
+    const status = code === 'SHIPPING_CEP_NOT_FOUND' ? 404 : code === 'SHIPPING_CEP_INVALID' ? 400 : 503;
+    res.status(status).json({ error: String(error?.message || 'não foi possível consultar o CEP').slice(0, 200), code });
   }
 });
 
