@@ -37,6 +37,7 @@ test('nomes de campo do formulário podem ser mapeados e campos podem ser ignora
 test('mensagens de erro em português', () => {
   assert.match(cepStatusMessage({ error: { code: 'SHIPPING_CEP_NOT_FOUND' } }), /CEP não encontrado/)
   assert.match(cepStatusMessage({ error: { status: 503 } }), /Preencha o endereço manualmente/)
+  assert.match(cepStatusMessage({ error: { status: 404, code: 'STOREFRONT_NOT_FOUND' } }), /Preencha o endereço manualmente/)
 })
 
 test('consulta usa o resolvedor do servidor e devolve o código do erro', async () => {
