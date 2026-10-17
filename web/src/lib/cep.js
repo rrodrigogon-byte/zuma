@@ -4,7 +4,8 @@
 // oficial dos Correios e guarda cada CEP confirmado no cache permanente do banco.
 // Assim, qualquer CEP do Brasil responde igual em qualquer empresa.
 
-export const CEP_LOOKUP_PATH = '/api/storefront/shipping/address'
+// Rota sem loja ligada ao domínio: funciona também no domínio principal (painel).
+export const CEP_LOOKUP_PATH = '/api/cep'
 
 export function cepDigits(value) {
   return String(value ?? '').replace(/\D/g, '').slice(0, 8)
@@ -65,7 +66,8 @@ export function isCityWideCep(found) {
 export function cepStatusMessage({ found = null, error = null } = {}) {
   if (error) {
     const code = error?.code || error?.data?.code || ''
-    if (code === 'SHIPPING_CEP_NOT_FOUND' || error?.status === 404) return 'CEP não encontrado. Confira os números.'
+    // Só o código do resolvedor diz que o CEP não existe; outro 404 (rota/loja) não é isso.
+    if (code === 'SHIPPING_CEP_NOT_FOUND') return 'CEP não encontrado. Confira os números.'
     if (code === 'SHIPPING_CEP_INVALID') return 'O CEP precisa ter 8 dígitos.'
     return 'Não foi possível consultar o CEP agora. Preencha o endereço manualmente.'
   }
