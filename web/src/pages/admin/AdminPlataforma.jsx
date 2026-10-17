@@ -3,6 +3,9 @@ import { AlertTriangle, Building2, CheckCircle2, ExternalLink, Landmark, Loader2
 import { api } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { useToast } from '../../hooks/useToast'
+import { mergeCepAddress } from '../../lib/cep.js'
+import { useCepAutofill } from '../../lib/useCepAutofill.js'
+import CepHint from '../../components/CepHint.jsx'
 
 const EMPTY_TENANT = {
   nomeFantasia: '', razaoSocial: '', cnpj: '', tipoNegocio: 'outro',
@@ -111,6 +114,8 @@ export default function AdminPlataforma() {
   const [showCreate, setShowCreate] = useState(true)
   const [showPreview, setShowPreview] = useState(false)
   const [form, setForm] = useState(EMPTY_TENANT)
+  // CEP de qualquer lugar do Brasil preenche rua, bairro, cidade e UF.
+  const cepInfo = useCepAutofill(found => setForm(current => mergeCepAddress(current, found, { cep: false, estado: 'uf', ibge: false })))
   const [result, setResult] = useState(null)
   const [groups, setGroups] = useState([])
   const [groupForm, setGroupForm] = useState({ nome: '', cnpj: '', razaoSocial: '' })
@@ -256,7 +261,7 @@ export default function AdminPlataforma() {
           <fieldset style={{ border: '1px solid var(--line)', borderRadius: 12, padding: 14, display: 'grid', gap: 13 }}>
             <legend style={{ padding: '0 6px', fontWeight: 800 }}>Endereço e retirada</legend>
             <div className="form-grid">
-              <label className="form-group"><span>CEP</span><input value={form.cep} onChange={(event) => change('cep', onlyDigits(event.target.value, 8))} inputMode="numeric" required /></label>
+              <label className="form-group"><span>CEP</span><input value={form.cep} onChange={(event) => { const cep = onlyDigits(event.target.value, 8); change('cep', cep); cepInfo.onCepInput(cep) }} inputMode="numeric" autoComplete="postal-code" placeholder="00000000" required /><CepHint info={cepInfo} /></label>
               <label className="form-group"><span>Logradouro</span><input value={form.logradouro} onChange={(event) => change('logradouro', event.target.value)} required /></label>
               <label className="form-group"><span>Número</span><input value={form.numero} onChange={(event) => change('numero', event.target.value)} required /></label>
               <label className="form-group"><span>Complemento</span><input value={form.complemento} onChange={(event) => change('complemento', event.target.value)} /></label>

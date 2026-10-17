@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
+import { mergeCepAddress } from '../../lib/cep.js'
+import { useCepAutofill } from '../../lib/useCepAutofill.js'
+import CepHint from '../../components/CepHint.jsx'
 
 const EMPTY_CONFIG = {
   cnpj: '', ie: '', im: '', cnae: '', crt: '1', razaoSocial: '', nomeFantasia: '', uf: 'MT',
@@ -14,12 +17,13 @@ const fieldStyle = {
   background: 'var(--bg)', color: 'var(--fg)', boxSizing: 'border-box', fontSize: 13,
 }
 
-function Field({ label, value, onChange, placeholder, type = 'text', required = false }) {
+function Field({ label, value, onChange, placeholder, type = 'text', required = false, hint = null }) {
   return <div>
     <label style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 5, fontWeight: 700 }}>
       {label}{required ? ' *' : ''}
     </label>
     <input type={type} placeholder={placeholder} value={value ?? ''} onChange={onChange} style={fieldStyle} />
+    {hint}
   </div>
 }
 
@@ -64,6 +68,12 @@ export default function ConfiguracaoFiscal() {
 
   const update = (key, value) => setForm(current => ({ ...current, [key]: value }))
   const updateAddress = (key, value) => setForm(current => ({ ...current, endereco: { ...current.endereco, [key]: value } }))
+  // O CEP preenche rua, bairro, cidade, UF e o código IBGE do município exigido na NFC-e/NF-e.
+  const cepInfo = useCepAutofill(found => setForm(current => ({
+    ...current,
+    uf: found?.estado ? String(found.estado).toUpperCase() : current.uf,
+    endereco: mergeCepAddress(current.endereco, found, { ibge: 'codigoMunicipio', estado: false }),
+  })))
 
   async function salvarConfig() {
     setSaving(true)
@@ -191,7 +201,7 @@ export default function ConfiguracaoFiscal() {
         <Field label="Bairro" required value={form.endereco.bairro} onChange={e => updateAddress('bairro', e.target.value)} placeholder="Bairro" />
         <Field label="Cidade" required value={form.endereco.cidade} onChange={e => updateAddress('cidade', e.target.value)} placeholder="Cidade" />
         <Field label="Código IBGE" required value={form.endereco.codigoMunicipio} onChange={e => updateAddress('codigoMunicipio', e.target.value)} placeholder="Ex.: 5107958" />
-        <Field label="CEP" required value={form.endereco.cep} onChange={e => updateAddress('cep', e.target.value)} placeholder="00000-000" />
+        <Field label="CEP" required value={form.endereco.cep} onChange={e => { updateAddress('cep', e.target.value); cepInfo.onCepInput(e.target.value) }} placeholder="00000-000" hint={<CepHint info={cepInfo} />} />
       </div>
     </Section>
 
