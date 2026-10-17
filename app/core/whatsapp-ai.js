@@ -70,7 +70,7 @@ import {
   STICKERS_RESTRITAS,
 } from './whatsapp-ai-persona.js';
 import { bubbleDelayMs, splitBubbles, styleModelText } from './whatsapp-ai-style.js';
-import { ensureToolLinks, toolMoneyValues, unbackedPrices } from './whatsapp-ai-normalize.js';
+import { agendaCalendarText, ensureToolLinks, fixWeekdayMistakes, serviceWithProfessional, toolMoneyValues, unbackedPrices } from './whatsapp-ai-normalize.js';
 import { enviarFigurinha as enviarFigurinhaPersona, figurinhaDisponivel, figurinhaSuportada } from './whatsapp-figurinhas.js';
 import { mapWhatsappAiProviderLatency24h, WHATSAPP_AI_PROVIDER_RUNS_24H_CHANNEL_SQL } from './whatsapp-ai-provider-metrics.js';
 
@@ -548,13 +548,13 @@ function confirmationReply(result) {
   if (result.type === 'agendamento') {
     const item = result.result;
     const extras = Array.isArray(item.extras) && item.extras.length
-      ? ` Em seguida: ${item.extras.map((extra) => `${extra.servico} com ${extra.profissional} às ${extra.horaLocal || quandoLegivel(extra)}`).join('; ')}.`
+      ? ` Em seguida: ${item.extras.map((extra) => `${serviceWithProfessional(extra.servico, extra.profissional)} às ${extra.horaLocal || quandoLegivel(extra)}`).join('; ')}.`
       : '';
-    return `Agendamento confirmado: ${item.servico} com ${item.profissional} em ${quandoLegivel(item)}.${extras} Código ${item.codigo || item.id}. Se precisar remarcar ou cancelar, é só me falar por aqui.`;
+    return `Agendamento confirmado: ${serviceWithProfessional(item.servico, item.profissional)} em ${quandoLegivel(item)}.${extras} Código ${item.codigo || item.id}. Se precisar remarcar ou cancelar, é só me falar por aqui.`;
   }
   if (result.type === 'remarcacao') {
     const item = result.result;
-    return `Agendamento remarcado: ${item.servico || 'seu atendimento'} com ${item.profissional} em ${quandoLegivel(item)}.${item.codigo ? ` Código ${item.codigo}.` : ''}`;
+    return `Agendamento remarcado: ${serviceWithProfessional(item.servico || 'seu atendimento', item.profissional)} em ${quandoLegivel(item)}.${item.codigo ? ` Código ${item.codigo}.` : ''}`;
   }
   if (result.type === 'cancelamento') {
     const item = result.result;
@@ -1400,6 +1400,8 @@ async function deterministicResponseCore(task, channel, session, message) {
     toolResults: [],
     toolLinks: [],
   };
+  // O modelo não sabia a data de hoje e deduzia o dia da semana ("Amanhã, sexta-feira" num sábado).
+  extraGuidance = `${agendaCalendarText()} ${extraGuidance}`.trim();
   const agenda = await agendaContextFor(toolContext);
   if (agenda.text) {
     extraGuidance = `${extraGuidance} ${agenda.text}`.trim();
@@ -1433,6 +1435,12 @@ async function deterministicResponseCore(task, channel, session, message) {
     }
     // Link de pagamento/carrinho gerado nesta resposta sempre chega ao cliente.
     if (presentationContext.toolLinks?.length) result = { ...result, text: ensureToolLinks(result.text, presentationContext.toolLinks) };
+    // Dia da semana que não bate com a data é corrigido antes de chegar ao cliente.
+    const datas = fixWeekdayMistakes(result.text);
+    if (datas.fixes.length) {
+      result = { ...result, text: datas.text };
+      console.warn('[WhatsApp AI] dia da semana corrigido na resposta:', datas.fixes.join('; '));
+    }
     const opportunityTrace = result.traces.some(trace => trace?.name === 'propor_oportunidade' && trace?.ok === true);
     const validationInput = {
       toolUrls: presentationContext.toolLinks || [],

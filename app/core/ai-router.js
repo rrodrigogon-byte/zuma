@@ -371,7 +371,8 @@ export async function runAnthropicWithTools({
   const inputChars = String(systemInstruction).length + messages.reduce((sum, m) => sum + String(m.content).length, 0);
   for (let step = 0; step < maxSteps; step += 1) {
     const payload = await anthropicMessages({ key, model, fetchImpl, timeoutMs, accessToken, body: {
-      max_tokens: 900, temperature: 0.35, system: String(systemInstruction).slice(0, 12000),
+      // Instruções inteiras (calendário e agenda vão no meio do prompt) e menos variação.
+      max_tokens: 900, temperature: 0.2, system: String(systemInstruction).slice(0, 24000),
       tools: anthropicTools.length ? anthropicTools : undefined, messages,
     } });
     const content = Array.isArray(payload?.content) ? payload.content : [];

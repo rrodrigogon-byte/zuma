@@ -69,3 +69,40 @@ test('link de pagamento do gateway e link devolvido pela ferramenta passam no fi
   assert.equal(stripUnapprovedUrls(`Aqui está o link: ${pix}`, env), `Aqui está o link: ${pix}`);
   assert.equal(validateWhatsappAiOutput(`Paga aqui: ${pix}`, { env }).violations.includes('UNAPPROVED_URL'), false);
 });
+
+test('calendário do prompt traz hoje e amanhã com o dia da semana certo', async () => {
+  const { agendaCalendarText } = await import('./whatsapp-ai-normalize.js');
+  const sexta = new Date('2026-10-16T13:00:00Z'); // 09:00 em Cuiabá, sexta-feira
+  const texto = agendaCalendarText(sexta, 3);
+  assert.match(texto, /agora é sexta-feira, 16 de outubro de 2026, 09:00/);
+  assert.match(texto, /hoje = sexta-feira 16\/10 \(2026-10-16\)/);
+  assert.match(texto, /amanhã = sábado 17\/10 \(2026-10-17\)/);
+  assert.match(texto, /depois de amanhã = domingo 18\/10/);
+});
+
+test('dia da semana errado na resposta é corrigido pela data', async () => {
+  const { fixWeekdayMistakes } = await import('./whatsapp-ai-normalize.js');
+  const sexta = new Date('2026-10-16T13:00:00Z');
+  // Conversa real de 16/10: amanhã era sábado.
+  let r = fixWeekdayMistakes('Opa! Amanhã, sexta-feira, a Nati tem horários às 12h, 12h30 ou 13h.', sexta);
+  assert.equal(r.text, 'Opa! Amanhã, sábado, a Nati tem horários às 12h, 12h30 ou 13h.');
+  assert.equal(r.fixes.length, 1);
+  r = fixWeekdayMistakes('Tenho sexta, 17/10 às 16h ou sábado 18/10 às 9h.', sexta);
+  assert.equal(r.text, 'Tenho sábado, 17/10 às 16h ou domingo 18/10 às 9h.');
+  r = fixWeekdayMistakes('Tenho quarta-feira, 14 de outubro, às 11h.', new Date('2026-10-14T13:00:00Z'));
+  assert.equal(r.fixes.length, 0);
+  r = fixWeekdayMistakes('Tenho Quinta-feira, 17 de outubro.', sexta);
+  assert.equal(r.text, 'Tenho Sábado, 17 de outubro.');
+  r = fixWeekdayMistakes('Hoje (sexta) tem vaga às 16h.', sexta);
+  assert.equal(r.fixes.length, 0);
+  assert.equal(fixWeekdayMistakes('Sem datas aqui.', sexta).text, 'Sem datas aqui.');
+});
+
+test('nome do cliente é gravado com maiúsculas certas', async () => {
+  const { formatPersonName } = await import('./whatsapp-ai-normalize.js');
+  assert.equal(formatPersonName('rodrigo goncalves'), 'Rodrigo Goncalves');
+  assert.equal(formatPersonName('  ANTONIO   DA SILVA '), 'Antonio da Silva');
+  assert.equal(formatPersonName('ana-paula dos santos'), 'Ana-Paula dos Santos');
+  assert.equal(formatPersonName('Ana McKenzie'), 'Ana McKenzie');
+  assert.equal(formatPersonName(''), '');
+});

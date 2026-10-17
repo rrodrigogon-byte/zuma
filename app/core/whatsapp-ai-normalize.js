@@ -156,3 +156,99 @@ export function ensureToolLinks(text, toolLinks = []) {
   }
   return out
 }
+
+// ── Datas: o modelo não pode deduzir o dia da semana ─────────────────────────────
+// 16/10 (sexta) ele escreveu "Amanhã, sexta-feira". O prompt não trazia a data de hoje.
+const NOMES_DIA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado']
+const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
+const AGENDA_TIME_ZONE = 'America/Cuiaba'
+
+function localParts(now) {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: AGENDA_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now)
+  const get = (type) => parts.find((part) => part.type === type)?.value || ''
+  return { iso: `${get('year')}-${get('month')}-${get('day')}`, time: `${get('hour')}:${get('minute')}` }
+}
+
+function weekdayOf(iso) {
+  return new Date(`${iso}T12:00:00Z`).getUTCDay()
+}
+
+function shortDate(iso) {
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
+}
+
+/** Bloco de calendário para o prompt: hoje, amanhã e os próximos dias com o dia da semana certo. */
+export function agendaCalendarText(now = new Date(), days = 14) {
+  const { iso, time } = localParts(now)
+  const lista = []
+  for (let offset = 0; offset < days; offset += 1) {
+    const day = addDays(iso, offset)
+    const rotulo = offset === 0 ? 'hoje' : offset === 1 ? 'amanhã' : offset === 2 ? 'depois de amanhã' : ''
+    lista.push(`${rotulo ? `${rotulo} = ` : ''}${NOMES_DIA[weekdayOf(day)]} ${shortDate(day)} (${day})`)
+  }
+  return `CALENDÁRIO (fuso de Cuiabá; use exatamente estas datas, nunca deduza o dia da semana): agora é ${NOMES_DIA[weekdayOf(iso)]}, ${Number(iso.slice(8, 10))} de ${MESES[Number(iso.slice(5, 7)) - 1]} de ${iso.slice(0, 4)}, ${time}. ${lista.join('; ')}. Nas ferramentas, mande a data como AAAA-MM-DD desta lista.`
+}
+
+const DIA_REGEX = '(domingo|segunda(?:-feira)?|ter[çc]a(?:-feira)?|quarta(?:-feira)?|quinta(?:-feira)?|sexta(?:-feira)?|s[áa]bado)'
+const MES_REGEX = '(janeiro|fevereiro|mar[çc]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)'
+
+function sameStyle(original, nome) {
+  // Mantém a forma escrita: "sexta" curto continua curto; maiúscula inicial preservada.
+  const curto = !/-feira$/i.test(original) && /-feira$/.test(nome) ? nome.replace(/-feira$/, '') : nome
+  return /^[A-ZÁ]/.test(original) ? curto.charAt(0).toUpperCase() + curto.slice(1) : curto
+}
+
+function isoFromDayMonth(day, month, todayIso) {
+  const year = Number(todayIso.slice(0, 4))
+  let iso = validIso(year, month, day)
+  if (iso && iso < addDays(todayIso, -7)) iso = validIso(year + 1, month, day)
+  return iso
+}
+
+/**
+ * Corrige o dia da semana que não bate com a data na resposta do modelo:
+ * "sexta, 17/10" → "sábado, 17/10"; "Amanhã, sexta-feira" (amanhã é sábado) → "Amanhã, sábado".
+ * Devolve { text, fixes } — fixes lista o que foi trocado (para registro).
+ */
+export function fixWeekdayMistakes(text, now = new Date()) {
+  const { iso: today } = localParts(now)
+  const fixes = []
+  let out = String(text ?? '')
+  const fix = (match, weekdayWord, iso) => {
+    if (!iso) return match
+    const certo = NOMES_DIA[weekdayOf(iso)]
+    if (plain(weekdayWord).replace(/-feira$/, '') === plain(certo).replace(/-feira$/, '')) return match
+    const trocado = sameStyle(weekdayWord, certo)
+    fixes.push(`${weekdayWord}→${trocado} (${iso})`)
+    return match.replace(weekdayWord, trocado)
+  }
+  // "sexta, 17/10", "sexta-feira dia 17/10", "sábado (17/10)"
+  out = out.replace(new RegExp(`\\b${DIA_REGEX}[\\s,(]+(?:dia\\s+)?(\\d{1,2})/(\\d{1,2})\\b`, 'giu'), (match, dia, d, m) => fix(match, dia, isoFromDayMonth(d, m, today)))
+  // "sexta-feira, 17 de outubro"
+  out = out.replace(new RegExp(`\\b${DIA_REGEX},?\\s+(?:dia\\s+)?(\\d{1,2})\\s+de\\s+${MES_REGEX}\\b`, 'giu'), (match, dia, d, mes) => fix(match, dia, isoFromDayMonth(d, MESES.findIndex((nome) => plain(nome) === plain(mes)) + 1, today)))
+  // "amanhã, sexta" / "hoje (quinta)" / "depois de amanhã, domingo"
+  out = out.replace(new RegExp(`\\b(hoje|amanh[ãa]|depois de amanh[ãa])[\\s,(-]+(?:é\\s+|que é\\s+)?${DIA_REGEX}\\b`, 'giu'), (match, rel, dia) => {
+    const r = plain(rel)
+    const iso = r === 'hoje' ? today : r === 'amanha' ? addDays(today, 1) : addDays(today, 2)
+    return fix(match, dia, iso)
+  })
+  return { text: out, fixes }
+}
+
+// ── Nome gravado no sistema ──────────────────────────────────────────────────────
+const PARTICULAS = new Set(['de', 'da', 'do', 'das', 'dos', 'e', "d'"])
+
+/**
+ * "rodrigo goncalves" / "RODRIGO GONÇALVES" → "Rodrigo Goncalves" / "Rodrigo Gonçalves".
+ * Nome já escrito com maiúsculas e minúsculas (ex.: "Ana McKenzie") fica como está.
+ */
+export function formatPersonName(value) {
+  const name = String(value ?? '').normalize('NFC').replace(/\s+/g, ' ').trim()
+  if (!name) return ''
+  const misto = name !== name.toLowerCase() && name !== name.toUpperCase()
+  if (misto) return name
+  return name.toLowerCase().split(' ').map((word, index) => {
+    if (index > 0 && PARTICULAS.has(word)) return word
+    return word.split('-').map((part) => part ? part.charAt(0).toUpperCase() + part.slice(1) : part).join('-')
+  }).join(' ')
+}

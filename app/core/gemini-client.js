@@ -127,8 +127,9 @@ export async function runGeminiWithTools({
   // O limite de saída também inclui raciocínio. Reservar espaço para texto no
   // modelo usado pelo WhatsApp evita consumir os 900 tokens só em pensamento.
   const generationConfig = requireCompletedReply && model === 'gemini-2.5-flash'
-    ? { temperature: 0.35, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 512 } }
-    : { temperature: 0.35, maxOutputTokens: 900 };
+    // Temperatura menor: mais precisão ao escolher ferramenta, data e horário (menos variação).
+    ? { temperature: 0.2, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 512 } }
+    : { temperature: 0.2, maxOutputTokens: 900 };
 
   for (let step = 0; step < maxSteps; step += 1) {
     const payload = await geminiRequest(endpoint, {

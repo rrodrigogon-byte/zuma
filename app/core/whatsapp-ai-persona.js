@@ -313,12 +313,12 @@ export function personaConfirmationReply(persona, result = {}, seed = '') {
   if (result.type === 'agendamento') {
     const quandoExtra = (extra) => (/^\d{2}:\d{2}$/.test(String(extra.horaLocal || '')) ? ` às ${hora(extra.horaLocal)}` : (extra.dataHora || extra.dataAgenda ? `, ${quandoCurto(extra)}` : ''));
     const extras = Array.isArray(item.extras) && item.extras.length
-      ? ` Depois: ${item.extras.map((extra) => `${extra.servico} com ${extra.profissional}${quandoExtra(extra)}`).join('; ')}.`
+      ? ` Depois: ${item.extras.map((extra) => `${serviceWithProfessional(extra.servico, extra.profissional)}${quandoExtra(extra)}`).join('; ')}.`
       : '';
-    return `${abre} ${item.servico} com ${item.profissional}, ${quandoCurto(item)}.${extras}${codigo ? ` Código ${codigo}.` : ''}`;
+    return `${abre} ${serviceWithProfessional(item.servico, item.profissional)}, ${quandoCurto(item)}.${extras}${codigo ? ` Código ${codigo}.` : ''}`;
   }
   if (result.type === 'remarcacao') {
-    return `${pick(['Remarcado!', 'Tá remarcado!'], seed)} ${item.servico || 'Seu horário'} com ${item.profissional}, ${quandoCurto(item)}.${item.codigo ? ` Código ${item.codigo}.` : ''}`;
+    return `${pick(['Remarcado!', 'Tá remarcado!'], seed)} ${serviceWithProfessional(item.servico || 'Seu horário', item.profissional)}, ${quandoCurto(item)}.${item.codigo ? ` Código ${item.codigo}.` : ''}`;
   }
   if (result.type === 'cancelamento') {
     return `Cancelado${item.servico ? `: ${item.servico}${item.profissional ? ` com ${item.profissional}` : ''}` : ''}. Quer que eu já deixe outro dia marcado?`;
