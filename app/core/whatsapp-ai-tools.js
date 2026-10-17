@@ -9,7 +9,7 @@ import { quoteAvailableShipping } from './commerce-shipping.js';
 import { requiresPickupOnly, PICKUP_ONLY_ERROR_CODE } from './commerce-pickup-rules.js';
 import { productDetails, productCard } from './whatsapp-product-card.js';
 import { createPaymentAttempt, publicPaymentMethods } from './payment-adapters.js';
-import { matchAgendaSlot, normalizeAgendaDate, serviceWithProfessional } from './whatsapp-ai-normalize.js';
+import { formatPersonName, matchAgendaSlot, normalizeAgendaDate, serviceWithProfessional } from './whatsapp-ai-normalize.js';
 // Agenda única: quando a empresa usa a agenda da barbearia (a do admin e do link
 // público), a IA lê e grava nela; senão segue o caminho PostgreSQL antigo.
 import {
@@ -486,7 +486,8 @@ function requireCustomerName(...candidates) {
   const options = last && typeof last === 'object' ? candidates.pop() : {};
   for (const candidate of candidates) {
     const name = cleanText(candidate, 100);
-    if (!isGenericCustomerName(name)) return name;
+    // Grava "Rodrigo Goncalves", não "rodrigo goncalves" ou "RODRIGO GONCALVES".
+    if (!isGenericCustomerName(name)) return formatPersonName(name);
   }
   const question = options.purpose === 'pedido' ? 'Qual seu nome para eu deixar no pedido?' : 'Qual seu nome para eu deixar no agendamento?';
   // Em 14, 16 e 17/10 o modelo pedia o nome e, na volta, mudava data/horário e "perdia" a vaga.
