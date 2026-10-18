@@ -9,11 +9,12 @@ export const SECOES_CLUBE = [
   { id: 'recepcao', label: 'Recepção' },
   { id: 'alunos', label: 'Alunos' },
   { id: 'aulas', label: 'Aulas' },
+  { id: 'quadras', label: 'Quadras' },
   { id: 'contratos', label: 'Contratos' },
   { id: 'retencao', label: 'Retenção' },
   { id: 'cobrancas', label: 'Cobranças' },
   { id: 'parceiros', label: 'Wellhub e TotalPass' },
-  { id: 'ajustes', label: 'Catracas e planos' },
+  { id: 'ajustes', label: 'Quadras, catracas e planos' },
 ]
 const IDS = new Set(SECOES_CLUBE.map((s) => s.id))
 

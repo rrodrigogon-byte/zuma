@@ -18,7 +18,7 @@ Só liga com `COMMERCE_CORE_ENABLED=1`. Sem isso, nenhuma rota do Clube é monta
 |---|---|
 | Menu no Kytto | Grupo **Clube & Academia** → `/admin/clube/<seção>`. Abre o painel do módulo embutido, com o menu do Kytto. |
 | Painel avulso (tablet da recepção) | `/clube/painel` |
-| APIs do painel | `/api/admin/clube/{acesso,contratos,aulas,retencao,parceiros,cobrancas}` |
+| APIs do painel | `/api/admin/clube/{acesso,contratos,aulas,quadras,retencao,parceiros,cobrancas,adesao}` |
 | Catraca Control iD | `/api/acesso/controlid/<segredo>/…` |
 | Wellhub / TotalPass | `/api/integracoes/<plataforma>/…` |
 | Páginas do aluno | `/contrato/<token>` (aceite), `/clube/passe/<token>` (QR de entrada), `/clube/pagar/<token>` (Pix) |
@@ -37,12 +37,23 @@ Só liga com `COMMERCE_CORE_ENABLED=1`. Sem isso, nenhuma rota do Clube é monta
 3. Cobranças: ligue o Pix com a chave, o nome e a cidade da academia. A partir daí, a régua, a IA e a recepção mandam o link `/clube/pagar/...`. A recepção dá baixa quando o Pix cai. A baixa estende o "pago até" e libera a catraca na hora.
 4. Contratos: crie o modelo e envie. O aluno aceita com o código que chega no WhatsApp. No aceite, ele pode autorizar novidades (é opcional).
 5. Aulas: crie as turmas. A grade das próximas 2 semanas é gerada sozinha.
+   - Quadras (clubes de tênis, beach tennis, padel): em Ajustes → Quadras e horário, defina o funcionamento por dia da semana e use "Adicionar várias" (ex.: 7 × "Saibro", 7 × "Beach"). A grade do dia fica em **Reservas de quadras**.
 6. Retenção: escolha a base legal das novidades e campanhas, o tom, os horários e o limite diário. Antes de ligar, confira na prévia quem receberia hoje.
 7. Parceiros: conecte o Gym ID do Wellhub ou a place key do TotalPass e cadastre a URL do webhook no portal da plataforma.
 
+## Quadras e reservas
+
+Tudo é por empresa: cada clube tem as próprias quadras (`clube_quadras`), o horário de funcionamento e as regras (`clube_quadras_config`) e as reservas (`clube_quadra_reservas`, migration 080). A tela antiga `/admin/quadras` continua sendo a do torneio (plataforma).
+
+- **Grade do dia** (`#quadras`): horários nas linhas, quadras nas colunas, filtro por modalidade. Toque num horário livre para reservar para um sócio, um avulso ou bloquear a quadra (aula, torneio, manutenção, evento). A grade se atualiza a cada minuto.
+- **Choque de horário:** nunca acontece. Cada reserva trava a quadra na transação. A reserva do sócio trava também o sócio, que não fica em duas quadras ao mesmo tempo.
+- **Regras do sócio:** a reserva só sai com mensalidade em dia (a tolerância do plano vale), e o clube pode desligar isso. Pelo WhatsApp também valem a antecedência máxima e o limite de reservas futuras; a recepção pode passar desses dois. Cancelar perto do horário fica marcado como tardio.
+- **Permissões:** horário, regras e cadastro de quadras pedem `settings.write`. Reservar e cancelar pedem `customers.write`.
+- **IA:** `clube_quadras_livres`, `clube_reservar_quadra`, `clube_minhas_reservas_quadra` e `clube_cancelar_reserva_quadra`. Quem não é sócio vê os horários livres (sem nomes), mas não reserva.
+
 ## IA do WhatsApp
 
-As 18 ferramentas `clube_*` entram pela extensão em `app/core/whatsapp-ai-extensoes.js`. Elas aparecem só para empresas com plano de acesso ativo ou turma ativa. Barbearias e lojas não as veem.
+As 22 ferramentas `clube_*` entram pela extensão em `app/core/whatsapp-ai-extensoes.js`. Elas aparecem só para empresas com plano de acesso, turma ou quadra ativa. Barbearias e lojas não as veem.
 
 **Identificação do aluno:**
 - O aluno é achado pelo telefone da conversa, comparado com `commerce_customers.telefone_normalizado`.
