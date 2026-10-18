@@ -106,6 +106,7 @@ const Mesas      = lazy(() => import('./pages/admin/Mesas'))
 const ReservasFilas = lazy(() => import('./pages/admin/ReservasFilas'))
 const KDSConfiguracao = lazy(() => import('./pages/admin/KDSConfiguracao'))
 const Socios     = lazy(() => import('./pages/admin/Socios'))
+const ClubeAcademia = lazy(() => import('./pages/admin/ClubeAcademia'))
 const Pagamentos = lazy(() => import('./pages/admin/Pagamentos'))
 const AdminLoja  = lazy(() => import('./pages/admin/AdminLoja'))
 const Aulas      = lazy(() => import('./pages/admin/Aulas'))
@@ -248,6 +249,8 @@ export default function App() {
           <Route path="/admin/reservas"     element={<Layout><ReservasFilas /></Layout>} />
           <Route path="/admin/kds"          element={<Layout><KDSConfiguracao /></Layout>} />
           <Route path="/admin/socios"       element={<Layout><Socios /></Layout>} />
+          <Route path="/admin/clube"        element={<Navigate to="/admin/clube/recepcao" replace />} />
+          <Route path="/admin/clube/:secao" element={<Layout><ClubeAcademia /></Layout>} />
           <Route path="/admin/pagamentos"   element={<Layout><Pagamentos /></Layout>} />
           <Route path="/admin/loja"         element={<Layout><AdminLoja /></Layout>} />
           <Route path="/admin/ecommerce"   element={<Layout><EcommerceAdmin /></Layout>} />

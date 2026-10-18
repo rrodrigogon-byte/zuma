@@ -61,6 +61,13 @@ const migrationFiles = [
   '070_whatsapp_channel_profiles.sql',
   '071_whatsapp_launch_channel.sql',
   '072_whatsapp_waha_internal_channels.sql',
+  '073_clube_acesso_controle.sql',
+  '074_clube_contratos_digitais.sql',
+  '075_clube_aulas_agenda.sql',
+  '076_clube_retencao.sql',
+  '077_clube_parceiros.sql',
+  '078_clube_cobrancas.sql',
+  '079_clube_importacoes.sql',
 ];
 const advisoryLockKey = 825410732;
 

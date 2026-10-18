@@ -15,6 +15,7 @@ import {
   createWhatsappAiToolExecutor,
   WHATSAPP_AI_TOOL_DECLARATIONS,
 } from './whatsapp-ai-tools.js';
+import { ferramentasExtrasWhatsappAi, notificarMensagemWhatsappAi } from './whatsapp-ai-extensoes.js';
 import { ensureWhatsappLead, updateWhatsappMarketingConsent } from './whatsapp-ai-crm.js';
 import { enviarFigurinha, enviarMensagem } from './whatsapp.js';
 import { enviarFigurinhaDoMomento } from './whatsapp-stickers.js';
@@ -1407,6 +1408,9 @@ async function deterministicResponseCore(task, channel, session, message) {
     extraGuidance = `${extraGuidance} ${agenda.text}`.trim();
     toolContext.toolResults.push(...agenda.results);
   }
+  // Ferramentas de módulos registrados (ex.: Clube & Academia), só nas empresas em que estão ativos.
+  const extras = await ferramentasExtrasWhatsappAi(toolContext);
+  const baseTools = extras.declaracoes.length ? [...WHATSAPP_AI_TOOL_DECLARATIONS, ...extras.declaracoes] : WHATSAPP_AI_TOOL_DECLARATIONS;
   const runArgs = {
     requireCompletedReply: true,
     systemInstruction: buildWhatsappAiSystemPrompt({
@@ -1417,14 +1421,14 @@ async function deterministicResponseCore(task, channel, session, message) {
       capabilities: channel.configuracao?.capabilities || {},
       customerMemory,
       teamAnswers,
-      extraGuidance: `${extraGuidance} ${session.estado?.preferSelfService ? 'O cliente prefere atendimento pela IA no WhatsApp. Resolva com as ferramentas; não encaminhe dúvidas comuns à equipe. Nunca invente conclusão ou disponibilidade.' : ''}`,
+      extraGuidance: `${extraGuidance} ${session.estado?.preferSelfService ? 'O cliente prefere atendimento pela IA no WhatsApp. Resolva com as ferramentas; não encaminhe dúvidas comuns à equipe. Nunca invente conclusão ou disponibilidade.' : ''} ${extras.orientacao}`.trim(),
       persona,
       segment: channelSegment(channel.configuracao, persona),
     }),
     history: priorHistory,
     userText,
-    tools: persona?.figurinhas ? [...WHATSAPP_AI_TOOL_DECLARATIONS, STICKER_TOOL_DECLARATION] : WHATSAPP_AI_TOOL_DECLARATIONS,
-    executeTool: persona?.figurinhas ? withStickerTool(createWhatsappAiToolExecutor(toolContext), toolContext, session) : createWhatsappAiToolExecutor(toolContext),
+    tools: persona?.figurinhas ? [...baseTools, STICKER_TOOL_DECLARATION] : baseTools,
+    executeTool: persona?.figurinhas ? withStickerTool(extras.envolver(createWhatsappAiToolExecutor(toolContext)), toolContext, session) : extras.envolver(createWhatsappAiToolExecutor(toolContext)),
   };
 
   async function finish(result, provider, presentationContext = toolContext, { checkPrices = false } = {}) {
@@ -1535,7 +1539,7 @@ async function deterministicResponseCore(task, channel, session, message) {
       delete reserveContext.sticker;
       reserveContext.toolResults = [...(toolContext.toolResults || [])];
       reserveContext.toolLinks = [];
-      const reserveExecutor = createWhatsappAiToolExecutor(reserveContext);
+      const reserveExecutor = extras.envolver(createWhatsappAiToolExecutor(reserveContext), reserveContext);
       const result = await runAnthropicWithTools({ ...runArgs, executeTool: persona?.figurinhas ? withStickerTool(reserveExecutor, reserveContext, session) : reserveExecutor });
       const out = await finish(result, 'anthropic', reserveContext);
       await recordRouterRun({ empresaId: task.empresa_id, task: 'responder_reserva', provider: 'anthropic', model: result.model, status: 'success', fallback: true, latencyMs: Date.now() - started,
@@ -1564,7 +1568,7 @@ async function deterministicResponseCore(task, channel, session, message) {
       const lista = out.retryPrices.slice(0, 4).map((cents) => `R$ ${(cents / 100).toFixed(2).replace('.', ',')}`).join(', ');
       const retryContext = { ...toolContext, toolResults: [...toolContext.toolResults], toolLinks: [] };
       const nota = `Atenção: a resposta anterior citou valores que não vieram das ferramentas (${lista}). Antes de responder, consulte buscar_produtos, apresentar_produto, listar_servicos ou listar_planos e cite somente valores devolvidos por elas; se não achar, não cite valor.`;
-      const again = await runGeminiWithTools({ ...runArgs, systemInstruction: `${runArgs.systemInstruction}\n\n${nota}`, executeTool: createWhatsappAiToolExecutor(retryContext) });
+      const again = await runGeminiWithTools({ ...runArgs, systemInstruction: `${runArgs.systemInstruction}\n\n${nota}`, executeTool: extras.envolver(createWhatsappAiToolExecutor(retryContext), retryContext) });
       out = await finish(again, 'gemini', retryContext);
     }
     if (out.kind === 'gemini') await markGeminiSuccess(task);
@@ -1631,6 +1635,11 @@ export async function processWhatsappConversationTask(task) {
     console.warn('[WhatsApp AI] captação CRM não bloqueou atendimento:', cleanText(leadError?.message || leadError, 300));
   }
   const priorOutput = await existingOutput(record, message);
+  // Módulos registrados (ex.: régua do Clube) sabem que o cliente respondeu: pausa a régua e grava "parar".
+  // Só na 1ª vez que a mensagem é processada (reprocessamento da tarefa não conta de novo).
+  if (!priorOutput && !['gestao', 'lancamentos'].includes(whatsappChannelType(record.configuracao?.tipo_canal || record.tipo_canal || 'cliente'))) {
+    await notificarMensagemWhatsappAi({ empresaId: record.empresa_id, lojaId: record.loja_id, phone: message.phone, text: message.text });
+  }
   const priorDelivery = priorOutput?.delivery_status || (priorOutput?.metadados?.delivered === true ? 'sent' : null);
   if (priorDelivery === 'sent') return { delivered: true, replay: true, sessionId: session.id };
   if (['unknown', 'sending', 'skipped'].includes(priorDelivery)) {

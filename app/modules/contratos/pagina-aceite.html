@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Contrato</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --fg: #15171c; --muted: #5d6472; --line: #e2e5ea;
+    --accent: #3f4cc0; --accent-fg: #ffffff; --ok: #1f8a5b; --erro: #b3261e; --destaque: #fff7e6; --destaque-borda: #e8b33a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0e1014; --card: #171a21; --fg: #e9ebf1; --muted: #a2a9b8; --line: #2a2f3b;
+      --accent: #7381ea; --accent-fg: #0e1014; --ok: #4cc28d; --erro: #ff8a80; --destaque: #2a2416; --destaque-borda: #a87f22; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 680px; margin: 0 auto; padding: 20px 16px 120px; }
+  h1 { font-size: 1.35rem; line-height: 1.3; margin: 8px 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; font-size: .95rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .passo { font-size: .8rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .destaque { background: var(--destaque); border: 1px solid var(--destaque-borda); border-radius: 10px; padding: 12px; margin: 10px 0; }
+  .destaque label { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; }
+  .destaque input { width: 22px; height: 22px; margin-top: 2px; flex: none; accent-color: var(--accent); }
+  .destaque b { display: block; }
+  details summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+  pre.texto { white-space: pre-wrap; font: inherit; font-size: .93rem; color: var(--fg); max-height: 50vh; overflow: auto; border-top: 1px solid var(--line); padding-top: 12px; }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 10px; padding: 14px 18px; width: 100%; cursor: pointer; background: var(--accent); color: var(--accent-fg); }
+  button.sec { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  input.codigo { font: 600 1.6rem/1 ui-monospace, monospace; letter-spacing: .4em; text-align: center; width: 100%; padding: 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); margin: 8px 0 12px; }
+  .msg { min-height: 1.4em; font-size: .93rem; margin: 6px 0; }
+  .msg.erro { color: var(--erro); } .msg.ok { color: var(--ok); }
+  .final { text-align: center; padding: 28px 16px; }
+  .final .selo { font-size: 2.6rem; line-height: 1; color: var(--ok); }
+  .hash { font: .75rem/1.4 ui-monospace, monospace; word-break: break-all; color: var(--muted); }
+  .rodape { color: var(--muted); font-size: .8rem; margin-top: 20px; }
+  .opcional { display: flex; gap: 10px; align-items: flex-start; font-size: .88rem; color: var(--muted); margin: 0 0 14px; cursor: pointer; }
+  .opcional input { width: 20px; height: 20px; margin-top: 1px; flex: none; accent-color: var(--accent); }
+  .oculto { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <div id="carregando" class="card">Carregando contrato…</div>
+  <div id="falha" class="card oculto"><b>Link inválido ou expirado.</b><p class="sub">Peça um novo link no WhatsApp da academia.</p></div>
+
+  <section id="conteudo" class="oculto">
+    <h1 id="titulo"></h1>
+    <p class="sub" id="para"></p>
+
+    <div class="card">
+      <div class="passo">1 de 2 · Leia os pontos importantes</div>
+      <p class="sub" style="margin:0 0 6px">Marque cada um para confirmar que leu.</p>
+      <div id="destaques"></div>
+      <details>
+        <summary>Ler o contrato completo</summary>
+        <pre class="texto" id="texto"></pre>
+      </details>
+    </div>
+
+    <div class="card">
+      <div class="passo">2 de 2 · Confirme com o código</div>
+      <p class="sub" style="margin:0 0 10px">Enviaremos um código de 6 dígitos para o WhatsApp <b id="tel"></b>.</p>
+      <button id="btnCodigo" class="sec" type="button">Receber código no WhatsApp</button>
+      <div id="blocoCodigo" class="oculto">
+        <input id="codigo" class="codigo" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••" aria-label="Código de 6 dígitos">
+        <label class="opcional"><input type="checkbox" id="aceitaMarketing"> <span>Quero receber novidades, lembretes de aula e condições especiais da academia no WhatsApp. É opcional e posso sair quando quiser respondendo PARAR.</span></label>
+        <button id="btnAceitar" type="button" disabled>Aceitar contrato</button>
+      </div>
+      <div id="msg" class="msg" role="status" aria-live="polite"></div>
+    </div>
+    <p class="rodape">Ao aceitar, registramos data, hora, IP e o código confirmado no seu WhatsApp, como prova do aceite eletrônico (MP 2.200-2/2001 e Lei 14.063/2020). Você pode desistir em até 7 dias se contratou fora da academia (CDC, art. 49).</p>
+  </section>
+
+  <section id="aceito" class="card final oculto">
+    <div class="selo">✓</div>
+    <h1>Contrato aceito</h1>
+    <p class="sub" id="aceitoEm"></p>
+    <p class="sub">Uma cópia fica disponível com a academia. Código de verificação:</p>
+    <p class="hash" id="hashFinal"></p>
+  </section>
+</main>
+<script>
+(() => {
+  const token = location.pathname.split('/').filter(Boolean).pop();
+  const api = `/api/public/contratos/${encodeURIComponent(token)}`;
+  const $ = (id) => document.getElementById(id);
+  const mostrar = (id, sim = true) => $(id).classList.toggle('oculto', !sim);
+  const msg = (texto, tipo = '') => { $('msg').textContent = texto; $('msg').className = `msg ${tipo}`; };
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let destaques = [];
+
+  const formatar = (iso) => new Date(iso).toLocaleString('pt-BR', { dateStyle: 'long', timeStyle: 'short' });
+
+  function finalizado(aceitoEm, hash) {
+    mostrar('conteudo', false); mostrar('aceito');
+    $('aceitoEm').textContent = `em ${formatar(aceitoEm)}`;
+    $('hashFinal').textContent = hash || '';
+  }
+
+  function atualizarBotao() {
+    const todas = destaques.every((d) => $(`d-${d.id}`).checked);
+    const codigoOk = /^\d{6}$/.test($('codigo').value);
+    $('btnAceitar').disabled = !(todas && codigoOk);
+    if (!todas && codigoOk) msg('Marque todos os pontos importantes acima.', 'erro');
+    else if ($('msg').classList.contains('erro') && todas) msg('');
+  }
+
+  async function carregar() {
+    const r = await fetch(api);
+    mostrar('carregando', false);
+    if (!r.ok) { mostrar('falha'); return; }
+    const c = await r.json();
+    document.title = c.titulo;
+    if (c.status === 'aceito') { finalizado(c.aceitoEm, c.hashEvidencias); return; }
+    if (c.status !== 'enviado') { mostrar('falha'); return; }
+    destaques = c.clausulasDestaque || [];
+    $('titulo').textContent = c.titulo;
+    $('para').textContent = c.signatario === c.aluno ? `Para ${c.aluno}` : `Aluno: ${c.aluno} · Responsável: ${c.signatario}`;
+    $('texto').textContent = c.conteudo;
+    $('tel').textContent = c.telefoneCodigo;
+    $('destaques').innerHTML = destaques.map((d) => `
+      <div class="destaque"><label>
+        <input type="checkbox" id="d-${esc(d.id)}">
+        <span><b>${esc(d.titulo)}</b>${esc(d.texto)}</span>
+      </label></div>`).join('');
+    destaques.forEach((d) => $(`d-${d.id}`).addEventListener('change', atualizarBotao));
+    mostrar('conteudo');
+  }
+
+  $('btnCodigo').addEventListener('click', async () => {
+    $('btnCodigo').disabled = true;
+    msg('Enviando…');
+    const r = await fetch(`${api}/codigo`, { method: 'POST' });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) {
+      msg('Código enviado. Confira seu WhatsApp.', 'ok');
+      mostrar('blocoCodigo');
+      $('codigo').focus();
+      setTimeout(() => { $('btnCodigo').disabled = false; $('btnCodigo').textContent = 'Reenviar código'; }, 60000);
+    } else {
+      msg(j.error || 'Não foi possível enviar o código.', 'erro');
+      $('btnCodigo').disabled = false;
+    }
+  });
+
+  $('codigo').addEventListener('input', (e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); atualizarBotao(); });
+
+  $('btnAceitar').addEventListener('click', async () => {
+    $('btnAceitar').disabled = true;
+    msg('Registrando aceite…');
+    const corpo = { codigo: $('codigo').value, clausulasMarcadas: destaques.filter((d) => $(`d-${d.id}`).checked).map((d) => d.id), aceitaMarketing: $('aceitaMarketing').checked };
+    const r = await fetch(`${api}/aceite`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(corpo) });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) { finalizado(j.aceitoEm, j.hashEvidencias); return; }
+    msg(j.error || 'Não foi possível registrar o aceite.', 'erro');
+    $('btnAceitar').disabled = false;
+  });
+
+  carregar().catch(() => { mostrar('carregando', false); mostrar('falha'); });
+})();
+</script>
+</body>
+</html>

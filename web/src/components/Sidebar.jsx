@@ -125,6 +125,19 @@ const NAV_ADMIN_GROUPS = [
     ],
   },
   {
+    label: 'Clube & Academia',
+    items: [
+      { to: '/admin/clube/recepcao',  icon: '🚪', label: 'Recepção & Catraca' },
+      { to: '/admin/clube/alunos',    icon: '🏋️', label: 'Alunos' },
+      { to: '/admin/clube/aulas',     icon: '🗓️', label: 'Grade de Aulas' },
+      { to: '/admin/clube/contratos', icon: '✍️', label: 'Contratos Digitais' },
+      { to: '/admin/clube/retencao',  icon: '🔁', label: 'Retenção (IA)' },
+      { to: '/admin/clube/cobrancas', icon: '💠', label: 'Cobranças Pix' },
+      { to: '/admin/clube/parceiros', icon: '🤝', label: 'Wellhub & TotalPass' },
+      { to: '/admin/clube/ajustes',   icon: '⚙️', label: 'Catracas & Planos' },
+    ],
+  },
+  {
     label: 'Membros',
     items: [
       { to: '/admin/usuarios',     icon: '👥', label: 'Usuários' },
@@ -303,7 +316,7 @@ const ROUTE_MODULES = [
   ['/admin/barbearia', 'barbearia'], ['/admin/oficina', 'oficina'], ['/admin/agropecuaria', 'agropecuaria'],
   ['/admin/varejo', 'varejo'], ['/admin/compras', 'compras'], ['/admin/fiscal', 'fiscal'],
   ['/admin/usuarios', 'usuarios'], ['/admin/socios', 'socios'], ['/admin/mensalidades', 'socios'],
-  ['/admin/aulas', 'socios'], ['/admin/crm', 'crm'], ['/admin/loja', 'loja'], ['/admin/lojas', 'loja'],
+  ['/admin/aulas', 'socios'], ['/admin/clube', 'clube'], ['/admin/crm', 'crm'], ['/admin/loja', 'loja'], ['/admin/lojas', 'loja'],
   ['/admin/noticias', 'conteudo'], ['/admin/contatos', 'conteudo'],
 ]
 

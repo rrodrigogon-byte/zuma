@@ -74,5 +74,12 @@
  "069_commerce_postal_codes.sql": "80c383732cf42c2ff0c1383f6d665ebe85552928b8326f0fe4b1ef206963b181",
  "070_whatsapp_channel_profiles.sql": "c565cde93b65f01af537407467bb699f2dd05fd96a005cdf2f823911c289e5f4",
  "071_whatsapp_launch_channel.sql": "6928847b9458d27c3166160a9bc116e7fc02028945c60f616b117fc466763043",
- "072_whatsapp_waha_internal_channels.sql": "128394c6de4bdcc5e611dfbf8bea5c618979049c8220253f2539a098d5b4fafd"
+ "072_whatsapp_waha_internal_channels.sql": "128394c6de4bdcc5e611dfbf8bea5c618979049c8220253f2539a098d5b4fafd",
+ "073_clube_acesso_controle.sql": "562fa833f23fc06778fc6d684ad5f88d5a51471de4ad208e2ec68fb554a67bb0",
+ "074_clube_contratos_digitais.sql": "550bfa73831a8fa5638b82a10fa00c0bb28ca9caa79e5ddbf29af3f5ae6ba75e",
+ "075_clube_aulas_agenda.sql": "49e8a3a39d2559faab9e8b1c5f9c50ba4d7e462a6291fb24fd3963b28cdf3013",
+ "076_clube_retencao.sql": "d2832b7d9d2ced68a85d6a4e1941e288ad83b04a7b2728db23aa738b47ad48c1",
+ "077_clube_parceiros.sql": "55b6ae5d08ab3b627f3bd497515934e6ab0d9b73c3ae49abab7ef7b9c8df5433",
+ "078_clube_cobrancas.sql": "482d079e20275af8d37d93ea49dd66d824933d83072808a833bc877f23302d49",
+ "079_clube_importacoes.sql": "b8b44e16bb2319f8230c96a0fff74d71de427e646aa3bec2169839ec2607b4ab"
 }

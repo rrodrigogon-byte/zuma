@@ -34,6 +34,12 @@ import { emitir as nfceEmitir, cancelar as nfceCancelar, nfceConfigurado } from 
 import { createCommerceAdminRouter, createCommercePublicRateLimitGuard, createCommercePublicRouter, createCommerceWebhookRouter } from './core/commerce-routes.js';
 import { lookupPostalCode } from './core/commerce-shipping.js';
 import { createWhatsappAiWebhookRouter } from './core/whatsapp-ai-routes.js';
+import { montarClube, iniciarRotinasClube } from './modules/clube/index.js';
+import { enviarWhatsappClube } from './modules/clube/whatsapp-agro-open.js';
+import { extensaoIaClube } from './modules/clube/ia-agro-open.js';
+import { lerSociosTtc, importarAlunos } from './modules/clube/importar-legado.js';
+import { registrarExtensaoWhatsappAi } from './core/whatsapp-ai-extensoes.js';
+import { WHATSAPP_AI_TOOL_DECLARATIONS } from './core/whatsapp-ai-tools.js';
 import { avecGovernanceNoStore } from './core/avec-import-http-policy.js';
 import { whatsappAiOperationalStatus } from './core/whatsapp-ai.js';
 import { legacyWppAvailable } from './core/whatsapp-legacy-scope.js';
@@ -127,7 +133,7 @@ app.use((req, res, next) => {
 });
 app.use(avecGovernanceNoStore);
 app.use(equipePerformanceNoStore);
-app.use(express.json({ limit: '1mb', verify: (req, res, buf) => { if (req.originalUrl?.startsWith('/api/webhooks/')) req.rawBody = Buffer.from(buf); } }));
+app.use(express.json({ limit: '1mb', verify: (req, res, buf) => { if (req.originalUrl?.startsWith('/api/webhooks/') || req.originalUrl?.startsWith('/api/integracoes/')) req.rawBody = Buffer.from(buf); } }));
 
 // SSE — realtime para KDS, Mesas, Portaria
 const sseClients = new Set();
@@ -598,7 +604,51 @@ app.use('/api/admin/commerce', (req, res, next) => {
 });
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
-const TENANT_ADMIN_MODULES = new Set(['barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos']);
+const TENANT_ADMIN_MODULES = new Set(['barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube']);
+
+// [kytto-clube] Kytto Clube & Academia (catraca, contrato digital, agenda, retenção, Wellhub/TotalPass).
+// Usa o pool do Commerce que já existe (não abre outro pool) e a mesma resolução de empresa e
+// permissão do Commerce (X-Empresa-Id validado contra commerce_memberships).
+let clubeIntegracao = null;
+// Adaptador do Clube sobre o pool do Commerce. Usa o pool direto (não commerceDb.query) para
+// não registrar em log os valores das consultas (nomes, telefones, chave Pix). O commit só
+// devolve a conexão se der certo; em falha quem devolve é o rollback (uma vez só).
+const clubeDb = {
+  query: (texto, valores) => getCommercePool().query(texto, valores),
+  queryRead: (texto, valores) => getCommercePool().query(texto, valores),
+  beginTransaction: async () => {
+    const client = await getCommercePool().connect();
+    try { await client.query('BEGIN'); } catch (error) { client.release(error); throw error; }
+    return client;
+  },
+  queryInTransaction: (client, texto, valores) => client.query(texto, valores),
+  commit: async (client) => { await client.query('COMMIT'); client.release(); },
+  rollback: async (client) => {
+    try { await client.query('ROLLBACK'); client.release(); } catch (error) { client.release(error); }
+  },
+};
+const CLUBE_STATUS_ESCOPO = { TENANT_SELECTION_REQUIRED: 400, STORE_SELECTION_REQUIRED: 400 };
+// Permissão do Commerce por tipo de operação do Clube: alterar configuração (chave Pix,
+// catracas, planos, parceiros, régua, modelos de contrato) pede settings.write; dinheiro
+// (cobranças, baixa, repasse, retroativo) pede payments.*; o dia a dia da recepção, customers.*.
+const CLUBE_CONFIG = /^\/api\/admin\/clube\/(?:cobrancas\/config|acesso\/(?:dispositivos|planos)|parceiros\/(?:contas|valores)|retencao\/(?:config|reguas)|contratos\/modelos)(?:\/|$)/;
+const CLUBE_DINHEIRO = /^\/api\/admin\/clube\/(?:cobrancas|acesso\/matriculas\/[^/]+\/pagamento|parceiros\/(?:repasses|retroativos|conciliacao))(?:\/|$)/;
+function permissaoDoClube(req) {
+  const caminho = String(req.originalUrl || '').split('?')[0];
+  const leitura = req.method === 'GET';
+  if (CLUBE_DINHEIRO.test(caminho)) return leitura ? 'payments.read' : (caminho.startsWith('/api/admin/clube/cobrancas/config') ? 'settings.write' : 'payments.write');
+  if (CLUBE_CONFIG.test(caminho)) return leitura ? 'customers.read' : 'settings.write';
+  return leitura ? 'customers.read' : 'customers.write';
+}
+async function empresaDoClube(req) {
+  try {
+    const contexto = await requireCommercePermission(req, permissaoDoClube(req));
+    return contexto.empresaId;
+  } catch (error) {
+    if (error?.name !== 'CommerceError') throw error;
+    throw Object.assign(new Error(error.message), { status: CLUBE_STATUS_ESCOPO[error.code] || 403, code: error.code });
+  }
+}
 // Convites operacionais são uma transição de identidade, não cadastro JSON.
 // O token segue apenas no e-mail individual; nenhuma resposta HTTP ou auditoria o contém.
 const OPERATIONAL_INVITE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -1001,6 +1051,39 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
 
   app.use('/api/webhooks', createWhatsappAiWebhookRouter());
   app.use('/api/webhooks', createCommerceWebhookRouter());
+  // [kytto-clube] rotas do Clube (painel em /api/admin/clube/*, aparelho Control iD, contrato, passe,
+  // webhooks Wellhub/TotalPass em /api/integracoes/*, painel em /clube/painel)
+  clubeIntegracao = montarClube(app, {
+    db: clubeDb,
+    empresaDaRequisicao: empresaDoClube,
+    operadorDaRequisicao: (req) => {
+      const id = req.user?.id || req.user?.email;
+      if (!id) throw Object.assign(new Error('Usuário sem identificação.'), { status: 401, code: 'UNAUTHENTICATED' });
+      return String(id);
+    },
+    enviarWhatsapp: enviarWhatsappClube,
+    urlPublica: process.env.PUBLIC_BASE_URL || '',
+  });
+  if (!process.env.PUBLIC_BASE_URL) console.warn('[clube] PUBLIC_BASE_URL não definido: links de Pix ficam desligados e contrato/passe saem sem endereço completo.');
+  // Migração dos sócios do TTC (JSON legado, global) para o Clube de UMA empresa escolhida.
+  // Só administrador da plataforma; sem "aplicar": true devolve só a prévia. Idempotente.
+  app.post('/api/admin/clube/importar/ttc', express.json({ limit: '16kb' }), async (req, res) => {
+    try {
+      if (!isPlatformAdminUser(req.user)) return res.status(403).json({ error: 'Só o administrador da plataforma importa os sócios do TTC.', code: 'PLATFORM_ADMIN_REQUIRED' });
+      const empresaId = await empresaDoClube(req);
+      const d = db();
+      const { alunos, avisos } = lerSociosTtc({ socios: d.socios, mensalidades: d.mensalidades, planosAssinatura: d.planosAssinatura, usuarios: d.usuarios }, { planosFixos: SOCIO_PLANOS });
+      const r = await importarAlunos(clubeDb, empresaId, { origem: 'ttc_socios', alunos, aplicar: req.body?.aplicar === true });
+      if (r.aplicado) { audit(req, 'clube.importar_ttc', { empresaId, ...r.resumo }); save(); }
+      res.json({ ...r, avisos });
+    } catch (error) {
+      res.status(Number.isInteger(error?.status) ? error.status : 500).json({ error: error?.message || 'Falha na importação', code: error?.code || 'IMPORT_ERROR' });
+    }
+  });
+  // IA do WhatsApp: ferramentas clube_* só nas empresas com plano ou turma ativa do Clube
+  registrarExtensaoWhatsappAi(extensaoIaClube({ db: clubeDb, integracao: clubeIntegracao }), {
+    nomesReservados: WHATSAPP_AI_TOOL_DECLARATIONS.map((d) => d.name),
+  });
   console.log('Commerce Core PostgreSQL habilitado (host, alias público e backoffice multiempresa)');
 }
 
@@ -7531,6 +7614,9 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
     startCommerceRetentionCleanup();
     startCommerceReservationExpiryCleanup();
     startLoyaltyExpiry();
+    // [kytto-clube] fila de espera, lembretes, faltas, régua de retenção, congelamentos e validações
+    // de parceiro; só com CLUBE_ROTINAS=1 (trava no banco: nunca roda em duplicidade)
+    if (process.env.CLUBE_ROTINAS === '1' && clubeIntegracao) iniciarRotinasClube(clubeDb, { enviarWhatsapp: enviarWhatsappClube, gerarLinkPagamento: clubeIntegracao.gerarLinkPagamento });
   }
   app.listen(PORT, ()=> console.log(`SetPoint React SPA em http://localhost:${PORT}`));
   if (process.env.NODE_ENV !== 'test') protecaoDados.iniciar();
