@@ -169,6 +169,7 @@
   #toast.erro { background: var(--bloqueia); color: #fff; }
   @media (max-width: 860px) { #toast { bottom: 84px; left: 16px; right: 16px; } }
   .oculto { display: none !important; }
+  .grade-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
   /* dentro do Kytto (/admin/clube): o menu é o do Kytto, sem o trilho próprio */
   body.embutido .app { grid-template-columns: 1fr; }
   body.embutido nav.trilho { display: none; }
@@ -293,6 +294,9 @@ const GATILHOS = {
 let pararRecepcao = null;
 const TELAS = { recepcao: telaRecepcao, alunos: telaAlunos, aulas: telaAulas, contratos: telaContratos, retencao: telaRetencao, cobrancas: telaCobrancas, parceiros: telaParceiros, ajustes: telaAjustes };
 const EMBUTIDO = new URLSearchParams(location.search).get('embed') === '1';
+// clube usa "sócio"; academia usa "aluno" (o Kytto passa ?termo=socio para clubes)
+const SOCIO = new URLSearchParams(location.search).get('termo') === 'socio';
+const TERMO = SOCIO ? { Alunos: 'Sócios e alunos', aluno: 'sócio', Quem: 'Sócio ou aluno' } : { Alunos: 'Alunos', aluno: 'aluno', Quem: 'Aluno' };
 if (EMBUTIDO) document.body.classList.add('embutido');
 function navegar() {
   const rota = (location.hash.slice(1) || 'recepcao').split('/')[0];
@@ -402,8 +406,8 @@ function liberarManual(aparelhos, clienteId) {
 /* ------------------------------------------------------------------ */
 async function telaAlunos() {
   $('#tela').innerHTML = `
-    <div class="topo"><div><h1>Alunos</h1><p class="sub">Matrículas, pagamentos, congelamento e o histórico de cada aluno.</p></div>
-      <button class="acao primaria" id="btnNova">Nova matrícula</button></div>
+    <div class="topo"><div><h1>${TERMO.Alunos}</h1><p class="sub">Adesões, pagamentos, congelamento e o histórico de cada ${TERMO.aluno}.</p></div>
+      <button class="acao primaria" id="btnNova">Nova adesão</button></div>
     <section class="bloco">
       <div class="acoes" style="margin-bottom:12px">
         <input class="busca" id="busca" type="search" placeholder="Buscar por nome ou telefone" aria-label="Buscar aluno">
@@ -418,7 +422,7 @@ async function telaAlunos() {
       <tr class="clicavel" data-cliente="${m.customerId}" tabindex="0"><td><b>${esc(m.nome)}</b><br><small class="sub">${esc(m.telefone || '')}</small></td><td>${esc(m.planoNome)}</td>
       <td>${m.pagoAte < hoje ? `<span style="color:var(--bloqueia);font-weight:600">${dataBR(m.pagoAte)}</span>` : dataBR(m.pagoAte)}</td>
       <td>${m.bloqueada ? estado('bloqueada', 'bloqueada') : estado(m.status)}</td></tr>`).join('')}</tbody></table>`
-      : '<p class="vazio">Nenhum aluno encontrado. Use “Nova matrícula” para cadastrar.</p>';
+      : '<p class="vazio">Ninguém encontrado. Use “Nova adesão” para cadastrar e matricular.</p>';
   };
   let t; $('#busca').oninput = () => { clearTimeout(t); t = setTimeout(carregar, 300); };
   $('#filtro').onchange = carregar;
@@ -429,38 +433,99 @@ async function telaAlunos() {
 }
 
 async function novaMatricula() {
-  const planos = (await api('/acesso/planos')).filter((p) => p.ativo);
-  if (!planos.length) return aviso('Cadastre um plano em Ajustes primeiro.', true);
-  const corpo = gaveta('Nova matrícula', 'O aluno precisa estar no cadastro de clientes do Kytto.', `
-    <form class="form" id="fMat">
-      <label class="campo largo">Cliente<input id="buscaCli" placeholder="Digite nome ou telefone" autocomplete="off"></label>
-      <div class="largo" id="achados"></div>
-      <input type="hidden" name="customerId" required>
-      <label class="campo largo">Plano<select name="planoId">${planos.map((p) => `<option value="${p.id}">${esc(p.nome)}${p.valorMensal ? ` · ${reais(p.valorMensal)}` : ''}</option>`).join('')}</select></label>
-      <label class="campo">Pago até<input type="date" name="pagoAte" required value="${somarDias(hojeISO(), 30)}"></label>
-      <label class="campo">Início<input type="date" name="inicio" value="${hojeISO()}"></label>
-      <div class="largo"><button class="acao primaria">Matricular e liberar a catraca</button></div>
+  const [planos, modelos] = await Promise.all([api('/acesso/planos'), api('/contratos/modelos').catch(() => [])]);
+  const ativos = planos.filter((p) => p.ativo);
+  if (!ativos.length) return aviso('Cadastre um plano em Ajustes primeiro.', true);
+  const temModelo = modelos.some((m) => m.ativo !== false);
+  const corpo = gaveta(`Nova adesão`, `Cadastro, plano, contrato e 1ª mensalidade em um passo.`, `
+    <form class="form" id="fMat" autocomplete="off">
+      <fieldset class="largo" style="border:0;padding:0;margin:0">
+        <legend style="font-weight:600;margin-bottom:6px">1. ${TERMO.Quem}</legend>
+        <label class="campo largo">Buscar no cadastro<input id="buscaCli" placeholder="Nome ou telefone (deixe em branco para cadastrar)"></label>
+        <div class="largo" id="achados"></div>
+        <input type="hidden" name="customerId">
+        <div class="largo grade-campos" id="novoCad">
+          <label class="campo">Nome completo<input name="nome" maxlength="240" placeholder="Como no documento"></label>
+          <label class="campo">WhatsApp<input name="telefone" inputmode="tel" placeholder="(65) 99999-0000"></label>
+          <label class="campo">E-mail (opcional)<input name="email" type="email"></label>
+        </div>
+        <label class="linha-check largo"><input type="checkbox" name="menor"> Menor de idade (contrato e cobranças vão para o responsável)</label>
+        <div class="largo grade-campos oculto" id="resp">
+          <label class="campo">Nome do responsável<input name="respNome" maxlength="240"></label>
+          <label class="campo">WhatsApp do responsável<input name="respTelefone" inputmode="tel"></label>
+        </div>
+      </fieldset>
+      <fieldset class="largo" style="border:0;padding:0;margin:8px 0 0">
+        <legend style="font-weight:600;margin-bottom:6px">2. Plano</legend>
+        <label class="campo largo">Plano<select name="planoId">${ativos.map((p) => `<option value="${p.id}">${esc(p.nome)}${p.valorMensal ? ` · ${reais(p.valorMensal)}/mês` : ''}${p.fidelidadeMeses ? ` · fidelidade ${p.fidelidadeMeses}m` : ''}</option>`).join('')}</select></label>
+        <label class="campo">Início<input type="date" name="inicio" value="${hojeISO()}"></label>
+      </fieldset>
+      <fieldset class="largo" style="border:0;padding:0;margin:8px 0 0">
+        <legend style="font-weight:600;margin-bottom:6px">3. 1ª mensalidade</legend>
+        <label class="linha-check largo"><input type="radio" name="pagamento" value="pix" checked> Enviar Pix no WhatsApp (a catraca libera quando a recepção confirmar o Pix)</label>
+        <label class="linha-check largo"><input type="radio" name="pagamento" value="balcao"> Já pagou na recepção (libera agora por 30 dias)</label>
+        <label class="linha-check largo"><input type="radio" name="pagamento" value="depois"> Cobrar depois</label>
+      </fieldset>
+      <fieldset class="largo" style="border:0;padding:0;margin:8px 0 0">
+        <legend style="font-weight:600;margin-bottom:6px">4. Contrato e comunicação</legend>
+        <label class="linha-check largo"><input type="checkbox" name="enviarContrato" ${temModelo ? 'checked' : 'disabled'}> Enviar o contrato para aceite no WhatsApp${temModelo ? '' : ' <small class="sub">(crie um modelo em Contratos digitais)</small>'}</label>
+        <label class="linha-check largo"><input type="checkbox" name="aceitaNovidades"> Autorizou receber novidades e campanhas do clube (opcional, LGPD)</label>
+      </fieldset>
+      <div class="largo"><button class="acao primaria">Concluir adesão</button></div>
     </form>`);
+  const f = $('#fMat', corpo);
   let t;
   $('#buscaCli', corpo).oninput = (ev) => {
     clearTimeout(t);
+    f.customerId.value = '';
+    $('#novoCad', corpo).classList.remove('oculto');
     t = setTimeout(async () => {
-      const l = await api(`/acesso/clientes?busca=${encodeURIComponent(ev.target.value)}`).catch(() => []);
-      $('#achados', corpo).innerHTML = l.map((c) => `<button type="button" class="acao" style="margin:0 6px 6px 0" data-id="${c.id}">${esc(c.nome)} ${c.telefone ? `<small>${esc(c.telefone)}</small>` : ''}</button>`).join('') || '<p class="vazio" style="padding:0">Nenhum cliente com esse nome.</p>';
+      const l = ev.target.value.trim().length >= 2 ? await api(`/acesso/clientes?busca=${encodeURIComponent(ev.target.value)}`).catch(() => []) : [];
+      $('#achados', corpo).innerHTML = l.map((c) => `<button type="button" class="acao" style="margin:0 6px 6px 0" data-id="${c.id}">${esc(c.nome)} ${c.telefone ? `<small>${esc(c.telefone)}</small>` : ''}</button>`).join('')
+        || (ev.target.value.trim().length >= 2 ? '<p class="vazio" style="padding:0">Ninguém com esse nome: preencha o cadastro abaixo.</p>' : '');
     }, 250);
   };
   $('#achados', corpo).onclick = (ev) => {
     const b = ev.target.closest('button[data-id]'); if (!b) return;
-    corpo.querySelector('[name=customerId]').value = b.dataset.id;
+    f.customerId.value = b.dataset.id;
     $('#buscaCli', corpo).value = b.textContent.trim(); $('#achados', corpo).innerHTML = '';
+    $('#novoCad', corpo).classList.add('oculto');
   };
-  $('#fMat', corpo).onsubmit = (ev) => {
+  f.menor.onchange = () => $('#resp', corpo).classList.toggle('oculto', !f.menor.checked);
+  f.onsubmit = async (ev) => {
     ev.preventDefault();
-    const d = form(ev.target);
-    if (!d.customerId) return aviso('Escolha o cliente na lista.', true);
-    agir(ev.submitter, () => api('/acesso/matriculas', { metodo: 'POST', corpo: d }), 'Matrícula criada. A catraca já recebeu o cadastro.')
-      .then((r) => { if (r) { $('#gaveta').close(); navegar(); } });
+    const d = form(f);
+    if (!d.customerId && String(d.nome || '').trim().length < 3) return aviso('Escolha alguém do cadastro ou preencha o nome completo.', true);
+    if (!d.customerId && !d.telefone) { if (!confirm('Sem WhatsApp, o contrato e o Pix não vão pelo celular. Continuar?')) return; }
+    if (f.menor.checked && !String(d.respNome || '').trim()) return aviso('Informe o responsável legal.', true);
+    const empresa = jsonLocal('sp_empresa_ativa');
+    const corpoReq = {
+      aluno: d.customerId ? { customerId: d.customerId } : { nome: d.nome, telefone: d.telefone, email: d.email },
+      menor: f.menor.checked,
+      responsavel: f.menor.checked ? { nome: d.respNome, telefone: d.respTelefone } : null,
+      planoId: d.planoId, inicio: d.inicio, pagamento: d.pagamento,
+      enviarContrato: Boolean(f.enviarContrato.checked), aceitaNovidades: Boolean(f.aceitaNovidades.checked),
+      empresaNome: empresa?.nome_fantasia || empresa?.nome || '',
+    };
+    const r = await agir(ev.submitter, () => api('/adesao', { metodo: 'POST', corpo: corpoReq }));
+    if (r) resumoAdesao(r);
   };
+}
+function resumoAdesao(r) {
+  const linha = (rotulo, item, sim, nao) => `<li style="margin:6px 0"><b>${rotulo}:</b> ${item ? (item.enviado ? sim : nao) : '—'}${item?.link ? `<div class="copiar" style="margin-top:6px"><input readonly value="${esc(item.link)}"><button type="button" class="acao" data-copiar="${esc(item.link)}">Copiar</button></div>` : ''}</li>`;
+  const corpo = gaveta('Adesão concluída', `${r.aluno.nome}${r.aluno.criado ? ' (cadastro novo)' : ''} · ${r.matricula.plano}`, `
+    <div class="aviso bom">Matrícula criada e cadastro enviado à catraca. Pago até ${dataBR(r.matricula.pagoAte)}.</div>
+    <ul style="padding-left:18px">
+      ${r.responsavel ? `<li style="margin:6px 0"><b>Responsável:</b> ${esc(r.responsavel.nome)}</li>` : ''}
+      ${linha('Contrato', r.contrato, 'enviado no WhatsApp para aceite', 'gerado, envie o link')}
+      ${linha('Pix da 1ª mensalidade', r.pix, `enviado no WhatsApp (${reais(r.pix?.valor)})`, 'gerado, envie o link')}
+    </ul>
+    ${r.avisos.length ? `<div class="aviso">${r.avisos.map(esc).join('<br>')}</div>` : ''}
+    <div class="acoes" style="margin-top:12px"><button class="acao primaria" id="verAluno">Abrir ficha</button><button class="acao" id="outra">Nova adesão</button></div>`);
+  corpo.querySelectorAll('[data-copiar]').forEach((b) => { b.onclick = () => navigator.clipboard?.writeText(b.dataset.copiar).then(() => aviso('Link copiado.')); });
+  $('#verAluno', corpo).onclick = () => abrirAluno(r.aluno.id);
+  $('#outra', corpo).onclick = () => novaMatricula();
+  if (location.hash.slice(1).startsWith('alunos')) navegar();
 }
 
 async function abrirAluno(customerId) {
@@ -661,7 +726,7 @@ function enviarContrato(modelos) {
       <label class="campo largo">Modelo<select name="modeloCodigo">${modelos.map((m) => `<option value="${esc(m.codigo)}">${esc(m.titulo)}</option>`).join('')}</select></label>
       <label class="campo">Plano<input name="planoNome" placeholder="Ex.: Mensal livre"></label>
       <label class="campo">Valor mensal<input name="planoValor" placeholder="129,90"></label>
-      <label class="campo largo">Nome da academia<input name="empresaNome" value="${esc(empresa?.nome_fantasia || empresa?.nome || '')}"></label>
+      <label class="campo largo">Nome do clube/academia<input name="empresaNome" value="${esc(empresa?.nome_fantasia || empresa?.nome || '')}"></label>
       <div class="largo"><button class="acao primaria">Enviar pelo WhatsApp</button></div>
     </form>`);
   let t;
@@ -669,7 +734,17 @@ function enviarContrato(modelos) {
     const l = await api(`/acesso/clientes?busca=${encodeURIComponent(ev.target.value)}`).catch(() => []);
     $('#achados', corpo).innerHTML = l.map((c) => `<button type="button" class="acao" style="margin:0 6px 6px 0" data-id="${c.id}">${esc(c.nome)}</button>`).join('');
   }, 250); };
-  $('#achados', corpo).onclick = (ev) => { const b = ev.target.closest('[data-id]'); if (!b) return; corpo.querySelector('[name=customerId]').value = b.dataset.id; $('#buscaAluno', corpo).value = b.textContent; $('#achados', corpo).innerHTML = ''; };
+  $('#achados', corpo).onclick = async (ev) => {
+    const b = ev.target.closest('[data-id]'); if (!b) return;
+    corpo.querySelector('[name=customerId]').value = b.dataset.id; $('#buscaAluno', corpo).value = b.textContent; $('#achados', corpo).innerHTML = '';
+    // plano e valor vêm da matrícula ativa (a recepção não precisa digitar)
+    const m = (await api('/acesso/matriculas?status=todas').catch(() => [])).find((x) => x.customerId === b.dataset.id && x.status !== 'cancelada');
+    if (m) {
+      const p = (await api('/acesso/planos').catch(() => [])).find((x) => x.id === m.planoId);
+      corpo.querySelector('[name=planoNome]').value = m.planoNome || p?.nome || '';
+      if (p?.valorMensal) corpo.querySelector('[name=planoValor]').value = Number(p.valorMensal).toFixed(2).replace('.', ',');
+    }
+  };
   $('#fContrato', corpo).onsubmit = (ev) => {
     ev.preventDefault();
     const d = form(ev.target);
