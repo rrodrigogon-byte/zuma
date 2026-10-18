@@ -172,6 +172,21 @@
 .dadm-wa-registration-link { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .dadm-wa-registration-link .c360-input { flex: 1 1 360px; min-width: 220px; max-width: none; font-size: 12px; }
 .dadm-wa-registration-link .c360-btn { flex: none; text-decoration: none; }
+.dadm-wa-number-form { display: grid; gap: 10px; margin-top: 16px; padding: 15px; border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line)); border-radius: 14px; background: color-mix(in srgb, var(--accent) 5%, var(--card)); }
+.dadm-wa-number-form h3, .dadm-wa-number-check h3 { margin: 0; font-size: 16px; }
+.dadm-wa-number-form p { margin: 4px 0 0; }
+.dadm-wa-number-fields { align-items: end; }
+.dadm-wa-number-fields .c360-field { flex: 1 1 280px; }
+.dadm-wa-number-fields .c360-btn { flex: 0 0 auto; }
+.dadm-wa-number-check { display: grid; gap: 8px; margin-top: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+.dadm-validation-count { color: #9A6A12; font-size: 12px; font-weight: 700; }
+.dadm-validation-count.ok { color: #2E7D62; }
+.dadm-wa-number-check .dadm-checklist { margin-top: 0; }
+.dadm-wa-number-check .dadm-checklist li { padding: 9px 4px; }
+.dadm-wa-number-check .dadm-checklist b { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: color-mix(in srgb, #E0A83B 22%, var(--card)); color: #9A6A12; }
+.dadm-wa-number-check .dadm-checklist li.ok b { background: color-mix(in srgb, #2E9E7B 18%, var(--card)); color: #2E7D62; }
+.dadm-wa-number-check .dadm-checklist span { display: grid; gap: 2px; }
+.dadm-wa-number-check .dadm-checklist small { color: var(--muted); line-height: 1.4; overflow-wrap: anywhere; }
 .dadm-wa-page .dadm-history li { min-width: 0; overflow-wrap: anywhere; }
 .dadm-wa-page .dadm-history li span:last-child { flex: none; }
 .dadm-wa-page .dadm-state.connecting::before { animation: dadm-wa-pulse 1.6s ease-in-out infinite; }
@@ -200,6 +215,7 @@
   .dadm-wa-summary { grid-template-columns: minmax(0, 1fr); }
   .dadm-wa-registration-link .c360-input,
   .dadm-wa-registration-link .c360-btn { width: 100%; }
+  .dadm-wa-number-fields .c360-btn { width: 100%; }
   .dadm-wa-page .dadm-result div { flex-wrap: wrap; }
   .dadm-wa-page .dadm-result dd { max-width: 100%; }
   .dadm-wa-page .dadm-history li { flex-direction: column; gap: 3px; }

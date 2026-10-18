@@ -9,11 +9,13 @@ beforeEach(() => {
   process.env.WHATSAPP_PROVIDER = 'chatbot_backend';
   process.env.CHATBOT_BACKEND_URL = 'https://backend.test';
   process.env.CHATBOT_BACKEND_KEY = 'k'.repeat(24);
+  delete process.env.WAHA_CONTROL_URL;
+  delete process.env.WAHA_CONTROL_BRIDGE_SECRET;
   delete process.env.CHATBOT_BACKEND_EMPRESA_ID;
 });
 afterEach(() => {
   reset();
-  for (const key of ['CHATBOT_BACKEND_INSTANCE', 'CHATBOT_BACKEND_MODE', 'CHATBOT_BACKEND_EMPRESA_ID', 'WHATSAPP_PROVIDER', 'CHATBOT_BACKEND_URL', 'CHATBOT_BACKEND_KEY']) delete process.env[key];
+  for (const key of ['CHATBOT_BACKEND_INSTANCE', 'CHATBOT_BACKEND_MODE', 'CHATBOT_BACKEND_EMPRESA_ID', 'WHATSAPP_PROVIDER', 'CHATBOT_BACKEND_URL', 'CHATBOT_BACKEND_KEY', 'WAHA_CONTROL_URL', 'WAHA_CONTROL_BRIDGE_SECRET']) delete process.env[key];
 });
 
 test('a instância padrão fica com uma só empresa e nunca com a principal da plataforma', async () => {
@@ -334,4 +336,34 @@ test('mantém Cliente, Gestão e Lançamentos independentes na mesma empresa', a
   assert.equal(conexao.obterConexao('emp-a', 'cliente').state, 'open');
   assert.equal(conexao.obterConexao('emp-a', 'gestao').state, 'qr');
   assert.equal(conexao.obterConexao('emp-a', 'lancamentos').state, 'connecting');
+});
+
+test('gera código de pareamento somente para a sessão interna atribuída e salva a referência', async () => {
+  process.env.WAHA_CONTROL_URL = 'https://bridge.test';
+  process.env.WAHA_CONTROL_BRIDGE_SECRET = 's'.repeat(32);
+  const calls = [];
+  const oldFetch = global.fetch;
+  global.fetch = async (url, options = {}) => {
+    calls.push([String(url), options]);
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: () => 'application/json' },
+      json: async () => String(url).endsWith('/provision') ? { status: 'SCAN_QR_CODE' } : { code: '1234-5678' },
+    };
+  };
+  try {
+    const conexao = await import('./whatsapp-conexao-kytto.js');
+    conexao.configurar('emp-a', { instance: 'private-lancamentos' }, { podeTrocarInstancia: true, tipoCanal: 'lancamentos' });
+    const result = await conexao.solicitarCodigoPareamento('emp-a', { phoneNumber: '+55 (11) 99999-9999', tipoCanal: 'lancamentos' });
+    assert.equal(result.ok, true);
+    assert.equal(result.pairingCode, '1234-5678');
+    assert.equal(result.conexao.state, 'connecting');
+    assert.equal(calls.length, 2);
+    assert.match(calls[1][0], /\/v1\/sessions\/private-lancamentos\/pairing-code$/);
+    assert.match(calls[1][1].body, /5511999999999/);
+    assert.equal(conexao.visaoPublica(conexao.obterConexao('emp-a', 'lancamentos'), { numeroCompleto: true }).phoneReference, '5511999999999');
+  } finally {
+    global.fetch = oldFetch;
+  }
 });

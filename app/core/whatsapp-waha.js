@@ -14,6 +14,12 @@ export function validWahaSession(value) {
   return SESSION_PATTERN.test(session) ? session : '';
 }
 
+export function normalizeWahaPhone(value) {
+  const phone = clean(value, 30).replace(/\D/g, '');
+  if (!/^\d{8,15}$/.test(phone)) throw new Error('Informe o telefone com DDI, somente números.');
+  return phone;
+}
+
 export function validWahaGroupId(value) {
   const groupId = clean(value, 180);
   return GROUP_PATTERN.test(groupId) ? groupId : '';
@@ -108,6 +114,18 @@ export async function getWahaSessionQr(sessionName) {
   const base64 = Buffer.from(await response.arrayBuffer()).toString('base64');
   if (!base64 || !contentType.startsWith('image/')) throw new Error('A instância WAHA não retornou um QR Code válido.');
   return { contentType, dataUrl: `data:${contentType};base64,${base64}` };
+}
+
+export async function requestWahaPairingCode(sessionName, phoneNumber) {
+  const phone = normalizeWahaPhone(phoneNumber);
+  const body = await jsonRequest(`/v1/sessions/${encodedSession(sessionName)}/pairing-code`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phoneNumber: phone }),
+  });
+  const code = clean(body?.code, 64);
+  if (!code) throw new Error('A ponte WAHA não retornou um código de pareamento.');
+  return code;
 }
 
 export async function logoutWahaSession(sessionName) {

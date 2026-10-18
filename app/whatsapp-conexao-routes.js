@@ -107,6 +107,23 @@ export function registerWhatsappConexaoRoutes(app, { legacyEmpresaId, legacyLoja
     res.status(result.ok ? 200 : result.code === 'WHATSAPP_INSTANCE_UNASSIGNED' ? 409 : 502).json({ ...result, conexao: view(req, empresaId) });
   });
 
+  app.post(`${routeBase}/codigo-pareamento`, async (req, res) => {
+    if (!gestor(req, res)) return;
+    if (perfil === 'cliente') return res.status(409).json({ error: 'Código de pareamento pertence somente aos canais internos WAHA.' });
+    const empresaId = legacyEmpresaId(req);
+    const result = await conexaoKytto.solicitarCodigoPareamento(empresaId, {
+      phoneNumber: req.body?.phoneNumber,
+      usuario: who(req),
+      tipoCanal: perfil,
+    });
+    if (result.ok) {
+      audit(req, 'WHATSAPP WAHA CÓDIGO PAREAMENTO', `perfil=${perfil}; instancia=${result.conexao.instance}`);
+      save();
+    }
+    const status = result.ok ? 200 : result.code === 'INVALID_PHONE' ? 400 : ['WAHA_NOT_CONFIGURED', 'WHATSAPP_INSTANCE_UNASSIGNED', 'WHATSAPP_ALREADY_CONNECTED'].includes(result.code) ? 409 : 502;
+    res.status(status).json({ ...result, conexao: view(req, empresaId) });
+  });
+
   app.post(`${routeBase}/desconectar`, async (req, res) => {
     if (!gestor(req, res)) return;
     if (req.body?.confirmado !== true) return res.status(400).json({ error: 'Confirme a desconexão.' });

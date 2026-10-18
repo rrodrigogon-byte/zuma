@@ -382,3 +382,21 @@ it('troca entre perfis limpa diagnósticos e não aceita a resposta antiga de Ge
  expect(apiMock.get.mock.calls.some(([path]) => path.endsWith('-lancamentos/diagnostico'))).toBe(true)
  await unmount(renderer)
 })
+
+it('exibe cadastro de número e solicita código de pareamento para canal interno', async () => {
+ setupInternal('lancamentos', { connection: { state: 'qr', phoneReference: '' } })
+ apiMock.post.mockImplementation((path) => path.endsWith('/codigo-pareamento')
+   ? Promise.resolve({ pairingCode: '1234-5678', conexao: { ...connection, provider: 'waha', providerLabel: 'WAHA privado', providerConfigured: true, state: 'connecting', instance: 'private-lancamentos', phoneReference: '5511999999999' } })
+   : Promise.resolve({}))
+ let renderer
+ await act(async () => { renderer = create(<WhatsappConexao />) }); await tick()
+ expect(textOf(renderer)).toContain('Cadastrar número do aparelho')
+ expect(textOf(renderer)).toContain('Gerar código de pareamento')
+ const input = renderer.root.findByProps({ id: 'wa-number-reference' })
+ await act(async () => { input.props.onChange({ target: { value: '+55 (11) 99999-9999' } }) })
+ const pairing = renderer.root.findAllByType('button').find(b => b.props.children === 'Gerar código de pareamento')
+ await act(async () => { pairing.props.onClick() }); await tick()
+ expect(apiMock.post).toHaveBeenCalledWith('/api/admin/barbearia/whatsapp-conexao-lancamentos/codigo-pareamento', { phoneNumber: '+55 (11) 99999-9999' }, { headers: { 'X-Empresa-Id': 'empresa-a', 'X-Loja-Id': 'loja-a' } })
+ expect(textOf(renderer)).toContain('1234-5678')
+ await unmount(renderer)
+})
