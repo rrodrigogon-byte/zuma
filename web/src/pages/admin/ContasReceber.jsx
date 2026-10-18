@@ -5,6 +5,7 @@ import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
 
 const EMPTY_CONTA_FORM = { clienteId: '', mesaNumero: '', descricao: '', valor: '', dataVencimento: '', observacao: '' }
+const STATUS_LABEL = { todos: 'Todas as contas', pendente: 'Pendentes', atrasada: 'Atrasadas', paga: 'Pagas' }
 
 export default function ContasReceber() {
   const { toast } = useToast()
@@ -48,7 +49,7 @@ export default function ContasReceber() {
   }
 
   const handleCriarConta = async () => {
-    if (!novaConta.clienteId || !novaConta.descricao || !Number(novaConta.valor) || !novaConta.dataVencimento) {
+    if (!novaConta.clienteId || !novaConta.descricao || Number(novaConta.valor) <= 0 || !novaConta.dataVencimento) {
       return toast('Cliente, descrição, valor e vencimento são obrigatórios', true)
     }
     setSaving(true)
@@ -104,8 +105,8 @@ export default function ContasReceber() {
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:24, flexWrap:'wrap', gap:12 }}>
         <h1 className="page-title" style={{ margin:0 }}>💰 Contas a Receber</h1>
         <div style={{ display:'flex', gap:8 }}>
-          <button className="btn btn-secondary btn-sm" onClick={load}>↺ Atualizar</button>
-          <button className="btn btn-primary btn-sm" onClick={abrirNovaConta}>+ Nova Conta</button>
+          <button className="btn btn-secondary btn-sm" onClick={load} disabled={loading}>↺ Atualizar</button>
+          <button className="btn btn-primary btn-sm" onClick={abrirNovaConta} disabled={loading || clientes.length === 0}>+ Nova Conta</button>
         </div>
       </div>
 
@@ -147,10 +148,16 @@ export default function ContasReceber() {
         </div>
       )}
 
+      {!loading && clientes.length === 0 && (
+        <div className="card" style={{ marginBottom: 16, border: '1px solid rgba(255,183,3,.5)', color: 'var(--muted)' }}>
+          Cadastre ao menos um cliente nominal antes de lançar uma conta a receber.
+        </div>
+      )}
+
       <div style={{ display:'flex', gap:8, marginBottom:16 }}>
         {['todos', 'pendente', 'atrasada', 'paga'].map(s => (
-          <button key={s} onClick={() => setFiltroStatus(s)} className={`btn btn-sm ${filtroStatus === s ? 'btn-primary' : 'btn-ghost'}`} style={{ textTransform: 'capitalize' }}>
-            {s === 'todos' ? 'Todas as Contas' : s}
+          <button key={s} onClick={() => setFiltroStatus(s)} className={`btn btn-sm ${filtroStatus === s ? 'btn-primary' : 'btn-ghost'}`}>
+            {STATUS_LABEL[s]}
           </button>
         ))}
       </div>

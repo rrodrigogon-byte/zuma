@@ -10,6 +10,7 @@ const TABS = [
   { id: 'fornecedores', label: 'Fornecedores', icon: '🚚', endpoint: '/fornecedores' },
   { id: 'usuarios', label: 'Usuários', icon: '🔐', endpoint: '/usuarios-mestres' },
 ]
+const SINGULARES = { funcionarios: 'Funcionário', fornecedores: 'Fornecedor', usuarios: 'Usuário' }
 
 const EMPTY = {
   funcionarios: { nome: '', cpf: '', email: '', telefone: '', cargo: '', departamento: '', dataAdmissao: '', salario: '', status: 'ativo', observacao: '' },
@@ -75,7 +76,7 @@ export default function CadastrosMestres() {
         fornecedores: fornecedores.fornecedores || [],
         usuarios: usuarios.usuarios || [],
       })
-      setEmpresa(contexto.empresa || null)
+      setEmpresa(contexto.empresa || contexto || null)
     } catch (error) {
       toast(error.message || 'Não foi possível carregar os cadastros mestres.', true)
     } finally {
@@ -160,7 +161,7 @@ export default function CadastrosMestres() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-secondary btn-sm" onClick={carregar}>↺ Atualizar</button>
           {podeGerenciarEmpresas && <button className="btn btn-secondary btn-sm" onClick={() => setModalEmpresa(true)}>🏢 Nova Empresa</button>}
-          <button className="btn btn-primary btn-sm" onClick={abrirNovo}>+ Novo {aba?.label?.slice(0, -1)}</button>
+          <button className="btn btn-primary btn-sm" onClick={abrirNovo}>+ Novo {SINGULARES[tab]}</button>
         </div>
       </div>
 
@@ -239,7 +240,7 @@ export default function CadastrosMestres() {
       )}
 
       {modal && (
-        <Modal title={`${modal.modo === 'novo' ? 'Novo' : 'Editar'} ${aba.label.slice(0, -1)}`} onClose={() => setModal(null)} width={620}>
+        <Modal title={`${modal.modo === 'novo' ? 'Novo' : 'Editar'} ${SINGULARES[tab]}`} onClose={() => setModal(null)} width={620}>
           <div style={{ display: 'grid', gap: 12, paddingBottom: 16 }}>
             {tab === 'funcionarios' && <FuncionarioForm form={form} setForm={setForm} />}
             {tab === 'fornecedores' && <FornecedorForm form={form} setForm={setForm} />}

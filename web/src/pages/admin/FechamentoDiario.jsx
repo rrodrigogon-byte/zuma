@@ -46,8 +46,8 @@ export default function FechamentoDiario() {
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:24, flexWrap:'wrap', gap:12 }}>
         <h1 className="page-title" style={{ margin:0 }}>🔐 Fechamento Diário</h1>
         <div style={{ display:'flex', gap:8 }}>
-          <button className="btn btn-secondary btn-sm" onClick={load}>↺ Atualizar</button>
-          <button className="btn btn-primary btn-sm" onClick={() => setModalNovo(true)}>Realizar Fechamento</button>
+          <button className="btn btn-secondary btn-sm" onClick={load} disabled={loading}>↺ Atualizar</button>
+          <button className="btn btn-primary btn-sm" onClick={() => setModalNovo(true)} disabled={loading}>Realizar Fechamento</button>
         </div>
       </div>
 
@@ -78,7 +78,7 @@ export default function FechamentoDiario() {
               <tr key={f.id}>
                 <td>
                   <div style={{ fontWeight: 600 }}>{fmtDate(f.dataFechamento)}</div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>{new Date(f.criadoEm).toLocaleTimeString()}</div>
+                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>{new Date(f.criadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
                 </td>
                 <td>{fmtR(f.totalReceber)}</td>
                 <td style={{ color: '#2ecc71', fontWeight: 600 }}>{fmtR(f.totalRecebido)}</td>

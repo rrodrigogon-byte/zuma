@@ -47,4 +47,17 @@ describe('A2 financeiro e cadastros multiempresa (PostgreSQL)', { skip: pgDeTest
     assert.deepEqual(await a2.listarCadastros(ctx.db, empresaB, 'funcionarios'), []);
     assert.deepEqual(await a2.listarCadastros(ctx.db, empresaB, 'fornecedores'), []);
   });
+
+  test('usuário mestre mantém tipo e perfis sem expor senha', async () => {
+    const criado = await a2.salvarUsuarioMestre(ctx.db, empresaA, {
+      nome: 'Caixa A', email: 'caixa-a@teste.local', tipoUsuario: 'caixa', perfis: ['caixa'], senhaInicial: 'SenhaForte!123',
+    });
+    assert.equal(criado.tipoUsuario, 'caixa');
+    assert.deepEqual(criado.perfis, ['caixa']);
+    assert.equal(criado.senhaInicial, '');
+    const listado = (await a2.listarUsuariosMestres(ctx.db, empresaA))[0];
+    assert.equal(listado.tipoUsuario, 'caixa');
+    assert.deepEqual(listado.perfis, ['caixa']);
+    assert.equal(listado.senhaInicial, '');
+  });
 });

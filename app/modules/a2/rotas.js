@@ -17,7 +17,7 @@ export function createA2AdminRouter({ db, empresaDaRequisicao, operadorDaRequisi
     }
   };
 
-  router.get('/empresa-ativa', executar(({ empresaId }) => svc.obterEmpresa(db, empresaId)));
+  router.get('/empresa-ativa', executar(async ({ empresaId }) => ({ empresa: await svc.obterEmpresa(db, empresaId) })));
 
   router.get('/clientes', executar(async ({ empresaId }) => ({ clientes: await svc.listarClientes(db, empresaId) })));
   router.post('/clientes', executar(({ empresaId, req }) => svc.salvarCliente(db, empresaId, req.body || {}), 201));
@@ -29,7 +29,7 @@ export function createA2AdminRouter({ db, empresaDaRequisicao, operadorDaRequisi
   router.get('/alertas-vencimento', executar(async ({ empresaId }) => ({ alertas: await svc.listarAlertas(db, empresaId) })));
 
   router.get('/fechamento-diario', executar(async ({ empresaId }) => ({ fechamentos: await svc.listarFechamentos(db, empresaId) })));
-  router.post('/fechamento-diario', executar(({ empresaId, req, operador }) => svc.criarFechamento(db, empresaId, req.body?.observacao, operador || req.user?.email || 'Sistema'), 201));
+  router.post('/fechamento-diario', executar(({ empresaId, req, operador }) => svc.criarFechamento(db, empresaId, req.body?.observacao, req.user?.nome || req.user?.nome_completo || req.user?.email || operador || 'Sistema'), 201));
 
   for (const tipo of ['funcionarios', 'fornecedores']) {
     router.get(`/${tipo}`, executar(({ empresaId }) => svc.listarCadastros(db, empresaId, tipo).then((registros) => ({ [tipo]: registros }))));

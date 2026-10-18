@@ -185,7 +185,23 @@ export async function salvarCadastro(db, empresaId, tipo, corpo = {}, registroId
 
 export async function listarUsuariosMestres(db, empresaId) {
   const result = await db.query('SELECT * FROM a2_usuarios_mestres WHERE empresa_id=$1 ORDER BY lower(nome)', [id(empresaId, 'empresa')]);
-  return result.rows.map((row) => ({ ...row, perfis: Array.isArray(row.perfis) ? row.perfis : [], senhaInicial: '' }));
+  return result.rows.map(usuarioMestreDto);
+}
+
+function usuarioMestreDto(row, perfis = null) {
+  return {
+    id: row.id,
+    nome: row.nome,
+    email: row.email || '',
+    telefone: row.telefone || '',
+    tipoUsuario: row.tipo_usuario || 'operador_pdv',
+    perfis: perfis || (Array.isArray(row.perfis) ? row.perfis : []),
+    senhaInicialConfigurada: Boolean(row.senha_inicial_configurada),
+    senhaInicial: '',
+    ativo: row.ativo !== false,
+    criadoEm: row.criado_em,
+    atualizadoEm: row.atualizado_em,
+  };
 }
 
 export async function salvarUsuarioMestre(db, empresaId, corpo = {}, registroId = null) {
@@ -201,17 +217,18 @@ export async function salvarUsuarioMestre(db, empresaId, corpo = {}, registroId 
   if (registroId) {
     const result = await db.query('UPDATE a2_usuarios_mestres SET nome=$1,email=$2,telefone=$3,tipo_usuario=$4,perfis=$5::jsonb,senha_inicial_configurada=senha_inicial_configurada OR $6,ativo=$7,atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$8 AND id=$9 RETURNING *', [nome, email, telefone, tipo, json(perfis, []), temSenha, ativo, empresa, id(registroId, 'registro')]);
     if (!result.rows[0]) throw new ErroDominio('NOT_FOUND', 'Usuário mestre não encontrado', 404);
-    return { ...result.rows[0], perfis, senhaInicial: '' };
+    return usuarioMestreDto(result.rows[0], perfis);
   }
   if (!temSenha || String(corpo.senhaInicial).length < 8) throw new ErroDominio('VALIDATION_ERROR', 'A senha inicial deve ter ao menos 8 caracteres.');
   const result = await db.query('INSERT INTO a2_usuarios_mestres (empresa_id,nome,email,telefone,tipo_usuario,perfis,senha_inicial_configurada,ativo) VALUES ($1,$2,$3,$4,$5,$6::jsonb,true,$7) RETURNING *', [empresa, nome, email, telefone, tipo, json(perfis, []), ativo]);
-  return { ...result.rows[0], perfis, senhaInicial: '' };
+  return usuarioMestreDto(result.rows[0], perfis);
 }
 
 export async function obterEmpresa(db, empresaId) {
   const result = await db.query('SELECT id, nome, nome AS nome_fantasia, cnpj, tipo_negocio, ativa FROM empresas WHERE id=$1', [id(empresaId, 'empresa')]);
   if (!result.rows[0]) throw new ErroDominio('NOT_FOUND', 'Empresa não encontrada', 404);
-  return result.rows[0];
+  const row = result.rows[0];
+  return { id: row.id, nome: row.nome, nomeFantasia: row.nome_fantasia || row.nome, cnpj: row.cnpj || '', tipoNegocio: row.tipo_negocio || 'outro', ativa: row.ativa !== false };
 }
 
 export { clienteDto, contaDto, resumo };
