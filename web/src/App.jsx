@@ -143,6 +143,7 @@ const FinanceiroEmpresa = lazy(() => import('./pages/admin/dino/FinanceiroEmpres
 const AuditoriaEmpresa = lazy(() => import('./pages/admin/dino/AuditoriaEmpresa'))
 const BIBarbearia = lazy(() => import('./pages/admin/dino/BIBarbearia'))
 const WhatsappConexao = lazy(() => import('./pages/admin/dino/WhatsappConexao'))
+const WhatsappControlCenter = lazy(() => import('./pages/admin/dino/WhatsappControlCenter'))
 const CerebroIA = lazy(() => import('./pages/admin/dino/CerebroIA'))
 const ContasReceber = lazy(() => import('./pages/admin/ContasReceber'))
 const FechamentoDiario = lazy(() => import('./pages/admin/FechamentoDiario'))
@@ -270,6 +271,7 @@ export default function App() {
           <Route path="/admin/sumula"         element={<Layout><Sumula /></Layout>} />
           <Route path="/admin/mensalidades"   element={<Layout><Mensalidades /></Layout>} />
           <Route path="/admin/financeiro"     element={<Layout><TenantAware tenant={<FinanceiroEmpresa />} legacy={<Financeiro />} /></Layout>} />
+          <Route path="/admin/whatsapp-central" element={<Layout><WhatsappControlCenter /></Layout>} />
           <Route path="/admin/whatsapp"       element={<Layout><WhatsappConexao /></Layout>} />
           <Route path="/admin/whatsapp-gestao" element={<Layout><WhatsappConexao /></Layout>} />
           <Route path="/admin/whatsapp-lancamentos" element={<Layout><WhatsappConexao /></Layout>} />

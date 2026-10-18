@@ -296,7 +296,8 @@ export const NAV_CLUBE_GROUPS = [
   {
     label: 'WhatsApp',
     items: [
-      { to: '/admin/whatsapp', icon: '💬', label: 'WhatsApp do clube' },
+      { to: '/admin/whatsapp-central', icon: '🧭', label: 'Central de Conexões' },
+      { to: '/admin/whatsapp', icon: '💬', label: 'WhatsApp Clientes' },
       { to: '/admin/whatsapp-gestao', icon: '▣', label: 'WhatsApp Gestão' },
       { to: '/admin/whatsapp-lancamentos', icon: '🧾', label: 'WhatsApp Lançamentos' },
     ],
