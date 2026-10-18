@@ -13,7 +13,9 @@ test('telas do banco global do evento: só administração da plataforma ou usu�
   assert.equal(rotaVisivel('/admin/torneios', { isPlatformAdmin: true, usuarioDeEmpresa: false }), true)
   assert.equal(rotaVisivel('/admin/torneios', { isPlatformAdmin: false, usuarioDeEmpresa: false }), true)
   assert.equal(rotaVisivel('/admin/torneios', { isPlatformAdmin: false, usuarioDeEmpresa: true }), false)
-  assert.equal(rotaVisivel('/pdv', { usuarioDeEmpresa: true }), false)
+  assert.equal(rotaVisivel('/pdv', { usuarioDeEmpresa: true }), true)
+  assert.equal(rotaVisivel('/admin/cardapio', { usuarioDeEmpresa: true }), true)
+  assert.equal(rotaVisivel('/kds', { usuarioDeEmpresa: true }), true)
   assert.equal(rotaVisivel('/admin/ecommerce?tab=orders', { usuarioDeEmpresa: true }), true)
 })
 

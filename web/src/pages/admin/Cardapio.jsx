@@ -3,6 +3,7 @@ import { api, asArray, fmtR } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
 import { useAuth } from '../../lib/auth'
+import { barAdminPath } from '../../lib/bar-api'
 
 function exportCSV(itens) {
   const headers = ['ID', 'Nome', 'Categoria', 'Setor', 'Preço', 'Disponível', 'Cozinha']
@@ -134,7 +135,7 @@ export default function Cardapio() {
 
   const load = () => {
     setLoading(true)
-    Promise.all([api.get('/api/admin/cardapio'), api.get('/api/admin/modificadores/grupos')])
+    Promise.all([api.get(barAdminPath('/cardapio')), api.get('/api/admin/modificadores/grupos')])
       .then(([cardapio, modificadores]) => { setItens(asArray(cardapio, ['itens', 'produtos', 'cardapio'])); setGruposModificadores(asArray(modificadores, ['grupos'])) })
       .catch(() => toast('Erro ao carregar cardápio', 'error'))
       .finally(() => setLoading(false))
@@ -174,7 +175,7 @@ export default function Cardapio() {
 
   const handleToggle = async (item, campo) => {
     try {
-      await api.patch(`/api/admin/cardapio/${item.id}`, { [campo]: !item[campo] })
+      await api.patch(barAdminPath(`/cardapio/${item.id}`), { [campo]: !item[campo] })
       load()
     } catch {
       toast('Erro ao atualizar', 'error')
@@ -184,7 +185,7 @@ export default function Cardapio() {
   const handleDelete = async (item) => {
     if (!confirm(`Excluir "${item.nome}"?`)) return
     try {
-      await api.delete(`/api/admin/cardapio/${item.id}`)
+      await api.delete(barAdminPath(`/cardapio/${item.id}`))
       toast('Item excluído', 'success')
       load()
     } catch {
@@ -202,8 +203,8 @@ export default function Cardapio() {
     const ordemB = outro.ordem ?? (idx + direcao)
     try {
       await Promise.all([
-        api.patch(`/api/admin/cardapio/${item.id}`, { ordem: ordemB }),
-        api.patch(`/api/admin/cardapio/${outro.id}`, { ordem: ordemA }),
+        api.patch(barAdminPath(`/cardapio/${item.id}`), { ordem: ordemB }),
+        api.patch(barAdminPath(`/cardapio/${outro.id}`), { ordem: ordemA }),
       ])
       load()
     } catch {
@@ -236,7 +237,7 @@ export default function Cardapio() {
     if (!novoForm.nome || novoForm.preco === '' || Number(novoForm.preco) < 0) return toast('Nome e preço válido são obrigatórios', 'warn')
     setSaving(true)
     try {
-      await api.post('/api/admin/cardapio', {
+      await api.post(barAdminPath('/cardapio'), {
         ...novoForm,
         preco: parseFloat(String(novoForm.preco).replace(',', '.')),
       })
@@ -277,7 +278,7 @@ export default function Cardapio() {
     if (!editForm.nome || editForm.preco === '' || Number(editForm.preco) < 0) return toast('Nome e preço válido são obrigatórios', 'warn')
     setSaving(true)
     try {
-      await api.patch(`/api/admin/cardapio/${editModal.id}`, {
+      await api.patch(barAdminPath(`/cardapio/${editModal.id}`), {
         ...editForm,
         preco: parseFloat(String(editForm.preco).replace(',', '.')),
       })

@@ -4,6 +4,7 @@ import { pagarTef, MODALIDADES_TEF } from '../lib/tef'
 import { enfileirarVendaOffline, entregarFilaAoAgente, imprimirViaAgenteLocal, resumoFilaOffline } from '../lib/pdvOffline'
 import { useToast } from '../hooks/useToast'
 import { useAuth } from '../lib/auth'
+import { barPath } from '../lib/bar-api'
 
 // ─── PIX EMV BR Code builder ───────────────────────────────────────────────
 function pixField(id, value) {
@@ -428,7 +429,7 @@ export default function PDV() {
 
   const loadMesas = useCallback(async () => {
     try {
-      const data = await api.get('/api/mesas')
+      const data = await api.get(barPath('/mesas'))
       setMesas({
         fisicas: asArray(data, ['fisicas', 'mesas']),
         virtuais: asArray(data, ['virtuais']),
@@ -439,7 +440,7 @@ export default function PDV() {
   const loadCardapio = useCallback(async () => {
     const chaveCache = `kytto_pdv_catalogo_${lojaAtiva?.id || 'padrao'}`
     try {
-      const [data, dadosCombos] = await Promise.all([api.get('/api/cardapio'), api.get('/api/combos').catch(() => ({ combos: [] }))])
+      const [data, dadosCombos] = await Promise.all([api.get(barPath('/cardapio')), api.get('/api/combos').catch(() => ({ combos: [] }))])
       const itens = asArray(data, ['itens', 'produtos', 'cardapio']).filter(p => p && !p.indisponivel)
       setCardapio(itens)
       setCombos(Array.isArray(dadosCombos?.combos) ? dadosCombos.combos : [])
@@ -455,7 +456,7 @@ export default function PDV() {
   const loadComanda = useCallback(async (id) => {
     if (!id) return
     try {
-      const data = await api.get(`/api/comanda/${id}`)
+      const data = await api.get(barPath(`/comanda/${id}`))
       setComanda(data)
     } catch { /* silencioso */ }
   }, [])
@@ -471,7 +472,7 @@ export default function PDV() {
 
   const loadCaixaHoje = useCallback(async () => {
     try {
-      const data = await api.get('/api/admin/caixa/hoje')
+      const data = await api.get(barPath('/caixa/hoje'))
       setCaixaHoje(data)
     } catch { /* silencioso */ }
   }, [])
@@ -479,7 +480,7 @@ export default function PDV() {
   const loadVendas = useCallback(async () => {
     setVendasLoading(true)
     try {
-      const data = await api.get('/api/admin/vendas?hoje=1')
+      const data = await api.get(barPath('/vendas?hoje=1'))
       setVendas(Array.isArray(data) ? data : (data.vendas || []))
     } catch { /* silencioso */ }
     finally { setVendasLoading(false) }
@@ -571,15 +572,15 @@ export default function PDV() {
     if (!sheet?.num) return
     setLoading(true)
     try {
-      await api.post(`/api/mesa/${sheet.num}/pedir`, { itens: [], nome: novaMesaNome || undefined })
+      await api.post(barPath(`/mesa/${sheet.num}/pedir`), { itens: [], nome: novaMesaNome || undefined })
       await loadMesas()
       toast('Comanda aberta!', 'success')
-      const mesasData = await api.get('/api/mesas')
+      const mesasData = await api.get(barPath('/mesas'))
       setMesas(mesasData)
       const m = mesasData.fisicas.find(x => x.num === sheet.num)
       if (m?.comandaId) {
         setSheet({ tipo: 'fisica', num: m.num, id: m.comandaId })
-        const cmd = await api.get(`/api/comanda/${m.comandaId}`)
+        const cmd = await api.get(barPath(`/comanda/${m.comandaId}`))
         setComanda(cmd)
       }
       setOverlay(null)
@@ -595,11 +596,11 @@ export default function PDV() {
     if (!novaVirtual.nome.trim()) { toast('Nome obrigatório', 'error'); return }
     setLoading(true)
     try {
-      const data = await api.post('/api/mesa-virtual', novaVirtual)
+      const data = await api.post(barPath('/mesa-virtual'), novaVirtual)
       await loadMesas()
       toast('Comanda virtual criada!', 'success')
       setSheet({ tipo: 'virtual', id: data.id })
-      const cmd = await api.get(`/api/comanda/${data.id}`)
+      const cmd = await api.get(barPath(`/comanda/${data.id}`))
       setComanda(cmd)
       setOverlay(null)
       setNovaVirtual({ nome: '', local: '' })
@@ -621,7 +622,7 @@ export default function PDV() {
     setItemObs({ prod, obs: '', qtd: getQtd(prod.id), grupos: [], selecoes: [] })
     setOverlay('obs-item')
     try {
-      const resposta = await api.get(`/api/cardapio/${prod.id}/modificadores`)
+      const resposta = await api.get(barPath(`/cardapio/${prod.id}/modificadores`))
       setItemObs(atual => atual.prod?.id === prod.id ? { ...atual, grupos: Array.isArray(resposta?.grupos) ? resposta.grupos : [] } : atual)
     } catch (erro) { toast(erro.message || 'Não foi possível carregar os adicionais do item.', 'error') }
   }
@@ -658,7 +659,7 @@ export default function PDV() {
   const lancarCombo = async (combo) => {
     if (!comanda?.id) return
     try {
-      const resposta = await api.post(`/api/comanda/${comanda.id}/adicionar`, { itens: [{ comboId: combo.id, qtd: 1 }] })
+      const resposta = await api.post(barPath(`/comanda/${comanda.id}/adicionar`), { itens: [{ comboId: combo.id, qtd: 1 }] })
       if (resposta?.offlineQueued) { toast('Combo salvo offline; será sincronizado ao reconectar.', 'success'); return }
       await loadComanda(comanda.id); await loadMesas(); toast(`Combo “${combo.nome}” adicionado!`, 'success')
     } catch (erro) { toast(erro.message || 'Não foi possível lançar o combo.', 'error') }
@@ -668,7 +669,7 @@ export default function PDV() {
   const adicionarItem = async (produtoId, qtd = 1, obs = '', modificadores = []) => {
     if (!comanda?.id) return false
     try {
-      const resposta = await api.post(`/api/comanda/${comanda.id}/adicionar`, { itens: [{ produtoId, qtd, obs, modificadores }] })
+      const resposta = await api.post(barPath(`/comanda/${comanda.id}/adicionar`), { itens: [{ produtoId, qtd, obs, modificadores }] })
       if (resposta?.offlineQueued) { toast('Item salvo offline; será sincronizado ao reconectar.', 'success'); return true }
       await loadComanda(comanda.id)
       await loadMesas()
@@ -752,14 +753,14 @@ export default function PDV() {
     if (!comanda?.id) return
     if (!window.confirm('Remover este item da comanda?')) return
     try {
-      await api.delete(`/api/comanda/${comanda.id}/item/${idx}`)
+      await api.delete(barPath(`/comanda/${comanda.id}/item/${idx}`))
       await loadComanda(comanda.id)
       await loadMesas()
       toast('Item removido', 'success')
     } catch (e) {
       // fallback: tentar POST
       try {
-        await api.post(`/api/comanda/${comanda.id}/cancelar-item`, { idx })
+      await api.post(barPath(`/comanda/${comanda.id}/cancelar-item`), { idx })
         await loadComanda(comanda.id)
         await loadMesas()
         toast('Item removido', 'success')
@@ -774,7 +775,7 @@ export default function PDV() {
     if (!comanda?.id) return
     setLoading(true)
     try {
-      await api.post(`/api/comanda/${comanda.id}/conta`, {})
+      await api.post(barPath(`/comanda/${comanda.id}/conta`), {})
       await loadComanda(comanda.id)
       await loadMesas()
       toast('Conta solicitada!', 'success')
@@ -829,8 +830,8 @@ export default function PDV() {
             cpf,
           }
       const resposta = registrarParcial
-        ? await api.post(`/api/comanda/${comanda.id}/pagamento-parcial`, { ...payload, meios: multiPag, totalFinal })
-        : await api.post(`/api/comanda/${comanda.id}/pagar`, payload)
+        ? await api.post(barPath(`/comanda/${comanda.id}/pagamento-parcial`), { ...payload, meios: multiPag, totalFinal })
+        : await api.post(barPath(`/comanda/${comanda.id}/pagar`), payload)
       if (registrarParcial && !resposta.quitada) {
         toast(`Parcela registrada. Saldo pendente: ${fmtR(resposta.saldoPendente)}`, 'success')
         setComanda(resposta.comanda)
@@ -869,7 +870,7 @@ export default function PDV() {
     if (!caixaMov.motivo.trim()) { toast('Informe o motivo', 'error'); return }
     setLoading(true)
     try {
-      await api.post('/api/admin/caixa/movimento', {
+      await api.post(barPath('/caixa/movimento'), {
         tipo: caixaMov.tipo,
         valor: val,
         motivo: caixaMov.motivo,

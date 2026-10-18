@@ -6,6 +6,7 @@
  */
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { api, fmtR } from '../lib/api'
+import { barPath } from '../lib/bar-api'
 import { useToast } from '../hooks/useToast'
 
 /* ─── emojis por categoria ─────────────────────────────────────── */
@@ -174,14 +175,14 @@ export default function GarcomView() {
   /* ── loaders ── */
   const loadMesas = useCallback(async (quiet = false) => {
     try {
-      setMesas(await api.get('/api/mesas'))
+      setMesas(await api.get(barPath('/mesas')))
       setLastUpdate(Date.now())
     } catch { if (!quiet) toast('Erro ao carregar mesas', true) }
   }, [])
 
   const loadCardapio = useCallback(async () => {
     try {
-      const data = await api.get('/api/cardapio')
+      const data = await api.get(barPath('/cardapio'))
       setCardapio(Array.isArray(data) ? data : [])
     } catch { /* silencioso */ }
   }, [])
@@ -197,7 +198,7 @@ export default function GarcomView() {
 
   const loadComanda = useCallback(async (id) => {
     if (!id) return
-    try { setComanda(await api.get(`/api/comanda/${id}`)) }
+    try { setComanda(await api.get(barPath(`/comanda/${id}`))) }
     catch { toast('Erro ao carregar comanda', true) }
   }, [])
 
@@ -262,7 +263,7 @@ export default function GarcomView() {
     setLoading(true)
     try {
       const itens = cart.map(ci => ({ produtoId: ci.prod.id, qtd: ci.qty, obs: ci.obs || undefined }))
-      const resposta = await api.post(`/api/comanda/${sheet.id}/adicionar`, { itens })
+      const resposta = await api.post(barPath(`/comanda/${sheet.id}/adicionar`), { itens })
       if (resposta?.offlineQueued) {
         toast(`✓ ${cartCount} item(s) salvo(s) offline; sincronização automática ao reconectar.`)
         setCart([]); setOverlay('comanda'); return
@@ -282,7 +283,7 @@ export default function GarcomView() {
     if (!sheet?.id) return
     setLoading(true)
     try {
-      await api.post(`/api/comanda/${sheet.id}/conta`, {})
+      await api.post(barPath(`/comanda/${sheet.id}/conta`), {})
       await loadComanda(sheet.id)
       await loadMesas(true)
       toast('🧾 Conta solicitada!')
@@ -297,7 +298,7 @@ export default function GarcomView() {
     if (novaQtd < 1) return removerItem(idx)
     setLoading(true)
     try {
-      await api.patch(`/api/comanda/${sheet.id}/item/${idx}`, { qtd: novaQtd })
+      await api.patch(barPath(`/comanda/${sheet.id}/item/${idx}`), { qtd: novaQtd })
       await loadComanda(sheet.id)
       await loadMesas(true)
     } catch (e) { toast(e.message || 'Erro ao alterar quantidade', true) }
@@ -309,7 +310,7 @@ export default function GarcomView() {
     if (!window.confirm('Remover este item da comanda?')) return
     setLoading(true)
     try {
-      await api.post(`/api/comanda/${sheet.id}/cancelar-item`, { idx })
+      await api.post(barPath(`/comanda/${sheet.id}/cancelar-item`), { idx })
       await loadComanda(sheet.id)
       await loadMesas(true)
       toast('Item removido')
@@ -322,7 +323,7 @@ export default function GarcomView() {
     if (!sheet?.id) return
     setLoading(true)
     try {
-      const r = await api.post(`/api/comanda/${sheet.id}/pagar`, { meio, ...(clienteId ? { clienteId } : {}) })
+      const r = await api.post(barPath(`/comanda/${sheet.id}/pagar`), { meio, ...(clienteId ? { clienteId } : {}) })
       const emConta = meio === 'conta'
       toast(emConta ? `✓ Lançado em conta · ${fmtR(r.total || 0)}` : `✓ Comanda encerrada · ${fmtR(r.total || 0)}`)
       fechar()
@@ -336,8 +337,8 @@ export default function GarcomView() {
     if (!sheet?.num) return
     setLoading(true)
     try {
-      await api.post(`/api/mesa/${sheet.num}/pedir`, { itens: [], nome: nomeMesa || undefined })
-      const mesasData = await api.get('/api/mesas')
+      await api.post(barPath(`/mesa/${sheet.num}/pedir`), { itens: [], nome: nomeMesa || undefined })
+      const mesasData = await api.get(barPath('/mesas'))
       setMesas(mesasData)
       const m = mesasData.fisicas.find(x => x.num === sheet.num)
       if (m?.comandaId) {

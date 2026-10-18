@@ -38,6 +38,9 @@ import { montarClube, iniciarRotinasClube } from './modules/clube/index.js';
 import { enviarWhatsappClube } from './modules/clube/whatsapp-agro-open.js';
 import { extensaoIaClube } from './modules/clube/ia-agro-open.js';
 import { lerSociosTtc, importarAlunos } from './modules/clube/importar-legado.js';
+import { createBarAdminRouter } from './modules/bar/rotas-multiempresa.js';
+import * as barService from './modules/bar/servico.js';
+import { responderErro as responderErroBarra } from './modules/acesso/banco.js';
 import { registrarExtensaoWhatsappAi } from './core/whatsapp-ai-extensoes.js';
 import { WHATSAPP_AI_TOOL_DECLARATIONS } from './core/whatsapp-ai-tools.js';
 import { avecGovernanceNoStore } from './core/avec-import-http-policy.js';
@@ -604,7 +607,7 @@ app.use('/api/admin/commerce', (req, res, next) => {
 });
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
-const TENANT_ADMIN_MODULES = new Set(['barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube']);
+const TENANT_ADMIN_MODULES = new Set(['bar', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube']);
 
 // [kytto-clube] Kytto Clube & Academia (catraca, contrato digital, agenda, retenção, Wellhub/TotalPass).
 // Usa o pool do Commerce que já existe (não abre outro pool) e a mesma resolução de empresa e
@@ -643,6 +646,23 @@ function permissaoDoClube(req) {
 async function empresaDoClube(req) {
   try {
     const contexto = await requireCommercePermission(req, permissaoDoClube(req));
+    return contexto.empresaId;
+  } catch (error) {
+    if (error?.name !== 'CommerceError') throw error;
+    throw Object.assign(new Error(error.message), { status: CLUBE_STATUS_ESCOPO[error.code] || 403, code: error.code });
+  }
+}
+const BAR_DINHEIRO = /^\/api\/admin\/bar\/(?:caixa|vendas|comanda\/[^/]+\/(?:pagar|pagamento-parcial))(?:\/|$)/;
+const BAR_CONFIG = /^\/api\/admin\/bar\/(?:produtos|cardapio|mesas|estoque)(?:\/|$)/;
+function permissaoDoBar(req) {
+  const caminho = String(req.originalUrl || '').split('?')[0];
+  if (BAR_DINHEIRO.test(caminho)) return req.method === 'GET' ? 'payments.read' : 'payments.write';
+  if (BAR_CONFIG.test(caminho) && req.method !== 'GET') return 'settings.write';
+  return req.method === 'GET' ? 'customers.read' : 'customers.write';
+}
+async function empresaDoBar(req) {
+  try {
+    const contexto = await requireCommercePermission(req, permissaoDoBar(req));
     return contexto.empresaId;
   } catch (error) {
     if (error?.name !== 'CommerceError') throw error;
@@ -1063,6 +1083,26 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
     },
     enviarWhatsapp: enviarWhatsappClube,
     urlPublica: process.env.PUBLIC_BASE_URL || '',
+  });
+  // [kytto-bar] Bar, PDV, comandas, estoque fracionado, KDS e caixa por empresa.
+  // O prefixo continua sob a trava /api/admin e a empresa é resolvida exclusivamente
+  // pela membership SQL; nenhum empresaId do corpo da requisição é aceito.
+  app.use('/api/admin/bar', auth, requireStaff, createBarAdminRouter({
+    db: clubeDb,
+    empresaDaRequisicao: empresaDoBar,
+    operadorDaRequisicao: (req) => String(req.user?.id || req.user?.email || ''),
+  }));
+  app.post('/api/admin/bar/importar/legado', auth, requirePlatformAdmin, express.json({ limit: '2mb' }), async (req, res) => {
+    try {
+      const empresaId = await empresaDoBar(req);
+      const legado = db();
+      const mesas = Array.isArray(legado.mesas) ? legado.mesas : Object.values(legado.mesas || {});
+      const resultado = await barService.importarLegado(clubeDb, empresaId, { cardapio: legado.cardapio || [], mesas }, { aplicar: req.body?.aplicar === true });
+      if (resultado.aplicar) { audit(req, 'bar.importar_legado', { empresaId, ...resultado.resumo }); save(); }
+      return res.json(resultado);
+    } catch (error) {
+      return responderErroBarra(res, error);
+    }
   });
   if (!process.env.PUBLIC_BASE_URL) console.warn('[clube] PUBLIC_BASE_URL não definido: links de Pix ficam desligados e contrato/passe saem sem endereço completo.');
   // Migração dos sócios do TTC (JSON legado, global) para o Clube de UMA empresa escolhida.
