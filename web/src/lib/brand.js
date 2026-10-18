@@ -112,6 +112,22 @@ export function isDinoBrandContext(...contexts) {
   })
 }
 
+/**
+ * Empresa de clube/academia (ex.: AGRO OPEN TTC, Tangará Tênis Clube): ganha o menu focado no dia a
+ * dia do clube (recepção, sócios, aulas, quadras, torneios e bar). Só muda o menu, não a marca.
+ */
+export function isClubeBrandContext(...contexts) {
+  return contexts.some((context) => {
+    const values = context && typeof context === 'object'
+      ? [context.segmento, context.vertical, context.brandKey, context.brand_key, context.slug, context.codigo, context.alias, context.nome, context.nome_fantasia]
+      : [context]
+    return values.some((value) => {
+      const v = String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      return /\bttc\b|tenis clube|agro ?open|\bacademia\b|\bclube\b|\bfitness\b/.test(v)
+    })
+  })
+}
+
 export const isDinoBrand = (brand) => brand === 'dino'
 export const isStalloneBrand = (brand) => brand === 'stallone'
 /** Marcas com loja de tema escolhível (sistema/claro/escuro) guardado no navegador. */

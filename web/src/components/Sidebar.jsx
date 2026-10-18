@@ -2,7 +2,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
-import { applyThemeMode, DINO_BARBERSHOP_LOGO, isDinoBrandContext, isStalloneBrandContext, STALLONE_LOGO, storedThemeMode } from '../lib/brand'
+import { applyThemeMode, DINO_BARBERSHOP_LOGO, isClubeBrandContext, isDinoBrandContext, isStalloneBrandContext, STALLONE_LOGO, storedThemeMode } from '../lib/brand'
 
 // ── Badge de pedidos pendentes ─────────────────────────────────────────────────
 function usePendingOrders(isStaff) {
@@ -235,6 +235,90 @@ const NAV_DINO_GROUPS = [
   },
 ]
 
+// Menu do clube/academia (AGRO OPEN TTC e próximas academias): organizado pelo dia a dia
+// — recepção e catraca primeiro, depois sócios, aulas e quadras, torneios, bar e gestão.
+// Sem os verticais de varejo que não se aplicam (supermercado, oficina, moda, barbearia).
+export const NAV_CLUBE_GROUPS = [
+  {
+    label: 'Hoje no clube', aberto: true,
+    items: [
+      { to: '/admin', icon: '📊', label: 'Painel', end: true },
+      { to: '/admin/clube/recepcao', icon: '🚪', label: 'Recepção & Catraca' },
+      { to: '/admin/clube/aulas', icon: '🗓️', label: 'Aulas do dia' },
+      { to: '/admin/clube/cobrancas', icon: '💠', label: 'Pix a confirmar' },
+    ],
+  },
+  {
+    label: 'Sócios & Alunos', aberto: true,
+    items: [
+      { to: '/admin/clube/alunos', icon: '🎾', label: 'Sócios e alunos' },
+      { to: '/admin/clube/contratos', icon: '✍️', label: 'Contratos digitais' },
+      { to: '/admin/clube/retencao', icon: '🔁', label: 'Retenção (IA)' },
+      { to: '/admin/clube/parceiros', icon: '🤝', label: 'Wellhub & TotalPass' },
+      { to: '/admin/crm', icon: '📈', label: 'CRM' },
+    ],
+  },
+  {
+    label: 'Quadras & Reservas',
+    items: [
+      { to: '/admin/quadras', icon: '🏟️', label: 'Quadras' },
+      { to: '/admin/reservas', icon: '📅', label: 'Reservas & Fila' },
+    ],
+  },
+  {
+    label: 'Torneios',
+    items: [
+      { to: '/admin/torneios', icon: '🏆', label: 'Torneios' },
+      { to: '/admin/inscricoes', icon: '📋', label: 'Inscrições' },
+      { to: '/admin/agenda', icon: '🗓️', label: 'Agenda / OoP' },
+      { to: '/admin/sumula', icon: '📝', label: 'Súmula' },
+      { to: '/admin/ranking', icon: '🥇', label: 'Ranking' },
+      { to: '/admin/pontos', icon: '⭐', label: 'Pontos & Elo' },
+      { to: '/admin/ligas', icon: '🏅', label: 'Ligas de Ranking' },
+    ],
+  },
+  {
+    label: 'Bar & Restaurante',
+    items: [
+      { to: '/admin/mesas', icon: '🪑', label: 'Mesas' },
+      { to: '/admin/cardapio', icon: '🍽️', label: 'Cardápio' },
+      { to: '/admin/estoque', icon: '📦', label: 'Estoque' },
+      { to: '/admin/kds', icon: '🖨️', label: 'KDS & Impressão' },
+      { to: '/admin/fechamento-diario', icon: '🔐', label: 'Fechamento do dia' },
+    ],
+  },
+  {
+    label: 'Gestão',
+    items: [
+      { to: '/admin/financeiro', icon: '💰', label: 'Financeiro' },
+      { to: '/admin/contas-receber', icon: '🧾', label: 'Contas a Receber' },
+      { to: '/admin/pagamentos', icon: '💳', label: 'Pagamentos' },
+      { to: '/admin/bi', icon: '📉', label: 'BI & Analytics' },
+      { to: '/admin/relatorios-operacionais', icon: '📄', label: 'Relatórios' },
+      { to: '/admin/notas', icon: '🧾', label: 'Notas Fiscais' },
+    ],
+  },
+  {
+    label: 'WhatsApp',
+    items: [
+      { to: '/admin/whatsapp', icon: '💬', label: 'WhatsApp do clube' },
+      { to: '/admin/whatsapp-gestao', icon: '▣', label: 'WhatsApp Gestão' },
+      { to: '/admin/whatsapp-lancamentos', icon: '🧾', label: 'WhatsApp Lançamentos' },
+    ],
+  },
+  {
+    label: 'Configurações',
+    items: [
+      { to: '/admin/clube/ajustes', icon: '⚙️', label: 'Catracas, planos e importação' },
+      { to: '/admin/usuarios', icon: '👥', label: 'Usuários' },
+      { to: '/admin/configuracoes', icon: '🛠️', label: 'Configurações' },
+      { to: '/admin/auditoria', icon: '🔍', label: 'Auditoria' },
+      { to: '/admin/socios', icon: '🗂️', label: 'Sócios (cadastro antigo)' },
+      { to: '/admin/mensalidades', icon: '🗂️', label: 'Mensalidades (antigo)' },
+    ],
+  },
+]
+
 // Menu de varejo da Stallone Nutre Sport (loja de suplementos: loja física +
 // e-commerce + WhatsApp). Sem torneio, mesas, garçom, portaria nem barbearia.
 const NAV_STALLONE_GROUPS = [
@@ -396,8 +480,8 @@ function NavItem({ to, icon, label, end, onClick, badgeCount, sidebarCollapsed =
   )
 }
 
-function Section({ label, items, onNavClick, collapsible = false, badgesMap = {}, sidebarCollapsed = false }) {
-  const [collapsed, setCollapsed] = useState(false)
+function Section({ label, items, onNavClick, collapsible = false, badgesMap = {}, sidebarCollapsed = false, startCollapsed = false }) {
+  const [collapsed, setCollapsed] = useState(startCollapsed)
   return (
     <div style={{ padding: '4px 0', borderBottom: '1px solid var(--line)' }}>
       {!sidebarCollapsed && <div
@@ -426,7 +510,13 @@ function Section({ label, items, onNavClick, collapsible = false, badgesMap = {}
   )
 }
 
-function AdminGroups({ groups, onNavClick, isPlatformAdmin, empresa, sidebarCollapsed = false }) {
+function AdminGroups({ groups, onNavClick, isPlatformAdmin, empresa, sidebarCollapsed = false, compacto = false }) {
+  const location = useLocation()
+  // menu compacto: só os grupos do dia a dia abertos; o grupo da tela atual abre sozinho
+  const naRota = (g) => g.items.some((item) => {
+    const p = String(item.to).split('?')[0]
+    return item.end ? location.pathname === p : location.pathname === p || location.pathname.startsWith(`${p}/`)
+  })
   return (
     <>
       {groups.map(g => ({ ...g, items: g.items.filter((item) => itemDisponivel(item, isPlatformAdmin, empresa)) }))
@@ -439,6 +529,7 @@ function AdminGroups({ groups, onNavClick, isPlatformAdmin, empresa, sidebarColl
             onNavClick={onNavClick}
             collapsible
             sidebarCollapsed={sidebarCollapsed}
+            startCollapsed={compacto && !g.aberto && !naRota(g)}
           />
         ))}
     </>
@@ -453,6 +544,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
   const pendentes = usePendingOrders(isStaff)
   const isDino = isDinoBrandContext(empresaAtiva)
   const isStallone = !isDino && isStalloneBrandContext(empresaAtiva)
+  const isClube = !isDino && !isStallone && isClubeBrandContext(empresaAtiva)
   const [themeMode, setThemeMode] = useState(() => storedThemeMode())
 
   // 🔒 SEGURANÇA: Ocultar sidebar completamente se não autenticado
@@ -636,8 +728,8 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
             ))}
           </div>
         )}
-        {isStaff && !isDino && !isStallone && <Section label="Operações" items={NAV_OP} onNavClick={handleNavClick} badgesMap={badgesMap} sidebarCollapsed={collapsed && !isMobile} />}
-        {isOrg && <AdminGroups groups={isDino ? NAV_DINO_GROUPS : isStallone ? NAV_STALLONE_GROUPS : NAV_ADMIN_GROUPS} onNavClick={handleNavClick} isPlatformAdmin={isPlatformAdmin} empresa={empresaDoMenu} sidebarCollapsed={collapsed && !isMobile} />}
+        {isStaff && !isDino && !isStallone && <Section label={isClube ? 'Balcão, bar e portaria' : 'Operações'} items={isClube ? NAV_OP.filter((item) => item.to !== '/loja-atendimento') : NAV_OP} onNavClick={handleNavClick} badgesMap={badgesMap} sidebarCollapsed={collapsed && !isMobile} />}
+        {isOrg && <AdminGroups groups={isDino ? NAV_DINO_GROUPS : isStallone ? NAV_STALLONE_GROUPS : isClube ? NAV_CLUBE_GROUPS : NAV_ADMIN_GROUPS} onNavClick={handleNavClick} isPlatformAdmin={isPlatformAdmin} empresa={empresaDoMenu} sidebarCollapsed={collapsed && !isMobile} compacto={isClube} />}
         {isPlatformAdmin && <Section label="Administração da Plataforma" items={NAV_PLATFORM} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />}
         {isAtleta && <Section label="Portal do Atleta" items={NAV_ATLETA} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />}
         <Section label={isDino ? 'Dino público' : isStallone ? 'Stallone público' : 'Site Público'} items={isDino ? NAV_DINO_PUBLIC : isStallone ? NAV_STALLONE_PUBLIC : NAV_PUBLIC} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />
