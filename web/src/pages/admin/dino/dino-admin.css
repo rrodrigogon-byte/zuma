@@ -233,6 +233,70 @@
 .dadm-operational-guidance > span { color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; }
 .dadm-operational-guidance > strong { font-size: 16px; color: var(--fg); }
 .dadm-operational-guidance p { margin: 0; color: var(--fg); font-size: 13px; line-height: 1.5; }
+
+/* Central WhatsApp: mesma hierarquia visual do ambiente branco da Turma do Boi. */
+.dadm-wa-page { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 1360px; }
+.dadm-wa-page > .dadm-wa-head { order: 1; }
+.dadm-wa-page > .dadm-wa-hero { order: 2; }
+.dadm-wa-page > .dadm-wa-summary { order: 3; }
+.dadm-wa-page > .dadm-wa-policy { order: 4; }
+.dadm-wa-page > .dadm-wa-config { order: 5; }
+.dadm-wa-page > .dadm-wa-feedback, .dadm-wa-page > .dadm-wa-loading { order: 6; }
+.dadm-wa-page > .dadm-operational { order: 7; }
+.dadm-wa-page > .dadm-wa-line-card { order: 8; }
+.dadm-wa-page > .dadm-wa { order: 9; }
+.dadm-wa-page > .dadm-wa-human-queue { order: 10; }
+
+.dadm-wa-hero { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 164px; padding: 30px 28px; border: 0; border-radius: 18px; color: #fff; background: linear-gradient(120deg, #173b58, #234f68 62%, #1c6670); box-shadow: 0 16px 35px rgba(22, 57, 84, .12); }
+.dadm-wa-hero > div { display: grid; gap: 10px; min-width: 0; }
+.dadm-wa-hero h2 { max-width: 840px; margin: 0; color: #fff; font: 500 clamp(22px, 3vw, 32px)/1.16 var(--font-display); letter-spacing: -.025em; }
+.dadm-wa-hero p { max-width: 900px; margin: 0; color: rgba(255,255,255,.8); font-size: 13px; line-height: 1.55; }
+.dadm-wa-hero > svg { flex: 0 0 auto; width: 56px; height: 56px; padding: 13px; color: #91e7d4; border: 1px solid rgba(145,231,212,.42); border-radius: 15px; background: rgba(145,231,212,.12); }
+.dadm-wa-badge { width: fit-content; padding: 4px 9px; border-radius: 999px; color: #66549b; background: #f4efff; font-size: 10px; font-weight: 900; letter-spacing: .02em; }
+.dadm-wa-policy { display: flex; gap: 12px; align-items: flex-start; padding: 13px 16px; border: 1px solid #cce4db; border-radius: 12px; color: #2b6653; background: #f2fbf7; }
+.dadm-wa-policy > svg { flex: 0 0 auto; color: #318467; margin-top: 1px; }
+.dadm-wa-policy strong { display: block; margin-bottom: 3px; font-size: 12px; }
+.dadm-wa-policy p { margin: 0; color: #607d72; font-size: 12px; line-height: 1.45; }
+.dadm-wa-config { border-color: #d9e5eb; box-shadow: 0 7px 18px rgba(20,50,75,.035); }
+.dadm-wa-config > .c360-card-head h2 { font-size: 19px; }
+.dadm-wa-config > p { max-width: 930px; }
+.dadm-wa-config .dadm-wa-context { background: #f7fafb; }
+.dadm-wa-config .dadm-wa-number-form { background: #fbfcfd; }
+.dadm-wa-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; overflow: hidden; border: 1px solid #dfe7ec; border-radius: 16px; background: #fff; box-shadow: 0 7px 18px rgba(20,50,75,.035); }
+.dadm-wa-summary article { display: grid; grid-template-columns: auto 1fr; gap: 5px 9px; min-width: 0; padding: 18px 17px; border: 0; border-right: 1px solid #e5ebef; border-radius: 0; background: #fff; }
+.dadm-wa-summary article:last-child { border-right: 0; }
+.dadm-wa-summary article > svg { grid-row: 1 / 4; color: #6c60c8; }
+.dadm-wa-summary article span { color: #71808d; font-size: 10px; font-weight: 900; letter-spacing: .045em; text-transform: uppercase; }
+.dadm-wa-summary article strong { color: #263e55; font: 800 18px/1.15 var(--font-display); overflow-wrap: anywhere; }
+.dadm-wa-summary article small { color: #8a98a4; font-size: 11px; line-height: 1.35; }
+.dadm-wa-summary .dadm-wa-summary-status { font-size: 15px; }
+.dadm-wa-summary .dadm-wa-summary-ok { color: #268365; }
+.dadm-wa-summary .dadm-wa-summary-warning { color: #aa731e; }
+.dadm-wa-line-card { display: flex; align-items: stretch; justify-content: space-between; gap: 24px; min-width: 0; padding: 20px 23px; border: 1px solid #d9e5eb; border-left: 4px solid var(--accent); border-radius: 16px; background: #fff; box-shadow: 0 7px 18px rgba(20,50,75,.035); }
+.dadm-wa-line-card .dadm-wa-identity { display: grid; align-content: center; justify-items: start; gap: 8px; min-width: 0; }
+.dadm-wa-line-card .dadm-wa-live { min-width: 235px; max-width: 300px; display: grid; align-content: center; justify-items: start; gap: 8px; border-left: 1px solid #e2e9ed; padding-left: 24px; }
+.dadm-wa-line-card .dadm-wa-live small { color: #788995; font-size: 12px; line-height: 1.45; }
+.dadm-wa-feedback { border: 1px solid color-mix(in srgb, #d96a5b 35%, var(--line)); }
+.dadm-wa-loading { color: #657786; text-align: center; }
+.dadm-wa-page .dadm-wa > .dadm-wa-column { min-width: 0; }
+@media (max-width: 1120px) {
+  .dadm-wa-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dadm-wa-summary article:nth-child(2) { border-right: 0; }
+  .dadm-wa-summary article:nth-child(-n+2) { border-bottom: 1px solid #e5ebef; }
+}
+@media (max-width: 760px) {
+  .dadm-wa-hero { align-items: flex-start; min-height: 0; padding: 23px 19px; }
+  .dadm-wa-hero > svg { width: 48px; height: 48px; }
+  .dadm-wa-line-card { flex-direction: column; gap: 15px; padding: 18px; }
+  .dadm-wa-line-card .dadm-wa-live { min-width: 0; max-width: none; border-top: 1px solid #e2e9ed; border-left: 0; padding: 14px 0 0; }
+}
+@media (max-width: 560px) {
+  .dadm-wa-summary { grid-template-columns: minmax(0, 1fr); }
+  .dadm-wa-summary article, .dadm-wa-summary article:nth-child(-n+2) { border-right: 0; border-bottom: 1px solid #e5ebef; }
+  .dadm-wa-summary article:last-child { border-bottom: 0; }
+  .dadm-wa-hero h2 { font-size: 24px; }
+  .dadm-wa-policy { padding: 12px; }
+}
 .dadm-operational-guidance small { color: var(--muted); font-size: 11.5px; line-height: 1.4; }
 .dadm-operational-details > summary { cursor: pointer; color: var(--fg); font-size: 13px; font-weight: 700; padding: 10px 0; }
 .dadm-operational-details > summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
