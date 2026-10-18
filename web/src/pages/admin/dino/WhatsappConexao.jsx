@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { Clock3, Inbox, MessageSquare, ShieldCheck, Smartphone } from 'lucide-react'
 import { api } from '../../../lib/api'
 import { useAuth } from '../../../lib/auth'
 import { brandFromContext } from '../../../lib/brand'
@@ -419,10 +420,22 @@ function WhatsappConexaoEmpresa() {
 
   return <div className="dadm-page dadm-wa-page">
     <header className="dadm-head dadm-wa-head">
-      <div><div className="dadm-eyebrow">Relacionamento & IA · {empresaAtiva?.nome || 'Empresa'}</div><h1>WhatsApp · {canalLabel}</h1><p>Acompanhe a linha em uso, a conexão do atendente e a atividade com atualização automática — sem expor a chave de API.</p></div>
+      <div><div className="dadm-eyebrow">Administração · coleta via WAHA</div><h1>Central WhatsApp</h1><p>Conexão, QR Code, pareamento e diagnóstico do canal <strong>{canalLabel}</strong>, sempre isolados por empresa e unidade.</p></div>
       <div className="dadm-actions"><button type="button" className="c360-btn ghost" disabled={atualizando} onClick={() => { carregar(true); recarregarIa(); if (podeGerenciar && !diagBloqueado) diagnosticar() }}>{atualizando ? 'Atualizando…' : 'Atualizar agora'}</button></div>
     </header>
-    <section className="dadm-card dadm-wa-registration" aria-labelledby="wa-registration">
+    <section className="dadm-wa-hero" aria-label="Resumo da Central WhatsApp">
+      <div>
+        <span className="dadm-wa-badge">Revisão humana obrigatória</span>
+        <h2>{tipoCanal === 'lancamentos' ? 'Receba despesas e documentos sem lançar nada por engano.' : tipoCanal === 'gestao' ? 'Centralize perguntas e rotinas sem misturar empresas ou canais.' : 'Conecte o WhatsApp da empresa com segurança e rastreabilidade.'}</h2>
+        <p>{tipoCanal === 'lancamentos' ? 'Notas, recibos e comprovantes são recebidos, preservados e preparados para revisão. Pagamentos, transferências, baixas e alterações de estoque nunca são automáticos.' : tipoCanal === 'gestao' ? 'O canal de Gestão é separado do atendimento ao cliente e do canal de Lançamentos. A empresa ativa, a unidade e o grupo autorizado determinam o que pode ser consultado.' : 'A Central mostra o estado real da sessão, oferece QR Code e código de pareamento, valida a linha e mantém a operação vinculada ao contexto escolhido.'}</p>
+      </div>
+      <MessageSquare size={30} aria-hidden="true" />
+    </section>
+    <section className="dadm-wa-policy" aria-label="Política de segurança do WhatsApp">
+      <ShieldCheck size={19} aria-hidden="true" />
+      <div><strong>Automação com barreira de segurança.</strong><p>Empresa, unidade, sessão física e canal são conferidos antes de liberar ações. Nenhum segredo aparece na tela; QR, grupos, mensagens e respostas não são compartilhados entre empresas.</p></div>
+    </section>
+    <section className="dadm-card dadm-wa-registration dadm-wa-config" aria-labelledby="wa-registration">
       <div className="c360-card-head"><h2 id="wa-registration">Cadastrar o número WhatsApp · {canalLabel}</h2><span className="dadm-operational-scope">Disponível para todas as empresas</span></div>
       <p>Use este link depois de selecionar a empresa no menu lateral. O cadastro, o QR e o status sempre ficam isolados na empresa ativa; uma empresa nunca reutiliza a linha de outra.</p>
       <section className="dadm-wa-context" aria-labelledby="wa-context-title">
@@ -473,8 +486,8 @@ function WhatsappConexaoEmpresa() {
       {conexao && <section className="dadm-wa-number-check" aria-labelledby="wa-number-check-title"><div className="c360-card-head"><h3 id="wa-number-check-title">Validação deste canal</h3><span className={`dadm-validation-count ${validationSteps.every((item) => item.ok) ? 'ok' : ''}`}>{validationSteps.filter((item) => item.ok).length}/{validationSteps.length} concluídas</span></div><ul className="dadm-checklist">{validationSteps.map((item) => <li key={item.title} className={item.ok ? 'ok' : 'pend'}><b aria-hidden="true">{item.ok ? '✓' : '!'}</b><span><strong>{item.title}</strong><small>{item.detail}</small></span></li>)}</ul></section>}
       <p className="dadm-muted">{tipoCanal === 'lancamentos' ? 'Este é o canal interno exclusivo para receber notas e preparar despesas pendentes. Para perguntas gerais, use' : tipoCanal === 'gestao' ? 'Este é o canal interno somente leitura para perguntas gerais do sistema. Para lançar notas, use' : 'Para configurar os canais internos sem remover o atendimento a clientes, use'}{' '}<Link to={tipoCanal === 'lancamentos' ? '/admin/whatsapp-gestao' : tipoCanal === 'gestao' ? '/admin/whatsapp-lancamentos' : '/admin/whatsapp-gestao'}>{tipoCanal === 'lancamentos' ? 'abrir o WhatsApp Gestão' : tipoCanal === 'gestao' ? 'abrir o WhatsApp Lançamentos' : 'abrir o WhatsApp Gestão'}</Link>.</p>
     </section>
-    {erro && <p className="dadm-note danger" role="alert">{erro}</p>}
-    {!conexao && !erro && <section className="dadm-card" role="status">{tenantId && lojaId ? 'Consultando o estado do WhatsApp…' : 'Selecione uma empresa e uma unidade para consultar os canais.'}</section>}
+    {erro && <p className="dadm-note danger dadm-wa-feedback" role="alert">{erro}</p>}
+    {!conexao && !erro && <section className="dadm-card dadm-wa-loading" role="status">{tenantId && lojaId ? 'Consultando o estado do WhatsApp…' : 'Selecione uma empresa e uma unidade para consultar os canais.'}</section>}
     <WhatsappAiOperationalSection status={iaOperational} readAt={iaReadAt} />
     <WhatsappHumanQueue
       empresaId={tenantId}
@@ -487,7 +500,7 @@ function WhatsappConexaoEmpresa() {
     />
 
     {conexao && <>
-      <section className="dadm-wa-hero" aria-label="Linha e status do WhatsApp">
+      <section className="dadm-wa-line-card" aria-label="Linha e status do WhatsApp">
         <div className="dadm-wa-identity">
           <span className="dadm-wa-overline">Linha do WhatsApp · {conexao.instance || 'instância não atribuída'}</span>
           <strong className="dadm-wa-number">{line.value}</strong>
@@ -503,10 +516,10 @@ function WhatsappConexaoEmpresa() {
       </section>
 
       <div className="dadm-wa-summary" aria-label="Resumo da operação">
-        <article><span>Atendente IA</span><strong>{iaSummary}</strong><small>{iaOperational.kind === 'valid' && iaOperational.channel.lastEventAt?.state === 'current' ? `Último evento: ${dateTime(iaOperational.channel.lastEventAt.value)}` : iaOperational.kind === 'valid' ? 'Evento não verificável ou não informado' : 'Leitura operacional não verificável'}</small></article>
-        <article><span>Contatos distintos · 24 h</span><strong>{messages ? Number(messages.contatos || 0).toLocaleString('pt-BR') : '—'}</strong><small>{messages ? 'Entre até 200 mensagens consultadas' : 'Disponível para a empresa dona'}</small></article>
-        <article><span>Mensagens consultadas · 24 h</span><strong>{messages ? Number(messages.total || 0).toLocaleString('pt-BR') : '—'}</strong><small>{messages ? `Amostra de até 200 · última ${dateTime(messages.ultimaEm)}` : 'Sem leitura disponível'}</small></article>
-        <article><span>Saúde do canal</span><strong>{pending == null ? 'Aguardando' : `${pending} pendência${pending === 1 ? '' : 's'} no diagnóstico`}</strong><small>{diag ? `Conferido em ${dateTime(diag.agora)} · não substitui a leitura operacional` : 'Confira a integração abaixo'}</small></article>
+        <article><Inbox size={19} aria-hidden="true" /><span>Mensagens recebidas</span><strong>{messages ? Number(messages.total || 0).toLocaleString('pt-BR') : '0'}</strong><small>na empresa ativa</small></article>
+        <article><Clock3 size={19} aria-hidden="true" /><span>A revisar</span><strong>{messages ? Number(messages.pendentes || messages.received || pending || 0).toLocaleString('pt-BR') : '0'}</strong><small>aguardando conferência</small></article>
+        <article><Smartphone size={19} aria-hidden="true" /><span>Estado do canal</span><strong className="dadm-wa-summary-status">{STATES[state] || state}</strong><small>{conexao?.providerLabel || 'Nenhum canal configurado'} · {iaSummary}</small></article>
+        <article><ShieldCheck size={19} aria-hidden="true" /><span>Webhook</span><strong className={conexao?.providerConfigured ? 'dadm-wa-summary-ok' : 'dadm-wa-summary-warning'}>{conexao?.providerConfigured ? 'Protegido' : 'Não configurado'}</strong><small>segredo mantido no servidor</small></article>
       </div>
 
       <div className="dadm-wa">
