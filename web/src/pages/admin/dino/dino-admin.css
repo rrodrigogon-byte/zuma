@@ -169,6 +169,11 @@
 .dadm-wa-webhook { overflow-wrap: anywhere; }
 .dadm-wa-registration { border-color: color-mix(in srgb, var(--accent) 28%, var(--line)); }
 .dadm-wa-registration > p { max-width: 900px; }
+.dadm-wa-context { display: grid; gap: 10px; padding: 14px; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); border-radius: 14px; background: color-mix(in srgb, var(--accent) 5%, var(--card)); }
+.dadm-wa-context h3 { margin: 0; font-size: 16px; }
+.dadm-wa-context > p { margin: 0; }
+.dadm-wa-context-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.dadm-wa-context-fields .c360-input { width: 100%; max-width: none; }
 .dadm-wa-registration-link { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .dadm-wa-registration-link .c360-input { flex: 1 1 360px; min-width: 220px; max-width: none; font-size: 12px; }
 .dadm-wa-registration-link .c360-btn { flex: none; text-decoration: none; }
@@ -213,6 +218,7 @@
 }
 @media (max-width: 560px) {
   .dadm-wa-summary { grid-template-columns: minmax(0, 1fr); }
+  .dadm-wa-context-fields { grid-template-columns: minmax(0, 1fr); }
   .dadm-wa-registration-link .c360-input,
   .dadm-wa-registration-link .c360-btn { width: 100%; }
   .dadm-wa-number-fields .c360-btn { width: 100%; }

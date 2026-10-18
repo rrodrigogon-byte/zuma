@@ -274,6 +274,33 @@ describe('WhatsappConexao · saúde operacional IA', () => {
     await unmount(renderer)
   })
 
+  it('oferece empresa e unidade no próprio fluxo quando o contexto ainda não foi selecionado', async () => {
+    const trocarEmpresa = vi.fn()
+    const trocarLoja = vi.fn()
+    authMock.useAuth.mockReturnValue({
+      empresaAtiva: null,
+      empresasAcessiveis: [{ id: 'empresa-a', nome: 'Empresa A' }, { id: 'empresa-b', nome: 'Empresa B' }],
+      trocarEmpresa,
+      lojaAtiva: null,
+      lojasAcessiveis: [{ id: 'loja-a', empresaId: 'empresa-a', nome: 'Unidade A' }],
+      trocarLoja,
+      user: {},
+    })
+    let renderer
+    await act(async () => { renderer = create(<WhatsappConexao />) })
+    await tick()
+    const html = textOf(renderer)
+    expect(html).toContain('Empresa e unidade do canal')
+    expect(html).toContain('Selecione uma empresa para liberar o cadastro deste canal.')
+    const empresa = renderer.root.findByProps({ id: 'whatsapp-empresa-ativa' })
+    await act(async () => { empresa.props.onChange({ target: { value: 'empresa-a' } }) })
+    expect(trocarEmpresa).toHaveBeenCalledWith('empresa-a')
+    const loja = renderer.root.findByProps({ id: 'whatsapp-loja-ativa' })
+    await act(async () => { loja.props.onChange({ target: { value: 'loja-a' } }) })
+    expect(trocarLoja).toHaveBeenCalledWith('loja-a')
+    await unmount(renderer)
+  })
+
   it('mantém a seção operacional disponível quando o endpoint legado de conexão falha', async () => {
     apiMock.get.mockImplementation((path) => path.startsWith('/api/admin/barbearia/whatsapp-conexao')
       ? Promise.reject(new Error('backend legado indisponível'))

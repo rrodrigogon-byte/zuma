@@ -37,7 +37,7 @@ export default function WhatsappConexao() {
 }
 
 function WhatsappConexaoEmpresa() {
-  const { empresaAtiva, lojaAtiva, user } = useAuth()
+  const { empresaAtiva, empresasAcessiveis, trocarEmpresa, lojaAtiva, lojasAcessiveis, trocarLoja, user } = useAuth()
   const pathname = typeof window !== 'undefined' ? String(window.location?.pathname || '') : ''
   const tipoCanal = pathname.includes('/admin/whatsapp-lancamentos') ? 'lancamentos' : pathname.includes('/admin/whatsapp-gestao') ? 'gestao' : 'cliente'
   const canalLabel = tipoCanal === 'lancamentos' ? 'Lançamentos' : tipoCanal === 'gestao' ? 'Gestão' : 'Clientes'
@@ -50,6 +50,10 @@ function WhatsappConexaoEmpresa() {
   const tenantId = String(empresaAtiva?.id || '')
   const lojaId = String(lojaAtiva?.id || '')
   const requestOptions = { headers: { 'X-Empresa-Id': tenantId, 'X-Loja-Id': lojaId } }
+  const empresas = Array.isArray(empresasAcessiveis) ? empresasAcessiveis.filter((empresa) => empresa?.id) : []
+  const lojas = Array.isArray(lojasAcessiveis)
+    ? lojasAcessiveis.filter((loja) => loja?.id && loja.ativa !== false && (!tenantId || String(loja.empresaId || '') === tenantId))
+    : []
   const [conexao, setConexao] = useState(null)
   const [podeGerenciar, setPodeGerenciar] = useState(false)
   const [ia, setIa] = useState(null)
@@ -421,6 +425,28 @@ function WhatsappConexaoEmpresa() {
     <section className="dadm-card dadm-wa-registration" aria-labelledby="wa-registration">
       <div className="c360-card-head"><h2 id="wa-registration">Cadastrar o número WhatsApp · {canalLabel}</h2><span className="dadm-operational-scope">Disponível para todas as empresas</span></div>
       <p>Use este link depois de selecionar a empresa no menu lateral. O cadastro, o QR e o status sempre ficam isolados na empresa ativa; uma empresa nunca reutiliza a linha de outra.</p>
+      <section className="dadm-wa-context" aria-labelledby="wa-context-title">
+        <div className="c360-card-head"><h3 id="wa-context-title">Empresa e unidade do canal</h3><span className="dadm-operational-scope">Obrigatório para consultar e conectar</span></div>
+        <p className="dadm-muted">Selecione o contexto antes de consultar a conexão. Depois disso, os botões de QR, código, validação e grupo Admin aparecem para a empresa e unidade escolhidas.</p>
+        <div className="dadm-wa-context-fields">
+          <label className="c360-field" htmlFor="whatsapp-empresa-ativa">Empresa
+            <select id="whatsapp-empresa-ativa" className="c360-input" value={empresaAtiva?.id || ''} onChange={(event) => trocarEmpresa?.(event.target.value)} disabled={!empresas.length}>
+              <option value="">Selecione uma empresa</option>
+              {empresas.map((empresa) => <option key={empresa.id} value={empresa.id}>{empresa.nome || empresa.razaoSocial || empresa.id}</option>)}
+            </select>
+          </label>
+          <label className="c360-field" htmlFor="whatsapp-loja-ativa">Unidade
+            <select id="whatsapp-loja-ativa" className="c360-input" value={lojaAtiva?.id || ''} onChange={(event) => trocarLoja?.(event.target.value)} disabled={!empresaAtiva?.id || !lojas.length}>
+              <option value="">Selecione uma unidade</option>
+              {lojas.map((loja) => <option key={loja.id} value={loja.id}>{loja.nome || loja.razaoSocial || loja.id}</option>)}
+            </select>
+          </label>
+        </div>
+        {!empresas.length && <p className="dadm-note danger" role="alert">Nenhuma empresa autorizada foi carregada. Atualize a sessão ou peça ao administrador da plataforma para liberar o acesso.</p>}
+        {empresas.length > 0 && !empresaAtiva?.id && <p className="dadm-note warn" role="status">Selecione uma empresa para liberar o cadastro deste canal.</p>}
+        {empresaAtiva?.id && !lojaAtiva?.id && <p className="dadm-note warn" role="status">Selecione uma unidade da empresa para liberar QR, pareamento e validação.</p>}
+        {empresaAtiva?.id && lojaAtiva?.id && <p className="dadm-note" role="status">Contexto ativo: <strong>{empresaAtiva.nome}</strong> · <strong>{lojaAtiva.nome}</strong>. As ações abaixo ficam isoladas neste contexto.</p>}
+      </section>
       <nav className="dadm-actions" aria-label="Perfis WhatsApp da empresa">
         <Link className="c360-btn ghost" aria-current={tipoCanal === 'cliente' ? 'page' : undefined} to="/admin/whatsapp">Clientes</Link>
         <Link className="c360-btn ghost" aria-current={tipoCanal === 'gestao' ? 'page' : undefined} to="/admin/whatsapp-gestao">Gestão</Link>
