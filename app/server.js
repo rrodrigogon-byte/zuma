@@ -629,9 +629,9 @@ const clubeDb = {
 };
 const CLUBE_STATUS_ESCOPO = { TENANT_SELECTION_REQUIRED: 400, STORE_SELECTION_REQUIRED: 400 };
 // Permissão do Commerce por tipo de operação do Clube: alterar configuração (chave Pix,
-// catracas, planos, parceiros, régua, modelos de contrato) pede settings.write; dinheiro
+// catracas, planos, parceiros, régua, modelos de contrato, quadras e horário) pede settings.write; dinheiro
 // (cobranças, baixa, repasse, retroativo) pede payments.*; o dia a dia da recepção, customers.*.
-const CLUBE_CONFIG = /^\/api\/admin\/clube\/(?:cobrancas\/config|acesso\/(?:dispositivos|planos)|parceiros\/(?:contas|valores)|retencao\/(?:config|reguas)|contratos\/modelos)(?:\/|$)/;
+const CLUBE_CONFIG = /^\/api\/admin\/clube\/(?:cobrancas\/config|acesso\/(?:dispositivos|planos)|parceiros\/(?:contas|valores)|retencao\/(?:config|reguas)|contratos\/modelos|quadras\/(?:config|cadastro))(?:\/|$)/;
 const CLUBE_DINHEIRO = /^\/api\/admin\/clube\/(?:cobrancas|acesso\/matriculas\/[^/]+\/pagamento|parceiros\/(?:repasses|retroativos|conciliacao))(?:\/|$)/;
 function permissaoDoClube(req) {
   const caminho = String(req.originalUrl || '').split('?')[0];

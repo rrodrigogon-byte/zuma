@@ -11,6 +11,7 @@ import { ErroDominio } from '../acesso/banco.js';
 import * as retencao from '../retencao/operacoes.js';
 import { registrarOptout } from '../retencao/servico.js';
 import { criarPasse, passeParaAcesso } from '../parceiros/servico.js';
+import * as quadras from '../quadras/servico.js';
 
 export const declaracoesClube = [
   {
@@ -148,6 +149,45 @@ export const declaracoesClube = [
       required: ['origem'],
     },
   },
+  // Quadras (tênis, beach tennis, padel…)
+  {
+    name: 'clube_quadras_livres',
+    description: 'Lista os horários com quadra livre num dia (tênis, beach tennis, padel…). Use quando o sócio quiser jogar ou perguntar por quadra. Nunca invente horário.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        dia: { type: 'STRING', description: 'Data no formato AAAA-MM-DD' },
+        modalidade: { type: 'STRING', description: 'tenis, beach_tennis, padel… Vazio = todas.' },
+        hora: { type: 'STRING', description: 'HH:MM: mostra a partir deste horário (opcional)' },
+        duracao_min: { type: 'INTEGER', description: 'Minutos de jogo (opcional; padrão do clube)' },
+      },
+      required: ['dia'],
+    },
+  },
+  {
+    name: 'clube_reservar_quadra',
+    description: 'Reserva uma quadra para o sócio da conversa. Confirme quadra, dia e horário com ele antes de chamar.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        quadra_id: { type: 'STRING' },
+        dia: { type: 'STRING', description: 'AAAA-MM-DD' },
+        hora: { type: 'STRING', description: 'HH:MM de início' },
+        duracao_min: { type: 'INTEGER', description: 'Opcional; padrão do clube' },
+      },
+      required: ['quadra_id', 'dia', 'hora'],
+    },
+  },
+  {
+    name: 'clube_minhas_reservas_quadra',
+    description: 'Lista as próximas reservas de quadra do sócio.',
+    parameters: { type: 'OBJECT', properties: {} },
+  },
+  {
+    name: 'clube_cancelar_reserva_quadra',
+    description: 'Cancela uma reserva de quadra do sócio (o id vem de clube_minhas_reservas_quadra). Confirme com ele antes.',
+    parameters: { type: 'OBJECT', properties: { reserva_id: { type: 'STRING' } }, required: ['reserva_id'] },
+  },
 ];
 
 async function avisarTerceiros(enviarAvisos, avisos) {
@@ -282,6 +322,28 @@ export async function executarFerramentaClube(db, conversa, nome, args = {}, {
         return { ok: true, orientacao: 'Confirme que ofertas e lembretes foram desligados.' };
       case 'clube_registrar_interesse':
         return { ok: true, ...(await retencao.registrarInteresse(db, empresaId, customerId, { origem: args.origem, interesse: args.interesse })) };
+      case 'clube_quadras_livres': {
+        const r = await quadras.horariosLivres(db, empresaId, {
+          data: args.dia, modalidade: quadras.normalizarModalidade(args.modalidade), aPartirDe: args.hora || '', duracaoMin: args.duracao_min || null, agora, respeitarAntecedencia: true,
+        });
+        if (r.reservaAindaFechada) return { ok: true, dia: r.diaRotulo, horarios: [], orientacao: `As reservas de quadra abrem ${r.aberturaDias} dia(s) antes. Ofereça um dia mais próximo.` };
+        if (!r.aberto) return { ok: true, dia: r.diaRotulo, fechado: true, orientacao: 'O clube não abre neste dia.' };
+        return { ok: true, dia: r.diaRotulo, duracao_min: r.duracaoMin, horarios: r.horarios.map((h) => ({ hora: h.hora, quadras: h.quadras.map((q) => ({ quadra_id: q.id, nome: q.nome, modalidade: q.modalidade })) })) };
+      }
+      case 'clube_reservar_quadra': {
+        const r = await quadras.reservar(db, empresaId, {
+          quadraId: args.quadra_id, customerId, data: args.dia, hora: args.hora, duracaoMin: args.duracao_min || null, tipo: 'socio', origem: 'whatsapp', agora,
+        });
+        return { ok: true, reserva_id: r.reservaId, reserva: r.rotulo };
+      }
+      case 'clube_minhas_reservas_quadra': {
+        const l = await quadras.reservasDoCliente(db, empresaId, customerId, { agora });
+        return { ok: true, reservas: l.map((x) => ({ reserva_id: x.id, reserva: x.rotulo })) };
+      }
+      case 'clube_cancelar_reserva_quadra': {
+        const r = await quadras.cancelarReserva(db, empresaId, { reservaId: args.reserva_id, customerId, agora });
+        return { ok: true, cancelada: r.cancelada, tardio: r.tardio };
+      }
       default:
         return { ok: false, erro: `Ferramenta desconhecida: ${nome}` };
     }

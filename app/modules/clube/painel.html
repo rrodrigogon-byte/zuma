@@ -170,6 +170,31 @@
   @media (max-width: 860px) { #toast { bottom: 84px; left: 16px; right: 16px; } }
   .oculto { display: none !important; }
   .grade-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+  /* grade de quadras: horários nas linhas, quadras nas colunas; cabeçalho e hora fixos ao rolar */
+  .qwrap { overflow: auto; max-height: calc(100vh - 230px); border-radius: var(--raio); }
+  .qgrade { border-collapse: separate; border-spacing: 0; width: 100%; }
+  .qgrade th, .qgrade td { border-bottom: 1px solid var(--linha); border-right: 1px solid var(--linha); padding: 0; vertical-align: top; }
+  .qgrade thead th { position: sticky; top: 0; z-index: 2; background: var(--placa); padding: 8px 6px; text-align: center; min-width: 118px; font: 600 .92rem/1.2 var(--titulo); color: var(--tinta); }
+  .qgrade thead th small { display: block; font: 500 .74rem/1.2 var(--texto); color: var(--apagado); }
+  .qgrade th.h { position: sticky; left: 0; z-index: 1; background: var(--placa); min-width: 62px; width: 62px; padding: 8px 10px 0 6px; text-align: right; font: 600 .9rem/1 var(--titulo); color: var(--apagado); }
+  .qgrade thead th.h { z-index: 3; }
+  .qgrade tr.agora th.h { color: var(--primaria, var(--libera)); box-shadow: inset 3px 0 0 var(--primaria, var(--libera)); }
+  .qgrade td > button { display: block; width: 100%; height: 100%; min-height: 44px; border: 0; background: none; cursor: pointer; text-align: left; padding: 6px 8px; color: var(--tinta); font-size: .82rem; line-height: 1.25; }
+  .qgrade td > button.livre { text-align: center; color: transparent; }
+  .qgrade td > button.livre:hover, .qgrade td > button.livre:focus-visible { background: var(--libera-fundo); color: var(--libera); font-weight: 700; }
+  .qgrade tr.passado td > button.livre { cursor: default; background: repeating-linear-gradient(135deg, transparent 0 6px, var(--chao) 6px 8px); }
+  .qgrade tbody tr { height: 46px; }
+  .qgrade td.ocup { position: relative; }
+  .qgrade td.ocup > button { position: absolute; inset: 1px 1px 1px 0; height: auto; min-height: 0; overflow: hidden; border-radius: 0 6px 6px 0; background: var(--libera-fundo); box-shadow: inset 4px 0 0 var(--libera); display: flex; flex-direction: column; justify-content: flex-start; padding: 5px 8px 4px 10px; }
+  .qgrade td.ocup.avulso > button { background: var(--chao); box-shadow: inset 4px 0 0 var(--foco); }
+  .qgrade td.ocup.bloqueio > button { background: var(--espera-fundo); box-shadow: inset 4px 0 0 var(--espera); }
+  .qgrade td.ocup b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .qgrade td.ocup small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .qgrade td.ocup small { color: var(--apagado); }
+  .legenda { display: flex; gap: 14px; flex-wrap: wrap; font-size: .85rem; color: var(--apagado); margin: 10px 2px 0; }
+  .legenda i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .dias-func { display: grid; grid-template-columns: 110px 90px 1fr 1fr; gap: 8px 10px; align-items: center; }
+  @media (max-width: 560px) { .dias-func { grid-template-columns: 1fr 70px; } .dias-func input[type=time] { grid-column: span 1; } }
   /* dentro do Kytto (/admin/clube): o menu é o do Kytto, sem o trilho próprio */
   body.embutido .app { grid-template-columns: 1fr; }
   body.embutido nav.trilho { display: none; }
@@ -192,6 +217,7 @@
     <a href="#recepcao" data-rota="recepcao"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21V5a2 2 0 0 1 2-2h4v18M14 21V9h4a2 2 0 0 1 2 2v10M2 21h20"/></svg>Recepção</a>
     <a href="#alunos" data-rota="alunos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-7 7-7s7 3 7 7M17 4a4 4 0 0 1 0 8M22 21c0-3-2-6-5-6.6"/></svg>Alunos</a>
     <a href="#aulas" data-rota="aulas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>Aulas</a>
+    <a href="#quadras" data-rota="quadras"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="1"/><path d="M12 4v16M3 12h18M7 8v8M17 8v8"/></svg>Quadras</a>
     <a href="#contratos" data-rota="contratos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 14l2.5 2.5L16 11"/></svg>Contratos</a>
     <a href="#retencao" data-rota="retencao"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Retenção</a>
     <a href="#cobrancas" data-rota="cobrancas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg>Cobranças</a>
@@ -292,7 +318,7 @@ const GATILHOS = {
 /* Rotas                                                               */
 /* ------------------------------------------------------------------ */
 let pararRecepcao = null;
-const TELAS = { recepcao: telaRecepcao, alunos: telaAlunos, aulas: telaAulas, contratos: telaContratos, retencao: telaRetencao, cobrancas: telaCobrancas, parceiros: telaParceiros, ajustes: telaAjustes };
+const TELAS = { recepcao: telaRecepcao, alunos: telaAlunos, aulas: telaAulas, quadras: telaQuadras, contratos: telaContratos, retencao: telaRetencao, cobrancas: telaCobrancas, parceiros: telaParceiros, ajustes: telaAjustes };
 const EMBUTIDO = new URLSearchParams(location.search).get('embed') === '1';
 // clube usa "sócio"; academia usa "aluno" (o Kytto passa ?termo=socio para clubes)
 const SOCIO = new URLSearchParams(location.search).get('termo') === 'socio';
@@ -696,6 +722,336 @@ function novaTurma(modalidades) {
 /* ------------------------------------------------------------------ */
 /* Contratos                                                           */
 /* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+/* Quadras: grade do dia e reservas                                    */
+/* ------------------------------------------------------------------ */
+const MODALIDADES_Q = { tenis: 'Tênis', beach_tennis: 'Beach tennis', padel: 'Padel', pickleball: 'Pickleball', squash: 'Squash', futevolei: 'Futevôlei', volei_praia: 'Vôlei de praia', futsal: 'Futsal', society: 'Society', outro: 'Outro' };
+const PISOS_Q = { saibro: 'Saibro', rapida: 'Rápida', areia: 'Areia', grama_sintetica: 'Grama sintética', grama: 'Grama', madeira: 'Madeira', outro: 'Outro' };
+const BLOQUEIOS_Q = { aula: 'Aula', torneio: 'Torneio', manutencao: 'Manutenção', evento: 'Evento' };
+const DIAS_Q = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+const minQ = (h) => { const [a, b] = String(h).split(':').map(Number); return a * 60 + b; };
+const horaQ = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+let quadrasDia = null;
+let quadrasModalidade = '';
+
+async function telaQuadras() {
+  const dia = quadrasDia || hojeISO();
+  const url = `/quadras/grade?data=${dia}${quadrasModalidade ? `&modalidade=${quadrasModalidade}` : ''}`;
+  let g = await api(url);
+  const todas = quadrasModalidade ? await api('/quadras/cadastro') : g.quadras;
+  const modalidades = [...new Set(todas.map((q) => q.modalidade))];
+  const faixas = g.faixas.map((f) => `${f.abre} às ${f.fecha}`).join(' e ');
+  $('#tela').innerHTML = `
+    <div class="topo"><div><h1>Quadras</h1><p class="sub">${esc(g.diaRotulo)} · ${g.aberto ? `aberto das ${esc(faixas)} · ${g.ocupacao.percentual}% ocupado` : 'fechado neste dia'}</p></div>
+      <div class="acoes" role="group" aria-label="Dia e modalidade">
+        <button class="acao" id="qAntes" aria-label="Dia anterior">‹</button>
+        <input type="date" id="qDia" value="${g.data}" style="width:auto" aria-label="Dia">
+        <button class="acao" id="qDepois" aria-label="Próximo dia">›</button>
+        <button class="acao" id="qHoje">Hoje</button>
+        ${modalidades.length > 1 || quadrasModalidade ? `<select id="qMod" style="width:auto" aria-label="Modalidade"><option value="">Todas as quadras</option>${modalidades.map((m) => `<option value="${m}" ${m === quadrasModalidade ? 'selected' : ''}>${esc(MODALIDADES_Q[m] || m)}</option>`).join('')}</select>` : ''}
+      </div></div>
+    ${g.configurado ? '' : '<div class="aviso">O horário de funcionamento ainda é o padrão (06:00 às 22:00). Ajuste em <a href="#ajustes">Ajustes → Quadras e horário</a>.</div>'}
+    <div id="qCorpo"></div>`;
+  const corpo = $('#qCorpo');
+  const indexar = () => new Map(g.quadras.flatMap((q) => q.reservas.map((r) => [r.id, { q, r }])));
+  let indice = new Map();
+  if (!todas.length) {
+    corpo.innerHTML = '<section class="bloco"><h2>Nenhuma quadra cadastrada</h2><p class="sub">Cadastre as quadras do clube (ex.: 7 de saibro e 7 de beach tennis) e o horário de funcionamento.</p><a class="acao primaria" href="#ajustes">Cadastrar quadras</a></section>';
+  } else if (!g.aberto) {
+    corpo.innerHTML = '<section class="bloco"><p class="vazio">O clube não abre neste dia. Para mudar, ajuste o funcionamento em <a href="#ajustes">Ajustes</a>.</p></section>';
+  } else {
+    corpo.innerHTML = `<section class="bloco" style="padding:0"><div class="qwrap"><table class="qgrade">${gradeQuadrasHtml(g)}</table></div></section>
+      <div class="legenda"><span><i style="background:var(--libera)"></i>Sócio</span><span><i style="background:var(--foco)"></i>Avulso</span><span><i style="background:var(--espera)"></i>Aula, torneio, manutenção</span><span>Toque num horário livre para reservar.</span></div>`;
+    indice = indexar();
+    // hoje: abre a grade já no horário atual (uma linha acima, para dar contexto)
+    const atual = corpo.querySelector('tr.agora');
+    if (atual) { const w = corpo.querySelector('.qwrap'); w.scrollTop = Math.max(0, atual.offsetTop - w.querySelector('thead').offsetHeight - atual.offsetHeight); }
+    corpo.querySelector('table').addEventListener('click', (ev) => {
+      const b = ev.target.closest('button'); if (!b) return;
+      if (b.dataset.reserva) { const x = indice.get(b.dataset.reserva); return verReservaQuadra(x.q, x.r, g); }
+      if (b.dataset.passado) return;
+      novaReservaQuadra(g, b.dataset.quadra, b.dataset.hora);
+    });
+  }
+  const ir = (d) => { quadrasDia = d; navegar(); };
+  $('#qAntes').onclick = () => ir(somarDias(g.data, -1));
+  $('#qDepois').onclick = () => ir(somarDias(g.data, 1));
+  $('#qHoje').onclick = () => ir(hojeISO());
+  $('#qDia').onchange = (ev) => { if (ev.target.value) ir(ev.target.value); };
+  if ($('#qMod')) $('#qMod').onchange = (ev) => { quadrasModalidade = ev.target.value; navegar(); };
+  // a grade se atualiza sozinha enquanto a tela está aberta (reservas pelo WhatsApp), sem perder a rolagem
+  const timer = setInterval(async () => {
+    const tabela = $('.qgrade');
+    if (!tabela || $('#gaveta').open) return;
+    try {
+      const novo = await api(url);
+      if (novo.quadras.length !== g.quadras.length || novo.horarios.length !== g.horarios.length) return navegar();
+      g = novo; tabela.innerHTML = gradeQuadrasHtml(g); indice = indexar();
+    } catch { /* tenta de novo no próximo minuto */ }
+  }, 60000);
+  pararRecepcao = () => clearInterval(timer);
+}
+
+/** "Ana Beatriz Souza Lima" → "Ana Lima" (ou "Ana L." se ainda for longo) para caber na célula. */
+function nomeCurto(nome) {
+  const p = String(nome || '').trim().split(/\s+/);
+  if (p.length < 2 || String(nome).length <= 14) return String(nome || '');
+  const dois = `${p[0]} ${p[p.length - 1]}`;
+  return dois.length <= 14 ? dois : `${p[0]} ${p[p.length - 1][0]}.`;
+}
+/** Linhas = horários (passo do clube); cada reserva ocupa as linhas que cruza (rowspan). */
+function gradeQuadrasHtml(g) {
+  const passo = g.intervaloMin;
+  const linhas = g.horarios.map(minQ);
+  const agora = g.agora ? minQ(g.agora) : (g.passou ? 1440 : -1);
+  const dono = g.quadras.map((q) => linhas.map((m) => q.reservas.find((r) => minQ(r.inicio) < m + passo && (r.fim === '24:00' ? 1440 : minQ(r.fim)) > m) || null));
+  const cab = `<thead><tr><th class="h" scope="col"><span class="oculto">Hora</span></th>${g.quadras.map((q) => `<th scope="col">${esc(q.nome)}<small>${esc(q.modalidadeRotulo)}${q.pisoRotulo && !q.nome.toLowerCase().includes(q.pisoRotulo.toLowerCase()) ? ` · ${esc(q.pisoRotulo)}` : ''}</small></th>`).join('')}</tr></thead>`;
+  const corpo = linhas.map((m, i) => {
+    const passado = m + passo <= agora;
+    const atual = agora >= m && agora < m + passo;
+    const cels = g.quadras.map((q, j) => {
+      const r = dono[j][i];
+      if (r) {
+        if (i > 0 && dono[j][i - 1] === r) return '';
+        let span = 1; while (i + span < linhas.length && dono[j][i + span] === r) span += 1;
+        const classe = ['socio'].includes(r.tipo) ? '' : (r.tipo === 'avulso' ? 'avulso' : 'bloqueio');
+        const quem = r.nome || r.titulo || r.tipoRotulo;
+        const curto = r.nome ? nomeCurto(r.nome) : quem;
+        return `<td class="ocup ${classe}" rowspan="${span}"><button type="button" data-reserva="${r.id}" title="${esc(quem)}" aria-label="${esc(`${q.nome}, ${r.inicio} às ${r.fim}: ${quem}`)}"><b>${esc(curto)}</b><small>${r.inicio}–${r.fim}${r.tipo !== 'socio' ? ` · ${esc(r.tipoRotulo)}` : ''}${r.origem === 'whatsapp' ? ' · WhatsApp' : ''}</small></button></td>`;
+      }
+      return `<td><button type="button" class="livre" data-quadra="${q.id}" data-hora="${horaQ(m)}" ${passado ? 'data-passado="1" tabindex="-1"' : ''} aria-label="${esc(`Reservar ${q.nome} às ${horaQ(m)}`)}">+</button></td>`;
+    }).join('');
+    return `<tr class="${passado ? 'passado' : ''} ${atual ? 'agora' : ''}"><th class="h" scope="row">${horaQ(m)}</th>${cels}</tr>`;
+  }).join('');
+  return `${cab}<tbody>${corpo}</tbody>`;
+}
+
+function novaReservaQuadra(g, quadraId, hora) {
+  const q = g.quadras.find((x) => x.id === quadraId) || g.quadras[0];
+  const duracoes = [...new Set([30, 60, 90, 120, g.duracaoMin])].sort((a, b) => a - b);
+  const corpo = gaveta(`Reservar ${q.nome}`, `${g.diaRotulo} às ${hora}`, `
+    <form class="form" id="fRq" autocomplete="off">
+      <fieldset class="largo" style="border:0;padding:0;margin:0"><legend style="font-weight:600;margin-bottom:6px">Para quem</legend>
+        <div class="acoes">
+          <label class="linha-check"><input type="radio" name="tipo" value="socio" checked> ${TERMO.Quem}</label>
+          <label class="linha-check"><input type="radio" name="tipo" value="avulso"> Avulso (não sócio)</label>
+          <label class="linha-check"><input type="radio" name="tipo" value="bloqueio"> Bloquear a quadra</label>
+        </div></fieldset>
+      <div class="largo" id="rqSocio">
+        <label class="campo">Buscar no cadastro<input id="rqBusca" placeholder="Nome ou telefone"></label>
+        <div id="rqAchados" style="margin-top:6px"></div><input type="hidden" name="customerId">
+      </div>
+      <label class="campo largo oculto" id="rqNome">Nome de quem vai jogar<input name="titulo" maxlength="120"></label>
+      <div class="largo grade-campos oculto" id="rqBloqueio">
+        <label class="campo">Motivo<select name="motivo">${Object.entries(BLOQUEIOS_Q).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label>
+        <label class="campo">Descrição (opcional)<input name="tituloBloqueio" maxlength="120" placeholder="Ex.: Aula com o Prof. Marcos"></label>
+      </div>
+      <label class="campo">Quadra<select name="quadraId">${g.quadras.map((x) => `<option value="${x.id}" ${x.id === q.id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}</select></label>
+      <label class="campo">Início<input type="time" name="hora" value="${esc(hora)}" step="900" required></label>
+      <label class="campo">Duração<select name="duracaoMin">${duracoes.map((d) => `<option value="${d}" ${d === g.duracaoMin ? 'selected' : ''}>${d >= 60 ? `${Math.floor(d / 60)}h${d % 60 ? d % 60 : ''}` : `${d} min`}</option>`).join('')}<option value="dia" class="oculto" id="rqDia">Até o fechamento</option></select></label>
+      <label class="campo largo">Observação (opcional)<input name="observacao" maxlength="300" placeholder="Ex.: dupla com o João"></label>
+      <div class="largo"><button class="acao primaria">Reservar</button></div>
+    </form>`);
+  const f = $('#fRq', corpo);
+  const trocarTipo = () => {
+    const t = f.tipo.value;
+    $('#rqSocio', corpo).classList.toggle('oculto', t === 'bloqueio');
+    $('#rqNome', corpo).classList.toggle('oculto', t !== 'avulso');
+    $('#rqBloqueio', corpo).classList.toggle('oculto', t !== 'bloqueio');
+    $('#rqDia', corpo).classList.toggle('oculto', t !== 'bloqueio');
+    $('#rqBusca', corpo).placeholder = t === 'avulso' ? 'Opcional: se já tem cadastro' : 'Nome ou telefone';
+  };
+  f.querySelectorAll('input[name=tipo]').forEach((r) => { r.onchange = trocarTipo; });
+  let t;
+  $('#rqBusca', corpo).oninput = (ev) => {
+    clearTimeout(t); f.customerId.value = '';
+    t = setTimeout(async () => {
+      const termo = ev.target.value.trim();
+      const l = termo.length >= 2 ? await api(`/acesso/clientes?busca=${encodeURIComponent(termo)}`).catch(() => []) : [];
+      $('#rqAchados', corpo).innerHTML = l.map((c) => `<button type="button" class="acao" style="margin:0 6px 6px 0" data-id="${c.id}">${esc(c.nome)} ${c.telefone ? `<small>${esc(c.telefone)}</small>` : ''}</button>`).join('')
+        || (termo.length >= 2 ? `<p class="vazio" style="padding:0">Ninguém com esse nome. Para cadastrar, use <a href="#alunos">Nova adesão</a> ou marque “Avulso”.</p>` : '');
+    }, 250);
+  };
+  $('#rqAchados', corpo).onclick = (ev) => {
+    const b = ev.target.closest('button[data-id]'); if (!b) return;
+    f.customerId.value = b.dataset.id; $('#rqBusca', corpo).value = b.textContent.trim(); $('#rqAchados', corpo).innerHTML = '';
+  };
+  f.onsubmit = async (ev) => {
+    ev.preventDefault();
+    const d = form(f);
+    const bloqueio = d.tipo === 'bloqueio';
+    if (d.tipo === 'socio' && !d.customerId) return aviso(`Escolha o ${TERMO.aluno} na busca.`, true);
+    if (d.tipo === 'avulso' && !d.customerId && !String(d.titulo || '').trim()) return aviso('Informe o nome de quem vai jogar.', true);
+    let duracao = d.duracaoMin;
+    if (duracao === 'dia') {
+      const ini = minQ(d.hora);
+      const faixa = g.faixas.map((x) => ({ a: minQ(x.abre), f: x.fecha === '24:00' ? 1440 : minQ(x.fecha) })).find((x) => ini >= x.a && ini < x.f);
+      if (!faixa) return aviso('Início fora do horário de funcionamento.', true);
+      duracao = faixa.f - ini;
+    }
+    const corpoReq = {
+      quadraId: d.quadraId, data: g.data, hora: d.hora, duracaoMin: Number(duracao), observacao: d.observacao || null,
+      tipo: bloqueio ? d.motivo : d.tipo, customerId: bloqueio ? null : (d.customerId || null),
+      titulo: bloqueio ? (d.tituloBloqueio || null) : (d.tipo === 'avulso' ? (d.titulo || null) : null),
+    };
+    const r = await agir(ev.submitter, () => api('/quadras/reservas', { metodo: 'POST', corpo: corpoReq }), (x) => `Reservado: ${x.rotulo}.`);
+    if (r) { $('#gaveta').close(); navegar(); }
+  };
+}
+
+function verReservaQuadra(q, r, g) {
+  const corpo = gaveta(r.nome || r.titulo || r.tipoRotulo, `${q.nome} · ${g.diaRotulo}, das ${r.inicio} às ${r.fim}`, `
+    <dl class="dados">
+      <dt>Tipo</dt><dd>${esc(r.tipoRotulo)}</dd>
+      ${r.nome ? `<dt>${TERMO.Quem}</dt><dd>${esc(r.nome)}</dd>` : ''}
+      ${r.telefone ? `<dt>WhatsApp</dt><dd>${esc(r.telefone)}</dd>` : ''}
+      ${r.titulo && r.nome ? `<dt>Descrição</dt><dd>${esc(r.titulo)}</dd>` : ''}
+      ${r.observacao ? `<dt>Observação</dt><dd>${esc(r.observacao)}</dd>` : ''}
+      <dt>Feita por</dt><dd>${r.origem === 'whatsapp' ? 'WhatsApp (IA)' : r.origem === 'app' ? 'Aplicativo' : 'Recepção'}</dd>
+    </dl>
+    <div class="secao acoes">
+      ${r.customerId ? `<button class="acao" id="rqPerfil">Abrir cadastro</button>` : ''}
+      ${g.passou ? '' : '<button class="acao perigo" id="rqCancelar">Cancelar reserva</button>'}
+    </div>`);
+  if ($('#rqPerfil', corpo)) $('#rqPerfil', corpo).onclick = () => abrirAluno(r.customerId);
+  if ($('#rqCancelar', corpo)) {
+    $('#rqCancelar', corpo).onclick = async (ev) => {
+      if (!confirm(`Cancelar a reserva de ${q.nome} das ${r.inicio} às ${r.fim}?`)) return;
+      const x = await agir(ev.currentTarget, () => api(`/quadras/reservas/${r.id}/cancelar`, { metodo: 'POST', corpo: {} }), (y) => (y.tardio ? 'Reserva cancelada (em cima da hora).' : 'Reserva cancelada.'));
+      if (x) { $('#gaveta').close(); navegar(); }
+    };
+  }
+}
+
+/* Ajustes das quadras: horário de funcionamento, regras e cadastro */
+function resumoFuncionamento(cfg) {
+  const txt = (d) => (cfg.funcionamento[String(d)] || []).map((f) => `${f.abre}–${f.fecha}`).join(', ') || 'fechado';
+  const grupos = [];
+  for (let d = 0; d < 7; d += 1) {
+    const t = txt(d);
+    const ult = grupos[grupos.length - 1];
+    if (ult && ult.t === t) ult.ate = d; else grupos.push({ de: d, ate: d, t });
+  }
+  if (grupos.length === 1) return `Todos os dias, ${grupos[0].t}`;
+  return grupos.map((x) => `${DIAS_Q[x.de]}${x.ate !== x.de ? ` a ${DIAS_Q[x.ate].toLowerCase()}` : ''}: ${x.t}`).join(' · ');
+}
+function blocoQuadrasAjustes(cfg, quadras) {
+  return `<section class="bloco" id="ajQuadras"><div class="topo" style="margin-bottom:10px"><div><h2 style="margin:0">Quadras e horário</h2><p class="sub" style="margin:4px 0 0">${esc(resumoFuncionamento(cfg))} · reserva de ${cfg.duracaoMin} min${cfg.configurado ? '' : ' <b>(padrão: ajuste o horário do clube)</b>'}</p></div>
+    <div class="acoes"><button class="acao" id="qCfg">Horário e regras</button><button class="acao" id="qLote">Adicionar várias</button><button class="acao primaria" id="qNova">Nova quadra</button></div></div>
+    ${quadras.length ? `<div class="rolagem"><table><thead><tr><th>Quadra</th><th>Modalidade</th><th>Piso</th><th>Avulso/hora</th><th>Situação</th></tr></thead><tbody>${quadras.map((q) => `
+      <tr class="clicavel" data-quadra="${q.id}" tabindex="0"><td>${esc(q.nome)}</td><td>${esc(q.modalidadeRotulo)}</td><td>${esc(q.pisoRotulo || '—')}${q.coberta ? ' · coberta' : ''}</td><td>${reais(q.valorHoraAvulso)}</td><td>${q.ativa ? estado('ativa', 'ativa') : estado('cancelada', 'desativada')}</td></tr>`).join('')}</tbody></table></div>`
+      : '<p class="vazio">Nenhuma quadra. Use “Adicionar várias” para criar, por exemplo, 7 quadras de saibro de uma vez.</p>'}</section>`;
+}
+function ligarQuadrasAjustes(cfg, quadras) {
+  $('#qCfg').onclick = () => configurarQuadras(cfg);
+  $('#qLote').onclick = quadrasEmLote;
+  $('#qNova').onclick = () => editarQuadra(null);
+  $('#ajQuadras').querySelectorAll('[data-quadra]').forEach((tr) => {
+    const abrir = () => editarQuadra(quadras.find((q) => q.id === tr.dataset.quadra));
+    tr.onclick = abrir; tr.onkeydown = (e) => { if (e.key === 'Enter') abrir(); };
+  });
+}
+function opcoesQ(mapa, atual, vazio = '') {
+  return `${vazio ? `<option value="">${vazio}</option>` : ''}${Object.entries(mapa).map(([k, v]) => `<option value="${k}" ${k === atual ? 'selected' : ''}>${v}</option>`).join('')}`;
+}
+function configurarQuadras(cfg) {
+  // o formulário edita uma faixa por dia; com mais de uma (ex.: 06–12 e 14–22, gravado pela API), não mexe no funcionamento
+  const variasFaixas = Object.values(cfg.funcionamento).some((f) => (f || []).length > 1);
+  const opcoesMin = (lista, atual) => [...new Set([...lista, atual])].sort((a, b) => a - b).map((d) => `<option value="${d}" ${d === atual ? 'selected' : ''}>${d} min</option>`).join('');
+  const linha = (d) => {
+    const f = (cfg.funcionamento[String(d)] || [])[0];
+    return `<b>${DIAS_Q[d]}</b><label class="linha-check"><input type="checkbox" data-aberto="${d}" ${f ? 'checked' : ''}> abre</label>
+      <input type="time" data-abre="${d}" value="${f?.abre || '06:00'}" step="900" aria-label="Abre ${DIAS_Q[d]}"><input type="time" data-fecha="${d}" value="${f && f.fecha !== '24:00' ? f.fecha : (f ? '00:00' : '22:00')}" step="60" aria-label="Fecha ${DIAS_Q[d]} (00:00 = meia-noite)">`;
+  };
+  const corpo = gaveta('Horário e regras das quadras', 'Vale para a grade da recepção e para as reservas pelo WhatsApp.', `
+    <form class="form" id="fQc">
+      ${variasFaixas ? `<div class="largo aviso">Funcionamento com mais de uma faixa por dia: ${esc(resumoFuncionamento(cfg))}. Ele fica como está; aqui você muda só as regras.</div>` : `<div class="largo"><h3>Funcionamento</h3><p class="sub" style="margin:0 0 8px">Fechar às 00:00 = aberto até meia-noite.</p><div class="dias-func">${[1, 2, 3, 4, 5, 6, 0].map(linha).join('')}</div>
+        <button type="button" class="acao" id="qCopiar" style="margin-top:10px">Usar o horário de segunda em todos os dias</button></div>`}
+      <label class="campo">Duração de uma reserva<select name="duracaoMin">${opcoesMin([30, 45, 60, 90, 120], cfg.duracaoMin)}</select></label>
+      <label class="campo">Horários na grade a cada<select name="intervaloMin">${opcoesMin([15, 30, 60], cfg.intervaloMin)}</select></label>
+      <label class="campo">Sócio reserva com até<span class="ajuda">dias de antecedência</span><input type="number" name="aberturaDias" min="0" max="90" value="${cfg.aberturaDias}"></label>
+      <label class="campo">Reservas futuras por sócio<span class="ajuda">a recepção pode passar do limite</span><input type="number" name="limiteReservasFuturas" min="1" max="50" value="${cfg.limiteReservasFuturas}"></label>
+      <label class="campo">Cancelar sem marcar atraso<span class="ajuda">minutos antes do horário</span><input type="number" name="cancelamentoMinAntes" min="0" max="2880" value="${cfg.cancelamentoMinAntes}"></label>
+      <label class="linha-check largo"><input type="checkbox" name="exigeSocioEmDia" ${cfg.exigeSocioEmDia ? 'checked' : ''}> Reserva de sócio só com mensalidade em dia</label>
+      <div class="largo"><button class="acao primaria">Salvar</button></div>
+    </form>`);
+  const f = $('#fQc', corpo);
+  if ($('#qCopiar', corpo)) $('#qCopiar', corpo).onclick = () => {
+    const a = f.querySelector('[data-abre="1"]').value; const z = f.querySelector('[data-fecha="1"]').value; const on = f.querySelector('[data-aberto="1"]').checked;
+    for (let d = 0; d < 7; d += 1) { f.querySelector(`[data-abre="${d}"]`).value = a; f.querySelector(`[data-fecha="${d}"]`).value = z; f.querySelector(`[data-aberto="${d}"]`).checked = on; }
+  };
+  f.onsubmit = (ev) => {
+    ev.preventDefault();
+    let funcionamento;
+    if (!variasFaixas) {
+      funcionamento = {};
+      for (let d = 0; d < 7; d += 1) {
+        const fecha = f.querySelector(`[data-fecha="${d}"]`).value;
+        funcionamento[d] = f.querySelector(`[data-aberto="${d}"]`).checked ? [{ abre: f.querySelector(`[data-abre="${d}"]`).value, fecha: fecha === '00:00' || fecha === '23:59' ? '24:00' : fecha }] : [];
+      }
+    }
+    const d = form(f);
+    agir(ev.submitter, () => api('/quadras/config', { metodo: 'PUT', corpo: {
+      ...(funcionamento ? { funcionamento } : {}), duracaoMin: d.duracaoMin, intervaloMin: d.intervaloMin, aberturaDias: d.aberturaDias,
+      limiteReservasFuturas: d.limiteReservasFuturas, cancelamentoMinAntes: d.cancelamentoMinAntes, exigeSocioEmDia: Boolean(d.exigeSocioEmDia),
+    } }), 'Horário salvo.').then((r) => { if (r) { $('#gaveta').close(); navegar(); } });
+  };
+}
+function camposQuadra(q) {
+  return `
+      <label class="campo">Modalidade<select name="modalidade">${opcoesQ(MODALIDADES_Q, q?.modalidade || 'tenis')}</select></label>
+      <label class="campo">Piso<select name="piso">${opcoesQ(PISOS_Q, q?.piso || '', 'Não informar')}</select></label>
+      <label class="campo">Valor por hora para avulso<span class="ajuda">opcional, só referência</span><input name="valorHoraAvulso" inputmode="decimal" value="${q?.valorHoraAvulso ?? ''}" placeholder="80,00"></label>
+      <label class="linha-check"><input type="checkbox" name="coberta" ${q?.coberta ? 'checked' : ''}> Coberta</label>
+      <label class="linha-check"><input type="checkbox" name="iluminacao" ${q ? (q.iluminacao ? 'checked' : '') : 'checked'}> Com iluminação</label>`;
+}
+function dadosQuadraForm(f) {
+  const d = form(f);
+  return { ...d, coberta: Boolean(d.coberta), iluminacao: Boolean(d.iluminacao), ...(f.ativa ? { ativa: f.ativa.checked } : {}) };
+}
+function editarQuadra(q) {
+  const corpo = gaveta(q ? q.nome : 'Nova quadra', 'Aparece na grade de reservas e para o WhatsApp.', `
+    <form class="form" id="fQ">
+      <label class="campo largo">Nome<input name="nome" required maxlength="80" value="${esc(q?.nome || '')}" placeholder="Ex.: Saibro 1, Central, Beach 3"></label>
+      ${camposQuadra(q)}
+      ${q ? `<label class="linha-check"><input type="checkbox" name="ativa" ${q.ativa ? 'checked' : ''}> Quadra ativa</label>` : ''}
+      <div class="largo"><button class="acao primaria">${q ? 'Salvar' : 'Cadastrar'}</button></div>
+    </form>`);
+  $('#fQ', corpo).onsubmit = (ev) => {
+    ev.preventDefault();
+    agir(ev.submitter, () => api(q ? `/quadras/cadastro/${q.id}` : '/quadras/cadastro', { metodo: q ? 'PUT' : 'POST', corpo: dadosQuadraForm(ev.target) }), 'Quadra salva.')
+      .then((r) => { if (r) { $('#gaveta').close(); navegar(); } });
+  };
+}
+function quadrasEmLote() {
+  const corpo = gaveta('Adicionar várias quadras', 'Cria quadras numeradas de uma vez. Nome repetido é ignorado.', `
+    <form class="form" id="fQl">
+      <label class="campo">Quantidade<input type="number" name="quantidade" min="1" max="50" value="7" required></label>
+      <label class="campo">Nome<span class="ajuda">vira “Nome 1”, “Nome 2”…</span><input name="prefixo" maxlength="70" value="Saibro" required></label>
+      <label class="campo">Começar do número<input type="number" name="numeroInicial" min="0" max="999" value="1"></label>
+      ${camposQuadra({ modalidade: 'tenis', piso: 'saibro', iluminacao: true })}
+      <p class="largo sub" id="qlPrevia" style="margin:0"></p>
+      <div class="largo"><button class="acao primaria">Criar quadras</button></div>
+    </form>`);
+  const f = $('#fQl', corpo);
+  const previa = () => {
+    const n = Number(f.quantidade.value) || 0; const i = Number(f.numeroInicial.value) || 0;
+    $('#qlPrevia', corpo).textContent = n ? `Vai criar: ${f.prefixo.value} ${i}${n > 1 ? ` … ${f.prefixo.value} ${i + n - 1}` : ''}` : '';
+  };
+  f.modalidade.onchange = () => {
+    if (f.modalidade.value === 'beach_tennis') { f.piso.value = 'areia'; if (f.prefixo.value === 'Saibro') f.prefixo.value = 'Beach'; }
+    if (f.modalidade.value === 'tenis' && f.prefixo.value === 'Beach') { f.piso.value = 'saibro'; f.prefixo.value = 'Saibro'; }
+    previa();
+  };
+  f.oninput = previa; previa();
+  f.onsubmit = (ev) => {
+    ev.preventDefault();
+    agir(ev.submitter, () => api('/quadras/cadastro/lote', { metodo: 'POST', corpo: dadosQuadraForm(f) }),
+      (r) => `${r.criadas.length} quadra(s) criada(s)${r.jaExistiam ? `, ${r.jaExistiam} já existia(m)` : ''}.`)
+      .then((r) => { if (r) { $('#gaveta').close(); navegar(); } });
+  };
+}
+
 async function telaContratos() {
   const [lista, modelos] = await Promise.all([api('/contratos'), api('/contratos/modelos')]);
   const pend = lista.filter((c) => c.status === 'enviado').length;
@@ -1001,9 +1357,12 @@ function novaConta() {
 /* Ajustes: catracas e planos                                          */
 /* ------------------------------------------------------------------ */
 async function telaAjustes() {
-  const [aparelhos, planos] = await Promise.all([api('/acesso/dispositivos'), api('/acesso/planos')]);
+  const [aparelhos, planos, cfgQuadras, quadras] = await Promise.all([
+    api('/acesso/dispositivos'), api('/acesso/planos'), api('/quadras/config').catch(() => null), api('/quadras/cadastro?todas=1').catch(() => null),
+  ]);
   $('#tela').innerHTML = `
-    <div class="topo"><div><h1>Ajustes</h1><p class="sub">Catracas Control iD e planos da academia.</p></div></div>
+    <div class="topo"><div><h1>Ajustes</h1><p class="sub">Quadras e horário, catracas Control iD e planos.</p></div></div>
+    ${cfgQuadras && quadras ? blocoQuadrasAjustes(cfgQuadras, quadras) : ''}
     <section class="bloco"><div class="topo" style="margin-bottom:10px"><h2 style="margin:0">Catracas</h2><button class="acao primaria" id="novoAparelho">Cadastrar catraca</button></div>
       ${aparelhos.length ? `<div class="rolagem"><table><thead><tr><th>Nome</th><th>Situação</th><th>Último contato</th><th></th></tr></thead><tbody>${aparelhos.map((a) => `
         <tr><td>${esc(a.nome)} <small class="sub">${esc(a.modelo || '')}</small></td><td>${estado(a.status)}</td><td>${dataHoraBR(a.ultimoContato)}</td>
@@ -1014,6 +1373,8 @@ async function telaAjustes() {
         <td><small>${[p.exigeReserva ? 'exige reserva' : '', p.limitePorDia ? `${p.limitePorDia}x/dia` : '', p.limitePorSemana ? `${p.limitePorSemana}x/semana` : '', p.horarios ? 'horário restrito' : ''].filter(Boolean).join(', ') || 'livre'}</small></td></tr>`).join('')}</tbody></table></div>` : '<p class="vazio">Crie o primeiro plano para começar a matricular.</p>'}</section>
     <section class="bloco"><div class="topo" style="margin-bottom:10px"><div><h2 style="margin:0">Trazer sócios do TTC</h2><p class="sub" style="margin:4px 0 0">Copia os sócios, planos e o “pago até” do sistema antigo do clube para esta empresa. Só o administrador da plataforma. Pode repetir: não duplica.</p></div>
       <button class="acao" id="previaTtc">Ver prévia</button></div><div id="ttc"></div></section>`;
+  if (cfgQuadras && quadras) ligarQuadrasAjustes(cfgQuadras, quadras);
+  if (location.hash === '#ajustes/quadras') $('#ajQuadras')?.scrollIntoView();
   $('#previaTtc').onclick = (ev) => importarTtc(ev.currentTarget, false);
   $('#novoAparelho').onclick = novoAparelho;
   $('#novoPlano').onclick = () => editarPlano(null);

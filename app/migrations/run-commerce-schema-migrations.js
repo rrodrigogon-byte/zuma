@@ -68,6 +68,7 @@ const migrationFiles = [
   '077_clube_parceiros.sql',
   '078_clube_cobrancas.sql',
   '079_clube_importacoes.sql',
+  '080_clube_quadras.sql',
 ];
 const advisoryLockKey = 825410732;
 

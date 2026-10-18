@@ -5,6 +5,7 @@ import { declaracoesClube } from './ferramentas-ia.js';
 import { criarClientePadrao } from '../parceiros/servico.js';
 import { transacao } from '../acesso/banco.js';
 import * as aulas from '../aulas/servico.js';
+import * as quadras from '../quadras/servico.js';
 import { canonicalWhatsappPhone, phoneMatchKeySql } from '../../core/whatsapp-phone.js';
 
 // Quem ainda não é aluno pode ver as vagas (sem virar cadastro) e, se pedir, deixar interesse:
@@ -36,7 +37,7 @@ export async function clienteDaConversa(db, empresaId, telefone) {
   return r.rows.length === 1 ? r.rows[0] : null;
 }
 
-/** A academia usa o Clube quando tem plano de acesso ativo ou turma ativa. */
+/** A academia usa o Clube quando tem plano de acesso ativo, turma ativa ou quadra ativa. */
 export async function clubeAtivoNaEmpresa(db, empresaId) {
   if (!empresaId) return false;
   const r = await db.query(
@@ -44,12 +45,15 @@ export async function clubeAtivoNaEmpresa(db, empresaId) {
          OR EXISTS (SELECT 1 FROM aulas_turmas WHERE empresa_id = $1 AND ativa) AS ativo`,
     [empresaId],
   );
-  return r.rows[0]?.ativo === true;
+  if (r.rows[0]?.ativo === true) return true;
+  // quadras vêm da migration 080; sem a tabela (banco antigo), segue como antes
+  return quadras.temQuadras(db, empresaId).catch(() => false);
 }
 
 const ORIENTACAO = [
   'Esta empresa é uma academia/clube.',
   'Para aulas, vagas, reservas, lista de espera, entrada na catraca, mensalidade, congelamento, contrato e QR de entrada, use as ferramentas clube_*.',
+  'Para jogar (quadra de tênis, beach tennis, padel): clube_quadras_livres mostra os horários; confirme quadra, dia e hora com a pessoa e use clube_reservar_quadra.',
   'Nunca invente horário, vaga, valor ou situação do aluno: consulte a ferramenta.',
   'Assunto de saúde, reclamação ou pedido de cancelamento com conflito: clube_transferir_para_humano.',
   'Diária, upgrade ou plano só quando o aluno precisar para entrar ou perguntar; fale de forma direta (ex.: "Se quiser, libero uma diária."), sem "recomendo", "sugiro", "oferta" ou "promoção".',
@@ -75,6 +79,19 @@ export function extensaoIaClube({ db, integracao }) {
         const fuso = (await db.query('SELECT fuso FROM aulas_turmas WHERE empresa_id = $1 AND ativa ORDER BY criado_em LIMIT 1', [contexto.empresaId])).rows[0]?.fuso || 'America/Cuiaba';
         const vagas = await aulas.listarVagas(db, contexto.empresaId, { dia: args?.dia, modalidade: args?.modalidade || '', agora: new Date(), fuso });
         return { ok: true, aulas: vagas.map((v) => ({ aula: v.rotulo, professor: v.professor, vagas: v.vagasAlunos })), observacao: 'Para reservar, a pessoa precisa ser aluna: ofereça registrar o interesse ou falar com a recepção.' };
+      }
+      if (!cliente && nome === 'clube_quadras_livres') {
+        // horários livres são públicos (sem nomes de quem reservou); reservar pede cadastro de sócio
+        let r;
+        try {
+          r = await quadras.horariosLivres(db, contexto.empresaId, {
+            data: args?.dia, modalidade: quadras.normalizarModalidade(args?.modalidade), aPartirDe: args?.hora || '', duracaoMin: args?.duracao_min || null, agora: new Date(), respeitarAntecedencia: true,
+          });
+        } catch (error) {
+          if (error?.code && error?.status) return { ok: false, erro: error.message };
+          throw error;
+        }
+        return { ok: true, dia: r.diaRotulo, fechado: !r.aberto, horarios: r.horarios.map((h) => ({ hora: h.hora, quadras: h.quadras.map((q) => q.nome) })), observacao: 'Para reservar, a pessoa precisa ser sócia: ofereça registrar o interesse ou falar com a recepção.' };
       }
       if (!cliente && nome === FERRAMENTA_DE_INTERESSE && telefoneNormalizado(contexto.phone)) {
         const r = await transacao(db, (q) => criarClientePadrao(q, {

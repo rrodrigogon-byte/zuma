@@ -37,6 +37,8 @@ describe('menu do clube (AGRO OPEN TTC)', () => {
     expect(textos).toContain('Hoje no clube')
     expect(links).toContain('/admin/clube/recepcao')
     expect(links).toContain('/admin/clube/alunos')
+    // reservas de quadra do próprio clube (multiempresa), não a tela global do torneio
+    expect(links).toContain('/admin/clube/quadras')
     expect(links).not.toContain('/admin/supermercado')
     expect(links).not.toContain('/admin/oficina')
     expect(links).not.toContain('/loja-atendimento')

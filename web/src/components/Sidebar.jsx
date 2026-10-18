@@ -130,11 +130,12 @@ const NAV_ADMIN_GROUPS = [
       { to: '/admin/clube/recepcao',  icon: '🚪', label: 'Recepção & Catraca' },
       { to: '/admin/clube/alunos',    icon: '🏋️', label: 'Alunos' },
       { to: '/admin/clube/aulas',     icon: '🗓️', label: 'Grade de Aulas' },
+      { to: '/admin/clube/quadras',   icon: '📅', label: 'Reservas de Quadras' },
       { to: '/admin/clube/contratos', icon: '✍️', label: 'Contratos Digitais' },
       { to: '/admin/clube/retencao',  icon: '🔁', label: 'Retenção (IA)' },
       { to: '/admin/clube/cobrancas', icon: '💠', label: 'Cobranças Pix' },
       { to: '/admin/clube/parceiros', icon: '🤝', label: 'Wellhub & TotalPass' },
-      { to: '/admin/clube/ajustes',   icon: '⚙️', label: 'Catracas & Planos' },
+      { to: '/admin/clube/ajustes',   icon: '⚙️', label: 'Quadras, Catracas & Planos' },
     ],
   },
   {
@@ -244,6 +245,7 @@ export const NAV_CLUBE_GROUPS = [
     items: [
       { to: '/admin', icon: '📊', label: 'Painel', end: true },
       { to: '/admin/clube/recepcao', icon: '🚪', label: 'Recepção & Catraca' },
+      { to: '/admin/clube/quadras', icon: '📅', label: 'Reservas de quadras' },
       { to: '/admin/clube/aulas', icon: '🗓️', label: 'Aulas do dia' },
       { to: '/admin/clube/cobrancas', icon: '💠', label: 'Pix a confirmar' },
     ],
@@ -259,18 +261,12 @@ export const NAV_CLUBE_GROUPS = [
     ],
   },
   {
-    label: 'Quadras & Reservas',
-    items: [
-      { to: '/admin/quadras', icon: '🏟️', label: 'Quadras' },
-      { to: '/admin/reservas', icon: '📅', label: 'Reservas & Fila' },
-    ],
-  },
-  {
     label: 'Torneios',
     items: [
       { to: '/admin/torneios', icon: '🏆', label: 'Torneios' },
       { to: '/admin/inscricoes', icon: '📋', label: 'Inscrições' },
       { to: '/admin/agenda', icon: '🗓️', label: 'Agenda / OoP' },
+      { to: '/admin/quadras', icon: '🏟️', label: 'Quadras do torneio' },
       { to: '/admin/sumula', icon: '📝', label: 'Súmula' },
       { to: '/admin/ranking', icon: '🥇', label: 'Ranking' },
       { to: '/admin/pontos', icon: '⭐', label: 'Pontos & Elo' },
@@ -309,7 +305,7 @@ export const NAV_CLUBE_GROUPS = [
   {
     label: 'Configurações',
     items: [
-      { to: '/admin/clube/ajustes', icon: '⚙️', label: 'Catracas, planos e importação' },
+      { to: '/admin/clube/ajustes', icon: '⚙️', label: 'Quadras, horário, catracas e planos' },
       { to: '/admin/usuarios', icon: '👥', label: 'Usuários' },
       { to: '/admin/configuracoes', icon: '🛠️', label: 'Configurações' },
       { to: '/admin/auditoria', icon: '🔍', label: 'Auditoria' },
