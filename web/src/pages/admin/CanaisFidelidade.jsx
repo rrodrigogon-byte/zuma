@@ -18,6 +18,7 @@ export default function CanaisFidelidade() {
     toast(message, type === 'sucesso' ? 'success' : type === 'erro' ? 'error' : 'info')
   }, [toast])
 
+  const [canaisDisponiveis, setCanaisDisponiveis] = useState(true)
   const load = useCallback(async () => {
     setLoading(true)
     const results = await Promise.allSettled([
@@ -26,6 +27,8 @@ export default function CanaisFidelidade() {
       api.get('/api/admin/fidelidade/avancada'),
     ])
     const [canaisRes, pedidosRes, avancadaRes] = results
+    // canais de venda e delivery ainda não estão ligados em produção: sem a API, a parte some
+    setCanaisDisponiveis(canaisRes.status === 'fulfilled' && pedidosRes.status === 'fulfilled')
     if (canaisRes.status === 'fulfilled') setCanais(canaisRes.value.canais || [])
     if (pedidosRes.status === 'fulfilled') setPedidos(pedidosRes.value.pedidos || [])
     if (avancadaRes.status === 'fulfilled') {
@@ -36,7 +39,7 @@ export default function CanaisFidelidade() {
       setFidelidadeAvancada(null)
       setFidelidadeAvancadaErro(avancadaRes.reason?.message || 'Fidelidade avançada temporariamente indisponível.')
     }
-    if (results.every(item => item.status === 'rejected')) toast('Não foi possível carregar a central.', 'error')
+    if (avancadaRes.status === 'rejected' && results.every(item => item.status === 'rejected')) toast('Não foi possível carregar a fidelidade.', 'error')
     setLoading(false)
   }, [toast])
 
@@ -59,15 +62,15 @@ export default function CanaisFidelidade() {
 
   return <div className="page">
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
-      <div><h1 className="page-title" style={{ marginBottom: 5 }}>Canais, Delivery & Fidelidade</h1><p style={{ margin: 0, color: 'var(--muted)' }}>Operação integrada por empresa, pronta para PDV, delivery próprio e marketplaces.</p></div>
+      <div><h1 className="page-title" style={{ marginBottom: 5 }}>{canaisDisponiveis ? 'Canais, Delivery & Fidelidade' : 'Fidelidade e resgates'}</h1><p style={{ margin: 0, color: 'var(--muted)' }}>{canaisDisponiveis ? 'Operação integrada por empresa, pronta para PDV, delivery próprio e marketplaces.' : 'Pontos, níveis e recompensas dos clientes desta empresa.'}</p></div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button className="btn btn-secondary btn-sm" onClick={load}>↺ Atualizar</button></div>
     </div>
-    <div className="card" style={{ marginBottom: 16, padding: 14, background: 'rgba(255,107,44,.06)', borderColor: 'rgba(255,107,44,.25)', fontSize: 13, color: 'var(--muted)' }}><strong style={{ color: '#FF6B2C' }}>iFood e marketplaces:</strong> a integração está preparada por empresa. A ativação real exige credenciais homologadas e webhook HTTPS assinado do canal.</div>
+    <div className="card" style={{ marginBottom: 16, padding: 14, background: 'rgba(255,107,44,.06)', borderColor: 'rgba(255,107,44,.25)', fontSize: 13, color: 'var(--muted)' }}><strong style={{ color: '#FF6B2C' }}>iFood e marketplaces:</strong> {canaisDisponiveis ? 'a integração está preparada por empresa. A ativação real exige credenciais homologadas e webhook HTTPS assinado do canal.' : 'canais de venda e delivery estão em implantação e ainda não estão ligados nesta versão.'}</div>
     {loading ? <div className="card" style={{ color: 'var(--muted)' }}>Carregando canais…</div> : <>
-      <section className="card" style={{ marginBottom: 16 }}><h2 style={{ margin: '0 0 13px', fontSize: 16, color: '#12283F' }}>Canais de venda</h2><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10 }}>{canais.map((canal) => <div key={canal.id} style={{ border: '1px solid var(--line)', borderRadius: 9, padding: 12 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}><strong>{canal.nome}</strong><span style={{ color: canal.ativo ? '#16806b' : 'var(--muted)', fontSize: 12 }}>{canal.ativo ? 'Ativo' : 'Inativo'}</span></div><div style={{ color: 'var(--muted)', fontSize: 12, margin: '6px 0 10px' }}>{canal.tipo} {canal.credencialConfigurada ? '· credencial protegida' : ''}</div><button className={canal.ativo ? 'btn btn-secondary btn-sm' : 'btn btn-primary btn-sm'} onClick={() => toggleChannel(canal)}>{canal.ativo ? 'Desativar' : 'Ativar'}</button></div>)}</div></section>
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(280px, 1fr)', gap: 16 }}>
+      {canaisDisponiveis && <section className="card" style={{ marginBottom: 16 }}><h2 style={{ margin: '0 0 13px', fontSize: 16, color: '#12283F' }}>Canais de venda</h2><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10 }}>{canais.map((canal) => <div key={canal.id} style={{ border: '1px solid var(--line)', borderRadius: 9, padding: 12 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}><strong>{canal.nome}</strong><span style={{ color: canal.ativo ? '#16806b' : 'var(--muted)', fontSize: 12 }}>{canal.ativo ? 'Ativo' : 'Inativo'}</span></div><div style={{ color: 'var(--muted)', fontSize: 12, margin: '6px 0 10px' }}>{canal.tipo} {canal.credencialConfigurada ? '· credencial protegida' : ''}</div><button className={canal.ativo ? 'btn btn-secondary btn-sm' : 'btn btn-primary btn-sm'} onClick={() => toggleChannel(canal)}>{canal.ativo ? 'Desativar' : 'Ativar'}</button></div>)}</div></section>}
+      <div style={{ display: 'grid', gridTemplateColumns: canaisDisponiveis ? 'minmax(0, 1.4fr) minmax(280px, 1fr)' : 'minmax(0, 1fr)', gap: 16 }}>
         <section className="card"><h2 style={{ margin: '0 0 12px', fontSize: 16, color: '#12283F' }}>Programa de fidelização</h2><p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 0 }}>Estado: <strong style={{ color: fidelidadeAvancada?.settings?.ativo ? '#16806b' : '#9f271e' }}>{fidelidadeAvancada?.settings?.ativo ? 'Ativo' : 'Inativo'}</strong> · {Number(fidelidadeAvancada?.settings?.pontos_por_real || 0)} ponto(s) por R$ 1,00.</p><p style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 0 }}>{fidelidadeAvancada?.ranking?.length || 0} cliente(s) com conta de pontos nesta loja. Clientes entram no ranking somente após crédito confirmado de pedido pago.</p></section>
-        <section className="card"><h2 style={{ margin: '0 0 12px', fontSize: 16, color: '#12283F' }}>Pedidos de delivery</h2><p style={{ color: 'var(--muted)', fontSize: 13 }}>Pedidos recebidos por canais ativos aparecem aqui por empresa.</p><strong style={{ color: '#FF6B2C', fontSize: 26 }}>{pedidos.length}</strong><div style={{ color: 'var(--muted)', fontSize: 12 }}>pedido(s) no histórico</div></section>
+        {canaisDisponiveis && <section className="card"><h2 style={{ margin: '0 0 12px', fontSize: 16, color: '#12283F' }}>Pedidos de delivery</h2><p style={{ color: 'var(--muted)', fontSize: 13 }}>Pedidos recebidos por canais ativos aparecem aqui por empresa.</p><strong style={{ color: '#FF6B2C', fontSize: 26 }}>{pedidos.length}</strong><div style={{ color: 'var(--muted)', fontSize: 12 }}>pedido(s) no histórico</div></section>}
       </div>
       <section className="loyalty-advanced-host">
         {fidelidadeAvancadaErro && <div className="card" style={{ marginTop: 18, color: '#9f271e' }}>{fidelidadeAvancadaErro}</div>}

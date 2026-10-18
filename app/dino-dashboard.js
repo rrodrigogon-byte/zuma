@@ -184,9 +184,16 @@ export function buildDinoDashboardAnalytics(input = {}, options = {}) {
   const appointments = list(input.appointments);
   const currentAppointments = appointments.filter((item) => inWindow(item, window));
   const previousAppointments = appointments.filter((item) => inWindow(item, previousWindow));
-  const customers = list(input.customers);
-  const currentNewCustomers = customers.filter((item) => inWindow(item, window)).length + num(commerceCurrent.customers?.summary?.new_customers);
-  const previousNewCustomers = customers.filter((item) => inWindow(item, previousWindow)).length + num(commercePrevious.customers?.summary?.new_customers);
+  // cliente novo = cadastrado no período (criadoEm), sem o cliente padrão e sem os trazidos por
+  // importação; atualizar um cadastro antigo (consentimento, telefone) não o torna novo
+  // A carga do AVEC (09/10/2026) marcou os 3.327 clientes trazidos com "Origem AVEC (carga …)" na observação.
+  const importado = (item) => Boolean(item.importadoEm)
+    || /import|avec|\(carga/i.test(`${item.origem || ''} ${item.origemCadastro || ''}`)
+    || /^origem\s+\S+.*\(carga|importa[cç][aã]o|importado/i.test(String(item.observacao || ''));
+  const customers = list(input.customers).filter((item) => !item.padrao && !importado(item));
+  const createdIn = (item, w) => { const date = dateValue(item.criadoEm); return Boolean(date && date >= w.fromDate && date < w.toDate); };
+  const currentNewCustomers = customers.filter((item) => createdIn(item, window)).length + num(commerceCurrent.customers?.summary?.new_customers);
+  const previousNewCustomers = customers.filter((item) => createdIn(item, previousWindow)).length + num(commercePrevious.customers?.summary?.new_customers);
   const daily = zeroSeries(window);
   const byDay = new Map(daily.map((item) => [item.day, item]));
   for (const item of list(commerceCurrent.sales?.daily)) {

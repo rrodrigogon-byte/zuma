@@ -1632,6 +1632,8 @@ app.get('/api/torneio/:id', (req,res)=>{
   if(!t) return res.status(404).json({error:'torneio não encontrado'});
   res.json(t);
 });
+// Lista do painel (a tela Torneios e a Agenda/OoP leem daqui; antes só existia a rota pública)
+app.get('/api/admin/torneios', auth, requireStaff, (req,res)=> res.json(db().torneios||[]));
 app.post('/api/admin/torneios', auth, (req,res)=>{
   const b = req.body||{};
   if(!b.nome) return res.status(400).json({error:'nome obrigatório'});
@@ -2561,6 +2563,46 @@ app.get('/api/admin/comandas', auth, requireStaff, (req,res)=>{
   const hoje = new Date().toISOString().slice(0,10);
   const lista = (db().comandas||[]).filter(c=> c.status==='aberta' || (c.fechadaEm||'').startsWith(hoje));
   res.json(lista.map(c=>({ ...c, total: comandaTotal(c) })));
+});
+
+// KDS no contrato atual da tela (pedidos por comanda, métricas e mudança de status por item).
+// A tela foi atualizada para o contrato do server-erp e o runtime do Render só tinha /api/kds:
+// a cozinha via a fila vazia. Estas rotas leem as mesmas comandas do evento (banco global),
+// por isso ficam negadas a usuário de empresa, como os demais módulos globais.
+const KDS_ATIVOS = ['novo', 'em_preparo', 'pronto'];
+// sem "cancelado": cancelar devolve estoque e tira da conta, o que só /api/comanda/:id/cancelar-item faz
+const KDS_TRANSICOES = { novo:['em_preparo','pronto'], em_preparo:['pronto'], pronto:['entregue','em_preparo'] };
+function pedidosKds(setorFiltro=''){
+  return (db().comandas||[])
+    .filter(c=>['aberta','conta'].includes(c.status))
+    .map(c=>({ comandaId:c.id, mesa:c.mesa??c.nome, mesaNum:c.mesaNum??null, cliente:c.nome, tipo:c.tipo, local:c.local||null, abertaEm:c.abertaEm||c.criadoEm||null,
+      itens:(c.itens||[]).map((it,indice)=>({ ...it, indice, status: it.status||'novo' }))
+        .filter(it=>KDS_ATIVOS.includes(it.status))
+        .filter(it=>!setorFiltro || String(it.setor||'bar').toLowerCase()===setorFiltro) }))
+    .filter(p=>p.itens.length>0);
+}
+app.get('/api/setores/pedidos', auth, requireStaff, requireLegacyGlobalScope, (req,res)=>{
+  const setorFiltro=String(req.query.setor||'').toLowerCase();
+  res.json({ ok:true, pedidos:pedidosKds(setorFiltro), setorFiltro: setorFiltro||'todos' });
+});
+app.get('/api/admin/kds/metricas', auth, requireStaff, requireLegacyGlobalScope, (req,res)=>{
+  const limite=Date.now()-20*60000;
+  const itens=pedidosKds().flatMap(p=>p.itens);
+  const atrasados=itens.filter(it=>it.status!=='pronto' && it.criadoEm && new Date(it.criadoEm).getTime()<limite).length;
+  res.json({ ok:true, metricas:{ atrasados, emPreparo:itens.filter(it=>it.status!=='pronto').length, prontos:itens.filter(it=>it.status==='pronto').length, filaImpressao:0 } });
+});
+app.patch('/api/kds/comanda/:id/item/:indice/status', auth, requireStaff, requireLegacyGlobalScope, (req,res)=>{
+  const c=(db().comandas||[]).find(x=>x.id==req.params.id);
+  if(!c || !['aberta','conta'].includes(c.status)) return res.status(409).json({error:'A comanda não está aberta.'});
+  const it=c.itens?.[Number(req.params.indice)];
+  if(!it) return res.status(404).json({error:'Item não encontrado na comanda.'});
+  const atual=it.status||'novo'; const novo=String(req.body?.status||'').toLowerCase();
+  if(!KDS_TRANSICOES[atual]?.includes(novo)) return res.status(409).json({error:`Não é possível passar de ${atual} para ${novo||'vazio'}.`});
+  it.status=novo; it.atualizadoEm=new Date().toISOString(); save();
+  res.json({ ok:true, item:it });
+});
+app.post('/api/kds/comanda/:id/item/:indice/reimprimir', auth, requireStaff, requireLegacyGlobalScope, (req,res)=>{
+  res.status(501).json({ error:'A reimpressão pela fila ainda não está disponível nesta versão. Use a impressão do PDV.' });
 });
 
 // GET /api/admin/kds — alias para /api/kds (usado por admin)
@@ -6914,6 +6956,25 @@ app.patch('/api/reservas/:id/cancelar', auth, async (req,res)=>{
   const tel=socio?.telefone||socio?.celular||'';
   if(tel && !isTenantScopedUser(req.user)){ wpp.reservaCancelada(tel, r.socioNome, r.quadraNome, r.data, `${r.horaInicio}–${r.horaFim}`).catch(()=>{}); }
   res.json(r);
+});
+// Aliases usados pela tela Quadras do torneio (mesmos dados de /api/admin/reservas)
+app.get('/api/admin/quadras/reservas', auth, requireStaff, (req,res)=>{
+  const { quadraId, data } = req.query;
+  let list=db().reservas||[];
+  if(quadraId) list=list.filter(r=>r.quadraId==quadraId);
+  if(data) list=list.filter(r=>r.data===data);
+  res.json(list.slice().sort((a,b)=>String(a.data).localeCompare(String(b.data))||String(a.horaInicio).localeCompare(String(b.horaInicio))));
+});
+app.patch('/api/admin/quadras/reservas/:id', auth, requireStaff, (req,res)=>{
+  const d=db(); const r=(d.reservas||[]).find(x=>x.id==req.params.id);
+  if(!r) return res.status(404).json({error:'não encontrada'});
+  const novo={ ...r };
+  ['quadraId','data','horaInicio','horaFim','obs','status','socioNome'].forEach(k=>{ if(req.body?.[k]!==undefined) novo[k]=req.body[k]; });
+  // mesma regra do POST /api/reservas: não sobrepor outra reserva da mesma quadra
+  const conflito=novo.status!=='cancelada' && (d.reservas||[]).find(x=>x.id!=r.id && x.quadraId==novo.quadraId && x.data===novo.data && x.status!=='cancelada' && x.horaInicio < novo.horaFim && x.horaFim > novo.horaInicio);
+  if(conflito) return res.status(409).json({error:'Horário indisponível para esta quadra'});
+  if(novo.quadraId!=r.quadraId){ const q=(d.quadras||[]).find(x=>x.id==novo.quadraId); if(!q) return res.status(404).json({error:'quadra não encontrada'}); novo.quadraNome=q.nome; }
+  Object.assign(r, novo); save(); res.json(r);
 });
 app.patch('/api/admin/reservas/:id', auth, requireStaff, (req,res)=>{
   const d=db(); const r=(d.reservas||[]).find(x=>x.id==req.params.id);

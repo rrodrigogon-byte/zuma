@@ -138,10 +138,15 @@ export function buildChecklist(f) {
   out.push(item('Cérebro', 'cerebro', 'Cérebro do atendente ligado', f.cerebro.ativo, f.cerebro.ativo ? `Nível N${f.cerebro.autonomia}.` : 'Ligue na aba Visão geral (comece no N1).', { link: '/admin/cerebro-ia' }));
   out.push(item('Cérebro', 'aprendizado', 'Primeiro ciclo de aprendizado', f.execucoes > 0, f.execucoes > 0 ? `${f.execucoes} execução(ões).` : 'Roda na madrugada seguinte à ativação.'));
 
-  out.push(item('Loja e agenda', 'slug', 'Agendamento online em /agendar/dino', Boolean(f.slug) && f.agendamentoAtivo,
-    f.slug ? `/agendar/${f.slug}${f.agendamentoAtivo ? '' : ' (desativado)'}` : 'Slug público não definido: a página de agendamento responde erro.', { acao: (!f.slug || !f.agendamentoAtivo) ? 'slug' : null }));
+  // agendamento online só faz sentido para quem agenda por profissional (barbearia, salão);
+  // clube, academia e loja não têm essa página e não devem ver o aviso
+  const usaAgenda = Boolean(f.slug) || Number(f.agendaIa?.profissionais || 0) > 0;
+  if (usaAgenda) {
+    out.push(item('Loja e agenda', 'slug', `Agendamento online em /agendar/${f.slug || '…'}`, Boolean(f.slug) && f.agendamentoAtivo,
+      f.slug ? `/agendar/${f.slug}${f.agendamentoAtivo ? '' : ' (desativado)'}` : 'Slug público não definido: a página de agendamento responde erro.', { acao: (!f.slug || !f.agendamentoAtivo) ? 'slug' : null }));
+  }
   const cores = f.vitrine?.accent && f.vitrine.accent !== DEFAULT_ORANGE;
-  out.push(item('Loja e agenda', 'vitrine_cores', 'Cores da Dino na vitrine', cores, cores ? `Destaque ${f.vitrine.accent}.` : 'Vitrine com o laranja padrão da plataforma.', { acao: f.vitrine?.aliasCount ? 'vitrine' : null }));
+  out.push(item('Loja e agenda', 'vitrine_cores', 'Cores da marca na vitrine', cores, cores ? `Destaque ${f.vitrine.accent}.` : 'Vitrine com o laranja padrão da plataforma.', { acao: f.vitrine?.aliasCount ? 'vitrine' : null }));
   out.push(item('Loja e agenda', 'vitrine_contato', 'WhatsApp de contato na vitrine', Boolean(f.vitrine?.phone), f.vitrine?.phone ? `Contato ${f.vitrine.phone}.` : 'Sem telefone de contato na vitrine.', { acao: f.vitrine?.aliasCount ? 'vitrine' : null }));
   out.push(item('Loja e agenda', 'fotos', 'Perfumes com foto', f.semFoto.length === 0, f.semFoto.length ? `${f.semFoto.length} sem foto: ${f.semFoto.slice(0, 5).map((p) => p.nome).join(', ')}${f.semFoto.length > 5 ? '…' : ''}` : 'Todos com foto.', { link: '/admin/ecommerce', dados: { itens: f.semFoto } }));
   if (f.reservados?.length) out.push(item('Loja e agenda', 'reservados', 'Itens presos em reserva de pagamento pendente', true, `${f.reservados.length} aparecem esgotados na vitrine porque o saldo está reservado: ${f.reservados.slice(0, 4).map((p) => p.nome).join(', ')}. Confira os pagamentos pendentes antes de liberar.`, { opcional: true }));

@@ -379,6 +379,17 @@ function CommerceAdminWorkspace({ defaultTab }) {
     syncStoreContext(active)
   }, [mode, storefronts, storefrontId, commerceStores])
 
+  // Uma só vitrine ativa e nenhuma escolhida ("Todas as lojas"): abre já nela, em vez de
+  // "Dados indisponíveis · Selecione uma loja ativa". Com várias, a escolha continua sendo da pessoa.
+  const autoSelecionou = useRef(false)
+  useEffect(() => {
+    if (autoSelecionou.current || mode !== 'core' || storefrontId) return
+    const ativas = storefronts.filter(item => !item.status || item.status === 'active')
+    if (ativas.length !== 1) return
+    autoSelecionou.current = true
+    selectStorefront(ativas[0])
+  }, [mode, storefronts, storefrontId])
+
   const filteredOrders = useMemo(() => {
     const needle = orderQuery.trim().toLowerCase()
     if (!needle) return orders

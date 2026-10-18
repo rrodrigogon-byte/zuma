@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
+import EmImplantacao from '../pages/admin/EmImplantacao'
+import { moduloEmImplantacao } from '../lib/disponibilidade'
 import NotifBell from './NotifBell'
 import { useAuth } from '../lib/auth'
 import { readSidebarCollapsed, writeSidebarCollapsed } from '../lib/layout-preferences'
@@ -55,7 +57,11 @@ function TopBar({ sidebarCollapsed = false }) {
   )
 }
 
-export default function Layout({ children, noSidebar = false, marketing = false }) {
+export default function Layout({ children: conteudo, noSidebar = false, marketing = false }) {
+  const location = useLocation()
+  // módulo ainda não ligado em produção: aviso no lugar de uma tela cheia de erros 404
+  const emImplantacao = moduloEmImplantacao(location.pathname)
+  const children = emImplantacao ? <EmImplantacao modulo={emImplantacao} /> : conteudo
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed)
   const { user } = useAuth()

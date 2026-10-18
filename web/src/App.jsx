@@ -3,7 +3,7 @@ import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
 import { useAuth } from './lib/auth'
-import { applyBrand, applyThemeMode, brandFromContext, brandFromHost, brandThemeMode, stalloneEntryFromHost, resolveBrand, storedThemeMode } from './lib/brand'
+import { applyBrand, applyThemeMode, brandFromContext, brandFromHost, brandThemeMode, stalloneEntryFromHost, resolveBrand, storedThemeMode, isClubeBrandContext, isDinoBrandContext, isStalloneBrandContext } from './lib/brand'
 import { isTenantScope } from './lib/tenant-scope'
 import { destinoInicialDino, ehHostDino, ehHostLojaDino } from './lib/dominios-dino'
 
@@ -107,6 +107,8 @@ const ReservasFilas = lazy(() => import('./pages/admin/ReservasFilas'))
 const KDSConfiguracao = lazy(() => import('./pages/admin/KDSConfiguracao'))
 const Socios     = lazy(() => import('./pages/admin/Socios'))
 const ClubeAcademia = lazy(() => import('./pages/admin/ClubeAcademia'))
+const ClubeDashboard = lazy(() => import('./pages/admin/ClubeDashboard'))
+const EmImplantacao = lazy(() => import('./pages/admin/EmImplantacao'))
 const Pagamentos = lazy(() => import('./pages/admin/Pagamentos'))
 const AdminLoja  = lazy(() => import('./pages/admin/AdminLoja'))
 const Aulas      = lazy(() => import('./pages/admin/Aulas'))
@@ -203,9 +205,11 @@ function Loading() {
 
 // Telas cujos módulos antigos eram globais da plataforma: com uma empresa
 // ativa, mostram a versão da empresa (ou levam ao módulo equivalente dela).
-function TenantAware({ tenant, legacy, stallone }) {
+// `clube`: clubes e academias têm telas próprias (não as da barbearia nem as do evento).
+function TenantAware({ tenant, legacy, stallone, clube }) {
   const { user, empresaAtiva } = useAuth()
   if (stallone && brandFromContext(empresaAtiva) === 'stallone') return stallone
+  if (clube && !isDinoBrandContext(empresaAtiva) && !isStalloneBrandContext(empresaAtiva) && isClubeBrandContext(empresaAtiva)) return clube
   return isTenantScope(user, empresaAtiva) ? tenant : legacy
 }
 
@@ -234,7 +238,7 @@ export default function App() {
 
         {/* Admin (admin/organizador) — guarda única via Outlet */}
         <Route element={<ProtectedOutlet need="org" />}>
-          <Route path="/admin"              element={<Layout><TenantAware stallone={<Navigate to="/admin/ecommerce?tab=overview" replace />} tenant={<Dashboard />} legacy={<Dashboard />} /></Layout>} />
+          <Route path="/admin"              element={<Layout><TenantAware stallone={<Navigate to="/admin/ecommerce?tab=overview" replace />} clube={<ClubeDashboard />} tenant={<Dashboard />} legacy={<Dashboard />} /></Layout>} />
           <Route path="/admin/plataforma"  element={<PlatformOnly><Layout><AdminPlataforma /></Layout></PlatformOnly>} />
           <Route path="/admin/usuarios"     element={<TenantAware tenant={<Navigate to="/admin/ecommerce?tab=users" replace />} legacy={<Layout><Usuarios /></Layout>} />} />
           <Route path="/admin/torneios"     element={<Layout><Torneios /></Layout>} />
@@ -256,12 +260,12 @@ export default function App() {
           <Route path="/admin/ecommerce"   element={<Layout><EcommerceAdmin /></Layout>} />
           <Route path="/admin/aulas"        element={<Layout><Aulas /></Layout>} />
           <Route path="/admin/crm"          element={<Layout><CRM /></Layout>} />
-          <Route path="/admin/bi"           element={<Layout><TenantAware stallone={<Navigate to="/admin/ecommerce?tab=reports" replace />} tenant={<BIBarbearia />} legacy={<BI />} /></Layout>} />
+          <Route path="/admin/bi"           element={<Layout><TenantAware stallone={<Navigate to="/admin/ecommerce?tab=reports" replace />} clube={<Navigate to="/admin" replace />} tenant={<BIBarbearia />} legacy={<BI />} /></Layout>} />
           <Route path="/admin/auditoria"       element={<Layout><TenantAware tenant={<AuditoriaEmpresa />} legacy={<Auditoria />} /></Layout>} />
-          <Route path="/admin/configuracoes"  element={<TenantAware stallone={<Navigate to="/admin/ecommerce?tab=stores" replace />} tenant={<Navigate to="/admin/barbearia-erp?area=gestao&tab=Configura%C3%A7%C3%A3o" replace />} legacy={<Layout><Configuracoes /></Layout>} />} />
+          <Route path="/admin/configuracoes"  element={<TenantAware stallone={<Navigate to="/admin/ecommerce?tab=stores" replace />} clube={<Navigate to="/admin/clube/ajustes" replace />} tenant={<Navigate to="/admin/barbearia-erp?area=gestao&tab=Configura%C3%A7%C3%A3o" replace />} legacy={<Layout><Configuracoes /></Layout>} />} />
           <Route path="/admin/cupons"         element={<Layout><Cupons /></Layout>} />
           <Route path="/admin/relatorios"     element={<Layout><Relatorios /></Layout>} />
-          <Route path="/admin/relatorios-operacionais" element={<TenantAware stallone={<Navigate to="/admin/ecommerce?tab=reports" replace />} tenant={<Navigate to="/admin/barbearia-erp?area=gestao&tab=Relat%C3%B3rios" replace />} legacy={<Layout><RelatoriosOperacionais /></Layout>} />} />
+          <Route path="/admin/relatorios-operacionais" element={<TenantAware stallone={<Navigate to="/admin/ecommerce?tab=reports" replace />} clube={<Navigate to="/admin" replace />} tenant={<Navigate to="/admin/barbearia-erp?area=gestao&tab=Relat%C3%B3rios" replace />} legacy={<Layout><RelatoriosOperacionais /></Layout>} />} />
           <Route path="/admin/noticias"       element={<Layout><Noticias /></Layout>} />
           <Route path="/admin/sumula"         element={<Layout><Sumula /></Layout>} />
           <Route path="/admin/mensalidades"   element={<Layout><Mensalidades /></Layout>} />
@@ -288,7 +292,7 @@ export default function App() {
           <Route path="/admin/oficina"         element={<Layout><Oficina /></Layout>} />
           <Route path="/admin/agropecuaria"    element={<Layout><Agropecuaria /></Layout>} />
           <Route path="/admin/varejo"          element={<Layout><Varejo /></Layout>} />
-          <Route path="/admin/compras"         element={<TenantAware tenant={<Navigate to="/admin/barbearia-erp?area=catalogo&tab=Estoque+de+revenda" replace />} legacy={<Layout><Compras /></Layout>} />} />
+          <Route path="/admin/compras"         element={<TenantAware clube={<Layout><EmImplantacao modulo="Compras e fornecedores" /></Layout>} tenant={<Navigate to="/admin/barbearia-erp?area=catalogo&tab=Estoque+de+revenda" replace />} legacy={<Layout><Compras /></Layout>} />} />
           <Route path="/admin/fiscal/config"   element={<Layout><ConfiguracaoFiscal /></Layout>} />
           <Route path="/admin/fiscal/classificacao" element={<Layout><ClassificacaoFiscal /></Layout>} />
           <Route path="/admin/loja-moda"       element={<Layout><LojaModa /></Layout>} />
