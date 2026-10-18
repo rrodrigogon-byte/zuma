@@ -17,7 +17,7 @@ import './dino-admin.css'
 
 const BASE = '/api/admin/barbearia/whatsapp-conexao'
 const STATES = { open: 'Conectado', qr: 'Aguardando leitura do QR', connecting: 'Conectando…', close: 'Desconectado', unknown: 'Sem informação' }
-const HISTORY = { conectado: 'Conectou', desconectado: 'Caiu', desconectado_manual: 'Desconectado manualmente', qr_gerado: 'QR gerado', reconexao_solicitada: 'Reconexão solicitada', reconexao_automatica: 'Reconexão automática', instancia_alterada: 'Instância alterada', erro: 'Erro' }
+const HISTORY = { conectado: 'Conectou', desconectado: 'Caiu', desconectado_manual: 'Desconectado manualmente', qr_gerado: 'QR gerado', codigo_pareamento_gerado: 'Código de pareamento gerado', reconexao_solicitada: 'Reconexão solicitada', reconexao_automatica: 'Reconexão automática', instancia_alterada: 'Instância alterada', erro: 'Erro' }
 const ERRORS = {
   chave_invalida: 'O backend recusou a chave de API. Confira CHATBOT_BACKEND_KEY no servidor.',
   instance_not_enabled: 'Esta linha ainda não existe no servidor de WhatsApp. Peça para incluir a instância em WHATSAPP_INSTANCE_NAMES do backend (Cloud Run) e publicar; depois toque em Gerar QR.',
@@ -243,6 +243,24 @@ function WhatsappConexaoEmpresa() {
     finally { if (scope === scopeRef.current) setBusy('') }
   }
 
+  async function gerarCodigoPareamento() {
+    if (tipoCanal === 'cliente') return
+    if (!referencia.trim()) { toast('Informe o número com DDD e DDI antes de gerar o código.', true); return }
+    const scope = scopeRef.current
+    setBusy('pareamento')
+    try {
+      const data = await api.post(`${basePath}/codigo-pareamento`, { phoneNumber: referencia }, requestOptions)
+      if (scope !== scopeRef.current) return
+      statusSeqRef.current += 1
+      statusFlightRef.current = null
+      setConexao(data.conexao)
+      setReferencia(data.conexao?.phoneReference || referencia)
+      setQr({ image: '', code: data.pairingCode || '' })
+      toast('Código gerado. Digite-o no WhatsApp do número informado.')
+    } catch (error) { if (scope === scopeRef.current) toast(error.message, true) }
+    finally { if (scope === scopeRef.current) setBusy('') }
+  }
+
   async function verificar() {
     const scope = scopeRef.current
     setBusy('verificar')
@@ -380,6 +398,20 @@ function WhatsappConexaoEmpresa() {
   const saidaBloqueada = !outbound.ready
   const messages = diag?.mensagens24h
   const iaSummary = iaOperational.kind === 'loading' ? 'Aguardando' : iaOperational.kind !== 'valid' ? 'Não verificável' : iaOperational.channel.configured ? (iaOperational.channel.status === 'ativo' ? 'Ativo' : 'Em preparação') : 'Não configurado'
+  const validationSteps = tipoCanal === 'cliente'
+    ? [
+      { ok: Boolean(conexao?.instance), title: 'Instância do backend atribuída', detail: conexao?.instance || 'A administração da plataforma precisa atribuir uma linha.' },
+      { ok: state === 'open' && Boolean(conexao?.phoneMasked), title: 'Número confirmado pelo backend', detail: state === 'open' && conexao?.phoneMasked ? conexao.phoneMasked : 'Faça o pareamento por QR e aguarde a confirmação.' },
+      { ok: Boolean(ia?.channel), title: 'Canal do atendente preparado', detail: ia?.channel ? `Status: ${ia.channel.status}` : 'Prepare o canal depois de confirmar a linha.' },
+    ]
+    : [
+      { ok: Boolean(conexao?.provider === 'waha' && conexao?.providerConfigured), title: 'Ponte WAHA privada configurada', detail: conexao?.providerConfigured ? 'Controle protegido disponível.' : 'A ponte ainda não está disponível no servidor.' },
+      { ok: Boolean(conexao?.instance), title: 'Sessão exclusiva atribuída', detail: conexao?.instance || 'A administração da plataforma precisa atribuir uma sessão.' },
+      { ok: Boolean(referencia), title: 'Número informado para pareamento', detail: referencia || 'Informe o número com DDI para liberar o código.' },
+      { ok: state === 'open', title: 'Número pareado e confirmado', detail: state === 'open' ? 'A sessão WAHA está conectada.' : 'Use QR ou código e depois clique em Verificar agora.' },
+      { ok: Boolean(grupoOperacional), title: 'Grupo Admin salvo', detail: grupoOperacional ? 'Mensagens ficam limitadas ao grupo allowlisted.' : 'Liste os grupos e salve um grupo Admin exclusivo.' },
+      { ok: internalReady.readyForActivation, title: 'Canal pronto para ativação', detail: internalReady.readyForActivation ? 'Todas as validações obrigatórias passaram.' : internalReady.blockers?.[0] || 'Consulte o diagnóstico abaixo.' },
+    ]
 
   return <div className="dadm-page dadm-wa-page">
     <header className="dadm-head dadm-wa-head">
@@ -401,6 +433,18 @@ function WhatsappConexaoEmpresa() {
         <Link className="c360-btn primary" to={tipoCanal === 'lancamentos' ? '/admin/whatsapp-lancamentos' : tipoCanal === 'gestao' ? '/admin/whatsapp-gestao' : '/admin/whatsapp'}>Abrir cadastro</Link>
       </div>
       <small className="dadm-muted">O administrador ou gestor da empresa deve abrir o link, conferir a empresa ativa e então gerar o QR para parear o aparelho.</small>
+      {podeGerenciar && conexao && <form className="dadm-wa-number-form" aria-labelledby="wa-number-title" onSubmit={(event) => { event.preventDefault(); salvarConfig({ numeroExibicao: referencia }) }}>
+        <div><h3 id="wa-number-title">Cadastrar número do aparelho</h3><p className="dadm-muted">Informe o número que será pareado neste canal. O cadastro é uma referência operacional; a confirmação real só acontece quando o backend/WAHA retornar a sessão conectada.</p></div>
+        <div className="dadm-filters dadm-wa-number-fields">
+          <label className="c360-field" htmlFor="wa-number-reference">Número do WhatsApp (com DDD e DDI)
+            <input id="wa-number-reference" className="c360-input" type="tel" inputMode="tel" autoComplete="off" maxLength={25} required value={referencia} onChange={(event) => { referenceDirtyRef.current = true; setReferencia(event.target.value) }} placeholder="+55 (65) 99999-0000" />
+          </label>
+          <button type="submit" className="c360-btn ghost" disabled={Boolean(busy) || referencia.replace(/\D/g, '') === (conexao.phoneReference || '')}>{busy === 'config' ? 'Salvando…' : 'Salvar número'}</button>
+          {tipoCanal !== 'cliente' && <button type="button" className="c360-btn primary" disabled={Boolean(busy) || !conexao.instance || !referencia.trim() || state === 'open'} onClick={gerarCodigoPareamento}>{busy === 'pareamento' ? 'Gerando código…' : 'Gerar código de pareamento'}</button>}
+        </div>
+        <small className="dadm-muted">{tipoCanal === 'cliente' ? 'Para Clientes, o número verificado vem exclusivamente do backend.' : 'O código é temporário e deve ser digitado no WhatsApp do aparelho informado. Ele não ativa o atendente nem substitui o grupo Admin.'}</small>
+      </form>}
+      {conexao && <section className="dadm-wa-number-check" aria-labelledby="wa-number-check-title"><div className="c360-card-head"><h3 id="wa-number-check-title">Validação deste canal</h3><span className={`dadm-validation-count ${validationSteps.every((item) => item.ok) ? 'ok' : ''}`}>{validationSteps.filter((item) => item.ok).length}/{validationSteps.length} concluídas</span></div><ul className="dadm-checklist">{validationSteps.map((item) => <li key={item.title} className={item.ok ? 'ok' : 'pend'}><b aria-hidden="true">{item.ok ? '✓' : '!'}</b><span><strong>{item.title}</strong><small>{item.detail}</small></span></li>)}</ul></section>}
       <p className="dadm-muted">{tipoCanal === 'lancamentos' ? 'Este é o canal interno exclusivo para receber notas e preparar despesas pendentes. Para perguntas gerais, use' : tipoCanal === 'gestao' ? 'Este é o canal interno somente leitura para perguntas gerais do sistema. Para lançar notas, use' : 'Para configurar os canais internos sem remover o atendimento a clientes, use'}{' '}<Link to={tipoCanal === 'lancamentos' ? '/admin/whatsapp-gestao' : tipoCanal === 'gestao' ? '/admin/whatsapp-lancamentos' : '/admin/whatsapp-gestao'}>{tipoCanal === 'lancamentos' ? 'abrir o WhatsApp Gestão' : tipoCanal === 'gestao' ? 'abrir o WhatsApp Lançamentos' : 'abrir o WhatsApp Gestão'}</Link>.</p>
     </section>
     {erro && <p className="dadm-note danger" role="alert">{erro}</p>}
@@ -423,7 +467,7 @@ function WhatsappConexaoEmpresa() {
           <strong className="dadm-wa-number">{line.value}</strong>
           <span className={`dadm-wa-source ${line.verified ? 'verified' : ''}`}>{line.verified ? '✓ ' : '• '}{line.source}</span>
           {line.copy && <button type="button" className="dadm-wa-copy" onClick={() => copiarNumero(line.copy)} aria-label="Copiar número completo do WhatsApp">Copiar número</button>}
-          {podeGerenciar && tipoCanal === 'cliente' && !conexao.phoneNumber && <a className="dadm-wa-copy dadm-wa-reference-link" href="#wa-reference">{conexao.phoneReference ? 'Editar referência não verificada' : 'Informar número de referência'}</a>}
+          {podeGerenciar && tipoCanal === 'cliente' && !conexao.phoneNumber && <a className="dadm-wa-copy dadm-wa-reference-link" href="#wa-number-reference">{conexao.phoneReference ? 'Editar referência não verificada' : 'Informar número de referência'}</a>}
         </div>
         <div className="dadm-wa-live">
           <span className={`dadm-state ${state}`} role="status">{STATES[state] || state}</span>
@@ -451,24 +495,19 @@ function WhatsappConexaoEmpresa() {
             <dl className="dadm-result">
               <div><dt>Identificação da linha</dt><dd>{line.verified ? line.value : 'Não confirmada'}</dd></div>
               <div><dt>Instância no backend</dt><dd>{conexao.instance || 'Não atribuída'}</dd></div>
-              {tipoCanal !== 'cliente' && <div><dt>Transporte</dt><dd>WAHA privado</dd></div>}
+              {tipoCanal !== 'cliente' && <><div><dt>Transporte</dt><dd>WAHA privado</dd></div><div><dt>Número cadastrado</dt><dd>{conexao.phoneReference || 'Ainda não informado'}</dd></div></>}
               {conexao && <div><dt>Envio de mensagens</dt><dd>{outbound.label}</dd></div>}
               <div><dt>Backend</dt><dd>{conexao.providerLabel}</dd></div>
               <div><dt>Conectado desde</dt><dd>{state === 'open' ? dateTime(conexao.lastConnectedAt) : '—'}</dd></div>
               <div><dt>Última verificação</dt><dd>{dateTime(conexao.lastCheckAt)}</dd></div>
               {conexao.reconnectAttempts > 0 && <div><dt>Tentativas de reconexão</dt><dd>{conexao.reconnectAttempts} · próxima {dateTime(conexao.nextReconnectAt)}</dd></div>}
             </dl>
-            {podeGerenciar && tipoCanal === 'cliente' && !conexao.phoneNumber && <form className="dadm-wa-reference" onSubmit={(event) => { event.preventDefault(); salvarConfig({ numeroExibicao: referencia }) }}>
-              <label className="c360-field" htmlFor="wa-reference">Número de referência (opcional; não verificado)</label>
-              <div className="dadm-filters"><input id="wa-reference" className="c360-input" type="tel" inputMode="tel" autoComplete="off" maxLength={25} value={referencia} onChange={(event) => { referenceDirtyRef.current = true; setReferencia(event.target.value) }} placeholder="(65) 99999-0000" /><button type="submit" className="c360-btn ghost" disabled={Boolean(busy) || referencia.replace(/\D/g, '') === (conexao.phoneReference || '')}>Salvar referência</button></div>
-              <small className="dadm-muted">Aparece no topo como referência não verificada. Não substitui a confirmação da linha no backend nem libera envio.</small>
-            </form>}
             {state !== 'open' && (qr.image || qr.code) && <div className="dadm-qr" aria-live="polite">
               {qr.image && <img src={qr.image} alt="QR code para conectar o WhatsApp" />}
-              {qr.code && <><span>Ou use o código de pareamento</span><code>{qr.code}</code></>}
+              {qr.code && <><span>{tipoCanal === 'cliente' ? 'Código de pareamento devolvido pelo backend' : 'Código de pareamento do número informado'}</span><code>{qr.code}</code></>}
               <small>O QR é renovado a cada 40 s enquanto esta aba estiver visível.</small>
             </div>}
-            {state !== 'open' && <ol className="dadm-steps"><li>No celular da empresa, abra o WhatsApp.</li><li>Toque em <strong>Configurações › Aparelhos conectados › Conectar um aparelho</strong>.</li><li>Gere o QR aqui e aponte a câmera. A tela atualiza quando conectar.</li></ol>}
+            {state !== 'open' && <ol className="dadm-steps"><li>No celular do número informado, abra o WhatsApp.</li><li>Para QR: toque em <strong>Configurações › Aparelhos conectados › Conectar um aparelho</strong> e aponte a câmera.</li><li>Para código: abra <strong>Aparelhos conectados › Conectar com número de telefone</strong> e digite o código acima.</li><li>Depois clique em <strong>Verificar agora</strong> e confira o checklist; número informado sozinho nunca significa pareamento.</li></ol>}
             {podeGerenciar ? <div className="dadm-actions">
               {state !== 'open' && <button type="button" className="c360-btn primary" disabled={Boolean(busy) || !conexao.providerConfigured || !conexao.instance} onClick={() => gerarQr()}>{busy === 'qr' ? 'Gerando…' : qr.image ? 'Gerar novo QR' : 'Gerar QR'}</button>}
               <button type="button" className="c360-btn ghost" disabled={Boolean(busy) || !conexao.providerConfigured} onClick={verificar}>{busy === 'verificar' ? 'Verificando…' : 'Verificar agora'}</button>

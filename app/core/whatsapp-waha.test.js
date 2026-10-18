@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import test from 'node:test';
 import {
   normalizeWahaMediaReference,
+  normalizeWahaPhone,
   validWahaGroupId,
   validWahaSession,
   verifyWahaHmac,
@@ -15,6 +16,13 @@ test('WAHA valida sessão e group JID', () => {
   assert.equal(validWahaGroupId('120363012345678901@g.us'), '120363012345678901@g.us');
   assert.equal(validWahaGroupId('5511999999999@s.whatsapp.net'), '');
   assert.equal(validWahaGroupId('120363@g.us/../x'), '');
+});
+
+test('WAHA normaliza o telefone do código de pareamento', () => {
+  assert.equal(normalizeWahaPhone('(55) 65 99999-0000'), '5565999990000');
+  assert.equal(normalizeWahaPhone('5511999999999'), '5511999999999');
+  assert.throws(() => normalizeWahaPhone('9999'), /DDI/);
+  assert.throws(() => normalizeWahaPhone('telefone'), /DDI/);
 });
 
 test('referência de mídia aceita somente caminho /api/files/', () => {

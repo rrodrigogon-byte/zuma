@@ -13,7 +13,7 @@ import {
 } from './core/whatsapp-provider.js';
 import {
   getWahaSessionQr, getWahaSessionStatus, logoutWahaSession, provisionWahaSession,
-  validWahaSession, wahaControlConfigured, wahaProviderSummary,
+  requestWahaPairingCode, validWahaSession, wahaControlConfigured, wahaProviderSummary,
 } from './core/whatsapp-waha.js';
 
 const HISTORY_LIMIT = 40;
@@ -295,6 +295,35 @@ export async function gerarQr(empresaId, { usuario = '', fetchImpl, registrarHis
   if (registrarHistorico) registrar(conexao, temPareamento ? 'qr_gerado' : 'reconexao_solicitada', usuario ? `por ${usuario}` : '');
   save();
   return { ok: true, qr, pairingCode: resultado.pairingCode || '', conexao: visaoPublica(conexao) };
+}
+
+export async function solicitarCodigoPareamento(empresaId, { phoneNumber = '', usuario = '', tipoCanal = 'cliente' } = {}) {
+  const perfil = normalizarTipoCanal(tipoCanal);
+  const conexao = obterConexao(empresaId, perfil);
+  if (!canalInterno(perfil)) return { ok: false, code: 'PAIRING_CODE_INTERNAL_ONLY', error: 'O código de pareamento pertence somente aos canais internos WAHA.', conexao: visaoPublica(conexao) };
+  if (!wahaControlConfigured()) return { ok: false, code: 'WAHA_NOT_CONFIGURED', error: 'Controle privado WAHA não configurado no servidor.', conexao: visaoPublica(conexao) };
+  if (!validWahaSession(conexao.instance)) return { ok: false, code: 'WHATSAPP_INSTANCE_UNASSIGNED', error: 'Esta empresa ainda não tem uma sessão WAHA atribuída.', conexao: visaoPublica(conexao) };
+  let reference;
+  try { reference = numeroReferencia(phoneNumber); } catch (error) { return { ok: false, code: 'INVALID_PHONE', error: error.message, conexao: visaoPublica(conexao) }; }
+  try {
+    const provisioned = await provisionWahaSession(conexao.instance);
+    if (normalizarEstadoWaha(provisioned?.status) === 'open') {
+      return { ok: false, code: 'WHATSAPP_ALREADY_CONNECTED', error: 'Esta sessão já está conectada. Verifique o status e o número pareado.', conexao: visaoPublica(conexao) };
+    }
+    const pairingCode = await requestWahaPairingCode(conexao.instance, reference);
+    conexao.numeroExibicao = reference;
+    conexao.ativo = true;
+    conexao.autoReconnect = true;
+    conexao.state = 'connecting';
+    conexao.phone = '';
+    conexao.lastCheckAt = new Date().toISOString();
+    conexao.lastError = null;
+    registrar(conexao, 'codigo_pareamento_gerado', usuario ? `por ${usuario}` : '');
+    save();
+    return { ok: true, pairingCode, conexao: visaoPublica(conexao) };
+  } catch (error) {
+    return { ok: false, code: 'PAIRING_CODE_FAILED', error: String(error?.message || 'Não foi possível gerar o código de pareamento.').slice(0, 180), conexao: visaoPublica(conexao) };
+  }
 }
 
 export async function desconectar(empresaId, { usuario = '', fetchImpl, tipoCanal = 'cliente' } = {}) {
