@@ -103,6 +103,8 @@ export default function WhatsappControlCenter() {
       setError('Selecione uma empresa e uma unidade para carregar os canais.')
       return
     }
+    setRows([])
+    setLastReadAt(null)
     setLoading(foreground)
     setError('')
     const results = await Promise.all(CHANNELS.map(async (channel) => {
