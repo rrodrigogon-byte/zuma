@@ -38,6 +38,7 @@ import { montarClube, iniciarRotinasClube } from './modules/clube/index.js';
 import { enviarWhatsappClube } from './modules/clube/whatsapp-agro-open.js';
 import { extensaoIaClube } from './modules/clube/ia-agro-open.js';
 import { lerSociosTtc, importarAlunos } from './modules/clube/importar-legado.js';
+import { createA2AdminRouter } from './modules/a2/rotas.js';
 import { registrarExtensaoWhatsappAi } from './core/whatsapp-ai-extensoes.js';
 import { WHATSAPP_AI_TOOL_DECLARATIONS } from './core/whatsapp-ai-tools.js';
 import { avecGovernanceNoStore } from './core/avec-import-http-policy.js';
@@ -604,7 +605,7 @@ app.use('/api/admin/commerce', (req, res, next) => {
 });
 
 // Módulos de /api/admin que separam dados por empresa e podem ser usados por tenant.
-const TENANT_ADMIN_MODULES = new Set(['barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube']);
+const TENANT_ADMIN_MODULES = new Set(['a2', 'barbearia', 'commerce', 'commerce-session', 'usuarios', 'usuarios-diretorio', 'platform', 'fidelidade', 'login', 'auditoria', 'modificadores', 'combos', 'clube']);
 
 // [kytto-clube] Kytto Clube & Academia (catraca, contrato digital, agenda, retenção, Wellhub/TotalPass).
 // Usa o pool do Commerce que já existe (não abre outro pool) e a mesma resolução de empresa e
@@ -643,6 +644,23 @@ function permissaoDoClube(req) {
 async function empresaDoClube(req) {
   try {
     const contexto = await requireCommercePermission(req, permissaoDoClube(req));
+    return contexto.empresaId;
+  } catch (error) {
+    if (error?.name !== 'CommerceError') throw error;
+    throw Object.assign(new Error(error.message), { status: CLUBE_STATUS_ESCOPO[error.code] || 403, code: error.code });
+  }
+}
+const A2_FINANCEIRO = /^\/api\/admin\/a2\/(?:contas-receber|alertas-vencimento|fechamento-diario)(?:\/|$)/;
+const A2_CADASTRO = /^\/api\/admin\/a2\/(?:funcionarios|fornecedores|usuarios-mestres)(?:\/|$)/;
+function permissaoDoA2(req) {
+  const caminho = String(req.originalUrl || '').split('?')[0];
+  if (A2_FINANCEIRO.test(caminho)) return req.method === 'GET' ? 'payments.read' : 'payments.write';
+  if (A2_CADASTRO.test(caminho) && req.method !== 'GET') return 'settings.write';
+  return req.method === 'GET' ? 'customers.read' : 'customers.write';
+}
+async function empresaDoA2(req) {
+  try {
+    const contexto = await requireCommercePermission(req, permissaoDoA2(req));
     return contexto.empresaId;
   } catch (error) {
     if (error?.name !== 'CommerceError') throw error;
@@ -1064,6 +1082,12 @@ if(process.env.COMMERCE_CORE_ENABLED === '1'){
     enviarWhatsapp: enviarWhatsappClube,
     urlPublica: process.env.PUBLIC_BASE_URL || '',
   });
+  // [kytto-a2] Financeiro, contas a receber, fechamento e cadastros mestres por empresa.
+  app.use('/api/admin/a2', auth, requireStaff, createA2AdminRouter({
+    db: clubeDb,
+    empresaDaRequisicao: empresaDoA2,
+    operadorDaRequisicao: (req) => String(req.user?.id || req.user?.email || 'sistema'),
+  }));
   if (!process.env.PUBLIC_BASE_URL) console.warn('[clube] PUBLIC_BASE_URL não definido: links de Pix ficam desligados e contrato/passe saem sem endereço completo.');
   // Migração dos sócios do TTC (JSON legado, global) para o Clube de UMA empresa escolhida.
   // Só administrador da plataforma; sem "aplicar": true devolve só a prévia. Idempotente.

@@ -53,7 +53,7 @@ describe('menu do clube (AGRO OPEN TTC)', () => {
     // backend ainda não montado em produção: fora do menu para todos
     expect(links).not.toContain('/admin/supermercado')
     expect(links).not.toContain('/admin/fiscal/config')
-    expect(links).not.toContain('/admin/contas-receber')
+    expect(links).toContain('/admin/contas-receber')
   })
 
   it('usuário do próprio clube não vê as telas do banco global do evento (dariam 403)', () => {

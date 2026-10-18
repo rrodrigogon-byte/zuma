@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../../lib/api'
+import { a2Path } from '../../lib/tenant-api'
 import { useToast } from '../../hooks/useToast'
 import { useAuth } from '../../lib/auth'
 import Modal from '../../components/Modal'
 
 const TABS = [
-  { id: 'funcionarios', label: 'Funcionários', icon: '👔', endpoint: '/api/admin/funcionarios' },
-  { id: 'fornecedores', label: 'Fornecedores', icon: '🚚', endpoint: '/api/admin/fornecedores' },
-  { id: 'usuarios', label: 'Usuários', icon: '🔐', endpoint: '/api/admin/usuarios-mestres' },
+  { id: 'funcionarios', label: 'Funcionários', icon: '👔', endpoint: '/funcionarios' },
+  { id: 'fornecedores', label: 'Fornecedores', icon: '🚚', endpoint: '/fornecedores' },
+  { id: 'usuarios', label: 'Usuários', icon: '🔐', endpoint: '/usuarios-mestres' },
 ]
 
 const EMPTY = {
@@ -64,10 +65,10 @@ export default function CadastrosMestres() {
     setLoading(true)
     try {
       const [funcionarios, fornecedores, usuarios, contexto] = await Promise.all([
-        api.get('/api/admin/funcionarios'),
-        api.get('/api/admin/fornecedores'),
-        api.get('/api/admin/usuarios-mestres'),
-        api.get('/api/admin/empresa-ativa'),
+        api.get(a2Path('/funcionarios')),
+        api.get(a2Path('/fornecedores')),
+        api.get(a2Path('/usuarios-mestres')),
+        api.get(a2Path('/empresa-ativa')),
       ])
       setDados({
         funcionarios: funcionarios.funcionarios || [],
@@ -132,8 +133,8 @@ export default function CadastrosMestres() {
         if (!payload.perfis.length) return toast('Selecione ao menos um perfil de acesso.', true)
         delete payload.roles
       }
-      if (modal?.modo === 'novo') await api.post(aba.endpoint, payload)
-      else await api.patch(`${aba.endpoint}/${modal.id}`, payload)
+      if (modal?.modo === 'novo') await api.post(a2Path(aba.endpoint), payload)
+      else await api.patch(a2Path(`${aba.endpoint}/${modal.id}`), payload)
       toast(`${tab.slice(0, -1)} ${modal?.modo === 'novo' ? 'cadastrado' : 'atualizado'} com sucesso.`)
       setModal(null)
       carregar()

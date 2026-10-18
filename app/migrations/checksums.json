@@ -82,5 +82,6 @@
  "077_clube_parceiros.sql": "55b6ae5d08ab3b627f3bd497515934e6ab0d9b73c3ae49abab7ef7b9c8df5433",
  "078_clube_cobrancas.sql": "482d079e20275af8d37d93ea49dd66d824933d83072808a833bc877f23302d49",
  "079_clube_importacoes.sql": "b8b44e16bb2319f8230c96a0fff74d71de427e646aa3bec2169839ec2607b4ab",
- "080_clube_quadras.sql": "bd7940c3b09dc39383a9a82f5c9d416dcdb38671f496b81b169295e080d3ce90"
+ "080_clube_quadras.sql": "bd7940c3b09dc39383a9a82f5c9d416dcdb38671f496b81b169295e080d3ce90",
+ "082_financeiro_cadastros_multiempresa.sql": "a0bfe2b6e14cb61258c1ee417ba8c4ec971adab9ea0eb7954c3176c38cca6445"
 }

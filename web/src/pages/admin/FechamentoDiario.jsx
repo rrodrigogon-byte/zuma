@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api, fmtR, fmtDate } from '../../lib/api'
+import { a2Path } from '../../lib/tenant-api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
 
@@ -14,7 +15,7 @@ export default function FechamentoDiario() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const { fechamentos } = await api.get('/api/admin/fechamento-diario')
+      const { fechamentos } = await api.get(a2Path('/fechamento-diario'))
       setFechamentos(fechamentos || [])
     } catch (e) {
       toast('Erro ao carregar fechamentos diários', true)
@@ -28,7 +29,7 @@ export default function FechamentoDiario() {
   const handleRealizarFechamento = async () => {
     setSaving(true)
     try {
-      await api.post('/api/admin/fechamento-diario', { observacao: obs })
+      await api.post(a2Path('/fechamento-diario'), { observacao: obs })
       toast('Fechamento diário realizado com sucesso')
       setModalNovo(false)
       setObs('')

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api, fmtR, fmtDate } from '../../lib/api'
+import { a2Path } from '../../lib/tenant-api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
 
@@ -21,9 +22,9 @@ export default function ContasReceber() {
     setLoading(true)
     try {
       const [resContas, resClientes, resAlertas] = await Promise.all([
-        api.get('/api/admin/contas-receber'),
-        api.get('/api/admin/clientes'),
-        api.get('/api/admin/alertas-vencimento')
+        api.get(a2Path('/contas-receber')),
+        api.get(a2Path('/clientes', '/api/admin/clientes')),
+        api.get(a2Path('/alertas-vencimento'))
       ])
       setContas(resContas.contas || [])
       setClientes(resClientes.clientes || [])
@@ -52,7 +53,7 @@ export default function ContasReceber() {
     }
     setSaving(true)
     try {
-      await api.post('/api/admin/contas-receber', {
+      await api.post(a2Path('/contas-receber'), {
         ...novaConta,
         mesaNumero: Number(novaConta.mesaNumero || 0),
         valor: Number(novaConta.valor),
@@ -73,7 +74,7 @@ export default function ContasReceber() {
     if (!modalPagamento) return
     setSaving(true)
     try {
-      await api.patch(`/api/admin/contas-receber/${modalPagamento.id}`, {
+      await api.patch(a2Path(`/contas-receber/${modalPagamento.id}`), {
         dataPagamento: new Date().toISOString()
       })
       toast('Pagamento registrado com sucesso')
