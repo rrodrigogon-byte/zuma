@@ -7,7 +7,7 @@
 <title>Kytto Clube</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700&family=Outfit:wght@500;600;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
     --chao: #eef0ec; --placa: #ffffff; --tinta: #1b1f23; --apagado: #5e666e; --linha: #d9ddd7;
@@ -73,7 +73,7 @@
 
   button.acao, a.acao { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--linha); background: var(--placa); border-radius: 8px; padding: 8px 14px; cursor: pointer; font-weight: 600; text-decoration: none; color: var(--tinta); }
   button.acao:hover { border-color: var(--apagado); }
-  button.acao.primaria { background: var(--libera); border-color: var(--libera); color: #fff; }
+  button.acao.primaria { background: var(--primaria, var(--libera)); border-color: var(--primaria, var(--libera)); color: #fff; }
   button.acao.perigo { color: var(--bloqueia); border-color: var(--bloqueia); }
   button.acao:disabled { opacity: .5; cursor: progress; }
   .acoes { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -173,6 +173,14 @@
   body.embutido .app { grid-template-columns: 1fr; }
   body.embutido nav.trilho { display: none; }
   body.embutido main { padding: 20px 24px 40px; }
+  /* identidade Kytto quando embutido: mesmas cores, fontes e cantos do restante do painel;
+     verde/vermelho seguem só como estado (liberado/bloqueado) */
+  body.embutido {
+    --chao: #FFF4EC; --placa: #FFFFFF; --tinta: #12283F; --apagado: #5A6570; --linha: #EADFD4;
+    --primaria: #FF6B2C; --foco: #E4551A; --raio: 14px;
+    --titulo: "Outfit", "Work Sans", system-ui, sans-serif; --texto: "Work Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  body.embutido .bloco { box-shadow: 0 12px 32px rgba(18,40,63,.06); }
   @media (max-width: 860px) { body.embutido main { padding: 16px 16px 40px; } body.embutido #toast { bottom: 20px; } }
 </style>
 </head>
