@@ -1,5 +1,6 @@
 import { createContext, useContext, useState } from 'react'
 import { encerrarPushDoAparelho } from './push-equipe'
+import { selecionarLojaAutomatica } from './context-selection'
 
 const AuthContext = createContext(null)
 
@@ -11,11 +12,23 @@ function readStorage(key, fallback = null) {
   }
 }
 
+function readLojaAtivaInicial() {
+  const empresa = readStorage('sp_empresa_ativa')
+  const lojas = readStorage('sp_lojas_acessiveis', [])
+  const atual = readStorage('sp_loja_ativa')
+  const selecionada = empresa?.id ? selecionarLojaAutomatica(lojas, empresa.id, atual) : null
+  try {
+    if (selecionada?.id && selecionada.id !== atual?.id) localStorage.setItem('sp_loja_ativa', JSON.stringify(selecionada))
+    if (!selecionada && atual?.id) localStorage.removeItem('sp_loja_ativa')
+  } catch { /* armazenamento pode estar indisponível durante a hidratação */ }
+  return selecionada
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => readStorage('sp_user'))
   const [empresaAtiva, setEmpresaAtiva] = useState(() => readStorage('sp_empresa_ativa'))
   const [empresasAcessiveis, setEmpresasAcessiveis] = useState(() => readStorage('sp_empresas_acessiveis', []))
-  const [lojaAtiva, setLojaAtiva] = useState(() => readStorage('sp_loja_ativa'))
+  const [lojaAtiva, setLojaAtiva] = useState(readLojaAtivaInicial)
   const [lojasAcessiveis, setLojasAcessiveis] = useState(() => readStorage('sp_lojas_acessiveis', []))
 
   const desligarPushContextoAtual = () => {
@@ -36,11 +49,10 @@ export function AuthProvider({ children }) {
     if (identidadeAnterior && (identidadeAnterior !== identidadeNova || empresaAtiva?.id !== empresaNova?.id || lojaAtiva?.id !== lojaNova?.id)) desligarPushContextoAtual()
     localStorage.setItem(site ? 'sp_site_token' : 'sp_token', token)
     localStorage.setItem('sp_user', JSON.stringify(userData))
-
     const empresas = Array.isArray(sessao.empresas_acessiveis) ? sessao.empresas_acessiveis : []
     const empresa = empresaNova
     const lojas = Array.isArray(sessao.lojas_acessiveis) ? sessao.lojas_acessiveis : []
-    const loja = lojaNova
+    const loja = selecionarLojaAutomatica(lojas, empresa?.id, lojaNova)
     if (empresas.length > 0) {
       localStorage.setItem('sp_empresas_acessiveis', JSON.stringify(empresas))
       setEmpresasAcessiveis(empresas)
@@ -66,6 +78,9 @@ export function AuthProvider({ children }) {
     if (loja) {
       localStorage.setItem('sp_loja_ativa', JSON.stringify(loja))
       setLojaAtiva(loja)
+    } else if (lojas.length > 0) {
+      localStorage.removeItem('sp_loja_ativa')
+      setLojaAtiva(null)
     }
     setUser(userData)
   }
@@ -74,10 +89,12 @@ export function AuthProvider({ children }) {
     const proxima = empresasAcessiveis.find((empresa) => empresa.id === empresaId)
     if (!proxima) return false
     if (empresaAtiva?.id !== proxima.id || lojaAtiva?.id) desligarPushContextoAtual()
+    const proximaLoja = selecionarLojaAutomatica(lojasAcessiveis, proxima.id)
     localStorage.setItem('sp_empresa_ativa', JSON.stringify(proxima))
-    localStorage.removeItem('sp_loja_ativa')
+    if (proximaLoja) localStorage.setItem('sp_loja_ativa', JSON.stringify(proximaLoja))
+    else localStorage.removeItem('sp_loja_ativa')
     setEmpresaAtiva(proxima)
-    setLojaAtiva(null)
+    setLojaAtiva(proximaLoja)
     return true
   }
 
@@ -101,6 +118,7 @@ export function AuthProvider({ children }) {
       localStorage.setItem('sp_empresas_acessiveis', JSON.stringify(empresas))
       setEmpresasAcessiveis(empresas)
     }
+    const empresaAtualizada = empresa || empresaAtiva
     if (empresa) {
       localStorage.setItem('sp_empresa_ativa', JSON.stringify(empresa))
       setEmpresaAtiva(empresa)
@@ -108,8 +126,15 @@ export function AuthProvider({ children }) {
     if (Array.isArray(lojas)) {
       localStorage.setItem('sp_lojas_acessiveis', JSON.stringify(lojas))
       setLojasAcessiveis(lojas)
-    }
-    if (loja) {
+      const selecionada = selecionarLojaAutomatica(lojas, empresaAtualizada?.id, loja || lojaAtiva)
+      if (selecionada) {
+        localStorage.setItem('sp_loja_ativa', JSON.stringify(selecionada))
+        setLojaAtiva(selecionada)
+      } else if (!loja) {
+        localStorage.removeItem('sp_loja_ativa')
+        setLojaAtiva(null)
+      }
+    } else if (loja) {
       localStorage.setItem('sp_loja_ativa', JSON.stringify(loja))
       setLojaAtiva(loja)
     }

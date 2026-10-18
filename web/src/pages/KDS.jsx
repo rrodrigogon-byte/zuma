@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { api } from '../lib/api'
+import { barPath } from '../lib/bar-api'
 import { useToast } from '../hooks/useToast'
 
 const STATUS_ORDER = ['novo', 'em_preparo', 'pronto']
@@ -238,7 +239,7 @@ export default function KDS() {
 
   async function load() {
     try {
-      const [data, dadosMetricas] = await Promise.all([api.get('/api/setores/pedidos'), api.get('/api/admin/kds/metricas')])
+      const [data, dadosMetricas] = await Promise.all([api.get(barPath('/setores/pedidos')), api.get(barPath('/kds/metricas'))])
       const pedidos = Array.isArray(data?.pedidos) ? data.pedidos : []
       setMetricas(dadosMetricas?.metricas || { atrasados:0, filaImpressao:0 })
       const itens = pedidos.flatMap((pedido) =>
@@ -270,7 +271,7 @@ export default function KDS() {
 
   async function handleStatusChange(comandaId, idx, newStatus) {
     try {
-      await api.patch(`/api/kds/comanda/${comandaId}/item/${idx}/status`, { status: newStatus })
+      await api.patch(barPath(`/kds/comanda/${comandaId}/item/${idx}/status`), { status: newStatus })
       setItems(prev =>
         prev.map(i =>
           i.comandaId === comandaId && i.idx === idx ? { ...i, status: newStatus } : i
@@ -282,7 +283,7 @@ export default function KDS() {
   }
 
   async function reimprimir(item) {
-    try { await api.post(`/api/kds/comanda/${item.comandaId}/item/${item.idx}/reimprimir`, {}); toast(`Item ${item.nome} adicionado à fila de impressão`) }
+    try { await api.post(barPath(`/kds/comanda/${item.comandaId}/item/${item.idx}/reimprimir`), {}); toast(`Item ${item.nome} adicionado à fila de impressão`) }
     catch { toast('Erro ao reimprimir item', 'error') }
   }
 
@@ -296,7 +297,7 @@ export default function KDS() {
     if (!pendentes.length) return
     if (!confirm(`Marcar ${pendentes.length} itens como PRONTOS?`)) return
     for (const item of pendentes) {
-      try { await api.patch(`/api/kds/comanda/${item.comandaId}/item/${item.idx}/status`, { status:'pronto' }) } catch {}
+      try { await api.patch(barPath(`/kds/comanda/${item.comandaId}/item/${item.idx}/status`), { status:'pronto' }) } catch {}
     }
     setItems(prev => prev.map(i => {
       const match = pendentes.find(p => p.comandaId===i.comandaId && p.idx===i.idx)

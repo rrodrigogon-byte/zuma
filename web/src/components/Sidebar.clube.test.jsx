@@ -56,12 +56,11 @@ describe('menu do clube (AGRO OPEN TTC)', () => {
     expect(links).toContain('/admin/contas-receber')
   })
 
-  it('usuário do próprio clube não vê as telas do banco global do evento (dariam 403)', () => {
+  it('usuário do próprio clube vê o bar por empresa e não vê módulos ainda globais', () => {
     const { links } = render({ id: 'ttc', nome: 'AGRO OPEN TTC' }, { platform: false, empresaId: 'ttc' })
     expect(links).toContain('/admin/clube/recepcao')
     expect(links).toContain('/admin/clube/quadras')
     expect(links).not.toContain('/admin/torneios')
-    expect(links).not.toContain('/admin/estoque')
-    expect(links).not.toContain('/pdv')
+    expect(links).toContain('/pdv')
   })
 })

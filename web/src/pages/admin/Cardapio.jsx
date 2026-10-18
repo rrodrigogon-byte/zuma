@@ -3,6 +3,7 @@ import { api, asArray, fmtR } from '../../lib/api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
 import { useAuth } from '../../lib/auth'
+import { barAdminPath } from '../../lib/bar-api'
 
 function exportCSV(itens) {
   const headers = ['ID', 'Nome', 'Categoria', 'Setor', 'Preço', 'Disponível', 'Cozinha']
@@ -131,10 +132,17 @@ export default function Cardapio() {
   const [filtroCat, setFiltroCat]   = useState('Todas')
   const [filtroDisp, setFiltroDisp] = useState('todos') // 'todos'|'disponiveis'|'indisponiveis'
   const [replicando, setReplicando] = useState(false)
+  const [itemEmAcao, setItemEmAcao] = useState(null)
+
+  const executarAcaoItem = async (itemId, acao) => {
+    if (itemEmAcao) return
+    setItemEmAcao(itemId)
+    try { await acao() } finally { setItemEmAcao(null) }
+  }
 
   const load = () => {
     setLoading(true)
-    Promise.all([api.get('/api/admin/cardapio'), api.get('/api/admin/modificadores/grupos')])
+    Promise.all([api.get(barAdminPath('/cardapio')), api.get('/api/admin/modificadores/grupos')])
       .then(([cardapio, modificadores]) => { setItens(asArray(cardapio, ['itens', 'produtos', 'cardapio'])); setGruposModificadores(asArray(modificadores, ['grupos'])) })
       .catch(() => toast('Erro ao carregar cardápio', 'error'))
       .finally(() => setLoading(false))
@@ -174,7 +182,7 @@ export default function Cardapio() {
 
   const handleToggle = async (item, campo) => {
     try {
-      await api.patch(`/api/admin/cardapio/${item.id}`, { [campo]: !item[campo] })
+      await api.patch(barAdminPath(`/cardapio/${item.id}`), { [campo]: !item[campo] })
       load()
     } catch {
       toast('Erro ao atualizar', 'error')
@@ -184,7 +192,7 @@ export default function Cardapio() {
   const handleDelete = async (item) => {
     if (!confirm(`Excluir "${item.nome}"?`)) return
     try {
-      await api.delete(`/api/admin/cardapio/${item.id}`)
+      await api.delete(barAdminPath(`/cardapio/${item.id}`))
       toast('Item excluído', 'success')
       load()
     } catch {
@@ -202,8 +210,8 @@ export default function Cardapio() {
     const ordemB = outro.ordem ?? (idx + direcao)
     try {
       await Promise.all([
-        api.patch(`/api/admin/cardapio/${item.id}`, { ordem: ordemB }),
-        api.patch(`/api/admin/cardapio/${outro.id}`, { ordem: ordemA }),
+        api.patch(barAdminPath(`/cardapio/${item.id}`), { ordem: ordemB }),
+        api.patch(barAdminPath(`/cardapio/${outro.id}`), { ordem: ordemA }),
       ])
       load()
     } catch {
@@ -236,7 +244,7 @@ export default function Cardapio() {
     if (!novoForm.nome || novoForm.preco === '' || Number(novoForm.preco) < 0) return toast('Nome e preço válido são obrigatórios', 'warn')
     setSaving(true)
     try {
-      await api.post('/api/admin/cardapio', {
+      await api.post(barAdminPath('/cardapio'), {
         ...novoForm,
         preco: parseFloat(String(novoForm.preco).replace(',', '.')),
       })
@@ -277,7 +285,7 @@ export default function Cardapio() {
     if (!editForm.nome || editForm.preco === '' || Number(editForm.preco) < 0) return toast('Nome e preço válido são obrigatórios', 'warn')
     setSaving(true)
     try {
-      await api.patch(`/api/admin/cardapio/${editModal.id}`, {
+      await api.patch(barAdminPath(`/cardapio/${editModal.id}`), {
         ...editForm,
         preco: parseFloat(String(editForm.preco).replace(',', '.')),
       })
@@ -498,12 +506,13 @@ export default function Cardapio() {
                       item={item}
                       isFirst={idx === 0}
                       isLast={idx === lista.length - 1}
-                      onToggleCozinha={() => handleToggle(item, 'cozinha')}
-                      onToggleDisponivel={() => handleToggle(item, 'indisponivel')}
+                      busy={itemEmAcao === item.id}
+                      onToggleCozinha={() => executarAcaoItem(item.id, () => handleToggle(item, 'cozinha'))}
+                      onToggleDisponivel={() => executarAcaoItem(item.id, () => handleToggle(item, 'indisponivel'))}
                       onEditar={() => openEditar(item)}
-                      onExcluir={() => handleDelete(item)}
-                      onSubir={() => handleMover(item, -1)}
-                      onDescer={() => handleMover(item, 1)}
+                      onExcluir={() => executarAcaoItem(item.id, () => handleDelete(item))}
+                      onSubir={() => executarAcaoItem(item.id, () => handleMover(item, -1))}
+                      onDescer={() => executarAcaoItem(item.id, () => handleMover(item, 1))}
                       onDuplicar={() => handleDuplicar(item)}
                     />
                   ))}
@@ -678,7 +687,7 @@ export default function Cardapio() {
   )
 }
 
-function ItemCard({ item, isFirst, isLast, onToggleCozinha, onToggleDisponivel, onEditar, onExcluir, onSubir, onDescer, onDuplicar }) {
+function ItemCard({ item, isFirst, isLast, busy, onToggleCozinha, onToggleDisponivel, onEditar, onExcluir, onSubir, onDescer, onDuplicar }) {
   return (
     <div
       className="card"
@@ -712,6 +721,7 @@ function ItemCard({ item, isFirst, isLast, onToggleCozinha, onToggleDisponivel, 
           active={!!item.cozinha}
           activeColor="#FF6B2C"
           onClick={onToggleCozinha}
+          disabled={busy}
         />
         <ToggleChip
           label={item.indisponivel ? 'Indisponível' : 'Disponível'}
@@ -719,6 +729,7 @@ function ItemCard({ item, isFirst, isLast, onToggleCozinha, onToggleDisponivel, 
           activeColor="#FF9B72"
           inactiveColor="#e05c5c"
           onClick={onToggleDisponivel}
+          disabled={busy}
         />
       </div>
 
@@ -728,7 +739,7 @@ function ItemCard({ item, isFirst, isLast, onToggleCozinha, onToggleDisponivel, 
         <button
           className="btn btn-ghost btn-sm"
           title="Mover para cima"
-          disabled={isFirst}
+          disabled={isFirst || busy}
           onClick={onSubir}
           style={{ padding: '2px 7px', opacity: isFirst ? 0.3 : 1 }}
         >
@@ -737,7 +748,7 @@ function ItemCard({ item, isFirst, isLast, onToggleCozinha, onToggleDisponivel, 
         <button
           className="btn btn-ghost btn-sm"
           title="Mover para baixo"
-          disabled={isLast}
+          disabled={isLast || busy}
           onClick={onDescer}
           style={{ padding: '2px 7px', opacity: isLast ? 0.3 : 1 }}
         >
@@ -754,10 +765,10 @@ function ItemCard({ item, isFirst, isLast, onToggleCozinha, onToggleDisponivel, 
           📋
         </button>
 
-        <button className="btn btn-secondary btn-sm" style={{ flex: 1, minWidth: 50 }} onClick={onEditar}>
-          Editar
+        <button className="btn btn-secondary btn-sm" style={{ flex: 1, minWidth: 50 }} onClick={onEditar} disabled={busy}>
+          {busy ? 'Salvando…' : 'Editar'}
         </button>
-        <button className="btn btn-danger btn-sm" onClick={onExcluir}>
+        <button className="btn btn-danger btn-sm" onClick={onExcluir} disabled={busy}>
           ✕
         </button>
       </div>
@@ -765,11 +776,12 @@ function ItemCard({ item, isFirst, isLast, onToggleCozinha, onToggleDisponivel, 
   )
 }
 
-function ToggleChip({ label, active, activeColor = '#FF6B2C', inactiveColor = '#555', onClick }) {
+function ToggleChip({ label, active, activeColor = '#FF6B2C', inactiveColor = '#555', onClick, disabled = false }) {
   const color = active ? activeColor : inactiveColor
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       style={{
         background: color + '22',
         color,
@@ -778,7 +790,8 @@ function ToggleChip({ label, active, activeColor = '#FF6B2C', inactiveColor = '#
         padding: '2px 10px',
         fontSize: 11,
         fontWeight: 600,
-        cursor: 'pointer',
+        cursor: disabled ? 'wait' : 'pointer',
+        opacity: disabled ? 0.55 : 1,
         transition: 'all 0.15s',
       }}
     >

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { api, fmtR } from '../../lib/api'
+import { barAdminPath } from '../../lib/bar-api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
 
@@ -47,7 +48,7 @@ export default function Estoque() {
   async function load() {
     setLoading(true)
     try {
-      const data = await api.get('/api/admin/estoque')
+      const data = await api.get(barAdminPath('/estoque'))
       // API retorna array plano ou { estoque, alertas }
       const lista = Array.isArray(data) ? data : (data.estoque || [])
       setEstoque(lista)
@@ -67,9 +68,9 @@ export default function Estoque() {
     if (isNaN(qtd) || qtd < 1) return toast('Quantidade inválida', true)
     setSaving(true)
     try {
-      const body = { produtoId: Number(form.produtoId), qtd }
+      const body = { produtoId: form.produtoId, qtd }
       if (form.custo !== '') body.custo = parseFloat(form.custo)
-      await api.post('/api/admin/estoque/entrada', body)
+      await api.post(barAdminPath('/estoque/entrada'), body)
       toast('Entrada registrada')
       setModal(false)
       setForm(EMPTY_ENTRADA)
@@ -87,7 +88,7 @@ export default function Estoque() {
     if (!Number.isFinite(minimo) || minimo < 0) return toast('Mínimo por categoria inválido', true)
     setSaving(true)
     try {
-      const resultado = await api.post('/api/admin/estoque/minimos-categoria', { ...minCategoriaForm, minimo })
+      const resultado = await api.post(barAdminPath('/estoque/minimos-categoria'), { ...minCategoriaForm, minimo })
       toast(`Mínimo da categoria atualizado${resultado.itensAtualizados ? ` em ${resultado.itensAtualizados} item(ns)` : ''}`)
       setMinCategoriaModal(false)
       setMinCategoriaForm({ categoria: '', minimo: '', aplicarAItensSemMinimo: true })
@@ -102,7 +103,7 @@ export default function Estoque() {
   async function sincronizarCardapio() {
     setSincronizando(true)
     try {
-      const resultado = await api.post('/api/admin/estoque/sincronizar-cardapio', {})
+      const resultado = await api.post(barAdminPath('/estoque/sincronizar-cardapio'), {})
       toast(`${resultado.criados || 0} novo(s) item(ns) sincronizado(s) com o cardápio`)
       load()
     } catch (error) {
@@ -118,7 +119,7 @@ export default function Estoque() {
     if (!Number.isFinite(qtd) || qtd < 0) return toast('Quantidade contada inválida', true)
     setInventariando(true)
     try {
-      await api.post('/api/admin/estoque/ajuste', { produtoId: inventarioForm.produtoId, qtd })
+      await api.post(barAdminPath('/estoque/ajuste'), { produtoId: inventarioForm.produtoId, qtd })
       toast('Contagem de inventário registrada')
       setInventarioModal(false)
       setInventarioForm(EMPTY_INVENTARIO)
@@ -143,7 +144,7 @@ export default function Estoque() {
     const min = parseInt(val)
     if (isNaN(min) || min < 0) return toast('Mínimo inválido', true)
     try {
-      await api.post('/api/admin/estoque/ajuste', { produtoId: key, min })
+      await api.post(barAdminPath('/estoque/ajuste'), { produtoId: key, min })
       toast('Mínimo atualizado')
       setEditMin(prev => { const c = { ...prev }; delete c[key]; return c })
       load()
@@ -163,9 +164,9 @@ export default function Estoque() {
     setAjustando(prev => ({ ...prev, [key]: true }))
     try {
       if (delta > 0) {
-        await api.post('/api/admin/estoque/entrada', { produtoId: key, qtd: delta })
+        await api.post(barAdminPath('/estoque/entrada'), { produtoId: key, qtd: delta })
       } else {
-        await api.post('/api/admin/estoque/ajuste', { produtoId: key, qtd: novaQtd })
+        await api.post(barAdminPath('/estoque/ajuste'), { produtoId: key, qtd: novaQtd })
       }
       load()
     } catch (e) {
