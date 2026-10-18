@@ -38,6 +38,7 @@ export function createBarAdminRouter({ db, empresaDaRequisicao, operadorDaRequis
   };
 
   // Cardápio e estoque: os aliases mantêm o contrato das telas existentes.
+  router.get('/clientes', executar(async ({ empresaId }) => ({ clientes: await svc.listarClientesConta(db, empresaId) })));
   router.get(['/produtos', '/cardapio'], executar(({ empresaId }) => svc.listarProdutos(db, empresaId, { apenasAtivos: false })));
   router.get('/cardapio/:id/modificadores', executar(() => ({ grupos: [] })));
   router.post(['/produtos', '/cardapio'], executar(({ empresaId, req }) => svc.salvarProduto(db, empresaId, req.body || {}), 201));
@@ -78,7 +79,7 @@ export function createBarAdminRouter({ db, empresaDaRequisicao, operadorDaRequis
   router.post('/mesas/:numero/fechar', executar(async ({ empresaId, req }) => {
     const mesas = await svc.listarMesas(db, empresaId);
     const mesa = mesas.fisicas.find((item) => item.num === Number(req.params.numero));
-    if (mesa?.comandaId) return svc.pagarComanda(db, empresaId, mesa.comandaId);
+    if (mesa?.comandaId) return svc.pagarComanda(db, empresaId, mesa.comandaId, req.body || {});
     return { ok: true };
   }));
   router.post('/mesas', executar(({ empresaId, req }) => svc.salvarMesa(db, empresaId, req.body || {}), 201));
@@ -104,8 +105,8 @@ export function createBarAdminRouter({ db, empresaDaRequisicao, operadorDaRequis
     return svc.adicionarItens(db, empresaId, req.params.id, [{ produtoId: item.produtoId, qtd: req.body.qtd, obs: item.obs }]);
   }));
   router.post('/comanda/:id/conta', executar(({ empresaId, req }) => svc.marcarConta(db, empresaId, req.params.id)));
-  router.post(['/comanda/:id/pagar', '/comandas/:id/pagar'], executar(({ empresaId, req }) => svc.pagarComanda(db, empresaId, req.params.id)));
-  router.post('/comanda/:id/pagamento-parcial', executar(({ empresaId, req }) => svc.pagarComanda(db, empresaId, req.params.id)));
+  router.post(['/comanda/:id/pagar', '/comandas/:id/pagar'], executar(({ empresaId, req }) => svc.pagarComanda(db, empresaId, req.params.id, req.body || {})));
+  router.post('/comanda/:id/pagamento-parcial', executar(({ empresaId, req }) => svc.pagarComanda(db, empresaId, req.params.id, req.body || {})));
 
   // KDS: atualização somente por transição válida do serviço.
   router.get(['/kds/pedidos', '/setores/pedidos'], executar(async ({ empresaId, req }) => {

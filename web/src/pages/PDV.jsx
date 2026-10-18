@@ -4,7 +4,7 @@ import { pagarTef, MODALIDADES_TEF } from '../lib/tef'
 import { enfileirarVendaOffline, entregarFilaAoAgente, imprimirViaAgenteLocal, resumoFilaOffline } from '../lib/pdvOffline'
 import { useToast } from '../hooks/useToast'
 import { useAuth } from '../lib/auth'
-import { barPath } from '../lib/bar-api'
+import { barAdminPath, barPath } from '../lib/bar-api'
 
 // ─── PIX EMV BR Code builder ───────────────────────────────────────────────
 function pixField(id, value) {
@@ -463,7 +463,7 @@ export default function PDV() {
 
   const loadClientesConta = useCallback(async () => {
     try {
-      const data = await api.get('/api/admin/clientes')
+      const data = await api.get(barAdminPath('/clientes'))
       const elegiveis = (data?.clientes || []).filter(cliente => !cliente.padrao && cliente.status !== 'deletado')
       setClientesConta(elegiveis)
       setClienteContaId(atual => atual && elegiveis.some(cliente => cliente.id === atual) ? atual : (elegiveis[0]?.id || ''))

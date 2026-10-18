@@ -50,6 +50,33 @@ describe('bar-pdv multiempresa (PostgreSQL)', { skip: pgDeTeste }, () => {
     assert.equal(resultados.filter((resultado) => resultado.status === 'rejected' && resultado.reason.code === 'ESTOQUE_INSUFICIENTE').length, 1);
     assert.equal((await bar.listarProdutos(ctx.db, empresa))[0].estoqueAtual, 0);
   });
+
+  test('persiste pagamento parcial, cliente e total final sem atravessar empresas', async () => {
+    const empresa = randomUUID();
+    const outraEmpresa = randomUUID();
+    const cliente = randomUUID();
+    await ctx.db.query('INSERT INTO commerce_customers (id, empresa_id, nome) VALUES ($1,$2,$3)', [cliente, empresa, 'Cliente do Bar']);
+    const produto = await bar.salvarProduto(ctx.db, empresa, { nome: 'Suco', categoria: 'Bebidas', setor: 'bar', preco: 30, estoqueAtual: 2 });
+    const comanda = await bar.abrirComanda(ctx.db, empresa, { nome: 'Mesa pagamento' });
+    await bar.adicionarItens(ctx.db, empresa, comanda.id, [{ produtoId: produto.id, qtd: 1 }]);
+
+    const parcial = await bar.pagarComanda(ctx.db, empresa, comanda.id, {
+      clienteId: cliente,
+      servico: false,
+      meios: [{ meio: 'dinheiro', valor: 10 }],
+    });
+    assert.equal(parcial.quitada, false);
+    assert.equal(parcial.saldoPendente, 20);
+    assert.equal(parcial.comanda.clienteId, cliente);
+    assert.equal(parcial.comanda.pagamentos.length, 1);
+
+    const final = await bar.pagarComanda(ctx.db, empresa, comanda.id, { meio: 'pix', servico: false });
+    assert.equal(final.quitada, true);
+    assert.equal(final.comanda.status, 'paga');
+    assert.equal(final.comanda.valorFinal, 30);
+    assert.equal((await bar.listarVendas(ctx.db, empresa, { hoje: true }))[0].total, 30);
+    await assert.rejects(() => bar.obterComanda(ctx.db, outraEmpresa, comanda.id), (error) => error.code === 'NOT_FOUND');
+  });
 });
 
 test('regras puras do A1 recusam transição inválida e calculam dose', () => {

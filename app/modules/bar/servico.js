@@ -3,6 +3,7 @@ import { ErroDominio, exigirTexto, exigirUuid, transacao } from '../acesso/banco
 
 const SETORES = new Set(['bar', 'cozinha', 'chapa']);
 const TIPOS_MESA = new Set(['fisica', 'virtual']);
+const MEIOS_PAGAMENTO = new Set(['pix', 'tef', 'cartao', 'dinheiro', 'carteira', 'conta']);
 const STATUS_ITEM = new Set(['pendente', 'preparando', 'pronto', 'servido', 'cancelado']);
 const TRANSICOES_ITEM = {
   pendente: new Set(['pendente', 'preparando', 'cancelado']),
@@ -65,7 +66,10 @@ function mapMesa(row) {
     total: linhaNumerica(row, 'comanda_total'),
   };
 }
-function mapComanda(row, itens = []) {
+function mapComanda(row, itens = [], pagamentos = []) {
+  const subtotal = linhaNumerica(row, 'total');
+  const valorFinal = row.valor_final === null || row.valor_final === undefined ? subtotal : linhaNumerica(row, 'valor_final');
+  const valorPago = pagamentos.reduce((soma, pagamento) => soma + linhaNumerica(pagamento, 'valor'), 0);
   return {
     id: row.id,
     empresaId: row.empresa_id,
@@ -73,7 +77,17 @@ function mapComanda(row, itens = []) {
     mesaNum: row.mesa_numero || null,
     nome: row.nome || '',
     status: row.status,
-    total: linhaNumerica(row, 'total'),
+    total: subtotal,
+    subtotal,
+    totalFinal: valorFinal,
+    valorPago,
+    saldoPendente: Math.max(0, Number((valorFinal - valorPago).toFixed(2))),
+    clienteId: row.cliente_id || null,
+    meioPagamento: row.meio_pagamento || null,
+    incluirServico: row.incluir_servico !== false,
+    descontoPercentual: linhaNumerica(row, 'desconto_percentual'),
+    divididoEm: Number(row.dividido_em || 1),
+    pagamentos: pagamentos.map((pagamento) => ({ id: pagamento.id, meio: pagamento.meio, valor: linhaNumerica(pagamento, 'valor'), referencia: pagamento.referencia || null, criadoEm: pagamento.criado_em })),
     abertaEm: row.aberta_em,
     itens: itens.map((item, indice) => ({
       id: item.id,
@@ -108,6 +122,11 @@ export async function listarProdutos(db, empresaId, { apenasAtivos = false } = {
   const filtro = apenasAtivos ? ' AND ativo = true' : '';
   const result = await db.queryRead(`SELECT * FROM bar_produtos WHERE empresa_id = $1${filtro} ORDER BY ordem, categoria, nome`, [emp]);
   return result.rows.map(mapProduto);
+}
+
+export async function listarClientesConta(db, empresaId) {
+  const result = await db.queryRead(`SELECT id, nome, email, telefone, bloqueado FROM commerce_customers WHERE empresa_id=$1 AND bloqueado=false ORDER BY lower(nome)`, [empresa(empresaId)]);
+  return result.rows.map((row) => ({ id: row.id, nome: row.nome, email: row.email || '', telefone: row.telefone || '', status: 'ativo', padrao: false }));
 }
 
 export async function salvarProduto(db, empresaId, corpo, id = null) {
@@ -196,7 +215,8 @@ async function itensDaComanda(db, empresaId, comandaId) {
 }
 export async function obterComanda(db, empresaId, id) {
   const row = await obterComandaRow(db, empresaId, id);
-  return mapComanda(row, await itensDaComanda(db, empresaId, id));
+  const pagamentos = await db.queryRead('SELECT id, meio, valor, referencia, criado_em FROM bar_comanda_pagamentos WHERE empresa_id=$1 AND comanda_id=$2 ORDER BY criado_em, id', [empresa(empresaId), exigirUuid(id, 'comanda')]);
+  return mapComanda(row, await itensDaComanda(db, empresaId, id), pagamentos.rows);
 }
 
 export async function abrirComanda(db, empresaId, { mesaId = null, nome = null, operadorId = null } = {}) {
@@ -293,14 +313,51 @@ export async function marcarConta(db, empresaId, id) {
   if (!result.rows[0]) throw new ErroDominio('NOT_FOUND', 'comanda aberta não encontrada', 404);
   return obterComanda(db, empresaId, id);
 }
-export async function pagarComanda(db, empresaId, id) {
+export async function pagarComanda(db, empresaId, id, corpo = {}) {
   const emp = empresa(empresaId);
+  const comandaId = exigirUuid(id, 'comanda');
+  let resposta;
   await transacao(db, async (q) => {
-    const result = await q("SELECT id FROM bar_comandas WHERE empresa_id=$1 AND id=$2 AND status IN ('aberta','conta') FOR UPDATE", [emp, exigirUuid(id, 'comanda')]);
-    if (!result.rows[0]) throw new ErroDominio('NOT_FOUND', 'comanda não encontrada ou já paga', 404);
-    await q("UPDATE bar_comandas SET status='paga', fechada_em=CURRENT_TIMESTAMP, atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$1 AND id=$2", [emp, id]);
+    const atual = await q("SELECT * FROM bar_comandas WHERE empresa_id=$1 AND id=$2 AND status IN ('aberta','conta') FOR UPDATE", [emp, comandaId]);
+    if (!atual.rows[0]) throw new ErroDominio('NOT_FOUND', 'comanda não encontrada ou já paga', 404);
+    const row = atual.rows[0];
+    const meio = String(corpo.meio || 'dinheiro').trim().toLowerCase();
+    const meios = Array.isArray(corpo.meios) && corpo.meios.length
+      ? corpo.meios.map((pagamento) => ({ meio: String(pagamento?.meio || '').trim().toLowerCase(), valor: dinheiro(pagamento?.valor, 'valor do pagamento'), referencia: textoOpcional(pagamento?.referencia || pagamento?.nsu, 180) }))
+      : [{ meio, valor: null, referencia: textoOpcional(corpo.tef?.nsu || corpo.tef?.referencia, 180) }];
+    if (meios.some((pagamento) => !MEIOS_PAGAMENTO.has(pagamento.meio))) throw new ErroDominio('VALIDATION_ERROR', 'forma de pagamento inválida');
+    const desconto = corpo.desconto === undefined || corpo.desconto === null ? 0 : numero(corpo.desconto, 'desconto', { minimo: 0, maximo: 100 });
+    const incluirServico = corpo.servico === undefined ? true : Boolean(corpo.servico);
+    const divididoEm = corpo.dividir === undefined ? 1 : Math.max(1, Math.min(99, Math.trunc(numero(corpo.dividir, 'divisão', { minimo: 1, maximo: 99 }))));
+    let clienteId = corpo.clienteId ? exigirUuid(corpo.clienteId, 'cliente') : row.cliente_id || null;
+    if (meios.some((pagamento) => pagamento.meio === 'conta') && !clienteId) throw new ErroDominio('CUSTOMER_REQUIRED', 'selecione um cliente para lançar a venda em conta');
+    if (clienteId) {
+      const cliente = await q('SELECT id FROM commerce_customers WHERE empresa_id=$1 AND id=$2 AND bloqueado=false LIMIT 1', [emp, clienteId]);
+      if (!cliente.rows[0]) throw new ErroDominio('CUSTOMER_NOT_FOUND', 'cliente não encontrado nesta empresa', 404);
+    }
+    const subtotal = linhaNumerica(row, 'total');
+    const valorComDesconto = subtotal * (1 - desconto / 100);
+    const valorFinal = Number((valorComDesconto + (incluirServico ? valorComDesconto * 0.1 : 0)).toFixed(2));
+    const pagos = await q('SELECT COALESCE(SUM(valor),0) AS total FROM bar_comanda_pagamentos WHERE empresa_id=$1 AND comanda_id=$2', [emp, comandaId]);
+    const jaPago = linhaNumerica(pagos.rows[0], 'total');
+    const saldo = Number(Math.max(0, valorFinal - jaPago).toFixed(2));
+    if (meios.some((pagamento) => pagamento.valor !== null) && meios.reduce((soma, pagamento) => soma + Number(pagamento.valor || 0), 0) > saldo + 0.01) {
+      throw new ErroDominio('PAYMENT_EXCEEDS_BALANCE', `pagamento maior que o saldo pendente de R$ ${saldo.toFixed(2)}`, 409);
+    }
+    const valorLancado = meios.reduce((soma, pagamento) => soma + (pagamento.valor === null ? saldo : pagamento.valor), 0);
+    if (valorLancado <= 0) throw new ErroDominio('VALIDATION_ERROR', 'valor do pagamento deve ser maior que zero');
+    for (const pagamento of meios) {
+      const valor = pagamento.valor === null ? saldo : pagamento.valor;
+      if (valor <= 0) continue;
+      await q('INSERT INTO bar_comanda_pagamentos (empresa_id, comanda_id, meio, valor, referencia) VALUES ($1,$2,$3,$4,$5)', [emp, comandaId, pagamento.meio, valor, pagamento.referencia]);
+    }
+    const totalPago = Number((jaPago + valorLancado).toFixed(2));
+    const quitada = totalPago + 0.01 >= valorFinal;
+    const status = quitada ? 'paga' : 'conta';
+    await q(`UPDATE bar_comandas SET status=$1, cliente_id=$2, meio_pagamento=$3, desconto_percentual=$4, incluir_servico=$5, valor_final=$6, dividido_em=$7, cpf_nota=$8, tef_referencia=$9, pagamentos=(SELECT COALESCE(jsonb_agg(jsonb_build_object('meio', meio, 'valor', valor, 'referencia', referencia) ORDER BY criado_em), '[]'::jsonb) FROM bar_comanda_pagamentos WHERE empresa_id=$10 AND comanda_id=$11), fechada_em=CASE WHEN $12 THEN CURRENT_TIMESTAMP ELSE fechada_em END, atualizado_em=CURRENT_TIMESTAMP WHERE empresa_id=$10 AND id=$11`, [status, clienteId, meios[0].meio, desconto, incluirServico, valorFinal, divididoEm, textoOpcional(corpo.cpf, 14), meios.find((pagamento) => pagamento.referencia)?.referencia || null, emp, comandaId, quitada]);
+    resposta = { quitada, saldoPendente: Math.max(0, Number((valorFinal - totalPago).toFixed(2))), valorFinal };
   });
-  return { ok: true, ...(await obterComanda(db, emp, id)) };
+  return { ok: true, ...resposta, comanda: await obterComanda(db, emp, comandaId) };
 }
 
 export async function abrirCaixa(db, empresaId, corpo = {}, operadorId = null) {
@@ -331,7 +388,7 @@ export async function registrarMovimentoCaixa(db, empresaId, corpo = {}, operado
   });
 }
 export async function resumoCaixa(db, empresaId) {
-  const result = await db.queryRead(`SELECT c.*, COALESCE((SELECT SUM(valor) FROM bar_caixa_movimentos m WHERE m.empresa_id=c.empresa_id AND m.caixa_id=c.id AND m.tipo='sangria'),0) AS sangrias, COALESCE((SELECT SUM(valor) FROM bar_caixa_movimentos m WHERE m.empresa_id=c.empresa_id AND m.caixa_id=c.id AND m.tipo='suprimento'),0) AS suprimentos, COALESCE((SELECT SUM(total) FROM bar_comandas v WHERE v.empresa_id=c.empresa_id AND v.status='paga' AND v.fechada_em >= c.aberto_em),0) AS vendas FROM bar_caixas c WHERE c.empresa_id=$1 AND c.status='aberto' ORDER BY c.aberto_em DESC LIMIT 1`, [empresa(empresaId)]);
+  const result = await db.queryRead(`SELECT c.*, COALESCE((SELECT SUM(valor) FROM bar_caixa_movimentos m WHERE m.empresa_id=c.empresa_id AND m.caixa_id=c.id AND m.tipo='sangria'),0) AS sangrias, COALESCE((SELECT SUM(valor) FROM bar_caixa_movimentos m WHERE m.empresa_id=c.empresa_id AND m.caixa_id=c.id AND m.tipo='suprimento'),0) AS suprimentos, COALESCE((SELECT SUM(COALESCE(v.valor_final, v.total)) FROM bar_comandas v WHERE v.empresa_id=c.empresa_id AND v.status='paga' AND v.fechada_em >= c.aberto_em),0) AS vendas FROM bar_caixas c WHERE c.empresa_id=$1 AND c.status='aberto' ORDER BY c.aberto_em DESC LIMIT 1`, [empresa(empresaId)]);
   const row = result.rows[0];
   if (!row) return { abertura: 0, sangrias: 0, suprimentos: 0, vendas: 0, saldo: 0, aberto: false };
   return { abertura: linhaNumerica(row, 'saldo_inicial'), sangrias: linhaNumerica(row, 'sangrias'), suprimentos: linhaNumerica(row, 'suprimentos'), vendas: linhaNumerica(row, 'vendas'), saldo: linhaNumerica(row, 'saldo_atual'), aberto: true, id: row.id };
@@ -339,8 +396,8 @@ export async function resumoCaixa(db, empresaId) {
 export async function listarVendas(db, empresaId, { hoje = false } = {}) {
   const emp = empresa(empresaId);
   const filtro = hoje ? " AND fechada_em >= CURRENT_DATE" : '';
-  const result = await db.queryRead(`SELECT id, nome, total, status, fechada_em FROM bar_comandas WHERE empresa_id=$1 AND status='paga'${filtro} ORDER BY fechada_em DESC LIMIT 200`, [emp]);
-  return result.rows.map((row) => ({ id: row.id, nome: row.nome || '', total: linhaNumerica(row, 'total'), status: row.status, data: row.fechada_em }));
+  const result = await db.queryRead(`SELECT id, nome, total, valor_final, status, fechada_em FROM bar_comandas WHERE empresa_id=$1 AND status='paga'${filtro} ORDER BY fechada_em DESC LIMIT 200`, [emp]);
+  return result.rows.map((row) => ({ id: row.id, nome: row.nome || '', total: row.valor_final === null || row.valor_final === undefined ? linhaNumerica(row, 'total') : linhaNumerica(row, 'valor_final'), subtotal: linhaNumerica(row, 'total'), status: row.status, data: row.fechada_em }));
 }
 
 export async function registrarMovimentoEstoque(db, empresaId, corpo = {}, operadorId = null) {

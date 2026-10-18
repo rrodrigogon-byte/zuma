@@ -63,6 +63,42 @@ CREATE TABLE IF NOT EXISTS bar_comandas (
 CREATE INDEX IF NOT EXISTS idx_bar_comandas_empresa_status ON bar_comandas (empresa_id, status, aberta_em);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_bar_comanda_mesa_aberta ON bar_comandas (empresa_id, mesa_id) WHERE mesa_id IS NOT NULL AND status IN ('aberta', 'conta');
 
+-- Dados de fechamento do PDV. O total original permanece em `total`; `valor_final`
+-- registra o valor efetivamente pago depois de desconto e serviço.
+ALTER TABLE bar_comandas
+  ADD COLUMN IF NOT EXISTS cliente_id UUID,
+  ADD COLUMN IF NOT EXISTS meio_pagamento VARCHAR(30),
+  ADD COLUMN IF NOT EXISTS desconto_percentual NUMERIC(5,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS incluir_servico BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS valor_final NUMERIC(12,2),
+  ADD COLUMN IF NOT EXISTS dividido_em INTEGER NOT NULL DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS cpf_nota VARCHAR(14),
+  ADD COLUMN IF NOT EXISTS tef_referencia VARCHAR(180),
+  ADD COLUMN IF NOT EXISTS pagamentos JSONB NOT NULL DEFAULT '[]'::jsonb;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_bar_comanda_cliente') THEN
+    ALTER TABLE bar_comandas
+      ADD CONSTRAINT fk_bar_comanda_cliente FOREIGN KEY (empresa_id, cliente_id)
+      REFERENCES commerce_customers (empresa_id, id) ON DELETE RESTRICT;
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS idx_bar_comandas_cliente ON bar_comandas (empresa_id, cliente_id) WHERE cliente_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS bar_comanda_pagamentos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  empresa_id UUID NOT NULL,
+  comanda_id UUID NOT NULL,
+  meio VARCHAR(30) NOT NULL,
+  valor NUMERIC(12,2) NOT NULL CHECK (valor > 0),
+  referencia VARCHAR(180),
+  criado_em TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT uq_bar_pagamento_empresa_id UNIQUE (empresa_id, id),
+  CONSTRAINT fk_bar_pagamento_comanda FOREIGN KEY (empresa_id, comanda_id)
+    REFERENCES bar_comandas (empresa_id, id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_bar_pagamentos_comanda ON bar_comanda_pagamentos (empresa_id, comanda_id, criado_em);
+
 CREATE TABLE IF NOT EXISTS bar_comanda_itens (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   empresa_id UUID NOT NULL,
