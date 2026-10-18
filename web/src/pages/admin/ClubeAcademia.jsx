@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useAuth } from '../../lib/auth'
 
 // Clube & Academia dentro do Kytto: o painel do módulo (/clube/painel) roda embutido, com o
 // menu do Kytto. A seção fica na URL (/admin/clube/<secao>), então voltar do navegador e
@@ -26,7 +27,10 @@ export default function ClubeAcademia() {
   const navigate = useNavigate()
   const frame = useRef(null)
   // endereço fixo do iframe: trocar de seção muda só o hash (não recarrega o painel)
-  const [inicial] = useState(() => `/clube/painel?embed=1#${atual}`)
+  const { empresaAtiva } = useAuth()
+  // clube (TTC, tênis clube) fala "sócio"; academia fala "aluno"
+  const termo = /\bttc\b|t[eê]nis clube|\bclube\b|agro ?open/i.test(String(empresaAtiva?.nome || empresaAtiva?.nome_fantasia || '')) ? '&termo=socio' : ''
+  const [inicial] = useState(() => `/clube/painel?embed=1${termo}#${atual}`)
   const [indisponivel, setIndisponivel] = useState(false)
   // sem o módulo ligado no servidor, /clube/painel cai no próprio app: avisa em vez de abrir o Kytto dentro do Kytto
   const conferir = () => {

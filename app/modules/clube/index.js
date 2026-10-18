@@ -18,6 +18,7 @@
 //   /api/admin/clube/parceiros/...        painel: Wellhub/TotalPass, check-ins, retroativos, conciliação
 //   /api/integracoes/<plataforma>/...     webhooks do Wellhub e do TotalPass (sem login; segredo/assinatura)
 //   /api/admin/clube/cobrancas/...        painel: Pix da academia, cobranças e baixa
+//   /api/admin/clube/adesao               recepção: cadastro + matrícula + contrato + Pix em um passo
 //   /clube/pagar/<token>                  página pública do Pix (QR e copia e cola)
 //   /clube/passe/<token>                  passe de entrada com QR que muda a cada 30 s
 //   /clube/painel                         painel da recepção e do dono (usa a sessão do Kytto)
@@ -39,6 +40,7 @@ import * as parceiros from '../parceiros/servico.js';
 import { createParceirosWebhookRouter, createParceirosAdminRouter, createPasseRouters } from '../parceiros/rotas.js';
 import * as cobrancas from '../cobrancas/servico.js';
 import { createCobrancasAdminRouter, createPagamentoPublicoRouters } from '../cobrancas/rotas.js';
+import { createAdesaoRouter } from './adesao.js';
 import express from 'express';
 import { readFileSync } from 'node:fs';
 
@@ -317,6 +319,10 @@ export function montarClube(app, {
   // Cobrança da mensalidade (Pix da academia), com baixa que libera a catraca
   const registrarPagamento = (dados) => registrarPagamentoClube(db, dados);
   app.use(`${prefixoAdmin}/cobrancas`, createCobrancasAdminRouter({ db, empresaDaRequisicao, operadorDaRequisicao, registrarPagamento, urlPublica }));
+  // adesão em um passo: cadastro + matrícula + contrato + Pix da 1ª mensalidade
+  app.use(`${prefixoAdmin}/adesao`, createAdesaoRouter({
+    db, empresaDaRequisicao, operadorDaRequisicao, enviarWhatsapp, urlPublica, gerarLinkPagamento: cobrancas.comOrigem(gerarLinkPagamento, 'recepcao'),
+  }));
   const pagar = createPagamentoPublicoRouters({ db });
   app.use('/clube/pagar', pagar.pagina);
   app.use('/api/public/clube/pagamentos', pagar.api);
