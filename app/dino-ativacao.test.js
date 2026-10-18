@@ -32,6 +32,13 @@ test('situação de 28/09: slug, vitrine laranja, esgotados e canal oferecem a a
   assert.match(by.fotos.detalhe, /Tom Ford/);
 });
 
+test('empresa sem agenda (clube, loja) não recebe o aviso de slug de agendamento', () => {
+  const r = buildChecklist({ ...base(), slug: '', agendaIa: { profissionais: 0, semJornada: [], semQuemFaz: [], agendamentosFuturos: 0 } });
+  assert.equal(r.itens.find((i) => i.id === 'slug'), undefined);
+  const comAgenda = buildChecklist({ ...base(), slug: '' });
+  assert.equal(comAgenda.itens.find((i) => i.id === 'slug').acao, 'slug');
+});
+
 test('webhook mostra URL e nome do cabeçalho, nunca o valor do segredo', () => {
   const r = buildChecklist({ ...base(), canal: { status: 'rascunho', instance: 'dino-1', publicCode: 'abc123', lastEventAt: null } });
   const w = r.itens.find((i) => i.id === 'webhook');

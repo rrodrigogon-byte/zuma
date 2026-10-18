@@ -1,5 +1,6 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { rotaVisivel } from '../lib/disponibilidade'
 import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
 import { applyThemeMode, DINO_BARBERSHOP_LOGO, isClubeBrandContext, isDinoBrandContext, isStalloneBrandContext, STALLONE_LOGO, storedThemeMode } from '../lib/brand'
@@ -261,7 +262,7 @@ export const NAV_CLUBE_GROUPS = [
     ],
   },
   {
-    label: 'Torneios',
+    label: 'Torneios (evento Agro Open)',
     items: [
       { to: '/admin/torneios', icon: '🏆', label: 'Torneios' },
       { to: '/admin/inscricoes', icon: '📋', label: 'Inscrições' },
@@ -274,7 +275,7 @@ export const NAV_CLUBE_GROUPS = [
     ],
   },
   {
-    label: 'Bar & Restaurante',
+    label: 'Bar & Restaurante (evento)',
     items: [
       { to: '/admin/mesas', icon: '🪑', label: 'Mesas' },
       { to: '/admin/cardapio', icon: '🍽️', label: 'Cardápio' },
@@ -288,9 +289,7 @@ export const NAV_CLUBE_GROUPS = [
     items: [
       { to: '/admin/financeiro', icon: '💰', label: 'Financeiro' },
       { to: '/admin/contas-receber', icon: '🧾', label: 'Contas a Receber' },
-      { to: '/admin/pagamentos', icon: '💳', label: 'Pagamentos' },
-      { to: '/admin/bi', icon: '📉', label: 'BI & Analytics' },
-      { to: '/admin/relatorios-operacionais', icon: '📄', label: 'Relatórios' },
+      { to: '/admin/pagamentos', icon: '💳', label: 'Pagamentos (evento)' },
       { to: '/admin/notas', icon: '🧾', label: 'Notas Fiscais' },
     ],
   },
@@ -405,7 +404,9 @@ function moduloDaRota(to) {
   return ROUTE_MODULES.find(([prefix]) => path === prefix || path.startsWith(`${prefix}/`))?.[1] || null
 }
 
-function itemDisponivel(item, isPlatformAdmin, empresa) {
+function itemDisponivel(item, isPlatformAdmin, empresa, usuarioDeEmpresa = false) {
+  // telas sem backend em produção somem para todos; as do banco global do evento, para usuário de empresa
+  if (!rotaVisivel(item.to, { isPlatformAdmin, usuarioDeEmpresa })) return false
   if (isPlatformAdmin) return true
   const modulos = Array.isArray(empresa?.modulos) ? empresa.modulos.map((modulo) => String(modulo).toLowerCase()) : null
   if (!modulos) return true
@@ -506,7 +507,7 @@ function Section({ label, items, onNavClick, collapsible = false, badgesMap = {}
   )
 }
 
-function AdminGroups({ groups, onNavClick, isPlatformAdmin, empresa, sidebarCollapsed = false, compacto = false }) {
+function AdminGroups({ groups, onNavClick, isPlatformAdmin, empresa, usuarioDeEmpresa = false, sidebarCollapsed = false, compacto = false }) {
   const location = useLocation()
   // menu compacto: só os grupos do dia a dia abertos; o grupo da tela atual abre sozinho
   const naRota = (g) => g.items.some((item) => {
@@ -515,7 +516,7 @@ function AdminGroups({ groups, onNavClick, isPlatformAdmin, empresa, sidebarColl
   })
   return (
     <>
-      {groups.map(g => ({ ...g, items: g.items.filter((item) => itemDisponivel(item, isPlatformAdmin, empresa)) }))
+      {groups.map(g => ({ ...g, items: g.items.filter((item) => itemDisponivel(item, isPlatformAdmin, empresa, usuarioDeEmpresa)) }))
         .filter((group) => group.items.length > 0)
         .map(g => (
           <Section
@@ -554,6 +555,9 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
     '/kds': pendentes,
   }
   const empresaDoMenu = empresaAtiva
+  // usuário preso a uma empresa (não é da plataforma nem usuário legado do evento)
+  const usuarioDeEmpresa = (Boolean(user?.empresaId) || user?.tenantBound === true) && !isPlatformAdmin
+  const opVisiveis = (itens) => itens.filter((item) => rotaVisivel(item.to, { isPlatformAdmin, usuarioDeEmpresa }))
   const lojasDaEmpresa = lojasAcessiveis.filter((loja) => !empresaAtiva?.id || loja.empresaId === empresaAtiva.id)
 
   useEffect(() => {
@@ -724,8 +728,8 @@ export default function Sidebar({ collapsed = false, onToggleCollapse = () => {}
             ))}
           </div>
         )}
-        {isStaff && !isDino && !isStallone && <Section label={isClube ? 'Balcão, bar e portaria' : 'Operações'} items={isClube ? NAV_OP.filter((item) => item.to !== '/loja-atendimento') : NAV_OP} onNavClick={handleNavClick} badgesMap={badgesMap} sidebarCollapsed={collapsed && !isMobile} />}
-        {isOrg && <AdminGroups groups={isDino ? NAV_DINO_GROUPS : isStallone ? NAV_STALLONE_GROUPS : isClube ? NAV_CLUBE_GROUPS : NAV_ADMIN_GROUPS} onNavClick={handleNavClick} isPlatformAdmin={isPlatformAdmin} empresa={empresaDoMenu} sidebarCollapsed={collapsed && !isMobile} compacto={isClube} />}
+        {isStaff && !isDino && !isStallone && <Section label={isClube ? 'Balcão, bar e portaria' : 'Operações'} items={opVisiveis(isClube ? NAV_OP.filter((item) => item.to !== '/loja-atendimento') : NAV_OP)} onNavClick={handleNavClick} badgesMap={badgesMap} sidebarCollapsed={collapsed && !isMobile} />}
+        {isOrg && <AdminGroups groups={isDino ? NAV_DINO_GROUPS : isStallone ? NAV_STALLONE_GROUPS : isClube ? NAV_CLUBE_GROUPS : NAV_ADMIN_GROUPS} onNavClick={handleNavClick} isPlatformAdmin={isPlatformAdmin} empresa={empresaDoMenu} usuarioDeEmpresa={usuarioDeEmpresa} sidebarCollapsed={collapsed && !isMobile} compacto={isClube} />}
         {isPlatformAdmin && <Section label="Administração da Plataforma" items={NAV_PLATFORM} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />}
         {isAtleta && <Section label="Portal do Atleta" items={NAV_ATLETA} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />}
         <Section label={isDino ? 'Dino público' : isStallone ? 'Stallone público' : 'Site Público'} items={isDino ? NAV_DINO_PUBLIC : isStallone ? NAV_STALLONE_PUBLIC : NAV_PUBLIC} onNavClick={handleNavClick} sidebarCollapsed={collapsed && !isMobile} />

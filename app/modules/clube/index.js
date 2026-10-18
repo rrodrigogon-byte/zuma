@@ -20,6 +20,7 @@
 //   /api/admin/clube/cobrancas/...        painel: Pix da academia, cobranças e baixa
 //   /api/admin/clube/adesao               recepção: cadastro + matrícula + contrato + Pix em um passo
 //   /api/admin/clube/quadras/...          quadras, horário de funcionamento, grade do dia e reservas
+//   /api/admin/clube/painel/resumo        números do dia para o painel inicial do clube
 //   /clube/pagar/<token>                  página pública do Pix (QR e copia e cola)
 //   /clube/passe/<token>                  passe de entrada com QR que muda a cada 30 s
 //   /clube/painel                         painel da recepção e do dono (usa a sessão do Kytto)
@@ -43,6 +44,7 @@ import * as cobrancas from '../cobrancas/servico.js';
 import { createCobrancasAdminRouter, createPagamentoPublicoRouters } from '../cobrancas/rotas.js';
 import { createAdesaoRouter } from './adesao.js';
 import { createQuadrasAdminRouter } from '../quadras/rotas.js';
+import { createPainelResumoRouter } from './painel-resumo.js';
 import express from 'express';
 import { readFileSync } from 'node:fs';
 
@@ -327,6 +329,8 @@ export function montarClube(app, {
   }));
   // quadras e reservas (tênis, beach tennis, padel…) com horário de funcionamento por empresa
   app.use(`${prefixoAdmin}/quadras`, createQuadrasAdminRouter({ db, empresaDaRequisicao, operadorDaRequisicao }));
+  // painel inicial do clube no Kytto (/admin): números do dia da própria empresa
+  app.use(`${prefixoAdmin}/painel`, createPainelResumoRouter({ db, empresaDaRequisicao }));
   const pagar = createPagamentoPublicoRouters({ db });
   app.use('/clube/pagar', pagar.pagina);
   app.use('/api/public/clube/pagamentos', pagar.api);

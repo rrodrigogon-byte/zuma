@@ -18,9 +18,9 @@ vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
 }))
 
-function render(empresa) {
+function render(empresa, { platform = true, empresaId = null } = {}) {
   authMock.useAuth.mockReturnValue({
-    user: { nome: 'Rodrigo', role: 'admin' }, logout: vi.fn(), isOrg: true, isStaff: true, isAtleta: false, isPlatformAdmin: true,
+    user: { nome: 'Rodrigo', role: 'admin', ...(empresaId ? { empresaId } : {}) }, logout: vi.fn(), isOrg: true, isStaff: true, isAtleta: false, isPlatformAdmin: platform,
     empresaAtiva: empresa, empresasAcessiveis: [empresa], lojaAtiva: null, lojasAcessiveis: [], trocarEmpresa: vi.fn(), trocarLoja: vi.fn(),
   })
   let tree
@@ -46,8 +46,22 @@ describe('menu do clube (AGRO OPEN TTC)', () => {
     expect(links).not.toContain('/admin/mesas')
   })
 
-  it('outras empresas seguem com o menu completo', () => {
+  it('outras empresas seguem com o menu completo, sem as telas que ainda não estão no ar', () => {
     const { links } = render({ id: 'x', nome: 'Supermercado Bom Preço' })
-    expect(links).toContain('/admin/supermercado')
+    expect(links).toContain('/admin/ecommerce')
+    expect(links).toContain('/admin/torneios')
+    // backend ainda não montado em produção: fora do menu para todos
+    expect(links).not.toContain('/admin/supermercado')
+    expect(links).not.toContain('/admin/fiscal/config')
+    expect(links).not.toContain('/admin/contas-receber')
+  })
+
+  it('usuário do próprio clube não vê as telas do banco global do evento (dariam 403)', () => {
+    const { links } = render({ id: 'ttc', nome: 'AGRO OPEN TTC' }, { platform: false, empresaId: 'ttc' })
+    expect(links).toContain('/admin/clube/recepcao')
+    expect(links).toContain('/admin/clube/quadras')
+    expect(links).not.toContain('/admin/torneios')
+    expect(links).not.toContain('/admin/estoque')
+    expect(links).not.toContain('/pdv')
   })
 })

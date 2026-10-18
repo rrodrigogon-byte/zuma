@@ -101,3 +101,17 @@ test('dashboard mantém capturas Commerce separadas dos pedidos e do caixa legad
   assert.equal(commerce.refundedOrders, 1);
   assert.equal(commerce.capturedTransactions, 1);
 });
+
+test('novos clientes: só cadastro no período; atualização, importação e cliente padrão não contam', () => {
+  const input = baseInput();
+  input.customers = [
+    { id: 'novo', criadoEm: '2026-09-01T12:00:00.000Z' },
+    { id: 'antigo-atualizado', criadoEm: '2025-01-10T12:00:00.000Z', atualizadoEm: '2026-09-01T10:00:00.000Z' },
+    { id: 'importado', criadoEm: '2026-09-01T09:00:00.000Z', observacao: 'Origem AVEC (carga 09/10/2026)' },
+    { id: 'agenda', criadoEm: '2026-09-01T09:30:00.000Z', observacao: 'Cadastro automático (agenda) por x', origemCadastro: 'agenda' },
+    { id: 'padrao', criadoEm: '2026-09-01T08:00:00.000Z', padrao: true },
+  ];
+  const r = buildDinoDashboardAnalytics(input, { now, period: 1 });
+  const kpi = r.kpis.find((item) => item.id === 'newCustomers');
+  assert.equal(kpi.value, 3, '2 do cadastro (novo e o da agenda) + 1 do Commerce; o importado do AVEC não conta');
+});
