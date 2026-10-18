@@ -6,6 +6,11 @@ test('telas sem backend em produção: aviso e fora do menu para todos', () => {
   assert.equal(moduloEmImplantacao('/admin/fiscal/config'), 'Configuração de NF-e e NFC-e')
   assert.equal(moduloEmImplantacao('/admin/supermercado?aba=lotes'), 'Supermercado')
   assert.equal(moduloEmImplantacao('/admin/clube/quadras'), null)
+  assert.equal(moduloEmImplantacao('/admin/clientes'), null)
+  assert.equal(moduloEmImplantacao('/admin/contas-receber'), null)
+  assert.equal(moduloEmImplantacao('/admin/fechamento-diario'), null)
+  assert.equal(moduloEmImplantacao('/admin/cadastros-mestres'), null)
+  assert.equal(rotaVisivel('/admin/clientes', { usuarioDeEmpresa: true }), true)
   assert.equal(rotaVisivel('/admin/notas', { isPlatformAdmin: true }), false)
 })
 

@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../../lib/api'
+import { a2Path } from '../../lib/tenant-api'
 import { useToast } from '../../hooks/useToast'
 import { useAuth } from '../../lib/auth'
 import Modal from '../../components/Modal'
 
 const TABS = [
-  { id: 'funcionarios', label: 'Funcionários', icon: '👔', endpoint: '/api/admin/funcionarios' },
-  { id: 'fornecedores', label: 'Fornecedores', icon: '🚚', endpoint: '/api/admin/fornecedores' },
-  { id: 'usuarios', label: 'Usuários', icon: '🔐', endpoint: '/api/admin/usuarios-mestres' },
+  { id: 'funcionarios', label: 'Funcionários', icon: '👔', endpoint: '/funcionarios' },
+  { id: 'fornecedores', label: 'Fornecedores', icon: '🚚', endpoint: '/fornecedores' },
+  { id: 'usuarios', label: 'Usuários', icon: '🔐', endpoint: '/usuarios-mestres' },
 ]
+const SINGULARES = { funcionarios: 'Funcionário', fornecedores: 'Fornecedor', usuarios: 'Usuário' }
 
 const EMPTY = {
   funcionarios: { nome: '', cpf: '', email: '', telefone: '', cargo: '', departamento: '', dataAdmissao: '', salario: '', status: 'ativo', observacao: '' },
@@ -64,17 +66,17 @@ export default function CadastrosMestres() {
     setLoading(true)
     try {
       const [funcionarios, fornecedores, usuarios, contexto] = await Promise.all([
-        api.get('/api/admin/funcionarios'),
-        api.get('/api/admin/fornecedores'),
-        api.get('/api/admin/usuarios-mestres'),
-        api.get('/api/admin/empresa-ativa'),
+        api.get(a2Path('/funcionarios')),
+        api.get(a2Path('/fornecedores')),
+        api.get(a2Path('/usuarios-mestres')),
+        api.get(a2Path('/empresa-ativa')),
       ])
       setDados({
         funcionarios: funcionarios.funcionarios || [],
         fornecedores: fornecedores.fornecedores || [],
         usuarios: usuarios.usuarios || [],
       })
-      setEmpresa(contexto.empresa || null)
+      setEmpresa(contexto.empresa || contexto || null)
     } catch (error) {
       toast(error.message || 'Não foi possível carregar os cadastros mestres.', true)
     } finally {
@@ -132,8 +134,8 @@ export default function CadastrosMestres() {
         if (!payload.perfis.length) return toast('Selecione ao menos um perfil de acesso.', true)
         delete payload.roles
       }
-      if (modal?.modo === 'novo') await api.post(aba.endpoint, payload)
-      else await api.patch(`${aba.endpoint}/${modal.id}`, payload)
+      if (modal?.modo === 'novo') await api.post(a2Path(aba.endpoint), payload)
+      else await api.patch(a2Path(`${aba.endpoint}/${modal.id}`), payload)
       toast(`${tab.slice(0, -1)} ${modal?.modo === 'novo' ? 'cadastrado' : 'atualizado'} com sucesso.`)
       setModal(null)
       carregar()
@@ -159,7 +161,7 @@ export default function CadastrosMestres() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-secondary btn-sm" onClick={carregar}>↺ Atualizar</button>
           {podeGerenciarEmpresas && <button className="btn btn-secondary btn-sm" onClick={() => setModalEmpresa(true)}>🏢 Nova Empresa</button>}
-          <button className="btn btn-primary btn-sm" onClick={abrirNovo}>+ Novo {aba?.label?.slice(0, -1)}</button>
+          <button className="btn btn-primary btn-sm" onClick={abrirNovo}>+ Novo {SINGULARES[tab]}</button>
         </div>
       </div>
 
@@ -238,7 +240,7 @@ export default function CadastrosMestres() {
       )}
 
       {modal && (
-        <Modal title={`${modal.modo === 'novo' ? 'Novo' : 'Editar'} ${aba.label.slice(0, -1)}`} onClose={() => setModal(null)} width={620}>
+        <Modal title={`${modal.modo === 'novo' ? 'Novo' : 'Editar'} ${SINGULARES[tab]}`} onClose={() => setModal(null)} width={620}>
           <div style={{ display: 'grid', gap: 12, paddingBottom: 16 }}>
             {tab === 'funcionarios' && <FuncionarioForm form={form} setForm={setForm} />}
             {tab === 'fornecedores' && <FornecedorForm form={form} setForm={setForm} />}

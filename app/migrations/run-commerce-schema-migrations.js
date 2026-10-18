@@ -70,6 +70,7 @@ const migrationFiles = [
   '079_clube_importacoes.sql',
   '080_clube_quadras.sql',
   '081_bar_pdv_multiempresa.sql',
+  '082_financeiro_cadastros_multiempresa.sql',
 ];
 const advisoryLockKey = 825410732;
 

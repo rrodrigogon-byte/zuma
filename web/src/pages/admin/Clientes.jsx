@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, fmtR } from '../../lib/api'
+import { a2Path } from '../../lib/tenant-api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
 
@@ -27,7 +28,7 @@ export default function Clientes() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const { clientes } = await api.get('/api/admin/clientes')
+      const { clientes } = await api.get(a2Path('/clientes'))
       setClientes(clientes || [])
     } catch (e) {
       toast('Erro ao carregar clientes', true)
@@ -43,10 +44,10 @@ export default function Clientes() {
     setSaving(true)
     try {
       if (modal === 'novo') {
-        await api.post('/api/admin/clientes', form)
+        await api.post(a2Path('/clientes'), form)
         toast('Cliente cadastrado com sucesso')
       } else {
-        await api.patch(`/api/admin/clientes/${modal}`, form)
+        await api.patch(a2Path(`/clientes/${modal}`), form)
         toast('Cliente atualizado com sucesso')
       }
       setModal(null)

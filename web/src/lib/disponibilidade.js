@@ -12,11 +12,7 @@
 
 export const EM_IMPLANTACAO = {
   '/admin/agropecuaria': 'Agropecuária e petshop',
-  '/admin/cadastros-mestres': 'Cadastros mestres (funcionários e fornecedores)',
-  '/admin/clientes': 'Clientes e contas',
   '/admin/compras': 'Compras e fornecedores',
-  '/admin/contas-receber': 'Contas a receber',
-  '/admin/fechamento-diario': 'Fechamento diário',
   '/admin/fichas-tecnicas': 'Fichas técnicas',
   '/admin/fiscal/classificacao': 'Classificação fiscal',
   '/admin/fiscal/config': 'Configuração de NF-e e NFC-e',
