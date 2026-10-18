@@ -72,6 +72,9 @@ self.addEventListener('fetch', event => {
   const request = event.request
   if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return
   const caminho = new URL(request.url).pathname
+  // Páginas do Clube servidas pelo servidor (contrato com dados do aluno, passe com QR, painel):
+  // nunca entram no cache do aparelho nem viram a "página inicial" offline.
+  if (/^\/(?:contrato|clube\/(?:painel|passe|pagar))(?:\/|$)/.test(caminho) || /^\/api\/public\/(?:contratos|clube)\//.test(caminho)) return
   if (request.mode === 'navigate') {
     const chave = PAGINA_APP.test(caminho) ? caminho : '/'
     event.respondWith(fetch(request).then(async response => {

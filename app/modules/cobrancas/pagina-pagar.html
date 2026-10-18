@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Pagamento por Pix</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --fg: #15171c; --muted: #5d6472; --line: #e2e5ea;
+    --accent: #1f8a5b; --erro: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0e1014; --card: #171a21; --fg: #e9ebf1; --muted: #a2a9b8; --line: #2a2f3b; --accent: #4cc28d; --erro: #ff8a80; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 440px; margin: 0 auto; padding: 24px 16px 40px; text-align: center; }
+  h1 { font-size: 1.15rem; margin: 0 0 4px; font-weight: 600; }
+  .valor { font-size: 2.1rem; font-weight: 700; margin: 6px 0 2px; font-variant-numeric: tabular-nums; }
+  .sub { color: var(--muted); margin: 0 0 16px; font-size: .93rem; }
+  .qr { background: #fff; border-radius: 16px; padding: 16px; margin: 0 auto 16px; width: min(280px, 80vw); aspect-ratio: 1; display: grid; place-items: center; border: 1px solid var(--line); }
+  .qr svg { width: 100%; height: 100%; display: block; }
+  textarea { width: 100%; min-height: 92px; resize: none; border: 1px solid var(--line); border-radius: 10px; padding: 10px; font: 12px/1.4 ui-monospace, Menlo, monospace; background: var(--card); color: var(--fg); word-break: break-all; }
+  button { width: 100%; margin-top: 10px; border: 0; border-radius: 10px; padding: 14px; font: 600 1rem system-ui, sans-serif; background: var(--accent); color: #fff; cursor: pointer; }
+  button:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+  .dica { color: var(--muted); font-size: .86rem; margin-top: 14px; }
+  .erro b { color: var(--erro); }
+  .ok b { color: var(--accent); }
+  .oculto { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <div id="carregando" class="card">Carregando…</div>
+  <div id="aviso" class="card oculto"><b id="avisoTitulo"></b><p class="sub" id="avisoTexto" style="margin:8px 0 0"></p></div>
+  <section id="pagar" class="oculto">
+    <h1 id="descricao">Pagamento</h1>
+    <div class="valor" id="valor"></div>
+    <p class="sub" id="recebedor"></p>
+    <div class="qr" id="qr" role="img" aria-label="QR Code do Pix"></div>
+    <label for="copia" class="sub" style="display:block;margin-bottom:6px">Pix copia e cola</label>
+    <textarea id="copia" readonly></textarea>
+    <button id="copiar" type="button">Copiar código Pix</button>
+    <p class="dica" id="validade"></p>
+    <p class="dica">Depois de pagar, a recepção confere o Pix e sua entrada é liberada. Se precisar, mande o comprovante no WhatsApp da academia.</p>
+  </section>
+</main>
+<script src="/clube/pagar/_qr.js"></script>
+<script>
+(() => {
+  const token = location.pathname.split('/').filter(Boolean).pop();
+  const $ = (id) => document.getElementById(id);
+  function aviso(classe, titulo, texto) {
+    $('carregando').classList.add('oculto'); $('pagar').classList.add('oculto');
+    $('aviso').className = `card ${classe}`;
+    $('avisoTitulo').textContent = titulo; $('avisoTexto').textContent = texto;
+  }
+  async function carregar() {
+    try {
+      const r = await fetch(`/api/public/clube/pagamentos/${encodeURIComponent(token)}`, { cache: 'no-store' });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return aviso('erro', 'Cobrança não encontrada', 'Peça um novo link no WhatsApp da academia.');
+      if (d.status === 'paga') return aviso('ok', 'Pagamento confirmado', `${d.descricao} · ${d.valorFormatado}. Obrigado!`);
+      if (d.status === 'cancelada') return aviso('erro', 'Cobrança cancelada', 'Peça um novo link no WhatsApp da academia.');
+      if (d.status === 'vencida') return aviso('erro', 'Link vencido', 'Peça um novo link no WhatsApp da academia.');
+      $('descricao').textContent = d.descricao;
+      $('valor').textContent = d.valorFormatado;
+      $('recebedor').textContent = d.recebedor ? `Recebedor: ${d.recebedor}` : '';
+      $('copia').value = d.pixCopiaCola;
+      $('validade').textContent = `Válido até ${new Date(d.expiraEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`;
+      if (typeof qrcode === 'function') {
+        const q = qrcode(0, 'M'); q.addData(d.pixCopiaCola); q.make();
+        $('qr').innerHTML = q.createSvgTag({ cellSize: 5, margin: 0, scalable: true });
+      } else {
+        $('qr').classList.add('oculto');
+      }
+      $('carregando').classList.add('oculto'); $('pagar').classList.remove('oculto');
+    } catch {
+      aviso('erro', 'Sem conexão', 'Confira a internet e abra o link de novo.');
+    }
+  }
+  $('copiar').addEventListener('click', async () => {
+    const v = $('copia').value;
+    try { await navigator.clipboard.writeText(v); } catch { $('copia').select(); document.execCommand('copy'); }
+    $('copiar').textContent = 'Código copiado';
+    setTimeout(() => { $('copiar').textContent = 'Copiar código Pix'; }, 2500);
+  });
+  carregar();
+})();
+</script>
+</body>
+</html>

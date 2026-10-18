@@ -15,6 +15,7 @@
     "test:whatsapp-ai-provider-metrics-pg": "node scripts/test-dino-whatsapp-provider-metrics-pg.mjs",
     "test:catalog-diagnostic-ui": "node --test web/src/lib/catalog-diagnostic.test.js && (cd web && ../node_modules/.bin/vitest --config vite.config.js run src/pages/admin/CommerceCatalogDiagnostic.test.jsx)",
     "test": "npm run test:node && npm run test:vitest && npm run test:whatsapp-health",
+    "test:clube-pg": "node --test --test-concurrency=1 app/core/clube-*.test.js",
     "test:agenda-contract": "node --test --test-concurrency=1 app/core/barbershop-agenda-contract.test.js",
     "test:whatsapp-health": "node --test web/src/pages/admin/dino/whatsapp-ai-operational.test.js web/src/lib/api.test.js && (cd web && ../node_modules/.bin/vitest --config vite.config.js run src/pages/admin/dino/WhatsappConexao.test.jsx)",
     "test:node": "node --test --test-concurrency=1 app/*.test.js app/core/*.test.js app/migrations/*.test.js app/tests/pdv-barbearia.test.js web/src/lib/*.test.js web/tests/commerce-users.test.mjs web/tests/commerce-accounts.test.mjs web/tests/accept-invite.test.mjs",

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Passe de entrada</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --fg: #15171c; --muted: #5d6472; --line: #e2e5ea;
+    --accent: #3f4cc0; --ok: #1f8a5b; --erro: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0e1014; --card: #171a21; --fg: #e9ebf1; --muted: #a2a9b8; --line: #2a2f3b; --accent: #7381ea; --ok: #4cc28d; --erro: #ff8a80; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 420px; margin: 0 auto; padding: 24px 16px 40px; text-align: center; }
+  h1 { font-size: 1.3rem; margin: 4px 0; }
+  .sub { color: var(--muted); margin: 0 0 18px; font-size: .95rem; }
+  .selo { display: inline-block; font-size: .78rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 3px 10px; margin-bottom: 10px; }
+  /* o QR fica sempre em fundo branco: leitor da catraca precisa de contraste, mesmo no modo escuro */
+  .qr { background: #fff; border-radius: 16px; padding: 18px; margin: 0 auto 14px; width: min(320px, 86vw); aspect-ratio: 1; display: grid; place-items: center; border: 1px solid var(--line); }
+  .qr svg { width: 100%; height: 100%; display: block; }
+  .barra { height: 4px; background: var(--line); border-radius: 4px; overflow: hidden; width: min(320px, 86vw); margin: 0 auto 16px; }
+  .barra i { display: block; height: 100%; background: var(--accent); width: 100%; transition: width 1s linear; }
+  .dica { color: var(--muted); font-size: .88rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+  .erro b { color: var(--erro); }
+  .oculto { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <div id="carregando" class="card">Carregando seu passe…</div>
+  <div id="falha" class="card erro oculto"><b id="falhaTitulo">Passe indisponível</b><p class="sub" id="falhaTexto" style="margin:8px 0 0"></p></div>
+  <section id="passe" class="oculto">
+    <span class="selo" id="selo">Passe</span>
+    <h1 id="ola">Seu passe de entrada</h1>
+    <p class="sub" id="validade"></p>
+    <div class="qr" id="qr" role="img" aria-label="QR de entrada"></div>
+    <div class="barra" aria-hidden="true"><i id="barra"></i></div>
+    <p class="dica">Aproxime a tela do leitor da catraca. O código muda sozinho a cada 30 segundos; um print não funciona.</p>
+    <p class="dica">Dica: aumente o brilho da tela.</p>
+  </section>
+</main>
+<script src="/clube/passe/_qr.js"></script>
+<script>
+(() => {
+  const token = location.pathname.split('/').filter(Boolean).pop();
+  const $ = (id) => document.getElementById(id);
+  let fimQr = 0; let timer = null;
+
+  function mostrarFalha(titulo, texto) {
+    $('carregando').classList.add('oculto'); $('passe').classList.add('oculto');
+    $('falhaTitulo').textContent = titulo; $('falhaTexto').textContent = texto;
+    $('falha').classList.remove('oculto');
+    if (timer) clearTimeout(timer);
+  }
+
+  function desenhar(valor) {
+    if (typeof qrcode !== 'function') { $('qr').textContent = valor; return; }
+    const q = qrcode(0, 'M');
+    q.addData(valor); q.make();
+    $('qr').innerHTML = q.createSvgTag({ cellSize: 6, margin: 0, scalable: true });
+  }
+
+  async function atualizar() {
+    try {
+      const r = await fetch(`/api/public/clube/passes/${encodeURIComponent(token)}/qr`, { cache: 'no-store' });
+      const d = await r.json().catch(() => ({}));
+      if (r.status === 410) return mostrarFalha('Passe vencido', 'Faça um novo check-in no app para receber outro passe.');
+      if (!r.ok) return mostrarFalha('Passe indisponível', d.error || 'Peça ajuda na recepção.');
+      desenhar(d.qr);
+      $('selo').textContent = d.plataforma ? `Check-in ${d.plataforma}` : 'Passe';
+      $('ola').textContent = d.nome ? `Olá, ${d.nome}!` : 'Seu passe de entrada';
+      const ate = new Date(d.passeExpiraEm);
+      $('validade').textContent = `Válido até ${ate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+      fimQr = new Date(d.qrExpiraEm).getTime();
+      $('carregando').classList.add('oculto'); $('passe').classList.remove('oculto');
+      const espera = Math.max(1500, Math.min(20000, fimQr - Date.now() + 300));
+      timer = setTimeout(atualizar, espera);
+    } catch {
+      timer = setTimeout(atualizar, 4000); // sem sinal: tenta de novo sem apagar o QR atual
+    }
+  }
+
+  setInterval(() => {
+    const resta = Math.max(0, fimQr - Date.now());
+    $('barra').style.width = `${Math.min(100, (resta / 30000) * 100)}%`;
+  }, 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { clearTimeout(timer); atualizar(); } });
+  atualizar();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1001 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Kytto Clube</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --chao: #eef0ec; --placa: #ffffff; --tinta: #1b1f23; --apagado: #5e666e; --linha: #d9ddd7;
+    --trilho: #22262b; --trilho-tinta: #e9ece8; --trilho-apagado: #9aa3ab;
+    --libera: #0f8f6b; --libera-fundo: #e2f3ec; --bloqueia: #c8342b; --bloqueia-fundo: #fbe7e5;
+    --espera: #b97c0c; --espera-fundo: #fbf0d9; --foco: #2f6fdb;
+    --raio: 10px;
+    --titulo: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
+    --texto: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --chao: #15181b; --placa: #1e2226; --tinta: #e7eae6; --apagado: #a1a9b0; --linha: #2e3338;
+      --trilho: #0f1113; --libera: #3fbf93; --libera-fundo: #16302a; --bloqueia: #f0776d; --bloqueia-fundo: #3a1f1d;
+      --espera: #e0b04f; --espera-fundo: #3a2e15; --foco: #7aa7ff;
+    }
+  }
+  :root[data-theme="dark"] {
+    --chao: #15181b; --placa: #1e2226; --tinta: #e7eae6; --apagado: #a1a9b0; --linha: #2e3338;
+    --trilho: #0f1113; --libera: #3fbf93; --libera-fundo: #16302a; --bloqueia: #f0776d; --bloqueia-fundo: #3a1f1d;
+    --espera: #e0b04f; --espera-fundo: #3a2e15; --foco: #7aa7ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--chao); color: var(--tinta); font: 16px/1.5 var(--texto); font-variant-numeric: tabular-nums; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
+  a { color: var(--foco); }
+
+  /* estrutura: trilho à esquerda no computador, barra embaixo no celular */
+  .app { display: grid; grid-template-columns: 220px 1fr; min-height: 100%; }
+  nav.trilho { background: var(--trilho); color: var(--trilho-tinta); padding: 20px 12px; position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 2px; }
+  .marca { font: 700 1.35rem/1 var(--titulo); letter-spacing: .01em; padding: 4px 12px 22px; }
+  .marca small { display: block; font: 500 .85rem/1.3 var(--texto); color: var(--trilho-apagado); margin-top: 4px; }
+  nav.trilho a { display: flex; align-items: center; gap: 12px; color: var(--trilho-apagado); text-decoration: none; padding: 10px 12px; border-radius: 8px; font-weight: 500; }
+  nav.trilho a svg { width: 20px; height: 20px; flex: none; }
+  nav.trilho a:hover { color: var(--trilho-tinta); background: rgba(255,255,255,.05); }
+  nav.trilho a[aria-current="page"] { color: var(--trilho-tinta); background: rgba(255,255,255,.09); box-shadow: inset 3px 0 0 var(--libera); }
+  nav.trilho .rodape { margin-top: auto; padding: 12px; font-size: .82rem; color: var(--trilho-apagado); }
+  main { padding: 28px 32px 48px; min-width: 0; }
+  @media (max-width: 860px) {
+    .app { grid-template-columns: 1fr; }
+    nav.trilho { position: fixed; inset: auto 0 0 0; top: auto; height: auto; flex-direction: row; justify-content: space-around; padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); z-index: 20; }
+    .marca, nav.trilho .rodape { display: none; }
+    nav.trilho a { flex-direction: column; gap: 2px; font-size: .7rem; padding: 6px 4px; }
+    nav.trilho a[aria-current="page"] { box-shadow: inset 0 -3px 0 var(--libera); }
+    main { padding: 18px 16px 96px; }
+  }
+
+  h1 { font: 600 1.9rem/1.15 var(--titulo); margin: 0 0 4px; }
+  h2 { font: 600 1.25rem/1.25 var(--titulo); margin: 0 0 12px; }
+  h3 { font: 600 1.05rem/1.3 var(--titulo); margin: 0 0 8px; }
+  .sub { color: var(--apagado); margin: 0 0 22px; }
+  .topo { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+  .topo .sub { margin: 0; }
+
+  .grade { display: grid; gap: 18px; }
+  .duas { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+  @media (max-width: 1100px) { .duas { grid-template-columns: 1fr; } }
+  .bloco { background: var(--placa); border: 1px solid var(--linha); border-radius: var(--raio); padding: 18px; min-width: 0; }
+  .bloco + .bloco { margin-top: 18px; }
+  .grade > .bloco + .bloco { margin-top: 0; }
+
+  button.acao, a.acao { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--linha); background: var(--placa); border-radius: 8px; padding: 8px 14px; cursor: pointer; font-weight: 600; text-decoration: none; color: var(--tinta); }
+  button.acao:hover { border-color: var(--apagado); }
+  button.acao.primaria { background: var(--libera); border-color: var(--libera); color: #fff; }
+  button.acao.perigo { color: var(--bloqueia); border-color: var(--bloqueia); }
+  button.acao:disabled { opacity: .5; cursor: progress; }
+  .acoes { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* faixa da catraca: cada passagem é uma raia, verde quem entrou, vermelho quem parou */
+  .raias { list-style: none; margin: 0; padding: 0; }
+  .raia { display: grid; grid-template-columns: 64px 1fr auto; gap: 14px; align-items: center; padding: 12px 14px 12px 16px; border-left: 6px solid var(--libera); background: var(--placa); border-bottom: 1px solid var(--linha); }
+  .raia:first-child { border-top-right-radius: var(--raio); }
+  .raia.negado { border-left-color: var(--bloqueia); background: var(--bloqueia-fundo); }
+  .raia.parceiro { border-left-color: var(--foco); }
+  .raia .hora { font: 600 1.15rem/1 var(--titulo); color: var(--apagado); }
+  .raia .quem { font: 600 1.25rem/1.2 var(--titulo); }
+  .raia .motivo { color: var(--apagado); font-size: .92rem; }
+  .raia.negado .motivo { color: var(--bloqueia); font-weight: 500; }
+  .raia.nova { animation: entra .6s ease-out; }
+  @keyframes entra { from { background: var(--libera-fundo); } }
+  @media (prefers-reduced-motion: reduce) { .raia.nova { animation: none; } }
+  @media (max-width: 560px) { .raia { grid-template-columns: 48px 1fr; } .raia .acoes { grid-column: 1 / -1; } }
+
+  .numeros { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
+  .numero { padding: 4px 0; }
+  .numero b { display: block; font: 600 2.2rem/1 var(--titulo); }
+  .numero span { color: var(--apagado); font-size: .9rem; }
+  .numero.alerta b { color: var(--bloqueia); }
+  .numero.bom b { color: var(--libera); }
+
+  .estado { display: inline-flex; align-items: center; gap: 6px; font-size: .88rem; font-weight: 500; padding: 2px 10px; border-radius: 999px; background: var(--chao); white-space: nowrap; }
+  .estado::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--apagado); }
+  .estado.online::before, .estado.ok::before, .estado.validado::before, .estado.aceito::before, .estado.ativa::before, .estado.resolvido::before { background: var(--libera); }
+  .estado.offline::before, .estado.erro::before, .estado.negado::before, .estado.retroativo::before, .estado.cancelada::before, .estado.falhou::before, .estado.bloqueada::before { background: var(--bloqueia); }
+  .estado.contingencia::before, .estado.enviado::before, .estado.aguardando::before, .estado.congelada::before, .estado.recebido::before, .estado.validando::before, .estado.aberta::before { background: var(--espera); }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-weight: 600; color: var(--apagado); font-size: .88rem; padding: 8px 10px; border-bottom: 1px solid var(--linha); }
+  td { padding: 10px; border-bottom: 1px solid var(--linha); vertical-align: middle; }
+  tr.clicavel { cursor: pointer; }
+  tr.clicavel:hover td { background: var(--chao); }
+  .rolagem { overflow-x: auto; }
+  .vazio { color: var(--apagado); padding: 18px 4px; }
+
+  label.campo { display: grid; gap: 4px; font-weight: 500; font-size: .92rem; }
+  label.campo span.ajuda { color: var(--apagado); font-weight: 400; font-size: .84rem; }
+  input:not([type=checkbox]):not([type=radio]), select, textarea { border: 1px solid var(--linha); background: var(--chao); border-radius: 8px; padding: 9px 11px; width: 100%; min-width: 0; }
+  textarea { min-height: 110px; resize: vertical; }
+  .form { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); align-items: end; }
+  .form .largo { grid-column: 1 / -1; }
+  .linha-check { display: flex; gap: 10px; align-items: center; font-weight: 500; }
+  .linha-check input { width: 20px; height: 20px; accent-color: var(--libera); }
+  .busca { max-width: 360px; }
+
+  /* barras simples (frequência, funil) */
+  .barras { display: flex; align-items: flex-end; gap: 6px; height: 90px; padding-top: 6px; }
+  .barras i { flex: 1; background: var(--libera); border-radius: 4px 4px 0 0; min-height: 2px; position: relative; }
+  .barras i span { position: absolute; top: -18px; left: 0; right: 0; text-align: center; font-size: .75rem; font-style: normal; color: var(--apagado); }
+  .funil-linha { display: grid; grid-template-columns: 150px 1fr 130px; gap: 12px; align-items: center; padding: 6px 0; }
+  .funil-linha .trilha { height: 12px; background: var(--linha); border-radius: 6px; overflow: hidden; display: flex; }
+  .funil-linha .trilha b { background: var(--libera); }
+  .funil-linha .trilha s { background: var(--espera); text-decoration: none; }
+  @media (max-width: 560px) { .funil-linha { grid-template-columns: 1fr; gap: 4px; } }
+
+  /* semana da agenda */
+  .semana { display: grid; grid-template-columns: repeat(7, minmax(130px, 1fr)); gap: 10px; overflow-x: auto; }
+  .dia h3 { font-size: .95rem; color: var(--apagado); }
+  .dia.hoje h3 { color: var(--tinta); }
+  .aula { display: block; width: 100%; text-align: left; border: 1px solid var(--linha); border-left: 4px solid var(--libera); background: var(--placa); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; cursor: pointer; }
+  .aula.cheia { border-left-color: var(--bloqueia); }
+  .aula.quase { border-left-color: var(--espera); }
+  .aula.cancelada { opacity: .5; text-decoration: line-through; }
+  .aula b { display: block; font: 600 1rem/1.2 var(--titulo); }
+  .aula small { color: var(--apagado); }
+
+  /* gaveta (perfil do aluno, detalhes) */
+  dialog { border: 0; padding: 0; background: var(--placa); color: var(--tinta); width: min(560px, 100vw); max-width: 100vw; height: 100vh; max-height: 100vh; margin: 0 0 0 auto; box-shadow: -8px 0 32px rgba(0,0,0,.18); }
+  dialog::backdrop { background: rgba(15,17,19,.45); }
+  dialog .cabeca { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 20px 20px 12px; border-bottom: 1px solid var(--linha); position: sticky; top: 0; background: var(--placa); }
+  dialog .corpo { padding: 18px 20px 40px; display: grid; gap: 18px; }
+  dialog .fechar { border: 0; background: none; font-size: 1.6rem; line-height: 1; cursor: pointer; color: var(--apagado); padding: 0 4px; }
+  .secao { border-top: 1px solid var(--linha); padding-top: 14px; }
+  dl.dados { display: grid; grid-template-columns: 140px 1fr; gap: 6px 12px; margin: 0; }
+  dl.dados dt { color: var(--apagado); }
+  dl.dados dd { margin: 0; }
+
+  .aviso { padding: 12px 14px; border-radius: 8px; background: var(--espera-fundo); border: 1px solid var(--espera); margin-bottom: 16px; }
+  .aviso.erro { background: var(--bloqueia-fundo); border-color: var(--bloqueia); }
+  .aviso.bom { background: var(--libera-fundo); border-color: var(--libera); }
+  .copiar { display: flex; gap: 8px; }
+  .copiar input { font-size: .85rem; }
+  .abas { display: flex; gap: 4px; border-bottom: 1px solid var(--linha); margin-bottom: 16px; overflow-x: auto; }
+  .abas button { border: 0; background: none; padding: 10px 14px; cursor: pointer; font-weight: 600; color: var(--apagado); border-bottom: 3px solid transparent; white-space: nowrap; }
+  .abas button[aria-selected="true"] { color: var(--tinta); border-bottom-color: var(--libera); }
+  #toast { position: fixed; right: 20px; bottom: 20px; background: var(--trilho); color: var(--trilho-tinta); padding: 12px 16px; border-radius: 8px; max-width: 360px; transform: translateY(20px); opacity: 0; visibility: hidden; transition: transform .25s, opacity .25s, visibility .25s; z-index: 50; }
+  #toast.mostra { transform: none; opacity: 1; visibility: visible; }
+  #toast.erro { background: var(--bloqueia); color: #fff; }
+  @media (max-width: 860px) { #toast { bottom: 84px; left: 16px; right: 16px; } }
+  .oculto { display: none !important; }
+  /* dentro do Kytto (/admin/clube): o menu é o do Kytto, sem o trilho próprio */
+  body.embutido .app { grid-template-columns: 1fr; }
+  body.embutido nav.trilho { display: none; }
+  body.embutido main { padding: 20px 24px 40px; }
+  @media (max-width: 860px) { body.embutido main { padding: 16px 16px 40px; } body.embutido #toast { bottom: 20px; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="trilho" aria-label="Seções do clube">
+    <div class="marca">Kytto Clube<small id="empresaNome">Recepção e gestão</small></div>
+    <a href="#recepcao" data-rota="recepcao"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21V5a2 2 0 0 1 2-2h4v18M14 21V9h4a2 2 0 0 1 2 2v10M2 21h20"/></svg>Recepção</a>
+    <a href="#alunos" data-rota="alunos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-7 7-7s7 3 7 7M17 4a4 4 0 0 1 0 8M22 21c0-3-2-6-5-6.6"/></svg>Alunos</a>
+    <a href="#aulas" data-rota="aulas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>Aulas</a>
+    <a href="#contratos" data-rota="contratos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 14l2.5 2.5L16 11"/></svg>Contratos</a>
+    <a href="#retencao" data-rota="retencao"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Retenção</a>
+    <a href="#cobrancas" data-rota="cobrancas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg>Cobranças</a>
+    <a href="#parceiros" data-rota="parceiros"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 12h8M12 8v8"/><rect x="3" y="3" width="18" height="18" rx="9"/></svg>Parceiros</a>
+    <a href="#ajustes" data-rota="ajustes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Ajustes</a>
+    <div class="rodape">Catraca, contratos, aulas e retenção</div>
+  </nav>
+  <main id="tela" tabindex="-1"></main>
+</div>
+<dialog id="gaveta" aria-labelledby="gavetaTitulo"><div class="cabeca"><div><h2 id="gavetaTitulo" style="margin:0"></h2><div id="gavetaSub" class="sub" style="margin:2px 0 0"></div></div><button class="fechar" aria-label="Fechar" onclick="document.getElementById('gaveta').close()">×</button></div><div class="corpo" id="gavetaCorpo"></div></dialog>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+'use strict';
+/* ------------------------------------------------------------------ */
+/* Acesso à API com a sessão do Kytto (mesmo login do painel)          */
+/* ------------------------------------------------------------------ */
+const BASE = '/api/admin/clube';
+function ler(chave) { try { return localStorage.getItem(chave); } catch { return null; } }
+function jsonLocal(chave) { try { return JSON.parse(ler(chave) || 'null'); } catch { return null; } }
+function cabecalhos() {
+  const token = ler('sp_token') || ler('sp_site_token') || '';
+  const empresa = jsonLocal('sp_empresa_ativa');
+  const loja = jsonLocal('sp_loja_ativa');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(empresa?.id ? { 'X-Empresa-Id': empresa.id } : {}),
+    ...(loja?.id ? { 'X-Loja-Id': loja.id } : {}),
+  };
+}
+async function api(caminho, { metodo = 'GET', corpo } = {}) {
+  const r = await fetch(BASE + caminho, { method: metodo, headers: cabecalhos(), body: corpo === undefined ? undefined : JSON.stringify(corpo) });
+  const d = await r.json().catch(() => ({}));
+  if (r.status === 401) { semSessao(); throw new Error('Sessão expirada'); }
+  if (!r.ok) { const e = new Error(d.error || `Erro ${r.status}`); e.status = r.status; e.code = d.code; throw e; }
+  return d;
+}
+
+/* ------------------------------------------------------------------ */
+/* Utilidades de interface                                             */
+/* ------------------------------------------------------------------ */
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const reais = (v) => (v === null || v === undefined || v === '' ? '—' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
+const dataBR = (d) => (d ? new Date(String(d).length === 10 ? `${d}T12:00:00` : d).toLocaleDateString('pt-BR') : '—');
+const dataHoraBR = (d) => (d ? new Date(d).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—');
+const hora = (d) => new Date(d).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+const hojeISO = () => new Date().toLocaleDateString('en-CA');
+const somarDias = (iso, n) => { const d = new Date(`${iso}T12:00:00`); d.setDate(d.getDate() + n); return d.toLocaleDateString('en-CA'); };
+const mesAtual = () => hojeISO().slice(0, 7);
+
+let toastTimer;
+function aviso(texto, erro = false) {
+  const t = $('#toast'); t.textContent = texto; t.className = `mostra${erro ? ' erro' : ''}`;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = ''; }, 4200);
+}
+/** Executa uma ação de botão com estado de espera e mensagem de resultado. */
+async function agir(botao, fn, ok) {
+  if (botao) botao.disabled = true;
+  try { const r = await fn(); if (ok) aviso(typeof ok === 'function' ? ok(r) : ok); return r; }
+  catch (e) { aviso(e.message, true); return null; }
+  finally { if (botao) botao.disabled = false; }
+}
+function semSessao() {
+  $('#tela').innerHTML = `<div class="bloco"><h2>Entre no Kytto para usar o painel do clube</h2><p class="sub">A sessão expirou ou este navegador ainda não fez login.</p><a class="acao" href="/login" target="_top">Fazer login</a></div>`;
+}
+function erroTela(e) {
+  if (e.status === 403) return `<div class="aviso erro">Seu usuário não tem permissão para o painel do clube, ou nenhuma empresa está selecionada. Escolha a empresa no Kytto e volte aqui.</div>`;
+  return `<div class="aviso erro">Não foi possível carregar: ${esc(e.message)}</div>`;
+}
+function gaveta(titulo, sub, html) {
+  $('#gavetaTitulo').textContent = titulo; $('#gavetaSub').textContent = sub || ''; $('#gavetaCorpo').innerHTML = html;
+  const g = $('#gaveta'); if (!g.open) g.showModal();
+  return $('#gavetaCorpo');
+}
+function form(el) { return Object.fromEntries(new FormData(el).entries()); }
+function estado(s, rotulo) { return `<span class="estado ${esc(s)}">${esc(rotulo || ROTULOS[s] || s)}</span>`; }
+const ROTULOS = {
+  online: 'online', offline: 'sem sinal', contingencia: 'contingência', aguardando: 'aguardando pareamento',
+  ativa: 'ativa', congelada: 'congelada', cancelada: 'cancelada', enviado: 'aguardando aceite', aceito: 'aceito', expirado: 'vencido',
+  recebido: 'recebido', validando: 'validando', validado: 'validado', falhou: 'tentando de novo', retroativo: 'pedir retroativo', negado: 'recusado',
+  aberta: 'aberta', em_andamento: 'em andamento', resolvida: 'resolvida',
+};
+const MOTIVOS = {
+  inadimplente: 'Mensalidade em aberto', contrato_pendente: 'Contrato não aceito', fora_do_horario: 'Fora do horário do plano',
+  limite_atingido: 'Limite do plano atingido', sem_reserva: 'Sem reserva de aula', unidade_nao_permitida: 'Plano de outra unidade',
+  ja_dentro: 'Entrada já registrada', sem_plano: 'Sem plano ativo', bloqueio_manual: 'Bloqueio no cadastro', nao_identificado: 'Não identificado',
+  liberado: 'Entrou', parceiro: 'Entrou pelo app parceiro',
+};
+const GATILHOS = {
+  inadimplente: 'Mensalidade atrasada', vencimento: 'Vencimento chegando', aniversario: 'Aniversário', faltante_serio: 'Sumido há 15 dias',
+  risco_cancelar: 'Frequência caindo', renovacao: 'Renovação do plano', faltante_leve: 'Sumido há 7 dias', prospect: 'Interessado sem matrícula',
+  parceiro_frequente: 'Parceiro frequente', pos_aula: 'Pesquisa da 1ª semana', ex_aluno: 'Ex-aluno',
+};
+
+/* ------------------------------------------------------------------ */
+/* Rotas                                                               */
+/* ------------------------------------------------------------------ */
+let pararRecepcao = null;
+const TELAS = { recepcao: telaRecepcao, alunos: telaAlunos, aulas: telaAulas, contratos: telaContratos, retencao: telaRetencao, cobrancas: telaCobrancas, parceiros: telaParceiros, ajustes: telaAjustes };
+const EMBUTIDO = new URLSearchParams(location.search).get('embed') === '1';
+if (EMBUTIDO) document.body.classList.add('embutido');
+function navegar() {
+  const rota = (location.hash.slice(1) || 'recepcao').split('/')[0];
+  const tela = TELAS[rota] ? rota : 'recepcao';
+  document.querySelectorAll('nav.trilho a').forEach((a) => {
+    if (a.dataset.rota === tela) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+  });
+  if (pararRecepcao) { pararRecepcao(); pararRecepcao = null; }
+  // dentro do Kytto: avisa a página de fora para a URL acompanhar a seção (voltar do navegador funciona)
+  if (EMBUTIDO && window.parent !== window) { try { window.parent.postMessage({ tipo: 'kytto-clube:rota', rota: tela }, location.origin); } catch { /* sem pai */ } }
+  $('#tela').innerHTML = '<p class="sub">Carregando…</p>';
+  TELAS[tela]().catch((e) => { if (e.message !== 'Sessão expirada') $('#tela').innerHTML = erroTela(e); });
+}
+window.addEventListener('hashchange', navegar);
+const empresa = jsonLocal('sp_empresa_ativa');
+if (empresa?.nome || empresa?.nome_fantasia) $('#empresaNome').textContent = empresa.nome_fantasia || empresa.nome;
+
+/* ------------------------------------------------------------------ */
+/* Recepção ao vivo                                                    */
+/* ------------------------------------------------------------------ */
+async function telaRecepcao() {
+  const [eventos, aparelhos] = await Promise.all([api('/acesso/eventos?limite=60'), api('/acesso/dispositivos')]);
+  let retro = []; let ocorr = [];
+  try { [retro, ocorr] = await Promise.all([api('/parceiros/retroativos'), api('/retencao/ocorrencias')]); } catch { /* módulos opcionais */ }
+  $('#tela').innerHTML = `
+    <div class="topo"><div><h1>Recepção</h1><p class="sub">Quem passou pela catraca agora. Bloqueio aparece em vermelho com a solução ao lado.</p></div>
+      <div class="acoes"><button class="acao" id="btnLiberar">Liberar entrada manual</button></div></div>
+    <div class="grade duas">
+      <section class="bloco" style="padding:0;overflow:hidden" aria-label="Passagens recentes"><ul class="raias" id="raias"></ul></section>
+      <div>
+        <section class="bloco"><h2>Hoje</h2><div class="numeros" id="numeros"></div></section>
+        <section class="bloco"><h2>Aparelhos</h2><div id="aparelhos"></div></section>
+        <section class="bloco"><h2>Para resolver</h2><div id="pendencias"></div></section>
+      </div>
+    </div>`;
+  const vistos = new Set();
+  let ultimos = eventos;
+  const desenhar = (lista, novos = new Set()) => {
+    $('#raias').innerHTML = lista.length ? lista.map((e) => raia(e, novos.has(e.id))).join('') : '<li class="vazio" style="padding:18px">Nenhuma passagem ainda hoje.</li>';
+    const hoje = hojeISO();
+    const deHoje = lista.filter((e) => new Date(e.em).toLocaleDateString('en-CA') === hoje);
+    $('#numeros').innerHTML = `
+      <div class="numero bom"><b>${deHoje.filter((e) => e.decisao === 'liberado').length}</b><span>entradas</span></div>
+      <div class="numero ${deHoje.some((e) => e.decisao === 'negado') ? 'alerta' : ''}"><b>${deHoje.filter((e) => e.decisao === 'negado').length}</b><span>bloqueios</span></div>
+      <div class="numero"><b>${deHoje.filter((e) => e.codigo === 'parceiro').length}</b><span>pelo Wellhub ou TotalPass</span></div>`;
+  };
+  eventos.forEach((e) => vistos.add(e.id));
+  desenhar(eventos);
+  $('#aparelhos').innerHTML = aparelhos.length
+    ? aparelhos.map((a) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--linha)"><span>${esc(a.nome)}</span>${estado(a.status)}</div>`).join('')
+    : '<p class="vazio">Nenhum aparelho cadastrado. <a href="#ajustes">Cadastrar catraca</a></p>';
+  const pend = [];
+  if (retro.length) pend.push(`<p><a href="#parceiros">${retro.length} check-in(s) de parceiro para pedir retroativo</a></p>`);
+  if (ocorr.length) pend.push(`<p><a href="#retencao">${ocorr.length} aluno(s) esperando atendimento</a></p>`);
+  $('#pendencias').innerHTML = pend.join('') || '<p class="vazio" style="padding:0">Tudo em dia.</p>';
+
+  $('#raias').addEventListener('click', (ev) => {
+    const b = ev.target.closest('button[data-acao]'); if (!b) return;
+    const { acao, cliente } = b.dataset;
+    if (acao === 'pix') agir(b, () => api(`/retencao/alunos/${cliente}/link-pagamento`, { metodo: 'POST', corpo: { enviar: true } }), 'Link de pagamento enviado no WhatsApp.');
+    if (acao === 'perfil') abrirAluno(cliente);
+    if (acao === 'liberar') liberarManual(aparelhos, cliente);
+  });
+  $('#btnLiberar').onclick = () => liberarManual(aparelhos, null);
+
+  const timer = setInterval(async () => {
+    try {
+      const lista = await api('/acesso/eventos?limite=60');
+      const novos = new Set(lista.filter((e) => !vistos.has(e.id)).map((e) => e.id));
+      lista.forEach((e) => vistos.add(e.id));
+      if (novos.size || lista.length !== ultimos.length) { ultimos = lista; desenhar(lista, novos); }
+    } catch { /* sem rede: tenta no próximo ciclo */ }
+  }, 4000);
+  pararRecepcao = () => clearInterval(timer);
+}
+function raia(e, nova) {
+  const negado = e.decisao === 'negado';
+  const acoes = [];
+  if (negado && e.customerId) {
+    if (e.codigo === 'inadimplente') acoes.push(`<button class="acao primaria" data-acao="pix" data-cliente="${e.customerId}">Enviar link de pagamento</button>`);
+    acoes.push(`<button class="acao" data-acao="perfil" data-cliente="${e.customerId}">Ver aluno</button>`);
+    if (!['bloqueio_manual', 'ja_dentro'].includes(e.codigo)) acoes.push(`<button class="acao" data-acao="liberar" data-cliente="${e.customerId}">Liberar</button>`);
+  }
+  return `<li class="raia${negado ? ' negado' : ''}${e.codigo === 'parceiro' ? ' parceiro' : ''}${nova ? ' nova' : ''}">
+    <span class="hora">${new Date(e.em).toLocaleDateString('en-CA') === hojeISO() ? hora(e.em) : new Date(e.em).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+    <div><div class="quem">${esc(e.nome || 'Não identificado')}</div><div class="motivo">${esc(MOTIVOS[e.codigo] || e.mensagem || e.codigo)}${e.origem === 'manual' ? ' (liberação manual)' : ''}${e.dispositivo ? ` · ${esc(e.dispositivo)}` : ''}</div></div>
+    <div class="acoes">${acoes.join('')}</div></li>`;
+}
+function liberarManual(aparelhos, clienteId) {
+  if (!aparelhos.length) return aviso('Cadastre uma catraca em Ajustes antes de liberar.', true);
+  const corpo = gaveta('Liberar entrada', 'Fica registrado com seu usuário e o motivo.', `
+    <form class="form" id="fLiberar">
+      <label class="campo largo">Aparelho<select name="dispositivo">${aparelhos.map((a) => `<option value="${a.id}">${esc(a.nome)}</option>`).join('')}</select></label>
+      <label class="campo largo">Motivo<input name="motivo" required minlength="3" maxlength="240" placeholder="Ex.: aluno esqueceu o celular, pagou na recepção"></label>
+      <div class="largo"><button class="acao primaria">Abrir catraca</button></div>
+    </form>`);
+  $('#fLiberar', corpo).onsubmit = (ev) => {
+    ev.preventDefault();
+    const d = form(ev.target);
+    agir(ev.submitter, () => api(`/acesso/dispositivos/${d.dispositivo}/liberar`, { metodo: 'POST', corpo: { customerId: clienteId, motivo: d.motivo } }), 'Comando de abertura enviado.')
+      .then((r) => { if (r) $('#gaveta').close(); });
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Alunos                                                              */
+/* ------------------------------------------------------------------ */
+async function telaAlunos() {
+  $('#tela').innerHTML = `
+    <div class="topo"><div><h1>Alunos</h1><p class="sub">Matrículas, pagamentos, congelamento e o histórico de cada aluno.</p></div>
+      <button class="acao primaria" id="btnNova">Nova matrícula</button></div>
+    <section class="bloco">
+      <div class="acoes" style="margin-bottom:12px">
+        <input class="busca" id="busca" type="search" placeholder="Buscar por nome ou telefone" aria-label="Buscar aluno">
+        <select id="filtro" aria-label="Situação" style="width:auto"><option value="ativa">Ativas</option><option value="congelada">Congeladas</option><option value="cancelada">Canceladas</option><option value="todas">Todas</option></select>
+      </div>
+      <div class="rolagem" id="lista"></div>
+    </section>`;
+  const carregar = async () => {
+    const lista = await api(`/acesso/matriculas?status=${$('#filtro').value}&busca=${encodeURIComponent($('#busca').value)}`);
+    const hoje = hojeISO();
+    $('#lista').innerHTML = lista.length ? `<table><thead><tr><th>Aluno</th><th>Plano</th><th>Pago até</th><th>Situação</th></tr></thead><tbody>${lista.map((m) => `
+      <tr class="clicavel" data-cliente="${m.customerId}" tabindex="0"><td><b>${esc(m.nome)}</b><br><small class="sub">${esc(m.telefone || '')}</small></td><td>${esc(m.planoNome)}</td>
+      <td>${m.pagoAte < hoje ? `<span style="color:var(--bloqueia);font-weight:600">${dataBR(m.pagoAte)}</span>` : dataBR(m.pagoAte)}</td>
+      <td>${m.bloqueada ? estado('bloqueada', 'bloqueada') : estado(m.status)}</td></tr>`).join('')}</tbody></table>`
+      : '<p class="vazio">Nenhum aluno encontrado. Use “Nova matrícula” para cadastrar.</p>';
+  };
+  let t; $('#busca').oninput = () => { clearTimeout(t); t = setTimeout(carregar, 300); };
+  $('#filtro').onchange = carregar;
+  $('#lista').addEventListener('click', (e) => { const tr = e.target.closest('tr[data-cliente]'); if (tr) abrirAluno(tr.dataset.cliente); });
+  $('#lista').addEventListener('keydown', (e) => { if (e.key === 'Enter') { const tr = e.target.closest('tr[data-cliente]'); if (tr) abrirAluno(tr.dataset.cliente); } });
+  $('#btnNova').onclick = novaMatricula;
+  await carregar();
+}
+
+async function novaMatricula() {
+  const planos = (await api('/acesso/planos')).filter((p) => p.ativo);
+  if (!planos.length) return aviso('Cadastre um plano em Ajustes primeiro.', true);
+  const corpo = gaveta('Nova matrícula', 'O aluno precisa estar no cadastro de clientes do Kytto.', `
+    <form class="form" id="fMat">
+      <label class="campo largo">Cliente<input id="buscaCli" placeholder="Digite nome ou telefone" autocomplete="off"></label>
+      <div class="largo" id="achados"></div>
+      <input type="hidden" name="customerId" required>
+      <label class="campo largo">Plano<select name="planoId">${planos.map((p) => `<option value="${p.id}">${esc(p.nome)}${p.valorMensal ? ` · ${reais(p.valorMensal)}` : ''}</option>`).join('')}</select></label>
+      <label class="campo">Pago até<input type="date" name="pagoAte" required value="${somarDias(hojeISO(), 30)}"></label>
+      <label class="campo">Início<input type="date" name="inicio" value="${hojeISO()}"></label>
+      <div class="largo"><button class="acao primaria">Matricular e liberar a catraca</button></div>
+    </form>`);
+  let t;
+  $('#buscaCli', corpo).oninput = (ev) => {
+    clearTimeout(t);
+    t = setTimeout(async () => {
+      const l = await api(`/acesso/clientes?busca=${encodeURIComponent(ev.target.value)}`).catch(() => []);
+      $('#achados', corpo).innerHTML = l.map((c) => `<button type="button" class="acao" style="margin:0 6px 6px 0" data-id="${c.id}">${esc(c.nome)} ${c.telefone ? `<small>${esc(c.telefone)}</small>` : ''}</button>`).join('') || '<p class="vazio" style="padding:0">Nenhum cliente com esse nome.</p>';
+    }, 250);
+  };
+  $('#achados', corpo).onclick = (ev) => {
+    const b = ev.target.closest('button[data-id]'); if (!b) return;
+    corpo.querySelector('[name=customerId]').value = b.dataset.id;
+    $('#buscaCli', corpo).value = b.textContent.trim(); $('#achados', corpo).innerHTML = '';
+  };
+  $('#fMat', corpo).onsubmit = (ev) => {
+    ev.preventDefault();
+    const d = form(ev.target);
+    if (!d.customerId) return aviso('Escolha o cliente na lista.', true);
+    agir(ev.submitter, () => api('/acesso/matriculas', { metodo: 'POST', corpo: d }), 'Matrícula criada. A catraca já recebeu o cadastro.')
+      .then((r) => { if (r) { $('#gaveta').close(); navegar(); } });
+  };
+}
+
+async function abrirAluno(customerId) {
+  const corpo = gaveta('Aluno', 'Carregando…', '<p class="sub">Carregando…</p>');
+  const todas = await api('/acesso/matriculas?status=todas').catch(() => []);
+  const m = todas.find((x) => x.customerId === customerId);
+  const [freq, fin, contratos, disparos, perfil, contato] = await Promise.all([
+    api(`/acesso/pessoas/${customerId}/frequencia`).catch(() => []),
+    api(`/retencao/alunos/${customerId}/financeiro`).catch(() => null),
+    api(`/contratos?customerId=${customerId}`).catch(() => []),
+    api(`/retencao/disparos?customerId=${customerId}&limite=10`).catch(() => []),
+    api(`/retencao/alunos/${customerId}/perfil`).catch(() => ({})),
+    api(`/retencao/alunos/${customerId}/contato`).catch(() => ({})),
+  ]);
+  const origemOk = { contrato: 'no aceite do contrato', recepcao: 'na recepção', conversa: 'na conversa' };
+  $('#gavetaTitulo').textContent = m?.nome || 'Aluno';
+  $('#gavetaSub').textContent = m ? `${m.planoNome} · ${m.telefone || 'sem telefone'}` : 'Sem matrícula';
+  const max = Math.max(1, ...freq.map((f) => f.acessos));
+  corpo.innerHTML = `
+    ${m ? `<dl class="dados">
+      <dt>Situação</dt><dd>${m.bloqueada ? `${estado('bloqueada', 'bloqueada')} ${esc(m.motivoBloqueio || '')}` : estado(m.status)}${m.congeladaAte ? ` até ${dataBR(m.congeladaAte)}` : ''}</dd>
+      <dt>Pago até</dt><dd>${dataBR(m.pagoAte)}</dd>
+      <dt>Fidelidade até</dt><dd>${dataBR(m.fimFidelidade)}</dd>
+      ${fin && fin.diasAtraso ? `<dt>Em atraso</dt><dd style="color:var(--bloqueia);font-weight:600">${fin.diasAtraso} dia(s) · ${reais(fin.total)}</dd>` : ''}
+    </dl>` : '<p class="vazio">Este cliente não tem matrícula.</p>'}
+    <div class="secao"><h3>Treinos por semana</h3>${freq.length ? `<div class="barras" aria-label="Frequência nas últimas semanas">${freq.map((f) => `<i style="height:${(f.acessos / max) * 100}%" title="Semana de ${dataBR(f.semana)}: ${f.acessos}"><span>${f.acessos}</span></i>`).join('')}</div>` : '<p class="vazio" style="padding:0">Sem treinos nas últimas 8 semanas.</p>'}</div>
+    ${m ? `<div class="secao"><h3>Ações</h3>
+      <form class="form" id="fPag"><label class="campo">Pago até<input type="date" name="pagoAte" required value="${somarDias(m.pagoAte > hojeISO() ? m.pagoAte : hojeISO(), 30)}"></label>
+        <label class="campo">Valor recebido<input name="valor" inputmode="decimal" placeholder="${fin?.total ? String(fin.total).replace('.', ',') : '0,00'}"></label>
+        <div><button class="acao primaria">Registrar pagamento</button></div></form>
+      <div class="acoes" style="margin-top:12px">
+        <button class="acao" data-a="pix">Enviar link de pagamento</button>
+        <button class="acao" data-a="pixcopiar">Copiar link do Pix</button>
+        ${m.status === 'congelada' ? '<button class="acao" data-a="descongelar">Encerrar congelamento</button>' : '<button class="acao" data-a="congelar">Congelar plano</button>'}
+        <button class="acao" data-a="bloquear">${m.bloqueada ? 'Desbloquear' : 'Bloquear'}</button>
+        ${m.status !== 'cancelada' ? '<button class="acao perigo" data-a="cancelar">Cancelar matrícula</button>' : ''}
+      </div></div>` : ''}
+    <div class="secao"><h3>Novidades no WhatsApp (LGPD)</h3>
+      ${contato.optoutEm ? `<p style="margin:4px 0">Pediu para não receber em ${dataHoraBR(contato.optoutEm)}. Cobranças continuam só informativas.</p>`
+        : contato.marketingConsentidoEm ? `<p style="margin:4px 0">${estado('aceito', 'autorizou')} ${dataHoraBR(contato.marketingConsentidoEm)} ${esc(origemOk[contato.evidencia?.origem] || '')}${contato.evidencia?.operador ? ` · ${esc(contato.evidencia.operador)}` : ''}</p>`
+        : '<p class="vazio" style="padding:0">Ainda não autorizou mensagens de novidades e campanhas.</p>'}
+      <div class="acoes" style="margin-top:8px">
+        ${contato.marketingConsentidoEm ? '<button class="acao" data-ok="nao">Registrar que não quer mais</button>' : '<button class="acao" data-ok="sim">Aluno autorizou agora</button>'}
+      </div></div>
+    <div class="secao"><h3>Contratos</h3>${contratos.length ? contratos.map((c) => `<p style="margin:4px 0">${esc(c.titulo)} ${estado(c.status)} <small class="sub">${dataBR(c.enviadoEm)}</small></p>`).join('') : '<p class="vazio" style="padding:0">Nenhum contrato.</p>'}</div>
+    <div class="secao"><h3>Mensagens da régua</h3>${disparos.length ? disparos.map((d) => `<p style="margin:6px 0"><b>${esc(GATILHOS[d.gatilho] || d.gatilho)}</b> <small class="sub">${dataHoraBR(d.enviadoEm)}</small><br><small>${esc(d.texto)}</small></p>`).join('') : '<p class="vazio" style="padding:0">Nenhuma mensagem automática enviada.</p>'}</div>
+    <div class="secao"><h3>Perfil para o professor</h3>
+      <form class="form" id="fPerfil"><label class="campo">Nascimento<input type="date" name="dataNascimento" value="${esc(perfil.dataNascimento || '')}"></label>
+        <label class="campo largo">Objetivo<input name="objetivo" maxlength="200" value="${esc(perfil.objetivo || '')}" placeholder="Ex.: hipertrofia, voltar a correr"></label>
+        <label class="campo largo">Observações<textarea name="observacoes" maxlength="500" placeholder="Lesões, restrições, cuidados no treino">${esc(perfil.observacoes || '')}</textarea></label>
+        <div><button class="acao">Salvar perfil</button></div></form></div>`;
+  corpo.querySelectorAll('button[data-ok]').forEach((b) => {
+    b.onclick = () => {
+      const concedido = b.dataset.ok === 'sim';
+      const detalhe = concedido ? prompt('Como o aluno autorizou? (fica como evidência)', 'Pediu na recepção para receber novidades') : 'Pediu na recepção para parar';
+      if (concedido && !detalhe) return;
+      agir(b, () => api(`/retencao/alunos/${customerId}/consentimento`, { metodo: 'POST', corpo: { concedido, detalhe } }), concedido ? 'Autorização registrada.' : 'Registrado: não recebe mais novidades.').then((r) => r && abrirAluno(customerId));
+    };
+  });
+  if (!m) return;
+  $('#fPag', corpo).onsubmit = (ev) => { ev.preventDefault(); agir(ev.submitter, () => api(`/acesso/matriculas/${m.id}/pagamento`, { metodo: 'POST', corpo: form(ev.target) }), 'Pagamento registrado. A catraca já foi atualizada.').then((r) => r && abrirAluno(customerId)); };
+  $('#fPerfil', corpo).onsubmit = (ev) => { ev.preventDefault(); const d = form(ev.target); agir(ev.submitter, () => api(`/retencao/alunos/${customerId}/perfil`, { metodo: 'PUT', corpo: d }), 'Perfil salvo.'); };
+  corpo.querySelectorAll('button[data-a]').forEach((b) => { b.onclick = () => acaoAluno(b, b.dataset.a, m, customerId); });
+}
+async function acaoAluno(b, a, m, customerId) {
+  if (a === 'pix') return agir(b, () => api(`/retencao/alunos/${customerId}/link-pagamento`, { metodo: 'POST', corpo: { enviar: true } }), 'Link enviado no WhatsApp do aluno.');
+  if (a === 'pixcopiar') {
+    const r = await agir(b, () => api(`/retencao/alunos/${customerId}/link-pagamento`, { metodo: 'POST', corpo: {} }));
+    if (r?.link) { try { await navigator.clipboard.writeText(r.link); aviso(`Link de ${r.valorFormatado} copiado.`); } catch { prompt('Copie o link do Pix:', r.link); } }
+    return;
+  }
+  if (a === 'congelar') {
+    const dias = prompt('Congelar por quantos dias? Os dias voltam no vencimento.', '15');
+    if (!dias) return;
+    return agir(b, () => api(`/retencao/alunos/${customerId}/congelar`, { metodo: 'POST', corpo: { dias: Number(dias) } }), (r) => `Congelado até ${dataBR(r.fim)}. Volta em ${dataBR(r.voltaEm)}.`).then((r) => r && abrirAluno(customerId));
+  }
+  if (a === 'descongelar') {
+    if (!confirm('Encerrar o congelamento agora? Os dias não usados saem do vencimento.')) return;
+    return agir(b, () => api(`/retencao/alunos/${customerId}/descongelar`, { metodo: 'POST', corpo: {} }), (r) => `Congelamento encerrado. ${r.diasDevolvidos} dia(s) não usados ajustados.`).then((r) => r && abrirAluno(customerId));
+  }
+  if (a === 'bloquear') {
+    const motivo = m.bloqueada ? null : prompt('Motivo do bloqueio (fica no histórico):');
+    if (!m.bloqueada && !motivo) return;
+    return agir(b, () => api(`/acesso/matriculas/${m.id}/bloqueio`, { metodo: 'POST', corpo: { bloqueada: !m.bloqueada, motivo } }), m.bloqueada ? 'Desbloqueado.' : 'Bloqueado. O aluno saiu da catraca.').then((r) => r && abrirAluno(customerId));
+  }
+  if (a === 'cancelar') {
+    const motivo = prompt('Por que o aluno está saindo? (preço, horário, mudança, saúde, resultado, atendimento, estrutura, tempo ou outro)', 'outro');
+    if (motivo === null) return;
+    const categoria = ['preco', 'horario', 'mudanca', 'saude', 'resultado', 'atendimento', 'estrutura', 'tempo'].find((c) => motivo.toLowerCase().normalize('NFD').replace(/[^a-z]/g, '').startsWith(c)) || 'outro';
+    await agir(b, async () => {
+      await api(`/retencao/alunos/${customerId}/motivo`, { metodo: 'POST', corpo: { categoria, detalhe: motivo } });
+      return api(`/acesso/matriculas/${m.id}/status`, { metodo: 'POST', corpo: { status: 'cancelada' } });
+    }, 'Matrícula cancelada e motivo registrado.');
+    return abrirAluno(customerId);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Aulas                                                               */
+/* ------------------------------------------------------------------ */
+let semanaInicio = null;
+async function telaAulas() {
+  if (!semanaInicio) { const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); semanaInicio = d.toLocaleDateString('en-CA'); }
+  const fim = somarDias(semanaInicio, 6);
+  const [grade, modalidades] = await Promise.all([api(`/aulas/grade?de=${semanaInicio}&ate=${fim}`), api('/aulas/modalidades')]);
+  const dias = Array.from({ length: 7 }, (_, i) => somarDias(semanaInicio, i));
+  const hoje = hojeISO();
+  $('#tela').innerHTML = `
+    <div class="topo"><div><h1>Aulas</h1><p class="sub">Semana de ${dataBR(semanaInicio)} a ${dataBR(fim)}. Verde tem vaga, amarelo quase cheia, vermelho lotada.</p></div>
+      <div class="acoes"><button class="acao" id="ant">Semana anterior</button><button class="acao" id="prox">Próxima semana</button><button class="acao primaria" id="novaTurma">Nova turma</button></div></div>
+    <section class="bloco"><div class="semana">${dias.map((d) => {
+      const doDia = grade.filter((a) => new Date(a.inicio).toLocaleDateString('en-CA') === d);
+      const nome = new Date(`${d}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit' });
+      return `<div class="dia${d === hoje ? ' hoje' : ''}"><h3>${esc(nome)}</h3>${doDia.map((a) => {
+        const taxa = a.ocupadas / a.capacidade;
+        const cls = a.status === 'cancelada' ? 'cancelada' : taxa >= 1 ? 'cheia' : taxa >= 0.8 ? 'quase' : '';
+        return `<button class="aula ${cls}" data-id="${a.id}"><b>${hora(a.inicio)} ${esc(a.modalidade)}</b><small>${a.ocupadas}/${a.capacidade}${a.fila ? ` · fila ${a.fila}` : ''}${a.professor ? ` · ${esc(a.professor)}` : ''}</small></button>`;
+      }).join('') || '<p class="vazio" style="padding:0;font-size:.9rem">Sem aulas</p>'}</div>`;
+    }).join('')}</div></section>
+    <section class="bloco"><h2>Modalidades</h2>${modalidades.length ? `<div class="rolagem"><table><thead><tr><th>Modalidade</th><th>Reserva abre</th><th>Cancelar sem falta</th><th>Faltas para bloquear</th></tr></thead><tbody>${modalidades.map((m) => `<tr><td>${esc(m.nome)}</td><td>${m.abertura_dias} dias antes</td><td>até ${m.cancelamento_min_antes} min antes</td><td>${m.noshow_limite_mes} no mês</td></tr>`).join('')}</tbody></table></div>` : '<p class="vazio">Crie a primeira modalidade ao cadastrar uma turma.</p>'}</section>`;
+  $('#ant').onclick = () => { semanaInicio = somarDias(semanaInicio, -7); navegar(); };
+  $('#prox').onclick = () => { semanaInicio = somarDias(semanaInicio, 7); navegar(); };
+  $('#novaTurma').onclick = () => novaTurma(modalidades);
+  $('#tela').querySelectorAll('.aula').forEach((b) => { b.onclick = () => abrirAula(grade.find((a) => a.id === b.dataset.id)); });
+}
+async function abrirAula(a) {
+  const corpo = gaveta(`${a.modalidade} às ${hora(a.inicio)}`, `${new Date(a.inicio).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' })} · ${a.ocupadas}/${a.capacidade} reservas`, '<p class="sub">Carregando…</p>');
+  const lista = await api(`/aulas/ocorrencias/${a.id}/lista`);
+  corpo.innerHTML = `
+    ${lista.length ? `<table><thead><tr><th>Aluno</th><th>Origem</th><th>Presença</th></tr></thead><tbody>${lista.map((r) => `
+      <tr><td>${esc(r.nome)}</td><td>${esc(r.origem)}</td><td><label class="linha-check"><input type="checkbox" data-r="${r.id}" ${r.status === 'presente' ? 'checked' : ''}> ${r.status === 'falta' ? 'faltou' : 'presente'}</label></td></tr>`).join('')}</tbody></table>`
+      : '<p class="vazio">Ninguém reservou ainda.</p>'}
+    ${a.status !== 'cancelada' ? '<div class="secao"><button class="acao perigo" id="cancelarAula">Cancelar esta aula e avisar os alunos</button></div>' : '<div class="aviso">Aula cancelada.</div>'}`;
+  corpo.querySelectorAll('input[data-r]').forEach((c) => { c.onchange = () => agir(null, () => api(`/aulas/reservas/${c.dataset.r}/presenca`, { metodo: 'POST', corpo: { presente: c.checked } }), c.checked ? 'Presença marcada.' : 'Presença retirada.'); });
+  const bc = $('#cancelarAula', corpo);
+  if (bc) bc.onclick = () => { const motivo = prompt('Motivo (vai na mensagem para os alunos):', 'imprevisto do professor'); if (motivo) agir(bc, () => api(`/aulas/ocorrencias/${a.id}/cancelar`, { metodo: 'POST', corpo: { motivo } }), 'Aula cancelada. Os alunos foram avisados no WhatsApp.').then((r) => { if (r) { $('#gaveta').close(); navegar(); } }); };
+}
+function novaTurma(modalidades) {
+  const corpo = gaveta('Nova turma', 'A turma se repete toda semana. As próximas 2 semanas já entram na grade.', `
+    <form class="form" id="fTurma">
+      <label class="campo largo">Modalidade<select name="modalidadeId">${modalidades.map((m) => `<option value="${m.id}">${esc(m.nome)}</option>`).join('')}<option value="__nova">Nova modalidade…</option></select></label>
+      <label class="campo largo oculto" id="novaMod">Nome da nova modalidade<input name="novaModalidade" placeholder="Ex.: Funcional, Pilates, Spinning"></label>
+      <label class="campo largo">Nome da turma<input name="nome" required maxlength="120" placeholder="Ex.: Funcional manhã"></label>
+      <fieldset class="largo" style="border:0;padding:0;margin:0"><legend style="font-weight:500;margin-bottom:6px">Dias</legend><div class="acoes">${['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((d, i) => `<label class="linha-check"><input type="checkbox" name="dia${i}" ${i >= 1 && i <= 5 ? 'checked' : ''}> ${d}</label>`).join('')}</div></fieldset>
+      <label class="campo">Horário<input type="time" name="horaInicio" required value="18:30"></label>
+      <label class="campo">Duração (min)<input type="number" name="duracaoMin" min="10" max="480" value="50"></label>
+      <label class="campo">Vagas<input type="number" name="capacidade" min="1" max="500" value="15"></label>
+      <label class="campo">Vagas para Wellhub/TotalPass<input type="number" name="vagasParceiros" min="0" value="0"></label>
+      <label class="campo">Professor<input name="professor" maxlength="120"></label>
+      <label class="campo">Sala<input name="sala" maxlength="80"></label>
+      <div class="largo"><button class="acao primaria">Criar turma</button></div>
+    </form>`);
+  const sel = corpo.querySelector('[name=modalidadeId]');
+  const alternar = () => $('#novaMod', corpo).classList.toggle('oculto', sel.value !== '__nova');
+  sel.onchange = alternar; alternar();
+  $('#fTurma', corpo).onsubmit = (ev) => {
+    ev.preventDefault();
+    const d = form(ev.target);
+    agir(ev.submitter, async () => {
+      let modalidadeId = d.modalidadeId;
+      if (modalidadeId === '__nova') modalidadeId = (await api('/aulas/modalidades', { metodo: 'POST', corpo: { nome: d.novaModalidade } })).id;
+      const diasSemana = [0, 1, 2, 3, 4, 5, 6].filter((i) => d[`dia${i}`]);
+      return api('/aulas/turmas', { metodo: 'POST', corpo: { modalidadeId, nome: d.nome, diasSemana, horaInicio: d.horaInicio, duracaoMin: Number(d.duracaoMin), capacidade: Number(d.capacidade), vagasParceiros: Number(d.vagasParceiros), professor: d.professor, sala: d.sala, vigenciaInicio: hojeISO() } });
+    }, 'Turma criada e grade gerada.').then((r) => { if (r) { $('#gaveta').close(); navegar(); } });
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Contratos                                                           */
+/* ------------------------------------------------------------------ */
+async function telaContratos() {
+  const [lista, modelos] = await Promise.all([api('/contratos'), api('/contratos/modelos')]);
+  const pend = lista.filter((c) => c.status === 'enviado').length;
+  $('#tela').innerHTML = `
+    <div class="topo"><div><h1>Contratos</h1><p class="sub">${pend ? `${pend} aguardando aceite no WhatsApp.` : 'Nenhum contrato aguardando aceite.'} O aluno aceita com um código de 6 dígitos, com validade jurídica.</p></div>
+      <div class="acoes"><button class="acao" id="novoModelo">Novo modelo</button><button class="acao primaria" id="novoContrato">Enviar contrato</button></div></div>
+    <section class="bloco rolagem">${lista.length ? `<table><thead><tr><th>Aluno</th><th>Contrato</th><th>Enviado</th><th>Situação</th><th></th></tr></thead><tbody>${lista.map((c) => `
+      <tr><td>${esc(c.aluno)}</td><td>${esc(c.titulo)}</td><td>${dataBR(c.enviadoEm)}</td><td>${estado(c.status)}${c.aceitoEm ? ` <small class="sub">${dataBR(c.aceitoEm)}</small>` : ''}</td>
+      <td class="acoes">${c.status === 'enviado' ? `<button class="acao" data-reenviar="${c.id}">Reenviar link</button>` : ''}${c.status === 'aceito' ? `<a class="acao" target="_blank" rel="noopener" href="#" data-comprovante="${c.id}">Comprovante</a>` : ''}</td></tr>`).join('')}</tbody></table>` : '<p class="vazio">Nenhum contrato enviado ainda.</p>'}</section>
+    <section class="bloco"><h2>Modelos</h2>${modelos.length ? modelos.map((m) => `<p style="margin:6px 0"><b>${esc(m.titulo)}</b> <small class="sub">código ${esc(m.codigo)}, versão ${m.versao}</small></p>`).join('') : '<p class="vazio">Crie o primeiro modelo. Ele precisa da cláusula de aceite eletrônico.</p>'}</section>`;
+  $('#tela').querySelectorAll('[data-reenviar]').forEach((b) => { b.onclick = () => agir(b, () => api(`/contratos/${b.dataset.reenviar}/reenviar`, { metodo: 'POST', corpo: {} }), 'Novo link enviado no WhatsApp.'); });
+  $('#tela').querySelectorAll('[data-comprovante]').forEach((a) => { a.onclick = async (ev) => {
+    ev.preventDefault();
+    const r = await fetch(`${BASE}/contratos/${a.dataset.comprovante}/comprovante`, { headers: cabecalhos() });
+    if (!r.ok) return aviso('Não foi possível abrir o comprovante.', true);
+    const url = URL.createObjectURL(new Blob([await r.text()], { type: 'text/html' }));
+    window.open(url, '_blank', 'noopener');
+  }; });
+  $('#novoContrato').onclick = () => enviarContrato(modelos);
+  $('#novoModelo').onclick = novoModelo;
+}
+function enviarContrato(modelos) {
+  if (!modelos.length) return aviso('Crie um modelo de contrato primeiro.', true);
+  const corpo = gaveta('Enviar contrato', 'O link vai para o WhatsApp de quem assina.', `
+    <form class="form" id="fContrato">
+      <label class="campo largo">Aluno<input id="buscaAluno" placeholder="Nome ou telefone" autocomplete="off"></label><div class="largo" id="achados"></div>
+      <input type="hidden" name="customerId">
+      <label class="campo largo">Modelo<select name="modeloCodigo">${modelos.map((m) => `<option value="${esc(m.codigo)}">${esc(m.titulo)}</option>`).join('')}</select></label>
+      <label class="campo">Plano<input name="planoNome" placeholder="Ex.: Mensal livre"></label>
+      <label class="campo">Valor mensal<input name="planoValor" placeholder="129,90"></label>
+      <label class="campo largo">Nome da academia<input name="empresaNome" value="${esc(empresa?.nome_fantasia || empresa?.nome || '')}"></label>
+      <div class="largo"><button class="acao primaria">Enviar pelo WhatsApp</button></div>
+    </form>`);
+  let t;
+  $('#buscaAluno', corpo).oninput = (ev) => { clearTimeout(t); t = setTimeout(async () => {
+    const l = await api(`/acesso/clientes?busca=${encodeURIComponent(ev.target.value)}`).catch(() => []);
+    $('#achados', corpo).innerHTML = l.map((c) => `<button type="button" class="acao" style="margin:0 6px 6px 0" data-id="${c.id}">${esc(c.nome)}</button>`).join('');
+  }, 250); };
+  $('#achados', corpo).onclick = (ev) => { const b = ev.target.closest('[data-id]'); if (!b) return; corpo.querySelector('[name=customerId]').value = b.dataset.id; $('#buscaAluno', corpo).value = b.textContent; $('#achados', corpo).innerHTML = ''; };
+  $('#fContrato', corpo).onsubmit = (ev) => {
+    ev.preventDefault();
+    const d = form(ev.target);
+    if (!d.customerId) return aviso('Escolha o aluno na lista.', true);
+    agir(ev.submitter, () => api('/contratos', { metodo: 'POST', corpo: { customerId: d.customerId, modeloCodigo: d.modeloCodigo, variaveis: { empresa: { nome: d.empresaNome }, plano: { nome: d.planoNome, valor: d.planoValor } } } }), 'Contrato enviado no WhatsApp.')
+      .then((r) => { if (r) { $('#gaveta').close(); navegar(); } });
+  };
+}
+function novoModelo() {
+  const corpo = gaveta('Novo modelo de contrato', 'Use {{aluno.nome}}, {{plano.nome}}, {{plano.valor}}, {{empresa.nome}} e {{data.emissao}} no texto.', `
+    <form class="form" id="fModelo">
+      <label class="campo">Código<input name="codigo" required pattern="[a-z0-9_]+" placeholder="matricula"><span class="ajuda">Letras minúsculas, sem espaço</span></label>
+      <label class="campo">Título<input name="titulo" required placeholder="Contrato de matrícula"></label>
+      <label class="campo largo">Texto do contrato<textarea name="corpo" required style="min-height:220px">CONTRATO DE PRESTAÇÃO DE SERVIÇOS — {{empresa.nome}}
+
+Aluno: {{aluno.nome}}. Plano: {{plano.nome}}, valor mensal de R$ {{plano.valor}}.
+
+As partes aceitam o aceite eletrônico deste contrato, nos termos do art. 10, §2º, da MP 2.200-2/2001.
+
+Emitido em {{data.emissao}}.</textarea></label>
+      <fieldset class="largo" style="border:0;padding:0;margin:0"><legend style="font-weight:500;margin-bottom:6px">Pontos em destaque (o aluno marca um a um)</legend>
+        <div id="destaques"></div><button type="button" class="acao" id="maisDestaque">Adicionar ponto</button></fieldset>
+      <div class="largo"><button class="acao primaria">Salvar modelo</button></div>
+    </form>`);
+  const add = (titulo = '', texto = '') => { const div = document.createElement('div'); div.className = 'form'; div.style.marginBottom = '10px'; div.innerHTML = `<input placeholder="Título (ex.: Fidelidade de 12 meses)" value="${esc(titulo)}" data-t><input placeholder="Texto do ponto" value="${esc(texto)}" data-x>`; $('#destaques', corpo).append(div); };
+  add('Fidelidade', 'O plano tem fidelidade conforme combinado na matrícula.'); add('Multa de cancelamento', 'Cancelamento antes do prazo gera multa de 10% do saldo restante.');
+  $('#maisDestaque', corpo).onclick = () => add();
+  $('#fModelo', corpo).onsubmit = (ev) => {
+    ev.preventDefault();
+    const d = form(ev.target);
+    const clausulasDestaque = [...corpo.querySelectorAll('#destaques .form')].map((l, i) => ({ id: `ponto${i + 1}`, titulo: l.querySelector('[data-t]').value.trim(), texto: l.querySelector('[data-x]').value.trim() })).filter((c) => c.titulo && c.texto);
+    agir(ev.submitter, () => api('/contratos/modelos', { metodo: 'POST', corpo: { ...d, clausulasDestaque } }), 'Modelo salvo.').then((r) => { if (r) { $('#gaveta').close(); navegar(); } });
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Retenção                                                            */
+/* ------------------------------------------------------------------ */
+async function telaRetencao() {
+  const mes = mesAtual();
+  const [p, cfg, ocorr] = await Promise.all([api(`/retencao/painel?mes=${mes}`), api('/retencao/config'), api('/retencao/ocorrencias')]);
+  const f = p.funil.total; const c = p.churn;
+  const maxDisp = Math.max(1, ...p.funil.porGatilho.map((g) => g.disparadas));
+  $('#tela').innerHTML = `
+    <div class="topo"><div><h1>Retenção</h1><p class="sub">A IA conversa com quem sumiu, atrasou ou vai vencer e resolve na hora. ${cfg.ativo ? 'A régua está ligada.' : '<b>A régua está desligada.</b>'}</p></div>
+      <div class="acoes"><button class="acao" id="btnPrevia">Ver quem recebe hoje</button><button class="acao" id="btnConfig">Configurar régua</button></div></div>
+    ${!cfg.ativo ? '<div class="aviso">Ligue a régua em “Configurar régua”. Antes, veja a prévia de quem receberia mensagem hoje.</div>' : ''}
+    <section class="bloco"><div class="numeros">
+      <div class="numero bom"><b>${reais(f.recuperado)}</b><span>recuperado pela IA em ${new Date(`${mes}-15`).toLocaleDateString('pt-BR', { month: 'long' })}</span></div>
+      <div class="numero"><b>${f.disparadas}</b><span>conversas iniciadas</span></div>
+      <div class="numero"><b>${f.disparadas ? Math.round((f.respondidas / f.disparadas) * 100) : 0}%</b><span>responderam</span></div>
+      <div class="numero"><b>${f.resolvidas}</b><span>resolvidas</span></div>
+      <div class="numero ${c.atual.taxa > (c.anterior.taxa ?? 99) ? 'alerta' : ''}"><b>${c.atual.taxa === null ? '—' : `${c.atual.taxa}%`}</b><span>saíram este mês${c.variacao !== null ? ` (${c.variacao > 0 ? '+' : ''}${c.variacao} pp)` : ''}</span></div>
+    </div></section>
+    <div class="grade duas" style="margin-top:18px">
+      <section class="bloco"><h2>Alunos em risco hoje</h2>${p.emRisco.length ? p.emRisco.map((a) => `
+        <div style="display:grid;grid-template-columns:52px 1fr auto;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--linha)">
+          <b style="font:600 1.5rem/1 var(--titulo);color:${a.risco >= 70 ? 'var(--bloqueia)' : 'var(--espera)'}">${a.risco}</b>
+          <div><b>${esc(a.nome)}</b><br><small class="sub">${a.fatores.slice(0, 2).map((x) => esc(x.fator)).join(', ')}</small></div>
+          <button class="acao" data-aluno="${a.customerId}">Ver</button></div>`).join('') : '<p class="vazio">Ninguém com risco alto hoje. O cálculo roda uma vez por dia.</p>'}</section>
+      <section class="bloco"><h2>Esperando atendimento</h2>${ocorr.length ? ocorr.map((o) => `
+        <div style="padding:8px 0;border-bottom:1px solid var(--linha)"><b>${esc(o.nome)}</b> ${estado(o.status)}<br><small>${esc(o.descricao)}</small><br>
+        <small class="sub">Protocolo ${esc(o.protocolo)} · ${dataHoraBR(o.criadoEm)}</small>
+        <div class="acoes" style="margin-top:6px"><button class="acao" data-resolver="${o.id}">Marcar resolvida</button>${o.telefone ? `<a class="acao" href="https://wa.me/${esc(String(o.telefone).replace(/\D/g, ''))}" target="_blank" rel="noopener">Abrir WhatsApp</a>` : ''}</div></div>`).join('') : '<p class="vazio">Nenhum aluno esperando.</p>'}</section>
+    </div>
+    <section class="bloco" style="margin-top:18px"><h2>Resultado por motivo de contato</h2>${p.funil.porGatilho.length ? p.funil.porGatilho.map((g) => `
+      <div class="funil-linha"><span>${esc(GATILHOS[g.gatilho] || g.gatilho)}</span>
+        <div class="trilha" title="${g.disparadas} enviadas, ${g.respondidas} responderam, ${g.resolvidas} resolvidas" style="width:${Math.max(12, (g.disparadas / maxDisp) * 100)}%"><b style="width:${g.disparadas ? (g.resolvidas / g.disparadas) * 100 : 0}%"></b><s style="width:${g.disparadas ? (Math.max(0, g.respondidas - g.resolvidas) / g.disparadas) * 100 : 0}%"></s></div>
+        <span>${g.resolvidas}/${g.disparadas}${g.recuperado ? ` · ${reais(g.recuperado)}` : ''}</span></div>`).join('') + '<p class="sub" style="margin:10px 0 0">O comprimento da barra é o volume de mensagens. Verde: resolvidas. Amarelo: responderam e ainda não resolveram. Cinza: sem resposta.</p>' : '<p class="vazio">Nenhuma mensagem enviada neste mês.</p>'}</section>
+    ${p.motivos.length ? `<section class="bloco"><h2>Por que saíram</h2>${p.motivos.map((m) => `<p style="margin:4px 0">${esc(m.categoria)}: <b>${m.n}</b></p>`).join('')}</section>` : ''}`;
+  $('#tela').querySelectorAll('[data-aluno]').forEach((b) => { b.onclick = () => abrirAluno(b.dataset.aluno); });
+  $('#tela').querySelectorAll('[data-resolver]').forEach((b) => { b.onclick = () => { const solucao = prompt('O que foi feito?'); if (solucao) agir(b, () => api(`/retencao/ocorrencias/${b.dataset.resolver}`, { metodo: 'PUT', corpo: { status: 'resolvida', solucao } }), 'Atendimento encerrado.').then((r) => r && navegar()); }; });
+  $('#btnPrevia').onclick = async (ev) => {
+    const r = await agir(ev.target, () => api('/retencao/previa'));
+    if (!r) return;
+    gaveta('Quem receberia hoje', `${r.mensagens.length} mensagem(ns). Nada foi enviado.`, r.mensagens.length
+      ? r.mensagens.map((m) => `<div class="secao"><b>${esc(m.nome)}</b> <small class="sub">${esc(GATILHOS[m.gatilho] || m.gatilho)}</small><p style="margin:4px 0 0">${esc(m.texto)}</p></div>`).join('')
+      : '<p class="vazio">Ninguém receberia mensagem agora.</p>');
+  };
+  $('#btnConfig').onclick = () => configurarRegua(cfg);
+}
+async function configurarRegua(cfg) {
+  const reguas = await api('/retencao/reguas');
+  const corpo = gaveta('Configurar régua', 'No máximo 1 mensagem por aluno a cada intervalo; quem responder vira atendimento.', `
+    <form class="form" id="fCfg">
+      <label class="linha-check largo"><input type="checkbox" name="ativo" ${cfg.ativo ? 'checked' : ''}> Régua ligada</label>
+      <label class="campo">Tom das mensagens<select name="tom">${[['proximo', 'Próximo'], ['formal', 'Formal'], ['divertido', 'Divertido']].map(([v, r]) => `<option value="${v}" ${cfg.tom === v ? 'selected' : ''}>${r}</option>`).join('')}</select></label>
+      <label class="campo">Intervalo mínimo (dias)<input type="number" name="intervaloDias" min="1" max="30" value="${cfg.intervaloDias}"></label>
+      <label class="campo">Envia a partir de<input type="number" name="horaInicio" min="0" max="23" value="${cfg.horaInicio}"></label>
+      <label class="campo">Envia até<input type="number" name="horaFim" min="1" max="24" value="${cfg.horaFim}"></label>
+      <label class="campo">Limite por dia<input type="number" name="limiteDiario" min="0" max="5000" value="${cfg.limiteDiario}"><span class="ajuda">Número conectado por QR: mantenha baixo</span></label>
+      <label class="linha-check"><input type="checkbox" name="enviaDomingo" ${cfg.enviaDomingo ? 'checked' : ''}> Envia no domingo</label>
+      <label class="campo largo">Base legal das novidades e campanhas<select name="baseLegalMarketing">
+        <option value="consentimento" ${cfg.baseLegalMarketing !== 'legitimo_interesse' ? 'selected' : ''}>Só para quem autorizou (recomendado)</option>
+        <option value="legitimo_interesse" ${cfg.baseLegalMarketing === 'legitimo_interesse' ? 'selected' : ''}>Legítimo interesse: todos os alunos, com opção de parar</option></select>
+        <span class="ajuda">Cobrança e vencimento são informativos e saem para todos. Com legítimo interesse, a academia deve ter registrado a avaliação (LIA) e toda mensagem oferece “parar”.</span></label>
+      <label class="campo">WhatsApp do gestor<input name="telefoneGestor" value="${esc(cfg.telefoneGestor || '')}" placeholder="65999990000"><span class="ajuda">Recebe aviso quando a IA passa para humano</span></label>
+      <label class="campo">Multa por atraso (%)<input name="multaPercentual" value="${cfg.multaPercentual}"><span class="ajuda">Máximo 2% (CDC)</span></label>
+      <label class="campo">Juros ao mês (%)<input name="jurosMesPercentual" value="${cfg.jurosMesPercentual}"></label>
+      <label class="campo">Parcelamento máximo<input type="number" name="acordoMaxParcelas" min="1" max="12" value="${cfg.acordoMaxParcelas}"></label>
+      <label class="campo">Prazo máximo de promessa (dias)<input type="number" name="acordoMaxDiasPromessa" min="0" max="30" value="${cfg.acordoMaxDiasPromessa}"></label>
+      <label class="campo largo">Mimo de aniversário<input name="mimoAniversario" value="${esc(cfg.mimoAniversario || '')}" placeholder="Ex.: Passa na recepção para pegar sua garrafinha"></label>
+      <label class="campo largo">Condição para ex-aluno voltar<input name="ofertaVolta" value="${esc(cfg.ofertaVolta || '')}" placeholder="Ex.: sem taxa de matrícula este mês"></label>
+      <label class="campo largo">Condição de renovação<input name="ofertaRenovacao" value="${esc(cfg.ofertaRenovacao || '')}" placeholder="Ex.: mesmo valor por mais 12 meses"></label>
+      <fieldset class="largo" style="border:0;padding:0;margin:0"><legend style="font-weight:500;margin-bottom:6px">Motivos de contato</legend>
+        ${reguas.map((r) => `<label class="linha-check" style="margin:6px 0"><input type="checkbox" data-g="${r.gatilho}" ${r.ativo ? 'checked' : ''}> ${esc(GATILHOS[r.gatilho] || r.gatilho)}${r.marketing ? '' : ' <small class="sub">(cobrança, continua mesmo com “parar”)</small>'}</label>`).join('')}</fieldset>
+      <div class="largo"><button class="acao primaria">Salvar</button></div>
+    </form>`);
+  $('#fCfg', corpo).onsubmit = (ev) => {
+    ev.preventDefault();
+    const d = form(ev.target);
+    d.ativo = Boolean(d.ativo); d.enviaDomingo = Boolean(d.enviaDomingo);
+    for (const k of ['intervaloDias', 'horaInicio', 'horaFim', 'limiteDiario', 'acordoMaxParcelas', 'acordoMaxDiasPromessa']) d[k] = Number(d[k]);
+    agir(ev.submitter, async () => {
+      await api('/retencao/config', { metodo: 'PUT', corpo: d });
+      for (const c of corpo.querySelectorAll('[data-g]')) {
+        const atual = reguas.find((r) => r.gatilho === c.dataset.g);
+        if (atual.ativo !== c.checked) await api(`/retencao/reguas/${c.dataset.g}`, { metodo: 'PUT', corpo: { ativo: c.checked, parametros: {}, textos: atual.textos } });
+      }
+      return true;
+    }, 'Régua salva.').then((r) => { if (r) { $('#gaveta').close(); navegar(); } });
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Cobranças (Pix da própria academia)                                 */
+/* ------------------------------------------------------------------ */
+async function telaCobrancas() {
+  const [cfg, lista] = await Promise.all([api('/cobrancas/config'), api('/cobrancas?limite=200')]);
+  const pend = lista.filter((c) => c.status === 'pendente');
+  const pagasMes = lista.filter((c) => c.status === 'paga' && String(c.pagoEm || '').slice(0, 7) === mesAtual());
+  const linha = (c) => `<tr><td>${esc(c.nome)}<br><small class="sub">${esc(c.descricao)}</small></td><td>${reais(c.valor)}</td>
+    <td><small>${esc(c.txid)}</small></td><td>${dataHoraBR(c.criadoEm)}<br><small class="sub">${c.status === 'pendente' ? `vence ${dataHoraBR(c.expiraEm)}` : c.status === 'paga' ? `paga ${dataHoraBR(c.pagoEm)} · ${esc(c.confirmadoPor || '')}` : 'cancelada'}</small></td>
+    <td class="acoes">${c.agendada ? `<small class="sub">sai no WhatsApp em ${dataBR(c.enviarEm)}</small><br>` : ''}${c.status === 'pendente' ? `<button class="acao primaria" data-conf="${c.id}">Pix caiu: dar baixa</button><button class="acao" data-canc="${c.id}">Cancelar</button>` : estado(c.status === 'paga' ? 'aceito' : 'cancelada', c.status)}</td></tr>`;
+  $('#tela').innerHTML = `
+    <div class="topo"><div><h1>Cobranças</h1><p class="sub">Pix direto na conta da academia. A régua, a IA e a recepção geram o link; a baixa libera a catraca na hora.</p></div>
+      <div class="acoes"><button class="acao" id="cfgPix">${cfg.ativo ? 'Configurar Pix' : 'Ligar cobrança por Pix'}</button></div></div>
+    ${cfg.ativo ? '' : '<div class="aviso">A cobrança online está desligada. Sem ela, a régua avisa do atraso sem link e a IA indica a recepção.</div>'}
+    <div class="numeros" style="margin-bottom:16px">
+      <div class="numero ${pend.length ? 'alerta' : ''}"><b>${pend.length}</b><span>aguardando pagamento · ${reais(pend.reduce((t, c) => t + c.valor, 0))}</span></div>
+      <div class="numero bom"><b>${pagasMes.length}</b><span>pagas no mês · ${reais(pagasMes.reduce((t, c) => t + c.valor, 0))}</span></div>
+    </div>
+    <section class="bloco"><h2>Aguardando pagamento</h2>
+      <p class="sub">Confira no extrato do banco o valor e o identificador (txid) antes de dar baixa.</p>
+      ${pend.length ? `<div class="rolagem"><table><thead><tr><th>Aluno</th><th>Valor</th><th>Identificador</th><th>Criada</th><th></th></tr></thead><tbody>${pend.map(linha).join('')}</tbody></table></div>` : '<p class="vazio">Nenhuma cobrança em aberto.</p>'}</section>
+    <section class="bloco"><h2>Histórico</h2>
+      ${lista.length > pend.length ? `<div class="rolagem"><table><thead><tr><th>Aluno</th><th>Valor</th><th>Identificador</th><th>Data</th><th></th></tr></thead><tbody>${lista.filter((c) => c.status !== 'pendente').slice(0, 60).map(linha).join('')}</tbody></table></div>` : '<p class="vazio">Sem histórico ainda.</p>'}</section>`;
+  $('#cfgPix').onclick = () => configurarPix(cfg);
+  $('#tela').querySelectorAll('[data-conf]').forEach((b) => { b.onclick = () => {
+    if (!confirm('Confirma que o Pix desta cobrança caiu na conta da academia?')) return;
+    agir(b, () => api(`/cobrancas/${b.dataset.conf}/confirmar`, { metodo: 'POST', corpo: {} }), (r) => (r.efeito?.matricula ? `Baixa feita. Pago até ${dataBR(r.efeito.matricula.pagoAte)}; catraca atualizada.` : 'Baixa feita.')).then((r) => r && navegar());
+  }; });
+  $('#tela').querySelectorAll('[data-canc]').forEach((b) => { b.onclick = () => {
+    if (!confirm('Cancelar esta cobrança? O link deixa de funcionar.')) return;
+    agir(b, () => api(`/cobrancas/${b.dataset.canc}/cancelar`, { metodo: 'POST', corpo: {} }), 'Cobrança cancelada.').then((r) => r && navegar());
+  }; });
+}
+function configurarPix(cfg) {
+  const corpo = gaveta('Cobrança por Pix', 'O dinheiro cai direto na conta da academia. Cada empresa usa a própria chave.', `
+    <form class="form" id="fPix">
+      <label class="linha-check largo"><input type="checkbox" name="ativo" ${cfg.ativo ? 'checked' : ''}> Cobrança por Pix ligada</label>
+      <label class="campo largo">Chave Pix<input name="pixChave" value="${esc(cfg.pixChave)}" placeholder="CNPJ, e-mail, +55 celular ou chave aleatória"></label>
+      <label class="campo">Nome do recebedor<input name="pixNome" maxlength="25" value="${esc(cfg.pixNome)}" placeholder="Como aparece no banco"><span class="ajuda">Até 25 letras, sem acento</span></label>
+      <label class="campo">Cidade<input name="pixCidade" maxlength="15" value="${esc(cfg.pixCidade)}"><span class="ajuda">Até 15 letras</span></label>
+      <label class="campo">Validade do link (horas)<input type="number" name="validadeHoras" min="1" max="720" value="${cfg.validadeHoras}"></label>
+      <div class="largo"><button class="acao primaria">Salvar</button></div>
+    </form>`);
+  $('#fPix', corpo).onsubmit = (ev) => {
+    ev.preventDefault();
+    const d = form(ev.target); d.ativo = Boolean(d.ativo); d.validadeHoras = Number(d.validadeHoras);
+    agir(ev.submitter, () => api('/cobrancas/config', { metodo: 'PUT', corpo: d }), 'Cobrança salva.').then((r) => { if (r) { $('#gaveta').close(); navegar(); } });
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Parceiros (Wellhub e TotalPass)                                     */
+/* ------------------------------------------------------------------ */
+async function telaParceiros() {
+  const [contas, checkins, retro, valores] = await Promise.all([api('/parceiros/contas'), api('/parceiros/checkins?limite=30'), api('/parceiros/retroativos'), api('/parceiros/valores')]);
+  $('#tela').innerHTML = `
+    <div class="topo"><div><h1>Wellhub e TotalPass</h1><p class="sub">O aluno faz check-in no app e a catraca libera sozinha. Só é validado quem passou.</p></div>
+      <button class="acao primaria" id="novaConta">Conectar unidade</button></div>
+    <section class="bloco"><h2>Unidades conectadas</h2>${contas.length ? `<div class="rolagem"><table><thead><tr><th>Plataforma</th><th>Unidade</th><th>Modo</th><th>Ambiente</th><th>Último check-in</th><th></th></tr></thead><tbody>${contas.map((c) => `
+      <tr><td>${c.plataforma === 'wellhub' ? 'Wellhub' : 'TotalPass'}</td><td>${esc(c.nome)} <small class="sub">${esc(c.idExterno)}</small></td><td>${c.modo === 'catraca' ? 'valida na catraca' : 'valida ao receber'}</td>
+      <td>${c.ambiente === 'producao' ? 'produção' : 'teste'}${c.verificada ? '' : '<br><small class="sub">aguardando o 1º check-in na URL desta unidade</small>'}</td><td>${dataHoraBR(c.ultimoWebhookEm)}</td><td><button class="acao" data-testar="${c.id}">Testar</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="vazio">Nenhuma unidade conectada. Cole o Gym ID do Wellhub ou a place_api_key do TotalPass.</p>'}</section>
+    ${retro.length ? `<section class="bloco"><h2>Pedir retroativo</h2><p class="sub">Passaram na catraca mas a validação não confirmou. Peça no portal da plataforma com estes dados.</p><div class="rolagem"><table><thead><tr><th>Aluno</th><th>ID na plataforma</th><th>Check-in</th><th>Prazo</th><th></th></tr></thead><tbody>${retro.map((r) => `
+      <tr><td>${esc(r.nome || '—')}</td><td>${esc(r.idNaPlataforma)}</td><td>${dataHoraBR(r.checkinEm)}</td><td>${r.prazo ? dataBR(r.prazo) : '—'}</td>
+      <td class="acoes"><button class="acao" data-retro="${r.id}" data-ok="1">Aprovado</button><button class="acao perigo" data-retro="${r.id}" data-ok="0">Negado</button></td></tr>`).join('')}</tbody></table></div></section>` : ''}
+    <section class="bloco"><h2>Check-ins recentes</h2>${checkins.length ? `<div class="rolagem"><table><thead><tr><th>Quando</th><th>Aluno</th><th>Plataforma</th><th>Situação</th></tr></thead><tbody>${checkins.map((k) => `
+      <tr><td>${dataHoraBR(k.recebido_em)}</td><td>${esc(k.nome || '—')}</td><td>${k.plataforma === 'wellhub' ? 'Wellhub' : 'TotalPass'}</td><td>${estado(k.status)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="vazio">Nenhum check-in recebido ainda.</p>'}</section>
+    <section class="bloco"><h2>Fechamento do mês</h2>
+      <form class="form" id="fConc"><label class="campo">Mês<input type="month" name="mes" value="${mesAtual()}"></label><div><button class="acao">Ver conciliação</button></div></form>
+      <div id="conc" style="margin-top:14px"></div>
+      <details style="margin-top:14px"><summary style="cursor:pointer;font-weight:600">Importar relatório de repasse</summary>
+        <form class="form" id="fRep" style="margin-top:10px">
+          <label class="campo">Plataforma<select name="plataforma"><option value="wellhub">Wellhub</option><option value="totalpass">TotalPass</option></select></label>
+          <label class="campo">Mês<input type="month" name="mes" value="${mesAtual()}"></label>
+          <label class="campo largo">Linhas do relatório<textarea name="linhas" placeholder="ID do aluno;data;valor&#10;1234567890123;2026-10-03;25,00"></textarea><span class="ajuda">Uma visita por linha, separada por ponto e vírgula</span></label>
+          <div><button class="acao">Importar</button></div></form></details>
+      <details style="margin-top:10px"><summary style="cursor:pointer;font-weight:600">Valor esperado por visita</summary>
+        <p class="sub" style="margin:8px 0">${valores.map((v) => `${v.plataforma === 'wellhub' ? 'Wellhub' : 'TotalPass'} ${v.produto === '*' ? '(todos)' : esc(v.produto)}: ${reais(v.valor)}`).join(' · ') || 'Nenhum valor cadastrado.'}</p>
+        <form class="form" id="fValor"><label class="campo">Plataforma<select name="plataforma"><option value="wellhub">Wellhub</option><option value="totalpass">TotalPass</option></select></label>
+          <label class="campo">Produto<input name="produto" value="*"><span class="ajuda">* vale para todos</span></label>
+          <label class="campo">Valor<input name="valor" required inputmode="decimal" placeholder="25,00"></label><div><button class="acao">Salvar valor</button></div></form></details>
+    </section>`;
+  $('#novaConta').onclick = novaConta;
+  $('#tela').querySelectorAll('[data-testar]').forEach((b) => { b.onclick = async () => {
+    const r = await agir(b, () => api(`/parceiros/contas/${b.dataset.testar}/testar`, { metodo: 'POST', corpo: {} }));
+    if (r) gaveta('Teste da conexão', r.pronto ? 'Tudo pronto.' : 'Falta concluir alguns passos.', r.passos.map((p) => `<p style="margin:6px 0">${p.ok ? estado('ok', 'ok') : estado('erro', 'pendente')} ${esc(p.passo)}${p.detalhe ? `<br><small class="sub">${esc(p.detalhe)}</small>` : ''}</p>`).join(''));
+  }; });
+  $('#tela').querySelectorAll('[data-retro]').forEach((b) => { b.onclick = () => agir(b, () => api(`/parceiros/retroativos/${b.dataset.retro}`, { metodo: 'POST', corpo: { aprovado: b.dataset.ok === '1' } }), 'Pendência atualizada.').then((r) => r && navegar()); });
+  $('#fConc').onsubmit = async (ev) => {
+    ev.preventDefault();
+    const r = await agir(ev.submitter, () => api(`/parceiros/conciliacao?mes=${form(ev.target).mes}`));
+    if (!r) return;
+    const TIPOS = { validado_nao_pago: 'Validado e não pago', pago_sem_checkin: 'Pago sem check-in nosso', valor_diferente: 'Valor diferente do esperado', retroativo_pendente: 'Retroativo pendente', retroativo_negado: 'Retroativo negado' };
+    $('#conc').innerHTML = (r.resumo.length ? `<div class="numeros">${r.resumo.map((x) => `<div class="numero"><b>${reais(x.receita)}</b><span>${x.plataforma === 'wellhub' ? 'Wellhub' : 'TotalPass'}: ${x.visitasPagas} visitas pagas, ${reais(x.mediaPorVisita)} por visita</span></div>`).join('')}</div>` : '<p class="vazio">Nada no mês.</p>')
+      + (r.divergencias.length ? `<h3 style="margin-top:14px">${r.divergencias.length} divergência(s)</h3><div class="rolagem"><table><tbody>${r.divergencias.map((d) => `<tr><td>${esc(TIPOS[d.tipo] || d.tipo)}</td><td>${esc(d.nome || d.chave)}</td><td>esperado ${reais(d.esperado)}</td><td>pago ${reais(d.pago)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="aviso bom" style="margin-top:12px">Sem divergências.</div>');
+  };
+  $('#fRep').onsubmit = (ev) => {
+    ev.preventDefault();
+    const d = form(ev.target);
+    const linhas = d.linhas.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).filter((l) => !/^id/i.test(l)).map((l) => { const [idNaPlataforma, data, valor] = l.split(/[;\t]/).map((x) => x.trim()); return { idNaPlataforma, data, valor }; });
+    agir(ev.submitter, () => api('/parceiros/repasses', { metodo: 'POST', corpo: { plataforma: d.plataforma, mes: d.mes, linhas } }), (r) => `${r.importadas} linha(s) importada(s).`);
+  };
+  $('#fValor').onsubmit = (ev) => { ev.preventDefault(); agir(ev.submitter, () => api('/parceiros/valores', { metodo: 'PUT', corpo: form(ev.target) }), 'Valor salvo.').then((r) => r && navegar()); };
+}
+function novaConta() {
+  const corpo = gaveta('Conectar unidade', 'Três passos: identificar a unidade, escolher o modo, cadastrar a URL no portal da plataforma.', `
+    <form class="form" id="fConta">
+      <label class="campo largo">Plataforma<select name="plataforma"><option value="wellhub">Wellhub</option><option value="totalpass">TotalPass</option></select></label>
+      <label class="campo largo">Nome da unidade<input name="nome" required placeholder="Ex.: Unidade Centro"></label>
+      <label class="campo" id="lblId">Gym ID<input name="idExterno" required></label>
+      <label class="campo oculto" id="lblCred">place_api_key<input name="credencial" autocomplete="off"></label>
+      <label class="campo largo">Modo<select name="modo"><option value="catraca">Com catraca: valida quando a pessoa passa</option><option value="sem_catraca">Sem catraca: valida ao receber o check-in</option></select></label>
+      <div class="largo"><button class="acao primaria">Conectar</button></div>
+    </form>`);
+  const sel = corpo.querySelector('[name=plataforma]');
+  const troca = () => { const tp = sel.value === 'totalpass'; $('#lblId', corpo).firstChild.textContent = tp ? 'Código da unidade' : 'Gym ID'; $('#lblCred', corpo).classList.toggle('oculto', !tp); };
+  sel.onchange = troca; troca();
+  $('#fConta', corpo).onsubmit = async (ev) => {
+    ev.preventDefault();
+    const r = await agir(ev.submitter, () => api('/parceiros/contas', { metodo: 'POST', corpo: form(ev.target) }));
+    if (!r) return;
+    const url = location.origin + new URL(r.webhookUrl, location.origin).pathname;
+    corpo.innerHTML = `<div class="aviso bom">Unidade conectada. Cadastre esta URL de webhook no portal ${r.conta.plataforma === 'wellhub' ? 'do Wellhub' : 'do TotalPass'}. Ela aparece só agora.</div>
+      <div class="copiar"><input readonly value="${esc(url)}" id="urlWh" aria-label="URL do webhook"><button class="acao" id="copiar">Copiar</button></div>
+      <p class="sub">Se perder a URL, use “Testar” e gere uma nova em Ajustes.</p>`;
+    $('#copiar', corpo).onclick = () => { navigator.clipboard?.writeText(url).then(() => aviso('URL copiada.')); };
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Ajustes: catracas e planos                                          */
+/* ------------------------------------------------------------------ */
+async function telaAjustes() {
+  const [aparelhos, planos] = await Promise.all([api('/acesso/dispositivos'), api('/acesso/planos')]);
+  $('#tela').innerHTML = `
+    <div class="topo"><div><h1>Ajustes</h1><p class="sub">Catracas Control iD e planos da academia.</p></div></div>
+    <section class="bloco"><div class="topo" style="margin-bottom:10px"><h2 style="margin:0">Catracas</h2><button class="acao primaria" id="novoAparelho">Cadastrar catraca</button></div>
+      ${aparelhos.length ? `<div class="rolagem"><table><thead><tr><th>Nome</th><th>Situação</th><th>Último contato</th><th></th></tr></thead><tbody>${aparelhos.map((a) => `
+        <tr><td>${esc(a.nome)} <small class="sub">${esc(a.modelo || '')}</small></td><td>${estado(a.status)}</td><td>${dataHoraBR(a.ultimoContato)}</td>
+        <td class="acoes"><button class="acao" data-sinc="${a.id}">Enviar todos os alunos</button><button class="acao" data-fila="${a.id}">Fila</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="vazio">Nenhuma catraca. Cadastre e cole a URL na interface do aparelho.</p>'}</section>
+    <section class="bloco"><div class="topo" style="margin-bottom:10px"><h2 style="margin:0">Planos</h2><button class="acao primaria" id="novoPlano">Novo plano</button></div>
+      ${planos.length ? `<div class="rolagem"><table><thead><tr><th>Plano</th><th>Mensalidade</th><th>Fidelidade</th><th>Tolerância</th><th>Regras</th></tr></thead><tbody>${planos.map((p) => `
+        <tr class="clicavel" data-plano="${p.id}" tabindex="0"><td>${esc(p.nome)} ${p.ativo ? '' : estado('cancelada', 'inativo')}</td><td>${reais(p.valorMensal)}</td><td>${p.fidelidadeMeses ? `${p.fidelidadeMeses} meses` : '—'}</td><td>${p.toleranciaDias} dias</td>
+        <td><small>${[p.exigeReserva ? 'exige reserva' : '', p.limitePorDia ? `${p.limitePorDia}x/dia` : '', p.limitePorSemana ? `${p.limitePorSemana}x/semana` : '', p.horarios ? 'horário restrito' : ''].filter(Boolean).join(', ') || 'livre'}</small></td></tr>`).join('')}</tbody></table></div>` : '<p class="vazio">Crie o primeiro plano para começar a matricular.</p>'}</section>
+    <section class="bloco"><div class="topo" style="margin-bottom:10px"><div><h2 style="margin:0">Trazer sócios do TTC</h2><p class="sub" style="margin:4px 0 0">Copia os sócios, planos e o “pago até” do sistema antigo do clube para esta empresa. Só o administrador da plataforma. Pode repetir: não duplica.</p></div>
+      <button class="acao" id="previaTtc">Ver prévia</button></div><div id="ttc"></div></section>`;
+  $('#previaTtc').onclick = (ev) => importarTtc(ev.currentTarget, false);
+  $('#novoAparelho').onclick = novoAparelho;
+  $('#novoPlano').onclick = () => editarPlano(null);
+  $('#tela').querySelectorAll('[data-plano]').forEach((tr) => { tr.onclick = () => editarPlano(planos.find((p) => p.id === tr.dataset.plano)); });
+  $('#tela').querySelectorAll('[data-sinc]').forEach((b) => { b.onclick = () => agir(b, () => api(`/acesso/dispositivos/${b.dataset.sinc}/sincronizar`, { metodo: 'POST', corpo: {} }), (r) => `${r.enfileirados} aluno(s) a caminho da catraca.`); });
+  $('#tela').querySelectorAll('[data-fila]').forEach((b) => { b.onclick = async () => { const r = await agir(b, () => api(`/acesso/dispositivos/${b.dataset.fila}/fila`)); if (r) gaveta('Fila da catraca', 'Comandos esperando o aparelho buscar.', `<dl class="dados">${Object.entries(r).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`); }; });
+}
+async function importarTtc(botao, aplicar) {
+  const r = await agir(botao, () => api('/importar/ttc', { metodo: 'POST', corpo: { aplicar } }), aplicar ? 'Sócios importados.' : null);
+  if (!r) return;
+  const x = r.resumo;
+  $('#ttc').innerHTML = `
+    <div class="aviso ${aplicar ? 'bom' : ''}">${aplicar ? 'Importado' : 'Prévia (nada foi gravado)'}: ${x.total} sócio(s), ${x.novos} novo(s), ${x.jaImportados} já importado(s), ${x.planosNovos} plano(s) novo(s), ${x.inadimplentes} em atraso, ${x.comProblema} com pendência de cadastro${x.erros ? `, <b>${x.erros} erro(s)</b>` : ''}.</div>
+    <div class="rolagem"><table><thead><tr><th>Sócio</th><th>Plano</th><th>Pago até</th><th>Pendências</th></tr></thead><tbody>${r.alunos.map((a) => `
+      <tr><td>${esc(a.nome)}</td><td>${esc(a.plano || '—')}</td><td>${dataBR(a.pagoAte)} ${a.situacao === 'inadimplente' ? estado('negado', 'em atraso') : ''}</td><td><small>${esc([...(a.problemas || []), a.erro || ''].filter(Boolean).join('; ') || '—')}</small></td></tr>`).join('')}</tbody></table></div>
+    ${aplicar ? '' : '<div class="acoes" style="margin-top:12px"><button class="acao primaria" id="aplicarTtc">Importar agora</button></div>'}`;
+  const b = $('#aplicarTtc');
+  if (b) b.onclick = () => { if (confirm('Importar os sócios do TTC para esta empresa?')) importarTtc(b, true); };
+}
+function novoAparelho() {
+  const corpo = gaveta('Cadastrar catraca', 'Depois de salvar, cole a URL na interface web do aparelho Control iD.', `
+    <form class="form" id="fAp">
+      <label class="campo largo">Nome<input name="nome" required placeholder="Ex.: Catraca da entrada"></label>
+      <label class="campo">Tipo<select name="modelo"><option value="catraca">Catraca</option><option value="porta">Porta</option></select></label>
+      <label class="campo">Sentido de entrada<select name="sentidoEntrada"><option value="clockwise">Horário</option><option value="anticlockwise">Anti-horário</option></select></label>
+      <div class="largo"><button class="acao primaria">Cadastrar</button></div>
+    </form>`);
+  $('#fAp', corpo).onsubmit = async (ev) => {
+    ev.preventDefault();
+    const r = await agir(ev.submitter, () => api('/acesso/dispositivos', { metodo: 'POST', corpo: form(ev.target) }));
+    if (!r) return;
+    const url = r.configuracao.servidorOnline;
+    corpo.innerHTML = `<div class="aviso">${esc(r.configuracao.aviso)}</div>
+      <ol style="padding-left:20px;display:grid;gap:8px"><li>No aparelho, abra Configurações e escolha o modo <b>Online, Pro</b>.</li>
+      <li>Em servidor online e servidor Push, cole a URL abaixo.</li><li>Deixe a contingência ligada.</li><li>Volte aqui e toque em “Enviar todos os alunos”.</li></ol>
+      <div class="copiar"><input readonly value="${esc(url)}" aria-label="URL do servidor"><button class="acao" id="copiar">Copiar</button></div>`;
+    $('#copiar', corpo).onclick = () => navigator.clipboard?.writeText(url).then(() => aviso('URL copiada.'));
+  };
+}
+function editarPlano(p) {
+  const corpo = gaveta(p ? `Plano ${p.nome}` : 'Novo plano', 'Mensalidade e fidelidade alimentam a régua de retenção e o contrato.', `
+    <form class="form" id="fPlano">
+      <label class="campo largo">Nome<input name="nome" required value="${esc(p?.nome || '')}"></label>
+      <label class="campo">Mensalidade<input name="valorMensal" inputmode="decimal" value="${p?.valorMensal ?? ''}" placeholder="129,90"></label>
+      <label class="campo">Fidelidade (meses)<input type="number" name="fidelidadeMeses" min="1" max="60" value="${p?.fidelidadeMeses ?? ''}"></label>
+      <label class="campo">Tolerância de atraso (dias)<input type="number" name="toleranciaDias" min="0" max="60" value="${p?.toleranciaDias ?? 5}"></label>
+      <label class="campo">Acessos por dia<input type="number" name="limitePorDia" min="1" max="20" value="${p?.limitePorDia ?? ''}" placeholder="livre"></label>
+      <label class="campo">Acessos por semana<input type="number" name="limitePorSemana" min="1" max="50" value="${p?.limitePorSemana ?? ''}" placeholder="livre"></label>
+      <label class="campo">Congelamento por ano (dias)<input type="number" name="congelamentoMaxDiasAno" min="0" max="180" value="${p?.congelamentoMaxDiasAno ?? 30}"></label>
+      <label class="campo">Congelamento mínimo (dias)<input type="number" name="congelamentoMinDias" min="1" max="90" value="${p?.congelamentoMinDias ?? 7}"></label>
+      <label class="linha-check"><input type="checkbox" name="exigeReserva" ${p?.exigeReserva ? 'checked' : ''}> Só entra com aula reservada</label>
+      ${p ? `<label class="linha-check"><input type="checkbox" name="ativo" ${p.ativo ? 'checked' : ''}> Plano ativo</label>` : ''}
+      <div class="largo"><button class="acao primaria">${p ? 'Salvar plano' : 'Criar plano'}</button></div>
+    </form>`);
+  $('#fPlano', corpo).onsubmit = (ev) => {
+    ev.preventDefault();
+    const d = form(ev.target);
+    d.exigeReserva = Boolean(d.exigeReserva);
+    if (p) d.ativo = Boolean(d.ativo);
+    if (p?.horarios) d.horarios = p.horarios;
+    agir(ev.submitter, () => api(p ? `/acesso/planos/${p.id}` : '/acesso/planos', { metodo: p ? 'PUT' : 'POST', corpo: d }), 'Plano salvo.').then((r) => { if (r) { $('#gaveta').close(); navegar(); } });
+  };
+}
+
+navegar();
+</script>
+</body>
+</html>
