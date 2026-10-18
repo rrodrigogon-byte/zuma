@@ -33,10 +33,10 @@ export const EM_IMPLANTACAO = {
 
 export const GLOBAIS_DO_EVENTO = [
   '/admin/torneios', '/admin/agenda', '/admin/sumula', '/admin/inscricoes', '/admin/quadras', '/admin/pontos',
-  '/admin/ranking', '/admin/ligas', '/admin/mesas', '/admin/cardapio', '/admin/estoque', '/admin/pagamentos',
+  '/admin/ranking', '/admin/ligas', '/admin/pagamentos',
   '/admin/socios', '/admin/mensalidades', '/admin/aulas', '/admin/crm', '/admin/loja', '/admin/noticias',
   '/admin/contatos', '/admin/relatorios',
-  '/pdv', '/admin/pdv', '/garcom', '/kds', '/admin/kds', '/portaria', '/admin/portaria',
+  '/portaria', '/admin/portaria',
 ]
 
 const caminho = (to) => String(to || '').split('?')[0].split('#')[0].replace(/\/+$/, '') || '/'

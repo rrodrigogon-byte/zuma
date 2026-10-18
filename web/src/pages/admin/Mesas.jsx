@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { api, fmtR, fmtDate } from '../../lib/api'
+import { barAdminPath } from '../../lib/bar-api'
 import { useToast } from '../../hooks/useToast'
 import Modal from '../../components/Modal'
 
@@ -73,9 +74,9 @@ export default function Mesas() {
     if (!quiet) setLoading(true)
     try {
       const [mesas, cfg, pedidoPublico] = await Promise.all([
-        api.get('/api/mesas'),
-        api.get('/api/admin/mesas/config'),
-        api.get('/api/admin/pedidos-publicos/config'),
+        api.get(barAdminPath('/mesas')),
+        api.get(barAdminPath('/mesas/config')),
+        api.get(barAdminPath('/pedidos-publicos/config')),
       ])
       setFisicas(mesas.fisicas || [])
       setVirtuais(mesas.virtuais || [])
@@ -103,7 +104,7 @@ export default function Mesas() {
     if (isNaN(n) || n < 1) return toast('Número inválido', true)
     setSavingCfg(true)
     try {
-      await api.post('/api/admin/mesas/config', { mesasFisicas:n })
+      await api.post(barAdminPath('/mesas/config'), { mesasFisicas:n })
       toast('Configuração salva'); load()
     } catch { toast('Erro ao salvar configuração', true) }
     finally { setSavingCfg(false) }
@@ -112,7 +113,7 @@ export default function Mesas() {
   async function salvarPedidoPublico() {
     setSalvandoPedidoPublico(true)
     try {
-      const resposta = await api.patch('/api/admin/pedidos-publicos/config', pedidoPublicoConfig)
+      const resposta = await api.patch(barAdminPath('/pedidos-publicos/config'), pedidoPublicoConfig)
       setPedidoPublicoConfig(resposta.configuracao || pedidoPublicoConfig); toast('Configuração do autoatendimento salva')
     } catch (erro) { toast(erro.message || 'Não foi possível salvar o autoatendimento', true) }
     finally { setSalvandoPedidoPublico(false) }
@@ -120,7 +121,7 @@ export default function Mesas() {
 
   async function abrirQrMesa(mesa) {
     setQrLoading(true)
-    try { const qr = await api.get(`/api/admin/mesas/${mesa.num}/qr`); setQrModal({ mesa, ...qr }) }
+    try { const qr = await api.get(barAdminPath(`/mesas/${mesa.num}/qr`)); setQrModal({ mesa, ...qr }) }
     catch (erro) { toast(erro.message || 'Não foi possível gerar o QR Code', true) }
     finally { setQrLoading(false) }
   }
@@ -128,7 +129,7 @@ export default function Mesas() {
   async function rotacionarQrMesa() {
     if (!qrModal?.mesa || !confirm(`Rotacionar o QR Code da Mesa ${qrModal.mesa.num}? O código atualmente impresso deixará de funcionar.`)) return
     setQrLoading(true)
-    try { await api.post(`/api/admin/mesas/${qrModal.mesa.num}/qr/rotacionar`, {}); toast('QR Code anterior invalidado. Gerando novo código…'); await abrirQrMesa(qrModal.mesa) }
+    try { await api.post(barAdminPath(`/mesas/${qrModal.mesa.num}/qr/rotacionar`), {}); toast('QR Code anterior invalidado. Gerando novo código…'); await abrirQrMesa(qrModal.mesa) }
     catch (erro) { toast(erro.message || 'Não foi possível rotacionar o QR Code', true) }
     finally { setQrLoading(false) }
   }
@@ -155,10 +156,10 @@ export default function Mesas() {
     setSalvandoMesa(true)
     try {
       if (mesaModal?.modo === 'nova') {
-        await api.post('/api/admin/mesas', { ...mesaForm, numero })
+        await api.post(barAdminPath('/mesas'), { ...mesaForm, numero })
         toast(`Mesa ${numero} cadastrada`)
       } else {
-        await api.patch(`/api/admin/mesas/${numero}`, { ...mesaForm, numero })
+        await api.patch(barAdminPath(`/mesas/${mesaModal.mesa?.id || numero}`), { ...mesaForm, numero })
         toast(`Mesa ${numero} atualizada`)
       }
       setMesaModal(null)
@@ -173,7 +174,7 @@ export default function Mesas() {
   async function excluirMesa(mesa) {
     if (!confirm(`Remover a mesa ${mesa.num} do mapa? Só mesas livres podem ser removidas.`)) return
     try {
-      await api.delete(`/api/admin/mesas/${mesa.num}`)
+      await api.delete(barAdminPath(`/mesas/${mesa.id || mesa.num}`))
       toast(`Mesa ${mesa.num} removida`)
       setMesaModal(null)
       load()
@@ -186,7 +187,7 @@ export default function Mesas() {
   async function abrirComanda(mesa) {
     if (!mesa.comandaId) return
     try {
-      const data = await api.get(`/api/comanda/${mesa.comandaId}`)
+      const data = await api.get(barAdminPath(`/comanda/${mesa.comandaId}`))
       setComanda({ mesa, data })
     } catch { toast('Erro ao carregar comanda', true) }
   }
@@ -195,7 +196,7 @@ export default function Mesas() {
   async function fecharForcado(num) {
     if (!confirm(`Fechar forçado a Mesa ${num}? Isso encerrará a comanda ativa.`)) return
     try {
-      await api.post(`/api/admin/mesas/${num}/fechar`)
+      await api.post(barAdminPath(`/mesas/${num}/fechar`))
       toast(`Mesa ${num} fechada`)
       setComanda(null); load()
     } catch (e) { toast(e.message || 'Erro ao fechar mesa', true) }
@@ -212,7 +213,7 @@ export default function Mesas() {
       toast(`Item "${item.nome}" transferido para Mesa ${mesaDestino}`)
       setTransferindo(null)
       // Recarregar comanda
-      const data = await api.get(`/api/comanda/${comanda.mesa.comandaId}`)
+      const data = await api.get(barAdminPath(`/comanda/${comanda.mesa.comandaId}`))
       setComanda(c => ({ ...c, data }))
       load(true)
     } catch (e) {
