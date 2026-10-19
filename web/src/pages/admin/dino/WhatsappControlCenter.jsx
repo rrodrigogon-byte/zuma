@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, ArrowRight, CheckCircle2, CircleAlert, ExternalLink, MessageSquare, RefreshCw, ShieldCheck, Smartphone, Store, Users, Workflow } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { api } from '../../../lib/api'
@@ -90,6 +90,7 @@ export default function WhatsappControlCenter() {
   const [loading, setLoading] = useState(false)
   const [lastReadAt, setLastReadAt] = useState(null)
   const [error, setError] = useState('')
+  const loadGeneration = useRef(0)
 
   const companies = useMemo(() => (Array.isArray(empresasAcessiveis) ? empresasAcessiveis : []).filter((item) => item?.id), [empresasAcessiveis])
   const stores = useMemo(() => (Array.isArray(lojasAcessiveis) ? lojasAcessiveis : []).filter((item) => item?.id && item.ativa !== false && (!empresaAtiva?.id || normalizeId(item.empresaId) === normalizeId(empresaAtiva.id))), [empresaAtiva?.id, lojasAcessiveis])
@@ -98,9 +99,12 @@ export default function WhatsappControlCenter() {
   const scopeHeaders = useMemo(() => ({ headers: { 'X-Empresa-Id': companyId, 'X-Loja-Id': storeId } }), [companyId, storeId])
 
   const loadChannels = useCallback(async (foreground = true) => {
+    const generation = ++loadGeneration.current
     if (!companyId || !storeId) {
       setRows([])
+      setLastReadAt(null)
       setError('Selecione uma empresa e uma unidade para carregar os canais.')
+      setLoading(false)
       return
     }
     setRows([])
@@ -115,13 +119,17 @@ export default function WhatsappControlCenter() {
         return { channel, connection: null, canManage: false, error: requestError }
       }
     }))
+    if (generation !== loadGeneration.current) return
     setRows(results)
     setLastReadAt(new Date().toISOString())
     if (results.every((item) => item.error)) setError('Nenhum canal respondeu. Confirme a sessão e a unidade selecionada.')
     setLoading(false)
   }, [companyId, storeId, scopeHeaders])
 
-  useEffect(() => { loadChannels(false) }, [loadChannels])
+  useEffect(() => {
+    loadChannels(true)
+    return () => { loadGeneration.current += 1 }
+  }, [loadChannels])
 
   const connectedCount = rows.filter((item) => channelState(item.connection).tone === 'success').length
   const configuredCount = rows.filter((item) => item.connection?.providerConfigured && item.connection?.instance).length
@@ -203,9 +211,10 @@ export default function WhatsappControlCenter() {
       <article className="wcp-kpi"><span><Store size={17} /> Unidade ativa</span><strong className="wcp-kpi-text">{activeStore}</strong><small>{activeCompany}</small></article>
     </section>
 
-    <section className="wcp-channel-section" aria-labelledby="wcp-channels-title">
+    <section className="wcp-channel-section" aria-labelledby="wcp-channels-title" aria-busy={loading}>
       <div className="wcp-section-heading"><div><span className="dadm-eyebrow">Passo 2</span><h2 id="wcp-channels-title">Mapa dos canais</h2><p>Abra um canal para gerar QR, solicitar código, confirmar pareamento, salvar grupo Admin e ativar o fluxo correspondente.</p></div><span className="wcp-last-read">{lastReadAt ? `Última leitura: ${dateTime(lastReadAt)}` : 'Aguardando leitura'}</span></div>
       {error && <p className="dadm-note warn" role="status"><CircleAlert size={16} /> {error}</p>}
+      {loading && <p className="dadm-note" role="status"><RefreshCw size={16} className="wcp-spin" /> Consultando os três canais no escopo selecionado…</p>}
       <div className="wcp-channel-grid">
         {(rows.length ? rows : CHANNELS.map((channel) => ({ channel, connection: null, error: null, canManage: false }))).map(({ channel, connection, error: channelError }) => {
           const Icon = channel.icon
