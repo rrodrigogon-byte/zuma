@@ -75,6 +75,15 @@ function formatScope(company, store) {
   return `${company.nome || company.razaoSocial || company.id} · ${store.nome || store.codigo || store.id}`
 }
 
+function safeLineIdentity(connection) {
+  const raw = String(connection?.phoneMasked || connection?.phoneReference || '').trim()
+  if (!raw) return 'Ainda não confirmada'
+  if (/[•*…]/.test(raw)) return raw
+  const digits = raw.replace(/\D/g, '')
+  if (digits.length < 8) return 'Linha cadastrada'
+  return `${digits.slice(0, 4)}•••••${digits.slice(-4)}`
+}
+
 export default function WhatsappControlCenter() {
   const {
     empresaAtiva,
@@ -223,7 +232,7 @@ export default function WhatsappControlCenter() {
             <div className="wcp-channel-top"><span className={`wcp-channel-icon is-${channel.tone}`}><Icon size={21} /></span><span className={`wcp-status-pill is-${state.tone}`}>{state.label}</span></div>
             <div><h3>{channel.label}</h3><p>{channel.description}</p></div>
             <div className="wcp-channel-detail"><span>Instância</span><strong>{connection?.instance || 'Não atribuída'}</strong></div>
-            <div className="wcp-channel-detail"><span>Identidade da linha</span><strong>{connection?.phoneMasked || connection?.phoneReference || 'Ainda não confirmada'}</strong></div>
+            <div className="wcp-channel-detail"><span>Identidade da linha</span><strong>{safeLineIdentity(connection)}</strong></div>
             <p className="wcp-channel-copy">{statusCopy(connection, channelError)}</p>
             <div className="wcp-channel-actions">
               <button type="button" className="c360-btn primary" onClick={() => openChannel(channel)} disabled={!companyId || !storeId}><ExternalLink size={14} /> Abrir configuração</button>

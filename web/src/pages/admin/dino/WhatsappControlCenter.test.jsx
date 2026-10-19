@@ -91,6 +91,20 @@ describe('WhatsappControlCenter', () => {
     await act(async () => { renderer.unmount() })
   })
 
+  it('mascara telefone bruto mesmo quando a API retorna a referência sem máscara', async () => {
+    apiMock.get.mockResolvedValue({
+      conexao: { ...connection('stallone-1'), phoneMasked: '', phoneReference: '5565996765768' },
+      podeGerenciar: true,
+    })
+    let renderer
+    await act(async () => { renderer = create(<WhatsappControlCenter />) })
+    await tick()
+    const html = textOf(renderer)
+    expect(html).toContain('5565•••••5768')
+    expect(html).not.toContain('5565996765768')
+    await act(async () => { renderer.unmount() })
+  })
+
   it('ignora respostas antigas quando a empresa muda durante a consulta', async () => {
     const first = [deferred(), deferred(), deferred()]
     const second = [deferred(), deferred(), deferred()]
