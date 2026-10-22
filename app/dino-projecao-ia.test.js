@@ -109,6 +109,30 @@ test('resposta JSON da IA vira leitura pronta sem substituir fatos determinísti
   assert.ok(result.analysis.alertas.some(item => item.tipo === 'meta'));
 });
 
+test('persistência do insight tipa o status para evitar parâmetro PostgreSQL ambíguo', async () => {
+  const queries = [];
+  const db = {
+    async queryRead() { return { rows: [] }; },
+    async query(sql) {
+      queries.push(sql);
+      if (sql.includes('INSERT INTO dino_forecast_ai_insights')) {
+        assert.match(sql, /\$6::text IN \('ready', 'fallback'\)/);
+        return { rows: [{ id: '33333333-3333-4333-8333-333333333333', gerado_em: new Date().toISOString() }] };
+      }
+      return { rows: [] };
+    },
+  };
+  const result = await analyzeForecastWithAi({
+    db,
+    empresaId,
+    lojaId,
+    projection,
+    runAiTaskImpl: async () => ({ data: { resumoExecutivo: 'Leitura tipada.', tendencia: 'queda', causas: [], recomendacoes: [] }, provider: 'gemini', model: 'test' }),
+  });
+  assert.equal(result.persisted, true);
+  assert.ok(queries.some(sql => sql.includes('INSERT INTO dino_forecast_ai_insights')));
+});
+
 test('feature desligada devolve fallback sem chamar o executor de IA', async () => {
   let chamadas = 0;
   const result = await analyzeForecastWithAi({ db: missingCommerceDb(), empresaId, lojaId, projection, allowAi: false, runAiTaskImpl: async () => { chamadas += 1; return {}; } });

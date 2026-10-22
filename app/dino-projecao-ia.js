@@ -317,7 +317,7 @@ async function persistInsight({ db, empresaId, lojaId, mes, fingerprint, snapsho
     const result = await db.query(
       `INSERT INTO dino_forecast_ai_insights
         (empresa_id, loja_id, competencia, fingerprint, prompt_version, status, source, snapshot, analysis, confidence, provider, model, erro_codigo, erro, gerado_em, expira_em, atualizado_em)
-       VALUES ($1, $2, $3::date, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11, $12, $13, $14, CASE WHEN $6 IN ('ready', 'fallback') THEN CURRENT_TIMESTAMP ELSE NULL END, CURRENT_TIMESTAMP + INTERVAL '6 hours', CURRENT_TIMESTAMP)
+       VALUES ($1, $2, $3::date, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11, $12, $13, $14, CASE WHEN $6::text IN ('ready', 'fallback') THEN CURRENT_TIMESTAMP ELSE NULL END, CURRENT_TIMESTAMP + INTERVAL '6 hours', CURRENT_TIMESTAMP)
        ON CONFLICT (empresa_id, loja_id, competencia, fingerprint)
        DO UPDATE SET prompt_version = EXCLUDED.prompt_version, status = EXCLUDED.status, source = EXCLUDED.source,
          snapshot = EXCLUDED.snapshot, analysis = EXCLUDED.analysis, confidence = EXCLUDED.confidence,
