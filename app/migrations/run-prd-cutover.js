@@ -215,7 +215,7 @@ async function execute() {
 
     await trx.query(
       `INSERT INTO auditoria (empresa_id, loja_id, tabela, operacao, registro_id, dados_anterior, dados_novo)
-       VALUES ($1, $2, 'prd_cutover', 'cutover', $3, $4::jsonb, $5::jsonb)`,
+       VALUES ($1, $2, 'prd_cutover', 'SYNC', $3, $4::jsonb, $5::jsonb)`,
       [AGRO.empresaId, AGRO.lojaId, RUN_KEY, json(before), json(summary)],
     );
     await trx.query(
