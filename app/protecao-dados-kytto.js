@@ -22,6 +22,8 @@ import path from 'path';
 import zlib from 'zlib';
 import { createHash } from 'crypto';
 import { promisify } from 'util';
+import { Readable, Writable } from 'stream';
+import { pipeline } from 'stream/promises';
 
 const gzip = promisify(zlib.gzip);
 const gunzip = promisify(zlib.gunzip);
@@ -41,6 +43,38 @@ export function diaLocal(ms = Date.now(), timeZone = process.env.KYTTO_TIMEZONE 
 
 function sha256(buffer) { return createHash('sha256').update(buffer).digest('hex'); }
 function mensagemErro(error) { return String(error?.code || error?.message || error || 'erro').slice(0, 160); }
+
+async function arquivoJsonValido(arquivo) {
+  const stat = await fs.promises.stat(arquivo);
+  if (stat.size < 2) throw new Error('arquivo do banco incompleto');
+  const handle = await fs.promises.open(arquivo, 'r');
+  try {
+    const inicio = Buffer.alloc(1);
+    const fim = Buffer.alloc(1);
+    await handle.read(inicio, 0, 1, 0);
+    await handle.read(fim, 0, 1, stat.size - 1);
+    if (inicio[0] !== 0x7b || fim[0] !== 0x7d) throw new Error('arquivo do banco incompleto');
+    return stat.size;
+  } finally { await handle.close(); }
+}
+
+async function comprimirArquivo(arquivo, destino) {
+  const hash = createHash('sha256');
+  let bytes = 0;
+  const entrada = fs.createReadStream(arquivo);
+  entrada.on('data', (chunk) => { bytes += chunk.length; hash.update(chunk); });
+  await pipeline(entrada, zlib.createGzip({ level: 6 }), fs.createWriteStream(destino));
+  return { bytes, sha256: hash.digest('hex') };
+}
+
+async function hashDescomprimido(comprimido) {
+  const hash = createHash('sha256');
+  const destino = new Writable({
+    write(chunk, _encoding, callback) { hash.update(chunk); callback(); },
+  });
+  await pipeline(Readable.from([comprimido]), zlib.createGunzip(), destino);
+  return hash.digest('hex');
+}
 
 export function cotaCopiasBytes(env = process.env) {
   const mb = Number.parseInt(env.PROTECAO_COPIAS_MAX_MB ?? '', 10);
@@ -135,46 +169,48 @@ export function criarProtecaoDados({ getPool, caminhoBanco, estadoGravacao = () 
     if (!souLider()) return { ok: false, motivo: 'instancia_nao_lider' };
     const arquivo = caminhoBanco();
     if (!fs.existsSync(arquivo)) return { ok: false, motivo: 'banco_inexistente' };
-    // O arquivo é trocado por rename atômico e sempre vem de JSON.stringify: a leitura
-    // pega uma versão completa. Confere só as bordas (sem um JSON.parse que dobraria a
-    // memória com arquivo grande).
-    const original = await fs.promises.readFile(arquivo);
-    if (original.length < 2 || original[0] !== 0x7b || original[original.length - 1] !== 0x7d) throw new Error('arquivo do banco incompleto');
-    const hash = sha256(original);
-    if (!forcar && tipo === 'horario' && hash === ultimoHash) {
-      estado.copiasPuladasSemMudanca += 1;
-      return { ok: true, pulada: true, motivo: 'sem_mudanca' };
-    }
-    const comprimido = await gzip(original, { level: 6 });
-    if (comprimido.length > LIMITE_GZIP_BYTES || comprimido.length > cotaBytes / 4) throw new Error(`cópia comprimida de ${comprimido.length} bytes acima do limite`);
-    const pool = getPool();
-    const dia = diaLocal(agora());
-    const origem = String(env.RENDER_INSTANCE_ID || os.hostname() || '').slice(0, 80);
-    const { rows } = await pool.query(
-      `INSERT INTO kytto_json_snapshots (tipo, dia_local, bytes_original, bytes_gzip, sha256, origem, conteudo)
-       VALUES ($1, $2::date, $3, $4, $5, $6, $7) RETURNING id, criado_em`,
-      [tipo, dia, original.length, comprimido.length, hash, origem, comprimido],
-    );
-    const id = rows[0].id;
-    // Restauração conferida: lê de volta, descomprime e compara o hash com o original
-    // (que veio de JSON.stringify). Cópia que não confere é apagada.
+    // O JSON legado pode ser grande demais para manter o estado em memória junto
+    // com buffers de leitura, gzip e restauração. Comprime para um temporário em
+    // streaming e confere a restauração também em streaming, sem duplicar o JSON.
+    const bytesOriginal = await arquivoJsonValido(arquivo);
+    const temporario = path.join(os.tmpdir(), `kytto-snapshot-${process.pid}-${Date.now()}.json.gz`);
     try {
-      const lido = await pool.query('SELECT conteudo FROM kytto_json_snapshots WHERE id = $1', [id]);
-      const restaurado = await gunzip(lido.rows[0].conteudo);
-      if (sha256(restaurado) !== hash) throw new Error(`cópia ${id} não confere com o original`);
-      await pool.query('UPDATE kytto_json_snapshots SET verificado_em = CURRENT_TIMESTAMP WHERE id = $1', [id]);
-    } catch (error) {
-      await pool.query('DELETE FROM kytto_json_snapshots WHERE id = $1 AND verificado_em IS NULL', [id]).catch(() => {});
-      throw error;
-    }
-    ultimoHash = hash;
-    Object.assign(estado, {
-      ultimaCopiaEm: new Date(agora()).toISOString(), ultimaCopiaId: String(id), ultimaCopiaTipo: tipo,
-      ultimaCopiaBytes: original.length, ultimaCopiaBytesGzip: comprimido.length, ultimaCopiaVerificada: true,
-      ultimoErro: null, ultimoErroEm: null,
-    });
-    await aplicarRetencao();
-    return { ok: true, id: String(id), tipo, bytes: original.length, bytesGzip: comprimido.length, verificada: true };
+      const { bytes, sha256: hash } = await comprimirArquivo(arquivo, temporario);
+      if (bytes !== bytesOriginal) throw new Error('arquivo do banco mudou durante a cópia');
+      if (!forcar && tipo === 'horario' && hash === ultimoHash) {
+        estado.copiasPuladasSemMudanca += 1;
+        return { ok: true, pulada: true, motivo: 'sem_mudanca' };
+      }
+      const comprimido = await fs.promises.readFile(temporario);
+      if (comprimido.length > LIMITE_GZIP_BYTES || comprimido.length > cotaBytes / 4) throw new Error(`cópia comprimida de ${comprimido.length} bytes acima do limite`);
+      const pool = getPool();
+      const dia = diaLocal(agora());
+      const origem = String(env.RENDER_INSTANCE_ID || os.hostname() || '').slice(0, 80);
+      const { rows } = await pool.query(
+        `INSERT INTO kytto_json_snapshots (tipo, dia_local, bytes_original, bytes_gzip, sha256, origem, conteudo)
+         VALUES ($1, $2::date, $3, $4, $5, $6, $7) RETURNING id, criado_em`,
+        [tipo, dia, bytesOriginal, comprimido.length, hash, origem, comprimido],
+      );
+      const id = rows[0].id;
+      // Restauração conferida: descomprime em streaming e compara o hash original.
+      // Cópia que não confere é apagada.
+      try {
+        const lido = await pool.query('SELECT conteudo FROM kytto_json_snapshots WHERE id = $1', [id]);
+        if (await hashDescomprimido(lido.rows[0].conteudo) !== hash) throw new Error(`cópia ${id} não confere com o original`);
+        await pool.query('UPDATE kytto_json_snapshots SET verificado_em = CURRENT_TIMESTAMP WHERE id = $1', [id]);
+      } catch (error) {
+        await pool.query('DELETE FROM kytto_json_snapshots WHERE id = $1 AND verificado_em IS NULL', [id]).catch(() => {});
+        throw error;
+      }
+      ultimoHash = hash;
+      Object.assign(estado, {
+        ultimaCopiaEm: new Date(agora()).toISOString(), ultimaCopiaId: String(id), ultimaCopiaTipo: tipo,
+        ultimaCopiaBytes: bytesOriginal, ultimaCopiaBytesGzip: comprimido.length, ultimaCopiaVerificada: true,
+        ultimoErro: null, ultimoErroEm: null,
+      });
+      await aplicarRetencao();
+      return { ok: true, id: String(id), tipo, bytes: bytesOriginal, bytesGzip: comprimido.length, verificada: true };
+    } finally { await fs.promises.unlink(temporario).catch(() => {}); }
   }
 
   async function aplicarRetencao() {
@@ -255,14 +291,14 @@ export function criarProtecaoDados({ getPool, caminhoBanco, estadoGravacao = () 
     limparCopiasLocais();
     const destino = arquivo.replace(/\.json$/, '') + '-' + diaLocal(agora()) + '.bak.json.gz';
     try {
-      const original = await fs.promises.readFile(arquivo);
+      const original = await fs.promises.stat(arquivo);
       // Reserva espaço para a gravação normal (principal + temporário + .bak).
-      if (espacoLivreBytes(path.dirname(arquivo)) < original.length * 4) {
+      if (espacoLivreBytes(path.dirname(arquivo)) < original.size * 4) {
         registrarErro('cópia local diária', new Error('espaço livre insuficiente no disco; cópia local pulada'));
         return null;
       }
       const tmp = destino + '.tmp';
-      await fs.promises.writeFile(tmp, await gzip(original, { level: 6 }));
+      await comprimirArquivo(arquivo, tmp);
       await fs.promises.rename(tmp, destino);
     } catch (error) { registrarErro('cópia local diária', error); return null; }
     return path.basename(destino);
