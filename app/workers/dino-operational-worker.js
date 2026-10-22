@@ -6,6 +6,7 @@ import {
   failDinoEffect,
 } from '../core/dino-operational-outbox.js';
 import { db as defaultCommerceDb } from '../core/database.js';
+import { createDinoForecastAiHandler } from '../dino-projecao-ia.js';
 
 const DEFAULT_LIMIT = 10;
 const DEFAULT_INTERVAL_MS = 5000;
@@ -47,6 +48,11 @@ export function createDinoNpsProcessHandler({ db = defaultCommerceDb, canonicalE
     }
     return { verified: true, responseId };
   };
+}
+
+/** Handler idempotente da análise gerencial da projeção de faturamento. */
+export function createDinoForecastAiProcessHandler({ db = defaultCommerceDb, fetchImpl = fetch } = {}) {
+  return createDinoForecastAiHandler({ db, fetchImpl });
 }
 
 function cleanWorkerId(value) {
@@ -206,4 +212,4 @@ export function startDinoOperationalWorker({ handlers = {}, intervalMs = DEFAULT
   };
 }
 
-export default { runDinoOperationalBatch, startDinoOperationalWorker, createDinoNpsProcessHandler };
+export default { runDinoOperationalBatch, startDinoOperationalWorker, createDinoNpsProcessHandler, createDinoForecastAiProcessHandler };

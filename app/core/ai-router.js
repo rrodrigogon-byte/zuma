@@ -51,6 +51,7 @@ export const AI_ROUTES = {
   resumir_extrair: ['anthropic:smart', 'openai:smart', 'gemini:smart'],
   propor_resposta: ['anthropic:smart', 'gemini:smart', 'openai:smart'],
   avaliar: ['openai:smart', 'anthropic:smart', 'gemini:smart'],
+  previsao_gerencial: ['gemini:smart', 'openai:smart', 'anthropic:smart'],
   venda_consultiva: ['anthropic:smart', 'gemini:smart', 'openai:smart'],
   responder_reserva: ['anthropic:smart', 'openai:smart'],
 };
@@ -60,6 +61,7 @@ export const AI_TASK_LABELS = {
   resumir_extrair: 'Resumir conversa e extrair fatos',
   propor_resposta: 'Propor respostas para perguntas novas',
   avaliar: 'Avaliar conversas (IA juíza)',
+  previsao_gerencial: 'Interpretar projeção de faturamento e sugerir ações',
   venda_consultiva: 'Venda consultiva de perfume',
   responder_reserva: 'Atender quando o Gemini cair',
 };

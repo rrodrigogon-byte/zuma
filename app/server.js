@@ -56,7 +56,8 @@ import { startPendingFollowUpWorker } from './core/whatsapp-ai-followup.js';
 import { db as commerceDb, getPool as getCommercePool } from './core/database.js';
 import { checkCommerceSchemaReadiness } from './core/commerce-schema-readiness.js';
 import { DinoNpsError, getDinoNpsOverview, getDinoNpsSchemaReadiness, queueDinoNpsProcessing, recordDinoNpsResponse, setDinoNpsSchemaReadiness } from './core/dino-nps-canonical.js';
-import { createDinoNpsProcessHandler, startDinoOperationalWorker } from './workers/dino-operational-worker.js';
+import { createDinoForecastAiProcessHandler, createDinoNpsProcessHandler, startDinoOperationalWorker } from './workers/dino-operational-worker.js';
+import * as dinoForecastAi from './dino-projecao-ia.js';
 import * as loyaltyDb from './db-pg.js';
 import {
   LoyaltyAdvancedError,
@@ -183,6 +184,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'agro-open-dev-secret-troque-em-pro
 let dinoNpsSchemaReady = false;
 let dinoNpsSchemaCode = 'DINO_NPS_SCHEMA_NOT_READY';
 let dinoOperationalWorker = null;
+let dinoForecastScheduler = null;
 // Em produção, recusa subir sem um JWT_SECRET próprio — o fallback conhecido permitiria
 // forjar tokens de admin.
 if(PROD && (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'agro-open-dev-secret-troque-em-producao')){
@@ -4199,6 +4201,82 @@ app.get('/api/admin/barbearia/captacao/projecao-faturamento', (req, res) => {
   } catch (error) { respostaCaptacao(res, error); }
 });
 
+// Camada narrativa da projeção: os números permanecem no motor determinístico;
+// a IA apenas explica, prioriza e sugere ações sem mutar o ERP.
+app.get('/api/admin/barbearia/captacao/projecao-faturamento/inteligencia', async (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try {
+    const horizonteBruto = req.query?.horizonte;
+    const horizonte = horizonteBruto === undefined || horizonteBruto === '' ? 6 : Number(horizonteBruto);
+    if (!Number.isFinite(horizonte) || horizonte < 1 || horizonte > 6) throw new captacaoKytto.CaptacaoError('Horizonte inválido: escolha entre 1 e 6 meses.', 'HORIZONTE_INVALIDO');
+    const projection = captacaoKytto.projecaoFaturamento(legacyEmpresaId(req), { mes: req.query?.mes, horizonte, lojaId: legacyLojaId(req) });
+    const inteligencia = await dinoForecastAi.analyzeForecastWithAi({
+      db: commerceDb,
+      empresaId: legacyEmpresaId(req),
+      lojaId: legacyLojaId(req),
+      projection,
+      force: req.query?.forcar === '1',
+      allowAi: process.env.DINO_FORECAST_AI_ENABLED === '1' || req.query?.forcar === '1',
+    });
+    res.json({ ok: true, projection, inteligencia, motor: dinoForecastAi.forecastAiStatus() });
+  } catch (error) {
+    const status = Number(error?.status || error?.statusCode) || 503;
+    res.status(status >= 400 && status < 600 ? status : 503).json({ ok: false, error: error.message || 'Análise de projeção indisponível.', code: error.code || 'DINO_FORECAST_AI_UNAVAILABLE' });
+  }
+});
+
+app.post('/api/admin/barbearia/captacao/projecao-faturamento/inteligencia/atualizar', async (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try {
+    const horizonte = req.body?.horizonte === undefined ? 6 : Number(req.body.horizonte);
+    if (!Number.isFinite(horizonte) || horizonte < 1 || horizonte > 6) throw new captacaoKytto.CaptacaoError('Horizonte inválido: escolha entre 1 e 6 meses.', 'HORIZONTE_INVALIDO');
+    const projection = captacaoKytto.projecaoFaturamento(legacyEmpresaId(req), { mes: req.body?.mes, horizonte, lojaId: legacyLojaId(req) });
+    const fila = await dinoForecastAi.enqueueForecastAnalysis({
+      db: commerceDb,
+      empresaId: legacyEmpresaId(req),
+      lojaId: legacyLojaId(req),
+      projection,
+      correlationId: req.requestId,
+    });
+    res.status(fila.replayed ? 200 : 202).json({ ok: true, ...fila, motor: dinoForecastAi.forecastAiStatus() });
+  } catch (error) {
+    const status = Number(error?.status || error?.statusCode) || 409;
+    res.status(status >= 400 && status < 600 ? status : 409).json({ ok: false, error: error.message || 'Não foi possível enfileirar a análise.', code: error.code || 'DINO_FORECAST_QUEUE_FAILED' });
+  }
+});
+
+app.get('/api/admin/barbearia/captacao/projecao-faturamento/alertas', async (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try {
+    const projection = captacaoKytto.projecaoFaturamento(legacyEmpresaId(req), { mes: req.query?.mes, horizonte: 1, lojaId: legacyLojaId(req) });
+    const alertas = await dinoForecastAi.listForecastAiAlerts({ db: commerceDb, empresaId: legacyEmpresaId(req), lojaId: legacyLojaId(req), mes: projection.mes, includeResolved: req.query?.resolvidos === '1' });
+    res.json({ ok: true, mes: projection.mes, alertas });
+  } catch (error) {
+    res.status(503).json({ ok: false, error: error.message || 'Alertas de projeção indisponíveis.', code: error.code || 'DINO_FORECAST_ALERTS_UNAVAILABLE' });
+  }
+});
+
+app.post('/api/admin/barbearia/captacao/projecao-faturamento/alertas/:id/reconhecer', async (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try {
+    const alerta = await dinoForecastAi.acknowledgeForecastAiAlert({ db: commerceDb, empresaId: legacyEmpresaId(req), lojaId: legacyLojaId(req), alertId: req.params.id, usuarioId: req.user?.id });
+    res.json({ ok: true, alerta });
+  } catch (error) {
+    const status = Number(error?.status || error?.statusCode) || 409;
+    res.status(status >= 400 && status < 600 ? status : 409).json({ ok: false, error: error.message || 'Não foi possível reconhecer o alerta.', code: error.code || 'DINO_FORECAST_ALERT_ACK_FAILED' });
+  }
+});
+
+app.post('/api/admin/barbearia/captacao/projecao-faturamento/simular', (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
+  try {
+    const horizonte = req.body?.horizonte === undefined ? 1 : Number(req.body.horizonte);
+    if (!Number.isFinite(horizonte) || horizonte < 1 || horizonte > 6) throw new captacaoKytto.CaptacaoError('Horizonte inválido: escolha entre 1 e 6 meses.', 'HORIZONTE_INVALIDO');
+    const projection = captacaoKytto.projecaoFaturamento(legacyEmpresaId(req), { mes: req.body?.mes, horizonte, lojaId: legacyLojaId(req) });
+    res.json({ ok: true, simulacao: dinoForecastAi.simulateForecast(projection, req.body?.fatores || req.body || {}) });
+  } catch (error) { respostaCaptacao(res, error); }
+});
+
 function comandaBarbeariaDaSessao(req, id) {
   const comanda = barbeariaErpKytto.obterComandaBarbearia(legacyEmpresaId(req), id);
   const lojaId = legacyLojaId(req);
@@ -7971,10 +8049,17 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
     // [kytto-clube] fila de espera, lembretes, faltas, régua de retenção, congelamentos e validações
     // de parceiro; só com CLUBE_ROTINAS=1 (trava no banco: nunca roda em duplicidade)
     if (process.env.CLUBE_ROTINAS === '1' && clubeIntegracao) iniciarRotinasClube(clubeDb, { enviarWhatsapp: enviarWhatsappClube, gerarLinkPagamento: clubeIntegracao.gerarLinkPagamento });
-    if (process.env.DINO_OPERATIONAL_WORKER_ENABLED === '1' && dinoNpsSchemaReady) {
-      dinoOperationalWorker = startDinoOperationalWorker({ handlers: { 'nps.process': createDinoNpsProcessHandler({ db: commerceDb }) } });
+    if (process.env.DINO_OPERATIONAL_WORKER_ENABLED === '1' && (dinoNpsSchemaReady || process.env.DINO_FORECAST_AI_ENABLED === '1')) {
+      const handlers = {};
+      if (dinoNpsSchemaReady) handlers['nps.process'] = createDinoNpsProcessHandler({ db: commerceDb });
+      if (process.env.DINO_FORECAST_AI_ENABLED === '1') handlers['forecast.ai.analyze'] = createDinoForecastAiProcessHandler({ db: commerceDb });
+      dinoOperationalWorker = startDinoOperationalWorker({ handlers });
+      dinoForecastScheduler = dinoForecastAi.startDinoForecastAiScheduler({
+        db: commerceDb,
+        projectionFactory: (empresaId, lojaId) => captacaoKytto.projecaoFaturamento(empresaId, { lojaId, horizonte: 6 }),
+      });
     } else if (process.env.DINO_OPERATIONAL_WORKER_ENABLED === '1') {
-      console.warn('Worker operacional DINO não iniciado: schema Commerce não está pronto.');
+      console.warn('Worker operacional DINO não iniciado: nenhum schema/feature operacional está pronto.');
     }
   }
   app.listen(PORT, ()=> console.log(`SetPoint React SPA em http://localhost:${PORT}`));
@@ -8029,7 +8114,7 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
 // Encerramento gracioso: garante o flush do último estado para o GCS antes de morrer
 // (Cloud Run envia SIGTERM no deploy/scale-down e concede ~10s de grace period).
 for(const sig of ['SIGTERM','SIGINT']){
-  process.on(sig, async ()=>{ try { dinoOperationalWorker?.stop?.(); } catch {} try { await flush(); } catch {} try { await protecaoDados.encerrar(); } catch {} process.exit(0); });
+  process.on(sig, async ()=>{ try { dinoOperationalWorker?.stop?.(); } catch {} try { dinoForecastScheduler?.stop?.(); } catch {} try { await flush(); } catch {} try { await protecaoDados.encerrar(); } catch {} process.exit(0); });
 }
 
 // A cópia local diária (com retenção de 7 dias) e a cópia externa ficam em
