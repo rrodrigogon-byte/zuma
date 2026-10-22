@@ -175,14 +175,75 @@ const BAK_INTERVALO_MS = Number.isFinite(_bakIntervalo) && _bakIntervalo >= 0 ? 
 const FSYNC_INTERVALO_MS = 30 * 1000;
 let _ultimoFsync = 0;
 const GRAVACAO_LENTA_MS = 250;
+const TAMANHO_BLOCO_JSON = 64 * 1024;
 const _metricas = { gravacoes: 0, ultimaGravacaoEm: null, ultimaDuracaoMs: 0, maiorDuracaoMs: 0, tamanhoBytes: 0, ultimoErro: null, ultimoErroEm: null, gravacoesLentas: 0, ultimoBakEm: 0 };
 
-function escreverArquivo(arquivo, conteudo){
+// JSON.stringify(_cache) cria uma string do tamanho inteiro do banco antes de o
+// primeiro byte chegar ao disco. Com o histórico Avec importado isso duplicava
+// dezenas de megabytes no heap e fazia o processo ultrapassar o limite de memória
+// do serviço. A escrita abaixo mantém apenas um bloco pequeno em memória e
+// conserva a semântica do JSON compacto usado pelo banco legado.
+function escreverJsonEmFluxo(fd, valor) {
+  let bloco = '';
+  let blocoBytes = 0;
+  let tamanhoBytes = 0;
+  const ancestrais = new WeakSet();
+  let descarregar;
+  const anexar = (texto) => {
+    if (!texto) return;
+    bloco += texto;
+    blocoBytes += Buffer.byteLength(texto, 'utf8');
+    if (blocoBytes >= TAMANHO_BLOCO_JSON) descarregar();
+  };
+  descarregar = () => {
+    if (!bloco) return;
+    tamanhoBytes += fs.writeSync(fd, bloco, null, 'utf8');
+    bloco = '';
+    blocoBytes = 0;
+  };
+  const visitar = (item, dentroDeArray = false) => {
+    if (item === null) { anexar('null'); return; }
+    const tipo = typeof item;
+    if (tipo === 'string') { anexar(JSON.stringify(item)); return; }
+    if (tipo === 'number') { anexar(Number.isFinite(item) ? String(item) : 'null'); return; }
+    if (tipo === 'boolean') { anexar(item ? 'true' : 'false'); return; }
+    if (tipo === 'undefined' || tipo === 'function' || tipo === 'symbol') { if (dentroDeArray) anexar('null'); return; }
+    if (tipo === 'bigint') throw new TypeError('Do not know how to serialize a BigInt');
+    if (ancestrais.has(item)) throw new TypeError('Converting circular structure to JSON');
+    ancestrais.add(item);
+    try {
+      if (Array.isArray(item)) {
+        anexar('[');
+        item.forEach((valorItem, indice) => { if (indice) anexar(','); visitar(valorItem, true); });
+        anexar(']');
+      } else {
+        anexar('{');
+        let primeiro = true;
+        Object.keys(item).forEach((chave) => {
+          const valorChave = item[chave];
+          if (valorChave === undefined || typeof valorChave === 'function' || typeof valorChave === 'symbol') return;
+          if (!primeiro) anexar(',');
+          primeiro = false;
+          anexar(JSON.stringify(chave));
+          anexar(':');
+          visitar(valorChave);
+        });
+        anexar('}');
+      }
+    } finally { ancestrais.delete(item); }
+  };
+  visitar(valor);
+  descarregar();
+  return tamanhoBytes;
+}
+
+function escreverArquivo(arquivo, valor){
   const fd = fs.openSync(arquivo, 'w');
   try {
-    fs.writeSync(fd, conteudo);
+    const tamanhoBytes = escreverJsonEmFluxo(fd, valor);
     const agora = Date.now();
     if(agora - _ultimoFsync >= FSYNC_INTERVALO_MS){ fs.fsyncSync(fd); _ultimoFsync = agora; }
+    return tamanhoBytes;
   } finally { fs.closeSync(fd); }
 }
 
@@ -190,9 +251,8 @@ export function save(){
   const inicio = Date.now();
   try {
     ensureDir();
-    const conteudo = JSON.stringify(_cache);
     const tmp = DB_PATH + '.tmp';
-    escreverArquivo(tmp, conteudo);
+    const tamanhoBytes = escreverArquivo(tmp, _cache);
     if(inicio - _metricas.ultimoBakEm >= BAK_INTERVALO_MS && fs.existsSync(DB_PATH)){
       try { fs.copyFileSync(DB_PATH, DB_PATH + '.bak'); _metricas.ultimoBakEm = inicio; }
       catch(e){ console.error('[DB] falha ao renovar a cópia .bak:', e.message); }
@@ -203,7 +263,7 @@ export function save(){
     _metricas.ultimaGravacaoEm = new Date().toISOString();
     _metricas.ultimaDuracaoMs = duracao;
     _metricas.maiorDuracaoMs = Math.max(_metricas.maiorDuracaoMs, duracao);
-    _metricas.tamanhoBytes = Buffer.byteLength(conteudo);
+    _metricas.tamanhoBytes = tamanhoBytes;
     _metricas.ultimoErro = null;
     if(duracao >= GRAVACAO_LENTA_MS){
       _metricas.gravacoesLentas += 1;
