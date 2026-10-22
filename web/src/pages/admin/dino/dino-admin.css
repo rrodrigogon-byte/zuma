@@ -417,3 +417,24 @@
 @media (max-width: 1100px) { .wcp-channel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .wcp-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .wcp-kpi:nth-child(2) { border-right: 0; } .wcp-kpi:nth-child(-n+2) { border-bottom: 1px solid #e5ebef; } }
 @media (max-width: 760px) { .wcp-hero { flex-direction: column; padding: 22px 19px; } .wcp-hero-visual { align-self: flex-start; } .wcp-scope-grid, .wcp-flow-grid, .wcp-channel-grid { grid-template-columns: minmax(0, 1fr); } .wcp-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .wcp-head-actions, .wcp-head-actions .c360-btn { width: 100%; } .wcp-head-actions .c360-btn { justify-content: center; } .wcp-kpis { grid-template-columns: minmax(0, 1fr); } .wcp-kpi, .wcp-kpi:nth-child(-n+2) { border-right: 0; border-bottom: 1px solid #e5ebef; } .wcp-kpi:last-child { border-bottom: 0; } .wcp-channel-actions .c360-btn { width: 100%; justify-content: center; } }
+
+/* Visão executiva do grafo da empresa. */
+.dadm-executive { gap: 14px; }
+.dadm-section-heading { display: flex; align-items: end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.dadm-section-heading > div:first-child { display: grid; gap: 5px; }
+.dadm-section-heading p { margin: 0; color: var(--muted); font-size: 13px; }
+.dadm-executive .dadm-filters { align-items: center; }
+.dadm-executive .dadm-filters label { font-size: 12px; font-weight: 700; color: var(--fg); }
+.dadm-exec-map { width: 100%; min-height: 220px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.dadm-exec-map line { stroke: var(--line); stroke-width: 1.5; }
+.dadm-exec-map text { fill: var(--muted); text-anchor: middle; font: 10px var(--font-body, sans-serif); }
+.dadm-exec-map text.node-label { fill: var(--fg); font-size: 11px; font-weight: 700; }
+.dadm-exec-map text.node-value { fill: var(--muted); font-size: 9px; }
+.dadm-exec-map circle { fill: color-mix(in srgb, var(--accent) 28%, var(--card)); stroke: var(--accent); stroke-width: 2; }
+.dadm-exec-map circle.severity-high, .dadm-exec-map circle.severity-critical { fill: color-mix(in srgb, #D96A5B 30%, var(--card)); stroke: #D96A5B; }
+.dadm-exec-map circle.severity-medium { fill: color-mix(in srgb, #E0A83B 35%, var(--card)); stroke: #E0A83B; }
+.dadm-analysis { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--accent) 4%, var(--card)); color: var(--fg); font-size: 13px; line-height: 1.5; }
+.dadm-analysis p { margin: 0; }
+.dadm-analysis ul { margin: 5px 0 0; padding-left: 20px; }
+.dadm-executive .c360-input:focus-visible, .dadm-executive .c360-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 620px) { .dadm-section-heading { align-items: stretch; } .dadm-executive .dadm-filters { display: grid; grid-template-columns: 1fr; } .dadm-executive .dadm-filters .c360-input { width: 100%; max-width: none; } .dadm-exec-map { min-height: 180px; } }

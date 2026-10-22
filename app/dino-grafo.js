@@ -170,7 +170,10 @@ export function buildCustomerGraph(input = {}, { now = new Date() } = {}) {
     if (from && to && from !== to) { ensure(to).indicou.add(from); edge(`c:${to}`, 'INDICOU', `c:${from}`); }
   }
   const keyOf = (item) => {
-    if (item?.clienteId) return idToKey.get(String(item.clienteId)) || null;
+    if (item?.clienteId) {
+      const linked = idToKey.get(String(item.clienteId));
+      if (linked) return linked;
+    }
     const phone = graphPhone(item?.clienteTelefone || item?.telefone);
     if (phone && !ambiguous.has(phone) && !blockedPhones.has(phone)) return phone;
     return null;
@@ -486,4 +489,3 @@ export function graphSummary(graph) {
     emRisco: customers.filter((c) => c.interval && c.daysSince !== null && c.daysSince > 1.5 * c.interval).length,
   };
 }
-

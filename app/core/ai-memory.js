@@ -219,48 +219,87 @@ function factView(row) {
   };
 }
 
-export async function customerMemory(empresaId, telefone, { limitSummaries = 10 } = {}) {
+export async function customerMemory(empresaId, telefone, { limitSummaries = 10, lojaId = null } = {}) {
   const phone = memoryPhone(telefone);
   if (!phone) return { telefone: null, facts: [], summaries: [], reviews: [] };
   const id = uuid(empresaId);
+  const storeId = lojaId ? uuid(lojaId, 'lojaId') : null;
   const [facts, summaries] = await Promise.all([
     db.queryRead(
       `SELECT f.*, s.dia AS fonte_dia FROM ai_customer_facts f
-         LEFT JOIN ai_conversation_summaries s ON s.id = f.fonte_resumo_id
-        WHERE f.empresa_id = $1 AND f.telefone = $2
+         LEFT JOIN ai_conversation_summaries s ON s.id = f.fonte_resumo_id AND s.empresa_id = f.empresa_id
+        WHERE f.empresa_id = $1 AND f.telefone = $2 AND ($3::uuid IS NULL OR s.loja_id = $3)
         ORDER BY CASE f.status WHEN 'ativo' THEN 0 WHEN 'proposto' THEN 1 WHEN 'contestado' THEN 2 ELSE 3 END, f.confianca DESC`,
-      [id, phone],
+      [id, phone, storeId],
     ),
     db.queryRead(
       `SELECT s.id, s.dia, s.resumo, s.resultado, s.sentimento, s.mensagens, s.modelo, r.nota, r.comentario
          FROM ai_conversation_summaries s
-         LEFT JOIN ai_judge_reviews r ON r.resumo_id = s.id
-        WHERE s.empresa_id = $1 AND s.telefone = $2 ORDER BY s.dia DESC LIMIT $3`,
-      [id, phone, Math.min(50, Math.max(1, Number(limitSummaries) || 10))],
+         LEFT JOIN ai_judge_reviews r ON r.resumo_id = s.id AND r.empresa_id = s.empresa_id AND r.telefone = s.telefone
+        WHERE s.empresa_id = $1 AND s.telefone = $2 AND ($3::uuid IS NULL OR s.loja_id = $3)
+        ORDER BY s.dia DESC LIMIT $4`,
+      [id, phone, storeId, Math.min(50, Math.max(1, Number(limitSummaries) || 10))],
     ),
   ]);
   return { telefone: phone, facts: facts.rows.map(factView), summaries: summaries.rows.map((row) => ({ ...row, nota: row.nota === null ? null : Number(row.nota) })) };
 }
 
-export async function setFactStatus(empresaId, factId, status, operador = '') {
+export async function setFactStatus(empresaId, factId, status, operador = '', lojaId = null) {
   if (!['ativo', 'contestado', 'proposto'].includes(status)) throw Object.assign(new Error('Status inválido'), { status: 400, code: 'VALIDATION_ERROR' });
+  const storeId = lojaId ? uuid(lojaId, 'lojaId') : null;
   const result = await db.query(
-    `UPDATE ai_customer_facts SET status = $3::varchar, alterado_por = $4, atualizado_em = CURRENT_TIMESTAMP,
+    `UPDATE ai_customer_facts f SET status = $3::varchar, alterado_por = $4, atualizado_em = CURRENT_TIMESTAMP,
             confianca = CASE WHEN $3::varchar = 'ativo' THEN GREATEST(confianca, 0.9) ELSE confianca END
-      WHERE empresa_id = $1 AND id = $2 RETURNING *`,
-    [uuid(empresaId), uuid(factId, 'factId'), status, clean(operador, 160) || null],
+      WHERE f.empresa_id = $1 AND f.id = $2
+        AND ($5::uuid IS NULL OR EXISTS (
+          SELECT 1 FROM ai_conversation_summaries s
+           WHERE s.id = f.fonte_resumo_id AND s.empresa_id = f.empresa_id AND s.loja_id = $5
+        ))
+      RETURNING f.*`,
+    [uuid(empresaId), uuid(factId, 'factId'), status, clean(operador, 160) || null, storeId],
   );
   if (!result.rows[0]) throw Object.assign(new Error('Fato não encontrado'), { status: 404, code: 'NOT_FOUND' });
   return factView(result.rows[0]);
 }
 
-/** LGPD: apaga tudo que o cérebro guardou sobre este telefone nesta empresa. */
-export async function forgetCustomer(empresaId, telefone) {
+/** LGPD: apaga a memória atribuível à loja; sem loja explícita, mantém a operação de esquecimento da empresa inteira. */
+export async function forgetCustomer(empresaId, telefone, { lojaId = null } = {}) {
   const id = uuid(empresaId);
   const phone = memoryPhone(telefone);
   if (!phone) throw Object.assign(new Error('Telefone inválido'), { status: 400, code: 'VALIDATION_ERROR' });
+  const storeId = lojaId ? uuid(lojaId, 'lojaId') : null;
   return db.transaction(async (trx) => {
     const counts = {};
+    if (storeId) {
+      counts.fatos = (await trx.query(
+        `DELETE FROM ai_customer_facts f USING ai_conversation_summaries s
+          WHERE f.empresa_id = $1 AND f.telefone = $2 AND s.id = f.fonte_resumo_id
+            AND s.empresa_id = f.empresa_id AND s.loja_id = $3`,
+        [id, phone, storeId],
+      )).rowCount || 0;
+      counts.avaliacoes = (await trx.query(
+        `DELETE FROM ai_judge_reviews r USING ai_conversation_summaries s
+          WHERE r.empresa_id = $1 AND r.telefone = $2 AND s.id = r.resumo_id
+            AND s.empresa_id = r.empresa_id AND s.loja_id = $3`,
+        [id, phone, storeId],
+      )).rowCount || 0;
+      counts.resumos = (await trx.query(
+        'DELETE FROM ai_conversation_summaries WHERE empresa_id = $1 AND telefone = $2 AND loja_id = $3',
+        [id, phone, storeId],
+      )).rowCount || 0;
+      // O registro de contatos automáticos (sem conteúdo) fica: é o que impede reenvio e respeita limites/opt-out.
+      counts.mensagensNaFila = (await trx.query(
+        `UPDATE tarefas_integracao_canais SET status = 'cancelada', payload = '{}'::jsonb, proxima_tentativa_em = NULL, data_atualizacao = CURRENT_TIMESTAMP
+          WHERE empresa_id = $1 AND loja_id = $2 AND tipo = 'automacao_ia' AND status IN ('pendente','falha') AND payload->>'telefone' = $3`,
+        [id, storeId, phone],
+      )).rowCount || 0;
+      counts.conversas = (await trx.query(
+        `DELETE FROM whatsapp_ai_sessions WHERE empresa_id = $1 AND loja_id = $2
+           AND ${phoneMatchKeySql('telefone')} = ${phoneMatchKeySql('$3')}`,
+        [id, storeId, phone],
+      )).rowCount || 0;
+      return { telefone: phone, escopo: 'loja', removidos: counts };
+    }
     counts.fatos = (await trx.query('DELETE FROM ai_customer_facts WHERE empresa_id = $1 AND telefone = $2', [id, phone])).rowCount || 0;
     counts.avaliacoes = (await trx.query('DELETE FROM ai_judge_reviews WHERE empresa_id = $1 AND telefone = $2', [id, phone])).rowCount || 0;
     counts.resumos = (await trx.query('DELETE FROM ai_conversation_summaries WHERE empresa_id = $1 AND telefone = $2', [id, phone])).rowCount || 0;
@@ -327,16 +366,17 @@ export async function approvedAnswers(empresaId, limit = 20) {
 }
 
 /** Busca por palavras em todos os resumos de um cliente ("o que ele falou de perfume?"). */
-export async function searchCustomerMemory(empresaId, telefone, termo) {
+export async function searchCustomerMemory(empresaId, telefone, termo, { lojaId = null } = {}) {
   const phone = memoryPhone(telefone);
   const q = clean(termo, 120);
   if (!phone || !q) return [];
+  const storeId = lojaId ? uuid(lojaId, 'lojaId') : null;
   const result = await db.queryRead(
     `SELECT dia, resumo, resultado FROM ai_conversation_summaries
-      WHERE empresa_id = $1 AND telefone = $2
+      WHERE empresa_id = $1 AND telefone = $2 AND ($4::uuid IS NULL OR loja_id = $4)
         AND to_tsvector('portuguese', resumo) @@ plainto_tsquery('portuguese', $3)
       ORDER BY dia DESC LIMIT 10`,
-    [uuid(empresaId), phone, q],
+    [uuid(empresaId), phone, q, storeId],
   );
   return result.rows;
 }

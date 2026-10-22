@@ -18,6 +18,19 @@ const REL = { AGENDOU: 'agendou', COMPROU: 'comprou', ATENDIDO_POR: 'atendido po
 const NODE_COLOR = { cliente: '#4B57A6', profissional: '#7C8494', servico: '#2E9E7B', produto: '#E0A83B', interesse: '#D96A5B' }
 const pct = (v) => (v === null || v === undefined ? '—' : `${String(v).replace('.', ',')}%`)
 const score = (v) => Number(v || 0).toFixed(2).replace('.', ',')
+const AREA_LABEL = { clientes: 'Clientes', operacao: 'Operação', financeiro: 'Financeiro', commerce: 'Commerce', estoque: 'Estoque' }
+const SOURCE_LABEL = { graph: 'Grafo de clientes', offers: 'Oportunidades', appointments: 'Agenda', finance: 'Financeiro Kytto', cash: 'Fechamentos de caixa', orders: 'Pedidos Commerce', payments: 'Capturas Commerce', inventory: 'Estoque Commerce', localInventory: 'Estoque de balcão' }
+const safeNumber = (v) => (v === null || v === undefined || v === '' ? null : Number.isFinite(Number(v)) ? Number(v) : null)
+function ExecutiveMap({ network }) {
+  const nodes = Array.isArray(network?.nodes) ? network.nodes.slice(0, 30) : []
+  const links = Array.isArray(network?.links) ? network.links : []
+  if (!nodes.length) return <p className="c360-empty">Mapa indisponível nesta leitura; isso não indica ausência de risco.</p>
+  const positions = new Map(nodes.map((n, i) => [String(n.id), { x: 300 + Math.cos(i / nodes.length * Math.PI * 2 - Math.PI / 2) * 205, y: 170 + Math.sin(i / nodes.length * Math.PI * 2 - Math.PI / 2) * 115 }]))
+  return <svg className="dadm-exec-map" viewBox="0 0 600 360" role="img" aria-label={`Mapa executivo: ${nodes.map(n => `${n.label} ${n.value || ''}`).join(', ')}; ${links.length} relações`}>
+    {links.map((l, i) => { const a = positions.get(String(l.from)); const b = positions.get(String(l.to)); return a && b ? <g key={`${i}-${l.from}-${l.to}`}><line x1={a.x} y1={a.y} x2={b.x} y2={b.y} /><text x={(a.x+b.x)/2} y={(a.y+b.y)/2}>{String(l.label || '').slice(0, 24)}</text></g> : null })}
+    {nodes.map(n => { const p = positions.get(String(n.id)); return <g key={String(n.id)}><circle cx={p.x} cy={p.y} r="17" className={`severity-${n.severity || 'normal'}`} /><text className="node-label" x={p.x} y={p.y+31}>{String(n.label || n.type || 'Entidade').slice(0, 25)}</text><text className="node-value" x={p.x} y={p.y+45}>{String(n.value ?? '')}</text></g> })}
+  </svg>
+}
 
 function Kpi({ label, value, hint, alert }) {
   return <article className={alert ? 'is-alert' : ''}><span>{label}</span><strong>{value}</strong>{hint && <small>{hint}</small>}</article>
@@ -51,7 +64,12 @@ function EgoGraph({ ego }) {
 }
 
 export default function CerebroIA() {
-  const { empresaAtiva } = useAuth()
+  const { empresaAtiva, lojaAtiva } = useAuth()
+  const scopeKey = `${empresaAtiva?.id || ''}:${lojaAtiva?.id || ''}`
+  return <CerebroIAWorkspace key={scopeKey} empresaAtiva={empresaAtiva} />
+}
+
+function CerebroIAWorkspace({ empresaAtiva }) {
   const stallone = brandFromContext(empresaAtiva) === 'stallone'
   const { toast } = useToast()
   const [tab, setTab] = useState('ativacao')
@@ -64,6 +82,12 @@ export default function CerebroIA() {
   const [busy, setBusy] = useState('')
   const [propostas, setPropostas] = useState({ status: 'proposto', items: [], drafts: {} })
   const [grafo, setGrafo] = useState(null)
+  const [execDays, setExecDays] = useState(30)
+  const [execArea, setExecArea] = useState('todas')
+  const [executivo, setExecutivo] = useState(null)
+  const [execError, setExecError] = useState('')
+  const [execAnalysis, setExecAnalysis] = useState(null)
+  const [execAnalysisError, setExecAnalysisError] = useState('')
   const [ego, setEgo] = useState(null)
   const [previa, setPrevia] = useState(null)
   const [confirmOff, setConfirmOff] = useState(false)
@@ -82,6 +106,8 @@ export default function CerebroIA() {
     catch (error) { toast(error.message, true) }
   }, [propostas.status, toast])
   const carregarGrafo = useCallback(async () => { try { setGrafo(await api.get(`${BASE}/grafo`)) } catch (error) { toast(error.message, true) } }, [toast])
+  const carregarExecutivo = useCallback(async (dias) => { setExecError(''); try { setExecutivo(await api.get(`${BASE}/grafo/executivo?dias=${dias}`)) } catch (error) { setExecutivo(null); setExecError(error.message || 'Não foi possível carregar o resumo executivo.') } }, [])
+  async function analisarExecutivo() { setBusy('exec-analysis'); setExecAnalysis(null); setExecAnalysisError(''); try { const out = await api.post(`${BASE}/grafo/executivo/analisar`, { dias: execDays }); setExecAnalysis(out?.analysis || null); if (!out?.analysis) setExecAnalysisError('A análise não retornou conteúdo disponível.') } catch (error) { setExecAnalysisError(error.message || 'Análise indisponível. Os indicadores continuam disponíveis.') } finally { setBusy('') } }
   const carregarAtivacao = useCallback(async () => { try { const data = await api.get('/api/admin/barbearia/ativacao'); setAtiv(data); setVitrine((v) => ({ ...v, phone: v.phone || data.vitrine?.phone || '' })) } catch (error) { toast(error.message, true) } }, [toast])
   const carregarPrevia = useCallback(async () => { try { setPrevia(await api.get(`${BASE}/automacoes/previa`)) } catch (error) { toast(error.message, true) } }, [toast])
 
@@ -90,8 +116,9 @@ export default function CerebroIA() {
     if (tab === 'ativacao' && !stallone) carregarAtivacao()
     if (tab === 'aprendizado') carregarPropostas()
     if (tab === 'ofertas' && !grafo) carregarGrafo()
+    if (tab === 'ofertas' && !executivo) carregarExecutivo(execDays)
     if (tab === 'automacoes') carregarPrevia()
-  }, [tab, info, stallone]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tab, info, stallone, execDays, executivo]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function salvar(patch = {}) {
     const next = { ...form, ...patch }
@@ -293,6 +320,24 @@ export default function CerebroIA() {
     </section>}
 
     {tab === 'ofertas' && <>
+      <section className="dadm-card dadm-executive" aria-labelledby="cb-executive">
+        <div className="dadm-section-heading"><div><h2 id="cb-executive">Mapa e resumo executivo</h2><p>Indicadores agregados da unidade ativa, com evidências e cobertura por fonte.</p><p>Ocupação não é inferida: a agenda alterna entre fontes que ainda não compartilham uma capacidade canônica.</p></div>
+          <div className="dadm-filters"><label htmlFor="exec-days">Período</label><select id="exec-days" className="c360-input" value={execDays} onChange={e => { const days = Number(e.target.value); setExecDays(days); setExecAnalysis(null); carregarExecutivo(days) }}><option value={30}>30 dias</option><option value={90}>90 dias</option></select><label htmlFor="exec-area">Área</label><select id="exec-area" className="c360-input" value={execArea} onChange={e => setExecArea(e.target.value)}><option value="todas">Todas as áreas</option>{Object.entries(AREA_LABEL).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select></div></div>
+        <p className="dadm-note">A IA recebe somente indicadores agregados. O provedor pode estar indisponível ou sujeito ao orçamento. A análise é apenas informativa: não envia mensagens, não contata clientes e não executa automações.</p>
+        <p className="dadm-muted">Pedidos confirmados seguem os estados aceitos pelo grafo; os demais estados não entram no KPI. A quantidade de reembolsos é apenas o estado do pedido: o valor efetivamente estornado não é inferido.</p>
+        {execError ? <p className="dadm-note warn" role="alert">{execError}</p> : !executivo ? <p className="dadm-muted" role="status">Carregando resumo executivo…</p> : <><p className="dadm-muted" role="status">Período: {executivo.period?.from ? new Date(executivo.period.from).toLocaleDateString('pt-BR') : '—'} a {executivo.period?.to ? new Date(executivo.period.to).toLocaleDateString('pt-BR') : '—'} · {executivo.period?.days || execDays} dias</p>
+          <div className="dadm-kpis" aria-label="Indicadores executivos">{[['Clientes', executivo.metrics?.customers?.total, `em risco: ${safeNumber(executivo.metrics?.customers?.atRisk) ?? '—'}`],['Operações', executivo.metrics?.operations?.total, `concluídas: ${safeNumber(executivo.metrics?.operations?.completed) ?? '—'} · faltas: ${safeNumber(executivo.metrics?.operations?.noShow) ?? '—'}`],['Receita recebida', safeNumber(executivo.metrics?.finance?.paidIncome) === null ? null : money(executivo.metrics.finance.paidIncome), `saldo líquido: ${safeNumber(executivo.metrics?.finance?.net) === null ? '—' : money(executivo.metrics.finance.net)}`],['Pedidos confirmados', executivo.metrics?.commerce?.confirmedOrders, `capturado: ${safeNumber(executivo.metrics?.commerce?.capturedAmount) === null ? '—' : money(executivo.metrics.commerce.capturedAmount)} · todos os estados: ${safeNumber(executivo.metrics?.commerce?.ordersTotal) ?? '—'}`],['Contas vencidas', executivo.metrics?.finance?.overdueCount, safeNumber(executivo.metrics?.finance?.overdueAmount) === null ? 'Valor indisponível' : money(executivo.metrics.finance.overdueAmount)],['Diferenças de caixa', executivo.metrics?.finance?.cashDiscrepancyCount, safeNumber(executivo.metrics?.finance?.cashDiscrepancyNet) === null ? 'Valor indisponível' : money(executivo.metrics.finance.cashDiscrepancyNet)]].map(([label,value,hint]) => <Kpi key={label} label={label} value={value == null ? '—' : typeof value === 'number' ? int(value) : value} hint={hint} />)}</div>
+          <p className="dadm-muted">Comparecimento (concluídos ÷ concluídos + faltas): {pct(executivo.metrics?.operations?.attendanceRate)} · cancelamentos na agenda: {pct(executivo.metrics?.operations?.cancellationRate)} · divergências de caixa — soma absoluta: {safeNumber(executivo.metrics?.finance?.cashDiscrepancyGross) === null ? '—' : money(executivo.metrics.finance.cashDiscrepancyGross)}. O saldo do ledger é receita menos despesas pagas registradas; não representa lucro contábil nem inclui capturas Commerce.</p>
+          <div className="dadm-grid"><section className="dadm-card"><h2>Rede de negócio</h2><ExecutiveMap network={executivo.network} /></section><section className="dadm-card"><h2>Fontes e cobertura</h2>{executivo.quality?.sources && Object.keys(executivo.quality.sources).length ? <ul className="dadm-memlist">{Object.entries(executivo.quality.sources).map(([name, source]) => {
+            const records = source?.records ?? source?.registros
+            const stateLabel = source?.status === 'ok' ? `Disponível${records != null ? ` · ${int(records)} registros` : ''}` : source?.status === 'limitado' ? 'Cobertura parcial; leitura limitada' : source?.status === 'indisponivel' || source?.status === 'unavailable' ? 'Indisponível; risco não avaliado' : 'Estado da fonte não informado; risco não avaliado'
+            return <li key={name}><strong>{SOURCE_LABEL[name] || name}</strong><span>{stateLabel}</span>{source?.detail && <small>{source.detail}</small>}</li>
+          })}</ul> : <p className="dadm-muted">Cobertura das fontes não informada; não interpretar como risco zero.</p>}</section></div>
+          <section className="dadm-card"><h2>Sinais e evidências{execArea !== 'todas' ? ` · ${AREA_LABEL[execArea]}` : ''}</h2>{(executivo.signals || []).filter(s => execArea === 'todas' || s.area === execArea).length ? <ul className="dadm-memlist">{(executivo.signals || []).filter(s => execArea === 'todas' || s.area === execArea).map((s,i) => <li key={s.id || i}><strong>{s.title || 'Sinal'} <span className="dadm-muted">· {AREA_LABEL[s.area] || s.area || 'Área não informada'} · {s.severity || 'sem classificação'}</span></strong><span>{s.detail || 'Detalhe não disponível.'}</span><small>Fonte: {s.source || 'não informada'}</small></li>)}</ul> : <p className="c360-empty">{(executivo.signals || []).length ? 'Nenhum sinal nesta área.' : 'Nenhum sinal foi retornado; fontes indisponíveis não equivalem a risco zero.'}</p>}</section>
+          <section className="dadm-grid"><div className="dadm-card"><h2>Estoque e oportunidades</h2>{executivo.metrics?.inventory ? <><p>{safeNumber(executivo.metrics.inventory.lowStock) ?? '—'} baixo(s) · {safeNumber(executivo.metrics.inventory.outOfStock) ?? '—'} esgotado(s) · {safeNumber(executivo.metrics.inventory.products) ?? '—'} produto(s) cobertos.</p>{executivo.metrics.inventory.lowStockProducts?.length ? <ul className="dadm-memlist">{executivo.metrics.inventory.lowStockProducts.map((p,i)=><li key={`${p.name}-${i}`}><strong>{p.name || 'Produto'}</strong><span>Disponível {p.available ?? '—'} · mínimo {p.minimum ?? '—'} · {p.sold ?? '—'} ocorrências em pedidos</span></li>)}</ul> : executivo.quality?.sources?.inventory?.status === 'indisponivel' ? <p className="dadm-muted">Estoque não avaliado: fonte indisponível.</p> : executivo.quality?.sources?.inventory?.status === 'limitado' ? <p className="dadm-muted">Cobertura parcial ou sem saldos; não é possível concluir que o estoque esteja normal.</p> : <p className="dadm-muted">Nenhum item de baixo estoque reportado nesta leitura.</p>}</> : <p className="dadm-muted">Dados de estoque indisponíveis; não presumir risco zero.</p>}{executivo.metrics?.commerce ? <p>Pedidos pendentes {executivo.metrics.commerce.pendingOrders ?? '—'} · cancelados {executivo.metrics.commerce.cancelledOrders ?? '—'} · reembolsados {executivo.metrics.commerce.refundedOrders ?? '—'}.</p> : <p className="dadm-muted">Commerce indisponível nesta leitura.</p>}</div><div className="dadm-card"><h2>Oportunidades agregadas</h2>{executivo.metrics?.offers?.length ? <ul className="dadm-memlist">{executivo.metrics.offers.map((o,i)=><li key={`${o.name}-${i}`}><strong>{o.name || 'Oferta'} · {o.type || 'oportunidade'}</strong><span>{o.count ?? '—'} ocorrência(s)</span></li>)}</ul> : <p className="dadm-muted">{executivo.quality?.sources?.graph?.status === 'ok' ? 'Nenhuma oportunidade agregada elegível nesta leitura.' : 'Cobertura do grafo parcial ou indisponível; oportunidades não avaliadas.'}</p>}</div></section>
+          <section className="dadm-card"><h2>Análise assistida (opcional)</h2><p>Envia somente agregados do período selecionado ao provedor configurado. Nenhum identificador pessoal ou conversa é incluído.</p><div className="dadm-actions"><button type="button" className="c360-btn primary" disabled={!executivo || busy === 'exec-analysis'} onClick={analisarExecutivo}>{busy === 'exec-analysis' ? 'Analisando…' : 'Analisar com IA'}</button></div>{execAnalysisError && <p className="dadm-note warn" role="status">{execAnalysisError}</p>}{execAnalysis && <div className="dadm-analysis" role="status">{execAnalysis.summary && <p><strong>Resumo:</strong> {execAnalysis.summary}</p>}{Array.isArray(execAnalysis.actions) && execAnalysis.actions.length > 0 && <div><strong>Ações sugeridas (para avaliação humana)</strong><ul>{execAnalysis.actions.map((x,i)=><li key={i}>{typeof x === 'string' ? x : x?.text || x?.action || ''}</li>)}</ul></div>}{Array.isArray(execAnalysis.caveats) && execAnalysis.caveats.length > 0 && <div><strong>Ressalvas</strong><ul>{execAnalysis.caveats.map((x,i)=><li key={i}>{typeof x === 'string' ? x : x?.text || x?.detail || ''}</li>)}</ul></div>}</div>}</section>
+        </>}
+      </section>
       {grafo ? <>
         <section className="dadm-card" aria-label="Qualidade dos dados do grafo">
           <h2>Qualidade e cobertura dos dados</h2>
@@ -381,4 +426,3 @@ export default function CerebroIA() {
     </Dialog>
   </div>
 }
-

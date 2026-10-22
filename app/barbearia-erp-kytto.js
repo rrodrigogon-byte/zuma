@@ -1193,10 +1193,10 @@ function statusEstoque(item) {
   return 'ok';
 }
 
-export function listarProdutosRevenda(empresaId, { incluirInativos = false, lojaId = '' } = {}) {
+export function listarProdutosRevenda(empresaId, { incluirInativos = false, lojaId = '', incluirSemLoja = false } = {}) {
   return Object.values(estadoEmpresa(empresaId, false).produtosRevenda)
     .filter((item) => incluirInativos || item.ativo !== false)
-    .filter((item) => !lojaId || item.lojaId === String(lojaId))
+    .filter((item) => !lojaId || item.lojaId === String(lojaId) || (incluirSemLoja && !item.lojaId))
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
     .map((item) => ({ ...item, statusEstoque: statusEstoque(item) }));
 }
