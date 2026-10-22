@@ -4186,6 +4186,7 @@ app.put('/api/admin/barbearia/captacao/metas-profissionais', (req, res) => {
   try { res.json({ ok: true, meta: captacaoKytto.salvarMetaProfissional(legacyEmpresaId(req), req.body || {}) }); } catch (error) { respostaCaptacao(res, error); }
 });
 app.get('/api/admin/barbearia/captacao/projecao-faturamento', (req, res) => {
+  if (!gestaoDaUnidade(req, res)) return;
   try {
     const horizonteBruto = req.query?.horizonte;
     const horizonte = horizonteBruto === undefined || horizonteBruto === '' ? 6 : Number(horizonteBruto);
