@@ -27,6 +27,28 @@ const dinheiro = (valor) => Number((Number(valor) || 0).toFixed(2));
 const numero = (valor, padrao = 0) => { if (valor === undefined || valor === null || String(valor).trim() === '') return padrao; const n = Number(String(valor).replace(',', '.')); return Number.isFinite(n) ? n : padrao; };
 const agoraIso = (opcoes = {}) => new Date(opcoes.agora ? new Date(opcoes.agora).valueOf() : Date.now()).toISOString();
 const novoId = (prefixo) => `${prefixo}-${crypto.randomBytes(5).toString('hex')}`;
+const lojaEscopo = (valor) => texto(valor, 120);
+
+function registroNaUnidade(registro, lojaId) {
+  // Sem lojaId a consulta é corporativa e mantém compatibilidade com legados.
+  // Em sessão de loja, somente o vínculo explícito com a unidade é válido:
+  // registros legados sem loja nunca são implicitamente compartilhados.
+  return !lojaId || registro?.lojaId === lojaId;
+}
+
+function produtoNoEscopo(empresaId, produtoId, lojaId = '') {
+  const id = String(produtoId || '');
+  const produto = barbearia.listarProdutosRevenda(empresaId, { incluirInativos: true }).find((item) => item.id === id);
+  if (!produto) throw new ComprasError('Produto do pedido/nota não encontrado na empresa ativa.', 'PRODUTO_INVALIDO', 404);
+  if (lojaId && produto.lojaId !== lojaId) throw new ComprasError('Produto não pertence à unidade ativa.', 'PRODUTO_FORA_DA_UNIDADE', 404);
+  return produto;
+}
+
+function pedidoNoEscopo(empresaId, pedidoId, lojaId = '') {
+  const pedido = estado(empresaId).pedidos[String(pedidoId)];
+  if (!pedido || !registroNaUnidade(pedido, lojaId)) throw new ComprasError('Pedido não encontrado na empresa/unidade ativa.', 'PEDIDO_NAO_ENCONTRADO', 404);
+  return pedido;
+}
 
 export const STATUS_PEDIDO = Object.freeze(['rascunho', 'enviado', 'recebido_parcial', 'recebido', 'cancelado']);
 
@@ -139,13 +161,14 @@ function visaoPedido(pedido) {
   return { ...pedido, itens, total: dinheiro(itens.reduce((soma, item) => soma + item.quantidade * item.custoUnitario, 0)), totalRecebido: dinheiro(itens.reduce((soma, item) => soma + item.recebido * item.custoUnitario, 0)) };
 }
 
-function itensPedidoNormalizados(empresaId, itens = []) {
+function itensPedidoNormalizados(empresaId, itens = [], lojaId = '') {
   if (!Array.isArray(itens) || !itens.length) throw new ComprasError('O pedido precisa de pelo menos um item.', 'PEDIDO_SEM_ITENS');
   const produtos = new Map(barbearia.listarProdutosRevenda(empresaId, { incluirInativos: true }).map((item) => [item.id, item]));
   const porProduto = new Map();
   for (const bruto of itens) {
     const produto = produtos.get(String(bruto?.produtoId || ''));
     if (!produto) throw new ComprasError('Produto do pedido não encontrado na revenda.', 'PRODUTO_INVALIDO');
+    if (lojaId && produto.lojaId !== lojaId) throw new ComprasError('Produto do pedido não pertence à unidade ativa.', 'PRODUTO_FORA_DA_UNIDADE', 404);
     const quantidade = Math.round(numero(bruto.quantidade, NaN));
     if (!Number.isFinite(quantidade) || quantidade <= 0) throw new ComprasError(`Quantidade inválida para ${produto.nome}.`, 'QUANTIDADE_INVALIDA');
     const custo = bruto.custoUnitario === undefined || bruto.custoUnitario === '' ? Number(produto.custoUltimaCompra || produto.custoUnitario || 0) : numero(bruto.custoUnitario, -1);
@@ -157,28 +180,32 @@ function itensPedidoNormalizados(empresaId, itens = []) {
   return [...porProduto.values()];
 }
 
-export function listarPedidos(empresaId, { status = '' } = {}) {
+export function listarPedidos(empresaId, { status = '', lojaId = '' } = {}) {
   return Object.values(estado(empresaId).pedidos)
     .filter((item) => !status || item.status === status)
+    .filter((item) => registroNaUnidade(item, lojaEscopo(lojaId)))
     .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))
     .map(visaoPedido);
 }
 
-export function obterPedido(empresaId, pedidoId) {
-  return visaoPedido(estado(empresaId).pedidos[String(pedidoId)]);
+export function obterPedido(empresaId, pedidoId, { lojaId = '' } = {}) {
+  const pedido = estado(empresaId).pedidos[String(pedidoId)];
+  return registroNaUnidade(pedido, lojaEscopo(lojaId)) ? visaoPedido(pedido) : null;
 }
 
 export function criarPedido(empresaId, dados = {}, opcoes = {}) {
   const atual = estado(empresaId);
   const fornecedor = atual.fornecedores[String(dados.fornecedorId || '')];
   if (!fornecedor || fornecedor.ativo === false) throw new ComprasError('Escolha um fornecedor ativo.', 'FORNECEDOR_NAO_ENCONTRADO');
-  const itens = itensPedidoNormalizados(empresaId, dados.itens);
+  const lojaId = lojaEscopo(dados.lojaId ?? opcoes.lojaId);
+  const itens = itensPedidoNormalizados(empresaId, dados.itens, lojaId);
   atual.sequenciaPedido += 1;
   const agora = agoraIso(opcoes);
   const pedido = {
     id: novoId('pc'),
     numero: `PC-${String(atual.sequenciaPedido).padStart(5, '0')}`,
     empresaId: String(empresaId),
+    lojaId: lojaId || null,
     fornecedorId: fornecedor.id,
     fornecedorNome: fornecedor.nome,
     status: 'rascunho',
@@ -197,10 +224,9 @@ export function criarPedido(empresaId, dados = {}, opcoes = {}) {
 }
 
 export function atualizarPedido(empresaId, pedidoId, dados = {}) {
-  const pedido = estado(empresaId).pedidos[String(pedidoId)];
-  if (!pedido) throw new ComprasError('Pedido não encontrado.', 'PEDIDO_NAO_ENCONTRADO', 404);
+  const pedido = pedidoNoEscopo(empresaId, pedidoId, lojaEscopo(dados.lojaId));
   if (pedido.status !== 'rascunho') throw new ComprasError('Só pedido em rascunho pode ser editado.', 'PEDIDO_FECHADO', 409);
-  if (dados.itens) pedido.itens = itensPedidoNormalizados(empresaId, dados.itens);
+  if (dados.itens) pedido.itens = itensPedidoNormalizados(empresaId, dados.itens, lojaEscopo(dados.lojaId) || pedido.lojaId || '');
   if (dados.previsaoEntrega !== undefined) pedido.previsaoEntrega = texto(dados.previsaoEntrega, 10);
   if (dados.observacoes !== undefined) pedido.observacoes = texto(dados.observacoes, 500);
   pedido.atualizadoEm = agoraIso();
@@ -208,9 +234,8 @@ export function atualizarPedido(empresaId, pedidoId, dados = {}) {
   return visaoPedido(pedido);
 }
 
-export function enviarPedido(empresaId, pedidoId, { usuario = '' } = {}) {
-  const pedido = estado(empresaId).pedidos[String(pedidoId)];
-  if (!pedido) throw new ComprasError('Pedido não encontrado.', 'PEDIDO_NAO_ENCONTRADO', 404);
+export function enviarPedido(empresaId, pedidoId, { usuario = '', lojaId = '' } = {}) {
+  const pedido = pedidoNoEscopo(empresaId, pedidoId, lojaEscopo(lojaId));
   if (pedido.status === 'enviado') return visaoPedido(pedido);
   if (pedido.status !== 'rascunho') throw new ComprasError('Só pedido em rascunho pode ser marcado como enviado.', 'PEDIDO_FECHADO', 409);
   Object.assign(pedido, { status: 'enviado', enviadoEm: agoraIso(), enviadoPor: texto(usuario, 160) || null, atualizadoEm: agoraIso() });
@@ -218,9 +243,8 @@ export function enviarPedido(empresaId, pedidoId, { usuario = '' } = {}) {
   return visaoPedido(pedido);
 }
 
-export function cancelarPedido(empresaId, pedidoId, { motivo = '', usuario = '' } = {}) {
-  const pedido = estado(empresaId).pedidos[String(pedidoId)];
-  if (!pedido) throw new ComprasError('Pedido não encontrado.', 'PEDIDO_NAO_ENCONTRADO', 404);
+export function cancelarPedido(empresaId, pedidoId, { motivo = '', usuario = '', lojaId = '' } = {}) {
+  const pedido = pedidoNoEscopo(empresaId, pedidoId, lojaEscopo(lojaId));
   if (pedido.itens.some((item) => item.recebido > 0)) throw new ComprasError('Pedido com recebimento não pode ser cancelado; encerre o saldo pendente.', 'PEDIDO_COM_RECEBIMENTO', 409);
   if (pedido.status === 'cancelado') return visaoPedido(pedido);
   Object.assign(pedido, { status: 'cancelado', canceladoEm: agoraIso(), canceladoPor: texto(usuario, 160) || null, motivoCancelamento: texto(motivo, 300), atualizadoEm: agoraIso() });
@@ -234,8 +258,8 @@ export function cancelarPedido(empresaId, pedidoId, { motivo = '', usuario = '' 
  */
 export function receberPedido(empresaId, pedidoId, dados = {}, opcoes = {}) {
   const atual = estado(empresaId);
-  const pedido = atual.pedidos[String(pedidoId)];
-  if (!pedido) throw new ComprasError('Pedido não encontrado.', 'PEDIDO_NAO_ENCONTRADO', 404);
+  const lojaId = lojaEscopo(dados.lojaId ?? opcoes.lojaId);
+  const pedido = pedidoNoEscopo(empresaId, pedidoId, lojaId);
   if (!['enviado', 'recebido_parcial', 'rascunho'].includes(pedido.status)) throw new ComprasError('Este pedido não aceita recebimento.', 'PEDIDO_FECHADO', 409);
   const chave = texto(dados.chaveIdempotencia, 120) || `rec-${pedido.recebimentos.length + 1}`;
   if (pedido.recebimentos.some((item) => item.chave === chave)) return { ...visaoPedido(pedido), repetido: true };
@@ -255,10 +279,10 @@ export function receberPedido(empresaId, pedidoId, dados = {}, opcoes = {}) {
   if (!aplicar.length) throw new ComprasError('Nada a receber.', 'RECEBIMENTO_VAZIO');
   const agora = agoraIso(opcoes);
   for (const { item, quantidade, custo } of aplicar) {
-    barbearia.entradaEstoqueRevenda(empresaId, item.produtoId, { quantidade, custoUnitario: custo, origem: 'pedido_compra', referencia: pedido.numero, fornecedorId: pedido.fornecedorId, chaveIdempotencia: `pc:${pedido.id}:${chave}:${item.produtoId}`, usuario: dados.usuario, observacao: `Recebimento do pedido ${pedido.numero}` });
+    barbearia.entradaEstoqueRevenda(empresaId, item.produtoId, { lojaId: pedido.lojaId || null, quantidade, custoUnitario: custo, origem: 'pedido_compra', referencia: pedido.numero, fornecedorId: pedido.fornecedorId, chaveIdempotencia: `pc:${pedido.id}:${chave}:${item.produtoId}`, usuario: dados.usuario, observacao: `Recebimento do pedido ${pedido.numero}` });
     item.recebido += quantidade;
   }
-  pedido.recebimentos.push({ chave, em: agora, usuario: texto(dados.usuario, 160) || null, notaChave: texto(dados.notaChave, 44) || null, itens: aplicar.map(({ item, quantidade, custo }) => ({ produtoId: item.produtoId, quantidade, custoUnitario: custo })) });
+  pedido.recebimentos.push({ chave, lojaId: pedido.lojaId || null, em: agora, usuario: texto(dados.usuario, 160) || null, notaChave: texto(dados.notaChave, 44) || null, itens: aplicar.map(({ item, quantidade, custo }) => ({ produtoId: item.produtoId, quantidade, custoUnitario: custo })) });
   pedido.status = pedido.itens.every((item) => item.recebido >= item.quantidade) ? 'recebido' : 'recebido_parcial';
   pedido.atualizadoEm = agora;
   save();
@@ -449,11 +473,12 @@ function sugestaoDeProduto(empresaId, nota, item, produtos) {
 }
 
 /** Prévia: lê a nota, sugere o produto de cada item e avisa se já foi lançada. */
-export function previaNotaEntrada(empresaId, xml) {
+export function previaNotaEntrada(empresaId, xml, opcoes = {}) {
+  const lojaId = lojaEscopo(opcoes.lojaId);
   const nota = lerXmlNfe(xml);
   const lancada = estado(empresaId).notasEntrada[nota.chave] || null;
   const destinatarioEsperado = cnpjEmpresa(empresaId);
-  const produtos = barbearia.listarProdutosRevenda(empresaId, { incluirInativos: false });
+  const produtos = barbearia.listarProdutosRevenda(empresaId, { incluirInativos: false, lojaId });
   const fornecedor = fornecedorPorCnpj(empresaId, nota.emitente.cnpj);
   const itens = nota.itens.map((item) => {
     const sugestao = sugestaoDeProduto(empresaId, nota, item, produtos);
@@ -467,8 +492,8 @@ export function previaNotaEntrada(empresaId, xml) {
     destinatarioCnpjEsperado: destinatarioEsperado || null,
     destinatarioVinculado: Boolean(destinatarioEsperado && destinatarioEsperado === nota.destinatarioCnpj),
     aceitaEntrada: Boolean(nota.autorizada && destinatarioEsperado && destinatarioEsperado === nota.destinatarioCnpj),
-    jaLancada: Boolean(lancada),
-    lancadaEm: lancada?.lancadaEm || null,
+    jaLancada: Boolean(lancada && registroNaUnidade(lancada, lojaId)),
+    lancadaEm: lancada && registroNaUnidade(lancada, lojaId) ? lancada.lancadaEm : null,
     itens,
     resumo: { itens: itens.length, comProduto: itens.filter((i) => i.produtoId).length, semProduto: itens.filter((i) => !i.produtoId).length },
   };
@@ -481,14 +506,21 @@ export function previaNotaEntrada(empresaId, xml) {
  */
 export function lancarNotaEntrada(empresaId, xml, dados = {}, opcoes = {}) {
   if (dados.confirmado !== true) throw new ComprasError('Confirme o lançamento da nota.', 'CONFIRMACAO_OBRIGATORIA');
+  const lojaId = lojaEscopo(dados.lojaId ?? opcoes.lojaId);
   const nota = lerXmlNfe(xml);
   validarNotaParaEntrada(empresaId, nota);
   const snapshot = snapshotEscopo(empresaId);
   const atual = estado(empresaId);
-  if (atual.notasEntrada[nota.chave]) return { ...atual.notasEntrada[nota.chave], repetida: true };
+  const notaExistente = atual.notasEntrada[nota.chave];
+  if (notaExistente) {
+    if (!registroNaUnidade(notaExistente, lojaId)) throw new ComprasError('NF-e não encontrada na empresa/unidade ativa.', 'NFE_FORA_DA_UNIDADE', 404);
+    return { ...notaExistente, repetida: true };
+  }
   const txId = novoId('nfe-tx');
   const transacao = {
     id: txId,
+    empresaId: String(empresaId),
+    lojaId: lojaId || null,
     chave: nota.chave,
     status: 'processando',
     iniciadoEm: agoraIso(opcoes),
@@ -505,7 +537,7 @@ export function lancarNotaEntrada(empresaId, xml, dados = {}, opcoes = {}) {
       fornecedor = salvarFornecedor(empresaId, { nome: nota.emitente.fantasia || nota.emitente.nome, cnpj: nota.emitente.cnpj });
     }
     const todosProdutos = barbearia.listarProdutosRevenda(empresaId, { incluirInativos: false });
-    const produtos = dados.lojaId ? todosProdutos.filter((produto) => !produto.lojaId || produto.lojaId === String(dados.lojaId)) : todosProdutos;
+    const produtos = lojaId ? todosProdutos.filter((produto) => produto.lojaId === lojaId) : todosProdutos;
     const produtosPorId = new Map(todosProdutos.map((produto) => [produto.id, produto]));
     const plano = [];
     for (const item of nota.itens) {
@@ -516,11 +548,13 @@ export function lancarNotaEntrada(empresaId, xml, dados = {}, opcoes = {}) {
       const fator = Math.max(1, Math.round(numero(decisao.fatorConversao, 1)));
       if (!Number.isSafeInteger(fator) || fator <= 0) throw new ComprasError(`Fator de conversão inválido no item ${item.item}.`, 'FATOR_CONVERSAO_INVALIDO');
       let produtoId = decisao.produtoId ? String(decisao.produtoId) : sugestaoDeProduto(empresaId, nota, item, produtos).produtoId;
-      if (produtoId && !produtosPorId.has(produtoId)) throw new ComprasError(`Produto informado no item ${item.item} não pertence à revenda desta empresa.`, 'PRODUTO_INVALIDO');
+      if (produtoId) {
+        if (!produtosPorId.has(produtoId)) throw new ComprasError(`Produto informado no item ${item.item} não pertence à revenda desta empresa.`, 'PRODUTO_INVALIDO', 404);
+      }
       if (!produtoId && decisao.criarProduto === true) {
         const precoVenda = numero(decisao.precoVenda, 0);
         if (precoVenda <= 0) throw new ComprasError(`Informe o preço de venda para criar ${item.descricao}.`, 'PRECO_OBRIGATORIO');
-        const criado = barbearia.criarProdutoRevenda(empresaId, { lojaId: dados.lojaId, nome: texto(decisao.nome || item.descricao, 140), sku: item.codigo, ean: item.ean, precoVenda, custoUnitario: item.custoUnitario / fator, estoqueAtual: 0, estoqueMinimo: Math.round(numero(decisao.estoqueMinimo, 0)), categoria: decisao.categoria || 'Revenda' });
+        const criado = barbearia.criarProdutoRevenda(empresaId, { lojaId: lojaId || null, nome: texto(decisao.nome || item.descricao, 140), sku: item.codigo, ean: item.ean, precoVenda, custoUnitario: item.custoUnitario / fator, estoqueAtual: 0, estoqueMinimo: Math.round(numero(decisao.estoqueMinimo, 0)), categoria: decisao.categoria || 'Revenda' });
         produtoId = criado.id;
         produtosPorId.set(criado.id, criado);
         produtos.push(criado);
@@ -533,25 +567,28 @@ export function lancarNotaEntrada(empresaId, xml, dados = {}, opcoes = {}) {
     const agora = agoraIso(opcoes);
     for (const passo of plano) {
       if (passo.ignorado) continue;
-      const r = barbearia.entradaEstoqueRevenda(empresaId, passo.produtoId, { lojaId: dados.lojaId, quantidade: passo.quantidade, custoUnitario: passo.custo, origem: 'nfe_entrada', referencia: `NF-e ${nota.numero}/${nota.serie}`, fornecedorId: fornecedor?.id, chaveIdempotencia: `nfe:${nota.chave}:${passo.item.item}`, usuario: dados.usuario, observacao: `NF-e ${nota.numero} · ${nota.emitente.nome}` });
+      produtoNoEscopo(empresaId, passo.produtoId, lojaId);
+      const r = barbearia.entradaEstoqueRevenda(empresaId, passo.produtoId, { lojaId: lojaId || null, quantidade: passo.quantidade, custoUnitario: passo.custo, origem: 'nfe_entrada', referencia: `NF-e ${nota.numero}/${nota.serie}`, fornecedorId: fornecedor?.id, chaveIdempotencia: `nfe:${nota.chave}:${passo.item.item}`, usuario: dados.usuario, observacao: `NF-e ${nota.numero} · ${nota.emitente.nome}` });
       if (nota.emitente.cnpj && passo.item.codigo) atual.vinculos[`${nota.emitente.cnpj}:${passo.item.codigo}`] = passo.produtoId;
       entradas.push({ item: passo.item.item, produtoId: passo.produtoId, produtoNome: r.produto.nome, quantidade: passo.quantidade, custoUnitario: passo.custo, estoquePosterior: r.produto.estoqueAtual, movimentoId: r.movimento?.id || null });
     }
     // Baixa o pendente do pedido de compra, se informado, sem nova entrada de estoque.
     if (dados.pedidoId) {
-      const pedido = atual.pedidos[String(dados.pedidoId)];
-      if (pedido && ['enviado', 'recebido_parcial', 'rascunho'].includes(pedido.status)) {
+      const pedido = pedidoNoEscopo(empresaId, dados.pedidoId, lojaId);
+      if (['enviado', 'recebido_parcial', 'rascunho'].includes(pedido.status)) {
         for (const entrada of entradas) {
           const linha = pedido.itens.find((it) => it.produtoId === entrada.produtoId);
           if (linha) linha.recebido = Math.min(linha.quantidade, linha.recebido + entrada.quantidade);
         }
-        pedido.recebimentos.push({ chave: `nfe:${nota.chave}`, em: agora, usuario: texto(dados.usuario, 160) || null, notaChave: nota.chave, itens: entradas.map((e) => ({ produtoId: e.produtoId, quantidade: e.quantidade, custoUnitario: e.custoUnitario })) });
+        pedido.recebimentos.push({ chave: `nfe:${nota.chave}`, lojaId: pedido.lojaId || null, em: agora, usuario: texto(dados.usuario, 160) || null, notaChave: nota.chave, itens: entradas.map((e) => ({ produtoId: e.produtoId, quantidade: e.quantidade, custoUnitario: e.custoUnitario })) });
         pedido.status = pedido.itens.every((it) => it.recebido >= it.quantidade) ? 'recebido' : 'recebido_parcial';
         pedido.atualizadoEm = agora;
       }
     }
     const registro = {
       chave: nota.chave,
+      empresaId: String(empresaId),
+      lojaId: lojaId || null,
       numero: nota.numero,
       serie: nota.serie,
       emissao: nota.emissao,
@@ -585,21 +622,27 @@ export function lancarNotaEntrada(empresaId, xml, dados = {}, opcoes = {}) {
   }
 }
 
-export function listarNotasEntrada(empresaId) {
-  return Object.values(estado(empresaId).notasEntrada).sort((a, b) => String(b.lancadaEm).localeCompare(String(a.lancadaEm))).map((item) => ({ ...item }));
+export function listarNotasEntrada(empresaId, { lojaId = '' } = {}) {
+  const escopo = lojaEscopo(lojaId);
+  return Object.values(estado(empresaId).notasEntrada)
+    .filter((item) => registroNaUnidade(item, escopo))
+    .sort((a, b) => String(b.lancadaEm).localeCompare(String(a.lancadaEm)))
+    .map((item) => ({ ...item }));
 }
 
 // Trilha operacional das tentativas, inclusive lançamentos compensados, para
 // reconciliação sem expor referências mutáveis do banco em memória.
-export function listarTransacoesEntrada(empresaId) {
+export function listarTransacoesEntrada(empresaId, { lojaId = '' } = {}) {
+  const escopo = lojaEscopo(lojaId);
   return Object.values(estado(empresaId).transacoesEntrada)
+    .filter((item) => registroNaUnidade(item, escopo))
     .sort((a, b) => String(b.iniciadoEm).localeCompare(String(a.iniciadoEm)))
     .map((item) => ({ ...item, itensPlanejados: [...(item.itensPlanejados || [])], entradas: item.entradas ? item.entradas.map((entrada) => ({ ...entrada })) : undefined, compensacoes: item.compensacoes ? item.compensacoes.map((compensacao) => ({ ...compensacao })) : undefined }));
 }
 
 // ── Vendas de revenda no período (base do giro e da curva ABC) ──────────────
 
-function vendasPorProduto(empresaId, { inicioMs, fimMs }) {
+function vendasPorProduto(empresaId, { inicioMs, fimMs, lojaId = '' }) {
   const dentro = (iso) => { const ms = Date.parse(iso || ''); return Number.isFinite(ms) && ms >= inicioMs && ms <= fimMs; };
   const mapa = new Map();
   const somar = (produtoId, quantidade, receita) => {
@@ -608,11 +651,11 @@ function vendasPorProduto(empresaId, { inicioMs, fimMs }) {
     atual.receita += Number(receita || 0);
     mapa.set(produtoId, atual);
   };
-  for (const venda of barbearia.listarVendasRevenda(empresaId, { status: 'pago' })) {
+  for (const venda of barbearia.listarVendasRevenda(empresaId, { status: 'pago', lojaId })) {
     if (!dentro(venda.pagamento?.confirmadoEm || venda.atualizadoEm)) continue;
     for (const item of venda.itens) somar(item.produtoId, item.quantidade, item.subtotal);
   }
-  for (const comanda of barbearia.listarComandasBarbearia(empresaId, {})) {
+  for (const comanda of barbearia.listarComandasBarbearia(empresaId, { lojaId })) {
     if (!['paga', 'em_conta'].includes(comanda.status) || !dentro(comanda.fechadaEm || comanda.atualizadoEm)) continue;
     const subtotal = (comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0);
     const fator = subtotal > 0 ? Math.max(0, subtotal - Math.min(subtotal, Number(comanda.desconto || 0))) / subtotal : 1;
@@ -634,17 +677,18 @@ function janela(dias, opcoes = {}) {
  * acaba antes do próximo recebimento (consumo médio × prazo do fornecedor).
  * Quantidade sugerida cobre o mínimo + 30 dias de giro.
  */
-export function sugestaoReposicao(empresaId, { dias = 60, coberturaDias = 30 } = {}, opcoes = {}) {
-  const j = janela(dias, opcoes);
+export function sugestaoReposicao(empresaId, { dias = 60, coberturaDias = 30, lojaId = '' } = {}, opcoes = {}) {
+  const escopo = lojaEscopo(lojaId || opcoes.lojaId);
+  const j = { ...janela(dias, opcoes), lojaId: escopo };
   const vendas = vendasPorProduto(empresaId, j);
   const fornecedores = new Map(listarFornecedores(empresaId, { incluirInativos: true }).map((f) => [f.id, f]));
   const pendentes = new Map();
-  for (const pedido of listarPedidos(empresaId)) {
+  for (const pedido of listarPedidos(empresaId, { lojaId: escopo })) {
     if (!['rascunho', 'enviado', 'recebido_parcial'].includes(pedido.status)) continue;
     for (const item of pedido.itens) pendentes.set(item.produtoId, (pendentes.get(item.produtoId) || 0) + item.pendente);
   }
   const itens = [];
-  for (const produto of barbearia.listarProdutosRevenda(empresaId)) {
+  for (const produto of barbearia.listarProdutosRevenda(empresaId, { lojaId: escopo })) {
     const vendido = vendas.get(produto.id)?.quantidade || 0;
     const consumoDia = vendido / j.dias;
     const fornecedor = fornecedores.get(produto.fornecedorPadraoId) || null;
@@ -685,8 +729,10 @@ export function sugestaoReposicao(empresaId, { dias = 60, coberturaDias = 30 } =
  * fornecedor vão para o fornecedor informado (ou ficam de fora, listados).
  * Nada é enviado: o gestor revisa e marca como enviado.
  */
-export function gerarPedidosDeReposicao(empresaId, { fornecedorPadraoId = '', usuario = '', produtosIds = null } = {}, opcoes = {}) {
-  const sugestao = sugestaoReposicao(empresaId, {}, opcoes);
+export function gerarPedidosDeReposicao(empresaId, { fornecedorPadraoId = '', usuario = '', produtosIds = null, lojaId = '' } = {}, opcoes = {}) {
+  const escopo = lojaEscopo(lojaId || opcoes.lojaId);
+  if (Array.isArray(produtosIds)) produtosIds.forEach((produtoId) => produtoNoEscopo(empresaId, produtoId, escopo));
+  const sugestao = sugestaoReposicao(empresaId, { lojaId: escopo }, opcoes);
   const grupos = new Map();
   const semFornecedor = [];
   for (const item of sugestao.itens) {
@@ -696,7 +742,7 @@ export function gerarPedidosDeReposicao(empresaId, { fornecedorPadraoId = '', us
     if (!grupos.has(fornecedorId)) grupos.set(fornecedorId, []);
     grupos.get(fornecedorId).push({ produtoId: item.produtoId, quantidade: item.quantidadeSugerida, custoUnitario: item.custoUnitario });
   }
-  const pedidos = [...grupos.entries()].map(([fornecedorId, itens]) => criarPedido(empresaId, { fornecedorId, itens, origem: 'reposicao_automatica', usuario, observacoes: 'Gerado pela sugestão de reposição (estoque mínimo + giro).' }, opcoes));
+  const pedidos = [...grupos.entries()].map(([fornecedorId, itens]) => criarPedido(empresaId, { fornecedorId, lojaId: escopo || null, itens, origem: 'reposicao_automatica', usuario, observacoes: 'Gerado pela sugestão de reposição (estoque mínimo + giro).' }, { ...opcoes, lojaId: escopo }));
   return { pedidos, semFornecedor };
 }
 
@@ -707,10 +753,11 @@ export function gerarPedidosDeReposicao(empresaId, { fornecedorPadraoId = '', us
  * C o restante. Traz margem bruta (receita − custo médio × quantidade), giro e
  * itens parados (com estoque e sem venda no período).
  */
-export function curvaAbc(empresaId, { dias = 90, criterio = 'receita' } = {}, opcoes = {}) {
-  const j = janela(dias, opcoes);
+export function curvaAbc(empresaId, { dias = 90, criterio = 'receita', lojaId = '' } = {}, opcoes = {}) {
+  const escopo = lojaEscopo(lojaId || opcoes.lojaId);
+  const j = { ...janela(dias, opcoes), lojaId: escopo };
   const vendas = vendasPorProduto(empresaId, j);
-  const produtos = barbearia.listarProdutosRevenda(empresaId, { incluirInativos: true });
+  const produtos = barbearia.listarProdutosRevenda(empresaId, { incluirInativos: true, lojaId: escopo });
   const linhas = produtos.map((produto) => {
     const v = vendas.get(produto.id) || { quantidade: 0, receita: 0 };
     const custo = v.quantidade * Number(produto.custoUnitario || 0);

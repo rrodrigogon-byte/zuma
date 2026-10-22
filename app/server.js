@@ -4406,6 +4406,7 @@ function respostaComprasRepasses(res, error) {
 }
 const usuarioReq = (req) => req.user?.email || req.user?.nome || '';
 app.get('/api/admin/barbearia/compras/fornecedores', (req, res) => {
+  // Fornecedores permanecem corporativos: o mesmo cadastro pode abastecer várias unidades.
   try { res.json({ ok: true, fornecedores: barbeariaComprasKytto.listarFornecedores(legacyEmpresaId(req), { incluirInativos: req.query.inativos === '1' }) }); } catch (error) { respostaComprasRepasses(res, error); }
 });
 app.post('/api/admin/barbearia/compras/fornecedores', (req, res) => {
@@ -4417,15 +4418,15 @@ app.put('/api/admin/barbearia/compras/fornecedores/:id', (req, res) => {
   try { res.json({ ok: true, fornecedor: barbeariaComprasKytto.salvarFornecedor(legacyEmpresaId(req), req.body || {}, req.params.id) }); } catch (error) { respostaComprasRepasses(res, error); }
 });
 app.get('/api/admin/barbearia/compras/pedidos', (req, res) => {
-  try { res.json({ ok: true, pedidos: barbeariaComprasKytto.listarPedidos(legacyEmpresaId(req), { status: String(req.query.status || '') }) }); } catch (error) { respostaComprasRepasses(res, error); }
+  try { res.json({ ok: true, pedidos: barbeariaComprasKytto.listarPedidos(legacyEmpresaId(req), { status: String(req.query.status || ''), lojaId: legacyLojaId(req) }) }); } catch (error) { respostaComprasRepasses(res, error); }
 });
 app.post('/api/admin/barbearia/compras/pedidos', (req, res) => {
   if (!gestaoDaUnidade(req, res)) return;
-  try { res.status(201).json({ ok: true, pedido: barbeariaComprasKytto.criarPedido(legacyEmpresaId(req), { ...(req.body || {}), usuario: usuarioReq(req) }) }); } catch (error) { respostaComprasRepasses(res, error); }
+  try { res.status(201).json({ ok: true, pedido: barbeariaComprasKytto.criarPedido(legacyEmpresaId(req), { ...(req.body || {}), lojaId: legacyLojaId(req), usuario: usuarioReq(req) }) }); } catch (error) { respostaComprasRepasses(res, error); }
 });
 app.put('/api/admin/barbearia/compras/pedidos/:id', (req, res) => {
   if (!gestaoDaUnidade(req, res)) return;
-  try { res.json({ ok: true, pedido: barbeariaComprasKytto.atualizarPedido(legacyEmpresaId(req), req.params.id, req.body || {}) }); } catch (error) { respostaComprasRepasses(res, error); }
+  try { res.json({ ok: true, pedido: barbeariaComprasKytto.atualizarPedido(legacyEmpresaId(req), req.params.id, { ...(req.body || {}), lojaId: legacyLojaId(req) }) }); } catch (error) { respostaComprasRepasses(res, error); }
 });
 app.post('/api/admin/barbearia/compras/pedidos/:id/:acao', (req, res) => {
   if (!gestaoDaUnidade(req, res)) return;
@@ -4433,11 +4434,11 @@ app.post('/api/admin/barbearia/compras/pedidos/:id/:acao', (req, res) => {
   try {
     const acao = req.params.acao;
     let pedido;
-    if (acao === 'enviar') pedido = barbeariaComprasKytto.enviarPedido(empresaId, req.params.id, { usuario: usuarioReq(req) });
-    else if (acao === 'cancelar') pedido = barbeariaComprasKytto.cancelarPedido(empresaId, req.params.id, { motivo: req.body?.motivo, usuario: usuarioReq(req) });
+    if (acao === 'enviar') pedido = barbeariaComprasKytto.enviarPedido(empresaId, req.params.id, { lojaId: legacyLojaId(req), usuario: usuarioReq(req) });
+    else if (acao === 'cancelar') pedido = barbeariaComprasKytto.cancelarPedido(empresaId, req.params.id, { lojaId: legacyLojaId(req), motivo: req.body?.motivo, usuario: usuarioReq(req) });
     else if (acao === 'receber') {
       if (req.body?.confirmado !== true) return res.status(400).json({ error: 'Confirme o recebimento da mercadoria.', code: 'CONFIRMACAO_OBRIGATORIA' });
-      pedido = barbeariaComprasKytto.receberPedido(empresaId, req.params.id, { ...(req.body || {}), usuario: usuarioReq(req) });
+      pedido = barbeariaComprasKytto.receberPedido(empresaId, req.params.id, { ...(req.body || {}), lojaId: legacyLojaId(req), usuario: usuarioReq(req) });
       audit(req, 'COMPRA RECEBIDA', `${pedido.numero} status=${pedido.status}`);
     } else return res.status(404).json({ error: 'Ação inválida.' });
     res.json({ ok: true, pedido });
@@ -4445,28 +4446,28 @@ app.post('/api/admin/barbearia/compras/pedidos/:id/:acao', (req, res) => {
 });
 app.post('/api/admin/barbearia/compras/nfe/previa', (req, res) => {
   if (!gestaoDaUnidade(req, res)) return;
-  try { res.json({ ok: true, ...barbeariaComprasKytto.previaNotaEntrada(legacyEmpresaId(req), String(req.body?.xml || '')) }); } catch (error) { respostaComprasRepasses(res, error); }
+  try { res.json({ ok: true, ...barbeariaComprasKytto.previaNotaEntrada(legacyEmpresaId(req), String(req.body?.xml || ''), { lojaId: legacyLojaId(req) }) }); } catch (error) { respostaComprasRepasses(res, error); }
 });
 app.post('/api/admin/barbearia/compras/nfe/lancar', (req, res) => {
   if (!gestaoDaUnidade(req, res)) return;
   try {
-    const nota = barbeariaComprasKytto.lancarNotaEntrada(legacyEmpresaId(req), String(req.body?.xml || ''), { ...(req.body || {}), xml: undefined, usuario: usuarioReq(req) });
+    const nota = barbeariaComprasKytto.lancarNotaEntrada(legacyEmpresaId(req), String(req.body?.xml || ''), { ...(req.body || {}), lojaId: legacyLojaId(req), xml: undefined, usuario: usuarioReq(req) });
     if (!nota.repetida) audit(req, 'NFE ENTRADA LANCADA', `${nota.numero}/${nota.serie} ${nota.fornecedorNome} itens=${nota.entradas.length}`);
     res.status(nota.repetida ? 200 : 201).json({ ok: true, nota });
   } catch (error) { respostaComprasRepasses(res, error); }
 });
 app.get('/api/admin/barbearia/compras/nfe', (req, res) => {
-  try { res.json({ ok: true, notas: barbeariaComprasKytto.listarNotasEntrada(legacyEmpresaId(req)) }); } catch (error) { respostaComprasRepasses(res, error); }
+  try { res.json({ ok: true, notas: barbeariaComprasKytto.listarNotasEntrada(legacyEmpresaId(req), { lojaId: legacyLojaId(req) }) }); } catch (error) { respostaComprasRepasses(res, error); }
 });
 app.get('/api/admin/barbearia/compras/reposicao', (req, res) => {
-  try { res.json({ ok: true, ...barbeariaComprasKytto.sugestaoReposicao(legacyEmpresaId(req), { dias: req.query.dias, coberturaDias: req.query.cobertura }) }); } catch (error) { respostaComprasRepasses(res, error); }
+  try { res.json({ ok: true, ...barbeariaComprasKytto.sugestaoReposicao(legacyEmpresaId(req), { dias: req.query.dias, coberturaDias: req.query.cobertura, lojaId: legacyLojaId(req) }) }); } catch (error) { respostaComprasRepasses(res, error); }
 });
 app.post('/api/admin/barbearia/compras/reposicao/pedidos', (req, res) => {
   if (!gestaoDaUnidade(req, res)) return;
-  try { res.status(201).json({ ok: true, ...barbeariaComprasKytto.gerarPedidosDeReposicao(legacyEmpresaId(req), { fornecedorPadraoId: req.body?.fornecedorPadraoId, produtosIds: Array.isArray(req.body?.produtosIds) ? req.body.produtosIds : null, usuario: usuarioReq(req) }) }); } catch (error) { respostaComprasRepasses(res, error); }
+  try { res.status(201).json({ ok: true, ...barbeariaComprasKytto.gerarPedidosDeReposicao(legacyEmpresaId(req), { fornecedorPadraoId: req.body?.fornecedorPadraoId, produtosIds: Array.isArray(req.body?.produtosIds) ? req.body.produtosIds : null, lojaId: legacyLojaId(req), usuario: usuarioReq(req) }) }); } catch (error) { respostaComprasRepasses(res, error); }
 });
 app.get('/api/admin/barbearia/compras/curva-abc', (req, res) => {
-  try { res.json({ ok: true, ...barbeariaComprasKytto.curvaAbc(legacyEmpresaId(req), { dias: req.query.dias, criterio: String(req.query.criterio || 'receita') }) }); } catch (error) { respostaComprasRepasses(res, error); }
+  try { res.json({ ok: true, ...barbeariaComprasKytto.curvaAbc(legacyEmpresaId(req), { dias: req.query.dias, criterio: String(req.query.criterio || 'receita'), lojaId: legacyLojaId(req) }) }); } catch (error) { respostaComprasRepasses(res, error); }
 });
 
 // ── Comissões: extrato, vales, repasses com recibo e pote dos planos ────────

@@ -23,9 +23,9 @@ function xmlNota({ chave = CHAVE, itens } = {}) {
   return `<?xml version="1.0" encoding="UTF-8"?><nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><NFe><infNFe Id="NFe${chave}" versao="4.00"><ide><serie>1</serie><nNF>1234</nNF><dhEmi>2026-10-10T10:00:00-04:00</dhEmi></ide><emit><CNPJ>50073355000260</CNPJ><xNome>DISTRIBUIDORA BARBER LTDA</xNome><xFant>Barber Dist</xFant></emit><dest><CNPJ>${DEST_CNPJ}</CNPJ></dest>${det}<total><ICMSTot><vProd>180.01</vProd><vNF>168.01</vNF></ICMSTot></total></infNFe></NFe><protNFe><infProt><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo><chNFe>${chave}</chNFe><nProt>135260000000001</nProt><dhRecbto>2026-10-10T10:00:05-04:00</dhRecbto></infProt></protNFe></nfeProc>`;
 }
 
-function produtos() {
-  const pomada = barbearia.criarProdutoRevenda(EMP, { nome: 'Pomada modeladora', ean: '7891234567895', precoVenda: 45, custoUnitario: 18, estoqueAtual: 2, estoqueMinimo: 3 });
-  const oleo = barbearia.criarProdutoRevenda(EMP, { nome: 'Óleo para barba 30ml', precoVenda: 39, custoUnitario: 0, estoqueAtual: 0, estoqueMinimo: 2 });
+function produtos(lojaId = '') {
+  const pomada = barbearia.criarProdutoRevenda(EMP, { lojaId, nome: 'Pomada modeladora', ean: '7891234567895', precoVenda: 45, custoUnitario: 18, estoqueAtual: 2, estoqueMinimo: 3 });
+  const oleo = barbearia.criarProdutoRevenda(EMP, { lojaId, nome: 'Óleo para barba 30ml', precoVenda: 39, custoUnitario: 0, estoqueAtual: 0, estoqueMinimo: 2 });
   return { pomada, oleo };
 }
 
@@ -113,7 +113,7 @@ test('nota cria produto novo e converte caixa em unidades', () => {
 });
 
 test('falha no item intermediário compensa entradas anteriores e permite replay', () => {
-  const { pomada, oleo } = produtos();
+  const { pomada, oleo } = produtos('loja-a');
   const outraLoja = barbearia.criarProdutoRevenda(EMP, { lojaId: 'loja-b', nome: 'Produto loja B', precoVenda: 29, custoUnitario: 10 });
   const xml = xmlNota({ chave: OUTRA_CHAVE });
   const estoqueAntes = barbearia.listarProdutosRevenda(EMP).map((item) => [item.id, item.estoqueAtual]);
@@ -207,4 +207,39 @@ test('curva ABC por receita com margem e itens parados', () => {
 
 test('fornecedor sem prazo usa 7 dias', () => {
   assert.equal(compras.salvarFornecedor(EMP, { nome: 'Sem prazo' }).prazoEntregaDias, 7);
+});
+
+test('escopo de unidade bloqueia produto legado/outro produto e mutação cross-store do pedido', () => {
+  const { pomada } = produtos('loja-a');
+  const outro = barbearia.criarProdutoRevenda(EMP, { lojaId: 'loja-b', nome: 'Produto loja B', precoVenda: 29 });
+  const legado = barbearia.criarProdutoRevenda(EMP, { nome: 'Produto legado', precoVenda: 19 });
+  const fornecedor = compras.salvarFornecedor(EMP, { nome: 'Fornecedor corporativo' });
+  assert.throws(() => compras.criarPedido(EMP, { lojaId: 'loja-a', fornecedorId: fornecedor.id, itens: [{ produtoId: outro.id, quantidade: 1 }] }), /unidade ativa/);
+  assert.throws(() => compras.criarPedido(EMP, { lojaId: 'loja-a', fornecedorId: fornecedor.id, itens: [{ produtoId: legado.id, quantidade: 1 }] }), /unidade ativa/);
+  const pedido = compras.criarPedido(EMP, { lojaId: 'loja-a', fornecedorId: fornecedor.id, itens: [{ produtoId: pomada.id, quantidade: 1 }] });
+  assert.equal(pedido.lojaId, 'loja-a');
+  assert.deepEqual(compras.listarPedidos(EMP, { lojaId: 'loja-a' }).map((item) => item.id), [pedido.id]);
+  assert.deepEqual(compras.listarPedidos(EMP, { lojaId: 'loja-b' }), []);
+  assert.throws(() => compras.enviarPedido(EMP, pedido.id, { lojaId: 'loja-b' }), /empresa\/unidade ativa/);
+  assert.equal(compras.listarPedidos(EMP).length, 1);
+});
+
+test('NF-e, transação, reposição e ABC não atravessam unidades; legados só aparecem no corporativo', () => {
+  const a = barbearia.criarProdutoRevenda(EMP, { lojaId: 'loja-a', nome: 'Produto A', sku: 'A', precoVenda: 30, custoUnitario: 10, estoqueAtual: 0, estoqueMinimo: 10 });
+  const b = barbearia.criarProdutoRevenda(EMP, { lojaId: 'loja-b', nome: 'Produto B', sku: 'B', precoVenda: 30, custoUnitario: 10, estoqueAtual: 0, estoqueMinimo: 10 });
+  const legado = barbearia.criarProdutoRevenda(EMP, { nome: 'Produto legado', precoVenda: 30, custoUnitario: 10, estoqueAtual: 0, estoqueMinimo: 2 });
+  const primeira = compras.lancarNotaEntrada(EMP, xmlNota(), { confirmado: true, lojaId: 'loja-a', itens: [{ item: 1, produtoId: a.id }, { item: 2, ignorar: true }, { item: 3, ignorar: true }] });
+  const segunda = compras.lancarNotaEntrada(EMP, xmlNota({ chave: OUTRA_CHAVE }), { confirmado: true, lojaId: 'loja-b', itens: [{ item: 1, produtoId: b.id }, { item: 2, ignorar: true }, { item: 3, ignorar: true }] });
+  assert.equal(primeira.lojaId, 'loja-a');
+  assert.equal(segunda.lojaId, 'loja-b');
+  assert.deepEqual(compras.listarNotasEntrada(EMP, { lojaId: 'loja-a' }).map((item) => item.lojaId), ['loja-a']);
+  assert.deepEqual(compras.listarNotasEntrada(EMP, { lojaId: 'loja-b' }).map((item) => item.lojaId), ['loja-b']);
+  assert.deepEqual(compras.listarTransacoesEntrada(EMP, { lojaId: 'loja-a' }).map((item) => item.lojaId), ['loja-a']);
+  assert.equal(compras.previaNotaEntrada(EMP, xmlNota(), { lojaId: 'loja-b' }).itens[0].produtoId, b.id);
+  assert.deepEqual(compras.sugestaoReposicao(EMP, { lojaId: 'loja-a' }).itens.map((item) => item.produtoId), [a.id]);
+  assert.deepEqual(compras.sugestaoReposicao(EMP, { lojaId: 'loja-b' }).itens.map((item) => item.produtoId), [b.id]);
+  assert.deepEqual(compras.curvaAbc(EMP, { lojaId: 'loja-a' }).linhas.map((item) => item.produtoId), [a.id]);
+  assert.deepEqual(compras.curvaAbc(EMP, { lojaId: 'loja-b' }).linhas.map((item) => item.produtoId), [b.id]);
+  assert.deepEqual(barbearia.listarProdutosRevenda(EMP, { lojaId: 'loja-a' }).map((item) => item.id), [a.id]);
+  assert.ok(barbearia.listarProdutosRevenda(EMP).some((item) => item.id === legado.id));
 });
