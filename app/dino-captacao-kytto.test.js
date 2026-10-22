@@ -287,6 +287,25 @@ test('ocupação da agenda e metas por profissional', () => {
   assert.throws(() => captacao.salvarMetaProfissional(EMPRESA, { profissionalId: 'nao-existe', mes }), { code: 'PROFISSIONAL_NAO_ENCONTRADO' });
 });
 
+test('projeção de meta traduz faturamento em produção necessária', () => {
+  const { bruno, corte } = montarBarbearia();
+  const hoje = dataLocal(Date.now());
+  concluir(agendar({ profissional: bruno, servico: corte, data: hoje, hora: '09:00', codigo: 'PLN00001' }));
+  const mes = hoje.slice(0, 7);
+  captacao.salvarMetaProfissional(EMPRESA, { profissionalId: bruno.id, mes, receita: 10000, atendimentos: 200 });
+
+  const linha = captacao.painelMetasProfissionais(EMPRESA, { mes }).profissionais.find((item) => item.profissionalId === bruno.id);
+  assert.equal(linha.receita, 50);
+  assert.equal(linha.ticketMedio, 50);
+  assert.equal(linha.receitaRestante, 9950);
+  assert.equal(linha.atendimentosRestantesReceita, 199);
+  assert.equal(linha.atendimentosExtrasReceita, 199);
+  assert.equal(linha.atendimentosRestantesMeta, 199);
+  assert.ok(linha.diasUteisTotais >= linha.diasUteisDecorridos);
+  assert.ok(linha.minutosRestantesReceita > 0);
+  assert.ok(linha.ocupacaoNecessaria > 0);
+});
+
 test('agenda única: com equipe na agenda da barbearia, a IA lê e grava nela', async () => {
   const fonteAnterior = process.env.BARBEARIA_AGENDA_FONTE;
   process.env.BARBEARIA_AGENDA_FONTE = 'barbearia';
