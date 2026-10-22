@@ -50,5 +50,5 @@ O histórico importado não recria agenda operacional, comanda, recebimento, bai
 Verificações aprovadas nesta branch:
 
 - Testes focados de Customer 360, importação, assistente, escopo de unidade e notificações: **44/44**.
-- `npm run test:node`: **1.728 testes, 1.643 aprovados, 85 ignorados, 0 falhas**.
+- `npm run test:node`: **1.729 testes, 1.644 aprovados, 85 ignorados, 0 falhas**.
 - `npm run build` do frontend: concluído com sucesso.
