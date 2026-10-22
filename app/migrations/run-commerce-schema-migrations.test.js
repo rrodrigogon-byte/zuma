@@ -96,6 +96,12 @@ test('migration 084 contém histórico e alertas idempotentes de projeção', ()
   ]) assert.match(sql, new RegExp(fragment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
 });
 
+test('manifesto de checksums cobre a migration 084 para o health check de produção', () => {
+  const sql = readFileSync(new URL('./084_dino_forecast_ai.sql', import.meta.url), 'utf8');
+  const checksums = JSON.parse(readFileSync(new URL('./checksums.json', import.meta.url), 'utf8'));
+  assert.equal(checksums['084_dino_forecast_ai.sql'], createHash('sha256').update(sql).digest('hex'));
+});
+
 test('runner usa o mesmo client para lock, controle, migrations, checksum e unlock', async () => {
   const hadDatabaseUrl = Object.hasOwn(process.env, 'DATABASE_URL');
   const previousDatabaseUrl = process.env.DATABASE_URL;
