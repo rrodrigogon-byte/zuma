@@ -498,13 +498,29 @@ export async function enqueueForecastAnalysis({ db = defaultDb, empresaId, lojaI
   const snapshot = snapshotForecast(projection);
   const fingerprint = fingerprintPayload(snapshot);
   const idempotencyKey = `forecast-ai:${snapshot.mes}:${fingerprint}`;
-  const effect = await enqueueDinoEffect({ empresaId, lojaId }, {
+  const input = {
     effect: EFFECT,
     idempotencyKey,
     fingerprint,
     correlationId: correlationId || null,
     payload: { mes: snapshot.mes, projection: snapshot },
-  }, db);
+  };
+  const effect = await enqueueDinoEffect({ empresaId, lojaId }, input, db);
+  if (effect.replayed && effect.status === 'succeeded') {
+    const persisted = await getForecastAiInsight({ db, empresaId, lojaId, mes: snapshot.mes, fingerprint });
+    if (!persisted || !['ready', 'fallback'].includes(String(persisted.status))) {
+      // Um efeito antigo pode ter sido concluído antes de a persistência do insight
+      // ser confirmada. Uma chave horária permite recuperação idempotente sem
+      // duplicar a análise em cada leitura do painel.
+      const recoveryInput = {
+        ...input,
+        idempotencyKey: `${idempotencyKey}:recovery:${Math.floor(Date.now() / 3600000)}`,
+        correlationId: correlationId || `forecast-recovery:${new Date().toISOString().slice(0, 13)}`,
+      };
+      const recovery = await enqueueDinoEffect({ empresaId, lojaId }, recoveryInput, db);
+      return { queued: !recovery.replayed, replayed: Boolean(recovery.replayed), effectId: recovery.id, recoveredFromEffectId: effect.id, fingerprint, status: recovery.status };
+    }
+  }
   return { queued: !effect.replayed, replayed: Boolean(effect.replayed), effectId: effect.id, fingerprint, status: effect.status };
 }
 
@@ -516,7 +532,11 @@ export function createDinoForecastAiHandler({ db = defaultDb, fetchImpl = fetch 
     if (!validScope(empresaId, lojaId) || !payload?.projection?.mes) {
       throw Object.assign(new Error('Tarefa de projeção sem escopo ou snapshot válido.'), { code: 'DINO_FORECAST_TASK_INVALID', retryable: false });
     }
-    return analyzeForecastWithAi({ db, empresaId, lojaId, projection: payload.projection, force: true, fetchImpl });
+    const result = await analyzeForecastWithAi({ db, empresaId, lojaId, projection: payload.projection, force: true, fetchImpl });
+    if (!result.persisted) {
+      throw Object.assign(new Error('Insight de projeção não foi persistido; a tarefa será reprocessada.'), { code: 'DINO_FORECAST_INSIGHT_PERSIST_FAILED', retryable: true });
+    }
+    return result;
   };
 }
 
