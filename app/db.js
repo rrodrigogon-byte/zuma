@@ -165,8 +165,9 @@ export async function flush(){
 // Escrita atômica: grava num temporário (com fsync periódico) e troca pelo arquivo
 // principal com rename (atômico no mesmo filesystem). O JSON é
 // compacto (sem indentação): o arquivo fica menor e a serialização mais rápida.
-// A cópia .bak da última versão íntegra é renovada no máximo a cada 5 minutos, em
-// vez de duplicar o arquivo inteiro a cada gravação.
+// O backup da última versão íntegra é renovado no máximo a cada 5 minutos. Hard
+// links preservam o snapshot anterior sem copiar o arquivo inteiro; em filesystems
+// que não os suportam, usa-se uma cópia temporária com rename atômico.
 const _bakIntervalo = Number.parseInt(process.env.DB_BAK_INTERVAL_MS ?? '', 10);
 const BAK_INTERVALO_MS = Number.isFinite(_bakIntervalo) && _bakIntervalo >= 0 ? _bakIntervalo : 5 * 60 * 1000;
 // fsync é caro com arquivo grande e várias gravações por requisição: força o disco no
@@ -174,6 +175,7 @@ const BAK_INTERVALO_MS = Number.isFinite(_bakIntervalo) && _bakIntervalo >= 0 ? 
 // perderia a janela). Um processo que morre não perde nada: o rename já aconteceu.
 const FSYNC_INTERVALO_MS = 30 * 1000;
 let _ultimoFsync = 0;
+let _avisoFallbackBackup = false;
 const GRAVACAO_LENTA_MS = 250;
 const TAMANHO_BLOCO_JSON = 64 * 1024;
 const _metricas = { gravacoes: 0, ultimaGravacaoEm: null, ultimaDuracaoMs: 0, maiorDuracaoMs: 0, tamanhoBytes: 0, ultimoErro: null, ultimoErroEm: null, gravacoesLentas: 0, ultimoBakEm: 0 };
@@ -247,6 +249,30 @@ function escreverArquivo(arquivo, valor){
   } finally { fs.closeSync(fd); }
 }
 
+function renovarBackup(){
+  const backup = DB_PATH + '.bak';
+  const temporario = backup + '.tmp';
+  try {
+    fs.rmSync(temporario, { force: true });
+    try {
+      fs.linkSync(DB_PATH, temporario);
+      fs.renameSync(temporario, backup);
+      return;
+    } catch (linkError) {
+      fs.rmSync(temporario, { force: true });
+      if (!_avisoFallbackBackup) {
+        console.warn('[DB] hard link indisponível para backup; usando cópia temporária.', linkError?.code || 'erro');
+        _avisoFallbackBackup = true;
+      }
+    }
+    fs.copyFileSync(DB_PATH, temporario);
+    fs.renameSync(temporario, backup);
+  } catch (error) {
+    try { fs.rmSync(temporario, { force: true }); } catch {}
+    throw error;
+  }
+}
+
 export function save(){
   const inicio = Date.now();
   try {
@@ -254,7 +280,7 @@ export function save(){
     const tmp = DB_PATH + '.tmp';
     const tamanhoBytes = escreverArquivo(tmp, _cache);
     if(inicio - _metricas.ultimoBakEm >= BAK_INTERVALO_MS && fs.existsSync(DB_PATH)){
-      try { fs.copyFileSync(DB_PATH, DB_PATH + '.bak'); _metricas.ultimoBakEm = inicio; }
+      try { renovarBackup(); _metricas.ultimoBakEm = inicio; }
       catch(e){ console.error('[DB] falha ao renovar a cópia .bak:', e.message); }
     }
     fs.renameSync(tmp, DB_PATH);
@@ -300,6 +326,10 @@ export function substituirBanco(estado){
   return _cache;
 }
 
-export function nextId(){ const id = _cache.seq++; save(); return id; }
+export function nextId({ persist = true } = {}){
+  const id = _cache.seq++;
+  if(persist) save();
+  return id;
+}
 
 export function reset(){ _cache = structuredClone(DEFAULT); save(); }
