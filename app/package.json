@@ -11,6 +11,8 @@
     "commerce:schema:apply": "node migrations/run-commerce-schema-migrations.js && node migrations/run-prd-cutover.js",
     "avec:import:dry-run": "node migrations/run-avec-dino-import.js --dry-run",
     "avec:import:apply": "node migrations/run-avec-dino-import.js",
+    "dino:recalc:dry-run": "node migrations/run-dino-recalc.js --dry-run",
+    "dino:recalc:apply": "node migrations/run-dino-recalc.js",
     "commerce:import:dry-run": "node migrations/import-legacy-commerce.js",
     "commerce:import:apply": "node migrations/import-legacy-commerce.js --apply"
   },
