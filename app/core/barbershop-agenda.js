@@ -87,6 +87,54 @@ function conferirFontePgSemConflito(scope) {
   if (haReservaJsonNaUnidade(scope)) throw new SchedulingError('as fontes da agenda exigem conciliação nesta unidade; nenhum horário foi criado', 'AGENDA_SOURCE_CONFLICT');
 }
 
+/** Decide a fonte estrita por unidade sem converter ausência de dados em fonte conhecida. */
+export function resolveStrictAgendaSource({
+  mappingValid = false, forced = '', hasLegacyRows = false, hasLegacyFuture = false,
+  hasPostgresFuture = false, hasPostgresRows = false,
+} = {}) {
+  if (forced === 'postgres') return 'postgres';
+  if (!mappingValid) return forced === 'barbearia' ? 'indisponivel' : 'postgres';
+  if (forced === 'barbearia') return hasLegacyRows ? 'barbearia' : 'indisponivel';
+  if (hasPostgresFuture && hasLegacyFuture) return 'conflito';
+  if (hasPostgresFuture) return 'postgres';
+  if (hasLegacyRows) return 'barbearia';
+  if (hasPostgresRows) return 'postgres';
+  return 'indisponivel';
+}
+
+async function agendaSourceDaUnidade(scope, forced) {
+  const empresa = chaveEmpresa(scope);
+  const unidade = chaveUnidade(scope);
+  const legacyEmpresa = limpo(scope.legacyEmpresaId, 120);
+  const legacyUnidade = limpo(scope.legacyLojaId, 120);
+  const mappingValid = Boolean(empresa && unidade && legacyEmpresa && legacyUnidade
+    && empresa === legacyEmpresa && unidade === legacyUnidade);
+  if (!mappingValid) return resolveStrictAgendaSource({ mappingValid: false, forced });
+  if (forced === 'postgres') return 'postgres';
+
+  const legacyRows = barbearia.listarAgendamentos(legacyEmpresa, {})
+    .filter((item) => String(item.lojaId || '') === legacyUnidade);
+  if (forced === 'barbearia') return resolveStrictAgendaSource({ mappingValid, forced, hasLegacyRows: legacyRows.length > 0 });
+  const result = await pgDb.queryRead(
+    `SELECT EXISTS (
+              SELECT 1 FROM agendamentos
+               WHERE empresa_id = $1 AND loja_id = $2 AND data_agendamento >= CURRENT_TIMESTAMP
+                 AND status NOT IN ('cancelado', 'nao_compareceu', 'concluido')
+            ) AS has_future,
+            EXISTS (SELECT 1 FROM agendamentos WHERE empresa_id = $1 AND loja_id = $2) AS has_rows`,
+    [empresa, unidade],
+  );
+  if (!Array.isArray(result?.rows) || !result.rows[0]) throw new SchedulingError('leitura da fonte incompleta', 'AGENDA_SOURCE_UNVERIFIABLE');
+  const hasPostgresFuture = result.rows[0].has_future === true || result.rows[0].has_future === 't';
+  const hasPostgresRows = result.rows[0].has_rows === true || result.rows[0].has_rows === 't';
+  const source = resolveStrictAgendaSource({
+    mappingValid, hasLegacyRows: legacyRows.length > 0,
+    hasLegacyFuture: haReservaJsonNaUnidade(scope), hasPostgresFuture, hasPostgresRows,
+  });
+  if (source === 'conflito') throw new SchedulingError('as fontes da agenda exigem conciliação nesta unidade; nenhum horário foi criado', 'AGENDA_SOURCE_CONFLICT');
+  return source;
+}
+
 /**
  * Fonte da agenda da IA para a empresa:
  * - BARBEARIA_AGENDA_FONTE=barbearia|postgres força a fonte (operação);
@@ -95,8 +143,9 @@ function conferirFontePgSemConflito(scope) {
  * - se ainda há agendamentos futuros no PostgreSQL, continua nele até acabarem,
  *   para não esconder horários já marcados nem permitir dupla reserva.
  */
-export async function agendaSource(scope = {}) {
+export async function agendaSource(scope = {}, { strictStoreMapping = false } = {}) {
   const forcada = String(process.env.BARBEARIA_AGENDA_FONTE || '').trim().toLowerCase();
+  if (strictStoreMapping) return agendaSourceDaUnidade(scope, forcada === 'barbearia' || forcada === 'postgres' ? forcada : '');
   if (forcada === 'barbearia' || forcada === 'postgres') return forcada;
   const empresa = chaveEmpresa(scope);
   const unidade = chaveUnidade(scope);

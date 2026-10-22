@@ -6,6 +6,19 @@ import { db } from './core/database.js';
 import { startAiLearningScheduler } from './core/ai-learning.js';
 import { localHour, runAutomationRound } from './core/ai-automations.js';
 import { loadBrainGraph } from './ai-brain-data.js';
+import { matchesLegacyStoreScope } from './core/legacy-store-scope.js';
+
+/** A linha de canal ativa aponta para uma loja Commerce; o legado Kytto usa o mesmo UUID por convenção. */
+export function automationGraphScope(row = {}) {
+  const scope = {
+    legacyEmpresaId: String(row.legacy_empresa_id || row.empresa_id || ''),
+    legacyLojaId: String(row.legacy_loja_id || row.loja_id || ''),
+    empresaId: String(row.empresa_id || ''),
+    commerceLojaId: String(row.loja_id || ''),
+  };
+  if (!matchesLegacyStoreScope(scope)) return null;
+  return { ...scope, legacyScopeVerified: true };
+}
 
 export async function runAutomationTick({ now = new Date() } = {}) {
   const hour = localHour(now);
@@ -19,13 +32,17 @@ export async function runAutomationTick({ now = new Date() } = {}) {
   ).catch(() => ({ rows: [] }));
   const results = [];
   for (const row of empresas.rows) {
-    if (!row.loja_id) continue;
     try {
+      const graphScope = automationGraphScope(row);
+      if (!graphScope) {
+        console.warn('[Cérebro] automação ignorada: empresa/unidade Kytto não validada para o canal ativo.');
+        results.push({ empresa: String(row.empresa_id || '').slice(0, 8), skipped: true, reason: 'legacy_scope_unverified' });
+        continue;
+      }
       const result = await runAutomationRound({
         empresaId: row.empresa_id,
         lojaId: row.loja_id,
-        // No store JSON da barbearia a empresa do Commerce usa o mesmo id (padrão já usado pelos lembretes de agenda).
-        loadGraph: () => loadBrainGraph({ legacyEmpresaId: row.empresa_id, empresaId: row.empresa_id, commerceLojaId: row.loja_id, legacyLojaId: row.loja_id }),
+        loadGraph: () => loadBrainGraph(graphScope),
         now,
       });
       results.push({ empresa: String(row.empresa_id).slice(0, 8), ...result });
@@ -54,4 +71,3 @@ export function startAiBrainSchedulers() {
   }
   return { learning, automations };
 }
-

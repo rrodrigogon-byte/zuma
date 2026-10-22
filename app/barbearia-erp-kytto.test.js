@@ -343,8 +343,12 @@ test('mantém estoque de revenda separado por empresa e exige histórico para al
 test('isola catálogo, movimentos e venda por unidade dentro da mesma empresa', () => {
   const lojaA = criarProdutoRevenda(EMPRESA_A, { lojaId: 'loja-a', nome: 'Pomada compartilhada', precoVenda: 35, estoqueAtual: 2 });
   const lojaB = criarProdutoRevenda(EMPRESA_A, { lojaId: 'loja-b', nome: 'Pomada compartilhada', precoVenda: 35, estoqueAtual: 2 });
+  const semLoja = criarProdutoRevenda(EMPRESA_A, { nome: 'Produto sem unidade', precoVenda: 12, estoqueAtual: 4 });
   assert.equal(listarProdutosRevenda(EMPRESA_A, { lojaId: 'loja-a' }).map((item) => item.id).join(','), lojaA.id);
   assert.equal(listarProdutosRevenda(EMPRESA_A, { lojaId: 'loja-b' }).map((item) => item.id).join(','), lojaB.id);
+  const coberturaA = listarProdutosRevenda(EMPRESA_A, { lojaId: 'loja-a', incluirSemLoja: true }).map((item) => item.id);
+  assert.deepEqual(new Set(coberturaA), new Set([lojaA.id, semLoja.id]));
+  assert.equal(coberturaA.includes(lojaB.id), false);
   assert.equal(listarMovimentosEstoque(EMPRESA_A, { lojaId: 'loja-a' }).every((item) => item.lojaId === 'loja-a'), true);
   assert.throws(() => criarVendaRevenda(EMPRESA_A, { lojaId: 'loja-a', itens: [{ produtoId: lojaB.id, quantidade: 1 }] }), /empresa\/unidade ativa/);
 });
