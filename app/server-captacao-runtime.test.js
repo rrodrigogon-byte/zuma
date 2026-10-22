@@ -42,7 +42,7 @@ test('captação: agendamento online com consentimento e indicação, lista de e
   const base = `http://127.0.0.1:${port}`;
   const processo = spawn(process.execPath, ['server.js'], {
     cwd: path.join(ROOT, 'app'),
-    env: { ...process.env, NODE_ENV: 'development', PORT: String(port), DB_PATH: dbPath, JWT_SECRET: 'captacao-jwt', PUBLIC_BASE_URL: `http://127.0.0.1:${port}`, SERVER_URL: '', COMMERCE_CORE_ENABLED: '0', SEED_DEMO: '0', WPP_BASE_URL: '', WPP_APIKEY: '', AI_API_KEY: '', OPENAI_API_KEY: '' },
+    env: { ...process.env, NODE_ENV: 'development', PORT: String(port), DB_PATH: dbPath, JWT_SECRET: 'captacao-jwt', PUBLIC_BASE_URL: `http://127.0.0.1:${port}`, SERVER_URL: '', COMMERCE_CORE_ENABLED: '0', SEED_DEMO: '0', WPP_BASE_URL: '', WPP_APIKEY: '', AI_API_KEY: '', OPENAI_API_KEY: '', GEMINI_API_KEY: '', ANTHROPIC_API_KEY: '' },
     stdio: 'ignore',
   });
   try {
@@ -109,6 +109,14 @@ test('captação: agendamento online com consentimento e indicação, lista de e
     const horizonteInvalido = await request(base, '/api/admin/barbearia/captacao/projecao-faturamento?horizonte=7', { headers });
     assert.equal(horizonteInvalido.response.status, 400);
     assert.equal(horizonteInvalido.body.code, 'HORIZONTE_INVALIDO');
+    const inteligencia = await request(base, `/api/admin/barbearia/captacao/projecao-faturamento/inteligencia?mes=${data.slice(0, 7)}&horizonte=6`, { headers });
+    assert.equal(inteligencia.response.status, 200, JSON.stringify(inteligencia.body));
+    assert.equal(inteligencia.body.inteligencia.status, 'fallback', 'escopo JSON legado deve usar leitura local segura');
+    const simulacao = await request(base, '/api/admin/barbearia/captacao/projecao-faturamento/simular', { method: 'POST', headers, body: JSON.stringify({ mes: data.slice(0, 7), fatores: { atendimentos: 1.1, ticket: 1, revenda: 1.2, ocupacao: 1 } }) });
+    assert.equal(simulacao.response.status, 200);
+    assert.ok(Number.isFinite(simulacao.body.simulacao.resultado.total));
+    const filaSemEscopoCanonico = await request(base, '/api/admin/barbearia/captacao/projecao-faturamento/inteligencia/atualizar', { method: 'POST', headers, body: JSON.stringify({ mes: data.slice(0, 7) }) });
+    assert.equal(filaSemEscopoCanonico.response.status, 409);
     // Assinante concluindo atendimento: cobrado avulso não consome o plano; sem cobrança, consome.
     const assinante = (await request(base, '/api/admin/barbearia/clientes', { method: 'POST', headers, body: JSON.stringify({ nome: 'Assinante', telefone: '65966660001' }) })).body.cliente;
     const plano = (await request(base, '/api/admin/barbearia/planos', { method: 'POST', headers, body: JSON.stringify({ nome: 'Clube', preco: 90, sessoesIncluidas: 4, validadeDias: 30, servicosIds: [servico.id] }) })).body.plano;

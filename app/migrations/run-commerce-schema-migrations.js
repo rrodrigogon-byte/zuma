@@ -72,6 +72,7 @@ const migrationFiles = [
   '081_bar_pdv_multiempresa.sql',
   '082_financeiro_cadastros_multiempresa.sql',
   '083_dino_operational_foundations.sql',
+  '084_dino_forecast_ai.sql',
 ];
 const advisoryLockKey = 825410732;
 

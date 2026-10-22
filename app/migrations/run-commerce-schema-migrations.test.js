@@ -32,8 +32,9 @@ test('normalizador aceita formas top-level BEGIN WORK e START TRANSACTION', () =
   assert.match(normalized, /SELECT 2;/);
 });
 
-test('runner expõe explicitamente a migration 083', () => {
-  assert.equal(migrationFiles.at(-1), '083_dino_operational_foundations.sql');
+test('runner expõe explicitamente a migration 084 de projeção com IA', () => {
+  assert.equal(migrationFiles.at(-1), '084_dino_forecast_ai.sql');
+  assert.equal(migrationFiles.at(-2), '083_dino_operational_foundations.sql');
 });
 
 test('migration 083 contém as tabelas, constraints e índices críticos da fundação', () => {
@@ -82,6 +83,19 @@ test('migration 083 contém as tabelas, constraints e índices críticos da fund
   assert.match(sql, /WHERE status IN \('offered', 'held'\)/);
 });
 
+test('migration 084 contém histórico e alertas idempotentes de projeção', () => {
+  const sql = readFileSync(new URL('./084_dino_forecast_ai.sql', import.meta.url), 'utf8');
+  for (const fragment of [
+    'dino_forecast_ai_insights',
+    'dino_forecast_ai_alerts',
+    'fk_dino_forecast_ai_insight_store',
+    'fk_dino_forecast_ai_alert_store',
+    'uq_dino_forecast_ai_snapshot',
+    'uq_dino_forecast_ai_alert',
+    "status IN ('pending', 'ready', 'fallback', 'failed')",
+  ]) assert.match(sql, new RegExp(fragment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+});
+
 test('runner usa o mesmo client para lock, controle, migrations, checksum e unlock', async () => {
   const hadDatabaseUrl = Object.hasOwn(process.env, 'DATABASE_URL');
   const previousDatabaseUrl = process.env.DATABASE_URL;
@@ -108,8 +122,8 @@ test('runner usa o mesmo client para lock, controle, migrations, checksum e unlo
   };
   try {
     const result = await runCommerceSchemaMigrations({ db });
-    assert.equal(result.files.at(-1), '083_dino_operational_foundations.sql');
-    assert.equal(result.applied.at(-1), '083_dino_operational_foundations.sql');
+    assert.equal(result.files.at(-1), '084_dino_forecast_ai.sql');
+    assert.equal(result.applied.at(-1), '084_dino_forecast_ai.sql');
   } finally {
     if (hadDatabaseUrl) process.env.DATABASE_URL = previousDatabaseUrl;
     else delete process.env.DATABASE_URL;
