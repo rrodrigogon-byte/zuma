@@ -59,10 +59,12 @@ function profissional(empresaId, profissionalId) {
  * período e divide pelos pontos (valor de tabela dos serviços usados pelo plano
  * no período) de cada profissional. Pote sem uso no período fica "sem rateio".
  */
-export function poteDosPlanos(empresaId, { inicio, fim }) {
+export function poteDosPlanos(empresaId, { inicio, fim, lojaId = '' }) {
   validarPeriodo(inicio, fim);
   const planos = new Map(barbearia.listarPlanos(empresaId, { incluirInativos: true }).map((p) => [p.id, p]));
-  const agendamentos = new Map(barbearia.listarAgendamentos(empresaId, {}).map((a) => [a.id, a]));
+  const agendamentos = new Map(barbearia.listarAgendamentos(empresaId, {})
+    .filter((a) => !lojaId || a.lojaId === String(lojaId))
+    .map((a) => [a.id, a]));
   const noPeriodo = (iso) => { const d = String(iso || '').slice(0, 10); return d >= inicio && d <= fim; };
   const porPlano = new Map();
   for (const assinatura of barbearia.listarAssinaturas(empresaId)) {
@@ -75,7 +77,9 @@ export function poteDosPlanos(empresaId, { inicio, fim }) {
     for (const uso of usos) {
       if (!noPeriodo(uso.registradoEm)) continue;
       const pontos = Number(uso.valorAvulso || 0);
-      const profissionalId = agendamentos.get(uso.agendamentoId)?.profissionalId || uso.profissionalId || '';
+      const agendamento = agendamentos.get(uso.agendamentoId);
+      if (lojaId && uso.agendamentoId && !agendamento) continue;
+      const profissionalId = agendamento?.profissionalId || uso.profissionalId || '';
       if (!profissionalId) { grupo.pontosSemProfissional += pontos; continue; }
       grupo.pontos.set(profissionalId, (grupo.pontos.get(profissionalId) || 0) + pontos);
     }
@@ -102,9 +106,9 @@ export function poteDosPlanos(empresaId, { inicio, fim }) {
 
 // ── Vales (adiantamentos) ───────────────────────────────────────────────────
 
-export function listarVales(empresaId, { profissionalId = '', status = '' } = {}) {
+export function listarVales(empresaId, { profissionalId = '', status = '', lojaId = '' } = {}) {
   return Object.values(estado(empresaId).vales)
-    .filter((v) => (!profissionalId || v.profissionalId === String(profissionalId)) && (!status || v.status === status))
+    .filter((v) => (!profissionalId || v.profissionalId === String(profissionalId)) && (!status || v.status === status) && (!lojaId || v.lojaId === String(lojaId)))
     .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))
     .map((v) => ({ ...v }));
 }
@@ -112,11 +116,11 @@ export function listarVales(empresaId, { profissionalId = '', status = '' } = {}
 /** Saldo de comissão ainda não repassada, de depois do último repasse até hoje. */
 export function saldoDisponivel(empresaId, profissionalId, opcoes = {}) {
   const hoje = agoraIso(opcoes).slice(0, 10);
-  const pagos = listarRepasses(empresaId, { profissionalId }).filter((r) => r.status === 'pago');
+  const pagos = listarRepasses(empresaId, { profissionalId, lojaId: opcoes.lojaId }).filter((r) => r.status === 'pago');
   const ultimoFim = pagos.reduce((max, r) => (r.fim > max ? r.fim : max), '');
   const inicio = ultimoFim ? new Date(Date.parse(`${ultimoFim}T12:00:00Z`) + 86400000).toISOString().slice(0, 10) : '2000-01-01';
   if (inicio > hoje) return { inicio, fim: hoje, comissao: 0, valesAbertos: 0, disponivel: 0 };
-  const extrato = extratoProfissional(empresaId, profissionalId, { inicio, fim: hoje }, opcoes);
+  const extrato = extratoProfissional(empresaId, profissionalId, { inicio, fim: hoje, lojaId: opcoes.lojaId }, opcoes);
   return { inicio, fim: hoje, comissao: extrato.totais.comissaoTotal, valesAbertos: extrato.totais.valesAbertos, disponivel: dinheiro(Math.max(0, extrato.totais.comissaoTotal - extrato.totais.valesAbertos)) };
 }
 
@@ -125,7 +129,7 @@ export function registrarVale(empresaId, dados = {}, opcoes = {}) {
   const valor = dinheiro(dados.valor);
   if (valor <= 0) throw new RepasseError('Informe o valor do vale.', 'VALOR_INVALIDO');
   if (dados.confirmado !== true) throw new RepasseError('Confirme o vale.', 'CONFIRMACAO_OBRIGATORIA');
-  const saldo = saldoDisponivel(empresaId, prof.id, opcoes);
+  const saldo = saldoDisponivel(empresaId, prof.id, { ...opcoes, lojaId: dados.lojaId });
   if (valor > saldo.disponivel) throw new RepasseError(`O vale passa da comissão já realizada e não repassada (disponível: R$ ${saldo.disponivel.toFixed(2).replace('.', ',')}).`, 'VALE_ACIMA_DO_SALDO', 409);
   const atual = estado(empresaId);
   const chave = texto(dados.chaveIdempotencia, 120);
@@ -134,7 +138,7 @@ export function registrarVale(empresaId, dados = {}, opcoes = {}) {
     if (existente) return { ...existente, repetido: true };
   }
   const agora = agoraIso(opcoes);
-  const vale = { id: novoId('vale'), profissionalId: prof.id, profissionalNome: prof.nome, valor, meio: MEIOS.has(dados.meio) ? dados.meio : 'pix', motivo: texto(dados.motivo, 200), status: 'aberto', chaveIdempotencia: chave || null, criadoEm: agora, criadoPor: texto(dados.usuario, 160) || null };
+  const vale = { id: novoId('vale'), profissionalId: prof.id, profissionalNome: prof.nome, lojaId: texto(dados.lojaId, 120), valor, meio: MEIOS.has(dados.meio) ? dados.meio : 'pix', motivo: texto(dados.motivo, 200), status: 'aberto', chaveIdempotencia: chave || null, criadoEm: agora, criadoPor: texto(dados.usuario, 160) || null };
   atual.vales[vale.id] = vale;
   try {
     financeiroKytto.registrarLancamento(empresaId, { tipo: 'despesa', categoria: 'Comissões - vale', descricao: `Vale de comissão · ${prof.nome}`, valor, origem: 'barbearia_vale_comissao', status: 'pago', meioPagamento: vale.meio, dataOperacao: agora, pagoEm: agora, chaveIdempotencia: `barbearia_vale:${empresaId}:${vale.id}`, referencia: { valeId: vale.id, profissionalId: prof.id } });
@@ -145,14 +149,14 @@ export function registrarVale(empresaId, dados = {}, opcoes = {}) {
 
 // ── Extrato ────────────────────────────────────────────────────────────────
 
-export function extratoProfissional(empresaId, profissionalId, { inicio, fim }, opcoes = {}) {
+export function extratoProfissional(empresaId, profissionalId, { inicio, fim, lojaId = '' }, opcoes = {}) {
   validarPeriodo(inicio, fim);
   const prof = profissional(empresaId, profissionalId);
-  const comissoes = barbearia.obterComissoes(empresaId, { inicio, fim, detalhar: true, profissionalId: prof.id });
+  const comissoes = barbearia.obterComissoes(empresaId, { inicio, fim, detalhar: true, profissionalId: prof.id, lojaId, strictUnit: Boolean(lojaId) });
   const linha = comissoes.porProfissional.find((item) => item.profissionalId === prof.id) || { linhas: [], bruto: 0, taxas: 0, materiais: 0, comissaoServicos: 0, comissaoProdutos: 0, atendimentos: 0, vendasProdutos: 0 };
-  const pote = poteDosPlanos(empresaId, { inicio, fim }).porProfissional.get(prof.id) || { valor: 0, detalhes: [] };
-  const valesAbertos = listarVales(empresaId, { profissionalId: prof.id, status: 'aberto' });
-  const repasses = listarRepasses(empresaId, { profissionalId: prof.id }).filter((r) => r.status === 'pago' && r.inicio <= fim && r.fim >= inicio);
+  const pote = poteDosPlanos(empresaId, { inicio, fim, lojaId }).porProfissional.get(prof.id) || { valor: 0, detalhes: [] };
+  const valesAbertos = listarVales(empresaId, { profissionalId: prof.id, status: 'aberto', lojaId });
+  const repasses = listarRepasses(empresaId, { profissionalId: prof.id, lojaId }).filter((r) => r.status === 'pago' && r.inicio <= fim && r.fim >= inicio);
   const comissaoTotal = dinheiro(Number(linha.comissaoServicos || 0) + Number(linha.comissaoProdutos || 0) + pote.valor);
   const totalVales = dinheiro(valesAbertos.reduce((s, v) => s + v.valor, 0));
   return {
@@ -184,16 +188,16 @@ export function extratoProfissional(empresaId, profissionalId, { inicio, fim }, 
 
 // ── Repasses ───────────────────────────────────────────────────────────────
 
-export function listarRepasses(empresaId, { profissionalId = '' } = {}) {
+export function listarRepasses(empresaId, { profissionalId = '', lojaId = '' } = {}) {
   return Object.values(estado(empresaId).repasses)
-    .filter((r) => !profissionalId || r.profissionalId === String(profissionalId))
+    .filter((r) => (!profissionalId || r.profissionalId === String(profissionalId)) && (!lojaId || r.lojaId === String(lojaId)))
     .sort((a, b) => String(b.pagoEm).localeCompare(String(a.pagoEm)))
     .map((r) => ({ ...r, vales: (r.vales || []).map((v) => ({ ...v })) }));
 }
 
-export function obterRepasse(empresaId, repasseId) {
+export function obterRepasse(empresaId, repasseId, lojaId = '') {
   const r = estado(empresaId).repasses[String(repasseId)];
-  return r ? { ...r, vales: (r.vales || []).map((v) => ({ ...v })) } : null;
+  return r && (!lojaId || r.lojaId === String(lojaId)) ? { ...r, vales: (r.vales || []).map((v) => ({ ...v })) } : null;
 }
 
 export function registrarRepasse(empresaId, dados = {}, opcoes = {}) {
@@ -202,9 +206,10 @@ export function registrarRepasse(empresaId, dados = {}, opcoes = {}) {
   validarPeriodo(inicio, fim);
   const prof = profissional(empresaId, dados.profissionalId);
   const atual = estado(empresaId);
-  const conflito = Object.values(atual.repasses).find((r) => r.profissionalId === prof.id && r.status === 'pago' && r.inicio <= fim && r.fim >= inicio);
+  const lojaId = texto(dados.lojaId, 120);
+  const conflito = Object.values(atual.repasses).find((r) => r.profissionalId === prof.id && (!lojaId || r.lojaId === lojaId) && r.status === 'pago' && r.inicio <= fim && r.fim >= inicio);
   if (conflito) throw new RepasseError(`Já existe o repasse ${conflito.recibo} cobrindo ${conflito.inicio} a ${conflito.fim}.`, 'PERIODO_JA_REPASSADO', 409);
-  const extrato = extratoProfissional(empresaId, prof.id, { inicio, fim }, opcoes);
+  const extrato = extratoProfissional(empresaId, prof.id, { inicio, fim, lojaId }, opcoes);
   const valorPago = dinheiro(extrato.totais.comissaoTotal - extrato.totais.valesAbertos);
   if (extrato.totais.comissaoTotal <= 0) throw new RepasseError('Não há comissão no período.', 'SEM_COMISSAO', 409);
   const meio = MEIOS.has(dados.meio) ? dados.meio : 'pix';
@@ -215,6 +220,7 @@ export function registrarRepasse(empresaId, dados = {}, opcoes = {}) {
     recibo: `REC-${String(atual.sequenciaRecibo).padStart(5, '0')}`,
     profissionalId: prof.id,
     profissionalNome: prof.nome,
+    lojaId,
     inicio,
     fim,
     status: 'pago',
@@ -245,7 +251,7 @@ export function registrarRepasse(empresaId, dados = {}, opcoes = {}) {
     vale.abatidoEm = agora;
   }
   if (repasse.saldoVale > 0) {
-    const resto = { id: novoId('vale'), profissionalId: prof.id, profissionalNome: prof.nome, valor: repasse.saldoVale, meio: 'outro', motivo: `Saldo do vale após o repasse ${repasse.recibo}`, status: 'aberto', criadoEm: agora, criadoPor: 'sistema', origemRepasseId: repasse.id };
+    const resto = { id: novoId('vale'), profissionalId: prof.id, profissionalNome: prof.nome, lojaId, valor: repasse.saldoVale, meio: 'outro', motivo: `Saldo do vale após o repasse ${repasse.recibo}`, status: 'aberto', criadoEm: agora, criadoPor: 'sistema', origemRepasseId: repasse.id };
     atual.vales[resto.id] = resto;
   }
   atual.repasses[repasse.id] = repasse;
@@ -256,15 +262,15 @@ export function registrarRepasse(empresaId, dados = {}, opcoes = {}) {
     } catch (erro) { repasse.erroFinanceiro = texto(erro?.message || erro, 200); }
   }
   save();
-  return obterRepasse(empresaId, repasse.id);
+  return obterRepasse(empresaId, repasse.id, lojaId);
 }
 
 /** Estorno: o repasse fica registrado como estornado e os vales voltam a abrir. */
-export function estornarRepasse(empresaId, repasseId, { motivo = '', usuario = '' } = {}, opcoes = {}) {
+export function estornarRepasse(empresaId, repasseId, { motivo = '', usuario = '', lojaId = '' } = {}, opcoes = {}) {
   const atual = estado(empresaId);
   const repasse = atual.repasses[String(repasseId)];
-  if (!repasse) throw new RepasseError('Repasse não encontrado.', 'REPASSE_NAO_ENCONTRADO', 404);
-  if (repasse.status === 'estornado') return obterRepasse(empresaId, repasse.id);
+  if (!repasse || (lojaId && repasse.lojaId !== String(lojaId))) throw new RepasseError('Repasse não encontrado.', 'REPASSE_NAO_ENCONTRADO', 404);
+  if (repasse.status === 'estornado') return obterRepasse(empresaId, repasse.id, lojaId);
   if (texto(motivo).length < 5) throw new RepasseError('Informe o motivo do estorno.', 'MOTIVO_OBRIGATORIO');
   const agora = agoraIso(opcoes);
   Object.assign(repasse, { status: 'estornado', estornadoEm: agora, estornadoPor: texto(usuario, 160) || null, motivoEstorno: texto(motivo, 300) });
@@ -278,7 +284,7 @@ export function estornarRepasse(empresaId, repasseId, { motivo = '', usuario = '
     } catch (erro) { repasse.erroFinanceiroEstorno = texto(erro?.message || erro, 200); }
   }
   save();
-  return obterRepasse(empresaId, repasse.id);
+  return obterRepasse(empresaId, repasse.id, lojaId);
 }
 
 // ── Recibo ─────────────────────────────────────────────────────────────────
@@ -288,8 +294,8 @@ const moeda = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency',
 const dataBr = (iso) => { const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : ''; };
 const MEIO_ROTULO = { pix: 'Pix', dinheiro: 'Dinheiro', transferencia: 'Transferência', outro: 'Outro' };
 
-export function reciboHtml(empresaId, repasseId, { empresaNome = '' } = {}) {
-  const r = obterRepasse(empresaId, repasseId);
+export function reciboHtml(empresaId, repasseId, { empresaNome = '', lojaId = '' } = {}) {
+  const r = obterRepasse(empresaId, repasseId, lojaId);
   if (!r) throw new RepasseError('Repasse não encontrado.', 'REPASSE_NAO_ENCONTRADO', 404);
   const linha = (rotulo, valor) => `<tr><td>${esc(rotulo)}</td><td class="v">${valor}</td></tr>`;
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Recibo ${esc(r.recibo)}</title>

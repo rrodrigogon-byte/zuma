@@ -318,13 +318,17 @@ export function expirarListaEspera(empresaId, opcoes = {}) {
 }
 
 /** Quem estava na lista e marcou horário naquele dia sai da lista. */
-export function marcarListaEsperaAgendada(empresaId, { telefone, data } = {}) {
+export function marcarListaEsperaAgendada(empresaId, { telefone, data, lojaId = '', servicoId = '' } = {}) {
   const estado = captacao(empresaId);
   const chave = telefoneChave(telefone);
   if (!chave || !data) return 0;
   let total = 0;
   for (const item of Object.values(estado.listaEspera)) {
-    if (item.status === 'aguardando' && item.data === String(data).slice(0, 10) && telefoneChave(item.telefone) === chave) {
+    if (item.status === 'aguardando'
+      && item.data === String(data).slice(0, 10)
+      && telefoneChave(item.telefone) === chave
+      && (!lojaId || item.lojaId === String(lojaId))
+      && (!servicoId || item.servicoId === String(servicoId))) {
       item.status = 'agendado';
       item.atualizadoEm = new Date().toISOString();
       total += 1;
@@ -387,8 +391,13 @@ export function candidatosParaVaga(empresaId, agendamentoLiberado = {}, opcoes =
   if (!Number.isFinite(inicio) || inicio <= agoraMs(opcoes)) return [];
   const periodo = periodoDoHorario(agendamentoLiberado.horaLocal);
   const limite = estado.configuracao.avisosListaEsperaPorVaga;
+  const lojaId = texto(opcoes.lojaId || agendamentoLiberado.lojaId, 120);
+  const servicoId = texto(agendamentoLiberado.servicoId, 100);
+  if (!lojaId || !servicoId || !periodo) return [];
   return Object.values(estado.listaEspera)
     .filter((item) => item.status === 'aguardando' && item.data === data)
+    .filter((item) => item.lojaId === lojaId)
+    .filter((item) => item.servicoId === servicoId)
     .filter((item) => opcoes.incluirSemConsentimento === true || item.consentimentoWhatsapp === true)
     .filter((item) => item.periodo === 'qualquer' || item.periodo === periodo)
     .filter((item) => !item.profissionalId || item.profissionalId === 'qualquer' || item.profissionalId === agendamentoLiberado.profissionalId)
@@ -400,7 +409,9 @@ export function candidatosParaVaga(empresaId, agendamentoLiberado = {}, opcoes =
       nome: item.nome,
       telefone: item.telefone,
       servicoId: item.servicoId,
+      profissionalId: item.profissionalId || 'qualquer',
       consentimentoWhatsapp: item.consentimentoWhatsapp === true,
+      lojaId: item.lojaId || '',
       data,
       horaLocal: agendamentoLiberado.horaLocal,
       mensagem: `Olá, ${nomeCurto(item.nome)}! Abriu um horário em ${data.split('-').reverse().join('/')} às ${agendamentoLiberado.horaLocal}. Quer ficar com ele? Responda por aqui ou agende pelo link da barbearia. Para não receber avisos, responda SAIR.`,
@@ -410,11 +421,17 @@ export function candidatosParaVaga(empresaId, agendamentoLiberado = {}, opcoes =
 /** Registra que estes inscritos foram avisados da vaga (após entrar na fila de envio). */
 export function marcarAvisados(empresaId, agendamentoLiberado = {}, ids = [], opcoes = {}) {
   const estado = captacao(empresaId);
+  const lojaId = texto(opcoes.lojaId || agendamentoLiberado.lojaId, 120);
+  const servicoId = texto(agendamentoLiberado.servicoId, 100);
+  const profissionalId = texto(agendamentoLiberado.profissionalId, 100);
+  if (!lojaId || !servicoId || !agendamentoLiberado.id) return 0;
   const registradoEm = iso(agoraMs(opcoes));
   let total = 0;
   for (const id of ids) {
     const item = estado.listaEspera[String(id)];
-    if (!item || (item.avisos || []).some((aviso) => aviso.agendamentoId === agendamentoLiberado.id)) continue;
+    if (!item || item.lojaId !== lojaId || item.servicoId !== servicoId
+      || (item.profissionalId && item.profissionalId !== 'qualquer' && item.profissionalId !== profissionalId)
+      || (item.avisos || []).some((aviso) => aviso.agendamentoId === agendamentoLiberado.id)) continue;
     item.avisos ||= [];
     item.avisos.push({ agendamentoId: agendamentoLiberado.id, horaLocal: agendamentoLiberado.horaLocal, registradoEm });
     item.ultimoAvisoEm = registradoEm;
@@ -851,7 +868,8 @@ function chaveCliente(item) {
  */
 export function retornosPrevistos(empresaId, { horizonteDias = 7, sugerirHorario = true, lojaId = '' } = {}, opcoes = {}) {
   const ms = agoraMs(opcoes);
-  const agendamentos = barbearia.listarAgendamentos(empresaId, {});
+  const agendamentos = barbearia.listarAgendamentos(empresaId, {})
+    .filter((item) => !lojaId || item.lojaId === lojaId);
   const futurosPorChave = new Set(agendamentos
     .filter((item) => STATUS_ATIVOS.has(item.status) && new Date(item.dataHora).valueOf() > ms)
     .map((item) => chaveCliente(item)));
@@ -970,7 +988,7 @@ export function ocupacaoAgenda(empresaId, { inicio, fim, lojaId = '' } = {}) {
   const calendario = lojaId && configuracao.lojas?.[lojaId] ? { ...configuracao, ...configuracao.lojas[lojaId] } : configuracao;
   const dias = diasNoIntervalo(inicio, fim);
   const agendamentos = barbearia.listarAgendamentos(empresaId, {})
-    .filter((item) => !lojaId || !item.lojaId || item.lojaId === lojaId)
+    .filter((item) => !lojaId || item.lojaId === lojaId)
     .filter((item) => !STATUS_FINAIS_INVALIDOS.has(item.status))
     .filter((item) => item.dataAgenda >= inicio && item.dataAgenda <= fim);
   // Atendimento coberto pelo plano não é receita avulsa (a receita é a mensalidade).
@@ -993,7 +1011,11 @@ export function ocupacaoAgenda(empresaId, { inicio, fim, lojaId = '' } = {}) {
       atendimentos: proprios.length,
       concluidos: concluidos.length,
       minutosConcluidos: concluidos.reduce((soma, item) => soma + Number(item.duracaoMinutos || 0), 0),
-      receita: Number(concluidos.reduce((soma, item) => soma + (cobertosPeloPlano.has(item.id) ? 0 : Number(item.valorRecebido || item.valor || 0)), 0).toFixed(2)),
+      receita: Number(concluidos.reduce((soma, item) => {
+        if (cobertosPeloPlano.has(item.id)) return soma;
+        const recebimento = barbearia.recebimentoAgendamentoVerificado(empresaId, item);
+        return soma + (recebimento ? Number(recebimento.valor || 0) : 0);
+      }, 0).toFixed(2)),
       cobertosPeloPlano: concluidos.filter((item) => cobertosPeloPlano.has(item.id)).length,
     };
   });
@@ -1358,15 +1380,16 @@ export function registrarCanalAgendamento(empresaId, agendamentoId, { canal, cam
 /** Agendamentos, clientes novos, concluídos e receita por canal no período. */
 // Valor do atendimento: o maior entre o preço e o recebido no dia (o sinal e o
 // cashback, pagos em outro momento, não reduzem o valor gerado pelo canal).
-function valorDoAtendimento(item) {
-  return dinheiro(Math.max(Number(item.valor || 0), Number(item.valorRecebido || 0)));
+function valorDoAtendimento(empresaId, item) {
+  const recebimento = barbearia.recebimentoAgendamentoVerificado(empresaId, item);
+  return recebimento ? dinheiro(Math.max(Number(item.valor || 0), Number(recebimento.valor || 0))) : 0;
 }
 
 export function painelCanais(empresaId, { inicio, fim, lojaId = '' } = {}) {
   const de = /^\d{4}-\d{2}-\d{2}$/.test(String(inicio || '')) ? inicio : '0000-01-01';
   const ate = /^\d{4}-\d{2}-\d{2}$/.test(String(fim || '')) ? fim : '9999-12-31';
   const canais = captacao(empresaId).canais;
-  const todos = barbearia.listarAgendamentos(empresaId, {}).filter((item) => !lojaId || !item.lojaId || item.lojaId === lojaId);
+  const todos = barbearia.listarAgendamentos(empresaId, {}).filter((item) => !lojaId || item.lojaId === lojaId);
   // Primeiro agendamento de cada telefone: define quem é cliente novo.
   const primeiro = new Map();
   for (const item of [...todos].sort((a, b) => String(a.dataHora).localeCompare(String(b.dataHora)))) {
@@ -1383,7 +1406,7 @@ export function painelCanais(empresaId, { inicio, fim, lojaId = '' } = {}) {
     linha.agendamentos += 1;
     const chave = telefoneChave(item.clienteTelefone) || `id:${item.clienteId || item.id}`;
     if (primeiro.get(chave) === item.id) linha.clientesNovos += 1;
-    if (item.status === 'concluido') { linha.concluidos += 1; linha.receita = dinheiro(linha.receita + valorDoAtendimento(item)); }
+    if (item.status === 'concluido') { linha.concluidos += 1; linha.receita = dinheiro(linha.receita + valorDoAtendimento(empresaId, item)); }
     if (['cancelado', 'nao_compareceu'].includes(item.status)) linha.cancelados += 1;
     linhas.set(nome, linha);
   }
@@ -1414,7 +1437,7 @@ export function painelReceitaIa(empresaId, { inicio, fim, lojaId = '' } = {}) {
     indicacao: { fonte: 'Indique um amigo', agendamentos: 0, concluidos: 0, receita: 0 },
   };
   for (const item of barbearia.listarAgendamentos(empresaId, {})) {
-    if (lojaId && item.lojaId && item.lojaId !== lojaId) continue;
+    if (lojaId && item.lojaId !== lojaId) continue;
     const dia = item.dataAgenda || String(item.dataHora).slice(0, 10);
     if (dia < de || dia > ate) continue;
     const fontes = [];
@@ -1424,10 +1447,10 @@ export function painelReceitaIa(empresaId, { inicio, fim, lojaId = '' } = {}) {
     for (const fonte of fontes) {
       const linha = linhas[fonte];
       linha.agendamentos += 1;
-      if (item.status === 'concluido') { linha.concluidos += 1; linha.receita = dinheiro(linha.receita + valorDoAtendimento(item)); }
+      if (item.status === 'concluido') { linha.concluidos += 1; linha.receita = dinheiro(linha.receita + valorDoAtendimento(empresaId, item)); }
     }
     // Um atendimento com duas fontes (ex.: indicação marcada pela IA) conta uma vez no total.
-    if (fontes.length && item.status === 'concluido') totalUnico = dinheiro(totalUnico + valorDoAtendimento(item));
+    if (fontes.length && item.status === 'concluido') totalUnico = dinheiro(totalUnico + valorDoAtendimento(empresaId, item));
   }
   const lista = Object.values(linhas);
   return { fontes: lista, receitaTotal: totalUnico };
@@ -1449,7 +1472,7 @@ export function comparativoUnidades(empresaId, { inicio, fim } = {}) {
     const lojaId = item.lojaId || '';
     const linha = porLoja.get(lojaId) || { lojaId, agendamentos: 0, concluidos: 0, faltas: 0, cancelados: 0, valorAtendido: 0, clientes: new Set() };
     linha.agendamentos += 1;
-    if (item.status === 'concluido') { linha.concluidos += 1; linha.valorAtendido = dinheiro(linha.valorAtendido + valorDoAtendimento(item)); }
+    if (item.status === 'concluido') { linha.concluidos += 1; linha.valorAtendido = dinheiro(linha.valorAtendido + valorDoAtendimento(empresaId, item)); }
     if (item.status === 'nao_compareceu') linha.faltas += 1;
     if (item.status === 'cancelado') linha.cancelados += 1;
     linha.clientes.add(telefoneChave(item.clienteTelefone) || item.clienteId || item.id);

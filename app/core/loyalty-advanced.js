@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const REWARD_STATUS = new Set(['rascunho', 'ativa', 'pausada', 'encerrada']);
@@ -62,6 +62,23 @@ function requireUuid(value, label) {
   if (!UUID_REGEX.test(value || '')) {
     throw new LoyaltyAdvancedError(`${label} inválido.`);
   }
+}
+
+function deterministicUuid(value) {
+  const hex = createHash('md5').update(String(value || '')).digest('hex').split('');
+  hex[12] = '5';
+  hex[16] = ((Number.parseInt(hex[16], 16) & 0x3) | 0x8).toString(16);
+  const joined = hex.join('');
+  return `${joined.slice(0, 8)}-${joined.slice(8, 12)}-${joined.slice(12, 16)}-${joined.slice(16, 20)}-${joined.slice(20, 32)}`;
+}
+
+function legacyPoints(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : fallback;
+}
+
+function legacyPhone(value) {
+  return String(value || '').replace(/\D/g, '');
 }
 
 export function defaultLoyaltyLevels() {
@@ -483,6 +500,188 @@ export async function getAdvancedLoyaltyOverview(db, scope) {
       pointsRedeemed: redemptions.filter(item => item.status !== 'cancelado').reduce((sum, item) => sum + Number(item.pontos_resgatados || 0), 0),
     },
   };
+}
+
+// A fidelidade legada não possui loja nem ledger imutável. Esta operação importa
+// somente o saldo do membro explicitamente selecionado para a loja da sessão,
+// nunca apaga o legado e pode ser simulada antes da confirmação.
+export async function reconcileLegacyLoyalty(db, {
+  empresaId, lojaId, legacyMembers = [], usuarioId = null, dryRun = true,
+} = {}) {
+  requireScope({ empresaId, lojaId });
+  if (!Array.isArray(legacyMembers) || legacyMembers.length > 5000) {
+    throw new LoyaltyAdvancedError('A lista legada deve conter até 5.000 membros.', 400, 'LEGACY_MEMBER_LIST_INVALID');
+  }
+  const client = await db.beginTransaction();
+  const summary = {
+    dryRun: dryRun !== false,
+    total: legacyMembers.length,
+    matched: 0,
+    migrated: 0,
+    unchanged: 0,
+    unmatched: 0,
+    ambiguous: 0,
+    pointsCredited: 0,
+    pointsAdjusted: 0,
+    items: [],
+  };
+  try {
+    await assertStore(db, client, empresaId, lojaId);
+    for (const member of legacyMembers) {
+      const memberKey = String(member?.id || member?.clienteId || member?.nome || '').trim().slice(0, 160);
+      const clienteId = String(member?.clienteId || '').trim();
+      if (!memberKey || !clienteId) {
+        summary.unmatched += 1;
+        summary.items.push({ memberId: memberKey || null, status: 'sem_identidade' });
+        continue;
+      }
+
+      let customerRows;
+      if (UUID_REGEX.test(clienteId)) {
+        customerRows = (await db.queryInTransaction(
+          client,
+          'SELECT id, nome, telefone FROM commerce_customers WHERE empresa_id = $1 AND id = $2 AND bloqueado = false',
+          [empresaId, clienteId],
+        )).rows;
+      } else {
+        const phone = legacyPhone(member?.telefone);
+        if (!phone) {
+          summary.unmatched += 1;
+          summary.items.push({ memberId: memberKey, status: 'sem_telefone', nome: member?.nome || null });
+          continue;
+        }
+        customerRows = (await db.queryInTransaction(
+          client,
+          `SELECT id, nome, telefone FROM commerce_customers
+            WHERE empresa_id = $1 AND bloqueado = false
+              AND regexp_replace(COALESCE(telefone, ''), '[^0-9]', '', 'g') = $2
+            ORDER BY id LIMIT 2`,
+          [empresaId, phone],
+        )).rows;
+      }
+      if (customerRows.length > 1) {
+        summary.ambiguous += 1;
+        summary.items.push({ memberId: memberKey, status: 'correspondencia_ambigua', nome: member?.nome || null });
+        continue;
+      }
+      const customer = customerRows[0];
+      if (!customer) {
+        summary.unmatched += 1;
+        summary.items.push({ memberId: memberKey, status: 'cliente_nao_encontrado', nome: member?.nome || null });
+        continue;
+      }
+      summary.matched += 1;
+
+      let accountResult = await db.queryInTransaction(
+        client,
+        `SELECT id, saldo_pontos, pontos_acumulados
+           FROM commerce_loyalty_accounts
+          WHERE empresa_id = $1 AND loja_id = $2 AND customer_id = $3
+          FOR UPDATE`,
+        [empresaId, lojaId, customer.id],
+      );
+      let account = accountResult.rows[0] || null;
+      const legacyAccumulated = legacyPoints(member?.pontosAcumulados ?? member?.pontos_acumulados, legacyPoints(member?.pontos));
+      const hasLegacyBalance = member?.pontos !== undefined && member?.pontos !== null;
+      const legacyBalance = legacyPoints(member?.pontos, 0);
+      const currentAccumulated = legacyPoints(account?.pontos_acumulados);
+      const currentBalance = legacyPoints(account?.saldo_pontos);
+      const desiredAccumulated = Math.max(currentAccumulated, legacyAccumulated);
+      const desiredBalance = hasLegacyBalance ? legacyBalance : currentBalance;
+      const creditDelta = desiredAccumulated - currentAccumulated;
+
+      if (!account && (desiredAccumulated > 0 || desiredBalance > 0)) {
+        account = (await db.queryInTransaction(
+          client,
+          `INSERT INTO commerce_loyalty_accounts
+             (empresa_id, loja_id, customer_id, saldo_pontos, pontos_acumulados)
+           VALUES ($1, $2, $3, 0, 0)
+           ON CONFLICT (empresa_id, loja_id, customer_id) DO UPDATE
+             SET atualizado_em = CURRENT_TIMESTAMP
+           RETURNING id, saldo_pontos, pontos_acumulados`,
+          [empresaId, lojaId, customer.id],
+        )).rows[0];
+      }
+
+      if (!account) {
+        summary.unchanged += 1;
+        summary.items.push({ memberId: memberKey, customerId: customer.id, status: 'sem_pontos' });
+        continue;
+      }
+
+      let saldoAtual = currentBalance;
+      if (creditDelta > 0) {
+        const saldoPosterior = saldoAtual + creditDelta;
+        if (dryRun === false) {
+          await db.queryInTransaction(
+            client,
+            `INSERT INTO commerce_loyalty_ledger
+              (empresa_id, loja_id, account_id, customer_id, tipo, pontos, saldo_anterior,
+               saldo_posterior, descricao, referencia_tipo, referencia_id, criado_por)
+             VALUES ($1, $2, $3, $4, 'credito', $5, $6, $7, $8, 'legacy_reconciliation', $9, $10)
+             ON CONFLICT (empresa_id, loja_id, referencia_tipo, referencia_id, tipo) DO NOTHING`,
+            [empresaId, lojaId, account.id, customer.id, creditDelta, saldoAtual, saldoPosterior,
+              `Reconciliação da fidelidade legada — ${String(member?.nome || customer.nome).slice(0, 170)}`,
+              deterministicUuid(`${empresaId}:${lojaId}:${memberKey}:credito:${desiredAccumulated}`), usuarioId],
+          );
+          await db.queryInTransaction(
+            client,
+            `UPDATE commerce_loyalty_accounts
+                SET saldo_pontos = $1, pontos_acumulados = $2, atualizado_em = CURRENT_TIMESTAMP
+              WHERE id = $3 AND empresa_id = $4 AND loja_id = $5`,
+            [saldoPosterior, desiredAccumulated, account.id, empresaId, lojaId],
+          );
+        }
+        saldoAtual = saldoPosterior;
+        summary.pointsCredited += creditDelta;
+      }
+
+      const ajuste = desiredBalance - saldoAtual;
+      if (ajuste !== 0) {
+        if (dryRun === false) {
+          await db.queryInTransaction(
+            client,
+            `INSERT INTO commerce_loyalty_ledger
+              (empresa_id, loja_id, account_id, customer_id, tipo, pontos, saldo_anterior,
+               saldo_posterior, descricao, referencia_tipo, referencia_id, criado_por)
+             VALUES ($1, $2, $3, $4, 'ajuste', $5, $6, $7, $8, 'legacy_reconciliation', $9, $10)
+             ON CONFLICT (empresa_id, loja_id, referencia_tipo, referencia_id, tipo) DO NOTHING`,
+            [empresaId, lojaId, account.id, customer.id, ajuste, saldoAtual, desiredBalance,
+              `Ajuste do saldo legado — ${String(member?.nome || customer.nome).slice(0, 170)}`,
+              deterministicUuid(`${empresaId}:${lojaId}:${memberKey}:saldo:${desiredBalance}:${desiredAccumulated}`), usuarioId],
+          );
+          await db.queryInTransaction(
+            client,
+            `UPDATE commerce_loyalty_accounts
+                SET saldo_pontos = $1, pontos_acumulados = $2, atualizado_em = CURRENT_TIMESTAMP
+              WHERE id = $3 AND empresa_id = $4 AND loja_id = $5`,
+            [desiredBalance, desiredAccumulated, account.id, empresaId, lojaId],
+          );
+        }
+        summary.pointsAdjusted += ajuste;
+      }
+
+      const changed = creditDelta !== 0 || ajuste !== 0 || !accountResult.rows[0];
+      if (changed) summary.migrated += 1;
+      else summary.unchanged += 1;
+      summary.items.push({
+        memberId: memberKey,
+        customerId: customer.id,
+        nome: customer.nome,
+        status: changed ? 'reconciliavel' : 'sincronizado',
+        pontosAcumuladosOrigem: legacyAccumulated,
+        saldoOrigem: hasLegacyBalance ? legacyBalance : null,
+        pontosAImportar: creditDelta,
+        ajusteSaldo: ajuste,
+      });
+    }
+    if (dryRun === false) await db.commit(client);
+    else await db.rollback(client);
+    return summary;
+  } catch (error) {
+    await db.rollback(client);
+    throw error;
+  }
 }
 
 export async function getCustomerLoyaltyStatus(db, { empresaId, lojaId, clienteId }) {

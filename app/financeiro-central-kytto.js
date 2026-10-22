@@ -102,6 +102,7 @@ export function registrarLancamento(empresaId, dados = {}) {
     dataOperacao,
     pagoEm,
     meioPagamento: texto(dados.meioPagamento || '', 40).toLowerCase() || null,
+    lojaId: texto(dados.lojaId, 120),
     observacao: texto(dados.observacao || dados.obs || '', 500),
     referencia: normalizarReferencia(dados.referencia),
     usuario: texto(dados.usuario || 'sistema@kytto.local', 120),
@@ -139,6 +140,7 @@ export function atualizarLancamento(empresaId, id, dados = {}, { permitirAutomat
   if (dados.descricao !== undefined) lancamento.descricao = texto(dados.descricao, 240) || lancamento.descricao;
   if (dados.vencimento !== undefined) lancamento.vencimento = dataCurta(dados.vencimento);
   if (dados.meioPagamento !== undefined) lancamento.meioPagamento = texto(dados.meioPagamento, 40).toLowerCase() || null;
+  if (dados.lojaId !== undefined) lancamento.lojaId = texto(dados.lojaId, 120);
   if (dados.observacao !== undefined || dados.obs !== undefined) lancamento.observacao = texto(dados.observacao ?? dados.obs, 500);
   if (dados.referencia !== undefined) lancamento.referencia = normalizarReferencia(dados.referencia);
 
@@ -171,6 +173,7 @@ export function listarLancamentos(empresaId, filtros = {}) {
   const categoria = texto(filtros.categoria, 100);
   const de = texto(filtros.de, 10);
   const ate = texto(filtros.ate, 10);
+  const lojaId = texto(filtros.lojaId, 120);
 
   return Object.values(store.lancamentos)
     .filter((item) => item.empresaId === String(empresaId))
@@ -180,6 +183,7 @@ export function listarLancamentos(empresaId, filtros = {}) {
     .filter((item) => !categoria || item.categoria === categoria)
     .filter((item) => !de || item.vencimento >= de)
     .filter((item) => !ate || item.vencimento <= ate)
+    .filter((item) => !lojaId || item.lojaId === lojaId)
     .sort((a, b) => String(b.dataOperacao).localeCompare(String(a.dataOperacao)) || String(b.criadoEm).localeCompare(String(a.criadoEm)))
     .map(serializar);
 }

@@ -35,6 +35,13 @@ test('migration 044 permanece imutável e o ledger Commerce entra somente pela 0
 test('visão avançada exige customers.read no runtime produtivo', () => {
   assert.match(routeBlock('get', '/api/admin/fidelidade/avancada'), /loyaltyAdvancedContext\(req, 'customers\.read'\)/);
   assert.match(routeBlock('get', '/api/admin/fidelidade/avancada/clientes/:id'), /loyaltyAdvancedContext\(req, 'customers\.read'\)/);
+  assert.match(routeBlock('get', '/api/admin/fidelidade/avancada/reconciliacao-legada'), /dryRun:\s*true/);
+});
+
+test('reconciliação legada exige customers.write e confirmação explícita', () => {
+  assert.match(routeBlock('post', '/api/admin/fidelidade/avancada/reconciliacao-legada'), /loyaltyAdvancedContext\(req, 'customers\.write'\)/);
+  assert.match(routeBlock('post', '/api/admin/fidelidade/avancada/reconciliacao-legada'), /confirmar !== true/);
+  assert.match(routeBlock('post', '/api/admin/fidelidade/avancada/reconciliacao-legada'), /dryRun:\s*false/);
 });
 
 test('configuração exige settings.write e níveis e catálogo exigem customers.write no runtime produtivo', () => {
@@ -66,4 +73,6 @@ test('painel usa somente o namespace administrativo produtivo', () => {
   assert.doesNotMatch(panel, /\/api\/omnichannel\/fidelidade/);
   assert.match(panel, /confirmar:\s*true/);
   assert.match(panel, /idempotency_key:\s*redemption\.idempotencyKey/);
+  assert.match(panel, /reconciliacao-legada/);
+  assert.match(panel, /Calcular prévia/);
 });

@@ -19,6 +19,7 @@ const financeiro = await import('./financeiro-central-kytto.js');
 
 const EMPRESA = '0f0e0d0c-1b2a-4c3d-8e9f-0123456789ab';
 const LOJA = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+const OUTRA_LOJA = 'bbbbbbbb-cccc-4ddd-8eee-ffffffffffff';
 const DIA_MS = 86400000;
 const TODOS = [0, 1, 2, 3, 4, 5, 6];
 const dataLocal = (ms) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cuiaba' }).format(new Date(ms));
@@ -36,7 +37,15 @@ function agendar({ bruno, corte, dias = 1, hora = '10:00', telefone = '659999900
 }
 function concluir(ag) {
   barbearia.alterarStatusAgendamento(EMPRESA, ag.id, 'em_atendimento');
-  return barbearia.alterarStatusAgendamento(EMPRESA, ag.id, 'concluido');
+  const concluido = barbearia.alterarStatusAgendamento(EMPRESA, ag.id, 'concluido');
+  const agora = new Date().toISOString();
+  const lancamento = financeiro.registrarLancamento(EMPRESA, {
+    tipo: 'receita', categoria: 'Serviços', descricao: `Atendimento ${ag.id}`, valor: ag.valor,
+    origem: 'barbearia_atendimento', status: 'pago', meioPagamento: 'pix', dataOperacao: agora, pagoEm: agora,
+    lojaId: ag.lojaId, automatico: true, chaveIdempotencia: `barbearia_atendimento:${EMPRESA}:${ag.id}`,
+    referencia: { agendamentoId: ag.id, servicoId: ag.servicoId, profissionalId: ag.profissionalId },
+  });
+  return barbearia.vincularLancamentoFinanceiro(EMPRESA, concluido.id, lancamento.id);
 }
 const PIX = { chave: '12.345.678/0001-90', nomeRecebedor: 'Barbearia Dino Ltda', cidade: 'Tangará da Serra' };
 
@@ -324,4 +333,25 @@ test('régua do clube desligada não reenvia nem bloqueia', async () => {
   montar();
   cobranca.salvarConfiguracaoCobranca(EMPRESA, { pix: PIX, cobrancaClube: { ativa: false } });
   assert.deepEqual(cobranca.processarReguaClube(EMPRESA, { agora: Date.now() + 60 * DIA_MS }), { reenviar: [], bloqueadas: [] });
+});
+
+test('cobranças, vales e cashback não atravessam a unidade da sessão', async () => {
+  const base = montar();
+  cobranca.salvarConfiguracaoCobranca(EMPRESA, { pix: PIX, sinal: { ativo: true, tipo: 'fixo', valor: 20 }, vale: { ativo: true }, cashback: { percentual: 10 } });
+  const daLojaA = agendar(base);
+  const data = dataLocal(Date.now() + DIA_MS);
+  const daLojaB = barbearia.criarAgendamento(EMPRESA, {
+    clienteNome: 'Cliente B', clienteTelefone: '65988880008', profissionalId: base.bruno.id, servicoId: base.corte.id,
+    dataHora: isoLocal(data, '11:00'), dataAgenda: data, horaLocal: '11:00', lojaId: OUTRA_LOJA, origem: 'agendamento_online', codigoConfirmacao: 'LOJAB001',
+  });
+  const sinalA = await cobranca.criarSinalDoAgendamento(EMPRESA, daLojaA);
+  const sinalB = await cobranca.criarSinalDoAgendamento(EMPRESA, daLojaB);
+  assert.equal(sinalA.lojaId, LOJA);
+  assert.equal(sinalB.lojaId, OUTRA_LOJA);
+  assert.equal(cobranca.sinalDoAgendamento(EMPRESA, daLojaA.id, OUTRA_LOJA), null);
+  assert.equal(cobranca.listarCobrancas(EMPRESA, { lojaId: OUTRA_LOJA }).map((item) => item.id).includes(sinalA.id), false);
+  assert.throws(() => cobranca.confirmarCobranca(EMPRESA, sinalA.id, { origem: 'manual', lojaId: OUTRA_LOJA }), (e) => e.code === 'COBRANCA_NAO_ENCONTRADA');
+
+  const valeB = await cobranca.comprarVale(EMPRESA, { valor: 100, deNome: 'Cliente B', deTelefone: '65988880008', lojaId: OUTRA_LOJA });
+  assert.throws(() => cobranca.consultarVale(EMPRESA, valeB.vale.codigo, LOJA), (e) => e.code === 'VALE_NAO_ENCONTRADO');
 });

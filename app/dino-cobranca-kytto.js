@@ -140,7 +140,7 @@ export function salvarConfiguracaoCobranca(empresaId, dados = {}) {
   const clube = dados.cobrancaClube || {};
   const pix = dados.pix || {};
   const cashback = dados.cashback || {};
-  atual.configuracao = {
+  const configuracao = {
     sinal: {
       ativo: sinal.ativo === undefined ? c.sinal.ativo : sinal.ativo === true,
       tipo: ['percentual', 'fixo'].includes(sinal.tipo) ? sinal.tipo : c.sinal.tipo,
@@ -166,9 +166,12 @@ export function salvarConfiguracaoCobranca(empresaId, dados = {}) {
     },
     vale: { ativo: dados.vale?.ativo === undefined ? c.vale.ativo : dados.vale.ativo === true },
   };
-  if ((atual.configuracao.sinal.ativo || atual.configuracao.cobrancaClube.ativa || atual.configuracao.vale.ativo) && !provedorCobranca(empresaId)) {
+  const provedorDisponivel = infinitePayDaEmpresa(empresaId)
+    || Boolean(configuracao.pix.chave && configuracao.pix.nomeRecebedor && configuracao.pix.cidade);
+  if ((configuracao.sinal.ativo || configuracao.cobrancaClube.ativa || configuracao.vale.ativo) && !provedorDisponivel) {
     throw new CobrancaError('Configure a InfinitePay no servidor ou a chave Pix da barbearia antes de ligar as cobranças.', 'PROVEDOR_AUSENTE', 409);
   }
+  atual.configuracao = configuracao;
   save();
   return obterConfiguracaoCobranca(empresaId);
 }
@@ -217,7 +220,10 @@ function visaoCobranca(item) {
     pagoAposExpirar: item.pagoAposExpirar === true,
     pagoAposCancelar: item.pagoAposCancelar === true,
     duplicada: item.duplicada === true,
+    lojaId: item.lojaId || '',
     efeitoErro: item.efeitoErro || null,
+    receitaFinanceiraPendente: item.receitaFinanceiraPendente === true,
+    receitaFinanceiraErro: item.receitaFinanceiraErro || null,
     revisar: item.revisar || null,
   };
 }
@@ -234,7 +240,8 @@ export async function criarCobranca(empresaId, dados = {}, opcoes = {}) {
   if (!referencia) throw new CobrancaError('Referência da cobrança obrigatória.');
   if (valor < 1) throw new CobrancaError('Valor mínimo da cobrança: R$ 1,00.', 'VALOR_INVALIDO');
   const atual = estado(empresaId);
-  const existente = Object.values(atual.cobrancas).find((item) => item.tipo === tipo && item.referencia === referencia && ['pendente', 'paga'].includes(item.status));
+  const lojaId = texto(dados.lojaId, 120);
+  const existente = Object.values(atual.cobrancas).find((item) => item.tipo === tipo && item.referencia === referencia && (!lojaId || item.lojaId === lojaId) && ['pendente', 'paga'].includes(item.status));
   if (existente) return visaoCobranca(existente);
   const provedor = opcoes.provedor || provedorCobranca(empresaId);
   if (!provedor) throw new CobrancaError('Nenhum meio de cobrança configurado.', 'PROVEDOR_AUSENTE', 409);
@@ -250,6 +257,7 @@ export async function criarCobranca(empresaId, dados = {}, opcoes = {}) {
     clienteId: texto(dados.clienteId, 120),
     clienteNome: texto(dados.clienteNome, 120),
     telefone: texto(dados.telefone, 30),
+    lojaId,
     status: 'pendente',
     provedor,
     orderNsu,
@@ -273,13 +281,14 @@ export async function criarCobranca(empresaId, dados = {}, opcoes = {}) {
   return visaoCobranca(item);
 }
 
-export function obterCobranca(empresaId, cobrancaId) {
-  return visaoCobranca(estado(empresaId).cobrancas[String(cobrancaId)]);
+export function obterCobranca(empresaId, cobrancaId, lojaId = '') {
+  const item = estado(empresaId).cobrancas[String(cobrancaId)];
+  return item && (!lojaId || item.lojaId === String(lojaId)) ? visaoCobranca(item) : null;
 }
 
-export function listarCobrancas(empresaId, { status = '', tipo = '', limite = 200 } = {}) {
+export function listarCobrancas(empresaId, { status = '', tipo = '', lojaId = '', limite = 200 } = {}) {
   return Object.values(estado(empresaId).cobrancas)
-    .filter((item) => (!status || item.status === status) && (!tipo || item.tipo === tipo))
+    .filter((item) => (!status || item.status === status) && (!tipo || item.tipo === tipo) && (!lojaId || item.lojaId === String(lojaId)))
     .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))
     .slice(0, Math.min(500, Math.max(1, numero(limite, 200))))
     .map(visaoCobranca);
@@ -298,10 +307,15 @@ function registrarReceita(empresaId, item, meio) {
       dataOperacao: item.pagoEm,
       pagoEm: item.pagoEm,
       automatico: true,
+      lojaId: item.lojaId || '',
       chaveIdempotencia: `barbearia_cobranca:${empresaId}:${item.id}`,
       referencia: { cobrancaId: item.id, tipo: item.tipo, referencia: item.referencia },
     });
   } catch (erro) {
+    item.receitaFinanceiraPendente = true;
+    item.receitaFinanceiraErro = texto(erro?.message || erro, 200);
+    item.revisar = item.revisar || 'receita_financeira_pendente';
+    save();
     console.error('[Cobrança] lançamento financeiro:', erro?.message || erro);
     return null;
   }
@@ -342,10 +356,10 @@ function aplicarEfeitos(empresaId, item) {
  * Chamado só depois de uma verificação: webhook conferido na InfinitePay,
  * retorno conferido ou confirmação manual da equipe (Pix da chave).
  */
-export function confirmarCobranca(empresaId, cobrancaId, { origem = 'manual', usuario = '', transacao = '' } = {}, opcoes = {}) {
+export function confirmarCobranca(empresaId, cobrancaId, { origem = 'manual', usuario = '', transacao = '', lojaId = '' } = {}, opcoes = {}) {
   const atual = estado(empresaId);
   const item = atual.cobrancas[String(cobrancaId)];
-  if (!item) throw new CobrancaError('Cobrança não encontrada.', 'COBRANCA_NAO_ENCONTRADA', 404);
+  if (!item || (lojaId && item.lojaId !== String(lojaId))) throw new CobrancaError('Cobrança não encontrada.', 'COBRANCA_NAO_ENCONTRADA', 404);
   if (item.status === 'paga') return { ...visaoCobranca(item), repetida: true };
   if (origem === 'manual' && item.provedor !== 'pix_manual') throw new CobrancaError('Pagamento pela InfinitePay é confirmado automaticamente.', 'CONFIRMACAO_AUTOMATICA', 409);
   // Dinheiro que entrou é sempre registrado, mesmo em cobrança vencida ou
@@ -371,9 +385,9 @@ export function confirmarCobranca(empresaId, cobrancaId, { origem = 'manual', us
   return visaoCobranca(item);
 }
 
-export function cancelarCobranca(empresaId, cobrancaId, { usuario = '' } = {}) {
+export function cancelarCobranca(empresaId, cobrancaId, { usuario = '', lojaId = '' } = {}) {
   const item = estado(empresaId).cobrancas[String(cobrancaId)];
-  if (!item) throw new CobrancaError('Cobrança não encontrada.', 'COBRANCA_NAO_ENCONTRADA', 404);
+  if (!item || (lojaId && item.lojaId !== String(lojaId))) throw new CobrancaError('Cobrança não encontrada.', 'COBRANCA_NAO_ENCONTRADA', 404);
   if (item.status === 'paga') throw new CobrancaError('Cobrança paga não pode ser cancelada aqui; faça o estorno pelo meio de pagamento.', 'COBRANCA_PAGA', 409);
   item.status = 'cancelada';
   item.canceladoPor = texto(usuario, 120) || 'equipe';
@@ -383,11 +397,11 @@ export function cancelarCobranca(empresaId, cobrancaId, { usuario = '' } = {}) {
 }
 
 /** Horário cancelado: o sinal pendente deixa de valer (pago depois, vira "revisar"). */
-export function cancelarSinalPendente(empresaId, agendamentoId) {
+export function cancelarSinalPendente(empresaId, agendamentoId, lojaId = '') {
   const atual = estado(empresaId);
   let mudou = false;
   for (const item of Object.values(atual.cobrancas)) {
-    if (item.tipo === 'sinal' && item.status === 'pendente' && item.referencia === `sinal:${agendamentoId}`) {
+    if (item.tipo === 'sinal' && item.status === 'pendente' && item.referencia === `sinal:${agendamentoId}` && (!lojaId || item.lojaId === String(lojaId))) {
       item.status = 'cancelada'; item.canceladoPor = 'horario_cancelado'; item.canceladoEm = new Date().toISOString(); mudou = true;
     }
   }
@@ -460,13 +474,14 @@ export async function criarSinalDoAgendamento(empresaId, agendamento, opcoes = {
     clienteId: agendamento.clienteId,
     clienteNome: agendamento.clienteNome,
     telefone: agendamento.clienteTelefone,
+    lojaId: agendamento.lojaId,
     expiraEm: iso(agoraMs(opcoes) + prazo * 60000),
   }, opcoes);
 }
 
-export function sinalDoAgendamento(empresaId, agendamentoId) {
+export function sinalDoAgendamento(empresaId, agendamentoId, lojaId = '') {
   const item = Object.values(estado(empresaId).cobrancas)
-    .filter((cob) => cob.tipo === 'sinal' && cob.referencia === `sinal:${agendamentoId}`)
+    .filter((cob) => cob.tipo === 'sinal' && cob.referencia === `sinal:${agendamentoId}` && (!lojaId || cob.lojaId === String(lojaId)))
     .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))[0];
   return visaoCobranca(item);
 }
@@ -528,6 +543,7 @@ export async function gerarCobrancasDoClube(empresaId, opcoes = {}) {
   const limite = ms + atual.configuracao.cobrancaClube.diasAntes * DIA_MS;
   const criadas = [];
   for (const assinatura of barbearia.listarAssinaturas(empresaId).filter((item) => item.status === 'ativa')) {
+    if (opcoes.lojaId && assinatura.lojaId && String(assinatura.lojaId) !== String(opcoes.lojaId)) continue;
     const resumo = captacao.resumoAssinatura(empresaId, assinatura.id, opcoes);
     if (!resumo?.plano || numero(resumo.plano.preco) < 1) continue;
     const pagoAte = resumo.pagoAte ? new Date(resumo.pagoAte).valueOf() : null;
@@ -544,6 +560,7 @@ export async function gerarCobrancasDoClube(empresaId, opcoes = {}) {
         clienteId: assinatura.clienteId,
         clienteNome: assinatura.clienteNome || cliente?.nome || '',
         telefone: cliente?.telefone || '',
+        lojaId: opcoes.lojaId || assinatura.lojaId || '',
       }, opcoes);
       criadas.push(cobranca);
     } catch (erro) {
@@ -677,7 +694,8 @@ export function saldoCashback(empresaId, telefone, opcoes = {}) {
   const chave = chaveCarteira(telefone);
   const registro = chave ? estado(empresaId).carteiras[chave] : null;
   const { percentual, validadeDias } = estado(empresaId).configuracao.cashback;
-  const { saldo, proximoVencimento } = calcularSaldo(registro?.movimentos || [], agoraMs(opcoes));
+  const movimentos = opcoes.lojaId ? (registro?.movimentos || []).filter((item) => item.lojaId === String(opcoes.lojaId)) : (registro?.movimentos || []);
+  const { saldo, proximoVencimento } = calcularSaldo(movimentos, agoraMs(opcoes));
   return { saldo, proximoVencimento, percentual, validadeDias, ativo: percentual > 0 };
 }
 
@@ -695,7 +713,7 @@ export function creditarCashback(empresaId, agendamento, opcoes = {}) {
   const referencia = `credito:${agendamento.id}`;
   if (conta.movimentos.some((m) => m.referencia === referencia)) return saldoCashback(empresaId, agendamento.clienteTelefone, opcoes);
   const ms = agoraMs(opcoes);
-  conta.movimentos.push({ tipo: 'credito', valor, referencia, em: iso(ms), expiraEm: iso(ms + validadeDias * DIA_MS) });
+  conta.movimentos.push({ tipo: 'credito', valor, referencia, lojaId: texto(opcoes.lojaId, 120), em: iso(ms), expiraEm: iso(ms + validadeDias * DIA_MS) });
   save();
   return { creditado: valor, ...saldoCashback(empresaId, agendamento.clienteTelefone, opcoes) };
 }
@@ -708,11 +726,12 @@ export function usarCashback(empresaId, { telefone, valor, referencia, usuario =
   if (!ref) throw new CobrancaError('Referência obrigatória.');
   const repetido = conta.movimentos.find((m) => m.referencia === `debito:${ref}`);
   if (repetido) return { usado: repetido.valor, repetido: true, ...saldoCashback(empresaId, telefone, opcoes) };
-  const { saldo } = calcularSaldo(conta.movimentos, agoraMs(opcoes));
+  const movimentos = opcoes.lojaId ? conta.movimentos.filter((item) => item.lojaId === String(opcoes.lojaId)) : conta.movimentos;
+  const { saldo } = calcularSaldo(movimentos, agoraMs(opcoes));
   const pedido = dinheiro(valor);
   if (pedido <= 0) throw new CobrancaError('Informe o valor a usar.', 'VALOR_INVALIDO');
   if (pedido > saldo) throw new CobrancaError(`Saldo de cashback insuficiente (R$ ${saldo.toFixed(2).replace('.', ',')}).`, 'SALDO_INSUFICIENTE', 409);
-  conta.movimentos.push({ tipo: 'debito', valor: pedido, referencia: `debito:${ref}`, em: iso(agoraMs(opcoes)), usuario: texto(usuario, 120) || null });
+  conta.movimentos.push({ tipo: 'debito', valor: pedido, referencia: `debito:${ref}`, lojaId: texto(opcoes.lojaId, 120), em: iso(agoraMs(opcoes)), usuario: texto(usuario, 120) || null });
   save();
   return { usado: pedido, ...saldoCashback(empresaId, telefone, opcoes) };
 }
@@ -720,7 +739,7 @@ export function usarCashback(empresaId, { telefone, valor, referencia, usuario =
 // ── Painel ─────────────────────────────────────────────────────────────────
 
 export function painelCobrancas(empresaId, opcoes = {}) {
-  const lista = Object.values(estado(empresaId).cobrancas);
+  const lista = Object.values(estado(empresaId).cobrancas).filter((item) => !opcoes.lojaId || item.lojaId === String(opcoes.lojaId));
   const soma = (filtro) => dinheiro(lista.filter(filtro).reduce((total, item) => total + item.valor, 0));
   const desde = agoraMs(opcoes) - 30 * DIA_MS;
   const recentes = (item) => new Date(item.criadoEm).valueOf() >= desde;
@@ -733,8 +752,11 @@ export function painelCobrancas(empresaId, opcoes = {}) {
       clubeRecebido: soma((i) => recentes(i) && i.tipo === 'assinatura' && i.status === 'paga'),
       clubePendente: soma((i) => i.tipo === 'assinatura' && i.status === 'pendente'),
     },
-    cashbackEmAberto: dinheiro(carteiras.reduce((total, conta) => total + calcularSaldo(conta.movimentos, agoraMs(opcoes)).saldo, 0)),
-    cobrancas: listarCobrancas(empresaId, { limite: 100 }),
+    cashbackEmAberto: dinheiro(carteiras.reduce((total, conta) => {
+      const movimentos = opcoes.lojaId ? conta.movimentos.filter((item) => item.lojaId === String(opcoes.lojaId)) : conta.movimentos;
+      return total + calcularSaldo(movimentos, agoraMs(opcoes)).saldo;
+    }, 0)),
+    cobrancas: listarCobrancas(empresaId, { lojaId: opcoes.lojaId, limite: 100 }),
   };
 }
 
@@ -783,13 +805,14 @@ function visaoVale(vale, { comCodigo = false } = {}) {
     validoAte: vale.validoAte || null,
     criadoEm: vale.criadoEm,
     origem: vale.origem,
+    lojaId: vale.lojaId || '',
   };
 }
 
 const VALE_MIN = 20;
 const VALE_MAX = 2000;
 
-function novoVale(empresaId, { valor, deNome, deTelefone, paraNome, mensagem, origem }) {
+function novoVale(empresaId, { valor, deNome, deTelefone, paraNome, mensagem, origem, lojaId = '' }) {
   const v = dinheiro(valor);
   if (v < VALE_MIN || v > VALE_MAX) throw new CobrancaError(`O vale-presente vai de R$ ${VALE_MIN} a R$ ${VALE_MAX}.`, 'VALE_VALOR_INVALIDO');
   const lista = vales(empresaId);
@@ -806,6 +829,7 @@ function novoVale(empresaId, { valor, deNome, deTelefone, paraNome, mensagem, or
     paraNome: texto(paraNome, 80),
     mensagem: texto(mensagem, 200),
     origem,
+    lojaId: texto(lojaId, 120),
     usos: [],
     criadoEm: new Date().toISOString(),
   };
@@ -828,6 +852,7 @@ export async function comprarVale(empresaId, dados = {}, opcoes = {}) {
       tipo: 'vale', referencia: `vale:${vale.id}`, valor: vale.valor,
       descricao: `Vale-presente${vale.paraNome ? ` para ${vale.paraNome}` : ''}`,
       clienteNome: vale.deNome, telefone: vale.deTelefone,
+      lojaId: vale.lojaId,
       expiraEm: iso(agoraMs(opcoes) + 24 * 60 * 60 * 1000),
     }, opcoes);
     return { vale: visaoVale(vale, { comCodigo: true }), pagamento: { valor: cobranca.valor, url: cobranca.url, pixCopiaECola: cobranca.pixCopiaECola, provedor: cobranca.provedor } };
@@ -839,10 +864,10 @@ export async function comprarVale(empresaId, dados = {}, opcoes = {}) {
 }
 
 /** Venda no balcão: a gestão confirma o recebimento; o vale já nasce ativo e a receita é lançada. */
-export function venderValeNoBalcao(empresaId, dados = {}, { usuario = '' } = {}) {
+export function venderValeNoBalcao(empresaId, dados = {}, { usuario = '', lojaId = '' } = {}) {
   const meio = texto(dados.meioPagamento, 40).toLowerCase();
   if (!meio) throw new CobrancaError('Informe o meio de pagamento.', 'DADOS_INVALIDOS');
-  const vale = novoVale(empresaId, { ...dados, origem: 'balcao' });
+  const vale = novoVale(empresaId, { ...dados, lojaId: lojaId || dados.lojaId, origem: 'balcao' });
   const pagoEm = new Date().toISOString();
   try {
     // Receita primeiro: sem lançamento, o vale não é emitido.
@@ -876,20 +901,20 @@ function ativarVale(empresaId, valeId, { cobrancaId = null, usuario = '' } = {})
   return vale;
 }
 
-export function consultarVale(empresaId, codigo) {
+export function consultarVale(empresaId, codigo, lojaId = '') {
   const normalizado = normalizarCodigoVale(codigo);
-  const vale = normalizado ? Object.values(vales(empresaId)).find((item) => item.codigo === normalizado) : null;
+  const vale = normalizado ? Object.values(vales(empresaId)).find((item) => item.codigo === normalizado && (!lojaId || item.lojaId === String(lojaId))) : null;
   if (!vale) throw new CobrancaError('Vale-presente não encontrado.', 'VALE_NAO_ENCONTRADO', 404);
   return visaoVale(vale);
 }
 
-export function listarVales(empresaId) {
-  return Object.values(vales(empresaId)).sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm))).slice(0, 300).map((vale) => visaoVale(vale));
+export function listarVales(empresaId, lojaId = '') {
+  return Object.values(vales(empresaId)).filter((vale) => !lojaId || vale.lojaId === String(lojaId)).sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm))).slice(0, 300).map((vale) => visaoVale(vale));
 }
 
-export function cancelarVale(empresaId, valeId, { usuario = '', motivo = '', meioEstorno = '' } = {}) {
+export function cancelarVale(empresaId, valeId, { usuario = '', motivo = '', meioEstorno = '', lojaId = '' } = {}) {
   const vale = vales(empresaId)[String(valeId)];
-  if (!vale) throw new CobrancaError('Vale-presente não encontrado.', 'VALE_NAO_ENCONTRADO', 404);
+  if (!vale || (lojaId && vale.lojaId !== String(lojaId))) throw new CobrancaError('Vale-presente não encontrado.', 'VALE_NAO_ENCONTRADO', 404);
   if ((vale.usos || []).length) throw new CobrancaError('Vale já usado não pode ser cancelado.', 'VALE_USADO', 409);
   if (vale.status === 'cancelado') return visaoVale(vale);
   const pago = vale.status === 'ativo';
@@ -921,17 +946,17 @@ export function cancelarVale(empresaId, valeId, { usuario = '', motivo = '', mei
 }
 
 /** Valor que o vale pode cobrir agora (sem debitar): saldo, ativo e dentro da validade. */
-export function saldoUtilVale(empresaId, codigo) {
+export function saldoUtilVale(empresaId, codigo, lojaId = '') {
   const normalizado = normalizarCodigoVale(codigo);
-  const vale = normalizado ? Object.values(vales(empresaId)).find((item) => item.codigo === normalizado) : null;
+  const vale = normalizado ? Object.values(vales(empresaId)).find((item) => item.codigo === normalizado && (!lojaId || item.lojaId === String(lojaId))) : null;
   if (!vale) throw new CobrancaError('Vale-presente não encontrado.', 'VALE_NAO_ENCONTRADO', 404);
   if (vale.status !== 'ativo') throw new CobrancaError(vale.status === 'aguardando_pagamento' ? 'Este vale ainda não foi pago.' : 'Este vale não está ativo.', 'VALE_INATIVO', 409);
   if (vale.validoAte && new Date(vale.validoAte).valueOf() < Date.now()) throw new CobrancaError('Este vale está vencido.', 'VALE_VENCIDO', 409);
   return { vale, saldo: saldoVale(vale) };
 }
 
-export function usarVale(empresaId, { codigo, valor, referencia, usuario = '' } = {}) {
-  const { vale, saldo } = saldoUtilVale(empresaId, codigo);
+export function usarVale(empresaId, { codigo, valor, referencia, usuario = '', lojaId = '' } = {}) {
+  const { vale, saldo } = saldoUtilVale(empresaId, codigo, lojaId);
   const ref = texto(referencia, 160);
   if (!ref) throw new CobrancaError('Referência obrigatória.');
   const repetido = (vale.usos || []).find((uso) => uso.referencia === ref);

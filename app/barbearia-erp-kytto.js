@@ -55,6 +55,17 @@ function diaOperacional(value) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: process.env.KYTTO_TIMEZONE || 'America/Cuiaba', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 }
 
+function horaOperacional(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return '';
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: process.env.KYTTO_TIMEZONE || 'America/Cuiaba',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(date);
+}
+
 function novoId(prefixo, bucket) {
   return `${prefixo}-${Date.now().toString(36)}-${String(Object.keys(bucket).length + 1).padStart(3, '0')}`;
 }
@@ -344,7 +355,9 @@ function agendamentoNormalizado(dados = {}, anterior = {}) {
     clienteTelefone: texto(dados.clienteTelefone ?? dados.cliente_telefone ?? anterior.clienteTelefone, 30),
         clienteEmail: texto(dados.clienteEmail ?? dados.cliente_email ?? anterior.clienteEmail, 160).toLowerCase(),
     lojaId: texto(dados.lojaId ?? dados.loja_id ?? anterior.lojaId, 120),
-    horaLocal: texto(dados.horaLocal ?? dados.hora_local ?? anterior.horaLocal, 5),
+    // Quando o cliente/admin envia somente dataHora, a jornada é validada no
+    // fuso operacional do servidor, nunca no fuso do navegador.
+    horaLocal: texto(dados.horaLocal ?? dados.hora_local ?? anterior.horaLocal, 5) || horaOperacional(dataHora),
     profissionalId:
  texto(dados.profissionalId ?? dados.profissional_id ?? anterior.profissionalId, 100),
     servicoId: texto(dados.servicoId ?? dados.servico_id ?? anterior.servicoId, 100),
@@ -765,6 +778,7 @@ export function alterarStatusAssinatura(empresaId, assinaturaId, status, dados =
 
 function produtoRevendaNormalizado(dados = {}, anterior = {}) {
   return {
+    lojaId: texto(dados.lojaId ?? dados.loja_id ?? anterior.lojaId, 120),
     nome: texto(dados.nome ?? anterior.nome, 140),
     sku: texto(dados.sku ?? anterior.sku, 80),
     // Código de barras (GTIN/EAN): casa o item da nota fiscal de entrada com o produto.
@@ -786,9 +800,10 @@ function statusEstoque(item) {
   return 'ok';
 }
 
-export function listarProdutosRevenda(empresaId, { incluirInativos = false } = {}) {
+export function listarProdutosRevenda(empresaId, { incluirInativos = false, lojaId = '' } = {}) {
   return Object.values(estadoEmpresa(empresaId, false).produtosRevenda)
     .filter((item) => incluirInativos || item.ativo !== false)
+    .filter((item) => !lojaId || item.lojaId === String(lojaId))
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
     .map((item) => ({ ...item, statusEstoque: statusEstoque(item) }));
 }
@@ -798,13 +813,15 @@ export function criarProdutoRevenda(empresaId, dados = {}) {
   const produto = produtoRevendaNormalizado(dados);
   if (!produto.nome) throw new Error('Nome do produto de revenda é obrigatório.');
   if (produto.precoVenda <= 0) throw new Error('Preço de venda deve ser positivo.');
-  if (Object.values(estado.produtosRevenda).some((item) => item.ativo !== false && item.nome.toLowerCase() === produto.nome.toLowerCase())) throw new Error('Já existe produto ativo de revenda com este nome.');
+  if (Object.values(estado.produtosRevenda).some((item) => item.ativo !== false
+    && item.nome.toLowerCase() === produto.nome.toLowerCase()
+    && item.lojaId === produto.lojaId)) throw new Error('Já existe produto ativo de revenda com este nome nesta unidade.');
   const id = novoId('rev', estado.produtosRevenda);
   const agora = dataAtual();
   estado.produtosRevenda[id] = { id, empresaId: String(empresaId), ...produto, criadoEm: agora, atualizadoEm: agora };
   if (produto.estoqueAtual > 0) {
     const movimentoId = novoId('mov', estado.movimentosEstoque);
-    estado.movimentosEstoque[movimentoId] = { id: movimentoId, empresaId: String(empresaId), produtoId: id, tipo: 'entrada_inicial', quantidade: produto.estoqueAtual, estoqueAnterior: 0, estoquePosterior: produto.estoqueAtual, observacao: 'Estoque inicial informado no cadastro.', criadoEm: agora };
+    estado.movimentosEstoque[movimentoId] = { id: movimentoId, empresaId: String(empresaId), lojaId: produto.lojaId || null, produtoId: id, tipo: 'entrada_inicial', quantidade: produto.estoqueAtual, estoqueAnterior: 0, estoquePosterior: produto.estoqueAtual, observacao: 'Estoque inicial informado no cadastro.', criadoEm: agora };
   }
   save();
   return { ...estado.produtosRevenda[id], statusEstoque: statusEstoque(estado.produtosRevenda[id]) };
@@ -814,6 +831,8 @@ export function atualizarProdutoRevenda(empresaId, produtoId, dados = {}) {
   const estado = estadoEmpresa(empresaId);
   const atual = estado.produtosRevenda[String(produtoId)];
   if (!atual || atual.empresaId !== String(empresaId)) return null;
+  const lojaId = texto(dados.lojaId ?? dados.loja_id, 120);
+  if (lojaId && atual.lojaId && atual.lojaId !== lojaId) return null;
   const produto = produtoRevendaNormalizado(dados, atual);
   if (!produto.nome || produto.precoVenda <= 0) throw new Error('Nome e preço positivo são obrigatórios para o produto.');
   if (produto.estoqueAtual !== atual.estoqueAtual) throw new Error('Use o endpoint de ajuste para alterar estoque e manter o histórico.');
@@ -826,6 +845,8 @@ export function ajustarEstoqueRevenda(empresaId, produtoId, dados = {}) {
   const estado = estadoEmpresa(empresaId);
   const produto = estado.produtosRevenda[String(produtoId)];
   if (!produto || produto.empresaId !== String(empresaId)) return null;
+  const lojaId = texto(dados.lojaId ?? dados.loja_id, 120);
+  if (lojaId && produto.lojaId && produto.lojaId !== lojaId) return null;
   const tipo = String(dados.tipo || 'ajuste');
   const quantidade = Math.round(numero(dados.quantidade ?? dados.qtd, NaN));
   if (!Number.isFinite(quantidade) || quantidade <= 0) throw new Error('Quantidade positiva é obrigatória.');
@@ -835,7 +856,7 @@ export function ajustarEstoqueRevenda(empresaId, produtoId, dados = {}) {
   if (posterior < 0) throw new Error('Estoque insuficiente para esta saída.');
   const agora = dataAtual();
   const movimentoId = novoId('mov', estado.movimentosEstoque);
-  estado.movimentosEstoque[movimentoId] = { id: movimentoId, empresaId: String(empresaId), produtoId: produto.id, tipo, quantidade, estoqueAnterior: anterior, estoquePosterior: posterior, observacao: texto(dados.observacao ?? dados.motivo, 300), criadoEm: agora };
+  estado.movimentosEstoque[movimentoId] = { id: movimentoId, empresaId: String(empresaId), lojaId: produto.lojaId || lojaId || null, produtoId: produto.id, tipo, quantidade, estoqueAnterior: anterior, estoquePosterior: posterior, observacao: texto(dados.observacao ?? dados.motivo, 300), criadoEm: agora };
   produto.estoqueAtual = posterior;
   produto.atualizadoEm = agora;
   produto.ultimoMovimentoEm = agora;
@@ -850,6 +871,8 @@ export function entradaEstoqueRevenda(empresaId, produtoId, dados = {}) {
   const estado = estadoEmpresa(empresaId);
   const produto = estado.produtosRevenda[String(produtoId)];
   if (!produto || produto.empresaId !== String(empresaId)) throw new Error('Produto de revenda não encontrado.');
+  const lojaId = texto(dados.lojaId ?? dados.loja_id, 120);
+  if (lojaId && produto.lojaId && produto.lojaId !== lojaId) throw new Error('Produto de revenda não pertence à unidade ativa.');
   const quantidade = Math.round(numero(dados.quantidade, NaN));
   if (!Number.isFinite(quantidade) || quantidade <= 0) throw new Error('Quantidade de entrada deve ser positiva.');
   const chave = texto(dados.chaveIdempotencia, 220);
@@ -873,6 +896,7 @@ export function entradaEstoqueRevenda(empresaId, produtoId, dados = {}) {
   estado.movimentosEstoque[movimentoId] = {
     id: movimentoId,
     empresaId: String(empresaId),
+    lojaId: produto.lojaId || lojaId || null,
     produtoId: produto.id,
     tipo: 'entrada_compra',
     quantidade,
@@ -916,17 +940,18 @@ export function custoMaterialServico(empresaId, servicoId) {
 export function listarMovimentosEstoque(empresaId, filtros = {}) {
   return Object.values(estadoEmpresa(empresaId, false).movimentosEstoque)
     .filter((item) => !filtros.produtoId || item.produtoId === String(filtros.produtoId))
+    .filter((item) => !filtros.lojaId || item.lojaId === String(filtros.lojaId))
     .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))
     .map((item) => ({ ...item }));
 }
 
-function itensVendaNormalizados(estado, empresaId, itens = []) {
+function itensVendaNormalizados(estado, empresaId, itens = [], lojaId = '') {
   if (!Array.isArray(itens) || itens.length === 0) throw new Error('A venda deve conter pelo menos um produto.');
   const normalizados = itens.map((item) => {
     const produtoId = String(item?.produtoId || item?.produto_id || '');
     const produto = estado.produtosRevenda[produtoId];
     const quantidade = Math.round(numero(item?.quantidade ?? item?.qtd, NaN));
-    if (!produto || produto.empresaId !== String(empresaId)) throw new Error('Produto de revenda inválido para a empresa ativa.');
+    if (!produto || produto.empresaId !== String(empresaId) || (lojaId && produto.lojaId && produto.lojaId !== String(lojaId))) throw new Error('Produto de revenda inválido para a empresa/unidade ativa.');
     if (produto.ativo === false) throw new Error(`Produto inativo: ${produto.nome}.`);
     if (!Number.isFinite(quantidade) || quantidade <= 0) throw new Error('Quantidade positiva é obrigatória para cada produto.');
     return { produtoId, nome: produto.nome, unidade: produto.unidade, quantidade, precoUnitario: produto.precoVenda, subtotal: dinheiro(produto.precoVenda * quantidade) };
@@ -948,24 +973,29 @@ export function listarVendasRevenda(empresaId, filtros = {}) {
     .filter((item) => !filtros.status || item.status === String(filtros.status))
     .filter((item) => !filtros.data || String(item.criadoEm).slice(0, 10) === String(filtros.data).slice(0, 10))
     .filter((item) => !filtros.profissionalId || item.profissionalId === String(filtros.profissionalId))
-    .filter((item) => !filtros.lojaId || !item.lojaId || item.lojaId === String(filtros.lojaId))
+    .filter((item) => !filtros.lojaId || item.lojaId === String(filtros.lojaId))
     .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))
     .map((item) => ({ ...item, itens: item.itens.map((linha) => ({ ...linha })) }));
 }
 
-export function obterVendaRevenda(empresaId, vendaId) {
+export function obterVendaRevenda(empresaId, vendaId, { lojaId = '' } = {}) {
   const venda = estadoEmpresa(empresaId, false).vendasRevenda[String(vendaId)];
-  return venda && venda.empresaId === String(empresaId) ? { ...venda, itens: venda.itens.map((item) => ({ ...item })) } : null;
+  if (!venda || venda.empresaId !== String(empresaId) || (lojaId && venda.lojaId !== String(lojaId))) return null;
+  return { ...venda, itens: venda.itens.map((item) => ({ ...item })) };
 }
 
 export function criarVendaRevenda(empresaId, dados = {}) {
   const estado = estadoEmpresa(empresaId);
   const chaveIdempotencia = texto(dados.chaveIdempotencia ?? dados.chave_idempotencia, 220);
+  const lojaId = texto(dados.lojaId ?? dados.loja_id, 120);
   if (chaveIdempotencia) {
     const existente = Object.values(estado.vendasRevenda).find((item) => item.chaveIdempotencia === chaveIdempotencia);
-    if (existente) return { ...existente, itens: existente.itens.map((item) => ({ ...item })) };
+    if (existente) {
+      if (lojaId && existente.lojaId !== lojaId) throw Object.assign(new Error('A chave de idempotência já foi usada em outra unidade.'), { code: 'IDEMPOTENCY_CONFLICT' });
+      return { ...existente, itens: existente.itens.map((item) => ({ ...item })) };
+    }
   }
-  const itens = itensVendaNormalizados(estado, empresaId, dados.itens);
+  const itens = itensVendaNormalizados(estado, empresaId, dados.itens, lojaId);
   const profissionalId = texto(dados.profissionalId ?? dados.profissional_id, 120);
   if (profissionalId && (!estado.profissionais[profissionalId] || estado.profissionais[profissionalId].ativo === false)) throw new Error('Profissional responsável não encontrado ou inativo.');
   const agora = dataAtual();
@@ -973,7 +1003,7 @@ export function criarVendaRevenda(empresaId, dados = {}) {
   const venda = {
     id,
     empresaId: String(empresaId),
-    lojaId: texto(dados.lojaId ?? dados.loja_id, 120),
+    lojaId,
     clienteId: texto(dados.clienteId ?? dados.cliente_id, 120),
     clienteNome: texto(dados.clienteNome ?? dados.cliente_nome, 160),
     profissionalId,
@@ -997,6 +1027,8 @@ export function finalizarVendaRevenda(empresaId, vendaId, dados = {}) {
   const estado = estadoEmpresa(empresaId);
   const venda = estado.vendasRevenda[String(vendaId)];
   if (!venda || venda.empresaId !== String(empresaId)) return null;
+  const lojaId = texto(dados.lojaId ?? dados.loja_id, 120);
+  if (lojaId && venda.lojaId !== lojaId) return null;
   if (venda.status === 'pago') return { ...venda, itens: venda.itens.map((item) => ({ ...item })) };
   if (dados.confirmadoPagamento !== true) throw new Error('A confirmação explícita do pagamento é obrigatória.');
   const meioPagamento = texto(dados.meioPagamento ?? dados.meio_pagamento, 40).toLowerCase();
@@ -1015,6 +1047,7 @@ export function finalizarVendaRevenda(empresaId, vendaId, dados = {}) {
     dataOperacao: agora,
     pagoEm: agora,
     meioPagamento,
+    lojaId: venda.lojaId || lojaId || null,
     usuario: dados.usuario,
     referencia: { pedidoId: venda.id },
     chaveIdempotencia: `barbearia_revenda:${empresaId}:${venda.id}`,
@@ -1026,7 +1059,7 @@ export function finalizarVendaRevenda(empresaId, vendaId, dados = {}) {
     produto.atualizadoEm = agora;
     produto.ultimoMovimentoEm = agora;
     const movimentoId = novoId('mov', estado.movimentosEstoque);
-    estado.movimentosEstoque[movimentoId] = { id: movimentoId, empresaId: String(empresaId), produtoId: produto.id, tipo: 'saida_venda', quantidade: item.quantidade, estoqueAnterior: anterior, estoquePosterior: produto.estoqueAtual, vendaId: venda.id, observacao: `Baixa da venda ${venda.id}.`, criadoEm: agora };
+    estado.movimentosEstoque[movimentoId] = { id: movimentoId, empresaId: String(empresaId), lojaId: produto.lojaId || venda.lojaId || lojaId || null, produtoId: produto.id, tipo: 'saida_venda', quantidade: item.quantidade, estoqueAnterior: anterior, estoquePosterior: produto.estoqueAtual, vendaId: venda.id, observacao: `Baixa da venda ${venda.id}.`, criadoEm: agora };
   }
   Object.assign(venda, { status: 'pago', estoqueBaixado: true, pagamento: { meioPagamento, valorRecebido, confirmadoEm: agora }, financeiroLancamentoId: financeiro.id, atualizadoEm: agora });
   save();
@@ -1064,6 +1097,7 @@ function itemComandaBarbeariaNormalizado(estado, comanda, dados = {}) {
   if (!['servico', 'produto'].includes(tipo)) throw new Error('Tipo de item inválido.');
   const cadastro = tipo === 'servico' ? estado.servicos[id] : estado.produtosRevenda[id];
   if (!cadastro || cadastro.empresaId !== String(comanda.empresaId) || cadastro.ativo === false) throw new Error(`${tipo === 'servico' ? 'Serviço' : 'Produto'} não encontrado ou inativo na empresa ativa.`);
+  if (tipo === 'produto' && comanda.lojaId && cadastro.lojaId && cadastro.lojaId !== comanda.lojaId) throw new Error('Produto de revenda não pertence à unidade da comanda.');
   const profissionalId = texto(dados.profissionalId ?? dados.profissional_id ?? comanda.profissionalId, 120);
   if (profissionalId && (!estado.profissionais[profissionalId] || estado.profissionais[profissionalId].ativo === false)) throw new Error('Profissional responsável não encontrado ou inativo.');
   const precoUnitario = dinheiro(tipo === 'servico' ? cadastro.preco : cadastro.precoVenda);
@@ -1114,6 +1148,7 @@ function validarEstoqueComandaBarbearia(estado, comanda, consumoPlanejado = plan
   for (const [produtoId, quantidade] of quantidades) {
     const produto = estado.produtosRevenda[produtoId];
     if (!produto || produto.ativo === false) throw new Error('Existe produto de revenda inativo na comanda ou na ficha técnica.');
+    if (comanda.lojaId && produto.lojaId && produto.lojaId !== comanda.lojaId) throw new Error('Existe produto de revenda de outra unidade na comanda.');
     if (Number(produto.estoqueAtual || 0) < quantidade) throw new Error(`Estoque insuficiente para ${produto.nome} (disponível: ${produto.estoqueAtual || 0}, necessário: ${quantidade}).`);
   }
 }
@@ -1420,6 +1455,7 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
       valor: pagamento.valor, origem: 'barbearia_comanda', status: pagamento.meio === 'conta' ? 'pendente' : 'pago',
       vencimento: pagamento.meio === 'conta' ? conta?.dataVencimento : dataAtual(), dataOperacao: dataAtual(),
       pagoEm: pagamento.meio === 'conta' ? null : dataAtual(), meioPagamento: pagamento.meio,
+      lojaId: comanda.lojaId || null,
       usuario: texto(dados.usuario, 120), automatico: true,
       chaveIdempotencia: `barbearia_comanda:${empresaId}:${comanda.id}:pagamento:${pagamento.id}`,
       referencia: { comandaId: comanda.id, clienteId: clienteId || undefined, profissionalId: comanda.profissionalId || undefined, contaReceberId: conta?.id, caixaId: pagamento.caixaId || undefined },
@@ -1461,7 +1497,7 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
       produto.atualizadoEm = dataAtual();
       produto.ultimoMovimentoEm = produto.atualizadoEm;
       const movimentoId = novoId('mov', estado.movimentosEstoque);
-      estado.movimentosEstoque[movimentoId] = { id: movimentoId, empresaId: String(empresaId), produtoId: produto.id, tipo: 'saida_comanda', quantidade: item.quantidade, estoqueAnterior: anterior, estoquePosterior: produto.estoqueAtual, comandaId: comanda.id, criadoEm: produto.atualizadoEm };
+      estado.movimentosEstoque[movimentoId] = { id: movimentoId, empresaId: String(empresaId), lojaId: produto.lojaId || comanda.lojaId || null, produtoId: produto.id, tipo: 'saida_comanda', quantidade: item.quantidade, estoqueAnterior: anterior, estoquePosterior: produto.estoqueAtual, comandaId: comanda.id, criadoEm: produto.atualizadoEm };
     }
     comanda.estoqueBaixadoAntes = true;
   }

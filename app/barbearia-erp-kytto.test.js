@@ -140,7 +140,7 @@ test('cria agenda com preço e duração do serviço e bloqueia conflito do mesm
     clienteNome: 'Cliente de teste',
     profissionalId: profissional.id,
     servicoId: servico.id,
-    dataHora: '2030-01-15T10:00:00.000Z',
+    dataHora: '2030-01-15T14:00:00.000Z',
     dataAgenda: '2030-01-15',
   };
   const agendamento = criarAgendamento(EMPRESA_A, dados);
@@ -156,16 +156,16 @@ test('cria agenda com preço e duração do serviço e bloqueia conflito do mesm
 test('remarca atendimento com histórico, preserva escopo e bloqueia conflito', () => {
   const profissional = baseProfissional();
   const servico = baseServico();
-  const agendamento = criarAgendamento(EMPRESA_A, { clienteNome: 'Cliente remarcação', profissionalId: profissional.id, servicoId: servico.id, dataHora: '2030-01-15T10:00:00.000Z', dataAgenda: '2030-01-15' });
-  criarAgendamento(EMPRESA_A, { clienteNome: 'Horário ocupado', profissionalId: profissional.id, servicoId: servico.id, dataHora: '2030-01-15T11:00:00.000Z', dataAgenda: '2030-01-15' });
+  const agendamento = criarAgendamento(EMPRESA_A, { clienteNome: 'Cliente remarcação', profissionalId: profissional.id, servicoId: servico.id, dataHora: '2030-01-15T14:00:00.000Z', dataAgenda: '2030-01-15' });
+  criarAgendamento(EMPRESA_A, { clienteNome: 'Horário ocupado', profissionalId: profissional.id, servicoId: servico.id, dataHora: '2030-01-15T15:00:00.000Z', dataAgenda: '2030-01-15' });
 
-  const remarcado = atualizarAgendamento(EMPRESA_A, agendamento.id, { dataHora: '2030-01-15T12:00:00.000Z', dataAgenda: '2030-01-15', profissionalId: profissional.id, servicoId: servico.id, origem: 'admin', usuario: 'operador-teste' });
-  assert.equal(remarcado.dataHora, '2030-01-15T12:00:00.000Z');
+  const remarcado = atualizarAgendamento(EMPRESA_A, agendamento.id, { dataHora: '2030-01-15T16:00:00.000Z', dataAgenda: '2030-01-15', profissionalId: profissional.id, servicoId: servico.id, origem: 'admin', usuario: 'operador-teste' });
+  assert.equal(remarcado.dataHora, '2030-01-15T16:00:00.000Z');
   assert.equal(remarcado.historicoRemarcacoes.length, 1);
-  assert.equal(remarcado.historicoRemarcacoes[0].antes.dataHora, '2030-01-15T10:00:00.000Z');
+  assert.equal(remarcado.historicoRemarcacoes[0].antes.dataHora, '2030-01-15T14:00:00.000Z');
   assert.equal(remarcado.historicoRemarcacoes[0].responsavel, 'operador-teste');
-  assert.throws(() => atualizarAgendamento(EMPRESA_A, agendamento.id, { dataHora: '2030-01-15T11:00:00.000Z', dataAgenda: '2030-01-15', profissionalId: profissional.id, servicoId: servico.id }), /Horário indisponível/);
-  assert.equal(atualizarAgendamento(EMPRESA_B, agendamento.id, { dataHora: '2030-01-15T13:00:00.000Z' }), null);
+  assert.throws(() => atualizarAgendamento(EMPRESA_A, agendamento.id, { dataHora: '2030-01-15T15:00:00.000Z', dataAgenda: '2030-01-15', profissionalId: profissional.id, servicoId: servico.id }), /Horário indisponível/);
+  assert.equal(atualizarAgendamento(EMPRESA_B, agendamento.id, { dataHora: '2030-01-15T17:00:00.000Z' }), null);
 });
 
 test('aplica calendário por unidade e não cruza conflito entre lojas diferentes', () => {
@@ -310,6 +310,15 @@ test('mantém estoque de revenda separado por empresa e exige histórico para al
   assert.throws(() => atualizarProdutoRevenda(EMPRESA_A, produto.id, { nome: 'Pomada teste', precoVenda: 35, estoqueAtual: 9 }), /endpoint de ajuste/);
 });
 
+test('isola catálogo, movimentos e venda por unidade dentro da mesma empresa', () => {
+  const lojaA = criarProdutoRevenda(EMPRESA_A, { lojaId: 'loja-a', nome: 'Pomada compartilhada', precoVenda: 35, estoqueAtual: 2 });
+  const lojaB = criarProdutoRevenda(EMPRESA_A, { lojaId: 'loja-b', nome: 'Pomada compartilhada', precoVenda: 35, estoqueAtual: 2 });
+  assert.equal(listarProdutosRevenda(EMPRESA_A, { lojaId: 'loja-a' }).map((item) => item.id).join(','), lojaA.id);
+  assert.equal(listarProdutosRevenda(EMPRESA_A, { lojaId: 'loja-b' }).map((item) => item.id).join(','), lojaB.id);
+  assert.equal(listarMovimentosEstoque(EMPRESA_A, { lojaId: 'loja-a' }).every((item) => item.lojaId === 'loja-a'), true);
+  assert.throws(() => criarVendaRevenda(EMPRESA_A, { lojaId: 'loja-a', itens: [{ produtoId: lojaB.id, quantidade: 1 }] }), /empresa\/unidade ativa/);
+});
+
 test('separa pedido de revenda da confirmação e baixa estoque e financeiro uma única vez', () => {
   const produto = criarProdutoRevenda(EMPRESA_A, { nome: 'Pomada venda', precoVenda: 40, estoqueAtual: 3, estoqueMinimo: 1 });
   const venda = criarVendaRevenda(EMPRESA_A, { clienteNome: 'Cliente venda', itens: [{ produtoId: produto.id, quantidade: 2 }], chaveIdempotencia: 'pedido-venda-teste-1' });
@@ -429,7 +438,7 @@ test('comanda parcialmente paga não pode ser cancelada por rotas genéricas', (
 
 test('remarcação e alteração de status rejeitam loja divergente sem mutar agendamento', () => {
   const servico = baseServico();
-  const agendamento = criarAgendamento(EMPRESA_A, { lojaId: 'loja-a', clienteNome: 'Cliente de teste', servicoId: servico.id, dataHora: '2030-01-15T10:00:00.000Z' });
+  const agendamento = criarAgendamento(EMPRESA_A, { lojaId: 'loja-a', clienteNome: 'Cliente de teste', servicoId: servico.id, dataHora: '2030-01-15T14:00:00.000Z' });
   assert.equal(atualizarAgendamento(EMPRESA_A, agendamento.id, { lojaId: 'loja-b' }), null);
   assert.equal(alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'concluido', { lojaId: 'loja-b' }), null);
   const depois = listarAgendamentos(EMPRESA_A, { lojaId: 'loja-a' }).find((item) => item.id === agendamento.id);

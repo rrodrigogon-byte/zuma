@@ -111,13 +111,13 @@ test('autoatendimento: fora do prazo da política o cliente é orientado a falar
 test('lista de espera: vaga aberta avisa quem pediu aquele dia e período, sem repetir', () => {
   const { bruno, corte } = montarBarbearia();
   const dia = dataLocal(Date.now() + 3 * DIA_MS);
-  const primeiro = captacao.entrarListaEspera(EMPRESA, { nome: 'Ana', telefone: '65911110001', data: dia, servicoId: corte.id, periodo: 'manha', consentimentoWhatsapp: true });
-  captacao.entrarListaEspera(EMPRESA, { nome: 'Beto', telefone: '65911110002', data: dia, servicoId: corte.id, periodo: 'tarde' });
-  captacao.entrarListaEspera(EMPRESA, { nome: 'Caio', telefone: '65911110003', data: dia, servicoId: corte.id, periodo: 'qualquer' });
-  const repetida = captacao.entrarListaEspera(EMPRESA, { nome: 'Ana', telefone: '65911110001', data: dia, servicoId: corte.id });
+  const primeiro = captacao.entrarListaEspera(EMPRESA, { nome: 'Ana', telefone: '65911110001', data: dia, servicoId: corte.id, lojaId: LOJA, periodo: 'manha', consentimentoWhatsapp: true });
+  captacao.entrarListaEspera(EMPRESA, { nome: 'Beto', telefone: '65911110002', data: dia, servicoId: corte.id, lojaId: LOJA, periodo: 'tarde' });
+  captacao.entrarListaEspera(EMPRESA, { nome: 'Caio', telefone: '65911110003', data: dia, servicoId: corte.id, lojaId: LOJA, periodo: 'qualquer' });
+  const repetida = captacao.entrarListaEspera(EMPRESA, { nome: 'Ana', telefone: '65911110001', data: dia, servicoId: corte.id, lojaId: LOJA });
   assert.equal(repetida.repetida, true);
   assert.equal(repetida.id, primeiro.id);
-  assert.throws(() => captacao.entrarListaEspera(EMPRESA, { nome: 'Ana', telefone: '65911110001', data: '2020-01-01', servicoId: corte.id }), { code: 'DATA_PASSADA' });
+  assert.throws(() => captacao.entrarListaEspera(EMPRESA, { nome: 'Ana', telefone: '65911110001', data: '2020-01-01', servicoId: corte.id, lojaId: LOJA }), { code: 'DATA_PASSADA' });
 
   const ag = agendar({ profissional: bruno, servico: corte, data: dia, hora: '09:00' });
   const cancelado = barbearia.alterarStatusAgendamento(EMPRESA, ag.id, 'cancelado');
@@ -126,6 +126,8 @@ test('lista de espera: vaga aberta avisa quem pediu aquele dia e período, sem r
   const candidatos = captacao.candidatosParaVaga(EMPRESA, cancelado);
   assert.deepEqual(candidatos.map((item) => item.nome), ['Ana'], 'aviso automático só para quem autorizou o WhatsApp');
   assert.match(candidatos[0].mensagem, /Abriu um horário/);
+  assert.deepEqual(captacao.candidatosParaVaga(EMPRESA, { ...cancelado, servicoId: '' }), [], 'vaga sem serviço nunca faz broadcast');
+  assert.deepEqual(captacao.candidatosParaVaga(EMPRESA, { ...cancelado, lojaId: 'outra-loja' }), [], 'vaga de outra unidade nunca seleciona candidatos');
   assert.equal(captacao.candidatosParaVaga(EMPRESA, cancelado).length, 1, 'consultar não marca ninguém como avisado');
   assert.equal(captacao.marcarAvisados(EMPRESA, cancelado, [candidatos[0].id]), 1);
   assert.equal(captacao.candidatosParaVaga(EMPRESA, cancelado).length, 0, 'não avisa duas vezes a mesma vaga');
@@ -338,7 +340,7 @@ test('agenda única: com equipe na agenda da barbearia, a IA lê e grava nela', 
   assert.deepEqual(meus.map((item) => item.id), [criado.id]);
   const remarcado = await agenda.rescheduleAppointment(null, scope, { appointmentId: criado.id, date: dia, time: '14:00' });
   assert.equal(remarcado.horaLocal, '14:00');
-  captacao.entrarListaEspera(EMPRESA, { nome: 'Espera', telefone: '65911118888', data: dia, servicoId: corte.id, periodo: 'tarde', consentimentoWhatsapp: true });
+  captacao.entrarListaEspera(EMPRESA, { nome: 'Espera', telefone: '65911118888', data: dia, servicoId: corte.id, lojaId: LOJA, periodo: 'tarde', consentimentoWhatsapp: true });
   const cancelado = await agenda.cancelAppointment(null, scope, criado.id);
   assert.equal(cancelado.status, 'cancelado');
   assert.equal(cancelado.listaEsperaCandidatos, 1);

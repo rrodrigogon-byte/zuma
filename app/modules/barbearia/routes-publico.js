@@ -195,7 +195,7 @@ router.post('/:slug/confirmar', async (req, res) => {
     if (vinculo.clienteId && corpo.consentimento_whatsapp === true) {
       try { captacao.registrarConsentimentoAtendimento(identidade.empresaId, vinculo.clienteId, 'agendamento_online_checkbox'); } catch (_) { /* não impede o agendamento */ }
     }
-    try { captacao.marcarListaEsperaAgendada(identidade.empresaId, { telefone, data: agendamento.dataAgenda }); } catch (_) { /* não impede o agendamento */ }
+    try { captacao.marcarListaEsperaAgendada(identidade.empresaId, { telefone, data: agendamento.dataAgenda, lojaId: agendamento.lojaId, servicoId: agendamento.servicoId }); } catch (_) { /* não impede o agendamento */ }
     if (corpo.indicacao) {
       try { captacao.registrarIndicacao(identidade.empresaId, { codigo: texto(corpo.indicacao, 12), agendamento }); } catch (_) { /* indicação inválida não impede o agendamento */ }
     }
@@ -309,8 +309,8 @@ router.post('/:slug/meu-agendamento', autoatendimento(async (req, res, identidad
   const visao = captacao.consultarAgendamentoCliente(identidade.empresaId, { codigo: req.body?.codigo, telefone: req.body?.cliente_telefone, lojaId: identidade.lojaId });
   // Código + telefone conferidos: mostra o sinal pendente (para pagar) e o saldo de cashback.
   const agendamento = barbearia.listarAgendamentos(identidade.empresaId, {}).find((item) => item.codigoConfirmacao === visao.codigo && (!identidade.lojaId || item.lojaId === identidade.lojaId));
-  const sinal = agendamento ? cobranca.sinalDoAgendamento(identidade.empresaId, agendamento.id) : null;
-  const cashback = cobranca.saldoCashback(identidade.empresaId, req.body?.cliente_telefone);
+  const sinal = agendamento ? cobranca.sinalDoAgendamento(identidade.empresaId, agendamento.id, identidade.lojaId) : null;
+  const cashback = cobranca.saldoCashback(identidade.empresaId, req.body?.cliente_telefone, { lojaId: identidade.lojaId });
   res.setHeader('Cache-Control', 'no-store');
   return res.json({
     ok: true,
@@ -324,7 +324,7 @@ router.post('/:slug/meu-agendamento', autoatendimento(async (req, res, identidad
 
 router.post('/:slug/meu-agendamento/cancelar', autoatendimento(async (req, res, identidade) => {
   const { agendamento, visao } = captacao.cancelarAgendamentoCliente(identidade.empresaId, { codigo: req.body?.codigo, telefone: req.body?.cliente_telefone, motivo: req.body?.motivo, lojaId: identidade.lojaId });
-  try { cobranca.cancelarSinalPendente(identidade.empresaId, agendamento.id); } catch (_) { /* não impede o cancelamento */ }
+  try { cobranca.cancelarSinalPendente(identidade.empresaId, agendamento.id, identidade.lojaId); } catch (_) { /* não impede o cancelamento */ }
   const contexto = { empresaId: identidade.empresaId, lojaId: agendamento.lojaId || identidade.lojaId, legacyEmpresaId: identidade.empresaId };
   await queueAppointmentNotifications(contexto, agendamento, 'cancelado').catch(() => null);
   await avisarListaEspera(contexto, agendamento, captacao.candidatosParaVaga(identidade.empresaId, agendamento)).catch(() => null);
@@ -334,15 +334,20 @@ router.post('/:slug/meu-agendamento/cancelar', autoatendimento(async (req, res, 
 
 router.post('/:slug/meu-agendamento/remarcar', autoatendimento(async (req, res, identidade) => {
   const corpo = req.body || {};
-  const { agendamento, visao } = captacao.remarcarAgendamentoCliente(identidade.empresaId, {
+  const { agendamento, anterior, visao } = captacao.remarcarAgendamentoCliente(identidade.empresaId, {
     codigo: corpo.codigo,
     telefone: corpo.cliente_telefone,
     data: texto(corpo.data, 10),
     horario: texto(corpo.horario, 5),
     lojaId: identidade.lojaId,
   });
+  try { captacao.marcarListaEsperaAgendada(identidade.empresaId, { telefone: corpo.cliente_telefone, data: agendamento.dataAgenda, lojaId: agendamento.lojaId, servicoId: agendamento.servicoId }); } catch (_) { /* não impede a remarcação */ }
   const contexto = { empresaId: identidade.empresaId, lojaId: agendamento.lojaId || identidade.lojaId, legacyEmpresaId: identidade.empresaId };
   await queueAppointmentNotifications(contexto, agendamento, 'remarcado').catch(() => null);
+  if (anterior && (anterior.dataAgenda !== agendamento.dataAgenda || anterior.horaLocal !== agendamento.horaLocal || anterior.profissionalId !== agendamento.profissionalId)) {
+    const contextoAnterior = { empresaId: identidade.empresaId, lojaId: anterior.lojaId || identidade.lojaId, legacyEmpresaId: identidade.empresaId };
+    await avisarListaEspera(contextoAnterior, { ...anterior, status: 'cancelado' }, captacao.candidatosParaVaga(identidade.empresaId, { ...anterior, status: 'cancelado' }, { lojaId: anterior.lojaId || identidade.lojaId })).catch(() => null);
+  }
   res.setHeader('Cache-Control', 'no-store');
   return res.json({ ok: true, agendamento: visao });
 }));
@@ -353,10 +358,14 @@ router.post('/:slug/pagamento/verificar', async (req, res) => {
   const identidade = identidadePublica(req.params.slug);
   if (!identidade) return res.status(404).json({ ok: false, error: 'Estabelecimento não encontrado.' });
   try {
+    const slugRecebido = slug(req.body?.slug);
+    const slugCanônico = slug(identidade.estabelecimento.slug);
+    if (slugRecebido && slugRecebido !== slugCanônico) return res.status(400).json({ ok: false, error: 'O pagamento não corresponde a este estabelecimento.', code: 'PAGAMENTO_SLUG_DIVERGENTE' });
     const resultado = await cobranca.confirmarPelaInfinitePay({
       order_nsu: texto(req.body?.order_nsu, 40),
       transaction_nsu: texto(req.body?.transaction_nsu, 80),
-      slug: texto(req.body?.slug, 80),
+      // O slug da URL é a fonte de verdade; o corpo do retorno é apenas dado auxiliar.
+      slug: slugCanônico,
     });
     if (resultado.empresaId !== identidade.empresaId) return res.status(404).json({ ok: false, error: 'Pagamento não encontrado.' });
     res.setHeader('Cache-Control', 'no-store');
@@ -370,7 +379,7 @@ router.post('/:slug/pagamento/verificar', async (req, res) => {
 // App do cliente: "minha conta" com código + telefone no corpo (nunca na URL).
 router.post('/:slug/minha-conta', autoatendimento(async (req, res, identidade) => {
   const conta = captacao.minhaConta(identidade.empresaId, { codigo: req.body?.codigo, telefone: req.body?.cliente_telefone, lojaId: identidade.lojaId });
-  const cashback = cobranca.saldoCashback(identidade.empresaId, req.body?.cliente_telefone);
+  const cashback = cobranca.saldoCashback(identidade.empresaId, req.body?.cliente_telefone, { lojaId: identidade.lojaId });
   res.setHeader('Cache-Control', 'no-store');
   return res.json({ ok: true, conta: { ...conta, cashback: cashback.ativo || cashback.saldo > 0 ? { saldo: cashback.saldo, proximoVencimento: cashback.proximoVencimento } : null } });
 }));
@@ -384,6 +393,7 @@ router.post('/:slug/vale/comprar', async (req, res) => {
     const resultado = await cobranca.comprarVale(identidade.empresaId, {
       valor: Number(corpo.valor), deNome: texto(corpo.de_nome, 80), deTelefone: texto(corpo.de_telefone, 30),
       paraNome: texto(corpo.para_nome, 80), mensagem: texto(corpo.mensagem, 200),
+      lojaId: identidade.lojaId,
     });
     res.setHeader('Cache-Control', 'no-store');
     return res.status(201).json({ ok: true, ...resultado });
@@ -392,7 +402,7 @@ router.post('/:slug/vale/comprar', async (req, res) => {
   }
 });
 router.post('/:slug/vale/consultar', autoatendimento(async (req, res, identidade) => {
-  const vale = cobranca.consultarVale(identidade.empresaId, req.body?.codigo);
+  const vale = cobranca.consultarVale(identidade.empresaId, req.body?.codigo, identidade.lojaId);
   res.setHeader('Cache-Control', 'no-store');
   return res.json({ ok: true, vale: { saldo: vale.saldo, status: vale.status, validoAte: vale.validoAte } });
 }));

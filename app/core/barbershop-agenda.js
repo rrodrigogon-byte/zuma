@@ -549,6 +549,6 @@ export async function cancelAppointment(trx, scope, appointmentId) {
 export async function avisarListaEspera(contexto, agendamentoLiberado, candidatos) {
   if (!candidatos?.length) return { queued: 0, skipped: true, reason: 'no_candidates' };
   const fila = await queueWaitlistNotifications(contexto, agendamentoLiberado, candidatos);
-  if (fila?.queuedIds?.length) captacao.marcarAvisados(contexto.legacyEmpresaId || contexto.empresaId, agendamentoLiberado, fila.queuedIds);
+  if (fila?.queuedIds?.length) captacao.marcarAvisados(contexto.legacyEmpresaId || contexto.empresaId, agendamentoLiberado, fila.queuedIds, { lojaId: contexto.lojaId || agendamentoLiberado.lojaId });
   return fila;
 }

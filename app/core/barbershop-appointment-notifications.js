@@ -204,9 +204,13 @@ export async function queueWaitlistNotifications(contexto = {}, agendamentoLiber
   const empresaId = uuidOuVazio(contexto.empresaId);
   const lojaId = uuidOuVazio(contexto.lojaId || agendamentoLiberado.lojaId);
   const legacyEmpresaId = limpo(contexto.legacyEmpresaId || contexto.empresaId, 120);
-  const elegiveis = (candidatos || []).filter((item) => item?.consentimentoWhatsapp === true && normalizarTelefone(item.telefone));
+  const servicoId = limpo(agendamentoLiberado.servicoId, 120);
+  const profissionalId = limpo(agendamentoLiberado.profissionalId, 120);
+  const elegiveis = (candidatos || []).filter((item) => item?.consentimentoWhatsapp === true && normalizarTelefone(item.telefone))
+    .filter((item) => String(item.lojaId || '') === lojaId && String(item.servicoId || '') === servicoId)
+    .filter((item) => !item.profissionalId || item.profissionalId === 'qualquer' || item.profissionalId === profissionalId);
   if (!empresaId || !lojaId) return { queued: 0, skipped: true, reason: 'commerce_scope_unavailable' };
-  if (!agendamentoLiberado?.id || !elegiveis.length) return { queued: 0, skipped: true, reason: 'no_eligible_waitlist' };
+  if (!agendamentoLiberado?.id || !servicoId || !elegiveis.length) return { queued: 0, skipped: true, reason: 'no_eligible_waitlist' };
   return db.transaction(async (trx) => {
     const canal = await canalAtivo(trx, empresaId, lojaId);
     if (!canal) return { queued: 0, skipped: true, reason: 'whatsapp_channel_inactive' };
@@ -241,6 +245,9 @@ async function processWaitlistTask(task, payload, legacyEmpresaId) {
   if (!entrada || entrada.status !== 'aguardando' || entrada.consentimentoWhatsapp !== true) return { skipped: true, reason: 'waitlist_not_eligible' };
   const liberado = barbearia.listarAgendamentos(legacyEmpresaId, {}).find((item) => item.id === limpo(payload.appointmentId, 120));
   if (!liberado || !['cancelado', 'nao_compareceu'].includes(String(liberado.status))) return { skipped: true, reason: 'slot_not_free' };
+  if (!liberado.lojaId || String(liberado.lojaId) !== String(task.loja_id) || String(entrada.lojaId || '') !== String(liberado.lojaId)) return { skipped: true, reason: 'store_scope_mismatch' };
+  if (!entrada.servicoId || String(entrada.servicoId) !== String(liberado.servicoId || '')) return { skipped: true, reason: 'service_scope_mismatch' };
+  if (entrada.profissionalId && entrada.profissionalId !== 'qualquer' && String(entrada.profissionalId) !== String(liberado.profissionalId || '')) return { skipped: true, reason: 'professional_scope_mismatch' };
   if (new Date(liberado.dataHora).valueOf() <= Date.now()) return { skipped: true, reason: 'slot_in_past' };
   // A vaga precisa caber no serviço que a pessoa pediu (duração, jornada, outros
   // agendamentos que entraram depois): confere na agenda real antes de avisar.
@@ -636,4 +643,3 @@ export async function reviewNotificationMetrics(contexto = {}) {
   );
   return { ...(resultado.rows[0] || { pendentes: 0, aceitas_provedor: 0, falhas: 0, canceladas: 0 }), canaisAtivos: Number(canais.rows[0]?.ativos || 0) };
 }
-
