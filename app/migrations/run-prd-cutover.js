@@ -93,7 +93,7 @@ async function createSnapshot(trx, payload) {
        (tipo, dia_local, bytes_original, bytes_gzip, sha256, origem, verificado_em, conteudo)
      VALUES ($1, $2::date, $3, $4, $5, $6, CURRENT_TIMESTAMP, $7)
      RETURNING id, sha256, bytes_original, bytes_gzip`,
-    ['prd-cutover-agro-dino-v1', nowDate(), raw.length, compressed.length, sha256, 'prd-cutover', compressed],
+    ['manual', nowDate(), raw.length, compressed.length, sha256, 'prd-cutover', compressed],
   );
   return result.rows[0];
 }
