@@ -50,14 +50,26 @@ function minimalEventPayload(parsed = {}) {
   };
 }
 
-async function webhookRateLimited(channelId) {
-  const result = await db.queryRead(
-    `SELECT COUNT(*)::int AS total
+export async function consumeWhatsappWebhookRateLimit(trx, { channelId, empresaId, lojaId, windowSeconds = 60, limit = WEBHOOK_EVENTS_PER_MINUTE } = {}) {
+  if (!trx || typeof trx.query !== 'function' || !channelId || !empresaId || !lojaId) {
+    const error = new Error('escopo do canal WhatsApp ausente para rate limit');
+    error.code = 'WHATSAPP_RATE_LIMIT_SCOPE_REQUIRED';
+    error.statusCode = 503;
+    throw error;
+  }
+  const lockKey = `whatsapp:${empresaId}:${lojaId}:${channelId}`;
+  await trx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [lockKey]);
+  const result = await trx.query(
+    `SELECT COUNT(*)::int AS total,
+            COALESCE(CEIL(EXTRACT(EPOCH FROM (($2::timestamptz + ($3 * INTERVAL '1 second')) - CURRENT_TIMESTAMP))), $3)::int AS retry_after_seconds
        FROM eventos_integracao_canais
-      WHERE canal_id = $1 AND recebido_em >= CURRENT_TIMESTAMP - INTERVAL '1 minute'`,
-    [channelId],
+      WHERE empresa_id = $1 AND loja_id = $4 AND canal_id = $5
+        AND recebido_em >= CURRENT_TIMESTAMP - ($3 * INTERVAL '1 second')`,
+    [empresaId, new Date().toISOString(), Math.max(1, Number(windowSeconds) || 60), lojaId, channelId],
   );
-  return Number(result.rows[0]?.total || 0) >= WEBHOOK_EVENTS_PER_MINUTE;
+  const total = Number(result.rows[0]?.total || 0);
+  const retryAfterSeconds = Math.max(1, Number(result.rows[0]?.retry_after_seconds || windowSeconds || 60));
+  return { allowed: total < Math.max(1, Number(limit) || 1), remaining: Math.max(0, Math.max(1, Number(limit) || 1) - total), retryAfterSeconds };
 }
 
 function validSignature(req, channel) {
@@ -124,13 +136,25 @@ async function mediaFromWebhook(channel, parsed, body, externalId, { waha = fals
   };
 }
 
-export async function ingestInboundWhatsappMessage(channel, parsed, { hash, providerPayload = {} } = {}) {
+export async function ingestInboundWhatsappMessage(channel, parsed, { hash, providerPayload = {}, rateLimit = consumeWhatsappWebhookRateLimit } = {}) {
   const aiReady = whatsappAiReady(channel);
   const optOutRequested = campaignOptOutRequested(parsed);
   const externalId = String(parsed.externalId || '').slice(0, 200);
   if (!externalId) return { ignored: true, reason: parsed.reason || 'missing_event_id' };
   const hashCorpo = hash || crypto.createHash('sha256').update(JSON.stringify(providerPayload || {})).digest('hex');
   const result = await db.transaction(async trx => {
+    const existing = await trx.query(
+      `SELECT hash_corpo FROM eventos_integracao_canais WHERE canal_id = $1 AND evento_externo_id = $2 LIMIT 1 FOR UPDATE`,
+      [channel.id, externalId],
+    );
+    if (existing.rows[0]) {
+      if (existing.rows[0].hash_corpo && String(existing.rows[0].hash_corpo).toLowerCase() !== String(hashCorpo).toLowerCase()) {
+        return { duplicate: true, payloadConflict: true };
+      }
+      return { duplicate: true };
+    }
+    const rate = await rateLimit(trx, { channelId: channel.id, empresaId: channel.empresa_id, lojaId: channel.loja_id, eventId: externalId, payloadHash: hashCorpo });
+    if (!rate.allowed) return { rateLimited: true, retryAfterSeconds: rate.retryAfterSeconds };
     const eventResult = await trx.query(
       `INSERT INTO eventos_integracao_canais
         (empresa_id, loja_id, canal_id, evento_externo_id, tipo_evento, assinatura_valida,
@@ -179,7 +203,7 @@ export async function ingestInboundWhatsappMessage(channel, parsed, { hash, prov
   return { ...result, campaignMetrics, marketingOptOut, cartRecoveryOptOut, appointmentOptOut };
 }
 
-export function createWhatsappAiWebhookRouter() {
+export function createWhatsappAiWebhookRouter({ rateLimit = consumeWhatsappWebhookRateLimit } = {}) {
   const router = express.Router();
 
   router.post('/waha', async (req, res) => {
@@ -208,7 +232,6 @@ export function createWhatsappAiWebhookRouter() {
       if (rawEvent !== 'message' && rawEvent !== 'message_received' && rawEvent !== 'messages_upsert') {
         return res.status(202).json({ accepted: true, ignored: true, reason: 'unsupported_event' });
       }
-      if (await webhookRateLimited(channel.id)) return res.status(429).json({ error: 'limite temporário de eventos atingido' });
       const parsedBase = parseWahaMessage(req.body || {}, { groupId: channel.configuracao?.waha_group_id, sessionName });
       const externalId = parsedBase.externalId || String(req.get('x-webhook-request-id') || '').slice(0, 200);
       let parsed = parsedBase;
@@ -219,7 +242,12 @@ export function createWhatsappAiWebhookRouter() {
       }
       if (!externalId) return res.status(202).json({ accepted: true, ignored: true, reason: parsed.reason || 'missing_event_id' });
       const hash = crypto.createHash('sha256').update(rawBody(req)).digest('hex');
-      const resultado = await ingestInboundWhatsappMessage(channel, { ...parsed, externalId }, { hash, providerPayload: req.body || {} });
+      const resultado = await ingestInboundWhatsappMessage(channel, { ...parsed, externalId }, { hash, providerPayload: req.body || {}, rateLimit });
+      if (resultado.payloadConflict) return res.status(409).json({ accepted: false, code: 'WHATSAPP_PAYLOAD_CONFLICT' });
+      if (resultado.rateLimited) {
+        res.set('Retry-After', String(resultado.retryAfterSeconds));
+        return res.status(429).json({ accepted: false, code: 'RATE_LIMIT', error: 'limite temporário de eventos atingido' });
+      }
       return res.status(202).json({ accepted: true, ...resultado });
     } catch (error) {
       console.error('[WhatsApp WAHA] erro no webhook:', String(error?.message || error).slice(0, 500));
@@ -246,8 +274,6 @@ export function createWhatsappAiWebhookRouter() {
         const metrics = await recordCampaignProviderEvent(channel, req.body || {}, { ignored: true }).catch(() => ({ updatedCampaigns: [] }));
         return res.status(202).json({ accepted: true, statusUpdate: true, campaignMetrics: metrics });
       }
-      if (await webhookRateLimited(channel.id)) return res.status(429).json({ error: 'limite temporário de eventos atingido' });
-
       const rawEvent = String(req.body?.event || req.body?.type || '').toUpperCase().replaceAll('.', '_');
       if (rawEvent === 'CONNECTION_UPDATE' || rawEvent === 'ONSTATECHANGE' || rawEvent === 'STATUS_INSTANCE') {
         const payloadData = req.body?.data && typeof req.body.data === 'object' ? req.body.data : req.body;
@@ -263,7 +289,12 @@ export function createWhatsappAiWebhookRouter() {
       }
       if (!externalId) return res.status(202).json({ accepted: true, ignored: true, reason: parsed.reason || 'missing_event_id' });
       const hash = crypto.createHash('sha256').update(rawBody(req)).digest('hex');
-      const resultado = await ingestInboundWhatsappMessage(channel, { ...parsed, externalId }, { hash, providerPayload: req.body || {} });
+      const resultado = await ingestInboundWhatsappMessage(channel, { ...parsed, externalId }, { hash, providerPayload: req.body || {}, rateLimit });
+      if (resultado.payloadConflict) return res.status(409).json({ accepted: false, code: 'WHATSAPP_PAYLOAD_CONFLICT' });
+      if (resultado.rateLimited) {
+        res.set('Retry-After', String(resultado.retryAfterSeconds));
+        return res.status(429).json({ accepted: false, code: 'RATE_LIMIT', error: 'limite temporário de eventos atingido' });
+      }
       return res.status(202).json({ accepted: true, ...resultado });
     } catch (error) {
       console.error('[WhatsApp AI] erro no webhook:', String(error?.message || error).slice(0, 500));

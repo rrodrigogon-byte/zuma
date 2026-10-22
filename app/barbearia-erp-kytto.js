@@ -1,10 +1,11 @@
 import crypto from 'node:crypto';
 import { identificarCliente, indiceIdentidadeClientes } from './barbearia-identidade.js';
-import { db, save } from './db.js';
+import { db, save, nextId } from './db.js';
 import * as financeiroKytto from './financeiro-central-kytto.js';
 import * as clientesKytto from './clientes-contas-kytto.js';
 import * as caixaKytto from './caixa-diario-kytto.js';
 import * as canaisFidelidadeKytto from './canais-fidelidade-kytto.js';
+import { executeDinoReversal, getDinoReversalMemoryAdapter } from './core/dino-reversal-coordinator.js';
 
 const STATUS = new Set(['agendado', 'confirmado', 'em_atendimento', 'concluido', 'cancelado', 'nao_compareceu']);
 const TRANSICOES = {
@@ -110,6 +111,13 @@ function estadoVazio() {
     assinaturas: {},
     produtosRevenda: {},
     movimentosEstoque: {},
+    movimentosComissao: {},
+    inventoryReservations: {},
+    inventoryReservationEvents: {},
+    inventoryReservationActions: {},
+    reservasEstoque: {},
+    eventosReservasEstoque: {},
+    acoesReservasEstoque: {},
     vendasRevenda: {},
     comandas: {},
     historicoAtendimentos: {},
@@ -151,6 +159,13 @@ function estadoEmpresa(empresaId, criar = true) {
       assinaturas: estado.assinaturas || {},
       produtosRevenda: estado.produtosRevenda || {},
       movimentosEstoque: estado.movimentosEstoque || {},
+      movimentosComissao: estado.movimentosComissao || {},
+      inventoryReservations: estado.inventoryReservations || estado.reservasEstoque || {},
+      inventoryReservationEvents: estado.inventoryReservationEvents || estado.eventosReservasEstoque || {},
+      inventoryReservationActions: estado.inventoryReservationActions || estado.acoesReservasEstoque || {},
+      reservasEstoque: estado.reservasEstoque || estado.inventoryReservations || {},
+      eventosReservasEstoque: estado.eventosReservasEstoque || estado.inventoryReservationEvents || {},
+      acoesReservasEstoque: estado.acoesReservasEstoque || estado.inventoryReservationActions || {},
       vendasRevenda: estado.vendasRevenda || {},
       comandas: estado.comandas || {},
       historicoAtendimentos: estado.historicoAtendimentos || {},
@@ -167,12 +182,373 @@ function estadoEmpresa(empresaId, criar = true) {
   estado.assinaturas ||= {};
   estado.produtosRevenda ||= {};
   estado.movimentosEstoque ||= {};
+  estado.movimentosComissao ||= {};
+  estado.inventoryReservations ||= {};
+  estado.inventoryReservationEvents ||= {};
+  estado.inventoryReservationActions ||= {};
+  estado.reservasEstoque = estado.inventoryReservations || estado.reservasEstoque || {};
+  estado.eventosReservasEstoque = estado.inventoryReservationEvents || estado.eventosReservasEstoque || {};
+  estado.acoesReservasEstoque = estado.inventoryReservationActions || estado.acoesReservasEstoque || {};
   estado.vendasRevenda ||= {};
   estado.comandas ||= {};
   estado.historicoAtendimentos ||= {};
-  estado.configuracao ||= {};
-  estado.configuracao.lojas ||= {};
+  // Bases legadas podem ter apenas {comandas:{...}} ou configuracao parcial.
+  // Mesclar o estado vazio aqui evita que a validação da agenda tente usar
+  // horarioAbertura/horarioFechamento indefinidos ao operar uma nova unidade.
+  const configuracaoPadrao = estadoVazio().configuracao;
+  estado.configuracao = {
+    ...configuracaoPadrao,
+    ...(estado.configuracao || {}),
+    lojas: { ...(configuracaoPadrao.lojas || {}), ...(estado.configuracao?.lojas || {}) },
+  };
   return estado;
+}
+
+// ── Reserva de estoque por operação (JSON ERP) ─────────────────────────────
+// Este domínio é deliberadamente local ao ERP legado. Ele não simula uma
+// transação PostgreSQL: snapshots servem somente para que uma operação deste
+// processo não deixe efeitos parciais no JSON quando uma etapa falhar.
+const STATUS_RESERVA_ESTOQUE = new Set(['held', 'confirmed', 'consumed', 'released', 'expired', 'cancelled']);
+const STATUS_RESERVA_ATIVA = new Set(['held', 'confirmed']);
+
+function erroEstoqueReserva(message, code, status = 400) {
+  return Object.assign(new Error(message), { code, status });
+}
+
+function raizSnapshot() {
+  return structuredClone(db());
+}
+
+function restaurarRaiz(snapshot) {
+  const raiz = db();
+  for (const chave of Object.keys(raiz)) delete raiz[chave];
+  Object.assign(raiz, structuredClone(snapshot));
+}
+
+function validarEscopoInventario(empresaId, lojaId) {
+  const empresa = texto(empresaId, 120);
+  const loja = texto(lojaId, 120);
+  if (!empresa) throw erroEstoqueReserva('empresaId é obrigatório para reservar estoque.', 'COMPANY_REQUIRED');
+  if (!loja) throw erroEstoqueReserva('lojaId é obrigatório para reservar estoque.', 'STORE_REQUIRED');
+  return { empresaId: empresa, lojaId: loja };
+}
+
+function hashReserva(value) {
+  return crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+function fingerprintReserva(dados) {
+  const informado = texto(dados.fingerprint, 160);
+  return informado && /^[0-9a-f]{64}$/i.test(informado) ? informado.toLowerCase() : hashReserva(informado || dados.payloadFingerprint);
+}
+
+function reservaAgora(dados = {}) {
+  const valor = dados.agora ?? dados.now ?? dataAtual();
+  const date = new Date(valor);
+  if (Number.isNaN(date.valueOf())) throw erroEstoqueReserva('Data de referência da reserva inválida.', 'DATE_INVALID');
+  return date;
+}
+
+function reservaExpiraEm(value) {
+  const date = new Date(value);
+  if (!value || Number.isNaN(date.valueOf())) throw erroEstoqueReserva('expiresAt é obrigatório e deve ser uma data válida.', 'EXPIRES_AT_INVALID');
+  return date.toISOString();
+}
+
+function normalizarQuantidadeReserva(value) {
+  const quantidade = Number(value);
+  if (!Number.isFinite(quantidade) || quantidade <= 0) throw erroEstoqueReserva('Quantidade de reserva deve ser positiva.', 'QUANTITY_INVALID');
+  return Number(quantidade.toFixed(4));
+}
+
+function normalizarReservaArgs(empresaId, lojaOuDados = {}, talvezDados = {}) {
+  const dados = typeof lojaOuDados === 'string' ? { ...(talvezDados || {}), lojaId: lojaOuDados } : { ...(lojaOuDados || {}) };
+  const escopo = validarEscopoInventario(empresaId, dados.lojaId ?? dados.loja_id);
+  const produtoId = texto(dados.produtoId ?? dados.produto_id ?? dados.productId ?? dados.itemRef ?? dados.item_ref, 180);
+  const quantidade = normalizarQuantidadeReserva(dados.quantidade ?? dados.quantity ?? dados.qtd);
+  const origem = texto(dados.origem ?? dados.origin, 120);
+  if (!produtoId) throw erroEstoqueReserva('produtoId/itemRef é obrigatório para reservar estoque.', 'PRODUCT_REQUIRED');
+  if (!origem) throw erroEstoqueReserva('origem é obrigatória para reservar estoque.', 'ORIGIN_REQUIRED');
+  const idempotencyKey = texto(dados.idempotencyKey ?? dados.idempotency_key ?? dados.chaveIdempotencia ?? dados.chave_idempotencia ?? dados.actionId ?? dados.action_id, 255);
+  if (!idempotencyKey) throw erroEstoqueReserva('idempotencyKey ou actionId é obrigatório para reservar estoque.', 'IDEMPOTENCY_REQUIRED');
+  const expiresAt = reservaExpiraEm(dados.expiresAt ?? dados.expires_at);
+  const payload = {
+    empresaId: escopo.empresaId,
+    lojaId: escopo.lojaId,
+    produtoId,
+    quantidade,
+    origem,
+    idempotencyKey,
+    expiresAt,
+    referencia: texto(dados.referencia ?? dados.reference, 180) || null,
+    correlationId: texto(dados.correlationId ?? dados.correlation_id, 180) || null,
+  };
+  const payloadFingerprint = hashReserva(JSON.stringify(payload));
+  return { ...payload, fingerprint: fingerprintReserva({ ...dados, payloadFingerprint }), payloadFingerprint, payloadSanitizado: { ...payload } };
+}
+
+function normalizarTransicaoReservaArgs(empresaId, alvo = {}, talvezDados = {}, acao = '') {
+  const dados = typeof alvo === 'string' ? { ...(talvezDados || {}), reservationId: alvo } : { ...(alvo || {}) };
+  const escopo = validarEscopoInventario(empresaId, dados.lojaId ?? dados.loja_id);
+  const reservationId = texto(dados.reservationId ?? dados.reservation_id ?? dados.id, 180);
+  const reservationKey = texto(dados.reservationKey ?? dados.reservation_key, 255);
+  if (!reservationId && !reservationKey) throw erroEstoqueReserva('reservationId ou reservationKey é obrigatório.', 'RESERVATION_REQUIRED');
+  const actionKey = texto(dados.actionId ?? dados.action_id ?? dados.idempotencyKey ?? dados.idempotency_key ?? dados.chaveIdempotencia ?? dados.chave_idempotencia, 255)
+    || `${reservationId || reservationKey}:${acao}`;
+  const payload = {
+    empresaId: escopo.empresaId,
+    lojaId: escopo.lojaId,
+    reservationId: reservationId || null,
+    reservationKey: reservationKey || null,
+    action: acao,
+    motivo: texto(dados.motivo ?? dados.reason, 300) || null,
+  };
+  const payloadFingerprint = hashReserva(JSON.stringify(payload));
+  return { ...payload, actionKey, fingerprint: fingerprintReserva({ ...dados, payloadFingerprint }), payloadFingerprint, payloadSanitizado: { ...payload } };
+}
+
+function produtoReservaNoEscopo(estado, empresaId, lojaId, produtoId) {
+  const produto = estado.produtosRevenda[String(produtoId)];
+  if (!produto || produto.empresaId !== String(empresaId)) throw erroEstoqueReserva('Produto não encontrado na empresa ativa.', 'PRODUCT_NOT_FOUND', 404);
+  if (produto.ativo === false) throw erroEstoqueReserva('Produto inativo não pode ser reservado.', 'PRODUCT_INACTIVE', 409);
+  // Produto legado sem loja não é compartilhado implicitamente nem sofre
+  // backfill. O chamador precisa corrigir o cadastro antes de reservar.
+  if (!produto.lojaId) throw erroEstoqueReserva('Produto legado sem loja está em quarentena; informe uma unidade antes de reservar.', 'SCOPE_QUARANTINED', 409);
+  if (produto.lojaId !== lojaId) throw erroEstoqueReserva('Produto não pertence à unidade ativa.', 'CROSS_STORE', 409);
+  return produto;
+}
+
+function reservaAtivaAgora(reserva, agora) {
+  return STATUS_RESERVA_ATIVA.has(reserva.status) && Date.parse(reserva.expiresAt) > agora.valueOf();
+}
+
+function reservasAtivasProduto(estado, empresaId, lojaId, produtoId, agora, excluirId = '') {
+  return Object.values(estado.inventoryReservations)
+    .filter((item) => item.empresaId === String(empresaId) && item.lojaId === String(lojaId) && item.produtoId === String(produtoId))
+    .filter((item) => item.id !== excluirId && reservaAtivaAgora(item, agora));
+}
+
+function copiarReserva(reserva, extras = {}) {
+  if (!reserva) return null;
+  const { actions: _actions, ...visivel } = reserva;
+  return { ...structuredClone(visivel), ...structuredClone(extras) };
+}
+
+function registrarEventoReserva(estado, reserva, eventType, status, fingerprint, payload = {}) {
+  const eventId = novoId('rsv-event', estado.inventoryReservationEvents);
+  estado.inventoryReservationEvents[eventId] = {
+    id: eventId,
+    empresaId: reserva.empresaId,
+    lojaId: reserva.lojaId,
+    reservationId: reserva.id,
+    eventType,
+    status,
+    fingerprint,
+    expiresAt: reserva.expiresAt,
+    payloadSanitizado: structuredClone(payload),
+    ocorridoEm: dataAtual(),
+  };
+  reserva.eventIds = [...(reserva.eventIds || []), eventId];
+  return estado.inventoryReservationEvents[eventId];
+}
+
+function localizarReserva(estado, dados) {
+  const reserva = dados.reservationId ? estado.inventoryReservations[dados.reservationId] : Object.values(estado.inventoryReservations).find((item) => item.reservationKey === dados.reservationKey);
+  return reserva || null;
+}
+
+function localizarReservaPorChaveGlobal(empresaId, reservationKey) {
+  const estado = estadoEmpresa(empresaId, false);
+  return Object.values(estado.inventoryReservations).find((item) => item.reservationKey === reservationKey) || null;
+}
+
+function aplicarAcaoReserva(estado, reserva, args, novoStatus, eventType, movimento = null) {
+  const actionId = `${reserva.id}:${args.actionKey}`;
+  const anterior = estado.inventoryReservationActions[actionId];
+  if (anterior) {
+    if (anterior.fingerprint !== args.fingerprint || anterior.payloadFingerprint !== args.payloadFingerprint) throw erroEstoqueReserva('A ação de reserva foi reutilizada com payload diferente.', 'IDEMPOTENCY_CONFLICT', 409);
+    return { reserva: copiarReserva(reserva, { replayed: true, movimento: anterior.movimento || null }), movimento: anterior.movimento || null };
+  }
+  if (reserva.status !== 'held' && reserva.status !== 'confirmed') throw erroEstoqueReserva(`Reserva já está em estado terminal (${reserva.status}).`, 'RESERVATION_STATE_CONFLICT', 409);
+  reserva.status = novoStatus;
+  reserva.atualizadoEm = dataAtual();
+  if (novoStatus === 'consumed') reserva.confirmadoEm = reserva.atualizadoEm;
+  if (novoStatus === 'released' || novoStatus === 'expired' || novoStatus === 'cancelled') reserva.liberadoEm = reserva.atualizadoEm;
+  const evento = registrarEventoReserva(estado, reserva, eventType, novoStatus, args.fingerprint, args.payloadSanitizado);
+  const resultado = { reserva: copiarReserva(reserva, { movimento: movimento ? structuredClone(movimento) : null }), movimento: movimento ? structuredClone(movimento) : null };
+  estado.inventoryReservationActions[actionId] = {
+    id: actionId,
+    empresaId: reserva.empresaId,
+    lojaId: reserva.lojaId,
+    reservationId: reserva.id,
+    actionKey: args.actionKey,
+    action: eventType,
+    fingerprint: args.fingerprint,
+    payloadFingerprint: args.payloadFingerprint,
+    status: novoStatus,
+    eventId: evento.id,
+    movimento: movimento ? structuredClone(movimento) : null,
+    resultado: structuredClone(resultado),
+    criadoEm: dataAtual(),
+  };
+  return resultado;
+}
+
+export function reserveInventoryForOperation(empresaId, lojaOuDados = {}, talvezDados = {}) {
+  const args = normalizarReservaArgs(empresaId, lojaOuDados, talvezDados);
+  const snapshot = raizSnapshot();
+  try {
+    const estado = estadoEmpresa(args.empresaId);
+    const existenteGlobal = localizarReservaPorChaveGlobal(args.empresaId, args.idempotencyKey);
+    if (existenteGlobal) {
+      if (existenteGlobal.lojaId !== args.lojaId || existenteGlobal.fingerprint !== args.fingerprint || existenteGlobal.payloadFingerprint !== args.payloadFingerprint) {
+        throw erroEstoqueReserva('A chave de idempotência já foi usada com payload ou unidade diferente.', 'IDEMPOTENCY_CONFLICT', 409);
+      }
+      return copiarReserva(existenteGlobal, { replayed: true });
+    }
+    const produto = produtoReservaNoEscopo(estado, args.empresaId, args.lojaId, args.produtoId);
+    const agora = reservaAgora(args);
+    const reservado = reservasAtivasProduto(estado, args.empresaId, args.lojaId, produto.id, agora).reduce((soma, item) => soma + Number(item.quantidade || 0), 0);
+    const estoque = Number(produto.estoqueAtual || 0);
+    const disponivel = Number((estoque - reservado).toFixed(4));
+    if (disponivel + 1e-9 < args.quantidade) throw erroEstoqueReserva(`Estoque disponível insuficiente para ${produto.nome} (disponível: ${disponivel}, necessário: ${args.quantidade}).`, 'INVENTORY_INSUFFICIENT', 409);
+    const id = novoId('rsv', estado.inventoryReservations);
+    const reserva = {
+      id,
+      empresaId: args.empresaId,
+      lojaId: args.lojaId,
+      reservationKey: args.idempotencyKey,
+      itemRef: produto.id,
+      produtoId: produto.id,
+      quantidade: args.quantidade,
+      status: 'held',
+      fingerprint: args.fingerprint,
+      payloadFingerprint: args.payloadFingerprint,
+      expiresAt: args.expiresAt,
+      origem: args.origem,
+      referencia: args.referencia,
+      correlationId: args.correlationId,
+      payloadSanitizado: args.payloadSanitizado,
+      eventIds: [],
+      actions: {},
+      criadoEm: dataAtual(),
+      atualizadoEm: dataAtual(),
+    };
+    estado.inventoryReservations[id] = reserva;
+    registrarEventoReserva(estado, reserva, 'reserved', 'held', args.fingerprint, args.payloadSanitizado);
+    save();
+    return copiarReserva(reserva, { replayed: false, disponivelAnterior: disponivel });
+  } catch (error) {
+    restaurarRaiz(snapshot);
+    throw error;
+  }
+}
+
+export function releaseInventoryReservation(empresaId, alvo = {}, talvezDados = {}) {
+  return transicionarInventoryReservation(empresaId, alvo, talvezDados, 'released', 'released');
+}
+
+export function commitInventoryReservation(empresaId, alvo = {}, talvezDados = {}) {
+  return transicionarInventoryReservation(empresaId, alvo, talvezDados, 'consumed', 'committed');
+}
+
+function transicionarInventoryReservation(empresaId, alvo, talvezDados, novoStatus, eventType) {
+  const args = normalizarTransicaoReservaArgs(empresaId, alvo, talvezDados, eventType);
+  const snapshot = raizSnapshot();
+  try {
+    const estado = estadoEmpresa(args.empresaId);
+    const reserva = localizarReserva(estado, args);
+    if (!reserva || reserva.empresaId !== args.empresaId || reserva.lojaId !== args.lojaId) throw erroEstoqueReserva('Reserva não encontrada na empresa/unidade ativa.', 'RESERVATION_NOT_FOUND', 404);
+    const actionId = `${reserva.id}:${args.actionKey}`;
+    const anterior = estado.inventoryReservationActions[actionId];
+    if (anterior) {
+      if (anterior.fingerprint !== args.fingerprint || anterior.payloadFingerprint !== args.payloadFingerprint) throw erroEstoqueReserva('A ação de reserva foi reutilizada com payload diferente.', 'IDEMPOTENCY_CONFLICT', 409);
+      return copiarReserva(reserva, { replayed: true, movimento: anterior.movimento || null });
+    }
+    if (novoStatus === 'consumed') {
+      if (Date.parse(reserva.expiresAt) <= Date.now()) throw erroEstoqueReserva('A reserva expirou e precisa ser liberada antes da baixa.', 'RESERVATION_EXPIRED', 409);
+      const produto = produtoReservaNoEscopo(estado, args.empresaId, args.lojaId, reserva.produtoId);
+      if (Number(produto.estoqueAtual || 0) < Number(reserva.quantidade || 0)) throw erroEstoqueReserva(`Estoque atual insuficiente para confirmar a reserva de ${produto.nome}.`, 'INVENTORY_INSUFFICIENT_AT_COMMIT', 409);
+      const anteriorEstoque = Number(produto.estoqueAtual || 0);
+      const agora = dataAtual();
+      produto.estoqueAtual = Number((anteriorEstoque - Number(reserva.quantidade || 0)).toFixed(4));
+      produto.atualizadoEm = agora;
+      produto.ultimoMovimentoEm = agora;
+      const movimentoId = novoId('mov', estado.movimentosEstoque);
+      const origemComanda = reserva.origem === 'comanda_barbearia';
+      const origemVenda = reserva.origem === 'venda_revenda';
+      const movimento = {
+        id: movimentoId,
+        empresaId: args.empresaId,
+        lojaId: args.lojaId,
+        produtoId: produto.id,
+        // A reserva continua sendo a trava concorrente, mas o ledger de estoque
+        // conserva a origem operacional para relatórios e estornos coordenados.
+        tipo: origemComanda ? 'saida_comanda' : origemVenda ? 'saida_venda' : 'saida_reserva',
+        quantidade: reserva.quantidade,
+        estoqueAnterior: anteriorEstoque,
+        estoquePosterior: produto.estoqueAtual,
+        origem: reserva.origem,
+        referencia: reserva.referencia || null,
+        ...(origemComanda ? { comandaId: reserva.referencia || null } : {}),
+        ...(origemVenda ? { vendaId: reserva.referencia || null } : {}),
+        reservationId: reserva.id,
+        reservationKey: reserva.reservationKey,
+        correlationId: reserva.correlationId || null,
+        observacao: `Baixa da reserva ${reserva.id}.`,
+        criadoEm: agora,
+      };
+      estado.movimentosEstoque[movimentoId] = movimento;
+      const resultado = aplicarAcaoReserva(estado, reserva, args, novoStatus, eventType, movimento);
+      save();
+      return resultado.reserva;
+    }
+    const resultado = aplicarAcaoReserva(estado, reserva, args, novoStatus, eventType);
+    save();
+    return resultado.reserva;
+  } catch (error) {
+    restaurarRaiz(snapshot);
+    throw error;
+  }
+}
+
+export function expireInventoryReservations(empresaId, lojaOuDados = {}, talvezDados = {}) {
+  const dados = typeof lojaOuDados === 'string' ? { ...(talvezDados || {}), lojaId: lojaOuDados } : { ...(lojaOuDados || {}) };
+  const { empresaId: empresa, lojaId } = validarEscopoInventario(empresaId, dados.lojaId ?? dados.loja_id);
+  const agora = reservaAgora(dados);
+  const snapshot = raizSnapshot();
+  try {
+    const estado = estadoEmpresa(empresa);
+    const expiradas = [];
+    for (const reserva of Object.values(estado.inventoryReservations)) {
+      if (reserva.empresaId !== empresa || reserva.lojaId !== lojaId || !STATUS_RESERVA_ATIVA.has(reserva.status)) continue;
+      if (Date.parse(reserva.expiresAt) > agora.valueOf()) continue;
+      const args = {
+        actionKey: `expire:${reserva.id}:${reserva.expiresAt}`,
+        fingerprint: hashReserva(JSON.stringify({ reservationId: reserva.id, lojaId, status: 'expired', expiresAt: reserva.expiresAt })),
+        payloadFingerprint: hashReserva(JSON.stringify({ reservationId: reserva.id, lojaId, status: 'expired', expiresAt: reserva.expiresAt })),
+        payloadSanitizado: { reservationId: reserva.id, lojaId, action: 'expired', expiresAt: reserva.expiresAt },
+      };
+      const resultado = aplicarAcaoReserva(estado, reserva, args, 'expired', 'expired');
+      expiradas.push(resultado.reserva);
+    }
+    if (expiradas.length) save();
+    return { empresaId: empresa, lojaId, agora: agora.toISOString(), expiradas, expired: expiradas, total: expiradas.length };
+  } catch (error) {
+    restaurarRaiz(snapshot);
+    throw error;
+  }
+}
+
+export function listarInventoryReservations(empresaId, { lojaId = '', produtoId = '', status = '' } = {}) {
+  const estado = estadoEmpresa(empresaId, false);
+  return Object.values(estado.inventoryReservations)
+    .filter((item) => item.empresaId === String(empresaId))
+    .filter((item) => !lojaId || item.lojaId === String(lojaId))
+    .filter((item) => !produtoId || item.produtoId === String(produtoId))
+    .filter((item) => !status || item.status === String(status))
+    .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))
+    .map((item) => copiarReserva(item));
 }
 
 function comissoesPorServicoNormalizadas(valor) {
@@ -1024,10 +1400,22 @@ export function criarVendaRevenda(empresaId, dados = {}) {
     pagamento: null,
     financeiroLancamentoId: null,
     chaveIdempotencia: chaveIdempotencia || null,
+    reservasEstoqueIds: [],
+    inventoryReservationIds: [],
+    reservaEstoqueStatus: 'sem_necessidade',
+    reservaEstoqueExpiresAt: expiresReservaOperacao(dados.expiresAt ?? dados.expires_at),
+    reservaEstoqueBloqueio: null,
     criadoEm: agora,
     atualizadoEm: agora,
   };
-  estado.vendasRevenda[id] = venda;
+  const snapshotReserva = raizSnapshot();
+  try {
+    estado.vendasRevenda[id] = venda;
+    sincronizarReservasOperacao(empresaId, venda, estado, { origem: 'venda_revenda', expiresAt: dados.expiresAt ?? dados.expires_at });
+  } catch (error) {
+    restaurarRaiz(snapshotReserva);
+    throw error;
+  }
   save();
   return { ...venda, itens: venda.itens.map((item) => ({ ...item })) };
 }
@@ -1038,6 +1426,7 @@ export function finalizarVendaRevenda(empresaId, vendaId, dados = {}) {
   if (!venda || venda.empresaId !== String(empresaId)) return null;
   const lojaId = texto(dados.lojaId ?? dados.loja_id, 120);
   if (lojaId && venda.lojaId !== lojaId) return null;
+  if (venda.status === 'cancelada') throw Object.assign(new Error('Venda cancelada não pode ser finalizada.'), { code: 'SALE_CANCELLED', status: 409 });
   if (venda.status === 'pago') return { ...venda, itens: venda.itens.map((item) => ({ ...item })) };
   if (dados.confirmadoPagamento !== true) throw new Error('A confirmação explícita do pagamento é obrigatória.');
   const meioPagamento = texto(dados.meioPagamento ?? dados.meio_pagamento, 40).toLowerCase();
@@ -1045,6 +1434,7 @@ export function finalizarVendaRevenda(empresaId, vendaId, dados = {}) {
   const valorRecebido = dinheiro(dados.valorRecebido ?? dados.valor_recebido, venda.total);
   if (valorRecebido !== venda.total) throw new Error(`Valor recebido deve ser ${venda.total.toFixed(2)}.`);
   estoqueVendaDisponivel(estado, venda.itens);
+  const reservaComitada = commitarReservasOperacao(empresaId, venda, estado);
   const agora = dataAtual();
   const financeiro = financeiroKytto.registrarLancamento(empresaId, {
     tipo: 'receita',
@@ -1061,7 +1451,7 @@ export function finalizarVendaRevenda(empresaId, vendaId, dados = {}) {
     referencia: { pedidoId: venda.id },
     chaveIdempotencia: `barbearia_revenda:${empresaId}:${venda.id}`,
   });
-  for (const item of venda.itens) {
+  if (!reservaComitada.committed) for (const item of venda.itens) {
     const produto = estado.produtosRevenda[item.produtoId];
     const anterior = Number(produto.estoqueAtual || 0);
     produto.estoqueAtual = anterior - item.quantidade;
@@ -1073,6 +1463,29 @@ export function finalizarVendaRevenda(empresaId, vendaId, dados = {}) {
   Object.assign(venda, { status: 'pago', estoqueBaixado: true, pagamento: { meioPagamento, valorRecebido, confirmadoEm: agora }, financeiroLancamentoId: financeiro.id, atualizadoEm: agora });
   save();
   return { ...venda, itens: venda.itens.map((item) => ({ ...item })) };
+}
+
+export function cancelarVendaRevenda(empresaId, vendaId, dados = {}) {
+  const estado = estadoEmpresa(empresaId);
+  const venda = estado.vendasRevenda[String(vendaId)];
+  if (!venda || venda.empresaId !== String(empresaId)) return null;
+  const lojaId = texto(dados.lojaId ?? dados.loja_id, 120);
+  if (lojaId && venda.lojaId !== lojaId) return null;
+  if (venda.status === 'pago') throw Object.assign(new Error('Venda já paga não pode ser cancelada neste fluxo.'), { code: 'SALE_ALREADY_PAID', status: 409 });
+  if (venda.status === 'cancelada') return { ...venda, itens: venda.itens.map((item) => ({ ...item })), idempotente: true };
+  const snapshot = raizSnapshot();
+  try {
+    liberarReservasOperacao(empresaId, venda, estado, 'cancelamento_venda');
+    venda.status = 'cancelada';
+    venda.canceladaEm = dataAtual();
+    venda.motivoCancelamento = texto(dados.motivo ?? dados.reason, 300);
+    venda.atualizadoEm = venda.canceladaEm;
+    save();
+    return { ...venda, itens: venda.itens.map((item) => ({ ...item })) };
+  } catch (error) {
+    restaurarRaiz(snapshot);
+    throw error;
+  }
 }
 
 function copiarComandaBarbearia(comanda, idempotente = false) {
@@ -1159,6 +1572,134 @@ function validarEstoqueComandaBarbearia(estado, comanda, consumoPlanejado = plan
     if (!produto || produto.ativo === false) throw new Error('Existe produto de revenda inativo na comanda ou na ficha técnica.');
     if (comanda.lojaId && produto.lojaId && produto.lojaId !== comanda.lojaId) throw new Error('Existe produto de revenda de outra unidade na comanda.');
     if (Number(produto.estoqueAtual || 0) < quantidade) throw new Error(`Estoque insuficiente para ${produto.nome} (disponível: ${produto.estoqueAtual || 0}, necessário: ${quantidade}).`);
+  }
+}
+
+function demandasInventarioComanda(estado, comanda) {
+  const porProduto = new Map();
+  for (const item of comanda.itens || []) {
+    // Vendas de revenda usam linhas sem `tipo`; somente serviços de comanda
+    // ficam fora desta parte (seus insumos entram no planejamento abaixo).
+    if (!item.produtoId || (item.tipo && item.tipo !== 'produto')) continue;
+    const atual = porProduto.get(item.produtoId) || { produtoId: item.produtoId, quantidade: 0 };
+    atual.quantidade += Number(item.quantidade || 0);
+    porProduto.set(item.produtoId, atual);
+  }
+  for (const consumo of planejarConsumoInternoComanda(estado, comanda)) {
+    const atual = porProduto.get(consumo.produtoId) || { produtoId: consumo.produtoId, quantidade: 0 };
+    atual.quantidade += Number(consumo.quantidade || 0);
+    porProduto.set(consumo.produtoId, atual);
+  }
+  return [...porProduto.values()].map((item) => ({ ...item, quantidade: Number(item.quantidade.toFixed(4)) }));
+}
+
+function expiresReservaOperacao(value) {
+  const informado = value ? new Date(value) : new Date(Date.now() + 30 * 60 * 1000);
+  if (Number.isNaN(informado.valueOf())) throw erroEstoqueReserva('expiresAt da operação é inválido.', 'EXPIRES_AT_INVALID');
+  return informado.toISOString();
+}
+
+function marcarBloqueioReservaOperacao(operacao, motivo, code = 'STORE_REQUIRED') {
+  operacao.reservasEstoqueIds = [];
+  operacao.inventoryReservationIds = [];
+  operacao.reservaEstoqueStatus = 'bloqueado';
+  operacao.reservaEstoqueBloqueio = { code, motivo, em: dataAtual() };
+  return { status: 'bloqueado', code, ids: [] };
+}
+
+function sincronizarReservasOperacao(empresaId, operacao, estado, { origem = 'operacao_pendente', expiresAt } = {}) {
+  const demandas = demandasInventarioComanda(estado, operacao);
+  if (!demandas.length) {
+    operacao.reservaEstoqueStatus = 'sem_necessidade';
+    operacao.reservasEstoqueIds = [];
+    operacao.inventoryReservationIds = [];
+    return { status: 'sem_necessidade', ids: [] };
+  }
+  if (!operacao.lojaId) return marcarBloqueioReservaOperacao(operacao, 'A operação não possui loja; reserva de estoque fica bloqueada para não compartilhar legado.', 'STORE_REQUIRED');
+  const incompatibilidade = demandas.find((item) => {
+    const produto = estado.produtosRevenda[item.produtoId];
+    return !produto?.lojaId || produto.lojaId !== operacao.lojaId;
+  });
+  if (incompatibilidade) return marcarBloqueioReservaOperacao(operacao, `Produto ${incompatibilidade.produtoId} não possui vínculo seguro com a loja ${operacao.lojaId}.`, 'SCOPE_QUARANTINED');
+
+  const idsAtuais = new Set(operacao.reservasEstoqueIds || operacao.inventoryReservationIds || []);
+  const porProduto = new Map(demandas.map((item) => [item.produtoId, item]));
+  const idsNovos = [];
+  for (const id of idsAtuais) {
+    const reserva = estado.inventoryReservations[id];
+    if (!reserva || !STATUS_RESERVA_ATIVA.has(reserva.status)) continue;
+    const demanda = porProduto.get(reserva.produtoId);
+    if (demanda && Number(reserva.quantidade) === Number(demanda.quantidade)) {
+      idsNovos.push(id);
+      porProduto.delete(reserva.produtoId);
+    } else {
+      releaseInventoryReservation(empresaId, { lojaId: operacao.lojaId, reservationId: id, actionId: `release-sync:${operacao.id}:${id}` });
+    }
+  }
+  for (const demanda of porProduto.values()) {
+    const prefixo = `${origem}:${operacao.id}:${demanda.produtoId}`;
+    const historicas = Object.values(estado.inventoryReservations).filter((item) => item.reservationKey === prefixo || item.reservationKey.startsWith(`${prefixo}:v`));
+    const versao = historicas.reduce((max, item) => Math.max(max, Number(String(item.reservationKey).match(/:v(\d+)$/)?.[1] || (item.reservationKey === prefixo ? 1 : 0))), 0) + (historicas.length ? 1 : 0);
+    const chave = historicas.length ? `${prefixo}:v${versao}` : prefixo;
+    const reserva = reserveInventoryForOperation(empresaId, {
+      lojaId: operacao.lojaId,
+      produtoId: demanda.produtoId,
+      quantidade: demanda.quantidade,
+      origem,
+      idempotencyKey: chave,
+      actionId: chave,
+      expiresAt: expiresReservaOperacao(expiresAt || operacao.reservaEstoqueExpiresAt),
+      referencia: operacao.id,
+      correlationId: operacao.id,
+    });
+    idsNovos.push(reserva.id);
+  }
+  operacao.reservasEstoqueIds = idsNovos;
+  operacao.inventoryReservationIds = [...idsNovos];
+  operacao.reservaEstoqueStatus = 'ativo';
+  operacao.reservaEstoqueExpiresAt = expiresReservaOperacao(expiresAt || operacao.reservaEstoqueExpiresAt);
+  operacao.reservaEstoqueBloqueio = null;
+  return { status: 'ativo', ids: [...idsNovos] };
+}
+
+function reservasOperacaoAtivas(estado, operacao) {
+  const ids = operacao.reservasEstoqueIds || operacao.inventoryReservationIds || [];
+  return ids.map((id) => estado.inventoryReservations[id]).filter((item) => item && STATUS_RESERVA_ATIVA.has(item.status));
+}
+
+function commitarReservasOperacao(empresaId, operacao, estado) {
+  const reservas = reservasOperacaoAtivas(estado, operacao);
+  if (!reservas.length || operacao.reservaEstoqueStatus !== 'ativo') return { committed: false, movimentos: [] };
+  const snapshot = raizSnapshot();
+  try {
+    const movimentos = [];
+    for (const reserva of reservas) {
+      const resultado = commitInventoryReservation(empresaId, { lojaId: operacao.lojaId, reservationId: reserva.id, actionId: `commit:${operacao.id}:${reserva.id}` });
+      if (resultado?.movimento) movimentos.push(resultado.movimento);
+    }
+    operacao.reservaEstoqueStatus = 'consumida';
+    operacao.reservaEstoqueMovimentoIds = movimentos.map((item) => item.id);
+    return { committed: true, movimentos };
+  } catch (error) {
+    restaurarRaiz(snapshot);
+    throw error;
+  }
+}
+
+function liberarReservasOperacao(empresaId, operacao, estado, motivo = 'cancelamento') {
+  const reservas = reservasOperacaoAtivas(estado, operacao);
+  if (!reservas.length) return [];
+  const snapshot = raizSnapshot();
+  try {
+    const liberadas = [];
+    for (const reserva of reservas) {
+      liberadas.push(releaseInventoryReservation(empresaId, { lojaId: operacao.lojaId, reservationId: reserva.id, actionId: `release:${motivo}:${operacao.id}:${reserva.id}`, motivo }));
+    }
+    operacao.reservaEstoqueStatus = 'liberada';
+    return liberadas;
+  } catch (error) {
+    restaurarRaiz(snapshot);
+    throw error;
   }
 }
 
@@ -1250,6 +1791,11 @@ export function criarComandaBarbearia(empresaId, dados = {}) {
     estoqueBaixado: false,
     financeiroLancamentoIds: [],
     contasReceberIds: [],
+    reservasEstoqueIds: [],
+    inventoryReservationIds: [],
+    reservaEstoqueStatus: 'sem_necessidade',
+    reservaEstoqueExpiresAt: expiresReservaOperacao(dados.expiresAt ?? dados.expires_at),
+    reservaEstoqueBloqueio: null,
     chaveIdempotencia: chaveIdempotencia || null,
     lancamentosEquipe: Array.isArray(dados.lancamentosEquipe) ? dados.lancamentosEquipe.slice(0, 1).map(o => ({ chave: String(o.chave), hash: String(o.hash) })) : [],
     observacoes: texto(dados.observacoes ?? dados.observacao, 600),
@@ -1263,7 +1809,14 @@ export function criarComandaBarbearia(empresaId, dados = {}) {
     const itens = itensIniciais.map((item) => itemComandaBarbeariaNormalizado(estado, comanda, item));
     comanda.itens.push(...itens);
   }
-  estado.comandas[id] = comanda;
+  const snapshotReserva = raizSnapshot();
+  try {
+    estado.comandas[id] = comanda;
+    sincronizarReservasOperacao(empresaId, comanda, estado, { origem: 'comanda_barbearia', expiresAt: dados.expiresAt ?? dados.expires_at });
+  } catch (error) {
+    restaurarRaiz(snapshotReserva);
+    throw error;
+  }
   save();
   return copiarComandaBarbearia(comanda);
 }
@@ -1274,20 +1827,32 @@ export function atualizarComandaBarbearia(empresaId, comandaId, dados = {}) {
   if (!comanda || comanda.empresaId !== String(empresaId)) return null;
   if (!['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(comanda.status)) throw new Error('A comanda não está aberta para edição.');
   if ('financeiroLancamentoIds' in dados || 'contasReceberIds' in dados) throw new Error('Vínculos financeiros só podem ser gerados no fluxo de recebimento confirmado.');
-  if (dados.desconto !== undefined) comanda.desconto = dinheiro(dados.desconto);
-  if (dados.descontoMotivo !== undefined || dados.desconto_motivo !== undefined) comanda.descontoMotivo = texto(dados.descontoMotivo ?? dados.desconto_motivo, 240);
-  if (dados.gorjeta !== undefined) comanda.gorjeta = dinheiro(dados.gorjeta);
-  if (dados.observacoes !== undefined || dados.observacao !== undefined) comanda.observacoes = texto(dados.observacoes ?? dados.observacao, 600);
-  comanda.atualizadoEm = dataAtual();
-  save();
-  return copiarComandaBarbearia(comanda);
+  const subtotal = Number((comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0).toFixed(2));
+  const descontoNovo = dados.desconto !== undefined ? dinheiro(dados.desconto) : Number(comanda.desconto || 0);
+  const gorjetaNova = dados.gorjeta !== undefined ? dinheiro(dados.gorjeta) : Number(comanda.gorjeta || 0);
+  const totalNovo = Number(Math.max(0, subtotal - Math.min(subtotal, descontoNovo) + gorjetaNova).toFixed(2));
+  if (totalNovo + 0.02 < Number(comanda.totalFaturado || 0)) throw erroEstoqueReserva('O total da comanda não pode ficar abaixo do total já faturado.', 'TOTAL_BELOW_BILLED', 409);
+  const snapshot = raizSnapshot();
+  try {
+    if (dados.desconto !== undefined) comanda.desconto = descontoNovo;
+    if (dados.descontoMotivo !== undefined || dados.desconto_motivo !== undefined) comanda.descontoMotivo = texto(dados.descontoMotivo ?? dados.desconto_motivo, 240);
+    if (dados.gorjeta !== undefined) comanda.gorjeta = gorjetaNova;
+    if (dados.observacoes !== undefined || dados.observacao !== undefined) comanda.observacoes = texto(dados.observacoes ?? dados.observacao, 600);
+    sincronizarReservasOperacao(empresaId, comanda, estado, { origem: 'comanda_barbearia', expiresAt: comanda.reservaEstoqueExpiresAt });
+    comanda.atualizadoEm = dataAtual();
+    save();
+    return copiarComandaBarbearia(comanda);
+  } catch (error) {
+    restaurarRaiz(snapshot);
+    throw error;
+  }
 }
 
 export function adicionarItensComandaBarbearia(empresaId, comandaId, itens = [], operacaoEquipe = null) {
   const estado = estadoEmpresa(empresaId);
   const comanda = estado.comandas[String(comandaId)];
   if (!comanda || comanda.empresaId !== String(empresaId)) return null;
-  if (!['aberta', 'aguardando_pagamento'].includes(comanda.status)) throw new Error('A comanda não está disponível para novos itens.');
+  if (!['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(comanda.status)) throw new Error('A comanda não está disponível para novos itens.');
   if (operacaoEquipe) {
     const anterior = (comanda.lancamentosEquipe || []).find(o => o.chave === operacaoEquipe.chave);
     if (anterior) {
@@ -1299,19 +1864,26 @@ export function adicionarItensComandaBarbearia(empresaId, comandaId, itens = [],
   const entradas = Array.isArray(itens) ? itens : [itens];
   if (!entradas.length) throw new Error('Inclua ao menos um item na comanda.');
   const novos = entradas.map((item) => itemComandaBarbeariaNormalizado(estado, comanda, item));
-  comanda.itens.push(...novos);
-  if (operacaoEquipe) comanda.lancamentosEquipe = [...(comanda.lancamentosEquipe || []), { ...operacaoEquipe }];
-  comanda.status = 'aberta';
-  comanda.atualizadoEm = dataAtual();
-  save();
-  return copiarComandaBarbearia(comanda);
+  const snapshot = raizSnapshot();
+  try {
+    comanda.itens.push(...novos);
+    if (operacaoEquipe) comanda.lancamentosEquipe = [...(comanda.lancamentosEquipe || []), { ...operacaoEquipe }];
+    comanda.status = 'aberta';
+    sincronizarReservasOperacao(empresaId, comanda, estado, { origem: 'comanda_barbearia', expiresAt: comanda.reservaEstoqueExpiresAt });
+    comanda.atualizadoEm = dataAtual();
+    save();
+    return copiarComandaBarbearia(comanda);
+  } catch (error) {
+    restaurarRaiz(snapshot);
+    throw error;
+  }
 }
 
 export function atualizarItemComandaBarbearia(empresaId, comandaId, itemId, dados = {}) {
   const estado = estadoEmpresa(empresaId);
   const comanda = estado.comandas[String(comandaId)];
   if (!comanda || comanda.empresaId !== String(empresaId)) return null;
-  if (!['aberta', 'aguardando_pagamento'].includes(comanda.status)) throw new Error('A comanda não está disponível para edição.');
+  if (!['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(comanda.status)) throw new Error('A comanda não está disponível para edição.');
   const atual = comanda.itens.find((item) => item.id === String(itemId));
   if (!atual) return null;
   const quantidade = dados.quantidade !== undefined || dados.qtd !== undefined ? Math.max(1, Math.round(numero(dados.quantidade ?? dados.qtd, atual.quantidade))) : atual.quantidade;
@@ -1319,26 +1891,49 @@ export function atualizarItemComandaBarbearia(empresaId, comandaId, itemId, dado
     const produto = estado.produtosRevenda[atual.produtoId];
     if (!produto || Number(produto.estoqueAtual || 0) < quantidade) throw new Error(`Estoque insuficiente para ${atual.nome}.`);
   }
-  atual.quantidade = quantidade;
-  atual.subtotal = dinheiro(atual.precoUnitario * quantidade);
-  if (dados.observacao !== undefined || dados.obs !== undefined) atual.observacao = texto(dados.observacao ?? dados.obs, 400);
-  atual.atualizadoEm = dataAtual();
-  comanda.atualizadoEm = atual.atualizadoEm;
-  save();
-  return copiarComandaBarbearia(comanda);
+  const subtotalAtual = Number((comanda.itens || []).reduce((soma, item) => soma + Number(item.subtotal || 0), 0).toFixed(2));
+  const subtotalNovo = Number((subtotalAtual - Number(atual.subtotal || 0) + dinheiro(atual.precoUnitario * quantidade)).toFixed(2));
+  const desconto = Number(Math.min(subtotalNovo, Math.max(0, Number(comanda.desconto || 0))).toFixed(2));
+  const totalNovo = Number(Math.max(0, subtotalNovo - desconto + Math.max(0, Number(comanda.gorjeta || 0))).toFixed(2));
+  if (totalNovo + 0.02 < Number(comanda.totalFaturado || 0)) throw erroEstoqueReserva('O total da comanda não pode ficar abaixo do total já faturado.', 'TOTAL_BELOW_BILLED', 409);
+  const snapshot = raizSnapshot();
+  try {
+    atual.quantidade = quantidade;
+    atual.subtotal = dinheiro(atual.precoUnitario * quantidade);
+    if (dados.observacao !== undefined || dados.obs !== undefined) atual.observacao = texto(dados.observacao ?? dados.obs, 400);
+    atual.atualizadoEm = dataAtual();
+    sincronizarReservasOperacao(empresaId, comanda, estado, { origem: 'comanda_barbearia', expiresAt: comanda.reservaEstoqueExpiresAt });
+    comanda.atualizadoEm = atual.atualizadoEm;
+    save();
+    return copiarComandaBarbearia(comanda);
+  } catch (error) {
+    restaurarRaiz(snapshot);
+    throw error;
+  }
 }
 
 export function removerItemComandaBarbearia(empresaId, comandaId, itemId) {
   const estado = estadoEmpresa(empresaId);
   const comanda = estado.comandas[String(comandaId)];
   if (!comanda || comanda.empresaId !== String(empresaId)) return null;
-  if (!['aberta', 'aguardando_pagamento'].includes(comanda.status)) throw new Error('A comanda não está disponível para edição.');
+  if (!['aberta', 'aguardando_pagamento', 'parcialmente_paga'].includes(comanda.status)) throw new Error('A comanda não está disponível para edição.');
   const indice = comanda.itens.findIndex((item) => item.id === String(itemId));
   if (indice < 0) return null;
-  comanda.itens.splice(indice, 1);
-  comanda.atualizadoEm = dataAtual();
-  save();
-  return copiarComandaBarbearia(comanda);
+  const subtotalNovo = Number((comanda.itens.reduce((soma, item, index) => soma + (index === indice ? 0 : Number(item.subtotal || 0)), 0)).toFixed(2));
+  const desconto = Number(Math.min(subtotalNovo, Math.max(0, Number(comanda.desconto || 0))).toFixed(2));
+  const totalNovo = Number(Math.max(0, subtotalNovo - desconto + Math.max(0, Number(comanda.gorjeta || 0))).toFixed(2));
+  if (totalNovo + 0.02 < Number(comanda.totalFaturado || 0)) throw erroEstoqueReserva('O total da comanda não pode ficar abaixo do total já faturado.', 'TOTAL_BELOW_BILLED', 409);
+  const snapshot = raizSnapshot();
+  try {
+    comanda.itens.splice(indice, 1);
+    sincronizarReservasOperacao(empresaId, comanda, estado, { origem: 'comanda_barbearia', expiresAt: comanda.reservaEstoqueExpiresAt });
+    comanda.atualizadoEm = dataAtual();
+    save();
+    return copiarComandaBarbearia(comanda);
+  } catch (error) {
+    restaurarRaiz(snapshot);
+    throw error;
+  }
 }
 
 export function alterarStatusComandaBarbearia(empresaId, comandaId, status, dados = {}) {
@@ -1447,6 +2042,16 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
       throw new Error(`Limite de crédito insuficiente. Disponível: R$ ${credito.disponivel.toFixed(2)}.`);
     }
   }
+  // Pagamento parcial mantém a reserva held. No fechamento, o commit é feito
+  // antes do ledger para que uma reserva expirada/insuficiente não seja paga.
+  const snapshotAntesCommitReserva = raizSnapshot();
+  let reservaComitada = { committed: false, movimentos: [] };
+  try {
+    if (faturamentoCompleto) reservaComitada = commitarReservasOperacao(empresaId, comanda, estado);
+  } catch (error) {
+    restaurarRaiz(snapshotAntesCommitReserva);
+    throw error;
+  }
   const lancamentosFinanceiros = [];
   const contasReceber = [];
   const recebimentosCaixa = [];
@@ -1464,7 +2069,7 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
       valor: pagamento.valor, origem: 'barbearia_comanda', status: pagamento.meio === 'conta' ? 'pendente' : 'pago',
       vencimento: pagamento.meio === 'conta' ? conta?.dataVencimento : dataAtual(), dataOperacao: dataAtual(),
       pagoEm: pagamento.meio === 'conta' ? null : dataAtual(), meioPagamento: pagamento.meio,
-      lojaId: comanda.lojaId || null,
+      lojaId: lojaIdOperacao,
       usuario: texto(dados.usuario, 120), automatico: true,
       chaveIdempotencia: `barbearia_comanda:${empresaId}:${comanda.id}:pagamento:${pagamento.id}`,
       referencia: { comandaId: comanda.id, clienteId: clienteId || undefined, profissionalId: comanda.profissionalId || undefined, contaReceberId: conta?.id, caixaId: pagamento.caixaId || undefined },
@@ -1498,7 +2103,13 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
   const possuiConta = comanda.pagamentos.some((item) => item.meio === 'conta');
   comanda.status = faturada ? (possuiConta ? 'em_conta' : 'paga') : (comanda.totalPago > 0 ? 'parcialmente_paga' : 'aguardando_pagamento');
   comanda.estoqueBaixado = Boolean(comanda.estoqueBaixado || faturada);
-  if (faturada && !comanda.estoqueBaixadoAntes) {
+  if (faturada && reservaComitada.committed) {
+    comanda.estoqueBaixadoAntes = true;
+    comanda.reservaEstoqueMovimentoIds = reservaComitada.movimentos.map((item) => item.id);
+    comanda.consumoInternoBaixado = true;
+    comanda.consumoInternoMovimentoIds = [...(comanda.consumoInternoMovimentoIds || []), ...reservaComitada.movimentos.map((item) => item.id)];
+  }
+  if (faturada && !reservaComitada.committed && !comanda.estoqueBaixadoAntes) {
     for (const item of comanda.itens.filter((linha) => linha.tipo === 'produto')) {
       const produto = estado.produtosRevenda[item.produtoId];
       const anterior = Number(produto.estoqueAtual || 0);
@@ -1510,13 +2121,16 @@ export function registrarPagamentoComandaBarbearia(empresaId, comandaId, dados =
     }
     comanda.estoqueBaixadoAntes = true;
   }
-  if (faturada) aplicarConsumoInternoComanda(estado, comanda, consumoPlanejado);
+  if (faturada && !reservaComitada.committed) aplicarConsumoInternoComanda(estado, comanda, consumoPlanejado);
   comanda.atualizadoEm = dataAtual();
   if (faturada) comanda.fechadaEm = comanda.atualizadoEm;
   if (faturada && !possuiConta && clienteId && comanda.totalPago > Number(comanda.fidelidadeValorPontuado || 0)) {
     const valorElegivel = Number((comanda.totalPago - Number(comanda.fidelidadeValorPontuado || 0)).toFixed(2));
     const credito = canaisFidelidadeKytto.creditarFidelidade(empresaId, clienteId, valorElegivel, 'barbearia_comanda', {
       chaveIdempotencia: `barbearia_comanda:${empresaId}:${comanda.id}:fidelidade:${comanda.totalPago.toFixed(2)}`,
+      lojaId: lojaIdOperacao,
+      legacyMigration: true,
+      bridge: 'legacy-loyalty-bridge',
     });
     if (credito) {
       comanda.fidelidadeValorPontuado = Number((Number(comanda.fidelidadeValorPontuado || 0) + valorElegivel).toFixed(2));
@@ -1534,11 +2148,18 @@ export function cancelarComandaBarbearia(empresaId, comandaId, dados = {}) {
   if (comanda.status === 'paga' || comanda.status === 'em_conta') throw new Error('Uma comanda já faturada não pode ser cancelada neste fluxo.');
   if (comanda.status === 'cancelada') return copiarComandaBarbearia(comanda, true);
   if (Number(comanda.totalPago || 0) > 0 || Number(comanda.totalFaturado || 0) > 0 || (comanda.pagamentos || []).length > 0) throw new Error('Uma comanda com cobrança registrada só pode ser cancelada pelo fluxo financeiro apropriado.');
-  comanda.status = 'cancelada';
-  comanda.observacoes = [comanda.observacoes, texto(dados.motivo, 300) ? `Cancelamento: ${texto(dados.motivo, 300)}` : 'Cancelamento manual.'].filter(Boolean).join(' · ');
-  comanda.atualizadoEm = dataAtual();
-  save();
-  return copiarComandaBarbearia(comanda);
+  const snapshot = raizSnapshot();
+  try {
+    liberarReservasOperacao(empresaId, comanda, estado, 'cancelamento_comanda');
+    comanda.status = 'cancelada';
+    comanda.observacoes = [comanda.observacoes, texto(dados.motivo, 300) ? `Cancelamento: ${texto(dados.motivo, 300)}` : 'Cancelamento manual.'].filter(Boolean).join(' · ');
+    comanda.atualizadoEm = dataAtual();
+    save();
+    return copiarComandaBarbearia(comanda);
+  } catch (error) {
+    restaurarRaiz(snapshot);
+    throw error;
+  }
 }
 
 function validarCalendarioAgendamento(estado, agendamento, profissional) {
@@ -2050,4 +2671,186 @@ export function listarHistoricoAtendimentos(empresaId, filtros = {}) {
     .filter((item) => !filtros.ate || item.dataAgenda <= String(filtros.ate).slice(0, 10))
     .sort((a, b) => `${b.dataAgenda} ${b.hora}`.localeCompare(`${a.dataAgenda} ${a.hora}`));
   return filtros.limite ? itens.slice(0, Math.max(1, Math.min(5000, Number(filtros.limite) || 50))) : itens;
+}
+
+// ── Estorno coordenado Dino ─────────────────────────────────────────────────
+// Os adaptadores abaixo só acrescentam evidência compensatória. Nenhum snapshot
+// de pagamento, venda, comanda ou movimento histórico é apagado/reescrito.
+function reversalText(value, max = 240) { return String(value ?? '').trim().slice(0, max); }
+
+function reversalSourceMovements(estado, source, sourceType) {
+  const sourceId = String(source.id);
+  const ids = new Set([
+    ...(source.reservaEstoqueMovimentoIds || []),
+    ...(source.consumoInternoMovimentoIds || []),
+  ].map(String));
+  return Object.values(estado.movimentosEstoque || {}).filter((movimento) => ids.has(String(movimento.id))
+    || ((sourceType === 'comanda' && movimento.comandaId === sourceId) || (sourceType === 'revenda' && movimento.vendaId === sourceId)));
+}
+
+export function registrarEstornoEstoqueDino(empresaId, { source, sourceType, lojaId, actionId, motivo } = {}) {
+  if (!source?.id || !actionId || !lojaId) throw Object.assign(new Error('Origem, lojaId e actionId são obrigatórios para estorno de estoque.'), { code: 'INVENTORY_REVERSAL_INVALID', retryable: false });
+  const estado = estadoEmpresa(empresaId);
+  const operacao = sourceType === 'comanda' ? estado.comandas[String(source.id)] : estado.vendasRevenda[String(source.id)];
+  if (!operacao || operacao.empresaId !== String(empresaId) || operacao.lojaId !== String(lojaId)) throw Object.assign(new Error('Origem de estoque não pertence à empresa/unidade ativa.'), { code: 'INVENTORY_SCOPE_MISMATCH', status: 409, retryable: false });
+  operacao.dinoReversalEffects ||= {};
+  if (operacao.dinoReversalEffects.inventory?.actionId === actionId && operacao.dinoReversalEffects.inventory.status === 'completed') return { status: 'completed', replayed: true, movements: [] };
+  const snapshot = raizSnapshot();
+  try {
+    const movimentos = [];
+    // Reservas ainda held/confirmed são liberadas; consumed/committed já teve
+    // baixa e recebe entrada compensatória, nunca uma segunda liberação.
+    for (const reservationId of [...new Set((operacao.reservasEstoqueIds || operacao.inventoryReservationIds || []).map(String))]) {
+      const reserva = estado.inventoryReservations[reservationId];
+      if (!reserva || reserva.empresaId !== String(empresaId) || reserva.lojaId !== String(lojaId)) continue;
+      if (['held', 'confirmed'].includes(reserva.status)) {
+        releaseInventoryReservation(empresaId, { lojaId, reservationId: reserva.id, actionId: `dino-reversal:${actionId}:reservation:${reserva.id}`, motivo: motivo || 'estorno coordenado' });
+      }
+    }
+    const outbound = reversalSourceMovements(estado, operacao, sourceType);
+    const already = new Set(Object.values(estado.movimentosEstoque || {}).filter((item) => item.tipo === 'entrada_estorno' && item.reversalActionId === actionId).map((item) => String(item.reversalOf)));
+    for (const original of outbound) {
+      if (!['saida_reserva', 'saida_comanda', 'saida_venda', 'consumo_servico'].includes(original.tipo) || already.has(String(original.id))) continue;
+      const produto = estado.produtosRevenda[String(original.produtoId)];
+      if (!produto || produto.empresaId !== String(empresaId) || produto.lojaId !== String(lojaId)) throw Object.assign(new Error('Produto do movimento não pertence à unidade ativa.'), { code: 'INVENTORY_SCOPE_MISMATCH', status: 409, retryable: false });
+      const anterior = Number(produto.estoqueAtual || 0);
+      const quantidade = Number(original.quantidade || 0);
+      if (!(quantidade > 0)) continue;
+      const agora = dataAtual();
+      produto.estoqueAtual = Number((anterior + quantidade).toFixed(4));
+      produto.atualizadoEm = agora;
+      produto.ultimoMovimentoEm = agora;
+      const id = novoId('mov', estado.movimentosEstoque);
+      const movimento = {
+        id, empresaId: String(empresaId), lojaId: String(lojaId), produtoId: produto.id,
+        tipo: 'entrada_estorno', quantidade, estoqueAnterior: anterior, estoquePosterior: produto.estoqueAtual,
+        reversalActionId: actionId, reversalOf: original.id, reservationId: original.reservationId || null,
+        comandaId: sourceType === 'comanda' ? source.id : null, vendaId: sourceType === 'revenda' ? source.id : null,
+        observacao: reversalText(motivo || `Estorno coordenado da ${sourceType} ${source.id}`, 300), criadoEm: agora,
+      };
+      estado.movimentosEstoque[id] = movimento;
+      movimentos.push(movimento);
+    }
+    operacao.dinoReversalEffects.inventory = { actionId, status: 'completed', movementIds: movimentos.map((item) => item.id), criadoEm: dataAtual() };
+    save();
+    return { status: 'completed', replayed: false, movements: movimentos };
+  } catch (error) { restaurarRaiz(snapshot); throw error; }
+}
+
+export function registrarEstornoComissaoDino(empresaId, { source, sourceType, lojaId, actionId, motivo } = {}) {
+  if (!source?.id || !actionId || !lojaId) throw Object.assign(new Error('Origem, lojaId e actionId são obrigatórios para estorno de comissão.'), { code: 'COMMISSION_REVERSAL_INVALID', retryable: false });
+  const estado = estadoEmpresa(empresaId);
+  const operacao = sourceType === 'comanda' ? estado.comandas[String(source.id)] : estado.vendasRevenda[String(source.id)];
+  if (!operacao || operacao.empresaId !== String(empresaId) || operacao.lojaId !== String(lojaId)) throw Object.assign(new Error('Origem de comissão não pertence à empresa/unidade ativa.'), { code: 'COMMISSION_SCOPE_MISMATCH', status: 409, retryable: false });
+  const existente = Object.values(estado.movimentosComissao || {}).filter((item) => item.actionId === actionId);
+  if (existente.length) return { status: 'completed', replayed: true, movements: existente };
+  const linhas = [];
+  if (sourceType === 'comanda') {
+    for (const item of operacao.itens || []) {
+      const profissional = item.profissionalId ? estado.profissionais[item.profissionalId] : null;
+      if (!profissional || item.tipo !== 'servico') continue;
+      const percentual = Number(profissional.comissoesPorServico?.[item.servicoId] ?? profissional.percentualComissao ?? 0);
+      const valor = Number((Math.max(0, Number(item.subtotal || 0)) * Math.max(0, percentual) / 100).toFixed(2));
+      if (valor > 0) linhas.push({ profissionalId: profissional.id, base: Number(item.subtotal || 0), percentual, valor });
+    }
+  } else {
+    const profissional = operacao.profissionalId ? estado.profissionais[operacao.profissionalId] : null;
+    const percentual = Number(profissional?.percentualComissaoProduto || 0);
+    const valor = Number((Math.max(0, Number(operacao.total || 0)) * Math.max(0, percentual) / 100).toFixed(2));
+    if (profissional && valor > 0) linhas.push({ profissionalId: profissional.id, base: Number(operacao.total || 0), percentual, valor });
+  }
+  const movimentos = linhas.map((linha) => {
+    const id = novoId('com-est', estado.movimentosComissao);
+    const movimento = { id, empresaId: String(empresaId), lojaId: String(lojaId), tipo: 'estorno_comissionamento', valor: linha.valor, valorEfeito: -linha.valor, base: linha.base, percentual: linha.percentual, profissionalId: linha.profissionalId, sourceType, sourceId: String(source.id), actionId, motivo: reversalText(motivo, 300), criadoEm: dataAtual() };
+    estado.movimentosComissao[id] = movimento;
+    return movimento;
+  });
+  save();
+  return { status: 'completed', replayed: false, movements: movimentos };
+}
+
+function registrarAuditoriaEstornoDino(empresaId, { sourceType, sourceId, lojaId, actionId, status, motivo } = {}) {
+  const raiz = db();
+  raiz.auditoria ||= [];
+  const existente = raiz.auditoria.find((item) => item.acao === 'DINO_REVERSAL' && item.actionId === actionId);
+  if (existente) return { status: 'completed', replayed: true };
+  // Somente ids, escopo e motivo: sem nome, telefone, e-mail, token ou payload.
+  raiz.auditoria.push({ id: nextId('aud'), ts: dataAtual(), acao: 'DINO_REVERSAL', empresaId: String(empresaId), lojaId: String(lojaId), actionId: String(actionId), sourceType, sourceId: String(sourceId), status, motivo: reversalText(motivo, 300) });
+  if (raiz.auditoria.length > 1000) raiz.auditoria = raiz.auditoria.slice(-1000);
+  save();
+  return { status: 'completed', replayed: false };
+}
+
+function marcarOrigemEstornada(empresaId, { sourceType, sourceId, actionId, status } = {}) {
+  const estado = estadoEmpresa(empresaId);
+  const origem = sourceType === 'comanda' ? estado.comandas[String(sourceId)] : estado.vendasRevenda[String(sourceId)];
+  if (!origem || origem.empresaId !== String(empresaId)) return null;
+  origem.dinoReversal = { actionId, status, atualizadoEm: dataAtual() };
+  origem.estornada = status === 'completed';
+  origem.estornoStatus = status;
+  origem.atualizadoEm = dataAtual();
+  save();
+  return origem;
+}
+
+function adaptersParaEstorno(empresaId, dados = {}) {
+  return {
+    adapter: getDinoReversalMemoryAdapter(),
+    resolveSource: (_scope, input) => input.sourceType === 'comanda'
+      ? obterComandaBarbearia(empresaId, input.sourceId)
+      : obterVendaRevenda(empresaId, input.sourceId, { lojaId: dados.lojaId }),
+    effects: {
+      payment: async ({ source, actionId, input }) => {
+        const pagamentos = Array.isArray(source.pagamentos) ? source.pagamentos : source.pagamento ? [source.pagamento] : [];
+        const externos = pagamentos.filter((item) => !['dinheiro', 'conta'].includes(String(item.meio || item.meioPagamento || '').toLowerCase()));
+        const gateway = dados.gatewayAdapter || dados.paymentAdapter || dados.gateway;
+        if (!externos.length) return { status: 'completed', reason: 'cash_or_account_payment' };
+        if (!gateway || typeof gateway.refund !== 'function') return { status: 'manual_required', pending: ['gateway_refund_adapter'], refundRequired: true };
+        const results = [];
+        for (const pagamento of externos) results.push(await gateway.refund({ empresaId, lojaId: dados.lojaId, sourceType: input.sourceType, sourceId: source.id, payment: { id: pagamento.id, meio: pagamento.meio, valor: pagamento.valor, provider: pagamento.provider, providerPaymentId: pagamento.providerPaymentId }, actionId }));
+        return { status: results.some((item) => item?.status === 'manual_required') ? 'manual_required' : results.some((item) => item?.status === 'pending') ? 'pending' : 'completed', results };
+      },
+      financial: async ({ source, actionId, input }) => {
+        const ids = input.sourceType === 'comanda' ? (source.financeiroLancamentoIds || []) : [source.financeiroLancamentoId].filter(Boolean);
+        const resultados = [];
+        for (const lancamentoId of ids) {
+          const original = financeiroKytto.obterLancamento(empresaId, lancamentoId, { lojaId: dados.lojaId });
+          if (!original) throw Object.assign(new Error('Lançamento financeiro da origem não encontrado.'), { code: 'FINANCIAL_ENTRY_NOT_FOUND', retryable: false });
+          if (original.status !== 'pago') continue;
+          resultados.push(financeiroKytto.reverterLancamento({ empresaId, lojaId: dados.lojaId, lancamentoId, actionId, idempotencyKey: `${input.idempotencyKey}:finance:${lancamentoId}`, motivo: input.motivo, usuarioId: input.operador, correlationId: input.correlationId, confirmado: true, metadata: { sourceType: input.sourceType, sourceId: source.id } }));
+        }
+        return { status: 'completed', reversals: resultados.map((item) => ({ id: item.id, originalId: item.lancamentoOriginalId, value: item.valor })) };
+      },
+      cash: async ({ source, actionId, input }) => {
+        const pagamentos = Array.isArray(source.pagamentos) ? source.pagamentos : source.pagamento ? [source.pagamento] : [];
+        const reversals = [];
+        for (const pagamento of pagamentos.filter((item) => String(item.meio || item.meioPagamento || '').toLowerCase() === 'dinheiro' && item.caixaMovimentoId)) {
+          reversals.push(caixaKytto.registrarEstornoRecebimento(empresaId, { lojaId: dados.lojaId, movimentoOriginalId: pagamento.caixaMovimentoId, valor: pagamento.valor, actionId, idempotencyKey: `${input.idempotencyKey}:cash:${pagamento.id}`, motivo: input.motivo, referencia: source.id, usuario: input.operador }));
+        }
+        return { status: 'completed', reversals: reversals.map((item) => ({ id: item.id, originalId: item.movimentoOriginalId, value: item.valor })) };
+      },
+      inventory: async ({ source, actionId, input }) => registrarEstornoEstoqueDino(empresaId, { source, sourceType: input.sourceType, lojaId: dados.lojaId, actionId, motivo: input.motivo }),
+      loyalty: async ({ source, actionId, input }) => {
+        const pontos = Number(source.fidelidadeValorPontuado || 0);
+        if (!(pontos > 0) || !source.clienteId) return { status: 'skipped', reason: 'no_loyalty_credit' };
+        return canaisFidelidadeKytto.reverterFidelidade(empresaId, source.clienteId, pontos, { legacyMigration: true, bridge: 'legacy-loyalty-bridge', lojaId: dados.lojaId, actionId, idempotencyKey: `${input.idempotencyKey}:loyalty`, motivo: input.motivo, sourceMovementId: source.fidelidadeMovimentoId });
+      },
+      commission: async ({ source, actionId, input }) => registrarEstornoComissaoDino(empresaId, { source, sourceType: input.sourceType, lojaId: dados.lojaId, actionId, motivo: input.motivo }),
+      audit: async ({ actionId, input }) => registrarAuditoriaEstornoDino(empresaId, { sourceType: input.sourceType, sourceId: input.sourceId, lojaId: dados.lojaId, actionId, status: 'requested', motivo: input.motivo }),
+      source: async ({ actionId, input, status }) => { marcarOrigemEstornada(empresaId, { sourceType: input.sourceType, sourceId: input.sourceId, actionId, status }); return { status: status || 'completed', sourceId: input.sourceId }; },
+    },
+    markSource: ({ actionId, input, status }) => marcarOrigemEstornada(empresaId, { sourceType: input.sourceType, sourceId: input.sourceId, actionId, status }),
+  };
+}
+
+export async function estornarPagamentoComandaBarbearia(empresaId, comandaId, dados = {}) {
+  const lojaId = reversalText(dados.lojaId ?? dados.loja_id, 180);
+  const input = { ...dados, sourceType: 'comanda', sourceId: comandaId, actionId: dados.actionId ?? dados.action_id, idempotencyKey: dados.idempotencyKey ?? dados.idempotency_key ?? dados.chaveIdempotencia, operador: dados.operador ?? dados.usuarioId ?? dados.usuario, approvedBy: dados.approvedBy ?? dados.approved_by, confirmado: dados.confirmado === true };
+  return executeDinoReversal({ empresaId, lojaId }, input, adaptersParaEstorno(empresaId, { ...dados, lojaId }));
+}
+
+export async function estornarVendaRevenda(empresaId, vendaId, dados = {}) {
+  const lojaId = reversalText(dados.lojaId ?? dados.loja_id, 180);
+  const input = { ...dados, sourceType: 'revenda', sourceId: vendaId, actionId: dados.actionId ?? dados.action_id, idempotencyKey: dados.idempotencyKey ?? dados.idempotency_key ?? dados.chaveIdempotencia, operador: dados.operador ?? dados.usuarioId ?? dados.usuario, approvedBy: dados.approvedBy ?? dados.approved_by, confirmado: dados.confirmado === true };
+  return executeDinoReversal({ empresaId, lojaId }, input, adaptersParaEstorno(empresaId, { ...dados, lojaId }));
 }

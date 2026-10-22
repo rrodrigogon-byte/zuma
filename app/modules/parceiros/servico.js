@@ -15,6 +15,131 @@ const JANELA_VALIDACAO_MS = 15 * MIN_MS;
 export const PLATAFORMAS = ['wellhub', 'totalpass'];
 const NOME_PLATAFORMA = { wellhub: 'Wellhub', totalpass: 'TotalPass' };
 
+const WEBHOOK_RATE_LIMIT = 60;
+const WEBHOOK_WINDOW_MS = 60 * 1000;
+
+function webhookQueryForTransaction(transaction) {
+  if (typeof transaction === 'function') return transaction;
+  if (transaction && typeof transaction.query === 'function') return transaction.query.bind(transaction);
+  throw new ErroDominio('WEBHOOK_GATE_UNAVAILABLE', 'Controle de webhook indisponível', 503);
+}
+
+/**
+ * Executa a operação na API moderna `db.transaction`; a ponte legada só é usada
+ * enquanto a ligação do servidor ainda expõe beginTransaction/queryInTransaction.
+ * Em ambos os casos não existe estado de processo para o rate limit.
+ */
+function transacaoWebhook(db, fn) {
+  if (typeof db?.transaction === 'function') {
+    return db.transaction(async (transaction) => fn(webhookQueryForTransaction(transaction)));
+  }
+  if (typeof db?.beginTransaction === 'function') return transacao(db, fn);
+  throw new ErroDominio('WEBHOOK_GATE_UNAVAILABLE', 'Controle de webhook indisponível', 503);
+}
+
+function codigoErroWebhook(error) {
+  const codigo = String(error?.code || '').replace(/[^A-Za-z0-9_.:-]/g, '').slice(0, 80);
+  return codigo || 'WEBHOOK_PROCESSING_FAILED';
+}
+
+function textoWebhook(valor, campo, limite = 180) {
+  const texto = String(valor ?? '').trim();
+  if (!texto || texto.length > limite) throw new ErroDominio('PAYLOAD_INVALIDO', `${campo} inválido`, 400);
+  return texto;
+}
+
+/**
+ * Gate atômico de webhooks. Só grava hash, identificadores e escopo em
+ * dino_webhook_events; nunca recebe nem persiste o corpo da requisição.
+ *
+ * O retorno do gate possui `complete({ status, error })`, usado pela rota para
+ * fechar a evidência como processed/failed depois do efeito de negócio.
+ */
+export function createWebhookGate(db) {
+  return async function webhookGate({
+    provider,
+    providerAccountId,
+    providerEventId,
+    eventHash,
+    empresaId = null,
+    lojaId = null,
+    agora = new Date(),
+    production = false,
+  } = {}) {
+    const provedor = textoWebhook(provider, 'provider', 80).toLowerCase();
+    const conta = textoWebhook(providerAccountId, 'provider account', 180);
+    const evento = textoWebhook(providerEventId, 'provider event', 180);
+    const hash = textoWebhook(eventHash, 'event hash', 64).toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(hash)) throw new ErroDominio('PAYLOAD_INVALIDO', 'hash de evento inválido', 400);
+    if (production && !lojaId) throw new ErroDominio('WEBHOOK_SCOPE_REQUIRED', 'Escopo de unidade ausente', 503);
+    const recebidoEm = agora instanceof Date && !Number.isNaN(agora.getTime()) ? agora : new Date();
+    const chave = `dino-webhook:${provedor}:${conta}:${evento}`;
+    const resultado = await transacaoWebhook(db, async (q) => {
+      await q('SELECT pg_advisory_xact_lock(hashtext($1))', [chave]);
+
+      // A consulta é deliberadamente sem o hash: o mesmo event id com outro
+      // corpo precisa ser distinguido como conflito, não como um novo evento.
+      const existente = await q(
+        `SELECT id, event_hash, status FROM dino_webhook_events
+          WHERE provider = $1 AND provider_account_id = $2 AND provider_event_id = $3
+          ORDER BY recebido_em DESC LIMIT 1`,
+        [provedor, conta, evento],
+      );
+      if (existente.rows[0]) {
+        if (String(existente.rows[0].event_hash).toLowerCase() !== hash) {
+          throw new ErroDominio('WEBHOOK_EVENT_CONFLICT', 'Evento de webhook divergente', 409);
+        }
+        return { duplicado: true, eventDbId: existente.rows[0].id };
+      }
+
+      const limite = await q(
+        `SELECT COUNT(*)::int AS total FROM dino_webhook_events
+          WHERE provider = $1 AND provider_account_id = $2
+            AND recebido_em >= $3::timestamptz - INTERVAL '60 seconds'`,
+        [provedor, conta, recebidoEm],
+      );
+      if (Number(limite.rows[0]?.total || 0) >= WEBHOOK_RATE_LIMIT) {
+        throw Object.assign(new ErroDominio('WEBHOOK_RATE_LIMIT', 'Muitas solicitações de webhook', 429), { retryAfterSeconds: 60 });
+      }
+
+      const inserido = await q(
+        `INSERT INTO dino_webhook_events
+          (provider, provider_account_id, provider_event_id, event_hash, status, empresa_id, loja_id, recebido_em)
+         VALUES ($1, $2, $3, $4, 'received', $5, $6, $7)
+         RETURNING id`,
+        [provedor, conta, evento, hash, empresaId || null, lojaId || null, recebidoEm],
+      );
+      return { duplicado: false, eventDbId: inserido.rows[0]?.id || null };
+    });
+
+    if (resultado.duplicado) return { ...resultado, duplicado: true };
+
+    const complete = async ({ status = 'processed', error = null } = {}) => {
+      const finalStatus = status === 'failed' ? 'failed' : 'processed';
+      const saneado = finalStatus === 'failed' ? codigoErroWebhook(error) : null;
+      await transacaoWebhook(db, async (q) => {
+        const where = resultado.eventDbId
+          ? 'id = $1'
+          : 'provider = $1 AND provider_account_id = $2 AND provider_event_id = $3 AND event_hash = $4';
+        const params = resultado.eventDbId
+          ? [resultado.eventDbId, finalStatus, saneado]
+          : [provedor, conta, evento, hash, finalStatus, saneado];
+        const offset = resultado.eventDbId ? 2 : 5;
+        await q(
+          `UPDATE dino_webhook_events
+              SET status = $${offset}, erro = $${offset + 1}, processado_em = CURRENT_TIMESTAMP
+            WHERE ${where} AND status IN ('received', 'processing')`,
+          params,
+        );
+      });
+    };
+    return { ...resultado, aceito: true, complete };
+  };
+}
+
+// Alias no padrão de nomes do módulo e para facilitar injeção por testes.
+export const criarWebhookGate = createWebhookGate;
+
 /* ------------------------------------------------------------------ */
 /* Contas da academia nas plataformas                                  */
 /* ------------------------------------------------------------------ */

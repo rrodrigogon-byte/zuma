@@ -54,10 +54,16 @@ import {
   cancelarComandaBarbearia,
   registrarPagamentoComandaBarbearia,
   registrarConsumoInternoComandaBarbearia,
+  reserveInventoryForOperation,
+  releaseInventoryReservation,
+  commitInventoryReservation,
+  expireInventoryReservations,
+  listarInventoryReservations,
 } from './barbearia-erp-kytto.js';
 
 const EMPRESA_A = 'empresa-teste-a';
 const EMPRESA_B = 'empresa-teste-b';
+const LOJA = 'loja-a';
 
 beforeEach(() => reset());
 afterEach(() => reset());
@@ -78,6 +84,7 @@ function receberAgenda(empresaId, agendamento, meio, valor) {
   const lancamento = registrarLancamento(empresaId, {
     tipo: 'receita', origem: 'barbearia_atendimento', status: 'pago',
     valor, meioPagamento: meio,
+    lojaId: agendamento.lojaId || LOJA,
     chaveIdempotencia: `barbearia_atendimento:${empresaId}:${agendamento.id}`,
   });
   return vincularLancamentoFinanceiro(empresaId, agendamento.id, lancamento.id);
@@ -209,17 +216,23 @@ test('torna o recebimento idempotente no financeiro central', () => {
     origem: 'barbearia_atendimento',
     status: 'pago',
     meioPagamento: 'pix',
+    lojaId: LOJA,
+    dataOperacao: '2030-01-15T14:00:00.000Z',
+    pagoEm: '2030-01-15T14:00:00.000Z',
     chaveIdempotencia: `barbearia_atendimento:${EMPRESA_A}:age-teste`,
     referencia: { agendamentoId: 'age-teste' },
   });
   const repetido = registrarLancamento(EMPRESA_A, {
     tipo: 'receita',
     categoria: 'Serviços',
-    descricao: 'Atendimento de teste repetido',
+    descricao: 'Atendimento de teste',
     valor: 50,
     origem: 'barbearia_atendimento',
     status: 'pago',
     meioPagamento: 'pix',
+    lojaId: LOJA,
+    dataOperacao: '2030-01-15T14:00:00.000Z',
+    pagoEm: '2030-01-15T14:00:00.000Z',
     chaveIdempotencia: `barbearia_atendimento:${EMPRESA_A}:age-teste`,
     referencia: { agendamentoId: 'age-teste' },
   });
@@ -269,7 +282,7 @@ test('agenda não aceita pagamento forjado em criação ou edição e não fatur
   const concluido = alterarStatusAgendamento(EMPRESA_A, agenda.id, 'concluido');
   assert.equal(obterDashboard(EMPRESA_A, { data: '2030-02-21' }).indicadores.faturamentoHoje, 0);
   assert.equal(obterComissoes(EMPRESA_A).porProfissional.find((item) => item.profissionalId === profissional.id).brutoServicos, 0);
-  const deOutraEmpresa = registrarLancamento(EMPRESA_B, { tipo: 'receita', origem: 'barbearia_atendimento', status: 'pago', valor: 50, chaveIdempotencia: `barbearia_atendimento:${EMPRESA_A}:${agenda.id}` });
+  const deOutraEmpresa = registrarLancamento(EMPRESA_B, { tipo: 'receita', origem: 'barbearia_atendimento', status: 'pago', valor: 50, lojaId: LOJA, chaveIdempotencia: `barbearia_atendimento:${EMPRESA_A}:${agenda.id}` });
   assert.throws(() => vincularLancamentoFinanceiro(EMPRESA_A, agenda.id, deOutraEmpresa.id), /Lançamento de recebimento/);
   assert.equal(recebimentoAgendamentoVerificado(EMPRESA_A, concluido), null);
   receberAgenda(EMPRESA_A, concluido, 'pix', 50);
@@ -336,19 +349,19 @@ test('isola catálogo, movimentos e venda por unidade dentro da mesma empresa', 
 });
 
 test('separa pedido de revenda da confirmação e baixa estoque e financeiro uma única vez', () => {
-  const produto = criarProdutoRevenda(EMPRESA_A, { nome: 'Pomada venda', precoVenda: 40, estoqueAtual: 3, estoqueMinimo: 1 });
-  const venda = criarVendaRevenda(EMPRESA_A, { clienteNome: 'Cliente venda', itens: [{ produtoId: produto.id, quantidade: 2 }], chaveIdempotencia: 'pedido-venda-teste-1' });
+  const produto = criarProdutoRevenda(EMPRESA_A, { lojaId: LOJA, nome: 'Pomada venda', precoVenda: 40, estoqueAtual: 3, estoqueMinimo: 1 });
+  const venda = criarVendaRevenda(EMPRESA_A, { lojaId: LOJA, clienteNome: 'Cliente venda', itens: [{ produtoId: produto.id, quantidade: 2 }], chaveIdempotencia: 'pedido-venda-teste-1' });
   assert.equal(venda.status, 'aguardando_pagamento');
   assert.equal(listarLancamentos(EMPRESA_A, { origem: 'barbearia_revenda' }).length, 0);
   assert.equal(listarMovimentosEstoque(EMPRESA_A, { produtoId: produto.id }).length, 1);
   assert.throws(() => finalizarVendaRevenda(EMPRESA_A, venda.id, { meioPagamento: 'pix' }), /confirmação explícita/);
-  const paga = finalizarVendaRevenda(EMPRESA_A, venda.id, { confirmadoPagamento: true, meioPagamento: 'pix', valorRecebido: 80, usuario: 'teste' });
+  const paga = finalizarVendaRevenda(EMPRESA_A, venda.id, { confirmadoPagamento: true, meioPagamento: 'pix', valorRecebido: 80, usuario: 'teste', lojaId: LOJA });
   assert.equal(paga.status, 'pago');
   assert.equal(paga.estoqueBaixado, true);
   assert.equal(listarProdutosRevenda(EMPRESA_A).find((item) => item.id === produto.id).estoqueAtual, 1);
   assert.equal(listarLancamentos(EMPRESA_A, { origem: 'barbearia_revenda', status: 'pago' }).length, 1);
   assert.equal(listarMovimentosEstoque(EMPRESA_A, { produtoId: produto.id }).length, 2);
-  const repetida = finalizarVendaRevenda(EMPRESA_A, venda.id, { confirmadoPagamento: true, meioPagamento: 'pix', valorRecebido: 80 });
+  const repetida = finalizarVendaRevenda(EMPRESA_A, venda.id, { confirmadoPagamento: true, meioPagamento: 'pix', valorRecebido: 80, lojaId: LOJA });
   assert.equal(repetida.financeiroLancamentoId, paga.financeiroLancamentoId);
   assert.equal(listarVendasRevenda(EMPRESA_A, { status: 'pago' }).length, 1);
   assert.equal(listarLancamentos(EMPRESA_A, { origem: 'barbearia_revenda' }).length, 1);
@@ -359,15 +372,15 @@ test('separa pedido de revenda da confirmação e baixa estoque e financeiro uma
 test('calcula repasse indicativo de serviços e produtos pagos sem lançar pagamento', () => {
   const profissional = baseProfissional();
   const servico = baseServico();
-  const agendamento = criarAgendamento(EMPRESA_A, { clienteNome: 'Cliente comissão', profissionalId: profissional.id, servicoId: servico.id, dataHora: '2030-04-02T10:00:00.000Z', dataAgenda: '2030-04-02', horaLocal: '10:00' });
+  const agendamento = criarAgendamento(EMPRESA_A, { lojaId: LOJA, clienteNome: 'Cliente comissão', profissionalId: profissional.id, servicoId: servico.id, dataHora: '2030-04-02T10:00:00.000Z', dataAgenda: '2030-04-02', horaLocal: '10:00' });
   alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'confirmado');
   alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'em_atendimento');
   receberAgenda(EMPRESA_A, alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'concluido'), 'dinheiro', 50);
-  const produto = criarProdutoRevenda(EMPRESA_A, { nome: 'Pomada comissão', precoVenda: 40, estoqueAtual: 1 });
-  const venda = criarVendaRevenda(EMPRESA_A, { profissionalId: profissional.id, itens: [{ produtoId: produto.id, quantidade: 1 }] });
-  finalizarVendaRevenda(EMPRESA_A, venda.id, { confirmadoPagamento: true, meioPagamento: 'dinheiro', valorRecebido: 40 });
-  const semProfissional = criarVendaRevenda(EMPRESA_A, { itens: [{ produtoId: (criarProdutoRevenda(EMPRESA_A, { nome: 'Pente comissão', precoVenda: 10, estoqueAtual: 1 })).id, quantidade: 1 }] });
-  const semProfissionalPaga = finalizarVendaRevenda(EMPRESA_A, semProfissional.id, { confirmadoPagamento: true, meioPagamento: 'dinheiro', valorRecebido: 10 });
+  const produto = criarProdutoRevenda(EMPRESA_A, { lojaId: LOJA, nome: 'Pomada comissão', precoVenda: 40, estoqueAtual: 1 });
+  const venda = criarVendaRevenda(EMPRESA_A, { lojaId: LOJA, profissionalId: profissional.id, itens: [{ produtoId: produto.id, quantidade: 1 }] });
+  finalizarVendaRevenda(EMPRESA_A, venda.id, { confirmadoPagamento: true, meioPagamento: 'dinheiro', valorRecebido: 40, lojaId: LOJA });
+  const semProfissional = criarVendaRevenda(EMPRESA_A, { lojaId: LOJA, itens: [{ produtoId: (criarProdutoRevenda(EMPRESA_A, { lojaId: LOJA, nome: 'Pente comissão', precoVenda: 10, estoqueAtual: 1 })).id, quantidade: 1 }] });
+  const semProfissionalPaga = finalizarVendaRevenda(EMPRESA_A, semProfissional.id, { confirmadoPagamento: true, meioPagamento: 'dinheiro', valorRecebido: 10, lojaId: LOJA });
   const resultado = obterComissoes(EMPRESA_A);
   const linha = resultado.porProfissional.find((item) => item.profissionalId === profissional.id);
   assert.equal(linha.brutoServicos, 50);
@@ -384,7 +397,7 @@ test('calcula repasse indicativo de serviços e produtos pagos sem lançar pagam
 test('desconta taxa da comissão somente quando existe regra real com fonte cadastrada', () => {
   const profissional = baseProfissional();
   const servico = baseServico();
-  const agendamento = criarAgendamento(EMPRESA_A, { clienteNome: 'Cliente taxa real', profissionalId: profissional.id, servicoId: servico.id, dataHora: '2030-04-03T10:00:00.000Z', dataAgenda: '2030-04-03', horaLocal: '10:00' });
+  const agendamento = criarAgendamento(EMPRESA_A, { lojaId: LOJA, clienteNome: 'Cliente taxa real', profissionalId: profissional.id, servicoId: servico.id, dataHora: '2030-04-03T10:00:00.000Z', dataAgenda: '2030-04-03', horaLocal: '10:00' });
   alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'confirmado');
   alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'em_atendimento');
   receberAgenda(EMPRESA_A, alterarStatusAgendamento(EMPRESA_A, agendamento.id, 'concluido'), 'pix', 50);
@@ -443,8 +456,8 @@ test('PATCH e status não aceitam ledger forjado nem confirmam pagamento sem o f
 
 test('comanda parcialmente paga não pode ser cancelada por rotas genéricas', () => {
   const servico = baseServico();
-  const comanda = criarComandaBarbearia(EMPRESA_A, { itens: [{ tipo: 'servico', servicoId: servico.id }] });
-  const parcial = registrarPagamentoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true, meioPagamento: 'pix', valor: 20, chaveIdempotencia: 'parcial-1' });
+  const comanda = criarComandaBarbearia(EMPRESA_A, { lojaId: LOJA, itens: [{ tipo: 'servico', servicoId: servico.id }] });
+  const parcial = registrarPagamentoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true, lojaId: LOJA, meioPagamento: 'pix', valor: 20, chaveIdempotencia: 'parcial-1' });
   assert.equal(parcial.status, 'parcialmente_paga');
   assert.throws(() => cancelarComandaBarbearia(EMPRESA_A, comanda.id), /fluxo financeiro apropriado/);
   assert.throws(() => alterarStatusComandaBarbearia(EMPRESA_A, comanda.id, 'cancelada'), /fluxo financeiro apropriado/);
@@ -464,8 +477,8 @@ test('remarcação e alteração de status rejeitam loja divergente sem mutar ag
 
 test('não baixa estoque nem lança financeiro quando pagamento fica pendente em conta', () => {
   const produto = criarProdutoRevenda(EMPRESA_A, { nome: 'Pomada conta', precoVenda: 30, estoqueAtual: 2 });
-  const comanda = criarComandaBarbearia(EMPRESA_A, { clienteNome: 'Cliente conta', itens: [{ tipo: 'produto', produtoId: produto.id, quantidade: 1 }] });
-  assert.throws(() => registrarPagamentoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true, meioPagamento: 'conta', valor: 30 }), /cliente cadastrado/);
+  const comanda = criarComandaBarbearia(EMPRESA_A, { lojaId: LOJA, clienteNome: 'Cliente conta', itens: [{ tipo: 'produto', produtoId: produto.id, quantidade: 1 }] });
+  assert.throws(() => registrarPagamentoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true, lojaId: LOJA, meioPagamento: 'conta', valor: 30 }), /cliente cadastrado/);
   assert.equal(db().barbearias[EMPRESA_A].produtosRevenda[produto.id].estoqueAtual, 2);
   assert.equal(listarLancamentos(EMPRESA_A, { origem: 'barbearia_comanda' }).length, 0);
 });
@@ -473,8 +486,8 @@ test('não baixa estoque nem lança financeiro quando pagamento fica pendente em
 test('aplica limite, saldo e vencimento antes de lançar a comanda na conta do cliente', () => {
   const cliente = criarCliente(EMPRESA_A, { nome: 'Cliente crédito', limiteCreditoMensal: 100, diasVencimento: 15 });
   const servico = baseServico();
-  const primeira = criarComandaBarbearia(EMPRESA_A, { clienteId: cliente.id, clienteNome: cliente.nome, itens: [{ tipo: 'servico', servicoId: servico.id }] });
-  const faturada = registrarPagamentoComandaBarbearia(EMPRESA_A, primeira.id, { confirmado: true, clienteId: cliente.id, meioPagamento: 'conta', valor: 50, chaveIdempotencia: 'conta-limite-1' });
+  const primeira = criarComandaBarbearia(EMPRESA_A, { lojaId: LOJA, clienteId: cliente.id, clienteNome: cliente.nome, itens: [{ tipo: 'servico', servicoId: servico.id }] });
+  const faturada = registrarPagamentoComandaBarbearia(EMPRESA_A, primeira.id, { confirmado: true, lojaId: LOJA, clienteId: cliente.id, meioPagamento: 'conta', valor: 50, chaveIdempotencia: 'conta-limite-1' });
   assert.equal(faturada.status, 'em_conta');
   assert.equal(obterSituacaoCredito(EMPRESA_A, cliente.id, 50).disponivel, 50);
   const contas = listarContasReceber(EMPRESA_A, { clienteId: cliente.id });
@@ -482,8 +495,8 @@ test('aplica limite, saldo e vencimento antes de lançar a comanda na conta do c
   const dias = Math.round((new Date(contas[0].dataVencimento).valueOf() - Date.now()) / 86400000);
   assert.ok(dias >= 14 && dias <= 15);
 
-  const segunda = criarComandaBarbearia(EMPRESA_A, { clienteId: cliente.id, clienteNome: cliente.nome, itens: [{ tipo: 'servico', servicoId: servico.id, quantidade: 2 }] });
-  assert.throws(() => registrarPagamentoComandaBarbearia(EMPRESA_A, segunda.id, { confirmado: true, clienteId: cliente.id, meioPagamento: 'conta', valor: 100, chaveIdempotencia: 'conta-limite-2' }), /Limite de crédito insuficiente/);
+  const segunda = criarComandaBarbearia(EMPRESA_A, { lojaId: LOJA, clienteId: cliente.id, clienteNome: cliente.nome, itens: [{ tipo: 'servico', servicoId: servico.id, quantidade: 2 }] });
+  assert.throws(() => registrarPagamentoComandaBarbearia(EMPRESA_A, segunda.id, { confirmado: true, lojaId: LOJA, clienteId: cliente.id, meioPagamento: 'conta', valor: 100, chaveIdempotencia: 'conta-limite-2' }), /Limite de crédito insuficiente/);
   assert.equal(listarContasReceber(EMPRESA_A, { clienteId: cliente.id }).length, 1);
   assert.equal(listarLancamentos(EMPRESA_A, { origem: 'barbearia_comanda' }).length, 1);
   assert.equal(obterSituacaoCredito(EMPRESA_B, cliente.id, 10), null);
@@ -515,18 +528,19 @@ test('mantém consentimento de CRM isolado por empresa e registra alteração', 
 
 test('pontua comanda paga uma única vez quando cliente aderiu à fidelidade', () => {
   const cliente = criarCliente(EMPRESA_A, { nome: 'Cliente fiel', telefone: '65977777777' });
-  cadastrarMembroFidelidade(EMPRESA_A, { clienteId: cliente.id, nome: cliente.nome, telefone: cliente.telefone });
+  const legacyMigration = { legacyMigration: true, lojaId: LOJA, bridge: 'legacy-loyalty-bridge' };
+  cadastrarMembroFidelidade(EMPRESA_A, { ...legacyMigration, clienteId: cliente.id, nome: cliente.nome, telefone: cliente.telefone });
   const servico = baseServico();
-  const comanda = criarComandaBarbearia(EMPRESA_A, { clienteId: cliente.id, clienteNome: cliente.nome, itens: [{ tipo: 'servico', servicoId: servico.id }] });
-  const primeira = registrarPagamentoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true, meioPagamento: 'pix', valor: 50, clienteId: cliente.id, chaveIdempotencia: 'pagamento-fiel-1' });
+  const comanda = criarComandaBarbearia(EMPRESA_A, { lojaId: LOJA, clienteId: cliente.id, clienteNome: cliente.nome, itens: [{ tipo: 'servico', servicoId: servico.id }] });
+  const primeira = registrarPagamentoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true, lojaId: LOJA, meioPagamento: 'pix', valor: 50, clienteId: cliente.id, chaveIdempotencia: 'pagamento-fiel-1' });
   assert.equal(primeira.status, 'paga');
   assert.equal(primeira.fidelidadeValorPontuado, 50);
   assert.equal(obterFidelidade(EMPRESA_A).membros[0].pontos, 50);
-  const repetida = registrarPagamentoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true, meioPagamento: 'pix', valor: 50, clienteId: cliente.id, chaveIdempotencia: 'pagamento-fiel-1' });
+  const repetida = registrarPagamentoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true, lojaId: LOJA, meioPagamento: 'pix', valor: 50, clienteId: cliente.id, chaveIdempotencia: 'pagamento-fiel-1' });
   assert.equal(repetida.fidelidadeValorPontuado, 50);
   assert.equal(obterFidelidade(EMPRESA_A).movimentos.length, 1);
   const chaveCredito = obterFidelidade(EMPRESA_A).movimentos[0].chaveIdempotencia;
-  assert.equal(creditarFidelidade(EMPRESA_A, cliente.id, 50, 'teste', { chaveIdempotencia: chaveCredito }).repetido, true);
+  assert.equal(creditarFidelidade(EMPRESA_A, cliente.id, 50, 'teste', { ...legacyMigration, chaveIdempotencia: chaveCredito }).repetido, true);
 });
 
 test('impede ficha técnica de serviço com insumo de outra empresa', () => {
@@ -539,7 +553,7 @@ test('baixa insumos da ficha técnica apenas após faturamento integral e de for
   const servico = criarServico(EMPRESA_A, { nome: 'Lavagem com insumo', preco: 45, consumoInterno: [{ produtoId: insumo.id, quantidade: 2 }] });
   const comanda = criarComandaBarbearia(EMPRESA_A, { lojaId: 'loja-a', clienteNome: 'Cliente consumo', itens: [{ tipo: 'servico', servicoId: servico.id, quantidade: 2 }] });
   assert.throws(() => registrarConsumoInternoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true }), /faturamento integral/);
-  const paga = registrarPagamentoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true, meioPagamento: 'pix', valor: 90 });
+  const paga = registrarPagamentoComandaBarbearia(EMPRESA_A, comanda.id, { confirmado: true, lojaId: LOJA, meioPagamento: 'pix', valor: 90 });
   assert.equal(paga.status, 'paga');
   assert.equal(listarProdutosRevenda(EMPRESA_A).find((item) => item.id === insumo.id).estoqueAtual, 1);
   assert.equal(listarMovimentosEstoque(EMPRESA_A, { produtoId: insumo.id }).filter((item) => item.tipo === 'consumo_servico').length, 1);
@@ -611,4 +625,59 @@ test('histórico importado: idempotente, sem financeiro e sem agenda', () => {
   assert.equal(listarAgendamentos(EMPRESA_A).length, 0);
   assert.equal(listarLancamentos(EMPRESA_A).length, antesLanc);
   assert.throws(() => importarHistoricoAtendimentos(EMPRESA_A, new Array(1001).fill(itens[0])), /1000/);
+});
+
+test('reservas: saldo 1 não é reservado duas vezes e replay/conflict são 409 sem mutação', () => {
+  const produto = criarProdutoRevenda(EMPRESA_A, { lojaId: 'loja-reserva', nome: 'Produto reservado', precoVenda: 10, estoqueAtual: 1 });
+  const dados = { lojaId: 'loja-reserva', produtoId: produto.id, quantidade: 1, origem: 'teste_reserva', idempotencyKey: 'reserva-1', expiresAt: '2099-01-01T00:00:00.000Z' };
+  const primeira = reserveInventoryForOperation(EMPRESA_A, dados);
+  const antes = structuredClone(db().barbearias[EMPRESA_A]);
+  assert.equal(reserveInventoryForOperation(EMPRESA_A, dados).replayed, true);
+  assert.throws(() => reserveInventoryForOperation(EMPRESA_A, { ...dados, quantidade: 2 }), (error) => error.code === 'IDEMPOTENCY_CONFLICT' && error.status === 409);
+  assert.throws(() => reserveInventoryForOperation(EMPRESA_A, { ...dados, idempotencyKey: 'reserva-2' }), (error) => error.code === 'INVENTORY_INSUFFICIENT' && error.status === 409);
+  assert.deepEqual(db().barbearias[EMPRESA_A].produtosRevenda[produto.id], antes.produtosRevenda[produto.id]);
+  assert.equal(listarInventoryReservations(EMPRESA_A, { lojaId: 'loja-reserva' }).filter((item) => item.status === 'held').length, 1);
+  assert.equal(primeira.lojaId, 'loja-reserva');
+});
+
+test('reservas: commit, release, expire e cancelamento convertem/liberam uma única vez', () => {
+  const produto = criarProdutoRevenda(EMPRESA_A, { lojaId: 'loja-reserva', nome: 'Produto ciclo', precoVenda: 10, estoqueAtual: 3 });
+  const commitida = reserveInventoryForOperation(EMPRESA_A, { lojaId: 'loja-reserva', produtoId: produto.id, quantidade: 1, origem: 'teste', actionId: 'ciclo-commit', expiresAt: '2099-01-01T00:00:00.000Z' });
+  const baixa = commitInventoryReservation(EMPRESA_A, { lojaId: 'loja-reserva', reservationId: commitida.id, actionId: 'commit-1' });
+  assert.equal(baixa.status, 'consumed');
+  assert.equal(baixa.movimento.tipo, 'saida_reserva');
+  assert.equal(commitInventoryReservation(EMPRESA_A, { lojaId: 'loja-reserva', reservationId: commitida.id, actionId: 'commit-1' }).replayed, true);
+  assert.equal(listarMovimentosEstoque(EMPRESA_A, { produtoId: produto.id }).filter((item) => item.reservationId === commitida.id).length, 1);
+
+  const liberada = reserveInventoryForOperation(EMPRESA_A, { lojaId: 'loja-reserva', produtoId: produto.id, quantidade: 1, origem: 'teste', actionId: 'ciclo-release', expiresAt: '2099-01-01T00:00:00.000Z' });
+  assert.equal(releaseInventoryReservation(EMPRESA_A, { lojaId: 'loja-reserva', reservationId: liberada.id, actionId: 'release-1' }).status, 'released');
+  assert.equal(releaseInventoryReservation(EMPRESA_A, { lojaId: 'loja-reserva', reservationId: liberada.id, actionId: 'release-1' }).replayed, true);
+
+  const expirada = reserveInventoryForOperation(EMPRESA_A, { lojaId: 'loja-reserva', produtoId: produto.id, quantidade: 1, origem: 'teste', actionId: 'ciclo-expire', expiresAt: '2020-01-01T00:00:00.000Z' });
+  assert.equal(expireInventoryReservations(EMPRESA_A, { lojaId: 'loja-reserva', agora: '2021-01-01T00:00:00.000Z' }).total, 1);
+  assert.equal(listarInventoryReservations(EMPRESA_A, { produtoId: produto.id, status: 'expired' }).some((item) => item.id === expirada.id), true);
+
+  const comanda = criarComandaBarbearia(EMPRESA_A, { lojaId: 'loja-reserva', itens: [{ tipo: 'produto', produtoId: produto.id, quantidade: 1 }] });
+  const idReservaComanda = comanda.reservasEstoqueIds[0];
+  cancelarComandaBarbearia(EMPRESA_A, comanda.id, { motivo: 'teste' });
+  assert.equal(listarInventoryReservations(EMPRESA_A, { lojaId: 'loja-reserva', status: 'released' }).some((item) => item.id === idReservaComanda), true);
+  assert.equal(cancelarComandaBarbearia(EMPRESA_A, comanda.id).idempotente, true);
+});
+
+test('reservas: cross-store é bloqueado e produto legado sem loja fica em quarentena', () => {
+  const produto = criarProdutoRevenda(EMPRESA_A, { lojaId: 'loja-a', nome: 'Produto unidade A', precoVenda: 10, estoqueAtual: 1 });
+  assert.throws(() => reserveInventoryForOperation(EMPRESA_A, { lojaId: 'loja-b', produtoId: produto.id, quantidade: 1, origem: 'teste', actionId: 'cross-store', expiresAt: '2099-01-01T00:00:00.000Z' }), (error) => error.code === 'CROSS_STORE' && error.status === 409);
+  const legado = criarProdutoRevenda(EMPRESA_A, { nome: 'Produto legado', precoVenda: 10, estoqueAtual: 1 });
+  assert.throws(() => reserveInventoryForOperation(EMPRESA_A, { lojaId: 'loja-a', produtoId: legado.id, quantidade: 1, origem: 'teste', actionId: 'legado', expiresAt: '2099-01-01T00:00:00.000Z' }), (error) => error.code === 'SCOPE_QUARANTINED' && error.status === 409);
+  assert.equal(listarInventoryReservations(EMPRESA_A, { produtoId: legado.id }).length, 0);
+});
+
+test('comanda: atualização que ficaria abaixo do faturado é TOTAL_BELOW_BILLED e não muta', () => {
+  const servico = baseServico();
+  const comanda = criarComandaBarbearia(EMPRESA_A, { itens: [{ tipo: 'servico', servicoId: servico.id }] });
+  const raw = db().barbearias[EMPRESA_A].comandas[comanda.id];
+  raw.totalFaturado = 40;
+  const antes = structuredClone(raw);
+  assert.throws(() => atualizarComandaBarbearia(EMPRESA_A, comanda.id, { desconto: 50 }), (error) => error.code === 'TOTAL_BELOW_BILLED' && error.status === 409);
+  assert.deepEqual(db().barbearias[EMPRESA_A].comandas[comanda.id], antes);
 });

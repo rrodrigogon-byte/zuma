@@ -184,16 +184,17 @@ test('reposição sugere ruptura e abaixo do mínimo e gera pedido por fornecedo
 });
 
 test('curva ABC por receita com margem e itens parados', () => {
-  const a = barbearia.criarProdutoRevenda(EMP, { nome: 'Perfume', precoVenda: 300, custoUnitario: 180, estoqueAtual: 10 });
-  const b = barbearia.criarProdutoRevenda(EMP, { nome: 'Pomada', precoVenda: 40, custoUnitario: 18, estoqueAtual: 10 });
-  const c = barbearia.criarProdutoRevenda(EMP, { nome: 'Pente', precoVenda: 10, custoUnitario: 3, estoqueAtual: 10 });
-  barbearia.criarProdutoRevenda(EMP, { nome: 'Parado', precoVenda: 50, custoUnitario: 20, estoqueAtual: 5 });
+  const lojaId = 'loja-a';
+  const a = barbearia.criarProdutoRevenda(EMP, { lojaId, nome: 'Perfume', precoVenda: 300, custoUnitario: 180, estoqueAtual: 10 });
+  const b = barbearia.criarProdutoRevenda(EMP, { lojaId, nome: 'Pomada', precoVenda: 40, custoUnitario: 18, estoqueAtual: 10 });
+  const c = barbearia.criarProdutoRevenda(EMP, { lojaId, nome: 'Pente', precoVenda: 10, custoUnitario: 3, estoqueAtual: 10 });
+  barbearia.criarProdutoRevenda(EMP, { lojaId, nome: 'Parado', precoVenda: 50, custoUnitario: 20, estoqueAtual: 5 });
   const vender = (produtoId, quantidade) => {
-    const v = barbearia.criarVendaRevenda(EMP, { itens: [{ produtoId, quantidade }] });
-    barbearia.finalizarVendaRevenda(EMP, v.id, { confirmadoPagamento: true, meioPagamento: 'pix', valorRecebido: v.total });
+    const v = barbearia.criarVendaRevenda(EMP, { lojaId, itens: [{ produtoId, quantidade }] });
+    barbearia.finalizarVendaRevenda(EMP, v.id, { lojaId, confirmadoPagamento: true, meioPagamento: 'pix', valorRecebido: v.total });
   };
   vender(a.id, 3); vender(b.id, 4); vender(c.id, 2);
-  const abc = compras.curvaAbc(EMP, { dias: 30 });
+  const abc = compras.curvaAbc(EMP, { dias: 30, lojaId });
   assert.equal(abc.receitaTotal, 1080);
   const linha = (nome) => abc.linhas.find((l) => l.nome === nome);
   assert.equal(linha('Perfume').classe, 'A');
@@ -202,7 +203,7 @@ test('curva ABC por receita com margem e itens parados', () => {
   assert.equal(linha('Pente').classe, 'C');
   assert.equal(linha('Parado').parado, true);
   assert.equal(abc.parados.length, 1);
-  assert.equal(compras.curvaAbc(EMP, { criterio: 'margem' }).criterio, 'margem');
+  assert.equal(compras.curvaAbc(EMP, { criterio: 'margem', lojaId }).criterio, 'margem');
 });
 
 test('fornecedor sem prazo usa 7 dias', () => {

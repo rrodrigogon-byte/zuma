@@ -84,5 +84,6 @@
  "079_clube_importacoes.sql": "b8b44e16bb2319f8230c96a0fff74d71de427e646aa3bec2169839ec2607b4ab",
  "080_clube_quadras.sql": "bd7940c3b09dc39383a9a82f5c9d416dcdb38671f496b81b169295e080d3ce90",
  "081_bar_pdv_multiempresa.sql": "cec9fc97cab9ab3ef21aa7f4e37fabb6eb8d26334c34f1fe1dcab6232e34e11c",
- "082_financeiro_cadastros_multiempresa.sql": "a0bfe2b6e14cb61258c1ee417ba8c4ec971adab9ea0eb7954c3176c38cca6445"
+ "082_financeiro_cadastros_multiempresa.sql": "a0bfe2b6e14cb61258c1ee417ba8c4ec971adab9ea0eb7954c3176c38cca6445",
+ "083_dino_operational_foundations.sql": "759527ff9017215b5b73e67f27be7046055c4f6497ef014a60e1f7ee14bdf8bc"
 }

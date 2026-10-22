@@ -3,8 +3,10 @@ import test from 'node:test';
 import { createCommerceWebhookRouter } from './commerce-routes.js';
 import { paymentProviders } from './payment-adapters.js';
 import { db } from './database.js';
-
+process.env.PUBLIC_RATE_LIMIT_SECRET ||= 'commerce-test-rate-limit-secret';
 const empresaId = '11111111-1111-4111-8111-111111111111';
+const lojaId = '22222222-2222-4222-8222-222222222222';
+const storefrontId = '33333333-3333-4333-8333-333333333333';
 const orderId = '55555555-5555-4555-8555-555555555555';
 const paymentId = '44444444-4444-4444-8444-444444444444';
 const accountId = '66666666-6666-4666-8666-666666666666';
@@ -36,12 +38,15 @@ test('webhook concorrente B pago não sobrescreve captura A; replay mantém erro
   });
   db.query = async sql => {
     calls.push(sql);
+    if (sql.includes('dino_webhook_events')) return { rows: [] };
     if (sql.includes('p.provider_payment_id = $2')) return { rows: [] };
-    if (sql.includes('p.provider_payment_id IS NULL') && sql.includes("p.status = 'pending'")) return { rows: [{ payment_id: paymentId, empresa_id: empresaId, payment_account_id: accountId, amount: '30', method: 'external', provider_payment_id: null, order_code: 'KC-RACE-SYNTHETIC', secret_ref: 'env:SYNTHETIC', public_config: {} }] };
+    if (sql.includes('p.provider_payment_id IS NULL') && sql.includes("p.status = 'pending'")) return { rows: [{ payment_id: paymentId, empresa_id: empresaId, loja_id: lojaId, storefront_id: storefrontId, payment_account_id: accountId, amount: '30', method: 'external', provider_payment_id: null, order_code: 'KC-RACE-SYNTHETIC', secret_ref: 'env:SYNTHETIC', public_config: {} }] };
     throw new Error('SELECT owner inesperado');
   };
   db.transaction = async callback => callback({ query: async (sql, values) => {
     calls.push(sql);
+    if (sql.includes('INSERT INTO commerce_public_rate_limits')) return { rows: [{ request_count: 1, retry_after_seconds: 60 }] };
+    if (sql.includes('DELETE FROM commerce_public_rate_limits')) return { rows: [] };
     if (sql.includes('INSERT INTO commerce_payment_webhooks')) { webhookInserts++; return { rows: webhookInserts === 1 ? [{ id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' }] : [] }; }
     if (sql.includes('SELECT status, payload_resumido')) return { rows: [{ status: 'failed', review_code: 'PROVIDER_CAPTURE_CONFLICT' }] };
     if (sql.includes('FOR UPDATE OF p')) return { rows: [{ id: paymentId, order_id: orderId, method: 'pix', amount: '30', status: 'captured', provider_payment_id: 'tx-A', order_status: 'paid' }] };

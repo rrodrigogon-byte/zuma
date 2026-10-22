@@ -10,6 +10,7 @@ import bcrypt from 'bcryptjs';
 
 const ROOT = path.resolve(new URL('.', import.meta.url).pathname, '..');
 const EMPRESA = 'empresa-desempenho';
+const LOJA = 'loja-desempenho';
 const TOTAL_CLIENTES = 3300;
 const TOTAL_AGENDAMENTOS = 1000;
 
@@ -27,7 +28,7 @@ function semear() {
     const dia = new Date(hoje.valueOf() + (i % 60) * 86400000);
     const dataAgenda = dia.toISOString().slice(0, 10);
     const id = `age-${i}`;
-    agendamentos[id] = { id, empresaId: EMPRESA, clienteId: `cli-${(i * 7) % TOTAL_CLIENTES}`, profissionalId: i % 2 ? 'prof-1' : 'prof-2', servicoId: 'srv-1', dataAgenda, dataHora: `${dataAgenda}T${String(8 + (i % 10)).padStart(2, '0')}:00:00.000Z`, duracaoMinutos: 30, status: 'agendado', valor: 50, criadoEm: '2026-10-10T12:00:00.000Z' };
+    agendamentos[id] = { id, empresaId: EMPRESA, lojaId: LOJA, clienteId: `cli-${(i * 7) % TOTAL_CLIENTES}`, profissionalId: i % 2 ? 'prof-1' : 'prof-2', servicoId: 'srv-1', dataAgenda, dataHora: `${dataAgenda}T${String(8 + (i % 10)).padStart(2, '0')}:00:00.000Z`, duracaoMinutos: 30, status: 'agendado', valor: 50, criadoEm: '2026-10-10T12:00:00.000Z' };
   }
   return { clientesKytto: { empresas: { [EMPRESA]: { clientes } } }, barbearias: { [EMPRESA]: { profissionais, servicos, agendamentos } } };
 }
@@ -43,7 +44,7 @@ test('visão geral da barbearia responde rápido com base do porte da Dino', { t
   const senha = 'desempenho-only-test-pass';
   fs.writeFileSync(dbPath, JSON.stringify({
     seq: 1,
-    usuarios: [{ id: 1, nome: 'Gestão', email: 'desempenho@example.com', senhaHash: bcrypt.hashSync(senha, 4), role: 'admin', ativo: true, empresaId: EMPRESA }],
+    usuarios: [{ id: 1, nome: 'Gestão', email: 'desempenho@example.com', senhaHash: bcrypt.hashSync(senha, 4), role: 'admin', ativo: true, empresaId: EMPRESA, lojaId: LOJA }],
     ...semear(),
   }));
   const port = 33000 + Math.floor(Math.random() * 500);

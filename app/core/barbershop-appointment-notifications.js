@@ -7,6 +7,7 @@ import { db } from './database.js';
 import { enviarMensagem } from './whatsapp.js';
 import { notificarEquipe } from '../dino-push-equipe.js';
 import { personaAppointmentMessage, quandoCurto, resolvePersona } from './whatsapp-ai-persona.js';
+import * as captacao from '../dino-captacao-kytto.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EVENTOS = new Set(['criado', 'remarcado', 'cancelado', 'lembrete']);
@@ -135,7 +136,7 @@ function tarefaPayload({ legacyEmpresaId, agendamento, evento }) {
     appointmentId: limpo(agendamento.id, 120),
     customerId: limpo(agendamento.clienteId, 120),
     eventType: evento,
-    scheduleFingerprint: sha(`${agendamento.dataHora}|${agendamento.profissionalId}|${agendamento.servicoId}`),
+    scheduleFingerprint: captacao.fingerprintSlot({ empresaId: legacyEmpresaId, ...agendamento }),
   };
 }
 
@@ -206,6 +207,7 @@ export async function queueWaitlistNotifications(contexto = {}, agendamentoLiber
   const legacyEmpresaId = limpo(contexto.legacyEmpresaId || contexto.empresaId, 120);
   const servicoId = limpo(agendamentoLiberado.servicoId, 120);
   const profissionalId = limpo(agendamentoLiberado.profissionalId, 120);
+  const slotFingerprint = captacao.fingerprintSlot({ empresaId: legacyEmpresaId, ...agendamentoLiberado, lojaId });
   const elegiveis = (candidatos || []).filter((item) => item?.consentimentoWhatsapp === true && normalizarTelefone(item.telefone))
     .filter((item) => String(item.lojaId || '') === lojaId && String(item.servicoId || '') === servicoId)
     .filter((item) => !item.profissionalId || item.profissionalId === 'qualquer' || item.profissionalId === profissionalId);
@@ -229,6 +231,9 @@ export async function queueWaitlistNotifications(contexto = {}, agendamentoLiber
           appointmentId: limpo(agendamentoLiberado.id, 120),
           waitlistId: limpo(candidato.id, 80),
           eventType: EVENTO_VAGA,
+          slotFingerprint,
+          actionId: `waitlist-vaga:${limpo(agendamentoLiberado.id, 100)}:${limpo(candidato.id, 60)}`,
+          idempotencyKey: `${limpo(agendamentoLiberado.id, 100)}:${EVENTO_VAGA}:${limpo(candidato.id, 60)}`,
         })],
       );
       if (Number(resultado.rowCount || 0) > 0) {
@@ -236,7 +241,8 @@ export async function queueWaitlistNotifications(contexto = {}, agendamentoLiber
         queuedIds.push(candidato.id);
       }
     }
-    return { queued, queuedIds, skipped: false };
+    if (queuedIds.length) captacao.marcarAvisosEnfileirados(legacyEmpresaId, agendamentoLiberado, queuedIds, { lojaId, slotFingerprint });
+    return { queued, queuedIds, slotFingerprint, skipped: false };
   });
 }
 
@@ -248,6 +254,8 @@ async function processWaitlistTask(task, payload, legacyEmpresaId) {
   if (!liberado.lojaId || String(liberado.lojaId) !== String(task.loja_id) || String(entrada.lojaId || '') !== String(liberado.lojaId)) return { skipped: true, reason: 'store_scope_mismatch' };
   if (!entrada.servicoId || String(entrada.servicoId) !== String(liberado.servicoId || '')) return { skipped: true, reason: 'service_scope_mismatch' };
   if (entrada.profissionalId && entrada.profissionalId !== 'qualquer' && String(entrada.profissionalId) !== String(liberado.profissionalId || '')) return { skipped: true, reason: 'professional_scope_mismatch' };
+  const slotFingerprint = captacao.fingerprintSlot({ empresaId: legacyEmpresaId, ...liberado });
+  if (payload.slotFingerprint && String(payload.slotFingerprint) !== slotFingerprint) return { skipped: true, reason: 'slot_fingerprint_mismatch' };
   if (new Date(liberado.dataHora).valueOf() <= Date.now()) return { skipped: true, reason: 'slot_in_past' };
   // A vaga precisa caber no serviço que a pessoa pediu (duração, jornada, outros
   // agendamentos que entraram depois): confere na agenda real antes de avisar.
@@ -293,7 +301,8 @@ async function processWaitlistTask(task, payload, legacyEmpresaId) {
   }
   const providerMessageId = limpo(resultado?.data?.key?.id || resultado?.data?.id, 200) || null;
   await db.query(`UPDATE tarefas_integracao_canais SET provider_message_id = $2 WHERE id = $1`, [task.id, providerMessageId]);
-  return { sent: true, appointmentId: liberado.id, eventType: EVENTO_VAGA, waitlistId: entrada.id, providerMessageId };
+  captacao.marcarAvisoEnviado(legacyEmpresaId, entrada.id, liberado, { lojaId: liberado.lojaId, slotFingerprint });
+  return { sent: true, status: 'sent', appointmentId: liberado.id, eventType: EVENTO_VAGA, waitlistId: entrada.id, slotFingerprint, providerMessageId };
 }
 
 /** Cancela lembretes/avisos pendentes de um agendamento (remarcado ou cancelado pela conversa). */
@@ -535,7 +544,9 @@ export async function processAppointmentNotificationTask(task = {}) {
   if (!agendamento) return { skipped: true, reason: 'appointment_not_found' };
   if (String(agendamento.lojaId || '') !== String(task.loja_id || '')) return { skipped: true, reason: 'store_scope_mismatch' };
   if (evento !== 'cancelado' && ['cancelado', 'concluido', 'nao_compareceu'].includes(String(agendamento.status))) return { skipped: true, reason: 'appointment_not_eligible' };
-  if (payload.scheduleFingerprint !== sha(`${agendamento.dataHora}|${agendamento.profissionalId}|${agendamento.servicoId}`)) return { skipped: true, reason: 'schedule_changed' };
+  const fingerprintAtual = captacao.fingerprintSlot({ empresaId: legacyEmpresaId, ...agendamento });
+  const fingerprintLegado = sha(`${agendamento.dataHora}|${agendamento.profissionalId}|${agendamento.servicoId}`);
+  if (payload.scheduleFingerprint !== fingerprintAtual && payload.scheduleFingerprint !== fingerprintLegado) return { skipped: true, reason: 'schedule_changed' };
   const elegibilidade = clienteElegivel(legacyEmpresaId, agendamento);
   if (!elegibilidade.eligible) return { skipped: true, reason: elegibilidade.reason };
   const channelResult = await db.query(

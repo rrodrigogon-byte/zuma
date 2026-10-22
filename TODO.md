@@ -2,6 +2,8 @@
 
 > Base de produção: `fix/kytto-comandas-pdv-20260808`. Cada item só é concluído com código, contratos de isolamento e evidência de teste correspondente.
 
+- [x] **Fundação de schema criada (083).** Estruturas aditivas para efeitos, estornos, reservas, waitlist, NPS, quarentena e webhooks estão registradas no runner/checksum; domínio, workers, testes PostgreSQL autorizados e deploy continuam pendentes.
+
 - [x] **Fundação já incorporada — sprint de segurança multiloja e fidelidade.** Aplicar isolamento em cobrança, revenda, estoque, comissões, repasses e ledger; disponibilizar prévia/confirmação idempotente de reconciliação de fidelidade; reforçar lista de espera por unidade, serviço e profissional; manter receita da ocupação baseada em recebimento verificado.
 
 - [ ] **Escopo único de empresa + loja e quarentena de legado.** Toda leitura/mutação de agenda, cobrança, carteira, fidelidade, lista de espera, estoque, compras, NF-e, caixa, revenda, comissão, vale e repasse deve exigir empresa e loja. Registros sem `lojaId` não entram em uma sessão de loja e aparecem somente em diagnóstico/reconciliação auditável. Consultas corporativas são explícitas. Duas lojas da mesma empresa não podem listar, confirmar, pagar, estornar ou consumir dados uma da outra.

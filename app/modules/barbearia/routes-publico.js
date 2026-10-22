@@ -4,6 +4,7 @@ import { armazenamentoAvaliacaoDuravel, db } from '../../db.js';
 import * as barbearia from '../../barbearia-erp-kytto.js';
 import { queueAppointmentNotifications } from '../../core/barbershop-appointment-notifications.js';
 import { avisarListaEspera } from '../../core/barbershop-agenda.js';
+import { DinoNpsError, getDinoNpsSchemaReadiness, queueDinoNpsProcessing, recordDinoNpsResponse } from '../../core/dino-nps-canonical.js';
 import * as captacao from '../../dino-captacao-kytto.js';
 import * as cobranca from '../../dino-cobranca-kytto.js';
 import { vincularClienteAoAtendimento } from '../../dino-clientes-vinculo.js';
@@ -11,6 +12,7 @@ import { phoneMatchKey } from '../../core/whatsapp-phone.js';
 
 const router = express.Router();
 const EMPRESA_PADRAO_ID = 'emp-kytto-001';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function texto(valor, limite = 160) {
   return String(valor ?? '').trim().slice(0, limite);
@@ -237,7 +239,9 @@ router.post('/:slug/confirmar', async (req, res) => {
 });
 
 function erroCaptacao(res, erro) {
-  if (erro instanceof captacao.CaptacaoError || erro instanceof cobranca.CobrancaError) return res.status(erro.status || 400).json({ ok: false, error: erro.message, code: erro.code });
+  if (erro instanceof captacao.CaptacaoError || erro instanceof cobranca.CobrancaError || erro instanceof DinoNpsError) {
+    return res.status(erro.statusCode || erro.status || 400).json({ ok: false, error: erro.message, code: erro.code });
+  }
   return erroHttp(res, erro);
 }
 
@@ -483,6 +487,57 @@ router.get('/:slug/app-barbeiro.webmanifest', (req, res) => {
 
 // NPS pós-atendimento: nota 0–10 do atendimento concluído (código + telefone no corpo).
 router.post('/:slug/avaliar', autoatendimento(async (req, res, identidade) => {
+  if (process.env.DINO_NPS_CANONICAL_ENABLED === '1') {
+    const readiness = getDinoNpsSchemaReadiness();
+    if (process.env.COMMERCE_CORE_ENABLED !== '1' || !readiness.ready) {
+      throw new DinoNpsError('Avaliação canônica indisponível até o schema Commerce estar pronto.', 503, readiness.code || 'DINO_NPS_SCHEMA_NOT_READY');
+    }
+    // A resposta canônica nunca aceita o identificador legado como prova. O
+    // link antigo (código+telefone) recebe 409 e não toca o armazenamento JSON.
+    if (!UUID_RE.test(String(identidade.empresaId || '')) || !UUID_RE.test(String(identidade.lojaId || ''))) {
+      throw new DinoNpsError('Atualize o link de avaliação para uma empresa e loja Commerce canônicas.', 409, 'NPS_CANONICAL_LINK_UPDATE_REQUIRED');
+    }
+    const corpo = req.body || {};
+    const appointmentId = corpo.appointmentId || corpo.appointment_id || corpo.agendamentoId || corpo.agendamento_id;
+    if (!appointmentId || !UUID_RE.test(String(appointmentId))) {
+      throw new DinoNpsError('Atualize o link de avaliação: appointmentId/agendamentoId é obrigatório.', 409, 'NPS_APPOINTMENT_ID_REQUIRED');
+    }
+    const codigo = texto(corpo.codigo || corpo.codigoConfirmacao || corpo.codigo_confirmacao, 80);
+    const telefone = texto(corpo.cliente_telefone || corpo.telefone, 40);
+    if (!codigo || !telefone) {
+      throw new DinoNpsError('Código e telefone são obrigatórios para validar o atendimento.', 400, 'NPS_CUSTOMER_PROOF_REQUIRED');
+    }
+    let resposta;
+    let processamento;
+    try {
+      resposta = await recordDinoNpsResponse({
+        empresaId: identidade.empresaId,
+        lojaId: identidade.lojaId,
+        correlationId: req.requestId,
+      }, {
+        appointmentId,
+        nota: corpo.nota,
+        comentario: texto(corpo.comentario, 2000),
+        codigo,
+        telefone,
+      });
+      processamento = await queueDinoNpsProcessing({
+        empresaId: identidade.empresaId,
+        lojaId: identidade.lojaId,
+        correlationId: req.requestId,
+      }, { responseId: resposta.id });
+    } catch (error) {
+      if (error instanceof DinoNpsError) throw error;
+      console.warn('[Dino NPS] avaliação canônica indisponível:', error?.code || error?.message || error);
+      throw new DinoNpsError('Avaliação canônica temporariamente indisponível.', 503, 'DINO_NPS_DATABASE_UNAVAILABLE');
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(resposta.replay || processamento.replay ? 200 : 201).json({
+      ok: true,
+      avaliacao: { repetida: Boolean(resposta.replay), nota: resposta.nota },
+      processamento: { status: processamento.status, replay: Boolean(processamento.replay) },
+    });
+  }
   if (!armazenamentoAvaliacaoDuravel()) {
     res.setHeader('Cache-Control', 'no-store');
     return res.status(503).json({ ok: false, code: 'REVIEW_STORAGE_UNAVAILABLE', error: 'Avaliações temporariamente indisponíveis. Tente novamente mais tarde.' });

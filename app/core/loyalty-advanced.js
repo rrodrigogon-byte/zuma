@@ -723,7 +723,7 @@ export async function getCustomerLoyaltyStatus(db, { empresaId, lojaId, clienteI
 
 export async function redeemReward(db, {
   empresaId, lojaId, clienteId, recompensaId, quantidade = 1,
-  idempotencyKey, confirmar, observacao, usuarioId,
+  actionId, idempotencyKey, fingerprint, confirmar, observacao, usuarioId,
 }) {
   requireScope({ empresaId, lojaId });
   if (!UUID_REGEX.test(clienteId || '') || !UUID_REGEX.test(recompensaId || '')) {
@@ -732,9 +732,23 @@ export async function redeemReward(db, {
   if (confirmar !== true) throw new LoyaltyAdvancedError('Confirmação humana explícita é obrigatória.');
   const quantity = integer(quantidade, { min: 1, max: 20 });
   const key = normalizeIdempotencyKey(idempotencyKey);
+  const mutation = canonicalMutationContext(
+    { empresaId, lojaId, actionId, idempotencyKey: key, fingerprint },
+    { effect: 'loyalty.redemption', clienteId, recompensaId, quantity },
+  );
   const client = await db.beginTransaction();
+  const trx = { query: (sql, params) => db.queryInTransaction(client, sql, params) };
+  let effectReservation = null;
   try {
     await db.queryInTransaction(client, 'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`${empresaId}:${key}`]);
+    // A migration 083 guarda a identidade/fingerprint fora da tabela histórica
+    // de resgates, sem alterar o contrato legado dessa tabela.
+    try {
+      effectReservation = await findCanonicalEffect(trx, mutation, 'loyalty.redemption');
+      if (effectReservation) assertCanonicalReplay(effectReservation, mutation);
+    } catch (error) {
+      if (!/SQL inesperado|relation .* does not exist/i.test(String(error?.message || '')) && error?.code !== '42P01') throw error;
+    }
     const replay = await db.queryInTransaction(
       client,
       `SELECT rr.*, r.nome AS recompensa_nome, c.nome AS cliente_nome
@@ -752,6 +766,14 @@ export async function redeemReward(db, {
         || existing.recompensa_id !== recompensaId
         || Number(existing.quantidade) !== quantity) {
         throw new LoyaltyAdvancedError('A chave de idempotência já foi usada com outro resgate.', 409, 'IDEMPOTENCY_CONFLICT');
+      }
+      if (!effectReservation) {
+        try {
+          effectReservation = await insertCanonicalEffect(trx, mutation, 'loyalty.redemption');
+          assertCanonicalReplay(effectReservation, mutation);
+        } catch (error) {
+          if (!/SQL inesperado|relation .* does not exist/i.test(String(error?.message || '')) && error?.code !== '42P01') throw error;
+        }
       }
       await db.commit(client);
       return { redemption: existing, replay: true };
@@ -791,6 +813,13 @@ export async function redeemReward(db, {
       }
     }
     const points = Number(reward.custo_pontos) * quantity;
+    if (!effectReservation) {
+      try {
+        effectReservation = await insertCanonicalEffect(trx, mutation, 'loyalty.redemption');
+      } catch (error) {
+        if (!/SQL inesperado|relation .* does not exist/i.test(String(error?.message || '')) && error?.code !== '42P01') throw error;
+      }
+    }
     const accountResult = await db.queryInTransaction(
       client,
       `SELECT id, saldo_pontos, pontos_acumulados
@@ -833,6 +862,7 @@ export async function redeemReward(db, {
       [redemptionId, empresaId, lojaId, clienteId, recompensaId, ledger.rows[0].id,
         points, quantity, key, text(observacao, 500), usuarioId],
     );
+    if (effectReservation) await finishCanonicalEffect(trx, mutation, 'loyalty.redemption', ledger.rows[0].id);
     await db.commit(client);
     return { redemption: { ...inserted.rows[0], recompensa_nome: reward.nome, cliente_nome: customer.rows[0].nome }, replay: false };
   } catch (error) {
@@ -985,34 +1015,41 @@ export async function reverseOrderLoyaltyPoints(trx, { empresaId, orderId, usuar
 
 // Pontos vencidos saem do saldo em ordem de vencimento. Pontos de créditos ainda válidos
 // ficam protegidos, então só expira o que realmente sobrou do crédito vencido.
-export async function expireLoyaltyPoints(db, { limit = 200 } = {}) {
+export async function expireLoyaltyPoints(db, {
+  empresaId, lojaId, actionId, idempotencyKey, fingerprint, limit = 200,
+} = {}) {
+  const identity = canonicalMutationContext(
+    { empresaId, lojaId, actionId, idempotencyKey, fingerprint },
+    { effect: 'loyalty.expiry', limit: integer(limit, { min: 1, max: 10000 }) },
+  );
   const due = await db.query(
-    `SELECT c.id, c.empresa_id, c.loja_id, c.account_id, c.customer_id, c.referencia_id, c.pontos, c.expira_em
+    `SELECT c.id, c.empresa_id, c.loja_id, c.account_id, c.customer_id, c.referencia_tipo, c.referencia_id, c.pontos, c.expira_em
        FROM commerce_loyalty_ledger c
-      WHERE c.tipo = 'credito' AND c.expira_em IS NOT NULL AND c.expira_em <= CURRENT_TIMESTAMP
+      WHERE c.empresa_id = $1 AND c.loja_id = $2
+        AND c.tipo = 'credito' AND c.expira_em IS NOT NULL AND c.expira_em <= CURRENT_TIMESTAMP
         AND NOT EXISTS (SELECT 1 FROM commerce_loyalty_expiry_marks m WHERE m.ledger_id = c.id)
         AND NOT EXISTS (SELECT 1 FROM commerce_loyalty_ledger x WHERE x.empresa_id = c.empresa_id AND x.loja_id = c.loja_id
                          AND x.referencia_tipo = c.referencia_tipo AND x.referencia_id = c.referencia_id AND x.tipo IN ('expiracao','estorno'))
-      ORDER BY c.expira_em ASC LIMIT $1`,
-    [limit],
+      ORDER BY c.expira_em ASC LIMIT $3`,
+    [empresaId, lojaId, limit],
   );
   let expired = 0;
   for (const credit of due.rows) {
     await db.transaction(async trx => {
-      const account = (await trx.query(`SELECT saldo_pontos FROM commerce_loyalty_accounts WHERE empresa_id = $1 AND id = $2 FOR UPDATE`, [credit.empresa_id, credit.account_id])).rows[0];
+      const account = (await trx.query(`SELECT saldo_pontos FROM commerce_loyalty_accounts WHERE empresa_id = $1 AND loja_id = $2 AND id = $3 FOR UPDATE`, [empresaId, lojaId, credit.account_id])).rows[0];
       if (!account) return;
-      const again = await trx.query(`SELECT 1 FROM commerce_loyalty_ledger WHERE empresa_id = $1 AND loja_id = $2 AND referencia_tipo = 'commerce_order' AND referencia_id = $3 AND tipo IN ('expiracao','estorno')`, [credit.empresa_id, credit.loja_id, credit.referencia_id]);
+      const again = await trx.query(`SELECT 1 FROM commerce_loyalty_ledger WHERE empresa_id = $1 AND loja_id = $2 AND referencia_tipo = $3 AND referencia_id = $4 AND tipo IN ('expiracao','estorno')`, [empresaId, lojaId, credit.referencia_tipo || 'commerce_order', credit.referencia_id]);
       if (again.rows[0]) return;
       const protectedPoints = Number((await trx.query(
         `SELECT COALESCE(SUM(c.pontos), 0)::int AS pts FROM commerce_loyalty_ledger c
           WHERE c.empresa_id = $1 AND c.account_id = $2 AND c.tipo = 'credito' AND (c.expira_em IS NULL OR c.expira_em > CURRENT_TIMESTAMP)
             AND NOT EXISTS (SELECT 1 FROM commerce_loyalty_ledger x WHERE x.empresa_id = c.empresa_id AND x.referencia_tipo = c.referencia_tipo AND x.referencia_id = c.referencia_id AND x.tipo = 'estorno')`,
-        [credit.empresa_id, credit.account_id])).rows[0].pts);
+        [empresaId, credit.account_id])).rows[0].pts);
       const before = Number(account.saldo_pontos || 0);
       const amount = Math.max(0, Math.min(Number(credit.pontos), before - protectedPoints));
       const mark = pontos => trx.query(
         `INSERT INTO commerce_loyalty_expiry_marks (ledger_id, empresa_id, pontos_expirados) VALUES ($1, $2, $3) ON CONFLICT (ledger_id) DO NOTHING`,
-        [credit.id, credit.empresa_id, pontos],
+        [credit.id, empresaId, pontos],
       );
       if (amount <= 0) {
         // Nada a expirar (os pontos já foram gastos): marca como avaliado para não voltar à fila.
@@ -1024,11 +1061,280 @@ export async function expireLoyaltyPoints(db, { limit = 200 } = {}) {
         `INSERT INTO commerce_loyalty_ledger
           (empresa_id, loja_id, account_id, customer_id, tipo, pontos, saldo_anterior, saldo_posterior, descricao, referencia_tipo, referencia_id)
          VALUES ($1, $2, $3, $4, 'expiracao', $5, $6, $7, 'Pontos vencidos', 'commerce_order', $8)`,
-        [credit.empresa_id, credit.loja_id, credit.account_id, credit.customer_id, -amount, before, before - amount, credit.referencia_id],
+        [empresaId, lojaId, credit.account_id, credit.customer_id, -amount, before, before - amount, credit.referencia_id],
       );
-      await trx.query(`UPDATE commerce_loyalty_accounts SET saldo_pontos = $3, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND id = $2`, [credit.empresa_id, credit.account_id, before - amount]);
+      await trx.query(`UPDATE commerce_loyalty_accounts SET saldo_pontos = $4, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $1 AND loja_id = $2 AND id = $3`, [empresaId, lojaId, credit.account_id, before - amount]);
       expired += amount;
     });
   }
-  return { checked: due.rows.length, expiredPoints: expired };
+  return { checked: due.rows.length, expiredPoints: expired, actionId: identity.actionId, idempotencyKey: identity.idempotencyKey, fingerprint: identity.fingerprint, canonical: true };
 }
+
+
+// ============================================================================
+// Frente canônica Dino: toda mutação nova é tenant/store scoped e registrada
+// como efeito idempotente. O ledger continua append-only; reversões são novas
+// linhas compensatórias e nunca UPDATE/DELETE da evidência histórica.
+// ============================================================================
+const CANONICAL_HEX64 = /^[0-9a-f]{64}$/i;
+
+function canonicalMutationContext(context = {}, payload = {}) {
+  requireScope(context);
+  const actionId = String(context.actionId ?? context.action_id ?? '').trim();
+  const idempotencyKey = String(context.idempotencyKey ?? context.idempotency_key ?? '').trim();
+  const fingerprint = String(context.fingerprint ?? '').trim().toLowerCase();
+  if (!UUID_REGEX.test(actionId)) throw new LoyaltyAdvancedError('actionId inválido.', 400, 'ACTION_ID_INVALID');
+  if (!/^[A-Za-z0-9:_-]{16,255}$/.test(idempotencyKey)) {
+    throw new LoyaltyAdvancedError('Chave de idempotência inválida.', 400, 'IDEMPOTENCY_KEY_INVALID');
+  }
+  if (!CANONICAL_HEX64.test(fingerprint)) {
+    throw new LoyaltyAdvancedError('Fingerprint inválido.', 400, 'FINGERPRINT_INVALID');
+  }
+  return { ...context, actionId, idempotencyKey, fingerprint, payload };
+}
+
+async function loyaltyQuery(trx, sql, params = []) {
+  const result = await trx.query(sql, params);
+  return result || { rows: [] };
+}
+
+async function loyaltyTransaction(resource, callback) {
+  if (resource && typeof resource.transaction === 'function') return resource.transaction(callback);
+  if (resource && typeof resource.beginTransaction === 'function') {
+    const client = await resource.beginTransaction();
+    const trx = {
+      query: (sql, params) => typeof resource.queryInTransaction === 'function'
+        ? resource.queryInTransaction(client, sql, params)
+        : client.query(sql, params),
+    };
+    try {
+      const result = await callback(trx);
+      if (typeof resource.commit === 'function') await resource.commit(client);
+      return result;
+    } catch (error) {
+      if (typeof resource.rollback === 'function') await resource.rollback(client);
+      throw error;
+    }
+  }
+  return callback(resource);
+}
+
+function canonicalPayloadFrom(context, input, effect) {
+  const customerId = input.customerId ?? input.customer_id ?? context.customerId ?? context.customer_id;
+  requireUuid(customerId, 'Cliente');
+  const points = integer(input.points ?? input.pontos ?? context.points ?? context.pontos, { min: 1, max: 100000000 });
+  const payload = {
+    effect,
+    customerId,
+    points,
+    completionId: input.completionId ?? input.completion_id ?? context.completionId ?? context.completion_id ?? null,
+    sourceActionId: input.sourceActionId ?? input.source_action_id ?? context.sourceActionId ?? context.source_action_id ?? null,
+    motivo: text(input.motivo ?? context.motivo ?? '', 240),
+  };
+  if (payload.completionId !== null) requireUuid(payload.completionId, 'completionId');
+  if (payload.sourceActionId !== null) requireUuid(payload.sourceActionId, 'sourceActionId');
+  return payload;
+}
+
+function canonicalEffectResult(row, identity, { replay = false, points = null, ledgerId = null, status = null } = {}) {
+  return {
+    effect: identity.payload.effect,
+    actionId: identity.actionId,
+    idempotencyKey: identity.idempotencyKey,
+    fingerprint: identity.fingerprint,
+    status: status || row?.status || 'succeeded',
+    ledgerId: ledgerId || row?.financial_entry_id || null,
+    points: points === null ? Number(identity.payload.points || 0) : points,
+    replay,
+    canonical: true,
+  };
+}
+
+async function findCanonicalEffect(trx, context, effect) {
+  const result = await loyaltyQuery(trx, `
+    SELECT id, action_id, idempotency_key, fingerprint, payload_sanitizado, status, financial_entry_id
+      FROM dino_effect_outbox
+     WHERE empresa_id = $1 AND loja_id = $2 AND efeito = $3 AND idempotency_key = $4
+     FOR UPDATE`, [context.empresaId, context.lojaId, effect, context.idempotencyKey]);
+  return result.rows?.[0] || null;
+}
+
+function assertCanonicalReplay(row, identity) {
+  let storedPayload = row?.payload_sanitizado;
+  if (typeof storedPayload === 'string') {
+    try { storedPayload = JSON.parse(storedPayload); } catch { storedPayload = null; }
+  }
+  const samePayload = !storedPayload || JSON.stringify(storedPayload) === JSON.stringify(identity.payload);
+  if (String(row?.fingerprint || '').toLowerCase() !== identity.fingerprint
+    || String(row?.action_id || '') !== identity.actionId || !samePayload) {
+    throw new LoyaltyAdvancedError('A chave de idempotência já foi usada com payload divergente.', 409, 'IDEMPOTENCY_CONFLICT');
+  }
+}
+
+async function insertCanonicalEffect(trx, context, effect) {
+  const inserted = await loyaltyQuery(trx, `
+    INSERT INTO dino_effect_outbox
+      (empresa_id, loja_id, efeito, idempotency_key, fingerprint, payload_sanitizado, status, action_id, correlation_id)
+    VALUES ($1, $2, $3, $4, $5, $6::jsonb, 'pending', $7, $8)
+    ON CONFLICT (empresa_id, loja_id, idempotency_key) DO NOTHING
+    RETURNING id, action_id, idempotency_key, fingerprint, payload_sanitizado, status, financial_entry_id`,
+  [context.empresaId, context.lojaId, effect, context.idempotencyKey, context.fingerprint,
+    JSON.stringify(context.payload), context.actionId, context.correlationId || null]);
+  if (inserted.rows?.[0]) return inserted.rows[0];
+  const raced = await findCanonicalEffect(trx, context, effect);
+  if (!raced) throw new LoyaltyAdvancedError('Não foi possível reservar o efeito de fidelidade.', 409, 'LOYALTY_EFFECT_RACE');
+  assertCanonicalReplay(raced, context);
+  return raced;
+}
+
+async function finishCanonicalEffect(trx, context, effect, ledgerId) {
+  await loyaltyQuery(trx, `
+    UPDATE dino_effect_outbox
+       SET status = 'succeeded', financial_entry_id = $1, atualizado_em = CURRENT_TIMESTAMP,
+           lease_token = NULL, lease_until = NULL
+     WHERE empresa_id = $2 AND loja_id = $3 AND efeito = $4 AND idempotency_key = $5`,
+  [ledgerId, context.empresaId, context.lojaId, effect, context.idempotencyKey]);
+}
+
+function canonicalArguments(first, second, third) {
+  const firstIsDb = first && (typeof first.query === 'function' || typeof first.transaction === 'function' || typeof first.beginTransaction === 'function');
+  const thirdIsDb = third && (typeof third.query === 'function' || typeof third.transaction === 'function' || typeof third.beginTransaction === 'function');
+  return firstIsDb
+    ? { resource: first, context: second || {}, input: third || {} }
+    : { resource: thirdIsDb ? third : second?.dbOverride, context: first || {}, input: first?.input || second || {} };
+}
+
+export async function creditLoyaltyForDinoCompletion(dbOrContext, contextOrInput = {}, maybeInput = {}) {
+  const { resource, context, input } = canonicalArguments(dbOrContext, contextOrInput, maybeInput);
+  const payload = canonicalPayloadFrom(context, input, 'loyalty.credit');
+  const identity = canonicalMutationContext(context, payload);
+  return loyaltyTransaction(resource, async trx => {
+    const previous = await findCanonicalEffect(trx, identity, 'loyalty.credit');
+    if (previous) {
+      assertCanonicalReplay(previous, identity);
+      return canonicalEffectResult(previous, identity, { replay: true, points: payload.points });
+    }
+    const store = await loyaltyQuery(trx, 'SELECT id FROM lojas WHERE id = $1 AND empresa_id = $2 FOR SHARE', [identity.lojaId, identity.empresaId]);
+    if (!store.rows?.[0]) throw new LoyaltyAdvancedError('Loja não encontrada no tenant ativo.', 404, 'STORE_NOT_FOUND');
+    const effect = await insertCanonicalEffect(trx, identity, 'loyalty.credit');
+    if (effect?.status === 'succeeded' && effect?.financial_entry_id) {
+      return canonicalEffectResult(effect, identity, { replay: true, points: payload.points });
+    }
+    const customer = await loyaltyQuery(trx,
+      'SELECT id FROM commerce_customers WHERE empresa_id = $1 AND id = $2 AND bloqueado = false FOR SHARE',
+      [identity.empresaId, payload.customerId]);
+    if (!customer.rows?.[0]) throw new LoyaltyAdvancedError('Cliente não encontrado no tenant ativo.', 404, 'CUSTOMER_NOT_FOUND');
+    await loyaltyQuery(trx, `
+      INSERT INTO commerce_loyalty_accounts (empresa_id, loja_id, customer_id)
+      VALUES ($1, $2, $3) ON CONFLICT (empresa_id, loja_id, customer_id) DO NOTHING`,
+    [identity.empresaId, identity.lojaId, payload.customerId]);
+    const account = await loyaltyQuery(trx, `
+      SELECT id, saldo_pontos, pontos_acumulados
+        FROM commerce_loyalty_accounts
+       WHERE empresa_id = $1 AND loja_id = $2 AND customer_id = $3
+       FOR UPDATE`, [identity.empresaId, identity.lojaId, payload.customerId]);
+    if (!account.rows?.[0]) throw new LoyaltyAdvancedError('Conta de fidelidade não encontrada.', 409, 'LOYALTY_ACCOUNT_NOT_FOUND');
+    const before = Number(account.rows[0].saldo_pontos || 0);
+    const after = before + payload.points;
+    const ledger = await loyaltyQuery(trx, `
+      INSERT INTO commerce_loyalty_ledger
+        (empresa_id, loja_id, account_id, customer_id, tipo, pontos, saldo_anterior,
+         saldo_posterior, descricao, referencia_tipo, referencia_id, expira_em, criado_por)
+      VALUES ($1, $2, $3, $4, 'credito', $5, $6, $7, $8, 'dino_completion', $9,
+              CASE WHEN $10::int IS NULL THEN NULL ELSE CURRENT_TIMESTAMP + make_interval(days => $10::int) END, $11)
+      RETURNING id`,
+    [identity.empresaId, identity.lojaId, account.rows[0].id, payload.customerId, payload.points,
+      before, after, text(input.descricao ?? 'Crédito por conclusão Dino', 240), identity.actionId,
+      input.validadeDias ?? input.validade_dias ?? null, input.usuarioId ?? context.usuarioId ?? null]);
+    const ledgerId = ledger.rows?.[0]?.id || null;
+    await loyaltyQuery(trx, `
+      UPDATE commerce_loyalty_accounts
+         SET saldo_pontos = $1, pontos_acumulados = pontos_acumulados + $2, atualizado_em = CURRENT_TIMESTAMP
+       WHERE empresa_id = $3 AND loja_id = $4 AND customer_id = $5`,
+    [after, payload.points, identity.empresaId, identity.lojaId, payload.customerId]);
+    await finishCanonicalEffect(trx, identity, 'loyalty.credit', ledgerId);
+    return canonicalEffectResult(effect, identity, { points: payload.points, ledgerId });
+  });
+}
+
+export async function reverseLoyaltyForDinoCompletion(dbOrContext, contextOrInput = {}, maybeInput = {}) {
+  const { resource, context, input } = canonicalArguments(dbOrContext, contextOrInput, maybeInput);
+  const payload = canonicalPayloadFrom(context, input, 'loyalty.reverse');
+  const sourceActionId = payload.sourceActionId || payload.completionId;
+  if (!sourceActionId) throw new LoyaltyAdvancedError('sourceActionId ou completionId é obrigatório.', 400, 'SOURCE_ACTION_REQUIRED');
+  payload.sourceActionId = sourceActionId;
+  const identity = canonicalMutationContext(context, payload);
+  return loyaltyTransaction(resource, async trx => {
+    const previous = await findCanonicalEffect(trx, identity, 'loyalty.reverse');
+    if (previous) {
+      assertCanonicalReplay(previous, identity);
+      return canonicalEffectResult(previous, identity, { replay: true, points: payload.points });
+    }
+    const source = await loyaltyQuery(trx, `
+      SELECT id, empresa_id, loja_id, account_id, customer_id, pontos
+        FROM commerce_loyalty_ledger
+       WHERE empresa_id = $1 AND loja_id = $2 AND referencia_tipo = 'dino_completion'
+         AND referencia_id = $3 AND tipo = 'credito'
+       FOR SHARE`, [identity.empresaId, identity.lojaId, sourceActionId]);
+    const credit = source.rows?.[0];
+    if (!credit) throw new LoyaltyAdvancedError('Crédito canônico de conclusão não encontrado.', 404, 'SOURCE_CREDIT_NOT_FOUND');
+    if (String(credit.customer_id) !== String(payload.customerId)) {
+      throw new LoyaltyAdvancedError('Crédito de outra identidade não pode ser revertido.', 409, 'LOYALTY_PAYLOAD_CONFLICT');
+    }
+    const effect = await insertCanonicalEffect(trx, identity, 'loyalty.reverse');
+    if (effect?.status === 'succeeded' && effect?.financial_entry_id) {
+      return canonicalEffectResult(effect, identity, { replay: true, points: payload.points });
+    }
+    const account = await loyaltyQuery(trx, `
+      SELECT id, saldo_pontos FROM commerce_loyalty_accounts
+       WHERE empresa_id = $1 AND loja_id = $2 AND customer_id = $3 FOR UPDATE`,
+    [identity.empresaId, identity.lojaId, payload.customerId]);
+    if (!account.rows?.[0]) throw new LoyaltyAdvancedError('Conta de fidelidade não encontrada.', 409, 'LOYALTY_ACCOUNT_NOT_FOUND');
+    const before = Number(account.rows[0].saldo_pontos || 0);
+    const amount = Math.min(Number(credit.pontos || payload.points), before, payload.points);
+    const after = before - Math.max(0, amount);
+    if (amount <= 0) throw new LoyaltyAdvancedError('Não há saldo disponível para reversão compensatória.', 409, 'LOYALTY_NO_BALANCE_TO_REVERSE');
+    const ledger = await loyaltyQuery(trx, `
+      INSERT INTO commerce_loyalty_ledger
+        (empresa_id, loja_id, account_id, customer_id, tipo, pontos, saldo_anterior,
+         saldo_posterior, descricao, referencia_tipo, referencia_id, criado_por)
+      VALUES ($1, $2, $3, $4, 'estorno', $5, $6, $7, $8, 'dino_completion_reversal', $9, $10)
+      RETURNING id`,
+    [identity.empresaId, identity.lojaId, account.rows[0].id, payload.customerId, -amount, before, after,
+      text(input.motivo || 'Reversão compensatória Dino', 240), identity.actionId,
+      input.usuarioId ?? context.usuarioId ?? null]);
+    const ledgerId = ledger.rows?.[0]?.id || null;
+    await loyaltyQuery(trx, `UPDATE commerce_loyalty_accounts SET saldo_pontos = $1, atualizado_em = CURRENT_TIMESTAMP WHERE empresa_id = $2 AND loja_id = $3 AND customer_id = $4`,
+      [after, identity.empresaId, identity.lojaId, payload.customerId]);
+    await finishCanonicalEffect(trx, identity, 'loyalty.reverse', ledgerId);
+    return { ...canonicalEffectResult(effect, identity, { points: amount, ledgerId }), shortfall: payload.points - amount };
+  });
+}
+
+export async function getLoyaltyEffectStatus(db, context = {}) {
+  requireScope(context);
+  const effect = text(context.effect || context.tipo || '', 120);
+  const key = text(context.idempotencyKey ?? context.idempotency_key, 255);
+  const actionId = context.actionId ?? context.action_id ?? null;
+  if (!key && !actionId) throw new LoyaltyAdvancedError('idempotencyKey ou actionId é obrigatório.', 400, 'EFFECT_ID_REQUIRED');
+  const result = await db.query(`
+    SELECT id, efeito, action_id, idempotency_key, fingerprint, status, financial_entry_id,
+           payload_sanitizado, erro, criado_em, atualizado_em
+      FROM dino_effect_outbox
+     WHERE empresa_id = $1 AND loja_id = $2
+       AND ($3::text = '' OR efeito = $3)
+       AND ($4::text IS NULL OR idempotency_key = $4)
+       AND ($5::uuid IS NULL OR action_id = $5)
+     ORDER BY criado_em DESC LIMIT 1`,
+  [context.empresaId, context.lojaId, effect, key || null, actionId]);
+  const row = result.rows?.[0];
+  if (!row) return { found: false, empresaId: context.empresaId, lojaId: context.lojaId };
+  return {
+    found: true, effect: row.efeito, actionId: row.action_id, idempotencyKey: row.idempotency_key,
+    fingerprint: row.fingerprint, status: row.status, ledgerId: row.financial_entry_id || null,
+    error: row.erro || null, canonical: true,
+  };
+}
+
+export const creditLoyaltyForCompletion = creditLoyaltyForDinoCompletion;
+export const reverseLoyaltyForCompletion = reverseLoyaltyForDinoCompletion;

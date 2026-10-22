@@ -32,7 +32,7 @@ const fetchFalso = async (url, op = {}) => {
 };
 
 before(async () => {
-  ctx = await criarBancoTeste(['073_clube_acesso_controle.sql', '076_clube_retencao.sql', '077_clube_parceiros.sql', '075_clube_aulas_agenda.sql', '078_clube_cobrancas.sql']);
+  ctx = await criarBancoTeste(['073_clube_acesso_controle.sql', '076_clube_retencao.sql', '077_clube_parceiros.sql', '075_clube_aulas_agenda.sql', '078_clube_cobrancas.sql', '083_dino_operational_foundations.sql']);
   const app = express();
   const deps = {
     db: ctx.db, enviarWhatsapp: async (m) => { whats.push(m); return { ok: true }; }, urlPublica: 'https://academia.kytto.com.br', qrSecret: QR,

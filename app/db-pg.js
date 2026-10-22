@@ -60,6 +60,21 @@ export async function query(text, params = []) {
 }
 
 /**
+ * Adquirir uma conexão dedicada do pool para operações que dependem da
+ * mesma sessão PostgreSQL, como advisory locks e migrations.
+ */
+export async function acquireClient() {
+  return pool.connect();
+}
+
+/**
+ * Liberar uma conexão dedicada previamente adquirida.
+ */
+export function releaseClient(client) {
+  client.release();
+}
+
+/**
  * Iniciar transação
  */
 export async function beginTransaction() {
@@ -577,6 +592,8 @@ export async function healthCheck() {
 
 export default {
   query,
+  acquireClient,
+  releaseClient,
   beginTransaction,
   commit,
   rollback,

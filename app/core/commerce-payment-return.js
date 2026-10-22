@@ -17,10 +17,13 @@ export const publicInfinitepayPaymentLookupSql = `
 
 export const infinitepayWebhookUnboundOwnerSql = `
   SELECT p.id AS payment_id, p.empresa_id, p.payment_account_id, p.amount, p.method,
-         p.provider_payment_id, o.public_code AS order_code, a.secret_ref, a.public_config
+         p.provider_payment_id, o.public_code AS order_code, o.storefront_id,
+         s.loja_id, a.secret_ref, a.public_config
     FROM commerce_payments p
     JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id
-    LEFT JOIN commerce_payment_accounts a ON a.empresa_id = p.empresa_id AND a.id = p.payment_account_id
+    JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id AND s.status = 'active'
+    JOIN commerce_payment_accounts a ON a.empresa_id = p.empresa_id AND a.id = p.payment_account_id
+      AND a.storefront_id = o.storefront_id AND a.ativo = true AND a.ambiente = 'production'
    WHERE p.provider = 'infinitepay' AND p.provider_payment_id IS NULL
      AND (o.public_code = $1 OR o.id::text = $1)
      AND p.status = 'pending' AND p.payment_account_id IS NOT NULL
@@ -35,11 +38,14 @@ export const infinitepayWebhookUnboundOwnerSql = `
 // mas jamais pode substituir o provider_payment_id já capturado.
 export const infinitepayWebhookDuplicateOwnerSql = `
   SELECT p.id AS payment_id, p.empresa_id, p.payment_account_id, p.amount, p.method,
-         p.provider_payment_id, o.public_code AS order_code, a.secret_ref, a.public_config,
+         p.provider_payment_id, o.public_code AS order_code, o.storefront_id,
+         s.loja_id, a.secret_ref, a.public_config,
          true AS possible_duplicate
     FROM commerce_payments p
     JOIN commerce_orders o ON o.empresa_id = p.empresa_id AND o.id = p.order_id
-    LEFT JOIN commerce_payment_accounts a ON a.empresa_id = p.empresa_id AND a.id = p.payment_account_id
+    JOIN commerce_storefronts s ON s.empresa_id = o.empresa_id AND s.id = o.storefront_id AND s.status = 'active'
+    JOIN commerce_payment_accounts a ON a.empresa_id = p.empresa_id AND a.id = p.payment_account_id
+      AND a.storefront_id = o.storefront_id AND a.ativo = true AND a.ambiente = 'production'
    WHERE p.provider = 'infinitepay' AND p.provider_payment_id IS NOT NULL
      AND p.provider_payment_id <> $2 AND p.status IN ('pending','authorized','captured')
      AND o.public_code = $1 AND p.payment_account_id IS NOT NULL

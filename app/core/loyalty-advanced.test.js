@@ -24,6 +24,10 @@ const REDEMPTION = '66666666-6666-4666-8666-666666666666';
 const LEDGER = '77777777-7777-4777-8777-777777777777';
 const ACCOUNT = '88888888-8888-4888-8888-888888888888';
 const ORDER = '99999999-9999-4999-8999-999999999999';
+const ACTION_REDEEM = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const ACTION_CANCEL = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const ACTION_DELIVER = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const FP = 'a'.repeat(64);
 
 function mockDb(handler) {
   const state = { calls: [], commits: 0, rollbacks: 0 };
@@ -164,11 +168,11 @@ test('resgate exige confirmação e idempotency key antes de abrir transação',
   let began = 0;
   const db = { async beginTransaction() { began += 1; return {}; } };
   await assert.rejects(
-    () => redeemReward(db, { ...SCOPE, clienteId: CUSTOMER, recompensaId: REWARD, confirmar: false, idempotencyKey: 'loyalty-reward:1234567890' }),
+    () => redeemReward(db, { ...SCOPE, clienteId: CUSTOMER, recompensaId: REWARD, confirmar: false, actionId: ACTION_REDEEM, fingerprint: FP, idempotencyKey: 'loyalty-reward:1234567890' }),
     /Confirmação humana explícita/,
   );
   await assert.rejects(
-    () => redeemReward(db, { ...SCOPE, clienteId: CUSTOMER, recompensaId: REWARD, confirmar: true, idempotencyKey: 'curta' }),
+    () => redeemReward(db, { ...SCOPE, clienteId: CUSTOMER, recompensaId: REWARD, confirmar: true, actionId: ACTION_REDEEM, fingerprint: FP, idempotencyKey: 'curta' }),
     /idempotência inválida/,
   );
   assert.equal(began, 0);
@@ -199,7 +203,7 @@ test('resgate confirmado debita saldo e estoque uma única vez em transação te
   });
   const result = await redeemReward(db, {
     ...SCOPE, clienteId: CUSTOMER, recompensaId: REWARD, quantidade: 1,
-    confirmar: true, idempotencyKey: 'loyalty-reward:1234567890abcdef',
+    confirmar: true, actionId: ACTION_REDEEM, fingerprint: FP, idempotencyKey: 'loyalty-reward:1234567890abcdef',
   });
   assert.equal(result.replay, false);
   assert.equal(result.redemption.pontos_resgatados, 500);
@@ -223,7 +227,7 @@ test('replay idempotente retorna o resgate existente sem novo débito', async ()
   });
   const result = await redeemReward(db, {
     ...SCOPE, clienteId: CUSTOMER, recompensaId: REWARD, confirmar: true,
-    idempotencyKey: 'loyalty-reward:1234567890abcdef',
+    actionId: ACTION_REDEEM, fingerprint: FP, idempotencyKey: 'loyalty-reward:1234567890abcdef',
   });
   assert.equal(result.replay, true);
   assert.equal(db.state.calls.some(call => call.sql.includes('INSERT INTO commerce_loyalty_ledger')), false);
@@ -243,7 +247,7 @@ test('reutilização da chave idempotente com outra quantidade é rejeitada sem 
   await assert.rejects(
     () => redeemReward(db, {
       ...SCOPE, clienteId: CUSTOMER, recompensaId: REWARD, quantidade: 2,
-      confirmar: true, idempotencyKey: 'loyalty-reward:1234567890abcdef',
+      confirmar: true, actionId: ACTION_REDEEM, fingerprint: FP, idempotencyKey: 'loyalty-reward:1234567890abcdef',
     }),
     error => error.statusCode === 409 && error.code === 'IDEMPOTENCY_CONFLICT',
   );

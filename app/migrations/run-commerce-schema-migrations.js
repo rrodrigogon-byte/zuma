@@ -71,6 +71,7 @@ const migrationFiles = [
   '080_clube_quadras.sql',
   '081_bar_pdv_multiempresa.sql',
   '082_financeiro_cadastros_multiempresa.sql',
+  '083_dino_operational_foundations.sql',
 ];
 const advisoryLockKey = 825410732;
 
@@ -150,8 +151,8 @@ function hasManagedDatabaseUrl() {
   );
 }
 
-async function ensureControlTable() {
-  await dbPg.query(`
+async function ensureControlTable(client) {
+  await client.query(`
     CREATE TABLE IF NOT EXISTS commerce_schema_migrations (
       id BIGSERIAL PRIMARY KEY,
       arquivo VARCHAR(255) NOT NULL UNIQUE,
@@ -161,11 +162,11 @@ async function ensureControlTable() {
   `);
 }
 
-async function applyMigration(fileName) {
+async function applyMigration(client, fileName) {
   const filePath = path.join(migrationDir, fileName);
   const sql = await readFile(filePath, 'utf8');
   const hash = checksum(sql);
-  const existing = await dbPg.query(
+  const existing = await client.query(
     'SELECT checksum FROM commerce_schema_migrations WHERE arquivo = $1',
     [fileName]
   );
@@ -181,24 +182,27 @@ async function applyMigration(fileName) {
   }
 
   console.log(`→ Aplicando ${fileName}`);
-  const client = await dbPg.beginTransaction();
   try {
-    await dbPg.queryInTransaction(client, stripTopLevelTransactionControl(sql));
-    await dbPg.queryInTransaction(
-      client,
+    await client.query('BEGIN');
+    await client.query(stripTopLevelTransactionControl(sql));
+    await client.query(
       'INSERT INTO commerce_schema_migrations (arquivo, checksum) VALUES ($1, $2)',
       [fileName, hash]
     );
-    await dbPg.commit(client);
+    await client.query('COMMIT');
     console.log(`✓ ${fileName} aplicada`);
     return true;
   } catch (error) {
-    await dbPg.rollback(client);
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      error.message = `${error.message}; rollback também falhou: ${rollbackError.message}`;
+    }
     throw new Error(`Falha na migration ${fileName}: ${error.message}`);
   }
 }
 
-export async function runCommerceSchemaMigrations({ dryRun = false } = {}) {
+export async function runCommerceSchemaMigrations({ dryRun = false, db = dbPg } = {}) {
   if (dryRun) {
     console.log('Dry-run: nenhuma conexão ou escrita foi executada.');
     for (const fileName of migrationFiles) console.log(`- ${fileName}`);
@@ -213,16 +217,23 @@ export async function runCommerceSchemaMigrations({ dryRun = false } = {}) {
     return { applied: [], files: [...migrationFiles], dryRun: false, skipped: true };
   }
 
-  await ensureControlTable();
-  await dbPg.query('SELECT pg_advisory_lock($1)', [advisoryLockKey]);
-  const applied = [];
+  const client = await db.acquireClient();
+  let lockAcquired = false;
   try {
+    await ensureControlTable(client);
+    await client.query('SELECT pg_advisory_lock($1)', [advisoryLockKey]);
+    lockAcquired = true;
+    const applied = [];
     for (const fileName of migrationFiles) {
-      if (await applyMigration(fileName)) applied.push(fileName);
+      if (await applyMigration(client, fileName)) applied.push(fileName);
     }
     return { applied, files: [...migrationFiles], dryRun: false };
   } finally {
-    await dbPg.query('SELECT pg_advisory_unlock($1)', [advisoryLockKey]);
+    try {
+      if (lockAcquired) await client.query('SELECT pg_advisory_unlock($1)', [advisoryLockKey]);
+    } finally {
+      db.releaseClient(client);
+    }
   }
 }
 

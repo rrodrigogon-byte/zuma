@@ -141,7 +141,7 @@ export function registrarVale(empresaId, dados = {}, opcoes = {}) {
   const vale = { id: novoId('vale'), profissionalId: prof.id, profissionalNome: prof.nome, lojaId: texto(dados.lojaId, 120), valor, meio: MEIOS.has(dados.meio) ? dados.meio : 'pix', motivo: texto(dados.motivo, 200), status: 'aberto', chaveIdempotencia: chave || null, criadoEm: agora, criadoPor: texto(dados.usuario, 160) || null };
   atual.vales[vale.id] = vale;
   try {
-    financeiroKytto.registrarLancamento(empresaId, { tipo: 'despesa', categoria: 'Comissões - vale', descricao: `Vale de comissão · ${prof.nome}`, valor, origem: 'barbearia_vale_comissao', status: 'pago', meioPagamento: vale.meio, dataOperacao: agora, pagoEm: agora, chaveIdempotencia: `barbearia_vale:${empresaId}:${vale.id}`, referencia: { valeId: vale.id, profissionalId: prof.id } });
+    financeiroKytto.registrarLancamento(empresaId, { tipo: 'despesa', categoria: 'Comissões - vale', descricao: `Vale de comissão · ${prof.nome}`, valor, origem: 'barbearia_vale_comissao', status: 'pago', meioPagamento: vale.meio, lojaId: vale.lojaId, dataOperacao: agora, pagoEm: agora, chaveIdempotencia: `barbearia_vale:${empresaId}:${vale.id}`, referencia: { valeId: vale.id, profissionalId: prof.id } });
   } catch (erro) { vale.erroFinanceiro = texto(erro?.message || erro, 200); }
   save();
   return { ...vale };
@@ -257,7 +257,7 @@ export function registrarRepasse(empresaId, dados = {}, opcoes = {}) {
   atual.repasses[repasse.id] = repasse;
   if (repasse.valorPago > 0 && dados.lancarDespesa !== false) {
     try {
-      const lanc = financeiroKytto.registrarLancamento(empresaId, { tipo: 'despesa', categoria: 'Comissões', descricao: `Repasse ${repasse.recibo} · ${prof.nome} · ${inicio} a ${fim}`, valor: repasse.valorPago, origem: 'barbearia_repasse_comissao', status: 'pago', meioPagamento: meio, dataOperacao: agora, pagoEm: agora, chaveIdempotencia: `barbearia_repasse:${empresaId}:${repasse.id}`, referencia: { repasseId: repasse.id, profissionalId: prof.id } });
+      const lanc = financeiroKytto.registrarLancamento(empresaId, { tipo: 'despesa', categoria: 'Comissões', descricao: `Repasse ${repasse.recibo} · ${prof.nome} · ${inicio} a ${fim}`, valor: repasse.valorPago, origem: 'barbearia_repasse_comissao', status: 'pago', meioPagamento: meio, lojaId: repasse.lojaId, dataOperacao: agora, pagoEm: agora, chaveIdempotencia: `barbearia_repasse:${empresaId}:${repasse.id}`, referencia: { repasseId: repasse.id, profissionalId: prof.id } });
       repasse.financeiroLancamentoId = lanc?.id || null;
     } catch (erro) { repasse.erroFinanceiro = texto(erro?.message || erro, 200); }
   }
@@ -280,7 +280,7 @@ export function estornarRepasse(empresaId, repasseId, { motivo = '', usuario = '
   }
   if (repasse.valorPago > 0) {
     try {
-      financeiroKytto.registrarLancamento(empresaId, { tipo: 'receita', categoria: 'Comissões - estorno', descricao: `Estorno do repasse ${repasse.recibo} · ${repasse.profissionalNome}`, valor: repasse.valorPago, origem: 'barbearia_repasse_estorno', status: 'pago', meioPagamento: repasse.meio, dataOperacao: agora, pagoEm: agora, chaveIdempotencia: `barbearia_repasse_estorno:${empresaId}:${repasse.id}`, referencia: { repasseId: repasse.id } });
+      financeiroKytto.registrarLancamento(empresaId, { tipo: 'receita', categoria: 'Comissões - estorno', descricao: `Estorno do repasse ${repasse.recibo} · ${repasse.profissionalNome}`, valor: repasse.valorPago, origem: 'barbearia_repasse_estorno', status: 'pago', meioPagamento: repasse.meio, lojaId: repasse.lojaId, dataOperacao: agora, pagoEm: agora, chaveIdempotencia: `barbearia_repasse_estorno:${empresaId}:${repasse.id}`, referencia: { repasseId: repasse.id } });
     } catch (erro) { repasse.erroFinanceiroEstorno = texto(erro?.message || erro, 200); }
   }
   save();

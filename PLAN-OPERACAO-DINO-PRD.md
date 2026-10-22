@@ -4,6 +4,8 @@
 **Base obrigatória de produção:** `origin/fix/kytto-comandas-pdv-20260808`  
 **Estado de início:** sprint de isolamento multiloja, fidelidade e lista de espera já incorporado nesta branch; ainda não publicado.
 
+**Atualização da fundação (2026-10-22):** a migration `083_dino_operational_foundations.sql` e o runner de schema foram criados para sustentar outbox, estornos, reservas, waitlist, NPS, quarentena e webhooks. Isto não conclui a Operação Dino: domínio, workers, testes PostgreSQL autorizados, deploy e os gates de PRD continuam pendentes.
+
 ## Objetivo
 
 Concluir a Operação Dino com controles de integridade financeira, isolamento multiloja, agenda, fidelidade, lista de espera, revenda, compras e projeção de faturamento. A entrega deve ser segura para PRD: sem vazamento entre lojas, sem confirmação financeira sem reconciliação, sem entrada fiscal parcial e sem comunicação enganosa sobre previsões.
@@ -16,6 +18,7 @@ Concluir a Operação Dino com controles de integridade financeira, isolamento m
 4. O retorno InfinitePay aceita exclusivamente o `invoice_slug` persistido na cobrança. Ausência, divergência, timeout ou divergência de valor/método/NSU jamais confirma pagamento ou agenda.
 5. Entrada de NF-e em PRD exige artefato válido e autorizado. Até haver dados fiscais reais de homologação, entradas que não passem a validação permanecem bloqueadas ou pendentes — nunca simuladas como autorizadas.
 6. A previsão é **previsão bruta de receita**, não caixa nem margem; permanece desligada por feature flag até que rota, fonte de recebimento, permissões e artefato estejam comprovados em PRD.
+7. O NPS canônico permanece **opt-in** em `DINO_NPS_CANONICAL_ENABLED=1`: a flag só opera depois de o readiness confirmar todo o schema Commerce. O boot não aplica migration nem habilita a flag implicitamente; sem schema/banco, as rotas respondem 503 e o worker não inicia loop. Em produção, a ativação exige configuração explícita e evidência de PostgreSQL/worker real.
 
 ## Arquitetura e estrutura
 
