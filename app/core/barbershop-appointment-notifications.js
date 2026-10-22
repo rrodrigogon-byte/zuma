@@ -8,6 +8,7 @@ import { enviarMensagem } from './whatsapp.js';
 import { notificarEquipe } from '../dino-push-equipe.js';
 import { personaAppointmentMessage, quandoCurto, resolvePersona } from './whatsapp-ai-persona.js';
 import * as captacao from '../dino-captacao-kytto.js';
+import { confirmationDeadlineExpired, confirmationPlan, secondConfirmationWindowOpen } from './dino-confirmation-policy.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EVENTOS = new Set(['criado', 'remarcado', 'cancelado', 'lembrete']);
@@ -18,6 +19,7 @@ const EVENTO_VAGA = 'vaga';
 const EVENTO_AVALIACAO = 'avaliacao';
 // Cobrança do clube (link de pagamento ou Pix copia e cola): mesma fila.
 const EVENTO_COBRANCA = 'cobranca';
+const EVENTO_CONFIRMACAO_DIA = 'confirmacao_dia';
 
 const DOMINIOS_OFICIAIS_DINO = new Set([
   'https://dino.kytto.com.br',
@@ -129,7 +131,7 @@ function referencia(agendamento, evento) {
   return `${limpo(agendamento.id, 100)}:${evento}:${sha(`${agendamento.dataHora}|${agendamento.status}`)}`;
 }
 
-function tarefaPayload({ legacyEmpresaId, agendamento, evento }) {
+function tarefaPayload({ legacyEmpresaId, agendamento, evento, confirmationStage = '' }) {
   return {
     version: 'barbershop-appointment-v1',
     legacyEmpresaId: limpo(legacyEmpresaId, 120),
@@ -137,10 +139,11 @@ function tarefaPayload({ legacyEmpresaId, agendamento, evento }) {
     customerId: limpo(agendamento.clienteId, 120),
     eventType: evento,
     scheduleFingerprint: captacao.fingerprintSlot({ empresaId: legacyEmpresaId, ...agendamento }),
+    ...(confirmationStage ? { confirmationStage } : {}),
   };
 }
 
-async function inserirTarefa(trx, { empresaId, lojaId, canalId, legacyEmpresaId, agendamento, evento, executarEm }) {
+async function inserirTarefa(trx, { empresaId, lojaId, canalId, legacyEmpresaId, agendamento, evento, executarEm, confirmationStage = '' }) {
   const ref = referencia(agendamento, evento);
   const resultado = await trx.query(
     `INSERT INTO tarefas_integracao_canais
@@ -148,7 +151,7 @@ async function inserirTarefa(trx, { empresaId, lojaId, canalId, legacyEmpresaId,
      VALUES ($1,$2,$3,'notificar_agendamento',$4,$5::jsonb,'pendente',$6)
      ON CONFLICT (empresa_id,tipo,referencia_externa) WHERE tipo='notificar_agendamento' DO NOTHING
      RETURNING id`,
-    [empresaId, lojaId, canalId, ref, JSON.stringify(tarefaPayload({ legacyEmpresaId, agendamento, evento })), executarEm],
+    [empresaId, lojaId, canalId, ref, JSON.stringify(tarefaPayload({ legacyEmpresaId, agendamento, evento, confirmationStage })), executarEm],
   );
   return Number(resultado.rowCount || 0);
 }
@@ -181,16 +184,25 @@ export async function queueAppointmentNotifications(contexto = {}, agendamento =
             SET status='cancelada',proxima_tentativa_em=NULL,data_atualizacao=CURRENT_TIMESTAMP
           WHERE empresa_id=$1 AND loja_id=$2 AND tipo='notificar_agendamento'
             AND payload->>'legacyEmpresaId'=$3             AND payload->>'appointmentId'=$4
-            AND payload->>'eventType' IN ('criado','remarcado','lembrete') AND status IN ('pendente','falha')`,
+            AND payload->>'eventType' IN ('criado','remarcado','lembrete','confirmacao_dia') AND status IN ('pendente','falha')`,
         [empresaId, lojaId, legacyEmpresaId, String(agendamento.id)],
       );
     }
     let queued = 0;
     if (evento !== 'lembrete') queued += await inserirTarefa(trx, { empresaId, lojaId, canalId: canal.id, legacyEmpresaId, agendamento, evento, executarEm: new Date() });
-    if (evento !== 'cancelado' && !['cancelado', 'concluido', 'nao_compareceu'].includes(String(agendamento.status))) {
-      const lembreteAlvo = dataHora.valueOf() - 24 * 60 * 60 * 1000;
-      if (lembreteAlvo >= Date.now() - 60 * 60 * 1000 && !lembreteRedundante(agendamento, dataHora)) {
-        queued += await inserirTarefa(trx, { empresaId, lojaId, canalId: canal.id, legacyEmpresaId, agendamento, evento: 'lembrete', executarEm: new Date(Math.max(Date.now(), lembreteAlvo)) });
+    if (evento !== 'cancelado' && String(agendamento.status) === 'agendado') {
+      const autoConfirm = barbearia.obterConfiguracao(legacyEmpresaId)?.confirmacaoAutomaticaAtiva === true;
+      const plano = autoConfirm ? confirmationPlan(dataHora, new Date()) : { enabled: false };
+      if (plano.enabled) {
+        barbearia.inicializarConfirmacaoAutomatica(legacyEmpresaId, agendamento.id, { lojaId });
+        // O segundo aviso sai 2h15 antes; o prazo de 1h termina 1h15 antes do horário.
+        queued += await inserirTarefa(trx, { empresaId, lojaId, canalId: canal.id, legacyEmpresaId, agendamento, evento: 'lembrete', executarEm: plano.firstAt, confirmationStage: 'primeira' });
+        queued += await inserirTarefa(trx, { empresaId, lojaId, canalId: canal.id, legacyEmpresaId, agendamento, evento: EVENTO_CONFIRMACAO_DIA, executarEm: plano.secondAt, confirmationStage: 'segunda' });
+      } else if (!autoConfirm) {
+        const lembreteAlvo = dataHora.valueOf() - 24 * 60 * 60 * 1000;
+        if (lembreteAlvo >= Date.now() - 60 * 60 * 1000 && !lembreteRedundante(agendamento, dataHora)) {
+          queued += await inserirTarefa(trx, { empresaId, lojaId, canalId: canal.id, legacyEmpresaId, agendamento, evento: 'lembrete', executarEm: new Date(Math.max(Date.now(), lembreteAlvo)) });
+        }
       }
     }
     return { queued, skipped: false };
@@ -482,14 +494,61 @@ async function processChargeTask(task, payload, legacyEmpresaId) {
   return { sent: true, chargeId: cobranca.id, eventType: EVENTO_COBRANCA, providerMessageId };
 }
 
+async function lembreteJaEnviado(empresaId, lojaId, agendamento) {
+  const empresaUuid = uuidOuVazio(empresaId);
+  const lojaUuid = uuidOuVazio(lojaId);
+  if (!empresaUuid || !lojaUuid) return null;
+  const fingerprint = captacao.fingerprintSlot({ empresaId, ...agendamento });
+  try {
+    const result = await db.query(
+      `SELECT data_atualizacao FROM tarefas_integracao_canais
+        WHERE empresa_id=$1 AND loja_id=$2 AND tipo='notificar_agendamento'
+          AND payload->>'appointmentId'=$3 AND payload->>'eventType'='lembrete'
+          AND payload->>'scheduleFingerprint'=$4 AND status='concluida'
+        ORDER BY data_atualizacao DESC LIMIT 1`,
+      [empresaUuid, lojaUuid, String(agendamento.id), fingerprint],
+    );
+    return result.rows[0]?.data_atualizacao || null;
+  } catch { return null; }
+}
+
 export async function enqueueDueAppointmentReminders() {
   const raiz = legacyDb();
   let queued = 0;
+  const now = new Date();
   for (const [legacyEmpresaId, estado] of Object.entries(raiz.barbearias || {})) {
+    const autoConfirm = barbearia.obterConfiguracao(legacyEmpresaId)?.confirmacaoAutomaticaAtiva === true;
     for (const agendamento of Object.values(estado?.agendamentos || {})) {
       const dataHora = dataValida(agendamento?.dataHora);
-      if (!dataHora || dataHora.valueOf() < Date.now() + 23 * 60 * 60 * 1000 || dataHora.valueOf() > Date.now() + 36 * 60 * 60 * 1000) continue;
-      if (['cancelado', 'concluido', 'nao_compareceu'].includes(String(agendamento.status))) continue;
+      if (!dataHora || ['cancelado', 'concluido', 'nao_compareceu'].includes(String(agendamento.status))) continue;
+      const leadMs = dataHora.valueOf() - now.valueOf();
+      if (autoConfirm && String(agendamento.status) === 'agendado' && leadMs >= 0 && leadMs <= 36 * 60 * 60 * 1000) {
+        const plano = confirmationPlan(dataHora, now);
+        if (!plano.enabled) continue;
+        const confirmacao = agendamento.confirmacaoAutomatica || {};
+        if (confirmacao.status === 'segunda_enviada' && confirmationDeadlineExpired(confirmacao.prazoRespostaAte, now)) {
+          const cancelado = barbearia.cancelarPorFaltaConfirmacao(legacyEmpresaId, agendamento.id, { lojaId: agendamento.lojaId || '', agora: now });
+          if (cancelado) {
+            const contexto = { empresaId: legacyEmpresaId, lojaId: cancelado.lojaId || '', legacyEmpresaId };
+            await queueAppointmentNotifications(contexto, cancelado, 'cancelado').catch(() => null);
+            const candidatos = captacao.candidatosParaVaga(legacyEmpresaId, cancelado, { lojaId: cancelado.lojaId || '' });
+            await queueWaitlistNotifications(contexto, cancelado, candidatos).catch(() => null);
+          }
+          continue;
+        }
+        if (confirmacao.status === 'segunda_enviada' || confirmacao.status === 'confirmado' || confirmacao.status === 'cancelado_falta_confirmacao') continue;
+        if (!confirmacao.primeiraEnviadaEm && now.valueOf() >= plano.firstAt.valueOf()) {
+          const jaEnviadoEm = await lembreteJaEnviado(legacyEmpresaId, agendamento.lojaId, agendamento);
+          if (jaEnviadoEm) barbearia.registrarConfirmacaoAutomaticaEnviada(legacyEmpresaId, agendamento.id, 'primeira', { lojaId: agendamento.lojaId || '', enviadoEm: jaEnviadoEm });
+        }
+        const resultado = await queueAppointmentNotifications({ empresaId: legacyEmpresaId, lojaId: agendamento.lojaId, legacyEmpresaId }, agendamento, 'lembrete').catch(() => null);
+        queued += Number(resultado?.queued || 0);
+        continue;
+      }
+      // Com a política ligada, nenhum estado recebe o lembrete legado; a rotina
+      // específica acima só programa as duas etapas para agendamentos pendentes.
+      if (autoConfirm) continue;
+      if (leadMs < 23 * 60 * 60 * 1000 || leadMs > 36 * 60 * 60 * 1000) continue;
       const resultado = await queueAppointmentNotifications({ empresaId: legacyEmpresaId, lojaId: agendamento.lojaId, legacyEmpresaId }, agendamento, 'lembrete').catch(() => null);
       queued += Number(resultado?.queued || 0);
     }
@@ -500,6 +559,10 @@ export async function enqueueDueAppointmentReminders() {
 export function mensagem(snapshot, agendamento, cliente, evento, persona = null) {
   const servico = snapshot.servicos.find((item) => item.id === agendamento.servicoId)?.nome || 'atendimento';
   const profissional = snapshot.profissionais.find((item) => item.id === agendamento.profissionalId)?.nome || 'profissional da equipe';
+  if (evento === EVENTO_CONFIRMACAO_DIA) {
+    const quando = formatarQuando(agendamento);
+    return `Olá, ${limpo(cliente.nome, 80)}. Ainda não recebemos a confirmação do seu agendamento ${quando} (${servico}). Responda CONFIRMO em até 1 hora para manter o horário. Sem resposta, o agendamento será cancelado automaticamente e o horário liberado para outra pessoa. Para mudar, responda REMARCAR. Para não receber avisos de atendimento, responda SAIR.`;
+  }
   if (persona) {
     // Mesma informação e os mesmos comandos (CONFIRMO, REMARCAR, CANCELO, SAIR), na voz curta da persona.
     return personaAppointmentMessage(persona, {
@@ -511,6 +574,7 @@ export function mensagem(snapshot, agendamento, cliente, evento, persona = null)
   const quando = formatarQuando(agendamento);
   const cabecalho = `Olá, ${limpo(cliente.nome, 80)}.`;
   const rodape = 'Esta é uma mensagem de atendimento. Para não receber estes avisos, responda SAIR.';
+  if (evento === 'cancelado' && agendamento.motivoCancelamento === 'falta_confirmacao') return `${cabecalho} Seu agendamento ${quando} foi cancelado automaticamente porque não recebemos a confirmação dentro de 1 hora. O horário foi liberado. Entre em contato com a equipe para escolher outro horário. ${rodape}`;
   if (evento === 'cancelado') return `${cabecalho} Seu agendamento na ${limpo(snapshot.configuracao.nomePublico || 'barbearia', 120)} foi cancelado. Se precisar, entre em contato para escolher outro horário. ${rodape}`;
   if (evento === 'remarcado') return `${cabecalho} Seu agendamento foi remarcado para ${quando}. Serviço: ${servico}. Profissional: ${profissional}. ${rodape}`;
   if (evento === 'lembrete') return `${cabecalho} Lembrete do seu agendamento ${quandoRelativo(agendamento)}, ${quando}. Serviço: ${servico}. Profissional: ${profissional}. Responda CONFIRMO, REMARCAR ou CANCELO. ${rodape}`;
@@ -533,7 +597,7 @@ export async function processAppointmentNotificationTask(task = {}) {
   if (legacyEmpresaId && appointmentId && evento === EVENTO_VAGA) return processWaitlistTask(task, payload, legacyEmpresaId);
   if (legacyEmpresaId && appointmentId && evento === EVENTO_AVALIACAO) return processReviewTask(task, payload, legacyEmpresaId);
   if (legacyEmpresaId && payload.chargeId && evento === EVENTO_COBRANCA) return processChargeTask(task, payload, legacyEmpresaId);
-  if (!legacyEmpresaId || !appointmentId || !EVENTOS.has(evento)) return { skipped: true, reason: 'task_payload_invalid' };
+  if (!legacyEmpresaId || !appointmentId || (!EVENTOS.has(evento) && evento !== EVENTO_CONFIRMACAO_DIA)) return { skipped: true, reason: 'task_payload_invalid' };
   const snapshot = {
     configuracao: barbearia.obterConfiguracao(legacyEmpresaId),
     profissionais: barbearia.listarProfissionais(legacyEmpresaId, { incluirInativos: true }),
@@ -544,6 +608,23 @@ export async function processAppointmentNotificationTask(task = {}) {
   if (!agendamento) return { skipped: true, reason: 'appointment_not_found' };
   if (String(agendamento.lojaId || '') !== String(task.loja_id || '')) return { skipped: true, reason: 'store_scope_mismatch' };
   if (evento !== 'cancelado' && ['cancelado', 'concluido', 'nao_compareceu'].includes(String(agendamento.status))) return { skipped: true, reason: 'appointment_not_eligible' };
+  if (evento === 'lembrete' && agendamento.status === 'confirmado') return { skipped: true, reason: 'appointment_already_confirmed' };
+  if (evento === 'lembrete') {
+    const automaticEnabled = snapshot.configuracao?.confirmacaoAutomaticaAtiva === true;
+    if (payload.confirmationStage === 'primeira') {
+      const confirmation = agendamento.confirmacaoAutomatica;
+      if (!automaticEnabled) return { skipped: true, reason: 'automatic_confirmation_disabled' };
+      if (agendamento.status !== 'agendado' || confirmation?.ativa !== true || confirmation.status !== 'aguardando') {
+        return { skipped: true, reason: 'first_confirmation_not_pending' };
+      }
+    } else if (automaticEnabled) return { skipped: true, reason: 'legacy_reminder_superseded' };
+  }
+  if (evento === EVENTO_CONFIRMACAO_DIA) {
+    const confirmation = agendamento.confirmacaoAutomatica;
+    if (snapshot.configuracao?.confirmacaoAutomaticaAtiva !== true || agendamento.status !== 'agendado') return { skipped: true, reason: 'automatic_confirmation_disabled' };
+    if (confirmation?.ativa !== true || confirmation.status !== 'primeira_enviada' || !confirmation.primeiraEnviadaEm) return { skipped: true, reason: 'first_confirmation_missing' };
+    if (!secondConfirmationWindowOpen(agendamento.dataHora, new Date())) return { skipped: true, reason: 'second_confirmation_too_late' };
+  }
   const fingerprintAtual = captacao.fingerprintSlot({ empresaId: legacyEmpresaId, ...agendamento });
   const fingerprintLegado = sha(`${agendamento.dataHora}|${agendamento.profissionalId}|${agendamento.servicoId}`);
   if (payload.scheduleFingerprint !== fingerprintAtual && payload.scheduleFingerprint !== fingerprintLegado) return { skipped: true, reason: 'schedule_changed' };
@@ -574,6 +655,11 @@ export async function processAppointmentNotificationTask(task = {}) {
   }
   const providerMessageId = limpo(resultado?.data?.key?.id || resultado?.data?.id, 200) || null;
   await db.query(`UPDATE tarefas_integracao_canais SET provider_message_id = $2 WHERE id = $1`, [task.id, providerMessageId]);
+  if (snapshot.configuracao?.confirmacaoAutomaticaAtiva === true && evento === 'lembrete') {
+    barbearia.registrarConfirmacaoAutomaticaEnviada(legacyEmpresaId, appointmentId, 'primeira', { lojaId: task.loja_id, enviadoEm: new Date() });
+  } else if (evento === EVENTO_CONFIRMACAO_DIA) {
+    barbearia.registrarConfirmacaoAutomaticaEnviada(legacyEmpresaId, appointmentId, 'segunda', { lojaId: task.loja_id, enviadoEm: new Date() });
+  }
   return { sent: true, appointmentId, eventType: evento, providerMessageId };
 }
 

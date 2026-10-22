@@ -7,6 +7,8 @@ const ALTURA_SLOT = 48
 const STATUS = {
   agendado: { label: 'Agendado', color: '#4a9eff' },
   confirmado: { label: 'Confirmado', color: '#8b5cf6' },
+  aguardando_confirmacao: { label: 'Aguardando confirmação', color: '#e0b24b' },
+  cancelado_falta_confirmacao: { label: 'Cancelado por falta de confirmação', color: '#e05c5c' },
   em_atendimento: { label: 'Em atendimento', color: '#f59e0b' },
   concluido: { label: 'Concluído', color: '#14b87a' },
   cancelado: { label: 'Cancelado', color: '#e05c5c' },
@@ -114,12 +116,12 @@ export default function BarbeariaAgendaBoard({ data, configuracao = {}, agendame
             {linhas.slice(0, -1).map((minutos) => <div key={minutos} style={{ height: ALTURA_SLOT, borderBottom: '1px solid var(--line)', borderTop: minutos % 60 === 0 ? '1px solid var(--line)' : undefined }} />)}
             {bloqueios.filter((item) => !item.profissionalId || item.profissionalId === coluna.id).map((bloqueio) => { const posicao = eventoPosicao({ dataHora: bloqueio.inicio, duracaoMinutos: (new Date(bloqueio.fim).valueOf() - new Date(bloqueio.inicio).valueOf()) / 60000 }, grade); return <div key={bloqueio.id} style={{ ...styles.blocked, top: posicao.top, height: posicao.height }} title={bloqueio.titulo}>{bloqueio.titulo}</div> })}
             {!trabalhaHoje && <div style={styles.offDayOverlay}>Folga do atendente<br /><small>{dataLonga(data)}</small></div>}
-            {(porColuna.get(coluna.id) || []).map((item) => { const posicao = eventoPosicao(item, grade); const status = STATUS[item.status] || STATUS.agendado; return <button key={item.id} type="button" onClick={() => onOpenAppointment(item)} style={{ ...styles.event, top: posicao.top, height: posicao.height, borderLeftColor: status.color, background: `${status.color}18` }} title={`${item.clienteNome || 'Cliente'} · ${item.servicoNome || 'Serviço'}`}><strong>{item.clienteNome || 'Cliente sem nome'}</strong><span>{item.servicoNome || 'Serviço não informado'}</span><small>{horaLabel(minutosDoDia(item.dataHora))} · {item.duracaoMinutos || grade.intervalo} min · {moeda(item.valor)}</small></button> })}
+            {(porColuna.get(coluna.id) || []).map((item) => { const posicao = eventoPosicao(item, grade); const status = STATUS[item.statusVisual] || STATUS[item.status] || STATUS.agendado; return <button key={item.id} type="button" onClick={() => onOpenAppointment(item)} style={{ ...styles.event, top: posicao.top, height: posicao.height, borderLeftColor: status.color, background: `${status.color}18` }} title={`${item.clienteNome || 'Cliente'} · ${item.servicoNome || 'Serviço'}`}><strong>{item.clienteNome || 'Cliente sem nome'}</strong><span>{item.servicoNome || 'Serviço não informado'}</span><small>{horaLabel(minutosDoDia(item.dataHora))} · {item.duracaoMinutos || grade.intervalo} min · {moeda(item.valor)}</small><small style={{ fontWeight: 800, color: status.color }}>{status.label}</small></button> })}
           </div> })}
         </div>
       </div>
     </div>
-    <div style={styles.legend}>{Object.entries(STATUS).slice(0, 4).map(([status, item]) => <span key={status} style={styles.legendItem}><i style={{ background: item.color }} />{item.label}</span>)}</div>
+    <div style={styles.legend}>{Object.entries(STATUS).filter(([status]) => ['agendado', 'confirmado', 'aguardando_confirmacao', 'cancelado_falta_confirmacao'].includes(status)).map(([status, item]) => <span key={status} style={styles.legendItem}><i style={{ background: item.color }} />{item.label}</span>)}</div>
   </section>
 }
 

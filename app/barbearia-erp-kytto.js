@@ -641,6 +641,7 @@ function servicoNormalizado(dados = {}, anterior = {}) {
     descricao: texto(dados.descricao ?? anterior.descricao, 500),
     categoria: texto(dados.categoria ?? anterior.categoria, 80) || 'Geral',
     duracaoMinutos: duracao,
+    intervaloRecomendacaoDias: Math.max(0, Math.min(3650, Math.round(numero(dados.intervaloRecomendacaoDias ?? dados.intervalo_recomendacao_dias ?? anterior.intervaloRecomendacaoDias, 0)))),
     preco,
     tipoPreco,
     ativo: dados.ativo ?? anterior.ativo ?? true,
@@ -697,6 +698,7 @@ function configuracaoPublicaNormalizada(dados = {}, anterior = {}) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
   const ativoRecebido = dados.agendamentoPublicoAtivo ?? dados.agendamento_publico_ativo;
+  const confirmacaoRecebida = dados.confirmacaoAutomaticaAtiva ?? dados.confirmacao_automatica_ativa;
   return {
     slugPublico: slugRecebido,
     nomePublico: texto(dados.nomePublico ?? dados.nome_publico ?? anterior.nomePublico, 160),
@@ -705,6 +707,8 @@ function configuracaoPublicaNormalizada(dados = {}, anterior = {}) {
     emojiPublico: texto(dados.emojiPublico ?? dados.emoji_publico ?? anterior.emojiPublico, 8) || '✂️',
     lojaPublicaId: texto(dados.lojaPublicaId ?? dados.loja_publica_id ?? anterior.lojaPublicaId, 120),
     agendamentoPublicoAtivo: ativoRecebido === undefined ? anterior.agendamentoPublicoAtivo !== false : Boolean(ativoRecebido),
+    // Opt-in explícito: nenhum tenant começa a cancelar horários automaticamente.
+    confirmacaoAutomaticaAtiva: confirmacaoRecebida === undefined ? anterior.confirmacaoAutomaticaAtiva === true : confirmacaoRecebida === true,
     taxasPagamento: taxasPagamentoNormalizadas(dados, anterior),
   };
 }
@@ -769,7 +773,7 @@ function ordenarPorData(a, b) {
 
 export function obterConfiguracao(empresaId) {
   const configuracao = estadoEmpresa(empresaId, false).configuracao;
-  return { ...configuracao, lojas: { ...(configuracao.lojas || {}) } };
+  return { ...configuracao, confirmacaoAutomaticaAtiva: configuracao.confirmacaoAutomaticaAtiva === true, lojas: { ...(configuracao.lojas || {}) } };
 }
 
 function obterCalendarioLoja(estado, lojaId) {
@@ -1178,6 +1182,7 @@ function produtoRevendaNormalizado(dados = {}, anterior = {}) {
     custoUnitario: dinheiro(dados.custoUnitario ?? dados.custo_unitario ?? anterior.custoUnitario),
     estoqueAtual: Math.max(0, Math.round(numero(dados.estoqueAtual ?? dados.estoque_atual ?? anterior.estoqueAtual, 0))),
     estoqueMinimo: Math.max(0, Math.round(numero(dados.estoqueMinimo ?? dados.estoque_minimo ?? anterior.estoqueMinimo, 0))),
+    intervaloRecompraDias: Math.max(0, Math.min(3650, Math.round(numero(dados.intervaloRecompraDias ?? dados.intervalo_recompra_dias ?? anterior.intervaloRecompraDias, 30)))),
     ativo: dados.ativo ?? anterior.ativo ?? true,
   };
 }
@@ -2311,6 +2316,9 @@ export function criarAgendamento(empresaId, dados = {}, opcoes = {}) {
   if (dados.status && dados.status !== 'agendado') throw new Error('Status inicial do agendamento deve ser agendado.');
   const estado = estadoEmpresa(empresaId);
   const agendamento = agendamentoNormalizado(dados, {}, opcoes);
+  if (obterConfiguracao(empresaId).confirmacaoAutomaticaAtiva === true && agendamento.status === 'agendado') {
+    agendamento.confirmacaoAutomatica = estadoConfirmacaoInicial();
+  }
   if (!agendamento.clienteNome && !agendamento.clienteId) throw new Error('Informe o cliente do atendimento.');
   if (!agendamento.servicoId || !estado.servicos[agendamento.servicoId] || estado.servicos[agendamento.servicoId].ativo === false) throw new Error('Serviço ativo é obrigatório.');
   if (agendamento.profissionalId && (!estado.profissionais[agendamento.profissionalId] || estado.profissionais[agendamento.profissionalId].ativo === false)) throw new Error('Profissional não encontrado ou inativo.');
@@ -2339,6 +2347,7 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}, opcoe
   const atual = estado.agendamentos[String(agendamentoId)];
   if (!atual || atual.empresaId !== String(empresaId)) return null;
   if (dados.lojaId !== undefined && texto(dados.lojaId, 120) !== texto(atual.lojaId, 120)) return null;
+  const statusAntes = atual.status;
   const antes = { dataHora: atual.dataHora, dataAgenda: atual.dataAgenda, profissionalId: atual.profissionalId, servicoId: atual.servicoId };
   const agendamento = agendamentoNormalizado(dados, atual, opcoes);
   agendamento.status = atual.status;
@@ -2369,6 +2378,12 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}, opcoe
       registradoEm: dataAtual(),
     });
     atual.historicoRemarcacoes = atual.historicoRemarcacoes.slice(0, 50);
+    if (statusAntes === 'confirmado' && agendamento.status === 'confirmado') agendamento.status = 'agendado';
+    if (obterConfiguracao(empresaId).confirmacaoAutomaticaAtiva === true && agendamento.status === 'agendado') {
+      agendamento.confirmacaoAutomatica = estadoConfirmacaoInicial();
+    } else if (atual.confirmacaoAutomatica) {
+      agendamento.confirmacaoAutomatica = { ...atual.confirmacaoAutomatica, ativa: false, status: 'remarcado', prazoRespostaAte: null };
+    }
   }
   Object.assign(atual, agendamento, { atualizadoEm: dataAtual() });
   save();
@@ -2386,13 +2401,91 @@ export function alterarStatusAgendamento(empresaId, agendamentoId, status, dados
   if (novoStatus !== atual.status && !TRANSICOES[atual.status]?.has(novoStatus)) {
     throw new Error(`Transição de ${atual.status} para ${novoStatus} não permitida.`);
   }
+  if (novoStatus === 'confirmado' && atual.confirmacaoAutomatica?.ativa === true
+      && atual.confirmacaoAutomatica.status === 'segunda_enviada'
+      && new Date(atual.confirmacaoAutomatica.prazoRespostaAte || 0).valueOf() <= Date.now()) {
+    const erro = new Error('O prazo para confirmar este agendamento expirou. A equipe precisa revisar o horário.');
+    erro.code = 'CONFIRMACAO_PRAZO_EXPIRADO';
+    throw erro;
+  }
   Object.assign(atual, {
     status: novoStatus,
     observacoes: texto(dados.observacoes ?? atual.observacoes, 600),
+    motivoCancelamento: novoStatus === 'cancelado'
+      ? texto(dados.motivoCancelamento ?? dados.motivo_cancelamento ?? atual.motivoCancelamento, 60)
+      : atual.motivoCancelamento,
     atualizadoEm: dataAtual(),
   });
+  if (novoStatus === 'confirmado' && atual.confirmacaoAutomatica?.ativa === true) {
+    atual.confirmacaoAutomatica = { ...atual.confirmacaoAutomatica, status: 'confirmado', confirmadoEm: dataAtual(), prazoRespostaAte: null };
+  } else if (novoStatus === 'cancelado' && atual.confirmacaoAutomatica) {
+    atual.confirmacaoAutomatica = { ...atual.confirmacaoAutomatica, status: 'cancelado', prazoRespostaAte: null };
+  }
   save();
   return { ...atual };
+}
+
+function estadoConfirmacaoInicial() {
+  return { ativa: true, status: 'aguardando', primeiraEnviadaEm: null, segundaEnviadaEm: null, prazoRespostaAte: null, confirmadoEm: null };
+}
+
+export function inicializarConfirmacaoAutomatica(empresaId, agendamentoId, { lojaId = '' } = {}) {
+  if (obterConfiguracao(empresaId).confirmacaoAutomaticaAtiva !== true) return null;
+  const atual = estadoEmpresa(empresaId).agendamentos[String(agendamentoId)];
+  if (!atual || atual.empresaId !== String(empresaId) || (lojaId && atual.lojaId && String(atual.lojaId) !== String(lojaId))) return null;
+  if (atual.status !== 'agendado') return null;
+  if (atual.confirmacaoAutomatica?.ativa === true) return { ...atual };
+  atual.confirmacaoAutomatica = estadoConfirmacaoInicial();
+  atual.atualizadoEm = dataAtual();
+  save();
+  return { ...atual };
+}
+
+export function registrarConfirmacaoAutomaticaEnviada(empresaId, agendamentoId, etapa, { lojaId = '', enviadoEm = new Date() } = {}) {
+  if (obterConfiguracao(empresaId).confirmacaoAutomaticaAtiva !== true) return null;
+  const atual = estadoEmpresa(empresaId).agendamentos[String(agendamentoId)];
+  if (!atual || atual.empresaId !== String(empresaId) || (lojaId && atual.lojaId && String(atual.lojaId) !== String(lojaId)) || atual.status !== 'agendado') return null;
+  if (atual.confirmacaoAutomatica?.ativa !== true) atual.confirmacaoAutomatica = estadoConfirmacaoInicial();
+  const instante = new Date(enviadoEm);
+  if (!Number.isFinite(instante.valueOf())) return null;
+  if (etapa === 'primeira') {
+    if (atual.confirmacaoAutomatica.status !== 'aguardando') return { ...atual };
+    atual.confirmacaoAutomatica = { ...atual.confirmacaoAutomatica, status: 'primeira_enviada', primeiraEnviadaEm: instante.toISOString() };
+  } else if (etapa === 'segunda') {
+    if (atual.confirmacaoAutomatica.status !== 'primeira_enviada' || !atual.confirmacaoAutomatica.primeiraEnviadaEm) return null;
+    const horaMarcada = new Date(atual.dataHora).valueOf();
+    if (!Number.isFinite(horaMarcada) || horaMarcada - instante.valueOf() < 2 * 60 * 60 * 1000) return null;
+    const prazo = new Date(instante.valueOf() + 60 * 60 * 1000);
+    if (horaMarcada - prazo.valueOf() < 60 * 60 * 1000) return null;
+    atual.confirmacaoAutomatica = { ...atual.confirmacaoAutomatica, status: 'segunda_enviada', segundaEnviadaEm: instante.toISOString(), prazoRespostaAte: prazo.toISOString() };
+  } else return null;
+  atual.atualizadoEm = dataAtual();
+  save();
+  return { ...atual };
+}
+
+export function cancelarPorFaltaConfirmacao(empresaId, agendamentoId, { lojaId = '', agora = new Date() } = {}) {
+  if (obterConfiguracao(empresaId).confirmacaoAutomaticaAtiva !== true) return null;
+  const atual = estadoEmpresa(empresaId).agendamentos[String(agendamentoId)];
+  if (!atual || atual.empresaId !== String(empresaId) || (lojaId && atual.lojaId && String(atual.lojaId) !== String(lojaId))
+      || atual.status !== 'agendado' || atual.confirmacaoAutomatica?.ativa !== true
+      || atual.confirmacaoAutomatica.status !== 'segunda_enviada' || !atual.confirmacaoAutomatica.prazoRespostaAte) return null;
+  const nowMs = new Date(agora).valueOf();
+  const deadlineMs = new Date(atual.confirmacaoAutomatica.prazoRespostaAte).valueOf();
+  const appointmentMs = new Date(atual.dataHora).valueOf();
+  if (!Number.isFinite(nowMs) || !Number.isFinite(deadlineMs) || !Number.isFinite(appointmentMs)
+      || nowMs < deadlineMs || nowMs >= appointmentMs || appointmentMs - deadlineMs < 60 * 60 * 1000) return null;
+  const anterior = atual.status;
+  const registradoEm = new Date(nowMs).toISOString();
+  atual.status = 'cancelado';
+  atual.motivoCancelamento = 'falta_confirmacao';
+  atual.historicoStatus ||= [];
+  atual.historicoStatus.unshift({ statusAnterior: anterior, status: 'cancelado', motivo: 'falta_confirmacao', registradoEm, origem: 'confirmacao_automatica' });
+  atual.historicoStatus = atual.historicoStatus.slice(0, 100);
+  atual.confirmacaoAutomatica = { ...atual.confirmacaoAutomatica, status: 'cancelado_falta_confirmacao', prazoRespostaAte: null, canceladoEm: registradoEm };
+  atual.atualizadoEm = registradoEm;
+  save();
+  return { ...atual, historicoStatus: atual.historicoStatus.map((item) => ({ ...item })) };
 }
 
 export function recebimentoAgendamentoVerificado(empresaId, agendamento) {
@@ -2629,7 +2722,7 @@ export function exportarEstado(empresaId) {
 const STATUS_HISTORICO = new Set(['concluido', 'pago', 'finalizado']);
 
 function chaveHistorico(origem, item) {
-  const base = [origem, item.dataAgenda, item.hora, String(item.clienteTelefone || '').replace(/\D/g, ''), texto(item.clienteNome, 160).toLowerCase(), texto(item.servicoNome, 160).toLowerCase(), texto(item.profissionalNome, 120).toLowerCase()].join('|');
+  const base = [origem, item.lojaId || '', item.dataAgenda, item.hora, String(item.clienteTelefone || '').replace(/\D/g, ''), texto(item.clienteNome, 160).toLowerCase(), texto(item.servicoNome, 160).toLowerCase(), texto(item.profissionalNome, 120).toLowerCase()].join('|');
   return `hist-${crypto.createHash('sha1').update(base).digest('hex').slice(0, 20)}`;
 }
 
@@ -2646,6 +2739,7 @@ export function importarHistoricoAtendimentos(empresaId, itens = [], opcoes = {}
     const status = texto(bruto?.status || 'concluido', 20).toLowerCase();
     const item = {
       dataAgenda, hora,
+      lojaId: texto(bruto?.lojaId || bruto?.loja_id || opcoes.lojaId, 120),
       clienteId: texto(bruto?.clienteId, 100),
       clienteNome: texto(bruto?.clienteNome, 160),
       clienteTelefone: texto(bruto?.clienteTelefone, 30),
@@ -2655,6 +2749,8 @@ export function importarHistoricoAtendimentos(empresaId, itens = [], opcoes = {}
       servicoNome: texto(bruto?.servicoNome, 160),
       valor: bruto?.valor === undefined || bruto?.valor === null || bruto?.valor === '' ? null : dinheiro(bruto.valor),
     };
+    const unidadeInformada = texto(bruto?.lojaId || bruto?.loja_id, 120);
+    if (opcoes.lojaId && unidadeInformada && unidadeInformada !== String(opcoes.lojaId)) { resultado.invalidos.push({ indice, motivo: 'unidade_fora_do_escopo' }); return; }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dataAgenda) || (hora && !/^\d{2}:\d{2}$/.test(hora))) { resultado.invalidos.push({ indice, motivo: 'data_ou_hora_invalida' }); return; }
     if (dataAgenda > diaOperacional(agora)) { resultado.invalidos.push({ indice, motivo: 'data_futura' }); return; }
     if (!item.clienteId && !item.clienteNome) { resultado.invalidos.push({ indice, motivo: 'sem_cliente' }); return; }
@@ -2671,11 +2767,12 @@ export function importarHistoricoAtendimentos(empresaId, itens = [], opcoes = {}
 
 export function listarHistoricoAtendimentos(empresaId, filtros = {}) {
   const itens = Object.values(estadoEmpresa(empresaId, false).historicoAtendimentos || {})
+    .filter((item) => !filtros.lojaId || !item.lojaId || String(item.lojaId) === String(filtros.lojaId))
     .filter((item) => !filtros.clienteId || item.clienteId === String(filtros.clienteId))
     .filter((item) => !filtros.de || item.dataAgenda >= String(filtros.de).slice(0, 10))
     .filter((item) => !filtros.ate || item.dataAgenda <= String(filtros.ate).slice(0, 10))
     .sort((a, b) => `${b.dataAgenda} ${b.hora}`.localeCompare(`${a.dataAgenda} ${a.hora}`));
-  return filtros.limite ? itens.slice(0, Math.max(1, Math.min(5000, Number(filtros.limite) || 50))) : itens;
+  return filtros.limite ? itens.slice(0, Math.max(1, Math.min(50000, Number(filtros.limite) || 50))) : itens;
 }
 
 // Cabeçalhos Avec preservados para reconciliação. Não são comandas do PDV e
