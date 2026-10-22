@@ -46,10 +46,10 @@ function montarBarbearia() {
   return { bruno, carlos, corte, barba };
 }
 
-function agendar({ profissional, servico, data, hora, nome = 'Cliente Um', telefone = '65999990001', codigo = 'ABCD1234', clienteId }) {
+function agendar({ profissional, servico, data, hora, nome = 'Cliente Um', telefone = '65999990001', codigo = 'ABCD1234', clienteId, lojaId = LOJA }) {
   return barbearia.criarAgendamento(EMPRESA, {
     clienteId, clienteNome: nome, clienteTelefone: telefone, profissionalId: profissional.id, servicoId: servico.id,
-    dataHora: isoLocal(data, hora), dataAgenda: data, horaLocal: hora, lojaId: LOJA, origem: 'agendamento_online', codigoConfirmacao: codigo,
+    dataHora: isoLocal(data, hora), dataAgenda: data, horaLocal: hora, lojaId, origem: 'agendamento_online', codigoConfirmacao: codigo,
   });
 }
 
@@ -265,6 +265,27 @@ test('retorno previsto: intervalo habitual, atraso e próximo horário do barbei
   assert.equal(resultado.todos.find((item) => item.nome === 'Agendado').situacao, 'agendado');
   const acionavel = resultado.acionaveis.find((item) => item.nome === 'Habitual');
   assert.ok(acionavel.sugestao?.horario, 'sugere um horário livre');
+});
+
+test('retorno previsto exige unidade, não mistura serviços e rejeita horizonte inválido', () => {
+  const { bruno, carlos, corte, barba } = montarBarbearia();
+  const outraLoja = 'bbbbbbbb-cccc-4ddd-8eee-ffffffffffff';
+  const telefone = '65944445555';
+  concluir(agendar({ profissional: bruno, servico: corte, data: dataLocal(Date.now() - 70 * DIA_MS), hora: '09:00', nome: 'Por serviço', telefone, codigo: 'RET00001' }));
+  concluir(agendar({ profissional: bruno, servico: corte, data: dataLocal(Date.now() - 35 * DIA_MS), hora: '09:00', nome: 'Por serviço', telefone, codigo: 'RET00002' }));
+  agendar({ profissional: carlos, servico: barba, data: dataLocal(Date.now() + 2 * DIA_MS), hora: '10:00', nome: 'Por serviço', telefone, codigo: 'RET00003' });
+  concluir(agendar({ profissional: carlos, servico: corte, data: dataLocal(Date.now() - 55 * DIA_MS), hora: '11:00', nome: 'Por serviço', telefone, codigo: 'RET00004', lojaId: outraLoja }));
+  concluir(agendar({ profissional: carlos, servico: corte, data: dataLocal(Date.now() - 15 * DIA_MS), hora: '11:00', nome: 'Por serviço', telefone, codigo: 'RET00005', lojaId: outraLoja }));
+
+  const retorno = captacao.retornosPrevistos(EMPRESA, { lojaId: LOJA, horizonteDias: 7 });
+  const corteEsperado = retorno.todos.find((item) => item.nome === 'Por serviço' && item.servicoPreferido?.id === corte.id);
+  assert.ok(corteEsperado);
+  assert.notEqual(corteEsperado.situacao, 'agendado', 'futuro de Barba não bloqueia retorno de Corte');
+  assert.equal(corteEsperado.visitas, 2, 'histórico de outra loja não altera a mediana desta unidade');
+  assert.throws(() => captacao.retornosPrevistos(EMPRESA, { horizonteDias: 7 }), { code: 'LOJA_OBRIGATORIA' });
+  assert.throws(() => captacao.retornosPrevistos(EMPRESA, { lojaId: LOJA, horizonteDias: 0 }), { code: 'HORIZONTE_INVALIDO' });
+  assert.throws(() => captacao.retornosPrevistos(EMPRESA, { lojaId: LOJA, horizonteDias: 2.5 }), { code: 'HORIZONTE_INVALIDO' });
+  assert.throws(() => captacao.retornosPrevistos(EMPRESA, { lojaId: LOJA, horizonteDias: 91 }), { code: 'HORIZONTE_INVALIDO' });
 });
 
 test('ocupação da agenda e metas por profissional', () => {

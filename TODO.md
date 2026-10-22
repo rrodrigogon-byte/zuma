@@ -1,0 +1,25 @@
+# Operação Dino — backlog de implementação e release PRD
+
+> Base de produção: `fix/kytto-comandas-pdv-20260808`. Cada item só é concluído com código, contratos de isolamento e evidência de teste correspondente.
+
+- [x] **Fundação já incorporada — sprint de segurança multiloja e fidelidade.** Aplicar isolamento em cobrança, revenda, estoque, comissões, repasses e ledger; disponibilizar prévia/confirmação idempotente de reconciliação de fidelidade; reforçar lista de espera por unidade, serviço e profissional; manter receita da ocupação baseada em recebimento verificado.
+
+- [ ] **Escopo único de empresa + loja e quarentena de legado.** Toda leitura/mutação de agenda, cobrança, carteira, fidelidade, lista de espera, estoque, compras, NF-e, caixa, revenda, comissão, vale e repasse deve exigir empresa e loja. Registros sem `lojaId` não entram em uma sessão de loja e aparecem somente em diagnóstico/reconciliação auditável. Consultas corporativas são explícitas. Duas lojas da mesma empresa não podem listar, confirmar, pagar, estornar ou consumir dados uma da outra.
+
+- [ ] **Agenda, ocupação e receita comprovada.** POST/PATCH validam ou derivam `horaLocal` em `America/Cuiaba`, coerente com `dataHora`, abertura, jornada, feriado, unidade e profissional. Atendimento concluído sem recebimento mantém ocupação, mas não altera receita, metas, projeção, comissão ou repasse; recebimento posterior cria efeito único e idempotente. Duplo clique/retry administrativo usa `Idempotency-Key` e chave com payload divergente retorna 409.
+
+- [ ] **Cobrança, sinal e InfinitePay seguros.** A cobrança persiste e valida somente o `invoice_slug` do provedor; slug ausente/divergente, valor/método/NSU divergentes ou timeout não confirmam agenda. Configuração de provedor é transacional, sem override interno e sem mutação quando a validação retorna 409. Falha de efeito ou lançamento financeiro fica rastreável, recuperável por retry e sem duplicar receita, cashback, vale, plano ou horário. Mudança de serviço/preço/remarcação revisa ou reemite o sinal de forma idempotente.
+
+- [ ] **Fidelidade, NPS e efeitos de conclusão.** O ledger Commerce/PostgreSQL é a fonte canônica. A reconciliação do legado é idempotente, por loja de destino confirmada, sem criar crédito duplicado. Falhas de NPS e `aguardandoFidelidade` viram pendência durável com retry/dead-letter/alerta. Conclusão por HTTP, ERP, WhatsApp ou chamada interna executa financeiro, plano, indicação, fidelidade e NPS uma vez. Indicação exige clientes válidos e permite reindicação somente conforme regra documentada.
+
+- [ ] **Lista de espera com reserva segura e retornos corretos.** A entrada exige loja, serviço e profissional compatíveis; criação, cancelamento e remarcação fecham ou reabrem somente a espera correspondente, com fingerprint de slot e idempotência. Oferta usa hold/aceite atômico com TTL, impedindo dois clientes no mesmo horário e integrando sinal/ledger de modo recuperável. Retornos usam histórico da mesma unidade e serviço; `dias` é inteiro validado dentro do limite.
+
+- [ ] **Compras, estoque, NF-e, revenda e caixa.** Compras, NF-e, reposição e ABC obedecem unidade. NF-e só entra com autorização, chave, CNPJ destinatário, emitente, vínculo e itens válidos; falha no item N não deixa estoque/financeiro órfão. Revenda aceita pagamento misto com caixa da unidade e profissional por item, sem duplicar ledger. Reserva de estoque expira corretamente e comanda parcialmente paga não reduz total sem ajuste/reversão explícita.
+
+- [ ] **Devolução, estorno, permissões e auditoria.** Venda ou comanda pagas são revertidas somente por operação imutável, autorizada e idempotente, com estoque, ledger, caixa, comissão e fidelidade consistentes. Confirmações manuais e webhooks possuem evidência de operador, loja, valor, NSU/slug, comprovante, motivo, deduplicação e limite compartilhado. A matriz de papéis bloqueia equipe sem permissão financeira e permite conferência limitada ao gerente da própria loja.
+
+- [ ] **Painéis administrativos completos.** Cobranças exibem Pix/checkout/reenvio, NSU, tentativas, revisão, cancelamento e ledger; métricas usam `pagoEm`/`expirouEm`. Painéis oferecem gestão de detratores, waitlist com filtros/trilha, compra parcial/divergência/histórico, pendências/retry e estornos, sempre respeitando unidade, papel e auditoria.
+
+- [ ] **Projeção de faturamento protegida.** A projeção usa apenas receita paga por loja e aparece como previsão bruta, não caixa/margem. Permissão de gestão, feature flag desligada por padrão, rota e bundle são validados antes de habilitação por tenant.
+
+- [ ] **Gate PRD, PR e publicação.** Rodar testes serializados com `DB_PATH` isolado, build web, contratos HTTP/cross-store e contratos PostgreSQL/worker com ambiente autorizado; confirmar migrations incrementais e rollback. Abrir PR contra `fix/kytto-comandas-pdv-20260808`; somente após aprovação e gate verde fazer merge, acompanhar deploy Live e executar smoke de `/api/info`, `/health`, rotas críticas, logs, flags e permissões. Em regressão, reverter a PR e desabilitar flags novas sem alterar a configuração do Render.

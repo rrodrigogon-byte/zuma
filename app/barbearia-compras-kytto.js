@@ -39,6 +39,7 @@ function estado(empresaId) {
   atual.fornecedores ||= {};
   atual.pedidos ||= {};
   atual.notasEntrada ||= {};
+  atual.transacoesEntrada ||= {};
   // Vínculo aprendido: código do produto no fornecedor (CNPJ:cProd) → produto da revenda.
   atual.vinculos ||= {};
   atual.sequenciaPedido = Number(atual.sequenciaPedido || 0);
@@ -55,6 +56,29 @@ function cnpjValido(cnpj) {
     return resto < 2 ? 0 : 11 - resto;
   };
   return calc(d.slice(0, 12)) === Number(d[12]) && calc(d.slice(0, 13)) === Number(d[13]);
+}
+
+function chaveNfeValida(chave) {
+  if (!/^\d{44}$/.test(String(chave || ''))) return false;
+  let soma = 0;
+  let peso = 2;
+  for (let i = 42; i >= 0; i -= 1) {
+    soma += Number(chave[i]) * peso;
+    peso = peso === 9 ? 2 : peso + 1;
+  }
+  const resto = soma % 11;
+  const digito = resto < 2 ? 0 : 11 - resto;
+  return digito === Number(chave[43]);
+}
+
+// O cadastro mestre é a única fonte local para o CNPJ da empresa destinatária.
+// Sem esse vínculo não há como afirmar que uma NF-e pertence ao tenant atual.
+function cnpjEmpresa(empresaId) {
+  const raiz = db();
+  const chave = String(empresaId || '');
+  const empresa = raiz.cadastrosMestresKytto?.empresas?.[chave] || raiz.empresas?.[chave];
+  const candidatos = [empresa?.cnpjNormalizado, empresa?.cnpj].map(soDigitos);
+  return candidatos.find((cnpj) => cnpjValido(cnpj)) || '';
 }
 
 // ── Fornecedores ────────────────────────────────────────────────────────────
@@ -260,57 +284,154 @@ function primeiro(raiz, nome) {
   return null;
 }
 
-/** Lê o XML da NF-e (nfeProc ou NFe) e devolve emitente, nota e itens. */
+/**
+ * Lê o XML da NF-e (nfeProc ou NFe) e devolve emitente, nota e itens.
+ *
+ * A presença de `protNFe` isoladamente não prova autorização: só cStat 100/150
+ * com chNFe igual à chave do infNFe é tratado como evidência de autorização.
+ * Não há tentativa de validar ou fabricar assinatura, certificado ou consulta
+ * à SEFAZ neste domínio.
+ */
 export function lerXmlNfe(xml) {
   const limpo = String(xml || '').replace(/^﻿/, '').trim();
   if (!limpo.startsWith('<')) throw new ComprasError('Arquivo não parece um XML.', 'XML_INVALIDO');
   if (limpo.length > 5_000_000) throw new ComprasError('XML muito grande.', 'XML_GRANDE');
-  const doc = new DOMParser({ onError: () => {} }).parseFromString(limpo, 'text/xml');
+  const errosParser = [];
+  let doc;
+  try {
+    doc = new DOMParser({ onError: (mensagem) => errosParser.push(String(mensagem || 'XML inválido')) }).parseFromString(limpo, 'text/xml');
+  } catch {
+    throw new ComprasError('XML malformado ou ilegível.', 'XML_INVALIDO');
+  }
+  if (errosParser.length) throw new ComprasError('XML malformado ou ilegível.', 'XML_INVALIDO');
+  const raiz = doc?.documentElement;
+  const nomeRaiz = raiz?.localName || raiz?.nodeName;
+  if (!raiz || !['nfeProc', 'NFe'].includes(nomeRaiz)) throw new ComprasError('XML não é de uma NF-e.', 'XML_NAO_NFE');
   const inf = primeiro(doc, 'infNFe');
   if (!inf) throw new ComprasError('XML não é de uma NF-e (infNFe ausente).', 'XML_NAO_NFE');
-  const chave = soDigitos(inf.getAttribute('Id')).slice(-44);
-  if (chave.length !== 44) throw new ComprasError('Chave da NF-e inválida no XML.', 'CHAVE_INVALIDA');
+  const id = texto(inf.getAttribute('Id'), 80);
+  if (!/^NFe\d{44}$/.test(id)) throw new ComprasError('Chave da NF-e ausente ou malformada no XML.', 'CHAVE_INVALIDA');
+  const chave = id.slice(3);
+  if (!chaveNfeValida(chave)) throw new ComprasError('Dígito verificador da chave da NF-e inválido.', 'CHAVE_INVALIDA');
   const ide = el(inf, 'ide');
   const emit = el(inf, 'emit');
   const dest = el(inf, 'dest');
   const total = el(inf, 'total', 'ICMSTot');
-  const itens = filhos(inf, 'det').map((det) => {
+  if (!ide || !emit || !dest || !total || !txt(ide, 'nNF') || !txt(ide, 'serie')) {
+    throw new ComprasError('XML de NF-e incompleto: ide, emitente, destinatário e total são obrigatórios.', 'XML_INCOMPLETO');
+  }
+  const emitenteCnpj = soDigitos(txt(emit, 'CNPJ'));
+  const destinatarioCnpj = soDigitos(txt(dest, 'CNPJ'));
+  if (!cnpjValido(emitenteCnpj)) throw new ComprasError('CNPJ do emitente ausente ou inválido no XML.', 'CNPJ_EMITENTE_INVALIDO');
+  if (!cnpjValido(destinatarioCnpj)) throw new ComprasError('CNPJ do destinatário ausente ou inválido no XML.', 'CNPJ_DESTINATARIO_INVALIDO');
+  const dets = filhos(inf, 'det');
+  if (!dets.length) throw new ComprasError('XML de NF-e sem itens.', 'XML_SEM_ITENS');
+  const itensUsados = new Set();
+  const itens = dets.map((det) => {
     const prod = el(det, 'prod');
-    const qCom = numero(txt(prod, 'qCom'));
-    const vProd = numero(txt(prod, 'vProd'));
-    const vDesc = numero(txt(prod, 'vDesc'));
+    if (!prod) throw new ComprasError('Item da NF-e sem grupo prod.', 'ITEM_NFE_INCOMPLETO');
+    const item = Number(det.getAttribute('nItem') || 0);
+    const codigo = txt(prod, 'cProd');
+    const descricao = txt(prod, 'xProd');
+    const qCom = numero(txt(prod, 'qCom'), NaN);
+    const valorUnitario = numero(txt(prod, 'vUnCom'), NaN);
+    const vProd = numero(txt(prod, 'vProd'), NaN);
+    const vDesc = numero(txt(prod, 'vDesc'), 0);
+    if (!Number.isInteger(item) || item <= 0 || itensUsados.has(item) || !codigo || !descricao) {
+      throw new ComprasError('Item da NF-e incompleto ou duplicado.', 'ITEM_NFE_INCOMPLETO');
+    }
+    if (!Number.isFinite(qCom) || qCom <= 0 || !Number.isFinite(valorUnitario) || valorUnitario < 0 || !Number.isFinite(vProd) || vProd < 0 || !Number.isFinite(vDesc) || vDesc < 0 || vDesc > vProd) {
+      throw new ComprasError(`Valores inválidos no item ${item} da NF-e.`, 'ITEM_NFE_INVALIDO');
+    }
+    itensUsados.add(item);
     const ean = soDigitos(txt(prod, 'cEAN'));
     return {
-      item: Number(det.getAttribute('nItem') || 0),
-      codigo: txt(prod, 'cProd'),
+      item,
+      codigo,
       ean: ean && !/^0+$/.test(ean) ? ean : '',
-      descricao: txt(prod, 'xProd'),
+      descricao,
       ncm: txt(prod, 'NCM'),
       cfop: txt(prod, 'CFOP'),
       unidade: txt(prod, 'uCom'),
       quantidade: qCom,
-      valorUnitario: numero(txt(prod, 'vUnCom')),
+      valorUnitario,
       valorTotal: vProd,
       desconto: vDesc,
       // Custo efetivo por unidade: valor do item menos o desconto do item.
-      custoUnitario: qCom > 0 ? Number(((vProd - vDesc) / qCom).toFixed(4)) : 0,
+      custoUnitario: Number(((vProd - vDesc) / qCom).toFixed(4)),
     };
   });
+  const protocolo = filhos(raiz, 'protNFe')[0] || null;
+  const infProt = protocolo ? el(protocolo, 'infProt') : null;
+  const chaveProtocoladaBruta = txt(infProt, 'chNFe');
+  const chaveProtocolada = /^\d{44}$/.test(chaveProtocoladaBruta) ? chaveProtocoladaBruta : '';
+  const cStat = txt(infProt, 'cStat');
+  const vinculoChave = chaveProtocolada === chave;
+  const autorizada = Boolean(infProt && ['100', '150'].includes(cStat) && vinculoChave);
+  const valorProdutos = numero(txt(total, 'vProd'), NaN);
+  const valorNota = numero(txt(total, 'vNF'), NaN);
+  if (!Number.isFinite(valorProdutos) || valorProdutos < 0 || !Number.isFinite(valorNota) || valorNota < 0) {
+    throw new ComprasError('XML de NF-e incompleto: totais vProd e vNF são obrigatórios.', 'XML_INCOMPLETO');
+  }
   return {
     chave,
     numero: txt(ide, 'nNF'),
     serie: txt(ide, 'serie'),
     emissao: txt(ide, 'dhEmi') || txt(ide, 'dEmi'),
-    emitente: { cnpj: soDigitos(txt(emit, 'CNPJ')), nome: txt(emit, 'xNome'), fantasia: txt(emit, 'xFant') },
-    destinatarioCnpj: soDigitos(txt(dest, 'CNPJ') || txt(dest, 'CPF')),
-    valorProdutos: numero(txt(total, 'vProd')),
-    valorNota: numero(txt(total, 'vNF')),
-    autorizada: Boolean(primeiro(doc, 'protNFe')),
+    emitente: { cnpj: emitenteCnpj, nome: txt(emit, 'xNome'), fantasia: txt(emit, 'xFant') },
+    destinatarioCnpj,
+    valorProdutos,
+    valorNota,
+    autorizada,
+    validacao: {
+      chave: true,
+      emitenteCnpj: true,
+      destinatarioCnpj: true,
+      protocolo: Boolean(infProt),
+      chaveProtocolada,
+      vinculoChave,
+      cStat: cStat || null,
+      autorizacaoVerificavel: autorizada,
+    },
     itens,
   };
 }
 
 const normalizarNome = (valor) => String(valor || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+function validarNotaParaEntrada(empresaId, nota) {
+  if (!nota.autorizada) {
+    throw new ComprasError('A NF-e não apresenta autorização verificável (cStat 100/150 e chave protocolada correspondente).', 'NFE_NAO_AUTORIZADA', 422);
+  }
+  const esperado = cnpjEmpresa(empresaId);
+  if (!esperado) throw new ComprasError('CNPJ destinatário da empresa não está configurado para vincular a NF-e.', 'CNPJ_DESTINATARIO_NAO_CONFIGURADO', 422);
+  if (nota.destinatarioCnpj !== esperado) {
+    throw new ComprasError('CNPJ destinatário da NF-e diverge do CNPJ da empresa atual.', 'CNPJ_DESTINATARIO_DIVERGENTE', 422);
+  }
+  return esperado;
+}
+
+function snapshotEscopo(empresaId) {
+  const raiz = db();
+  const chave = String(empresaId || '');
+  return {
+    compras: raiz.barbeariaCompras?.[chave] === undefined ? undefined : structuredClone(raiz.barbeariaCompras[chave]),
+    erp: raiz.barbearias?.[chave] === undefined ? undefined : structuredClone(raiz.barbearias[chave]),
+  };
+}
+
+function restaurarEscopo(empresaId, snapshot) {
+  const raiz = db();
+  const chave = String(empresaId || '');
+  raiz.barbeariaCompras ||= {};
+  raiz.barbearias ||= {};
+  if (snapshot.compras === undefined) delete raiz.barbeariaCompras[chave];
+  else raiz.barbeariaCompras[chave] = structuredClone(snapshot.compras);
+  if (snapshot.erp === undefined) delete raiz.barbearias[chave];
+  else raiz.barbearias[chave] = structuredClone(snapshot.erp);
+  if (!Object.keys(raiz.barbeariaCompras).length) delete raiz.barbeariaCompras;
+  if (!Object.keys(raiz.barbearias).length) delete raiz.barbearias;
+}
 
 function sugestaoDeProduto(empresaId, nota, item, produtos) {
   const vinculo = estado(empresaId).vinculos[`${nota.emitente.cnpj}:${item.codigo}`];
@@ -331,6 +452,7 @@ function sugestaoDeProduto(empresaId, nota, item, produtos) {
 export function previaNotaEntrada(empresaId, xml) {
   const nota = lerXmlNfe(xml);
   const lancada = estado(empresaId).notasEntrada[nota.chave] || null;
+  const destinatarioEsperado = cnpjEmpresa(empresaId);
   const produtos = barbearia.listarProdutosRevenda(empresaId, { incluirInativos: false });
   const fornecedor = fornecedorPorCnpj(empresaId, nota.emitente.cnpj);
   const itens = nota.itens.map((item) => {
@@ -340,8 +462,11 @@ export function previaNotaEntrada(empresaId, xml) {
     return { ...item, ...sugestao, produtoNome: produto?.nome || '', estoqueAtual: produto?.estoqueAtual ?? null, custoAtual: produto?.custoUnitario ?? null, alerta: fracionado ? 'quantidade_fracionada' : null };
   });
   return {
-    nota: { chave: nota.chave, numero: nota.numero, serie: nota.serie, emissao: nota.emissao, emitente: nota.emitente, valorProdutos: nota.valorProdutos, valorNota: nota.valorNota, autorizada: nota.autorizada },
+    nota: { chave: nota.chave, numero: nota.numero, serie: nota.serie, emissao: nota.emissao, emitente: nota.emitente, destinatarioCnpj: nota.destinatarioCnpj, valorProdutos: nota.valorProdutos, valorNota: nota.valorNota, autorizada: nota.autorizada, validacao: nota.validacao },
     fornecedor: fornecedor ? { id: fornecedor.id, nome: fornecedor.nome } : null,
+    destinatarioCnpjEsperado: destinatarioEsperado || null,
+    destinatarioVinculado: Boolean(destinatarioEsperado && destinatarioEsperado === nota.destinatarioCnpj),
+    aceitaEntrada: Boolean(nota.autorizada && destinatarioEsperado && destinatarioEsperado === nota.destinatarioCnpj),
     jaLancada: Boolean(lancada),
     lancadaEm: lancada?.lancadaEm || null,
     itens,
@@ -357,74 +482,119 @@ export function previaNotaEntrada(empresaId, xml) {
 export function lancarNotaEntrada(empresaId, xml, dados = {}, opcoes = {}) {
   if (dados.confirmado !== true) throw new ComprasError('Confirme o lançamento da nota.', 'CONFIRMACAO_OBRIGATORIA');
   const nota = lerXmlNfe(xml);
+  validarNotaParaEntrada(empresaId, nota);
+  const snapshot = snapshotEscopo(empresaId);
   const atual = estado(empresaId);
   if (atual.notasEntrada[nota.chave]) return { ...atual.notasEntrada[nota.chave], repetida: true };
-  const decisoes = new Map((dados.itens || []).map((item) => [Number(item.item), item]));
-  let fornecedor = fornecedorPorCnpj(empresaId, nota.emitente.cnpj);
-  if (!fornecedor && nota.emitente.nome) {
-    fornecedor = salvarFornecedor(empresaId, { nome: nota.emitente.fantasia || nota.emitente.nome, cnpj: cnpjValido(nota.emitente.cnpj) ? nota.emitente.cnpj : '' });
-  }
-  const produtos = barbearia.listarProdutosRevenda(empresaId, { incluirInativos: false });
-  const plano = [];
-  for (const item of nota.itens) {
-    const decisao = decisoes.get(item.item) || {};
-    if (decisao.ignorar === true) { plano.push({ item, ignorado: true }); continue; }
-    if (!Number.isInteger(item.quantidade) && !decisao.fatorConversao) throw new ComprasError(`Item ${item.item} (${item.descricao}) tem quantidade fracionada: informe o fator de conversão ou ignore.`, 'QUANTIDADE_FRACIONADA');
-    // Fator de conversão: caixa com 12 = 12 unidades no estoque.
-    const fator = Math.max(1, Math.round(numero(decisao.fatorConversao, 1)));
-    let produtoId = decisao.produtoId || sugestaoDeProduto(empresaId, nota, item, produtos).produtoId;
-    if (!produtoId && decisao.criarProduto === true) {
-      const precoVenda = numero(decisao.precoVenda, 0);
-      if (precoVenda <= 0) throw new ComprasError(`Informe o preço de venda para criar ${item.descricao}.`, 'PRECO_OBRIGATORIO');
-      const criado = barbearia.criarProdutoRevenda(empresaId, { nome: texto(decisao.nome || item.descricao, 140), sku: item.codigo, ean: item.ean, precoVenda, custoUnitario: item.custoUnitario / fator, estoqueAtual: 0, estoqueMinimo: Math.round(numero(decisao.estoqueMinimo, 0)), categoria: decisao.categoria || 'Revenda' });
-      produtoId = criado.id;
-      produtos.push(criado);
-    }
-    if (!produtoId) throw new ComprasError(`Item ${item.item} (${item.descricao}) sem produto: vincule, crie ou ignore.`, 'ITEM_SEM_PRODUTO');
-    plano.push({ item, produtoId, quantidade: Math.round(item.quantidade * fator), custo: Number((item.custoUnitario / fator).toFixed(4)) });
-  }
-  const agora = agoraIso(opcoes);
-  const entradas = [];
-  for (const passo of plano) {
-    if (passo.ignorado) continue;
-    const r = barbearia.entradaEstoqueRevenda(empresaId, passo.produtoId, { quantidade: passo.quantidade, custoUnitario: passo.custo, origem: 'nfe_entrada', referencia: `NF-e ${nota.numero}/${nota.serie}`, fornecedorId: fornecedor?.id, chaveIdempotencia: `nfe:${nota.chave}:${passo.item.item}`, usuario: dados.usuario, observacao: `NF-e ${nota.numero} · ${nota.emitente.nome}` });
-    if (nota.emitente.cnpj && passo.item.codigo) atual.vinculos[`${nota.emitente.cnpj}:${passo.item.codigo}`] = passo.produtoId;
-    entradas.push({ item: passo.item.item, produtoId: passo.produtoId, produtoNome: r.produto.nome, quantidade: passo.quantidade, custoUnitario: passo.custo, estoquePosterior: r.produto.estoqueAtual });
-  }
-  // Baixa o pendente do pedido de compra, se informado, sem nova entrada de estoque.
-  if (dados.pedidoId) {
-    const pedido = atual.pedidos[String(dados.pedidoId)];
-    if (pedido && ['enviado', 'recebido_parcial', 'rascunho'].includes(pedido.status)) {
-      for (const entrada of entradas) {
-        const linha = pedido.itens.find((it) => it.produtoId === entrada.produtoId);
-        if (linha) linha.recebido = Math.min(linha.quantidade, linha.recebido + entrada.quantidade);
-      }
-      pedido.recebimentos.push({ chave: `nfe:${nota.chave}`, em: agora, usuario: texto(dados.usuario, 160) || null, notaChave: nota.chave, itens: entradas.map((e) => ({ produtoId: e.produtoId, quantidade: e.quantidade, custoUnitario: e.custoUnitario })) });
-      pedido.status = pedido.itens.every((it) => it.recebido >= it.quantidade) ? 'recebido' : 'recebido_parcial';
-      pedido.atualizadoEm = agora;
-    }
-  }
-  const registro = {
+  const txId = novoId('nfe-tx');
+  const transacao = {
+    id: txId,
     chave: nota.chave,
-    numero: nota.numero,
-    serie: nota.serie,
-    emissao: nota.emissao,
-    fornecedorId: fornecedor?.id || null,
-    fornecedorNome: fornecedor?.nome || nota.emitente.nome,
-    valorNota: nota.valorNota,
-    pedidoId: dados.pedidoId || null,
-    entradas,
-    ignorados: plano.filter((p) => p.ignorado).map((p) => ({ item: p.item.item, descricao: p.item.descricao })),
-    lancadaEm: agora,
-    lancadaPor: texto(dados.usuario, 160) || null,
+    status: 'processando',
+    iniciadoEm: agoraIso(opcoes),
+    iniciadoPor: texto(dados.usuario, 160) || null,
+    itensPlanejados: nota.itens.map((item) => item.item),
   };
-  atual.notasEntrada[nota.chave] = registro;
+  atual.transacoesEntrada[txId] = transacao;
   save();
-  return { ...registro };
+  const entradas = [];
+  try {
+    const decisoes = new Map((dados.itens || []).map((item) => [Number(item.item), item]));
+    let fornecedor = fornecedorPorCnpj(empresaId, nota.emitente.cnpj);
+    if (!fornecedor && nota.emitente.nome) {
+      fornecedor = salvarFornecedor(empresaId, { nome: nota.emitente.fantasia || nota.emitente.nome, cnpj: nota.emitente.cnpj });
+    }
+    const todosProdutos = barbearia.listarProdutosRevenda(empresaId, { incluirInativos: false });
+    const produtos = dados.lojaId ? todosProdutos.filter((produto) => !produto.lojaId || produto.lojaId === String(dados.lojaId)) : todosProdutos;
+    const produtosPorId = new Map(todosProdutos.map((produto) => [produto.id, produto]));
+    const plano = [];
+    for (const item of nota.itens) {
+      const decisao = decisoes.get(item.item) || {};
+      if (decisao.ignorar === true) { plano.push({ item, ignorado: true }); continue; }
+      if (!Number.isInteger(item.quantidade) && !decisao.fatorConversao) throw new ComprasError(`Item ${item.item} (${item.descricao}) tem quantidade fracionada: informe o fator de conversão ou ignore.`, 'QUANTIDADE_FRACIONADA');
+      // Fator de conversão: caixa com 12 = 12 unidades no estoque.
+      const fator = Math.max(1, Math.round(numero(decisao.fatorConversao, 1)));
+      if (!Number.isSafeInteger(fator) || fator <= 0) throw new ComprasError(`Fator de conversão inválido no item ${item.item}.`, 'FATOR_CONVERSAO_INVALIDO');
+      let produtoId = decisao.produtoId ? String(decisao.produtoId) : sugestaoDeProduto(empresaId, nota, item, produtos).produtoId;
+      if (produtoId && !produtosPorId.has(produtoId)) throw new ComprasError(`Produto informado no item ${item.item} não pertence à revenda desta empresa.`, 'PRODUTO_INVALIDO');
+      if (!produtoId && decisao.criarProduto === true) {
+        const precoVenda = numero(decisao.precoVenda, 0);
+        if (precoVenda <= 0) throw new ComprasError(`Informe o preço de venda para criar ${item.descricao}.`, 'PRECO_OBRIGATORIO');
+        const criado = barbearia.criarProdutoRevenda(empresaId, { lojaId: dados.lojaId, nome: texto(decisao.nome || item.descricao, 140), sku: item.codigo, ean: item.ean, precoVenda, custoUnitario: item.custoUnitario / fator, estoqueAtual: 0, estoqueMinimo: Math.round(numero(decisao.estoqueMinimo, 0)), categoria: decisao.categoria || 'Revenda' });
+        produtoId = criado.id;
+        produtosPorId.set(criado.id, criado);
+        produtos.push(criado);
+      }
+      if (!produtoId) throw new ComprasError(`Item ${item.item} (${item.descricao}) sem produto: vincule, crie ou ignore.`, 'ITEM_SEM_PRODUTO');
+      const quantidade = Math.round(item.quantidade * fator);
+      if (!Number.isSafeInteger(quantidade) || quantidade <= 0) throw new ComprasError(`Quantidade resultante inválida no item ${item.item}.`, 'QUANTIDADE_INVALIDA');
+      plano.push({ item, produtoId, quantidade, custo: Number((item.custoUnitario / fator).toFixed(4)) });
+    }
+    const agora = agoraIso(opcoes);
+    for (const passo of plano) {
+      if (passo.ignorado) continue;
+      const r = barbearia.entradaEstoqueRevenda(empresaId, passo.produtoId, { lojaId: dados.lojaId, quantidade: passo.quantidade, custoUnitario: passo.custo, origem: 'nfe_entrada', referencia: `NF-e ${nota.numero}/${nota.serie}`, fornecedorId: fornecedor?.id, chaveIdempotencia: `nfe:${nota.chave}:${passo.item.item}`, usuario: dados.usuario, observacao: `NF-e ${nota.numero} · ${nota.emitente.nome}` });
+      if (nota.emitente.cnpj && passo.item.codigo) atual.vinculos[`${nota.emitente.cnpj}:${passo.item.codigo}`] = passo.produtoId;
+      entradas.push({ item: passo.item.item, produtoId: passo.produtoId, produtoNome: r.produto.nome, quantidade: passo.quantidade, custoUnitario: passo.custo, estoquePosterior: r.produto.estoqueAtual, movimentoId: r.movimento?.id || null });
+    }
+    // Baixa o pendente do pedido de compra, se informado, sem nova entrada de estoque.
+    if (dados.pedidoId) {
+      const pedido = atual.pedidos[String(dados.pedidoId)];
+      if (pedido && ['enviado', 'recebido_parcial', 'rascunho'].includes(pedido.status)) {
+        for (const entrada of entradas) {
+          const linha = pedido.itens.find((it) => it.produtoId === entrada.produtoId);
+          if (linha) linha.recebido = Math.min(linha.quantidade, linha.recebido + entrada.quantidade);
+        }
+        pedido.recebimentos.push({ chave: `nfe:${nota.chave}`, em: agora, usuario: texto(dados.usuario, 160) || null, notaChave: nota.chave, itens: entradas.map((e) => ({ produtoId: e.produtoId, quantidade: e.quantidade, custoUnitario: e.custoUnitario })) });
+        pedido.status = pedido.itens.every((it) => it.recebido >= it.quantidade) ? 'recebido' : 'recebido_parcial';
+        pedido.atualizadoEm = agora;
+      }
+    }
+    const registro = {
+      chave: nota.chave,
+      numero: nota.numero,
+      serie: nota.serie,
+      emissao: nota.emissao,
+      fornecedorId: fornecedor?.id || null,
+      fornecedorNome: fornecedor?.nome || nota.emitente.nome,
+      valorNota: nota.valorNota,
+      pedidoId: dados.pedidoId || null,
+      transacaoId: txId,
+      entradas: entradas.map(({ movimentoId, ...entrada }) => ({ ...entrada, movimentoId })),
+      ignorados: plano.filter((p) => p.ignorado).map((p) => ({ item: p.item.item, descricao: p.item.descricao })),
+      lancadaEm: agora,
+      lancadaPor: texto(dados.usuario, 160) || null,
+    };
+    atual.transacoesEntrada[txId] = { ...transacao, status: 'concluida', concluidaEm: agora, entradas: entradas.map((entrada) => ({ item: entrada.item, produtoId: entrada.produtoId, movimentoId: entrada.movimentoId })) };
+    atual.notasEntrada[nota.chave] = registro;
+    save();
+    return { ...registro };
+  } catch (error) {
+    const compensacoes = entradas.map((entrada) => ({ item: entrada.item, produtoId: entrada.produtoId, movimentoId: entrada.movimentoId, tipo: 'restauracao_snapshot', status: 'compensada' }));
+    restaurarEscopo(empresaId, snapshot);
+    const restaurado = estado(empresaId);
+    restaurado.transacoesEntrada[txId] = {
+      ...transacao,
+      status: 'compensada',
+      compensadaEm: agoraIso(opcoes),
+      falha: { code: error?.code || 'NFE_ENTRADA_FALHOU', message: String(error?.message || error) },
+      compensacoes,
+    };
+    save();
+    throw error;
+  }
 }
 
 export function listarNotasEntrada(empresaId) {
   return Object.values(estado(empresaId).notasEntrada).sort((a, b) => String(b.lancadaEm).localeCompare(String(a.lancadaEm))).map((item) => ({ ...item }));
+}
+
+// Trilha operacional das tentativas, inclusive lançamentos compensados, para
+// reconciliação sem expor referências mutáveis do banco em memória.
+export function listarTransacoesEntrada(empresaId) {
+  return Object.values(estado(empresaId).transacoesEntrada)
+    .sort((a, b) => String(b.iniciadoEm).localeCompare(String(a.iniciadoEm)))
+    .map((item) => ({ ...item, itensPlanejados: [...(item.itensPlanejados || [])], entradas: item.entradas ? item.entradas.map((entrada) => ({ ...entrada })) : undefined, compensacoes: item.compensacoes ? item.compensacoes.map((compensacao) => ({ ...compensacao })) : undefined }));
 }
 
 // ── Vendas de revenda no período (base do giro e da curva ABC) ──────────────

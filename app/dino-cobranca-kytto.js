@@ -269,6 +269,8 @@ export async function criarCobranca(empresaId, dados = {}, opcoes = {}) {
     const checkout = await adapter.createCheckout({ order: { publicCode: orderNsu, total: valor }, account: contaInfinitePay(empresaId) });
     item.url = checkout?.publicData?.url || '';
     if (!item.url) throw new CobrancaError('A InfinitePay não devolveu o link de pagamento.', 'PROVEDOR_SEM_LINK', 502);
+    item.invoiceSlug = texto(checkout?.publicData?.invoice_slug || checkout?.publicData?.invoiceSlug || checkout?.publicData?.slug, 180);
+    if (!item.invoiceSlug) throw new CobrancaError('A InfinitePay não devolveu o invoice_slug do pagamento.', 'PROVEDOR_SEM_INVOICE_SLUG', 502);
   } else if (provedor === 'pix_manual') {
     const pix = atual.configuracao.pix;
     item.pixCopiaECola = gerarBrCode({ chave: pix.chave, nome: pix.nomeRecebedor, cidade: pix.cidade, valor, txid: orderNsu.slice(0, 25) });
@@ -434,10 +436,13 @@ export function cancelarCobrancasClubeQuitadas(empresaId, assinaturaId) {
  */
 export async function confirmarPelaInfinitePay(payload = {}, opcoes = {}) {
   const orderNsu = texto(payload.order_nsu || payload.orderNsu, 40);
+  const invoiceSlug = texto(payload.invoice_slug || payload.invoiceSlug, 180);
   const indice = db().barbeariaCobrancaIndice?.[orderNsu];
   if (!indice) throw new CobrancaError('Cobrança não encontrada.', 'COBRANCA_NAO_ENCONTRADA', 404);
   const item = estado(indice.empresaId).cobrancas[indice.id];
   if (!item || item.provedor !== 'infinitepay') throw new CobrancaError('Cobrança não encontrada.', 'COBRANCA_NAO_ENCONTRADA', 404);
+  if (!invoiceSlug) throw new CobrancaError('O invoice_slug do pagamento é obrigatório.', 'PAGAMENTO_INVOICE_SLUG_AUSENTE', 400);
+  if (!item.invoiceSlug || item.invoiceSlug !== invoiceSlug) throw new CobrancaError('O invoice_slug do pagamento não corresponde à cobrança.', 'PAGAMENTO_INVOICE_SLUG_DIVERGENTE', 400);
   if (item.status === 'paga') return { ...visaoCobranca(item), repetida: true, empresaId: indice.empresaId };
   const adapter = opcoes.adapter || createInfinitePayAdapter();
   const verificado = await adapter.verifyWebhook({
@@ -445,6 +450,10 @@ export async function confirmarPelaInfinitePay(payload = {}, opcoes = {}) {
     context: { expectedOrderNsu: orderNsu, expectedAmount: item.valor, account: contaInfinitePay(indice.empresaId) },
   });
   if (verificado?.status !== 'captured') return { ...visaoCobranca(item), pendente: true, empresaId: indice.empresaId };
+  const valorVerificado = Number(verificado.amount);
+  const metodoVerificado = String(verificado.summary?.captureMethod || verificado.captureMethod || '').trim().toLowerCase();
+  if (!Number.isFinite(valorVerificado) || Math.abs(valorVerificado - item.valor) > 0.01) throw new CobrancaError('A InfinitePay confirmou valor divergente da cobrança.', 'PAGAMENTO_VALOR_DIVERGENTE', 400);
+  if (!['pix', 'credit_card'].includes(metodoVerificado)) throw new CobrancaError('A InfinitePay confirmou método de pagamento inválido.', 'PAGAMENTO_METODO_DIVERGENTE', 400);
   return { ...confirmarCobranca(indice.empresaId, item.id, { origem: 'infinitepay', transacao: verificado.providerPaymentId }, opcoes), empresaId: indice.empresaId };
 }
 

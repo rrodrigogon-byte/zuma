@@ -112,23 +112,32 @@ test('InfinitePay: confirmação só depois de conferir na InfinitePay; equipe n
   process.env.INFINITEPAY_BARBEARIA_EMPRESAS = `outra-empresa,${EMPRESA}`;
   cobranca.salvarConfiguracaoCobranca(EMPRESA, { sinal: { ativo: true, tipo: 'fixo', valor: 25 } });
   const chamadas = [];
+  const invoiceSlug = 'invoice-dino-teste';
   const adapter = {
-    async createCheckout({ order }) { chamadas.push(['link', order.publicCode, order.total]); return { publicData: { url: `https://checkout.infinitepay.io/dino-teste/${order.publicCode}` } }; },
+    async createCheckout({ order }) { chamadas.push(['link', order.publicCode, order.total]); return { publicData: { url: `https://checkout.infinitepay.io/dino-teste/${order.publicCode}`, slug: invoiceSlug } }; },
     async verifyWebhook({ payload, context }) {
       chamadas.push(['check', payload.order_nsu, context.expectedAmount]);
-      return { status: payload.transaction_nsu === 'pago' ? 'captured' : 'pending', providerPaymentId: payload.transaction_nsu };
+      const captured = payload.transaction_nsu === 'pago';
+      return captured ? { status: 'captured', amount: context.expectedAmount, providerPaymentId: payload.transaction_nsu, summary: { captureMethod: 'pix' } } : { status: 'pending', providerPaymentId: null };
     },
   };
   const ag = agendar(base);
   const sinal = await cobranca.criarSinalDoAgendamento(EMPRESA, ag, { adapter });
   assert.equal(sinal.provedor, 'infinitepay');
   assert.match(sinal.url, /^https:\/\/checkout\.infinitepay\.io\//);
+  assert.equal(db().barbeariaCobranca[EMPRESA].cobrancas[sinal.id].invoiceSlug, invoiceSlug);
   assert.throws(() => cobranca.confirmarCobranca(EMPRESA, sinal.id, { origem: 'manual' }), (e) => e.code === 'CONFIRMACAO_AUTOMATICA');
   const orderNsu = chamadas[0][1];
-  const pendente = await cobranca.confirmarPelaInfinitePay({ order_nsu: orderNsu, transaction_nsu: 'ainda-nao', slug: 's' }, { adapter });
+  await assert.rejects(() => cobranca.confirmarPelaInfinitePay({ order_nsu: orderNsu, transaction_nsu: 'ainda-nao' }, { adapter }), (e) => e.code === 'PAGAMENTO_INVOICE_SLUG_AUSENTE');
+  await assert.rejects(() => cobranca.confirmarPelaInfinitePay({ order_nsu: orderNsu, transaction_nsu: 'ainda-nao', invoice_slug: 'slug-comercial-dino' }, { adapter }), (e) => e.code === 'PAGAMENTO_INVOICE_SLUG_DIVERGENTE');
+  assert.equal(cobranca.obterCobranca(EMPRESA, sinal.id).status, 'pendente');
+  const pendente = await cobranca.confirmarPelaInfinitePay({ order_nsu: orderNsu, transaction_nsu: 'ainda-nao', invoice_slug: invoiceSlug }, { adapter });
   assert.equal(pendente.pendente, true);
-  const pago = await cobranca.confirmarPelaInfinitePay({ order_nsu: orderNsu, transaction_nsu: 'pago', slug: 's' }, { adapter });
+  const pago = await cobranca.confirmarPelaInfinitePay({ order_nsu: orderNsu, transaction_nsu: 'pago', invoice_slug: invoiceSlug }, { adapter });
   assert.equal(pago.status, 'paga');
+  const replay = await cobranca.confirmarPelaInfinitePay({ order_nsu: orderNsu, transaction_nsu: 'pago', invoice_slug: invoiceSlug }, { adapter });
+  assert.equal(replay.repetida, true);
+  await assert.rejects(() => cobranca.confirmarPelaInfinitePay({ order_nsu: orderNsu, transaction_nsu: 'pago' }, { adapter }), (e) => e.code === 'PAGAMENTO_INVOICE_SLUG_AUSENTE');
   assert.deepEqual(chamadas.filter((c) => c[0] === 'check').map((c) => c[2]), [25, 25], 'confere o valor esperado');
   await assert.rejects(() => cobranca.confirmarPelaInfinitePay({ order_nsu: 'DINOSINVENTADO', transaction_nsu: 'pago', slug: 's' }, { adapter }), (e) => e.status === 404);
   // Horário cancelado com sinal pendente: a cobrança é cancelada; se o cliente pagar mesmo assim, vira "revisar" (sem erro em loop).
@@ -137,10 +146,46 @@ test('InfinitePay: confirmação só depois de conferir na InfinitePay; equipe n
   barbearia.alterarStatusAgendamento(EMPRESA, outro.id, 'cancelado');
   assert.equal(cobranca.cancelarSinalPendente(EMPRESA, outro.id), true);
   const nsu2 = chamadas.filter((c) => c[0] === 'link').at(-1)[1];
-  const pagoCancelado = await cobranca.confirmarPelaInfinitePay({ order_nsu: nsu2, transaction_nsu: 'pago', slug: 's' }, { adapter });
+  const pagoCancelado = await cobranca.confirmarPelaInfinitePay({ order_nsu: nsu2, transaction_nsu: 'pago', invoice_slug: invoiceSlug }, { adapter });
   assert.equal(pagoCancelado.status, 'paga');
   assert.equal(pagoCancelado.revisar, 'cobranca_cancelada');
   assert.equal(cobranca.obterCobranca(EMPRESA, sinal2.id).pagoAposCancelar, true);
+  delete process.env.INFINITEPAY_BARBEARIA_EMPRESAS;
+});
+
+test('InfinitePay: checkout sem invoice_slug não cria cobrança confirmável', async () => {
+  const base = montar();
+  process.env.INFINITEPAY_HANDLE = 'dino-teste';
+  process.env.INFINITEPAY_BARBEARIA_EMPRESAS = EMPRESA;
+  cobranca.salvarConfiguracaoCobranca(EMPRESA, { sinal: { ativo: true, tipo: 'fixo', valor: 25 } });
+  const adapter = { async createCheckout() { return { publicData: { url: 'https://checkout.infinitepay.io/sem-slug' } }; } };
+  const ag = agendar({ ...base, telefone: '65999990003' });
+  await assert.rejects(() => cobranca.criarSinalDoAgendamento(EMPRESA, ag, { adapter }), (e) => e.code === 'PROVEDOR_SEM_INVOICE_SLUG');
+  assert.equal(cobranca.listarCobrancas(EMPRESA).length, 0);
+  delete process.env.INFINITEPAY_BARBEARIA_EMPRESAS;
+});
+
+test('InfinitePay: valor e método divergentes nunca confirmam a cobrança', async () => {
+  const base = montar();
+  process.env.INFINITEPAY_HANDLE = 'dino-teste';
+  process.env.INFINITEPAY_BARBEARIA_EMPRESAS = EMPRESA;
+  cobranca.salvarConfiguracaoCobranca(EMPRESA, { sinal: { ativo: true, tipo: 'fixo', valor: 25 } });
+  let verificado = { amount: 24, captureMethod: 'pix' };
+  const invoiceSlug = 'invoice-validado';
+  const adapter = {
+    async createCheckout() { return { publicData: { url: 'https://checkout.infinitepay.io/validado', slug: invoiceSlug } }; },
+    async verifyWebhook() { return { status: 'captured', amount: verificado.amount, providerPaymentId: 'tx-validado', summary: { captureMethod: verificado.captureMethod } }; },
+  };
+  const ag = agendar({ ...base, telefone: '65999990004' });
+  const sinal = await cobranca.criarSinalDoAgendamento(EMPRESA, ag, { adapter });
+  const payload = { order_nsu: db().barbeariaCobranca[EMPRESA].cobrancas[sinal.id].orderNsu, transaction_nsu: 'tx-validado', invoice_slug: invoiceSlug };
+  await assert.rejects(() => cobranca.confirmarPelaInfinitePay(payload, { adapter }), (e) => e.code === 'PAGAMENTO_VALOR_DIVERGENTE');
+  assert.equal(cobranca.obterCobranca(EMPRESA, sinal.id).status, 'pendente');
+  verificado = { amount: 25, captureMethod: 'boleto' };
+  await assert.rejects(() => cobranca.confirmarPelaInfinitePay(payload, { adapter }), (e) => e.code === 'PAGAMENTO_METODO_DIVERGENTE');
+  assert.equal(cobranca.obterCobranca(EMPRESA, sinal.id).status, 'pendente');
+  verificado = { amount: 25, captureMethod: 'pix' };
+  assert.equal((await cobranca.confirmarPelaInfinitePay(payload, { adapter })).status, 'paga');
   delete process.env.INFINITEPAY_BARBEARIA_EMPRESAS;
 });
 

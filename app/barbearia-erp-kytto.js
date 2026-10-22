@@ -346,8 +346,17 @@ function calendarioNormalizado(dados = {}, anterior = {}) {
   };
 }
 
-function agendamentoNormalizado(dados = {}, anterior = {}) {
-  const dataHora = texto(dados.dataHora ?? dados.data_hora ?? anterior.dataHora, 40);
+function agendamentoNormalizado(dados = {}, anterior = {}, opcoes = {}) {
+  const dataHoraRecebida = texto(dados.dataHora ?? dados.data_hora ?? anterior.dataHora, 40);
+  const horaLocalRecebida = texto(dados.horaLocal ?? dados.hora_local ?? anterior.horaLocal, 5);
+  const dataAgendaRecebida = texto(dados.dataAgenda ?? dados.data_agenda ?? anterior.dataAgenda, 10);
+  const dataAgendaOperacional = dataAgendaRecebida || (opcoes.horaOperacionalEstrita ? diaOperacional(dataHoraRecebida) : chaveDia(dataHoraRecebida));
+  const horaLocalOperacional = horaLocalRecebida || horaOperacional(dataHoraRecebida);
+  // A API administrativa recebe data e hora operacional, não a zona do navegador.
+  // Quando o contrato estrito está ativo, o instante é reconstruído no fuso Cuiabá.
+  const dataHora = opcoes.horaOperacionalEstrita && /^\d{4}-\d{2}-\d{2}$/.test(dataAgendaOperacional) && horaValida(horaLocalOperacional)
+    ? dataHoraPublica(dataAgendaOperacional, horaLocalOperacional)
+    : dataHoraRecebida;
   const status = STATUS.has(String(dados.status ?? anterior.status)) ? String(dados.status ?? anterior.status) : 'agendado';
   return {
     clienteId: texto(dados.clienteId ?? dados.cliente_id ?? anterior.clienteId, 100),
@@ -357,12 +366,12 @@ function agendamentoNormalizado(dados = {}, anterior = {}) {
     lojaId: texto(dados.lojaId ?? dados.loja_id ?? anterior.lojaId, 120),
     // Quando o cliente/admin envia somente dataHora, a jornada é validada no
     // fuso operacional do servidor, nunca no fuso do navegador.
-    horaLocal: texto(dados.horaLocal ?? dados.hora_local ?? anterior.horaLocal, 5) || horaOperacional(dataHora),
+    horaLocal: horaLocalOperacional,
     profissionalId:
  texto(dados.profissionalId ?? dados.profissional_id ?? anterior.profissionalId, 100),
     servicoId: texto(dados.servicoId ?? dados.servico_id ?? anterior.servicoId, 100),
     dataHora,
-    dataAgenda: texto(dados.dataAgenda ?? dados.data_agenda ?? anterior.dataAgenda, 10) || chaveDia(dataHora),
+    dataAgenda: dataAgendaOperacional,
     duracaoMinutos: Math.max(5, Math.min(480, Math.round(numero(dados.duracaoMinutos ?? dados.duracao_minutos ?? anterior.duracaoMinutos, 30)))),
     valor: dinheiro(dados.valor ?? anterior.valor),
     status,
@@ -1535,11 +1544,13 @@ export function cancelarComandaBarbearia(empresaId, comandaId, dados = {}) {
 function validarCalendarioAgendamento(estado, agendamento, profissional) {
   const dataAgenda = String(agendamento.dataAgenda || chaveDia(agendamento.dataHora)).slice(0, 10);
   const calendario = obterCalendarioLoja(estado, agendamento.lojaId);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataAgenda)) throw new Error('Data operacional inválida.');
+  if (!horaValida(agendamento.horaLocal)) throw new Error('Horário operacional inválido. Use HH:MM.');
+  if (!Number.isFinite(new Date(agendamento.dataHora).valueOf())) throw new Error('Data e horário do atendimento são inválidos.');
   if (calendario.feriados?.includes(dataAgenda)) throw new Error('A unidade não recebe reservas nesta data: feriado configurado.');
   const dataLocal = new Date(`${dataAgenda}T12:00:00Z`);
   if (Number.isNaN(dataLocal.valueOf())) throw new Error('Data operacional inválida.');
   if (Array.isArray(calendario.diasFuncionamento) && !calendario.diasFuncionamento.includes(dataLocal.getUTCDay())) throw new Error('A unidade não funciona neste dia da semana.');
-  if (!agendamento.horaLocal) return;
   const [hora, minuto] = agendamento.horaLocal.split(':').map(Number);
   const inicioMinutos = hora * 60 + minuto;
   const fimMinutos = inicioMinutos + agendamento.duracaoMinutos;
@@ -1675,7 +1686,7 @@ export function criarAgendamento(empresaId, dados = {}, opcoes = {}) {
   rejeitarPagamentoNaAgenda(dados);
   if (dados.status && dados.status !== 'agendado') throw new Error('Status inicial do agendamento deve ser agendado.');
   const estado = estadoEmpresa(empresaId);
-  const agendamento = agendamentoNormalizado(dados);
+  const agendamento = agendamentoNormalizado(dados, {}, opcoes);
   if (!agendamento.clienteNome && !agendamento.clienteId) throw new Error('Informe o cliente do atendimento.');
   if (!agendamento.servicoId || !estado.servicos[agendamento.servicoId] || estado.servicos[agendamento.servicoId].ativo === false) throw new Error('Serviço ativo é obrigatório.');
   if (agendamento.profissionalId && (!estado.profissionais[agendamento.profissionalId] || estado.profissionais[agendamento.profissionalId].ativo === false)) throw new Error('Profissional não encontrado ou inativo.');
@@ -1705,7 +1716,7 @@ export function atualizarAgendamento(empresaId, agendamentoId, dados = {}, opcoe
   if (!atual || atual.empresaId !== String(empresaId)) return null;
   if (dados.lojaId !== undefined && texto(dados.lojaId, 120) !== texto(atual.lojaId, 120)) return null;
   const antes = { dataHora: atual.dataHora, dataAgenda: atual.dataAgenda, profissionalId: atual.profissionalId, servicoId: atual.servicoId };
-  const agendamento = agendamentoNormalizado(dados, atual);
+  const agendamento = agendamentoNormalizado(dados, atual, opcoes);
   agendamento.status = atual.status;
   if (!agendamento.servicoId || !estado.servicos[agendamento.servicoId] || estado.servicos[agendamento.servicoId].ativo === false) throw new Error('Serviço ativo é obrigatório.');
   const servico = estado.servicos[agendamento.servicoId];

@@ -1,21 +1,26 @@
 import test, { beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { reset } from './db.js';
+import { db, reset } from './db.js';
 import * as barbearia from './barbearia-erp-kytto.js';
 import * as compras from './barbearia-compras-kytto.js';
 
 const EMP = 'emp-compras';
-beforeEach(() => reset());
+const DEST_CNPJ = '11222333000181';
+const OUTRA_CHAVE = '51261050073355000260550010000012351000012349';
+beforeEach(() => {
+  reset();
+  db().cadastrosMestresKytto = { empresas: { [EMP]: { id: EMP, cnpj: DEST_CNPJ } } };
+});
 afterEach(() => reset());
 
-const CHAVE = '51261050073355000260550010000012341000012345';
+const CHAVE = '51261050073355000260550010000012341000012341';
 function xmlNota({ chave = CHAVE, itens } = {}) {
   const det = (itens || [
     { n: 1, cProd: 'P-POM', ean: '7891234567895', xProd: 'POMADA MODELADORA 120G', qCom: '6.0000', vUnCom: '20.00', vProd: '120.00', vDesc: '12.00' },
     { n: 2, cProd: 'P-OLEO', ean: 'SEM GTIN', xProd: 'Óleo para barba 30ml', qCom: '4', vUnCom: '15.00', vProd: '60.00' },
     { n: 3, cProd: 'BRINDE', ean: '', xProd: 'Display promocional', qCom: '1', vUnCom: '0.01', vProd: '0.01' },
   ]).map((i) => `<det nItem="${i.n}"><prod><cProd>${i.cProd}</cProd><cEAN>${i.ean}</cEAN><xProd>${i.xProd}</xProd><NCM>33059000</NCM><CFOP>5102</CFOP><uCom>UN</uCom><qCom>${i.qCom}</qCom><vUnCom>${i.vUnCom}</vUnCom><vProd>${i.vProd}</vProd>${i.vDesc ? `<vDesc>${i.vDesc}</vDesc>` : ''}</prod></det>`).join('');
-  return `<?xml version="1.0" encoding="UTF-8"?><nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><NFe><infNFe Id="NFe${chave}" versao="4.00"><ide><serie>1</serie><nNF>1234</nNF><dhEmi>2026-10-10T10:00:00-04:00</dhEmi></ide><emit><CNPJ>50073355000260</CNPJ><xNome>DISTRIBUIDORA BARBER LTDA</xNome><xFant>Barber Dist</xFant></emit><dest><CNPJ>11222333000181</CNPJ></dest>${det}<total><ICMSTot><vProd>180.01</vProd><vNF>168.01</vNF></ICMSTot></total></infNFe></NFe><protNFe><infProt><chNFe>${chave}</chNFe></infProt></protNFe></nfeProc>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><NFe><infNFe Id="NFe${chave}" versao="4.00"><ide><serie>1</serie><nNF>1234</nNF><dhEmi>2026-10-10T10:00:00-04:00</dhEmi></ide><emit><CNPJ>50073355000260</CNPJ><xNome>DISTRIBUIDORA BARBER LTDA</xNome><xFant>Barber Dist</xFant></emit><dest><CNPJ>${DEST_CNPJ}</CNPJ></dest>${det}<total><ICMSTot><vProd>180.01</vProd><vNF>168.01</vNF></ICMSTot></total></infNFe></NFe><protNFe><infProt><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo><chNFe>${chave}</chNFe><nProt>135260000000001</nProt><dhRecbto>2026-10-10T10:00:05-04:00</dhRecbto></infProt></protNFe></nfeProc>`;
 }
 
 function produtos() {
@@ -43,6 +48,25 @@ test('XML de NF-e: lê itens, desconto por item e ignora GTIN genérico', () => 
   assert.equal(nota.itens[1].ean, '');
   assert.throws(() => compras.lerXmlNfe('<html/>'), /NF-e/);
   assert.throws(() => compras.lerXmlNfe('nada'), /XML/);
+});
+
+test('XML incompleto ou sem autorização verificável não é aceito como autorizado', () => {
+  const semDestinatario = xmlNota().replace(`<CNPJ>${DEST_CNPJ}</CNPJ>`, '<CNPJ></CNPJ>');
+  assert.throws(() => compras.lerXmlNfe(semDestinatario), /CNPJ do destinatário/);
+  const semProtocolo = xmlNota().replace(/<protNFe>[\s\S]*?<\/protNFe>/, '');
+  const nota = compras.lerXmlNfe(semProtocolo);
+  assert.equal(nota.autorizada, false);
+  assert.equal(nota.validacao.protocolo, false);
+  assert.throws(() => compras.lancarNotaEntrada(EMP, semProtocolo, { confirmado: true }), /autorização verificável/);
+});
+
+test('NF-e com CNPJ destinatário divergente do tenant é bloqueada antes de mutar', () => {
+  const xml = xmlNota().replace(`<CNPJ>${DEST_CNPJ}</CNPJ>`, '<CNPJ>50073355000260</CNPJ>');
+  const previa = compras.previaNotaEntrada(EMP, xml);
+  assert.equal(previa.destinatarioVinculado, false);
+  assert.equal(previa.aceitaEntrada, false);
+  assert.throws(() => compras.lancarNotaEntrada(EMP, xml, { confirmado: true }), /CNPJ destinatário.*diverge/);
+  assert.equal(compras.listarNotasEntrada(EMP).length, 0);
 });
 
 test('prévia sugere produto por EAN e nome; lançamento dá entrada com custo médio e não duplica', () => {
@@ -73,7 +97,7 @@ test('prévia sugere produto por EAN e nome; lançamento dá entrada com custo m
   assert.equal(de_novo.repetida, true);
   assert.equal(barbearia.listarProdutosRevenda(EMP).find((p) => p.id === pomada.id).estoqueAtual, 8);
   // Nota nova do mesmo fornecedor: o código cProd já está vinculado.
-  const outra = compras.previaNotaEntrada(EMP, xmlNota({ chave: CHAVE.replace(/5$/, '6') }));
+  const outra = compras.previaNotaEntrada(EMP, xmlNota({ chave: OUTRA_CHAVE }));
   assert.equal(outra.itens[1].criterio, 'vinculo_anterior');
 });
 
@@ -86,6 +110,34 @@ test('nota cria produto novo e converte caixa em unidades', () => {
   assert.equal(novo.estoqueAtual, 24);
   assert.equal(novo.custoUnitario, 20);
   assert.equal(novo.ean, '7890000000017');
+});
+
+test('falha no item intermediário compensa entradas anteriores e permite replay', () => {
+  const { pomada, oleo } = produtos();
+  const outraLoja = barbearia.criarProdutoRevenda(EMP, { lojaId: 'loja-b', nome: 'Produto loja B', precoVenda: 29, custoUnitario: 10 });
+  const xml = xmlNota({ chave: OUTRA_CHAVE });
+  const estoqueAntes = barbearia.listarProdutosRevenda(EMP).map((item) => [item.id, item.estoqueAtual]);
+  assert.throws(() => compras.lancarNotaEntrada(EMP, xml, {
+    confirmado: true,
+    lojaId: 'loja-a',
+    itens: [{ item: 1, produtoId: pomada.id }, { item: 2, produtoId: outraLoja.id }, { item: 3, ignorar: true }],
+  }), /unidade ativa/);
+  assert.deepEqual(barbearia.listarProdutosRevenda(EMP).map((item) => [item.id, item.estoqueAtual]), estoqueAntes);
+  assert.equal(compras.listarNotasEntrada(EMP).length, 0);
+  const tentativas = compras.listarTransacoesEntrada(EMP);
+  assert.equal(tentativas.length, 1);
+  assert.equal(tentativas[0].status, 'compensada');
+  assert.equal(tentativas[0].compensacoes[0].status, 'compensada');
+
+  const replay = compras.lancarNotaEntrada(EMP, xml, {
+    confirmado: true,
+    lojaId: 'loja-a',
+    itens: [{ item: 1, produtoId: pomada.id }, { item: 2, produtoId: oleo.id }, { item: 3, ignorar: true }],
+  });
+  assert.equal(replay.repetida, undefined);
+  assert.equal(replay.entradas.length, 2);
+  assert.equal(compras.lancarNotaEntrada(EMP, xml, { confirmado: true, lojaId: 'loja-a', itens: [{ item: 3, ignorar: true }] }).repetida, true);
+  assert.equal(barbearia.listarProdutosRevenda(EMP).find((item) => item.id === pomada.id).estoqueAtual, 8);
 });
 
 test('pedido de compra: rascunho, envio, recebimento parcial e total com custo médio', () => {

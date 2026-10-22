@@ -3407,9 +3407,9 @@ app.get('/api/admin/barbearia/analytics', async (req, res) => {
       appointments: barbeariaErpKytto.listarAgendamentos(empresaId, { lojaId }),
       retailSales: barbeariaErpKytto.listarVendasRevenda(empresaId, { lojaId }),
       commands: barbeariaErpKytto.listarComandasBarbearia(empresaId, { lojaId }),
-      products: barbeariaErpKytto.listarProdutosRevenda(empresaId, { incluirInativos: true }),
-      professionals: barbeariaErpKytto.listarProfissionais(empresaId, { incluirInativos: true }),
-      financeEntries: financeiroKytto.listarLancamentos(empresaId, {}),
+      products: barbeariaErpKytto.listarProdutosRevenda(empresaId, { incluirInativos: true, lojaId }),
+      professionals: barbeariaErpKytto.listarProfissionais(empresaId, { incluirInativos: true, lojaId }),
+      financeEntries: financeiroKytto.listarLancamentos(empresaId, { lojaId }),
     };
     const currentWindow = { fromDate: range.fromDate, toDate: range.toDate };
     const previousWindow = { fromDate: range.previousFromDate, toDate: range.previousToDate };
@@ -3675,7 +3675,7 @@ app.post('/api/admin/barbearia/agenda', async (req, res) => {
     if (naoAvisarCliente && !podeSilenciarAvisoAgenda(req.user)) {
       return res.status(403).json({ error: 'Só a gestão pode registrar agendamento sem avisar o cliente.', code: 'AVISO_CLIENTE_OBRIGATORIO' });
     }
-    const agendamento = enriquecerAgendamentoBarbearia(empresaId, barbeariaErpKytto.criarAgendamento(empresaId, body, { permitirEncaixe: encaixe }));
+    const agendamento = enriquecerAgendamentoBarbearia(empresaId, barbeariaErpKytto.criarAgendamento(empresaId, body, { permitirEncaixe: encaixe, horaOperacionalEstrita: true }));
     try { captacaoKytto.marcarListaEsperaAgendada(empresaId, { telefone: agendamento.clienteTelefone, data: agendamento.dataAgenda, lojaId: agendamento.lojaId || lojaId, servicoId: agendamento.servicoId }); } catch (_) { /* não impede a criação da agenda */ }
     if (agendamento.encaixe) audit(req, 'AGENDA ENCAIXE', `${agendamento.id} profissional=${agendamento.profissionalId} ${agendamento.dataHora}`);
     let notificacao;
@@ -3693,7 +3693,7 @@ app.patch('/api/admin/barbearia/agenda/:id', async (req, res) => {
     const empresaId = legacyEmpresaId(req);
     const lojaId = legacyLojaId(req);
     const anterior = listarAgendamentosBarbearia(empresaId, { lojaId }).find((item) => item.id === String(req.params.id));
-    const agendamento = barbeariaErpKytto.atualizarAgendamento(empresaId, req.params.id, { ...(req.body || {}), lojaId, usuario: req.user?.email || req.user?.nome || '', origem: 'admin' }, { permitirEncaixe: req.body?.encaixe === true });
+    const agendamento = barbeariaErpKytto.atualizarAgendamento(empresaId, req.params.id, { ...(req.body || {}), lojaId, usuario: req.user?.email || req.user?.nome || '', origem: 'admin' }, { permitirEncaixe: req.body?.encaixe === true, horaOperacionalEstrita: true });
     if (!agendamento) return res.status(404).json({ error: 'Agendamento não encontrado na empresa ativa.' });
     const remarcado = anterior && ['dataHora', 'dataAgenda', 'profissionalId', 'servicoId'].some((campo) => String(anterior[campo] || '') !== String(agendamento[campo] || ''));
     const notificacao = remarcado
@@ -4067,7 +4067,10 @@ app.post('/api/admin/barbearia/captacao/assinaturas/:id/usos', (req, res) => {
   try { res.status(201).json({ ok: true, resumo: captacaoKytto.registrarUsoAssinatura(legacyEmpresaId(req), req.params.id, req.body || {}) }); } catch (error) { respostaCaptacao(res, error); }
 });
 app.get('/api/admin/barbearia/captacao/retornos', (req, res) => {
-  try { res.json({ ok: true, ...captacaoKytto.retornosPrevistos(legacyEmpresaId(req), { horizonteDias: Number(req.query?.dias) || 7, lojaId: legacyLojaId(req) }) }); } catch (error) { respostaCaptacao(res, error); }
+  try {
+    const dias = req.query?.dias === undefined ? 7 : Number(req.query.dias);
+    res.json({ ok: true, ...captacaoKytto.retornosPrevistos(legacyEmpresaId(req), { horizonteDias: dias, lojaId: legacyLojaId(req) }) });
+  } catch (error) { respostaCaptacao(res, error); }
 });
 app.get('/api/admin/barbearia/captacao/ocupacao', (req, res) => {
   try {

@@ -867,20 +867,26 @@ function chaveCliente(item) {
  * Classifica em "no prazo", "esta semana" e "atrasado".
  */
 export function retornosPrevistos(empresaId, { horizonteDias = 7, sugerirHorario = true, lojaId = '' } = {}, opcoes = {}) {
+  const unidade = texto(lojaId, 120);
+  const horizonte = Number(horizonteDias);
+  if (!unidade) throw new CaptacaoError('Selecione a unidade para consultar retornos previstos.', 'LOJA_OBRIGATORIA');
+  if (!Number.isInteger(horizonte) || horizonte < 1 || horizonte > 90) throw new CaptacaoError('Informe um horizonte de 1 a 90 dias.', 'HORIZONTE_INVALIDO');
   const ms = agoraMs(opcoes);
   const agendamentos = barbearia.listarAgendamentos(empresaId, {})
-    .filter((item) => !lojaId || item.lojaId === lojaId);
+    .filter((item) => item.lojaId === unidade);
   const futurosPorChave = new Set(agendamentos
     .filter((item) => STATUS_ATIVOS.has(item.status) && new Date(item.dataHora).valueOf() > ms)
-    .map((item) => chaveCliente(item)));
+    .map((item) => `${chaveCliente(item)}:${item.servicoId || ''}`));
   const porCliente = new Map();
   for (const item of agendamentos) {
     if (item.status !== 'concluido') continue;
     const chave = chaveCliente(item);
-    if (!chave) continue;
-    const lista = porCliente.get(chave) || [];
+    const servicoId = texto(item.servicoId, 100);
+    if (!chave || !servicoId) continue;
+    const chaveRetorno = `${chave}:${servicoId}`;
+    const lista = porCliente.get(chaveRetorno) || [];
     lista.push(item);
-    porCliente.set(chave, lista);
+    porCliente.set(chaveRetorno, lista);
   }
   const profissionais = mapaPorId(barbearia.listarProfissionais(empresaId, { incluirInativos: true }));
   const servicos = mapaPorId(barbearia.listarServicos(empresaId, { incluirInativos: true }));
@@ -907,7 +913,7 @@ export function retornosPrevistos(empresaId, { horizonteDias = 7, sugerirHorario
     const diasAtraso = Math.floor((ms - previsto) / DIA_MS);
     const situacao = futurosPorChave.has(chave)
       ? 'agendado'
-      : diasAtraso > 0 ? 'atrasado' : previsto - ms <= horizonteDias * DIA_MS ? 'esta_semana' : 'no_prazo';
+      : diasAtraso > 0 ? 'atrasado' : previsto - ms <= horizonte * DIA_MS ? 'esta_semana' : 'no_prazo';
     itens.push({
       clienteId: ultima.clienteId || '',
       nome: ultima.clienteNome,
@@ -931,7 +937,7 @@ export function retornosPrevistos(empresaId, { horizonteDias = 7, sugerirHorario
       item.sugestao = proximoHorarioLivre(empresaId, {
         servicoId: item.servicoPreferido.id,
         profissionalId: item.profissionalPreferido?.id,
-        lojaId,
+        lojaId: unidade,
         aPartirDe: Math.max(ms, new Date(`${item.retornoPrevisto}T12:00:00Z`).valueOf()),
       });
     }

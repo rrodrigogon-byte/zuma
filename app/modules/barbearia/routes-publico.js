@@ -358,14 +358,12 @@ router.post('/:slug/pagamento/verificar', async (req, res) => {
   const identidade = identidadePublica(req.params.slug);
   if (!identidade) return res.status(404).json({ ok: false, error: 'Estabelecimento não encontrado.' });
   try {
-    const slugRecebido = slug(req.body?.slug);
-    const slugCanônico = slug(identidade.estabelecimento.slug);
-    if (slugRecebido && slugRecebido !== slugCanônico) return res.status(400).json({ ok: false, error: 'O pagamento não corresponde a este estabelecimento.', code: 'PAGAMENTO_SLUG_DIVERGENTE' });
+    const invoiceSlug = texto(req.body?.invoice_slug || req.body?.invoiceSlug, 180);
+    if (!invoiceSlug) return res.status(400).json({ ok: false, error: 'O invoice_slug do pagamento é obrigatório.', code: 'PAGAMENTO_INVOICE_SLUG_AUSENTE' });
     const resultado = await cobranca.confirmarPelaInfinitePay({
       order_nsu: texto(req.body?.order_nsu, 40),
       transaction_nsu: texto(req.body?.transaction_nsu, 80),
-      // O slug da URL é a fonte de verdade; o corpo do retorno é apenas dado auxiliar.
-      slug: slugCanônico,
+      invoice_slug: invoiceSlug,
     });
     if (resultado.empresaId !== identidade.empresaId) return res.status(404).json({ ok: false, error: 'Pagamento não encontrado.' });
     res.setHeader('Cache-Control', 'no-store');

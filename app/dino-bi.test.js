@@ -10,8 +10,8 @@ const input = {
   professionals,
   products,
   appointments: [
-    { id: 'a1', status: 'concluido', servicoId: 's1', servicoNome: 'Corte', valor: 60, profissionalId: 'p1', clienteId: 'c1', dataHora: '2026-09-02T13:00:00Z' },
-    { id: 'a2', status: 'concluido', servicoId: 's1', servicoNome: 'Corte', valor: 60, profissionalId: 'p1', clienteId: 'c1', dataHora: '2026-09-20T13:00:00Z' },
+    { id: 'a1', status: 'concluido', servicoId: 's1', servicoNome: 'Corte', valor: 60, profissionalId: 'p1', clienteId: 'c1', financeiroLancamentoId: 'fin-a1', dataHora: '2026-09-02T13:00:00Z' },
+    { id: 'a2', status: 'concluido', servicoId: 's1', servicoNome: 'Corte', valor: 60, profissionalId: 'p1', clienteId: 'c1', financeiroLancamentoId: 'fin-a2', dataHora: '2026-09-20T13:00:00Z' },
     { id: 'a3', status: 'nao_compareceu', servicoId: 's1', dataHora: '2026-09-05T13:00:00Z' },
     { id: 'a4', status: 'cancelado', servicoId: 's1', dataHora: '2026-09-06T13:00:00Z' },
     { id: 'a5', status: 'concluido', servicoId: 's1', valor: 60, profissionalId: 'p1', clienteId: 'c2', dataHora: '2026-09-10T13:00:00Z', origem: 'agendamento_online' },
@@ -26,6 +26,8 @@ const input = {
   retailSales: [],
   customers: [{ id: 'c2', criadoEm: '2026-09-10T12:00:00Z' }, { id: 'padrao', padrao: true, criadoEm: '2026-09-10T12:00:00Z' }],
   financeEntries: [
+    { id: 'fin-a1', tipo: 'receita', origem: 'barbearia_atendimento', status: 'pago', valor: 60, pagoEm: '2026-09-02T13:10:00Z' },
+    { id: 'fin-a2', tipo: 'receita', origem: 'barbearia_atendimento', status: 'pago', valor: 60, pagoEm: '2026-09-20T13:10:00Z' },
     { tipo: 'despesa', status: 'pago', categoria: 'Aluguel', valor: 50, pagoEm: '2026-09-15T12:00:00Z' },
     { tipo: 'despesa', status: 'pago', categoria: 'Comissões', valor: 999, pagoEm: '2026-09-15T12:00:00Z' },
     { tipo: 'despesa', status: 'pago', categoria: 'Produtos', origem: 'estoque', valor: 999, pagoEm: '2026-09-15T12:00:00Z' },
@@ -35,6 +37,16 @@ const input = {
 
 test('serviços não contam duas vezes o atendimento que virou comanda', () => {
   const rows = bi.servicesPerformed(input, window);
+  assert.equal(rows.length, 3);
+  assert.equal(rows.reduce((sum, row) => sum + row.receita, 0), 180);
+});
+
+test('atendimento concluído sem lançamento pago não entra como receita, meta ou comissão', () => {
+  const semRecebimento = {
+    ...input,
+    appointments: [...input.appointments, { id: 'sem-recebimento', status: 'concluido', servicoId: 's1', valor: 999, profissionalId: 'p1', dataHora: '2026-09-25T13:00:00Z' }],
+  };
+  const rows = bi.servicesPerformed(semRecebimento, window);
   assert.equal(rows.length, 3);
   assert.equal(rows.reduce((sum, row) => sum + row.receita, 0), 180);
 });

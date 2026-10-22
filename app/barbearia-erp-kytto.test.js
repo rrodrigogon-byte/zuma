@@ -184,6 +184,22 @@ test('aplica calendário por unidade e não cruza conflito entre lojas diferente
   assert.equal(listarAgendamentos(EMPRESA_A, { lojaId: 'loja-b' }).length, 1);
 });
 
+test('rota administrativa reconstrói o instante no fuso operacional e rejeita hora inválida', () => {
+  const profissional = baseProfissional();
+  const servico = baseServico();
+  const criado = criarAgendamento(EMPRESA_A, {
+    clienteNome: 'Fuso operacional', lojaId: 'loja-a', profissionalId: profissional.id, servicoId: servico.id,
+    dataAgenda: '2030-01-16', horaLocal: '10:00', dataHora: '2030-01-16T10:00:00.000Z',
+  }, { horaOperacionalEstrita: true });
+  assert.equal(criado.dataHora, '2030-01-16T14:00:00.000Z');
+  assert.equal(criado.dataAgenda, '2030-01-16');
+  assert.equal(criado.horaLocal, '10:00');
+  assert.throws(() => criarAgendamento(EMPRESA_A, {
+    clienteNome: 'Hora inválida', lojaId: 'loja-a', profissionalId: profissional.id, servicoId: servico.id,
+    dataAgenda: '2030-01-17', horaLocal: '10h', dataHora: '2030-01-17T14:00:00.000Z',
+  }, { horaOperacionalEstrita: true }), /Horário operacional inválido/);
+});
+
 test('torna o recebimento idempotente no financeiro central', () => {
   const primeiro = registrarLancamento(EMPRESA_A, {
     tipo: 'receita',
