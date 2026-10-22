@@ -20,7 +20,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
-import { db, save, caminhoBanco } from '../db.js';
+let db;
+let save;
+let caminhoBanco;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, 'data', 'avec-dino-20261022');
@@ -516,7 +518,7 @@ function summarize(root, report, empresaId) {
   };
 }
 
-async function execute() {
+export async function execute() {
   const pkg = loadPackage();
   const empresaId = text(process.env.AVEC_DINO_IMPORT_EMPRESA_ID || pkg.manifest.targetEmpresaId || DEFAULT_EMPRESA_ID, 120);
   const lojaId = text(process.env.AVEC_DINO_IMPORT_LOJA_ID || pkg.manifest.targetLojaId || DEFAULT_LOJA_ID, 120);
@@ -525,6 +527,7 @@ async function execute() {
     console.log(JSON.stringify({ skipped: true, reason: 'AVEC_DINO_IMPORT_CONFIRM não habilitado', runKey: RUN_KEY, packageCounts: pkg.actualCounts }));
     return { skipped: true };
   }
+  ({ db, save, caminhoBanco } = await import('../db.js'));
   const root = db();
   const previous = root.importacoesAvec?.[RUN_KEY];
   if (!dryRun && previous?.status === 'applied') {
@@ -573,7 +576,8 @@ async function execute() {
   }
 }
 
-execute().catch((error) => {
+const entrypoint = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+if (entrypoint) execute().catch((error) => {
   console.error(`Falha fatal no runner Avec: ${error.stack || error.message || error}`);
   process.exitCode = 1;
 });
