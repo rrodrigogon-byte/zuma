@@ -8047,6 +8047,14 @@ process.on('uncaughtException', (e)=> console.error('uncaughtException:', e?.mes
     }
     console.log(`[Avec] lote ${resultadoImportacaoAvec.alreadyApplied ? 'já aplicado' : 'aplicado'} antes do boot HTTP.`);
   }
+  if (process.env.DINO_RECALC_CONFIRM === 'PRD_DINO_RECALC_20261022_V1') {
+    const { execute: executarRecalculoDino } = await import('./migrations/run-dino-recalc.js');
+    const resultadoRecalculoDino = await executarRecalculoDino();
+    if (!resultadoRecalculoDino?.ok && !resultadoRecalculoDino?.alreadyApplied) {
+      throw new Error(`Recálculo Dino não concluído: ${resultadoRecalculoDino?.error || 'resultado ausente'}`);
+    }
+    console.log(`[Dino] recálculo ${resultadoRecalculoDino.alreadyApplied ? 'já aplicado' : 'aplicado'} antes do boot HTTP.`);
+  }
   if (process.env.COMMERCE_CORE_ENABLED === '1') {
     // A flag canônica não aplica schema e não liga nada implicitamente: o
     // readiness apenas compara o ledger; migrations continuam sendo pré-deploy.
