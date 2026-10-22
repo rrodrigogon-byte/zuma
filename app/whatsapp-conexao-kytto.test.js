@@ -145,6 +145,27 @@ test('verificação reativa a conexão local quando o backend confirma estado ab
   }
 });
 
+test('watchdog não regrava o db.json quando só o horário da checagem mudou', async () => {
+  const saved = { WHATSAPP_PROVIDER: process.env.WHATSAPP_PROVIDER, CHATBOT_BACKEND_URL: process.env.CHATBOT_BACKEND_URL, CHATBOT_BACKEND_KEY: process.env.CHATBOT_BACKEND_KEY };
+  process.env.WHATSAPP_PROVIDER = 'chatbot_backend';
+  process.env.CHATBOT_BACKEND_URL = 'https://backend.test';
+  process.env.CHATBOT_BACKEND_KEY = 'k'.repeat(24);
+  try {
+    const conexao = await import('./whatsapp-conexao-kytto.js');
+    const { estadoGravacao } = await import('./db.js');
+    const estado = conexao.obterConexao('emp-a');
+    estado.ativo = true;
+    const fetchImpl = async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ state: 'open' }) });
+    await conexao.vigiarConexao('emp-a', { fetchImpl });
+    const gravacoesDepoisDaMudanca = estadoGravacao().gravacoes;
+    await conexao.vigiarConexao('emp-a', { fetchImpl });
+    assert.equal(estadoGravacao().gravacoes, gravacoesDepoisDaMudanca);
+    assert.equal(conexao.obterConexao('emp-a').state, 'open');
+  } finally {
+    for (const [key, value] of Object.entries(saved)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  }
+});
+
 test('logout por instância exige GET final close/qr, pausa reconexão e apaga identidade anterior', async () => {
   const conexao = await import('./whatsapp-conexao-kytto.js');
   const estado = conexao.obterConexao('emp-a');
