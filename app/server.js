@@ -54,6 +54,7 @@ import { startIsaPollWorker } from './core/whatsapp-isa-poll.js';
 import { configuracaoResumo, configuracaoResumoPublica, diaLocal as diaLocalResumo, enviarResumo, lojaDoCanal as lojaDoCanalResumo, montarResumoDiario, startResumoDiarioWorker } from './core/dino-resumo-diario.js';
 import { startPendingFollowUpWorker } from './core/whatsapp-ai-followup.js';
 import { db as commerceDb, getPool as getCommercePool } from './core/database.js';
+import { registrarAuditoriaLoginLegado } from './core/legacy-admin-login-audit.js';
 import { checkCommerceSchemaReadiness } from './core/commerce-schema-readiness.js';
 import { DinoNpsError, getDinoNpsOverview, getDinoNpsSchemaReadiness, queueDinoNpsProcessing, recordDinoNpsResponse, setDinoNpsSchemaReadiness } from './core/dino-nps-canonical.js';
 import { createDinoForecastAiProcessHandler, createDinoNpsProcessHandler, startDinoOperationalWorker } from './workers/dino-operational-worker.js';
@@ -593,9 +594,9 @@ async function auditLoyaltyAdvanced(req, context, { table, operation, recordId =
 }
 
 // ---- trilha de auditoria das ações administrativas ----
-function audit(req, acao, detalhe){
+function audit(req, acao, detalhe, { persistSequence = true } = {}){
   const d = db(); d.auditoria = d.auditoria || [];
-  d.auditoria.push({ id: nextId(), ts:new Date().toISOString(),
+  d.auditoria.push({ id: nextId({ persist: persistSequence }), ts:new Date().toISOString(),
     user: req.user ? `${req.user.nome} (${req.user.role})` : 'anônimo',
     acao, detalhe: detalhe||'', ip: req.ip || '',
     empresaId: auditEmpresaId(req) });
@@ -609,6 +610,17 @@ function auditoria(user, acao, detalhe){
     acao, detalhe: detalhe||'', ip: '',
     empresaId: user?.empresaId ? String(user.empresaId) : null });
   if(d.auditoria.length > 1000) d.auditoria = d.auditoria.slice(-1000);
+}
+
+function registrarFallbackAuditoriaLogin(user, empresaId, motivo){
+  console.error('[SECURITY_AUDIT_FALLBACK] ' + JSON.stringify({
+    event: 'legacy_admin_login_success',
+    occurredAt: new Date().toISOString(),
+    empresaId: empresaId || null,
+    legacyUserId: String(user?.id ?? ''),
+    role: String(user?.role ?? ''),
+    reason: String(motivo || 'audit_unavailable'),
+  }));
 }
 
 // Namespace do Commerce Core deve retornar 404 quando o módulo opt-in está desligado.
@@ -1444,10 +1456,29 @@ app.post('/api/admin/login', async (req,res)=>{
   if(!u || !u.ativo || !senhaConfere(String(senhaInformada || ''), u.senhaHash)) return res.status(401).json({error:'usuário ou senha inválidos', code:'INVALID_CREDENTIALS'});
   if(!STAFF.includes(u.role)) return res.status(403).json({error:'esta conta não tem acesso ao painel'});
   limparTentativas(chave);
-  audit({user:{nome:u.nome,role:u.role}, ip:req.ip}, 'LOGIN painel'); save();
   const sessao = await commerceSessionFor(u);
   const empresaId = sessao.empresaId ?? u.empresaId;
   const lojaId = sessao.lojaId ?? u.lojaId;
+  if (process.env.COMMERCE_CORE_ENABLED === '1') {
+    if (sessao.empresaId) {
+      try {
+        const result = await registrarAuditoriaLoginLegado(commerceDb, {
+          empresaId: sessao.empresaId,
+          lojaId: sessao.lojaId,
+          legacyUserId: u.id,
+          role: u.role,
+        });
+        if (!result.recorded) registrarFallbackAuditoriaLogin(u, sessao.empresaId, result.reason || 'insert_not_confirmed');
+      } catch (error) {
+        registrarFallbackAuditoriaLogin(u, sessao.empresaId, error?.code || 'AUDIT_UNAVAILABLE');
+      }
+    } else {
+      registrarFallbackAuditoriaLogin(u, null, 'missing_company');
+    }
+  } else {
+    audit({user:{nome:u.nome,role:u.role}, ip:req.ip}, 'LOGIN painel', undefined, { persistSequence: false });
+    save();
+  }
   res.json({ token: tokenFor({ ...u, empresaId, lojaId }), user: publicUser(u), role: u.role, sessao: { ...sessao, empresaId, lojaId } });
 });
 
@@ -6544,7 +6575,7 @@ function fulfill(pg){
 // Trilha legada: administrador da plataforma vê tudo (ou filtra por empresa);
 // usuário de empresa vê só a própria empresa; equipe do evento legado vê só
 // os registros sem empresa. IPs só aparecem para a administração da plataforma.
-app.get('/api/admin/auditoria', auth, requireStaff, (req,res)=>{
+app.get('/api/admin/auditoria', auth, requireStaff, async (req,res)=>{
   const platform = isPlatformAdminUser(req.user);
   const filtro = String(req.query?.empresaId || '').trim();
   const propria = req.user?.empresaId ? String(req.user.empresaId) : null;
@@ -6553,7 +6584,39 @@ app.get('/api/admin/auditoria', auth, requireStaff, (req,res)=>{
     if (platform) return !filtro || empresa === filtro;
     return empresa === propria;
   });
-  res.json(itens.slice(-200).reverse().map(item => platform ? item : { ...item, ip:'' }));
+  let commerceLogins = [];
+  if (process.env.COMMERCE_CORE_ENABLED === '1' && (platform || propria)) {
+    try {
+      const values = [];
+      let scopeClause = '';
+      if (platform && filtro) {
+        values.push(filtro);
+        scopeClause = ` AND empresa_id = $${values.length}`;
+      } else if (!platform) {
+        values.push(propria);
+        scopeClause = ` AND empresa_id = $${values.length}`;
+      }
+      values.push(200);
+      const result = await commerceDb.queryRead(
+        `SELECT id, empresa_id, criado_em, depois FROM commerce_audit_logs
+          WHERE entidade = 'legacy_admin_login'${scopeClause}
+          ORDER BY criado_em DESC LIMIT $${values.length}`,
+        values,
+      );
+      commerceLogins = (result.rows || []).map(row => {
+        const dados = row.depois && typeof row.depois === 'object' ? row.depois : {};
+        const usuario = `Usuário legado #${dados.legacyUserId || '—'} (${dados.role || 'staff'})`;
+        const ts = row.criado_em instanceof Date ? row.criado_em.toISOString() : String(row.criado_em || '');
+        return { id: row.id, ts, criadoEm: ts, user: usuario, usuario, acao: 'LOGIN painel', detalhe: '', dados, empresaId: row.empresa_id, ip: '' };
+      });
+    } catch (error) {
+      console.error('[AUTH] falha ao consultar auditoria de login Commerce:', error?.code || 'AUDIT_QUERY_UNAVAILABLE');
+    }
+  }
+  const combined = [...itens, ...commerceLogins]
+    .sort((a, b) => Date.parse(b.ts || b.criadoEm || '') - Date.parse(a.ts || a.criadoEm || ''))
+    .slice(0, 200);
+  res.json(combined.map(item => platform ? item : { ...item, ip:'' }));
 });
 
 // =================== NOTIFICAÇÕES DO ADMIN ===================
